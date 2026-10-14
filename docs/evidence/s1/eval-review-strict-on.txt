@@ -1,0 +1,91 @@
+
+=== Kamra eval harness: 85/89 passed ===
+  PASS  occupancy pricing: 2 adults = base
+  PASS  occupancy pricing: single rate + extra adult + child
+  PASS  season doubles the rate in range only
+  PASS  a season only moves the room type it names
+  PASS  small-group pricing is per head, and only on its own days
+  PASS  rate guardrails can hold a different floor at the weekend
+  PASS  GST slab: 5% below threshold, 18% above
+  PASS  voucher: 10% off, min-nights enforced
+  PASS  guardrail blocks rates outside floor/ceiling
+  PASS  double booking blocked; adjacent stay allowed
+  PASS  day-use occupies its date for overlap purposes
+  PASS  blacklisted guest cannot book
+  PASS  folio: check-in opens, night posts once, balance math holds
+  PASS  split folio: transfer moves value, totals conserved
+  PASS  ticket SLA: priority sets due window
+  PASS  billing rules: corporate room→Company folio, alcohol→Guest
+  PASS  split billing: % and ₹ splits conserve totals, bulk move works
+  PASS  group billing: company pays stays on ONE master, guest extras local
+  PASS  profiles: merge repoints stays & money intact; anonymize keeps books
+  PASS  add-ons: booked extras post to the folio once, priced from Experience
+  PASS  policies: late cancel fee, free outside window, no-show charged
+  PASS  closed folio is frozen: charges immutable, payments still settle
+  PASS  room capacity: over-occupancy booking refused, at-capacity allowed
+  PASS  room block: held room leaves availability, release restores it
+  PASS  housekeeping assignment: assign, decline back to pool, claim
+  PASS  housekeeping SLA: due_by set, overdue task escalates & breaches
+  PASS  CRS access guard: a property-restricted user is blocked from others
+  PASS  POS: order fires KOT, delivery posts F&B to the room folio with discount
+  PASS  POS: table map states, KOT numbering, void with reason, outlet settle
+  PASS  POS: two parties share a table, split bill conserves the total
+  PASS  POS: delivery & takeaway orders, seats, guests, recent bills
+  PASS  POS: table areas, temp-table tiles, NC bills at zero with auth
+  PASS  POS: table reservation lifecycle and cleaning state
+  FAIL  laundry: rate card pricing, shortage guard, folio bill at 18% GST — PermissionError: You don't have access to EVAL Hotel. [File "/home/frappe/frappe-bench/apps/frappe/frappe/utils/messages.py", line 118, in msgprint | _raise_exception() | ~~~~~~~~~~~~~~~~^^ | File "/home/frappe/frappe-bench/apps/frappe/frappe/utils/messages.py", line 59, in _raise_exception | raise exc | frappe.exceptions.PermissionError: You don't have access to EVAL Hotel.]
+  PASS  revenue: overbooking allowance, hurdle premium & floor, position briefing
+  PASS  migration: vendor CSV maps, day-first dates, history stamped, misfits skipped
+  PASS  pre-checkin: ID photo stored privately, discarded at checkout per policy
+  PASS  laundry rates: CSV bulk import upserts by item+service, refuses junk
+  PASS  guest documents: address proof + staff upload + both discarded per policy
+  PASS  stay ledger: advance/deposit kinds, guarded refunds, actual times on GRC
+  PASS  kitchen display: chef context, post-fire void alert, recall undo
+  PASS  kitchen display: coursing holds & fires, cook's clock starts at fire, allergen alarm
+  PASS  kitchen stock: fire deducts per outlet, shortage never blocks, ledger reconciles
+  FAIL  kitchen stock: post-fire void is wastage not a reversal, count is an explicit decision, no auto-86 — PermissionError: You don't have access to EVAL Hotel. [File "/home/frappe/frappe-bench/apps/frappe/frappe/utils/messages.py", line 118, in msgprint | _raise_exception() | ~~~~~~~~~~~~~~~~^^ | File "/home/frappe/frappe-bench/apps/frappe/frappe/utils/messages.py", line 59, in _raise_exception | raise exc | frappe.exceptions.PermissionError: You don't have access to EVAL Hotel.]
+  PASS  ID document: private storage, token gate, never blocks check-in, discarded at checkout
+  FAIL  ID document: desk captures and verifies, roles gate the look — PermissionError: You don't have access to EVAL Hotel. [File "/home/frappe/frappe-bench/apps/frappe/frappe/utils/messages.py", line 118, in msgprint | _raise_exception() | ~~~~~~~~~~~~~~~~^^ | File "/home/frappe/frappe-bench/apps/frappe/frappe/utils/messages.py", line 59, in _raise_exception | raise exc | frappe.exceptions.PermissionError: You don't have access to EVAL Hotel.]
+  PASS  Indonesia pack: PBJT flat tax, NPWP labels, Rupiah locale
+  PASS  currency follows the pack: locale endpoint + public ui_locale
+  PASS  SEA/ME packs: Thai VAT, Malaysian SST room/F&B split, UAE TRN
+  PASS  generic pack: currency symbol comes from the Currency master
+  PASS  Saudi pack + ZATCA: vocabulary, QR, hash chain, credit note
+  PASS  deposit before arrival: advance on an early folio, link, carried to check-in
+  PASS  India pack: Razorpay/Cashfree links, GSTR-1 and Kamra Verify; other packs refuse
+  PASS  WhatsApp: native Meta send, booking flow, inbound -> ticket
+  PASS  whitelist audit: every endpoint the frontend calls is callable
+  PASS  check-in flow: context, allocator suggestion, room handover
+  PASS  occupant register: per-occupant ID scans, edit-safe, discarded at checkout
+  PASS  channel manager: ARI snapshot, push, OTA book/modify/cancel
+  PASS  banquet: per-pax lines bill the guarantee, and honour the menu minimum
+  PASS  banquet: complimentary lines are free but never disappear
+  PASS  banquet: a discount spreads pro-rata and each line keeps its own GST
+  PASS  banquet: hourly halls bill real hours, including past midnight
+  PASS  banquet: a confirmed function owns the hall; tentative holds don't
+  PASS  banquet: the pipeline only moves through legal states, with a reason
+  PASS  banquet: holding a green room takes the room out of sale
+  PASS  banquet: every price move is recorded, and quotes are versioned
+  PASS  banquet: terms follow the quote, receipts settle them
+  PASS  banquet: the event order needs a confirmed function and prints the menu
+  PASS  banquet: month-wise tracking counts the pipeline by event date
+  PASS  banquet: a session sets the clock, custom hours must state one
+  PASS  banquet: service charge rides the food, not the hall
+  PASS  banquet: a deposit is held money, not payment
+  PASS  banquet: close-out deducts damage and returns the rest
+  PASS  banquet: the month grid puts a function in its own session
+  PASS  banquet: the registers add up and the cash book reads by payment
+  PASS  banquet: a dish costs what its recipe costs
+  PASS  banquet: choosing dishes costs the menu line and prices the upgrade
+  PASS  banquet: input credit follows the OUTPUT rate, not the invoice
+  PASS  banquet: the indent explodes the picks into ingredients
+  PASS  banquet: the night bills what was served, not what was quoted
+  PASS  banquet: the customer is a person with a history
+  PASS  privacy: erasure reaches photos, signatures, occupants, messages, logs and history; export answers access
+  PASS  privacy: retention erases idle guests, keeps blacklisted, booked and retention-off ones
+  PASS  privacy: message retention clears old WhatsApp text and chats, keeps the rows
+  PASS  privacy: a child on the stay register keeps name and age only, unless the register needs the ID
+  FAIL  public booking: a guest books through the governed agent the install created — PermissionError: You don't have access to EVAL Hotel. [File "/home/frappe/frappe-bench/apps/frappe/frappe/utils/messages.py", line 118, in msgprint | _raise_exception() | ~~~~~~~~~~~~~~~~^^ | File "/home/frappe/frappe-bench/apps/frappe/frappe/utils/messages.py", line 59, in _raise_exception | raise exc | frappe.exceptions.PermissionError: You don't have access to EVAL Hotel.]
+  PASS  property scope: restricted staff can't read another property's stays
+  PASS  webhooks refuse calls when no secret is configured
+  PASS  checkout: refused while owed or owing; a credit company goes to city ledger (#132)
