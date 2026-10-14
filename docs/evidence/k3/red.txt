@@ -1,0 +1,128 @@
+Starting test run with parameters: site=kamra.localhost, module=kamra.tests.test_channel_manager_bookings, verbose=False, tests=(), force=False, profile=False, failfast=False, skip_before_tests=False, debug=False, selected_categories=[]
+View detailed logs (using --verbose): /home/frappe/frappe-bench/logs/frappe.testing.log
+
+Running 9 integration tests for kamra
+
+kamra.tests.test_channel_manager_bookings.ChannelManagerBookingTestCase
+    ✖  test_capacity_refusal_on_modify_keeps_new_dates_for_resolution
+    ✖  test_currency_mismatch_on_modify_is_requested
+    ✖  test_foreign_currency_is_requested_without_mislabelled_money
+    ✔  test_invalid_occupancy_is_not_treated_as_overbooking
+    ✔  test_matching_currency_keeps_confirmed_booking_and_original_price
+    ✖  test_missing_currency_defaults_to_property_currency
+    ✖  test_multi_room_refusal_keeps_all_lines_requested
+    ✖  test_requested_replay_does_not_duplicate_the_booking
+    ✖  test_sold_out_booking_is_requested_with_resolution_note
+
+
+======================================================================
+ FAIL  test_capacity_refusal_on_modify_keeps_new_dates_for_resolution (kamra.tests.test_channel_manager_bookings.ChannelManagerBookingTestCase.test_capacity_refusal_on_modify_keeps_new_dates_for_resolution)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/kamra/kamra/tests/test_channel_manager_bookings.py", line 127, in test_capacity_refusal_on_modify_keeps_new_dates_for_resolution
+    self.assertEqual(doc.status, "Requested")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+    doc = <Reservation: doctype=Reservation RES-2026-00011>
+    payload = {'action': 'modify', 'hotelCode': 'demo', 'channel': 'Booking.com', 'bookingId': 'TEST-83d90ade', 'checkin': '2026-10-15', 'checkout': '2026-10-16', 'guest': {'firstName': 'OTA', 'lastName': 'Arrival'}, 'amount': {'amountAfterTax': 1500, 'currency': 'UGX'}, 'specialRequests': 'Late arrival', 'rooms': [{'roomCode': 'std', 'occupancy': {'adults': 2, 'children': 0}, 'prices': [{'date': '2026-10-15', 'sellRate': 1500}]}]}
+    self = <kamra.tests.test_channel_manager_bookings.ChannelManagerBookingTestCase testMethod=test_capacity_refusal_on_modify_keeps_new_dates_for_resolution>
+AssertionError: 'Confirmed' != 'Requested'
+- Confirmed
++ Requested
+
+
+======================================================================
+ FAIL  test_currency_mismatch_on_modify_is_requested (kamra.tests.test_channel_manager_bookings.ChannelManagerBookingTestCase.test_currency_mismatch_on_modify_is_requested)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/kamra/kamra/tests/test_channel_manager_bookings.py", line 113, in test_currency_mismatch_on_modify_is_requested
+    self.assertEqual(self.received().status, "Requested")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    payload = {'action': 'modify', 'hotelCode': 'demo', 'channel': 'Booking.com', 'bookingId': 'TEST-972556c3', 'checkin': '2026-10-15', 'checkout': '2026-10-16', 'guest': {'firstName': 'OTA', 'lastName': 'Arrival'}, 'amount': {'amountAfterTax': 1500, 'currency': 'USD'}, 'specialRequests': 'Late arrival', 'rooms': [{'roomCode': 'std', 'occupancy': {'adults': 2, 'children': 0}, 'prices': [{'date': '2026-10-15', 'sellRate': 1500}]}]}
+    self = <kamra.tests.test_channel_manager_bookings.ChannelManagerBookingTestCase testMethod=test_currency_mismatch_on_modify_is_requested>
+AssertionError: 'Confirmed' != 'Requested'
+- Confirmed
++ Requested
+
+
+======================================================================
+ FAIL  test_foreign_currency_is_requested_without_mislabelled_money (kamra.tests.test_channel_manager_bookings.ChannelManagerBookingTestCase.test_foreign_currency_is_requested_without_mislabelled_money)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/kamra/kamra/tests/test_channel_manager_bookings.py", line 95, in test_foreign_currency_is_requested_without_mislabelled_money
+    self.assertEqual(doc.status, "Requested")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+    doc = <Reservation: doctype=Reservation RES-2026-00027>
+    self = <kamra.tests.test_channel_manager_bookings.ChannelManagerBookingTestCase testMethod=test_foreign_currency_is_requested_without_mislabelled_money>
+AssertionError: 'Confirmed' != 'Requested'
+- Confirmed
++ Requested
+
+
+======================================================================
+ FAIL  test_missing_currency_defaults_to_property_currency (kamra.tests.test_channel_manager_bookings.ChannelManagerBookingTestCase.test_missing_currency_defaults_to_property_currency)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/kamra/kamra/tests/test_channel_manager_bookings.py", line 90, in test_missing_currency_defaults_to_property_currency
+    self.assertEqual(aiosell.parse_webhook(self.conn, payload)[0]["currency"], "UGX")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    payload = {'action': 'book', 'hotelCode': 'demo', 'channel': 'Booking.com', 'bookingId': 'TEST-0354be0d', 'checkin': '2026-10-15', 'checkout': '2026-10-16', 'guest': {'firstName': 'OTA', 'lastName': 'Arrival'}, 'amount': {'amountAfterTax': 1500}, 'specialRequests': 'Late arrival', 'rooms': [{'roomCode': 'std', 'occupancy': {'adults': 2, 'children': 0}, 'prices': [{'date': '2026-10-15', 'sellRate': 1500}]}]}
+    self = <kamra.tests.test_channel_manager_bookings.ChannelManagerBookingTestCase testMethod=test_missing_currency_defaults_to_property_currency>
+AssertionError: 'INR' != 'UGX'
+- INR
++ UGX
+
+
+======================================================================
+ FAIL  test_multi_room_refusal_keeps_all_lines_requested (kamra.tests.test_channel_manager_bookings.ChannelManagerBookingTestCase.test_multi_room_refusal_keeps_all_lines_requested)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/kamra/kamra/tests/test_channel_manager_bookings.py", line 77, in test_multi_room_refusal_keeps_all_lines_requested
+    self.assertEqual(self.received(f"{self.ref}-{i}").status, "Requested")
+                     ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+    i = 0
+    self = <kamra.tests.test_channel_manager_bookings.ChannelManagerBookingTestCase testMethod=test_multi_room_refusal_keeps_all_lines_requested>
+  File "/workspace/kamra/kamra/tests/test_channel_manager_bookings.py", line 60, in received
+    self.assertTrue(name, "OTA booking was dropped instead of retained for resolution")
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    name = None
+    ref = 'TEST-c4303f21-0'
+    self = <kamra.tests.test_channel_manager_bookings.ChannelManagerBookingTestCase testMethod=test_multi_room_refusal_keeps_all_lines_requested>
+AssertionError: None is not true : OTA booking was dropped instead of retained for resolution
+
+======================================================================
+ FAIL  test_requested_replay_does_not_duplicate_the_booking (kamra.tests.test_channel_manager_bookings.ChannelManagerBookingTestCase.test_requested_replay_does_not_duplicate_the_booking)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/kamra/kamra/tests/test_channel_manager_bookings.py", line 84, in test_requested_replay_does_not_duplicate_the_booking
+    self.assertEqual(self.received().status, "Requested")
+                     ~~~~~~~~~~~~~^^
+    payload = {'action': 'book', 'hotelCode': 'demo', 'channel': 'Booking.com', 'bookingId': 'TEST-af1d9309', 'checkin': '2026-10-15', 'checkout': '2026-10-16', 'guest': {'firstName': 'OTA', 'lastName': 'Arrival'}, 'amount': {'amountAfterTax': 1500, 'currency': 'UGX'}, 'specialRequests': 'Late arrival', 'rooms': [{'roomCode': 'std', 'occupancy': {'adults': 2, 'children': 0}, 'prices': [{'date': '2026-10-15', 'sellRate': 1500}]}]}
+    self = <kamra.tests.test_channel_manager_bookings.ChannelManagerBookingTestCase testMethod=test_requested_replay_does_not_duplicate_the_booking>
+  File "/workspace/kamra/kamra/tests/test_channel_manager_bookings.py", line 60, in received
+    self.assertTrue(name, "OTA booking was dropped instead of retained for resolution")
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    name = None
+    ref = None
+    self = <kamra.tests.test_channel_manager_bookings.ChannelManagerBookingTestCase testMethod=test_requested_replay_does_not_duplicate_the_booking>
+AssertionError: None is not true : OTA booking was dropped instead of retained for resolution
+
+======================================================================
+ FAIL  test_sold_out_booking_is_requested_with_resolution_note (kamra.tests.test_channel_manager_bookings.ChannelManagerBookingTestCase.test_sold_out_booking_is_requested_with_resolution_note)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/kamra/kamra/tests/test_channel_manager_bookings.py", line 66, in test_sold_out_booking_is_requested_with_resolution_note
+    doc = self.received()
+    original = <Reservation: doctype=Reservation RES-2026-00054>
+    self = <kamra.tests.test_channel_manager_bookings.ChannelManagerBookingTestCase testMethod=test_sold_out_booking_is_requested_with_resolution_note>
+  File "/workspace/kamra/kamra/tests/test_channel_manager_bookings.py", line 60, in received
+    self.assertTrue(name, "OTA booking was dropped instead of retained for resolution")
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    name = None
+    ref = None
+    self = <kamra.tests.test_channel_manager_bookings.ChannelManagerBookingTestCase testMethod=test_sold_out_booking_is_requested_with_resolution_note>
+AssertionError: None is not true : OTA booking was dropped instead of retained for resolution
+
+----------------------------------------------------------------------
+Ran 9 tests in 1.267s
+
+FAILED (failures=7)
