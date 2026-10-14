@@ -1,0 +1,97 @@
+Starting test run with parameters: site=kamra.localhost, module=kamra.tests.test_property_scope, verbose=False, tests=(), force=False, profile=False, failfast=False, skip_before_tests=False, debug=False, selected_categories=[]
+View detailed logs (using --verbose): /home/frappe/frappe-bench/logs/frappe.testing.log
+
+Running 19 integration tests for kamra
+
+kamra.tests.test_property_scope.PropertyScopeTestCase
+    ✖  test_every_property_linked_doctype_is_scoped
+    ✔  test_guest_argument_is_scoped_by_default
+    ✔  test_guest_doc_read_refused_for_other_property
+       ▸  /home/frappe/frappe-bench/apps/frappe/frappe/model/qb_query.py:163: V17FrappeDeprecationWarning: This codepath was marked (DATE: 2024-01-01) deprecated for removal (from v17 onwards); note:
+       ▸   The 'limit_page_length' parameter is deprecated. Use 'limit' instead.
+       ▸  
+       ▸    deprecation_warning(
+    ✔  test_guest_list_hides_other_properties_guests
+    ✔  test_legacy_scope_keeps_unscoped_staff_chain_wide
+    ✔  test_legacy_scope_lists_every_property_to_unscoped_staff
+    ✖  test_strict_scope_covers_property_linked_doctypes
+    ✔  test_strict_scope_does_not_exempt_hotel_admin
+    ✖  test_strict_scope_does_not_exempt_kamra_agent
+    ✔  test_strict_scope_keeps_administrator_chain_wide
+    ✔  test_strict_scope_keeps_explicit_property_permissions
+    ✔  test_strict_scope_keeps_system_manager_chain_wide
+    ✔  test_strict_scope_keeps_system_manager_lists_chain_wide
+    ✖  test_strict_scope_lists_nothing_to_unscoped_staff
+    ✔  test_strict_scope_lists_only_permitted_property
+    ✖  test_strict_scope_reads_site_config_as_integer
+    ✔  test_strict_scope_refuses_staff_without_property_permissions
+    ✔  test_unrestricted_staff_still_see_every_guest
+    ✔  test_upsert_cannot_take_over_other_property_record
+
+
+======================================================================
+ FAIL  test_every_property_linked_doctype_is_scoped (kamra.tests.test_property_scope.PropertyScopeTestCase.test_every_property_linked_doctype_is_scoped)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/kamra/kamra/tests/test_property_scope.py", line 213, in test_every_property_linked_doctype_is_scoped
+    self.assertIn("kamra.authz.property_query_conditions", queries.get(doctype, []), doctype)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    checks = {'Event': ['frappe.desk.doctype.event.event.has_permission'], 'ToDo': ['frappe.desk.doctype.todo.todo.has_permission'], 'Note': ['frappe.desk.doctype.note.note.has_permission'], 'User': ['frappe.core.doctype.user.user.has_permission'], 'Dashboard Chart': ['frappe.desk.doctype.dashboard_chart.dashboard_chart.has_permission'], 'Number Card': ['frappe.desk.doctype.number_card.number_card.has_permission'], 'Kanban Board': ['frappe.desk.doctype.kanban_board.kanban_board.has_permission'], 'Contact': ['frappe.contacts.address_and_contact.has_permission'], 'Address': ['frappe.contacts.address_and_contact.has_permission'], 'Comment': ['frappe.core.doctype.comment.comment.has_permission'], 'Communication': ['frappe.core.doctype.communication.communication.has_permission'], 'Workflow Action': ['frappe.workflow.doctype.workflow_action.workflow_action.has_permission'], 'File': ['frappe.core.doctype.file.file.has_permission'], 'Prepared Report': ['frappe.core.doctype.prepared_report.prepared_report.has_permission'], 'Notification Settings': ['frappe.desk.doctype.notification_settings.notification_settings.has_permission'], 'Dashboard Settings': ['frappe.desk.doctype.dashboard_settings.dashboard_settings.has_permission'], 'Notification Log': ['frappe.desk.doctype.notification_log.notification_log.has_permission'], 'User Invitation': ['frappe.core.doctype.user_invitation.user_invitation.has_permission'], 'Document Follow': ['frappe.email.doctype.document_follow.document_follow.has_permission'], 'Custom Sidebar': ['frappe.desk.doctype.custom_sidebar.custom_sidebar.has_permission'], 'Dock': ['frappe.desk.doctype.dock.dock.has_permission'], 'Guest': ['kamra.authz.guest_has_permission']}
+    doctype = 'AI Assistant Settings'
+    linked = {'Cashier Session', 'Laundry Order', 'Banquet Dish', 'Group Booking', 'City Ledger Account', 'Credit Note', 'Rate Plan', 'ZATCA Settings', 'Venue Booking', 'City Ledger Entry', 'Ingredient Stock', 'Room Block', 'Proforma Folio', 'Night Audit Run', 'Meal Plan', 'Laundry Rate', 'Revenue Budget', 'Banquet Menu', 'Shift Handover', 'Room', 'Menu Item', 'Sellable Unit', 'Banquet Checklist Template', 'Petty Cash Voucher', 'Folio Reprint', 'Agent Action Log', 'Channel Provider Connection', 'Exchange Rate', 'POS Order', 'Venue', 'Folio Ledger Entry', 'Payment Gateway Settings', 'Rate Guardrail', 'Service Ticket', 'ZATCA Invoice', 'Room Type', 'Copilot Conversation', 'WhatsApp Message', 'Exchange Transaction', 'Banquet Service Item', 'Ingredient', 'POS Outlet', 'Folio', 'Cancelled Invoice', 'Discount Voucher', 'Hurdle Rate', 'Lost And Found Item', 'Channel Manager Connection', 'Reservation', 'AI Assistant Settings', 'Turnover Profile', 'Banquet Function Task', 'Security Deposit', 'Ingredient Ledger Entry', 'Cashier', 'Season', 'Housekeeping Task', 'MCP OAuth Grant', 'POS Table Reservation', 'Transaction Code', 'Experience', 'Cashier Transaction'}
+    queries = {'Event': ['frappe.desk.doctype.event.event.get_permission_query_conditions'], 'ToDo': ['frappe.desk.doctype.todo.todo.get_permission_query_conditions'], 'User': ['frappe.core.doctype.user.user.get_permission_query_conditions'], 'Dashboard Settings': ['frappe.desk.doctype.dashboard_settings.dashboard_settings.get_permission_query_conditions'], 'Notification Log': ['frappe.desk.doctype.notification_log.notification_log.get_permission_query_conditions'], 'Dashboard': ['frappe.desk.doctype.dashboard.dashboard.get_permission_query_conditions'], 'Dashboard Chart': ['frappe.desk.doctype.dashboard_chart.dashboard_chart.get_permission_query_conditions'], 'Number Card': ['frappe.desk.doctype.number_card.number_card.get_permission_query_conditions'], 'Notification Settings': ['frappe.desk.doctype.notification_settings.notification_settings.get_permission_query_conditions'], 'Note': ['frappe.desk.doctype.note.note.get_permission_query_conditions'], 'Kanban Board': ['frappe.desk.doctype.kanban_board.kanban_board.get_permission_query_conditions'], 'Contact': ['frappe.contacts.address_and_contact.get_permission_query_conditions_for_contact'], 'Address': ['frappe.contacts.address_and_contact.get_permission_query_conditions_for_address'], 'Comment': ['frappe.core.doctype.comment.comment.get_permission_query_conditions'], 'Communication': ['frappe.core.doctype.communication.communication.get_permission_query_conditions_for_communication'], 'Workflow Action': ['frappe.workflow.doctype.workflow_action.workflow_action.get_permission_query_conditions'], 'Prepared Report': ['frappe.core.doctype.prepared_report.prepared_report.get_permission_query_condition'], 'File': ['frappe.core.doctype.file.file.get_permission_query_conditions'], 'User Invitation': ['frappe.core.doctype.user_invitation.user_invitation.get_permission_query_conditions'], 'Tag Link': ['frappe.desk.doctype.tag_link.tag_link.get_permission_query_conditions'], 'Document Follow': ['frappe.email.doctype.document_follow.document_follow.get_permission_query_conditions'], 'Custom Sidebar': ['frappe.desk.doctype.custom_sidebar.custom_sidebar.get_permission_query_conditions'], 'Dock': ['frappe.desk.doctype.dock.dock.get_permission_query_conditions'], 'Guest': ['kamra.authz.guest_query_conditions']}
+    self = <kamra.tests.test_property_scope.PropertyScopeTestCase testMethod=test_every_property_linked_doctype_is_scoped>
+AssertionError: 'kamra.authz.property_query_conditions' not found in [] : AI Assistant Settings
+
+======================================================================
+ FAIL  test_strict_scope_covers_property_linked_doctypes (kamra.tests.test_property_scope.PropertyScopeTestCase.test_strict_scope_covers_property_linked_doctypes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/kamra/kamra/tests/test_property_scope.py", line 182, in test_strict_scope_covers_property_linked_doctypes
+    self.assertEqual(self.listed_properties(doctype), set(), doctype)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    doctype = 'Folio'
+    name = 'TEST-SCOPE-00c867ab0b'
+    names = {'Folio': 'TEST-SCOPE-00c867ab0b', 'Room': 'TEST-SCOPE-7331ff0997', 'Housekeeping Task': 'TEST-SCOPE-0711f2ce49'}
+    self = <kamra.tests.test_property_scope.PropertyScopeTestCase testMethod=test_strict_scope_covers_property_linked_doctypes>
+    user = <User: doctype=User scope.desk@test.local>
+AssertionError: Items in the first set but not the second:
+'TEST Scope Other' : Folio
+
+======================================================================
+ FAIL  test_strict_scope_does_not_exempt_kamra_agent (kamra.tests.test_property_scope.PropertyScopeTestCase.test_strict_scope_does_not_exempt_kamra_agent)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/kamra/kamra/tests/test_property_scope.py", line 134, in test_strict_scope_does_not_exempt_kamra_agent
+    self.assertEqual(authz.restricted_properties(), set())
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    self = <kamra.tests.test_property_scope.PropertyScopeTestCase testMethod=test_strict_scope_does_not_exempt_kamra_agent>
+    user = <User: doctype=User scope.desk@test.local>
+AssertionError: None != set()
+
+======================================================================
+ FAIL  test_strict_scope_lists_nothing_to_unscoped_staff (kamra.tests.test_property_scope.PropertyScopeTestCase.test_strict_scope_lists_nothing_to_unscoped_staff)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/kamra/kamra/tests/test_property_scope.py", line 162, in test_strict_scope_lists_nothing_to_unscoped_staff
+    self.assertEqual(self.listed_properties(), set())
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    self = <kamra.tests.test_property_scope.PropertyScopeTestCase testMethod=test_strict_scope_lists_nothing_to_unscoped_staff>
+AssertionError: Items in the first set but not the second:
+'TEST Scope Home'
+'TEST Scope Other'
+
+======================================================================
+ FAIL  test_strict_scope_reads_site_config_as_integer (kamra.tests.test_property_scope.PropertyScopeTestCase.test_strict_scope_reads_site_config_as_integer)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/kamra/kamra/tests/test_property_scope.py", line 144, in test_strict_scope_reads_site_config_as_integer
+    self.assertIsNone(authz.restricted_properties())
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    self = <kamra.tests.test_property_scope.PropertyScopeTestCase testMethod=test_strict_scope_reads_site_config_as_integer>
+AssertionError: set() is not None
+
+----------------------------------------------------------------------
+Ran 19 tests in 3.784s
+
+FAILED (failures=5)

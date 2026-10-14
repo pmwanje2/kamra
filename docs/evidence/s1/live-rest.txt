@@ -1,0 +1,10 @@
+== off ==
+{"url":"http://127.0.0.1:18712/api/resource/Reservation?fields=%5B%22name%22%2C%22property%22%5D&filters=%5B%5B%22property%22%2C%22in%22%2C%5B%22P1%22%2C%22P2%22%5D%5D%5D","status":200,"body":{"data":[{"name":"RES-2026-00011","property":"P1"},{"name":"RES-2026-00013","property":"P2"}]}}
+== on ==
+{"url":"http://127.0.0.1:18712/api/resource/Reservation?fields=%5B%22name%22%2C%22property%22%5D&filters=%5B%5B%22property%22%2C%22in%22%2C%5B%22P1%22%2C%22P2%22%5D%5D%5D","status":200,"body":{"data":[]}}
+== agent ==
+{"url":"http://127.0.0.1:18712/api/resource/Reservation?fields=%5B%22name%22%2C%22property%22%5D&filters=%5B%5B%22property%22%2C%22in%22%2C%5B%22P1%22%2C%22P2%22%5D%5D%5D","status":200,"body":{"data":[]}}
+== doc ==
+{"url":"http://127.0.0.1:18712/api/resource/Reservation/RES-2026-00013","status":403,"body":{"exception":"frappe.exceptions.PermissionError","exc_type":"PermissionError","exc":"<stack omitted>","_server_messages":"[\"{\\\"message\\\":\\\"Not allowed via controller permission check\\\",\\\"as_table\\\":false,\\\"title\\\":\\\"Message\\\"}\"]","_error_message":"You need the 'read' permission on <strong>Reservation</str
+== snap ==
+{"url":"http://127.0.0.1:18712/api/method/kamra.api.front_desk_snapshot?property=P2","status":403,"body":{"exception":"frappe.exceptions.PermissionError: You don't have access to P2.","exc_type":"PermissionError","exc":"<stack omitted>","_server_messages":"[\"{\\\"message\\\":\\\"You don't have access to P2.\\\",\\\"as_table\\\":false,\\\"title\\\":\\\"Message\\\",\\\"indicator\\\":\\\"red\\\",\\\"raise_exception\\\"
