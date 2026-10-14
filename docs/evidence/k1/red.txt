@@ -1,0 +1,39 @@
+Starting test run with parameters: site=kamra.localhost, module=kamra.tests.test_channel_manager_availability, verbose=False, tests=(), force=False, profile=False, failfast=False, skip_before_tests=False, debug=False, selected_categories=[]
+View detailed logs (using --verbose): /home/frappe/frappe-bench/logs/frappe.testing.log
+
+Running 6 integration tests for kamra
+
+kamra.tests.test_channel_manager_availability.ChannelManagerAvailabilityTestCase
+    ✔  test_adjacent_stay_leaves_tonight_available
+    ✔  test_assigned_stay_is_not_counted_twice
+    ✖  test_legacy_unassigned_stay_reduces_ota_inventory
+    ✔  test_requested_stay_holds_no_ota_inventory
+    ✔  test_room_block_still_holds_ota_inventory
+    ✖  test_unassigned_confirmed_stay_reduces_ota_inventory
+
+
+======================================================================
+ FAIL  test_legacy_unassigned_stay_reduces_ota_inventory (kamra.tests.test_channel_manager_availability.ChannelManagerAvailabilityTestCase.test_legacy_unassigned_stay_reduces_ota_inventory)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/kamra/kamra/tests/test_channel_manager_availability.py", line 45, in test_legacy_unassigned_stay_reduces_ota_inventory
+    self.assertEqual(self.available(), 0)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    self = <kamra.tests.test_channel_manager_availability.ChannelManagerAvailabilityTestCase testMethod=test_legacy_unassigned_stay_reduces_ota_inventory>
+AssertionError: 1 != 0
+
+======================================================================
+ FAIL  test_unassigned_confirmed_stay_reduces_ota_inventory (kamra.tests.test_channel_manager_availability.ChannelManagerAvailabilityTestCase.test_unassigned_confirmed_stay_reduces_ota_inventory)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/kamra/kamra/tests/test_channel_manager_availability.py", line 40, in test_unassigned_confirmed_stay_reduces_ota_inventory
+    self.assertEqual(self.available(), 0)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+    self = <kamra.tests.test_channel_manager_availability.ChannelManagerAvailabilityTestCase testMethod=test_unassigned_confirmed_stay_reduces_ota_inventory>
+    stay = <Reservation: doctype=Reservation RES-2026-00027>
+AssertionError: 1 != 0
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.702s
+
+FAILED (failures=2)
