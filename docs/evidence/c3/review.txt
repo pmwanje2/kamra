@@ -1,0 +1,11 @@
+CodeRabbit CLI 0.7.6
+Command: coderabbit review --agent -t committed --base-commit 985606b3497b784e556b1d7522c28098123a77d7
+Candidate production source: 65bfc3832db242d38826923c5e2e61770850e994
+
+{"type":"review_context","reviewType":"committed","currentBranch":"fix/supervisor-reason-pin-policy","baseBranch":"develop","baseCommit":"985606b3497b784e556b1d7522c28098123a77d7","workingDirectory":"/tmp/kamra-3712-nrk9ZE"}
+{"type":"status","phase":"connecting","status":"connecting_to_review_service"}
+{"type":"error","errorType":"connection","message":"Connection failed: Invalid organization","recoverable":true,"details":{"shape":{"message":"Invalid organization","code":-32003,"data":{"code":"FORBIDDEN","httpStatus":403,"path":"vsCode.subscribeToEvents"}},"data":{"code":"FORBIDDEN","httpStatus":403,"path":"vsCode.subscribeToEvents"},"name":"TRPCClientError"}}
+Error: Invalid organization
+Exit status: 1
+
+CANNOT-VERIFY: no CodeRabbit review result. This does not substitute for the unavailable independent cross-family specialist.

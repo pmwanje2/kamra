@@ -1,0 +1,570 @@
+Starting test run with parameters: site=kamra.localhost, app=kamra, verbose=False, tests=(), force=False, profile=False, failfast=False, skip_before_tests=False, debug=False, selected_categories=[]
+View detailed logs (using --verbose): /home/frappe/frappe-bench/logs/frappe.testing.log
+
+Running 119 integration tests for kamra
+
+kamra.tests.test_property_scope.PropertyScopeTestCase
+    ✔  test_guest_argument_is_scoped_by_default
+    ✔  test_guest_doc_read_refused_for_other_property
+       ▸  /home/frappe/frappe-bench/apps/frappe/frappe/model/qb_query.py:163: V17FrappeDeprecationWarning: This codepath was marked (DATE: 2024-01-01) deprecated for removal (from v17 onwards); note:
+       ▸   The 'limit_page_length' parameter is deprecated. Use 'limit' instead.
+       ▸  
+       ▸    deprecation_warning(
+    ✔  test_guest_list_hides_other_properties_guests
+    ✔  test_unrestricted_staff_still_see_every_guest
+    ✔  test_upsert_cannot_take_over_other_property_record
+
+kamra.tests.test_supervisor_reason.SupervisorReasonTestCase
+    ✔  test_finance_can_use_supervisor_reason_without_pin_when_property_pin_is_off
+    ✔  test_finance_still_needs_pin_when_property_pin_is_on
+    ✔  test_front_desk_still_needs_supervisor_role_when_property_pin_is_off
+    ✔  test_hotel_admin_can_use_supervisor_reason_without_pin_when_property_pin_is_off
+    ✔  test_pin_enabled_supervisor_reason_checks_the_cashier_pin
+
+kamra.tests.test_banquet.TestAccess
+    ✔  test_finance_may_read_but_not_re_price
+    ✔  test_housekeeping_sees_the_indent_but_not_the_pipeline
+    ✔  test_only_the_catalogue_roles_change_what_things_cost
+    ✔  test_sales_can_run_the_whole_flow
+
+kamra.tests.test_banquet.TestAmenities
+    ✔  test_chargeable_extras_can_be_priced_onto_the_quote
+    ✔  test_included_amenities_are_not_billed
+    ✔  test_or_parked_as_open_items_while_it_is_undecided
+
+kamra.tests.test_banquet.TestBanquetOps
+    ✔  test_cannot_email_before_stamping
+    ✔  test_completing_a_checklist_task
+    ✔  test_confirm_via_set_status_also_spawns_checklists
+    ✔  test_desk_records_guest_confirmation
+    ✖  test_emailing_a_quote_stamps_quote_emailed_on
+    ✔  test_guest_confirm_can_move_status_and_spawn_checklists
+    ✖  test_quote_no_response_alert_after_three_days
+
+kamra.tests.test_banquet.TestCloseOut
+    ✔  test_a_deduction_needs_a_reason
+    ✔  test_closing_out_twice_would_refund_twice
+    ✔  test_damage_comes_off_the_deposit_and_the_rest_goes_back
+    ✔  test_the_damage_kept_becomes_revenue
+    ✔  test_you_cannot_keep_more_than_you_hold
+
+kamra.tests.test_banquet.TestCostAndMargin
+    ✔  test_a_dish_costs_what_its_recipe_costs
+    ✔  test_a_five_percent_supply_cannot_claim_the_input_credit
+    ✔  test_a_menu_costs_its_default_dishes_before_anyone_chooses
+    ✔  test_a_price_rise_re_costs_every_dish
+    ✔  test_a_service_carries_its_buy_price_onto_the_line
+    ✔  test_margin_is_revenue_less_what_it_actually_cost
+    ✔  test_the_same_food_at_eighteen_percent_can
+
+kamra.tests.test_banquet.TestCustomer
+    ✔  test_a_profile_carries_the_history
+    ✔  test_an_unknown_number_is_not_a_crash
+    ✔  test_the_same_number_is_the_same_client
+
+kamra.tests.test_banquet.TestDocumentCompliance
+    ✔  test_a_quotation_gets_a_number_that_survives_revisions
+    ✔  test_an_invoice_number_is_assigned_once_and_never_moves
+    ✔  test_an_unissued_document_says_it_is_a_draft
+    ✔  test_an_unsold_function_cannot_be_invoiced
+    ✔  test_every_line_carries_its_service_code
+    ✔  test_it_carries_the_compliance_footer_and_place_of_supply
+    ✔  test_the_hotels_identity_is_on_the_paper
+    ✔  test_the_tax_is_broken_out_by_rate_and_named
+    ✔  test_the_total_is_written_out_in_words
+
+kamra.tests.test_banquet.TestDocuments
+    ✔  test_a_quote_is_versioned
+    ✔  test_a_receipt_prints_with_the_amount_in_words
+    ✔  test_an_unsold_function_gets_no_event_order
+    ✔  test_every_document_renders
+    ✔  test_the_event_order_numbers_itself_and_prints_the_menu
+
+kamra.tests.test_banquet.TestEnquiry
+    ✔  test_a_customer_needs_a_name
+    ✔  test_an_enquiry_is_diarised_so_it_cannot_go_quiet
+    ✔  test_enquiry_opens_with_the_halls_rack_rental_on_it
+
+kamra.tests.test_banquet.TestFloorPlan
+    ✔  test_a_hall_with_no_sections_only_clashes_with_itself
+    ✔  test_selling_a_half_takes_the_whole_room
+    ✔  test_selling_the_whole_room_takes_both_halves
+    ✔  test_the_hall_reports_what_it_shares_a_floor_with
+    ✔  test_the_two_halves_sell_independently
+
+kamra.tests.test_banquet.TestGreenRoom
+    ✔  test_holding_a_green_room_takes_it_out_of_sale
+    ✔  test_losing_the_function_gives_the_room_back
+
+kamra.tests.test_banquet.TestHallConflicts
+    ✔  test_a_confirmed_function_owns_the_hall
+    ✔  test_a_hall_takes_a_morning_and_an_evening_function
+    ✔  test_a_tentative_hold_can_be_sold_over
+    ✔  test_availability_reports_the_clash_it_refused
+
+kamra.tests.test_banquet.TestHallDeal
+    ✔  test_a_waived_hall_still_costs_the_hotel_to_open
+    ✔  test_hall_and_food_bills_both
+    ✔  test_the_hall_is_free_once_the_food_bill_clears_the_number
+    ✔  test_the_rental_comes_back_when_the_food_bill_drops
+
+kamra.tests.test_banquet.TestKitchen
+    ✔  test_no_menu_chosen_means_nothing_to_tell_the_kitchen
+    ✔  test_the_chefs_get_it_split_by_section
+    ✔  test_the_indent_explodes_the_picks_into_ingredients
+
+kamra.tests.test_banquet.TestMenuComposition
+    ✔  test_a_course_offers_its_dishes
+    ✔  test_choosing_re_costs_the_line_and_prices_the_upgrade
+    ✔  test_the_card_prints_what_they_chose_not_the_catalogue
+
+kamra.tests.test_banquet.TestModuleGate
+    ✔  test_a_module_that_does_not_exist_is_refused
+    ✔  test_a_property_runs_only_what_it_switched_on
+    ✔  test_admin_and_the_front_desk_cannot_be_switched_off
+    ✔  test_an_empty_setting_means_everything
+
+kamra.tests.test_banquet.TestMonthGrid
+    ✔  test_a_morning_function_does_not_block_the_evening
+
+kamra.tests.test_banquet.TestPipeline
+    ✔  test_a_function_cannot_skip_the_work
+    ✔  test_losing_business_requires_saying_why
+
+kamra.tests.test_banquet.TestPricing
+    ✔  test_a_complimentary_line_is_free_but_never_disappears
+    ✔  test_a_discount_bigger_than_the_quote_is_a_mistake
+    ✔  test_a_discount_spreads_pro_rata_and_each_line_keeps_its_own_tax
+    ✔  test_a_package_floor_bills_its_minimum
+    ✔  test_every_price_move_is_recorded
+    ✔  test_menus_bill_the_guarantee_not_the_hope
+    ✔  test_more_people_than_guaranteed_are_billed_too
+    ✔  test_service_charge_rides_the_food_not_the_hall
+
+kamra.tests.test_banquet.TestQuoteAdvisor
+    ✔  test_it_calls_a_loss_a_loss
+    ✔  test_it_prices_a_what_if_without_touching_the_quote
+    ✔  test_it_refuses_to_pretend_when_nothing_is_costed
+    ✔  test_it_says_how_much_more_can_be_given_away
+    ✔  test_it_says_how_much_more_food_would_free_the_hall
+    ✔  test_it_says_what_is_left_at_the_current_price
+
+kamra.tests.test_banquet.TestRegisters
+    ✔  test_an_unknown_register_is_refused
+    ✔  test_lost_business_is_not_sales
+    ✔  test_the_cash_book_reads_by_payment_and_by_mode
+    ✔  test_the_function_register_totals_its_own_rows
+
+kamra.tests.test_banquet.TestSessions
+    ✔  test_a_reception_running_past_midnight_is_five_hours_not_minus_19
+    ✔  test_a_session_sets_the_clock
+    ✔  test_custom_hours_must_state_its_hours
+    ✔  test_explicit_hours_are_kept_as_custom_hours
+
+kamra.tests.test_banquet.TestTheNight
+    ✔  test_a_deposit_is_held_money_not_payment
+    ✔  test_an_advance_does_pay_the_bill_down
+    ✔  test_terms_stated_as_a_percentage_follow_the_quote
+    ✔  test_the_bar_running_on_bills_on_top
+    ✔  test_the_bill_follows_what_was_served
+
+kamra.tests.test_mcp.TestOAuthHelpers
+    ✔  test_pkce_and_redirect_allowlist
+
+kamra.tests.test_mcp.TestRemoteMCP
+    ✔  test_dcr_rejects_foreign_redirect
+    ✔  test_front_desk_does_not_see_set_room_rate
+    ✔  test_refresh_rotates
+    ✔  test_revoke_kills_access
+    ✔  test_token_requires_pkce
+    ✔  test_tools_call_logs_mcp_channel
+    ✖  test_unauthenticated_mcp_is_401_with_resource_metadata
+----------------------------------------------------------------------
+Ran 119 tests in 32.184s
+
+FAILED (failures=1, errors=2)
+
+kamra.tests.test_assistant_privacy.TestAssistantPrivacy
+    ✔  test_keeps_lookalike_keys
+    ✔  test_masks_lists_under_contact_keys
+    ✔  test_masks_phone_last_four_when_not_strict
+    ✔  test_scrubs_nested_guest
+    ✔  test_strict_redacts
+    ✔  test_strict_scrubs_contact_fields
+
+kamra.tests.test_voucher_limits.TestVoucherLimits
+
+
+======================================================================
+ ERROR  test_emailing_a_quote_stamps_quote_emailed_on (kamra.tests.test_banquet.TestBanquetOps.test_emailing_a_quote_stamps_quote_emailed_on)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/kamra/kamra/tests/test_banquet.py", line 530, in test_emailing_a_quote_stamps_quote_emailed_on
+    out = ops.send_quotation(fn, channels=["email"])
+    fn = 'EVT-2026-0039'
+    ops = <module 'kamra.banquet_ops' from '/workspace/kamra/kamra/banquet_ops.py'>
+    self = <kamra.tests.test_banquet.TestBanquetOps testMethod=test_emailing_a_quote_stamps_quote_emailed_on>
+  File "/home/frappe/frappe-bench/apps/frappe/frappe/utils/typing_validations.py", line 36, in wrapper
+    return func(*args, **kwargs)
+    apply_condition = <function _in_request_or_test at 0x7a4cf9031f30>
+    args = ['EVT-2026-0039']
+    func = <function send_quotation at 0x7a4cedebf3d0>
+    kwargs = {'channels': ['email']}
+  File "/workspace/kamra/kamra/authz.py", line 222, in guarded
+    return fn(*args, **kwargs)
+    allowed = {'Kamra Agent', 'System Manager', 'Revenue Manager', 'Front Desk', 'Hotel Admin', 'Administrator'}
+    args = ('EVT-2026-0039',)
+    fn = <function send_quotation at 0x7a4cedebeae0>
+    kwargs = {'channels': ['email']}
+    roles = ('Front Desk', 'Revenue Manager', 'Kamra Agent')
+    scope = {}
+  File "/workspace/kamra/kamra/banquet_ops.py", line 253, in send_quotation
+    frappe.sendmail(
+    ~~~~~~~~~~~~~~~^
+    	recipients=[email],
+     ^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    	now=True,
+     ^^^^^^^^^
+    )
+    ^
+    banquet_document = <function banquet_document at 0x7a4cee6db270>
+    channels = ['email']
+    doc = <VenueBooking: doctype=Venue Booking EVT-2026-0039>
+    email = 'guest@example.com'
+    fn_load = <function _fn at 0x7a4cee7c8ca0>
+    function = 'EVT-2026-0039'
+    html = '\n\t<div style="font-family:sans-serif;font-size:14px;color:#18181b">\n\t  <p>TEST Banquet Hotel</p>\n\t  <h2>Quotation QTN-2026-00004\n\t      v1</h2>\n\t  <p>Dear Test Customer,</p>\n\t  <p>Please find our quotation for\n\t     <strong>Wedding</strong>\n\t     on <strong>2026-12-24</strong> at\n\t     <strong>TEST Banquet Hotel-Test Hall</strong>.</p>\n\t  <table style="border-collapse:collapse;width:100%;max-width:560px"\n\t         cellpadding="6">\n\t    <thead><tr style="background:#f4f4f5;text-align:left">\n\t      <th>Item</th><th style="text-align:right">Qty</th>\n\t      <th style="text-align:right">Amount</th>\n\t    </tr></thead>\n\t    <tbody><tr><td>Test Hall rental</td><td style=\'text-align:right\'>1.0</td><td style=\'text-align:right\'>50,000.00</td></tr><tr><td>Test Buffet (Dinner)</td><td style=\'text-align:right\'>100.0</td><td style=\'text-align:right\'>120,000.00</td></tr></tbody>\n\t  </table>\n\t  <p><strong>Total:\n\t     185,000.00</strong>\n\t      · valid till 2026-10-30</p>\n\t  <p>Please reply to this email, call us, or message on WhatsApp to confirm\n\t     or request changes. Our sales desk will record your response.</p>\n\t  <p>Thank you,<br/>TEST Banquet Hotel</p>\n\t</div>\n\t'
+    log_action = <function log_action at 0x7a4cedebd4e0>
+    payload = {'header': {'kind': 'quote', 'title': 'Quotation', 'number': 'QTN-2026-00004', 'is_final': True, 'function': 'EVT-2026-0039', 'reference': 'EVT-2026-0039', 'issued_on': '2026-10-15', 'version': 1, 'printed_on': '2026-10-15 00:23:37.584932', 'valid_till': '2026-10-30', 'beo_number': None, 'amount_in_words': 'Rupees One Lakh Eighty Five Thousand Only', 'service_code_label': 'SAC', 'footer': 'This is a computer-generated tax invoice under the GST Act.', 'place_of_supply': 'Karnataka', 'tax_label': 'GST', 'tax_id_label': 'GSTIN'}, 'property': {'property_name': 'TEST Banquet Hotel', 'legal_name': None, 'address_line': None, 'city': 'Testville', 'state': 'Karnataka', 'pincode': None, 'country': 'India', 'phone': None, 'email': None, 'website': None, 'gstin': '29AABCU9603R1ZM', 'logo_url': None, 'address': 'Testville, Karnataka'}, 'customer': {'name': 'Test Customer', 'contact': 'Test Customer', 'phone': None, 'email': 'guest@example.com', 'company': None, 'gstin': None, 'address': None, 'place_of_supply': None}, 'event': {'event_name': None, 'event_type': 'Wedding', 'venue': 'Test Hall', 'venue_type': 'Banquet Hall', 'event_date': '2026-12-24', 'end_date': None, 'start_time': '19:00', 'end_time': '23:00', 'hours': 4.0, 'setup_style': 'Round Table', 'setup_notes': None, 'setup_from': None, 'teardown_by': None, 'pax_expected': 200, 'pax_guaranteed': 100, 'pax_actual': 0, 'billable_pax': 100, 'rate_basis': 'Per Pax', 'green_room': None, 'green_room_complimentary': True}, 'totals': {'subtotal': 170000.0, 'discount': 0.0, 'taxable': 170000.0, 'tax': 15000.0, 'grand_total': 185000.0, 'complimentary_value': 0.0, 'received': 0.0, 'balance_due': 185000.0, 'tax_summary': [{'gst_rate': 5.0, 'taxable': 120000.0, 'tax': 6000.0}, {'gst_rate': 18.0, 'taxable': 50000.0, 'tax': 9000.0}]}, 'tax_breakup': [{'rate': 5.0, 'taxable': 120000.0, 'total_tax': 6000.0, 'parts': [{'label': 'CGST', 'rate': 2.5, 'amount': 3000.0}, {'label': 'SGST', 'rate': 2.5, 'amount': 3000.0}]}, {'rate': 18.0, 'taxable': 50000.0, 'total_tax': 9000.0, 'parts': [{'label': 'CGST', 'rate': 9.0, 'amount': 4500.0}, {'label': 'SGST', 'rate': 9.0, 'amount': 4500.0}]}], 'lines': [{'row': '77eidurun5', 'item_type': 'Venue Rental', 'item_name': 'Test Hall rental', 'service_code': '997212', 'description': None, 'qty': 1.0, 'uom': 'Lot', 'list_rate': 50000.0, 'rate': 50000.0, 'chargeable': True, 'is_alcohol': False, 'on_pack_list': False, 'amount': 50000.0, 'net_amount': 50000.0, 'gst_rate': 18.0, 'gst_amount': 9000.0, 'total': 59000.0, 'notes': None, 'banquet_menu': None}, {'row': '77fvpc58qf', 'item_type': 'Menu', 'item_name': 'Test Buffet (Dinner)', 'service_code': '999799', 'description': None, 'qty': 100.0, 'uom': 'Pax', 'list_rate': 1200.0, 'rate': 1200.0, 'chargeable': True, 'is_alcohol': False, 'on_pack_list': False, 'amount': 120000.0, 'net_amount': 120000.0, 'gst_rate': 5.0, 'gst_amount': 6000.0, 'total': 126000.0, 'notes': None, 'banquet_menu': 'BMENU-00020'}], 'complimentary': [], 'terms': [], 'terms_note': None, 'open_items': [], 'requirements': None}
+    sent = []
+    subject = 'Quotation QTN-2026-00004 — Test Customer'
+  File "/home/frappe/frappe-bench/apps/frappe/frappe/email/__init__.py", line 277, in sendmail
+    q = builder.process(send_now=False)
+    QueueBuilder = <class 'frappe.email.doctype.email_queue.email_queue.QueueBuilder'>
+    add_css = True
+    add_unsubscribe_link = 1
+    args = None
+    as_markdown = False
+    attachments = None
+    bcc = []
+    builder = <frappe.email.doctype.email_queue.email_queue.QueueBuilder object at 0x7a4cee6f0830>
+    cc = []
+    communication = None
+    content = None
+    delayed = True
+    doctype = None
+    email_headers = None
+    email_read_tracker_url = None
+    expose_recipients = None
+    get_email_from_template = <function get_email_from_template at 0x7a4cf9012cf0>
+    header = None
+    in_reply_to = None
+    inline_images = None
+    is_notification = False
+    message = '\n\t<div style="font-family:sans-serif;font-size:14px;color:#18181b">\n\t  <p>TEST Banquet Hotel</p>\n\t  <h2>Quotation QTN-2026-00004\n\t      v1</h2>\n\t  <p>Dear Test Customer,</p>\n\t  <p>Please find our quotation for\n\t     <strong>Wedding</strong>\n\t     on <strong>2026-12-24</strong> at\n\t     <strong>TEST Banquet Hotel-Test Hall</strong>.</p>\n\t  <table style="border-collapse:collapse;width:100%;max-width:560px"\n\t         cellpadding="6">\n\t    <thead><tr style="background:#f4f4f5;text-align:left">\n\t      <th>Item</th><th style="text-align:right">Qty</th>\n\t      <th style="text-align:right">Amount</th>\n\t    </tr></thead>\n\t    <tbody><tr><td>Test Hall rental</td><td style=\'text-align:right\'>1.0</td><td style=\'text-align:right\'>50,000.00</td></tr><tr><td>Test Buffet (Dinner)</td><td style=\'text-align:right\'>100.0</td><td style=\'text-align:right\'>120,000.00</td></tr></tbody>\n\t  </table>\n\t  <p><strong>Total:\n\t     185,000.00</strong>\n\t      · valid till 2026-10-30</p>\n\t  <p>Please reply to this email, call us, or message on WhatsApp to confirm\n\t     or request changes. Our sales desk will record your response.</p>\n\t  <p>Thank you,<br/>TEST Banquet Hotel</p>\n\t</div>\n\t'
+    message_id = None
+    name = None
+    now = True
+    print_letterhead = False
+    queue_separately = False
+    raw_html = False
+    read_receipt = None
+    recipients = ['guest@example.com']
+    redact_message_after_send = False
+    reference_doctype = 'Venue Booking'
+    reference_name = 'EVT-2026-0039'
+    reply_to = None
+    retry = 1
+    send_after = None
+    send_priority = 1
+    sender = ''
+    subject = 'Quotation QTN-2026-00004 — Test Customer'
+    template = None
+    text_content = None
+    unsubscribe_message = None
+    unsubscribe_method = None
+    unsubscribe_params = None
+    with_container = False
+    wrapper = None
+    x_priority = 3
+  File "/home/frappe/frappe-bench/apps/frappe/frappe/email/doctype/email_queue/email_queue.py", line 865, in process
+    queue_data = self.as_dict(include_recipients=False)
+    final_recipients = ['guest@example.com']
+    queue_separately = False
+    self = <frappe.email.doctype.email_queue.email_queue.QueueBuilder object at 0x7a4cee6f0830>
+    send_now = False
+  File "/home/frappe/frappe-bench/apps/frappe/frappe/email/doctype/email_queue/email_queue.py", line 925, in as_dict
+    mail = self.prepare_email_content()
+    email_account = <EmailAccount: doctype=Email Account Notifications>
+    email_account_name = None
+    include_recipients = False
+    self = <frappe.email.doctype.email_queue.email_queue.QueueBuilder object at 0x7a4cee6f0830>
+  File "/home/frappe/frappe-bench/apps/frappe/frappe/email/doctype/email_queue/email_queue.py", line 829, in prepare_email_content
+    formatted=self.email_html_content(),
+              ~~~~~~~~~~~~~~~~~~~~~~~^^
+    email_account = <EmailAccount: doctype=Email Account Notifications>
+    self = <frappe.email.doctype.email_queue.email_queue.QueueBuilder object at 0x7a4cee6f0830>
+  File "/home/frappe/frappe-bench/apps/frappe/frappe/email/doctype/email_queue/email_queue.py", line 733, in email_html_content
+    return get_formatted_html(
+    	self.subject,
+    ...<7 lines>...
+    	wrapper=self.email_wrapper,
+    )
+    email_account = <EmailAccount: doctype=Email Account Notifications>
+    self = <frappe.email.doctype.email_queue.email_queue.QueueBuilder object at 0x7a4cee6f0830>
+  File "/home/frappe/frappe-bench/apps/frappe/frappe/email/email_body.py", line 449, in get_formatted_html
+    return inline_style_in_html(html, add_css=add_css)
+    add_css = True
+    email_account = <EmailAccount: doctype=Email Account Notifications>
+    footer = None
+    header = None
+    html = '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">\n<html xmlns="http://www.w3.org/1999/xhtml">\n\n<head>\n\t<meta name="viewport" content="width=device-width" />\n\t<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />\n\t<title>Quotation QTN-2026-00004 — Test Customer</title>\n</head>\n\n<body>\n\t<table class="body-table " cellpadding="0" cellspacing="0">\n\t\t<tr>\n\t\t\t<td class="body-content" align="center" valign="top">\n\t\t\t\t<table class="email-container" border="0" cellpadding="0" cellspacing="0"\n\t\t\t\t\twidth=" 100% ">\n\t\t\t\t\t\n\t\t\t\t\t<tr>\n\t\t\t\t\t\t<td valign="top" class="email-title-cell">\n\t\t\t\t\t\t\t\n\t\t\t\t\t\t</td>\n\t\t\t\t\t</tr>\n\t\t\t\t\t<tr>\n\t\t\t\t\t\t<td valign="top" class="email-body-cell">\n\t\t\t\t\t\t\t<table class="email-body" border="0" cellpadding="0" cellspacing="0" width="100%">\n\t\t\t\t\t\t\t\t<tr>\n\t\t\t\t\t\t\t\t\t<td valign="top">\n\t\t\t\t\t\t\t\t\t\t<div>\n\t<div style="font-family:sans-serif;font-size:14px;color:#18181b">\n\t  <p>TEST Banquet Hotel</p>\n\t  <h2>Quotation QTN-2026-00004\n\t      v1</h2>\n\t  <p>Dear Test Customer,</p>\n\t  <p>Please find our quotation for\n\t     <strong>Wedding</strong>\n\t     on <strong>2026-12-24</strong> at\n\t     <strong>TEST Banquet Hotel-Test Hall</strong>.</p>\n\t  <table style="border-collapse:collapse;width:100%;max-width:560px"\n\t         cellpadding="6">\n\t    <thead><tr style="background:#f4f4f5;text-align:left">\n\t      <th>Item</th><th style="text-align:right">Qty</th>\n\t      <th style="text-align:right">Amount</th>\n\t    </tr></thead>\n\t    <tbody><tr><td>Test Hall rental</td><td style=\'text-align:right\'>1.0</td><td style=\'text-align:right\'>50,000.00</td></tr><tr><td>Test Buffet (Dinner)</td><td style=\'text-align:right\'>100.0</td><td style=\'text-align:right\'>120,000.00</td></tr></tbody>\n\t  </table>\n\t  <p><strong>Total:\n\t     185,000.00</strong>\n\t      · valid till 2026-10-30</p>\n\t  <p>Please reply to this email, call us, or message on WhatsApp to confirm\n\t     or request changes. Our sales desk will record your response.</p>\n\t  <p>Thank you,<br/>TEST Banquet Hotel</p>\n\t</div>\n\t</div>\n\t\t\t\t\t\t\t\t\t</td>\n\t\t\t\t\t\t\t\t</tr>\n\t\t\t\t\t\t\t</table>\n\t\t\t\t\t\t</td>\n\t\t\t\t\t</tr>\n\t\t\t\t\t<tr>\n\t\t\t\t\t\t<td valign="top" class="email-footer-cell ">\n\t\t\t\t\t\t\t<table class="email-footer" border="0" cellpadding="0" cellspacing="0" width="100%">\n\t\t\t\t\t\t\t\t<tr>\n\t\t\t\t\t\t\t\t\t<td valign="top" data-email-footer="true">\n\t\t\t\t\t\t\t\t\t\t<div class="email-footer-container text-muted ">\n\t<!-- email_account_footer -->\n\t\n\n\t<!-- sender_address -->\n\t\n\n\t<!--unsubscribe link here-->\n\n\t<div class="email-pixel">\n\t\t<!--email_open_check-->\n\t</div>\n\n\t<!-- default_mail_footer -->\n\t\n\n</div>\n\t\t\t\t\t\t\t\t\t</td>\n\t\t\t\t\t\t\t\t</tr>\n\t\t\t\t\t\t\t\t<tr>\n\t\t\t\t\t\t\t\t\t<td valign="top">\n\t\t\t\t\t\t\t\t\t\t<div class="print-html"></div>\n\t\t\t\t\t\t\t\t\t</td>\n\t\t\t\t\t\t\t\t</tr>\n\t\t\t\t\t\t\t</table>\n\t\t\t\t\t\t</td>\n\t\t\t\t\t</tr>\n\t\t\t\t</table>\n\t\t\t</td>\n\t\t</tr>\n\t</table>\n</body>\n\n</html>'
+    message = '\n\t<div style="font-family:sans-serif;font-size:14px;color:#18181b">\n\t  <p>TEST Banquet Hotel</p>\n\t  <h2>Quotation QTN-2026-00004\n\t      v1</h2>\n\t  <p>Dear Test Customer,</p>\n\t  <p>Please find our quotation for\n\t     <strong>Wedding</strong>\n\t     on <strong>2026-12-24</strong> at\n\t     <strong>TEST Banquet Hotel-Test Hall</strong>.</p>\n\t  <table style="border-collapse:collapse;width:100%;max-width:560px"\n\t         cellpadding="6">\n\t    <thead><tr style="background:#f4f4f5;text-align:left">\n\t      <th>Item</th><th style="text-align:right">Qty</th>\n\t      <th style="text-align:right">Amount</th>\n\t    </tr></thead>\n\t    <tbody><tr><td>Test Hall rental</td><td style=\'text-align:right\'>1.0</td><td style=\'text-align:right\'>50,000.00</td></tr><tr><td>Test Buffet (Dinner)</td><td style=\'text-align:right\'>100.0</td><td style=\'text-align:right\'>120,000.00</td></tr></tbody>\n\t  </table>\n\t  <p><strong>Total:\n\t     185,000.00</strong>\n\t      · valid till 2026-10-30</p>\n\t  <p>Please reply to this email, call us, or message on WhatsApp to confirm\n\t     or request changes. Our sales desk will record your response.</p>\n\t  <p>Thank you,<br/>TEST Banquet Hotel</p>\n\t</div>\n\t'
+    params = {'site_url': 'http://kamra.localhost', 'title': 'Quotation QTN-2026-00004 — Test Customer', 'print_html': None, 'subject': 'Quotation QTN-2026-00004 — Test Customer', 'brand_logo': None, 'brand_name': None, 'with_container': False, 'header': None, 'content': '\n\t<div style="font-family:sans-serif;font-size:14px;color:#18181b">\n\t  <p>TEST Banquet Hotel</p>\n\t  <h2>Quotation QTN-2026-00004\n\t      v1</h2>\n\t  <p>Dear Test Customer,</p>\n\t  <p>Please find our quotation for\n\t     <strong>Wedding</strong>\n\t     on <strong>2026-12-24</strong> at\n\t     <strong>TEST Banquet Hotel-Test Hall</strong>.</p>\n\t  <table style="border-collapse:collapse;width:100%;max-width:560px"\n\t         cellpadding="6">\n\t    <thead><tr style="background:#f4f4f5;text-align:left">\n\t      <th>Item</th><th style="text-align:right">Qty</th>\n\t      <th style="text-align:right">Amount</th>\n\t    </tr></thead>\n\t    <tbody><tr><td>Test Hall rental</td><td style=\'text-align:right\'>1.0</td><td style=\'text-align:right\'>50,000.00</td></tr><tr><td>Test Buffet (Dinner)</td><td style=\'text-align:right\'>100.0</td><td style=\'text-align:right\'>120,000.00</td></tr></tbody>\n\t  </table>\n\t  <p><strong>Total:\n\t     185,000.00</strong>\n\t      · valid till 2026-10-30</p>\n\t  <p>Please reply to this email, call us, or message on WhatsApp to confirm\n\t     or request changes. Our sales desk will record your response.</p>\n\t  <p>Thank you,<br/>TEST Banquet Hotel</p>\n\t</div>\n\t', 'footer': '<div class="email-footer-container text-muted ">\n\t<!-- email_account_footer -->\n\t\n\n\t<!-- sender_address -->\n\t\n\n\t<!--unsubscribe link here-->\n\n\t<div class="email-pixel">\n\t\t<!--email_open_check-->\n\t</div>\n\n\t<!-- default_mail_footer -->\n\t\n\n</div>'}
+    print_html = None
+    raw_html = False
+    rendered_email = '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">\n<html xmlns="http://www.w3.org/1999/xhtml">\n\n<head>\n\t<meta name="viewport" content="width=device-width" />\n\t<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />\n\t<title>Quotation QTN-2026-00004 — Test Customer</title>\n</head>\n\n<body>\n\t<table class="body-table " cellpadding="0" cellspacing="0">\n\t\t<tr>\n\t\t\t<td class="body-content" align="center" valign="top">\n\t\t\t\t<table class="email-container" border="0" cellpadding="0" cellspacing="0"\n\t\t\t\t\twidth=" 100% ">\n\t\t\t\t\t\n\t\t\t\t\t<tr>\n\t\t\t\t\t\t<td valign="top" class="email-title-cell">\n\t\t\t\t\t\t\t\n\t\t\t\t\t\t</td>\n\t\t\t\t\t</tr>\n\t\t\t\t\t<tr>\n\t\t\t\t\t\t<td valign="top" class="email-body-cell">\n\t\t\t\t\t\t\t<table class="email-body" border="0" cellpadding="0" cellspacing="0" width="100%">\n\t\t\t\t\t\t\t\t<tr>\n\t\t\t\t\t\t\t\t\t<td valign="top">\n\t\t\t\t\t\t\t\t\t\t<div>\n\t<div style="font-family:sans-serif;font-size:14px;color:#18181b">\n\t  <p>TEST Banquet Hotel</p>\n\t  <h2>Quotation QTN-2026-00004\n\t      v1</h2>\n\t  <p>Dear Test Customer,</p>\n\t  <p>Please find our quotation for\n\t     <strong>Wedding</strong>\n\t     on <strong>2026-12-24</strong> at\n\t     <strong>TEST Banquet Hotel-Test Hall</strong>.</p>\n\t  <table style="border-collapse:collapse;width:100%;max-width:560px"\n\t         cellpadding="6">\n\t    <thead><tr style="background:#f4f4f5;text-align:left">\n\t      <th>Item</th><th style="text-align:right">Qty</th>\n\t      <th style="text-align:right">Amount</th>\n\t    </tr></thead>\n\t    <tbody><tr><td>Test Hall rental</td><td style=\'text-align:right\'>1.0</td><td style=\'text-align:right\'>50,000.00</td></tr><tr><td>Test Buffet (Dinner)</td><td style=\'text-align:right\'>100.0</td><td style=\'text-align:right\'>120,000.00</td></tr></tbody>\n\t  </table>\n\t  <p><strong>Total:\n\t     185,000.00</strong>\n\t      · valid till 2026-10-30</p>\n\t  <p>Please reply to this email, call us, or message on WhatsApp to confirm\n\t     or request changes. Our sales desk will record your response.</p>\n\t  <p>Thank you,<br/>TEST Banquet Hotel</p>\n\t</div>\n\t</div>\n\t\t\t\t\t\t\t\t\t</td>\n\t\t\t\t\t\t\t\t</tr>\n\t\t\t\t\t\t\t</table>\n\t\t\t\t\t\t</td>\n\t\t\t\t\t</tr>\n\t\t\t\t\t<tr>\n\t\t\t\t\t\t<td valign="top" class="email-footer-cell ">\n\t\t\t\t\t\t\t<table class="email-footer" border="0" cellpadding="0" cellspacing="0" width="100%">\n\t\t\t\t\t\t\t\t<tr>\n\t\t\t\t\t\t\t\t\t<td valign="top" data-email-footer="true">\n\t\t\t\t\t\t\t\t\t\t<div class="email-footer-container text-muted ">\n\t<!-- email_account_footer -->\n\t\n\n\t<!-- sender_address -->\n\t\n\n\t<!--unsubscribe link here-->\n\n\t<div class="email-pixel">\n\t\t<!--email_open_check-->\n\t</div>\n\n\t<!-- default_mail_footer -->\n\t\n\n</div>\n\t\t\t\t\t\t\t\t\t</td>\n\t\t\t\t\t\t\t\t</tr>\n\t\t\t\t\t\t\t\t<tr>\n\t\t\t\t\t\t\t\t\t<td valign="top">\n\t\t\t\t\t\t\t\t\t\t<div class="print-html"></div>\n\t\t\t\t\t\t\t\t\t</td>\n\t\t\t\t\t\t\t\t</tr>\n\t\t\t\t\t\t\t</table>\n\t\t\t\t\t\t</td>\n\t\t\t\t\t</tr>\n\t\t\t\t</table>\n\t\t\t</td>\n\t\t</tr>\n\t</table>\n</body>\n\n</html>'
+    sender = None
+    subject = 'Quotation QTN-2026-00004 — Test Customer'
+    unsubscribe_link = None
+    with_container = False
+    wrapper = 'templates/emails/standard.html'
+  File "/home/frappe/frappe-bench/apps/frappe/frappe/email/email_body.py", line 480, in inline_style_in_html
+    css_files = [bundled_asset(path) for path in css_files]
+                 ~~~~~~~~~~~~~^^^^^^
+    Premailer = <class 'premailer.premailer.Premailer'>
+    add_css = True
+    bundled_asset = <function bundled_asset at 0x7a4cf42fc0f0>
+    css_files = ['email.bundle.css']
+    html = '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">\n<html xmlns="http://www.w3.org/1999/xhtml">\n\n<head>\n\t<meta name="viewport" content="width=device-width" />\n\t<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />\n\t<title>Quotation QTN-2026-00004 — Test Customer</title>\n</head>\n\n<body>\n\t<table class="body-table " cellpadding="0" cellspacing="0">\n\t\t<tr>\n\t\t\t<td class="body-content" align="center" valign="top">\n\t\t\t\t<table class="email-container" border="0" cellpadding="0" cellspacing="0"\n\t\t\t\t\twidth=" 100% ">\n\t\t\t\t\t\n\t\t\t\t\t<tr>\n\t\t\t\t\t\t<td valign="top" class="email-title-cell">\n\t\t\t\t\t\t\t\n\t\t\t\t\t\t</td>\n\t\t\t\t\t</tr>\n\t\t\t\t\t<tr>\n\t\t\t\t\t\t<td valign="top" class="email-body-cell">\n\t\t\t\t\t\t\t<table class="email-body" border="0" cellpadding="0" cellspacing="0" width="100%">\n\t\t\t\t\t\t\t\t<tr>\n\t\t\t\t\t\t\t\t\t<td valign="top">\n\t\t\t\t\t\t\t\t\t\t<div>\n\t<div style="font-family:sans-serif;font-size:14px;color:#18181b">\n\t  <p>TEST Banquet Hotel</p>\n\t  <h2>Quotation QTN-2026-00004\n\t      v1</h2>\n\t  <p>Dear Test Customer,</p>\n\t  <p>Please find our quotation for\n\t     <strong>Wedding</strong>\n\t     on <strong>2026-12-24</strong> at\n\t     <strong>TEST Banquet Hotel-Test Hall</strong>.</p>\n\t  <table style="border-collapse:collapse;width:100%;max-width:560px"\n\t         cellpadding="6">\n\t    <thead><tr style="background:#f4f4f5;text-align:left">\n\t      <th>Item</th><th style="text-align:right">Qty</th>\n\t      <th style="text-align:right">Amount</th>\n\t    </tr></thead>\n\t    <tbody><tr><td>Test Hall rental</td><td style=\'text-align:right\'>1.0</td><td style=\'text-align:right\'>50,000.00</td></tr><tr><td>Test Buffet (Dinner)</td><td style=\'text-align:right\'>100.0</td><td style=\'text-align:right\'>120,000.00</td></tr></tbody>\n\t  </table>\n\t  <p><strong>Total:\n\t     185,000.00</strong>\n\t      · valid till 2026-10-30</p>\n\t  <p>Please reply to this email, call us, or message on WhatsApp to confirm\n\t     or request changes. Our sales desk will record your response.</p>\n\t  <p>Thank you,<br/>TEST Banquet Hotel</p>\n\t</div>\n\t</div>\n\t\t\t\t\t\t\t\t\t</td>\n\t\t\t\t\t\t\t\t</tr>\n\t\t\t\t\t\t\t</table>\n\t\t\t\t\t\t</td>\n\t\t\t\t\t</tr>\n\t\t\t\t\t<tr>\n\t\t\t\t\t\t<td valign="top" class="email-footer-cell ">\n\t\t\t\t\t\t\t<table class="email-footer" border="0" cellpadding="0" cellspacing="0" width="100%">\n\t\t\t\t\t\t\t\t<tr>\n\t\t\t\t\t\t\t\t\t<td valign="top" data-email-footer="true">\n\t\t\t\t\t\t\t\t\t\t<div class="email-footer-container text-muted ">\n\t<!-- email_account_footer -->\n\t\n\n\t<!-- sender_address -->\n\t\n\n\t<!--unsubscribe link here-->\n\n\t<div class="email-pixel">\n\t\t<!--email_open_check-->\n\t</div>\n\n\t<!-- default_mail_footer -->\n\t\n\n</div>\n\t\t\t\t\t\t\t\t\t</td>\n\t\t\t\t\t\t\t\t</tr>\n\t\t\t\t\t\t\t\t<tr>\n\t\t\t\t\t\t\t\t\t<td valign="top">\n\t\t\t\t\t\t\t\t\t\t<div class="print-html"></div>\n\t\t\t\t\t\t\t\t\t</td>\n\t\t\t\t\t\t\t\t</tr>\n\t\t\t\t\t\t\t</table>\n\t\t\t\t\t\t</td>\n\t\t\t\t\t</tr>\n\t\t\t\t</table>\n\t\t\t</td>\n\t\t</tr>\n\t</table>\n</body>\n\n</html>'
+  File "/home/frappe/frappe-bench/apps/frappe/frappe/utils/jinja_globals.py", line 155, in bundled_asset
+    path = bundled_assets.get(path) or path
+           ^^^^^^^^^^^^^^^^^^
+    abs_url = <function abs_url at 0x7a4cf5fa9900>
+    bundled_assets = None
+    get_assets_json = <function get_assets_json at 0x7a4cf8fb3480>
+    path = 'email.bundle.css'
+    rtl = None
+AttributeError: 'NoneType' object has no attribute 'get'
+
+======================================================================
+ ERROR  test_quote_no_response_alert_after_three_days (kamra.tests.test_banquet.TestBanquetOps.test_quote_no_response_alert_after_three_days)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/kamra/kamra/tests/test_banquet.py", line 606, in test_quote_no_response_alert_after_three_days
+    ops.send_quotation(fn, channels=["email"])
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+    add_days = <function add_days at 0x7a4cf8f717a0>
+    fn = 'EVT-2026-0048'
+    now_datetime = <function now_datetime at 0x7a4cf8f72400>
+    ops = <module 'kamra.banquet_ops' from '/workspace/kamra/kamra/banquet_ops.py'>
+    self = <kamra.tests.test_banquet.TestBanquetOps testMethod=test_quote_no_response_alert_after_three_days>
+  File "/home/frappe/frappe-bench/apps/frappe/frappe/utils/typing_validations.py", line 36, in wrapper
+    return func(*args, **kwargs)
+    apply_condition = <function _in_request_or_test at 0x7a4cf9031f30>
+    args = ['EVT-2026-0048']
+    func = <function send_quotation at 0x7a4cedebf3d0>
+    kwargs = {'channels': ['email']}
+  File "/workspace/kamra/kamra/authz.py", line 222, in guarded
+    return fn(*args, **kwargs)
+    allowed = {'Kamra Agent', 'System Manager', 'Revenue Manager', 'Front Desk', 'Hotel Admin', 'Administrator'}
+    args = ('EVT-2026-0048',)
+    fn = <function send_quotation at 0x7a4cedebeae0>
+    kwargs = {'channels': ['email']}
+    roles = ('Front Desk', 'Revenue Manager', 'Kamra Agent')
+    scope = {}
+  File "/workspace/kamra/kamra/banquet_ops.py", line 253, in send_quotation
+    frappe.sendmail(
+    ~~~~~~~~~~~~~~~^
+    	recipients=[email],
+     ^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    	now=True,
+     ^^^^^^^^^
+    )
+    ^
+    banquet_document = <function banquet_document at 0x7a4cee6db270>
+    channels = ['email']
+    doc = <VenueBooking: doctype=Venue Booking EVT-2026-0048>
+    email = 'guest@example.com'
+    fn_load = <function _fn at 0x7a4cee7c8ca0>
+    function = 'EVT-2026-0048'
+    html = '\n\t<div style="font-family:sans-serif;font-size:14px;color:#18181b">\n\t  <p>TEST Banquet Hotel</p>\n\t  <h2>Quotation QTN-2026-00006\n\t      v1</h2>\n\t  <p>Dear Test Customer,</p>\n\t  <p>Please find our quotation for\n\t     <strong>Wedding</strong>\n\t     on <strong>2026-12-26</strong> at\n\t     <strong>TEST Banquet Hotel-Test Hall</strong>.</p>\n\t  <table style="border-collapse:collapse;width:100%;max-width:560px"\n\t         cellpadding="6">\n\t    <thead><tr style="background:#f4f4f5;text-align:left">\n\t      <th>Item</th><th style="text-align:right">Qty</th>\n\t      <th style="text-align:right">Amount</th>\n\t    </tr></thead>\n\t    <tbody><tr><td>Test Hall rental</td><td style=\'text-align:right\'>1.0</td><td style=\'text-align:right\'>50,000.00</td></tr><tr><td>Test Buffet (Dinner)</td><td style=\'text-align:right\'>100.0</td><td style=\'text-align:right\'>120,000.00</td></tr></tbody>\n\t  </table>\n\t  <p><strong>Total:\n\t     185,000.00</strong>\n\t      · valid till 2026-10-30</p>\n\t  <p>Please reply to this email, call us, or message on WhatsApp to confirm\n\t     or request changes. Our sales desk will record your response.</p>\n\t  <p>Thank you,<br/>TEST Banquet Hotel</p>\n\t</div>\n\t'
+    log_action = <function log_action at 0x7a4cedebd4e0>
+    payload = {'header': {'kind': 'quote', 'title': 'Quotation', 'number': 'QTN-2026-00006', 'is_final': True, 'function': 'EVT-2026-0048', 'reference': 'EVT-2026-0048', 'issued_on': '2026-10-15', 'version': 1, 'printed_on': '2026-10-15 00:23:38.314190', 'valid_till': '2026-10-30', 'beo_number': None, 'amount_in_words': 'Rupees One Lakh Eighty Five Thousand Only', 'service_code_label': 'SAC', 'footer': 'This is a computer-generated tax invoice under the GST Act.', 'place_of_supply': 'Karnataka', 'tax_label': 'GST', 'tax_id_label': 'GSTIN'}, 'property': {'property_name': 'TEST Banquet Hotel', 'legal_name': None, 'address_line': None, 'city': 'Testville', 'state': 'Karnataka', 'pincode': None, 'country': 'India', 'phone': None, 'email': None, 'website': None, 'gstin': '29AABCU9603R1ZM', 'logo_url': None, 'address': 'Testville, Karnataka'}, 'customer': {'name': 'Test Customer', 'contact': 'Test Customer', 'phone': None, 'email': 'guest@example.com', 'company': None, 'gstin': None, 'address': None, 'place_of_supply': None}, 'event': {'event_name': None, 'event_type': 'Wedding', 'venue': 'Test Hall', 'venue_type': 'Banquet Hall', 'event_date': '2026-12-26', 'end_date': None, 'start_time': '19:00', 'end_time': '23:00', 'hours': 4.0, 'setup_style': 'Round Table', 'setup_notes': None, 'setup_from': None, 'teardown_by': None, 'pax_expected': 200, 'pax_guaranteed': 100, 'pax_actual': 0, 'billable_pax': 100, 'rate_basis': 'Per Pax', 'green_room': None, 'green_room_complimentary': True}, 'totals': {'subtotal': 170000.0, 'discount': 0.0, 'taxable': 170000.0, 'tax': 15000.0, 'grand_total': 185000.0, 'complimentary_value': 0.0, 'received': 0.0, 'balance_due': 185000.0, 'tax_summary': [{'gst_rate': 5.0, 'taxable': 120000.0, 'tax': 6000.0}, {'gst_rate': 18.0, 'taxable': 50000.0, 'tax': 9000.0}]}, 'tax_breakup': [{'rate': 5.0, 'taxable': 120000.0, 'total_tax': 6000.0, 'parts': [{'label': 'CGST', 'rate': 2.5, 'amount': 3000.0}, {'label': 'SGST', 'rate': 2.5, 'amount': 3000.0}]}, {'rate': 18.0, 'taxable': 50000.0, 'total_tax': 9000.0, 'parts': [{'label': 'CGST', 'rate': 9.0, 'amount': 4500.0}, {'label': 'SGST', 'rate': 9.0, 'amount': 4500.0}]}], 'lines': [{'row': '77lve2oj9b', 'item_type': 'Venue Rental', 'item_name': 'Test Hall rental', 'service_code': '997212', 'description': None, 'qty': 1.0, 'uom': 'Lot', 'list_rate': 50000.0, 'rate': 50000.0, 'chargeable': True, 'is_alcohol': False, 'on_pack_list': False, 'amount': 50000.0, 'net_amount': 50000.0, 'gst_rate': 18.0, 'gst_amount': 9000.0, 'total': 59000.0, 'notes': None, 'banquet_menu': None}, {'row': '77m9ag93th', 'item_type': 'Menu', 'item_name': 'Test Buffet (Dinner)', 'service_code': '999799', 'description': None, 'qty': 100.0, 'uom': 'Pax', 'list_rate': 1200.0, 'rate': 1200.0, 'chargeable': True, 'is_alcohol': False, 'on_pack_list': False, 'amount': 120000.0, 'net_amount': 120000.0, 'gst_rate': 5.0, 'gst_amount': 6000.0, 'total': 126000.0, 'notes': None, 'banquet_menu': 'BMENU-00020'}], 'complimentary': [], 'terms': [], 'terms_note': None, 'open_items': [], 'requirements': None}
+    sent = []
+    subject = 'Quotation QTN-2026-00006 — Test Customer'
+  File "/home/frappe/frappe-bench/apps/frappe/frappe/email/__init__.py", line 277, in sendmail
+    q = builder.process(send_now=False)
+    QueueBuilder = <class 'frappe.email.doctype.email_queue.email_queue.QueueBuilder'>
+    add_css = True
+    add_unsubscribe_link = 1
+    args = None
+    as_markdown = False
+    attachments = None
+    bcc = []
+    builder = <frappe.email.doctype.email_queue.email_queue.QueueBuilder object at 0x7a4cee6f0830>
+    cc = []
+    communication = None
+    content = None
+    delayed = True
+    doctype = None
+    email_headers = None
+    email_read_tracker_url = None
+    expose_recipients = None
+    get_email_from_template = <function get_email_from_template at 0x7a4cf9012cf0>
+    header = None
+    in_reply_to = None
+    inline_images = None
+    is_notification = False
+    message = '\n\t<div style="font-family:sans-serif;font-size:14px;color:#18181b">\n\t  <p>TEST Banquet Hotel</p>\n\t  <h2>Quotation QTN-2026-00006\n\t      v1</h2>\n\t  <p>Dear Test Customer,</p>\n\t  <p>Please find our quotation for\n\t     <strong>Wedding</strong>\n\t     on <strong>2026-12-26</strong> at\n\t     <strong>TEST Banquet Hotel-Test Hall</strong>.</p>\n\t  <table style="border-collapse:collapse;width:100%;max-width:560px"\n\t         cellpadding="6">\n\t    <thead><tr style="background:#f4f4f5;text-align:left">\n\t      <th>Item</th><th style="text-align:right">Qty</th>\n\t      <th style="text-align:right">Amount</th>\n\t    </tr></thead>\n\t    <tbody><tr><td>Test Hall rental</td><td style=\'text-align:right\'>1.0</td><td style=\'text-align:right\'>50,000.00</td></tr><tr><td>Test Buffet (Dinner)</td><td style=\'text-align:right\'>100.0</td><td style=\'text-align:right\'>120,000.00</td></tr></tbody>\n\t  </table>\n\t  <p><strong>Total:\n\t     185,000.00</strong>\n\t      · valid till 2026-10-30</p>\n\t  <p>Please reply to this email, call us, or message on WhatsApp to confirm\n\t     or request changes. Our sales desk will record your response.</p>\n\t  <p>Thank you,<br/>TEST Banquet Hotel</p>\n\t</div>\n\t'
+    message_id = None
+    name = None
+    now = True
+    print_letterhead = False
+    queue_separately = False
+    raw_html = False
+    read_receipt = None
+    recipients = ['guest@example.com']
+    redact_message_after_send = False
+    reference_doctype = 'Venue Booking'
+    reference_name = 'EVT-2026-0048'
+    reply_to = None
+    retry = 1
+    send_after = None
+    send_priority = 1
+    sender = ''
+    subject = 'Quotation QTN-2026-00006 — Test Customer'
+    template = None
+    text_content = None
+    unsubscribe_message = None
+    unsubscribe_method = None
+    unsubscribe_params = None
+    with_container = False
+    wrapper = None
+    x_priority = 3
+  File "/home/frappe/frappe-bench/apps/frappe/frappe/email/doctype/email_queue/email_queue.py", line 865, in process
+    queue_data = self.as_dict(include_recipients=False)
+    final_recipients = ['guest@example.com']
+    queue_separately = False
+    self = <frappe.email.doctype.email_queue.email_queue.QueueBuilder object at 0x7a4cee6f0830>
+    send_now = False
+  File "/home/frappe/frappe-bench/apps/frappe/frappe/email/doctype/email_queue/email_queue.py", line 925, in as_dict
+    mail = self.prepare_email_content()
+    email_account = <EmailAccount: doctype=Email Account Notifications>
+    email_account_name = None
+    include_recipients = False
+    self = <frappe.email.doctype.email_queue.email_queue.QueueBuilder object at 0x7a4cee6f0830>
+  File "/home/frappe/frappe-bench/apps/frappe/frappe/email/doctype/email_queue/email_queue.py", line 829, in prepare_email_content
+    formatted=self.email_html_content(),
+              ~~~~~~~~~~~~~~~~~~~~~~~^^
+    email_account = <EmailAccount: doctype=Email Account Notifications>
+    self = <frappe.email.doctype.email_queue.email_queue.QueueBuilder object at 0x7a4cee6f0830>
+  File "/home/frappe/frappe-bench/apps/frappe/frappe/email/doctype/email_queue/email_queue.py", line 733, in email_html_content
+    return get_formatted_html(
+    	self.subject,
+    ...<7 lines>...
+    	wrapper=self.email_wrapper,
+    )
+    email_account = <EmailAccount: doctype=Email Account Notifications>
+    self = <frappe.email.doctype.email_queue.email_queue.QueueBuilder object at 0x7a4cee6f0830>
+  File "/home/frappe/frappe-bench/apps/frappe/frappe/email/email_body.py", line 449, in get_formatted_html
+    return inline_style_in_html(html, add_css=add_css)
+    add_css = True
+    email_account = <EmailAccount: doctype=Email Account Notifications>
+    footer = None
+    header = None
+    html = '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">\n<html xmlns="http://www.w3.org/1999/xhtml">\n\n<head>\n\t<meta name="viewport" content="width=device-width" />\n\t<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />\n\t<title>Quotation QTN-2026-00006 — Test Customer</title>\n</head>\n\n<body>\n\t<table class="body-table " cellpadding="0" cellspacing="0">\n\t\t<tr>\n\t\t\t<td class="body-content" align="center" valign="top">\n\t\t\t\t<table class="email-container" border="0" cellpadding="0" cellspacing="0"\n\t\t\t\t\twidth=" 100% ">\n\t\t\t\t\t\n\t\t\t\t\t<tr>\n\t\t\t\t\t\t<td valign="top" class="email-title-cell">\n\t\t\t\t\t\t\t\n\t\t\t\t\t\t</td>\n\t\t\t\t\t</tr>\n\t\t\t\t\t<tr>\n\t\t\t\t\t\t<td valign="top" class="email-body-cell">\n\t\t\t\t\t\t\t<table class="email-body" border="0" cellpadding="0" cellspacing="0" width="100%">\n\t\t\t\t\t\t\t\t<tr>\n\t\t\t\t\t\t\t\t\t<td valign="top">\n\t\t\t\t\t\t\t\t\t\t<div>\n\t<div style="font-family:sans-serif;font-size:14px;color:#18181b">\n\t  <p>TEST Banquet Hotel</p>\n\t  <h2>Quotation QTN-2026-00006\n\t      v1</h2>\n\t  <p>Dear Test Customer,</p>\n\t  <p>Please find our quotation for\n\t     <strong>Wedding</strong>\n\t     on <strong>2026-12-26</strong> at\n\t     <strong>TEST Banquet Hotel-Test Hall</strong>.</p>\n\t  <table style="border-collapse:collapse;width:100%;max-width:560px"\n\t         cellpadding="6">\n\t    <thead><tr style="background:#f4f4f5;text-align:left">\n\t      <th>Item</th><th style="text-align:right">Qty</th>\n\t      <th style="text-align:right">Amount</th>\n\t    </tr></thead>\n\t    <tbody><tr><td>Test Hall rental</td><td style=\'text-align:right\'>1.0</td><td style=\'text-align:right\'>50,000.00</td></tr><tr><td>Test Buffet (Dinner)</td><td style=\'text-align:right\'>100.0</td><td style=\'text-align:right\'>120,000.00</td></tr></tbody>\n\t  </table>\n\t  <p><strong>Total:\n\t     185,000.00</strong>\n\t      · valid till 2026-10-30</p>\n\t  <p>Please reply to this email, call us, or message on WhatsApp to confirm\n\t     or request changes. Our sales desk will record your response.</p>\n\t  <p>Thank you,<br/>TEST Banquet Hotel</p>\n\t</div>\n\t</div>\n\t\t\t\t\t\t\t\t\t</td>\n\t\t\t\t\t\t\t\t</tr>\n\t\t\t\t\t\t\t</table>\n\t\t\t\t\t\t</td>\n\t\t\t\t\t</tr>\n\t\t\t\t\t<tr>\n\t\t\t\t\t\t<td valign="top" class="email-footer-cell ">\n\t\t\t\t\t\t\t<table class="email-footer" border="0" cellpadding="0" cellspacing="0" width="100%">\n\t\t\t\t\t\t\t\t<tr>\n\t\t\t\t\t\t\t\t\t<td valign="top" data-email-footer="true">\n\t\t\t\t\t\t\t\t\t\t<div class="email-footer-container text-muted ">\n\t<!-- email_account_footer -->\n\t\n\n\t<!-- sender_address -->\n\t\n\n\t<!--unsubscribe link here-->\n\n\t<div class="email-pixel">\n\t\t<!--email_open_check-->\n\t</div>\n\n\t<!-- default_mail_footer -->\n\t\n\n</div>\n\t\t\t\t\t\t\t\t\t</td>\n\t\t\t\t\t\t\t\t</tr>\n\t\t\t\t\t\t\t\t<tr>\n\t\t\t\t\t\t\t\t\t<td valign="top">\n\t\t\t\t\t\t\t\t\t\t<div class="print-html"></div>\n\t\t\t\t\t\t\t\t\t</td>\n\t\t\t\t\t\t\t\t</tr>\n\t\t\t\t\t\t\t</table>\n\t\t\t\t\t\t</td>\n\t\t\t\t\t</tr>\n\t\t\t\t</table>\n\t\t\t</td>\n\t\t</tr>\n\t</table>\n</body>\n\n</html>'
+    message = '\n\t<div style="font-family:sans-serif;font-size:14px;color:#18181b">\n\t  <p>TEST Banquet Hotel</p>\n\t  <h2>Quotation QTN-2026-00006\n\t      v1</h2>\n\t  <p>Dear Test Customer,</p>\n\t  <p>Please find our quotation for\n\t     <strong>Wedding</strong>\n\t     on <strong>2026-12-26</strong> at\n\t     <strong>TEST Banquet Hotel-Test Hall</strong>.</p>\n\t  <table style="border-collapse:collapse;width:100%;max-width:560px"\n\t         cellpadding="6">\n\t    <thead><tr style="background:#f4f4f5;text-align:left">\n\t      <th>Item</th><th style="text-align:right">Qty</th>\n\t      <th style="text-align:right">Amount</th>\n\t    </tr></thead>\n\t    <tbody><tr><td>Test Hall rental</td><td style=\'text-align:right\'>1.0</td><td style=\'text-align:right\'>50,000.00</td></tr><tr><td>Test Buffet (Dinner)</td><td style=\'text-align:right\'>100.0</td><td style=\'text-align:right\'>120,000.00</td></tr></tbody>\n\t  </table>\n\t  <p><strong>Total:\n\t     185,000.00</strong>\n\t      · valid till 2026-10-30</p>\n\t  <p>Please reply to this email, call us, or message on WhatsApp to confirm\n\t     or request changes. Our sales desk will record your response.</p>\n\t  <p>Thank you,<br/>TEST Banquet Hotel</p>\n\t</div>\n\t'
+    params = {'site_url': 'http://kamra.localhost', 'title': 'Quotation QTN-2026-00006 — Test Customer', 'print_html': None, 'subject': 'Quotation QTN-2026-00006 — Test Customer', 'brand_logo': None, 'brand_name': None, 'with_container': False, 'header': None, 'content': '\n\t<div style="font-family:sans-serif;font-size:14px;color:#18181b">\n\t  <p>TEST Banquet Hotel</p>\n\t  <h2>Quotation QTN-2026-00006\n\t      v1</h2>\n\t  <p>Dear Test Customer,</p>\n\t  <p>Please find our quotation for\n\t     <strong>Wedding</strong>\n\t     on <strong>2026-12-26</strong> at\n\t     <strong>TEST Banquet Hotel-Test Hall</strong>.</p>\n\t  <table style="border-collapse:collapse;width:100%;max-width:560px"\n\t         cellpadding="6">\n\t    <thead><tr style="background:#f4f4f5;text-align:left">\n\t      <th>Item</th><th style="text-align:right">Qty</th>\n\t      <th style="text-align:right">Amount</th>\n\t    </tr></thead>\n\t    <tbody><tr><td>Test Hall rental</td><td style=\'text-align:right\'>1.0</td><td style=\'text-align:right\'>50,000.00</td></tr><tr><td>Test Buffet (Dinner)</td><td style=\'text-align:right\'>100.0</td><td style=\'text-align:right\'>120,000.00</td></tr></tbody>\n\t  </table>\n\t  <p><strong>Total:\n\t     185,000.00</strong>\n\t      · valid till 2026-10-30</p>\n\t  <p>Please reply to this email, call us, or message on WhatsApp to confirm\n\t     or request changes. Our sales desk will record your response.</p>\n\t  <p>Thank you,<br/>TEST Banquet Hotel</p>\n\t</div>\n\t', 'footer': '<div class="email-footer-container text-muted ">\n\t<!-- email_account_footer -->\n\t\n\n\t<!-- sender_address -->\n\t\n\n\t<!--unsubscribe link here-->\n\n\t<div class="email-pixel">\n\t\t<!--email_open_check-->\n\t</div>\n\n\t<!-- default_mail_footer -->\n\t\n\n</div>'}
+    print_html = None
+    raw_html = False
+    rendered_email = '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">\n<html xmlns="http://www.w3.org/1999/xhtml">\n\n<head>\n\t<meta name="viewport" content="width=device-width" />\n\t<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />\n\t<title>Quotation QTN-2026-00006 — Test Customer</title>\n</head>\n\n<body>\n\t<table class="body-table " cellpadding="0" cellspacing="0">\n\t\t<tr>\n\t\t\t<td class="body-content" align="center" valign="top">\n\t\t\t\t<table class="email-container" border="0" cellpadding="0" cellspacing="0"\n\t\t\t\t\twidth=" 100% ">\n\t\t\t\t\t\n\t\t\t\t\t<tr>\n\t\t\t\t\t\t<td valign="top" class="email-title-cell">\n\t\t\t\t\t\t\t\n\t\t\t\t\t\t</td>\n\t\t\t\t\t</tr>\n\t\t\t\t\t<tr>\n\t\t\t\t\t\t<td valign="top" class="email-body-cell">\n\t\t\t\t\t\t\t<table class="email-body" border="0" cellpadding="0" cellspacing="0" width="100%">\n\t\t\t\t\t\t\t\t<tr>\n\t\t\t\t\t\t\t\t\t<td valign="top">\n\t\t\t\t\t\t\t\t\t\t<div>\n\t<div style="font-family:sans-serif;font-size:14px;color:#18181b">\n\t  <p>TEST Banquet Hotel</p>\n\t  <h2>Quotation QTN-2026-00006\n\t      v1</h2>\n\t  <p>Dear Test Customer,</p>\n\t  <p>Please find our quotation for\n\t     <strong>Wedding</strong>\n\t     on <strong>2026-12-26</strong> at\n\t     <strong>TEST Banquet Hotel-Test Hall</strong>.</p>\n\t  <table style="border-collapse:collapse;width:100%;max-width:560px"\n\t         cellpadding="6">\n\t    <thead><tr style="background:#f4f4f5;text-align:left">\n\t      <th>Item</th><th style="text-align:right">Qty</th>\n\t      <th style="text-align:right">Amount</th>\n\t    </tr></thead>\n\t    <tbody><tr><td>Test Hall rental</td><td style=\'text-align:right\'>1.0</td><td style=\'text-align:right\'>50,000.00</td></tr><tr><td>Test Buffet (Dinner)</td><td style=\'text-align:right\'>100.0</td><td style=\'text-align:right\'>120,000.00</td></tr></tbody>\n\t  </table>\n\t  <p><strong>Total:\n\t     185,000.00</strong>\n\t      · valid till 2026-10-30</p>\n\t  <p>Please reply to this email, call us, or message on WhatsApp to confirm\n\t     or request changes. Our sales desk will record your response.</p>\n\t  <p>Thank you,<br/>TEST Banquet Hotel</p>\n\t</div>\n\t</div>\n\t\t\t\t\t\t\t\t\t</td>\n\t\t\t\t\t\t\t\t</tr>\n\t\t\t\t\t\t\t</table>\n\t\t\t\t\t\t</td>\n\t\t\t\t\t</tr>\n\t\t\t\t\t<tr>\n\t\t\t\t\t\t<td valign="top" class="email-footer-cell ">\n\t\t\t\t\t\t\t<table class="email-footer" border="0" cellpadding="0" cellspacing="0" width="100%">\n\t\t\t\t\t\t\t\t<tr>\n\t\t\t\t\t\t\t\t\t<td valign="top" data-email-footer="true">\n\t\t\t\t\t\t\t\t\t\t<div class="email-footer-container text-muted ">\n\t<!-- email_account_footer -->\n\t\n\n\t<!-- sender_address -->\n\t\n\n\t<!--unsubscribe link here-->\n\n\t<div class="email-pixel">\n\t\t<!--email_open_check-->\n\t</div>\n\n\t<!-- default_mail_footer -->\n\t\n\n</div>\n\t\t\t\t\t\t\t\t\t</td>\n\t\t\t\t\t\t\t\t</tr>\n\t\t\t\t\t\t\t\t<tr>\n\t\t\t\t\t\t\t\t\t<td valign="top">\n\t\t\t\t\t\t\t\t\t\t<div class="print-html"></div>\n\t\t\t\t\t\t\t\t\t</td>\n\t\t\t\t\t\t\t\t</tr>\n\t\t\t\t\t\t\t</table>\n\t\t\t\t\t\t</td>\n\t\t\t\t\t</tr>\n\t\t\t\t</table>\n\t\t\t</td>\n\t\t</tr>\n\t</table>\n</body>\n\n</html>'
+    sender = None
+    subject = 'Quotation QTN-2026-00006 — Test Customer'
+    unsubscribe_link = None
+    with_container = False
+    wrapper = 'templates/emails/standard.html'
+  File "/home/frappe/frappe-bench/apps/frappe/frappe/email/email_body.py", line 480, in inline_style_in_html
+    css_files = [bundled_asset(path) for path in css_files]
+                 ~~~~~~~~~~~~~^^^^^^
+    Premailer = <class 'premailer.premailer.Premailer'>
+    add_css = True
+    bundled_asset = <function bundled_asset at 0x7a4cf42fc0f0>
+    css_files = ['email.bundle.css']
+    html = '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">\n<html xmlns="http://www.w3.org/1999/xhtml">\n\n<head>\n\t<meta name="viewport" content="width=device-width" />\n\t<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />\n\t<title>Quotation QTN-2026-00006 — Test Customer</title>\n</head>\n\n<body>\n\t<table class="body-table " cellpadding="0" cellspacing="0">\n\t\t<tr>\n\t\t\t<td class="body-content" align="center" valign="top">\n\t\t\t\t<table class="email-container" border="0" cellpadding="0" cellspacing="0"\n\t\t\t\t\twidth=" 100% ">\n\t\t\t\t\t\n\t\t\t\t\t<tr>\n\t\t\t\t\t\t<td valign="top" class="email-title-cell">\n\t\t\t\t\t\t\t\n\t\t\t\t\t\t</td>\n\t\t\t\t\t</tr>\n\t\t\t\t\t<tr>\n\t\t\t\t\t\t<td valign="top" class="email-body-cell">\n\t\t\t\t\t\t\t<table class="email-body" border="0" cellpadding="0" cellspacing="0" width="100%">\n\t\t\t\t\t\t\t\t<tr>\n\t\t\t\t\t\t\t\t\t<td valign="top">\n\t\t\t\t\t\t\t\t\t\t<div>\n\t<div style="font-family:sans-serif;font-size:14px;color:#18181b">\n\t  <p>TEST Banquet Hotel</p>\n\t  <h2>Quotation QTN-2026-00006\n\t      v1</h2>\n\t  <p>Dear Test Customer,</p>\n\t  <p>Please find our quotation for\n\t     <strong>Wedding</strong>\n\t     on <strong>2026-12-26</strong> at\n\t     <strong>TEST Banquet Hotel-Test Hall</strong>.</p>\n\t  <table style="border-collapse:collapse;width:100%;max-width:560px"\n\t         cellpadding="6">\n\t    <thead><tr style="background:#f4f4f5;text-align:left">\n\t      <th>Item</th><th style="text-align:right">Qty</th>\n\t      <th style="text-align:right">Amount</th>\n\t    </tr></thead>\n\t    <tbody><tr><td>Test Hall rental</td><td style=\'text-align:right\'>1.0</td><td style=\'text-align:right\'>50,000.00</td></tr><tr><td>Test Buffet (Dinner)</td><td style=\'text-align:right\'>100.0</td><td style=\'text-align:right\'>120,000.00</td></tr></tbody>\n\t  </table>\n\t  <p><strong>Total:\n\t     185,000.00</strong>\n\t      · valid till 2026-10-30</p>\n\t  <p>Please reply to this email, call us, or message on WhatsApp to confirm\n\t     or request changes. Our sales desk will record your response.</p>\n\t  <p>Thank you,<br/>TEST Banquet Hotel</p>\n\t</div>\n\t</div>\n\t\t\t\t\t\t\t\t\t</td>\n\t\t\t\t\t\t\t\t</tr>\n\t\t\t\t\t\t\t</table>\n\t\t\t\t\t\t</td>\n\t\t\t\t\t</tr>\n\t\t\t\t\t<tr>\n\t\t\t\t\t\t<td valign="top" class="email-footer-cell ">\n\t\t\t\t\t\t\t<table class="email-footer" border="0" cellpadding="0" cellspacing="0" width="100%">\n\t\t\t\t\t\t\t\t<tr>\n\t\t\t\t\t\t\t\t\t<td valign="top" data-email-footer="true">\n\t\t\t\t\t\t\t\t\t\t<div class="email-footer-container text-muted ">\n\t<!-- email_account_footer -->\n\t\n\n\t<!-- sender_address -->\n\t\n\n\t<!--unsubscribe link here-->\n\n\t<div class="email-pixel">\n\t\t<!--email_open_check-->\n\t</div>\n\n\t<!-- default_mail_footer -->\n\t\n\n</div>\n\t\t\t\t\t\t\t\t\t</td>\n\t\t\t\t\t\t\t\t</tr>\n\t\t\t\t\t\t\t\t<tr>\n\t\t\t\t\t\t\t\t\t<td valign="top">\n\t\t\t\t\t\t\t\t\t\t<div class="print-html"></div>\n\t\t\t\t\t\t\t\t\t</td>\n\t\t\t\t\t\t\t\t</tr>\n\t\t\t\t\t\t\t</table>\n\t\t\t\t\t\t</td>\n\t\t\t\t\t</tr>\n\t\t\t\t</table>\n\t\t\t</td>\n\t\t</tr>\n\t</table>\n</body>\n\n</html>'
+  File "/home/frappe/frappe-bench/apps/frappe/frappe/utils/jinja_globals.py", line 155, in bundled_asset
+    path = bundled_assets.get(path) or path
+           ^^^^^^^^^^^^^^^^^^
+    abs_url = <function abs_url at 0x7a4cf5fa9900>
+    bundled_assets = None
+    get_assets_json = <function get_assets_json at 0x7a4cf8fb3480>
+    path = 'email.bundle.css'
+    rtl = None
+AttributeError: 'NoneType' object has no attribute 'get'
+
+======================================================================
+ FAIL  test_unauthenticated_mcp_is_401_with_resource_metadata (kamra.tests.test_mcp.TestRemoteMCP.test_unauthenticated_mcp_is_401_with_resource_metadata)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/kamra/kamra/tests/test_mcp.py", line 93, in test_unauthenticated_mcp_is_401_with_resource_metadata
+    self.assertIn("/mcp/.well-known/oauth-protected-resource", www)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    resp = <Response 87 bytes [401 UNAUTHORIZED]>
+    self = <kamra.tests.test_mcp.TestRemoteMCP testMethod=test_unauthenticated_mcp_is_401_with_resource_metadata>
+    www = 'Bearer realm="Kamra", resource_metadata="http://kamra.localhost/mcp/oauth/resource", scope="kamra.mcp"'
+AssertionError: '/mcp/.well-known/oauth-protected-resource' not found in 'Bearer realm="Kamra", resource_metadata="http://kamra.localhost/mcp/oauth/resource", scope="kamra.mcp"'
+
+
+Running 36 unspecified-category tests for kamra
+    ✔  test_expired_voucher_rejected
+    ✔  test_min_nights_still_applies_without_limits
+    ✔  test_not_started_voucher_rejected
+    ✔  test_saved_booking_keeps_expired_voucher
+    ✔  test_saved_booking_keeps_used_up_voucher
+    ✔  test_used_up_voucher_rejected
+
+kamra.tests.test_void_charge_reason.TestVoidChargeReason
+    ✔  test_blank_reason_is_refused
+    ✔  test_typed_reason_is_passed_to_the_void
+
+kamra.tests.test_charge_validation.TestChargeValidation
+    ✔  test_normal_charge_passes
+    ✔  test_not_a_number_rejected
+    ✔  test_unknown_tax_rate_rejected
+    ✔  test_zero_and_minus_amount_rejected
+
+kamra.tests.test_charge_validation.TestPostingPaths
+    ✔  test_add_folio_charge_checks_what_the_caller_sent
+    ✔  test_agent_alcohol_outside_india_is_not_refused
+    ✔  test_agent_minus_amount_is_refused
+    ✔  test_agent_rate_sent_by_caller_is_still_checked
+    ✔  test_banquet_billing_does_not_use_the_checked_entry_point
+    ✔  test_internal_poster_is_not_whitelisted
+
+kamra.tests.test_aiosell.TestParseWebhook
+    ✔  test_cancel_needs_only_booking_id
+    ✔  test_missing_guest_never_crashes
+    ✔  test_modify_is_flagged_modify
+    ✔  test_multi_room_book_splits_and_suffixes_ota_ref
+    ✔  test_single_room_book_maps_every_field
+
+kamra.tests.test_aiosell.TestPush
+    ✔  test_placeholder_credentials_report_pending_not_a_fake_sync
+    ✔  test_push_bodies_match_the_spec_shapes
+
+kamra.tests.test_aiosell.TestRangeCollapse
+    ✔  test_consecutive_equal_values_collapse_to_ranges
+
+kamra.tests.test_aiosell.TestVillaLockout
+    ✔  test_a_booked_member_room_zeroes_the_villa
+    ✔  test_a_booked_villa_zeroes_every_member
+    ✔  test_all_free_is_untouched
+    ✔  test_no_villa_mapped_is_a_noop
+
+
+----------------------------------------------------------------------
+Ran 36 tests in 0.056s
+
+OK
