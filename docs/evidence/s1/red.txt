@@ -1,0 +1,49 @@
+Starting test run with parameters: site=kamra.localhost, module=kamra.tests.test_property_scope, verbose=False, tests=(), force=False, profile=False, failfast=False, skip_before_tests=False, debug=False, selected_categories=[]
+View detailed logs (using --verbose): /home/frappe/frappe-bench/logs/frappe.testing.log
+
+Running 12 integration tests for kamra
+
+kamra.tests.test_property_scope.PropertyScopeTestCase
+    ✔  test_guest_argument_is_scoped_by_default
+    ✔  test_guest_doc_read_refused_for_other_property
+       ▸  /home/frappe/frappe-bench/apps/frappe/frappe/model/qb_query.py:163: V17FrappeDeprecationWarning: This codepath was marked (DATE: 2024-01-01) deprecated for removal (from v17 onwards); note:
+       ▸   The 'limit_page_length' parameter is deprecated. Use 'limit' instead.
+       ▸  
+       ▸    deprecation_warning(
+    ✔  test_guest_list_hides_other_properties_guests
+    ✔  test_legacy_scope_keeps_unscoped_staff_chain_wide
+    ✖  test_strict_scope_does_not_exempt_hotel_admin
+    ✔  test_strict_scope_keeps_administrator_chain_wide
+    ✔  test_strict_scope_keeps_explicit_property_permissions
+    ✔  test_strict_scope_keeps_system_manager_chain_wide
+    ✔  test_strict_scope_keeps_unscoped_agent_behavior
+    ✖  test_strict_scope_refuses_staff_without_property_permissions
+    ✔  test_unrestricted_staff_still_see_every_guest
+    ✔  test_upsert_cannot_take_over_other_property_record
+
+
+======================================================================
+ FAIL  test_strict_scope_does_not_exempt_hotel_admin (kamra.tests.test_property_scope.PropertyScopeTestCase.test_strict_scope_does_not_exempt_hotel_admin)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/kamra/kamra/tests/test_property_scope.py", line 137, in test_strict_scope_does_not_exempt_hotel_admin
+    with self.assertRaises(frappe.PermissionError):
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+    self = <kamra.tests.test_property_scope.PropertyScopeTestCase testMethod=test_strict_scope_does_not_exempt_hotel_admin>
+    user = <User: doctype=User scope.desk@test.local>
+AssertionError: PermissionError not raised
+
+======================================================================
+ FAIL  test_strict_scope_refuses_staff_without_property_permissions (kamra.tests.test_property_scope.PropertyScopeTestCase.test_strict_scope_refuses_staff_without_property_permissions)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/kamra/kamra/tests/test_property_scope.py", line 84, in test_strict_scope_refuses_staff_without_property_permissions
+    with self.assertRaises(frappe.PermissionError):
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+    self = <kamra.tests.test_property_scope.PropertyScopeTestCase testMethod=test_strict_scope_refuses_staff_without_property_permissions>
+AssertionError: PermissionError not raised
+
+----------------------------------------------------------------------
+Ran 12 tests in 0.833s
+
+FAILED (failures=2)
