@@ -1,0 +1,192 @@
+Starting test run with parameters: site=kamra.localhost, module=kamra.tests.test_supervisor_reason, verbose=False, tests=(), force=False, profile=False, failfast=False, skip_before_tests=False, debug=False, selected_categories=[]
+View detailed logs (using --verbose): /home/frappe/frappe-bench/logs/frappe.testing.log
+
+Running 5 integration tests for kamra
+
+kamra.tests.test_supervisor_reason.SupervisorReasonTestCase
+    ✖  test_finance_can_use_supervisor_reason_without_pin_when_property_pin_is_off
+    ✔  test_finance_still_needs_pin_when_property_pin_is_on
+    ✖  test_front_desk_still_needs_supervisor_role_when_property_pin_is_off
+    ✖  test_hotel_admin_can_use_supervisor_reason_without_pin_when_property_pin_is_off
+    ✔  test_pin_enabled_supervisor_reason_checks_the_cashier_pin
+
+
+======================================================================
+ ERROR  test_finance_can_use_supervisor_reason_without_pin_when_property_pin_is_off (kamra.tests.test_supervisor_reason.SupervisorReasonTestCase.test_finance_can_use_supervisor_reason_without_pin_when_property_pin_is_off)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/kamra/kamra/tests/test_supervisor_reason.py", line 37, in test_finance_can_use_supervisor_reason_without_pin_when_property_pin_is_off
+    self.assertEqual(self.reason_for(self.finance), self.reason)
+                     ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+    self = <kamra.tests.test_supervisor_reason.SupervisorReasonTestCase testMethod=test_finance_can_use_supervisor_reason_without_pin_when_property_pin_is_off>
+  File "/workspace/kamra/kamra/tests/test_supervisor_reason.py", line 30, in reason_for
+    return ledger.require_reason("Adjust", self.reason, supervisor_pin=pin,
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                 property=self.property)
+                                 ^^^^^^^^^^^^^^^^^^^^^^^
+    pin = None
+    self = <kamra.tests.test_supervisor_reason.SupervisorReasonTestCase testMethod=test_finance_can_use_supervisor_reason_without_pin_when_property_pin_is_off>
+    user = 'test-finance-9c388ad3@example.test'
+  File "/workspace/kamra/kamra/ledger.py", line 978, in require_reason
+    frappe.throw("SUPERVISOR_PIN_REQUIRED: this reason needs approval.")
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    category = 'Adjust'
+    free_text = ''
+    property = 'TEST Reason 9c388ad3'
+    reason_code = 'TEST-SUP-9c388ad3'
+    row = {'category': 'Adjust', 'requires_supervisor': 1, 'disabled': 0}
+    supervisor_pin = None
+  File "/home/frappe/frappe-bench/apps/frappe/frappe/utils/messages.py", line 159, in throw
+    msgprint(
+    ~~~~~~~~^
+    	msg,
+     ^^^^
+    ...<7 lines>...
+    	allow_dangerous_html=allow_dangerous_html,
+     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+    allow_dangerous_html = False
+    as_list = False
+    exc = <class 'frappe.exceptions.ValidationError'>
+    is_minimizable = False
+    msg = 'SUPERVISOR_PIN_REQUIRED: this reason needs approval.'
+    primary_action = None
+    title = None
+    wide = False
+  File "/home/frappe/frappe-bench/apps/frappe/frappe/utils/messages.py", line 118, in msgprint
+    _raise_exception()
+    ~~~~~~~~~~~~~~~~^^
+    _raise_exception = <function msgprint.<locals>._raise_exception at 0x74775d813740>
+    alert = False
+    allow_dangerous_html = False
+    as_list = False
+    as_table = False
+    clean_html = <function clean_html at 0x747767ef7480>
+    indicator = 'red'
+    inspect = <module 'inspect' from '/usr/local/lib/python3.14/inspect.py'>
+    is_minimizable = False
+    msg = 'SUPERVISOR_PIN_REQUIRED: this reason needs approval.'
+    out = {'message': 'SUPERVISOR_PIN_REQUIRED: this reason needs approval.', 'as_table': False, 'title': 'Message', 'indicator': 'red', 'raise_exception': 1, '__frappe_exc_id': '50861f5a94321e4ae1609f8f8695c8a5fdc13360ac6d86d3657fabb1'}
+    primary_action = None
+    raise_exception = <class 'frappe.exceptions.ValidationError'>
+    realtime = False
+    title = None
+    wide = False
+  File "/home/frappe/frappe-bench/apps/frappe/frappe/utils/messages.py", line 59, in _raise_exception
+    raise exc
+    exc = ValidationError('SUPERVISOR_PIN_REQUIRED: this reason needs approval.')
+    inspect = <module 'inspect' from '/usr/local/lib/python3.14/inspect.py'>
+    msg = 'SUPERVISOR_PIN_REQUIRED: this reason needs approval.'
+    out = {'message': 'SUPERVISOR_PIN_REQUIRED: this reason needs approval.', 'as_table': False, 'title': 'Message', 'indicator': 'red', 'raise_exception': 1, '__frappe_exc_id': '50861f5a94321e4ae1609f8f8695c8a5fdc13360ac6d86d3657fabb1'}
+    raise_exception = <class 'frappe.exceptions.ValidationError'>
+frappe.exceptions.ValidationError: SUPERVISOR_PIN_REQUIRED: this reason needs approval.
+
+======================================================================
+ ERROR  test_front_desk_still_needs_supervisor_role_when_property_pin_is_off (kamra.tests.test_supervisor_reason.SupervisorReasonTestCase.test_front_desk_still_needs_supervisor_role_when_property_pin_is_off)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/kamra/kamra/tests/test_supervisor_reason.py", line 41, in test_front_desk_still_needs_supervisor_role_when_property_pin_is_off
+    self.reason_for(self.frontdesk)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+    self = <kamra.tests.test_supervisor_reason.SupervisorReasonTestCase testMethod=test_front_desk_still_needs_supervisor_role_when_property_pin_is_off>
+  File "/workspace/kamra/kamra/tests/test_supervisor_reason.py", line 30, in reason_for
+    return ledger.require_reason("Adjust", self.reason, supervisor_pin=pin,
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                 property=self.property)
+                                 ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/kamra/kamra/ledger.py", line 978, in require_reason
+    frappe.throw("SUPERVISOR_PIN_REQUIRED: this reason needs approval.")
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/frappe/frappe-bench/apps/frappe/frappe/utils/messages.py", line 159, in throw
+    msgprint(
+    ~~~~~~~~^
+    	msg,
+     ^^^^
+    ...<7 lines>...
+    	allow_dangerous_html=allow_dangerous_html,
+     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/frappe/frappe-bench/apps/frappe/frappe/utils/messages.py", line 118, in msgprint
+    _raise_exception()
+    ~~~~~~~~~~~~~~~~^^
+  File "/home/frappe/frappe-bench/apps/frappe/frappe/utils/messages.py", line 59, in _raise_exception
+    raise exc
+frappe.exceptions.ValidationError: SUPERVISOR_PIN_REQUIRED: this reason needs approval.
+
+======================================================================
+ ERROR  test_hotel_admin_can_use_supervisor_reason_without_pin_when_property_pin_is_off (kamra.tests.test_supervisor_reason.SupervisorReasonTestCase.test_hotel_admin_can_use_supervisor_reason_without_pin_when_property_pin_is_off)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/kamra/kamra/tests/test_supervisor_reason.py", line 44, in test_hotel_admin_can_use_supervisor_reason_without_pin_when_property_pin_is_off
+    self.assertEqual(self.reason_for(self.hotel_admin), self.reason)
+                     ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+    self = <kamra.tests.test_supervisor_reason.SupervisorReasonTestCase testMethod=test_hotel_admin_can_use_supervisor_reason_without_pin_when_property_pin_is_off>
+  File "/workspace/kamra/kamra/tests/test_supervisor_reason.py", line 30, in reason_for
+    return ledger.require_reason("Adjust", self.reason, supervisor_pin=pin,
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                 property=self.property)
+                                 ^^^^^^^^^^^^^^^^^^^^^^^
+    pin = None
+    self = <kamra.tests.test_supervisor_reason.SupervisorReasonTestCase testMethod=test_hotel_admin_can_use_supervisor_reason_without_pin_when_property_pin_is_off>
+    user = 'test-admin-81dc25a1@example.test'
+  File "/workspace/kamra/kamra/ledger.py", line 978, in require_reason
+    frappe.throw("SUPERVISOR_PIN_REQUIRED: this reason needs approval.")
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    category = 'Adjust'
+    free_text = ''
+    property = 'TEST Reason 81dc25a1'
+    reason_code = 'TEST-SUP-81dc25a1'
+    row = {'category': 'Adjust', 'requires_supervisor': 1, 'disabled': 0}
+    supervisor_pin = None
+  File "/home/frappe/frappe-bench/apps/frappe/frappe/utils/messages.py", line 159, in throw
+    msgprint(
+    ~~~~~~~~^
+    	msg,
+     ^^^^
+    ...<7 lines>...
+    	allow_dangerous_html=allow_dangerous_html,
+     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+    allow_dangerous_html = False
+    as_list = False
+    exc = <class 'frappe.exceptions.ValidationError'>
+    is_minimizable = False
+    msg = 'SUPERVISOR_PIN_REQUIRED: this reason needs approval.'
+    primary_action = None
+    title = None
+    wide = False
+  File "/home/frappe/frappe-bench/apps/frappe/frappe/utils/messages.py", line 118, in msgprint
+    _raise_exception()
+    ~~~~~~~~~~~~~~~~^^
+    _raise_exception = <function msgprint.<locals>._raise_exception at 0x74775d6ee6c0>
+    alert = False
+    allow_dangerous_html = False
+    as_list = False
+    as_table = False
+    clean_html = <function clean_html at 0x747767ef7480>
+    indicator = 'red'
+    inspect = <module 'inspect' from '/usr/local/lib/python3.14/inspect.py'>
+    is_minimizable = False
+    msg = 'SUPERVISOR_PIN_REQUIRED: this reason needs approval.'
+    out = {'message': 'SUPERVISOR_PIN_REQUIRED: this reason needs approval.', 'as_table': False, 'title': 'Message', 'indicator': 'red', 'raise_exception': 1, '__frappe_exc_id': 'f6e4f7f6dc6157ffc135f26f2f66a9934ca529a6dc66743952779097'}
+    primary_action = None
+    raise_exception = <class 'frappe.exceptions.ValidationError'>
+    realtime = False
+    title = None
+    wide = False
+  File "/home/frappe/frappe-bench/apps/frappe/frappe/utils/messages.py", line 59, in _raise_exception
+    raise exc
+    exc = ValidationError('SUPERVISOR_PIN_REQUIRED: this reason needs approval.')
+    inspect = <module 'inspect' from '/usr/local/lib/python3.14/inspect.py'>
+    msg = 'SUPERVISOR_PIN_REQUIRED: this reason needs approval.'
+    out = {'message': 'SUPERVISOR_PIN_REQUIRED: this reason needs approval.', 'as_table': False, 'title': 'Message', 'indicator': 'red', 'raise_exception': 1, '__frappe_exc_id': 'f6e4f7f6dc6157ffc135f26f2f66a9934ca529a6dc66743952779097'}
+    raise_exception = <class 'frappe.exceptions.ValidationError'>
+frappe.exceptions.ValidationError: SUPERVISOR_PIN_REQUIRED: this reason needs approval.
+
+----------------------------------------------------------------------
+Ran 5 tests in 1.138s
+
+FAILED (errors=3)

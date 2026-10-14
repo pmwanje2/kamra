@@ -1,0 +1,17 @@
+Starting test run with parameters: site=kamra.localhost, module=kamra.tests.test_supervisor_reason, verbose=False, tests=(), force=False, profile=False, failfast=False, skip_before_tests=False, debug=False, selected_categories=[]
+View detailed logs (using --verbose): /home/frappe/frappe-bench/logs/frappe.testing.log
+
+Running 5 integration tests for kamra
+
+kamra.tests.test_supervisor_reason.SupervisorReasonTestCase
+    ✔  test_finance_can_use_supervisor_reason_without_pin_when_property_pin_is_off  (2.27s)
+    ✔  test_finance_still_needs_pin_when_property_pin_is_on
+    ✔  test_front_desk_still_needs_supervisor_role_when_property_pin_is_off
+    ✔  test_hotel_admin_can_use_supervisor_reason_without_pin_when_property_pin_is_off
+    ✔  test_pin_enabled_supervisor_reason_checks_the_cashier_pin
+
+
+----------------------------------------------------------------------
+Ran 5 tests in 3.223s
+
+OK
