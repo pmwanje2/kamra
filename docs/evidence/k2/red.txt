@@ -1,0 +1,30 @@
+Starting test run with parameters: site=kamra.localhost, module=kamra.tests.test_reservation_capacity, verbose=False, tests=(), force=False, profile=False, failfast=False, skip_before_tests=False, debug=False, selected_categories=[]
+View detailed logs (using --verbose): /home/frappe/frappe-bench/logs/frappe.testing.log
+
+Running 3 integration tests for kamra
+
+kamra.tests.test_reservation_capacity.ReservationCapacityTestCase
+    ✔  test_requested_stay_does_not_lock_or_consume_capacity
+    ✖  test_room_type_row_is_locked_before_inventory_counts
+    ✔  test_sold_out_type_still_refuses_an_unassigned_stay
+
+
+======================================================================
+ FAIL  test_room_type_row_is_locked_before_inventory_counts (kamra.tests.test_reservation_capacity.ReservationCapacityTestCase.test_room_type_row_is_locked_before_inventory_counts)
+----------------------------------------------------------------------
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/kamra/kamra/tests/test_reservation_capacity.py", line 34, in test_room_type_row_is_locked_before_inventory_counts
+    self.assertTrue(locks, "Room Type was not locked before checking capacity")
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    counts = [0, 3]
+    doc = <Reservation: doctype=Reservation unsaved>
+    locks = []
+    queries = <MagicMock name='sql' id='138080943582112'>
+    self = <kamra.tests.test_reservation_capacity.ReservationCapacityTestCase testMethod=test_room_type_row_is_locked_before_inventory_counts>
+    sql = ['SELECT DISTINCT COUNT(*) FROM `TABROOM` WHERE `ROOM_TYPE`=%(PARAM1)S', 'SELECT `OVERBOOKING_PCT` FROM `TABROOM TYPE` WHERE `NAME`=%(PARAM1)S ORDER BY `CREATION` DESC LIMIT 1', 'SELECT `OVERBOOKING_PCT` FROM `TABPROPERTY` WHERE `NAME`=%(PARAM1)S ORDER BY `CREATION` DESC LIMIT 1', "SELECT COUNT(*) FROM `TABRESERVATION`\n\t\t\t\t   WHERE ROOM_TYPE = %(RT)S AND NAME != %(NAME)S\n\t\t\t\t     AND STATUS IN ('CONFIRMED', 'CHECKED IN', 'HELD', 'PENDING PAYMENT')\n\t\t\t\t     AND CHECK_IN_DATE <= %(D)S\n\t\t\t\t     AND GREATEST(CHECK_OUT_DATE,\n\t\t\t\t                  DATE_ADD(CHECK_IN_DATE, INTERVAL 1 DAY)) > %(D)S"]
+AssertionError: [] is not true : Room Type was not locked before checking capacity
+
+Ran 3 tests in 0.578s
+
+FAILED (failures=1)
