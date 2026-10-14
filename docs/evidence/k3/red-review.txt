@@ -1,0 +1,73 @@
+Starting test run with parameters: site=kamra.localhost, module=kamra.tests.test_channel_manager_bookings, verbose=False, tests=(), force=False, profile=False, failfast=False, skip_before_tests=False, debug=False, selected_categories=[]
+View detailed logs (using --verbose): /home/frappe/frappe-bench/logs/frappe.testing.log
+
+Running 12 integration tests for kamra
+
+kamra.tests.test_channel_manager_bookings.ChannelManagerBookingTestCase
+    ✔  test_capacity_refusal_on_modify_keeps_new_dates_for_resolution
+    ✔  test_currency_mismatch_on_modify_is_requested
+    ✔  test_foreign_currency_is_requested_without_mislabelled_money
+    ✔  test_invalid_occupancy_is_not_treated_as_overbooking
+    ✔  test_matching_currency_keeps_confirmed_booking_and_original_price
+    ✔  test_missing_currency_defaults_to_property_currency
+    ✖  test_modify_dropping_a_retained_room_cancels_it
+    ✔  test_multi_room_refusal_keeps_all_lines_requested
+    ✖  test_ota_cancel_cancels_retained_requested_booking
+    ✖  test_physical_room_double_booking_is_retained_as_requested
+    ✔  test_requested_replay_does_not_duplicate_the_booking
+    ✔  test_sold_out_booking_is_requested_with_resolution_note
+
+
+======================================================================
+ FAIL  test_modify_dropping_a_retained_room_cancels_it (kamra.tests.test_channel_manager_bookings.ChannelManagerBookingTestCase.test_modify_dropping_a_retained_room_cancels_it)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/kamra/kamra/tests/test_channel_manager_bookings.py", line 157, in test_modify_dropping_a_retained_room_cancels_it
+    self.assertEqual(self.received(f"{self.ref}-2").status, "Cancelled")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    i = 2
+    payload = {'action': 'modify', 'hotelCode': 'demo', 'channel': 'Booking.com', 'bookingId': 'TEST-de3e3448', 'checkin': '2026-10-15', 'checkout': '2026-10-16', 'guest': {'firstName': 'OTA', 'lastName': 'Arrival'}, 'amount': {'amountAfterTax': 1500, 'currency': 'UGX'}, 'specialRequests': 'Late arrival', 'rooms': [{'roomCode': 'std', 'occupancy': {'adults': 2, 'children': 0}, 'prices': [{'date': '2026-10-15', 'sellRate': 1500}]}, {'roomCode': 'std', 'occupancy': {'adults': 2, 'children': 0}, 'prices': [{'date': '2026-10-15', 'sellRate': 1500}]}]}
+    self = <kamra.tests.test_channel_manager_bookings.ChannelManagerBookingTestCase testMethod=test_modify_dropping_a_retained_room_cancels_it>
+AssertionError: 'Requested' != 'Cancelled'
+- Requested
++ Cancelled
+
+
+======================================================================
+ FAIL  test_ota_cancel_cancels_retained_requested_booking (kamra.tests.test_channel_manager_bookings.ChannelManagerBookingTestCase.test_ota_cancel_cancels_retained_requested_booking)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/kamra/kamra/tests/test_channel_manager_bookings.py", line 145, in test_ota_cancel_cancels_retained_requested_booking
+    self.assertEqual(doc.status, "Cancelled")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+    doc = <Reservation: doctype=Reservation RES-2026-00069>
+    self = <kamra.tests.test_channel_manager_bookings.ChannelManagerBookingTestCase testMethod=test_ota_cancel_cancels_retained_requested_booking>
+AssertionError: 'Requested' != 'Cancelled'
+- Requested
++ Cancelled
+
+
+======================================================================
+ FAIL  test_physical_room_double_booking_is_retained_as_requested (kamra.tests.test_channel_manager_bookings.ChannelManagerBookingTestCase.test_physical_room_double_booking_is_retained_as_requested)
+The room-overlap refusal ("Double booking blocked") is an inventory
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/kamra/kamra/tests/test_channel_manager_bookings.py", line 179, in test_physical_room_double_booking_is_retained_as_requested
+    doc = self.received()
+    assign_taken_room = <function ChannelManagerBookingTestCase.test_physical_room_double_booking_is_retained_as_requested.<locals>.assign_taken_room at 0x7e8d537b4720>
+    holder = <Reservation: doctype=Reservation RES-2026-00075>
+    original = <function _apply_event at 0x7e8d5830f7f0>
+    self = <kamra.tests.test_channel_manager_bookings.ChannelManagerBookingTestCase testMethod=test_physical_room_double_booking_is_retained_as_requested>
+    taken = 'TEST OTA b2aadbc3-101'
+  File "/workspace/kamra/kamra/tests/test_channel_manager_bookings.py", line 60, in received
+    self.assertTrue(name, "OTA booking was dropped instead of retained for resolution")
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    name = None
+    ref = None
+    self = <kamra.tests.test_channel_manager_bookings.ChannelManagerBookingTestCase testMethod=test_physical_room_double_booking_is_retained_as_requested>
+AssertionError: None is not true : OTA booking was dropped instead of retained for resolution
+
+----------------------------------------------------------------------
+Ran 12 tests in 2.446s
+
+FAILED (failures=3)

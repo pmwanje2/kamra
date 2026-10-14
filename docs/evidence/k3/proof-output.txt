@@ -1,0 +1,27 @@
+/files/kamra-k3-requested-cancel.json
+{
+  "fix": "K3",
+  "worker": "process_webhook_events",
+  "real_commit_and_rollback": true,
+  "1_sold_out_book_event": {
+    "name": "RES-2026-00007",
+    "ota_ref": "TEST-5a89eaa5",
+    "source": "OTA",
+    "status": "Requested",
+    "special_requests": "Late arrival\nOTA overbooking \u2014 resolve",
+    "cancellation_reason": "",
+    "cancellation_note": null,
+    "amount_after_tax": 1500.0,
+    "sellable_tonight": 0
+  },
+  "2_ota_cancel_event": {
+    "name": "RES-2026-00007",
+    "ota_ref": "TEST-5a89eaa5",
+    "source": "OTA",
+    "status": "Cancelled",
+    "special_requests": "Late arrival\nOTA overbooking \u2014 resolve",
+    "cancellation_reason": "Booked elsewhere",
+    "cancellation_note": "Cancelled by Booking.com (TEST-5a89eaa5)",
+    "amount_after_tax": 1500.0
+  }
+}
