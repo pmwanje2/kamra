@@ -363,6 +363,7 @@ export const APPS: AppDef[] = [
  *  the first one *among* the apps given - pass the user's visible apps so
  *  the page opens inside an app they can actually see. */
 export function appForPath(pathname: string, among: AppDef[] = APPS): AppDef {
+  if (!among.length) return { ...APPS[0], items: [] }
   let best: { app: AppDef; len: number } | null = null
   for (const app of among.length ? among : APPS) {
     const prefixes = [
