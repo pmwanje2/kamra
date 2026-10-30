@@ -217,8 +217,9 @@ export default function AppShell() {
   const [branding, setBranding] = useState({
     name: "Kamra PMS", logo: asset("kamra-mark.svg"),
   })
-  const [assistant, setAssistant] = useState<{ property: string; enabled: boolean } | null>(null)
-  const assistantEnabled = assistant?.property === property ? assistant.enabled : null
+  const [assistant, setAssistant] = useState<{ property: string; pathname: string; enabled: boolean } | null>(null)
+  const assistantEnabled = assistant?.property === property && assistant.pathname === location.pathname
+    ? assistant.enabled : null
 
   useEffect(() => {
     getSiteInfo().then((info) => {
@@ -235,10 +236,10 @@ export default function AppShell() {
     setAssistant(null)
     call<{ enabled: boolean }>("kamra.assistant.assistant_status", { property })
       .then((s) => {
-        if (!cancelled) setAssistant({ property, enabled: s?.enabled === true })
+        if (!cancelled) setAssistant({ property, pathname: location.pathname, enabled: s?.enabled === true })
       })
       .catch(() => {
-        if (!cancelled) setAssistant({ property, enabled: false })
+        if (!cancelled) setAssistant({ property, pathname: location.pathname, enabled: false })
       })
     return () => { cancelled = true }
   }, [property, location.pathname])
