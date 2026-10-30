@@ -16,6 +16,7 @@ Modified source files:
 - `frontend/src/App.tsx`
 - `frontend/src/AppShell.tsx`
 - `frontend/src/components/CommandPalette.tsx`
+- `frontend/src/components/HelpPanel.tsx`
 - `frontend/src/components/UpdateNag.tsx`
 - `frontend/src/i18n/catalog.csv`
 - `frontend/src/i18n/locales/ar.json`
@@ -55,6 +56,13 @@ The empty-registry regression from
 list from restoring hidden navigation. The same regression harness also
 uses native list-shaped search fixtures, waits for completed searches,
 and rejects unhandled browser errors.
+The upstream review follow-ups use tests-only RED commits
+`90f46eebe81a07cf79c32d62d94cfbed86b42228` and
+`2c3346f2031d5ca852953a674a30b632bbe19a01`, followed by separate corrections
+`9b2735fff85d5cf5423482355f535bcd16251d22` and
+`da65110b820176fd5fe2bc556ea5c28bfbac2042`. Their equivalent changes here
+key assistant status by both pathname and property before rendering a route,
+and require a null-safe literal `true` in the help panel's own status check.
 Conflict resolution preserves the pin's existing Arabic-only locale and
 assistant/app-shell structure, without importing later features.
 
