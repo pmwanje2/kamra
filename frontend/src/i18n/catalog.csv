@@ -976,7 +976,6 @@ Item,Item,البند,screens/FolioView.tsx; screens/Laundry.tsx,,translated
 Item (Shirt…),Item (Shirt…),البند (قميص…),screens/Laundry.tsx,,translated
 Items,Items,العناصر,screens/POS.tsx; screens/pos/OrderHistory.tsx; screens/pos/PosSidePanel.tsx,,translated
 Journal by kind / mode,Journal by kind / mode,,screens/CashierShiftReport.tsx,,needs_translation
-Kamra {latest} is available - you are on {installed}.,Kamra {latest} is available - you are on {installed}.,كامرا {latest} متاح - أنت على {installed}.,components/UpdateNag.tsx,latest installed,translated
 Kamra Agent → Connect your AI,Kamra Agent → Connect your AI,,screens/settings/cards.tsx,,needs_translation
 "Kamra Agent for staff. Pick a provider, paste the key, Test. Claude Desktop is MCP (Kamra Agent → Connect your AI) - not an Anthropic key in this form.","Kamra Agent for staff. Pick a provider, paste the key, Test. Claude Desktop is MCP (Kamra Agent → Connect your AI) - not an Anthropic key in this form.",,screens/settings/cards.tsx,,needs_translation
 Kamra POSTs a signed JSON event to each endpoint. Failed deliveries are retried for about 8 hours.,Kamra POSTs a signed JSON event to each endpoint. Failed deliveries are retried for about 8 hours.,,screens/settings/WebhooksPage.tsx,,needs_translation
@@ -2061,6 +2060,7 @@ Variance,Variance,الفارق,screens/CashierShiftReport.tsx; screens/CashierTi
 Veg,Veg,نباتي,screens/Kitchen.tsx; screens/POS.tsx,,translated
 Verify,Verify,,screens/FolioView.tsx,,needs_translation
 Verifying a delivery,Verifying a delivery,,screens/settings/WebhooksPage.tsx,,needs_translation
+Version {latest} is available - you are on {installed}.,Version {latest} is available - you are on {installed}.,الإصدار {latest} متاح - أنت على {installed}.,components/UpdateNag.tsx,latest installed,translated
 via {name},via {name},عبر {name},screens/Today.tsx,name,translated
 View,View,عرض,components/RoomDrawer.tsx; screens/EndOfDay.tsx,,translated
 View all apps,View all apps,عرض كل التطبيقات,AppShell.tsx,,translated

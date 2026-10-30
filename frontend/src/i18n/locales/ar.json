@@ -450,6 +450,7 @@
   "KOT {kot} is on the kitchen display. Turn on Print KOT to send it to the printer.": "أمر المطبخ {kot} على شاشة المطبخ. فعّل طباعة أمر المطبخ لإرساله إلى الطابعة.",
   "Kamra Agent": "وكيل كامرا",
   "Kamra will create a whole-property sellable unit for each listing. You can add physical rooms later for housekeeping if needed.": "ستنشئ كامرا وحدة قابلة للبيع للعقار بالكامل لكل قائمة. يمكنك إضافة غرف فعلية لاحقاً للتدبير المنزلي إن لزم.",
+  "Version {latest} is available - you are on {installed}.": "الإصدار {latest} متاح - أنت على {installed}.",
   "Keep": "إبقاء",
   "Keep the booking": "إبقاء الحجز",
   "Keyboard shortcuts": "اختصارات لوحة المفاتيح",

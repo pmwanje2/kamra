@@ -65,6 +65,8 @@ export interface ShellContext {
   /** The property's enabled_modules (empty = all; undefined while loading) -
    *  the same filter the sidebar and MCP apply. */
   modules?: string[]
+  /** null until this property's enabled/key status is known. */
+  assistantEnabled: boolean | null
 }
 
 // mirrors @require_roles on kamra.api.create_booking / walk_in (admins always pass)
@@ -212,10 +214,34 @@ export default function AppShell() {
   const [property, setProperty] = useState(getCurrentProperty())
   const [demoMode, setDemoMode] = useState(false)
   const [build, setBuild] = useState<string | null>(null)
+  const [branding, setBranding] = useState({
+    name: "Kamra PMS", logo: asset("kamra-mark.svg"),
+  })
+  const [assistant, setAssistant] = useState<{ property: string; enabled: boolean } | null>(null)
+  const assistantEnabled = assistant?.property === property ? assistant.enabled : null
 
   useEffect(() => {
-    getSiteInfo().then((info) => setBuild(versionLabel(info)))
+    getSiteInfo().then((info) => {
+      setBuild(versionLabel(info))
+      setBranding({
+        name: info.app_name?.trim() || "Kamra PMS",
+        logo: info.app_logo?.trim() || asset("kamra-mark.svg"),
+      })
+    })
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    setAssistant(null)
+    call<{ enabled: boolean }>("kamra.assistant.assistant_status", { property })
+      .then((s) => {
+        if (!cancelled) setAssistant({ property, enabled: s?.enabled === true })
+      })
+      .catch(() => {
+        if (!cancelled) setAssistant({ property, enabled: false })
+      })
+    return () => { cancelled = true }
+  }, [property, location.pathname])
 
   useEffect(() => {
     myProperties().then((props) => {
@@ -266,7 +292,7 @@ export default function AppShell() {
     return () => window.removeEventListener("kamra:modules-changed", load)
   }, [property])
 
-  const apps = visibleApps(roles, modules)
+  const apps = visibleApps(roles, modules, assistantEnabled === true)
   const routeApp = appForPath(location.pathname, apps)
   const currentApp = apps.some((a) => a.id === routeApp.id) ? routeApp : apps[0]
   const floor = location.pathname === "/pos" || location.pathname === "/kitchen"
@@ -336,12 +362,9 @@ export default function AppShell() {
           aria-label={t("Home")}
           className="mb-5 flex items-center gap-2 rounded-lg px-1 outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
         >
-          <img src={asset("kamra-mark.svg")} alt="" className="size-7" aria-hidden />
+          <img src={branding.logo} alt="" className="size-7 object-contain" aria-hidden />
           <span className="text-lg font-semibold tracking-tight text-zinc-900">
-            kamra
-            <span className="ml-1 align-middle text-[10px] font-semibold tracking-[0.2em] text-brand-600">
-              PMS
-            </span>
+            {branding.name}
           </span>
         </NavLink>
 
@@ -488,6 +511,7 @@ export default function AppShell() {
                 refreshKey,
                 canBook,
                 modules,
+                assistantEnabled,
                 openBooking: (initial) => {
                   if (canBook) setBooking(initial)
                 },
@@ -500,8 +524,8 @@ export default function AppShell() {
       {/* Never float over the till / kitchen pass in focus mode. */}
       {!kiosk && (
         <Suspense fallback={null}>
-          <HelpPanel />
-          <CommandPalette />
+          {assistantEnabled === true && <HelpPanel />}
+          <CommandPalette assistantEnabled={assistantEnabled === true} />
         </Suspense>
       )}
 
