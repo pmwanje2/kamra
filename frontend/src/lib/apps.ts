@@ -376,7 +376,7 @@ export function appForPath(pathname: string, among: AppDef[] = APPS): AppDef {
         best = { app, len: p.length }
     }
   }
-  return best?.app ?? APPS[0]
+  return best?.app ?? among[0] ?? APPS[0]
 }
 
 /** The apps this user can reach: their roles must allow it AND the
