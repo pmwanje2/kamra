@@ -34,6 +34,7 @@ from kamra.tests.audit_fixtures import (
 DESK = "ut.rate.desk@test.local"
 REVENUE = "ut.rate.revenue@test.local"
 GM = "ut.rate.gm@test.local"
+AGENT = "ut.rate.agent@test.local"
 
 
 def set_setting(prop: str, key: str, value) -> None:
@@ -62,6 +63,7 @@ class AgreedRateTestCase(AuditTestCase):
 		ensure_user(DESK, ["Front Desk"])
 		ensure_user(REVENUE, ["Revenue Manager"])
 		ensure_user(GM, ["Hotel Admin"])
+		ensure_user(AGENT, ["Kamra Agent"])
 		frappe.db.delete("Cashier PIN", {"name": GM})
 		frappe.get_doc({"doctype": "Cashier PIN", "user": GM, "pin": "4321"}
 		               ).insert(ignore_permissions=True)
@@ -73,6 +75,14 @@ class AgreedRateTestCase(AuditTestCase):
 			return fn(*args, **kwargs)
 		finally:
 			frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- restore
+
+	def as_agent(self, user, fn, *args, **kwargs):
+		"""The call an AI agent (MCP / chat) makes on behalf of user."""
+		frappe.flags.kamra_agent_call = "MCP"
+		try:
+			return self.as_user(user, fn, *args, **kwargs)
+		finally:
+			frappe.flags.kamra_agent_call = None
 
 	def nights(self, name=None):
 		doc = frappe.get_doc("Reservation", name or self.res.name)
@@ -189,3 +199,111 @@ class AgreedRateTestCase(AuditTestCase):
 		folio_mod.post_remaining_nights(frappe.get_doc("Reservation", stay.name))
 		room_lines = charges(stay.name, "Room")
 		self.assertEqual(sorted(float(c.amount) for c in room_lines), locked)
+
+	# --- AI agents: never past the front desk's limit, never a supervisor PIN
+
+	def test_agent_call_under_a_revenue_manager_is_held_to_the_desk_limit(self):
+		set_setting(PROP_A, "rate_override_limit_pct", 10)
+		with self.assertRaises(frappe.PermissionError) as raised:
+			self.as_agent(REVENUE, api.set_agreed_rate, self.res.name, 750,
+			              "RATE-PROMO", confirm_price=1)
+		self.assertIn("hotel screen", str(raised.exception))
+		with self.assertRaises(frappe.PermissionError):
+			self.as_agent(REVENUE, api.set_agreed_rate, self.res.name, 1200,
+			              "RATE-PROMO", confirm_price=1)
+		self.assertEqual(self.nights(), [1000, 1000])
+		pv = self.as_agent(REVENUE, api.rate_override_preview, self.res.name, 750)
+		self.assertFalse(pv["can_set_rate"])
+		self.assertTrue(pv["needs_supervisor"])
+		self.assertFalse(self.rate_logs())
+
+	def test_agent_call_under_a_revenue_manager_applies_a_cut_within_the_limit(self):
+		set_setting(PROP_A, "rate_override_limit_pct", 30)
+		self.as_agent(REVENUE, api.set_agreed_rate, self.res.name, 900,
+		              "RATE-PROMO", confirm_price=1)
+		self.assertEqual(self.nights(), [900, 900])
+
+	def test_the_agent_service_user_alone_cannot_set_an_agreed_rate(self):
+		set_setting(PROP_A, "rate_override_limit_pct", 30)
+		with self.assertRaises(frappe.PermissionError) as raised:
+			self.as_user(AGENT, api.set_agreed_rate, self.res.name, 900,
+			             "RATE-PROMO", confirm_price=1)
+		self.assertIn("hotel screen", str(raised.exception))
+		with self.assertRaises(frappe.PermissionError):
+			self.as_agent(AGENT, api.set_agreed_rate, self.res.name, 900,
+			              "RATE-PROMO", confirm_price=1)
+		self.assertEqual(self.nights(), [1000, 1000])
+		self.assertFalse(self.rate_logs())
+
+	def test_an_agent_never_uses_a_supervisor_pin(self):
+		set_setting(PROP_A, "rate_override_limit_pct", 10)
+		for user in (DESK, REVENUE, GM):
+			with self.assertRaises(frappe.PermissionError) as raised:
+				self.as_agent(user, api.set_agreed_rate, self.res.name, 750,
+				              "RATE-PROMO", confirm_price=1, pin="4321", supervisor=GM)
+			self.assertIn("hotel screen", str(raised.exception))
+		self.assertEqual(self.nights(), [1000, 1000])
+		self.assertFalse(self.rate_logs())
+
+	def test_an_agent_cannot_use_a_reason_code_that_needs_a_supervisor(self):
+		set_setting(PROP_A, "rate_override_limit_pct", 30)
+		with self.assertRaises(frappe.PermissionError) as raised:
+			self.as_agent(DESK, api.set_agreed_rate, self.res.name, 900,
+			              "RATE-MGR", confirm_price=1)
+		self.assertIn("hotel screen", str(raised.exception))
+		self.assertEqual(self.nights(), [1000, 1000])
+
+	# --- tax-inclusive prices: the cut is measured gross against gross
+
+	def vat_stay(self):
+		"""A stay at a VAT-inclusive property: the card says 1,000 a night
+		with 18% tax inside it, so the locked nightly rate is 847.46 net."""
+		make_property(PROP_A, business_date=YESTERDAY, rates_include_tax=1)
+		rt = make_room_type(PROP_A, "VAT", base_price=1000, tax_percent=18)
+		frappe.db.set_value("Room Type", rt, {"base_price": 1000, "tax_percent": 18})
+		room = make_room(PROP_A, rt, "201")
+		res = make_reservation(PROP_A, rt, d(5), d(7), room=room)
+		self.assertEqual([round(r, 2) for r in self.nights(res.name)], [847.46, 847.46])
+		self.assertAlmostEqual(float(res.amount_after_tax), 2000, places=1)
+		return res
+
+	def test_inclusive_rates_a_desk_cut_within_the_limit_is_not_a_raise(self):
+		set_setting(PROP_A, "rate_override_limit_pct", 10)
+		res = self.vat_stay()
+		pv = self.as_user(DESK, api.rate_override_preview, res.name, 900)
+		self.assertAlmostEqual(pv["current_nightly"], 1000, places=1)
+		self.assertAlmostEqual(pv["reduction_pct"], 10, places=1)
+		self.assertFalse(pv["raises"])
+		self.assertFalse(pv["needs_supervisor"])
+		self.as_user(DESK, api.set_agreed_rate, res.name, 900, "RATE-PROMO",
+		             confirm_price=1)
+		self.assertEqual([round(r, 2) for r in self.nights(res.name)], [762.71, 762.71])
+		self.assertAlmostEqual(
+			float(frappe.db.get_value("Reservation", res.name, "amount_after_tax")),
+			1800, places=1)
+
+	def test_inclusive_rates_a_desk_cut_over_the_limit_needs_a_supervisor(self):
+		set_setting(PROP_A, "rate_override_limit_pct", 10)
+		res = self.vat_stay()
+		pv = self.as_user(DESK, api.rate_override_preview, res.name, 800)
+		self.assertAlmostEqual(pv["reduction_pct"], 20, places=1)
+		self.assertTrue(pv["needs_supervisor"])
+		with self.assertRaises(frappe.PermissionError):
+			self.as_user(DESK, api.set_agreed_rate, res.name, 800, "RATE-PROMO",
+			             confirm_price=1)
+		self.assertEqual([round(r, 2) for r in self.nights(res.name)], [847.46, 847.46])
+		self.as_user(DESK, api.set_agreed_rate, res.name, 800, "RATE-PROMO",
+		             confirm_price=1, pin="4321", supervisor=GM)
+		self.assertEqual([round(r, 2) for r in self.nights(res.name)], [677.97, 677.97])
+
+	def test_inclusive_rates_the_log_shows_gross_nightly_amounts(self):
+		set_setting(PROP_A, "rate_override_limit_pct", 10)
+		res = self.vat_stay()
+		self.as_user(DESK, api.set_agreed_rate, res.name, 900, "RATE-PROMO",
+		             confirm_price=1)
+		log = frappe.get_all("Agent Action Log",
+		                     filters={"action_type": "rate_override",
+		                              "reference_name": res.name},
+		                     pluck="rationale")
+		self.assertEqual(len(log), 1)
+		self.assertIn("1,000.00 → 900.00 a night", log[0])
