@@ -13,7 +13,8 @@
     "phone:check": "node scripts/phone-check.mjs",
     "csv:check": "node scripts/csv-check.mjs",
     "booking-defaults:check": "node scripts/booking-defaults-check.mjs",
-    "key-notice:check": "node scripts/key-notice-check.mjs"
+    "key-notice:check": "node scripts/key-notice-check.mjs",
+    "tax:check": "node scripts/charge-tax-check.mjs"
   },
   "dependencies": {
     "libphonenumber-js": "^1.13.15",
