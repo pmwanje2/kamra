@@ -479,6 +479,11 @@ MODULES: tuple[Module, ...] = (
 				       "AI agents can ask, never approve."),
 				S("allowance_approval_above", "Only allowances above", "number", 0, min=0,
 				  hint="Smaller allowances post straight away. 0 means every allowance needs approval."),
+				S("rate_override_limit_pct", "Front desk may lower a stay's rate by up to", "number", 0,
+				  min=0, max=100, unit="%",
+				  hint="An agreed rate for one stay (Agreed rate on the reservation), with a reason. A bigger "
+				       "cut needs a Hotel Admin or Finance PIN; the desk never raises a rate. Revenue "
+				       "Managers and Hotel Admins set any rate. 0 sends every cut by the desk to a manager."),
 			)),
 			Section("fx", "Exchange rates",
 			        "A guest paying in foreign money needs today's rate: typed in on the Currency Desk, "
