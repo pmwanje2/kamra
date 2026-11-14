@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useState } from "react"
+import { Fragment, useCallback, useEffect, useRef, useState } from "react"
 import { ArrowLeft, ArrowRightLeft, Printer, Trash2, X } from "lucide-react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { call, getCurrentProperty } from "../lib/api"
@@ -8,6 +8,7 @@ import AllowanceRequests from "../components/AllowanceRequests"
 import FolioDiscount from "../components/FolioDiscount"
 import ChangeCompany from "../components/ChangeCompany"
 import { loadLocale, sellsAlcohol, taxRates, fmtAmount } from "../lib/money"
+import { defaultChargeTaxRate } from "../lib/chargeTax"
 import { serverError } from "../lib/resource"
 import { useCashierAuth } from "../lib/cashierAuth"
 import { useAuth } from "../lib/auth"
@@ -273,9 +274,12 @@ export default function FolioView() {
   const [busy, setBusy] = useState(false)
 
   const [charge, setCharge] = useState({
-    charge_type: "Food & Beverage", description: "", amount: "", gst_rate: "5",
+    charge_type: "Food & Beverage", description: "", amount: "",
+    // the property's own rate (0% where it charges no tax), never a made-up one
+    gst_rate: defaultChargeTaxRate(taxRates(), locale().services_tax_rate),
     is_alcohol: false,
   })
+  const taxPicked = useRef(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [voidFor, setVoidFor] = useState<string | null>(null)
   const [voidReason, setVoidReason] = useState("")
@@ -370,7 +374,12 @@ export default function FolioView() {
 
   const [rates, setRates] = useState<number[]>(taxRates())
   useEffect(() => {
-    loadLocale().then((l) => setRates(l.tax_rates))
+    loadLocale().then((l) => {
+      setRates(l.tax_rates)
+      // start on the property's rate once it is known, unless the desk picked one
+      if (!taxPicked.current)
+        setCharge((c) => ({ ...c, gst_rate: defaultChargeTaxRate(l.tax_rates, l.services_tax_rate) }))
+    })
   }, [])
   // the rate the server will put on this charge when it is food & beverage
   // (same words and rate as kamra.api._resolve_charge_gst); null = the
@@ -1494,9 +1503,10 @@ export default function FolioView() {
                   className={inputCls}
                   aria-label={t("{tax} rate", { tax: taxLabel() })}
                   value={charge.gst_rate}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    taxPicked.current = true
                     setCharge({ ...charge, gst_rate: e.target.value })
-                  }
+                  }}
                 >
                   {rates.map((n) => String(n)).map((r) => (
                     <option key={r} value={r}>
