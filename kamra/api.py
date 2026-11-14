@@ -6231,6 +6231,122 @@ def _can_set_rate() -> bool:
 	return _is_admin() or "Revenue Manager" in frappe.get_roles()
 
 
+def _current_nightly(res) -> float:
+	"""What one night of this stay costs now, before tax: the locked rates'
+	average (the rate the folio bills), else the agreed rate."""
+	rates = [flt(r.rate) for r in res.get("night_rates") or []]
+	if rates:
+		return round(sum(rates) / len(rates), 2)
+	return flt(res.get("agreed_rate"))
+
+
+def _rate_override_plan(res, agreed_rate) -> dict:
+	"""Who may set this agreed rate, and what it would do to the bill.
+	Leaves res holding the new agreed rate for the save that follows."""
+	from kamra.settings import get_setting
+	agreed_rate = flt(agreed_rate)
+	if agreed_rate <= 0:
+		frappe.throw(_("Enter the new nightly rate."))
+	if not res.get("auto_price"):
+		frappe.throw(_("This booking is priced by hand; change its amount instead."))
+	current = _current_nightly(res)
+	cut = round(100 * (current - agreed_rate) / current, 2) if current else 0.0
+	limit = flt(get_setting(res.property, "rate_override_limit_pct"))
+	manager = _can_set_rate()
+	pv = _reprice_preview(res, agreed_rate=agreed_rate)
+	pv.update(current_nightly=current, agreed_rate=agreed_rate,
+	          reduction_pct=cut, limit_pct=limit, can_set_rate=manager,
+	          raises=agreed_rate > current + 0.005,
+	          needs_supervisor=not manager and cut > limit)
+	return pv
+
+
+@frappe.whitelist()
+@require_roles("Front Desk", "Revenue Manager", "Kamra Agent")
+def rate_override_preview(reservation: str, agreed_rate: float):
+	"""What an agreed nightly rate would do to this stay before the desk
+	confirms it: the new nightly rates and total, the cut against what the
+	guest pays now, the property's limit for the front desk and whether a
+	supervisor has to sign it off. Nothing is written."""
+	res = frappe.get_doc("Reservation", reservation)
+	assert_property_access(res.property)
+	return _rate_override_plan(res, agreed_rate)
+
+
+@frappe.whitelist(methods=["POST"])
+@require_roles("Front Desk", "Revenue Manager", "Kamra Agent")
+def set_agreed_rate(reservation: str, agreed_rate: float, reason_code: str,
+                    reason: str = "", confirm_price: int = 0,
+                    pin: str | None = None, supervisor: str | None = None):
+	"""Agree a different nightly rate for one stay, in place: the guest keeps
+	their room, only this stay's nightly rates change (locked as usual, so
+	the folio and check-out bill it). The rate card - room type, season,
+	tariff - is never touched. Nights already charged follow the property's
+	rate-change policy.
+
+	reason_code is a Rate Change reason (RATE-PROMO, RATE-MGR, ...).
+	Revenue Manager / Hotel Admin set any positive rate. The front desk may
+	only lower it, by up to rate_override_limit_pct (Finance settings);
+	a bigger cut, or a reason code that requires a supervisor, is signed
+	off by a Hotel Admin or Finance user with their PIN (supervisor + pin).
+	Call rate_override_preview first and pass confirm_price=1."""
+	from kamra.authz import verify_supervisor
+	from kamra.ledger import ensure_default_reason_codes
+	from kamra.savings import log_action
+
+	doc = frappe.get_doc("Reservation", reservation)
+	assert_property_access(doc.property)
+	if doc.status not in ("Confirmed", "Checked In"):
+		frappe.throw(_("Only an active reservation can take an agreed rate."))
+	ensure_default_reason_codes()
+	code = frappe.db.get_value("Reason Code", reason_code or "",
+	                           ["category", "requires_supervisor", "disabled"],
+	                           as_dict=True)
+	if code and not code.disabled and code.category == "Rate Change":
+		why = reason_code
+	elif not reason_code and (reason or "").strip() and not frappe.db.exists(
+			"Reason Code", {"category": "Rate Change", "disabled": 0}):
+		# the hotel switched every Rate Change code off: a written reason
+		why, code = reason.strip()[:140], frappe._dict(requires_supervisor=0)
+	else:
+		frappe.throw(_("Pick a Rate Change reason code for the agreed rate."))
+	old_nightly = _current_nightly(doc)
+	old_amount = flt(doc.amount_after_tax)
+	plan = _rate_override_plan(doc, agreed_rate)
+	approver = None
+	if not plan["can_set_rate"]:
+		if plan["raises"]:
+			frappe.throw(_("The front desk can lower a stay's rate, not raise it. "
+			               "Ask a Revenue Manager."), frappe.PermissionError)
+		if plan["needs_supervisor"] or code.requires_supervisor:
+			if not (supervisor or "").strip():
+				frappe.throw(_("A cut of {0}% is over the front desk's limit of {1}%, "
+				               "or the reason needs a manager: a Hotel Admin or Finance "
+				               "user signs it off with their PIN.").format(
+					f"{plan['reduction_pct']:g}", f"{plan['limit_pct']:g}"),
+					frappe.PermissionError)
+			approver = verify_supervisor(doc.property, supervisor, pin)
+	_require_price_confirmation(plan, confirm_price)
+	doc.flags.kamra_agreed_rate_override = True
+	# the role and limit checks above are the permission; Revenue Manager
+	# has no write DocPerm on Reservation
+	doc.save(ignore_permissions=True)
+	note = (f"{why}: {old_nightly:,.2f} → {flt(agreed_rate):,.2f} a night"
+	        f" · total {old_amount:,.2f} → {flt(doc.amount_after_tax):,.2f}")
+	if (reason or "").strip() and why != reason.strip()[:140]:
+		note += f" · {reason.strip()[:140]}"
+	log_action("rate_override", "Reservation", doc.name, doc.property,
+	           rationale=note, approver=approver,
+	           before_snapshot={"nightly": old_nightly, "amount_after_tax": old_amount},
+	           after_snapshot={"agreed_rate": flt(agreed_rate),
+	                           "amount_after_tax": flt(doc.amount_after_tax)})
+	return {"ok": True, "reservation": doc.name, "room": doc.room,
+	        "agreed_rate": flt(doc.agreed_rate),
+	        "nights": [{"date": str(r.stay_date), "rate": flt(r.rate)}
+	                   for r in doc.night_rates],
+	        "amount_after_tax": flt(doc.amount_after_tax), "approver": approver}
+
+
 def _move_price(res, new_type: str | None, rate_mode: str,
                 agreed_rate: float | None) -> dict:
 	"""Price preview for a room move. Leaves res holding the move's price
@@ -8853,7 +8969,8 @@ def property_locale(property: str):
 	localization pack. Drives the frontend's money formatting and tax dropdowns
 	so no screen hardcodes ₹ or GST %. `integrations` says which country
 	integrations (gateways, tax return, ID checks) this property has."""
-	from kamra.localization import front_desk_vocabulary, integrations, pack_for
+	from kamra.localization import (front_desk_vocabulary, integrations, pack_for,
+	                                services_tax_rate)
 	from kamra.settings import get_setting
 	prop = frappe.get_cached_doc("Property", property)
 	pack = pack_for(property)
@@ -8865,6 +8982,10 @@ def property_locale(property: str):
 	        # that is ignored
 	        "fnb_tax_rate": float(pack.fnb_tax_rate(property)),
 	        "fnb_charge_words": list(_FNB_WORDS),
+	        # the property's rate on a guest service (laundry, spa, misc): the
+	        # charge form starts there, so a hotel that charges no tax opens
+	        # on 0% rather than a made-up rate
+	        "services_tax_rate": float(services_tax_rate(pack, property)),
 	        # a dry property hides every alcohol field and label
 	        "sells_alcohol": bool(int(get_setting(property, "sells_alcohol") or 0))}
 

@@ -38,6 +38,9 @@ interface Locale {
    *  caller picked, and the words that make a charge F&B. */
   fnb_tax_rate?: number
   fnb_charge_words?: string[]
+  /** The property's rate on a guest service (laundry, spa, misc): where
+   *  the folio's Post a charge box starts. */
+  services_tax_rate?: number
   /** Off for a dry property: alcohol fields and labels are hidden. */
   sells_alcohol?: boolean
 }
