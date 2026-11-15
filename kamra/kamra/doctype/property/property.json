@@ -28,6 +28,8 @@
   "currency",
   "checkin_time",
   "checkout_time",
+  "late_checkout_fee_mode",
+  "late_checkout_fee_value",
   "minimum_nights",
   "booking_mode",
   "hold_minutes",
@@ -36,6 +38,7 @@
   "cleaning_fee_taxable",
   "room_levy_label",
   "room_levy_percent",
+  "room_levy_per_night",
   "room_levy_taxable",
   "default_company_billing",
   "access_instructions",
@@ -232,6 +235,22 @@
    "label": "Check-out Time"
   },
   {
+   "default": "None",
+   "description": "What a late check-out costs: the Late check-out step starts on this fee. Percent of Night is a % of the stay's last room night.",
+   "fieldname": "late_checkout_fee_mode",
+   "fieldtype": "Select",
+   "label": "Late check-out fee",
+   "options": "None\nFixed\nPercent of Night"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.late_checkout_fee_mode && doc.late_checkout_fee_mode != 'None'",
+   "description": "An amount for Fixed, a % for Percent of Night.",
+   "fieldname": "late_checkout_fee_value",
+   "fieldtype": "Float",
+   "label": "Late check-out fee value"
+  },
+  {
    "default": "1",
    "fieldname": "minimum_nights",
    "fieldtype": "Int",
@@ -284,6 +303,13 @@
    "fieldtype": "Percent",
    "label": "Room levy %",
    "default": "0"
+  },
+  {
+   "fieldname": "room_levy_per_night",
+   "fieldtype": "Currency",
+   "label": "Room levy per night",
+   "default": "0",
+   "description": "A fixed amount per occupied room per night (e.g. a local hotel tax of 2,000), on the same Room levy line. Adds to the %; 0 when none applies."
   },
   {
    "fieldname": "room_levy_taxable",
@@ -750,7 +776,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-11-12 10:00:00.000000",
+ "modified": "2026-11-15 09:00:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Property",

@@ -6593,5 +6593,9 @@
   "Never": "Nunca",
   "Rates and restrictions": "Tarifas e restrições",
   "Send it": "Enviar",
-  "The last full sync went out on {date} at {time}. The channel manager admits one a day: send another anyway?": "A última sincronização completa saiu no dia {date} às {time}. O gerenciador de canais aceita uma por dia: enviar outra mesmo assim?"
+  "The last full sync went out on {date} at {time}. The channel manager admits one a day: send another anyway?": "A última sincronização completa saiu no dia {date} às {time}. O gerenciador de canais aceita uma por dia: enviar outra mesmo assim?",
+  "The property's late check-out fee is {fee}.": "A taxa de check-out tardio da propriedade é {fee}.",
+  "The property's late check-out fee is {pct}% of a night ({fee}).": "A taxa de check-out tardio da propriedade é {pct}% de uma diária ({fee}).",
+  "This late fee exceeds one night's room rate ({night}). Check it is not the whole bill.": "Esta taxa de check-out tardio excede a diária de uma noite ({night}). Verifique se não é a conta inteira.",
+  "I confirm the late fee of {fee}": "Confirmo a taxa de check-out tardio de {fee}"
 }

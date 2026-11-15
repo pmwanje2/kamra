@@ -620,19 +620,24 @@ def post_room_night(reservation, date, folios=None) -> bool:
 
 def _post_room_levy(folios, reservation, date, night_rate):
 	"""The property's per-night levy on the room rate (municipality fee,
-	city / tourism tax) - its own line so the invoice shows it and the
-	ledger books it apart from room revenue."""
+	city / tourism tax): a % of the night's rate and/or a fixed amount per
+	occupied room-night (room_levy_per_night) - its own line so the invoice
+	shows it and the ledger books it apart from room revenue."""
 	prop = frappe.get_cached_doc("Property", reservation.property)
 	pct = float(prop.get("room_levy_percent") or 0)
-	if not pct or not night_rate or _charge_posted(
+	fixed = float(prop.get("room_levy_per_night") or 0)
+	levy = round(float(night_rate or 0) * pct / 100, 2) + round(fixed, 2)
+	if levy <= 0 or _charge_posted(
 			reservation.name, "Room Levy", date):
 		return
-	levy = round(float(night_rate) * pct / 100, 2)
+	label = prop.get("room_levy_label") or "Room levy"
+	parts = ([f"{pct:g}%"] if pct and night_rate else []) + (
+		[f"{fixed:,g} per night"] if fixed else [])
 	_append_charge(folios, reservation, "Room Levy", {
 		"posting_date": date,
 		"charge_type": "Room Levy",
 		"reservation": reservation.name,
-		"description": f"{prop.get('room_levy_label') or 'Room levy'} {pct:g}%",
+		"description": f"{label} {' + '.join(parts)}",
 		"qty": 1,
 		"rate": levy,
 		"amount": levy,
