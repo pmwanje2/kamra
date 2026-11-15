@@ -4940,10 +4940,17 @@ def _reverse_check_in_blocker(doc) -> str | None:
 	if any(b["billable"] for b in _pending_bills(doc, [])):
 		return _("A restaurant or laundry bill is still open for this stay: settle or "
 		         "cancel it first.")
+	if names and frappe.db.exists("DocType", "POS Invoice") and \
+	   frappe.get_meta("POS Invoice").has_field("kamra_ref") and \
+	   frappe.db.exists("POS Invoice", {"kamra_ref": ("in", names), "docstatus": 0}):
+		return _("A restaurant or laundry bill is still open for this stay: settle or "
+		         "cancel it first.")
 	if any(abs(flt(f.grand_total)) >= 0.005 or abs(flt(f.payments_total)) >= 0.005
 	       for f in folios):
 		return _("The bill is not at a zero balance: void the charges and refund the "
 		         "payments first, or check the guest out.")
+	if names and frappe.db.exists("Folio Charge", {"parent": ("in", names)}):
+		return _("Charges remain on the bill: void them first, or check the guest out.")
 	# an authorization holds the deposit with no payment on the bill
 	if frappe.db.exists("Security Deposit", {"reservation": doc.name,
 	                                         "status": ("in", ("Collected", "Held"))}):
@@ -4967,8 +4974,22 @@ def reverse_check_in(reservation: str, reason: str, pin: str | None = None):
 	reason = (reason or "").strip()
 	if not reason:
 		frappe.throw(_("Say why the check-in is being reversed."))
+	from kamra.credit import _is_agent
 	doc = frappe.get_doc("Reservation", reservation)
 	assert_property_access(doc.property)
+	if _is_agent():
+		caller_roles = set(frappe.get_roles())
+		if frappe.session.user != "Administrator" and not (
+			caller_roles & {"Front Desk", "Finance", "Hotel Admin", "System Manager"}
+		):
+			frappe.throw(_("Only Front Desk, Finance or Hotel Admin may reverse a check-in."),
+			             frappe.PermissionError)
+		if pin is not None:
+			frappe.throw(_("An AI agent cannot pass a cashier PIN: undo the check-in on the hotel screen."),
+			             frappe.PermissionError)
+		if cint(frappe.db.get_value("Property", doc.property, "require_cashier_pin")):
+			frappe.throw(_("This property requires a cashier PIN: undo the check-in on the hotel screen."),
+			             frappe.PermissionError)
 	blocker = _reverse_check_in_blocker(doc)
 	if blocker:
 		frappe.throw(blocker)
@@ -7868,13 +7889,16 @@ def _block_prices(property: str, check_in_date: str, check_out_date: str,
 			continue
 		rate = flt(b.get("block_rate"))
 		rt_doc = frappe.get_cached_doc("Room Type", rt)
+		levy_fixed = max(flt(frappe.db.get_value("Property", property, "room_levy_per_night")), 0.0)
 		try:
 			q = quote(property, rt, check_in_date, check_out_date,
 			          min(2, cint(rt_doc.adults_capacity) or 2), 0, agreed_rate=rate)
 			per = {str(getdate(n["date"])): float(n["rate"]) for n in q["nightly"]}
 			room_total = sum(per.values())
-			# levy and tax per unit of room rate, as the engine worked them out
-			levy_share = flt(q.get("room_levy")) / room_total if room_total else 0
+			billable_q = max(len(q["nightly"]), 1)
+			pct_levy = max(flt(q.get("room_levy")) - levy_fixed * billable_q, 0.0)
+			# percent levy scales with room rate; fixed per-night levy scales with room_nights
+			levy_share = pct_levy / room_total if room_total else 0
 			tax_share = (flt(q["amount_after_tax"]) - room_total - flt(q.get("room_levy"))) \
 				/ room_total if room_total else 0
 		except frappe.ValidationError:
@@ -7884,9 +7908,9 @@ def _block_prices(property: str, check_in_date: str, check_out_date: str,
 			levy_share = 0
 			tax_share = float(room_gst_rate(property, rt_doc, Decimal(str(base)))) / 100
 		row_before = sum(n * per.get(d, 0) for d, n in counts.items())
-		row_tax = row_before * tax_share
-		row_levy = row_before * levy_share
 		room_nights = sum(counts.values())
+		row_tax = row_before * tax_share
+		row_levy = row_before * levy_share + room_nights * levy_fixed
 		rows.append({
 			"room_type": rt, "room_type_name": rt_doc.room_type_name,
 			"rooms": max(counts.values()), "nightly": counts if nightly else {},
