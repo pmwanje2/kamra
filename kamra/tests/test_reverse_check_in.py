@@ -283,6 +283,15 @@ class ReverseCheckInTestCase(AuditTestCase):
 			frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- test fixture
 		self.assertEqual(self.status(), "Checked In")
 
+	def test_refused_when_non_room_charges_net_to_zero(self):
+		api.add_folio_charge(self.folio, "Laundry", "UT laundry", 300)
+		# folio-level allowance: v2.7.10's api.post_allowance wants a manager PIN
+		folio_mod.post_allowance(self.folio, 300, "UT offset", gst_rate=0)
+		self.assertAlmostEqual(float(frappe.db.get_value("Folio", self.folio, "grand_total") or 0), 0.0, places=2)
+		with self.assertRaisesRegex(frappe.ValidationError, "void"):
+			api.reverse_check_in(self.res.name, "Wrong guest")
+		self.assertEqual(self.status(), "Checked In")
+
 	def test_exposed_to_agents_as_a_tool(self):
 		from kamra.mcp_tools import BY_NAME, DESTRUCTIVE
 		spec = BY_NAME["reverse_check_in"]
@@ -323,17 +332,24 @@ class ReverseCheckInTestCase(AuditTestCase):
 
 class ReverseCheckInPosInvoiceUnitTest(unittest.TestCase):
 	"""Siteless: a draft ERPNext POS Invoice (kamra_ref = the stay's folio)
-	is an open restaurant bill. ERPNext is not on the Kamra test bench, so
-	the database answers are stubbed."""
+	is an open restaurant bill; unvoided lines netting to zero refuse; an
+	agent never passes a PIN; the group quote scales a fixed levy by room
+	nights. ERPNext is not on the Kamra test bench, so the database answers
+	are stubbed."""
 
 	def setUp(self):
 		self._had_db = hasattr(frappe.local, "db")
 		self._old_db = getattr(frappe.local, "db", None)
 		frappe.local.db = frappe._dict(exists=lambda *a, **k: None,
 		                               get_value=lambda *a, **k: None)
+		self._old_flags = getattr(frappe.local, "flags", None)
+		frappe.local.flags = frappe._dict()
+		frappe.local.message_log = []
 		self.enterContext(patch("frappe.translate.get_all_translations", return_value={}))
 
 	def tearDown(self):
+		if self._old_flags is not None:
+			frappe.local.flags = self._old_flags
 		if self._had_db:
 			frappe.local.db = self._old_db
 		elif hasattr(frappe.local, "db"):
@@ -359,3 +375,70 @@ class ReverseCheckInPosInvoiceUnitTest(unittest.TestCase):
 			msg = api._reverse_check_in_blocker(doc)
 		self.assertIsNotNone(msg)
 		self.assertIn("restaurant or laundry bill", msg)
+
+	def test_blocker_rejects_unvoided_charges_netting_to_zero(self):
+		doc = frappe._dict(name="RES-1", status="Checked In", check_in_date="2026-11-15", property="PROP-1", guest_name="UT", _occupied_rooms=lambda **k: [], save=lambda *a, **k: None, db_set=lambda *a, **k: None)
+		folios = [frappe._dict(name="FOL-1", grand_total=0.0, payments_total=0.0)]
+
+		def fake_exists(dt, filters=None):
+			if dt == "Folio Charge" and filters and filters.get("charge_type") == "Room":
+				return None
+			if dt == "Folio Charge":
+				return "CHG-1"  # unvoided Laundry + Allowance rows netting to 0
+			return None
+
+		frappe.local.db.exists = fake_exists
+		with patch("kamra.business_date.get_business_date", return_value="2026-11-15"), \
+		     patch("kamra.checkout._pending_bills", return_value=[]), \
+		     patch.object(frappe, "get_all", return_value=folios), \
+		     patch.object(frappe, "get_meta", side_effect=lambda *a, **k: frappe._dict(has_field=lambda f: False)):
+			msg = api._reverse_check_in_blocker(doc)
+		self.assertIsNotNone(msg)
+		self.assertIn("void", msg.lower())
+
+	def test_agent_cannot_pass_pin_or_bypass_property_cashier_pin(self):
+		doc = frappe._dict(name="RES-1", status="Checked In", check_in_date="2026-11-15", property="PROP-1", guest_name="UT", _occupied_rooms=lambda **k: [], save=lambda *a, **k: None, db_set=lambda *a, **k: None)
+		frappe.local.db.get_value = lambda *a, **k: 1
+		with patch("kamra.authz._enforce_property_scope"), \
+		     patch("kamra.api.assert_property_access"), \
+		     patch("kamra.credit._is_agent", return_value=True), \
+		     patch.object(frappe, "get_roles", return_value=["Front Desk", "Kamra Agent"]), \
+		     patch.object(frappe, "session", frappe._dict(user="fd@example.com")), \
+		     patch.object(frappe, "get_doc", return_value=doc), \
+		     patch("kamra.api._reverse_check_in_blocker", return_value=None), patch("kamra.api._revoke_stay_keys", return_value={"ok": True}), patch("kamra.savings.log_action"):
+			with self.assertRaises(frappe.PermissionError):
+				api.reverse_check_in("RES-1", "Wrong guest", pin="1234")
+			with self.assertRaises(frappe.PermissionError):
+				api.reverse_check_in("RES-1", "Wrong guest")
+
+	def test_standalone_kamra_agent_without_desk_role_is_refused(self):
+		doc = frappe._dict(name="RES-1", status="Checked In", check_in_date="2026-11-15", property="PROP-1", guest_name="UT", _occupied_rooms=lambda **k: [], save=lambda *a, **k: None, db_set=lambda *a, **k: None)
+		with patch("kamra.authz._enforce_property_scope"), \
+		     patch("kamra.api.assert_property_access"), \
+		     patch("kamra.credit._is_agent", return_value=True), \
+		     patch.object(frappe, "get_roles", return_value=["Kamra Agent"]), \
+		     patch.object(frappe, "session", frappe._dict(user="agent@kamra.local")), \
+		     patch.object(frappe, "get_doc", return_value=doc), \
+		     patch("kamra.api._reverse_check_in_blocker", return_value=None), patch("kamra.api._revoke_stay_keys", return_value={"ok": True}), patch("kamra.savings.log_action"):
+			with self.assertRaises(frappe.PermissionError):
+				api.reverse_check_in("RES-1", "Agent alone")
+
+	def test_group_block_prices_scales_fixed_levy_by_room_nights_not_rate_share(self):
+		rt_doc = frappe._dict(adults_capacity=2, base_price=100, room_type_name="Deluxe")
+		fake_q = {
+			"nightly": [{"date": "2026-11-20", "rate": 100.0}, {"date": "2026-11-21", "rate": 200.0}],
+			"room_levy": 4000.0,  # 2,000 fixed per night * 2 nights, 0% percent levy
+			"amount_after_tax": 4300.0,
+		}
+		blocks = [frappe._dict(
+			room_type="RT-DLX",
+			rooms_blocked=1,
+			block_rate=0,
+			nightly_counts='{"2026-11-20": 3, "2026-11-21": 1}',  # 4 room-nights -> fixed levy must be 4 * 2000 = 8000!
+		)]
+		frappe.local.db.get_value = lambda dt, name, field=None, **k: 2000.0 if field == "room_levy_per_night" else 0
+		with patch("kamra.pricing.quote", return_value=fake_q), patch("kamra.booking_refs.resolve_room_type", return_value="RT-DLX"), patch("kamra.api.resolve_room_type", return_value="RT-DLX", create=True), \
+		     patch.object(frappe, "get_cached_doc", return_value=rt_doc):
+			out = api._block_prices("PROP-1", "2026-11-20", "2026-11-22", blocks)
+		self.assertEqual(out["rows"][0]["room_nights"], 4)
+		self.assertEqual(out["levy"], 8000.0)
