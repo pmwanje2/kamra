@@ -11,7 +11,8 @@
     "i18n:import": "node scripts/i18n-import.mjs",
     "i18n:check": "node scripts/i18n-check.mjs",
     "phone:check": "node scripts/phone-check.mjs",
-    "tax:check": "node scripts/charge-tax-check.mjs"
+    "tax:check": "node scripts/charge-tax-check.mjs",
+    "late-fee:check": "node scripts/late-fee-check.mjs"
   },
   "dependencies": {
     "libphonenumber-js": "^1.13.15",
