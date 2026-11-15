@@ -787,6 +787,7 @@ class Reservation(Document):
 		out["policy"] = policy
 		prop = frappe.get_cached_doc("Property", self.property)
 		levy_pct = flt(prop.get("room_levy_percent")) / 100
+		levy_fixed = flt(prop.get("room_levy_per_night"))
 		levy_taxed = cint(prop.get("room_levy_taxable")
 		                  if prop.get("room_levy_taxable") is not None else 1)
 		for row in rows:
@@ -818,7 +819,7 @@ class Reservation(Document):
 			# the folio's levy for the night stays as posted
 			# ponytail: the quote taxes its levy at the stay's average rate;
 			# a per-night levy rate here can differ by a rounding paisa
-			levy_new = new * levy_pct
+			levy_new = new * levy_pct + levy_fixed
 			out["base"] += (base - new) + (c["levy_base"] - levy_new)
 			out["tax"] += (base * gst - new * new_gst) / 100 + c["levy_tax"] - (
 				levy_new * new_gst / 100 if levy_taxed else 0)

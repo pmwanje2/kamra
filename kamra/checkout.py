@@ -25,7 +25,7 @@ import re
 
 import frappe
 from frappe import _
-from frappe.utils import flt, getdate, nowdate
+from frappe.utils import add_days, flt, getdate, nowdate
 
 EPS = 0.009
 OPEN_POS_STATUSES = ("Placed", "Confirmed", "Preparing")
@@ -296,9 +296,12 @@ def assert_no_open_bills(res) -> None:
 
 
 def _late_checkout(res, prop, folio_rows) -> dict | None:
-	"""Is the guest leaving after the property's check-out time? The fee is
-	the desk's to enter (Kamra has no late-fee tariff): the dialog offers a
-	Late Checkout charge line and never suggests an amount."""
+	"""Is the guest leaving after the property's check-out time? The dialog
+	offers a Late Checkout charge line. The property's rule
+	(late_checkout_fee_mode: None / Fixed / Percent of Night, with
+	late_checkout_fee_value) gives `suggested_fee`; with None the desk
+	enters the fee. `night_rate` (the stay's last room night) lets the
+	screen ask for a confirmation when a fee is more than one night."""
 	if res.status != "Checked In" or res.get("is_day_use"):
 		return None
 	cutoff = prop.get("checkout_time")
@@ -319,13 +322,26 @@ def _late_checkout(res, prop, folio_rows) -> dict | None:
 		"Folio Charge",
 		filters={"parent": ("in", names), "charge_type": "Room"} if names
 		else {"name": ""},
-		fields=["gst_rate"], order_by="posting_date desc", limit=1)
+		fields=["gst_rate", "amount"], order_by="posting_date desc", limit=1)
+	night_rate = flt(room_rate[0].amount) if room_rate else 0.0
+	if not night_rate:
+		from kamra.folio import _nightly_room_rate
+		night_rate = flt(_nightly_room_rate(res, add_days(res.check_out_date, -1)))
+	mode = prop.get("late_checkout_fee_mode") or "None"
+	value = flt(prop.get("late_checkout_fee_value"))
+	suggested = None
+	if mode == "Fixed" and value > 0:
+		suggested = round(value, 2)
+	elif mode == "Percent of Night" and value > 0 and night_rate:
+		suggested = round(night_rate * value / 100, 2)
 	guest = next((f["folio"] for f in folio_rows
 	              if f["folio_type"] == "Guest" and f["status"] == "Open"), None)
 	return {"checkout_time": cutoff_s, "now": now.strftime("%H:%M"),
 	        "late": late, "requested": bool(res.get("late_checkout")),
 	        "already_charged": charged, "folio": guest,
-	        "tax_rate": flt(room_rate[0].gst_rate) if room_rate else 0.0}
+	        "tax_rate": flt(room_rate[0].gst_rate) if room_rate else 0.0,
+	        "fee_mode": mode, "fee_value": value,
+	        "night_rate": round(night_rate, 2), "suggested_fee": suggested}
 
 
 def checkout_context(reservation: str) -> dict:

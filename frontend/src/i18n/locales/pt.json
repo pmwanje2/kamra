@@ -6568,5 +6568,9 @@
   "Fix Night Audit blockers": "Corrigir bloqueios do Fechamento de Dia",
   "Showing the latest {n}. Pick From and To dates to see others.": "Mostrando as {n} mais recentes. Escolha as datas De e Até para ver outras.",
   "Showing the {n} biggest balances. The ledger total above includes every folio.": "Mostrando os {n} maiores saldos. O total do livro acima inclui todos os fólios.",
-  "Not sent. The reason is on the page behind this one.": "Não enviado. O motivo aparece na página por trás desta."
+  "Not sent. The reason is on the page behind this one.": "Não enviado. O motivo aparece na página por trás desta.",
+  "The property's late check-out fee is {fee}.": "A taxa de check-out tardio da propriedade é {fee}.",
+  "The property's late check-out fee is {pct}% of a night ({fee}).": "A taxa de check-out tardio da propriedade é {pct}% de uma diária ({fee}).",
+  "This late fee exceeds one night's room rate ({night}). Check it is not the whole bill.": "Esta taxa de check-out tardio excede a diária de uma noite ({night}). Verifique se não é a conta inteira.",
+  "I confirm the late fee of {fee}": "Confirmo a taxa de check-out tardio de {fee}"
 }

@@ -984,13 +984,19 @@ def quote(
 		total_base += pet_fee
 
 	# Room levy (municipality fee, city / tourism tax): a % of the room rate
-	# net of discount, posted per night as its own folio line
+	# net of discount and/or a fixed amount per occupied room-night (a local
+	# hotel tax), posted per night as its own folio line
 	levy_pct = _dec(prop.get("room_levy_percent") or 0)
+	levy_fixed = _dec(prop.get("room_levy_per_night") or 0)
 	levy = levy_tax = Decimal(0)
 	if levy_pct > 0 and room_total:
 		room_net = room_total * (taxable / subtotal) if subtotal else room_total
 		levy = room_net * levy_pct / Decimal(100)
-		if cint(prop.get("room_levy_taxable") if prop.get("room_levy_taxable") is not None else 1):
+	if levy_fixed > 0:
+		levy += levy_fixed * billable_nights
+	if levy:
+		if room_total and cint(prop.get("room_levy_taxable")
+		                       if prop.get("room_levy_taxable") is not None else 1):
 			avg_gst = room_tax / room_total * Decimal(100)
 			levy_tax = levy * avg_gst / Decimal(100)
 		tax += levy_tax

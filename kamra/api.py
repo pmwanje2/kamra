@@ -5285,18 +5285,34 @@ def checkout_context(reservation: str):
 
 def _reverse_check_in_blocker(doc) -> str | None:
 	"""Why this stay's check-in can't be reversed now, or None (OPERA's
-	Reverse Check In: checked in today, zero balance, nothing posted)."""
+	Reverse Check In: arrived on the current business date, nothing posted
+	or paid, nothing open, no deposit held). The day is the stay's arrival
+	business date, not the calendar date of checked_in_at: between midnight
+	and the night audit the calendar is a day ahead of the hotel day."""
 	from kamra.business_date import get_business_date
+	from kamra.checkout import _pending_bills
 	if doc.status != "Checked In":
 		return _("Only a checked-in stay can have its check-in reversed.")
-	at = doc.get("checked_in_at")
-	if not at or str(getdate(at)) != str(get_business_date(doc.property)):
+	if not doc.get("check_in_date") or \
+	   str(getdate(doc.check_in_date)) != str(get_business_date(doc.property)):
 		return _("The night audit has run since this check-in, so it can't be "
 		         "reversed. Check the guest out instead.")
 	folios = frappe.get_all("Folio", filters={"reservation": doc.name}, pluck="name")
+	if folios and frappe.db.exists("Folio Charge", {"parent": ("in", folios),
+	                                                "charge_type": "Room"}):
+		return _("A room night is posted for this stay: check the guest out instead.")
 	if folios and (frappe.db.exists("Folio Charge", {"parent": ("in", folios)})
 	               or frappe.db.exists("Folio Payment", {"parent": ("in", folios)})):
 		return _("A charge or payment is on the bill: void it, or check the guest out.")
+	# restaurant / laundry not on the bill yet, and a draft ERPNext POS
+	# Invoice raised against one of the stay's folios
+	if any(b["billable"] for b in _pending_bills(doc, [])) or (
+			folios and frappe.db.exists("DocType", "POS Invoice")
+			and frappe.get_meta("POS Invoice").has_field("kamra_ref")
+			and frappe.db.exists("POS Invoice", {"kamra_ref": ("in", folios),
+			                                     "docstatus": 0})):
+		return _("A restaurant or laundry bill is still open for this stay: settle or "
+		         "cancel it first.")
 	# an authorization holds the deposit with no payment on the bill
 	if frappe.db.exists("Security Deposit", {"reservation": doc.name,
 	                                         "status": ("in", ("Collected", "Held"))}):
@@ -5306,18 +5322,35 @@ def _reverse_check_in_blocker(doc) -> str | None:
 
 
 @frappe.whitelist(methods=["POST"])
-@require_roles("Front Desk")
+@require_roles("Front Desk", "Finance", "Kamra Agent")
 def reverse_check_in(reservation: str, reason: str, pin: str | None = None):
-	"""Undo a check-in made by mistake (wrong guest, wrong room), the same
-	business day and before anything is posted or paid. The stay goes back
-	to Confirmed (arrival) with its room; the room is released and marked
-	Dirty so housekeeping inspects it before it is sold again. From there
-	the desk checks the guest in again or cancels the booking."""
+	"""Undo a check-in made by mistake (wrong guest, wrong room), on the
+	arrival's business date and before anything is posted, open or paid.
+	The stay goes back to Confirmed (arrival) with its room; the room is
+	released and marked Dirty so housekeeping inspects it before it is sold
+	again. From there the desk checks the guest in again or cancels the
+	booking. An agent acts for a Front Desk, Finance or Hotel Admin user,
+	never passes a cashier PIN and is refused where the property requires
+	one; the user it acts for is the logged actor."""
 	from kamra.authz import require_cashier_pin
+	from kamra.credit import _is_agent
 	reason = (reason or "").strip()
 	if not reason:
 		frappe.throw(_("Say why the check-in is being reversed."))
 	doc = frappe.get_doc("Reservation", reservation)
+	assert_property_access(doc.property)
+	if _is_agent():
+		if frappe.session.user != "Administrator" and not (
+				set(frappe.get_roles()) & {"Front Desk", "Finance", "Hotel Admin",
+				                           "System Manager"}):
+			frappe.throw(_("Only Front Desk, Finance or Hotel Admin may reverse a check-in."),
+			             frappe.PermissionError)
+		if pin is not None:
+			frappe.throw(_("An AI agent cannot pass a cashier PIN: undo the check-in "
+			               "on the hotel screen."), frappe.PermissionError)
+		if cint(frappe.db.get_value("Property", doc.property, "require_cashier_pin")):
+			frappe.throw(_("This property requires a cashier PIN: undo the check-in "
+			               "on the hotel screen."), frappe.PermissionError)
 	blocker = _reverse_check_in_blocker(doc)
 	if blocker:
 		frappe.throw(blocker)
@@ -5326,7 +5359,9 @@ def reverse_check_in(reservation: str, reason: str, pin: str | None = None):
 	doc.status = "Confirmed"
 	frappe.flags.kamra_status_transition = True
 	try:
-		doc.save()
+		# authorized above (role guard, property scope, agent boundary):
+		# Finance reads Reservation but may reverse a check-in
+		doc.save(ignore_permissions=True)
 	finally:
 		frappe.flags.kamra_status_transition = False
 	doc.db_set({"actual_check_in": None, "checked_in_at": None, "checked_in_by": None},
@@ -5346,7 +5381,7 @@ def reverse_check_in(reservation: str, reason: str, pin: str | None = None):
 	log_action("reverse_check_in", "Reservation", doc.name, doc.property,
 	           rationale=f"{doc.guest_name}: {reason}")
 	return {"ok": True, "reservation": doc.name, "status": doc.status,
-	        "key_result": key_result}
+	        "rooms": rooms, "key_result": key_result}
 
 
 def _revoke_stay_keys(doc, rooms: list[str]) -> dict | None:
