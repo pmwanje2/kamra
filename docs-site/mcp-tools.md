@@ -1,6 +1,6 @@
 # MCP tool reference
 
-Kamra exposes **161 governed tools** on the hosted MCP
+Kamra exposes **162 governed tools** on the hosted MCP
 endpoint (`/mcp`) and the stdio sidecar (`mcp/kamra_mcp.py`). Every
 call runs as the connected user - **role** permissions apply, tools
 are further filtered by the property's **enabled modules**, prices
@@ -265,6 +265,17 @@ can change the charge for one stay. checkout_context shows the plan
 and amounts first. Confirm with the user first.
 
 Endpoint: `kamra.api.early_departure`.
+Mutating - logged to the activity ledger.
+
+### `reverse_check_in(reservation, reason)`
+
+Undo a check-in made by mistake (wrong guest or room), on the hotel
+day of the arrival only: no room night posted, no open restaurant or
+laundry bill, no held deposit and a zero bill (void charges and refund
+payments first). The stay goes back to Confirmed and the room to Dirty.
+Give the reason. Confirm with the user first.
+
+Endpoint: `kamra.api.reverse_check_in`.
 Mutating - logged to the activity ledger.
 
 ### `checkout_context(reservation)`
@@ -533,9 +544,11 @@ Mutating - logged to the activity ledger.
 
 ## Billing
 
-### `get_folio(reservation)`
+### `get_folio(reservation, include_voided)`
 
 The guest's bill: charge lines, payments, GST, balance.
+include_voided=1 also lists voided_charges (line, reason, who, when),
+kept apart from the totals.
 
 Endpoint: `kamra.api.get_folio`.
 

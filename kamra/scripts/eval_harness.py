@@ -10406,6 +10406,131 @@ def t388():
 	assert day["available_rooms"] == 12 and day["occupancy_pct"] == 33.3, day
 
 
+@check("reverse check-in: same hotel day, zero bill, back to Confirmed with the room Dirty; refused once a night is posted")
+def t_reverse_check_in():
+	from kamra import api
+	from kamra.folio import post_room_night
+	fp = "EVAL Reverse Check-in"
+	bed, _villa, rooms = _inv_property(fp, "RCI", rooms=2, with_villa=False)
+	today = nowdate()
+	frappe.db.set_value("Property", fp, "business_date", today)
+	frappe.db.set_value("Room", rooms[0], "housekeeping_status", "Clean")
+
+	def stay(room, phone):
+		res = frappe.get_doc({
+			"doctype": "Reservation", "property": fp, "room_type": bed,
+			"guest": _guest("Eval Reverse", phone), "room": room,
+			"check_in_date": today, "check_out_date": add_days(today, 1),
+			"adults": 2, "auto_price": 1}).insert(ignore_permissions=True)
+		res.status = "Checked In"
+		res.save(ignore_permissions=True)
+		return res
+
+	res = stay(rooms[0], "+91 70000 39101")
+	out = api.reverse_check_in(res.name, "Eval: wrong guest")
+	assert out["status"] == "Confirmed", out
+	assert frappe.db.get_value("Room", rooms[0], ["occupancy_status", "housekeeping_status"]) \
+		== ("Vacant", "Dirty")
+	assert frappe.db.exists("Agent Action Log", {"action_type": "reverse_check_in",
+	                                            "reference_name": res.name})
+	other = stay(rooms[1], "+91 70000 39102")
+	post_room_night(frappe.get_doc("Reservation", other.name), today)
+	try:
+		api.reverse_check_in(other.name, "Eval: too late")
+		raise AssertionError("reversed a stay with a room night posted")
+	except frappe.ValidationError:
+		pass
+	assert frappe.db.get_value("Reservation", other.name, "status") == "Checked In"
+
+
+@check("folio: voided lines are listed for audit with reason and actor, apart from the totals")
+def t_voided_lines_visible():
+	from kamra import api
+	res, folio = _in_house("Eval Voided Lines", "+91 70000 39103", nowdate(),
+	                       add_days(nowdate(), 1), _ledger_room("V391"))
+	row = api.add_folio_charge(folio, "Minibar", "Eval wrong minibar", 450)["charges"][-1]["name"]
+	before = float(frappe.db.get_value("Folio", folio, "grand_total"))
+	line_total = float(frappe.db.get_value("Folio Charge", row, "total"))
+	api.void_folio_charge(folio, row, reason="Eval wrong room")
+	plain = api.get_folio(res.name)
+	audit = api.get_folio(res.name, include_voided=1)
+	assert "voided_charges" not in plain
+	assert [v["description"] for v in audit["voided_charges"]] == ["Eval wrong minibar"], audit
+	v = audit["voided_charges"][0]
+	assert v["reason"] == "Eval wrong room" and v["voided_by"] and v["amount"] == 450, v
+	assert plain["grand_total"] == audit["grand_total"] == round(before - line_total, 2), \
+		(plain["grand_total"], audit["grand_total"], before, line_total)
+
+
+@check("room levy: a fixed amount per occupied room-night is quoted and posted; 0 changes nothing")
+def t_levy_per_night():
+	from kamra.folio import post_room_night
+	from kamra.pricing import quote
+	saved = frappe.db.get_value("Property", P, ["room_levy_per_night", "room_levy_percent",
+	                                             "room_levy_taxable"], as_dict=True)
+	try:
+		frappe.db.set_value("Property", P, {"room_levy_percent": 0, "room_levy_taxable": 0,
+		                                    "room_levy_per_night": 0})
+		frappe.clear_document_cache("Property", P)
+		base = quote(P, RT, "2036-07-01", "2036-07-03", 2, 0)
+		assert base["room_levy"] == 0, base
+		frappe.db.set_value("Property", P, "room_levy_per_night", 2000)
+		frappe.clear_document_cache("Property", P)
+		q = quote(P, RT, "2036-07-01", "2036-07-03", 2, 0)
+		assert q["room_levy"] == 4000, q
+		assert round(q["amount_after_tax"] - base["amount_after_tax"], 2) == 4000, (q, base)
+		res, folio = _in_house("Eval Levy Night", "+91 70000 39104", "2036-07-01",
+		                       "2036-07-03", _ledger_room("L392"))
+		post_room_night(frappe.get_doc("Reservation", res.name), "2036-07-01")
+		levy = frappe.get_all("Folio Charge", filters={"parent": folio, "charge_type": "Room Levy"},
+		                      pluck="amount")
+		assert levy == [2000], levy
+	finally:
+		frappe.db.set_value("Property", P, {
+			"room_levy_per_night": saved.room_levy_per_night or 0,
+			"room_levy_percent": saved.room_levy_percent or 0,
+			"room_levy_taxable": saved.room_levy_taxable})
+		frappe.clear_document_cache("Property", P)
+
+
+@check("late check-out: the property's fee rule reaches the check-out step with the night rate")
+def t_late_checkout_fee_rule():
+	from datetime import datetime
+	from unittest.mock import patch
+
+	from kamra import api
+	from kamra.folio import post_room_night
+	saved = frappe.db.get_value("Property", P, ["late_checkout_fee_mode", "late_checkout_fee_value",
+	                                             "checkout_time"], as_dict=True)
+	try:
+		frappe.db.set_value("Property", P, {"late_checkout_fee_mode": "Percent of Night",
+		                                    "late_checkout_fee_value": 50,
+		                                    "checkout_time": "11:00:00"})
+		frappe.clear_document_cache("Property", P)
+		# in house since yesterday, leaving today (a past arrival, as the audit sees it)
+		res = frappe.get_doc({
+			"doctype": "Reservation", "property": P, "room_type": RT,
+			"guest": _guest("Eval Late Fee", "+91 70000 39105"), "room": _ledger_room("LC393"),
+			"check_in_date": add_days(nowdate(), -1), "check_out_date": nowdate(),
+			"adults": 2, "auto_price": 1})
+		res.flags.allow_past_check_in = True
+		res.insert(ignore_permissions=True)
+		res.status = "Checked In"
+		res.save(ignore_permissions=True)
+		post_room_night(frappe.get_doc("Reservation", res.name), add_days(nowdate(), -1))
+		with patch("kamra.no_show.property_now",
+		           return_value=datetime.fromisoformat(f"{nowdate()} 15:00:00")):
+			lc = api.checkout_context(res.name)["late_checkout"]
+		assert lc and lc["fee_mode"] == "Percent of Night", lc
+		assert lc["night_rate"] > 0 and lc["suggested_fee"] == round(lc["night_rate"] / 2, 2), lc
+	finally:
+		frappe.db.set_value("Property", P, {
+			"late_checkout_fee_mode": saved.late_checkout_fee_mode or "None",
+			"late_checkout_fee_value": saved.late_checkout_fee_value or 0,
+			"checkout_time": saved.checkout_time})
+		frappe.clear_document_cache("Property", P)
+
+
 @check("Nicaragua pack: IVA, regional defaults and separate manual INTUR levy")
 def t_nicaragua_pack():
 	from kamra.api import _apply_country_defaults
@@ -10705,6 +10830,8 @@ def execute():
 		           t370, t371, t372, t373, t374, t375, t376,
 		           t217, t260, t261, t262, t263, t264,
 		           t380, t381, t382, t383, t384, t385, t386, t387, t388, t_nicaragua_pack,
+		           t_reverse_check_in, t_voided_lines_visible, t_levy_per_night,
+		           t_late_checkout_fee_rule,
 		           t_concurrency_guards, t_safe_deposit_race):
 			fn()
 	finally:

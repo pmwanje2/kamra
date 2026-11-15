@@ -144,6 +144,10 @@ line, so **Review voids and allowances** lists them all for the manager.
 2. Type the reason. It is required and goes on the record.
 3. Press **Confirm void**.
 
+The line leaves the bill and its totals. **Voided lines** under the charge
+lines lists every line voided off the folio with the reason, who voided it
+and when, for audit; it is not part of the bill and does not print.
+
 ![Voiding a laundry charge: the reason box and the Confirm void button on the line](/img/billing/void.png)
 
 **Pass an allowance** when the charge was right but you are giving money

@@ -601,19 +601,24 @@ def post_room_night(reservation, date, folios=None) -> bool:
 
 def _post_room_levy(folios, reservation, date, night_rate):
 	"""The property's per-night levy on the room rate (municipality fee,
-	city / tourism tax) - its own line so the invoice shows it and the
-	ledger books it apart from room revenue."""
+	city / tourism tax): a % of the night's rate and/or a fixed amount per
+	occupied room-night (room_levy_per_night) - its own line so the invoice
+	shows it and the ledger books it apart from room revenue."""
 	prop = frappe.get_cached_doc("Property", reservation.property)
 	pct = float(prop.get("room_levy_percent") or 0)
-	if not pct or not night_rate or _charge_posted(
+	fixed = float(prop.get("room_levy_per_night") or 0)
+	levy = round(float(night_rate or 0) * pct / 100, 2) + round(fixed, 2)
+	if levy <= 0 or _charge_posted(
 			reservation.name, "Room Levy", date):
 		return
-	levy = round(float(night_rate) * pct / 100, 2)
+	label = prop.get("room_levy_label") or "Room levy"
+	parts = ([f"{pct:g}%"] if pct and night_rate else []) + (
+		[f"{fixed:,g} per night"] if fixed else [])
 	_append_charge(folios, reservation, "Room Levy", {
 		"posting_date": date,
 		"charge_type": "Room Levy",
 		"reservation": reservation.name,
-		"description": f"{prop.get('room_levy_label') or 'Room levy'} {pct:g}%",
+		"description": f"{label} {' + '.join(parts)}",
 		"qty": 1,
 		"rate": levy,
 		"amount": levy,
@@ -1168,6 +1173,14 @@ def void_charge(folio_name: str, charge_row: str, reason: str = "") -> dict:
 		frappe.throw("That charge line is not on this folio.")
 	removed = {"charge_type": row.charge_type, "description": row.description,
 	           "amount": row.amount}
+	# what the line was, kept for the audit view (voided_charges below):
+	# the row itself leaves the folio
+	snapshot = {"row": row.name, "charge_type": row.charge_type,
+	            "description": row.description, "posting_date": str(row.posting_date),
+	            "qty": row.qty, "rate": row.rate, "amount": row.amount,
+	            "gst_rate": row.gst_rate, "gst_amount": row.gst_amount,
+	            "total": row.total, "reservation": row.get("reservation"),
+	            "posted_by": row.owner, "reason": (reason or "").strip()}
 	# no-op when the caller (api.void_folio_charge) already reversed it
 	from kamra.ledger import reverse_ledger_for_charge
 	try:
@@ -1184,8 +1197,42 @@ def void_charge(folio_name: str, charge_row: str, reason: str = "") -> dict:
 	           rationale=f"Removed {removed['charge_type']} "
 	                     f"{removed['description']} "
 	                     f"{money_text(folio.property, removed['amount'])}"
-	                     + (f" - {reason}" if reason else ""))
+	                     + (f" - {reason}" if reason else ""),
+	           before_snapshot=snapshot)
 	return {"folio": folio.name, "removed": removed, "balance": folio.balance}
+
+
+def voided_charges(folio_name: str) -> list[dict]:
+	"""The lines voided off this folio, oldest first, for the audit view:
+	what each line was, why it was voided, by whom and when. Read from the
+	action log (void_charge), so it never changes the folio's totals. A void
+	logged before lines were snapshotted comes back with its log text only."""
+	rows = frappe.get_all(
+		"Agent Action Log",
+		filters={"action_type": "void_charge", "reference_doctype": "Folio",
+		         "reference_name": folio_name},
+		fields=["name", "actor", "creation", "executed_at", "rationale",
+		        "before_snapshot"],
+		order_by="creation asc, name asc", limit_page_length=0)
+	out = []
+	for r in rows:
+		try:
+			snap = json.loads(r.before_snapshot) if r.before_snapshot else {}
+		except ValueError:
+			snap = {}
+		snap = snap if isinstance(snap, dict) else {}
+		out.append({
+			**snap,
+			"row": snap.get("row"),
+			"description": snap.get("description") or r.rationale,
+			"amount": float(snap.get("amount") or 0),
+			"reason": snap.get("reason"),
+			"voided": True,
+			"voided_by": r.actor,
+			"voided_at": str(r.executed_at or r.creation),
+			"log": r.name,
+		})
+	return out
 
 
 def part_settle(folio_name: str) -> dict:

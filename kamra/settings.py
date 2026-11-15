@@ -105,6 +105,11 @@ MODULES: tuple[Module, ...] = (
 			Section("times", "Check-in & check-out", "", (
 				S("checkin_time", "Check-in time", "time", "14:00", P),
 				S("checkout_time", "Check-out time", "time", "11:00", P),
+				S("late_checkout_fee_mode", "Late check-out fee", "select", "None", P,
+				  options=("None", "Fixed", "Percent of Night"),
+				  hint="The Late check-out step starts on this fee. Percent of Night is a % of the last room night."),
+				S("late_checkout_fee_value", "Late check-out fee value", "number", 0, P, min=0,
+				  hint="An amount for Fixed, a % for Percent of Night."),
 				S("minimum_nights", "Minimum stay", "number", 1, P, min=1, max=60, unit="nights"),
 			)),
 			Section("cancellation", "Cancellation & no-show", "", (
@@ -402,6 +407,8 @@ MODULES: tuple[Module, ...] = (
 			Section("fees", "Fees & levies", "", (
 				S("room_levy_label", "Room levy name", store=P, hint="Municipality fee, city or tourism tax."),
 				S("room_levy_percent", "Room levy", "number", 0, P, min=0, max=100, unit="%"),
+				S("room_levy_per_night", "Room levy per night", "number", 0, P, min=0,
+				  hint="A fixed amount per occupied room per night (a local hotel tax). Adds to the %."),
 				S("room_levy_taxable", "Tax applies to the levy", "check", 1, P),
 				S("cleaning_fee", "Cleaning fee per stay", "number", 0, P, min=0),
 				S("cleaning_fee_taxable", "Cleaning fee is taxable", "check", 1, P),

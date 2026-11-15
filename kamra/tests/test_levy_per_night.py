@@ -69,12 +69,14 @@ class LevyPerNightTestCase(AuditTestCase):
 		self.assertEqual([str(c.posting_date) for c in levies], [d(0), d(1)])
 		self.assertEqual([float(c.amount) for c in levies], [2000, 2000])
 		self.assertTrue(all("Local hotel tax" in c.description for c in levies))
-		# booked to the levy account, apart from room revenue
+		# booked to the levy account on the ledger, apart from room revenue
 		row = frappe.get_all("Folio Charge", filters={"reservation": res.name,
 		                                               "charge_type": "Room Levy"},
-		                     fields=["transaction_code", "gst_rate"], limit=1)[0]
-		self.assertEqual(row.transaction_code, ledger.code_for_charge_type("Room Levy"))
+		                     fields=["name", "gst_rate"], limit=1)[0]
 		self.assertEqual(float(row.gst_rate), 0)
+		self.assertEqual(frappe.db.get_value(
+			"Folio Ledger Entry", {"source_doctype": "Folio Charge", "source_name": row.name},
+			"transaction_code"), ledger.code_for_charge_type("Room Levy"))
 
 	def test_a_night_is_not_levied_twice(self):
 		res = make_reservation(PROP_A, self.rt, d(0), d(2), status="Checked In",

@@ -509,6 +509,18 @@ TOOLS: tuple[ToolSpec, ...] = (
 		mutating=True,
 	),
 	_t(
+		"reverse_check_in",
+		"api.reverse_check_in",
+		"""Undo a check-in made by mistake (wrong guest or room), on the hotel
+		day of the arrival only: no room night posted, no open restaurant or
+		laundry bill, no held deposit and a zero bill (void charges and refund
+		payments first). The stay goes back to Confirmed and the room to Dirty.
+		Give the reason. Confirm with the user first.""",
+		{"reservation": _p("string"), "reason": _p("string")},
+		required=("reservation", "reason"),
+		mutating=True,
+	),
+	_t(
 		"checkout_context",
 		"api.checkout_context",
 		"""Read-only: what stands between a stay and check-out, without
@@ -765,8 +777,10 @@ TOOLS: tuple[ToolSpec, ...] = (
 	_t(
 		"get_folio",
 		"api.get_folio",
-		"The guest's bill: charge lines, payments, GST, balance.",
-		{"reservation": _p("string")},
+		"""The guest's bill: charge lines, payments, GST, balance.
+		include_voided=1 also lists voided_charges (line, reason, who, when),
+		kept apart from the totals.""",
+		{"reservation": _p("string"), "include_voided": _p("integer")},
 		required=("reservation",),
 		group="Billing",
 	),
@@ -2360,6 +2374,7 @@ def input_schema(spec: ToolSpec) -> dict[str, Any]:
 # Writes that can't simply be undone: MCP clients may ask before each one
 DESTRUCTIVE = frozenset({
 	"cancel_booking", "cancel_itinerary", "decline_booking_request", "check_out", "early_departure",
+	"reverse_check_in",
 	"void_charge", "close_folio", "waive_security_deposit", "pos_cancel_order", "pos_remove_item",
 	"pos_move_room_bill",
 	"run_night_audit", "recover_stuck_business_date",

@@ -167,6 +167,17 @@ interface InvoiceData {
     total_tax: number
     parts: { label: string; rate: number; amount: number }[]
   }[]
+  /** lines voided off this folio (include_voided=1): audit only, never in the totals */
+  voided_lines?: {
+    row: string | null
+    charge_type?: string
+    description: string
+    posting_date?: string
+    amount: number
+    reason: string | null
+    voided_by: string
+    voided_at: string
+  }[]
 }
 
 const CHARGE_TYPES = [
@@ -333,7 +344,7 @@ export default function FolioView() {
 
   const load = useCallback(() => {
     if (name)
-      call<InvoiceData>("kamra.api.folio_invoice", { folio: name })
+      call<InvoiceData>("kamra.api.folio_invoice", { folio: name, include_voided: 1 })
         .then((d) => {
           setData(d)
           // the balance prefill is home money; a foreign amount is typed in
@@ -1234,6 +1245,46 @@ export default function FolioView() {
               </>
             )
           })()}
+
+          {/* Audit: lines voided off this bill, with why and who. Not bill lines:
+              they never count in the totals and never print. */}
+          {(data.voided_lines?.length ?? 0) > 0 && (
+            <details className="mb-6 rounded-xl border border-zinc-200 px-4 py-3 print:hidden">
+              <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wider text-zinc-500">
+                {t("Voided lines ({n})", { n: data.voided_lines?.length ?? 0 })}
+              </summary>
+              <p className="mt-2 text-xs text-zinc-500">
+                {t("Taken off this bill. Shown for audit; not in the totals.")}
+              </p>
+              <table className="mt-2 w-full text-sm">
+                <thead>
+                  <tr className="border-b border-zinc-200 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
+                    <th className="py-2 pr-3">{t("Date")}</th>
+                    <th className="py-2 pr-3">{t("Item")}</th>
+                    <th className="py-2 pr-3">{t("Reason")}</th>
+                    <th className="py-2 pr-3">{t("Voided by")}</th>
+                    <th className="py-2 text-right">{t("Amount {cur}", { cur: cur() })}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.voided_lines?.map((v, i) => (
+                    <tr key={v.row ?? i} className="border-b border-zinc-100 text-zinc-500">
+                      <td className="py-1.5 pr-3 tabular-nums">{v.posting_date ?? ""}</td>
+                      <td className="py-1.5 pr-3 line-through">
+                        {v.charge_type ? `${translate(v.charge_type)}: ` : ""}{v.description}
+                      </td>
+                      <td className="py-1.5 pr-3">{v.reason ?? ""}</td>
+                      <td className="py-1.5 pr-3">
+                        {v.voided_by}
+                        <span className="ml-1 text-xs text-zinc-400">{String(v.voided_at).slice(0, 16)}</span>
+                      </td>
+                      <td className="py-1.5 text-right tabular-nums line-through">{inr(v.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </details>
+          )}
 
           {/* What the guest actually bought, before they read forty lines. */}
           {(data.summary_by_head?.length ?? 0) > 1 && (

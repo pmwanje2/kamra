@@ -6368,5 +6368,15 @@
   "Department": "Departamento",
   "Rooms, each outlet, banquets and each minor department (laundry, spa, taxi...), as on the night audit report.": "Quartos, cada ponto de venda, banquetes e cada departamento operacional menor (lavanderia, spa, táxi...), como no relatório de fechamento de dia.",
   "Food and beverage on folios": "Alimentos e bebidas nas contas",
-  "Meal plans and minibar": "Planos de refeição e frigobar"
+  "Meal plans and minibar": "Planos de refeição e frigobar",
+  "The property's late check-out fee is {fee}.": "A taxa de check-out tardio da propriedade é {fee}.",
+  "The property's late check-out fee is {pct}% of a night ({fee}).": "A taxa de check-out tardio da propriedade é {pct}% de uma diária ({fee}).",
+  "This late fee exceeds one night's room rate ({night}). Check it is not the whole bill.": "Esta taxa de check-out tardio excede a diária de uma noite ({night}). Verifique se não é a conta inteira.",
+  "I confirm the late fee of {fee}": "Confirmo a taxa de check-out tardio de {fee}",
+  "Voided lines ({n})": "Linhas anuladas ({n})",
+  "Taken off this bill. Shown for audit; not in the totals.": "Retiradas desta conta. Exibidas para auditoria; não entram nos totais.",
+  "Voided by": "Anulado por",
+  "Undo check-in": "Desfazer check-in",
+  "Takes the guest back to an arrival in the same room; the room is marked Dirty. Only today, with nothing on the bill.": "Volta o hóspede a chegada no mesmo quarto; o quarto fica Sujo. Só hoje e sem nada na conta.",
+  "Why (e.g. checked in the wrong guest)": "Por quê (ex.: check-in do hóspede errado)"
 }

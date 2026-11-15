@@ -6192,5 +6192,15 @@
   "Department": "القسم",
   "Rooms, each outlet, banquets and each minor department (laundry, spa, taxi...), as on the night audit report.": "الغرف وكل منفذ والمآدب وكل قسم تشغيلي فرعي (الغسيل والسبا والتاكسي...)، كما في تقرير تدقيق الليل.",
   "Food and beverage on folios": "الطعام والمشروبات على الفواتير",
-  "Meal plans and minibar": "خطط الوجبات والميني بار"
+  "Meal plans and minibar": "خطط الوجبات والميني بار",
+  "The property's late check-out fee is {fee}.": "رسوم المغادرة المتأخرة في المنشأة هي {fee}.",
+  "The property's late check-out fee is {pct}% of a night ({fee}).": "رسوم المغادرة المتأخرة في المنشأة هي {pct}% من ليلة ({fee}).",
+  "This late fee exceeds one night's room rate ({night}). Check it is not the whole bill.": "رسوم المغادرة المتأخرة هذه تتجاوز سعر ليلة واحدة ({night}). تأكد أنها ليست الفاتورة كاملة.",
+  "I confirm the late fee of {fee}": "أؤكد رسوم المغادرة المتأخرة البالغة {fee}",
+  "Voided lines ({n})": "البنود الملغاة ({n})",
+  "Taken off this bill. Shown for audit; not in the totals.": "أُزيلت من هذه الفاتورة. تُعرض للتدقيق ولا تدخل في الإجماليات.",
+  "Voided by": "ألغاه",
+  "Undo check-in": "التراجع عن تسجيل الوصول",
+  "Takes the guest back to an arrival in the same room; the room is marked Dirty. Only today, with nothing on the bill.": "يعيد الضيف إلى حالة الوصول في الغرفة نفسها، وتُعلَّم الغرفة متسخة. اليوم فقط، ودون أي مبلغ على الفاتورة.",
+  "Why (e.g. checked in the wrong guest)": "السبب (مثلًا: تسجيل وصول ضيف خاطئ)"
 }

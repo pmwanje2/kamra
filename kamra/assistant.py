@@ -561,8 +561,10 @@ TOOLS = {
 		{"reservation": {"type": "string"}}, False, True),
 	"get_folio": (
 		"get_folio",
-		"The stay's bill: charges, payments, GST, balance.",
-		{"reservation": {"type": "string"}}, False, False),
+		"The stay's bill: charges, payments, GST, balance. include_voided=1 also "
+		"lists voided_charges (line, reason, who, when), apart from the totals.",
+		{"reservation": {"type": "string"}, "include_voided": {"type": "integer"}},
+		False, False),
 	"post_charge": (
 		"post_stay_charge",
 		"Post a charge to a stay; billing rules pick the folio. Alcohol never bills to a company.",

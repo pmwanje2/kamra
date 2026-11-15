@@ -247,7 +247,7 @@ class ReverseCheckInTestCase(AuditTestCase):
 	def test_exposed_to_agents_as_a_tool(self):
 		from kamra.mcp_tools import BY_NAME, DESTRUCTIVE
 		spec = BY_NAME["reverse_check_in"]
-		self.assertEqual(spec.method, "api.reverse_check_in")
+		self.assertEqual(spec.dotted, "api.reverse_check_in")
 		self.assertEqual(set(spec.required), {"reservation", "reason"})
 		self.assertTrue(spec.mutating)
 		self.assertIn("reverse_check_in", DESTRUCTIVE)

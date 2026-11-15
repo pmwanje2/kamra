@@ -1486,8 +1486,12 @@ def advance_ticket(ticket: str, status: str, resolution_note: str | None = None)
 
 @frappe.whitelist()
 @require_roles("Finance", "Front Desk", "Night Auditor", "Kamra Agent")
-def get_folio(reservation: str):
-	"""Folio for a reservation - opens one if the guest is checked in."""
+def get_folio(reservation: str, include_voided: int = 0):
+	"""Folio for a reservation - opens one if the guest is checked in.
+
+	include_voided=1 adds `voided_charges`: every line voided off the bill
+	(what it was, the reason, who and when) for the audit view. They are
+	listed apart and never counted in the totals or the balance."""
 	name = frappe.db.get_value(
 		"Folio", {"reservation": reservation, "folio_type": "Guest"}
 	)
@@ -1498,7 +1502,11 @@ def get_folio(reservation: str):
 		from kamra.folio import open_folio
 		name = open_folio(res)
 	folio = frappe.get_doc("Folio", name)
-	return folio.as_dict()
+	out = folio.as_dict()
+	if cint(include_voided):
+		from kamra.folio import voided_charges
+		out["voided_charges"] = voided_charges(name)
+	return out
 
 
 @frappe.whitelist()
@@ -3068,7 +3076,7 @@ def cancel_invoice(folio: str, reason: str, pin: str | None = None):
 
 @frappe.whitelist()
 @require_roles("Finance", "Front Desk", "Kamra Agent")
-def folio_invoice(folio: str):
+def folio_invoice(folio: str, include_voided: int = 0):
 	"""Everything the bill needs to print itself.
 
 	A tax invoice is a legal document, not a screenshot of a table: the
@@ -3078,6 +3086,9 @@ def folio_invoice(folio: str):
 	and the guest wants a summary by what they bought before they read
 	forty lines. All of that is assembled here so every surface that
 	prints a bill - the folio screen, a PDF, an email - agrees.
+
+	include_voided=1 adds `voided_lines` for the folio screen's audit view;
+	they are not bill lines and never reach the totals or a printed bill.
 	"""
 	from kamra import localization as loc
 
@@ -3147,7 +3158,7 @@ def folio_invoice(folio: str):
 	# what the tax authority requires ON the bill (ZATCA: QR + Arabic title)
 	statutory = loc.invoice_print_block(
 		pack, "Folio", doc.name, doc.invoice_number) if settled else None
-	return {
+	out = {
 		"folio": doc.as_dict(),
 		"lines": lines,
 		"bill_to": bill_to,
@@ -3221,6 +3232,10 @@ def folio_invoice(folio: str):
 			for rate, v in sorted(by_rate.items())
 		],
 	}
+	if cint(include_voided):
+		from kamra.folio import voided_charges
+		out["voided_lines"] = voided_charges(doc.name)
+	return out
 
 
 def _invoice_guest(res) -> dict:
@@ -4097,6 +4112,9 @@ def reservation_detail(reservation: str):
 			# undo checkout: same business day only (reinstate_checkout)
 			"can_reinstate": res.status == "Checked Out" and bool(res.get("check_out_business_date"))
 			and str(res.check_out_business_date) == str(get_business_date(res.property)),
+			# undo check-in: same hotel day, nothing on the bill (reverse_check_in)
+			"can_reverse_check_in": res.status == "Checked In"
+			and not _reverse_check_in_blocker(res),
 		},
 		# Warnings are NOT capabilities, and they live apart on purpose. A
 		# missing ID must never appear in `actions` - the guest is standing
@@ -4900,6 +4918,112 @@ def checkout_context(reservation: str):
 		"next_tip": next_tip(evaluated),
 	}
 	return ctx
+
+
+def _reverse_check_in_blocker(doc) -> str | None:
+	"""Why this stay's check-in can't be reversed now, or None (OPERA Cloud
+	Reverse Check-In: arrived on the current hotel day, nothing posted for
+	the night, nothing open and nothing owed or paid)."""
+	from kamra.business_date import get_business_date
+	from kamra.checkout import _pending_bills
+	if doc.status != "Checked In":
+		return _("Only a checked-in stay can have its check-in reversed.")
+	if str(getdate(doc.check_in_date)) != str(get_business_date(doc.property)):
+		return _("The night audit has run since this arrival, so its check-in can't "
+		         "be reversed. Check the guest out instead.")
+	folios = frappe.get_all("Folio", filters={"reservation": doc.name},
+	                        fields=["name", "grand_total", "payments_total"])
+	names = [f.name for f in folios]
+	if names and frappe.db.exists("Folio Charge", {"parent": ("in", names),
+	                                               "charge_type": "Room"}):
+		return _("A room night is posted for this stay: check the guest out instead.")
+	if any(b["billable"] for b in _pending_bills(doc, [])):
+		return _("A restaurant or laundry bill is still open for this stay: settle or "
+		         "cancel it first.")
+	if any(abs(flt(f.grand_total)) >= 0.005 or abs(flt(f.payments_total)) >= 0.005
+	       for f in folios):
+		return _("The bill is not at a zero balance: void the charges and refund the "
+		         "payments first, or check the guest out.")
+	# an authorization holds the deposit with no payment on the bill
+	if frappe.db.exists("Security Deposit", {"reservation": doc.name,
+	                                         "status": ("in", ("Collected", "Held"))}):
+		return _("A security deposit is held for this stay: release or refund it "
+		         "first, or check the guest out.")
+	return None
+
+
+@frappe.whitelist(methods=["POST"])
+@require_roles("Front Desk", "Finance", "Kamra Agent")
+def reverse_check_in(reservation: str, reason: str, pin: str | None = None):
+	"""Undo a check-in made by mistake (wrong guest, wrong room), on the
+	hotel day of the arrival and before anything is posted, open or paid:
+	OPERA Cloud's Reverse Check-In. The stay goes back to Confirmed with its
+	room; the room is released and marked Dirty (a guest or staff may have
+	been inside), keys on a connected lock system are cancelled, and the
+	reason goes on the action log. From there the desk checks the guest in
+	again or cancels the booking. Cashier PIN as for other money actions;
+	an agent gets the same refusals and is the logged actor."""
+	from kamra.authz import require_cashier_pin
+	reason = (reason or "").strip()
+	if not reason:
+		frappe.throw(_("Say why the check-in is being reversed."))
+	doc = frappe.get_doc("Reservation", reservation)
+	assert_property_access(doc.property)
+	blocker = _reverse_check_in_blocker(doc)
+	if blocker:
+		frappe.throw(blocker)
+	require_cashier_pin(doc.property, pin)
+	rooms = doc._occupied_rooms(checking_in=False)
+	doc.status = "Confirmed"
+	frappe.flags.kamra_status_transition = True
+	try:
+		doc.save()
+	finally:
+		frappe.flags.kamra_status_transition = False
+	doc.db_set({"actual_check_in": None, "checked_in_at": None, "checked_in_by": None},
+	           update_modified=False)
+	# nobody is in house: the next check-in stamps everyone's arrival again
+	for occ in doc.get("occupants") or []:
+		if occ.get("arrived_at"):
+			occ.db_set("arrived_at", None, update_modified=False)
+	for room in rooms:
+		if frappe.db.get_value("Room", room, "housekeeping_status") == "Out of Order":
+			frappe.db.set_value("Room", room, "occupancy_status", "Vacant")
+		else:
+			frappe.db.set_value("Room", room, {"occupancy_status": "Vacant",
+			                                   "housekeeping_status": "Dirty"})
+	key_result = _revoke_stay_keys(doc, rooms)
+	from kamra.savings import log_action
+	log_action("reverse_check_in", "Reservation", doc.name, doc.property,
+	           rationale=f"{doc.guest_name}: {reason}")
+	return {"ok": True, "reservation": doc.name, "status": doc.status,
+	        "rooms": rooms, "key_result": key_result}
+
+
+def _revoke_stay_keys(doc, rooms: list[str]) -> dict | None:
+	"""Cancel the stay's keys for every room it held on a connected lock
+	system (door_lock revoke_keys). The manual adapter has nothing to call:
+	the desk collects the cards. A connector failure is shown, never raised."""
+	from kamra.door_lock import get_adapter
+	adapter = None
+	try:
+		adapter = get_adapter(doc.property)
+		if adapter.key == "manual" or not adapter.supports_revoke or not rooms:
+			return None
+		results = [adapter.revoke_keys(doc.property, doc.name, room) for room in rooms]
+	except Exception:
+		key = adapter.key if adapter else None
+		frappe.log_error(title=f"Door lock {key} revoke_keys failed")
+		return {"ok": False, "adapter": key, "manual": False,
+		        "message": _("The lock system did not answer. Cancel the keys at the encoder.")}
+	ok = all(r.ok for r in results)
+	message = next((r.message for r in results if not r.ok), results[-1].message)
+	from kamra.savings import log_action
+	log_action("revoke_keys", "Reservation", doc.name, doc.property,
+	           rationale=f"check-in reversed, keys for {', '.join(rooms)} via "
+	                     f"{adapter.key}: {'ok' if ok else 'failed'}")
+	return {"ok": ok, "adapter": adapter.key,
+	        "manual": any(r.manual for r in results), "message": message}
 
 
 @frappe.whitelist(methods=["POST"])
