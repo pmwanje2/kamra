@@ -5746,17 +5746,40 @@ def _can_set_rate() -> bool:
 
 
 def _current_nightly(res) -> float:
-	"""What one night of this stay costs now, before tax: the locked rates'
-	average (the rate the folio bills), else the agreed rate."""
-	rates = [flt(r.rate) for r in res.get("night_rates") or []]
-	if rates:
+	"""What one night of this stay costs now, on the basis an agreed rate is
+	entered in: the locked rates' average (the rate the folio bills), else
+	the agreed rate. The locked rates are always before tax; where the
+	property's prices include tax (rates_include_tax) an agreed rate is a
+	gross price, so each locked night is put back to gross with its own tax
+	rate before the two are compared."""
+	from kamra.pricing import rates_include_tax
+	rows = res.get("night_rates") or []
+	if rows:
+		gross = rates_include_tax(res.property)
+		rates = [flt(r.rate) * (1 + flt(r.gst_rate) / 100 if gross else 1)
+		         for r in rows]
 		return round(sum(rates) / len(rates), 2)
 	return flt(res.get("agreed_rate"))
 
 
+# who may ask an AI agent to agree a rate for them: the people who set one
+# at the desk themselves
+AGREED_RATE_CALLER_ROLES = ("Front Desk", "Revenue Manager", "Hotel Admin")
+
+
+def _refuse_agent_rate(reason: str):
+	frappe.throw(_("{0} A manager approves it on the hotel screen.").format(reason),
+	             frappe.PermissionError)
+
+
 def _rate_override_plan(res, agreed_rate) -> dict:
 	"""Who may set this agreed rate, and what it would do to the bill.
-	Leaves res holding the new agreed rate for the save that follows."""
+	Leaves res holding the new agreed rate for the save that follows.
+
+	An AI agent is held to the front desk's limit whoever it acts for: a
+	Revenue Manager's or Hotel Admin's own right to set any rate is theirs
+	at the hotel screen, not the agent's."""
+	from kamra.credit import _is_agent
 	from kamra.settings import get_setting
 	agreed_rate = flt(agreed_rate)
 	if agreed_rate <= 0:
@@ -5766,10 +5789,12 @@ def _rate_override_plan(res, agreed_rate) -> dict:
 	current = _current_nightly(res)
 	cut = round(100 * (current - agreed_rate) / current, 2) if current else 0.0
 	limit = flt(get_setting(res.property, "rate_override_limit_pct"))
-	manager = _can_set_rate()
+	agent = _is_agent()
+	manager = _can_set_rate() and not agent
 	pv = _reprice_preview(res, agreed_rate=agreed_rate)
 	pv.update(current_nightly=current, agreed_rate=agreed_rate,
 	          reduction_pct=cut, limit_pct=limit, can_set_rate=manager,
+	          agent=agent,
 	          raises=agreed_rate > current + 0.005,
 	          needs_supervisor=not manager and cut > limit)
 	return pv
@@ -5803,13 +5828,24 @@ def set_agreed_rate(reservation: str, agreed_rate: float, reason_code: str,
 	only lower it, by up to rate_override_limit_pct (Finance settings);
 	a bigger cut, or a reason code that requires a supervisor, is signed
 	off by a Hotel Admin or Finance user with their PIN (supervisor + pin).
+	An AI agent may only apply a cut within the front desk's limit, for a
+	signed-in Front Desk / Revenue Manager / Hotel Admin; anything that
+	needs a supervisor (and any supervisor + pin it passes) is refused, for
+	a manager to approve on the hotel screen.
 	Call rate_override_preview first and pass confirm_price=1."""
 	from kamra.authz import verify_supervisor
+	from kamra.credit import _is_agent
 	from kamra.ledger import ensure_default_reason_codes
 	from kamra.savings import log_action
 
 	doc = frappe.get_doc("Reservation", reservation)
 	assert_property_access(doc.property)
+	agent = _is_agent()
+	if agent:
+		if not set(AGREED_RATE_CALLER_ROLES) & set(frappe.get_roles()):
+			_refuse_agent_rate(_("An AI agent can't agree a rate on its own."))
+		if (supervisor or "").strip() or (pin or "").strip():
+			_refuse_agent_rate(_("An AI agent can't use a supervisor's PIN."))
 	if doc.status not in ("Confirmed", "Checked In"):
 		frappe.throw(_("Only an active reservation can take an agreed rate."))
 	ensure_default_reason_codes()
@@ -5828,7 +5864,14 @@ def set_agreed_rate(reservation: str, agreed_rate: float, reason_code: str,
 	old_amount = flt(doc.amount_after_tax)
 	plan = _rate_override_plan(doc, agreed_rate)
 	approver = None
-	if not plan["can_set_rate"]:
+	if agent:
+		if plan["raises"]:
+			_refuse_agent_rate(_("An AI agent can lower a stay's rate, not raise it."))
+		if plan["needs_supervisor"] or code.requires_supervisor:
+			_refuse_agent_rate(_("A cut of {0}% is over the front desk's limit of {1}%, "
+			                     "or the reason needs a manager.").format(
+				f"{plan['reduction_pct']:g}", f"{plan['limit_pct']:g}"))
+	elif not plan["can_set_rate"]:
 		if plan["raises"]:
 			frappe.throw(_("The front desk can lower a stay's rate, not raise it. "
 			               "Ask a Revenue Manager."), frappe.PermissionError)

@@ -294,7 +294,13 @@ class AgreedRateTestCase(AuditTestCase):
 		self.assertEqual([round(r, 2) for r in self.nights(res.name)], [847.46, 847.46])
 		self.as_user(DESK, api.set_agreed_rate, res.name, 800, "RATE-PROMO",
 		             confirm_price=1, pin="4321", supervisor=GM)
-		self.assertEqual([round(r, 2) for r in self.nights(res.name)], [677.97, 677.97])
+		# 800 gross a night: 677.97 net each, the cent balanced so the stay
+		# totals exactly 1,600
+		for night in self.nights(res.name):
+			self.assertAlmostEqual(night, 677.97, delta=0.011)
+		self.assertAlmostEqual(
+			float(frappe.db.get_value("Reservation", res.name, "amount_after_tax")),
+			1600, places=1)
 
 	def test_inclusive_rates_the_log_shows_gross_nightly_amounts(self):
 		set_setting(PROP_A, "rate_override_limit_pct", 10)
