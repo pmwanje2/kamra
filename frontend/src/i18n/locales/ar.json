@@ -2350,6 +2350,7 @@
   "{n} adults": "{n} بالغين",
   "{n} adult{s}": "{n} بالغ{s}",
   "{n} bill(s) were taken for a different room than the folio they posted to.": "{n} فاتورة أُخذت لغرفة غير التي رُحّلت إلى فاتورتها.",
+  "{n} open": "{n} مفتوحة",
   "{n} blocker(s)": "{n} عائق",
   "{n} booking{s} imported{history}": "تم استيراد {n} حجز{s}{history}",
   "{n} changeover conflict{s}": "{n} تعارض تبديل{s}",
