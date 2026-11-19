@@ -333,3 +333,67 @@ class NightAuditScheduleTestCase(AuditTestCase):
 		frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- restore
 		self.assertEqual(settings.get_setting(PROP_A, "night_audit_catch_up_days"), 1)
 		self.assertEqual(settings.SETTINGS["night_audit_catch_up_days"][1].store, "kv")
+
+	# 12 - a stored limit that is not a whole number from 1 to 7 (written
+	# around save_settings) stops the scheduled audit instead of guessing
+	def test_invalid_catch_up_limit_stops_the_scheduled_audit(self):
+		messages = set()
+		for bad in (0, -1, 8, 99, "abc", True):
+			with self.subTest(stored=bad):
+				# a run left by an earlier value would read as a stuck date
+				frappe.db.delete("Night Audit Run", {"property": PROP_A})
+				frappe.db.delete("Night Audit Log", {"property": PROP_A})
+				frappe.db.set_value("Property", PROP_A, "business_date", YESTERDAY)
+				self.alert.reset_mock()
+				self.setting("night_audit_catch_up_days", bad)
+				self.tick("03:00")
+				self.assertEqual(self.bd(), YESTERDAY)
+				self.assertEqual(self.closed(), [])
+				logs = self.logs()
+				self.assertEqual([(r.status, r.run_trigger) for r in logs],
+				                 [("Skipped", "Scheduled")])
+				msg = logs[0].message
+				# names the setting and where it is stored
+				self.assertIn("Catch up at most (night_audit_catch_up_days)", msg)
+				self.assertIn(f"Property Setting {PROP_A}::night_audit_catch_up_days", msg)
+				messages.add(msg)
+				alerts = [c.args for c in self.alert.call_args_list if c.args[0] == PROP_A]
+				self.assertEqual(len(alerts), 1)
+				self.assertEqual(alerts[0][1], ("Hotel Admin",))
+				self.assertTrue(str(alerts[0][2]).startswith("Night audit stopped"))
+				self.assertIn(msg, alerts[0][3])
+				# the other property, on the default, still closed
+				self.assertEqual(self.bd(PROP_B), TODAY)
+		# one message for every bad value: the value itself is never in it
+		self.assertEqual(len(messages), 1)
+
+	def test_empty_catch_up_limit_behaves_as_three(self):
+		self.setting("night_audit_catch_up_days", "")
+		frappe.db.set_value("Property", PROP_A, "business_date", d(-3))
+		self.tick("03:00")
+		self.assertEqual(self.bd(), d(-2))
+		frappe.db.set_value("Property", PROP_A, "business_date", d(-4))
+		frappe.db.delete("Night Audit Log", {"property": PROP_A})
+		self.tick("03:15")
+		self.assertEqual(self.bd(), d(-4))
+		self.assertIn("catches up 3 days on its own", self.logs()[0].message)
+
+	def test_unset_catch_up_limit_falls_back_to_the_constant(self):
+		self.assertEqual(settings.SETTINGS["night_audit_catch_up_days"][1].default,
+		                 folio_mod.NIGHTLY_CATCH_UP_DAYS)
+		with patch.object(folio_mod, "NIGHTLY_CATCH_UP_DAYS", 1):
+			frappe.db.set_value("Property", PROP_A, "business_date", d(-2))
+			self.tick("03:00")
+		self.assertEqual(self.bd(), d(-2))
+		self.assertIn("catches up 1 day on its own", self.logs()[0].message)
+
+	def test_day_counts_are_singular_for_one(self):
+		self.assertEqual(folio_mod._days(1), "1 day")
+		self.assertEqual(folio_mod._days(2), "2 days")
+		# the only way to be 1 day behind and over the limit: a limit of 0
+		with patch.object(folio_mod, "NIGHTLY_CATCH_UP_DAYS", 0):
+			self.tick("03:00")
+		self.assertEqual(self.bd(), YESTERDAY)
+		msg = self.logs()[0].message
+		self.assertIn(", 1 day behind today", msg)
+		self.assertIn("catches up 0 days on its own", msg)
