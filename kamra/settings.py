@@ -247,6 +247,10 @@ MODULES: tuple[Module, ...] = (
 				S("night_audit_grace_minutes", "Wait after that time", "number", 0,
 				  min=0, max=120, unit="min",
 				  hint="Extra delay, for a bar or restaurant still posting after the set time."),
+				S("night_audit_catch_up_days", "Catch up at most", "number", 3,
+				  min=1, max=7, unit="days",
+				  hint="How many missed business dates the automatic night audit closes on "
+				       "its own. Beyond this, close the open days from End of Day."),
 			)),
 			Section("auditchecks", "Night audit checklist",
 			        "Checks run before the night audit closes the day (Finance → End of Day). "

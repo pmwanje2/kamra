@@ -1765,9 +1765,10 @@ def run_night_audit(property: str, business_date: str | None = None,
 	}
 
 
-# The scheduler closes at most this many overdue days on its own. A
-# property further behind gets an alert instead: weeks of unattended room
-# nights and no-show fees need a person to check the stays first.
+# The scheduler closes at most this many overdue days on its own (the
+# property's night_audit_catch_up_days, else this). A property further
+# behind gets an alert instead: weeks of unattended room nights and no-show
+# fees need a person to check the stays first.
 NIGHTLY_CATCH_UP_DAYS = 3
 
 
@@ -1852,12 +1853,14 @@ def _nightly_audit_property(property: str, today) -> dict | None:
 			return {"skipped": True, "business_date": stuck["business_date"],
 			        "message": msg}
 	behind = date_diff(today, bd)
-	if behind > NIGHTLY_CATCH_UP_DAYS:
+	from kamra.settings import get_setting
+	limit = int(get_setting(property, "night_audit_catch_up_days") or NIGHTLY_CATCH_UP_DAYS)
+	if behind > limit:
 		name = frappe.db.get_value("Property", property, "property_name") or property
 		msg = (f"The business date is {bd}, {behind} days behind today. The "
-		       f"scheduled night audit only catches up {NIGHTLY_CATCH_UP_DAYS} "
-		       f"days on its own. Check in-house stays and arrivals, then close "
-		       f"the open days from End of Day.")
+		       f"scheduled night audit only catches up {limit} "
+		       f"{'day' if limit == 1 else 'days'} on its own. Check in-house "
+		       f"stays and arrivals, then close the open days from End of Day.")
 		log.warning(f"Night audit not run for {property}: {msg}")
 		na.alert_staff(property, ("Hotel Admin", "Finance"),
 		               f"Night audit behind - {name}", f"{name}: {msg}")
