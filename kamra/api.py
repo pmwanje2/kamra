@@ -4030,8 +4030,10 @@ def _stay_balances(names: list) -> dict:
 	today = getdate(nowdate())
 	due_out = [n for n, r in resv.items() if r.status == "Checked In"
 	           and r.check_out_date and getdate(r.check_out_date) <= today]
+	unavailable: set = set()
 	if due_out:
-		folios.update(_checkout_projection(due_out))
+		projected, unavailable = _checkout_projection(due_out)
+		folios.update(projected)
 	out = {}
 	for name, res in resv.items():
 		folio = folios.get(name)
@@ -4055,6 +4057,8 @@ def _stay_balances(names: list) -> dict:
 			m = {"total": total_booked, "paid": adv,
 			     "due": max(0.0, round(total_booked - adv, 2)),
 			     "has_folio": False, "source": "booking"}
+		# the posted figures stand in: check-out's own sheet says why
+		m["projection_unavailable"] = name in unavailable
 		out[name] = m
 	return out
 
@@ -4077,12 +4081,21 @@ def _guest_folio_sums(names: list) -> dict:
 	)}
 
 
-def _checkout_projection(names: list) -> dict:
+PROJECTION_ERROR = "Kamra: check-out balance projection"
+
+
+def _checkout_projection(names: list) -> tuple[dict, set]:
 	"""Guest-folio sums as they will stand at check-out: every remaining
 	night posted by the same writer check-out uses (post_remaining_nights),
 	inside a savepoint that is rolled back. Nothing is kept - not the
 	charges, the ledger lines, nor the realtime pings their saves queue -
-	so this is a read. Falls back to the posted figures on any error."""
+	so this is a read.
+
+	Returns (sums, unavailable): a stay whose nights could not be posted
+	keeps its posted figures and is named in `unavailable`. The boards poll
+	this every 30 seconds, so its failure is logged once per stay per
+	business date, not on every poll."""
+	from kamra.business_date import get_business_date
 	from kamra.folio import post_remaining_nights
 
 	db = frappe.db
@@ -4091,14 +4104,20 @@ def _checkout_projection(names: list) -> dict:
 	had_log = hasattr(frappe.local, "_realtime_log")
 	saved_log = list(getattr(frappe.local, "_realtime_log", None) or [])
 	sp = "kamra_checkout_projection"
+	failed: dict = {}
+	sums: dict = {}
 	db.savepoint(sp)
 	try:
 		for name in names:
-			post_remaining_nights(frappe.get_doc("Reservation", name))
-		return _guest_folio_sums(names)
-	except Exception:
-		frappe.log_error(title="Kamra: check-out balance projection")
-		return {}
+			res = frappe.get_doc("Reservation", name)
+			db.savepoint(f"{sp}_stay")
+			try:
+				post_remaining_nights(res)
+			except Exception:
+				db.rollback(save_point=f"{sp}_stay")
+				failed[name] = (res.property, frappe.get_traceback())
+		ok = [n for n in names if n not in failed]
+		sums = _guest_folio_sums(ok)
 	finally:
 		db.rollback(save_point=sp)
 		for q, fns in zip(queues, saved):
@@ -4108,6 +4127,14 @@ def _checkout_projection(names: list) -> dict:
 			frappe.local._realtime_log = saved_log
 		elif hasattr(frappe.local, "_realtime_log"):
 			del frappe.local._realtime_log
+	for name, (prop, trace) in failed.items():
+		title = f"{PROJECTION_ERROR} {get_business_date(prop)}"
+		if frappe.db.exists("Error Log", {"reference_doctype": "Reservation",
+		                                  "reference_name": name, "method": title}):
+			continue
+		frappe.log_error(title=title, message=trace,
+		                 reference_doctype="Reservation", reference_name=name)
+	return sums, set(failed)
 
 
 def _stay_balance(reservation: str) -> dict:
