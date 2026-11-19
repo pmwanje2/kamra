@@ -273,3 +273,63 @@ class NightAuditScheduleTestCase(AuditTestCase):
 		self.assertEqual(out["business_date"], YESTERDAY)
 		self.setting("night_audit_auto", 0)
 		self.assertIsNone(na_mod.night_audit_schedule(PROP_A)["next_run"])
+
+	# 11 - catch-up limit per property (night_audit_catch_up_days)
+	def behind_alerts(self, prop=PROP_A):
+		return [c.args for c in self.alert.call_args_list
+		        if c.args[0] == prop and str(c.args[2]).startswith("Night audit behind")]
+
+	def test_catch_up_limit_one_skips_two_days_behind(self):
+		self.setting("night_audit_catch_up_days", 1)
+		frappe.db.set_value("Property", PROP_A, "business_date", d(-2))
+		self.tick("03:00")
+		self.assertEqual(self.bd(), d(-2))
+		self.assertEqual(self.closed(), [])
+		logs = self.logs()
+		self.assertEqual([(r.status, r.run_trigger) for r in logs], [("Skipped", "Scheduled")])
+		self.assertIn("catches up 1 day on its own", logs[0].message)
+		alerts = self.behind_alerts()
+		self.assertEqual(len(alerts), 1)
+		self.assertEqual(alerts[0][1], ("Hotel Admin", "Finance"))
+		self.assertIn("catches up 1 day on its own", alerts[0][3])
+
+	def test_catch_up_limit_five_runs_four_days_behind(self):
+		self.setting("night_audit_catch_up_days", 5)
+		frappe.db.set_value("Property", PROP_A, "business_date", d(-4))
+		self.tick("03:00")
+		self.assertEqual(self.bd(), d(-3))
+		self.assertEqual(self.closed(), [d(-4)])
+		self.assertEqual([r.status for r in self.logs()], ["Closed"])
+		self.assertEqual(self.behind_alerts(), [])
+
+	def test_catch_up_limit_unset_behaves_as_three(self):
+		self.assertEqual(settings.get_setting(PROP_A, "night_audit_catch_up_days"), 3)
+		frappe.db.set_value("Property", PROP_A, "business_date", d(-4))
+		self.tick("03:00")
+		self.assertEqual(self.bd(), d(-4))
+		self.assertIn("catches up 3 days on its own", self.logs()[0].message)
+		# property B, also unset, three days behind still closes
+		frappe.db.set_value("Property", PROP_B, "business_date", d(-3))
+		self.tick("03:15")
+		self.assertEqual(self.bd(PROP_B), d(-2))
+
+	def test_catch_up_limit_is_validated(self):
+		for bad, word in ((0, "below"), (8, "above")):
+			with self.assertRaisesRegex(frappe.ValidationError, f"Catch up at most can't be {word}"):
+				settings.save_settings(PROP_A, "front-desk", {"night_audit_catch_up_days": bad})
+		settings.save_settings(PROP_A, "front-desk", {"night_audit_catch_up_days": 7})
+		self.assertEqual(settings.get_setting(PROP_A, "night_audit_catch_up_days"), 7)
+
+	def test_catch_up_limit_editors(self):
+		from kamra.tests.audit_fixtures import ensure_user
+		rev = ensure_user("ut.na.revenue@example.com", ["Revenue Manager"])
+		admin = ensure_user("ut.na.hoteladmin@example.com", ["Hotel Admin"])
+		frappe.set_user(rev)  # nosemgrep: frappe-setuser -- acting as the persona
+		with self.assertRaises(frappe.PermissionError):
+			settings.save_settings(PROP_A, "front-desk", {"night_audit_catch_up_days": 1})
+		frappe.set_user(admin)  # nosemgrep: frappe-setuser -- acting as the persona
+		out = settings.save_settings(PROP_A, "front-desk", {"night_audit_catch_up_days": 1})
+		self.assertEqual(out["changed"], ["night_audit_catch_up_days"])
+		frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- restore
+		self.assertEqual(settings.get_setting(PROP_A, "night_audit_catch_up_days"), 1)
+		self.assertEqual(settings.SETTINGS["night_audit_catch_up_days"][1].store, "kv")
