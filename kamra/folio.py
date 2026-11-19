@@ -1772,6 +1772,25 @@ def run_night_audit(property: str, business_date: str | None = None,
 NIGHTLY_CATCH_UP_DAYS = 3
 
 
+def _days(n: int) -> str:
+	return f"{n} day" if n == 1 else f"{n} days"
+
+
+def _catch_up_limit(property: str) -> int | None:
+	"""The property's stored night_audit_catch_up_days, NIGHTLY_CATCH_UP_DAYS
+	when unset or empty, and None when the stored value is not a whole
+	number from 1 to 7 (a row written around save_settings): the caller
+	then stops instead of guessing a limit."""
+	from kamra.settings import SETTINGS, read_kv
+	raw = read_kv(property, "night_audit_catch_up_days")
+	if raw is None or raw == "":
+		return NIGHTLY_CATCH_UP_DAYS
+	spec = SETTINGS["night_audit_catch_up_days"][1]
+	if isinstance(raw, bool) or not isinstance(raw, int) or not spec.min <= raw <= spec.max:
+		return None
+	return raw
+
+
 def audit_due_at(property: str, day):
 	"""When the automatic audit is due on `day`, on the property's clock:
 	night_audit_time plus the grace minutes."""
@@ -1843,6 +1862,17 @@ def _nightly_audit_property(property: str, today) -> dict | None:
 	# A completed run for the open date whose roll did not stick. Without
 	# this every night answered already_ran and the date never moved again.
 	# Advance it like recover_stuck_business_date does; nothing is re-posted.
+	limit = _catch_up_limit(property)
+	if limit is None:
+		name = frappe.db.get_value("Property", property, "property_name") or property
+		msg = (f"Catch up at most (night_audit_catch_up_days) is not a whole number "
+		       f"from 1 to 7 in Property Setting {property}::night_audit_catch_up_days. "
+		       f"The scheduled night audit is stopped until it is fixed under Settings "
+		       f"→ Front Desk → Automatic night audit.")
+		log.warning(f"Night audit not run for {property}: {msg}")
+		na.alert_staff(property, ("Hotel Admin",),
+		               f"Night audit stopped - {name}", f"{name}: {msg}")
+		return {"skipped": True, "business_date": str(bd), "message": msg}
 	stuck = na.stuck_business_date(property)
 	if stuck:
 		bd = getdate(advance_business_date(property, str(bd)))
@@ -1853,14 +1883,12 @@ def _nightly_audit_property(property: str, today) -> dict | None:
 			return {"skipped": True, "business_date": stuck["business_date"],
 			        "message": msg}
 	behind = date_diff(today, bd)
-	from kamra.settings import get_setting
-	limit = int(get_setting(property, "night_audit_catch_up_days") or NIGHTLY_CATCH_UP_DAYS)
 	if behind > limit:
 		name = frappe.db.get_value("Property", property, "property_name") or property
-		msg = (f"The business date is {bd}, {behind} days behind today. The "
-		       f"scheduled night audit only catches up {limit} "
-		       f"{'day' if limit == 1 else 'days'} on its own. Check in-house "
-		       f"stays and arrivals, then close the open days from End of Day.")
+		msg = (f"The business date is {bd}, {_days(behind)} behind today. The "
+		       f"scheduled night audit only catches up {_days(limit)} on its own. "
+		       f"Check in-house stays and arrivals, then close the open days from "
+		       f"End of Day.")
 		log.warning(f"Night audit not run for {property}: {msg}")
 		na.alert_staff(property, ("Hotel Admin", "Finance"),
 		               f"Night audit behind - {name}", f"{name}: {msg}")
