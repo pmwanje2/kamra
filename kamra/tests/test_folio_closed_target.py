@@ -44,6 +44,10 @@ class FolioClosedTargetTestCase(AuditTestCase):
 		empty Sh0 invoice before either night was posted."""
 		res = make_reservation(PROP_A, self.rt, d(-2), TODAY,
 		                       status="Checked In", room=self.room)
+		# Error Log is MyISAM: rows outlive the test rollback while the
+		# naming series rolls back, so an earlier run left logs under this name
+		frappe.db.delete("Error Log", {"reference_doctype": "Reservation",
+		                               "reference_name": res.name})
 		closed = guest_folio(res.name)
 		self.assertFalse(frappe.get_doc("Folio", closed).charges)
 		folio_mod.close_folio(closed)
