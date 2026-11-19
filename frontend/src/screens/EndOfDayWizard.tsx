@@ -1006,27 +1006,38 @@ export default function EndOfDayWizard() {
       {err && <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 print:hidden">{err}</p>}
       <div className="grid gap-4 lg:grid-cols-[280px_1fr] print:block">
         <Card className="h-fit p-2 print:hidden">
-          <ol>
+          <ol className="grid gap-0.5 sm:grid-cols-2 lg:grid-cols-1">
             {state.steps.map((s) => {
               const reachable = state.ran || s.index <= 10
               return (
-                <li key={s.key}>
+                <li key={s.key} className="min-w-0">
                   <button
                     type="button"
                     disabled={!reachable}
                     onClick={() => setActive(s.index)}
                     className={cn(
-                      "flex w-full items-center gap-2 rounded-lg px-2 py-2 text-start text-sm hover:bg-zinc-100 disabled:opacity-50",
+                      "flex w-full items-start gap-2 rounded-lg px-2 py-2 text-start text-sm hover:bg-zinc-100 disabled:opacity-50",
                       active === s.index && "bg-brand-50 font-medium text-brand-800",
                     )}
                   >
-                    {ICON[stepStatus(s)]}
-                    <span className="w-5 text-xs tabular-nums text-zinc-400">{s.index}</span>
-                    <span className="flex-1">{t(s.title)}</span>
+                    <span className="flex h-5 shrink-0 items-center">{ICON[stepStatus(s)]}</span>
+                    <span
+                      data-step-number
+                      className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-[11px] font-medium tabular-nums text-zinc-500"
+                    >
+                      {s.index}
+                    </span>
+                    <span data-step-title className="min-w-0 flex-1 break-words leading-5">
+                      {t(s.title)}
+                    </span>
                     {s.count > 0 && s.index < 10 && (
-                      <span className={cn("text-xs tabular-nums", s.status === "blocked" ? "text-rose-600" : "text-zinc-400")}>
+                      <Badge
+                        tone={s.status === "blocked" ? "rose" : "amber"}
+                        aria-label={t("{n} open", { n: s.count })}
+                        className="shrink-0 tabular-nums"
+                      >
                         {s.count}
-                      </span>
+                      </Badge>
                     )}
                   </button>
                 </li>

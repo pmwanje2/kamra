@@ -266,6 +266,7 @@
   "{n} attempts": "{n} tentativas",
   "{n} bill(s) were taken for a different room than the folio they posted to.": "{n} fatura(s) foram lançadas para um quarto diferente do extrato de destino.",
   "{n} billable": "{n} faturável",
+  "{n} open": "{n} em aberto",
   "{n} blocker(s)": "{n} bloqueador(es)",
   "{n} booking(s) imported, {h} as past-stay history, {a} already in Kamra": "{n} reservas importadas, {h} como histórico de estadias anteriores, {a} já em Kamra",
   "{n} booking{s} imported{history}": "{n} reserva{s} importada{history}",

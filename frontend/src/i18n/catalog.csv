@@ -302,6 +302,7 @@
 {n} nights. Stay total {from} to {to} (+{amt}).,{n} nights. Stay total {from} to {to} (+{amt}).,{n} ليالٍ. إجمالي الإقامة من {from} إلى {to} (+{amt}).,"{n} noches. Total de la estancia, del {from} al {to}: +{amt}.",screens/TapeChart.tsx,n from to amt,translated
 {n} of {m},{n} of {m},{n} من {m},{n} de {m},screens/EndOfDayWizard.tsx,n m,translated
 {n} of {total} room(s) named.,{n} of {total} room(s) named.,,,components/GroupBookingDialog.tsx,n total,needs_translation
+{n} open,{n} open,{n} مفتوحة,Abiertos: {n},screens/EndOfDayWizard.tsx,n,translated
 {n} out of service,{n} out of service,{n} خارج الخدمة,Fuera de servicio: {n},components/RoomInsights.tsx,n,translated
 {n} overdue,{n} overdue,{n} متأخر,Vencidos: {n},,n,translated
 {n} overdue · Housekeeping,{n} overdue · Housekeeping,{n} متأخرة · التدبير المنزلي,Limpieza · tareas vencidas: {n},screens/Today.tsx,n,translated
