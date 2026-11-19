@@ -192,8 +192,14 @@ def check_open_tills(property: str, bd: str) -> dict:
 		"transactions": cint(r.txns),
 		"cash_taken": flt(r.cash_in),
 	} for r in rows]
+	severity = _severity(property, "open_tills")
+	from kamra.cashier import tills_required
+	if not tills_required(property) and not any(i["transactions"] for i in items):
+		# tills are off here: an empty till holds no money to count. One that
+		# took money still blocks, so none is dropped from the count.
+		severity = "warn"
 	return _check(
-		"open_tills", "Open cashier tills", _severity(property, "open_tills"),
+		"open_tills", "Open cashier tills", severity,
 		items, "Close each till under Finance → Cashier: count the cash and "
 		       "record the variance.", "/cashier/sessions")
 

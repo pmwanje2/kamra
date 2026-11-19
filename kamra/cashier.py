@@ -92,8 +92,9 @@ TILL_OPENERS = ("Front Desk", "Finance", "Kamra Agent")
 def tills_required(property: str | None) -> bool:
 	"""Does this property take money through cashier tills? On by default.
 	A small place with no cash drawer turns it off (Settings > Finance):
-	payments are then recorded without a till, and the till screens
-	(paid-outs, drops, petty cash, exchange) still need one."""
+	payments are then recorded without a till, no till can be opened
+	(open_session), and the till screens (paid-outs, drops, petty cash,
+	exchange) are unavailable."""
 	return bool(get_setting(property, "use_cashier_tills"))
 
 
@@ -310,7 +311,13 @@ def open_session(property: str, opening_float: float | None = None,
 	`cashier_terminal` picks a configured till. Without it the session is the
 	property's Default till, one per user, exactly as before terminals existed.
 	A configured terminal has one open session at a time; one user may hold
-	several, one per terminal."""
+	several, one per terminal. Refused where the property does not use
+	tills (use_cashier_tills off): payments there are recorded without one."""
+	if not tills_required(property):
+		frappe.throw("Cashier tills are switched off at this property, so there is "
+		             "no till to open. Payments are recorded without one. To use a "
+		             "till (paid-outs, drops, petty cash, exchange), turn tills on "
+		             "under Settings → Finance.")
 	ensure_business_date(property)
 	user = frappe.session.user
 	term = None
