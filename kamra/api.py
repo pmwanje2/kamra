@@ -4093,8 +4093,8 @@ def _checkout_projection(names: list) -> tuple[dict, set]:
 
 	Returns (sums, unavailable): a stay whose nights could not be posted
 	keeps its posted figures and is named in `unavailable`. The boards poll
-	this every 30 seconds, so its failure is logged once per stay per
-	business date, not on every poll."""
+	this every 30 seconds, so a failure is logged once per stay, business
+	date and error class, not on every poll."""
 	from kamra.business_date import get_business_date
 	from kamra.folio import post_remaining_nights
 
@@ -4113,9 +4113,9 @@ def _checkout_projection(names: list) -> tuple[dict, set]:
 			db.savepoint(f"{sp}_stay")
 			try:
 				post_remaining_nights(res)
-			except Exception:
+			except Exception as e:
 				db.rollback(save_point=f"{sp}_stay")
-				failed[name] = (res.property, frappe.get_traceback())
+				failed[name] = (res.property, type(e).__name__, frappe.get_traceback())
 		ok = [n for n in names if n not in failed]
 		sums = _guest_folio_sums(ok)
 	finally:
@@ -4127,8 +4127,8 @@ def _checkout_projection(names: list) -> tuple[dict, set]:
 			frappe.local._realtime_log = saved_log
 		elif hasattr(frappe.local, "_realtime_log"):
 			del frappe.local._realtime_log
-	for name, (prop, trace) in failed.items():
-		title = f"{PROJECTION_ERROR} {get_business_date(prop)}"
+	for name, (prop, error, trace) in failed.items():
+		title = f"{PROJECTION_ERROR} {get_business_date(prop)} {error}"
 		if frappe.db.exists("Error Log", {"reference_doctype": "Reservation",
 		                                  "reference_name": name, "method": title}):
 			continue
