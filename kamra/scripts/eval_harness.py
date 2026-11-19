@@ -8823,26 +8823,75 @@ def t342():
 	assert frappe.db.get_value("Reservation", res.name, "status") == "Checked Out"
 
 
-@check("checkout context: a folio invoiced before its nights were posted is a blocker, not a toast")
+@check("checkout context: a folio invoiced before its nights were posted stays frozen; the nights post once to an open folio and are owed")
 def t343():
 	from kamra import api
+	from kamra import folio as folio_mod
 	res, folio = _settle_stay("E343", "+91 70000 03430")
 	# nothing posted yet, so the empty bill is settled and closes
 	assert abs(float(frappe.db.get_value("Folio", folio, "balance") or 0)) < 0.01
-	api.close_folio(folio)
-	s = api.checkout_context(res.name)
-	codes = [b["code"] for b in s["blockers"]]
-	assert "nights_not_posted" in codes and not s["actions"]["can_checkout"], s["blockers"]
-	b = next(b for b in s["blockers"] if b["code"] == "nights_not_posted")
-	assert b["folio"] == folio and "invoice" in b["message"], b
-	# and the preview left no message behind for the browser to toast
+	number = api.close_folio(folio)["invoice_number"]
+	assert number, "the empty bill took no invoice number"
+
+	def frozen():
+		# (a) the issued invoice is untouched: no lines, same number, closed
+		assert frappe.db.count("Folio Charge", {"parent": folio}) == 0, folio
+		assert frappe.db.get_value("Folio", folio, ["status", "invoice_number"]) \
+			== ("Closed", number), folio
+
+	def other_guest_folios():
+		return frappe.get_all(
+			"Folio", filters={"reservation": res.name, "folio_type": "Guest",
+			                  "name": ("!=", folio)},
+			fields=["name", "status"])
+
+	frappe.local.message_log = []
+	previews = [api.checkout_context(res.name) for _ in range(2)]
+	frozen()
+	# the preview is a read: no folio opened, no night kept
+	assert not other_guest_folios(), other_guest_folios()
+	assert not frappe.db.count("Folio Charge", {"reservation": res.name,
+	                                           "charge_type": "Room"})
+	# (d) and it left no message behind for the browser to toast
 	assert not [m for m in (frappe.local.message_log or [])
 	            if "frozen" in str(m)], frappe.local.message_log
+	owed = previews[0]["totals"]["owed"]
+	for s in previews:
+		codes = [b["code"] for b in s["blockers"]]
+		# (c) owed, never nights_not_posted
+		assert "nights_not_posted" not in codes and "owed" in codes, s["blockers"]
+		assert not s["actions"]["can_checkout"], s["actions"]
+		assert abs(s["totals"]["owed"] - owed) < 0.01, (s["totals"], owed)
+
+	# (b) the nights land once, on a different, open Guest folio
+	assert folio_mod.post_remaining_nights(res) == 2
+	assert folio_mod.post_remaining_nights(res) == 0, "a second run double-posted"
+	frozen()
+	opened = other_guest_folios()
+	assert len(opened) == 1 and opened[0].status == "Open", opened
+	nights = frappe.get_all("Folio Charge",
+	                        filters={"reservation": res.name, "charge_type": "Room"},
+	                        fields=["parent", "posting_date"])
+	assert sorted(str(n.posting_date) for n in nights) == ["2037-03-01", "2037-03-02"], nights
+	assert {n.parent for n in nights} == {opened[0].name}, nights
+	# (c) what the preview said is owed is exactly the nights' bill
+	night_total = float(frappe.db.get_value("Folio", opened[0].name, "grand_total"))
+	assert night_total > 0 and abs(owed - night_total) < 0.01, (owed, night_total)
+	s = api.checkout_context(res.name)
+	assert "nights_not_posted" not in [b["code"] for b in s["blockers"]], s["blockers"]
+	assert abs(s["totals"]["owed"] - night_total) < 0.01, s["totals"]
+	assert [c["folio"] for c in s["collect"]] == [opened[0].name], s["collect"]
+
+	# (e) check-out without payment is still refused, and posts nothing twice
 	try:
 		api.check_out(res.name)
-		raise AssertionError("checked out onto an invoiced folio")
-	except frappe.ValidationError:
-		pass
+		raise AssertionError("checked out owing the nights")
+	except frappe.ValidationError as e:
+		assert "owed" in str(e), e
+	assert frappe.db.get_value("Reservation", res.name, "status") == "Checked In"
+	assert frappe.db.count("Folio Charge", {"reservation": res.name,
+	                                        "charge_type": "Room"}) == 2
+	frozen()
 	frappe.local.message_log = []
 
 

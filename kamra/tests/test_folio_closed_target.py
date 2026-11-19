@@ -122,6 +122,27 @@ class FolioClosedTargetTestCase(AuditTestCase):
 			api._stay_balances([res.name])
 		self.assertEqual(self.error_logs() - before, 2)
 
+	def test_a_new_kind_of_failure_the_same_day_is_still_logged(self):
+		res, _closed = self.closed_empty_stay()
+		before = self.error_logs()
+		with patch("kamra.folio.post_remaining_nights",
+		           side_effect=frappe.ValidationError("UT projection failure")):
+			for _ in range(2):
+				api._stay_balances([res.name])
+		self.assertEqual(self.error_logs() - before, 1)
+		# same stay, same business date, a different error: logged once more
+		with patch("kamra.folio.post_remaining_nights",
+		           side_effect=ZeroDivisionError("UT another failure")):
+			for _ in range(2):
+				money = api._stay_balances([res.name])[res.name]
+		self.assertTrue(money["projection_unavailable"])
+		self.assertEqual(self.error_logs() - before, 2)
+		titles = frappe.get_all("Error Log", filters={
+			"reference_doctype": "Reservation", "reference_name": res.name},
+			pluck="method")
+		self.assertTrue(any("ValidationError" in t for t in titles), titles)
+		self.assertTrue(any("ZeroDivisionError" in t for t in titles), titles)
+
 	def test_one_failed_stay_does_not_hide_the_others(self):
 		res, _closed = self.closed_empty_stay()
 		room2 = make_room(PROP_A, self.rt, "102")
