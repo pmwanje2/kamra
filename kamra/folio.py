@@ -503,10 +503,39 @@ def _nightly_gst(reservation, date) -> float:
 	                           gross + _over_cap_night(reservation)))
 
 
+def open_line_target(reservation, charge_type: str, is_alcohol: int = 0) -> str:
+	"""target_folio, never an invoiced folio: when the stay's Guest folio is
+	closed, the line goes on its open Guest folio, and one opens when there
+	is none (the part_settle shape, without repeating the one-time fees the
+	first folio carried). Company and group folios already route only to
+	open ones."""
+	name = target_folio(reservation, charge_type, is_alcohol)
+	if frappe.db.get_value("Folio", name, "status") != "Closed":
+		return name
+	open_guest = frappe.db.get_value(
+		"Folio", {"reservation": reservation.name, "folio_type": "Guest",
+		          "status": "Open"}, order_by="creation desc")
+	if open_guest:
+		return open_guest
+	closed = frappe.get_doc("Folio", name)
+	fresh = frappe.get_doc({
+		"doctype": "Folio",
+		"property": closed.property,
+		"reservation": reservation.name,
+		"guest": closed.guest,
+		"folio_type": "Guest",
+		"status": "Open",
+		"opened_on": now_datetime(),
+	})
+	_recalculate(fresh)
+	fresh.insert(ignore_permissions=True)
+	return fresh.name
+
+
 def _append_charge(folios, reservation, charge_type, line, is_alcohol=0):
 	"""Append a line to the routed folio, reusing loaded docs so a multi-
 	night posting run saves each folio once."""
-	name = target_folio(reservation, charge_type, is_alcohol)
+	name = open_line_target(reservation, charge_type, is_alcohol)
 	if name not in folios:
 		folios[name] = frappe.get_doc("Folio", name)
 	folios[name].append("charges", line)
@@ -683,7 +712,7 @@ def post_rate_lines(reservation, lines: list) -> None:
 	for line in lines:
 		name = line["folio"]
 		if frappe.db.get_value("Folio", name, "status") == "Closed":
-			name = target_folio(reservation, "Room")
+			name = open_line_target(reservation, "Room")
 		if name not in folios:
 			folios[name] = frappe.get_doc("Folio", name)
 		folios[name].append("charges", {
