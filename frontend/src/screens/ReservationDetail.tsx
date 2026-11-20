@@ -208,9 +208,12 @@ export default function ReservationDetail({
   const [reverseKeys, setReverseKeys] = useState<string | null>(null)
   const [changingRoom, setChangingRoom] = useState(false)
   const [declineReason, setDeclineReason] = useState("")
-  // the roles set_agreed_rate admits (Hotel Admin and System Manager as admins)
   const { roles } = useAuth()
+  // the roles set_agreed_rate admits (Hotel Admin and System Manager as admins)
   const canAgreeRate = ["Front Desk", "Revenue Manager", "Hotel Admin", "System Manager"]
+    .some((r) => roles.includes(r))
+  // booking_quotation / email_booking_quotation: Front Desk and above
+  const canQuote = ["Front Desk", "Revenue Manager", "Hotel Admin", "System Manager"]
     .some((r) => roles.includes(r))
 
   const refresh = useCallback(() => {
@@ -827,6 +830,14 @@ export default function ReservationDetail({
           className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm font-medium text-zinc-600 hover:border-brand-600 hover:text-brand-700"
         >
           <FileText className="size-4" />{translate(" Registration card")}</Link>
+        {d.actions.can_amend && canQuote && (
+          <Link
+            to={`/booking-quote/${encodeURIComponent(name)}`}
+            onClick={onClose}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm font-medium text-zinc-600 hover:border-brand-600 hover:text-brand-700"
+          >
+            <FileText className="size-4" />{translate("Quotation")}</Link>
+        )}
       </div>
 
       {/* cancel flow (self-guards to Confirmed) */}

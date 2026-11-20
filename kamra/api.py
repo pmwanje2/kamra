@@ -8380,16 +8380,7 @@ def group_quotation(group_booking: str):
 	if gb.get("master_reservation"):
 		contact = frappe.db.get_value("Reservation", gb.master_reservation, "guest_name")
 	return {
-		"property": {
-			"property_name": prop.property_name, "logo_url": prop.get("logo_url"),
-			"address": ", ".join(x for x in (prop.get("address_line"), prop.get("city"),
-			                                 prop.get("state"), prop.get("pincode")) if x),
-			"phone": prop.get("phone"), "email": prop.get("email"),
-			"website": prop.get("website"), "tax_id": prop.get("gstin"),
-			"tax_id_label": ctx.get("tax_id_label") or "Tax ID",
-			"tax_label": ctx.get("tax_label") or "Tax",
-			"currency": prop.get("currency"),
-		},
+		"property": _quotation_header(prop, ctx),
 		"group": {
 			"name": gb.name, "group_name": gb.group_name, "group_type": gb.get("group_type"),
 			"status": gb.status, "company": gb.company and frappe.db.get_value(
@@ -8403,6 +8394,284 @@ def group_quotation(group_booking: str):
 		"prices": prices,
 		"issued_on": nowdate(),
 	}
+
+
+def _quotation_header(prop, ctx: dict) -> dict:
+	"""The hotel block at the top of a quotation (group or single booking)."""
+	return {
+		"property_name": prop.property_name, "logo_url": prop.get("logo_url"),
+		"address": ", ".join(x for x in (prop.get("address_line"), prop.get("city"),
+		                                 prop.get("state"), prop.get("pincode")) if x),
+		"phone": prop.get("phone"), "email": prop.get("email"),
+		"website": prop.get("website"), "tax_id": prop.get("gstin"),
+		"tax_id_label": ctx.get("tax_id_label") or "Tax ID",
+		"tax_label": ctx.get("tax_label") or "Tax",
+		"currency": prop.get("currency"),
+	}
+
+
+# Refusals for a single booking's quotation. Closed and append-only: a
+# caller (the hotel screen, an agent) keys on the id before the colon.
+QUOTE_REFUSALS = {
+	"QUOTE_NO_EMAIL_ACCOUNT": "This site has no outgoing email account. An "
+	                          "administrator sets one up (Email Account, default "
+	                          "outgoing); until then print the quotation or save it as PDF.",
+	"QUOTE_NO_RECIPIENT_EMAIL": "The booking has no email address on record for the "
+	                            "booker. Add it to the guest profile first.",
+	"QUOTE_BOOKING_CLOSED": "Only a booking that is still to come or in house gets a quotation.",
+	"QUOTE_RECENTLY_SENT": "This quotation was emailed less than a minute ago. Wait a "
+	                       "minute before sending the same quotation again.",
+}
+QUOTE_RESEND_SECONDS = 60
+_QUOTE_STATUSES = ("Requested", "Held", "Pending Payment", "Waitlist", "Confirmed",
+                   "Checked In")
+
+
+def _refuse_quote(code: str):
+	frappe.throw(f"{code}: {_(QUOTE_REFUSALS[code])}")
+
+
+def _quotation_recipient(res) -> str | None:
+	"""Where the booker reads email. The guest profile carries the only
+	address a booking has; when someone else booked and asked to be the
+	contact, that address is not theirs, so nobody is picked."""
+	if res.get("booked_by_name") and res.get("contact_preference") == "Booker":
+		return None
+	email = frappe.db.get_value("Guest", res.guest, "email") if res.guest else None
+	return (email or "").strip() or None
+
+
+def _quote_line_items(res) -> list[dict]:
+	"""The priced lines the booking's quote snapshot holds (pricing.quote
+	line_items, saved with the totals by Reservation.apply_pricing)."""
+	snap = res.get("quote_snapshot")
+	if not snap:
+		return []
+	try:
+		data = json.loads(snap) if isinstance(snap, str) else snap
+		return [li for li in (data.get("line_items") or []) if isinstance(li, dict)]
+	except (ValueError, TypeError, AttributeError):
+		return []  # unreadable snapshot: the booked price shows as one line
+
+
+def _quote_line_label(res, item: dict, meal_label: str | None) -> str:
+	component = item.get("component")
+	if component == "meal_plan" and meal_label:
+		return _("Meal plan: {0}").format(meal_label)
+	if component == "promotion" and res.get("voucher"):
+		code = frappe.db.get_value("Discount Voucher", res.voucher, "voucher_code")
+		return _("Discount: voucher {0}").format(code or res.voucher)
+	return _(item.get("description") or component or "")
+
+
+def _quotation_lines(res, nights: list[dict], meal_label: str | None) -> list[dict]:
+	"""The price as an OPERA proforma shows it: room nights, then each
+	inclusion (meal plan), fee and discount on its own line. The room line
+	is the nights listed above it. The lines plus tax are the booking's
+	total exactly: whatever the snapshot does not explain (a price set by
+	hand, nights already charged) is its own adjustment line."""
+	items = _quote_line_items(res)
+	target = flt(flt(res.amount_after_tax) - flt(res.tax_amount), 2)
+	room = next((li for li in items if li.get("component") == "accommodation"), None)
+	if nights:
+		room_amount = flt(sum(n["rate"] for n in nights), 2)
+	elif room:
+		room_amount = flt(room.get("amount"), 2)
+	else:
+		room_amount = target
+	lines = [{"component": "accommodation",
+	          "description": _((room or {}).get("description")
+	                           or ("Room nights" if nights or room else "Stay as booked")),
+	          "amount": room_amount}]
+	for li in items:
+		if li.get("component") == "accommodation" or not flt(li.get("amount"), 2):
+			continue
+		lines.append({"component": li.get("component"),
+		              "description": _quote_line_label(res, li, meal_label),
+		              "amount": flt(li.get("amount"), 2)})
+	rest = flt(target - sum(line["amount"] for line in lines), 2)
+	if rest:
+		lines.append({"component": "adjustment",
+		              "description": _("Adjustment to the booked price"), "amount": rest})
+	return lines
+
+
+def _quotation_terms(cancellation: dict, meal_label: str | None) -> list[str]:
+	"""The terms printed under the price, matching the lines shown."""
+	c = cancellation or {}
+	if c.get("free_now") and c.get("free_until"):
+		terms = [_("Free cancellation until {0}; after that {1} is charged.").format(
+			c["free_until"], c.get("fee_label"))]
+	elif c.get("free_now"):
+		terms = [_("Free cancellation.")]
+	else:
+		terms = [_("Cancelling now is charged {0}.").format(c.get("fee_label"))]
+	if meal_label:
+		terms.append(_("Meal plan included: {0}, as priced above.").format(meal_label))
+	else:
+		terms.append(_("Room only: meals are not included."))
+	terms.append(_("The lines above plus tax make up the total. Anything else taken "
+	               "during the stay is billed separately."))
+	return terms
+
+
+def _booking_quotation(res) -> dict:
+	import hashlib
+
+	from kamra.localization import pack_for
+	prop = frappe.get_doc("Property", res.property)
+	ctx = pack_for(res.property).invoice_context(prop) or {}
+	nights = [{"date": str(n.stay_date), "rate": flt(n.rate),
+	           "meal": flt(n.get("meal_amount"))}
+	          for n in (res.get("night_rates") or [])]
+	meal_label = ((frappe.db.get_value("Meal Plan", res.meal_plan, "label")
+	               or res.meal_plan) if res.meal_plan else None)
+	cancellation = cancellation_outlook(res.property, res.room_type,
+	                                    str(res.check_in_date), str(res.check_out_date))
+	q = {
+		"property": _quotation_header(prop, ctx),
+		"booking": {
+			"name": res.name, "status": res.status, "guest_name": res.guest_name,
+			"booked_by": res.get("booked_by_name"),
+			"company": (res.company and frappe.db.get_value(
+				"Corporate Account", res.company, "company_name")) or res.company,
+			"room_type_name": frappe.db.get_value(
+				"Room Type", res.room_type, "room_type_name") if res.room_type else None,
+			"meal_plan": meal_label,
+			"adults": cint(res.adults), "children": cint(res.children),
+			"check_in_date": str(res.check_in_date),
+			"check_out_date": str(res.check_out_date), "nights": cint(res.nights),
+		},
+		"nights": nights,
+		"lines": _quotation_lines(res, nights, meal_label),
+		"totals": {
+			"before_tax": flt(res.amount_before_tax), "tax": flt(res.tax_amount),
+			"discount": flt(res.get("discount_amount")),
+			"total": flt(res.amount_after_tax),
+			"deposit_due": _deposit_state(res)["due"],
+		},
+		"cancellation": cancellation,
+		"terms": _quotation_terms(cancellation, meal_label),
+		"email_to": _quotation_recipient(res),
+	}
+	# what the guest is shown, so a resend of the same quotation is recognised
+	q["version"] = hashlib.sha1(json.dumps(q, sort_keys=True, default=str).encode()
+	                            ).hexdigest()[:12]  # nosec B324 -- change detector, not security
+	q["issued_on"] = nowdate()
+	return q
+
+
+def _booking_quotation_html(q: dict) -> str:
+	"""The quotation as a printable page, for the PDF the email carries."""
+	from kamra.custom_reports import _page_html
+	esc = frappe.utils.escape_html
+	p, b, t = q["property"], q["booking"], q["totals"]
+	sym = esc(frappe.db.get_value("Currency", p.get("currency"), "symbol") or "")
+	money = lambda n: f"{sym}{flt(n):,.2f}"  # noqa: E731
+	right = "style='text-align:right'"
+	nights = "".join(
+		f"<tr><td>{esc(n['date'])}</td><td {right}>{money(n['rate'])}</td></tr>"
+		for n in q["nights"])
+	lines = "".join(
+		f"<tr><td>{esc(x['description'])}</td><td {right}>{money(x['amount'])}</td></tr>"
+		for x in q["lines"])
+	body = (
+		f"<p>{esc(p['address'])}<br>{esc(' · '.join(x for x in (p.get('phone'), p.get('email')) if x))}</p>"
+		f"<p><b>{esc(_('Guest'))}:</b> {esc(b.get('guest_name') or '')}<br>"
+		f"<b>{esc(_('Stay'))}:</b> {esc(b['check_in_date'])} → {esc(b['check_out_date'])}"
+		f" · {esc(_('{0} night(s)').format(b['nights']))} · {esc(b.get('room_type_name') or '')}</p>"
+		+ (f"<table><thead><tr><th>{esc(_('Night'))}</th><th {right}>"
+		   f"{esc(_('Rate / night'))}</th></tr></thead><tbody>{nights}</tbody></table>"
+		   if nights else "")
+		+ f"<h2>{esc(_('Price'))}</h2><table><tbody>{lines}"
+		f"<tr><td>{esc(_(p['tax_label']))}</td><td {right}>{money(t['tax'])}</td></tr>"
+		f"<tr><td><b>{esc(_('Total'))}</b></td><td {right}><b>{money(t['total'])}</b></td></tr>"
+		+ (f"<tr><td>{esc(_('Deposit to confirm'))}</td><td {right}>{money(t['deposit_due'])}</td></tr>"
+		   if t["deposit_due"] > 0 else "")
+		+ "</tbody></table><h2>" + esc(_("Terms")) + "</h2><ul>"
+		+ "".join(f"<li>{esc(x)}</li>" for x in q["terms"]) + "</ul>")
+	meta = " · ".join([p["property_name"], b["name"], _("Issued {0}").format(q["issued_on"])])
+	return _page_html(_("Quotation"), meta, body)
+
+
+def _sent_recently(res, version: str) -> bool:
+	"""This version of the booking's quotation already went out within the
+	last QUOTE_RESEND_SECONDS (the quotation_emailed log row)."""
+	from frappe.utils import add_to_date
+	since = add_to_date(now_datetime(), seconds=-QUOTE_RESEND_SECONDS)
+	for snap in frappe.get_all("Agent Action Log", filters={
+			"action_type": "quotation_emailed", "reference_doctype": "Reservation",
+			"reference_name": res.name, "executed_at": (">", since)},
+			pluck="after_snapshot"):
+		try:
+			if (json.loads(snap or "{}") or {}).get("version") == version:
+				return True
+		except (ValueError, TypeError, AttributeError):
+			continue
+	return False
+
+
+@frappe.whitelist()
+@require_roles("Front Desk", "Revenue Manager", "Hotel Admin")
+def booking_quotation(reservation: str):
+	"""One booking's quotation / proforma: the hotel, the stay, each night's
+	booked rate, the totals and deposit, and the cancellation terms. The
+	same layout as group_quotation. Nothing is posted."""
+	from kamra.crs import assert_property_access
+	res = frappe.get_doc("Reservation", reservation)
+	assert_property_access(res.property)
+	return _booking_quotation(res)
+
+
+@frappe.whitelist(methods=["POST"])
+@require_roles("Front Desk", "Revenue Manager", "Hotel Admin")
+def email_booking_quotation(reservation: str):
+	"""Email the booking's quotation to the booker, as a PDF, through
+	Frappe's own email: a Communication logged on the Reservation and sent
+	by the site's outgoing account. It goes to the address on record only
+	(the guest profile's email); no other recipient, cc or bcc can be given.
+	The mail is queued (status "Queued"); Frappe's Email Queue delivers it.
+	Refuses with QUOTE_NO_EMAIL_ACCOUNT, QUOTE_NO_RECIPIENT_EMAIL,
+	QUOTE_BOOKING_CLOSED, or QUOTE_RECENTLY_SENT when the same version of
+	the quotation went out less than a minute ago."""
+	from frappe.core.doctype.communication.email import make
+	from frappe.email.doctype.email_account.email_account import EmailAccount
+	from frappe.utils.pdf import get_pdf
+
+	from kamra.crs import assert_property_access
+	res = frappe.get_doc("Reservation", reservation)
+	assert_property_access(res.property)
+	if res.status not in _QUOTE_STATUSES:
+		_refuse_quote("QUOTE_BOOKING_CLOSED")
+	if not EmailAccount.find_outgoing(match_by_doctype="Reservation"):
+		_refuse_quote("QUOTE_NO_EMAIL_ACCOUNT")
+	email = _quotation_recipient(res)
+	if not email:
+		_refuse_quote("QUOTE_NO_RECIPIENT_EMAIL")
+	# one send per quotation version a minute; the row lock makes a double
+	# click wait for the first send's log row
+	frappe.db.get_value("Reservation", res.name, "name", for_update=True)
+	q = _booking_quotation(res)
+	if _sent_recently(res, q["version"]):
+		_refuse_quote("QUOTE_RECENTLY_SENT")
+	subject = _("Quotation {0} from {1}").format(res.name, q["property"]["property_name"])
+	message = _("Dear {0}, please find your quotation for {1} to {2} attached. "
+	            "Reference {3}.").format(res.guest_name or _("Guest"),
+	                                     q["booking"]["check_in_date"],
+	                                     q["booking"]["check_out_date"], res.name)
+	pdf = get_pdf(_booking_quotation_html(q))
+	comm = make(doctype="Reservation", name=res.name, subject=subject,
+	            content=frappe.utils.escape_html(message), recipients=[email],
+	            send_email=1,
+	            attachments=[{"fname": f"Quotation-{res.name}.pdf", "fcontent": pdf}])
+	from kamra.savings import log_action
+	log_action("quotation_emailed", "Reservation", res.name, res.property,
+	           rationale=f"Quotation PDF to {email} ({comm['name']})",
+	           after_snapshot={"version": q["version"], "to": email,
+	                           "communication": comm["name"]})
+	# Frappe queues the mail; the Email Queue sends it
+	return {"ok": True, "status": "Queued", "sent_to": email,
+	        "communication": comm["name"]}
 
 
 def _group_money(gb, prices: dict, rooming: list) -> dict:
