@@ -204,8 +204,9 @@ export default function App() {
         <Route path="hk" element={<HkApp />} />
         {/* dedicated login route so signing out changes the URL */}
         <Route path="login" element={<LoginPage />} />
-        {/* password reset email lands on /update-password?key=… (redirected
-            into /kamra); signed-in change-password uses the same screen */}
+        {/* signed-in change-password, and /kamra/update-password?key=… links;
+            Frappe's reset email stays on the site's central /update-password
+            (maximus D23: no site-wide redirect into /kamra) */}
         <Route path="update-password" element={<UpdatePassword />} />
         <Route element={<RequireAuth />}>
           <Route element={<AppShell />}>
