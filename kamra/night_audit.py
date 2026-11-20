@@ -1303,8 +1303,10 @@ def build_pack(property: str, bd: str, *, checks: list[dict],
 		"held_late_arrivals": held_late,
 	}
 	total_rooms = frappe.db.count("Room", {"property": property}) or 0
+	# the closed date's posted figures; the daytime projection is not kept
 	_section(pack, "statistics",
-	         lambda: {**reports._day_stats(property, bd, total_rooms),
+	         lambda: {**{k: v for k, v in reports._day_stats(property, bd, total_rooms).items()
+	                     if k not in reports.PROJECTED_KEYS},
 	                  "total_rooms": total_rooms})
 	_section(pack, "manager_flash",
 	         lambda: _raw(reports.manager_flash)(property, bd))

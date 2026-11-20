@@ -28,17 +28,20 @@ def _out_of_order(property: str, date: str, open_date: bool) -> int:
 		""", {"p": property, "d": date})[0][0] or 0)
 
 
-def _projected_room_revenue(property: str, date: str, total_rooms: int,
-                            occupied: int) -> dict:
+PROJECTED_KEYS = ("projected_room_revenue", "projected_adr", "projected_revpar")
+
+
+def _projected_room_revenue(property: str, date: str, total_rooms: int) -> dict:
 	"""Room revenue the open business date will post, from the rooms in
-	house (OPERA's daytime flash): each in-house stay's night at the rate
-	the night audit posts (the locked nightly rate), or what is already
-	posted for it. The posted figures are left as they are; these are
-	labelled projected."""
+	house (OPERA's daytime flash): each stay the night audit will post a
+	night for - arrival <= date < departure, as folio.run_night_audit
+	selects them - at the rate the audit posts (the locked nightly rate),
+	or what is already posted for it. ADR is over those stays. The posted
+	figures are left as they are; these are labelled projected."""
 	from kamra.folio import _nightly_room_rate
 	stays = frappe.get_all("Reservation", filters={
 		"property": property, "status": "Checked In",
-		"check_in_date": ("<=", date)}, pluck="name")
+		"check_in_date": ("<=", date), "check_out_date": (">", date)}, pluck="name")
 	posted = dict(frappe.db.sql(
 		"""
 		SELECT fc.reservation, SUM(fc.amount) FROM `tabFolio Charge` fc
@@ -46,16 +49,24 @@ def _projected_room_revenue(property: str, date: str, total_rooms: int,
 		  AND fc.posting_date = %(d)s
 		GROUP BY fc.reservation
 		""", {"r": stays or [""], "d": date}))
-	revenue = 0.0
-	for name in stays:
-		if name in posted:
-			revenue += float(posted[name] or 0)
-		else:
-			revenue += _nightly_room_rate(frappe.get_doc("Reservation", name), date)
+	unposted = [n for n in stays if n not in posted]
+	revenue = sum(float(v or 0) for v in posted.values())
+	if unposted:
+		# one read for every unposted stay's locked nights, not a get_doc each
+		rates: dict = {}
+		for r in frappe.get_all("Reservation Night Rate", filters={
+				"parenttype": "Reservation", "parent": ("in", unposted),
+				"stay_date": date}, fields=["parent", "rate"]):
+			rates[r.parent] = float(r.rate or 0)
+		for name in unposted:
+			if name in rates:
+				revenue += rates[name]
+			else:  # booked before rates were locked: priced as the audit prices it
+				revenue += _nightly_room_rate(frappe.get_doc("Reservation", name), date)
 	revenue = round(revenue, 2)
 	return {
 		"projected_room_revenue": revenue,
-		"projected_adr": round(revenue / occupied, 0) if occupied else 0,
+		"projected_adr": round(revenue / len(stays), 0) if stays else 0,
 		"projected_revpar": round(revenue / total_rooms, 0) if total_rooms else 0,
 	}
 
@@ -114,7 +125,7 @@ def _day_stats(property: str, date: str, total_rooms: int) -> dict:
 			""",
 			{"p": property, "d": date})[0][0] or 0)
 	available = max(total_rooms - _out_of_order(property, date, in_house), 0)
-	projected = _projected_room_revenue(property, date, total_rooms, occupied) \
+	projected = _projected_room_revenue(property, date, total_rooms) \
 		if in_house else {}
 	return {
 		**projected,
