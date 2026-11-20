@@ -69,10 +69,12 @@ class LevyPerNightTestCase(AuditTestCase):
 		self.assertEqual([str(c.posting_date) for c in levies], [d(0), d(1)])
 		self.assertEqual([float(c.amount) for c in levies], [2000, 2000])
 		self.assertTrue(all("Local hotel tax" in c.description for c in levies))
-		# booked to the levy account on the ledger, apart from room revenue
+		# booked to the levy account, apart from room revenue: on the charge
+		# line itself (as RED asserted) and on the ledger
 		row = frappe.get_all("Folio Charge", filters={"reservation": res.name,
 		                                               "charge_type": "Room Levy"},
-		                     fields=["name", "gst_rate"], limit=1)[0]
+		                     fields=["name", "transaction_code", "gst_rate"], limit=1)[0]
+		self.assertEqual(row.transaction_code, ledger.code_for_charge_type("Room Levy"))
 		self.assertEqual(float(row.gst_rate), 0)
 		self.assertEqual(frappe.db.get_value(
 			"Folio Ledger Entry", {"source_doctype": "Folio Charge", "source_name": row.name},
