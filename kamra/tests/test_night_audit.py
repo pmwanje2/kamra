@@ -925,7 +925,9 @@ class NoShowPolicyTestCase(AuditTestCase):
 
 	def test_guaranteed_arrivals_are_kept(self):
 		self.policy(non_guaranteed_release_time="18:00")
-		paid = self.due(check_in=TODAY, check_out=d(2), advance_paid=500)
+		paid = self.due(check_in=TODAY, check_out=d(2))
+		# advance_paid is ledger-owned: a booking is never inserted with one
+		frappe.db.set_value("Reservation", paid.name, "advance_paid", 500)
 		ota = self.due(check_in=TODAY, check_out=d(2), source="OTA")
 		corporate = self.due(check_in=TODAY, check_out=d(2),
 		                     booking_type="Corporate")
