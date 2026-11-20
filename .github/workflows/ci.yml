@@ -170,6 +170,7 @@ jobs:
           bench --site test.localhost run-tests --module kamra.tests.test_banquet \
             2>&1 | tee banquet.out
           grep -qE "^OK$" banquet.out
+          if grep -qE "^FAILED" banquet.out; then exit 1; fi
 
       - name: Run the night audit, ledger and scheduled-audit unit tests
         run: |
@@ -180,6 +181,9 @@ jobs:
             # known bugs are pinned as expected failures and a few tests skip
             # by design, so OK may carry those counts
             grep -qE "^OK( \(((expected failures|skipped)=[0-9]+(, )?)+\))?$" "$m.out" || exit 1
+            # a module can print one summary per test runner (integration
+            # and siteless): any FAILED summary fails it, whatever else is OK
+            if grep -qE "^FAILED" "$m.out"; then exit 1; fi
           done
 
       - name: Run front-desk persona journey
