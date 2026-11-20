@@ -2916,6 +2916,11 @@ class AdvancePaidIsLedgerOwned(frappe.ValidationError):
 	refunds keep it (frappe.db.set_value). A booking save never changes it."""
 
 
+class NoRoomNightsToDiscount(frappe.ValidationError):
+	"""A discount comes off posted room nights and the bill has none yet.
+	The desk screen keys on this class to offer Advance bill."""
+
+
 def _discount_lines(doc, kind: str, value: float, basis: str) -> list[dict]:
 	"""What a discount takes off the room nights on the bill, one line per
 	tax rate (the allowance reverses tax at the rate of the nights it
@@ -2931,9 +2936,9 @@ def _discount_lines(doc, kind: str, value: float, basis: str) -> list[dict]:
 		g["base"] += flt(c.amount)
 		g["nights"] += 1
 	if not groups:
-		frappe.throw(_("There are no room nights on this bill yet. A discount "
-		               "comes off posted nights: give it after night audit or "
-		               "at check-out."))
+		frappe.throw(_("No nights are posted yet. Use Advance bill to post the stay "
+		               "now, then give the discount, or use a rate plan or promo "
+		               "code at booking."), NoRoomNightsToDiscount)
 	base = sum(g["base"] for g in groups.values())
 	value = flt(value)
 	if value <= 0:
