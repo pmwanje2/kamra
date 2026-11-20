@@ -573,16 +573,29 @@ def read_kv(property: str, key: str, default=None):
 	return default if val is None else val
 
 
-def write_kv(property: str, key: str, val):
+def write_kv(property: str, key: str, val, module: str | None = None):
 	"""The one writer of a Property Setting row. Callers check roles and
-	log the change; this stores the JSON value and nothing else. The
-	caller clears the cache (clear_cache) once it is done writing."""
+	log the change; this stores the JSON value. The row is saved as a
+	document, so its validate/on_update events, a site's own Before Save
+	rule and Version history see every write. module names the settings
+	page the change came from (flags.kamra_settings_module); only
+	save_settings passes it. The caller clears the cache (clear_cache)
+	once it is done writing."""
+	value = json.dumps(val)
 	name = frappe.db.get_value("Property Setting", {"property": property, "setting_key": key})
 	if name:
-		frappe.db.set_value("Property Setting", name, "value", json.dumps(val))
+		doc = frappe.get_doc("Property Setting", name)
+		if doc.value == value:
+			return
+		doc.value = value
 	else:
-		frappe.get_doc({"doctype": "Property Setting", "property": property,
-		                "setting_key": key, "value": json.dumps(val)}).insert(ignore_permissions=True)
+		doc = frappe.get_doc({"doctype": "Property Setting", "property": property,
+		                      "setting_key": key, "value": value})
+	doc.flags.kamra_settings_module = module
+	if name:
+		doc.save(ignore_permissions=True)  # roles checked by the caller
+	else:
+		doc.insert(ignore_permissions=True)
 
 
 def _turnover_name(property: str) -> str | None:
@@ -845,7 +858,7 @@ def save_settings(property: str, module: str, changes) -> dict:
 			tp.update(by_store["turnover"])
 			tp.save(ignore_permissions=True)
 	for key, val in (by_store.get("kv") or {}).items():
-		write_kv(property, key, val)
+		write_kv(property, key, val, module=module)
 	clear_cache(property)
 
 	after_all = _values(property, mod)
