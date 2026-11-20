@@ -59,6 +59,10 @@ jobs:
         run: npm run late-fee:check
         working-directory: frontend
 
+      - name: Check a date change saves once the new price is confirmed
+        run: npm run amend-dates:check
+        working-directory: frontend
+
   contract:
     # Fails a PR that breaks what connected apps rely on (MCP tools, REST
     # methods, scopes, webhooks). No bench: the contract is read from source.
