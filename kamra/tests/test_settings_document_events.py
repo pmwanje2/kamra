@@ -207,6 +207,21 @@ class AdvancePaidIsLedgerOwnedTestCase(AuditTestCase):
 			frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- test fixture
 		self.assertEqual(self.vouchers(), [])
 
+	def test_a_ledger_path_may_save_the_advance_with_the_server_flag(self):
+		# the exemption a server-side ledger path sets on the document
+		res = frappe.get_doc({
+			"doctype": "Reservation", "property": PROP_A, "room_type": self.rt,
+			"guest": make_guest(), "status": "Confirmed", "room": self.room,
+			"check_in_date": d(3), "check_out_date": d(5), "adults": 2,
+			"children": 0, "advance_paid": 400})
+		res.flags.kamra_ledger_advance = True
+		res.insert(ignore_permissions=True)
+		res.reload()
+		res.advance_paid = 650
+		res.flags.kamra_ledger_advance = True
+		res.save(ignore_permissions=True)
+		self.assertEqual(float(frappe.db.get_value("Reservation", res.name, "advance_paid")), 650)
+
 	def test_a_zero_advance_on_a_new_booking_is_fine(self):
 		res = make_reservation(PROP_A, self.rt, d(3), d(5), status="Confirmed",
 		                       room=self.room, advance_paid=0)
