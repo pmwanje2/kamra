@@ -433,15 +433,18 @@ def is_supervisor(user: str | None = None, roles=SUPERVISOR_ROLES) -> bool:
 		set(roles) & set(frappe.get_roles(user)))
 
 
-def supervisors_for(property: str, roles=SUPERVISOR_ROLES) -> list[dict]:
+def supervisors_for(property: str, roles=SUPERVISOR_ROLES,
+                    exclude: str | None = None) -> list[dict]:
 	"""Who can approve on a till at this property: enabled users holding
 	one of `roles`, with access to the property and a cashier PIN set.
-	Names only."""
+	`exclude` (the person asking) is left out: nobody approves their own
+	request. Names only."""
 	users = set(frappe.get_all(
 		"Has Role", filters={"role": ["in", [r for r in roles if r != "Administrator"]],
 		                     "parenttype": "User"},
 		pluck="parent", distinct=True))
 	users &= set(frappe.get_all("Cashier PIN", pluck="name"))
+	users.discard(exclude)
 	out = []
 	for u in frappe.get_all("User", filters={"name": ["in", list(users) or [""]],
 	                                         "enabled": 1, "user_type": "System User"},
@@ -453,16 +456,21 @@ def supervisors_for(property: str, roles=SUPERVISOR_ROLES) -> list[dict]:
 
 
 def verify_supervisor(property: str, supervisor: str | None, pin,
-                      roles=SUPERVISOR_ROLES) -> str:
+                      roles=SUPERVISOR_ROLES, requester: str | None = None) -> str:
 	"""A supervisor approves at someone else's till with their user id and
 	their own cashier PIN. The PIN is always required here, whatever the
 	property's PIN setting, because it is the only proof the supervisor was
 	there. Wrong PINs count against the supervisor's lock like any other
-	entry. Returns the approving user."""
+	entry. With `requester` (who asked for the approval), the supervisor
+	must be someone else: SUPERVISOR_SELF_APPROVAL. Returns the approving
+	user."""
 	supervisor = (supervisor or "").strip()
 	if not supervisor or not frappe.db.exists("User", supervisor):
 		frappe.throw("SUPERVISOR_REQUIRED: pick the supervisor who approves this.",
 		             frappe.PermissionError)
+	if requester and supervisor == requester:
+		frappe.throw("SUPERVISOR_SELF_APPROVAL: you cannot approve your own "
+		             "request. Another supervisor signs it off.", frappe.PermissionError)
 	if not frappe.db.get_value("User", supervisor, "enabled") or \
 			not is_supervisor(supervisor, roles):
 		frappe.throw(f"{supervisor} cannot approve this. It needs a Hotel "
