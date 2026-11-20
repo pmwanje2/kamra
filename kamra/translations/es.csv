@@ -235,7 +235,7 @@ Extend unchecked-out departures one night,Extender una noche las salidas sin che
 The guest owes {0} - nothing is due back to refund.,El huésped debe {0}; no hay nada que devolver.
 Only {0} is due back to the guest - can't refund more than that.,Solo se le deben {0} al huésped; no se puede devolver más.
 Room type code {0} is already used at this property.,El código de tipo de habitación {0} ya se usa en esta propiedad.
-There are no room nights on this bill yet. A discount comes off posted nights: give it after night audit or at check-out.,Todavía no hay noches en esta cuenta. El descuento se aplica a las noches cargadas: déselo después de la auditoría nocturna o en el check-out.
+"No nights are posted yet. Use Advance bill to post the stay now, then give the discount, or use a rate plan or promo code at booking.","Todavía no hay noches cargadas. Use «Facturar por adelantado» para cargar la estancia ahora y luego dé el descuento, o use un plan de tarifa o un código promocional al reservar."
 Enter a discount above zero.,Ingrese un descuento mayor que cero.
 A discount can't be more than 100%.,Un descuento no puede superar el 100%.
 The discount is more than the room nights on the bill ({0}).,El descuento supera las noches de la cuenta ({0}).

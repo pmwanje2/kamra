@@ -752,7 +752,7 @@ Advance {v0},Advance {v0},دفعة مقدمة {v0},Anticipo {v0},,v0,translated
 Advance % at booking,Advance % at booking,نسبة الدفعة المقدمة % عند الحجز,Anticipo % al reservar,,,translated
 "Advance a booking on these dates owes (25, 50, 100). 0 = the property's usual deposit %. A stay crossing seasons owes the highest","Advance a booking on these dates owes (25, 50, 100). 0 = the property's usual deposit %. A stay crossing seasons owes the highest",الدفعة المقدمة المستحقة على الحجز في هذه التواريخ (25، 50، 100). 0 = نسبة العربون المعتادة للمنشأة. الإقامة التي تمتد عبر مواسم تدفع الأعلى,"Anticipo que debe una reserva en estas fechas (25, 50, 100). 0 = el depósito habitual de la propiedad. Una estancia que cruza temporadas paga el más alto",,,translated
 Advance at confirmation,Advance at confirmation,دفعة مقدمة عند التأكيد,Anticipo al confirmar,,,translated
-Advance bill,Advance bill,فاتورة مقدمة,Facturar por adelantado,screens/FolioView.tsx,,translated
+Advance bill,Advance bill,فاتورة مقدمة,Facturar por adelantado,components/FolioDiscount.tsx; screens/FolioView.tsx,,translated
 Advance date,Advance date,تقديم تاريخ العمل,Avanzar la fecha operativa,screens/EndOfDay.tsx; screens/EndOfDayWizard.tsx,,translated
 Advance deposits held,Advance deposits held,العرابين المحتفظ بها,Anticipos recibidos,,,translated
 advance due {amount},advance due {amount},دفعة مقدمة مستحقة {amount},anticipo pendiente {amount},screens/CRS.tsx,amount,translated

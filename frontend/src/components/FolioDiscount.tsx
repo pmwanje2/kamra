@@ -7,6 +7,7 @@ import { useEffect, useState } from "react"
 import { call } from "../lib/api"
 import { cur, fmtAmount } from "../lib/money"
 import { serverError } from "../lib/resource"
+import { isNoRoomNights } from "../lib/discountHint"
 import { useT } from "../lib/i18n"
 import { Button } from "./ui/button"
 
@@ -16,19 +17,22 @@ const inputCls =
 
 interface Preview { total: number; label: string; lines: { nights: number; base: number }[] }
 
-export default function FolioDiscount({ folio, adjustCodes: given, act, onPosted }: {
+export default function FolioDiscount({ folio, adjustCodes: given, act, onPosted, onAdvanceBill }: {
   folio: string
   /** The Adjust reason codes; fetched here when the caller has none. */
   adjustCodes?: { name: string; description: string }[]
   /** FolioView's act(): unlocks the cashier PIN, shows errors, reloads. */
   act: (fn: () => Promise<unknown>) => Promise<void>
   onPosted: (pending: boolean) => void
+  /** The folio's Advance bill action, offered when no night is posted yet. */
+  onAdvanceBill?: () => void
 }) {
   const { t } = useT()
   const blank = { kind: "Percent", value: "", basis: "Stay", code: "", reason: "", reason_code: "" }
   const [d, setD] = useState(blank)
   const [preview, setPreview] = useState<Preview | null>(null)
   const [hint, setHint] = useState<string | null>(null)
+  const [noNights, setNoNights] = useState(false)
   const [pin, setPin] = useState<string | null>(null)
   const [fetched, setFetched] = useState<{ name: string; description: string }[]>([])
   const adjustCodes = given ?? fetched
@@ -47,11 +51,15 @@ export default function FolioDiscount({ folio, adjustCodes: given, act, onPosted
   useEffect(() => {
     setPreview(null)
     setHint(null)
+    setNoNights(false)
     if (!promo && !(Number(d.value) > 0)) return
     const id = setTimeout(() => {
       call<Preview>("kamra.api.post_discount", { ...params, preview: 1 })
         .then(setPreview)
-        .catch((e) => setHint(serverError(e)))
+        .catch((e) => {
+          setHint(serverError(e))
+          setNoNights(isNoRoomNights(e))
+        })
     }, 350)
     return () => clearTimeout(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -137,6 +145,11 @@ export default function FolioDiscount({ folio, adjustCodes: given, act, onPosted
         </p>
       )}
       {hint && <p className="mt-2 text-xs text-amber-700">{hint}</p>}
+      {noNights && onAdvanceBill && (
+        <Button variant="outline" className="mt-2" onClick={onAdvanceBill}>
+          {t("Advance bill")}
+        </Button>
+      )}
     </div>
   )
 }
