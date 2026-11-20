@@ -4754,6 +4754,7 @@ Profile actions,Profile actions,إجراءات الملف الشخصي,Acciones 
 Profit and loss,Profit and loss,الأرباح والخسائر,Pérdidas y ganancias,screens/ManagementBooks.tsx,,translated
 Profit for the period,Profit for the period,ربح الفترة,Ganancia del periodo,screens/ManagementBooks.tsx,,translated
 Proforma,Proforma,فاتورة أولية,Proforma,screens/FolioView.tsx,,translated
+projected {v} (in house),projected {v} (in house),متوقع {v} (المقيمون),proyectado {v} (en casa),screens/Reports.tsx,v,translated
 "Projectors, LED walls, DJ, podium, stage, decor, bar. Add it free to give it away.","Projectors, LED walls, DJ, podium, stage, decor, bar. Add it free to give it away.",أجهزة عرض، شاشات LED، DJ، منصة خطابة، مسرح، ديكور، بار. أضفه مجاناً لتقديمه هدية.,"Proyectores, pantallas LED, DJ, atril, escenario, decoración y bar. Márquelo sin cargo para incluirlo de cortesía.",screens/BanquetFunction.tsx,,translated
 Promo code,Promo code,رمز ترويجي,Código promocional,components/FolioDiscount.tsx; screens/PublicBooking.tsx,,translated
 Promoted from waitlist,Promoted from waitlist,تمت الترقية من قائمة الانتظار,Reserva trasladada desde la lista de espera,,,translated
