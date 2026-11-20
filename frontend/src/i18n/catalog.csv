@@ -1386,7 +1386,6 @@ CANCELLED - STOP COOKING,CANCELLED - STOP COOKING,ملغى - أوقف الطبخ
 Cancelled {ref},Cancelled {ref},أُلغيت {ref},Cancelada {ref},screens/TripConfirmation.tsx,ref,translated
 Cancelled a booking,Cancelled a booking,ألغى حجزاً,Reserva cancelada,,,translated
 Cancelled bills (,Cancelled bills (,الفواتير الملغاة (,Cuentas canceladas (,screens/PosDashboard.tsx,,translated
-Cancelling now is charged {fee}.,Cancelling now is charged {fee}.,الإلغاء الآن يُحتسب عليه {fee}.,Cancelar ahora cobra {fee}.,screens/BookingQuotation.tsx,fee,translated
 Cancelling…,Cancelling…,جارٍ الإلغاء…,Cancelando…,components/CancelPanel.tsx,,translated
 cannot close,cannot close,لا يمكن الإغلاق,no se puede cerrar,,,translated
 capped at 300,capped at 300,بحد أقصى 300,limitado a 300,screens/pos/PosSidePanel.tsx,,translated
@@ -2615,11 +2614,11 @@ Free,Free,متاحة,Disponible,components/CheckInDialog.tsx; components/RoomDra
 Free cancellation,Free cancellation,إلغاء مجاني,Cancelación gratuita,screens/PublicBooking.tsx,,translated
 Free cancellation until,Free cancellation until,إلغاء مجاني حتى,Cancelación gratuita hasta,,,translated
 Free cancellation until {date},Free cancellation until {date},إلغاء مجاني حتى {date},Cancelación gratuita hasta el {date},screens/PublicBooking.tsx,date,translated
-Free cancellation until {date}; after that {fee} is charged.,Free cancellation until {date}; after that {fee} is charged.,إلغاء مجاني حتى {date}، وبعدها تُفرض {fee}.,Cancelación gratuita hasta {date}; después de eso se carga {fee}.,components/BookingDialog.tsx; screens/BookingQuotation.tsx,date fee,translated
+Free cancellation until {date}; after that {fee} is charged.,Free cancellation until {date}; after that {fee} is charged.,إلغاء مجاني حتى {date}، وبعدها تُفرض {fee}.,Cancelación gratuita hasta {date}; después de eso se carga {fee}.,components/BookingDialog.tsx,date fee,translated
 Free cancellation up to {n} day before arrival,Free cancellation up to {n} day before arrival,إلغاء مجاني حتى {n} يوم قبل الوصول,Cancelación gratuita hasta {n} día antes de la llegada,screens/PublicBooking.tsx,n,translated
 Free cancellation up to {n} days before arrival,Free cancellation up to {n} days before arrival,إلغاء مجاني حتى {n} أيام قبل الوصول,Cancelación gratuita hasta {n} días antes de la llegada,screens/PublicBooking.tsx,n,translated
 Free cancellation window (days before arrival),Free cancellation window (days before arrival),فترة الإلغاء المجاني (أيام قبل الوصول),Plazo de cancelación gratuita (días antes de la llegada),screens/BookingEngine.tsx,,translated
-Free cancellation.,Free cancellation.,إلغاء مجاني.,Cancelación gratuita.,components/BookingDialog.tsx; screens/BookingQuotation.tsx,,translated
+Free cancellation.,Free cancellation.,إلغاء مجاني.,Cancelación gratuita.,components/BookingDialog.tsx,,translated
 Free Child Age Limit (Years),Free Child Age Limit (Years),حد عمر الطفل المجاني (سنوات),Edad máxima para alojamiento infantil sin cargo (años),screens/Setup.tsx,,translated
 French,French,فرنسي,Francesa,,,translated
 Frequently Asked Questions,Frequently Asked Questions,الأسئلة الشائعة,Preguntas frecuentes,screens/PublicBooking.tsx,,translated
@@ -4801,7 +4800,7 @@ Quotation,Quotation,عرض سعر,Cotización,components/GroupControl.tsx; scree
 Quotation {group} saved for {b} room(s). No rooms are held until you confirm the block.,Quotation {group} saved for {b} room(s). No rooms are held until you confirm the block.,,,components/GroupBookingDialog.tsx,group b,needs_translation
 Quotation margins,Quotation margins,هوامش عروض الأسعار,Márgenes de cotización,,,translated
 "Quotation margins, payment milestones and follow-ups for functions.","Quotation margins, payment milestones and follow-ups for functions.",هوامش عروض الأسعار، ومراحل الدفع، والمتابعات للمناسبات.,"Márgenes de cotización, etapas de pago y seguimiento de eventos.",,,translated
-Quotation sent to {email}.,Quotation sent to {email}.,تم إرسال عرض السعر إلى {email}.,Cotización enviada a {email}.,screens/BookingQuotation.tsx,email,translated
+Quotation queued for sending to {email}.,Quotation queued for sending to {email}.,عرض السعر في قائمة الإرسال إلى {email}.,Cotización en cola para enviarse a {email}.,screens/BookingQuotation.tsx,email,translated
 Quotations,Quotations,عروض الأسعار,Cotizaciones,,,translated
 Quote,Quote,عرض سعر,Cotización,components/BookingDialog.tsx; screens/BanquetFunction.tsx,,translated
 Quote {v0},Quote {v0},عرض سعر {v0},Cotización {v0},,v0,translated
@@ -5206,7 +5205,7 @@ Room numbers,Room numbers,أرقام الغرف,Números de habitación,,,transl
 "Room numbers per type, comma-separated.","Room numbers per type, comma-separated.",أرقام الغرف لكل نوع، مفصولة بفواصل.,"Números de habitación por tipo, separados por comas.",screens/Setup.tsx,,translated
 Room only,Room only,غرفة فقط,Solo habitación,components/BookingDialog.tsx; screens/PublicBooking.tsx,,translated
 Room Only,Room Only,الإقامة فقط,Solo alojamiento,,,translated
-Room prices exclude meals and extras unless stated. Tax as applicable on the day of stay.,Room prices exclude meals and extras unless stated. Tax as applicable on the day of stay.,أسعار الغرف لا تشمل الوجبات والإضافات ما لم يُذكر ذلك. تُطبق الضريبة حسب يوم الإقامة.,Los precios de las habitaciones no incluyen comidas ni extras salvo que se indique. Impuestos según corresponda el día de la estancia.,screens/BookingQuotation.tsx; screens/GroupQuotation.tsx,,translated
+Room prices exclude meals and extras unless stated. Tax as applicable on the day of stay.,Room prices exclude meals and extras unless stated. Tax as applicable on the day of stay.,أسعار الغرف لا تشمل الوجبات والإضافات ما لم يُذكر ذلك. تُطبق الضريبة حسب يوم الإقامة.,Los precios de las habitaciones no incluyen comidas ni extras salvo que se indique. Impuestos según corresponda el día de la estancia.,screens/GroupQuotation.tsx,,translated
 room rate / room sold,room rate / room sold,سعر الغرفة / غرفة مباعة,ingresos por habitaciones / habitaciones vendidas,screens/Reports.tsx,,translated
 Room rate variances,Room rate variances,فروقات أسعار الغرف,Diferencias de tarifas de habitación,,,translated
 room rev / room,room rev / room,إيراد الغرفة / غرفة,ingresos por habitaciones / habitación,screens/Reports.tsx,,translated
@@ -5250,7 +5249,7 @@ Rooms (net of discounts),Rooms (net of discounts),الغرف (صافي الخص�
 Rooms × dates with live rates,Rooms × dates with live rates,الغرف × التواريخ بأسعار مباشرة,Habitaciones por fecha con tarifas actuales,,,translated
 Rooms are held until {v0}. Rooms not named by then are released.,Rooms are held until {v0}. Rooms not named by then are released.,,,screens/GroupQuotation.tsx,v0,needs_translation
 "Rooms are matched to each guest's type and preferences. Assigning places them now; ""Review"" flags a choice worth a second look.","Rooms are matched to each guest's type and preferences. Assigning places them now; ""Review"" flags a choice worth a second look.","تُطابق الغرف نوع كل ضيف وتفضيلاته. التعيين يضعهم الآن؛ ""مراجعة"" تعلّم اختياراً يستحق نظرة ثانية.","Las habitaciones se seleccionan según el tipo reservado y las preferencias del huésped. Al asignarlas, la habitación queda confirmada; «Revisar» indica una propuesta que conviene comprobar.",screens/TapeChart.tsx,,translated
-Rooms before tax,Rooms before tax,الغرف قبل الضريبة,Habitaciones antes de impuestos,screens/BookingQuotation.tsx; screens/GroupQuotation.tsx,,translated
+Rooms before tax,Rooms before tax,الغرف قبل الضريبة,Habitaciones antes de impuestos,screens/GroupQuotation.tsx,,translated
 Rooms here:,Rooms here:,الغرف هنا:,Habitaciones en esta ubicación:,screens/PublicBooking.tsx,,translated
 Rooms imported,Rooms imported,تم استيراد الغرف,Habitaciones importadas,screens/RoomsSetup.tsx,,translated
 "Rooms in house at a zero rate, usually complimentary or an entry error.","Rooms in house at a zero rate, usually complimentary or an entry error.",غرف مشغولة بسعر صفر، غالباً مجانية أو خطأ في الإدخال.,"Habitaciones ocupadas con tarifa cero, normalmente por cortesía o por un error de registro.",,,translated

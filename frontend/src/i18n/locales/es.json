@@ -6401,12 +6401,11 @@
   "Back to the booking": "Volver a la reserva",
   "No email address on record for the booker.": "No hay un correo registrado para quien reservó.",
   "Print / Save as PDF": "Imprimir / Guardar como PDF",
-  "Quotation sent to {email}.": "Cotización enviada a {email}.",
+  "Quotation queued for sending to {email}.": "Cotización en cola para enviarse a {email}.",
   "Issued {v0}": "Emitida el {v0}",
   "{v0} night(s)": "{v0} noche(s)",
   "Rate / night": "Tarifa / noche",
   "Rooms before tax": "Habitaciones antes de impuestos",
   "Deposit to confirm": "Depósito para confirmar",
-  "Cancelling now is charged {fee}.": "Cancelar ahora cobra {fee}.",
   "Room prices exclude meals and extras unless stated. Tax as applicable on the day of stay.": "Los precios de las habitaciones no incluyen comidas ni extras salvo que se indique. Impuestos según corresponda el día de la estancia."
 }

@@ -39,8 +39,12 @@ interface Quote {
     nights: number
   }
   nights: { date: string; rate: number; meal: number }[]
+  /** room nights, then each inclusion, fee and discount: with tax, the total */
+  lines: { component: string; description: string; amount: number }[]
   totals: { before_tax: number; tax: number; discount: number; total: number; deposit_due: number }
   cancellation: { free_now: boolean; free_until: string | null; fee_label: string }
+  /** written by the server for this booking, matching the lines */
+  terms: string[]
   email_to: string | null
   issued_on: string
 }
@@ -69,7 +73,7 @@ export default function BookingQuotation() {
     setError(null)
     setSent(null)
     try {
-      const out = await call<{ sent_to: string }>("kamra.api.email_booking_quotation", { reservation: d.booking.name })
+      const out = await call<{ sent_to: string; status: string }>("kamra.api.email_booking_quotation", { reservation: d.booking.name })
       setSent(out.sent_to)
     } catch (e) {
       setError(serverError(e))
@@ -81,7 +85,7 @@ export default function BookingQuotation() {
   if (!d) return error ? <p className="py-10 text-center text-rose-600">{error}</p>
     : <p className="py-10 text-center text-zinc-400">{translate("Loading…")}</p>
 
-  const { property: p, booking: b, totals, cancellation: c } = d
+  const { property: p, booking: b, totals } = d
   return (
     <div className="mx-auto max-w-3xl">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2 print:hidden">
@@ -103,7 +107,7 @@ export default function BookingQuotation() {
       </div>
       {(sent || error || !d.email_to) && (
         <div className="mb-4 space-y-1 text-sm print:hidden">
-          {sent && <p className="text-emerald-700">{translate("Quotation sent to {email}.", { email: sent })}</p>}
+          {sent && <p className="text-emerald-700">{translate("Quotation queued for sending to {email}.", { email: sent })}</p>}
           {error && <p className="text-rose-600">{translate(error)}</p>}
           {!d.email_to && <p className="text-zinc-500">{translate("No email address on record for the booker.")}</p>}
         </div>
@@ -153,7 +157,12 @@ export default function BookingQuotation() {
             ))}
           </tbody>
           <tfoot>
-            <tr><td className="pt-3 text-right text-zinc-500">{translate("Rooms before tax")}</td><td className="pt-3 text-right">{money(totals.before_tax)}</td></tr>
+            {d.lines.map((line) => (
+              <tr key={line.component}>
+                <td className="pt-2 text-right text-zinc-500">{line.description}</td>
+                <td className="pt-2 text-right">{money(line.amount)}</td>
+              </tr>
+            ))}
             <tr><td className="text-right text-zinc-500">{translate(p.tax_label)}</td><td className="text-right">{money(totals.tax)}</td></tr>
             <tr className="text-base font-semibold"><td className="pt-1 text-right">{translate("Total")}</td><td className="pt-1 text-right">{money(totals.total)}</td></tr>
             {totals.deposit_due > 0 && (
@@ -165,14 +174,7 @@ export default function BookingQuotation() {
         <section className="space-y-1 text-zinc-600">
           <div className="font-medium text-zinc-800">{translate("Terms")}</div>
           <ul className="list-disc space-y-1 pl-5">
-            {c.free_now && c.free_until ? (
-              <li>{translate("Free cancellation until {date}; after that {fee} is charged.", { date: c.free_until, fee: c.fee_label })}</li>
-            ) : c.free_now ? (
-              <li>{translate("Free cancellation.")}</li>
-            ) : (
-              <li>{translate("Cancelling now is charged {fee}.", { fee: c.fee_label })}</li>
-            )}
-            <li>{translate("Room prices exclude meals and extras unless stated. Tax as applicable on the day of stay.")}</li>
+            {d.terms.map((term) => <li key={term}>{term}</li>)}
           </ul>
         </section>
       </div>
