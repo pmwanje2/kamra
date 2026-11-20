@@ -6821,3 +6821,4 @@ Back to the booking,Back to the booking,العودة إلى الحجز,Volver a 
 Cancelling now is charged {fee}.,Cancelling now is charged {fee}.,الإلغاء الآن يُحتسب عليه {fee}.,Cancelar ahora cobra {fee}.,,,screens/BookingQuotation.tsx,fee,translated
 No email address on record for the booker.,No email address on record for the booker.,لا يوجد بريد إلكتروني مسجل لصاحب الحجز.,No hay un correo registrado para quien reservó.,,,screens/BookingQuotation.tsx,,translated
 Quotation sent to {email}.,Quotation sent to {email}.,تم إرسال عرض السعر إلى {email}.,Cotización enviada a {email}.,,,screens/BookingQuotation.tsx,email,translated
+projected {v} (in house),projected {v} (in house),متوقع {v} (المقيمون),proyectado {v} (en casa),,,screens/Reports.tsx,v,translated

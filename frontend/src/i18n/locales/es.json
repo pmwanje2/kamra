@@ -6608,5 +6608,6 @@
   "Back to the booking": "Volver a la reserva",
   "No email address on record for the booker.": "No hay un correo registrado para quien reservó.",
   "Quotation sent to {email}.": "Cotización enviada a {email}.",
-  "Cancelling now is charged {fee}.": "Cancelar ahora cobra {fee}."
+  "Cancelling now is charged {fee}.": "Cancelar ahora cobra {fee}.",
+  "projected {v} (in house)": "proyectado {v} (en casa)"
 }
