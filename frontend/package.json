@@ -15,7 +15,8 @@
     "booking-defaults:check": "node scripts/booking-defaults-check.mjs",
     "key-notice:check": "node scripts/key-notice-check.mjs",
     "tax:check": "node scripts/charge-tax-check.mjs",
-    "late-fee:check": "node scripts/late-fee-check.mjs"
+    "late-fee:check": "node scripts/late-fee-check.mjs",
+    "flash-projected:check": "node scripts/flash-projected-check.mjs"
   },
   "dependencies": {
     "libphonenumber-js": "^1.13.15",
