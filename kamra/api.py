@@ -6348,7 +6348,8 @@ def _rate_override_plan(res, agreed_rate) -> dict:
 	# who can sign a desk cut off here: the people verify_supervisor accepts
 	# (names only); a manager or an agent never picks one
 	from kamra.authz import supervisors_for
-	pv["supervisors"] = [] if manager or agent else supervisors_for(res.property)
+	pv["supervisors"] = [] if manager or agent else supervisors_for(
+		res.property, exclude=frappe.session.user)
 	return pv
 
 
@@ -6434,9 +6435,9 @@ def set_agreed_rate(reservation: str, agreed_rate: float, reason_code: str,
 				               "user signs it off with their PIN.").format(
 					f"{plan['reduction_pct']:g}", f"{plan['limit_pct']:g}"),
 					frappe.PermissionError)
-			approver = verify_supervisor(doc.property, supervisor, pin)
+			approver = verify_supervisor(doc.property, supervisor, pin,
+			                             requester=frappe.session.user)
 	_require_price_confirmation(plan, confirm_price)
-	doc.flags.kamra_agreed_rate_override = True
 	# the role and limit checks above are the permission; Revenue Manager
 	# has no write DocPerm on Reservation
 	doc.save(ignore_permissions=True)
