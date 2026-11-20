@@ -5149,6 +5149,8 @@ def _do_cancel(res, reason: str = "Guest request", note: str | None = None,
 				"max_uses": 1,
 				"disabled": 0
 			})
+			# a site rule on promo codes can tell this system credit note apart
+			voucher.flags.kamra_credit_note = 1
 			voucher.insert(ignore_permissions=True)
 
 	from kamra.savings import log_action
