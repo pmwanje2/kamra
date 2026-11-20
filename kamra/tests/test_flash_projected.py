@@ -77,6 +77,27 @@ class FlashProjectedTestCase(AuditTestCase):
 		self.assertEqual(day["occupancy_basis"], "posted")
 		self.assertNotIn("projected_adr", day)
 
+	def test_a_stay_departing_on_the_business_date_is_not_projected(self):
+		"""The night audit posts a room night only for a stay with arrival <=
+		business date < departure (folio.run_night_audit). A guest checking
+		out today has no night tonight, so the projection leaves it out."""
+		make_reservation(PROP_A, self.rt, YESTERDAY, TODAY, status="Checked In",
+		                 room=self.rooms[2])
+		day = _day_stats(PROP_A, TODAY, 4)
+		self.assertEqual(day["projected_room_revenue"], 4000)
+		# ADR over the rooms that will post tonight, not every room in house
+		self.assertEqual(day["projected_adr"], 2000)
+		self.assertEqual(day["projected_revpar"], 1000)
+
+	def test_the_audit_pack_statistics_carry_no_projection(self):
+		"""The pack's statistics are the posted figures of the closed date;
+		a projection is a daytime figure and is not kept there."""
+		from kamra import night_audit
+		pack = night_audit.build_pack(PROP_A, TODAY, checks=[], acknowledgements=[],
+		                              summary={}, no_shows=[], held_late=[])
+		self.assertEqual(pack["statistics"]["occupancy_basis"], "in_house")
+		self.assertFalse([k for k in pack["statistics"] if k.startswith("projected_")])
+
 	def test_the_flash_today_carries_the_projection(self):
 		flash = manager_flash(PROP_A, TODAY)
 		self.assertEqual(flash["today"]["projected_adr"], 2000)
