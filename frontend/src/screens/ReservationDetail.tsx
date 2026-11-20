@@ -42,6 +42,8 @@ import SecurityDepositPanel from "../components/SecurityDepositPanel"
 import RoomChangeDialog from "../components/RoomChangeDialog"
 import CheckOutDialog from "../components/CheckOutDialog"
 import CheckInDialog from "../components/CheckInDialog"
+import AgreedRatePanel from "../components/AgreedRatePanel"
+import { useAuth } from "../lib/auth"
 import StayInstructions from "../components/StayInstructions"
 import { cur, moneyLocale } from "../lib/money"
 import { t as translate, useUILanguage } from "../lib/i18n"
@@ -200,6 +202,10 @@ export default function ReservationDetail({
   const [reverseKeys, setReverseKeys] = useState<string | null>(null)
   const [changingRoom, setChangingRoom] = useState(false)
   const [declineReason, setDeclineReason] = useState("")
+  // the roles set_agreed_rate admits (Hotel Admin and System Manager as admins)
+  const { roles } = useAuth()
+  const canAgreeRate = ["Front Desk", "Revenue Manager", "Hotel Admin", "System Manager"]
+    .some((r) => roles.includes(r))
 
   const refresh = useCallback(() => {
     reservationDetail(name)
@@ -502,6 +508,9 @@ export default function ReservationDetail({
               <Field label={translate("Pre-check-in")} value={d.precheckin_status} />
             )}
           </dl>
+          {d.actions.can_amend && (d.night_rates?.length ?? 0) > 0 && canAgreeRate && (
+            <AgreedRatePanel reservation={name} nightRates={d.night_rates ?? []} onSaved={() => { refresh(); reload() }} />
+          )}
           {d.booked_check_out_date && (
             <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
               {translate("Left early: booked to {date}.", { date: d.booked_check_out_date })}
