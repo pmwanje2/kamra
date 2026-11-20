@@ -39,9 +39,19 @@ assert.match(read("screens/ReservationDetail.tsx"), /to=\{`\/booking-quote\/\$\{
 for (const shared of ["Print / Save as PDF", "Rate / night", "Total", "Terms"])
   assert.ok(screen.includes(`"${shared}"`), `same wording as GroupQuotation: ${shared}`)
 
+// review on #16: the price line by line (room nights, meal plan, discount,
+// fees) adding up to the total, and the terms the server wrote for this booking
+assert.match(screen, /\blines:\s*\{/, "the Quote type carries the priced lines")
+assert.match(screen, /d\.lines\.map\(/, "each priced line is shown")
+assert.match(screen, /d\.terms\.map\(/, "the terms come from the server, matching the lines")
+assert.ok(!screen.includes("Room prices exclude meals"), "no fixed 'prices exclude meals' term")
+// the mail is queued by Frappe, not delivered when the call returns
+assert.ok(!screen.includes('"Quotation sent to {email}."'), "the screen does not claim the mail was sent")
+assert.ok(screen.includes('"Quotation queued for sending to {email}."'), "the screen says the mail is queued")
+
 for (const language of ["ar", "es", "pt"]) {
   const dictionary = JSON.parse(read(`i18n/locales/${language}.json`))
-  for (const key of ["Quotation", "Email to guest", "Quotation sent to {email}."])
+  for (const key of ["Quotation", "Email to guest", "Quotation queued for sending to {email}."])
     assert.ok(dictionary[key]?.trim(), `${language}: translation for ${key}`)
 }
 

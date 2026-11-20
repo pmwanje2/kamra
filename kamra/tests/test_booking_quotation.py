@@ -185,6 +185,101 @@ class BookingQuotationTestCase(AuditTestCase):
 			self.send()
 		self.assertTrue(str(raised.exception).startswith("QUOTE_BOOKING_CLOSED:"))
 
+	# --- the price, line by line (review on #16) -------------------------
+
+	def priced_booking(self):
+		"""Two nights at 1,000 for two adults, breakfast at 200 a head a
+		night, a 10% voucher and a 500 cleaning fee: room 2,000, meal plan
+		800, discount -280, cleaning 500 before tax."""
+		make_property(PROP_A, business_date=TODAY, cleaning_fee=500,
+		              cleaning_fee_taxable=1)
+		meal = frappe.get_doc({"doctype": "Meal Plan", "property": PROP_A, "code": "CP",
+		                       "label": "Breakfast", "price_per_adult": 200}
+		                      ).insert(ignore_permissions=True).name
+		voucher = frappe.get_doc({"doctype": "Discount Voucher", "property": PROP_A,
+		                          "voucher_code": "TENOFF", "discount_type": "Percent",
+		                          "value": 10}).insert(ignore_permissions=True).name
+		self.res = make_reservation(PROP_A, self.rt, d(5), d(7),
+		                            guest=make_guest("UT Quote", email=GUEST_EMAIL),
+		                            meal_plan=meal, voucher=voucher)
+		return self.as_user(DESK, api.booking_quotation, self.res.name)
+
+	def test_the_lines_add_up_to_the_total(self):
+		"""OPERA proforma: room nights, the meal plan, the discount and the fee
+		each on their own line, and the lines plus tax are the total."""
+		q = self.priced_booking()
+		amounts = {line["component"]: line["amount"] for line in q["lines"]}
+		self.assertEqual(amounts, {"accommodation": 2000, "meal_plan": 800,
+		                           "promotion": -280, "cleaning_fee": 500})
+		self.assertEqual(sum(n["rate"] for n in q["nights"]), amounts["accommodation"])
+		total = float(self.res.amount_after_tax)
+		self.assertGreater(q["totals"]["tax"], 0)
+		self.assertAlmostEqual(sum(amounts.values()) + q["totals"]["tax"], total, places=2)
+		self.assertAlmostEqual(q["totals"]["total"], total, places=2)
+		discount = next(x for x in q["lines"] if x["component"] == "promotion")
+		self.assertIn("TENOFF", discount["description"])
+		meal = next(x for x in q["lines"] if x["component"] == "meal_plan")
+		self.assertIn("Breakfast", meal["description"])
+
+	def test_the_terms_match_what_is_shown(self):
+		q = self.priced_booking()
+		terms = " ".join(q["terms"])
+		self.assertNotIn("exclude meals", terms)
+		self.assertIn("Breakfast", terms)
+		html = api._booking_quotation_html(q)
+		for line in q["lines"]:
+			self.assertIn(frappe.utils.escape_html(line["description"]), html)
+		self.assertIn("-280.00", html)
+		self.assertIn("500.00", html)
+		for term in q["terms"]:
+			self.assertIn(frappe.utils.escape_html(term), html)
+		self.assertNotIn("exclude meals", html)
+
+	def test_a_room_only_booking_says_meals_are_not_included(self):
+		q = self.as_user(DESK, api.booking_quotation, self.res.name)
+		self.assertEqual([x["component"] for x in q["lines"]], ["accommodation"])
+		self.assertAlmostEqual(q["lines"][0]["amount"] + q["totals"]["tax"],
+		                       q["totals"]["total"], places=2)
+		self.assertTrue(any("not included" in t for t in q["terms"]))
+
+	def test_the_currency_symbol_is_escaped_in_the_pdf(self):
+		currency = frappe.db.get_value("Property", PROP_A, "currency")
+		frappe.db.set_value("Currency", currency, "symbol", "<i>R")
+		q = self.as_user(DESK, api.booking_quotation, self.res.name)
+		html = api._booking_quotation_html(q)
+		self.assertNotIn("<i>R", html)
+		self.assertIn("&lt;i&gt;R", html)
+
+	# --- one send per version a minute ----------------------------------
+
+	def test_the_same_quotation_is_not_resent_within_a_minute(self):
+		self.outgoing_account()
+		out, _pdf = self.send()
+		self.assertEqual(out["status"], "Queued")
+		with self.assertRaises(frappe.ValidationError) as raised:
+			self.send()
+		self.assertTrue(str(raised.exception).startswith("QUOTE_RECENTLY_SENT:"))
+		self.assertEqual(len(self.comms()), 1)
+		# a minute later it goes again
+		log = frappe.get_all("Agent Action Log", filters={
+			"action_type": "quotation_emailed", "reference_name": self.res.name},
+			pluck="name")
+		self.assertEqual(len(log), 1)
+		frappe.db.set_value("Agent Action Log", log[0], "executed_at",
+		                    frappe.utils.add_to_date(frappe.utils.now_datetime(),
+		                                             seconds=-61))
+		self.send()
+		self.assertEqual(len(self.comms()), 2)
+
+	def test_a_changed_quotation_can_be_sent_at_once(self):
+		self.outgoing_account()
+		self.send()
+		res = frappe.get_doc("Reservation", self.res.name)
+		res.check_out_date = d(8)
+		res.save(ignore_permissions=True)
+		self.send()
+		self.assertEqual(len(self.comms()), 2)
+
 	def test_roles_below_the_front_desk_are_denied_not_refused(self):
 		"""An authorization denial (PermissionError), kept apart from the
 		validation refusals above."""
