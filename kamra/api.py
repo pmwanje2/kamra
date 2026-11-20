@@ -2911,6 +2911,11 @@ def post_allowance(folio: str, amount: float, reason: str = "",
 	return {"ok": True, "folio": folio, "serial": serial}
 
 
+class AdvancePaidIsLedgerOwned(frappe.ValidationError):
+	"""Reservation.advance_paid is what the folio recorded; payments and
+	refunds keep it (frappe.db.set_value). A booking save never changes it."""
+
+
 class NoRoomNightsToDiscount(frappe.ValidationError):
 	"""A discount comes off posted room nights and the bill has none yet.
 	The desk screen keys on this class to offer Advance bill."""
@@ -5154,6 +5159,8 @@ def _do_cancel(res, reason: str = "Guest request", note: str | None = None,
 				"max_uses": 1,
 				"disabled": 0
 			})
+			# a site rule on promo codes can tell this system credit note apart
+			voucher.flags.kamra_credit_note = 1
 			voucher.insert(ignore_permissions=True)
 
 	from kamra.savings import log_action
