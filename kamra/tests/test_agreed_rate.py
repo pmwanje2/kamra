@@ -14,7 +14,7 @@ import json
 
 import frappe
 
-from kamra import api
+from kamra import api, ledger
 from kamra import folio as folio_mod
 from kamra.settings import clear_cache
 from kamra.tests.audit_fixtures import (
@@ -313,3 +313,29 @@ class AgreedRateTestCase(AuditTestCase):
 		                     pluck="rationale")
 		self.assertEqual(len(log), 1)
 		self.assertIn("1,000.00 → 900.00 a night", log[0])
+
+	# --- what the hotel screen's Agreed rate action needs (M09)
+
+	def test_preview_names_who_can_sign_off_a_desk_cut(self):
+		"""The desk picks the approver from the people verify_supervisor
+		accepts here (Hotel Admin / Finance with a cashier PIN)."""
+		set_setting(PROP_A, "rate_override_limit_pct", 10)
+		pv = self.as_user(DESK, api.rate_override_preview, self.res.name, 750)
+		self.assertTrue(pv["needs_supervisor"])
+		users = [s["user"] for s in pv["supervisors"]]
+		self.assertIn(GM, users)
+		self.assertNotIn(REVENUE, users)
+		self.assertNotIn(DESK, users)
+		self.assertEqual(self.nights(), [1000, 1000])
+
+	def test_preview_names_no_approver_for_a_manager(self):
+		pv = self.as_user(REVENUE, api.rate_override_preview, self.res.name, 750)
+		self.assertTrue(pv["can_set_rate"])
+		self.assertEqual(pv["supervisors"], [])
+
+	def test_a_revenue_manager_lists_the_rate_change_reasons(self):
+		"""set_agreed_rate needs a Rate Change reason code, so everyone who
+		may set a rate can read the list."""
+		codes = self.as_user(REVENUE, ledger.list_reason_codes, "Rate Change")
+		self.assertTrue({"RATE-PROMO", "RATE-MGR"} <= {c["name"] for c in codes})
+		self.assertEqual({c["category"] for c in codes}, {"Rate Change"})
