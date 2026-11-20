@@ -60,4 +60,11 @@ for (const language of ["ar", "es", "pt"]) {
   assert.ok(!csv.includes("give it after night audit"), `${language}: the old message is gone`)
 }
 
+// Review of c6a48bfc6: after Advance bill posts the nights the hint must go (the preview re-runs when the folio
+// reloads), and the deep link focuses the button once per visit, not on every reload.
+assert.match(panel, /refreshKey\?: unknown/, "the panel takes a value that changes when the folio reloads")
+assert.match(panel, /\[folio, promo, d\.kind, d\.value, d\.basis, refreshKey\]/, "the preview re-runs on reload")
+assert.match(view, /refreshKey=\{/, "FolioView passes its reload marker")
+assert.match(view, /focusedAdvanceBill\.current/, "the deep link focuses once")
+
 console.log("discount-advance-bill-check: ok")
