@@ -6609,12 +6609,11 @@
   "Back to the booking": "Voltar à reserva",
   "No email address on record for the booker.": "Não há email registado para quem reservou.",
   "Print / Save as PDF": "Imprimir / Guardar como PDF",
-  "Quotation sent to {email}.": "Cotação enviada para {email}.",
   "Issued {v0}": "Emitida em {v0}",
   "{v0} night(s)": "{v0} noite(s)",
   "Rooms before tax": "Quartos antes de impostos",
   "Deposit to confirm": "Depósito para confirmar",
-  "Cancelling now is charged {fee}.": "Cancelar agora cobra {fee}.",
   "Room prices exclude meals and extras unless stated. Tax as applicable on the day of stay.": "Os preços dos quartos não incluem refeições nem extras, salvo indicação. Impostos conforme aplicável no dia da estadia.",
-  "projected {v} (in house)": "projetado {v} (hospedados)"
+  "projected {v} (in house)": "projetado {v} (hospedados)",
+  "Quotation queued for sending to {email}.": "Cotação na fila para envio a {email}."
 }
