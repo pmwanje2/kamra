@@ -14,7 +14,7 @@ import json
 
 import frappe
 
-from kamra import api
+from kamra import api, ledger
 from kamra import folio as folio_mod
 from kamra.settings import clear_cache
 from kamra.tests.audit_fixtures import (
@@ -35,6 +35,7 @@ DESK = "ut.rate.desk@test.local"
 REVENUE = "ut.rate.revenue@test.local"
 GM = "ut.rate.gm@test.local"
 AGENT = "ut.rate.agent@test.local"
+SELF = "ut.rate.deskfinance@test.local"
 
 
 def set_setting(prop: str, key: str, value) -> None:
@@ -313,3 +314,63 @@ class AgreedRateTestCase(AuditTestCase):
 		                     pluck="rationale")
 		self.assertEqual(len(log), 1)
 		self.assertIn("1,000.00 → 900.00 a night", log[0])
+
+	# --- what the hotel screen's Agreed rate action needs (M09)
+
+	def test_preview_names_who_can_sign_off_a_desk_cut(self):
+		"""The desk picks the approver from the people verify_supervisor
+		accepts here (Hotel Admin / Finance with a cashier PIN)."""
+		set_setting(PROP_A, "rate_override_limit_pct", 10)
+		pv = self.as_user(DESK, api.rate_override_preview, self.res.name, 750)
+		self.assertTrue(pv["needs_supervisor"])
+		users = [s["user"] for s in pv["supervisors"]]
+		self.assertIn(GM, users)
+		self.assertNotIn(REVENUE, users)
+		self.assertNotIn(DESK, users)
+		self.assertEqual(self.nights(), [1000, 1000])
+
+	def _desk_with_finance(self):
+		"""A front desk user who also holds Finance and a cashier PIN: a
+		supervisor for other people's cuts, never for their own."""
+		ensure_user(SELF, ["Front Desk", "Finance"])
+		frappe.db.delete("Cashier PIN", {"name": SELF})
+		frappe.get_doc({"doctype": "Cashier PIN", "user": SELF, "pin": "5678"}
+		               ).insert(ignore_permissions=True)
+		set_setting(PROP_A, "rate_override_limit_pct", 10)
+
+	def test_the_preview_never_offers_the_desk_user_as_their_own_approver(self):
+		self._desk_with_finance()
+		pv = self.as_user(SELF, api.rate_override_preview, self.res.name, 750)
+		self.assertTrue(pv["needs_supervisor"])
+		users = [s["user"] for s in pv["supervisors"]]
+		self.assertNotIn(SELF, users)
+		self.assertIn(GM, users)
+
+	def test_nobody_signs_off_their_own_rate_cut(self):
+		"""Segregation of duties: the person cutting the rate is never the
+		approver, even with a supervisor role and their own PIN. A denial
+		(PermissionError) with a stable id."""
+		self._desk_with_finance()
+		with self.assertRaises(frappe.PermissionError) as raised:
+			self.as_user(SELF, api.set_agreed_rate, self.res.name, 750, "RATE-PROMO",
+			             confirm_price=1, pin="5678", supervisor=SELF)
+		self.assertTrue(str(raised.exception).startswith("SUPERVISOR_SELF_APPROVAL:"))
+		self.assertEqual(self.nights(), [1000, 1000])
+		self.assertFalse(self.rate_logs())
+		# another supervisor signs the same cut off
+		self.as_user(SELF, api.set_agreed_rate, self.res.name, 750, "RATE-PROMO",
+		             confirm_price=1, pin="4321", supervisor=GM)
+		self.assertEqual(self.nights(), [750, 750])
+		self.assertEqual(self.rate_logs()[0].approver, GM)
+
+	def test_preview_names_no_approver_for_a_manager(self):
+		pv = self.as_user(REVENUE, api.rate_override_preview, self.res.name, 750)
+		self.assertTrue(pv["can_set_rate"])
+		self.assertEqual(pv["supervisors"], [])
+
+	def test_a_revenue_manager_lists_the_rate_change_reasons(self):
+		"""set_agreed_rate needs a Rate Change reason code, so everyone who
+		may set a rate can read the list."""
+		codes = self.as_user(REVENUE, ledger.list_reason_codes, "Rate Change")
+		self.assertTrue({"RATE-PROMO", "RATE-MGR"} <= {c["name"] for c in codes})
+		self.assertEqual({c["category"] for c in codes}, {"Rate Change"})

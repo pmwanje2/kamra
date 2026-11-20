@@ -6572,5 +6572,13 @@
   "The property's late check-out fee is {fee}.": "A taxa de check-out tardio da propriedade é {fee}.",
   "The property's late check-out fee is {pct}% of a night ({fee}).": "A taxa de check-out tardio da propriedade é {pct}% de uma diária ({fee}).",
   "This late fee exceeds one night's room rate ({night}). Check it is not the whole bill.": "Esta taxa de check-out tardio excede a diária de uma noite ({night}). Verifique se não é a conta inteira.",
-  "I confirm the late fee of {fee}": "Confirmo a taxa de check-out tardio de {fee}"
+  "I confirm the late fee of {fee}": "Confirmo a taxa de check-out tardio de {fee}",
+  "Agreed rate": "Tarifa acordada",
+  "- this stay only; the rate card stays as it is": "- só esta estadia; a tabela de tarifas não muda",
+  "New rate / night": "Nova tarifa / noite",
+  "Was": "Antes",
+  "The front desk can lower a stay's rate, not raise it. Ask a Revenue Manager.": "A recepção pode baixar a tarifa de uma estadia, não aumentá-la. Peça a um gerente de receitas.",
+  "A cut of {pct}% is over the front desk's limit of {limit}%.": "Um desconto de {pct}% ultrapassa o limite da recepção de {limit}%.",
+  "A manager signs this off with their PIN.": "Um gerente aprova com o seu PIN.",
+  "Save agreed rate": "Guardar tarifa acordada"
 }
