@@ -174,6 +174,8 @@ jobs:
       - name: Run the banquet unit tests
         run: |
           cd frappe-bench
+          # tee would otherwise mask a runner that dies after printing OK
+          set -o pipefail
           bench --site test.localhost set-config allow_tests true
           bench --site test.localhost run-tests --module kamra.tests.test_banquet \
             2>&1 | tee banquet.out
@@ -183,6 +185,8 @@ jobs:
       - name: Run the night audit, ledger and scheduled-audit unit tests
         run: |
           cd frappe-bench
+          # tee would otherwise mask a runner that dies after printing OK
+          set -o pipefail
           for m in test_assistant_currency test_nicaragua_pack test_night_audit test_ledger_audit test_folio_leaks test_bill_settlement test_health test_scheduled_jobs test_golive test_credit_control test_webhooks test_pos_interface test_mcp test_contract_keys test_seed_history test_rates test_night_prices test_night_prices_booking test_holiday_package test_siu_room_type_sync test_booking_options_order test_payment_idempotency test_ui_languages test_agreed_rate test_charge_tax_default test_proforma_projected test_late_checkout_fee test_levy_per_night test_reverse_check_in test_night_audit_schedule test_cashier_tills_off test_folio_closed_target; do
             bench --site test.localhost run-tests --module kamra.tests.$m \
               2>&1 | tee "$m.out"
