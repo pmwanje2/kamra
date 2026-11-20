@@ -235,7 +235,7 @@ Extend unchecked-out departures one night,تمديد المغادرين غير �
 The guest owes {0} - nothing is due back to refund.,الضيف مدين بمبلغ {0} - لا يوجد مبلغ مستحق للاسترداد.
 Only {0} is due back to the guest - can't refund more than that.,المستحق للضيف {0} فقط - لا يمكن استرداد أكثر من ذلك.
 Room type code {0} is already used at this property.,رمز نوع الغرفة {0} مستخدم بالفعل في هذه المنشأة.
-There are no room nights on this bill yet. A discount comes off posted nights: give it after night audit or at check-out.,لا توجد ليالٍ على هذه الفاتورة بعد. الخصم يُطبَّق على الليالي المرحّلة: امنحه بعد تدقيق الليل أو عند المغادرة.
+"No nights are posted yet. Use Advance bill to post the stay now, then give the discount, or use a rate plan or promo code at booking.",لا توجد ليالٍ مرحّلة بعد. استخدم «فاتورة مقدمة» لترحيل الإقامة الآن ثم امنح الخصم، أو استخدم خطة سعر أو رمز ترويجي عند الحجز.
 Enter a discount above zero.,أدخل خصمًا أكبر من صفر.
 A discount can't be more than 100%.,لا يمكن أن يزيد الخصم عن 100%.
 The discount is more than the room nights on the bill ({0}).,الخصم أكبر من ليالي الإقامة على الفاتورة ({0}).
