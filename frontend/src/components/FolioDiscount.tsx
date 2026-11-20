@@ -17,7 +17,7 @@ const inputCls =
 
 interface Preview { total: number; label: string; lines: { nights: number; base: number }[] }
 
-export default function FolioDiscount({ folio, adjustCodes: given, act, onPosted, onAdvanceBill }: {
+export default function FolioDiscount({ folio, adjustCodes: given, act, onPosted, onAdvanceBill, refreshKey }: {
   folio: string
   /** The Adjust reason codes; fetched here when the caller has none. */
   adjustCodes?: { name: string; description: string }[]
@@ -26,6 +26,8 @@ export default function FolioDiscount({ folio, adjustCodes: given, act, onPosted
   onPosted: (pending: boolean) => void
   /** The folio's Advance bill action, offered when no night is posted yet. */
   onAdvanceBill?: () => void
+  /** Changes when the folio reloads (after Advance bill posts nights), so the preview re-runs. */
+  refreshKey?: unknown
 }) {
   const { t } = useT()
   const blank = { kind: "Percent", value: "", basis: "Stay", code: "", reason: "", reason_code: "" }
@@ -63,7 +65,7 @@ export default function FolioDiscount({ folio, adjustCodes: given, act, onPosted
     }, 350)
     return () => clearTimeout(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [folio, promo, d.kind, d.value, d.basis])
+  }, [folio, promo, d.kind, d.value, d.basis, refreshKey])
 
   const nights = preview?.lines.reduce((s, l) => s + l.nights, 0) ?? 0
   const canGive = !!preview && (promo || d.reason.trim() || d.reason_code) && pin !== ""

@@ -440,11 +440,14 @@ export default function FolioView() {
   // a link to /billing/<folio>?action=advance-bill (the discount hint, a chat
   // hand-off) brings the desk to the Advance bill button; the cashier presses it
   const wantsAdvanceBill = searchParams.get("action") === ADVANCE_BILL_ACTION
+  const focusedAdvanceBill = useRef(false)
   useEffect(() => {
-    if (!wantsAdvanceBill || !data) return
+    if (!wantsAdvanceBill || !data || focusedAdvanceBill.current) return
     const button = document.getElementById(ADVANCE_BILL_ACTION)
-    button?.scrollIntoView({ block: "center" })
-    button?.focus()
+    if (!button) return
+    focusedAdvanceBill.current = true
+    button.scrollIntoView({ block: "center" })
+    button.focus()
   }, [wantsAdvanceBill, data])
 
   if (!data)
@@ -1578,6 +1581,7 @@ export default function FolioView() {
               </Button>
               <FolioDiscount folio={folio.name} adjustCodes={adjustCodes} act={act}
                 onAdvanceBill={stay?.reservation ? advanceBill : undefined}
+                refreshKey={data}
                 onPosted={(pending) => {
                   setAllowanceNote(pending
                     ? t("Sent to a manager. It goes on the bill once approved.")
