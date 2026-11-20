@@ -367,6 +367,11 @@ class Reservation(Document):
 			!= (str(self.check_in_date), str(self.check_out_date), self.room_type)
 
 	def validate(self):
+		before = None if self.is_new() else self.get_doc_before_save()
+		if before and flt(before.advance_paid) != flt(self.advance_paid):
+			from kamra.api import AdvancePaidIsLedgerOwned
+			frappe.throw(_("Advance paid follows the payments on the folio; take a payment or refund there."),
+			             AdvancePaidIsLedgerOwned)
 		# Before any other inventory lock, so villa vs room and category
 		# capacity take this row in the same order as booking and accept.
 		if self.property:

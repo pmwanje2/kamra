@@ -23,6 +23,9 @@ from frappe import _
 from kamra.authz import ADMIN, assert_property_access, require_roles
 
 CACHE_KEY = "kamra_settings"
+# write_kv saves the Property Setting document, so its events, a site's own
+# Before Save rule and Version history see every settings write.
+WRITE_KV_RUNS_DOCUMENT_EVENTS = True
 
 
 @dataclass(frozen=True)
