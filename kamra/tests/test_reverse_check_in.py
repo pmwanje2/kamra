@@ -218,6 +218,22 @@ class ReverseCheckInTestCase(AuditTestCase):
 			"action_type": "reverse_check_in", "reference_name": self.res.name,
 			"actor": FINANCE}))
 
+	def test_read_only_roles_are_refused(self):
+		# the status save runs with ignore_permissions after the guards, so
+		# the role guard is all that keeps read-only roles out
+		for role in ("Night Auditor", "Revenue Manager", "Housekeeping"):
+			user = f"ut-reverse-{role.lower().replace(' ', '-')}@kamra.local"
+			ensure_user(user, [role])
+			frappe.set_user(user)  # nosemgrep: frappe-setuser -- test fixture
+			try:
+				with self.subTest(role=role), self.assertRaises(frappe.PermissionError):
+					api.reverse_check_in(self.res.name, f"{role}: wrong guest")
+			finally:
+				frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- test fixture
+			self.assertEqual(self.status(), "Checked In")
+		self.assertFalse(frappe.db.exists("Agent Action Log", {
+			"action_type": "reverse_check_in", "reference_name": self.res.name}))
+
 	def test_refused_when_a_room_night_is_posted(self):
 		folio_mod.post_room_night(frappe.get_doc("Reservation", self.res.name), TODAY)
 		with self.assertRaisesRegex(frappe.ValidationError, "room night"):
