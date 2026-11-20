@@ -199,7 +199,9 @@ class BookingQuotationTestCase(AuditTestCase):
 		voucher = frappe.get_doc({"doctype": "Discount Voucher", "property": PROP_A,
 		                          "voucher_code": "TENOFF", "discount_type": "Percent",
 		                          "value": 10}).insert(ignore_permissions=True).name
+		# a second room, so the priced stay is not refused as sold out
 		self.res = make_reservation(PROP_A, self.rt, d(5), d(7),
+		                            room=make_room(PROP_A, self.rt, "102"),
 		                            guest=make_guest("UT Quote", email=GUEST_EMAIL),
 		                            meal_plan=meal, voucher=voucher)
 		return self.as_user(DESK, api.booking_quotation, self.res.name)
