@@ -57,6 +57,7 @@ class SettingsDocumentEventsTestCase(AuditTestCase):
 		self.addCleanup(settings.clear_cache)
 		settings.clear_cache(PROP_A)
 		self.seen: list[dict] = []
+		self.before: list[str] = []
 		real = frappe.get_doc
 
 		def watch(*args, **kwargs):
@@ -68,6 +69,9 @@ class SettingsDocumentEventsTestCase(AuditTestCase):
 					if method == "validate":
 						self.seen.append({"key": doc.setting_key, "value": doc.value,
 						                  "module": doc.flags.get("kamra_settings_module")})
+						before = doc.get_doc_before_save()
+						if before:
+							self.before.append(before.value)
 					return original(method, *a, **kw)
 
 				doc.run_method = run_method
@@ -85,10 +89,10 @@ class SettingsDocumentEventsTestCase(AuditTestCase):
 		self.seen.clear()
 		settings.write_kv(PROP_A, "rate_override_limit_pct", 15)
 		self.assertEqual(self.seen, [{"key": "rate_override_limit_pct", "value": "15", "module": None}])
-		name = frappe.db.get_value("Property Setting", {"property": PROP_A, "setting_key": "rate_override_limit_pct"})
-		versions = frappe.get_all("Version", filters={"ref_doctype": "Property Setting", "docname": name},
-		                          pluck="data")
-		self.assertTrue(any('"10"' in v and '"15"' in v for v in versions), versions)
+		# Frappe skips Version rows under tests (Document.save: ignore_version =
+		# frappe.in_test); a saved document carries its before-image, which is
+		# what Version and a Before Save rule compare.
+		self.assertEqual(self.before, ["10"])
 		self.assertEqual(settings.get_setting(PROP_A, "rate_override_limit_pct"), 15)
 
 	def test_an_unchanged_value_writes_nothing(self):
