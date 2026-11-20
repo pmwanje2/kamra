@@ -2911,6 +2911,11 @@ def post_allowance(folio: str, amount: float, reason: str = "",
 	return {"ok": True, "folio": folio, "serial": serial}
 
 
+class AdvancePaidIsLedgerOwned(frappe.ValidationError):
+	"""Reservation.advance_paid is what the folio recorded; payments and
+	refunds keep it (frappe.db.set_value). A booking save never changes it."""
+
+
 def _discount_lines(doc, kind: str, value: float, basis: str) -> list[dict]:
 	"""What a discount takes off the room nights on the bill, one line per
 	tax rate (the allowance reverses tax at the rate of the nights it
