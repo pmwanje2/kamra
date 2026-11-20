@@ -27,7 +27,6 @@ Extend unchecked-out departures one night,Estender por uma diária as saídas se
 The guest owes {0} - nothing is due back to refund.,O hóspede deve {0}; não há nada a devolver.
 Only {0} is due back to the guest - can't refund more than that.,Só {0} é devido ao hóspede; não é possível devolver mais.
 Room type code {0} is already used at this property.,O código de tipo de quarto {0} já é usado nesta propriedade.
-There are no room nights on this bill yet. A discount comes off posted nights: give it after night audit or at check-out.,Ainda não há diárias nesta conta. O desconto incide sobre as diárias lançadas: dê depois do fechamento de dia ou no check-out.
 Enter a discount above zero.,Informe um desconto maior que zero.
 A discount can't be more than 100%.,Um desconto não pode passar de 100%.
 The discount is more than the room nights on the bill ({0}).,O desconto é maior que as diárias da conta ({0}).
@@ -103,3 +102,4 @@ Stay as booked,Estadia conforme reservada
 Extra guests by arrangement,Hóspedes adicionais conforme acordado
 Room levy,Taxa por quarto
 Room nights,Noites de quarto
+"No nights are posted yet. Use Advance bill to post the stay now, then give the discount, or use a rate plan or promo code at booking.","Ainda não há diárias lançadas. Use «Fatura antecipada» para lançar a estadia agora e depois dê o desconto, ou use um plano tarifário ou código promocional na reserva."

@@ -53,7 +53,9 @@ const message = "No nights are posted yet. Use Advance bill to post the stay now
   "or use a rate plan or promo code at booking."
 for (const language of ["ar", "es", "pt"]) {
   const csv = fs.readFileSync(new URL(`../../kamra/translations/${language}.csv`, import.meta.url), "utf8")
-  assert.ok(csv.split("\n").some((line) => line.startsWith(message + ",") && line.length > message.length + 1),
+  // Frappe reads these with Python's csv module: a key with commas is quoted
+  const key = `"${message}",`
+  assert.ok(csv.split("\n").some((line) => line.startsWith(key) && line.replace(key, "").replace(/^"|"\r?$/g, "").trim()),
     `${language}: translation for the no-nights message`)
   assert.ok(!csv.includes("give it after night audit"), `${language}: the old message is gone`)
 }
