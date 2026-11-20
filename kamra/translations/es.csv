@@ -270,3 +270,14 @@ Bills still open,Cuentas aún abiertas
 Use Check out to check a guest out: it makes sure every bill is cleared first.,Usa Check-out para dar salida al huésped: primero comprueba que todas las cuentas estén saldadas.
 Check out,Check-out
 Discounts and allowances,Descuentos y bonificaciones
+Quotation {0} from {1},Cotización {0} de {1}
+"Dear {0}, please find your quotation for {1} to {2} attached. Reference {3}.",Estimado/a {0}: adjuntamos su cotización del {1} al {2}. Referencia {3}.
+Quotation,Cotización
+Issued {0},Emitida el {0}
+Free cancellation until {0}; after that {1} is charged.,Cancelación gratuita hasta el {0}; después se cobra {1}.
+Free cancellation.,Cancelación gratuita.
+Cancelling now is charged {0}.,Cancelar ahora cobra {0}.
+Room prices exclude meals and extras unless stated. Tax as applicable on the day of stay.,Los precios de las habitaciones no incluyen comidas ni extras salvo que se indique. Impuestos según corresponda el día de la estancia.
+Rate / night,Tarifa / noche
+Deposit to confirm,Depósito para confirmar
+{0} night(s),{0} noche(s)

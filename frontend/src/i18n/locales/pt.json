@@ -6572,5 +6572,15 @@
   "The property's late check-out fee is {fee}.": "A taxa de check-out tardio da propriedade é {fee}.",
   "The property's late check-out fee is {pct}% of a night ({fee}).": "A taxa de check-out tardio da propriedade é {pct}% de uma diária ({fee}).",
   "This late fee exceeds one night's room rate ({night}). Check it is not the whole bill.": "Esta taxa de check-out tardio excede a diária de uma noite ({night}). Verifique se não é a conta inteira.",
-  "I confirm the late fee of {fee}": "Confirmo a taxa de check-out tardio de {fee}"
+  "I confirm the late fee of {fee}": "Confirmo a taxa de check-out tardio de {fee}",
+  "Back to the booking": "Voltar à reserva",
+  "No email address on record for the booker.": "Não há email registado para quem reservou.",
+  "Print / Save as PDF": "Imprimir / Guardar como PDF",
+  "Quotation sent to {email}.": "Cotação enviada para {email}.",
+  "Issued {v0}": "Emitida em {v0}",
+  "{v0} night(s)": "{v0} noite(s)",
+  "Rooms before tax": "Quartos antes de impostos",
+  "Deposit to confirm": "Depósito para confirmar",
+  "Cancelling now is charged {fee}.": "Cancelar agora cobra {fee}.",
+  "Room prices exclude meals and extras unless stated. Tax as applicable on the day of stay.": "Os preços dos quartos não incluem refeições nem extras, salvo indicação. Impostos conforme aplicável no dia da estadia."
 }

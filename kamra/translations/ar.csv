@@ -270,3 +270,14 @@ Bills still open,فواتير ما زالت مفتوحة
 Use Check out to check a guest out: it makes sure every bill is cleared first.,استخدم «تسجيل المغادرة» لإخراج النزيل: يتأكد أولاً من تسوية كل الفواتير.
 Check out,تسجيل المغادرة
 Discounts and allowances,الخصومات والتسويات
+Quotation {0} from {1},عرض السعر {0} من {1}
+"Dear {0}, please find your quotation for {1} to {2} attached. Reference {3}.",عزيزنا {0}، مرفق عرض السعر لإقامتكم من {1} إلى {2}. المرجع {3}.
+Quotation,عرض السعر
+Issued {0},صدر في {0}
+Free cancellation until {0}; after that {1} is charged.,إلغاء مجاني حتى {0}؛ بعد ذلك يُحتسب {1}.
+Free cancellation.,إلغاء مجاني.
+Cancelling now is charged {0}.,الإلغاء الآن يُحتسب عليه {0}.
+Room prices exclude meals and extras unless stated. Tax as applicable on the day of stay.,أسعار الغرف لا تشمل الوجبات والإضافات ما لم يُذكر ذلك. تُطبق الضريبة حسب يوم الإقامة.
+Rate / night,السعر / الليلة
+Deposit to confirm,العربون للتأكيد
+{0} night(s),{0} ليلة
