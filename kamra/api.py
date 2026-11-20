@@ -6422,6 +6422,10 @@ def _rate_override_plan(res, agreed_rate) -> dict:
 	          agent=agent,
 	          raises=agreed_rate > current + 0.005,
 	          needs_supervisor=not manager and cut > limit)
+	# who can sign a desk cut off here: the people verify_supervisor accepts
+	# (names only); a manager or an agent never picks one
+	from kamra.authz import supervisors_for
+	pv["supervisors"] = [] if manager or agent else supervisors_for(res.property)
 	return pv
 
 

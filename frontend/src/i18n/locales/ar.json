@@ -6404,5 +6404,13 @@
   "The property's late check-out fee is {fee}.": "رسوم المغادرة المتأخرة في المنشأة هي {fee}.",
   "The property's late check-out fee is {pct}% of a night ({fee}).": "رسوم المغادرة المتأخرة في المنشأة هي {pct}% من ليلة ({fee}).",
   "This late fee exceeds one night's room rate ({night}). Check it is not the whole bill.": "رسوم المغادرة المتأخرة هذه تتجاوز سعر ليلة واحدة ({night}). تأكد أنها ليست الفاتورة كاملة.",
-  "I confirm the late fee of {fee}": "أؤكد رسوم المغادرة المتأخرة البالغة {fee}"
+  "I confirm the late fee of {fee}": "أؤكد رسوم المغادرة المتأخرة البالغة {fee}",
+  "Agreed rate": "السعر المتفق عليه",
+  "- this stay only; the rate card stays as it is": "- لهذه الإقامة فقط؛ تبقى قائمة الأسعار كما هي",
+  "New rate / night": "السعر الجديد / الليلة",
+  "Was": "كان",
+  "The front desk can lower a stay's rate, not raise it. Ask a Revenue Manager.": "يمكن للاستقبال خفض سعر الإقامة لا رفعه. اطلب ذلك من مدير الإيرادات.",
+  "A cut of {pct}% is over the front desk's limit of {limit}%.": "تخفيض بنسبة {pct}% يتجاوز حد الاستقبال البالغ {limit}%.",
+  "A manager signs this off with their PIN.": "يوافق عليه مدير برمز PIN الخاص به.",
+  "Save agreed rate": "حفظ السعر المتفق عليه"
 }

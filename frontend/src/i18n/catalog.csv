@@ -2112,14 +2112,14 @@ Detach profile,Detach profile,فصل الملف,Desvincular perfil,Desanexar per
 Detail,Detail,التفاصيل,Detalle,Detalhe,明细,screens/Inventory.tsx; screens/VoidAllowanceReport.tsx,,translated
 Details,Details,التفاصيل,Detalles,Detalhes,详情,components/RoomDrawer.tsx; screens/Receivables.tsx; screens/Tickets.tsx; screens/settings/cards.tsx,,translated
 Details (optional with a reason above),Details (optional with a reason above),تفاصيل (اختيارية إذا اخترت سببًا أعلاه),Detalles (opcional con un motivo arriba),Detalhes (opcional com motivo acima),详情（上方填写原因时可选）,screens/pos/VoidApproval.tsx,,translated
-Details (optional),Details (optional),تفاصيل (اختياري),Detalles (opcional),Detalhes (opcional),详情（可选）,components/FolioDiscount.tsx; screens/FolioView.tsx,,translated
+Details (optional),Details (optional),تفاصيل (اختياري),Detalles (opcional),Detalhes (opcional),详情（可选）,components/AgreedRatePanel.tsx; components/FolioDiscount.tsx; screens/FolioView.tsx,,translated
 Deterministic priced quote for a stay,Deterministic priced quote for a stay,عرض سعر محسوب لإقامة,Cotización calculada para una estancia,Orçamento determinístico para uma estadia,按固定规则计算的住宿报价,,,translated
 Developer mode is on - turn it off in production.,Developer mode is on - turn it off in production.,وضع المطور مفعّل، أوقفه في بيئة الإنتاج.,El modo de desarrollador está activado; desactívelo en producción.,O modo de desenvolvedor está ativado - desligue-o na produção.,开发者模式已开启 - 生产环境请关闭。,screens/settings/cards.tsx,,translated
 Developers,Developers,المطورون,Desarrolladores,Desenvolvedores,开发者,screens/Developers.tsx,,translated
 Developers & API keys,Developers & API keys,المطورون ومفاتيح API,Desarrolladores y claves API,Desenvolvedores e chaves de API,开发者与 API 密钥,screens/settings/SettingsHub.tsx,,translated
 Diary,Diary,اليومية,Agenda,Diário,日程簿,screens/Banquet.tsx,,translated
 Dietary needs,Dietary needs,احتياجات غذائية,Necesidades dietéticas,Necessidades dietéticas,饮食需求,components/CheckInDialog.tsx,,translated
-Difference,Difference,الفرق,Diferencia,Diferença,差额,,,translated
+Difference,Difference,الفرق,Diferencia,Diferença,差额,components/AgreedRatePanel.tsx,,translated
 Different dates,Different dates,,,,不同日期,components/AgentGuide.tsx,,needs_translation
 Different number of rooms each night,Different number of rooms each night,,Distinta cantidad de habitaciones cada noche,Quantidade variável de quartos por noite,每晚房间数不同,components/GroupBookingDialog.tsx,,needs_translation
 Differs,Differs,مختلف,Difiere,Difere,不一致,screens/GoLiveImport.tsx,,translated
@@ -3467,11 +3467,11 @@ Manage Users,Manage Users,إدارة المستخدمين,Administrar usuarios,G
 Managed on their own screens,Managed on their own screens,تُدار على شاشاتها الخاصة,Gestionado en sus propias pantallas,Gerenciados em telas próprias,在各自界面管理,screens/settings/ModulePage.tsx,,translated
 Management,Management,الإدارة,Gerencia,Gestão,管理,,,translated
 Management view from what Kamra records. Not statutory accounts.,Management view from what Kamra records. Not statutory accounts.,عرض إداري لما يسجله Kamra. ليست حسابات نظامية.,Vista de gestión con lo que registra Kamra. No son cuentas oficiales.,Visão gerencial a partir do que o Kamra registra. Não são demonstrações contábeis oficiais.,基于 Kamra 记录的管理视图，非法定账目。,screens/ManagementBooks.tsx,,translated
-Manager,Manager,المدير,Gerente,Gerente,经理,components/AllowanceRequests.tsx,,translated
+Manager,Manager,المدير,Gerente,Gerente,经理,components/AgreedRatePanel.tsx; components/AllowanceRequests.tsx,,translated
 Manager approves now,Manager approves now,يوافق المدير الآن,Un gerente aprueba ahora,Um gerente aprova agora,经理立即批准,components/AllowanceRequests.tsx,,translated
 Manager flash,Manager flash,التقرير السريع للمدير,Resumen gerencial,Flash do gerenciador,经理速报,screens/Owner.tsx; screens/Reports.tsx,,translated
-Manager PIN,Manager PIN,رمز PIN للمدير,PIN del gerente,PIN do gerente,经理 PIN,components/AllowanceRequests.tsx,,translated
-Manager…,Manager…,المدير…,Gerente…,Gerente…,经理…,components/AllowanceRequests.tsx,,translated
+Manager PIN,Manager PIN,رمز PIN للمدير,PIN del gerente,PIN do gerente,经理 PIN,components/AgreedRatePanel.tsx; components/AllowanceRequests.tsx,,translated
+Manager…,Manager…,المدير…,Gerente…,Gerente…,经理…,components/AgreedRatePanel.tsx; components/AllowanceRequests.tsx,,translated
 Manager's flash,Manager's flash,التقرير السريع للمدير,Resumen gerencial,Flash do gerente,经理速报,,,translated
 manual,manual,يدوي,manual,manual,手动,,,translated
 Manual,Manual,يدوي,Manual,Manual,手动,screens/CurrencyDesk.tsx; screens/Tickets.tsx,,translated
@@ -3730,7 +3730,7 @@ Next photo,Next photo,الصورة التالية,Foto siguiente,Próxima foto,�
 Next try {at},Next try {at},المحاولة التالية {at},Siguiente intento {at},"Em seguida, tente {at}",下次尝试 {at},screens/settings/WebhooksPage.tsx,at,translated
 Nicaraguan,Nicaraguan,نيكاراغوي,Nicaragüense,Nicaraguense,尼加拉瓜式,,,translated
 night,night,ليلة,noche,noite,间夜,components/BookingDialog.tsx; screens/PublicBooking.tsx,,translated
-Night,Night,ليلة,Noche,Noite,夜间,,,translated
+Night,Night,ليلة,Noche,Noite,夜间,components/AgreedRatePanel.tsx,,translated
 night audit,night audit,تدقيق الليل,auditoría nocturna,auditoria noturna,夜审,,,translated
 Night audit,Night audit,تدقيق الليل,Auditoría nocturna,Fechamento de dia,夜审,,,translated
 Night Audit,Night Audit,التدقيق الليلي,Auditoría nocturna,Fechamento de Dia,夜审,screens/AuditPack.tsx; screens/Billing.tsx; screens/EndOfDay.tsx; screens/EndOfDayWizard.tsx,,translated
@@ -3852,7 +3852,7 @@ No line is marked as something to carry yet.,No line is marked as something to c
 No linked guest profile.,No linked guest profile.,لا يوجد ملف ضيف مرتبط.,Sin perfil de huésped vinculado.,Nenhum perfil de hóspede vinculado.,未关联宾客档案。,screens/ReservationDetail.tsx,,translated
 no live dishes,no live dishes,لا أطباق متاحة,sin platos activos,sem pratos vivos,无在售菜品,screens/Inventory.tsx,,translated
 No loud music after 10 PM. Swimming pool requires proper swimwear.,No loud music after 10 PM. Swimming pool requires proper swimwear.,يُمنع رفع صوت الموسيقى بعد الساعة 10 مساء. يتطلب المسبح ملابس سباحة مناسبة.,No se permite música alta después de las 22:00. Para usar la piscina se requiere traje de baño adecuado.,Não há música alta depois das 22h. A piscina requer trajes de banho adequados.,22:00 后请勿播放高音量音乐。泳池须穿正规泳装。,screens/BookingEngine.tsx,,translated
-No manager with a cashier PIN can approve here yet.,No manager with a cashier PIN can approve here yet.,لا يوجد بعد مدير لديه رمز PIN للصندوق يمكنه الموافقة هنا.,Todavía no hay ningún gerente con PIN de cajero que pueda aprobar aquí.,Ainda não há gerente com PIN de caixa que possa aprovar aqui.,暂无持有收银 PIN 的经理可在此批准。,components/AllowanceRequests.tsx,,translated
+No manager with a cashier PIN can approve here yet.,No manager with a cashier PIN can approve here yet.,لا يوجد بعد مدير لديه رمز PIN للصندوق يمكنه الموافقة هنا.,Todavía no hay ningún gerente con PIN de cajero que pueda aprobar aquí.,Ainda não há gerente com PIN de caixa que possa aprovar aqui.,暂无持有收银 PIN 的经理可在此批准。,components/AgreedRatePanel.tsx; components/AllowanceRequests.tsx,,translated
 No matches.,No matches.,لا توجد نتائج.,No hay coincidencias.,Nenhuma correspondência.,无匹配结果。,components/CommandPalette.tsx; screens/POS.tsx,,translated
 No menu chosen yet.,No menu chosen yet.,لم تُختر قائمة بعد.,Aún no se ha seleccionado un menú.,Nenhum menu escolhido ainda.,尚未选择菜单。,screens/BanquetDocument.tsx,,translated
 No menu packages yet - add the ones you actually sell.,No menu packages yet - add the ones you actually sell.,لا باقات قوائم بعد، أضف ما تبيعه فعلا.,Aún no hay paquetes de menú. Agregue los que ofrece a sus clientes.,Ainda não há pacotes de menu - adicione aqueles que você realmente vende.,暂无菜单套餐 - 请添加实际销售的套餐。,screens/BanquetCatalogue.tsx,,translated
@@ -4095,7 +4095,7 @@ Nothing was sent to the kitchen. A reason is enough.,Nothing was sent to the kit
 Nothing yet.,Nothing yet.,لا شيء بعد.,Nada todavía.,Nada ainda.,暂无。,screens/Banquet.tsx,,translated
 Notification sound,Notification sound,صوت الإشعارات,Sonido de notificación,Som de notificação,通知提示音,components/AlertSettings.tsx,,translated
 Notifications,Notifications,الإشعارات,Notificaciones,Notificações,消息通知,components/AlertSettings.tsx; components/NotificationBell.tsx,,translated
-Now,Now,الآن,Ahora,Agora,现在,components/RoomDrawer.tsx,,translated
+Now,Now,الآن,Ahora,Agora,现在,components/AgreedRatePanel.tsx; components/RoomDrawer.tsx,,translated
 Now in {room} · {n} rooms free for these dates,Now in {room} · {n} rooms free for these dates,حاليًا في {room} · {n} غرف متاحة لهذه التواريخ,Ahora en {room} · {n} habitaciones libres para estas fechas,Agora em quartos {room} · {n} gratuitos para estas datas,现住 {room} · 这些日期空闲 {n} 间,components/RoomChangeDialog.tsx,room n,translated
 Number,Number,الرقم,Número,Número,号码,,,translated
 Number = rooms available · price = 2-adult nightly rate with seasons applied. Weekend columns in green.,Number = rooms available · price = 2-adult nightly rate with seasons applied. Weekend columns in green.,الرقم = الغرف المتاحة · السعر = سعر الليلة لشخصين بالغين بعد تطبيق المواسم. أعمدة نهاية الأسبوع باللون الأخضر.,"Número = habitaciones disponibles · precio = tarifa por noche para 2 adultos, con temporadas aplicadas. Los fines de semana aparecen en verde.",Número = quartos disponíveis · preço = diária para 2 adultos com temporadas aplicadas. Colunas de fim de semana em verde.,数字 = 可售房数 · 房价 = 两位成人每晚房价（已应用季节价）。周末列显示为绿色。,components/CalendarView.tsx,,translated
@@ -4939,7 +4939,7 @@ Reason for overriding the blacklist,Reason for overriding the blacklist,سبب �
 Reason for the credit override (logged),Reason for the credit override (logged),سبب تجاوز الائتمان (يُسجَّل),Motivo de la excepción de crédito (queda registrado),Motivo da substituição de crédito (registrado),信用管控特批原因（会留痕）,components/BookingDialog.tsx,,translated
 Reason for the override (logged with your name),Reason for the override (logged with your name),سبب التجاوز (يُسجَّل باسمك),Motivo de la excepción (se registra con su nombre),Motivo da substituição (registrado com seu nome),特批原因（连同你的姓名记录）,components/ChangeCompany.tsx; components/CheckOutDialog.tsx,,translated
 "Reason, e.g. guest left","Reason, e.g. guest left",السبب، مثل: غادر الضيف,"Motivo, por ejemplo, el huésped ya se retiró","Razão, por ex. hóspede saiu",原因，例如宾客已离开,screens/pos/VoidApproval.tsx,,translated
-Reason…,Reason…,السبب…,Motivo…,Razão…,原因…,components/FolioDiscount.tsx; screens/FolioView.tsx; screens/pos/VoidApproval.tsx,,translated
+Reason…,Reason…,السبب…,Motivo…,Razão…,原因…,components/AgreedRatePanel.tsx; components/FolioDiscount.tsx; screens/FolioView.tsx; screens/pos/VoidApproval.tsx,,translated
 Rebuild pack,Rebuild pack,إعادة بناء الحزمة,Reconstruir paquete,Regerar pacote,重建报表包,screens/EndOfDay.tsx,,translated
 Rebuild pack to print,Rebuild pack to print,أعد إنشاء الحزمة للطباعة,Regenerar el paquete de informes para imprimir,Regerar pacote para impressão,重建报表包以打印,screens/AuditPack.tsx,,translated
 Recall,Recall,استدعاء,Recuperar,Lembre-se,撤回,screens/Kitchen.tsx,,translated
@@ -5395,7 +5395,7 @@ Saved access for {name}.,Saved access for {name}.,تم حفظ صلاحيات {na
 Saved as the hotel default.,Saved as the hotel default.,تم الحفظ كإعداد افتراضي للفندق.,Guardado como valor predeterminado del hotel.,Salvo como padrão do hotel.,已保存为酒店默认。,components/CustomizeToday.tsx,,translated
 Saved.,Saved.,تم الحفظ.,Guardado.,Salvo.,已保存。,components/CustomizeToday.tsx; components/GroupControl.tsx; screens/settings/McpAccessPage.tsx,,translated
 Saving...,Saving...,جارٍ الحفظ...,Guardando…,Salvando...,保存中…,screens/RevenueReports.tsx,,translated
-Saving…,Saving…,جارٍ الحفظ…,Guardando…,Salvando…,保存中…,components/BillingRulesEditor.tsx; components/BookingDialog.tsx; components/ChangeCompany.tsx; components/CheckInDialog.tsx; components/CreditTermsEditor.tsx; components/DepositPanel.tsx; components/GuestDocuments.tsx; components/ResourceScreen.tsx; components/RoomTypeMedia.tsx; components/SecurityDepositPanel.tsx; screens/BookingEngine.tsx; screens/EndOfDay.tsx; screens/EndOfDayWizard.tsx; screens/GuestJourney.tsx; screens/KitchenPrinters.tsx; screens/Payables.tsx; screens/PublicCheckin.tsx; screens/Receivables.tsx; screens/RegistrationCard.tsx; screens/UpdatePassword.tsx; screens/settings/AccessPages.tsx; screens/settings/ModulePage.tsx; screens/settings/WebhooksPage.tsx; screens/settings/cards.tsx,,translated
+Saving…,Saving…,جارٍ الحفظ…,Guardando…,Salvando…,保存中…,components/AgreedRatePanel.tsx; components/BillingRulesEditor.tsx; components/BookingDialog.tsx; components/ChangeCompany.tsx; components/CheckInDialog.tsx; components/CreditTermsEditor.tsx; components/DepositPanel.tsx; components/GuestDocuments.tsx; components/ResourceScreen.tsx; components/RoomTypeMedia.tsx; components/SecurityDepositPanel.tsx; screens/BookingEngine.tsx; screens/EndOfDay.tsx; screens/EndOfDayWizard.tsx; screens/GuestJourney.tsx; screens/KitchenPrinters.tsx; screens/Payables.tsx; screens/PublicCheckin.tsx; screens/Receivables.tsx; screens/RegistrationCard.tsx; screens/UpdatePassword.tsx; screens/settings/AccessPages.tsx; screens/settings/ModulePage.tsx; screens/settings/WebhooksPage.tsx; screens/settings/cards.tsx,,translated
 Scan for in-room dining,Scan for in-room dining,امسح لطلب الطعام داخل الغرفة,Escanee para pedir servicio a la habitación,Procure refeições no quarto,扫码点客房送餐,,,translated
 Scan ID,Scan ID,مسح الهوية,Escanear identificación,Ler documento,扫描证件,components/CheckInGuests.tsx,,translated
 Scan the ID,Scan the ID,امسح الهوية,Escanea la identificación,Leia o documento,扫描证件,components/IdScan.tsx,,translated
@@ -6113,7 +6113,7 @@ The whole portfolio at a glance.,The whole portfolio at a glance.,المحفظة
 The working number,The working number,العدد المعتمد للتخطيط,Cantidad prevista para la planificación,O número de trabalho,有效号码,screens/BanquetFunction.tsx,,translated
 Theatre,Theatre,مسرح,Teatro,Teatro,剧场,,,translated
 Their phone number? You can skip it.,Their phone number? You can skip it.,,,,对方电话？可跳过。,components/AgentGuide.tsx,,needs_translation
-Their PIN,Their PIN,رمزه,Su PIN,O PIN deles,其 PIN,components/AllowanceRequests.tsx; screens/pos/VoidApproval.tsx,,translated
+Their PIN,Their PIN,رمزه,Su PIN,O PIN deles,其 PIN,components/AgreedRatePanel.tsx; components/AllowanceRequests.tsx; screens/pos/VoidApproval.tsx,,translated
 Theme,Theme,المظهر,Tema,Tema,主题外观,screens/settings/cards.tsx,,translated
 Theme (system),Theme (system),المظهر (النظام),Tema (sistema),Tema (sistema),主题（跟随系统）,,,translated
 Theme and language for this browser.,Theme and language for this browser.,المظهر واللغة لهذا المتصفح.,Tema e idioma para este navegador.,Tema e idioma para este navegador.,此浏览器的主题与语言。,,,translated
@@ -6257,7 +6257,7 @@ Too many requests - give it a few seconds and try again.,Too many requests - giv
 Top items,Top items,الأصناف الأكثر مبيعًا,Artículos más vendidos,Itens principais,热销项目,screens/PosDashboard.tsx,,translated
 Top of the page,Top of the page,أعلى الصفحة,Principio de la página,Topo da página,页面顶部,components/CustomizeToday.tsx,,translated
 total,total,الإجمالي,total,total,合计,screens/CRS.tsx; screens/PublicListing.tsx,,translated
-Total,Total,الإجمالي,Total,Total,合计,components/BookingDialog.tsx; lib/thermal.ts; screens/AuditPack.tsx; screens/BanquetDocument.tsx; screens/CashierShiftReport.tsx; screens/FolioHistory.tsx; screens/GoLiveImport.tsx; screens/GroupQuotation.tsx; screens/Laundry.tsx; screens/ManagementBooks.tsx; screens/POS.tsx; screens/Payables.tsx; screens/PublicBooking.tsx; screens/Receivables.tsx; screens/Reports.tsx; screens/ReservationDetail.tsx; screens/RevenueReports.tsx,,translated
+Total,Total,الإجمالي,Total,Total,合计,components/AgreedRatePanel.tsx; components/BookingDialog.tsx; lib/thermal.ts; screens/AuditPack.tsx; screens/BanquetDocument.tsx; screens/CashierShiftReport.tsx; screens/FolioHistory.tsx; screens/GoLiveImport.tsx; screens/GroupQuotation.tsx; screens/Laundry.tsx; screens/ManagementBooks.tsx; screens/POS.tsx; screens/Payables.tsx; screens/PublicBooking.tsx; screens/Receivables.tsx; screens/Reports.tsx; screens/ReservationDetail.tsx; screens/RevenueReports.tsx,,translated
 TOTAL,TOTAL,الإجمالي,TOTAL,TOTAL,合计,lib/thermal.ts,,translated
 Total ,Total ,الإجمالي ,Total ,Total ,合计 ,screens/BanquetDocument.tsx,,translated
 "Total · {n} night, taxes included","Total · {n} night, taxes included",الإجمالي · {n} ليلة، شامل الضرائب,"Total · {n} noche, impuestos incluidos","Total · {n} noite, taxas incluídas",合计 · {n} 晚，含税,,n,translated
@@ -6806,6 +6806,14 @@ ZATCA: still needed for valid e-invoices - {fields}.,ZATCA: still needed for val
 Zero-rate and complimentary rooms,Zero-rate and complimentary rooms,غرف بسعر صفر ومجانية,Habitaciones con tarifa cero y de cortesía,Quartos cortesia ou com diária zerada,零房价与免单客房,screens/AuditPack.tsx,,translated
 Zero-rated on purpose,Zero-rated on purpose,خاضع لنسبة صفرية عمدًا,Tasa cero aplicada intencionalmente,Classificação zero propositalmente,确认为零税率,screens/BanquetFunction.tsx,,translated
 The property's late check-out fee is {fee}.,The property's late check-out fee is {fee}.,رسوم المغادرة المتأخرة في المنشأة هي {fee}.,La tarifa de salida tardía del establecimiento es {fee}.,,,components/CheckOutDialog.tsx,fee,translated
-The property's late check-out fee is {pct}% of a night ({fee}).,The property's late check-out fee is {pct}% of a night ({fee}).,رسوم المغادرة المتأخرة في المنشأة هي {pct}% من ليلة ({fee}).,La tarifa de salida tardía del establecimiento es el {pct}% de una noche ({fee}).,,,components/CheckOutDialog.tsx,fee pct,translated
+The property's late check-out fee is {pct}% of a night ({fee}).,The property's late check-out fee is {pct}% of a night ({fee}).,رسوم المغادرة المتأخرة في المنشأة هي {pct}% من ليلة ({fee}).,La tarifa de salida tardía del establecimiento es el {pct}% de una noche ({fee}).,,,components/CheckOutDialog.tsx,pct fee,translated
 This late fee exceeds one night's room rate ({night}). Check it is not the whole bill.,This late fee exceeds one night's room rate ({night}). Check it is not the whole bill.,رسوم المغادرة المتأخرة هذه تتجاوز سعر ليلة واحدة ({night}). تأكد أنها ليست الفاتورة كاملة.,Esta tarifa de salida tardía supera la tarifa de una noche ({night}). Comprueba que no sea la cuenta completa.,,,components/CheckOutDialog.tsx,night,translated
 I confirm the late fee of {fee},I confirm the late fee of {fee},أؤكد رسوم المغادرة المتأخرة البالغة {fee},Confirmo la tarifa de salida tardía de {fee},,,components/CheckOutDialog.tsx,fee,translated
+- this stay only; the rate card stays as it is,- this stay only; the rate card stays as it is,- لهذه الإقامة فقط؛ تبقى قائمة الأسعار كما هي,- solo esta estancia; el tarifario no cambia,,,components/AgreedRatePanel.tsx,,translated
+A cut of {pct}% is over the front desk's limit of {limit}%.,A cut of {pct}% is over the front desk's limit of {limit}%.,تخفيض بنسبة {pct}% يتجاوز حد الاستقبال البالغ {limit}%.,Un descuento del {pct}% supera el límite de recepción del {limit}%.,,,components/AgreedRatePanel.tsx,pct limit,translated
+A manager signs this off with their PIN.,A manager signs this off with their PIN.,يوافق عليه مدير برمز PIN الخاص به.,Un gerente lo aprueba con su PIN.,,,components/AgreedRatePanel.tsx,,translated
+Agreed rate,Agreed rate,السعر المتفق عليه,Tarifa acordada,,,components/AgreedRatePanel.tsx,,translated
+New rate / night,New rate / night,السعر الجديد / الليلة,Nueva tarifa / noche,,,components/AgreedRatePanel.tsx,,translated
+Save agreed rate,Save agreed rate,حفظ السعر المتفق عليه,Guardar tarifa acordada,,,components/AgreedRatePanel.tsx,,translated
+"The front desk can lower a stay's rate, not raise it. Ask a Revenue Manager.","The front desk can lower a stay's rate, not raise it. Ask a Revenue Manager.",يمكن للاستقبال خفض سعر الإقامة لا رفعه. اطلب ذلك من مدير الإيرادات.,"La recepción puede bajar la tarifa de una estancia, no subirla. Pregunta a un gerente de ingresos.",,,components/AgreedRatePanel.tsx,,translated
+Was,Was,كان,Antes,,,components/AgreedRatePanel.tsx,,translated
