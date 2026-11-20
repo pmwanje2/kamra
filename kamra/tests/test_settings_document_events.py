@@ -79,6 +79,10 @@ class SettingsDocumentEventsTestCase(AuditTestCase):
 
 		self._stack.enter_context(patch.object(frappe, "get_doc", watch))
 
+	def test_the_module_declares_that_settings_writes_run_document_events(self):
+		# A site that governs these rows (SiteOps) refuses to rely on a Kamra without this behaviour.
+		self.assertIs(settings.WRITE_KV_RUNS_DOCUMENT_EVENTS, True)
+
 	def test_a_new_row_runs_validate(self):
 		settings.write_kv(PROP_A, "rate_override_limit_pct", 10)
 		self.assertEqual(self.seen, [{"key": "rate_override_limit_pct", "value": "10", "module": None}])
@@ -134,3 +138,33 @@ class CreditNoteVoucherFlagTestCase(AuditTestCase):
 			out = api.cancel_reservation(res.name, waive_fee=1, issue_credit_note=1)
 		self.assertTrue(out.get("voucher_code") or frappe.db.exists("Discount Voucher", {"property": PROP_A}))
 		self.assertEqual(SEEN_VOUCHERS, [1])
+
+
+class AdvancePaidIsLedgerOwnedTestCase(AuditTestCase):
+	"""Reservation.advance_paid is the money the folio recorded (kamra.api payments
+	and refunds keep it). A person editing the booking cannot change it, so a
+	cancellation credit note (sized from it) can't be inflated by the desk."""
+
+	properties = (PROP_A,)
+
+	def setUp(self):
+		super().setUp()
+		self.at(TODAY, "kamra.folio", "kamra.business_date", "kamra.api")
+		make_property(PROP_A, business_date=TODAY)
+		self.rt = make_room_type(PROP_A, "STD", base_price=1000)
+		self.room = make_room(PROP_A, self.rt, "101")
+
+	def test_a_booking_save_cannot_change_the_advance_paid(self):
+		res = make_reservation(PROP_A, self.rt, d(3), d(5), status="Confirmed", room=self.room)
+		res.reload()
+		res.advance_paid = 99999
+		with self.assertRaises(api.AdvancePaidIsLedgerOwned) as raised:
+			res.save(ignore_permissions=True)
+		self.assertTrue(issubclass(api.AdvancePaidIsLedgerOwned, frappe.ValidationError))
+		self.assertEqual(float(frappe.db.get_value("Reservation", res.name, "advance_paid") or 0), 0)
+
+	def test_a_booking_save_that_keeps_the_advance_paid_still_works(self):
+		res = make_reservation(PROP_A, self.rt, d(3), d(5), status="Confirmed", room=self.room)
+		res.reload()
+		res.special_requests = "UT late arrival"
+		res.save(ignore_permissions=True)
