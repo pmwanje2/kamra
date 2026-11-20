@@ -86,6 +86,10 @@ interface Day {
   adr: number
   revpar: number
   revpax: number
+  /** before the night audit, from the rooms in house (in-house basis only) */
+  projected_room_revenue?: number
+  projected_adr?: number
+  projected_revpar?: number
 }
 
 interface Flash {
@@ -1073,8 +1077,20 @@ function FlashPanel(props: {
             { occupied: todayData?.rooms_occupied ?? 0, available: todayData?.available_rooms ?? 0 },
           )}
         />
-        <Stat label={t("ADR")} value={`${cur()}${inr(todayData?.adr ?? 0)}`} sub={t("room rate / room sold")} />
-        <Stat label={t("RevPAR")} value={`${cur()}${inr(todayData?.revpar ?? 0)}`} sub={t("room rev / room")} />
+        <Stat
+          label={t("ADR")}
+          value={`${cur()}${inr(todayData?.adr ?? 0)}`}
+          sub={todayData?.projected_adr != null
+            ? t("projected {v} (in house)", { v: `${cur()}${inr(todayData.projected_adr)}` })
+            : t("room rate / room sold")}
+        />
+        <Stat
+          label={t("RevPAR")}
+          value={`${cur()}${inr(todayData?.revpar ?? 0)}`}
+          sub={todayData?.projected_revpar != null
+            ? t("projected {v} (in house)", { v: `${cur()}${inr(todayData.projected_revpar)}` })
+            : t("room rev / room")}
+        />
         <Stat
           label={t("RevPAX")}
           value={`${cur()}${inr(todayData?.revpax ?? 0)}`}
