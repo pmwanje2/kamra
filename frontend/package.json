@@ -24,7 +24,8 @@
     "amend-dates:check": "node scripts/amend-dates-check.mjs",
     "agreed-rate:check": "node scripts/agreed-rate-check.mjs",
     "booking-quote:check": "node scripts/booking-quote-check.mjs",
-    "flash-projected:check": "node scripts/flash-projected-check.mjs"
+    "flash-projected:check": "node scripts/flash-projected-check.mjs",
+    "discount-advance-bill:check": "node scripts/discount-advance-bill-check.mjs"
   },
   "dependencies": {
     "libphonenumber-js": "^1.13.15",
