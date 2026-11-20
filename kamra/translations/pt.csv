@@ -64,8 +64,8 @@ Bills still open,Contas ainda abertas
 Use Check out to check a guest out: it makes sure every bill is cleared first.,Use Check-out para dar saída ao hóspede: ele confere antes que todas as contas estejam quitadas.
 Check out,Check-out
 Discounts and allowances,Descontos e abatimentos
-"{0} is not a Kamra language.","{0} não é um idioma do Kamra."
-"{0} is switched off. Turn it on from Languages in Settings.","{0} está desligado. Ative-o em Idiomas nas Definições."
+{0} is not a Kamra language.,{0} não é um idioma do Kamra.
+{0} is switched off. Turn it on from Languages in Settings.,{0} está desligado. Ative-o em Idiomas nas Definições.
 No room mappings yet - map your room types to the provider's room and rate ids first.,Ainda não há mapeamentos de quartos: primeiro mapeie seus tipos de quarto para os ids de quarto e de tarifa do provedor.
 No room type matches it.,Não corresponde a nenhum tipo de quarto.
 Provider rate plan {0} is already mapped on this connection.,O plano tarifário {0} do provedor já está mapeado nesta conexão.
@@ -78,3 +78,14 @@ The channel manager has {0} rooms of {1}; Kamra has {2}.,O gerenciador de canais
 The channel manager sells in {0}; this property is in {1}.,O gerenciador de canais vende em {0}; esta propriedade está em {1}.
 The channel manager's property time zone is {0}; this property's is {1}.,O fuso horário da propriedade no gerenciador de canais é {0}; o desta propriedade é {1}.
 {0} does not take ARI changes.,{0} não aceita o envio de disponibilidade e tarifas por mudanças.
+Quotation {0} from {1},Cotação {0} de {1}
+"Dear {0}, please find your quotation for {1} to {2} attached. Reference {3}.",Caro/a {0}: segue em anexo a sua cotação de {1} a {2}. Referência {3}.
+Quotation,Cotação
+Issued {0},Emitida em {0}
+Free cancellation until {0}; after that {1} is charged.,Cancelamento gratuito até {0}; depois é cobrado {1}.
+Free cancellation.,Cancelamento gratuito.
+Cancelling now is charged {0}.,Cancelar agora cobra {0}.
+Room prices exclude meals and extras unless stated. Tax as applicable on the day of stay.,"Os preços dos quartos não incluem refeições nem extras, salvo indicação. Impostos conforme aplicável no dia da estadia."
+Rate / night,Tarifa / noite
+Deposit to confirm,Depósito para confirmar
+{0} night(s),{0} noite(s)

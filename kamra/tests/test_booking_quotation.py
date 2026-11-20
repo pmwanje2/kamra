@@ -32,7 +32,18 @@ DESK = "ut.quote.desk@test.local"
 NIGHT = "ut.quote.night@test.local"
 GUEST_EMAIL = "booker@guest.test"
 ACCOUNT = "UT Quote Outgoing"
-PDF = b"%PDF-1.4 ut quotation"
+
+
+def _blank_pdf() -> bytes:
+	"""A real one-page PDF: Frappe's File checks what it stores."""
+	from io import BytesIO
+
+	from pypdf import PdfWriter
+	out = BytesIO()
+	w = PdfWriter()
+	w.add_blank_page(width=72, height=72)
+	w.write(out)
+	return out.getvalue()
 
 
 class BookingQuotationTestCase(AuditTestCase):
@@ -80,7 +91,7 @@ class BookingQuotationTestCase(AuditTestCase):
 
 	def send(self, user=DESK, **extra):
 		"""The HTTP path: frappe.call drops arguments the method does not take."""
-		with patch("frappe.utils.pdf.get_pdf", return_value=PDF) as pdf:
+		with patch("frappe.utils.pdf.get_pdf", return_value=_blank_pdf()) as pdf:
 			out = self.as_user(user, frappe.call, "kamra.api.email_booking_quotation",
 			                   reservation=self.res.name, **extra)
 		return out, pdf

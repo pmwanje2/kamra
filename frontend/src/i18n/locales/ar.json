@@ -6412,5 +6412,16 @@
   "The front desk can lower a stay's rate, not raise it. Ask a Revenue Manager.": "يمكن للاستقبال خفض سعر الإقامة لا رفعه. اطلب ذلك من مدير الإيرادات.",
   "A cut of {pct}% is over the front desk's limit of {limit}%.": "تخفيض بنسبة {pct}% يتجاوز حد الاستقبال البالغ {limit}%.",
   "A manager signs this off with their PIN.": "يوافق عليه مدير برمز PIN الخاص به.",
-  "Save agreed rate": "حفظ السعر المتفق عليه"
+  "Save agreed rate": "حفظ السعر المتفق عليه",
+  "Back to the booking": "العودة إلى الحجز",
+  "No email address on record for the booker.": "لا يوجد بريد إلكتروني مسجل لصاحب الحجز.",
+  "Print / Save as PDF": "طباعة / حفظ بصيغة PDF",
+  "Quotation sent to {email}.": "تم إرسال عرض السعر إلى {email}.",
+  "Issued {v0}": "صدر في {v0}",
+  "{v0} night(s)": "{v0} ليلة",
+  "Rate / night": "السعر / الليلة",
+  "Rooms before tax": "الغرف قبل الضريبة",
+  "Deposit to confirm": "العربون للتأكيد",
+  "Cancelling now is charged {fee}.": "الإلغاء الآن يُحتسب عليه {fee}.",
+  "Room prices exclude meals and extras unless stated. Tax as applicable on the day of stay.": "أسعار الغرف لا تشمل الوجبات والإضافات ما لم يُذكر ذلك. تُطبق الضريبة حسب يوم الإقامة."
 }

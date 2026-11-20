@@ -6604,5 +6604,9 @@
   "The front desk can lower a stay's rate, not raise it. Ask a Revenue Manager.": "La recepción puede bajar la tarifa de una estancia, no subirla. Pregunta a un gerente de ingresos.",
   "A cut of {pct}% is over the front desk's limit of {limit}%.": "Un descuento del {pct}% supera el límite de recepción del {limit}%.",
   "A manager signs this off with their PIN.": "Un gerente lo aprueba con su PIN.",
-  "Save agreed rate": "Guardar tarifa acordada"
+  "Save agreed rate": "Guardar tarifa acordada",
+  "Back to the booking": "Volver a la reserva",
+  "No email address on record for the booker.": "No hay un correo registrado para quien reservó.",
+  "Quotation sent to {email}.": "Cotización enviada a {email}.",
+  "Cancelling now is charged {fee}.": "Cancelar ahora cobra {fee}."
 }
