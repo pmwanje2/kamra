@@ -2,6 +2,7 @@ import { ResponsiveList, Popin } from "../components/ui/responsive-list"
 import { Fragment, useCallback, useEffect, useRef, useState } from "react"
 import { ArrowLeft, ArrowRightLeft, Printer, Trash2, X } from "lucide-react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
+import { formatDate, roomLabel } from "../lib/utils"
 import { call, getCurrentProperty, newIdempotencyKey } from "../lib/api"
 import EditableNationality from "../components/EditableNationality"
 import LinkedRecords from "../components/LinkedRecords"
@@ -98,6 +99,7 @@ interface InvoiceData {
     meal_plan: string | null
     room_type: string | null
     room: string | null
+    room_number?: string | null
     company: string | null
     group_booking: string | null
     booked_by_name: string | null
@@ -912,7 +914,7 @@ export default function FolioView() {
             </Fact>
             {stay.reservation && (<>
             <Fact label={t("Room")}>
-              {stay.room ? stay.room.split("-").pop() : "-"}
+              {roomLabel(stay)}
               {stay.room_type && (
                 <span className="text-zinc-500">
                   {" "}
@@ -1169,7 +1171,7 @@ export default function FolioView() {
                               />}
                             </Popin>
                           )}
-                          <Popin label={t("Date")} importance="medium" className="py-2 pr-3 text-zinc-500">{c.posting_date}</Popin>
+                          <Popin label={t("Date")} importance="medium" className="py-2 pr-3 text-zinc-500">{formatDate(c.posting_date)}</Popin>
                           <Popin label={t("Item")} importance="high" className="py-2 pr-3">
                             {/* on the guest's bill an allowance reads as a discount */}
                             <span className="font-medium">{translate(c.charge_type === "Allowance" ? "Discount" : c.charge_type)}</span>
@@ -1407,7 +1409,7 @@ export default function FolioView() {
                 {folio.payments.map((p, i) => (
                   <li key={i} className="flex justify-between py-1.5">
                     <span>
-                      {p.posting_date} · {translate(p.mode)}
+                      {formatDate(p.posting_date)} · {translate(p.mode)}
                       {p.payment_kind && p.payment_kind !== "Payment" && (
                         <span className={"ml-1.5 rounded px-1.5 py-0.5 text-[10px] font-semibold " +
                           (p.payment_kind === "Refund" ? "bg-rose-50 text-rose-600"
