@@ -15,6 +15,12 @@ class CorrectionTests(AuditTestCase):
 		self.session = cashier.open_session(PROP_A, 0)['name']
 		self.row = api.add_folio_payment(self.folio, 'Cash', 100)['payments'][-1]['name']
 
+	def supervisor(self):
+		user = 'k2-supervisor@example.test'
+		frappe.get_doc(dict(doctype='User', email=user, first_name='Test', send_welcome_email=0, roles=[dict(role='Finance')])).insert()
+		frappe.get_doc(dict(doctype='Cashier PIN', user=user, pin='8394')).insert()
+		return user
+
 	def options(self, row=None):
 		return api.payment_correction_options(self.folio, row or self.row)
 
@@ -26,8 +32,9 @@ class CorrectionTests(AuditTestCase):
 		self.assertTrue(callable(getattr(api, 'correct_folio_payment', None)), 'Missing governed correction action')
 		self.assertTrue(self.options()['can_reclassify'])
 		before = frappe.db.get_value('Folio', self.folio, 'balance')
+		user = self.supervisor()
 		for _ in range(2):
-			self.submit('reclassify_tender', 'REV-ACCOUNT', 'one', destination_mode='Card')
+			self.submit('reclassify_tender', 'REV-ACCOUNT', 'one', destination_mode='Card', supervisor_user=user, supervisor_pin='8394')
 		doc = frappe.get_doc('Folio', self.folio)
 		self.assertEqual(doc.balance, before)
 		self.assertEqual([(r.mode, r.amount) for r in doc.payments], [('Cash', 100), ('Cash', -100), ('Card', 100)])
@@ -43,9 +50,7 @@ class CorrectionTests(AuditTestCase):
 		args = dict(refund_amount=25, supervisor_user='Administrator', supervisor_pin='1234')
 		with self.assertRaisesRegex(frappe.PermissionError, 'SUPERVISOR_SELF_APPROVAL'):
 			self.submit('partial_refund', 'REF-OVER', 'two', **args)
-		user = 'k2-supervisor@example.test'
-		frappe.get_doc(dict(doctype='User', email=user, first_name='Test', send_welcome_email=0, roles=[dict(role='Finance')])).insert()
-		frappe.get_doc(dict(doctype='Cashier PIN', user=user, pin='8394')).insert()
+		user = self.supervisor()
 		args.update(supervisor_user=user)
 		with self.assertRaises(frappe.ValidationError):
 			self.submit('partial_refund', 'REF-OVER', 'two', **args)
