@@ -313,6 +313,143 @@ class CorrectionTests(AuditTestCase):
 			)
 		self.assertFalse(frappe.db.get_value("Folio Ledger Entry", {"source_name": r["reversal"]}, "session"))
 
+	def booked(self):
+		# The accounting bridge supplies this custom field; standalone Kamra has no ERP app.
+		get_doc = frappe.get_doc
+
+		def marked(*args, **kw):
+			doc = get_doc(*args, **kw)
+			if doc.doctype == "Folio" and doc.name == self.folio:
+				next(p for p in doc.payments if p.name == self.row).payment_entry = "TEST-PE"
+			return doc
+
+		return patch.object(frappe, "get_doc", side_effect=marked)
+
+	def install_bridge_script(self, method, code=None, disabled=0):
+		api_method = f"hospitality_kamra.{method}"
+		return frappe.get_doc(
+			dict(
+				doctype="Server Script",
+				name=api_method,
+				api_method=api_method,
+				script_type="API",
+				disabled=disabled,
+				script=code
+				or (
+					f'context = frappe.call("kamra.api.erp_correction_context", api_method="{api_method}")\n'
+					'frappe.response["message"] = dict(actor=frappe.session.user, context=context, args=dict(frappe.form_dict))'
+				),
+			)
+		).insert()
+
+	def test_standalone_and_disabled_scripts_preserve_erp_guidance(self):
+		with self.booked():
+			self.assertIn("ERP-booked", self.options()["blocked_reason"])
+			self.install_bridge_script("payment_correction_options", disabled=1)
+			self.install_bridge_script("correct_folio_payment", disabled=1)
+			self.assertIn("ERP-booked", self.options()["blocked_reason"])
+			with self.assertRaisesRegex(frappe.ValidationError, "ERP-booked"):
+				self.submit("reverse_payment", "REV-ERR", "native")
+
+	def test_native_payment_and_charge_ignore_installed_scripts(self):
+		self.install_bridge_script("correct_folio_payment", 'frappe.throw("unexpected bridge execution")')
+		self.submit(
+			"partial_refund",
+			"REF-OVER",
+			"local-refund",
+			refund_amount=10,
+			supervisor_user=self.supervisor(),
+			supervisor_pin="8394",
+		)
+		api._post_folio_charge(self.folio, "Misc", "Mistake", 5)
+		self.row = frappe.get_doc("Folio", self.folio).charges[-1].name
+		self.submit("void_charge", "VOID-DUP", "local-charge")
+		self.assertFalse(self.options()["can_void"])
+
+	def test_booked_dispatch_binds_actor_and_isolates_arguments(self):
+		from kamra.tests.audit_fixtures import ensure_user
+
+		desk = ensure_user("bridge-desk@example.test", ["Front Desk"])
+		sup = self.supervisor()
+		self.install_bridge_script("payment_correction_options")
+		self.install_bridge_script("correct_folio_payment")
+		with (
+			self.booked(),
+			self.set_user(desk),
+			patch("frappe.utils.safe_exec.is_safe_exec_enabled", return_value=True),
+		):
+			outer = frappe.local.form_dict
+			read = self.options()
+			self.assertEqual(read.get("args"), {"folio": self.folio, "row_name": self.row})
+			self.assertEqual(read["actor"], desk)
+			for approved in (False, True):
+				kw = dict(supervisor_user=sup.upper(), supervisor_pin="8394") if approved else {}
+				r = self.submit("partial_refund", "REF-OVER", "key", refund_amount=7, **kw)
+				self.assertEqual(r["actor"], sup if approved else desk)
+				self.assertEqual(r["context"], {"requester": desk, "approver": sup if approved else None})
+				self.assertEqual(
+					r["args"],
+					dict(
+						folio=self.folio,
+						row_name=self.row,
+						action="partial_refund",
+						reason_code="REF-OVER",
+						reason_text="Correction at counter",
+						new_payment_mode=None,
+						refund_amount=7,
+						supervisor=sup if approved else None,
+						idempotency_key="key",
+					),
+				)
+				self.assertIs(frappe.local.form_dict, outer)
+				self.assertEqual(frappe.session.user, desk)
+				self.assertNotIn("kamra_erp_correction_authorized", frappe.flags)
+			with self.assertRaisesRegex(frappe.ValidationError, "Wrong cashier PIN"):
+				self.submit("reverse_payment", "REV-ERR", "bad", supervisor_user=sup, supervisor_pin="0000")
+
+	def test_script_exception_restores_request_and_authority(self):
+		from kamra.tests.audit_fixtures import ensure_user
+
+		desk = ensure_user("bridge-desk@example.test", ["Front Desk"])
+		sup = self.supervisor()
+		self.install_bridge_script(
+			"correct_folio_payment",
+			'frappe.response["message"] = "temporary"\nfrappe.throw("bridge refused")',
+		)
+		with (
+			self.booked(),
+			self.set_user(desk),
+			patch.dict(frappe.response, message="previous"),
+			patch.dict(frappe.flags, kamra_erp_correction_requester="previous"),
+			patch("frappe.utils.safe_exec.is_safe_exec_enabled", return_value=True),
+		):
+			outer = frappe.local.form_dict
+			with self.assertRaisesRegex(frappe.ValidationError, "bridge refused"):
+				self.submit(
+					"reverse_payment", "REV-ERR", "failed", supervisor_user=sup, supervisor_pin="8394"
+				)
+			self.assertIs(frappe.local.form_dict, outer)
+			self.assertEqual(frappe.response.message, "previous")
+			self.assertEqual(frappe.session.user, desk)
+			self.assertEqual(frappe.flags.kamra_erp_correction_requester, "previous")
+			self.assertNotIn("kamra_erp_correction_approver", frappe.flags)
+			self.assertNotIn("kamra_erp_correction_authorized", frappe.flags)
+
+	def test_bridge_requires_native_dispatch_and_action_is_post_only(self):
+		self.assertEqual(
+			frappe.allowed_http_methods_for_whitelisted_func[api.correct_folio_payment], ["POST"]
+		)
+		self.assertTrue(
+			callable(getattr(api, "erp_correction_context", None)),
+			"Server Script needs a guarded context reader",
+		)
+		script = self.install_bridge_script("correct_folio_payment")
+		with (
+			patch("frappe.utils.safe_exec.is_safe_exec_enabled", return_value=True),
+			self.assertRaises(frappe.PermissionError),
+		):
+			script.execute_method()
+
 
 class BridgeSupervisorTests(AuditTestCase):
 	def setUp(self):
@@ -395,3 +532,31 @@ class BridgeSupervisorTests(AuditTestCase):
 				self.assertEqual(frappe.cache.get_value(self.fails_key), count)
 			with self.assertRaisesRegex(frappe.ValidationError, "PIN_LOCKED"):
 				self.bridge("verify_supervisor_approval", self.home, supervisor=self.approver, pin="8394")
+
+	def test_case_variant_self_approval_is_denied(self):
+		with (
+			self.set_user(self.approver),
+			self.assertRaisesRegex(frappe.PermissionError, "SUPERVISOR_SELF_APPROVAL"),
+		):
+			self.bridge("verify_supervisor_approval", self.home, supervisor=self.approver.upper(), pin="8394")
+
+	def test_case_variants_share_rollback_resistant_lock(self):
+		with self.set_user(self.desk), patch("kamra.authz._pin_policy", return_value=(2, 15)):
+			for name in (self.approver.upper(), self.approver):
+				frappe.db.savepoint("failed_pin")
+				with self.assertRaisesRegex(frappe.ValidationError, "Wrong cashier PIN"):
+					self.bridge("verify_supervisor_approval", self.home, supervisor=name, pin="0000")
+				frappe.db.rollback(save_point="failed_pin")
+			with self.assertRaisesRegex(frappe.ValidationError, "PIN_LOCKED"):
+				self.bridge(
+					"verify_supervisor_approval", self.home, supervisor=self.approver.title(), pin="8394"
+				)
+
+	def test_canonical_property_and_optional_inputs(self):
+		from kamra import authz
+
+		self.assertIn(self.approver, [u["user"] for u in authz.list_supervisors(self.home.upper())])
+		with self.assertRaisesRegex(frappe.PermissionError, "SUPERVISOR_REQUIRED"):
+			authz.verify_supervisor_approval(self.home)
+		with self.assertRaisesRegex(frappe.ValidationError, "SUPERVISOR_PIN_REQUIRED"):
+			authz.verify_supervisor_approval(self.home, self.approver)
