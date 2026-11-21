@@ -1,3 +1,4 @@
+import { CurrencyInput, SettlementPreview, useSettlementQuote } from "../components/SettlementPreview"
 import { RateOptions } from "./RateOptions"
 import { useEffect, useRef, useState } from "react"
 import { htmlToText, formatDate, roomLabel } from "../lib/utils"
@@ -790,6 +791,9 @@ export function BookingDialog(props: {
   }
 
   // one key per open dialog: a double-tap replays instead of double-booking
+  const [payCurrency,setPayCurrency] = useState('')
+  const foreign = !!payCurrency && payCurrency !== loc.currency && ['Cash','Foreign Cash','Bank Transfer'].includes(walk.pay_mode)
+  const fx = useSettlementQuote(getCurrentProperty(), foreign ? payCurrency : '', Number(walk.pay_amount))
   const [walkInKey] = useState(() =>
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
@@ -801,6 +805,7 @@ export function BookingDialog(props: {
     setError(null)
     try {
       const amount = Number(walk.pay_amount) || 0
+      if (foreign && amount > 0 && !fx?.quote) throw new Error(fx?.error || t("Wait for the settlement preview."))
       if (amount > 0 && pinStatus?.required) await ensureUnlocked()
       const res = await call<WalkInResult>("kamra.api.walk_in", {
         property: getCurrentProperty(),
@@ -820,7 +825,7 @@ export function BookingDialog(props: {
         id_number: walk.id_number.trim() || undefined,
         nationality: walk.nationality.trim() || undefined,
         payment_mode: amount > 0 ? walk.pay_mode : undefined,
-        payment_amount: amount,
+        payment_amount: amount, currency: foreign ? payCurrency : undefined, quote_id: fx?.quote?.quote_id,
         payment_reference: walk.pay_reference.trim() || undefined,
         idempotency_key: walkInKey,
         ...slotArgs,
@@ -1860,7 +1865,7 @@ export function BookingDialog(props: {
                           type="button"
                           role="radio"
                           aria-checked={walk.pay_mode === m}
-                          onClick={() => setW("pay_mode", m)}
+                          onClick={() => {setW("pay_mode", m); if (payCurrency) {setPayCurrency("");setW("pay_amount", "")}}}
                           className={
                             "rounded-lg border px-3.5 py-2 text-sm font-medium transition-colors " +
                             (walk.pay_mode === m
@@ -1872,6 +1877,8 @@ export function BookingDialog(props: {
                         </button>
                       ))}
                     </div>
+                    {['Cash','Bank Transfer','Foreign Cash'].includes(walk.pay_mode) && <CurrencyInput home={loc.currency} value={payCurrency} onChange={v=>{setPayCurrency(v);setAmountTouched(true);setW('pay_amount','')}}/>}
+                    {foreign && <SettlementPreview result={fx} amount={payAmount} balance={grandTotal}/>}
                     <div className="grid gap-3 sm:grid-cols-2">
                       <Field label={t("Amount collected")}>
                         <input
@@ -1887,7 +1894,7 @@ export function BookingDialog(props: {
                           }}
                         />
                         <p className="mt-1.5 text-xs text-zinc-400">
-                          {payAmount <= 0
+                          {foreign ? null : payAmount <= 0
                             ? t("Nothing collected now - the full amount stays on the bill.")
                             : payAmount < grandTotal
                               ? t("{amt} left on the bill.", {
@@ -2639,7 +2646,7 @@ export function BookingDialog(props: {
                         ? t("Saving…")
                         : payAmount > 0
                           ? t("Collect {amt} and continue to check-in", {
-                              amt: `${cur()}${inr(payAmount)}`,
+                              amt: foreign ? `${payCurrency} ${payAmount}` : `${cur()}${inr(payAmount)}`,
                             })
                           : t("Continue to check-in")}
                     </Button>

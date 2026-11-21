@@ -1225,7 +1225,7 @@ def post_allowance(folio_name: str, amount: float, reason: str,
 	return folio.name
 
 
-def void_charge(folio_name: str, charge_row: str, reason: str = "") -> dict:
+def void_charge(folio_name: str, charge_row: str, reason: str = "", *, correction: dict | None = None) -> dict:
 	"""Void a wrong charge line on an OPEN folio - the correction path for
 	a mis-posted bill (wrong amount, duplicate, wrong guest). The line stays
 	on the folio and a line of the opposite sign follows it (same charge
@@ -1271,6 +1271,7 @@ def void_charge(folio_name: str, charge_row: str, reason: str = "") -> dict:
 		"reversal_of": row.name,
 		"void_reason": reason.strip(),
 		"voided_by": frappe.session.user,
+		**(correction or {}),
 	})
 	_recalculate(folio)
 	folio.save(ignore_permissions=True)

@@ -18,7 +18,11 @@
   "transaction_code",
   "gl_code",
   "refund_of",
-  "idempotency_key"
+  "idempotency_key",
+  "exchange_rate_date",
+  "repost_of",
+  "correction_approved_by",
+  "correction_signature"
  ],
  "fields": [
   {
@@ -108,6 +112,35 @@
    "read_only": 1,
    "no_copy": 1,
    "description": "The payment line this refund gives money back on."
+  },
+  {
+   "fieldname": "exchange_rate_date",
+   "fieldtype": "Date",
+   "label": "Effective Exchange Rate Date",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "repost_of",
+   "fieldtype": "Data",
+   "label": "Reposted Payment",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "correction_approved_by",
+   "fieldtype": "Link",
+   "label": "Correction Approved By",
+   "read_only": 1,
+   "no_copy": 1,
+   "options": "User"
+  },
+  {
+   "fieldname": "correction_signature",
+   "fieldtype": "Data",
+   "label": "Correction Request Fingerprint",
+   "read_only": 1,
+   "no_copy": 1
   }
  ],
  "grid_page_length": 50,
