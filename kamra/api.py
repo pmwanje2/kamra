@@ -6527,6 +6527,7 @@ def set_agreed_rate(reservation: str, agreed_rate: float, reason_code: str,
 			approver = verify_supervisor(doc.property, supervisor, pin,
 			                             requester=frappe.session.user)
 	_require_price_confirmation(plan, confirm_price)
+	doc.flags.kamra_agreed_rate_override = True
 	# the role and limit checks above are the permission; Revenue Manager
 	# has no write DocPerm on Reservation
 	doc.save(ignore_permissions=True)
