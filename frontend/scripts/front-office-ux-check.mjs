@@ -31,7 +31,31 @@ await check('business date and pending EOD in header',async()=>{await page.locat
 await check('authoritative room caption',async()=>assert.ok(await page.locator('tr').filter({hasText:'Morning Guest'}).getByText(room,{exact:true}).isVisible()))
 await check('overdue tab',async()=>{await page.getByRole('tab',{name:/Overdue/}).click();await page.locator('main').getByText('Morning Guest',{exact:true}).waitFor()})
 await check('booking validation messages and focus',async()=>{
- await page.getByRole('button',{name:'New booking',exact:true}).click();const dialog=page.getByRole('dialog'); await dialog.locator('input[type=tel]').first().fill('123'); const confirm=dialog.getByRole('button',{name:'Confirm booking'});assert.ok(await confirm.isEnabled(),'Confirm must explain all blockers'); let writes=0;page.on('request',r=>{if(r.url().endsWith('.create_booking')) writes++});await confirm.click();const errors=dialog.getByRole('region',{name:'Booking messages'});await errors.waitFor();await errors.getByRole('button',{name:/guest name/i}).click();assert.equal(await page.locator(':focus').getAttribute('aria-invalid'),'true');assert.equal(writes,0); await page.keyboard.press('Escape')
+ const open = page.getByRole('button', {name:'New booking', exact:true})
+ const priced = page.waitForResponse(r => r.url().includes('kamra.api.get_quote') && r.ok())
+ await open.click()
+ const dialog = page.getByRole('dialog')
+ await priced
+ await dialog.locator('input[type=tel]').first().fill('123')
+ const confirm = dialog.getByRole('button', {name:'Confirm booking'})
+ assert.ok(await confirm.isEnabled(), 'Confirm must explain all blockers')
+ let writes = 0
+ const countWrites = r => { if (r.url().endsWith('.create_booking')) writes++ }
+ page.on('request', countWrites)
+ try {
+   await confirm.click()
+   const errors = dialog.getByRole('region', {name:'Booking messages'})
+   await errors.waitFor()
+   assert.equal(await errors.getByRole('button').count(), 2)
+   assert.ok(await errors.getByRole('button', {name:/guest phone/i}).isVisible())
+   await errors.getByRole('button', {name:/guest name/i}).click()
+   assert.equal(await page.locator(':focus').getAttribute('aria-invalid'), 'true')
+   assert.equal(await page.locator(':focus').getAttribute('id'), 'booking-guest')
+   assert.ok(await page.evaluate(() => document.scrollingElement.scrollWidth <= innerWidth))
+   assert.equal(writes, 0)
+   await page.keyboard.press('Escape')
+   await dialog.waitFor({state:'detached'})
+ } finally { page.off('request', countWrites) }
 })
 await check('linked clean primary action',async()=>{await page.goto('/housekeeping-board');await page.getByRole('button',{name:new RegExp(room)}).first().click();const sent=page.waitForResponse(r=>r.url().endsWith('.hk_update_task'));sent.catch(()=>{});await page.getByRole('button',{name:'Complete Checkout Clean',exact:true}).click();assert.equal((await (await sent).json()).message.status,'Done')})
 await check('flash defaults to the business day and states its basis', async () => {
@@ -43,6 +67,18 @@ await check('flash defaults to the business day and states its basis', async () 
  const earlier = new Date(message.business_date + 'T12:00:00Z'); earlier.setUTCDate(earlier.getUTCDate()-1)
  await page.getByLabel('Report date').fill(earlier.toISOString().slice(0,10))
  await page.locator('main').getByText('Actual', {exact:true}).waitFor()
+})
+await check('guests left owing on a phone', async () => {
+ await page.setViewportSize({width:375,height:812})
+ await page.route('**/api/method/kamra.receivables.guests_owing*', route => route.fulfill({json:{message:[{
+   folio,guest_name:'Departed Guest',reservation:'CONFIRMED-RESERVATION-000042',balance:100,status:'Checked Out',
+   check_in_date:'2031-03-12',check_out_date:'2031-03-15',
+ }]}}))
+ await page.goto('/billing')
+ const row = page.getByRole('row').filter({hasText:'Departed Guest'})
+ await row.waitFor()
+ assert.ok(await row.evaluate(el=>el.getBoundingClientRect().right <= innerWidth), 'owing row must pop in')
+ await row.getByText('Departed Guest').click(); await page.waitForURL('**/billing/'+folio)
 })
 await check('localized tax copy',()=>{for(const file of ['Billing.tsx','BanquetDocument.tsx','configs.ts'])assert.doesNotMatch(readFileSync(new URL(`../src/screens/${file}`,import.meta.url),'utf8'),/\bGST\b/)})
 } finally {await browser.close()}
