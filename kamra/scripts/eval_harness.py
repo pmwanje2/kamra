@@ -7655,6 +7655,7 @@ def t326():
 	api.add_folio_charge(folio, "Food & Beverage", "Dinner", 1000, gst_rate=5)
 	api.add_folio_charge(folio, "Spa", "Massage", 2000, gst_rate=18)
 	inv = api.folio_invoice(folio)
+	assert inv["stay"]["room_number"] == frappe.db.get_value("Room", inv["stay"]["room"], "room_number")
 	ctx = pack_for(P).invoice_context(frappe.get_cached_doc("Property", P))
 	comps = [c for c, _ in ctx["split"]]
 	ratios = {c: float(r) for c, r in ctx["split"]}
