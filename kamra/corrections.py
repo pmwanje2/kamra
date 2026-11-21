@@ -31,8 +31,17 @@ def _row(doc, name):
 	frappe.throw("Select a line on this folio.")
 
 
-def _block(doc, row, charge):
-	day = str(row.posting_date)
+def _original_entry(doc, row):
+	return frappe.db.get_value(
+		"Folio Ledger Entry",
+		{"folio": doc.name, "source_doctype": "Folio Payment", "source_name": row.name, "credit": [">", 0]},
+		["name", "session"],
+		as_dict=True,
+		order_by="creation asc",
+	)
+
+
+def _block(doc, row, charge, entry):
 	if (
 		doc.status != "Open"
 		or doc.invoice_number
@@ -40,17 +49,10 @@ def _block(doc, row, charge):
 		or (
 			doc.reservation and frappe.db.get_value("Reservation", doc.reservation, "status") == "Checked Out"
 		)
-		or day != str(get_business_date(doc.property))
-		or frappe.db.exists(
-			"Night Audit Run",
-			{
-				"property": doc.property,
-				"business_date": day,
-				"status": ["in", ["Completed", "Completed with Warnings"]],
-			},
-		)
 	):
 		return FISCAL
+	if str(row.posting_date) > str(get_business_date(doc.property)):
+		return "Ask Finance to review the future posting date."
 	if charge:
 		if row.get("reversal_of") or any(c.get("reversal_of") == row.name for c in doc.charges):
 			return "This charge is a reversal or has already been voided."
@@ -60,29 +62,48 @@ def _block(doc, row, charge):
 		return "Return a security deposit through the stay's deposit record."
 	elif row.payment_kind == "Refund" or row.amount <= 0:
 		return "A reversal cannot itself be reversed here."
-	else:
-		entry = frappe.db.get_value(
-			"Folio Ledger Entry",
-			{
-				"folio": doc.name,
-				"source_doctype": "Folio Payment",
-				"source_name": row.name,
-				"credit": [">", 0],
-			},
-			["name", "session"],
-			as_dict=True,
-			order_by="creation asc",
-		)
-		if not entry:
-			return "Ask Finance to reconcile this payment with its missing ledger entry."
-		if entry.session and frappe.db.get_value("Cashier Session", entry.session, "status") != "Open":
-			return JOURNAL
+	elif not entry:
+		return "Ask Finance to reconcile this payment with its missing ledger entry."
 	return ""
 
 
 def options(doc, name):
 	row, charge = _row(doc, name)
-	blocked = _block(doc, row, charge)
+	entry = None if charge else _original_entry(doc, row)
+	out = _options(doc, row, charge, entry, _open_original_session(doc, entry))
+	from kamra.authz import supervisors_for
+
+	out["supervisors"] = (
+		supervisors_for(doc.property, exclude=frappe.session.user)
+		if any(a["requires"] or any(c.requires_supervisor for c in a["reason_codes"]) for a in out["actions"])
+		else []
+	)
+	return out
+
+
+def _open_original_session(doc, entry, *, lock=False):
+	if (
+		entry
+		and entry.session
+		and frappe.db.get_value(
+			"Cashier Session", {"name": entry.session, "property": doc.property}, "status", for_update=lock
+		)
+		== "Open"
+	):
+		return entry.session
+
+
+def _options(doc, row, charge, entry, session):
+	name = row.name
+	blocked = _block(doc, row, charge, entry)
+	prior = str(row.posting_date) < str(get_business_date(doc.property)) or frappe.db.exists(
+		"Night Audit Run",
+		{
+			"property": doc.property,
+			"business_date": row.posting_date,
+			"status": ["in", ["Completed", "Completed with Warnings"]],
+		},
+	)
 	residual = (
 		0
 		if charge
@@ -95,6 +116,12 @@ def options(doc, name):
 		why = blocked or (
 			"There is no guest credit to return." if action == "partial_refund" and doc.balance >= 0 else ""
 		)
+		if (
+			not why
+			and action in ("reverse_payment", "reclassify_tender")
+			and (prior or (entry.session and not session))
+		):
+			why = JOURNAL
 		if why:
 			denied.append(dict(id=action, reason=why))
 		else:
@@ -104,7 +131,7 @@ def options(doc, name):
 				dict(
 					id=action,
 					label=LABELS[action],
-					requires=[] if charge else ["supervisor_user", "supervisor_pin"],
+					requires=[] if charge and not prior else ["supervisor_user", "supervisor_pin"],
 					reason_codes=codes,
 				)
 			)
@@ -115,8 +142,8 @@ def options(doc, name):
 		can_void="void_charge" in ids,
 		can_reverse="reverse_payment" in ids,
 		can_reclassify="reclassify_tender" in ids,
-		requires_supervisor=bool(actions and not charge),
-		blocked_reason=blocked,
+		requires_supervisor=any(a["requires"] for a in actions),
+		blocked_reason=blocked or (denied[0]["reason"] if denied and not actions else ""),
 		residual=residual,
 		refund_cap=min(residual, max(0, -doc.balance)),
 	)
@@ -154,8 +181,16 @@ def correct(folio, name, action, code, note, key, pin, supervisor_user, supervis
 	if prior:
 		if prior.get("correction_signature") != signature:
 			frappe.throw("This retry key belongs to another request.")
-		return dict(ok=True, idempotent_replay=1, reversal=prior.name, balance=doc.balance)
-	opts = options(doc, name)
+		result = dict(ok=True, idempotent_replay=1, balance=doc.balance)
+		result["refund" if action == "partial_refund" else "reversal"] = prior.name
+		if action == "reclassify_tender":
+			result["repost"] = next(
+				p.name for p in doc.payments if p.repost_of == name and p.idempotency_key == key + ":repost"
+			)
+		return result
+	entry = None if charge else _original_entry(doc, row)
+	session = _open_original_session(doc, entry, lock=True)
+	opts = _options(doc, row, charge, entry, session)
 	allowed = next((a for a in opts["actions"] if a["id"] == action), None)
 	if not allowed:
 		frappe.throw(
@@ -182,11 +217,9 @@ def correct(folio, name, action, code, note, key, pin, supervisor_user, supervis
 	repost = action == "reclassify_tender"
 	if repost:
 		modes = payment_modes(pack_for(doc.property))
-		if (
-			destination == row.mode
-			or destination not in modes
-			or (destination == "Foreign Cash" and not row.fx_amount)
-		):
+		if row.fx_amount:
+			modes = [*modes, "Foreign Cash"]
+		if destination == row.mode or destination not in modes:
 			frappe.throw("Choose a different valid destination tender.")
 		if any(p.get("idempotency_key") == key + ":repost" for p in doc.payments):
 			frappe.throw("Repost retry key already used.")
@@ -208,6 +241,11 @@ def correct(folio, name, action, code, note, key, pin, supervisor_user, supervis
 		and frappe.db.get_value("Reservation", doc.reservation, "status")
 		in ("Held", "Pending Payment", "Confirmed")
 	)
+	# Drawerless bank entries stay drawerless. A cash payout or cash repost
+	# needs a live drawer even when the original shift has closed.
+	cash_modes = ("Cash", "Foreign Cash")
+	refund_session = session or (require_open_session(doc.property) if mode in cash_modes else None)
+	repost_session = session or (require_open_session(doc.property) if destination in cash_modes else None)
 	result = _refund_folio_payment(
 		folio,
 		amount,
@@ -218,6 +256,7 @@ def correct(folio, name, action, code, note, key, pin, supervisor_user, supervis
 		ledger="Deposit" if advance else "Guest",
 		correction={**metadata, **fx},
 		bookkeeping_action=None if is_refund else action,
+		session=refund_session,
 	)
 	if repost:
 		doc.reload()
@@ -241,12 +280,20 @@ def correct(folio, name, action, code, note, key, pin, supervisor_user, supervis
 		)
 		_recalculate(doc)
 		doc.save()
-		sess = require_open_session(doc.property)
 		pay = doc.payments[-1]
-		record_payment_ledger(doc, pay.as_dict(), session=sess, ledger="Deposit" if advance else "Guest")
-		record_cashier_txn(
-			doc.property, "Payment", destination, amount, folio=folio, reference=why, session=sess
+		record_payment_ledger(
+			doc, pay.as_dict(), session=repost_session, ledger="Deposit" if advance else "Guest"
 		)
+		if repost_session:
+			record_cashier_txn(
+				doc.property,
+				"Payment",
+				destination,
+				amount,
+				folio=folio,
+				reference=why,
+				session=repost_session,
+			)
 		result.update(repost=pay.name, balance=doc.balance)
 	elif advance:
 		paid = frappe.db.get_value("Reservation", doc.reservation, "advance_paid", for_update=True) or 0

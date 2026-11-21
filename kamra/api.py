@@ -1860,7 +1860,7 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
                           ledger: str | None = None,
                           refund_of: str | None = None,
                           idempotency_key: str | None = None, correction: dict | None = None,
-                          bookkeeping_action: str | None = None):
+                          bookkeeping_action: str | None = None, session: str | None = None):
 	"""The one refund writer (folio row, till, ledger). Not whitelisted:
 	ledger lets a security-deposit refund release the Deposit ledger -
 	callers that pass it have already checked the deposit's balance.
@@ -1909,13 +1909,14 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 	from kamra.localization import default_currency, pack_for
 	currency = (frappe.get_cached_value("Property", doc.property, "currency")
 	            or default_currency(pack_for(doc.property)))
-	sess = None
-	try:
-		sess = require_open_session(doc.property)
-	except Exception:
-		if "Kamra Agent" not in frappe.get_roles() and \
-		   frappe.session.user != "Administrator":
-			raise
+	sess = session
+	if correction is None:
+		try:
+			sess = require_open_session(doc.property)
+		except Exception:
+			if "Kamra Agent" not in frappe.get_roles() and \
+			   frappe.session.user != "Administrator":
+				raise
 	doc.append("payments", {
 		"posting_date": bd,
 		"payment_kind": "Refund",
@@ -1931,9 +1932,10 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 	_recalculate(doc)
 	doc.save()
 	pay = doc.payments[-1]
-	record_cashier_txn(
-		doc.property, "Refund", mode, -float(amount),
-		folio=doc.name, reference=str(reason_text)[:140], session=sess)
+	if sess or correction is None:
+		record_cashier_txn(
+			doc.property, "Refund", mode, -float(amount),
+			folio=doc.name, reference=str(reason_text)[:140], session=sess)
 	try:
 		from kamra.ledger import record_payment_ledger
 		record_payment_ledger(doc, pay.as_dict(), session=sess, ledger=ledger)
@@ -1962,7 +1964,7 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 		log_action("folio_refund", "Folio", doc.name, doc.property,
 		           rationale=f"Refund {money_text(doc.property, amount)} by {mode}: "
 		                     f"{str(reason_text)[:100]}")
-	elif release_advance:
+	elif release_advance or correction:
 		from kamra.localization import money_text
 		from kamra.savings import log_action
 		log_action("folio_refund", "Folio", doc.name, doc.property,
@@ -4835,7 +4837,7 @@ def walk_in(property: str, room_type: str, room: str, check_out_date: str,
 	if amount < 0:
 		frappe.throw(_("Payment amount cannot be negative."))
 	modes = payment_modes(pack_for(property))
-	if amount and payment_mode not in modes:
+	if amount and payment_mode not in modes and not (payment_mode == "Foreign Cash" and currency):
 		frappe.throw(_("Pick a payment mode: {0}.").format(", ".join(modes)))
 	validate_id_type(property, id_type)
 

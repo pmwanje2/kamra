@@ -16,6 +16,7 @@ type Action = {
 type Options = {
   actions: Action[]
   blocked: { id: string; reason: string }[]
+  supervisors: { user: string; full_name: string }[]
   refund_cap: number
 }
 export default function RowCorrection({
@@ -27,7 +28,7 @@ export default function RowCorrection({
   folio: string
   row: string
   modes: string[]
-  act: (fn: () => Promise<unknown>) => Promise<void>
+  act: (fn: () => Promise<unknown>, onError: (message: string) => void) => Promise<void>
 }) {
   const { t } = useT()
   const [options, setOptions] = useState<Options>(),
@@ -46,6 +47,7 @@ export default function RowCorrection({
       action?.requires.includes("supervisor_user") ||
       action?.reason_codes.find((c) => c.name === code)?.requires_supervisor
   const choose = (a?: Action) => {
+    setError("")
     setId(a?.id ?? "")
     setCode(a?.reason_codes[0]?.name ?? "")
   }
@@ -75,6 +77,17 @@ export default function RowCorrection({
     }
   }
   async function submit() {
+    if (!options || loading) return
+    const problems: string[] = []
+    if (!code) problems.push(t("Choose a reason code."))
+    if (!note.trim()) problems.push(t("Enter a reason note."))
+    if (id === "reclassify_tender" && !mode) problems.push(t("Choose the destination tender."))
+    if (id === "partial_refund" && !(Number(amount) > 0 && Number(amount) <= options.refund_cap && /^\d+(?:\.\d{1,2})?$/.test(amount)))
+      problems.push(t("Enter a positive refund amount up to {cap}, with at most two decimals.", {cap: options.refund_cap}))
+    if (approvals && !user) problems.push(options.supervisors.length ? t("Choose an approving supervisor.") : t("No eligible supervisor is available for this property."))
+    if (approvals && !pin.trim()) problems.push(t("Enter the supervisor PIN."))
+    setError(problems.join(" "))
+    if (problems.length) return
     setLoading(true)
     try {
       await act(async () => {
@@ -92,7 +105,7 @@ export default function RowCorrection({
         })
         close()
         setKey(newIdempotencyKey())
-      })
+      }, setError)
     } finally {
       setLoading(false)
     }
@@ -108,9 +121,9 @@ export default function RowCorrection({
           {t("Correct…")}
         </button>
       )}
-      {error && <p role="alert">{error}</p>}
+      {error && <p role="alert" className="rounded border border-red-200 bg-red-50 p-2 text-red-800">{error}</p>}
       {options && (
-        <div className="grid gap-2 rounded border p-2">
+        <div className="grid gap-2 rounded border p-2 [&_input]:min-w-0 [&_input]:rounded [&_input]:border [&_input]:p-2 [&_select]:min-w-0 [&_select]:rounded [&_select]:border [&_select]:p-2">
           {[...new Set(options.blocked.map((b) => b.reason))].map((b) => (
             <p key={b}>{t(b)}</p>
           ))}
@@ -171,12 +184,14 @@ export default function RowCorrection({
               )}
               {!!approvals && (
                 <>
-                  <input
+                  <select
                     aria-label={t("Supervisor user")}
-                    placeholder={t("Supervisor user")}
                     value={user}
                     onChange={(e) => setUser(e.target.value)}
-                  />
+                  >
+                    <option value="">{t("Select a supervisor")}</option>
+                    {options.supervisors.map(s => <option key={s.user} value={s.user}>{s.full_name} ({s.user})</option>)}
+                  </select>
                   <input
                     aria-label={t("Supervisor PIN")}
                     type="password"
@@ -188,24 +203,15 @@ export default function RowCorrection({
                 </>
               )}
               <button
-                disabled={
-                  loading ||
-                  !note.trim() ||
-                  !code ||
-                  (!!approvals && (!user || !pin)) ||
-                  (id === "partial_refund" &&
-                    !(
-                      Number(amount) > 0 && Number(amount) <= options.refund_cap
-                    )) ||
-                  (id === "reclassify_tender" && !mode)
-                }
+                className="rounded bg-brand-700 px-3 py-2 font-semibold text-white disabled:opacity-50"
+                disabled={loading}
                 onClick={submit}
               >
                 {t("Confirm correction")}
               </button>
             </>
           )}
-          <button onClick={close}>{t("Close")}</button>
+          <button disabled={loading} onClick={close}>{t("Close")}</button>
         </div>
       )}
     </div>

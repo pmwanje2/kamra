@@ -410,7 +410,7 @@ export default function FolioView() {
   /** Params helper kept for call sites; unlock happens in act(). */
   const withPin = (params: Record<string, unknown>) => params
 
-  async function act(fn: () => Promise<unknown>) {
+  async function act(fn: () => Promise<unknown>, onError: (message: string) => void = setError) {
     setBusy(true)
     setError(null)
     try {
@@ -418,7 +418,7 @@ export default function FolioView() {
       await fn()
       load()
     } catch (e) {
-      setError(serverError(e))
+      onError(serverError(e))
     } finally {
       setBusy(false)
     }
@@ -1380,7 +1380,7 @@ export default function FolioView() {
                       )}
                     </span>
                     <span className={Number(p.amount) < 0 ? "font-medium text-rose-600" : ""}>{property.currency} {Number(p.amount).toLocaleString(undefined,{maximumFractionDigits:2})}</span>
-                    {canRequestCorrection && <RowCorrection folio={folio.name} row={p.name} modes={loc.payment_modes.filter(m=>m!==p.mode)} act={act} />}
+                    {canRequestCorrection && <RowCorrection folio={folio.name} row={p.name} modes={(Number(p.fx_amount) > 0 ? [...loc.payment_modes, "Foreign Cash"] : loc.payment_modes).filter(m => m !== p.mode)} act={act} />}
                   </li>
                 ))}
               </ul>

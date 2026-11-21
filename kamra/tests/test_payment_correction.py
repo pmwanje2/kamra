@@ -168,7 +168,10 @@ class CorrectionTests(AuditTestCase):
 		self.assertEqual(api.correct_folio_payment(**params)["idempotent_replay"], 1)
 		self.assertFalse(self.options(row)["can_void"])
 		frappe.db.set_value("Cashier Session", self.session, "status", "Closed")
-		self.assertIn("Finance", self.options()["blocked_reason"])
+		self.assertIn(
+			"Journal Entry",
+			next(b["reason"] for b in self.options()["blocked"] if b["id"] == "reverse_payment"),
+		)
 
 	def test_bookkeeping_reclass_is_not_announced_as_money_paid_to_guest(self):
 		user = self.supervisor()

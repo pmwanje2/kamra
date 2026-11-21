@@ -99,9 +99,10 @@ class SettlementRateTests(AuditTestCase):
 		self.assertFalse(frappe.get_doc("Folio", folio).payments)
 
 	def test_walk_in_accepts_explicit_foreign_cash(self):
+		from frappe.utils import add_days, nowdate
+
 		from kamra import cashier
 		from kamra.tests.audit_fixtures import make_room
-		from frappe.utils import add_days, nowdate
 
 		rt = make_room_type(PROP_A)
 		room = make_room(PROP_A, rt, "103")
