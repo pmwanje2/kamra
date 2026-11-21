@@ -97,3 +97,25 @@ class SettlementRateTests(AuditTestCase):
 		with self.assertRaisesRegex(frappe.ValidationError, "published rate changed"):
 			api.add_folio_payment(folio, "Cash", 2, currency="EUR", quote_id=q["quote_id"])
 		self.assertFalse(frappe.get_doc("Folio", folio).payments)
+
+	def test_walk_in_accepts_explicit_foreign_cash(self):
+		from kamra import cashier
+		from kamra.tests.audit_fixtures import make_room
+		from frappe.utils import add_days, nowdate
+
+		rt = make_room_type(PROP_A)
+		room = make_room(PROP_A, rt, "103")
+		self.rate(TODAY, 4100)
+		cashier.open_session(PROP_A, 0)
+		r = api.walk_in(
+			PROP_A,
+			rt,
+			room,
+			add_days(nowdate(), 1),
+			"FX Walk In",
+			defer_check_in=1,
+			payment_mode="Foreign Cash",
+			payment_amount=2,
+			currency="EUR",
+		)
+		self.assertEqual(r["paid"], 8200)

@@ -25,3 +25,9 @@ for (const label of [
   assert.ok(preview.includes(label), label)
 assert.ok(preview.includes("formatDate("))
 assert.ok(src("screens/FolioView.tsx").includes("<RowCorrection"))
+
+const correction = src("components/RowCorrection.tsx")
+assert.match(correction, /<button\s+[^>]*disabled=\{loading\}[^>]*onClick=\{submit\}/s,
+  "Confirm must explain missing inputs on click")
+assert.match(correction, /<select\s+[^>]*aria-label=\{t\("Supervisor user"\)\}/s,
+  "Pick an eligible supervisor by name")

@@ -28,8 +28,7 @@ class CorrectionTests(AuditTestCase):
 		self.session = cashier.open_session(PROP_A, 0)["name"]
 		self.row = api.add_folio_payment(self.folio, "Cash", 100)["payments"][-1]["name"]
 
-	def supervisor(self):
-		user = "k2-supervisor@example.test"
+	def supervisor(self, user="k2-supervisor@example.test"):
 		frappe.get_doc(
 			dict(
 				doctype="User",
@@ -60,15 +59,19 @@ class CorrectionTests(AuditTestCase):
 		self.assertTrue(self.options()["can_reclassify"])
 		before = frappe.db.get_value("Folio", self.folio, "balance")
 		user = self.supervisor()
+		receipts = []
 		for _ in range(2):
-			self.submit(
-				"reclassify_tender",
-				"REV-ACCOUNT",
-				"one",
-				destination_mode="Card",
-				supervisor_user=user,
-				supervisor_pin="8394",
+			receipts.append(
+				self.submit(
+					"reclassify_tender",
+					"REV-ACCOUNT",
+					"one",
+					destination_mode="Card",
+					supervisor_user=user,
+					supervisor_pin="8394",
+				)
 			)
+		self.assertEqual(receipts[0]["repost"], receipts[1].get("repost"))
 		doc = frappe.get_doc("Folio", self.folio)
 		self.assertEqual(doc.balance, before)
 		self.assertEqual(
@@ -109,14 +112,10 @@ class CorrectionTests(AuditTestCase):
 				self.options()
 			with self.assertRaises(frappe.PermissionError):
 				self.submit("reverse_payment", "REV-ERR", "no")
-		for dt, name, field, value in [
-			("Property", PROP_A, "business_date", d(1)),
-			("Folio", self.folio, "status", "Closed"),
-		]:
-			frappe.db.set_value(dt, name, field, value)
-			self.assertIn("Credit Note", self.options()["blocked_reason"])
-			with self.assertRaises(frappe.ValidationError):
-				self.submit("reverse_payment", "REV-ERR", "no")
+		frappe.db.set_value("Folio", self.folio, "status", "Closed")
+		self.assertIn("Credit Note", self.options()["blocked_reason"])
+		with self.assertRaisesRegex(frappe.ValidationError, "KMR-CN-001"):
+			self.submit("reverse_payment", "REV-ERR", "no")
 
 	def test_foreign_drawer_reclassification_moves_original_home_value(self):
 		from kamra import ledger
@@ -199,3 +198,106 @@ class CorrectionTests(AuditTestCase):
 		)
 		p = frappe.get_doc("Folio", self.folio).payments[-1]
 		self.assertEqual((p.amount, p.currency, p.fx_amount or 0), (126, ledger.home_currency(PROP_A), 0))
+
+	def test_requester_with_other_drawer_corrects_original_drawer(self):
+		approver = self.supervisor()
+		operator = self.supervisor("different-cashier@example.test")
+		frappe.set_user(operator)
+		try:
+			other = cashier.open_session(PROP_A, 0)["name"]
+			r = self.submit(
+				"reclassify_tender",
+				"REV-ACCOUNT",
+				"other",
+				destination_mode="Card",
+				supervisor_user=approver,
+				supervisor_pin="8394",
+			)
+		finally:
+			frappe.set_user("Administrator")
+		self.assertFalse(frappe.db.exists("Cashier Transaction", {"session": other, "folio": self.folio}))
+		for name in [r["reversal"], r["repost"]]:
+			self.assertEqual(
+				frappe.db.get_value("Folio Ledger Entry", {"source_name": name}, "session"), self.session
+			)
+		totals = cashier._recompute_session_totals(self.session)
+		self.assertEqual((totals["cash"], totals["card"]), (0, 100))
+
+	def test_prior_receipt_guides_journal_but_refunds_credit_on_current_day(self):
+		frappe.db.set_value("Property", PROP_A, "business_date", d(1))
+		frappe.db.set_value("Cashier Session", self.session, "status", "Closed")
+		current = cashier.open_session(PROP_A, 0)["name"]
+		opts = self.options()
+		self.assertEqual([a["id"] for a in opts["actions"]], ["partial_refund"])
+		for action in ("reverse_payment", "reclassify_tender"):
+			with self.assertRaisesRegex(frappe.ValidationError, "Journal Entry"):
+				self.submit(action, "REV-ACCOUNT", "stop")
+		refund = self.submit(
+			"partial_refund",
+			"REF-OVER",
+			"refund",
+			refund_amount=25,
+			supervisor_user=self.supervisor(),
+			supervisor_pin="8394",
+		)["refund"]
+		self.assertEqual(str(frappe.db.get_value("Folio Payment", refund, "posting_date")), d(1))
+		self.assertEqual(
+			frappe.db.get_value("Folio Ledger Entry", {"source_name": refund}, "session"), current
+		)
+
+	def test_prior_charge_needs_supervisor_and_voids_today(self):
+		api._post_folio_charge(self.folio, "Misc", "Duplicate", 55)
+		self.row = frappe.get_doc("Folio", self.folio).charges[-1].name
+		frappe.db.set_value("Property", PROP_A, "business_date", d(1))
+		self.assertTrue(self.options()["can_void"])
+		with self.assertRaises(frappe.PermissionError):
+			self.submit("void_charge", "VOID-DUP", "prior-charge")
+		self.submit(
+			"void_charge",
+			"VOID-DUP",
+			"prior-charge",
+			supervisor_user=self.supervisor(),
+			supervisor_pin="8394",
+		)
+		self.assertEqual(str(frappe.get_doc("Folio", self.folio).charges[-1].posting_date), d(1))
+
+	def test_foreign_wire_to_foreign_cash_preserves_notes(self):
+		from kamra import ledger
+
+		ledger.upsert_exchange_rate(PROP_A, "EUR", 42, 44)
+		self.row = api.add_folio_payment(self.folio, "Bank Transfer", 3, currency="EUR")["payments"][-1][
+			"name"
+		]
+		self.submit(
+			"reclassify_tender",
+			"REV-ACCOUNT",
+			"notes",
+			destination_mode="Foreign Cash",
+			supervisor_user=self.supervisor(),
+			supervisor_pin="8394",
+		)
+		p = frappe.get_doc("Folio", self.folio).payments[-1]
+		self.assertEqual((p.mode, p.currency, p.fx_amount, p.amount), ("Foreign Cash", "EUR", 3, 126))
+		totals = cashier._recompute_session_totals(self.session)
+		self.assertEqual((totals["foreign_cash"], totals["other"]), (126, 0))
+
+	def test_options_offer_named_eligible_supervisors(self):
+		user = self.supervisor()
+		self.assertIn(user, [s["user"] for s in self.options().get("supervisors", [])])
+
+	def test_governed_prior_advance_refund_has_audit_record(self):
+		res = make_reservation(PROP_A, make_room_type(PROP_A, "ADV"), d(1), d(3))
+		self.folio = api.record_advance(res.name, 500)["folio"]
+		self.row = frappe.get_doc("Folio", self.folio).payments[0].name
+		frappe.db.set_value("Property", PROP_A, "business_date", d(1))
+		with patch("kamra.savings.log_action") as log:
+			self.submit(
+				"partial_refund",
+				"REF-OVER",
+				"payback",
+				refund_amount=50,
+				supervisor_user=self.supervisor(),
+				supervisor_pin="8394",
+			)
+		self.assertIn("folio_refund", [c.args[0] for c in log.call_args_list])
+		self.assertEqual(frappe.db.get_value("Reservation", res.name, "advance_paid"), 450)
