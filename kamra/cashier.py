@@ -183,20 +183,10 @@ def _recompute_session_totals(session: str, persist: bool = True) -> dict[str, f
 			drops += abs(amt)
 		elif kind == "Petty Cash":
 			petty += abs(amt)
-		elif kind in ("Payment", "Exchange"):
+		elif kind in ("Payment", "Exchange", "Refund"):
 			if mode == "Foreign Cash":
 				foreign += amt  # home value of foreign notes; not in expected cash
 			elif mode in CASH_MODES:
-				cash += amt
-			elif mode in CARD_MODES:
-				card += amt
-			elif mode in instant_modes:
-				upi += amt
-			else:
-				other += amt
-		elif kind == "Refund":
-			# refunds reduce the mode bucket (amount stored negative)
-			if mode in CASH_MODES:
 				cash += amt
 			elif mode in CARD_MODES:
 				card += amt

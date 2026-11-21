@@ -57,9 +57,6 @@ class CorrectionTests(AuditTestCase):
 		)
 
 	def test_reclassify_replays_once_and_keeps_drawer_and_balance(self):
-		self.assertTrue(
-			callable(getattr(api, "correct_folio_payment", None)), "Missing governed correction action"
-		)
 		self.assertTrue(self.options()["can_reclassify"])
 		before = frappe.db.get_value("Folio", self.folio, "balance")
 		user = self.supervisor()
@@ -92,9 +89,6 @@ class CorrectionTests(AuditTestCase):
 		)
 
 	def test_refund_cap_and_named_approval(self):
-		self.assertTrue(
-			callable(getattr(api, "correct_folio_payment", None)), "Missing governed correction action"
-		)
 		args = dict(refund_amount=25, supervisor_user="Administrator", supervisor_pin="1234")
 		with self.assertRaisesRegex(frappe.PermissionError, "SUPERVISOR_SELF_APPROVAL"):
 			self.submit("partial_refund", "REF-OVER", "two", **args)
@@ -110,9 +104,6 @@ class CorrectionTests(AuditTestCase):
 		self.assertEqual(self.options()["residual"], 75)
 
 	def test_closed_audited_and_role_denial(self):
-		self.assertTrue(
-			callable(getattr(api, "correct_folio_payment", None)), "Missing governed correction action"
-		)
 		with patch("frappe.get_roles", return_value=["Housekeeping"]):
 			with self.assertRaises(frappe.PermissionError):
 				self.options()
@@ -182,16 +173,29 @@ class CorrectionTests(AuditTestCase):
 
 	def test_bookkeeping_reclass_is_not_announced_as_money_paid_to_guest(self):
 		user = self.supervisor()
-		with patch('kamra.webhooks.emit_payment') as emit:
-			self.submit('reclassify_tender', 'REV-ACCOUNT', 'mode', destination_mode='Card',
-			            supervisor_user=user, supervisor_pin='8394')
-			self.assertNotIn('folio.refunded', [call.args[0] for call in emit.call_args_list])
+		with patch("kamra.webhooks.emit_payment") as emit:
+			self.submit(
+				"reclassify_tender",
+				"REV-ACCOUNT",
+				"mode",
+				destination_mode="Card",
+				supervisor_user=user,
+				supervisor_pin="8394",
+			)
+			self.assertNotIn("folio.refunded", [call.args[0] for call in emit.call_args_list])
 
 	def test_foreign_to_domestic_repost_carries_home_tender(self):
 		from kamra import ledger
-		ledger.upsert_exchange_rate(PROP_A, 'EUR', 42, 44)
-		self.row = api.add_folio_payment(self.folio,'Cash',3,currency='EUR')['payments'][-1]['name']
-		self.submit('reclassify_tender','REV-ACCOUNT','card-fix', destination_mode='Card',
-		            supervisor_user=self.supervisor(),supervisor_pin='8394')
-		p = frappe.get_doc('Folio', self.folio).payments[-1]
-		self.assertEqual((p.amount,p.currency,p.fx_amount or 0), (126, ledger.home_currency(PROP_A), 0))
+
+		ledger.upsert_exchange_rate(PROP_A, "EUR", 42, 44)
+		self.row = api.add_folio_payment(self.folio, "Cash", 3, currency="EUR")["payments"][-1]["name"]
+		self.submit(
+			"reclassify_tender",
+			"REV-ACCOUNT",
+			"card-fix",
+			destination_mode="Card",
+			supervisor_user=self.supervisor(),
+			supervisor_pin="8394",
+		)
+		p = frappe.get_doc("Folio", self.folio).payments[-1]
+		self.assertEqual((p.amount, p.currency, p.fx_amount or 0), (126, ledger.home_currency(PROP_A), 0))

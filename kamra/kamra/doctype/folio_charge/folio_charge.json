@@ -27,7 +27,9 @@
   "reservation",
   "reversal_of",
   "void_reason",
-  "voided_by"
+  "voided_by",
+  "correction_approved_by",
+  "correction_signature"
  ],
  "fields": [
   {
@@ -177,6 +179,21 @@
    "no_copy": 1,
    "options": "User",
    "read_only": 1
+  },
+  {
+   "fieldname": "correction_approved_by",
+   "fieldtype": "Link",
+   "label": "Correction Approved By",
+   "read_only": 1,
+   "no_copy": 1,
+   "options": "User"
+  },
+  {
+   "fieldname": "correction_signature",
+   "fieldtype": "Data",
+   "label": "Correction Request Fingerprint",
+   "read_only": 1,
+   "no_copy": 1
   }
  ],
  "grid_page_length": 50,
