@@ -1,3 +1,5 @@
+import { Popin, ResponsiveList } from "../components/ui/responsive-list"
+import { formatDate } from "../lib/utils"
 
 import { useCallback, useEffect, useState } from "react"
 import { MoonStar } from "lucide-react"
@@ -9,7 +11,7 @@ import { Badge } from "../components/ui/badge"
 import { Button } from "../components/ui/button"
 import { cur, fmtMoney, moneyLocale } from "../lib/money"
 import { DataTable } from "../components/ui/data-table"
-import { useT, uiDateLocale } from "../lib/i18n"
+import { useT } from "../lib/i18n"
 import {
   Card,
   CardContent,
@@ -20,21 +22,7 @@ import {
 const inr = (n: unknown) =>
   Number(n ?? 0).toLocaleString(moneyLocale(), { maximumFractionDigits: 0 })
 
-const fmtDate = (d: unknown) =>
-  d
-    ? new Date(String(d) + "T00:00:00").toLocaleDateString(uiDateLocale(moneyLocale()), {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      })
-    : "-"
-const fmtWhen = (d: unknown) =>
-  d
-    ? new Date(String(d).replace(" ", "T").slice(0, 19)).toLocaleString(
-        uiDateLocale(moneyLocale()),
-        { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" },
-      )
-    : ""
+const fmtWhen = (d: unknown) => d ? `${formatDate(String(d).slice(0, 10))} ${String(d).slice(11, 16)}` : ""
 
 type GuestOwing = {
   folio: string; guest_name: string; balance: number; reservation: string
@@ -99,7 +87,7 @@ export default function Billing() {
                   className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 py-1.5"
                 >
                   <span className="w-28 font-medium">
-                    {fmtDate(r.business_date)}
+                    {formatDate(r.business_date)}
                   </span>
                   <span className="flex-1 text-zinc-500">
                     {t("{n} night{s} · {amount} · {folios} folio{s2} · {noShows} no-show{s3}", {
@@ -161,14 +149,14 @@ export default function Billing() {
           </CardHeader>
           <CardContent>
             <DataTable<GuestOwing>
-              id="billing.guests_owing" exportName="guests-left-owing" rows={owing} rowKey={(g) => g.folio}
+              responsive id="billing.guests_owing" exportName="guests-left-owing" rows={owing} rowKey={(g) => g.folio}
               onRowClick={(g) => navigate(`/billing/${encodeURIComponent(g.folio)}`)}
               columns={[
-                { key: "guest_name", label: t("Guest"), render: (g) => <span className="font-medium">{g.guest_name}</span> },
+                { key: "guest_name", importance: "high", label: t("Guest"), render: (g) => <span className="font-medium">{g.guest_name}</span> },
                 { key: "reservation", label: t("Booking"), render: (g) => <span className="font-mono text-xs">{g.reservation}</span> },
-                { key: "check_in_date", label: t("Stay"), render: (g) => <span className="text-xs text-zinc-500">{g.check_in_date} → {g.check_out_date}</span> },
+                { key: "check_in_date", label: t("Stay"), render: (g) => <span className="text-xs text-zinc-500">{formatDate(g.check_in_date)} → {formatDate(g.check_out_date)}</span> },
                 { key: "status", label: t("Status"), render: (g) => <span className="text-xs">{t(g.status)}</span> },
-                { key: "balance", label: t("Owed"), align: "right", render: (g) => <span className="font-medium">{fmtMoney(g.balance)}</span> },
+                { key: "balance", importance: "high", label: t("Owed"), align: "right", render: (g) => <span className="font-medium">{fmtMoney(g.balance)}</span> },
               ]}
             />
           </CardContent>
@@ -179,12 +167,12 @@ export default function Billing() {
         <CardHeader>
           <CardTitle>{t("Folios")}</CardTitle>
           <span className="text-xs text-zinc-400">
-            {t("Click a folio to post charges, settle and print the GST invoice")}
+            {t("Click a folio to post charges, settle and print the tax invoice")}
           </span>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <ResponsiveList className="w-full text-sm">
               <thead>
                 <tr className="border-b border-zinc-200 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
                   <th className="py-2 pr-4">{t("Folio")}</th>
@@ -203,25 +191,25 @@ export default function Billing() {
                     className="cursor-pointer hover:bg-zinc-50"
                     onClick={() => navigate(`/billing/${encodeURIComponent(f.name)}`)}
                   >
-                    <td className="py-2.5 pr-4 font-medium">{f.name}</td>
-                    <td className="py-2.5 pr-4">{String(f.guest_name ?? "-")}</td>
-                    <td className="py-2.5 pr-4">
+                    <Popin label={t("Folio")} importance="high" className="py-2.5 pr-4 font-medium"><a href={`/billing/${encodeURIComponent(f.name)}`} onClick={e => { e.preventDefault(); e.stopPropagation(); navigate(`/billing/${encodeURIComponent(f.name)}`) }}>{f.name}</a></Popin>
+                    <Popin label={t("Guest")} importance="high" className="py-2.5 pr-4">{String(f.guest_name ?? "-")}</Popin>
+                    <Popin label={t("Status")} importance="high" className="py-2.5 pr-4">
                       <Badge tone={f.status === "Open" ? "amber" : "green"}>
                         {t(String(f.status))}
                       </Badge>
-                    </td>
-                    <td className="py-2.5 pr-4 text-zinc-500">
+                    </Popin>
+                    <Popin label={t("Invoice")} importance="low" className="py-2.5 pr-4 text-zinc-500">
                       {String(f.invoice_number ?? "-")}
-                    </td>
-                    <td className="py-2.5 pr-4">{cur()}{inr(f.grand_total)}</td>
-                    <td className="py-2.5 pr-4">{cur()}{inr(f.payments_total)}</td>
-                    <td className="py-2.5 pr-4 font-medium">
+                    </Popin>
+                    <Popin label={t("Total")} importance="medium" className="py-2.5 pr-4">{cur()}{inr(f.grand_total)}</Popin>
+                    <Popin label={t("Paid")} importance="medium" className="py-2.5 pr-4">{cur()}{inr(f.payments_total)}</Popin>
+                    <Popin label={t("Balance")} importance="medium" className="py-2.5 pr-4 font-medium">
                       {Number(f.balance) > 0 ? (
                         <span className="text-amber-600">{cur()}{inr(f.balance)}</span>
                       ) : (
                         <span className="text-emerald-600">{cur()}0</span>
                       )}
-                    </td>
+                    </Popin>
                   </tr>
                 ))}
                 {folios.length === 0 && (
@@ -232,7 +220,7 @@ export default function Billing() {
                   </tr>
                 )}
               </tbody>
-            </table>
+            </ResponsiveList>
           </div>
         </CardContent>
       </Card>

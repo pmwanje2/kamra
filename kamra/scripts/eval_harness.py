@@ -7507,6 +7507,7 @@ def t304():
 @check("a departure's balance counts the nights night audit has not posted, as check-out does, and keeps nothing")
 def t305():
 	from kamra import api
+	frappe.db.set_value("Property", P, "business_date", nowdate())
 	rt, (room, _r2) = _t300_rooms("T3D")
 	res = _t300_in_house(rt, room, "Eval Owes", "+91 70000 30051")
 	folio = frappe.db.get_value("Folio", {"reservation": res.name,
@@ -7641,6 +7642,7 @@ def t326():
 	api.add_folio_charge(folio, "Food & Beverage", "Dinner", 1000, gst_rate=5)
 	api.add_folio_charge(folio, "Spa", "Massage", 2000, gst_rate=18)
 	inv = api.folio_invoice(folio)
+	assert inv["stay"]["room_number"] == frappe.db.get_value("Room", inv["stay"]["room"], "room_number")
 	ctx = pack_for(P).invoice_context(frappe.get_cached_doc("Property", P))
 	comps = [c for c, _ in ctx["split"]]
 	ratios = {c: float(r) for c, r in ctx["split"]}

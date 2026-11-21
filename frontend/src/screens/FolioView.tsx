@@ -1,6 +1,8 @@
+import { ResponsiveList, Popin } from "../components/ui/responsive-list"
 import { Fragment, useCallback, useEffect, useRef, useState } from "react"
 import { ArrowLeft, ArrowRightLeft, Printer, Trash2, X } from "lucide-react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
+import { formatDate, roomLabel } from "../lib/utils"
 import { call, getCurrentProperty, newIdempotencyKey } from "../lib/api"
 import EditableNationality from "../components/EditableNationality"
 import LinkedRecords from "../components/LinkedRecords"
@@ -97,6 +99,7 @@ interface InvoiceData {
     meal_plan: string | null
     room_type: string | null
     room: string | null
+    room_number?: string | null
     company: string | null
     group_booking: string | null
     booked_by_name: string | null
@@ -466,7 +469,7 @@ export default function FolioView() {
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between print:hidden">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 print:hidden">
         <Link
           to="/billing"
           className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-800"
@@ -474,7 +477,7 @@ export default function FolioView() {
           <ArrowLeft className="size-4" aria-hidden />
           {t("Billing")}
         </Link>
-        <div className="flex gap-2">
+        <div className="flex max-w-full flex-wrap gap-2">
           {siblings.length > 1 && (
             <div className="flex flex-wrap items-center gap-1 rounded-lg bg-zinc-100 p-1">
               {siblings.map((s) => {
@@ -911,7 +914,7 @@ export default function FolioView() {
             </Fact>
             {stay.reservation && (<>
             <Fact label={t("Room")}>
-              {stay.room ? stay.room.split("-").pop() : "-"}
+              {roomLabel(stay)}
               {stay.room_type && (
                 <span className="text-zinc-500">
                   {" "}
@@ -1123,7 +1126,7 @@ export default function FolioView() {
                     </div>
                   )
                 })()}
-                <table className="mb-5 w-full text-sm">
+                <ResponsiveList className="mb-5 w-full text-sm">
                   <thead>
                     <tr className="border-b border-zinc-200 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
                       {open && (
@@ -1151,7 +1154,7 @@ export default function FolioView() {
                       <Fragment key={c.name ?? i}>
                         <tr className={voided ? "text-zinc-400" : undefined}>
                           {open && (
-                            <td className="py-2 pr-2 print:hidden">
+                            <Popin label={t("Select")} importance="medium" className="py-2 pr-2 print:hidden">
                               {!voided && <input
                                 type="checkbox"
                                 className="size-3.5 accent-brand-600"
@@ -1166,10 +1169,10 @@ export default function FolioView() {
                                   })
                                 }
                               />}
-                            </td>
+                            </Popin>
                           )}
-                          <td className="py-2 pr-3 text-zinc-500">{c.posting_date}</td>
-                          <td className="py-2 pr-3">
+                          <Popin label={t("Date")} importance="medium" className="py-2 pr-3 text-zinc-500">{formatDate(c.posting_date)}</Popin>
+                          <Popin label={t("Item")} importance="high" className="py-2 pr-3">
                             {/* on the guest's bill an allowance reads as a discount */}
                             <span className="font-medium">{translate(c.charge_type === "Allowance" ? "Discount" : c.charge_type)}</span>
                             {c.description && (
@@ -1185,16 +1188,16 @@ export default function FolioView() {
                                 {c.allowance_serial}
                               </Link>
                             )}
-                          </td>
+                          </Popin>
                           <td className="hidden py-2 pr-3 font-mono text-xs text-zinc-400 print:table-cell">
                             {lines.find((l) => l.row === c.name)?.service_code ?? ""}
                           </td>
-                          <td className="py-2 pr-3 text-right">{inr(c.amount)}</td>
-                          {taxed && <td className="py-2 pr-3 text-right">{c.gst_rate}%</td>}
-                          {taxed && <td className="py-2 pr-3 text-right">{inr(c.gst_amount)}</td>}
-                          <td className="py-2 text-right font-medium">{inr(c.total)}</td>
+                          <Popin label={t("Amount")} importance="medium" className="py-2 pr-3 text-right">{inr(c.amount)}</Popin>
+                          {taxed && <Popin label={`${taxLabel()} %`} importance="medium" className="py-2 pr-3 text-right">{c.gst_rate}%</Popin>}
+                          {taxed && <Popin label={taxLabel()} importance="medium" className="py-2 pr-3 text-right">{inr(c.gst_amount)}</Popin>}
+                          <Popin label={t("Total")} importance="medium" className="py-2 text-right font-medium">{inr(c.total)}</Popin>
                           {editable && (
-                            <td className="relative whitespace-nowrap py-2 pl-3 text-right print:hidden">
+                            <Popin label={t("Actions")} importance="medium" className="relative whitespace-nowrap py-2 pl-3 text-right print:hidden">
                               {c.charge_type !== "Allowance" && !voided &&
                                 (voidFor === c.name ? (
                                   <span className="mr-1.5 inline-flex items-center gap-1">
@@ -1257,14 +1260,14 @@ export default function FolioView() {
                                   {t("Move")}
                                 </button>
                               )}
-                            </td>
+                            </Popin>
                           )}
                         </tr>
                       </Fragment>
                       )
                     })}
                   </tbody>
-                </table>
+                </ResponsiveList>
               </>
             )
           })()}
@@ -1406,7 +1409,7 @@ export default function FolioView() {
                 {folio.payments.map((p, i) => (
                   <li key={i} className="flex justify-between py-1.5">
                     <span>
-                      {p.posting_date} · {translate(p.mode)}
+                      {formatDate(p.posting_date)} · {translate(p.mode)}
                       {p.payment_kind && p.payment_kind !== "Payment" && (
                         <span className={"ml-1.5 rounded px-1.5 py-0.5 text-[10px] font-semibold " +
                           (p.payment_kind === "Refund" ? "bg-rose-50 text-rose-600"

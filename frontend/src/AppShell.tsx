@@ -44,7 +44,7 @@ import { getTheme, setTheme } from "./lib/theme"
 import { LANGS, setLang } from "./lib/dir"
 import { useT } from "./lib/i18n"
 import { loadLocale } from "./lib/money"
-import { cn } from "./lib/utils"
+import { cn, formatDate } from "./lib/utils"
 import { useKiosk } from "./lib/kiosk"
 import { getSiteInfo, versionLabel } from "./lib/siteInfo"
 import AlertSettings from "./components/AlertSettings"
@@ -417,8 +417,19 @@ export default function AppShell() {
     }
   }, [navOpen])
 
+  const activeProperty = properties.find(p => p.name === property)
+  const [businessRevision, setBusinessRevision] = useState(0)
   useEffect(() => {
+    const changed = () => setBusinessRevision(n => n + 1)
+    window.addEventListener("kamra:business-date", changed)
+    window.addEventListener("focus", changed)
+    const timer = window.setInterval(changed, 60000)
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", changed); window.removeEventListener("kamra:business-date", changed) }
+  }, [])
+  useEffect(() => {
+    let live = true
     myProperties().then((props) => {
+      if (!live) return
       setProperties(props)
       if (props.length === 0) {
         // Fresh install / Frappe Cloud: force setup wizard, not empty Desk.
@@ -435,6 +446,10 @@ export default function AppShell() {
         setProperty(props[0].name)
       }
     })
+    return () => { live = false }
+  }, [location.pathname, navigate, property, businessRevision])
+
+  useEffect(() => {
     call<{ demo_mode: boolean }>("kamra.public_api.site_info")
       .then((info) => setDemoMode(info.demo_mode))
       .catch(() => setDemoMode(false))
@@ -703,7 +718,7 @@ export default function AppShell() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         {!kiosk && (
-        <header className="sticky top-0 z-40 flex min-w-0 items-center gap-2 border-b border-zinc-200 bg-white/90 px-4 py-2.5 backdrop-blur">
+        <header className="sticky top-0 z-40 flex min-w-0 items-center flex-wrap gap-1 border-b border-zinc-200 bg-white/90 px-2 sm:gap-2 sm:px-4 py-2.5 backdrop-blur">
           <button
             type="button"
             className="grid size-8 shrink-0 place-items-center rounded-md text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 sm:hidden"
@@ -734,7 +749,11 @@ export default function AppShell() {
               {properties[0]?.property_name ?? ""}
             </span>
           )}
-          <div className="flex min-w-0 flex-1 justify-center px-2">
+          {activeProperty && <div className="order-last flex w-full flex-wrap items-center gap-2 text-xs sm:order-none sm:w-auto" aria-live="polite">
+            <span className="rounded bg-zinc-100 px-2 py-1"><span className="sr-only sm:not-sr-only">{t("Business date")} · </span>{formatDate(activeProperty.business_date)}</span>
+            {activeProperty.business_date !== activeProperty.calendar_date && <span className="rounded bg-amber-50 px-2 py-1 text-amber-800">{t("Calendar {date} · End of Day pending", {date: formatDate(activeProperty.calendar_date)})}</span>}
+          </div>}
+          <div className="flex min-w-0 flex-1 justify-center sm:px-2">
             <div className="hidden w-full max-w-md lg:block">
               <SearchShortcut />
             </div>

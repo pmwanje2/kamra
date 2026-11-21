@@ -182,6 +182,11 @@ export const eodProgress = (
 export const eodAcknowledge = (property: string, key: string, reason: string) =>
   call("kamra.night_audit.eod_acknowledge", { property, key, reason })
 
+function businessDateChanged<T>(result: T): T {
+  window.dispatchEvent(new Event("kamra:business-date"))
+  return result
+}
+
 export const runNightAudit = (property: string) =>
   call<{
     audit?: string
@@ -191,7 +196,7 @@ export const runNightAudit = (property: string) =>
     amount_posted?: number
     no_shows_flagged?: number
     next_business_date?: string
-  }>("kamra.api.run_night_audit", { property })
+  }>("kamra.api.run_night_audit", { property }).then(businessDateChanged)
 
 export const auditHistory = (property: string, limit = 60, from_date?: string, to_date?: string) =>
   call<RunRow[]>("kamra.night_audit.night_audit_history", {
@@ -208,4 +213,4 @@ export const recoverStuckBusinessDate = (property: string) =>
   call<{ ok: boolean; audit: string; business_date: string; next_business_date: string }>(
     "kamra.night_audit.recover_stuck_business_date",
     { property },
-  )
+  ).then(businessDateChanged)

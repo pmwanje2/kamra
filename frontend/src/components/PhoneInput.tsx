@@ -7,6 +7,7 @@ import { PHONE_DIAL_CODES, dialForCountry, isPhoneComplete, joinPhone, phoneLeng
  * international code. `value`/`onChange` stay fully qualified for storage.
  */
 export default function PhoneInput(props: {
+  id?: string
   value: string
   country?: string | null
   onChange: (phone: string) => void
@@ -66,6 +67,7 @@ export default function PhoneInput(props: {
           ))}
         </select>
         <input
+          id={props.id}
           type="tel"
           inputMode="numeric"
           autoComplete="tel-national"
