@@ -104,7 +104,7 @@ class VoidKeepsLineTestCase(AuditTestCase):
 		self.assertEqual(_day_stats(PROP_A, TODAY, 1)["rooms_sold"], 0)
 		self.assertNotIn(TODAY, folio_mod.charged_nights(self.res.name))
 		# a discount does not come off the voided night
-		with self.assertRaisesRegex(frappe.ValidationError, "no room nights"):
+		with self.assertRaises(api.NoRoomNightsToDiscount):
 			api.post_discount(self.folio, value=10, kind="Percent", preview=1)
 		# advance billing (and the night audit) post the night again
 		ledger.force_advance_bill(self.res.name, "tonight")

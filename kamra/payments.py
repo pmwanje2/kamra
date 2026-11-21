@@ -99,11 +99,19 @@ def settle_payment_link(folio_name: str, link_id: str, amount: float) -> bool:
 	except Exception:
 		frappe.log_error(title="ledger payment-link write failed")
 	if pre_arrival:
-		frappe.db.set_value("Reservation", res.name, "advance_paid",
-		                    float(res.advance_paid or 0) + amount)
+		res.reload()  # the folio save above may have touched the booking
+		paid = float(res.advance_paid or 0) + amount
 		if res.status in ("Pending Payment", "Held"):
+			# one save: the deposit (a ledger write) and the confirmation it buys
 			from kamra.api import _confirm_status
-			_confirm_status(res)
+			res.advance_paid = paid
+			res.flags.kamra_ledger_advance = True
+			try:
+				_confirm_status(res)
+			finally:
+				res.flags.pop("kamra_ledger_advance", None)
+		else:
+			frappe.db.set_value("Reservation", res.name, "advance_paid", paid)
 	from kamra.savings import log_action
 	log_action("payment_received", "Folio", folio.name, folio.property,
 	           minutes_saved=3,

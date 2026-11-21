@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import frappe
 
-from kamra import api, golive
+from kamra import api, golive, ledger
 from kamra import folio as folio_mod
 from kamra import night_audit as na
 from kamra.tests.audit_fixtures import (
@@ -132,8 +132,27 @@ class DeskFeedbackTestCase(AuditTestCase):
 	def test_no_room_nights_yet(self):
 		res = make_reservation(PROP_A, self.rt, TODAY, d(2), status="Checked In",
 		                       room=self.room)
-		with self.assertRaisesRegex(frappe.ValidationError, "no room nights"):
+		# A stable class the screen keys on (never the wording), and a message
+		# that names the way forward: Advance bill now, or price it at booking.
+		with self.assertRaises(api.NoRoomNightsToDiscount) as raised:
 			api.post_discount(guest_folio(res.name), value=10, reason="UT")
+		self.assertTrue(issubclass(api.NoRoomNightsToDiscount, frappe.ValidationError))
+		self.assertEqual(str(raised.exception),
+		                 "No nights are posted yet. Use Advance bill to post the stay now, "
+		                 "then give the discount, or use a rate plan or promo code at booking.")
+
+	def test_advance_bill_then_the_discount_comes_off_at_check_in(self):
+		"""OPERA advance billing: a guest who pays at check-in gets the
+		discount once the stay's nights are posted, before night audit."""
+		res = make_reservation(PROP_A, self.rt, TODAY, d(2), status="Checked In",
+		                       room=self.room)
+		folio = guest_folio(res.name)
+		with self.assertRaises(api.NoRoomNightsToDiscount):
+			api.post_discount(folio, value=10, kind="Percent", preview=1)
+		posted = ledger.force_advance_bill(res.name, "entire")
+		self.assertEqual(len(posted["nights_posted"]), 2)
+		preview = api.post_discount(folio, value=10, kind="Percent", preview=1)
+		self.assertEqual(sum(ln["nights"] for ln in preview["lines"]), 2)
 
 	def test_promo_code_on_an_open_folio_once(self):
 		_res, folio = self.stay()

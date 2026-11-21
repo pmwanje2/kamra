@@ -1,13 +1,15 @@
-import { Fragment, useCallback, useEffect, useState } from "react"
+import { Fragment, useCallback, useEffect, useRef, useState } from "react"
 import { ArrowLeft, ArrowRightLeft, Printer, Trash2, X } from "lucide-react"
-import { Link, useNavigate, useParams } from "react-router-dom"
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { call, getCurrentProperty, newIdempotencyKey } from "../lib/api"
 import EditableNationality from "../components/EditableNationality"
 import LinkedRecords from "../components/LinkedRecords"
 import AllowanceRequests from "../components/AllowanceRequests"
 import FolioDiscount from "../components/FolioDiscount"
+import { ADVANCE_BILL_ACTION } from "../lib/discountHint"
 import ChangeCompany from "../components/ChangeCompany"
 import { loadLocale, sellsAlcohol, taxRates, fmtAmount } from "../lib/money"
+import { defaultChargeTaxRate } from "../lib/chargeTax"
 import { serverError } from "../lib/resource"
 import { useCashierAuth } from "../lib/cashierAuth"
 import { useAuth } from "../lib/auth"
@@ -270,6 +272,7 @@ function VerifyTaxId({ taxId, name }: { taxId: string; name: string }) {
 export default function FolioView() {
   const { t } = useT()
   const { name } = useParams()
+  const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const [data, setData] = useState<InvoiceData | null>(null)
   const [siblings, setSiblings] = useState<SiblingFolio[]>([])
@@ -277,9 +280,12 @@ export default function FolioView() {
   const [busy, setBusy] = useState(false)
 
   const [charge, setCharge] = useState({
-    charge_type: "Food & Beverage", description: "", amount: "", gst_rate: "5",
+    charge_type: "Food & Beverage", description: "", amount: "",
+    // the property's own rate (0% where it charges no tax), never a made-up one
+    gst_rate: defaultChargeTaxRate(taxRates(), locale().services_tax_rate),
     is_alcohol: false,
   })
+  const taxPicked = useRef(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [voidFor, setVoidFor] = useState<string | null>(null)
   const [voidReason, setVoidReason] = useState("")
@@ -376,7 +382,12 @@ export default function FolioView() {
 
   const [rates, setRates] = useState<number[]>(taxRates())
   useEffect(() => {
-    loadLocale().then((l) => setRates(l.tax_rates))
+    loadLocale().then((l) => {
+      setRates(l.tax_rates)
+      // start on the property's rate once it is known, unless the desk picked one
+      if (!taxPicked.current)
+        setCharge((c) => ({ ...c, gst_rate: defaultChargeTaxRate(l.tax_rates, l.services_tax_rate) }))
+    })
   }, [])
   // a hotel that charges no tax (its only rate is 0%) gets no tax pickers
   const noTax = rates.length === 1 && Number(rates[0]) === 0
@@ -418,6 +429,26 @@ export default function FolioView() {
       }
     })
   }
+
+  /** OPERA advance billing: post the stay's coming nights now, so a guest who
+   *  pays at check-in can be discounted and receipted before night audit. */
+  function advanceBill() {
+    if (!stayRes) return
+    act(() => call("kamra.ledger.force_advance_bill", withPin({ reservation: stayRes, nights: "entire" })))
+  }
+
+  // a link to /billing/<folio>?action=advance-bill (the discount hint, a chat
+  // hand-off) brings the desk to the Advance bill button; the cashier presses it
+  const wantsAdvanceBill = searchParams.get("action") === ADVANCE_BILL_ACTION
+  const focusedAdvanceBill = useRef(false)
+  useEffect(() => {
+    if (!wantsAdvanceBill || !data || focusedAdvanceBill.current) return
+    const button = document.getElementById(ADVANCE_BILL_ACTION)
+    if (!button) return
+    focusedAdvanceBill.current = true
+    button.scrollIntoView({ block: "center" })
+    button.focus()
+  }, [wantsAdvanceBill, data])
 
   if (!data)
     return <p className="py-10 text-center text-sm text-zinc-400">{t("Loading…")}</p>
@@ -584,12 +615,9 @@ export default function FolioView() {
             {t("Proforma")}
           </Button>
           {open && stay?.reservation ? (
-            <Button variant="outline" disabled={busy}
+            <Button variant="outline" disabled={busy} id={ADVANCE_BILL_ACTION}
               title={t("Post future room & tax ahead of night audit")}
-              onClick={() =>
-                act(() => call("kamra.ledger.force_advance_bill",
-                  withPin({ reservation: stay.reservation, nights: "entire" })))
-              }>
+              onClick={advanceBill}>
               {t("Advance bill")}
             </Button>
           ) : null}
@@ -1509,9 +1537,10 @@ export default function FolioView() {
                   className={inputCls}
                   aria-label={t("{tax} rate", { tax: taxLabel() })}
                   value={charge.gst_rate}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    taxPicked.current = true
                     setCharge({ ...charge, gst_rate: e.target.value })
-                  }
+                  }}
                 >
                   {rates.map((n) => String(n)).map((r) => (
                     <option key={r} value={r}>
@@ -1551,6 +1580,8 @@ export default function FolioView() {
                 {t("Post")}
               </Button>
               <FolioDiscount folio={folio.name} adjustCodes={adjustCodes} act={act}
+                onAdvanceBill={stay?.reservation ? advanceBill : undefined}
+                refreshKey={data}
                 onPosted={(pending) => {
                   setAllowanceNote(pending
                     ? t("Sent to a manager. It goes on the bill once approved.")

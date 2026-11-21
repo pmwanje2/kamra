@@ -11,7 +11,7 @@ from decimal import ROUND_HALF_UP, ROUND_UP, Decimal
 from typing import Any
 
 import frappe
-from frappe.utils import getdate, now_datetime, nowdate
+from frappe.utils import cint, flt, getdate, now_datetime, nowdate
 
 from kamra.authz import require_roles
 from kamra.business_date import get_business_date
@@ -1783,10 +1783,24 @@ def force_advance_bill(reservation: str, nights: str = "entire",
 
 @frappe.whitelist(methods=["POST"])
 @require_roles("Front Desk", "Finance", "Kamra Agent")
-def generate_proforma(folio: str, notes: str | None = None):
+def generate_proforma(folio: str, notes: str | None = None,
+                      include_projected: int = 1):
+	"""A pro forma bill: an estimate, never an invoice. For a stay still in
+	progress (Checked In, or Confirmed with a deposit folio) it adds the
+	nights check-out will post as `projected_lines` (each projected: True)
+	and an `estimate` of posted + projected - worked out by the writer
+	check-out uses, in a savepoint that is always rolled back, so nothing
+	is posted. include_projected=0 prints the posted folio only."""
 	from kamra.api import folio_invoice
 	inv = folio_invoice(folio)
 	f = inv["folio"]
+	if cint(include_projected):
+		inv["projected_lines"] = _projected_lines(f)
+		posted = flt(f.get("grand_total"))
+		ahead = round(sum(flt(l["total"]) for l in inv["projected_lines"]), 2)
+		inv["estimate"] = {"posted_total": round(posted, 2), "projected_total": ahead,
+		                   "grand_total": round(posted + ahead, 2),
+		                   "balance": round(flt(f.get("balance")) + ahead, 2)}
 	doc = frappe.get_doc({
 		"doctype": "Proforma Folio",
 		"property": f.get("property"),
@@ -1801,6 +1815,34 @@ def generate_proforma(folio: str, notes: str | None = None):
 	})
 	doc.insert(ignore_permissions=True)
 	return {"proforma": doc.name, "invoice": inv}
+
+
+def _projected_lines(f) -> list[dict]:
+	"""The room nights (and their levies, extra guests) check-out would
+	still post to this folio, as estimate lines. Posted inside a savepoint
+	that is rolled back, with whatever the writes queued forgotten."""
+	if f.get("status") != "Open" or not f.get("reservation"):
+		return []
+	res = frappe.get_doc("Reservation", f.get("reservation"))
+	if res.status not in ("Checked In", "Confirmed"):
+		return []
+	from kamra.checkout import _NoTrace
+	from kamra.folio import post_remaining_nights
+	before = set(frappe.get_all("Folio Charge", filters={"parent": f.get("name")},
+	                            pluck="name"))
+	lines = []
+	with _NoTrace("kamra_proforma_projection"):
+		post_remaining_nights(res)
+		for c in frappe.get_doc("Folio", f.get("name")).charges:
+			if c.name in before:
+				continue
+			lines.append({
+				"posting_date": str(c.posting_date), "charge_type": c.charge_type,
+				"description": c.description, "qty": c.qty, "rate": c.rate,
+				"amount": c.amount, "gst_rate": c.gst_rate,
+				"gst_amount": c.gst_amount, "total": c.total, "projected": True,
+			})
+	return sorted(lines, key=lambda l: (l["posting_date"], l["charge_type"]))
 
 
 @frappe.whitelist(methods=["POST"])
@@ -2463,7 +2505,8 @@ def ensure_default_reason_codes() -> None:
 
 
 @frappe.whitelist()
-@require_roles("Front Desk", "Finance", "F&B Manager", "Kamra Agent")  # POS void reasons
+# POS void reasons; Revenue Manager for the Rate Change codes set_agreed_rate takes
+@require_roles("Front Desk", "Finance", "F&B Manager", "Kamra Agent", "Revenue Manager")
 def list_reason_codes(category: str | None = None):
 	ensure_default_reason_codes()
 	filters: dict[str, Any] = {"disabled": 0}

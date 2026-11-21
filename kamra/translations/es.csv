@@ -235,7 +235,7 @@ Extend unchecked-out departures one night,Extender una noche las salidas sin che
 The guest owes {0} - nothing is due back to refund.,El huésped debe {0}; no hay nada que devolver.
 Only {0} is due back to the guest - can't refund more than that.,Solo se le deben {0} al huésped; no se puede devolver más.
 Room type code {0} is already used at this property.,El código de tipo de habitación {0} ya se usa en esta propiedad.
-There are no room nights on this bill yet. A discount comes off posted nights: give it after night audit or at check-out.,Todavía no hay noches en esta cuenta. El descuento se aplica a las noches cargadas: déselo después de la auditoría nocturna o en el check-out.
+"No nights are posted yet. Use Advance bill to post the stay now, then give the discount, or use a rate plan or promo code at booking.","Todavía no hay noches cargadas. Use «Facturar por adelantado» para cargar la estancia ahora y luego dé el descuento, o use un plan de tarifa o un código promocional al reservar."
 Enter a discount above zero.,Ingrese un descuento mayor que cero.
 A discount can't be more than 100%.,Un descuento no puede superar el 100%.
 The discount is more than the room nights on the bill ({0}).,El descuento supera las noches de la cuenta ({0}).
@@ -270,3 +270,27 @@ Bills still open,Cuentas aún abiertas
 Use Check out to check a guest out: it makes sure every bill is cleared first.,Usa Check-out para dar salida al huésped: primero comprueba que todas las cuentas estén saldadas.
 Check out,Check-out
 Discounts and allowances,Descuentos y bonificaciones
+Quotation {0} from {1},Cotización {0} de {1}
+"Dear {0}, please find your quotation for {1} to {2} attached. Reference {3}.",Estimado/a {0}: adjuntamos su cotización del {1} al {2}. Referencia {3}.
+Quotation,Cotización
+Issued {0},Emitida el {0}
+Free cancellation until {0}; after that {1} is charged.,Cancelación gratuita hasta el {0}; después se cobra {1}.
+Free cancellation.,Cancelación gratuita.
+Cancelling now is charged {0}.,Cancelar ahora cobra {0}.
+Room prices exclude meals and extras unless stated. Tax as applicable on the day of stay.,Los precios de las habitaciones no incluyen comidas ni extras salvo que se indique. Impuestos según corresponda el día de la estancia.
+Rate / night,Tarifa / noche
+Deposit to confirm,Depósito para confirmar
+{0} night(s),{0} noche(s)
+Meal plan: {0},Plan de comidas: {0}
+Discount: voucher {0},Descuento: cupón {0}
+Adjustment to the booked price,Ajuste al precio reservado
+"Meal plan included: {0}, as priced above.","Plan de comidas incluido: {0}, según el precio indicado arriba."
+Room only: meals are not included.,Solo alojamiento: las comidas no están incluidas.
+The lines above plus tax make up the total. Anything else taken during the stay is billed separately.,Las líneas anteriores más los impuestos forman el total. Cualquier otro consumo durante la estancia se factura aparte.
+Price,Precio
+This quotation was emailed less than a minute ago. Wait a minute before sending the same quotation again.,Esta cotización se envió por correo hace menos de un minuto. Espera un minuto antes de volver a enviar la misma cotización.
+Cleaning fee,Tarifa de limpieza
+Discount,Descuento
+Stay as booked,Estancia según la reserva
+Extra guests by arrangement,Huéspedes adicionales según lo acordado
+Room levy,Tasa por habitación

@@ -235,7 +235,7 @@ Extend unchecked-out departures one night,تمديد المغادرين غير �
 The guest owes {0} - nothing is due back to refund.,الضيف مدين بمبلغ {0} - لا يوجد مبلغ مستحق للاسترداد.
 Only {0} is due back to the guest - can't refund more than that.,المستحق للضيف {0} فقط - لا يمكن استرداد أكثر من ذلك.
 Room type code {0} is already used at this property.,رمز نوع الغرفة {0} مستخدم بالفعل في هذه المنشأة.
-There are no room nights on this bill yet. A discount comes off posted nights: give it after night audit or at check-out.,لا توجد ليالٍ على هذه الفاتورة بعد. الخصم يُطبَّق على الليالي المرحّلة: امنحه بعد تدقيق الليل أو عند المغادرة.
+"No nights are posted yet. Use Advance bill to post the stay now, then give the discount, or use a rate plan or promo code at booking.",لا توجد ليالٍ مرحّلة بعد. استخدم «فاتورة مقدمة» لترحيل الإقامة الآن ثم امنح الخصم، أو استخدم خطة سعر أو رمز ترويجي عند الحجز.
 Enter a discount above zero.,أدخل خصمًا أكبر من صفر.
 A discount can't be more than 100%.,لا يمكن أن يزيد الخصم عن 100%.
 The discount is more than the room nights on the bill ({0}).,الخصم أكبر من ليالي الإقامة على الفاتورة ({0}).
@@ -270,3 +270,27 @@ Bills still open,فواتير ما زالت مفتوحة
 Use Check out to check a guest out: it makes sure every bill is cleared first.,استخدم «تسجيل المغادرة» لإخراج النزيل: يتأكد أولاً من تسوية كل الفواتير.
 Check out,تسجيل المغادرة
 Discounts and allowances,الخصومات والتسويات
+Quotation {0} from {1},عرض السعر {0} من {1}
+"Dear {0}, please find your quotation for {1} to {2} attached. Reference {3}.",عزيزنا {0}، مرفق عرض السعر لإقامتكم من {1} إلى {2}. المرجع {3}.
+Quotation,عرض السعر
+Issued {0},صدر في {0}
+Free cancellation until {0}; after that {1} is charged.,إلغاء مجاني حتى {0}؛ بعد ذلك يُحتسب {1}.
+Free cancellation.,إلغاء مجاني.
+Cancelling now is charged {0}.,الإلغاء الآن يُحتسب عليه {0}.
+Room prices exclude meals and extras unless stated. Tax as applicable on the day of stay.,أسعار الغرف لا تشمل الوجبات والإضافات ما لم يُذكر ذلك. تُطبق الضريبة حسب يوم الإقامة.
+Rate / night,السعر / الليلة
+Deposit to confirm,العربون للتأكيد
+{0} night(s),{0} ليلة
+Meal plan: {0},خطة الوجبات: {0}
+Discount: voucher {0},خصم: قسيمة {0}
+Adjustment to the booked price,تعديل على سعر الحجز
+"Meal plan included: {0}, as priced above.",خطة الوجبات مشمولة: {0}، كما هو مسعّر أعلاه.
+Room only: meals are not included.,غرفة فقط: الوجبات غير مشمولة.
+The lines above plus tax make up the total. Anything else taken during the stay is billed separately.,البنود أعلاه مع الضريبة تشكّل الإجمالي. أي شيء آخر يُطلب أثناء الإقامة يُحتسب بشكل منفصل.
+Price,السعر
+This quotation was emailed less than a minute ago. Wait a minute before sending the same quotation again.,أُرسل عرض السعر هذا بالبريد قبل أقل من دقيقة. انتظر دقيقة قبل إرسال العرض نفسه مرة أخرى.
+Cleaning fee,رسوم التنظيف
+Discount,خصم
+Stay as booked,الإقامة كما هي محجوزة
+Extra guests by arrangement,ضيوف إضافيون بالاتفاق
+Room levy,رسوم الغرفة

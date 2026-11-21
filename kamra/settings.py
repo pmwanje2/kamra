@@ -23,6 +23,9 @@ from frappe import _
 from kamra.authz import ADMIN, assert_property_access, require_roles
 
 CACHE_KEY = "kamra_settings"
+# write_kv saves the Property Setting document, so its events, a site's own
+# Before Save rule and Version history see every settings write.
+WRITE_KV_RUNS_DOCUMENT_EVENTS = True
 
 
 @dataclass(frozen=True)
@@ -105,6 +108,11 @@ MODULES: tuple[Module, ...] = (
 			Section("times", "Check-in & check-out", "", (
 				S("checkin_time", "Check-in time", "time", "14:00", P),
 				S("checkout_time", "Check-out time", "time", "11:00", P),
+				S("late_checkout_fee_mode", "Late check-out fee", "select", "None", P,
+				  options=("None", "Fixed", "Percent of Night"),
+				  hint="The Late check-out step starts on this fee. Percent of Night is a % of the last room night."),
+				S("late_checkout_fee_value", "Late check-out fee value", "number", 0, P, min=0,
+				  hint="An amount for Fixed, a % for Percent of Night."),
 				S("minimum_nights", "Minimum stay", "number", 1, P, min=1, max=60, unit="nights"),
 			)),
 			Section("cancellation", "Cancellation & no-show", "", (
@@ -242,6 +250,10 @@ MODULES: tuple[Module, ...] = (
 				S("night_audit_grace_minutes", "Wait after that time", "number", 0,
 				  min=0, max=120, unit="min",
 				  hint="Extra delay, for a bar or restaurant still posting after the set time."),
+				S("night_audit_catch_up_days", "Catch up at most", "number", 3,
+				  min=1, max=7, unit="days",
+				  hint="How many missed business dates the automatic night audit closes on "
+				       "its own. Beyond this, close the open days from End of Day."),
 			)),
 			Section("auditchecks", "Night audit checklist",
 			        "Checks run before the night audit closes the day (Finance → End of Day). "
@@ -413,6 +425,8 @@ MODULES: tuple[Module, ...] = (
 			Section("fees", "Fees & levies", "", (
 				S("room_levy_label", "Room levy name", store=P, hint="Municipality fee, city or tourism tax."),
 				S("room_levy_percent", "Room levy", "number", 0, P, min=0, max=100, unit="%"),
+				S("room_levy_per_night", "Room levy per night", "number", 0, P, min=0,
+				  hint="A fixed amount per occupied room per night (a local hotel tax). Adds to the %."),
 				S("room_levy_taxable", "Tax applies to the levy", "check", 1, P),
 				S("cleaning_fee", "Cleaning fee per stay", "number", 0, P, min=0),
 				S("cleaning_fee_taxable", "Cleaning fee is taxable", "check", 1, P),
@@ -479,6 +493,11 @@ MODULES: tuple[Module, ...] = (
 				       "AI agents can ask, never approve."),
 				S("allowance_approval_above", "Only allowances above", "number", 0, min=0,
 				  hint="Smaller allowances post straight away. 0 means every allowance needs approval."),
+				S("rate_override_limit_pct", "Front desk may lower a stay's rate by up to", "number", 0,
+				  min=0, max=100, unit="%",
+				  hint="An agreed rate for one stay (Agreed rate on the reservation), with a reason. A bigger "
+				       "cut needs a Hotel Admin or Finance PIN; the desk never raises a rate. Revenue "
+				       "Managers and Hotel Admins set any rate. 0 sends every cut by the desk to a manager."),
 			)),
 			Section("fx", "Exchange rates",
 			        "A guest paying in foreign money needs today's rate: typed in on the Currency Desk, "
@@ -557,16 +576,29 @@ def read_kv(property: str, key: str, default=None):
 	return default if val is None else val
 
 
-def write_kv(property: str, key: str, val):
+def write_kv(property: str, key: str, val, module: str | None = None):
 	"""The one writer of a Property Setting row. Callers check roles and
-	log the change; this stores the JSON value and nothing else. The
-	caller clears the cache (clear_cache) once it is done writing."""
+	log the change; this stores the JSON value. The row is saved as a
+	document, so its validate/on_update events, a site's own Before Save
+	rule and Version history see every write. module names the settings
+	page the change came from (flags.kamra_settings_module); only
+	save_settings passes it. The caller clears the cache (clear_cache)
+	once it is done writing."""
+	value = json.dumps(val)
 	name = frappe.db.get_value("Property Setting", {"property": property, "setting_key": key})
 	if name:
-		frappe.db.set_value("Property Setting", name, "value", json.dumps(val))
+		doc = frappe.get_doc("Property Setting", name)
+		if doc.value == value:
+			return
+		doc.value = value
 	else:
-		frappe.get_doc({"doctype": "Property Setting", "property": property,
-		                "setting_key": key, "value": json.dumps(val)}).insert(ignore_permissions=True)
+		doc = frappe.get_doc({"doctype": "Property Setting", "property": property,
+		                      "setting_key": key, "value": value})
+	doc.flags.kamra_settings_module = module
+	if name:
+		doc.save(ignore_permissions=True)  # roles checked by the caller
+	else:
+		doc.insert(ignore_permissions=True)
 
 
 def _turnover_name(property: str) -> str | None:
@@ -829,7 +861,7 @@ def save_settings(property: str, module: str, changes) -> dict:
 			tp.update(by_store["turnover"])
 			tp.save(ignore_permissions=True)
 	for key, val in (by_store.get("kv") or {}).items():
-		write_kv(property, key, val)
+		write_kv(property, key, val, module=module)
 	clear_cache(property)
 
 	after_all = _values(property, mod)

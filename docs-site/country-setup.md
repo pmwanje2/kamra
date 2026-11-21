@@ -72,6 +72,11 @@ shows it and the ledger books it apart from room revenue. Saudi Arabia and
 the UAE pre-fill the name *Municipality fee*; set the rate your
 municipality charges.
 
+Where the levy is a fixed amount per occupied room per night (a local
+hotel tax such as UGX 2,000 a night), set **Room levy per night** instead.
+It is quoted, posted and shown on the pro forma on the same Room levy line,
+and adds to the % when both are set. At 0 nothing changes.
+
 ## Saudi Arabia: ZATCA e-invoicing
 
 ### What Kamra does (Phase 1 - generation)

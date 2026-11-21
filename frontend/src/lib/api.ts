@@ -1908,19 +1908,6 @@ export const amendStay = (
     confirm_price,
   })
 
-/** Preview the new price, ask the user when it changes, then amend with the
- * price confirmed. Resolves null when the user declines. */
-export async function amendStayConfirmed(
-  reservation: string,
-  check_in_date: string,
-  check_out_date: string,
-  ask: (p: RepricePreview) => boolean,
-) {
-  const p = await amendStayPreview(reservation, check_in_date, check_out_date)
-  if (p.needs_confirmation && !ask(p)) return null
-  return amendStay(reservation, check_in_date, check_out_date, p.needs_confirmation ? 1 : 0)
-}
-
 export const setLateArrival = (reservation: string, late_arrival: boolean, eta?: string) =>
   call<{ ok: boolean }>("kamra.api.set_late_arrival", {
     reservation,
