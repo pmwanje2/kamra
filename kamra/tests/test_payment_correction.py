@@ -301,3 +301,17 @@ class CorrectionTests(AuditTestCase):
 			)
 		self.assertIn("folio_refund", [c.args[0] for c in log.call_args_list])
 		self.assertEqual(frappe.db.get_value("Reservation", res.name, "advance_paid"), 450)
+
+	def test_finance_without_till_corrects_sessionless_bank_payment(self):
+		frappe.db.set_value("Cashier Session", self.session, "status", "Closed")
+		self.row = api.add_folio_payment(self.folio, "Bank Transfer", 100)["payments"][-1]["name"]
+		approver = self.supervisor()
+		operator = self.supervisor("no-drawer@example.test")
+		frappe.set_user(operator)
+		try:
+			r = self.submit(
+				"reverse_payment", "REV-ERR", "bank", supervisor_user=approver, supervisor_pin="8394"
+			)
+		finally:
+			frappe.set_user("Administrator")
+		self.assertFalse(frappe.db.get_value("Folio Ledger Entry", {"source_name": r["reversal"]}, "session"))
