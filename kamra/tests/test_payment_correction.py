@@ -205,8 +205,7 @@ class CorrectionTests(AuditTestCase):
 	def test_requester_with_other_drawer_corrects_original_drawer(self):
 		approver = self.supervisor()
 		operator = self.supervisor("different-cashier@example.test")
-		frappe.set_user(operator)
-		try:
+		with self.set_user(operator):
 			other = cashier.open_session(PROP_A, 0)["name"]
 			r = self.submit(
 				"reclassify_tender",
@@ -216,8 +215,6 @@ class CorrectionTests(AuditTestCase):
 				supervisor_user=approver,
 				supervisor_pin="8394",
 			)
-		finally:
-			frappe.set_user("Administrator")
 		self.assertFalse(frappe.db.exists("Cashier Transaction", {"session": other, "folio": self.folio}))
 		for name in [r["reversal"], r["repost"]]:
 			self.assertEqual(
@@ -310,11 +307,8 @@ class CorrectionTests(AuditTestCase):
 		self.row = api.add_folio_payment(self.folio, "Bank Transfer", 100)["payments"][-1]["name"]
 		approver = self.supervisor()
 		operator = self.supervisor("no-drawer@example.test")
-		frappe.set_user(operator)
-		try:
+		with self.set_user(operator):
 			r = self.submit(
 				"reverse_payment", "REV-ERR", "bank", supervisor_user=approver, supervisor_pin="8394"
 			)
-		finally:
-			frappe.set_user("Administrator")
 		self.assertFalse(frappe.db.get_value("Folio Ledger Entry", {"source_name": r["reversal"]}, "session"))
