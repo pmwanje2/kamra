@@ -14,7 +14,6 @@ class CorrectionTests(AuditTestCase):
 		self.folio = guest_folio(self.res.name)
 		self.session = cashier.open_session(PROP_A, 0)['name']
 		self.row = api.add_folio_payment(self.folio, 'Cash', 100)['payments'][-1]['name']
-		self.assertTrue(callable(getattr(api, 'correct_folio_payment', None)), 'Missing governed correction action')
 
 	def options(self, row=None):
 		return api.payment_correction_options(self.folio, row or self.row)
@@ -24,6 +23,7 @@ class CorrectionTests(AuditTestCase):
 		                                 reason_note='Correction at counter', idempotency_key=key, **kw)
 
 	def test_reclassify_replays_once_and_keeps_drawer_and_balance(self):
+		self.assertTrue(callable(getattr(api, 'correct_folio_payment', None)), 'Missing governed correction action')
 		self.assertTrue(self.options()['can_reclassify'])
 		before = frappe.db.get_value('Folio', self.folio, 'balance')
 		for _ in range(2):
@@ -39,6 +39,7 @@ class CorrectionTests(AuditTestCase):
 		self.assertEqual(sum(frappe.get_all('Cashier Transaction', {'session': self.session, 'mode':'Cash'}, pluck='amount')), 0)
 
 	def test_refund_cap_and_named_approval(self):
+		self.assertTrue(callable(getattr(api, 'correct_folio_payment', None)), 'Missing governed correction action')
 		args = dict(refund_amount=25, supervisor_user='Administrator', supervisor_pin='1234')
 		with self.assertRaisesRegex(frappe.PermissionError, 'SUPERVISOR_SELF_APPROVAL'):
 			self.submit('partial_refund', 'REF-OVER', 'two', **args)
@@ -56,6 +57,7 @@ class CorrectionTests(AuditTestCase):
 		self.assertEqual(self.options()['residual'], 75)
 
 	def test_closed_audited_and_role_denial(self):
+		self.assertTrue(callable(getattr(api, 'correct_folio_payment', None)), 'Missing governed correction action')
 		with patch('frappe.get_roles', return_value=['Housekeeping']):
 			with self.assertRaises(frappe.PermissionError):
 				self.options()
