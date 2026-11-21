@@ -415,10 +415,12 @@ def verify_supervisor(property: str, supervisor: str | None, pin,
 	must be someone else: SUPERVISOR_SELF_APPROVAL. Returns the approving
 	user."""
 	supervisor = (supervisor or "").strip()
-	if not supervisor or not frappe.db.exists("User", supervisor):
+	canonical = frappe.db.exists("User", supervisor) if supervisor else None
+	if not canonical:
 		frappe.throw("SUPERVISOR_REQUIRED: pick the supervisor who approves this.",
 		             frappe.PermissionError)
-	if requester and supervisor == requester:
+	supervisor = str(canonical)
+	if requester and supervisor.casefold() == str(requester).casefold():
 		frappe.throw("SUPERVISOR_SELF_APPROVAL: you cannot approve your own "
 		             "request. Another supervisor signs it off.", frappe.PermissionError)
 	if not frappe.db.get_value("User", supervisor, "enabled") or \
@@ -438,7 +440,7 @@ def verify_supervisor(property: str, supervisor: str | None, pin,
 	# request, so guesses at someone else's PIN are also counted in the
 	# cache, which a rollback does not touch.
 	max_attempts, lock_minutes = _pin_policy(property)
-	fails_key = f"kamra_supervisor_pin_fails:{supervisor}"
+	fails_key = f"kamra_supervisor_pin_fails:{supervisor.casefold()}"
 	if cint(frappe.cache.get_value(fails_key)) >= max_attempts:
 		frappe.throw("PIN_LOCKED: too many wrong supervisor PIN attempts - "
 		             f"try again in {lock_minutes} minutes.")
@@ -450,6 +452,32 @@ def verify_supervisor(property: str, supervisor: str | None, pin,
 		raise
 	frappe.cache.delete_value(fails_key)
 	return supervisor
+
+
+def _require_approval_property(property: str) -> str:
+	# The general role guard allows absent property filters on list endpoints.
+	canonical = frappe.db.exists("Property", property) if isinstance(property, str) and property else None
+	if not canonical:
+		frappe.throw("An accessible property is required for supervisor approval.", frappe.PermissionError)
+	return str(canonical)
+
+
+@frappe.whitelist()
+@require_roles("Front Desk", "Finance")
+def list_supervisors(property: str) -> list[dict]:
+	"""List eligible independent approvers for this property's folio corrections."""
+	property = _require_approval_property(property)
+	return supervisors_for(property, exclude=frappe.session.user)
+
+
+@frappe.whitelist(methods=["POST"])
+@require_roles("Front Desk", "Finance")
+def verify_supervisor_approval(property: str, supervisor: str | None = None, pin: str | None = None) -> dict:
+	"""Verify a named supervisor for the authenticated requester's correction."""
+	property = _require_approval_property(property)
+	approver = verify_supervisor(property, supervisor, pin, roles=SUPERVISOR_ROLES,
+	                             requester=frappe.session.user)
+	return {"supervisor": approver}
 
 
 def _check_user_pin(user: str, pin, property: str | None):
