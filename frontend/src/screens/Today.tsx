@@ -799,14 +799,7 @@ export default function Today() {
   const hh = new Date().getHours()
   const greeting =
     hh < 12 ? t("Good morning") : hh < 17 ? t("Good afternoon") : t("Good evening")
-  const prettyDate = snap?.date
-    ? new Date(snap.date + "T00:00:00").toLocaleDateString(uiDateLocale(undefined), {
-        weekday: "short",
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      })
-    : ""
+  const prettyDate = snap?.date ? formatDate(snap.date) : ""
 
   // Today is a set of widgets; each person picks which show and in what
   // order (Customize). The built-in layout is the classic Today.

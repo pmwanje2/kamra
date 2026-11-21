@@ -3547,6 +3547,7 @@ def folio_invoice(folio: str):
 			"arrival": str(res.get("actual_check_in") or "") or None,
 			"departure": str(res.get("actual_check_out") or "") or None,
 			"nights": res.nights, "room": res.room,
+			"room_number": frappe.db.get_value("Room", res.room, "room_number") if res.room else None,
 			"room_type": res.room_type,
 			"adults": res.adults, "children": res.children,
 			"pax": int(res.adults or 0) + int(res.children or 0),

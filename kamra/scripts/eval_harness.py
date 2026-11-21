@@ -7521,6 +7521,7 @@ def t304():
 @check("a departure's balance counts the nights night audit has not posted, as check-out does, and keeps nothing")
 def t305():
 	from kamra import api
+	frappe.db.set_value("Property", P, "business_date", nowdate())
 	rt, (room, _r2) = _t300_rooms("T3D")
 	res = _t300_in_house(rt, room, "Eval Owes", "+91 70000 30051")
 	folio = frappe.db.get_value("Folio", {"reservation": res.name,
