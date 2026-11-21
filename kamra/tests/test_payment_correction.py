@@ -312,3 +312,81 @@ class CorrectionTests(AuditTestCase):
 				"reverse_payment", "REV-ERR", "bank", supervisor_user=approver, supervisor_pin="8394"
 			)
 		self.assertFalse(frappe.db.get_value("Folio Ledger Entry", {"source_name": r["reversal"]}, "session"))
+
+
+class BridgeSupervisorTests(AuditTestCase):
+	def setUp(self):
+		super().setUp()
+		from kamra.tests.audit_fixtures import PROP_B, ensure_user
+
+		self.home = make_property(PROP_A)
+		self.other = make_property(PROP_B)
+		self.desk = ensure_user("k2b-desk@example.test", ["Front Desk"])
+		self.approver = ensure_user("k2b-approver@example.test", ["Finance"])
+		self.housekeeping = ensure_user("k2b-housekeeping@example.test", ["Housekeeping"])
+		for user in (self.desk, self.approver):
+			frappe.get_doc(
+				dict(doctype="User Permission", user=user, allow="Property", for_value=self.home)
+			).insert()
+			frappe.clear_cache(user=user)
+		frappe.get_doc(dict(doctype="Cashier PIN", user=self.approver, pin="8394")).insert()
+		self.fails_key = f"kamra_supervisor_pin_fails:{self.approver}"
+		frappe.cache.delete_value(self.fails_key)
+		self.addCleanup(frappe.cache.delete_value, self.fails_key)
+
+	def bridge(self, endpoint, prop, **kwargs):
+		from frappe.utils.safe_exec import safe_exec
+
+		from kamra import authz
+
+		method = getattr(authz, endpoint, None)
+		self.assertIn(method, frappe.whitelisted, f"Server Scripts need whitelisted kamra.authz.{endpoint}")
+		local = dict(method=f"kamra.authz.{endpoint}", params=dict(property=prop, **kwargs))
+		with patch("frappe.utils.safe_exec.is_safe_exec_enabled", return_value=True):
+			safe_exec("result = frappe.call(method, **params)", _locals=local)
+		return local["result"]
+
+	def test_front_desk_lists_and_verifies_named_approver(self):
+		with self.set_user(self.desk):
+			self.assertIn(self.approver, [r["user"] for r in self.bridge("list_supervisors", self.home)])
+			result = self.bridge(
+				"verify_supervisor_approval", self.home, supervisor=self.approver, pin="8394"
+			)
+			self.assertEqual(result, {"supervisor": self.approver})
+
+	def test_requester_is_session_owned_and_excluded(self):
+		with self.set_user(self.approver):
+			self.assertNotIn(self.approver, [r["user"] for r in self.bridge("list_supervisors", self.home)])
+			with self.assertRaisesRegex(frappe.PermissionError, "SUPERVISOR_SELF_APPROVAL"):
+				self.bridge(
+					"verify_supervisor_approval",
+					self.home,
+					supervisor=self.approver,
+					pin="8394",
+					requester=self.desk,
+				)
+
+	def test_unauthorized_calls_do_not_attempt_a_pin(self):
+		for user, prop in [
+			(self.housekeeping, self.home),
+			(self.desk, self.other),
+			(self.desk, ""),
+			("Guest", self.home),
+		]:
+			with self.subTest(user=user, prop=prop), self.set_user(user):
+				with self.assertRaises(frappe.PermissionError):
+					self.bridge("list_supervisors", prop)
+				with self.assertRaises(frappe.PermissionError):
+					self.bridge("verify_supervisor_approval", prop, supervisor=self.approver, pin="0000")
+		self.assertFalse(frappe.cache.get_value(self.fails_key))
+
+	def test_wrong_attempts_survive_request_rollback_and_lock_correct_pin(self):
+		with self.set_user(self.desk), patch("kamra.authz._pin_policy", return_value=(2, 15)):
+			for count in (1, 2):
+				frappe.db.savepoint("bad_supervisor_pin")
+				with self.assertRaisesRegex(frappe.ValidationError, "Wrong cashier PIN"):
+					self.bridge("verify_supervisor_approval", self.home, supervisor=self.approver, pin="0000")
+				frappe.db.rollback(save_point="bad_supervisor_pin")
+				self.assertEqual(frappe.cache.get_value(self.fails_key), count)
+			with self.assertRaisesRegex(frappe.ValidationError, "PIN_LOCKED"):
+				self.bridge("verify_supervisor_approval", self.home, supervisor=self.approver, pin="8394")
