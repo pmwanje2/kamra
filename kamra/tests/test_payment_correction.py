@@ -73,3 +73,35 @@ class CorrectionTests(AuditTestCase):
 			self.assertIn('Credit Note', self.options()['blocked_reason'])
 			with self.assertRaises(frappe.ValidationError):
 				self.submit('reverse_payment','REV-ERR','no')
+
+	def test_foreign_drawer_reclassification_moves_original_home_value(self):
+		from kamra import ledger
+		ledger.upsert_exchange_rate(PROP_A, 'EUR', 42, 44)
+		p = api.add_folio_payment(self.folio,'Cash',3,currency='EUR')['payments'][-1]
+		self.row = p['name']
+		self.submit('reclassify_tender','REV-ACCOUNT','fx-fix', destination_mode='Bank Transfer',
+		            supervisor_user=self.supervisor(),supervisor_pin='8394')
+		totals = cashier._recompute_session_totals(self.session)
+		self.assertEqual((totals['foreign_cash'],totals['other']), (0, 126))
+
+	def test_reclassified_advance_transfers_only_once_at_checkin(self):
+		from kamra import ledger
+		res = make_reservation(PROP_A, make_room_type(PROP_A, 'ADV'), d(1), d(3))
+		self.folio = api.record_advance(res.name, 500)['folio']
+		self.row = frappe.get_doc('Folio', self.folio).payments[0].name
+		self.submit('reclassify_tender','REV-ACCOUNT','adv-fix', destination_mode='Bank Transfer',
+		            supervisor_user=self.supervisor(),supervisor_pin='8394')
+		self.assertEqual(frappe.db.get_value('Reservation', res.name, 'advance_paid'),500)
+		self.assertEqual(ledger.transfer_advances_to_guest(res.name), 500)
+		self.assertEqual(ledger.transfer_advances_to_guest(res.name), 0)
+
+	def test_void_reason_without_supervisor_and_closed_till_guidance(self):
+		api._post_folio_charge(self.folio, 'Misc', 'Duplicate', 55)
+		row = frappe.get_doc('Folio', self.folio).charges[-1].name
+		params = dict(folio=self.folio,payment_row=row,action='void_charge',reason_code='VOID-DUP',reason='Double charge', idempotency_key='void')
+		self.assertTrue(self.options(row)['can_void'])
+		api.correct_folio_payment(**params)
+		self.assertEqual(api.correct_folio_payment(**params)['idempotent_replay'],1)
+		self.assertFalse(self.options(row)['can_void'])
+		frappe.db.set_value('Cashier Session', self.session,'status','Closed')
+		self.assertIn('Finance',self.options()['blocked_reason'])

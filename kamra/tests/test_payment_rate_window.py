@@ -47,3 +47,9 @@ class SettlementRateTests(AuditTestCase):
 		self.rate(TODAY, 4200)
 		p = api.folio_invoice(out['folio'])['payments'][0]
 		self.assertEqual((p['exchange_rate'], str(p['exchange_rate_date']), p['amount']), (4100, YESTERDAY, 8200))
+
+	def test_receipt_identifies_property_currency_independent_of_country_default(self):
+		from kamra.folio import open_folio
+		res = make_reservation(PROP_A, make_room_type(PROP_A), TODAY, d(2))
+		invoice = api.folio_invoice(open_folio(res))
+		self.assertEqual(invoice['property'].get('currency'), 'UGX')
