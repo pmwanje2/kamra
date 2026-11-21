@@ -34,6 +34,16 @@ await check('booking validation messages and focus',async()=>{
  await page.getByRole('button',{name:'New booking',exact:true}).click();const dialog=page.getByRole('dialog'); await dialog.locator('input[type=tel]').first().fill('123'); const confirm=dialog.getByRole('button',{name:'Confirm booking'});assert.ok(await confirm.isEnabled(),'Confirm must explain all blockers'); let writes=0;page.on('request',r=>{if(r.url().endsWith('.create_booking')) writes++});await confirm.click();const errors=dialog.getByRole('region',{name:'Booking messages'});await errors.waitFor();await errors.getByRole('button',{name:/guest name/i}).click();assert.equal(await page.locator(':focus').getAttribute('aria-invalid'),'true');assert.equal(writes,0); await page.keyboard.press('Escape')
 })
 await check('linked clean primary action',async()=>{await page.goto('/housekeeping-board');await page.getByRole('button',{name:new RegExp(room)}).first().click();const sent=page.waitForResponse(r=>r.url().endsWith('.hk_update_task'));sent.catch(()=>{});await page.getByRole('button',{name:'Complete Checkout Clean',exact:true}).click();assert.equal((await (await sent).json()).message.status,'Done')})
+await check('flash defaults to the business day and states its basis', async () => {
+ const response = page.waitForResponse(r => r.url().includes('kamra.reports.manager_flash'))
+ await page.goto('/reports/flash'); const {message} = await (await response).json()
+ assert.equal(message.report_date, message.business_date)
+ assert.equal(await page.getByLabel('Report date').inputValue(), message.business_date)
+ await page.locator('main').getByText('Projected', {exact:true}).waitFor()
+ const earlier = new Date(message.business_date + 'T12:00:00Z'); earlier.setUTCDate(earlier.getUTCDate()-1)
+ await page.getByLabel('Report date').fill(earlier.toISOString().slice(0,10))
+ await page.locator('main').getByText('Actual', {exact:true}).waitFor()
+})
 await check('localized tax copy',()=>{for(const file of ['Billing.tsx','BanquetDocument.tsx','configs.ts'])assert.doesNotMatch(readFileSync(new URL(`../src/screens/${file}`,import.meta.url),'utf8'),/\bGST\b/)})
 } finally {await browser.close()}
 assert.deepEqual(failures,[])
