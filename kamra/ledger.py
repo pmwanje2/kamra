@@ -6,6 +6,7 @@ the four Opera ledgers (Guest / Deposit / AR / Package) can be balanced."""
 
 from __future__ import annotations
 
+import hashlib
 import json
 from decimal import ROUND_HALF_UP, ROUND_UP, Decimal
 from typing import Any
@@ -280,8 +281,10 @@ def _advance_held(folio: str, payment_row: str) -> float:
 	return round(float(frappe.db.sql(
 		"""SELECT COALESCE(SUM(credit - debit), 0) FROM `tabFolio Ledger Entry`
 		   WHERE ledger = 'Deposit' AND source_doctype = 'Folio Payment'
-		     AND source_name = %s AND folio = %s""",
-		(payment_row, folio))[0][0] or 0), 2)
+		     AND folio = %s AND (source_name = %s OR source_name IN (
+		       SELECT name FROM `tabFolio Payment` WHERE parent = %s AND parenttype = 'Folio'
+		       AND refund_of = %s AND correction_signature IS NOT NULL))""",
+		(folio, payment_row, folio, payment_row))[0][0] or 0), 2)
 
 
 def transfer_advances_to_guest(reservation: str,
@@ -1985,8 +1988,14 @@ def folio_history(property: str, query: str | None = None,
 		        or q in (r.invoice_number or "").lower()
 		        or q in (r.name or "").lower()
 		        or q in (r.reservation or "").lower()]
+	by_folio = {}
+	if rows:
+		for pay in frappe.get_all("Folio Payment", filters={"parenttype": "Folio", "parent": ["in", [r.name for r in rows]],
+			"fx_amount": ["!=", 0]}, fields=["parent", "currency", "fx_amount", "exchange_rate", "exchange_rate_date"], order_by="idx"):
+			by_folio.setdefault(pay.parent, []).append(pay)
 	# Attach reprint counts
 	for r in rows:
+		r["fx_payments"] = by_folio.get(r.name, [])
 		r["reprints"] = frappe.db.count("Folio Reprint", {"folio": r.name})
 	return {"folios": rows}
 
@@ -2421,24 +2430,43 @@ def home_to_fx(amount, rate) -> float:
 		Decimal("0.01"), rounding=ROUND_UP))
 
 
-def payment_rate(property: str, currency: str) -> dict:
-	"""The rate a foreign-currency payment converts at: the hotel's BUY
-	rate (it is buying the guest's foreign money) set for the current
-	business date. A rate from an earlier day is refused, not reused."""
+def _settlement_window() -> int:
+	if not frappe.db.exists("DocType", "Accounts Settings") or not frappe.get_meta(
+		"Accounts Settings").has_field("stale_days"):
+		return 1
+	return max(1, cint(frappe.db.get_single_value("Accounts Settings", "stale_days")))
+
+
+@frappe.whitelist()
+@require_roles("Front Desk", "Finance", "Night Auditor", "Kamra Agent")
+def payment_rate(property: str, currency: str, amount: float | None = None) -> dict:
+	"""Resolve the Finance-published buy rate for this property's open business day."""
+	from frappe.utils import add_days
 	currency = (currency or "").strip().upper()
-	if currency == home_currency(property):
+	home = home_currency(property)
+	if currency == home:
 		frappe.throw(f"{currency} is this hotel's own currency.")
 	bd = get_business_date(property)
-	row = frappe.db.get_value(
-		"Exchange Rate",
-		{"property": property, "currency": currency, "rate_date": bd,
-		 "disabled": 0},
-		["buy_rate", "rate_date"], as_dict=True)
-	if not row or float(row.buy_rate or 0) <= 0:
-		frappe.throw(f"No {currency} rate set for {bd}. Finance fetches "
-		             "or types today's rate on the Currency Desk first.")
-	return {"currency": currency, "rate": float(row.buy_rate),
-	        "rate_date": str(row.rate_date)}
+	window = _settlement_window()
+	rows = frappe.get_all("Exchange Rate", filters={"property": property, "currency": currency,
+		"rate_date": ["between", [add_days(bd, 1-window), bd]], "disabled": 0},
+		fields=["rate_date", "buy_rate", "max_exchange"], order_by="rate_date desc", limit_page_length=2)
+	if len(rows) == 2 and rows[0].rate_date == rows[1].rate_date:
+		frappe.throw(f"KMR-FX-002 / HSP-CASHIER-FX-RATE: Multiple {currency} rates on {rows[0].rate_date}. Ask Finance.")
+	if not rows or not flt(rows[0].buy_rate) > 0:
+		frappe.throw(f"KMR-FX-001 / HSP-CASHIER-FX-RATE: No {currency} rate set for {bd} within {window} day(s). Ask Finance.")
+	row = rows[0]
+	out = {"currency": currency, "rate": row.buy_rate, "rate_date": str(row.rate_date),
+	       "home_currency": home, "max_exchange": row.max_exchange, "window_days": window}
+	if amount is not None:
+		foreign = round_cents(amount)
+		if foreign <= 0 or (flt(row.max_exchange) > 0 and foreign > row.max_exchange):
+			frappe.throw("HSP-CASHIER-FX-LIMIT: Enter a positive amount within the published exchange limit.")
+		out["home_amount"] = fx_to_home(foreign, row.buy_rate)
+		# An opaque confirmation ties the preview to the exact terms, including a Finance rate change.
+		out["quote_id"] = hashlib.sha256(json.dumps([property, bd, currency, foreign,
+			str(row.rate_date), row.buy_rate, home]).encode()).hexdigest()
+	return out
 
 
 @frappe.whitelist()

@@ -1,3 +1,4 @@
+import { formatDate } from "../lib/utils"
 import { useCallback, useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 import { call, getCurrentProperty } from "../lib/api"
@@ -19,6 +20,7 @@ type FolioRow = {
   grand_total: number
   balance: number
   closed_on?: string
+  fx_payments?: {currency:string; fx_amount:number; exchange_rate:number; exchange_rate_date?:string}[]
   reprints: number
 }
 
@@ -161,6 +163,7 @@ export default function FolioHistory() {
                 </td>
                 <td className="px-3 py-2 font-mono text-xs">
                   {r.invoice_number || "-"}
+                  {r.fx_payments?.map((p,i)=><div key={i}>{p.currency} {p.fx_amount} @ {p.exchange_rate}{p.exchange_rate_date && ` · ${formatDate(p.exchange_rate_date)}`}</div>)}
                 </td>
                 <td className="px-3 py-2">
                   <Badge tone={r.status === "Open" ? "green" : "zinc"}>

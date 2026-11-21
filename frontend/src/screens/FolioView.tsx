@@ -1,6 +1,8 @@
+import { CurrencyInput, SettlementPreview, useSettlementQuote } from "../components/SettlementPreview"
+import RowCorrection from "../components/RowCorrection"
 import { ResponsiveList, Popin } from "../components/ui/responsive-list"
 import { Fragment, useCallback, useEffect, useRef, useState } from "react"
-import { ArrowLeft, ArrowRightLeft, Printer, Trash2, X } from "lucide-react"
+import { ArrowLeft, ArrowRightLeft, Printer, X } from "lucide-react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { formatDate, roomLabel } from "../lib/utils"
 import { call, getCurrentProperty, newIdempotencyKey } from "../lib/api"
@@ -54,6 +56,8 @@ interface InvoiceData {
       total: number
     }[]
     payments: {
+      name: string
+      exchange_rate_date?: string | null
       payment_kind?: string | null
       posting_date: string
       mode: string
@@ -70,6 +74,7 @@ interface InvoiceData {
     balance: number
   }
   property: {
+    currency: string
     name: string
     legal_name: string | null
     logo_url: string | null
@@ -290,8 +295,6 @@ export default function FolioView() {
   })
   const taxPicked = useRef(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [voidFor, setVoidFor] = useState<string | null>(null)
-  const [voidReason, setVoidReason] = useState("")
   const [partVal, setPartVal] = useState("")
   // ways to pay follow the country pack; Payment Link is the gateway, anywhere
   const loc = useLocale()
@@ -305,8 +308,7 @@ export default function FolioView() {
   })
   // one key per Record press; reused on retry (#550)
   const [paymentKey, setPaymentKey] = useState(newIdempotencyKey)
-  // foreign currencies the hotel set a rate for TODAY (the only rate the
-  // server converts a payment at); "" = the hotel's own currency
+  // Available display currencies. The settlement preview reads the published rate separately.
   const [fxRates, setFxRates] = useState<{ currency: string; buy_rate: number }[]>([])
   const [showIn, setShowIn] = useState("")
   const [shown, setShown] = useState<{
@@ -316,12 +318,12 @@ export default function FolioView() {
   useEffect(() => {
     call<{ business_date: string; rates: { currency: string; buy_rate: number; rate_date: string }[] }>(
       "kamra.ledger.list_exchange_rates", { property: getCurrentProperty() })
-      .then((r) => setFxRates(r.rates.filter((x) => x.rate_date === r.business_date)))
+      .then((r) => setFxRates(r.rates))
       .catch(() => setFxRates([]))
   }, [])
-  const fxRate = fxRates.find((r) => r.currency === payment.currency)?.buy_rate
-  const payModes = fxRate ? PAY_MODES.filter((m) => m === "Cash" || m === "Bank Transfer") : PAY_MODES
-  const [refund, setRefund] = useState<{ amount: string; mode: string; reason: string } | null>(null)
+  const foreign = !!payment.currency && payment.currency !== (data?.property.currency || loc.currency)
+  const quote = useSettlementQuote(data?.folio.property || getCurrentProperty(), foreign ? payment.currency : '', Number(payment.amount))
+  const payModes = foreign ? PAY_MODES.filter(m => m === 'Cash' || m === 'Bank Transfer' || m === 'Foreign Cash') : PAY_MODES
   const [showCancel, setShowCancel] = useState(false)
   const [cancelReason, setCancelReason] = useState("")
   const [allowance, setAllowance] = useState({ amount: "", reason: "", gst_rate: "0", reason_code: "" })
@@ -336,6 +338,7 @@ export default function FolioView() {
   // Correct charged nights: Finance / Hotel Admin, when the property's
   // rate-change policy allows it (the dry run refuses otherwise)
   const { roles } = useAuth()
+  const canRequestCorrection = roles.some(r => ["Front Desk","Finance","Hotel Admin","System Manager","Administrator"].includes(r))
   const canCorrect = roles.some((r) =>
     ["Finance", "Hotel Admin", "System Manager", "Administrator"].includes(r))
   const [toCorrect, setToCorrect] = useState<
@@ -407,7 +410,7 @@ export default function FolioView() {
   /** Params helper kept for call sites; unlock happens in act(). */
   const withPin = (params: Record<string, unknown>) => params
 
-  async function act(fn: () => Promise<unknown>) {
+  async function act(fn: () => Promise<unknown>, onError: (message: string) => void = setError) {
     setBusy(true)
     setError(null)
     try {
@@ -415,7 +418,7 @@ export default function FolioView() {
       await fn()
       load()
     } catch (e) {
-      setError(serverError(e))
+      onError(serverError(e))
     } finally {
       setBusy(false)
     }
@@ -1198,56 +1201,7 @@ export default function FolioView() {
                           <Popin label={t("Total")} importance="medium" className="py-2 text-right font-medium">{inr(c.total)}</Popin>
                           {editable && (
                             <Popin label={t("Actions")} importance="medium" className="relative whitespace-nowrap py-2 pl-3 text-right print:hidden">
-                              {c.charge_type !== "Allowance" && !voided &&
-                                (voidFor === c.name ? (
-                                  <span className="mr-1.5 inline-flex items-center gap-1">
-                                    <input
-                                      className={`${inputCls} w-52`}
-                                      placeholder={t("Reason (required - goes on the record)")}
-                                      value={voidReason}
-                                      onChange={(e) => setVoidReason(e.target.value)}
-                                    />
-                                    <button
-                                      className="rounded-md border border-rose-300 bg-rose-50 px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-100 disabled:opacity-50"
-                                      disabled={busy || !voidReason.trim()}
-                                      onClick={() =>
-                                        act(async () => {
-                                          await call("kamra.api.void_folio_charge",
-                                            withPin({
-                                              folio: folio.name,
-                                              charge_row: c.name,
-                                              reason: voidReason.trim(),
-                                            }))
-                                          setVoidFor(null)
-                                          setVoidReason("")
-                                        })
-                                      }
-                                    >
-                                      {t("Confirm void")}
-                                    </button>
-                                    <button
-                                      className="text-xs text-zinc-400 hover:text-zinc-700"
-                                      onClick={() => {
-                                        setVoidFor(null)
-                                        setVoidReason("")
-                                      }}
-                                    >
-                                      {t("Cancel")}
-                                    </button>
-                                  </span>
-                                ) : (
-                                  <button
-                                    aria-label={t("Void this charge")}
-                                    className="mr-1.5 inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2 py-1 text-xs text-zinc-500 hover:border-rose-400 hover:text-rose-700"
-                                    onClick={() => {
-                                      setVoidFor(c.name)
-                                      setVoidReason("")
-                                    }}
-                                  >
-                                    <Trash2 className="size-3" aria-hidden />
-                                    {t("Void")}
-                                  </button>
-                                ))}
+                              {canRequestCorrection && c.charge_type !== "Allowance" && !voided && <RowCorrection folio={folio.name} row={c.name} modes={[]} act={act} />}
                               {open && !voided && !selected.has(c.name) && (
                                 <button
                                   aria-label={t("Move or split this charge")}
@@ -1406,8 +1360,8 @@ export default function FolioView() {
                 {t("Payments")}
               </h3>
               <ul className="divide-y divide-zinc-100">
-                {folio.payments.map((p, i) => (
-                  <li key={i} className="flex justify-between py-1.5">
+                {folio.payments.map((p) => (
+                  <li key={p.name} className="flex flex-wrap justify-between gap-2 py-1.5">
                     <span>
                       {formatDate(p.posting_date)} · {translate(p.mode)}
                       {p.payment_kind && p.payment_kind !== "Payment" && (
@@ -1421,44 +1375,16 @@ export default function FolioView() {
                       {p.reference && (
                         <span className="text-zinc-400"> · {p.reference}</span>
                       )}
-                      {Number(p.fx_amount) > 0 && (
-                        <span className="text-zinc-400"> · {p.currency} {inr(p.fx_amount)} @ {p.exchange_rate}</span>
+                      {!!Number(p.fx_amount) && (
+                        <span className="text-zinc-400"> · {p.currency} {p.fx_amount} @ {p.exchange_rate}{p.exchange_rate_date && ` · ${formatDate(p.exchange_rate_date)}`}</span>
                       )}
                     </span>
-                    <span className={Number(p.amount) < 0 ? "font-medium text-rose-600" : ""}>{cur()}{inr(p.amount)}</span>
+                    <span className={Number(p.amount) < 0 ? "font-medium text-rose-600" : ""}>{property.currency} {Number(p.amount).toLocaleString(undefined,{maximumFractionDigits:2})}</span>
+                    {canRequestCorrection && <RowCorrection folio={folio.name} row={p.name} modes={(Number(p.fx_amount) > 0 ? [...loc.payment_modes, "Foreign Cash"] : loc.payment_modes).filter(m => m !== p.mode)} act={act} />}
                   </li>
                 ))}
               </ul>
-              {refund ? (
-                <div className="mt-2 flex flex-wrap items-end gap-2 rounded-lg border border-rose-200 bg-rose-50 p-2">
-                  <input className={`${inputCls} w-24`} type="number" placeholder={translate(cur())}
-                    value={refund.amount} onChange={(e) => setRefund({ ...refund, amount: e.target.value })} />
-                  <select className={inputCls} value={refund.mode}
-                    onChange={(e) => setRefund({ ...refund, mode: e.target.value })}>
-                    {PAY_MODES.map((m) => <option key={m} value={m}>{translate(m)}</option>)}
-                  </select>
-                  <input className={`${inputCls} flex-1`} placeholder={t("Reason (required - e.g. deposit returned)")}
-                    value={refund.reason} onChange={(e) => setRefund({ ...refund, reason: e.target.value })} />
-                  <Button variant="outline" className="text-rose-600" disabled={busy || !refund.amount || !refund.reason.trim()}
-                    onClick={() => act(async () => {
-                      await call("kamra.api.refund_folio_payment", withPin({
-                        folio: folio.name, amount: Number(refund.amount),
-                        mode: refund.mode, reason: refund.reason,
-                      }))
-                      setRefund(null)
-                    })}>
-                    {t("Refund")}
-                  </Button>
-                  <Button variant="ghost" onClick={() => setRefund(null)}>✕</Button>
-                </div>
-              ) : folio.balance < 0 && (
-                /* only money the guest is owed goes back; a guest who still
-                   owes settles first (the server refuses it too) */
-                <button className="mt-1 text-xs font-medium text-rose-600 hover:underline"
-                  onClick={() => setRefund({ amount: String(-folio.balance), mode: "Cash", reason: "" })}>
-                  {t("Refund money (deposit return / over-collection)")}
-                </button>
-              )}
+
             </div>
           )}
 
@@ -1762,7 +1688,7 @@ export default function FolioView() {
                 title={t("What this money is: against the bill, an advance, or a refundable deposit")}
                 onChange={(e) => setPayment({ ...payment, kind: e.target.value })}
               >
-                {["Payment", "Advance", ...(fxRate ? [] : ["Security Deposit"])].map((k) => (
+                {["Payment", "Advance", ...(foreign ? [] : ["Security Deposit"])].map((k) => (
                   <option key={k} value={k}>{t(k)}</option>
                 ))}
               </select>
@@ -1775,27 +1701,13 @@ export default function FolioView() {
                   <option key={m} value={m}>{t(m)}</option>
                 ))}
               </select>
-              {fxRates.length > 0 && (
-                <select
-                  className={inputCls}
-                  value={payment.currency}
-                  title={t("Currency the guest pays in")}
-                  onChange={(e) => {
-                    const currency = e.target.value
-                    // foreign money is notes or a wire; a card terminal charges home currency
-                    const mode = currency && !["Cash", "Bank Transfer"].includes(payment.mode) ? "Cash" : payment.mode
-                    setPayment({ ...payment, currency, mode, amount: "",
-                      kind: currency && payment.kind === "Security Deposit" ? "Payment" : payment.kind })
-                  }}
-                >
-                  <option value="">{locale().currency}</option>
-                  {fxRates.map((r) => <option key={r.currency}>{r.currency}</option>)}
-                </select>
-              )}
+              <CurrencyInput home={property.currency} value={payment.currency} onChange={currency=>setPayment({...payment, currency, amount:'',
+                mode: currency && !['Foreign Cash','Cash','Bank Transfer'].includes(payment.mode)?'Cash':payment.mode,
+                kind:currency && payment.kind==='Security Deposit'?'Payment':payment.kind})}/>
               <input
                 className={`${inputCls} w-28`}
                 type="number"
-                placeholder={fxRate ? payment.currency : translate(`${cur()}`)}
+                placeholder={foreign ? payment.currency : translate(`${cur()}`)}
                 value={payment.amount}
                 onChange={(e) =>
                   setPayment({ ...payment, amount: e.target.value })
@@ -1809,24 +1721,19 @@ export default function FolioView() {
                   setPayment({ ...payment, reference: e.target.value })
                 }
               />
-              {fxRate && Number(payment.amount) > 0 && (
-                <span className="text-xs text-zinc-500">
-                  {t("About {cur}{amount} at {rate}", {
-                    cur: cur(), amount: inr(Number(payment.amount) * fxRate), rate: fxRate,
-                  })}
-                </span>
-              )}
+              {foreign && <SettlementPreview result={quote} amount={Number(payment.amount)} balance={folio.balance} />}
               <Button
                 disabled={busy || !payment.amount}
                 onClick={() =>
                   act(async () => {
+                    if (foreign && !quote?.quote) throw new Error(quote?.error || t("Wait for the settlement preview."))
                     await call("kamra.api.add_folio_payment", withPin({
                       folio: folio.name,
                       mode: payment.mode,
                       kind: payment.kind,
                       amount: Number(payment.amount),
                       reference: payment.reference || undefined,
-                      currency: payment.currency || undefined,
+                      currency: payment.currency || undefined, quote_id: quote?.quote?.quote_id,
                       idempotency_key: paymentKey,
                     }))
                     setPaymentKey(newIdempotencyKey())

@@ -849,7 +849,8 @@ def _deposit_reservation(reservation: str):
 @require_roles("Front Desk", "Finance", "Kamra Agent")
 def record_advance(reservation: str, amount: float, mode: str = "Cash",
                    reference: str | None = None, pin: str | None = None,
-                   idempotency_key: str | None = None):
+                   idempotency_key: str | None = None, currency: str | None = None,
+                   quote_id: str | None = None):
 	"""Take a deposit / advance on a booking before arrival (#114). Opens
 	the guest folio early so the money sits on the stay from day one and
 	the balance at check-in is right; recorded through add_folio_payment,
@@ -876,7 +877,7 @@ def record_advance(reservation: str, amount: float, mode: str = "Cash",
 		frappe.throw(_("Enter the deposit amount."))
 	from kamra.localization import pack_for, payment_modes
 	modes = payment_modes(pack_for(res.property))
-	if mode not in modes:
+	if mode not in modes and not (mode == "Foreign Cash" and currency):
 		frappe.throw(_("Pick a payment mode: {0}.").format(", ".join(modes)))
 	# money guards before any write: a locked till refuses cleanly
 	from kamra.authz import require_cashier_pin
@@ -887,16 +888,17 @@ def record_advance(reservation: str, amount: float, mode: str = "Cash",
 	_confirm_status(res)
 	from kamra.folio import open_folio
 	folio = open_folio(res)
-	add_folio_payment(folio, mode, amount,
+	posted = add_folio_payment(folio, mode, amount,
 	                  reference=reference or f"deposit:{res.name}", pin=pin,
-	                  kind="Advance", idempotency_key=key)
+	                  kind="Advance", idempotency_key=key, currency=currency, quote_id=quote_id)
+	amount = posted["payments"][-1]["amount"]
 	frappe.db.set_value("Reservation", res.name, "advance_paid",
 	                    float(res.advance_paid or 0) + amount)
 	res.reload()
 	from kamra.savings import log_action
 	log_action("record_advance", "Folio", folio, res.property,
 	           rationale=f"{mode} deposit {amount:,.0f} on {res.name}")
-	return {"folio": folio, "status": res.status,
+	return {"folio": folio, "status": res.status, "paid": amount,
 	        "deposit": _deposit_state(res)}
 
 
@@ -1616,7 +1618,7 @@ def _pin_guard(folio: str, pin=None):
 def add_folio_payment(folio: str, mode: str, amount: float,
                       reference: str | None = None, pin: str | None = None,
                       kind: str = "Payment", currency: str | None = None,
-                      idempotency_key: str | None = None):
+                      idempotency_key: str | None = None, quote_id: str | None = None):
 	"""Record money received on the stay ledger. kind labels WHY it came
 	in - Payment (against the bill), Advance (collected before/at
 	check-in) or Security Deposit (held, refundable). Refunds go through
@@ -1646,7 +1648,7 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 	assert_payment_mode(doc.property, mode)
 	from kamra.business_date import get_business_date
 	from kamra.cashier import record_cashier_txn, require_open_session
-	from kamra.ledger import fx_to_home, home_currency, payment_rate, round_cents
+	from kamra.ledger import home_currency, payment_rate, round_cents
 	bd = get_business_date(doc.property)
 	# Property currency — never leave Folio Payment on the INR schema default (#341)
 	currency_home = home_currency(doc.property)
@@ -1663,10 +1665,12 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 		if kind == "Security Deposit":
 			frappe.throw("Take a security deposit in the hotel's currency: "
 			             "it is refunded in that currency.")
-		r = payment_rate(doc.property, currency)
+		r = payment_rate(doc.property, currency, amount)
+		if quote_id and quote_id != r["quote_id"]:
+			frappe.throw("HSP-CASHIER-FX-RATE: The published rate changed. Refresh the preview and confirm again.")
 		fx = {"currency": r["currency"], "fx_amount": round_cents(amount),
-		      "exchange_rate": r["rate"]}
-		amount = fx_to_home(fx["fx_amount"], r["rate"])
+		      "exchange_rate": r["rate"], "exchange_rate_date": r["rate_date"]}
+		amount = r["home_amount"]
 		if amount <= 0:
 			frappe.throw("Amount must be positive.")
 	currency = currency_home
@@ -1777,6 +1781,26 @@ def add_folio_payments(payments, pin: str | None = None):
 	return {"posted": len(payments), "folios": folios}
 
 
+@frappe.whitelist()
+@require_roles("Front Desk", "Finance")
+def payment_correction_options(folio: str, payment_row: str):
+	from kamra.corrections import options
+	return options(frappe.get_doc("Folio", folio), payment_row)
+
+
+@frappe.whitelist(methods=["POST"])
+@require_roles("Front Desk", "Finance")
+def correct_folio_payment(folio: str, payment_row: str, action: str | None = None,
+                          reason_code: str | None = None, reason: str | None = None,
+                          idempotency_key: str | None = None, pin: str | None = None,
+                          supervisor_pin: str | None = None, supervisor_user: str | None = None,
+                          refund_amount: float | None = None, destination_mode: str | None = None,
+                          action_type: str | None = None, reason_note: str | None = None):
+	from kamra.corrections import correct
+	return correct(folio, payment_row, action_type or action, reason_code, reason_note or reason,
+	               (idempotency_key or "").strip(), pin, supervisor_user, supervisor_pin, refund_amount, destination_mode)
+
+
 @frappe.whitelist(methods=["POST"])
 @require_roles("Finance", "Front Desk", "Kamra Agent")
 def refund_folio_payment(folio: str, amount: float | None = None,
@@ -1835,7 +1859,8 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
                           supervisor_pin: str | None = None,
                           ledger: str | None = None,
                           refund_of: str | None = None,
-                          idempotency_key: str | None = None):
+                          idempotency_key: str | None = None, correction: dict | None = None,
+                          bookkeeping_action: str | None = None, session: str | None = None):
 	"""The one refund writer (folio row, till, ledger). Not whitelisted:
 	ledger lets a security-deposit refund release the Deposit ledger -
 	callers that pass it have already checked the deposit's balance.
@@ -1884,13 +1909,14 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 	from kamra.localization import default_currency, pack_for
 	currency = (frappe.get_cached_value("Property", doc.property, "currency")
 	            or default_currency(pack_for(doc.property)))
-	sess = None
-	try:
-		sess = require_open_session(doc.property)
-	except Exception:
-		if "Kamra Agent" not in frappe.get_roles() and \
-		   frappe.session.user != "Administrator":
-			raise
+	sess = session
+	if correction is None:
+		try:
+			sess = require_open_session(doc.property)
+		except Exception:
+			if "Kamra Agent" not in frappe.get_roles() and \
+			   frappe.session.user != "Administrator":
+				raise
 	doc.append("payments", {
 		"posting_date": bd,
 		"payment_kind": "Refund",
@@ -1900,19 +1926,28 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 		"currency": currency,
 		"refund_of": refund_of,
 		"idempotency_key": idempotency_key,
+		**(correction or {}),
 	})
 	from kamra.folio import _recalculate
 	_recalculate(doc)
 	doc.save()
 	pay = doc.payments[-1]
-	record_cashier_txn(
-		doc.property, "Refund", mode, -float(amount),
-		folio=doc.name, reference=str(reason_text)[:140], session=sess)
+	if sess or correction is None:
+		record_cashier_txn(
+			doc.property, "Refund", mode, -float(amount),
+			folio=doc.name, reference=str(reason_text)[:140], session=sess)
 	try:
 		from kamra.ledger import record_payment_ledger
 		record_payment_ledger(doc, pay.as_dict(), session=sess, ledger=ledger)
 	except Exception:
+		if correction:
+			raise
 		frappe.log_error(title="ledger refund write failed")
+	if bookkeeping_action:
+		from kamra.savings import log_action
+		log_action(bookkeeping_action, "Folio", doc.name, doc.property,
+		           rationale=f"{refund_of}: {amount} {mode} ({reason_text})")
+		return {"ok": True, "balance": doc.balance, "reversal": pay.name}
 	from kamra.webhooks import emit_payment
 	emit_payment("folio.refunded", doc, pay)
 	if ledger == "Deposit":  # a security deposit, or an advance still held
@@ -1929,7 +1964,7 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 		log_action("folio_refund", "Folio", doc.name, doc.property,
 		           rationale=f"Refund {money_text(doc.property, amount)} by {mode}: "
 		                     f"{str(reason_text)[:100]}")
-	elif release_advance:
+	elif release_advance or correction:
 		from kamra.localization import money_text
 		from kamra.savings import log_action
 		log_action("folio_refund", "Folio", doc.name, doc.property,
@@ -3476,7 +3511,8 @@ def folio_invoice(folio: str):
 		"payment_kind": p.payment_kind, "mode": p.mode,
 		"amount": p.amount, "reference": p.reference,
 		"currency": p.currency, "fx_amount": p.get("fx_amount"),
-		"exchange_rate": p.get("exchange_rate"),
+		"exchange_rate": p.get("exchange_rate"), "exchange_rate_date": p.get("exchange_rate_date"),
+		"fx_rate_date": p.get("exchange_rate_date"),
 		"transaction_code": p.get("transaction_code"),
 		"gl_code": p.get("gl_code"), "refund_of": p.get("refund_of"),
 	} for p in doc.payments]
@@ -3506,6 +3542,7 @@ def folio_invoice(folio: str):
 				"label", "SAC"),
 		},
 		"property": {
+			"currency": prop.currency or loc.default_currency(pack),
 			"name": prop.property_name, "legal_name": prop.legal_name,
 			"logo_url": prop.get("logo_url"),
 			"address_line": prop.address_line, "city": prop.city,
@@ -4771,7 +4808,8 @@ def walk_in(property: str, room_type: str, room: str, check_out_date: str,
             booked_via: str | None = None,
             ota_ref: str | None = None,
             ota_total: float = 0,
-            ota_commission_pct: float | None = None):
+            ota_commission_pct: float | None = None, currency: str | None = None,
+            quote_id: str | None = None):
 	"""Walk-in in one step: book, register the ID, check into the chosen
 	room and take the money - the counter flow that used to be four screens.
 
@@ -4799,7 +4837,7 @@ def walk_in(property: str, room_type: str, room: str, check_out_date: str,
 	if amount < 0:
 		frappe.throw(_("Payment amount cannot be negative."))
 	modes = payment_modes(pack_for(property))
-	if amount and payment_mode not in modes:
+	if amount and payment_mode not in modes and not (payment_mode == "Foreign Cash" and currency):
 		frappe.throw(_("Pick a payment mode: {0}.").format(", ".join(modes)))
 	validate_id_type(property, id_type)
 
@@ -4868,8 +4906,9 @@ def walk_in(property: str, room_type: str, room: str, check_out_date: str,
 	if cint(defer_check_in):
 		folio = None
 		if amount:
-			folio = record_advance(reservation, amount, mode=payment_mode,
-			                       reference=payment_reference, pin=pin)["folio"]
+			advance = record_advance(reservation, amount, mode=payment_mode,
+			                       reference=payment_reference, pin=pin, currency=currency, quote_id=quote_id)
+			folio, amount = advance["folio"], advance["paid"]
 		return {
 			"reservation": reservation, "room": room,
 			"room_number": frappe.db.get_value("Room", room, "room_number"),
@@ -4885,9 +4924,10 @@ def walk_in(property: str, room_type: str, room: str, check_out_date: str,
 	folio = frappe.db.get_value("Folio", folio_filter)
 
 	if amount:
-		add_folio_payment(folio, payment_mode, amount,
+		posted = add_folio_payment(folio, payment_mode, amount,
 		                  reference=payment_reference, pin=pin,
-		                  kind="Advance")
+		                  kind="Advance", currency=currency, quote_id=quote_id)
+		amount = posted["payments"][-1]["amount"]
 
 	return {
 		"reservation": reservation,

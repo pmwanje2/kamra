@@ -1,3 +1,4 @@
+import { CurrencyInput, SettlementPreview, useSettlementQuote } from "../components/SettlementPreview"
 /*  Take a deposit on a booking before arrival (#114): record it as paid at
     the desk, or send the guest a payment link. Either way it lands on the
     guest folio as an Advance, so the balance at check-in is right. Used in
@@ -5,7 +6,7 @@
 
 import { useState } from "react"
 import { Check, Copy, Link2, MessageCircle } from "lucide-react"
-import { call, newIdempotencyKey } from "../lib/api"
+import { getCurrentProperty, call, newIdempotencyKey } from "../lib/api"
 import { serverError } from "../lib/resource"
 import { useCashierAuth } from "../lib/cashierAuth"
 import { cur, useLocale, fmtAmount } from "../lib/money"
@@ -43,6 +44,9 @@ export default function DepositPanel(props: {
   const [mode, setMode] = useState<"record" | "link" | null>(null)
   const [amount, setAmount] = useState(String(deposit.due || ""))
   const [payMode, setPayMode] = useState(loc.payment_modes[0] ?? "Cash")
+  const [payCurrency,setPayCurrency]=useState('')
+  const foreign=mode==='record' && !!payCurrency && payCurrency!==loc.currency && ['Cash','Foreign Cash','Bank Transfer'].includes(payMode)
+  const fx=useSettlementQuote(getCurrentProperty(),foreign?payCurrency:'', Number(amount))
   const [reference, setReference] = useState("")
   // one key per "Take advance": a retry after a lost response replays
   const [advKey, setAdvKey] = useState(newIdempotencyKey)
@@ -56,6 +60,7 @@ export default function DepositPanel(props: {
   if (!deposit.can_take && !deposit.paid) return null
 
   function open(m: "record" | "link") {
+    setPayCurrency('')
     setMode(m)
     setError(null)
     setAmount(String(deposit.due || ""))
@@ -65,11 +70,12 @@ export default function DepositPanel(props: {
     setBusy(true)
     setError(null)
     try {
+      if (foreign && !fx?.quote) throw new Error(fx?.error || t("Wait for the settlement preview."))
       if (pinStatus?.required) await ensureUnlocked()
       const r = await call<{ deposit: DepositState }>("kamra.api.record_advance", {
         reservation: props.reservation,
         amount: Number(amount),
-        mode: payMode,
+        mode: payMode, currency: foreign?payCurrency:undefined, quote_id:fx?.quote?.quote_id,
         reference: reference.trim() || undefined,
         idempotency_key: advKey,
       })
@@ -203,6 +209,8 @@ export default function DepositPanel(props: {
 
       {mode && (
         <div className="mt-3 space-y-3 rounded-lg bg-zinc-50 p-3">
+          {mode==='record' && ['Cash','Foreign Cash','Bank Transfer'].includes(payMode) && <CurrencyInput home={loc.currency} value={payCurrency} onChange={v=>{setPayCurrency(v);setAmount('')}}/>}
+          {foreign && <SettlementPreview result={fx} amount={Number(amount)} balance={deposit.due}/>}
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-zinc-600">{t("Amount")}</span>
             <input
@@ -225,7 +233,7 @@ export default function DepositPanel(props: {
                     type="button"
                     role="radio"
                     aria-checked={payMode === m}
-                    onClick={() => setPayMode(m)}
+                    onClick={() => {setPayMode(m); if(payCurrency){setPayCurrency('');setAmount('')}}}
                     className={
                       "rounded-lg border px-3 py-1.5 text-sm font-medium " +
                       (payMode === m
@@ -247,7 +255,7 @@ export default function DepositPanel(props: {
               )}
               <div className="flex gap-2">
                 <Button disabled={busy || !(Number(amount) > 0)} onClick={record}>
-                  {busy ? t("Saving…") : t("Record {amt}", { amt: fmt(Number(amount) || 0) })}
+                  {busy ? t("Saving…") : t("Record {amt}", { amt: foreign?`${payCurrency} ${amount}`:fmt(Number(amount) || 0) })}
                 </Button>
                 <Button variant="ghost" onClick={() => setMode(null)}>
                   {t("Cancel")}
@@ -259,7 +267,7 @@ export default function DepositPanel(props: {
           {mode === "link" && !link && (
             <div className="flex gap-2">
               <Button disabled={busy || !(Number(amount) > 0)} onClick={sendLink}>
-                {busy ? t("Creating…") : t("Create link for {amt}", { amt: fmt(Number(amount) || 0) })}
+                {busy ? t("Creating…") : t("Create link for {amt}", { amt: foreign?`${payCurrency} ${amount}`:fmt(Number(amount) || 0) })}
               </Button>
               <Button variant="ghost" onClick={() => setMode(null)}>
                 {t("Cancel")}
