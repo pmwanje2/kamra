@@ -452,6 +452,30 @@ def verify_supervisor(property: str, supervisor: str | None, pin,
 	return supervisor
 
 
+def _require_approval_property(property: str):
+	# The general role guard allows absent property filters on list endpoints.
+	if not property or not frappe.db.exists("Property", property):
+		frappe.throw("An accessible property is required for supervisor approval.", frappe.PermissionError)
+
+
+@frappe.whitelist()
+@require_roles("Front Desk", "Finance")
+def list_supervisors(property: str) -> list[dict]:
+	"""List eligible independent approvers for this property's folio corrections."""
+	_require_approval_property(property)
+	return supervisors_for(property, exclude=frappe.session.user)
+
+
+@frappe.whitelist(methods=["POST"])
+@require_roles("Front Desk", "Finance")
+def verify_supervisor_approval(property: str, supervisor: str, pin: str) -> dict:
+	"""Verify a named supervisor for the authenticated requester's correction."""
+	_require_approval_property(property)
+	approver = verify_supervisor(property, supervisor, pin, roles=SUPERVISOR_ROLES,
+	                             requester=frappe.session.user)
+	return {"supervisor": approver}
+
+
 def _check_user_pin(user: str, pin, property: str | None):
 	"""Check `user`'s cashier PIN; wrong tries count towards the lock."""
 	max_attempts, lock_minutes = _pin_policy(property)

@@ -341,9 +341,14 @@ class BridgeSupervisorTests(AuditTestCase):
 
 		method = getattr(authz, endpoint, None)
 		self.assertIn(method, frappe.whitelisted, f"Server Scripts need whitelisted kamra.authz.{endpoint}")
-		local = dict(method=f"kamra.authz.{endpoint}", params=dict(property=prop, **kwargs))
+		local = dict(method=f"kamra.authz.{endpoint}", prop=prop, **kwargs)
+		args = "property=prop"
+		if endpoint == "verify_supervisor_approval":
+			args += ", supervisor=supervisor, pin=pin"
+		if "requester" in kwargs:
+			args += ", requester=requester"
 		with patch("frappe.utils.safe_exec.is_safe_exec_enabled", return_value=True):
-			safe_exec("result = frappe.call(method, **params)", _locals=local)
+			safe_exec(f"result = frappe.call(method, {args})", _locals=local)
 		return local["result"]
 
 	def test_front_desk_lists_and_verifies_named_approver(self):
