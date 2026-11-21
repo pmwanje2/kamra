@@ -8,7 +8,7 @@ cash drawer reconcile to.
 import json
 
 import frappe
-from frappe.utils import add_days, getdate, nowdate
+from frappe.utils import add_days, getdate
 
 from kamra.authz import require_roles
 from kamra.folio import STANDS_ON_ITS_DATE
@@ -224,6 +224,8 @@ def void_allowance_report(
 
 def movement_counts(property: str, start: str, date: str) -> dict:
 	"""Arrivals, departures, no-shows over start..date, and who is in house."""
+	from kamra.movements import departure_counts
+
 	def count(field, statuses):
 		return frappe.db.count("Reservation", {
 			"property": property, field: ("between", [start, date]),
@@ -231,7 +233,8 @@ def movement_counts(property: str, start: str, date: str) -> dict:
 
 	return {
 		"arrivals": count("check_in_date", ["Confirmed", "Checked In"]),
-		"departures": count("check_out_date", ["Checked In", "Checked Out"]),
+		**departure_counts(property, start, date),
+		"departures_basis": "planned", "checked_out_basis": "actual",
 		"in_house": frappe.db.count("Reservation", {
 			"property": property, "status": "Checked In"}),
 		"no_shows": count("check_in_date", ["No Show"]),
@@ -242,12 +245,13 @@ def movement_counts(property: str, start: str, date: str) -> dict:
 @require_roles("Finance", "Revenue Manager", "Night Auditor", "Kamra Agent")
 def manager_flash(property: str, date: str | None = None,
                   from_date: str | None = None):
-	"""The daily flash: yesterday's performance, month to date, today's
+	"""The daily flash: performance for the requested date, month to date,
 	movement, collections by mode, and the 7-day outlook. With from_date,
 	the day figures, trend, movement and collections cover from_date..date."""
 	from kamra.business_date import report_range_end
-
-	date = date or nowdate()
+	from kamra.movements import report_dates
+	dates = report_dates(property, date)
+	date = dates["report_date"]
 	start = from_date or date
 	report_range_end(start, date)
 	total_rooms = frappe.db.count("Room", {"property": property}) or 0
@@ -277,7 +281,7 @@ def manager_flash(property: str, date: str | None = None,
 		})
 
 	return {
-		"date": str(date), "from_date": str(start), "total_rooms": total_rooms,
+		**dates, "from_date": str(start), "total_rooms": total_rooms,
 		"available_rooms": days[-1]["available_rooms"],
 		"today": days[-1] if len(days) == 1 else _sum_days(days, total_rooms),
 		"mtd": _sum_days(month, total_rooms), "movement": movement,

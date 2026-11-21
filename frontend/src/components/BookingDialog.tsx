@@ -1,6 +1,6 @@
 import { RateOptions } from "./RateOptions"
 import { useEffect, useRef, useState } from "react"
-import { htmlToText } from "../lib/utils"
+import { htmlToText, formatDate, roomLabel } from "../lib/utils"
 import { useNavigate } from "react-router-dom"
 import { ChevronDown, Loader2, Megaphone, Plus, ShieldAlert, Star, Trash2, X } from "lucide-react"
 import {
@@ -64,12 +64,12 @@ const inputCls =
   "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
 
 
-function Field(props: { label: string; children: React.ReactNode }) {
+function Field(props: { required?: boolean; label: string; children: React.ReactNode }) {
   useUILanguage()
   return (
     <label className="block">
       <span className="mb-1.5 block text-sm font-medium text-zinc-600">
-        {translate(props.label)}
+        {props.label}{props.required && <span aria-hidden="true"> *</span>}
       </span>
       {props.children}
     </label>
@@ -126,9 +126,19 @@ export function BookingDialog(props: {
   const [quote, setQuote] = useState<Quote | null>(null)
   const [quoting, setQuoting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const dialog = useRef<HTMLDivElement>(null)
+  const [attempted, setAttempted] = useState(false)
+  const [messagesOpen, setMessagesOpen] = useState(false)
+  const [submitError, setSubmitError] = useState("")
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null
+    dialog.current?.focus()
+    return () => { opener?.focus() }
+  }, [])
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState<{
     ref: string
+    room_number?: string | null
     room: string | null
     waitlist?: boolean
     walkIn?: WalkInResult
@@ -615,6 +625,11 @@ export function BookingDialog(props: {
   }
 
   async function submit(waitlist = false) {
+    if (!waitlist) {
+      setAttempted(true)
+      setSubmitError("")
+      if (problems.length) { setMessagesOpen(true); return }
+    }
     setBusy(true)
     setError(null)
     try {
@@ -757,7 +772,7 @@ export function BookingDialog(props: {
         ...nightPricesParam,
       })
       await addOthers(res.reservation)
-      setDone({ ref: res.reservation, room: res.room })
+      setDone({ ref: res.reservation, room: res.room, room_number: res.room_number })
       props.onBooked()
       call<{ deposit: DepositState }>("kamra.api.reservation_detail", {
         reservation: res.reservation,
@@ -767,7 +782,8 @@ export function BookingDialog(props: {
         )
         .catch(() => {})
     } catch (e) {
-      setError(shortErr(e))
+      if (waitlist) setError(shortErr(e))
+      else { setSubmitError(shortErr(e)); setMessagesOpen(true) }
     } finally {
       setBusy(false)
     }
@@ -816,7 +832,7 @@ export function BookingDialog(props: {
         defer_check_in: 1,
       })
       await addOthers(res.reservation)
-      setDone({ ref: res.reservation, room: res.room, walkIn: res })
+      setDone({ ref: res.reservation, room: res.room, room_number: res.room_number, walkIn: res })
       setGuidedCheckIn(res.checked_in === 0 ? res.reservation : null)
       props.onBooked()
     } catch (e) {
@@ -844,6 +860,34 @@ export function BookingDialog(props: {
     form.over_capacity_guests > 0 ? form.over_capacity_charge : 0
   const extraNeedsReason =
     form.over_capacity_guests > 0 && !form.over_capacity_reason.trim()
+
+  const problems: {field: string; severity: "error"; message: string}[] = []
+  function requireField(blocked: boolean, field: string, message: string) {
+    if (blocked) problems.push({field, severity: "error", message})
+  }
+  requireField(!form.guest_name.trim(), "guest", t("Enter the guest name."))
+  requireField(!form.room_type || !quote || quoting, "room", t("Select a room type and wait for a valid quote."))
+  requireField(badDate, "arrival", pastCheckIn ? t("That date has already passed.") : t("Enter a valid check-in date."))
+  requireField(!isPhoneComplete(form.phone, country), "phone", t("Check the guest phone number."))
+  requireField(onBehalf && !isPhoneComplete(form.booked_by_phone, country), "booker-phone", t("Check the booker phone number."))
+  requireField(badSlot, "slot", t("The slot must end after it starts."))
+  requireField(outDraft !== null, "departure", t("Check-out must be after check-in."))
+  requireField(blacklistBlocked, "blacklist", t("Resolve the guest blacklist restriction."))
+  requireField(creditBlocked, "credit", t("Resolve the company credit restriction."))
+  requireField(extraNeedsReason, "extra", t("Enter the reason for the extra guests."))
+  const messages = attempted ? [...problems, ...(submitError ? [{field: "server", message: submitError}] : [])] : []
+  const target = (field: string) => ({id: `booking-${field}`, "aria-invalid": attempted && problems.some(p => p.field === field) || undefined})
+  function jump(field: string) {
+    const focusField = () => {
+      const element = document.getElementById(`booking-${field}`)
+      element?.focus(); element?.scrollIntoView({block: "center"})
+    }
+    setMessagesOpen(false)
+    if (field === "booker-phone" && !moreOpen) {
+      setMoreOpen(true)
+      requestAnimationFrame(focusField)
+    } else focusField()
+  }
 
   // the advance each room's dates ask for, priced by the server
   const advanceNow = quote
@@ -924,7 +968,7 @@ export function BookingDialog(props: {
       })
     if (c.free_until)
       return t("Free cancellation until {date}; after that {fee} is charged.", {
-        date: c.free_until,
+        date: formatDate(c.free_until),
         fee: c.fee_label,
       })
     return t("Free cancellation.")
@@ -937,11 +981,19 @@ export function BookingDialog(props: {
 
   return (
     <div
-      className="fixed inset-0 z-50"
+      className="booking-dialog fixed inset-0 z-50"
+      ref={dialog} tabIndex={-1}
       role="dialog"
       aria-modal="true"
       aria-label={(walkIn ? t("Walk-in") : t("New booking"))}
-      onKeyDown={(e) => e.key === "Escape" && props.onClose()}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") { props.onClose(); return }
+        if (e.key !== "Tab") return
+        const controls = [...e.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex="0"]')].filter(el => el.getClientRects().length)
+        const first = controls[0], last = controls.at(-1)
+        if (e.shiftKey && (document.activeElement === first || document.activeElement === dialog.current)) { e.preventDefault(); last?.focus() }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus() }
+      }}
     >
       <div
         className="absolute inset-0 bg-black/40 animate-fade-in"
@@ -965,7 +1017,7 @@ export function BookingDialog(props: {
               {pinnedRoom && (
                 <>
                   <span className="text-zinc-300"> · </span>
-                  {t("Room {n}", { n: props.initial.room_number || props.initial.room || "" })}
+                  {t("Room {n}", { n: roomLabel(props.initial) })}
                 </>
               )}
             </p>
@@ -1035,7 +1087,7 @@ export function BookingDialog(props: {
                 <p className="text-lg font-semibold">{t("Booked · {ref}", { ref: done.ref })}</p>
                 <p className="mt-1 text-sm">
                   {done.room
-                    ? t("Room {n} assigned.", { n: done.room.split("-").pop() ?? "" })
+                    ? t("Room {n} assigned.", { n: roomLabel(done) })
                     : t("No room auto-assigned - pick one from Reservations.")}{" "}
                   {t("Find it under Arrivals on the stay date.")}
                 </p>
@@ -1057,7 +1109,7 @@ export function BookingDialog(props: {
                 <span className="text-zinc-500">{t("Room")}</span>
                 <span className="text-right font-medium">
                   {done.room
-                    ? (done.room.split("-").pop() ?? done.room)
+                    ? roomLabel(done)
                     : t("Unassigned")}
                   <span className="mt-0.5 block text-xs font-normal text-zinc-500">
                     {roomTypeName || form.room_type}
@@ -1070,14 +1122,14 @@ export function BookingDialog(props: {
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <span className="text-zinc-500">{t("Check-in")}</span>
                 <span className="font-medium">
-                  {form.check_in_date}
+                  {formatDate(form.check_in_date)}
                   {!dayUse && !walkIn && stayIn ? ` · ${stayIn}` : ""}
                 </span>
               </div>
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <span className="text-zinc-500">{t("Check-out")}</span>
                 <span className="font-medium">
-                  {checkOut}
+                  {formatDate(checkOut)}
                   {!dayUse && !walkIn && stayOut ? ` · ${stayOut}` : ""}
                 </span>
               </div>
@@ -1140,9 +1192,9 @@ export function BookingDialog(props: {
             </div>
           </div>
         ) : (
-          <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
             {/* Form */}
-            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 md:px-8 md:py-6">
+            <div className="min-w-0 shrink-0 px-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:px-6 py-5 md:px-8 md:py-6">
               <div className="w-full max-w-none space-y-6">
                 {options?.property?.sell_message && (
                   <div className="flex items-start gap-2 rounded-xl bg-brand-50 px-4 py-3 text-sm text-brand-900">
@@ -1155,17 +1207,17 @@ export function BookingDialog(props: {
                 )}
 
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label={t("Guest name")}>
+                  <Field required label={t("Guest name")}>
                     <div className="relative">
                       <input
                         className={inputCls}
-                        value={form.guest_name}
+                        aria-required="true"
+                        {...target("guest")} value={form.guest_name}
                         onChange={(e) => {
                           setProfile(null)
                           set("guest_name", e.target.value)
                         }}
                         placeholder={t("Type to find or create")}
-                        autoFocus
                       />
                       {hits.length > 0 && (
                         <ul className="absolute z-10 mt-1 w-full overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-lg">
@@ -1225,7 +1277,7 @@ export function BookingDialog(props: {
                   </Field>
                   <Field label={t("Phone")}>
                     <PhoneInput
-                      value={form.phone}
+                      id="booking-phone" value={form.phone}
                       country={options?.property?.country}
                       onChange={(v) => set("phone", v)}
                     />
@@ -1241,7 +1293,7 @@ export function BookingDialog(props: {
                 </Field>
 
                 {blacklisted && (
-                  <div
+                  <div {...target("blacklist")} tabIndex={-1}
                     role="alert"
                     className="space-y-3 rounded-xl border-2 border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-800"
                   >
@@ -1287,7 +1339,7 @@ export function BookingDialog(props: {
                 )}
 
                 {creditFails && credit && (
-                  <div
+                  <div {...target("credit")} tabIndex={-1}
                     role="alert"
                     className={
                       credit.blocked
@@ -1367,10 +1419,10 @@ export function BookingDialog(props: {
                 )}
 
                 <div className={walkIn ? "grid gap-3 sm:grid-cols-2" : ""}>
-                <Field label={t("Room type")}>
+                <Field required label={t("Room type")}>
                   <select
                     className={inputCls}
-                    value={form.room_type}
+                    {...target("room")} value={form.room_type}
                     onChange={(e) => {
                       // a smaller room type leaves a party it cannot sleep
                       autoRoomType.current = false
@@ -1488,12 +1540,12 @@ export function BookingDialog(props: {
                 </div>
 
                 <div className={"grid grid-cols-2 gap-3 " + (dayUse ? "sm:grid-cols-4" : "sm:grid-cols-5")}>
-                  <Field label={t("Check-in")}>
+                  <Field required={!walkIn} label={t("Check-in")}>
                     <input
                       type="date"
                       className={inputCls + (walkIn ? " bg-zinc-50 text-zinc-500" : "")}
                       min={todayLocal()}
-                      value={form.check_in_date}
+                      {...target("arrival")} value={form.check_in_date}
                       readOnly={walkIn}
                       title={(walkIn ? t("A walk-in arrives today") : undefined)}
                       onChange={(e) => {
@@ -1511,13 +1563,13 @@ export function BookingDialog(props: {
                     /* Two time inputs need two columns - a single cell overflows
                        into Adults and looks like a double text box. */
                     <div className="col-span-2 min-w-0 sm:col-span-3">
-                      <Field label={t("Time slot")}>
+                      <Field required label={t("Time slot")}>
                         <div className="flex min-w-0 items-center gap-1">
                           <input
                             type="time"
                             aria-label={t("From")}
                             className={inputCls + " min-w-0 flex-1 px-2"}
-                            value={slot.from}
+                            {...target("slot")} value={slot.from}
                             onChange={(e) => setSlot((x) => ({ ...x, from: e.target.value }))}
                           />
                           <span className="shrink-0 text-zinc-400" aria-hidden>
@@ -1540,12 +1592,12 @@ export function BookingDialog(props: {
                     </div>
                   ) : (
                     <>
-                      <Field label={t("Check-out")}>
+                      <Field required label={t("Check-out")}>
                         <input
                           type="date"
                           className={inputCls}
                           min={shiftDate(form.check_in_date || todayLocal(), 1)}
-                          value={outDraft ?? checkOut}
+                          {...target("departure")} value={outDraft ?? checkOut}
                           onChange={(e) => {
                             const v = e.target.value
                             // keep a half-typed or too-early date in the box (it
@@ -1564,7 +1616,7 @@ export function BookingDialog(props: {
                           </p>
                         )}
                       </Field>
-                      <Field label={t("Nights")}>
+                      <Field required label={t("Nights")}>
                         <input
                           type="number"
                           min={1}
@@ -1578,7 +1630,7 @@ export function BookingDialog(props: {
                       </Field>
                     </>
                   )}
-                  <Field label={t("Adults")}>
+                  <Field required label={t("Adults")}>
                     <input
                       type="number"
                       min={1}
@@ -1712,7 +1764,7 @@ export function BookingDialog(props: {
                     {form.over_capacity_guests > 0 && (
                       <input
                         className={inputCls}
-                        value={form.over_capacity_reason}
+                        {...target("extra")} value={form.over_capacity_reason}
                         onChange={(e) =>
                           set("over_capacity_reason", e.target.value)
                         }
@@ -2224,7 +2276,7 @@ export function BookingDialog(props: {
                                 </Field>
                                 <Field label={translate("Booker phone")}>
                                   <PhoneInput
-                                    value={form.booked_by_phone}
+                                    id="booking-booker-phone" value={form.booked_by_phone}
                                     country={options?.property?.country}
                                     onChange={(v) =>
                                       set("booked_by_phone", v)
@@ -2524,8 +2576,8 @@ export function BookingDialog(props: {
                       </div>
                       <p className="mt-1 text-xs text-zinc-400">
                         {dayUse
-                          ? `${form.check_in_date} · ${slot.from}-${slot.to}`
-                          : `${form.check_in_date} → ${checkOut}`}
+                          ? `${formatDate(form.check_in_date)} · ${slot.from}-${slot.to}`
+                          : `${formatDate(form.check_in_date)} → ${formatDate(checkOut)}`}
                       </p>
                       {otaTotal > 0 && (
                         <p className="mt-1 text-xs font-medium text-indigo-600">
@@ -2601,9 +2653,15 @@ export function BookingDialog(props: {
                   </>
                 ) : (
                 <>
+                {messages.length > 0 && <div className="relative mb-2 text-sm text-rose-800">
+                  <Button variant="outline" aria-expanded={messagesOpen} onClick={() => setMessagesOpen(!messagesOpen)}><ShieldAlert className="size-4" />{t("Messages ({n})", {n: messages.length})}</Button>
+                  {messagesOpen && <section aria-label={t("Booking messages")} className="absolute bottom-full z-10 mb-1 max-h-52 w-full overflow-auto rounded-lg border border-rose-200 bg-white p-2 shadow-lg">
+                    <ul>{messages.map(m => <li key={m.field}>{m.field === "server" ? <span role="alert">{m.message}</span> : <button className="w-full p-2 text-start underline" onClick={() => jump(m.field)}>{m.message}</button>}</li>)}</ul>
+                  </section>}
+                </div>}
                 <Button
                   className="w-full justify-center py-2.5 text-base"
-                  disabled={busy || !form.guest_name || !quote || badDate || pastCheckIn || badPhone || badSlot || outDraft !== null || blacklistBlocked || creditBlocked || extraNeedsReason}
+                  disabled={busy}
                   onClick={() => submit()}
                 >
                   {busy ? t("Booking…") : t("Confirm booking")}

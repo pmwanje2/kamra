@@ -25,7 +25,9 @@
     "agreed-rate:check": "node scripts/agreed-rate-check.mjs",
     "booking-quote:check": "node scripts/booking-quote-check.mjs",
     "flash-projected:check": "node scripts/flash-projected-check.mjs",
-    "discount-advance-bill:check": "node scripts/discount-advance-bill-check.mjs"
+    "discount-advance-bill:check": "node scripts/discount-advance-bill-check.mjs",
+    "front-office:check": "node scripts/front-office-format-check.mjs",
+    "front-office:browser": "node scripts/front-office-ux-check.mjs"
   },
   "dependencies": {
     "libphonenumber-js": "^1.13.15",

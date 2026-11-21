@@ -329,6 +329,7 @@ export const enabledModules = () =>
   })
 
 export interface ReservationRow {
+  room_number: string | null
   name: string
   guest_name: string
   room_type: string
@@ -367,6 +368,9 @@ export interface Snapshot {
   date: string
   business_date?: string | null
   arrivals: ReservationRow[]
+  departures_due: ReservationRow[]
+  departures_overdue: ReservationRow[]
+  checked_out: ReservationRow[]
   departures: ReservationRow[]
   in_house: ReservationRow[]
   rooms: RoomRow[]
@@ -507,6 +511,8 @@ export function setCurrentProperty(p: string) {
 }
 
 export interface PropertyRow {
+  business_date: string
+  calendar_date: string
   name: string
   property_name: string
   city: string | null
@@ -626,6 +632,7 @@ export const createBooking = (
   call<{
     reservation: string
     room: string | null
+    room_number: string | null
     amount_after_tax: number
     status?: string
     credit_warning?: { company: string; reasons: string[]; overridden: boolean }
@@ -1732,8 +1739,8 @@ export const checkIn = (reservation: string) =>
 export const checkOut = (reservation: string) =>
   call("kamra.api.check_out", { reservation })
 
-export const setHousekeepingStatus = (room: string, status: string) =>
-  call("kamra.api.set_housekeeping_status", { room, status })
+export const setHousekeepingStatus = (room: string, status: string, reason?: string) =>
+  call("kamra.api.set_housekeeping_status", { room, status, reason })
 
 export interface ReservationDetail {
   name: string

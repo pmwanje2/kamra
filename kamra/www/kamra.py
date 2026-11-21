@@ -5,6 +5,7 @@ from html import escape
 
 import frappe
 from frappe.utils import get_url, strip_html
+from frappe.utils.dateutils import get_user_date_format
 
 # The SPA owns its own routing; never cache the boot shell.
 no_cache = 1
@@ -36,7 +37,8 @@ def get_context(context):
 	# The socket.io namespace is the site name, which is not the hostname on
 	# a custom domain - without it live updates silently never arrive.
 	site = json.dumps(frappe.local.site).replace("<", "\\u003c")
-	boot = f'<script>window.csrf_token = "{csrf}"; window.kamra_site = {site};</script>'
+	date_format = json.dumps(get_user_date_format()).replace("<", "\\u003c")
+	boot = f'<script>window.kamra_date_format = {date_format}; window.csrf_token = "{csrf}"; window.kamra_site = {site};</script>'
 	# Inject before the module script so the token is set before the app boots.
 	html = html.replace("</head>", boot + "</head>", 1)
 	html = _with_meta(html, frappe.request.path if frappe.request else "/")

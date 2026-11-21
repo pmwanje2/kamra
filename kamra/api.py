@@ -1070,7 +1070,6 @@ def hk_queue(property: str):
 	prio_rank = {"Urgent": 0, "High": 1, "Medium": 2, "Low": 3}
 	for t in tasks:
 		t["arrival_today"] = t.room in arriving_rooms
-		t["room_number"] = (t.room or "").split("-")[-1]
 		t["mine"] = bool(t.assigned_to_user) and t.assigned_to_user == me
 		t["claimable"] = not t.assigned_to_user
 		t["overdue"] = bool(t.due_by and get_datetime(t.due_by) < now_dt)
@@ -1088,6 +1087,10 @@ def hk_queue(property: str):
 		        "occupancy_status"],
 		order_by="room_number asc",
 	)
+
+	numbers = {r.name: r.room_number for r in rooms}
+	for task in tasks:
+		task["room_number"] = numbers.get(task.room)
 
 	# guest context the housekeeper needs on the floor: who's in the room or
 	# arriving, whether they're a VIP, their requests and arrival timing
@@ -4020,12 +4023,22 @@ def _property_scope():
 def my_properties():
 	"""Properties the current user may work with. frappe.get_list applies
 	User Permissions, so a property-restricted user sees only theirs."""
-	return frappe.get_list(
+	filters = {"disabled": 0}
+	scope = _property_scope()
+	if scope is not None:
+		filters["name"] = scope
+	props = frappe.get_list(
 		"Property",
-		filters={"disabled": 0},
-		fields=["name", "property_name", "city"],
+		filters=filters,
+		fields=["name", "property_name", "city", "business_date"],
 		order_by="property_name asc",
 	)
+	from kamra.business_date import get_business_date
+	from kamra.no_show import property_now
+	for row in props:
+		row["business_date"] = str(row.business_date or get_business_date(row.name))
+		row["calendar_date"] = str(property_now(row.name).date())
+	return props
 
 
 def _stay_balances(names: list) -> dict:
@@ -4176,17 +4189,20 @@ def _stay_balance(reservation: str) -> dict:
 @require_roles("Front Desk", "Night Auditor", "Kamra Agent", "Finance", "Revenue Manager")
 def front_desk_snapshot(property: str | None = None, date: str | None = None):
 	"""Everything the front desk needs for one day, in one call."""
+	from kamra.authz import assert_property_access
 	from kamra.business_date import get_business_date
-	date = date or nowdate()
-
-	res_filters = {"check_in_date": date, "status": "Confirmed"}
-	dep_filters = {"check_out_date": date, "status": "Checked In"}
-	inh_filters = {"status": "Checked In"}
-	room_filters = {}
-	scope = property or _property_scope()
-	if scope:
-		for flt in (res_filters, dep_filters, inh_filters, room_filters):
-			flt["property"] = scope
+	from kamra.movements import completed_on, departure_state
+	if not property:
+		props = my_properties()
+		if len(props) != 1:
+			frappe.throw(_("Select a property to view its business day."))
+		property = props[0]["name"]
+		assert_property_access(property)
+	business_date = get_business_date(property)
+	date = str(date or business_date)
+	res_filters = {"property": property, "check_in_date": date, "status": "Confirmed"}
+	inh_filters = {"property": property, "status": "Checked In"}
+	room_filters = {"property": property}
 
 	res_fields = [
 		"name", "guest_name", "room_type", "room", "status", "source",
@@ -4200,17 +4216,20 @@ def front_desk_snapshot(property: str | None = None, date: str | None = None):
 		"Reservation", filters=res_filters, fields=res_fields,
 		order_by="creation asc",
 	)
-	departures = frappe.get_all(
-		"Reservation", filters=dep_filters, fields=res_fields,
-		order_by="creation asc",
-	)
 	in_house = frappe.get_all(
 		"Reservation", filters=inh_filters, fields=res_fields,
 		order_by="room asc",
 	)
 
+	departures = [r for r in in_house if departure_state(r, date) == "due_today"]
+	overdue = [r for r in in_house if departure_state(r, date) == "overdue"]
+	stay = frappe.qb.DocType("Reservation")
+	completed = (frappe.qb.from_(stay).select(*(stay[field] for field in res_fields))
+	             .where((stay.property == property) & completed_on(stay, date, date))
+	             .orderby(stay.room).run(as_dict=True))
+
 	# payment state per stay - the same rules as the reservation drawer
-	all_rows = arrivals + departures + in_house
+	all_rows = arrivals + in_house + completed
 	money = _stay_balances([r.name for r in all_rows])
 	for r in all_rows:
 		m = money.get(r.name) or {}
@@ -4226,6 +4245,10 @@ def front_desk_snapshot(property: str | None = None, date: str | None = None):
 		order_by="room_number asc",
 	)
 
+	numbers = {r.name: r.room_number for r in rooms}
+	for row in all_rows:
+		row["room_number"] = numbers.get(row.room)
+
 	minutes = frappe.db.sql(
 		"""
 		SELECT COALESCE(SUM(minutes_saved), 0)
@@ -4238,7 +4261,10 @@ def front_desk_snapshot(property: str | None = None, date: str | None = None):
 	return {
 		"date": date,
 		# an arrival due on or before it can be marked a no-show at the desk
-		"business_date": str(get_business_date(property)) if property else None,
+		"business_date": business_date,
+		"departures_due": departures,
+		"departures_overdue": overdue,
+		"checked_out": completed,
 		"arrivals": arrivals,
 		"departures": departures,
 		"in_house": in_house,
@@ -5634,7 +5660,7 @@ def _is_room_supervisor() -> bool:
 
 @frappe.whitelist(methods=["POST"])
 @require_roles("Housekeeping", HK_SUPERVISOR, "Front Desk", "Kamra Agent")
-def set_housekeeping_status(room: str, status: str):
+def set_housekeeping_status(room: str, status: str, reason: str | None = None):
 	"""Change a room's housekeeping status - role, property and DocPerm
 	checked (#99): an attendant can mark Clean / Dirty, only a supervisor
 	can pass a room or take it out of order, nobody can touch a room of a
@@ -5659,7 +5685,7 @@ def set_housekeeping_status(room: str, status: str):
 	frappe.db.set_value("Room", room, "housekeeping_status", status)
 	from kamra.savings import log_action
 	log_action("room_status", "Room", room, r.property,
-	           rationale=f"{r.housekeeping_status or '-'} → {status}")
+	           rationale=f"{r.housekeeping_status or '-'} → {status}" + (f": {reason.strip()}" if reason else ""))
 	if status == "Out of Order":
 		# set_value skips the Room hooks, so the bell is told here
 		from kamra.notifications import room_out_of_order
@@ -5688,15 +5714,21 @@ def room_board(property: str):
 			         "room": ("is", "set")},
 			fields=["room", "guest_name", "check_out_date", "is_day_use",
 			        "planned_check_out_time", "status"])}
+	from kamra.business_date import get_business_date
+	business = get_business_date(property)
+	clean_tasks = {}
 	tasks = {}
 	for t in frappe.get_all(
 			"Housekeeping Task",
 			filters={"property": property,
 			         "status": ("in", ["Pending", "In Progress"])},
 			fields=["name", "room", "task_type", "status", "priority",
-			        "assigned_to_user", "due_by"],
+			        "assigned_to_user", "due_by", "reservation.check_out_business_date as departure_day"],
 			order_by="creation asc"):
 		tasks.setdefault(t.room, t)
+		day = t.departure_day if t.task_type == "Checkout Clean" and t.departure_day else t.due_by
+		if t.task_type in ("Checkout Clean", "Stayover Clean") and str(day)[:10] == business:
+			clean_tasks.setdefault(t.room, []).append({"name": t.name, "type": t.task_type})
 	names = {u.name: u.full_name for u in frappe.get_all(
 		"User", filters={"name": ("in", list({t.assigned_to_user for t in
 		                                      tasks.values() if t.assigned_to_user}))},
@@ -5712,6 +5744,7 @@ def room_board(property: str):
 		r["day_use"] = bool(stay and stay.is_day_use)
 		r["etd"] = str(stay.planned_check_out_time)[:5] \
 			if stay and stay.planned_check_out_time else None
+		r["clean_tasks"] = clean_tasks.get(r.name, [])
 		t = tasks.get(r.name)
 		r["task"] = {
 			"name": t.name, "type": t.task_type, "status": t.status,
@@ -7192,6 +7225,7 @@ def _booking_result(doc) -> dict:
 	return {
 		"reservation": doc.name,
 		"room": doc.room,
+		"room_number": frappe.db.get_value("Room", doc.room, "room_number") if doc.room else None,
 		"guest": doc.guest,
 		"amount_after_tax": doc.amount_after_tax,
 		"discount": doc.discount_amount,

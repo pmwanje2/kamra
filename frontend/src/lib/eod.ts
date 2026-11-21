@@ -191,7 +191,10 @@ export const runNightAudit = (property: string) =>
     amount_posted?: number
     no_shows_flagged?: number
     next_business_date?: string
-  }>("kamra.api.run_night_audit", { property })
+  }>("kamra.api.run_night_audit", { property }).then(result => {
+    window.dispatchEvent(new Event("kamra:business-date"))
+    return result
+  })
 
 export const auditHistory = (property: string, limit = 60, from_date?: string, to_date?: string) =>
   call<RunRow[]>("kamra.night_audit.night_audit_history", {

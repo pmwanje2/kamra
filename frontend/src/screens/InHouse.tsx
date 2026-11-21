@@ -1,3 +1,4 @@
+import { Popin, ResponsiveList } from "../components/ui/responsive-list"
 import { useCallback, useEffect, useState } from "react"
 import { useNavigate, useOutletContext, useSearchParams } from "react-router-dom"
 import { ChevronLeft, ChevronRight, LogIn, LogOut, Receipt, Users } from "lucide-react"
@@ -9,36 +10,28 @@ import { Avatar } from "../components/ui/avatar"
 import CheckInDialog from "../components/CheckInDialog"
 import CheckOutDialog from "../components/CheckOutDialog"
 import type { ShellContext } from "../AppShell"
-import { cn } from "../lib/utils"
+import { cn, roomLabel, formatDate } from "../lib/utils"
 import { shiftDate } from "../lib/stay"
 import { cur, moneyLocale } from "../lib/money"
 import { serverError } from "../lib/resource"
-import { useT, t as translate, uiDateLocale } from "../lib/i18n"
+import { useT, t as translate } from "../lib/i18n"
 
 /** Everyone at the property on a day, in one place: who is due in, who is
  *  in house and who is due out, each with the desk's actions. */
 
-type Tab = "arrivals" | "in-house" | "departures"
+type Tab = "arrivals" | "in-house" | "departures" | "overdue" | "checked-out"
 const TABS: { id: Tab; label: string; icon: typeof LogIn }[] = [
   { id: "arrivals", label: "Arrivals", icon: LogIn },
   { id: "in-house", label: "In house", icon: Users },
-  { id: "departures", label: "Departures", icon: LogOut },
+  { id: "departures", label: "Due today", icon: LogOut },
+  { id: "overdue", label: "Overdue", icon: LogOut },
+  { id: "checked-out", label: "Checked out", icon: LogOut },
 ]
 
-const iso = (d: Date) => {
-  const z = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
-  return z.toISOString().slice(0, 10)
-}
 // "" for a bad ?date= in the URL rather than an Invalid Date crash
 const shift = shiftDate
 const money = (n: number) =>
   `${cur()}${Number(n || 0).toLocaleString(moneyLocale(), { maximumFractionDigits: 0 })}`
-const short = (d: string) =>
-  new Date(d + "T00:00:00").toLocaleDateString(uiDateLocale(undefined), {
-    day: "numeric",
-    month: "short",
-  })
-
 function Balance({ row }: { row: ReservationRow }) {
   const { t } = useT()
   const due = Number(row.balance_due ?? 0)
@@ -54,24 +47,25 @@ export default function InHouse() {
   const { refreshKey } = useOutletContext<ShellContext>()
   const [params, setParams] = useSearchParams()
   const tab = (TABS.some((x) => x.id === params.get("tab")) ? params.get("tab") : "arrivals") as Tab
-  const today = iso(new Date())
-  const date = params.get("date") || today
+  const [snap, setSnap] = useState<Snapshot | null>(null)
+  const today = snap?.business_date || ""
+  const requestedDate = params.get("date") || undefined
+  const date = requestedDate || today
   // expected arrivals over a range: date..until (one day when not set)
   const until = tab === "arrivals" && (params.get("until") ?? "") > date ? params.get("until")! : ""
-  const [snap, setSnap] = useState<Snapshot | null>(null)
   const [rangeArrivals, setRangeArrivals] = useState<ReservationRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [checkingIn, setCheckingIn] = useState<string | null>(null)
   const [checkingOut, setCheckingOut] = useState<string | null>(null)
 
   const load = useCallback(() => {
-    getSnapshot(date === today ? undefined : date)
+    getSnapshot(requestedDate)
       .then((s) => {
         setSnap(s)
         setError(null)
       })
       .catch((e) => setError(serverError(e)))
-  }, [date, today])
+  }, [requestedDate])
   useEffect(load, [load, refreshKey])
 
   // ponytail: one snapshot per day, capped at 14 days; add a range endpoint
@@ -104,7 +98,9 @@ export default function InHouse() {
   const rows: Record<Tab, ReservationRow[]> = {
     arrivals: [...(snap?.arrivals ?? []), ...(rangeArrivals ?? [])],
     "in-house": snap?.in_house ?? [],
-    departures: snap?.departures ?? [],
+    departures: snap?.departures_due ?? [],
+    overdue: snap?.departures_overdue ?? [],
+    "checked-out": snap?.checked_out ?? [],
   }
   const shown = rows[tab]
 
@@ -118,12 +114,7 @@ export default function InHouse() {
     }
   }
 
-  const prettyDate = new Date(date + "T00:00:00").toLocaleDateString(uiDateLocale(undefined), {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  })
+  const prettyDate = formatDate(date)
 
   return (
     <div className="space-y-4">
@@ -132,7 +123,7 @@ export default function InHouse() {
           <h1 className="text-xl font-semibold text-zinc-900">{t("In House")}</h1>
           <p className="text-xs text-zinc-500">{t("Arrivals, guests in house and departures, in one list.")}</p>
         </div>
-        <div className="flex items-center gap-1 rounded-lg border border-zinc-200 bg-white p-0.5 text-sm">
+        <div className="flex max-w-full flex-wrap items-center gap-1 rounded-lg border border-zinc-200 bg-white p-0.5 text-sm">
           <button
             aria-label={t("Previous day")}
             className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-100"
@@ -165,7 +156,7 @@ export default function InHouse() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 sm:max-w-xl" role="tablist">
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-5" role="tablist">
         {TABS.map((x) => (
           <button
             key={x.id}
@@ -201,11 +192,13 @@ export default function InHouse() {
               ? t("No arrivals on this day.")
               : tab === "departures"
                 ? t("No departures on this day.")
+                : tab === "overdue" ? t("No overdue stays.")
+                : tab === "checked-out" ? t("No completed checkouts.")
                 : t("Nobody is in house.")}
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <ResponsiveList className="w-full text-sm">
               <thead>
                 <tr className="border-b border-zinc-100 text-left text-[11px] font-medium uppercase tracking-wider text-zinc-400">
                   <th className="px-4 py-2.5">{t("Guest")}</th>
@@ -223,7 +216,7 @@ export default function InHouse() {
                     className="cursor-pointer hover:bg-zinc-50"
                     onClick={() => navigate(`/grc/${encodeURIComponent(row.name)}`)}
                   >
-                    <td className="px-4 py-2.5">
+                    <Popin label={t("Guest")} importance="high" className="px-4 py-2.5">
                       <div className="flex items-center gap-2.5">
                         <Avatar name={row.guest_name} />
                         <div className="min-w-0">
@@ -235,30 +228,30 @@ export default function InHouse() {
                           </div>
                         </div>
                       </div>
-                    </td>
-                    <td className="px-3 py-2.5 tabular-nums">
-                      {row.room ? row.room.split("-").pop() : <span className="text-zinc-400">{t("Unassigned")}</span>}
-                    </td>
-                    <td className="hidden px-3 py-2.5 text-zinc-600 sm:table-cell">
-                      {short(row.check_in_date)} - {short(row.check_out_date)}
+                    </Popin>
+                    <Popin label={t("Room")} importance="high" className="px-3 py-2.5 tabular-nums">
+                      {row.room ? <span>{roomLabel(row)}</span> : <span className="text-zinc-400">{t("Unassigned")}</span>}
+                    </Popin>
+                    <Popin label={t("Stay")} importance="medium" className="hidden px-3 py-2.5 text-zinc-600 sm:table-cell">
+                      {formatDate(row.check_in_date)} - {formatDate(row.check_out_date)}
                       <span className="text-zinc-400"> · {t("{n} night{s}", { n: row.nights, s: row.nights === 1 ? "" : "s" })}</span>
-                    </td>
-                    <td className="hidden px-3 py-2.5 md:table-cell">
+                    </Popin>
+                    <Popin label={t("Source")} importance="low" className="hidden px-3 py-2.5 md:table-cell">
                       <Badge tone={row.source === "OTA" ? "indigo" : row.source === "AI Agent" ? "brand" : "zinc"}>
                         {row.source === "OTA" ? row.channel || t("OTA") : t(row.source)}
                       </Badge>
-                    </td>
-                    <td className="px-3 py-2.5 text-right">
+                    </Popin>
+                    <Popin label={t("Due")} importance="medium" className="px-3 py-2.5 text-right">
                       <Balance row={row} />
-                    </td>
-                    <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+                    </Popin>
+                    <Popin label={t("Actions")} importance="low" className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
                       <div className="flex justify-end gap-1.5">
                         {tab === "arrivals" && date === today && (
                           <Button className="px-2.5 py-1 text-xs" onClick={() => setCheckingIn(row.name)}>
                             {t("Check in")}
                           </Button>
                         )}
-                        {tab !== "arrivals" && (
+                        {tab !== "arrivals" && tab !== "checked-out" && (
                           <Button
                             variant={tab === "departures" ? "primary" : "outline"}
                             className="px-2.5 py-1 text-xs"
@@ -279,11 +272,11 @@ export default function InHouse() {
                           </Button>
                         )}
                       </div>
-                    </td>
+                    </Popin>
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </ResponsiveList>
           </div>
         )}
       </div>

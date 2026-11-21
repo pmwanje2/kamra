@@ -4,6 +4,7 @@ import { Mail, Plus, Printer, Trash2 } from "lucide-react"
 import { call, getCurrentProperty } from "../lib/api"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
+import { formatDate } from "../lib/utils"
 import { cur, moneyLocale } from "../lib/money"
 import { useT, serverLang, t as translate } from "../lib/i18n"
 import { useAuth } from "../lib/auth"
@@ -93,6 +94,9 @@ interface Day {
 }
 
 interface Flash {
+  report_date: string
+  business_date: string
+  basis: "projected" | "actual"
   date: string
   from_date: string
   total_rooms: number
@@ -172,7 +176,7 @@ export default function Reports({ initialTab = "saved" }: { initialTab?: Tab }) 
   const [busy, setBusy] = useState(false)
 
   // Manager flash
-  const [flashDate, setFlashDate] = useState(todayISO)
+  const [flashDate, setFlashDate] = useState("")
   const [flashFrom, setFlashFrom] = useState("") // "" = the one day
   const [flash, setFlash] = useState<Flash | null>(null)
 
@@ -214,8 +218,8 @@ export default function Reports({ initialTab = "saved" }: { initialTab?: Tab }) 
     if (tab !== "flash") return
     call<Flash>("kamra.reports.manager_flash", {
       property,
-      date: flashDate,
-      from_date: flashFrom && flashFrom < flashDate ? flashFrom : undefined,
+      date: flashDate || undefined,
+      from_date: flashFrom && (!flashDate || flashFrom < flashDate) ? flashFrom : undefined,
     })
       .then(setFlash)
       .catch((e) => setError((e as Error).message))
@@ -1019,7 +1023,7 @@ export default function Reports({ initialTab = "saved" }: { initialTab?: Tab }) 
       {tab === "flash" && (
         <FlashPanel
           d={flash}
-          date={flashDate}
+          date={flashDate || flash?.report_date || ""}
           setDate={setFlashDate}
           from={flashFrom}
           setFrom={setFlashFrom}
@@ -1045,6 +1049,7 @@ function FlashPanel(props: {
 
   return (
     <div>
+      <p className="mb-2 text-sm">{t("Report date")} · {formatDate(d.report_date)} · {t("Business date")} · {formatDate(d.business_date)} · <strong>{d.basis === "actual" ? t("Actual") : t("Projected")}</strong></p>
       <div className="mb-4 flex flex-wrap justify-end gap-2 print:hidden">
         <input
           type="date"

@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Columns3, Download } from "lucide-react"
+import { Popin, ResponsiveList } from "./responsive-list"
 import { Button } from "./button"
 import { t as translate, useUILanguage } from "../../lib/i18n"
 import { downloadCsv } from "../../lib/csv"
 
 export type Column<R> = {
   key: string
+  importance?: "high" | "medium" | "low"
   /** Header text, already translated. */
   label: string
   /** What the cell shows; defaults to row[key]. */
@@ -29,6 +31,7 @@ type Props<R> = {
   /** CSV file name, without .csv. */
   exportName?: string
   empty?: ReactNode
+  responsive?: boolean
   pageSize?: number
 }
 
@@ -60,7 +63,7 @@ function raw<R>(c: Column<R>, row: R): string | number | null | undefined {
 /** A table every list in Kamra can share: centred headers, click a header
  *  to sort, choose the columns, export what is shown to CSV, and page
  *  through long lists. */
-export function DataTable<R>({ id, columns, rows, rowKey, onRowClick, exportName, empty, pageSize = 25 }: Props<R>) {
+export function DataTable<R>({ id, columns, rows, rowKey, onRowClick, exportName, empty, responsive = false, pageSize = 25 }: Props<R>) {
   useUILanguage()
   const [hidden, setHidden] = useState<string[]>(
     () => load(id) ?? columns.filter((c) => c.hidden).map((c) => c.key))
@@ -69,6 +72,7 @@ export function DataTable<R>({ id, columns, rows, rowKey, onRowClick, exportName
   const [size, setSize] = useState(pageSize)
   const [picking, setPicking] = useState(false)
 
+  const Table = responsive ? ResponsiveList : "table"
   const shown = columns.filter((c) => !hidden.includes(c.key))
   const sorted = useMemo(() => {
     if (!sort) return rows
@@ -124,7 +128,7 @@ export function DataTable<R>({ id, columns, rows, rowKey, onRowClick, exportName
         </Button>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <Table className="w-full text-sm">
           <thead className="text-xs uppercase text-zinc-400">
             <tr>
               {shown.map((c) => (
@@ -147,7 +151,11 @@ export function DataTable<R>({ id, columns, rows, rowKey, onRowClick, exportName
               <tr key={rowKey(r)}
                 className={`border-t border-zinc-100 align-top ${onRowClick ? "cursor-pointer hover:bg-zinc-50" : ""}`}
                 onClick={onRowClick ? () => onRowClick(r) : undefined}>
-                {shown.map((c) => (
+                {shown.map((c) => responsive ? (
+                  <Popin key={c.key} label={c.label} importance={c.importance} className={`px-2 py-2 ${alignCls(c)}`}>
+                    {c.render ? c.render(r) : String(raw(c, r) ?? "")}
+                  </Popin>
+                ) : (
                   <td key={c.key} className={`px-2 py-2 ${alignCls(c)}`}>
                     {c.render ? c.render(r) : String(raw(c, r) ?? "")}
                   </td>
@@ -159,7 +167,7 @@ export function DataTable<R>({ id, columns, rows, rowKey, onRowClick, exportName
                 {empty ?? translate("Nothing to show.")}</td></tr>
             ) : null}
           </tbody>
-        </table>
+        </Table>
       </div>
       {sorted.length > PAGE_SIZES[0] ? (
         <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-zinc-500">

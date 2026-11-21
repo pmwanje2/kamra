@@ -10,7 +10,7 @@ a per-property table - the chain's central view.
 from decimal import ROUND_HALF_UP, Decimal
 
 import frappe
-from frappe.utils import add_days, add_years, getdate, nowdate
+from frappe.utils import add_days, add_years, getdate
 
 from kamra.authz import ADMIN, require_roles
 
@@ -192,7 +192,9 @@ def property_dashboard(property: str, date: str | None = None, with_comparison: 
 	year comparison is heavy, so only the Dashboard screen asks for it."""
 	from kamra.crs import assert_property_access
 	assert_property_access(property)
-	date = date or nowdate()
+	from kamra.movements import report_dates
+	dates = report_dates(property, date)
+	date = dates["report_date"]
 	hk = _housekeeping_slice(property)
 	forecast = occupancy_forecast(property, date)
 	if not sees_figures():
@@ -201,7 +203,7 @@ def property_dashboard(property: str, date: str | None = None, with_comparison: 
 		return {
 			"property": property,
 			"property_name": frappe.db.get_value("Property", property, "property_name"),
-			"date": date,
+			**dates,
 			"figures_hidden": True,
 			**move,
 			"front_desk": move,
@@ -219,12 +221,14 @@ def property_dashboard(property: str, date: str | None = None, with_comparison: 
 	return {
 		"property": property,
 		"property_name": frappe.db.get_value("Property", property, "property_name"),
-		"date": date,
+		**dates,
 		"total_rooms": flash.get("total_rooms", 0),
 		# headline metrics
 		"occupancy_pct": today.get("occupancy_pct", 0),
 		"arrivals": move.get("arrivals", 0),
 		"departures": move.get("departures", 0),
+		"departures_overdue": move["departures_overdue"],
+		"checked_out": move["checked_out"],
 		"in_house": move.get("in_house", 0),
 		"no_shows": move.get("no_shows", 0),
 		# net of allowances (reports._day_stats)
@@ -246,12 +250,7 @@ def property_dashboard(property: str, date: str | None = None, with_comparison: 
 			"rooms_sold_mtd": mtd.get("rooms_sold", 0),
 		},
 		# department dashboards
-		"front_desk": {
-			"arrivals": move.get("arrivals", 0),
-			"departures": move.get("departures", 0),
-			"in_house": move.get("in_house", 0),
-			"no_shows": move.get("no_shows", 0),
-		},
+		"front_desk": move,
 		"housekeeping": hk,
 		"finance": finance,
 		"outlook": flash.get("outlook", []),
@@ -274,6 +273,7 @@ def _whole(amount) -> float:
 def _property_summary(property: str, date: str):
 	"""Compact headline numbers for one property in the portfolio table."""
 	total_rooms = frappe.db.count("Room", {"property": property}) or 0
+	from kamra.movements import departure_counts
 	from kamra.reports import _day_stats
 	s = _day_stats(property, date, total_rooms)
 	finance = _finance_slice(property, date)
@@ -286,9 +286,7 @@ def _property_summary(property: str, date: str):
 		"arrivals": frappe.db.count("Reservation", {
 			"property": property, "check_in_date": date,
 			"status": ("in", ["Confirmed", "Checked In"])}),
-		"departures": frappe.db.count("Reservation", {
-			"property": property, "check_out_date": date,
-			"status": ("in", ["Checked In", "Checked Out"])}),
+		**departure_counts(property, date, date),
 		"in_house": frappe.db.count("Reservation", {
 			"property": property, "status": "Checked In"}),
 		"revenue_today": _whole(s.get("total_revenue", 0)),
@@ -302,10 +300,13 @@ def _property_summary(property: str, date: str):
 def portfolio_dashboard(date: str | None = None):
 	"""The chain's central view: headline metrics rolled up across every
 	property the signed-in user may access, plus a per-property table."""
-	date = date or nowdate()
 	from kamra.api import my_properties
-	props = [p["name"] for p in my_properties()]
-	rows = [_property_summary(p, date) for p in props]
+	rows = []
+	for prop in my_properties():
+		day = date or prop["business_date"]
+		rows.append({**_property_summary(prop["name"], day), "report_date": day})
+	days = {row["report_date"] for row in rows}
+	date = date or (days.pop() if len(days) == 1 else None)
 
 	rooms = sum(r["total_rooms"] for r in rows)
 	sold = sum(r["rooms_sold"] for r in rows)

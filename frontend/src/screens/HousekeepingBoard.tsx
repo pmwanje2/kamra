@@ -29,6 +29,7 @@ interface BoardRoom {
   /** a same-day (hourly) stay - the room turns today, at etd */
   day_use?: boolean
   etd?: string | null
+  clean_tasks: {name: string; type: string}[]
   task: {
     name: string
     type: string
@@ -126,11 +127,22 @@ export default function HousekeepingBoard() {
     }
   }
 
+  async function complete(room: string, task: string) {
+    setBusy(room)
+    try {
+      await call("kamra.api.hk_update_task", {task, status: "Done"})
+      setOpen(null); load()
+    } catch (e) { setError(serverError(e)) } finally { setBusy(null) }
+  }
+
   async function setStatus(room: string, status: HkStatus) {
+    const inspection = status === "Inspected" || status === "Ready"
+    const reason = inspection ? undefined : window.prompt(t("Reason for overriding room status"))?.trim()
+    if (!inspection && !reason) return
     setBusy(room)
     setOpen(null)
     try {
-      await setHousekeepingStatus(room, status)
+      await setHousekeepingStatus(room, status, reason)
       load()
     } catch (e) {
       setError(serverError(e))
@@ -274,7 +286,7 @@ export default function HousekeepingBoard() {
                 )}
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
                   {list.map((r) => (
-                    <div key={r.name} className="relative">
+                    <div key={r.name} className="relative min-w-0">
                       <button
                         type="button"
                         disabled={busy === r.name}
@@ -288,7 +300,7 @@ export default function HousekeepingBoard() {
                         )}
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-base font-semibold">{r.room_number}</span>
+                          <span className="min-w-0 break-words text-base font-semibold">{r.room_number}</span>
                           <span className="flex items-center gap-1">
                             {r.due_out && (
                               <LogOut className="size-3.5 text-violet-600" aria-label={t("Due out")} />
@@ -320,16 +332,19 @@ export default function HousekeepingBoard() {
                       </button>
                       {open === r.name && (
                         <div
-                          role="menu"
-                          className="absolute inset-x-0 top-full z-10 mt-1 overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-lg"
+                          aria-label={t("Room actions")} role="group"
+                          className="relative z-10 mt-1 min-w-0 rounded-lg border border-zinc-200 bg-white shadow-lg"
                         >
+                          {r.clean_tasks.length > 1 && <p className="p-2 text-xs">{t("Choose a cleaning task")}</p>}
+                          {r.clean_tasks.map(task => <Button key={task.name} className="w-full whitespace-normal" disabled={busy === r.name} onClick={() => complete(r.name, task.name)}>
+                            {task.type === "Checkout Clean" ? t("Complete Checkout Clean") : t("Complete Stayover Clean")}{r.clean_tasks.length > 1 && ` · ${task.name}`}</Button>)}
+                          <details><summary className="cursor-pointer p-2 text-sm">{t("Override room status")}</summary>
                           {choices
-                            .filter((s) => s !== r.housekeeping_status)
+                            .filter((s) => s !== r.housekeeping_status && s !== "Inspected" && s !== "Ready")
                             .map((s) => (
                               <button
                                 key={s}
                                 type="button"
-                                role="menuitem"
                                 onClick={() => setStatus(r.name, s)}
                                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-zinc-50"
                               >
@@ -337,6 +352,8 @@ export default function HousekeepingBoard() {
                                 {t("Mark {status}", { status: t(s) })}
                               </button>
                             ))}
+                          </details>
+                          {canSupervise && choices.filter(s => (s === "Inspected" || s === "Ready") && s !== r.housekeeping_status).map(s => <Button key={s} variant="outline" onClick={() => setStatus(r.name, s)}>{t("Mark {status}", {status: t(s)})}</Button>)}
                           {canSupervise && r.task && (
                             <div className="border-t border-zinc-100 px-3 py-2">
                               <label className="flex items-center gap-1.5 text-xs font-medium text-zinc-500">
