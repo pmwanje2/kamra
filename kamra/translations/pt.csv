@@ -27,7 +27,7 @@ Extend unchecked-out departures one night,Estender por uma diária as saídas se
 The guest owes {0} - nothing is due back to refund.,O hóspede deve {0}; não há nada a devolver.
 Only {0} is due back to the guest - can't refund more than that.,Só {0} é devido ao hóspede; não é possível devolver mais.
 Room type code {0} is already used at this property.,O código de tipo de quarto {0} já é usado nesta propriedade.
-There are no room nights on this bill yet. A discount comes off posted nights: give it after night audit or at check-out.,Ainda não há diárias nesta conta. O desconto incide sobre as diárias lançadas: dê depois do fechamento de dia ou no check-out.
+"No nights are posted yet. Use Advance bill to post the stay now, then give the discount, or use a rate plan or promo code at booking.","Ainda não há diárias lançadas. Use «Fatura antecipada» para lançar a estadia agora e depois dê o desconto, ou use um plano tarifário ou código promocional na reserva."
 Enter a discount above zero.,Informe um desconto maior que zero.
 A discount can't be more than 100%.,Um desconto não pode passar de 100%.
 The discount is more than the room nights on the bill ({0}).,O desconto é maior que as diárias da conta ({0}).
@@ -64,3 +64,28 @@ Bills still open,Contas ainda abertas
 Use Check out to check a guest out: it makes sure every bill is cleared first.,Use Check-out para dar saída ao hóspede: ele confere antes que todas as contas estejam quitadas.
 Check out,Check-out
 Discounts and allowances,Descontos e abatimentos
+Quotation {0} from {1},Cotação {0} de {1}
+"Dear {0}, please find your quotation for {1} to {2} attached. Reference {3}.",Caro/a {0}: segue em anexo a sua cotação de {1} a {2}. Referência {3}.
+Quotation,Cotação
+Issued {0},Emitida em {0}
+Free cancellation until {0}; after that {1} is charged.,Cancelamento gratuito até {0}; depois é cobrado {1}.
+Free cancellation.,Cancelamento gratuito.
+Cancelling now is charged {0}.,Cancelar agora cobra {0}.
+Room prices exclude meals and extras unless stated. Tax as applicable on the day of stay.,"Os preços dos quartos não incluem refeições nem extras, salvo indicação. Impostos conforme aplicável no dia da estadia."
+Rate / night,Tarifa / noite
+Deposit to confirm,Depósito para confirmar
+{0} night(s),{0} noite(s)
+Meal plan: {0},Plano de refeições: {0}
+Discount: voucher {0},Desconto: voucher {0}
+Adjustment to the booked price,Ajuste ao preço reservado
+"Meal plan included: {0}, as priced above.","Plano de refeições incluído: {0}, conforme o preço acima."
+Room only: meals are not included.,Só alojamento: as refeições não estão incluídas.
+The lines above plus tax make up the total. Anything else taken during the stay is billed separately.,As linhas acima mais os impostos formam o total. Qualquer outro consumo durante a estadia é faturado à parte.
+Price,Preço
+This quotation was emailed less than a minute ago. Wait a minute before sending the same quotation again.,Esta cotação foi enviada por email há menos de um minuto. Aguarde um minuto antes de enviar a mesma cotação novamente.
+Cleaning fee,Taxa de limpeza
+Discount,Desconto
+Stay as booked,Estadia conforme reservada
+Extra guests by arrangement,Hóspedes adicionais conforme acordado
+Room levy,Taxa por quarto
+Room nights,Noites de quarto

@@ -192,8 +192,14 @@ def check_open_tills(property: str, bd: str) -> dict:
 		"transactions": cint(r.txns),
 		"cash_taken": flt(r.cash_in),
 	} for r in rows]
+	severity = _severity(property, "open_tills")
+	from kamra.cashier import tills_required
+	if not tills_required(property) and not any(i["transactions"] for i in items):
+		# tills are off here: an empty till holds no money to count. One that
+		# took money still blocks, so none is dropped from the count.
+		severity = "warn"
 	return _check(
-		"open_tills", "Open cashier tills", _severity(property, "open_tills"),
+		"open_tills", "Open cashier tills", severity,
 		items, "Close each till under Finance → Cashier: count the cash and "
 		       "record the variance.", "/cashier/sessions")
 
@@ -1297,8 +1303,10 @@ def build_pack(property: str, bd: str, *, checks: list[dict],
 		"held_late_arrivals": held_late,
 	}
 	total_rooms = frappe.db.count("Room", {"property": property}) or 0
+	# the closed date's posted figures; the daytime projection is not kept
 	_section(pack, "statistics",
-	         lambda: {**reports._day_stats(property, bd, total_rooms),
+	         lambda: {**{k: v for k, v in reports._day_stats(property, bd, total_rooms).items()
+	                     if k not in reports.PROJECTED_KEYS},
 	                  "total_rooms": total_rooms})
 	_section(pack, "manager_flash",
 	         lambda: _raw(reports.manager_flash)(property, bd))

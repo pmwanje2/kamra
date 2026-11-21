@@ -522,10 +522,39 @@ def _nightly_gst(reservation, date) -> float:
 	                           gross + _over_cap_night(reservation)))
 
 
+def open_line_target(reservation, charge_type: str, is_alcohol: int = 0) -> str:
+	"""target_folio, never an invoiced folio: when the stay's Guest folio is
+	closed, the line goes on its open Guest folio, and one opens when there
+	is none (the part_settle shape, without repeating the one-time fees the
+	first folio carried). Company and group folios already route only to
+	open ones."""
+	name = target_folio(reservation, charge_type, is_alcohol)
+	if frappe.db.get_value("Folio", name, "status") != "Closed":
+		return name
+	open_guest = frappe.db.get_value(
+		"Folio", {"reservation": reservation.name, "folio_type": "Guest",
+		          "status": "Open"}, order_by="creation desc")
+	if open_guest:
+		return open_guest
+	closed = frappe.get_doc("Folio", name)
+	fresh = frappe.get_doc({
+		"doctype": "Folio",
+		"property": closed.property,
+		"reservation": reservation.name,
+		"guest": closed.guest,
+		"folio_type": "Guest",
+		"status": "Open",
+		"opened_on": now_datetime(),
+	})
+	_recalculate(fresh)
+	fresh.insert(ignore_permissions=True)
+	return fresh.name
+
+
 def _append_charge(folios, reservation, charge_type, line, is_alcohol=0):
 	"""Append a line to the routed folio, reusing loaded docs so a multi-
 	night posting run saves each folio once."""
-	name = target_folio(reservation, charge_type, is_alcohol)
+	name = open_line_target(reservation, charge_type, is_alcohol)
 	if name not in folios:
 		folios[name] = frappe.get_doc("Folio", name)
 	folios[name].append("charges", line)
@@ -620,19 +649,24 @@ def post_room_night(reservation, date, folios=None) -> bool:
 
 def _post_room_levy(folios, reservation, date, night_rate):
 	"""The property's per-night levy on the room rate (municipality fee,
-	city / tourism tax) - its own line so the invoice shows it and the
-	ledger books it apart from room revenue."""
+	city / tourism tax): a % of the night's rate and/or a fixed amount per
+	occupied room-night (room_levy_per_night) - its own line so the invoice
+	shows it and the ledger books it apart from room revenue."""
 	prop = frappe.get_cached_doc("Property", reservation.property)
 	pct = float(prop.get("room_levy_percent") or 0)
-	if not pct or not night_rate or _charge_posted(
+	fixed = float(prop.get("room_levy_per_night") or 0)
+	levy = round(float(night_rate or 0) * pct / 100, 2) + round(fixed, 2)
+	if levy <= 0 or _charge_posted(
 			reservation.name, "Room Levy", date):
 		return
-	levy = round(float(night_rate) * pct / 100, 2)
+	label = prop.get("room_levy_label") or "Room levy"
+	parts = ([f"{pct:g}%"] if pct and night_rate else []) + (
+		[f"{fixed:,g} per night"] if fixed else [])
 	_append_charge(folios, reservation, "Room Levy", {
 		"posting_date": date,
 		"charge_type": "Room Levy",
 		"reservation": reservation.name,
-		"description": f"{prop.get('room_levy_label') or 'Room levy'} {pct:g}%",
+		"description": f"{label} {' + '.join(parts)}",
 		"qty": 1,
 		"rate": levy,
 		"amount": levy,
@@ -698,7 +732,7 @@ def post_rate_lines(reservation, lines: list) -> None:
 	for line in lines:
 		name = line["folio"]
 		if frappe.db.get_value("Folio", name, "status") == "Closed":
-			name = target_folio(reservation, "Room")
+			name = open_line_target(reservation, "Room")
 		if name not in folios:
 			folios[name] = frappe.get_doc("Folio", name)
 		folios[name].append("charges", {
@@ -1760,10 +1794,30 @@ def run_night_audit(property: str, business_date: str | None = None,
 	}
 
 
-# The scheduler closes at most this many overdue days on its own. A
-# property further behind gets an alert instead: weeks of unattended room
-# nights and no-show fees need a person to check the stays first.
+# The scheduler closes at most this many overdue days on its own (the
+# property's night_audit_catch_up_days, else this). A property further
+# behind gets an alert instead: weeks of unattended room nights and no-show
+# fees need a person to check the stays first.
 NIGHTLY_CATCH_UP_DAYS = 3
+
+
+def _days(n: int) -> str:
+	return f"{n} day" if n == 1 else f"{n} days"
+
+
+def _catch_up_limit(property: str) -> int | None:
+	"""The property's stored night_audit_catch_up_days, NIGHTLY_CATCH_UP_DAYS
+	when unset or empty, and None when the stored value is not a whole
+	number from 1 to 7 (a row written around save_settings): the caller
+	then stops instead of guessing a limit."""
+	from kamra.settings import SETTINGS, read_kv
+	raw = read_kv(property, "night_audit_catch_up_days")
+	if raw is None or raw == "":
+		return NIGHTLY_CATCH_UP_DAYS
+	spec = SETTINGS["night_audit_catch_up_days"][1]
+	if isinstance(raw, bool) or not isinstance(raw, int) or not spec.min <= raw <= spec.max:
+		return None
+	return raw
 
 
 def audit_due_at(property: str, day):
@@ -1837,6 +1891,17 @@ def _nightly_audit_property(property: str, today) -> dict | None:
 	# A completed run for the open date whose roll did not stick. Without
 	# this every night answered already_ran and the date never moved again.
 	# Advance it like recover_stuck_business_date does; nothing is re-posted.
+	limit = _catch_up_limit(property)
+	if limit is None:
+		name = frappe.db.get_value("Property", property, "property_name") or property
+		msg = (f"Catch up at most (night_audit_catch_up_days) is not a whole number "
+		       f"from 1 to 7 in Property Setting {property}::night_audit_catch_up_days. "
+		       f"The scheduled night audit is stopped until it is fixed under Settings "
+		       f"→ Front Desk → Automatic night audit.")
+		log.warning(f"Night audit not run for {property}: {msg}")
+		na.alert_staff(property, ("Hotel Admin",),
+		               f"Night audit stopped - {name}", f"{name}: {msg}")
+		return {"skipped": True, "business_date": str(bd), "message": msg}
 	stuck = na.stuck_business_date(property)
 	if stuck:
 		bd = getdate(advance_business_date(property, str(bd)))
@@ -1847,12 +1912,12 @@ def _nightly_audit_property(property: str, today) -> dict | None:
 			return {"skipped": True, "business_date": stuck["business_date"],
 			        "message": msg}
 	behind = date_diff(today, bd)
-	if behind > NIGHTLY_CATCH_UP_DAYS:
+	if behind > limit:
 		name = frappe.db.get_value("Property", property, "property_name") or property
-		msg = (f"The business date is {bd}, {behind} days behind today. The "
-		       f"scheduled night audit only catches up {NIGHTLY_CATCH_UP_DAYS} "
-		       f"days on its own. Check in-house stays and arrivals, then close "
-		       f"the open days from End of Day.")
+		msg = (f"The business date is {bd}, {_days(behind)} behind today. The "
+		       f"scheduled night audit only catches up {_days(limit)} on its own. "
+		       f"Check in-house stays and arrivals, then close the open days from "
+		       f"End of Day.")
 		log.warning(f"Night audit not run for {property}: {msg}")
 		na.alert_staff(property, ("Hotel Admin", "Finance"),
 		               f"Night audit behind - {name}", f"{name}: {msg}")
