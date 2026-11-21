@@ -11,6 +11,7 @@ lower it, within the property's rate_override_limit_pct, and a bigger cut
 from __future__ import annotations
 
 import json
+from unittest.mock import patch
 
 import frappe
 
@@ -36,6 +37,10 @@ REVENUE = "ut.rate.revenue@test.local"
 GM = "ut.rate.gm@test.local"
 AGENT = "ut.rate.agent@test.local"
 SELF = "ut.rate.deskfinance@test.local"
+
+
+def observe_agreed_rate_override(doc, method):
+	frappe.flags.agreed_rate_observations.append((doc.name, doc.flags.get("kamra_agreed_rate_override")))
 
 
 def set_setting(prop: str, key: str, value) -> None:
@@ -98,8 +103,16 @@ class AgreedRateTestCase(AuditTestCase):
 	def test_front_desk_lowers_the_rate_within_the_limit(self):
 		set_setting(PROP_A, "rate_override_limit_pct", 30)
 		seasons = frappe.db.count("Season", {"property": PROP_A})
-		out = self.as_user(DESK, api.set_agreed_rate, self.res.name, 750,
-		                   "RATE-PROMO", reason="Agreed at the desk", confirm_price=1)
+		hooks = frappe.get_doc_hooks().get("Reservation", {})
+		events = {**hooks, "before_validate": [*hooks.get("before_validate", []),
+		                                      f"{__name__}.observe_agreed_rate_override"]}
+		observed = []
+		with patch.dict(frappe.get_doc_hooks(), Reservation=events), patch.dict(
+			frappe.flags, agreed_rate_observations=observed
+		):
+			out = self.as_user(DESK, api.set_agreed_rate, self.res.name, 750,
+			                   "RATE-PROMO", reason="Agreed at the desk", confirm_price=1)
+		self.assertEqual(observed, [(self.res.name, True)])
 		self.assertTrue(out["ok"])
 		doc = frappe.get_doc("Reservation", self.res.name)
 		self.assertEqual(doc.room, self.rooms[0])
@@ -121,6 +134,7 @@ class AgreedRateTestCase(AuditTestCase):
 			self.as_user(DESK, api.set_agreed_rate, self.res.name, 750,
 			             "RATE-PROMO", confirm_price=1)
 		self.assertEqual(self.nights(), [1000, 1000])
+		self.assertFalse(self.rate_logs())
 		# a Hotel Admin signs it off with their own PIN
 		self.as_user(DESK, api.set_agreed_rate, self.res.name, 750, "RATE-PROMO",
 		             confirm_price=1, pin="4321", supervisor=GM)
@@ -176,6 +190,7 @@ class AgreedRateTestCase(AuditTestCase):
 		with self.assertRaises(api.PriceConfirmationRequired):
 			self.as_user(REVENUE, api.set_agreed_rate, self.res.name, 800, "RATE-MGR")
 		self.assertEqual(self.nights(), [1000, 1000])
+		self.assertFalse(self.rate_logs())
 
 	def test_preview_writes_nothing(self):
 		set_setting(PROP_A, "rate_override_limit_pct", 10)
