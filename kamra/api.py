@@ -6,6 +6,7 @@ surface serves the React console today and the MCP layer next.
 
 import json
 import math
+from contextlib import nullcontext
 
 import frappe
 from frappe import _
@@ -1781,11 +1782,59 @@ def add_folio_payments(payments, pin: str | None = None):
 	return {"posted": len(payments), "folios": folios}
 
 
+def _erp_bridge_script(api_method: str):
+	name = frappe.db.get_value("Server Script", {"script_type": "API", "api_method": api_method, "disabled": 0})
+	return frappe.get_doc("Server Script", name) if name else None
+
+
+def _booked_correction_script(doc, row_name, method):
+	from kamra.corrections import _row
+	row, charge = _row(doc, row_name)
+	if not charge and row.get("payment_entry"):
+		return _erp_bridge_script("hospitality_kamra." + method)
+
+
+@frappe.whitelist()
+def erp_correction_context(api_method: str) -> dict:
+	"""safe_exec creates separate flags. Expose only the active method's verified actors."""
+	flags = frappe.flags
+	if flags.kamra_erp_correction_authorized is not True or flags.kamra_erp_correction_method != api_method:
+		frappe.throw("A governed folio correction is required.", frappe.PermissionError)
+	return {"requester": flags.kamra_erp_correction_requester, "approver": flags.kamra_erp_correction_approver}
+
+
+def _execute_correction_script(script, args, approver=None):
+	flags = dict(kamra_erp_correction_authorized=True, kamra_erp_correction_method=script.api_method,
+	             kamra_erp_correction_requester=frappe.session.user, kamra_erp_correction_approver=approver)
+	previous = {k: frappe.flags[k] for k in flags if k in frappe.flags}
+	form = frappe.local.form_dict
+	absent = object()
+	message = frappe.response.pop("message", absent)
+	try:
+		with act_as(approver) if approver else nullcontext():
+			frappe.flags.update(flags)
+			frappe.local.form_dict = frappe._dict(args)
+			script.execute_method()
+			return frappe.response.get("message")
+	finally:
+		frappe.local.form_dict = form
+		frappe.response.pop("message", None)
+		if message is not absent:
+			frappe.response["message"] = message
+		for k in flags:
+			frappe.flags.pop(k, None)
+		frappe.flags.update(previous)
+
+
 @frappe.whitelist()
 @require_roles("Front Desk", "Finance")
 def payment_correction_options(folio: str, payment_row: str):
 	from kamra.corrections import options
-	return options(frappe.get_doc("Folio", folio), payment_row)
+	doc = frappe.get_doc("Folio", folio)
+	script = _booked_correction_script(doc, payment_row, "payment_correction_options")
+	if script:
+		return _execute_correction_script(script, dict(folio=folio, row_name=payment_row))
+	return options(doc, payment_row)
 
 
 @frappe.whitelist(methods=["POST"])
@@ -1796,7 +1845,19 @@ def correct_folio_payment(folio: str, payment_row: str, action: str | None = Non
                           supervisor_pin: str | None = None, supervisor_user: str | None = None,
                           refund_amount: float | None = None, destination_mode: str | None = None,
                           action_type: str | None = None, reason_note: str | None = None):
+	from kamra.authz import SUPERVISOR_ROLES, verify_supervisor
 	from kamra.corrections import correct
+	doc = frappe.get_doc("Folio", folio, for_update=True)
+	script = _booked_correction_script(doc, payment_row, "correct_folio_payment")
+	if script:
+		approver = None
+		if supervisor_user is not None or supervisor_pin is not None:
+			approver = verify_supervisor(doc.property, supervisor_user, supervisor_pin,
+			                             roles=SUPERVISOR_ROLES, requester=frappe.session.user)
+		return _execute_correction_script(script, dict(folio=folio, row_name=payment_row,
+			action=action_type or action, reason_code=reason_code, reason_text=reason_note or reason,
+			new_payment_mode=destination_mode, refund_amount=refund_amount, supervisor=approver,
+			idempotency_key=(idempotency_key or "").strip()), approver)
 	return correct(folio, payment_row, action_type or action, reason_code, reason_note or reason,
 	               (idempotency_key or "").strip(), pin, supervisor_user, supervisor_pin, refund_amount, destination_mode)
 
