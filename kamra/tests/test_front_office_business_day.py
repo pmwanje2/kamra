@@ -24,6 +24,14 @@ class TestFrontOfficeBusinessDay(AuditTestCase):
 				snap = front_desk_snapshot(prop)
 				self.assertEqual((snap["date"], snap["business_date"]), (TODAY, TODAY))
 
+	def test_implicit_property_keeps_strict_scope(self):
+		# The role gate runs before a missing property is resolved. Recheck the
+		# resolved property even if the list query returns a candidate.
+		with patch("kamra.authz.restricted_properties", return_value=set()), \
+		     patch("kamra.api.my_properties", return_value=[frappe._dict(name=PROP_A)]):
+			with self.assertRaises(frappe.PermissionError):
+				front_desk_snapshot()
+
 	def test_movement_buckets_and_legacy_fallback(self):
 		names = []
 		for i, (scheduled, actual, status) in enumerate([
