@@ -201,3 +201,16 @@ select:disabled {
     padding: 0 !important;
   }
 }
+
+.popin-label { display: none; }
+@media screen and (max-width: 639px) {
+  .responsive-list, .responsive-list > tbody { display: block; width: 100%; }
+  .responsive-list > thead { position: absolute; clip-path: inset(50%); width: 1px; height: 1px; overflow: hidden; }
+  .responsive-list > tbody > tr { display: flex; flex-wrap: wrap; align-items: baseline; gap: .375rem .75rem; padding: .75rem; }
+  .responsive-list > tbody > tr > td { display: block; min-width: 0; max-width: 100%; padding: 0; text-align: start; overflow-wrap: anywhere; }
+  .responsive-list td[data-importance="high"] { order: -1; }
+  .responsive-list td[data-importance="medium"], .responsive-list td[data-importance="low"] { flex-basis: 100%; }
+  .responsive-list td.hidden:not([data-importance]) { display: none; }
+  .responsive-list .popin-label { display: inline; margin-inline-end: .5em; color: var(--color-zinc-500); font-size: .75rem; }
+}
+.booking-dialog [aria-invalid="true"] { outline: 2px solid var(--color-rose-600); outline-offset: 1px; }

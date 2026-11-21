@@ -12,7 +12,7 @@ const HkTaskMediaPanel = lazy(() =>
   import("../components/HkMedia").then((m) => ({ default: m.HkTaskMediaPanel })),
 )
 const ReservationDetail = lazy(() => import("./ReservationDetail"))
-import { cur, locale, sellsAlcohol } from "../lib/money"
+import { cur, locale, sellsAlcohol, taxLabel } from "../lib/money"
 
 export const floorsConfig: ScreenConfig = {
   doctype: "Floor",
@@ -410,7 +410,7 @@ export const venuesConfig: ScreenConfig = {
     { field: "base_price", label: "Day rental", type: "currency" },
     { field: "hourly_rate", label: "Hourly rental", type: "currency" },
     { field: "min_hours", label: "Minimum hours", type: "int" },
-    { field: "gst_rate", label: "Rental GST %", type: "int" },
+    { field: "gst_rate", get label() { return `${taxLabel()} %` }, type: "int" },
     { field: "setup_styles", label: "Layouts it takes", type: "data" },
     { field: "amenities", label: "Amenities", type: "data" },
     { field: "disabled", label: "Disabled", type: "check" },
@@ -788,7 +788,7 @@ export const ingredientsConfig: ScreenConfig = {
       hint: "One unit only. Recipes and purchases both use it - buy and cook in the same unit (e.g. define in g if you cook in g)." },
     { field: "cost_per_unit", label: "Cost / unit", type: "currency",
       hint: "Last known cost, used to value wastage. Indicative only - not FIFO and not on the books." },
-    { field: "gst_rate", label: "Input GST %", type: "float",
+    { field: "gst_rate", get label() { return `${taxLabel()} %` }, type: "float",
       hint: "Tax paid when buying this." },
     { field: "is_active", label: "Active", type: "check",
       hint: "Turn off instead of deleting when a recipe or stock history uses it." },

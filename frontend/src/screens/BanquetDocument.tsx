@@ -698,7 +698,7 @@ function TaxBreakup({ doc }: { doc: Doc }) {
   const { lang, t } = useT()
   const rows = doc.tax_breakup ?? []
   if (!rows.length || Number(doc.totals.tax) === 0) return null
-  const label = doc.header.tax_label ?? "GST"
+  const label = doc.header.tax_label || t("Tax")
   return (
     <Section title={translate("{v0} breakup", { v0: String(label) })}>
       <table className="w-full">

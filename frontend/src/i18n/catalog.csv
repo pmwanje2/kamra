@@ -654,6 +654,7 @@ Active yesterday,Active yesterday,نشط أمس,Activo ayer,,,translated
 Activity,Activity,النشاط,Actividad,,,translated
 Activity Log,Activity Log,سجل النشاط,Registro de actividad,screens/Activity.tsx,,translated
 Actor,Actor,المنفّذ,Responsable de la acción,,,translated
+Actual,Actual,فعلي,Real,screens/Reports.tsx,,translated
 Actual (MTD),Actual (MTD),الفعلي (منذ بداية الشهر),Real (mes a la fecha),screens/RevenueReports.tsx,,translated
 Actual check-in,Actual check-in,الوصول الفعلي,Hora real de entrada,screens/RegistrationCard.tsx,,translated
 Actual check-out,Actual check-out,المغادرة الفعلية,Hora real de salida,screens/RegistrationCard.tsx,,translated
@@ -894,7 +895,7 @@ Always required,Always required,مطلوب دائما,Siempre obligatorio,,,tran
 Amenities,Amenities,المرافق,Comodidades,components/RoomDrawer.tsx; screens/PublicBooking.tsx,,translated
 Amenities (one per line),Amenities (one per line),المرافق (واحد في كل سطر),Servicios e instalaciones (uno por línea),components/RoomTypeMedia.tsx,,translated
 American,American,أمريكي,Estadounidense,,,translated
-Amount,Amount,المبلغ,Importe,components/AgentGuide.tsx; components/CheckOutDialog.tsx; components/DepositPanel.tsx; components/GroupBookingDialog.tsx; components/RoomStayPanels.tsx; components/SecurityDepositPanel.tsx; screens/BanquetDocument.tsx; screens/BanquetFunction.tsx; screens/BanquetRegisters.tsx; screens/CRS.tsx; screens/CashierTill.tsx; screens/GroupQuotation.tsx; screens/PettyCash.tsx; screens/Receivables.tsx; screens/pos/OrderHistory.tsx; screens/pos/PosSidePanel.tsx,,translated
+Amount,Amount,المبلغ,Importe,components/AgentGuide.tsx; components/CheckOutDialog.tsx; components/DepositPanel.tsx; components/GroupBookingDialog.tsx; components/RoomStayPanels.tsx; components/SecurityDepositPanel.tsx; screens/BanquetDocument.tsx; screens/BanquetFunction.tsx; screens/BanquetRegisters.tsx; screens/CRS.tsx; screens/CashierTill.tsx; screens/FolioView.tsx; screens/GroupQuotation.tsx; screens/PettyCash.tsx; screens/Receivables.tsx; screens/pos/OrderHistory.tsx; screens/pos/PosSidePanel.tsx,,translated
 Amount ({cur}),Amount ({cur}),مبلغ ({cur}),Importe ({cur}),components/FolioDiscount.tsx,cur,translated
 Amount (before tax),Amount (before tax),المبلغ (قبل الضريبة),Importe (antes de impuestos),components/RoomStayPanels.tsx,,translated
 Amount (held {amt}),Amount (held {amt}),المبلغ (المحتجز {amt}),Importe (retenido: {amt}),components/SecurityDepositPanel.tsx,amt,translated
@@ -1099,7 +1100,7 @@ Back to till,Back to till,العودة إلى الصندوق,Volver a la caja,sc
 Back to today,Back to today,العودة إلى اليوم,Volver a hoy,screens/InHouse.tsx,,translated
 Bag is back: mark ready,Bag is back: mark ready,عادت الحقيبة: اجعلها جاهزة,Prendas devueltas: marcar como listas,components/CheckOutDialog.tsx,,translated
 Bakery,Bakery,المخبز,Panadería,,,translated
-Balance,Balance,الرصيد,Saldo,components/CheckOutDialog.tsx; components/RoomDrawer.tsx; screens/BanquetFunction.tsx; screens/CityLedgerPayment.tsx; screens/FolioHistory.tsx; screens/FolioView.tsx; screens/Inventory.tsx; screens/Ledgers.tsx; screens/Receivables.tsx; screens/RegistrationCard.tsx; screens/Today.tsx,,translated
+Balance,Balance,الرصيد,Saldo,components/CheckOutDialog.tsx; components/RoomDrawer.tsx; screens/BanquetFunction.tsx; screens/Billing.tsx; screens/CityLedgerPayment.tsx; screens/FolioHistory.tsx; screens/FolioView.tsx; screens/Inventory.tsx; screens/Ledgers.tsx; screens/Receivables.tsx; screens/RegistrationCard.tsx; screens/Today.tsx,,translated
 Balance {cur},Balance {cur},الرصيد {cur},Saldo {cur},screens/Billing.tsx,cur,translated
 Balance after: ,Balance after: ,الرصيد بعد: ,Saldo posterior: ,screens/CityLedgerPayment.tsx,,translated
 Balance due,Balance due,الرصيد المستحق,Saldo pendiente,screens/BanquetDocument.tsx; screens/BanquetFunction.tsx; screens/ReservationDetail.tsx,,translated
@@ -1255,6 +1256,7 @@ Booking confirmed - the rooms are now kept for the group.,Booking confirmed - th
 Booking Engine,Booking Engine,محرك الحجز,Motor de reservas,,,translated
 Booking Engine Console,Booking Engine Console,لوحة محرك الحجز,Administración del motor de reservas,screens/BookingEngine.tsx,,translated
 Booking engine language,Booking engine language,لغة محرك الحجز,Idioma del motor de reservas,screens/BookingEngine.tsx,,translated
+Booking messages,Booking messages,رسائل الحجز,Mensajes de la reserva,components/BookingDialog.tsx,,translated
 Booking mode,Booking mode,نوع الحجز,Modo de reserva,components/BookingDialog.tsx,,translated
 Booking notes,Booking notes,ملاحظات الحجز,Notas de reserva,components/CheckInDialog.tsx,,translated
 Booking number,Booking number,رقم الحجز,Número de reserva,screens/PublicBooking.tsx,,translated
@@ -1301,7 +1303,7 @@ Bulk upload menu,Bulk upload menu,رفع القائمة جماعياً,Importar 
 Burgundy,Burgundy,عنابي,Borgoña,,,translated
 Business,Business,الأعمال,Negocios,components/BookingDialog.tsx,,translated
 business date,business date,تاريخ العمل,fecha operativa,,,translated
-Business date,Business date,تاريخ العمل,Fecha operativa,screens/CashierBoard.tsx; screens/CashierSessions.tsx; screens/CashierShiftReport.tsx; screens/CashierTill.tsx; screens/EndOfDay.tsx; screens/settings/cards.tsx,,translated
+Business date,Business date,تاريخ العمل,Fecha operativa,AppShell.tsx; screens/CashierBoard.tsx; screens/CashierSessions.tsx; screens/CashierShiftReport.tsx; screens/CashierTill.tsx; screens/EndOfDay.tsx; screens/Reports.tsx; screens/settings/cards.tsx,,translated
 Business date {bd},Business date {bd},تاريخ العمل {bd},Fecha operativa {bd},screens/settings/cards.tsx,bd,translated
 Business date {bd} · property time {now},Business date {bd} · property time {now},تاريخ العمل {bd} · وقت المنشأة {now},Fecha operativa: {bd} · hora del alojamiento: {now},screens/EndOfDay.tsx,bd now,translated
 Business date {d},Business date {d},تاريخ العمل {d},Fecha operativa: {d},screens/AuditPack.tsx,d,translated
@@ -1341,6 +1343,7 @@ By week,By week,حسب الأسبوع,Por semana,screens/Today.tsx,,translated
 Calculate,Calculate,احسب,Calcular,screens/CurrencyDesk.tsx,,translated
 Calculator,Calculator,الآلة الحاسبة,Calculadora,screens/CurrencyDesk.tsx,,translated
 Calendar,Calendar,التقويم,Calendario,,,translated
+Calendar {date} · End of Day pending,Calendar {date} · End of Day pending,التقويم {date} · إقفال اليوم معلّق,Calendario: {date} · Cierre del día pendiente,AppShell.tsx,date,translated
 Call caretaker,Call caretaker,اتصل بالمشرف,Llamar al encargado,screens/PublicListing.tsx,,translated
 "Call for directions, check-in help, or on-site questions.","Call for directions, check-in help, or on-site questions.",اتصل للاستفسار عن الاتجاهات أو المساعدة في الوصول أو أي سؤال أثناء الإقامة.,"Llama si necesitas indicaciones, ayuda con la llegada o resolver alguna duda durante tu estancia.",screens/PublicListing.tsx,,translated
 call us on {v0} and we'll find you a room.,call us on {v0} and we'll find you a room.,اتصل بنا على {v0} وسنجد لك غرفة.,llámenos al {v0} y le ayudaremos a encontrar una habitación.,screens/CancellationLetter.tsx,v0,translated
@@ -1530,6 +1533,8 @@ Check out a guest,Check out a guest,تسجيل مغادرة ضيف,Registrar la 
 Check out guests,Check out guests,,,components/GroupControl.tsx,,needs_translation
 Check rooms in one by one from the group's rooming list.,Check rooms in one by one from the group's rooming list.,سجّل دخول الغرف واحدة تلو الأخرى من قائمة غرف المجموعة.,Registre la entrada de cada habitación desde la lista de habitaciones del grupo.,,,translated
 Check speed,Check speed,فحص السرعة,Comprobar velocidad,screens/settings/cards.tsx,,translated
+Check the booker phone number.,Check the booker phone number.,تحقق من رقم هاتف صاحب الحجز.,Revise el teléfono de quien reserva.,components/BookingDialog.tsx,,translated
+Check the guest phone number.,Check the guest phone number.,تحقق من رقم هاتف النزيل.,Revise el teléfono del huésped.,components/BookingDialog.tsx,,translated
 "Check the guest's name and phone, then the ID for the guest and everyone staying. If they checked in online, review what they sent.","Check the guest's name and phone, then the ID for the guest and everyone staying. If they checked in online, review what they sent.",تحقق من اسم الضيف وهاتفه، ثم من هوية الضيف وكل من يقيم معه. إذا سجل الوصول عبر الإنترنت، راجع ما أرسله.,"Verifique el nombre y el teléfono del huésped, luego la identificación del huésped y de todos los que se hospedan. Si realizaron el check-in en línea, revise lo que enviaron.",components/CheckInDialog.tsx,,translated
 Check the order,Check the order,,,components/AgentGuide.tsx,,needs_translation
 Check the phone number and calling code.,Check the phone number and calling code.,تحقق من رقم الهاتف ورمز الاتصال الدولي.,Revise el número de teléfono y el prefijo internacional.,components/PhoneInput.tsx,,translated
@@ -1560,7 +1565,7 @@ Checked in,Checked in,تم تسجيل الوصول,Entrada registrada,screens/Ta
 Checked In,Checked In,تم تسجيل الوصول,Entrada registrada,,,translated
 Checked in · Room {n},Checked in · Room {n},تم تسجيل الوصول · غرفة {n},Entrada registrada · Habitación {n},components/BookingDialog.tsx,n,translated
 checked out,checked out,,,components/GroupControl.tsx,,needs_translation
-Checked out,Checked out,تم تسجيل المغادرة,Salida registrada,,,translated
+Checked out,Checked out,تم تسجيل المغادرة,Salida registrada,screens/Today.tsx,,translated
 Checked Out,Checked Out,تم تسجيل المغادرة,Salida registrada,,,translated
 Checked out with a company credit warning,Checked out with a company credit warning,تمت المغادرة مع تحذير بشأن ائتمان الشركة,Salida registrada con advertencia de crédito de la empresa,components/CheckOutDialog.tsx,,translated
 Checked today's desk,Checked today's desk,راجع مكتب الاستقبال اليوم,Recepción de hoy consultada,,,translated
@@ -1592,6 +1597,7 @@ Children: {policy},Children: {policy},الأطفال: {policy},Niños: {policy},
 "Children's data: the register needs only name and age, so no ID is kept","Children's data: the register needs only name and age, so no ID is kept",بيانات الأطفال: يحتاج السجل الاسم والعمر فقط، لذا لا تُحفظ هوية,Datos de menores: el registro solo necesita nombre y edad; no se conserva un documento de identidad,screens/RegistrationCard.tsx,,translated
 Chinese,Chinese,صيني,China,,,translated
 choose {v0} · {v1} picked,choose {v0} · {v1} picked,اختر {v0} · تم اختيار {v1},elegir {v0} · seleccionados: {v1},screens/banquet/MenuComposer.tsx,v0 v1,translated
+Choose a cleaning task,Choose a cleaning task,اختر مهمة تنظيف,Elija una tarea de limpieza,screens/HousekeepingBoard.tsx,,translated
 Choose a company…,Choose a company…,اختر شركة…,Elija una empresa…,components/GroupBookingDialog.tsx,,translated
 Choose a housekeeper…,Choose a housekeeper…,اختر موظف التدبير المنزلي…,Seleccione a un miembro del personal de limpieza…,screens/HousekeepingBoard.tsx,,translated
 Choose a listing,Choose a listing,اختر خياراً,Elige una opción,screens/PublicListing.tsx,,translated
@@ -1652,7 +1658,8 @@ Click a bar to move rooms or change dates.,Click a bar to move rooms or change d
 "Click a bar to move the room, change dates, check in or check out.","Click a bar to move the room, change dates, check in or check out.",انقر شريطاً لنقل الغرفة أو تغيير التواريخ أو تسجيل الوصول أو المغادرة.,"Haga clic en una barra para cambiar la habitación, modificar las fechas o registrar la entrada o la salida.",screens/TapeChart.tsx,,translated
 "Click a bar to move the room, change dates, check in or check out. With a mouse, drag a bar to another room or drag its ends to change dates.","Click a bar to move the room, change dates, check in or check out. With a mouse, drag a bar to another room or drag its ends to change dates.",انقر شريطاً لنقل الغرفة أو تغيير التواريخ أو تسجيل الوصول أو المغادرة. بالفأرة، اسحب الشريط إلى غرفة أخرى أو اسحب طرفيه لتغيير التواريخ.,"Haga clic en una barra para cambiar la habitación, modificar las fechas o registrar la entrada o la salida. Con el mouse, arrastre la barra a otra habitación o arrastre sus extremos para cambiar las fechas.",screens/TapeChart.tsx,,translated
 Click a cell to start a booking,Click a cell to start a booking,انقر على خلية لبدء حجز,Seleccione una celda para iniciar una reserva,components/CalendarView.tsx,,translated
-"Click a folio to post charges, settle and print the GST invoice","Click a folio to post charges, settle and print the GST invoice",انقر فاتورة لترحيل الرسوم والتسوية وطباعة فاتورة GST,"Abra un folio para registrar cargos, liquidar el saldo e imprimir la factura GST",screens/Billing.tsx,,translated
+"Click a folio to post charges, settle and print the GST invoice","Click a folio to post charges, settle and print the GST invoice",انقر فاتورة لترحيل الرسوم والتسوية وطباعة فاتورة GST,"Abra un folio para registrar cargos, liquidar el saldo e imprimir la factura GST",,,translated
+"Click a folio to post charges, settle and print the tax invoice","Click a folio to post charges, settle and print the tax invoice",اختر حسابًا لتسجيل الرسوم وتسوية الرصيد وطباعة الفاتورة الضريبية,"Seleccione una cuenta para registrar cargos, liquidarla e imprimir la factura fiscal",screens/Billing.tsx,,translated
 Click a room to advance its housekeeping status,Click a room to advance its housekeeping status,انقر غرفة لتقديم حالة التدبير المنزلي,Haga clic en una habitación para avanzar en su estado de limpieza,,,translated
 Click a room to change its status or open it,Click a room to change its status or open it,انقر على غرفة لتغيير حالتها أو فتحها,Haga clic en una habitación para cambiar su estado o abrirla,screens/Today.tsx,,translated
 Click a row to see the rows behind it.,Click a row to see the rows behind it.,انقر على صف لعرض التفاصيل.,Haga clic en una fila para ver el detalle.,screens/Reports.tsx,,translated
@@ -1752,6 +1759,8 @@ Company Travel Desk,Company Travel Desk,مكتب سفر الشركة,Departament
 "Company, add-ons & arrival details","Company, add-ons & arrival details",الشركة والإضافات وتفاصيل الوصول,"Empresa, complementos y detalles de llegada",components/BookingDialog.tsx,,translated
 Compares the files loaded in steps 1-3 with what is now in Kamra: counts and totals per category. Go live only when every line matches.,Compares the files loaded in steps 1-3 with what is now in Kamra: counts and totals per category. Go live only when every line matches.,يقارن الملفات المحمّلة في الخطوات 1-3 بما هو موجود الآن في Kamra: الأعداد والإجماليات لكل فئة. ابدأ التشغيل الفعلي فقط عندما يتطابق كل سطر.,Compara los archivos cargados en los pasos 1–3 con los datos actuales de Kamra: cantidades y totales por categoría. Pase al sistema en producción solo cuando coincidan todos los registros.,screens/GoLiveImport.tsx,,translated
 Complaint,Complaint,شكوى,Queja,components/AgentGuide.tsx,,translated
+Complete Checkout Clean,Complete Checkout Clean,إتمام تنظيف الغرفة بعد المغادرة,Completar limpieza de salida,screens/HousekeepingBoard.tsx,,translated
+Complete Stayover Clean,Complete Stayover Clean,إتمام تنظيف الغرفة أثناء الإقامة,Completar limpieza de estancia,screens/HousekeepingBoard.tsx,,translated
 Complete your booking,Complete your booking,أكمل حجزك,Completa tu reserva,screens/PublicBooking.tsx; screens/PublicListing.tsx,,translated
 Completed,Completed,مكتمل,Completado,screens/CRS.tsx,,translated
 Completed with Warnings,Completed with Warnings,اكتمل مع تحذيرات,Completado con advertencias,,,translated
@@ -2203,6 +2212,7 @@ due in 3 days,due in 3 days,تستحق خلال 3 أيام,vence en 3 días,,,tr
 Due now,Due now,المستحق الآن,A pagar ahora,screens/PublicBooking.tsx,,translated
 Due out,Due out,مغادرة اليوم,Salida prevista para hoy,screens/HousekeepingBoard.tsx,,translated
 due today,due today,تستحق اليوم,vence hoy,,,translated
+Due today,Due today,المغادرة مقررة اليوم,Salida prevista hoy,screens/Today.tsx,,translated
 Duplicate booking,Duplicate booking,حجز مكرر,Reserva duplicada,,,translated
 Duration,Duration,المدة,Duración,,,translated
 "Duration (e.g. 90 min, half day)","Duration (e.g. 90 min, half day)",المدة (مثلا 90 دقيقة، نصف يوم),"Duración (p. ej., 90 min, medio día)",,,translated
@@ -2309,8 +2319,11 @@ Enquiry,Enquiry,استفسار,Consulta,,,translated
 "Enter 1-99%, or a {cur} amount under the line's {cur}{amount} (before {tax}).","Enter 1-99%, or a {cur} amount under the line's {cur}{amount} (before {tax}).",أدخل 1-99٪، أو مبلغاً بـ {cur} أقل من {cur}{amount} للبند (قبل {tax}).,"Ingrese un porcentaje entre 1 y 99 %, o un importe en {cur} inferior al total de la línea ({cur}{amount}, antes de {tax}).",screens/FolioView.tsx,cur amount tax,translated
 "Enter 1-99%, or a {cur} amount under the line's {cur}{amount} (before GST).","Enter 1-99%, or a {cur} amount under the line's {cur}{amount} (before GST).",أدخل 1-99٪، أو مبلغاً بـ {cur} أقل من {cur}{amount} للبند (قبل GST).,"Ingrese un porcentaje entre 1 y 99 %, o un importe en {cur} inferior al total de la línea ({cur}{amount}, antes del GST).",,cur amount,translated
 Enter a rate,Enter a rate,إدخال سعر,Introducir una tarifa,components/RoomChangeDialog.tsx,,translated
+Enter a valid check-in date.,Enter a valid check-in date.,أدخل تاريخ وصول صالحًا.,Introduzca una fecha de entrada válida.,components/BookingDialog.tsx,,translated
 Enter the amount received.,Enter the amount received.,أدخل المبلغ المستلم.,Indique el importe recibido.,,,translated
 "Enter the email or username for your Kamra account. If it is registered, we will send a reset link.","Enter the email or username for your Kamra account. If it is registered, we will send a reset link.",أدخل البريد أو اسم المستخدم لحسابك في كامرا. إن كان مسجلاً سنرسل رابط إعادة التعيين.,"Introduce el correo o usuario de tu cuenta Kamra. Si está registrado, te enviaremos un enlace para restablecerla.",screens/Login.tsx,,translated
+Enter the guest name.,Enter the guest name.,أدخل اسم النزيل.,Introduzca el nombre del huésped.,components/BookingDialog.tsx,,translated
+Enter the reason for the extra guests.,Enter the reason for the extra guests.,أدخل سبب إضافة النزلاء.,Indique el motivo de los huéspedes adicionales.,components/BookingDialog.tsx,,translated
 "Enter this pairing code in the app. It works once, for 10 minutes.","Enter this pairing code in the app. It works once, for 10 minutes.",أدخل رمز الربط هذا في التطبيق. يعمل مرة واحدة لمدة 10 دقائق.,"Introduce este código de vinculación en la aplicación. Funciona una sola vez, durante 10 minutos.",components/ConnectApp.tsx,,translated
 "Enter your current password, then the new one twice.","Enter your current password, then the new one twice.",أدخل كلمة المرور الحالية ثم الجديدة مرتين.,Introduce tu contraseña actual y la nueva dos veces.,screens/UpdatePassword.tsx,,translated
 Enter your PIN to continue,Enter your PIN to continue,أدخل رمزك للمتابعة,Ingrese su PIN para continuar,components/PinPad.tsx,,translated
@@ -3496,6 +3509,7 @@ Merge {v0} into this profile,Merge {v0} into this profile,دمج {v0} في هذ�
 Merge a duplicate,Merge a duplicate,دمج ملف مكرر,Fusionar un duplicado,screens/GuestJourney.tsx,,translated
 Merge a duplicate into this profile,Merge a duplicate into this profile,دمج ملف مكرر في هذا الملف,Fusionar un perfil duplicado con este,screens/GuestJourney.tsx,,translated
 Merging…,Merging…,جارٍ الدمج…,Fusionando…,screens/GuestJourney.tsx,,translated
+Messages ({n}),Messages ({n}),الرسائل ({n}),Mensajes ({n}),components/BookingDialog.tsx,n,translated
 Messages the guest gets on WhatsApp during the stay.,Messages the guest gets on WhatsApp during the stay.,الرسائل التي يتلقاها النزيل على واتساب أثناء الإقامة.,Mensajes que el huésped recibe por WhatsApp durante la estancia.,,,translated
 Meta App Secret,Meta App Secret,المفتاح السري لتطبيق Meta,Secreto de la aplicación de Meta,,,translated
 Meta Description,Meta Description,الوصف التعريفي,Descripción para buscadores,screens/BookingEngine.tsx,,translated
@@ -3756,6 +3770,7 @@ No closed invoices in this window.,No closed invoices in this window.,لا فو�
 No company has an overdue bill.,No company has an overdue bill.,لا توجد شركة لديها فاتورة متأخرة.,Ninguna empresa tiene facturas vencidas.,screens/EndOfDayWizard.tsx,,translated
 No company is over its credit limit.,No company is over its credit limit.,لا شركة تجاوزت حد الائتمان.,Ninguna empresa supera su límite de crédito.,screens/EndOfDayWizard.tsx,,translated
 No company: the guest pays,No company: the guest pays,بلا شركة: يدفع الضيف,Sin empresa: paga el huésped,components/ChangeCompany.tsx,,translated
+No completed checkouts.,No completed checkouts.,لا توجد مغادرات مكتملة.,No hay salidas completadas.,screens/InHouse.tsx,,translated
 No conversations yet,No conversations yet,لا محادثات بعد,Aún no hay conversaciones,screens/WhatsAppChat.tsx,,translated
 No corporate account on this stay - the guest pays the full bill.,No corporate account on this stay - the guest pays the full bill.,لا حساب شركة على هذه الإقامة، يدفع الضيف الفاتورة كاملة.,No hay cuenta corporativa en esta estadía: el huésped paga la cuenta completa.,components/CheckOutDialog.tsx,,translated
 "No courses yet - Starters, Main course, Live counter, Desserts.","No courses yet - Starters, Main course, Live counter, Desserts.",لا مراحل تقديم بعد: المقبلات، الطبق الرئيسي، محطة الطهي المباشر، الحلويات.,"Aún no hay tiempos del menú: entradas, plato principal, estación de cocina en vivo o postres.",screens/BanquetCatalogue.tsx,,translated
@@ -3840,6 +3855,7 @@ No other room of this type - try All types.,No other room of this type - try All
 No outlet,No outlet,بلا منفذ,Sin punto de venta,screens/Setup.tsx,,translated
 No outlet bills were posted to rooms today.,No outlet bills were posted to rooms today.,لم تُرحّل فواتير منافذ إلى الغرف اليوم.,Hoy no se cargaron cuentas de puntos de venta a habitaciones.,screens/EndOfDayWizard.tsx,,translated
 "No outlet has tables yet. List them on the outlet (e.g. T1:4, T2) to get a code per table.","No outlet has tables yet. List them on the outlet (e.g. T1:4, T2) to get a code per table.",لا يوجد منفذ بطاولات بعد. أضف الطاولات في المنفذ (مثل T1:4، T2) لتحصل على رمز لكل طاولة.,"Ningún punto de venta tiene mesas configuradas. Agréguelas al punto de venta, por ejemplo T1:4, T2, para generar un código por mesa.",,,translated
+No overdue stays.,No overdue stays.,لا توجد إقامات تجاوزت موعد المغادرة.,No hay estancias con salida vencida.,screens/InHouse.tsx,,translated
 No pack,No pack,لا حزمة,Sin paquete,screens/Billing.tsx,,translated
 "No payment today, pay at the property","No payment today, pay at the property",لا دفع اليوم، ادفع في مكان الإقامة,"Sin pago hoy, pague en el alojamiento",screens/PublicBooking.tsx,,translated
 No payment yet - take a deposit below to secure the booking.,No payment yet - take a deposit below to secure the booking.,لا دفعات بعد، حصّل عربونا أدناه لتأكيد الحجز.,Aún no hay pagos. Cobre un anticipo abajo para garantizar la reserva.,screens/ReservationDetail.tsx,,translated
@@ -4371,7 +4387,7 @@ Over limit,Over limit,تجاوز الحد,Supera el límite,screens/Receivables.
 Overbooking,Overbooking,الحجز الزائد,Sobreventa,,,translated
 Overbooking allowance,Overbooking allowance,حد الحجز الزائد,Límite de sobreventa,,,translated
 overdue,overdue,متأخر,vencido,screens/CashForecast.tsx; screens/HkApp.tsx; screens/Laundry.tsx,,translated
-Overdue,Overdue,متأخر,Vencido,components/RoomStayPanels.tsx; screens/BanquetFunction.tsx; screens/CityLedgerPayment.tsx; screens/Dashboard.tsx; screens/Owner.tsx; screens/Payables.tsx; screens/Receivables.tsx,,translated
+Overdue,Overdue,متأخر,Vencido,components/RoomStayPanels.tsx; screens/BanquetFunction.tsx; screens/CityLedgerPayment.tsx; screens/Dashboard.tsx; screens/Owner.tsx; screens/Payables.tsx; screens/Receivables.tsx; screens/Today.tsx,,translated
 Overdue by,Overdue by,متأخر بمقدار,Retraso de,screens/OpsSLA.tsx; screens/Tickets.tsx,,translated
 overdue by {t},overdue by {t},متأخر بمقدار {t},con {t} de retraso,screens/Tickets.tsx,t,translated
 Overdue by company,Overdue by company,المتأخرات حسب الشركة,Vencido por empresa,,,translated
@@ -4381,6 +4397,7 @@ Overnight,Overnight,مبيت,Durante la noche,components/BookingDialog.tsx,,tran
 overnight stay,overnight stay,إقامة ليلية,pernoctación,screens/TapeChart.tsx,,translated
 Overridden check,Overridden check,الفحص الذي تم تجاوزه,Comprobación con excepción autorizada,,,translated
 Override credit control - say why (it is logged),Override credit control - say why (it is logged),تجاوز ضبط الائتمان: اذكر السبب (يُسجَّل),Saltar el control de crédito: indica el motivo (queda registrado),screens/Receivables.tsx,,translated
+Override room status,Override room status,تغيير حالة الغرفة يدويًا,Cambiar manualmente el estado de la habitación,screens/HousekeepingBoard.tsx,,translated
 Override with reason,Override with reason,تجاوز مع ذكر السبب,Autorizar excepción con un motivo,screens/EndOfDayWizard.tsx,,translated
 Overview,Overview,نظرة عامة,Descripción general,screens/SystemHealth.tsx,,translated
 Owed,Owed,مستحق,Pendiente,screens/Billing.tsx; screens/CityLedgerPayment.tsx; screens/Payables.tsx,,translated
@@ -4407,7 +4424,7 @@ Page ,Page ,صفحة ,Página ,screens/Agents.tsx,,translated
 Page {n},Page {n},صفحة {n},Página {n},components/ResourceScreen.tsx; screens/Agents.tsx,n,translated
 Page not found.,Page not found.,الصفحة غير موجودة.,Página no encontrada.,App.tsx,,translated
 Page Slug Prefix,Page Slug Prefix,بادئة رابط الصفحة,Prefijo de la ruta pública,screens/BookingEngine.tsx,,translated
-Paid,Paid,مدفوع,Pagado,components/CheckOutDialog.tsx; components/RoomDrawer.tsx; screens/FolioView.tsx; screens/InHouse.tsx; screens/Payables.tsx; screens/Receivables.tsx; screens/RegistrationCard.tsx; screens/ReservationDetail.tsx; screens/Today.tsx; screens/pos/PosSidePanel.tsx,,translated
+Paid,Paid,مدفوع,Pagado,components/CheckOutDialog.tsx; components/RoomDrawer.tsx; screens/Billing.tsx; screens/FolioView.tsx; screens/InHouse.tsx; screens/Payables.tsx; screens/Receivables.tsx; screens/RegistrationCard.tsx; screens/ReservationDetail.tsx; screens/Today.tsx; screens/pos/PosSidePanel.tsx,,translated
 PAID,PAID,مدفوع,PAGADO,lib/thermal.ts,,translated
 Paid {amount},Paid {amount},المدفوع {amount},Pagado {amount},screens/CRS.tsx,amount,translated
 Paid {cur},Paid {cur},مدفوع {cur},Pagado {cur},screens/Billing.tsx,cur,translated
@@ -4754,6 +4771,7 @@ Profile actions,Profile actions,إجراءات الملف الشخصي,Acciones 
 Profit and loss,Profit and loss,الأرباح والخسائر,Pérdidas y ganancias,screens/ManagementBooks.tsx,,translated
 Profit for the period,Profit for the period,ربح الفترة,Ganancia del periodo,screens/ManagementBooks.tsx,,translated
 Proforma,Proforma,فاتورة أولية,Proforma,screens/FolioView.tsx,,translated
+Projected,Projected,متوقع,Proyectado,screens/Reports.tsx,,translated
 projected {v} (in house),projected {v} (in house),متوقع {v} (المقيمون),proyectado {v} (en casa),screens/Reports.tsx,v,translated
 "Projectors, LED walls, DJ, podium, stage, decor, bar. Add it free to give it away.","Projectors, LED walls, DJ, podium, stage, decor, bar. Add it free to give it away.",أجهزة عرض، شاشات LED، DJ، منصة خطابة، مسرح، ديكور، بار. أضفه مجاناً لتقديمه هدية.,"Proyectores, pantallas LED, DJ, atril, escenario, decoración y bar. Márquelo sin cargo para incluirlo de cortesía.",screens/BanquetFunction.tsx,,translated
 Promo code,Promo code,رمز ترويجي,Código promocional,components/FolioDiscount.tsx; screens/PublicBooking.tsx,,translated
@@ -4894,6 +4912,7 @@ Reason code,Reason code,رمز السبب,Código de motivo,screens/AllowanceVou
 Reason Code,Reason Code,رمز السبب,Código de motivo,,,translated
 Reason Codes,Reason Codes,رموز الأسباب,Códigos de motivo,,,translated
 Reason for declining,Reason for declining,سبب الرفض,Motivo del rechazo,screens/ReservationDetail.tsx,,translated
+Reason for overriding room status,Reason for overriding room status,سبب تغيير حالة الغرفة يدويًا,Motivo del cambio manual de estado,screens/HousekeepingBoard.tsx,,translated
 Reason for overriding the blacklist,Reason for overriding the blacklist,سبب تجاوز القائمة السوداء,Motivo para autorizar una reserva pese a la lista negra,components/BookingDialog.tsx,,translated
 Reason for the credit override (logged),Reason for the credit override (logged),سبب تجاوز الائتمان (يُسجَّل),Motivo de la excepción de crédito (queda registrado),components/BookingDialog.tsx,,translated
 Reason for the override (logged with your name),Reason for the override (logged with your name),سبب التجاوز (يُسجَّل باسمك),Motivo de la excepción (se registra con su nombre),components/ChangeCompany.tsx; components/CheckOutDialog.tsx,,translated
@@ -5076,6 +5095,8 @@ Reset to default ({value}),Reset to default ({value}),إعادة التعيين 
 Residence Card,Residence Card,بطاقة الإقامة,Cédula de residencia,,,translated
 Resolution minutes,Resolution minutes,دقائق الحل,Minutos de resolución,,,translated
 Resolve,Resolve,حل,Resolver,screens/EndOfDayWizard.tsx,,translated
+Resolve the company credit restriction.,Resolve the company credit restriction.,عالج قيد الائتمان الخاص بالشركة.,Resuelva la restricción de crédito de la empresa.,components/BookingDialog.tsx,,translated
+Resolve the guest blacklist restriction.,Resolve the guest blacklist restriction.,عالج قيد إدراج النزيل في قائمة الحظر.,Resuelva la restricción por bloqueo del huésped.,components/BookingDialog.tsx,,translated
 Resolved,Resolved,محلول,Resuelto,screens/OpsSLA.tsx,,translated
 resolved {when},resolved {when},حُلّت {when},resuelto {when},components/RoomDrawer.tsx,when,translated
 Resolved on,Resolved on,تاريخ الحل,Resuelto el,,,translated
@@ -5170,6 +5191,7 @@ Room {v0} meal plan,Room {v0} meal plan,خطة وجبات الغرفة {v0},Plan
 Room {v0} quantity,Room {v0} quantity,,,components/BookingDialog.tsx,v0,needs_translation
 Room {v0} type,Room {v0} type,نوع الغرفة {v0},Tipo de habitación {v0},components/BookingDialog.tsx,v0,translated
 Room + tax,Room + tax,الغرفة + الضريبة,Habitación + impuestos,,,translated
+Room actions,Room actions,إجراءات الغرفة,Acciones de la habitación,screens/HousekeepingBoard.tsx,,translated
 Room and F&B,Room and F&B,الغرفة والأطعمة والمشروبات,Habitación y alimentos y bebidas,,,translated
 Room and F&B (liquor to guest),Room and F&B (liquor to guest),الغرفة والأطعمة والمشروبات (الكحول على الضيف),Habitación y alimentos y bebidas (alcohol a cargo del huésped),,,translated
 Room and tax were posted and the business date rolled.,Room and tax were posted and the business date rolled.,رُحّلت الغرفة والضريبة ونُقل تاريخ العمل.,Se registraron los cargos de habitación e impuestos y avanzó la fecha operativa.,screens/EndOfDayWizard.tsx,,translated
@@ -5423,6 +5445,7 @@ Select {v0},Select {v0},تحديد {v0},Seleccionar {v0},screens/Receivables.tsx
 Select a bill on the left to see every line.,Select a bill on the left to see every line.,اختر فاتورة على اليسار لعرض كل البنود.,Seleccione una cuenta a la izquierda para ver cada línea.,screens/pos/OpenBillsPopup.tsx,,translated
 Select a calling code.,Select a calling code.,اختر رمز الاتصال الدولي.,Seleccione un prefijo telefónico.,components/PhoneInput.tsx,,translated
 Select a room and rate to see your total here.,Select a room and rate to see your total here.,اختر غرفة وسعرًا لترى المجموع هنا.,Seleccione una habitación y una tarifa para ver aquí el total.,screens/PublicBooking.tsx,,translated
+Select a room type and wait for a valid quote.,Select a room type and wait for a valid quote.,اختر نوع الغرفة وانتظر عرض سعر صالحًا.,Seleccione un tipo de habitación y espere una cotización válida.,components/BookingDialog.tsx,,translated
 Select all {n},Select all {n},تحديد الكل ({n}),Seleccionar las {n},screens/Receivables.tsx,n,translated
 Select charge,Select charge,اختر الرسوم,Seleccionar cargo,screens/FolioView.tsx,,translated
 Select items from the menu,Select items from the menu,اختر أصنافاً من القائمة,Seleccione artículos del menú,screens/POS.tsx,,translated
@@ -5889,7 +5912,7 @@ Task deadlines,Task deadlines,مواعيد المهام,Plazos de las tareas,,,t
 Tasks,Tasks,المهام,Tareas,,,translated
 Tasks by attendant,Tasks by attendant,المهام حسب العامل,Tareas por camarera,,,translated
 Tasks by type,Tasks by type,المهام حسب النوع,Tareas por tipo,,,translated
-Tax,Tax,الضريبة,Impuestos,components/RoomStayPanels.tsx,,translated
+Tax,Tax,الضريبة,Impuestos,components/RoomStayPanels.tsx; screens/BanquetDocument.tsx,,translated
 Tax %,Tax %,الضريبة %,Impuesto (%),screens/CurrencyDesk.tsx,,translated
 Tax applies to the levy,Tax applies to the levy,تُطبّق الضريبة على الرسم,Aplicar impuesto a la tasa de alojamiento,,,translated
 Tax Id,Tax Id,الرقم الضريبي,Identificación fiscal,,,translated
@@ -6205,7 +6228,7 @@ Too many requests - give it a few seconds and try again.,Too many requests - giv
 Top items,Top items,الأصناف الأكثر مبيعًا,Artículos más vendidos,screens/PosDashboard.tsx,,translated
 Top of the page,Top of the page,أعلى الصفحة,Principio de la página,components/CustomizeToday.tsx,,translated
 total,total,الإجمالي,total,screens/CRS.tsx; screens/PublicListing.tsx,,translated
-Total,Total,الإجمالي,Total,components/AgreedRatePanel.tsx; components/BookingDialog.tsx; lib/thermal.ts; screens/AuditPack.tsx; screens/BanquetDocument.tsx; screens/BookingQuotation.tsx; screens/CashierShiftReport.tsx; screens/FolioHistory.tsx; screens/GoLiveImport.tsx; screens/GroupQuotation.tsx; screens/Laundry.tsx; screens/ManagementBooks.tsx; screens/POS.tsx; screens/Payables.tsx; screens/PublicBooking.tsx; screens/Receivables.tsx; screens/Reports.tsx; screens/ReservationDetail.tsx; screens/RevenueReports.tsx,,translated
+Total,Total,الإجمالي,Total,components/AgreedRatePanel.tsx; components/BookingDialog.tsx; lib/thermal.ts; screens/AuditPack.tsx; screens/BanquetDocument.tsx; screens/Billing.tsx; screens/BookingQuotation.tsx; screens/CashierShiftReport.tsx; screens/FolioHistory.tsx; screens/FolioView.tsx; screens/GoLiveImport.tsx; screens/GroupQuotation.tsx; screens/Laundry.tsx; screens/ManagementBooks.tsx; screens/POS.tsx; screens/Payables.tsx; screens/PublicBooking.tsx; screens/Receivables.tsx; screens/Reports.tsx; screens/ReservationDetail.tsx; screens/RevenueReports.tsx,,translated
 TOTAL,TOTAL,الإجمالي,TOTAL,lib/thermal.ts,,translated
 Total ,Total ,الإجمالي ,Total ,screens/BanquetDocument.tsx,,translated
 "Total · {n} night, taxes included","Total · {n} night, taxes included",الإجمالي · {n} ليلة، شامل الضرائب,"Total · {n} noche, impuestos incluidos",,n,translated
