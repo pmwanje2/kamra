@@ -63,8 +63,8 @@ Bills still open,Contas ainda abertas
 Use Check out to check a guest out: it makes sure every bill is cleared first.,Use Check-out para dar saída ao hóspede: ele confere antes que todas as contas estejam quitadas.
 Check out,Check-out
 Discounts and allowances,Descontos e abatimentos
-{0} is not a Kamra language.,{0} não é um idioma do Kamra.
-{0} is switched off. Turn it on from Languages in Settings.,{0} está desligado. Ative-o em Idiomas nas Definições.
+"{0} is not a Kamra language.","{0} não é um idioma do Kamra."
+"{0} is switched off. Turn it on from Languages in Settings.","{0} está desligado. Ative-o em Idiomas nas Definições."
 No room mappings yet - map your room types to the provider's room and rate ids first.,Ainda não há mapeamentos de quartos: primeiro mapeie seus tipos de quarto para os ids de quarto e de tarifa do provedor.
 No room type matches it.,Não corresponde a nenhum tipo de quarto.
 Provider rate plan {0} is already mapped on this connection.,O plano tarifário {0} do provedor já está mapeado nesta conexão.
