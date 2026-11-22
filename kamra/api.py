@@ -1782,16 +1782,13 @@ def add_folio_payments(payments, pin: str | None = None):
 	return {"posted": len(payments), "folios": folios}
 
 
-def _erp_bridge_script(api_method: str):
-	name = frappe.db.get_value("Server Script", {"script_type": "API", "api_method": api_method, "disabled": 0})
-	return frappe.get_doc("Server Script", name) if name else None
-
-
 def _booked_correction_script(doc, row_name, method):
 	from kamra.corrections import _row
+	from kamra.erp_bridge import get_bridge_script
+
 	row, charge = _row(doc, row_name)
 	if not charge and row.get("payment_entry"):
-		return _erp_bridge_script("hospitality_kamra." + method)
+		return get_bridge_script("hospitality_kamra." + method)
 
 
 @frappe.whitelist()
@@ -1804,23 +1801,16 @@ def erp_correction_context(api_method: str) -> dict:
 
 
 def _execute_correction_script(script, args, approver=None):
+	from kamra.erp_bridge import run_bridge_script
+
 	flags = dict(kamra_erp_correction_authorized=True, kamra_erp_correction_method=script.api_method,
 	             kamra_erp_correction_requester=frappe.session.user, kamra_erp_correction_approver=approver)
 	previous = {k: frappe.flags[k] for k in flags if k in frappe.flags}
-	form = frappe.local.form_dict
-	absent = object()
-	message = frappe.response.pop("message", absent)
 	try:
 		with act_as(approver) if approver else nullcontext():
 			frappe.flags.update(flags)
-			frappe.local.form_dict = frappe._dict(args)
-			script.execute_method()
-			return frappe.response.get("message")
+			return run_bridge_script(script, args)
 	finally:
-		frappe.local.form_dict = form
-		frappe.response.pop("message", None)
-		if message is not absent:
-			frappe.response["message"] = message
 		for k in flags:
 			frappe.flags.pop(k, None)
 		frappe.flags.update(previous)
