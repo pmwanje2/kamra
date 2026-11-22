@@ -40,6 +40,53 @@ def room_type_tariffs(room_type: str):
 	return bridge_call("hospitality_tariffs.room_type_tariffs", room_type=room_type)
 
 
+@frappe.whitelist()
+@require_roles(*RATE_ROLES)
+def list_contract_tariffs(property: str):
+	"""Read the property's tariff directory if the integration is installed."""
+	from kamra.erp_bridge import bridge_call
+
+	assert_property_access(property)
+	result = bridge_call("hospitality_tariffs.list_tariffs", property=property)
+	if result is not None:
+		return result
+	return {"supported": False, "property": property, "price_lists": [], "items": [],
+	        "can_propose": False, "can_approve": False}
+
+
+@frappe.whitelist(methods=["POST"])
+@require_roles("Revenue Manager", "Hotel Admin")
+def propose_contract_tariff(property: str, price_list: str, item_code: str,
+                            price_list_rate: float, valid_from: str, valid_upto: str | None = None):
+	"""Propose a new version; the integration owns effective-date validation."""
+	from kamra.erp_bridge import bridge_call
+
+	assert_property_access(property)
+	return bridge_call("hospitality_tariffs.propose_tariff", property=property, price_list=price_list,
+	                   item_code=item_code, price_list_rate=price_list_rate,
+	                   valid_from=valid_from, valid_upto=valid_upto)
+
+
+@frappe.whitelist(methods=["POST"])
+@require_roles("Hotel Admin")
+def approve_contract_tariff(item_price: str):
+	"""Release an eligible draft through the integration's approval workflow."""
+	from kamra.erp_bridge import bridge_call
+
+	# Item prices are external IDs. The bridge resolves their property from the
+	# price list and enforces scope, draft state, and separation of duties.
+	return bridge_call("hospitality_tariffs.approve_tariff", item_price=item_price)
+
+
+@frappe.whitelist(methods=["POST"])
+@require_roles("Hotel Admin")
+def discard_contract_tariff(item_price: str):
+	"""Discard a draft through the same property-scoped integration."""
+	from kamra.erp_bridge import bridge_call
+
+	return bridge_call("hospitality_tariffs.discard_tariff", item_price=item_price)
+
+
 def _season_label(s) -> dict:
 	unit = {"Percent": "%", "Amount": "", "Absolute": ""}.get(s.adjustment_type, "")
 	sign = "+" if (s.adjustment_type != "Absolute" and float(s.adjustment_value or 0) >= 0) else ""

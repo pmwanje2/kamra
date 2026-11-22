@@ -58,6 +58,7 @@ const Reports = lazy(() => import("./screens/Reports"))
 const ReportsHub = lazy(() => import("./screens/ReportsHub"))
 const InHouse = lazy(() => import("./screens/InHouse"))
 const RateCalendar = lazy(() => import("./screens/RateCalendar"))
+const ContractTariffs = lazy(() => import("./screens/ContractTariffs"))
 const RevenueReports = lazy(() => import("./screens/RevenueReports"))
 const OpsSLA = lazy(() => import("./screens/OpsSLA"))
 const Dashboard = lazy(() => import("./screens/Dashboard"))
@@ -258,6 +259,7 @@ export default function App() {
             path="rate-plans"
             element={<ConfiguredScreen config="ratePlansConfig" />}
           />
+          <Route path="tariffs" element={<ContractTariffs />} />
           <Route
             path="guardrails"
             element={<ConfiguredScreen config="guardrailsConfig" />}

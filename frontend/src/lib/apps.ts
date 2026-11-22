@@ -260,6 +260,8 @@ export const APPS: AppDef[] = [
       { to: "/rate-calendar", label: "Rate Calendar", icon: CalendarDays,
         keywords: ["bar", "best available rate", "base rate", "rack rate", "tariff", "pricing", "price by date"] },
       { to: "/rate-plans", label: "Rate Plans", icon: Tags },
+      { to: "/tariffs", label: "Contract Tariffs", icon: FileSpreadsheet,
+        keywords: ["Change USD room tariff", "Edit USD rates", "Contract tariffs"] },
       { to: "/seasons", label: "Seasons", icon: CalendarDays },
       { to: "/packages", label: "Packages", icon: Package,
         keywords: ["holiday package", "pacote", "carnaval", "reveillon", "special offer", "feriado", "closed package"] },

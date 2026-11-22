@@ -3,6 +3,7 @@ import { call } from "../lib/api"
 import { useT } from "../lib/i18n"
 import { useLocale } from "../lib/money"
 import { currencyText, formatFxRate, tariffDate } from "./ContractTariff"
+import { ManageTariffsLink } from "./ManageTariffsLink"
 import RoomTypeMedia from "./RoomTypeMedia"
 
 export default function RoomTypeExtras(props: Parameters<typeof RoomTypeMedia>[0]) {
@@ -43,9 +44,11 @@ function RoomTypeTariffs({ roomType }: { roomType: string }) {
     return () => { live = false }
   }, [roomType])
 
-  if (!data && !error) return null
   return <section aria-label={t("Contract tariffs")} className="space-y-3 rounded-xl border border-zinc-200 p-4">
-    <h3 className="text-sm font-semibold">{t("Contract tariffs")}</h3>
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <h3 className="text-sm font-semibold">{t("Contract tariffs")}</h3>
+      <ManageTariffsLink roomType={roomType} />
+    </div>
     {error && <p className="text-sm text-rose-700">{t("Could not load contract tariffs.")}</p>}
     {data?.all_active_plans_tariff && <p className="text-sm text-amber-800">
       {t("The card rate is not used by any active rate plan.")}
