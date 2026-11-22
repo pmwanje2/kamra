@@ -66,9 +66,13 @@ export async function fixturePage(browser, origin, role, viewport, replies = {})
       "kamra.api.enabled_modules": [],
       "kamra.public_api.site_info": { brand, brand_name: null, brand_logo: null },
       "kamra.api.hk_queue": { tasks: [], rooms: [] },
-      "kamra.health.system_health": { overall: "passed", installed: { kamra: "2.8.0", frappe: "16", site: "kamra.test" },
-        latest: { url: "https://github.com/Kamra-PMS/kamra-pms", tag: "v2.8.0" },
-        upgrade: { docs: "https://kamrapms.com/docs" }, checks: [{ title: "Frappe (v16)" }] },
+      "kamra.health.system_health": {
+        product: brand.product, overall: "passed", checked_at: "2031-03-12T08:00:00+03:00",
+        properties: [{ property: "Health Fixture Property", status: "passed", business_date: "2031-03-12",
+          calendar_date: "2031-03-12", night_audit: { last_business_date: "2031-03-11", status: "Completed",
+            completed_at: "2031-03-12T02:00:00+03:00", next_due: null } }],
+        checks: [{ id: "service", title: "Service", status: "passed", detail: "Responding." }],
+      },
       "kamra.public_api.catalog_index": { mode: "hotel", property: "Fixture Hotel" },
       "kamra.public_api.showcase": { property: { name: "Fixture Hotel", property_name: "Fixture Hotel", city: "Fixture City",
         checkin_time: "14:00", checkout_time: "11:00", faqs: [], amenities: [] },
@@ -117,7 +121,10 @@ async function sweep() {
         for (const route of paths) {
           try {
             await settled(page, route)
-            if (route === "/health") await page.getByText("Passed", { exact: true }).waitFor()
+            if (route === "/health") {
+              await page.getByText("Health Fixture Property", { exact: true }).waitFor()
+              await page.getByText("Passed", { exact: true }).first().waitFor()
+            }
             if (/^\/book(?:\/|$)/.test(route)) await page.getByRole("heading", { name: "Fixture Hotel", exact: true }).first().waitFor()
             const values = await page.evaluate(() => {
               const values = [document.title, document.body.innerText]
