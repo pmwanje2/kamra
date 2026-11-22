@@ -1,7 +1,7 @@
 """Billing in more than one currency (#411).
 
 The books stay in the hotel's currency. A guest may pay in foreign cash or
-by a foreign bank transfer: the server converts at the hotel's own buy rate
+by a foreign bank transfer: the server converts at the hotel's settlement rate
 for the business date, posts the home amount to the ledger and keeps the
 foreign amount and rate on the payment row. A folio can be SHOWN in another
 currency; the tax invoice never changes.
@@ -40,8 +40,8 @@ class MultiCurrencyTestCase(AuditTestCase):
 		self.folio = guest_folio(res.name)
 		self.sess = cashier.open_session(PROP_A, 500)["name"]
 
-	def rate(self, buy=83.105, sell=84.0, currency="USD"):
-		return ledger.upsert_exchange_rate(PROP_A, currency, buy, sell)
+	def rate(self, buy=83.105, sell=None, currency="USD"):
+		return ledger.upsert_exchange_rate(PROP_A, currency, buy, buy if sell is None else sell)
 
 	def test_rounding_rules(self):
 		# half up to the cent on what is posted (float round() gives 2.34)
@@ -236,8 +236,8 @@ class OnlineRatesTestCase(AuditTestCase):
 		usd = self.row("USD")
 		self.assertEqual((usd.market_rate, usd.buy_rate, usd.sell_rate), (80.0, 78.4, 81.6))
 		self.assertEqual((usd.source, usd.set_by), ("Online", frappe.session.user))
-		# a payment now converts at the fetched buy rate
-		self.assertEqual(ledger.payment_rate(PROP_A, "USD")["rate"], 78.4)
+		# a payment now converts at the published market rate
+		self.assertEqual(ledger.payment_rate(PROP_A, "USD")["rate"], 80.0)
 		# fetching again updates the online row, never a second one
 		self.fetch(_fake_api({"INR": 100}))
 		self.assertEqual(self.row("USD").buy_rate, 98.0)

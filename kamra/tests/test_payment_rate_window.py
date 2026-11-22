@@ -21,15 +21,16 @@ class SettlementRateTests(AuditTestCase):
 		make_property(PROP_A, business_date=TODAY, currency="UGX", require_cashier_pin=0)
 		frappe.db.delete("Exchange Rate", {"property": PROP_A})
 
-	def rate(self, date, buy, disabled=0):
+	def rate(self, date, buy, disabled=0, currency="EUR", **fields):
 		frappe.get_doc(
 			dict(
 				doctype="Exchange Rate",
 				property=PROP_A,
-				currency="EUR",
+				currency=currency,
 				rate_date=date,
 				buy_rate=buy,
-				sell_rate=buy,
+				sell_rate=fields.pop("sell_rate", buy),
+				**fields,
 				disabled=disabled,
 			)
 		).insert()
@@ -120,3 +121,36 @@ class SettlementRateTests(AuditTestCase):
 			currency="EUR",
 		)
 		self.assertEqual(r["paid"], 8200)
+
+	def test_online_settlement_and_bureau_transactions(self):
+		from kamra import cashier
+
+		self.rate(TODAY, 3920, currency="USD", sell_rate=4080, source="Online", market_rate=4000)
+		self.assertEqual(ledger.payment_rate(PROP_A, "USD")["rate"], 4000)
+		for rows in ("rates", "tender_rates"):
+			row = ledger.list_exchange_rates(PROP_A)[rows][0]
+			self.assertEqual((row.settlement_rate, row.buy_rate, row.sell_rate), (4000, 3920, 4080))
+		cashier.open_session(PROP_A, 20000)
+		for direction, rate in (("Buy", 3920), ("Sell", 4080)):
+			self.assertEqual(ledger.post_exchange(PROP_A, "USD", 1, direction)["exchange_rate"], rate)
+
+	def test_manual_midpoint_or_flat_rate(self):
+		for sell, expected in ((4100, 4100), (4200, 4150)):
+			ledger.upsert_exchange_rate(PROP_A, "EUR", 4100, sell)
+			self.assertEqual(ledger.payment_rate(PROP_A, "EUR")["rate"], expected)
+
+	def test_walk_in_contract_amount_settles_in_whole_shillings(self):
+		from frappe.utils import add_days, nowdate
+		from kamra import cashier
+		from kamra.tests.audit_fixtures import make_room
+
+		self.rate(TODAY, 3951.612903226, currency="USD", sell_rate=4112.903225806,
+		          market_rate=4032.258064516, source="Online")
+		rt = make_room_type(PROP_A, base_price=524194)
+		frappe.db.set_value("Room Type", rt, "tax_percent", 0)
+		room = make_room(PROP_A, rt, "104")
+		cashier.open_session(PROP_A, 0)
+		result = api.walk_in(PROP_A, rt, room, add_days(nowdate(), 1), "USD Guest",
+		                     defer_check_in=1, payment_mode="Foreign Cash", currency="USD", payment_amount=130)
+		self.assertEqual(result["paid"], 524194)
+		self.assertEqual(result["amount_after_tax"] - result["paid"], 0)

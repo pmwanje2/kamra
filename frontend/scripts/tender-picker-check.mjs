@@ -96,7 +96,7 @@ try {
             property: { name:"P", currency:"UGX" }, gst_summary:[],
           },
           list_exchange_rates: { business_date:businessDate, rates:[
-            { currency:"USD", rate_date:hasToday ? businessDate : "2031-03-10", buy_rate:3650 },
+            { currency:"USD", rate_date:hasToday ? businessDate : "2031-03-10", buy_rate:3577, settlement_rate:3650 },
             { currency:"EUR", rate_date:businessDate, buy_rate:4000 },
           ] },
           payment_rate: { currency:"USD", rate:3650, rate_date:businessDate, home_currency:"UGX",
@@ -123,20 +123,20 @@ try {
         await radio("Mobile Money").click()
         assert.ok(await usd.isDisabled(), "Mobile Money may only take UGX")
         assert.equal(await radio("Bank Transfer").count(), 0, "Unmapped mode offered")
-        await radio(hasToday ? "Cash" : "Foreign Cash").click()
+        await radio("Foreign Cash").click()
         assert.equal(await radio("EUR").count(), 0, "Published rate without a mapped account must not be offered")
         if (!hasToday) {
           assert.ok(await usd.isDisabled(), "A stale rate must not enable USD")
           assert.ok(await page.getByText(/No published rate/).first().isVisible())
         } else {
-          await usd.click()
+          assert.equal(await usd.getAttribute("aria-pressed"), "true")
           const amount = page.locator('input[type="number"]').filter({ visible:true })
           const rateDate = page.getByText("Effective rate date", { exact:true })
           await rateDate.waitFor()
-          assert.equal(await rateDate.locator("..").locator("dd").textContent(), businessDate)
+          assert.equal(await rateDate.locator("..").locator("dd").textContent(), "11 Mar 2031")
           assert.equal(await radio("Foreign Cash").getAttribute("aria-pressed"), "true")
           assert.equal(await page.getByText("Amount tendered", { exact:true }).locator("..").locator("dd").textContent(), "USD 130.01")
-          assert.ok(await page.getByText("3650", { exact:true }).isVisible())
+          assert.ok(await page.getByText("1 USD = 3,650 UGX", { exact:true }).isVisible())
           assert.ok(await amount.count(), "The tender amount must remain editable")
           const submit = screen === "walk-in" ? /Collect USD 130.01 and continue/ :
             screen === "folio" ? /^Record$/ : /^Record USD 130.01$/
@@ -151,7 +151,7 @@ try {
           assert.ok(["Cash", "Foreign Cash"].includes(body.mode ?? body.payment_mode))
         }
         if (screen === "folio") {
-          const correction = page.getByRole("listitem").filter({ hasText: "USD 1 @ 3650" })
+          const correction = page.getByRole("listitem").filter({ hasText: "USD 1.00 @ 3,650" })
           await correction.getByRole("button", { name:"Correct…" }).click()
           const picker = correction.getByRole("group", { name:"Payment mode" })
           assert.equal(await picker.getByRole("button", { name:"Bank Transfer" }).count(), 0)
