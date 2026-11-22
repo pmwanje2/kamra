@@ -1,1 +1,0 @@
-import{j as i}from"./vendor-B7XwBC7W.js";function r({className:s="",...e}){return i.jsx("table",{...e,className:`responsive-list ${s}`})}function o({label:s,importance:e="medium",children:n,...a}){return i.jsxs("td",{...a,"data-importance":e,children:[i.jsx("span",{"aria-hidden":"true",className:"popin-label",children:s}),n]})}export{o as P,r as R};
