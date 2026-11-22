@@ -1,4 +1,5 @@
 import { ResourceScreen } from "../components/ResourceScreen"
+import { ManageTariffsLink } from "../components/ManageTariffsLink"
 import { useLocale } from "../lib/money"
 import * as configs from "./configs"
 
@@ -8,7 +9,7 @@ export type ConfigName = keyof typeof configs
  *  their configs load with the first route that needs them, not the shell. */
 export default function ConfiguredScreen({ config }: { config: ConfigName }) {
   if (config === "roomTypesConfig") return <RoomTypesScreen />
-  return <ResourceScreen config={configs[config]} />
+  return <ResourceScreen config={configs[config]} headerAction={config === "ratePlansConfig" ? <ManageTariffsLink /> : undefined} />
 }
 
 function RoomTypesScreen() {
