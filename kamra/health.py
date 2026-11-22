@@ -12,14 +12,17 @@ from __future__ import annotations
 import json
 import re
 import shutil
+from datetime import datetime, timedelta, timezone
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import frappe
 from frappe.utils import add_to_date, cint, get_datetime, now_datetime
 
 from kamra import __version__ as KAMRA_VERSION
-from kamra.authz import require_roles
+from kamra.authz import require_roles, restricted_properties
+from kamra.branding import product_name, white_label
 
 GITHUB_REPO = "Kamra-PMS/kamra-pms"
 GITHUB_LATEST = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
@@ -343,6 +346,8 @@ def _nag_is_dismissed(tag: str) -> bool:
 
 def poll_github_releases():
 	"""Scheduler: refresh the GitHub latest-release cache (no UI side effects)."""
+	if white_label():
+		return
 	frappe.cache.delete_value(CACHE_KEY)
 	_fetch_github_latest()
 
@@ -351,6 +356,8 @@ def poll_github_releases():
 @require_roles("Hotel Admin", "System Manager", "Administrator")
 def update_nag():
 	"""Lightweight check for the in-app update banner (admins only)."""
+	if white_label():
+		return {"available": False}
 	# Shared playground installs are not upgradable by the visitor.
 	if frappe.db.get_default("kamra_demo_mode") == "1":
 		return {"available": False, "reason": "demo"}
@@ -388,6 +395,8 @@ def dismiss_update_nag(tag: str, snooze_days: int = 0):
 	snooze_days > 0 → remind later. snooze_days == 0 → dismiss until a newer
 	GitHub release appears.
 	"""
+	if white_label():
+		return
 	tag = (tag or "").strip()
 	if not tag:
 		frappe.throw("Missing release tag.")
@@ -425,10 +434,130 @@ def take_site_backup(with_files: int = 1):
 	return paths
 
 
+def _operational_check(id_: str, title: str, status: str, detail: str) -> dict:
+	return {"id": id_, "title": title, "status": status, "detail": detail}
+
+
+def _property_health(prop, site_now, scheduler_active):
+	from kamra.night_audit import next_auto_run
+
+	zone = site_now.tzinfo
+	clock_ok = True
+	if tz_name := (prop.timezone or "").strip():
+		try:
+			zone = ZoneInfo(tz_name)
+		except (ValueError, ZoneInfoNotFoundError):
+			clock_ok = False
+	local_now = site_now.astimezone(zone)
+	calendar_date = local_now.date()
+	business_date = prop.business_date or calendar_date
+	last = frappe.db.get_value(
+		"Night Audit Log", {"property": prop.name, "status": ("!=", "Skipped")},
+		["business_date", "status", "finished_at"], as_dict=True, order_by="creation desc",
+	)
+	status = {"Closed": "Completed", "Failed": "Failed", "Held": "Held"}.get(last.status) if last else None
+	completed = None
+	if status == "Completed" and last.finished_at:
+		# Log timestamps are recorded on the site clock, not the property clock.
+		completed = get_datetime(last.finished_at).replace(tzinfo=site_now.tzinfo).astimezone(zone)
+	next_due = next_auto_run(prop.name, business_date, local_now.replace(tzinfo=None)) if scheduler_active else None
+	audit_attention = business_date < calendar_date - timedelta(days=1) or status == "Failed"
+	return {
+		"property": prop.property_name or prop.name,
+		"status": "passed" if clock_ok and not audit_attention else "attention",
+		"business_date": str(business_date),
+		"calendar_date": str(calendar_date),
+		"night_audit": {
+			"last_business_date": str(last.business_date) if last and last.business_date else None,
+			"status": status,
+			"completed_at": completed.isoformat(timespec="seconds") if completed else None,
+			"next_due": get_datetime(next_due).replace(tzinfo=zone).isoformat(timespec="seconds") if next_due else None,
+		},
+	}, audit_attention, clock_ok
+
+
+def _channel_health(properties):
+	from kamra.channel_ari import outbox_status
+
+	if not properties:
+		return None
+	connections = frappe.get_all("Channel Manager Connection",
+		filters={"property": ("in", properties)}, fields=["name", "active"])
+	if not connections:
+		return None
+	title = frappe._("Channel connections")
+	active = [conn.name for conn in connections if conn.active]
+	if not active:
+		return _operational_check("channels", title, "info", frappe._("None connected."))
+	# This reader only inspects local outbox state. Never return names, raw
+	# statuses, pause reasons, or provider error messages.
+	statuses = [outbox_status(name) for name in active]
+	if any(s["failed"] or s["paused"] or s["last_push_status"].startswith("FAILED:") for s in statuses):
+		return _operational_check("channels", title, "attention", frappe._("Channel updates need attention."))
+	return _operational_check("channels", title, "passed", frappe._("No channel update failures reported."))
+
+
+def _white_label_health() -> dict:
+	from frappe.utils import get_system_timezone
+	from frappe.utils.scheduler import is_scheduler_inactive
+
+	# Build an allowlisted payload; never run legacy diagnostics just to strip
+	# their output (even a cache hit could otherwise disclose release data).
+	payload = {
+		"product": product_name(),
+		"overall": "passed",
+		"checked_at": None,
+		"properties": [],
+		"checks": [],
+	}
+	checks = payload["checks"]
+	try:
+		frappe.db.sql("select 1")
+	except Exception:
+		checks.append(_operational_check("service", frappe._("Service"), "failed", frappe._("Service is not responding.")))
+		payload["overall"] = "failed"
+		payload["checked_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+		return payload
+	# Reuse one instant for every property in the snapshot, including midnight boundaries.
+	site_now = now_datetime().replace(tzinfo=ZoneInfo(get_system_timezone()))
+	payload["checked_at"] = site_now.isoformat(timespec="seconds")
+	checks.append(_operational_check("service", frappe._("Service"), "passed", frappe._("Responding.")))
+
+	active = not is_scheduler_inactive(verbose=False)
+	checks.append(_operational_check("background", frappe._("Background jobs"), "passed" if active else "attention",
+		frappe._("Background jobs are enabled.") if active else frappe._("Background jobs are paused. Contact Maximus support.")))
+	allowed = restricted_properties()
+	filters = {} if allowed is None else {"name": ("in", sorted(allowed))}
+	props = frappe.get_list("Property", filters=filters,
+		fields=["name", "property_name", "business_date", "timezone"], order_by="property_name asc, name asc",
+		limit_page_length=0) if allowed != set() else []
+	rows = [_property_health(p, site_now, active) for p in props]
+	payload["properties"] = [result for result, _, _ in rows]
+	audit_title, clock_title = frappe._("Night audit"), frappe._("Property clock")
+	if not rows:
+		detail = frappe._("No properties in your scope.")
+		checks.append(_operational_check("night_audit", audit_title, "info", detail))
+		checks.append(_operational_check("property_clock", clock_title, "info", detail))
+	else:
+		audit_attention = any(audit for _, audit, _ in rows)
+		clock_ok = all(clock for _, _, clock in rows)
+		checks.append(_operational_check("night_audit", audit_title, "attention" if audit_attention else "passed",
+			frappe._("End of Day needs attention.") if audit_attention else frappe._("Business dates are current.")))
+		checks.append(_operational_check("property_clock", clock_title, "passed" if clock_ok else "attention",
+			frappe._("Matches the hotel time zone.") if clock_ok else frappe._("Check the property time zone setting.")))
+	if channels := _channel_health([p.name for p in props]):
+		checks.append(channels)
+	if any(c["status"] == "attention" for c in checks):
+		payload["overall"] = "attention"
+	return payload
+
+
 @frappe.whitelist()
 @require_roles("Hotel Admin", "System Manager", "Administrator")
 def system_health(refresh: int = 0):
-	"""Admin diagnostics: version vs GitHub + site component checks."""
+	"""Admin health: property operations in white-label mode, diagnostics otherwise."""
+	if white_label():
+		return _white_label_health()
 	if cint(refresh):
 		frappe.cache.delete_value(CACHE_KEY)
 

@@ -49,7 +49,7 @@ class TestHealthWhiteLabel(unittest.TestCase):
 		              "message": "Private failure detail from frappe at https://private.test"}]
 		self.connections = [{"name": "Private channel at South", "property": "South", "active": 1}]
 		self.frappe = module(
-			"frappe", __version__="16.123.45", conf={"kamra_white_label": 1,
+			"frappe", _=lambda text: text, __version__="16.123.45", conf={"kamra_white_label": 1,
 			"kamra_product_name": "Maximus Hotel", "kamra_strict_property_scope": 1},
 			local=SimpleNamespace(site="private-host.test"), session=SimpleNamespace(user="tester"),
 			cache=Mock(), defaults=Mock(), db=Mock(), get_site_path=lambda: "/",
@@ -67,7 +67,8 @@ class TestHealthWhiteLabel(unittest.TestCase):
 		self.outbox = Mock(return_value={"outbox": True, "pending": 0, "failed": 2, "paused": {},
 		                                "last_push_status": "ERPNext https://private.test"})
 		utils = module(
-			"frappe.utils", cint=lambda val: int(val or 0), get_datetime=datetime.fromisoformat,
+			"frappe.utils", cint=lambda val: int(val or 0),
+			get_datetime=lambda val: datetime.fromisoformat(val) if isinstance(val, str) else val,
 			add_to_date=Mock(), now_datetime=lambda: datetime(2026, 11, 21, 22),
 			get_system_timezone=lambda: "UTC",
 		)
@@ -100,7 +101,7 @@ class TestHealthWhiteLabel(unittest.TestCase):
 			else:
 				rows = [r for r in rows if r[key] == wanted]
 		limit = kwargs.get("limit", kwargs.get("limit_page_length"))
-		return [r[pluck] if pluck else Row({field: r[field] for field in fields or ["name"]}) for r in rows[:limit]]
+		return [r[pluck] if pluck else Row({field: r[field] for field in fields or ["name"]}) for r in rows[:limit or None]]
 
 	def get_value(self, doctype, filters, fields, **kwargs):
 		if isinstance(filters, str):
