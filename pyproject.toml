@@ -9,6 +9,7 @@ readme = "README.md"
 license = { text = "Apache-2.0" }
 dynamic = ["version"]
 dependencies = [
+    "Babel>=2.13",  # ISO currency minor units for settlement
     # "frappe~=16.0.0" # Installed and managed by bench.
 ]
 

@@ -5,7 +5,8 @@ import { useCashierAuth } from "../lib/cashierAuth"
 import { useAuth } from "../lib/auth"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
-import { fmtAmount } from "../lib/money"
+import { formatFxRate } from "../components/ContractTariff"
+import { fmtAmount, moneyLocale } from "../lib/money"
 import { useT, t as translate } from "../lib/i18n"
 
 
@@ -188,7 +189,7 @@ export default function CurrencyDesk() {
             </div>
             {calc ? (
               <p className="text-sm text-zinc-600">
-                {(lang !== "en") ? t("Exchange rate") : translate("Rate")} {String(calc.exchange_rate)}{translate(" → local")}{" "}
+                {(lang !== "en") ? t("Exchange rate") : translate("Rate")} {formatFxRate(Number(calc.exchange_rate), moneyLocale())}{translate(" → local")}{" "}
                 <span className="font-semibold tabular-nums">
                   {inr(calc.local_amount)}
                 </span>
@@ -235,7 +236,7 @@ export default function CurrencyDesk() {
               </Button>
             ) : null}
             <p className="w-full text-xs text-zinc-500">
-              {t("Rates are hotel currency per 1 unit of the foreign currency, for today's business date. A guest paying a bill in foreign money is converted at today's Buy rate.")}
+              {t("Rates are hotel currency per 1 unit of the foreign currency, for today's business date. Buy and sell rates apply to currency exchange. Bill payments use the published settlement rate.")}
             </p>
           </CardContent>
         </Card>
@@ -257,13 +258,13 @@ export default function CurrencyDesk() {
             {rates.map((r) => (
               <tr key={r.currency} className="border-t">
                 <td className="px-3 py-2 font-medium">{r.currency}</td>
-                <td className="px-3 py-2 tabular-nums">{r.buy_rate}</td>
-                <td className="px-3 py-2 tabular-nums">{r.sell_rate}</td>
+                <td className="px-3 py-2 tabular-nums">{formatFxRate(r.buy_rate, moneyLocale())}</td>
+                <td className="px-3 py-2 tabular-nums">{formatFxRate(r.sell_rate, moneyLocale())}</td>
                 <td className="px-3 py-2">{r.service_tax_pct}</td>
                 <td className="px-3 py-2 tabular-nums">{r.rate_date}</td>
                 <td className="px-3 py-2 text-xs text-zinc-500">
                   {r.source === "Online"
-                    ? t("Online, market {v0}", { v0: String(r.market_rate ?? "") })
+                    ? t("Online, market {v0}", { v0: formatFxRate(Number(r.market_rate), moneyLocale()) })
                     : t("Manual")}
                   {r.set_by ? ` · ${r.set_by}` : ""}
                 </td>
@@ -299,7 +300,7 @@ export default function CurrencyDesk() {
                   <td className="px-3 py-2">
                     {String(h.fx_amount)} {String(h.currency)}
                   </td>
-                  <td className="px-3 py-2">{String(h.exchange_rate)}</td>
+                  <td className="px-3 py-2">{formatFxRate(Number(h.exchange_rate), moneyLocale())}</td>
                   <td className="px-3 py-2 tabular-nums">
                     {inr(h.local_amount)}
                   </td>

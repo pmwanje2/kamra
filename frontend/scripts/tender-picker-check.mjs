@@ -72,6 +72,10 @@ try {
       page.on("pageerror", (error) => errors.push(error.message))
       const quote = { nights: 1, nightly: [], room_total: home, meal_total: 0, discount: 0,
         amount_before_tax: home, amount_after_tax: home, tax_amount: 0, tax_percent: 0 }
+      const walkIn = screen === "walk-in"
+      const settlementRate = walkIn ? 4032.258064516 : 3650
+      if (walkIn) Object.assign(quote, { tariff: { currency:"USD", nightly:130, property_currency:"UGX",
+        fx_rate:settlementRate, fx_date:businessDate }, agreed_rate:524194, room_total:524194, amount_after_tax:524194 })
       await page.route("**/api/method/*", (route) => {
         const method = new URL(route.request().url()).pathname.split("/").at(-1)
         const payload = route.request().postDataJSON() ?? {}
@@ -96,11 +100,11 @@ try {
             property: { name:"P", currency:"UGX" }, gst_summary:[],
           },
           list_exchange_rates: { business_date:businessDate, rates:[
-            { currency:"USD", rate_date:hasToday ? businessDate : "2031-03-10", buy_rate:3577, settlement_rate:3650 },
+            { currency:"USD", rate_date:hasToday ? businessDate : "2031-03-10", buy_rate:settlementRate * 0.98, settlement_rate:settlementRate },
             { currency:"EUR", rate_date:businessDate, buy_rate:4000 },
           ] },
-          payment_rate: { currency:"USD", rate:3650, rate_date:businessDate, home_currency:"UGX",
-            home_amount: Number(payload.amount) * 3650, quote_id:"test-quote" },
+          payment_rate: { currency:"USD", rate:settlementRate, rate_date:businessDate, home_currency:"UGX",
+            home_amount: Math.round(Number(payload.amount) * settlementRate), quote_id:"test-quote" },
           add_folio_payment: {},
           payment_correction_options: { actions:[{ id:"reclassify_tender", label:"Correct payment mode",
             requires:[], reason_codes:[{ name:"REV-ACCOUNT", description:"Wrong tender" }] }],
@@ -135,10 +139,19 @@ try {
           await rateDate.waitFor()
           assert.equal(await rateDate.locator("..").locator("dd").textContent(), "11 Mar 2031")
           assert.equal(await radio("Foreign Cash").getAttribute("aria-pressed"), "true")
-          assert.equal(await page.getByText("Amount tendered", { exact:true }).locator("..").locator("dd").textContent(), "USD 130.01")
-          assert.ok(await page.getByText("1 USD = 3,650 UGX", { exact:true }).isVisible())
+          assert.equal(await page.getByText("Amount tendered", { exact:true }).locator("..").locator("dd").textContent(), walkIn ? "USD 130.00" : "USD 130.01")
+          assert.ok(await page.getByText(walkIn ? "1 USD = 4,032.26 UGX" : "1 USD = 3,650 UGX", { exact:true }).isVisible())
           assert.ok(await amount.count(), "The tender amount must remain editable")
-          const submit = screen === "walk-in" ? /Collect USD 130.01 and continue/ :
+          if (walkIn) {
+            await page.getByText("Settled in full", {exact:true}).waitFor()
+            const input = page.getByRole("spinbutton", {name:"Amount collected"})
+            assert.equal(await input.inputValue(), "130")
+            await input.fill("100")
+            await page.getByText("Remaining balance", {exact:true}).waitFor()
+            await radio("Full amount").click()
+            await page.getByText("Settled in full", {exact:true}).waitFor()
+          }
+          const submit = walkIn ? /Collect USD 130.00 and continue/ :
             screen === "folio" ? /^Record$/ : /^Record USD 130.01$/
           const expectedMethod = { "walk-in":"walk_in", folio:"add_folio_payment", deposit:"record_advance" }[screen]
           const [request] = await Promise.all([

@@ -34,7 +34,11 @@ class TestV280CarrierContract(unittest.TestCase):
 		self.assertIn("amount", [arg.arg for arg in payment_rate.args.args])
 
 		# Execute the real calculation without importing the bench-bound ledger.
-		row = SimpleNamespace(rate_date="2026-11-21", buy_rate=3650.0, max_exchange=500.0)
+		row = SimpleNamespace(rate_date="2026-11-21", source="Online", market_rate=4032.258064516,
+			buy_rate=3951.612903226, sell_rate=4112.903225806, max_exchange=500.0)
+		row.get = lambda key: getattr(row, key, None)
+		numbers = ModuleType("babel.numbers")
+		numbers.get_currency_precision = {"UGX": 0}.__getitem__
 		utils = ModuleType("frappe.utils")
 		utils.add_days = lambda value, days: str(date.fromisoformat(value) + timedelta(days=days))
 		namespace = {
@@ -50,14 +54,14 @@ class TestV280CarrierContract(unittest.TestCase):
 		}
 		payment_rate.decorator_list = []
 		module = ast.Module(
-			body=[ledger[name] for name in ("_money", "round_cents", "fx_to_home", "payment_rate")],
+			body=[ledger[name] for name in ("_settlement_rate", "_money", "round_cents", "fx_to_home", "payment_rate")],
 			type_ignores=[],
 		)
-		with patch.dict(sys.modules, {"frappe.utils": utils}):
+		with patch.dict(sys.modules, {"frappe.utils": utils, "babel.numbers": numbers}):
 			exec(compile(module, str(KAMRA / "ledger.py"), "exec"), namespace)
 			quote = namespace["payment_rate"]("Test Hotel", "USD", amount=130)
 			other = namespace["payment_rate"]("Test Hotel", "USD", amount=131)
-		self.assertEqual(quote["home_amount"], 474500)
+		self.assertEqual((quote["rate"], quote["home_amount"]), (4032.258064516, 524194))
 		self.assertRegex(quote["quote_id"], r"^[0-9a-f]{64}$")
 		self.assertNotEqual(quote["quote_id"], other["quote_id"])
 

@@ -146,11 +146,16 @@ class SettlementRateTests(AuditTestCase):
 
 		self.rate(TODAY, 3951.612903226, currency="USD", sell_rate=4112.903225806,
 		          market_rate=4032.258064516, source="Online")
-		rt = make_room_type(PROP_A, base_price=524194)
-		frappe.db.set_value("Room Type", rt, "tax_percent", 0)
+		make_property(PROP_A, business_date=TODAY, country="Uganda", currency="UGX", rates_include_tax=1)
+		rt = make_room_type(PROP_A, "FX-CONTRACT", base_price=410619, tax_percent=0)
+		plan = frappe.get_doc({"doctype": "Rate Plan", "property": PROP_A, "rate_plan_name": "USD contract",
+		                       "code": "UT-FX", "modifier_type": "Percent", "modifier_value": 0}).insert()
+		tariff = dict(currency="USD", nightly=130, fx_rate=4032.258064516, property_currency="UGX", fx_date=TODAY)
 		room = make_room(PROP_A, rt, "104")
 		cashier.open_session(PROP_A, 0)
-		result = api.walk_in(PROP_A, rt, room, add_days(nowdate(), 1), "USD Guest",
-		                     defer_check_in=1, payment_mode="Foreign Cash", currency="USD", payment_amount=130)
+		with patch("kamra.pricing.contract_rate", return_value=(524194, tariff)):
+			result = api.walk_in(PROP_A, rt, room, add_days(nowdate(), 1), "USD Guest", rate_plan=plan.name,
+			                     defer_check_in=1, payment_mode="Foreign Cash", currency="USD", payment_amount=130)
+
 		self.assertEqual(result["paid"], 524194)
 		self.assertEqual(result["amount_after_tax"] - result["paid"], 0)

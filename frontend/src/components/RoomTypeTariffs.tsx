@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import { call } from "../lib/api"
 import { useT } from "../lib/i18n"
 import { useLocale } from "../lib/money"
-import { currencyText, tariffDate } from "./ContractTariff"
+import { currencyText, formatFxRate, tariffDate } from "./ContractTariff"
 import RoomTypeMedia from "./RoomTypeMedia"
 
 export default function RoomTypeExtras(props: Parameters<typeof RoomTypeMedia>[0]) {
@@ -51,18 +51,28 @@ function RoomTypeTariffs({ roomType }: { roomType: string }) {
       {t("The card rate is not used by any active rate plan.")}
     </p>}
     {data && !data.tariffs.length && <p className="text-sm text-zinc-600">{t("No approved contract tariffs.")}</p>}
-    {data?.tariffs.map((tariff, i) => <div key={`${tariff.rate_plan}-${tariff.valid_from}-${i}`} className="space-y-1 rounded-lg bg-zinc-50 p-3 text-sm">
-      <p className="font-medium">{tariff.label || tariff.rate_plan}</p>
-      <p className="text-zinc-600">{t("Room: {amount}", { amount: currencyText(tariff.currency, tariff.room, locale) })}</p>
-      {tariff.single != null && <p className="text-zinc-600">{t("Single: {amount}", { amount: currencyText(tariff.currency, tariff.single, locale) })}</p>}
-      {tariff.extra != null && <p className="text-zinc-600">{t("Extra: {amount}", { amount: currencyText(tariff.currency, tariff.extra, locale) })}</p>}
-      <p className="text-zinc-600">{t("{state} · Valid from {date}", { state: t(tariff.approval_state), date: tariffDate(tariff.valid_from, locale) })}</p>
-      {currency && tariff.fx_rate != null && tariff.fx_rate > 0 && tariff.fx_date && <p className="text-zinc-600">
-        {t("{amount} at the selling rate on {date}", {
-          amount: currencyText(currency, tariff.room * tariff.fx_rate, locale),
-          date: tariffDate(tariff.fx_date, locale),
-        })}
-      </p>}
-    </div>)}
+    {!!data?.tariffs.length && <div className="overflow-x-auto">
+      <table className="w-full text-left text-sm tabular-nums">
+        <caption className="caption-bottom pt-2 text-start text-xs text-zinc-600">
+          {[...new Set(data.tariffs.flatMap(row => currency && row.fx_rate && row.fx_date ? [
+            t("Published selling rate: 1 {foreign} = {rate} {home} · {date}", {
+              foreign: row.currency, rate: formatFxRate(row.fx_rate, locale), home: currency, date: tariffDate(row.fx_date, locale),
+            }),
+          ] : []))].map(ref => <div key={ref}>{ref}</div>)}
+        </caption>
+        <thead><tr>{["Rate plan", "Single", "Double", "Extra bed", "Status", "Local equiv."].map(h =>
+          <th scope="col" className="whitespace-nowrap px-2 py-2" key={h}>{t(h)}</th>)}</tr></thead>
+        <tbody>{data.tariffs.map((row, i) => <tr className="border-t border-zinc-200" key={i}>
+          <th scope="row" className="px-2 py-2">{row.label || row.rate_plan}
+            <small className="block font-normal text-zinc-500">{t("Valid from")} {tariffDate(row.valid_from, locale)}</small>
+          </th>
+          {[row.single, row.room, row.extra].map((amount, idx) => <td className="whitespace-nowrap px-2" key={idx}>
+            {amount == null ? "—" : currencyText(row.currency, amount, locale)}
+          </td>)}
+          <td className="px-2"><span className="rounded-full bg-emerald-50 px-2 py-1 text-xs text-emerald-700">{t(row.approval_state)}</span></td>
+          <td className="whitespace-nowrap px-2">{currency && row.fx_rate ? currencyText(currency, row.room * row.fx_rate, locale) : "—"}</td>
+        </tr>)}</tbody>
+      </table>
+    </div>}
   </section>
 }

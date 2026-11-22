@@ -1626,7 +1626,7 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 
 	currency: leave out (or pass the home currency) for a normal payment.
 	A foreign code means `amount` is the foreign money received (cash or a
-	bank transfer); the server converts it at today's buy rate, posts the
+	bank transfer); the server converts it at the published settlement rate, posts the
 	home amount and keeps the foreign amount and rate on the row.
 	A retry with the same idempotency_key returns the folio without
 	posting again."""
