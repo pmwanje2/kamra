@@ -1,6 +1,7 @@
 import { SettlementPreview, useSettlementQuote } from "./SettlementPreview"
 import TenderPicker, { resolveTender, tenderAmount, tenderModes, tenderReady, useTenderRates } from "./TenderPicker"
 import { RateOptions } from "./RateOptions"
+import { currencyText, TariffNight, TariffRoomTotal } from "./ContractTariff"
 import { useEffect, useRef, useState } from "react"
 import { htmlToText, formatDate, roomLabel } from "../lib/utils"
 import { useNavigate } from "react-router-dom"
@@ -386,6 +387,7 @@ export function BookingDialog(props: {
       setForm((f) => ({
         ...f,
         meal_plan: o.meal_plans.find((m) => m.is_default)?.name ?? "",
+        rate_plan: f.rate_plan || o.default_plan || "",
       }))
     })
   }, [])
@@ -421,7 +423,8 @@ export function BookingDialog(props: {
   // screen shows). Only a Revenue Manager / Hotel Admin may; an OTA total
   // already sets the price, and a day-use stay is priced by its slot.
   const [nightPrices, setNightPrices] = useState<Record<string, number>>({})
-  const canSetPrice = !!options?.can_set_rate && otaTotal <= 0 && !dayUse
+  const planRequired = !!options?.rate_plan_required
+  const canSetPrice = !!options?.can_set_rate && otaTotal <= 0 && !dayUse && !form.rate_plan && !planRequired
   const stayNights = badDate || dayUse
     ? []
     : Array.from({ length: Math.max(1, form.nights) }, (_, i) => shiftDate(form.check_in_date, i))
@@ -491,6 +494,8 @@ export function BookingDialog(props: {
       setQuoting(false)
       return
     }
+    let live = true
+    setQuote(null)
     setQuoting(true)
     const t = setTimeout(() => {
       getQuote({
@@ -505,19 +510,23 @@ export function BookingDialog(props: {
         voucher_code: form.voucher_code || undefined,
         over_capacity_charge: extraCharge || undefined,
         pets: form.pets || undefined,
+        extra_beds: extra.extra_beds || undefined,
+        ...slotArgs,
         ...nightPricesParam,
       })
         .then((q) => {
+          if (!live) return
           setQuote(q)
           setError(null)
         })
         .catch((e) => {
+          if (!live) return
           setQuote(null)
           setError(shortErr(e))
         })
-        .finally(() => setQuoting(false))
+        .finally(() => { if (live) setQuoting(false) })
     }, 300)
-    return () => clearTimeout(t)
+    return () => { live = false; clearTimeout(t) }
   }, [
     form.room_type,
     form.check_in_date,
@@ -534,6 +543,9 @@ export function BookingDialog(props: {
     form.over_capacity_charge,
     form.over_capacity_guests,
     form.pets,
+    extra.extra_beds,
+    slot.from,
+    slot.to,
     checkOut,
     // a typed price re-quotes: the totals, tax and advance follow it
     JSON.stringify(nightPricesArg),
@@ -830,6 +842,7 @@ export function BookingDialog(props: {
         nationality: walk.nationality.trim() || undefined,
         payment_mode: amount > 0 ? tender.mode : undefined,
         payment_amount: amount, currency: foreign ? payCurrency : undefined, quote_id: fx?.quote?.quote_id,
+        extra_beds: extra.extra_beds || undefined,
         payment_reference: walk.pay_reference.trim() || undefined,
         idempotency_key: walkInKey,
         ...slotArgs,
@@ -884,6 +897,7 @@ export function BookingDialog(props: {
   requireField(blacklistBlocked, "blacklist", t("Resolve the guest blacklist restriction."))
   requireField(creditBlocked, "credit", t("Resolve the company credit restriction."))
   requireField(extraNeedsReason, "extra", t("Enter the reason for the extra guests."))
+  requireField(planRequired && !form.rate_plan && !companyPlan, "rate-plan", t("Choose a rate plan for this booking."))
   const messages = attempted ? [...problems, ...(submitError ? [{field: "server", message: submitError}] : [])] : []
   const target = (field: string) => ({id: `booking-${field}`, "aria-invalid": attempted && problems.some(p => p.field === field) || undefined})
   function jump(field: string) {
@@ -936,6 +950,8 @@ export function BookingDialog(props: {
       addonsGross
     )
   })()
+  const quoteTariff = otaTotal <= 0 ? quote?.tariff : null
+  const quoteTaxBasis = quote?.tax_basis === undefined ? loc.tax_basis : quote.tax_basis
 
   const suggestedAmount = paymentReady ? tenderAmount(grandTotal, payCurrency, loc.currency, buyRates) : ""
   useEffect(() => {
@@ -1458,8 +1474,8 @@ export function BookingDialog(props: {
                   >
                     {options?.room_types.map((rt) => (
                       <option key={rt.name} value={rt.name}>
-                        {rt.room_type_name} · {t("BAR")} {cur()}
-                        {inr(rt.base_price)}/{t("night")}
+                        {rt.room_type_name}
+                        {!form.rate_plan && !planRequired && !quoteTariff && <> · {t("BAR")} {cur()}{inr(rt.base_price)}/{t("night")}</>}
                       </option>
                     ))}
                   </select>
@@ -1800,17 +1816,18 @@ export function BookingDialog(props: {
                       ))}
                     </select>
                   </Field>
-                  {(options?.rate_plans.length ?? 0) > 0 && (
+                  {(planRequired || (options?.rate_plans.length ?? 0) > 0) && (
                     <Field label={t("Rate plan")}>
                       <select
                         className={inputCls}
+                        {...target("rate-plan")}
                         value={form.rate_plan}
                         onChange={(e) => set("rate_plan", e.target.value)}
                       >
-                        <option value="">
+                        <option value="" disabled={planRequired && !companyPlan} hidden={planRequired && !!form.rate_plan}>
                           {companyPlan
                             ? `${t("Company rate")}: ${companyPlan.rate_plan_name}`
-                            : t("Standard rate (no plan)")}
+                            : planRequired ? t("Choose a rate plan") : t("Standard rate (no plan)")}
                         </option>
                         {options?.rate_plans.map((rp) => (
                           <option key={rp.name} value={rp.name}>
@@ -1840,9 +1857,11 @@ export function BookingDialog(props: {
                     checkOut={checkOut}
                     adults={form.adults}
                     children={form.children}
+                    extraBeds={extra.extra_beds}
                     mealPlan={form.meal_plan || undefined}
                     voucher={form.voucher_code || undefined}
                     ratePlan={form.rate_plan}
+                    planRequired={planRequired}
                     onPickPlan={(p) => set("rate_plan", p)}
                     nightPrices={nightPrices}
                     onNightPrices={setNightPrices}
@@ -2470,11 +2489,16 @@ export function BookingDialog(props: {
                           ? t("Day use {from}-{to}", { from: slot.from, to: slot.to })
                           : translate("{v0} night{v1}", { v0: String(quote.nights), v1: String(quote.nights === 1 ? "" : "s") })}
                       </span>
-                      <span className="shrink-0 tabular-nums">
+                      {!quoteTariff && <span className="shrink-0 tabular-nums">
                         {cur()}
                         {inr(quote.room_total)}
-                      </span>
+                      </span>}
                     </div>
+                    {quoteTariff && <div className="space-y-1 text-sm">
+                      <p><TariffNight {...quote} /></p>
+                      <p><TariffRoomTotal tariff={quoteTariff} nights={quote.nights}
+                        agreedRate={quote.agreed_rate ?? 0} locale={loc.locale} /></p>
+                    </div>}
                     {(quote.over_capacity_total ?? 0) > 0 && (
                       <div className="flex justify-between text-zinc-600">
                         <span>{t("Extra guests")}</span>
@@ -2522,7 +2546,13 @@ export function BookingDialog(props: {
                         </span>
                       </div>
                     )}
-                    <div className="flex justify-between text-zinc-600">
+                    {quoteTaxBasis?.inclusive ? <p className="text-xs text-zinc-600">
+                      {t("Includes {tax} (≈ {amount} on the room). The invoice shows the exact tax.", {
+                        tax: quoteTaxBasis.label,
+                        amount: currencyText(quoteTariff?.property_currency || loc.currency,
+                          quote.room_total * quoteTaxBasis.rate / (100 + quoteTaxBasis.rate), loc.locale),
+                      })}
+                    </p> : <div className="flex justify-between text-zinc-600">
                       <span>
                         {loc.tax_label} {quote.tax_percent}%
                       </span>
@@ -2530,7 +2560,7 @@ export function BookingDialog(props: {
                         {cur()}
                         {inr(quote.tax_amount)}
                       </span>
-                    </div>
+                    </div>}
                     {moreQuotes.map((mq, i) =>
                       mq ? (
                         <div
@@ -2568,8 +2598,7 @@ export function BookingDialog(props: {
                       <div className="flex items-baseline justify-between gap-2">
                         <span>{t("Total")}{moreRooms.length > 0 ? t(" · all rooms") : ""}</span>
                         <span className="text-3xl font-semibold tabular-nums tracking-tight text-zinc-900">
-                          {cur()}
-                          {inr(grandTotal)}
+                          {quoteTariff ? currencyText(quoteTariff.property_currency, grandTotal, loc.locale) : `${cur()}${inr(grandTotal)}`}
                         </span>
                       </div>
                       <p className="mt-1 text-xs text-zinc-400">

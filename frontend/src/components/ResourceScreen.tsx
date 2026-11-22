@@ -138,6 +138,7 @@ export interface ScreenConfig {
     statusCheck?: boolean
   }[]
   form: FieldSpec[]
+  formNote?: string
   propertyScoped?: boolean
   allowCreate?: boolean
   allowDelete?: boolean
@@ -982,6 +983,7 @@ export function ResourceScreen({
             </Suspense>
           ) : (
             <div className="space-y-4">
+              {config.formNote && <p className="rounded-lg bg-zinc-50 p-3 text-sm text-zinc-700">{config.formNote}</p>}
               <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
                 {config.form.filter(spec => spec.dependsOn ? spec.dependsOn(draft) : true).map((spec) => (
                   <label

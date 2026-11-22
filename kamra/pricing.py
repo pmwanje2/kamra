@@ -6,7 +6,7 @@ no LLM ever computes money. Resolution order per night:
   -> rate-plan modifier -> meal plan -> voucher discount -> tax.
 """
 
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 import frappe
 from frappe import _
@@ -646,6 +646,69 @@ def negotiated_rate_plan(property: str, company: str | None) -> str | None:
 			"Rate Plan", {"property": property, "code": rp.code, "disabled": 0},
 			"name")
 	return None
+
+
+class ContractRateRefused(frappe.ValidationError):
+	"""The resolver did not authorize a price for this option."""
+
+
+def contract_rate(property, room_type, rate_plan, check_in, check_out, adults, children, extra_beds=0):
+	"""Resolve an optional contract without reading the provider's records."""
+	if not rate_plan:
+		return None
+	from kamra.erp_bridge import bridge_call
+	response = bridge_call("hospitality_tariffs.tariff_rate", property=property, room_type=room_type,
+		                   rate_plan=rate_plan, check_in=str(check_in), check_out=str(check_out),
+		                   adults=cint(adults), children=cint(children), extra_beds=cint(extra_beds)) or {}
+	result = response.get("tariff", response)
+	if not result:
+		return None
+	if result.get("refusal"):
+		raise ContractRateRefused(result["refusal"])
+	if not cint(result.get("is_tariff")):
+		return None
+	try:
+		agreed, nightly, fx = (_dec(result.get(k)) for k in ("agreed_rate", "nightly", "fx_rate"))
+		if not all(value.is_finite() and value > 0 for value in (agreed, nightly, fx)):
+			raise ValueError
+		price_date = str(getdate(result["fx_date"])) if result.get("fx_date") else None
+		currency = result["currency"]
+		if not currency or not price_date:
+			raise ValueError
+	except (KeyError, TypeError, ValueError, InvalidOperation):
+		raise ContractRateRefused(_("The contract rate is incomplete. Ask a manager to check the tariff."))
+	prop_currency = frappe.get_cached_doc("Property", property).currency or default_currency(pack_for(property))
+	return float(agreed), {
+		"currency": currency, "nightly": float(nightly), "fx_rate": float(fx),
+		"fx_date": price_date, "property_currency": prop_currency,
+	}
+
+
+def tax_basis(property):
+	"""The invoice's tax vocabulary. This does not change posted line tax."""
+	from kamra.erp_bridge import bridge_call
+	return bridge_call("hospitality_kamra.tax_basis", property=property)
+
+
+def saved_contract_tariff(reservation):
+	"""Return the original contract, never re-resolve it at today's rate."""
+	snapshot = reservation.get("contract_tariff")
+	return frappe.parse_json(snapshot) if snapshot else {}
+
+
+def quote_with_contract(property, room_type, check_in_date, check_out_date, adults=2, children=0,
+	                    meal_plan=None, rate_plan=None, voucher_code=None, *, extra_beds=0, **kwargs):
+	"""Use the same quote math as a booking with an agreed room rate."""
+	if date_diff(check_out_date, check_in_date) < 0:
+		frappe.throw(_("Check-out cannot be before check-in."))
+	resolved = contract_rate(property, room_type,
+		rate_plan or negotiated_rate_plan(property, kwargs.get("company")),
+		check_in_date, check_out_date, adults, children, extra_beds)
+	q = quote(property, room_type, check_in_date, check_out_date, adults, children,
+	          meal_plan, rate_plan, voucher_code, agreed_rate=resolved[0] if resolved else 0, **kwargs)
+	if resolved:
+		q.update(agreed_rate=resolved[0], tariff=resolved[1])
+	return q
 
 
 # A typed nightly price is a sanity-checked figure, not a free-for-all: the

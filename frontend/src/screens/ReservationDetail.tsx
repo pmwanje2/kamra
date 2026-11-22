@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { useRealtime } from "../lib/realtime"
+import { TariffNight } from "../components/ContractTariff"
 import {
   BedDouble,
   CalendarDays,
@@ -608,6 +609,9 @@ export default function ReservationDetail({
             {d.meal_plan && <Field label={translate("Meal plan")} value={d.meal_plan_name || d.meal_plan} />}
             {d.rate_plan && <Field label={translate("Rate plan")} value={d.rate_plan} />}
           </dl>
+          {d.tariff && <p className="mt-2 text-sm text-zinc-600">
+            {translate("Booked contract tariff")}: <TariffNight {...d} />
+          </p>}
           {!d.room && d.status === "Confirmed" && (
             <p className="mt-2 text-xs text-amber-600">{translate("No room assigned yet - use Assign room above before check-in.")}</p>
           )}

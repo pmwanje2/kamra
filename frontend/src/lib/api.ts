@@ -420,6 +420,8 @@ export interface BookingOptions {
     code: string
     is_default?: 0 | 1
   }[]
+  default_plan?: string | null
+  rate_plan_required?: boolean
   companies: {
     name: string
     company_name: string
@@ -454,7 +456,26 @@ export interface BookingOptions {
   }
 }
 
-export interface Quote {
+export interface ContractTariff {
+  currency: string
+  nightly: number
+  property_currency: string
+  fx_rate: number
+  fx_date: string
+}
+
+export interface TariffReference {
+  tariff?: ContractTariff | null
+  agreed_rate?: number | null
+}
+
+export interface TaxBasis {
+  label: string
+  rate: number
+  inclusive: boolean | 0 | 1
+}
+
+export interface Quote extends TariffReference {
   nights: number
   /** same-day stay: nights is 0 and one date is billed */
   day_use?: boolean
@@ -474,6 +495,7 @@ export interface Quote {
   amount_before_tax: number
   tax_percent: number
   tax_amount: number
+  tax_basis?: TaxBasis | null
   amount_after_tax: number
   /** what cancelling would cost, judged from today by the same rules as
    * cancellation_preview - free_until is never in the past */
@@ -554,6 +576,9 @@ export interface QuoteParams {
   voucher_code?: string
   over_capacity_charge?: number
   pets?: number
+  extra_beds?: number
+  check_in_time?: string
+  check_out_time?: string
   /** nights the desk priced by hand; the rest are priced by Kamra */
   night_prices?: NightPrice[]
 }
@@ -1743,7 +1768,7 @@ export const checkOut = (reservation: string) =>
 export const setHousekeepingStatus = (room: string, status: string, reason?: string) =>
   call("kamra.api.set_housekeeping_status", { room, status, reason })
 
-export interface ReservationDetail {
+export interface ReservationDetail extends TariffReference {
   name: string
   /** set when the stay is one room of a group booking */
   group: { name: string; group_name: string; rooms: number; to_check_in: number } | null
