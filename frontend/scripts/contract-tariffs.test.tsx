@@ -6,6 +6,8 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import App from "../src/App"
 import RoomTypeExtras from "../src/components/RoomTypeTariffs"
 import { appForPath } from "../src/lib/apps"
+import { setLang } from "../src/lib/dir"
+import { ensureDictionary } from "../src/lib/locales"
 import { FEATURES } from "../src/lib/searchIndex"
 
 const { rpc } = vi.hoisted(() => ({ rpc: vi.fn() }))
@@ -49,6 +51,7 @@ describe("Contract Tariffs", () => {
 
   beforeEach(() => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true)
+    vi.stubGlobal("localStorage", jsdom.window.localStorage)
     rpc.mockReset().mockImplementation((method: string) => {
       if (method === listMethod) return Promise.resolve(data)
       if (method === "kamra.rates.room_type_tariffs") return Promise.resolve(null)
@@ -62,6 +65,7 @@ describe("Contract Tariffs", () => {
   afterEach(async () => {
     await act(async () => root.unmount())
     host.remove()
+    localStorage.clear()
     vi.unstubAllGlobals()
   })
 
@@ -189,6 +193,22 @@ describe("Contract Tariffs", () => {
     await render()
     expect(text()).toContain("Contract tariffs are not available for this property.")
     expect(text()).not.toMatch(/New version|Approve|Discard|ERPNext|Frappe|Kamra/)
+  })
+
+  it.each([
+    ["ar", "التعرفة التعاقدية", "نسخة جديدة"],
+    ["de", "Vertragstarife", "Neue Version"],
+    ["es", "Tarifas contractuales", "Nueva versión"],
+    ["fil", "Mga kontratang taripa", "Bagong bersyon"],
+    ["id", "Tarif kontrak", "Versi baru"],
+    ["pt", "Tarifas contratuais", "Nova versão"],
+    ["zh-CN", "合同价格", "新建版本"],
+  ])("translates tariff-specific controls in %s", async (language, heading, action) => {
+    await ensureDictionary(language)
+    setLang(language)
+    await render()
+    expect(host.querySelector("h1")?.textContent).toBe(heading)
+    expect(text()).toContain(action)
   })
 
   it("is discoverable in Revenue and through staff search", () => {
