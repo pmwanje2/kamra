@@ -1745,7 +1745,6 @@ The tax return export,税务申报导出
 The tentative hold on {0} runs out {1}.,{0} 的暂定保留将于 {1} 到期。
 The till this bill was taken on is already closed and counted. Ask a manager to correct it.,该账单所属钱箱已结班并完成清点。请让主管更正。
 The {0} payment gateway,{0} 支付网关
-There are no room nights on this bill yet. A discount comes off posted nights: give it after night audit or at check-out.,该账单暂无间夜记录。折扣仅可抵扣已入账间夜，请在夜审后或宾客退房结账时操作。
 There is already a vendor called {0} here.,本酒店已有名为 {0} 的供应商。
 There's already a printer called {0}.,已有名为 {0} 的打印机。
 "There's no bill to post to. Tie the function to a group booking, or pass a folio.",没有可入账的账单。请将活动关联到团队预订，或指定客账。
@@ -2113,3 +2112,95 @@ this bill,本账单
 "{0}{1:,.2f} is owed back on folio {2}, which is already invoiced ({3}). A refund needs the invoice cancelled first: open the folio.","客账 {2} 尚需退还 {0}{1:,.2f}，但该客账已开票（{3}）。退款需先作废发票：请打开客账。"
 "{0}{1:,.2f} overdue (oldest due {2}).","{0}{1:,.2f} 已逾期（最早到期 {2}）。"
 "{0}{1:,.2f} overdue by more than {2} days (oldest due {3}).","{0}{1:,.2f} 逾期超过 {2} 天（最早到期 {3}）。"
+"A cut of {0}% is over the front desk's limit of {1}%, or the reason needs a manager.",降价 {0}% 超过前台的 {1}% 限额，或此原因需要经理审批。
+"A cut of {0}% is over the front desk's limit of {1}%, or the reason needs a manager: a Hotel Admin or Finance user signs it off with their PIN.",降价 {0}% 超过前台的 {1}% 限额，或此原因需要经理审批：请由酒店管理员或财务人员输入自己的 PIN 码批准。
+A restaurant or laundry bill is still open for this stay: settle or cancel it first.,此住宿仍有未结清的餐饮或洗衣账单：请先结清或取消。
+A room night is posted for this stay: check the guest out instead.,此住宿已入账一个房晚：请为宾客办理退房。
+ARI calls per minute,每分钟 ARI 调用次数
+Adjustment to the booked price,预订价格调整
+Advance paid follows the payments on the folio; take a payment or refund there.,已付预付款以客账中的收款记录为准；请在客账中收款或退款。
+"An AI agent can lower a stay's rate, not raise it.",AI 助手可以降低房价，但不能提高房价。
+An AI agent can't agree a rate on its own.,AI 助手不能自行商定房价。
+An AI agent can't use a supervisor's PIN.,AI 助手不能使用主管的 PIN 码。
+An AI agent cannot pass a cashier PIN: undo the check-in on the hotel screen.,AI 助手不能传入收银 PIN 码：请在酒店操作界面撤销入住。
+Cancelling now is charged {0}.,现在取消将收取 {0}。
+Correction Approved By,更正审批人
+Correction Request Fingerprint,更正请求指纹
+"Dear {0}, please find your quotation for {1} to {2} attached. Reference {3}.",{0} 您好，随信附上 {1} 至 {2} 的报价单。参考编号：{3}。
+Deposit to confirm,确认预订所需押金
+Discount: voucher {0},折扣：优惠券 {0}
+"Each night price must be exactly {date, price}.","每晚价格必须严格采用 {date, price} 格式。"
+Effective Exchange Rate Date,汇率生效日期
+Free cancellation until {0}; after that {1} is charged.,{0} 前可免费取消，之后将收取 {1}。
+Free cancellation.,可免费取消。
+Full sync,全量同步
+Hand-set nightly prices: {0}. The other nights are at the rate card.,手动设置的每晚房价：{0}。其余房晚按挂牌价计费。
+Issued {0},签发于 {0}
+Kinds,类别
+Last full sync,上次全量同步
+Late check-out fee,延迟退房费
+Late check-out fee value,延迟退房费数值
+"Meal plan included: {0}, as priced above.",包含餐食方案：{0}，价格如上所示。
+Meal plan: {0},餐食方案：{0}
+Next Attempt At,下次尝试时间
+Nightly prices need an overnight stay; a day-use stay is priced by its time slot.,按晚定价仅适用于过夜住宿；日间用房按时段计价。
+"Nightly prices typed by hand cannot be combined with {0}. Clear the typed prices, or remove {0}.",手动设置的每晚房价不能与{0}同时使用。请清除手动房价，或移除{0}。
+"No nights are posted yet. Use Advance bill to post the stay now, then give the discount, or use a rate plan or promo code at booking.",尚无已入账的房晚。请用“提前出账”先将住宿入账后再打折，或在预订时使用房价方案或优惠码。
+No room mappings yet - map your room types to the provider's room and rate ids first.,尚无房型映射，请先将房型对应到渠道服务商的房型和房价编号。
+No room type matches it.,没有匹配的房型。
+None of the nights with a typed price is in this stay.,所有填写了手动房价的日期均不在本次入住期间。
+"Only Front Desk, Finance or Hotel Admin may reverse a check-in.",仅前台、财务或酒店管理员可以撤销入住。
+Only a Revenue Manager or Hotel Admin can set nightly prices.,仅收益经理或酒店管理员可以设置每晚房价。
+Only an active reservation can take an agreed rate.,仅有效的预订可设置协议房价。
+Outcome,结果
+Pick a Rate Change reason code for the agreed rate.,请为协议房价选择一个房价变更原因代码。
+Prices typed by hand,手动设置的价格
+Provider ID,服务商编号
+Provider Task IDs,服务商任务编号
+Provider rate plan {0} is already mapped on this connection.,服务商房价方案 {0} 已在此连接中映射。
+Queued At,入队时间
+Quotation {0} from {1},来自 {1} 的报价单 {0}
+Rate / night,每晚房价
+Rate batch window (seconds),房价批处理窗口（秒）
+"Rate plan {0} adds a fixed amount: on the channels it applies every night, on direct bookings once per stay.",房价方案 {0} 增加固定金额：渠道预订每晚收取，直接预订每次住宿收取一次。
+"Rate plan {0} belongs to {1}, not to this connection's property {2}.",房价方案 {0} 属于 {1}，不属于此连接对应的酒店 {2}。
+Rate plan {0} is priced per person; Kamra sends one price per room.,房价方案 {0} 按人数计价；Kamra 按每间客房发送一个价格。
+Reposted Payment,重新入账的付款
+Room levy per night,每晚客房附加费
+Room only: meals are not included.,仅含住宿，不含餐食。
+Select a property to view its business day.,请选择酒店以查看其营业日。
+Send a list of language codes.,请发送语言代码列表。
+Sent At,发送时间
+Sent Values (JSON),已发送的值（JSON）
+Several rate plans of this room match no Kamra rate plan: map them by hand.,该客房的多个房价方案在 Kamra 中没有匹配项，请手动映射。
+Terms,条款
+The channel manager has {0} rooms of {1}; Kamra has {2}.,渠道管理器中有 {0} 间 {1}，Kamra 中有 {2} 间。
+The channel manager sells in {0}; this property is in {1}.,渠道管理器以 {0} 销售；此酒店使用 {1}。
+The channel manager's property time zone is {0}; this property's is {1}.,渠道管理器的酒店时区为 {0}；此酒店的时区为 {1}。
+"The front desk can lower a stay's rate, not raise it. Ask a Revenue Manager.",前台可以降低房价，但不能提高。请联系收益经理。
+"The guest is still in house, so their bill stays open for tonight's charges. To invoice what is paid so far, use Settle & continue stay.",宾客仍在住，账单将保持开启以便入账今晚的费用。如需为已付金额开票，请使用“结算并继续入住”。
+The lines above plus tax make up the total. Anything else taken during the stay is billed separately.,以上各项与税费构成总额。入住期间的其他费用将另行计费。
+The night {0} is priced twice.,{0} 的房价重复设置。
+The price for {0} can have at most 2 decimals.,{0} 的房价最多保留两位小数。
+The price for {0} is above the highest price Kamra accepts ({1}).,{0} 的房价超过 Kamra 可接受的最高房价（{1}）。
+The price for {0} must be a number.,{0} 的房价必须为数值。
+The price for {0} must be above zero.,{0} 的房价必须大于零。
+This connection is not active.,此连接未启用。
+This property requires a cashier PIN: undo the check-in on the hotel screen.,此酒店要求输入收银 PIN 码：请在酒店操作界面撤销入住。
+Typed Price,手动设置的房价
+a holiday package,度假套餐
+a rate plan,房价方案
+a voucher,优惠券
+"an OTA total, which already sets the price",已确定价格的 OTA 总额
+an agreed rate,协议房价
+"night_prices must be a list of {date, price}.","night_prices 必须是由 {date, price} 组成的列表。"
+the company's negotiated rate plan,公司的协议房价方案
+the group's block rate,团队房价
+the long-stay discount,长住折扣
+{0} A manager approves it on the hotel screen.,{0} 请由经理在酒店操作界面审批。
+{0} does not take ARI changes.,{0} 不接受 ARI 变更。
+{0} is not a Kamra language.,{0} 不是 Kamra 支持的语言。
+{0} is not a night of this stay ({1} to {2}).,{0} 不在本次入住期间（{1} 至 {2}）。
+{0} is not a valid night.,{0} 不是有效的入住日期。
+{0} is switched off. Turn it on from Languages in Settings.,{0} 已停用。请在设置中的“语言”页面启用。
+{0} night(s),{0} 间夜
