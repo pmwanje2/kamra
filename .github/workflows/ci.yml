@@ -161,12 +161,6 @@ jobs:
         with:
           node-version: 24
 
-      - name: Build the SPA from source for the test site
-        working-directory: apps/kamra/frontend
-        run: |
-          npm ci
-          npm run build
-
       - name: Install system deps
         run: |
           sudo apt-get update -qq
@@ -198,6 +192,9 @@ jobs:
           cd frappe-bench
           bench get-app payments
           bench get-app kamra "${GITHUB_WORKSPACE}/apps/kamra"
+          # get-app clones the source; ignored build output must be built in that clone.
+          npm --prefix apps/kamra/frontend ci
+          npm --prefix apps/kamra/frontend run build
           bench new-site test.localhost \
             --mariadb-user-host-login-scope='%' \
             --db-root-password root --admin-password admin

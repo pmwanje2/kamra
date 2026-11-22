@@ -61,5 +61,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Build the SPA for the offline install check
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
       - name: Offline FC install checks
         run: python kamra/scripts/marketplace_install_check.py
