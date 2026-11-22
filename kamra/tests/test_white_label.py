@@ -61,12 +61,19 @@ class WhiteLabelTest(unittest.TestCase):
 		self.assertFalse(brand.white_label())
 		self.frappe.conf.clear()
 		self.assertEqual((brand.product_name(), brand.assistant_name(), brand.white_label()), ("Kamra", "Kamra Agent", False))
+		self.frappe.conf["kamra_white_label"] = 1
+		self.assertEqual((brand.product_name(), brand.assistant_name()), ("Hotel PMS", "Assistant"))
 
 	def test_public_metadata_omits_upstream_identity_and_build(self):
 		info = load_site_info(self.frappe)
 		self.assertFalse(info.keys() & {"app", "version", "channel", "build"}, info)
 		self.assertEqual(info["brand"], {"product": "Maximus Hotel", "assistant": "Eve", "white_label": True,
 		                                "logo": "/files/hotel-logo.svg", "favicon": "/files/favicon.png"})
+		self.assertEqual(info["brand_name"], "Maximus Hotel")
+		self.frappe.db.get_single_value = lambda *_: "/assets/kamra/frontend/kamra-mark.svg"
+		self.frappe.get_website_settings = {"app_name": "Frappe", "favicon": "/assets/frappe/images/favicon.svg"}.get
+		self.assertIsNone(load_site_info(self.frappe)["brand"]["logo"])
+		self.assertIsNone(load_site_info(self.frappe)["brand"]["favicon"])
 		self.frappe.conf.clear()
 		self.assertTrue({"app", "version", "channel", "build"} <= load_site_info(self.frappe).keys())
 
@@ -87,6 +94,17 @@ class WhiteLabelTest(unittest.TestCase):
 		self.assertNotIn("<", boot)
 		self.assertEqual(json.loads(boot)["product"], self.frappe.conf["kamra_product_name"])
 		self.assertEqual(json.loads(boot)["assistant"], "Eve")
+
+	def test_reconciliation_messages_render_the_site_product(self):
+		from kamra.branding import product_name
+
+		path = KAMRA / "golive.py"
+		function = next(node for node in ast.parse(path.read_text(encoding="utf-8")).body
+		                if isinstance(node, ast.FunctionDef) and node.name == "_compare")
+		scope = {"product_name": product_name, "_money": float, "_same": lambda left, right: left == right}
+		exec(compile(ast.Module(body=[function], type_ignores=[]), str(path), "exec"), scope)
+		result = scope["_compare"]("booking", "Bookings", {"test stay": 12}, {}, str)
+		self.assertEqual(result["problems"], ["test stay: 12.00 in the file, not in Maximus Hotel"])
 
 	def test_server_message_sources_have_no_vendor_literals(self):
 		findings = set()

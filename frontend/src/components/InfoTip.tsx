@@ -3,9 +3,9 @@ import { Info } from "lucide-react"
 import { useT } from "../lib/i18n"
 import { getLang } from "../lib/dir"
 import { cn } from "../lib/utils"
+import { upstreamDocs } from "../lib/brand"
 
 
-const DOCS = "https://kamrapms.com/docs"
 // pages the docs site has in Spanish and Arabic (TRANSLATED in
 // docs-site/.vitepress/config.mts)
 const TRANSLATED = new Set([
@@ -16,10 +16,12 @@ const TRANSLATED = new Set([
 
 /** A docs link in the reader's language when that page is translated.
  *  An #anchor is dropped there: translated headings have other slugs. */
-export function docsUrl(doc: string): string {
+export function docsUrl(doc: string): string | undefined {
+  const base = upstreamDocs()
+  if (!base) return undefined
   const lang = getLang()
   const [page] = doc.split("#")
-  return lang !== "en" && TRANSLATED.has(page) ? `${DOCS}/${lang}/${page}` : `${DOCS}/${doc}`
+  return lang !== "en" && TRANSLATED.has(page) ? `${base}/${lang}/${page}` : `${base}/${doc}`
 }
 
 /** A small (i) that explains a choice in place, with a link to the docs.
@@ -37,6 +39,7 @@ export function InfoTip({
   className?: string
 }) {
   const { t } = useT()
+  const href = doc && docsUrl(doc)
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLSpanElement>(null)
 
@@ -71,9 +74,9 @@ export function InfoTip({
           className="absolute start-0 top-6 z-30 w-72 rounded-lg border border-zinc-200 bg-white p-3 text-start text-xs font-normal normal-case leading-relaxed tracking-normal text-zinc-600 shadow-lg"
         >
           {children}
-          {doc && (
+          {href && (
             <a
-              href={docsUrl(doc)}
+              href={href}
               target="_blank"
               rel="noreferrer"
               className="mt-2 block font-medium text-brand-700 hover:underline"

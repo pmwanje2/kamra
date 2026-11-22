@@ -1,5 +1,6 @@
-// The SPA is served at /kamra in production and at / by the Vite dev server.
-export const ROUTER_BASENAME = import.meta.env.PROD ? "/kamra" : "/"
+// SiteOps can serve the same SPA under its hotel URL mask.
+const hotelAlias = typeof window !== "undefined" && /^\/hotel(?:\/|$)/.test(window.location.pathname)
+export const ROUTER_BASENAME = hotelAlias ? "/hotel" : import.meta.env.PROD ? "/kamra" : "/"
 
 // Prefix an in-app path with the basename for a full-page navigation
 // (window.location), which the router's own navigate() would otherwise add.

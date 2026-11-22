@@ -54,7 +54,7 @@ def scan_guest_id(property: str, guest: str, id_type: str, consent: int = 0) -> 
 	and number, date of birth, gender; nationality, name and address only
 	where the profile has none."""
 	if not cint(consent):
-		frappe.throw("Tell the guest their ID will be read by Kamra's verification partner, "
+		frappe.throw("Tell the guest their ID will be read by the ID verification partner, "
 		             "then tick the confirmation.")
 	if id_type not in SCANNABLE_IDS:
 		frappe.throw(f"Reading supports: {', '.join(SCANNABLE_IDS)}.")
@@ -90,7 +90,7 @@ def scan_guest_id(property: str, guest: str, id_type: str, consent: int = 0) -> 
 		g.save(ignore_permissions=True)
 	from kamra.savings import log_action
 	log_action("scan_guest_id", "Guest", g.name, property, minutes_saved=3,
-	           rationale=f"{id_type} read by Kamra Verify; filled {', '.join(filled) or 'nothing new'}",
+	           rationale=f"{id_type} read by the ID verification partner; filled {', '.join(filled) or 'nothing new'}",
 	           channel="API")
 	return {"filled": {k: str(v) for k, v in filled.items()},
 	        "charged": out.get("charged")}

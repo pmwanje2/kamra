@@ -18,6 +18,7 @@ from urllib.parse import parse_qs, quote, urlencode, urlparse
 import frappe
 from frappe.utils import add_to_date, get_url, now_datetime
 
+from kamra.branding import product_name, white_label
 from kamra.authz import require_roles
 from kamra.mcp_tools import TOOL_COUNT
 
@@ -472,10 +473,11 @@ def revoke_my_grants(property: str | None = None) -> dict:
 
 
 def _error_page(message: str) -> str:
+	back = "/kamra" if white_label() else "/kamra/assistant"
 	return _html_shell(
 		"Could not connect",
 		f"<p>{frappe.utils.escape_html(message)}</p>"
-		"<p><a href='/kamra/assistant'>Back to Kamra</a></p>",
+		f"<p><a href='{back}'>Back to {frappe.utils.escape_html(product_name())}</a></p>",
 	)
 
 
@@ -499,8 +501,8 @@ def _consent_page(params: dict[str, str], user: str, properties: list[dict]) -> 
 	who = frappe.utils.escape_html(user)
 	description = frappe._(
 		"Your AI provider will act as {0}, within your role. Prices, taxes and "
-		"availability stay in Kamra. Every action is recorded under your name in the Activity log."
-	).format(f"<strong>{who}</strong>")
+		"availability stay in {product}. Every action is recorded under your name in the Activity log."
+	).format(f"<strong>{who}</strong>", product=frappe.utils.escape_html(product_name()))
 	return _html_shell(
 		frappe._("AI Provider"),
 		f"""

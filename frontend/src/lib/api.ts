@@ -7,6 +7,7 @@
 // session; guests and the dev server (ignore_csrf) don't need it.
 import { htmlToText } from "./utils"
 import { t as translate } from "./i18n"
+import { whiteLabel } from "./brand"
 import type { NightPrice } from "./nightPrices"
 
 function csrfToken(): string | undefined {
@@ -69,10 +70,10 @@ async function doFetch(path: string, init?: RequestInit, retried = false): Promi
     try {
       res = await request()
     } catch (err) {
-      console.warn(`[kamra] network failure calling ${path}`, err)
+      console.warn(`Network failure calling ${path}`, err)
       window.dispatchEvent(new Event("kamra:offline"))
       throw Object.assign(
-        new Error("Can't reach Kamra right now. Check your connection - we'll reconnect automatically."),
+        new Error(translate("Can't reach {product} right now. Check your connection - we'll reconnect automatically.")),
         { network: true },
       )
     }
@@ -108,7 +109,7 @@ async function doFetch(path: string, init?: RequestInit, retried = false): Promi
 function httpError(status: number, body: string): Error {
   const err = Object.assign(new Error(), { status, body })
   err.message = serverError(err)
-  if (status >= 500) console.warn(`[kamra] server error ${status}`, body.slice(0, 2000))
+  if (status >= 500) console.warn(`Server error ${status}`, body.slice(0, 2000))
   return err
 }
 
@@ -146,7 +147,7 @@ export function serverError(e: unknown): string {
   if (status && status >= 500)
     return translate("Something went wrong on the server. Try again in a moment.")
   if (status) return translate("That didn't go through. Please try again.")
-  console.warn("[kamra] unexpected error", e)
+  console.warn("Unexpected error", e)
   return translate("Something unexpected went wrong. Try again - if it keeps happening, let your admin know.")
 }
 
@@ -301,7 +302,7 @@ export async function callGuest<T = unknown>(
       credentials: "omit",
     })
   } catch (err) {
-    console.warn(`[kamra] network failure calling ${path}`, err)
+    console.warn(`Network failure calling ${path}`, err)
     window.dispatchEvent(new Event("kamra:offline"))
     throw Object.assign(
       new Error("You seem to be offline. Check your connection and try again."),
@@ -499,7 +500,7 @@ export const getDefaultProperty = () =>
 
 // Active property - set by the header switcher, read at call time.
 let currentProperty =
-  localStorage.getItem("kamra_property") || DEMO_PROPERTY
+  localStorage.getItem("kamra_property") || (whiteLabel() ? "" : DEMO_PROPERTY)
 
 export function getCurrentProperty() {
   return currentProperty

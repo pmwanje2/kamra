@@ -2,6 +2,8 @@
 # For license information, please see license.txt
 
 import frappe
+
+from kamra.branding import product_name
 from frappe import _
 from frappe.model.document import Document
 from frappe.utils import cint, date_diff, flt, formatdate, getdate, now_datetime, today
@@ -74,9 +76,9 @@ def entire_place_rooms(property: str, room_type: str,
 	if other_villas:
 		frappe.throw(
 			_("{0} has no rooms of its own and the property has other villa "
-			  "types, so Kamra can't tell which rooms it takes. Add Room "
+			  "types, so {product} can't tell which rooms it takes. Add Room "
 			  "records under {0}, or assign a room before check-in.").format(
-				room_type),
+				room_type, product=product_name()),
 			title=_("Villa has no rooms"))
 	ooo = "" if include_out_of_order else \
 		"AND COALESCE(r.housekeeping_status, '') != 'Out of Order'"

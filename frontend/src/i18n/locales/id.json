@@ -311,7 +311,7 @@
   "Identity": "Identitas",
   "In the room": "Di kamar",
   "Interim invoice: freeze this paid folio and keep the stay running on a fresh one - for long stays settled every few days": "Interim invoice: bekukan folio lunas ini dan lanjutkan menginap pada folio baru - untuk long stay yang dilunasi beberapa hari sekali",
-  "Kamra Verify checks this tax ID with the tax network. Charged per check to your Kamra Connect wallet.": "Kamra Verify memeriksa ID pajak ini dengan jaringan pajak. Dikenai biaya per pemeriksaan ke dompet Kamra Connect Anda.",
+  "ID verification partner checks this tax ID with the tax network. Charged per check to your verification wallet.": "ID verification partner memeriksa ID pajak ini dengan jaringan pajak. Dikenai biaya per pemeriksaan ke dompet the ID verification partner Anda.",
   "Late check-in, high floor, allergies…": "Check-in larut, high floor, alergi…",
   "Left {time}": "Pergi {time}",
   "Left early: booked to {date}.": "Pergi lebih awal: dipesan sampai {date}.",

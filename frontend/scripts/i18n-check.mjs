@@ -65,10 +65,12 @@ new Function("require", "exports", output)((name) => {
   if (name === "react") return require("react")
   if (name === "./dir") return { getLang: () => language }
   if (name === "./locales") return { dictionaryFor: (key) => dictionaries[key] ?? {} }
+  if (name === "./brand") return { product: () => "Maximus Hotel", assistant: () => "Eve" }
   throw new Error(`Unexpected translator import: ${name}`)
 }, api)
 assert.equal(api.t("Phone"), "Phone")
 assert.equal(api.t("Room {n}", { n: 12 }), "Room 12")
+assert.equal(api.t("{product} · {assistant}"), "Maximus Hotel · Eve")
 assert.equal(api.tn(1, "{n} night", "{n} nights"), "1 night")
 assert.equal(api.tn(2, "{n} night", "{n} nights"), "2 nights")
 language = "es"

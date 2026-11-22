@@ -9,12 +9,37 @@ const root = fileURLToPath(new URL("../", import.meta.url))
 
 // Machine identifiers only. Whole-value matches keep prose containing an
 // identifier (an error, link caption, etc.) in scope.
-function identifier(value, node) {
-  if (/^(?:kamra|frappe|erpnext)(?:[.:_][\w:-]+)+$/i.test(value)) return true
-  if (/^\/(?:assets\/kamra|api\/method\/(?:kamra|frappe)\.|kamra(?:\/|$))/i.test(value)) return true
-  if (/^(?:X-Frappe-CSRF-Token|x-frappe-csrf-token|x-kamra-[\w-]+|kamra|frappe)$/i.test(value) &&
-      value !== "Kamra" && value !== "Frappe") return true
-  if (node && ts.isExternalModuleReference(node.parent)) return true
+const exceptions = new Map(Object.entries({
+  "src/lib/brand.ts": ["Kamra", "Kamra Agent", "kamra-mark.svg", "https://kamrapms.com",
+    "https://github.com/Kamra-PMS/kamra-pms", "Frappe Desk", "ERPNext", "HeyKoala"],
+  "src/lib/api.ts": ["kamra-session", "Kamra Demo Palace", "kamra.banquet."],
+  "src/lib/dir.ts": ["kamra-guest-lang", "kamra-lang"],
+  "src/lib/theme.ts": ["kamra-theme"],
+  "src/lib/thermal.ts": ["iframe[data-kamra-print]", "data-kamra-print"],
+  "src/components/InfoTip.tsx": ["why-kamra"],
+  "src/components/NotificationBell.tsx": ["Kamra Notification"],
+  "src/components/SetupNag.tsx": ["kamra.setupnag."],
+  "src/components/ui/data-table.tsx": ["kamra.table."],
+  "src/screens/AccountingExport.tsx": ["erpnext"],
+  "src/screens/Developers.tsx": ["claude mcp add --transport http kamra"],
+  "src/screens/settings/cards.tsx": ["claude mcp add --transport http kamra", "kamra.connect.client."],
+  "src/screens/settings/WebhooksPage.tsx": ["kamra.webhooks."],
+  "src/screens/settings/AccessPages.tsx": ["kamra-job-titles"],
+  "src/screens/Inventory.tsx": ["kamra.inventory."],
+  "src/screens/Kitchen.tsx": ["kamra.pos."],
+  "src/screens/PublicBooking.tsx": ["kamra-jsonld"],
+  "src/screens/Tickets.tsx": ["kamra.tickets."],
+}))
+
+function identifier(value, node, filename) {
+  if (!node || ts.isJsxText(node)) return false
+  if (exceptions.get(filename)?.includes(value)) return true
+  if (/^(?:kamra|frappe|erpnext)(?:[.:_]\w[\w:-]*)+$/.test(value)) return true
+  if (/^\/(?:assets\/kamra|api\/method\/(?:kamra|frappe)\.|kamra(?:\/|$))[\w./?=%&#:-]*$/.test(value)) return true
+  if (/^x-(?:frappe-csrf-token|kamra-(?:event(?:-id)?|timestamp|signature|property))$/i.test(value)) return true
+  if (filename === "src/screens/Login.tsx" && /^(?:admin|gm|frontdesk|revenue|finance|hk)@kamra\.local$/.test(value)) return true
+  if (ts.isPropertyAssignment(node.parent) && node.parent.name.getText() === "doctype" &&
+      value === "Kamra Notification") return true
   return false
 }
 
@@ -39,8 +64,8 @@ export function csvRows(text) {
 export function checkSource() {
   let sourceCount = 0
   const findings = []
-  const scan = (value, location, node) => {
-    if (forbidden.test(value.trim()) && !identifier(value.trim(), node)) findings.push(`${location}: ${value.trim()}`)
+  const scan = (value, location, node, filename) => {
+    if (forbidden.test(value.trim()) && !identifier(value.trim(), node, filename)) findings.push(`${location}: ${value.trim()}`)
   }
   function walk(dir) {
     for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -51,7 +76,8 @@ export function checkSource() {
         function visit(node) {
           if (ts.isStringLiteralLike(node) || ts.isTemplateLiteralToken(node) || ts.isJsxText(node)) {
             const before = findings.length
-            scan(node.text, `${path.relative(root, name)}:${source.getLineAndCharacterOfPosition(node.getStart()).line + 1}`, node)
+            const filename = path.relative(root, name)
+            scan(node.text, `${filename}:${source.getLineAndCharacterOfPosition(node.getStart()).line + 1}`, node, filename)
             sourceCount += findings.length - before
           }
           ts.forEachChild(node, visit)
@@ -68,9 +94,11 @@ export function checkSource() {
     }
   }
   const [header, ...rows] = csvRows(fs.readFileSync(path.join(root, "src/i18n/catalog.csv"), "utf8"))
+  const valuesEnd = header?.indexOf("sources")
+  if (valuesEnd !== 6 || !rows.length) throw new Error("Unexpected catalog.csv schema")
   for (const [i, row] of rows.entries()) {
     if (row.length !== header.length) throw new Error(`catalog.csv:${i + 2}: unexpected column count`)
-    for (let col = 0; col < header.indexOf("sources"); col++) scan(row[col], `catalog.csv:${i + 2}`)
+    for (let col = 0; col < valuesEnd; col++) scan(row[col], `catalog.csv:${i + 2}`)
   }
   const html = fs.readFileSync(path.join(root, "index.html"), "utf8")
   for (const match of html.matchAll(/<title>([^<]*)<\/title>|\bcontent="([^"]*)"/g)) {

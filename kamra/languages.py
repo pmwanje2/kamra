@@ -13,6 +13,7 @@ import json
 import frappe
 from frappe import _
 
+from kamra.branding import product_name
 from kamra.authz import require_roles
 from kamra.ui_languages import (
 	UnknownLanguage,
@@ -90,7 +91,7 @@ def assert_enabled_language(code: str) -> str:
 	known = known_codes()
 	match = next((c for c in known if c.lower() == raw.lower()), None)
 	if not match:
-		frappe.throw(_("{0} is not a Kamra language.").format(language_label(raw, catalog())))
+		frappe.throw(_("{0} is not a {product} language.").format(language_label(raw, catalog()), product=product_name()))
 	if match not in enabled_list(known, disabled_codes()):
 		frappe.throw(_("{0} is switched off. Turn it on from Languages in Settings.").format(
 			language_label(match, catalog())))
@@ -103,7 +104,7 @@ def _as_requested(disabled):
 	except UnknownLanguage as exc:
 		if not exc.code:
 			frappe.throw(_("Send a list of language codes."))
-		frappe.throw(_("{0} is not a Kamra language.").format(exc.code))
+		frappe.throw(_("{0} is not a {product} language.").format(exc.code, product=product_name()))
 		raise
 
 

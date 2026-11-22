@@ -113,7 +113,7 @@ export default function MenuImport({
     })
     const a = document.createElement("a")
     a.href = URL.createObjectURL(blob)
-    a.download = "kamra-menu-template.csv"
+    a.download = "menu-template.csv"
     a.click()
     URL.revokeObjectURL(a.href)
   }

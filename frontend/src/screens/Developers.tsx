@@ -8,6 +8,7 @@ import {
   getCurrentProperty,
 } from "../lib/api"
 import { serverError } from "../lib/resource"
+import { upstreamDocs, upstreamRepo } from "../lib/brand"
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Button } from "../components/ui/button"
 import { t as translate, useUILanguage } from "../lib/i18n"
@@ -175,7 +176,7 @@ export default function Developers() {
           <div>
             <div className="mb-1 text-xs font-medium text-zinc-500">{translate("Example - today's front desk")}</div>
             <pre className="overflow-x-auto rounded-lg bg-zinc-900 p-3 text-xs leading-relaxed text-zinc-100">
-{`curl -X POST ${base}/api/method/kamra.api.front_desk_snapshot \\
+{`curl -X POST ${base}${"/api/method/kamra.api.front_desk_snapshot"} \\
   -H "Authorization: ${authHeader}" \\
   -H "Content-Type: application/json" \\
   -d '{"property": "${property}"}'`}
@@ -183,7 +184,7 @@ export default function Developers() {
           </div>
           <p className="text-xs text-zinc-400">{translate("Full reference:")}{" "}
             <a
-              href="https://github.com/Kamra-PMS/kamra-pms/blob/main/docs/ai-and-api.md"
+                href={`${upstreamRepo()}/blob/main/docs/ai-and-api.md`}
               target="_blank"
               rel="noreferrer"
               className="font-medium text-brand-700 hover:underline"
@@ -196,7 +197,7 @@ export default function Developers() {
       <Card>
         <CardHeader>
           <CardTitle>{translate("Key endpoints")}</CardTitle>
-          <p className="mt-0.5 text-xs text-zinc-400">{translate("All under ")}<code className="text-zinc-500">/api/method/kamra.api.&lt;name&gt;</code>{" "}{translate("(POST, JSON). Role-gated the same as the UI.")}</p>
+          <p className="mt-0.5 text-xs text-zinc-400">{translate("All under ")}<code className="text-zinc-500">{"/api/method/kamra.api."}&lt;name&gt;</code>{" "}{translate("(POST, JSON). Role-gated the same as the UI.")}</p>
         </CardHeader>
         <CardContent className="space-y-4">
           {ENDPOINTS.map((sec) => (
@@ -236,10 +237,10 @@ export default function Developers() {
             .
           </p>
           <p>{translate("A POS service user (role ")}<code className="text-xs">POS Integrator</code>{translate(", limited to this property) calls")}{" "}
-            <code className="text-xs">kamra.pos_interface.pos_room_lookup</code>{translate(" and")}{" "}
+            <code className="text-xs">{"kamra.pos_interface.pos_room_lookup"}</code>{translate(" and")}{" "}
             <code className="text-xs">pos_post_room_charge</code>{translate(" with its API key.")}{" "}
             <a
-              href="https://kamrapms.com/docs/integrations"
+                href={`${upstreamDocs()}/integrations`}
               target="_blank"
               rel="noreferrer"
               className="font-medium text-brand-700 hover:underline"
@@ -253,7 +254,7 @@ export default function Developers() {
         <CardHeader>
           <CardTitle>{translate("Connect an AI agent (MCP)")}</CardTitle>
           <p className="mt-0.5 text-xs text-zinc-400">{translate("Point Claude at this property over MCP. Staff should use")}{" "}
-            <a href="/kamra/assistant" className="font-medium text-brand-700 hover:underline">{translate("Kamra Agent → AI Provider")}</a>{translate(". The key above is for unattended / service integrations.")}</p>
+            <a href="/kamra/assistant" className="font-medium text-brand-700 hover:underline">{translate("{assistant} → AI Provider")}</a>{translate(". The key above is for unattended / service integrations.")}</p>
         </CardHeader>
         <CardContent>
           <pre className="overflow-x-auto rounded-lg bg-zinc-100 p-3 text-xs leading-relaxed text-zinc-700">

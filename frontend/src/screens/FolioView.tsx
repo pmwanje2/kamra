@@ -253,7 +253,7 @@ function VerifyTaxId({ taxId, name }: { taxId: string; name: string }) {
       {" "}
       <button type="button" disabled={busy}
         className="text-xs font-medium text-brand-700 hover:underline disabled:opacity-50"
-        title={t("Kamra Verify checks this tax ID with the tax network. Charged per check to your Kamra Connect wallet.")}
+        title={t("ID verification partner checks this tax ID with the tax network. Charged per check to your verification wallet.")}
         onClick={async () => {
           setBusy(true); setRes(null)
           try {

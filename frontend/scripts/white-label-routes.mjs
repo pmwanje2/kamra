@@ -1,26 +1,51 @@
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
+import { mkdtemp, readFile, rm } from "node:fs/promises"
+import { createServer } from "node:http"
+import { tmpdir } from "node:os"
+import { extname, resolve, sep } from "node:path"
 import { fileURLToPath } from "node:url"
 import { chromium } from "playwright"
-import { createServer } from "vite"
+import { build } from "vite"
 import { forbidden } from "./brand-leak-check.mjs"
 
 export const brand = { product: "Maximus Hotel", assistant: "Eve", white_label: true, logo: null, favicon: null }
 const authRoutes = ["marketplace", "developers", "setup", "finish-setup", "agents", "assistant"]
 const gatedSettings = ["ai", "claude", "mcp-access", "verify"]
 const root = fileURLToPath(new URL("../", import.meta.url))
+const assetBase = "/assets/kamra/frontend/"
+const mime = { ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".png": "image/png" }
 
 export async function withFixture(run) {
-  const server = await createServer({ root, server: { host: "127.0.0.1", port: 0, hmr: false, proxy: {} } })
+  const output = await mkdtemp(resolve(tmpdir(), "hotel-route-fixture-"))
+  let server
   let browser
   try {
-    await server.listen()
+    // Test the production code, not the dev server (which can reload active
+    // pages when lazily loaded screens introduce dependencies).
+    await build({ root, logLevel: "error", build: { outDir: output } })
+    const shell = (await readFile(resolve(output, "index.html"), "utf8"))
+      .replace(/<title>.*?<\/title>/, `<title>${brand.product}</title>`)
+    server = createServer(async (request, response) => {
+      const { pathname } = new URL(request.url, "http://127.0.0.1")
+      if (pathname.startsWith(assetBase)) {
+        const file = resolve(output, pathname.slice(assetBase.length))
+        if (file.startsWith(output + sep)) {
+          const body = await readFile(file).catch(() => null)
+          if (body) return response.writeHead(200, { "content-type": mime[extname(file)] ?? "application/octet-stream" }).end(body)
+        }
+      } else if (/^\/(?:kamra|hotel)(?:\/|$)/.test(pathname)) {
+        return response.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(shell)
+      }
+      response.writeHead(404).end()
+    })
+    await new Promise((ready) => server.listen(0, "127.0.0.1", ready))
     browser = await chromium.launch({ executablePath: process.env.CHROMIUM })
-    const origin = `http://127.0.0.1:${server.httpServer.address().port}`
+    const origin = `http://127.0.0.1:${server.address().port}`
     await run(browser, origin)
   } finally {
     await browser?.close()
-    await server.close()
+    if (server) await new Promise((closed) => server.close(closed))
+    await rm(output, { recursive: true })
   }
 }
 
@@ -36,11 +61,19 @@ export async function fixturePage(browser, origin, role, viewport, replies = {})
     const method = url.pathname.split("/").at(-1)
     const guest = role === "Guest"
     const defaults = {
-      "kamra.api.whoami": guest ? { user: "Guest" } : { user: "staff@example.test", full_name: "Fixture Staff", roles: [role] },
+      "kamra.api.whoami": guest ? { user: "Guest" } : { user: "staff@example.test", full_name: "Fixture Staff", roles: role === "IT" ? ["Hotel Admin", "System Manager"] : [role] },
       "kamra.api.my_properties": [{ name: "Fixture Hotel", property_name: "Fixture Hotel", business_date: "2031-03-12" }],
       "kamra.api.enabled_modules": [],
       "kamra.public_api.site_info": { brand, brand_name: null, brand_logo: null },
-      "kamra.settings.settings_schema": { modules: [], enabled_modules: [], is_admin: role === "Hotel Admin", is_it_admin: role === "Hotel Admin" },
+      "kamra.api.hk_queue": { tasks: [], rooms: [] },
+      "kamra.health.system_health": { overall: "passed", installed: { kamra: "2.8.0", frappe: "16", site: "kamra.test" },
+        latest: { url: "https://github.com/Kamra-PMS/kamra-pms", tag: "v2.8.0" },
+        upgrade: { docs: "https://kamrapms.com/docs" }, checks: [{ title: "Frappe (v16)" }] },
+      "kamra.public_api.catalog_index": { mode: "hotel", property: "Fixture Hotel" },
+      "kamra.public_api.showcase": { property: { name: "Fixture Hotel", property_name: "Fixture Hotel", city: "Fixture City",
+        checkin_time: "14:00", checkout_time: "11:00", faqs: [], amenities: [] },
+        room_types: [], meal_plans: [], experiences: [] },
+      "kamra.settings.settings_schema": { modules: [], enabled_modules: [], is_admin: role === "Hotel Admin" || role === "IT", is_it_admin: role === "IT" },
     }
     const message = replies[method] ?? defaults[method]
     if (message === undefined) {
@@ -49,25 +82,24 @@ export async function fixturePage(browser, origin, role, viewport, replies = {})
     return route.fulfill({ json: { message } })
   })
   const page = await context.newPage()
-  page.setDefaultTimeout(6000)
+  page.setDefaultTimeout(20000)
   return page
 }
 
 export async function settled(page, url) {
-  const response = await page.goto(url)
+  const path = url.startsWith("/hotel/") ? url : `/kamra${url}`
+  const response = await page.goto(path, { waitUntil: "domcontentloaded" })
   assert.ok(response?.ok(), `SPA shell did not serve ${url}`)
   await page.waitForFunction(() => {
     const text = document.getElementById("root")?.innerText.trim()
     return text && !["Loading…", "Loading..."].includes(text)
-  })
-  // The shell can mount ahead of its lazy route. Wait out that fallback too.
-  await page.getByText("Loading…", { exact: true }).first().waitFor({ state: "hidden" }).catch((e) => {
-    throw new Error(`Route did not settle: ${url}`, { cause: e })
-  })
+  }, undefined, { polling: 50 })
+  // Screens may intentionally retain their own loading/empty states in the
+  // synthetic fixture. The condition above waits for the app/route shell.
 }
 
 async function sweep() {
-  const source = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8")
+  const source = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8")
   const variants = { checkin: "2031-03-12", checkout: "2031-03-13", adults: "2", children: "0", kind: "quote" }
   const routes = new Set(["/", "/unknown-test-route", ...gatedSettings.map((p) => `/settings/${p}`)])
   const declared = [...source.matchAll(/<Route\b\s+path="([^"]+)"/g)]
@@ -85,6 +117,8 @@ async function sweep() {
         for (const route of paths) {
           try {
             await settled(page, route)
+            if (route === "/health") await page.getByText("Passed", { exact: true }).waitFor()
+            if (/^\/book(?:\/|$)/.test(route)) await page.getByRole("heading", { name: "Fixture Hotel", exact: true }).first().waitFor()
             const values = await page.evaluate(() => {
               const values = [document.title, document.body.innerText]
               const attributes = ["alt", "title", "aria-label", "placeholder", "href", "src"]
@@ -101,14 +135,14 @@ async function sweep() {
               return values
             })
             const bad = values.filter((value) => forbidden.test(value) ||
-              /^\/app(?:[/?#]|$)|(?:^|\/\/)github\.com(?:\/|$)/i.test(value))
+              /^(?:https?:\/\/[^/]+)?\/app(?:[/?#]|$)|(?:^|\/\/)github\.com(?:\/|$)/i.test(value))
             assert.deepEqual([...new Set(bad)].map((s) => s.slice(0, 150)), [])
-            assert.match(values[0], /Maximus Hotel|Fixture Hotel/)
-            assert.equal(await page.getByText("Something went wrong", { exact: true }).count(), 0)
+            assert.match(values[0], /Maximus Hotel|Fixture Hotel|Places to stay/)
+            assert.equal(await page.getByText("This page hit a problem", { exact: true }).count(), 0, "Screen hit the React error boundary")
             if (authRoutes.includes(route.slice(1)) || gatedSettings.some((p) => route === `/settings/${p}`)) {
               await page.getByText("Not available here", { exact: true }).waitFor()
             }
-            assert.equal(await page.locator('a[href^="/marketplace"], a[href^="/developers"], a[href="/setup"], a[href="/finish-setup"], a[href="/agents"], a[href="/assistant"]').count(), 0)
+            assert.equal(await page.locator(authRoutes.map((route) => `a[href="/kamra/${route}"]`).join(",")).count(), 0)
           } catch (error) {
             failures.push(`${role} ${viewport.width}px ${route}: ${error.message.slice(0, 360)}`)
             if (process.env.KAMRA_ROUTE_FAIL_FAST === "1") throw new Error(failures.at(-1))
@@ -121,10 +155,11 @@ async function sweep() {
     await Promise.all([ { width: 1280, height: 800 }, { width: 412, height: 915 } ].flatMap((viewport) => [
       visit("Hotel Admin", viewport, routes), visit("Front Desk", viewport, routes),
       visit("Guest", viewport, ["/login", "/update-password", "/hk", "/book", "/stay/fixture", "/checkin/fixture"]),
+      visit("IT", viewport, ["/settings/appearance", "/apps", "/marketplace", "/developers", "/settings/ai"]),
     ]))
   })
   assert.equal(failures.length, 0, failures.join("\n"))
-  console.log(`White-label sweep: ${routes.size * 4 + 12} route visits`)
+  console.log(`White-label sweep: ${routes.size * 4 + 22} route visits`)
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) await sweep()

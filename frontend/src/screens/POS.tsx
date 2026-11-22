@@ -13,6 +13,7 @@ import MoveRoomBill from "./pos/MoveRoomBill"
 import VoidApproval, { type VoidArgs } from "./pos/VoidApproval"
 import { useNavigate } from "react-router-dom"
 import { call, getCurrentProperty } from "../lib/api"
+import { whiteLabel } from "../lib/brand"
 import { subscribeRealtime } from "../lib/realtime"
 import { serverError } from "../lib/resource"
 import type { OutletWaiterList } from "../components/OutletWaiters"
@@ -1259,8 +1260,8 @@ export default function POS() {
         <div className="flex shrink-0 items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
           <span>
             {t("Printing waited on the print dialog. Start Chrome with --kiosk-printing on this till to print KOTs instantly.")}{" "}
-            <a className="font-semibold underline" href={docsUrl("features#fast-silent-printing")}
-              target="_blank" rel="noreferrer">{t("How")}</a>
+            {!whiteLabel() && <a className="font-semibold underline" href={docsUrl("features#fast-silent-printing")}
+              target="_blank" rel="noreferrer">{t("How")}</a>}
           </span>
           <button className="text-xs font-semibold" onClick={() => setPrintTip(false)}>{t("Dismiss")}</button>
         </div>

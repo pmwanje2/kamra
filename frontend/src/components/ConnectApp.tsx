@@ -222,7 +222,7 @@ export default function ConnectApp() {
 
             {preview.redirect_uri && (
               <p className="text-xs text-zinc-500">
-                {t("Staff sign in to it with their own Kamra login, through {uri}.", {
+                {t("Staff sign in to it with their own {product} login, through {uri}.", {
                   uri: preview.redirect_uri,
                 })}
               </p>

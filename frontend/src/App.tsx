@@ -13,6 +13,7 @@ const Login = lazy(() => import("./screens/Login"))
 const UpdatePassword = lazy(() => import("./screens/UpdatePassword"))
 import { useAuth } from "./lib/auth"
 import { visibleApps } from "./lib/apps"
+import { SERVICE_ROLE, upstreamOnly } from "./lib/brand"
 import { t, useT, t as translate, useUILanguage } from "./lib/i18n"
 import { toFullPath } from "./lib/routing"
 import { syncLang } from "./lib/dir"
@@ -123,7 +124,7 @@ function RequireAuth() {
 /** Roles the Today board's API accepts (kamra front_desk_today). Anyone else
  *  would land on a permission error, so they start in their own app instead. */
 const TODAY_ROLES = [
-  "Front Desk", "Finance", "Night Auditor", "Revenue Manager", "Kamra Agent",
+  "Front Desk", "Finance", "Night Auditor", "Revenue Manager", SERVICE_ROLE,
   "Hotel Admin", "System Manager", "Administrator",
 ]
 
@@ -172,6 +173,15 @@ function CalendarScreen() {
   )
 }
 
+function WhiteLabelRoutes() {
+  const { pathname } = useLocation()
+  const { t } = useT()
+  const shell = useOutletContext<ShellContext>()
+  return upstreamOnly(pathname)
+    ? <p className="py-10 text-center text-sm text-zinc-500">{t("Not available here")}</p>
+    : <Outlet context={shell} />
+}
+
 export default function App() {
   useUILanguage()
   // guest pages and the desk keep separate languages; re-apply on crossing
@@ -211,6 +221,7 @@ export default function App() {
         <Route path="update-password" element={<UpdatePassword />} />
         <Route element={<RequireAuth />}>
           <Route element={<AppShell />}>
+          <Route element={<WhiteLabelRoutes />}>
           <Route index element={<Home />} />
           <Route path="apps" element={<AppLauncher />} />
           <Route path="marketplace" element={<Marketplace />} />
@@ -407,6 +418,7 @@ export default function App() {
               </p>
             }
           />
+          </Route>
           </Route>
         </Route>
       </Routes>

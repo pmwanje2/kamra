@@ -11,6 +11,8 @@ from functools import wraps
 import frappe
 from frappe.utils import add_to_date, cint, now_datetime
 
+from kamra.branding import role_label
+
 ADMIN = ("System Manager", "Administrator", "Hotel Admin")
 
 # IT / site admins only - deliberately EXCLUDES the Hotel Admin business role.
@@ -367,7 +369,7 @@ def require_roles(*roles, scope: dict | None = None):
 		def guarded(*args, **kwargs):
 			if not allowed & set(frappe.get_roles()):
 				frappe.throw(
-					f"Not permitted - needs one of: {', '.join(sorted(roles))}."
+					f"Not permitted - needs one of: {', '.join(role_label(role) for role in sorted(roles))}."
 					if roles else "Not permitted - needs Hotel Admin.",
 					frappe.PermissionError)
 			_enforce_property_scope(fn, args, kwargs, scope)

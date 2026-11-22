@@ -8,11 +8,12 @@ import { formatDate } from "../lib/utils"
 import { cur, moneyLocale } from "../lib/money"
 import { useT, serverLang, t as translate } from "../lib/i18n"
 import { useAuth } from "../lib/auth"
+import { SERVICE_ROLE } from "../lib/brand"
 
 const VOID_REPORT_ROLES = ["Finance", "Hotel Admin", "System Manager", "Administrator"]
 const EDIT_ROLES = ["Finance", "Hotel Admin", "System Manager", "Administrator"]
 // kamra.reports.manager_flash: the hotel's figures, not the front desk's
-const FLASH_ROLES = ["Finance", "Revenue Manager", "Night Auditor", "Kamra Agent", "Hotel Admin",
+const FLASH_ROLES = ["Finance", "Revenue Manager", "Night Auditor", SERVICE_ROLE, "Hotel Admin",
   "System Manager", "Administrator"]
 
 type Tab = "saved" | "builder" | "packs" | "flash"
@@ -560,7 +561,7 @@ export default function Reports({ initialTab = "saved" }: { initialTab?: Tab }) 
         <div>
           <div className="mb-3 flex items-center justify-between">
             <p className="text-sm text-zinc-500">
-              {t("Build a report, save it, run it again, or have Kamra email it on a schedule.")}
+              {t("Build a report, save it, run it again, or have {product} email it on a schedule.")}
             </p>
             <Button
               onClick={() => {

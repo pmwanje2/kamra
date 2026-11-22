@@ -10,6 +10,7 @@ import { useSearchParams } from "react-router-dom"
 import { Columns3, Download, Plus, Search, Trash2 } from "lucide-react"
 import { Sheet } from "./ui/sheet"
 import { call, getCurrentProperty } from "../lib/api"
+import { providerLabel } from "../lib/brand"
 import {
   createResource,
   deleteResource,
@@ -323,7 +324,7 @@ function FieldInput(props: {
           <option value="">-</option>
           {masterOpts.map((o) => (
             <option key={o} value={o}>
-              {t(o)}
+              {t(spec.field === "provider" ? providerLabel(o) : o)}
             </option>
           ))}
         </select>
@@ -886,7 +887,8 @@ export function ResourceScreen({
                           {t(String(row[c.field]))}
                         </Badge>
                       ) : (
-                        cellValue(row[c.field], t)
+                        cellValue(c.field === "provider" && typeof row[c.field] === "string"
+                          ? providerLabel(String(row[c.field])) : row[c.field], t)
                       )}
                     </td>
                   ))}

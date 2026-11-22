@@ -82,7 +82,7 @@ Invoice {0} for {1} was due on {2} and is {3} days overdue.,الفاتورة {0}
 Item,البند
 Items,العناصر
 Items by menu,الأصناف حسب القائمة
-Kamra report,تقرير Kamra
+{product} report,تقرير {product}
 Laundry orders,طلبات المغسلة
 Laundry pack,حزمة المغسلة
 Lost and found,المفقودات
@@ -198,7 +198,7 @@ This guest has not agreed to marketing messages.,لم يوافق هذا الضي
 You will get offers from {0} on WhatsApp. Reply STOP at any time to opt out.,ستصلك عروض {0} عبر واتساب. أرسل توقف في أي وقت لإلغاء الاشتراك.
 You will no longer get offers from {0}. Booking and stay messages continue. Reply START to opt in again.,لن تصلك عروض {0} بعد الآن. تستمر رسائل الحجز والإقامة. أرسل START للاشتراك مجددًا.
 AI Provider,مزوّد الذكاء الاصطناعي
-"Your AI provider will act as {0}, within your role. Prices, taxes and availability stay in Kamra. Every action is recorded under your name in the Activity log.",سيعمل مزوّد الذكاء الاصطناعي باسم {0} وضمن صلاحيات دورك. تبقى الأسعار والضرائب والتوافر في Kamra. يُسجّل كل إجراء باسمك في سجل النشاط.
+"Your AI provider will act as {0}, within your role. Prices, taxes and availability stay in {product}. Every action is recorded under your name in the Activity log.",سيعمل مزوّد الذكاء الاصطناعي باسم {0} وضمن صلاحيات دورك. تبقى الأسعار والضرائب والتوافر في {product}. يُسجّل كل إجراء باسمك في سجل النشاط.
 Tax,الضريبة
 {0} bill from {1},فاتورة {0} من {1}
 {0} to {1},{0} إلى {1}
@@ -269,7 +269,7 @@ Bills still open,فواتير ما زالت مفتوحة
 Use Check out to check a guest out: it makes sure every bill is cleared first.,استخدم «تسجيل المغادرة» لإخراج النزيل: يتأكد أولاً من تسوية كل الفواتير.
 Check out,تسجيل المغادرة
 Discounts and allowances,الخصومات والتسويات
-"{0} is not a Kamra language.","{0} ليست لغة في Kamra."
+{0} is not a {product} language.,{0} ليست لغة في {product}.
 "{0} is switched off. Turn it on from Languages in Settings.","{0} متوقفة. فعّلها من اللغات في الإعدادات."
 Quotation {0} from {1},عرض السعر {0} من {1}
 "Dear {0}, please find your quotation for {1} to {2} attached. Reference {3}.",عزيزنا {0}، مرفق عرض السعر لإقامتكم من {1} إلى {2}. المرجع {3}.

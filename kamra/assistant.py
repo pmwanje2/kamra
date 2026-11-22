@@ -14,6 +14,7 @@ import frappe
 import requests
 from frappe.utils import add_days, cint, getdate, nowdate
 
+from kamra.branding import assistant_name, product_name
 from kamra.assistant_privacy import processor_disclosure, scrub_for_llm
 from kamra.authz import require_roles
 from kamra.llm_compat import chat_payload, retry_chat_payload
@@ -51,8 +52,8 @@ def _provider_error(resp, limit: int = 300) -> str:
 	return f"AI provider error ({resp.status_code}): {(resp.text or '')[:limit]}"
 
 
-SYSTEM = """You are Kamra Agent, the assistant for {property_name}, a hotel
-running Kamra PMS. Today is {today}. You help staff work faster: look
+SYSTEM = """You are {assistant}, the assistant for {property_name}, a hotel
+running {product}. Today is {today}. You help staff work faster: look
 things up, quote, book, check guests in and out, post charges, take
 payments, preview and process cancellations.
 
@@ -776,6 +777,7 @@ def _system_prompt(property: str, settings, lang: str | None = None) -> str:
 	today = getdate(nowdate())
 	week = ", ".join(f"{d:%A} {d}" for d in (add_days(today, i) for i in range(1, 8)))
 	return SYSTEM.format(
+		assistant=assistant_name(), product=product_name(),
 		property_name=prop.property_name or property, today=f"{today:%A} {today}", week=week,
 		currency=currency or "unspecified",
 		currency_label=symbol or currency or "unspecified",
@@ -888,7 +890,7 @@ def test_connection(property: str, base_url: str | None = None,
 		frappe.throw(
 			"That looks like an Anthropic / Claude API key. This chat uses "
 			"OpenAI-compatible Chat Completions only. Use Connect Claude "
-			"(MCP) on Kamra Agent, or put Claude behind OpenRouter.")
+			f"(MCP) on {assistant_name()}, or put Claude behind OpenRouter.")
 
 	base = (base_url or (s.base_url if s else None)
 	        or "https://api.openai.com/v1").rstrip("/")
@@ -1422,12 +1424,12 @@ def ask_stream(property: str, messages, lang: str | None = None):
 	})
 
 
-HELP_SYSTEM = """You are the Kamra PMS help assistant. You explain HOW to use
-Kamra - an open-source, AI-native hotel PMS - to hotel staff. You do NOT act on
-hotel data (Kamra Agent does that); you give short, concrete how-to
+HELP_SYSTEM = """You are the {product} help assistant. You explain HOW to use
+{product} to hotel staff. You do NOT act on
+hotel data ({assistant} handles that); you give short, concrete how-to
 answers and point to where things live in the app.
 
-What Kamra does and where to find it:
+What {product} does and where to find it:
 - Front desk: "Today" (arrivals, departures, in-house, room board, check in /
   out), Tape Chart (rooms × dates; move rooms, amend stays), Calendar
   (availability).
@@ -1455,17 +1457,17 @@ What Kamra does and where to find it:
   amenities (one per line) and a description shown on the public booking engine.
 - Settings: property & GST, booking page (hero image, amenities, description),
   cancellation/deposit policy, payment gateway, and the AI assistant (your own
-  key). Admins also have Developers (API keys), New Property and the Frappe Desk.
+  key). Additional administration depends on the site.
 - Public booking engine at /book; pre-arrival self check-in via the guest link.
-- Roles: a System Admin (IT - users, API keys, Frappe Desk) versus a Hotel
+- Roles: a System Admin (IT - users and access) versus a Hotel
   Admin / GM (runs the property, no IT access). Manage staff from
   Admin → Manage Users.
-- Kamra Agent (the sparkle button) can act - quote, book, check in,
+- {assistant} can act - quote, book, check in,
   post charges, cancel, and watch the waitlist. This help assistant only
   explains how to do things yourself.
 
 Be brief and practical. Use short steps. If you're unsure, say so and point to
-the docs (github.com/Kamra-PMS/kamra-pms/tree/main/docs)."""
+the hotel administrator."""
 
 
 @frappe.whitelist(methods=["POST"])
@@ -1488,7 +1490,7 @@ def help_ask(property: str, messages):
 	model = s.model or "gpt-4o-mini"
 	headers = {"Authorization": f"Bearer {api_key}",
 	           "Content-Type": "application/json"}
-	convo = [{"role": "system", "content": HELP_SYSTEM}] + list(messages)
+	convo = [{"role": "system", "content": HELP_SYSTEM.format(product=product_name(), assistant=assistant_name())}] + list(messages)
 	sse = _sse
 	no_credit = _no_credit()  # translated now, before the request context goes
 

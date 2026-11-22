@@ -12,6 +12,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, cint, flt, get_datetime, getdate, now_datetime, nowdate
 
+from kamra.branding import product_name
 from kamra.authz import act_as, assert_property_access, require_it_admin, require_roles
 from kamra.install import AGENT_EMAIL
 
@@ -1544,7 +1545,7 @@ def _refuse_opening_balance(charge_type: str):
 		frappe.throw("Opening balances are posted by the go-live import "
 		             "only (Go-live import screen).")
 	if charge_type == "Rate Adjustment":
-		frappe.throw("Rate adjustments are posted by Kamra when a stay's rate "
+		frappe.throw(f"Rate adjustments are posted by {product_name()} when a stay's rate "
 		             "changes. Post an allowance to give money back.")
 
 

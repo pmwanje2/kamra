@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react"
+import { whiteLabel } from "../lib/brand"
 import { clampGuests, maxCapacity } from "../lib/occupancy"
 import PrivacyNotice, { setPrivacyTerms } from "../components/PrivacyNotice"
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom"
@@ -1631,9 +1632,9 @@ export default function PublicBooking() {
 
             <div className="mt-12 flex flex-col items-center gap-3">
               <LanguageSwitcher className="md:hidden" />
-              <p className="text-center text-xs text-zinc-400">
-                {t("Powered by Kamra - the open-source, agent-ready hotel PMS")}
-              </p>
+              {!whiteLabel() && <p className="text-center text-xs text-zinc-400">
+                {t("Powered by {product} - the open-source, agent-ready hotel PMS")}
+              </p>}
             </div>
           </div>
 

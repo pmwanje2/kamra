@@ -32,7 +32,7 @@ MCP_READ = "MCP Read"
 MCP_MANAGE = "MCP Manage"
 MCP_ROLES = (MCP_READ, MCP_MANAGE)
 
-NO_ACCESS = ("Your Kamra user has no MCP access. Ask your hotel admin for "
+NO_ACCESS = ("Your account has no MCP access. Ask your hotel admin for "
              "MCP Read or MCP Manage.")
 READ_ONLY = ("Your MCP access is read-only (MCP Read), so the AI can't make "
              "changes. Ask your hotel admin for MCP Manage.")
