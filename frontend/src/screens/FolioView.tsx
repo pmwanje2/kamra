@@ -1,4 +1,5 @@
-import { CurrencyInput, SettlementPreview, useSettlementQuote } from "../components/SettlementPreview"
+import { SettlementPreview, useSettlementQuote } from "../components/SettlementPreview"
+import TenderPicker, { resolveTender, tenderAmount, tenderModes, tenderReady, useTenderRates } from "../components/TenderPicker"
 import RowCorrection from "../components/RowCorrection"
 import { ResponsiveList, Popin } from "../components/ui/responsive-list"
 import { Fragment, useCallback, useEffect, useRef, useState } from "react"
@@ -296,11 +297,9 @@ export default function FolioView() {
   const taxPicked = useRef(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [partVal, setPartVal] = useState("")
-  // ways to pay follow the country pack; Payment Link is the gateway, anywhere
   const loc = useLocale()
-  const PAY_MODES = [...loc.payment_modes, "Payment Link"]
   const [payment, setPayment] = useState({
-    mode: locale().payment_modes[0] ?? "Cash",
+    mode: "",
     amount: "",
     reference: "",
     kind: "Payment",
@@ -308,22 +307,22 @@ export default function FolioView() {
   })
   // one key per Record press; reused on retry (#550)
   const [paymentKey, setPaymentKey] = useState(newIdempotencyKey)
-  // Available display currencies. The settlement preview reads the published rate separately.
-  const [fxRates, setFxRates] = useState<{ currency: string; buy_rate: number }[]>([])
+  const folioProperty = data?.folio.property || getCurrentProperty()
+  const home = data?.property.currency || loc.currency
+  const { today: buyRates, rates: fxRates } = useTenderRates(folioProperty, !!data)
+  const availableTenders = tenderModes(loc, home, true)
+  const paymentTenders = payment.kind === "Security Deposit"
+    ? availableTenders.filter(({ currencies }) => currencies.includes(home)).map(({ mode }) => ({ mode, currencies: [home] }))
+    : availableTenders
+  const tender = resolveTender(paymentTenders, home, payment)
+  const paymentReady = tenderReady(tender, home, buyRates)
+  const foreign = !!tender.currency && tender.currency !== home
   const [showIn, setShowIn] = useState("")
   const [shown, setShown] = useState<{
     currency: string; rate: number; rate_date: string; home_currency: string
     grand_total: number; balance: number
   } | null>(null)
-  useEffect(() => {
-    call<{ business_date: string; rates: { currency: string; buy_rate: number; rate_date: string }[] }>(
-      "kamra.ledger.list_exchange_rates", { property: getCurrentProperty() })
-      .then((r) => setFxRates(r.rates))
-      .catch(() => setFxRates([]))
-  }, [])
-  const foreign = !!payment.currency && payment.currency !== (data?.property.currency || loc.currency)
-  const quote = useSettlementQuote(data?.folio.property || getCurrentProperty(), foreign ? payment.currency : '', Number(payment.amount))
-  const payModes = foreign ? PAY_MODES.filter(m => m === 'Cash' || m === 'Bank Transfer' || m === 'Foreign Cash') : PAY_MODES
+  const quote = useSettlementQuote(folioProperty, foreign && paymentReady ? tender.currency : "", Number(payment.amount))
   const [showCancel, setShowCancel] = useState(false)
   const [cancelReason, setCancelReason] = useState("")
   const [allowance, setAllowance] = useState({ amount: "", reason: "", gst_rate: "0", reason_code: "" })
@@ -350,8 +349,9 @@ export default function FolioView() {
       call<InvoiceData>("kamra.api.folio_invoice", { folio: name })
         .then((d) => {
           setData(d)
-          // the balance prefill is home money; a foreign amount is typed in
-          setPayment((p) => ({ ...p, amount: p.currency ? "" : String(d.folio.balance || "") }))
+          setPayment((p) => ({
+            ...p, amount: p.currency && p.currency !== d.property.currency ? "" : String(d.folio.balance || ""),
+          }))
           return d.stay.reservation
             ? call<SiblingFolio[]>("kamra.api.reservation_folios", {
                 reservation: d.stay.reservation,
@@ -1380,7 +1380,9 @@ export default function FolioView() {
                       )}
                     </span>
                     <span className={Number(p.amount) < 0 ? "font-medium text-rose-600" : ""}>{property.currency} {Number(p.amount).toLocaleString(undefined,{maximumFractionDigits:2})}</span>
-                    {canRequestCorrection && <RowCorrection folio={folio.name} row={p.name} modes={(Number(p.fx_amount) > 0 ? [...loc.payment_modes, "Foreign Cash"] : loc.payment_modes).filter(m => m !== p.mode)} act={act} />}
+                    {canRequestCorrection && <RowCorrection folio={folio.name} row={p.name}
+                      home={home} currency={Number(p.fx_amount) > 0 ? p.currency || home : home}
+                      modes={availableTenders.filter(({ mode }) => mode !== p.mode && mode !== "Payment Link")} act={act} />}
                   </li>
                 ))}
               </ul>
@@ -1692,22 +1694,15 @@ export default function FolioView() {
                   <option key={k} value={k}>{t(k)}</option>
                 ))}
               </select>
-              <select
-                className={inputCls}
-                value={payment.mode}
-                onChange={(e) => setPayment({ ...payment, mode: e.target.value })}
-              >
-                {payModes.map((m) => (
-                  <option key={m} value={m}>{t(m)}</option>
-                ))}
-              </select>
-              <CurrencyInput home={property.currency} value={payment.currency} onChange={currency=>setPayment({...payment, currency, amount:'',
-                mode: currency && !['Foreign Cash','Cash','Bank Transfer'].includes(payment.mode)?'Cash':payment.mode,
-                kind:currency && payment.kind==='Security Deposit'?'Payment':payment.kind})}/>
+              <TenderPicker home={home} chosen={tender} modes={paymentTenders} rates={buyRates}
+                onChange={(choice) => setPayment({
+                  ...payment, ...choice,
+                  amount: choice.currency === tender.currency ? payment.amount : tenderAmount(folio.balance, choice.currency, home, buyRates),
+                })} />
               <input
                 className={`${inputCls} w-28`}
                 type="number"
-                placeholder={foreign ? payment.currency : translate(`${cur()}`)}
+                placeholder={foreign ? tender.currency : translate(`${cur()}`)}
                 value={payment.amount}
                 onChange={(e) =>
                   setPayment({ ...payment, amount: e.target.value })
@@ -1723,17 +1718,18 @@ export default function FolioView() {
               />
               {foreign && <SettlementPreview result={quote} amount={Number(payment.amount)} balance={folio.balance} />}
               <Button
-                disabled={busy || !payment.amount}
+                disabled={busy || !paymentReady || !(Number(payment.amount) > 0) || (foreign && !quote?.quote)}
                 onClick={() =>
                   act(async () => {
+                    if (!paymentReady) throw new Error(t("Choose an available payment method and currency."))
                     if (foreign && !quote?.quote) throw new Error(quote?.error || t("Wait for the settlement preview."))
                     await call("kamra.api.add_folio_payment", withPin({
                       folio: folio.name,
-                      mode: payment.mode,
+                      mode: tender.mode,
                       kind: payment.kind,
                       amount: Number(payment.amount),
                       reference: payment.reference || undefined,
-                      currency: payment.currency || undefined, quote_id: quote?.quote?.quote_id,
+                      currency: tender.currency, quote_id: quote?.quote?.quote_id,
                       idempotency_key: paymentKey,
                     }))
                     setPaymentKey(newIdempotencyKey())

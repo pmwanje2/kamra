@@ -2,6 +2,8 @@ import { useState } from "react"
 import { call, newIdempotencyKey } from "../lib/api"
 import { useT } from "../lib/i18n"
 import { serverError } from "../lib/resource"
+import type { TenderMode } from "../lib/money"
+import TenderPicker from "./TenderPicker"
 
 type Action = {
   id: string
@@ -23,11 +25,15 @@ export default function RowCorrection({
   folio,
   row,
   modes,
+  home = "",
+  currency = home,
   act,
 }: {
   folio: string
   row: string
-  modes: string[]
+  modes: TenderMode[]
+  home?: string
+  currency?: string
   act: (fn: () => Promise<unknown>, onError: (message: string) => void) => Promise<void>
 }) {
   const { t } = useT()
@@ -46,10 +52,18 @@ export default function RowCorrection({
     approvals =
       action?.requires.includes("supervisor_user") ||
       action?.reason_codes.find((c) => c.name === code)?.requires_supervisor
+  // Reposting to an FX tender retains the original rate. Other tenders
+  // repost the original home value, so their account must map that currency.
+  const destinations = modes.flatMap(({ mode, currencies }) => {
+    const code = mode === "Foreign Cash" || mode === "Bank Transfer" ? currency : home
+    return currencies.includes(code) ? [{ mode, currencies: [code] }] : []
+  })
+  const destinationCurrency = destinations.find((m) => m.mode === mode)?.currencies[0] ?? currency
   const choose = (a?: Action) => {
     setError("")
     setId(a?.id ?? "")
     setCode(a?.reason_codes[0]?.name ?? "")
+    setMode("")
   }
   const close = () => {
     setOptions(undefined)
@@ -81,7 +95,7 @@ export default function RowCorrection({
     const problems: string[] = []
     if (!code) problems.push(t("Choose a reason code."))
     if (!note.trim()) problems.push(t("Enter a reason note."))
-    if (id === "reclassify_tender" && !mode) problems.push(t("Choose the destination tender."))
+    if (id === "reclassify_tender" && !destinations.some((m) => m.mode === mode)) problems.push(t("Choose the destination tender."))
     if (id === "partial_refund" && !(Number(amount) > 0 && Number(amount) <= options.refund_cap && /^\d+(?:\.\d{1,2})?$/.test(amount)))
       problems.push(t("Enter a positive refund amount up to {cap}, with at most two decimals.", {cap: options.refund_cap}))
     if (approvals && !user) problems.push(options.supervisors.length ? t("Choose an approving supervisor.") : t("No eligible supervisor is available for this property."))
@@ -160,16 +174,11 @@ export default function RowCorrection({
                 onChange={(e) => setNote(e.target.value)}
               />
               {id === "reclassify_tender" && (
-                <select
-                  aria-label={t("Destination tender")}
-                  value={mode}
-                  onChange={(e) => setMode(e.target.value)}
-                >
-                  <option value="">{t("Destination tender")}</option>
-                  {modes.map((m) => (
-                    <option key={m}>{m}</option>
-                  ))}
-                </select>
+                <div>
+                  <p>{t("Destination tender")}</p>
+                  <TenderPicker home={home} fixedCurrency={destinationCurrency} chosen={{ mode, currency: destinationCurrency }}
+                    modes={destinations} onChange={(choice) => setMode(choice.mode)} />
+                </div>
               )}
               {id === "partial_refund" && (
                 <input

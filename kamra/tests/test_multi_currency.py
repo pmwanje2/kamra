@@ -50,6 +50,16 @@ class MultiCurrencyTestCase(AuditTestCase):
 		self.assertEqual(ledger.home_to_fx(1000, 83.10), 12.04)
 		self.assertGreaterEqual(ledger.fx_to_home(12.04, 83.10), 1000)
 
+	def test_uganda_mobile_money_posts_to_folio_and_instant_till_bucket(self):
+		make_property(PROP_A, business_date=TODAY, country="Uganda", currency="UGX")
+		pay = api.add_folio_payment(self.folio, "Mobile Money", 50_000)["payments"][-1]
+		self.assertEqual((pay["mode"], pay["currency"], pay["amount"]), ("Mobile Money", "UGX", 50_000))
+		txn = frappe.db.get_value(
+			"Cashier Transaction", {"session": self.sess, "folio": self.folio}, ["mode", "amount"], as_dict=True,
+		)
+		self.assertEqual((txn.mode, txn.amount), ("Mobile Money", 50_000))
+		self.assertEqual(cashier._recompute_session_totals(self.sess)["upi"], 50_000)
+
 	def test_rate_entry_is_checked(self):
 		for cur, buy in (("INR", 1), ("US", 83), ("USD", 0)):
 			with self.assertRaises(frappe.ValidationError):
@@ -181,9 +191,9 @@ def _fake_api(rates=None, fail=None):
 	"""requests.get stand-in for open.er-api.com (no network in tests)."""
 	from unittest.mock import MagicMock
 	resp = MagicMock()
-	_reply(resp, {"result": "success", "base_code": "INR",
+	_reply(resp, {"result": "success", "base_code": "USD",
 	              "time_last_update_utc": "Thu, 29 Oct 2026 00:02:31 +0000",
-	              "rates": rates or {"INR": 1, "USD": 0.0125, "EUR": 0.01}})
+	              "rates": {"USD": 1, **(rates or {"INR": 80, "EUR": 0.8})}})
 	return MagicMock(side_effect=fail) if fail else MagicMock(return_value=resp)
 
 
@@ -220,7 +230,7 @@ class OnlineRatesTestCase(AuditTestCase):
 		fake = _fake_api()
 		out = self.fetch(fake)
 		self.assertEqual(fake.call_args.kwargs["timeout"], 5)
-		self.assertIn("/INR", fake.call_args.args[0])
+		self.assertTrue(fake.call_args.args[0].endswith("/USD"))
 		self.assertEqual(sorted(out["updated"]), ["EUR", "USD"])
 		self.assertEqual(out["not_offered"], ["GBP"])  # home INR skipped
 		usd = self.row("USD")
@@ -229,12 +239,15 @@ class OnlineRatesTestCase(AuditTestCase):
 		# a payment now converts at the fetched buy rate
 		self.assertEqual(ledger.payment_rate(PROP_A, "USD")["rate"], 78.4)
 		# fetching again updates the online row, never a second one
-		self.fetch(_fake_api({"USD": 0.01}))
+		self.fetch(_fake_api({"INR": 100}))
 		self.assertEqual(self.row("USD").buy_rate, 98.0)
 		self.assertEqual(frappe.db.count("Exchange Rate", {"property": PROP_A, "currency": "USD"}), 1)
 
 	def test_nonsense_rates_are_dropped(self):
-		out = self.fetch(_fake_api({"USD": 0, "EUR": -0.5, "GBP": "abc", "AED": 1e-320}))
+		from kamra import settings
+		settings.write_kv(PROP_A, "fx_currencies", "EUR, GBP, AED, JPY")
+		settings.clear_cache(PROP_A)
+		out = self.fetch(_fake_api({"INR": 80, "EUR": -0.5, "GBP": "abc", "AED": 1e-320, "JPY": 0}))
 		self.assertEqual(out["updated"], [])
 		self.assertFalse(frappe.db.exists("Exchange Rate", {"property": PROP_A}))
 
@@ -262,7 +275,7 @@ class OnlineRatesTestCase(AuditTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			self.fetch(bad)
 		# untrusted reply: wrong base, oversized, not JSON
-		for payload in ({"result": "success", "base_code": "USD", "rates": {"USD": 1}},
+		for payload in ({"result": "success", "base_code": "INR", "rates": {"INR": 1}},
 		                b"[" * (ledger.FX_MAX_BYTES + 10), b"<html>"):
 			_reply(bad.return_value, payload)
 			with self.assertRaises(frappe.ValidationError, msg=str(payload)[:40]):
@@ -290,7 +303,7 @@ class OnlineRatesTestCase(AuditTestCase):
 			self.assertEqual(fake.call_count, calls)
 
 	def test_weak_currency_rate_keeps_precision(self):
-		self.fetch(_fake_api({"USD": 0.0125, "EUR": 1 / 0.000123456789}))
+		self.fetch(_fake_api({"INR": 80, "EUR": 80 / 0.000123456789}))
 		self.assertAlmostEqual(self.row("EUR").market_rate, 0.000123457, places=9)
 
 	def test_scheduled_fetch_remembers_gaps_and_caches_reply(self):

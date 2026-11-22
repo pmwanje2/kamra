@@ -222,10 +222,12 @@ def record_cashier_txn(
 	notes: str | None = None,
 	session: str | None = None,
 	outlet: str | None = None,
+	tender_validated: bool = False,
 ) -> str | None:
 	"""Append a Cashier Transaction. Returns session name (or None)."""
-	from kamra.localization import assert_payment_mode
-	assert_payment_mode(property, mode)
+	if not tender_validated:
+		from kamra.localization import assert_pack_payment_mode
+		assert_pack_payment_mode(property, mode)
 	sess = session
 	if not outlet and pos_order:
 		outlet = frappe.db.get_value("POS Order", pos_order, "outlet")

@@ -3,6 +3,7 @@ import { call } from "../lib/api"
 import { serverError } from "../lib/resource"
 import { formatDate } from "../lib/utils"
 import { t } from "../lib/i18n"
+import { moneyDigits, moneyLocale } from "../lib/money"
 
 type Quote = {
   rate: number
@@ -41,30 +42,6 @@ export function useSettlementQuote(
   return result?.key === key ? result : undefined
 }
 
-export function CurrencyInput({
-  home,
-  value,
-  onChange,
-}: {
-  home: string
-  value: string
-  onChange: (v: string) => void
-}) {
-  return (
-    <label className="text-xs">
-      {t("Tender currency")}
-      <input
-        className="ml-1 w-16 rounded border p-1 uppercase"
-        aria-label={t("Tender currency")}
-        maxLength={3}
-        placeholder={home}
-        value={value}
-        onChange={(e) => onChange(e.target.value.toUpperCase().trim())}
-      />
-    </label>
-  )
-}
-
 export function SettlementPreview({
   result,
   amount,
@@ -88,14 +65,21 @@ export function SettlementPreview({
       </p>
     )
   const rest = Math.round((balance - q.home_amount) * 100) / 100
+  const homeAmount = (value: number) => {
+    const digits = moneyDigits(q.home_currency)
+    return `${q.home_currency} ${Number(value).toLocaleString(moneyLocale(), {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    })}`
+  }
   const facts = [
     [t("Amount tendered"), `${q.currency} ${amount}`],
     [t("Exchange rate"), q.rate],
     [t("Effective rate date"), formatDate(q.rate_date)],
-    [t("Company-currency equivalent"), `${q.home_currency} ${q.home_amount}`],
+    [t("Company-currency equivalent"), homeAmount(q.home_amount)],
     [
       rest < 0 ? t("Change due") : t("Remaining balance"),
-      `${q.home_currency} ${Math.abs(rest)}`,
+      homeAmount(Math.abs(rest)),
     ],
   ]
   return (

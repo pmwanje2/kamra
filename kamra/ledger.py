@@ -2117,12 +2117,20 @@ def list_exchange_rates(property: str):
 	# Keep latest per currency
 	seen = set()
 	latest = []
+	today_rows = {}
+	duplicates = set()
 	for r in rows:
+		if str(r.rate_date) == str(today):
+			if r.currency in today_rows:
+				duplicates.add(r.currency)
+			today_rows[r.currency] = r
 		if r.currency in seen:
 			continue
 		seen.add(r.currency)
 		latest.append(r)
-	return {"business_date": today, "rates": latest}
+	return {"business_date": today, "rates": latest,
+	        "tender_rates": [r for c, r in today_rows.items()
+	                         if c not in duplicates and flt(r.buy_rate) > 0]}
 
 
 @frappe.whitelist(methods=["POST"])
@@ -2179,9 +2187,9 @@ def upsert_exchange_rate(property: str, currency: str, buy_rate: float,
 # free use, rates refresh once a day, rate limited (do not call more than
 # about hourly), and a page showing the rates must credit "Rates By Exchange
 # Rate API" with a link. Response shape:
-#   {"result": "success", "base_code": "INR",
+#   {"result": "success", "base_code": "USD",
 #    "time_last_update_utc": "Thu, 29 Oct 2026 00:02:31 +0000",
-#    "rates": {"INR": 1, "USD": 0.01189, ...}}   # foreign units per 1 base
+#    "rates": {"USD": 1, "UGX": 4048.218994, ...}}   # currency units per USD
 # and on failure {"result": "error", "error-type": "unsupported-code"}.
 # Swap the provider here; market_rates() is the only reader. A country
 # pack whose bills must use an official rate (a central bank's daily
@@ -2196,15 +2204,18 @@ def market_rates(home: str) -> tuple[dict, str | None]:
 	"""Market mid rates as home-currency units per 1 foreign unit, and the
 	provider's as-of time. Throws a plain message on any failure; never
 	called from a request that takes a payment. The reply is untrusted:
-	size-capped, its base must be our home currency, and a rate that isn't
+	size-capped, its base must be USD, and a rate that isn't
 	a finite positive number is dropped."""
 	import math
 
 	import requests
 	try:
-		if not (len(home) == 3 and home.isalpha()):
+		if not (len(home) == 3 and home.isascii() and home.isalpha()):
 			raise ValueError(f"home currency {home!r} is not an ISO code")
-		r = requests.get(FX_RATES_URL.format(base=home.upper()), timeout=FX_TIMEOUT_S,
+		home = home.upper()
+		# A home-based quote can round USD to a tiny number (e.g. 0.000248
+		# for UGX). Divide two USD-base rates instead of inverting that number.
+		r = requests.get(FX_RATES_URL.format(base="USD"), timeout=FX_TIMEOUT_S,
 		                 stream=True, allow_redirects=False)
 		r.raise_for_status()
 		body = r.raw.read(FX_MAX_BYTES + 1, decode_content=True)
@@ -2213,16 +2224,26 @@ def market_rates(home: str) -> tuple[dict, str | None]:
 		data = json.loads(body)
 		if data.get("result") != "success":
 			raise ValueError(data.get("error-type") or "no rates returned")
-		if str(data.get("base_code") or "").upper() != home.upper():
-			raise ValueError(f"rates are for {data.get('base_code')}, not {home}")
-		mids = {}
-		for c, v in (data.get("rates") or {}).items():
+		if str(data.get("base_code") or "").upper() != "USD":
+			raise ValueError(f"rates are for {data.get('base_code')}, not USD")
+		rates = data.get("rates") or {}
+		try:
+			home_per_usd = float(rates.get(home) or 0)
+		except (TypeError, ValueError, OverflowError):
+			home_per_usd = 0
+		if not math.isfinite(home_per_usd) or home_per_usd <= 0:
+			raise ValueError(f"{home} has no valid USD-base rate")
+		mids = {"USD": home_per_usd, home: 1.0}
+		for c, v in rates.items():
+			code = str(c).upper()
+			if code in (home, "USD"):
+				continue
 			try:
-				mid = 1 / float(v)
+				mid = home_per_usd / float(v)
 			except (TypeError, ValueError, ZeroDivisionError, OverflowError):
 				continue
 			if math.isfinite(mid) and mid > 0:
-				mids[str(c).upper()] = mid
+				mids[code] = mid
 	except Exception as e:
 		frappe.throw(f"Could not fetch exchange rates ({type(e).__name__}: {e}). "
 		             "Today's rates are unchanged; type them in on the Currency Desk.")

@@ -7,6 +7,11 @@ import { useEffect, useState } from "react"
 import { call, getCurrentProperty } from "./api"
 import { adoptGuestLanguage, applyEnabledLanguages } from "./dir"
 
+export interface TenderMode {
+  mode: string
+  currencies: string[]
+}
+
 interface Locale {
   currency_symbol: string
   locale: string
@@ -20,6 +25,8 @@ interface Locale {
   id_type_hints: Record<string, string>
   /** Ways to pay the desk offers - always canonical Folio Payment modes. */
   payment_modes: string[]
+  tender_modes?: TenderMode[] | null
+  fx_currencies?: string[]
   /** The pack's own instant / wallet modes; the till keeps
    *  them in their own bucket (system_upi). Empty where there are none. */
   instant_payment_modes: string[]
@@ -98,7 +105,7 @@ export function loadLocale(): Promise<Locale> {
     property: getCurrentProperty(),
   })
     .then((l) => {
-      cache = { ...cache, ...l }
+      cache = { ...cache, tender_modes: null, fx_currencies: [], ...l }
       remember()
       return cache
     })
