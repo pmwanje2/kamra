@@ -50,13 +50,15 @@ class TenderModesTest(unittest.TestCase):
 
 		script.execute_method.side_effect = execute
 		previous_form = frappe._dict(original=True)
+		tender_endpoint = "hospitality_kamra.tender_modes"
 		with (
 			patch("frappe.local", SimpleNamespace(form_dict=previous_form)),
 			patch("frappe.response", frappe._dict(message="outer")),
-			patch.object(erp_bridge, "get_bridge_script", return_value=script) as lookup,
+			patch.object(erp_bridge, "get_bridge_script",
+				side_effect=lambda method: script if method == tender_endpoint else None) as lookup,
 		):
 			yield
-			lookup.assert_called_with("hospitality_kamra.tender_modes")
+			lookup.assert_any_call(tender_endpoint)
 			self.assertIs(frappe.local.form_dict, previous_form)
 			self.assertEqual(frappe.response.message, "outer")
 
@@ -79,6 +81,7 @@ class TenderModesTest(unittest.TestCase):
 			locale = unwrap(api.property_locale)("P")
 		self.assertEqual(locale["tender_modes"], MAPPED)
 		self.assertEqual(locale["fx_currencies"], ["USD"])
+		self.assertIsNone(locale["tax_basis"])
 
 	def test_mapping_is_authoritative_even_for_pack_and_core_modes(self):
 		with self.bridge({"tender_modes": MAPPED}):
