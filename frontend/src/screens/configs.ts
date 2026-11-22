@@ -1,19 +1,22 @@
 import type { ScreenConfig } from "../components/ResourceScreen"
+import type { TaxBasis } from "../lib/api"
+import { t } from "../lib/i18n"
 import { floorSource } from "../components/ResourceScreen"
 import { lazy } from "react"
+import { voicePartner } from "../lib/brand"
 
 // Drawer panels load when a row is opened, not with the app shell
 const CompanyExtras = lazy(() => import("../components/CompanyExtras"))
 const EventLinks = lazy(() => import("../components/EventLinks"))
 const GroupControl = lazy(() => import("../components/GroupControl"))
-const RoomTypeMedia = lazy(() => import("../components/RoomTypeMedia"))
+const RoomTypeExtras = lazy(() => import("../components/RoomTypeTariffs"))
 const OutletWaiters = lazy(() => import("../components/OutletWaiters"))
 const ChannelConnectionActions = lazy(() => import("../components/ChannelConnectionActions"))
 const HkTaskMediaPanel = lazy(() =>
   import("../components/HkMedia").then((m) => ({ default: m.HkTaskMediaPanel })),
 )
 const ReservationDetail = lazy(() => import("./ReservationDetail"))
-import { cur, locale, sellsAlcohol } from "../lib/money"
+import { cur, locale, sellsAlcohol, taxLabel } from "../lib/money"
 
 export const floorsConfig: ScreenConfig = {
   doctype: "Floor",
@@ -62,7 +65,9 @@ export const roomsConfig: ScreenConfig = {
   ],
 }
 
-export const roomTypesConfig: ScreenConfig = {
+export function roomTypesConfig(currency: string, taxBasis?: TaxBasis | null): ScreenConfig {
+  const cardLabel = currency ? t("Card rate / night ({currency})", { currency }) : t("Card rate / night")
+  return {
   doctype: "Room Type",
   title: "Room Types",
   description: "Room types with occupancy-based pricing.",
@@ -72,22 +77,23 @@ export const roomTypesConfig: ScreenConfig = {
     { field: "room_type_name", label: "Name" },
     { field: "room_type_code", label: "Code", badge: true },
     { field: "room_category", label: "Unit kind" },
-    { field: "base_price", label: `Base ${cur()}/night` },
+    { field: "base_price", label: cardLabel },
     { field: "base_occupancy", label: "Base occ." },
     { field: "extra_adult_price", label: `Extra adult ${cur()}` },
-    { field: "tax_percent", label: "Tax %" },
+    ...(taxBasis ? [] : [{ field: "tax_percent", label: "Tax %" }]),
   ],
   form: [
     { field: "room_type_name", label: "Name", type: "data", required: true },
     { field: "room_type_code", label: "Code (e.g. DLX)", type: "data", required: true },
     { field: "listing_slug", label: "Public listing URL slug (/stay/…)", type: "data" },
     { field: "room_category", label: "Unit kind", type: "select", options: ["Villa", "Private", "Shared"] },
-    { field: "base_price", label: "Base price / night", type: "currency", required: true },
+    { field: "base_price", label: cardLabel, type: "currency", required: true,
+      hint: "Used only by rate plans without a contract tariff" },
     { field: "base_occupancy", label: "Adults included in base price", type: "int" },
     { field: "single_occupancy_price", label: "Single occupancy price", type: "currency", dependsOn: (d) => d.room_category !== "Villa" },
     { field: "extra_adult_price", label: "Extra adult / night", type: "currency" },
     { field: "child_price", label: "Extra child / night", type: "currency", hint: "Additional charge per child per night (0 = free)" },
-    { field: "tax_percent", label: "Tax %", type: "float" },
+    ...(taxBasis ? [] : [{ field: "tax_percent", label: "Tax %", type: "float" as const }]),
     { field: "children_within_base_occupancy", label: "Children count towards base occupancy", type: "check", hint: "Only guests beyond the base occupancy are charged, children included" },
     { field: "adults_capacity", label: "Max adults", type: "int" },
     { field: "children_capacity", label: "Max children", type: "int" },
@@ -108,7 +114,11 @@ export const roomTypesConfig: ScreenConfig = {
     { field: "longitude", label: "Longitude", type: "float" },
     { field: "disabled", label: "Disabled", type: "check" },
   ],
-  extra: RoomTypeMedia,
+  formNote: taxBasis?.inclusive
+    ? t("Tax is applied by the invoice ({tax} included).", { tax: taxBasis.label })
+    : taxBasis ? t("Tax is applied by the invoice ({tax}).", { tax: taxBasis.label }) : undefined,
+  extra: RoomTypeExtras,
+  }
 }
 
 export const ratePlansConfig: ScreenConfig = {
@@ -411,7 +421,7 @@ export const venuesConfig: ScreenConfig = {
     { field: "base_price", label: "Day rental", type: "currency" },
     { field: "hourly_rate", label: "Hourly rental", type: "currency" },
     { field: "min_hours", label: "Minimum hours", type: "int" },
-    { field: "gst_rate", label: "Rental GST %", type: "int" },
+    { field: "gst_rate", get label() { return `${taxLabel()} %` }, type: "int" },
     { field: "setup_styles", label: "Layouts it takes", type: "data" },
     { field: "amenities", label: "Amenities", type: "data" },
     { field: "disabled", label: "Disabled", type: "check" },
@@ -789,7 +799,7 @@ export const ingredientsConfig: ScreenConfig = {
       hint: "One unit only. Recipes and purchases both use it - buy and cook in the same unit (e.g. define in g if you cook in g)." },
     { field: "cost_per_unit", label: "Cost / unit", type: "currency",
       hint: "Last known cost, used to value wastage. Indicative only - not FIFO and not on the books." },
-    { field: "gst_rate", label: "Input GST %", type: "float",
+    { field: "gst_rate", get label() { return `${taxLabel()} %` }, type: "float",
       hint: "Tax paid when buying this." },
     { field: "is_active", label: "Active", type: "check",
       hint: "Turn off instead of deleting when a recipe or stock history uses it." },
@@ -860,7 +870,7 @@ export const channelConnectionsConfig: ScreenConfig = {
   ],
   form: [
     { field: "channel", label: "Channel", type: "select", options: ["WhatsApp", "Voice", "SMS"], required: true },
-    { field: "provider", label: "Provider", type: "select", options: ["Meta Business", "HeyKoala", "Twilio", "Retell", "Vapi", "Custom"], required: true },
+    { field: "provider", label: "Provider", type: "select", options: ["Meta Business", voicePartner, "Twilio", "Retell", "Vapi", "Custom"], required: true },
     { field: "phone_number", label: "Phone number (display)", type: "data" },
     { field: "external_account_id", label: "Meta phone number ID", type: "data", hint: "From Meta Business Manager > WhatsApp > API setup" },
     { field: "credentials", label: "Access token", type: "data", hint: "Permanent Cloud API token - stored encrypted" },

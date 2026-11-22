@@ -4,7 +4,8 @@
 import { useMemo, useState, type ReactNode } from "react"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { serverError, updatePassword } from "../lib/api"
-import { asset } from "../lib/asset"
+import BrandMark from "../components/BrandMark"
+import { product, whiteLabel } from "../lib/brand"
 import { useAuth } from "../lib/auth"
 import { useT, t as translate } from "../lib/i18n"
 import { Button } from "../components/ui/button"
@@ -196,15 +197,15 @@ function Shell(props: { children: ReactNode }) {
       <div className="fixed inset-x-0 top-0 h-[5px] bg-[#1C3F38]" aria-hidden />
       <div className="w-full max-w-sm">
         <div className="mb-6 flex flex-col items-center gap-2">
-          <img src={asset("kamra-mark.svg")} alt="Kamra" className="size-16" />
+          <BrandMark className="size-16 text-xl" />
           <span
             className="text-2xl font-semibold tracking-[0.02em] text-[#1C3F38]"
             style={{ fontFamily: "Montserrat, ui-sans-serif, system-ui, sans-serif" }}
           >
-            kamra
-            <span className="ml-1.5 align-middle text-[10px] font-semibold tracking-[0.4em] text-[#1E7B4F]">
+            {product()}
+            {!whiteLabel() && <span className="ml-1.5 align-middle text-[10px] font-semibold tracking-[0.4em] text-[#1E7B4F]">
               PMS
-            </span>
+            </span>}
           </span>
         </div>
         <div className="rounded border border-[#E2E8F0] bg-white p-6">{props.children}</div>

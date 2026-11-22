@@ -29,6 +29,7 @@ import {
 
 import { Badge } from "../../components/ui/badge"
 import { call, getCurrentProperty } from "../../lib/api"
+import { roleLabel, upstreamOnly, whiteLabel } from "../../lib/brand"
 import { useT, t as translate } from "../../lib/i18n"
 import { useLocale } from "../../lib/money"
 import { serverError } from "../../lib/resource"
@@ -91,22 +92,22 @@ const CUSTOM_PAGES: CustomPage[] = [
     description: "Who can sign in, what each person can do and which properties they reach.",
     keywords: "users people invite roles permissions deactivate cashier pin reset team employees matrix rights" },
   { id: "modules", title: "Modules", group: "access", icon: ToggleRight,
-    description: "Switch off the parts of Kamra this property doesn't run.",
+    description: "Switch off the parts of {product} this property doesn't run.",
     keywords: "apps enable disable switch off restaurant banquets events housekeeping" },
   { id: "payments", title: "Payments", group: "integrations", icon: CreditCard,
     description: "The payment-link gateway for advances and folio settlement.",
     keywords: "razorpay cashfree gateway payment link keys webhook" },
   { id: "ai", title: "AI assistant", group: "integrations", icon: Bot,
-    description: "Bring your own AI key for Kamra Agent in the console.",
-    keywords: "openai gemini groq openrouter key model llm kamra agent chat" },
+    description: "Bring your own AI key for {assistant} in the console.",
+    keywords: "openai gemini groq openrouter key model llm assistant chat" },
   { id: "claude", title: "AI access (MCP)", group: "access", icon: LayoutGrid,
     description: "Who may connect Claude or another AI client, what it may do here, and the live connections.",
     keywords: "mcp claude chatgpt n8n desktop connector oauth agent ai access read manage permissions roles block tools disconnect" },
   { id: "webhooks", title: "Webhooks", group: "integrations", icon: Webhook,
     description: "Send bookings, check-ins, folio postings and the night audit to another system as signed events.",
     keywords: "webhook integration events api door lock pos crm data warehouse signature delivery log resend" },
-  { id: "verify", title: "Kamra Verify", group: "integrations", icon: FileCheck2,
-    description: "Tax ID and guest ID checks through Kamra Connect.",
+  { id: "verify", title: "ID verification partner", group: "integrations", icon: FileCheck2,
+    description: "Tax ID and guest ID checks through the ID verification partner.",
     keywords: "gstin aadhaar passport verify connect wallet" },
   { id: "zatca", title: "ZATCA e-invoicing", group: "integrations", icon: FileCheck2,
     description: "Saudi Arabia (FATOORA): seller details for every invoice XML.",
@@ -199,6 +200,7 @@ export default function SettingsHub() {
       icon: MODULE_ICON[m.id] ?? LayoutGrid, off: m.toggle && !m.enabled,
     }))
     const custom = CUSTOM_PAGES.filter((p) => {
+      if (upstreamOnly(`/settings/${p.id}`)) return false
       if (p.group === "personal") return true
       if (!schema.is_admin) return false
       if (p.id === "zatca") return country === "Saudi Arabia"
@@ -225,7 +227,7 @@ export default function SettingsHub() {
     }
     for (const m of schema.modules) {
       if (has(m.title, m.description)) out.push({ page: m.id, pageTitle: m.title, label: m.title, sub: m.description })
-      for (const sec of m.sections)
+      for (const sec of visibleSections(m))
         for (const s of sec.settings)
           if (has(s.label, s.hint, sec.title))
             out.push({ page: m.id, pageTitle: m.title, label: s.label, sub: sec.title, key: s.key })
@@ -374,7 +376,7 @@ export default function SettingsHub() {
                 </div>
               )
             })}
-            {schema.is_it_admin && (
+            {!whiteLabel() && schema.is_it_admin && (
               <div>
                 <p className="mb-1 px-2.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-400">{t("IT")}</p>
                 <Link
@@ -415,7 +417,7 @@ export default function SettingsHub() {
         />
         {mod ? (
           <ModulePage
-            module={mod}
+            module={{ ...mod, sections: visibleSections(mod), related: internalFnbOff(mod) ? [] : mod.related }}
             sources={sources}
             focusKey={focus}
             taxIdLabel={loc.tax_id_label}
@@ -439,8 +441,8 @@ export default function SettingsHub() {
             )}
             {mod.id === "housekeeping" && <LaundryRatesCard property={property} />}
             {mod.id === "revenue" && <HurdleRatesCard property={property} />}
-            {mod.id === "fnb" && <KitchenPrintersCard property={property} />}
-            {mod.id === "fnb" && <SpeedCheckCard property={property} />}
+            {mod.id === "fnb" && mod.enabled && <KitchenPrintersCard property={property} />}
+            {mod.id === "fnb" && mod.enabled && <SpeedCheckCard property={property} />}
           </ModulePage>
         ) : (
           <CustomPageBody
@@ -454,6 +456,11 @@ export default function SettingsHub() {
     </div>
   )
 }
+
+const internalFnbOff = (mod: SettingsModule) => mod.id === "fnb" && !mod.enabled
+const visibleSections = (mod: SettingsModule) => internalFnbOff(mod)
+  ? mod.sections.filter((section) => section.id === "external_pos")
+  : mod.sections
 
 function PageHeader({
   entry, module, canToggle, busy, onToggle,
@@ -478,7 +485,7 @@ function PageHeader({
             <p className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-zinc-500">
               {t("Changed by")}
               {["Hotel Admin", ...module.editors.filter((r) => r !== "Hotel Admin")].map((r) => (
-                <Badge key={r} tone="zinc">{t(r)}</Badge>
+                <Badge key={r} tone="zinc">{t(roleLabel(r))}</Badge>
               ))}
             </p>
           )}

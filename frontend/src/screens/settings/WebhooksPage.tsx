@@ -1,3 +1,4 @@
+import { upstreamDocs, whiteLabel } from "../../lib/brand"
 import { useCallback, useEffect, useState } from "react"
 import { Check, Copy, Plus, RefreshCw, RotateCcw, Send, Trash2 } from "lucide-react"
 
@@ -234,7 +235,7 @@ export function WebhooksPage({ property }: { property: string }) {
             <div>
               <CardTitle>{t("Endpoints")}</CardTitle>
               <p className="mt-0.5 text-xs text-zinc-400">
-                {t("Kamra POSTs a signed JSON event to each endpoint. Failed deliveries are retried for about 8 hours.")}
+                {t("{product} POSTs a signed JSON event to each endpoint. Failed deliveries are retried for about 8 hours.")}
               </p>
             </div>
             {editing === null && (
@@ -450,23 +451,23 @@ export function WebhooksPage({ property }: { property: string }) {
         </CardHeader>
         <CardContent className="space-y-2 text-sm text-zinc-600">
           <p>
-            {t("Each request carries X-Kamra-Event, X-Kamra-Event-Id, X-Kamra-Timestamp and X-Kamra-Signature. Recompute the signature over the raw body and reject old timestamps:")}
+            {t("Recompute the signature over the raw body and reject old timestamps.")}
           </p>
-          <pre className="overflow-x-auto rounded-lg bg-zinc-900 p-3 text-xs leading-relaxed text-zinc-100">
+          {!whiteLabel() && <pre className="overflow-x-auto rounded-lg bg-zinc-900 p-3 text-xs leading-relaxed text-zinc-100">
 {`expected = "sha256=" + HMAC_SHA256(secret, timestamp + "." + raw_body).hex()
-valid = constant_time_equal(expected, X-Kamra-Signature)
+valid = constant_time_equal(expected, ${"X-Kamra-Signature"})
         and abs(now - timestamp) < 300`}
-          </pre>
+          </pre>}
           <p className="text-xs text-zinc-500">
             {t("Answer 2xx within 10 seconds. Retries keep the same event id, so ignore ids you've already processed.")}{" "}
-            <a
-              href="https://kamrapms.com/docs/integrations"
+            {!whiteLabel() && <a
+              href={`${upstreamDocs()}/integrations`}
               target="_blank"
               rel="noreferrer"
               className="font-medium text-brand-700 hover:underline"
             >
               {t("Integrations guide")} →
-            </a>
+            </a>}
           </p>
         </CardContent>
       </Card>

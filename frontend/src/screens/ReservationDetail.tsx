@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { useRealtime } from "../lib/realtime"
+import { TariffNight } from "../components/ContractTariff"
 import {
   BedDouble,
   CalendarDays,
@@ -18,7 +19,8 @@ import {
 
 import {
   acceptBookingRequest,
-  amendStayConfirmed,
+  amendStay,
+  amendStayPreview,
   call,
   declineBookingRequest,
   idDocumentImage,
@@ -26,6 +28,7 @@ import {
   reservationDetail,
   setLateArrival,
   verifyPrecheckin,
+  type RepricePreview,
   type ReservationDetail as Detail,
 } from "../lib/api"
 import { IdDocumentField } from "../components/IdDocumentField"
@@ -42,12 +45,18 @@ import SecurityDepositPanel from "../components/SecurityDepositPanel"
 import RoomChangeDialog from "../components/RoomChangeDialog"
 import CheckOutDialog from "../components/CheckOutDialog"
 import CheckInDialog from "../components/CheckInDialog"
+import AgreedRatePanel from "../components/AgreedRatePanel"
+import { useAuth } from "../lib/auth"
 import StayInstructions from "../components/StayInstructions"
 import { cur, moneyLocale } from "../lib/money"
 import { t as translate, useUILanguage } from "../lib/i18n"
 
 const inr = (n: number) =>
   `${cur()}` + Number(n || 0).toLocaleString(moneyLocale(), { maximumFractionDigits: 0 })
+
+/** Whole nights from `a` to `b` (YYYY-MM-DD). */
+const nightsBetween = (a: string, b: string) =>
+  Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86_400_000)
 
 const STATUS_TONE: Record<string, string> = {
   Waitlist: "bg-amber-100 text-amber-800",
@@ -200,6 +209,13 @@ export default function ReservationDetail({
   const [reverseKeys, setReverseKeys] = useState<string | null>(null)
   const [changingRoom, setChangingRoom] = useState(false)
   const [declineReason, setDeclineReason] = useState("")
+  // the roles set_agreed_rate admits (Hotel Admin and System Manager as admins)
+  const { roles } = useAuth()
+  const canAgreeRate = ["Front Desk", "Revenue Manager", "Hotel Admin", "System Manager"]
+    .some((r) => roles.includes(r))
+  // booking_quotation / email_booking_quotation: Front Desk and above
+  const canQuote = ["Front Desk", "Revenue Manager", "Hotel Admin", "System Manager"]
+    .some((r) => roles.includes(r))
 
   const refresh = useCallback(() => {
     reservationDetail(name)
@@ -243,6 +259,23 @@ export default function ReservationDetail({
     if (savedCi) setCi(savedCi)
     if (savedCo) setCo(savedCo)
   }, [savedCi, savedCo])
+  // New dates re-price the stay: the server's preview is shown in the page
+  // and the save sends confirm_price from it. A window.confirm() gate here
+  // dropped the save silently whenever the browser suppressed the dialog.
+  const [datePreview, setDatePreview] = useState<RepricePreview | null>(null)
+  const datesDiffer = !!savedCi && (ci !== savedCi || co !== savedCo)
+  const datesValid = !!ci && !!co && ci < co
+  useEffect(() => {
+    setDatePreview(null)
+    if (!datesDiffer || !datesValid) return
+    let live = true
+    amendStayPreview(name, ci, co)
+      .then((p) => live && setDatePreview(p))
+      .catch((e) => live && setError(serverError(e)))
+    return () => {
+      live = false
+    }
+  }, [name, ci, co, datesDiffer, datesValid])
 
   // editable special requests
   const [req, setReq] = useState<string>("")
@@ -446,23 +479,46 @@ export default function ReservationDetail({
             </label>
           </div>
           {datesChanged && d.actions.can_amend && (
-            <Button
-              className="mt-3"
-              disabled={busy}
-              onClick={() =>
-                act(() =>
-                  amendStayConfirmed(name, ci, co, (p) =>
-                    window.confirm(
-                      translate("New dates re-price this stay: {v0} → {v1}", { v0: String(inr(p.current_amount)), v1: String(inr(p.new_amount)) }) +
-                        ` (${p.difference >= 0 ? "+" : "−"}${inr(Math.abs(p.difference))}).` +
-                        translate(" Confirm the new price with the guest?"),
-                    ),
-                  ),
-                )
-              }
-            >
-              {busy ? translate("Updating…") : translate("Update dates & re-price")}
-            </Button>
+            <div className="mt-3 space-y-2">
+              {!datesValid ? (
+                <p className="text-xs text-rose-600">{translate("Check-out must be after check-in.")}</p>
+              ) : !datePreview ? (
+                !error && <p className="text-xs text-zinc-400">{translate("Checking price")}</p>
+              ) : datePreview.difference === 0 ? (
+                <p className="text-sm text-zinc-600">
+                  {translate("{n} nights. No change to the price.", { n: nightsBetween(ci, co) })}
+                </p>
+              ) : (
+                <p className={`text-sm ${datePreview.difference > 0 ? "text-amber-700" : "text-emerald-700"}`}>
+                  {datePreview.difference > 0
+                    ? translate("{n} nights. Stay total {from} to {to} (+{amt}).", {
+                        n: nightsBetween(ci, co),
+                        from: inr(datePreview.current_amount),
+                        to: inr(datePreview.new_amount),
+                        amt: inr(datePreview.difference),
+                      })
+                    : translate("{n} nights. Stay total {from} to {to} (-{amt}).", {
+                        n: nightsBetween(ci, co),
+                        from: inr(datePreview.current_amount),
+                        to: inr(datePreview.new_amount),
+                        amt: inr(Math.abs(datePreview.difference)),
+                      })}
+                </p>
+              )}
+              <Button
+                disabled={busy || !datesValid || !datePreview}
+                onClick={() =>
+                  datePreview &&
+                  act(() => amendStay(name, ci, co, datePreview.needs_confirmation ? 1 : 0))
+                }
+              >
+                {busy
+                  ? translate("Updating…")
+                  : datePreview?.needs_confirmation
+                    ? translate("Confirm new dates and price")
+                    : translate("Confirm new dates")}
+              </Button>
+            </div>
           )}
           {d.status === "Confirmed" && (
             <label className="mt-3 flex items-start gap-2 text-sm text-zinc-700">
@@ -502,6 +558,9 @@ export default function ReservationDetail({
               <Field label={translate("Pre-check-in")} value={d.precheckin_status} />
             )}
           </dl>
+          {d.actions.can_amend && (d.night_rates?.length ?? 0) > 0 && canAgreeRate && (
+            <AgreedRatePanel reservation={name} nightRates={d.night_rates ?? []} onSaved={() => { refresh(); reload() }} />
+          )}
           {d.booked_check_out_date && (
             <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
               {translate("Left early: booked to {date}.", { date: d.booked_check_out_date })}
@@ -550,6 +609,9 @@ export default function ReservationDetail({
             {d.meal_plan && <Field label={translate("Meal plan")} value={d.meal_plan_name || d.meal_plan} />}
             {d.rate_plan && <Field label={translate("Rate plan")} value={d.rate_plan} />}
           </dl>
+          {d.tariff && <p className="mt-2 text-sm text-zinc-600">
+            {translate("Booked contract tariff")}: <TariffNight {...d} />
+          </p>}
           {!d.room && d.status === "Confirmed" && (
             <p className="mt-2 text-xs text-amber-600">{translate("No room assigned yet - use Assign room above before check-in.")}</p>
           )}
@@ -772,6 +834,14 @@ export default function ReservationDetail({
           className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm font-medium text-zinc-600 hover:border-brand-600 hover:text-brand-700"
         >
           <FileText className="size-4" />{translate(" Registration card")}</Link>
+        {d.actions.can_amend && canQuote && (
+          <Link
+            to={`/booking-quote/${encodeURIComponent(name)}`}
+            onClick={onClose}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm font-medium text-zinc-600 hover:border-brand-600 hover:text-brand-700"
+          >
+            <FileText className="size-4" />{translate("Quotation")}</Link>
+        )}
       </div>
 
       {/* cancel flow (self-guards to Confirmed) */}

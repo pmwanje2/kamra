@@ -49,7 +49,7 @@ class Boundary extends Component<Props, { error: Error | null; updating: boolean
 
   componentDidCatch(error: Error, info: { componentStack?: string | null }) {
     // the details are for us, never for the guest or the desk
-    console.error("[kamra] screen crashed", error, info.componentStack)
+    console.error("Screen crashed", error, info.componentStack)
     if (isChunkError(error) && !reloadForNewBuild()) {
       this.setState({ updating: false })
     }

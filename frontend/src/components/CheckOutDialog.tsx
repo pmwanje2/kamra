@@ -4,6 +4,7 @@ import { call, newIdempotencyKey } from "../lib/api"
 import { MAX_LINES, allocate, isCash, splitProblem, splitTotals, type PayLine } from "../lib/splitPayment"
 import { checkOutWithCredit } from "./CreditCheckout"
 import { useCashierAuth } from "../lib/cashierAuth"
+import { lateFeeDefault, lateFeeExceedsNight } from "../lib/lateFee"
 import { serverError } from "../lib/resource"
 import { toFullPath } from "../lib/routing"
 import { useLocale, fmtAmount, sellsAlcohol } from "../lib/money"
@@ -199,6 +200,12 @@ export interface CheckoutContext {
     already_charged: boolean
     folio: string | null
     tax_rate: number
+    /** the property's rule (Property.late_checkout_fee_mode / _value) */
+    fee_mode?: "None" | "Fixed" | "Percent of Night"
+    fee_value?: number
+    /** the stay's last room night, to catch a fee bigger than one night */
+    night_rate?: number
+    suggested_fee?: number | null
   } | null
   /** Leaving before the booked date: the plan, or what was done */
   early_departure: {
@@ -306,6 +313,7 @@ export default function CheckOutDialog(props: {
   const [lateAmt, setLateAmt] = useState("")
   const [lateDesc, setLateDesc] = useState("")
   const [lateRate, setLateRate] = useState("")
+  const [lateOverNightOk, setLateOverNightOk] = useState(false)
   const [outletModes, setOutletModes] = useState<Record<string, string>>({})
   const [companyOk, setCompanyOk] = useState(false)
   const [changingCompany, setChangingCompany] = useState(false)
@@ -355,6 +363,7 @@ export default function CheckOutDialog(props: {
     setRefundReason((r) => r || t("Refund of overpayment at check-out"))
     setLateDesc((d) => d || t("Late check-out"))
     if (ctx.late_checkout) setLateRate((r) => r || String(ctx.late_checkout?.tax_rate ?? 0))
+    if (ctx.late_checkout) setLateAmt((a) => a || lateFeeDefault(ctx.late_checkout))
   }, [ctx, t])
 
   const sym = ctx?.currency_symbol ?? ""
@@ -560,6 +569,7 @@ export default function CheckOutDialog(props: {
   function addLateFee() {
     const lc = ctx?.late_checkout
     if (!lc?.folio) return
+    if (lateFeeExceedsNight(Number(lateAmt), lc.night_rate) && !lateOverNightOk) return
     return run(async () => {
       await call("kamra.api.add_folio_charge", {
         folio: lc.folio, charge_type: "Late Checkout",
@@ -567,6 +577,7 @@ export default function CheckOutDialog(props: {
         amount: Number(lateAmt), gst_rate: Number(lateRate || 0),
       })
       setLateAmt("")
+      setLateOverNightOk(false)
     }, false)
   }
 
@@ -1128,7 +1139,7 @@ export default function CheckOutDialog(props: {
                     <label className="block text-xs">
                       <span className="mb-1 block text-zinc-500">{t("Amount")}</span>
                       <input className={inputCls} type="number" min="0" inputMode="decimal"
-                        value={lateAmt} onChange={(e) => setLateAmt(e.target.value)} />
+                        value={lateAmt} onChange={(e) => { setLateAmt(e.target.value); setLateOverNightOk(false) }} />
                     </label>
                     <label className="block text-xs">
                       <span className="mb-1 block text-zinc-500">{t("Tax rate")}</span>
@@ -1142,8 +1153,35 @@ export default function CheckOutDialog(props: {
                       <span className="mb-1 block text-zinc-500">{t("Description")}</span>
                       <input className={inputCls} value={lateDesc} onChange={(e) => setLateDesc(e.target.value)} />
                     </label>
+                    {ctx.late_checkout.fee_mode && ctx.late_checkout.fee_mode !== "None" && (
+                      <p className="text-xs text-zinc-500 sm:col-span-3">
+                        {ctx.late_checkout.fee_mode === "Fixed"
+                          ? t("The property's late check-out fee is {fee}.", { fee: fmt(ctx.late_checkout.fee_value ?? 0) })
+                          : t("The property's late check-out fee is {pct}% of a night ({fee}).", {
+                            pct: String(ctx.late_checkout.fee_value ?? 0),
+                            fee: fmt(ctx.late_checkout.suggested_fee ?? 0),
+                          })}
+                      </p>
+                    )}
+                    {lateFeeExceedsNight(Number(lateAmt), ctx.late_checkout.night_rate) && (
+                      <div role="alert" className="space-y-2 rounded-xl border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800 sm:col-span-3">
+                        <p className="flex items-start gap-2 font-medium">
+                          <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+                          {t("This late fee exceeds one night's room rate ({night}). Check it is not the whole bill.", {
+                            night: fmt(ctx.late_checkout.night_rate ?? 0),
+                          })}
+                        </p>
+                        <label className="flex items-center gap-2">
+                          <input type="checkbox" checked={lateOverNightOk}
+                            onChange={(e) => setLateOverNightOk(e.target.checked)} />
+                          {t("I confirm the late fee of {fee}", { fee: fmt(Number(lateAmt)) })}
+                        </label>
+                      </div>
+                    )}
                     <div className="sm:col-span-3">
-                      <Button disabled={busy || !(Number(lateAmt) > 0)} onClick={() => void addLateFee()}>
+                      <Button disabled={busy || !(Number(lateAmt) > 0)
+                        || (lateFeeExceedsNight(Number(lateAmt), ctx.late_checkout.night_rate) && !lateOverNightOk)}
+                        onClick={() => void addLateFee()}>
                         {t("Add late check-out fee")}
                       </Button>
                     </div>

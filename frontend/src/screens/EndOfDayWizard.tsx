@@ -7,6 +7,7 @@
     same page. Acknowledgements live on the draft Night Audit Run, so
     reopening keeps them. */
 
+import { whiteLabel } from "../lib/brand"
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
 import {
   ArrowLeft,
@@ -298,17 +299,17 @@ function FixHelp({ check, date }: { check: Check; date: string }) {
           </li>
         ))}
       </ol>
-      <div className="mt-3 flex flex-wrap items-center gap-2">
+      {!whiteLabel() && <div className="mt-3 flex flex-wrap items-center gap-2">
         <Button
           variant="outline"
           className="h-8 px-3 text-xs"
           onClick={() => navigate("/assistant", { state: { prompt: translate(fix.ask(check.count, date)), property } })}
         >
           <Sparkles className="me-1.5 size-3.5" aria-hidden />
-          {t("Ask Kamra Agent to help")}
+          {t("Ask {assistant} to help")}
         </Button>
         <span className="text-xs text-zinc-400">{t("It opens the agent with this check described. You approve what it changes.")}</span>
-      </div>
+      </div>}
       <p className="mt-3 text-xs text-zinc-500">
         <span className="font-medium text-zinc-600">{t("If you override:")}</span> {t(fix.override)}
       </p>

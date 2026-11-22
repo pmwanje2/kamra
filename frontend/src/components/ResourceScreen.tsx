@@ -10,6 +10,7 @@ import { useSearchParams } from "react-router-dom"
 import { Columns3, Download, Plus, Search, Trash2 } from "lucide-react"
 import { Sheet } from "./ui/sheet"
 import { call, getCurrentProperty } from "../lib/api"
+import { providerLabel } from "../lib/brand"
 import {
   createResource,
   deleteResource,
@@ -137,6 +138,7 @@ export interface ScreenConfig {
     statusCheck?: boolean
   }[]
   form: FieldSpec[]
+  formNote?: string
   propertyScoped?: boolean
   allowCreate?: boolean
   allowDelete?: boolean
@@ -323,7 +325,7 @@ function FieldInput(props: {
           <option value="">-</option>
           {masterOpts.map((o) => (
             <option key={o} value={o}>
-              {t(o)}
+              {t(spec.field === "provider" ? providerLabel(o) : o)}
             </option>
           ))}
         </select>
@@ -886,7 +888,8 @@ export function ResourceScreen({
                           {t(String(row[c.field]))}
                         </Badge>
                       ) : (
-                        cellValue(row[c.field], t)
+                        cellValue(c.field === "provider" && typeof row[c.field] === "string"
+                          ? providerLabel(String(row[c.field])) : row[c.field], t)
                       )}
                     </td>
                   ))}
@@ -980,6 +983,7 @@ export function ResourceScreen({
             </Suspense>
           ) : (
             <div className="space-y-4">
+              {config.formNote && <p className="rounded-lg bg-zinc-50 p-3 text-sm text-zinc-700">{config.formNote}</p>}
               <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
                 {config.form.filter(spec => spec.dependsOn ? spec.dependsOn(draft) : true).map((spec) => (
                   <label

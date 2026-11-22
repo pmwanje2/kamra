@@ -13,6 +13,7 @@ const Login = lazy(() => import("./screens/Login"))
 const UpdatePassword = lazy(() => import("./screens/UpdatePassword"))
 import { useAuth } from "./lib/auth"
 import { visibleApps } from "./lib/apps"
+import { SERVICE_ROLE, upstreamOnly } from "./lib/brand"
 import { t, useT, t as translate, useUILanguage } from "./lib/i18n"
 import { toFullPath } from "./lib/routing"
 import { syncLang } from "./lib/dir"
@@ -29,6 +30,7 @@ const HkApp = lazy(() => import("./screens/HkApp"))
 const Guests = lazy(() => import("./screens/Guests"))
 const RegistrationCard = lazy(() => import("./screens/RegistrationCard"))
 const GroupQuotation = lazy(() => import("./screens/GroupQuotation"))
+const BookingQuotation = lazy(() => import("./screens/BookingQuotation"))
 const CancellationLetter = lazy(() => import("./screens/CancellationLetter"))
 const AllowanceVoucher = lazy(() => import("./screens/AllowanceVoucher"))
 const TripConfirmation = lazy(() => import("./screens/TripConfirmation"))
@@ -122,7 +124,7 @@ function RequireAuth() {
 /** Roles the Today board's API accepts (kamra front_desk_today). Anyone else
  *  would land on a permission error, so they start in their own app instead. */
 const TODAY_ROLES = [
-  "Front Desk", "Finance", "Night Auditor", "Revenue Manager", "Kamra Agent",
+  "Front Desk", "Finance", "Night Auditor", "Revenue Manager", SERVICE_ROLE,
   "Hotel Admin", "System Manager", "Administrator",
 ]
 
@@ -171,6 +173,15 @@ function CalendarScreen() {
   )
 }
 
+function WhiteLabelRoutes() {
+  const { pathname } = useLocation()
+  const { t } = useT()
+  const shell = useOutletContext<ShellContext>()
+  return upstreamOnly(pathname)
+    ? <p className="py-10 text-center text-sm text-zinc-500">{t("Not available here")}</p>
+    : <Outlet context={shell} />
+}
+
 export default function App() {
   useUILanguage()
   // guest pages and the desk keep separate languages; re-apply on crossing
@@ -204,11 +215,13 @@ export default function App() {
         <Route path="hk" element={<HkApp />} />
         {/* dedicated login route so signing out changes the URL */}
         <Route path="login" element={<LoginPage />} />
-        {/* password reset email lands on /update-password?key=… (redirected
-            into /kamra); signed-in change-password uses the same screen */}
+        {/* signed-in change-password, and /kamra/update-password?key=… links;
+            Frappe's reset email stays on the site's central /update-password
+            (maximus D23: no site-wide redirect into /kamra) */}
         <Route path="update-password" element={<UpdatePassword />} />
         <Route element={<RequireAuth />}>
           <Route element={<AppShell />}>
+          <Route element={<WhiteLabelRoutes />}>
           <Route index element={<Home />} />
           <Route path="apps" element={<AppLauncher />} />
           <Route path="marketplace" element={<Marketplace />} />
@@ -223,6 +236,7 @@ export default function App() {
           />
           <Route path="grc/:name" element={<RegistrationCard />} />
           <Route path="group-quote/:name" element={<GroupQuotation />} />
+          <Route path="booking-quote/:name" element={<BookingQuotation />} />
           <Route path="cancelled/:name" element={<CancellationLetter />} />
           <Route path="trip/:name" element={<TripConfirmation />} />
           <Route path="guests" element={<Guests />} />
@@ -404,6 +418,7 @@ export default function App() {
               </p>
             }
           />
+          </Route>
           </Route>
         </Route>
       </Routes>

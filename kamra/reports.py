@@ -8,7 +8,7 @@ cash drawer reconcile to.
 import json
 
 import frappe
-from frappe.utils import add_days, getdate, nowdate
+from frappe.utils import add_days, getdate
 
 from kamra.authz import require_roles
 from kamra.folio import STANDS_ON_ITS_DATE
@@ -26,6 +26,49 @@ def _out_of_order(property: str, date: str, open_date: bool) -> int:
 		WHERE property = %(p)s AND block_status = 'Active'
 		  AND reason = 'Maintenance' AND from_date <= %(d)s AND to_date > %(d)s
 		""", {"p": property, "d": date})[0][0] or 0)
+
+
+PROJECTED_KEYS = ("projected_room_revenue", "projected_adr", "projected_revpar")
+
+
+def _projected_room_revenue(property: str, date: str, total_rooms: int) -> dict:
+	"""Room revenue the open business date will post, from the rooms in
+	house (OPERA's daytime flash): each stay the night audit will post a
+	night for - arrival <= date < departure, as folio.run_night_audit
+	selects them - at the rate the audit posts (the locked nightly rate),
+	or what is already posted for it. ADR is over those stays. The posted
+	figures are left as they are; these are labelled projected."""
+	from kamra.folio import _nightly_room_rate
+	stays = frappe.get_all("Reservation", filters={
+		"property": property, "status": "Checked In",
+		"check_in_date": ("<=", date), "check_out_date": (">", date)}, pluck="name")
+	posted = dict(frappe.db.sql(
+		"""
+		SELECT fc.reservation, SUM(fc.amount) FROM `tabFolio Charge` fc
+		WHERE fc.reservation IN %(r)s AND fc.charge_type = 'Room'
+		  AND fc.posting_date = %(d)s
+		GROUP BY fc.reservation
+		""", {"r": stays or [""], "d": date}))
+	unposted = [n for n in stays if n not in posted]
+	revenue = sum(float(v or 0) for v in posted.values())
+	if unposted:
+		# one read for every unposted stay's locked nights, not a get_doc each
+		rates: dict = {}
+		for r in frappe.get_all("Reservation Night Rate", filters={
+				"parenttype": "Reservation", "parent": ("in", unposted),
+				"stay_date": date}, fields=["parent", "rate"]):
+			rates[r.parent] = float(r.rate or 0)
+		for name in unposted:
+			if name in rates:
+				revenue += rates[name]
+			else:  # booked before rates were locked: priced as the audit prices it
+				revenue += _nightly_room_rate(frappe.get_doc("Reservation", name), date)
+	revenue = round(revenue, 2)
+	return {
+		"projected_room_revenue": revenue,
+		"projected_adr": round(revenue / len(stays), 0) if stays else 0,
+		"projected_revpar": round(revenue / total_rooms, 0) if total_rooms else 0,
+	}
 
 
 def _day_stats(property: str, date: str, total_rooms: int) -> dict:
@@ -82,7 +125,10 @@ def _day_stats(property: str, date: str, total_rooms: int) -> dict:
 			""",
 			{"p": property, "d": date})[0][0] or 0)
 	available = max(total_rooms - _out_of_order(property, date, in_house), 0)
+	projected = _projected_room_revenue(property, date, total_rooms) \
+		if in_house else {}
 	return {
+		**projected,
 		"date": str(date),
 		"rooms_sold": sold,
 		"rooms_occupied": occupied,
@@ -178,6 +224,8 @@ def void_allowance_report(
 
 def movement_counts(property: str, start: str, date: str) -> dict:
 	"""Arrivals, departures, no-shows over start..date, and who is in house."""
+	from kamra.movements import departure_counts
+
 	def count(field, statuses):
 		return frappe.db.count("Reservation", {
 			"property": property, field: ("between", [start, date]),
@@ -185,7 +233,8 @@ def movement_counts(property: str, start: str, date: str) -> dict:
 
 	return {
 		"arrivals": count("check_in_date", ["Confirmed", "Checked In"]),
-		"departures": count("check_out_date", ["Checked In", "Checked Out"]),
+		**departure_counts(property, start, date),
+		"departures_basis": "planned", "checked_out_basis": "actual",
 		"in_house": frappe.db.count("Reservation", {
 			"property": property, "status": "Checked In"}),
 		"no_shows": count("check_in_date", ["No Show"]),
@@ -196,12 +245,13 @@ def movement_counts(property: str, start: str, date: str) -> dict:
 @require_roles("Finance", "Revenue Manager", "Night Auditor", "Kamra Agent")
 def manager_flash(property: str, date: str | None = None,
                   from_date: str | None = None):
-	"""The daily flash: yesterday's performance, month to date, today's
+	"""The daily flash: performance for the requested date, month to date,
 	movement, collections by mode, and the 7-day outlook. With from_date,
 	the day figures, trend, movement and collections cover from_date..date."""
 	from kamra.business_date import report_range_end
-
-	date = date or nowdate()
+	from kamra.movements import report_dates
+	dates = report_dates(property, date)
+	date = dates["report_date"]
 	start = from_date or date
 	report_range_end(start, date)
 	total_rooms = frappe.db.count("Room", {"property": property}) or 0
@@ -231,7 +281,7 @@ def manager_flash(property: str, date: str | None = None,
 		})
 
 	return {
-		"date": str(date), "from_date": str(start), "total_rooms": total_rooms,
+		**dates, "from_date": str(start), "total_rooms": total_rooms,
 		"available_rooms": days[-1]["available_rooms"],
 		"today": days[-1] if len(days) == 1 else _sum_days(days, total_rooms),
 		"mtd": _sum_days(month, total_rooms), "movement": movement,

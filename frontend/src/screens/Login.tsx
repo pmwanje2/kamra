@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react"
 
 import { login, requestPasswordReset, serverError } from "../lib/api"
-import { asset } from "../lib/asset"
+import BrandMark from "../components/BrandMark"
+import { product, whiteLabel } from "../lib/brand"
 import { Button } from "../components/ui/button"
 import { getSiteInfo, versionLabel } from "../lib/siteInfo"
 import { getLang, setLang, type Lang } from "../lib/dir"
@@ -92,15 +93,15 @@ export default function Login(props: { onSuccess: () => void }) {
           </p>
         )}
         <div className="mb-6 flex flex-col items-center gap-2">
-          <img src={asset("kamra-mark.svg")} alt="Kamra" className="size-16" />
+          <BrandMark className="size-16 text-xl" />
           <span
             className="text-2xl font-semibold tracking-[0.02em] text-[#1C3F38]"
             style={{ fontFamily: "Montserrat, ui-sans-serif, system-ui, sans-serif" }}
           >
-            kamra
-            <span className="ml-1.5 align-middle text-[10px] font-semibold tracking-[0.4em] text-[#1E7B4F]">
+            {product()}
+            {!whiteLabel() && <span className="ml-1.5 align-middle text-[10px] font-semibold tracking-[0.4em] text-[#1E7B4F]">
               PMS
-            </span>
+            </span>}
           </span>
           <label className="mt-1 flex items-center gap-2 text-xs text-[#6f7a71]">
             <span>{t("Language")}</span>
@@ -195,7 +196,7 @@ export default function Login(props: { onSuccess: () => void }) {
         >
           <h1 className="text-base font-semibold text-[#1C3F38]">{t("Reset password")}</h1>
           <p className="text-sm text-[#6f7a71]">
-            {t("Enter the email or username for your Kamra account. If it is registered, we will send a reset link.")}
+            {t("Enter the email or username for your {product} account. If it is registered, we will send a reset link.")}
           </p>
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-[#3f4941]">
@@ -247,7 +248,7 @@ export default function Login(props: { onSuccess: () => void }) {
         </form>
         )}
 
-        {demoMode && mode === "sign-in" && (
+        {!whiteLabel() && demoMode && mode === "sign-in" && (
         <div className="mt-4 rounded border border-dashed border-[#bec9bf] p-4">
           <p className="mb-3 rounded bg-[#fffbeb] px-3 py-2 text-center text-xs leading-relaxed text-[#92400e]">
             {t("Shared playground, not a live hotel. Play data is wiped every night and the sample hotel is seeded again. Don't put real guests, payments or API keys here.")}
@@ -269,9 +270,9 @@ export default function Login(props: { onSuccess: () => void }) {
           </div>
         </div>
         )}
-        {version && (
+        {!whiteLabel() && version && (
           <p className="mt-6 text-center text-[11px] text-[#6f7a71]">
-            Kamra PMS v{version}
+            {product()} PMS v{version}
           </p>
         )}
       </div>

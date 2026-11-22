@@ -33,7 +33,7 @@ import {
 import { StatCard } from "../components/ui/stat-card"
 import { Avatar } from "../components/ui/avatar"
 import { RoomMediaButton } from "../components/HkMedia"
-import { cn } from "../lib/utils"
+import { cn, roomLabel, formatDate } from "../lib/utils"
 import type { ShellContext } from "../AppShell"
 import CheckInDialog from "../components/CheckInDialog"
 import NoShowDialog from "../components/NoShowDialog"
@@ -259,7 +259,7 @@ function ReservationList(props: {
             </div>
             <div className="mt-0.5 text-xs text-zinc-500">
               {row.room
-                ? t("Room {n}", { n: row.room.split("-").pop() ?? "" })
+                ? t("Room {n}", { n: roomLabel(row) })
                 : t("Unassigned")}{" "}
               · {t("{n} night{s}", { n: row.nights, s: row.nights === 1 ? "" : "s" })} ·{" "}
               {t("{n} ad", { n: row.adults })}
@@ -351,11 +351,13 @@ function relDay(
   t: (s: string, vars?: Record<string, string | number>) => string,
   today?: string,
 ) {
-  const base = today ? new Date(today + "T00:00:00") : new Date()
+  if (!today) return formatDate(dateStr)
+  const base = Date.parse(today + "T00:00:00Z")
   const d = Math.round(
-    (new Date(dateStr + "T00:00:00").getTime() - base.getTime()) / 86_400_000,
+    (Date.parse(dateStr + "T00:00:00Z") - base) / 86_400_000,
   )
-  if (d <= 0) return t("Today")
+  if (d < 0) return t("Overdue")
+  if (d === 0) return t("Today")
   if (d === 1) return t("Tomorrow")
   return t("In {n} days", { n: d })
 }
@@ -393,7 +395,7 @@ function InHouseTable({
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-medium text-zinc-800">{row.guest_name}</span>
                 <span className="block text-xs text-zinc-500">
-                  {row.room ? t("Room {room}", { room: row.room.split("-").pop() ?? "" }) : t("No room yet")}
+                  {row.room ? t("Room {room}", { room: roomLabel(row) }) : t("No room yet")}
                   {" · "}
                   {t("Leaves {when}", { when: relDay(row.check_out_date, t, today) })}
                 </span>
@@ -441,7 +443,7 @@ function InHouseTable({
                   </div>
                 </td>
                 <td className="py-2.5 tabular-nums text-zinc-600">
-                  {row.room ? row.room.split("-").pop() : t("No room yet")}
+                  {row.room ? roomLabel(row) : t("No room yet")}
                 </td>
                 <td className="py-2.5">
                   <SourceBadge row={row} />
@@ -463,7 +465,7 @@ function InHouseTable({
                 </td>
                 <td className="py-2.5 pe-1 text-end">
                   <div className="tabular-nums text-zinc-600">
-                    {row.check_out_date}
+                    {formatDate(row.check_out_date)}
                   </div>
                   <div className="text-[11px] text-zinc-400">
                     {relDay(row.check_out_date, t, today)}
@@ -600,7 +602,7 @@ export default function Today() {
   const sellableN = occNow ? Number(occNow.sellable) : (snap?.rooms.length ?? 0)
   const occupancyPct = sellableN ? Math.round(((occupied ?? 0) / sellableN) * 100) : 0
   const arrivalsN = snap?.arrivals.length ?? 0
-  const departuresN = snap?.departures.length ?? 0
+  const departuresN = snap?.departures_due.length ?? 0
   const inhouseN = snap?.in_house.length ?? 0
   const revenue = Number(kpi?.revenue_today ?? 0)
   // Today's RevPAR (room revenue / rooms). MTD lives on statistics.revpar.
@@ -797,14 +799,7 @@ export default function Today() {
   const hh = new Date().getHours()
   const greeting =
     hh < 12 ? t("Good morning") : hh < 17 ? t("Good afternoon") : t("Good evening")
-  const prettyDate = snap?.date
-    ? new Date(snap.date + "T00:00:00").toLocaleDateString(uiDateLocale(undefined), {
-        weekday: "short",
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      })
-    : ""
+  const prettyDate = snap?.date ? formatDate(snap.date) : ""
 
   // Today is a set of widgets; each person picks which show and in what
   // order (Customize). The built-in layout is the classic Today.
@@ -821,12 +816,14 @@ export default function Today() {
         />
         <StatCard
           icon={<LogOut className="size-4" />}
-          label={t("Departures")}
+          label={t("Due today")}
           value={departuresN}
           spark={mkTrend(departuresN, false)}
           sparkColor="var(--color-amber-600)"
           to="/in-house?tab=departures"
         />
+        <StatCard icon={<LogOut className="size-4" />} label={t("Overdue")} value={snap?.departures_overdue.length ?? 0} to="/in-house?tab=overdue" />
+        <StatCard icon={<LogOut className="size-4" />} label={t("Checked out")} value={snap?.checked_out.length ?? 0} to="/in-house?tab=checked-out" />
         <StatCard
           icon={<Users className="size-4" />}
           label={t("In-house")}
@@ -935,7 +932,7 @@ export default function Today() {
         </CardHeader>
         <CardContent className="pt-1">
           <ReservationList
-            rows={snap?.departures ?? []}
+            rows={snap?.departures_due ?? []}
             empty={t("No departures due today.")}
             action={(row) => (
               <Button

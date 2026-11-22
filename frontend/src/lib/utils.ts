@@ -15,3 +15,15 @@ export function htmlToText(s: string): string {
   } while (out !== prev)
   return out.replace(/[<>]/g, "")
 }
+
+/** Format a civil date without converting it through a timezone. */
+export function formatDate(iso: unknown): string {
+  const parts = /^(\d{4})-(\d\d)-(\d\d)$/.exec(String(iso ?? ""))
+  if (!parts) return "–"
+  const format = (window as Window & { kamra_date_format?: string }).kamra_date_format || "yyyy-mm-dd"
+  return format.toLowerCase().replace(/yyyy|mm|dd/g, token => parts[{yyyy: 1, mm: 2, dd: 3}[token]!])
+}
+
+export function roomLabel(row: { room_number?: string | null }): string {
+  return row.room_number || "–"
+}

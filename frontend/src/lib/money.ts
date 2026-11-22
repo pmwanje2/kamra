@@ -4,14 +4,20 @@
     the right symbol immediately on reload, before the network answers. */
 
 import { useEffect, useState } from "react"
-import { call, getCurrentProperty } from "./api"
+import { call, getCurrentProperty, type TaxBasis } from "./api"
 import { adoptGuestLanguage, applyEnabledLanguages } from "./dir"
+
+export interface TenderMode {
+  mode: string
+  currencies: string[]
+}
 
 interface Locale {
   currency_symbol: string
   locale: string
   currency: string
   tax_label: string
+  tax_basis?: TaxBasis | null
   tax_id_label: string
   tax_rates: number[]
   /** ID documents this country's desk records (pack ID_TYPES). */
@@ -20,6 +26,8 @@ interface Locale {
   id_type_hints: Record<string, string>
   /** Ways to pay the desk offers - always canonical Folio Payment modes. */
   payment_modes: string[]
+  tender_modes?: TenderMode[] | null
+  fx_currencies?: string[]
   /** The pack's own instant / wallet modes; the till keeps
    *  them in their own bucket (system_upi). Empty where there are none. */
   instant_payment_modes: string[]
@@ -38,6 +46,9 @@ interface Locale {
    *  caller picked, and the words that make a charge F&B. */
   fnb_tax_rate?: number
   fnb_charge_words?: string[]
+  /** The property's rate on a guest service (laundry, spa, misc): where
+   *  the folio's Post a charge box starts. */
+  services_tax_rate?: number
   /** Off for a dry property: alcohol fields and labels are hidden. */
   sells_alcohol?: boolean
 }
@@ -91,11 +102,13 @@ function remember() {
 }
 
 export function loadLocale(): Promise<Locale> {
+  const property = getCurrentProperty()
   return call<Locale>("kamra.api.property_locale", {
-    property: getCurrentProperty(),
+    property,
   })
     .then((l) => {
-      cache = { ...cache, ...l }
+      if (property !== getCurrentProperty()) return cache
+      cache = { ...cache, tender_modes: null, fx_currencies: [], tax_basis: null, ...l }
       remember()
       return cache
     })

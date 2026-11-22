@@ -74,7 +74,7 @@ class PackRatesSourceTestCase(AuditTestCase):
 		with patch("requests.get", fake):
 			out = ledger.fetch_exchange_rates(PROP_A)
 		fake.assert_called_once()
-		self.assertIn("/INR", fake.call_args.args[0])
+		self.assertTrue(fake.call_args.args[0].endswith("/USD"))
 		self.assertEqual(sorted(out["updated"]), ["EUR", "USD"])
 		self.assertEqual(self.row("USD").source, "Online")
 
@@ -121,5 +121,5 @@ class PackRatesSourceTestCase(AuditTestCase):
 		with patch("requests.get", fake):
 			mids, _ = ledger._market_rates_hourly("INR")
 		fake.assert_called_once()
-		self.assertEqual(mids["USD"], 80.0)  # 1 / 0.0125 from the open feed, not the pack's
+		self.assertEqual(mids["USD"], 80.0)  # USD-base INR quote from the open feed, not the pack's
 		self.assertTrue(frappe.cache.get_value("kamra:fx_market:kamra.ledger:INR"))

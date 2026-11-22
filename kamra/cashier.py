@@ -92,8 +92,9 @@ TILL_OPENERS = ("Front Desk", "Finance", "Kamra Agent")
 def tills_required(property: str | None) -> bool:
 	"""Does this property take money through cashier tills? On by default.
 	A small place with no cash drawer turns it off (Settings > Finance):
-	payments are then recorded without a till, and the till screens
-	(paid-outs, drops, petty cash, exchange) still need one."""
+	payments are then recorded without a till, no till can be opened
+	(open_session), and the till screens (paid-outs, drops, petty cash,
+	exchange) are unavailable."""
 	return bool(get_setting(property, "use_cashier_tills"))
 
 
@@ -182,20 +183,10 @@ def _recompute_session_totals(session: str, persist: bool = True) -> dict[str, f
 			drops += abs(amt)
 		elif kind == "Petty Cash":
 			petty += abs(amt)
-		elif kind in ("Payment", "Exchange"):
+		elif kind in ("Payment", "Exchange", "Refund"):
 			if mode == "Foreign Cash":
 				foreign += amt  # home value of foreign notes; not in expected cash
 			elif mode in CASH_MODES:
-				cash += amt
-			elif mode in CARD_MODES:
-				card += amt
-			elif mode in instant_modes:
-				upi += amt
-			else:
-				other += amt
-		elif kind == "Refund":
-			# refunds reduce the mode bucket (amount stored negative)
-			if mode in CASH_MODES:
 				cash += amt
 			elif mode in CARD_MODES:
 				card += amt
@@ -231,10 +222,12 @@ def record_cashier_txn(
 	notes: str | None = None,
 	session: str | None = None,
 	outlet: str | None = None,
+	tender_validated: bool = False,
 ) -> str | None:
 	"""Append a Cashier Transaction. Returns session name (or None)."""
-	from kamra.localization import assert_payment_mode
-	assert_payment_mode(property, mode)
+	if not tender_validated:
+		from kamra.localization import assert_pack_payment_mode
+		assert_pack_payment_mode(property, mode)
 	sess = session
 	if not outlet and pos_order:
 		outlet = frappe.db.get_value("POS Order", pos_order, "outlet")
@@ -310,7 +303,13 @@ def open_session(property: str, opening_float: float | None = None,
 	`cashier_terminal` picks a configured till. Without it the session is the
 	property's Default till, one per user, exactly as before terminals existed.
 	A configured terminal has one open session at a time; one user may hold
-	several, one per terminal."""
+	several, one per terminal. Refused where the property does not use
+	tills (use_cashier_tills off): payments there are recorded without one."""
+	if not tills_required(property):
+		frappe.throw("Cashier tills are switched off at this property, so there is "
+		             "no till to open. Payments are recorded without one. To use a "
+		             "till (paid-outs, drops, petty cash, exchange), turn tills on "
+		             "under Settings → Finance.")
 	ensure_business_date(property)
 	user = frappe.session.user
 	term = None

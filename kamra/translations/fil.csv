@@ -4,7 +4,7 @@ This guest has not agreed to marketing messages.,Hindi pumayag ang guest na ito 
 You will get offers from {0} on WhatsApp. Reply STOP at any time to opt out.,Makakatanggap kayo ng offers mula sa {0} sa WhatsApp. Reply STOP kahit kailan para huminto.
 You will no longer get offers from {0}. Booking and stay messages continue. Reply START to opt in again.,Hindi na kayo makakatanggap ng offers mula sa {0}. Tuloy ang booking at stay messages. Reply START para sumali ulit.
 AI Provider,Provider ng AI
-"Your AI provider will act as {0}, within your role. Prices, taxes and availability stay in Kamra. Every action is recorded under your name in the Activity log.","Aaktong {0} ang AI provider ninyo, sa loob ng role ninyo. Ang presyo, tax, at availability ay nananatili sa Kamra. Bawat aksyon ay naitatala sa pangalan ninyo sa Activity log."
+"Your AI provider will act as {0}, within your role. Prices, taxes and availability stay in {product}. Every action is recorded under your name in the Activity log.","Aaktong {0} ang AI provider ninyo, sa loob ng role ninyo. Ang presyo, tax, at availability ay nananatili sa {product}. Bawat aksyon ay naitatala sa pangalan ninyo sa Activity log."
 {0} bill from {1},Bill ng {0} mula kay {1}
 {0} to {1},{0} hanggang {1}
 Billed this month,Nasingil ngayong buwan

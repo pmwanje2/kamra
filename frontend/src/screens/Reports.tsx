@@ -4,14 +4,16 @@ import { Mail, Plus, Printer, Trash2 } from "lucide-react"
 import { call, getCurrentProperty } from "../lib/api"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
+import { formatDate } from "../lib/utils"
 import { cur, moneyLocale } from "../lib/money"
 import { useT, serverLang, t as translate } from "../lib/i18n"
 import { useAuth } from "../lib/auth"
+import { SERVICE_ROLE } from "../lib/brand"
 
 const VOID_REPORT_ROLES = ["Finance", "Hotel Admin", "System Manager", "Administrator"]
 const EDIT_ROLES = ["Finance", "Hotel Admin", "System Manager", "Administrator"]
 // kamra.reports.manager_flash: the hotel's figures, not the front desk's
-const FLASH_ROLES = ["Finance", "Revenue Manager", "Night Auditor", "Kamra Agent", "Hotel Admin",
+const FLASH_ROLES = ["Finance", "Revenue Manager", "Night Auditor", SERVICE_ROLE, "Hotel Admin",
   "System Manager", "Administrator"]
 
 type Tab = "saved" | "builder" | "packs" | "flash"
@@ -86,9 +88,16 @@ interface Day {
   adr: number
   revpar: number
   revpax: number
+  /** before the night audit, from the rooms in house (in-house basis only) */
+  projected_room_revenue?: number
+  projected_adr?: number
+  projected_revpar?: number
 }
 
 interface Flash {
+  report_date: string
+  business_date: string
+  basis: "projected" | "actual"
   date: string
   from_date: string
   total_rooms: number
@@ -168,7 +177,7 @@ export default function Reports({ initialTab = "saved" }: { initialTab?: Tab }) 
   const [busy, setBusy] = useState(false)
 
   // Manager flash
-  const [flashDate, setFlashDate] = useState(todayISO)
+  const [flashDate, setFlashDate] = useState("")
   const [flashFrom, setFlashFrom] = useState("") // "" = the one day
   const [flash, setFlash] = useState<Flash | null>(null)
 
@@ -210,8 +219,8 @@ export default function Reports({ initialTab = "saved" }: { initialTab?: Tab }) 
     if (tab !== "flash") return
     call<Flash>("kamra.reports.manager_flash", {
       property,
-      date: flashDate,
-      from_date: flashFrom && flashFrom < flashDate ? flashFrom : undefined,
+      date: flashDate || undefined,
+      from_date: flashFrom && (!flashDate || flashFrom < flashDate) ? flashFrom : undefined,
     })
       .then(setFlash)
       .catch((e) => setError((e as Error).message))
@@ -552,7 +561,7 @@ export default function Reports({ initialTab = "saved" }: { initialTab?: Tab }) 
         <div>
           <div className="mb-3 flex items-center justify-between">
             <p className="text-sm text-zinc-500">
-              {t("Build a report, save it, run it again, or have Kamra email it on a schedule.")}
+              {t("Build a report, save it, run it again, or have {product} email it on a schedule.")}
             </p>
             <Button
               onClick={() => {
@@ -1015,7 +1024,7 @@ export default function Reports({ initialTab = "saved" }: { initialTab?: Tab }) 
       {tab === "flash" && (
         <FlashPanel
           d={flash}
-          date={flashDate}
+          date={flashDate || flash?.report_date || ""}
           setDate={setFlashDate}
           from={flashFrom}
           setFrom={setFlashFrom}
@@ -1041,6 +1050,7 @@ function FlashPanel(props: {
 
   return (
     <div>
+      <p className="mb-2 text-sm">{t("Report date")} · {formatDate(d.report_date)} · {t("Business date")} · {formatDate(d.business_date)} · <strong>{d.basis === "actual" ? t("Actual") : t("Projected")}</strong></p>
       <div className="mb-4 flex flex-wrap justify-end gap-2 print:hidden">
         <input
           type="date"
@@ -1073,8 +1083,20 @@ function FlashPanel(props: {
             { occupied: todayData?.rooms_occupied ?? 0, available: todayData?.available_rooms ?? 0 },
           )}
         />
-        <Stat label={t("ADR")} value={`${cur()}${inr(todayData?.adr ?? 0)}`} sub={t("room rate / room sold")} />
-        <Stat label={t("RevPAR")} value={`${cur()}${inr(todayData?.revpar ?? 0)}`} sub={t("room rev / room")} />
+        <Stat
+          label={t("ADR")}
+          value={`${cur()}${inr(todayData?.adr ?? 0)}`}
+          sub={todayData?.projected_adr != null
+            ? t("projected {v} (in house)", { v: `${cur()}${inr(todayData.projected_adr)}` })
+            : t("room rate / room sold")}
+        />
+        <Stat
+          label={t("RevPAR")}
+          value={`${cur()}${inr(todayData?.revpar ?? 0)}`}
+          sub={todayData?.projected_revpar != null
+            ? t("projected {v} (in house)", { v: `${cur()}${inr(todayData.projected_revpar)}` })
+            : t("room rev / room")}
+        />
         <Stat
           label={t("RevPAX")}
           value={`${cur()}${inr(todayData?.revpax ?? 0)}`}

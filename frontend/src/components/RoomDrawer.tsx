@@ -164,7 +164,7 @@ export default function RoomDrawer(props: {
 
   const title = d
     ? t("Room {n}", { n: d.room.room_number })
-    : t("Room {n}", { n: props.room.split("-").pop() ?? "" })
+    : t("Room")
   const description = d
     ? [d.room.room_type_name, d.room.floor ? t("Floor {f}", { f: d.room.floor }) : null]
         .filter(Boolean)

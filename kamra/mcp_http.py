@@ -15,6 +15,7 @@ import json
 import frappe
 from werkzeug.wrappers import Response
 
+from kamra.branding import product_name
 from kamra.mcp_oauth import (
 	authorization_server_doc,
 	handle_authorize_get,
@@ -289,8 +290,8 @@ def _unauthorized() -> Response:
 		{
 			"error": "invalid_token",
 			"error_description": (
-				"Sign in with OAuth, or send a Kamra API key "
-				"(Authorization: token <api_key>:<api_secret>), to use Kamra MCP."),
+				f"Sign in with OAuth, or send a {product_name()} API key "
+				"(Authorization: token <api_key>:<api_secret>), to use MCP."),
 		},
 		401,
 	)
@@ -326,7 +327,7 @@ def _dispatch_method(method: str, params: dict, grant) -> dict:
 		return {
 			"protocolVersion": version,
 			"capabilities": {"tools": {"listChanged": False}},
-			"serverInfo": {"name": "kamra", "version": str(TOOL_COUNT), "title": "Kamra PMS"},
+			"serverInfo": {"name": "kamra", "version": str(TOOL_COUNT), "title": product_name()},
 			"instructions": INSTRUCTIONS,
 		}
 	if method in ("notifications/initialized", "notifications/cancelled"):

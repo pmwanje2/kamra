@@ -7,6 +7,7 @@
 // session; guests and the dev server (ignore_csrf) don't need it.
 import { htmlToText } from "./utils"
 import { t as translate } from "./i18n"
+import { whiteLabel } from "./brand"
 import type { NightPrice } from "./nightPrices"
 
 function csrfToken(): string | undefined {
@@ -69,10 +70,10 @@ async function doFetch(path: string, init?: RequestInit, retried = false): Promi
     try {
       res = await request()
     } catch (err) {
-      console.warn(`[kamra] network failure calling ${path}`, err)
+      console.warn(`Network failure calling ${path}`, err)
       window.dispatchEvent(new Event("kamra:offline"))
       throw Object.assign(
-        new Error("Can't reach Kamra right now. Check your connection - we'll reconnect automatically."),
+        new Error(translate("Can't reach {product} right now. Check your connection - we'll reconnect automatically.")),
         { network: true },
       )
     }
@@ -108,7 +109,7 @@ async function doFetch(path: string, init?: RequestInit, retried = false): Promi
 function httpError(status: number, body: string): Error {
   const err = Object.assign(new Error(), { status, body })
   err.message = serverError(err)
-  if (status >= 500) console.warn(`[kamra] server error ${status}`, body.slice(0, 2000))
+  if (status >= 500) console.warn(`Server error ${status}`, body.slice(0, 2000))
   return err
 }
 
@@ -146,7 +147,7 @@ export function serverError(e: unknown): string {
   if (status && status >= 500)
     return translate("Something went wrong on the server. Try again in a moment.")
   if (status) return translate("That didn't go through. Please try again.")
-  console.warn("[kamra] unexpected error", e)
+  console.warn("Unexpected error", e)
   return translate("Something unexpected went wrong. Try again - if it keeps happening, let your admin know.")
 }
 
@@ -301,7 +302,7 @@ export async function callGuest<T = unknown>(
       credentials: "omit",
     })
   } catch (err) {
-    console.warn(`[kamra] network failure calling ${path}`, err)
+    console.warn(`Network failure calling ${path}`, err)
     window.dispatchEvent(new Event("kamra:offline"))
     throw Object.assign(
       new Error("You seem to be offline. Check your connection and try again."),
@@ -329,6 +330,7 @@ export const enabledModules = () =>
   })
 
 export interface ReservationRow {
+  room_number: string | null
   name: string
   guest_name: string
   room_type: string
@@ -367,6 +369,9 @@ export interface Snapshot {
   date: string
   business_date?: string | null
   arrivals: ReservationRow[]
+  departures_due: ReservationRow[]
+  departures_overdue: ReservationRow[]
+  checked_out: ReservationRow[]
   departures: ReservationRow[]
   in_house: ReservationRow[]
   rooms: RoomRow[]
@@ -415,6 +420,8 @@ export interface BookingOptions {
     code: string
     is_default?: 0 | 1
   }[]
+  default_plan?: string | null
+  rate_plan_required?: boolean
   companies: {
     name: string
     company_name: string
@@ -449,7 +456,26 @@ export interface BookingOptions {
   }
 }
 
-export interface Quote {
+export interface ContractTariff {
+  currency: string
+  nightly: number
+  property_currency: string
+  fx_rate: number
+  fx_date: string
+}
+
+export interface TariffReference {
+  tariff?: ContractTariff | null
+  agreed_rate?: number | null
+}
+
+export interface TaxBasis {
+  label: string
+  rate: number
+  inclusive: boolean | 0 | 1
+}
+
+export interface Quote extends TariffReference {
   nights: number
   /** same-day stay: nights is 0 and one date is billed */
   day_use?: boolean
@@ -469,6 +495,7 @@ export interface Quote {
   amount_before_tax: number
   tax_percent: number
   tax_amount: number
+  tax_basis?: TaxBasis | null
   amount_after_tax: number
   /** what cancelling would cost, judged from today by the same rules as
    * cancellation_preview - free_until is never in the past */
@@ -495,7 +522,7 @@ export const getDefaultProperty = () =>
 
 // Active property - set by the header switcher, read at call time.
 let currentProperty =
-  localStorage.getItem("kamra_property") || DEMO_PROPERTY
+  localStorage.getItem("kamra_property") || (whiteLabel() ? "" : DEMO_PROPERTY)
 
 export function getCurrentProperty() {
   return currentProperty
@@ -507,6 +534,8 @@ export function setCurrentProperty(p: string) {
 }
 
 export interface PropertyRow {
+  business_date: string
+  calendar_date: string
   name: string
   property_name: string
   city: string | null
@@ -547,6 +576,9 @@ export interface QuoteParams {
   voucher_code?: string
   over_capacity_charge?: number
   pets?: number
+  extra_beds?: number
+  check_in_time?: string
+  check_out_time?: string
   /** nights the desk priced by hand; the rest are priced by Kamra */
   night_prices?: NightPrice[]
 }
@@ -626,6 +658,7 @@ export const createBooking = (
   call<{
     reservation: string
     room: string | null
+    room_number: string | null
     amount_after_tax: number
     status?: string
     credit_warning?: { company: string; reasons: string[]; overridden: boolean }
@@ -1732,10 +1765,10 @@ export const checkIn = (reservation: string) =>
 export const checkOut = (reservation: string) =>
   call("kamra.api.check_out", { reservation })
 
-export const setHousekeepingStatus = (room: string, status: string) =>
-  call("kamra.api.set_housekeeping_status", { room, status })
+export const setHousekeepingStatus = (room: string, status: string, reason?: string) =>
+  call("kamra.api.set_housekeeping_status", { room, status, reason })
 
-export interface ReservationDetail {
+export interface ReservationDetail extends TariffReference {
   name: string
   /** set when the stay is one room of a group booking */
   group: { name: string; group_name: string; rooms: number; to_check_in: number } | null
@@ -1912,19 +1945,6 @@ export const amendStay = (
     check_out_date,
     confirm_price,
   })
-
-/** Preview the new price, ask the user when it changes, then amend with the
- * price confirmed. Resolves null when the user declines. */
-export async function amendStayConfirmed(
-  reservation: string,
-  check_in_date: string,
-  check_out_date: string,
-  ask: (p: RepricePreview) => boolean,
-) {
-  const p = await amendStayPreview(reservation, check_in_date, check_out_date)
-  if (p.needs_confirmation && !ask(p)) return null
-  return amendStay(reservation, check_in_date, check_out_date, p.needs_confirmation ? 1 : 0)
-}
 
 export const setLateArrival = (reservation: string, late_arrival: boolean, eta?: string) =>
   call<{ ok: boolean }>("kamra.api.set_late_arrival", {

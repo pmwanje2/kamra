@@ -5,6 +5,9 @@ from html import escape
 
 import frappe
 from frappe.utils import get_url, strip_html
+from frappe.utils.dateutils import get_user_date_format
+
+from kamra.branding import brand_context, brand_logo, product_name, white_label
 
 # The SPA owns its own routing; never cache the boot shell.
 no_cache = 1
@@ -22,11 +25,9 @@ def get_context(context):
 	if not os.path.exists(index_path):
 		frappe.throw(
 			frappe._(
-				"Kamra front-end is not built. Run "
-				"<code>cd apps/kamra/frontend && yarn install && yarn build</code> "
-				"(Frappe Cloud runs this automatically on deploy)."
-			),
-			title="Kamra not built",
+				"{product} is temporarily unavailable. Contact your system administrator."
+			).format(product=escape(product_name())),
+			title=frappe._("Application not built"),
 		)
 
 	with open(index_path, encoding="utf-8") as f:  # nosemgrep: frappe-security-file-traversal -- serves the app's own built index.html from a fixed app path, not user input
@@ -35,8 +36,14 @@ def get_context(context):
 	csrf = frappe.sessions.get_csrf_token()
 	# The socket.io namespace is the site name, which is not the hostname on
 	# a custom domain - without it live updates silently never arrive.
-	site = json.dumps(frappe.local.site).replace("<", "\\u003c")
-	boot = f'<script>window.csrf_token = "{csrf}"; window.kamra_site = {site};</script>'
+	def script_json(value):
+		return json.dumps(value).replace("<", "\\u003c")
+
+	boot = (
+		f'<script>window.kamra_date_format = {script_json(get_user_date_format())}; '
+		f'window.csrf_token = {script_json(csrf)}; window.kamra_site = {script_json(frappe.local.site)}; '
+		f'window.kamra_brand = {script_json(brand_context(brand_logo()))};</script>'
+	)
 	# Inject before the module script so the token is set before the app boots.
 	html = html.replace("</head>", boot + "</head>", 1)
 	html = _with_meta(html, frappe.request.path if frappe.request else "/")
@@ -49,10 +56,16 @@ def get_context(context):
 # Link previews and most crawlers never run the SPA, so the guest pages get
 # their title, description and image in the HTML itself. Staff screens and
 # tokenized check-in links are kept out of search.
-_GUEST = re.compile(r"^/(?:$|(?:kamra/)?book(?:/|$)|(?:kamra/)?stay/([^/]+))")
+_GUEST = re.compile(r"^/(?:$|(?:(?:kamra|hotel)/)?book(?:/|$)|(?:(?:kamra|hotel)/)?stay/([^/]+))")
 
 
 def _with_meta(html: str, path: str) -> str:
+	product = escape(product_name())
+	title = product if white_label() else f"{product} PMS"
+	description = f"{product} — direct booking, front desk, housekeeping and billing."
+	html = re.sub(r"<title>.*?</title>", lambda _: f"<title>{title}</title>", html, count=1, flags=re.S)
+	html = re.sub(r'<meta\s+name="description"[^>]*>', lambda _: f'<meta name="description" content="{description}" />',
+	              html, count=1, flags=re.S)
 	match = _GUEST.match(path or "/")
 	if not match:
 		return html.replace("</head>", '<meta name="robots" content="noindex" /></head>', 1)
@@ -61,7 +74,7 @@ def _with_meta(html: str, path: str) -> str:
 		return html
 	if meta.get("lang"):
 		html = re.sub(r'<html lang="[^"]*"', f'<html lang="{escape(meta["lang"])}"', html, count=1)
-	html = re.sub(r"<title>.*?</title>", f"<title>{escape(meta['title'])}</title>", html, count=1, flags=re.S)
+	html = re.sub(r"<title>.*?</title>", lambda _: f"<title>{escape(meta['title'])}</title>", html, count=1, flags=re.S)
 	html = re.sub(r'<meta\s+name="description"[^>]*>', "", html, count=1, flags=re.S)
 	tags = [
 		f'<meta name="description" content="{escape(meta["description"])}" />',

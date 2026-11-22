@@ -85,6 +85,11 @@ City business tax is paid by the hotel, not added to the guest's rate. If
 a city ordinance charges guests a fee, type its name and percent here, or
 post a flat fee as a charge.
 
+Where the levy is a fixed amount per occupied room per night (a local
+hotel tax such as UGX 2,000 a night), set **Room levy per night** instead.
+It is quoted, posted and shown on the pro forma on the same Room levy line,
+and adds to the % when both are set. At 0 nothing changes.
+
 ## Saudi Arabia: ZATCA e-invoicing
 
 ### What Kamra does (Phase 1 - generation)

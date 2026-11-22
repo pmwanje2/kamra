@@ -11,7 +11,8 @@ import {
 import { subscribeRealtime } from "../lib/realtime"
 import { Badge } from "../components/ui/badge"
 import { cn } from "../lib/utils"
-import { asset } from "../lib/asset"
+import BrandMark from "../components/BrandMark"
+import { SERVICE_ROLE } from "../lib/brand"
 import Login from "./Login"
 import HkLaundry from "./HkLaundry"
 import { serverError } from "../lib/resource"
@@ -42,7 +43,7 @@ interface HkTask {
 }
 
 // who may pass an inspection or verify a clean - the server enforces the same rule
-const SUPERVISOR_ROLES = ["Housekeeping Supervisor", "Front Desk", "Hotel Admin", "System Manager", "Kamra Agent"]
+const SUPERVISOR_ROLES = ["Housekeeping Supervisor", "Front Desk", "Hotel Admin", "System Manager", SERVICE_ROLE]
 
 const isVideo = (url: string) => /\.(mp4|mov|webm|m4v|3gp|avi)$/i.test(url)
 
@@ -360,7 +361,7 @@ export default function HkApp() {
   return (
     <div className="min-h-screen bg-zinc-50 pb-20">
       <header className="sticky top-0 z-40 flex items-center gap-2 border-b border-zinc-200 bg-white px-4 py-3">
-        <img src={asset("kamra-mark.svg")} alt="" className="size-6" aria-hidden />
+        <BrandMark className="size-6" decorative />
         <span className="font-semibold">{t("Housekeeping")}</span>
         <span className="ml-auto flex items-center gap-3">
           <button

@@ -486,7 +486,7 @@ function ReadIdButton({ guest, idType, idTypes, onDone }: {
   return (
     <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-2 text-xs print:hidden">
       <label className="flex basis-full items-start gap-1.5 text-zinc-500"
-        title={t("The guest must know their ID is read by Kamra's verification partner")}>
+        title={t("The guest must know their ID is read by the ID verification partner")}>
         <input type="checkbox" className="mt-0.5" checked={told} onChange={(e) => setTold(e.target.checked)} />
         {t("Guest told their ID is read by our verification partner")}
       </label>
@@ -496,7 +496,7 @@ function ReadIdButton({ guest, idType, idTypes, onDone }: {
       </select>
       <button type="button" disabled={busy || !told}
         className="font-medium text-brand-700 hover:underline disabled:opacity-50"
-        title={t("Kamra Verify reads the ID and fills the profile. Charged per read to your Kamra Connect wallet.")}
+        title={t("ID verification partner reads the ID and fills the profile. Charged per read to your verification wallet.")}
         onClick={async () => {
           setBusy(true); setMsg(null)
           try {

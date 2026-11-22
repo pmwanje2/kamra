@@ -413,7 +413,7 @@ That photo couldn't be processed. Please retake it.,No se pudo procesar la foto.
 The ID didn't read cleanly. Scan it again.,El documento no se leyó bien. Escanéelo de nuevo.
 Nothing was scanned.,No se escaneó nada.
 That scan is too long to be an ID.,Ese escaneo es demasiado largo para ser un documento.
-"Kamra can't read this ID's code. Type the details in, and take a picture of the ID.",Kamra no puede leer el código de este documento. Escriba los datos y saque una foto del documento.
+"{product} can't read this ID's code. Type the details in, and take a picture of the ID.",{product} no puede leer el código de este documento. Escriba los datos y saque una foto del documento.
 Menu item not found.,No se encontró el plato del menú.
 An ingredient needs a name.,Un ingrediente necesita un nombre.
 This ingredient has stock history. Deactivate it instead.,Este ingrediente tiene historial de stock. Desactívelo.
@@ -452,7 +452,7 @@ A stay needs at least one adult.,Una estancia necesita al menos un adulto.
 Check-in date is in the past,La fecha de check-in ya pasó
 A stay joins or leaves a trip only through the trip itself.,Una estancia entra o sale de un viaje solo desde el propio viaje.
 Double Booking Blocked,Doble reserva bloqueada
-"{0} has no rooms of its own and the property has other villa types, so Kamra can't tell which rooms it takes. Add Room records under {0}, or assign a room before check-in.","{0} no tiene habitaciones propias y la propiedad tiene otros tipos de villa, así que Kamra no sabe qué habitaciones ocupa. Agregue registros de habitación en {0} o asigne una habitación antes del check-in."
+"{0} has no rooms of its own and the property has other villa types, so {product} can't tell which rooms it takes. Add Room records under {0}, or assign a room before check-in.","{0} no tiene habitaciones propias y la propiedad tiene otros tipos de villa, así que {product} no sabe qué habitaciones ocupa. Agregue registros de habitación en {0} o asigne una habitación antes del check-in."
 Minimum stay,Estancia mínima
 Room capacity,Capacidad de la habitación
 Over room capacity,Supera la capacidad de la habitación
@@ -517,7 +517,7 @@ A {0} bag can't move to {1}.,Una bolsa {0} no puede pasar a {1}.
 "The company has already paid part of this bill (or money it paid ahead was applied), so the checkout can't be undone. Finance can correct it on the account.","La empresa ya pagó parte de esta cuenta (o se aplicó dinero que pagó por adelantado), así que el check-out no se puede deshacer. Finanzas puede corregirlo en la cuenta."
 "A credit note or adjustment already changed this bill on the company's account, so the checkout can't be undone. Finance can correct it on the account.","Una nota de crédito o un ajuste ya cambió esta cuenta en la cuenta de la empresa, así que el check-out no se puede deshacer. Finanzas puede corregirlo en la cuenta."
 The tax return export,La exportación de la declaración de impuestos
-Kamra Verify isn't available yet.,Kamra Verify todavía no está disponible.
+The ID verification partner isn't available yet.,El servicio de verificación de identidad todavía no está disponible.
 Tax ID verification,Verificación de la identificación fiscal
 Guest ID verification,Verificación del documento del huésped
 {0} is not available for this property's country.,{0} no está disponible para el país de esta propiedad.
@@ -842,7 +842,7 @@ Switch the webhook on first.,Active primero el webhook.
 That is not a valid URL.,No es una URL válida.
 The host {0} can't be resolved.,No se puede resolver el host {0}.
 Unknown event {0}. Use one of: {1}.,Evento desconocido {0}. Use uno de: {1}.
-Kamra front-end is not built. Run <code>cd apps/kamra/frontend && yarn install && yarn build</code> (Frappe Cloud runs this automatically on deploy).,El frontend de Kamra no está compilado. Ejecute <code>cd apps/kamra/frontend && yarn install && yarn build</code> (Frappe Cloud lo hace automáticamente al desplegar).
+{product} is temporarily unavailable. Contact your system administrator.,{product} no está disponible temporalmente. Póngase en contacto con el administrador del sistema.
 "VAT number (15 digits, starting and ending with 3)",Número de IVA (15 dígitos; empieza y termina con 3)
 Seller name,Nombre del vendedor
 Commercial Registration,Registro comercial
@@ -935,7 +935,7 @@ Invoice {0} for {1} was due on {2} and is {3} days overdue.,La factura {0} por {
 Item,Artículo
 Items,Artículos
 Items by menu,Artículos por menú
-Kamra report,Informe de Kamra
+{product} report,Informe de {product}
 Laundry orders,Pedidos de lavandería
 Laundry pack,Paquete de Lavandería
 Lost and found,Objetos perdidos
@@ -1051,7 +1051,7 @@ This guest has not agreed to marketing messages.,Este huésped no ha aceptado re
 You will get offers from {0} on WhatsApp. Reply STOP at any time to opt out.,Recibirá ofertas de {0} por WhatsApp. Responda BAJA en cualquier momento para darse de baja.
 You will no longer get offers from {0}. Booking and stay messages continue. Reply START to opt in again.,Ya no recibirá ofertas de {0}. Los mensajes de reserva y estancia continúan. Responda START para volver a suscribirse.
 AI Provider,Proveedor de IA
-"Your AI provider will act as {0}, within your role. Prices, taxes and availability stay in Kamra. Every action is recorded under your name in the Activity log.","Su proveedor de IA actuará como {0}, con los permisos de su rol. Los precios, los impuestos y la disponibilidad se gestionan en Kamra. Cada acción se registra con su nombre en el registro de Actividad."
+"Your AI provider will act as {0}, within your role. Prices, taxes and availability stay in {product}. Every action is recorded under your name in the Activity log.","Su proveedor de IA actuará como {0}, con los permisos de su rol. Los precios, los impuestos y la disponibilidad se gestionan en {product}. Cada acción se registra con su nombre en el registro de Actividad."
 Tax,Impuestos
 {0} bill from {1},Factura de {0} de {1}
 {0} to {1},{0} a {1}
@@ -1088,7 +1088,6 @@ Extend unchecked-out departures one night,Extender una noche las salidas sin che
 The guest owes {0} - nothing is due back to refund.,El huésped debe {0}; no hay nada que devolver.
 Only {0} is due back to the guest - can't refund more than that.,Solo se le deben {0} al huésped; no se puede devolver más.
 Room type code {0} is already used at this property.,El código de tipo de habitación {0} ya se usa en esta propiedad.
-There are no room nights on this bill yet. A discount comes off posted nights: give it after night audit or at check-out.,Todavía no hay noches en esta cuenta. El descuento se aplica a las noches cargadas: déselo después de la auditoría nocturna o en el check-out.
 Enter a discount above zero.,Ingrese un descuento mayor que cero.
 A discount can't be more than 100%.,Un descuento no puede superar el 100%.
 The discount is more than the room nights on the bill ({0}).,El descuento supera las noches de la cuenta ({0}).
@@ -1123,17 +1122,39 @@ Bills still open,Cuentas aún abiertas
 Use Check out to check a guest out: it makes sure every bill is cleared first.,Usa Check-out para dar salida al huésped: primero comprueba que todas las cuentas estén saldadas.
 Check out,Check-out
 Discounts and allowances,Descuentos y bonificaciones
-"{0} is not a Kamra language.","{0} no es un idioma de Kamra."
+{0} is not a {product} language.,{0} no es un idioma de {product}.
 "{0} is switched off. Turn it on from Languages in Settings.","{0} está desactivado. Actívelo en Idiomas, dentro de Configuración."
 No room mappings yet - map your room types to the provider's room and rate ids first.,Todavía no hay asociaciones de habitaciones: primero asocie sus tipos de habitación a los ids de habitación y de tarifa del proveedor.
 No room type matches it.,No coincide con ningún tipo de habitación.
 Provider rate plan {0} is already mapped on this connection.,El plan de tarifa {0} del proveedor ya está asociado en esta conexión.
 "Rate plan {0} adds a fixed amount: on the channels it applies every night, on direct bookings once per stay.","El plan de tarifa {0} suma un importe fijo: en las plataformas se aplica cada noche, en la venta directa una vez por estancia."
 "Rate plan {0} belongs to {1}, not to this connection's property {2}.","El plan de tarifa {0} pertenece a {1}, no a la propiedad {2} de esta conexión."
-Rate plan {0} is priced per person; Kamra sends one price per room.,El plan de tarifa {0} tiene precio por persona; Kamra envía un precio por habitación.
-"Room type {0} belongs to {1}, not to this connection's property {2}.","El tipo de habitación {0} pertenece a {1}, no a la propiedad {2} de esta conexión."
-Several rate plans of this room match no Kamra rate plan: map them by hand.,Varios planes de tarifa de esta habitación no coinciden con ningún plan de Kamra: asócielos a mano.
-The channel manager has {0} rooms of {1}; Kamra has {2}.,El gestor de canales tiene {0} habitaciones de {1}; Kamra tiene {2}.
+Rate plan {0} is priced per person; {product} sends one price per room.,El plan de tarifa {0} tiene precio por persona; {product} envía un precio por habitación.
+Several rate plans of this room match no {product} rate plan: map them by hand.,Varios planes de tarifa de esta habitación no coinciden con ningún plan de {product}: asócielos a mano.
+The channel manager has {0} rooms of {1}; {product} has {2}.,El gestor de canales tiene {0} habitaciones de {1}; {product} tiene {2}.
 The channel manager sells in {0}; this property is in {1}.,El gestor de canales vende en {0}; esta propiedad está en {1}.
 The channel manager's property time zone is {0}; this property's is {1}.,La zona horaria de la propiedad en el gestor de canales es {0}; la de esta propiedad es {1}.
 {0} does not take ARI changes.,{0} no admite el envío de disponibilidad y tarifas por cambios.
+Quotation {0} from {1},Cotización {0} de {1}
+"Dear {0}, please find your quotation for {1} to {2} attached. Reference {3}.",Estimado/a {0}: adjuntamos su cotización del {1} al {2}. Referencia {3}.
+Issued {0},Emitida el {0}
+Free cancellation until {0}; after that {1} is charged.,Cancelación gratuita hasta el {0}; después se cobra {1}.
+Free cancellation.,Cancelación gratuita.
+Cancelling now is charged {0}.,Cancelar ahora cobra {0}.
+Room prices exclude meals and extras unless stated. Tax as applicable on the day of stay.,Los precios de las habitaciones no incluyen comidas ni extras salvo que se indique. Impuestos según corresponda el día de la estancia.
+Rate / night,Tarifa / noche
+Deposit to confirm,Depósito para confirmar
+{0} night(s),{0} noche(s)
+Meal plan: {0},Plan de comidas: {0}
+Discount: voucher {0},Descuento: cupón {0}
+Adjustment to the booked price,Ajuste al precio reservado
+"Meal plan included: {0}, as priced above.","Plan de comidas incluido: {0}, según el precio indicado arriba."
+Room only: meals are not included.,Solo alojamiento: las comidas no están incluidas.
+The lines above plus tax make up the total. Anything else taken during the stay is billed separately.,Las líneas anteriores más los impuestos forman el total. Cualquier otro consumo durante la estancia se factura aparte.
+Price,Precio
+This quotation was emailed less than a minute ago. Wait a minute before sending the same quotation again.,Esta cotización se envió por correo hace menos de un minuto. Espera un minuto antes de volver a enviar la misma cotización.
+Cleaning fee,Tarifa de limpieza
+Stay as booked,Estancia según la reserva
+Extra guests by arrangement,Huéspedes adicionales según lo acordado
+Room levy,Tasa por habitación
+"No nights are posted yet. Use Advance bill to post the stay now, then give the discount, or use a rate plan or promo code at booking.","Todavía no hay noches cargadas. Use «Facturar por adelantado» para cargar la estancia ahora y luego dé el descuento, o use un plan de tarifa o un código promocional al reservar."

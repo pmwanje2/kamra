@@ -7,6 +7,7 @@ import { APP_TILE, useConnectedApps, visibleApps, type AppDef } from "../lib/app
 import ConnectedAppIcon from "../components/ConnectedAppIcon"
 import { cn } from "../lib/utils"
 import { useT } from "../lib/i18n"
+import { whiteLabel } from "../lib/brand"
 
 /** The suite launcher - the "all apps" home. Opens an app by routing to its
  *  first screen. Also the front door to the Marketplace. */
@@ -33,7 +34,7 @@ export default function AppLauncher() {
       <header>
         <h1 className="text-xl font-semibold tracking-tight text-zinc-900">{t("Your apps")}</h1>
         <p className="mt-0.5 text-sm text-zinc-500">
-          {t("Everything Kamra does, one room at a time. Pick where you want to work.")}
+          {t("Everything {product} does, one room at a time. Pick where you want to work.")}
         </p>
       </header>
 
@@ -84,7 +85,7 @@ export default function AppLauncher() {
         </section>
       )}
 
-      {canMarket && (
+      {!whiteLabel() && canMarket && (
         <button
           onClick={() => navigate("/marketplace")}
           className="flex w-full items-center gap-3 rounded-lg border border-dashed border-zinc-300 bg-white p-3.5 text-left hover:border-zinc-400 hover:bg-zinc-50"

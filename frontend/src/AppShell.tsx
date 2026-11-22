@@ -37,14 +37,15 @@ import {
   setCurrentProperty,
   type PropertyRow,
 } from "./lib/api"
-import { asset } from "./lib/asset"
+import BrandMark from "./components/BrandMark"
+import { brandTitle, product, SERVICE_ROLE, upstreamHome, whiteLabel } from "./lib/brand"
 import { useAuth } from "./lib/auth"
 import { subscribeRealtime } from "./lib/realtime"
 import { getTheme, setTheme } from "./lib/theme"
 import { setLang } from "./lib/dir"
 import { useOfferedLanguages, useT } from "./lib/i18n"
 import { loadLocale } from "./lib/money"
-import { cn } from "./lib/utils"
+import { cn, formatDate } from "./lib/utils"
 import { useKiosk } from "./lib/kiosk"
 import { getSiteInfo, versionLabel } from "./lib/siteInfo"
 import AlertSettings from "./components/AlertSettings"
@@ -89,7 +90,7 @@ export interface ShellContext {
 // mirrors @require_roles on kamra.api.create_booking / walk_in (admins always pass)
 const BOOKING_ROLES = [
   "Front Desk",
-  "Kamra Agent",
+  SERVICE_ROLE,
   "Hotel Admin",
   "System Manager",
   "Administrator",
@@ -396,7 +397,7 @@ export default function AppShell() {
     getSiteInfo().then((info) => {
       setBuild(versionLabel(info))
       setBrand({ name: info.brand_name ?? null, logo: info.brand_logo ?? null })
-      document.title = info.brand_name ? `${info.brand_name} · Kamra PMS` : "Kamra PMS"
+      document.title = !whiteLabel() && info.brand_name ? `${info.brand_name} · ${brandTitle()}` : brandTitle()
     })
   }, [])
 
@@ -418,13 +419,24 @@ export default function AppShell() {
     }
   }, [navOpen])
 
+  const activeProperty = properties.find(p => p.name === property)
+  const [businessRevision, setBusinessRevision] = useState(0)
   useEffect(() => {
+    const changed = () => setBusinessRevision(n => n + 1)
+    window.addEventListener("kamra:business-date", changed)
+    window.addEventListener("focus", changed)
+    const timer = window.setInterval(changed, 60000)
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", changed); window.removeEventListener("kamra:business-date", changed) }
+  }, [])
+  useEffect(() => {
+    let live = true
     myProperties().then((props) => {
+      if (!live) return
       setProperties(props)
       if (props.length === 0) {
         // Fresh install / Frappe Cloud: force setup wizard, not empty Desk.
         if (
-          location.pathname !== "/setup" &&
+          !whiteLabel() && location.pathname !== "/setup" &&
           !location.pathname.startsWith("/setup/")
         ) {
           navigate("/setup", { replace: true })
@@ -436,6 +448,10 @@ export default function AppShell() {
         setProperty(props[0].name)
       }
     })
+    return () => { live = false }
+  }, [location.pathname, navigate, property, businessRevision])
+
+  useEffect(() => {
     call<{ demo_mode: boolean }>("kamra.public_api.site_info")
       .then((info) => setDemoMode(info.demo_mode))
       .catch(() => setDemoMode(false))
@@ -487,7 +503,8 @@ export default function AppShell() {
   // the switcher / launcher / palette name the app they open (state.app)
   const routeApp = appForPath(
     location.pathname, apps,
-    (location.state as { app?: string } | null)?.app ?? lastApp.current,
+    location.pathname === "/settings/fnb" ? undefined :
+      (location.state as { app?: string } | null)?.app ?? lastApp.current,
   )
   const currentApp = apps.some((a) => a.id === routeApp.id) ? routeApp : apps[0]
   useEffect(() => {
@@ -597,18 +614,18 @@ export default function AppShell() {
       aria-label={t("Home")}
       className="flex items-center gap-2 rounded-lg px-1 outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
     >
-      <img src={brand.logo || asset("kamra-mark.svg")} alt="" className="size-7 object-contain" aria-hidden />
-      {brand.name ? (
+      <BrandMark legacyLogo={whiteLabel() ? undefined : brand.logo} className="size-7" decorative />
+      {!whiteLabel() && brand.name ? (
         <span className="min-w-0 leading-tight">
           <span className="block truncate text-sm font-semibold text-zinc-900">{brand.name}</span>
-          <span className="block text-[10px] font-semibold tracking-[0.2em] text-brand-600">KAMRA PMS</span>
+          <span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-brand-600">{brandTitle()}</span>
         </span>
       ) : (
         <span className="text-lg font-semibold tracking-tight text-zinc-900">
-          kamra
-          <span className="ml-1 align-middle text-[10px] font-semibold tracking-[0.2em] text-brand-600">
+          {product()}
+          {!whiteLabel() && <span className="ml-1 align-middle text-[10px] font-semibold tracking-[0.2em] text-brand-600">
             PMS
-          </span>
+          </span>}
         </span>
       )}
     </NavLink>
@@ -635,12 +652,12 @@ export default function AppShell() {
       <div className="mt-auto pt-6">
         <AlertSettings />
       </div>
-      {build ? (
+      {!whiteLabel() && build ? (
         <p
           className="px-2.5 pt-2 text-[11px] text-zinc-400"
-          title={t("The Kamra version this site is running")}
+          title={t("The {product} version this site is running")}
         >
-          Kamra v{build}
+          {product()} v{build}
         </p>
       ) : null}
     </>
@@ -651,20 +668,20 @@ export default function AppShell() {
     // content scrolls; everything else keeps normal page flow.
     <div className={cn("flex min-h-screen flex-col", floor && "lg:h-screen")}>
       <NotificationHost />
-      {demoMode && !kiosk && (
+      {!whiteLabel() && demoMode && !kiosk && (
         <div className="bg-amber-500 px-4 py-1.5 text-center text-xs font-medium text-amber-950">
           {t("Shared playground, not your hotel. Data is wiped every night.")}
           {" "}
           <a
-            href="https://kamrapms.com"
+            href={upstreamHome()}
             className="underline underline-offset-2 hover:text-black"
           >
-            {t("Get your own Kamra →")}
+            {t("Get your own {product} →")}
           </a>
         </div>
       )}
-      {!kiosk && !demoMode && <UpdateNag />}
-      {!kiosk && !demoMode && <SetupNag />}
+      {!whiteLabel() && !kiosk && !demoMode && <UpdateNag />}
+      {!whiteLabel() && !kiosk && !demoMode && <SetupNag />}
       <div className="flex min-h-0 flex-1">
       {!kiosk && (
       <aside className="hidden w-56 shrink-0 flex-col border-r border-zinc-200 bg-white px-3 py-5 sm:sticky sm:top-0 sm:flex sm:h-screen sm:overflow-y-auto sm:overscroll-contain">
@@ -704,7 +721,7 @@ export default function AppShell() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         {!kiosk && (
-        <header className="sticky top-0 z-40 flex min-w-0 items-center gap-2 border-b border-zinc-200 bg-white/90 px-4 py-2.5 backdrop-blur">
+        <header className="sticky top-0 z-40 flex min-w-0 items-center flex-wrap gap-1 border-b border-zinc-200 bg-white/90 px-2 sm:gap-2 sm:px-4 py-2.5 backdrop-blur">
           <button
             type="button"
             className="grid size-8 shrink-0 place-items-center rounded-md text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 sm:hidden"
@@ -735,7 +752,11 @@ export default function AppShell() {
               {properties[0]?.property_name ?? ""}
             </span>
           )}
-          <div className="flex min-w-0 flex-1 justify-center px-2">
+          {activeProperty && <div className="order-last flex w-full flex-wrap items-center gap-2 text-xs sm:order-none sm:w-auto" aria-live="polite">
+            <span className="rounded bg-zinc-100 px-2 py-1"><span className="sr-only sm:not-sr-only">{t("Business date")} · </span>{formatDate(activeProperty.business_date)}</span>
+            {activeProperty.business_date !== activeProperty.calendar_date && <span className="rounded bg-amber-50 px-2 py-1 text-amber-800">{t("Calendar {date} · End of Day pending", {date: formatDate(activeProperty.calendar_date)})}</span>}
+          </div>}
+          <div className="flex min-w-0 flex-1 justify-center sm:px-2">
             <div className="hidden w-full max-w-md lg:block">
               <SearchShortcut />
             </div>

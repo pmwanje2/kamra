@@ -1,15 +1,15 @@
 import { useCallback, useSyncExternalStore } from "react"
 import { LANGS, getLang, offeredLangs, type LangDef } from "./dir"
 import { dictionaryFor } from "./locales"
+import { assistant, product } from "./brand"
 
 export type Vars = Record<string, string | number>
 
 /** Replace `{name}` placeholders in a template. Arabic (and others) can
  * reorder words by placing the same placeholders differently. */
 function interpolate(template: string, vars?: Vars): string {
-  if (!vars) return template
   return template.replace(/\{(\w+)\}/g, (_, k: string) =>
-    vars[k] !== undefined && vars[k] !== null ? String(vars[k]) : `{${k}}`,
+    k === "product" ? product() : k === "assistant" ? assistant() : String(vars?.[k] ?? `{${k}}`),
   )
 }
 

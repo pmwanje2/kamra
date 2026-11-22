@@ -1,3 +1,5 @@
+import { SettlementPreview, useSettlementQuote } from "./SettlementPreview"
+import TenderPicker, { resolveTender, tenderAmount, tenderModes, tenderReady, useTenderRates } from "./TenderPicker"
 /*  Take a deposit on a booking before arrival (#114): record it as paid at
     the desk, or send the guest a payment link. Either way it lands on the
     guest folio as an Advance, so the balance at check-in is right. Used in
@@ -5,7 +7,7 @@
 
 import { useState } from "react"
 import { Check, Copy, Link2, MessageCircle } from "lucide-react"
-import { call, newIdempotencyKey } from "../lib/api"
+import { getCurrentProperty, call, newIdempotencyKey } from "../lib/api"
 import { serverError } from "../lib/resource"
 import { useCashierAuth } from "../lib/cashierAuth"
 import { cur, useLocale, fmtAmount } from "../lib/money"
@@ -42,7 +44,15 @@ export default function DepositPanel(props: {
   const { deposit } = props
   const [mode, setMode] = useState<"record" | "link" | null>(null)
   const [amount, setAmount] = useState(String(deposit.due || ""))
-  const [payMode, setPayMode] = useState(loc.payment_modes[0] ?? "Cash")
+  const [requested, setRequested] = useState({ mode: "", currency: "" })
+  const property = getCurrentProperty()
+  const { today: buyRates } = useTenderRates(property, mode === "record")
+  const modes = tenderModes(loc, loc.currency)
+  const tender = resolveTender(modes, loc.currency, requested)
+  const payCurrency = tender.currency
+  const foreign = mode === "record" && !!payCurrency && payCurrency !== loc.currency
+  const paymentReady = tenderReady(tender, loc.currency, buyRates)
+  const fx = useSettlementQuote(property, foreign && paymentReady ? payCurrency : "", Number(amount))
   const [reference, setReference] = useState("")
   // one key per "Take advance": a retry after a lost response replays
   const [advKey, setAdvKey] = useState(newIdempotencyKey)
@@ -56,6 +66,7 @@ export default function DepositPanel(props: {
   if (!deposit.can_take && !deposit.paid) return null
 
   function open(m: "record" | "link") {
+    setRequested({ mode: "", currency: "" })
     setMode(m)
     setError(null)
     setAmount(String(deposit.due || ""))
@@ -65,11 +76,13 @@ export default function DepositPanel(props: {
     setBusy(true)
     setError(null)
     try {
+      if (!paymentReady) throw new Error(t("Choose an available payment method and currency."))
+      if (foreign && !fx?.quote) throw new Error(fx?.error || t("Wait for the settlement preview."))
       if (pinStatus?.required) await ensureUnlocked()
       const r = await call<{ deposit: DepositState }>("kamra.api.record_advance", {
         reservation: props.reservation,
         amount: Number(amount),
-        mode: payMode,
+        mode: tender.mode, currency: foreign ? payCurrency : undefined, quote_id: fx?.quote?.quote_id,
         reference: reference.trim() || undefined,
         idempotency_key: advKey,
       })
@@ -203,6 +216,12 @@ export default function DepositPanel(props: {
 
       {mode && (
         <div className="mt-3 space-y-3 rounded-lg bg-zinc-50 p-3">
+          {mode === "record" && <TenderPicker home={loc.currency} chosen={tender} modes={modes} rates={buyRates}
+            onChange={(choice) => {
+              setRequested(choice)
+              if (choice.currency !== payCurrency) setAmount(tenderAmount(deposit.due, choice.currency, loc.currency, buyRates))
+            }} />}
+          {foreign && <SettlementPreview result={fx} amount={Number(amount)} balance={deposit.due}/>}
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-zinc-600">{t("Amount")}</span>
             <input
@@ -218,26 +237,7 @@ export default function DepositPanel(props: {
 
           {mode === "record" && (
             <>
-              <div role="radiogroup" aria-label={t("Payment mode")} className="flex flex-wrap gap-2">
-                {loc.payment_modes.map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    role="radio"
-                    aria-checked={payMode === m}
-                    onClick={() => setPayMode(m)}
-                    className={
-                      "rounded-lg border px-3 py-1.5 text-sm font-medium " +
-                      (payMode === m
-                        ? "border-brand-600 bg-brand-50 text-brand-800"
-                        : "border-zinc-200 bg-white text-zinc-600")
-                    }
-                  >
-                    {t(m)}
-                  </button>
-                ))}
-              </div>
-              {payMode !== "Cash" && (
+              {tender.mode && tender.mode !== "Cash" && (
                 <input
                   className={inputCls}
                   placeholder={t("Card slip / transfer ref (optional)")}
@@ -246,8 +246,8 @@ export default function DepositPanel(props: {
                 />
               )}
               <div className="flex gap-2">
-                <Button disabled={busy || !(Number(amount) > 0)} onClick={record}>
-                  {busy ? t("Saving…") : t("Record {amt}", { amt: fmt(Number(amount) || 0) })}
+                <Button disabled={busy || !paymentReady || !(Number(amount) > 0) || (foreign && !fx?.quote)} onClick={record}>
+                  {busy ? t("Saving…") : t("Record {amt}", { amt: foreign?`${payCurrency} ${amount}`:fmt(Number(amount) || 0) })}
                 </Button>
                 <Button variant="ghost" onClick={() => setMode(null)}>
                   {t("Cancel")}
@@ -259,7 +259,7 @@ export default function DepositPanel(props: {
           {mode === "link" && !link && (
             <div className="flex gap-2">
               <Button disabled={busy || !(Number(amount) > 0)} onClick={sendLink}>
-                {busy ? t("Creating…") : t("Create link for {amt}", { amt: fmt(Number(amount) || 0) })}
+                {busy ? t("Creating…") : t("Create link for {amt}", { amt: foreign?`${payCurrency} ${amount}`:fmt(Number(amount) || 0) })}
               </Button>
               <Button variant="ghost" onClick={() => setMode(null)}>
                 {t("Cancel")}

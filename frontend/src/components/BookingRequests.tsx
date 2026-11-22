@@ -16,7 +16,9 @@ import { useAuth } from "../lib/auth"
 
 
 // kamra.booking_requests.booking_requests: Front Desk, plus the admins
-const INBOX_ROLES = ["Front Desk", "Hotel Admin", "System Manager", "Administrator", "Kamra Agent"]
+import { SERVICE_ROLE } from "../lib/brand"
+
+const INBOX_ROLES = ["Front Desk", "Hotel Admin", "System Manager", "Administrator", SERVICE_ROLE]
 
 type BookingRequest = {
   name: string

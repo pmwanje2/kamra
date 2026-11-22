@@ -6,13 +6,14 @@ the four Opera ledgers (Guest / Deposit / AR / Package) can be balanced."""
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Callable
 from decimal import ROUND_HALF_UP, ROUND_UP, Decimal
 from typing import Any
 
 import frappe
-from frappe.utils import getdate, now_datetime, nowdate
+from frappe.utils import cint, flt, getdate, now_datetime, nowdate
 
 from kamra.authz import require_roles
 from kamra.business_date import get_business_date
@@ -281,8 +282,10 @@ def _advance_held(folio: str, payment_row: str) -> float:
 	return round(float(frappe.db.sql(
 		"""SELECT COALESCE(SUM(credit - debit), 0) FROM `tabFolio Ledger Entry`
 		   WHERE ledger = 'Deposit' AND source_doctype = 'Folio Payment'
-		     AND source_name = %s AND folio = %s""",
-		(payment_row, folio))[0][0] or 0), 2)
+		     AND folio = %s AND (source_name = %s OR source_name IN (
+		       SELECT name FROM `tabFolio Payment` WHERE parent = %s AND parenttype = 'Folio'
+		       AND refund_of = %s AND correction_signature IS NOT NULL))""",
+		(folio, payment_row, folio, payment_row))[0][0] or 0), 2)
 
 
 def transfer_advances_to_guest(reservation: str,
@@ -1784,10 +1787,24 @@ def force_advance_bill(reservation: str, nights: str = "entire",
 
 @frappe.whitelist(methods=["POST"])
 @require_roles("Front Desk", "Finance", "Kamra Agent")
-def generate_proforma(folio: str, notes: str | None = None):
+def generate_proforma(folio: str, notes: str | None = None,
+                      include_projected: int = 1):
+	"""A pro forma bill: an estimate, never an invoice. For a stay still in
+	progress (Checked In, or Confirmed with a deposit folio) it adds the
+	nights check-out will post as `projected_lines` (each projected: True)
+	and an `estimate` of posted + projected - worked out by the writer
+	check-out uses, in a savepoint that is always rolled back, so nothing
+	is posted. include_projected=0 prints the posted folio only."""
 	from kamra.api import folio_invoice
 	inv = folio_invoice(folio)
 	f = inv["folio"]
+	if cint(include_projected):
+		inv["projected_lines"] = _projected_lines(f)
+		posted = flt(f.get("grand_total"))
+		ahead = round(sum(flt(l["total"]) for l in inv["projected_lines"]), 2)
+		inv["estimate"] = {"posted_total": round(posted, 2), "projected_total": ahead,
+		                   "grand_total": round(posted + ahead, 2),
+		                   "balance": round(flt(f.get("balance")) + ahead, 2)}
 	doc = frappe.get_doc({
 		"doctype": "Proforma Folio",
 		"property": f.get("property"),
@@ -1802,6 +1819,34 @@ def generate_proforma(folio: str, notes: str | None = None):
 	})
 	doc.insert(ignore_permissions=True)
 	return {"proforma": doc.name, "invoice": inv}
+
+
+def _projected_lines(f) -> list[dict]:
+	"""The room nights (and their levies, extra guests) check-out would
+	still post to this folio, as estimate lines. Posted inside a savepoint
+	that is rolled back, with whatever the writes queued forgotten."""
+	if f.get("status") != "Open" or not f.get("reservation"):
+		return []
+	res = frappe.get_doc("Reservation", f.get("reservation"))
+	if res.status not in ("Checked In", "Confirmed"):
+		return []
+	from kamra.checkout import _NoTrace
+	from kamra.folio import post_remaining_nights
+	before = set(frappe.get_all("Folio Charge", filters={"parent": f.get("name")},
+	                            pluck="name"))
+	lines = []
+	with _NoTrace("kamra_proforma_projection"):
+		post_remaining_nights(res)
+		for c in frappe.get_doc("Folio", f.get("name")).charges:
+			if c.name in before:
+				continue
+			lines.append({
+				"posting_date": str(c.posting_date), "charge_type": c.charge_type,
+				"description": c.description, "qty": c.qty, "rate": c.rate,
+				"amount": c.amount, "gst_rate": c.gst_rate,
+				"gst_amount": c.gst_amount, "total": c.total, "projected": True,
+			})
+	return sorted(lines, key=lambda l: (l["posting_date"], l["charge_type"]))
 
 
 @frappe.whitelist(methods=["POST"])
@@ -1944,8 +1989,14 @@ def folio_history(property: str, query: str | None = None,
 		        or q in (r.invoice_number or "").lower()
 		        or q in (r.name or "").lower()
 		        or q in (r.reservation or "").lower()]
+	by_folio = {}
+	if rows:
+		for pay in frappe.get_all("Folio Payment", filters={"parenttype": "Folio", "parent": ["in", [r.name for r in rows]],
+			"fx_amount": ["!=", 0]}, fields=["parent", "currency", "fx_amount", "exchange_rate", "exchange_rate_date"], order_by="idx"):
+			by_folio.setdefault(pay.parent, []).append(pay)
 	# Attach reprint counts
 	for r in rows:
+		r["fx_payments"] = by_folio.get(r.name, [])
 		r["reprints"] = frappe.db.count("Folio Reprint", {"folio": r.name})
 	return {"folios": rows}
 
@@ -2066,12 +2117,20 @@ def list_exchange_rates(property: str):
 	# Keep latest per currency
 	seen = set()
 	latest = []
+	today_rows = {}
+	duplicates = set()
 	for r in rows:
+		if str(r.rate_date) == str(today):
+			if r.currency in today_rows:
+				duplicates.add(r.currency)
+			today_rows[r.currency] = r
 		if r.currency in seen:
 			continue
 		seen.add(r.currency)
 		latest.append(r)
-	return {"business_date": today, "rates": latest}
+	return {"business_date": today, "rates": latest,
+	        "tender_rates": [r for c, r in today_rows.items()
+	                         if c not in duplicates and flt(r.buy_rate) > 0]}
 
 
 @frappe.whitelist(methods=["POST"])
@@ -2128,9 +2187,9 @@ def upsert_exchange_rate(property: str, currency: str, buy_rate: float,
 # free use, rates refresh once a day, rate limited (do not call more than
 # about hourly), and a page showing the rates must credit "Rates By Exchange
 # Rate API" with a link. Response shape:
-#   {"result": "success", "base_code": "INR",
+#   {"result": "success", "base_code": "USD",
 #    "time_last_update_utc": "Thu, 29 Oct 2026 00:02:31 +0000",
-#    "rates": {"INR": 1, "USD": 0.01189, ...}}   # foreign units per 1 base
+#    "rates": {"USD": 1, "UGX": 4048.218994, ...}}   # currency units per USD
 # and on failure {"result": "error", "error-type": "unsupported-code"}.
 # Swap the provider here; market_rates() is the only reader. A country
 # pack whose bills must use an official rate (a central bank's daily
@@ -2145,15 +2204,18 @@ def market_rates(home: str) -> tuple[dict, str | None]:
 	"""Market mid rates as home-currency units per 1 foreign unit, and the
 	provider's as-of time. Throws a plain message on any failure; never
 	called from a request that takes a payment. The reply is untrusted:
-	size-capped, its base must be our home currency, and a rate that isn't
+	size-capped, its base must be USD, and a rate that isn't
 	a finite positive number is dropped."""
 	import math
 
 	import requests
 	try:
-		if not (len(home) == 3 and home.isalpha()):
+		if not (len(home) == 3 and home.isascii() and home.isalpha()):
 			raise ValueError(f"home currency {home!r} is not an ISO code")
-		r = requests.get(FX_RATES_URL.format(base=home.upper()), timeout=FX_TIMEOUT_S,
+		home = home.upper()
+		# A home-based quote can round USD to a tiny number (e.g. 0.000248
+		# for UGX). Divide two USD-base rates instead of inverting that number.
+		r = requests.get(FX_RATES_URL.format(base="USD"), timeout=FX_TIMEOUT_S,
 		                 stream=True, allow_redirects=False)
 		r.raise_for_status()
 		body = r.raw.read(FX_MAX_BYTES + 1, decode_content=True)
@@ -2162,16 +2224,26 @@ def market_rates(home: str) -> tuple[dict, str | None]:
 		data = json.loads(body)
 		if data.get("result") != "success":
 			raise ValueError(data.get("error-type") or "no rates returned")
-		if str(data.get("base_code") or "").upper() != home.upper():
-			raise ValueError(f"rates are for {data.get('base_code')}, not {home}")
-		mids = {}
-		for c, v in (data.get("rates") or {}).items():
+		if str(data.get("base_code") or "").upper() != "USD":
+			raise ValueError(f"rates are for {data.get('base_code')}, not USD")
+		rates = data.get("rates") or {}
+		try:
+			home_per_usd = float(rates.get(home) or 0)
+		except (TypeError, ValueError, OverflowError):
+			home_per_usd = 0
+		if not math.isfinite(home_per_usd) or home_per_usd <= 0:
+			raise ValueError(f"{home} has no valid USD-base rate")
+		mids = {"USD": home_per_usd, home: 1.0}
+		for c, v in rates.items():
+			code = str(c).upper()
+			if code in (home, "USD"):
+				continue
 			try:
-				mid = 1 / float(v)
+				mid = home_per_usd / float(v)
 			except (TypeError, ValueError, ZeroDivisionError, OverflowError):
 				continue
 			if math.isfinite(mid) and mid > 0:
-				mids[str(c).upper()] = mid
+				mids[code] = mid
 	except Exception as e:
 		frappe.throw(f"Could not fetch exchange rates ({type(e).__name__}: {e}). "
 		             "Today's rates are unchanged; type them in on the Currency Desk.")
@@ -2393,24 +2465,43 @@ def home_to_fx(amount, rate) -> float:
 		Decimal("0.01"), rounding=ROUND_UP))
 
 
-def payment_rate(property: str, currency: str) -> dict:
-	"""The rate a foreign-currency payment converts at: the hotel's BUY
-	rate (it is buying the guest's foreign money) set for the current
-	business date. A rate from an earlier day is refused, not reused."""
+def _settlement_window() -> int:
+	if not frappe.db.exists("DocType", "Accounts Settings") or not frappe.get_meta(
+		"Accounts Settings").has_field("stale_days"):
+		return 1
+	return max(1, cint(frappe.db.get_single_value("Accounts Settings", "stale_days")))
+
+
+@frappe.whitelist()
+@require_roles("Front Desk", "Finance", "Night Auditor", "Kamra Agent")
+def payment_rate(property: str, currency: str, amount: float | None = None) -> dict:
+	"""Resolve the Finance-published buy rate for this property's open business day."""
+	from frappe.utils import add_days
 	currency = (currency or "").strip().upper()
-	if currency == home_currency(property):
+	home = home_currency(property)
+	if currency == home:
 		frappe.throw(f"{currency} is this hotel's own currency.")
 	bd = get_business_date(property)
-	row = frappe.db.get_value(
-		"Exchange Rate",
-		{"property": property, "currency": currency, "rate_date": bd,
-		 "disabled": 0},
-		["buy_rate", "rate_date"], as_dict=True)
-	if not row or float(row.buy_rate or 0) <= 0:
-		frappe.throw(f"No {currency} rate set for {bd}. Finance fetches "
-		             "or types today's rate on the Currency Desk first.")
-	return {"currency": currency, "rate": float(row.buy_rate),
-	        "rate_date": str(row.rate_date)}
+	window = _settlement_window()
+	rows = frappe.get_all("Exchange Rate", filters={"property": property, "currency": currency,
+		"rate_date": ["between", [add_days(bd, 1-window), bd]], "disabled": 0},
+		fields=["rate_date", "buy_rate", "max_exchange"], order_by="rate_date desc", limit_page_length=2)
+	if len(rows) == 2 and rows[0].rate_date == rows[1].rate_date:
+		frappe.throw(f"KMR-FX-002 / HSP-CASHIER-FX-RATE: Multiple {currency} rates on {rows[0].rate_date}. Ask Finance.")
+	if not rows or not flt(rows[0].buy_rate) > 0:
+		frappe.throw(f"KMR-FX-001 / HSP-CASHIER-FX-RATE: No {currency} rate set for {bd} within {window} day(s). Ask Finance.")
+	row = rows[0]
+	out = {"currency": currency, "rate": row.buy_rate, "rate_date": str(row.rate_date),
+	       "home_currency": home, "max_exchange": row.max_exchange, "window_days": window}
+	if amount is not None:
+		foreign = round_cents(amount)
+		if foreign <= 0 or (flt(row.max_exchange) > 0 and foreign > row.max_exchange):
+			frappe.throw("HSP-CASHIER-FX-LIMIT: Enter a positive amount within the published exchange limit.")
+		out["home_amount"] = fx_to_home(foreign, row.buy_rate)
+		# An opaque confirmation ties the preview to the exact terms, including a Finance rate change.
+		out["quote_id"] = hashlib.sha256(json.dumps([property, bd, currency, foreign,
+			str(row.rate_date), row.buy_rate, home]).encode()).hexdigest()
+	return out
 
 
 @frappe.whitelist()
@@ -2477,7 +2568,8 @@ def ensure_default_reason_codes() -> None:
 
 
 @frappe.whitelist()
-@require_roles("Front Desk", "Finance", "F&B Manager", "Kamra Agent")  # POS void reasons
+# POS void reasons; Revenue Manager for the Rate Change codes set_agreed_rate takes
+@require_roles("Front Desk", "Finance", "F&B Manager", "Kamra Agent", "Revenue Manager")
 def list_reason_codes(category: str | None = None):
 	ensure_default_reason_codes()
 	filters: dict[str, Any] = {"disabled": 0}

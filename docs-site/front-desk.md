@@ -366,7 +366,11 @@ leaving before the booked date starts with **Leaving early**:
    Housekeeping; a role that can't do it is told who can.
 2. **Late check-out.** Only when the guest leaves after your check-out
    time. Enter the fee your hotel charges and press **Add late check-out
-   fee**, or **Skip** to waive it. Kamra never suggests an amount.
+   fee**, or **Skip** to waive it. When the property sets a **Late
+   check-out fee** (*Settings -> Stay policies -> Check-in & check-out*:
+   a fixed amount or a % of a night), the box starts on that fee. A fee
+   above one night's room rate shows a warning and needs a tick to confirm
+   it, so the whole bill is never posted as a late fee by mistake.
 3. **Company bill.** Only when a company with credit pays part of the
    stay. It shows which folio moves to the company's account (the city
    ledger) and the company's credit check. Tick the box once the guest
@@ -432,6 +436,18 @@ again in the same room:
 It works until the night audit runs. It is refused if someone else is in
 the room, or if the company has already paid part of the bill; Finance
 corrects those on the account.
+
+### Undo a check-in
+
+Checked in the wrong guest or into the wrong room? Open the stay and press
+**Undo check-in**, then say why. The stay goes back to an arrival with its
+room, the room is marked Dirty for housekeeping to check, and keys on a
+connected lock system are cancelled. It works only on the hotel day of the
+arrival (before the night audit, even after midnight), while nothing is
+on the bill (no charge or payment line, a voided one included), no
+restaurant or laundry bill is open and no deposit is held. Otherwise check
+the guest out. Front Desk and Finance can undo a check-in; an AI agent can
+do it for them, but not where the property requires a cashier PIN.
 
 ## Look up a guest
 

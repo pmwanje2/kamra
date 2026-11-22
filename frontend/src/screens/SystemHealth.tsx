@@ -1,3 +1,4 @@
+import { product, upstreamDocs, whiteLabel } from "../lib/brand"
 import { useCallback, useEffect, useState } from "react"
 import {
   AlertTriangle,
@@ -9,8 +10,8 @@ import {
   XCircle,
 } from "lucide-react"
 import { call } from "../lib/api"
-import { serverError } from "../lib/resource"
-import { useT, t as translate } from "../lib/i18n"
+import { useT } from "../lib/i18n"
+import { formatDate } from "../lib/utils"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 
@@ -25,7 +26,7 @@ type HealthCheck = {
   link?: string | null
 }
 
-type HealthPayload = {
+type LegacyHealthPayload = {
   overall: CheckStatus
   summary: Record<CheckStatus, number>
   installed: { kamra: string; frappe: string | null; site: string }
@@ -47,6 +48,33 @@ type HealthPayload = {
     note: string
   }
   checks: HealthCheck[]
+}
+
+type PropertyHealth = {
+  property: string
+  status: CheckStatus
+  business_date: string
+  calendar_date: string
+  night_audit: {
+    last_business_date: string | null
+    status: string | null
+    completed_at: string | null
+    next_due: string | null
+  }
+}
+
+type OperationalHealthPayload = {
+  product: string
+  overall: CheckStatus
+  checked_at: string
+  properties: PropertyHealth[]
+  checks: Omit<HealthCheck, "link">[]
+}
+
+type HealthPayload = LegacyHealthPayload | OperationalHealthPayload
+
+function isOperational(data: HealthPayload): data is OperationalHealthPayload {
+  return "properties" in data && Array.isArray(data.properties)
 }
 
 const STATUS_STYLE: Record<
@@ -90,22 +118,61 @@ function StatusPill({ status }: { status: CheckStatus }) {
   )
 }
 
+function PropertyTime({ value }: { value: string | null }) {
+  // Preserve the property's civil clock rather than converting to browser time.
+  return value ? <time dateTime={value}>{formatDate(value.slice(0, 10))} {value.slice(11, 16)}</time> : "–"
+}
+
+function PropertyCard({ property }: { property: PropertyHealth }) {
+  const { t } = useT()
+  const audit = property.night_audit
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between gap-3">
+        <CardTitle>{property.property}</CardTitle>
+        <StatusPill status={property.status} />
+      </CardHeader>
+      <CardContent className="space-y-3 text-sm text-zinc-600">
+        <dl className="grid grid-cols-2 gap-3">
+          <div><dt>{t("Business date")}</dt><dd>{formatDate(property.business_date)}</dd></div>
+          <div><dt>{t("Calendar date")}</dt><dd>{formatDate(property.calendar_date)}</dd></div>
+        </dl>
+        <p className="font-medium text-zinc-800">{t("Night audit")}: {audit.status ? t(audit.status) : t("Not run yet")}</p>
+        <dl className="grid gap-3 sm:grid-cols-3">
+          <div><dt>{t("Last audited business date")}</dt><dd>{formatDate(audit.last_business_date)}</dd></div>
+          <div><dt>{t("Completed at")}</dt><dd><PropertyTime value={audit.completed_at} /></dd></div>
+          <div><dt>{t("Next scheduled audit")}</dt><dd>{audit.next_due ? <PropertyTime value={audit.next_due} /> : t("Not scheduled")}</dd></div>
+        </dl>
+      </CardContent>
+    </Card>
+  )
+}
+
 export default function SystemHealth() {
   const { t } = useT()
   const [data, setData] = useState<HealthPayload | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState(false)
   const [busy, setBusy] = useState(false)
+  const operational = data && isOperational(data) ? data : null
+  const legacy = data && !isOperational(data) && !whiteLabel() ? data : null
+  const checks = legacy?.checks ?? operational?.checks
 
   const load = useCallback(async (refresh = false) => {
     setBusy(true)
-    setError(null)
+    setError(false)
     try {
       const out = await call<HealthPayload>("kamra.health.system_health", {
         refresh: refresh ? 1 : 0,
       })
+      if (!out || (!isOperational(out) && (whiteLabel() || !out.installed || !out.latest || !out.upgrade))) {
+        setData(null)
+        setError(true)
+        return
+      }
       setData(out)
-    } catch (e) {
-      setError(serverError(e))
+    } catch {
+      // Raw transport or server errors may name the underlying stack.
+      setError(true)
     } finally {
       setBusy(false)
     }
@@ -124,9 +191,12 @@ export default function SystemHealth() {
             {t("System Health")}
           </h1>
           <p className="mt-0.5 text-sm text-zinc-500">
-            {t("Check the status of this Kamra site and whether a newer open-source release is available.")}
+            {legacy
+              ? t("Check the status of this {product} site and whether a newer open-source release is available.", { product: product() })
+              : t("Check the operational status of your properties.")}
           </p>
         </div>
+        {operational && <StatusPill status={operational.overall} />}
         <Button
           variant="outline"
           disabled={busy}
@@ -139,7 +209,7 @@ export default function SystemHealth() {
 
       {error && (
         <p className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
-          {translate(error)}
+          {t("Could not load system health.")}
         </p>
       )}
 
@@ -147,12 +217,15 @@ export default function SystemHealth() {
         <p className="py-10 text-center text-sm text-zinc-400">{t("Loading…")}</p>
       )}
 
-      {data && (
-        <>
+      {operational?.properties.map((property) => (
+        <PropertyCard key={property.property} property={property} />
+      ))}
+
+      {legacy && (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-3">
               <CardTitle>{t("Overview")}</CardTitle>
-              <StatusPill status={data.overall === "info" ? "passed" : data.overall} />
+              <StatusPill status={legacy.overall === "info" ? "passed" : legacy.overall} />
             </CardHeader>
             <CardContent className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-2">
@@ -160,10 +233,10 @@ export default function SystemHealth() {
                   {t("Installed")}
                 </p>
                 <p className="mt-0.5 font-mono text-sm font-semibold">
-                  kamra {data.installed.kamra}
+                  {product()} {legacy.installed.kamra}
                 </p>
                 <p className="text-xs text-zinc-500">
-                  Frappe {data.installed.frappe ?? "-"}
+                  {t("Platform")} {legacy.installed.frappe ?? "-"}
                 </p>
               </div>
               <div className="rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-2">
@@ -171,11 +244,11 @@ export default function SystemHealth() {
                   {t("Latest on GitHub")}
                 </p>
                 <p className="mt-0.5 font-mono text-sm font-semibold">
-                  {data.latest.tag ?? t("Unavailable")}
+                  {legacy.latest.tag ?? t("Unavailable")}
                 </p>
-                {data.latest.url && (
+                {legacy.latest.url && (
                   <a
-                    href={data.latest.url}
+                    href={legacy.latest.url}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex items-center gap-1 text-xs font-medium text-brand-700 hover:underline"
@@ -190,18 +263,20 @@ export default function SystemHealth() {
                   {t("Site")}
                 </p>
                 <p className="mt-0.5 truncate font-mono text-sm font-semibold">
-                  {data.installed.site}
+                  {legacy.installed.site}
                 </p>
               </div>
             </CardContent>
           </Card>
+      )}
 
+      {checks && (
           <Card>
             <CardHeader>
               <CardTitle>{t("Checks")}</CardTitle>
             </CardHeader>
             <CardContent className="divide-y divide-zinc-100">
-              {data.checks.map((c) => {
+              {checks.map((c: HealthCheck) => {
                 const style = STATUS_STYLE[c.status]
                 return (
                   <div
@@ -212,7 +287,7 @@ export default function SystemHealth() {
                       <p className="flex items-center gap-1.5 text-sm font-medium text-zinc-800">
                         <style.Icon className={`size-4 shrink-0 ${style.text}`} aria-hidden />
                         {t(c.title)}
-                        {c.link && (
+                        {legacy && c.link && (
                           <a
                             href={c.link}
                             target={c.link.startsWith("http") ? "_blank" : undefined}
@@ -232,23 +307,25 @@ export default function SystemHealth() {
               })}
             </CardContent>
           </Card>
+      )}
 
+      {legacy && (
           <Card>
             <CardHeader>
               <CardTitle>{t("How to upgrade")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-zinc-600">
-              <p>{t(data.upgrade.note)}</p>
+              <p>{t(legacy.upgrade.note)}</p>
               <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">
                 <p className="text-xs font-medium uppercase tracking-wider text-zinc-400">
                   {t("Docker (self-host)")}
                 </p>
                 <code className="mt-1 block break-all font-mono text-xs text-zinc-800">
-                  docker pull {data.upgrade.docker_latest}
+                  docker pull {legacy.upgrade.docker_latest}
                 </code>
                 <p className="mt-1 text-xs text-zinc-500">
                   {t("Then recreate the stack / run migrate. Nightly channel")}:{" "}
-                  <code className="font-mono">{data.upgrade.docker_nightly}</code>
+                  <code className="font-mono">{legacy.upgrade.docker_nightly}</code>
                 </p>
               </div>
               <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">
@@ -256,12 +333,12 @@ export default function SystemHealth() {
                   {t("Bench")}
                 </p>
                 <code className="mt-1 block whitespace-pre-wrap break-all font-mono text-xs text-zinc-800">
-                  {data.upgrade.bench}
+                  {legacy.upgrade.bench}
                 </code>
               </div>
               <div className="flex flex-wrap gap-3">
                 <a
-                  href={data.upgrade.releases}
+                  href={legacy.upgrade.releases}
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex items-center gap-1 text-sm font-medium text-brand-700 hover:underline"
@@ -270,7 +347,7 @@ export default function SystemHealth() {
                   <ExternalLink className="size-3.5" aria-hidden />
                 </a>
                 <a
-                  href={data.upgrade.docs}
+                  href={legacy.upgrade.docs}
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex items-center gap-1 text-sm font-medium text-brand-700 hover:underline"
@@ -279,7 +356,7 @@ export default function SystemHealth() {
                   <ExternalLink className="size-3.5" aria-hidden />
                 </a>
                 <a
-                  href="https://kamrapms.com/docs/quickstart#going-back-downgrade"
+                  href={`${upstreamDocs()}/quickstart#going-back-downgrade`}
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex items-center gap-1 text-sm font-medium text-brand-700 hover:underline"
@@ -290,7 +367,6 @@ export default function SystemHealth() {
               </div>
             </CardContent>
           </Card>
-        </>
       )}
     </div>
   )

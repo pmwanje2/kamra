@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
-import { call, getCurrentProperty } from "../lib/api"
+import { call, getCurrentProperty, type TariffReference } from "../lib/api"
+import { TariffNight, TariffRoomTotal } from "./ContractTariff"
 import { InfoTip } from "./InfoTip"
 import { cur, moneyDigits, moneyLocale } from "../lib/money"
 import { isOverride, maxPriceDigits, parsePrice, splitRoomTotal } from "../lib/nightPrices"
@@ -19,12 +20,14 @@ export interface NightRate {
   occupancy: number
 }
 
-interface PlanRow {
+interface PlanRow extends TariffReference {
   name: string
   label: string
   code: string | null
   room_total: number
   vs_plain: number
+  available?: boolean
+  refusal?: string
 }
 
 interface Options {
@@ -34,6 +37,7 @@ interface Options {
   voucher: { code: string; valid: boolean; discount?: number; kind?: string; value?: number; reason?: string } | null
   /** the figures above (and a typed night price) include tax */
   tax_inclusive?: boolean
+  rate_plan_required?: boolean
 }
 
 /** The stay's rate, explained: each night's BAR and what moved it, the whole
@@ -45,6 +49,7 @@ export function RateOptions({
   checkOut,
   adults,
   children,
+  extraBeds,
   mealPlan,
   voucher,
   ratePlan,
@@ -53,12 +58,14 @@ export function RateOptions({
   onNightPrices,
   canSetPrice,
   lockedNote,
+  planRequired,
 }: {
   roomType: string
   checkIn: string
   checkOut: string
   adults: number
   children: number
+  extraBeds?: number
   mealPlan?: string
   voucher?: string
   ratePlan: string
@@ -70,6 +77,7 @@ export function RateOptions({
   canSetPrice: boolean
   /** why the prices cannot be typed, when it is not a missing right */
   lockedNote?: string
+  planRequired?: boolean
 }) {
   const { t } = useT()
   const [data, setData] = useState<Options | null>(null)
@@ -89,6 +97,8 @@ export function RateOptions({
         check_out_date: checkOut,
         adults,
         children,
+        extra_beds: extraBeds || undefined,
+        rate_plan: ratePlan || undefined,
         meal_plan: mealPlan || undefined,
         voucher_code: voucher || undefined,
       })
@@ -104,10 +114,12 @@ export function RateOptions({
       live = false
       clearTimeout(h)
     }
-  }, [roomType, checkIn, checkOut, adults, children, mealPlan, voucher, t])
+  }, [roomType, checkIn, checkOut, adults, children, extraBeds, mealPlan, voucher, ratePlan, t])
 
   if (err) return <p className="text-xs text-zinc-400">{translate(err)}</p>
   if (!data) return null
+  const selected = data.plans.find((plan) => plan.name === ratePlan)
+  const required = planRequired || data.rate_plan_required
   const moved = data.nights.some((x) => x.season || x.demand)
   const digits = maxPriceDigits(moneyDigits())
   const plain = (n: number) => String(Number(n.toFixed(digits)))
@@ -163,11 +175,16 @@ export function RateOptions({
     <div className="space-y-3 rounded-xl border border-zinc-200 p-4">
       <div className="flex items-center gap-1.5">
         <h3 className="text-sm font-semibold text-zinc-800">{t("Rates for these dates")}</h3>
-        <InfoTip doc="revenue">
+        {!selected?.tariff && <InfoTip doc="revenue">
           {t("BAR is the best available rate: the room type's base price. A season or a busy-house (demand) rule can move it for a date. A rate plan then adjusts the whole stay, and a voucher comes off the total.")}
-        </InfoTip>
+        </InfoTip>}
       </div>
 
+      {selected?.tariff ? <ul className="space-y-1 text-sm">
+        {data.nights.map(night => <li key={night.date} className="flex flex-wrap justify-between gap-x-3">
+          <span>{night.date.slice(5)}</span><TariffNight {...selected} />
+        </li>)}
+      </ul> : selected?.available === false || (required && !ratePlan) ? null : <>
       {canSetPrice && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
           <label htmlFor="night-room-total" className="text-zinc-600">
@@ -285,12 +302,13 @@ export function RateOptions({
       {!moved && (
         <p className="text-xs text-zinc-400">{t("No season or demand rule applies: every night is at BAR.")}</p>
       )}
+      </>}
 
       {data.plans.length > 0 && (
         <div>
           <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">{t("Rate plans")}</p>
           <div className="space-y-1">
-            <button
+            {!required && <button
               type="button"
               onClick={() => onPickPlan("")}
               className={cn(
@@ -303,15 +321,16 @@ export function RateOptions({
                 {cur()}
                 {n0(data.plain.room_total)}
               </span>
-            </button>
+            </button>}
             {data.plans.map((p) => (
               <button
                 key={p.name}
                 type="button"
                 onClick={() => onPickPlan(p.name)}
-                disabled={hasTyped}
+                disabled={hasTyped || p.available === false}
+                aria-pressed={ratePlan === p.name}
                 className={cn(
-                  "flex w-full items-center justify-between rounded-lg border px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-50",
+                  "flex w-full flex-wrap items-center justify-between gap-x-3 text-start rounded-lg border px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-50",
                   ratePlan === p.name ? "border-brand-600 bg-brand-50" : "border-zinc-200 hover:bg-zinc-50",
                 )}
               >
@@ -319,7 +338,14 @@ export function RateOptions({
                   {p.label}
                   {p.code ? <span className="ms-1 text-xs text-zinc-400">{p.code}</span> : null}
                 </span>
-                <span className="tabular-nums">
+                {p.available === false ? <span className="text-rose-700">{p.refusal}</span> : p.tariff ? (
+                  <span className="text-xs">
+                    <TariffNight {...p} />
+                    <span className="block text-zinc-600">
+                      <TariffRoomTotal tariff={p.tariff} nights={data.nights.length} agreedRate={p.agreed_rate ?? 0} locale={moneyLocale()} />
+                    </span>
+                  </span>
+                ) : <span className="tabular-nums">
                   {cur()}
                   {n0(p.room_total)}
                   {p.vs_plain !== 0 && (
@@ -328,7 +354,7 @@ export function RateOptions({
                       {n0(p.vs_plain)}
                     </span>
                   )}
-                </span>
+                </span>}
               </button>
             ))}
           </div>

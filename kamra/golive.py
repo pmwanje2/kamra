@@ -35,6 +35,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, flt, getdate, now_datetime
 
+from kamra.branding import product_name
 from kamra.authz import require_roles
 from kamra.migrate import (
 	_detect_dayfirst,
@@ -53,20 +54,20 @@ CHANNEL = "Go-live opening balance"
 
 TEMPLATES = {
 	"bookings": (
-		"kamra-bookings.csv",
+		"bookings-template.csv",
 		["Reservation No", "Guest Name", "Phone", "Email", "Room Type", "Room",
 		 "Check In", "Check Out", "Adults", "Children", "Total Amount",
 		 "Status", "Source"]),
 	"companies": (
-		"kamra-companies.csv",
+		"companies-template.csv",
 		["Company Name", "Tax ID", "Contact Name", "Contact Phone",
 		 "Contact Email", "Credit Allowed", "Credit Limit", "Credit Days",
 		 "Account No"]),
 	"rooms": (
-		"kamra-rooms.csv",
+		"rooms-template.csv",
 		["Room Number", "Room Type", "Floor", "Notes"]),
 	"opening": (
-		"kamra-opening-balances.csv",
+		"opening-balances-template.csv",
 		["Type", "Reservation No", "Guest Name", "Room", "Check In",
 		 "Check Out", "Room Type", "Company", "Invoice No", "Invoice Date",
 		 "Amount", "Mode"]),
@@ -151,8 +152,7 @@ def _normalize_companies(csv_text: str):
 	if "company_name" not in mapping:
 		return headers, mapping, [], [{
 			"row": 0, "name": "",
-			"error": "Couldn't find a Company Name column. Use Kamra's "
-			         "companies template."}]
+			"error": f"Couldn't find a Company Name column. Use the {product_name()} companies template."}]
 	rows, issues, seen = [], [], set()
 	for i, r in enumerate(raw, start=1):
 		def get(f, r=r):
@@ -382,7 +382,7 @@ def _normalize_opening(property: str, csv_text: str):
 		return headers, mapping, [], [{
 			"row": 0, "type": "", "who": "",
 			"error": "Couldn't find column(s) for: " + ", ".join(missing)
-			         + ". Use Kamra's opening-balance template."}], True
+			         + f". Use the {product_name()} opening-balance template."}], True
 	dayfirst = _detect_dayfirst(
 		[r.get(mapping.get(f, ""), "") for r in raw
 		 for f in ("check_in", "invoice_date")])
@@ -792,13 +792,13 @@ def _compare(cat: str, label: str, file_map: dict, kamra_map: dict,
 	problems = []
 	for k, amt in file_map.items():
 		if k not in kamra_map:
-			problems.append(f"{name_of(k)}: {amt:,.2f} in the file, not in Kamra")
+			problems.append(f"{name_of(k)}: {amt:,.2f} in the file, not in {product_name()}")
 		elif not _same(kamra_map[k], amt):
 			problems.append(f"{name_of(k)}: file {amt:,.2f}, "
-			                f"Kamra {kamra_map[k]:,.2f}")
+			                f"{product_name()} {kamra_map[k]:,.2f}")
 	for k, amt in kamra_map.items():
 		if k not in file_map:
-			problems.append(f"{name_of(k)}: {amt:,.2f} in Kamra, not in the file")
+			problems.append(f"{name_of(k)}: {amt:,.2f} in {product_name()}, not in the file")
 	ft, kt = _money(sum(file_map.values())), _money(sum(kamra_map.values()))
 	return {
 		"category": cat, "label": label,
@@ -833,7 +833,7 @@ def reconcile(property: str, opening_csv: str | None = None,
 			"property": property,
 			"idempotency_key": ("in", list(keys) or [""])},
 			pluck="idempotency_key"))
-		problems = [f"{r['guest_name']} {r['check_in']}: not in Kamra"
+		problems = [f"{r['guest_name']} {r['check_in']}: not in {product_name()}"
 		            for k, r in keys.items() if k not in found]
 		if len(keys) < len(rows):
 			problems.append(f"{len(rows) - len(keys)} row(s) repeat another "
@@ -852,7 +852,7 @@ def reconcile(property: str, opening_csv: str | None = None,
 		for r in rows:
 			name = _find_company(r["company_name"])
 			if not name:
-				problems.append(f"{r['company_name']}: not in Kamra")
+				problems.append(f"{r['company_name']}: not in {product_name()}")
 				continue
 			found += 1
 			credit = frappe.db.get_value("Corporate Account", name,
@@ -972,7 +972,7 @@ def _normalize_rooms(property: str, csv_text: str):
 		return headers, mapping, [], [{
 			"row": 0, "room": "",
 			"error": "Couldn't find a Room Number and a Room Type column. "
-			         "Use Kamra's rooms template."}]
+			         f"Use the {product_name()} rooms template."}]
 	resolve, _available = _room_type_resolver(property)
 	rows, issues, seen = [], [], set()
 	for i, r in enumerate(raw, start=1):

@@ -89,7 +89,7 @@ function RoomImport({ onClose, onDone }: { onClose: () => void; onDone: () => vo
     const text = "Room Number,Room Type,Floor,Notes\n101,DLX,1,Sea view\n102,DLX,1,\n201,STD,2,\n"
     const a = document.createElement("a")
     a.href = URL.createObjectURL(new Blob(["﻿" + text], { type: "text/csv;charset=utf-8" }))
-    a.download = "kamra-rooms.csv"
+    a.download = "rooms-template.csv"
     a.click()
     URL.revokeObjectURL(a.href)
   }

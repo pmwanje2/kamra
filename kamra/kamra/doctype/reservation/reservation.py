@@ -2,6 +2,8 @@
 # For license information, please see license.txt
 
 import frappe
+
+from kamra.branding import product_name
 from frappe import _
 from frappe.model.document import Document
 from frappe.utils import cint, date_diff, flt, formatdate, getdate, now_datetime, today
@@ -74,9 +76,9 @@ def entire_place_rooms(property: str, room_type: str,
 	if other_villas:
 		frappe.throw(
 			_("{0} has no rooms of its own and the property has other villa "
-			  "types, so Kamra can't tell which rooms it takes. Add Room "
+			  "types, so {product} can't tell which rooms it takes. Add Room "
 			  "records under {0}, or assign a room before check-in.").format(
-				room_type),
+				room_type, product=product_name()),
 			title=_("Villa has no rooms"))
 	ooo = "" if include_out_of_order else \
 		"AND COALESCE(r.housekeeping_status, '') != 'Out of Order'"
@@ -367,6 +369,17 @@ class Reservation(Document):
 			!= (str(self.check_in_date), str(self.check_out_date), self.room_type)
 
 	def validate(self):
+		# A ledger path that saves the booking sets flags.kamra_ledger_advance;
+		# Frappe never fills doc.flags from a client payload.
+		if self.is_new():
+			moved = flt(self.advance_paid) != 0
+		else:
+			before = self.get_doc_before_save()
+			moved = bool(before) and flt(before.advance_paid) != flt(self.advance_paid)
+		if moved and not self.flags.get("kamra_ledger_advance"):
+			from kamra.api import AdvancePaidIsLedgerOwned
+			frappe.throw(_("Advance paid follows the payments on the folio; take a payment or refund there."),
+			             AdvancePaidIsLedgerOwned)
 		# Before any other inventory lock, so villa vs room and category
 		# capacity take this row in the same order as booking and accept.
 		if self.property:
@@ -393,6 +406,7 @@ class Reservation(Document):
 		self.validate_type_capacity()
 		self.validate_cancellation_path()
 		self.apply_negotiated_rate_plan()
+		self.capture_contract_tariff()
 		self.keep_hand_set_nights()
 		self.apply_pricing()
 		self.stamp_room_assignment()
@@ -418,6 +432,28 @@ class Reservation(Document):
 		plan = negotiated_rate_plan(self.property, self.company)
 		if plan:
 			self.rate_plan = plan
+
+	def capture_contract_tariff(self):
+		"""Freeze the read resolver's reference at booking, not on later reads."""
+		if not self.is_new():
+			previous = self.get_doc_before_save()
+			self.contract_tariff = previous.get("contract_tariff") if previous else None
+			return
+		self.contract_tariff = None
+		if not self.auto_price or self.group_booking:
+			return  # external or block totals already set the room price
+		from kamra.pricing import contract_rate
+		resolved = contract_rate(self.property, self.room_type, self.rate_plan, self.check_in_date,
+			self.check_out_date, self.adults, self.children, self.get("extra_beds"))
+		if not resolved:
+			return
+		agreed_rate, tariff = resolved
+		# A site's Before Validate writer may already have set the rate. Refuse
+		# a disagreement rather than store a reference to a different price.
+		if flt(self.agreed_rate) and flt(self.agreed_rate) != agreed_rate:
+			frappe.throw(_("The contract rate changed. Refresh the quote before booking."))
+		self.agreed_rate = agreed_rate
+		self.contract_tariff = {"tariff": tariff, "agreed_rate": agreed_rate}
 
 	def validate_minimum_nights(self):
 		"""Property.minimum_nights is a hard floor for overnight stays."""
@@ -833,6 +869,7 @@ class Reservation(Document):
 		out["policy"] = policy
 		prop = frappe.get_cached_doc("Property", self.property)
 		levy_pct = flt(prop.get("room_levy_percent")) / 100
+		levy_fixed = flt(prop.get("room_levy_per_night"))
 		levy_taxed = cint(prop.get("room_levy_taxable")
 		                  if prop.get("room_levy_taxable") is not None else 1)
 		for row in rows:
@@ -864,7 +901,7 @@ class Reservation(Document):
 			# the folio's levy for the night stays as posted
 			# ponytail: the quote taxes its levy at the stay's average rate;
 			# a per-night levy rate here can differ by a rounding paisa
-			levy_new = new * levy_pct
+			levy_new = new * levy_pct + levy_fixed
 			out["base"] += (base - new) + (c["levy_base"] - levy_new)
 			out["tax"] += (base * gst - new * new_gst) / 100 + c["levy_tax"] - (
 				levy_new * new_gst / 100 if levy_taxed else 0)
