@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react"
 import { Download, FileSpreadsheet } from "lucide-react"
 
 import { call, getCurrentProperty } from "../lib/api"
+import { accountingImportLabel } from "../lib/brand"
 import { serverError } from "../lib/resource"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardHeader } from "../components/ui/card"
@@ -123,7 +124,7 @@ const FORMATS = [
   { key: "generic", label: "Generic CSV" },
   { key: "tally", label: "Tally" },
   { key: "zoho", label: "Zoho Books" },
-  { key: "erpnext", label: "ERPNext" },
+  { key: "erpnext", label: accountingImportLabel() },
 ]
 
 export default function AccountingExport() {

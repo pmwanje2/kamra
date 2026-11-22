@@ -124,7 +124,7 @@ export default function HelpPanel() {
           <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
             {msgs.length === 0 && (
               <div className="space-y-2">
-                <p className="text-sm text-zinc-600">{translate("Ask how to do anything in Kamra - I'll walk you through it.")}</p>
+                <p className="text-sm text-zinc-600">{translate("Ask how to do anything in {product} - I'll walk you through it.")}</p>
                 {SUGGESTIONS.map((s) => (
                   <button
                     key={s}

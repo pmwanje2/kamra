@@ -311,7 +311,7 @@
   "Identity": "Identität",
   "In the room": "Im Zimmer",
   "Interim invoice: freeze this paid folio and keep the stay running on a fresh one - for long stays settled every few days": "Zwischenrechnung: Dieses bezahlte Folio einfrieren und den Aufenthalt auf einem neuen fortführen - für lange Aufenthalte, die alle paar Tage beglichen werden",
-  "Kamra Verify checks this tax ID with the tax network. Charged per check to your Kamra Connect wallet.": "Kamra Verify prüft diese Steuer-ID über das Steuernetzwerk. Die Abrechnung erfolgt pro Prüfung über Ihr Kamra-Connect-Guthaben.",
+  "ID verification partner checks this tax ID with the tax network. Charged per check to your verification wallet.": "ID verification partner prüft diese Steuer-ID über das Steuernetzwerk. Die Abrechnung erfolgt pro Prüfung über Ihr ID verification-Connect-Guthaben.",
   "Late check-in, high floor, allergies…": "Später Check-in, hohe Etage, Allergien…",
   "Left {time}": "Abgereist {time}",
   "Left early: booked to {date}.": "Früher abgereist: gebucht bis {date}.",

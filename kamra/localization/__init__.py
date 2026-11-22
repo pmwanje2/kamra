@@ -404,7 +404,7 @@ def tax_return_rows(pack, property: str | None, from_date: str, to_date: str):
 
 def verify_tax_id(pack, property: str, tax_id: str, business_name: str = ""):
 	if not verify_released():
-		frappe.throw(frappe._("Kamra Verify isn't available yet."))
+		frappe.throw(frappe._("The ID verification partner isn't available yet."))
 	fn = getattr(pack, "verify_tax_id", None)
 	if not fn:
 		_not_offered(frappe._("Tax ID verification"))
@@ -414,7 +414,7 @@ def verify_tax_id(pack, property: str, tax_id: str, business_name: str = ""):
 def verify_guest_id(pack, property: str, guest: str, id_type: str,
                     consent: int = 0):
 	if not verify_released():
-		frappe.throw(frappe._("Kamra Verify isn't available yet."))
+		frappe.throw(frappe._("The ID verification partner isn't available yet."))
 	fn = getattr(pack, "verify_guest_id", None)
 	if not fn:
 		_not_offered(frappe._("Guest ID verification"))

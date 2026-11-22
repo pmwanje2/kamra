@@ -13,6 +13,7 @@ from frappe.utils import cint, date_diff
 
 from kamra.authz import act_as
 from kamra.booking_slugs import resolve_public_slug, slugify
+from kamra.branding import brand_context, brand_logo, product_name, white_label
 from kamra.install import AGENT_EMAIL
 
 
@@ -249,8 +250,15 @@ def site_info():
 	what a bug report and the login screen quote.
 	"""
 	from kamra import __version__
-	return {
+	info = {
 		"demo_mode": frappe.db.get_default("kamra_demo_mode") == "1",
+		**_brand(),
+	}
+	info["brand"] = brand_context(info["brand_logo"])
+	if info["brand"]["white_label"]:
+		return info
+	return {
+		**info,
 		"app": "kamra",
 		"version": __version__,
 		# `bench --site <site> set-config kamra_channel nightly` labels a
@@ -258,7 +266,6 @@ def site_info():
 		# kamra_build (a short commit id) is optional.
 		"channel": (frappe.conf.get("kamra_channel") or "")[:20] or None,
 		"build": (frappe.conf.get("kamra_build") or "")[:12] or None,
-		**_brand(),
 	}
 
 
@@ -266,11 +273,9 @@ def _brand() -> dict:
 	"""A hotel's or partner's own name and logo, shown next to Kamra's
 	(co-branding, as ERPNext does). Read from Frappe's own Website and Navbar
 	Settings; Frappe's stock app name "Frappe" counts as not set."""
-	name = (frappe.get_website_settings("app_name") or "").strip()
-	logo = (frappe.get_website_settings("app_logo")
-	        or frappe.db.get_single_value("Navbar Settings", "app_logo"))
+	name = product_name() if white_label() else (frappe.get_website_settings("app_name") or "").strip()
 	return {"brand_name": None if name in ("", "Frappe") else name,
-	        "brand_logo": logo or None}
+	        "brand_logo": brand_logo()}
 
 
 @frappe.whitelist(allow_guest=True)

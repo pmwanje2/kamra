@@ -44,6 +44,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_to_date, cint, now_datetime
 
+from kamra.branding import product_name
 from kamra.authz import require_roles
 
 WEBHOOK = "Outbound Webhook"
@@ -704,7 +705,7 @@ def send_test_event(name: str, property: str | None = None) -> dict:
 	doc = _own(WEBHOOK, name, property)
 	if not doc.active:
 		frappe.throw(_("Switch the webhook on first."))
-	envelope_data = {"message": "Test event from Kamra - your endpoint is reachable.",
+	envelope_data = {"message": f"Test event from {product_name()} - your endpoint is reachable.",
 	                 "webhook": doc.name}
 	d = frappe.get_doc({
 		"doctype": DELIVERY, "property": doc.property, "webhook": doc.name,

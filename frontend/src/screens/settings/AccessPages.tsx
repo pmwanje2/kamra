@@ -1,3 +1,4 @@
+import { roleLabel as displayRole } from "../../lib/brand"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { KeyRound, Search, UserPlus } from "lucide-react"
 
@@ -71,7 +72,7 @@ export function StaffPage() {
   }, [load])
 
   const roleLabel = useCallback(
-    (r: string) => roles.find((x) => x.role === r)?.label ?? r,
+    (r: string) => displayRole(r, roles.find((x) => x.role === r)?.label),
     [roles],
   )
 
@@ -110,7 +111,7 @@ export function StaffPage() {
         >
           <option value="">{t("All roles")}</option>
           {roles.map((r) => (
-            <option key={r.role} value={r.role}>{t(r.label)}</option>
+            <option key={r.role} value={r.role}>{t(displayRole(r.role, r.label))}</option>
           ))}
         </select>
         <Button onClick={() => setEditing("new")}>
@@ -365,7 +366,7 @@ function StaffSheet({
                     onChange={() => toggleRole(r.role)}
                   />
                   <span>
-                    <span className="block text-sm font-medium text-zinc-800">{t(r.label)}</span>
+                    <span className="block text-sm font-medium text-zinc-800">{t(displayRole(r.role, r.label))}</span>
                     <span className="block text-xs text-zinc-500">{t(r.description)}</span>
                   </span>
                 </label>

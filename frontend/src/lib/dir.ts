@@ -29,7 +29,7 @@ export type Lang = string
 
 // Guest pages keep their own choice: a guest (or staff previewing /book)
 // picking Spanish there must not switch the desk, and the reverse.
-const GUEST_PAGE = /^(\/kamra)?\/(book|stay|checkin)(\/|$)/
+const GUEST_PAGE = /^(\/(?:kamra|hotel))?\/(book|stay|checkin)(\/|$)/
 const key = () => (GUEST_PAGE.test(window.location.pathname) ? "kamra-guest-lang" : "kamra-lang")
 const known = LANGS.map((l) => l.code)
 

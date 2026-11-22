@@ -838,9 +838,9 @@ KOT #,厨房单号
 KOT Fired,厨房单已起菜
 KOT no,厨房单号
 KOT on send,送厨时打印厨房单
-Kamra Verify isn't available yet.,Kamra Verify 暂不可用。
-"Kamra can't read this ID's code. Type the details in, and take a picture of the ID.",Kamra 无法读取该证件的编码。请手工录入信息，并拍摄证件照片。
-Kamra front-end is not built. Run <code>cd apps/kamra/frontend && yarn install && yarn build</code> (Frappe Cloud runs this automatically on deploy).,Kamra 前端尚未构建。请运行 <code>cd apps/kamra/frontend && yarn install && yarn build</code>（Frappe Cloud 部署时会自动执行）。
+The ID verification partner isn't available yet.,证件核验合作方暂不可用。
+"{product} can't read this ID's code. Type the details in, and take a picture of the ID.",{product} 无法读取该证件的编码。请手工录入信息，并拍摄证件照片。
+{product} is temporarily unavailable. Contact your system administrator.,{product} 暂时无法使用。请联系系统管理员。
 Key Card Numbers,房卡号
 Key ID,密钥 ID
 Key Secret,密钥
@@ -1982,7 +1982,7 @@ You don't have access to {0}.,你没有 {0} 的访问权限。
 You recorded this payment; another Finance user confirms it.,该付款由你记录，需由其他财务人员确认。
 You will get offers from {0} on WhatsApp. Reply STOP at any time to opt out.,你将通过 WhatsApp 收到来自 {0} 的优惠。可随时回复 STOP 退订。
 You will no longer get offers from {0}. Booking and stay messages continue. Reply START to opt in again.,你将不再收到来自 {0} 的优惠。预订与住宿消息仍会发送。回复 START 可重新订阅。
-"Your AI provider will act as {0}, within your role. Prices, taxes and availability stay in Kamra. Every action is recorded under your name in the Activity log.",你的 AI 提供商将以 {0} 的身份、在你的角色范围内操作。价格、税费与可售房始终由 Kamra 计算。所有操作都以你的名义记入活动日志。
+"Your AI provider will act as {0}, within your role. Prices, taxes and availability stay in {product}. Every action is recorded under your name in the Activity log.",你的 AI 提供商将以 {0} 的身份、在你的角色范围内操作。价格、税费与可售房始终由 {product} 计算。所有操作都以你的名义记入活动日志。
 Your booking request at {0},您在 {0} 的预订请求
 Your role can settle the bill but not check the guest out. Ask Front Desk or a Hotel Admin to press Check out.,你的角色可结清账单但无法办理退房。请让前台或酒店管理员点击「退房」。
 Your role can't change {0} settings.,你的角色不能更改 {0} 设置。
@@ -2047,7 +2047,7 @@ this bill,本账单
 {0} has collected the room. Extras are paid by the guest.,{0} 已支付房费。额外消费由宾客支付。
 {0} has no billing contact email. Add one on the corporate account or type an address.,{0} 没有账单联系人邮箱。请在企业账户中添加，或直接输入邮箱。
 {0} has no checked-in guest to post to. Take payment at the outlet to close it.,{0} 没有在住宾客可挂房账。请在营业点收款后关闭。
-"{0} has no rooms of its own and the property has other villa types, so Kamra can't tell which rooms it takes. Add Room records under {0}, or assign a room before check-in.",{0} 没有自己的客房，而该酒店还有其他别墅房型，因此 Kamra 无法判断它包含哪些客房。请在 {0} 下添加客房记录，或在入住前分配客房。
+"{0} has no rooms of its own and the property has other villa types, so {product} can't tell which rooms it takes. Add Room records under {0}, or assign a room before check-in.",{0} 没有自己的客房，而该酒店还有其他别墅房型，因此 {product} 无法判断它包含哪些客房。请在 {0} 下添加客房记录，或在入住前分配客房。
 "{0} is a guest account, not staff.",{0} 是宾客账户，不是员工。
 "{0} is already confirmed for {1} on {2}{3}.{4} Move one of them, or use a different hall.",{0} 已于 {2}{3} 确认为 {1}。{4} 请移动其中一个，或改用其他场地。
 {0} is already connected. Disconnect it first.,{0} 已连接。请先断开。
@@ -2164,7 +2164,7 @@ Rate / night,每晚房价
 Rate batch window (seconds),房价批处理窗口（秒）
 "Rate plan {0} adds a fixed amount: on the channels it applies every night, on direct bookings once per stay.",房价方案 {0} 增加固定金额：渠道预订每晚收取，直接预订每次住宿收取一次。
 "Rate plan {0} belongs to {1}, not to this connection's property {2}.",房价方案 {0} 属于 {1}，不属于此连接对应的酒店 {2}。
-Rate plan {0} is priced per person; Kamra sends one price per room.,房价方案 {0} 按人数计价；Kamra 按每间客房发送一个价格。
+Rate plan {0} is priced per person; {product} sends one price per room.,房价方案 {0} 按人数计价；{product} 按每间客房发送一个价格。
 Reposted Payment,重新入账的付款
 Room levy per night,每晚客房附加费
 Room only: meals are not included.,仅含住宿，不含餐食。
@@ -2172,9 +2172,9 @@ Select a property to view its business day.,请选择酒店以查看其营业日
 Send a list of language codes.,请发送语言代码列表。
 Sent At,发送时间
 Sent Values (JSON),已发送的值（JSON）
-Several rate plans of this room match no Kamra rate plan: map them by hand.,该客房的多个房价方案在 Kamra 中没有匹配项，请手动映射。
+Several rate plans of this room match no {product} rate plan: map them by hand.,该客房的多个房价方案在 {product} 中没有匹配项，请手动映射。
 Terms,条款
-The channel manager has {0} rooms of {1}; Kamra has {2}.,渠道管理器中有 {0} 间 {1}，Kamra 中有 {2} 间。
+The channel manager has {0} rooms of {1}; {product} has {2}.,渠道管理器中有 {0} 间 {1}，{product} 中有 {2} 间。
 The channel manager sells in {0}; this property is in {1}.,渠道管理器以 {0} 销售；此酒店使用 {1}。
 The channel manager's property time zone is {0}; this property's is {1}.,渠道管理器的酒店时区为 {0}；此酒店的时区为 {1}。
 "The front desk can lower a stay's rate, not raise it. Ask a Revenue Manager.",前台可以降低房价，但不能提高。请联系收益经理。
@@ -2182,7 +2182,7 @@ The channel manager's property time zone is {0}; this property's is {1}.,渠道�
 The lines above plus tax make up the total. Anything else taken during the stay is billed separately.,以上各项与税费构成总额。入住期间的其他费用将另行计费。
 The night {0} is priced twice.,{0} 的房价重复设置。
 The price for {0} can have at most 2 decimals.,{0} 的房价最多保留两位小数。
-The price for {0} is above the highest price Kamra accepts ({1}).,{0} 的房价超过 Kamra 可接受的最高房价（{1}）。
+The price for {0} is above the highest price {product} accepts ({1}).,{0} 的房价超过 {product} 可接受的最高房价（{1}）。
 The price for {0} must be a number.,{0} 的房价必须为数值。
 The price for {0} must be above zero.,{0} 的房价必须大于零。
 This connection is not active.,此连接未启用。
@@ -2199,8 +2199,9 @@ the group's block rate,团队房价
 the long-stay discount,长住折扣
 {0} A manager approves it on the hotel screen.,{0} 请由经理在酒店操作界面审批。
 {0} does not take ARI changes.,{0} 不接受 ARI 变更。
-{0} is not a Kamra language.,{0} 不是 Kamra 支持的语言。
+{0} is not a {product} language.,{0} 不是 {product} 支持的语言。
 {0} is not a night of this stay ({1} to {2}).,{0} 不在本次入住期间（{1} 至 {2}）。
 {0} is not a valid night.,{0} 不是有效的入住日期。
 {0} is switched off. Turn it on from Languages in Settings.,{0} 已停用。请在设置中的“语言”页面启用。
 {0} night(s),{0} 间夜
+Application not built,应用尚未构建

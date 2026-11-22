@@ -37,7 +37,8 @@ import {
   setCurrentProperty,
   type PropertyRow,
 } from "./lib/api"
-import { asset } from "./lib/asset"
+import BrandMark from "./components/BrandMark"
+import { brandTitle, product, SERVICE_ROLE, upstreamHome, whiteLabel } from "./lib/brand"
 import { useAuth } from "./lib/auth"
 import { subscribeRealtime } from "./lib/realtime"
 import { getTheme, setTheme } from "./lib/theme"
@@ -89,7 +90,7 @@ export interface ShellContext {
 // mirrors @require_roles on kamra.api.create_booking / walk_in (admins always pass)
 const BOOKING_ROLES = [
   "Front Desk",
-  "Kamra Agent",
+  SERVICE_ROLE,
   "Hotel Admin",
   "System Manager",
   "Administrator",
@@ -396,7 +397,7 @@ export default function AppShell() {
     getSiteInfo().then((info) => {
       setBuild(versionLabel(info))
       setBrand({ name: info.brand_name ?? null, logo: info.brand_logo ?? null })
-      document.title = info.brand_name ? `${info.brand_name} · Kamra PMS` : "Kamra PMS"
+      document.title = !whiteLabel() && info.brand_name ? `${info.brand_name} · ${brandTitle()}` : brandTitle()
     })
   }, [])
 
@@ -435,7 +436,7 @@ export default function AppShell() {
       if (props.length === 0) {
         // Fresh install / Frappe Cloud: force setup wizard, not empty Desk.
         if (
-          location.pathname !== "/setup" &&
+          !whiteLabel() && location.pathname !== "/setup" &&
           !location.pathname.startsWith("/setup/")
         ) {
           navigate("/setup", { replace: true })
@@ -502,7 +503,8 @@ export default function AppShell() {
   // the switcher / launcher / palette name the app they open (state.app)
   const routeApp = appForPath(
     location.pathname, apps,
-    (location.state as { app?: string } | null)?.app ?? lastApp.current,
+    location.pathname === "/settings/fnb" ? undefined :
+      (location.state as { app?: string } | null)?.app ?? lastApp.current,
   )
   const currentApp = apps.some((a) => a.id === routeApp.id) ? routeApp : apps[0]
   useEffect(() => {
@@ -612,18 +614,18 @@ export default function AppShell() {
       aria-label={t("Home")}
       className="flex items-center gap-2 rounded-lg px-1 outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
     >
-      <img src={brand.logo || asset("kamra-mark.svg")} alt="" className="size-7 object-contain" aria-hidden />
-      {brand.name ? (
+      <BrandMark legacyLogo={whiteLabel() ? undefined : brand.logo} className="size-7" decorative />
+      {!whiteLabel() && brand.name ? (
         <span className="min-w-0 leading-tight">
           <span className="block truncate text-sm font-semibold text-zinc-900">{brand.name}</span>
-          <span className="block text-[10px] font-semibold tracking-[0.2em] text-brand-600">KAMRA PMS</span>
+          <span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-brand-600">{brandTitle()}</span>
         </span>
       ) : (
         <span className="text-lg font-semibold tracking-tight text-zinc-900">
-          kamra
-          <span className="ml-1 align-middle text-[10px] font-semibold tracking-[0.2em] text-brand-600">
+          {product()}
+          {!whiteLabel() && <span className="ml-1 align-middle text-[10px] font-semibold tracking-[0.2em] text-brand-600">
             PMS
-          </span>
+          </span>}
         </span>
       )}
     </NavLink>
@@ -650,12 +652,12 @@ export default function AppShell() {
       <div className="mt-auto pt-6">
         <AlertSettings />
       </div>
-      {build ? (
+      {!whiteLabel() && build ? (
         <p
           className="px-2.5 pt-2 text-[11px] text-zinc-400"
-          title={t("The Kamra version this site is running")}
+          title={t("The {product} version this site is running")}
         >
-          Kamra v{build}
+          {product()} v{build}
         </p>
       ) : null}
     </>
@@ -666,20 +668,20 @@ export default function AppShell() {
     // content scrolls; everything else keeps normal page flow.
     <div className={cn("flex min-h-screen flex-col", floor && "lg:h-screen")}>
       <NotificationHost />
-      {demoMode && !kiosk && (
+      {!whiteLabel() && demoMode && !kiosk && (
         <div className="bg-amber-500 px-4 py-1.5 text-center text-xs font-medium text-amber-950">
           {t("Shared playground, not your hotel. Data is wiped every night.")}
           {" "}
           <a
-            href="https://kamrapms.com"
+            href={upstreamHome()}
             className="underline underline-offset-2 hover:text-black"
           >
-            {t("Get your own Kamra →")}
+            {t("Get your own {product} →")}
           </a>
         </div>
       )}
-      {!kiosk && !demoMode && <UpdateNag />}
-      {!kiosk && !demoMode && <SetupNag />}
+      {!whiteLabel() && !kiosk && !demoMode && <UpdateNag />}
+      {!whiteLabel() && !kiosk && !demoMode && <SetupNag />}
       <div className="flex min-h-0 flex-1">
       {!kiosk && (
       <aside className="hidden w-56 shrink-0 flex-col border-r border-zinc-200 bg-white px-3 py-5 sm:sticky sm:top-0 sm:flex sm:h-screen sm:overflow-y-auto sm:overscroll-contain">

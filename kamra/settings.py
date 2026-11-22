@@ -142,7 +142,7 @@ MODULES: tuple[Module, ...] = (
 				  options=("Keep charged nights", "Credit the difference", "Correct back-dated rates"),
 				  hint="Keep charged nights: charged nights keep their rate, only the nights still to come take "
 				       "the new one; give any difference back as an allowance. Credit the difference: when the "
-				       "new rate is lower, Kamra posts a credit for each charged night, dated today. Correct "
+				       "new rate is lower, {product} posts a credit for each charged night, dated today. Correct "
 				       "back-dated rates: as Keep, plus Finance or a Hotel Admin can correct charged nights to "
 				       "the current rate with a reason and their PIN; each night is reversed and posted again."),
 			)),

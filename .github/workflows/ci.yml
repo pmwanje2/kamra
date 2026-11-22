@@ -34,6 +34,18 @@ jobs:
         run: python3 -m unittest kamra.tests.test_ui_language_logic
       - name: v2.8.0 carrier and ERP bridge contracts (no site)
         run: python3 -m unittest kamra.tests.test_v280_carrier_contract kamra.tests.test_erp_bridge
+      - name: Check white-label source and server messages
+        run: |
+          npm --prefix frontend run brand:check
+          python3 -m unittest kamra.tests.test_white_label
+      - name: Install Chromium for synthetic browser checks
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Check white-label routes and disabled F&B settings
+        working-directory: frontend
+        run: |
+          npm run white-label:routes
+          npm run settings:route-check
       - run: npm run build
         working-directory: frontend
       - name: Verify production serve base

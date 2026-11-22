@@ -30,6 +30,7 @@ const i18n = load("src/lib/i18n.ts", {
   react: require("react"),
   "./dir": { getLang: () => language },
   "./locales": { dictionaryFor: (key) => dictionaries[key] ?? {} },
+  "./brand": { product: () => "Maximus Hotel", assistant: () => "Eve" },
 })
 const dates = load("src/lib/localDates.ts")
 const { t } = i18n

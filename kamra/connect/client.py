@@ -13,6 +13,7 @@ import json
 
 import frappe
 
+from kamra.branding import white_label
 from kamra.authz import require_roles
 
 DEFAULT_HUB = "https://hub.kamrapms.com"
@@ -62,7 +63,7 @@ def call(name: str, s=None, *, key: str | None = None, json_body: dict | None = 
 	if key is None:
 		key = _key(s) if s.linked else ""
 	if not key:
-		frappe.throw("Link Kamra Connect first: Settings → Kamra Verify.")
+		frappe.throw("The ID verification partner is not connected. Contact your system administrator.")
 	if _transport["fn"]:
 		return _transport["fn"](name, key, json_body=json_body, params=params, data=data)
 
@@ -81,10 +82,12 @@ def call(name: str, s=None, *, key: str | None = None, json_body: dict | None = 
 	try:
 		resp = requests.post(f"{_hub(s)}/api/method/{HUB_API}.{name}",
 		                     json=body, data=data, params=params, headers=headers, timeout=60)
-	except requests.RequestException as e:
-		frappe.throw(f"Kamra Connect hub is unreachable: {e}")
+	except requests.RequestException:
+		frappe.throw("The ID verification partner is unreachable. Try again later.")
 	if resp.status_code >= 400:
-		frappe.throw(f"Kamra Connect: {_error_message(resp)}")
+		if white_label():
+			frappe.throw(f"The ID verification partner rejected the request (HTTP {resp.status_code}).")
+		frappe.throw(f"ID verification partner: {_error_message(resp)}")
 	return resp.json().get("message")
 
 

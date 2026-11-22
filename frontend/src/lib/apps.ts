@@ -76,6 +76,7 @@ import {
 import { useEffect, useState } from "react"
 
 import { call } from "./api"
+import { deskLabel, upstreamOnly, whiteLabel } from "./brand"
 
 /** "Night audit" is what most hotels call End of Day; EOD is what they type. */
 const EOD_KEYWORDS = ["End of day", "EOD", "Close the day", "Roll the date"]
@@ -123,7 +124,7 @@ export const APPS: AppDef[] = [
     roles: ["Front Desk", "Night Auditor", "Hotel Admin", "System Manager", "Administrator"],
     items: [
       { to: "/", label: "Today", icon: Home },
-      { to: "/assistant", label: "Kamra Agent", icon: Sparkles, featured: true,
+      { to: "/assistant", label: "{assistant}", icon: Sparkles, featured: true,
         keywords: ["AI", "Assistant", "Copilot", "Ask"] },
       { to: "/in-house", label: "In House", icon: BedDouble,
         keywords: ["Arrivals", "Departures", "In-house guests", "Who is in", "Due out"] },
@@ -362,7 +363,7 @@ export const APPS: AppDef[] = [
     name: "Admin",
     icon: SettingsIcon,
     tint: APP_TILE,
-    description: "Settings, staff and access, rooms, audit and the Marketplace.",
+    description: "Settings, staff and access, rooms and audit.",
     roles: ["Hotel Admin", "System Manager", "Administrator"],
     // every other settings page belongs here unless a module app claims it
     extraPrefixes: ["/settings"],
@@ -398,7 +399,7 @@ export const APPS: AppDef[] = [
       { to: "/finish-setup", label: "Finish setup", icon: ListChecks, keywords: ["onboarding", "checklist", "getting started", "setup wizard"] },
       {
         href: `${DESK}/app/build`,
-        label: "Frappe Desk",
+        label: deskLabel() ?? "Desk",
         icon: ExternalLink,
         roles: ["Administrator", "System Manager"],
       },
@@ -450,7 +451,10 @@ export function visibleApps(roles: string[], modules?: string[]): AppDef[] {
     (a) =>
       a.roles.some((r) => roles.includes(r)) &&
       (!modules?.length || modules.includes(a.id)),
-  )
+  ).map((app) => whiteLabel() ? {
+    ...app,
+    items: app.items.filter(({ to, href }) => !(to && upstreamOnly(to)) && href !== `${DESK}/app/build`),
+  } : app)
 }
 
 /** A connected app from the App Registry (kamra.apps.my_apps): an add-on on

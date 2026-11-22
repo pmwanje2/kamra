@@ -12,6 +12,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, cint, date_diff, getdate, nowdate
 
+from kamra.branding import product_name
 from kamra.localization import default_currency, pack_for
 
 
@@ -704,8 +705,8 @@ def normalize_night_prices(night_prices, check_in_date, check_out_date) -> dict:
 		if not price.is_finite() or price <= 0:
 			frappe.throw(_("The price for {0} must be above zero.").format(day))
 		if price > MAX_NIGHT_PRICE:
-			frappe.throw(_("The price for {0} is above the highest price Kamra accepts ({1}).").format(
-				day, f"{MAX_NIGHT_PRICE:,.0f}"))
+			frappe.throw(_("The price for {0} is above the highest price {product} accepts ({1}).").format(
+				day, f"{MAX_NIGHT_PRICE:,.0f}", product=product_name()))
 		if price.as_tuple().exponent < -2:
 			frappe.throw(_("The price for {0} can have at most 2 decimals.").format(day))
 		out[str(day)] = price

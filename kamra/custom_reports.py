@@ -19,6 +19,7 @@ from frappe import _
 from frappe.utils import add_days, date_diff, getdate, now_datetime, nowdate
 
 from kamra.authz import require_roles
+from kamra.branding import product_name
 from kamra.pos import _full_name, _served_by
 from kamra.crs import assert_property_access
 
@@ -1971,7 +1972,7 @@ def email_custom_report(
 		content = _to_csv(meta)
 		fname = _filename(meta, "csv")
 
-	title = _tr(meta.get("title") or "Kamra report", lang)
+	title = _tr(meta["title"], lang) if meta.get("title") else _tr("{product} report", lang).format(product=product_name())
 	esc = frappe.utils.escape_html
 	frappe.sendmail(
 		recipients=emails,

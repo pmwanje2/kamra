@@ -6,6 +6,7 @@ import App from "./App"
 import { initTheme } from "./lib/theme"
 import { initLang } from "./lib/dir"
 import { asset } from "./lib/asset"
+import { brandTitle, logo, siteBrand, whiteLabel } from "./lib/brand"
 import { AuthProvider } from "./lib/auth"
 import { CashierAuthProvider } from "./lib/cashierAuth"
 import { ROUTER_BASENAME } from "./lib/routing"
@@ -16,13 +17,19 @@ initTheme()
 function setIcon(rel: string, href: string, type?: string) {
   const link = document.createElement("link")
   link.rel = rel
-  link.href = asset(href)
+  link.href = href
   if (type) link.type = type
   document.head.appendChild(link)
 }
-setIcon("icon", "kamra-mark.svg", "image/svg+xml")
-setIcon("icon", "favicon-32.png", "image/png")
-setIcon("apple-touch-icon", "apple-touch-180.png")
+if (import.meta.env.DEV) document.title = brandTitle()
+const favicon = siteBrand()?.favicon
+if (favicon) setIcon("icon", favicon)
+else if (!whiteLabel()) {
+  const mark = logo()
+  if (mark) setIcon("icon", mark)
+  setIcon("icon", asset("favicon-32.png"), "image/png")
+  setIcon("apple-touch-icon", asset("apple-touch-180.png"))
+}
 
 function mount() {
   createRoot(document.getElementById("root")!).render(

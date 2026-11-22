@@ -22,6 +22,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, nowdate
 
+from kamra.branding import product_name
 from kamra.authz import require_roles
 from kamra.channels import provider_for
 
@@ -760,8 +761,8 @@ def _import_rate_plan_mappings(conn, details: dict, index: dict, dry_run: int) -
 			continue
 		rooms = frappe.db.count("Room", {"room_type": match})
 		if r.get("count_of_rooms") is not None and int(r["count_of_rooms"]) != rooms:
-			warn("count_of_rooms", room_id, _("The channel manager has {0} rooms of {1}; Kamra has {2}.").format(
-				r["count_of_rooms"], r.get("room_name") or room_id, rooms))
+			warn("count_of_rooms", room_id, _("The channel manager has {0} rooms of {1}; {product} has {2}.").format(
+				r["count_of_rooms"], r.get("room_name") or room_id, rooms, product=product_name()))
 		paired, loose = [], []
 		for rp in rateplans:
 			plan = plans.get(_norm(rp.get("rateplan_name"))) or plans.get(_norm(rp.get("rateplan_id")))
@@ -772,12 +773,12 @@ def _import_rate_plan_mappings(conn, details: dict, index: dict, dry_run: int) -
 		for rp, _plan in loose:
 			unmatched.append({"room_id": room_id, "room_name": r.get("room_name"),
 			                  "rateplan_id": str(rp.get("rateplan_id") or ""), "rateplan_name": rp.get("rateplan_name"),
-			                  "reason": _("Several rate plans of this room match no Kamra rate plan: map them by hand.")})
+			                  "reason": _("Several rate plans of this room match no {product} rate plan: map them by hand.").format(product=product_name())})
 		for rp, plan in paired:
 			rate_id = str(rp.get("rateplan_id") or "")
 			if rp.get("sell_mode") == "per_person":
-				warn("per_person", rate_id, _("Rate plan {0} is priced per person; Kamra sends one price per room.").format(
-					rp.get("rateplan_name") or rate_id))
+				warn("per_person", rate_id, _("Rate plan {0} is priced per person; {product} sends one price per room.").format(
+					rp.get("rateplan_name") or rate_id, product=product_name()))
 			if plan and plan.modifier_type in ("Amount", "Absolute"):
 				warn("fixed_amount", plan.name, _("Rate plan {0} adds a fixed amount: on the channels it applies every "
 				                                  "night, on direct bookings once per stay.").format(plan.rate_plan_name))

@@ -18,6 +18,7 @@ from datetime import date
 import frappe
 from frappe import _
 
+from kamra.branding import product_name
 from kamra.authz import require_roles
 
 _WEIGHTS = (7, 3, 1)
@@ -133,8 +134,8 @@ def read(property: str, text: str) -> dict:
 	if out is None:
 		out = loc.read_id_scan(pack, text)
 	if out is None:
-		frappe.throw(_("Kamra can't read this ID's code. Type the details in, "
-		               "and take a picture of the ID."))
+		frappe.throw(_("{product} can't read this ID's code. Type the details in, "
+		               "and take a picture of the ID.").format(product=product_name()))
 	code = out.pop("nationality_code", None)
 	if code and not out.get("nationality"):
 		# ponytail: home country by code, others keep the 3-letter code the

@@ -1,3 +1,4 @@
+import { product, upstreamDocs, whiteLabel } from "../lib/brand"
 import { useCallback, useEffect, useState } from "react"
 import {
   AlertTriangle,
@@ -124,7 +125,7 @@ export default function SystemHealth() {
             {t("System Health")}
           </h1>
           <p className="mt-0.5 text-sm text-zinc-500">
-            {t("Check the status of this Kamra site and whether a newer open-source release is available.")}
+            {whiteLabel() ? t("Check the status of this site.") : t("Check the status of this {product} site and whether a newer open-source release is available.")}
           </p>
         </div>
         <Button
@@ -139,7 +140,7 @@ export default function SystemHealth() {
 
       {error && (
         <p className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
-          {translate(error)}
+          {whiteLabel() ? t("Status unavailable") : translate(error)}
         </p>
       )}
 
@@ -147,7 +148,8 @@ export default function SystemHealth() {
         <p className="py-10 text-center text-sm text-zinc-400">{t("Loading…")}</p>
       )}
 
-      {data && (
+      {data && whiteLabel() && <StatusPill status={data.overall === "info" ? "passed" : data.overall} />}
+      {data && !whiteLabel() && (
         <>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-3">
@@ -160,10 +162,10 @@ export default function SystemHealth() {
                   {t("Installed")}
                 </p>
                 <p className="mt-0.5 font-mono text-sm font-semibold">
-                  kamra {data.installed.kamra}
+                  {product()} {data.installed.kamra}
                 </p>
                 <p className="text-xs text-zinc-500">
-                  Frappe {data.installed.frappe ?? "-"}
+                  {t("Platform")} {data.installed.frappe ?? "-"}
                 </p>
               </div>
               <div className="rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-2">
@@ -279,7 +281,7 @@ export default function SystemHealth() {
                   <ExternalLink className="size-3.5" aria-hidden />
                 </a>
                 <a
-                  href="https://kamrapms.com/docs/quickstart#going-back-downgrade"
+                  href={`${upstreamDocs()}/quickstart#going-back-downgrade`}
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex items-center gap-1 text-sm font-medium text-brand-700 hover:underline"

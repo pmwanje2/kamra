@@ -38,7 +38,7 @@ const helpFor = (): Record<string, { what: string; where: string; changes: strin
     link: ["/receivables", translate("Open Receivables")],
   },
   Package: {
-    what: translate("Meant for prepaid packages held until they are used (for example a meal plan sold with the room). Kamra does not post to it yet, so it stays at 0."),
+    what: translate("Meant for prepaid packages held until they are used (for example a meal plan sold with the room). {product} does not post to it yet, so it stays at 0."),
     where: translate("Nothing to see while it is 0."),
     changes: translate("No screen posts to it today; package revenue goes to the Guest ledger with the room."),
     fix: translate("Nothing to correct."),
