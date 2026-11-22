@@ -8,7 +8,7 @@ test("Room Types separates the card rate from approved, read-only tariffs and in
     await page.getByRole("row", { name: /Standard Room/ }).click()
     const dialog = page.getByRole("dialog")
     await dialog.getByText("Code (e.g. DLX)", { exact: false }).waitFor()
-    assert.ok(await dialog.getByText("Card rate / night (UGX)", { exact: true }).isVisible(), "card rate label must name the property currency")
+    assert.ok(await dialog.getByText(/^Card rate \/ night \(UGX\)(?: \*)?$/).isVisible(), "card rate label must name the property currency")
     await dialog.getByText("Used only by rate plans without a contract tariff").waitFor()
     const panel = dialog.getByRole("region", { name: "Contract tariffs" })
     await panel.getByText("Corporate tariff").waitFor()

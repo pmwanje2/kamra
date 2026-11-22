@@ -43,6 +43,7 @@ export async function withDesk(run, override = {}) {
         "kamra.api.available_rooms": [{ name: "ROOM-101", room_number: "101" }],
         "kamra.cashier.my_till": { open: true, property, terminal_links: [] },
         "kamra.api.linked_records": { folios: [], reservations: [] },
+        "kamra.api.correct_charged_nights": { nights: [] },
         "kamra.ledger.list_exchange_rates": { rates: [], business_date: "2026-11-21" },
         "frappe.client.get_list": args.doctype === "Room Type" ? [roomType] : [],
         "frappe.client.get": roomType,

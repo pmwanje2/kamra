@@ -1,4 +1,6 @@
 import type { ScreenConfig } from "../components/ResourceScreen"
+import type { TaxBasis } from "../lib/api"
+import { t } from "../lib/i18n"
 import { floorSource } from "../components/ResourceScreen"
 import { lazy } from "react"
 import { voicePartner } from "../lib/brand"
@@ -7,7 +9,7 @@ import { voicePartner } from "../lib/brand"
 const CompanyExtras = lazy(() => import("../components/CompanyExtras"))
 const EventLinks = lazy(() => import("../components/EventLinks"))
 const GroupControl = lazy(() => import("../components/GroupControl"))
-const RoomTypeMedia = lazy(() => import("../components/RoomTypeMedia"))
+const RoomTypeExtras = lazy(() => import("../components/RoomTypeTariffs"))
 const OutletWaiters = lazy(() => import("../components/OutletWaiters"))
 const ChannelConnectionActions = lazy(() => import("../components/ChannelConnectionActions"))
 const HkTaskMediaPanel = lazy(() =>
@@ -63,7 +65,9 @@ export const roomsConfig: ScreenConfig = {
   ],
 }
 
-export const roomTypesConfig: ScreenConfig = {
+export function roomTypesConfig(currency: string, taxBasis?: TaxBasis | null): ScreenConfig {
+  const cardLabel = currency ? t("Card rate / night ({currency})", { currency }) : t("Card rate / night")
+  return {
   doctype: "Room Type",
   title: "Room Types",
   description: "Room types with occupancy-based pricing.",
@@ -73,22 +77,23 @@ export const roomTypesConfig: ScreenConfig = {
     { field: "room_type_name", label: "Name" },
     { field: "room_type_code", label: "Code", badge: true },
     { field: "room_category", label: "Unit kind" },
-    { field: "base_price", label: `Base ${cur()}/night` },
+    { field: "base_price", label: cardLabel },
     { field: "base_occupancy", label: "Base occ." },
     { field: "extra_adult_price", label: `Extra adult ${cur()}` },
-    { field: "tax_percent", label: "Tax %" },
+    ...(taxBasis ? [] : [{ field: "tax_percent", label: "Tax %" }]),
   ],
   form: [
     { field: "room_type_name", label: "Name", type: "data", required: true },
     { field: "room_type_code", label: "Code (e.g. DLX)", type: "data", required: true },
     { field: "listing_slug", label: "Public listing URL slug (/stay/…)", type: "data" },
     { field: "room_category", label: "Unit kind", type: "select", options: ["Villa", "Private", "Shared"] },
-    { field: "base_price", label: "Base price / night", type: "currency", required: true },
+    { field: "base_price", label: cardLabel, type: "currency", required: true,
+      hint: "Used only by rate plans without a contract tariff" },
     { field: "base_occupancy", label: "Adults included in base price", type: "int" },
     { field: "single_occupancy_price", label: "Single occupancy price", type: "currency", dependsOn: (d) => d.room_category !== "Villa" },
     { field: "extra_adult_price", label: "Extra adult / night", type: "currency" },
     { field: "child_price", label: "Extra child / night", type: "currency", hint: "Additional charge per child per night (0 = free)" },
-    { field: "tax_percent", label: "Tax %", type: "float" },
+    ...(taxBasis ? [] : [{ field: "tax_percent", label: "Tax %", type: "float" as const }]),
     { field: "children_within_base_occupancy", label: "Children count towards base occupancy", type: "check", hint: "Only guests beyond the base occupancy are charged, children included" },
     { field: "adults_capacity", label: "Max adults", type: "int" },
     { field: "children_capacity", label: "Max children", type: "int" },
@@ -109,7 +114,11 @@ export const roomTypesConfig: ScreenConfig = {
     { field: "longitude", label: "Longitude", type: "float" },
     { field: "disabled", label: "Disabled", type: "check" },
   ],
-  extra: RoomTypeMedia,
+  formNote: taxBasis?.inclusive
+    ? t("Tax is applied by the invoice ({tax} included).", { tax: taxBasis.label })
+    : taxBasis ? t("Tax is applied by the invoice ({tax}).", { tax: taxBasis.label }) : undefined,
+  extra: RoomTypeExtras,
+  }
 }
 
 export const ratePlansConfig: ScreenConfig = {

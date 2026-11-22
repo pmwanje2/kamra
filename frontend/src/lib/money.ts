@@ -4,7 +4,7 @@
     the right symbol immediately on reload, before the network answers. */
 
 import { useEffect, useState } from "react"
-import { call, getCurrentProperty } from "./api"
+import { call, getCurrentProperty, type TaxBasis } from "./api"
 import { adoptGuestLanguage, applyEnabledLanguages } from "./dir"
 
 export interface TenderMode {
@@ -17,6 +17,7 @@ interface Locale {
   locale: string
   currency: string
   tax_label: string
+  tax_basis?: TaxBasis | null
   tax_id_label: string
   tax_rates: number[]
   /** ID documents this country's desk records (pack ID_TYPES). */
@@ -101,11 +102,13 @@ function remember() {
 }
 
 export function loadLocale(): Promise<Locale> {
+  const property = getCurrentProperty()
   return call<Locale>("kamra.api.property_locale", {
-    property: getCurrentProperty(),
+    property,
   })
     .then((l) => {
-      cache = { ...cache, tender_modes: null, fx_currencies: [], ...l }
+      if (property !== getCurrentProperty()) return cache
+      cache = { ...cache, tender_modes: null, fx_currencies: [], tax_basis: null, ...l }
       remember()
       return cache
     })

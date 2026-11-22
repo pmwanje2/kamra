@@ -78,6 +78,7 @@
   "discount_amount",
   "auto_price",
   "agreed_rate",
+  "contract_tariff",
   "sb_notes",
   "special_requests",
   "sb_precheckin",
@@ -528,6 +529,14 @@
    "fieldname": "agreed_rate",
    "fieldtype": "Currency",
    "label": "Agreed Nightly Rate",
+   "read_only": 1
+  },
+  {
+   "fieldname": "contract_tariff",
+   "fieldtype": "JSON",
+   "hidden": 1,
+   "label": "Booked Contract Tariff",
+   "no_copy": 1,
    "read_only": 1
   },
   {

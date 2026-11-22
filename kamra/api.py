@@ -3503,6 +3503,7 @@ def folio_invoice(folio: str):
 	- `folio`, `bill_to`, `guest`, `stay`, `property`, `document`
 	"""
 	from kamra import localization as loc
+	from kamra.pricing import saved_contract_tariff
 
 	doc = frappe.get_doc("Folio", folio)
 	prop = frappe.get_doc("Property", doc.property)
@@ -3630,6 +3631,7 @@ def folio_invoice(folio: str):
 		"guest": _invoice_guest(res) if res else {"name": doc.guest_name},
 		"stay": {"reservation": None, "company": bill_company} if not res else {
 			"reservation": res.name,
+			**saved_contract_tariff(res),
 			"check_in": str(res.check_in_date),
 			"check_out": str(res.check_out_date),
 			"arrival": str(res.get("actual_check_in") or "") or None,
@@ -4515,6 +4517,7 @@ def reservation_detail(reservation: str):
 	booker and the actions currently available. Powers the reservation drawer."""
 	from kamra.business_date import get_business_date
 	from kamra.kamra.doctype.reservation.reservation import uses_member_rooms
+	from kamra.pricing import saved_contract_tariff
 	res = frappe.get_doc("Reservation", reservation)
 
 	# guest identity + stay history
@@ -4574,6 +4577,7 @@ def reservation_detail(reservation: str):
 
 	return {
 		"name": res.name,
+		**saved_contract_tariff(res),
 		"group": group,
 		"status": res.status,
 		"source": res.source,
@@ -4878,7 +4882,7 @@ def walk_in(property: str, room_type: str, room: str, check_out_date: str,
             ota_ref: str | None = None,
             ota_total: float = 0,
             ota_commission_pct: float | None = None, currency: str | None = None,
-            quote_id: str | None = None, night_prices=None):
+            quote_id: str | None = None, night_prices=None, extra_beds: int = 0):
 	"""Walk-in in one step: book, register the ID, check into the chosen
 	room and take the money - the counter flow that used to be four screens.
 
@@ -4944,7 +4948,8 @@ def walk_in(property: str, room_type: str, room: str, check_out_date: str,
 		blacklist_override_reason=blacklist_override_reason,
 		credit_override_reason=credit_override_reason,
 		booked_via=booked_via, ota_ref=ota_ref, ota_total=ota_total,
-		ota_commission_pct=ota_commission_pct, night_prices=night_prices)
+		ota_commission_pct=ota_commission_pct, night_prices=night_prices,
+		stay_details={"extra_beds": cint(extra_beds)} if extra_beds else None)
 	reservation = booked["reservation"]
 	folio_filter = {"reservation": reservation, "folio_type": "Guest"}
 
@@ -6994,6 +6999,11 @@ def set_late_arrival(reservation: str, late_arrival: int = 1,
 def booking_options(property: str):
 	"""Everything the booking form needs to render its dropdowns."""
 	from kamra.channel_manager import channel_commission_pcts
+	from kamra.rates import default_plan
+	from kamra.settings import get_setting
+	plans = frappe.get_all(
+		"Rate Plan", filters={"property": property, "disabled": 0},
+		fields=["name", "rate_plan_name", "code", "is_default"], order_by="rate_plan_name asc, name asc")
 	return {
 		"room_types": frappe.get_all(
 			"Room Type", filters={"property": property, "disabled": 0},
@@ -7008,10 +7018,9 @@ def booking_options(property: str):
 			fields=["name", "code", "label", "price_per_adult", "is_default"],
 			order_by="price_per_adult asc",
 		),
-		"rate_plans": frappe.get_all(
-			"Rate Plan", filters={"property": property, "disabled": 0},
-			fields=["name", "rate_plan_name", "code", "is_default"],
-		),
+		"rate_plans": plans,
+		"default_plan": default_plan(plans),
+		"rate_plan_required": bool(get_setting(property, "rate_plan_required")),
 		"companies": frappe.get_all(
 			"Corporate Account", filters={"disabled": 0},
 			fields=["name", "company_name", "negotiated_rate_plan"],
@@ -7099,7 +7108,7 @@ def get_quote(property: str, room_type: str, check_in_date: str,
               company: str | None = None,
               check_in_time: str | None = None,
               check_out_time: str | None = None,
-              night_prices=None):
+              night_prices=None, extra_beds: int = 0):
 	"""Price a stay. With a company and no rate plan, the company's
 	negotiated plan applies - the same plan create_booking stores.
 	check_in_time / check_out_time price an hourly or block day-use plan.
@@ -7109,9 +7118,8 @@ def get_quote(property: str, room_type: str, check_in_date: str,
 	property's rates include tax - and the rest at the rate card. A voucher,
 	rate plan, long-stay discount or holiday package with typed nights is
 	refused."""
-	from kamra.booking_refs import (resolve_meal_plan, resolve_rate_plan,
-	                                resolve_room_type)
-	from kamra.pricing import quote
+	from kamra.booking_refs import resolve_meal_plan, resolve_rate_plan, resolve_room_type
+	from kamra.pricing import ContractRateRefused, quote_with_contract, tax_basis
 
 	# agents name things the way staff do ("Deluxe", "breakfast"); resolve
 	# to IDs at this property or refuse with the valid options
@@ -7121,17 +7129,19 @@ def get_quote(property: str, room_type: str, check_in_date: str,
 	typed = _check_night_prices(
 		property, room_type, check_in_date, check_out_date, night_prices,
 		voucher_code=voucher_code, rate_plan=rate_plan, company=company)
-	q = quote(property, room_type, check_in_date, check_out_date,
-	          int(adults), int(children), meal_plan or None,
-	          rate_plan or None, voucher_code or None,
-	          over_capacity_charge=float(over_capacity_charge or 0),
-	          pets=int(pets or 0), company=company or None,
-	          check_in_time=check_in_time or None,
-	          check_out_time=check_out_time or None,
-	          night_prices=[{"date": d, "price": str(p)} for d, p in typed.items()])
-	if isinstance(q, dict):
-		q["cancellation"] = cancellation_outlook(
-			property, room_type, check_in_date, check_out_date)
+	try:
+		q = quote_with_contract(property, room_type, check_in_date, check_out_date,
+		                        int(adults), int(children), meal_plan or None,
+		                        rate_plan or None, voucher_code or None,
+		                        over_capacity_charge=float(over_capacity_charge or 0),
+		                        pets=int(pets or 0), company=company or None,
+		                        check_in_time=check_in_time or None, check_out_time=check_out_time or None,
+		                        extra_beds=extra_beds,
+		                        night_prices=[{"date": d, "price": str(p)} for d, p in typed.items()])
+	except ContractRateRefused as exc:
+		frappe.throw(str(exc))
+	q["tax_basis"] = tax_basis(property)
+	q["cancellation"] = cancellation_outlook(property, room_type, check_in_date, check_out_date)
 	return q
 
 
@@ -7583,6 +7593,12 @@ def create_booking(property: str, room_type: str, check_in_date: str,
 			                    guest_name=guest_name, phone=phone)
 			return _booking_replay(existing)
 
+	from kamra.pricing import negotiated_rate_plan
+	from kamra.settings import get_setting
+	rate_plan = rate_plan or negotiated_rate_plan(property, company)
+	if get_setting(property, "rate_plan_required") and not rate_plan:
+		frappe.throw(_("A rate plan is required for this property.") + " (KMR-RATE-REQ-001)")
+
 	# An agent that retries a tool call (timeout, lost response, a model
 	# that repeats itself) must not book the guest twice. Without a key,
 	# an identical agent booking made moments ago is returned instead of a
@@ -7643,7 +7659,6 @@ def create_booking(property: str, room_type: str, check_in_date: str,
 
 	# a property can turn room assignment at booking off (Settings > Front Desk);
 	# a room the caller named (a walk-in) is still honoured
-	from kamra.settings import get_setting
 	if not get_setting(property, "assign_room_on_booking"):
 		assign_room = 0
 
@@ -9624,8 +9639,8 @@ def property_locale(property: str):
 	localization pack. Drives the frontend's money formatting and tax dropdowns
 	so no screen hardcodes ₹ or GST %. `integrations` says which country
 	integrations (gateways, tax return, ID checks) this property has."""
-	from kamra.localization import (front_desk_vocabulary, integrations, pack_for,
-	                                services_tax_rate, tender_modes)
+	from kamra.localization import front_desk_vocabulary, integrations, pack_for, services_tax_rate, tender_modes
+	from kamra.pricing import tax_basis
 	from kamra.settings import get_setting, list_setting
 	prop = frappe.get_cached_doc("Property", property)
 	pack = pack_for(property)
@@ -9633,6 +9648,7 @@ def property_locale(property: str):
 	        "integrations": integrations(pack),
 	        "tender_modes": tender_modes(property),
 	        "fx_currencies": list_setting(property, "fx_currencies"),
+	        "tax_basis": tax_basis(property),
 	        # the rate the server puts on any food & beverage charge, whatever
 	        # rate the caller picked (_resolve_charge_gst) - so the folio's
 	        # charge form shows the rate that will apply instead of a choice

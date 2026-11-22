@@ -406,6 +406,7 @@ class Reservation(Document):
 		self.validate_type_capacity()
 		self.validate_cancellation_path()
 		self.apply_negotiated_rate_plan()
+		self.capture_contract_tariff()
 		self.keep_hand_set_nights()
 		self.apply_pricing()
 		self.stamp_room_assignment()
@@ -431,6 +432,28 @@ class Reservation(Document):
 		plan = negotiated_rate_plan(self.property, self.company)
 		if plan:
 			self.rate_plan = plan
+
+	def capture_contract_tariff(self):
+		"""Freeze the read resolver's reference at booking, not on later reads."""
+		if not self.is_new():
+			previous = self.get_doc_before_save()
+			self.contract_tariff = previous.get("contract_tariff") if previous else None
+			return
+		self.contract_tariff = None
+		if not self.auto_price or self.group_booking:
+			return  # external or block totals already set the room price
+		from kamra.pricing import contract_rate
+		resolved = contract_rate(self.property, self.room_type, self.rate_plan, self.check_in_date,
+			self.check_out_date, self.adults, self.children, self.get("extra_beds"))
+		if not resolved:
+			return
+		agreed_rate, tariff = resolved
+		# A site's Before Validate writer may already have set the rate. Refuse
+		# a disagreement rather than store a reference to a different price.
+		if flt(self.agreed_rate) and flt(self.agreed_rate) != agreed_rate:
+			frappe.throw(_("The contract rate changed. Refresh the quote before booking."))
+		self.agreed_rate = agreed_rate
+		self.contract_tariff = {"tariff": tariff, "agreed_rate": agreed_rate}
 
 	def validate_minimum_nights(self):
 		"""Property.minimum_nights is a hard floor for overnight stays."""
