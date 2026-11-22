@@ -7,6 +7,10 @@ export function currencyText(currency: string, amount: number, locale: string) {
   return `${currency} ${amount.toLocaleString(locale, { minimumFractionDigits: digits, maximumFractionDigits: digits })}`
 }
 
+export function formatFxRate(rate: number, locale: string) {
+  return rate.toLocaleString(locale, { useGrouping: true, maximumFractionDigits: rate >= 100 ? 2 : rate >= 1 ? 4 : 6 })
+}
+
 export function tariffDate(value: string, locale: string) {
   const date = new Date(`${value}T00:00:00Z`)
   if (!Number.isFinite(date.getTime())) return value
@@ -21,7 +25,7 @@ export function TariffNight({ tariff, agreed_rate }: TariffReference) {
   return <span className="tabular-nums">{t("{contract} / night · {home} at {rate} ({date})", {
     contract: currencyText(tariff.currency, tariff.nightly, locale),
     home: currencyText(tariff.property_currency, agreed_rate, locale),
-    rate: tariff.fx_rate.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 6 }),
+    rate: formatFxRate(tariff.fx_rate, locale),
     date: tariffDate(tariff.fx_date, locale),
   })}</span>
 }

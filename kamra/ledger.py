@@ -2102,6 +2102,15 @@ def group_checkout(group: str, pin: str | None = None, reservations=None):
 
 # ── FX desk ──────────────────────────────────────────────────────────────────
 
+def _settlement_rate(row) -> float:
+	"""Book rate for settling a bill; buy and sell spreads belong to the FX desk."""
+	if row.get("source") == "Online" and flt(row.market_rate) > 0:
+		return flt(row.market_rate)
+	if flt(row.sell_rate) > 0:
+		return (flt(row.buy_rate) + flt(row.sell_rate)) / 2
+	return flt(row.buy_rate)
+
+
 @frappe.whitelist()
 @require_roles("Front Desk", "Finance", "Kamra Agent")
 def list_exchange_rates(property: str):
@@ -2120,6 +2129,7 @@ def list_exchange_rates(property: str):
 	today_rows = {}
 	duplicates = set()
 	for r in rows:
+		r.settlement_rate = _settlement_rate(r)
 		if str(r.rate_date) == str(today):
 			if r.currency in today_rows:
 				duplicates.add(r.currency)
@@ -2130,7 +2140,7 @@ def list_exchange_rates(property: str):
 		latest.append(r)
 	return {"business_date": today, "rates": latest,
 	        "tender_rates": [r for c, r in today_rows.items()
-	                         if c not in duplicates and flt(r.buy_rate) > 0]}
+	                         if c not in duplicates and r.settlement_rate > 0]}
 
 
 @frappe.whitelist(methods=["POST"])
@@ -2451,10 +2461,11 @@ def round_cents(value) -> float:
 	return float(_money(value).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
-def fx_to_home(fx_amount, rate) -> float:
-	"""Foreign money received -> home amount posted. Half up to the cent."""
+def fx_to_home(fx_amount, rate, digits=2) -> float:
+	"""Foreign money received -> home amount posted. Half up to the home minor unit."""
+	unit = Decimal(1).scaleb(-digits)
 	return float((_money(fx_amount) * _money(rate)).quantize(
-		Decimal("0.01"), rounding=ROUND_HALF_UP))
+		unit, rounding=ROUND_HALF_UP))
 
 
 def home_to_fx(amount, rate) -> float:
@@ -2475,7 +2486,8 @@ def _settlement_window() -> int:
 @frappe.whitelist()
 @require_roles("Front Desk", "Finance", "Night Auditor", "Kamra Agent")
 def payment_rate(property: str, currency: str, amount: float | None = None) -> dict:
-	"""Resolve the Finance-published buy rate for this property's open business day."""
+	"""Resolve the Finance-published settlement rate for this property's open business day."""
+	from babel.numbers import get_currency_precision
 	from frappe.utils import add_days
 	currency = (currency or "").strip().upper()
 	home = home_currency(property)
@@ -2485,22 +2497,23 @@ def payment_rate(property: str, currency: str, amount: float | None = None) -> d
 	window = _settlement_window()
 	rows = frappe.get_all("Exchange Rate", filters={"property": property, "currency": currency,
 		"rate_date": ["between", [add_days(bd, 1-window), bd]], "disabled": 0},
-		fields=["rate_date", "buy_rate", "max_exchange"], order_by="rate_date desc", limit_page_length=2)
+		fields=["rate_date", "buy_rate", "sell_rate", "market_rate", "source", "max_exchange"], order_by="rate_date desc", limit_page_length=2)
 	if len(rows) == 2 and rows[0].rate_date == rows[1].rate_date:
 		frappe.throw(f"KMR-FX-002 / HSP-CASHIER-FX-RATE: Multiple {currency} rates on {rows[0].rate_date}. Ask Finance.")
-	if not rows or not flt(rows[0].buy_rate) > 0:
+	rate = _settlement_rate(rows[0]) if rows else 0
+	if rate <= 0:
 		frappe.throw(f"KMR-FX-001 / HSP-CASHIER-FX-RATE: No {currency} rate set for {bd} within {window} day(s). Ask Finance.")
 	row = rows[0]
-	out = {"currency": currency, "rate": row.buy_rate, "rate_date": str(row.rate_date),
+	out = {"currency": currency, "rate": rate, "rate_date": str(row.rate_date),
 	       "home_currency": home, "max_exchange": row.max_exchange, "window_days": window}
 	if amount is not None:
 		foreign = round_cents(amount)
 		if foreign <= 0 or (flt(row.max_exchange) > 0 and foreign > row.max_exchange):
 			frappe.throw("HSP-CASHIER-FX-LIMIT: Enter a positive amount within the published exchange limit.")
-		out["home_amount"] = fx_to_home(foreign, row.buy_rate)
+		out["home_amount"] = fx_to_home(foreign, rate, get_currency_precision(home))
 		# An opaque confirmation ties the preview to the exact terms, including a Finance rate change.
 		out["quote_id"] = hashlib.sha256(json.dumps([property, bd, currency, foreign,
-			str(row.rate_date), row.buy_rate, home]).encode()).hexdigest()
+			str(row.rate_date), rate, home, out["home_amount"]]).encode()).hexdigest()
 	return out
 
 

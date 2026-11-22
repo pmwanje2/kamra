@@ -1,7 +1,7 @@
 import { SettlementPreview, useSettlementQuote } from "./SettlementPreview"
-import TenderPicker, { resolveTender, tenderAmount, tenderModes, tenderReady, useTenderRates } from "./TenderPicker"
+import TenderPicker, { TenderInput, resolveTender, tenderAmount, tenderModes, tenderReady, useTenderRates } from "./TenderPicker"
 import { RateOptions } from "./RateOptions"
-import { currencyText, TariffNight, TariffRoomTotal } from "./ContractTariff"
+import { currencyText, TariffRoomTotal } from "./ContractTariff"
 import { useEffect, useRef, useState } from "react"
 import { htmlToText, formatDate, roomLabel } from "../lib/utils"
 import { useNavigate } from "react-router-dom"
@@ -21,7 +21,7 @@ import {
 } from "../lib/api"
 import { pickDefaultRoomType } from "../lib/bookingDefaults"
 import { Button } from "./ui/button"
-import { cur, moneyLocale, useLocale } from "../lib/money"
+import { useLocale } from "../lib/money"
 import { isPhoneComplete } from "../lib/phone"
 import { nightsBetween, parseDate, shiftDate } from "../lib/stay"
 import { typedNights, type NightPrice } from "../lib/nightPrices"
@@ -104,8 +104,6 @@ function todayLocal() {
   return `${d.getFullYear()}-${m}-${day}`
 }
 
-const inr = (n: number) =>
-  n.toLocaleString(moneyLocale(), { maximumFractionDigits: 0 })
 
 export function BookingDialog(props: {
   initial: {
@@ -284,6 +282,7 @@ export function BookingDialog(props: {
   const navigate = useNavigate()
   // ID documents and ways to pay come from the property's country pack
   const loc = useLocale()
+  const homeText = (amount: number) => currencyText(loc.currency, amount, loc.locale)
   const { ensureUnlocked, status: pinStatus } = useCashierAuth()
   const [walkIn, setWalkIn] = useState(!!props.initial.walkIn)
   // Overnight stay: the arrival and departure time. They default to the
@@ -802,12 +801,12 @@ export function BookingDialog(props: {
 
   // one key per open dialog: a double-tap replays instead of double-booking
   const [requestedCurrency, setRequestedCurrency] = useState("")
-  const { today: buyRates } = useTenderRates(getCurrentProperty(), walkIn)
+  const { today: settlementRates } = useTenderRates(getCurrentProperty(), walkIn)
   const modes = tenderModes(loc, loc.currency)
   const tender = resolveTender(modes, loc.currency, { mode: walk.pay_mode, currency: requestedCurrency })
   const payCurrency = tender.currency
   const foreign = !!payCurrency && payCurrency !== loc.currency
-  const paymentReady = tenderReady(tender, loc.currency, buyRates)
+  const paymentReady = tenderReady(tender, loc.currency, settlementRates)
   const fx = useSettlementQuote(getCurrentProperty(), foreign && paymentReady ? payCurrency : "", Number(walk.pay_amount))
   const [walkInKey] = useState(() =>
     typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -953,7 +952,11 @@ export function BookingDialog(props: {
   const quoteTariff = otaTotal <= 0 ? quote?.tariff : null
   const quoteTaxBasis = quote?.tax_basis === undefined ? loc.tax_basis : quote.tax_basis
 
-  const suggestedAmount = paymentReady ? tenderAmount(grandTotal, payCurrency, loc.currency, buyRates) : ""
+  const fullAmount = (currency: string) => quoteTariff && quote && quoteTariff.currency === currency &&
+    quote.agreed_rate != null && quote.agreed_rate * quote.nights === grandTotal
+    ? String(Number((quoteTariff.nightly * quote.nights).toFixed(2)))
+    : tenderAmount(grandTotal, currency, loc.currency, settlementRates)
+  const suggestedAmount = paymentReady ? fullAmount(payCurrency) : ""
   useEffect(() => {
     if (walkIn && !amountTouched)
       setWalk((w) => ({
@@ -1096,8 +1099,8 @@ export function BookingDialog(props: {
                   {" · "}
                   {(done.walkIn.paid ?? 0) > 0
                     ? t("{amt} of {total} collected", {
-                        amt: `${cur()}${inr(done.walkIn.paid ?? 0)}`,
-                        total: `${cur()}${inr(done.walkIn.amount_after_tax ?? 0)}`,
+                        amt: homeText(done.walkIn.paid ?? 0),
+                        total: homeText(done.walkIn.amount_after_tax ?? 0),
                       })
                     : t("Nothing collected yet - it's all on the bill.")}
                 </p>
@@ -1475,7 +1478,7 @@ export function BookingDialog(props: {
                     {options?.room_types.map((rt) => (
                       <option key={rt.name} value={rt.name}>
                         {rt.room_type_name}
-                        {!form.rate_plan && !planRequired && !quoteTariff && <> · {t("BAR")} {cur()}{inr(rt.base_price)}/{t("night")}</>}
+                        {!form.rate_plan && !planRequired && !quoteTariff && <> · {t("BAR")} {homeText(rt.base_price)}/{t("night")}</>}
                       </option>
                     ))}
                   </select>
@@ -1728,8 +1731,7 @@ export function BookingDialog(props: {
                     </Field>
                     {options.property.pet_charge > 0 && (
                       <p className="col-span-1 self-end pb-2 text-xs text-zinc-500 sm:col-span-3">
-                        {cur()}
-                        {inr(options.property.pet_charge)}{" "}
+                        {homeText(options.property.pet_charge)}{" "}
                         {t(petChargeBasis(options.property.pet_charge_basis))}
                       </p>
                     )}
@@ -1811,8 +1813,7 @@ export function BookingDialog(props: {
                       <option value="">{t("Room only")}</option>
                       {options?.meal_plans.map((mp) => (
                         <option key={mp.name} value={mp.name}>
-                          {translate(mp.label)} (+{cur()}
-                          {inr(mp.price_per_adult)}{translate("/adult)")}</option>
+                          {translate(mp.label)} (+{homeText(mp.price_per_adult)}{translate("/adult)")}</option>
                       ))}
                     </select>
                   </Field>
@@ -1879,40 +1880,30 @@ export function BookingDialog(props: {
                     <h3 className="text-sm font-semibold text-zinc-800">
                       {t("Payment")}
                     </h3>
-                    <TenderPicker home={loc.currency} chosen={tender} modes={modes} rates={buyRates}
+                    <TenderPicker home={loc.currency} chosen={tender} modes={modes} rates={settlementRates}
                       onChange={({ mode, currency }) => {
                         setRequestedCurrency(currency)
                         setWalk((w) => ({
                           ...w, pay_mode: mode,
-                          pay_amount: currency === payCurrency ? w.pay_amount : tenderAmount(grandTotal, currency, loc.currency, buyRates),
+                          pay_amount: currency === payCurrency ? w.pay_amount : fullAmount(currency),
                         }))
                         if (currency !== payCurrency) setAmountTouched(false)
                       }} />
-                    {foreign && <SettlementPreview result={fx} amount={payAmount} balance={grandTotal}/>}
                     <div className="grid gap-3 sm:grid-cols-2">
-                      <Field label={t("Amount collected")}>
-                        <input
-                          type="number"
-                          min={0}
-                          step="0.01"
-                          inputMode="decimal"
-                          className={inputCls}
-                          value={walk.pay_amount}
-                          onChange={(e) => {
-                            setAmountTouched(true)
-                            setW("pay_amount", e.target.value)
-                          }}
-                        />
+                      <div>
+                        <p className="mb-1 text-xs font-medium">{t("Amount collected")}</p>
+                        <TenderInput currency={payCurrency} value={walk.pay_amount} full={suggestedAmount}
+                          onChange={amount => { setAmountTouched(true); setW("pay_amount", amount) }} />
                         <p className="mt-1.5 text-xs text-zinc-400">
                           {foreign ? null : payAmount <= 0
                             ? t("Nothing collected now - the full amount stays on the bill.")
                             : payAmount < grandTotal
                               ? t("{amt} left on the bill.", {
-                                  amt: `${cur()}${inr(grandTotal - payAmount)}`,
+                                  amt: homeText(grandTotal - payAmount),
                                 })
                               : t("Paid in full.")}
                         </p>
-                      </Field>
+                      </div>
                       {tender.mode && tender.mode !== "Cash" && (
                         <Field label={t("Reference")}>
                           <input
@@ -1924,6 +1915,7 @@ export function BookingDialog(props: {
                         </Field>
                       )}
                     </div>
+                    {foreign && <SettlementPreview result={fx} amount={payAmount} balance={grandTotal}/>}
                   </div>
                 )}
 
@@ -2249,8 +2241,7 @@ export function BookingDialog(props: {
                                       }))
                                     }
                                   >
-                                    {x.experience_name} · {cur()}
-                                    {inr(x.price)}
+                                    {x.experience_name} · {homeText(x.price)}
                                   </button>
                                 )
                               })}
@@ -2490,12 +2481,10 @@ export function BookingDialog(props: {
                           : translate("{v0} night{v1}", { v0: String(quote.nights), v1: String(quote.nights === 1 ? "" : "s") })}
                       </span>
                       {!quoteTariff && <span className="shrink-0 tabular-nums">
-                        {cur()}
-                        {inr(quote.room_total)}
+                        {homeText(quote.room_total)}
                       </span>}
                     </div>
                     {quoteTariff && <div className="space-y-1 text-sm">
-                      <p><TariffNight {...quote} /></p>
                       <p><TariffRoomTotal tariff={quoteTariff} nights={quote.nights}
                         agreedRate={quote.agreed_rate ?? 0} locale={loc.locale} /></p>
                     </div>}
@@ -2503,8 +2492,7 @@ export function BookingDialog(props: {
                       <div className="flex justify-between text-zinc-600">
                         <span>{t("Extra guests")}</span>
                         <span className="tabular-nums">
-                          {cur()}
-                          {inr(quote.over_capacity_total ?? 0)}
+                          {homeText(quote.over_capacity_total ?? 0)}
                         </span>
                       </div>
                     )}
@@ -2512,8 +2500,7 @@ export function BookingDialog(props: {
                       <div className="flex justify-between text-zinc-600">
                         <span>{t("Meals")}</span>
                         <span className="tabular-nums">
-                          {cur()}
-                          {inr(quote.meal_total)}
+                          {homeText(quote.meal_total)}
                         </span>
                       </div>
                     )}
@@ -2523,8 +2510,7 @@ export function BookingDialog(props: {
                           {t("Pets")} × {form.pets}
                         </span>
                         <span className="tabular-nums">
-                          {cur()}
-                          {inr(quote.pet_charge || 0)}
+                          {homeText(quote.pet_charge || 0)}
                         </span>
                       </div>
                     )}
@@ -2532,8 +2518,7 @@ export function BookingDialog(props: {
                       <div className="flex justify-between font-medium text-emerald-700">
                         <span>{t("Long stay {pct}% off (in the room price)", { pct: String(quote.long_stay.percent) })}</span>
                         <span className="tabular-nums">
-                          −{cur()}
-                          {inr(quote.long_stay.amount)}
+                          −{homeText(quote.long_stay.amount)}
                         </span>
                       </div>
                     )}
@@ -2541,8 +2526,7 @@ export function BookingDialog(props: {
                       <div className="flex justify-between font-medium text-emerald-700">
                         <span>{t("Voucher")}</span>
                         <span className="tabular-nums">
-                          −{cur()}
-                          {inr(quote.discount)}
+                          −{homeText(quote.discount)}
                         </span>
                       </div>
                     )}
@@ -2557,8 +2541,7 @@ export function BookingDialog(props: {
                         {loc.tax_label} {quote.tax_percent}%
                       </span>
                       <span className="tabular-nums">
-                        {cur()}
-                        {inr(quote.tax_amount)}
+                        {homeText(quote.tax_amount)}
                       </span>
                     </div>}
                     {moreQuotes.map((mq, i) =>
@@ -2576,8 +2559,7 @@ export function BookingDialog(props: {
                               : ""}
                           </span>
                           <span className="shrink-0 tabular-nums">
-                            {cur()}
-                            {inr(mq.amount_after_tax * (moreRooms[i]?.count ?? 1))}
+                            {homeText(mq.amount_after_tax * (moreRooms[i]?.count ?? 1))}
                           </span>
                         </div>
                       ) : null,
@@ -2588,8 +2570,7 @@ export function BookingDialog(props: {
                           {t("Add-ons (incl. {tax})", { tax: loc.tax_label })}
                         </span>
                         <span className="tabular-nums">
-                          {cur()}
-                          {inr(addonsGross)}
+                          {homeText(addonsGross)}
                         </span>
                       </div>
                     )}
@@ -2598,7 +2579,7 @@ export function BookingDialog(props: {
                       <div className="flex items-baseline justify-between gap-2">
                         <span>{t("Total")}{moreRooms.length > 0 ? t(" · all rooms") : ""}</span>
                         <span className="text-3xl font-semibold tabular-nums tracking-tight text-zinc-900">
-                          {quoteTariff ? currencyText(quoteTariff.property_currency, grandTotal, loc.locale) : `${cur()}${inr(grandTotal)}`}
+                          {quoteTariff ? currencyText(quoteTariff.property_currency, grandTotal, loc.locale) : homeText(grandTotal)}
                         </span>
                       </div>
                       <p className="mt-1 text-xs text-zinc-400">
@@ -2619,15 +2600,15 @@ export function BookingDialog(props: {
                         {(options.property.no_show_charge || "None") !== "None" &&
                           translate(" No-show: {v0} charged.", { v0: String(String(options.property.no_show_charge).toLowerCase()) })}
                         {advanceNow > 0 && advancePercents.size <= 1 &&
-                          translate(" Deposit expected now: {v0}{v1} ({v2}%).", { v0: String(cur()), v1: String(inr(advanceNow)), v2: String(advanceRooms[0]?.percent ?? 0) })}
+                          translate(" Deposit expected now: {v0}{v1} ({v2}%).", { v0: "", v1: homeText(advanceNow), v2: String(advanceRooms[0]?.percent ?? 0) })}
                         {advanceNow > 0 && advancePercents.size > 1 &&
-                          translate(" Advance {v0}{v1}:", { v0: String(cur()), v1: String(inr(advanceNow)) })}
+                          translate(" Advance {v0}{v1}:", { v0: "", v1: homeText(advanceNow) })}
                       </p>
                     )}
                     {options?.property && advanceNow > 0 && advancePercents.size > 1 && (
                       <ul className="text-xs text-zinc-500">
                         {advanceRooms.map((r, i) => (
-                          <li key={i}>{`${r.name} · ${r.percent}% · ${cur()}${inr(r.amount)}`}</li>
+                          <li key={i}>{`${r.name} · ${r.percent}% · ${homeText(r.amount)}`}</li>
                         ))}
                       </ul>
                     )}
@@ -2666,7 +2647,7 @@ export function BookingDialog(props: {
                         ? t("Saving…")
                         : payAmount > 0
                           ? t("Collect {amt} and continue to check-in", {
-                              amt: foreign ? `${payCurrency} ${payAmount}` : `${cur()}${inr(payAmount)}`,
+                              amt: currencyText(payCurrency, payAmount, loc.locale),
                             })
                           : t("Continue to check-in")}
                     </Button>

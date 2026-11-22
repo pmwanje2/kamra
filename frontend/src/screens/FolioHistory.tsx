@@ -1,3 +1,4 @@
+import { currencyText, formatFxRate } from "../components/ContractTariff"
 import { formatDate } from "../lib/utils"
 import { useCallback, useEffect, useState } from "react"
 import { Link } from "react-router-dom"
@@ -163,7 +164,7 @@ export default function FolioHistory() {
                 </td>
                 <td className="px-3 py-2 font-mono text-xs">
                   {r.invoice_number || "-"}
-                  {r.fx_payments?.map((p,i)=><div key={i}>{p.currency} {p.fx_amount} @ {p.exchange_rate}{p.exchange_rate_date && ` · ${formatDate(p.exchange_rate_date)}`}</div>)}
+                  {r.fx_payments?.map((p,i)=><div className="tabular-nums" key={i}>{currencyText(p.currency, p.fx_amount, moneyLocale())} @ {formatFxRate(p.exchange_rate, moneyLocale())}{p.exchange_rate_date && ` · ${formatDate(p.exchange_rate_date)}`}</div>)}
                 </td>
                 <td className="px-3 py-2">
                   <Badge tone={r.status === "Open" ? "green" : "zinc"}>

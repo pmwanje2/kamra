@@ -11,7 +11,8 @@ test("Room Types separates the card rate from approved, read-only tariffs and in
     assert.ok(await dialog.getByText(/^Card rate \/ night \(UGX\)(?: \*)?$/).isVisible(), "card rate label must name the property currency")
     await dialog.getByText("Used only by rate plans without a contract tariff").waitFor()
     const panel = dialog.getByRole("region", { name: "Contract tariffs" })
-    await panel.getByText("Corporate tariff").waitFor()
+    await panel.getByRole("table").getByRole("row", { name: /Corporate tariff/ }).waitFor()
+    await panel.getByText(/Published selling rate: 1 USD = 3,650 UGX/).waitFor()
     for (const text of [/USD 130\.00/, /USD 100\.00/, /USD 20\.00/, /UGX 474,500/, /Approved/, /1 Nov/, /card rate is not used/i]) {
       await panel.getByText(text).first().waitFor()
     }

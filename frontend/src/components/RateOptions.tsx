@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from "react"
 import { call, getCurrentProperty, type TariffReference } from "../lib/api"
-import { TariffNight, TariffRoomTotal } from "./ContractTariff"
+import { currencyText, formatFxRate, tariffDate } from "./ContractTariff"
 import { InfoTip } from "./InfoTip"
-import { cur, moneyDigits, moneyLocale } from "../lib/money"
+import { locale, moneyDigits, moneyLocale } from "../lib/money"
 import { isOverride, maxPriceDigits, parsePrice, splitRoomTotal } from "../lib/nightPrices"
 import { useT, t as translate } from "../lib/i18n"
 import { cn } from "../lib/utils"
 
 
-const n0 = (n: number) => Number(n ?? 0).toLocaleString(moneyLocale(), { maximumFractionDigits: 0 })
+const homeText = (n: number) => currencyText(locale().currency, n, moneyLocale())
 
 export interface NightRate {
   date: string
@@ -119,6 +119,9 @@ export function RateOptions({
   if (err) return <p className="text-xs text-zinc-400">{translate(err)}</p>
   if (!data) return null
   const selected = data.plans.find((plan) => plan.name === ratePlan)
+  const references = [...new Map(data.plans.flatMap(({ tariff }) => tariff ? [[
+    JSON.stringify([tariff.currency, tariff.property_currency, tariff.fx_rate, tariff.fx_date]), tariff,
+  ] as const] : [])).values()]
   const required = planRequired || data.rate_plan_required
   const moved = data.nights.some((x) => x.season || x.demand)
   const digits = maxPriceDigits(moneyDigits())
@@ -180,18 +183,14 @@ export function RateOptions({
         </InfoTip>}
       </div>
 
-      {selected?.tariff ? <ul className="space-y-1 text-sm">
-        {data.nights.map(night => <li key={night.date} className="flex flex-wrap justify-between gap-x-3">
-          <span>{night.date.slice(5)}</span><TariffNight {...selected} />
-        </li>)}
-      </ul> : selected?.available === false || (required && !ratePlan) ? null : <>
+      {selected?.tariff || selected?.available === false || (required && !ratePlan) ? null : <>
       {canSetPrice && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
           <label htmlFor="night-room-total" className="text-zinc-600">
             {t("Room total")}
           </label>
           <span className="inline-flex items-center gap-1">
-            <span className="text-zinc-500">{cur()}</span>
+            <span className="text-zinc-500">{locale().currency}</span>
             <input
               id="night-room-total"
               inputMode="decimal"
@@ -227,7 +226,7 @@ export function RateOptions({
               <span className="w-24 text-zinc-500">{x.date.slice(5)}</span>
               {canSetPrice ? (
                 <span className="inline-flex items-center gap-1">
-                  <span className="text-zinc-500">{cur()}</span>
+                  <span className="text-zinc-500">{locale().currency}</span>
                   <input
                     ref={(el) => {
                       inputs.current[x.date] = el
@@ -247,14 +246,13 @@ export function RateOptions({
                 </span>
               ) : (
                 <span className="font-medium tabular-nums">
-                  {cur()}
-                  {n0(priceOf(x))}
+                  {homeText(priceOf(x))}
                 </span>
               )}
               {typed ? (
                 <>
                   <span className="text-xs text-zinc-400 tabular-nums line-through">
-                    {t("BAR {r}", { r: `${cur()}${n0(x.rate)}` })}
+                    {t("BAR {r}", { r: homeText(x.rate) })}
                   </span>
                   <button
                     type="button"
@@ -270,7 +268,7 @@ export function RateOptions({
               ) : (
                 x.rate !== x.bar && (
                   <span className="text-xs text-zinc-400 tabular-nums">
-                    {t("BAR {r}", { r: `${cur()}${n0(x.bar)}` })}
+                    {t("BAR {r}", { r: homeText(x.bar) })}
                   </span>
                 )
               )}
@@ -312,14 +310,13 @@ export function RateOptions({
               type="button"
               onClick={() => onPickPlan("")}
               className={cn(
-                "flex w-full items-center justify-between rounded-lg border px-3 py-1.5 text-sm",
+                "flex w-full items-center justify-between gap-3 rounded-xl border px-3.5 py-2.5 transition-colors text-sm",
                 !ratePlan ? "border-brand-600 bg-brand-50" : "border-zinc-200 hover:bg-zinc-50",
               )}
             >
               <span>{t("Standard rate")}</span>
               <span className="tabular-nums">
-                {cur()}
-                {n0(data.plain.room_total)}
+                {homeText(data.plain.room_total)}
               </span>
             </button>}
             {data.plans.map((p) => (
@@ -330,41 +327,44 @@ export function RateOptions({
                 disabled={hasTyped || p.available === false}
                 aria-pressed={ratePlan === p.name}
                 className={cn(
-                  "flex w-full flex-wrap items-center justify-between gap-x-3 text-start rounded-lg border px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-50",
+                  "flex w-full items-center justify-between gap-3 text-start rounded-xl border px-3.5 py-2.5 transition-colors text-sm disabled:cursor-not-allowed disabled:opacity-50",
                   ratePlan === p.name ? "border-brand-600 bg-brand-50" : "border-zinc-200 hover:bg-zinc-50",
                 )}
               >
-                <span>
+                <span className="font-semibold text-zinc-900">
                   {p.label}
-                  {p.code ? <span className="ms-1 text-xs text-zinc-400">{p.code}</span> : null}
+                  {p.code ? <span className="ms-1 rounded bg-zinc-100 px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-zinc-600">{p.code}</span> : null}
                 </span>
                 {p.available === false ? <span className="text-rose-700">{p.refusal}</span> : p.tariff ? (
-                  <span className="text-xs">
-                    <TariffNight {...p} />
-                    <span className="block text-zinc-600">
-                      <TariffRoomTotal tariff={p.tariff} nights={data.nights.length} agreedRate={p.agreed_rate ?? 0} locale={moneyLocale()} />
-                    </span>
+                  <span className="text-right font-semibold tabular-nums">
+                    {currencyText(p.tariff.currency, p.tariff.nightly, moneyLocale())}{" "}
+                    <span className="text-xs font-normal text-zinc-500">/ {t("night")}</span>
+                    <span className="block text-xs font-normal text-zinc-500">≈ {currencyText(p.tariff.property_currency, p.agreed_rate ?? p.room_total / Math.max(1, data.nights.length), moneyLocale())}</span>
                   </span>
                 ) : <span className="tabular-nums">
-                  {cur()}
-                  {n0(p.room_total)}
+                  {homeText(p.room_total)}
                   {p.vs_plain !== 0 && (
                     <span className={cn("ms-2 text-xs", p.vs_plain < 0 ? "text-emerald-700" : "text-rose-700")}>
                       {p.vs_plain > 0 ? "+" : ""}
-                      {n0(p.vs_plain)}
+                      {homeText(p.vs_plain)}
                     </span>
                   )}
                 </span>}
               </button>
             ))}
           </div>
+          {references.map(r => <p key={JSON.stringify(r)} className="mt-2 text-xs text-zinc-600 tabular-nums">
+            {t("Published rate: 1 {foreign} = {rate} {home} · Effective {date}", {
+              foreign: r.currency, rate: formatFxRate(r.fx_rate, moneyLocale()), home: r.property_currency, date: tariffDate(r.fx_date, moneyLocale()),
+            })}
+          </p>)}
         </div>
       )}
 
       {data.voucher && (
         <p className={cn("text-sm", data.voucher.valid ? "text-emerald-700" : "text-rose-700")}>
           {data.voucher.valid
-            ? t("Voucher {code} takes {amt} off.", { code: data.voucher.code, amt: `${cur()}${n0(data.voucher.discount ?? 0)}` })
+            ? t("Voucher {code} takes {amt} off.", { code: data.voucher.code, amt: homeText(data.voucher.discount ?? 0) })
             : data.voucher.reason}
         </p>
       )}

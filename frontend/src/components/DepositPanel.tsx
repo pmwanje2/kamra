@@ -1,5 +1,5 @@
 import { SettlementPreview, useSettlementQuote } from "./SettlementPreview"
-import TenderPicker, { resolveTender, tenderAmount, tenderModes, tenderReady, useTenderRates } from "./TenderPicker"
+import TenderPicker, { TenderInput, resolveTender, tenderAmount, tenderModes, tenderReady, useTenderRates } from "./TenderPicker"
 /*  Take a deposit on a booking before arrival (#114): record it as paid at
     the desk, or send the guest a payment link. Either way it lands on the
     guest folio as an Advance, so the balance at check-in is right. Used in
@@ -46,12 +46,12 @@ export default function DepositPanel(props: {
   const [amount, setAmount] = useState(String(deposit.due || ""))
   const [requested, setRequested] = useState({ mode: "", currency: "" })
   const property = getCurrentProperty()
-  const { today: buyRates } = useTenderRates(property, mode === "record")
+  const { today: settlementRates } = useTenderRates(property, mode === "record")
   const modes = tenderModes(loc, loc.currency)
   const tender = resolveTender(modes, loc.currency, requested)
   const payCurrency = tender.currency
   const foreign = mode === "record" && !!payCurrency && payCurrency !== loc.currency
-  const paymentReady = tenderReady(tender, loc.currency, buyRates)
+  const paymentReady = tenderReady(tender, loc.currency, settlementRates)
   const fx = useSettlementQuote(property, foreign && paymentReady ? payCurrency : "", Number(amount))
   const [reference, setReference] = useState("")
   // one key per "Take advance": a retry after a lost response replays
@@ -216,24 +216,14 @@ export default function DepositPanel(props: {
 
       {mode && (
         <div className="mt-3 space-y-3 rounded-lg bg-zinc-50 p-3">
-          {mode === "record" && <TenderPicker home={loc.currency} chosen={tender} modes={modes} rates={buyRates}
+          {mode === "record" && <TenderPicker home={loc.currency} chosen={tender} modes={modes} rates={settlementRates}
             onChange={(choice) => {
               setRequested(choice)
-              if (choice.currency !== payCurrency) setAmount(tenderAmount(deposit.due, choice.currency, loc.currency, buyRates))
+              if (choice.currency !== payCurrency) setAmount(tenderAmount(deposit.due, choice.currency, loc.currency, settlementRates))
             }} />}
-          {foreign && <SettlementPreview result={fx} amount={Number(amount)} balance={deposit.due}/>}
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-zinc-600">{t("Amount")}</span>
-            <input
-              type="number"
-              min={0}
-              step="0.01"
-              inputMode="decimal"
-              className={inputCls}
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-            />
-          </label>
+          <TenderInput currency={mode === "record" ? payCurrency : loc.currency} value={amount}
+            full={tenderAmount(deposit.due, mode === "record" ? payCurrency : loc.currency, loc.currency, settlementRates)}
+            onChange={setAmount} />
 
           {mode === "record" && (
             <>
@@ -245,6 +235,7 @@ export default function DepositPanel(props: {
                   onChange={(e) => setReference(e.target.value)}
                 />
               )}
+              {foreign && <SettlementPreview result={fx} amount={Number(amount)} balance={deposit.due} />}
               <div className="flex gap-2">
                 <Button disabled={busy || !paymentReady || !(Number(amount) > 0) || (foreign && !fx?.quote)} onClick={record}>
                   {busy ? t("Saving…") : t("Record {amt}", { amt: foreign?`${payCurrency} ${amount}`:fmt(Number(amount) || 0) })}

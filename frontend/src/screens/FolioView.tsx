@@ -1,6 +1,6 @@
 import { SettlementPreview, useSettlementQuote } from "../components/SettlementPreview"
-import TenderPicker, { resolveTender, tenderAmount, tenderModes, tenderReady, useTenderRates } from "../components/TenderPicker"
-import { TariffNight } from "../components/ContractTariff"
+import TenderPicker, { TenderInput, resolveTender, tenderAmount, tenderModes, tenderReady, useTenderRates } from "../components/TenderPicker"
+import { currencyText, formatFxRate, TariffNight } from "../components/ContractTariff"
 import RowCorrection from "../components/RowCorrection"
 import { ResponsiveList, Popin } from "../components/ui/responsive-list"
 import { Fragment, useCallback, useEffect, useRef, useState } from "react"
@@ -310,13 +310,13 @@ export default function FolioView() {
   const [paymentKey, setPaymentKey] = useState(newIdempotencyKey)
   const folioProperty = data?.folio.property || getCurrentProperty()
   const home = data?.property.currency || loc.currency
-  const { today: buyRates, rates: fxRates } = useTenderRates(folioProperty, !!data)
+  const { today: settlementRates, rates: fxRates } = useTenderRates(folioProperty, !!data)
   const availableTenders = tenderModes(loc, home, true)
   const paymentTenders = payment.kind === "Security Deposit"
     ? availableTenders.filter(({ currencies }) => currencies.includes(home)).map(({ mode }) => ({ mode, currencies: [home] }))
     : availableTenders
   const tender = resolveTender(paymentTenders, home, payment)
-  const paymentReady = tenderReady(tender, home, buyRates)
+  const paymentReady = tenderReady(tender, home, settlementRates)
   const foreign = !!tender.currency && tender.currency !== home
   const [showIn, setShowIn] = useState("")
   const [shown, setShown] = useState<{
@@ -1380,7 +1380,7 @@ export default function FolioView() {
                         <span className="text-zinc-400"> · {p.reference}</span>
                       )}
                       {!!Number(p.fx_amount) && (
-                        <span className="text-zinc-400"> · {p.currency} {p.fx_amount} @ {p.exchange_rate}{p.exchange_rate_date && ` · ${formatDate(p.exchange_rate_date)}`}</span>
+                        <span className="text-zinc-400"> · {currencyText(p.currency!, Number(p.fx_amount), loc.locale)} @ {formatFxRate(Number(p.exchange_rate), loc.locale)}{p.exchange_rate_date && ` · ${formatDate(p.exchange_rate_date)}`}</span>
                       )}
                     </span>
                     <span className={Number(p.amount) < 0 ? "font-medium text-rose-600" : ""}>{property.currency} {Number(p.amount).toLocaleString(undefined,{maximumFractionDigits:2})}</span>
@@ -1698,20 +1698,14 @@ export default function FolioView() {
                   <option key={k} value={k}>{t(k)}</option>
                 ))}
               </select>
-              <TenderPicker home={home} chosen={tender} modes={paymentTenders} rates={buyRates}
+              <TenderPicker home={home} chosen={tender} modes={paymentTenders} rates={settlementRates}
                 onChange={(choice) => setPayment({
                   ...payment, ...choice,
-                  amount: choice.currency === tender.currency ? payment.amount : tenderAmount(folio.balance, choice.currency, home, buyRates),
+                  amount: choice.currency === tender.currency ? payment.amount : tenderAmount(folio.balance, choice.currency, home, settlementRates),
                 })} />
-              <input
-                className={`${inputCls} w-28`}
-                type="number"
-                placeholder={foreign ? tender.currency : translate(`${cur()}`)}
-                value={payment.amount}
-                onChange={(e) =>
-                  setPayment({ ...payment, amount: e.target.value })
-                }
-              />
+              <TenderInput currency={tender.currency} value={payment.amount}
+                full={tenderAmount(folio.balance, tender.currency, home, settlementRates)}
+                onChange={amount => setPayment({ ...payment, amount })} />
               <input
                 className={`${inputCls} flex-1`}
                 placeholder={t("Reference (optional)")}

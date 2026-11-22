@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react"
 import { call } from "../lib/api"
 import { useT } from "../lib/i18n"
-import type { TenderMode } from "../lib/money"
+import { moneyDigits, type TenderMode } from "../lib/money"
 
 type Vocabulary = { payment_modes: string[]; tender_modes?: TenderMode[] | null; fx_currencies?: string[] }
-type Rate = { currency: string; rate_date: string; buy_rate: number }
+type Rate = { currency: string; rate_date: string; buy_rate: number; settlement_rate?: number; market_rate?: number }
 type Rates = { business_date: string; rates: Rate[]; tender_rates?: Rate[] }
 type Choice = { mode: string; currency: string }
-type BuyRates = Readonly<Record<string, number>>
+type SettlementRates = Readonly<Record<string, number>>
 
 export function useTenderRates(property: string, enabled = true) {
   const [state, setState] = useState<{ property: string; data: Rates }>()
@@ -20,10 +20,10 @@ export function useTenderRates(property: string, enabled = true) {
     return () => { active = false }
   }, [property, enabled])
   const data = state?.property === property ? state.data : undefined
-  const today: BuyRates = Object.fromEntries(
+  const today: SettlementRates = Object.fromEntries(
     (data?.tender_rates ?? data?.rates ?? [])
-      .filter((r) => r.rate_date === data?.business_date && Number(r.buy_rate) > 0)
-      .map((r) => [r.currency, Number(r.buy_rate)]),
+      .filter((r) => r.rate_date === data?.business_date && Number(r.settlement_rate || r.market_rate || r.buy_rate) > 0)
+      .map((r) => [r.currency, Number(r.settlement_rate || r.market_rate || r.buy_rate)]),
   )
   return { today, rates: data?.rates ?? [] }
 }
@@ -62,17 +62,35 @@ export function resolveTender(modes: TenderMode[], home: string, requested: Choi
   return { mode: item.mode, currency }
 }
 
-export function tenderReady({ mode, currency }: Choice, home: string, rates: BuyRates) {
+export function tenderReady({ mode, currency }: Choice, home: string, rates: SettlementRates) {
   return !!(mode && currency && (currency === home || rates[currency] > 0))
 }
 
-export function tenderAmount(balance: number, currency: string, home: string, rates: BuyRates) {
+export function tenderAmount(balance: number, currency: string, home: string, rates: SettlementRates) {
   if (!(balance > 0) || !currency) return ""
   if (currency === home) return String(Math.round(balance * 100) / 100)
   const rate = rates[currency]
   if (!(rate > 0)) return ""
   const cents = (balance / rate) * 100
+  const lower = Math.floor(cents) / 100
+  const scale = 10 ** moneyDigits(home)
+  if (Math.round(lower * rate * scale) >= Math.round(balance * scale)) return String(lower)
   return String(Math.ceil(cents - Number.EPSILON * cents) / 100)
+}
+
+export function TenderInput({ currency, value, full, onChange }: {
+  currency: string; value: string; full: string; onChange: (amount: string) => void
+}) {
+  const { t } = useT()
+  return <div className="flex items-center gap-2">
+    <label className="flex min-w-0 items-center gap-2 rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5">
+      <span className="text-xs font-medium text-zinc-500">{currency}</span>
+      <input type="number" min="0" step="0.01" inputMode="decimal" aria-label={t("Amount collected")}
+        className="w-24 min-w-0 text-right tabular-nums" value={value} onChange={e => onChange(e.target.value)} />
+    </label>
+    <button type="button" disabled={!full} className="rounded-full border px-2 py-1 text-xs disabled:opacity-50"
+      onClick={() => onChange(full)}>{t("Full amount")}</button>
+  </div>
 }
 
 export default function TenderPicker({
@@ -81,7 +99,7 @@ export default function TenderPicker({
   home: string
   chosen: Choice
   modes: TenderMode[]
-  rates?: BuyRates
+  rates?: SettlementRates
   onChange: (value: Choice) => void
   fixedCurrency?: string
 }) {
@@ -101,7 +119,8 @@ export default function TenderPicker({
           <button key={mode} type="button" aria-pressed={chosen.mode === mode} className={pill(chosen.mode === mode)}
             onClick={() => {
               if (chosen.mode === mode) return
-              const currency = fixedCurrency || (currencies.includes(home) ? home : "")
+              const enabled = currencies.filter(code => rates[code] > 0)
+              const currency = fixedCurrency || (currencies.includes(home) ? home : enabled.length === 1 ? enabled[0] : "")
               onChange({ mode, currency })
             }}>
             {t(mode)}

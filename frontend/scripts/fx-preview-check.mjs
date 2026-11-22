@@ -18,12 +18,13 @@ for (const label of [
   "Amount tendered",
   "Exchange rate",
   "Effective rate date",
-  "Company-currency equivalent",
+  "Local equivalent",
+  "Settled in full",
   "Remaining balance",
   "Change due",
 ])
   assert.ok(preview.includes(label), label)
-assert.ok(preview.includes("formatDate("))
+assert.ok(preview.includes("tariffDate("))
 assert.ok(src("screens/FolioView.tsx").includes("<RowCorrection"))
 
 const correction = src("components/RowCorrection.tsx")
