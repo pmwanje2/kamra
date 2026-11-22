@@ -235,7 +235,7 @@
    "fieldname": "payment_mode",
    "fieldtype": "Select",
    "label": "Payment Mode",
-   "options": "\nCash\nCard\nUPI",
+   "options": "\nCash\nCard\nUPI\nMobile Money",
    "read_only": 1
   },
   {

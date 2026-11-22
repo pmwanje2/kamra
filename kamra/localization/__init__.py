@@ -115,7 +115,8 @@ def money_text(property: str | None, amount) -> str:
 		value = float(amount or 0)
 	except (TypeError, ValueError):
 		return f"{symbol}{amount}"
-	return f"{'-' if value < 0 else ''}{symbol}{group_digits(abs(value), currency == 'INR')}"
+	digits = f"{abs(value):,.0f}" if currency == "UGX" else group_digits(abs(value), currency == "INR")
+	return f"{'-' if value < 0 else ''}{symbol}{digits}"
 
 
 def group_digits(value: float, lakh: bool = False) -> str:
@@ -207,15 +208,63 @@ def outlet_payment_modes(pack) -> list[str]:
 	return [m for m in payment_modes(pack) if m in ("Cash", "Card") or m in instant]
 
 
-def assert_payment_mode(property: str, mode: str | None) -> None:
-	"""Refuse a country's own mode (UPI and alike) where the property's
-	pack does not offer it. The shared money writers call this."""
+def assert_pack_payment_mode(property: str, mode: str | None) -> None:
+	"""Country vocabulary for non-folio operations, including historical refunds."""
 	if not mode or mode in CORE_PAYMENT_MODES:
 		return
 	modes = payment_modes(pack_for(property))
 	if mode not in modes:
 		frappe.throw(frappe._("{0} is not a payment mode here. Pick one of: {1}.")
 		             .format(mode, ", ".join(modes)))
+
+
+def tender_modes(property: str) -> list[dict] | None:
+	"""Optional property tender/currency matrix. An empty matrix is authoritative."""
+	from kamra.erp_bridge import bridge_call
+
+	result = bridge_call("hospitality_kamra.tender_modes", response_types=(dict, list), property=property)
+	if result is None:
+		return None
+	rows = result.get("tender_modes") if isinstance(result, dict) else result
+	if not isinstance(rows, list) or any(
+		not isinstance(row, dict) or not isinstance(row.get("mode"), str)
+		or not isinstance(row.get("currencies"), list)
+		or any(not isinstance(code, str) or len(code) != 3 or not code.isascii()
+		       or not code.isalpha() or not code.isupper() for code in row["currencies"])
+		for row in rows
+	):
+		raise ValueError("Invalid tender configuration.")
+	return [{"mode": row["mode"], "currencies": row["currencies"]} for row in rows]
+
+
+def assert_payment_mode(property: str, mode: str | None, currency: str | None = None,
+                        *, pack_only: bool = False) -> None:
+	"""Validate a new folio tender against the property mapping, when installed."""
+	if not mode and not pack_only:
+		return
+	mapped = tender_modes(property)
+	if mapped is None:
+		if pack_only:
+			modes = payment_modes(pack_for(property))
+			if mode not in modes and not (mode == "Foreign Cash" and currency):
+				frappe.throw(frappe._("Pick a payment mode: {0}.").format(", ".join(modes)))
+		else:
+			assert_pack_payment_mode(property, mode)
+		return
+	from kamra.ledger import home_currency
+
+	home = home_currency(property)
+	code = (currency or "").strip().upper() or home
+	mode_names = {row["mode"] for row in mapped}
+	target = mode
+	if code == home and mode == "Foreign Cash":
+		frappe.throw(frappe._("Foreign Cash needs the currency of the notes received."))
+	if code != home and mode in ("Cash", "Foreign Cash"):
+		# Some bridges report the posted mode; others group all notes under Cash.
+		target = "Foreign Cash" if "Foreign Cash" in mode_names else "Cash"
+	foreign_not_supported = code != home and mode not in ("Cash", "Foreign Cash", "Bank Transfer")
+	if foreign_not_supported or not any(row["mode"] == target and code in row["currencies"] for row in mapped):
+		frappe.throw(frappe._("{0} is not available for payments in {1}.").format(mode, code))
 
 
 def default_currency(pack) -> str:

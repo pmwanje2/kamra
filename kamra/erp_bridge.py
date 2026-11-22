@@ -3,11 +3,15 @@
 Callers own endpoint authorization; this module does not expose an RPC.
 """
 
+from types import NoneType
+
 import frappe
 
 
 def get_bridge_script(api_method: str):
-	name = frappe.db.get_value("Server Script", {"script_type": "API", "api_method": api_method, "disabled": 0})
+	name = frappe.db.get_value(
+		"Server Script", {"script_type": "API", "api_method": api_method, "disabled": 0}
+	)
 	return frappe.get_doc("Server Script", name) if name else None
 
 
@@ -26,12 +30,12 @@ def run_bridge_script(script, form: dict):
 			frappe.response["message"] = previous_message
 
 
-def bridge_call(api_method: str, **form) -> dict | None:
+def bridge_call(api_method: str, *, response_types=(dict, NoneType), **form) -> dict | list | None:
 	"""Return an optional bridge's result; never substitute the outer response."""
 	script = get_bridge_script(api_method)
 	if script is None:
 		return None
 	result = run_bridge_script(script, form)
-	if result is not None and not isinstance(result, dict):
-		raise TypeError(f"{api_method} must return a dictionary")
+	if not isinstance(result, response_types):
+		raise TypeError("Unexpected integration response.")
 	return result

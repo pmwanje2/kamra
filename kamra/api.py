@@ -876,10 +876,8 @@ def record_advance(reservation: str, amount: float, mode: str = "Cash",
 	amount = float(amount or 0)
 	if amount <= 0:
 		frappe.throw(_("Enter the deposit amount."))
-	from kamra.localization import pack_for, payment_modes
-	modes = payment_modes(pack_for(res.property))
-	if mode not in modes and not (mode == "Foreign Cash" and currency):
-		frappe.throw(_("Pick a payment mode: {0}.").format(", ".join(modes)))
+	from kamra.localization import assert_payment_mode
+	assert_payment_mode(res.property, mode, currency, pack_only=True)
 	# money guards before any write: a locked till refuses cleanly
 	from kamra.authz import require_cashier_pin
 	from kamra.cashier import require_open_session
@@ -1646,7 +1644,7 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 			return out
 	doc = frappe.get_doc("Folio", folio)
 	from kamra.localization import assert_payment_mode
-	assert_payment_mode(doc.property, mode)
+	assert_payment_mode(doc.property, mode, currency)
 	from kamra.business_date import get_business_date
 	from kamra.cashier import record_cashier_txn, require_open_session
 	from kamra.ledger import home_currency, payment_rate, round_cents
@@ -1654,10 +1652,11 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 	# Property currency — never leave Folio Payment on the INR schema default (#341)
 	currency_home = home_currency(doc.property)
 	fx = None
-	foreign = bool(currency and currency.strip().upper() != currency_home)
+	currency = (currency or "").strip().upper()
+	foreign = bool(currency and currency != currency_home)
 	if mode == "Foreign Cash":
 		if not foreign:
-			frappe.throw("Foreign Cash needs the currency of the notes received.")
+			frappe.throw(_("Foreign Cash needs the currency of the notes received."))
 		mode = "Cash"
 	if foreign:
 		if mode not in FX_PAYMENT_MODES:
@@ -1704,7 +1703,7 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 	           if fx else None)
 	record_cashier_txn(
 		doc.property, "Payment", mode, float(amount),
-		folio=doc.name, reference=reference, notes=fx_note, session=sess)
+		folio=doc.name, reference=reference, notes=fx_note, session=sess, tender_validated=True)
 	try:
 		from kamra.ledger import record_payment_ledger
 		record_payment_ledger(doc, pay.as_dict(), session=sess)
@@ -4900,15 +4899,14 @@ def walk_in(property: str, room_type: str, room: str, check_out_date: str,
 	work as in create_booking (the stay's source is then OTA). night_prices
 	books nights at the desk's own prices, as in create_booking."""
 	from kamra.crs import assert_property_access
-	from kamra.localization import pack_for, payment_modes, validate_id_type
+	from kamra.localization import assert_payment_mode, validate_id_type
 	assert_property_access(property)
 
 	amount = float(payment_amount or 0)
 	if amount < 0:
 		frappe.throw(_("Payment amount cannot be negative."))
-	modes = payment_modes(pack_for(property))
-	if amount and payment_mode not in modes and not (payment_mode == "Foreign Cash" and currency):
-		frappe.throw(_("Pick a payment mode: {0}.").format(", ".join(modes)))
+	if amount:
+		assert_payment_mode(property, payment_mode, currency, pack_only=True)
 	validate_id_type(property, id_type)
 
 	check_in_date = nowdate()
@@ -9626,12 +9624,14 @@ def property_locale(property: str):
 	so no screen hardcodes ₹ or GST %. `integrations` says which country
 	integrations (gateways, tax return, ID checks) this property has."""
 	from kamra.localization import (front_desk_vocabulary, integrations, pack_for,
-	                                services_tax_rate)
-	from kamra.settings import get_setting
+	                                services_tax_rate, tender_modes)
+	from kamra.settings import get_setting, list_setting
 	prop = frappe.get_cached_doc("Property", property)
 	pack = pack_for(property)
 	return {**pack.locale(prop), **front_desk_vocabulary(pack),
 	        "integrations": integrations(pack),
+	        "tender_modes": tender_modes(property),
+	        "fx_currencies": list_setting(property, "fx_currencies"),
 	        # the rate the server puts on any food & beverage charge, whatever
 	        # rate the caller picked (_resolve_charge_gst) - so the folio's
 	        # charge form shows the rate that will apply instead of a choice

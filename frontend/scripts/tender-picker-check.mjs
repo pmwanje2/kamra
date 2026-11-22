@@ -64,26 +64,34 @@ try {
   const origin = server.resolvedUrls.local[0]
   browser = await chromium.launch(process.env.CHROMIUM ?
     { executablePath: process.env.CHROMIUM } : { channel: "chromium" })
-  for (const width of [1280, 412]) {
+  for (const [width, hasToday] of [[1280, true], [412, true], [412, false]]) {
     for (const screen of ["walk-in", "folio", "deposit"]) {
       const page = await browser.newPage({ viewport: { width, height: 915 } })
       page.setDefaultTimeout(5000)
-      const hasToday = width === 1280
+      const errors = []
+      page.on("pageerror", (error) => errors.push(error.message))
       const quote = { nights: 1, nightly: [], room_total: home, meal_total: 0, discount: 0,
         amount_before_tax: home, amount_after_tax: home, tax_amount: 0, tax_percent: 0 }
       await page.route("**/api/method/*", (route) => {
         const method = new URL(route.request().url()).pathname.split("/").at(-1)
         const payload = route.request().postDataJSON() ?? {}
         const fixtures = {
-          property_locale: locale, whoami: { user: "test@example.com", roles: ["Front Desk"] },
+          property_locale: width === 1280 ? locale : { ...locale, tender_modes: [
+            { mode:"Cash", currencies:["UGX"] }, { mode:"Foreign Cash", currencies:["USD"] },
+            ...locale.tender_modes.slice(1),
+          ] },
+          whoami: { user: "test@example.com", roles: ["Front Desk"] },
           booking_options: { room_types: [{name:"STD", room_type_name:"Standard", base_price:home,
             adults_capacity:2, children_capacity:1}], meal_plans:[], companies:[], rate_plans:[],
             travel_agents:[], experiences:[], property:{country:"Uganda"} },
           available_rooms: [{ name:"ROOM-1", room_number:"101", housekeeping_status:"Clean" }],
-          get_quote: quote, rate_options: { plans: [] }, guest_alert: {},
+          get_quote: quote, rate_options: { nights: [], plans: [], plain: quote, voucher: null },
+          guest_alert: {}, my_till: { required: false, open: true },
           folio_invoice: {
             folio: { name:"F-1", property:"P", status:"Open", guest_name:"Test Guest", charges:[],
-              payments:[], charges_total:home, tax_total:0, grand_total:home, payments_total:0, balance:home },
+              payments:[{ name:"PAY-1", posting_date:businessDate, mode:"Foreign Cash", currency:"USD",
+                fx_amount:1, exchange_rate:3650, amount:3650 }],
+              charges_total:home + 3650, tax_total:0, grand_total:home + 3650, payments_total:3650, balance:home },
             stay: { reservation:null, check_in:businessDate, check_out:"2031-03-12" },
             property: { name:"P", currency:"UGX" }, gst_summary:[],
           },
@@ -94,6 +102,9 @@ try {
           payment_rate: { currency:"USD", rate:3650, rate_date:businessDate, home_currency:"UGX",
             home_amount: Number(payload.amount) * 3650, quote_id:"test-quote" },
           add_folio_payment: {},
+          payment_correction_options: { actions:[{ id:"reclassify_tender", label:"Correct payment mode",
+            requires:[], reason_codes:[{ name:"REV-ACCOUNT", description:"Wrong tender" }] }],
+            blocked:[], supervisors:[], refund_cap:0 },
           record_advance: { deposit },
           walk_in: { reservation:"R-1", room:"ROOM-1", room_number:"101", checked_in:1 },
         }
@@ -112,7 +123,7 @@ try {
         await radio("Mobile Money").click()
         assert.ok(await usd.isDisabled(), "Mobile Money may only take UGX")
         assert.equal(await radio("Bank Transfer").count(), 0, "Unmapped mode offered")
-        await radio("Foreign Cash").click()
+        await radio(hasToday ? "Cash" : "Foreign Cash").click()
         assert.equal(await radio("EUR").count(), 0, "Published rate without a mapped account must not be offered")
         if (!hasToday) {
           assert.ok(await usd.isDisabled(), "A stale rate must not enable USD")
@@ -120,7 +131,10 @@ try {
         } else {
           await usd.click()
           const amount = page.locator('input[type="number"]').filter({ visible:true })
-          await page.getByText("Effective rate date", { exact:true }).waitFor()
+          const rateDate = page.getByText("Effective rate date", { exact:true })
+          await rateDate.waitFor()
+          assert.equal(await rateDate.locator("..").locator("dd").textContent(), businessDate)
+          assert.equal(await radio("Foreign Cash").getAttribute("aria-pressed"), "true")
           assert.equal(await page.getByText("Amount tendered", { exact:true }).locator("..").locator("dd").textContent(), "USD 130.01")
           assert.ok(await page.getByText("3650", { exact:true }).isVisible())
           assert.ok(await amount.count(), "The tender amount must remain editable")
@@ -136,10 +150,19 @@ try {
           assert.equal(body.quote_id, "test-quote")
           assert.ok(["Cash", "Foreign Cash"].includes(body.mode ?? body.payment_mode))
         }
+        if (screen === "folio") {
+          const correction = page.getByRole("listitem").filter({ hasText: "USD 1 @ 3650" })
+          await correction.getByRole("button", { name:"Correct…" }).click()
+          const picker = correction.getByRole("group", { name:"Payment mode" })
+          assert.equal(await picker.getByRole("button", { name:"Bank Transfer" }).count(), 0)
+          await picker.getByRole("button", { name:"Card" }).click()
+          assert.ok(await correction.getByRole("button", { name:"UGX", exact:true }).isDisabled())
+          assert.equal(await correction.getByRole("button", { name:"USD", exact:true }).count(), 0)
+        }
         assert.ok(await page.evaluate(() => document.scrollingElement.scrollWidth <= innerWidth), "Page overflow")
-        console.log(`PASS ${width}px ${screen}`)
+        console.log(`PASS ${width}px ${screen} (${hasToday ? "published" : "stale"} rate)`)
       } catch (error) {
-        failures.push(`${width}px ${screen}: ${error.message}`)
+        failures.push(`${width}px ${screen} (hasToday=${hasToday}): ${error.message}\n${errors.join("\n")}`)
       } finally {
         await page.close()
       }

@@ -660,6 +660,7 @@ Following up: quotation {0},跟进中：报价 {0}
 Food Cost,食材成本
 Food Type,餐食类型
 For,为
+Foreign Cash needs the currency of the notes received.,请选择收到的外币现钞币种。
 Found By,拾获人
 Found In Room,拾获房间
 Found On,拾获日期
@@ -2061,6 +2062,7 @@ this bill,本账单
 {0} is not a payment mode here. Pick one of: {1}.,{0} 不是本地的付款方式。请选择以下之一：{1}。
 {0} is not a valid app manifest.,{0} 不是有效的应用清单。
 {0} is not an active user.,{0} 不是启用中的用户。
+{0} is not available for payments in {1}.,{0} 不支持以 {1} 付款。
 {0} is not available for this property's country.,{0} 不适用于该酒店所在国家。
 {0} is not billed on this account.,{0} 未在该账户上开票。
 {0} is not blocking the audit - nothing to acknowledge.,{0} 未阻断夜审——无需确认。

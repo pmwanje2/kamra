@@ -154,8 +154,8 @@ def correct(folio, name, action, code, note, key, pin, supervisor_user, supervis
 	from kamra.authz import require_cashier_pin, verify_supervisor
 	from kamra.cashier import record_cashier_txn, require_open_session
 	from kamra.folio import _recalculate, void_charge
-	from kamra.ledger import record_payment_ledger
-	from kamra.localization import pack_for, payment_modes
+	from kamra.ledger import home_currency, record_payment_ledger
+	from kamra.localization import assert_payment_mode
 
 	if action not in LABELS or not key or len(key) > 100 or not code or not (note or "").strip():
 		frappe.throw("Choose a correction and reason, enter a note, and provide a retry key.")
@@ -216,11 +216,13 @@ def correct(folio, name, action, code, note, key, pin, supervisor_user, supervis
 	amount = amount or opts["residual"]
 	repost = action == "reclassify_tender"
 	if repost:
-		modes = payment_modes(pack_for(doc.property))
-		if row.fx_amount:
-			modes = [*modes, "Foreign Cash"]
-		if destination == row.mode or destination not in modes:
+		if not destination or destination == row.mode or (not row.fx_amount and destination == "Foreign Cash"):
 			frappe.throw("Choose a different valid destination tender.")
+		# Only these modes retain the original FX snapshot when reposted.
+		currency = (row.currency if row.fx_amount and destination in ("Foreign Cash", "Bank Transfer")
+		            else home_currency(doc.property))
+		assert_payment_mode(doc.property, destination,
+		                    currency, pack_only=True)
 		if any(p.get("idempotency_key") == key + ":repost" for p in doc.payments):
 			frappe.throw("Repost retry key already used.")
 	# Partial refunds pay out home money. Bookkeeping reversals negate the original tender.
@@ -293,6 +295,7 @@ def correct(folio, name, action, code, note, key, pin, supervisor_user, supervis
 				folio=folio,
 				reference=why,
 				session=repost_session,
+				tender_validated=True,
 			)
 		result.update(repost=pay.name, balance=doc.balance)
 	elif advance:

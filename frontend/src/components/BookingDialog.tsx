@@ -1,4 +1,5 @@
-import { CurrencyInput, SettlementPreview, useSettlementQuote } from "../components/SettlementPreview"
+import { SettlementPreview, useSettlementQuote } from "./SettlementPreview"
+import TenderPicker, { resolveTender, tenderAmount, tenderModes, tenderReady, useTenderRates } from "./TenderPicker"
 import { RateOptions } from "./RateOptions"
 import { useEffect, useRef, useState } from "react"
 import { htmlToText, formatDate, roomLabel } from "../lib/utils"
@@ -316,9 +317,6 @@ export function BookingDialog(props: {
   useEffect(() => {
     setWalk((w) => ({
       ...w,
-      pay_mode: loc.payment_modes.includes(w.pay_mode)
-        ? w.pay_mode
-        : (loc.payment_modes[0] ?? "Cash"),
       nationality: w.nationality || loc.default_nationality,
     }))
   }, [loc])
@@ -791,9 +789,14 @@ export function BookingDialog(props: {
   }
 
   // one key per open dialog: a double-tap replays instead of double-booking
-  const [payCurrency,setPayCurrency] = useState('')
-  const foreign = !!payCurrency && payCurrency !== loc.currency && ['Cash','Foreign Cash','Bank Transfer'].includes(walk.pay_mode)
-  const fx = useSettlementQuote(getCurrentProperty(), foreign ? payCurrency : '', Number(walk.pay_amount))
+  const [requestedCurrency, setRequestedCurrency] = useState("")
+  const { today: buyRates } = useTenderRates(getCurrentProperty(), walkIn)
+  const modes = tenderModes(loc, loc.currency)
+  const tender = resolveTender(modes, loc.currency, { mode: walk.pay_mode, currency: requestedCurrency })
+  const payCurrency = tender.currency
+  const foreign = !!payCurrency && payCurrency !== loc.currency
+  const paymentReady = tenderReady(tender, loc.currency, buyRates)
+  const fx = useSettlementQuote(getCurrentProperty(), foreign && paymentReady ? payCurrency : "", Number(walk.pay_amount))
   const [walkInKey] = useState(() =>
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
@@ -805,6 +808,7 @@ export function BookingDialog(props: {
     setError(null)
     try {
       const amount = Number(walk.pay_amount) || 0
+      if (amount > 0 && !paymentReady) throw new Error(t("Choose an available payment method and currency."))
       if (foreign && amount > 0 && !fx?.quote) throw new Error(fx?.error || t("Wait for the settlement preview."))
       if (amount > 0 && pinStatus?.required) await ensureUnlocked()
       const res = await call<WalkInResult>("kamra.api.walk_in", {
@@ -824,7 +828,7 @@ export function BookingDialog(props: {
         id_type: walk.id_type || undefined,
         id_number: walk.id_number.trim() || undefined,
         nationality: walk.nationality.trim() || undefined,
-        payment_mode: amount > 0 ? walk.pay_mode : undefined,
+        payment_mode: amount > 0 ? tender.mode : undefined,
         payment_amount: amount, currency: foreign ? payCurrency : undefined, quote_id: fx?.quote?.quote_id,
         payment_reference: walk.pay_reference.trim() || undefined,
         idempotency_key: walkInKey,
@@ -933,13 +937,14 @@ export function BookingDialog(props: {
     )
   })()
 
+  const suggestedAmount = paymentReady ? tenderAmount(grandTotal, payCurrency, loc.currency, buyRates) : ""
   useEffect(() => {
     if (walkIn && !amountTouched)
       setWalk((w) => ({
         ...w,
-        pay_amount: grandTotal > 0 ? String(Math.round(grandTotal * 100) / 100) : "",
+        pay_amount: suggestedAmount,
       }))
-  }, [walkIn, amountTouched, grandTotal])
+  }, [walkIn, amountTouched, suggestedAmount])
 
   const payAmount = Number(walk.pay_amount) || 0
   // taking the walk-in's money needs the operator's till open
@@ -955,6 +960,7 @@ export function BookingDialog(props: {
     badSlot ||
     !walk.room ||
     payAmount < 0 ||
+    (payAmount > 0 && (!paymentReady || (foreign && !fx?.quote))) ||
     (!!walk.id_number.trim() && !walk.id_type)
 
   // the server judges the terms from today (season, tiers, free window);
@@ -1854,30 +1860,15 @@ export function BookingDialog(props: {
                     <h3 className="text-sm font-semibold text-zinc-800">
                       {t("Payment")}
                     </h3>
-                    <div
-                      role="radiogroup"
-                      aria-label={t("Payment mode")}
-                      className="flex flex-wrap gap-2"
-                    >
-                      {loc.payment_modes.map((m) => (
-                        <button
-                          key={m}
-                          type="button"
-                          role="radio"
-                          aria-checked={walk.pay_mode === m}
-                          onClick={() => {setW("pay_mode", m); if (payCurrency) {setPayCurrency("");setW("pay_amount", "")}}}
-                          className={
-                            "rounded-lg border px-3.5 py-2 text-sm font-medium transition-colors " +
-                            (walk.pay_mode === m
-                              ? "border-brand-600 bg-brand-50 text-brand-800"
-                              : "border-zinc-200 text-zinc-600 hover:border-zinc-300")
-                          }
-                        >
-                          {t(m)}
-                        </button>
-                      ))}
-                    </div>
-                    {['Cash','Bank Transfer','Foreign Cash'].includes(walk.pay_mode) && <CurrencyInput home={loc.currency} value={payCurrency} onChange={v=>{setPayCurrency(v);setAmountTouched(true);setW('pay_amount','')}}/>}
+                    <TenderPicker home={loc.currency} chosen={tender} modes={modes} rates={buyRates}
+                      onChange={({ mode, currency }) => {
+                        setRequestedCurrency(currency)
+                        setWalk((w) => ({
+                          ...w, pay_mode: mode,
+                          pay_amount: currency === payCurrency ? w.pay_amount : tenderAmount(grandTotal, currency, loc.currency, buyRates),
+                        }))
+                        if (currency !== payCurrency) setAmountTouched(false)
+                      }} />
                     {foreign && <SettlementPreview result={fx} amount={payAmount} balance={grandTotal}/>}
                     <div className="grid gap-3 sm:grid-cols-2">
                       <Field label={t("Amount collected")}>
@@ -1903,7 +1894,7 @@ export function BookingDialog(props: {
                               : t("Paid in full.")}
                         </p>
                       </Field>
-                      {walk.pay_mode !== "Cash" && (
+                      {tender.mode && tender.mode !== "Cash" && (
                         <Field label={t("Reference")}>
                           <input
                             className={inputCls}
