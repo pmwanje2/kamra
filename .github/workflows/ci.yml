@@ -32,6 +32,8 @@ jobs:
         working-directory: frontend
       - name: UI language fallback rules
         run: python3 -m unittest kamra.tests.test_ui_language_logic
+      - name: v2.8.0 carrier and ERP bridge contracts (no site)
+        run: python3 -m unittest kamra.tests.test_v280_carrier_contract kamra.tests.test_erp_bridge
       - run: npm run build
         working-directory: frontend
       - name: Verify production serve base
@@ -57,6 +59,10 @@ jobs:
 
       - name: Check nightly prices typed on New booking
         run: npm run night-prices:check
+        working-directory: frontend
+
+      - name: Check local date formatting
+        run: npm run dates:check
         working-directory: frontend
 
       - name: Check the charge tax default
@@ -89,6 +95,10 @@ jobs:
 
       - name: Check settlement previews and row corrections
         run: npm run fx-preview:check
+        working-directory: frontend
+
+      - name: Check front-office business dates and room labels
+        run: npm run front-office:check
         working-directory: frontend
 
   contract:
@@ -150,6 +160,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+
+      - name: Build the SPA from source for the test site
+        working-directory: apps/kamra/frontend
+        run: |
+          npm ci
+          npm run build
 
       - name: Install system deps
         run: |

@@ -1,0 +1,14 @@
+Maximus Hotel — Kamra PMS v2.8.0 carrier
+
+Based on Kamra PMS v2.8.0 by the Kamra-PMS contributors:
+https://github.com/Kamra-PMS/kamra-pms/tree/v2.8.0
+The upstream code at that tag is licensed under Apache License 2.0.
+See license.txt for the license text and TRADEMARK.md for upstream mark usage.
+
+This fork contains Maximus additions and modifications, including governed
+folio corrections and settlement FX, front-office workflows, and ERP bridge
+integration. Source: https://github.com/pmwanje2/kamra
+
+Proposed license for the Maximus additions in this carrier: Apache License 2.0.
+Maximus's explicit D-LIC-1 confirmation is required before merge or release.
+This notice does not change the license of prior fork releases.
