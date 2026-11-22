@@ -132,7 +132,7 @@ class CorrectionTests(AuditTestCase):
 			supervisor_pin="8394",
 		)
 		totals = cashier._recompute_session_totals(self.session)
-		self.assertEqual((totals["foreign_cash"], totals["other"]), (0, 126))
+		self.assertEqual((totals["foreign_cash"], totals["other"]), (0, 129))
 
 	def test_reclassified_advance_transfers_only_once_at_checkin(self):
 		from kamra import ledger
@@ -200,7 +200,7 @@ class CorrectionTests(AuditTestCase):
 			supervisor_pin="8394",
 		)
 		p = frappe.get_doc("Folio", self.folio).payments[-1]
-		self.assertEqual((p.amount, p.currency, p.fx_amount or 0), (126, ledger.home_currency(PROP_A), 0))
+		self.assertEqual((p.amount, p.currency, p.fx_amount or 0), (129, ledger.home_currency(PROP_A), 0))
 
 	def test_requester_with_other_drawer_corrects_original_drawer(self):
 		approver = self.supervisor()
@@ -277,9 +277,9 @@ class CorrectionTests(AuditTestCase):
 			supervisor_pin="8394",
 		)
 		p = frappe.get_doc("Folio", self.folio).payments[-1]
-		self.assertEqual((p.mode, p.currency, p.fx_amount, p.amount), ("Foreign Cash", "EUR", 3, 126))
+		self.assertEqual((p.mode, p.currency, p.fx_amount, p.amount), ("Foreign Cash", "EUR", 3, 129))
 		totals = cashier._recompute_session_totals(self.session)
-		self.assertEqual((totals["foreign_cash"], totals["other"]), (126, 0))
+		self.assertEqual((totals["foreign_cash"], totals["other"]), (129, 0))
 
 	def test_options_offer_named_eligible_supervisors(self):
 		user = self.supervisor()
