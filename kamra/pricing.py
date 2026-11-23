@@ -847,6 +847,25 @@ def negotiated_rate_plan(property: str, company: str | None) -> str | None:
 	return None
 
 
+def billable_children(reservation) -> int:
+	"""Chargeable children for a stay: total children less free children
+	(occupants at or under the room type's free_child_age, or recorded
+	infants, whichever is higher). Shared by quote_inputs,
+	capture_contract_tariff and contract_tariff_for_new_dates so quotes,
+	bookings, amendments and the tariff resolver agree."""
+	free_children = 0
+	free_child_age = frappe.db.get_value("Room Type", reservation.room_type, "free_child_age")
+	free_child_age = 6 if free_child_age is None else int(free_child_age)
+	for occ in reservation.get("occupants") or []:
+		age = occ.get("age") if isinstance(occ, dict) else getattr(occ, "age", None)
+		if age and int(age) <= free_child_age:
+			free_children += 1
+	infants = cint(reservation.get("infants"))
+	if infants > free_children:
+		free_children = infants
+	return max(0, cint(reservation.get("children")) - free_children)
+
+
 class ContractRateRefused(frappe.ValidationError):
 	"""The resolver did not authorize a price for this option."""
 
@@ -1064,7 +1083,7 @@ def contract_tariff_for_new_dates(reservation, booked_check_in, booked_check_out
 	for run in runs:
 		start, end = run[0], str(getdate(add_days(run[-1], 1)))
 		resolved = contract_rate(reservation.property, reservation.room_type, reservation.rate_plan, start, end,
-			reservation.adults, reservation.children, reservation.get("extra_beds"),
+			reservation.adults, billable_children(reservation), reservation.get("extra_beds"),
 			company=reservation.get("company"), fx_date=tariff.get("fx_date"))
 		if not resolved:
 			frappe.throw(_("The contract has no valid rate for the added nights {0} to {1}. Ask a manager to check "
