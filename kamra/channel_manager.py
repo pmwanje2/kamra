@@ -493,7 +493,7 @@ def tax_hold(conn, e: dict, room_type: str) -> str | None:
 
 # A stay the guest has come to: an OTA modify that cannot be read never
 # turns it back into a request or reprices it.
-_ARRIVED = ("Checked In",)
+_ARRIVED = ("Checked In", "Checked Out")
 
 
 def _flag_for_review(conn, doc, e: dict, reason: str) -> dict:
