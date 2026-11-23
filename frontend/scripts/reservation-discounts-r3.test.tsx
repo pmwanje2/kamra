@@ -149,7 +149,9 @@ describe("Stay rate & daily details panel", () => {
 
   it("asks for its reason codes once and lists each code once (P1-B)", async () => {
     const errors = vi.spyOn(console, "error").mockImplementation(() => {})
-    await act(async () => root.render(<AgreedRatePanel reservation="RES-9" onSaved={() => {}} nightRates={nightRates} />))
+    // the categories are the server's (reservation_detail.reason_categories, R6)
+    await act(async () => root.render(<AgreedRatePanel reservation="RES-9" onSaved={() => {}} nightRates={nightRates}
+      reasonCategories={{ discount: ["Rate Change", "Adjust"], agreed_rate: ["Rate Change"] }} />))
     await press("Stay rate & daily details")
     await until(() => expect(optionValues(byLabel("Discount reason")).length).toBeGreaterThan(1))
     for (let i = 0; i < 5; i++) await settle()
@@ -357,7 +359,8 @@ describe("Reservation screen", () => {
     night_rates: NIGHTS.map((date) => ({ date, rate: 900, base_rate: 1000, discount_amount: 100,
       discount_type: null, discount_value: 0, entry_base_rate: 1000, entry_rate: 900, charged: false })),
     discount: { discount_type: "Percent", discount_value: 10, discount_reason: "RATE-PROMO", fixed_rate: 1 },
-    actions: { can_amend: true }, warnings: {}, occupants: [], checkin_backfill: [],
+    // the server says who may fix a rate (R6): a Revenue Manager may
+    actions: { can_amend: true, can_set_rate: true }, warnings: {}, occupants: [], checkin_backfill: [],
     amount_after_tax: 1800, advance_paid: 0,
     money: { total: 1800, paid: 0, due: 1800, has_folio: false, source: "booking" }, ...over,
   })

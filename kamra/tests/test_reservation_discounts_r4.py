@@ -38,6 +38,7 @@ from frappe.utils import flt
 
 from kamra import api, pricing, settings
 from kamra import folio as folio_mod
+from kamra.install import AGENT_ROLE
 from kamra.tests.audit_fixtures import (
 	PROP_A,
 	d,
@@ -615,7 +616,7 @@ class RoleLimitTests(RoundFourTestCase):
 	"""R4-11: the front desk's limit by role (OPERA's authorizer levels, SAP's
 	condition limits by responsibility), in the existing settings: each
 	person takes the highest limit among their roles, everyone else the
-	property's own, and an AI agent the front desk's."""
+	property's own, and an AI agent its own role's line (R6-2)."""
 
 	def setUp(self):
 		super().setUp()
@@ -655,7 +656,10 @@ class RoleLimitTests(RoundFourTestCase):
 				opts = self.as_user(user, api.booking_options, PROP_A)
 				self.assertEqual(opts["rate_override_limit_pct"], limit)
 
-	def test_an_ai_agent_is_held_to_the_front_desks_limit(self):
+	def test_an_ai_agent_is_held_to_its_own_roles_limit(self):
+		# R6-2: the agent's limit is its own role's line (no role name in code)
+		set_setting(PROP_A, "rate_override_limits_by_role",
+		            f"Front Desk: 5\n{DUTY_ROLE}: 15\n{AGENT_ROLE}: 5")
 		args = dict(discount_type="Percent", discount_value=10, discount_reason="RATE-PROMO")
 		with self.assertRaises(frappe.PermissionError):
 			self.as_agent(DUTY, api.create_booking, PROP_A, self.rt, d(5), d(7), "UT Agent Duty", **args)
