@@ -1140,3 +1140,742 @@ class RoutingTestCase(AuditTestCase):
 		desc = frappe.get_meta("Corporate Account").get_field("billing_rules").description or ""
 		self.assertNotRegex(desc, r"\b(alcohol|liquor)\b",
 		                    f"Corporate Account.billing_rules still mentions alcohol: {desc!r}")
+
+	# Hydrogen R3 P1-A: UGX share_charges & split_charge exact minor units -
+
+	def test_ugx_share_charges_and_split_charge_leave_no_fractional_shillings(self):
+		make_property(PROP_A, business_date=TODAY, country="Uganda", currency="UGX",
+		              rates_include_tax=0, gst_rate_low=15, gst_rate_high=15)
+		settings.clear_cache(PROP_A)
+		stay = self.stay(1)
+		f1 = guest_folio(stay.name)
+		f2, f3 = [b["folio"] for b in folio_mod.open_guest_bills(
+			stay.name, ["UT Share Guest 2", "UT Share Guest 3"])]
+		api.add_folio_charge(f1, "Misc", "Odd 0pct", 100001, gst_rate=0)
+		api.add_folio_charge(f1, "Misc", "Odd 15pct", 100001, gst_rate=15)
+		f1_doc = frappe.get_doc("Folio", f1)
+		row_0 = next(c.name for c in f1_doc.charges if c.description == "Odd 0pct")
+		row_15 = next(c.name for c in f1_doc.charges if c.description == "Odd 15pct")
+
+		folio_mod.share_charges(f1, [row_0, row_15], [f2, f3])
+
+		for row_id, exp_amt, exp_tax, exp_tot in (
+			(row_0, Decimal("100001"), Decimal("0"), Decimal("100001")),
+			(row_15, Decimal("100001"), Decimal("15000"), Decimal("115001")),
+		):
+			parts = [
+				c for f in (f1, f2, f3)
+				for c in frappe.get_doc("Folio", f).charges
+				if c.get("split_of") == row_id and not c.get("reversal_of")
+			]
+			self.assertEqual(len(parts), 3)
+			for c in parts:
+				for val in (c.amount, c.gst_amount, c.total):
+					self.assertEqual(Decimal(str(val)) % 1, 0,
+					                 f"fractional UGX on {c.description}: {val}")
+				self.assertEqual(Decimal(str(c.amount)) + Decimal(str(c.gst_amount)),
+				                 Decimal(str(c.total)))
+			self.assertEqual(sum(Decimal(str(c.amount)) for c in parts), exp_amt)
+			self.assertEqual(sum(Decimal(str(c.gst_amount)) for c in parts), exp_tax)
+			self.assertEqual(sum(Decimal(str(c.total)) for c in parts), exp_tot)
+
+		gts = [Decimal(str(frappe.db.get_value("Folio", f, "grand_total"))) for f in (f1, f2, f3)]
+		for gt in gts:
+			self.assertEqual(gt % 1, 0, f"fractional UGX grand_total: {gt}")
+		self.assertEqual(gts, [Decimal("71666"), Decimal("71668"), Decimal("71668")])
+		self.assertEqual(sum(gts), Decimal("215002"))
+
+		# split_charge(..., percent=33.333) on 100,001 @ 15% UGX also lands in whole shillings
+		api.add_folio_charge(f1, "Misc", "SplitCharge 15pct", 100001, gst_rate=15)
+		row_sc = next(c.name for c in frappe.get_doc("Folio", f1).charges
+		              if c.description == "SplitCharge 15pct")
+		out = folio_mod.split_charge(f1, row_sc, f2, percent=33.333)
+		kept = next(c for c in frappe.get_doc("Folio", f1).charges if c.name == out["kept_row"])
+		moved = next(c for c in frappe.get_doc("Folio", f2).charges if c.name == out["moved_row"])
+		for c in (kept, moved):
+			for val in (c.amount, c.gst_amount, c.total):
+				self.assertEqual(Decimal(str(val)) % 1, 0,
+				                 f"fractional UGX on split_charge: {val}")
+			self.assertEqual(Decimal(str(c.amount)) + Decimal(str(c.gst_amount)),
+			                 Decimal(str(c.total)))
+		self.assertEqual(Decimal(str(kept.amount)) + Decimal(str(moved.amount)), Decimal("100001"))
+		self.assertEqual(Decimal(str(kept.gst_amount)) + Decimal(str(moved.gst_amount)), Decimal("15000"))
+		self.assertEqual(Decimal(str(kept.total)) + Decimal(str(moved.total)), Decimal("115001"))
+
+	# Hydrogen R3 P1-B: mixed POS room checks, move_room_bill, per-code tax, 140-char
+
+	def test_mixed_code_pos_order_moves_taxes_per_code_rounds_ugx_and_fits_140_chars(self):
+		from kamra import pos
+		# (a) UGX mixed check with discount -> whole UGX tax & move_room_bill works
+		make_property(PROP_A, business_date=TODAY, country="Uganda", currency="UGX",
+		              rates_include_tax=0, gst_rate_low=15, gst_rate_high=15)
+		settings.clear_cache(PROP_A)
+		food_only = corp([("#1000", "Company"), ("#2000", "Company")])
+		stay1 = self.stay(1, company=food_only, booking_type="Corporate")
+		stay2 = self.stay(2)
+		outlet_ug = frappe.get_doc({
+			"doctype": "POS Outlet", "property": PROP_A, "outlet_name": "UT R4 Main Grill",
+			"outlet_type": "Restaurant", "gst_rate": 15, "transaction_code": "2000",
+		}).insert(ignore_permissions=True).name
+		mi_steak = frappe.get_doc({
+			"doctype": "Menu Item", "property": PROP_A, "outlet": outlet_ug,
+			"item_name": "Steak", "category": "Mains", "price": 50000,
+			"is_alcohol": 0, "transaction_code": "2000",
+		}).insert(ignore_permissions=True).name
+		mi_beer = frappe.get_doc({
+			"doctype": "Menu Item", "property": PROP_A, "outlet": outlet_ug,
+			"item_name": "Nile Special", "category": "Beverages", "price": 15000,
+			"is_alcohol": 1, "transaction_code": "2010",
+		}).insert(ignore_permissions=True).name
+		order = frappe.get_doc({
+			"doctype": "POS Order", "property": PROP_A, "outlet": outlet_ug,
+			"order_type": "Room Service", "reservation": stay1.name, "room": stay1.room,
+			"payment_status": "Room Charge", "discount_amount": 5000,
+			"items": [
+				{"menu_item": mi_steak, "item_name": "Steak", "qty": 1, "rate": 50000, "amount": 50000},
+				{"menu_item": mi_beer, "item_name": "Nile Special", "qty": 1, "rate": 15000, "amount": 15000},
+			],
+		}).insert(ignore_permissions=True)
+		order.status = "Delivered"
+		order.save(ignore_permissions=True)
+
+		rows = frappe.get_all(
+			"Folio Charge",
+			filters={"parenttype": "Folio", "description": ("like", f"%({order.name})%")},
+			fields=["name", "parent", "transaction_code", "is_alcohol",
+			        "amount", "gst_rate", "gst_amount", "total"],
+			order_by="transaction_code asc",
+		)
+		self.assertEqual(len(rows), 2)
+		for r in rows:
+			for val in (r.amount, r.gst_amount, r.total):
+				self.assertEqual(Decimal(str(val)) % 1, 0, f"fractional UGX on POS row: {r}")
+			self.assertEqual(Decimal(str(r.amount)) + Decimal(str(r.gst_amount)),
+			                 Decimal(str(r.total)))
+		self.assertEqual(sum(Decimal(str(r.amount)) for r in rows), Decimal("60000"))
+		self.assertEqual(sum(Decimal(str(r.gst_amount)) for r in rows), Decimal("9000"))
+		self.assertEqual(sum(Decimal(str(r.total)) for r in rows), Decimal("69000"))
+		by_code = {r.transaction_code: frappe.db.get_value("Folio", r.parent, "folio_type") for r in rows}
+		self.assertEqual(by_code, {"2000": "Company", "2010": "Guest"})
+
+		# Moving the mixed-code room bill to stay2 succeeds and moves all its code lines
+		with patch("kamra.webhooks.emit_folio_posted"):
+			moved = pos.move_room_bill(order.name, stay2.room, "wrong room test")
+		self.assertEqual(moved["reservation"], stay2.name)
+		self.assertEqual(
+			frappe.db.get_value("POS Order", order.name, ["room", "reservation"]),
+			(stay2.room, stay2.name),
+		)
+		after_rows = frappe.get_all(
+			"Folio Charge",
+			filters={"parenttype": "Folio", "description": ("like", f"%({order.name})%")},
+			fields=["parent", "reservation", "transaction_code", "amount"],
+			order_by="transaction_code asc",
+		)
+		self.assertEqual(len(after_rows), 2)
+		stay2_guest = guest_folio(stay2.name)
+		self.assertTrue(all(r.parent == stay2_guest and r.reservation == stay2.name for r in after_rows))
+		self.assertEqual(sum(Decimal(str(r.amount)) for r in after_rows), Decimal("60000"))
+
+		# (b) Per-code taxation on India property (food 5% vs alcohol 18%, plus TC.default_tax_rate)
+		make_property(PROP_A, business_date=TODAY, country="India", currency="INR",
+		              rates_include_tax=0)
+		settings.clear_cache(PROP_A)
+		outlet_in = frappe.get_doc({
+			"doctype": "POS Outlet", "property": PROP_A, "outlet_name": "UT India Bistro",
+			"outlet_type": "Restaurant", "gst_rate": 5, "transaction_code": "2000",
+		}).insert(ignore_permissions=True).name
+		mi_food_in = frappe.get_doc({
+			"doctype": "Menu Item", "property": PROP_A, "outlet": outlet_in,
+			"item_name": "Paneer Tikka", "category": "Food", "price": 1000,
+			"is_alcohol": 0, "transaction_code": "2000",
+		}).insert(ignore_permissions=True).name
+		mi_beer_in = frappe.get_doc({
+			"doctype": "Menu Item", "property": PROP_A, "outlet": outlet_in,
+			"item_name": "Craft Beer", "category": "Beverages", "price": 1000,
+			"is_alcohol": 1, "transaction_code": "2010",
+		}).insert(ignore_permissions=True).name
+		in_ord = pos.create_order(
+			outlet_in,
+			[{"menu_item": mi_food_in, "qty": 1}, {"menu_item": mi_beer_in, "qty": 1}],
+			room=stay2.room, order_type="Room Service",
+		)["order"]
+		pos.deliver_order(in_ord)
+		in_rows = {
+			r.transaction_code: (float(r.gst_rate), float(r.gst_amount), float(r.total))
+			for r in frappe.get_all(
+				"Folio Charge",
+				filters={"parenttype": "Folio", "description": ("like", f"%({in_ord})%")},
+				fields=["transaction_code", "gst_rate", "gst_amount", "total"],
+			)
+		}
+		self.assertEqual(in_rows["2000"], (5.0, 50.0, 1050.0))
+		self.assertEqual(in_rows["2010"], (18.0, 180.0, 1180.0))
+
+		# Configured Transaction Code.default_tax_rate wins (configuration, not hardcoding)
+		bar = bar_code()
+		frappe.db.set_value("Transaction Code", bar, "default_tax_rate", 12)
+		mi_custom = frappe.get_doc({
+			"doctype": "Menu Item", "property": PROP_A, "outlet": outlet_in,
+			"item_name": "Custom Cocktail", "category": "Beverages", "price": 1000,
+			"is_alcohol": 1, "transaction_code": bar,
+		}).insert(ignore_permissions=True).name
+		cust_ord = pos.create_order(
+			outlet_in, [{"menu_item": mi_custom, "qty": 1}],
+			room=stay2.room, order_type="Room Service",
+		)["order"]
+		pos.deliver_order(cust_ord)
+		cust_row = frappe.get_all(
+			"Folio Charge",
+			filters={"parenttype": "Folio", "description": ("like", f"%({cust_ord})%")},
+			fields=["transaction_code", "gst_rate", "gst_amount"],
+		)[0]
+		self.assertEqual((cust_row.transaction_code, float(cust_row.gst_rate), float(cust_row.gst_amount)),
+		                 (bar, 12.0, 120.0))
+
+		# (c) 6-item order whose raw description exceeds 140 chars delivers cleanly and keeps (ORD-...)
+		long_outlet = frappe.get_doc({
+			"doctype": "POS Outlet", "property": PROP_A,
+			"outlet_name": "Grand Dining Hall & Bistro Lounge",
+			"outlet_type": "Restaurant", "gst_rate": 5, "transaction_code": "2000",
+		}).insert(ignore_permissions=True).name
+		long_items = []
+		for i in range(1, 7):
+			mi = frappe.get_doc({
+				"doctype": "Menu Item", "property": PROP_A, "outlet": long_outlet,
+				"item_name": f"Signature Tasting Course Platter Number {i}",
+				"category": "Food", "price": 100, "is_alcohol": 0, "transaction_code": "2000",
+			}).insert(ignore_permissions=True).name
+			long_items.append({"menu_item": mi, "qty": 1})
+		long_ord = pos.create_order(
+			long_outlet, long_items, room=stay2.room, order_type="Room Service",
+		)["order"]
+		pos.deliver_order(long_ord)
+		long_rows = frappe.get_all(
+			"Folio Charge",
+			filters={"parenttype": "Folio", "description": ("like", f"%({long_ord})%")},
+			fields=["description", "amount"],
+		)
+		self.assertEqual(len(long_rows), 1)
+		self.assertLessEqual(len(long_rows[0].description), 140)
+		self.assertTrue(long_rows[0].description.endswith(f"({long_ord})"))
+		self.assertEqual(float(long_rows[0].amount), 600.0)
+
+	# Hydrogen R3 P1-C: explicit transaction_code drives is_alcohol/tax/audit & banquet SC
+
+	def test_explicit_alcohol_transaction_code_drives_flag_tax_and_audit_group(self):
+		from kamra import audit_report
+		from kamra import pos_interface as pi
+		make_property(PROP_A, business_date=TODAY, country="India", currency="INR",
+		              rates_include_tax=0)
+		settings.clear_cache(PROP_A)
+		stay = self.stay(1)
+		guest = guest_folio(stay.name)
+
+		api.post_stay_charge(stay.name, "Food & Beverage", "Whiskey 2010 stay",
+		                     1000, is_alcohol=0, transaction_code="2010")
+		row1 = frappe.get_doc("Folio", guest).charges[-1]
+		self.assertEqual((row1.transaction_code, int(row1.is_alcohol), float(row1.gst_rate),
+		                  float(row1.gst_amount), float(row1.total)),
+		                 ("2010", 1, 18.0, 180.0, 1180.0))
+
+		api.add_folio_charge(guest, "Food & Beverage", "Whiskey 2010 direct",
+		                     1000, gst_rate=0, is_alcohol=0, transaction_code="2010")
+		row2 = frappe.get_doc("Folio", guest).charges[-1]
+		self.assertEqual((row2.transaction_code, int(row2.is_alcohol), float(row2.gst_rate),
+		                  float(row2.gst_amount), float(row2.total)),
+		                 ("2010", 1, 18.0, 180.0, 1180.0))
+
+		with patch("kamra.webhooks._enqueue"):
+			pi.pos_post_room_charge(PROP_A, "UT-TKT-IMP-2010", 1000, "Ext Bar 2010",
+			                        reservation=stay.name, tax_rate=18,
+			                        is_alcohol=0, transaction_code="2010")
+		epc = frappe.get_all(pi.CHARGE, filters={"ticket_id": "UT-TKT-IMP-2010"},
+		                     fields=["transaction_code", "is_alcohol"])[0]
+		self.assertEqual((epc.transaction_code, int(epc.is_alcohol)), ("2010", 1))
+		row3 = frappe.get_doc("Folio", guest).charges[-1]
+		self.assertEqual((row3.transaction_code, int(row3.is_alcohol), float(row3.gst_rate),
+		                  float(row3.gst_amount), float(row3.total)),
+		                 ("2010", 1, 18.0, 180.0, 1180.0))
+
+		rep = audit_report._folio(PROP_A, TODAY, TODAY)
+		self.assertEqual((rep["food"], rep["beverage"]), (0.0, 3000.0))
+		# Even a legacy DB row with transaction_code='2010' and is_alcohol=0 still counts as beverage
+		frappe.db.set_value("Folio Charge", row1.name, "is_alcohol", 0, update_modified=False)
+		rep2 = audit_report._folio(PROP_A, TODAY, TODAY)
+		self.assertEqual((rep2["food"], rep2["beverage"]), (0.0, 3000.0))
+
+	def test_banquet_post_to_folio_includes_service_charge_and_code_2010_alcohol_tax(self):
+		from kamra import banquet
+		make_property(PROP_A, business_date=TODAY, country="India", currency="INR",
+		              rates_include_tax=0)
+		settings.clear_cache(PROP_A)
+		gb = frappe.get_doc({
+			"doctype": "Group Booking", "property": PROP_A,
+			"group_name": "UT Banquet SC Group", "check_in_date": TODAY,
+			"check_out_date": d(2), "status": "Confirmed", "rooms_blocked": 1,
+			"master_pays": "Nothing (guest pays unless rules say so)",
+		}).insert(ignore_permissions=True)
+		venue = frappe.get_doc({
+			"doctype": "Venue", "property": PROP_A, "venue_name": "UT SC Probe Hall",
+			"capacity_theatre": 100,
+		}).insert(ignore_permissions=True).name
+		vb = frappe.get_doc({
+			"doctype": "Venue Booking", "property": PROP_A, "venue": venue,
+			"group_booking": gb.name, "customer_name": "Banquet Probe Client",
+			"customer_phone": "+256700000001", "event_name": "Probe Reception",
+			"event_date": d(1), "session": "Evening", "attendees": 10,
+			"status": "Confirmed", "service_charge_percent": 10,
+			"items": [{
+				"item_type": "Food & Beverage", "item_name": "Wine Service Coded 2010",
+				"qty": 1, "uom": "Lot", "rate": 100000, "chargeable": 1,
+				"is_alcohol": 0, "transaction_code": "2010", "gst_rate": 18,
+			}],
+		}).insert(ignore_permissions=True)
+		self.assertEqual((float(vb.subtotal), float(vb.service_charge),
+		                  float(vb.tax_amount), float(vb.grand_total)),
+		                 (100000.0, 10000.0, 19800.0, 129800.0))
+
+		out = banquet.post_to_folio(vb.name)
+		gf = frappe.get_doc("Folio", out["folio"])
+		self.assertEqual(float(gf.grand_total), 129800.0)
+		wine = next(c for c in gf.charges if c.transaction_code == "2010")
+		self.assertEqual((int(wine.is_alcohol), float(wine.gst_rate),
+		                  float(wine.gst_amount), float(wine.total)),
+		                 (1, 18.0, 18000.0, 118000.0))
+		sc = next(c for c in gf.charges if "Service charge" in (c.description or ""))
+		self.assertTrue(sc.description.startswith(vb.name))
+		self.assertEqual((float(sc.amount), float(sc.gst_rate),
+		                  float(sc.gst_amount), float(sc.total)),
+		                 (10000.0, 18.0, 1800.0, 11800.0))
+
+	# Hydrogen R3 P1-D: correct_folio_charge uncovered reclass, Percent, replay
+
+	def test_correct_folio_charge_reroutes_uncovered_reclassification_percent_limit_and_replay(self):
+		from kamra import ledger
+		# (a1) Company Billing Rule (#2000 only): reclassifying F&B -> Spa moves off Company W2 to W1
+		food_only = corp([("#2000", "Company")])
+		stay_a = self.stay(1, company=food_only, booking_type="Corporate")
+		api.post_stay_charge(stay_a.name, "Food & Beverage", "Dinner 100k", 100000,
+		                     transaction_code="2000")
+		w1_a = guest_folio(stay_a.name)
+		w2_a = frappe.db.get_value("Folio", {"reservation": stay_a.name, "window_no": 2})
+		row_a = frappe.db.get_value("Folio Charge", {"parent": w2_a, "description": "Dinner 100k"}, "name")
+		corr_a = api.correct_folio_charge(
+			w2_a, row_a, reason="Reclassify to uncovered Spa", amount=100000, gst_rate=0,
+			charge_type="Spa", idempotency_key="ut-r4-idem-spa")
+		self.assertEqual(float(frappe.db.get_value("Folio", w2_a, "charges_total")), 0.0)
+		self.assertEqual(float(frappe.db.get_value("Folio", w1_a, "charges_total")), 100000.0)
+		self.assertEqual(corr_a.get("overflow_folio"), w1_a)
+		self.assertTrue(corr_a.get("overflow_row"))
+		# Replay after 100% overflow returns overflow_folio, overflow_row and exact repost
+		replay_a = api.correct_folio_charge(
+			w2_a, row_a, reason="Reclassify to uncovered Spa", amount=100000, gst_rate=0,
+			charge_type="Spa", idempotency_key="ut-r4-idem-spa")
+		self.assertEqual(replay_a.get("idempotent_replay"), 1)
+		self.assertEqual(replay_a.get("repost"), corr_a["repost"])
+		self.assertEqual(replay_a.get("overflow_folio"), corr_a["overflow_folio"])
+		self.assertEqual(replay_a.get("overflow_row"), corr_a["overflow_row"])
+
+		# (a2) Routing Instruction covering #2000: reclassifying F&B -> Spa moves off W2 to W1
+		stay_a2 = make_reservation(PROP_A, self.rt, d(-1), d(2), status="Checked In",
+		                           room=make_room(PROP_A, self.rt, "341"))
+		w1_a2 = guest_folio(stay_a2.name)
+		w2_a2 = folio_mod.open_window(reservation=stay_a2.name, payee_type="Company",
+		                              payee_company=corp([]), payment_method="Company Credit")
+		ri_a2 = route(["#2000"], reservation=stay_a2.name, target_type="Window", target_window=2)
+		api.post_stay_charge(stay_a2.name, "Food & Beverage", "RI Dinner", 100000,
+		                     transaction_code="2000")
+		row_a2 = frappe.db.get_value("Folio Charge", {"parent": w2_a2, "description": "RI Dinner"}, "name")
+		corr_a2 = api.correct_folio_charge(w2_a2, row_a2, reason="RI reclass Spa",
+		                                   amount=100000, gst_rate=0, charge_type="Spa")
+		self.assertEqual(float(frappe.db.get_value("Folio", w2_a2, "charges_total")), 0.0)
+		self.assertEqual(float(frappe.db.get_value("Folio", w1_a2, "charges_total")), 100000.0)
+		self.assertEqual(corr_a2.get("overflow_folio"), w1_a2)
+		self.assertEqual(routing.used(ri_a2.name), Decimal("0"))
+
+		# (b) Percent routing limit (50%): correcting 50k -> 200k splits 100k W2 + 100k W1
+		stay_b = self.stay(2)
+		w1_b = guest_folio(stay_b.name)
+		w2_b = folio_mod.open_window(reservation=stay_b.name, payee_type="Company",
+		                             payee_company=corp([]), payment_method="Company Credit")
+		route(["#2000"], reservation=stay_b.name, target_type="Window", target_window=2,
+		      limit_type="Percent", limit_value=50)
+		api.post_stay_charge(stay_b.name, "Food & Beverage", "Dining Pct", 100000,
+		                     transaction_code="2000")
+		row_b = frappe.db.get_value("Folio Charge", {"parent": w2_b, "description": "Dining Pct"}, "name")
+		corr_b = api.correct_folio_charge(w2_b, row_b, reason="Pct upward", amount=200000)
+		self.assertEqual(float(frappe.db.get_value("Folio", w2_b, "charges_total")), 100000.0)
+		self.assertEqual(float(frappe.db.get_value("Folio", w1_b, "charges_total")), 150000.0)
+		self.assertEqual(corr_b.get("overflow_folio"), w1_b)
+		self.assertTrue(corr_b.get("overflow_row"))
+		self.assertTrue(ledger.folio_reconciliation(PROP_A)["in_balance"])
+
+		# (c) Amount-limit overflow idempotency replay keeps overflow_folio and overflow_row
+		stay_c = make_reservation(PROP_A, self.rt, d(-1), d(2), status="Checked In",
+		                          room=make_room(PROP_A, self.rt, "342"))
+		w1_c = guest_folio(stay_c.name)
+		w2_c = folio_mod.open_window(reservation=stay_c.name, payee_type="Company",
+		                             payee_company=corp([]), payment_method="Company Credit")
+		route(["#2000"], reservation=stay_c.name, target_type="Window", target_window=2,
+		      limit_type="Amount", limit_value=100000)
+		api.post_stay_charge(stay_c.name, "Food & Beverage", "Idem FnB", 80000,
+		                     transaction_code="2000")
+		row_c = frappe.db.get_value("Folio Charge", {"parent": w2_c, "description": "Idem FnB"}, "name")
+		first_c = api.correct_folio_charge(w2_c, row_c, reason="Upward idem", amount=250000,
+		                                   idempotency_key="ut-r4-idem-up")
+		replay_c = api.correct_folio_charge(w2_c, row_c, reason="Upward idem", amount=250000,
+		                                    idempotency_key="ut-r4-idem-up")
+		self.assertEqual(first_c.get("overflow_folio"), w1_c)
+		self.assertTrue(first_c.get("overflow_row"))
+		self.assertEqual(replay_c.get("idempotent_replay"), 1)
+		self.assertEqual(replay_c.get("reversal"), first_c["reversal"])
+		self.assertEqual(replay_c.get("repost"), first_c["repost"])
+		self.assertEqual(replay_c.get("overflow_folio"), first_c["overflow_folio"])
+		self.assertEqual(replay_c.get("overflow_row"), first_c["overflow_row"])
+
+	# Hydrogen R3 P1-E: real two-connection MariaDB 11.8 snapshot-isolation race
+
+	def test_concurrent_post_and_correction_retry_snapshot_conflicts_without_500(self):
+		import json
+		import os
+		import subprocess
+		import sys
+		import tempfile
+
+		# Release any locks held by AuditTestCase.setUp (e.g. tabSeries / Transaction Code)
+		# before spawning real MariaDB worker processes, and re-arm the savepoint in finally.
+		from kamra.tests.audit_fixtures import SAVEPOINT
+		frappe.db.rollback()
+		tag = frappe.generate_hash(length=6)
+		pname = f"UT Conc R4 {tag}"
+		site = frappe.local.site
+		bench_sites = os.path.abspath(frappe.get_site_path(".."))
+
+		setup_code = (
+			"import json, os, sys, frappe\n"
+			f"os.chdir({bench_sites!r})\n"
+			f"frappe.init(site={site!r})\n"
+			"frappe.connect()\n"
+			"frappe.set_user('Administrator')\n"
+			f"pname, tag, today, checkout = {pname!r}, {tag!r}, {TODAY!r}, {d(2)!r}\n"
+			"frappe.get_doc({\n"
+			"    'doctype': 'Property', 'property_name': pname, 'country': 'Uganda',\n"
+			"    'currency': 'UGX', 'city': 'Kampala', 'state': 'Central',\n"
+			"    'gst_mode': 'Fixed', 'rates_include_tax': 0, 'business_date': today,\n"
+			"    'default_company_billing': 'Nothing (guest pays unless rules say so)',\n"
+			"    'disabled': 0,\n"
+			"}).insert(ignore_permissions=True)\n"
+			"from kamra import api, ledger\n"
+			"ledger.ensure_default_transaction_codes()\n"
+			"rt = frappe.get_doc({\n"
+			"    'doctype': 'Room Type', 'property': pname, 'room_type_code': 'CSTD',\n"
+			"    'room_type_name': 'Conc Std', 'base_price': 100000, 'adults_capacity': 2,\n"
+			"}).insert(ignore_permissions=True).name\n"
+			"corps, guests = [], []\n"
+			"def mk_case(label):\n"
+			"    rm = frappe.get_doc({'doctype': 'Room', 'property': pname, 'room_type': rt, 'room_number': f'CR{label}'}).insert(ignore_permissions=True).name\n"
+			"    g = frappe.get_doc({'doctype': 'Guest', 'first_name': f'UT Conc {tag} {label}'}).insert(ignore_permissions=True).name\n"
+			"    guests.append(g)\n"
+			"    comp = frappe.get_doc({'doctype': 'Corporate Account', 'company_name': f'UT Conc Corp {tag} {label}', 'credit_allowed': 1}).insert(ignore_permissions=True).name\n"
+			"    corps.append(comp)\n"
+			"    res = frappe.get_doc({\n"
+			"        'doctype': 'Reservation', 'property': pname, 'room_type': rt, 'guest': g,\n"
+			"        'status': 'Confirmed', 'room': rm, 'company': comp,\n"
+			"        'check_in_date': today, 'check_out_date': checkout, 'adults': 1, 'children': 0,\n"
+			"    })\n"
+			"    res.flags.allow_past_check_in = True\n"
+			"    res.insert(ignore_permissions=True)\n"
+			"    res.status = 'Checked In'\n"
+			"    res.save(ignore_permissions=True)\n"
+			"    w2 = api.open_folio_window(reservation=res.name, payee_type='Company', payee_company=comp)['folio']\n"
+			"    w1 = frappe.db.get_value('Folio', {'reservation': res.name, 'window_no': 1})\n"
+			"    ri = frappe.get_doc({\n"
+			"        'doctype': 'Routing Instruction', 'property': pname, 'reservation': res.name,\n"
+			"        'target_type': 'Window', 'target_window': 2,\n"
+			"        'codes': [{'transaction_code': '2000'}],\n"
+			"        'limit_type': 'Amount', 'limit_value': 100000,\n"
+			"        'from_date': today, 'to_date': checkout,\n"
+			"    }).insert(ignore_permissions=True).name\n"
+			"    return {'res': res.name, 'win1': w1, 'win2': w2, 'ri': ri}\n"
+			"c1, c2, c3 = mk_case('A'), mk_case('B'), mk_case('C')\n"
+			"api.post_stay_charge(c2['res'], 'Food & Beverage', 'Base 60k', 60000, transaction_code='2000')\n"
+			"c2['row'] = frappe.db.get_value('Folio Charge', {'parent': c2['win2'], 'description': 'Base 60k'}, 'name')\n"
+			"api.post_stay_charge(c3['res'], 'Food & Beverage', 'C3 Row 1', 40000, transaction_code='2000')\n"
+			"api.post_stay_charge(c3['res'], 'Food & Beverage', 'C3 Row 2', 40000, transaction_code='2000')\n"
+			"c3['row1'] = frappe.db.get_value('Folio Charge', {'parent': c3['win2'], 'description': 'C3 Row 1'}, 'name')\n"
+			"c3['row2'] = frappe.db.get_value('Folio Charge', {'parent': c3['win2'], 'description': 'C3 Row 2'}, 'name')\n"
+			"frappe.db.commit()\n"
+			"print(json.dumps({'c1': c1, 'c2': c2, 'c3': c3, 'corps': corps, 'guests': guests}))\n"
+		)
+
+		worker_code = (
+			"import json, os, sys, time, frappe\n"
+			f"os.chdir({bench_sites!r})\n"
+			f"frappe.init(site={site!r})\n"
+			"frappe.connect()\n"
+			"frappe.set_user('Administrator')\n"
+			"mode, payload, bf, wid = sys.argv[1], json.loads(sys.argv[2]), sys.argv[3], sys.argv[4]\n"
+			"frappe.db.sql('SELECT COUNT(*) FROM `tabRouting Instruction` WHERE name=%s', (payload['ri'],))\n"
+			"with open(bf + '.' + wid, 'w') as fh: fh.write('1')\n"
+			"other = '2' if wid == '1' else '1'\n"
+			"t0 = time.time()\n"
+			"while not os.path.exists(bf + '.' + other) and time.time() - t0 < 10: time.sleep(0.01)\n"
+			"from kamra import api\n"
+			"try:\n"
+			"    if mode == 'post80':\n"
+			"        res = api.post_stay_charge(payload['res'], 'Food & Beverage', 'Conc Post ' + wid, 80000, transaction_code='2000')\n"
+			"    else:\n"
+			"        res = api.correct_folio_charge(payload['win2'], payload['row'], reason='Conc corr', amount=int(sys.argv[5]))\n"
+			"    frappe.db.commit()\n"
+			"    print(json.dumps({'worker': wid, 'ok': True, 'res': res}, default=str))\n"
+			"except Exception as e:\n"
+			"    frappe.db.rollback()\n"
+			"    print(json.dumps({'worker': wid, 'ok': False, 'error': f'{type(e).__name__}: {e}'}, default=str))\n"
+		)
+
+		verify_code = (
+			"import json, os, sys, frappe\n"
+			f"os.chdir({bench_sites!r})\n"
+			f"frappe.init(site={site!r})\n"
+			"frappe.connect()\n"
+			"data = json.loads(sys.argv[1])\n"
+			"out = {}\n"
+			"for k in ('c1', 'c2', 'c3'):\n"
+			"    d = data[k]\n"
+			"    out[k] = [\n"
+			"        float(frappe.db.get_value('Folio', d['win2'], 'charges_total') or 0),\n"
+			"        float(frappe.db.get_value('Folio', d['win1'], 'charges_total') or 0),\n"
+			"    ]\n"
+			"print(json.dumps(out))\n"
+		)
+
+		cleanup_code = (
+			"import json, os, sys, frappe\n"
+			f"os.chdir({bench_sites!r})\n"
+			f"frappe.init(site={site!r})\n"
+			"frappe.connect()\n"
+			"frappe.set_user('Administrator')\n"
+			f"pname = {pname!r}\n"
+			"data = json.loads(sys.argv[1])\n"
+			"for dt in ('Folio Ledger Entry', 'Agent Action Log', 'Routing Instruction',\n"
+			"           'Folio', 'Reservation', 'Room', 'Room Type', 'Property Setting'):\n"
+			"    frappe.db.delete(dt, {'property': pname})\n"
+			"for c in data.get('corps', []):\n"
+			"    frappe.db.delete('Company Billing Rule', {'parent': c})\n"
+			"    frappe.db.delete('Corporate Account', {'name': c})\n"
+			"for g in data.get('guests', []):\n"
+			"    frappe.db.delete('Guest', {'name': g})\n"
+			"frappe.db.delete('Property', {'name': pname})\n"
+			"frappe.db.commit()\n"
+		)
+
+		def run_pair(m1, p1, a1, m2, p2, a2):
+			bf = tempfile.mktemp(prefix="ut_kn43_conc_")
+			try:
+				pa = subprocess.Popen([sys.executable, "-c", worker_code, m1, json.dumps(p1), bf, "1", *a1],
+				                      stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+				pb = subprocess.Popen([sys.executable, "-c", worker_code, m2, json.dumps(p2), bf, "2", *a2],
+				                      stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+				oa, ea = pa.communicate(timeout=30)
+				ob, eb = pb.communicate(timeout=30)
+				self.assertTrue(oa.strip(), f"worker 1 empty stdout; stderr={ea}")
+				self.assertTrue(ob.strip(), f"worker 2 empty stdout; stderr={eb}")
+				return json.loads(oa.strip().splitlines()[-1]), json.loads(ob.strip().splitlines()[-1])
+			finally:
+				for sfx in (".1", ".2"):
+					if os.path.exists(bf + sfx):
+						os.remove(bf + sfx)
+
+		data = None
+		try:
+			setup_out = subprocess.check_output([sys.executable, "-c", setup_code], text=True, timeout=30)
+			data = json.loads(setup_out.strip().splitlines()[-1])
+			c1, c2, c3 = data["c1"], data["c2"], data["c3"]
+
+			r1a, r1b = run_pair("post80", c1, [], "post80", c1, [])
+			r2a, r2b = run_pair("post80", c2, [], "corr_to", c2, ["90000"])
+			r3a, r3b = run_pair("corr_to", {**c3, "row": c3["row1"]}, ["90000"],
+			                    "corr_to", {**c3, "row": c3["row2"]}, ["90000"])
+
+			self.assertTrue(r1a["ok"] and r1b["ok"], (r1a, r1b))
+			self.assertTrue(r2a["ok"] and r2b["ok"], (r2a, r2b))
+			self.assertTrue(r3a["ok"] and r3b["ok"], (r3a, r3b))
+
+			ver_out = subprocess.check_output(
+				[sys.executable, "-c", verify_code, json.dumps(data)], text=True, timeout=30)
+			totals = json.loads(ver_out.strip().splitlines()[-1])
+			self.assertEqual(totals["c1"], [100000.0, 60000.0])
+			self.assertEqual(totals["c2"], [100000.0, 70000.0])
+			self.assertEqual(totals["c3"], [100000.0, 80000.0])
+		finally:
+			if data is not None:
+				subprocess.run([sys.executable, "-c", cleanup_code, json.dumps(data)],
+				               check=False, timeout=30)
+			frappe.db.rollback()
+			frappe.db.savepoint(SAVEPOINT)
+
+	# Hydrogen R3 P1-F: K1/R3 backend _() messages in all 7 locale CSVs ----
+
+	def test_k1_backend_messages_translated_in_all_seven_locales(self):
+		import csv
+		import re
+		from pathlib import Path
+
+		required = (
+			"Transaction code {0} is not an enabled charge code.",
+			"Transaction code {0} has no charge type. Set one under Transaction codes.",
+			"Unexpected parameter(s) for route_outlet_charge: {0}. Pass a transaction_code instead (is_alcohol was removed).",
+			"Cannot route to reservation {0} because its status is {1}.",
+			"Cannot route to cancelled group {0}.",
+			"Cannot create or keep an active routing instruction for cancelled group {0}.",
+			"A company window names the paying company, and only that.",
+			"A guest window names no company or agent.",
+			"A travel agent window names the paying agent, and only that.",
+			"A group's master bill needs its Group Booking.",
+			"A group's master bill must be at the group's property.",
+			"Window must be from 1 to {0}.",
+			"Window {0} already has an open bill.",
+			"A bill can have at most {0} windows. Close a window or move its charges to another one.",
+			"Open a window on a stay or on a group's master bill.",
+			"Reservation {0} not found.",
+			"Group {0} not found.",
+			"Group {0} is cancelled, so it has no master bill.",
+			"A routing instruction is for one stay or for one group.",
+			"The stay or group must be at {0}.",
+			"Target window must be from 1 to {0}.",
+			"Choose the window to route to.",
+			"A window instruction routes within the stay; leave the target room empty.",
+			"Choose the room to route to.",
+			"Charges can only be routed to a room at the same property.",
+			"To route within the stay, route to one of its windows.",
+			"This stay is not part of a group, so it has no group master.",
+			"The group's bill must be at the same property.",
+			"A group master instruction has no target room.",
+			"Route to a window, a room or the group master.",
+			"Each row names a charge type or a transaction code, not both.",
+			"All Charges routes everything; remove the rows.",
+			"Choose the charge types or codes to route, or tick All Charges.",
+			"An instruction for all charges cannot carry a limit.",
+			"An amount limit must be more than zero.",
+			"A percent limit must be more than 0 and at most 100.",
+			"To Date is before From Date.",
+			"Tick at least one day of the week.",
+			"Instruction {0} already routes some of these charges on some of these days. "
+			"Only one instruction may cover a charge on a date: change its dates or charges, or disable it.",
+			"Bill-to for {0}: {1}.",
+		)
+		placeholder_re = re.compile(r"\{[^{}]*\}")
+		trans_dir = Path(frappe.get_app_path("kamra", "translations"))
+		for lang in ("ar", "de", "es", "fil", "id", "pt", "zh"):
+			csv_path = trans_dir / f"{lang}.csv"
+			self.assertTrue(csv_path.is_file(), f"missing translation CSV: {csv_path.name}")
+			seen: dict[str, str] = {}
+			with csv_path.open(encoding="utf-8", newline="") as fh:
+				for row in csv.reader(fh):
+					if not row or len(row) < 2:
+						continue
+					src, dst = row[0], row[1]
+					if src == "source":
+						continue
+					self.assertNotIn(src, seen, f"{lang}.csv: duplicate source {src!r}")
+					seen[src] = dst
+			for msg in required:
+				self.assertIn(msg, seen, f"{lang}.csv missing {msg!r}")
+				self.assertTrue(seen[msg].strip(), f"{lang}.csv empty translation for {msg!r}")
+				self.assertEqual(
+					sorted(placeholder_re.findall(msg)),
+					sorted(placeholder_re.findall(seen[msg])),
+					f"{lang}.csv placeholder mismatch for {msg!r}: {seen[msg]!r}",
+				)
+
+	# Hydrogen R3 P2-A: migration edges (master_reservation=None, multi-prop, orphan)
+
+	def test_migration_handles_no_master_groups_and_multi_property_or_orphan_companies(self):
+		import importlib
+		make_property(PROP_A, business_date=TODAY)
+		make_property(PROP_B, business_date=TODAY)
+		frappe.db.set_value("Property", PROP_A, "default_company_billing",
+		                    "Room and F&B (liquor to guest)")
+		frappe.db.set_value("Property", PROP_B, "default_company_billing", "Room only")
+		frappe.clear_document_cache("Property", PROP_A)
+		frappe.clear_document_cache("Property", PROP_B)
+		settings.clear_cache(PROP_A)
+		settings.clear_cache(PROP_B)
+
+		# 1. Confirmed group with master_reservation=None and liquor-excluding preset
+		gb_no_master = frappe.get_doc({
+			"doctype": "Group Booking", "property": PROP_A,
+			"group_name": "UT NoMaster PreK1 Group", "check_in_date": TODAY,
+			"check_out_date": d(2), "status": "Confirmed",
+		}).insert(ignore_permissions=True)
+		frappe.db.set_value("Group Booking", gb_no_master.name, {
+			"master_reservation": None,
+			"master_pays": "Room and F&B (liquor to guest)",
+		})
+
+		# 2. Ruleless credit company spanning PROP_A (liquor-excl) and PROP_B (Room only)
+		c_multi = frappe.get_doc({
+			"doctype": "Corporate Account", "company_name": "UT MultiProp Ruleless Corp",
+			"credit_allowed": 1,
+		}).insert(ignore_permissions=True).name
+		stay_a = make_reservation(PROP_A, self.rt, d(-1), d(2), status="Checked In",
+		                          room=make_room(PROP_A, self.rt, "351"),
+		                          company=c_multi, booking_type="Corporate")
+		rt_b = make_room_type(PROP_B, "STDB", base_price=1000)
+		stay_b = make_reservation(PROP_B, rt_b, d(-1), d(2), status="Checked In",
+		                          room=make_room(PROP_B, rt_b, "451"),
+		                          company=c_multi, booking_type="Corporate")
+
+		# 3. Orphan ruleless credit company on a mixed-preset multi-property site
+		c_orphan = frappe.get_doc({
+			"doctype": "Corporate Account", "company_name": "UT Orphan Ruleless Corp",
+			"credit_allowed": 1,
+		}).insert(ignore_permissions=True).name
+
+		mig = importlib.import_module("kamra.patches.v48.migrate_liquor_exclusion_to_code_rules")
+		ren = importlib.import_module("kamra.patches.v48.rename_company_billing_presets")
+		mig.execute()
+		ren.execute()
+		ri_after_1 = frappe.get_all("Routing Instruction",
+		                            filters={"group_booking": gb_no_master.name}, pluck="name")
+		stay_a_ris_1 = frappe.get_all("Routing Instruction",
+		                              filters={"reservation": stay_a.name}, pluck="name")
+		# Idempotent second run
+		mig.execute()
+		ren.execute()
+		self.assertEqual(
+			frappe.get_all("Routing Instruction", filters={"group_booking": gb_no_master.name}, pluck="name"),
+			ri_after_1,
+		)
+		self.assertEqual(
+			frappe.get_all("Routing Instruction", filters={"reservation": stay_a.name}, pluck="name"),
+			stay_a_ris_1,
+		)
+
+		# No-master group was NOT renamed to liquor-including "Room and F&B" and has non-alcohol group RI
+		self.assertEqual(
+			frappe.db.get_value("Group Booking", gb_no_master.name, "master_pays"),
+			"Nothing (guest pays unless rules say so)",
+		)
+		self.assertEqual(len(ri_after_1), 1)
+		gb_codes = {r.transaction_code for r in frappe.get_doc("Routing Instruction", ri_after_1[0]).codes}
+		self.assertIn("2000", gb_codes)
+		self.assertNotIn("2010", gb_codes)
+
+		# Multi-property and orphan companies did NOT get global F&B rules across Room-only properties
+		self.assertEqual(frappe.get_doc("Corporate Account", c_multi).billing_rules, [])
+		self.assertEqual(frappe.get_doc("Corporate Account", c_orphan).billing_rules, [])
+		# PROP_B (Room only) stays keep Food on Guest; PROP_A active stay routes Food to Company & Beer to Guest
+		self.assertEqual(
+			api.post_stay_charge(stay_b.name, "Food & Beverage", "PropB Food", 500, transaction_code="2000")["folio_type"],
+			"Guest",
+		)
+		self.assertEqual(
+			api.post_stay_charge(stay_a.name, "Food & Beverage", "PropA Food", 500, transaction_code="2000")["folio_type"],
+			"Company",
+		)
+		self.assertEqual(
+			api.post_stay_charge(stay_a.name, "Food & Beverage", "PropA Beer", 400, transaction_code="2010")["folio_type"],
+			"Guest",
+		)
