@@ -1491,6 +1491,7 @@ Change USD room tariff,Change USD room tariff,تغيير تعرفة الغرفة
 Changed by,Changed by,غيّره,Cambiado por,Alterado por,修改人,screens/settings/SettingsHub.tsx,,translated
 CHANGEOVER CONFLICT,CHANGEOVER CONFLICT,تعارض تبديل الغرفة,CONFLICTO ENTRE SALIDA Y ENTRADA,CONFLITO DE MUDANÇA,客房衔接冲突,screens/TapeChart.tsx,,translated
 changes data,changes data,يغيّر البيانات,modifica datos,altera dados,变更数据,screens/settings/McpAccessPage.tsx,,translated
+Changes log,Changes log,سجل التغييرات,Registro de cambios,Registro de alterações,变更日志,components/ChangesLog.tsx,,translated
 Changes Requested,Changes Requested,مطلوب تعديلات,Cambios solicitados,Alterações solicitadas,已请求修改,,,translated
 Changes waiting,Changes waiting,,Cambios en espera,Mudanças na fila,,components/ChannelConnectionActions.tsx,,needs_translation
 channel,channel,القناة,canal,canal,渠道,,,translated
@@ -2017,6 +2018,7 @@ Date ranges that lift or set nightly rates. Highest priority wins. Toggle Disabl
 Date stuck,Date stuck,التاريخ متوقف,Fecha sin actualizar,Data travada,营业日未推进,screens/EndOfDay.tsx; screens/EndOfDayWizard.tsx,,translated
 Dated,Dated,بتاريخ,Fecha,Datado,日期,screens/BanquetDocument.tsx,,translated
 Dates,Dates,التواريخ,Fechas,Datas,日期,screens/PublicBooking.tsx,,translated
+Dates changed,Dates changed,تغيير التواريخ,Fechas cambiadas,Datas alteradas,日期已更改,components/ChangesLog.tsx,,translated
 dates read as {format},dates read as {format},تُقرأ التواريخ كـ {format},fechas leídas como {format},datas lidas como {format},日期按 {format} 读取,screens/GoLiveImport.tsx,format,translated
 Day,Day,اليوم,Día,Dia,日,screens/AuditPack.tsx; screens/CashForecast.tsx,,translated
 Day and month to date,Day and month to date,اليوم ومنذ بداية الشهر,Día y acumulado del mes,Dia e mês acumulados,当日与本月至今,screens/AuditPack.tsx,,translated
@@ -2288,8 +2290,10 @@ Manage tariffs,Manage tariffs,إدارة التعرفة,Gestionar tarifas,Gerenc
 New rate,New rate,السعر الجديد,Nueva tarifa,Nova tarifa,新价格,screens/ContractTariffs.tsx,,translated
 New tariff version,New tariff version,نسخة تعرفة جديدة,Nueva versión de tarifa,Nova versão da tarifa,新建价格版本,screens/ContractTariffs.tsx,,translated
 New version,New version,نسخة جديدة,Nueva versión,Nova versão,新建版本,screens/ContractTariffs.tsx,,translated
+Nightly prices,Nightly prices,الأسعار الليلية,Precios por noche,Preços por noite,每晚价格,components/ChangesLog.tsx,,translated
 No active tariff,No active tariff,لا توجد تعرفة سارية,Sin tarifa vigente,Sem tarifa vigente,无当前有效价格,screens/ContractTariffs.tsx,,translated
 No approved contract tariffs.,No approved contract tariffs.,,,,,components/RoomTypeTariffs.tsx,,needs_translation
+No changes recorded yet.,No changes recorded yet.,لم تُسجَّل أي تغييرات بعد.,Aún no hay cambios registrados.,Ainda não há alterações registradas.,尚无变更记录。,components/ChangesLog.tsx,,translated
 No published book rate is available for this price list.,No published book rate is available for this price list.,لا يتوفر سعر صرف محاسبي منشور لقائمة الأسعار هذه.,No hay un tipo de cambio contable publicado para esta lista de precios.,Não há câmbio contábil publicado para esta lista de preços.,此价格表没有已发布的记账汇率。,screens/ContractTariffs.tsx,,translated
 No tariff versions are pending approval.,No tariff versions are pending approval.,لا توجد نسخ تعرفة بانتظار الموافقة.,No hay versiones de tarifa pendientes de aprobación.,Nenhuma versão de tarifa aguarda aprovação.,没有待审批的价格版本。,screens/ContractTariffs.tsx,,translated
 No tariffs match these filters.,No tariffs match these filters.,لا توجد تعرفة مطابقة لعوامل التصفية هذه.,Ninguna tarifa coincide con estos filtros.,Nenhuma tarifa corresponde a estes filtros.,没有符合这些筛选条件的价格。,screens/ContractTariffs.tsx,,translated
@@ -2298,6 +2302,7 @@ Pending: {rate} from {date},Pending: {rate} from {date},بانتظار المو�
 Price list,Price list,قائمة الأسعار,Lista de precios,Lista de preços,价格表,screens/ContractTariffs.tsx,,translated
 Published book rate: 1 {foreign} = {rate} {home} · {date},Published book rate: 1 {foreign} = {rate} {home} · {date},سعر الصرف المحاسبي المنشور: ١ {foreign} = {rate} {home} · {date},Tipo de cambio contable publicado: 1 {foreign} = {rate} {home} · {date},Câmbio contábil publicado: 1 {foreign} = {rate} {home} · {date},已发布的记账汇率：1 {foreign} = {rate} {home} · {date},screens/ContractTariffs.tsx,foreign rate home date,translated
 Published selling rate: 1 {foreign} = {rate} {home} · {date},Published selling rate: 1 {foreign} = {rate} {home} · {date},,,,,components/RoomTypeTariffs.tsx,foreign rate home date,needs_translation
+Rate correction,Rate correction,تصحيح السعر,Corrección de tarifa,Correção de tarifa,房价修正,components/ChangesLog.tsx,,translated
 Recompute the signature over the raw body and reject old timestamps.,Recompute the signature over the raw body and reject old timestamps.,يحمل كل طلب X-شريك التحقق من الهوية-Event وX-شريك التحقق من الهوية-Event-Id وX-شريك التحقق من الهوية-Timestamp وX-شريك التحقق من الهوية-Signature. أعد حساب التوقيع على النص الخام وارفض الطوابع الزمنية القديمة:,"Cada solicitud lleva X-el servicio de verificación de identidad-Event, X-el servicio de verificación de identidad-Event-Id, X-el servicio de verificación de identidad-Timestamp y X-el servicio de verificación de identidad-Signature. Vuelva a calcular la firma sobre el cuerpo sin procesar y rechace las marcas de tiempo antiguas:","Cada solicitação carrega X-o serviço de verificação de identidade-Event, X-o serviço de verificação de identidade-Event-Id, X-o serviço de verificação de identidade-Timestamp e X-o serviço de verificação de identidade-Signature. Recalcule a assinatura sobre o corpo bruto e rejeite os carimbos de data/hora antigos:",每个请求携带 X-证件核验合作方-Event、X-证件核验合作方-Event-Id、X-证件核验合作方-Timestamp 与 X-证件核验合作方-Signature。请对原始报文重算签名并拒绝过期时间戳：,screens/settings/WebhooksPage.tsx,,translated
 "Each sign-in from Claude, ChatGPT or another MCP client. Disconnect one and it has to sign in again.","Each sign-in from Claude, ChatGPT or another MCP client. Disconnect one and it has to sign in again.",كل تسجيل دخول من Claude أو ChatGPT أو أي عميل MCP آخر. افصل أحدها وسيحتاج إلى تسجيل الدخول مجددا.,"Cada inicio de sesión desde Claude, ChatGPT u otro cliente MCP. Si desconecta uno, tendrá que iniciar sesión de nuevo.","Cada login de Claude, ChatGPT ou outro cliente MCP. Desconecte um e ele deverá fazer login novamente.",来自 Claude、ChatGPT 或其他 MCP 客户端的每次登录。断开会话后需重新登录。,screens/settings/McpAccessPage.tsx,,translated
 "Each stay becomes a normal booking at its own property, with its own bill. Take advances on each stay.","Each stay becomes a normal booking at its own property, with its own bill. Take advances on each stay.",تصبح كل إقامة حجزًا عاديًا في منشأتها، بفاتورتها الخاصة. استلم الدفعات المقدمة على كل إقامة.,"Cada estancia se convierte en una reserva normal en su propiedad, con su propia cuenta. Cobra los anticipos en cada estancia.","Cada estadia se torna uma reserva normal no seu respectivo hotel, com sua própria fatura. Receba adiantamentos em cada estadia.",每段住宿在各酒店成为普通预订，各有独立账单。可分别收取预付款。,,,translated
@@ -2680,9 +2685,11 @@ Refreshing contract tariffs…,Refreshing contract tariffs…,جارٍ تحدي�
 Released tariffs are never overwritten — new versions take effect from their effective date once approved.,Released tariffs are never overwritten — new versions take effect from their effective date once approved.,لا تُستبدل التعرفة المنشورة؛ بعد الموافقة تسري النسخ الجديدة اعتبارًا من تاريخ سريانها.,"Las tarifas publicadas no se sobrescriben. Una vez aprobadas, las nuevas versiones se aplican desde su fecha de vigencia.","Tarifas liberadas não são sobrescritas. Após aprovação, as novas versões valem a partir da data de vigência.",已发布的价格不会被覆盖。新版本获批后，自生效日期起适用。,screens/ContractTariffs.tsx,,translated
 Retry,Retry,إعادة المحاولة,Reintentar,Tentar novamente,重试,screens/ContractTariffs.tsx,,translated
 Revenue · Contract Tariffs,Revenue · Contract Tariffs,الإيرادات · التعرفة التعاقدية,Ingresos · Tarifas contractuales,Receita · Tarifas contratuais,收益 · 合同价格,,,translated
+Room move,Room move,نقل الغرفة,Cambio de habitación,Troca de quarto,换房,components/ChangesLog.tsx,,translated
 Same reason as the stay,Same reason as the stay,نفس سبب الإقامة,El mismo motivo que la estancia,O mesmo motivo da estadia,与住宿相同的原因,components/DiscountPanel.tsx,,translated
 Search tariffs,Search tariffs,البحث في التعرفة,Buscar tarifas,Buscar tarifas,搜索价格,screens/ContractTariffs.tsx,,translated
 Select a price list to see its published book rate.,Select a price list to see its published book rate.,اختر قائمة أسعار لعرض سعر الصرف المحاسبي المنشور لها.,Selecciona una lista de precios para ver su tipo de cambio contable publicado.,Selecione uma lista de preços para ver seu câmbio contábil publicado.,请选择价格表以查看其已发布的记账汇率。,screens/ContractTariffs.tsx,,translated
+Signed off by {name},Signed off by {name},وافق عليه {name},Aprobado por {name},Aprovado por {name},由 {name} 批准,components/ChangesLog.tsx,name,translated
 Submit for approval,Submit for approval,إرسال للموافقة,Enviar para aprobación,Enviar para aprovação,提交审批,screens/ContractTariffs.tsx,,translated
 Supplement,Supplement,إضافة,Suplemento,Suplemento,附加服务,,,translated
 Supplements,Supplements,الإضافات,Suplementos,Suplementos,附加服务,screens/ContractTariffs.tsx,,translated

@@ -4623,6 +4623,8 @@ def reservation_detail(reservation: str):
 			 "discount_amount": float(n.get("discount_amount") or 0),
 			 "discount_type": n.get("discount_type") or None,
 			 "discount_value": float(n.get("discount_value") or 0),
+			 # the night's own reason (Daily Details); blank follows the stay
+			 "discount_reason": n.get("discount_reason") or None,
 			 **_entry_figures(res.property, n),
 			 # already on the folio: its discount is settled there (a folio
 			 # allowance), so the Daily Details editor leaves it alone
@@ -7297,6 +7299,108 @@ def set_reservation_discount(reservation: str, discount_type: str | None = None,
 	                   for r in doc.night_rates],
 	        "amount_after_tax": flt(doc.amount_after_tax),
 	        "approver": (gov or {}).get("approver")}
+
+
+# --- the reservation's Changes Log -------------------------------------------
+# OPERA Cloud Actions > Changes Log and SAP's pricing change documents
+# (CDHDR / CDPOS), from what Frappe and Kamra already record: the Version rows
+# Reservation keeps (track_changes) and the audit rows of the governed
+# actions. Nothing new is stored.
+
+# the fields the log shows: what is sold, its price and the discount; keys,
+# snapshots and tokens never show
+CHANGE_LOG_FIELDS = (
+	"status", "check_in_date", "check_out_date", "room", "room_type", "rate_plan", "meal_plan",
+	"adults", "children", "extra_beds", "voucher", "company", "market_segment", "auto_price",
+	"agreed_rate", "fixed_rate", "discount_type", "discount_value", "discount_reason",
+	"amount_after_tax")
+CHANGE_LOG_TITLES = {
+	"create_reservation": "Booked", "reservation_discount": "Discount",
+	"rate_override": "Agreed rate", "room_move": "Room move", "amend_stay": "Dates changed",
+	"correct_charged_nights": "Rate correction", "set_night_prices": "Nightly prices"}
+
+
+def _night_rate_changes(before: dict, after: dict) -> list[dict]:
+	"""Each night whose rate moved ({date: rate} before and after); a night
+	only on one side was added to or taken out of the stay."""
+	out = []
+	for day in sorted(set(before) | set(after)):
+		was, now = before.get(day), after.get(day)
+		if was is None or now is None or abs(was - now) >= 0.005:
+			out.append({"date": day, "from": was, "to": now})
+	return out
+
+
+def _version_nights(data: dict) -> list[dict]:
+	"""The nights a save re-locked, from its Version row: the night rows it
+	took off and the ones it put on (Reservation replaces them whole)."""
+	def rates(key):
+		return {str(getdate(row["stay_date"])): flt(row.get("rate"))
+		        for table, row in data.get(key) or []
+		        if table == "night_rates" and isinstance(row, dict) and row.get("stay_date")}
+	return _night_rate_changes(rates("removed"), rates("added"))
+
+
+def _snapshot_nights(before, after) -> list[dict]:
+	"""The nights an audit row's before / after snapshots hold (_discount_snapshot)."""
+	def rates(snap):
+		try:
+			snap = json.loads(snap) if isinstance(snap, str) else snap
+		except ValueError:
+			return {}
+		return {str(n["date"]): flt(n.get("rate")) for n in (snap or {}).get("nights") or []
+		        if isinstance(n, dict) and n.get("date")} if isinstance(snap, dict) else {}
+	was, now = rates(before), rates(after)
+	return _night_rate_changes(was, now) if was and now else []
+
+
+def _change_entry(kind: str, by: str | None, at, **values) -> dict:
+	from frappe.utils import get_fullname
+	approver = values.pop("approver", None)
+	return {"kind": kind, "at": str(at), "by": by, "by_name": get_fullname(by) if by else None,
+	        "approver": approver, "approver_name": get_fullname(approver) if approver else None,
+	        "action_type": None, "title": None, "rationale": None, "fields": [], "nights": [],
+	        **values}
+
+
+@frappe.whitelist()
+@require_roles("Front Desk", "Kamra Agent", "Finance", "Revenue Manager")
+def reservation_changes(reservation: str):
+	"""The reservation's Changes Log, newest first: every save Frappe
+	recorded on it (its Version rows: the fields in CHANGE_LOG_FIELDS and
+	each night's rate, before and after) and every governed action (the
+	audit rows: who, why, each night before and after, and who signed it
+	off). Read only."""
+	res = frappe.get_doc("Reservation", reservation)
+	assert_property_access(res.property)
+	meta = frappe.get_meta("Reservation")
+	entries = []
+	for v in frappe.get_all("Version", filters={"ref_doctype": "Reservation", "docname": res.name},
+	                        fields=["owner", "creation", "data"], order_by="creation desc", limit=200):
+		try:
+			data = json.loads(v.data or "{}")
+		except ValueError:
+			continue
+		if not isinstance(data, dict):
+			continue
+		fields = [{"field": f, "label": meta.get_label(f),
+		           "from": "" if old in (None, "") else str(old),
+		           "to": "" if new in (None, "") else str(new)}
+		          for f, old, new in data.get("changed") or [] if f in CHANGE_LOG_FIELDS]
+		nights = _version_nights(data)
+		if fields or nights:
+			entries.append(_change_entry("change", v.owner, v.creation, fields=fields, nights=nights))
+	for a in frappe.get_all(
+			"Agent Action Log", filters={"reference_doctype": "Reservation", "reference_name": res.name},
+			fields=["action_type", "actor", "approver", "rationale", "creation",
+			        "before_snapshot", "after_snapshot"],
+			order_by="creation desc", limit=200):
+		entries.append(_change_entry(
+			"action", a.actor, a.creation, action_type=a.action_type, approver=a.approver,
+			title=CHANGE_LOG_TITLES.get(a.action_type) or (a.action_type or "").replace("_", " ").capitalize(),
+			rationale=a.rationale, nights=_snapshot_nights(a.before_snapshot, a.after_snapshot)))
+	entries.sort(key=lambda e: e["at"], reverse=True)
+	return {"entries": entries}
 
 
 def _move_price(res, new_type: str | None, rate_mode: str,

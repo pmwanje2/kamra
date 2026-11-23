@@ -1854,6 +1854,8 @@ export interface ReservationDetail extends TariffReference {
     /** the night's own Daily Details discount (blank: follows the stay) */
     discount_type?: "Percent" | "Amount" | null
     discount_value?: number
+    /** the night's own reason (blank: the stay's) */
+    discount_reason?: string | null
     /** already on the folio: its discount is settled there */
     charged?: boolean
   }[]

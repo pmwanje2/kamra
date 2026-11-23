@@ -74,6 +74,8 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
   /** the nightly rates the folio bills now (reservation_detail.night_rates) */
   nightRates: {
     date: string; rate: number; base_rate?: number; discount_type?: DiscountType | null; discount_value?: number
+    /** the night's own reason (blank: the stay's) */
+    discount_reason?: string | null
     /** the night's base on the basis the desk enters a discount */
     entry_base_rate?: number
     /** already on the folio: its discount is a folio allowance, never re-sent */
@@ -130,7 +132,8 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
     value: current?.discount_type ? String(current.discount_value) : "",
     reason: current?.discount_reason ?? "",
     nights: Object.fromEntries(openNights.filter((n) => n.discount_type)
-      .map((n) => [n.date, { type: n.discount_type as DiscountType, value: String(n.discount_value ?? 0) }])),
+      .map((n) => [n.date, { type: n.discount_type as DiscountType, value: String(n.discount_value ?? 0),
+        ...(n.discount_reason ? { reason: n.discount_reason } : {}) }])),
   })
   const [discount, setDiscount] = useState<DiscountState>(initial)
   // a stay that holds a manager's fixed-rate override reopens with it on

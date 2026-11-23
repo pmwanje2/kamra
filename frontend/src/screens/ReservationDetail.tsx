@@ -46,6 +46,7 @@ import RoomChangeDialog from "../components/RoomChangeDialog"
 import CheckOutDialog from "../components/CheckOutDialog"
 import CheckInDialog from "../components/CheckInDialog"
 import AgreedRatePanel from "../components/AgreedRatePanel"
+import ChangesLog from "../components/ChangesLog"
 import SupervisorSignOff, { SignOffReasons } from "../components/SupervisorSignOff"
 import { supervisorArgs } from "../lib/reservationDiscount"
 import { useAuth } from "../lib/auth"
@@ -602,6 +603,7 @@ export default function ReservationDetail({
             <AgreedRatePanel reservation={name} nightRates={d.night_rates ?? []} current={d.discount}
               canOverrideFixed={canOverrideFixed} onSaved={() => { refresh(); reload() }} />
           )}
+          <ChangesLog reservation={name} money={inr} />
           {d.booked_check_out_date && (
             <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
               {translate("Left early: booked to {date}.", { date: d.booked_check_out_date })}
