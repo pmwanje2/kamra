@@ -582,3 +582,252 @@ class PropertyBasisChangeTestCase(_SellingBasisFixture, IntegrationTestCase):
 		self.assertTrue(any(Decimal(rate) == Decimal("161800") and (
 			key == day(NIGHT) or (isinstance(key, tuple) and key[0] <= day(NIGHT) <= key[1]))
 			for key, rate in offered.items()), offered)
+
+
+def _tax(name, total, type=None, is_inclusive=False, **extra) -> dict:
+	"""One rooms[].taxes[] entry as Channex relays it (BookingRoomTax: type
+	is a string or null, name a string)."""
+	return dict({"is_inclusive": is_inclusive, "name": name, "total_price": str(total),
+	             "type": type}, **extra)
+
+
+VAT_ON_TOP = _tax("VAT", "27000.00", type="tax")
+
+
+class ChannexTaxRuleTestCase(_SellingBasisFixture, IntegrationTestCase):
+	"""Which of a booking room's taxes[] is the room tax the folio bills is
+	the connection's configuration (Channel Manager Connection > OTA tax
+	rules): rules on the tax's type and name, tried in order, the first that
+	matches deciding. A new Channex connection starts from rules that count
+	VAT, GST, sales, occupancy and room taxes and leave out fees, city taxes
+	and a tax the OTA withheld; a property can change them.
+
+	Each booking is one night sold at 150,000 before tax: 177,000 billed when
+	the 27,000 listed on top is the room tax, 150,000 when it is not."""
+
+	def booked(self, h, *taxes, ota_name: str = "Expedia") -> tuple[float, bool]:
+		"""(total, nightly_net) of the one room Channex's webhook parses
+		into, read with the connection's configuration as saved."""
+		payload = {"event": "booking", "payload": {
+			"status": "new", "ota_reservation_code": "TAX-" + frappe.generate_hash(length=6),
+			"ota_name": ota_name, "arrival_date": day(NIGHT), "departure_date": day(NIGHT + 1),
+			"currency": h.currency, "customer": {"name": "Ota", "surname": "Guest"},
+			"rooms": [{"room_type_id": "rt-std", "checkin_date": day(NIGHT),
+			           "checkout_date": day(NIGHT + 1), "occupancy": {"adults": 2, "children": 0},
+			           "days": {day(NIGHT): "150000.00"}, "taxes": list(taxes)}]}}
+		conn = frappe.get_doc("Channel Manager Connection", h.conn.name)
+		event = channex.parse_webhook(conn, payload)[0]
+		return flt(event["total"], 2), event["nightly_net"]
+
+	def rules(self, h, rows) -> None:
+		"""Replace the connection's OTA tax rules with `rows`
+		(match_on, match_type, match_text, counts_as), in that order."""
+		conn = frappe.get_doc("Channel Manager Connection", h.conn.name)
+		conn.set("ota_tax_rules", [{"match_on": on, "match_type": how, "match_text": text, "counts_as": counts}
+		                           for on, how, text, counts in rows])
+		conn.save(ignore_permissions=True)
+
+	def test_a_vat_without_a_type_is_read_by_its_name(self):
+		"""BookingRoomTax.type may be null: the name still says VAT."""
+		h = self.hotel(inclusive=0)
+		self.assertEqual(self.booked(h, _tax("VAT (18%)", "27000.00", type=None)), (177000.0, True))
+
+	def test_us_sales_occupancy_and_room_taxes_are_the_room_tax(self):
+		"""Expedia "Total Amount Excluding Taxes" and Agoda "Exclusive" are
+		the US model (docs.channex.io), where the room tax is a sales,
+		occupancy or room tax, not a VAT."""
+		h = self.hotel(inclusive=0)
+		for label in ("Sales Tax", "Occupancy Tax", "Room Tax"):
+			with self.subTest(label=label):
+				self.assertEqual(self.booked(h, _tax(label, "27000.00", type=label)), (177000.0, True))
+
+	def test_a_gst_is_the_room_tax(self):
+		h = self.hotel(inclusive=0)
+		for name, type_ in (("GST (18%)", None), ("Goods and Services Tax", "Goods and Services Tax")):
+			with self.subTest(name=name):
+				self.assertEqual(self.booked(h, _tax(name, "27000.00", type=type_)), (177000.0, True))
+
+	def test_a_city_tax_of_type_tax_is_left_out(self):
+		"""Channex's generic type "tax" on a city tax: the name says what it is."""
+		h = self.hotel(inclusive=0)
+		self.assertEqual(self.booked(h, VAT_ON_TOP, _tax("City Tax", "5000.00", type="tax")),
+		                 (177000.0, True))
+
+	def test_a_fee_whose_label_mentions_vat_is_left_out(self):
+		h = self.hotel(inclusive=0)
+		self.assertEqual(self.booked(h, VAT_ON_TOP, _tax("Cleaning Fee", "20000.00",
+		                                                 type="Cleaning Fee (incl. VAT)")),
+		                 (177000.0, True))
+
+	def test_fees_city_taxes_and_withheld_taxes_are_left_out(self):
+		h = self.hotel(inclusive=0)
+		for tax in (_tax("Cleaning fee", "20000.00", type="fee"),
+		            _tax("City tax", "5000.00", type="city_tax"),
+		            _tax("Tourism levy", "3000.00", type="tax"),
+		            _tax("Service charge", "15000.00", type=None),
+		            _tax("VAT (Withheld Tax)", "27000.00", type="tax", is_withheld=True)):
+			with self.subTest(tax=tax["name"]):
+				self.assertEqual(self.booked(h, tax), (150000.0, False))
+
+	def test_the_standard_rules_are_the_connections_own_rows(self):
+		"""The defaults are configuration on the connection, not code: both
+		kinds of row are there to read and change."""
+		h = self.hotel(inclusive=0)
+		conn = frappe.get_doc("Channel Manager Connection", h.conn.name)
+		self.assertEqual({r.counts_as for r in conn.ota_tax_rules}, {"Room tax", "Ignored"})
+
+	def test_a_property_that_configured_its_own_rules(self):
+		"""A property's own rules replace the standard ones: with only a
+		lodging tax counted, a lodging tax on top is billed and a VAT is not."""
+		h = self.hotel(inclusive=0)
+		self.assertEqual(self.booked(h, _tax("Lodging Tax", "27000.00", type=None)), (150000.0, False))
+		self.rules(h, [("Type or Name", "Contains", "lodging tax", "Room tax")])
+		self.assertEqual(self.booked(h, _tax("Lodging Tax", "27000.00", type=None)), (177000.0, True))
+		self.assertEqual(self.booked(h, VAT_ON_TOP), (150000.0, False))
+
+	def test_the_first_matching_rule_decides(self):
+		"""A property that bills the city tax on its own folio puts a rule
+		for it above the one that leaves city taxes out."""
+		h = self.hotel(inclusive=0)
+		conn = frappe.get_doc("Channel Manager Connection", h.conn.name)
+		standard = [(r.match_on, r.match_type, r.match_text, r.counts_as) for r in conn.ota_tax_rules]
+		self.rules(h, [("Name", "Is", "City Tax", "Room tax"), *standard])
+		self.assertEqual(self.booked(h, VAT_ON_TOP, _tax("City Tax", "5000.00", type="tax")),
+		                 (182000.0, True))
+
+	def test_matching_is_on_whole_words(self):
+		""""vat" is a word of "VAT (18%)", not of "Private transfer"; an
+		"Is" rule needs the whole label."""
+		h = self.hotel(inclusive=0)
+		self.rules(h, [("Type or Name", "Contains", "vat", "Room tax"), ("Type", "Is", "tax", "Room tax")])
+		self.assertEqual(self.booked(h, _tax("VAT (18%)", "27000.00", type=None)), (177000.0, True))
+		self.assertEqual(self.booked(h, _tax("Private transfer", "27000.00", type=None)), (150000.0, False))
+		self.assertEqual(self.booked(h, _tax("Sales", "27000.00", type="Sales Tax")), (150000.0, False))
+		self.assertEqual(self.booked(h, _tax("Sales", "27000.00", type="TAX")), (177000.0, True))
+
+	def test_the_round_trip_bills_a_vat_read_by_its_name_like_the_desk(self):
+		h = self.hotel(inclusive=0)
+		pushed = self.channex_push(h)
+		desk = self.desk_booking(h)
+		payload = self.channex_payload(h, self.charged(h, pushed), report="exclusive")
+		for tax in payload["payload"]["rooms"][0]["taxes"]:
+			tax.update(type=None, name="VAT (18%)")
+		self.deliver(h, payload)
+		self.assertBillsLikeTheDesk(self.received(h, payload["payload"]["ota_reservation_code"]), desk)
+
+	def test_migrate_gives_existing_channex_connections_the_standard_rules(self):
+		"""A connection made before the rules existed has none: the patch
+		gives it the standard ones and leaves a property's own alone."""
+		from kamra.patches.v48.seed_channel_ota_tax_rules import execute
+
+		fresh = self.hotel(inclusive=0)
+		standard = [(r.match_on, r.match_type, r.match_text, r.counts_as) for r in
+		            frappe.get_doc("Channel Manager Connection", fresh.conn.name).ota_tax_rules]
+		old, own = self.hotel(inclusive=0), self.hotel(inclusive=0)
+		frappe.db.delete("Channel OTA Tax Rule", {"parenttype": "Channel Manager Connection",
+		                                          "parent": old.conn.name})
+		self.rules(own, [("Type or Name", "Contains", "lodging tax", "Room tax")])
+		self.assertEqual(self.booked(old, VAT_ON_TOP), (150000.0, False))
+		execute()
+		rows = lambda h: [(r.match_on, r.match_type, r.match_text, r.counts_as) for r in  # noqa: E731
+		                  frappe.get_doc("Channel Manager Connection", h.conn.name).ota_tax_rules]
+		self.assertTrue(standard)
+		self.assertEqual(rows(old), standard)
+		self.assertEqual(rows(own), [("Type or Name", "Contains", "lodging tax", "Room tax")])
+		self.assertEqual(self.booked(old, VAT_ON_TOP), (177000.0, True))
+
+
+class ChannexTaxBasisTestCase(_SellingBasisFixture, IntegrationTestCase):
+	"""Whether an OTA's amounts include tax is that OTA's setting on the
+	channel manager (Expedia booking_amount_settings, Agoda
+	booking_tax_settings), and a Channex booking does not carry it: a
+	booking that lists no taxes reads the same either way. The connection
+	records it per OTA (Channel Manager Connection > OTA tax basis). A
+	booking from an OTA set to report amounts before tax that lists no tax
+	is held as Requested for staff, its amount in the note, never billed as
+	if tax were in it. An OTA not on the list keeps today's reading."""
+
+	def before_tax(self, h, channel: str = "Expedia") -> None:
+		conn = frappe.get_doc("Channel Manager Connection", h.conn.name)
+		conn.append("ota_tax_basis", {"channel": channel, "amounts": "Excluding tax"})
+		conn.save(ignore_permissions=True)
+
+	def booking(self, h, ota_name: str = "Expedia", listed: bool = False, status: str = "new",
+	            ref: str | None = None, taxes=()) -> dict:
+		"""One night sold at 150,000 before tax, the guest paying it plus
+		the property's room tax, reported before tax; `taxes` are what the
+		room lists (default: none), or the room tax on top when `listed`."""
+		payload = self.channex_payload(h, self.charged(h, Decimal("150000")), report="exclusive")
+		body = payload["payload"]
+		body.update(ota_name=ota_name, status=status)
+		if ref:
+			body["ota_reservation_code"] = ref
+		if not listed:
+			body["rooms"][0]["taxes"] = list(taxes)
+		return payload
+
+	def land(self, h, payload):
+		self.deliver(h, payload)
+		return self.received(h, payload["payload"]["ota_reservation_code"])
+
+	def sellable(self, h) -> int:
+		return cm._sellable(h.property, h.room_type, day(NIGHT), day(NIGHT + 1))
+
+	def test_a_before_tax_ota_listing_no_tax_is_held_for_staff(self):
+		h = self.hotel(inclusive=0)
+		self.before_tax(h)
+		doc = self.land(h, self.booking(h))
+		self.assertEqual(doc.status, "Requested")
+		for part in ("Expedia", "150000", "UGX", "resolve"):
+			self.assertIn(part, doc.special_requests or "")
+		self.assertEqual(flt(doc.amount_after_tax), 0)
+		self.assertEqual(self.sellable(h), 3)
+
+	def test_a_before_tax_ota_listing_only_a_city_tax_is_held_for_staff(self):
+		"""A city tax is not the room tax: the room tax is still missing."""
+		h = self.hotel(inclusive=0)
+		self.before_tax(h)
+		doc = self.land(h, self.booking(h, taxes=[_tax("City Tax", "5000.00", type="city_tax")]))
+		self.assertEqual(doc.status, "Requested")
+		self.assertEqual(flt(doc.amount_after_tax), 0)
+
+	def test_a_modify_listing_no_tax_is_held_for_staff(self):
+		h = self.hotel(inclusive=0)
+		self.before_tax(h)
+		first = self.booking(h, listed=True)
+		self.assertEqual(self.land(h, first).status, "Confirmed")
+		ref = first["payload"]["ota_reservation_code"]
+		doc = self.land(h, self.booking(h, status="modified", ref=ref))
+		self.assertEqual(doc.status, "Requested")
+		self.assertIn("Expedia", doc.special_requests or "")
+		self.assertEqual(flt(doc.amount_after_tax), 0)
+
+	def test_a_before_tax_ota_that_lists_its_tax_bills_like_the_desk(self):
+		h = self.hotel(inclusive=0)
+		self.before_tax(h)
+		desk = self.desk_booking(h)
+		doc = self.land(h, self.booking(h, listed=True))
+		self.assertEqual(doc.status, "Confirmed")
+		self.assertBillsLikeTheDesk(doc, desk)
+
+	def test_another_ota_on_the_same_connection_keeps_todays_reading(self):
+		h = self.hotel(inclusive=0)
+		self.before_tax(h, "Expedia")
+		doc = self.land(h, self.booking(h, ota_name="Booking.com"))
+		self.assertEqual(doc.status, "Confirmed")
+		self.assertEqual(flt(doc.amount_after_tax), 150000)
+
+	def test_a_connection_with_no_tax_basis_keeps_todays_reading(self):
+		h = self.hotel(inclusive=0)
+		doc = self.land(h, self.booking(h))
+		self.assertEqual(doc.status, "Confirmed")
+		self.assertEqual(flt(doc.amount_after_tax), 150000)
+
+	def test_a_property_without_room_tax_is_not_held(self):
+		"""Nothing is missing when the room carries no tax: before tax and
+		after are the same amount."""
+		h = self.hotel(inclusive=0, tax=0)
+		self.before_tax(h)
+		doc = self.land(h, self.booking(h))
+		self.assertEqual(doc.status, "Confirmed")
+		self.assertEqual(flt(doc.amount_after_tax), 150000)
