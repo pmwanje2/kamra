@@ -9,12 +9,17 @@ never lets it. H is the property currency, C the rate plan's contract
 currency and E the currency of the mapped Channex rate plan.
 
 Outbound: E == C sends the contract nightly, E == H the property-currency
-agreed rate the desk books, anything else nothing at all. A missing tariff
-still stops sale; a missing exchange rate holds the night instead.
+agreed rate the desk books, anything else - an unknown E included, for every
+plan - nothing at all. Only the resolver's refusal of the night (a missing
+tariff) or no price above zero stops sale. A missing exchange rate, and any
+other error while pricing (a permission refusal, the database, the bridge),
+holds the night at what the channel last accepted instead.
 
 Inbound: an OTA booking in C converts the OTA's own nights into H at
-booking. An OTA-collected booking keeps that rate; a property-collected one
-follows the rate plan's exchange-rate lock, as a desk booking does."""
+booking. A booking the OTA explicitly collects (payment_collect "ota") or
+pays by virtual card keeps that rate; any other (Channex: null means the
+property collects) follows the rate plan's exchange-rate lock, as a desk
+booking does."""
 
 from __future__ import annotations
 
@@ -85,9 +90,13 @@ class OutboundCurrencyTest(OutboundCurrencyHarness):
 		agreed, _tariff = self.pricing.contract_rate("Test Hotel", STD, "DERIVED", NIGHT, NEXT, 2, 0)
 		self.assertEqual(agreed, 427000)
 
-	def test_any_other_currency_or_none_on_a_foreign_plan_is_refused(self):
+	def test_any_other_or_unknown_currency_is_refused_for_every_plan(self):
+		"""An unknown channel currency fails closed for a home or card plan too
+		(Neon R1 P0-2): UGX must never go into a channel rate plan that may
+		sell in USD."""
 		for plan, currency in (("CONTRACT", "EUR"), ("CONTRACT", None), ("DERIVED", "EUR"),
-		                       ("CARD", "USD"), ("CARD-USD", "USD"), ("CARD-USD", None)):
+		                       ("CARD", "USD"), ("CARD-USD", "USD"), ("CARD-USD", None),
+		                       ("CARD", None), (None, None)):
 			with self.subTest(plan=plan, currency=currency):
 				with self.assertRaises(self.channel_ari.AriCurrencyRefused):
 					self.night(plan, currency)
@@ -96,8 +105,6 @@ class OutboundCurrencyTest(OutboundCurrencyHarness):
 		self.assertEqual(self.night("CARD", "UGX"), CARD)
 		self.assertEqual(self.night("CARD-USD", "UGX"), CARD)
 		self.assertEqual(self.night(None, "UGX"), CARD)
-		# a home plan whose channel currency is not known yet sells as it always has
-		self.assertEqual(self.night("CARD", None), CARD)
 
 	def test_a_missing_exchange_rate_holds_the_night_and_a_missing_tariff_stops_sale(self):
 		self.tariffs["CONTRACT"] = {"is_tariff": 1, "refusal": FX_REFUSAL}
@@ -107,6 +114,30 @@ class OutboundCurrencyTest(OutboundCurrencyHarness):
 					self.night("CONTRACT", currency)
 		self.tariffs["CONTRACT"] = {"is_tariff": 1, "refusal": NO_TARIFF}
 		self.assertIsNone(self.night("CONTRACT", "USD"))
+
+	def test_an_unexpected_error_while_pricing_holds_the_night_and_never_stops_sale(self):
+		"""Neon R1 P0-1: Frappe's PermissionError (an Exception, not a
+		ValidationError), a database or a bridge failure, even a
+		ValidationError the engine did not mean as a refusal (InReadOnlyMode
+		is one), is not a reason to take the plan off sale."""
+		for error in (FramePermissionError("Tariff prices are for hotel staff."), RuntimeError("Lost connection"),
+		              self.frappe.ValidationError("read only")):
+			with self.subTest(error=type(error).__name__):
+				def refuse(form, error=error):
+					raise error
+				self.tariffs["CONTRACT"] = refuse
+				for currency in ("USD", "UGX"):
+					with self.assertRaisesRegex(self.channel_ari.AriPricingFailed, type(error).__name__):
+						self.night("CONTRACT", currency)
+
+	def test_no_price_above_zero_still_stops_sale(self):
+		with patch.object(self.pricing, "quote", lambda *args, **kwargs: {"room_total": 0}):
+			self.assertIsNone(self.night("CARD", "UGX"))
+
+
+class FramePermissionError(Exception):
+	"""frappe.PermissionError as Frappe defines it (frappe/exceptions.py:
+	class PermissionError(Exception)); the harness's own is a ValidationError."""
 
 
 class RestrictionCellsCurrencyTest(OutboundCurrencyHarness):
@@ -123,13 +154,14 @@ class RestrictionCellsCurrencyTest(OutboundCurrencyHarness):
 		self.map("rp-usd", "CONTRACT", "USD")
 		self.map("rp-ugx", "CONTRACT", "UGX")
 		self.map("rp-eur", "CONTRACT", "EUR")
-		self.map("rp-bar", None, None)
+		self.map("rp-bar", None, "UGX")
+		self.map("rp-unknown", "CARD", None)
 		cells, problems = self.cells()
 		self.assertEqual(sorted(cells), ["rp-bar", "rp-ugx", "rp-usd"])
 		self.assertEqual(cells["rp-usd"][NIGHT], {"rate": Decimal("130.00"), "stop_sell": False})
 		self.assertEqual(cells["rp-ugx"][NIGHT], {"rate": Decimal("474000.00"), "stop_sell": False})
 		self.assertEqual(cells["rp-bar"][NEXT], {"rate": CARD, "stop_sell": False})
-		self.assertEqual(sorted(problems["refused"]), ["rp-eur"])
+		self.assertEqual(sorted(problems["refused"]), ["rp-eur", "rp-unknown"])
 		for code in ("EUR", "USD", "UGX"):
 			self.assertIn(code, problems["refused"]["rp-eur"])
 		self.assertFalse(problems.get("held"))
@@ -137,7 +169,7 @@ class RestrictionCellsCurrencyTest(OutboundCurrencyHarness):
 	def test_a_missing_exchange_rate_sends_nothing_for_the_night_instead_of_a_stop_sell(self):
 		self.map("rp-usd", "CONTRACT", "USD")
 		self.map("rp-ugx", "CONTRACT", "UGX")
-		self.map("rp-bar", None, None)
+		self.map("rp-bar", None, "UGX")
 		priced = self.tariff(fx_rate=3648.2, agreed_rate=474266)
 		self.tariffs["CONTRACT"] = lambda form: (
 			{"is_tariff": 1, "refusal": FX_REFUSAL} if form["check_in"] == NIGHT else priced)
@@ -177,6 +209,26 @@ class RestrictionCellsCurrencyTest(OutboundCurrencyHarness):
 		self.assertEqual(cells["rp-usd"], {NIGHT: {"stop_sell": True}, NEXT: {"stop_sell": True}})
 		self.assertFalse(problems.get("held"))
 		self.assertFalse(problems.get("refused"))
+		self.assertFalse(problems.get("errored"))
+
+	def test_a_night_that_errors_while_pricing_sends_nothing_and_is_reported(self):
+		self.map("rp-usd", "CONTRACT", "USD")
+		self.map("rp-bar", None, "UGX")
+		priced = self.tariff(fx_rate=3648.2, agreed_rate=474266)
+
+		def resolve(form):
+			if form["check_in"] == NIGHT:
+				raise FramePermissionError("Tariff prices are for hotel staff.")
+			return priced
+		self.tariffs["CONTRACT"] = resolve
+		cells, problems = self.cells()
+		self.assertEqual(cells["rp-usd"], {NEXT: {"rate": Decimal("130.00"), "stop_sell": False}})
+		self.assertEqual(cells["rp-bar"][NIGHT], {"rate": CARD, "stop_sell": False})
+		self.assertEqual(sorted(problems["errored"]), ["rp-usd"])
+		self.assertEqual(problems["errored"]["rp-usd"]["dates"], [NIGHT])
+		self.assertEqual(problems["errored"]["rp-usd"]["rate_plan"], "CONTRACT")
+		self.assertIn("FramePermissionError", problems["errored"]["rp-usd"]["reason"])
+		self.assertFalse(problems.get("held"))
 
 
 # An OTA booking in USD on CORP, booked at 3,650: the OTA sold the first night

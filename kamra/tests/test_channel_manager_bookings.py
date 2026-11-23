@@ -333,3 +333,83 @@ class ChannexForeignContractBookingTestCase(IntegrationTestCase):
 		self.assertIn("EUR", doc.special_requests)
 		self.assertIn("UGX", doc.special_requests)
 		self.assertFalse(doc.contract_tariff)
+
+	def test_a_booking_that_does_not_say_who_collects_follows_its_rate_plan(self):
+		"""Neon R1 P1-1: Channex documents payment_collect null as "usually the
+		property collects"; OPERA OXI keeps the rate code's exchange type
+		unless the booking is prepaid, OTA-collected or a virtual card."""
+		self.deliver(self.payload(collect=None))
+		doc = self.received()
+		self.assertEqual(doc.status, "Confirmed")
+		self.assertNotIn("fx_lock_policy", frappe.parse_json(doc.contract_tariff))
+		self.assertEqual(pricing.reservation_fx_policy(doc), "Fixed at Check In")
+
+	def test_a_free_night_stays_the_ota_s_free_night(self):
+		"""Neon R1 P1-4: Stay 2, Pay 1. The OTA's 0.00 night is its price, not
+		a gap to fill with an even split."""
+		self.deliver(self.payload(amounts=("130.00", "0.00")))
+		doc = self.received()
+		self.assertEqual(doc.status, "Confirmed")
+		self.assertEqual(self.gross_nights(doc), [475000, 0])
+		self.assertEqual(float(doc.amount_after_tax), 475000)
+		self.assertEqual([(n["nightly"], n["agreed_rate"])
+		                  for n in frappe.parse_json(doc.contract_tariff)["tariff"]["nights"]],
+		                 [(130.0, 475000.0), (0.0, 0.0)])
+
+	def test_a_booking_not_in_its_mapped_channel_currency_is_not_converted(self):
+		"""Neon R1 P2-2: Kamra sells CORP on rp-corp in UGX, so a delivery
+		labelled USD for those amounts is not read as dollars."""
+		frappe.db.set_value("Channel Room Mapping", {"connection": self.conn.name, "external_rate_id": "rp-corp"},
+		                    "external_currency", "UGX")
+		self.deliver(self.payload(amounts=("474000.00", "438000.00")))
+		doc = self.received()
+		self.assertEqual(doc.status, "Requested")
+		self.assertEqual(float(doc.amount_after_tax or 0), 0)
+		self.assertFalse(doc.contract_tariff)
+		self.assertIn("USD", doc.special_requests)
+
+	def test_a_modify_into_the_property_currency_keeps_nothing_of_the_foreign_contract(self):
+		"""Neon R1 P0-3: a modify is the booking's full new state. A stay the
+		OTA now sells in UGX keeps nothing of the USD contract, so check-in
+		and Night Audit cannot convert it again (OPERA OXI replaces a
+		reservation's rate and currency on a modification)."""
+		self.deliver(self.payload())
+		self.deliver(self.payload(currency="UGX", status="modified", amounts=("480000.00", "440000.00")))
+		doc = self.received()
+		self.assertEqual(doc.status, "Confirmed")
+		self.assertEqual(self.gross_nights(doc), [480000, 440000])
+		self.assertFalse(doc.contract_tariff)
+		self.assertFalse(doc.rate_plan)
+		self.assertFalse(float(doc.agreed_rate or 0))
+		self.assertEqual(pricing.contract_night_rates(doc), {})
+		self.assertFalse(pricing.relock_contract_fx_at_check_in(doc))
+
+	def test_a_modify_in_another_currency_is_requested_without_the_old_contract_or_its_nights(self):
+		self.deliver(self.payload())
+		self.deliver(self.payload(currency="EUR", status="modified"))
+		doc = self.received()
+		self.assertEqual(doc.status, "Requested")
+		self.assertEqual(float(doc.amount_after_tax or 0), 0)
+		self.assertFalse(doc.contract_tariff)
+		self.assertFalse(doc.rate_plan)
+		self.assertFalse(float(doc.agreed_rate or 0))
+		self.assertEqual(list(doc.night_rates), [])
+		self.assertIn("EUR", doc.special_requests)
+
+	def test_a_modify_keeps_the_booking_s_exchange_rate_and_lock(self):
+		"""Neon R1 P0-3: OPERA keeps a reservation's exchange basis on a
+		modification; only the OTA's amounts are read again. With no rate
+		published on the day of the modification, or a new one, the stay is
+		converted at the booking's rate and stays fixed at reservation."""
+		self.deliver(self.payload(collect="ota"))
+		for rates in ({}, {"USD": Decimal(3750)}):
+			with self.subTest(rates=rates):
+				self.rates = rates
+				self.deliver(self.payload(collect="ota", status="modified", amounts=("140.00", "130.00")))
+				doc = self.received()
+				self.assertEqual(doc.status, "Confirmed")
+				# USD 140 and 130 at the booking's 3,650: 511,000 and 474,500 to 475,000
+				self.assertEqual(self.gross_nights(doc), [511000, 475000])
+				snapshot = frappe.parse_json(doc.contract_tariff)
+				self.assertEqual((snapshot["tariff"]["fx_rate"], snapshot["fx_lock_policy"]),
+				                 (3650, "Fixed at Reservation"))
