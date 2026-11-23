@@ -605,3 +605,60 @@ class ChangesLogTests(RoundFourTestCase):
 			{"date": d(6), "discount_type": "Percent", "discount_value": 10, "discount_reason": "ADJ-RATE"}])
 		detail = self.as_user(DESK, api.reservation_detail, res.name)
 		self.assertEqual([n.get("discount_reason") for n in detail["night_rates"]], [None, "ADJ-RATE"])
+
+
+DUTY = "ut.disc.duty@test.local"
+DUTY_ROLE = "UT Duty Manager"
+
+
+class RoleLimitTests(RoundFourTestCase):
+	"""R4-11: the front desk's limit by role (OPERA's authorizer levels, SAP's
+	condition limits by responsibility), in the existing settings: each
+	person takes the highest limit among their roles, everyone else the
+	property's own, and an AI agent the front desk's."""
+
+	def setUp(self):
+		super().setUp()
+		set_setting(PROP_A, "rate_override_limit_pct", 0)
+		set_setting(PROP_A, "rate_override_limits_by_role",
+		            f"Front Desk: 5\n{DUTY_ROLE}: 15\nNot a role at all")
+		ensure_user(DUTY, ["Front Desk", DUTY_ROLE])
+
+	def test_each_role_works_within_its_own_limit(self):
+		from kamra.settings import get_setting
+		self.assertEqual(get_setting(PROP_A, "rate_override_limits_by_role").splitlines()[0], "Front Desk: 5")
+		res = self.stay()
+		ten = dict(discount_type="Percent", discount_value=10, **PROMO)
+		pv = self.as_user(DESK, api.discount_preview, res.name, **ten)
+		self.assertEqual((pv["limit_pct"], pv["needs_supervisor"]), (5, True))
+		with self.assertRaises(frappe.PermissionError):
+			self.discount(res.name, **ten)
+		pv = self.as_user(DUTY, api.discount_preview, res.name, **ten)
+		self.assertEqual((pv["limit_pct"], pv["needs_supervisor"]), (15, False))
+		self.discount(res.name, DUTY, **ten)
+		self.assertEqual(self.rows(res.name), [(1000, 100, 900)] * 2)
+		with self.assertRaises(frappe.PermissionError):
+			self.discount(res.name, DUTY, discount_type="Percent", discount_value=20, **PROMO)
+
+	def test_an_agreed_rate_takes_the_same_limits(self):
+		res = self.stay()
+		pv = self.as_user(DUTY, api.rate_override_preview, res.name, 880)
+		self.assertEqual((pv["limit_pct"], pv["needs_supervisor"]), (15, False))
+		with self.assertRaises(frappe.PermissionError):
+			self.agree(res.name, 880)
+		self.agree(res.name, 880, DUTY)
+		self.assertEqual(self.rows(res.name), [(880, 0, 880)] * 2)
+
+	def test_the_booking_screen_offers_each_person_their_own_limit(self):
+		for user, limit in ((DESK, 5), (DUTY, 15)):
+			with self.subTest(user=user):
+				opts = self.as_user(user, api.booking_options, PROP_A)
+				self.assertEqual(opts["rate_override_limit_pct"], limit)
+
+	def test_an_ai_agent_is_held_to_the_front_desks_limit(self):
+		args = dict(discount_type="Percent", discount_value=10, discount_reason="RATE-PROMO")
+		with self.assertRaises(frappe.PermissionError):
+			self.as_agent(DUTY, api.create_booking, PROP_A, self.rt, d(5), d(7), "UT Agent Duty", **args)
+		out = self.as_agent(DUTY, api.create_booking, PROP_A, self.rt, d(5), d(7), "UT Agent Duty Five",
+		                    discount_type="Percent", discount_value=5, discount_reason="RATE-PROMO")
+		self.assertEqual(self.rows(out["reservation"]), [(1000, 50, 950)] * 2)
