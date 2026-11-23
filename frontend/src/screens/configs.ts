@@ -1055,3 +1055,195 @@ export const transactionCodesConfig: ScreenConfig = {
       hint: "Turn off instead of deleting when the journal already posted it." },
   ],
 }
+
+const isSystemCode = (draft: Record<string, unknown>) => Boolean(Number(draft.system))
+const canDeleteMaster = (row: Record<string, unknown>) => !Number(row.system)
+
+function simpleMasterConfig(opts: {
+  doctype: string
+  title: string
+  description: string
+  codeHint: string
+}): ScreenConfig {
+  return {
+    doctype: opts.doctype,
+    title: opts.title,
+    description: opts.description,
+    searchFields: ["code", "description"],
+    filters: [{ field: "disabled", label: "Disabled", options: ["0", "1"] }],
+    pageSize: 50,
+    orderBy: "sort_order asc, code asc",
+    canDelete: canDeleteMaster,
+    columns: [
+      { field: "code", label: "Code" },
+      { field: "description", label: "Description" },
+      { field: "sort_order", label: "Sort order" },
+      { field: "system", label: "Type", booleanBadge: { truthy: "System", falsy: "Custom" } },
+      { field: "disabled", label: "Status", statusCheck: true },
+    ],
+    form: [
+      { field: "code", label: "Code", type: "data", required: true, readOnlyOnEdit: true, hint: opts.codeHint },
+      { field: "description", label: "Description", type: "data", required: true },
+      { field: "sort_order", label: "Sort order", type: "int", default: 0,
+        hint: "Lower numbers appear first in pickers." },
+      { field: "disabled", label: "Disabled", type: "check", disabledWhen: isSystemCode,
+        hint: "Switch off instead of deleting once used on bookings. System codes stay active." },
+    ],
+  }
+}
+
+export const marketCodesConfig: ScreenConfig = simpleMasterConfig({
+  doctype: "Market Code",
+  title: "Market Codes",
+  description: "Market segments used on reservations, rate reporting and revenue analysis.",
+  codeHint: "Short code stored on reservations (e.g. Corporate, Safari Operator).",
+})
+
+export const originCodesConfig: ScreenConfig = simpleMasterConfig({
+  doctype: "Origin Code",
+  title: "Origin Codes",
+  description: "Booking sources recorded on reservations (e.g. Direct, Walk-in, OTA, Travel Agent).",
+  codeHint: "Booking origin code stored on reservations.",
+})
+
+export const bookingTypesConfig: ScreenConfig = simpleMasterConfig({
+  doctype: "Booking Type",
+  title: "Booking Types",
+  description: "Stay categories such as Overnight or Day Use.",
+  codeHint: "Booking type code stored on reservations.",
+})
+
+export const bookerRelationsConfig: ScreenConfig = simpleMasterConfig({
+  doctype: "Booker Relation",
+  title: "Booker Relations",
+  description: "Relationship of the person making a booking on a guest's behalf.",
+  codeHint: "Booker relation code (e.g. Assistant, Company Travel Desk).",
+})
+
+export const cancellationReasonsConfig: ScreenConfig = simpleMasterConfig({
+  doctype: "Cancellation Reason",
+  title: "Cancellation Reasons",
+  description: "Reasons recorded when a reservation is cancelled.",
+  codeHint: "Cancellation reason code stored on cancelled reservations.",
+})
+
+export const paymentMethodsConfig: ScreenConfig = {
+  doctype: "Payment Method",
+  title: "Payment Methods",
+  description: "Payment methods offered at the desk and on folios. Custom methods belong to this property only.",
+  propertyOrShared: true,
+  searchFields: ["code", "description", "mode_of_payment"],
+  filters: [
+    {
+      field: "tender_type",
+      label: "Tender type",
+      options: [
+        "Cash", "Foreign Cash", "Card", "Instant", "Bank Transfer",
+        "OTA Prepaid", "Company Credit", "Payment Link", "Cheque", "Other",
+      ],
+    },
+    { field: "disabled", label: "Disabled", options: ["0", "1"] },
+  ],
+  pageSize: 50,
+  orderBy: "sort_order asc, code asc",
+  canDelete: canDeleteMaster,
+  columns: [
+    { field: "code", label: "Code" },
+    { field: "description", label: "Description" },
+    { field: "tender_type", label: "Tender type", badge: true },
+    { field: "mode_of_payment", label: "Accounting Mode of Payment" },
+    { field: "system", label: "Type", booleanBadge: { truthy: "System", falsy: "Custom" } },
+    { field: "disabled", label: "Status", statusCheck: true },
+  ],
+  form: [
+    { field: "code", label: "Code", type: "data", required: true, readOnlyOnEdit: true,
+      hint: "Name shown in payment pickers (e.g. MTN MoMo, Airtel Money)." },
+    { field: "description", label: "Description", type: "data" },
+    {
+      field: "tender_type",
+      label: "Tender type",
+      type: "select",
+      required: true,
+      default: "Other",
+      disabledWhen: isSystemCode,
+      options: [
+        "Cash", "Foreign Cash", "Card", "Instant", "Bank Transfer",
+        "OTA Prepaid", "Company Credit", "Payment Link", "Cheque", "Other",
+      ],
+      hint: "Controls till bucket and foreign-currency eligibility.",
+    },
+    { field: "mode_of_payment", label: "Accounting Mode of Payment", type: "data",
+      hint: "Matching Mode of Payment in Accounting when connected to an ERP bridge." },
+    { field: "sort_order", label: "Sort order", type: "int", default: 0,
+      hint: "Lower numbers appear first in pickers." },
+    { field: "disabled", label: "Disabled", type: "check", disabledWhen: isSystemCode,
+      hint: "Switch off instead of deleting once used on folios. System codes stay active." },
+  ],
+}
+
+export const mealPlanCodesConfig: ScreenConfig = simpleMasterConfig({
+  doctype: "Meal Plan Code",
+  title: "Meal Plan Codes",
+  description: "Standard board codes linked from property meal plans (e.g. EP, CP, MAP, AP).",
+  codeHint: "Short board code (e.g. EP, BB, HB, FB).",
+})
+
+export const payerTypesConfig: ScreenConfig = simpleMasterConfig({
+  doctype: "Payer Type",
+  title: "Payer Types",
+  description: "Billing responsibility choices confirmed at check-in (e.g. Guest, Company, Split).",
+  codeHint: "Payer type code offered at check-in.",
+})
+
+export const checkInRequestsConfig: ScreenConfig = {
+  doctype: "Check-in Request",
+  title: "Check-in Requests",
+  description: "Quick guest request presets offered at check-in; picking one raises a service ticket.",
+  searchFields: ["code", "description", "team"],
+  filters: [
+    {
+      field: "team",
+      label: "Team",
+      options: ["Housekeeping", "Room Service", "Maintenance", "Front Desk", "Concierge", "Complaint", "Other"],
+    },
+    { field: "disabled", label: "Disabled", options: ["0", "1"] },
+  ],
+  pageSize: 50,
+  orderBy: "sort_order asc, code asc",
+  canDelete: canDeleteMaster,
+  columns: [
+    { field: "code", label: "Code" },
+    { field: "description", label: "Description" },
+    { field: "team", label: "Team", badge: true },
+    { field: "priority", label: "Priority", badge: true },
+    { field: "system", label: "Type", booleanBadge: { truthy: "System", falsy: "Custom" } },
+    { field: "disabled", label: "Status", statusCheck: true },
+  ],
+  form: [
+    { field: "code", label: "Code", type: "data", required: true, readOnlyOnEdit: true,
+      hint: "Short machine key (e.g. extra_bed, airport_pickup)." },
+    { field: "description", label: "Description", type: "data", required: true },
+    {
+      field: "team",
+      label: "Team",
+      type: "select",
+      required: true,
+      default: "Front Desk",
+      options: ["Housekeeping", "Room Service", "Maintenance", "Front Desk", "Concierge", "Complaint", "Other"],
+    },
+    {
+      field: "priority",
+      label: "Priority",
+      type: "select",
+      required: true,
+      default: "Medium",
+      options: ["Low", "Medium", "High", "Urgent"],
+    },
+    { field: "charge_type", label: "Charge type", type: "data",
+      hint: "Optional folio charge type when the request carries a fee." },
+    { field: "sort_order", label: "Sort order", type: "int", default: 0,
+      hint: "Lower numbers appear first in pickers." },
+    { field: "disabled", label: "Disabled", type: "check", disabledWhen: isSystemCode,
+      hint: "Switch off instead of deleting. System presets stay active." },
+  ],
+}

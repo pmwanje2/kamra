@@ -22,6 +22,7 @@ interface Locale {
   currency_symbol: string
   locale: string
   currency: string
+  date_format?: string | null
   tax_label: string
   tax_basis?: TaxBasis | null
   tax_id_label: string
@@ -96,9 +97,18 @@ let cache: Locale = {
 
 const listeners = new Set<() => void>()
 
+function syncDateFormat(fmt?: string | null) {
+  if (fmt && typeof window !== "undefined") {
+    ;(window as Window & { kamra_date_format?: string }).kamra_date_format = fmt
+  }
+}
+
 try {
   const saved = JSON.parse(localStorage.getItem("kamra_locale") || "")
-  if (saved && saved.currency) cache = { ...cache, ...saved }
+  if (saved && saved.currency) {
+    cache = { ...cache, ...saved }
+    syncDateFormat(cache.date_format)
+  }
 } catch {
   /* first run - neutral defaults until the pack resolves */
 }
@@ -120,6 +130,7 @@ export function loadLocale(): Promise<Locale> {
     .then((l) => {
       if (property !== getCurrentProperty()) return cache
       cache = { ...cache, tender_modes: null, fx_currencies: [], tax_basis: null, ...l }
+      syncDateFormat(cache.date_format)
       remember()
       return cache
     })

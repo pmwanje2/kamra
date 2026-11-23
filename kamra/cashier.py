@@ -172,10 +172,10 @@ def _recompute_session_totals(session: str, persist: bool = True) -> dict[str, f
 	# in system_upi / "upi" - field kept by name so existing tills read on
 	from kamra.localization import instant_payment_modes, pack_for
 	from kamra.masters import client_tender_types
-	instant_modes = instant_payment_modes(pack_for(sess.property))
+	instant_modes = instant_payment_modes(pack_for(sess.property), sess.property)
 	# a hotel's own payment method counts as its tender type (switched-off
 	# ones too, so a till that took one still adds up)
-	tender = client_tender_types()
+	tender = client_tender_types(sess.property)
 	cash = card = upi = other = foreign = paid_outs = drops = petty = 0.0
 	for r in rows:
 		amt = float(r.total or 0)

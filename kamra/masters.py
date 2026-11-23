@@ -100,6 +100,10 @@ LINKED_FIELDS: tuple[tuple[str, str, str], ...] = (
 	("Meal Plan", "code", MEAL_PLAN_CODE),
 )
 
+SYSTEM_TENDER_TYPES: dict[str, str] = {
+	row["code"]: row["tender_type"] for row in SEEDS[PAYMENT]
+}
+
 
 def _insert(doctype: str, row: dict) -> None:
 	doc = frappe.get_doc({"doctype": doctype, **{k: v for k, v in row.items() if v is not None}})
@@ -119,11 +123,35 @@ def ensure_masters() -> None:
 				_insert(doctype, {**row, "sort_order": i * 10})
 
 
+def _payment_mode_properties() -> dict[str, set[str]]:
+	"""Map each stored payment mode string to the set of properties that used it."""
+	props_by_mode: dict[str, set[str]] = {}
+	sources = (
+		("Folio Payment", "Folio", "SELECT DISTINCT c.mode, p.property FROM `tabFolio Payment` c LEFT JOIN `tabFolio` p ON p.name = c.parent WHERE c.mode IS NOT NULL AND c.mode != ''"),
+		("Cashier Transaction", None, "SELECT DISTINCT mode, property FROM `tabCashier Transaction` WHERE mode IS NOT NULL AND mode != ''"),
+		("Banquet Receipt", "Venue Booking", "SELECT DISTINCT c.mode, p.property FROM `tabBanquet Receipt` c LEFT JOIN `tabVenue Booking` p ON p.name = c.parent WHERE c.mode IS NOT NULL AND c.mode != ''"),
+	)
+	for doctype, parent_dt, sql in sources:
+		if not (frappe.db.table_exists(doctype) and frappe.db.has_column(doctype, "mode")):
+			continue
+		if parent_dt and not frappe.db.table_exists(parent_dt):
+			continue
+		for mode, prop in frappe.db.sql(sql):
+			bucket = props_by_mode.setdefault(mode, set())
+			if prop:
+				bucket.add(prop)
+	return props_by_mode
+
+
 def adopt_values_in_use() -> int:
 	"""A master row for every value stored in a linked field, so data an
 	older release wrote (or a value the old Select never listed) still
-	saves. Adopted rows are the hotel's codes, never system codes."""
+	saves. Adopted rows are the hotel's codes, never system codes.
+	Adopted Payment Methods are scoped to the property that used them."""
 	added = 0
+	payment_props = _payment_mode_properties() if frappe.db.table_exists(PAYMENT) else {}
+	has_pm_property = frappe.db.table_exists(PAYMENT) and frappe.db.has_column(PAYMENT, "property")
+
 	for doctype, fieldname, master in LINKED_FIELDS:
 		if not (frappe.db.table_exists(doctype) and frappe.db.table_exists(master)
 		        and frappe.db.has_column(doctype, fieldname)):
@@ -131,11 +159,22 @@ def adopt_values_in_use() -> int:
 		values = frappe.get_all(doctype, filters={fieldname: ("is", "set")},
 		                        fields=[fieldname], distinct=True, pluck=fieldname)
 		for value in values:
+			scoped_prop = None
+			if master == PAYMENT and has_pm_property:
+				props = payment_props.get(value) or set()
+				scoped_prop = next(iter(props)) if len(props) == 1 else None
 			if frappe.db.exists(master, value):
+				# Backfill property on previously adopted unscoped non-system Payment Methods
+				if master == PAYMENT and has_pm_property and scoped_prop:
+					existing = frappe.db.get_value(PAYMENT, value, ["system", "property"], as_dict=True)
+					if existing and not int(existing.system or 0) and not existing.property:
+						frappe.db.set_value(PAYMENT, value, "property", scoped_prop, update_modified=False)
 				continue
 			row = {"code": value, "description": value, "system": 0}
 			if master == PAYMENT:
 				row["tender_type"] = "Other"
+				if has_pm_property and scoped_prop:
+					row["property"] = scoped_prop
 			try:
 				_insert(master, row)
 			except frappe.ValidationError:
@@ -203,24 +242,56 @@ def desk_vocabulary() -> dict:
 	}
 
 
-def client_payment_methods(tender_type: str | None = None, *, enabled_only: bool = True) -> list[str]:
-	"""Payment methods the hotel added itself (not system codes). System
-	methods keep the country pack's rules (kamra.localization); a hotel's
-	own method is offered everywhere and behaves as its tender type."""
-	filters = {"system": 0}
+def client_payment_methods(
+	tender_type: str | None = None,
+	*,
+	property: str | None = None,
+	enabled_only: bool = True,
+) -> list[str]:
+	"""Payment methods added by this property (not system codes). System
+	methods keep the country pack's rules (kamra.localization); a property's
+	own methods are offered only for that property (or when explicitly
+	unscoped across properties) and never leak into pack-only queries."""
+	if not property:
+		return []
+	filters: dict = {"system": 0}
 	if enabled_only:
 		filters["disabled"] = 0
 	if tender_type:
 		filters["tender_type"] = tender_type
-	return [r.name for r in _sorted(_offered_rows(
-		PAYMENT, filters, ["name", "sort_order", "creation"]))]
+	has_prop_col = _has_db() and frappe.db.table_exists(PAYMENT) and frappe.db.has_column(PAYMENT, "property")
+	fields = ["name", "sort_order", "creation", *(["property"] if has_prop_col else [])]
+	rows = _offered_rows(PAYMENT, filters, fields)
+	if has_prop_col:
+		rows = [r for r in rows if not r.get("property") or r.get("property") == property]
+	return [r.name for r in _sorted(rows)]
 
 
-def client_tender_types() -> dict[str, str]:
+def client_tender_types(property: str | None = None) -> dict[str, str]:
 	"""{method: tender type} for the hotel's own methods, switched-off ones
 	included, so a till that took one still counts it in the right bucket."""
-	return {r.name: r.tender_type for r in _offered_rows(
-		PAYMENT, {"system": 0}, ["name", "tender_type"])}
+	has_prop_col = _has_db() and frappe.db.table_exists(PAYMENT) and frappe.db.has_column(PAYMENT, "property")
+	fields = ["name", "tender_type", *(["property"] if has_prop_col else [])]
+	rows = _offered_rows(PAYMENT, {"system": 0}, fields)
+	if property and has_prop_col:
+		rows = [r for r in rows if not r.get("property") or r.get("property") == property]
+	return {r.name: r.tender_type for r in rows}
+
+
+def payment_tender_type(mode: str | None) -> str | None:
+	"""Return Payment Method.tender_type for `mode`, falling back to seeded
+	system tender types when no database is available."""
+	if not mode:
+		return None
+	if _has_db():
+		try:
+			if frappe.db.table_exists(PAYMENT):
+				val = frappe.db.get_value(PAYMENT, mode, "tender_type")
+				if isinstance(val, str) and val:
+					return val
+		except Exception:
+			pass
+	return SYSTEM_TENDER_TYPES.get(mode)
 
 
 class MasterCode(Document):

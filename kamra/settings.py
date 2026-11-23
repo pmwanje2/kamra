@@ -86,6 +86,13 @@ MODULES: tuple[Module, ...] = (
 				S("currency", "Currency", store=P, hint="ISO code, e.g. SAR, AED, USD."),
 				S("timezone", "Time zone", "select", store=P, options_source="timezones",
 				  hint="Hotel local clock for the night audit and timestamps."),
+				S("booking_language", "Default language", "select", "", P, options_source="languages",
+				  hint="Guest page default language. Leave blank to follow the browser."),
+				S("locale", "Number format (locale)", "select", "", P, options_source="locales",
+				  hint="Number formatting locale, e.g. en-UG, en-GB, en-US. Leave blank to follow the country pack."),
+				S("date_format", "Date format", "select", "",
+				  options=("dd-mm-yyyy", "dd/mm/yyyy", "yyyy-mm-dd", "mm-dd-yyyy", "mm/dd/yyyy"),
+				  hint="How dates appear on front-desk screens. Leave blank for the site default."),
 				S("address_line", "Address", store=P),
 				S("city", "City", store=P),
 				S("state", "State / region", store=P),
@@ -97,7 +104,7 @@ MODULES: tuple[Module, ...] = (
 				S("website", "Website", store=P),
 				S("gstin", "Tax registration number", store=P, hint="GSTIN, VAT or TRN - printed on invoices."),
 				S("invoice_footer", "Invoice footer", "textarea", store=P,
-				  hint="Your own lines at the foot of every invoice - e.g. CIN, bank name, account number and IFSC."),
+				  hint="Your own lines at the foot of every invoice - e.g. company registration, bank name and account details."),
 			)),
 		),
 	),
@@ -780,6 +787,8 @@ def settings_schema(property: str) -> dict:
 	"""Every settings page this user may see for the property, with current
 	values. Pages they can't change come back read-only (can_edit=False)."""
 	assert_property_access(property)
+	from kamra.localization import pack_for, uses_tax_slab
+	slab_mode = uses_tax_slab(pack_for(property))
 	roles = _roles()
 	enabled = _enabled_modules(property)
 	modules = []
@@ -787,14 +796,31 @@ def settings_schema(property: str) -> dict:
 		editable = can_edit(m, roles)
 		if not editable:
 			continue
+		sections_out = []
+		for sec in m.sections:
+			items = []
+			for s in sec.settings:
+				if m.id == "finance" and sec.id == "tax" and not slab_mode:
+					if s.key in ("gst_mode", "gst_slab_threshold", "gst_rate_high"):
+						continue
+					spec = _spec_json(s, property)
+					if s.key == "gst_rate_low":
+						spec["label"] = "Room tax rate"
+						spec["hint"] = "Flat rate applied to room nights when the property calculates tax locally."
+					items.append(spec)
+					continue
+				items.append(_spec_json(s, property))
+			sections_out.append({
+				"id": sec.id, "title": sec.title, "description": sec.description,
+				"settings": items,
+			})
 		modules.append({
 			"id": m.id, "title": m.title, "description": m.description,
 			"group": m.group, "toggle": m.toggle,
 			"enabled": (m.id in enabled) if m.toggle else True,
 			"editors": list(m.editors), "can_edit": editable,
 			"related": [{"label": a, "to": b} for a, b in m.related],
-			"sections": [{"id": sec.id, "title": sec.title, "description": sec.description,
-			              "settings": [_spec_json(s, property) for s in sec.settings]} for sec in m.sections],
+			"sections": sections_out,
 			"values": _values(property, m),
 		})
 	return {
@@ -888,7 +914,7 @@ def save_settings(property: str, module: str, changes) -> dict:
 		           rationale=f"{mod.title} settings: {labels}",
 		           before_snapshot={k: before_all.get(k) for k in changed},
 		           after_snapshot=changed)
-	if "country" in changed or "currency" in changed:
+	if any(k in changed for k in ("country", "currency", "locale", "date_format", "booking_language")):
 		frappe.clear_cache()
 	return {"ok": True, "values": after_all, "changed": list(changed)}
 

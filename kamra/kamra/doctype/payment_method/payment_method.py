@@ -5,4 +5,7 @@ from kamra.masters import MasterCode
 
 
 class PaymentMethod(MasterCode):
-	pass
+	def validate(self):
+		super().validate()
+		if self.system:
+			self.property = None

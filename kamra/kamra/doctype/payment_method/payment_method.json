@@ -8,6 +8,7 @@
  "field_order": [
   "code",
   "description",
+  "property",
   "tender_type",
   "mode_of_payment",
   "sort_order",
@@ -33,6 +34,14 @@
    "description": "What the desk sees. Blank: the code."
   },
   {
+   "fieldname": "property",
+   "fieldtype": "Link",
+   "label": "Property",
+   "options": "Property",
+   "in_list_view": 1,
+   "description": "The property that offers this payment method. Blank for shared system codes."
+  },
+  {
    "fieldname": "tender_type",
    "fieldtype": "Select",
    "label": "Tender Type",
@@ -45,7 +54,7 @@
    "fieldname": "mode_of_payment",
    "fieldtype": "Data",
    "label": "ERP Mode of Payment",
-   "description": "The ERPNext Mode of Payment this method posts to. Blank: the ERP bridge's own mapping."
+   "description": "The Accounting Mode of Payment this method posts to. Blank: the ERP bridge's own mapping."
   },
   {
    "fieldname": "sort_order",

@@ -657,7 +657,8 @@ def _post_room_levy(folios, reservation, date, night_rate):
 	if levy <= 0 or _charge_posted(
 			reservation.name, "Room Levy", date):
 		return
-	label = prop.get("room_levy_label") or "Room levy"
+	from kamra.localization import pack_for
+	label = prop.get("room_levy_label") or getattr(pack_for(prop.name), "ROOM_LEVY_LABEL", None) or "Room levy"
 	parts = ([f"{pct:g}%"] if pct and night_rate else []) + (
 		[f"{fixed:,g} per night"] if fixed else [])
 	_append_charge(folios, reservation, "Room Levy", {

@@ -115,10 +115,17 @@ def setting_default(property: str | None, key: str):
 	return dict(getattr(pack_for(property), "SETTING_DEFAULTS", None) or {}).get(key)
 
 
+def uses_tax_slab(pack) -> bool:
+	"""True only for country packs that calculate room tax by nightly slab (India)."""
+	return bool(getattr(pack, "USES_TAX_SLAB", False))
+
+
 def property_country_defaults(country: str | None) -> dict:
 	"""{Property field: value} a new property in this country starts with:
-	the pack's currency (when the Currency exists), clock, flat VAT and its
-	SETTING_DEFAULTS."""
+	the pack's currency (when the Currency exists), clock, levy label, flat VAT
+	(when not on the ERP bridge) and its SETTING_DEFAULTS."""
+	from kamra.erp_bridge import is_bridge_active
+
 	pack = pack_for_country(country or "India")
 	out = {}
 	currency = getattr(pack, "DEFAULT_CURRENCY", None)
@@ -126,7 +133,9 @@ def property_country_defaults(country: str | None) -> dict:
 		out["currency"] = currency
 	if getattr(pack, "DEFAULT_TIMEZONE", None):
 		out["timezone"] = pack.DEFAULT_TIMEZONE
-	if getattr(pack, "DEFAULT_VAT", None):
+	if getattr(pack, "ROOM_LEVY_LABEL", None):
+		out["room_levy_label"] = pack.ROOM_LEVY_LABEL
+	if getattr(pack, "DEFAULT_VAT", None) and not is_bridge_active():
 		out["gst_rate_low"] = float(pack.DEFAULT_VAT)
 	out.update(getattr(pack, "SETTING_DEFAULTS", None) or {})
 	meta = frappe.get_meta("Property")
@@ -242,18 +251,21 @@ def _pack_payment_modes(pack) -> list[str]:
 	return [m for m in modes if m in allowed]
 
 
-def instant_payment_modes(pack) -> list[str]:
-	"""The pack's instant / wallet modes, then the hotel's own Instant
+FOREIGN_CURRENCY_TENDER_TYPES = ("Cash", "Foreign Cash", "Bank Transfer")
+
+
+def instant_payment_modes(pack, property: str | None = None) -> list[str]:
+	"""The pack's instant / wallet modes, then this property's own Instant
 	payment methods."""
 	from kamra.masters import client_payment_methods
-	return list(dict.fromkeys([*_pack_instant_modes(pack), *client_payment_methods("Instant")]))
+	return list(dict.fromkeys([*_pack_instant_modes(pack), *client_payment_methods("Instant", property=property)]))
 
 
-def payment_modes(pack) -> list[str]:
-	"""What the desk takes money in: the pack's modes, then the hotel's own
+def payment_modes(pack, property: str | None = None) -> list[str]:
+	"""What the desk takes money in: the pack's modes, then this property's own
 	enabled payment methods."""
 	from kamra.masters import client_payment_methods
-	return list(dict.fromkeys([*_pack_payment_modes(pack), *client_payment_methods()]))
+	return list(dict.fromkeys([*_pack_payment_modes(pack), *client_payment_methods(property=property)]))
 
 
 def cash_denominations(pack) -> list[float]:
@@ -274,7 +286,7 @@ def assert_pack_payment_mode(property: str, mode: str | None) -> None:
 	"""Country vocabulary for non-folio operations, including historical refunds."""
 	if not mode or mode in CORE_PAYMENT_MODES:
 		return
-	modes = payment_modes(pack_for(property))
+	modes = payment_modes(pack_for(property), property)
 	if mode not in modes:
 		frappe.throw(frappe._("{0} is not a payment mode here. Pick one of: {1}.")
 		             .format(mode, ", ".join(modes)))
@@ -304,11 +316,14 @@ def assert_payment_mode(property: str, mode: str | None, currency: str | None = 
 	"""Validate a new folio tender against the property mapping, when installed."""
 	if not mode and not pack_only:
 		return
+	from kamra.masters import payment_tender_type
+
+	tender = payment_tender_type(mode)
 	mapped = tender_modes(property)
 	if mapped is None:
 		if pack_only:
-			modes = payment_modes(pack_for(property))
-			if mode not in modes and not (mode == "Foreign Cash" and currency):
+			modes = payment_modes(pack_for(property), property)
+			if mode not in modes and not (tender == "Foreign Cash" and currency):
 				frappe.throw(frappe._("Pick a payment mode: {0}.").format(", ".join(modes)))
 		else:
 			assert_pack_payment_mode(property, mode)
@@ -319,12 +334,12 @@ def assert_payment_mode(property: str, mode: str | None, currency: str | None = 
 	code = (currency or "").strip().upper() or home
 	mode_names = {row["mode"] for row in mapped}
 	target = mode
-	if code == home and mode == "Foreign Cash":
+	if code == home and tender == "Foreign Cash":
 		frappe.throw(frappe._("Foreign Cash needs the currency of the notes received."))
 	if code != home and mode in ("Cash", "Foreign Cash"):
 		# Some bridges report the posted mode; others group all notes under Cash.
 		target = "Foreign Cash" if "Foreign Cash" in mode_names else "Cash"
-	foreign_not_supported = code != home and mode not in ("Cash", "Foreign Cash", "Bank Transfer")
+	foreign_not_supported = code != home and tender not in FOREIGN_CURRENCY_TENDER_TYPES
 	if foreign_not_supported or not any(row["mode"] == target and code in row["currencies"] for row in mapped):
 		frappe.throw(frappe._("{0} is not available for payments in {1}.").format(mode, code))
 
@@ -334,13 +349,13 @@ def default_currency(pack) -> str:
 	return getattr(pack, "DEFAULT_CURRENCY", None) or "USD"
 
 
-def front_desk_vocabulary(pack) -> dict:
+def front_desk_vocabulary(pack, property: str | None = None) -> dict:
 	return {
 		"id_types": id_types(pack),
 		# a help line per ID type, e.g. which copy of a national ID is fine
 		"id_type_hints": dict(getattr(pack, "ID_TYPE_HINTS", None) or {}),
-		"payment_modes": payment_modes(pack),
-		"instant_payment_modes": instant_payment_modes(pack),
+		"payment_modes": payment_modes(pack, property),
+		"instant_payment_modes": instant_payment_modes(pack, property),
 		"outlet_payment_modes": outlet_payment_modes(pack),
 		"default_nationality": getattr(pack, "DEFAULT_NATIONALITY", "") or "",
 		"adult_age": adult_age(pack),

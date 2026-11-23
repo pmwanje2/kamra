@@ -9,11 +9,9 @@ import { ChevronDown, Loader2, Megaphone, Plus, ShieldAlert, Star, Trash2, X } f
 import {
   call,
   createBooking,
-  getBookingOptions,
   getCurrentProperty,
-  getQuote,
-  guestAlert,
-  guestSearch,
+  isTaxUndetermined,
+  TAX_NOT_SET_UP_MSG,
   type BookingOptions,
   type GuestAlert,
   type GuestHit,
@@ -339,7 +337,10 @@ export function BookingDialog(props: {
       return
     }
     const t = setTimeout(
-      () => guestSearch(form.guest_name).then(setHits).catch(() => setHits([])),
+      () =>
+        call<GuestHit[]>("kamra.api.guest_search", { q: form.guest_name })
+          .then((rows) => setHits(Array.isArray(rows) ? rows : []))
+          .catch(() => setHits([])),
       250,
     )
     return () => clearTimeout(t)
@@ -356,7 +357,7 @@ export function BookingDialog(props: {
     }
     let live = true
     const t = setTimeout(() => {
-      guestAlert({ guest: guest || undefined, phone: guest ? undefined : phone })
+      call<GuestAlert>("kamra.api.guest_alert", { guest: guest || undefined, phone: guest ? undefined : phone })
         .then((a) => {
           if (!live) return
           setAlert(a)
@@ -378,7 +379,7 @@ export function BookingDialog(props: {
   const autoRoomType = useRef(!props.initial.room_type)
 
   useEffect(() => {
-    getBookingOptions().then((o) => {
+    call<BookingOptions>("kamra.api.booking_options", { property: getCurrentProperty() }).then((o) => {
       setOptions(o)
       setForm((f) => ({
         ...f,
@@ -494,7 +495,8 @@ export function BookingDialog(props: {
     setQuote(null)
     setQuoting(true)
     const t = setTimeout(() => {
-      getQuote({
+      call<Quote>("kamra.api.get_quote", {
+        property: getCurrentProperty(),
         room_type: form.room_type,
         check_in_date: form.check_in_date,
         check_out_date: checkOut,
@@ -557,7 +559,8 @@ export function BookingDialog(props: {
       Promise.all(
         moreRooms.map((r) =>
           r.room_type
-            ? getQuote({
+            ? call<Quote>("kamra.api.get_quote", {
+                property: getCurrentProperty(),
                 room_type: r.room_type,
                 check_in_date: form.check_in_date,
                 check_out_date: checkOut,
@@ -2522,7 +2525,14 @@ export function BookingDialog(props: {
                         </span>
                       </div>
                     )}
-                    {quoteTaxBasis?.inclusive ? <p className="text-xs text-zinc-600">
+                    {isTaxUndetermined(quoteTaxBasis) ? (
+                      <p
+                        role="status"
+                        className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs text-amber-800"
+                      >
+                        {t(TAX_NOT_SET_UP_MSG)}
+                      </p>
+                    ) : quoteTaxBasis?.inclusive ? <p className="text-xs text-zinc-600">
                       {t("Includes {tax} (≈ {amount} on the room). The invoice shows the exact tax.", {
                         tax: quoteTaxBasis.label,
                         amount: currencyText(quoteTariff?.property_currency || loc.currency,

@@ -13,6 +13,7 @@ import frappe
 
 FNB_GST = 5.0  # F&B / meal-plan GST rate
 SERVICES_GST = 18.0  # laundry and other guest services
+USES_TAX_SLAB = True
 
 INVOICE_TITLE = "Tax Invoice"  # the words the tax law requires on the bill
 DEFAULT_CURRENCY = "INR"

@@ -365,7 +365,7 @@
    "label": "GSTIN"
   },
   {
-   "description": "Printed at the foot of every invoice, under the tax note - e.g. CIN and bank details for transfers.",
+   "description": "Printed at the foot of every invoice, under the tax note - e.g. company registration and bank details for transfers.",
    "fieldname": "invoice_footer",
    "fieldtype": "Small Text",
    "label": "Invoice Footer"
@@ -388,6 +388,7 @@
    "label": "GST Rules"
   },
   {
+   "depends_on": "eval:doc.country=='India'",
    "description": "Slab: rate decides GST (India). Fixed: use the room type's tax_percent. Blank: the country pack's.",
    "fieldname": "gst_mode",
    "fieldtype": "Select",
@@ -395,6 +396,7 @@
    "options": "\nSlab\nFixed"
   },
   {
+   "depends_on": "eval:doc.country=='India'",
    "fieldname": "gst_slab_threshold",
    "fieldtype": "Currency",
    "label": "Slab Threshold (per night)"
@@ -405,6 +407,7 @@
    "label": "GST at/below threshold"
   },
   {
+   "depends_on": "eval:doc.country=='India'",
    "fieldname": "gst_rate_high",
    "fieldtype": "Percent",
    "label": "GST above threshold"
