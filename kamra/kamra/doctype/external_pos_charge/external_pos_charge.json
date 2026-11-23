@@ -17,6 +17,7 @@
   "folio",
   "sb_charge",
   "charge_type",
+  "transaction_code",
   "description",
   "cb_b",
   "amount",
@@ -95,6 +96,13 @@
    "read_only": 1
   },
   {
+   "fieldname": "transaction_code",
+   "fieldtype": "Link",
+   "label": "Transaction Code",
+   "options": "Transaction Code",
+   "read_only": 1
+  },
+  {
    "fieldname": "description",
    "fieldtype": "Data",
    "label": "Description",
@@ -127,7 +135,7 @@
  ],
  "grid_page_length": 50,
  "links": [],
- "modified": "2026-10-19 12:00:00.000000",
+ "modified": "2026-11-23 23:00:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "External POS Charge",

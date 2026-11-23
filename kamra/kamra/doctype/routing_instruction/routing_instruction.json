@@ -189,7 +189,7 @@
   },
   {
    "depends_on": "eval:doc.limit_type!='None'",
-   "description": "An amount (before tax) or a percent of each charge. What is over the limit stays on window 1.",
+   "description": "An amount (gross for tax-inclusive codes, before tax otherwise) or a percent of each charge. What is over the limit stays on window 1.",
    "fieldname": "limit_value",
    "fieldtype": "Float",
    "label": "Limit"
@@ -226,7 +226,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-11-24 09:00:00.000000",
+ "modified": "2026-11-24 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Routing Instruction",

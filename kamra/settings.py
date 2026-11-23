@@ -456,6 +456,9 @@ MODULES: tuple[Module, ...] = (
 				  hint="How many separate bills a stay or a group's master bill can have, each with its "
 				       "own payer and invoice. Window 1 is the guest's and takes every charge that is not "
 				       "routed elsewhere."),
+				S("beverage_transaction_code", "Default beverage transaction code", "text", "2010",
+				  hint="Transaction code used for alcoholic beverage postings from POS, banquets and the "
+				       "desk when an item or outlet has no code of its own."),
 			)),
 			Section("credit", "Company credit",
 			        "Payment terms and credit control for companies billed on the city ledger. "

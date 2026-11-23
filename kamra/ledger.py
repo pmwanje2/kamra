@@ -50,6 +50,17 @@ CHARGE_TYPE_TO_CODE = {
 	                    "Opening Balance"),
 }
 
+# Extra revenue codes beyond the 1:1 charge-type defaults. Matches OPERA Cloud
+# routing and transaction codes (and the Simphony-OPERA interface), where
+# beverage/alcohol posts under its own transaction code so a food-only routing
+# rule never captures liquor:
+# https://docs.oracle.com/en/industries/hospitality/opera-cloud/25.5/ocsuh/t_admin_financial_transaction_management_managing_routing_codes.htm
+# https://docs.oracle.com/en/industries/hospitality/simphony/19.7/simcg/c_opera_connection.htm
+DEFAULT_BEVERAGE_CODE = "2010"
+EXTRA_REVENUE_CODES = (
+	("2010", "Beverage & Alcohol", "F&B", "Beverage", "Food & Beverage", 1),
+)
+
 PAYMENT_CODES = {
 	"Payment": ("9001", "Payment", "Payment"),
 	"Advance": ("9002", "Advance / Deposit", "Payment"),
@@ -75,6 +86,20 @@ def ensure_default_transaction_codes(property: str | None = None) -> None:
 			"charge_type": charge_type,
 			"is_alcohol": 0,
 		}).insert(ignore_permissions=True)
+	for code, desc, group, subgroup, charge_type, is_alc in EXTRA_REVENUE_CODES:
+		if frappe.db.exists("Transaction Code", code):
+			continue
+		frappe.get_doc({
+			"doctype": "Transaction Code",
+			"code": code,
+			"description": desc,
+			"property": property,
+			"txn_type": "Revenue",
+			"revenue_group": group,
+			"subgroup": subgroup,
+			"charge_type": charge_type,
+			"is_alcohol": is_alc,
+		}).insert(ignore_permissions=True)
 	for kind, (code, desc, group) in PAYMENT_CODES.items():
 		if frappe.db.exists("Transaction Code", code):
 			continue
@@ -96,6 +121,46 @@ def code_for_charge_type(charge_type: str) -> str | None:
 	if not frappe.db.exists("Transaction Code", code):
 		ensure_default_transaction_codes()
 	return code if frappe.db.exists("Transaction Code", code) else None
+
+
+def beverage_transaction_code(property: str | None = None) -> str:
+	"""The property's configured transaction code for beverage / alcohol
+	postings (default 2010), seeded on demand when missing."""
+	configured = ""
+	if property:
+		from kamra.settings import get_setting
+		configured = (get_setting(property, "beverage_transaction_code") or "").strip()
+	code = configured or DEFAULT_BEVERAGE_CODE
+	if not frappe.db.exists("Transaction Code", code):
+		ensure_default_transaction_codes()
+	if frappe.db.exists("Transaction Code", code):
+		return code
+	if not frappe.db.exists("Transaction Code", DEFAULT_BEVERAGE_CODE):
+		ensure_default_transaction_codes()
+	return DEFAULT_BEVERAGE_CODE
+
+
+def resolve_transaction_code(charge_type: str, *,
+                             transaction_code: str | None = None,
+                             is_alcohol: int = 0,
+                             property: str | None = None) -> str | None:
+	"""Transaction code for a charge posting: an explicit code wins (must be an
+	enabled non-Payment code); otherwise an alcohol line uses the property's
+	configured beverage code (default 2010), and every other line uses the
+	charge type's default code."""
+	code = (transaction_code or "").strip() or None
+	if code:
+		if code == DEFAULT_BEVERAGE_CODE and not frappe.db.exists("Transaction Code", code):
+			ensure_default_transaction_codes()
+		row = frappe.db.get_value(
+			"Transaction Code", code, ["disabled", "txn_type"], as_dict=True)
+		if not row or row.disabled or row.txn_type == "Payment":
+			frappe.throw(
+				frappe._("Transaction code {0} is not an enabled charge code.").format(code))
+		return code
+	if cint(is_alcohol):
+		return beverage_transaction_code(property)
+	return code_for_charge_type(charge_type)
 
 
 def payment_code_for(kind: str | None, mode: str | None) -> str | None:
@@ -129,7 +194,9 @@ def stamp_gl_codes(folio_doc) -> None:
 		if c.name in posted:
 			continue
 		if not c.transaction_code:
-			c.transaction_code = code_for_charge_type(c.charge_type or "Misc")
+			c.transaction_code = (
+				beverage_transaction_code(folio_doc.property) if cint(c.get("is_alcohol"))
+				else code_for_charge_type(c.charge_type or "Misc"))
 		if not c.gl_code:
 			c.gl_code = gl_code_of(c.transaction_code)
 	for p in folio_doc.payments:

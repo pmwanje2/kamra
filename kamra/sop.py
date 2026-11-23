@@ -547,7 +547,10 @@ def evaluate_checkout_step(step: dict, context: dict) -> dict:
 		rules = billing.get("rules") or []
 		company = billing.get("company_name") or billing.get("company")
 		if company and rules:
-			parts = [f"{r.get('charge_type')}: {r.get('pay_by')}" for r in rules[:6]]
+			parts = [
+				f"{r.get('code_label') or r.get('transaction_code') or r.get('charge_type')}: {r.get('pay_by')}"
+				for r in rules[:6]
+			]
 			tip = _("Bill-to for {0}: {1}.").format(
 				company, "; ".join(parts))
 		elif company:

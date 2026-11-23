@@ -1527,13 +1527,15 @@ def get_folio(reservation: str):
 def add_folio_charge(folio: str, charge_type: str, description: str,
                      amount: float, gst_rate: float = 0,
                      posting_date: str | None = None, is_alcohol: int = 0,
-                     reservation: str | None = None):
+                     reservation: str | None = None,
+                     transaction_code: str | None = None):
 	_refuse_opening_balance(charge_type)
 	# check what the caller sent, before the hotel's own rules pick a rate
 	_check_charge_amount_and_tax(
 		frappe.db.get_value("Folio", folio, "property"), amount, gst_rate)
 	return _post_folio_charge(folio, charge_type, description, amount,
-	                          gst_rate, posting_date, is_alcohol, reservation)
+	                          gst_rate, posting_date, is_alcohol, reservation,
+	                          transaction_code=transaction_code)
 
 
 def _refuse_opening_balance(charge_type: str):
@@ -1551,7 +1553,8 @@ def _post_folio_charge(folio: str, charge_type: str, description: str,
                        amount: float, gst_rate: float = 0,
                        posting_date: str | None = None, is_alcohol: int = 0,
                        reservation: str | None = None,
-                       routing_instruction: str | None = None, tax: float | None = None):
+                       routing_instruction: str | None = None, tax: float | None = None,
+                       transaction_code: str | None = None):
 	"""Put one charge on a bill. Not whitelisted and does no amount or rate
 	check: a caller that takes an amount or rate from outside calls
 	_check_charge_amount_and_tax on it first. Code that posts rates the
@@ -1567,9 +1570,11 @@ def _post_folio_charge(folio: str, charge_type: str, description: str,
 	gst_rate = _resolve_charge_gst(doc.property, charge_type, description,
 	                               int(is_alcohol or 0), float(gst_rate or 0))
 	from kamra.business_date import assert_transaction_date
-	from kamra.ledger import code_for_charge_type, record_charge_ledger
+	from kamra.ledger import record_charge_ledger, resolve_transaction_code
 	bd = assert_transaction_date(doc.property, posting_date, label="Posting date")
-	code = code_for_charge_type(charge_type)
+	code = resolve_transaction_code(
+		charge_type, transaction_code=transaction_code,
+		is_alcohol=int(is_alcohol or 0), property=doc.property)
 	doc.append("charges", {
 		"posting_date": bd,
 		"charge_type": charge_type,
@@ -2224,11 +2229,38 @@ def correct_folio_charge(folio: str, charge_row: str, reason: str = "",
 	          "corrects_row": orig.name, "idempotency_key": key, "qty": 1}
 	# a routed line's correction stays routed: the reversal takes the
 	# original's usage back, the repost spends it while the instruction still
-	# covers it (routing.used counts both, on the original's date)
+	# covers it (routing.used counts both, on the original's date). An upward
+	# correction under an Amount routing limit is capped just like at posting,
+	# with any overflow sent to the stay's window 1.
+	from kamra.ledger import resolve_transaction_code
+	repost_code = (
+		orig.transaction_code if new_type == orig.charge_type
+		else resolve_transaction_code(new_type, is_alcohol=is_alcohol, property=doc.property)
+	)
 	routed = orig.get("routing_instruction")
-	repost_routed = routed if routed and _still_covers(
-		routed, new_type, orig.transaction_code if new_type == orig.charge_type else None) \
-		else None
+	repost_routed = routed if routed and _still_covers(routed, new_type, repost_code) else None
+	routed_part = None
+	overflow_part = None
+	if repost_routed and orig.reservation:
+		ri = frappe.get_doc("Routing Instruction", repost_routed)
+		if ri.limit_type == "Amount":
+			from decimal import ROUND_DOWN, Decimal
+
+			from kamra import folio as fm
+			from kamra import routing as routing_mod
+			orig_fig = fm.routed_figure(
+				doc.property, orig.charge_type, orig.amount, orig.gst_amount)
+			used_before = routing_mod.used(
+				ri.name, orig.posting_date if cint(ri.per_day) else None)
+			left = Decimal(str(ri.limit_value or 0)) - (used_before - orig_fig)
+			line = fm.line_figures(doc.property, new_type, new_amount, gst_rate=new_rate)
+			if left < line["figure"]:
+				if left <= 0:
+					routed_part = (Decimal(0), Decimal(0))
+					overflow_part = fm.cut_figure(line, line["figure"])
+				else:
+					routed_part, overflow_part = fm.split_figure(
+						line, left.quantize(line["unit"], ROUND_DOWN))
 	# the reversal books back at the codes the original was posted with
 	doc.append("charges", {
 		**common, "charge_type": orig.charge_type, "routing_instruction": routed,
@@ -2240,21 +2272,62 @@ def correct_folio_charge(folio: str, charge_row: str, reason: str = "",
 		"tax_as_posted": orig.get("tax_as_posted"),
 		"gst_amount": -float(orig.gst_amount or 0),
 	})
-	doc.append("charges", {
-		**common, "charge_type": new_type, "description": new_desc,
-		"rate": new_amount, "amount": new_amount, "gst_rate": new_rate,
-		"routing_instruction": repost_routed,
-	})
+	rev_idx = len(doc.charges) - 1
+	overflow_doc = None
+	overflow_idx = None
+	rep_idx = None
+	if overflow_part is not None and (overflow_part[0] + overflow_part[1] > 0):
+		from kamra.folio import window_folio
+		if routed_part[0] + routed_part[1] > 0:
+			doc.append("charges", {
+				**common, "charge_type": new_type, "transaction_code": repost_code,
+				"description": new_desc,
+				"rate": float(routed_part[0]), "amount": float(routed_part[0]),
+				"gst_rate": new_rate, "gst_amount": float(routed_part[1]),
+				"tax_as_posted": 1, "routing_instruction": repost_routed,
+			})
+			rep_idx = len(doc.charges) - 1
+		w1_name = window_folio(reservation=orig.reservation, window_no=1)
+		overflow_doc = doc if w1_name == doc.name else frappe.get_doc("Folio", w1_name)
+		overflow_doc.append("charges", {
+			**common, "charge_type": new_type, "transaction_code": repost_code,
+			"description": new_desc,
+			"rate": float(overflow_part[0]), "amount": float(overflow_part[0]),
+			"gst_rate": new_rate, "gst_amount": float(overflow_part[1]),
+			"tax_as_posted": 1, "routing_instruction": None,
+		})
+		overflow_idx = len(overflow_doc.charges) - 1
+	else:
+		doc.append("charges", {
+			**common, "charge_type": new_type, "transaction_code": repost_code,
+			"description": new_desc,
+			"rate": new_amount, "amount": new_amount, "gst_rate": new_rate,
+			"routing_instruction": repost_routed,
+		})
+		rep_idx = len(doc.charges) - 1
 	from kamra.folio import _recalculate
 	_recalculate(doc)
 	doc.save(ignore_permissions=True)
-	rev, rep = doc.charges[-2], doc.charges[-1]
+	rev = doc.charges[rev_idx]
+	rep = doc.charges[rep_idx] if rep_idx is not None else None
+	overflow_row = None
+	if overflow_doc is doc and overflow_idx is not None:
+		overflow_row = doc.charges[overflow_idx]
+	elif overflow_doc is not None and overflow_idx is not None:
+		_recalculate(overflow_doc)
+		overflow_doc.save(ignore_permissions=True)
+		overflow_row = overflow_doc.charges[overflow_idx]
 	first = _original_charge_entry(doc.name, orig.name)
 	record_charge_ledger(doc, rev.as_dict(), reversal_of=first.name if first else None)
-	record_charge_ledger(doc, rep.as_dict())
 	from kamra.webhooks import emit_folio_posted
 	emit_folio_posted(doc, rev)
-	emit_folio_posted(doc, rep)
+	if rep is not None:
+		record_charge_ledger(doc, rep.as_dict())
+		emit_folio_posted(doc, rep)
+	if overflow_row is not None:
+		record_charge_ledger(overflow_doc, overflow_row.as_dict())
+		emit_folio_posted(overflow_doc, overflow_row)
+	primary_repost = rep or overflow_row
 	from kamra.localization import money_text
 	from kamra.savings import log_action
 	log_action("correct_charge", "Folio", doc.name, doc.property,
@@ -2264,39 +2337,51 @@ def correct_folio_charge(folio: str, charge_row: str, reason: str = "",
 	                     f"{reason_text[:100]}",
 	           before_snapshot={"row": orig.name, "charge_type": orig.charge_type,
 	                            "amount": orig.amount, "gst_rate": orig.gst_rate},
-	           after_snapshot={"reversal": rev.name, "repost": rep.name})
-	return {"ok": True, "folio": doc.name, "reversal": rev.name,
-	        "repost": rep.name, "balance": doc.balance}
+	           after_snapshot={"reversal": rev.name, "repost": primary_repost.name,
+	                           **({"overflow_folio": overflow_doc.name,
+	                               "overflow_row": overflow_row.name}
+	                              if overflow_row is not None else {})})
+	out = {"ok": True, "folio": doc.name, "reversal": rev.name,
+	       "repost": primary_repost.name, "balance": doc.balance}
+	if overflow_row is not None:
+		out["overflow_folio"] = overflow_doc.name
+		out["overflow_row"] = overflow_row.name
+	return out
 
 
 @frappe.whitelist()
 @require_roles("Finance", "Front Desk", "Kamra Agent")
 def post_stay_charge(reservation: str, charge_type: str, description: str,
-                     amount: float, gst_rate: float = 0, is_alcohol: int = 0):
+                     amount: float, gst_rate: float = 0, is_alcohol: int = 0,
+                     transaction_code: str | None = None):
 	"""Post a charge to a stay letting its routing pick the window - its
 	Routing Instructions first, then the billing rules: corporate room and
 	meals land on the company's window, anything unrouted on the guest's.
-	A routing limit splits the charge (`parts`). Liquor is a line
-	like any other: it bills where the rules send its code. The agent-facing
-	way to post charges."""
+	A routing limit splits the charge (`parts`). Liquor posts under its own
+	transaction code (default 2010) and bills where the rules send that code.
+	The agent-facing way to post charges."""
 	res = frappe.get_doc("Reservation", reservation)
 	if res.status not in ("Confirmed", "Checked In", "Checked Out"):
 		frappe.throw("Reservation is not active.")
 	from kamra.business_date import get_business_date
 	from kamra.folio import line_parts
+	from kamra.ledger import resolve_transaction_code
 	is_alcohol = 1 if int(is_alcohol or 0) else 0
 	# check what the caller sent, not the rate the hotel picks below
 	_check_charge_amount_and_tax(res.property, amount, gst_rate)
+	code = resolve_transaction_code(
+		charge_type, transaction_code=transaction_code,
+		is_alcohol=is_alcohol, property=res.property)
 	# GST is decided by the hotel's tax rules, not by the caller's guess:
 	# food & beverage carries the F&B rate (5% in India), not 12/18.
 	gst_rate = _resolve_charge_gst(res.property, charge_type, description,
 	                               is_alcohol, gst_rate)
 	parts = line_parts(res, charge_type, float(amount), get_business_date(res.property),
-	                   gst_rate=gst_rate)
+	                   transaction_code=code, gst_rate=gst_rate)
 	outs = [_post_folio_charge(p["folio"], charge_type, description, p["amount"],
 	                           gst_rate, is_alcohol=is_alcohol, reservation=res.name,
 	                           routing_instruction=p["routing_instruction"],
-	                           tax=p.get("gst_amount"))
+	                           tax=p.get("gst_amount"), transaction_code=code)
 	        for p in parts]
 	return {"folio": parts[0]["folio"], "folio_type": outs[0].get("folio_type"),
 	        "balance": outs[0].get("balance"),
@@ -2333,16 +2418,26 @@ def open_folio_window(reservation: str | None = None, group_booking: str | None 
 
 @frappe.whitelist(methods=["POST"])
 def route_outlet_charge(reservation: str, transaction_code: str, amount: float,
-                        dry_run: int = 0):
+                        dry_run: int = 0, **_unknown):
 	"""For the accounting bridge's room charge: the open folio an outlet
 	check of this transaction code lands on for this stay, by the stay's
 	routing (OPERA routes a Simphony check by its transaction code). An
 	outlet check is a fiscal receipt, so it routes whole or not at all.
-	Returns the folio, its window and the routing instruction the copied
-	line must carry, so its usage counts. Allowed to whoever may write a
-	Folio (native permissions); posts nothing. The code must be an enabled
-	revenue code with a charge type. `dry_run` (a draft check's lookup)
-	opens no bill: `folio` is None when the window would open one."""
+	Returns `{folio, window_no, routing_instruction}` so the copied line
+	carries the instruction and its usage counts. `is_alcohol` was removed
+	in K1 (beverage/alcohol items carry their own transaction code, default
+	2010), and unknown parameters (including legacy `is_alcohol`) are
+	refused rather than silently ignored, even over `frappe.call`. Allowed
+	to whoever may write a Folio (native permissions); posts nothing. The
+	code must be an enabled revenue code with a charge type. `dry_run` (a
+	draft check's lookup) opens no bill: `folio` is None when the window
+	would open one."""
+	extra = sorted(k for k in _unknown if k not in ("cmd", "_"))
+	if extra:
+		frappe.throw(
+			_("Unexpected parameter(s) for route_outlet_charge: {0}. "
+			  "Pass a transaction_code instead (is_alcohol was removed).").format(
+				", ".join(extra)))
 	from kamra.authz import assert_record_access
 	assert_record_access("Reservation", reservation)
 	frappe.has_permission("Folio", "write", throw=True)
@@ -2815,10 +2910,11 @@ def change_stay_company(reservation: str, reason: str,
 	# who pays); with no company it is the guest's until it is empty
 	from kamra.folio import DIRECT_BILL, _company_credit
 	for f in company_folios:
-		frappe.db.set_value("Folio", f.name, {
-			"payee_type": "Company" if company else "Guest",
-			"payee_company": company,
-			"payment_method": DIRECT_BILL if _company_credit(company) else None})
+		fdoc = frappe.get_doc("Folio", f.name)
+		fdoc.payee_type = "Company" if company else "Guest"
+		fdoc.payee_company = company
+		fdoc.payment_method = DIRECT_BILL if _company_credit(company) else None
+		fdoc.save(ignore_permissions=True)
 
 	def company_pays(c) -> bool:
 		return bool(company) and _company_pays(
@@ -2904,7 +3000,8 @@ def change_stay_company(reservation: str, reason: str,
 
 _FOLIO_LIST_FIELDS = ["name", "folio_type", "status", "invoice_number",
                       "grand_total", "payments_total", "balance",
-                      "bill_to_name"]
+                      "bill_to_name", "window_no", "payee_type",
+                      "payee_company", "payee_agent", "payment_method"]
 
 
 @frappe.whitelist()
@@ -2928,14 +3025,21 @@ def reservation_folios(reservation: str):
 			filters={"group_booking": group, "folio_type": "Group"},
 			fields=_FOLIO_LIST_FIELDS,
 		) if m.name not in seen]
-	# name the company each company bill goes to, as get_folio bills it: a
-	# group member billed to its own company also sees the group's bill
+	# name the company or travel agent each window bills to: a stay can carry
+	# a second sponsor's company window or a travel agent window alongside the
+	# guest's and the group's
 	group_company = group and frappe.db.get_value("Group Booking", group, "company")
+	agent_ids = list({r.payee_agent for r in rows if r.get("payee_agent")})
+	agent_names = dict(frappe.get_all(
+		"Travel Agent", filters={"name": ["in", agent_ids]},
+		fields=["name", "agent_name"], as_list=True)) if agent_ids else {}
 	for r in rows:
-		if r.folio_type == "Company":
-			r["company"] = stay_company
+		if r.payee_type == "Company" or r.folio_type == "Company":
+			r["company"] = r.payee_company or stay_company
 		elif r.folio_type == "Group":
-			r["company"] = group_company or stay_company
+			r["company"] = r.payee_company or group_company or stay_company
+		if r.payee_type == "Travel Agent" and r.payee_agent:
+			r["agent_name"] = agent_names.get(r.payee_agent) or r.payee_agent
 	return rows
 
 
@@ -2988,10 +3092,13 @@ def set_group_master(group_booking: str, reservation: str):
 		"Folio", {"group_booking": gb.name, "folio_type": "Group", "window_no": 1,
 		          "status": "Open"})
 	if bill:
-		payee = {"guest": frappe.db.get_value("Reservation", reservation, "guest")}
+		fdoc = frappe.get_doc("Folio", bill)
+		fdoc.guest = frappe.db.get_value("Reservation", reservation, "guest")
 		if not gb.company:
-			payee.update(payee_type="Guest", payee_company=None, payee_agent=None)
-		frappe.db.set_value("Folio", bill, payee)
+			fdoc.payee_type = "Guest"
+			fdoc.payee_company = None
+			fdoc.payee_agent = None
+		fdoc.save(ignore_permissions=True)
 	from kamra.savings import log_action
 	log_action("group_master", "Group Booking", gb.name, gb.property,
 	           rationale=f"Main room set to {reservation}")

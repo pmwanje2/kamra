@@ -48,7 +48,8 @@ def outlets(property: str):
 	setting, so the till never has to know where the answer came from."""
 	rows = frappe.get_all(
 		"POS Outlet", filters={"property": property, "disabled": 0},
-		fields=["name", "outlet_name", "outlet_type", "gst_rate", "kot_mode"],
+		fields=["name", "outlet_name", "outlet_type", "gst_rate", "kot_mode",
+		        "transaction_code"],
 		order_by="outlet_name")
 	for r in rows:
 		r["auto_kot"] = 1 if _auto_kot(property, r.kot_mode) else 0
@@ -79,7 +80,7 @@ def pos_menu(outlet: str):
 		"Menu Item",
 		filters={"outlet": outlet, "available": 1},
 		fields=["name", "item_name", "category", "price", "is_veg",
-		        "is_alcohol", "image", "description", "prep_station"],
+		        "is_alcohol", "transaction_code", "image", "description", "prep_station"],
 		order_by="category, item_name")
 	cats: dict[str, list] = {}
 	for it in items:

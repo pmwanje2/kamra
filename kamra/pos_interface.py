@@ -106,14 +106,17 @@ def pos_post_room_charge(property: str, ticket_id: str, amount: float,
                          reservation: str | None = None,
                          charge_type: str = "Food & Beverage",
                          is_alcohol: int = 0, tax_rate: float = 0,
-                         outlet_name: str | None = None) -> dict:
+                         outlet_name: str | None = None,
+                         transaction_code: str | None = None) -> dict:
 	"""Post one POS ticket to an in-house guest's bill.
 
 	`ticket_id` is the idempotency key: the same ticket again returns the
 	first posting with duplicate=true. Name the stay by room (number or id)
-	and/or reservation. The routing and billing rules choose the folio,
-	liquor (is_alcohol=1) included. Tax is the hotel's rule for the charge
-	type, not the POS's."""
+	and/or reservation. Pass `transaction_code` to post under a specific
+	revenue code (Simphony-OPERA mapping); otherwise `is_alcohol=1` uses
+	the property's beverage transaction code (default 2010). The routing
+	and billing rules choose the folio by transaction code. Tax is the
+	hotel's rule for the charge type, not the POS's."""
 	ticket_id = (ticket_id or "").strip()
 	if not ticket_id or len(ticket_id) > 140:
 		frappe.throw(_("ticket_id is required (the POS check number, up to 140 characters)."))
@@ -123,10 +126,14 @@ def pos_post_room_charge(property: str, ticket_id: str, amount: float,
 	if not description:
 		frappe.throw(_("Describe the charge (e.g. 'Rooftop bar - check 1042')."))
 	is_alcohol = 1 if cint(is_alcohol) else 0
-	# the posting path checks this again; checking first means a bad ticket
+	# the posting path checks these again; checking first means a bad ticket
 	# never claims its ticket number
 	from kamra.api import _check_charge_amount_and_tax
+	from kamra.ledger import resolve_transaction_code
 	_check_charge_amount_and_tax(property, amount, tax_rate)
+	resolved_code = resolve_transaction_code(
+		charge_type, transaction_code=transaction_code,
+		is_alcohol=is_alcohol, property=property)
 	amount = flt(amount)
 
 	key = _charge_name(property, ticket_id)
@@ -161,6 +168,7 @@ def pos_post_room_charge(property: str, ticket_id: str, amount: float,
 		"ticket_id": ticket_id, "outlet_name": (outlet_name or "").strip()[:140] or None,
 		"posted_by": frappe.session.user, "reservation": reservation,
 		"room": room_id, "charge_type": charge_type,
+		"transaction_code": resolved_code,
 		"description": description[:140], "amount": amount,
 		"is_alcohol": is_alcohol,
 	})
@@ -176,7 +184,8 @@ def pos_post_room_charge(property: str, ticket_id: str, amount: float,
 	text = f"{description} (POS {ticket_id})"[:140]
 	with act_as(AGENT_EMAIL):
 		out = post_stay_charge(reservation, charge_type, text, amount,
-		                       gst_rate=flt(tax_rate), is_alcohol=is_alcohol)
+		                       gst_rate=flt(tax_rate), is_alcohol=is_alcohol,
+		                       transaction_code=resolved_code)
 	rec.db_set({"folio": out.get("folio"), "balance_after": flt(out.get("balance"))},
 	           update_modified=False)
 

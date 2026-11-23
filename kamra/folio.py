@@ -450,12 +450,12 @@ def target_folio(reservation, charge_type: str, *, amount=None, posting_date=Non
 
 
 def routed_target(reservation, charge_type: str, *, amount=None, posting_date=None,
-                  transaction_code: str | None = None) -> tuple[str, str | None]:
+                  transaction_code: str | None = None, pending=()) -> tuple[str, str | None]:
 	"""(open folio, routing instruction) for a charge that moves whole, such
 	as an outlet check or a bill moved to another room."""
 	from kamra.routing import route
 	parts = route(reservation, charge_type, amount, posting_date,
-	              transaction_code=transaction_code, whole=True)
+	              transaction_code=transaction_code, whole=True, pending=pending)
 	if parts:
 		return parts[0]["folio"], parts[0]["routing_instruction"]
 	return open_line_target(reservation, charge_type, name=_legacy_target(
@@ -1260,6 +1260,19 @@ def cut_figure(line: dict, figure) -> tuple[Decimal, Decimal]:
 
 def _figure(line: dict, part: tuple[Decimal, Decimal]) -> Decimal:
 	return part[0] + part[1] if line["priced_with_tax"] else part[0]
+
+
+def split_figure(line: dict, part_figure) -> tuple[tuple[Decimal, Decimal], tuple[Decimal, Decimal]]:
+	"""Split `line` into (part, remainder), both quantized to the currency's
+	minor unit so gross, tax and net of the two parts sum exactly to the
+	quantized whole line (no sub-shilling / sub-minor-unit remainders)."""
+	whole = cut_figure(line, line["figure"])
+	part = cut_figure(line, part_figure)
+	if _figure(line, part) >= line["figure"]:
+		return whole, (Decimal(0), Decimal(0))
+	if _figure(line, part) <= 0:
+		return (Decimal(0), Decimal(0)), whole
+	return part, (whole[0] - part[0], whole[1] - part[1])
 
 
 def _post_split(src, row, sign: int, line: dict, cuts: list, kept_units: Decimal) -> dict:

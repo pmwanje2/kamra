@@ -138,7 +138,8 @@ def banquet_catalogue(property: str):
 		"Banquet Service Item",
 		filters={"property": property, "disabled": 0},
 		fields=["name", "item_name", "category", "uom", "rate", "gst_rate",
-		        "chargeable", "is_alcohol", "on_pack_list", "description"],
+		        "chargeable", "is_alcohol", "transaction_code", "on_pack_list",
+		        "description"],
 		order_by="category, item_name")
 	venues = frappe.get_all(
 		"Venue", filters={"property": property, "disabled": 0},
@@ -212,8 +213,8 @@ def save_service_item(property: str, item_name: str, category: str,
 		"property": property, "item_name": item_name.strip()[:140],
 		"category": category, "rate": float(rate or 0), "uom": uom,
 	})
-	for field in ("gst_rate", "chargeable", "is_alcohol", "on_pack_list",
-	              "description", "disabled"):
+	for field in ("gst_rate", "chargeable", "is_alcohol", "transaction_code",
+	              "on_pack_list", "description", "disabled"):
 		if field in kw and kw[field] is not None:
 			doc.set(field, kw[field])
 	doc.save()
@@ -566,6 +567,7 @@ def add_service(function: str, service_item: str, qty=None, rate=None,
 		"chargeable": (1 if int(chargeable) else 0) if chargeable is not None
 		              else (1 if s.chargeable else 0),
 		"is_alcohol": 1 if s.is_alcohol else 0,
+		"transaction_code": s.get("transaction_code") or None,
 		"on_pack_list": 1 if s.on_pack_list else 0,
 		"gst_rate": float(s.gst_rate or 0),
 		"notes": notes,
@@ -601,6 +603,7 @@ def save_items(function: str, items):
 			"is_supplementary": 1 if r.get("is_supplementary") else 0,
 			"chargeable": 1 if r.get("chargeable", 1) else 0,
 			"is_alcohol": 1 if r.get("is_alcohol") else 0,
+			"transaction_code": r.get("transaction_code") or None,
 			"on_pack_list": 1 if r.get("on_pack_list") else 0,
 			"tax_exempt": 1 if r.get("tax_exempt") else 0,
 			"gst_rate": float(r.get("gst_rate") or 0),
@@ -1569,18 +1572,28 @@ def post_to_folio(function: str, folio: str | None = None):
 		frappe.throw(_("There's no bill to post to. Tie the function to a "
 		              "group booking, or pass a folio."))
 
+	from kamra.ledger import resolve_transaction_code
 	posted = []
 	for r in doc.items:
 		if not r.chargeable or not float(r.net_amount or 0):
 			continue
+		ct = _FOLIO_CHARGE_TYPE.get(r.item_type, "Misc")
+		is_alc = 1 if (r.is_alcohol or r.item_type == "Alcohol") else 0
+		row_code = r.get("transaction_code") or (
+			frappe.db.get_value("Banquet Service Item", r.service_item, "transaction_code")
+			if r.get("service_item") else None
+		)
+		code = resolve_transaction_code(
+			ct, transaction_code=row_code, is_alcohol=is_alc, property=doc.property)
 		_post_folio_charge(
 			target,
-			_FOLIO_CHARGE_TYPE.get(r.item_type, "Misc"),
+			ct,
 			f"{doc.name} · {r.item_name}"
 			+ (f" ({r.qty:g} {r.uom})" if r.qty else ""),
 			float(r.net_amount),
 			gst_rate=float(r.gst_rate or 0),
-			is_alcohol=1 if r.is_alcohol else 0)
+			is_alcohol=is_alc,
+			transaction_code=code)
 		posted.append({"item_name": r.item_name, "amount": float(r.net_amount)})
 
 	doc.folio = target
@@ -2470,7 +2483,8 @@ def record_consumption(function: str, rows=None, pax_actual: int | None = None):
 def add_supplementary(function: str, item_name: str, qty: float, rate: float,
                       item_type: str = "Food & Beverage",
                       uom: str = "Unit", cost_rate: float = 0,
-                      is_alcohol: int = 0, notes: str | None = None):
+                      is_alcohol: int = 0, notes: str | None = None,
+                      transaction_code: str | None = None):
 	"""Something ordered on the night that wasn't on the quote - another
 	round at the bar, twenty extra plates, a second cake. It bills on top
 	and is marked so the final bill can show it apart from what was
@@ -2484,7 +2498,8 @@ def add_supplementary(function: str, item_name: str, qty: float, rate: float,
 		"qty": float(qty), "uom": uom, "rate": float(rate),
 		"list_rate": float(rate), "cost_rate": float(cost_rate or 0),
 		"chargeable": 1, "is_supplementary": 1,
-		"is_alcohol": 1 if int(is_alcohol or 0) else 0, "notes": notes,
+		"is_alcohol": 1 if int(is_alcohol or 0) else 0,
+		"transaction_code": transaction_code or None, "notes": notes,
 	})
 	doc.save()
 	return {"ok": True, "grand_total": doc.grand_total,

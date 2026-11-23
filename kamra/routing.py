@@ -184,7 +184,8 @@ def route(reservation, charge_type: str, amount=None, posting_date=None, *,
 	if kind == "Percent":
 		if whole:
 			return window_1()
-		routed = fm.cut_figure(line, line["figure"] * Decimal(str(ri.limit_value or 0)) / 100)
+		routed, rest = fm.split_figure(
+			line, line["figure"] * Decimal(str(ri.limit_value or 0)) / 100)
 	else:
 		left = Decimal(str(ri.limit_value or 0)) - used(
 			ri.name, day if cint(ri.per_day) else None, pending)
@@ -192,8 +193,7 @@ def route(reservation, charge_type: str, amount=None, posting_date=None, *,
 			return [_part(dst, amount, ri.name)]
 		if left <= 0 or whole:
 			return window_1()
-		routed = fm.cut_figure(line, left.quantize(line["unit"], ROUND_DOWN))
-	rest = (line["base"] - routed[0], line["tax"] - routed[1])
+		routed, rest = fm.split_figure(line, left.quantize(line["unit"], ROUND_DOWN))
 	parts = []
 	if routed[0] + routed[1] > 0:
 		parts.append(_part(dst, float(routed[0]), ri.name, routed[1]))
@@ -285,6 +285,11 @@ def validate_instruction(ri) -> None:
 	                   frappe.db.get_value("Group Booking", ri.group_booking, "property"))
 	if source_property != ri.property:
 		frappe.throw(_("The stay or group must be at {0}.").format(ri.property))
+	enforce_active_targets = not cint(ri.disabled) or ri.is_new()
+	if ri.group_booking and enforce_active_targets:
+		if frappe.db.get_value("Group Booking", ri.group_booking, "status") == "Cancelled":
+			frappe.throw(_("Cannot create or keep an active routing instruction for cancelled group {0}.").format(
+				ri.group_booking))
 	window = cint(ri.target_window)
 	if window:
 		from kamra.folio import window_cap
@@ -298,20 +303,26 @@ def validate_instruction(ri) -> None:
 			frappe.throw(_("A window instruction routes within the stay; leave the target room empty."))
 	elif ri.target_type == "Room":
 		other = frappe.db.get_value("Reservation", ri.target_reservation,
-		                            ["name", "property"], as_dict=True)
+		                            ["name", "property", "status"], as_dict=True)
 		if not other:
 			frappe.throw(_("Choose the room to route to."))
 		if other.property != ri.property:
 			frappe.throw(_("Charges can only be routed to a room at the same property."))
 		if other.name == ri.reservation:
 			frappe.throw(_("To route within the stay, route to one of its windows."))
+		if enforce_active_targets and other.status in ("Checked Out", "Cancelled", "No Show"):
+			frappe.throw(_("Cannot route to reservation {0} because its status is {1}.").format(
+				other.name, other.status))
 	elif ri.target_type == "Group Master":
 		group = ri.group_booking or frappe.db.get_value(
 			"Reservation", ri.reservation, "group_booking")
 		if not group:
 			frappe.throw(_("This stay is not part of a group, so it has no group master."))
-		if frappe.db.get_value("Group Booking", group, "property") != ri.property:
+		gb = frappe.db.get_value("Group Booking", group, ["property", "status"], as_dict=True)
+		if not gb or gb.property != ri.property:
 			frappe.throw(_("The group's bill must be at the same property."))
+		if enforce_active_targets and gb.status == "Cancelled":
+			frappe.throw(_("Cannot route to cancelled group {0}.").format(group))
 		if ri.target_reservation:
 			frappe.throw(_("A group master instruction has no target room."))
 	else:

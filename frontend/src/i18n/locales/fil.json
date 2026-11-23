@@ -1155,5 +1155,8 @@
   "Marks a liquor code. It routes like any other code: leave it out of a company's billing rules or a routing instruction and the guest pays it.": "Minamarkahan ang code ng alak. Niru-route ito gaya ng ibang code: iwan ito sa labas ng patakaran sa pagsingil ng kumpanya o ng routing instruction at ang bisita ang magbabayad.",
   "Confirm which charges bill to the company vs the guest.": "Kumpirmahin kung aling singil ang sa kumpanya at alin ang sa bisita.",
   "For every room of the group, on one group bill. Each guest pays their own extras.": "Para sa bawat kuwarto ng grupo, sa iisang group bill. Ang bawat bisita ang nagbabayad ng sarili niyang extra.",
-  "Liquor, for its tax and the F&B report. It posts to the function's bill with the rest.": "Alak, para sa buwis nito at sa ulat ng F&B. Ipinapasok ito sa bill ng function kasama ng iba pa."
+  "Liquor, for its tax and the F&B report. It posts to the function's bill with the rest.": "Alak, para sa buwis nito at sa ulat ng F&B. Ipinapasok ito sa bill ng function kasama ng iba pa.",
+  "Default beverage transaction code": "Default na transaction code para sa inumin",
+  "Transaction code used for alcoholic beverage postings from POS, banquets and the desk when an item or outlet has no code of its own.": "Transaction code na ginagamit sa pag-post ng mga inuming may alkohol mula sa POS, banquet, at front desk kapag walang sariling code ang item o outlet.",
+  "Travel Agent": "Ahente ng Paglalakbay"
 }

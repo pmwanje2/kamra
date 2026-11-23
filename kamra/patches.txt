@@ -40,4 +40,5 @@ kamra.patches.v47.report_duplicate_ota_refs
 kamra.patches.v47.create_floors_from_rooms
 kamra.patches.v47.move_policy_fee_advances_to_guest_ledger
 kamra.patches.v48.backfill_folio_windows
+kamra.patches.v48.migrate_liquor_exclusion_to_code_rules
 kamra.patches.v48.rename_company_billing_presets

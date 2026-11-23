@@ -6698,5 +6698,7 @@
   "How many separate bills a stay or a group's master bill can have, each with its own payer and invoice. Window 1 is the guest's and takes every charge that is not routed elsewhere.": "Cuántas cuentas separadas puede tener una estancia o la cuenta maestra de un grupo, cada una con su propio pagador y su factura. La ventana 1 es la del huésped y recibe todo cargo que no se enrute a otra parte.",
   "The accounting system issued invoice {document} for this bill. It is corrected there with a credit note and a new invoice; this bill is not reopened or credited here.": "El sistema contable emitió la factura {document} para esta cuenta. Se corrige allí con una nota de crédito y una nueva factura; esta cuenta no se reabre ni se acredita aquí.",
   "At most {amount} can still be credited on this invoice.": "En esta factura se puede acreditar como máximo {amount}.",
-  "status|Split": "Dividido"
+  "status|Split": "Dividido",
+  "Default beverage transaction code": "Código de transacción predeterminado para bebidas",
+  "Transaction code used for alcoholic beverage postings from POS, banquets and the desk when an item or outlet has no code of its own.": "Código de transacción usado para cargos de bebidas alcohólicas desde el TPV, banquetes y recepción cuando el artículo o punto de venta no tiene código propio."
 }
