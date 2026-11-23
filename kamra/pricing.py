@@ -881,10 +881,12 @@ def contract_rate(property, room_type, rate_plan, check_in, check_out, adults, c
 
 	A stay over a season or tariff change (OPERA Rate Changes During Stay,
 	SAP condition validity) comes back with `nights`: one {date, nightly,
-	agreed_rate, item_price} per stay night in date order, the scalar
-	figures being the check-in night's. Each night is derived, rounded and
-	checked on its own and kept as tariff["nights"]; a list that does not
-	cover the stay night by night is refused."""
+	agreed_rate, item_price} per stay night in date order (with its own
+	extra_person when that renews too), the scalar figures being the
+	check-in night's. Each night is derived, rounded and checked on its own
+	and kept as tariff["nights"]; a list that does not cover the stay night
+	by night, or whose first night is not the scalar figures, is refused.
+	"nights": None is a one-rate answer."""
 	if not rate_plan:
 		return None
 	from kamra.erp_bridge import bridge_call
@@ -917,16 +919,18 @@ def contract_rate(property, room_type, rate_plan, check_in, check_out, adults, c
 		currency = result["currency"]
 		if not currency or not price_date:
 			raise ValueError
-		nights = _resolver_nights(result["nights"], check_in, check_out) if "nights" in result else None
+		nights = (_resolver_nights(result, check_in, check_out) if result.get("nights") is not None
+		          else None)
 	except (KeyError, TypeError, ValueError, InvalidOperation):
 		raise ContractRateRefused(_("The contract rate is incomplete. Ask a manager to check the tariff."))
 	prop_currency = property_currency(property)
 	step, mode = plan.get("rounding_step"), plan.get("rounding_mode") or "Nearest"
 	derived = chain[depth + 1:]
 
-	def price_night(nightly, agreed):
+	def price_night(nightly, agreed, extra_person=None):
 		if derived:
-			nightly = _price_through(derived, nightly, _dec(result.get("extra_person")), root=False)
+			extras = _dec(result.get("extra_person") if extra_person is None else extra_person)
+			nightly = _price_through(derived, nightly, extras, root=False)
 			if nightly <= 0:
 				raise ContractRateRefused(_("The derived rate plan prices this stay at zero or less. "
 				                            "Ask a manager to check the rate plan."))
@@ -942,26 +946,28 @@ def contract_rate(property, room_type, rate_plan, check_in, check_out, adults, c
 	if nights is not None:
 		tariff["nights"] = []
 		for night in nights:
-			night_nightly, night_agreed = price_night(night["nightly"], night["agreed_rate"])
+			night_nightly, night_agreed = price_night(night["nightly"], night["agreed_rate"], night["extra_person"])
 			tariff["nights"].append({"date": night["date"], "nightly": float(night_nightly),
 			                         "agreed_rate": float(night_agreed), "item_price": night["item_price"]})
 	if derived:
 		tariff["derived_from"] = chain[depth].name
 		priced = ([(night["date"], _dec(night["agreed_rate"])) for night in tariff["nights"]] if nights is not None
-		          else [(str(getdate(add_days(check_in, i))), agreed)
-		                for i in range(max(date_diff(check_out, check_in), 1))])
+		          else [(day, agreed) for day in _stay_nights(check_in, check_out)])
 		_hold_to_guardrails(property, room_type, priced)
 	return float(agreed), tariff
 
 
-def _resolver_nights(raw, check_in, check_out) -> list[dict]:
-	"""The resolver's per-night tariff, checked: exactly one {date, nightly,
-	agreed_rate, item_price} for each night of the stay (its check-in date
-	for a day-use stay), in date order, each amount above zero. Anything
-	else raises ValueError."""
+def _resolver_nights(result: dict, check_in, check_out) -> list[dict]:
+	"""The resolver's per-night tariff (result["nights"]), checked: exactly
+	one {date, nightly, agreed_rate, item_price} for each night of the stay
+	(its check-in date for a day-use stay), in date order, each amount above
+	zero, an optional extra_person at zero or more; the first night is the
+	scalar nightly, agreed_rate and extra_person. Anything else raises
+	ValueError. A night's extra_person is None when it has none."""
+	raw = result["nights"]
 	if not isinstance(raw, list):
 		raise ValueError
-	dates = [str(getdate(add_days(check_in, i))) for i in range(max(date_diff(check_out, check_in), 1))]
+	dates = _stay_nights(check_in, check_out)
 	if len(raw) != len(dates):
 		raise ValueError
 	nights = []
@@ -971,7 +977,17 @@ def _resolver_nights(raw, check_in, check_out) -> list[dict]:
 		nightly, agreed = _dec(night["nightly"]), _dec(night["agreed_rate"])
 		if not all(value.is_finite() and value > 0 for value in (nightly, agreed)):
 			raise ValueError
-		nights.append({"date": day, "nightly": nightly, "agreed_rate": agreed, "item_price": night.get("item_price")})
+		extra = None if night.get("extra_person") is None else _dec(night["extra_person"])
+		if extra is not None and not (extra.is_finite() and extra >= 0):
+			raise ValueError
+		nights.append({"date": day, "nightly": nightly, "agreed_rate": agreed, "extra_person": extra,
+		               "item_price": night.get("item_price")})
+	first = nights[0]
+	if (first["nightly"], first["agreed_rate"]) != (_dec(result.get("nightly")), _dec(result.get("agreed_rate"))):
+		raise ValueError
+	if first["extra_person"] is not None and result.get("extra_person") is not None \
+			and first["extra_person"] != _dec(result["extra_person"]):
+		raise ValueError
 	return nights
 
 
@@ -1014,6 +1030,72 @@ def contract_night_rates(reservation) -> dict[str, float]:
 	if not nights or booked is None or abs(_dec(reservation.get("agreed_rate")) - _dec(booked)) > Decimal("0.005"):
 		return {}
 	return {str(night["date"]): float(night["agreed_rate"]) for night in nights}
+
+
+def contract_tariff_for_new_dates(reservation, booked_check_in, booked_check_out) -> dict | None:
+	"""The booking's frozen contract for its new dates (amend_stay, an early
+	check-out, any save that moves them), or None when it does not change.
+
+	The nights the contract already priced keep their locked rates. A night
+	it never priced is resolved now through the tariff resolver (OPERA
+	re-prices added nights from the rate code), at the booking's exchange
+	rate date, and a night with no valid price refuses the new dates rather
+	than bill another night's tariff. A night that left the stay leaves the
+	contract. A one-rate contract stays one rate while its rate still
+	prices every night. A manager's agreed rate, a fixed rate (OPERA Fixed
+	Rate), a stay priced by hand or by its group block keeps its price:
+	None."""
+	if not cint(reservation.get("auto_price")) or reservation.get("group_booking") \
+			or cint(reservation.get("fixed_rate")):
+		return None
+	snapshot = saved_contract_tariff(reservation)
+	tariff = snapshot.get("tariff") or {}
+	booked = snapshot.get("agreed_rate")
+	if not tariff.get("currency") or booked is None \
+			or abs(_dec(reservation.get("agreed_rate")) - _dec(booked)) > Decimal("0.005"):
+		return None
+	stay = _stay_nights(reservation.check_in_date, reservation.check_out_date)
+	own = tariff.get("nights")
+	if own:
+		held = {str(night["date"]): night for night in own}
+	elif booked_check_in and booked_check_out:
+		held = {day: {"date": day, "nightly": tariff["nightly"], "agreed_rate": booked, "item_price": None}
+		        for day in _stay_nights(booked_check_in, booked_check_out)}
+	else:
+		return None
+	added = [day for day in stay if day not in held]
+	if not added and (not own or [str(night["date"]) for night in own] == stay):
+		return None
+	runs: list[list[str]] = []
+	for day in added:
+		if runs and str(getdate(add_days(runs[-1][-1], 1))) == day:
+			runs[-1].append(day)
+		else:
+			runs.append([day])
+	for run in runs:
+		start, end = run[0], str(getdate(add_days(run[-1], 1)))
+		resolved = contract_rate(reservation.property, reservation.room_type, reservation.rate_plan, start, end,
+			reservation.adults, reservation.children, reservation.get("extra_beds"),
+			company=reservation.get("company"), fx_date=tariff.get("fx_date"))
+		if not resolved:
+			frappe.throw(_("The contract has no valid rate for the added nights {0} to {1}. Ask a manager to check "
+			               "the tariff, or keep the stay's dates.").format(start, end), ContractRateRefused)
+		agreed, priced = resolved
+		by_date = {night["date"]: night for night in priced.get("nights") or []}
+		for day in run:
+			night = by_date.get(day) or {"nightly": priced["nightly"], "agreed_rate": agreed}
+			held[day] = {"date": day, "nightly": night["nightly"], "agreed_rate": night["agreed_rate"],
+			             "item_price": night.get("item_price")}
+	nights = [held[day] for day in stay]
+	if not own and all(_dec(night["nightly"]) == _dec(tariff["nightly"])
+	                   and abs(_dec(night["agreed_rate"]) - _dec(booked)) <= Decimal("0.005") for night in nights):
+		return None
+	return {**snapshot, "tariff": {**tariff, "nights": nights}}
+
+
+def _stay_nights(check_in, check_out) -> list[str]:
+	"""Each night of a stay by date (its check-in date for a day-use stay)."""
+	return [str(getdate(add_days(check_in, i))) for i in range(max(date_diff(check_out, check_in), 1))]
 
 
 def relock_contract_fx_at_check_in(reservation) -> bool:

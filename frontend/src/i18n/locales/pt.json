@@ -6780,7 +6780,7 @@
   "Adjust extra person charges": "Ajustar cobranças por pessoa extra",
   "Rounding step": "Passo de arredondamento",
   "Rounding mode": "Modo de arredondamento",
-  "When a foreign-currency contract converts to the property's currency: at booking, at check-in, on each night's posting date, or when the group block is created.": "Quando um contrato em moeda estrangeira é convertido para a moeda da propriedade: na reserva, no check-in, na data de lançamento de cada noite ou quando o bloqueio do grupo é criado.",
+  "When a foreign-currency contract converts to the property's currency: at booking, at check-in, or on each night's posting date.": "Quando um contrato em moeda estrangeira é convertido para a moeda da propriedade: na reserva, no check-in ou na data de lançamento de cada noite.",
   "Blank: priced from the room type's card or this plan's own tariff. Set: this plan's modifier applies to the base plan's price.": "Vazio: preço do cartão do tipo de quarto ou da tarifa própria deste plano. Preenchido: o modificador deste plano se aplica ao preço do plano base.",
   "Derived plans only. Off: extra adults and children keep the base plan's charge.": "Somente planos derivados. Desligado: adultos e crianças extras mantêm a cobrança do plano base.",
   "Round the local price to this multiple (for example 1000 for a currency with no cents). 0 = the currency's smallest unit.": "Arredonda o preço local para este múltiplo (por exemplo, 1000 para uma moeda sem centavos). 0 = a menor unidade da moeda.",

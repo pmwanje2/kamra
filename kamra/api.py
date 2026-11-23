@@ -6724,6 +6724,7 @@ def _reprice_preview(res, **changes) -> dict:
 	whose price inputs do not change keeps its locked nightly rates."""
 	current = float(res.amount_after_tax or 0)
 	old_key = res.get("rate_lock_key")
+	booked = (res.get("check_in_date"), res.get("check_out_date"))
 	for k, v in changes.items():
 		res.set(k, v)
 	out = {"current_amount": current, "new_amount": current,
@@ -6734,6 +6735,8 @@ def _reprice_preview(res, **changes) -> dict:
 	hand = any(flt(r.get("hand_price")) > 0 for r in res.get("night_rates") or [])
 	if (not res.get("auto_price") and not hand) or not res.room_type:
 		return out
+	# new dates: the contract prices the nights it never priced, as the save will
+	res.reprice_contract_nights(*booked)
 	inputs = res.quote_inputs()
 	if res.get("night_rates") and old_key == res.rate_lock_key_for(inputs):
 		return out  # same stay, same locked rates

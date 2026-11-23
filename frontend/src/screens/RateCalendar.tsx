@@ -97,6 +97,9 @@ export default function RateCalendar() {
   const choose = (key: "rate_plan" | "company", value: string) => {
     setPick(null)
     setParams((p) => {
+      // Customer controls Rate plan (SAP Fiori IN/OUT parameter): a plan chosen holds only for the customer it
+      // was chosen with, so a new or cleared customer derives it again (its negotiated plan, else the card rate)
+      if (key === "company") p.delete("rate_plan")
       // with a customer, the card rate stays chosen as ?rate_plan= so the negotiated plan does not replace it
       if (value || (key === "rate_plan" && p.get("company"))) p.set(key, value)
       else p.delete(key)
@@ -179,6 +182,10 @@ export default function RateCalendar() {
             >
               <option value="">{t("Public rate (no customer)")}</option>
               {customers.map((c) => <option key={c.name} value={c.name}>{c.label}</option>)}
+              {/* a linked customer that is not an active Corporate Account: named and flagged, never as the public rate */}
+              {company && !customers.some((c) => c.name === company) && (
+                <option value={company}>{t("Not available: {reason}", { reason: company })}</option>
+              )}
             </select>
           )}
           <Button variant="outline" aria-label={t("Earlier")} onClick={() => setFrom(shift(data?.from ?? "", -days))} disabled={!data}>

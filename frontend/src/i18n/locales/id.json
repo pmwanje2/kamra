@@ -500,7 +500,7 @@
   "Adjust extra person charges": "Sesuaikan biaya orang tambahan",
   "Rounding step": "Kelipatan pembulatan",
   "Rounding mode": "Mode pembulatan",
-  "When a foreign-currency contract converts to the property's currency: at booking, at check-in, on each night's posting date, or when the group block is created.": "Kapan kontrak dalam mata uang asing dikonversi ke mata uang properti: saat pemesanan, saat check-in, pada tanggal posting setiap malam, atau saat blok grup dibuat.",
+  "When a foreign-currency contract converts to the property's currency: at booking, at check-in, or on each night's posting date.": "Kapan kontrak dalam mata uang asing dikonversi ke mata uang properti: saat pemesanan, saat check-in, atau pada tanggal posting setiap malam.",
   "Blank: priced from the room type's card or this plan's own tariff. Set: this plan's modifier applies to the base plan's price.": "Kosong: harga dari kartu tipe kamar atau tarif paket ini sendiri. Diisi: pengubah paket ini berlaku pada harga paket dasar.",
   "Derived plans only. Off: extra adults and children keep the base plan's charge.": "Hanya untuk paket turunan. Nonaktif: dewasa dan anak tambahan tetap dikenai biaya paket dasar.",
   "Round the local price to this multiple (for example 1000 for a currency with no cents). 0 = the currency's smallest unit.": "Bulatkan harga lokal ke kelipatan ini (misalnya 1000 untuk mata uang tanpa sen). 0 = satuan terkecil mata uang.",

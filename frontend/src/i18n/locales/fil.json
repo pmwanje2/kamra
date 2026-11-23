@@ -1220,7 +1220,7 @@
   "Adjust extra person charges": "Iayon ang singil sa dagdag na tao",
   "Rounding step": "Hakbang ng pag-round",
   "Rounding mode": "Paraan ng pag-round",
-  "When a foreign-currency contract converts to the property's currency: at booking, at check-in, on each night's posting date, or when the group block is created.": "Kailan ikinokonbert ang kontratang nasa banyagang pera sa pera ng property: sa booking, sa check-in, sa petsa ng pag-post ng bawat gabi, o kapag ginawa ang group block.",
+  "When a foreign-currency contract converts to the property's currency: at booking, at check-in, or on each night's posting date.": "Kailan ikinokonbert ang kontratang nasa banyagang pera sa pera ng property: sa booking, sa check-in, o sa petsa ng pag-post ng bawat gabi.",
   "Blank: priced from the room type's card or this plan's own tariff. Set: this plan's modifier applies to the base plan's price.": "Blangko: batay sa presyo ng uri ng kuwarto o sa sariling taripa ng plan na ito. May laman: ilalapat ang modifier ng plan na ito sa presyo ng batayang plan.",
   "Derived plans only. Off: extra adults and children keep the base plan's charge.": "Para lamang sa mga hango na plan. Naka-off: mananatili ang singil ng batayang plan para sa dagdag na adults at bata.",
   "Round the local price to this multiple (for example 1000 for a currency with no cents). 0 = the currency's smallest unit.": "I-round ang lokal na presyo sa multiple na ito (halimbawa 1000 para sa perang walang sentimo). 0 = pinakamaliit na yunit ng pera.",
