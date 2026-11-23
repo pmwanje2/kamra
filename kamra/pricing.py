@@ -911,7 +911,7 @@ def contract_rate(property, room_type, rate_plan, check_in, check_out, adults, c
 			raise ContractRateRefused(_("The derived rate plan prices this stay at zero or less. "
 			                            "Ask a manager to check the rate plan."))
 		nightly = round_rate_amount(nightly, 0, currency=currency)
-		agreed = round_rate_amount(nightly * fx, step, mode, prop_currency)
+		agreed = contract_local_amount(plan, nightly, fx, prop_currency)
 	elif _dec(step) > 0:
 		agreed = round_rate_amount(agreed, step, mode, prop_currency)
 	tariff = {"currency": currency, "nightly": float(nightly), "fx_rate": float(fx),
@@ -958,7 +958,7 @@ def relock_contract_fx_at_check_in(reservation) -> bool:
 			"contract stay checks in.").format(currency, business))
 	fx, fx_date = posting
 	rp = frappe.get_doc("Rate Plan", reservation.rate_plan)
-	agreed = float(round_rate_amount(nightly * fx, rp.get("rounding_step"), rp.get("rounding_mode") or "Nearest", home))
+	agreed = float(contract_local_amount(rp, nightly, fx, home))
 	reservation.agreed_rate = agreed
 	reservation.contract_tariff = {"tariff": {**tariff, "nightly": float(nightly), "fx_rate": float(fx),
 	                                          "fx_date": fx_date}, "agreed_rate": agreed}

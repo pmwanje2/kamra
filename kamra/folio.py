@@ -624,6 +624,7 @@ def current_date_contract_night(reservation, date) -> dict | None:
 	fx_date, stale}, or None - bill the locked night - for other policies
 	or a home-currency contract."""
 	from kamra.pricing import (
+		contract_local_amount,
 		posting_fx_rate,
 		rate_plan_fx_policy,
 		rates_include_tax,
@@ -655,7 +656,7 @@ def current_date_contract_night(reservation, date) -> dict | None:
 		        "currency": currency, "fx_rate": float(fx), "fx_date": fx_date, "stale": True}
 	fx, fx_date = posting
 	rp = frappe.get_doc("Rate Plan", plan)
-	gross = round_rate_amount(nightly * fx, rp.get("rounding_step"), rp.get("rounding_mode") or "Nearest", home)
+	gross = contract_local_amount(rp, nightly, fx, home)
 	share = _negotiated_share(reservation, snapshot, locked_night(reservation, date))
 	if share != 1:
 		gross = round_rate_amount(gross * share, 0, currency=home)
