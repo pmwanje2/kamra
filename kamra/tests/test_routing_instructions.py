@@ -335,6 +335,18 @@ class RoutingTestCase(AuditTestCase):
 		self.assertEqual((used(copies[first.name][0].name), used(copies[second.name][0].name),
 		                  used(template.name)), (1000, 800, 0))
 
+	def test_split_night_is_one_room_sold(self):
+		# a limit splits one room night over two windows: still one room sold
+		route(["Room"], reservation=self.res.name, target_type="Window", target_window=2,
+		      limit_type="Amount", limit_value=600, per_day=1)
+		nightly = float(folio_mod._nightly_room_rate(self.res, d(-1)))
+		folio_mod.post_room_night(self.res, d(-1))
+		self.assertEqual(len(lines(self.w2, "Room")) + len(
+			lines(guest_folio(self.res.name), "Room")), 2)
+		yesterday = api.owner_briefing(PROP_A, TODAY)["yesterday"]
+		self.assertEqual(yesterday["room_revenue"], nightly)
+		self.assertEqual(yesterday["adr"], round(nightly, 0))
+
 	def test_billing_rule_all_charge_types(self):
 		meta = frappe.get_meta("Folio Charge").get_field("charge_type").options.split("\n")
 		rule = frappe.get_meta("Company Billing Rule").get_field("charge_type").options.split("\n")
