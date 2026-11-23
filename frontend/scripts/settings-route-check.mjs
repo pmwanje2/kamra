@@ -17,6 +17,7 @@ const imports = {
   "lucide-react": require("lucide-react"),
   "./api": {},
   "./brand": { deskLabel: () => undefined, upstreamOnly: () => false, whiteLabel: () => true },
+  "./routing": { toFullPath: (path) => `/kamra${path}` },
 }
 const appRegistry = {}
 const js = ts.transpileModule(source.replaceAll("import.meta.env.PROD", "true"), {
