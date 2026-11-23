@@ -138,7 +138,7 @@
    "label": "OTA Taxes"
   },
   {
-   "description": "Which of the taxes an OTA lists on a booking is the room tax, tried top to bottom: the first rule that matches decides, and a tax no rule matches is ignored. A new Channex connection starts with the standard rules.",
+   "description": "Which of the taxes an OTA lists on a booking is the room tax, tried top to bottom: the first rule that matches decides. A tax listed on top of the price that no rule reads holds the booking for review; one inside the price is already in what is billed. A connection made as, or switched to, Channex starts with the standard rules.",
    "fieldname": "ota_tax_rules",
    "fieldtype": "Table",
    "label": "OTA Tax Rules",

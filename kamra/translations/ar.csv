@@ -296,3 +296,7 @@ Stay as booked,الإقامة كما هي محجوزة
 Extra guests by arrangement,ضيوف إضافيون بالاتفاق
 Room levy,رسوم الغرفة
 "No nights are posted yet. Use Advance bill to post the stay now, then give the discount, or use a rate plan or promo code at booking.",لا توجد ليالٍ مرحّلة بعد. استخدم «فاتورة مقدمة» لترحيل الإقامة الآن ثم امنح الخصم، أو استخدم خطة سعر أو رمز ترويجي عند الحجز.
+OTA Tax Rules row {0}: the text needs a letter or a digit.,صف قواعد ضرائب OTA رقم {0}: يجب أن يحتوي النص على حرف أو رقم.
+OTA Tax Basis rows {0} and {1} are the same OTA ({2}): keep one.,صفا أساس ضرائب OTA رقم {0} و{1} يخصان OTA نفسها ({2}): احتفظ بواحد.
+OTA Tax Rules,قواعد ضرائب OTA
+OTA Tax Basis,أساس ضرائب OTA
