@@ -352,7 +352,12 @@ def _import_records(rows) -> list[dict]:
 		frappe.throw(_("Send the tariff rows as a list."))
 	if len(rows) > TARIFF_BATCH_LIMIT:
 		frappe.throw(_("Send at most {0} tariff rows at a time.").format(TARIFF_BATCH_LIMIT))
-	return [{_column_key(key): value for key, value in row.items() if key} for row in rows]
+	return [{_column_key(key): _unguard(value) for key, value in row.items() if key} for row in rows]
+
+
+def _unguard(value):
+	"""A cell the export guarded against running as a formula ('+, '=, '-, '@) reads back as typed."""
+	return value[1:] if isinstance(value, str) and re.match(r"'[=+\-@]", value) else value
 
 
 def _unchanged(item: dict | None, entry: dict) -> bool:

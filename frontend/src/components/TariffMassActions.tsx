@@ -121,20 +121,24 @@ function BulkVersionDialog({ items, property, businessDate, lists, locale, dateL
   const ready = value.trim() !== "" && Number.isFinite(amount)
     && (dateMode === "set" ? !!validFrom && (!validUntil || validUntil >= validFrom) : shift.trim() !== "" && Number.isInteger(days))
   const plan = items.map((item) => {
-    const reference = item.active
-    if (!reference) return null
+    const reference = item.active ?? null
+    // a shift needs dates to move, and only an exact rate needs no current rate
+    if (!reference && (kind !== "exact" || dateMode === "shift")) return null
     const currency = itemCurrency(item, lists.get(item.price_list))
-    const rate = roundRate(adjustRate(reference.rate, { kind, value: amount }), multiple, mode, currency)
-    const from = dateMode === "set" ? validFrom : addDays(reference.valid_from, days)
-    const upto = dateMode === "set" ? validUntil || null : reference.valid_upto ? addDays(reference.valid_upto, days) : null
-    return { item, reference, currency, rate, from, upto }
+    const rate = roundRate(adjustRate(reference?.rate ?? 0, { kind, value: amount }), multiple, mode, currency)
+    const from = dateMode === "set" || !reference ? validFrom : addDays(reference.valid_from, days)
+    const upto = dateMode === "set" ? validUntil || null : reference?.valid_upto ? addDays(reference.valid_upto, days) : null
+    const earliest = reference && reference.valid_from >= businessDate ? addDays(reference.valid_from, 1) : businessDate
+    const valid = Number.isFinite(rate) && rate >= 0 && from >= earliest && (!upto || upto >= from)
+    return { item, reference, currency, rate, from, upto, valid }
   })
   const entries = plan.filter((entry) => entry != null)
   const leftOut = plan.length - entries.length
+  const invalid = entries.filter((entry) => !entry.valid).length
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!ready || !entries.length) return
+    if (!ready || !entries.length || invalid) return
     void run(async () => {
       const result = await call("kamra.rates.bulk_propose_contract_tariffs", {
         property, entries: entries.map(({ item, rate, from, upto }) => ({
@@ -152,7 +156,7 @@ function BulkVersionDialog({ items, property, businessDate, lists, locale, dateL
     subtitle={tn(items.length, "{n} tariff selected", "{n} tariffs selected")}
     footer={<>
       <Button type="button" variant="outline" onClick={onClose} disabled={busy}>{t("Cancel")}</Button>
-      <Button type="submit" disabled={busy || !ready || !entries.length}>
+      <Button type="submit" disabled={busy || !ready || !entries.length || invalid > 0}>
         {busy ? t("Saving…") : t("Submit {n} for approval", { n: entries.length })}
       </Button>
     </>}>
@@ -214,11 +218,11 @@ function BulkVersionDialog({ items, property, businessDate, lists, locale, dateL
     {ready && <div className="space-y-2 rounded-lg border border-brand-200 bg-brand-50 p-3 text-sm" aria-live="polite">
       <p className="font-medium">{t("New versions")}</p>
       <ul className="max-h-48 space-y-1 overflow-y-auto tabular-nums">
-        {entries.map(({ item, reference, currency, rate, from, upto }) =>
-          <li key={[item.price_list, item.item_code, item.customer ?? ""].join("|")}>
+        {entries.map(({ item, reference, currency, rate, from, upto, valid }) =>
+          <li key={[item.price_list, item.item_code, item.customer ?? ""].join("|")} className={valid ? "" : "text-rose-800"}>
             {t("{item}: {from} → {to}", {
               item: [item.item_name, item.customer].filter(Boolean).join(" · "),
-              from: currencyText(currency, reference.rate, locale),
+              from: reference ? currencyText(currency, reference.rate, locale) : "—",
               to: currencyText(currency, rate, locale),
             })} <span className="text-zinc-600">{upto
               ? t("{from} – {until}", { from: tariffDate(from, dateLocale), until: tariffDate(upto, dateLocale) })
@@ -226,6 +230,9 @@ function BulkVersionDialog({ items, property, businessDate, lists, locale, dateL
           </li>)}
       </ul>
       {leftOut > 0 && <p>{tn(leftOut, "{n} tariff has no current rate and is left out.", "{n} tariffs have no current rate and are left out.")}</p>}
+      {invalid > 0 && <p className="font-medium text-rose-800">{tn(invalid,
+        "{n} version would start before its current version or end before it starts. Change the dates.",
+        "{n} versions would start before their current versions or end before they start. Change the dates.")}</p>}
     </div>}
     <Failure message={failure} />
   </TariffModal>
@@ -311,7 +318,8 @@ function ImportDialog({ property, onClose, onDone }: MassProps) {
       if (result == null) setFailure(t("Tariff editing is not available for this property."))
       else if (result.errors.length) setErrors(result.errors)
       else onDone([
-        tn(result.created, "{n} draft version created for approval", "{n} draft versions created for approval"),
+        result.created ? tn(result.created, "{n} draft version created for approval", "{n} draft versions created for approval")
+          : t("No new versions to create"),
         result.unchanged ? t("{n} unchanged", { n: result.unchanged }) : "",
         result.skipped ? tn(result.skipped, "{n} row without a rate skipped", "{n} rows without a rate skipped") : "",
       ].filter(Boolean).join(" · "))

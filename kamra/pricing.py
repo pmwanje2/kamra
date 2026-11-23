@@ -729,17 +729,20 @@ def _price_through(plans: list, total: Decimal, extras: Decimal, root: bool) -> 
 	return room + extras
 
 
-def round_planned_stay(rate_plan: str, room_total: Decimal, room_tax: Decimal,
-                       inclusive: bool) -> tuple[Decimal, Decimal]:
+def round_planned_stay(rate_plan: str, room_total: Decimal, room_tax: Decimal, inclusive: bool,
+                       floor: Decimal = Decimal(0)) -> tuple[Decimal, Decimal]:
 	"""The plan's rounding step on the stay's room price as the guest sees
 	it - the gross price in a tax-inclusive house, the net one otherwise.
-	Tax keeps its share; a step of 0 leaves the quote as it is."""
+	Tax keeps its share; a step of 0 leaves the quote as it is, and rounding
+	never takes the stay below its long-stay floor."""
 	rp = frappe.get_doc("Rate Plan", rate_plan)
 	step = _dec(rp.get("rounding_step"))
 	shown = room_total + room_tax if inclusive else room_total
 	if step <= 0 or shown <= 0:
 		return room_total, room_tax
 	factor = round_rate_amount(shown, step, rp.get("rounding_mode") or "Nearest") / shown
+	if room_total * factor < floor:
+		return room_total, room_tax
 	return room_total * factor, room_tax * factor
 
 
@@ -838,6 +841,9 @@ def contract_rate(property, room_type, rate_plan, check_in, check_out, adults, c
 	derived = chain[depth + 1:]
 	if derived:
 		nightly = _price_through(derived, nightly, _dec(result.get("extra_person")), root=False)
+		if nightly <= 0:
+			raise ContractRateRefused(_("The derived rate plan prices this stay at zero or less. "
+			                            "Ask a manager to check the rate plan."))
 		nightly = round_rate_amount(nightly, 0, currency=currency)
 		agreed = round_rate_amount(nightly * fx, step, mode, prop_currency)
 	elif _dec(step) > 0:
@@ -898,7 +904,7 @@ def quote_with_contract(property, room_type, check_in_date, check_out_date, adul
 		frappe.throw(_("Check-out cannot be before check-in."))
 	resolved = contract_rate(property, room_type,
 		rate_plan or negotiated_rate_plan(property, kwargs.get("company")),
-		check_in_date, check_out_date, adults, children, extra_beds)
+		check_in_date, check_out_date, adults, children, extra_beds, company=kwargs.get("company"))
 	q = quote(property, room_type, check_in_date, check_out_date, adults, children,
 	          meal_plan, rate_plan, voucher_code, agreed_rate=resolved[0] if resolved else 0, **kwargs)
 	if resolved:
@@ -1269,7 +1275,7 @@ def quote(
 		if old_room_total:
 			room_tax *= room_total / old_room_total
 			los_saved *= room_total / old_room_total
-		room_total, room_tax = round_planned_stay(rate_plan, room_total, room_tax, inclusive)
+		room_total, room_tax = round_planned_stay(rate_plan, room_total, room_tax, inclusive, los_floor)
 
 	from kamra.folio import _fnb_gst
 	FNB_GST = _fnb_gst(property)

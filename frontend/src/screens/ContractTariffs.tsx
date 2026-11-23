@@ -104,6 +104,7 @@ function TariffDirectory({ property }: { property: string }) {
   const [notice, setNotice] = useState<string | null>(null)
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const [exporting, setExporting] = useState(false)
+  const [exportFailed, setExportFailed] = useState(false)
   const requestKey = `${revision}|${asOf}`
 
   useEffect(() => {
@@ -192,8 +193,25 @@ function TariffDirectory({ property }: { property: string }) {
       ? t("{from} – {until}", { from: tariffDate(version.valid_from, dateLocale), until: tariffDate(version.valid_upto, dateLocale) })
       : tariffDate(version.valid_from, dateLocale),
   }
-  const roundingText = (rule: Rounding) => rule?.step ? t("rounded to nearest {step}", { step: rule.step.toLocaleString(locale) }) : ""
-  const planCurrency = (name: string) => policies[name]?.currency || directory.property_currency
+  const roundingText = (rule: Rounding) => {
+    if (!rule) return ""
+    if (!rule.step) return t("standard currency rounding")
+    const step = rule.step.toLocaleString(locale)
+    return rule.mode === "Up" ? t("rounded up to {step}", { step })
+      : rule.mode === "Down" ? t("rounded down to {step}", { step }) : t("rounded to nearest {step}", { step })
+  }
+  // a plan's currency is its own, else its nearest base plan's, else the property's
+  const planCurrency = (start: string) => {
+    const seen = new Set<string>()
+    for (let name = start; name && !seen.has(name);) {
+      const plan = policies[name]
+      if (!plan) break
+      if (plan.currency) return plan.currency
+      seen.add(name)
+      name = plan.base_rate_plan ?? ""
+    }
+    return directory.property_currency
+  }
   const planBadges = (selectedList?.rate_plans ?? []).filter((name) => policies[name]).map((name) => {
     const plan = policies[name]
     const base = plan.base_rate_plan ? policies[plan.base_rate_plan]?.label ?? plan.base_rate_plan : null
@@ -206,7 +224,7 @@ function TariffDirectory({ property }: { property: string }) {
       foreign: selectedList.currency, rate: formatFxRate(selectedList.fx_rate, locale), home: directory.property_currency,
       date: tariffDate(selectedList.fx_date, dateLocale),
     }),
-    roundingText(listRule),
+    listRule ? roundingText(listRule) : planBadges.length > 1 ? t("rounding set per rate plan") : "",
   ].filter(Boolean).join(" · ") : null
   const labels: Labels = {
     Select: t("Select"), Item: t("Item"), Category: t("Category"), Rate: t("Current rate"), Local: t("Local equiv."),
@@ -217,10 +235,14 @@ function TariffDirectory({ property }: { property: string }) {
 
   async function exportCsv() {
     setExporting(true)
+    setExportFailed(false)
     try {
       const out = await call<CsvExport | null>("kamra.rates.export_contract_tariffs_csv",
         selectedList && filter !== "pending" ? { property, price_list: selectedList.name } : { property })
       if (out?.supported) downloadCsv(`contract-tariffs-${out.business_date ?? directory.business_date}`, out.columns, out.rows)
+      else setExportFailed(true)
+    } catch {
+      setExportFailed(true)
     } finally {
       setExporting(false)
     }
@@ -311,6 +333,7 @@ function TariffDirectory({ property }: { property: string }) {
         </Button>}
       </span>
     </div>
+    {exportFailed && <p role="alert" className="text-sm text-rose-800">{t("The contract tariffs could not be exported.")}</p>}
     {loading && <p role="status" className="text-sm text-zinc-600">{t("Refreshing contract tariffs…")}</p>}
 
     {filter === "Room" && matrix.length > 0 ? <RoomMatrix rows={matrix} view={view} />
@@ -333,7 +356,8 @@ type Labels = Record<"Select" | "Item" | "Category" | "Rate" | "Local" | "Dates"
 function RoomMatrix({ rows, view }: { rows: MatrixRow<ContractTariffItem>[]; view: TariffView }) {
   const { t, tn } = useT()
   const tiers = [...new Set(rows.flatMap((row) => [...row.tiers.keys()]))].sort((a, b) => a - b)
-  const columns = 3 + tiers.length + (view.selectable ? 1 : 0)
+  const others = rows.some((row) => row.others.length > 0)
+  const columns = 3 + tiers.length + (others ? 1 : 0) + (view.selectable ? 1 : 0)
   return <div aria-busy={view.loading} className="xl:overflow-x-auto xl:rounded-xl xl:border xl:border-zinc-200 xl:bg-white">
     <table role="table" aria-label={t("Room pricing matrix")} className="block w-full text-start text-sm xl:table">
       <thead className="hidden bg-zinc-50 xl:table-header-group">
@@ -341,19 +365,20 @@ function RoomMatrix({ rows, view }: { rows: MatrixRow<ContractTariffItem>[]; vie
           {view.selectable && <th scope="col" className="w-10 px-3 py-3"><span className="sr-only">{t("Select")}</span></th>}
           <th scope="col" className="px-3 py-3 text-start font-semibold">{t("Room type")}</th>
           {tiers.map((n) => <th key={n} scope="col" className="px-3 py-3 text-start font-semibold">{tn(n, "{n} Adult", "{n} Adults")}</th>)}
+          {others && <th scope="col" className="px-3 py-3 text-start font-semibold">{t("Other occupancy")}</th>}
           <th scope="col" className="px-3 py-3 text-start font-semibold">{t("Extras")}</th>
           <th scope="col" className="px-3 py-3 text-start font-semibold">{t("Actions")}</th>
         </tr>
       </thead>
       <tbody className="block space-y-2 xl:table-row-group">
-        {rows.map((row) => <MatrixRowView key={row.key} row={row} tiers={tiers} columns={columns} view={view} />)}
+        {rows.map((row) => <MatrixRowView key={row.key} row={row} tiers={tiers} others={others} columns={columns} view={view} />)}
       </tbody>
     </table>
   </div>
 }
 
-function MatrixRowView({ row, tiers, columns, view }: {
-  row: MatrixRow<ContractTariffItem>; tiers: number[]; columns: number; view: TariffView
+function MatrixRowView({ row, tiers, others, columns, view }: {
+  row: MatrixRow<ContractTariffItem>; tiers: number[]; others: boolean; columns: number; view: TariffView
 }) {
   const { t, tn } = useT()
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -377,6 +402,12 @@ function MatrixRowView({ row, tiers, columns, view }: {
         const item = row.tiers.get(n)
         return <Cell key={n} label={tn(n, "{n} Adult", "{n} Adults")}>{item ? <TierCell item={item} view={view} /> : "—"}</Cell>
       })}
+      {others && <Cell label={t("Other occupancy")}>{row.others.length ? <div className="space-y-3">
+        {row.others.map((item) => <div key={item.item_code}>
+          <span className="block text-xs font-medium text-zinc-600">{item.occupancy || item.item_name}</span>
+          <TierCell item={item} view={view} />
+        </div>)}
+      </div> : "—"}</Cell>}
       <Cell label={t("Extras")}><Extras row={row} view={view} /></Cell>
       <td role="cell" className="block px-3 py-2 xl:table-cell xl:py-3 xl:align-top">
         {withHistory.length > 0 && <Button type="button" variant="ghost" aria-expanded={historyOpen}

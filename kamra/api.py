@@ -3503,6 +3503,7 @@ def folio_invoice(folio: str):
 	- `folio`, `bill_to`, `guest`, `stay`, `property`, `document`
 	"""
 	from kamra import localization as loc
+	from kamra.folio import reference_currency
 	from kamra.pricing import saved_contract_tariff
 
 	doc = frappe.get_doc("Folio", folio)
@@ -3632,6 +3633,8 @@ def folio_invoice(folio: str):
 		"stay": {"reservation": None, "company": bill_company} if not res else {
 			"reservation": res.name,
 			**saved_contract_tariff(res),
+			# the contract currency beside home amounts (Property reference currency calculation)
+			"reference_currency": reference_currency(res),
 			"check_in": str(res.check_in_date),
 			"check_out": str(res.check_out_date),
 			"arrival": str(res.get("actual_check_in") or "") or None,

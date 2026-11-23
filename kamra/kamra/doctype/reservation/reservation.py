@@ -448,7 +448,7 @@ class Reservation(Document):
 			return  # external or block totals already set the room price
 		from kamra.pricing import contract_rate
 		resolved = contract_rate(self.property, self.room_type, self.rate_plan, self.check_in_date,
-			self.check_out_date, self.adults, self.children, self.get("extra_beds"))
+			self.check_out_date, self.adults, self.children, self.get("extra_beds"), company=self.get("company"))
 		if not resolved:
 			return
 		agreed_rate, tariff = resolved
