@@ -176,10 +176,10 @@ class InvoiceCorrectionTestCase(AuditTestCase):
 		self.assertTrue(frappe.db.exists("Agent Action Log", {
 			"action_type": "cancel_invoice", "reference_name": self.folio}))
 		# the same roles as a credit note: Front Desk may not credit a bill
-		frappe.set_user(ensure_user("ut-desk@example.com", ["Front Desk"]))
+		frappe.set_user(ensure_user("ut-desk@example.com", ["Front Desk"]))  # nosemgrep: frappe-setuser -- test fixture
 		with self.assertRaises(frappe.PermissionError):
 			api.cancel_invoice(self.folio, "UT desk tries")
-		frappe.set_user("Administrator")
+		frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- test fixture
 		# and only an issued, closed bill is sent
 		frappe.db.set_value("Folio", self.folio, "status", "Open", update_modified=False)
 		with self.assertRaises(frappe.ValidationError):
