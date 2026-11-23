@@ -120,10 +120,14 @@ function quoteFor(params: Record<string, unknown>) {
   }
 }
 
+// per-test changes to what the server answers (reset before each test)
+let optionsOver: Record<string, unknown> = {}
+let quoteOver: (params: Record<string, unknown>) => Record<string, unknown> = () => ({})
+
 function serve(method: string, params: Record<string, unknown>) {
   switch (method) {
-    case "kamra.api.booking_options": return Promise.resolve(OPTIONS)
-    case "kamra.api.get_quote": return Promise.resolve(quoteFor(params))
+    case "kamra.api.booking_options": return Promise.resolve({ ...OPTIONS, ...optionsOver })
+    case "kamra.api.get_quote": return Promise.resolve({ ...quoteFor(params), ...quoteOver(params) })
     case "kamra.api.available_rooms": return Promise.resolve([{ name: "STD-101", room_number: "101", housekeeping_status: "Clean" }])
     case "kamra.api.property_locale": return Promise.resolve({ currency: "UGX", currency_symbol: "UGX ", locale: "en", tax_label: "VAT", tax_rates: [0], payment_modes: ["Cash"] })
     case "kamra.rates.rate_options": return Promise.resolve({ nights: [], plans: [], voucher: null,
@@ -138,7 +142,11 @@ function serve(method: string, params: Record<string, unknown>) {
 }
 
 describe("BookingDialog: inline discount for new bookings and walk-ins", () => {
-  beforeEach(() => rpc.mockReset().mockImplementation(serve))
+  beforeEach(() => {
+    optionsOver = {}
+    quoteOver = () => ({})
+    rpc.mockReset().mockImplementation(serve)
+  })
   const quoteCalls = () => rpc.mock.calls.filter(([m]) => m === "kamra.api.get_quote").map(([, p]) => p)
 
   async function open(walkIn: boolean) {
@@ -201,6 +209,111 @@ describe("BookingDialog: inline discount for new bookings and walk-ins", () => {
     expect(booked).toMatchObject({ rate_plan: "TARIFF", discount_type: "Percent", discount_value: 25,
       discount_reason: "RATE-PROMO", supervisor_user: "gm@test", supervisor_pin: "4321" })
   })
+
+  // --- round 2 (Gap Record #8555 review) ---------------------------------
+  const walkInButton = () => Array.from(host.querySelectorAll("button")).find((b) =>
+    /^(Collect .* and continue to check-in|Continue to check-in)$/.test(b.textContent?.trim() ?? ""))!
+  const lastQuote = () => quoteCalls().at(-1) as Record<string, unknown>
+  async function discountOf(value: string, reason = "RATE-PROMO") {
+    await typeInto(byLabel<HTMLInputElement>("Discount value")!, value)
+    if (reason) await choose(byLabel<HTMLSelectElement>("Discount reason")!, reason)
+    await vi.waitFor(async () => {
+      await settle()
+      expect(lastQuote()).toMatchObject({ discount_value: Number(value) })
+    }, { timeout: 3000, interval: 20 })
+  }
+
+  it("blocks the walk-in until the discount has its reason and the manager's PIN (P1-8)", async () => {
+    await open(true)
+    await typeInto(host.querySelector<HTMLInputElement>("#booking-guest")!, "Walk Guest")
+    await discountOf("5")
+    await vi.waitFor(() => expect(walkInButton().disabled).toBe(false), { timeout: 3000, interval: 20 })
+    // over the desk's limit: a manager signs it off before the money is taken
+    await discountOf("25")
+    await vi.waitFor(() => expect(byLabel("Manager PIN")).not.toBeNull(), { timeout: 3000, interval: 20 })
+    expect(walkInButton().disabled).toBe(true)
+    await choose(byLabel<HTMLSelectElement>("Manager")!, "gm@test")
+    await typeInto(byLabel<HTMLInputElement>("Manager PIN")!, "4321")
+    await vi.waitFor(() => expect(walkInButton().disabled).toBe(false), { timeout: 3000, interval: 20 })
+    // a discount with no reason is never sent
+    await choose(byLabel<HTMLSelectElement>("Discount reason")!, "")
+    await vi.waitFor(() => expect(walkInButton().disabled).toBe(true), { timeout: 3000, interval: 20 })
+    await act(async () => walkInButton().click())
+    expect(rpc.mock.calls.some(([m]) => m === "kamra.api.walk_in")).toBe(false)
+  })
+
+  it("holds an amount or a Daily Details night to the night's own rate (P1-8)", async () => {
+    await open(true)
+    await typeInto(host.querySelector<HTMLInputElement>("#booking-guest")!, "Walk Guest")
+    await press("Amount / night")
+    await discountOf("1500")
+    await choose(byLabel<HTMLSelectElement>("Manager")!, "gm@test")
+    await typeInto(byLabel<HTMLInputElement>("Manager PIN")!, "4321")
+    await settle()
+    // 1,500 off a 1,000 night: refused here, not left to the server
+    expect(walkInButton().disabled).toBe(true)
+    await typeInto(byLabel<HTMLInputElement>("Discount value")!, "")
+    await settle()
+    await press("Per-night daily details")
+    const night = host.querySelector<HTMLInputElement>(`tr[data-night="${NIGHTS[0]}"] input[type=number]`)!
+    await press("% off")
+    await typeInto(night, "150")
+    await settle()
+    expect(text()).toContain("A percentage is between 0 and 100.")
+    expect(walkInButton().disabled).toBe(true)
+  })
+
+  it("stops a new booking whose Daily Details night is out of bounds (P1-8)", async () => {
+    await open(false)
+    await typeInto(host.querySelector<HTMLInputElement>("#booking-guest")!, "Ada Guest")
+    await choose(byLabel<HTMLSelectElement>("Discount reason")!, "RATE-PROMO")
+    await press("Per-night daily details")
+    await typeInto(host.querySelector<HTMLInputElement>(`tr[data-night="${NIGHTS[1]}"] input[type=number]`)!, "150")
+    await settle()
+    await press("Confirm booking")
+    // let a booking the dialog wrongly sent finish before this test ends
+    for (let i = 0; i < 20; i++) await settle()
+    expect(rpc.mock.calls.some(([m]) => m === "kamra.api.create_booking")).toBe(false)
+  })
+
+  it("lets a revenue manager fix the rate on a plan that takes no discount (P1-9)", async () => {
+    optionsOver = { can_set_rate: true }
+    await open(false)
+    await typeInto(host.querySelector<HTMLInputElement>("#booking-guest")!, "Ada Guest")
+    await choose(host.querySelector<HTMLSelectElement>("#booking-rate-plan")!, "NRF")
+    await vi.waitFor(async () => {
+      await settle()
+      expect(byLabel("Fixed rate override")).not.toBeNull()
+    }, { timeout: 3000, interval: 20 })
+    expect(byLabel<HTMLInputElement>("Discount value")!.disabled).toBe(true)
+    await act(async () => byLabel<HTMLInputElement>("Fixed rate override")!.click())
+    expect(byLabel<HTMLInputElement>("Discount value")!.disabled).toBe(false)
+    await discountOf("10")
+    expect(lastQuote()).toMatchObject({ rate_plan: "NRF", discount_type: "Percent", fixed_rate: 1 })
+    await press("Confirm booking")
+    await vi.waitFor(() => expect(rpc.mock.calls.some(([m]) => m === "kamra.api.create_booking")).toBe(true),
+      { timeout: 3000, interval: 20 })
+    const [, booked] = rpc.mock.calls.find(([m]) => m === "kamra.api.create_booking")!
+    expect(booked).toMatchObject({ rate_plan: "NRF", discount_type: "Percent", discount_value: 10, fixed_rate: 1 })
+  })
+
+  it("offers no fixed-rate override to the front desk (P1-9)", async () => {
+    await open(false)
+    await choose(host.querySelector<HTMLSelectElement>("#booking-rate-plan")!, "NRF")
+    await settle()
+    expect(byLabel("Fixed rate override")).toBeNull()
+  })
+
+  it("shows a discounted contract tariff as base, discount and net only (P1-10)", async () => {
+    quoteOver = () => ({ agreed_rate: 1000, tariff: { currency: "USD", nightly: 100, property_currency: "UGX",
+      fx_rate: 10, fx_date: "2031-03-01" } })
+    await open(false)
+    await vi.waitFor(() => expect(text()).toContain("Room tariff subtotal"), { timeout: 3000, interval: 20 })
+    await discountOf("10")
+    await vi.waitFor(() => expect(text()).toContain("Net room rate"), { timeout: 3000, interval: 20 })
+    expect(text()).toContain("Base room rate")
+    expect(text()).not.toContain("Room tariff subtotal")
+  })
 })
 
 describe("Stay Rate & Daily Details editor (reservation screen)", () => {
@@ -211,10 +324,11 @@ describe("Stay Rate & Daily Details editor (reservation screen)", () => {
     difference: -200, needs_confirmation: true,
     nights: NIGHTS.map((date) => ({ date, base_rate: 1000, discount_amount: 100, rate: 900, charged: false })),
   }
+  let planOver: Record<string, unknown> = {}
   beforeEach(() => rpc.mockReset().mockImplementation((method: string, params: Record<string, unknown>) => {
     if (method === "kamra.ledger.list_reason_codes")
       return Promise.resolve(REASONS.filter((r) => !params.category || r.category === params.category))
-    if (method === "kamra.api.discount_preview") return Promise.resolve(preview)
+    if (method === "kamra.api.discount_preview") return Promise.resolve({ ...preview, ...planOver })
     if (method === "kamra.api.set_reservation_discount") return Promise.resolve({ ok: true })
     return Promise.resolve(null)
   }))
@@ -241,6 +355,63 @@ describe("Stay Rate & Daily Details editor (reservation screen)", () => {
     const [, applied] = rpc.mock.calls.find(([m]) => m === "kamra.api.set_reservation_discount")!
     expect(applied).toMatchObject({ reservation: "RES-9", discount_type: "Percent", discount_value: 10,
       reason_code: "ADJ-RATE", confirm_price: 1 })
+  })
+
+  // --- round 2 (Gap Record #8555 review) ---------------------------------
+  beforeEach(() => { planOver = {} })
+  const previews = () => rpc.mock.calls.filter(([m]) => m === "kamra.api.discount_preview").map(([, p]) => p)
+  const saveButton = () => Array.from(host.querySelectorAll("button"))
+    .find((b) => b.textContent?.trim() === "Save discount")!
+
+  it("leaves a night already on the folio out of what it sends (P1-7)", async () => {
+    const saved = vi.fn()
+    await act(async () => root.render(<AgreedRatePanel reservation="RES-9" onSaved={saved}
+      current={{ discount_type: null, discount_value: 0, discount_reason: null }}
+      nightRates={[
+        { date: NIGHTS[0], rate: 900, base_rate: 1000, discount_type: "Percent", discount_value: 10, charged: true },
+        { date: NIGHTS[1], rate: 1000 },
+      ]} />))
+    await press("Stay rate & daily details")
+    await typeInto(byLabel<HTMLInputElement>("Discount value")!, "5")
+    await choose(byLabel<HTMLSelectElement>("Discount reason")!, "RATE-PROMO")
+    await vi.waitFor(async () => {
+      await settle()
+      expect(previews().at(-1)).toMatchObject({ discount_type: "Percent", discount_value: 5 })
+    }, { timeout: 3000, interval: 20 })
+    expect(previews().at(-1)!.night_discounts).toBeUndefined()
+    await press("Save discount")
+    await vi.waitFor(() => expect(saved).toHaveBeenCalled(), { timeout: 3000, interval: 20 })
+    const [, applied] = rpc.mock.calls.find(([m]) => m === "kamra.api.set_reservation_discount")!
+    expect(applied.night_discounts).toBeUndefined()
+  })
+
+  it("starts from the stay's discount every time it opens (P1-7)", async () => {
+    const nightRates = NIGHTS.map((date) => ({ date, rate: 1000 }))
+    const panel = (pct: number) => <AgreedRatePanel reservation="RES-9" onSaved={() => {}} nightRates={nightRates}
+      current={{ discount_type: "Percent", discount_value: pct, discount_reason: "RATE-PROMO" }} />
+    await act(async () => root.render(panel(10)))
+    await press("Stay rate & daily details")
+    expect(byLabel<HTMLInputElement>("Discount value")!.value).toBe("10")
+    await press("Cancel")
+    // the stay was saved elsewhere at 20%: the drawer re-renders with it
+    await act(async () => root.render(panel(20)))
+    await press("Stay rate & daily details")
+    expect(byLabel<HTMLInputElement>("Discount value")!.value).toBe("20")
+  })
+
+  it("keeps Save discount off on a plan that takes no discount (P1-11)", async () => {
+    planOver = { eligible: false, can_set_rate: false }
+    await act(async () => root.render(<AgreedRatePanel reservation="RES-9" onSaved={() => {}}
+      nightRates={NIGHTS.map((date) => ({ date, rate: 1000 }))} />))
+    await press("Stay rate & daily details")
+    await typeInto(byLabel<HTMLInputElement>("Discount value")!, "10")
+    await choose(byLabel<HTMLSelectElement>("Discount reason")!, "RATE-PROMO")
+    await vi.waitFor(async () => {
+      await settle()
+      expect(previews().length).toBeGreaterThan(0)
+      expect(text()).toContain("This rate plan does not allow discounts.")
+    }, { timeout: 3000, interval: 20 })
+    expect(saveButton().disabled).toBe(true)
   })
 
   it("keeps the fixed-rate override on the existing agreed-rate flow", async () => {

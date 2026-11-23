@@ -467,8 +467,9 @@ class ReservationDiscountGovernanceTests(DiscountTestCase):
 			self.book(RATEDESK, **args)
 		out = self.book(RATEDESK, **args, supervisor_user=GM, supervisor_pin="4321")
 		self.assertEqual(self.rows(out["reservation"]), [(1000, 1000, 0), (1000, 1000, 0)])
-		# a supervisor role granting it themselves is the sign-off
-		self.book(GM, **args)
+		# a supervisor role is no sign-off of its own: another one signs a comp
+		with self.assertRaises(frappe.PermissionError):
+			self.book(GM, **args)
 		# a revenue manager's deep (non-comp) cut is theirs to make
 		self.book(RATEDESK, discount_type="Percent", discount_value=60, discount_reason="RATE-PROMO")
 

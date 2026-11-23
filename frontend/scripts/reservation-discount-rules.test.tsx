@@ -3,6 +3,8 @@
  * OPERA Cloud Discount % OR Amount per night + mandatory reason, Daily
  * Details with Apply to future nights, the SAP OVB2 bounds and the inline
  * supervisor PIN when the cut is over the front desk's limit. */
+import fs from "node:fs"
+import path from "node:path"
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -79,6 +81,36 @@ describe("discount rules (lib/reservationDiscount)", () => {
     expect(discountEligible(plans, "NRF")).toBe(false)
     expect(discountEligible(plans, "")).toBe(true)
     expect(discountEligible([{ name: "OLD" }], "OLD")).toBe(true)
+  })
+})
+
+describe("discount rules, round 2 (Gap Record #8555 review)", () => {
+  const withReason = { discount_type: "Percent", discount_value: 10, discount_reason: "RATE-PROMO" } as const
+
+  it("is not ready on a plan that takes no discount unless a manager fixes the rate (P1-11)", () => {
+    const closed = governance({ eligible: false })
+    expect(discountReady({ args: withReason, governance: closed, supervisor: "", pin: "" })).toBe(false)
+    expect(discountReady({ args: withReason, governance: closed, supervisor: "", pin: "", fixedOverride: true }))
+      .toBe(true)
+    // taking a discount off is always allowed
+    expect(discountReady({ args: {}, governance: closed, supervisor: "", pin: "" })).toBe(true)
+  })
+
+  it("holds each Daily Details night to its own base rate, and the stay to the lowest (P1-8)", () => {
+    const nights = [{ date: NIGHTS[0], base_rate: 1000 }, { date: NIGHTS[1], base_rate: 500 }]
+    const night = (date: string, type: "Percent" | "Amount", value: string) =>
+      state({ nights: { [date]: { type, value } } })
+    expect(discountError(night(NIGHTS[0], "Percent", "150"), nights)).toBe("A percentage is between 0 and 100.")
+    expect(discountError(night(NIGHTS[1], "Amount", "600"), nights)).toBe("The discount is more than the night's rate.")
+    expect(discountError(night(NIGHTS[1], "Amount", "-5"), nights)).toBe("Enter a discount of zero or more.")
+    expect(discountError(night(NIGHTS[1], "Amount", "500"), nights)).toBeNull()
+    expect(discountError(state({ type: "Amount", value: "600" }), nights)).toBe("The discount is more than the night's rate.")
+    expect(discountError(state({ type: "Amount", value: "500" }), nights)).toBeNull()
+  })
+
+  it("leaves no unspaced `&&!!(` in the booking dialog (P2-14)", () => {
+    const source = fs.readFileSync(path.resolve(process.cwd(), "src/components/BookingDialog.tsx"), "utf8")
+    expect(source).not.toContain("&&!!(")
   })
 })
 
@@ -159,6 +191,27 @@ describe("DiscountPanel", () => {
     expect(text()).toContain("A manager signs this off with their PIN.")
     expect(byLabel("Manager PIN")).not.toBeNull()
     expect(Array.from(byLabel<HTMLSelectElement>("Manager")!.options).map((o) => o.value)).toEqual(["", "gm@test"])
+  })
+
+  it("never copies a discount onto a night already on the folio (P2-13)", async () => {
+    const onChange = vi.fn()
+    const third = "2031-03-19"
+    await act(async () => root.render(<Harness onChange={onChange} initial={state({ reason: "RATE-PROMO" })}
+      nights={[{ date: NIGHTS[0], base_rate: 1000 }, { date: NIGHTS[1], base_rate: 1000, charged: true },
+        { date: third, base_rate: 1000 }]} />))
+    await press("Per-night daily details")
+    await act(async () => byLabel<HTMLInputElement>("Apply to future nights")!.click())
+    await typeInto(host.querySelector<HTMLInputElement>(`tr[data-night="${NIGHTS[0]}"] input[type=number]`)!, "20")
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      nights: { [NIGHTS[0]]: { type: "Percent", value: "20" }, [third]: { type: "Percent", value: "20" } },
+    }))
+  })
+
+  it("says when a Daily Details night is out of bounds (P1-8)", async () => {
+    await act(async () => root.render(<Harness initial={state({ reason: "RATE-PROMO",
+      nights: { [NIGHTS[0]]: { type: "Percent", value: "150" } } })}
+      nights={[{ date: NIGHTS[0], base_rate: 1000 }, { date: NIGHTS[1], base_rate: 1000 }]} />))
+    expect(text()).toContain("A percentage is between 0 and 100.")
   })
 
   it("shows per-night Daily Details with Apply to future nights", async () => {
