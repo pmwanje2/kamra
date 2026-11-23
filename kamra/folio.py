@@ -368,13 +368,21 @@ def _charge_posted(reservation_name: str, charge_type: str, date: str) -> bool:
 	own provenance first and fall back to the folio's reservation for
 	lines predating the provenance field. Only automated lines count: a
 	charge the desk posted by hand (an extra bed asked for at check-in) is
-	not the night's own posting and must not suppress it."""
+	not the night's own posting and must not suppress it.
+
+	"Posted" is the standing rule the statistics use (STANDS_ON_ITS_DATE),
+	not NOT_VOIDED: a night voided on a later business date still stands on
+	its closed date, so check-out and the audit never post a second line onto
+	it (OPERA posts room and tax only on the open business date and corrects
+	a past one by an adjustment on the current date). A night voided on its
+	own, still-open date has dropped out, so it can be posted again, at the
+	rate code in effect when it is."""
 	return bool(frappe.db.sql(
 		"""
 		SELECT 1 FROM `tabFolio Charge` fc
 		JOIN `tabFolio` f ON fc.parent = f.name
 		WHERE fc.charge_type = %(ct)s AND fc.posting_date = %(date)s
-		  AND fc.auto_posted = 1 AND """ + NOT_VOIDED + """
+		  AND fc.auto_posted = 1 AND """ + STANDS_ON_ITS_DATE + """
 		  AND (fc.reservation = %(res)s
 		       OR (IFNULL(fc.reservation, '') = '' AND f.reservation = %(res)s))
 		LIMIT 1

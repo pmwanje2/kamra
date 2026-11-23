@@ -283,22 +283,44 @@ export default function ReservationDetail({
   const dateSigned = !dateGov?.needs_supervisor || !!dateSignOff.supervisor_user
   const datesDiffer = !!savedCi && (ci !== savedCi || co !== savedCo)
   const datesValid = !!ci && !!co && ci < co
+  // The stay's rate plan (OPERA Stay Details' Rate Code), changed through
+  // Amend stay: from the current business date for the nights still to
+  // come, the posted ones keeping their rate. A Complimentary or House Use
+  // plan takes a second manager's sign-off (comp_governance).
+  const savedPlan = d?.rate_plan ?? ""
+  const [plan, setPlan] = useState("")
+  useEffect(() => {
+    setPlan(savedPlan)
+  }, [savedPlan])
+  const planDiffers = !!d?.rate_plans?.length && !!plan && plan !== savedPlan
+  const [compSupervisor, setCompSupervisor] = useState("")
+  const [compPin, setCompPin] = useState("")
+  const compGov = planDiffers ? datePreview?.comp_governance ?? null : null
+  // one manager whose roles cover both prompts signs both (OPERA's one authorizer)
+  const discountCoversComp = !!dateGov?.needs_supervisor && !!dateSupervisor &&
+    !!compGov?.supervisors.some((s) => s.user === dateSupervisor)
+  const compAsks = !!compGov?.needs_supervisor && !discountCoversComp
+  const compSigned = !compAsks || (!!compSupervisor && !!compPin.trim())
+  const compSignOff = compAsks && compSupervisor && compPin.trim()
+    ? { comp_supervisor_user: compSupervisor, comp_supervisor_pin: compPin.trim() } : {}
   useEffect(() => {
     setDatePreview(null)
     setDatePin("")
-    if (!datesDiffer || !datesValid) return
+    setCompPin("")
+    if ((!datesDiffer && !planDiffers) || !datesValid) return
     let live = true
-    amendStayPreview(name, ci, co)
+    ;(planDiffers ? amendStayPreview(name, ci, co, { rate_plan: plan }) : amendStayPreview(name, ci, co))
       .then((p) => {
         if (!live) return
         setDatePreview(p)
         if (p.supervisors?.length === 1) setDateSupervisor(p.supervisors[0].user)
+        if (p.comp_governance?.supervisors.length === 1) setCompSupervisor(p.comp_governance.supervisors[0].user)
       })
       .catch((e) => live && setError(serverError(e)))
     return () => {
       live = false
     }
-  }, [name, ci, co, datesDiffer, datesValid])
+  }, [name, ci, co, datesDiffer, datesValid, planDiffers, plan])
 
   // editable special requests
   const [req, setReq] = useState<string>("")
@@ -358,7 +380,7 @@ export default function ReservationDetail({
       </p>
     )
 
-  const datesChanged = ci !== d.check_in_date || co !== d.check_out_date
+  const datesChanged = ci !== d.check_in_date || co !== d.check_out_date || planDiffers
   const money = d.money
   // the desk's discount at a glance (OPERA Stay Details): what it takes off
   // and its reason, without opening the editor
@@ -517,6 +539,23 @@ export default function ReservationDetail({
               />
             </label>
           </div>
+          {d.actions.can_amend && (d.rate_plans?.length ?? 0) > 0 && (
+            <label className="mt-3 block">
+              <span className="text-xs text-zinc-400">{translate("Rate plan")}</span>
+              <select
+                aria-label={translate("Rate plan")}
+                value={plan}
+                disabled={busy}
+                onChange={(e) => setPlan(e.target.value)}
+                className="mt-0.5 w-full rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm disabled:bg-zinc-50 disabled:text-zinc-400"
+              >
+                {!savedPlan && <option value="">—</option>}
+                {(d.rate_plans ?? []).map((p) => (
+                  <option key={p.name} value={p.name}>{p.rate_plan_name || p.code || p.name}</option>
+                ))}
+              </select>
+            </label>
+          )}
           {datesChanged && d.actions.can_amend && (
             <div className="mt-3 space-y-2">
               {!datesValid ? (
@@ -544,23 +583,43 @@ export default function ReservationDetail({
                       })}
                 </p>
               )}
+              {planDiffers && (
+                <p className="text-xs text-zinc-500">
+                  {translate("Applies from the current business date for remaining nights; posted nights keep their rate.")}
+                </p>
+              )}
               {dateGov?.needs_supervisor && (
                 <SupervisorSignOff reason={<SignOffReasons gov={dateGov} />}
                   supervisors={datePreview?.supervisors ?? dateGov.supervisors}
                   supervisor={dateSupervisor} pin={datePin} onSupervisor={setDateSupervisor} onPin={setDatePin} />
               )}
+              {compAsks && compGov && (
+                <SupervisorSignOff
+                  reason={translate("A {category} rate plan needs a manager's sign-off.",
+                    { category: translate(compGov.rate_category) })}
+                  supervisors={compGov.supervisors} supervisor={compSupervisor} pin={compPin}
+                  onSupervisor={setCompSupervisor} onPin={setCompPin} />
+              )}
               <Button
-                disabled={busy || !datesValid || !datePreview || !dateSigned}
+                disabled={busy || !datesValid || !datePreview || !dateSigned || !compSigned}
                 onClick={() =>
                   datePreview &&
-                  act(() => amendStay(name, ci, co, datePreview.needs_confirmation ? 1 : 0, dateSignOff))
+                  act(() => amendStay(name, ci, co, datePreview.needs_confirmation ? 1 : 0, {
+                    ...dateSignOff,
+                    ...compSignOff,
+                    ...(planDiffers ? { rate_plan: plan } : {}),
+                  }))
                 }
               >
                 {busy
                   ? translate("Updating…")
-                  : datePreview?.needs_confirmation
-                    ? translate("Confirm new dates and price")
-                    : translate("Confirm new dates")}
+                  : planDiffers
+                    ? datePreview?.needs_confirmation
+                      ? translate("Confirm rate plan and price")
+                      : translate("Confirm rate plan")
+                    : datePreview?.needs_confirmation
+                      ? translate("Confirm new dates and price")
+                      : translate("Confirm new dates")}
               </Button>
             </div>
           )}

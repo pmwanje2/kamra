@@ -4509,6 +4509,20 @@ def _checkin_backfill(res) -> list[dict]:
 	        for s in soft_pending(steps)]
 
 
+def _detail_rate_plans(property: str, current: str | None) -> list[dict]:
+	"""The plans Amend stay can move a stay to (OPERA Stay Details' Rate
+	Code list): the property's enabled plans, and the stay's own when it has
+	since been disabled, so the picker can still show where it is."""
+	fields = ["name", "rate_plan_name", "code", "rate_category"]
+	plans = frappe.get_all("Rate Plan", filters={"property": property, "disabled": 0},
+	                       fields=fields, order_by="rate_plan_name asc, name asc")
+	if current and all(p["name"] != current for p in plans):
+		own = frappe.db.get_value("Rate Plan", current, fields, as_dict=True)
+		if own:
+			plans.insert(0, own)
+	return plans
+
+
 @frappe.whitelist()
 @require_roles("Front Desk", "Kamra Agent", "Finance", "Revenue Manager")
 def reservation_detail(reservation: str):
@@ -4601,6 +4615,10 @@ def reservation_detail(reservation: str):
 			if res.meal_plan else None,
 		"meal_plan": res.meal_plan,
 		"rate_plan": res.rate_plan,
+		"rate_plan_name": (frappe.db.get_value("Rate Plan", res.rate_plan, "rate_plan_name")
+		                   or res.rate_plan) if res.rate_plan else None,
+		"rate_category": res.get("rate_category") or None,
+		"rate_plans": _detail_rate_plans(res.property, res.rate_plan),
 		"special_requests": res.special_requests,
 		"eta": res.eta,
 		"late_arrival": int(res.get("late_arrival") or 0),
@@ -9615,16 +9633,17 @@ def verify_cashier_pin(property: str, pin: str):
 # ---------------------------------------------------------------------------
 
 def _block_prices(property: str, check_in_date: str, check_out_date: str,
-                  blocks) -> dict:
+                  blocks, company: str | None = None) -> dict:
 	"""What a room block costs: per room type, its rooms per night × the
 	night's rate (the group rate when set, else the rate-card price for 2
-	adults, room only) plus room tax. The same numbers drive the booking
-	screen, the group's totals and the quotation."""
+	adults, room only, on the company's negotiated rate plan when it has
+	one: the plan its stays are booked on) plus room tax. The same numbers
+	drive the booking screen, the group's totals and the quotation."""
 	from decimal import Decimal
 
 	from kamra.booking_refs import resolve_room_type
 	from kamra.group_blocks import group_nights, parse_nightly
-	from kamra.pricing import quote, room_gst_rate
+	from kamra.pricing import apply_rate_plan, negotiated_rate_plan, quote, room_gst_rate
 	nights = group_nights(check_in_date, check_out_date)
 	rows, before, tax, levy = [], 0.0, 0.0, 0.0
 	for b in blocks or []:
@@ -9639,8 +9658,14 @@ def _block_prices(property: str, check_in_date: str, check_out_date: str,
 		levy_fixed = max(flt(frappe.db.get_value("Property", property, "room_levy_per_night")), 0.0)
 		try:
 			q = quote(property, rt, check_in_date, check_out_date,
-			          min(2, cint(rt_doc.adults_capacity) or 2), 0, agreed_rate=rate)
-			per = {str(getdate(n["date"])): float(n["rate"]) for n in q["nightly"]}
+			          min(2, cint(rt_doc.adults_capacity) or 2), 0, agreed_rate=rate,
+			          company=company)
+			# the quote's nights are the plan-free card; its room total is
+			# the plan's. Each night carries the plan's share, as the folio
+			# posts it (rate_plan_factor).
+			card = sum(float(n["rate"]) for n in q["nightly"])
+			factor = float(q["room_total"]) / card if card else 1.0
+			per = {str(getdate(n["date"])): float(n["rate"]) * factor for n in q["nightly"]}
 			room_total = sum(per.values())
 			billable_q = max(len(q["nightly"]), 1)
 			pct_levy = max(flt(q.get("room_levy")) - levy_fixed * billable_q, 0.0)
@@ -9649,8 +9674,12 @@ def _block_prices(property: str, check_in_date: str, check_out_date: str,
 			tax_share = (flt(q["amount_after_tax"]) - room_total - flt(q.get("room_levy"))) \
 				/ room_total if room_total else 0
 		except frappe.ValidationError:
-			# a closed or restricted date: show the card price, tax at its slab
+			# a closed or restricted date: show the card price (on the
+			# company's plan, as quote prices it), tax at its slab
 			base = rate or flt(rt_doc.base_price)
+			plan = negotiated_rate_plan(property, company) if company and not rate else None
+			if plan and nights:
+				base = float(apply_rate_plan(plan, Decimal(str(base * len(nights))))) / len(nights)
 			per = {d: base for d in nights}
 			levy_share = 0
 			tax_share = float(room_gst_rate(property, rt_doc, Decimal(str(base)))) / 100
@@ -9685,7 +9714,7 @@ def group_price_preview(property: str, check_in_date: str, check_out_date: str,
 	assert_property_access(property)
 	blocks = frappe.parse_json(blocks) if isinstance(blocks, str) else blocks
 	comp_plan = negotiated_rate_plan(property, company) if company else None
-	return {**_block_prices(property, check_in_date, check_out_date, blocks),
+	return {**_block_prices(property, check_in_date, check_out_date, blocks, company=company),
 	        "can_set_rate": _can_set_rate(),
 	        "comp_governance": comp_rate_governance(property, comp_plan)}
 
@@ -9706,7 +9735,7 @@ def group_quotation(group_booking: str):
 	prices = _block_prices(gb.property, str(gb.check_in_date), str(gb.check_out_date), [
 		{"room_type": b.room_type, "rooms_blocked": b.rooms_blocked,
 		 "block_rate": b.block_rate, "nightly_counts": b.get("nightly_counts")}
-		for b in gb.blocks])
+		for b in gb.blocks], company=gb.get("company"))
 	contact = None
 	if gb.get("master_reservation"):
 		contact = frappe.db.get_value("Reservation", gb.master_reservation, "guest_name")
@@ -10087,7 +10116,7 @@ def group_detail(group_booking: str):
 	prices = _block_prices(gb.property, str(gb.check_in_date), str(gb.check_out_date), [
 		{"room_type": b.room_type, "rooms_blocked": b.rooms_blocked,
 		 "block_rate": b.block_rate, "nightly_counts": b.get("nightly_counts")}
-		for b in gb.blocks])
+		for b in gb.blocks], company=gb.get("company"))
 	rooming = frappe.get_all(
 		"Reservation",
 		filters={"group_booking": gb.name},

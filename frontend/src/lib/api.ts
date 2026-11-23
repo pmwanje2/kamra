@@ -1833,6 +1833,11 @@ export interface ReservationDetail extends TariffReference {
   /** The meal plan's label - meal_plan is its internal ID. */
   meal_plan_name?: string | null
   rate_plan: string | null
+  /** the stay's plan by name, its category, and the plans Amend stay can
+   * move it to (OPERA Stay Details' Rate Code list) */
+  rate_plan_name?: string | null
+  rate_category?: string | null
+  rate_plans?: { name: string; rate_plan_name: string; code: string; rate_category?: string | null }[]
   special_requests: string | null
   eta: string | null
   /** Flagged late: the night audit holds it as Due In, not a no-show. */
@@ -2001,6 +2006,8 @@ export interface RepricePreview {
   discount_governance?: DiscountGovernance | null
   needs_supervisor?: boolean
   supervisors?: { user: string; full_name: string }[]
+  /** a new rate plan: its category's sign-off (Complimentary, House Use) */
+  comp_governance?: CompGovernance | null
   /** a stay in house: what the rate-change policy does to nights already
    * on the folio (kept at their charged rate, or credited by Kamra) */
   charged_nights?: {
@@ -2015,11 +2022,13 @@ export const amendStayPreview = (
   reservation: string,
   check_in_date: string,
   check_out_date: string,
+  opts?: { rate_plan?: string },
 ) =>
   call<RepricePreview>("kamra.api.amend_stay_preview", {
     reservation,
     check_in_date,
     check_out_date,
+    ...(opts?.rate_plan ? { rate_plan: opts.rate_plan } : {}),
   })
 
 export const amendStay = (
@@ -2027,8 +2036,15 @@ export const amendStay = (
   check_in_date: string,
   check_out_date: string,
   confirm_price = 0,
-  /** a manager's sign-off when the discount needs one (supervisorArgs) */
-  signOff: { supervisor_user?: string; supervisor_pin?: string } = {},
+  /** a manager's sign-off when the discount needs one (supervisorArgs), the
+   * new rate plan, and its own sign-off when its category needs one */
+  signOff: {
+    supervisor_user?: string
+    supervisor_pin?: string
+    rate_plan?: string
+    comp_supervisor_user?: string
+    comp_supervisor_pin?: string
+  } = {},
 ) =>
   call<{ nights: number; amount_after_tax: number }>("kamra.api.amend_stay", {
     reservation,

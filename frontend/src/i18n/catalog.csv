@@ -956,6 +956,7 @@ Appearance,Appearance,المظهر,Apariencia,Aparência,外观,screens/settings
 Applied oldest bill first,Applied oldest bill first,طُبّق على أقدم فاتورة أولًا,Aplicado primero a la factura más antigua,Aplicado à fatura mais antiga primeiro,已优先核销最早账单,screens/CityLedgerPayment.tsx,,translated
 Applied to a new function; each can be changed on the function.,Applied to a new function; each can be changed on the function.,تُطبَّق على المناسبات الجديدة، ويمكن تغييرها في كل مناسبة.,Se aplican a los eventos nuevos y pueden modificarse en cada evento.,Aplicado a uma nova função; cada um pode ser alterado na função.,应用于新活动；可在各活动上单独修改。,,,translated
 Applied to the folios you picked,Applied to the folios you picked,طُبِّق على الفواتير التي اخترتها,Aplicado a los folios seleccionados,Aplicado aos fólios que você escolheu,已应用到所选客账,screens/CityLedgerPayment.tsx,,translated
+Applies from the current business date for remaining nights; posted nights keep their rate.,Applies from the current business date for remaining nights; posted nights keep their rate.,يسري من تاريخ العمل الحالي على الليالي المتبقية؛ وتحتفظ الليالي المرحّلة بسعرها.,Se aplica desde la fecha operativa actual a las noches restantes; las noches ya cargadas conservan su tarifa.,Aplica-se a partir da data contábil atual às noites restantes; as noites já lançadas mantêm a tarifa.,自当前营业日起适用于剩余晚数；已入账的晚数保持原价。,screens/ReservationDetail.tsx,,translated
 Applies to,Applies to,ينطبق على,Se aplica a,Aplica-se a,适用范围,components/FolioDiscount.tsx,,translated
 applies to this browser only,applies to this browser only,ينطبق على هذا المتصفح فقط,se aplica solo a este navegador,aplica-se apenas a este navegador,仅适用于此浏览器,screens/settings/cards.tsx,,translated
 Apply,Apply,تطبيق,Aplicar,Aplicar,应用,components/ChannelConnectionActions.tsx; components/GroupControl.tsx; screens/PublicBooking.tsx,,translated
@@ -1821,6 +1822,8 @@ Confirm new dates,Confirm new dates,تأكيد التواريخ الجديدة,C
 Confirm new dates and price,Confirm new dates and price,تأكيد التواريخ والسعر الجديد,Confirmar nuevas fechas y precio,Confirme novas datas e preço,确认新日期与价格,screens/TapeChart.tsx,,translated
 Confirm new password,Confirm new password,تأكيد كلمة المرور الجديدة,Confirmar contraseña nueva,Confirmar nova senha,确认新密码,screens/UpdatePassword.tsx,,translated
 Confirm payment,Confirm payment,تأكيد الدفعة,Confirmar pago,Confirmar pagamento,确认收款,screens/Receivables.tsx,,translated
+Confirm rate plan,Confirm rate plan,تأكيد خطة السعر,Confirmar plan tarifario,Confirmar plano tarifário,确认房价计划,screens/ReservationDetail.tsx,,translated
+Confirm rate plan and price,Confirm rate plan and price,تأكيد خطة السعر والسعر الجديد,Confirmar plan tarifario y precio,Confirmar plano tarifário e preço,确认房价计划与价格,screens/ReservationDetail.tsx,,translated
 Confirm the function first,Confirm the function first,أكّد المناسبة أولاً,Confirme primero el evento,Confirme a função primeiro,请先确认活动,,,translated
 Confirm the function first.,Confirm the function first.,أكّد المناسبة أولاً.,Confirme primero el evento.,Confirme a função primeiro.,请先确认活动。,,,translated
 Confirm void,Confirm void,تأكيد الإبطال,Confirmar anulación,Confirmar nulidade,确认作废,screens/FolioView.tsx,,translated

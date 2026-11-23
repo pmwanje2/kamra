@@ -6730,5 +6730,8 @@
   "Untick for rates that never take a desk discount (non-refundable, packages).": "Desmárquelo para las tarifas que nunca admiten descuento en recepción (no reembolsables, paquetes).",
   "Rate category": "Categoría de tarifa",
   "A {category} rate plan needs a manager's sign-off.": "Una tarifa {category} necesita la aprobación de un gerente.",
-  "Settings → Revenue says which categories a manager signs off, and which are left out of ADR, RevPAR or occupancy.": "Ajustes → Ingresos indica qué categorías aprueba un gerente y cuáles quedan fuera de la ADR, el RevPAR o la ocupación."
+  "Settings → Revenue says which categories a manager signs off, and which are left out of ADR, RevPAR or occupancy.": "Ajustes → Ingresos indica qué categorías aprueba un gerente y cuáles quedan fuera de la ADR, el RevPAR o la ocupación.",
+  "Applies from the current business date for remaining nights; posted nights keep their rate.": "Se aplica desde la fecha operativa actual a las noches restantes; las noches ya cargadas conservan su tarifa.",
+  "Confirm rate plan": "Confirmar plan tarifario",
+  "Confirm rate plan and price": "Confirmar plan tarifario y precio"
 }

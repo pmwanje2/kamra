@@ -6545,5 +6545,8 @@
   "Untick for rates that never take a desk discount (non-refundable, packages).": "ألغِ التحديد للأسعار التي لا تقبل خصم الاستقبال أبدًا (غير القابلة للاسترداد، الباقات).",
   "Rate category": "فئة السعر",
   "A {category} rate plan needs a manager's sign-off.": "خطة أسعار {category} تحتاج إلى موافقة المدير.",
-  "Settings → Revenue says which categories a manager signs off, and which are left out of ADR, RevPAR or occupancy.": "تحدد الإعدادات ← الإيرادات الفئات التي يوافق عليها المدير، وتلك المستبعدة من متوسط السعر اليومي (ADR) أو الإيراد لكل غرفة متاحة (RevPAR) أو الإشغال."
+  "Settings → Revenue says which categories a manager signs off, and which are left out of ADR, RevPAR or occupancy.": "تحدد الإعدادات ← الإيرادات الفئات التي يوافق عليها المدير، وتلك المستبعدة من متوسط السعر اليومي (ADR) أو الإيراد لكل غرفة متاحة (RevPAR) أو الإشغال.",
+  "Applies from the current business date for remaining nights; posted nights keep their rate.": "يسري من تاريخ العمل الحالي على الليالي المتبقية؛ وتحتفظ الليالي المرحّلة بسعرها.",
+  "Confirm rate plan": "تأكيد خطة السعر",
+  "Confirm rate plan and price": "تأكيد خطة السعر والسعر الجديد"
 }

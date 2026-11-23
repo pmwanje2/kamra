@@ -50,7 +50,7 @@ def _projected_room_revenue(property: str, date: str, total_rooms: int) -> dict:
 		SELECT fc.reservation, SUM(fc.amount), MAX(NULLIF(fc.rate_category, ''))
 		FROM `tabFolio Charge` fc
 		WHERE fc.reservation IN %(r)s AND fc.charge_type = 'Room'
-		  AND fc.posting_date = %(d)s
+		  AND fc.posting_date = %(d)s AND """ + STANDS_ON_ITS_DATE + """
 		GROUP BY fc.reservation
 		""", {"r": stays or [""], "d": date})
 	posted = {n: float(v or 0) for n, v, _c in posted_rows}
