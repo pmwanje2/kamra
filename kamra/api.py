@@ -6472,9 +6472,14 @@ def move_reservation(reservation: str, new_room: str,
 			"previous_amount": round(old_amount, 2),
 			"amount_after_tax": round(float(doc.amount_after_tax or 0), 2),
 			"reason": (reason or "").strip() or None})
+	# who signed off the discount the move re-priced (as amend_stay logs it)
+	approver = (doc.flags.get("kamra_discount_governance") or {}).get("approver")
+	if approver:
+		note += f" · discount signed off by {approver}"
 	if (reason or "").strip():
 		note += f" · {reason.strip()[:140]}"
-	log_action("room_move", "Reservation", doc.name, doc.property, rationale=note)
+	log_action("room_move", "Reservation", doc.name, doc.property, rationale=note,
+	           **({"approver": approver} if approver else {}))
 	return {"ok": True, "room": doc.room, "room_type": doc.room_type,
 	        "amount_after_tax": float(doc.amount_after_tax or 0)}
 
@@ -6582,11 +6587,15 @@ def _rate_override_plan(res, agreed_rate) -> dict:
 		frappe.throw(_("Enter the new nightly rate."))
 	if not res.get("auto_price"):
 		frappe.throw(_("This booking is priced by hand; change its amount instead."))
+	from kamra.kamra.doctype.reservation.reservation import night_entry_bases
 	current = _current_nightly(res)
 	cut = round(100 * (current - agreed_rate) / current, 2) if current else 0.0
 	limit = flt(get_setting(res.property, "rate_override_limit_pct"))
 	agent = _is_agent()
 	manager = _can_set_rate() and not agent
+	booked = night_entry_bases(res.property, {str(getdate(r.stay_date)): r
+	                                          for r in res.get("night_rates") or []})
+	res.flags.kamra_repriced_rows = None
 	pv = _reprice_preview(res, agreed_rate=agreed_rate)
 	pv.update(current_nightly=current, agreed_rate=agreed_rate,
 	          reduction_pct=cut, limit_pct=limit, can_set_rate=manager,
@@ -6598,6 +6607,20 @@ def _rate_override_plan(res, agreed_rate) -> dict:
 	from kamra.authz import supervisors_for
 	pv["supervisors"] = [] if manager or agent else supervisors_for(
 		res.property, exclude=frappe.session.user)
+	# the stay's discount stays on the new rate: the two are judged together,
+	# as the whole cut from the base each night was booked at - the same
+	# rules the save runs (Reservation.regovern_repriced_discount)
+	rows = res.flags.get("kamra_repriced_rows")
+	if rows and res.has_discount():
+		gov = discount_governance(
+			res.property, res.room_type, res.rate_plan,
+			_repriced_nights(res, rows, [str(r["stay_date"]) for r in rows], booked),
+			reason_code=res.get("discount_reason"), fixed_held=bool(cint(res.get("fixed_rate"))))
+		pv["discount_governance"] = gov
+		pv["reduction_pct"] = max(cut, gov["max_pct"])
+		if gov["needs_supervisor"]:
+			pv["needs_supervisor"] = True
+			pv["supervisors"] = gov["supervisors"]
 	return pv
 
 
@@ -6687,11 +6710,15 @@ def set_agreed_rate(reservation: str, agreed_rate: float, reason_code: str,
 			                             requester=frappe.session.user)
 	_require_price_confirmation(plan, confirm_price)
 	doc.flags.kamra_agreed_rate_override = True
+	# a discounted stay takes the discount rules again on the new rate
+	# (a full comp included, whoever sets it): the same sign-off goes with it
+	_discount_sign_off(doc, supervisor, pin)
 	# an agreed rate is a rate set by hand: OPERA's Fixed Rate
 	doc.fixed_rate = 1
 	# the role and limit checks above are the permission; Revenue Manager
 	# has no write DocPerm on Reservation
 	doc.save(ignore_permissions=True)
+	approver = approver or (doc.flags.get("kamra_discount_governance") or {}).get("approver")
 	note = (f"{why}: {old_nightly:,.2f} → {flt(agreed_rate):,.2f} a night"
 	        f" · total {old_amount:,.2f} → {flt(doc.amount_after_tax):,.2f}")
 	if (reason or "").strip() and why != reason.strip()[:140]:
@@ -6936,17 +6963,37 @@ def govern_reservation_discount(doc) -> None:
 		supervisor_user=ctx.get("supervisor_user"), supervisor_pin=ctx.get("supervisor_pin"))
 
 
-def govern_repriced_discount(doc, dates) -> None:
-	"""Reservation.validate's call when a save re-priced a discounted stay
-	(a new rate plan, room type or dates): the discount rules on the nights
-	that changed, with the stay's own reason and any fixed-rate override it
-	already holds. A supervisor signs it off with
-	flags.kamra_discount_supervisor ({user, pin}: amend_stay,
-	move_reservation); nights already on the folio are not judged again."""
+def _repriced_nights(doc, rows, dates, booked_base: dict | None = None) -> list[dict]:
+	"""The re-priced nights the discount rules judge: those in `dates`,
+	nights already on the folio left out. With booked_base ({date: base},
+	Reservation.night_entry_bases) each night's discount is the whole cut
+	from the base it was booked at - an agreed rate stacked on the discount
+	is judged with it - never less than the discount itself."""
 	from kamra.folio import charged_nights
+	from kamra.pricing import entry_rate, rates_include_tax
 	charged = set(charged_nights(doc.name))
-	nights = [n for n in _night_rows_as_nights(doc.night_rates, doc)
-	          if n["date"] in set(dates) and n["date"] not in charged]
+	dates = set(dates)
+	nights = [n for n in _night_rows_as_nights(rows, doc)
+	          if n["date"] in dates and n["date"] not in charged]
+	if booked_base:
+		inclusive = rates_include_tax(doc.property)
+		for n in nights:
+			base = booked_base.get(n["date"])
+			if base:
+				net = flt(entry_rate(n["rate"], n["gst_rate"], inclusive))
+				n["discount_amount"] = round(max(base - net, n["discount_amount"]), 2)
+	return nights
+
+
+def govern_repriced_discount(doc, dates, booked_base: dict | None = None) -> None:
+	"""Reservation.validate's call when a save re-priced a discounted stay
+	(a new rate plan, room type, agreed rate, party or dates): the discount
+	rules on the nights that changed, with the stay's own reason and any
+	fixed-rate override it already holds. A supervisor signs it off with
+	flags.kamra_discount_supervisor ({user, pin}: amend_stay,
+	move_reservation, set_agreed_rate); nights already on the folio are not
+	judged again. booked_base: see _repriced_nights."""
+	nights = _repriced_nights(doc, doc.night_rates, dates, booked_base)
 	if not nights:
 		return
 	sign = doc.flags.get("kamra_discount_supervisor") or {}
@@ -7223,6 +7270,8 @@ def _reprice_preview(res, **changes) -> dict:
 	# the same nights the save locks: charged nights held by the policy
 	rows = res.quote_night_rows(q)
 	hold = res.hold_charged_nights(rows)
+	# for a caller that judges them (_rate_override_plan); never saved
+	res.flags.kamra_repriced_rows = rows
 	new = round(float(q["amount_after_tax"]) + hold["base"] + hold["tax"], 2)
 	out.update({
 		"new_amount": new,
@@ -8287,6 +8336,9 @@ def create_booking(property: str, room_type: str, check_in_date: str,
 		doc.auto_price = 0
 		doc.set("night_rates", [{"stay_date": d, "hand_price": float(p)}
 		                        for d, p in sorted(typed.items())])
+		# checked above (_check_night_prices): the only insert that may
+		# carry a typed price (Reservation.guard_locked_nights)
+		doc.flags.kamra_night_prices_writer = True
 	# the discount the insert prices and governs (Reservation.validate)
 	discount_request = dict(supervisor_user=supervisor_user, supervisor_pin=supervisor_pin)
 	if disc:
@@ -8398,7 +8450,15 @@ def create_booking(property: str, room_type: str, check_in_date: str,
 			payload = doc.as_dict()
 			payload.pop("name", None)
 			payload["guest"] = guest
+			if not typed:
+				# the failed attempt's validate locked its nights: the retry
+				# is inserted unpriced, as the first try was (a Before
+				# Validate writer refuses a new booking with night rows:
+				# HSP-TARIFF-007), and prices them again
+				payload.pop("night_rates", None)
 			doc = frappe.get_doc(payload)
+			if typed:
+				doc.flags.kamra_night_prices_writer = True
 			if disc:
 				_set_discount_inputs(doc, disc, discount_reason, fixed_rate, **discount_request)
 	if via:

@@ -18,7 +18,7 @@
 
 import { useEffect, useState } from "react"
 import { call } from "../lib/api"
-import { agreedRateReady, agreedRateRows, type AgreedRatePreview } from "../lib/agreedRate"
+import { agreedRateNeedsSupervisor, agreedRateReady, agreedRateRows, type AgreedRatePreview } from "../lib/agreedRate"
 import { cur, moneyLocale } from "../lib/money"
 import {
   discountArgs,
@@ -39,7 +39,15 @@ const inputCls =
   "rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm " +
   "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
 
-interface ReasonCode { name: string; description: string; requires_supervisor: number }
+/** the reason codes a discount takes (kamra.api.DISCOUNT_REASON_CATEGORIES);
+ * an agreed rate takes the Rate Change ones */
+const DISCOUNT_CATEGORIES = ["Rate Change", "Adjust"]
+
+/** Each usable code once, in the server's order. */
+function discountReasons(all: DiscountReason[] | null): DiscountReason[] {
+  const seen = new Set<string>()
+  return (all ?? []).filter((r) => DISCOUNT_CATEGORIES.includes(r.category) && !seen.has(r.name) && !!seen.add(r.name))
+}
 
 // whole currency units, like the rest of the reservation drawer
 const money = (n: number) =>
@@ -59,7 +67,7 @@ interface DiscountPlan extends DiscountGovernance {
   }[]
 }
 
-export default function AgreedRatePanel({ reservation, nightRates, current, onSaved }: {
+export default function AgreedRatePanel({ reservation, nightRates, current, canOverrideFixed = false, onSaved }: {
   reservation: string
   /** the nightly rates the folio bills now (reservation_detail.night_rates) */
   nightRates: {
@@ -69,8 +77,14 @@ export default function AgreedRatePanel({ reservation, nightRates, current, onSa
     /** already on the folio: its discount is a folio allowance, never re-sent */
     charged?: boolean
   }[]
-  /** the stay's discount now (reservation_detail.discount) */
-  current?: { discount_type: DiscountType | null; discount_value: number; discount_reason: string | null } | null
+  /** the stay's discount now (reservation_detail.discount); fixed_rate: it
+   * holds a manager's fixed-rate override */
+  current?: {
+    discount_type: DiscountType | null; discount_value: number; discount_reason: string | null; fixed_rate?: number
+  } | null
+  /** a Revenue Manager / Hotel Admin: may override a plan that takes no
+   * discount with a fixed rate (kamra.api._can_set_rate) */
+  canOverrideFixed?: boolean
   onSaved: () => void
 }) {
   const { t } = useT()
@@ -78,20 +92,12 @@ export default function AgreedRatePanel({ reservation, nightRates, current, onSa
   const [mode, setMode] = useState<"discount" | "fixed">("discount")
   const [rate, setRate] = useState("")
   const [preview, setPreview] = useState<AgreedRatePreview | null>(null)
-  const [codes, setCodes] = useState<ReasonCode[]>([])
   const [reasonCode, setReasonCode] = useState("")
   const [reason, setReason] = useState("")
   const [supervisor, setSupervisor] = useState("")
   const [pin, setPin] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!open) return
-    call<ReasonCode[]>("kamra.ledger.list_reason_codes", { category: "Rate Change" })
-      .then(setCodes)
-      .catch((e) => setError(serverError(e)))
-  }, [open])
 
   useEffect(() => {
     setPreview(null)
@@ -125,8 +131,12 @@ export default function AgreedRatePanel({ reservation, nightRates, current, onSa
       .map((n) => [n.date, { type: n.discount_type as DiscountType, value: String(n.discount_value ?? 0) }])),
   })
   const [discount, setDiscount] = useState<DiscountState>(initial)
-  const [fixedOverride, setFixedOverride] = useState(false)
+  // a stay that holds a manager's fixed-rate override reopens with it on
+  const seededOverride = () => Boolean(current?.fixed_rate && canOverrideFixed)
+  const [fixedOverride, setFixedOverride] = useState(seededOverride)
   const [discountCodes, setDiscountCodes] = useState<DiscountReason[]>([])
+  // the agreed rate's reasons: the Rate Change codes among them
+  const codes = discountCodes.filter((c) => c.category === "Rate Change")
   const [plan, setPlan] = useState<DiscountPlan | null>(null)
   const stayNights = openNights.map((n) => n.date)
   const args = discountArgs(discount, stayNights)
@@ -135,11 +145,11 @@ export default function AgreedRatePanel({ reservation, nightRates, current, onSa
   const asks = !!(args.discount_type || args.night_discounts?.length) || hadDiscount
   const argsKey = JSON.stringify([args, fixedOverride])
 
+  // one request for every reason the panel offers, each code listed once
   useEffect(() => {
     if (!open) return
-    Promise.all(["Rate Change", "Adjust"].map((category) =>
-      call<DiscountReason[]>("kamra.ledger.list_reason_codes", { category })))
-      .then((lists) => setDiscountCodes(lists.flat()))
+    call<DiscountReason[]>("kamra.ledger.list_reason_codes", {})
+      .then((all) => setDiscountCodes(discountReasons(all)))
       .catch((e) => setError(serverError(e)))
   }, [open])
 
@@ -213,7 +223,7 @@ export default function AgreedRatePanel({ reservation, nightRates, current, onSa
   }
 
   const codeNeedsSupervisor = !!codes.find((c) => c.name === reasonCode)?.requires_supervisor
-  const askSupervisor = !!preview && !preview.can_set_rate && (preview.needs_supervisor || codeNeedsSupervisor)
+  const askSupervisor = !!preview && agreedRateNeedsSupervisor(preview, codeNeedsSupervisor)
   const ready = agreedRateReady({ preview, reasonCode, codeNeedsSupervisor, supervisor, pin })
   const rows = preview ? agreedRateRows(nightRates, preview) : []
 
@@ -244,7 +254,7 @@ export default function AgreedRatePanel({ reservation, nightRates, current, onSa
   // elsewhere, or this panel's own, re-renders it with fresh props)
   function openPanel() {
     setDiscount(initial())
-    setFixedOverride(false)
+    setFixedOverride(seededOverride())
     setPlan(null)
     setOpen(true)
   }
@@ -398,11 +408,13 @@ export default function AgreedRatePanel({ reservation, nightRates, current, onSa
       {askSupervisor && preview && (
         <div className="space-y-2 rounded-lg bg-amber-50 p-2">
           <p className="text-xs text-amber-800">
-            {preview.needs_supervisor
-              ? t("A cut of {pct}% is over the front desk's limit of {limit}%.", {
-                  pct: preview.reduction_pct, limit: preview.limit_pct,
-                })
-              : null}{" "}
+            {preview.discount_governance?.comp
+              ? t("A 100% discount (comp) needs a manager's sign-off.")
+              : preview.needs_supervisor
+                ? t("A cut of {pct}% is over the front desk's limit of {limit}%.", {
+                    pct: preview.reduction_pct, limit: preview.limit_pct,
+                  })
+                : null}{" "}
             {t("A manager signs this off with their PIN.")}
           </p>
           {preview.supervisors.length === 0 ? (

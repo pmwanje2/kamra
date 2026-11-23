@@ -134,6 +134,9 @@ export function BookingDialog(props: {
     guest?: string
     guest_name?: string
     phone?: string
+    /** nights to book (a quote handed over, say); default one */
+    nights?: number
+    /** the picked guest's past stays, for their profile card - never nights */
     stays?: number
     adults?: number
     children?: number
@@ -186,8 +189,9 @@ export function BookingDialog(props: {
     guest_name: props.initial.guest_name ?? "",
     phone: props.initial.phone ?? "",
     room_type: props.initial.room_type ?? "",
-    check_in_date: props.initial.date ?? todayLocal(),
-    nights: props.initial.stays ?? 1,
+    // a walk-in arrives today, whatever date the screen it came from showed
+    check_in_date: props.initial.walkIn ? todayLocal() : props.initial.date ?? todayLocal(),
+    nights: props.initial.nights ?? 1,
     adults: props.initial.adults ?? 2,
     children: props.initial.children ?? 0,
     meal_plan: "",
@@ -488,6 +492,13 @@ export function BookingDialog(props: {
     ? discountEntered : { ...discountEntered, fixed_rate: 1 as const }
   const discountGov: DiscountGovernance | null = quote?.discount_governance ?? null
   const discountSignOff = supervisorArgs(discountGov, discountSupervisor, discountPin)
+  // the dates the quote priced, so the Total always names its own nights:
+  // its first night to the day after its last
+  const quoteStay = (() => {
+    const first = quote?.nightly?.[0]?.date ?? form.check_in_date
+    const last = quote?.nightly?.at(-1)?.date
+    return { from: first, to: last ? shiftDate(last, 1) : shiftDate(first, Math.max(1, quote?.nights ?? 1)) }
+  })()
   const discountReasonText = (() => {
     const r = options?.discount_reasons?.find((x) => x.name === discount.reason)
     return r ? translate(r.description || r.name) : discount.reason
@@ -2586,20 +2597,24 @@ export function BookingDialog(props: {
                         {homeText(quote.room_total)}
                       </span>}
                     </div>
+                    {/* label and amount never touch or wrap: the amount
+                        keeps its width, a long reason truncates */}
                     {(quote.reservation_discount_total ?? 0) > 0 && (<>
-                      <div className="flex justify-between text-zinc-600">
+                      <div className="flex justify-between gap-3 text-zinc-600">
                         <span>{t("Base room rate")}</span>
-                        <span className="tabular-nums">{homeText(quote.room_base_total ?? quote.room_total)}</span>
+                        <span className="shrink-0 whitespace-nowrap tabular-nums">{homeText(quote.room_base_total ?? quote.room_total)}</span>
                       </div>
-                      <div className="flex justify-between font-medium text-emerald-700">
-                        <span className="min-w-0 truncate">{t("Discount ({reason})", { reason: discountReasonText })}</span>
-                        <span className="tabular-nums">−{homeText(quote.reservation_discount_total ?? 0)}</span>
+                      <div className="flex justify-between gap-3 font-medium text-emerald-700">
+                        <span className="min-w-0 truncate">
+                          {discountReasonText ? t("Discount ({reason})", { reason: discountReasonText }) : t("Discount")}
+                        </span>
+                        <span className="shrink-0 whitespace-nowrap tabular-nums">−{homeText(quote.reservation_discount_total ?? 0)}</span>
                       </div>
-                      <div className="flex justify-between text-zinc-600">
+                      <div className="flex justify-between gap-3 text-zinc-600">
                         <span>{t("Net room rate")}</span>
                         {/* base less discount, on the basis both are entered
                             (gross where rates include tax) */}
-                        <span className="tabular-nums">{homeText(
+                        <span className="shrink-0 whitespace-nowrap tabular-nums">{homeText(
                           (quote.room_base_total ?? quote.room_total) - (quote.reservation_discount_total ?? 0))}</span>
                       </div>
                     </>)}
@@ -2704,9 +2719,9 @@ export function BookingDialog(props: {
                         </span>
                       </div>
                       <p className="mt-1 text-xs text-zinc-400">
-                        {dayUse
-                          ? `${formatDate(form.check_in_date)} · ${slot.from}-${slot.to}`
-                          : `${formatDate(form.check_in_date)} → ${formatDate(checkOut)}`}
+                        {quote.day_use
+                          ? `${formatDate(quoteStay.from)} · ${slot.from}-${slot.to}`
+                          : `${formatDate(quoteStay.from)} → ${formatDate(quoteStay.to)}`}
                       </p>
                       {otaTotal > 0 && (
                         <p className="mt-1 text-xs font-medium text-indigo-600">

@@ -90,10 +90,12 @@ function Card(props: {
 
 function Field(props: { label: string; value: React.ReactNode }) {
   useUILanguage()
+  // min-w-0 and the wrap let a long value (a guest's email) break inside its
+  // own grid column instead of running into the next one
   return (
-    <div>
+    <div className="min-w-0">
       <dt className="text-xs text-zinc-400">{translate(props.label)}</dt>
-      <dd className="mt-0.5 text-sm text-zinc-800">{props.value || "-"}</dd>
+      <dd className="mt-0.5 break-words text-sm text-zinc-800 [overflow-wrap:anywhere]">{props.value || "-"}</dd>
     </div>
   )
 }
@@ -212,6 +214,9 @@ export default function ReservationDetail({
   // the roles set_agreed_rate admits (Hotel Admin and System Manager as admins)
   const { roles } = useAuth()
   const canAgreeRate = ["Front Desk", "Revenue Manager", "Hotel Admin", "System Manager"]
+    .some((r) => roles.includes(r))
+  // who may fix a rate over a plan that takes no discount (kamra.api._can_set_rate)
+  const canOverrideFixed = ["Revenue Manager", "Hotel Admin", "System Manager"]
     .some((r) => roles.includes(r))
   // booking_quotation / email_booking_quotation: Front Desk and above
   const canQuote = ["Front Desk", "Revenue Manager", "Hotel Admin", "System Manager"]
@@ -560,7 +565,7 @@ export default function ReservationDetail({
           </dl>
           {d.actions.can_amend && (d.night_rates?.length ?? 0) > 0 && canAgreeRate && (
             <AgreedRatePanel reservation={name} nightRates={d.night_rates ?? []} current={d.discount}
-              onSaved={() => { refresh(); reload() }} />
+              canOverrideFixed={canOverrideFixed} onSaved={() => { refresh(); reload() }} />
           )}
           {d.booked_check_out_date && (
             <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
