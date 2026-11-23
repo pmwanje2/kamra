@@ -27,9 +27,9 @@ from frappe.utils import flt
 from kamra import api, settings
 from kamra import channel_manager as cm
 from kamra import folio as folio_mod
+from kamra.tests import test_reservation_discounts_r4 as r4
 from kamra.tests.audit_fixtures import PROP_A, charges, d, make_reservation, make_room, make_room_type
 from kamra.tests.test_reservation_discounts import DESK, GM, set_setting
-from kamra.tests import test_reservation_discounts_r4 as r4
 from kamra.tests.test_reservation_discounts_r2 import PROMO
 
 
