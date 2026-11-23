@@ -188,9 +188,8 @@ def _billing(res) -> dict:
 	if res.get("company"):
 		company_name = frappe.db.get_value("Corporate Account", res.company,
 		                                   "company_name") or res.company
-		rules = [{"charge_type": r.charge_type, "pay_by": r.pay_by}
-		         for r in frappe.get_doc("Corporate Account", res.company)
-		         .get("billing_rules") or []]
+		from kamra.folio import billing_rule_rows
+		rules = billing_rule_rows(res.company)
 	group_name = master = None
 	if res.get("group_booking"):
 		group_name = frappe.db.get_value("Group Booking", res.group_booking,

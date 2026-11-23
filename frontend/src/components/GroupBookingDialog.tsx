@@ -755,7 +755,7 @@ export default function GroupBookingDialog(props: {
                   <select className={inputCls} value={pays} onChange={(e) => setPays(e.target.value)}>
                     {MASTER_PAYS.map((m) => <option key={m.value} value={m.value}>{t(m.label)}</option>)}
                   </select>
-                  <span className="mt-1 block text-xs text-zinc-500">{t("For every room of the group, on one group bill. Each guest pays their own extras; liquor always stays with the guest.")}</span>
+                  <span className="mt-1 block text-xs text-zinc-500">{t("For every room of the group, on one group bill. Each guest pays their own extras.")}</span>
                 </label>
               ) : (
                 <p className="text-zinc-600">{t("The company's billing rules decide what it pays, on one group bill.")}</p>

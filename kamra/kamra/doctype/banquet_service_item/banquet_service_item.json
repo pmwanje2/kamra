@@ -99,7 +99,7 @@
    "fieldname": "is_alcohol",
    "fieldtype": "Check",
    "label": "Alcohol",
-   "description": "Alcohol never lands on a company folio."
+   "description": "Liquor, for its tax and the F&B report. It posts to the function's bill with the rest."
   },
   {
    "fieldname": "on_pack_list",

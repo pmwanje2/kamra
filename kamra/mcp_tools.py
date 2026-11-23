@@ -2182,7 +2182,7 @@ TOOLS: tuple[ToolSpec, ...] = (
 		"""Move a restaurant bill that was charged to the wrong room onto the
 		right in-house room, the same business day it was posted, with a
 		reason. The charge leaves the first guest's bill and lands on the
-		right guest's (liquor never on a company bill). Confirm the room with
+		right guest's, by that stay's routing and billing rules. Confirm the room with
 		the user first.""",
 		{"order": _p("string"), "room": _p("string"), "reason": _p("string")},
 		required=("order", "room", "reason"),

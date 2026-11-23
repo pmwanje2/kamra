@@ -436,5 +436,7 @@
   "Room covers the room night, its meal plan, levies, early check-in / late checkout and the cleaning fee. Laundry, minibar, spa and misc extras stay with the guest unless 'Everything' is chosen.": "Zimmer umfasst die Übernachtung, ihre Verpflegung, Abgaben, frühen Check-in / späten Check-out und die Reinigungsgebühr. Wäsche, Minibar, Spa und sonstige Extras bleiben beim Gast, außer 'Alles' ist gewählt.",
   "Marks the item as liquor for tax and reports. It bills where the stay's routing sends it, like any other item.": "Kennzeichnet den Artikel als Alkohol für Steuer und Berichte. Er wird wie jeder andere Artikel dort berechnet, wohin die Weiterleitung des Aufenthalts ihn schickt.",
   "Marks a liquor code. It routes like any other code: leave it out of a company's billing rules or a routing instruction and the guest pays it.": "Kennzeichnet einen Alkohol-Code. Er wird wie jeder andere Code weitergeleitet: Lassen Sie ihn aus den Abrechnungsregeln einer Firma oder einer Weiterleitungsanweisung heraus, dann zahlt der Gast.",
-  "Confirm which charges bill to the company vs the guest.": "Bestätigen Sie, welche Belastungen an die Firma und welche an den Gast gehen."
+  "Confirm which charges bill to the company vs the guest.": "Bestätigen Sie, welche Belastungen an die Firma und welche an den Gast gehen.",
+  "For every room of the group, on one group bill. Each guest pays their own extras.": "Für jedes Zimmer der Gruppe, auf einer Gruppenrechnung. Jeder Gast zahlt seine eigenen Extras.",
+  "Liquor, for its tax and the F&B report. It posts to the function's bill with the rest.": "Alkohol, für seine Steuer und den F&B-Bericht. Er wird mit dem Rest auf die Rechnung der Veranstaltung gebucht."
 }

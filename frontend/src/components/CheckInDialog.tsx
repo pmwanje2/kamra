@@ -12,8 +12,9 @@ import {
 } from "lucide-react"
 import { call } from "../lib/api"
 import { serverError } from "../lib/resource"
+import { ruleKey, ruleLabel, type BillingRuleRow } from "../lib/billingRules"
 import { toFullPath } from "../lib/routing"
-import { fmtMoney, sellsAlcohol } from "../lib/money"
+import { fmtMoney } from "../lib/money"
 import { useT, t as translateUI, useUILanguage } from "../lib/i18n"
 import { cn } from "../lib/utils"
 import { Button } from "./ui/button"
@@ -118,7 +119,7 @@ interface Flow {
     pay_at_hotel: 0 | 1
     company: string | null
     company_name: string | null
-    billing_rules: { charge_type: string; pay_by: string }[]
+    billing_rules: BillingRuleRow[]
     group_booking: string | null
     group_name: string | null
     stay_total: number
@@ -873,12 +874,11 @@ export default function CheckInDialog(props: {
                   <p className="mb-1 font-semibold text-zinc-800">{t("What the company pays")}</p>
                   <ul className="space-y-0.5 text-zinc-600">
                     {flow.billing.billing_rules.map((b) => (
-                      <li key={b.charge_type}>
-                        {t(b.charge_type)}: {t(b.pay_by)}
+                      <li key={ruleKey(b)}>
+                        {ruleLabel(b, t)}: {t(b.pay_by)}
                       </li>
                     ))}
                   </ul>
-                  {sellsAlcohol() && <p className="mt-1 text-xs text-zinc-400">{t("Alcohol is always paid by the guest.")}</p>}
                 </div>
               )}
               {payer === "OTA prepaid" && (

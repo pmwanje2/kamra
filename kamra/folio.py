@@ -416,6 +416,25 @@ def _company_pays(company: str, charge_type: str,
 	return covered is None or charge_type in covered
 
 
+def billing_rule_rows(company: str) -> list[dict]:
+	"""A company's billing rules as the check-in and check-out screens show
+	them: a charge-type rule by its type, a transaction-code rule by its code
+	and the code's description (code_label)."""
+	rows = frappe.get_all("Company Billing Rule", filters={"parent": company},
+	                      fields=["charge_type", "transaction_code", "pay_by"],
+	                      order_by="idx asc")
+	out = []
+	for r in rows:
+		code = r.transaction_code or None
+		label = None
+		if code:
+			label = " ".join(filter(None, (code, frappe.db.get_value(
+				"Transaction Code", code, "description"))))
+		out.append({"charge_type": None if code else r.charge_type,
+		            "transaction_code": code, "code_label": label, "pay_by": r.pay_by})
+	return out
+
+
 def target_folio(reservation, charge_type: str, *, amount=None, posting_date=None,
                  transaction_code: str | None = None) -> str:
 	"""Route a whole charge to the right folio of the stay: the stay's
