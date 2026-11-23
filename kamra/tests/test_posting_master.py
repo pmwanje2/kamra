@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import frappe
 
-from kamra import api, banquet
+from kamra import api, banquet, night_audit, settings
 from kamra import folio as folio_mod
 from kamra.tests.audit_fixtures import (
 	PROP_A,
@@ -154,3 +154,56 @@ class PostingMasterTestCase(AuditTestCase):
 		self.assertGreater(owed, 1000)
 		# the group is still in house, so its open bill still counts
 		self.assertEqual(in_house_exposure(company, PROP_A), round(owed, 2))
+
+	# Neon R1 P1-6: a cancelled group has no posting master --------------
+
+	def test_a_cancelled_group_opens_no_posting_master(self):
+		gb = self.group(company=corp())
+		r2 = self.members(gb)[1]
+		frappe.get_doc({"doctype": "Routing Instruction", "property": PROP_A,
+		                "reservation": r2.name, "target_type": "Group Master",
+		                "codes": [{"charge_type": "Laundry"}]}).insert(ignore_permissions=True)
+		gb.db_set("status", "Cancelled")
+		# the instruction cannot reach the group's bill: window 1 takes it
+		self.assertEqual(api.post_stay_charge(r2.name, "Laundry", "UT shirts", 300)
+		                 ["folio_type"], "Guest")
+		# nor do the presets bill a cancelled group's company
+		self.assertEqual(api.post_stay_charge(r2.name, "Room", "UT night", 1000)
+		                 ["folio_type"], "Guest")
+		self.assertFalse(frappe.db.exists("Folio", {"group_booking": gb.name,
+		                                            "folio_type": "Group"}))
+		with self.assertRaises(frappe.ValidationError):
+			folio_mod.open_group_folio(gb.name)
+
+	# Neon R1 P1-8: the main room is window 1's payee, no other window's --
+
+	def test_set_group_master_changes_window_1_only(self):
+		gb = self.group()
+		r2 = self.members(gb)[1]
+		pm = folio_mod.open_group_folio(gb.name)
+		frappe.db.set_value("Folio", pm, "status", "Closed")
+		sponsor = corp()
+		w2 = folio_mod.open_window(group_booking=gb.name, payee_type="Company",
+		                           payee_company=sponsor)
+		api.set_group_master(gb.name, r2.name)
+		self.assertEqual(frappe.db.get_value("Folio", w2, ["payee_type", "payee_company"]),
+		                 ("Company", sponsor))
+
+	# Neon R1 P1-9: the night audit sees a posting master with no stay ----
+
+	def test_night_audit_sees_an_open_posting_master(self):
+		company = corp()
+		gb = self.group(company=company)
+		pm = folio_mod.open_group_folio(gb.name)
+		api.add_folio_charge(pm, "Misc", "UT group dinner", 5000, gst_rate=0)
+		settings.write_kv(PROP_A, "na_high_balance_threshold", 2000)
+		settings.clear_cache(PROP_A)
+		high = night_audit.check_high_balance(PROP_A)
+		self.assertEqual([(i["folio"], i["balance"]) for i in high["items"]], [(pm, 5000)])
+		frappe.get_doc({"doctype": "City Ledger Account", "property": PROP_A,
+		                "company": company, "credit_limit": 3000}
+		               ).insert(ignore_permissions=True)
+		over = night_audit.check_credit_limit(PROP_A)
+		self.assertEqual([(i["company"], i["in_house"], i["over_by"]) for i in over["items"]],
+		                 [(company, 5000, 2000)])
+		settings.clear_cache(PROP_A)

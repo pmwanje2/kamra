@@ -2,14 +2,19 @@
 chosen charge types or transaction codes go to another window, another room
 or the group's posting master, on chosen dates and days of the week, up to
 an amount or percent limit. Usage is derived from the posted lines, so it
-cannot drift. Liquor routes only where an instruction says so.
+cannot drift. Liquor is just another transaction code: it routes where an
+instruction or a company's billing rules include its code, like any charge
+(OPERA routes only what is included; there is no alcohol switch).
 """
 
 from __future__ import annotations
 
+from decimal import ROUND_HALF_UP, Decimal
+from unittest.mock import patch
+
 import frappe
 
-from kamra import api, settings
+from kamra import api, routing, settings
 from kamra import folio as folio_mod
 from kamra.tests.audit_fixtures import (
 	PROP_A,
@@ -33,7 +38,10 @@ def corp(rules=()) -> str:
 	else:
 		doc = frappe.get_doc({"doctype": "Corporate Account", "company_name": CORP})
 	doc.credit_allowed = 1
-	doc.set("billing_rules", [{"charge_type": c, "pay_by": p} for c, p in rules])
+	# a rule names a charge type, or a transaction code ("#2000")
+	doc.set("billing_rules", [
+		{"transaction_code": c[1:], "pay_by": p} if c.startswith("#")
+		else {"charge_type": c, "pay_by": p} for c, p in rules])
 	if doc.is_new():
 		doc.insert(ignore_permissions=True)
 	else:
@@ -63,6 +71,24 @@ def lines(folio: str, charge_type: str | None = None) -> list:
 
 def used(instruction: str) -> float:
 	return float(frappe.get_doc("Routing Instruction", instruction).used_amount or 0)
+
+
+BAR = "UT2010"
+
+
+def bar_code() -> str:
+	"""The bar's own transaction code, as a hotel configures it (OPERA keeps
+	food and liquor on separate codes): Food & Beverage, flagged liquor."""
+	if not frappe.db.exists("Transaction Code", BAR):
+		frappe.get_doc({"doctype": "Transaction Code", "code": BAR, "description": "UT Bar",
+		                "txn_type": "Revenue", "revenue_group": "F&B",
+		                "subgroup": "Bar", "charge_type": "Food & Beverage",
+		                "is_alcohol": 1}).insert(ignore_permissions=True)
+	return BAR
+
+
+def rounded(value, unit="1") -> Decimal:
+	return Decimal(str(value)).quantize(Decimal(unit), rounding=ROUND_HALF_UP)
 
 
 class RoutingTestCase(AuditTestCase):
@@ -267,32 +293,307 @@ class RoutingTestCase(AuditTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			route(["Laundry"], target_type="Window", target_window=2)
 
-	def test_alcohol_off_by_default_configurable(self):
+	def test_liquor_routes_by_its_code_like_any_charge(self):
+		# no alcohol switch on an instruction or a group (OPERA has none)
+		self.assertFalse(frappe.get_meta("Routing Instruction").has_field("include_alcohol"))
+		self.assertFalse(frappe.get_meta("Group Booking").has_field("route_alcohol"))
+		bar = bar_code()
 		ri = route(["Food & Beverage"], reservation=self.res.name, target_type="Window",
 		           target_window=2)
-		self.assertEqual(self.charge("Food & Beverage", 500, "UT lunch")["folio"], self.w2)
-		self.assertEqual(self.charge("Food & Beverage", 800, "UT whisky", alcohol=1)["folio"],
-		                 guest_folio(self.res.name))
-		frappe.db.set_value("Routing Instruction", ri.name, "include_alcohol", 1)
+		# an instruction for Food & Beverage routes every code of it, liquor too
 		self.assertEqual(self.charge("Food & Beverage", 800, "UT whisky", alcohol=1)["folio"],
 		                 self.w2)
-		# moving liquor onto the posting master needs the group's route_alcohol
+		out = api.route_outlet_charge(self.res.name, bar, 500)
+		self.assertEqual((out["folio"], out["routing_instruction"]), (self.w2, ri.name))
+		# one for the food code alone leaves the bar's code on window 1
+		frappe.db.set_value("Routing Instruction", ri.name, "disabled", 1)
+		food = route(["#2000"], reservation=self.res.name, target_type="Window",
+		             target_window=2)
+		self.assertEqual(api.route_outlet_charge(self.res.name, bar, 500)["folio"],
+		                 guest_folio(self.res.name))
+		self.assertEqual(api.route_outlet_charge(self.res.name, "2000", 500)
+		                 ["routing_instruction"], food.name)
+
+	def test_company_rules_name_codes_and_liquor_has_no_default(self):
+		# Neon R1 P0-1: the bar's code (is_alcohol on the code) leaked onto the
+		# company through the presets. The presets now follow the company's
+		# rules and codes only: what they include is billed, nothing else.
+		bar = bar_code()
+		company = corp([("#2000", "Company")])
+		stay = self.stay(1, company=company, booking_type="Corporate")
+		billed = folio_mod.open_company_folio(stay)
+		self.assertEqual(api.route_outlet_charge(stay.name, "2000", 500)["folio"], billed)
+		self.assertEqual(api.route_outlet_charge(stay.name, bar, 500)["folio"],
+		                 guest_folio(stay.name))
+		# a company that pays Food & Beverage pays all of it, liquor included
+		corp([("Food & Beverage", "Company")])
+		self.assertEqual(api.route_outlet_charge(stay.name, bar, 500)["folio"], billed)
+		self.assertEqual(self.charge("Food & Beverage", 800, "UT wine", alcohol=1,
+		                             res=stay)["folio"], billed)
+		# the rules editor round-trips a code rule
+		api.set_billing_rules(company, [{"transaction_code": "2000", "pay_by": "Company"},
+		                                {"charge_type": "Room", "pay_by": "Company"}])
+		self.assertEqual(sorted((r.get("transaction_code") or "", r.get("charge_type") or "")
+		                        for r in api.get_billing_rules(company)),
+		                 [("", "Room"), ("2000", "")])
+
+	def test_liquor_lines_post_move_split_and_correct_like_any_line(self):
+		# the hard-coded liquor refusals are gone: a company or group that does
+		# not pay for liquor simply routes no liquor code
 		gb = frappe.get_doc({"doctype": "Group Booking", "property": PROP_A,
 		                     "group_name": "UT Liquor Group", "check_in_date": d(-2),
 		                     "check_out_date": d(2),
 		                     "status": "Confirmed"}).insert(ignore_permissions=True)
 		member = self.stay(1, group_booking=gb.name)
 		beer = self.charge("Food & Beverage", 300, "UT beer", alcohol=1, res=member)
-		row = lines(beer["folio"])[-1].name
 		pm = folio_mod.open_group_folio(gb.name)
-		with self.assertRaisesRegex(frappe.ValidationError, "Alcohol"):
-			folio_mod.transfer_charges(beer["folio"], [row], pm)
-		gb.db_set("route_alcohol", 1)
-		folio_mod.transfer_charges(beer["folio"], [row], pm)
+		folio_mod.transfer_charges(beer["folio"], [lines(beer["folio"])[-1].name], pm)
 		self.assertEqual([r.amount for r in lines(pm)], [300])
-		# and a group's instruction takes its liquor default from the group
-		template = route(["Minibar"], group_booking=gb.name, target_type="Group Master")
-		self.assertEqual(template.include_alcohol, 1)
+		api._post_folio_charge(self.w2, "Food & Beverage", "UT wine", 900, is_alcohol=1)
+		wine = lines(self.w2)[-1].name
+		api.correct_folio_charge(self.w2, wine, reason="UT wrong bottle", amount=700)
+		self.assertEqual(sorted(r.amount for r in lines(self.w2)), [-900, 700, 900])
+		whisky = self.charge("Food & Beverage", 1000, "UT whisky", alcohol=1)
+		row = lines(whisky["folio"])[-1].name
+		folio_mod.split_charge(whisky["folio"], row, self.w2, percent=40)
+		self.assertIn(400, [r.amount for r in lines(self.w2)])
+
+	# Neon R1 P0-2: usage follows corrections and splits exactly --------
+
+	def test_correcting_a_routed_line_moves_its_usage(self):
+		ri = route(["Laundry"], reservation=self.res.name, target_type="Window",
+		           target_window=2, limit_type="Amount", limit_value=150000)
+		self.charge("Laundry", 60000)
+		api.correct_folio_charge(self.w2, lines(self.w2)[0].name, reason="UT one bag",
+		                         amount=20000)
+		# no stale usage: the corrected line counts, the original no longer does
+		self.assertEqual(used(ri.name), 20000)
+		self.charge("Laundry", 130000)
+		self.assertEqual(used(ri.name), 150000)
+		self.assertEqual(sum(r.amount for r in lines(self.w2)), 150000)
+		# a correction up: usage follows it, and no limit is spent twice
+		spa = route(["Spa"], reservation=self.res.name, target_type="Window",
+		            target_window=2, limit_type="Amount", limit_value=100000)
+		self.charge("Spa", 40000)
+		row = lines(self.w2, "Spa")[0].name
+		api.correct_folio_charge(self.w2, row, reason="UT full treatment", amount=100000)
+		self.assertEqual(used(spa.name), 100000)
+		self.assertEqual(self.charge("Spa", 60000)["folio"], guest_folio(self.res.name))
+		self.assertEqual(sum(r.amount for r in lines(self.w2, "Spa")), 100000)
+		# voiding the corrected line frees the limit again
+		repost = next(r for r in lines(self.w2, "Spa") if r.amount == 100000)
+		folio_mod.void_charge(self.w2, repost.name, "UT not taken")
+		self.assertEqual(used(spa.name), 0)
+
+	def test_a_correction_counts_on_the_day_of_the_line_it_corrects(self):
+		ri = route(["Laundry"], reservation=self.res.name, target_type="Window",
+		           target_window=2, limit_type="Amount", limit_value=50000, per_day=1)
+		self.charge("Laundry", 50000)
+		frappe.db.set_value("Property", PROP_A, "business_date", d(1))
+		frappe.clear_document_cache("Property", PROP_A)
+		api.correct_folio_charge(self.w2, lines(self.w2)[0].name, reason="UT one bag",
+		                         amount=30000)
+		self.assertEqual((routing.used(ri.name, TODAY), routing.used(ri.name, d(1))),
+		                 (30000, 0))
+
+	def test_splitting_a_routed_line_keeps_usage_on_what_stays(self):
+		ri = route(["Laundry"], reservation=self.res.name, target_type="Window",
+		           target_window=2, limit_type="Amount", limit_value=100000)
+		self.charge("Laundry", 100000)
+		row = lines(self.w2)[0].name
+		guest = guest_folio(self.res.name)
+		folio_mod.split_charge(self.w2, row, guest, percent=20)
+		# the part left on the company's window is what it pays: 80,000
+		self.assertEqual(used(ri.name), 80000)
+		self.charge("Laundry", 100000)
+		self.assertEqual(used(ri.name), 100000)
+		self.assertEqual(sum(r.amount for r in lines(self.w2)), 100000)
+		# a split that stays on the window keeps both parts routed
+		other = lines(self.w2)[-1].name
+		folio_mod.split_charge(self.w2, other, self.w2, percent=50)
+		self.assertEqual(used(ri.name), 100000)
+
+	# Neon R1 P0-3: routed parts in the currency's minor unit, tax kept --
+
+	def ugx_night(self, price=500000, tax=18):
+		make_property(PROP_A, business_date=TODAY, rates_include_tax=1, currency="UGX")
+		settings.clear_cache(PROP_A)
+		taxed = make_room_type(PROP_A, f"UGX{tax}", base_price=price, tax_percent=tax)
+		res = make_reservation(PROP_A, taxed, d(-1), d(1), status="Checked In",
+		                       room=make_room(PROP_A, taxed, "309"))
+		w2 = folio_mod.open_window(reservation=res.name, payee_type="Company",
+		                           payee_company=corp())
+		return res, w2
+
+	def assert_bills_add_up(self, folios, gross, tax):
+		docs = [frappe.get_doc("Folio", f) for f in folios]
+		self.assertEqual(sum(rounded(f.grand_total) for f in docs), rounded(gross))
+		self.assertEqual(sum(rounded(f.tax_total) for f in docs), rounded(tax))
+
+	def test_percent_routing_of_a_tax_inclusive_shilling_night(self):
+		res, w2 = self.ugx_night()
+		route(["Room"], reservation=res.name, target_type="Window", target_window=2,
+		      limit_type="Percent", limit_value=33.333)
+		folio_mod.post_room_night(res, d(-1))
+		(routed,) = lines(w2, "Room")
+		routed = frappe.get_doc("Folio Charge", routed.name)
+		(rest,) = [frappe.get_doc("Folio Charge", r.name)
+		           for r in lines(guest_folio(res.name), "Room")]
+		# 33.333% of the 500,000 price, tax inside it, in whole shillings
+		self.assertEqual(Decimal(str(routed.total)), Decimal("166665"))
+		self.assertEqual(Decimal(str(routed.gst_amount)) % 1, 0)
+		self.assertEqual(Decimal(str(routed.amount)) % 1, 0)
+		self.assertEqual(rounded(rest.total), Decimal("333335"))
+		self.assertAlmostEqual(routed.total + rest.total, 500000, places=2)
+		self.assert_bills_add_up([w2, guest_folio(res.name)], 500000,
+		                         routed.gst_amount + rest.gst_amount)
+		self.assertEqual(rounded(routed.gst_amount + rest.gst_amount),
+		                 rounded(Decimal(500000) * 18 / 118))
+
+	def test_amount_limit_caps_the_gross_of_a_tax_inclusive_night(self):
+		# OPERA: an inclusive code routes its value with its taxes, so the
+		# limit caps what the company is billed, tax included
+		res, w2 = self.ugx_night()
+		ri = route(["Room"], reservation=res.name, target_type="Window", target_window=2,
+		           limit_type="Amount", limit_value=200000, per_day=1)
+		folio_mod.post_room_night(res, d(-1))
+		(routed,) = [frappe.get_doc("Folio Charge", r.name) for r in lines(w2, "Room")]
+		(rest,) = [frappe.get_doc("Folio Charge", r.name)
+		           for r in lines(guest_folio(res.name), "Room")]
+		self.assertEqual(Decimal(str(routed.total)), Decimal("200000"))
+		self.assertEqual(rounded(rest.total), Decimal("300000"))
+		self.assertEqual(routing.used(ri.name, d(-1)), 200000)
+
+	def test_percent_routing_conserves_tax_in_shillings(self):
+		make_property(PROP_A, business_date=TODAY, currency="UGX")
+		settings.clear_cache(PROP_A)
+		route(["Laundry"], reservation=self.res.name, target_type="Window",
+		      target_window=2, limit_type="Percent", limit_value=33.333)
+		api.post_stay_charge(self.res.name, "Laundry", "UT laundry", 100003, gst_rate=18)
+		guest = guest_folio(self.res.name)
+		routed = frappe.get_doc("Folio Charge", lines(self.w2)[0].name)
+		self.assertEqual((routed.amount, routed.gst_amount), (33334, 6000))
+		# the bills' own rounded tax adds up to the unsplit line's: 18,001
+		self.assert_bills_add_up([self.w2, guest], 100003 * Decimal("1.18"),
+		                         100003 * Decimal("0.18"))
+
+	def test_routing_cuts_a_line_as_split_charge_does(self):
+		# one splitter: a night routed 33.333% and the same night split
+		# 33.333% by hand come out to the same parts, to the shilling
+		res, w2 = self.ugx_night()
+		route(["Room"], reservation=res.name, target_type="Window", target_window=2,
+		      limit_type="Percent", limit_value=33.333)
+		folio_mod.post_room_night(res, d(-1))
+		routed = frappe.get_doc("Folio Charge", lines(w2, "Room")[0].name)
+		taxed = frappe.db.get_value("Reservation", res.name, "room_type")
+		other = make_reservation(PROP_A, taxed, d(-1), d(1), status="Checked In",
+		                         room=make_room(PROP_A, taxed, "310"))
+		folio_mod.post_room_night(other, d(-1))
+		night = lines(guest_folio(other.name), "Room")[0].name
+		extra = folio_mod.split_folio(other.name, "Extra")
+		folio_mod.split_charge(guest_folio(other.name), night, extra, percent=33.333)
+		cut = frappe.get_doc("Folio Charge", lines(extra, "Room")[0].name)
+		self.assertEqual((routed.amount, routed.gst_amount, routed.total),
+		                 (cut.amount, cut.gst_amount, cut.total))
+
+	# Neon R1 P1-5: overlap is by code and by active day ------------------
+
+	def test_disjoint_codes_of_one_charge_type_route_to_different_windows(self):
+		bar = bar_code()
+		w3 = folio_mod.open_window(reservation=self.res.name, payee_type="Guest")
+		food = route(["#2000"], reservation=self.res.name, target_type="Window",
+		             target_window=2)
+		drinks = route([f"#{bar}"], reservation=self.res.name, target_type="Window",
+		               target_window=3)
+		self.assertEqual(api.route_outlet_charge(self.res.name, "2000", 400)
+		                 ["routing_instruction"], food.name)
+		out = api.route_outlet_charge(self.res.name, bar, 400)
+		self.assertEqual((out["folio"], out["routing_instruction"]), (w3, drinks.name))
+		# the charge type covers both codes, so it still overlaps either
+		with self.assertRaises(frappe.ValidationError):
+			route(["Food & Beverage"], reservation=self.res.name, target_type="Window",
+			      target_window=2)
+
+	def test_overlap_needs_a_day_active_in_both(self):
+		week = dict(monday=1, tuesday=0, wednesday=0, thursday=1, friday=0, saturday=0,
+		            sunday=0)
+		# d(-2) is a Monday: the two ranges share only d(0), a Wednesday,
+		# which neither instruction runs on
+		route(["Laundry"], reservation=self.res.name, target_type="Window", target_window=2,
+		      from_date=d(-2), to_date=d(0), **week)
+		route(["Laundry"], reservation=self.res.name, target_type="Window", target_window=2,
+		      from_date=d(0), to_date=d(1), **week)
+		# a Thursday in both ranges (d(1)) is a real overlap
+		with self.assertRaises(frappe.ValidationError):
+			route(["Laundry"], reservation=self.res.name, target_type="Window",
+			      target_window=2, from_date=d(1), to_date=d(5), **week)
+		route(["Spa"], reservation=self.res.name, target_type="Window", target_window=2,
+		      from_date=d(-2), to_date=d(-2), **week)
+		with self.assertRaises(frappe.ValidationError):
+			route(["Spa"], reservation=self.res.name, target_type="Window", target_window=2,
+			      from_date=d(-9), to_date=d(-2), **{**week, "thursday": 0})
+
+	# Neon R1 P1-6: a matched instruction never falls back to the presets -
+
+	def test_a_checked_out_target_room_keeps_the_charge_on_window_1(self):
+		company = corp([("Food & Beverage", "Company")])
+		stay = self.stay(1, company=company, booking_type="Corporate")
+		other = self.stay(2)
+		ri = route(["Food & Beverage"], reservation=stay.name, target_type="Room",
+		           target_reservation=other.name)
+		self.assertEqual(self.charge("Food & Beverage", 500, "UT dinner", res=stay)["folio"],
+		                 guest_folio(other.name))
+		frappe.db.set_value("Reservation", other.name, "status", "Checked Out")
+		out = self.charge("Food & Beverage", 500, "UT late dinner", res=stay)
+		self.assertEqual(out["folio"], guest_folio(stay.name))
+		self.assertEqual(out["parts"][0]["routing_instruction"], None)
+		self.assertFalse(frappe.db.exists("Folio Charge", {"routing_instruction": ri.name,
+		                                                   "description": "UT late dinner"}))
+
+	# Neon R1 P1-10: a room-service order is routed with its amount -------
+
+	def test_a_room_service_order_routes_by_its_limit_and_carries_it(self):
+		from kamra import pos
+		ri = route(["Food & Beverage"], reservation=self.res.name, target_type="Window",
+		           target_window=2, limit_type="Amount", limit_value=1000)
+		outlet = frappe.get_doc({"doctype": "POS Outlet", "property": PROP_A,
+		                         "outlet_name": "UT Routing Kitchen",
+		                         "outlet_type": "Room Service",
+		                         "gst_rate": 0}).insert(ignore_permissions=True).name
+		dish = frappe.get_doc({"doctype": "Menu Item", "property": PROP_A, "outlet": outlet,
+		                       "item_name": "UT Club Sandwich", "category": "Food",
+		                       "price": 400, "is_veg": 1, "available": 1,
+		                       "prep_station": "Kitchen"}).insert(ignore_permissions=True).name
+		order = pos.create_order(outlet, [{"menu_item": dish, "qty": 1}],
+		                         room=self.rooms[0], order_type="Room Service")["order"]
+		self.assertTrue(pos.deliver_order(order)["posted_to_folio"])
+		line = frappe.get_all("Folio Charge", filters={"description": ["like", f"%{order}%"]},
+		                      fields=["parent", "routing_instruction", "amount"])
+		self.assertEqual([(r.parent, r.routing_instruction, r.amount) for r in line],
+		                 [(self.w2, ri.name, 400)])
+		self.assertEqual(used(ri.name), 400)
+
+	# Neon R1 P2-12/13: the outlet lookup posts nothing; one route ------
+
+	def test_the_outlet_lookup_opens_no_bill_and_checks_its_code(self):
+		other = self.stay(1)
+		route(["Food & Beverage"], reservation=other.name, target_type="Window",
+		      target_window=2)
+		before = frappe.db.count("Folio")
+		out = api.route_outlet_charge(other.name, "2000", 400, dry_run=1)
+		self.assertEqual((out["folio"], out["window_no"]), (None, 2))
+		self.assertEqual(frappe.db.count("Folio"), before)
+		self.assertTrue(api.route_outlet_charge(other.name, "2000", 400)["folio"])
+		frappe.db.set_value("Transaction Code", bar_code(), "disabled", 1)
+		with self.assertRaises(frappe.ValidationError):
+			api.route_outlet_charge(other.name, BAR, 400)
+		with self.assertRaises(frappe.ValidationError):
+			api.route_outlet_charge(other.name, "9001", 400)
+
+	def test_an_unrouted_line_is_routed_once(self):
+		with patch("kamra.routing.route", wraps=routing.route) as spy:
+			folio_mod.line_parts(self.res, "Laundry", 300)
+		self.assertEqual(spy.call_count, 1)
 
 	def test_pays_own_charges_on_company_group(self):
 		gb = frappe.get_doc({"doctype": "Group Booking", "property": PROP_A,

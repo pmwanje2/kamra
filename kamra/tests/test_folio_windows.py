@@ -172,7 +172,9 @@ class FolioWindowsTestCase(AuditTestCase):
 				"payee_agent": None, "payment_method": None})
 		importlib.import_module("kamra.patches.v48.backfill_folio_windows").execute()
 		got = {name: window(name) for name in legacy}
-		self.assertEqual([got[n].window_no for n in legacy], [1, 2, 3, 1, 2])
+		# a closed (invoiced) folio is history and keeps no window; the open
+		# posting master is the group's window 1
+		self.assertEqual([got[n].window_no for n in legacy], [1, 2, 3, 0, 1])
 		self.assertEqual([got[n].payee_type for n in legacy],
 		                 ["Guest", "Company", "Guest", "Company", "Company"])
 		self.assertEqual((got[company].payee_company, got[company].payment_method),
@@ -182,3 +184,130 @@ class FolioWindowsTestCase(AuditTestCase):
 		# run twice, nothing moves
 		importlib.import_module("kamra.patches.v48.backfill_folio_windows").execute()
 		self.assertEqual({n: window(n) for n in legacy}, got)
+
+	# Neon R1 P0-4: the backfill never wedges a stay or passes the cap ----
+
+	def legacy(self, *names):
+		for name in names:
+			frappe.db.set_value("Folio", name, {
+				"window_no": 0, "payee_type": None, "payee_company": None,
+				"payee_agent": None, "payment_method": None})
+
+	def backfill(self):
+		importlib.import_module("kamra.patches.v48.backfill_folio_windows").execute()
+
+	def test_backfill_gives_each_open_guest_bill_its_own_window(self):
+		g1 = folio_mod.open_folio(self.res)
+		# before windows nothing stopped a second open Guest folio on a stay
+		g2 = folio_mod.open_window(reservation=self.res.name, folio_type="Guest")
+		self.legacy(g1, g2)
+		self.backfill()
+		self.assertEqual((window(g1).window_no, window(g2).window_no), (1, 2))
+		# both still save: no two open bills share a window
+		for name in (g1, g2):
+			frappe.get_doc("Folio", name).save(ignore_permissions=True)
+		self.backfill()
+		self.assertEqual((window(g1).window_no, window(g2).window_no), (1, 2))
+
+	def test_backfill_keeps_history_off_the_windows(self):
+		a = corp(CORP_A, rules=(("Laundry", "Company"),))
+		self.res.db_set({"company": a, "booking_type": "Corporate"})
+		guest = folio_mod.open_folio(self.res)
+		# nine weekly interim bills, settled and closed, then the open one
+		closed = []
+		for _ in range(9):
+			name = folio_mod.open_window(reservation=self.res.name, folio_type="Company",
+			                             payee_type="Company", payee_company=a)
+			# closed before windows existed, so it held no window number
+			frappe.db.set_value("Folio", name, {"status": "Closed", "window_no": 0})
+			closed.append(name)
+		current = folio_mod.open_window(reservation=self.res.name, folio_type="Company",
+		                                payee_type="Company", payee_company=a)
+		self.legacy(guest, current, *closed)
+		self.backfill()
+		windows = {n: window(n).window_no for n in (guest, current, *closed)}
+		self.assertEqual((windows[guest], windows[current]), (1, 2))
+		self.assertEqual({windows[n] for n in closed}, {0})
+		# closed bills still name their payer, and the windows stay usable
+		self.assertEqual({window(n).payee_company for n in closed}, {a})
+		self.assertEqual(window(folio_mod.open_window(reservation=self.res.name)).window_no, 3)
+		self.backfill()
+		self.assertEqual({n: window(n).window_no for n in windows}, windows)
+
+	def test_backfill_never_passes_the_cap(self):
+		settings.write_kv(PROP_A, "folio_windows", 2)
+		settings.clear_cache(PROP_A)
+		names = [folio_mod.open_folio(self.res)]
+		names.append(folio_mod.open_window(reservation=self.res.name))
+		self.legacy(*names)
+		extra = frappe.get_doc({"doctype": "Folio", "property": PROP_A,
+		                        "reservation": self.res.name, "guest": self.res.guest,
+		                        "folio_type": "Extra", "status": "Open", "window_no": 0})
+		extra.flags.ignore_validate = True
+		extra.insert(ignore_permissions=True)
+		self.legacy(extra.name)
+		self.backfill()
+		self.assertEqual([window(n).window_no for n in (*names, extra.name)], [1, 2, 0])
+
+	def test_a_closed_company_bill_from_before_windows_reopens_as_a_window(self):
+		a = corp(CORP_A, rules=(("Laundry", "Company"),))
+		self.res.db_set({"company": a, "booking_type": "Corporate"})
+		guest = folio_mod.open_folio(self.res)
+		old = folio_mod.split_folio(self.res.name, "Company")
+		frappe.db.set_value("Folio", old, "status", "Closed")
+		self.legacy(guest, old)
+		self.backfill()
+		out = api.post_stay_charge(self.res.name, "Laundry", "UT shirts", 300)
+		self.assertNotIn(out["folio"], (guest, old))
+		self.assertEqual((window(out["folio"]).payee_company, window(out["folio"]).window_no),
+		                 (a, 2))
+
+	# Neon R1 P1-7: a company change leaves a second sponsor's window -----
+
+	def test_company_change_leaves_a_second_sponsors_window_alone(self):
+		a, b = corp(CORP_A, rules=(("Room", "Company"),)), corp(CORP_B)
+		c = corp("UT Windows Corp C", rules=(("Room", "Company"),))
+		self.res.db_set({"company": a, "booking_type": "Corporate"})
+		folio_mod.open_folio(self.res)
+		w2 = folio_mod.open_company_folio(frappe.get_doc("Reservation", self.res.name))
+		w3 = folio_mod.open_window(reservation=self.res.name, payee_type="Company",
+		                           payee_company=b)
+		route(self.res.name, ["Food & Beverage"], target_type="Window", target_window=3)
+		dinner = api.post_stay_charge(self.res.name, "Food & Beverage", "UT dinner", 500)
+		self.assertEqual(dinner["folio"], w3)
+		api.change_stay_company(self.res.name, "UT new employer", company=c)
+		self.assertEqual((window(w2).payee_company, window(w3).payee_company), (c, b))
+		self.assertEqual([r.description for r in frappe.get_doc("Folio", w3).charges],
+		                 ["UT dinner"])
+		# the second sponsor's settled bill does not block the next change
+		frappe.db.set_value("Folio", w3, {"status": "Closed", "invoice_number": "UT-INV-3"})
+		api.change_stay_company(self.res.name, "UT back again", company=a)
+		self.assertEqual((window(w2).payee_company, window(w3).payee_company), (a, b))
+
+	# Neon R1 P1-9: a company's Extra window is its exposure --------------
+
+	def test_a_company_paid_extra_window_counts_in_exposure(self):
+		from kamra.credit import in_house_exposure
+		a = corp(CORP_A)
+		billed = folio_mod.open_window(reservation=self.res.name, folio_type="Extra",
+		                               payee_type="Company", payee_company=a)
+		api.add_folio_charge(billed, "Misc", "UT sundry", 1000, gst_rate=0)
+		self.assertEqual(in_house_exposure(a, PROP_A), 1000)
+
+	# Neon R1 P1-11: the bill names the window's payee --------------------
+
+	def test_the_invoice_names_the_window_payee(self):
+		a, b = corp(CORP_A), corp(CORP_B)
+		self.res.db_set({"company": a, "booking_type": "Corporate"})
+		w3 = folio_mod.open_window(reservation=self.res.name, payee_type="Company",
+		                           payee_company=b)
+		self.assertEqual(api.folio_invoice(w3)["bill_to"]["name"],
+		                 frappe.db.get_value("Corporate Account", b, "company_name"))
+		agent = frappe.get_doc({"doctype": "Travel Agent", "agent_name": "UT Windows Agent"}
+		                       ).insert(ignore_permissions=True).name
+		w4 = folio_mod.open_window(reservation=self.res.name, payee_type="Travel Agent",
+		                           payee_agent=agent)
+		self.assertEqual(api.folio_invoice(w4)["bill_to"]["name"], "UT Windows Agent")
+		# the guest's own window is the guest's, even on a company's stay
+		own = folio_mod.open_folio(frappe.get_doc("Reservation", self.res.name))
+		self.assertIsNone(api.folio_invoice(own)["bill_to"])

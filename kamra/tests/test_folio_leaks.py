@@ -199,7 +199,7 @@ class FolioLeaksTestCase(AuditTestCase):
 		                 [(self.room, "101")])
 		self.assertIn("UT Asha", rows[0]["guest_name"])
 
-	def test_dine_in_bill_charged_to_room_keeps_billing_and_alcohol_rules(self):
+	def test_dine_in_bill_charged_to_room_keeps_billing_rules(self):
 		outlet, dosa, gin = self.outlet()
 		res = self.corporate_stay()
 		guest = guest_folio(res.name)
@@ -212,7 +212,7 @@ class FolioLeaksTestCase(AuditTestCase):
 			"Folio", {"reservation": res.name, "folio_type": "Company"})
 		self.assertTrue(frappe.get_all("Folio Charge", filters={
 			"parent": company, "description": ["like", f"%{food['order']}%"]}))
-		# with alcohol the whole bill goes to the guest
+		# liquor is Food & Beverage too: the company pays it like the food
 		drinks = pos.create_order(outlet, [{"menu_item": gin, "qty": 1}],
 		                          table_no="T1", order_type="Dine In",
 		                          room=self.room)
@@ -222,7 +222,7 @@ class FolioLeaksTestCase(AuditTestCase):
 		line = frappe.get_all("Folio Charge", filters={
 			"description": ["like", f"%{drinks['order']}%"]},
 			fields=["parent", "is_alcohol", "posting_date"])
-		self.assertEqual([(r.parent, r.is_alcohol) for r in line], [(guest, 1)])
+		self.assertEqual([(r.parent, r.is_alcohol) for r in line], [(company, 1)])
 		self.assertEqual(str(line[0].posting_date), TODAY)
 
 	def test_charge_to_room_refuses_an_empty_room(self):

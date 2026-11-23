@@ -2,7 +2,7 @@
 
 The main room (Group Booking.master_reservation) carries what `master_pays`
 covers for every room on one group bill, with no company needed. A room can
-opt out (pays_own_charges), liquor never routes, the main guest can leave
+opt out (pays_own_charges), liquor routes like any line, the main guest can leave
 while the bill stays open, and settle_group_bill closes it. A company group
 without a main room bills the company on a group bill anchored to its first
 room: OPERA's posting master. That bill is the group's, not the first room's:
@@ -73,12 +73,12 @@ class GroupBillingTestCase(AuditTestCase):
 		api.set_pays_own_charges(r3.name, 1)
 		self.assertEqual(self.post(r3, "Room", "UT R3 night")["folio_type"], "Guest")
 
-	def test_alcohol_never_routes(self):
-		r2 = self.group(pays="Everything except liquor")[1][1]
+	def test_liquor_routes_like_any_line(self):
+		r2 = self.group(pays="Everything")[1][1]
 		self.assertEqual(self.post(r2, "Food & Beverage", "UT lunch", 500)["folio_type"],
 		                 "Group")
 		self.assertEqual(self.post(r2, "Food & Beverage", "UT whisky", 800, 1)["folio_type"],
-		                 "Guest")
+		                 "Group")
 
 	def test_main_guest_leaves_and_the_bill_stays_open(self):
 		r1, r2 = self.group()[1][:2]

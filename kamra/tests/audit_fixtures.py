@@ -64,6 +64,11 @@ def ensure_user(email: str, roles: list[str]) -> str:
 	return email
 
 
+def _default_company_billing() -> str:
+	from kamra.folio import DEFAULT_COMPANY_BILLING
+	return DEFAULT_COMPANY_BILLING
+
+
 def make_property(name: str, **fields) -> str:
 	"""A bare property, put back to these exact values if it exists."""
 	payload = {
@@ -76,7 +81,8 @@ def make_property(name: str, **fields) -> str:
 		"no_show_timing": "At audit for arrival date",
 		"protect_late_arrivals": 1, "waive_no_show_fee_for_ota": 1,
 		"non_guaranteed_release_time": None, "timezone": None,
-		"default_company_billing": "Room and F&B (liquor to guest)",
+		# the property's default preset, whatever the code names it
+		"default_company_billing": _default_company_billing(),
 	}
 	payload.update(fields)
 	if frappe.db.exists("Property", name):
