@@ -334,20 +334,29 @@ def on_reservation_change(doc, method=None):
 
 
 @frappe.whitelist(allow_guest=True, methods=["POST"])
-def webhook(connection: str, **kwargs):
+def webhook(connection: str | None = None, **kwargs):
 	"""One URL per connection:
 	/api/method/kamra.channel_manager.webhook?connection=CMC-00001
 	Authenticated by the connection's webhook secret (X-Webhook-Secret
-	header or `secret` in the payload)."""
-	conn = frappe.get_doc("Channel Manager Connection", connection)
-	if not conn.active:
-		return {"ok": False, "reason": "connection_inactive"}
-	secret = conn.get_password("webhook_secret", raise_exception=False)
+	header or `secret` in the payload).
+
+	The connection is read from the URL itself: on a JSON post (Channex
+	sends one) Frappe builds the arguments from the body alone and drops
+	the query string (frappe.app.make_form_dict). The URL's connection
+	wins over an argument of the same name.
+
+	Every refusal is the same: an unknown or inactive connection, no
+	secret configured, and a wrong or missing secret all get one
+	PermissionError, so an unauthenticated caller learns nothing about
+	which connections exist."""
+	connection = (frappe.request.args.get("connection") if frappe.request else None) \
+		or connection
 	sent = (frappe.get_request_header("X-Webhook-Secret")
 	        if frappe.request else None) or kwargs.get("secret") or ""
-	# no secret configured = nothing to authenticate against: refuse
-	if not secret or not hmac.compare_digest(str(sent), secret):
+	name = _authenticated_connection(connection, sent)
+	if not name:
 		frappe.throw("Webhook secret mismatch.", frappe.PermissionError)
+	conn = frappe.get_doc("Channel Manager Connection", name)
 
 	try:
 		payload = json.loads(frappe.request.data or b"{}") \
@@ -358,6 +367,28 @@ def webhook(connection: str, **kwargs):
 	events = provider_for(conn.provider).parse_webhook(conn, payload)
 	results = [_apply_event(conn, e) for e in events]
 	return {"ok": True, "results": results}
+
+
+def _authenticated_connection(connection, sent) -> str | None:
+	"""The active connection whose webhook secret `sent` matches, else None.
+
+	`connection` must be a string: with `from __future__ import annotations`
+	Frappe skips the type check, and a JSON object would reach the ORM as a
+	filter. A name always takes the same two lookups and one constant-time
+	compare (bytes, so a non-ASCII secret cannot raise), whether or not the
+	connection exists, is active, or has a secret."""
+	if not isinstance(connection, str) or not connection:
+		return None
+	from frappe.utils.password import get_decrypted_password
+
+	row = frappe.db.get_value("Channel Manager Connection", {"name": connection},
+	                          ["name", "active"], as_dict=True)
+	secret = get_decrypted_password("Channel Manager Connection",
+	                                row.name if row else connection, "webhook_secret",
+	                                raise_exception=False) or ""
+	matches = hmac.compare_digest(str(sent).encode(), secret.encode())
+	# no secret configured = nothing to authenticate against: refuse
+	return row.name if row and row.active and secret and matches else None
 
 
 def _room_type_for(connection: str, external_id: str) -> str | None:
