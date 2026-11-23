@@ -119,4 +119,9 @@ class ContractRateQuoteTest(AuditTestCase):
 			"fx_rate": 3650, "fx_date": "2026-11-21"}], "all_active_plans_tariff": True}
 		self.add_script("hospitality_tariffs.room_type_tariffs", payload, checks={"room_type": self.room_type})
 		self.assertTrue(hasattr(rates, "room_type_tariffs"), "no room tariff read is exposed")
-		self.assertEqual(rates.room_type_tariffs(self.room_type), payload)
+		# the bridge payload, plus the plan's lock and rounding and the server's local equivalent
+		row, = payload["tariffs"]
+		self.assertEqual(rates.room_type_tariffs(self.room_type), {
+			**payload, "property_currency": "UGX", "primary_rate_plan": self.plan, "card_rate_plans": [],
+			"tariffs": [{**row, "local_room": 474500, "local_single": 365000,
+				"fx_lock_policy": "Fixed at Reservation", "rounding_step": 0, "rounding_mode": "Nearest"}]})
