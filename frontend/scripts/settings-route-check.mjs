@@ -17,6 +17,8 @@ const imports = {
   "lucide-react": require("lucide-react"),
   "./api": {},
   "./brand": { deskLabel: () => undefined, upstreamOnly: () => false, whiteLabel: () => true },
+  // a site that keeps its own books: no screen is handed to the ERP
+  "./erpBooks": { keptInErp: () => undefined },
 }
 const appRegistry = {}
 const js = ts.transpileModule(source.replaceAll("import.meta.env.PROD", "true"), {
