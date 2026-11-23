@@ -4,12 +4,12 @@
   price: a plain save (REST PUT) cannot change it and a plain insert (REST
   POST) cannot type one. Only create_booking, after _check_night_prices,
   books typed nights.
-- P0-B a discounted stay re-priced by an agreed rate, a custom-rate room
-  move or a party change takes the discount rules again, on every night
-  still to come; a night whose locked price changed for any other reason is
-  judged too. An agreed rate stacked on a discount is judged as the whole
-  cut from the base the stay was booked at, so neither the front desk's
-  limit nor the full-comp sign-off can be stepped around.
+- P0-B a discounted stay re-priced by a party change takes the discount
+  rules again, on every night still to come; a night whose locked price
+  changed for any other reason is judged too. An agreed rate (round 4:
+  OPERA's Fixed Rate) replaces the discount instead of stacking on it, and
+  its own cut is measured from each night's rate-code amount, so neither
+  the front desk's limit nor the full-comp sign-off can be stepped around.
 - P2-C a room move's audit row names the supervisor who signed the
   discount off.
 - P2-D a booking retried after a deadlock is inserted without the first
@@ -94,59 +94,47 @@ class StackedRateTests(RoundTwoTestCase):
 		                    confirm_price=1, **kw)
 
 	def test_an_agreed_rate_cannot_turn_a_managers_discount_into_an_unsigned_comp(self):
+		# the agreed rate replaces the discount (round 4), so it is what the
+		# guest pays and can never stack into a night at no charge
 		name = self.book(GM, discount_type="Amount", discount_value=500,
 		                 discount_reason="RATE-PROMO")["reservation"]
 		self.assertEqual(self.rows(name), [(1000, 500, 500)] * 2)
-		with self.assertRaises(frappe.PermissionError):
-			self.agree(name, 500, GM)
-		self.assertEqual(self.rows(name), [(1000, 500, 500)] * 2)
-		with self.assertRaises(frappe.PermissionError) as raised:
-			self.agree(name, 500, GM, supervisor=GM, pin="4321")
-		self.assertTrue(str(raised.exception).startswith("SUPERVISOR_SELF_APPROVAL:"))
-		self.desk_with_finance()
-		# the preview asks for someone else's PIN before the desk confirms
 		pv = self.as_user(GM, api.rate_override_preview, name, 500)
-		self.assertTrue(pv["needs_supervisor"])
-		self.assertTrue(pv["discount_governance"]["comp"])
-		self.assertNotIn(GM, [s["user"] for s in pv["supervisors"]])
-		self.assertIn(SELF, [s["user"] for s in pv["supervisors"]])
-		out = self.agree(name, 500, GM, supervisor=SELF, pin="5678")
-		self.assertEqual(self.rows(name), [(500, 500, 0)] * 2)
-		self.assertEqual(out["approver"], SELF)
+		self.assertFalse(pv["needs_supervisor"])
+		self.assertNotIn("discount_governance", pv)
+		out = self.agree(name, 500, GM)
+		self.assertEqual(self.rows(name), [(500, 0, 500)] * 2)
+		self.assertIsNone(out["approver"])
 		logs = frappe.get_all("Agent Action Log", filters={
 			"action_type": "rate_override", "reference_name": name}, pluck="approver")
-		self.assertEqual(logs, [SELF])
+		self.assertEqual(logs, [None])
 
 	def test_a_custom_rate_room_move_cannot_turn_a_discount_into_an_unsigned_comp(self):
 		name = self.book(GM, discount_type="Amount", discount_value=500,
 		                 discount_reason="RATE-PROMO")["reservation"]
 		room = self.doc(name).room
 		other = next(r for r in self.rooms if r != room)
-		with self.assertRaises(frappe.PermissionError):
-			self.as_user(GM, api.move_reservation, name, other, rate_mode="custom",
-			             agreed_rate=500, confirm_price=1)
-		self.assertEqual(self.doc(name).room, room)
-		self.assertEqual(self.rows(name), [(1000, 500, 500)] * 2)
-		self.desk_with_finance()
 		self.as_user(GM, api.move_reservation, name, other, rate_mode="custom",
-		             agreed_rate=500, confirm_price=1, supervisor_user=SELF, supervisor_pin="5678")
-		self.assertEqual(self.rows(name), [(500, 500, 0)] * 2)
+		             agreed_rate=500, confirm_price=1)
+		doc = self.doc(name)
+		self.assertEqual(doc.room, other)
+		self.assertEqual(self.rows(name), [(500, 0, 500)] * 2)
+		self.assertEqual((doc.discount_type or None, int(doc.fixed_rate)), (None, 1))
 
 	def test_the_front_desk_cannot_stack_an_agreed_rate_past_its_limit(self):
 		name = self.book(DESK, discount_type="Amount", discount_value=100,
 		                 discount_reason="RATE-PROMO")["reservation"]
 		self.assertEqual(self.rows(name), [(1000, 100, 900)] * 2)
-		# 800 less the 100 off is 700: 30% off the 1,000 it was booked at
+		# 800 replaces the 100 off: 20% off the 1,000 rate-code amount
 		with self.assertRaises(frappe.PermissionError):
 			self.agree(name, 800)
 		self.assertEqual(self.rows(name), [(1000, 100, 900)] * 2)
 		pv = self.as_user(DESK, api.rate_override_preview, name, 800)
 		self.assertTrue(pv["needs_supervisor"])
-		self.assertAlmostEqual(pv["discount_governance"]["max_pct"], 30, places=2)
-		# the desk is told the whole cut, not the 11% the rate alone takes
-		self.assertAlmostEqual(pv["reduction_pct"], 30, places=2)
+		# the desk is told the whole cut from the rate-code amount
+		self.assertAlmostEqual(pv["reduction_pct"], 20, places=2)
 		out = self.agree(name, 800, supervisor=GM, pin="4321")
-		self.assertEqual(self.rows(name), [(800, 100, 700)] * 2)
+		self.assertEqual(self.rows(name), [(800, 0, 800)] * 2)
 		self.assertEqual(out["approver"], GM)
 
 	def test_a_party_change_takes_the_discount_rules_again(self):
@@ -164,11 +152,12 @@ class StackedRateTests(RoundTwoTestCase):
 		res = make_reservation(PROP_A, self.rt, d(5), d(7), room=self.rooms[0])
 		self.discount(res.name, discount_type="Amount", discount_value=100, **PROMO)
 		self.assertEqual(self.rows(res.name), [(1000, 100, 900)] * 2)
-		# the rate card falls after booking, then a meal plan re-prices the
-		# stay: 100 off a 400 night is 25%, over the desk's 15%
+		# the rate card falls after booking, then an extra-guest charge
+		# re-prices the stay: 100 off a 400 night is 25%, over the desk's 15%
+		# (a meal plan alone keeps the booked room rate: round 4)
 		frappe.db.set_value("Room Type", self.rt, "base_price", 400)
 		doc = self.doc(res.name)
-		doc.meal_plan = self.meal_plan(300)
+		doc.over_capacity_charge = 50
 		with self.assertRaises(frappe.PermissionError):
 			self.as_user(DESK, doc.save, ignore_permissions=True)
 		self.assertEqual(self.rows(res.name), [(1000, 100, 900)] * 2)

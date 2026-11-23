@@ -51,6 +51,7 @@ from kamra.tests.audit_fixtures import (
 from kamra.tests.test_reservation_discounts import (
 	DESK,
 	GM,
+	REVENUE,
 	SELF,
 	DiscountTestCase,
 	set_setting,
@@ -155,8 +156,10 @@ class BookedRateImmutabilityTests(RoundTwoTestCase):
 
 	def test_an_agreed_rate_stays_and_its_meals_keep_the_booked_price(self):
 		meal = self.meal_plan(300)
-		res = make_reservation(PROP_A, self.rt, d(5), d(7), room=self.rooms[0],
-		                       meal_plan=meal, agreed_rate=1200)
+		res = make_reservation(PROP_A, self.rt, d(5), d(7), room=self.rooms[0], meal_plan=meal)
+		# an agreed rate is set through its governed writer (round 4: a plain
+		# insert can no longer carry one)
+		self.as_user(REVENUE, api.set_agreed_rate, res.name, 1200, "RATE-MGR", confirm_price=1)
 		meals = [flt(r.meal_amount) for r in self.doc(res.name).night_rates]
 		frappe.db.set_value("Meal Plan", meal, "price_per_adult", 900)
 		self.discount(res.name, discount_type="Amount", discount_value=200, **PROMO)

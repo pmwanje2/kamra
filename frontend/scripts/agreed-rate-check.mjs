@@ -22,7 +22,7 @@ const load = (rel) => {
 
 assert.ok(fs.existsSync(new URL("../src/lib/agreedRate.ts", import.meta.url)),
   "src/lib/agreedRate.ts holds the agreed-rate rules the panel uses")
-const { agreedRateRows, agreedRateReady } = load("lib/agreedRate.ts")
+const { agreedRateRows, agreedRateReady, discountReasonCodes, agreedRateReasonCodes } = load("lib/agreedRate.ts")
 
 // per night: the rate the folio bills now, the agreed one and the difference
 const preview = {
@@ -63,9 +63,26 @@ assert.equal(agreedRateReady({ ...base, preview: { ...within, raises: true, can_
 const panel = read("components/AgreedRatePanel.tsx")
 assert.ok(panel.includes('"kamra.api.rate_override_preview"'), "the panel previews with rate_override_preview")
 assert.ok(panel.includes('"kamra.api.set_agreed_rate"'), "the panel saves with set_agreed_rate")
-// one list_reason_codes request serves the discount and the agreed rate;
-// the agreed rate offers the Rate Change codes among them
-assert.match(panel, /\.category === "Rate Change"/, "the panel lists Rate Change reason codes")
+// one list_reason_codes request serves the discount and the agreed rate:
+// the discount takes the Rate Change and Adjust codes, each once by name, in
+// the server's order; the agreed rate takes the Rate Change codes among them
+assert.equal(typeof discountReasonCodes, "function", "lib/agreedRate.ts exports discountReasonCodes")
+assert.equal(typeof agreedRateReasonCodes, "function", "lib/agreedRate.ts exports agreedRateReasonCodes")
+const code = (name, category) => ({ name, code: name, description: name, category, requires_supervisor: 0 })
+const served = [code("RATE-PROMO", "Rate Change"), code("ADJ-RATE", "Adjust"), code("VOID-ERR", "Void"),
+  code("RATE-MGR", "Rate Change"), code("RATE-PROMO", "Rate Change"), code("ADJ-RATE", "Adjust"),
+  code("PAY-REFUND", "Refund")]
+const forDiscount = discountReasonCodes(served)
+assert.deepEqual(forDiscount.map((r) => r.name), ["RATE-PROMO", "ADJ-RATE", "RATE-MGR"],
+  "Rate Change and Adjust codes only, each once by name, in the server's order")
+assert.deepEqual(agreedRateReasonCodes(forDiscount).map((r) => r.name), ["RATE-PROMO", "RATE-MGR"],
+  "the agreed rate offers the Rate Change codes")
+assert.deepEqual(discountReasonCodes(null), [], "no answer yet: no codes")
+assert.deepEqual(discountReasonCodes(served.filter((r) => r.category === "Void")), [], "no usable code")
+// the panel asks once, for every category, and keeps what these rules keep
+assert.ok(panel.includes('"kamra.ledger.list_reason_codes", {}'), "one list_reason_codes request, every category")
+assert.ok(panel.includes("discountReasonCodes(") && panel.includes("agreedRateReasonCodes("),
+  "the panel filters the reason codes with the rules in lib/agreedRate.ts")
 for (const arg of ["reason_code", "confirm_price", "supervisor", "pin"])
   assert.match(panel, new RegExp(`\\b${arg}\\b`), `set_agreed_rate gets ${arg}`)
 assert.ok(panel.includes("agreedRateRows(") && panel.includes("agreedRateReady("),
