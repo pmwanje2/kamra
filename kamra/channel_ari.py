@@ -85,12 +85,8 @@ def rate_quantum(property: str | None) -> Decimal:
 	"""The smallest step of a rate sent to a channel: the ISO 4217 minor unit
 	of the currency the property sells in, as pricing.quote prices it (1 for
 	UGX, 0.001 for KWD); 0.01 without a property."""
-	from kamra.pricing import _minor_unit
-	currency = None
-	if property:
-		from kamra.localization import default_currency, pack_for
-		currency = frappe.get_cached_doc("Property", property).currency or default_currency(pack_for(property))
-	return Decimal(1).scaleb(-_minor_unit(currency))
+	from kamra.pricing import _minor_unit, selling_currency
+	return Decimal(1).scaleb(-_minor_unit(selling_currency(property)))
 
 
 def channel_rate(property: str, q: dict) -> Decimal:
@@ -658,6 +654,10 @@ def enqueue_ari_flushes() -> None:
 # ---------------------------------------------------------------------------
 
 _HORIZON_SOURCES = ("Rate Plan", "Room Type", "Hurdle Rate", "Rate Guardrail")
+# What a property's prices are offered on (channel_rate, rate_quantum): its
+# selling basis, currency, tax pack and room tax rates.
+_PROPERTY_BASIS = ("rates_include_tax", "currency", "country", "gst_mode", "gst_slab_threshold",
+                   "gst_rate_low", "gst_rate_high")
 
 
 def _dates(*values) -> list:
@@ -702,6 +702,10 @@ def _source(doc, method) -> tuple[str, str | None, str | None, str] | None:
 		return (doc.property, *w, "restrictions") if w else None
 	if dt in _HORIZON_SOURCES:
 		return doc.property, None, None, "restrictions"
+	if dt == "Property":
+		if not before or not any(doc.has_value_changed(f) for f in _PROPERTY_BASIS):
+			return None
+		return doc.name, None, None, "restrictions"
 	if dt == "Room":
 		if method == "on_update":
 			if not before:
