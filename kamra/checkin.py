@@ -34,18 +34,22 @@ DESK = ("Front Desk", "Night Auditor", "Kamra Agent")
 # confirmations only a person at the desk can give
 STAFF = ("Front Desk", "Night Auditor")
 
-PAYERS = ("OTA prepaid", "OTA, guest pays here", "Guest", "Company", "Group")
 
-# quick requests at check-in -> a service ticket each (subject, category, priority)
-# (label, team, priority, the charge type a price is billed as - None when
-# the request is never charged)
-REQUEST_PRESETS = {
-	"extra_bed": ("Extra bed", "Housekeeping", "Medium", "Extra Guests"),
-	"wake_up_call": ("Wake-up call", "Front Desk", "Medium", None),
-	"airport_drop": ("Airport drop", "Concierge", "Medium", "Taxi"),
-	"dietary": ("Dietary needs", "Room Service", "Medium", None),
-	"special_occasion": ("Special occasion", "Concierge", "Medium", "Misc"),
-}
+def payers() -> list[str]:
+	"""Who may pay, as the desk confirms it: the Payer Type master. OTA
+	prepaid, OTA guest pays here, Guest, Company and Group are system
+	codes this module reasons about; a hotel adds its own beside them."""
+	from kamra.masters import PAYER, enabled_codes
+	return enabled_codes(PAYER)
+
+
+def request_presets() -> dict[str, tuple]:
+	"""Quick requests at check-in, from the Check-in Request master: each
+	becomes a service ticket. {key: (label, team, priority, the charge type
+	a price is billed as - None when the request is never charged)}."""
+	from kamra.masters import CHECKIN_REQUEST, master_rows
+	return {r.name: (r.description or r.name, r.team, r.priority, r.charge_type or None)
+	        for r in master_rows(CHECKIN_REQUEST, fields=("team", "priority", "charge_type"))}
 
 STAY_INFO_KEYS = ("guest_wifi_name", "guest_wifi_password", "breakfast_hours",
                   "emergency_number", "guest_info_note")
@@ -231,6 +235,8 @@ def _billing(res) -> dict:
 	return {
 		"payer": payer,
 		"payer_label": labels[payer],
+		# a hotel's own payer types, as the description it gave them
+		"payer_labels": {r.name: r.description or r.name for r in _payer_rows() if not r.system},
 		"source": res.source, "channel": res.get("channel"),
 		"ota_ref": res.get("ota_ref"),
 		"pay_at_hotel": 1 if res.get("is_pay_at_hotel") else 0,
@@ -239,8 +245,13 @@ def _billing(res) -> dict:
 		"group_booking": res.get("group_booking"), "group_name": group_name,
 		"group_master_folio": master,
 		"stay_total": total, "advance_paid": paid, "balance_due": balance,
-		"options": list(PAYERS),
+		"options": payers(),
 	}
+
+
+def _payer_rows() -> list:
+	from kamra.masters import PAYER, master_rows
+	return master_rows(PAYER)
 
 
 def _room(res) -> dict:
@@ -525,7 +536,7 @@ def _flow_payload(res, steps, ctx, guest) -> dict:
 			for s in soft_pending(steps)],
 		"rooms": _free_rooms(res) if not res.room else [],
 		"request_presets": [{"key": k, "label": v[0], "priced": bool(v[3])}
-		                    for k, v in REQUEST_PRESETS.items()],
+		                    for k, v in request_presets().items()],
 		# the deposit step takes money: is the operator's till open, or can
 		# they open it here (kamra.cashier.open_session)
 		"till": _till(res.property),
@@ -662,8 +673,9 @@ def confirm_billing(reservation: str, payer: str, note: str | None = None):
 	"""The desk confirms who pays (OTA, guest, company, group)."""
 	res = _res(reservation)
 	_open(res)
-	if payer not in PAYERS:
-		frappe.throw(_("Pick who pays: {0}.").format(", ".join(_(p) for p in PAYERS)))
+	options = payers()
+	if payer not in options:
+		frappe.throw(_("Pick who pays: {0}.").format(", ".join(_(p) for p in options)))
 	if payer == "Company" and not res.get("company"):
 		frappe.throw(_("This booking has no company. Add the company to the booking first."))
 	if payer == "Group" and not res.get("group_booking"):
@@ -785,7 +797,8 @@ def log_checkin_requests(reservation: str, requests=None, note: str | None = Non
 	_open(res)
 	if isinstance(requests, str):
 		requests = frappe.parse_json(requests) if requests.strip() else []
-	requests = [r for r in (requests or []) if r in REQUEST_PRESETS]
+	presets = request_presets()
+	requests = [r for r in (requests or []) if r in presets]
 	note = (note or "").strip()[:500]
 	if isinstance(prices, str):
 		prices = frappe.parse_json(prices) if prices.strip() else {}
@@ -807,7 +820,7 @@ def log_checkin_requests(reservation: str, requests=None, note: str | None = Non
 	as_agent = not (can_bill and can_ticket)
 	with act_as(AGENT_EMAIL) if as_agent else nullcontext():
 		for key in requests:
-			subject, category, priority, charge_type = REQUEST_PRESETS[key]
+			subject, category, priority, charge_type = presets[key]
 			amount = flt((prices or {}).get(key))
 			if charge_type and amount > 0 and key not in billed:
 				post_stay_charge(res.name, charge_type, subject, amount,
@@ -823,7 +836,7 @@ def log_checkin_requests(reservation: str, requests=None, note: str | None = Non
 				room=res.room, reservation=res.name, guest=res.guest,
 				description=note)["ticket"])
 	record_step(res, "guest_requests", "done",
-	            note=", ".join(REQUEST_PRESETS[k][0] for k in requests) or note or _("Nothing needed"),
+	            note=", ".join(presets[k][0] for k in requests) or note or _("Nothing needed"),
 	            tickets=tickets, billed=billed)
 	out = checkin_flow(reservation)
 	out["tickets"] = tickets

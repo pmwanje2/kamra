@@ -274,7 +274,7 @@ MODULES: tuple[Module, ...] = (
 				  hint="On: a guest still Checked In past their departure date is extended by one "
 				       "night when the audit runs, and that night is posted like any other. A stay "
 				       "that can't be extended (the room is booked) stays on the checklist."),
-				S("na_high_balance_threshold", "Flag in-house folios owing more than", "number", 50000,
+				S("na_high_balance_threshold", "Flag in-house folios owing more than", "number", None,
 				  min=0, hint="0 turns the high-balance check off."),
 				S("na_rate_variance_tolerance", "Rate variance tolerance", "number", 1.0,
 				  min=0, max=100000,
@@ -417,11 +417,11 @@ MODULES: tuple[Module, ...] = (
 		         ("Transaction codes", "/transaction-codes"), ("Reason codes", "/reason-codes")),
 		sections=(
 			Section("tax", "Room tax", "Tax on the room rate. Outlet and service rates come from the country pack.", (
-				S("gst_mode", "Tax mode", "select", "Slab", P, options=("Slab", "Fixed"),
+				S("gst_mode", "Tax mode", "select", None, P, options=("Slab", "Fixed"),
 				  hint="Slab: the rate switches at the threshold per night."),
-				S("gst_slab_threshold", "Slab threshold per night", "number", 7500, P, min=0),
-				S("gst_rate_low", "Rate below threshold", "number", 5, P, min=0, max=100, unit="%"),
-				S("gst_rate_high", "Rate above threshold", "number", 18, P, min=0, max=100, unit="%"),
+				S("gst_slab_threshold", "Slab threshold per night", "number", None, P, min=0),
+				S("gst_rate_low", "Rate below threshold", "number", None, P, min=0, max=100, unit="%"),
+				S("gst_rate_high", "Rate above threshold", "number", None, P, min=0, max=100, unit="%"),
 				S("rates_include_tax", "Displayed rates include tax", "check", 0, P),
 			)),
 			Section("fees", "Fees & levies", "", (
@@ -485,7 +485,7 @@ MODULES: tuple[Module, ...] = (
 				  hint="Payments, invoices, allowances and settlements re-confirm who is acting. Agents are exempt."),
 				S("pin_max_attempts", "Lock a PIN after", "number", 5, min=3, max=10, unit="wrong tries"),
 				S("pin_lock_minutes", "Lock for / stay unlocked for", "number", 15, min=1, max=240, unit="min"),
-				S("max_cash_refund", "Cash refund limit for new cashiers", "number", 5000, min=0),
+				S("max_cash_refund", "Cash refund limit for new cashiers", "number", None, min=0),
 				S("till_variance_tolerance", "Till variance that needs a manager", "number", 0, min=0,
 				  hint="A till closed over or short by more than this is flagged for a manager to review. 0 turns the check off."),
 				S("allowance_approval", "Allowances need a manager's approval", "select", "Off",
@@ -625,12 +625,25 @@ PROPERTY_DEFAULTS = {"fx_currencies": fx_currencies_default}
 
 
 def _default(property: str | None, spec: S):
+	"""A setting's value when nothing is saved: a property-derived default,
+	else the country pack's (amounts in its currency, its tax slab - see
+	kamra.localization.setting_default), else the registry's. Money
+	thresholds have no registry default: a country that names none leaves
+	them unset, and nothing acts on them until the hotel sets one."""
 	fn = PROPERTY_DEFAULTS.get(spec.key)
 	if fn and property:
 		try:
 			return fn(property)
 		except Exception:
 			return spec.default
+	if property:
+		from kamra.localization import setting_default
+		try:
+			value = setting_default(property, spec.key)
+		except Exception:
+			value = None
+		if value is not None:
+			return value
 	return spec.default
 
 

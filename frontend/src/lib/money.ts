@@ -12,6 +12,12 @@ export interface TenderMode {
   currencies: string[]
 }
 
+/** One code of a hotel master: the stored value and what the desk shows. */
+export interface Choice {
+  value: string
+  label: string
+}
+
 interface Locale {
   currency_symbol: string
   locale: string
@@ -51,6 +57,11 @@ interface Locale {
   services_tax_rate?: number
   /** Off for a dry property: alcohol fields and labels are hidden. */
   sells_alcohol?: boolean
+  /** The hotel's own Market codes, booker relations and Cancellation
+   *  Reasons (Settings data, OPERA codes) - never a list typed in a screen. */
+  market_codes?: Choice[]
+  booker_relations?: Choice[]
+  cancellation_reasons?: Choice[]
 }
 
 export interface Integrations {

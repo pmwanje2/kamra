@@ -100,6 +100,51 @@ def default_nationality(pack) -> str:
 	return getattr(pack, "DEFAULT_NATIONALITY", "") or ""
 
 
+# ── defaults a property takes from its country ───────────────────────────
+# A pack may declare SETTING_DEFAULTS = {registry key: value}: its tax slab,
+# and amounts that only mean something in its currency (a high-balance
+# threshold, a cash refund limit, a security deposit). Core ships none of
+# these, so a country without them has no amount set - and nothing acts on
+# an amount nobody chose (the OPERA property template, seeded per country).
+
+def setting_default(property: str | None, key: str):
+	"""The property's country pack default for one settings-registry key,
+	or None where the pack has none."""
+	if not property:
+		return None
+	return dict(getattr(pack_for(property), "SETTING_DEFAULTS", None) or {}).get(key)
+
+
+def property_country_defaults(country: str | None) -> dict:
+	"""{Property field: value} a new property in this country starts with:
+	the pack's currency (when the Currency exists), clock, flat VAT and its
+	SETTING_DEFAULTS."""
+	pack = pack_for_country(country or "India")
+	out = {}
+	currency = getattr(pack, "DEFAULT_CURRENCY", None)
+	if currency and frappe.db.exists("Currency", currency):
+		out["currency"] = currency
+	if getattr(pack, "DEFAULT_TIMEZONE", None):
+		out["timezone"] = pack.DEFAULT_TIMEZONE
+	if getattr(pack, "DEFAULT_VAT", None):
+		out["gst_rate_low"] = float(pack.DEFAULT_VAT)
+	out.update(getattr(pack, "SETTING_DEFAULTS", None) or {})
+	meta = frappe.get_meta("Property")
+	return {k: v for k, v in out.items() if meta.has_field(k)}
+
+
+def fill_property_defaults(doc) -> None:
+	"""A new Property takes what the operator left blank from its country
+	pack (property_country_defaults). Values given always win; an existing
+	property is never touched. An import carries its own values, as Frappe
+	skips doctype defaults there too."""
+	if frappe.flags.in_import:
+		return
+	for key, value in property_country_defaults(doc.get("country")).items():
+		if doc.get(key) in (None, ""):
+			doc.set(key, value)
+
+
 def money_text(property: str | None, amount) -> str:
 	"""An amount in the property's currency for server-written text (the
 	activity log, alerts) - never a hardcoded rupee sign."""
@@ -171,8 +216,10 @@ def amount_in_words(pack, prop_doc, amount) -> str:
 # A pack declares ID_TYPES / PAYMENT_MODES / DEFAULT_* as module constants.
 # The desk offers Cash, Card and Bank Transfer everywhere. A pack may add
 # its own instant / wallet modes (INSTANT_PAYMENT_MODES, e.g. India's UPI):
-# each must also be a Folio Payment / Cashier Transaction option, and the
-# till keeps them in their own bucket (Cashier Session.system_upi).
+# each is a system Payment Method (kamra.masters), and the till keeps them
+# in their own bucket (Cashier Session.system_upi). A hotel's own Payment
+# Methods (Settings data, OPERA payment methods) are offered beside the
+# pack's in every country; an Instant one shares the instant bucket.
 
 GENERIC_ID_TYPES = ["Passport", "National ID", "Driving License", "Other"]
 GENERIC_PAYMENT_MODES = ["Cash", "Card", "Bank Transfer"]
@@ -185,14 +232,28 @@ def id_types(pack) -> list[str]:
 	return list(getattr(pack, "ID_TYPES", None) or GENERIC_ID_TYPES)
 
 
-def instant_payment_modes(pack) -> list[str]:
+def _pack_instant_modes(pack) -> list[str]:
 	return list(getattr(pack, "INSTANT_PAYMENT_MODES", None) or [])
 
 
-def payment_modes(pack) -> list[str]:
+def _pack_payment_modes(pack) -> list[str]:
 	modes = getattr(pack, "PAYMENT_MODES", None) or GENERIC_PAYMENT_MODES
-	allowed = (*GENERIC_PAYMENT_MODES, *instant_payment_modes(pack))
+	allowed = (*GENERIC_PAYMENT_MODES, *_pack_instant_modes(pack))
 	return [m for m in modes if m in allowed]
+
+
+def instant_payment_modes(pack) -> list[str]:
+	"""The pack's instant / wallet modes, then the hotel's own Instant
+	payment methods."""
+	from kamra.masters import client_payment_methods
+	return list(dict.fromkeys([*_pack_instant_modes(pack), *client_payment_methods("Instant")]))
+
+
+def payment_modes(pack) -> list[str]:
+	"""What the desk takes money in: the pack's modes, then the hotel's own
+	enabled payment methods."""
+	from kamra.masters import client_payment_methods
+	return list(dict.fromkeys([*_pack_payment_modes(pack), *client_payment_methods()]))
 
 
 def cash_denominations(pack) -> list[float]:
@@ -203,9 +264,10 @@ def cash_denominations(pack) -> list[float]:
 
 def outlet_payment_modes(pack) -> list[str]:
 	"""What a bill is settled with at an outlet (POS): cash, card and the
-	pack's instant modes."""
-	instant = instant_payment_modes(pack)
-	return [m for m in payment_modes(pack) if m in ("Cash", "Card") or m in instant]
+	pack's instant modes. Outlet bills keep their own fixed modes (POS
+	Order), so a hotel's own payment methods are taken at the desk only."""
+	instant = _pack_instant_modes(pack)
+	return [m for m in _pack_payment_modes(pack) if m in ("Cash", "Card") or m in instant]
 
 
 def assert_pack_payment_mode(property: str, mode: str | None) -> None:

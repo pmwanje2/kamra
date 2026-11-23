@@ -398,6 +398,7 @@ class Reservation(Document):
 		self.validate_status_transition()
 		self.validate_blacklist()
 		self.validate_occupancy()
+		self.default_occupant_nationality()
 		self.validate_room_belongs_to_type()
 		self.validate_no_overlap()
 		self.validate_itinerary_leg()
@@ -410,6 +411,19 @@ class Reservation(Document):
 		self.keep_hand_set_nights()
 		self.apply_pricing()
 		self.stamp_room_assignment()
+
+	def default_occupant_nationality(self):
+		"""An occupant added without a nationality takes the property
+		country's own (the pack's DEFAULT_NATIONALITY), never a fixed one.
+		Rows already on file, and a nationality the desk typed, are kept."""
+		new_rows = [o for o in self.get("occupants") or []
+		            if o.is_new() and not (o.nationality or "").strip()]
+		if not new_rows or not self.property:
+			return
+		from kamra.localization import default_nationality, pack_for
+		nationality = default_nationality(pack_for(self.property))
+		for o in new_rows:
+			o.nationality = nationality or None
 
 	def stamp_room_assignment(self):
 		"""Who put the guest in this room, and when. Every writer that

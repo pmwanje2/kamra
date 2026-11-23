@@ -1070,7 +1070,7 @@ def quote(
 			los_saved *= room_total / old_room_total
 
 	from kamra.folio import _fnb_gst
-	FNB_GST = _fnb_gst(property)
+	fnb_rate = _fnb_gst(property)  # the country pack's F&B rate
 
 	billable_nights = max(nights, 1)
 	meal_total = Decimal(0)
@@ -1081,8 +1081,8 @@ def quote(
 			+ children * _dec(mp.price_per_child)
 		)
 		if inclusive:
-			meal_total /= Decimal(1) + _dec(FNB_GST) / Decimal(100)
-	meal_tax = meal_total * _dec(FNB_GST) / Decimal(100)
+			meal_total /= Decimal(1) + _dec(fnb_rate) / Decimal(100)
+	meal_tax = meal_total * _dec(fnb_rate) / Decimal(100)
 
 	subtotal = room_total + meal_total
 

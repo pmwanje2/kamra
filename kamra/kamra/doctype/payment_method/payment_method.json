@@ -1,0 +1,165 @@
+{
+ "actions": [],
+ "autoname": "field:code",
+ "creation": "2026-11-23 00:00:00",
+ "description": "OPERA Payment Method: what the desk takes money in, how the till counts it and the ERP Mode of Payment it posts to.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "code",
+  "description",
+  "tender_type",
+  "mode_of_payment",
+  "sort_order",
+  "system",
+  "disabled"
+ ],
+ "fields": [
+  {
+   "fieldname": "code",
+   "fieldtype": "Data",
+   "label": "Code",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1,
+   "set_only_once": 1,
+   "description": "The value stored on records. It can't change once saved; reword the description instead."
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Data",
+   "label": "Description",
+   "in_list_view": 1,
+   "description": "What the desk sees. Blank: the code."
+  },
+  {
+   "fieldname": "tender_type",
+   "fieldtype": "Select",
+   "label": "Tender Type",
+   "options": "Cash\nForeign Cash\nCard\nInstant\nBank Transfer\nOTA Prepaid\nCompany Credit\nPayment Link\nCheque\nOther",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "How the till treats it: Cash is counted in the drawer, Card and Instant (mobile money, wallets) keep their own till totals, everything else is Other."
+  },
+  {
+   "fieldname": "mode_of_payment",
+   "fieldtype": "Data",
+   "label": "ERP Mode of Payment",
+   "description": "The ERPNext Mode of Payment this method posts to. Blank: the ERP bridge's own mapping."
+  },
+  {
+   "fieldname": "sort_order",
+   "fieldtype": "Int",
+   "label": "Sort Order",
+   "default": "0",
+   "description": "Lower is listed first. 0 lists after the seeded codes."
+  },
+  {
+   "fieldname": "system",
+   "fieldtype": "Check",
+   "label": "System Code",
+   "default": "0",
+   "read_only": 1,
+   "description": "The PMS itself uses this code: it can be reworded but not deleted or switched off."
+  },
+  {
+   "fieldname": "disabled",
+   "fieldtype": "Check",
+   "label": "Disabled",
+   "default": "0",
+   "description": "Switched off: no longer offered. Records that already carry it keep it."
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-23 18:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Kamra",
+ "name": "Payment Method",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 1,
+   "email": 1
+  },
+  {
+   "role": "Hotel Admin",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 1,
+   "email": 1
+  },
+  {
+   "role": "Finance",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "email": 1
+  },
+  {
+   "role": "Front Desk",
+   "read": 1,
+   "print": 1,
+   "report": 1
+  },
+  {
+   "role": "Revenue Manager",
+   "read": 1,
+   "print": 1,
+   "report": 1
+  },
+  {
+   "role": "Night Auditor",
+   "read": 1,
+   "print": 1,
+   "report": 1
+  },
+  {
+   "role": "Housekeeping",
+   "read": 1,
+   "print": 1,
+   "report": 1
+  },
+  {
+   "role": "Housekeeping Supervisor",
+   "read": 1,
+   "print": 1,
+   "report": 1
+  },
+  {
+   "role": "F&B Manager",
+   "read": 1,
+   "print": 1,
+   "report": 1
+  },
+  {
+   "role": "Kamra Agent",
+   "read": 1,
+   "print": 1,
+   "report": 1
+  }
+ ],
+ "search_fields": "description",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "description",
+ "track_changes": 1
+}

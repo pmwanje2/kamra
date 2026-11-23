@@ -30,11 +30,11 @@
   },
   {
    "fieldname": "mode",
-   "fieldtype": "Select",
+   "fieldtype": "Link",
    "label": "Mode",
    "default": "Bank Transfer",
    "in_list_view": 1,
-   "options": "Cash\nCard\nUPI\nBank Transfer\nCheque\nOther"
+   "options": "Payment Method"
   },
   {
    "fieldname": "amount",
@@ -58,7 +58,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-31 10:00:00.000000",
+ "modified": "2026-11-23 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Banquet Receipt",

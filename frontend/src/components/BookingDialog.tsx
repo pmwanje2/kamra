@@ -34,9 +34,6 @@ import DepositPanel, { type DepositState } from "./DepositPanel"
 import CheckInDialog from "./CheckInDialog"
 import TillCard, { useTill } from "./TillCard"
 
-/** Reservation.market_segment options (same list as the doctype). */
-const MARKET_SEGMENTS = ["Corporate", "Leisure", "Group", "MICE", "Government", "Wedding",
-  "Long Stay", "Airline Crew", "Complimentary", "House Use"]
 
 
 interface CompanyCredit {
@@ -2210,8 +2207,8 @@ export function BookingDialog(props: {
                             onChange={(e) => set("market_segment", e.target.value)}
                           >
                             <option value="">{form.company ? translate("Corporate") : "-"}</option>
-                            {MARKET_SEGMENTS.map((m) => (
-                              <option key={m} value={m}>{translate(m)}</option>
+                            {(loc.market_codes ?? []).map((m) => (
+                              <option key={m.value} value={m.value}>{translate(m.label)}</option>
                             ))}
                           </select>
                         </Field>
@@ -2302,13 +2299,8 @@ export function BookingDialog(props: {
                                     }
                                   >
                                     <option value="">-</option>
-                                    {[
-                                      "Assistant",
-                                      "Family",
-                                      "Company Travel Desk",
-                                      "Travel Agent",
-                                    ].map((r) => (
-                                      <option key={r} value={r}>{translate(r)}</option>
+                                    {(loc.booker_relations ?? []).map((r) => (
+                                      <option key={r.value} value={r.value}>{translate(r.label)}</option>
                                     ))}
                                   </select>
                                 </Field>

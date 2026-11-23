@@ -11,8 +11,6 @@ from decimal import Decimal
 import frappe
 from frappe.utils import add_days, getdate, now_datetime, nowdate
 
-FNB_GST = 5.0  # F&B / meal-plan GST rate (India default; kept for imports)
-
 # SQL on `tabFolio Charge` fc: a line that is neither voided nor a void's
 # reversal. Both stay on the folio (void_charge) and net to zero, so sums
 # need nothing; counts of rooms sold and "already posted" checks do.

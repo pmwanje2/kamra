@@ -26,12 +26,12 @@
    "reqd": 1
   },
   {
-   "description": "EP room only \u00b7 CP breakfast \u00b7 MAP breakfast + 1 meal \u00b7 AP all meals",
+   "description": "The board basis it is sold as (a Meal Plan Code: EP, CP, MAP, AP or the hotel's own, e.g. BB, HB, FB)",
    "fieldname": "code",
-   "fieldtype": "Select",
+   "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Code",
-   "options": "EP\nCP\nMAP\nAP",
+   "options": "Meal Plan Code",
    "reqd": 1
   },
   {
@@ -74,7 +74,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-04 16:01:36.498781",
+ "modified": "2026-11-23 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Meal Plan",

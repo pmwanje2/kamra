@@ -171,7 +171,11 @@ def _recompute_session_totals(session: str, persist: bool = True) -> dict[str, f
 	# the pack's instant modes keep their own bucket, stored
 	# in system_upi / "upi" - field kept by name so existing tills read on
 	from kamra.localization import instant_payment_modes, pack_for
+	from kamra.masters import client_tender_types
 	instant_modes = instant_payment_modes(pack_for(sess.property))
+	# a hotel's own payment method counts as its tender type (switched-off
+	# ones too, so a till that took one still adds up)
+	tender = client_tender_types()
 	cash = card = upi = other = foreign = paid_outs = drops = petty = 0.0
 	for r in rows:
 		amt = float(r.total or 0)
@@ -184,13 +188,13 @@ def _recompute_session_totals(session: str, persist: bool = True) -> dict[str, f
 		elif kind == "Petty Cash":
 			petty += abs(amt)
 		elif kind in ("Payment", "Exchange", "Refund"):
-			if mode == "Foreign Cash":
+			if mode == "Foreign Cash" or tender.get(mode) == "Foreign Cash":
 				foreign += amt  # home value of foreign notes; not in expected cash
-			elif mode in CASH_MODES:
+			elif mode in CASH_MODES or tender.get(mode) == "Cash":
 				cash += amt
-			elif mode in CARD_MODES:
+			elif mode in CARD_MODES or tender.get(mode) == "Card":
 				card += amt
-			elif mode in instant_modes:
+			elif mode in instant_modes or tender.get(mode) == "Instant":
 				upi += amt
 			else:
 				other += amt

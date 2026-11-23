@@ -303,7 +303,8 @@ export const mealPlansConfig: ScreenConfig = {
     { field: "is_default", label: "Default" },
   ],
   form: [
-    { field: "code", label: "Code", type: "select", options: ["EP", "CP", "MAP", "AP"], required: true },
+    { field: "code", label: "Code", type: "link", linkDoctype: "Meal Plan Code", required: true,
+      hint: "The board basis it is sold as: EP, CP, MAP, AP or your own (Meal Plan Codes)." },
     { field: "label", label: "Label", type: "data" },
     { field: "price_per_adult", label: "Price per adult / night", type: "currency" },
     { field: "price_per_child", label: "Price per child / night", type: "currency" },
