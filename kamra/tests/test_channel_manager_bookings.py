@@ -192,3 +192,61 @@ class ChannelManagerBookingTestCase(IntegrationTestCase):
 		self.assertEqual(doc.status, "Requested")
 		self.assertIn("OTA overbooking — resolve", doc.special_requests)
 		self.assertFalse(doc.room)
+
+	def test_readable_modify_on_overbooking_hold_keeps_hold_note_and_appends_ota_notes(self):
+		"""A readable modify on a stay held for a non-tax reason (e.g.
+		overbooking) must keep the hold note and append the OTA's notes."""
+		self.sold_out()
+		self.deliver(self.payload())
+		held = self.received()
+		self.assertEqual(held.status, "Requested")
+		self.assertIn("OTA overbooking — resolve", held.special_requests)
+
+		# Modify with empty OTA notes: hold note must NOT be wiped to None
+		mod_empty = self.payload()
+		mod_empty["action"] = "modify"
+		mod_empty["specialRequests"] = ""
+		self.deliver(mod_empty)
+		doc = self.received()
+		self.assertEqual(doc.status, "Requested")
+		self.assertIn("OTA overbooking — resolve", doc.special_requests or "")
+
+		# Modify with new OTA notes: keep the hold note and append the OTA notes
+		mod_notes = self.payload()
+		mod_notes["action"] = "modify"
+		mod_notes["specialRequests"] = "High floor please"
+		self.deliver(mod_notes)
+		doc = self.received()
+		self.assertEqual(doc.status, "Requested")
+		self.assertIn("OTA overbooking — resolve", doc.special_requests or "")
+		self.assertIn("High floor please", doc.special_requests or "")
+		self.assertEqual((doc.special_requests or "").count("OTA overbooking — resolve"), 1)
+
+		# Repeating the same modify stays idempotent without duplicating the hold line
+		self.deliver(mod_notes)
+		doc = self.received()
+		self.assertEqual((doc.special_requests or "").count("OTA overbooking — resolve"), 1)
+		self.assertIn("High floor please", doc.special_requests or "")
+
+	def test_modify_dropping_a_checked_in_room_flags_review_instead_of_ignoring(self):
+		"""When a multi-room modify omits a room that is already Checked In,
+		that room is neither cancelled nor silently ignored: it stays Checked In
+		and is flagged for front-desk review."""
+		for n in ("102", "103"):
+			frappe.get_doc({"doctype": "Room", "property": self.property,
+				"room_type": self.room_type, "room_number": n}).insert(ignore_permissions=True)
+		self.deliver(self.payload(rooms=3))
+		dropped = self.received(f"{self.ref}-2")
+		frappe.db.set_value("Reservation", dropped.name, "status", "Checked In")
+
+		payload = self.payload(rooms=2)
+		payload["action"] = "modify"
+		self.deliver(payload)
+
+		dropped.reload()
+		self.assertEqual(dropped.status, "Checked In")
+		self.assertEqual(dropped.channel_review_needed, 1)
+		self.assertIn("not applied: the stay is Checked In", dropped.special_requests or "")
+		self.assertTrue(frappe.db.exists("Agent Action Log", {
+			"reference_doctype": "Reservation", "reference_name": dropped.name,
+			"action_type": "channel.modify_needs_review"}))

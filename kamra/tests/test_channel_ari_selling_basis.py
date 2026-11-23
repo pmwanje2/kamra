@@ -859,6 +859,41 @@ class ChannexTaxRuleTestCase(_SellingBasisFixture, IntegrationTestCase):
 			with self.subTest(taxes=len(taxes)):
 				self.assertHeld(self.landed(h, *taxes), "OTA tax rules")
 
+	def test_tax_words_splits_letter_digit_and_script_boundaries(self):
+		"""Adjacent letters and digits ("VAT18%", "增值税6%") and Latin/CJK
+		boundaries ("Hotel增值税") split into distinct words so rules do not
+		miss joined rate percentages."""
+		self.assertEqual(channex.tax_words("VAT18%"), ["vat", "18"])
+		self.assertEqual(channex.tax_words("18%VAT"), ["18", "vat"])
+		self.assertEqual(channex.tax_words("GST5"), ["gst", "5"])
+		self.assertEqual(channex.tax_words("增值税6%"), ["增值税", "6"])
+		self.assertEqual(channex.tax_words("Hotel增值税"), ["hotel", "增值税"])
+		self.assertEqual(channex.tax_words("VAT (18%)"), ["vat", "18"])
+
+	def test_letter_digit_joined_and_cjk_compound_taxes_match_and_still_fail_closed(self):
+		"""Joined percentages ("VAT18%", "增值税6%") and unspaced CJK phrases
+		("酒店增值税" containing "增值税") match their rules; unmatched CJK and
+		Latin substring near-misses still fail closed."""
+		h = self.hotel(inclusive=0)
+		self.rules(h, [
+			("Type or Name", "Contains", "vat", "Room tax"),
+			("Type or Name", "Contains", "gst", "Room tax"),
+			("Type or Name", "Contains", "增值税", "Room tax"),
+			("Type or Name", "Contains", "宿泊税", "Room tax"),
+			("Type or Name", "Contains", "부가가치세", "Room tax"),
+		])
+		for label in ("VAT18%", "GST5%", "增值税6%", "酒店增值税", "酒店增值税6%", "東京都宿泊税", "호텔부가가치세10%"):
+			with self.subTest(label=label):
+				self.assertEqual(self.booked(h, _tax(label, "27000.00")), (177000.0, True))
+		# Fail closed: unmatched CJK exclusive tax and Latin partial-word "Private"
+		self.assertHeld(self.landed(h, _tax("酒店城市税", "5000.00")), "酒店城市税")
+		self.assertHeld(self.landed(h, _tax("Private transfer", "27000.00")), "Private transfer")
+		# "Is" stays exact even for CJK
+		self.rules(h, [("Name", "Is", "增值税", "Room tax")])
+		exact = self.landed(h, _tax("增值税", "27000.00"))
+		self.assertEqual((exact.status, flt(exact.amount_after_tax)), ("Confirmed", 177000.0))
+		self.assertHeld(self.landed(h, _tax("酒店增值税", "27000.00")), "酒店增值税")
+
 
 class ChannexTaxBasisTestCase(_SellingBasisFixture, IntegrationTestCase):
 	"""Whether an OTA's amounts include tax is that OTA's setting on the
@@ -1054,3 +1089,304 @@ class ChannexTaxBasisTestCase(_SellingBasisFixture, IntegrationTestCase):
 				conn.set("ota_tax_basis", [{"channel": a, "amounts": "Including tax"},
 				                           {"channel": b, "amounts": "Excluding tax"}])
 				conn.save(ignore_permissions=True)
+
+	def test_an_ota_basis_row_with_no_word_is_refused(self):
+		"""A punctuation-only OTA name ("---", "...", "___") has an empty
+		ota_key and can never match any booking: refused when saved, matching
+		the rule-phrase check."""
+		h = self.hotel(inclusive=0)
+		for bad in ("---", "...", "!!!@@@", "___", "   "):
+			with self.subTest(channel=bad), self.assertRaises(frappe.ValidationError):
+				conn = frappe.get_doc("Channel Manager Connection", h.conn.name)
+				conn.set("ota_tax_basis", [{"channel": bad, "amounts": "Excluding tax"}])
+				conn.save(ignore_permissions=True)
+
+
+class ChannelModifySafetyTestCase(_SellingBasisFixture, IntegrationTestCase):
+	"""OPERA Cloud OXI safety for in-house and closed stays:
+	- UPDATE INHOUSE RES = N: an OTA modify for a Checked In stay never alters
+	  financials, room, dates, or status; it flags the stay and logs
+	  channel.modify_needs_review for front-desk review.
+	- Closed stays (Checked Out, No Show, Cancelled) are immutable to OTA
+	  modifies and record the unapplied update for review.
+	- Inbound OTA cancellations never cancel Checked In, Checked Out, or
+	  No Show stays; they leave the stay untouched and record it for review,
+	  while duplicate cancels on already-Cancelled stays remain idempotent."""
+
+	def add_deluxe_room_type(self, h) -> str:
+		tag = frappe.generate_hash(length=5).upper()
+		dlx = frappe.get_doc({
+			"doctype": "Room Type", "property": h.property,
+			"room_type_code": "DLX" + tag, "room_type_name": "Deluxe",
+			"base_price": 250000, "adults_capacity": 2,
+		}).insert(ignore_permissions=True).name
+		for i in range(2):
+			frappe.get_doc({
+				"doctype": "Room", "property": h.property, "room_type": dlx,
+				"room_number": f"D{tag}-{i + 1}",
+			}).insert(ignore_permissions=True)
+		frappe.get_doc({
+			"doctype": "Channel Room Mapping", "connection": h.conn.name,
+			"room_type": dlx, "external_room_id": "rt-dlx", "external_rate_id": "rp-dlx",
+		}).insert(ignore_permissions=True)
+		return dlx
+
+	def book_today(self, h, ota_name: str = "Booking.com", notes: str = ""):
+		payload = self.channex_payload(h, Decimal("177000"), n=0, report="exclusive")
+		payload["payload"]["ota_name"] = ota_name
+		payload["payload"]["notes"] = notes
+		self.deliver(h, payload)
+		ref = payload["payload"]["ota_reservation_code"]
+		return self.received(h, ref), ref
+
+	def modify_event(self, h, ref: str, *, ota_name: str = "Booking.com",
+	                 ext_room: str = "rt-dlx", nights: int = 2,
+	                 gross: list[Decimal] | None = None, notes: str = "Changed via OTA") -> dict:
+		gross = gross or [Decimal("295000")] * nights
+		payload = self.channex_payload(h, gross, n=0, report="exclusive")
+		body = payload["payload"]
+		body.update(status="modified", ota_reservation_code=ref, ota_name=ota_name, notes=notes)
+		body["rooms"][0]["room_type_id"] = ext_room
+		body["rooms"][0]["occupancy"] = {"adults": 1, "children": 1}
+		conn = frappe.get_doc("Channel Manager Connection", h.conn.name)
+		return channex.parse_webhook(conn, payload)[0]
+
+	def cancel_event(self, h, ref: str, ota_name: str = "Booking.com") -> dict:
+		payload = {
+			"event": "booking",
+			"payload": {
+				"status": "cancelled",
+				"ota_reservation_code": ref,
+				"ota_name": ota_name,
+				"rooms": [{"room_type_id": "rt-std", "days": {}}],
+			},
+		}
+		conn = frappe.get_doc("Channel Manager Connection", h.conn.name)
+		return channex.parse_webhook(conn, payload)[0]
+
+	def check_in_real(self, h, doc):
+		from kamra import api, folio as folio_mod
+
+		room = frappe.db.get_value("Room", {"property": h.property, "room_type": h.room_type}, "name")
+		api.check_in(doc.name, room=room)
+		doc.reload()
+		folio_mod.post_remaining_nights(doc)
+		folio_name = frappe.db.get_value("Folio", {"reservation": doc.name, "folio_type": "Guest"}, "name")
+		self.assertTrue(folio_name, "Expected open guest folio after check-in")
+		return frappe.get_doc("Reservation", doc.name), frappe.get_doc("Folio", folio_name)
+
+	def check_out_real(self, h, doc):
+		from kamra import api, folio as folio_mod
+
+		doc, folio = self.check_in_real(h, doc)
+		api.add_folio_payment(folio.name, "Cash", flt(folio.grand_total))
+		api.check_out(doc.name)
+		folio_mod.close_folio(folio.name)
+		return frappe.get_doc("Reservation", doc.name), frappe.get_doc("Folio", folio.name)
+
+	def night_snapshot(self, doc):
+		return [(str(r.stay_date), flt(r.rate, 2), flt(r.gst_rate, 2)) for r in doc.night_rates]
+
+	def folio_snapshot(self, folio_name: str):
+		f = frappe.get_doc("Folio", folio_name)
+		return (f.status, flt(f.grand_total, 2), flt(f.balance, 2),
+		        [(c.description, flt(c.amount, 2), flt(c.gst_amount, 2)) for c in f.charges])
+
+	def test_readable_modify_leaves_checked_in_stay_and_folio_unchanged_and_flags_review(self):
+		from kamra import api
+
+		h = self.hotel(inclusive=0)
+		self.add_deluxe_room_type(h)
+		booked, ref = self.book_today(h, notes="Early check-in")
+		doc, folio = self.check_in_real(h, booked)
+		before_nights = self.night_snapshot(doc)
+		before_folio = self.folio_snapshot(folio.name)
+		before_state = (doc.status, doc.room_type, doc.room, str(doc.check_in_date),
+		                str(doc.check_out_date), doc.adults, doc.children,
+		                flt(doc.amount_after_tax, 2), flt(doc.amount_before_tax, 2),
+		                flt(doc.tax_amount, 2), doc.auto_price)
+
+		conn = frappe.get_doc("Channel Manager Connection", h.conn.name)
+		# First: same room type with changed dates + price (silently rewrote Checked In on base)
+		out = cm._apply_event(conn, self.modify_event(h, ref, ext_room="rt-std"))
+		self.assertEqual(out["result"], "held_for_review")
+		self.assertEqual(out["reservation"], doc.name)
+		# Second: different room type change must also hold cleanly without mutating or throwing
+		out_rt = cm._apply_event(conn, self.modify_event(h, ref, ext_room="rt-dlx"))
+		self.assertEqual(out_rt["result"], "held_for_review")
+
+		doc.reload()
+		after_state = (doc.status, doc.room_type, doc.room, str(doc.check_in_date),
+		               str(doc.check_out_date), doc.adults, doc.children,
+		               flt(doc.amount_after_tax, 2), flt(doc.amount_before_tax, 2),
+		               flt(doc.tax_amount, 2), doc.auto_price)
+		self.assertEqual(after_state, before_state)
+		self.assertEqual(self.night_snapshot(doc), before_nights)
+		self.assertEqual(self.folio_snapshot(folio.name), before_folio)
+		self.assertEqual(doc.channel_review_needed, 1)
+		self.assertIn("Early check-in", doc.special_requests or "")
+		self.assertIn("not applied: the stay is Checked In", doc.special_requests or "")
+		self.assertTrue(frappe.db.exists("Agent Action Log", {
+			"reference_doctype": "Reservation", "reference_name": doc.name,
+			"action_type": "channel.modify_needs_review"}))
+
+		detail = api.reservation_detail(doc.name)
+		self.assertEqual(detail["channel_review_needed"], 1)
+		self.assertTrue(detail["warnings"]["channel_review_needed"])
+		self.assertTrue(detail["channel_reviews"])
+		self.assertEqual(detail["channel_reviews"][0]["action_type"], "channel.modify_needs_review")
+
+		cleared = cm.clear_channel_review(doc.name)
+		self.assertTrue(cleared["ok"])
+		doc.reload()
+		self.assertEqual(doc.channel_review_needed, 0)
+		self.assertEqual(self.night_snapshot(doc), before_nights)
+		self.assertTrue(frappe.db.exists("Agent Action Log", {
+			"reference_doctype": "Reservation", "reference_name": doc.name,
+			"action_type": "channel.review_cleared"}))
+
+	def test_readable_modify_leaves_checked_out_stay_unchanged_and_flags_review(self):
+		h = self.hotel(inclusive=0)
+		self.add_deluxe_room_type(h)
+		booked, ref = self.book_today(h, notes="VIP pillow")
+		doc, folio = self.check_out_real(h, booked)
+		before_nights = self.night_snapshot(doc)
+		before_folio = self.folio_snapshot(folio.name)
+		before_state = (doc.status, doc.room_type, doc.room, str(doc.check_in_date),
+		                str(doc.check_out_date), flt(doc.amount_after_tax, 2))
+
+		conn = frappe.get_doc("Channel Manager Connection", h.conn.name)
+		# Same room type with changed dates + price (silently rewrote Checked Out on base)
+		out = cm._apply_event(conn, self.modify_event(h, ref, ext_room="rt-std"))
+		self.assertEqual(out["result"], "held_for_review")
+		# Different room type change must also hold cleanly without mutating or throwing
+		out_rt = cm._apply_event(conn, self.modify_event(h, ref, ext_room="rt-dlx"))
+		self.assertEqual(out_rt["result"], "held_for_review")
+
+		doc.reload()
+		self.assertEqual((doc.status, doc.room_type, doc.room, str(doc.check_in_date),
+		                  str(doc.check_out_date), flt(doc.amount_after_tax, 2)), before_state)
+		self.assertEqual(self.night_snapshot(doc), before_nights)
+		self.assertEqual(self.folio_snapshot(folio.name), before_folio)
+		self.assertEqual(doc.channel_review_needed, 1)
+		self.assertIn("VIP pillow", doc.special_requests or "")
+		self.assertIn("not applied: the stay is Checked Out", doc.special_requests or "")
+		self.assertTrue(frappe.db.exists("Agent Action Log", {
+			"reference_doctype": "Reservation", "reference_name": doc.name,
+			"action_type": "channel.modify_needs_review"}))
+
+	def test_readable_modify_leaves_no_show_and_cancelled_stays_unchanged_and_flags_review(self):
+		for status in ("No Show", "Cancelled"):
+			with self.subTest(status=status):
+				h = self.hotel(inclusive=0)
+				self.add_deluxe_room_type(h)
+				doc, ref = self.book_today(h)
+				frappe.db.set_value("Reservation", doc.name, "status", status)
+				doc.reload()
+				before_nights = self.night_snapshot(doc)
+				before_state = (doc.status, doc.room_type, str(doc.check_in_date),
+				                str(doc.check_out_date), flt(doc.amount_after_tax, 2))
+
+				conn = frappe.get_doc("Channel Manager Connection", h.conn.name)
+				out = cm._apply_event(conn, self.modify_event(h, ref))
+				self.assertEqual(out["result"], "held_for_review")
+
+				doc.reload()
+				self.assertEqual((doc.status, doc.room_type, str(doc.check_in_date),
+				                  str(doc.check_out_date), flt(doc.amount_after_tax, 2)), before_state)
+				self.assertEqual(self.night_snapshot(doc), before_nights)
+				self.assertEqual(doc.channel_review_needed, 1)
+				self.assertIn(f"not applied: the stay is {status}", doc.special_requests or "")
+				self.assertTrue(frappe.db.exists("Agent Action Log", {
+					"reference_doctype": "Reservation", "reference_name": doc.name,
+					"action_type": "channel.modify_needs_review"}))
+
+	def test_modify_with_unmapped_room_on_checked_in_stay_still_flags_review(self):
+		h = self.hotel(inclusive=0)
+		booked, ref = self.book_today(h)
+		doc, _folio = self.check_in_real(h, booked)
+		conn = frappe.get_doc("Channel Manager Connection", h.conn.name)
+		out = cm._apply_event(conn, self.modify_event(h, ref, ext_room="rt-unmapped"))
+		self.assertEqual(out["result"], "held_for_review")
+		doc.reload()
+		self.assertEqual(doc.status, "Checked In")
+		self.assertEqual(doc.channel_review_needed, 1)
+		self.assertIn("rt-unmapped", doc.special_requests or "")
+		self.assertTrue(frappe.db.exists("Agent Action Log", {
+			"reference_doctype": "Reservation", "reference_name": doc.name,
+			"action_type": "channel.modify_needs_review"}))
+
+	def test_cancel_leaves_checked_in_checked_out_and_no_show_stays_unchanged_and_flags_review(self):
+		for mode in ("Checked In", "Checked Out", "No Show"):
+			with self.subTest(status=mode):
+				h = self.hotel(inclusive=0)
+				booked, ref = self.book_today(h)
+				folio = None
+				if mode == "Checked In":
+					doc, folio = self.check_in_real(h, booked)
+				elif mode == "Checked Out":
+					doc, folio = self.check_out_real(h, booked)
+				else:
+					frappe.db.set_value("Reservation", booked.name, "status", "No Show")
+					doc = frappe.get_doc("Reservation", booked.name)
+				before_nights = self.night_snapshot(doc)
+				before_folio = self.folio_snapshot(folio.name) if folio else None
+
+				conn = frappe.get_doc("Channel Manager Connection", h.conn.name)
+				out = cm._apply_event(conn, self.cancel_event(h, ref))
+				self.assertEqual(out["result"], "held_for_review")
+				self.assertEqual(out.get("reservations"), [])
+				self.assertEqual(out.get("credit_notes"), [])
+
+				doc.reload()
+				self.assertEqual(doc.status, mode)
+				self.assertEqual(self.night_snapshot(doc), before_nights)
+				if folio:
+					self.assertEqual(self.folio_snapshot(folio.name), before_folio)
+				self.assertEqual(doc.channel_review_needed, 1)
+				self.assertIn(f"not applied: the stay is {mode}", doc.special_requests or "")
+				self.assertTrue(frappe.db.exists("Agent Action Log", {
+					"reference_doctype": "Reservation", "reference_name": doc.name,
+					"action_type": "channel.cancel_needs_review"}))
+
+	def test_cancel_on_already_cancelled_stay_is_idempotent_without_review_flag(self):
+		h = self.hotel(inclusive=0)
+		doc, ref = self.book_today(h)
+		conn = frappe.get_doc("Channel Manager Connection", h.conn.name)
+		first = cm._apply_event(conn, self.cancel_event(h, ref))
+		self.assertEqual(first["result"], "cancelled")
+		second = cm._apply_event(conn, self.cancel_event(h, ref))
+		self.assertEqual(second["result"], "already_cancelled")
+		doc.reload()
+		self.assertEqual(doc.status, "Cancelled")
+		self.assertEqual(doc.channel_review_needed, 0)
+		self.assertFalse(frappe.db.exists("Agent Action Log", {
+			"reference_doctype": "Reservation", "reference_name": doc.name,
+			"action_type": "channel.cancel_needs_review"}))
+
+	def test_clear_channel_review_enforces_roles(self):
+		h = self.hotel(inclusive=0)
+		booked, ref = self.book_today(h)
+		doc, _folio = self.check_in_real(h, booked)
+		conn = frappe.get_doc("Channel Manager Connection", h.conn.name)
+		cm._apply_event(conn, self.modify_event(h, ref))
+
+		hk_email = f"hk-{frappe.generate_hash(length=6)}@example.test"
+		frappe.get_doc({
+			"doctype": "User", "email": hk_email, "first_name": "HK",
+			"enabled": 1, "roles": [{"role": "Housekeeping"}],
+		}).insert(ignore_permissions=True)
+		fd_email = f"fd-{frappe.generate_hash(length=6)}@example.test"
+		frappe.get_doc({
+			"doctype": "User", "email": fd_email, "first_name": "FD",
+			"enabled": 1, "roles": [{"role": "Front Desk"}],
+		}).insert(ignore_permissions=True)
+		try:
+			frappe.set_user(hk_email)  # nosemgrep: frappe-setuser -- test RBAC check
+			with self.assertRaises(frappe.PermissionError):
+				cm.clear_channel_review(doc.name)
+			frappe.set_user(fd_email)  # nosemgrep: frappe-setuser -- test RBAC check
+			self.assertTrue(cm.clear_channel_review(doc.name)["ok"])
+		finally:
+			frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- restore test user
+		self.assertEqual(frappe.db.get_value("Reservation", doc.name, "channel_review_needed"), 0)
