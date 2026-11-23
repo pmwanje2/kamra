@@ -331,11 +331,18 @@ def on_reservation_change(doc, method=None):
 
 
 @frappe.whitelist(allow_guest=True, methods=["POST"])
-def webhook(connection: str, **kwargs):
+def webhook(connection: str | None = None, **kwargs):
 	"""One URL per connection:
 	/api/method/kamra.channel_manager.webhook?connection=CMC-00001
 	Authenticated by the connection's webhook secret (X-Webhook-Secret
-	header or `secret` in the payload)."""
+	header or `secret` in the payload).
+
+	The connection is read from the URL itself: on a JSON post (Channex
+	sends one) Frappe builds the arguments from the body alone and drops
+	the query string (frappe.app.make_form_dict). The URL's connection
+	wins over an argument of the same name."""
+	connection = (frappe.request.args.get("connection") if frappe.request else None) \
+		or connection
 	conn = frappe.get_doc("Channel Manager Connection", connection)
 	if not conn.active:
 		return {"ok": False, "reason": "connection_inactive"}
