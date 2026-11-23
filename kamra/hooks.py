@@ -367,11 +367,12 @@ doc_events["Reservation"] = {
 
 # What moves availability or price queues an ARI change for the connections
 # with an outbox (kamra.channel_ari: only changes, in ranges, under the
-# provider's rate limit). Reservations go through on_reservation_change. An
-# exchange rate (Kamra's, or ERPNext's Currency Exchange where it shares the
-# site) re-prices only a foreign plan sold in the property's currency.
+# provider's rate limit). Reservations go through on_reservation_change. A
+# selling Currency Exchange (ERPNext's, where Kamra shares the site: the only
+# rate a contract converts at) re-prices only a foreign plan sold in the
+# property's currency.
 for _doctype in ("Season", "Rate Plan", "Room Type", "Hurdle Rate", "Rate Guardrail",
-                 "Room", "Room Block", "Channel Room Mapping", "Exchange Rate", "Currency Exchange"):
+                 "Room", "Room Block", "Channel Room Mapping", "Currency Exchange"):
 	_events = doc_events.setdefault(_doctype, {})
 	for _event in ("on_update", "after_insert", "on_trash"):
 		_current = _events.get(_event) or []

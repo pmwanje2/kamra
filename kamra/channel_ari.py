@@ -28,11 +28,15 @@ SAP replicates a condition in its currency or converts it into a
 fixed-currency channel at the governed rate of the pricing date. So with H
 the property's currency and C the contract's: E == C sends the contract
 nightly, E == H the property-currency agreed rate the desk books (a plan
-priced from the card only this), and anything else nothing - the outbox row
-fails and says why. A missing tariff still stops sale; a missing exchange
-rate (HSP-TARIFF-003) is a pricing error that passes, not a delisting: the
-night is held at what the provider last accepted, the row is retried and
-Finance is told.
+priced from the card only this), and anything else - an unknown E included,
+for every plan - nothing: the outbox row fails and says why. Only the
+resolver's refusal of a night (a missing tariff) or no price above zero
+stops sale. A missing exchange rate (HSP-TARIFF-003) is a pricing error that
+passes, not a delisting, and so is any other error while pricing (a
+permission refusal, the database, the bridge): the night is held at what the
+provider last accepted, retried on its own, and Finance (an exchange rate)
+or Revenue (anything else) is told. The worker prices as the system, never
+as the user whose change queued it.
 """
 
 from __future__ import annotations
@@ -45,9 +49,9 @@ from decimal import ROUND_HALF_UP, Decimal
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, date_diff, getdate, nowdate
+from frappe.utils import add_days, cint, date_diff, getdate, nowdate
 
-from kamra.authz import require_roles
+from kamra.authz import act_as, require_roles
 
 ARI_HORIZON_DAYS = 500  # the full sync and the nightly sweep
 ARI_MAX_DAYS = 730  # a user's change is sent whole up to here
@@ -100,21 +104,25 @@ class AriPriceHeld(Exception):
 	nothing is sent for it, so the provider keeps the last rate it accepted."""
 
 
+class AriPricingFailed(Exception):
+	"""The night could not be priced for a reason that is not a refusal (a
+	permission refusal, the database, the bridge): nothing is sent for it,
+	so the provider keeps the last rate it accepted."""
+
+
 class AriCurrencyRefused(Exception):
 	"""The mapped provider rate plan sells in a currency the night cannot be
-	priced in: neither the contract's nor the property's."""
+	priced in: neither the contract's nor the property's, or not known."""
 
 
 def _sold_currency(rate_plan: str | None, external_currency: str | None, home: str) -> str:
 	"""The currency a mapping's rates go out in: the provider rate plan's
-	when it is the plan's own (C) or the property's (H); H for a home plan
-	whose provider currency is not known yet. AriCurrencyRefused otherwise."""
+	when it is the plan's own (C) or the property's (H). AriCurrencyRefused
+	otherwise, and when it is not known: never a guess."""
 	from kamra.pricing import rate_plan_currency, resolve_rate_plan_chain
 	priced_in = rate_plan_currency(resolve_rate_plan_chain(rate_plan)) if rate_plan else home
-	if external_currency in (priced_in, home):
+	if external_currency and external_currency in (priced_in, home):
 		return external_currency
-	if not external_currency and priced_in == home:
-		return home
 	raise AriCurrencyRefused(_("sells in {0}; it can go only in {1}").format(
 		external_currency or _("an unknown currency"), " or ".join(sorted({priced_in, home}))))
 
@@ -128,9 +136,10 @@ def _plan_night_rate(property: str, room_type: str, rate_plan: str | None, d,
 	contract nightly (a derived plan's modifier in it); in the property's it
 	is the agreed rate; a card night goes only in the property's.
 
-	None when the night cannot be quoted (a missing tariff among them) or is
-	not worth more than 0: stop sale. AriPriceHeld when its exchange rate is
-	missing or stale, AriCurrencyRefused when it cannot go in `currency`."""
+	None when the resolver refuses the night (a missing tariff among them) or
+	it is not worth more than 0: stop sale. AriPriceHeld when its exchange
+	rate is missing or stale, AriPricingFailed on any other error while
+	pricing it, AriCurrencyRefused when it cannot go in `currency`."""
 	from kamra.pricing import ContractRateRefused, property_currency, quote_with_contract
 	home = property_currency(property)
 	if not currency:
@@ -143,8 +152,8 @@ def _plan_night_rate(property: str, room_type: str, rate_plan: str | None, d,
 		if "HSP-TARIFF-003" in str(exc):
 			raise AriPriceHeld(str(exc)) from None
 		return None
-	except Exception:
-		return None
+	except Exception as exc:
+		raise AriPricingFailed(f"{type(exc).__name__}: {exc}") from exc
 	tariff = q.get("tariff")
 	if tariff and currency == tariff.get("currency"):
 		amount = tariff.get("nightly")
@@ -155,8 +164,8 @@ def _plan_night_rate(property: str, room_type: str, rate_plan: str | None, d,
 			currency, " or ".join(sorted({tariff.get("currency"), home} if tariff else {home}))))
 	try:
 		total = Decimal(str(amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-	except Exception:
-		return None
+	except Exception as exc:
+		raise AriPricingFailed(f"{type(exc).__name__}: {amount!r} is not a price") from exc
 	return total if total > 0 else None
 
 
@@ -176,9 +185,10 @@ def restriction_cells(conn, date_from, date_to, problems: dict | None = None) ->
 	and carries no rate.
 
 	A mapping that cannot go in its currency has no cells at all, and a night
-	whose exchange rate is missing has none either. `problems` (when given)
-	collects them: "refused" {external_rate_id: why} and "held"
-	{external_rate_id: {"dates": [...], "reason": the refusal}}."""
+	whose exchange rate is missing, or that errs while it is priced, has none
+	either. `problems` (when given) collects them: "refused"
+	{external_rate_id: why}, "held" and "errored" {external_rate_id:
+	{"dates": [...], "reason": ..., "rate_plan": ...}}."""
 	from kamra.channel_manager import _mappings
 	from kamra.pricing import property_currency
 	problems = {} if problems is None else problems
@@ -201,13 +211,15 @@ def restriction_cells(conn, date_from, date_to, problems: dict | None = None) ->
 				try:
 					plan[str(d)] = _restriction_day(
 						_plan_night_rate(conn.property, m.room_type, m.rate_plan, d, currency))
-				except AriPriceHeld as exc:
-					held = problems.setdefault("held", {}).setdefault(
+				except (AriPriceHeld, AriPricingFailed) as exc:
+					key = "held" if isinstance(exc, AriPriceHeld) else "errored"
+					held = problems.setdefault(key, {}).setdefault(
 						ext_id, {"dates": [], "reason": str(exc), "rate_plan": m.rate_plan})
 					held["dates"].append(str(d))
 		except AriCurrencyRefused as exc:
 			problems.setdefault("refused", {})[ext_id] = f"{ext_id} {exc}"
 			problems.get("held", {}).pop(ext_id, None)
+			problems.get("errored", {}).pop(ext_id, None)
 			continue
 		if plan:
 			out[ext_id] = plan
@@ -338,6 +350,7 @@ _ARI_CALLS = "channex_ari_calls::{connection}::{kind}"  # timestamps of the last
 _ARI_ERROR = "channex_ari_error::{connection}"
 _ARI_FX = "channex_ari_fx::{connection}"
 _ARI_CURRENCY = "channex_ari_currency::{connection}"
+_ARI_PRICING = "channex_ari_pricing::{connection}"
 
 
 def _dt(ts: float) -> datetime:
@@ -501,11 +514,11 @@ def _currency_detail(refused: dict) -> str:
 	return "Currency: " + " | ".join(refused[k] for k in sorted(refused)) + " - not sent" if refused else ""
 
 
-def _held_detail(held: dict) -> str:
+def _held_detail(held: dict, why: str = "no exchange rate") -> str:
 	if not held:
 		return ""
 	reasons = "; ".join(sorted({h["reason"] for h in held.values()}))
-	return f"Held (no exchange rate): {', '.join(sorted(held))}: {reasons}"
+	return f"Held ({why}): {', '.join(sorted(held))}: {reasons}"
 
 
 def _currency_refused(conn, detail: str) -> None:
@@ -529,6 +542,22 @@ def _fx_alert(conn, held: dict) -> None:
 		"published.").format("/".join(currencies), ", ".join(names) or ", ".join(sorted(held))),
 		doctype="Channel Manager Connection", name=conn.name)
 	frappe.log_error(title=f"Channex ARI FX held {conn.name}", message=_held_detail(held)[:1000])
+
+
+def _pricing_alert(conn, errored: dict) -> None:
+	"""Nights that errored while they were priced: Revenue is told through
+	the notification bell, and the Error Log says why, once an hour per
+	connection."""
+	if not _once_an_hour(_ARI_PRICING.format(connection=conn.name)):
+		return
+	from kamra.notifications import record
+	plans = sorted({h["rate_plan"] for h in errored.values() if h.get("rate_plan")})
+	names = [frappe.db.get_value("Rate Plan", p, "rate_plan_name") or p for p in plans]
+	record(conn.property, "revenue", _(
+		"Channel rates for {0} could not be priced: they stay at their last price and are retried.").format(
+		", ".join(names) or ", ".join(sorted(errored))), doctype="Channel Manager Connection", name=conn.name)
+	frappe.log_error(title=f"Channex ARI pricing error {conn.name}",
+	                 message=_held_detail(errored, "pricing error")[:1000])
 
 
 def _windows(rows: list) -> list[tuple[str, str]]:
@@ -587,15 +616,22 @@ def _done(rows: list, kind: str, task_ids: list, now: float, detail: str = "", f
 		frappe.db.set_value("Channel ARI Outbox", r.name, values, update_modified=True)
 
 
-def _held(rows: list, task_ids: list, detail: str, bumped: set, now: float) -> int:
-	"""Some nights of these rows wait for an exchange rate: they stay Pending
-	and are retried with the 5xx back-off. Seconds to the retry."""
-	for r in rows:
-		values = _noted(r, task_ids, detail)
-		if values:
-			frappe.db.set_value("Channel ARI Outbox", r.name, values, update_modified=True)
-	_backoff(rows, bumped, now)
-	return min(30 * 2 ** (max(int(r.attempts or 1) for r in rows) - 1), 1800)
+def _retry_held(conn, rows: list, kind: str, task_ids: list, detail: str, ext_ids: list, dates: list,
+                refused: bool, now: float) -> int:
+	"""Some nights of this kind could not be priced now (an exchange rate
+	missing, an error): they get a retry of their own - one Pending row of
+	this kind for those nights only, never a full sync, with the 5xx
+	back-off. The rest of the kind went out, so the claimed rows are done
+	with it: a full sync is not sent again, and the other kind of a row
+	keeps its own wait. Seconds to the retry."""
+	attempts = max(int(r.attempts or 0) for r in rows) + 1
+	wait = min(30 * 2 ** (attempts - 1), 1800)
+	_insert_row({"connection": conn.name, "property": conn.property, "status": "Pending", "kinds": kind,
+	             "full": 0, "date_from": dates[0], "date_to": dates[-1], "attempts": attempts,
+	             "next_attempt_at": _dt(now + wait), "queued_at": _dt(now),
+	             "reason": f"Retry held nights: {', '.join(ext_ids)}"[:140], "detail": detail[:280]})
+	_done(rows, kind, task_ids, now, detail, failed=refused)
+	return wait
 
 
 def _backoff(rows: list, bumped: set, now: float) -> None:
@@ -673,7 +709,17 @@ def flush_outbox(connection: str) -> dict:
 	differs from Channel ARI State (everything if a row asks for a full
 	sync), joins it into ranges and makes ONE call. What it did not finish
 	goes back to Pending. Returns {kind: {"sent": n} | {"paused": s} |
-	{"waiting": s} | {"retry": s} | {"failed": detail} | {"nothing": True}}."""
+	{"waiting": s} | {"retry": s} | {"failed": detail} | {"nothing": True}}.
+
+	frappe.enqueue runs a job as the user who queued it - Guest on a booking
+	webhook, an accounts user saving a Currency Exchange - so the pass runs
+	as the system (Administrator, as the scheduler's jobs do) and hands that
+	user back after."""
+	with act_as("Administrator"):
+		return _flush_outbox(connection)
+
+
+def _flush_outbox(connection: str) -> dict:
 	conn = frappe.get_doc("Channel Manager Connection", connection)
 	result = {kind: {"nothing": True} for kind in KINDS}
 	if not conn.active or not _supports_outbox(conn.provider):
@@ -717,7 +763,7 @@ def _flush(conn, rows: list, now: float, result: dict) -> None:
 			failed.append(f"{kind}: {refused}")
 			_currency_refused(conn, refused)
 		if not changes:
-			_settle(conn, krows, kind, [], now, refused, problems, bumped, result, 0)
+			_settle(conn, krows, kind, [], now, refused, problems, result, 0)
 			frappe.db.commit()  # nosemgrep: frappe-manual-commit -- ari worker: nothing to send, the rows are done
 			continue
 		_count_call(connection, kind, now)
@@ -744,7 +790,7 @@ def _flush(conn, rows: list, now: float, result: dict) -> None:
 		dropped = {_key(c) for c in rejected}
 		_remember(connection, kind, _expand([c for c in changes if _key(c) not in dropped]))
 		detail = " | ".join(filter(None, [_rejected_detail(rejected), refused]))
-		_settle(conn, krows, kind, out.get("task_ids") or [], now, detail, problems, bumped, result, len(changes))
+		_settle(conn, krows, kind, out.get("task_ids") or [], now, detail, problems, result, len(changes))
 		if rejected:
 			frappe.log_error(title=f"Channex ARI rejected {conn.name}", message=json.dumps(
 				[dict(c, values={f: _canon(v) for f, v in (c.get("values") or {}).items()}) for c in rejected],
@@ -758,17 +804,22 @@ def _flush(conn, rows: list, now: float, result: dict) -> None:
 
 
 def _settle(conn, rows: list, kind: str, task_ids: list, now: float, detail: str, problems: dict,
-            bumped: set, result: dict, sent: int) -> None:
+            result: dict, sent: int) -> None:
 	"""After a kind's call (or none needed): nights held for an exchange rate
-	keep the rows Pending for a retry and tell Finance; a refused currency
-	fails them; otherwise they are done."""
-	held = problems.get("held") or {}
-	if held:
-		detail = " | ".join(filter(None, [detail, _held_detail(held)]))
-		result[kind] = {"sent": sent, "held": _held(rows, task_ids, detail, bumped, now)}
-		_fx_alert(conn, held)
-		return
+	or that errored get a retry of their own and Finance or Revenue is told;
+	a refused currency fails the rows; otherwise they are done."""
+	held, errored = problems.get("held") or {}, problems.get("errored") or {}
 	refused = bool(problems.get("refused"))
+	if held or errored:
+		detail = " | ".join(filter(None, [detail, _held_detail(held), _held_detail(errored, "pricing error")]))
+		dates = sorted({d for nights in (held, errored) for h in nights.values() for d in h["dates"]})
+		wait = _retry_held(conn, rows, kind, task_ids, detail, sorted({*held, *errored}), dates, refused, now)
+		result[kind] = {"sent": sent, "held": wait}
+		if held:
+			_fx_alert(conn, held)
+		if errored:
+			_pricing_alert(conn, errored)
+		return
 	_done(rows, kind, task_ids, now, detail, failed=refused)
 	result[kind] = {"sent": sent, "failed": detail} if refused else {"sent": sent}
 
@@ -802,9 +853,11 @@ def enqueue_ari_flushes() -> None:
 # ---------------------------------------------------------------------------
 
 _HORIZON_SOURCES = ("Rate Plan", "Room Type", "Hurdle Rate", "Rate Guardrail")
-# exchange rates: Kamra's own FX desk rate, and ERPNext's Currency Exchange
-# where Kamra shares its site (the governed rate a contract converts at)
-_FX_SOURCES = ("Exchange Rate", "Currency Exchange")
+# the exchange rate a contract converts at: ERPNext's selling Currency
+# Exchange where Kamra shares its site (pricing.posting_fx_rate and
+# hospitality_tariffs.tariff_rate read nothing else; Kamra's own Exchange
+# Rate is the FX desk's, and moves no channel price)
+_FX_SOURCES = ("Currency Exchange",)
 
 
 def _dates(*values) -> list:
@@ -868,14 +921,18 @@ def _source(doc, method) -> tuple[str, str | None, str | None, str] | None:
 
 
 def _forget_mapping(doc, before=None) -> None:
-	"""A mapping removed (or re-pointed) leaves its provider ids unknown: what
-	was sent for them is forgotten, so a new mapping sends them whole. The
-	room id's availability stays while another mapping still uses it."""
+	"""A mapping removed (or re-pointed, or now selling in another currency)
+	leaves its provider ids unknown: what was sent for them is forgotten, so
+	a new mapping sends them whole. The room id's availability stays while
+	another mapping still uses it."""
 	old = before or doc
-	if before and before.external_rate_id == doc.external_rate_id \
+	# a provider rate plan that now sells in another currency: what it was
+	# sent in the old one is not comparable
+	recurrency = bool(before) and (before.get("external_currency") or None) != (doc.get("external_currency") or None)
+	if before and not recurrency and before.external_rate_id == doc.external_rate_id \
 			and before.external_room_id == doc.external_room_id:
 		return
-	if not before or before.external_rate_id != doc.external_rate_id:
+	if not before or recurrency or before.external_rate_id != doc.external_rate_id:
 		_forget(old.connection, "restrictions", old.external_rate_id)
 	if not before or before.external_room_id != doc.external_room_id:
 		still = frappe.db.exists("Channel Room Mapping", {"connection": old.connection,
@@ -884,19 +941,17 @@ def _forget_mapping(doc, before=None) -> None:
 			_forget(old.connection, "availability", old.external_room_id)
 
 
-def _fx_source_connections(doc) -> dict[str, set]:
-	"""{property: {connection}} whose prices an exchange rate moves: the
-	connections that sell a plan priced in that currency in the property's
-	own currency (E == H). A plan sold in its contract currency does not
-	move with the rate."""
+def _fx_source_connections(doc, before=None) -> dict[str, set]:
+	"""{property: {connection}} whose prices a selling Currency Exchange row
+	moves (one that is, or was, for selling): the connections that sell a
+	plan priced in that currency in the property's own currency (E == H). A
+	plan sold in its contract currency does not move with the rate."""
 	from kamra.channel_manager import _mappings
 	from kamra.pricing import property_currency, rate_plan_currency, resolve_rate_plan_chain
-	if doc.doctype == "Exchange Rate":
-		currency, home_only = doc.get("currency"), None
-		connections = outbox_connections(doc.get("property")) if doc.get("property") else []
-	else:
-		currency, home_only = doc.get("from_currency"), doc.get("to_currency")
-		connections = outbox_connections()
+	if not (cint(doc.get("for_selling")) or cint(before.get("for_selling") if before else 0)):
+		return {}
+	currency, home_only = doc.get("from_currency"), doc.get("to_currency")
+	connections = outbox_connections()
 	out: dict[str, set] = {}
 	for c in connections:
 		home = property_currency(c.property)
@@ -917,7 +972,8 @@ def on_ari_source_change(doc, method=None) -> None:
 		if method == "on_update" and doc.flags.in_insert:
 			return  # after_insert has it
 		if doc.doctype in _FX_SOURCES:
-			for property, connections in _fx_source_connections(doc).items():
+			before = doc.get_doc_before_save() if method == "on_update" else None
+			for property, connections in _fx_source_connections(doc, before).items():
 				enqueue_ari_change(property, kinds="restrictions", reason=f"{doc.doctype} {doc.name}",
 				                   connections=connections)
 			return
