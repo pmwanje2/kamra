@@ -800,6 +800,7 @@ class Reservation(Document):
 		old = self.get_doc_before_save()
 		if not old:
 			return
+
 		def by_date(doc):
 			out: dict = {}
 			for r in doc.get("night_rates") or []:

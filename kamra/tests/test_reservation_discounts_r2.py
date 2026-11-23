@@ -57,6 +57,8 @@ from kamra.tests.test_reservation_discounts import (
 )
 
 PROMO = dict(reason_code="RATE-PROMO")
+# a full comp at booking
+COMP = dict(discount_type="Percent", discount_value=100, discount_reason="ADJ-RATE")
 
 
 def refuse_locked_nights_on_insert(doc, method):
@@ -456,23 +458,21 @@ class RepriceRulesTests(RoundTwoTestCase):
 class FullCompTests(RoundTwoTestCase):
 	"""P2-12: nobody signs off their own 100% comp."""
 
-	ARGS = dict(discount_type="Percent", discount_value=100, discount_reason="ADJ-RATE")
-
 	def test_a_hotel_admin_needs_another_supervisors_pin_for_a_comp(self):
 		with self.assertRaises(frappe.PermissionError):
-			self.book(GM, **self.ARGS)
+			self.book(GM, **COMP)
 		with self.assertRaises(frappe.PermissionError) as raised:
-			self.book(GM, **self.ARGS, supervisor_user=GM, supervisor_pin="4321")
+			self.book(GM, **COMP, supervisor_user=GM, supervisor_pin="4321")
 		self.assertTrue(str(raised.exception).startswith("SUPERVISOR_SELF_APPROVAL:"))
 		self.desk_with_finance()
-		out = self.book(GM, **self.ARGS, supervisor_user=SELF, supervisor_pin="5678")
+		out = self.book(GM, **COMP, supervisor_user=SELF, supervisor_pin="5678")
 		self.assertEqual(self.rows(out["reservation"]), [(1000, 1000, 0), (1000, 1000, 0)])
 		self.assertEqual(self.discount_logs(out["reservation"])[0].approver, SELF)
 
 	def test_the_preview_asks_a_hotel_admin_for_someone_elses_pin(self):
 		self.desk_with_finance()
 		gov = self.as_user(GM, api.get_quote, PROP_A, self.rt, d(5), d(7),
-		                   **self.ARGS)["discount_governance"]
+		                   **COMP)["discount_governance"]
 		self.assertTrue(gov["comp"])
 		self.assertTrue(gov["needs_supervisor"])
 		self.assertNotIn(GM, [s["user"] for s in gov["supervisors"]])
