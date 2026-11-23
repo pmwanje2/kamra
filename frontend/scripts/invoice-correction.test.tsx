@@ -218,6 +218,90 @@ describe("Invoice corrections on the folio screen", () => {
     expect(rows.map((r) => r.className.includes("print:hidden"))).toEqual([true, true, false, false, false])
   })
 
+  it("moves an outlet or package line whole without offering a split input", async () => {
+    data = invoice({
+      status: "Open",
+      invoice_number: null,
+      charges: [
+        { name: "c_out", posting_date: "2026-11-22", charge_type: "Food & Beverage",
+          description: "Restaurant Order", source_ref: "POS-ORD-8801",
+          amount: 1000, gst_rate: 18, gst_amount: 180, total: 1180 },
+        { name: "c_pkg", posting_date: "2026-11-22", charge_type: "Meal Plan",
+          description: "Breakfast Plan",
+          amount: 500, gst_rate: 18, gst_amount: 90, total: 590 },
+        { name: "c_room", posting_date: "2026-11-22", charge_type: "Room",
+          description: "Room 101",
+          amount: 2000, gst_rate: 18, gst_amount: 360, total: 2360 },
+      ],
+      charges_total: 3500, tax_total: 630, grand_total: 4130, payments_total: 0, balance: 4130,
+    })
+    data.stay = { ...data.stay, reservation: "RES-1" }
+    rpc.mockImplementation((method: string) => {
+      if (method === "kamra.api.folio_invoice") return Promise.resolve(data)
+      if (method === "kamra.api.reservation_folios") {
+        return Promise.resolve([
+          { name: "FOLIO-1", folio_type: "Guest", status: "Open", balance: 4130 },
+          { name: "FOLIO-2", folio_type: "Extra", status: "Open", balance: 0 },
+        ])
+      }
+      if (method === "kamra.api.correct_charged_nights") return Promise.resolve({ nights: [] })
+      if (method === "kamra.api.linked_records") return Promise.resolve(null)
+      if (method === "kamra.api.allowance_requests") return Promise.resolve({ requests: [], can_decide: false })
+      if (method === "kamra.ledger.list_reason_codes") return Promise.resolve([])
+      if (method === "kamra.api.property_locale") return Promise.resolve({ currency: "UGX" })
+      return Promise.resolve({})
+    })
+    await render("Restaurant Order")
+
+    const rowCheckbox = (label: string) => {
+      const row = [...host.querySelectorAll("tr")].find((r) => r.textContent?.includes(label))
+      const box = row?.querySelector<HTMLInputElement>('input[type="checkbox"]')
+      if (!box) throw new Error(`No checkbox for ${label}`)
+      return box
+    }
+    const toggle = (label: string) => act(async () => rowCheckbox(label).click())
+    const splitInput = () => host.querySelector<HTMLInputElement>('input[placeholder="30% or 1500"]')
+
+    // Single outlet line: no split input or "move only" prompt, explains whole move
+    await toggle("Restaurant Order")
+    expect(splitInput()).toBeNull()
+    expect(text()).not.toContain("move only")
+    expect(text()).toContain("Moves whole (cannot be split)")
+    await press("Clear")
+
+    // Single package (Meal Plan) line: same whole-move behaviour
+    await toggle("Breakfast Plan")
+    expect(splitInput()).toBeNull()
+    expect(text()).not.toContain("move only")
+    expect(text()).toContain("Moves whole (cannot be split)")
+    await press("Clear")
+
+    // Ordinary room line offers the split input; switching to an outlet line
+    // without clearing still sends a whole transfer, never a split call
+    await toggle("Room 101")
+    const input = splitInput()
+    expect(input).not.toBeNull()
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!
+    await act(async () => {
+      setter.call(input!, "30%")
+      input!.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+    await toggle("Room 101")
+    await toggle("Restaurant Order")
+    expect(splitInput()).toBeNull()
+    const targetBtn = [...host.querySelectorAll("button")].find(
+      (b) => b.textContent?.includes("Extra") && b.textContent?.includes("owes"),
+    )
+    if (!targetBtn) throw new Error("No Extra target button")
+    await act(async () => targetBtn.click())
+    expect(rpc).toHaveBeenCalledWith("kamra.api.transfer_folio_charges", {
+      from_folio: "FOLIO-1",
+      charge_rows: ["c_out"],
+      to_folio: "FOLIO-2",
+    })
+    expect(rpc).not.toHaveBeenCalledWith("kamra.api.split_folio_charge", expect.anything())
+  })
+
   it.each([
     ["ar", "إشعار دائن", "أصدر النظام المحاسبي الفاتورة INV-0001"],
     ["de", "Gutschrift", "Die Rechnung INV-0001 wurde von der Buchhaltung"],

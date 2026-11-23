@@ -28,6 +28,7 @@ from kamra.tests.audit_fixtures import (
 	AuditTestCase,
 	d,
 	ensure_user,
+	guest_folio,
 	make_property,
 	make_reservation,
 	make_room,
@@ -168,6 +169,93 @@ class InvoiceCorrectionTestCase(AuditTestCase):
 		with self.assertRaisesRegex(frappe.ValidationError, REFUSED):
 			folio_mod.cancel_invoice(self.folio, "UT checkout reinstated")
 		self.assert_untouched()
+
+	def _bridge_checked_out_stay(self, room_no: str, sales_invoice: str, *,
+	                             use_save: bool = False, with_extra: bool = False):
+		rt = make_room_type(PROP_A, "STD", base_price=1000)
+		res = make_reservation(PROP_A, rt, d(-1), TODAY, status="Checked In",
+		                       room=make_room(PROP_A, rt, room_no))
+		folio_mod.post_remaining_nights(res)
+		gf = guest_folio(res.name)
+		bal = float(frappe.db.get_value("Folio", gf, "balance") or 0)
+		if bal > 0:
+			api.add_folio_payment(gf, "Cash", bal)
+		extra, extra_inv = None, None
+		if with_extra:
+			extra = folio_mod.split_folio(res.name, "Extra")
+			edoc = frappe.get_doc("Folio", extra)
+			edoc.append("charges", {"posting_date": TODAY, "reservation": res.name,
+			                        "charge_type": "Misc", "description": "UT minibar",
+			                        "qty": 1, "rate": 100, "amount": 100, "gst_rate": 0})
+			folio_mod._recalculate(edoc)
+			save_folio(edoc)
+			api.add_folio_payment(extra, "Cash", 100)
+			extra_inv = folio_mod.close_folio(extra)
+		api.check_out(res.name)
+		if use_save:
+			# mirrors Kamra ERP Checkout Close + Folio Close: closes folio with
+			# sales_invoice and leaves invoice_number and closed_on unset
+			fdoc = frappe.get_doc("Folio", gf)
+			fdoc.status = "Closed"
+			fdoc.invoice_number = None
+			fdoc.closed_on = None
+			fdoc.sales_invoice = sales_invoice
+			fdoc.save(ignore_permissions=True)
+		else:
+			frappe.db.set_value("Folio", gf, {
+				"status": "Closed",
+				"sales_invoice": sales_invoice,
+				"invoice_number": None,
+			}, update_modified=False)
+		return res, gf, extra, extra_inv
+
+	def test_reinstating_a_bridge_checkout_is_refused(self):
+		"""OPERA/ERP: a folio already invoiced by the accounting system at
+		check-out (sales_invoice set, no hotel invoice_number) cannot be
+		reopened by reinstating the check-out, and nothing else on the stay
+		is cancelled or moved back to Checked In."""
+		res, gf, extra, extra_inv = self._bridge_checked_out_stay(
+			"102", "UT-SINV-CHK", with_extra=True)
+
+		with self.assertRaisesRegex(frappe.ValidationError, REFUSED):
+			api.reinstate_checkout(res.name, "UT checked out by mistake")
+
+		self.assertEqual(frappe.db.get_value("Reservation", res.name, "status"), "Checked Out")
+		self.assertEqual(
+			frappe.db.get_value("Folio", gf, ["status", "invoice_number", "sales_invoice"]),
+			("Closed", None, "UT-SINV-CHK"),
+		)
+		self.assertEqual(
+			frappe.db.get_value("Folio", extra, ["status", "invoice_number"]),
+			("Closed", extra_inv),
+		)
+		self.assertFalse(frappe.db.exists("Cancelled Invoice", {"folio": ("in", [gf, extra])}))
+
+	def test_reinstating_a_bridge_checkout_after_prior_night_audit_is_refused(self):
+		"""When a prior Night Audit Run exists and Kamra ERP Checkout Close
+		closed the folio without stamping closed_on, reinstate_checkout still
+		sees the bridge-invoiced folio and refuses."""
+		run = frappe.get_doc({
+			"doctype": "Night Audit Run",
+			"property": PROP_A,
+			"business_date": d(-1),
+			"status": "Completed",
+		}).insert(ignore_permissions=True)
+		frappe.db.set_value("Night Audit Run", run.name, "creation", "2020-01-01 00:00:00",
+		                    update_modified=False)
+
+		res, gf, _extra, _extra_inv = self._bridge_checked_out_stay(
+			"103", "UT-SINV-CHK-2", use_save=True)
+
+		with self.assertRaisesRegex(frappe.ValidationError, REFUSED):
+			api.reinstate_checkout(res.name, "UT checked out by mistake")
+
+		self.assertEqual(frappe.db.get_value("Reservation", res.name, "status"), "Checked Out")
+		self.assertEqual(
+			frappe.db.get_value("Folio", gf, ["status", "invoice_number", "sales_invoice"]),
+			("Closed", None, "UT-SINV-CHK-2"),
+		)
+		self.assertFalse(frappe.db.exists("Cancelled Invoice", {"folio": gf}))
 
 	def test_a_bridge_cancellation_is_checked_and_logged_like_any_other(self):
 		self.issued_by_bridge()
