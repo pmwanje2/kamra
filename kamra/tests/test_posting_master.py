@@ -148,8 +148,9 @@ class PostingMasterTestCase(AuditTestCase):
 		gb = self.group(company=company)
 		r1, r2 = self.members(gb)
 		bill = api.post_stay_charge(r2.name, "Room", "UT R2 night", 1000)["folio"]
-		owed = float(frappe.db.get_value("Folio", bill, "balance"))
-		self.assertGreater(owed, 0)
+		# check-out posts the first room's own night to the group's bill too
 		api.check_out(r1.name)
+		owed = float(frappe.db.get_value("Folio", bill, "balance"))
+		self.assertGreater(owed, 1000)
 		# the group is still in house, so its open bill still counts
 		self.assertEqual(in_house_exposure(company, PROP_A), round(owed, 2))

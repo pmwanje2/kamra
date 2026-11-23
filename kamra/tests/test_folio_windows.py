@@ -164,10 +164,11 @@ class FolioWindowsTestCase(AuditTestCase):
 		frappe.db.set_value("Folio", first_pm, "status", "Closed")
 		second_pm = folio_mod.open_window(group_booking=gb.name)
 		legacy = [guest, company, extra, first_pm, second_pm]
-		# as the rows stood before the migration: no window, no payee
+		# as the rows stood after the migration added the columns: no window
+		# (an Int column is 0, never NULL), no payee
 		for name in legacy:
 			frappe.db.set_value("Folio", name, {
-				"window_no": None, "payee_type": None, "payee_company": None,
+				"window_no": 0, "payee_type": None, "payee_company": None,
 				"payee_agent": None, "payment_method": None})
 		importlib.import_module("kamra.patches.v48.backfill_folio_windows").execute()
 		got = {name: window(name) for name in legacy}
