@@ -77,6 +77,7 @@ import { useEffect, useState } from "react"
 
 import { call } from "./api"
 import { deskLabel, upstreamOnly, whiteLabel } from "./brand"
+import { toFullPath } from "./routing"
 
 /** "Night audit" is what most hotels call End of Day; EOD is what they type. */
 const EOD_KEYWORDS = ["End of day", "EOD", "Close the day", "Roll the date"]
@@ -174,7 +175,7 @@ export const APPS: AppDef[] = [
       { to: "/laundry", label: "Laundry", icon: Shirt },
       { to: "/lost-found", label: "Lost & Found", icon: PackageSearch },
       { to: "/reports", label: "Reports", icon: ChartLine },
-      { href: "/kamra/hk", label: "Phone App", icon: Smartphone },
+      { href: toFullPath("/hk"), label: "Phone App", icon: Smartphone },
       { to: "/settings/housekeeping", label: "Settings", icon: SettingsIcon,
         roles: ["Housekeeping Supervisor", "Hotel Admin", "System Manager", "Administrator"] },
     ],

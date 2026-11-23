@@ -2,7 +2,7 @@
  "actions": [],
  "autoname": "field:app_id",
  "creation": "2026-11-12 00:00:00",
- "description": "A connected app in the app switcher, paired to its own service account. Connect, pair and disconnect with kamra.apps, not by editing here.",
+ "description": "A connected app in the app switcher, paired to its own service account. Connect, pair and disconnect from the app switcher, not by editing here.",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [

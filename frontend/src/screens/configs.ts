@@ -915,7 +915,34 @@ export const channelManagerConfig: ScreenConfig = {
     { field: "sync_days", label: "Days to push", type: "int" },
     { field: "ari_calls_per_minute", label: "ARI calls per minute", type: "int", hint: "Per endpoint (availability and restrictions count apart). Channex allows 10." },
     { field: "ari_batch_seconds", label: "Rate batch window (seconds)", type: "int", hint: "Rate changes made within this window go out together in one call." },
+    {
+      field: "update_inhouse_res",
+      label: "Update in-house reservations",
+      type: "select",
+      options: ["N", "Y"],
+      hint: "OXI UPDATE INHOUSE RES: N rejects OTA changes to checked-in stays and flags them for review. Y requires arrival-date, room-type, billed-night, and assigned-room bounds and is not yet enabled.",
+    },
     { field: "active", label: "Active", type: "check" },
+    {
+      field: "ota_tax_rules", label: "OTA Tax Rules", type: "table", orderable: true,
+      dependsOn: (d) => d.provider === "Channex",
+      hint: "Which of the taxes an OTA lists on a booking is the room tax, tried top to bottom: the first rule that matches decides. Put specific or Ignored rules (such as city or tourism taxes) above broader Room tax rules. A tax on top of the price that no rule reads holds the booking for review. A new Channex connection, or one switched to Channex, starts with the standard rules.",
+      columns: [
+        { field: "match_on", label: "Match on", type: "select", options: ["Type or Name", "Type", "Name"], default: "Type or Name" },
+        { field: "match_type", label: "Match", type: "select", options: ["Contains", "Is"], default: "Contains" },
+        { field: "match_text", label: "Text", type: "data" },
+        { field: "counts_as", label: "Counts as", type: "select", options: ["Room tax", "Ignored"] },
+      ],
+    },
+    {
+      field: "ota_tax_basis", label: "OTA Tax Basis", type: "table",
+      dependsOn: (d) => d.provider === "Channex",
+      hint: "Whether each OTA's booking amounts include tax, as set for it on the channel manager: a booking does not say. Excluding tax: a booking from that OTA that lists no room tax is held for review.",
+      columns: [
+        { field: "channel", label: "OTA", type: "data" },
+        { field: "amounts", label: "Booking amounts", type: "select", options: ["Including tax", "Excluding tax"], default: "Including tax" },
+      ],
+    },
   ],
   extra: ChannelConnectionActions,
 }

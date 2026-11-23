@@ -112,10 +112,12 @@ def build_push_bodies(hotel_code: str, snapshot) -> tuple[list, list]:
 			inv_updates.append({"startDate": start, "endDate": end,
 			                    "rooms": [{"roomCode": room_code,
 			                               "available": avail}]})
-		# rates -> /update-rates (needs a rate plan; skip rows without one)
+		# rates -> /update-rates (needs a rate plan; skip rows without one),
+		# as the snapshot prices them: already to the currency's decimals
+		# (channel_ari.channel_rate), three for KWD
 		if rate_code:
 			for start, end, rate in _runs(
-					[{"date": d["date"], "value": round(float(d["rate"]), 2)}
+					[{"date": d["date"], "value": float(d["rate"])}
 					 for d in rt["days"]]):
 				rate_updates.append({"startDate": start, "endDate": end,
 				                     "rates": [{"roomCode": room_code,
@@ -205,10 +207,16 @@ def parse_webhook(conn, payload) -> list[dict]:
 		prices = room.get("prices") or []
 		# single-room: use the booking's tax-inclusive total; multi-room: best
 		# per-room signal is the sum of its nightly sell rates.
+		nightly = sum(float(p.get("sellRate") or 0) for p in prices)
 		if multi:
-			total = sum(float(p.get("sellRate") or 0) for p in prices)
+			total = nightly
 		else:
 			total = float(amount.get("amountAfterTax") or 0)
+		# the sell rates are before tax when they add up to the booking's
+		# amountBeforeTax (to the cent a night) and tax is on top of it
+		before = float(amount.get("amountBeforeTax") or 0)
+		nightly_net = (not multi and 0 < before < total
+		               and abs(nightly - before) < 0.01 * max(len(prices), 1))
 		out.append({
 			"event": event,
 			"booking_id": booking_id,
@@ -228,6 +236,7 @@ def parse_webhook(conn, payload) -> list[dict]:
 			# these (scaled to the total) as its confirmed nightly rates
 			"nightly": [{"date": p.get("date"), "amount": float(p.get("sellRate") or 0)}
 			            for p in prices if p.get("date")],
+			"nightly_net": nightly_net,
 			"currency": amount.get("currency") or frappe.db.get_value("Property", conn.property, "currency"),
 			"notes": payload.get("specialRequests") or "",
 		})
