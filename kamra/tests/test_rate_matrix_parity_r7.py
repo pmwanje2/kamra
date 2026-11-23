@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 from datetime import date, timedelta
+from typing import ClassVar
 from unittest.mock import patch
 
 from kamra.tests.rate_matrix_harness import Doc, RateMatrixHarness, ValidationError
@@ -63,7 +64,7 @@ class ContractStayAmendmentTest(QuotePatches, RateMatrixHarness):
 
 	modules = ("kamra.pricing", "kamra.kamra.doctype.reservation.reservation", "kamra.authz", "kamra.api")
 	# the tariff as the resolver holds it today: USD 100 to 31 Dec, USD 200 from 1 Jan
-	season = {"2026": (100, 365000, "IP-2026"), "2027": (200, 730000, "IP-2027")}
+	season: ClassVar[dict[str, tuple]] = {"2026": (100, 365000, "IP-2026"), "2027": (200, 730000, "IP-2027")}
 
 	def extra_modules(self):
 		return {"kamra.folio": stub_module("kamra.folio", _fnb_gst=lambda property: 5,
