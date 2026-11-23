@@ -1270,4 +1270,3 @@ class ReservationDetailRatePlanAmendTests(CompCase):
 		self.assertGreater(rates_by_date[YESTERDAY], 0)  # closed night kept its billed rate
 		self.assertEqual(rates_by_date[TODAY], 0.0)      # open business date onward takes COMP
 		self.assertEqual(rates_by_date[d(1)], 0.0)
-
