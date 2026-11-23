@@ -12,6 +12,7 @@
   "column_break_a",
   "external_room_id",
   "external_rate_id",
+  "external_currency",
   "rate_plan"
  ],
  "fields": [
@@ -48,6 +49,14 @@
    "fieldtype": "Data",
    "label": "Provider Rate Plan ID",
    "in_list_view": 1
+  },
+  {
+   "fieldname": "external_currency",
+   "fieldtype": "Data",
+   "label": "Provider Rate Plan Currency",
+   "read_only": 1,
+   "length": 3,
+   "description": "The currency the provider rate plan sells in, set by the mapping import. Rates go out in it: the contract amount when it is the rate plan's currency, the property-currency price when it is the property's, otherwise nothing."
   },
   {
    "fieldname": "rate_plan",

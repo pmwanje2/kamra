@@ -622,24 +622,29 @@ def current_date_contract_night(reservation, date) -> dict | None:
 	rate) is billed, marked STALE_FX_MARK on the charge and logged for
 	Night Audit and Finance. {rate, gst_rate, label, currency, fx_rate,
 	fx_date, stale}, or None - bill the locked night - for other policies
-	or a home-currency contract."""
+	or a home-currency contract. An OTA booking in the contract currency
+	posts the OTA's own amount for that night (its snapshot's `nights`); the
+	policy is the stay's (pricing.reservation_fx_policy)."""
 	from kamra.pricing import (
 		contract_local_amount,
 		posting_fx_rate,
-		rate_plan_fx_policy,
 		rates_include_tax,
+		reservation_fx_policy,
 		room_gst_rate,
 		round_rate_amount,
 		saved_contract_tariff,
 	)
 
 	plan = reservation.get("rate_plan")
-	if rate_plan_fx_policy(plan) != "Current Date":
+	if reservation_fx_policy(reservation) != "Current Date":
 		return None
 	snapshot = saved_contract_tariff(reservation)
 	tariff = snapshot.get("tariff") or {}
 	currency, home = tariff.get("currency"), tariff.get("property_currency")
 	nightly = Decimal(str(tariff.get("nightly") or 0))
+	channel = tariff.get("nights") or {}
+	if channel:
+		nightly = Decimal(str(channel.get(str(getdate(date))) or 0))
 	if not currency or currency == home or nightly <= 0:
 		return None
 	contract = round_rate_amount(nightly, 0, currency=currency)
@@ -657,6 +662,9 @@ def current_date_contract_night(reservation, date) -> dict | None:
 	fx, fx_date = posting
 	rp = frappe.get_doc("Rate Plan", plan)
 	gross = contract_local_amount(rp, nightly, fx, home)
+	if channel:
+		# that night as it was booked, so an override of it keeps its share
+		snapshot = {"agreed_rate": float(contract_local_amount(rp, nightly, tariff.get("fx_rate"), home))}
 	share = _negotiated_share(reservation, snapshot, locked_night(reservation, date))
 	if share != 1:
 		gross = round_rate_amount(gross * share, 0, currency=home)
@@ -702,7 +710,7 @@ def reference_currency(reservation, grand_total=None, balance=None) -> dict | No
 	contract currency at that rate. None for a home-currency stay, or when
 	CURRENT has no published rate today."""
 	from kamra.business_date import get_business_date
-	from kamra.pricing import posting_fx_rate, rate_plan_fx_policy, round_rate_amount, saved_contract_tariff
+	from kamra.pricing import posting_fx_rate, reservation_fx_policy, round_rate_amount, saved_contract_tariff
 
 	tariff = saved_contract_tariff(reservation).get("tariff") or {}
 	currency, home = tariff.get("currency"), tariff.get("property_currency")
@@ -716,7 +724,7 @@ def reference_currency(reservation, grand_total=None, balance=None) -> dict | No
 		if not posting:
 			return None
 		fx, fx_date = posting
-	elif rate_plan_fx_policy(reservation.get("rate_plan")) == "Current Date":
+	elif reservation_fx_policy(reservation) == "Current Date":
 		posted = _posted_contract_fx(reservation, currency)
 		if posted:
 			fx, fx_date, nights = posted[0], posted[1] or fx_date, posted[2]

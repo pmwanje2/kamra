@@ -227,13 +227,18 @@ def parse_webhook(conn, payload) -> list[dict]:
 	"""Channex booking webhook -> normalized events.
 
 	Payload: {event: "booking", payload: {status, ota_reservation_code,
-	ota_name, arrival_date, departure_date, customer{...}, rooms[...]}}
+	ota_name, arrival_date, departure_date, currency, payment_collect,
+	guarantee{is_virtual}, customer{...}, rooms[{room_type_id, rate_plan_id,
+	days{date: amount}, ...}]}}. payment_collect is "ota" (the OTA takes the
+	money: prepaid, or a virtual card) or "property".
 	"""
 	body = payload.get("payload") or payload
 	status = (body.get("status") or "new").lower()
 	event = {"new": "book", "modified": "modify",
 	         "cancelled": "cancel"}.get(status, "book")
 	customer = body.get("customer") or {}
+	collect = str(body.get("payment_collect") or "").strip().lower()
+	virtual = bool((body.get("guarantee") or {}).get("is_virtual"))
 	out = []
 	for room in body.get("rooms") or [{}]:
 		days = room.get("days") or {}
@@ -246,6 +251,9 @@ def parse_webhook(conn, payload) -> list[dict]:
 			           or body.get("unique_id") or "",
 			"channel": body.get("ota_name") or "OTA",
 			"room_type_external_id": room.get("room_type_id") or "",
+			"rate_plan_external_id": str(room.get("rate_plan_id") or ""),
+			"payment_collect": collect,
+			"virtual_card": virtual,
 			"check_in": room.get("checkin_date") or body.get("arrival_date"),
 			"check_out": room.get("checkout_date") or body.get("departure_date"),
 			"adults": int(occ.get("adults") or 2),

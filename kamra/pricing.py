@@ -138,6 +138,14 @@ def rate_plan_fx_policy(rate_plan: str | None) -> str:
 	return frappe.db.get_value("Rate Plan", rate_plan, "fx_lock_policy") or DEFAULT_FX_LOCK
 
 
+def reservation_fx_policy(reservation) -> str:
+	"""The exchange-rate lock a stay follows: the one its booking fixed in
+	its contract snapshot, else its rate plan's. An OTA booking the OTA
+	collects (prepaid or a virtual card) is fixed at reservation whatever its
+	plan says (channel_manager); every other stay follows its rate plan."""
+	return saved_contract_tariff(reservation).get("fx_lock_policy") or rate_plan_fx_policy(reservation.get("rate_plan"))
+
+
 def contract_local_amount(rate_plan, nightly, fx_rate, home_currency) -> Decimal:
 	"""A contract amount in the posting currency: converted at `fx_rate` and rounded as the plan rounds."""
 	return round_rate_amount(_dec(nightly) * _dec(fx_rate), rate_plan.get("rounding_step"),
@@ -936,8 +944,10 @@ def relock_contract_fx_at_check_in(reservation) -> bool:
 	resolver's own re-lock (kamra_fx_checkin_relock) is asked for only on a
 	stay it priced (custom_tariff_currency); a derived plan's stay re-locks
 	under kamra_contract_relocked. No published rate refuses the check-in.
-	True when the booking was relocked."""
-	if rate_plan_fx_policy(reservation.get("rate_plan")) != "Fixed at Check In":
+	An OTA booking in the contract currency (its snapshot carries the OTA's
+	own `nights`) converts each of those nights again and locks them. True
+	when the booking was relocked."""
+	if reservation_fx_policy(reservation) != "Fixed at Check In":
 		return False
 	snapshot = saved_contract_tariff(reservation)
 	tariff = snapshot.get("tariff") or {}
@@ -962,6 +972,12 @@ def relock_contract_fx_at_check_in(reservation) -> bool:
 	reservation.agreed_rate = agreed
 	reservation.contract_tariff = {"tariff": {**tariff, "nightly": float(nightly), "fx_rate": float(fx),
 	                                          "fx_date": fx_date}, "agreed_rate": agreed}
+	if tariff.get("nights"):
+		from kamra.channel_manager import lock_channel_rates
+		nights = [{"date": day, "amount": float(contract_local_amount(rp, amount, fx, home))}
+		          for day, amount in sorted(tariff["nights"].items())]
+		reservation.amount_after_tax = sum(night["amount"] for night in nights)
+		lock_channel_rates(reservation, reservation.amount_after_tax, nights)
 	reservation.flags.kamra_contract_relocked = True
 	if reservation.get("custom_tariff_currency"):
 		reservation.flags.kamra_fx_checkin_relock = True

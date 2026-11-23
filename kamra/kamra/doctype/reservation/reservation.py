@@ -437,7 +437,11 @@ class Reservation(Document):
 		"""Freeze the read resolver's reference at booking, not on later reads.
 		The one exception is a contract locked at check-in, whose exchange
 		rate check-in has just converted again (pricing.relock_contract_fx_at_check_in;
-		kamra_fx_checkin_relock is the tariff resolver's flag for a stay it priced)."""
+		kamra_fx_checkin_relock is the tariff resolver's flag for a stay it priced).
+		An OTA booking in its rate plan's currency brings its own snapshot, the
+		OTA's price converted at booking (kamra_channel_tariff, channel_manager)."""
+		if self.flags.get("kamra_channel_tariff"):
+			return
 		if not self.is_new():
 			if self.flags.get("kamra_contract_relocked") or self.flags.get("kamra_fx_checkin_relock"):
 				return
