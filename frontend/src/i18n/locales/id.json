@@ -417,5 +417,13 @@
   "Valid until {date}": "Berlaku hingga {date}",
   "Venue": "Ruang acara",
   "Venues / Conference": "Ruang acara dan konferensi",
-  "Version history": "Riwayat versi"
+  "Version history": "Riwayat versi",
+  "A credit note is issued here against invoice {invoice}, with its share of the tax.": "Credit note diterbitkan di sini atas invoice {invoice}, beserta bagian pajaknya.",
+  "Amount to credit, tax included": "Jumlah yang dikreditkan, termasuk pajak",
+  "Cancel {invoice}? The accounting system credits it and issues a new invoice; this bill is not reopened here.": "Batalkan {invoice}? Sistem akuntansi mengkreditkannya dan menerbitkan invoice baru; tagihan ini tidak dibuka kembali di sini.",
+  "Invoice {invoice} was issued by the accounting system as {document}. It is corrected there with a credit note and a new invoice; this bill is not reopened or credited here.": "Invoice {invoice} diterbitkan oleh sistem akuntansi sebagai {document}. Invoice dikoreksi di sana dengan credit note dan invoice baru; tagihan ini tidak dibuka kembali atau dikreditkan di sini.",
+  "Issue credit note": "Terbitkan credit note",
+  "Send for credit note and re-bill": "Kirim untuk credit note dan penagihan ulang",
+  "Tax in this credit note: {amount}": "Pajak dalam credit note ini: {amount}",
+  "Credit note": "Credit note"
 }

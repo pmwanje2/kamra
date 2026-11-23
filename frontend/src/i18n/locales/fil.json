@@ -1137,5 +1137,13 @@
   "Valid until {date}": "May bisa hanggang {date}",
   "Venue": "Lugar ng kaganapan",
   "Venues / Conference": "Mga lugar ng kaganapan at kumperensya",
-  "Version history": "Kasaysayan ng mga bersyon"
+  "Version history": "Kasaysayan ng mga bersyon",
+  "A credit note is issued here against invoice {invoice}, with its share of the tax.": "Dito inilalabas ang credit note laban sa invoice {invoice}, kasama ang bahagi nito sa buwis.",
+  "Amount to credit, tax included": "Halagang ikikredito, kasama ang buwis",
+  "Cancel {invoice}? The accounting system credits it and issues a new invoice; this bill is not reopened here.": "Kanselahin ang {invoice}? Kinikredito ito ng sistema ng accounting at naglalabas ng bagong invoice; hindi muling binubuksan ang bill na ito dito.",
+  "Invoice {invoice} was issued by the accounting system as {document}. It is corrected there with a credit note and a new invoice; this bill is not reopened or credited here.": "Ang invoice {invoice} ay inilabas ng sistema ng accounting bilang {document}. Doon ito itinatama sa pamamagitan ng credit note at bagong invoice; hindi muling binubuksan o kinikredito ang bill na ito dito.",
+  "Issue credit note": "Ilabas ang credit note",
+  "Send for credit note and re-bill": "Ipadala para sa credit note at muling pag-bill",
+  "Tax in this credit note: {amount}": "Buwis sa credit note na ito: {amount}",
+  "Credit note": "Credit note"
 }

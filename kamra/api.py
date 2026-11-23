@@ -1718,6 +1718,11 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 		# an advance taken from a guest already in house pays the stay
 		from kamra.ledger import transfer_advances_to_guest
 		transfer_advances_to_guest(doc.reservation)
+	elif kind == "Advance" and doc.folio_type == "Group" and doc.get("group_booking"):
+		# the group's bill: paid in advance while any room of the group is in
+		# house, it pays the group at once, whichever room it is anchored to
+		from kamra.ledger import transfer_group_advances
+		transfer_group_advances(doc.group_booking)
 	if kind == "Security Deposit" and doc.reservation and \
 	   (doc.folio_type or "Guest") == "Guest":
 		# keep the stay's Security Deposit record in step, whichever screen
@@ -2592,12 +2597,14 @@ def transfer_folio_charges(from_folio: str, charge_rows, to_folio: str | None = 
 @require_roles("Finance", "Front Desk", "Kamra Agent")
 def split_folio_charge(from_folio: str, charge_row: str, to_folio: str,
                        percent: float | None = None,
-                       amount: float | None = None):
-	"""Split one charge line between two folios - by percent or amount."""
+                       amount: float | None = None, qty: float | None = None):
+	"""Split one charge line in two - by percent, amount or quantity - on
+	its own folio or onto another of the stay or group."""
 	from kamra.folio import split_charge
 	out = split_charge(from_folio, charge_row, to_folio,
 	                   percent=float(percent) if percent else None,
-	                   amount=float(amount) if amount else None)
+	                   amount=float(amount) if amount else None,
+	                   qty=float(qty) if qty else None)
 	from kamra.savings import log_action
 	from kamra.localization import money_text
 	log_action("split_charge", "Folio", to_folio,
@@ -3460,9 +3467,16 @@ def part_settle_folio(folio: str, pin: str | None = None):
 @frappe.whitelist(methods=["POST"])
 @require_roles("Finance", "Front Desk", "Kamra Agent")
 def cancel_invoice(folio: str, reason: str, pin: str | None = None):
-	"""Void an invoice into the register and reopen the folio for correction."""
+	"""Void an invoice into the register and reopen the folio for correction.
+	An invoice the ERPNext bridge issued goes to the bridge's credit and
+	re-bill instead; the folio is not reopened here."""
 	_pin_guard(folio, pin)
-	from kamra.folio import cancel_invoice as _cancel
+	from kamra.folio import bridge_invoice, cancel_invoice as _cancel, route_to_credit_and_rebill
+	doc = frappe.get_doc("Folio", folio)
+	if bridge_invoice(doc):
+		if not (reason or "").strip():
+			frappe.throw(_("A cancellation needs a reason - it goes on the record."))
+		return route_to_credit_and_rebill(doc, reason.strip())
 	out = _cancel(folio, reason)
 	from kamra.savings import log_action
 	log_action("cancel_invoice", "Folio", folio,
@@ -5374,8 +5388,9 @@ def _assert_settled(doc, credit_override_reason: str | None = None) -> list[dict
 
 	Every night is posted first, because night audit may not have run for the
 	last one. Only what the company pays moves to the city ledger: the stay's
-	Company folio, or the group master when the group's company has credit.
-	The guest's own folios (Guest, Extra) - liquor, extras, anything the
+	Company folio. A group's master bill is settled with the group
+	(settle_group_bill), never by one member's check-out. The guest's own
+	folios (Guest, Extra) - liquor, extras, anything the
 	billing rules left on the guest - are the guest's to settle, so a balance
 	there refuses the check-out. Closed folios count too: a bill closed with
 	money still on it is still owed. frappe.flags.allow_unsettled_checkout is

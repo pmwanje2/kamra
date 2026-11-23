@@ -2,6 +2,7 @@ import { SettlementPreview, useSettlementQuote } from "../components/SettlementP
 import TenderPicker, { TenderInput, resolveTender, tenderAmount, tenderModes, tenderReady, useTenderRates } from "../components/TenderPicker"
 import { currencyText, formatFxRate, TariffNight } from "../components/ContractTariff"
 import RowCorrection from "../components/RowCorrection"
+import InvoiceCorrectionDialog from "../components/InvoiceCorrectionDialog"
 import { ResponsiveList, Popin } from "../components/ui/responsive-list"
 import { Fragment, useCallback, useEffect, useRef, useState } from "react"
 import { ArrowLeft, ArrowRightLeft, Printer, X } from "lucide-react"
@@ -41,6 +42,9 @@ interface InvoiceData {
     status: "Open" | "Closed"
     folio_type?: string
     invoice_number: string | null
+    /** the accounting system's invoice for this folio, where it issued one:
+     *  it is then corrected there (credit note and re-bill), never here */
+    sales_invoice?: string | null
     guest_name: string
     charges: {
       name: string
@@ -325,6 +329,7 @@ export default function FolioView() {
   } | null>(null)
   const quote = useSettlementQuote(folioProperty, foreign && paymentReady ? tender.currency : "", Number(payment.amount))
   const [showCancel, setShowCancel] = useState(false)
+  const [showCredit, setShowCredit] = useState(false)
   const [cancelReason, setCancelReason] = useState("")
   const [allowance, setAllowance] = useState({ amount: "", reason: "", gst_rate: "0", reason_code: "" })
   const [adjustCodes, setAdjustCodes] = useState<{ name: string; description: string }[]>([])
@@ -629,13 +634,7 @@ export default function FolioView() {
             </Button>
           ) : null}
           {!open && folio.invoice_number ? (
-            <Button variant="outline" disabled={busy} onClick={() => {
-              const amt = window.prompt(t("Credit note amount"))
-              const reason = window.prompt(t("Reason"))
-              if (!amt || !reason) return
-              act(() => call("kamra.ledger.issue_credit_note",
-                withPin({ folio: folio.name, amount: Number(amt), reason })))
-            }}>
+            <Button variant="outline" disabled={busy} onClick={() => setShowCredit(true)}>
               {t("Credit note")}
             </Button>
           ) : null}
@@ -690,12 +689,21 @@ export default function FolioView() {
         </div>
       </div>
 
+      {showCredit && !open && folio.invoice_number && (
+        <InvoiceCorrectionDialog folio={folio} onClose={() => setShowCredit(false)}
+          onDone={() => { setShowCredit(false); load() }} />
+      )}
+
       {showCancel && !open && (
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm print:hidden">
           <span className="text-amber-800">
-            {t("Cancel {invoice}? The number goes on the cancelled register and the folio reopens for correction.", {
-              invoice: folio.invoice_number ?? "",
-            })}
+            {folio.sales_invoice
+              ? t("Cancel {invoice}? The accounting system credits it and issues a new invoice; this bill is not reopened here.", {
+                  invoice: folio.invoice_number ?? "",
+                })
+              : t("Cancel {invoice}? The number goes on the cancelled register and the folio reopens for correction.", {
+                  invoice: folio.invoice_number ?? "",
+                })}
           </span>
           <input
             className="min-w-56 flex-1 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-sm"

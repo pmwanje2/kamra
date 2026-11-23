@@ -6764,5 +6764,12 @@
   "Valid until (optional)": "有效期至（选填）",
   "Valid until {date}": "有效期至 {date}",
   "Venues / Conference": "活动与会议场地",
-  "Version history": "版本历史"
+  "Version history": "版本历史",
+  "A credit note is issued here against invoice {invoice}, with its share of the tax.": "将在此针对发票 {invoice} 开具贷项通知单，并包含其相应的税额。",
+  "Amount to credit, tax included": "冲减金额（含税）",
+  "Cancel {invoice}? The accounting system credits it and issues a new invoice; this bill is not reopened here.": "取消 {invoice}？会计系统将冲减该发票并开具新发票；此账单不会在此重新打开。",
+  "Invoice {invoice} was issued by the accounting system as {document}. It is corrected there with a credit note and a new invoice; this bill is not reopened or credited here.": "发票 {invoice} 由会计系统以 {document} 开具。须在会计系统中以贷项通知单和新发票更正；此账单不会在此重新打开或冲减。",
+  "Issue credit note": "开具贷项通知单",
+  "Send for credit note and re-bill": "提交贷项通知单并重新开票",
+  "Tax in this credit note: {amount}": "本贷项通知单含税额：{amount}"
 }

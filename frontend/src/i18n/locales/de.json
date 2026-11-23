@@ -417,5 +417,13 @@
   "Valid until {date}": "Gültig bis {date}",
   "Venue": "Veranstaltungsraum",
   "Venues / Conference": "Veranstaltungs- und Konferenzräume",
-  "Version history": "Versionsverlauf"
+  "Version history": "Versionsverlauf",
+  "A credit note is issued here against invoice {invoice}, with its share of the tax.": "Hier wird eine Gutschrift zur Rechnung {invoice} ausgestellt, mit ihrem Anteil an der Steuer.",
+  "Amount to credit, tax included": "Gutschriftsbetrag inkl. Steuer",
+  "Cancel {invoice}? The accounting system credits it and issues a new invoice; this bill is not reopened here.": "{invoice} stornieren? Die Buchhaltung schreibt sie gut und stellt eine neue Rechnung aus; diese Rechnung wird hier nicht wieder geöffnet.",
+  "Invoice {invoice} was issued by the accounting system as {document}. It is corrected there with a credit note and a new invoice; this bill is not reopened or credited here.": "Die Rechnung {invoice} wurde von der Buchhaltung als {document} ausgestellt. Sie wird dort mit einer Gutschrift und einer neuen Rechnung korrigiert; diese Rechnung wird hier weder wieder geöffnet noch gutgeschrieben.",
+  "Issue credit note": "Gutschrift ausstellen",
+  "Send for credit note and re-bill": "Zur Gutschrift und Neuberechnung senden",
+  "Tax in this credit note: {amount}": "Steuer in dieser Gutschrift: {amount}",
+  "Credit note": "Gutschrift"
 }

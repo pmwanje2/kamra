@@ -297,15 +297,46 @@ def transfer_advances_to_guest(reservation: str,
 
 	Idempotent per payment: only what is still held for that payment row
 	moves, so calling it again (check-in, a later advance, check-out, the
-	backfill patch) never moves money twice. Returns the amount moved."""
+	backfill patch) never moves money twice. Returns the amount moved.
+
+	A group's bill (its Group folio) is the group's, not the room it is
+	anchored to: its advances follow the group (transfer_group_advances), so
+	a first room that cancelled or never arrived does not strand them."""
+	moved = _apply_advances(
+		frappe.get_all("Folio", filters={"reservation": reservation},
+		               fields=["name", "property"]), business_date)
+	group = frappe.db.get_value("Reservation", reservation, "group_booking")
+	if group:
+		moved += transfer_group_advances(group, business_date)
+	return moved
+
+
+def transfer_group_advances(group_booking: str,
+                            business_date: str | None = None) -> float:
+	"""Apply the advances on a group's bill once the group is in house - any
+	of its rooms checked in (or since checked out), as OPERA's posting master
+	is checked in with the group. Idempotent, as transfer_advances_to_guest.
+	Returns the amount moved."""
+	if not frappe.db.exists("Reservation", {
+			"group_booking": group_booking,
+			"status": ("in", ("Checked In", "Checked Out"))}):
+		return 0.0
+	return _apply_advances(
+		frappe.get_all("Folio", filters={"group_booking": group_booking,
+		                                 "folio_type": "Group"},
+		               fields=["name", "property"]), business_date)
+
+
+def _apply_advances(folios, business_date: str | None = None) -> float:
+	"""Move what is still held of each Advance on these folios from the
+	Deposit ledger to the Guest ledger."""
 	code = PAYMENT_CODES["Advance"][0]
 	if not frappe.db.exists("Transaction Code", code):
 		ensure_default_transaction_codes()
 	if not frappe.db.exists("Transaction Code", code):
 		code = None
 	moved = 0.0
-	for folio in frappe.get_all("Folio", filters={"reservation": reservation},
-	                            fields=["name", "property"]):
+	for folio in folios:
 		for row in frappe.get_all(
 				"Folio Payment",
 				filters={"parent": folio.name, "parenttype": "Folio",
@@ -1751,19 +1782,20 @@ def force_advance_bill(reservation: str, nights: str = "entire",
 	posted = []
 	start = ci if res.status != "Checked In" else getdate(
 		get_business_date(res.property))
+	# a night routed to the Company or Group bill lands on that folio, not the
+	# guest's: what was posted is judged across every folio of the stay
+	from kamra.folio import _charge_posted
+
+	def stay_lines():
+		return frappe.get_all("Folio Charge", filters={
+			"parenttype": "Folio", "reservation": res.name}, fields=["name", "total"])
+
+	before = {r.name for r in stay_lines()}
 	for i in range(n):
 		day = add_days(start, i)
 		if getdate(day) >= co:
 			break
-		# Skip if already auto-posted for this date
-		from kamra.folio import voided_rows
-		voided = voided_rows(folio)
-		exists = any(
-			c.charge_type == "Room" and str(c.posting_date) == str(day)
-			and c.auto_posted and not c.get("reversal_of") and c.name not in voided
-			for c in folio.charges
-		)
-		if exists:
+		if _charge_posted(res.name, "Room", str(day)):
 			continue
 		ok = post_room_night(res, str(day))
 		if ok:
@@ -1771,10 +1803,8 @@ def force_advance_bill(reservation: str, nights: str = "entire",
 	folio.reload()
 	_recalculate(folio)
 	folio.save(ignore_permissions=True)
-	amount = sum(
-		float(c.total or 0) for c in folio.charges
-		if str(c.posting_date) in posted
-	)
+	amount = round(sum(float(r.total or 0) for r in stay_lines()
+	                   if r.name not in before), 2)
 	return {
 		"folio": folio.name,
 		"nights_posted": posted,
@@ -1862,7 +1892,15 @@ def issue_credit_note(folio: str, amount: float, reason: str,
 		frappe.throw("Amount must be positive.")
 	if not (reason or "").strip():
 		frappe.throw("A reason is required.")
+	from kamra.folio import bridge_invoice, route_to_credit_and_rebill
+	if bridge_invoice(doc):
+		# issued by the ERPNext bridge: its credit and re-bill corrects it
+		return route_to_credit_and_rebill(doc, reason.strip(), float(amount))
 	bd = get_business_date(doc.property)
+	# the tax inside what is credited, in the invoice's own proportion
+	gross = Decimal(str(doc.grand_total or 0))
+	tax = (Decimal(str(amount)) * Decimal(str(doc.tax_total or 0)) / gross).quantize(
+		Decimal("0.01"), rounding=ROUND_HALF_UP) if gross else Decimal(0)
 	# Sequential CN number
 	count = frappe.db.count("Credit Note", {"property": doc.property}) + 1
 	cn_number = f"CN-{doc.property[:6]}-{bd.replace('-', '')}-{count:04d}"
@@ -1874,7 +1912,7 @@ def issue_credit_note(folio: str, amount: float, reason: str,
 		"credit_note_number": cn_number,
 		"issue_date": bd,
 		"amount": float(amount),
-		"tax_amount": 0,
+		"tax_amount": float(tax),
 		"reason": reason.strip()[:500],
 		"status": "Issued",
 		"issued_by": frappe.session.user,
@@ -2065,8 +2103,9 @@ def batch_print_folios(folios: str | list):
 @require_roles("Front Desk", "Night Auditor", "Kamra Agent")
 def quick_checkout(reservation: str, pin: str | None = None):
 	"""Check out and close the guest folio in one step. check_out settles the
-	stay the one way: the company's folio (Company, or the group master)
-	moves to the city ledger when the company has credit, and the guest's
+	stay the one way: the stay's Company folio moves to the city ledger when
+	the company has credit (a group's master bill is settled with the
+	group), and the guest's
 	own folio must already be paid - liquor and extras are never billed to
 	the company."""
 	from kamra.api import check_out, close_folio

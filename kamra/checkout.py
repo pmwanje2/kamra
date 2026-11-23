@@ -34,11 +34,13 @@ OPEN_LAUNDRY_STATUSES = ("Requested", "Collected", "In Process", "Ready")
 
 def settlement_position(reservation: str) -> dict:
 	"""Every folio of the stay, sorted into the guest's side and the
-	company's. The group master of a group with a main room is left out:
-	it is settled with the group. Only the stay's Company folio, or the
-	group master when the group's company has credit, goes to the city
-	ledger; anything else with money on it is the guest's to settle. Closed folios count too: a bill
-	closed with money on it is still owed.
+	company's. The group's master bill is left out, even where it is
+	anchored to this stay: as OPERA's posting master it stays open until
+	the group settles it (settle_group_bill), and a member's check-out
+	settles only that member's own folios. Only the stay's Company folio
+	goes to the city ledger; anything else with money on it is the guest's
+	to settle. Closed folios count too: a bill closed with money on it is
+	still owed.
 
 	owed            what the guest still has to pay
 	refund_due      what the guest is owed back
@@ -55,10 +57,9 @@ def settlement_position(reservation: str) -> dict:
 			        "reservation", "status", "invoice_number",
 			        "grand_total", "payments_total"],
 			order_by="creation asc"):
-		if f.folio_type == "Group" and f.group_booking and frappe.db.get_value(
-				"Group Booking", f.group_booking, "master_reservation"):
-			# a main room's group bill stays open past its own departure and
-			# is settled with the group (settle_group_bill), not this stay
+		if f.folio_type == "Group" and f.group_booking:
+			# the group's bill stays open past the departure of the room it is
+			# anchored to and is settled with the group, not this stay
 			continue
 		balance = round(flt(f.balance), 2)
 		payer = company_payer_of(f) if balance > EPS else None

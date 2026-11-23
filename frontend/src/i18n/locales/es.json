@@ -6690,5 +6690,12 @@
   "Valid until (optional)": "Válida hasta (opcional)",
   "Valid until {date}": "Válida hasta el {date}",
   "Venues / Conference": "Espacios y salas de conferencias",
-  "Version history": "Historial de versiones"
+  "Version history": "Historial de versiones",
+  "A credit note is issued here against invoice {invoice}, with its share of the tax.": "Aquí se emite una nota de crédito contra la factura {invoice}, con su parte del impuesto.",
+  "Amount to credit, tax included": "Importe a acreditar, impuestos incluidos",
+  "Cancel {invoice}? The accounting system credits it and issues a new invoice; this bill is not reopened here.": "¿Anular {invoice}? El sistema contable la acredita y emite una nueva factura; esta cuenta no se reabre aquí.",
+  "Invoice {invoice} was issued by the accounting system as {document}. It is corrected there with a credit note and a new invoice; this bill is not reopened or credited here.": "El sistema contable emitió la factura {invoice} como {document}. Se corrige allí con una nota de crédito y una nueva factura; esta cuenta no se reabre ni se acredita aquí.",
+  "Issue credit note": "Emitir nota de crédito",
+  "Send for credit note and re-bill": "Enviar para nota de crédito y refacturación",
+  "Tax in this credit note: {amount}": "Impuesto en esta nota de crédito: {amount}"
 }

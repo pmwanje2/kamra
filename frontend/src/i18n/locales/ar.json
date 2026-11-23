@@ -6505,5 +6505,12 @@
   "Valid until (optional)": "ساري حتى (اختياري)",
   "Valid until {date}": "ساري حتى {date}",
   "Venues / Conference": "قاعات الفعاليات والمؤتمرات",
-  "Version history": "سجل النسخ"
+  "Version history": "سجل النسخ",
+  "A credit note is issued here against invoice {invoice}, with its share of the tax.": "يُصدر إشعار دائن هنا مقابل الفاتورة {invoice}، مع حصته من الضريبة.",
+  "Amount to credit, tax included": "المبلغ المراد قيده دائنًا، شاملًا الضريبة",
+  "Cancel {invoice}? The accounting system credits it and issues a new invoice; this bill is not reopened here.": "إلغاء {invoice}؟ يقيدها النظام المحاسبي دائنًا ويصدر فاتورة جديدة؛ ولا يُعاد فتح هذا الحساب هنا.",
+  "Invoice {invoice} was issued by the accounting system as {document}. It is corrected there with a credit note and a new invoice; this bill is not reopened or credited here.": "أصدر النظام المحاسبي الفاتورة {invoice} بالرقم {document}. تُصحَّح هناك بإشعار دائن وفاتورة جديدة؛ ولا يُعاد فتح هذا الحساب أو قيده دائنًا هنا.",
+  "Issue credit note": "إصدار إشعار دائن",
+  "Send for credit note and re-bill": "إرسال لإشعار دائن وإعادة الفوترة",
+  "Tax in this credit note: {amount}": "الضريبة في إشعار الدائن هذا: {amount}"
 }
