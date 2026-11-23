@@ -406,6 +406,52 @@ class ERPBooksFenceTestCase(AuditTestCase):
 		self.assertEqual(res["over_limit_by"], 300.0)
 		self.assertEqual(res["overdue_amount"], 1800.0)
 
+	def test_owner_snapshot_shows_no_receivable_figure_when_erp_keeps_them_and_answers_no_lookup(self):
+		from kamra import dashboards
+
+		self._seed_stale_city_ledger(credit_limit=2000.0, amount=5000.0, days_ago=60)
+		self.keeps(receivables=RECEIVABLES)
+		self.ar_answer = None
+		before = list(frappe.local.message_log)
+		with self.installed():
+			snap = dashboards.owner_snapshot(PROP_A)
+		# unknown is not zero, and never the stale 5000 of the hotel app's own ledger
+		self.assertIsNone(snap["city_ledger"])
+		self.assertIsNone(snap["city_ledger_overdue"])
+		# the refusal was handled: the screen must not also pop a "kept in the accounting system" message
+		self.assertEqual(list(frappe.local.message_log), before)
+
+	def test_kept_receivables_without_a_lookup_never_read_the_stale_city_ledger(self):
+		from kamra import credit, night_audit
+		from kamra.settings import write_kv
+
+		company, _account, _folio = self._seed_stale_city_ledger(credit_limit=2000.0, amount=5000.0, days_ago=60)
+		write_kv(PROP_A, "credit_control", "block")
+		self.keeps(receivables=RECEIVABLES)
+		self.ar_answer = None
+		with self.installed():
+			self.assertEqual(night_audit.check_credit_limit(PROP_A)["items"], [])
+			self.assertEqual(night_audit.check_overdue_ar(PROP_A)["items"], [])
+			res = credit.check_company_credit(company, PROP_A, 500.0)
+			terms = credit.company_credit_terms(company, PROP_A)
+		self.assertEqual(res["ar_balance"], 0.0)
+		self.assertEqual(res["overdue_amount"], 0.0)
+		self.assertTrue(res["ok"])
+		self.assertEqual(terms["balance"], 0.0)
+
+	def test_off_bridge_credit_control_still_reads_the_city_ledger(self):
+		from kamra import credit
+		from kamra.settings import write_kv
+
+		company, _account, _folio = self._seed_stale_city_ledger(credit_limit=2000.0, amount=5000.0, days_ago=60)
+		write_kv(PROP_A, "credit_control", "block")
+		self.answer = None
+		with self.installed():
+			res = credit.check_company_credit(company, PROP_A, 500.0)
+		self.assertEqual(res["ar_balance"], 5000.0)
+		self.assertTrue(res["blocked"])
+		self.assertNotIn(ERP_RECEIVABLES, self.calls)
+
 	def test_payment_reminders_stand_down_when_receivables_kept_in_erp(self):
 		from kamra import statements
 		from kamra.settings import write_kv
