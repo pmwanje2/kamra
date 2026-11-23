@@ -197,8 +197,9 @@ def _has_role(roles) -> bool:
 
 def _pending_bills(res, modes: list[str]) -> list[dict]:
 	"""Bills for this stay that are not on its folio yet: restaurant and
-	room-service orders still open, laundry not delivered. Each says what
-	the desk can do about it, through the bill's own endpoints:
+	room-service orders still open, laundry not delivered, and checks still
+	open at an outlet another point of sale runs (kamra.outlet_checks). Each
+	says what the desk can do about it, through the bill's own endpoints:
 
 	  POS order   post to the room (pos.deliver_order) or pay at the outlet
 	              (pos.pay_order)
@@ -277,6 +278,20 @@ def _pending_bills(res, modes: list[str]) -> list[dict]:
 				"pay_modes": [],
 				"hint": hint,
 				"act_roles": ["Front Desk", "Housekeeping"]})
+	from kamra.outlet_checks import open_outlet_checks
+	for c in open_outlet_checks(res.property, reservation=res.name, room=res.get("room")) or []:
+		# a check open at an outlet another point of sale runs: settled
+		# there (charged to the room, paid or voided), never from here
+		out.append({
+			"kind": "outlet", "name": c["name"],
+			"label": c["outlet"] or _("Restaurant"),
+			"status": "Billed" if c["billed"] else "Open",
+			"amount": c["amount"], "complimentary": False,
+			"can_act": True, "can_post_to_room": False, "can_mark_ready": False,
+			"billable": True, "pay_modes": [],
+			"hint": _("Still open at the outlet. Settle it there before check-out: "
+			          "charge it to the room, take payment or void it."),
+			"act_roles": []})
 	return out
 
 

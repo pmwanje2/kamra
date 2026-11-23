@@ -33,6 +33,8 @@ def get_context(context):
 	with open(index_path, encoding="utf-8") as f:  # nosemgrep: frappe-security-file-traversal -- serves the app's own built index.html from a fixed app path, not user input
 		html = f.read()
 
+	from kamra.erp_books import desk_screens
+
 	csrf = frappe.sessions.get_csrf_token()
 	# The socket.io namespace is the site name, which is not the hostname on
 	# a custom domain - without it live updates silently never arrive.
@@ -42,7 +44,8 @@ def get_context(context):
 	boot = (
 		f'<script>window.kamra_date_format = {script_json(get_user_date_format())}; '
 		f'window.csrf_token = {script_json(csrf)}; window.kamra_site = {script_json(frappe.local.site)}; '
-		f'window.kamra_brand = {script_json(brand_context(brand_logo()))};</script>'
+		f'window.kamra_brand = {script_json(brand_context(brand_logo()))}; '
+		f'window.kamra_erp_screens = {script_json(desk_screens())};</script>'
 	)
 	# Inject before the module script so the token is set before the app boots.
 	html = html.replace("</head>", boot + "</head>", 1)

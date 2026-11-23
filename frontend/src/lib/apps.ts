@@ -77,6 +77,7 @@ import { useEffect, useState } from "react"
 
 import { call } from "./api"
 import { deskLabel, upstreamOnly, whiteLabel } from "./brand"
+import { keptInErp } from "./erpBooks"
 
 /** "Night audit" is what most hotels call End of Day; EOD is what they type. */
 const EOD_KEYWORDS = ["End of day", "EOD", "Close the day", "Roll the date"]
@@ -456,7 +457,11 @@ export function visibleApps(roles: string[], modules?: string[]): AppDef[] {
   ).map((app) => whiteLabel() ? {
     ...app,
     items: app.items.filter(({ to, href }) => !(to && upstreamOnly(to)) && href !== `${DESK}/app/build`),
-  } : app)
+  } : app).map((app) => ({
+    ...app,
+    // books the site's ERP keeps (lib/erpBooks) are opened there
+    items: app.items.filter(({ to }) => !(to && keptInErp(to))),
+  }))
 }
 
 /** A connected app from the App Registry (kamra.apps.my_apps): an add-on on

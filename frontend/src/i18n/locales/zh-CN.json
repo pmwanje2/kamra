@@ -6764,5 +6764,7 @@
   "Valid until (optional)": "有效期至（选填）",
   "Valid until {date}": "有效期至 {date}",
   "Venues / Conference": "活动与会议场地",
-  "Version history": "版本历史"
+  "Version history": "版本历史",
+  "Still open at the outlet. Settle it there before check-out: charge it to the room, take payment or void it.": "该账单在营业点仍未结清。请在退房前在那里结清：挂房账、收款或作废。",
+  "This is kept in the accounting system.": "此项在会计系统中管理。"
 }

@@ -244,6 +244,18 @@ def check_open_pos_bills(property: str, bd: str) -> dict:
 			"state": state,
 			"opened_at": _iso(r.creation),
 		})
+	# checks still open at outlets another point of sale runs
+	# (kamra.outlet_checks); na_block_open_pos decides them the same way
+	from kamra.outlet_checks import open_outlet_checks
+	for c in open_outlet_checks(property, business_date=bd) or []:
+		items.append({
+			"order": c["name"], "bill_no": c["name"], "kot_no": None,
+			"outlet": c["outlet"], "outlet_id": None, "table_no": c["table"],
+			"room": c["room"], "reservation": c["reservation"], "guest_name": None,
+			"amount": c["amount"], "status": "Billed" if c["billed"] else "Open",
+			"state": "served, not settled" if c["billed"] else "open",
+			"opened_at": c["opened_at"],
+		})
 	return _check(
 		"open_pos_bills", "Open restaurant bills",
 		_severity(property, "open_pos_bills"), items,

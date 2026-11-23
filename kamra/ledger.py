@@ -17,6 +17,7 @@ from frappe.utils import cint, flt, getdate, now_datetime, nowdate
 
 from kamra.authz import require_roles
 from kamra.business_date import get_business_date
+from kamra.erp_books import kept_in_erp
 
 CHARGE_TYPE_TO_CODE = {
 	"Room": ("1000", "Room Charge", "Rooms", "Room"),
@@ -1113,6 +1114,7 @@ def apply_unapplied_credit(account: str, only_folio: str | None = None,
 
 @frappe.whitelist(methods=["POST"])
 @require_roles("Finance", "Hotel Admin", "Kamra Agent")
+@kept_in_erp("receivables")
 def city_ledger_settle(account: str, amount: float, mode: str = "Bank Transfer",
                        reference: str | None = None, allocations=None,
                        idempotency_key: str | None = None,
@@ -1273,6 +1275,7 @@ def _requested_with_key(key: str) -> dict | None:
 
 @frappe.whitelist(methods=["POST"])
 @require_roles("Finance", "Hotel Admin")
+@kept_in_erp("receivables")
 def decide_city_ledger_payment(request: str, approve: int = 1, note: str = "",
                                pin: str | None = None):
 	"""Confirm or reject a company payment an agent recorded. Confirming
@@ -1327,6 +1330,7 @@ def decide_city_ledger_payment(request: str, approve: int = 1, note: str = "",
 
 @frappe.whitelist(methods=["POST"])
 @require_roles("Finance", "Hotel Admin")
+@kept_in_erp("receivables")
 def reverse_city_ledger_payment(payment: str, reason: str | None = None,
                                 reason_code: str | None = None, pin: str | None = None):
 	"""Undo a company payment: a bounced cheque, or money put on the wrong
@@ -1394,6 +1398,7 @@ def reverse_city_ledger_payment(payment: str, reason: str | None = None,
 
 @frappe.whitelist(methods=["POST"])
 @require_roles("Finance", "Hotel Admin")
+@kept_in_erp("receivables")
 def set_city_ledger_dispute(account: str, folio: str, disputed: int = 1,
                             note: str | None = None):
 	"""Mark a company bill as disputed (or clear it). A disputed bill gets no

@@ -1137,5 +1137,7 @@
   "Valid until {date}": "May bisa hanggang {date}",
   "Venue": "Lugar ng kaganapan",
   "Venues / Conference": "Mga lugar ng kaganapan at kumperensya",
-  "Version history": "Kasaysayan ng mga bersyon"
+  "Version history": "Kasaysayan ng mga bersyon",
+  "Still open at the outlet. Settle it there before check-out: charge it to the room, take payment or void it.": "Bukas pa sa outlet. Ayusin ito roon bago mag-check-out: i-charge sa kuwarto, tumanggap ng bayad o i-void ito.",
+  "This is kept in the accounting system.": "Ito ay nasa sistema ng accounting."
 }
