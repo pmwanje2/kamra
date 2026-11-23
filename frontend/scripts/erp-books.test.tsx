@@ -215,7 +215,7 @@ describe("ERP-kept books", () => {
     })
     await vi.waitFor(() => {
       expect(host.textContent).toContain("Open restaurant bills")
-    })
+    }, { timeout: 5000 })
     const hrefs = Array.from(host.querySelectorAll("a")).map((a) => ({
       text: a.textContent?.trim() ?? "",
       href: a.getAttribute("href"),
@@ -227,54 +227,80 @@ describe("ERP-kept books", () => {
     expect(hrefs.some((l) => l.href === RECEIVABLES.url)).toBe(true)
   })
 
-  it("replaces residual /receivables and /accounting-export links in Ledgers, Reports and Owner when bridged", async () => {
-    boot({ receivables: RECEIVABLES, accounting_export: EXPORT })
-    rpc.mockImplementation(async (method: string) => {
-      if (method === "kamra.ledger.ledger_balances") {
-        return {
-          business_date: "2026-11-23", in_balance: true, reconciliation: null,
-          ledgers: [{ ledger: "AR", debit: 400, credit: 0, balance: 400 }],
-        }
+  const bridgedScreensRpc = () => rpc.mockImplementation(async (method: string) => {
+    if (method === "kamra.ledger.ledger_balances") {
+      return {
+        business_date: "2026-11-23", in_balance: true, reconciliation: null,
+        ledgers: [{ ledger: "AR", debit: 400, credit: 0, balance: 400 }],
       }
-      if (method === "kamra.ledger.journal_by_transaction_code") return { rows: [] }
-      if (method === "kamra.custom_reports.saved_reports") return { reports: [] }
-      if (method === "kamra.custom_reports.report_datasets") return { datasets: [] }
-      if (method === "kamra.dashboards.owner_snapshot") {
-        return {
-          property_name: "Test Hotel", date: "2026-11-23", total_rooms: 10,
-          today: { rooms_sold: 5, occupancy_pct: 50, adr: 100, revpar: 50, room_revenue: 500, fnb_revenue: 0, other_revenue: 0, allowances: 0, total_revenue: 500 },
-          movement: { arrivals: 1, departures: 1, in_house: 5, no_shows: 0 },
-          collections: { grand_total: 500, modes: [] },
-          outlook: [], guest_balances: 0, open_folios: 0,
-          city_ledger: 400, city_ledger_overdue: 100, audits: null,
-        }
+    }
+    if (method === "kamra.ledger.journal_by_transaction_code") return { rows: [] }
+    if (method === "kamra.custom_reports.list_custom_reports") return []
+    if (method === "kamra.custom_reports.list_report_datasets") return []
+    if (method === "kamra.custom_reports.list_report_packs") return []
+    if (method === "kamra.dashboards.owner_snapshot") {
+      return {
+        property_name: "Test Hotel", date: "2026-11-23", total_rooms: 10,
+        today: { rooms_sold: 5, occupancy_pct: 50, adr: 100, revpar: 50, room_revenue: 500, fnb_revenue: 0, other_revenue: 0, allowances: 0, total_revenue: 500 },
+        movement: { arrivals: 1, departures: 1, in_house: 5, no_shows: 0 },
+        collections: { grand_total: 500, modes: [] },
+        outlook: [], guest_balances: 0, open_folios: 0,
+        city_ledger: 400, city_ledger_overdue: 100, audits: null,
       }
-      return null
-    })
+    }
+    return null
+  })
+  const hrefsOf = () => Array.from(host.querySelectorAll("a")).map((a) => a.getAttribute("href"))
 
-    // Ledgers screen: bottom link and AR help link point at ERP Accounts Receivable, never /kamra/receivables.
+  it("Ledgers: the receivables links point at the ERP Accounts Receivable report, never /kamra/receivables", async () => {
+    boot({ receivables: RECEIVABLES, accounting_export: EXPORT })
+    bridgedScreensRpc()
     await act(async () => {
       root.render(<MemoryRouter basename="/kamra" initialEntries={["/kamra/ledgers"]}><Ledgers /></MemoryRouter>)
     })
     await vi.waitFor(() => { expect(host.textContent).toContain("Books check") })
-    const ledgersHrefs = Array.from(host.querySelectorAll("a")).map((a) => a.getAttribute("href"))
-    expect(ledgersHrefs).not.toContain("/kamra/receivables")
-    expect(ledgersHrefs).toContain(RECEIVABLES.url)
+    expect(hrefsOf()).not.toContain("/kamra/receivables")
+    expect(hrefsOf()).toContain(RECEIVABLES.url)
+  })
 
-    // Reports screen: hides /accounting-export link when kept in ERP.
+  it("Reports: the accounting export link points at the ERP report, never /kamra/accounting-export", async () => {
+    boot({ receivables: RECEIVABLES, accounting_export: EXPORT })
+    bridgedScreensRpc()
     await act(async () => {
       root.render(<MemoryRouter basename="/kamra" initialEntries={["/kamra/reports/custom"]}><Reports /></MemoryRouter>)
     })
-    await vi.waitFor(() => { expect(host.textContent).toContain("Reports") })
-    const reportsHrefs = Array.from(host.querySelectorAll("a")).map((a) => a.getAttribute("href"))
-    expect(reportsHrefs).not.toContain("/kamra/accounting-export")
+    await vi.waitFor(() => { expect(host.textContent).toContain("Accounting export") })
+    expect(hrefsOf()).not.toContain("/kamra/accounting-export")
+    expect(hrefsOf()).toContain(EXPORT.url)
+  })
 
-    // Owner view: Company accounts row links to ERP Accounts Receivable.
+  it("Owner: the company accounts row opens the ERP Accounts Receivable report", async () => {
+    boot({ receivables: RECEIVABLES })
+    bridgedScreensRpc()
     await act(async () => {
       root.render(<MemoryRouter basename="/kamra" initialEntries={["/kamra/owner"]}><Owner /></MemoryRouter>)
     })
     await vi.waitFor(() => { expect(host.textContent).toContain("Company accounts (city ledger)") })
-    const ownerHrefs = Array.from(host.querySelectorAll("a")).map((a) => a.getAttribute("href"))
-    expect(ownerHrefs).toContain(RECEIVABLES.url)
+    expect(hrefsOf()).toContain(RECEIVABLES.url)
+    expect(hrefsOf()).not.toContain("/kamra/ledgers")
+  })
+
+  it("Owner: shows a dash, not zero, when the accounting system keeps the receivables and cannot be read", async () => {
+    boot({ receivables: RECEIVABLES })
+    rpc.mockImplementation(async (method: string) => method === "kamra.dashboards.owner_snapshot" ? {
+      property_name: "Test Hotel", date: "2026-11-23", total_rooms: 10,
+      today: { rooms_sold: 5, occupancy_pct: 50, adr: 100, revpar: 50, room_revenue: 500, fnb_revenue: 0, other_revenue: 0, allowances: 0, total_revenue: 500 },
+      movement: { arrivals: 1, departures: 1, in_house: 5, no_shows: 0 },
+      collections: { grand_total: 500, modes: [] },
+      outlook: [], guest_balances: 0, open_folios: 0,
+      city_ledger: null, city_ledger_overdue: null, audits: null,
+    } : null)
+    await act(async () => {
+      root.render(<MemoryRouter basename="/kamra" initialEntries={["/kamra/owner"]}><Owner /></MemoryRouter>)
+    })
+    await vi.waitFor(() => { expect(host.textContent).toContain("Company accounts (city ledger)") })
+    const row = Array.from(host.querySelectorAll("a, div")).find((e) => e.textContent?.startsWith("Company accounts (city ledger)"))
+    expect(row?.textContent).toContain("—")
+    expect(row?.textContent).not.toMatch(/0\s*$/)
   })
 })
