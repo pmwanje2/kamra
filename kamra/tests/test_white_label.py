@@ -37,7 +37,9 @@ def load_parts(name, names, frappe, imports=("kamra.branding",), **namespace):
 	with its imports from `imports`, so no unrelated bench module loads."""
 	path = KAMRA / name
 	tree = ast.parse(path.read_text(encoding="utf-8"))
-	targets = lambda node: {t.id for t in getattr(node, "targets", []) if isinstance(t, ast.Name)}
+
+	def targets(node):
+		return {t.id for t in getattr(node, "targets", []) if isinstance(t, ast.Name)}
 	selected = [node for node in tree.body if (
 		isinstance(node, ast.FunctionDef) and node.name in names
 	) or (isinstance(node, ast.Assign) and targets(node) & set(names)
@@ -229,12 +231,14 @@ class WhiteLabelTest(unittest.TestCase):
 
 	def test_absolute_links_never_name_the_app_mount(self):
 		mount = re.compile(r"^/kamra(?:/|$)")
-		get_url = lambda node: isinstance(node, ast.Call) and ast.unparse(node.func).split(".")[-1] == "get_url"
+
+		def get_url(node):
+			return isinstance(node, ast.Call) and ast.unparse(node.func).split(".")[-1] == "get_url"
 		findings = set()
 		for rel, tree in server_sources():
 			for node in ast.walk(tree):
 				if isinstance(node, ast.JoinedStr):
-					for left, right in zip(node.values, node.values[1:]):
+					for left, right in zip(node.values, node.values[1:], strict=False):
 						if isinstance(left, ast.FormattedValue) and get_url(left.value) and \
 								isinstance(right, ast.Constant) and mount.match(right.value):
 							findings.add(f"{rel}:{node.lineno}: {right.value}")
@@ -322,7 +326,7 @@ class WhiteLabelTest(unittest.TestCase):
 						continue
 					if refused and min(refused) < call.lineno:
 						continue  # only reached when not white-labelled
-					args = dict(zip(("recipients", "sender", "subject"), call.args))
+					args = dict(zip(("recipients", "sender", "subject"), call.args, strict=False))
 					args.update((kw.arg, kw.value) for kw in call.keywords if kw.arg)
 					for key in ("recipients", "sender", "subject"):
 						value = args.get(key)
