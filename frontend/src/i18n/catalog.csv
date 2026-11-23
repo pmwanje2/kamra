@@ -6908,3 +6908,27 @@ Select a room type and wait for a valid quote.,Select a room type and wait for a
 Voice partner,Voice partner,شريك الخدمات الصوتية,Proveedor de voz,Parceiro de voz,语音合作方,lib/brand.ts,,translated
 {assistant} (service),{assistant} (service),{assistant} (خدمة),{assistant} (servicio),{assistant} (serviço),{assistant}（服务）,lib/brand.ts,assistant,translated
 Not available here,Not available here,غير متاح هنا,No disponible aquí,Indisponível aqui,此处不可用,App.tsx,,translated
+% off,% off,% خصم,% de descuento,% de desconto,% 折扣,components/DiscountPanel.tsx,,translated
+A 100% discount (comp) needs a manager's sign-off.,A 100% discount (comp) needs a manager's sign-off.,خصم 100% (مجاني) يحتاج إلى موافقة المدير.,Un descuento del 100 % (cortesía) necesita la aprobación de un gerente.,Um desconto de 100% (cortesia) precisa da aprovação de um gerente.,100% 折扣（免费）需要经理批准。,components/DiscountPanel.tsx,,translated
+A percentage is between 0 and 100.,A percentage is between 0 and 100.,النسبة المئوية بين 0 و100.,Un porcentaje está entre 0 y 100.,Uma porcentagem fica entre 0 e 100.,百分比须在 0 到 100 之间。,,,translated
+Amount / night,Amount / night,مبلغ / ليلة,Importe / noche,Valor / noite,金额 / 晚,components/DiscountPanel.tsx,,translated
+Apply to future nights,Apply to future nights,تطبيق على الليالي التالية,Aplicar a las noches siguientes,Aplicar às noites seguintes,应用于之后的夜晚,components/DiscountPanel.tsx,,translated
+Base,Base,الأساس,Base,Base,基础价,components/AgreedRatePanel.tsx; components/DiscountPanel.tsx,,translated
+Base room rate,Base room rate,سعر الغرفة الأساسي,Tarifa base de la habitación,Tarifa base do quarto,基础房价,components/BookingDialog.tsx,,translated
+Below the rate floor on {dates}.,Below the rate floor on {dates}.,أقل من الحد الأدنى للسعر في {dates}.,Por debajo de la tarifa mínima el {dates}.,Abaixo da tarifa mínima em {dates}.,{dates} 低于最低房价。,components/DiscountPanel.tsx,dates,translated
+"Comes off the room rate only - meals, extras and tax keep their own price.","Comes off the room rate only - meals, extras and tax keep their own price.",يُخصم من سعر الغرفة فقط - تبقى الوجبات والإضافات والضريبة بسعرها.,"Solo se descuenta de la tarifa de la habitación: las comidas, los extras y los impuestos mantienen su precio.","Sai apenas da tarifa do quarto - refeições, extras e impostos mantêm o próprio preço.",仅从房价中扣除——餐食、附加项目和税费保持原价。,components/DiscountPanel.tsx,,translated
+Discount ({reason}),Discount ({reason}),خصم ({reason}),Descuento ({reason}),Desconto ({reason}),折扣（{reason}）,components/BookingDialog.tsx,reason,translated
+Discount eligible,Discount eligible,مؤهل للخصم,Admite descuento,Aceita desconto,可打折,,,translated
+Discount value,Discount value,قيمة الخصم,Valor del descuento,Valor do desconto,折扣值,components/DiscountPanel.tsx,,translated
+Enter a discount of zero or more.,Enter a discount of zero or more.,أدخل خصمًا يساوي صفرًا أو أكثر.,Introduzca un descuento de cero o más.,Informe um desconto de zero ou mais.,请输入零或以上的折扣。,,,translated
+Fixed rate,Fixed rate,سعر ثابت,Tarifa fija,Tarifa fixa,固定房价,components/AgreedRatePanel.tsx,,translated
+Fixed rate override,Fixed rate override,تجاوز بسعر ثابت,Anulación con tarifa fija,Substituição por tarifa fixa,固定房价覆盖,components/AgreedRatePanel.tsx,,translated
+Net room rate,Net room rate,صافي سعر الغرفة,Tarifa neta de la habitación,Tarifa líquida do quarto,净房价,components/BookingDialog.tsx,,translated
+Per-night daily details,Per-night daily details,التفاصيل اليومية لكل ليلة,Detalle diario por noche,Detalhes diários por noite,每晚明细,components/DiscountPanel.tsx,,translated
+Pick a reason for the discount.,Pick a reason for the discount.,اختر سببًا للخصم.,Elija un motivo para el descuento.,Escolha um motivo para o desconto.,请选择折扣原因。,components/BookingDialog.tsx,,translated
+Save discount,Save discount,حفظ الخصم,Guardar descuento,Salvar desconto,保存折扣,components/AgreedRatePanel.tsx,,translated
+Stay rate & daily details,Stay rate & daily details,سعر الإقامة والتفاصيل اليومية,Tarifa de la estancia y detalle diario,Tarifa da estadia e detalhes diários,住宿房价与每日明细,components/AgreedRatePanel.tsx,,translated
+The discount is more than the night's rate.,The discount is more than the night's rate.,الخصم أكبر من سعر الليلة.,El descuento supera la tarifa de la noche.,O desconto é maior do que a tarifa da noite.,折扣超过了当晚房价。,,,translated
+This rate plan does not allow discounts.,This rate plan does not allow discounts.,خطة الأسعار هذه لا تسمح بالخصومات.,Este plan de tarifas no admite descuentos.,Este plano tarifário não permite descontos.,此价格计划不允许折扣。,components/DiscountPanel.tsx,,translated
+This reason needs a manager's sign-off.,This reason needs a manager's sign-off.,هذا السبب يحتاج إلى موافقة المدير.,Este motivo necesita la aprobación de un gerente.,Este motivo precisa da aprovação de um gerente.,此原因需要经理批准。,components/DiscountPanel.tsx,,translated
+"Untick for rates that never take a desk discount (non-refundable, packages).","Untick for rates that never take a desk discount (non-refundable, packages).",ألغِ التحديد للأسعار التي لا تقبل خصم الاستقبال أبدًا (غير القابلة للاسترداد، الباقات).,"Desmárquelo para las tarifas que nunca admiten descuento en recepción (no reembolsables, paquetes).","Desmarque para tarifas que nunca recebem desconto da recepção (não reembolsáveis, pacotes).",对从不接受前台折扣的房价（不可退款、套餐）取消勾选。,,,translated

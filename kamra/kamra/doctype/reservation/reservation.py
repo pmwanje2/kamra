@@ -6,7 +6,7 @@ import frappe
 from kamra.branding import product_name
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import cint, date_diff, flt, formatdate, getdate, now_datetime, today
+from frappe.utils import add_days, cint, date_diff, flt, formatdate, getdate, now_datetime, today
 
 
 class InventoryRefused(frappe.ValidationError):
@@ -17,6 +17,19 @@ class InventoryRefused(frappe.ValidationError):
 # One definition shared by the villa <-> room lockout and the member-room
 # fallback, so the two can never drift apart.
 NON_VILLA_SQL = "(rt.room_category != 'Villa' OR rt.room_category IS NULL)"
+
+
+def discount_inputs(doc) -> tuple[tuple, set]:
+	"""A booking's discount as the desk set it: the stay's (type, value,
+	reason, fixed rate) and each night's own Daily Details entry."""
+	stay = (doc.get("discount_type") or None, flt(doc.get("discount_value")),
+	        doc.get("discount_reason") or None, cint(doc.get("fixed_rate")))
+	nights = {(str(getdate(r.stay_date)), r.get("discount_type") or None,
+	           flt(r.get("discount_value")), r.get("discount_reason") or None,
+	           cint(r.get("fixed_rate")))
+	          for r in doc.get("night_rates") or []
+	          if r.get("discount_type") or cint(r.get("fixed_rate"))}
+	return stay, nights
 
 
 def lock_property_for_inventory(property: str) -> None:
@@ -380,6 +393,7 @@ class Reservation(Document):
 			from kamra.api import AdvancePaidIsLedgerOwned
 			frappe.throw(_("Advance paid follows the payments on the folio; take a payment or refund there."),
 			             AdvancePaidIsLedgerOwned)
+		self.guard_discount_inputs()
 		# Before any other inventory lock, so villa vs room and category
 		# capacity take this row in the same order as booking and accept.
 		if self.property:
@@ -409,6 +423,7 @@ class Reservation(Document):
 		self.capture_contract_tariff()
 		self.keep_hand_set_nights()
 		self.apply_pricing()
+		self.govern_discount()
 		self.stamp_room_assignment()
 
 	def stamp_room_assignment(self):
@@ -677,6 +692,13 @@ class Reservation(Document):
 		hand = self.hand_set_prices()
 		if hand:
 			inputs["night_prices"] = hand
+		# the desk's discount, the same way: only when there is one
+		if self.get("discount_type") and flt(self.get("discount_value")) > 0:
+			inputs["discount_type"] = self.discount_type
+			inputs["discount_value"] = flt(self.discount_value)
+		nights = self.night_discount_inputs()
+		if nights:
+			inputs["night_discounts"] = nights
 		# Day-use times only enter the lock key when the stay is same-day:
 		# overnight ETA/ETD is display-only and must not re-price.
 		if cint(self.get("is_day_use")) or (
@@ -699,6 +721,54 @@ class Reservation(Document):
 		        if flt(r.get("hand_price")) > 0
 		        and first <= getdate(r.stay_date) < last]
 		return sorted(rows, key=lambda r: r["date"])
+
+	def night_discount_inputs(self) -> list[dict]:
+		"""The nights with a discount of their own (Daily Details) still inside
+		the stay, as the quote takes them. A night row with no discount type
+		follows the stay's discount; its base / discount / rate columns are
+		what the quote worked out, never an input."""
+		if not self.check_in_date or not self.check_out_date:
+			return []
+		first = getdate(self.check_in_date)
+		last = max(getdate(self.check_out_date), getdate(add_days(first, 1)))
+		rows = [{"date": str(getdate(r.stay_date)), "discount_type": r.discount_type,
+		         "discount_value": flt(r.get("discount_value")),
+		         "discount_reason": r.get("discount_reason") or None,
+		         "fixed_rate": cint(r.get("fixed_rate"))}
+		        for r in self.get("night_rates") or []
+		        if (r.get("discount_type") or cint(r.get("fixed_rate")))
+		        and first <= getdate(r.stay_date) < last]
+		return sorted(rows, key=lambda r: r["date"])
+
+	def guard_discount_inputs(self):
+		"""A discount is granted only through the governed actions
+		(create_booking, walk_in, set_reservation_discount), which check the
+		reason, the desk's limit and any supervisor sign-off and then set
+		flags.kamra_reservation_discount. Frappe never fills doc.flags from a
+		client payload, so a discount written straight onto the booking - its
+		own fields or a night row's - is refused. set_agreed_rate may mark the
+		stay a fixed rate. A night that drops out of the stay takes its
+		discount with it."""
+		if self.flags.get("kamra_reservation_discount"):
+			return
+		old = None if self.is_new() else self.get_doc_before_save()
+		(stay_was, nights_were) = discount_inputs(old) if old else ((None, 0.0, None, 0), set())
+		stay, nights = discount_inputs(self)
+		if self.flags.get("kamra_agreed_rate_override"):
+			stay, stay_was = stay[:3], stay_was[:3]
+		if stay != stay_was or not nights <= nights_were:
+			frappe.throw(_("A discount is given on the booking screen, with a reason, and "
+			               "signed off by a supervisor when it needs one."),
+			             frappe.PermissionError, title=_("Discount"))
+
+	def govern_discount(self):
+		"""The discount rules (kamra.api.discount_governance) on the nights
+		this save just locked, when a governed action put a discount on the
+		booking - so the reason, the desk's limit and any sign-off are
+		checked against exactly what the folio will bill."""
+		if self.flags.get("kamra_discount_context"):
+			from kamra.api import govern_reservation_discount
+			govern_reservation_discount(self)
 
 	def keep_hand_set_nights(self):
 		"""Prices the nights a desk typed (night_rates rows carrying a
@@ -828,6 +898,10 @@ class Reservation(Document):
 			if i == len(nightly) - 1 and plan_free:
 				rate = round(room_total - running, 2)
 			running += rate
+			# gross, discount and net side by side (the discounted quote's
+			# nights are already in cents, so the discount is exact)
+			off = round(float(n.get("discount_amount") or 0), 2)
+			own = n.get("night_discount") or {}
 			rows.append({
 				"stay_date": n["date"],
 				"rate": rate,
@@ -836,6 +910,13 @@ class Reservation(Document):
 				"demand_premium_pct": float(n.get("demand_premium_pct") or 0),
 				# what the desk typed for the night (0: Kamra priced it)
 				"hand_price": float(n.get("typed_price") or 0),
+				"base_rate": round(rate + off, 2),
+				"discount_amount": off,
+				# the night's own Daily Details discount; blank follows the stay
+				"discount_type": own.get("discount_type"),
+				"discount_value": float(own.get("discount_value") or 0),
+				"discount_reason": own.get("discount_reason"),
+				"fixed_rate": cint(own.get("fixed_rate")),
 			})
 		return rows
 
@@ -909,6 +990,10 @@ class Reservation(Document):
 				out["nights"].append({"date": night, "charged": c["base"],
 				                      "new": round(new, 2), "action": action})
 			row["rate"], row["gst_rate"] = round(base, 2), gst
+			if "base_rate" in row:
+				# what the folio holds for the night, against the night's base
+				row["discount_amount"] = round(max(flt(row["base_rate"]) - row["rate"], 0), 2)
+				row["base_rate"] = round(row["rate"] + row["discount_amount"], 2)
 		out["base"], out["tax"] = round(out["base"], 2), round(out["tax"], 2)
 		return out
 

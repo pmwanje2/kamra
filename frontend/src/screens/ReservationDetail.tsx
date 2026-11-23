@@ -559,7 +559,8 @@ export default function ReservationDetail({
             )}
           </dl>
           {d.actions.can_amend && (d.night_rates?.length ?? 0) > 0 && canAgreeRate && (
-            <AgreedRatePanel reservation={name} nightRates={d.night_rates ?? []} onSaved={() => { refresh(); reload() }} />
+            <AgreedRatePanel reservation={name} nightRates={d.night_rates ?? []} current={d.discount}
+              onSaved={() => { refresh(); reload() }} />
           )}
           {d.booked_check_out_date && (
             <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">

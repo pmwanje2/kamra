@@ -76,6 +76,10 @@
   "is_pay_at_hotel",
   "voucher",
   "discount_amount",
+  "discount_type",
+  "discount_value",
+  "discount_reason",
+  "fixed_rate",
   "auto_price",
   "agreed_rate",
   "contract_tariff",
@@ -518,6 +522,37 @@
    "read_only": 1
   },
   {
+   "description": "The stay's discount: a percentage OR a flat amount off each night's room rate. Set through the booking screen with a reason; meals, extras and tax keep their own price.",
+   "fieldname": "discount_type",
+   "fieldtype": "Select",
+   "label": "Discount Type",
+   "options": "\nPercent\nAmount",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "The percentage (0 to 100) or the amount off each night, in the property's currency.",
+   "fieldname": "discount_value",
+   "fieldtype": "Float",
+   "label": "Discount Value",
+   "read_only": 1
+  },
+  {
+   "fieldname": "discount_reason",
+   "fieldtype": "Link",
+   "label": "Discount Reason",
+   "options": "Reason Code",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "The stay is on a rate set by hand (an agreed rate, or a manager's fixed-rate override of a plan that is not discountable).",
+   "fieldname": "fixed_rate",
+   "fieldtype": "Check",
+   "label": "Fixed Rate",
+   "read_only": 1
+  },
+  {
    "default": "1",
    "fieldname": "auto_price",
    "fieldtype": "Check",
@@ -954,7 +989,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-10-29 14:00:00.000000",
+ "modified": "2026-11-23 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Reservation",

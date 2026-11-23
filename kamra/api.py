@@ -4613,8 +4613,17 @@ def reservation_detail(reservation: str):
 		# the nightly rates confirmed at booking - what the folio bills
 		"night_rates": [
 			{"date": str(n.stay_date), "rate": float(n.rate or 0),
-			 "demand_premium_pct": float(n.demand_premium_pct or 0)}
+			 "demand_premium_pct": float(n.demand_premium_pct or 0),
+			 "base_rate": float(n.get("base_rate") or n.rate or 0),
+			 "discount_amount": float(n.get("discount_amount") or 0),
+			 "discount_type": n.get("discount_type") or None,
+			 "discount_value": float(n.get("discount_value") or 0)}
 			for n in (res.get("night_rates") or [])],
+		# the desk's discount on the stay (each night's own is on its row)
+		"discount": {"discount_type": res.get("discount_type") or None,
+		             "discount_value": flt(res.get("discount_value")),
+		             "discount_reason": res.get("discount_reason") or None,
+		             "fixed_rate": cint(res.get("fixed_rate"))},
 		"precheckin_status": res.precheckin_status,
 		"precheckin_token": res.get("precheckin_token"),
 		# the scan itself is never in this payload - id_document is only the
@@ -4882,7 +4891,11 @@ def walk_in(property: str, room_type: str, room: str, check_out_date: str,
             ota_ref: str | None = None,
             ota_total: float = 0,
             ota_commission_pct: float | None = None, currency: str | None = None,
-            quote_id: str | None = None, night_prices=None, extra_beds: int = 0):
+            quote_id: str | None = None, night_prices=None, extra_beds: int = 0,
+            discount_type: str | None = None, discount_value: float = 0,
+            discount_reason: str | None = None, night_discounts=None,
+            fixed_rate: int = 0, supervisor_pin: str | None = None,
+            supervisor_user: str | None = None):
 	"""Walk-in in one step: book, register the ID, check into the chosen
 	room and take the money - the counter flow that used to be four screens.
 
@@ -4902,7 +4915,10 @@ def walk_in(property: str, room_type: str, room: str, check_out_date: str,
 	An OTA guest who books and arrives the same day is a walk-in booked
 	via that site: booked_via / ota_ref / ota_total / ota_commission_pct
 	work as in create_booking (the stay's source is then OTA). night_prices
-	books nights at the desk's own prices, as in create_booking."""
+	books nights at the desk's own prices, and discount_type /
+	discount_value / discount_reason / night_discounts give the desk's
+	discount (supervisor_user + supervisor_pin above the desk's limit), as in
+	create_booking - priced before the money is taken."""
 	from kamra.crs import assert_property_access
 	from kamra.localization import assert_payment_mode, validate_id_type
 	assert_property_access(property)
@@ -4949,7 +4965,11 @@ def walk_in(property: str, room_type: str, room: str, check_out_date: str,
 		credit_override_reason=credit_override_reason,
 		booked_via=booked_via, ota_ref=ota_ref, ota_total=ota_total,
 		ota_commission_pct=ota_commission_pct, night_prices=night_prices,
-		stay_details={"extra_beds": cint(extra_beds)} if extra_beds else None)
+		stay_details={"extra_beds": cint(extra_beds)} if extra_beds else None,
+		discount_type=discount_type, discount_value=discount_value,
+		discount_reason=discount_reason, night_discounts=night_discounts,
+		fixed_rate=fixed_rate, supervisor_pin=supervisor_pin,
+		supervisor_user=supervisor_user)
 	reservation = booked["reservation"]
 	folio_filter = {"reservation": reservation, "folio_type": "Guest"}
 
@@ -6656,6 +6676,8 @@ def set_agreed_rate(reservation: str, agreed_rate: float, reason_code: str,
 			                             requester=frappe.session.user)
 	_require_price_confirmation(plan, confirm_price)
 	doc.flags.kamra_agreed_rate_override = True
+	# an agreed rate is a rate set by hand: OPERA's Fixed Rate
+	doc.fixed_rate = 1
 	# the role and limit checks above are the permission; Revenue Manager
 	# has no write DocPerm on Reservation
 	doc.save(ignore_permissions=True)
@@ -6673,6 +6695,370 @@ def set_agreed_rate(reservation: str, agreed_rate: float, reason_code: str,
 	        "nights": [{"date": str(r.stay_date), "rate": flt(r.rate)}
 	                   for r in doc.night_rates],
 	        "amount_after_tax": flt(doc.amount_after_tax), "approver": approver}
+
+
+# --- reservation and walk-in discounts --------------------------------------
+# OPERA Cloud Reservation Discounts (Rate Code "Discount" flag, Look to Book,
+# Walk-In, Stay Details, Daily Details) and SAP S/4HANA's manual discount
+# condition: a percentage OR an amount off each night's room rate, gross and
+# net kept apart, a mandatory reason, the desk's limit and a supervisor's
+# sign-off above it. One set of rules, discount_governance, for every place a
+# discount is given; Reservation.validate runs it on the nights it locks.
+
+# the reason codes a discount may carry (RATE-PROMO, RATE-MGR, ADJ-RATE, ...)
+DISCOUNT_REASON_CATEGORIES = ("Rate Change", "Adjust")
+
+
+def discount_reasons() -> list[dict]:
+	"""The active reason codes a reservation discount can be given with."""
+	from kamra.ledger import ensure_default_reason_codes
+	ensure_default_reason_codes()
+	return frappe.get_all(
+		"Reason Code",
+		filters={"disabled": 0, "category": ["in", list(DISCOUNT_REASON_CATEGORIES)]},
+		fields=["name", "code", "description", "category", "requires_supervisor"],
+		order_by="category asc, code asc")
+
+
+def discount_options(property: str) -> dict:
+	"""What a booking screen needs to offer a discount: whether this user
+	may give one, the front desk's limit and the reasons to pick from."""
+	from kamra.settings import get_setting
+	return {
+		"can_discount": bool(set(frappe.get_roles()) & {
+			"Front Desk", "Revenue Manager", "Kamra Agent"}) or _is_admin(),
+		"rate_override_limit_pct": flt(get_setting(property, "rate_override_limit_pct")),
+		"discount_reasons": discount_reasons(),
+	}
+
+
+def _discount_reason(reason_code) -> frappe._dict:
+	"""The discount's reason code, or a refusal: it must be an active Rate
+	Change or Adjust code (SAP's mandatory order reason)."""
+	from kamra.ledger import ensure_default_reason_codes
+	ensure_default_reason_codes()
+	code = None
+	if isinstance(reason_code, str) and reason_code.strip():
+		code = frappe.db.get_value(
+			"Reason Code", reason_code.strip(),
+			["name", "category", "requires_supervisor", "disabled"], as_dict=True)
+	if not code or code.disabled or code.category not in DISCOUNT_REASON_CATEGORIES:
+		frappe.throw(_("Pick a Rate Change or Adjust reason code for the discount."),
+		             title=_("Discount reason"))
+	return code
+
+
+def discount_governance(property: str, room_type: str | None, rate_plan: str | None,
+                        nightly: list[dict], *, reason_code: str | None = None,
+                        fixed_rate=0, check: bool = False,
+                        supervisor_user: str | None = None,
+                        supervisor_pin: str | None = None) -> dict:
+	"""The rules for a reservation or walk-in discount, on the nights it
+	prices ({date, base_rate, discount_amount, rate, gst_rate} - a quote's
+	nights or a booking's locked rows).
+
+	- Each discounted night carries an active Rate Change or Adjust reason
+	  (the night's own, else the stay's).
+	- A rate plan marked not discountable (discount_eligible 0) takes none,
+	  unless a Revenue Manager / Hotel Admin fixes the rate (fixed_rate).
+	- The front desk may cut each night by up to rate_override_limit_pct; a
+	  deeper cut, a night under its rate guardrail floor or a reason code
+	  that requires a supervisor is signed off by a Hotel Admin or Finance
+	  user with their PIN, never the person asking. A Revenue Manager /
+	  Hotel Admin gives any cut, but a full comp (a night at zero) still
+	  needs a supervisor - their own role, or another one's PIN.
+	- An AI agent is held to the front desk's limit whoever it acts for, and
+	  never uses a supervisor's PIN.
+
+	check=False is the preview (get_quote, discount_preview): nothing is
+	refused and no PIN is checked. check=True enforces it and returns the
+	approver."""
+	from kamra.authz import is_supervisor, supervisors_for, verify_supervisor
+	from kamra.credit import _is_agent
+	from kamra.pricing import rail_for_day, rates_include_tax
+	from kamra.settings import get_setting
+
+	discounted = [n for n in nightly if flt(n.get("discount_amount")) > 0]
+	base_total = sum(flt(n.get("base_rate", n.get("rate"))) for n in nightly)
+	discount_total = sum(flt(n.get("discount_amount")) for n in nightly)
+	max_pct = max((100 * flt(n["discount_amount"]) / flt(n["base_rate"])
+	               for n in discounted if flt(n.get("base_rate"))), default=0.0)
+	comp = any(flt(n.get("rate")) <= 0 for n in discounted)
+	floor_breach = []
+	if discounted:
+		inclusive = rates_include_tax(property)
+		rails = frappe.get_all(
+			"Rate Guardrail", filters={"property": property, "disabled": 0,
+			                           "room_type": ("in", [room_type, "", None])},
+			fields=["room_type", "floor_price", "days_of_week"])
+		for n in discounted:
+			rail = rail_for_day(rails, room_type, getdate(n["date"]).strftime("%a").lower())
+			# the floor is on the price basis the rate card uses
+			net = flt(n["rate"]) * (1 + flt(n.get("gst_rate")) / 100 if inclusive else 1)
+			if rail and flt(rail.floor_price) and net < flt(rail.floor_price) - 0.005:
+				floor_breach.append(str(n["date"]))
+	limit = flt(get_setting(property, "rate_override_limit_pct"))
+	agent = _is_agent()
+	manager = _can_set_rate() and not agent
+	flag = frappe.db.get_value("Rate Plan", rate_plan, "discount_eligible") if rate_plan else None
+	eligible = flag is None or bool(cint(flag))
+	fixed = bool(cint(fixed_rate)) or any(
+		cint((n.get("night_discount") or {}).get("fixed_rate")) for n in discounted)
+	codes, reason_ok = {}, True
+	for n in discounted:
+		why = n.get("discount_reason") or reason_code
+		if why in codes:
+			continue
+		try:
+			codes[why] = _discount_reason(why)
+		except frappe.ValidationError:
+			if check:
+				raise
+			reason_ok = False
+	reason_sup = any(cint(c.requires_supervisor) for c in codes.values())
+	desk_needs = max_pct > limit + 0.005 or bool(floor_breach) or reason_sup
+	needs_supervisor = bool(discounted) and (
+		(not manager and desk_needs) or (comp and manager and not is_supervisor()))
+	out = {
+		"base_total": round(base_total, 2), "discount_total": round(discount_total, 2),
+		"net_total": round(base_total - discount_total, 2),
+		"effective_pct": round(100 * discount_total / base_total, 2) if base_total else 0.0,
+		"max_pct": round(max_pct, 2), "limit_pct": limit,
+		"needs_supervisor": needs_supervisor, "can_set_rate": manager, "agent": agent,
+		"eligible": eligible, "fixed_rate": int(fixed), "comp": comp,
+		"floor_breach": floor_breach, "reason_requires_supervisor": reason_sup,
+		"reason_ok": reason_ok,
+		# who can sign it off here (names only); nobody signs their own
+		"supervisors": supervisors_for(property, exclude=frappe.session.user)
+		if needs_supervisor and not agent else [],
+		"approver": None,
+	}
+	if not check or not discounted:
+		return out
+	if agent:
+		if not set(AGREED_RATE_CALLER_ROLES) & set(frappe.get_roles()):
+			_refuse_agent_rate(_("An AI agent can't give a discount on its own."))
+		if (supervisor_user or "").strip() or (supervisor_pin or "").strip():
+			_refuse_agent_rate(_("An AI agent can't use a supervisor's PIN."))
+	if fixed and not manager:
+		if agent:
+			_refuse_agent_rate(_("An AI agent can't fix a rate."))
+		frappe.throw(_("Only a Revenue Manager or Hotel Admin can fix a rate to discount it."),
+		             frappe.PermissionError)
+	if not eligible and not fixed:
+		frappe.throw(_("The rate plan {0} can't be discounted at the desk. A Revenue Manager "
+		               "or Hotel Admin can fix the rate instead.").format(
+			frappe.db.get_value("Rate Plan", rate_plan, "rate_plan_name") or rate_plan),
+			title=_("Discount"))
+	if not needs_supervisor:
+		return out
+	why = (_("A cut of {0}% is over the front desk's limit of {1}%").format(
+		f"{max_pct:g}", f"{limit:g}") if max_pct > limit + 0.005 and not manager
+	       else _("A night at no charge") if comp
+	       else _("A night under the rate floor") if floor_breach
+	       else _("The reason"))
+	if agent:
+		_refuse_agent_rate(_("{0} needs a manager's sign-off.").format(why))
+	if not (supervisor_user or "").strip():
+		frappe.throw(_("{0} needs a manager's sign-off: a Hotel Admin or Finance user signs "
+		               "it off with their PIN.").format(why), frappe.PermissionError)
+	out["approver"] = verify_supervisor(property, supervisor_user, supervisor_pin,
+	                                    requester=frappe.session.user)
+	return out
+
+
+def _night_rows_as_nights(rows) -> list[dict]:
+	"""A booking's night rows in the shape discount_governance reads."""
+	out = []
+	for r in rows:
+		# a dict from quote_night_rows or a saved row: both read with .get
+		get = r.get
+		out.append({"date": str(getdate(get("stay_date"))), "rate": flt(get("rate")),
+		            "base_rate": flt(get("base_rate")) or flt(get("rate")),
+		            "discount_amount": flt(get("discount_amount")),
+		            "gst_rate": flt(get("gst_rate")),
+		            "discount_reason": get("discount_reason") or None,
+		            "night_discount": {"fixed_rate": cint(get("fixed_rate"))}})
+	return out
+
+
+def govern_reservation_discount(doc) -> None:
+	"""Reservation.validate's call, after the nights are priced: the rules
+	on the nights this save locks, for the discount a governed action put on
+	the booking (flags.kamra_discount_context). The outcome (approver,
+	effective %) waits in flags.kamra_discount_governance for the log."""
+	ctx = doc.flags.get("kamra_discount_context")
+	if not isinstance(ctx, dict):
+		return
+	# a night already on the folio keeps what it holds; its rules were
+	# settled when it was given, so only the nights still to come are judged
+	charged = set(ctx.get("charged") or ())
+	nights = [n for n in _night_rows_as_nights(doc.night_rates) if n["date"] not in charged]
+	doc.flags.kamra_discount_governance = discount_governance(
+		doc.property, doc.room_type, doc.rate_plan, nights,
+		reason_code=doc.get("discount_reason") or ctx.get("reason_code"),
+		fixed_rate=ctx.get("fixed_rate"), check=True,
+		supervisor_user=ctx.get("supervisor_user"), supervisor_pin=ctx.get("supervisor_pin"))
+
+
+def _set_discount_inputs(doc, disc: dict, reason_code, fixed_rate, *,
+                         charged=frozenset(), supervisor_user=None, supervisor_pin=None) -> None:
+	"""Put a discount the desk asked for on the booking, for the save that
+	prices and governs it: the stay's own fields, each Daily Details night on
+	its row (a night not listed follows the stay's discount) and the flags
+	that tell Reservation.validate this is a governed action. Nights already
+	on the folio keep what they had."""
+	stay = (disc or {}).get("stay")
+	nights = (disc or {}).get("nights") or {}
+	doc.discount_type = stay[0] if stay else None
+	doc.discount_value = float(stay[1]) if stay else 0
+	doc.discount_reason = (reason_code or "").strip() or None if disc else None
+	if cint(fixed_rate):
+		doc.fixed_rate = 1
+	rows = {str(getdate(r.stay_date)): r for r in doc.get("night_rates") or []}
+	for day in nights:
+		if day not in rows:
+			rows[day] = doc.append("night_rates", {"stay_date": day})
+	for day, row in rows.items():
+		if day in charged:
+			continue
+		own = nights.get(day)
+		# a night listed with no discount is that night out of the stay's
+		row.discount_type = (own["type"] or "Percent") if own else None
+		row.discount_value = float(own["value"]) if own else 0
+		row.discount_reason = (own["reason"] or doc.discount_reason) if own else None
+		row.fixed_rate = cint(own["fixed_rate"]) if own else 0
+	doc.flags.kamra_reservation_discount = True
+	doc.flags.kamra_discount_context = {
+		"reason_code": doc.discount_reason, "fixed_rate": cint(fixed_rate),
+		"supervisor_user": supervisor_user, "supervisor_pin": supervisor_pin,
+		"charged": sorted(charged)}
+
+
+def _log_discount(doc, gov: dict | None, before: dict | None = None,
+                  channel: str | None = None) -> None:
+	"""The hotel's audit trail for a discount: who gave it, why, what it
+	took off and who signed it off."""
+	from kamra.savings import log_action
+	if not gov:
+		return
+	what = (f"{doc.discount_value:g}% off" if doc.get("discount_type") == "Percent"
+	        else f"{flt(doc.discount_value):,.2f} off a night" if doc.get("discount_type")
+	        else "Daily Details discount" if gov.get("discount_total") else "discount removed")
+	note = (f"{doc.get('discount_reason') or 'no reason'}: {what} · base "
+	        f"{gov['base_total']:,.2f} less {gov['discount_total']:,.2f} = "
+	        f"{gov['net_total']:,.2f} ({gov['effective_pct']:g}% effective)")
+	if doc.get("fixed_rate"):
+		note += " · fixed rate"
+	log_action("reservation_discount", "Reservation", doc.name, doc.property,
+	           rationale=note, approver=gov.get("approver"),
+	           before_snapshot=before,
+	           after_snapshot={"discount_type": doc.get("discount_type"),
+	                           "discount_value": flt(doc.get("discount_value")),
+	                           "discount_reason": doc.get("discount_reason"),
+	                           "discount_total": gov["discount_total"],
+	                           "amount_after_tax": flt(doc.amount_after_tax)},
+	           **({"channel": channel} if channel else {}))
+
+
+def _discount_plan(doc, discount_type=None, discount_value=0, reason_code=None,
+                   night_discounts=None, fixed_rate=0) -> dict:
+	"""Put the discount on doc in memory and say what saving it would do:
+	each night's base, discount and net (nights already on the folio held
+	by the property's rate-change policy), the new total against the
+	current one, and the rules (effective %, whether a supervisor signs it
+	off). Nothing is written."""
+	from kamra.folio import charged_nights
+	from kamra.pricing import normalize_discounts
+	if doc.status not in ("Confirmed", "Checked In"):
+		frappe.throw(_("Only an active reservation can take a discount."))
+	if not doc.get("auto_price"):
+		frappe.throw(_("This booking is priced by hand; change its amount instead."))
+	disc = normalize_discounts(discount_type, discount_value, night_discounts,
+	                           doc.check_in_date, doc.check_out_date)
+	charged = set(charged_nights(doc.name))
+	on_folio = sorted(set((disc or {}).get("nights") or {}) & charged)
+	if on_folio:
+		frappe.throw(_("{0} is already on the folio: a discount there is a folio allowance "
+		               "(Discount on the bill).").format(", ".join(on_folio)))
+	current = flt(doc.amount_after_tax)
+	_set_discount_inputs(doc, disc, reason_code, fixed_rate, charged=charged)
+	q = doc.requote()
+	rows = doc.quote_night_rows(q)
+	hold = doc.hold_charged_nights(rows)
+	new = round(flt(q["amount_after_tax"]) + hold["base"] + hold["tax"], 2)
+	plan = discount_governance(doc.property, doc.room_type, doc.rate_plan,
+	                           [n for n in _night_rows_as_nights(rows) if n["date"] not in charged],
+	                           reason_code=doc.discount_reason, fixed_rate=fixed_rate)
+	effective = {n["date"]: n for n in q["nightly"]}
+	plan.update(
+		current_amount=current, new_amount=new, difference=round(new - current, 2),
+		needs_confirmation=abs(new - current) >= 0.01,
+		nights=[{"date": str(r["stay_date"]), "base_rate": r["base_rate"],
+		         "discount_type": effective.get(str(r["stay_date"]), {}).get("discount_type"),
+		         "discount_value": effective.get(str(r["stay_date"]), {}).get("discount_value", 0),
+		         "discount_amount": r["discount_amount"], "rate": r["rate"],
+		         "own": bool(r.get("discount_type")),
+		         "charged": str(r["stay_date"]) in charged} for r in rows])
+	return plan
+
+
+@frappe.whitelist(methods=["POST"])
+@require_roles("Front Desk", "Revenue Manager", "Kamra Agent")
+def discount_preview(reservation: str, discount_type: str | None = None,
+                     discount_value: float = 0, reason_code: str | None = None,
+                     night_discounts=None, fixed_rate: int = 0):
+	"""What a discount would do to this stay before the desk confirms it
+	(Stay Details / Daily Details): base, discount and net per night and in
+	total, the effective %, the front desk's limit and whether a supervisor
+	signs it off. Nothing is written."""
+	doc = frappe.get_doc("Reservation", reservation)
+	assert_property_access(doc.property)
+	return _discount_plan(doc, discount_type, discount_value, reason_code,
+	                      night_discounts, fixed_rate)
+
+
+@frappe.whitelist(methods=["POST"])
+@require_roles("Front Desk", "Revenue Manager", "Kamra Agent")
+def set_reservation_discount(reservation: str, discount_type: str | None = None,
+                             discount_value: float = 0, reason_code: str | None = None,
+                             night_discounts=None, fixed_rate: int = 0,
+                             supervisor_pin: str | None = None,
+                             supervisor_user: str | None = None, confirm_price: int = 1):
+	"""Give (or change, or clear) a confirmed or in-house stay's discount: a
+	% OR an amount off each night still to come, or Daily Details nights of
+	their own (night_discounts). The base rate, the agreed rate and the
+	contract snapshot stay as booked; each night locks its base, discount
+	and net and the folio bills the net. Nights already on the folio keep
+	what they hold (a folio allowance covers those). The rules are
+	discount_governance's; a supervisor signs off with supervisor_user +
+	supervisor_pin. Call discount_preview first; confirm_price=0 refuses a
+	change in the total until it is confirmed."""
+	doc = frappe.get_doc("Reservation", reservation)
+	assert_property_access(doc.property)
+	before = {"discount_type": doc.get("discount_type"),
+	          "discount_value": flt(doc.get("discount_value")),
+	          "discount_reason": doc.get("discount_reason"),
+	          "amount_after_tax": flt(doc.amount_after_tax)}
+	plan = _discount_plan(doc, discount_type, discount_value, reason_code,
+	                      night_discounts, fixed_rate)
+	_require_price_confirmation(plan, confirm_price)
+	doc.flags.kamra_discount_context.update(supervisor_user=supervisor_user,
+	                                        supervisor_pin=supervisor_pin)
+	# the role and limit checks are the permission; Revenue Manager has no
+	# write DocPerm on Reservation
+	doc.save(ignore_permissions=True)
+	gov = doc.flags.get("kamra_discount_governance")
+	_log_discount(doc, gov, before)
+	return {"ok": True, "reservation": doc.name, "room": doc.room,
+	        "discount_type": doc.get("discount_type"),
+	        "discount_value": flt(doc.get("discount_value")),
+	        "discount_reason": doc.get("discount_reason"),
+	        "nights": [{"date": str(r.stay_date), "base_rate": flt(r.base_rate),
+	                    "discount_amount": flt(r.discount_amount), "rate": flt(r.rate)}
+	                   for r in doc.night_rates],
+	        "amount_after_tax": flt(doc.amount_after_tax),
+	        "approver": (gov or {}).get("approver")}
 
 
 def _move_price(res, new_type: str | None, rate_mode: str,
@@ -7003,7 +7389,8 @@ def booking_options(property: str):
 	from kamra.settings import get_setting
 	plans = frappe.get_all(
 		"Rate Plan", filters={"property": property, "disabled": 0},
-		fields=["name", "rate_plan_name", "code", "is_default"], order_by="rate_plan_name asc, name asc")
+		fields=["name", "rate_plan_name", "code", "is_default", "discount_eligible"],
+		order_by="rate_plan_name asc, name asc")
 	return {
 		"room_types": frappe.get_all(
 			"Room Type", filters={"property": property, "disabled": 0},
@@ -7041,6 +7428,8 @@ def booking_options(property: str):
 		"ota_commission": channel_commission_pcts(),
 		# who may type a night's price on the booking screen (night_prices)
 		"can_set_rate": _can_set_rate(),
+		# the inline discount: who may give one, the desk's limit, the reasons
+		**discount_options(property),
 	}
 
 
@@ -7108,7 +7497,11 @@ def get_quote(property: str, room_type: str, check_in_date: str,
               company: str | None = None,
               check_in_time: str | None = None,
               check_out_time: str | None = None,
-              night_prices=None, extra_beds: int = 0):
+              night_prices=None, extra_beds: int = 0,
+              discount_type: str | None = None, discount_value: float = 0,
+              discount_reason: str | None = None, night_discounts=None,
+              fixed_rate: int = 0, supervisor_pin: str | None = None,
+              supervisor_user: str | None = None):
 	"""Price a stay. With a company and no rate plan, the company's
 	negotiated plan applies - the same plan create_booking stores.
 	check_in_time / check_out_time price an hourly or block day-use plan.
@@ -7117,7 +7510,14 @@ def get_quote(property: str, room_type: str, check_in_date: str,
 	prices those nights at the typed figure - tax included when the
 	property's rates include tax - and the rest at the rate card. A voucher,
 	rate plan, long-stay discount or holiday package with typed nights is
-	refused."""
+	refused.
+
+	discount_type / discount_value / discount_reason / night_discounts
+	price the desk's discount the way create_booking will, and
+	discount_governance says what booking it takes (the effective %, the
+	front desk's limit, whether a supervisor signs it off). A quote never
+	checks a PIN: supervisor_user / supervisor_pin are accepted so a booking
+	screen can send one payload, and ignored."""
 	from kamra.booking_refs import resolve_meal_plan, resolve_rate_plan, resolve_room_type
 	from kamra.pricing import ContractRateRefused, quote_with_contract, tax_basis
 
@@ -7137,9 +7537,15 @@ def get_quote(property: str, room_type: str, check_in_date: str,
 		                        pets=int(pets or 0), company=company or None,
 		                        check_in_time=check_in_time or None, check_out_time=check_out_time or None,
 		                        extra_beds=extra_beds,
-		                        night_prices=[{"date": d, "price": str(p)} for d, p in typed.items()])
+		                        night_prices=[{"date": d, "price": str(p)} for d, p in typed.items()],
+		                        discount_type=discount_type or None,
+		                        discount_value=discount_value, night_discounts=night_discounts)
 	except ContractRateRefused as exc:
 		frappe.throw(str(exc))
+	if discount_type or night_discounts not in (None, "", [], {}):
+		q["discount_governance"] = discount_governance(
+			property, room_type, q.get("rate_plan"), q["nightly"],
+			reason_code=discount_reason, fixed_rate=fixed_rate)
 	q["tax_basis"] = tax_basis(property)
 	q["cancellation"] = cancellation_outlook(property, room_type, check_in_date, check_out_date)
 	return q
@@ -7510,7 +7916,14 @@ def create_booking(property: str, room_type: str, check_in_date: str,
                    ota_commission_pct: float | None = None,
                    marketing_consent: int = 0,
                    market_segment: str | None = None,
-                   night_prices=None):
+                   night_prices=None,
+                   discount_type: str | None = None,
+                   discount_value: float = 0,
+                   discount_reason: str | None = None,
+                   night_discounts=None,
+                   fixed_rate: int = 0,
+                   supervisor_pin: str | None = None,
+                   supervisor_user: str | None = None):
 	"""One-call booking: attach to an existing guest profile when given,
 	else reuse a profile whose phone and full name both match (a
 	blacklisted phone always resolves to its profile) / create one.
@@ -7539,7 +7952,15 @@ def create_booking(property: str, room_type: str, check_in_date: str,
 	at the rate card; the booking is then priced by hand (auto_price off),
 	each typed night is locked in night_rates and logged. Only a Revenue
 	Manager or Hotel Admin may; a voucher, rate plan, company plan, OTA
-	total or group block rate with typed nights is refused."""
+	total or group block rate with typed nights is refused.
+
+	discount_type (Percent / Amount) + discount_value + discount_reason give
+	the stay a desk discount off each night's room rate, on any rate plan
+	that allows one (discount_eligible) - night_discounts sets Daily Details
+	nights of their own. The rules are discount_governance's (the desk's
+	limit; supervisor_user + supervisor_pin above it; fixed_rate is a Revenue
+	Manager's / Hotel Admin's override of a plan that is not discountable).
+	Leaving them out books exactly as before."""
 	from kamra.crs import assert_property_access
 	from kamra.kamra.doctype.reservation.reservation import lock_property_for_inventory
 	from kamra.reservation_state import find_by_idempotency, lock_sius_for_booking
@@ -7562,6 +7983,12 @@ def create_booking(property: str, room_type: str, check_in_date: str,
 		property, room_type, check_in_date, check_out_date, night_prices,
 		voucher_code=voucher_code, rate_plan=rate_plan, company=company,
 		ota_total=ota_total if booked_via else 0, group_booking=group_booking)
+	# the desk's discount: its shape refused here, its rules on the priced nights
+	from kamra.pricing import normalize_discounts
+	disc = normalize_discounts(discount_type, discount_value, night_discounts,
+	                           check_in_date, check_out_date)
+	if disc and booked_via and flt(ota_total) > 0:
+		frappe.throw(_("The OTA total already sets the price; it can't take a desk discount."))
 
 	# "MCP" / "Chat" while an agent tool call runs; its bookings are AI Agent
 	# bookings whichever agent surface made them
@@ -7746,6 +8173,10 @@ def create_booking(property: str, room_type: str, check_in_date: str,
 		doc.auto_price = 0
 		doc.set("night_rates", [{"stay_date": d, "hand_price": float(p)}
 		                        for d, p in sorted(typed.items())])
+	# the discount the insert prices and governs (Reservation.validate)
+	discount_request = dict(supervisor_user=supervisor_user, supervisor_pin=supervisor_pin)
+	if disc:
+		_set_discount_inputs(doc, disc, discount_reason, fixed_rate, **discount_request)
 
 	# extras chosen at booking - priced from the Experience, posted to the
 	# folio the moment it opens
@@ -7854,10 +8285,15 @@ def create_booking(property: str, room_type: str, check_in_date: str,
 			payload.pop("name", None)
 			payload["guest"] = guest
 			doc = frappe.get_doc(payload)
+			if disc:
+				_set_discount_inputs(doc, disc, discount_reason, fixed_rate, **discount_request)
 	if via:
 		set_ota_commission(doc, ota_commission_pct)
 	if typed:
 		_record_night_prices(doc, typed)
+	if disc:
+		_log_discount(doc, doc.flags.get("kamra_discount_governance"),
+		              channel=channel or ("API" if source == "AI Agent" else "Desk"))
 
 	from kamra.savings import log_action
 	log_action(

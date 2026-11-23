@@ -25,6 +25,17 @@ import { useLocale } from "../lib/money"
 import { isPhoneComplete } from "../lib/phone"
 import { nightsBetween, parseDate, shiftDate } from "../lib/stay"
 import { typedNights, type NightPrice } from "../lib/nightPrices"
+import {
+  discountArgs,
+  discountEligible,
+  discountError,
+  discountReady,
+  emptyDiscount,
+  supervisorArgs,
+  type DiscountGovernance,
+  type DiscountState,
+} from "../lib/reservationDiscount"
+import DiscountPanel from "./DiscountPanel"
 import PhoneInput from "./PhoneInput"
 import { clampGuests, sleeps } from "../lib/occupancy"
 import { useT, t as translate, useUILanguage } from "../lib/i18n"
@@ -95,6 +106,16 @@ interface WalkInResult {
   amount_after_tax?: number
   /** 0: booked and room assigned, check-in still to finish (defer_check_in) */
   checked_in?: 0 | 1
+}
+
+/** The quote's nights for Daily Details, on the basis the desk sees a rate:
+ * gross where the property's rates include tax. */
+function discountNights(q: Quote) {
+  const inclusive = !!q.line_items?.[0]?.is_tax_inclusive
+  return q.nightly.map((n) => {
+    const base = n.base_rate ?? n.rate
+    return { date: n.date, base_rate: Math.round(base * (inclusive ? 1 + (n.gst_rate ?? 0) / 100 : 1) * 100) / 100 }
+  })
 }
 
 function todayLocal() {
@@ -439,6 +460,31 @@ export function BookingDialog(props: {
   }, [stayKey])
   const nightPricesParam = nightPricesArg.length ? { night_prices: nightPricesArg } : {}
 
+  // The desk's discount (OPERA Look to Book / Walk-In): % or an amount off
+  // each night, with a reason, on any rate plan that allows one - tariff
+  // plans and walk-ins included. One room at a time (a group's rooms are
+  // discounted on their own stays afterwards); an OTA total sets the price.
+  const [discount, setDiscount] = useState<DiscountState>(emptyDiscount)
+  const [discountSupervisor, setDiscountSupervisor] = useState("")
+  const [discountPin, setDiscountPin] = useState("")
+  const canDiscount = !!options?.can_discount && otaTotal <= 0 && moreRooms.length === 0
+  const discountPlan = form.rate_plan || quote?.rate_plan || ""
+  const discountOk = discountEligible(options?.rate_plans, discountPlan)
+  useEffect(() => {
+    // a plan that can't be discounted clears what was entered (OPERA)
+    if (discountOk) return
+    setDiscount(emptyDiscount())
+    setDiscountSupervisor("")
+    setDiscountPin("")
+  }, [discountOk])
+  const discountParam = canDiscount && discountOk ? discountArgs(discount, stayNights) : {}
+  const discountGov: DiscountGovernance | null = quote?.discount_governance ?? null
+  const discountSignOff = supervisorArgs(discountGov, discountSupervisor, discountPin)
+  const discountReasonText = (() => {
+    const r = options?.discount_reasons?.find((x) => x.name === discount.reason)
+    return r ? translate(r.description || r.name) : discount.reason
+  })()
+
   useEffect(() => {
     if (!autoRoomType.current || !options?.room_types.length || badDate) return
     let live = true
@@ -512,6 +558,7 @@ export function BookingDialog(props: {
         extra_beds: extra.extra_beds || undefined,
         ...slotArgs,
         ...nightPricesParam,
+        ...discountParam,
       })
         .then((q) => {
           if (!live) return
@@ -548,6 +595,8 @@ export function BookingDialog(props: {
     checkOut,
     // a typed price re-quotes: the totals, tax and advance follow it
     JSON.stringify(nightPricesArg),
+    // so does the desk's discount: the walk-in's amount collected follows it
+    JSON.stringify(discountParam),
   ])
 
   // quotes for the additional rooms
@@ -663,6 +712,8 @@ export function BookingDialog(props: {
           company: form.company || undefined,
           waitlist: 1,
           ...nightPricesParam,
+          ...discountParam,
+          ...discountSignOff,
           ...slotArgs,
           blacklist_override_reason: blacklistOverride,
         })
@@ -780,6 +831,8 @@ export function BookingDialog(props: {
         ...viaArgs,
         marketing_consent: offers ? 1 : undefined,
         ...nightPricesParam,
+        ...discountParam,
+        ...discountSignOff,
       })
       await addOthers(res.reservation)
       setDone({ ref: res.reservation, room: res.room, room_number: res.room_number })
@@ -848,6 +901,8 @@ export function BookingDialog(props: {
         blacklist_override_reason: blacklistOverride,
         ...viaArgs,
         ...nightPricesParam,
+        ...discountParam,
+        ...discountSignOff,
         // book, assign and take the money now; the guided check-in
         // (property's required steps) finishes it right after
         defer_check_in: 1,
@@ -897,6 +952,12 @@ export function BookingDialog(props: {
   requireField(creditBlocked, "credit", t("Resolve the company credit restriction."))
   requireField(extraNeedsReason, "extra", t("Enter the reason for the extra guests."))
   requireField(planRequired && !form.rate_plan && !companyPlan, "rate-plan", t("Choose a rate plan for this booking."))
+  const discountBad = canDiscount && discountOk ? discountError(discount) : null
+  if (discountBad) requireField(true, "discount", t(discountBad))
+  requireField(!discountBad &&!!(discountParam.discount_type || discountParam.night_discounts) && !discountParam.discount_reason,
+    "discount", t("Pick a reason for the discount."))
+  requireField(!!discountParam.discount_reason && !discountReady({ args: discountParam, governance: discountGov,
+    supervisor: discountSupervisor, pin: discountPin }), "discount", t("A manager signs this off with their PIN."))
   const messages = attempted ? [...problems, ...(submitError ? [{field: "server", message: submitError}] : [])] : []
   const target = (field: string) => ({id: `booking-${field}`, "aria-invalid": attempted && problems.some(p => p.field === field) || undefined})
   function jump(field: string) {
@@ -1851,6 +1912,17 @@ export function BookingDialog(props: {
                   </Field>
                 </div>
 
+                {canDiscount && (
+                  <div id="booking-discount" tabIndex={-1}>
+                    <DiscountPanel value={discount} onChange={setDiscount}
+                      reasons={options?.discount_reasons ?? []} eligible={discountOk}
+                      governance={discountGov}
+                      nights={dayUse || !quote ? undefined : discountNights(quote)}
+                      supervisor={discountSupervisor} pin={discountPin}
+                      onSupervisor={setDiscountSupervisor} onPin={setDiscountPin} money={homeText} />
+                  </div>
+                )}
+
                 {form.room_type && (
                   <RateOptions
                     roomType={form.room_type}
@@ -2480,10 +2552,24 @@ export function BookingDialog(props: {
                           ? t("Day use {from}-{to}", { from: slot.from, to: slot.to })
                           : translate("{v0} night{v1}", { v0: String(quote.nights), v1: String(quote.nights === 1 ? "" : "s") })}
                       </span>
-                      {!quoteTariff && <span className="shrink-0 tabular-nums">
+                      {!quoteTariff && !(quote.reservation_discount_total ?? 0) && <span className="shrink-0 tabular-nums">
                         {homeText(quote.room_total)}
                       </span>}
                     </div>
+                    {(quote.reservation_discount_total ?? 0) > 0 && (<>
+                      <div className="flex justify-between text-zinc-600">
+                        <span>{t("Base room rate")}</span>
+                        <span className="tabular-nums">{homeText(quote.room_base_total ?? quote.room_total)}</span>
+                      </div>
+                      <div className="flex justify-between font-medium text-emerald-700">
+                        <span className="min-w-0 truncate">{t("Discount ({reason})", { reason: discountReasonText })}</span>
+                        <span className="tabular-nums">−{homeText(quote.reservation_discount_total ?? 0)}</span>
+                      </div>
+                      <div className="flex justify-between text-zinc-600">
+                        <span>{t("Net room rate")}</span>
+                        <span className="tabular-nums">{homeText(quote.room_total)}</span>
+                      </div>
+                    </>)}
                     {quoteTariff && <div className="space-y-1 text-sm">
                       <p><TariffRoomTotal tariff={quoteTariff} nights={quote.nights}
                         agreedRate={quote.agreed_rate ?? 0} locale={loc.locale} /></p>
@@ -2522,11 +2608,11 @@ export function BookingDialog(props: {
                         </span>
                       </div>
                     )}
-                    {quote.discount > 0 && (
+                    {(quote.voucher_discount ?? quote.discount) > 0 && (
                       <div className="flex justify-between font-medium text-emerald-700">
                         <span>{t("Voucher")}</span>
                         <span className="tabular-nums">
-                          −{homeText(quote.discount)}
+                          −{homeText(quote.voucher_discount ?? quote.discount)}
                         </span>
                       </div>
                     )}

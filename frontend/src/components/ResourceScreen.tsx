@@ -124,6 +124,8 @@ export interface FieldSpec {
   dependsOn?: (draft: Record<string, unknown>) => boolean
   /** Block dates before today unless the user may backdate (Finance / Hotel Admin). */
   notPast?: boolean
+  /** a new record starts with this value (the DocType's own default) */
+  default?: string | number
 }
 
 export interface ScreenConfig {
@@ -646,6 +648,7 @@ export function ResourceScreen({
       const defaults: Record<string, unknown> = {}
       for (const spec of config.form) {
         if (spec.type === "date" && spec.notPast) defaults[spec.field] = isoToday()
+        else if (spec.default !== undefined) defaults[spec.field] = spec.default
       }
       setDraft(defaults)
       return

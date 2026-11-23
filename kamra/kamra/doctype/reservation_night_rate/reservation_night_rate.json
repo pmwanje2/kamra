@@ -11,7 +11,13 @@
   "gst_rate",
   "meal_amount",
   "demand_premium_pct",
-  "hand_price"
+  "hand_price",
+  "base_rate",
+  "discount_type",
+  "discount_value",
+  "discount_amount",
+  "discount_reason",
+  "fixed_rate"
  ],
  "fields": [
   {
@@ -56,13 +62,57 @@
    "fieldtype": "Currency",
    "label": "Typed Price",
    "read_only": 1
+  },
+  {
+   "description": "The night's room rate before the desk's discount (season, demand premium, rate plan or contract rate applied). Room Rate is this less the discount.",
+   "fieldname": "base_rate",
+   "fieldtype": "Currency",
+   "label": "Base Rate",
+   "read_only": 1
+  },
+  {
+   "description": "This night's own discount (Daily Details). Blank: the night follows the stay's discount.",
+   "fieldname": "discount_type",
+   "fieldtype": "Select",
+   "label": "Discount Type",
+   "options": "\nPercent\nAmount",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "discount_value",
+   "fieldtype": "Float",
+   "label": "Discount Value",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "What the discount took off this night's room rate, before tax.",
+   "fieldname": "discount_amount",
+   "fieldtype": "Currency",
+   "label": "Discount",
+   "read_only": 1
+  },
+  {
+   "fieldname": "discount_reason",
+   "fieldtype": "Link",
+   "label": "Discount Reason",
+   "options": "Reason Code",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "fixed_rate",
+   "fieldtype": "Check",
+   "label": "Fixed Rate",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-11-18 23:30:00.000000",
+ "modified": "2026-11-23 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Reservation Night Rate",

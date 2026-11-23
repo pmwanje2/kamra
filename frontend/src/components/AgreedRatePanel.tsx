@@ -1,17 +1,38 @@
-/*  Agree a different nightly rate for this stay only (OPERA rate override /
+/*  Stay rate & daily details for one stay (OPERA Stay Details / Daily
+    Details), two ways:
+
+    Discount - a % OR an amount off each night still to come, or nights of
+    their own with "Apply to future nights", with a Rate Change or Adjust
+    reason. kamra.api.discount_preview shows each night's base, discount and
+    net and the new total; kamra.api.set_reservation_discount saves it. The
+    base rate, an agreed rate and a contract's snapshot stay as booked.
+
+    Fixed rate - agree a different nightly rate (OPERA rate override /
     negotiated rate): kamra.api.rate_override_preview shows each night's old
     rate, new rate and difference plus the new total; kamra.api.set_agreed_rate
-    saves it with a Rate Change reason code. The front desk may only lower a
-    rate, by up to the property's limit; a bigger cut, or a reason code that
-    needs a supervisor, is signed off by a Hotel Admin or Finance user with
-    their PIN. The rate card is never touched. */
+    saves it with a Rate Change reason code.
+
+    Either way the front desk works within the property's limit; a bigger
+    cut, or a reason code that needs a supervisor, is signed off by a Hotel
+    Admin or Finance user with their PIN. The rate card is never touched. */
 
 import { useEffect, useState } from "react"
 import { call } from "../lib/api"
 import { agreedRateReady, agreedRateRows, type AgreedRatePreview } from "../lib/agreedRate"
 import { cur, moneyLocale } from "../lib/money"
+import {
+  discountArgs,
+  discountReady,
+  emptyDiscount,
+  supervisorArgs,
+  type DiscountGovernance,
+  type DiscountReason,
+  type DiscountState,
+  type DiscountType,
+} from "../lib/reservationDiscount"
 import { serverError } from "../lib/resource"
 import { useT } from "../lib/i18n"
+import DiscountPanel from "./DiscountPanel"
 import { Button } from "./ui/button"
 
 const inputCls =
@@ -25,14 +46,26 @@ const money = (n: number) =>
   `${cur()}${Number(n || 0).toLocaleString(moneyLocale(), { maximumFractionDigits: 0 })}`
 const signed = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${money(Math.abs(n))}`
 
-export default function AgreedRatePanel({ reservation, nightRates, onSaved }: {
+/** kamra.api.discount_preview: the rules plus what saving would do. */
+interface DiscountPlan extends DiscountGovernance {
+  current_amount: number
+  new_amount: number
+  difference: number
+  needs_confirmation: boolean
+  nights: { date: string; base_rate: number; discount_amount: number; rate: number; charged: boolean }[]
+}
+
+export default function AgreedRatePanel({ reservation, nightRates, current, onSaved }: {
   reservation: string
   /** the nightly rates the folio bills now (reservation_detail.night_rates) */
-  nightRates: { date: string; rate: number }[]
+  nightRates: { date: string; rate: number; base_rate?: number; discount_type?: DiscountType | null; discount_value?: number }[]
+  /** the stay's discount now (reservation_detail.discount) */
+  current?: { discount_type: DiscountType | null; discount_value: number; discount_reason: string | null } | null
   onSaved: () => void
 }) {
   const { t } = useT()
   const [open, setOpen] = useState(false)
+  const [mode, setMode] = useState<"discount" | "fixed">("discount")
   const [rate, setRate] = useState("")
   const [preview, setPreview] = useState<AgreedRatePreview | null>(null)
   const [codes, setCodes] = useState<ReasonCode[]>([])
@@ -52,7 +85,7 @@ export default function AgreedRatePanel({ reservation, nightRates, onSaved }: {
 
   useEffect(() => {
     setPreview(null)
-    if (!open || !(Number(rate) > 0)) return
+    if (!open || mode !== "fixed" || !(Number(rate) > 0)) return
     let live = true
     const id = setTimeout(() => {
       call<AgreedRatePreview>("kamra.api.rate_override_preview", { reservation, agreed_rate: Number(rate) })
@@ -68,10 +101,95 @@ export default function AgreedRatePanel({ reservation, nightRates, onSaved }: {
       live = false
       clearTimeout(id)
     }
-  }, [open, rate, reservation])
+  }, [open, mode, rate, reservation])
+
+  // --- Discount: the stay's, or Daily Details nights of their own
+  const initial = (): DiscountState => ({
+    ...emptyDiscount(),
+    type: current?.discount_type ?? "Percent",
+    value: current?.discount_type ? String(current.discount_value) : "",
+    reason: current?.discount_reason ?? "",
+    nights: Object.fromEntries(nightRates.filter((n) => n.discount_type)
+      .map((n) => [n.date, { type: n.discount_type as DiscountType, value: String(n.discount_value ?? 0) }])),
+  })
+  const [discount, setDiscount] = useState<DiscountState>(initial)
+  const [fixedOverride, setFixedOverride] = useState(false)
+  const [discountCodes, setDiscountCodes] = useState<DiscountReason[]>([])
+  const [plan, setPlan] = useState<DiscountPlan | null>(null)
+  const stayNights = nightRates.map((n) => n.date)
+  const args = discountArgs(discount, stayNights)
+  const hadDiscount = !!current?.discount_type || nightRates.some((n) => n.discount_type)
+  // clearing a discount the stay has is a change too
+  const asks = !!(args.discount_type || args.night_discounts?.length) || hadDiscount
+  const argsKey = JSON.stringify([args, fixedOverride])
+
+  useEffect(() => {
+    if (!open) return
+    Promise.all(["Rate Change", "Adjust"].map((category) =>
+      call<DiscountReason[]>("kamra.ledger.list_reason_codes", { category })))
+      .then((lists) => setDiscountCodes(lists.flat()))
+      .catch((e) => setError(serverError(e)))
+  }, [open])
+
+  useEffect(() => {
+    setPlan(null)
+    if (!open || mode !== "discount" || !asks) return
+    let live = true
+    const id = setTimeout(() => {
+      call<DiscountPlan>("kamra.api.discount_preview", {
+        reservation, discount_type: args.discount_type, discount_value: args.discount_value,
+        reason_code: args.discount_reason, night_discounts: args.night_discounts,
+        fixed_rate: fixedOverride ? 1 : 0,
+      })
+        .then((p) => {
+          if (!live) return
+          setPlan(p)
+          setError(null)
+          if (p.supervisors.length === 1) setSupervisor(p.supervisors[0].user)
+        })
+        .catch((e) => live && setError(serverError(e)))
+    }, 350)
+    return () => {
+      live = false
+      clearTimeout(id)
+    }
+    // argsKey stands for args and the override
+  }, [open, mode, argsKey, reservation])
+
+  // a cleared discount is ready too (it puts the stay back on its rate)
+  const discountOk = !!plan && discountReady({ args, governance: plan, supervisor, pin })
+
+  async function saveDiscount() {
+    if (!plan || !discountOk) return
+    setBusy(true)
+    setError(null)
+    try {
+      await call("kamra.api.set_reservation_discount", {
+        reservation,
+        discount_type: args.discount_type,
+        discount_value: args.discount_value,
+        reason_code: args.discount_reason,
+        night_discounts: args.night_discounts,
+        fixed_rate: fixedOverride ? 1 : 0,
+        ...supervisorArgs(plan, supervisor, pin),
+        // the desk has seen the new price in the preview
+        confirm_price: 1,
+      })
+      close()
+      onSaved()
+    } catch (e) {
+      setError(serverError(e))
+    } finally {
+      setBusy(false)
+    }
+  }
 
   function close() {
     setOpen(false)
+    setMode("discount")
+    setDiscount(initial())
+    setFixedOverride(false)
+    setPlan(null)
     setRate("")
     setPreview(null)
     setReasonCode("")
@@ -112,15 +230,89 @@ export default function AgreedRatePanel({ reservation, nightRates, onSaved }: {
   if (!open)
     return (
       <Button variant="outline" className="mt-3" onClick={() => setOpen(true)}>
-        {t("Agreed rate")}
+        {t("Stay rate & daily details")}
       </Button>
     )
 
+  const tab = (key: "discount" | "fixed", label: string) => (
+    <button type="button" role="tab" aria-selected={mode === key} onClick={() => { setMode(key); setError(null) }}
+      className={`px-3 py-1 text-sm font-medium ${mode === key ? "rounded-md bg-white text-zinc-900 shadow-sm" : "text-zinc-500"}`}>
+      {label}
+    </button>
+  )
+  const planNights = new Map((plan?.nights ?? []).map((n) => [n.date, n]))
+
   return (
     <div className="mt-3 space-y-2 rounded-lg border border-brand-600/30 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="text-xs font-medium uppercase tracking-wider text-zinc-400">
+          {t("Stay rate & daily details")}
+          <span className="ms-1.5 normal-case tracking-normal">{t("- this stay only; the rate card stays as it is")}</span>
+        </div>
+        <div role="tablist" className="inline-flex rounded-lg bg-zinc-100 p-0.5">
+          {tab("discount", t("Discount"))}
+          {tab("fixed", t("Fixed rate"))}
+        </div>
+      </div>
+
+      {mode === "discount" && (<>
+        <DiscountPanel value={discount} onChange={setDiscount} reasons={discountCodes}
+          eligible={!plan || plan.eligible || fixedOverride} governance={plan}
+          nights={nightRates.map((n) => ({
+            date: n.date,
+            base_rate: planNights.get(n.date)?.base_rate ?? n.base_rate ?? n.rate,
+            charged: planNights.get(n.date)?.charged,
+          }))}
+          supervisor={supervisor} pin={pin} onSupervisor={setSupervisor} onPin={setPin} money={money}>
+          {plan && !plan.eligible && plan.can_set_rate && (
+            <label className="flex items-center gap-2 text-xs text-zinc-600">
+              <input type="checkbox" checked={fixedOverride} onChange={(e) => setFixedOverride(e.target.checked)} />
+              {t("Fixed rate override")}
+            </label>
+          )}
+        </DiscountPanel>
+        {plan && (
+          <div className="w-0 min-w-full overflow-x-auto">
+            <table className="w-full whitespace-nowrap text-sm tabular-nums">
+              <thead>
+                <tr className="text-xs text-zinc-400">
+                  <th className="pe-2 text-start font-normal">{t("Night")}</th>
+                  <th className="px-2 text-end font-normal">{t("Base")}</th>
+                  <th className="px-2 text-end font-normal">{t("Discount")}</th>
+                  <th className="ps-2 text-end font-normal">{t("Net")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {plan.nights.map((n) => (
+                  <tr key={n.date} className={n.charged ? "text-zinc-400" : ""}>
+                    <td className="pe-2">{n.date}</td>
+                    <td className="px-2 text-end">{money(n.base_rate)}</td>
+                    <td className="px-2 text-end text-emerald-700">{n.discount_amount ? signed(-n.discount_amount) : "-"}</td>
+                    <td className="ps-2 text-end">{money(n.rate)}</td>
+                  </tr>
+                ))}
+                <tr className="border-t border-zinc-200 font-medium">
+                  <td className="pe-2">{t("Total")}</td>
+                  <td className="px-2 text-end">{money(plan.current_amount)}</td>
+                  <td className="px-2 text-end">{signed(plan.difference)}</td>
+                  <td className="ps-2 text-end">{money(plan.new_amount)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+        {error && <p className="text-xs text-rose-600">{t(error)}</p>}
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={close}>{t("Cancel")}</Button>
+          <Button disabled={busy || !discountOk} onClick={() => void saveDiscount()}>
+            {busy ? t("Saving…") : t("Save discount")}
+          </Button>
+        </div>
+      </>)}
+
+      {mode === "fixed" && (<>
       <div className="text-xs font-medium uppercase tracking-wider text-zinc-400">
         {t("Agreed rate")}
-        <span className="ms-1.5 normal-case tracking-normal">{t("- this stay only; the rate card stays as it is")}</span>
       </div>
       <label className="block">
         <span className="text-xs text-zinc-400">{t("New rate / night")}</span>
@@ -213,6 +405,7 @@ export default function AgreedRatePanel({ reservation, nightRates, onSaved }: {
           {busy ? t("Saving…") : t("Save agreed rate")}
         </Button>
       </div>
+      </>)}
     </div>
   )
 }

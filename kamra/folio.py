@@ -72,14 +72,15 @@ def open_folio(reservation) -> str:
 		"status": "Open",
 		"opened_on": now_datetime(),
 	})
-	if reservation.discount_amount:
+	voucher = voucher_discount(reservation)
+	if voucher:
 		folio.append("charges", {
 			"posting_date": nowdate(),
 			"charge_type": "Discount",
 			"description": "Booking discount (voucher)",
 			"qty": 1,
-			"rate": -float(reservation.discount_amount),
-			"amount": -float(reservation.discount_amount),
+			"rate": -voucher,
+			"amount": -voucher,
 			"gst_rate": _room_gst(reservation),
 			"auto_posted": 1,
 		})
@@ -94,6 +95,17 @@ def open_folio(reservation) -> str:
 	_post_cleaning_fee(reservation, folio.name)
 	_post_pet_charge(reservation, folio.name)
 	return folio.name
+
+
+def voucher_discount(reservation) -> float:
+	"""The part of the booking's discount the folio posts as its own line:
+	the voucher. The desk's reservation discount is already inside each
+	locked night's rate (Room Rate is the base less the discount), so
+	posting it again would discount the stay twice."""
+	total = float(reservation.get("discount_amount") or 0)
+	in_nights = sum(float(r.get("discount_amount") or 0)
+	                for r in reservation.get("night_rates") or [])
+	return round(max(total - in_nights, 0), 2)
 
 
 def _post_cleaning_fee(reservation, folio_name: str):
@@ -583,6 +595,11 @@ def post_room_night(reservation, date, folios=None) -> bool:
 			gst_rate = _nightly_gst(reservation, date)
 			desc = (f"Room {room_no} · {reservation.room_type.split('-')[-1]}"
 			        + (" · day use" if getattr(reservation, "is_day_use", 0) else ""))
+			locked = locked_night(reservation, date)
+			if locked is not None and float(locked.get("discount_amount") or 0) > 0:
+				# the net rate is what bills; the line says what it came from
+				desc += (f" · {float(locked.base_rate or 0):,.2f} less discount"
+				         f" {float(locked.discount_amount):,.2f}")
 		_append_charge(folios, reservation, "Room", {
 			"posting_date": date,
 			"charge_type": "Room",
