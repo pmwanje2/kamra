@@ -6789,5 +6789,6 @@
   "OXI UPDATE INHOUSE RES: N rejects OTA changes to checked-in stays and flags them for review. Y requires arrival-date, room-type, billed-night, and assigned-room bounds and is not yet enabled.": "OXI UPDATE INHOUSE RES：N 会拒绝 OTA 对已入住预订的修改并标记待审核。Y 需要到店日期、房型、已入账房晚及已分配房间的安全边界，尚未启用。",
   "Which of the taxes an OTA lists on a booking is the room tax, tried top to bottom: the first rule that matches decides. Put specific or Ignored rules (such as city or tourism taxes) above broader Room tax rules. A tax on top of the price that no rule reads holds the booking for review. A new Channex connection, or one switched to Channex, starts with the standard rules.": "OTA 在预订中列出的哪项税费是客房税，从上到下依次匹配：第一条匹配的规则决定。请将具体或忽略规则（如城市税、旅游税）放在较宽泛的客房税规则之上。价格之外加收、且没有规则能识别的税费会使预订暂缓待审。新的 Channex 连接，或改为 Channex 的连接，从标准规则开始。",
   "Still open at the outlet. Settle it there before check-out: charge it to the room, take payment or void it.": "该账单在营业点仍未结清。请在退房前在那里结清：挂房账、收款或作废。",
-  "This is kept in the accounting system.": "此项在会计系统中管理。"
+  "This is kept in the accounting system.": "此项在会计系统中管理。",
+  "Check-out waits for these. Settle them at the outlet.": "以下账单尚未处理，暂不能退房。请在营业点结清。"
 }

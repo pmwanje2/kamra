@@ -690,6 +690,13 @@ export default function CheckOutDialog(props: {
 
   const close = checkedOut ? () => void finishCheckout() : props.onClose
   const r = ctx?.reservation
+  // The amber tip repeats the first blocker. Where that blocker is already
+  // shown in red on this step, the tip stays out so the sentence is not twice on screen.
+  const blockersHere: Blocker[] = !ctx ? [] : current === "review" ? reviewProblems
+    : current === "company" ? blockersFor("company")
+    : current === "settle" ? settleProblems
+    : current === "confirm" ? ctx.blockers.filter((b) => !["owed", "refund", "credit_blocked"].includes(b.code))
+    : []
 
   // ---- footer: what Continue means on each step ----------------------
   let continueLabel: string | undefined
@@ -779,7 +786,7 @@ export default function CheckOutDialog(props: {
             }}
           />
 
-          {ctx.sop.next_tip && !checkedOut && (
+          {ctx.sop.next_tip && !checkedOut && !blockersHere.some((b) => b.message === ctx.sop.next_tip) && (
             <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
               <Lightbulb className="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden />
               <p>{t(ctx.sop.next_tip)}</p>
@@ -1508,7 +1515,9 @@ export default function CheckOutDialog(props: {
                     ))}
                   </ul>
                   <p className="mt-2 text-xs text-amber-800">
-                    {t("Check-out waits for these. Go back to the Bill step and post them to the room, or settle them at the outlet.")}
+                    {ctx.pending_bills.some((b) => b.billable && b.can_post_to_room)
+                      ? t("Check-out waits for these. Go back to the Bill step and post them to the room, or settle them at the outlet.")
+                      : t("Check-out waits for these. Settle them at the outlet.")}
                   </p>
                 </Section>
               )}

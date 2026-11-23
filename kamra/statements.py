@@ -441,6 +441,9 @@ def send_property_reminders(property: str) -> dict:
 	"""Email each company with a bill that reached a reminder stage today
 	and has not had that stage yet. Returns what was sent and the companies
 	skipped for want of a billing email."""
+	from kamra.erp_books import erp_screens
+	if erp_screens().get("receivables"):
+		return {"sent": [], "no_email": []}
 	from kamra.ledger import _netted, aging_date, days_overdue
 	from kamra.savings import log_action
 	today = aging_date(property)
@@ -487,6 +490,9 @@ def send_property_reminders(property: str) -> dict:
 
 def run_payment_reminders():
 	"""Daily: send due-date reminders for every property that turned them on."""
+	from kamra.erp_books import erp_screens
+	if erp_screens().get("receivables"):
+		return
 	from kamra.settings import get_setting
 	for prop in frappe.get_all("Property", filters={"disabled": 0}, pluck="name"):
 		if not cint(get_setting(prop, "credit_reminders")):

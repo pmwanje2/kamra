@@ -36,6 +36,7 @@ import {
 import { serverError } from "../lib/resource"
 import { useCashierAuth } from "../lib/cashierAuth"
 import { CHECK_FIXES } from "../lib/eodFixes"
+import AppLink from "../components/AppLink"
 import { Badge } from "../components/ui/badge"
 import { Button } from "../components/ui/button"
 import { Card } from "../components/ui/card"
@@ -292,9 +293,9 @@ function FixHelp({ check, date }: { check: Check; date: string }) {
           <li key={st.text}>
             {t(st.text)}
             {st.to && (
-              <Link to={st.to} className="ms-2 text-brand-700 hover:underline">
+              <AppLink to={st.to} className="ms-2 text-brand-700 hover:underline">
                 {t(st.cta ?? "Open")} →
-              </Link>
+              </AppLink>
             )}
           </li>
         ))}
@@ -344,9 +345,9 @@ function CheckBlock({
           </Badge>
         </h3>
         {check.resolve && check.count > 0 && (
-          <Link to={check.resolve} className="text-xs text-brand-700 hover:underline">
+          <AppLink to={check.resolve} className="text-xs text-brand-700 hover:underline">
             {t("Resolve")} →
-          </Link>
+          </AppLink>
         )}
       </div>
       {check.count > 0 && <p className="text-xs text-zinc-500">{t(check.action)}</p>}

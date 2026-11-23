@@ -33,7 +33,7 @@ def get_context(context):
 	with open(index_path, encoding="utf-8") as f:  # nosemgrep: frappe-security-file-traversal -- serves the app's own built index.html from a fixed app path, not user input
 		html = f.read()
 
-	from kamra.erp_books import desk_screens
+	from kamra.erp_books import desk_config
 
 	csrf = frappe.sessions.get_csrf_token()
 	# The socket.io namespace is the site name, which is not the hostname on
@@ -41,11 +41,13 @@ def get_context(context):
 	def script_json(value):
 		return json.dumps(value).replace("<", "\\u003c")
 
+	erp_cfg = desk_config()
 	boot = (
 		f'<script>window.kamra_date_format = {script_json(get_user_date_format())}; '
 		f'window.csrf_token = {script_json(csrf)}; window.kamra_site = {script_json(frappe.local.site)}; '
 		f'window.kamra_brand = {script_json(brand_context(brand_logo()))}; '
-		f'window.kamra_erp_screens = {script_json(desk_screens())};</script>'
+		f'window.kamra_erp_screens = {script_json(erp_cfg["screens"])}; '
+		f'window.kamra_erp_pos_url = {script_json(erp_cfg["pos_url"])};</script>'
 	)
 	# Inject before the module script so the token is set before the app boots.
 	html = html.replace("</head>", boot + "</head>", 1)

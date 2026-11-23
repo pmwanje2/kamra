@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Link } from "react-router-dom"
+import AppLink from "../components/AppLink"
 import { call, getCurrentProperty } from "../lib/api"
 import { serverError } from "../lib/resource"
 import { Button } from "../components/ui/button"
@@ -241,8 +242,8 @@ export default function Ledgers() {
               ))}
             </dl>
             {helpCard.link ? (
-              <Link className="mt-3 inline-block text-sm font-medium text-brand-700 hover:underline"
-                to={helpCard.link[0]}>{helpCard.link[1]}</Link>
+              <AppLink className="mt-3 inline-block text-sm font-medium text-brand-700 hover:underline"
+                to={helpCard.link[0]}>{helpCard.link[1]}</AppLink>
             ) : null}
           </CardContent>
         </Card>
@@ -312,7 +313,7 @@ export default function Ledgers() {
 
       <p className="text-sm text-zinc-500">
         {translate("What each company owes, and how late, is in Receivables.")}{" "}
-        <Link to="/receivables" className="font-medium text-brand-700 hover:underline">{translate("Open Receivables")}</Link>
+        <AppLink to="/receivables" className="font-medium text-brand-700 hover:underline">{translate("Open Receivables")}</AppLink>
       </p>
     </div>
   )

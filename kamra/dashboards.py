@@ -352,7 +352,14 @@ def owner_snapshot(property: str, date: str | None = None, from_date: str | None
 	# which predate the owner view and leave out some of its roles
 	flash = unwrap(manager_flash)(property, str(date), from_date)
 	outstanding, open_folios = _open_folio_totals(property)
-	ar = unwrap(city_ledger_aging)(property)["totals"]
+	try:
+		ar = unwrap(city_ledger_aging)(property)["totals"]
+	except frappe.PermissionError:
+		# the ERP keeps the receivables and answers no lookup: unknown, never
+		# a zero or the hotel app's stale ledger. Handled here, so the screen
+		# gets no "kept in the accounting system" pop-up for it.
+		frappe.clear_last_message()
+		ar = None
 	sees_audits = (set(AUDIT_ROLES) | set(ADMIN)) & set(frappe.get_roles())
 	return {
 		**flash,
@@ -360,7 +367,7 @@ def owner_snapshot(property: str, date: str | None = None, from_date: str | None
 		"property_name": frappe.db.get_value("Property", property, "property_name"),
 		"guest_balances": outstanding,
 		"open_folios": open_folios,
-		"city_ledger": round(sum(ar[k] for k in DUE_BUCKETS), 2),
-		"city_ledger_overdue": ar["overdue"],
+		"city_ledger": round(sum(ar[k] for k in DUE_BUCKETS), 2) if ar else None,
+		"city_ledger_overdue": ar["overdue"] if ar else None,
 		"audits": unwrap(night_audit_history)(property, 5) if sees_audits else None,
 	}

@@ -495,11 +495,18 @@ def check_high_balance(property: str) -> dict:
 
 
 def check_credit_limit(property: str) -> dict:
+	from kamra.erp_books import receivables_source
 	from kamra.ledger import company_payer_of
-	accounts = frappe.get_all(
-		"City Ledger Account",
-		filters={"property": property, "disabled": 0, "credit_limit": (">", 0)},
-		fields=["name", "company", "account_number", "credit_limit"])
+	# the ERP's Customer receivables when it keeps them (its Payment Entry
+	# receipts never reach this app's City Ledger), else the City Ledger
+	erp_rows = receivables_source(property, strict=False)
+	if erp_rows is not None:
+		accounts = [a for a in erp_rows if flt(a["credit_limit"]) > 0]
+	else:
+		accounts = frappe.get_all(
+			"City Ledger Account",
+			filters={"property": property, "disabled": 0, "credit_limit": (">", 0)},
+			fields=["name", "company", "account_number", "credit_limit"])
 	items = []
 	if accounts:
 		folios = frappe.db.sql(
@@ -518,20 +525,27 @@ def check_credit_limit(property: str) -> dict:
 			if company:
 				by_company.setdefault(company, []).append(f)
 		for a in accounts:
-			ar = flt(frappe.db.sql(
-				"""SELECT COALESCE(SUM(debit - credit), 0)
-				   FROM `tabCity Ledger Entry` WHERE account = %s""", a.name)[0][0], 2)
-			mine = by_company.get(a.company) or []
+			if erp_rows is not None:
+				name, company, number = a["account"], a["company"], a["account_number"]
+				limit = flt(a["credit_limit"])
+				ar = flt(a["balance"], 2)
+			else:
+				name, company, number = a.name, a.company, a.account_number
+				limit = flt(a.credit_limit)
+				ar = flt(frappe.db.sql(
+					"""SELECT COALESCE(SUM(debit - credit), 0)
+					   FROM `tabCity Ledger Entry` WHERE account = %s""", a.name)[0][0], 2)
+			mine = by_company.get(company) or []
 			in_house = round(sum(max(flt(f.balance), 0) for f in mine), 2)
 			exposure = round(ar + in_house, 2)
-			if exposure <= flt(a.credit_limit):
+			if exposure <= limit:
 				continue
 			items.append({
-				"account": a.name, "company": a.company,
-				"account_number": a.account_number,
-				"credit_limit": flt(a.credit_limit), "ar_balance": ar,
+				"account": name, "company": company,
+				"account_number": number,
+				"credit_limit": limit, "ar_balance": ar,
 				"in_house": in_house, "exposure": exposure,
-				"over_by": round(exposure - flt(a.credit_limit), 2),
+				"over_by": round(exposure - limit, 2),
 				"folios": [{"folio": f.name, "reservation": f.reservation,
 				            "guest_name": f.guest_name, "room": _room_no(f.room),
 				            "balance": flt(f.balance, 2)} for f in mine],
@@ -545,26 +559,45 @@ def check_credit_limit(property: str) -> dict:
 def check_overdue_ar(property: str) -> dict:
 	"""Companies with city ledger bills past their due date (invoice date +
 	credit days), by company - what to chase before billing them more."""
-	from kamra.ledger import _account_position
+	from kamra.erp_books import receivables_source
+	from kamra.ledger import _account_position, _age_buckets, aging_date, effective_credit_days
 	items = []
-	for a in frappe.get_all(
-			"City Ledger Account",
-			filters={"property": property, "disabled": 0},
-			fields=["name", "company", "account_number", "credit_limit"],
-			limit_page_length=0):
-		pos = _account_position(a.name)
-		if pos["overdue"] <= 0.005:
-			continue
-		items.append({
-			"account": a.name, "company": a.company,
-			"account_number": a.account_number,
-			"credit_days": pos["credit_days"],
-			"overdue": pos["overdue"], "d1_30": pos["d1_30"],
-			"d31_60": pos["d31_60"], "d61_90": pos["d61_90"],
-			"d90p": pos["d90p"],
-			"oldest_due_date": pos["oldest_overdue_due_date"],
-			"balance": round(pos["open_balance"] - pos["unapplied_credit"], 2),
-		})
+	erp_rows = receivables_source(property, strict=False)
+	if erp_rows is not None:
+		today = aging_date(property)
+		for a in erp_rows:
+			pos = _age_buckets(a["open_items"], a["unapplied_credit"], today)
+			if pos["overdue"] <= 0.005:
+				continue
+			items.append({
+				"account": a["account"], "company": a["company"],
+				"account_number": a["account_number"],
+				"credit_days": effective_credit_days(a["account"], property),
+				"overdue": pos["overdue"], "d1_30": pos["d1_30"],
+				"d31_60": pos["d31_60"], "d61_90": pos["d61_90"],
+				"d90p": pos["d90p"],
+				"oldest_due_date": pos["oldest_overdue_due_date"],
+				"balance": round(flt(a["balance"]), 2),
+			})
+	else:
+		for a in frappe.get_all(
+				"City Ledger Account",
+				filters={"property": property, "disabled": 0},
+				fields=["name", "company", "account_number", "credit_limit"],
+				limit_page_length=0):
+			pos = _account_position(a.name)
+			if pos["overdue"] <= 0.005:
+				continue
+			items.append({
+				"account": a.name, "company": a.company,
+				"account_number": a.account_number,
+				"credit_days": pos["credit_days"],
+				"overdue": pos["overdue"], "d1_30": pos["d1_30"],
+				"d31_60": pos["d31_60"], "d61_90": pos["d61_90"],
+				"d90p": pos["d90p"],
+				"oldest_due_date": pos["oldest_overdue_due_date"],
+				"balance": round(pos["open_balance"] - pos["unapplied_credit"], 2),
+			})
 	items.sort(key=lambda r: -r["overdue"])
 	return _check(
 		"overdue_ar", "Companies with overdue bills", "warn", items,

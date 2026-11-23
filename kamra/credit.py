@@ -163,11 +163,28 @@ def check_company_credit(account_or_company: str, property: str,
 		return out
 	limit = 0.0
 	ar = 0.0
+	from kamra.erp_books import receivables_source
+	from kamra.ledger import aging_date
+	# the ERP's Customer receivables when it keeps them (a Payment Entry there
+	# never reaches the hotel app's City Ledger), else the City Ledger as before
+	erp_rows = receivables_source(property, company=company, strict=False)
 	if account:
 		if lock:
 			_lock_city_ledger_account(account)
 		limit = flt(frappe.db.get_value("City Ledger Account", account,
 		                                "credit_limit"))
+	if erp_rows is not None:
+		row = next((a for a in erp_rows
+		            if a.get("company") == company
+		            or (account and a.get("account") == account)), None)
+		if row:
+			if limit <= 0:
+				limit = flt(row.get("credit_limit"))
+			ar = round(flt(row.get("balance")), 2)
+			out["overdue_amount"], out["oldest_due_date"] = overdue_past_grace(
+				row["open_items"], row["unapplied_credit"], out["grace_days"],
+				aging_date(property))
+	elif account:
 		if lock:
 			from kamra.ledger import locked_account_figures
 			pos = locked_account_figures(account)
@@ -177,7 +194,6 @@ def check_company_credit(account_or_company: str, property: str,
 			ar = round(flt(frappe.db.sql(
 				"""SELECT COALESCE(SUM(debit - credit), 0) FROM `tabCity Ledger Entry`
 				   WHERE account = %s""", account)[0][0]), 2)
-		from kamra.ledger import aging_date
 		overdue, oldest = overdue_past_grace(
 			pos["open_items"], pos["unapplied_credit"], out["grace_days"],
 			aging_date(property))
@@ -374,6 +390,15 @@ def company_credit_terms(company: str, property: str):
 		{"property": property, "company": company, "disabled": 0},
 		["name", "credit_limit", "credit_days", "use_default_credit_days",
 		 "balance"], as_dict=True)
+	from kamra.erp_books import receivables_source
+	erp_rows = receivables_source(property, company=company, strict=False)
+	if erp_rows is not None:
+		row = next((a for a in erp_rows
+		            if a.get("company") == company
+		            or (account and a.get("account") == account.name)), None)
+		balance = round(flt(row.get("balance")), 2) if row else 0.0
+	else:
+		balance = flt(account.balance) if account else 0.0
 	return {
 		"company": company,
 		"credit_allowed": credit_applies(company),
@@ -385,7 +410,7 @@ def company_credit_terms(company: str, property: str):
 		"effective_credit_days": effective_credit_days(
 			account.name if account else None, property),
 		"default_credit_days": int(get_setting(property, "default_credit_days") or 0),
-		"balance": flt(account.balance) if account else 0.0,
+		"balance": balance,
 		"policy": credit_policy(property),
 		"can_edit": bool({"Finance", "Hotel Admin", "System Manager",
 		                  "Administrator"} & set(frappe.get_roles())),

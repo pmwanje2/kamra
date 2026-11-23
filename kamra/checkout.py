@@ -296,10 +296,15 @@ def _pending_bills(res, modes: list[str]) -> list[dict]:
 
 
 def _open_bills_message(bills: list[dict]) -> str:
+	items = ", ".join(f"{_(b['label'])} {b['name']} ({_(b['status'])})"
+	                  for b in bills)
+	if bills and all(b.get("kind") == "outlet" for b in bills):
+		return _("{0} bill(s) for this stay are still open at the outlet: {1}. "
+		         "Settle them at the outlet before check-out.").format(
+			len(bills), items)
 	return _("{0} bill(s) for this stay are not on the guest's bill yet: {1}. "
 	         "Post them to the room or settle them before check-out.").format(
-		len(bills), ", ".join(f"{_(b['label'])} {b['name']} ({_(b['status'])})"
-		                      for b in bills))
+		len(bills), items)
 
 
 def assert_no_open_bills(res) -> None:

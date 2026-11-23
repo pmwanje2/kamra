@@ -17,7 +17,7 @@ from frappe.utils import cint, flt, getdate, now_datetime, nowdate
 
 from kamra.authz import require_roles
 from kamra.business_date import get_business_date
-from kamra.erp_books import kept_in_erp
+from kamra.erp_books import kept_in_erp, receivables_source
 
 CHARGE_TYPE_TO_CODE = {
 	"Room": ("1000", "Room Charge", "Rooms", "Room"),
@@ -1575,22 +1575,47 @@ def _account_position(account: str) -> dict:
 	}
 
 
+def _erp_aging(property: str, rows: list[dict]) -> list[dict]:
+	"""The aging rows of the same shape as _account_position, from the ERP's
+	Customer receivables (open vouchers by Payment Ledger Entry)."""
+	today = aging_date(property)
+	out = []
+	for r in rows:
+		out.append({
+			"name": r["account"], "company": r["company"],
+			"account_number": r["account_number"],
+			"balance": r["balance"], "credit_limit": r["credit_limit"],
+			"open_balance": r["open_balance"],
+			"unapplied_credit": r["unapplied_credit"],
+			"credit_days": effective_credit_days(r["account"], property),
+			**_age_buckets(r["open_items"], r["unapplied_credit"], today),
+		})
+	return out
+
+
 @frappe.whitelist()
 @require_roles("Finance", "Hotel Admin", "Front Desk", "Night Auditor", "Kamra Agent")
 def city_ledger_aging(property: str):
 	"""Every company's AR at the property, aged by due date (not_due,
 	d1_30, d31_60, d61_90, d90p and their sum `overdue`). The invoice-age
-	keys (current, b30, b60, b90, b90p) are kept for older callers."""
-	accounts = frappe.get_all(
-		"City Ledger Account",
-		filters={"property": property, "disabled": 0},
-		fields=["name", "company", "account_number", "balance", "credit_limit"],
-	)
-	out = []
-	for a in accounts:
-		pos = _account_position(a.name)
-		pos.pop("open_items")
-		out.append({**a, **pos})
+	keys (current, b30, b60, b90, b90p) are kept for older callers.
+
+	While the ERP keeps the receivables these are its Customer receivables
+	(a Payment Entry there is seen), never this app's City Ledger Entry rows."""
+	erp_rows = receivables_source(property)
+	if erp_rows is not None:
+		out = _erp_aging(property, erp_rows)
+	else:
+		accounts = frappe.get_all(
+			"City Ledger Account",
+			filters={"property": property, "disabled": 0},
+			fields=["name", "company", "account_number", "balance", "credit_limit"],
+		)
+		out = []
+		for a in accounts:
+			pos = _account_position(a.name)
+			pos.pop("open_items")
+			out.append({**a, **pos})
 	totals = {k: round(sum(a[k] for a in out), 2)
 	          for k in (*DUE_BUCKETS, "overdue", "disputed")}
 	return {"accounts": out, "totals": totals}
@@ -1625,6 +1650,7 @@ def payment_bills(account: str, payments: list[str]) -> dict[str, list]:
 
 @frappe.whitelist()
 @require_roles("Finance", "Hotel Admin", "Front Desk", "Kamra Agent")
+@kept_in_erp("receivables")
 def city_ledger_history(account: str):
 	"""Everything that ever moved on one company's account, oldest first, with
 	the running balance: each bill (and the guest it was for), credit note,
@@ -1650,6 +1676,7 @@ def city_ledger_history(account: str):
 
 @frappe.whitelist()
 @require_roles("Finance", "Hotel Admin", "Front Desk", "Kamra Agent")
+@kept_in_erp("receivables")
 def city_ledger_account(account: str):
 	"""One company's city ledger: balance, aging, each open bill (oldest
 	first) and recent payments - what the payment screen needs."""
