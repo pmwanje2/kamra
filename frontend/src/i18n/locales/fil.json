@@ -1147,5 +1147,8 @@
   "Tax in this credit note: {amount}": "Buwis sa credit note na ito: {amount}",
   "Credit note": "Credit note",
   "Folio windows": "Mga window ng folio",
-  "How many separate bills a stay or a group's master bill can have, each with its own payer and invoice. Window 1 is the guest's and takes every charge that is not routed elsewhere.": "Ilang hiwalay na bill ang maaaring magkaroon ang isang stay o ang master bill ng isang grupo, bawat isa ay may sariling nagbabayad at invoice. Ang window 1 ay sa bisita at tumatanggap ng bawat singil na hindi inilipat sa iba."
+  "How many separate bills a stay or a group's master bill can have, each with its own payer and invoice. Window 1 is the guest's and takes every charge that is not routed elsewhere.": "Ilang hiwalay na bill ang maaaring magkaroon ang isang stay o ang master bill ng isang grupo, bawat isa ay may sariling nagbabayad at invoice. Ang window 1 ay sa bisita at tumatanggap ng bawat singil na hindi inilipat sa iba.",
+  "The accounting system issued invoice {document} for this bill. It is corrected there with a credit note and a new invoice; this bill is not reopened or credited here.": "Inilabas ng sistema ng accounting ang invoice {document} para sa bill na ito. Doon ito itinatama sa pamamagitan ng credit note at bagong invoice; hindi muling binubuksan o kinikredito ang bill na ito dito.",
+  "At most {amount} can still be credited on this invoice.": "Hanggang {amount} na lang ang maaaring ikredito sa invoice na ito.",
+  "status|Split": "Hinati"
 }

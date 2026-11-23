@@ -3,7 +3,10 @@
    A hotel that invoices here gets a credit note dialog that shows the tax
    it credits. Where the accounting system issued the invoice, the dialog
    says so and sends the correction to its credit note and re-bill; this
-   screen never reopens or credits that bill on its own. No browser prompt. */
+   screen never reopens or credits that bill on its own, even when it closed
+   the bill at check-out with no hotel invoice number. No browser prompt.
+   Only the roles that may credit a bill are offered it, a credit never goes
+   past what is left on the invoice, and a split shows as a split. */
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { MemoryRouter, Route, Routes } from "react-router-dom"
@@ -11,7 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import FolioView from "../src/screens/FolioView"
 import { setLang } from "../src/lib/dir"
 import { ensureDictionary } from "../src/lib/locales"
-import { fmtMoney } from "../src/lib/money"
+import { fmtMoney, moneyDigits } from "../src/lib/money"
 
 const { rpc } = vi.hoisted(() => ({ rpc: vi.fn() }))
 vi.mock("../src/lib/api", () => ({
@@ -19,7 +22,8 @@ vi.mock("../src/lib/api", () => ({
   getCurrentProperty: () => "Test Hotel",
   newIdempotencyKey: () => "key",
 }))
-vi.mock("../src/lib/auth", () => ({ useAuth: () => ({ status: "authed", roles: ["Finance"] }) }))
+const auth = vi.hoisted(() => ({ roles: ["Finance"] }))
+vi.mock("../src/lib/auth", () => ({ useAuth: () => ({ status: "authed", roles: auth.roles }) }))
 
 const DOCUMENT = "ACC-SINV-2026-00001"
 
@@ -55,6 +59,7 @@ describe("Invoice corrections on the folio screen", () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true)
     vi.stubGlobal("localStorage", jsdom.window.localStorage)
     data = invoice()
+    auth.roles = ["Finance"]
     rpc.mockReset().mockImplementation((method: string) => {
       if (method === "kamra.api.folio_invoice") return Promise.resolve(data)
       if (method === "kamra.ledger.list_reason_codes") return Promise.resolve([])
@@ -76,13 +81,14 @@ describe("Invoice corrections on the folio screen", () => {
     vi.unstubAllGlobals()
   })
 
-  async function render() {
+  async function render(shown = "INV-0001") {
     await act(async () => root.render(
       <MemoryRouter initialEntries={["/billing/FOLIO-1"]}>
         <Routes><Route path="/billing/:name" element={<FolioView />} /></Routes>
       </MemoryRouter>))
-    await vi.waitFor(() => expect(host.textContent).toContain("INV-0001"), { interval: 1 })
+    await vi.waitFor(() => expect(host.textContent).toContain(shown), { interval: 1 })
   }
+  const buttons = () => [...host.querySelectorAll("button")].map((b) => b.textContent?.trim())
   const text = () => host.textContent ?? ""
   const button = (label: string) => {
     const found = [...host.querySelectorAll("button")].find((b) => b.textContent?.trim() === label)
@@ -137,6 +143,79 @@ describe("Invoice corrections on the folio screen", () => {
     await press("Cancel invoice")
     expect(text()).toContain("Cancel INV-0001? The accounting system credits it and issues a new invoice; this bill is not reopened here.")
     expect(text()).not.toContain("the folio reopens for correction")
+  })
+
+  it("corrects a bill the accounting system closed at check-out with no hotel number", async () => {
+    data = invoice({ invoice_number: null, sales_invoice: DOCUMENT })
+    data.document = { ...data.document, number: null as unknown as string }
+    await render("Ada Guest")
+    await press("Credit note")
+    const said = dialog()?.textContent ?? ""
+    expect(said).toContain(`The accounting system issued invoice ${DOCUMENT} for this bill.`)
+    expect(said).not.toContain("issued here")
+    await press("Close")
+    await press("Cancel invoice")
+    expect(text()).toContain(`Cancel ${DOCUMENT}? The accounting system credits it and issues a new invoice; this bill is not reopened here.`)
+  })
+
+  it("offers to credit a bill only to the roles that may", async () => {
+    auth.roles = ["Front Desk"]
+    await render()
+    expect(buttons()).not.toContain("Credit note")
+    // a bill invoiced here is still cancelled and reopened at the desk
+    expect(buttons()).toContain("Cancel invoice")
+    await act(async () => root.unmount())
+    root = createRoot(host)
+    data = invoice({ sales_invoice: DOCUMENT })
+    await render()
+    expect(buttons()).not.toContain("Credit note")
+    expect(buttons()).not.toContain("Cancel invoice")
+  })
+
+  it("never credits more than is left on the invoice", async () => {
+    data = { ...invoice(), credited: 1000 }
+    await render()
+    await press("Credit note")
+    await type("Reason (required - goes on the record)", "Hall unused")
+    await type("Amount to credit, tax included", "500")
+    expect(dialog()?.textContent).toContain(`At most ${fmtMoney(180)} can still be credited on this invoice.`)
+    expect(button("Issue credit note").disabled).toBe(true)
+    await type("Amount to credit, tax included", "180")
+    expect(dialog()?.textContent).not.toContain("can still be credited")
+    expect(button("Issue credit note").disabled).toBe(false)
+  })
+
+  it("shows the tax the server books, in the currency's minor unit", async () => {
+    await render()
+    await vi.waitFor(() => expect(moneyDigits()).toBe(0), { interval: 1 })
+    await press("Credit note")
+    // 95.0228 x 180 / 1180 = 14.495: a shilling bill books 14, not 14.50
+    await type("Amount to credit, tax included", "95.0228")
+    expect(dialog()?.textContent).toContain(`Tax in this credit note: ${fmtMoney(14)}`)
+  })
+
+  it("names a split for what it is and leaves it off the printed bill", async () => {
+    const line = { posting_date: "2026-11-22", charge_type: "Laundry", gst_rate: 0, gst_amount: 0 }
+    data = invoice({ charges: [
+      { ...line, name: "c1", description: "Bag A", amount: 1000, total: 1000 },
+      { ...line, name: "c2", description: "Bag A", amount: -1000, total: -1000,
+        reversal_of: "c1", split_of: "c1", void_reason: "Split to FOLIO-2" },
+      { ...line, name: "c3", description: "Bag A", amount: 700, total: 700, split_of: "c1" },
+      { ...line, name: "v1", description: "Bag B", amount: 50, total: 50 },
+      { ...line, name: "v2", description: "VOID: Bag B - wrong", amount: -50, total: -50,
+        reversal_of: "v1", void_reason: "wrong" },
+    ] })
+    await render()
+    const rows = [...host.querySelectorAll("tr")].filter((r) => r.textContent?.includes("Bag"))
+    expect(rows).toHaveLength(5)
+    const badge = (r: Element) => [...r.querySelectorAll("span")].map((s) => s.textContent)
+    expect(badge(rows[0])).toContain("Split")
+    expect(badge(rows[1])).toContain("Split")
+    expect(badge(rows[0])).not.toContain("Voided")
+    expect(badge(rows[2])).not.toContain("Split")
+    expect(badge(rows[3])).toContain("Voided")
+    expect(badge(rows[4])).toContain("Voided")
+    expect(rows.map((r) => r.className.includes("print:hidden"))).toEqual([true, true, false, false, false])
   })
 
   it.each([

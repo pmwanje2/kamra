@@ -15,7 +15,7 @@ from typing import Any
 import frappe
 from frappe.utils import cint, flt, getdate, now_datetime, nowdate
 
-from kamra.authz import require_roles
+from kamra.authz import INVOICE_CORRECTION_ROLES, require_roles
 from kamra.business_date import get_business_date
 
 CHARGE_TYPE_TO_CODE = {
@@ -303,8 +303,9 @@ def transfer_advances_to_guest(reservation: str,
 	anchored to: its advances follow the group (transfer_group_advances), so
 	a first room that cancelled or never arrived does not strand them."""
 	moved = _apply_advances(
-		frappe.get_all("Folio", filters={"reservation": reservation},
-		               fields=["name", "property"]), business_date)
+		[f for f in frappe.get_all("Folio", filters={"reservation": reservation},
+		                           fields=["name", "property", "folio_type"])
+		 if f.folio_type != "Group"], business_date)
 	group = frappe.db.get_value("Reservation", reservation, "group_booking")
 	if group:
 		moved += transfer_group_advances(group, business_date)
@@ -1782,14 +1783,13 @@ def force_advance_bill(reservation: str, nights: str = "entire",
 	from frappe.utils import add_days, date_diff, getdate
 
 	from kamra.authz import require_cashier_pin
-	from kamra.folio import _recalculate, open_folio, post_room_night
+	from kamra.folio import open_folio, post_room_night
 
 	res = frappe.get_doc("Reservation", reservation)
 	require_cashier_pin(res.property, pin)
 	if res.status not in ("Confirmed", "Checked In", "Held", "Pending Payment"):
 		frappe.throw("Advance bill only for active reservations.")
 	folio_name = open_folio(res)
-	folio = frappe.get_doc("Folio", folio_name)
 	ci = getdate(res.check_in_date)
 	co = getdate(res.check_out_date)
 	stay = max(date_diff(co, ci), 1)
@@ -1809,7 +1809,8 @@ def force_advance_bill(reservation: str, nights: str = "entire",
 
 	def stay_lines():
 		return frappe.get_all("Folio Charge", filters={
-			"parenttype": "Folio", "reservation": res.name}, fields=["name", "total"])
+			"parenttype": "Folio", "reservation": res.name},
+			fields=["name", "total", "parent", "charge_type"], order_by="creation asc")
 
 	before = {r.name for r in stay_lines()}
 	for i in range(n):
@@ -1821,16 +1822,17 @@ def force_advance_bill(reservation: str, nights: str = "entire",
 		ok = post_room_night(res, str(day))
 		if ok:
 			posted.append(str(day))
-	folio.reload()
-	_recalculate(folio)
-	folio.save(ignore_permissions=True)
-	amount = round(sum(float(r.total or 0) for r in stay_lines()
-	                   if r.name not in before), 2)
+	# post_room_night saved every folio it posted to; the bill shown is the
+	# one the nights went to (the guest's, unless they route elsewhere)
+	new = [r for r in stay_lines() if r.name not in before]
+	amount = round(sum(float(r.total or 0) for r in new), 2)
+	target = next((r.parent for r in new if r.charge_type == "Room"),
+	              new[0].parent if new else folio_name)
 	return {
-		"folio": folio.name,
+		"folio": target,
 		"nights_posted": posted,
 		"amount": amount,
-		"balance": folio.balance,
+		"balance": frappe.db.get_value("Folio", target, "balance"),
 	}
 
 
@@ -1901,27 +1903,41 @@ def _projected_lines(f) -> list[dict]:
 
 
 @frappe.whitelist(methods=["POST"])
-@require_roles("Finance", "Hotel Admin", "Kamra Agent")
+@require_roles(*INVOICE_CORRECTION_ROLES)
 def issue_credit_note(folio: str, amount: float, reason: str,
                       pin: str | None = None):
+	"""Credit an issued invoice. Credit notes never add up to more than the
+	invoice (OPERA's Credit Bill credits at most the bill). The folio and
+	its credit notes are read under lock, the notes with a locking read, so
+	a credit another desk committed meanwhile is counted (or, on MariaDB
+	11.8 with innodb_snapshot_isolation, the request is refused with 1020
+	and tried again) - never credited twice over."""
 	from kamra.authz import require_cashier_pin
 	doc = frappe.get_doc("Folio", folio)
 	require_cashier_pin(doc.property, pin)
-	if not doc.invoice_number:
+	from kamra.folio import bridge_invoice, invoiced, route_to_credit_and_rebill
+	if not invoiced(doc):
 		frappe.throw("Credit notes need a closed invoice as the original.")
 	if float(amount) <= 0:
 		frappe.throw("Amount must be positive.")
 	if not (reason or "").strip():
 		frappe.throw("A reason is required.")
-	from kamra.folio import bridge_invoice, route_to_credit_and_rebill
+	frappe.db.get_value("Folio", folio, "name", for_update=True)
+	gross = Decimal(str(doc.grand_total or 0))
+	left = gross - credited_total(folio, for_update=True)
+	if Decimal(str(amount)) > left:
+		from kamra.localization import money_text
+		frappe.throw(frappe._("At most {0} can still be credited on invoice {1}.").format(
+			money_text(doc.property, max(left, Decimal(0))),
+			doc.invoice_number or bridge_invoice(doc)))
 	if bridge_invoice(doc):
 		# issued by the ERPNext bridge: its credit and re-bill corrects it
 		return route_to_credit_and_rebill(doc, reason.strip(), float(amount))
 	bd = get_business_date(doc.property)
-	# the tax inside what is credited, in the invoice's own proportion
-	gross = Decimal(str(doc.grand_total or 0))
+	# the tax inside what is credited, in the invoice's own proportion, to
+	# the currency's minor unit
 	tax = (Decimal(str(amount)) * Decimal(str(doc.tax_total or 0)) / gross).quantize(
-		Decimal("0.01"), rounding=ROUND_HALF_UP) if gross else Decimal(0)
+		minor_unit(doc.property), rounding=ROUND_HALF_UP) if gross else Decimal(0)
 	# Sequential CN number
 	count = frappe.db.count("Credit Note", {"property": doc.property}) + 1
 	cn_number = f"CN-{doc.property[:6]}-{bd.replace('-', '')}-{count:04d}"
@@ -1992,6 +2008,14 @@ def issue_credit_note(folio: str, amount: float, reason: str,
 			source_name=cn.name,
 		)
 	return {"credit_note": cn.name, "number": cn_number}
+
+
+def credited_total(folio: str, for_update: bool = False) -> Decimal:
+	"""What the issued credit notes on this folio's invoice add up to."""
+	return Decimal(str(frappe.db.sql(
+		"""SELECT COALESCE(SUM(amount), 0) FROM `tabCredit Note`
+		   WHERE folio = %s AND status = 'Issued'""" + (" FOR UPDATE" if for_update else ""),
+		folio)[0][0] or 0))
 
 
 # ── Folio history / reprints / batch ─────────────────────────────────────────
@@ -2510,6 +2534,13 @@ def home_currency(property: str) -> str:
 	from kamra import localization as loc
 	return (frappe.get_cached_value("Property", property, "currency")
 	        or loc.default_currency(loc.pack_for(property)))
+
+
+def minor_unit(property: str) -> Decimal:
+	"""The smallest amount a bill in the hotel's currency states: 0.01 for a
+	two-decimal currency, 1 for the Uganda shilling (ISO 4217, via babel)."""
+	from babel.numbers import get_currency_precision
+	return Decimal(1).scaleb(-get_currency_precision(home_currency(property)))
 
 
 def _money(value) -> Decimal:

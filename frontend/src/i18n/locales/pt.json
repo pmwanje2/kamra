@@ -6706,5 +6706,8 @@
   "Send for credit note and re-bill": "Enviar para nota de crédito e refaturamento",
   "Tax in this credit note: {amount}": "Imposto nesta nota de crédito: {amount}",
   "Folio windows": "Janelas de fólio",
-  "How many separate bills a stay or a group's master bill can have, each with its own payer and invoice. Window 1 is the guest's and takes every charge that is not routed elsewhere.": "Quantas contas separadas uma estadia ou a conta mestre de um grupo pode ter, cada uma com o seu próprio pagador e fatura. A janela 1 é a do hóspede e recebe todas as cobranças que não são encaminhadas para outro lugar."
+  "How many separate bills a stay or a group's master bill can have, each with its own payer and invoice. Window 1 is the guest's and takes every charge that is not routed elsewhere.": "Quantas contas separadas uma estadia ou a conta mestre de um grupo pode ter, cada uma com o seu próprio pagador e fatura. A janela 1 é a do hóspede e recebe todas as cobranças que não são encaminhadas para outro lugar.",
+  "The accounting system issued invoice {document} for this bill. It is corrected there with a credit note and a new invoice; this bill is not reopened or credited here.": "O sistema contábil emitiu a fatura {document} para esta conta. Ela é corrigida lá com uma nota de crédito e uma nova fatura; esta conta não é reaberta nem creditada aqui.",
+  "At most {amount} can still be credited on this invoice.": "No máximo {amount} ainda pode ser creditado nesta fatura.",
+  "status|Split": "Dividido"
 }

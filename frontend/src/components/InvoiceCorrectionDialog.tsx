@@ -3,12 +3,15 @@
     accounting system issued the invoice (the folio carries its
     sales_invoice), the correction goes to that system's credit note and
     re-bill (issue_credit_note routes it): this screen never reopens or
-    credits that bill on its own. */
+    credits that bill on its own, even when that system closed the bill at
+    check-out with no hotel invoice number. A credit never goes past what is
+    left on the invoice (the server refuses it too), and the tax shown is
+    worked out to the currency's minor unit, as the server books it. */
 
 import { useState } from "react"
 import { call } from "../lib/api"
 import { useCashierAuth } from "../lib/cashierAuth"
-import { fmtMoney } from "../lib/money"
+import { fmtMoney, moneyDigits } from "../lib/money"
 import { serverError } from "../lib/resource"
 import { useT } from "../lib/i18n"
 import { Button } from "./ui/button"
@@ -27,6 +30,8 @@ const inputCls =
 
 export default function InvoiceCorrectionDialog(props: {
   folio: InvoicedFolio
+  /** what the invoice's issued credit notes already add up to */
+  credited?: number
   onClose: () => void
   onDone: () => void
 }) {
@@ -34,16 +39,21 @@ export default function InvoiceCorrectionDialog(props: {
   const { ensureUnlocked, status } = useCashierAuth()
   const { folio } = props
   const document = folio.sales_invoice || null
-  const invoice = folio.invoice_number ?? ""
+  const invoice = folio.invoice_number || document || ""
   const [amount, setAmount] = useState("")
   const [reason, setReason] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const value = Number(amount)
-  const ready = value > 0 && !!reason.trim()
-  // the tax inside the credit, in the invoice's own proportion (as the server)
+  const unit = 10 ** moneyDigits()
+  // credit notes never add up to more than the invoice
+  const left = Math.max(0, Math.round((folio.grand_total - (props.credited ?? 0)) * unit) / unit)
+  const over = value > left
+  const ready = value > 0 && !over && !!reason.trim()
+  // the tax inside the credit, in the invoice's own proportion, to the
+  // currency's minor unit (as the server)
   const tax = value > 0 && folio.grand_total
-    ? Math.round((value * folio.tax_total * 100) / folio.grand_total) / 100
+    ? Math.round((value * folio.tax_total * unit) / folio.grand_total) / unit
     : 0
 
   async function issue() {
@@ -73,9 +83,11 @@ export default function InvoiceCorrectionDialog(props: {
         </header>
         <div className="space-y-3 px-5 py-4 text-sm">
           <p className="text-zinc-700">
-            {document
+            {document && folio.invoice_number
               ? t("Invoice {invoice} was issued by the accounting system as {document}. It is corrected there with a credit note and a new invoice; this bill is not reopened or credited here.", { invoice, document })
-              : t("A credit note is issued here against invoice {invoice}, with its share of the tax.", { invoice })}
+              : document
+                ? t("The accounting system issued invoice {document} for this bill. It is corrected there with a credit note and a new invoice; this bill is not reopened or credited here.", { document })
+                : t("A credit note is issued here against invoice {invoice}, with its share of the tax.", { invoice })}
           </p>
           <input className={inputCls} type="number" min="0" step="any" inputMode="decimal"
             aria-label={t("Amount to credit, tax included")}
@@ -85,6 +97,9 @@ export default function InvoiceCorrectionDialog(props: {
             aria-label={t("Reason (required - goes on the record)")}
             placeholder={t("Reason (required - goes on the record)")}
             value={reason} onChange={(e) => setReason(e.target.value)} />
+          {over && (
+            <p className="text-amber-700">{t("At most {amount} can still be credited on this invoice.", { amount: fmtMoney(left) })}</p>
+          )}
           {!document && tax > 0 && (
             <p className="text-zinc-500">{t("Tax in this credit note: {amount}", { amount: fmtMoney(tax) })}</p>
           )}

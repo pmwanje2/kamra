@@ -427,5 +427,8 @@
   "Tax in this credit note: {amount}": "Pajak dalam credit note ini: {amount}",
   "Credit note": "Credit note",
   "Folio windows": "Jendela folio",
-  "How many separate bills a stay or a group's master bill can have, each with its own payer and invoice. Window 1 is the guest's and takes every charge that is not routed elsewhere.": "Berapa banyak tagihan terpisah yang dapat dimiliki sebuah menginap atau tagihan induk grup, masing-masing dengan pembayar dan fakturnya sendiri. Jendela 1 milik tamu dan menerima setiap tagihan yang tidak dialihkan ke tempat lain."
+  "How many separate bills a stay or a group's master bill can have, each with its own payer and invoice. Window 1 is the guest's and takes every charge that is not routed elsewhere.": "Berapa banyak tagihan terpisah yang dapat dimiliki sebuah menginap atau tagihan induk grup, masing-masing dengan pembayar dan fakturnya sendiri. Jendela 1 milik tamu dan menerima setiap tagihan yang tidak dialihkan ke tempat lain.",
+  "The accounting system issued invoice {document} for this bill. It is corrected there with a credit note and a new invoice; this bill is not reopened or credited here.": "Sistem akuntansi menerbitkan invoice {document} untuk tagihan ini. Invoice dikoreksi di sana dengan credit note dan invoice baru; tagihan ini tidak dibuka kembali atau dikreditkan di sini.",
+  "At most {amount} can still be credited on this invoice.": "Paling banyak {amount} masih dapat dikreditkan pada invoice ini.",
+  "status|Split": "Dibagi"
 }

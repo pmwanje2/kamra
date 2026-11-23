@@ -387,8 +387,11 @@ def _checkout_context(reservation: str) -> dict:
 	posted_charges = 0.0
 	for f0 in frappe.get_all(
 			"Folio", filters={"reservation": res.name},
-			fields=["name", "grand_total"]):
-		posted_charges += flt(f0.grand_total)
+			fields=["name", "grand_total", "folio_type"]):
+		# the group's bill anchored to this stay is the group's: shown for
+		# reference below, never counted as this stay's
+		if f0.folio_type != "Group":
+			posted_charges += flt(f0.grand_total)
 		for n in frappe.get_all(
 				"Folio Charge", filters={"parent": f0.name}, pluck="name"):
 			posted_charge_names.add(n)
