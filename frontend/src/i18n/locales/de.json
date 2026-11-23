@@ -457,5 +457,6 @@
   "Credit note": "Gutschrift",
   "The accounting system issued invoice {document} for this bill. It is corrected there with a credit note and a new invoice; this bill is not reopened or credited here.": "Die Buchhaltung hat die Rechnung {document} für diese Abrechnung ausgestellt. Sie wird dort mit einer Gutschrift und einer neuen Rechnung korrigiert; diese Abrechnung wird hier weder wieder geöffnet noch gutgeschrieben.",
   "At most {amount} can still be credited on this invoice.": "Auf diese Rechnung können höchstens noch {amount} gutgeschrieben werden.",
-  "status|Split": "Aufgeteilt"
+  "status|Split": "Aufgeteilt",
+  "Moves whole (cannot be split)": "Wird vollständig verschoben (nicht teilbar)"
 }

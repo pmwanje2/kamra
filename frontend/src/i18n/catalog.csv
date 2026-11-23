@@ -3679,6 +3679,7 @@ Move everything on the company bill back to the guest,Move everything on the com
 Move it on,Move it on,انقلها للمرحلة التالية,Avanzar al siguiente estado,Siga em frente,推进,screens/Tickets.tsx,,translated
 move only,move only,نقل فقط,solo trasladar,mover apenas,仅移动,screens/FolioView.tsx,,translated
 Move or split this charge,Move or split this charge,نقل أو تقسيم هذه الرسوم,Mover o dividir este cargo,Mova ou divida esta cobrança,转移或拆分此费用,screens/FolioView.tsx,,translated
+Moves whole (cannot be split),Moves whole (cannot be split),يُنقل بالكامل (لا يمكن تقسيمه),Se mueve completo (no se puede dividir),Move-se inteiro (não pode ser dividido),整项转移（不可拆分）,screens/FolioView.tsx,,translated
 Move room,Move room,نقل الغرفة,Cambiar de habitación,Mudar de quarto,换房,components/RoomDrawer.tsx; screens/TapeChart.tsx,,translated
 Move the bill to another room,Move the bill to another room,نقل الفاتورة إلى غرفة أخرى,Mover la cuenta a otra habitación,Transferir a fatura para outro quarto,将账单移至其他客房,screens/pos/MoveRoomBill.tsx,,translated
 Move to {room},Move to {room},نقل إلى {room},Cambiar a la habitación {room},Mover para {room},移至 {room},components/RoomChangeDialog.tsx,room,translated

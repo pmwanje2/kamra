@@ -6730,5 +6730,6 @@
   "Tax in this credit note: {amount}": "Imposto nesta nota de crédito: {amount}",
   "The accounting system issued invoice {document} for this bill. It is corrected there with a credit note and a new invoice; this bill is not reopened or credited here.": "O sistema contábil emitiu a fatura {document} para esta conta. Ela é corrigida lá com uma nota de crédito e uma nova fatura; esta conta não é reaberta nem creditada aqui.",
   "At most {amount} can still be credited on this invoice.": "No máximo {amount} ainda pode ser creditado nesta fatura.",
-  "status|Split": "Dividido"
+  "status|Split": "Dividido",
+  "Moves whole (cannot be split)": "Move-se inteiro (não pode ser dividido)"
 }

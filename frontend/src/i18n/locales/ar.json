@@ -6538,5 +6538,6 @@
   "Tax in this credit note: {amount}": "الضريبة في إشعار الدائن هذا: {amount}",
   "The accounting system issued invoice {document} for this bill. It is corrected there with a credit note and a new invoice; this bill is not reopened or credited here.": "أصدر النظام المحاسبي الفاتورة {document} لهذا الحساب. تُصحَّح هناك بإشعار دائن وفاتورة جديدة؛ ولا يُعاد فتح هذا الحساب أو قيده دائنًا هنا.",
   "At most {amount} can still be credited on this invoice.": "يمكن قيد {amount} دائنًا على هذه الفاتورة كحد أقصى.",
-  "status|Split": "مُقسَّم"
+  "status|Split": "مُقسَّم",
+  "Moves whole (cannot be split)": "يُنقل بالكامل (لا يمكن تقسيمه)"
 }

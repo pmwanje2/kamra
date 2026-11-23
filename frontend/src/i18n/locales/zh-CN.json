@@ -6797,5 +6797,6 @@
   "Tax in this credit note: {amount}": "本贷项通知单含税额：{amount}",
   "The accounting system issued invoice {document} for this bill. It is corrected there with a credit note and a new invoice; this bill is not reopened or credited here.": "会计系统已为此账单开具发票 {document}。须在会计系统中以贷项通知单和新发票更正；此账单不会在此重新打开或冲减。",
   "At most {amount} can still be credited on this invoice.": "此发票最多还可冲减 {amount}。",
-  "status|Split": "已拆分"
+  "status|Split": "已拆分",
+  "Moves whole (cannot be split)": "整项转移（不可拆分）"
 }

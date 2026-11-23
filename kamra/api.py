@@ -5689,7 +5689,7 @@ def reinstate_checkout(reservation: str, reason: str, pin: str | None = None):
 	in house again in the same room. Refused once the night audit has run,
 	when someone else is in the room, or when the company has paid."""
 	from kamra.authz import require_cashier_pin
-	from kamra.folio import cancel_invoice
+	from kamra.folio import bridge_invoice, cancel_invoice, invoiced, refuse_bridge_correction
 	from kamra.ledger import reverse_city_ledger_transfer
 
 	reason = (reason or "").strip()
@@ -5728,15 +5728,21 @@ def reinstate_checkout(reservation: str, reason: str, pin: str | None = None):
 		"creation", order_by="creation desc")
 	# the group's bill anchored to this stay is the group's: settled with the
 	# group, it keeps its invoice when one room's check-out is undone
+	fields = ["name", "status", "invoice_number", "closed_on", "modified", "folio_type"]
+	if frappe.db.has_column("Folio", "sales_invoice"):
+		fields.append("sales_invoice")
 	folios = [f for f in frappe.get_all(
-		"Folio", filters={"reservation": doc.name},
-		fields=["name", "status", "invoice_number", "closed_on", "folio_type"])
+		"Folio", filters={"reservation": doc.name}, fields=fields)
 		if f.folio_type != "Group"
 		and (f.status != "Closed" or not day_start
-		     or (f.closed_on and get_datetime(f.closed_on) >= get_datetime(day_start)))]
+		     or ((f.closed_on or f.modified)
+		         and get_datetime(f.closed_on or f.modified) >= get_datetime(day_start)))]
+	for f in folios:
+		if f.status == "Closed" and bridge_invoice(f):
+			refuse_bridge_correction(f)
 	cancelled, brought_back = [], 0.0
 	for f in folios:
-		if f.status == "Closed" and f.invoice_number:
+		if f.status == "Closed" and invoiced(f):
 			cancelled.append(cancel_invoice(f.name, f"Checkout reinstated: {reason}")["cancelled"])
 	for f in folios:
 		brought_back += reverse_city_ledger_transfer(f.name, reason)
