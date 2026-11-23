@@ -1020,7 +1020,10 @@ class ChannexAriImportTestCase(_AriFixture, IntegrationTestCase):
 		self.assertTrue(frappe.get_meta("Channel Room Mapping").get_field("external_currency").read_only)
 
 	def eur_tariff(self, api_method, **form):
-		"""BB's EUR contract night, as hospitality_tariffs.tariff_rate answers it."""
+		"""BB's EUR contract night, as hospitality_tariffs.tariff_rate answers
+		it, and BB's approved EUR 90 in the tariff directory."""
+		if api_method == "hospitality_tariffs.list_tariffs" and form.get("property") == self.property:
+			return tariff_directory(self.bb, "EUR", 90, ("Twin", "Double"))
 		if api_method != "hospitality_tariffs.tariff_rate" or form.get("rate_plan") != self.bb:
 			return None
 		return {"tariff": {"is_tariff": 1, "currency": "EUR", "nightly": 90, "fx_rate": 1.1, "agreed_rate": 99,
@@ -1034,6 +1037,33 @@ class ChannexAriImportTestCase(_AriFixture, IntegrationTestCase):
 			out = self.run_import()
 		self.assertEqual(self.plan_warnings(out), {})
 		self.assertEqual(self.currencies()["rp-twin-bb"], "EUR")
+
+	def test_a_plan_sold_in_its_contract_currency_is_probed_without_an_exchange_rate(self):
+		"""Paul's SAP decision on siteops#8559 (SG 105): the import's probe is
+		the push's own night, so a EUR plan sold in EUR reads the tariff
+		directory and never asks the quote, which needs an exchange rate.
+		With no published rate, it still sees the contract's own currency: a
+		contract listed in GBP cannot go in EUR, and is warned about."""
+		frappe.db.set_value("Rate Plan", self.bb, "currency", "EUR")
+		self.fake.rate_plans[1]["attributes"]["currency"] = "EUR"
+		quoted, listed = [], {"currency": "EUR"}
+
+		def bridge(api_method, **form):
+			if api_method == "hospitality_tariffs.list_tariffs" and form.get("property") == self.property:
+				return tariff_directory(self.bb, listed["currency"], 90, ("Twin", "Double"))
+			if api_method == "hospitality_tariffs.tariff_rate" and form.get("rate_plan") == self.bb:
+				quoted.append(form)
+				return {"tariff": dict(CORP_FX_REFUSAL)}
+			return None
+		with patch("kamra.erp_bridge.bridge_call", side_effect=bridge):
+			out = self.run_import()
+			self.assertEqual(self.plan_warnings(out), {})
+			self.assertEqual(self.currencies()["rp-twin-bb"], "EUR")
+			self.assertEqual(quoted, [])
+			listed["currency"] = "GBP"
+			out = self.run_import()
+		self.assertEqual(sorted(self.plan_warnings(out)), ["rp-twin-bb"])
+		self.assertEqual(quoted, [])
 
 	def test_a_foreign_plan_no_tariff_prices_is_warned_it_cannot_go_in_its_own_currency(self):
 		"""Neon R1 P2-2: a EUR plan with no contract tariff is priced from the
@@ -1084,6 +1114,23 @@ CORP_PRICED = {"is_tariff": 1, "currency": "EUR", "nightly": 90, "fx_rate": 1.1,
 CORP_FX_REFUSAL = {"is_tariff": 1, "refusal": "HSP-TARIFF-003: No single Currency Exchange rate for the business date."}
 
 
+def tariff_directory(plan: str, currency: str, nightly, room_types=("Twin",)) -> dict:
+	"""hospitality_tariffs.list_tariffs: `plan`'s price list in `currency`,
+	with no usable exchange rate, and its approved general Item Price of
+	`nightly` for each room type at two adults, in force since a month ago."""
+	price_list = f"Contract {currency} {plan}"
+	version = {"name": f"IP-{plan}", "rate": nightly, "valid_from": day(-30), "valid_upto": None,
+	           "workflow_state": "Approved", "local_equiv": None}
+	return {"supported": True, "property_currency": "USD", "business_date": day(0), "as_of_date": day(0),
+	        "price_lists": [{"name": price_list, "currency": currency, "fx_rate": None, "fx_date": None,
+	                         "fx_source": "Currency Exchange", "fx_stale_days": 1, "rate_plans": [plan],
+	                         "rate_plan_details": [{"name": plan, "disabled": 0}]}],
+	        "items": [{"price_list": price_list, "currency": currency, "customer": None,
+	                   "item_code": f"TAR-{name.upper()}-2A", "category": "Room", "room_type": name,
+	                   "occupancy": "Double", "occupancy_tier": 2, "active": dict(version), "pending": [],
+	                   "history": []} for name in room_types]}
+
+
 class ChannexAriCurrencyTestCase(_AriWorkerMixin, IntegrationTestCase):
 	"""A EUR contract plan on Twin at this USD property: CORP, EUR 90 a night,
 	1.1 dollars a euro on the business date, so USD 99. Each case maps
@@ -1098,13 +1145,19 @@ class ChannexAriCurrencyTestCase(_AriWorkerMixin, IntegrationTestCase):
 			"rate_plan_name": "Corporate EUR", "code": "CORP" + frappe.generate_hash(length=4).upper(),
 			"currency": "EUR", "modifier_type": "Percent", "modifier_value": 0}).insert(ignore_permissions=True).name
 		self.tariff = dict(CORP_PRICED, fx_date=nowdate())
+		self.quoted: list[dict] = []
 		bridge = patch("kamra.erp_bridge.bridge_call", side_effect=self.bridge)
 		bridge.start()
 		self.addCleanup(bridge.stop)
 
 	def bridge(self, api_method, **form):
+		"""CORP's quote (self.tariff, each form kept in self.quoted) and its
+		approved EUR 90 in the tariff directory."""
+		if api_method == "hospitality_tariffs.list_tariffs" and form.get("property") == self.property:
+			return tariff_directory(self.corp, "EUR", 90)
 		if api_method != "hospitality_tariffs.tariff_rate" or form.get("rate_plan") != self.corp:
 			return None
+		self.quoted.append(form)
 		return {"tariff": dict(self.tariff)}
 
 	def map_corp(self, currency):
@@ -1132,6 +1185,30 @@ class ChannexAriCurrencyTestCase(_AriWorkerMixin, IntegrationTestCase):
 		self.flush()
 		self.assertEqual(self.corp_values(), [{"property_id": "cx-test", "rate_plan_id": "rp-twin-corp",
 		                                       "date": day(5), "rate": "90.00", "stop_sell": False}])
+
+	def test_a_contract_plan_sold_in_its_own_currency_needs_no_exchange_rate(self):
+		"""Paul's SAP decision on siteops#8559 (SG 105): a tariff quote that
+		needs an exchange rate fails closed without one, and the contract
+		rate goes to the channel in its own currency from the tariff master
+		data (hospitality_tariffs.list_tariffs; SAP's condition-record
+		replicate), which converts nothing. With no published rate EUR 90
+		goes out, nothing is held and Finance is not told; once the rate is
+		published the figure is the same, so nothing more goes. The quote is
+		never asked."""
+		self.tariff = dict(CORP_FX_REFUSAL)
+		self.map_corp("EUR")
+		out = self.flush()
+		self.assertNotIn("held", out["restrictions"])
+		self.assertEqual(self.corp_values(), [{"property_id": "cx-test", "rate_plan_id": "rp-twin-corp",
+		                                       "date": day(5), "rate": "90.00", "stop_sell": False}])
+		self.assertEqual({r.status for r in self.rows()}, {"Sent"})
+		self.assertEqual(self.finance_alerts(), 0)
+		self.tariff = dict(CORP_PRICED, fx_date=nowdate())
+		self.ari.enqueue_ari_change(self.property, day(5), day(5), kinds="restrictions", reason="test")
+		self.flush()
+		self.assertEqual(len(self.corp_values()), 1)
+		self.assertEqual(self.sent("restrictions", "rp-twin-corp")[day(5)], {"rate": "90.00", "stop_sell": False})
+		self.assertEqual(self.quoted, [])
 
 	def test_a_contract_plan_sold_in_the_property_currency_goes_at_the_agreed_rate(self):
 		self.map_corp("USD")

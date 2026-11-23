@@ -10,10 +10,14 @@ currency and E the currency of the mapped Channex rate plan.
 
 Outbound: E == C sends the contract nightly, E == H the property-currency
 agreed rate the desk books, anything else - an unknown E included, for every
-plan - nothing at all. Only the resolver's refusal of the night (a missing
-tariff) or no price above zero stops sale. A missing exchange rate, and any
-other error while pricing (a permission refusal, the database, the bridge),
-holds the night at what the channel last accepted instead.
+plan - nothing at all. E == C converts nothing, so it is read from the
+approved tariff master data (hospitality_tariffs.list_tariffs, SAP's
+condition-record replicate), never from a quote: a tariff quote that needs
+an exchange rate refuses without one (SAP SG 105, HSP-TARIFF-003), and only
+E == H needs one. Only a night with no approved price (a missing tariff) or
+no price above zero stops sale. A missing exchange rate, and any other error
+while pricing (a permission refusal, the database, the bridge), holds the
+night at what the channel last accepted instead.
 
 Inbound: an OTA booking in C converts the OTA's own nights into H at
 booking. A booking the OTA explicitly collects (payment_collect "ota") or
@@ -23,6 +27,7 @@ booking does."""
 
 from __future__ import annotations
 
+import copy
 import json
 from decimal import Decimal
 from types import ModuleType
@@ -35,12 +40,52 @@ NIGHT, NEXT = "2026-12-05", "2026-12-06"
 CARD = Decimal(100000)
 FX_REFUSAL = "HSP-TARIFF-003: No single Currency Exchange rate for the business date."
 NO_TARIFF = "HSP-TARIFF-002: No valid Item Price for this date."
+STALE_FX = ("HSP-TARIFF-003: No single Currency Exchange.exchange_rate valid for USD on 2026-12-05; Finance "
+            "enters the current published rate.")
+BUSINESS = "2026-12-01"
+
+
+def version(name, rate, valid_from="2026-11-01", valid_upto=None, state="Approved"):
+	"""An Item Price version as hospitality_tariffs.list_tariffs lists it."""
+	return {"name": name, "rate": rate, "valid_from": valid_from, "valid_upto": valid_upto, "workflow_state": state,
+	        "local_equiv": None}
+
+
+def tariff_row(item_code, *versions, room_type="Standard", tier=2, category="Room", occupancy=None, customer=None,
+               price_list="Contract USD", currency="USD"):
+	"""A directory row as list_tariffs builds it: the Approved version in force
+	on the business date is `active`, drafts are `pending`, every other
+	version (Approved or Rejected) is `history`. `versions` go newest
+	valid_from first, as the directory orders them."""
+	active = next((v for v in versions if v["workflow_state"] == "Approved" and (v["valid_from"] or "") <= BUSINESS
+	               and (not v["valid_upto"] or v["valid_upto"] >= BUSINESS)), None)
+	return {"price_list": price_list, "currency": currency, "fx_rate": None, "fx_date": None, "customer": customer,
+	        "item_code": item_code, "item_name": item_code, "category": category, "room_type": room_type,
+	        "occupancy": occupancy or ({1: "Single", 2: "Double", 3: "Triple"}.get(tier) if category == "Room" else None),
+	        "occupancy_tier": tier if category == "Room" else None, "active": active,
+	        "pending": [v for v in versions if v["workflow_state"] == "Draft"],
+	        "history": [v for v in versions if v is not active and v["workflow_state"] != "Draft"]}
+
+
+def directory(*rows, plans=("CONTRACT",), price_list="Contract USD", currency="USD"):
+	"""hospitality_tariffs.list_tariffs for the property: one price list
+	pricing `plans`, with no usable exchange rate (fx_rate None), and `rows`."""
+	return {"supported": True, "property": "Test Hotel", "property_currency": "UGX", "business_date": BUSINESS,
+	        "as_of_date": BUSINESS, "can_propose": False, "can_approve": False,
+	        "price_lists": [{"name": price_list, "currency": currency, "fx_rate": None, "fx_date": None,
+	                         "fx_source": "Currency Exchange", "fx_stale_days": 1, "rate_plans": list(plans),
+	                         "rate_plan_details": [{"name": plan, "rate_plan_name": plan, "disabled": 0,
+	                                                "fx_lock_policy": "Fixed at Reservation", "rounding_step": 1000,
+	                                                "rounding_mode": "Nearest"} for plan in plans]}],
+	        "items": list(rows)}
 
 
 class OutboundCurrencyHarness(RateMatrixHarness):
 	"""A UGX hotel: CONTRACT (USD 130 at 3,648.2, rounded to 1,000), DERIVED
 	(CONTRACT less 10%), CARD (a home plan priced from the card) and CARD-USD
-	(a USD plan with no tariff, so priced from the UGX card)."""
+	(a USD plan with no tariff, so priced from the UGX card). The tariff
+	directory lists CONTRACT's approved USD 130 for Standard at two adults,
+	with no usable exchange rate."""
 
 	modules = ("kamra.pricing", "kamra.authz", "kamra.channel_ari")
 
@@ -52,17 +97,30 @@ class OutboundCurrencyHarness(RateMatrixHarness):
 
 	def setUp(self):
 		super().setUp()
-		self.add("Room Type", STD, property="Test Hotel", base_occupancy=2)
+		self.add("Room Type", STD, property="Test Hotel", room_type_name="Standard", base_occupancy=2,
+		         adults_capacity=2)
 		self.plan("CONTRACT", currency="USD", rounding_step=1000)
 		self.plan("DERIVED", base_rate_plan="CONTRACT", modifier_type="Percent", modifier_value=-10,
 		          rounding_step=1000)
 		self.plan("CARD")
 		self.plan("CARD-USD", currency="USD")
 		self.tariffs["CONTRACT"] = self.tariff(fx_rate=3648.2, agreed_rate=474266)
+		self.listing = directory(tariff_row("STD-2A", version("IP-130", 130)))
 		quote = patch.object(self.pricing, "quote", self.card_quote)
 		quote.start()
 		self.addCleanup(quote.stop)
 		self.conn = Doc(name="CMC-1", property="Test Hotel")
+
+	def bridge_call(self, api_method, *, response_types=None, **form):
+		"""The harness's tariff_rate, and the tariff directory (`self.listing`,
+		or what it answers for the form)."""
+		if api_method != "hospitality_tariffs.list_tariffs":
+			return super().bridge_call(api_method, response_types=response_types, **form)
+		self.bridge_calls.append((api_method, dict(form)))
+		return copy.deepcopy(self.listing(form) if callable(self.listing) else self.listing)
+
+	def directory_forms(self):
+		return [form for method, form in self.bridge_calls if method == "hospitality_tariffs.list_tariffs"]
 
 	@staticmethod
 	def card_quote(property, room_type, check_in_date, check_out_date, adults=2, children=0, meal_plan=None,
@@ -106,13 +164,25 @@ class OutboundCurrencyTest(OutboundCurrencyHarness):
 		self.assertEqual(self.night("CARD-USD", "UGX"), CARD)
 		self.assertEqual(self.night(None, "UGX"), CARD)
 
-	def test_a_missing_exchange_rate_holds_the_night_and_a_missing_tariff_stops_sale(self):
-		self.tariffs["CONTRACT"] = {"is_tariff": 1, "refusal": FX_REFUSAL}
-		for currency in ("USD", "UGX"):
-			with self.subTest(currency=currency):
-				with self.assertRaisesRegex(self.channel_ari.AriPriceHeld, "HSP-TARIFF-003"):
-					self.night("CONTRACT", currency)
+	def test_a_missing_exchange_rate_holds_only_the_property_currency_night(self):
+		"""SAP SG 105 (Paul's decision on siteops#8559): only the night that
+		converts needs the exchange rate. E == H holds without it; E == C,
+		read from the tariff directory, goes at the contract nightly."""
+		for refusal in (FX_REFUSAL, STALE_FX):
+			with self.subTest(refusal=refusal[:40]):
+				self.tariffs["CONTRACT"] = {"is_tariff": 1, "refusal": refusal}
+				for plan in ("CONTRACT", "DERIVED"):
+					with self.assertRaisesRegex(self.channel_ari.AriPriceHeld, "HSP-TARIFF-003"):
+						self.night(plan, "UGX")
+				self.assertEqual(self.night("CONTRACT", "USD"), Decimal("130.00"))
+				self.assertEqual(self.night("DERIVED", "USD"), Decimal("117.00"))
+
+	def test_a_missing_tariff_stops_sale_in_either_currency(self):
 		self.tariffs["CONTRACT"] = {"is_tariff": 1, "refusal": NO_TARIFF}
+		self.assertIsNone(self.night("CONTRACT", "UGX"))
+		# the quote would price it; the directory has no approved version of the room line
+		self.tariffs["CONTRACT"] = self.tariff(fx_rate=3648.2, agreed_rate=474266)
+		self.listing = directory(tariff_row("STD-2A", version("IP-D", 130, state="Draft")))
 		self.assertIsNone(self.night("CONTRACT", "USD"))
 
 	def test_an_unexpected_error_while_pricing_holds_the_night_and_never_stops_sale(self):
@@ -125,7 +195,8 @@ class OutboundCurrencyTest(OutboundCurrencyHarness):
 			with self.subTest(error=type(error).__name__):
 				def refuse(form, error=error):
 					raise error
-				self.tariffs["CONTRACT"] = refuse
+				self.tariffs["CONTRACT"] = refuse  # the quote, for E == H
+				self.listing = refuse  # the tariff directory, for E == C
 				for currency in ("USD", "UGX"):
 					with self.assertRaisesRegex(self.channel_ari.AriPricingFailed, type(error).__name__):
 						self.night("CONTRACT", currency)
@@ -133,6 +204,135 @@ class OutboundCurrencyTest(OutboundCurrencyHarness):
 	def test_no_price_above_zero_still_stops_sale(self):
 		with patch.object(self.pricing, "quote", lambda *args, **kwargs: {"room_total": 0}):
 			self.assertIsNone(self.night("CARD", "UGX"))
+
+
+class ContractCurrencyDirectoryTest(OutboundCurrencyHarness):
+	"""E == C from the tariff master data, never from a quote (Paul's SAP
+	decision on siteops#8559): SAP replicates a condition record to a
+	channel in its own currency and converts nothing, so it needs no
+	exchange rate, while a tariff quote that needs one fails closed with
+	HSP-TARIFF-003 (SG 105). The night is the general Approved Item Price in
+	force on it, priced for the room type's base occupancy as tariff_rate
+	prices it, and a derived plan's modifier applies to it as contract_rate
+	applies it - so the figure is the one the quote gives when the rate
+	exists."""
+
+	def usd(self, plan, room_type=STD, night=NIGHT):
+		return self.channel_ari._plan_night_rate("Test Hotel", room_type, plan, self.utils.getdate(night), "USD")
+
+	def test_a_contract_currency_night_needs_no_exchange_rate_and_never_asks_the_quote(self):
+		for case, answer in (("published", self.tariff(fx_rate=3648.2, agreed_rate=474266)),
+		                     ("missing", {"is_tariff": 1, "refusal": FX_REFUSAL}),
+		                     ("stale", {"is_tariff": 1, "refusal": STALE_FX})):
+			with self.subTest(fx=case):
+				self.tariffs["CONTRACT"] = answer
+				self.bridge_calls.clear()
+				self.assertEqual(self.usd("CONTRACT"), Decimal("130.00"))
+				self.assertEqual(self.usd("DERIVED"), Decimal("117.00"))
+				self.assertEqual(self.tariff_forms(), [])
+				self.assertEqual(self.directory_forms(), [{"property": "Test Hotel"}] * 2)
+
+	def test_a_property_currency_night_still_asks_the_quote_and_holds_without_the_rate(self):
+		self.tariffs["CONTRACT"] = {"is_tariff": 1, "refusal": FX_REFUSAL}
+		with self.assertRaisesRegex(self.channel_ari.AriPriceHeld, "HSP-TARIFF-003"):
+			self.night("CONTRACT", "UGX")
+		self.assertEqual(len(self.tariff_forms()), 1)
+		self.assertEqual(self.directory_forms(), [])
+
+	def test_the_figure_is_the_one_the_quote_gives_when_the_exchange_rate_exists(self):
+		"""A Family room sold at three adults over its largest tier (two):
+		USD 130 and one extra adult at USD 20.50, as tariff_rate prices it
+		(nightly 150.50, extra_person 20.50), then each derivation as
+		contract_rate applies it: Percent on the room part only, a per-night
+		Amount, and a Percent that adjusts the extra person too."""
+		self.add("Room Type", "Test Hotel-FAM", property="Test Hotel", room_type_name="Family", base_occupancy=3,
+		         adults_capacity=3)
+		self.plan("AMOUNT", base_rate_plan="CONTRACT", modifier_type="Amount", modifier_value=5)
+		self.plan("WHOLE", base_rate_plan="CONTRACT", modifier_type="Percent", modifier_value=-10,
+		          adjust_extra_person=1)
+		self.listing = directory(
+			tariff_row("FAM-1A", version("IP-F1", 100), room_type="Family", tier=1),
+			tariff_row("FAM-2A", version("IP-F2", 130), room_type="Family", tier=2),
+			tariff_row("TAR-EXTRA-ADULT", version("IP-XA", 20.5), room_type=None, category="Supplement"),
+			tariff_row("STD-2A", version("IP-130", 130)))
+		self.tariffs["CONTRACT"] = self.tariff(nightly=150.5, extra_person=20.5, fx_rate=3648.2, agreed_rate=549054)
+		expected = {"CONTRACT": "150.50", "DERIVED": "137.50", "AMOUNT": "155.50", "WHOLE": "135.45"}
+		for plan, figure in expected.items():
+			with self.subTest(plan=plan):
+				_agreed, quoted = self.pricing.contract_rate("Test Hotel", "Test Hotel-FAM", plan, NIGHT, NEXT, 3, 0)
+				self.assertEqual(Decimal(str(quoted["nightly"])), Decimal(figure))
+				self.assertEqual(self.usd(plan, "Test Hotel-FAM"), Decimal(figure))
+
+	def test_the_base_occupancy_sells_at_its_tier_with_the_room_types_own_extra_adult(self):
+		"""tariff_rate's lines: the largest tier up to the adults, else the
+		smallest; each adult above it, up to adults_capacity, at the room
+		type's own Extra Adult supplement, else TAR-EXTRA-ADULT."""
+		self.add("Room Type", "Test Hotel-FAM", property="Test Hotel", room_type_name="Family", base_occupancy=3,
+		         adults_capacity=3)
+		rows = [tariff_row("FAM-1A", version("IP-F1", 100), room_type="Family", tier=1),
+		        tariff_row("FAM-2A", version("IP-F2", 130), room_type="Family", tier=2),
+		        tariff_row("FAM-XA", version("IP-FX", 25), room_type="Family", category="Supplement",
+		                   occupancy="Extra Adult"),
+		        tariff_row("TAR-EXTRA-ADULT", version("IP-XA", 20.5), room_type=None, category="Supplement")]
+		self.listing = directory(*rows)
+		self.assertEqual(self.usd("CONTRACT", "Test Hotel-FAM"), Decimal("155.00"))
+		self.docs[("Room Type", "Test Hotel-FAM")].adults_capacity = 2  # no billable adult above the tier
+		self.assertEqual(self.usd("CONTRACT", "Test Hotel-FAM"), Decimal("130.00"))
+		self.docs[("Room Type", "Test Hotel-FAM")].base_occupancy = 1
+		self.assertEqual(self.usd("CONTRACT", "Test Hotel-FAM"), Decimal("100.00"))
+		self.listing = directory(rows[1], rows[2])  # one adult below the smallest tier sells at it
+		self.assertEqual(self.usd("CONTRACT", "Test Hotel-FAM"), Decimal("130.00"))
+
+	def test_each_night_goes_at_the_approved_general_version_in_force_on_it(self):
+		"""SAP condition validity (DATAB-DATBI), OPERA Rate Changes During
+		Stay: the latest valid_from first, then the name, as tariff_rate
+		resolves it. A draft, a rejected version and a customer's own price
+		never go to a channel."""
+		self.listing = directory(
+			tariff_row("STD-2A", version("IP-DRAFT", 999, NIGHT, state="Draft"), version("IP-140", 140, NEXT),
+			           version("IP-131", 131, "2026-11-15", NIGHT), version("IP-130", 130, "2026-11-15", NIGHT),
+			           version("IP-REJ", 1, "2026-11-20", state="Rejected"), version("IP-OLD", 120, "2026-10-01")),
+			tariff_row("STD-2A", version("IP-CUST", 50), customer="CUST-1"))
+		self.assertEqual(self.usd("CONTRACT"), Decimal("131.00"))
+		self.assertEqual(self.usd("CONTRACT", night=NEXT), Decimal("140.00"))
+		self.assertEqual(self.usd("CONTRACT", night="2026-11-10"), Decimal("120.00"))
+
+	def test_a_night_no_approved_positive_room_price_covers_stops_sale(self):
+		for case, rows in (
+				("draft only", [tariff_row("STD-2A", version("IP-D", 130, state="Draft"))]),
+				("expired", [tariff_row("STD-2A", version("IP-E", 130, "2026-11-01", "2026-12-04"))]),
+				("zero", [tariff_row("STD-2A", version("IP-Z", 0))]),
+				("another room type", [tariff_row("DBL-2A", version("IP-DBL", 130), room_type="Double")]),
+				("extra adult unpriced", [tariff_row("STD-1A", version("IP-S", 100), tier=1)])):
+			with self.subTest(case=case):
+				self.listing = directory(*rows)
+				self.assertIsNone(self.usd("CONTRACT"))
+
+	def test_no_listed_contract_or_one_in_another_currency_cannot_go_in_the_contract_currency(self):
+		for case, listing in (
+				("no list prices the plan or a base", directory(tariff_row("STD-2A", version("IP-1", 130)),
+				                                                plans=("CARD",))),
+				("listed in EUR", directory(tariff_row("STD-2A", version("IP-1", 130), price_list="Contract EUR",
+				                                       currency="EUR"), price_list="Contract EUR", currency="EUR")),
+				("no directory", None)):
+			with self.subTest(case=case):
+				self.listing = listing
+				for plan in ("CONTRACT", "DERIVED"):
+					with self.assertRaises(self.channel_ari.AriCurrencyRefused):
+						self.usd(plan)
+
+	def test_a_directory_it_cannot_read_holds_the_night(self):
+		"""Two Standard room types, or a rate that is not a number: Kamra
+		cannot tell which price is the contract's, so the night is held and
+		Revenue told - never a guess, never a stop-sell."""
+		for case, rows in (
+				("two rooms at one tier", [tariff_row("STD-2A", version("IP-1", 130)),
+				                           tariff_row("STD2-2A", version("IP-2", 160))]),
+				("not a number", [tariff_row("STD-2A", version("IP-1", "n/a"))])):
+			with self.subTest(case=case):
+				self.listing = directory(*rows)
+				with self.assertRaises(self.channel_ari.AriPricingFailed):
+					self.usd("CONTRACT")
 
 
 class FramePermissionError(Exception):
@@ -166,7 +366,9 @@ class RestrictionCellsCurrencyTest(OutboundCurrencyHarness):
 			self.assertIn(code, problems["refused"]["rp-eur"])
 		self.assertFalse(problems.get("held"))
 
-	def test_a_missing_exchange_rate_sends_nothing_for_the_night_instead_of_a_stop_sell(self):
+	def test_a_missing_exchange_rate_sends_nothing_for_the_property_currency_night_instead_of_a_stop_sell(self):
+		"""SAP SG 105: only the night that converts is held. The plan sold in
+		its contract currency goes on both nights, from the tariff directory."""
 		self.map("rp-usd", "CONTRACT", "USD")
 		self.map("rp-ugx", "CONTRACT", "UGX")
 		self.map("rp-bar", None, "UGX")
@@ -174,20 +376,37 @@ class RestrictionCellsCurrencyTest(OutboundCurrencyHarness):
 		self.tariffs["CONTRACT"] = lambda form: (
 			{"is_tariff": 1, "refusal": FX_REFUSAL} if form["check_in"] == NIGHT else priced)
 		cells, problems = self.cells()
-		self.assertEqual(cells["rp-usd"], {NEXT: {"rate": Decimal("130.00"), "stop_sell": False}})
+		self.assertEqual(cells["rp-usd"], {NIGHT: {"rate": Decimal("130.00"), "stop_sell": False},
+		                                   NEXT: {"rate": Decimal("130.00"), "stop_sell": False}})
 		self.assertEqual(cells["rp-ugx"], {NEXT: {"rate": Decimal("474000.00"), "stop_sell": False}})
 		self.assertEqual(cells["rp-bar"][NIGHT], {"rate": CARD, "stop_sell": False})
-		self.assertEqual(sorted(problems["held"]), ["rp-ugx", "rp-usd"])
-		self.assertEqual(problems["held"]["rp-usd"]["dates"], [NIGHT])
-		self.assertIn("HSP-TARIFF-003", problems["held"]["rp-usd"]["reason"])
+		self.assertEqual(sorted(problems["held"]), ["rp-ugx"])
+		self.assertEqual(problems["held"]["rp-ugx"]["dates"], [NIGHT])
+		self.assertIn("HSP-TARIFF-003", problems["held"]["rp-ugx"]["reason"])
 		self.assertFalse(problems.get("refused"))
+
+	def test_the_tariff_directory_is_read_once_a_pass(self):
+		"""A full sync prices 500 nights of every mapping: the directory (all
+		of the property's tariff versions) is read once for them, not once a
+		night."""
+		self.map("rp-usd", "CONTRACT", "USD")
+		self.map("rp-usd-derived", "DERIVED", "USD")
+		cells, _problems = self.cells()
+		self.assertEqual({d: v["rate"] for d, v in cells["rp-usd-derived"].items()},
+		                 {NIGHT: Decimal("117.00"), NEXT: Decimal("117.00")})
+		self.assertEqual(self.directory_forms(), [{"property": "Test Hotel"}])
+		self.assertEqual(self.tariff_forms(), [])
 
 	def test_each_date_goes_at_its_own_contract_night(self):
 		"""Guard (R6, OPERA Rate Changes During Stay): every pushed date is its
-		own one-night contract quote, so a tariff change inside the window
-		shows on the day it starts - never one figure for the horizon."""
+		own contract night - a one-night quote in the property's currency, the
+		version in force that night in the contract's - so a tariff change
+		inside the window shows on the day it starts, never one figure for
+		the horizon."""
 		self.map("rp-usd", "CONTRACT", "USD")
 		self.map("rp-ugx", "CONTRACT", "UGX")
+		self.listing = directory(tariff_row("STD-2A", version("IP-140", 140, NEXT),
+		                                    version("IP-130", 130, "2026-11-01", NIGHT)))
 		first = self.tariff(fx_rate=3648.2, agreed_rate=474266)
 		second = self.tariff(nightly=140, fx_rate=3648.2, agreed_rate=510748)
 		self.tariffs["CONTRACT"] = lambda form: dict(
@@ -204,15 +423,19 @@ class RestrictionCellsCurrencyTest(OutboundCurrencyHarness):
 
 	def test_a_missing_tariff_still_stops_sale(self):
 		self.map("rp-usd", "CONTRACT", "USD")
+		self.map("rp-ugx", "CONTRACT", "UGX")
 		self.tariffs["CONTRACT"] = {"is_tariff": 1, "refusal": NO_TARIFF}
+		self.listing = directory(tariff_row("STD-2A", version("IP-130", 130, "2026-11-01", NIGHT)))
 		cells, problems = self.cells()
-		self.assertEqual(cells["rp-usd"], {NIGHT: {"stop_sell": True}, NEXT: {"stop_sell": True}})
+		self.assertEqual(cells["rp-ugx"], {NIGHT: {"stop_sell": True}, NEXT: {"stop_sell": True}})
+		self.assertEqual(cells["rp-usd"], {NIGHT: {"rate": Decimal("130.00"), "stop_sell": False},
+		                                   NEXT: {"stop_sell": True}})
 		self.assertFalse(problems.get("held"))
 		self.assertFalse(problems.get("refused"))
 		self.assertFalse(problems.get("errored"))
 
 	def test_a_night_that_errors_while_pricing_sends_nothing_and_is_reported(self):
-		self.map("rp-usd", "CONTRACT", "USD")
+		self.map("rp-ugx", "CONTRACT", "UGX")
 		self.map("rp-bar", None, "UGX")
 		priced = self.tariff(fx_rate=3648.2, agreed_rate=474266)
 
@@ -222,11 +445,25 @@ class RestrictionCellsCurrencyTest(OutboundCurrencyHarness):
 			return priced
 		self.tariffs["CONTRACT"] = resolve
 		cells, problems = self.cells()
-		self.assertEqual(cells["rp-usd"], {NEXT: {"rate": Decimal("130.00"), "stop_sell": False}})
+		self.assertEqual(cells["rp-ugx"], {NEXT: {"rate": Decimal("474000.00"), "stop_sell": False}})
 		self.assertEqual(cells["rp-bar"][NIGHT], {"rate": CARD, "stop_sell": False})
-		self.assertEqual(sorted(problems["errored"]), ["rp-usd"])
-		self.assertEqual(problems["errored"]["rp-usd"]["dates"], [NIGHT])
-		self.assertEqual(problems["errored"]["rp-usd"]["rate_plan"], "CONTRACT")
+		self.assertEqual(sorted(problems["errored"]), ["rp-ugx"])
+		self.assertEqual(problems["errored"]["rp-ugx"]["dates"], [NIGHT])
+		self.assertEqual(problems["errored"]["rp-ugx"]["rate_plan"], "CONTRACT")
+		self.assertIn("FramePermissionError", problems["errored"]["rp-ugx"]["reason"])
+		self.assertFalse(problems.get("held"))
+
+	def test_a_directory_that_errors_sends_nothing_for_the_contract_currency_plan(self):
+		self.map("rp-usd", "CONTRACT", "USD")
+		self.map("rp-bar", None, "UGX")
+
+		def refuse(form):
+			raise FramePermissionError("No contract tariffs can be shown for that Property.")
+		self.listing = refuse
+		cells, problems = self.cells()
+		self.assertNotIn("rp-usd", cells)
+		self.assertEqual(cells["rp-bar"][NIGHT], {"rate": CARD, "stop_sell": False})
+		self.assertEqual(problems["errored"]["rp-usd"]["dates"], [NIGHT, NEXT])
 		self.assertIn("FramePermissionError", problems["errored"]["rp-usd"]["reason"])
 		self.assertFalse(problems.get("held"))
 
