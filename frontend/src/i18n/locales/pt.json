@@ -6697,5 +6697,20 @@
   "Valid until (optional)": "Válida até (opcional)",
   "Valid until {date}": "Válida até {date}",
   "Venues / Conference": "Espaços e salas de conferência",
-  "Version history": "Histórico de versões"
+  "Version history": "Histórico de versões",
+  "OTA Tax Rules": "Regras de impostos OTA",
+  "OTA Tax Basis": "Base de impostos OTA",
+  "Match on": "Corresponder em",
+  "Match": "Correspondência",
+  "Counts as": "Conta como",
+  "Booking amounts": "Valores da reserva",
+  "Type or Name": "Tipo ou nome",
+  "Contains": "Contém",
+  "Is": "É",
+  "Ignored": "Ignorado",
+  "Including tax": "Com impostos",
+  "Excluding tax": "Sem impostos",
+  "Add row": "Adicionar linha",
+  "Which of the taxes an OTA lists on a booking is the room tax, tried top to bottom: the first rule that matches decides. A tax on top of the price that no rule reads holds the booking for review. A new Channex connection, or one switched to Channex, starts with the standard rules.": "Qual dos impostos que uma OTA indica numa reserva é a taxa de quarto, testando de cima para baixo: decide a primeira regra que corresponder. Um imposto acima do preço que nenhuma regra reconhece retém a reserva para revisão. Uma nova conexão Channex, ou uma alterada para Channex, começa com as regras padrão.",
+  "Whether each OTA's booking amounts include tax, as set for it on the channel manager: a booking does not say. Excluding tax: a booking from that OTA that lists no room tax is held for review.": "Se os valores das reservas de cada OTA incluem impostos, conforme configurado para ela no gerenciador de canais: a reserva não informa. Sem impostos: uma reserva dessa OTA que não indique a taxa de quarto fica retida para revisão."
 }

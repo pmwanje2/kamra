@@ -425,6 +425,93 @@ def _locked_live_ota(property: str, ota_ref: str | None):
 	return rows[0] if rows else None
 
 
+def ota_key(name: str | None) -> str:
+	"""One OTA however it is written: its site name (canonical_channel),
+	case folded, letters and digits only ("Hostelworld" is "hostelworld")."""
+	return re.sub(r"[\W_]+", "", (canonical_channel(name) or "").casefold())
+
+
+def ota_amounts(conn, channel: str | None) -> str | None:
+	"""What an OTA's booking amounts are on this connection ("Including tax"
+	or "Excluding tax": Channel Manager Connection > OTA tax basis, as set
+	for the OTA on the channel manager); None when it is not listed."""
+	key = ota_key(channel)
+	for row in conn.get("ota_tax_basis") or []:
+		if key and ota_key(row.get("channel")) == key:
+			return row.get("amounts")
+	return None
+
+
+# How a hold for a tax that cannot be read starts its note: a later modify
+# that reads releases it (an overbooking hold is staff's to resolve).
+RULES_MISSING = "OTA tax rules missing — resolve"
+TAX_UNREAD = "OTA tax not recognised — resolve"
+ROOM_TAX_MISSING = "OTA room tax missing — resolve"
+_TAX_HOLDS = (RULES_MISSING, TAX_UNREAD, ROOM_TAX_MISSING)
+
+
+def _held_amount(conn, e: dict) -> str:
+	"""The booking's amount and OTA as a hold note gives them."""
+	currency = e.get("currency") or frappe.db.get_value("Property", conn.property, "currency") or ""
+	return f"{e.get('total') or 0} {currency} from {e.get('channel') or 'OTA'}"
+
+
+def room_tax_missing(conn, e: dict, room_type: str) -> str | None:
+	"""Why a booking is held for review when its OTA reports amounts before
+	tax (ota_amounts "Excluding tax") but it lists no room tax owed
+	(room_tax_listed false): its price is then before tax, and the tax the
+	guest paid on top is not there to bill. None otherwise - an OTA not
+	listed, a booking that lists its room tax, or a room the property
+	charges no tax on."""
+	if e.get("room_tax_listed") is not False or ota_amounts(conn, e.get("channel")) != "Excluding tax":
+		return None
+	from kamra.pricing import room_gst_rate
+	rt = frappe.get_cached_doc("Room Type", room_type)
+	amounts = [float(n.get("amount") or 0) for n in e.get("nightly") or []] or [float(e.get("total") or 0)]
+	if not any(room_gst_rate(conn.property, rt, Decimal(str(a))) > 0 for a in amounts):
+		return None
+	return (f"{ROOM_TAX_MISSING}: {_held_amount(conn, e)}, whose amounts are "
+	        "before tax, with no room tax listed")
+
+
+def tax_hold(conn, e: dict, room_type: str) -> str | None:
+	"""Why a booking's taxes cannot be read into what the folio bills, for
+	staff to resolve; None when they can. Fail closed: a connection with no
+	OTA tax rules (tax_rules false) reads nothing; a tax listed on top of
+	the price that no rule reads (unread_taxes) was paid by the guest and
+	is not in the price; and an OTA whose amounts are before tax that lists
+	no room tax (room_tax_missing). The booking is then held as Requested,
+	billed nothing, never confirmed at a price the guest did not pay."""
+	if e.get("tax_rules") is False:
+		return (f"{RULES_MISSING}: {_held_amount(conn, e)}; the connection "
+		        "has no OTA tax rules to read its taxes by")
+	if e.get("unread_taxes"):
+		return (f"{TAX_UNREAD}: {_held_amount(conn, e)} lists "
+		        f"{', '.join(e['unread_taxes'])} on top of the price, which no OTA tax rule reads")
+	return room_tax_missing(conn, e, room_type)
+
+
+# A stay the guest has come to: an OTA modify that cannot be read never
+# turns it back into a request or reprices it.
+_ARRIVED = ("Checked In", "Checked Out")
+
+
+def _flag_for_review(conn, doc, e: dict, reason: str) -> dict:
+	"""An OTA modify of a stay the guest has come to, held for staff: the
+	stay is left as it is (status, nights, amount) and the reason goes on
+	it and in the action log - as OXI leaves an in-house reservation it
+	cannot update and logs the message for review."""
+	note = f"{reason} (not applied: the stay is {doc.status})"
+	if note not in (doc.special_requests or ""):
+		doc.db_set("special_requests", "\n".join(s for s in (doc.special_requests, note) if s))
+	from kamra.savings import log_action
+	log_action("channel.modify_needs_review", "Reservation", doc.name, conn.property,
+	           rationale=f"{e.get('channel') or 'OTA'} modify of {e.get('ota_ref')} via "
+	                     f"{conn.provider} not applied: {note}",
+	           channel="API")
+	return {"ota_ref": e.get("ota_ref"), "result": "held_for_review", "reservation": doc.name}
+
+
 def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 	"""One normalized OTA event -> the same paths a human would take."""
 	e["channel"] = canonical_channel(e.get("channel")) or "OTA"
@@ -470,6 +557,10 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 		                    f"{e['currency']}; property currency {property_currency}")
 		# Keep foreign money in the note, never in the property's ledger currency.
 		e = dict(e, total=0)
+	elif untaxed := tax_hold(conn, e, room_type):
+		requested_reason = "; ".join(r for r in (requested_reason, untaxed) if r)
+		# a price whose taxes cannot be read is not what the guest paid: never bill it
+		e = dict(e, total=0)
 	if requested_reason:
 		e = dict(e, notes="\n".join(s for s in (e.get("notes"), requested_reason) if s))
 
@@ -477,6 +568,9 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 		# A modify payload is the full new state - overwrite the record, never
 		# merge. Room type can change too (guest moved to a different category).
 		doc = frappe.get_doc("Reservation", existing.name)
+		if requested_reason and doc.status in _ARRIVED:
+			return _flag_for_review(conn, doc, e, requested_reason)
+		tax_held = doc.status == "Requested" and any(h in (doc.special_requests or "") for h in _TAX_HOLDS)
 		doc.room_type = room_type
 		doc.check_in_date = e["check_in"]
 		doc.check_out_date = e["check_out"]
@@ -493,6 +587,10 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 			if requested_reason:
 				doc.status = "Requested"
 				frappe.flags.kamra_status_transition = True
+			elif tax_held:
+				# the OTA's new state reads its taxes: the hold is released and
+				# the stay takes its room (or is refused one, and held as overbooked)
+				doc.status = "Confirmed"
 			doc.save(ignore_permissions=True)
 		finally:
 			frappe.flags.kamra_status_transition = old_transition
@@ -564,9 +662,15 @@ def lock_channel_rates(doc, total_after_tax, nightly=None, nightly_net=False) ->
 	own pre-tax rate falls in, and the last night takes the rounding, as the
 	desk's nights do (Reservation.quote_night_rows). To the currency's
 	decimals, never fewer than two (pricing.night_rate_places). A zero total
-	(currency mismatch, retained for staff) locks nothing."""
+	(a currency mismatch or a tax that cannot be read, held for staff)
+	locks nothing, and a night locked before it is cleared: a stay billed
+	nothing keeps no price."""
 	total = float(total_after_tax or 0)
-	if total <= 0 or not doc.room_type:
+	if total <= 0:
+		doc.set("night_rates", [])
+		doc.rate_lock_key = None
+		return
+	if not doc.room_type:
 		return
 	from frappe.utils import date_diff, getdate
 

@@ -2227,3 +2227,7 @@ None connected.,未建立连接。
 Property clock,酒店时钟
 Responding.,响应正常。
 Service is not responding.,服务未响应。
+OTA Tax Rules row {0}: the text needs a letter or a digit.,OTA 税费规则第 {0} 行：文本至少需要一个字母或数字。
+OTA Tax Basis rows {0} and {1} are the same OTA ({2}): keep one.,OTA 计税基础第 {0} 行和第 {1} 行是同一个 OTA（{2}）：请保留一行。
+OTA Tax Rules,OTA 税费规则
+OTA Tax Basis,OTA 计税基础

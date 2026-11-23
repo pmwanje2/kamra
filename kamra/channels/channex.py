@@ -17,7 +17,7 @@ rate limit.
 
 from __future__ import annotations
 
-import re
+import unicodedata
 from decimal import ROUND_HALF_UP, Decimal
 
 DEFAULT_ENDPOINT = "https://app.channex.io/api/v1"
@@ -227,24 +227,77 @@ def push_ari(conn, snapshot) -> tuple[bool, str]:
 	return True, f"{sent.get('availability', 0)} availability, {sent.get('restrictions', 0)} rate values"
 
 
-# The room tax among a booking room's taxes: Channex's own type "tax", or a
-# VAT / GST under the name an OTA relays (Booking.com "Value Added Tax
-# (VAT)"). Fees and city taxes ("fee", "city_tax", "City Tax") are the OTA's,
-# not the tax the property charges on the night.
-_ROOM_TAX = re.compile(r"^tax$|\bvat\b|\bgst\b|value added tax|goods and services tax")
+def tax_words(value) -> list[str]:
+	"""A tax label as its words: runs of letters, marks and digits in any
+	script, case folded ("MwSt" and "MWST" are "mwst"; "ضريبة", "增值税"
+	and "séjour" are one word each). Punctuation and spaces only part them."""
+	words, word = [], []
+	for ch in unicodedata.normalize("NFKC", str(value or "")).casefold():
+		if unicodedata.category(ch)[0] in "LMN":
+			word.append(ch)
+		elif word:
+			words.append("".join(word))
+			word = []
+	if word:
+		words.append("".join(word))
+	return words
 
 
-def _tax_on_top(room: dict) -> float:
+def _rule_matches(rule, label: list[str]) -> bool:
+	"""Is: the label is the rule's words. Contains: they appear in it, in
+	order and whole ("vat" is in "VAT (18%)", not in "Private")."""
+	want = tax_words(rule.get("match_text"))
+	if not want or not label:
+		return False
+	if rule.get("match_type") == "Is":
+		return label == want
+	return any(label[i:i + len(want)] == want for i in range(len(label) - len(want) + 1))
+
+
+def _counts_as(conn, tax: dict) -> str | None:
+	"""What the connection's OTA tax rules (Channel Manager Connection >
+	OTA tax rules) read a booking room's taxes[] entry as: "Room tax" (the
+	tax the folio bills with the room), "Ignored" (the OTA's own: a fee, a
+	city tax), or None when no rule reads it. The first rule its type
+	and/or name matches decides. Channex relays an OTA's labels as it gets
+	them (BookingRoomTax: type a string or null, name a string), so both
+	are read."""
+	labels = {"Type": tax_words(tax.get("type")), "Name": tax_words(tax.get("name"))}
+	for rule in conn.get("ota_tax_rules") or []:
+		on = rule.get("match_on") or "Type or Name"
+		fields = ("Type", "Name") if on == "Type or Name" else (on,)
+		if any(_rule_matches(rule, labels.get(f) or []) for f in fields):
+			return rule.get("counts_as")
+	return None
+
+
+def _owed(tax: dict) -> bool:
+	"""A tax the guest owes the property on this booking: an amount above
+	nothing that the OTA did not withhold. Channex marks is_withheld on the
+	taxes an OTA collected and remits itself (docs.channex.io changelog,
+	Airbnb tax_withholding_details; bookings collection, collected taxes):
+	those are not the property's to bill."""
+	return float(tax.get("total_price") or 0) > 0 and not tax.get("is_withheld")
+
+
+def _tax_on_top(conn, room: dict) -> float:
 	"""The room tax a booking room lists on top of its day prices
 	(is_inclusive false - docs.channex.io, bookings collection: Expedia
 	"Total Amount Excluding Tax", Agoda "Exclusive"); 0 when the prices hold
 	it. A tax the OTA withheld is not the property's to bill."""
-	total = 0.0
-	for tax in room.get("taxes") or []:
-		kind = " ".join(re.findall(r"[a-z]+", str(tax.get("type") or "").lower()))
-		if tax.get("is_inclusive") is False and not tax.get("is_withheld") and _ROOM_TAX.search(kind):
-			total += float(tax.get("total_price") or 0)
-	return total
+	return sum(float(tax.get("total_price") or 0) for tax in room.get("taxes") or []
+	           if tax.get("is_inclusive") is False and _owed(tax) and _counts_as(conn, tax) == "Room tax")
+
+
+def _unread_taxes(conn, room: dict) -> list[str]:
+	"""The taxes a booking room lists on top of its day prices (is_inclusive
+	false), owed to the property, that no OTA tax rule reads, as "name
+	(amount)". The guest paid them on top: they are not in the price, so
+	the booking is held until a rule says what they are. One inside the
+	price (is_inclusive true) is already in what the folio bills."""
+	return [f"{tax.get('name') or tax.get('type') or 'tax'} ({tax.get('total_price')})"
+	        for tax in room.get("taxes") or []
+	        if tax.get("is_inclusive") is False and _owed(tax) and _counts_as(conn, tax) is None]
 
 
 def parse_webhook(conn, payload) -> list[dict]:
@@ -255,7 +308,13 @@ def parse_webhook(conn, payload) -> list[dict]:
 
 	A room's total is what the guest paid for it: its day prices, plus the
 	room tax when the channel lists it on top of them (then the day prices
-	are before tax: nightly_net)."""
+	are before tax: nightly_net). room_tax_listed says whether its taxes[]
+	name a room tax owed (above nothing, not withheld): a booking does not
+	carry its OTA's tax setting, so one from an OTA set to amounts before
+	tax that lists none is held for review (channel_manager, the
+	connection's OTA tax basis). unread_taxes are the taxes on top no rule
+	reads, and tax_rules whether the connection has any rules at all: either
+	holds the booking for review too (channel_manager.tax_hold)."""
 	body = payload.get("payload") or payload
 	status = (body.get("status") or "new").lower()
 	event = {"new": "book", "modified": "modify",
@@ -264,7 +323,7 @@ def parse_webhook(conn, payload) -> list[dict]:
 	out = []
 	for room in body.get("rooms") or [{}]:
 		days = room.get("days") or {}
-		on_top = _tax_on_top(room)
+		on_top = _tax_on_top(conn, room)
 		total = (sum(float(v or 0) for v in days.values())
 		         or float(body.get("amount") or 0)) + on_top
 		occ = room.get("occupancy") or {}
@@ -286,6 +345,10 @@ def parse_webhook(conn, payload) -> list[dict]:
 			"total": total,
 			"nightly": [{"date": k, "amount": float(v or 0)} for k, v in sorted(days.items())],
 			"nightly_net": bool(on_top),
+			"room_tax_listed": any(_owed(t) and _counts_as(conn, t) == "Room tax"
+			                       for t in room.get("taxes") or []),
+			"unread_taxes": _unread_taxes(conn, room),
+			"tax_rules": bool(conn.get("ota_tax_rules")),
 			"currency": body.get("currency") or "",
 			"notes": body.get("notes") or "",
 		})
