@@ -653,7 +653,8 @@ class RoutingTestCase(AuditTestCase):
 	def test_billing_rule_all_charge_types(self):
 		meta = frappe.get_meta("Folio Charge").get_field("charge_type").options.split("\n")
 		rule = frappe.get_meta("Company Billing Rule").get_field("charge_type").options.split("\n")
-		self.assertEqual(set(rule), set(meta) - {"Allowance", "Opening Balance"})
+		# a blank first option: a rule that names a transaction code has no type
+		self.assertEqual(set(rule) - {""}, set(meta) - {"Allowance", "Opening Balance"})
 		make_property(PROP_A, business_date=TODAY, room_levy_percent=10)
 		other = self.stay(1, company=corp([("Room Levy", "Company")]),
 		                  booking_type="Corporate")
@@ -676,3 +677,16 @@ class RoutingTestCase(AuditTestCase):
 		         if promise.search(df.description or "")]
 		found += [t.name for t in mcp_tools.TOOLS if promise.search(t.description)]
 		self.assertEqual(found, [])
+
+	def test_a_code_rule_carries_no_charge_type_and_is_shown_by_its_code(self):
+		# made as Desk makes it: a Select would take its first option, "Room"
+		company = corp([("#2000", "Company")])
+		self.assertEqual([(r.charge_type or None, r.transaction_code) for r in
+		                  frappe.get_doc("Corporate Account", company).billing_rules],
+		                 [(None, "2000")])
+		stay = self.stay(1, company=company, booking_type="Corporate")
+		from kamra import checkin, checkout
+		shown = {"charge_type": None, "transaction_code": "2000",
+		         "code_label": "2000 Food & Beverage", "pay_by": "Company"}
+		self.assertEqual(checkin._billing(stay)["billing_rules"], [shown])
+		self.assertEqual(checkout._checkout_context(stay.name)["billing"]["rules"], [shown])
