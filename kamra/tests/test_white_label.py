@@ -570,3 +570,29 @@ class WhiteLabelTest(unittest.TestCase):
 		                 [(302, "/hotel/checkin/tok123"), (200, "kamra")])
 		# Without the mask the app answers the link where it was sent.
 		self.assertEqual(response_chain("/checkin/tok123", [kamra]), [(200, "kamra")])
+
+	# -- R3: /book, /stay and /hk answer without a /kamra 301 hop -------------
+
+	def test_public_routes_answer_without_a_kamra_hop(self):
+		from kamra import hooks
+
+		kamra = {"website_redirects": hooks.website_redirects, "website_route_rules": hooks.website_route_rules}
+		routes = (
+			("/book", "/hotel/book"),
+			("/book/2026-07-10/2026-07-12/2/0", "/hotel/book/2026-07-10/2026-07-12/2/0"),
+			("/stay", "/hotel/stay"),
+			("/stay/grand-villa", "/hotel/stay/grand-villa"),
+			("/stay/grand-villa/2026-07-10/2026-07-12/2/0", "/hotel/stay/grand-villa/2026-07-10/2026-07-12/2/0"),
+			("/hk", "/hotel/hk"),
+		)
+		for path, hotel_target in routes:
+			with self.subTest(path=path):
+				# Installed before the mask (ring0-canary, salama, tankhill): one 302 hop, never /kamra.
+				self.assertEqual(response_chain(path, [kamra, MASK]), [(302, hotel_target), (200, "kamra")])
+				self.assertEqual(response_chain(path, [MASK, kamra]), [(302, hotel_target), (200, "kamra")])
+				# Without the mask the app answers the path in place.
+				self.assertEqual(response_chain(path, [kamra]), [(200, "kamra")])
+		for unrelated in ("/book-appointment", "/staying", "/hks", "/hk/extra", "/update-password"):
+			with self.subTest(unrelated=unrelated):
+				self.assertEqual(respond(unrelated, [kamra]), (404, None))
+				self.assertEqual(respond(unrelated, [kamra, MASK]), (404, None))
