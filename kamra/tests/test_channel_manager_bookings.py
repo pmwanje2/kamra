@@ -250,3 +250,40 @@ class ChannelManagerBookingTestCase(IntegrationTestCase):
 		self.assertTrue(frappe.db.exists("Agent Action Log", {
 			"reference_doctype": "Reservation", "reference_name": dropped.name,
 			"action_type": "channel.modify_needs_review"}))
+
+	def test_capacity_refusal_on_multi_room_modify_still_reconciles_dropped_rooms(self):
+		"""When a multi-room modify hits InventoryRefused and falls back to
+		retaining the remaining lines as Requested, omitted rooms are still
+		reconciled: Confirmed dropped rooms are cancelled and Checked In
+		dropped rooms stay Checked In with channel_review_needed flagged."""
+		for n in ("102", "103", "104"):
+			frappe.get_doc({"doctype": "Room", "property": self.property,
+				"room_type": self.room_type, "room_number": n}).insert(ignore_permissions=True)
+
+		# Book 4 rooms on future dates (all Confirmed: -0, -1, -2, -3)
+		book = self.payload(rooms=4)
+		book["checkin"] = str(add_days(nowdate(), 4))
+		book["checkout"] = str(add_days(nowdate(), 5))
+		self.deliver(book)
+		for i in range(4):
+			self.assertEqual(self.received(f"{self.ref}-{i}").status, "Confirmed")
+
+		# Room -3 is already Checked In; room -2 is still Confirmed
+		dropped_inhouse = self.received(f"{self.ref}-3")
+		frappe.db.set_value("Reservation", dropped_inhouse.name, "status", "Checked In")
+
+		# Sell out today completely (4 rooms) so moving rooms -0 and -1 to today hits InventoryRefused
+		for _ in range(4):
+			self.sold_out()
+
+		# Modify moves to today and drops rooms -2 (Confirmed) and -3 (Checked In)
+		mod = self.payload(rooms=2)
+		mod["action"] = "modify"
+		self.deliver(mod)
+
+		self.assertEqual(self.received(f"{self.ref}-0").status, "Requested")
+		self.assertEqual(self.received(f"{self.ref}-1").status, "Requested")
+		self.assertEqual(self.received(f"{self.ref}-2").status, "Cancelled")
+		dropped_inhouse.reload()
+		self.assertEqual(dropped_inhouse.status, "Checked In")
+		self.assertEqual(dropped_inhouse.channel_review_needed, 1)
