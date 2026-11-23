@@ -466,11 +466,10 @@
   "This rate plan does not allow discounts.": "Paket tarif ini tidak mengizinkan diskon.",
   "This reason needs a manager's sign-off.": "Alasan ini memerlukan persetujuan manajer.",
   "Untick for rates that never take a desk discount (non-refundable, packages).": "Hapus centang untuk tarif yang tidak pernah mendapat diskon resepsionis (tidak dapat dikembalikan, paket).",
-  "A Complimentary rate plan needs a manager's sign-off.": "Paket tarif gratis memerlukan persetujuan manajer.",
-  "A House Use rate plan needs a manager's sign-off.": "Paket tarif pemakaian hotel memerlukan persetujuan manajer.",
   "Rate category": "Kategori tarif",
-  "Complimentary or House Use: a manager signs off each booking, and its rooms count in occupancy but not in ADR.": "Gratis atau pemakaian hotel: manajer menyetujui setiap pemesanan, dan kamarnya dihitung dalam okupansi tetapi tidak dalam ADR.",
   "Complimentary": "Gratis",
   "House Use": "Pemakaian hotel",
-  "Standard": "Standar"
+  "Standard": "Standar",
+  "A {category} rate plan needs a manager's sign-off.": "Paket tarif {category} memerlukan persetujuan manajer.",
+  "Settings → Revenue says which categories a manager signs off, and which are left out of ADR, RevPAR or occupancy.": "Pengaturan → Pendapatan menentukan kategori mana yang disetujui manajer, dan mana yang tidak dihitung dalam ADR, RevPAR, atau okupansi."
 }

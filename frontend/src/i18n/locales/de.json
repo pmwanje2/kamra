@@ -466,11 +466,10 @@
   "This rate plan does not allow discounts.": "Dieser Tarif erlaubt keine Rabatte.",
   "This reason needs a manager's sign-off.": "Dieser Grund braucht die Freigabe einer Führungskraft.",
   "Untick for rates that never take a desk discount (non-refundable, packages).": "Abwählen für Tarife, die nie einen Rabatt an der Rezeption erhalten (nicht erstattbar, Pakete).",
-  "A Complimentary rate plan needs a manager's sign-off.": "Ein Gratis-Tarif braucht die Freigabe einer Führungskraft.",
-  "A House Use rate plan needs a manager's sign-off.": "Ein Eigennutzungs-Tarif braucht die Freigabe einer Führungskraft.",
   "Rate category": "Tarifkategorie",
-  "Complimentary or House Use: a manager signs off each booking, and its rooms count in occupancy but not in ADR.": "Gratis oder Eigennutzung: Eine Führungskraft gibt jede Buchung frei; die Zimmer zählen zur Belegung, aber nicht zur ADR.",
   "Complimentary": "Gratis",
   "House Use": "Eigennutzung",
-  "Standard": "Standard"
+  "Standard": "Standard",
+  "A {category} rate plan needs a manager's sign-off.": "Ein Tarif der Kategorie {category} braucht die Freigabe einer Führungskraft.",
+  "Settings → Revenue says which categories a manager signs off, and which are left out of ADR, RevPAR or occupancy.": "Einstellungen → Erlöse legt fest, welche Kategorien eine Führungskraft freigibt und welche aus ADR, RevPAR oder Belegung herausfallen."
 }

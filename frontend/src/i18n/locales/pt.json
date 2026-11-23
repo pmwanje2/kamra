@@ -6735,8 +6735,7 @@
   "This rate plan does not allow discounts.": "Este plano tarifário não permite descontos.",
   "This reason needs a manager's sign-off.": "Este motivo precisa da aprovação de um gerente.",
   "Untick for rates that never take a desk discount (non-refundable, packages).": "Desmarque para tarifas que nunca recebem desconto da recepção (não reembolsáveis, pacotes).",
-  "A Complimentary rate plan needs a manager's sign-off.": "Um plano tarifário de cortesia precisa da aprovação de um gerente.",
-  "A House Use rate plan needs a manager's sign-off.": "Um plano tarifário de uso do hotel precisa da aprovação de um gerente.",
   "Rate category": "Categoria da tarifa",
-  "Complimentary or House Use: a manager signs off each booking, and its rooms count in occupancy but not in ADR.": "Cortesia ou uso do hotel: um gerente aprova cada reserva, e os quartos contam na ocupação, mas não na ADR."
+  "A {category} rate plan needs a manager's sign-off.": "Um plano tarifário {category} precisa da aprovação de um gerente.",
+  "Settings → Revenue says which categories a manager signs off, and which are left out of ADR, RevPAR or occupancy.": "Configurações → Receita define quais categorias um gerente aprova e quais ficam fora da ADR, do RevPAR ou da ocupação."
 }

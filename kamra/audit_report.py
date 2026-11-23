@@ -152,9 +152,10 @@ def _banquets(property: str, start, end) -> dict:
 
 
 def _period(property: str, label: str, start, end, total_rooms: int) -> dict:
-	from kamra.room_statistics import posted_rooms, room_figures
+	from kamra.room_statistics import category_rules, posted_rooms, room_figures
 	f = _folio(property, start, end)
-	rooms = posted_rooms(property, start, end)
+	rules = category_rules(property)
+	rooms = posted_rooms(property, start, end, rules)
 	outlets = _outlets(property, start, end)
 	banq = _banquets(property, start, end)
 	# the restaurants' bills, plus F&B posted on folios some other way
@@ -162,11 +163,10 @@ def _period(property: str, label: str, start, end, total_rooms: int) -> dict:
 	bev = sum(o["beverage"] for o in outlets) + f["beverage"]
 	nights = rooms["rooms_sold"]
 	available = total_rooms * (date_diff(end, start) + 1)
-	# ADR, RevPAR and occupancy as every report counts them
-	# (kamra.room_statistics: comp and house-use rooms out of ADR)
-	figures = room_figures(room_revenue=rooms["room_revenue"], rooms_sold=nights,
-	                       comp_rooms=rooms["comp_rooms"],
-	                       house_use_rooms=rooms["house_use_rooms"], occupancy_rooms=available)
+	# ADR, RevPAR and occupancy as every report counts them, by the
+	# property's rate categories (kamra.room_statistics)
+	figures = room_figures(rules, room_revenue=rooms["room_revenue"], rooms_sold=nights,
+	                       by_category=rooms["by_category"], occupancy_rooms=available)
 	# discounts and allowances given after a charge (negative) get their own
 	# column: inside "other" they made it negative and hid the other income
 	total = (f["rooms"] + food + bev + banq["total"] + f["meal_plan_minibar"]
@@ -175,7 +175,7 @@ def _period(property: str, label: str, start, end, total_rooms: int) -> dict:
 		"label": label, "from_date": str(start), "to_date": str(end),
 		"rooms_sold": nights,
 		"room_revenue": f["rooms"],
-		# comp_rooms, house_use_rooms, occupancy_pct, adr, revpar
+		# rooms_by_category, occupancy_pct, adr, revpar
 		**figures,
 		"food": round(food, 2), "beverage": round(bev, 2),
 		"banquets": banq["total"], "meal_plan_minibar": f["meal_plan_minibar"],

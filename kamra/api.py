@@ -285,12 +285,19 @@ def owner_briefing(property: str, date: str | None = None):
 	# yesterday's room revenue + rooms sold from posted folio charges, as
 	# every report counts them (kamra.room_statistics); occupancy is the
 	# house now
-	from kamra.room_statistics import posted_rooms, room_figures
-	rooms = posted_rooms(property, yesterday, yesterday)
+	from kamra.room_statistics import (
+		category_rules,
+		in_house_by_category,
+		posted_rooms,
+		room_figures,
+		with_occupied,
+	)
+	rules = category_rules(property)
+	rooms = posted_rooms(property, yesterday, yesterday, rules)
 	room_revenue = rooms["room_revenue"]
-	figures = room_figures(room_revenue=room_revenue, rooms_sold=rooms["rooms_sold"],
-	                       comp_rooms=rooms["comp_rooms"],
-	                       house_use_rooms=rooms["house_use_rooms"],
+	figures = room_figures(rules, room_revenue=room_revenue, rooms_sold=rooms["rooms_sold"],
+	                       by_category=with_occupied(rooms["by_category"],
+	                                                 in_house_by_category(rules, property)),
 	                       rooms_occupied=occupied, occupancy_rooms=rooms_total)
 	occupancy_pct, adr, revpar = figures["occupancy_pct"], figures["adr"], figures["revpar"]
 
@@ -333,8 +340,7 @@ def owner_briefing(property: str, date: str | None = None):
 		"departures_today": departures,
 		"yesterday": {
 			"room_revenue": room_revenue, "adr": adr, "revpar": revpar,
-			"comp_rooms": figures["comp_rooms"],
-			"house_use_rooms": figures["house_use_rooms"],
+			"rooms_by_category": figures["rooms_by_category"],
 			"night_audit": audit,
 			"agent_minutes_saved": float(minutes or 0),
 		},
@@ -7021,11 +7027,13 @@ def discount_governance(property: str, room_type: str | None, rate_plan: str | N
 def comp_rate_governance(property: str, rate_plan: str | None, *, check: bool = False,
                          supervisor_user: str | None = None,
                          supervisor_pin: str | None = None) -> dict:
-	"""A Complimentary or House Use rate plan (OPERA's rate code
-	Complimentary and House Use flags; Rate Plan.rate_category) is signed
-	off by another supervisor with their PIN whoever books it, as a full comp
-	is (discount_governance): OPERA's comp authorizer. Nobody signs off their
-	own (verify_supervisor), and an AI agent can't book one or use a PIN.
+	"""A rate plan whose category needs a sign-off (Rate Plan.rate_category
+	and the property's rate_categories: OPERA's Complimentary and House Use
+	by default) is signed off by another supervisor with their PIN whoever
+	books it, as a full comp is (discount_governance): OPERA's comp
+	authorizer. The approvers are the roles in rate_category_approvers.
+	Nobody signs off their own (verify_supervisor), and an AI agent can't
+	book one or use a PIN.
 
 	check=False is the preview (get_quote, amend_stay_preview): nothing is
 	refused and no PIN is checked. check=True enforces it and returns the
@@ -7033,26 +7041,28 @@ def comp_rate_governance(property: str, rate_plan: str | None, *, check: bool = 
 	{rate_category, needs_supervisor, agent, supervisors, approver}"""
 	from kamra.authz import supervisors_for, verify_supervisor
 	from kamra.credit import _is_agent
-	from kamra.room_statistics import COMP_CATEGORIES, COMPLIMENTARY, rate_category
-	category = rate_category(rate_plan)
-	needs = category in COMP_CATEGORIES
+	from kamra.room_statistics import category_rules, rate_category
+	rules = category_rules(property)
+	category = rate_category(property, rate_plan)
+	needs = category in rules.sign_off
 	agent = _is_agent()
 	out = {"rate_category": category, "needs_supervisor": needs, "agent": agent,
 	       # who can sign it off here (names only); nobody signs their own
-	       "supervisors": supervisors_for(property, exclude=frappe.session.user)
+	       "supervisors": supervisors_for(property, roles=rules.approvers,
+	                                      exclude=frappe.session.user)
 	       if needs and not agent else [],
 	       "approver": None}
 	if not check or not needs:
 		return out
-	why = (_("A Complimentary rate plan") if category == COMPLIMENTARY
-	       else _("A House Use rate plan"))
+	why = _("A {0} rate plan").format(_(category))
 	if agent:
 		_refuse_agent_rate(_("{0} needs a manager's sign-off.").format(why))
 	if not (supervisor_user or "").strip():
-		frappe.throw(_("{0} needs a manager's sign-off: a Hotel Admin or Finance user signs "
-		               "it off with their PIN.").format(why), frappe.PermissionError)
+		frappe.throw(_("{0} needs a manager's sign-off: a {1} user signs it off with their "
+		               "PIN.").format(why, _(" or ").join(_(r) for r in rules.approvers)),
+		             frappe.PermissionError)
 	out["approver"] = verify_supervisor(property, supervisor_user, supervisor_pin,
-	                                    requester=frappe.session.user)
+	                                    roles=rules.approvers, requester=frappe.session.user)
 	return out
 
 

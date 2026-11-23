@@ -1184,11 +1184,10 @@
   "This rate plan does not allow discounts.": "Hindi pinapayagan ng rate plan na ito ang diskwento.",
   "This reason needs a manager's sign-off.": "Kailangan ng pahintulot ng manager ang dahilang ito.",
   "Untick for rates that never take a desk discount (non-refundable, packages).": "Alisin ang tsek para sa mga presyong hindi kailanman binibigyan ng diskwento ng front desk (non-refundable, package).",
-  "A Complimentary rate plan needs a manager's sign-off.": "Kailangan ng pahintulot ng manager ang libreng rate plan.",
-  "A House Use rate plan needs a manager's sign-off.": "Kailangan ng pahintulot ng manager ang rate plan na gamit ng hotel.",
   "Rate category": "Kategorya ng rate",
-  "Complimentary or House Use: a manager signs off each booking, and its rooms count in occupancy but not in ADR.": "Libre o gamit ng hotel: inaaprubahan ng manager ang bawat booking, at kasama ang mga kuwarto nito sa occupancy pero hindi sa ADR.",
   "Complimentary": "Libre",
   "House Use": "Gamit ng hotel",
-  "Standard": "Standard"
+  "Standard": "Standard",
+  "A {category} rate plan needs a manager's sign-off.": "Kailangan ng pahintulot ng manager ang rate plan na {category}.",
+  "Settings → Revenue says which categories a manager signs off, and which are left out of ADR, RevPAR or occupancy.": "Sa Settings → Revenue nakasaad kung aling mga kategorya ang inaaprubahan ng manager, at alin ang hindi kasama sa ADR, RevPAR o occupancy."
 }

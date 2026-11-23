@@ -408,6 +408,21 @@ MODULES: tuple[Module, ...] = (
 				S("overbooking_pct", "Overbooking allowance", "number", 0, P, min=0, max=50, unit="%",
 				  hint="0 never oversells. A room type can override this."),
 			)),
+			# OPERA's rate code Complimentary and House Use flags; read by
+			# kamra.room_statistics (every report) and the booking's sign-off
+			Section("rate_categories", "Complimentary and house use",
+			        "Each rate plan has a category. A category can be left out of ADR, RevPAR or "
+			        "occupancy, and a booking on it can need a manager's sign-off.", (
+				S("rate_categories", "Rate categories", "textarea",
+				  "Standard\nComplimentary: sign-off, no ADR\nHouse Use: sign-off, no ADR",
+				  hint="One category a line, then what it means: sign-off, no ADR, no RevPAR, no "
+				       "occupancy. A category left out of a figure adds neither rooms nor revenue to "
+				       "it. The first line is the category of a plan that names none. OPERA's "
+				       "defaults count comp and house-use rooms as occupied but not in ADR."),
+				S("rate_category_approvers", "Who signs them off", "textarea", "Hotel Admin\nFinance",
+				  hint="One role a line. A user with one of these roles and a cashier PIN signs off a "
+				       "booking on a category that needs it, never their own. AI agents can't."),
+			)),
 		),
 	),
 	Module(
@@ -751,17 +766,21 @@ def _spec_json(s: S, property: str | None = None) -> dict:
 
 
 @frappe.whitelist()
-@require_roles("Finance", "Front Desk", "Night Auditor", "F&B Manager", "Kamra Agent")
+@require_roles("Finance", "Front Desk", "Night Auditor", "F&B Manager", "Revenue Manager",
+               "Kamra Agent")
 def menu_masters(property: str) -> dict:
 	"""Allergen tags, prep stations, courses and category suggestions for
 	the Menu form and kitchen display. Edited under Settings → F&B → Menu
-	master lists."""
+	master lists. Also the property's rate categories for the Rate Plans
+	form (Settings → Revenue → Complimentary and house use)."""
+	from kamra.room_statistics import category_rules
 	assert_property_access(property)
 	return {
 		"allergens": list_setting(property, "menu_allergen_tags"),
 		"prep_stations": list_setting(property, "menu_prep_stations"),
 		"courses": list_setting(property, "menu_courses"),
 		"categories": list_setting(property, "menu_categories"),
+		"rate_categories": list(category_rules(property).categories),
 	}
 
 

@@ -1971,9 +1971,8 @@ export function BookingDialog(props: {
                 {compAsks && compGov && (
                   <div id="booking-comp" tabIndex={-1}>
                     <SupervisorSignOff
-                      reason={compGov.rate_category === "House Use"
-                        ? t("A House Use rate plan needs a manager's sign-off.")
-                        : t("A Complimentary rate plan needs a manager's sign-off.")}
+                      reason={t("A {category} rate plan needs a manager's sign-off.",
+                        { category: t(compGov.rate_category) })}
                       supervisors={compGov.supervisors} supervisor={compSupervisor} pin={compPin}
                       onSupervisor={setCompSupervisor} onPin={setCompPin} />
                   </div>

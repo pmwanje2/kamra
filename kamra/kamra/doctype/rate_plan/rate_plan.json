@@ -85,11 +85,10 @@
   },
   {
    "default": "Standard",
-   "description": "Complimentary or House Use (OPERA's rate code Complimentary and House Use flags): a booking on this plan needs a manager's sign-off, and its rooms count in occupancy but not in ADR.",
+   "description": "One of the property's rate categories (Settings, Revenue, Complimentary and house use; OPERA's Complimentary and House Use rate code flags). A category can need a manager's sign-off and be left out of ADR, RevPAR or occupancy.",
    "fieldname": "rate_category",
-   "fieldtype": "Select",
-   "label": "Rate Category",
-   "options": "Standard\nComplimentary\nHouse Use"
+   "fieldtype": "Data",
+   "label": "Rate Category"
   },
   {
    "default": "0",

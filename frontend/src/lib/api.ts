@@ -1975,10 +1975,11 @@ export const generateApiKey = () =>
  * room_move_preview). A booking bills the nightly rates confirmed at
  * booking; a change to what is sold re-quotes them, and the server refuses
  * the change unless the new price is confirmed. */
-/** OPERA's rate code Complimentary / House Use flags (Rate Plan.rate_category):
- * a booking on such a plan is signed off by another manager with their PIN. */
+/** A rate plan's category (Rate Plan.rate_category, from the property's own
+ * list; OPERA's Complimentary / House Use by default): a booking on one that
+ * needs a sign-off is signed off by another manager with their PIN. */
 export interface CompGovernance {
-  rate_category: "Standard" | "Complimentary" | "House Use"
+  rate_category: string
   needs_supervisor: boolean
   agent: boolean
   supervisors: { user: string; full_name: string }[]
