@@ -7,6 +7,7 @@ class ChannelManagerConnection(Document):
 	def validate(self):
 		self.seed_ota_tax_rules()
 		self.validate_ota_taxes()
+		self.validate_inhouse_policy()
 		# Inbound webhooks are refused until the connection can authenticate
 		# them - say so up front instead of letting bookings silently bounce.
 		if not self.active:
@@ -23,6 +24,19 @@ class ChannelManagerConnection(Document):
 				"rejected until it is configured.",
 				indicator="orange", alert=True)
 
+	def validate_inhouse_policy(self):
+		"""OPERA Cloud 26.2 OXI UPDATE INHOUSE RES (default N): N rejects OTA
+		changes to Checked In stays and flags them for front-desk review. Y is
+		refused until arrival-date, room-type, billed-night, and assigned-room
+		safety bounds are implemented."""
+		value = (self.get("update_inhouse_res") or "N").strip()
+		self.update_inhouse_res = value
+		if value != "N":
+			frappe.throw(
+				_("Update In-House Reservations = Y is not yet enabled: OXI Y requires arrival-date, room-type, billed-night, and assigned-room safety bounds. Keep N so OTA changes to checked-in stays are rejected and flagged for review."),
+				title=_("Update In-House Reservations"),
+			)
+
 	def seed_ota_tax_rules(self):
 		"""A Channex booking lists its taxes; which is the room tax is this
 		connection's rules. A connection that becomes Channex - made as one,
@@ -36,17 +50,28 @@ class ChannelManagerConnection(Document):
 
 	def validate_ota_taxes(self):
 		"""A rule needs a word to match (punctuation alone matches no tax),
-		and each OTA has one tax basis (a second row for it was never read)."""
+		CJK rules need at least two characters so single characters like "税"
+		cannot swallow unrelated taxes, and each OTA has one tax basis (a
+		second row for it was never read)."""
 		from kamra.channel_manager import ota_key
-		from kamra.channels.channex import tax_words
+		from kamra.channels.channex import is_cjk_word, tax_words
 
 		for row in self.get("ota_tax_rules") or []:
-			if not tax_words(row.match_text):
+			words = tax_words(row.match_text)
+			if not words:
 				frappe.throw(_("OTA Tax Rules row {0}: the text needs a letter or a digit.").format(row.idx),
 				             title=_("OTA Tax Rules"))
+			if any(is_cjk_word(w) and len(w) < 2 for w in words):
+				frappe.throw(
+					_("OTA Tax Rules row {0}: a CJK rule needs at least two characters so it does not match unrelated taxes.").format(row.idx),
+					title=_("OTA Tax Rules"),
+				)
 		seen = {}
 		for row in self.get("ota_tax_basis") or []:
 			key = ota_key(row.channel)
+			if not key:
+				frappe.throw(_("OTA Tax Basis row {0}: the OTA name needs a letter or a digit.").format(row.idx),
+				             title=_("OTA Tax Basis"))
 			if key in seen:
 				frappe.throw(_("OTA Tax Basis rows {0} and {1} are the same OTA ({2}): keep one.").format(
 					seen[key], row.idx, row.channel.strip()), title=_("OTA Tax Basis"))
