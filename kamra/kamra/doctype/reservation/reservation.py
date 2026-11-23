@@ -380,6 +380,15 @@ class Reservation(Document):
 			from kamra.api import AdvancePaidIsLedgerOwned
 			frappe.throw(_("Advance paid follows the payments on the folio; take a payment or refund there."),
 			             AdvancePaidIsLedgerOwned)
+		# Channel review flag is owned by _flag_for_review (db_set) and
+		# cleared only through clear_channel_review (role check + audit log).
+		# Any insert with it set or save that changes it is refused.
+		prev_review = 0 if self.is_new() else cint((self.get_doc_before_save() or {}).get("channel_review_needed"))
+		if cint(self.get("channel_review_needed")) != prev_review:
+			frappe.throw(
+				_("Channel review status can only be cleared via the review action."),
+				frappe.PermissionError,
+			)
 		# Before any other inventory lock, so villa vs room and category
 		# capacity take this row in the same order as booking and accept.
 		if self.property:
@@ -810,7 +819,10 @@ class Reservation(Document):
 		A rate plan works on the stay total, so each night carries its share
 		of the planned total (same spread as folio._rate_plan_factor), and
 		the last night absorbs rounding so the nights add up to the quote's
-		room total exactly."""
+		room total exactly - to the currency's decimals, never fewer than two
+		(pricing.night_rate_places)."""
+		from kamra.pricing import night_rate_places
+		places = night_rate_places(self.property)
 		nightly = q.get("nightly") or []
 		plan_free = sum(float(n["rate"]) for n in nightly)
 		room_total = float(q.get("room_total") or 0)
@@ -824,9 +836,9 @@ class Reservation(Document):
 			        + (self.children or 0) * float(mp.get("price_per_child") or 0))
 		rows, running = [], 0.0
 		for i, n in enumerate(nightly):
-			rate = round(float(n["rate"]) * factor, 2)
+			rate = round(float(n["rate"]) * factor, places)
 			if i == len(nightly) - 1 and plan_free:
-				rate = round(room_total - running, 2)
+				rate = round(room_total - running, places)
 			running += rate
 			rows.append({
 				"stay_date": n["date"],

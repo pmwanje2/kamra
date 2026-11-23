@@ -47,7 +47,7 @@
    "options": "Print station\nDirect IP",
    "default": "Print station",
    "in_list_view": 1,
-   "description": "Print station: a kitchen display screen prints to the printer attached to its device. Direct IP: the Kamra server sends the ticket to the printer's network address - only when Kamra runs on the hotel's own network."
+   "description": "Print station: a kitchen display screen prints to the printer attached to its device. Direct IP: the server sends the ticket to the printer's network address - only when the server runs on the hotel's own network."
   },
   {
    "fieldname": "paper_width",
