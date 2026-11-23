@@ -9,13 +9,17 @@ import runpy
 import sys
 import tempfile
 import unittest
+from collections import defaultdict
+from decimal import Decimal
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import Mock, patch
 from urllib.parse import quote, unquote
 
 KAMRA = Path(__file__).resolve().parents[1]
-FORBIDDEN = re.compile(r"\bKamra\b|kamrapms\.com|\bFrappe\b|\bERPNext\b|\bURY\b|HeyKoala", re.I)
+# A letter or digit, not \b, bounds a name, as in frontend/scripts/brand-leak-check.mjs:
+# "_" and "-" join words in identifiers, so kamra_mcp_disabled in prose still leaks.
+FORBIDDEN = re.compile(r"(?<![a-z0-9])(?:Kamra|Frappe|ERPNext|URY)(?![a-z0-9])|kamrapms\.com|HeyKoala", re.I)
 CONFIG = {"kamra_white_label": "1", "kamra_product_name": "Maximus Hotel", "kamra_assistant_name": "Eve",
           "kamra_channel": "nightly", "kamra_build": "aa9"}
 
@@ -79,6 +83,113 @@ def module(name, **attrs):
 
 class Row(dict):
 	__getattr__ = dict.__getitem__
+
+
+class Doc(dict):
+	__getattr__ = dict.get
+
+
+def strings(value):
+	if isinstance(value, str):
+		yield value
+	elif isinstance(value, dict):
+		for item in value.values():
+			yield from strings(item)
+	elif isinstance(value, (list, tuple)):
+		for item in value:
+			yield from strings(item)
+
+
+class Sheet:
+	"""Just enough of an openpyxl worksheet to read what was written."""
+
+	def __init__(self, title):
+		self.title, self.cells, self.column_dimensions = title, {}, defaultdict(SimpleNamespace)
+
+	def cell(self, row, column, value=None):
+		cell = self.cells.setdefault((row, column), SimpleNamespace(value=None))
+		if value is not None:
+			cell.value = value
+		return cell
+
+	def add_data_validation(self, validation):
+		pass
+
+
+WORKBOOKS = []
+
+
+class Workbook:
+	def __init__(self):
+		self.sheets = [Sheet("Sheet")]
+		WORKBOOKS.append(self)
+
+	@property
+	def active(self):
+		return self.sheets[0]
+
+	def create_sheet(self, title):
+		self.sheets.append(Sheet(title))
+		return self.sheets[-1]
+
+	def save(self, buffer):
+		buffer.write(b"xlsx")
+
+
+# maximus_branding/hooks.py at maximus-siteops 12696351, verbatim: the SiteOps
+# hotel mask, installed after Kamra on every white-labelled tenant.
+EVE_WEB_URL = "https://chat.maximusglobal.net/"
+MASK = {
+	"website_route_rules": [
+		{"from_route": "/hotel", "to_route": "kamra"},
+		{"from_route": "/hotel/<path:app_path>", "to_route": "kamra"},
+	],
+	"website_redirects": [
+		{
+			"source": r"(?:kamra|hotel)/(assistant|agents|marketplace|developers|setup|finish-setup|settings/(?:ai|claude))(/.*)?",
+			"target": EVE_WEB_URL,
+			"redirect_http_status": 302,
+		},
+		{"source": r"(?:kamra|hotel)/(?:pos|pos-dashboard)(/.*)?", "target": "/pos", "redirect_http_status": 302},
+		{"source": r"(?:kamra|hotel)/kitchen(/.*)?", "target": "/mosaic", "redirect_http_status": 302},
+		{
+			"source": r"(?:kamra|hotel)/(?:menu-items|outlets|printers|inventory)(/.*)?",
+			"target": "/app",
+			"redirect_http_status": 302,
+		},
+		{"source": r"kamra(\.html)?", "target": "/hotel", "redirect_http_status": 302},
+		{"source": r"kamra/(.*)", "target": r"/hotel/\1", "redirect_http_status": 302},
+		{"source": r"book", "target": "/hotel/book", "redirect_http_status": 302},
+		{"source": r"book/(.*)", "target": r"/hotel/book/\1", "redirect_http_status": 302},
+		{"source": r"stay", "target": "/hotel/stay", "redirect_http_status": 302},
+		{"source": r"stay/(.*)", "target": r"/hotel/stay/\1", "redirect_http_status": 302},
+		{"source": r"hk", "target": "/hotel/hk", "redirect_http_status": 302},
+		{"source": r"checkin/(.*)", "target": r"/hotel/checkin/\1", "redirect_http_status": 302},
+	],
+}
+
+
+def respond(path, apps):
+	"""How Frappe answers one GET (website/path_resolver.py PathResolver.resolve):
+	every app's website_redirects in install order, the first match wins, 301
+	unless the rule names a status; otherwise a website_route_rules page."""
+	path = path.strip("/ ")
+	for rule in (rule for app in apps for rule in app["website_redirects"]):
+		pattern = rule["source"].strip("/ ") + "$"
+		if re.match(pattern, path):
+			return rule.get("redirect_http_status") or 301, re.sub(pattern, rule["target"], path)
+	for rule in (rule for app in apps for rule in app["website_route_rules"]):
+		route = re.sub(r"<\w+>", "[^/]+", re.sub(r"<path:\w+>", ".+", rule["from_route"].strip("/")))
+		if re.fullmatch(route, path):
+			return 200, rule["to_route"]
+	return 404, None
+
+
+def response_chain(path, apps):
+	hops = [respond(path, apps)]
+	while hops[-1][0] in (301, 302) and len(hops) < 5:
+		hops.append(respond(hops[-1][1], apps))
+	return hops
 
 
 class Refused(Exception):
@@ -395,3 +506,67 @@ class WhiteLabelTest(unittest.TestCase):
 		self.assertEqual(brand._site_asset("/files/favicon-32.png"), "/files/favicon-32.png")  # the hotel's own
 		self.frappe.conf["kamra_white_label"] = "0"
 		self.assertEqual(brand._site_asset("/assets/kamra/kamra-logo.png"), "/assets/kamra/kamra-logo.png")
+
+	# -- R2: downloads, invoice packs, Desk text and the check-in route -------
+
+	def test_vendor_pattern_sees_a_name_joined_to_an_identifier(self):
+		for text in ("The site setting kamra_mcp_disabled turns MCP off.", "Kamra-Webhooks/1",
+		             "Documento generado por Kamra.", "set frappe_desk", "KAMRA"):
+			self.assertRegex(text, FORBIDDEN)
+		for text in ("Maximus Hotel", "Ask Mr Kamrani at the desk"):
+			self.assertNotRegex(text, FORBIDDEN)
+
+	def test_rooming_list_template_names_the_site_product(self):
+		self.frappe.get_all = lambda *args, **kwargs: ["Deluxe", "Suite"]
+		self.frappe.response = {}
+		stubs = {
+			"openpyxl": module("openpyxl", Workbook=Workbook),
+			"openpyxl.styles": module("openpyxl.styles", Font=lambda *args, **kwargs: None,
+			                          PatternFill=lambda *args, **kwargs: None),
+			"openpyxl.worksheet": module("openpyxl.worksheet"),
+			"openpyxl.worksheet.datavalidation": module("openpyxl.worksheet.datavalidation",
+				DataValidation=lambda *args, **kwargs: SimpleNamespace(add=lambda cells: None)),
+			"kamra.crs": module("kamra.crs", assert_property_access=lambda prop: None),
+		}
+
+		def written():
+			api["rooming_list_template"]("North")
+			self.assertEqual(self.frappe.response["filename"], "rooming-list-template.xlsx")
+			return {sheet.title: [cell.value for _, cell in sorted(sheet.cells.items()) if cell.value is not None]
+			        for sheet in WORKBOOKS[-1].sheets}
+		with patch.dict(sys.modules, stubs):
+			api = load_parts("api.py", {"rooming_list_template"}, self.frappe,
+			                 require_roles=lambda *roles: lambda fn: fn)
+			sheets = written()
+			self.assertEqual([text for text in strings(sheets) if FORBIDDEN.search(str(text))], [])
+			self.assertIn("In Maximus Hotel: copy the rows (with the header) and use Paste from Excel,",
+			              sheets["How to use"])
+			self.frappe.conf.clear()  # upstream Kamra is unchanged
+			self.assertIn("In Kamra: copy the rows (with the header) and use Paste from Excel,",
+			              written()["How to use"])
+
+	def test_invoice_footers_name_the_site_product(self):
+		prop = Doc(name="North", property_name="North Inn", city="Managua", state="Managua", country="Nicaragua")
+		packs = sorted(path.relative_to(KAMRA).as_posix() for path in (KAMRA / "localization").rglob("*.py")
+		               if "def invoice_context(" in path.read_text(encoding="utf-8"))
+		self.assertGreaterEqual(len(packs), 11)
+		for pack in packs:
+			with self.subTest(pack=pack):
+				context = load_parts(pack, {"invoice_context"}, self.frappe, Decimal=Decimal)["invoice_context"](prop)
+				self.assertEqual([text for text in strings(context) if FORBIDDEN.search(text)], [])
+		nicaragua = load_parts("localization/nicaragua.py", {"invoice_context"}, self.frappe, Decimal=Decimal)
+		self.assertTrue(nicaragua["invoice_context"](prop)["footer"].startswith("Documento generado por Maximus Hotel. "))
+		self.frappe.conf.clear()  # upstream Kamra is unchanged
+		self.assertTrue(nicaragua["invoice_context"](prop)["footer"].startswith("Documento generado por Kamra. "))
+
+	def test_guest_check_in_link_answers_without_a_kamra_hop(self):
+		from kamra import hooks
+
+		kamra = {"website_redirects": hooks.website_redirects, "website_route_rules": hooks.website_route_rules}
+		# Installed before the mask (ring0-canary, salama, tankhill): one non-permanent hop, never /kamra.
+		self.assertEqual(response_chain("/checkin/tok123", [kamra, MASK]),
+		                 [(302, "/hotel/checkin/tok123"), (200, "kamra")])
+		self.assertEqual(response_chain("/checkin/tok123", [MASK, kamra]),
+		                 [(302, "/hotel/checkin/tok123"), (200, "kamra")])
+		# Without the mask the app answers the link where it was sent.
+		self.assertEqual(response_chain("/checkin/tok123", [kamra]), [(200, "kamra")])

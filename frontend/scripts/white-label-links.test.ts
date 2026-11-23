@@ -12,7 +12,17 @@ async function phoneApp(pathname: string) {
   return APPS.find((app) => app.id === "housekeeping")?.items.find((item) => item.label === "Phone App")?.href
 }
 
-afterEach(() => window.history.replaceState(null, "", "/"))
+async function productionMount(pathname: string) {
+  window.history.replaceState(null, "", pathname)
+  vi.resetModules()
+  vi.stubEnv("PROD", true)
+  return (await import("../src/lib/routing")).ROUTER_BASENAME
+}
+
+afterEach(() => {
+  window.history.replaceState(null, "", "/")
+  vi.unstubAllEnvs()
+})
 
 describe("links outside the router", () => {
   it("open the housekeeping phone app under the white-label mount", async () => {
@@ -21,5 +31,16 @@ describe("links outside the router", () => {
 
   it("open the housekeeping phone app under the development mount", async () => {
     expect(await phoneApp("/housekeeping")).toBe("/hk")
+  })
+})
+
+describe("the production router's mount", () => {
+  it("answers a guest's check-in link where it was sent, at the site root", async () => {
+    expect(await productionMount("/checkin/tok123")).toBe("/")
+  })
+
+  it("keeps the Kamra and white-label mounts", async () => {
+    expect(await productionMount("/kamra/checkin/tok123")).toBe("/kamra")
+    expect(await productionMount("/hotel/checkin/tok123")).toBe("/hotel")
   })
 })
