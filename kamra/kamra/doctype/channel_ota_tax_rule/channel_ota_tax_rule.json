@@ -1,0 +1,64 @@
+{
+ "actions": [],
+ "creation": "2026-11-24 09:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "match_on",
+  "match_type",
+  "match_text",
+  "counts_as"
+ ],
+ "fields": [
+  {
+   "default": "Type or Name",
+   "description": "The part of the OTA's tax line to read: its type, its name, or either.",
+   "fieldname": "match_on",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Match On",
+   "options": "Type or Name\nType\nName",
+   "reqd": 1
+  },
+  {
+   "default": "Contains",
+   "description": "Contains: the words appear in it, in order (\"vat\" matches \"VAT (18%)\", not \"Private\"). Is: it is exactly these words.",
+   "fieldname": "match_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Match",
+   "options": "Contains\nIs",
+   "reqd": 1
+  },
+  {
+   "description": "Letters and digits only count; case, spaces and punctuation are ignored.",
+   "fieldname": "match_text",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Text",
+   "reqd": 1
+  },
+  {
+   "description": "Room tax: billed on the folio with the room when the OTA lists it on top of the price. Ignored: the OTA's own (a fee, a city tax), never billed as the room tax.",
+   "fieldname": "counts_as",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Counts As",
+   "options": "Room tax\nIgnored",
+   "reqd": 1
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-11-24 09:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Kamra",
+ "name": "Channel OTA Tax Rule",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

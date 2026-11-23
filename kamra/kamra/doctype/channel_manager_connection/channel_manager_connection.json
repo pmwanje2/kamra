@@ -23,6 +23,9 @@
   "sync_days",
   "ari_calls_per_minute",
   "ari_batch_seconds",
+  "sb_ota_taxes",
+  "ota_tax_rules",
+  "ota_tax_basis",
   "last_full_sync",
   "last_push",
   "last_push_status"
@@ -128,6 +131,25 @@
    "default": "30",
    "non_negative": 1,
    "description": "Rate changes made within this window go out together in one call."
+  },
+  {
+   "fieldname": "sb_ota_taxes",
+   "fieldtype": "Section Break",
+   "label": "OTA Taxes"
+  },
+  {
+   "description": "Which of the taxes an OTA lists on a booking is the room tax, tried top to bottom: the first rule that matches decides, and a tax no rule matches is ignored. A new Channex connection starts with the standard rules.",
+   "fieldname": "ota_tax_rules",
+   "fieldtype": "Table",
+   "label": "OTA Tax Rules",
+   "options": "Channel OTA Tax Rule"
+  },
+  {
+   "description": "Whether each OTA's booking amounts include tax, as set for it on the channel manager: a Channex booking does not say. An OTA not listed is read as before.",
+   "fieldname": "ota_tax_basis",
+   "fieldtype": "Table",
+   "label": "OTA Tax Basis",
+   "options": "Channel OTA Tax Basis"
   },
   {
    "fieldname": "last_full_sync",

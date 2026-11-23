@@ -425,6 +425,36 @@ def _locked_live_ota(property: str, ota_ref: str | None):
 	return rows[0] if rows else None
 
 
+def ota_amounts(conn, channel: str | None) -> str | None:
+	"""What an OTA's booking amounts are on this connection ("Including tax"
+	or "Excluding tax": Channel Manager Connection > OTA tax basis, as set
+	for the OTA on the channel manager); None when it is not listed."""
+	channel = canonical_channel(channel)
+	for row in conn.get("ota_tax_basis") or []:
+		if channel and canonical_channel(row.get("channel")) == channel:
+			return row.get("amounts")
+	return None
+
+
+def room_tax_missing(conn, e: dict, room_type: str) -> str | None:
+	"""Why a booking is held for review when its OTA reports amounts before
+	tax (ota_amounts "Excluding tax") but it lists no room tax
+	(room_tax_listed false): its price is then before tax, and the tax the
+	guest paid on top is not there to bill. None otherwise - an OTA not
+	listed, a booking that lists its room tax, or a room the property
+	charges no tax on."""
+	if e.get("room_tax_listed") is not False or ota_amounts(conn, e.get("channel")) != "Excluding tax":
+		return None
+	from kamra.pricing import room_gst_rate
+	rt = frappe.get_cached_doc("Room Type", room_type)
+	amounts = [float(n.get("amount") or 0) for n in e.get("nightly") or []] or [float(e.get("total") or 0)]
+	if not any(room_gst_rate(conn.property, rt, Decimal(str(a))) > 0 for a in amounts):
+		return None
+	currency = e.get("currency") or frappe.db.get_value("Property", conn.property, "currency") or ""
+	return (f"OTA room tax missing — resolve: {e.get('total') or 0} {currency} from "
+	        f"{e.get('channel') or 'OTA'}, whose amounts are before tax, with no room tax listed")
+
+
 def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 	"""One normalized OTA event -> the same paths a human would take."""
 	e["channel"] = canonical_channel(e.get("channel")) or "OTA"
@@ -469,6 +499,10 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 		requested_reason = (f"OTA currency mismatch — resolve: {e.get('total') or 0} "
 		                    f"{e['currency']}; property currency {property_currency}")
 		# Keep foreign money in the note, never in the property's ledger currency.
+		e = dict(e, total=0)
+	elif untaxed := room_tax_missing(conn, e, room_type):
+		requested_reason = "; ".join(r for r in (requested_reason, untaxed) if r)
+		# a price before tax is not what the guest paid: never bill it as if it were
 		e = dict(e, total=0)
 	if requested_reason:
 		e = dict(e, notes="\n".join(s for s in (e.get("notes"), requested_reason) if s))

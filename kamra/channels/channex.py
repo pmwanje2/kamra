@@ -227,22 +227,46 @@ def push_ari(conn, snapshot) -> tuple[bool, str]:
 	return True, f"{sent.get('availability', 0)} availability, {sent.get('restrictions', 0)} rate values"
 
 
-# The room tax among a booking room's taxes: Channex's own type "tax", or a
-# VAT / GST under the name an OTA relays (Booking.com "Value Added Tax
-# (VAT)"). Fees and city taxes ("fee", "city_tax", "City Tax") are the OTA's,
-# not the tax the property charges on the night.
-_ROOM_TAX = re.compile(r"^tax$|\bvat\b|\bgst\b|value added tax|goods and services tax")
+def _words(value) -> list[str]:
+	"""A tax label as its words: letters and digits, lower case."""
+	return re.findall(r"[a-z0-9]+", str(value or "").lower())
 
 
-def _tax_on_top(room: dict) -> float:
+def _rule_matches(rule, label: list[str]) -> bool:
+	"""Is: the label is the rule's words. Contains: they appear in it, in
+	order and whole ("vat" is in "VAT (18%)", not in "Private")."""
+	want = _words(rule.get("match_text"))
+	if not want or not label:
+		return False
+	if rule.get("match_type") == "Is":
+		return label == want
+	return any(label[i:i + len(want)] == want for i in range(len(label) - len(want) + 1))
+
+
+def _is_room_tax(conn, tax: dict) -> bool:
+	"""Whether the connection's OTA tax rules (Channel Manager Connection >
+	OTA tax rules) read a booking room's taxes[] entry as the room tax the
+	folio bills: the first rule its type and/or name matches decides; an
+	entry no rule matches is the OTA's, not the property's. Channex relays
+	an OTA's labels as it gets them (BookingRoomTax: type a string or null,
+	name a string), so both are read."""
+	labels = {"Type": _words(tax.get("type")), "Name": _words(tax.get("name"))}
+	for rule in conn.get("ota_tax_rules") or []:
+		on = rule.get("match_on") or "Type or Name"
+		fields = ("Type", "Name") if on == "Type or Name" else (on,)
+		if any(_rule_matches(rule, labels.get(f) or []) for f in fields):
+			return rule.get("counts_as") == "Room tax"
+	return False
+
+
+def _tax_on_top(conn, room: dict) -> float:
 	"""The room tax a booking room lists on top of its day prices
 	(is_inclusive false - docs.channex.io, bookings collection: Expedia
 	"Total Amount Excluding Tax", Agoda "Exclusive"); 0 when the prices hold
 	it. A tax the OTA withheld is not the property's to bill."""
 	total = 0.0
 	for tax in room.get("taxes") or []:
-		kind = " ".join(re.findall(r"[a-z]+", str(tax.get("type") or "").lower()))
-		if tax.get("is_inclusive") is False and not tax.get("is_withheld") and _ROOM_TAX.search(kind):
+		if tax.get("is_inclusive") is False and not tax.get("is_withheld") and _is_room_tax(conn, tax):
 			total += float(tax.get("total_price") or 0)
 	return total
 
@@ -255,7 +279,10 @@ def parse_webhook(conn, payload) -> list[dict]:
 
 	A room's total is what the guest paid for it: its day prices, plus the
 	room tax when the channel lists it on top of them (then the day prices
-	are before tax: nightly_net)."""
+	are before tax: nightly_net). room_tax_listed says whether its taxes[]
+	name the room tax at all: a booking does not carry its OTA's tax
+	setting, so one from an OTA set to amounts before tax that lists none
+	is held for review (channel_manager, the connection's OTA tax basis)."""
 	body = payload.get("payload") or payload
 	status = (body.get("status") or "new").lower()
 	event = {"new": "book", "modified": "modify",
@@ -264,7 +291,7 @@ def parse_webhook(conn, payload) -> list[dict]:
 	out = []
 	for room in body.get("rooms") or [{}]:
 		days = room.get("days") or {}
-		on_top = _tax_on_top(room)
+		on_top = _tax_on_top(conn, room)
 		total = (sum(float(v or 0) for v in days.values())
 		         or float(body.get("amount") or 0)) + on_top
 		occ = room.get("occupancy") or {}
@@ -286,6 +313,7 @@ def parse_webhook(conn, payload) -> list[dict]:
 			"total": total,
 			"nightly": [{"date": k, "amount": float(v or 0)} for k, v in sorted(days.items())],
 			"nightly_net": bool(on_top),
+			"room_tax_listed": any(_is_room_tax(conn, t) for t in room.get("taxes") or []),
 			"currency": body.get("currency") or "",
 			"notes": body.get("notes") or "",
 		})
