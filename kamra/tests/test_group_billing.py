@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import frappe
 
-from kamra import api
+from kamra import api, folio as folio_mod, ledger
 from kamra.checkout import settlement_position
 from kamra.tests.audit_fixtures import (
 	PROP_A,
@@ -37,14 +37,14 @@ class GroupBillingTestCase(AuditTestCase):
 		self.rt = make_room_type(PROP_A, "STD", base_price=1000)
 		self.rooms = [make_room(PROP_A, self.rt, n) for n in ("101", "102", "103")]
 
-	def group(self, company=None, master=True, pays="Room only"):
+	def group(self, company=None, master=True, pays="Room only", status="Checked In"):
 		gb = frappe.get_doc({
 			"doctype": "Group Booking", "property": PROP_A,
 			"group_name": "UT Sharma Wedding", "company": company,
 			"check_in_date": d(-1), "check_out_date": d(2),
 			"status": "Confirmed"}).insert(ignore_permissions=True)
 		stays = [make_reservation(PROP_A, self.rt, d(-1), TODAY if i == 0 else d(2),
-		                          status="Checked In", room=room,
+		                          status=status, room=room,
 		                          group_booking=gb.name)
 		         for i, room in enumerate(self.rooms)]
 		if master:
@@ -112,12 +112,58 @@ class GroupBillingTestCase(AuditTestCase):
 		self.assertEqual(frappe.db.get_value("Group Booking", gb.name,
 		                                     "master_reservation"), r2.name)
 
-	def test_company_group_without_main_room_is_unchanged(self):
-		r1, r2 = self.group(company=_corp(), master=False)[1][:2]
+	def test_company_group_bill_stays_open_when_the_first_room_leaves(self):
+		gb, (r1, r2, _r3) = self.group(company=_corp(), master=False)
 		bill = self.post(r2, "Room", "UT R2 night")["folio"]
-		self.assertEqual(frappe.db.get_value("Folio", bill, "folio_type"), "Group")
-		self.assertIn(bill, [f for f, _c, _b in
-		                     settlement_position(r1.name)["to_city_ledger"]])
+		# anchored to the first room, but the group's bill, not that stay's
+		self.assertEqual(frappe.db.get_value("Folio", bill, ["folio_type", "reservation"]),
+		                 ("Group", r1.name))
+		position = settlement_position(r1.name)
+		self.assertNotIn(bill, [f for f, _c, _b in position["to_city_ledger"]])
+		self.assertNotIn(bill, [f["name"] for f in position["folios"]])
+		api.check_out(r1.name)
+		self.assertEqual(frappe.db.get_value("Folio", bill, "status"), "Open")
+		self.assertFalse(frappe.db.exists("City Ledger Entry", {"folio": bill}))
+		self.assertEqual(self.post(r2, "Room", "UT R2 next night")["folio"], bill)
+		# the group settles it, with the group
+		self.assertTrue(api.settle_group_bill(gb.name, to_city_ledger=1)["closed"])
+
+	def test_advance_bill_counts_the_nights_routed_to_the_group(self):
+		gb, (_r1, r2, _r3) = self.group(company=_corp(), master=False)
+		out = ledger.force_advance_bill(r2.name, "entire")
+		self.assertEqual(out["nights_posted"], [TODAY, d(1)])
+		bill = frappe.db.get_value("Folio", {"group_booking": gb.name, "folio_type": "Group"})
+		routed = [c for c in frappe.get_doc("Folio", bill).charges
+		          if c.reservation == r2.name and str(c.posting_date) in out["nights_posted"]]
+		self.assertEqual(len([c for c in routed if c.charge_type == "Room"]), 2)
+		self.assertGreater(out["amount"], 0)
+		self.assertAlmostEqual(out["amount"], sum(c.total for c in routed), 2)
+		# pressed again, nothing posts and nothing is counted twice
+		again = ledger.force_advance_bill(r2.name, "entire")
+		self.assertEqual((again["nights_posted"], again["amount"]), ([], 0))
+
+	def test_group_advance_follows_the_group_not_the_first_room(self):
+		gb, (r1, r2, _r3) = self.group(company=_corp(), master=False, status="Confirmed")
+		bill = folio_mod.open_group_folio(gb.name)
+		self.assertEqual(frappe.db.get_value("Folio", bill, "reservation"), r1.name)
+		api.add_folio_payment(bill, "Cash", 500, kind="Advance")
+		own = folio_mod.open_folio(r1)
+		api.add_folio_payment(own, "Cash", 300, kind="Advance")
+		self.assertEqual((_held(bill), _held(own)), (500, 300))
+		# the first room never arrives; another room of the group does
+		_check_in(r2)
+		self.assertEqual(_held(bill), 0)
+		self.assertEqual(_applied(bill), 500)
+		# the first room's own advance waits for that room
+		self.assertEqual(_held(own), 300)
+
+	def test_group_advance_taken_while_the_group_is_in_house_applies_at_once(self):
+		gb, (r1, r2, _r3) = self.group(company=_corp(), master=False, status="Confirmed")
+		_check_in(r2)
+		bill = folio_mod.open_group_folio(gb.name)
+		self.assertEqual(frappe.db.get_value("Folio", bill, "reservation"), r1.name)
+		api.add_folio_payment(bill, "Cash", 500, kind="Advance")
+		self.assertEqual((_held(bill), _applied(bill)), (0, 500))
 
 	def test_plain_group_without_main_room_routes_nothing(self):
 		r2 = self.group(master=False)[1][1]
@@ -134,6 +180,31 @@ class GroupBillingTestCase(AuditTestCase):
 		gb = frappe.db.get_value("Group Booking", out["group_booking"],
 		                         ["master_pays", "group_type"], as_dict=True)
 		self.assertEqual((gb.master_pays, gb.group_type), ("Room only", "Wedding"))
+
+
+def _check_in(res):
+	doc = frappe.get_doc("Reservation", res.name)
+	doc.flags.allow_past_check_in = True
+	doc.status = "Checked In"
+	doc.save(ignore_permissions=True)
+
+
+def _ledger_sum(folio, ledger_name, description=None):
+	filters = "AND description = %(d)s" if description else ""
+	return round(float(frappe.db.sql(
+		f"""SELECT COALESCE(SUM(credit - debit), 0) FROM `tabFolio Ledger Entry`
+		    WHERE folio = %(f)s AND ledger = %(l)s {filters}""",
+		{"f": folio, "l": ledger_name, "d": description})[0][0]), 2)
+
+
+def _held(folio):
+	"""What of the folio's advances still sits in the Deposit ledger."""
+	return _ledger_sum(folio, "Deposit")
+
+
+def _applied(folio):
+	"""Advances moved to the Guest ledger to pay the stay."""
+	return _ledger_sum(folio, "Guest", ledger.ADVANCE_APPLIED)
 
 
 def _corp():
