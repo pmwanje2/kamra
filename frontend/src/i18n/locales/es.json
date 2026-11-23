@@ -6697,5 +6697,7 @@
   "Invoice {invoice} was issued by the accounting system as {document}. It is corrected there with a credit note and a new invoice; this bill is not reopened or credited here.": "El sistema contable emitió la factura {invoice} como {document}. Se corrige allí con una nota de crédito y una nueva factura; esta cuenta no se reabre ni se acredita aquí.",
   "Issue credit note": "Emitir nota de crédito",
   "Send for credit note and re-bill": "Enviar para nota de crédito y refacturación",
-  "Tax in this credit note: {amount}": "Impuesto en esta nota de crédito: {amount}"
+  "Tax in this credit note: {amount}": "Impuesto en esta nota de crédito: {amount}",
+  "Folio windows": "Ventanas de folio",
+  "How many separate bills a stay or a group's master bill can have, each with its own payer and invoice. Window 1 is the guest's and takes every charge that is not routed elsewhere.": "Cuántas cuentas separadas puede tener una estancia o la cuenta maestra de un grupo, cada una con su propio pagador y su factura. La ventana 1 es la del huésped y recibe todo cargo que no se enrute a otra parte."
 }

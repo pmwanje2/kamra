@@ -9,6 +9,7 @@ from frappe.model.document import Document
 class Folio(Document):
 	def validate(self):
 		self.guard_closed()
+		self.validate_window()
 		self.stamp_payment_currency()
 		from kamra.ledger import stamp_gl_codes
 		stamp_gl_codes(self)
@@ -53,3 +54,63 @@ class Folio(Document):
 				"adjustments on a new folio.").format(old.invoice_number))
 		if len(self.payments) < len(old.payments):
 			frappe.throw(_("Payments cannot be removed from a closed folio."))
+
+	def validate_window(self):
+		"""A stay's or a posting master's folio is one billing window (OPERA
+		1-8): numbered within the property's folio_windows, one open folio
+		per window, and a payee that matches its type. A posting master
+		(Group) belongs to a group at the same property. An Account invoice
+		has no window."""
+		if self.folio_type == "Account" or not (self.reservation or self.group_booking):
+			return
+		from kamra.folio import _window_key, next_window, window_cap
+		if self.folio_type == "Group":
+			if not self.group_booking:
+				frappe.throw(_("A group's master bill needs its Group Booking."))
+			if frappe.db.get_value("Group Booking", self.group_booking, "property") != self.property:
+				frappe.throw(_("A group's master bill must be at the group's property."))
+			key = _window_key(group_booking=self.group_booking)
+		else:
+			key = _window_key(reservation=self.reservation)
+		if self.is_new():
+			if not self.window_no:
+				self.window_no = 1 if self.folio_type == "Guest" else next_window(
+					key, self.property, start=1 if self.folio_type == "Group" else 2)
+			if not self.payee_type:
+				self.set_default_payee()
+		before = None if self.is_new() else self.get_doc_before_save()
+		if self.is_new() or (before and before.window_no != self.window_no):
+			cap = window_cap(self.property)
+			if not 1 <= int(self.window_no or 0) <= cap:
+				frappe.throw(_("Window must be from 1 to {0}.").format(cap))
+		if self.window_no and self.status == "Open" and frappe.db.exists("Folio", {
+				**key, "window_no": self.window_no, "status": "Open",
+				"name": ("!=", self.name or "")}):
+			frappe.throw(_("Window {0} already has an open bill.").format(self.window_no))
+		self.validate_payee()
+
+	def set_default_payee(self):
+		"""A folio a legacy writer opened: its payee from its kind."""
+		company = None
+		if self.folio_type == "Company" and self.reservation:
+			company = frappe.db.get_value("Reservation", self.reservation, "company")
+		elif self.folio_type == "Group":
+			company = frappe.db.get_value("Group Booking", self.group_booking, "company")
+		self.payee_type = "Company" if company else "Guest"
+		self.payee_company = company
+		if company and not self.payment_method and frappe.db.get_value(
+				"Corporate Account", company, "credit_allowed"):
+			from kamra.folio import DIRECT_BILL
+			self.payment_method = DIRECT_BILL
+
+	def validate_payee(self):
+		if not self.payee_type:
+			return  # a folio from before windows, until the backfill names its payee
+		if self.payee_type == "Company":
+			if not self.payee_company or self.payee_agent:
+				frappe.throw(_("A company window names the paying company, and only that."))
+		elif self.payee_type == "Travel Agent":
+			if not self.payee_agent or self.payee_company:
+				frappe.throw(_("A travel agent window names the paying agent, and only that."))
+		elif self.payee_company or self.payee_agent:
+			frappe.throw(_("A guest window names no company or agent."))

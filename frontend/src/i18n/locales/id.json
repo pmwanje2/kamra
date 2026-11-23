@@ -425,5 +425,7 @@
   "Issue credit note": "Terbitkan credit note",
   "Send for credit note and re-bill": "Kirim untuk credit note dan penagihan ulang",
   "Tax in this credit note: {amount}": "Pajak dalam credit note ini: {amount}",
-  "Credit note": "Credit note"
+  "Credit note": "Credit note",
+  "Folio windows": "Jendela folio",
+  "How many separate bills a stay or a group's master bill can have, each with its own payer and invoice. Window 1 is the guest's and takes every charge that is not routed elsewhere.": "Berapa banyak tagihan terpisah yang dapat dimiliki sebuah menginap atau tagihan induk grup, masing-masing dengan pembayar dan fakturnya sendiri. Jendela 1 milik tamu dan menerima setiap tagihan yang tidak dialihkan ke tempat lain."
 }

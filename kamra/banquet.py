@@ -1572,12 +1572,13 @@ def post_to_folio(function: str, folio: str | None = None):
 		frappe.throw(_("There's no bill to post to. Tie the function to a "
 		              "group booking, or pass a folio."))
 
-	folio_type = frappe.db.get_value("Folio", target, "folio_type")
+	from kamra.folio import _alcohol_allowed
+	liquor_ok = _alcohol_allowed(frappe.get_doc("Folio", target))
 	posted, deferred = [], []
 	for r in doc.items:
 		if not r.chargeable or not float(r.net_amount or 0):
 			continue
-		if r.is_alcohol and folio_type in ("Company", "Group"):
+		if r.is_alcohol and not liquor_ok:
 			deferred.append({"item_name": r.item_name,
 			                 "amount": float(r.total or 0)})
 			continue

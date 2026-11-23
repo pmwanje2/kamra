@@ -625,19 +625,36 @@ def _ar_account(property: str, company: str) -> str:
 	return doc.name
 
 
+def _payee(folio) -> tuple[str | None, str | None]:
+	"""(payee_type, payee_company) of a folio or a folio row that may not
+	carry them (a get_all row with other fields)."""
+	payee = folio.get("payee_type")
+	if payee is None and folio.get("name"):
+		row = frappe.db.get_value("Folio", folio.get("name"),
+		                          ["payee_type", "payee_company"], as_dict=True) or {}
+		return row.get("payee_type"), row.get("payee_company")
+	return payee, folio.get("payee_company")
+
+
 def company_payer_of(folio) -> str | None:
 	"""The company that pays this folio on credit, or None when the guest
-	pays it. Only a Company folio (the stay's company) or a group master
-	(the group's company) is the company's bill; Guest and Extra folios -
-	liquor, extras - are always the guest's."""
-	kind = folio.get("folio_type") or "Guest"
-	company = None
-	if kind == "Company" and folio.get("reservation"):
-		company = frappe.db.get_value(
-			"Reservation", folio.get("reservation"), "company")
-	elif kind == "Group" and folio.get("group_booking"):
-		company = frappe.db.get_value(
-			"Group Booking", folio.get("group_booking"), "company")
+	pays it. A window's payee decides (OPERA: each window has its own payee;
+	SAP: the payer): a Company payee with credit is the company's bill, any
+	other payee the guest's - liquor and extras included. A folio from
+	before windows, with no payee yet, keeps the old rule: only a Company
+	folio (the stay's company) or a group master (the group's company)."""
+	payee, payee_company = _payee(folio)
+	if payee:
+		company = payee_company if payee == "Company" else None
+	else:
+		kind = folio.get("folio_type") or "Guest"
+		company = None
+		if kind == "Company" and folio.get("reservation"):
+			company = frappe.db.get_value(
+				"Reservation", folio.get("reservation"), "company")
+		elif kind == "Group" and folio.get("group_booking"):
+			company = frappe.db.get_value(
+				"Group Booking", folio.get("group_booking"), "company")
 	if company and frappe.db.get_value(
 			"Corporate Account", company, "credit_allowed"):
 		return company
@@ -667,7 +684,11 @@ def due_date_for(account: str | None, invoice_date, property: str | None = None)
 
 def _transfer_company(folio, company: str | None = None) -> str | None:
 	"""Who a city ledger transfer bills: the company asked for, else the
-	stay's, else the group's."""
+	window's payee company, else the stay's, else the group's."""
+	if not company:
+		payee, payee_company = _payee(folio)
+		if payee == "Company":
+			company = payee_company
 	if not company and folio.get("reservation"):
 		company = frappe.db.get_value("Reservation", folio.reservation, "company")
 	if not company and folio.get("group_booking"):

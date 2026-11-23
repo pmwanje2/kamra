@@ -6512,5 +6512,7 @@
   "Invoice {invoice} was issued by the accounting system as {document}. It is corrected there with a credit note and a new invoice; this bill is not reopened or credited here.": "أصدر النظام المحاسبي الفاتورة {invoice} بالرقم {document}. تُصحَّح هناك بإشعار دائن وفاتورة جديدة؛ ولا يُعاد فتح هذا الحساب أو قيده دائنًا هنا.",
   "Issue credit note": "إصدار إشعار دائن",
   "Send for credit note and re-bill": "إرسال لإشعار دائن وإعادة الفوترة",
-  "Tax in this credit note: {amount}": "الضريبة في إشعار الدائن هذا: {amount}"
+  "Tax in this credit note: {amount}": "الضريبة في إشعار الدائن هذا: {amount}",
+  "Folio windows": "نوافذ الفاتورة",
+  "How many separate bills a stay or a group's master bill can have, each with its own payer and invoice. Window 1 is the guest's and takes every charge that is not routed elsewhere.": "عدد الفواتير المنفصلة التي يمكن أن تكون لإقامة أو لفاتورة المجموعة الرئيسية، لكل منها دافعها وفاتورتها. النافذة 1 للضيف وتتلقى كل رسم لا يُوجَّه إلى مكان آخر."
 }

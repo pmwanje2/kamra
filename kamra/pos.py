@@ -239,7 +239,7 @@ def move_room_bill(order: str, room: str, reason: str, pin: str | None = None):
 	than that day it is a correction for Finance (allowance, then repost)."""
 	from kamra.authz import require_cashier_pin
 	from kamra.business_date import get_business_date
-	from kamra.folio import move_charges, target_folio
+	from kamra.folio import move_charges, routed_target
 
 	reason = (reason or "").strip()
 	if not reason:
@@ -254,7 +254,8 @@ def move_room_bill(order: str, room: str, reason: str, pin: str | None = None):
 		"Folio Charge",
 		filters={"parenttype": "Folio", "description": ("like", f"%({doc.name})%"),
 		         "reservation": doc.reservation},
-		fields=["name", "parent", "idx", "posting_date", "is_alcohol", "amount"])
+		fields=["name", "parent", "idx", "posting_date", "is_alcohol", "amount",
+		        "transaction_code"])
 	if not rows:
 		frappe.throw(_("Couldn't find this bill on the room's folio. It may have "
 		              "been moved or voided already."))
@@ -281,11 +282,14 @@ def move_room_bill(order: str, room: str, reason: str, pin: str | None = None):
 	if new_res == doc.reservation:
 		frappe.throw(_("The bill is already on this room."))
 	src = frappe.get_doc("Folio", row.parent)
-	dst = frappe.get_doc("Folio", target_folio(
+	target, instruction = routed_target(
 		frappe.get_doc("Reservation", new_res), "Food & Beverage",
-		is_alcohol=bool(row.is_alcohol)))
+		is_alcohol=1 if row.is_alcohol else 0, amount=row.amount,
+		posting_date=row.posting_date, transaction_code=row.transaction_code)
+	dst = frappe.get_doc("Folio", target)
 	from kamra.webhooks import emit_folio_posted
-	for line in move_charges(src, dst, [row.name], reservation=new_res):
+	for line in move_charges(src, dst, [row.name], reservation=new_res,
+	                         routing_instruction=instruction):
 		emit_folio_posted(dst, line)
 	doc.db_set({"room": new_room, "reservation": new_res,
 	            "guest": _bill_guest(new_res, None)}, update_modified=False)

@@ -6771,5 +6771,7 @@
   "Invoice {invoice} was issued by the accounting system as {document}. It is corrected there with a credit note and a new invoice; this bill is not reopened or credited here.": "发票 {invoice} 由会计系统以 {document} 开具。须在会计系统中以贷项通知单和新发票更正；此账单不会在此重新打开或冲减。",
   "Issue credit note": "开具贷项通知单",
   "Send for credit note and re-bill": "提交贷项通知单并重新开票",
-  "Tax in this credit note: {amount}": "本贷项通知单含税额：{amount}"
+  "Tax in this credit note: {amount}": "本贷项通知单含税额：{amount}",
+  "Folio windows": "账单窗口",
+  "How many separate bills a stay or a group's master bill can have, each with its own payer and invoice. Window 1 is the guest's and takes every charge that is not routed elsewhere.": "一次住宿或团队主账单可拥有的独立账单数量，每个账单有各自的付款方和发票。窗口 1 属于客人，承接所有未转往其他窗口的费用。"
 }

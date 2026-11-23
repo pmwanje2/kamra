@@ -425,5 +425,7 @@
   "Issue credit note": "Gutschrift ausstellen",
   "Send for credit note and re-bill": "Zur Gutschrift und Neuberechnung senden",
   "Tax in this credit note: {amount}": "Steuer in dieser Gutschrift: {amount}",
-  "Credit note": "Gutschrift"
+  "Credit note": "Gutschrift",
+  "Folio windows": "Folio-Fenster",
+  "How many separate bills a stay or a group's master bill can have, each with its own payer and invoice. Window 1 is the guest's and takes every charge that is not routed elsewhere.": "Wie viele getrennte Rechnungen ein Aufenthalt oder die Hauptrechnung einer Gruppe haben kann, jede mit eigenem Zahler und eigener Rechnung. Fenster 1 gehört dem Gast und nimmt jede Belastung auf, die nicht anderswohin geleitet wird."
 }

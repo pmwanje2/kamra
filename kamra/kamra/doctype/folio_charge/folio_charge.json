@@ -25,6 +25,7 @@
   "auto_posted",
   "is_alcohol",
   "reservation",
+  "routing_instruction",
   "reversal_of",
   "void_reason",
   "voided_by",
@@ -194,13 +195,21 @@
    "label": "Correction Request Fingerprint",
    "read_only": 1,
    "no_copy": 1
+  },
+  {
+   "description": "The routing instruction that put this line on this window. Its usage is the sum of the lines that carry it.",
+   "fieldname": "routing_instruction",
+   "fieldtype": "Link",
+   "label": "Routing Instruction",
+   "options": "Routing Instruction",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-11-13 12:00:00.000000",
+ "modified": "2026-11-23 20:00:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Folio Charge",

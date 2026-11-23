@@ -452,6 +452,10 @@ MODULES: tuple[Module, ...] = (
 				  hint="Room covers the room night, its meal plan, levies, early check-in / late checkout and the "
 				       "cleaning fee. Laundry, minibar, spa and misc extras stay with the guest unless "
 				       "'Everything except liquor' is chosen."),
+				S("folio_windows", "Folio windows", "number", 8, min=1, max=8,
+				  hint="How many separate bills a stay or a group's master bill can have, each with its "
+				       "own payer and invoice. Window 1 is the guest's and takes every charge that is not "
+				       "routed elsewhere."),
 			)),
 			Section("credit", "Company credit",
 			        "Payment terms and credit control for companies billed on the city ledger. "

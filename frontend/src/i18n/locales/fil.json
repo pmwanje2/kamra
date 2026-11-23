@@ -1145,5 +1145,7 @@
   "Issue credit note": "Ilabas ang credit note",
   "Send for credit note and re-bill": "Ipadala para sa credit note at muling pag-bill",
   "Tax in this credit note: {amount}": "Buwis sa credit note na ito: {amount}",
-  "Credit note": "Credit note"
+  "Credit note": "Credit note",
+  "Folio windows": "Mga window ng folio",
+  "How many separate bills a stay or a group's master bill can have, each with its own payer and invoice. Window 1 is the guest's and takes every charge that is not routed elsewhere.": "Ilang hiwalay na bill ang maaaring magkaroon ang isang stay o ang master bill ng isang grupo, bawat isa ay may sariling nagbabayad at invoice. Ang window 1 ay sa bisita at tumatanggap ng bawat singil na hindi inilipat sa iba."
 }

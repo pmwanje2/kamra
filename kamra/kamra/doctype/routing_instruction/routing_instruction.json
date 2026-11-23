@@ -1,0 +1,306 @@
+{
+ "actions": [],
+ "autoname": "format:RI-{#####}",
+ "creation": "2026-11-23 20:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "property",
+  "reservation",
+  "group_booking",
+  "column_break_a",
+  "target_type",
+  "target_window",
+  "target_reservation",
+  "disabled",
+  "sb_codes",
+  "all_codes",
+  "codes",
+  "include_alcohol",
+  "sb_when",
+  "from_date",
+  "to_date",
+  "column_break_b",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+  "sunday",
+  "sb_limit",
+  "limit_type",
+  "limit_value",
+  "per_day",
+  "column_break_c",
+  "used_amount",
+  "source_instruction"
+ ],
+ "fields": [
+  {
+   "fieldname": "property",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Property",
+   "options": "Property",
+   "reqd": 1
+  },
+  {
+   "description": "The stay whose charges are routed. Leave empty on a group's instruction.",
+   "fieldname": "reservation",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Reservation",
+   "options": "Reservation"
+  },
+  {
+   "description": "A group's instruction: copied to each room of the group when it is picked up, and each copy keeps its own usage.",
+   "fieldname": "group_booking",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Group Booking",
+   "options": "Group Booking"
+  },
+  {
+   "fieldname": "column_break_a",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Window",
+   "fieldname": "target_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Route To",
+   "options": "Window\nRoom\nGroup Master",
+   "reqd": 1
+  },
+  {
+   "description": "The window of the stay (Window), of the other room (Room, default 1) or of the group's posting master (Group Master, default 1).",
+   "fieldname": "target_window",
+   "fieldtype": "Int",
+   "label": "Target Window"
+  },
+  {
+   "depends_on": "eval:doc.target_type=='Room'",
+   "fieldname": "target_reservation",
+   "fieldtype": "Link",
+   "label": "Target Room's Reservation",
+   "options": "Reservation"
+  },
+  {
+   "fieldname": "disabled",
+   "fieldtype": "Check",
+   "label": "Disabled",
+   "default": "0"
+  },
+  {
+   "fieldname": "sb_codes",
+   "fieldtype": "Section Break",
+   "label": "What is routed"
+  },
+  {
+   "default": "0",
+   "description": "Every charge. Cannot carry a limit.",
+   "fieldname": "all_codes",
+   "fieldtype": "Check",
+   "label": "All Charges"
+  },
+  {
+   "depends_on": "eval:!doc.all_codes",
+   "fieldname": "codes",
+   "fieldtype": "Table",
+   "label": "Charge Types and Codes",
+   "options": "Routing Instruction Code"
+  },
+  {
+   "description": "Off by default: liquor stays on window 1 unless this is ticked. A group's instructions take the group's Route Alcohol setting.",
+   "fieldname": "include_alcohol",
+   "fieldtype": "Check",
+   "label": "Include Alcohol"
+  },
+  {
+   "fieldname": "sb_when",
+   "fieldtype": "Section Break",
+   "label": "When"
+  },
+  {
+   "description": "Blank: from the start of the stay.",
+   "fieldname": "from_date",
+   "fieldtype": "Date",
+   "label": "From Date"
+  },
+  {
+   "description": "Blank: to the end of the stay.",
+   "fieldname": "to_date",
+   "fieldtype": "Date",
+   "label": "To Date"
+  },
+  {
+   "fieldname": "column_break_b",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "fieldname": "monday",
+   "fieldtype": "Check",
+   "label": "Monday"
+  },
+  {
+   "default": "1",
+   "fieldname": "tuesday",
+   "fieldtype": "Check",
+   "label": "Tuesday"
+  },
+  {
+   "default": "1",
+   "fieldname": "wednesday",
+   "fieldtype": "Check",
+   "label": "Wednesday"
+  },
+  {
+   "default": "1",
+   "fieldname": "thursday",
+   "fieldtype": "Check",
+   "label": "Thursday"
+  },
+  {
+   "default": "1",
+   "fieldname": "friday",
+   "fieldtype": "Check",
+   "label": "Friday"
+  },
+  {
+   "default": "1",
+   "fieldname": "saturday",
+   "fieldtype": "Check",
+   "label": "Saturday"
+  },
+  {
+   "default": "1",
+   "fieldname": "sunday",
+   "fieldtype": "Check",
+   "label": "Sunday"
+  },
+  {
+   "fieldname": "sb_limit",
+   "fieldtype": "Section Break",
+   "label": "Limit"
+  },
+  {
+   "default": "None",
+   "fieldname": "limit_type",
+   "fieldtype": "Select",
+   "label": "Limit Type",
+   "options": "None\nAmount\nPercent"
+  },
+  {
+   "depends_on": "eval:doc.limit_type!='None'",
+   "description": "An amount (before tax) or a percent of each charge. What is over the limit stays on window 1.",
+   "fieldname": "limit_value",
+   "fieldtype": "Float",
+   "label": "Limit"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.limit_type=='Amount'",
+   "description": "The amount limit applies to each day's charges.",
+   "fieldname": "per_day",
+   "fieldtype": "Check",
+   "label": "Per Day"
+  },
+  {
+   "fieldname": "column_break_c",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "What the lines routed by this instruction add up to (the day's, with Per Day). Worked out from the posted lines; voids lower it.",
+   "fieldname": "used_amount",
+   "fieldtype": "Currency",
+   "is_virtual": 1,
+   "label": "Used",
+   "read_only": 1
+  },
+  {
+   "description": "The group's instruction this one was copied from at pickup.",
+   "fieldname": "source_instruction",
+   "fieldtype": "Link",
+   "label": "Copied From",
+   "options": "Routing Instruction",
+   "read_only": 1,
+   "no_copy": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-11-23 20:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Kamra",
+ "name": "Routing Instruction",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Hotel Admin",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Front Desk",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Finance",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Kamra Agent",
+   "write": 1
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "print": 1,
+   "role": "Night Auditor"
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

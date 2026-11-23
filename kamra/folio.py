@@ -202,42 +202,97 @@ def _post_addons(reservation, folio_name: str):
 	save_folio(doc)
 
 
-def open_group_folio(group_booking: str) -> str:
-	"""Open (or return) the group's master folio - one consolidated bill
-	for everything the company (or the main room) pays across all rooms of
-	the group. It is anchored to the group's main room when one is set,
-	else its first reservation, so invoicing and printing work unchanged."""
-	existing = frappe.db.get_value(
-		"Folio", {"group_booking": group_booking, "folio_type": "Group",
-		          "status": "Open"})
-	if existing:
-		return existing
-	filters = {"group_booking": group_booking,
-	           "status": ("not in", ("Cancelled", "No Show"))}
-	master = frappe.db.get_value("Group Booking", group_booking,
-	                             "master_reservation")
-	if master:
-		filters["name"] = master
-	lead = frappe.get_all(
-		"Reservation", filters=filters,
-		fields=["name", "property", "guest"],
-		order_by="creation asc", limit=1)
-	if not lead and master:  # the main room was cancelled: first live room
-		del filters["name"]
-		lead = frappe.get_all(
-			"Reservation", filters=filters,
-			fields=["name", "property", "guest"],
-			order_by="creation asc", limit=1)
-	if not lead:
-		frappe.throw(f"Group {group_booking} has no active reservations.")
-	lead = lead[0]
+# A billing window's payee (OPERA: each window has its own payee profile and
+# payment method; SAP: one billing document per payer).
+WINDOW_FIELDS = ("payee_type", "payee_company", "payee_agent", "payment_method")
+DIRECT_BILL = "Company Credit"  # the Folio Payment mode of a direct-bill window
+
+
+def window_cap(property: str | None) -> int:
+	"""How many windows a stay or a posting master may have: the property's
+	`folio_windows` setting (OPERA allows up to 8)."""
+	from kamra.settings import get_setting
+	return max(int(get_setting(property, "folio_windows") or 1), 1)
+
+
+def _window_key(reservation: str | None = None, group_booking: str | None = None) -> dict:
+	"""The folios that share one set of window numbers: a stay's own, or a
+	group's posting master."""
+	if group_booking and not reservation:
+		return {"group_booking": group_booking, "folio_type": "Group"}
+	return {"reservation": reservation, "folio_type": ("!=", "Group")}
+
+
+def next_window(key: dict, property: str, start: int = 1) -> int:
+	"""The lowest window number no folio of this stay or group holds yet. A
+	window whose folio closed keeps its number: its next posting reopens it."""
+	cap = window_cap(property)
+	taken = {int(w) for w in frappe.get_all(
+		"Folio", filters={**key, "window_no": (">", 0)}, pluck="window_no")}
+	for n in range(start, cap + 1):
+		if n not in taken:
+			return n
+	frappe.throw(frappe._("A bill can have at most {0} windows. Close a window or move its "
+	                      "charges to another one.").format(cap))
+
+
+def _company_credit(company: str | None) -> bool:
+	return bool(company) and bool(frappe.db.get_value("Corporate Account", company,
+	                                                  "credit_allowed"))
+
+
+def open_window(reservation: str | None = None, group_booking: str | None = None,
+                window_no: int | None = None, payee_type: str | None = None,
+                payee_company: str | None = None, payee_agent: str | None = None,
+                payment_method: str | None = None, bill_to_name: str | None = None,
+                folio_type: str | None = None) -> str:
+	"""Open a billing window on a stay or on a group's posting master and
+	return its folio. Without `window_no` it takes the next free number (2
+	on, for a stay: window 1 is the guest's). The payee defaults to the
+	guest; a posting master's to the group's company. A credit company's
+	window is direct bill (Company Credit) unless a method is given.
+	`folio_type` stays the account kind (Guest, Extra, Company, Group)."""
+	if bool(reservation) == bool(group_booking):
+		frappe.throw(frappe._("Open a window on a stay or on a group's master bill."))
+	if reservation:
+		res = frappe.db.get_value("Reservation", reservation,
+		                          ["name", "property", "guest"], as_dict=True)
+		if not res:
+			frappe.throw(frappe._("Reservation {0} not found.").format(reservation))
+		prop, guest = res.property, res.guest
+	else:
+		gb = frappe.db.get_value("Group Booking", group_booking,
+		                         ["name", "property", "company", "master_reservation"],
+		                         as_dict=True)
+		if not gb:
+			frappe.throw(frappe._("Group {0} not found.").format(group_booking))
+		prop = gb.property
+		guest = gb.master_reservation and frappe.db.get_value(
+			"Reservation", gb.master_reservation, "guest")
+		if not payee_type:
+			payee_type = "Company" if gb.company else "Guest"
+			payee_company = payee_company or gb.company
+	payee_type = payee_type or "Guest"
+	key = _window_key(reservation, group_booking)
+	n = int(window_no or 0) or next_window(key, prop, start=1 if group_booking else 2)
+	if not payment_method and payee_type == "Company" and _company_credit(payee_company):
+		payment_method = DIRECT_BILL
+	if not folio_type:
+		folio_type = "Group" if group_booking else "Guest" if n == 1 \
+			else "Company" if payee_type == "Company" else "Extra"
 	folio = frappe.get_doc({
 		"doctype": "Folio",
-		"property": lead.property,
-		"reservation": lead.name,
-		"guest": lead.guest,
-		"folio_type": "Group",
+		"property": prop,
+		"reservation": reservation,
+		"guest": guest,
+		"folio_type": folio_type,
 		"group_booking": group_booking,
+		"window_no": n,
+		"payee_type": payee_type,
+		"payee_company": payee_company,
+		"payee_agent": payee_agent,
+		"payment_method": payment_method,
+		"bill_to_name": (bill_to_name or "")[:140] or None,
 		"status": "Open",
 		"opened_on": now_datetime(),
 	})
@@ -246,23 +301,84 @@ def open_group_folio(group_booking: str) -> str:
 	return folio.name
 
 
+def window_folio(reservation: str | None = None, group_booking: str | None = None,
+                 window_no: int = 1) -> str:
+	"""The open folio of one window. When the window's folio was closed
+	(invoiced), a new one opens for it with the same payee; a window never
+	used opens now (a stay's window 1 through open_folio, with its one-time
+	fees)."""
+	key = _window_key(reservation, group_booking)
+	n = int(window_no or 1)
+	current = frappe.db.get_value("Folio", {**key, "window_no": n, "status": "Open"},
+	                              "name", order_by="creation desc")
+	if current:
+		return current
+	last = frappe.db.get_value("Folio", {**key, "window_no": n},
+	                           ["folio_type", "bill_to_name", *WINDOW_FIELDS],
+	                           as_dict=True, order_by="creation desc")
+	if last:
+		return open_window(reservation, group_booking, window_no=n,
+		                   folio_type=last.folio_type, bill_to_name=last.bill_to_name,
+		                   **{f: last.get(f) for f in WINDOW_FIELDS})
+	if reservation and n == 1:
+		return open_folio(frappe.get_doc("Reservation", reservation))
+	return open_window(reservation, group_booking, window_no=n)
+
+
+def open_group_folio(group_booking: str) -> str:
+	"""Open (or return) the group's posting master (OPERA PM): the group's
+	own bill, window 1, with no stay behind it. It opens with the Group
+	Booking, before any room is picked up, and takes deposits, banquet
+	postings and what is routed to the group. A member's check-out never
+	settles it; the group does (settle_group_bill)."""
+	return window_folio(group_booking=group_booking, window_no=1)
+
+
 def open_company_folio(reservation) -> str:
-	"""Open (or return) the Company folio of a corporate stay."""
+	"""Open (or return) the window of a corporate stay that bills the stay's
+	company."""
+	company = reservation.get("company")
+	if company:
+		key = _window_key(reservation.name)
+		existing = frappe.db.get_value(
+			"Folio", {**key, "payee_type": "Company", "payee_company": company},
+			["name", "window_no", "status"], as_dict=True, order_by="window_no asc")
+		if existing:
+			return existing.name if existing.status == "Open" else \
+				window_folio(reservation=reservation.name, window_no=existing.window_no)
 	existing = frappe.db.get_value(
 		"Folio",
 		{"reservation": reservation.name, "folio_type": "Company",
-		 "status": "Open"},
+		 "status": "Open", "payee_type": ("is", "not set")},
 	)
 	if existing:
 		return existing
 	return split_folio(reservation.name, "Company")
 
 
+def _alcohol_allowed(folio, routing_instruction: str | None = None) -> bool:
+	"""May a liquor line land on this folio? A line routed by an instruction
+	that includes alcohol may. A group's posting master takes liquor only
+	when the group routes alcohol (Group Booking.route_alcohol). Otherwise
+	only a window the guest pays takes it: liquor never bills to a company
+	unless an instruction says so."""
+	if routing_instruction:
+		return bool(frappe.db.get_value("Routing Instruction", routing_instruction,
+		                                "include_alcohol"))
+	if folio.get("folio_type") == "Group" and folio.get("group_booking"):
+		return bool(frappe.db.get_value("Group Booking", folio.group_booking,
+		                                "route_alcohol"))
+	payee = folio.get("payee_type")
+	if payee:
+		return payee == "Guest"
+	return folio.get("folio_type") not in ("Company", "Group")
+
+
 # What a credit company pays when it has NO billing rules of its own - the
 # property's `default_company_billing` setting. "Room" means the stay as sold:
 # the room night, its meal plan, the levies on it, early/late fees, the
 # cleaning fee, the extra beds agreed on it and any discount against it.
-# Alcohol is filtered out before any of this (target_folio), so no option can
+# Alcohol is filtered out before any of this (_legacy_target), so no option can
 # bill liquor to a company.
 _ROOM_CHARGES = frozenset({
 	"Room", "Meal Plan", "Room Levy", "Early Check-in", "Late Checkout", "Early Departure",
@@ -301,36 +417,84 @@ def _company_pays(company: str, charge_type: str,
 	return covered is None or charge_type in covered
 
 
-def target_folio(reservation, charge_type: str, is_alcohol: int = 0) -> str:
-	"""Route a charge to the right folio of the stay.
+def target_folio(reservation, charge_type: str, is_alcohol: int = 0, *,
+                 amount=None, posting_date=None, transaction_code: str | None = None) -> str:
+	"""Route a whole charge to the right folio of the stay: the stay's
+	Routing Instruction for it first (kamra.routing), else the legacy
+	presets (_legacy_target). A line routed whole is never split; with
+	`amount` None an instruction with a limit is skipped."""
+	from kamra.routing import route
+	parts = route(reservation, charge_type, amount, posting_date,
+	              transaction_code=transaction_code, is_alcohol=is_alcohol, whole=True)
+	if parts:
+		return parts[0]["folio"]
+	return _legacy_target(reservation, charge_type, is_alcohol)
 
-	Group stays route company-payable charge types to the ONE group
-	master folio (company pays the stay for every room, each guest pays
-	their own extras). Individual corporate stays route to the stay's
-	Company folio. The company's billing rules pick the charge types; a
-	credit company with no rules uses the property's default
-	(`default_company_billing`). Alcohol never bills to a company -
-	Indian corporates won't settle it and most travel policies prohibit it.
+
+def routed_target(reservation, charge_type: str, is_alcohol: int = 0, *, amount=None,
+                  posting_date=None, transaction_code: str | None = None) -> tuple[str, str | None]:
+	"""(open folio, routing instruction) for a charge that moves whole, such
+	as an outlet check or a bill moved to another room."""
+	from kamra.routing import route
+	parts = route(reservation, charge_type, amount, posting_date,
+	              transaction_code=transaction_code, is_alcohol=is_alcohol, whole=True)
+	if parts:
+		return parts[0]["folio"], parts[0]["routing_instruction"]
+	return open_line_target(reservation, charge_type, is_alcohol,
+	                        name=_legacy_target(reservation, charge_type, is_alcohol)), None
+
+
+def line_parts(reservation, charge_type: str, amount, posting_date=None, *,
+               is_alcohol: int = 0, transaction_code: str | None = None,
+               pending=()) -> list[dict]:
+	"""Where a hotel line goes: [{folio, amount, routing_instruction}], never
+	an invoiced folio. A routing limit splits it into the routed part and
+	the remainder on window 1; `pending` are routed lines not saved yet."""
+	from kamra.routing import route
+	parts = route(reservation, charge_type, amount, posting_date,
+	              transaction_code=transaction_code, is_alcohol=is_alcohol,
+	              pending=pending)
+	if parts:
+		return parts
+	# the same line, routed whole on its own date: the legacy presets
+	name = open_line_target(reservation, charge_type, is_alcohol, name=target_folio(
+		reservation, charge_type, is_alcohol, amount=amount, posting_date=posting_date,
+		transaction_code=transaction_code))
+	return [{"folio": name, "amount": amount, "routing_instruction": None}]
+
+
+def _legacy_target(reservation, charge_type: str, is_alcohol: int = 0) -> str:
+	"""The presets, used only when no Routing Instruction covers a charge.
+
+	Group stays route company-payable charge types to the group's posting
+	master (company pays the stay for every room, each guest pays their own
+	extras). Individual corporate stays route to the stay's company window.
+	The company's billing rules pick the charge types; a credit company with
+	no rules uses the property's default (`default_company_billing`).
+	Alcohol never routes here.
 
 	A group with a main room (`master_reservation`) and no paying company
-	routes what `master_pays` covers to the same master folio, unless the
-	room opted out (`pays_own_charges`). Alcohol stays with the guest.
+	routes what `master_pays` covers to the same posting master. A room that
+	opted out (`pays_own_charges`) keeps its own charges, on a company group
+	too: the group's company does not pick them up through the stay either.
 	"""
 	if not is_alcohol:
 		group = reservation.get("group_booking")
-		if group:
-			g = frappe.db.get_value(
-				"Group Booking", group,
-				["company", "master_reservation", "master_pays"], as_dict=True)
+		g = frappe.db.get_value(
+			"Group Booking", group,
+			["company", "master_reservation", "master_pays"], as_dict=True) if group else None
+		opted_out = bool(g) and bool(reservation.get("pays_own_charges"))
+		if g and not opted_out:
 			if g.company and _company_pays(
 					g.company, charge_type, reservation.get("property")):
 				return open_group_folio(group)
-			if g.master_reservation and not reservation.get("pays_own_charges"):
+			if g.master_reservation:
 				covered = COMPANY_BILLING_DEFAULTS.get(g.master_pays, frozenset())
 				if covered is None or charge_type in covered:
 					return open_group_folio(group)
-		if reservation.get("company") and _company_pays(
-				reservation.company, charge_type, reservation.get("property")):
+		company = reservation.get("company")
+		if company and not (opted_out and company == g.company) and _company_pays(
+				company, charge_type, reservation.get("property")):
 			return open_company_folio(reservation)
 	return open_folio(reservation)
 
@@ -522,42 +686,45 @@ def _nightly_gst(reservation, date) -> float:
 	                           gross + _over_cap_night(reservation)))
 
 
-def open_line_target(reservation, charge_type: str, is_alcohol: int = 0) -> str:
-	"""target_folio, never an invoiced folio: when the stay's Guest folio is
-	closed, the line goes on its open Guest folio, and one opens when there
-	is none (the part_settle shape, without repeating the one-time fees the
-	first folio carried). Company and group folios already route only to
-	open ones."""
-	name = target_folio(reservation, charge_type, is_alcohol)
-	if frappe.db.get_value("Folio", name, "status") != "Closed":
+def open_line_target(reservation, charge_type: str, is_alcohol: int = 0,
+                     name: str | None = None) -> str:
+	"""target_folio (or `name`), never an invoiced folio: when the folio the
+	line would go to is closed, it goes on the open folio of the same window,
+	and one opens when there is none, with the same payee (the part_settle
+	shape, without repeating the one-time fees the first folio carried)."""
+	name = name or target_folio(reservation, charge_type, is_alcohol)
+	row = frappe.db.get_value("Folio", name, ["status", "folio_type", "group_booking",
+	                                         "window_no"], as_dict=True)
+	if not row or row.status != "Closed":
 		return name
-	open_guest = frappe.db.get_value(
-		"Folio", {"reservation": reservation.name, "folio_type": "Guest",
-		          "status": "Open"}, order_by="creation desc")
-	if open_guest:
-		return open_guest
-	closed = frappe.get_doc("Folio", name)
-	fresh = frappe.get_doc({
-		"doctype": "Folio",
-		"property": closed.property,
-		"reservation": reservation.name,
-		"guest": closed.guest,
-		"folio_type": "Guest",
-		"status": "Open",
-		"opened_on": now_datetime(),
-	})
-	_recalculate(fresh)
-	fresh.insert(ignore_permissions=True)
-	return fresh.name
+	if row.folio_type == "Group" and row.group_booking:
+		return window_folio(group_booking=row.group_booking, window_no=row.window_no or 1)
+	return window_folio(reservation=reservation.name, window_no=row.window_no or 1)
+
+
+def _pending_routed(folios) -> list[tuple]:
+	"""Routed lines appended to the loaded folios and not saved yet, so a
+	multi-night posting run spends a routing limit only once."""
+	return [(c.routing_instruction, c.posting_date, c.amount)
+	        for doc in folios.values() for c in doc.charges
+	        if c.get("routing_instruction") and not c.get("creation")]
 
 
 def _append_charge(folios, reservation, charge_type, line, is_alcohol=0):
-	"""Append a line to the routed folio, reusing loaded docs so a multi-
-	night posting run saves each folio once."""
-	name = open_line_target(reservation, charge_type, is_alcohol)
-	if name not in folios:
-		folios[name] = frappe.get_doc("Folio", name)
-	folios[name].append("charges", line)
+	"""Append a line to the folio(s) routing sends it to, reusing loaded docs
+	so a multi-night posting run saves each folio once. A routing limit
+	splits it: the routed part and the remainder are each a line."""
+	parts = line_parts(reservation, charge_type, line["amount"], line["posting_date"],
+	                   is_alcohol=is_alcohol, transaction_code=line.get("transaction_code"),
+	                   pending=_pending_routed(folios))
+	for part in parts:
+		name = part["folio"]
+		if name not in folios:
+			folios[name] = frappe.get_doc("Folio", name)
+		row = {**line, "routing_instruction": part["routing_instruction"]}
+		if len(parts) > 1:
+			row.update(qty=1, rate=part["amount"], amount=part["amount"])
+		folios[name].append("charges", row)
 
 
 def post_room_night(reservation, date, folios=None) -> bool:
@@ -809,18 +976,11 @@ def split_folio(reservation: str, folio_type: str = "Extra") -> str:
 	):
 		if not f.grand_total and not f.payments_total:
 			return f.name
-	folio = frappe.get_doc({
-		"doctype": "Folio",
-		"property": res.property,
-		"reservation": res.name,
-		"guest": res.guest,
-		"folio_type": folio_type,
-		"status": "Open",
-		"opened_on": now_datetime(),
-	})
-	_recalculate(folio)
-	folio.insert(ignore_permissions=True)
-	return folio.name
+	# a company folio bills the stay's company as its window's payee
+	company = res.get("company") if folio_type == "Company" else None
+	return open_window(reservation=res.name, folio_type=folio_type,
+	                   payee_type="Company" if company else "Guest",
+	                   payee_company=company)
 
 
 def transfer_charge(from_folio: str, charge_row: str, to_folio: str):
@@ -829,12 +989,16 @@ def transfer_charge(from_folio: str, charge_row: str, to_folio: str):
 
 
 def _folio_group(folio) -> str | None:
-	return folio.get("group_booking") or frappe.db.get_value(
+	if folio.get("group_booking"):
+		return folio.group_booking
+	return folio.get("reservation") and frappe.db.get_value(
 		"Reservation", folio.reservation, "group_booking")
 
 
 def _same_stay_or_group(src, dst) -> bool:
-	if src.reservation == dst.reservation:
+	# two folios with no stay (posting masters, account invoices) are not
+	# one stay: only their group can make them one bill
+	if src.reservation and src.reservation == dst.reservation:
 		return True
 	sg, dg = _folio_group(src), _folio_group(dst)
 	return bool(sg and sg == dg)
@@ -857,7 +1021,7 @@ def transfer_charges(from_folio: str, charge_rows: list, to_folio: str):
 
 
 def move_charges(src, dst, charge_rows: list, reservation: str | None = None,
-                 key: str | None = None):
+                 key: str | None = None, routing_instruction: str | None = None):
 	"""Take charge lines off one open folio and put them on another, ledger
 	and all. Callers decide whose bill a line may move to: transfer_charges
 	keeps it within a stay or group, pos.move_room_bill to the right room.
@@ -873,7 +1037,7 @@ def move_charges(src, dst, charge_rows: list, reservation: str | None = None,
 			frappe.throw(f"Charge {charge_row} not found on {src.name}.")
 		if row.get("reversal_of") or voided.get(row.name):
 			frappe.throw("A voided line and its reversal stay on the folio they were posted to.")
-		if row.get("is_alcohol") and dst.folio_type in ("Company", "Group"):
+		if row.get("is_alcohol") and not _alcohol_allowed(dst, routing_instruction):
 			frappe.throw("Alcohol cannot be billed to a company folio.")
 		# an outlet charge (the bridge's source_ref) was fiscalised at the
 		# outlet: it moves whole and only within its stay or group, so the
@@ -899,6 +1063,8 @@ def move_charges(src, dst, charge_rows: list, reservation: str | None = None,
 			# and its outlet reference, so the hotel invoice never bills an
 			# outlet charge again (the source row is saved away first)
 			"source_ref": row.get("source_ref"),
+			# routed there now (pos.move_room_bill); a hand move is no routing
+			"routing_instruction": routing_instruction,
 			"idempotency_key": key,
 		})
 		moved.append(dst.charges[-1])
@@ -987,7 +1153,7 @@ def split_charge(from_folio: str, charge_row: str, to_folio: str,
 	if part <= 0 or part >= base:
 		from kamra.localization import money_text
 		frappe.throw(f"Split must be between 0 and {money_text(src.property, base)} (exclusive).")
-	if row.get("is_alcohol") and dst.folio_type in ("Company", "Group"):
+	if row.get("is_alcohol") and not _alcohol_allowed(dst):
 		frappe.throw("Alcohol cannot be billed to a company folio.")
 
 	remainder = base - part
@@ -1075,15 +1241,8 @@ def open_guest_bills(reservation: str, names: list | None = None) -> list[dict]:
 			"Folio", {"reservation": res.name, "folio_type": "Extra",
 			          "status": "Open", "bill_to_name": n})
 		if not existing:
-			folio = frappe.get_doc({
-				"doctype": "Folio", "property": res.property,
-				"reservation": res.name, "guest": res.guest,
-				"folio_type": "Extra", "bill_to_name": n[:140],
-				"status": "Open", "opened_on": now_datetime(),
-			})
-			_recalculate(folio)
-			folio.insert(ignore_permissions=True)
-			existing = folio.name
+			existing = open_window(reservation=res.name, folio_type="Extra",
+			                       payee_type="Guest", bill_to_name=n)
 		out.append({"folio": existing, "name": n})
 	return out
 
@@ -1398,6 +1557,10 @@ def part_settle(folio_name: str) -> dict:
 		"status": "Open",
 		"opened_on": now_datetime(),
 		"group_booking": folio.get("group_booking"),
+		# the same window and payee go on billing
+		"window_no": folio.get("window_no"),
+		"bill_to_name": folio.get("bill_to_name"),
+		**{f: folio.get(f) for f in WINDOW_FIELDS},
 	})
 	_recalculate(fresh)
 	fresh.insert(ignore_permissions=True)
