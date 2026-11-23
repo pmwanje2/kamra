@@ -30,18 +30,65 @@ def _text(value) -> str | None:
 	return value if isinstance(value, str) and value else None
 
 
+def _opt_bool(value) -> bool | None:
+	if value is None or isinstance(value, str):
+		return None
+	if isinstance(value, (bool, int, float)):
+		return bool(int(value))
+	return None
+
+
+def _opt_float(value) -> float | None:
+	if value is None:
+		return None
+	try:
+		return float(value)
+	except (TypeError, ValueError):
+		return None
+
+
+def _unverified() -> dict:
+	return {
+		"state": "unverified",
+		"sales_invoice": None,
+		"fdn": None,
+		"verification_code": None,
+		"qr": None,
+		"issued": None,
+		"sandbox": False,
+		"efris_status": None,
+		"tax_template": None,
+		"charges_tax": None,
+		"efris_enrolled": None,
+		"outstanding_amount": None,
+		"credit_notes": [],
+		"replaced_by": None,
+	}
+
+
 def fiscal_status(folio) -> dict | None:
 	"""The fiscal document of a closed folio, or None where there is none to read:
 	an open folio (a provisional bill) or a site without the bridge."""
 	if folio.status != "Closed":
 		return None
+	import frappe
+
 	from kamra.erp_bridge import bridge_call
 
-	answer = bridge_call(FISCAL_DOCUMENT, folio=folio.name)
+	try:
+		answer = bridge_call(FISCAL_DOCUMENT, folio=folio.name)
+	except Exception:
+		frappe.log_error(title="fiscal status read failed")
+		return _unverified()
 	if answer is None:
 		return None
+	if not isinstance(answer, dict):
+		return _unverified()
 	state = answer.get("state")
 	sales_invoice = _text(answer.get("sales_invoice"))
+	charges_tax = _opt_bool(answer.get("charges_tax"))
+	efris_enrolled = _opt_bool(answer.get("efris_enrolled"))
+	notes = answer.get("credit_notes")
 	out = {
 		"state": state,
 		"sales_invoice": sales_invoice,
@@ -51,14 +98,26 @@ def fiscal_status(folio) -> dict | None:
 		"issued": None,
 		"sandbox": bool(answer.get("sandbox")),
 		"efris_status": _text(answer.get("efris_status")),
+		"tax_template": _text(answer.get("tax_template")),
+		"charges_tax": charges_tax,
+		"efris_enrolled": efris_enrolled,
+		"outstanding_amount": _opt_float(answer.get("outstanding_amount")),
+		"credit_notes": list(notes) if isinstance(notes, list) else [],
+		"replaced_by": _text(answer.get("replaced_by")),
 	}
 	if state == "fiscalised":
 		identifiers = {key: _text(answer.get(key)) for key in ("fdn", "verification_code", "qr", "issued")}
-		if not (sales_invoice and identifiers["fdn"] and identifiers["verification_code"]):
+		if not (sales_invoice and identifiers["fdn"] and identifiers["verification_code"]
+		        and charges_tax is not None and efris_enrolled is not None):
 			state = None
 		out.update(identifiers)
-	if state == "not_efris" and not sales_invoice:
-		state = None
+	if state == "not_efris":
+		if not (sales_invoice and charges_tax is not None and efris_enrolled is not None):
+			state = None
+		elif efris_enrolled:
+			# PR-9: not_efris is never final when the company is enrolled in EFRIS
+			state = "pending"
+			out["state"] = "pending"
 	if state not in STATES:
 		# fail closed: a fiscal state this app does not know is never printed as final
 		out.update(state="unverified", fdn=None, verification_code=None, qr=None, issued=None)
@@ -67,4 +126,29 @@ def fiscal_status(folio) -> dict | None:
 
 def is_final(fiscal: dict | None) -> bool:
 	"""Whether the fiscal document can be handed over as the tax invoice."""
-	return bool(fiscal and fiscal["state"] in FINAL_STATES and not fiscal["sandbox"])
+	if not fiscal or fiscal.get("sandbox"):
+		return False
+	state = fiscal.get("state")
+	if state == "fiscalised":
+		return bool(fiscal.get("sales_invoice") and fiscal.get("fdn")
+		            and fiscal.get("verification_code")
+		            and fiscal.get("charges_tax") is not None
+		            and fiscal.get("efris_enrolled") is not None)
+	if state == "not_efris":
+		return bool(fiscal.get("sales_invoice")
+		            and fiscal.get("efris_enrolled") is False
+		            and fiscal.get("charges_tax") is not None)
+	return False
+
+
+def fiscal_title(fiscal: dict) -> str:
+	"""Document title under the accounting bridge (PR-9 §2.8)."""
+	if fiscal.get("state") == "unverified":
+		return "Fiscal status unavailable"
+	if fiscal.get("sandbox"):
+		return "Test fiscal number - not a valid tax invoice"
+	if not is_final(fiscal):
+		return "Fiscal document pending"
+	if fiscal.get("state") == "fiscalised":
+		return "Tax Invoice"
+	return "Tax Invoice" if fiscal.get("charges_tax") else "Invoice"

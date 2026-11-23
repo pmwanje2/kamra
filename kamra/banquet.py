@@ -125,10 +125,21 @@ def _fiscal_bridge() -> bool:
 def _event_folio(doc) -> str:
 	"""The open folio a standalone function bills on - OPERA posts event
 	charges and deposits to a folio. It has no stay; it names the function.
-	A settled one is never reopened: the next posting opens a new one."""
+	A closed event folio never accepts further payments or silently spawns a
+	second open folio: corrections go through a credit note or reopen per policy."""
 	current = frappe.db.get_value(
 		"Folio", {"venue_booking": doc.name, "status": "Open"}, "name")
 	if not current:
+		closed = None
+		if doc.folio and frappe.db.get_value(
+				"Folio", {"name": doc.folio, "venue_booking": doc.name, "status": "Closed"}, "name"):
+			closed = doc.folio
+		else:
+			closed = frappe.db.get_value(
+				"Folio", {"venue_booking": doc.name, "status": "Closed"}, "name")
+		if closed:
+			frappe.throw(_("Event folio {0} is already closed. Record corrections through a "
+			              "credit note or reopen per policy.").format(closed))
 		from kamra.folio import _recalculate
 		folio = frappe.get_doc({
 			"doctype": "Folio",
@@ -145,6 +156,42 @@ def _event_folio(doc) -> str:
 		current = folio.name
 	doc.folio = current
 	return current
+
+
+def event_folio_deposit_held(doc) -> float | None:
+	"""Net security deposit still held on a standalone function's event folio
+	under the ERP accounting bridge, derived purely from Folio Ledger Entry
+	(excluding ordinary Advance 9002 entries and their reversals), less any
+	withheld damage_amount. Returns None when off-bridge or no event folio."""
+	if not doc.get("folio") or not _fiscal_bridge():
+		return None
+	if frappe.db.get_value("Folio", doc.folio, "venue_booking") != doc.name:
+		return None
+	entries = frappe.get_all(
+		"Folio Ledger Entry",
+		filters={"folio": doc.folio, "ledger": "Deposit"},
+		fields=["name", "transaction_code", "debit", "credit", "reversal_of"],
+	)
+	if not entries:
+		return 0.0
+	by_name = {e.name: e for e in entries}
+
+	def _is_advance_chain(entry) -> bool:
+		cur = entry
+		seen = set()
+		while cur and cur.name not in seen:
+			seen.add(cur.name)
+			if cur.get("transaction_code") == "9002":
+				return True
+			cur = by_name.get(cur.get("reversal_of"))
+		return False
+
+	net = sum(
+		float(e.get("credit") or 0) - float(e.get("debit") or 0)
+		for e in entries
+		if not _is_advance_chain(e)
+	)
+	return round(max(0.0, net - float(doc.get("damage_amount") or 0)), 2)
 
 
 _FOLIO_INVOICE_ONLY = ("Under the ERP accounting bridge a function's tax invoice is issued from "
@@ -330,7 +377,7 @@ def create_enquiry(property: str, venue: str, event_date: str,
 				"list_rate": float(v.hourly_rate if hourly else v.base_price),
 				"rate": float(v.hourly_rate if hourly else v.base_price),
 				"chargeable": 1,
-				"gst_rate": float(v.gst_rate or 18),
+				"gst_rate": float(v.gst_rate or 0),
 			})
 	doc.insert()
 	from kamra.savings import log_action
@@ -372,6 +419,9 @@ def function_sheet(function: str):
 	out["fiscal_bridge"] = 1 if _fiscal_bridge() else 0
 	out["event_folio"] = doc.folio if doc.folio and frappe.db.get_value(
 		"Folio", doc.folio, "venue_booking") == doc.name else None
+	folio_held = event_folio_deposit_held(doc)
+	if folio_held is not None:
+		out["deposit_held"] = folio_held
 	return out
 
 
@@ -844,8 +894,11 @@ def record_receipt(function: str, amount: float, mode: str = "Bank Transfer",
 	if _fiscal_bridge():
 		return _receipt_on_folio(doc, float(amount), mode, kind, reference,
 		                         settle_term, pin)
-	from kamra.localization import assert_pack_payment_mode
-	assert_pack_payment_mode(doc.property, mode)
+	from kamra.localization import assert_pack_payment_mode, assert_payment_mode
+	if kind == "Refund":
+		assert_pack_payment_mode(doc.property, mode)
+	else:
+		assert_payment_mode(doc.property, mode)
 	from kamra.business_date import assert_transaction_date
 	rd = assert_transaction_date(doc.property, receipt_date, label="Receipt date")
 	doc.append("receipts", {
@@ -881,6 +934,8 @@ def _receipt_on_folio(doc, amount, mode, kind, reference, settle_term, pin):
 	if doc.group_booking:
 		frappe.throw(_("This function rides group {0}: take its money on the group's "
 		              "master folio.").format(doc.group_booking))
+	from kamra.localization import assert_payment_mode
+	assert_payment_mode(doc.property, mode)
 	term = None
 	if settle_term:
 		term = next((t for t in doc.payment_terms if t.name == settle_term), None)
@@ -1162,7 +1217,7 @@ def _function_alerts(doc):
 			            "urgency": "high" if term.status == "Overdue" else "normal",
 			            "message": _("{0}: {1} due {2}.").format(
 				            term.milestone,
-				            frappe.format_value(float(term.amount or 0), "Currency"),
+				            money_text(doc.property, float(term.amount or 0)),
 				            term.due_date)})
 	if doc.status == "Confirmed":
 		if 0 <= days_out <= 7 and not doc.beo_generated_on:
@@ -1179,8 +1234,8 @@ def _function_alerts(doc):
 		if 0 <= days_out <= 14 and not float(doc.advance_received or 0):
 			out.append({"kind": "no_advance", "urgency": "high",
 			            "message": _("Nothing received yet against "
-			                        "{0}.").format(frappe.format_value(
-				            float(doc.grand_total or 0), "Currency"))})
+			                        "{0}.").format(money_text(
+				            doc.property, float(doc.grand_total or 0)))})
 		open_rows = [o for o in doc.open_items if o.status == "Open"]
 		if open_rows and days_out <= 7:
 			out.append({"kind": "open_items", "urgency": "normal",
@@ -1624,24 +1679,19 @@ def generate_invoice(function: str):
 
 # ══ settlement ═══════════════════════════════════════════════════════════
 
-_FOLIO_CHARGE_TYPE = {
-	"Menu": "Food & Beverage",
-	"Food & Beverage": "Food & Beverage",
-	"Alcohol": "Food & Beverage",
-	"Accommodation": "Room",
-}
-
-
 def _revenue_codes(doc, revenue_types) -> dict:
 	"""{revenue type: transaction code} for this function - OPERA Revenue
 	Type Mapping. The most specific enabled row wins (hall and event type,
 	then hall, then event type, then the type alone); two rows of the same
-	reach that disagree are a set-up error, refused before anything posts."""
+	reach that disagree are a set-up error, refused before anything posts.
+	Unmapped types require an explicit `banquet_default_transaction_code`
+	setting; they never silently default to Misc/8000."""
+	wanted = {rt for rt in revenue_types if rt}
 	reach: dict = {}
 	for r in frappe.get_all(
 			"Banquet Revenue Mapping",
 			filters={"property": doc.property, "disabled": 0,
-			         "revenue_type": ("in", list(revenue_types) or [""])},
+			         "revenue_type": ("in", list(wanted) or [""])},
 			fields=["revenue_type", "transaction_code", "venue", "event_type"]):
 		if (r.venue and r.venue != doc.venue) or (r.event_type and r.event_type != doc.event_type):
 			continue
@@ -1654,19 +1704,54 @@ def _revenue_codes(doc, revenue_types) -> dict:
 			frappe.throw(_("{0} charges map to more than one transaction code ({1}) with the "
 			              "same reach. Keep one mapping.").format(revenue_type, ", ".join(sorted(codes))))
 		out[revenue_type] = next(iter(codes))
+	unmapped = sorted(wanted - set(out))
+	if unmapped:
+		raw_default = frappe.db.get_value(
+			"Property Setting",
+			{"property": doc.property, "setting_key": "banquet_default_transaction_code"},
+			"value",
+		)
+		try:
+			parsed_default = frappe.parse_json(raw_default) if raw_default is not None else None
+		except Exception:
+			parsed_default = raw_default
+		default_code = (str(parsed_default or "")).strip()
+		if not default_code:
+			frappe.throw(_("No Banquet Revenue Mapping is configured for: {0}. Add a Banquet "
+			              "Revenue Mapping or set the property's Default banquet revenue code.")
+			             .format(", ".join(unmapped)))
+		tc = frappe.db.get_value(
+			"Transaction Code", default_code,
+			["name", "txn_type", "property", "disabled"], as_dict=True)
+		if not tc or tc.disabled or tc.txn_type != "Revenue" or (tc.property and tc.property != doc.property):
+			frappe.throw(_("Default banquet revenue code {0} must be an enabled Revenue "
+			              "Transaction Code for this property.").format(default_code))
+		for revenue_type in unmapped:
+			out[revenue_type] = default_code
 	return out
 
 
+# Native permission intersection for posting a banquet function to a folio:
+# - Folio billing writes (bridge Kamra ERP Folio Fences): Front Desk, Hotel Admin, Finance
+#   (Kamra Agent is restricted by KMR-RC-005 to Laundry/Minibar; Revenue Manager has no Folio DocPerm).
+# - Venue Booking writes (venue_booking.json): Front Desk, Hotel Admin (Finance is read-only write=0).
+# Only Front Desk and Hotel Admin (+ System Manager/Administrator via ADMIN) hold both native rights.
 @frappe.whitelist(methods=["POST"])
-@require_roles(*BANQUET_ROLES, "Finance")
+@require_roles("Front Desk")
 def post_to_folio(function: str, folio: str | None = None):
-	"""Push the chargeable lines onto a bill. A function tied to a group
-	rides the group's master folio; otherwise pass one explicitly.
+	"""Push the chargeable lines (and F&B service charge) onto a bill. A
+	function tied to a group rides the group's master folio; otherwise a
+	standalone function posts to its event folio (under the bridge) or an
+	explicitly passed folio.
+
+	Under the ERP accounting bridge, line tax is zero because ERPNext's tax
+	templates calculate tax on the Sales Invoice (KMR-TAX-001).
 
 	Alcohol is reported back rather than posted when the bill is a company
 	or group folio - the same rule the folio itself enforces - so it can be
 	settled separately instead of failing the whole post."""
 	from kamra.api import _post_folio_charge
+	from kamra.kamra.doctype.venue_booking.venue_booking import SERVICE_CHARGE_TYPES
 
 	doc = _fn(function)
 	if doc.posted_to_folio:
@@ -1692,25 +1777,61 @@ def post_to_folio(function: str, folio: str | None = None):
 
 	folio_type = frappe.db.get_value("Folio", target, "folio_type")
 	lines = [r for r in doc.items if r.chargeable and float(r.net_amount or 0)]
-	codes = _revenue_codes(doc, {r.item_type for r in lines})
-	posted, deferred = [], []
+	postable, deferred = [], []
 	for r in lines:
 		if r.is_alcohol and folio_type in ("Company", "Group"):
 			deferred.append({"item_name": r.item_name,
 			                 "amount": float(r.total or 0)})
-			continue
-		code = codes.get(r.item_type)
+		else:
+			postable.append(r)
+
+	sc_amount = 0.0
+	sc_gst = 0.0
+	if float(doc.service_charge or 0) > 0:
+		sc_all = sum(float(r.net_amount or 0) for r in lines if r.item_type in SERVICE_CHARGE_TYPES)
+		sc_post = [r for r in postable if r.item_type in SERVICE_CHARGE_TYPES]
+		sc_post_base = sum(float(r.net_amount or 0) for r in sc_post)
+		if sc_all > 0 and sc_post_base > 0:
+			sc_amount = (
+				float(doc.service_charge)
+				if abs(sc_post_base - sc_all) < 0.005
+				else round(float(doc.service_charge) * sc_post_base / sc_all, 2)
+			)
+			sc_gst = max((float(r.gst_rate or 0) for r in sc_post), default=0.0)
+
+	needed_types = {r.item_type for r in postable}
+	if sc_amount > 0:
+		needed_types.add("Service Charge")
+	codes = _revenue_codes(doc, needed_types)
+
+	on_bridge = _fiscal_bridge()
+	posted = []
+	for r in postable:
+		code = codes[r.item_type]
 		_post_folio_charge(
 			target,
-			(frappe.db.get_value("Transaction Code", code, "charge_type") or "Misc")
-			if code else _FOLIO_CHARGE_TYPE.get(r.item_type, "Misc"),
+			frappe.db.get_value("Transaction Code", code, "charge_type") or "Misc",
 			f"{doc.name} · {r.item_name}"
 			+ (f" ({r.qty:g} {r.uom})" if r.qty else ""),
 			float(r.net_amount),
-			gst_rate=float(r.gst_rate or 0),
+			gst_rate=0.0 if on_bridge else float(r.gst_rate or 0),
 			is_alcohol=1 if r.is_alcohol else 0,
 			transaction_code=code)
 		posted.append({"item_name": r.item_name, "amount": float(r.net_amount)})
+
+	if sc_amount > 0:
+		sc_code = codes["Service Charge"]
+		pct = float(doc.service_charge_percent or 0)
+		label = f"Service charge ({pct:g}%)" if pct else "Service charge"
+		_post_folio_charge(
+			target,
+			frappe.db.get_value("Transaction Code", sc_code, "charge_type") or "Misc",
+			f"{doc.name} · {label}",
+			sc_amount,
+			gst_rate=0.0 if on_bridge else sc_gst,
+			is_alcohol=0,
+			transaction_code=sc_code)
+		posted.append({"item_name": label, "amount": sc_amount})
 
 	doc.folio = target
 	# the flag is the double-post guard, so it goes up the moment anything
@@ -1734,6 +1855,50 @@ def post_to_folio(function: str, folio: str | None = None):
 	        "settle_separately": deferred,
 	        "note": _("Alcohol can't ride a company bill - settle those lines "
 	                  "separately.") if deferred else None}
+
+
+@frappe.whitelist(methods=["POST"])
+@require_roles("Front Desk", "Finance")
+def settle_event_folio(function: str, to_city_ledger: int = 0,
+                       mode: str | None = None, amount: float | None = None,
+                       reference: str | None = None, pin: str | None = None,
+                       credit_override_reason: str | None = None):
+	"""Settle and close a standalone event folio (OPERA event direct-bill /
+	city ledger settlement or final cash/tender settlement).
+
+	When `to_city_ledger=1`, routes the open balance to the function's
+	Corporate Account City Ledger Account and closes the folio in the same
+	request so ERPNext issues the Sales Invoice to the company's ERP Customer
+	with the unpaid balance in native AR."""
+	from kamra.api import add_folio_payment
+	from kamra.folio import close_folio
+	from kamra.ledger import transfer_to_city_ledger
+
+	doc = _fn(function)
+	if doc.group_booking:
+		frappe.throw(_("This function rides group {0}: settle it on the group's "
+		              "master folio.").format(doc.group_booking))
+	if not doc.posted_to_folio or not doc.folio:
+		frappe.throw(_("Post this function to its event folio before settling it."))
+	folio = frappe.get_doc("Folio", doc.folio)
+	if folio.status != "Open":
+		frappe.throw(_("Event folio {0} is already {1}.").format(folio.name, folio.status))
+	if int(to_city_ledger or 0):
+		if not doc.company:
+			frappe.throw(_("Link a company to this function before settling to the city ledger."))
+		if not frappe.db.get_value("Corporate Account", doc.company, "credit_allowed"):
+			frappe.throw(_("{0} is not allowed on city ledger (credit).").format(doc.company))
+		if float(folio.balance or 0) > 0:
+			transfer_to_city_ledger(
+				folio.name, doc.company,
+				credit_override_reason=credit_override_reason)
+	elif amount and float(amount) > 0:
+		if not mode:
+			frappe.throw(_("Choose a payment mode for the settlement payment."))
+		add_folio_payment(folio.name, mode, float(amount), reference=reference, pin=pin)
+	inv = close_folio(folio.name)
+	return {"ok": True, "folio": folio.name, "invoice_number": inv,
+	        "city_ledger": bool(int(to_city_ledger or 0))}
 
 
 # ══ the close-out ════════════════════════════════════════════════════════
@@ -1770,17 +1935,18 @@ def close_out(function: str, damage_amount: float = 0,
 	if damage and not (damage_note or "").strip():
 		frappe.throw(_("Say what was damaged - a deduction the customer "
 		              "can't see the reason for is a dispute waiting."))
-	held = float(doc.deposit_held or 0)
+	folio_held = event_folio_deposit_held(doc)
+	held = folio_held if folio_held is not None else float(doc.deposit_held or 0)
 	if damage > held and held:
 		frappe.throw(_("Damages of {0} exceed the {1} held. Bill the "
 		              "difference as a charge instead of over-deducting.")
-		             .format(frappe.format_value(damage, "Currency"),
-		                     frappe.format_value(held, "Currency")))
+		             .format(money_text(doc.property, damage),
+		                     money_text(doc.property, held)))
 	if int(refund_deposit or 0) and held > 0 and _fiscal_bridge():
 		frappe.throw(_("{0} of deposit is held on the function's folio. Under the ERP "
 		              "accounting bridge Finance returns it with a native refund Payment "
 		              "Entry: close out without refunding here.")
-		             .format(frappe.format_value(held, "Currency")))
+		             .format(money_text(doc.property, held)))
 	if pax_actual is not None:
 		doc.pax_actual = int(pax_actual)
 
@@ -1830,11 +1996,12 @@ def _reclose(doc, damage_amount, refund_deposit, pax_actual):
 		frappe.throw(_("Damages were settled at the first close-out ({0}). "
 		              "Bill anything further as a charge on the function.")
 		             .format(doc.closed_out_on))
-	held = float(doc.deposit_held or 0)
+	folio_held = event_folio_deposit_held(doc)
+	held = folio_held if folio_held is not None else float(doc.deposit_held or 0)
 	if int(refund_deposit or 0) and held > 0:
 		frappe.throw(_("{0} of deposit is still held. Record the refund as a "
 		              "receipt before closing again.")
-		             .format(frappe.format_value(held, "Currency")))
+		             .format(money_text(doc.property, held)))
 	if pax_actual is not None:
 		doc.pax_actual = int(pax_actual)
 	doc.closed_out_on = now_datetime()

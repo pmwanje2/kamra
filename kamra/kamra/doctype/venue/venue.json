@@ -103,8 +103,7 @@
   {
    "fieldname": "gst_rate",
    "fieldtype": "Percent",
-   "label": "Rental GST %",
-   "default": "18"
+   "label": "Rental GST %"
   },
   {
    "fieldname": "setup_styles",

@@ -596,9 +596,10 @@ def _ar_account(property: str, company: str) -> str:
 
 def company_payer_of(folio) -> str | None:
 	"""The company that pays this folio on credit, or None when the guest
-	pays it. Only a Company folio (the stay's company) or a group master
-	(the group's company) is the company's bill; Guest and Extra folios -
-	liquor, extras - are always the guest's."""
+	pays it. Only a Company folio (the stay's company), a group master
+	(the group's company), or a standalone corporate event Account folio
+	is the company's bill; Guest and Extra folios - liquor, extras - are
+	always the guest's."""
 	kind = folio.get("folio_type") or "Guest"
 	company = None
 	if kind == "Company" and folio.get("reservation"):
@@ -607,6 +608,9 @@ def company_payer_of(folio) -> str | None:
 	elif kind == "Group" and folio.get("group_booking"):
 		company = frappe.db.get_value(
 			"Group Booking", folio.get("group_booking"), "company")
+	elif kind == "Account" and folio.get("venue_booking") and not folio.get("reservation") and not folio.get("group_booking"):
+		company = frappe.db.get_value(
+			"Venue Booking", folio.get("venue_booking"), "company")
 	if company and frappe.db.get_value(
 			"Corporate Account", company, "credit_allowed"):
 		return company
@@ -636,12 +640,15 @@ def due_date_for(account: str | None, invoice_date, property: str | None = None)
 
 def _transfer_company(folio, company: str | None = None) -> str | None:
 	"""Who a city ledger transfer bills: the company asked for, else the
-	stay's, else the group's."""
+	stay's, else the group's, else the standalone event's."""
 	if not company and folio.get("reservation"):
 		company = frappe.db.get_value("Reservation", folio.reservation, "company")
 	if not company and folio.get("group_booking"):
 		company = frappe.db.get_value(
 			"Group Booking", folio.group_booking, "company")
+	if not company and folio.get("venue_booking") and not folio.get("group_booking"):
+		company = frappe.db.get_value(
+			"Venue Booking", folio.venue_booking, "company")
 	return company
 
 
@@ -1964,9 +1971,10 @@ def record_folio_reprint(folio: str, document: str = "Guest Folio",
 def folio_history(property: str, query: str | None = None,
                   status: str | None = None, from_date: str | None = None,
                   to_date: str | None = None):
-	# account invoices have no stay to show - they live on Receivables
-	filters: list = [["property", "=", property],
-	                 ["folio_type", "!=", "Account"]]
+	# Direct Receivables AR invoices (Account folios without a Venue Booking) live on Receivables;
+	# stay folios and standalone event folios (Account folios with venue_booking) appear in Folio History.
+	filters: list = [["property", "=", property]]
+	or_filters: list = [["folio_type", "!=", "Account"], ["venue_booking", "is", "set"]]
 	if status:
 		filters.append(["status", "=", status])
 	if from_date:  # by the day the bill was closed
@@ -1977,7 +1985,9 @@ def folio_history(property: str, query: str | None = None,
 	rows = frappe.get_all(
 		"Folio",
 		filters=filters,
-		fields=["name", "guest_name", "reservation", "status", "invoice_number",
+		or_filters=or_filters,
+		fields=["name", "guest_name", "reservation", "venue_booking", "folio_type",
+		        "status", "invoice_number",
 		        "grand_total", "payments_total", "balance", "closed_on",
 		        "modified"],
 		order_by="modified desc",
@@ -1988,7 +1998,8 @@ def folio_history(property: str, query: str | None = None,
 		rows = [r for r in rows if q in (r.guest_name or "").lower()
 		        or q in (r.invoice_number or "").lower()
 		        or q in (r.name or "").lower()
-		        or q in (r.reservation or "").lower()]
+		        or q in (r.reservation or "").lower()
+		        or q in (r.venue_booking or "").lower()]
 	by_folio = {}
 	if rows:
 		for pay in frappe.get_all("Folio Payment", filters={"parenttype": "Folio", "parent": ["in", [r.name for r in rows]],

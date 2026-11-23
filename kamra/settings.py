@@ -397,6 +397,10 @@ MODULES: tuple[Module, ...] = (
 			Section("followup", "Sales follow-up", "", (
 				S("banquet_follow_up_days", "Follow up an enquiry after", "number", 2, min=0, max=60, unit="days"),
 			)),
+			Section("billing", "Billing", "How function line types map to folio transaction codes.", (
+				S("banquet_default_transaction_code", "Default banquet revenue code", "text", None,
+				  hint="Optional fallback Revenue Transaction Code for unmapped function line types. Leave blank to require an explicit Banquet Revenue Mapping."),
+			)),
 		),
 	),
 	Module(

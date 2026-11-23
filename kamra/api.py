@@ -1646,6 +1646,8 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 			out["idempotent_replay"] = 1
 			return out
 	doc = frappe.get_doc("Folio", folio)
+	if doc.status == "Closed":
+		frappe.throw(_("This folio is closed. Record corrections through a credit note or reopen per policy."))
 	from kamra.localization import assert_payment_mode
 	assert_payment_mode(doc.property, mode, currency)
 	from kamra.business_date import get_business_date
@@ -2096,12 +2098,21 @@ def _check_charge_amount_and_tax(property: str, amount, gst_rate):
 def _resolve_charge_gst(property: str, charge_type: str, description: str,
                         is_alcohol: int, provided: float) -> float:
 	"""The tax rate a charge actually carries, decided server-side so a caller
-	(human or agent) cannot mis-tax it. Food & beverage uses the F&B rate from
-	the localization pack; alcohol its own rate; a taxi with no rate the
-	services rate; otherwise the given rate."""
+	(human or agent) cannot mis-tax it. Under the ERP accounting bridge, folio
+	lines carry zero tax because ERPNext's tax templates calculate tax on the
+	Sales Invoice (KMR-TAX-001). Off the bridge, food & beverage uses the F&B
+	rate from the localization pack and services/alcohol use the configured
+	services rate."""
+	from kamra.fiscal import fiscal_bridge
+
+	if fiscal_bridge():
+		return 0.0
 	text = f"{charge_type} {description}".lower()
 	if is_alcohol:
-		return float(provided) if provided else 18.0
+		if provided:
+			return float(provided)
+		from kamra.localization import pack_for, services_tax_rate
+		return services_tax_rate(pack_for(property), property)
 	if any(w in text for w in _FNB_WORDS):
 		from kamra.folio import _fnb_gst
 		return float(_fnb_gst(property))
@@ -3524,12 +3535,14 @@ def folio_invoice(folio: str):
 		bill_company = frappe.db.get_value(
 			"Group Booking", doc.group_booking, "company") or bill_company
 	if doc.folio_type == "Account":
-		# billed to the account it was raised on (as zatca._folio_buyer)
+		# billed to the account it was raised on (as zatca._folio_buyer), or the event's company
 		account = frappe.db.get_value(
 			"City Ledger Entry", {"folio": doc.name, "kind": "Invoice"},
 			"account", order_by="creation asc")
 		bill_company = account and frappe.db.get_value(
 			"City Ledger Account", account, "company")
+		if not bill_company and doc.get("venue_booking"):
+			bill_company = frappe.db.get_value("Venue Booking", doc.venue_booking, "company")
 	if bill_company:
 		company = frappe.db.get_value(
 			"Corporate Account", bill_company, ["company_name", "gstin"], as_dict=True)
@@ -3581,20 +3594,22 @@ def folio_invoice(folio: str):
 	# under the ERPNext accounting bridge the tax invoice is the ERP Sales
 	# Invoice and its fiscal identifiers (EFRIS FDN, verification code, QR);
 	# this folio's own number is then an internal reference only
-	from kamra.fiscal import fiscal_status
+	from kamra.fiscal import fiscal_status, fiscal_title
 	from kamra.fiscal import is_final as fiscal_final
 	fiscal = fiscal_status(doc)
-	title = (statutory or {}).get("title") or (
-		_(loc.invoice_title(pack)) if settled else _("Provisional Bill"))
+	if statutory and statutory.get("title"):
+		title = statutory["title"]
+	elif not settled:
+		title = _("Provisional Bill")
+	elif getattr(pack, "INVOICE_TITLE", None):
+		title = _(loc.invoice_title(pack))
+	else:
+		# No static pack title (e.g. Uganda / generic): standalone title follows configured tax.
+		title = _("Tax Invoice") if float(prop.get("gst_rate_low") or 0) > 0 else _("Invoice")
 	number, final, internal_number = doc.invoice_number or doc.name, settled, None
 	if fiscal:
 		number, final, internal_number = fiscal["sales_invoice"] or doc.name, fiscal_final(fiscal), doc.invoice_number
-		if fiscal["state"] == "unverified":
-			title = _("Fiscal status unavailable")
-		elif fiscal["sandbox"]:
-			title = _("Test fiscal number - not a valid tax invoice")
-		elif not final:
-			title = _("Fiscal document pending")
+		title = _(fiscal_title(fiscal))
 	payments = [{
 		"row": p.name, "posting_date": str(p.posting_date),
 		"payment_kind": p.payment_kind, "mode": p.mode,

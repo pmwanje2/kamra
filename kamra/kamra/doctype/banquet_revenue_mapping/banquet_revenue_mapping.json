@@ -3,7 +3,7 @@
  "allow_rename": 0,
  "autoname": "hash",
  "creation": "2026-11-23 18:00:00.000000",
- "description": "Which transaction code each kind of function charge posts to (OPERA Revenue Type Mapping). The most specific row wins: hall and event type, then hall, then event type, then the revenue type alone. A charge with no row keeps its default code.",
+ "description": "Which transaction code each kind of function charge posts to (OPERA Revenue Type Mapping). The most specific row wins: hall and event type, then hall, then event type, then the revenue type alone. Unmapped types require an explicit property default code or are refused.",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
@@ -29,7 +29,7 @@
    "fieldname": "revenue_type",
    "fieldtype": "Select",
    "label": "Revenue Type",
-   "options": "Venue Rental\nMenu\nFood & Beverage\nAlcohol\nAudio Visual\nDecor\nEntertainment\nFurniture & Setup\nStaffing\nAccommodation\nStationery\nOther",
+   "options": "Venue Rental\nMenu\nFood & Beverage\nAlcohol\nAudio Visual\nDecor\nEntertainment\nFurniture & Setup\nStaffing\nAccommodation\nStationery\nService Charge\nOther",
    "reqd": 1,
    "in_list_view": 1,
    "in_standard_filter": 1,

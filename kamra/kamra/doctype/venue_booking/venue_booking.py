@@ -31,9 +31,15 @@ from frappe.utils import (
 )
 
 # What a line is taxed at when nobody said. Food carries the F&B rate from
-# the property's localization pack; everything else is a service.
+# the property's localization pack; everything else follows the pack's
+# configured services tax rate (never a hardcoded percentage).
 _FNB_TYPES = ("Menu", "Food & Beverage")
-_SERVICE_GST = 18.0
+
+
+def _service_gst_rate(property_name: str | None) -> float:
+	from kamra.localization import pack_for, services_tax_rate
+
+	return float(services_tax_rate(pack_for(property_name), property_name))
 
 BLOCKING_STATUSES = ("Confirmed",)
 
@@ -143,7 +149,7 @@ class VenueBooking(Document):
 		if row.item_type in _FNB_TYPES and not row.is_alcohol:
 			from kamra.folio import _fnb_gst
 			return float(_fnb_gst(self.property))
-		return _SERVICE_GST
+		return _service_gst_rate(self.property)
 
 	def _fill_quantities(self):
 		"""Quantities that follow the function - pax, hours - are filled
@@ -195,7 +201,7 @@ class VenueBooking(Document):
 		if row.item_type in _FOOD_TYPES:
 			from kamra.folio import _fnb_gst
 			return Decimal(str(_fnb_gst(self.property)))
-		return Decimal(str(_SERVICE_GST))
+		return Decimal(str(_service_gst_rate(self.property)))
 
 	def _cost_and_margin(self):
 		"""What the function costs the hotel, and what's left.
@@ -279,10 +285,12 @@ class VenueBooking(Document):
 		if discount < 0:
 			frappe.throw(_("A discount can't be negative."))
 		if discount > subtotal:
+			from kamra.localization import money_text
+
 			frappe.throw(
 				_("The discount ({0}) is more than the quote itself ({1}).")
-				.format(frappe.format_value(float(discount), "Currency"),
-				        frappe.format_value(float(subtotal), "Currency")))
+				.format(money_text(self.property, float(discount)),
+				        money_text(self.property, float(subtotal))))
 		# spread the negotiated reduction across the lines so a mixed-rate
 		# quote (food at 5%, AV at 18%) still taxes each line correctly
 		factor = ((subtotal - discount) / subtotal) if subtotal else Decimal(1)
@@ -350,6 +358,11 @@ class VenueBooking(Document):
 				     if r.kind == "Security Deposit"), Decimal(0))
 				- Decimal(str(self.deposit_refunded or 0))
 				- Decimal(str(self.damage_amount or 0)))
+		from kamra.banquet import event_folio_deposit_held
+
+		folio_held = event_folio_deposit_held(self)
+		if folio_held is not None:
+			self.deposit_held = folio_held
 		self.balance_due = float(
 			Decimal(str(self.grand_total))
 			- Decimal(str(self.advance_received or 0)))

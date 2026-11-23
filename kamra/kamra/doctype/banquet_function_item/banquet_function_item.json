@@ -42,7 +42,7 @@
    "reqd": 1,
    "in_list_view": 1,
    "default": "Other",
-   "options": "Venue Rental\nMenu\nFood & Beverage\nAlcohol\nAudio Visual\nDecor\nEntertainment\nFurniture & Setup\nStaffing\nAccommodation\nStationery\nOther"
+   "options": "Venue Rental\nMenu\nFood & Beverage\nAlcohol\nAudio Visual\nDecor\nEntertainment\nFurniture & Setup\nStaffing\nAccommodation\nStationery\nService Charge\nOther"
   },
   {
    "fieldname": "item_name",

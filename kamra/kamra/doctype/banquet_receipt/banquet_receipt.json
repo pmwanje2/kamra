@@ -31,11 +31,11 @@
   },
   {
    "fieldname": "mode",
-   "fieldtype": "Select",
+   "fieldtype": "Data",
    "label": "Mode",
    "default": "Bank Transfer",
    "in_list_view": 1,
-   "options": "Cash\nCard\nUPI\nBank Transfer\nCheque\nOther"
+   "description": "Payment mode from the property's configured tenders."
   },
   {
    "fieldname": "amount",
