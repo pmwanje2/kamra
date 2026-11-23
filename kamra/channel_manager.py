@@ -189,12 +189,15 @@ def ari_snapshot(property: str, connection: str, days: int = 90, start=None,
 
 
 def _one_night_rate(property: str, room_type: str, d, d2) -> float:
-	"""The pricing engine's one-night sell rate (2 adults), 0 when the
-	night cannot be quoted - availability still goes out for that day."""
+	"""The pricing engine's one-night sell rate (2 adults), as the channels
+	sell it (channel_ari.channel_rate: gross where the property's rates
+	include tax), 0 when the night cannot be quoted - availability still
+	goes out for that day."""
+	from kamra.channel_ari import channel_rate
 	from kamra.pricing import quote
 	try:
 		q = quote(property, room_type, str(d), str(d2), 2, 0)
-		return round(float(q["nightly"][0]["rate"]), 2)
+		return float(channel_rate(property, q))
 	except Exception:
 		return 0.0
 
@@ -484,7 +487,7 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 		if e.get("total") or requested_reason:
 			doc.amount_after_tax = e.get("total") or 0
 		if not doc.auto_price:
-			lock_channel_rates(doc, e.get("total"), e.get("nightly"))
+			lock_channel_rates(doc, e.get("total"), e.get("nightly"), e.get("nightly_net"))
 		old_transition = frappe.flags.kamra_status_transition
 		try:
 			if requested_reason:
@@ -521,7 +524,7 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 	})
 	if e.get("total"):
 		doc.amount_after_tax = e["total"]
-		lock_channel_rates(doc, e["total"], e.get("nightly"))
+		lock_channel_rates(doc, e["total"], e.get("nightly"), e.get("nightly_net"))
 	try:
 		doc.insert(ignore_permissions=True)
 	except frappe.DuplicateEntryError:
@@ -549,34 +552,42 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 	        "reservation": doc.name}
 
 
-def lock_channel_rates(doc, total_after_tax, nightly=None) -> None:
+def lock_channel_rates(doc, total_after_tax, nightly=None, nightly_net=False) -> None:
 	"""Lock an OTA booking's nightly rates from the channel's own prices.
 
 	The OTA sold the stay at its price (`total_after_tax`, tax included), so
 	the folio must bill that - not today's rack rate. The channel's per-night
 	prices say how the total splits across the nights (an even split when it
-	sends none); each night's share has the room tax backed out at the slab
-	its own pre-tax rate falls in. A zero total (currency mismatch, retained
-	for staff) locks nothing."""
+	sends none) - each with its own room tax put on first when they are
+	before tax (`nightly_net`), so a night in a higher slab takes its own
+	share; each night's share has the room tax backed out at the slab its
+	own pre-tax rate falls in, and the last night takes the rounding, as the
+	desk's nights do (Reservation.quote_night_rows). To the currency's
+	decimals, never fewer than two (pricing.night_rate_places). A zero total
+	(currency mismatch, retained for staff) locks nothing."""
 	total = float(total_after_tax or 0)
 	if total <= 0 or not doc.room_type:
 		return
 	from frappe.utils import date_diff, getdate
 
-	from kamra.pricing import room_gst_rate
+	from kamra.pricing import night_rate_places, room_gst_rate
 
 	nights = max(date_diff(doc.check_out_date, doc.check_in_date), 1)
 	dates = [str(add_days(doc.check_in_date, i)) for i in range(nights)]
 	given = {str(getdate(n["date"])): float(n.get("amount") or 0)
 	         for n in (nightly or []) if n.get("date")}
 	weights = [given.get(d, 0.0) for d in dates]
+	rt = frappe.get_doc("Room Type", doc.room_type)
+	if nightly_net:
+		weights = [w * (1 + float(room_gst_rate(doc.property, rt, Decimal(str(w)))) / 100)
+		           for w in weights]
 	if not sum(weights):
 		weights = [1.0] * nights
-	rt = frappe.get_doc("Room Type", doc.room_type)
-	rows, running = [], 0.0
+	places = night_rate_places(doc.property)
+	shares, running = [], 0.0
 	scale = total / sum(weights)
 	for i, (d, w) in enumerate(zip(dates, weights, strict=True)):
-		gross = round(total - running, 2) if i == nights - 1 else round(w * scale, 2)
+		gross = round(total - running, places) if i == nights - 1 else round(w * scale, places)
 		running += gross
 		gst = Decimal(str(room_gst_rate(doc.property, rt, Decimal(str(gross)))))
 		pre = Decimal(str(gross)) / (1 + gst / 100)
@@ -584,7 +595,13 @@ def lock_channel_rates(doc, total_after_tax, nightly=None) -> None:
 		if gst2 != gst:  # the slab follows the pre-tax rate
 			gst = gst2
 			pre = Decimal(str(gross)) / (1 + gst / 100)
-		rows.append({"stay_date": d, "rate": round(float(pre), 2),
+		shares.append((d, pre, gst))
+	room_total = float(sum(pre for _, pre, _ in shares))
+	rows, running = [], 0.0
+	for i, (d, pre, gst) in enumerate(shares):
+		rate = round(room_total - running, places) if i == nights - 1 else round(float(pre), places)
+		running += rate
+		rows.append({"stay_date": d, "rate": rate,
 		             "gst_rate": float(gst), "meal_amount": 0,
 		             "demand_premium_pct": 0})
 	doc.set("night_rates", rows)

@@ -371,9 +371,10 @@ doc_events["Reservation"] = {
 
 # What moves availability or price queues an ARI change for the connections
 # with an outbox (kamra.channel_ari: only changes, in ranges, under the
-# provider's rate limit). Reservations go through on_reservation_change.
+# provider's rate limit). Reservations go through on_reservation_change; a
+# Property only when its selling basis changes (channel_ari._PROPERTY_BASIS).
 for _doctype in ("Season", "Rate Plan", "Room Type", "Hurdle Rate", "Rate Guardrail",
-                 "Room", "Room Block", "Channel Room Mapping"):
+                 "Room", "Room Block", "Channel Room Mapping", "Property"):
 	_events = doc_events.setdefault(_doctype, {})
 	for _event in ("on_update", "after_insert", "on_trash"):
 		_current = _events.get(_event) or []

@@ -20,6 +20,14 @@ def _dec(v) -> Decimal:
 	return Decimal(str(v or 0))
 
 
+def _minor_unit(currency: str | None) -> int:
+	"""ISO 4217 decimals of a currency (CLDR data, as payment rounding uses)."""
+	if not currency:
+		return 2
+	from babel.numbers import get_currency_precision
+	return get_currency_precision(currency)
+
+
 def pet_charge_amount(prop, pets: int, nights: int) -> Decimal:
 	"""What the property charges for this many pets over the stay, before
 	tax. Per stay by default - most homestays charge once per pet, not per
@@ -444,6 +452,22 @@ def room_gst_rate(property: str, room_type_doc, nightly_rate: Decimal) -> Decima
 
 def rates_include_tax(property: str) -> bool:
 	return bool(frappe.get_cached_doc("Property", property).get("rates_include_tax"))
+
+
+def selling_currency(property: str | None) -> str | None:
+	"""The currency a property prices in: its own, else its country pack's."""
+	if not property:
+		return None
+	from kamra.localization import default_currency, pack_for
+	return frappe.get_cached_doc("Property", property).currency or default_currency(pack_for(property))
+
+
+def night_rate_places(property: str | None) -> int:
+	"""The decimals a booking's locked night rate keeps: the ISO 4217 minor
+	unit of the property's currency (three for KWD), never fewer than two.
+	The net share of a tax-inclusive price is not a whole UGX: 127,118.64 of
+	a 150,000 night at 18%, where 127,119 would bill 150,000.42."""
+	return max(2, _minor_unit(selling_currency(property)))
 
 
 def stay_season_rules(property: str, check_in, check_out,
