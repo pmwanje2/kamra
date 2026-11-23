@@ -17,6 +17,7 @@ rate limit.
 
 from __future__ import annotations
 
+import re
 from decimal import ROUND_HALF_UP, Decimal
 
 DEFAULT_ENDPOINT = "https://app.channex.io/api/v1"
@@ -113,10 +114,11 @@ def _attributes(item: dict) -> dict:
 _ARI_ID_FIELD = {"availability": "room_type_id", "restrictions": "rate_plan_id"}
 
 
-def _ari_value(field: str, value):
+def _ari_value(field: str, value, quantum: Decimal):
 	if field == "rate":
-		# a decimal string: Channex refuses a bare float with decimals
-		return str(Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+		# a decimal string with the currency's decimals (none for UGX, three
+		# for KWD): Channex refuses a bare float with decimals
+		return str(Decimal(str(value)).quantize(quantum, rounding=ROUND_HALF_UP))
 	if field == "availability":
 		return int(value)
 	return value
@@ -134,7 +136,9 @@ def push_ari_changes(conn, kind: str, changes: list[dict]) -> dict:
 	"wait": seconds the RateLimit header asks to hold back}. A rejected value
 	does not fail the call: Channex applies the others and lists it under
 	meta.warnings. ChannexRateLimited on a 429, ChannexError otherwise."""
+	from kamra.channel_ari import rate_quantum
 	id_field = _ARI_ID_FIELD[kind]
+	quantum = rate_quantum(conn.get("property"))
 	values, by_key = [], {}
 	for change in changes:
 		obj = {"property_id": conn.external_property_id, id_field: change["external_id"]}
@@ -143,7 +147,7 @@ def push_ari_changes(conn, kind: str, changes: list[dict]) -> dict:
 		else:
 			obj["date_from"], obj["date_to"] = change["date_from"], change["date_to"]
 		for field, value in (change.get("values") or {}).items():
-			obj[field] = _ari_value(field, value)
+			obj[field] = _ari_value(field, value, quantum)
 		values.append(obj)
 		by_key.setdefault(_change_key(id_field, obj), change)
 	body, headers = _send(conn, "POST", kind, payload={"values": values})
@@ -223,12 +227,35 @@ def push_ari(conn, snapshot) -> tuple[bool, str]:
 	return True, f"{sent.get('availability', 0)} availability, {sent.get('restrictions', 0)} rate values"
 
 
+# The room tax among a booking room's taxes: Channex's own type "tax", or a
+# VAT / GST under the name an OTA relays (Booking.com "Value Added Tax
+# (VAT)"). Fees and city taxes ("fee", "city_tax", "City Tax") are the OTA's,
+# not the tax the property charges on the night.
+_ROOM_TAX = re.compile(r"^tax$|\bvat\b|\bgst\b|value added tax|goods and services tax")
+
+
+def _tax_on_top(room: dict) -> float:
+	"""The room tax a booking room lists on top of its day prices
+	(is_inclusive false - docs.channex.io, bookings collection: Expedia
+	"Total Amount Excluding Tax", Agoda "Exclusive"); 0 when the prices hold
+	it. A tax the OTA withheld is not the property's to bill."""
+	total = 0.0
+	for tax in room.get("taxes") or []:
+		kind = " ".join(re.findall(r"[a-z]+", str(tax.get("type") or "").lower()))
+		if tax.get("is_inclusive") is False and not tax.get("is_withheld") and _ROOM_TAX.search(kind):
+			total += float(tax.get("total_price") or 0)
+	return total
+
+
 def parse_webhook(conn, payload) -> list[dict]:
 	"""Channex booking webhook -> normalized events.
 
 	Payload: {event: "booking", payload: {status, ota_reservation_code,
 	ota_name, arrival_date, departure_date, customer{...}, rooms[...]}}
-	"""
+
+	A room's total is what the guest paid for it: its day prices, plus the
+	room tax when the channel lists it on top of them (then the day prices
+	are before tax: nightly_net)."""
 	body = payload.get("payload") or payload
 	status = (body.get("status") or "new").lower()
 	event = {"new": "book", "modified": "modify",
@@ -237,8 +264,9 @@ def parse_webhook(conn, payload) -> list[dict]:
 	out = []
 	for room in body.get("rooms") or [{}]:
 		days = room.get("days") or {}
-		total = sum(float(v or 0) for v in days.values()) or \
-			float(body.get("amount") or 0)
+		on_top = _tax_on_top(room)
+		total = (sum(float(v or 0) for v in days.values())
+		         or float(body.get("amount") or 0)) + on_top
 		occ = room.get("occupancy") or {}
 		out.append({
 			"event": event,
@@ -257,6 +285,7 @@ def parse_webhook(conn, payload) -> list[dict]:
 			"email": customer.get("mail") or customer.get("email") or "",
 			"total": total,
 			"nightly": [{"date": k, "amount": float(v or 0)} for k, v in sorted(days.items())],
+			"nightly_net": bool(on_top),
 			"currency": body.get("currency") or "",
 			"notes": body.get("notes") or "",
 		})
