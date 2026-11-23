@@ -570,5 +570,8 @@
   "Foreign-currency contracts": "Verträge in Fremdwährung",
   "How a bill shows a stay priced in a foreign-currency contract beside the home amounts.": "Wie eine Rechnung einen in einem Fremdwährungsvertrag bepreisten Aufenthalt neben den Beträgen in Hauswährung zeigt.",
   "Reference currency on bills": "Referenzwährung auf Rechnungen",
-  "ACTUAL: each charge and payment at the exchange rate of the day it was priced or posted. CURRENT: the whole bill at today's published rate.": "ACTUAL: jede Belastung und Zahlung zum Wechselkurs des Tages, an dem sie bepreist oder gebucht wurde. CURRENT: die ganze Rechnung zum heute veröffentlichten Kurs."
+  "ACTUAL: each charge and payment at the exchange rate of the day it was priced or posted. CURRENT: the whole bill at today's published rate.": "ACTUAL: jede Belastung und Zahlung zum Wechselkurs des Tages, an dem sie bepreist oder gebucht wurde. CURRENT: die ganze Rechnung zum heute veröffentlichten Kurs.",
+  "Rate plan: {plan}": "Ratenplan: {plan}",
+  "Negotiated rate plan for {customer}": "Verhandelter Ratenplan für {customer}",
+  "Clear rate plan and customer": "Ratenplan und Kunde zurücksetzen"
 }

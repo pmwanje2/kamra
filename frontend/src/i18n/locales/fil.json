@@ -1289,5 +1289,8 @@
   "Foreign-currency contracts": "Mga kontrata sa dayuhang pera",
   "How a bill shows a stay priced in a foreign-currency contract beside the home amounts.": "Kung paano ipinapakita ng bill ang pananatiling may presyo sa kontratang dayuhang pera katabi ng mga halaga sa lokal na pera.",
   "Reference currency on bills": "Reference currency sa mga bill",
-  "ACTUAL: each charge and payment at the exchange rate of the day it was priced or posted. CURRENT: the whole bill at today's published rate.": "ACTUAL: bawat singil at bayad sa exchange rate ng araw na ito ay napresyuhan o nai-post. CURRENT: ang buong bill sa rate na inilathala ngayon."
+  "ACTUAL: each charge and payment at the exchange rate of the day it was priced or posted. CURRENT: the whole bill at today's published rate.": "ACTUAL: bawat singil at bayad sa exchange rate ng araw na ito ay napresyuhan o nai-post. CURRENT: ang buong bill sa rate na inilathala ngayon.",
+  "Rate plan: {plan}": "Plano ng rate: {plan}",
+  "Negotiated rate plan for {customer}": "Napagkasunduang plano ng rate ng {customer}",
+  "Clear rate plan and customer": "I-clear ang plano ng rate at kustomer"
 }

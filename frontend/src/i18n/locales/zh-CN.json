@@ -6905,5 +6905,8 @@
   "Foreign-currency contracts": "外币合同",
   "How a bill shows a stay priced in a foreign-currency contract beside the home amounts.": "账单如何在本币金额旁显示以外币合同定价的住宿。",
   "Reference currency on bills": "账单上的参考货币",
-  "ACTUAL: each charge and payment at the exchange rate of the day it was priced or posted. CURRENT: the whole bill at today's published rate.": "ACTUAL：每笔费用和付款按其定价或入账当天的汇率。CURRENT：整张账单按今天公布的汇率。"
+  "ACTUAL: each charge and payment at the exchange rate of the day it was priced or posted. CURRENT: the whole bill at today's published rate.": "ACTUAL：每笔费用和付款按其定价或入账当天的汇率。CURRENT：整张账单按今天公布的汇率。",
+  "Rate plan: {plan}": "房价计划：{plan}",
+  "Negotiated rate plan for {customer}": "{customer} 的协议房价计划",
+  "Clear rate plan and customer": "清除房价计划和客户"
 }

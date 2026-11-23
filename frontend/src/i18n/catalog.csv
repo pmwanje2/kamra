@@ -1705,6 +1705,7 @@ Clear all,Clear all,مسح الكل,Borrar todo,Limpar tudo,全部清除,,,trans
 Clear dispute,Clear dispute,إلغاء النزاع,Retirar disputa,Encerrar contestação,清除争议,screens/Receivables.tsx,,translated
 Clear message text after,Clear message text after,مسح نص الرسائل بعد,Eliminar texto de mensajes después de,Limpar o texto da mensagem após,在此时间后清除消息文本,,,translated
 Clear new,Clear new,مسح الجديد,Borrar novedades,Limpar novo,清除新增,screens/POS.tsx,,translated
+Clear rate plan and customer,Clear rate plan and customer,مسح خطة السعر والعميل,Borrar plan tarifario y cliente,Limpar plano tarifário e cliente,清除房价计划和客户,screens/RateCalendar.tsx,,translated
 Clear selection,Clear selection,مسح التحديد,Borrar selección,Limpar seleção,,screens/Receivables.tsx,,needs_translation
 Clear the dispute,Clear the dispute,إلغاء النزاع,Retirar la disputa,Encerrar a contestação,清除争议,screens/Receivables.tsx,,translated
 Clear the order,Clear the order,,,,清除订单,components/AgentGuide.tsx,,needs_translation
@@ -3825,6 +3826,7 @@ Needs chasing{urgent},Needs chasing{urgent},يحتاج متابعة{urgent},Requ
 Needs you,Needs you,تحتاج إليك,Requiere su atención,Precisa de você,,screens/EndOfDayWizard.tsx,,needs_translation
 NEGATIVE,NEGATIVE,سالب,NEGATIVO,NEGATIVO,负数,,,translated
 Negotiated rate plan,Negotiated rate plan,خطة سعر متفاوض عليها,Plan tarifario negociado,Plano tarifário negociado,协议房价计划,,,translated
+Negotiated rate plan for {customer},Negotiated rate plan for {customer},خطة سعر متفاوض عليها لـ {customer},Plan tarifario negociado de {customer},Plano tarifário negociado de {customer},{customer} 的协议房价计划,screens/RateCalendar.tsx,customer,translated
 Net,Net,الصافي,Neto,Líquido,净额,screens/CashForecast.tsx,,translated
 Net Total (net_total),Net Total (net_total),صافي الإجمالي (net_total),Total neto (net_total),Total líquido (total_líquido),净额（net_total）,,,translated
 Network round trip {ms} ms - fine.,Network round trip {ms} ms - fine.,زمن ذهاب وإياب الشبكة {ms} ms، جيد.,Tiempo de respuesta de la red: {ms} ms. Adecuado.,Ida e volta da rede {ms} ms - tudo bem.,网络往返 {ms} 毫秒 - 正常。,screens/settings/cards.tsx,ms,translated
@@ -5055,6 +5057,7 @@ Rate Guardrails,Rate Guardrails,حدود الأسعار,Límites de tarifas,Aval
 Rate per night,Rate per night,السعر لليلة,Tarifa por noche,Tarifa por noite,每晚房价,components/RoomChangeDialog.tsx,,translated
 Rate per pax,Rate per pax,السعر لكل شخص,Tarifa por persona,Taxa por pessoa,每人价格,screens/BanquetCatalogue.tsx,,translated
 Rate plan,Rate plan,خطة السعر,Plan tarifario,Plano tarifário,房价计划,components/BookingDialog.tsx; screens/ReservationDetail.tsx,,translated
+Rate plan: {plan},Rate plan: {plan},خطة السعر: {plan},Plan tarifario: {plan},Plano tarifário: {plan},房价计划：{plan},screens/RateCalendar.tsx,plan,translated
 Rate Plan,Rate Plan,خطة السعر,Plan tarifario,Plano tarifário,房价计划,,,translated
 Rate plans,Rate plans,خطط الأسعار,Planes tarifarios,Planos tarifários,房价计划,components/RateOptions.tsx,,translated
 Rate Plans,Rate Plans,خطط الأسعار,Planes tarifarios,Planos Tarifários,房价计划,,,translated
