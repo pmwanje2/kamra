@@ -10,12 +10,12 @@ import { setLang } from "../src/lib/dir"
 import { ensureDictionary } from "../src/lib/locales"
 import { FEATURES } from "../src/lib/searchIndex"
 
-const { rpc, download } = vi.hoisted(() => ({ rpc: vi.fn(), download: vi.fn() }))
+const { rpc, download, resource } = vi.hoisted(() => ({ rpc: vi.fn(), download: vi.fn(), resource: vi.fn() }))
 vi.mock("../src/lib/api", () => ({
   call: (method: string, params: unknown) => method === "kamra.api.property_locale"
     ? Promise.resolve({ locale: "en", currency: "UGX" }) : rpc(method, params),
   getCurrentProperty: () => "Test Hotel",
-  frappeFetch: async (path: string) => ({ data: path.includes("?") ? [] : {} }),
+  frappeFetch: (path: string) => resource(path),
   serverError: (error: Error) => error.message,
 }))
 vi.mock("../src/lib/csv", async (original) => ({ ...await original<typeof import("../src/lib/csv")>(), downloadCsv: download }))
@@ -71,6 +71,7 @@ describe("Contract Tariffs", () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true)
     vi.stubGlobal("localStorage", jsdom.window.localStorage)
     download.mockReset()
+    resource.mockReset().mockImplementation(async (path: string) => ({ data: path.includes("?") ? [] : {} }))
     rpc.mockReset().mockImplementation((method: string) => {
       if (method === listMethod) return Promise.resolve(data)
       if (method === "kamra.rates.room_type_tariffs") return Promise.resolve(null)
@@ -510,7 +511,9 @@ describe("Contract Tariffs", () => {
       "Adjust extra person charges", "Rounding step", "Rounding mode"]) expect(text()).toContain(label)
     const options = Array.from(host.querySelectorAll("select option"), (node) => node.textContent)
     expect(options).toEqual(expect.arrayContaining(["Fixed at Reservation", "Fixed at Check In", "Current Date",
-      "Fixed at Block", "Nearest", "Up", "Down"]))
+      "Nearest", "Up", "Down"]))
+    // no group block locks a rate (P1-5): the policy is not offered
+    expect(options).not.toContain("Fixed at Block")
   })
 
   // ── Round 2 (Gap Record #8556) ─────────────────────────────────────────────
@@ -725,5 +728,144 @@ describe("Contract Tariffs", () => {
     expect(text(dialog)).toContain("Amount change (in each tariff's currency)")
     await choose(field(dialog, "adjustment"), "exact")
     expect(text(dialog)).toContain("New rate (in each tariff's currency)")
+  })
+
+  // ── Round 6 (OPERA Cloud / SAP S/4HANA parity) ─────────────────────────────
+  it("creates a new customer's first own rate from a public row's single version dialog", async () => {
+    resource.mockImplementation(async (path: string) => path.startsWith("/api/resource/Customer")
+      ? { data: [{ name: "New Client", customer_name: "New Client Ltd" }, { name: "Client Co", customer_name: "Client Co" }] }
+      : { data: path.includes("?") ? [] : {} })
+    rpc.mockImplementationOnce(async () => data)
+      .mockImplementationOnce(async () => ({ name: "NEW", customer: "New Client" }))
+      .mockImplementationOnce(async () => data)
+    await render("/tariffs?q=Deluxe")
+    await click("New version", row("Corporate USD|Deluxe|").querySelector("[data-item='DLX']")!)
+    const dialog = host.querySelector("dialog[open]")!
+    const customer = field<HTMLInputElement>(dialog, "customer")
+    expect(text(dialog)).toContain("Customer (optional)")
+    expect(text(dialog)).toContain("Leave empty for the public rate.")
+    const suggestions = Array.from(dialog.querySelectorAll(`datalist[id="${customer.getAttribute("list")}"] option`),
+      (option) => option.getAttribute("value"))
+    expect(suggestions).toEqual(["Client Co", "New Client"])
+    await input(customer, "New Client")
+    expect(text(dialog.querySelector("header")!)).toContain("Customer rate: New Client")
+    await input(dialog.querySelector("input[type=number]")!, "118")
+    await click("Submit for approval", dialog)
+    expect(rpc.mock.calls[1]).toEqual(["kamra.rates.propose_contract_tariff", { property: "Test Hotel",
+      price_list: usd.name, item_code: "DLX", price_list_rate: 118, valid_from: "2026-11-23", valid_upto: null,
+      customer: "New Client" }])
+  })
+
+  it("keeps a customer row's own customer in its single version dialog", async () => {
+    await render("/tariffs?q=Deluxe")
+    await click("New version", row("Corporate USD|Deluxe|Client Co").querySelector("[data-item='DLX']")!)
+    expect(host.querySelector("dialog[open] [name=customer]")).toBeNull()
+  })
+
+  it("creates a customer's own rates in bulk from the selected public tariffs", async () => {
+    rpc.mockImplementationOnce(async () => data)
+      .mockImplementationOnce(async () => ({ proposed: ["N1", "N2"] }))
+      .mockImplementationOnce(async () => data)
+    await render()
+    const dialog = await openBulk()
+    expect(text(dialog)).toContain("Leave empty to keep each tariff's own customer.")
+    await input(field(dialog, "customer"), "New Client")
+    await input(field(dialog, "adjustment_value"), "-10")
+    expect(text(dialog)).toContain("Deluxe King · New Client: USD 130.00 → USD 117.00")
+    await click("Submit 2 for approval", dialog)
+    expect(rpc.mock.calls[1]).toEqual(["kamra.rates.bulk_propose_contract_tariffs", { property: "Test Hotel", entries: [
+      { price_list: usd.name, item_code: "DLX-1A", price_list_rate: 99, valid_from: "2026-11-23", valid_upto: null,
+        customer: "New Client" },
+      { price_list: usd.name, item_code: "DLX", price_list_rate: 117, valid_from: "2026-11-23", valid_upto: null,
+        customer: "New Client" },
+    ] }])
+  })
+
+  it("prices a customer's bulk version from that customer's own row when both rows are selected", async () => {
+    rpc.mockImplementationOnce(async () => data)
+      .mockImplementationOnce(async () => ({ proposed: ["N1", "N2"] }))
+      .mockImplementationOnce(async () => data)
+    await render()
+    await check("Select all")
+    await click("Create new version in bulk")
+    const dialog = host.querySelector("dialog[open]")!
+    expect(field(dialog, "customer"), "the bulk dialog's customer picker").not.toBeNull()
+    await input(field(dialog, "customer"), "Client Co")
+    await choose(field(dialog, "adjustment"), "amount")
+    await input(field(dialog, "adjustment_value"), "5")
+    await click("Submit 2 for approval", dialog)
+    expect(rpc.mock.calls[1]).toEqual(["kamra.rates.bulk_propose_contract_tariffs", { property: "Test Hotel", entries: [
+      { price_list: usd.name, item_code: "DLX-1A", price_list_rate: 115, valid_from: "2026-11-23", valid_upto: null,
+        customer: "Client Co" },
+      { price_list: usd.name, item_code: "DLX", price_list_rate: 125, valid_from: "2026-11-23", valid_upto: null,
+        customer: "Client Co" },
+    ] }])
+  })
+
+  it("proposes a complimentary (zero) supplement from the single version dialog", async () => {
+    rpc.mockImplementationOnce(async () => data)
+      .mockImplementationOnce(async () => ({ item_price: "NEW" }))
+      .mockImplementationOnce(async () => data)
+    await render()
+    await click("Supplements")
+    await click("New version", host.querySelector("tr[data-item='TAR-EXTRA-ADULT']")!)
+    const dialog = host.querySelector("dialog[open]")!
+    const amount = dialog.querySelector<HTMLInputElement>("input[type=number]")!
+    expect(amount.min).toBe("0")
+    await input(amount, "0")
+    await click("Submit for approval", dialog)
+    expect(rpc.mock.calls[1]).toEqual(["kamra.rates.propose_contract_tariff", { property: "Test Hotel",
+      price_list: usd.name, item_code: "TAR-EXTRA-ADULT", price_list_rate: 0, valid_from: "2026-11-23", valid_upto: null }])
+  })
+
+  it("still needs a room rate above zero", async () => {
+    await render("/tariffs?q=Deluxe")
+    await click("New version", row("Corporate USD|Deluxe|").querySelector("[data-item='DLX']")!)
+    const dialog = host.querySelector("dialog[open]")!
+    expect(dialog.querySelector<HTMLInputElement>("input[type=number]")!.min).toBe("0.01")
+    await input(dialog.querySelector("input[type=number]")!, "0")
+    await click("Submit for approval", dialog)
+    expect(rpc).toHaveBeenCalledTimes(1)
+  })
+
+  it("shows who proposed, approved or rejected each version and when", async () => {
+    const audited = { ...item,
+      pending: [{ ...draft, owner: "maker@example.test", creation: "2026-11-21 10:05:00" }],
+      history: [
+        { name: "OLD", rate: 115, valid_from: "2026-10-01", valid_upto: "2026-11-21", workflow_state: "Approved",
+          owner: "maker@example.test", creation: "2026-09-28 09:15:00", approver: "checker@example.test",
+          modified_by: "checker@example.test", modified: "2026-09-29 16:40:00" },
+        { name: "REJ", rate: 125, valid_from: "2026-11-01", workflow_state: "Rejected", owner: "maker@example.test",
+          creation: "2026-10-20 08:00:00", modified_by: "checker@example.test", modified: "2026-10-21 12:30:00",
+          rejection_reason: "Above the corporate ceiling" },
+        // an older integration answers no audit fields: the row still reads cleanly
+        { name: "BARE", rate: 105, valid_from: "2026-08-01", workflow_state: "Approved" },
+      ] }
+    rpc.mockImplementation(async (method: string) => method === listMethod
+      ? { ...data, items: [audited, single, triple, corporate, extraAdult, bed, hall] } : null)
+    await render()
+    const publicRow = row("Corporate USD|Deluxe|")
+    expect(text(publicRow)).toContain("Proposed by maker@example.test")
+    expect(text(publicRow)).toContain("Nov 21, 2026")
+    await click("History", publicRow)
+    const history = host.querySelector<HTMLElement>("tr[id] ul")!
+    const [approved, rejected, bare] = Array.from(history.querySelectorAll("li"), (node) => node.textContent ?? "")
+    expect(approved).toContain("Proposed by maker@example.test")
+    expect(approved).toContain("Sep 28, 2026")
+    expect(approved).toContain("Approved by checker@example.test")
+    expect(approved).toContain("Sep 29, 2026")
+    expect(rejected).toContain("Rejected by checker@example.test")
+    expect(rejected).toContain("Oct 21, 2026")
+    expect(rejected).toContain("Reason: Above the corporate ceiling")
+    expect(bare).not.toMatch(/by|Reason|undefined|null|Invalid/)
+  })
+
+  it("schedules only the versions that start after the effective date being viewed", async () => {
+    await render()
+    expect(text(row("Corporate USD|Deluxe|"))).toContain("Scheduled: USD 150.00 from Jan 1, 2027")
+    await input(field<HTMLInputElement>(host, "as_of_date"), "2027-01-15")
+    await vi.waitFor(() => expect(rpc).toHaveBeenLastCalledWith(listMethod, { property: "Test Hotel", as_of_date: "2027-01-15" }))
+    await vi.waitFor(() => expect(host.textContent).not.toContain("Refreshing contract tariffs…"))
+    expect(text(row("Corporate USD|Deluxe|"))).not.toContain("Scheduled: USD 150.00")
   })
 })
