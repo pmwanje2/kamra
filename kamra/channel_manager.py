@@ -568,7 +568,10 @@ def _channel_contract(conn, e: dict, home: str) -> tuple[dict | None, str | None
 	So the OTA's own nights (its discounts kept) convert at the governed
 	selling rate of the business date (pricing.posting_fx_rate), rounded as
 	the plan rounds (pricing.contract_local_amount), and the booking keeps a
-	contract snapshot of them. An OTA-collected booking (prepaid or a virtual
+	contract snapshot of them in the contract's per-night shape (each night's
+	own amounts, the scalar figures the check-in night's, as
+	pricing.contract_rate keeps a stay over a tariff change). An
+	OTA-collected booking (prepaid or a virtual
 	card; also when the channel does not say) is fixed at reservation; a
 	property-collected one follows its rate plan's lock, as a desk booking
 	does (pricing.reservation_fx_policy).
@@ -614,11 +617,11 @@ def _channel_contract(conn, e: dict, home: str) -> tuple[dict | None, str | None
 		return None, None
 	rp = chain[-1]
 	local = [contract_local_amount(rp, amount, fx, home) for amount in amounts]
-	nightly = round_rate_amount(sum(amounts) / len(amounts), 0, currency=currency)
-	agreed = float(contract_local_amount(rp, nightly, fx, home))
-	snapshot = {"tariff": {"currency": currency, "nightly": float(nightly), "fx_rate": float(fx),
-	                       "fx_date": fx_date, "property_currency": home, "source": "channel",
-	                       "nights": {d: float(amount) for d, amount in zip(dates, amounts, strict=True)}},
+	nights = [{"date": d, "nightly": float(amount), "agreed_rate": float(value)}
+	          for d, amount, value in zip(dates, amounts, local, strict=True)]
+	agreed = nights[0]["agreed_rate"]
+	snapshot = {"tariff": {"currency": currency, "nightly": nights[0]["nightly"], "fx_rate": float(fx),
+	                       "fx_date": fx_date, "property_currency": home, "source": "channel", "nights": nights},
 	            "agreed_rate": agreed}
 	if e.get("payment_collect") != "property" or e.get("virtual_card"):
 		snapshot["fx_lock_policy"] = DEFAULT_FX_LOCK
