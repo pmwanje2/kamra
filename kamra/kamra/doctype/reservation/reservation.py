@@ -981,10 +981,13 @@ class Reservation(Document):
 		"""This save changes the desk's discount and nothing else that is
 		sold (dates, room type, party, meal / rate plan, voucher, agreed
 		rate), on a stay whose every night is locked for what it held."""
-		if self.is_new() or self.has_value_changed("auto_price") or not self.nights_cover_stay():
+		if (self.is_new() or self.has_value_changed("auto_price")
+				or self.flags.get("correct_charged_nights") or not self.nights_cover_stay()):
 			return False
 		old = self.get_doc_before_save()
-		if not old or not old.lock_is_current():
+		# a caller that cleared or replaced the lock asks for a re-quote
+		if (not old or not old.lock_is_current()
+				or self.get("rate_lock_key") != old.get("rate_lock_key")):
 			return False
 		return self.sold_key(inputs) == self.sold_key(old.quote_inputs())
 

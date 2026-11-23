@@ -645,9 +645,14 @@ def post_room_night(reservation, date, folios=None) -> bool:
 			        + (" · day use" if getattr(reservation, "is_day_use", 0) else ""))
 			locked = locked_night(reservation, date)
 			if locked is not None and float(locked.get("discount_amount") or 0) > 0:
-				# the net rate is what bills; the line says what it came from
-				desc += (f" · {float(locked.base_rate or 0):,.2f} less discount"
-				         f" {float(locked.discount_amount):,.2f}")
+				# the net rate is what bills; the line says what it came from,
+				# base and discount on the basis the discount was given (gross
+				# where rates include tax)
+				from kamra.pricing import entry_rate, rates_include_tax
+				off = float(locked.discount_amount)
+				base = float(entry_rate(locked.rate, locked.gst_rate,
+				                        rates_include_tax(reservation.property))) + off
+				desc += f" · {base:,.2f} less discount {off:,.2f}"
 		_append_charge(folios, reservation, "Room", {
 			"posting_date": date,
 			"charge_type": "Room",

@@ -589,6 +589,9 @@ def lock_channel_rates(doc, total_after_tax, nightly=None) -> None:
 		             "demand_premium_pct": 0})
 	doc.set("night_rates", rows)
 	doc.rate_lock_key = None
+	# the channel's own prices: the one writer of a locked night besides the
+	# booking's own pricing (Reservation.guard_locked_nights)
+	doc.flags.kamra_night_rates_writer = True
 
 
 def _reconcile_booking_rooms(conn, booking_id: str, keep: set) -> None:
