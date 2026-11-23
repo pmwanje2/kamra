@@ -987,6 +987,86 @@ class ClosedNightVoidAndRepostTests(AuditTestCase):
 		self.assertEqual(proj["projected_adr"], 1000)
 		self.assertEqual(proj["projected_revpar"], 250)
 
+	def test_later_date_void_before_amend_stay_comp_to_bar_holds_closed_night_and_matches_folio(self):
+		from kamra import folio as folio_mod
+		# 3-night COMP stay: YESTERDAY posted at 0, then voided on later date TODAY, then amended COMP -> BAR
+		stay = self._stay(self.rooms[0], self.comp, ci=YESTERDAY, co=d(2))
+		self.assertTrue(folio_mod.post_room_night(frappe.get_doc("Reservation", stay.name), YESTERDAY))
+
+		self._set_business_date(TODAY)
+		folio_name, orig_row = self._active_room_row(stay.name)
+		self._as_user(GM, api.void_folio_charge, folio_name, orig_row, reason="UT void closed comp night", pin="4321")
+
+		# Closed YESTERDAY stands on its date, so charged_nights must agree with _charge_posted
+		charged = folio_mod.charged_nights(stay.name)
+		self.assertIn(YESTERDAY, charged)
+		self.assertEqual(charged[YESTERDAY]["base"], 0.0)
+
+		pv = self._as_user(DESK, api.amend_stay_preview, stay.name, YESTERDAY, d(2), rate_plan=self.bar)
+		self.assertTrue(
+			any(n["date"] == YESTERDAY and n["action"] == "kept" and n["charged"] == 0.0
+			    for n in pv["charged_nights"]["nights"]),
+			pv["charged_nights"],
+		)
+		self._as_user(DESK, api.amend_stay, stay.name, YESTERDAY, d(2), confirm_price=1, rate_plan=self.bar)
+		updated = frappe.get_doc("Reservation", stay.name)
+		rates_by_date = {str(r.stay_date): flt(r.rate) for r in updated.night_rates}
+		self.assertEqual(rates_by_date, {YESTERDAY: 0.0, TODAY: 1000.0, d(1): 1000.0})
+		self.assertAlmostEqual(flt(updated.amount_after_tax), flt(pv["new_amount"]), places=2)
+
+		remaining = folio_mod.post_remaining_nights(updated)
+		self.assertEqual(remaining, 2)
+		folio_total = flt(frappe.db.get_value("Folio", folio_name, "grand_total"))
+		self.assertAlmostEqual(flt(updated.amount_after_tax), folio_total, places=2)
+
+		# Contrast: same-date void on still-open TODAY drops out of charged_nights and re-prices + re-posts
+		same = self._stay(self.rooms[1], self.comp, ci=TODAY, co=d(2))
+		self.assertTrue(folio_mod.post_room_night(frappe.get_doc("Reservation", same.name), TODAY))
+		same_folio, same_row = self._active_room_row(same.name)
+		self._as_user(GM, api.void_folio_charge, same_folio, same_row, reason="UT same-date void comp", pin="4321")
+		self.assertNotIn(TODAY, folio_mod.charged_nights(same.name))
+		self._as_user(DESK, api.amend_stay, same.name, TODAY, d(2), confirm_price=1, rate_plan=self.bar)
+		same_after = frappe.get_doc("Reservation", same.name)
+		self.assertEqual({str(r.stay_date): flt(r.rate) for r in same_after.night_rates},
+		                 {TODAY: 1000.0, d(1): 1000.0})
+		self.assertEqual(folio_mod.post_remaining_nights(same_after), 2)
+		same_total = flt(frappe.db.get_value("Folio", same_folio, "grand_total"))
+		self.assertAlmostEqual(flt(same_after.amount_after_tax), same_total, places=2)
+
+	def test_later_date_void_of_paid_night_before_amend_to_comp_keeps_folio_and_header_in_sync(self):
+		from kamra import folio as folio_mod
+		# 3-night BAR stay: YESTERDAY posted at 1000, voided on later date TODAY (folio net 0), then amended BAR -> COMP
+		stay = self._stay(self.rooms[2], self.bar, ci=YESTERDAY, co=d(2))
+		self.assertTrue(folio_mod.post_room_night(frappe.get_doc("Reservation", stay.name), YESTERDAY))
+
+		self._set_business_date(TODAY)
+		folio_name, orig_row = self._active_room_row(stay.name)
+		self._as_user(GM, api.void_folio_charge, folio_name, orig_row, reason="UT void closed paid night", pin="4321")
+
+		charged = folio_mod.charged_nights(stay.name)
+		self.assertIn(YESTERDAY, charged)
+		self.assertEqual(charged[YESTERDAY]["base"], 0.0)
+
+		# Under Credit the difference, an already-voided closed night must never be credited a second time
+		set_setting(PROP_R4, "charged_night_rate_change", "Credit the difference")
+		self._as_user(
+			DESK, api.amend_stay, stay.name, YESTERDAY, d(2), confirm_price=1,
+			rate_plan=self.comp, comp_supervisor_user=GM, comp_supervisor_pin="4321",
+		)
+		adjs = frappe.get_all(
+			"Folio Charge",
+			filters={"reservation": stay.name, "charge_type": "Rate Adjustment"},
+			pluck="name",
+		)
+		self.assertEqual(adjs, [])
+		updated = frappe.get_doc("Reservation", stay.name)
+		self.assertEqual({str(r.stay_date): flt(r.rate) for r in updated.night_rates},
+		                 {YESTERDAY: 0.0, TODAY: 0.0, d(1): 0.0})
+		self.assertEqual(flt(updated.amount_after_tax), 0.0)
+		self.assertEqual(folio_mod.post_remaining_nights(updated), 2)
+		folio_total = flt(frappe.db.get_value("Folio", folio_name, "grand_total"))
+		self.assertEqual(folio_total, 0.0)
+
 
 class GroupPreviewPricingParityTests(CompCase):
 	"""R4 P2 #2: group_price_preview, group_quotation and group_detail use the
