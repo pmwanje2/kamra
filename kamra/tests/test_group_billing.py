@@ -4,7 +4,10 @@ The main room (Group Booking.master_reservation) carries what `master_pays`
 covers for every room on one group bill, with no company needed. A room can
 opt out (pays_own_charges), liquor never routes, the main guest can leave
 while the bill stays open, and settle_group_bill closes it. A company group
-without a main room keeps its city-ledger behaviour.
+without a main room bills the company on a group bill anchored to its first
+room: OPERA's posting master. That bill is the group's, not the first room's:
+the room's own check-out, reinstatement, no-show or check-out sheet leaves it
+and its advances alone, and only the group's own settlement closes it.
 """
 
 from __future__ import annotations
@@ -165,6 +168,61 @@ class GroupBillingTestCase(AuditTestCase):
 		self.assertEqual(frappe.db.get_value("Folio", bill, "reservation"), r1.name)
 		api.add_folio_payment(bill, "Cash", 500, kind="Advance")
 		self.assertEqual((_held(bill), _applied(bill)), (0, 500))
+
+	def test_advance_bill_returns_the_bill_the_nights_went_to(self):
+		gb, (_r1, r2, _r3) = self.group(company=_corp(), master=False)
+		own = folio_mod.open_folio(r2)
+		stamp = frappe.db.get_value("Folio", own, "modified")
+		out = ledger.force_advance_bill(r2.name, "entire")
+		bill = frappe.db.get_value("Folio", {"group_booking": gb.name, "folio_type": "Group"})
+		self.assertEqual(out["folio"], bill)
+		self.assertEqual(out["balance"], frappe.db.get_value("Folio", bill, "balance"))
+		# nothing landed on the guest's own bill, and it is not saved again
+		self.assertEqual(frappe.db.get_value("Folio", own, "modified"), stamp)
+
+	def test_a_first_room_that_never_arrives_leaves_the_group_advance_held(self):
+		gb, (r1, _r2, _r3) = self.group(company=_corp(), master=False, status="Confirmed")
+		bill = folio_mod.open_group_folio(gb.name)
+		self.assertEqual(frappe.db.get_value("Folio", bill, "reservation"), r1.name)
+		api.add_folio_payment(bill, "Cash", 5000, kind="Advance")
+		# the first room's no-show or cancellation fee applies that room's own
+		# advances; the group's stay held while no room of it is in house
+		ledger.transfer_advances_to_guest(r1.name)
+		folio_mod.post_policy_fee(frappe.get_doc("Reservation", r1.name), "First Night",
+		                          "No-show charge (UT)")
+		self.assertEqual((_held(bill), _applied(bill)), (5000, 0))
+
+	def test_reinstating_the_first_room_leaves_the_settled_group_bill(self):
+		gb, (r1, r2, _r3) = self.group(company=_corp(), master=False)
+		bill = self.post(r2, "Room", "UT R2 night")["folio"]
+		api.check_out(r1.name)
+		self.assertTrue(api.settle_group_bill(gb.name, to_city_ledger=1)["closed"])
+		number = frappe.db.get_value("Folio", bill, "invoice_number")
+		self.assertTrue(number)
+		api.reinstate_checkout(r1.name, "UT checked out the wrong room")
+		self.assertEqual(frappe.db.get_value("Folio", bill, ["status", "invoice_number"]),
+		                 ("Closed", number))
+		self.assertFalse(frappe.db.exists("Cancelled Invoice", {"folio": bill}))
+		self.assertTrue(frappe.db.exists("City Ledger Entry", {"folio": bill, "kind": "Invoice"}))
+
+	def test_the_first_rooms_check_out_sheet_leaves_the_group_bill_out(self):
+		_gb, (r1, r2, _r3) = self.group(company=_corp(), master=False)
+		bill = self.post(r2, "Room", "UT R2 night", amount=5000)["folio"]
+		self.assertEqual(frappe.db.get_value("Folio", bill, "reservation"), r1.name)
+		ctx = api.checkout_context(r1.name)
+		self.assertEqual(ctx["bill_split"]["on_folio_now"], 0)
+
+	def test_the_first_rooms_check_in_reverses_whatever_the_group_bill_holds(self):
+		gb = frappe.get_doc({
+			"doctype": "Group Booking", "property": PROP_A, "group_name": "UT Offsite",
+			"company": _corp(), "check_in_date": TODAY, "check_out_date": d(2),
+			"status": "Confirmed"}).insert(ignore_permissions=True)
+		r1, r2 = (make_reservation(PROP_A, self.rt, TODAY, d(2), status="Checked In",
+		                           room=room, group_booking=gb.name)
+		          for room in self.rooms[:2])
+		bill = self.post(r2, "Room", "UT R2 night")["folio"]
+		self.assertEqual(frappe.db.get_value("Folio", bill, "reservation"), r1.name)
+		self.assertIsNone(api._reverse_check_in_blocker(frappe.get_doc("Reservation", r1.name)))
 
 	def test_plain_group_without_main_room_routes_nothing(self):
 		r2 = self.group(master=False)[1][1]
