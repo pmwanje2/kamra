@@ -567,9 +567,13 @@ class ChangesLogTests(RoundFourTestCase):
 	def test_the_changes_log_names_each_change_its_nights_and_its_approver(self):
 		set_setting(PROP_A, "rate_override_limit_pct", 10)
 		res = self.stay()
-		self.discount(res.name, discount_type="Percent", discount_value=30,
-		              supervisor_user=GM, supervisor_pin="4321", **PROMO)
-		self.agree(res.name, 650, supervisor=GM, pin="4321")
+		# Frappe skips Version rows under test (Document._save: ignore_version
+		# defaults to frappe.in_test); production writes them, so these saves
+		# do too
+		with patch.object(frappe, "in_test", False):
+			self.discount(res.name, discount_type="Percent", discount_value=30,
+			              supervisor_user=GM, supervisor_pin="4321", **PROMO)
+			self.agree(res.name, 650, supervisor=GM, pin="4321")
 		entries = self.as_user(DESK, api.reservation_changes, res.name)["entries"]
 		actions = [e["action_type"] for e in entries if e["kind"] == "action"]
 		self.assertEqual(actions[:2], ["rate_override", "reservation_discount"])
