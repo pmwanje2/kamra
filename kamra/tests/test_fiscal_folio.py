@@ -35,12 +35,14 @@ FISCALISED = {
 	"state": "fiscalised", "sales_invoice": INVOICE, "fdn": "322000123456",
 	"verification_code": "80123456789012345678", "qr": "data:image/png;base64,iVBORw0KGgo=",
 	"issued": "2031-03-12 10:04:00", "sandbox": 0, "efris_status": "Success",
+	"tax_template": "VAT 18% Inclusive - EA", "charges_tax": 1, "efris_enrolled": 1,
+	"outstanding_amount": 0.0, "credit_notes": [], "replaced_by": None,
 }
 
 
 @contextmanager
 def fiscal_reader(result):
-	"""Install the bridge's fiscal-document reader and answer with `result`."""
+	"""Install the bridge's fiscal-document reader and answer with `result` (or raise if an exception)."""
 	real = erp_bridge.get_bridge_script
 	reader = object()
 	calls = []
@@ -51,6 +53,8 @@ def fiscal_reader(result):
 	def run(script, form):
 		assert script is reader
 		calls.append(dict(form))
+		if isinstance(result, BaseException):
+			raise result
 		return result
 
 	with patch.object(erp_bridge, "get_bridge_script", side_effect=get), \
@@ -121,15 +125,91 @@ class FiscalFolioTests(AuditTestCase):
 
 	def test_a_company_not_on_efris_prints_its_erp_invoice_number_as_final(self):
 		internal = self.settle()
-		with fiscal_reader({"state": "not_efris", "sales_invoice": INVOICE}):
-			document = api.folio_invoice(self.folio)["document"]
-		self.assertTrue(document["is_final"])
-		self.assertEqual((document["number"], document["internal_number"]), (INVOICE, internal))
+		for charges_tax, want_title in ((1, "Tax Invoice"), (0, "Invoice")):
+			with self.subTest(charges_tax=charges_tax):
+				with fiscal_reader({
+					"state": "not_efris", "sales_invoice": INVOICE,
+					"charges_tax": charges_tax, "efris_enrolled": 0,
+				}):
+					document = api.folio_invoice(self.folio)["document"]
+				self.assertTrue(document["is_final"])
+				self.assertEqual(document["title"], want_title)
+				self.assertEqual((document["number"], document["internal_number"]), (INVOICE, internal))
+
+	def test_not_efris_for_an_efris_enrolled_company_is_not_final(self):
+		"""Tax plan PR-9: not_efris on an EFRIS-enrolled company stays pending, never final."""
+		self.settle()
+		answer = {
+			"state": "not_efris", "sales_invoice": INVOICE,
+			"charges_tax": 1, "efris_enrolled": 1,
+		}
+		with fiscal_reader(answer):
+			data = api.folio_invoice(self.folio)
+			self.assertFalse(data["document"]["is_final"])
+			self.assertEqual(data["document"]["title"], "Fiscal document pending")
+			self.assertEqual(data["fiscal"]["state"], "pending")
+			with self.assertRaisesRegex(frappe.ValidationError, "pending"):
+				api.reprint_fiscal_folio(self.folio)
+
+	def test_a_reader_without_tax_and_enrollment_fields_fails_closed(self):
+		"""Tax plan PR-9: a reader omitting charges_tax or efris_enrolled is never treated as final."""
+		self.settle()
+		legacy_fiscalised = {k: v for k, v in FISCALISED.items() if k not in ("charges_tax", "efris_enrolled")}
+		for answer in (
+			{"state": "not_efris", "sales_invoice": INVOICE},
+			{"state": "not_efris", "sales_invoice": INVOICE, "efris_enrolled": 0},
+			legacy_fiscalised,
+		):
+			with self.subTest(answer=answer), fiscal_reader(answer):
+				data = api.folio_invoice(self.folio)
+				self.assertFalse(data["document"]["is_final"])
+				self.assertEqual(data["fiscal"]["state"], "unverified")
+				self.assertEqual(data["document"]["title"], "Fiscal status unavailable")
+				with self.assertRaisesRegex(frappe.ValidationError, "unavailable"):
+					api.reprint_fiscal_folio(self.folio)
+
+	def test_uganda_has_no_static_invoice_title_and_standalone_title_follows_configured_tax(self):
+		"""Tax plan PR-9: no static Uganda INVOICE_TITLE; standalone title follows configured tax."""
+		from kamra.localization import uganda
+
+		self.assertIsNone(getattr(uganda, "INVOICE_TITLE", None))
+		frappe.db.set_value("Property", PROP_A, {"country": "Uganda", "currency": "UGX",
+		                                         "gst_rate_low": 0, "gst_rate_high": 0})
+		frappe.clear_document_cache("Property", PROP_A)
+		self.settle()
+		self.assertEqual(api.folio_invoice(self.folio)["document"]["title"], "Invoice")
+		frappe.db.set_value("Property", PROP_A, {"gst_rate_low": 18})
+		frappe.clear_document_cache("Property", PROP_A)
+		self.assertEqual(api.folio_invoice(self.folio)["document"]["title"], "Tax Invoice")
+
+	def test_a_reader_error_falls_back_to_fiscal_status_unavailable_instead_of_500(self):
+		"""Hydrogen P1-1: bridge_call error must never crash folio_invoice with HTTP 500."""
+		internal = self.settle()
+		err = AttributeError("module has no attribute 'parse_json'")
+		with fiscal_reader(err):
+			data = api.folio_invoice(self.folio)
+			self.assertFalse(data["document"]["is_final"])
+			self.assertEqual(data["document"]["title"], "Fiscal status unavailable")
+			self.assertEqual(data["document"]["number"], self.folio)
+			self.assertEqual(data["document"]["internal_number"], internal)
+			self.assertEqual(data["fiscal"]["state"], "unverified")
+			with self.assertRaisesRegex(frappe.ValidationError, "unavailable"):
+				api.reprint_fiscal_folio(self.folio)
+
+	def test_add_folio_payment_refuses_a_closed_folio(self):
+		"""Hydrogen P1-2 (probe2b): OPERA refuses payments on a closed folio."""
+		self.settle()
+		before = len(frappe.get_doc("Folio", self.folio).payments)
+		with self.assertRaisesRegex(frappe.ValidationError, "closed"):
+			api.add_folio_payment(self.folio, "Cash", 100)
+		self.assertEqual(len(frappe.get_doc("Folio", self.folio).payments), before)
 
 	def test_an_unrecognised_reader_answer_fails_closed(self):
 		for answer in ({"state": "issued", "sales_invoice": INVOICE},
-		               {"state": "fiscalised", "sales_invoice": INVOICE, "fdn": None},
-		               {"state": "fiscalised", "sales_invoice": INVOICE, "fdn": 7, "verification_code": "x"}):
+		               {"state": "fiscalised", "sales_invoice": INVOICE, "fdn": None,
+		                "charges_tax": 1, "efris_enrolled": 1},
+		               {"state": "fiscalised", "sales_invoice": INVOICE, "fdn": 7,
+		                "verification_code": "x", "charges_tax": 1, "efris_enrolled": 1}):
 			with self.subTest(answer=answer):
 				if not frappe.db.get_value("Folio", self.folio, "invoice_number"):
 					self.settle()

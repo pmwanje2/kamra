@@ -103,6 +103,8 @@ class TestEventFolio(BanquetFiscalCase):
 
 	def test_final_billing_posts_a_standalone_function_to_its_event_folio(self):
 		fn = confirmed(self.f)
+		mapping("Venue Rental", revenue_code("UT-BQ-HALL"))
+		mapping("Menu", revenue_code("UT-BQ-FOOD", charge_type="Food & Beverage"))
 		with accounting_bridge():
 			out = bq.post_to_folio(fn)
 		doc = sheet(fn)
@@ -110,14 +112,249 @@ class TestEventFolio(BanquetFiscalCase):
 		self.assertEqual((folio.folio_type, folio.venue_booking, doc.folio, doc.posted_to_folio),
 		                 ("Account", fn, folio.name, 1))
 		self.assertTrue(folio.charges)
+		for row in folio.charges:
+			self.assertEqual((float(row.gst_rate or 0), float(row.gst_amount or 0)), (0.0, 0.0))
+			self.assertAlmostEqual(float(row.total), float(row.amount), 2)
 
-	def test_a_held_deposit_is_refunded_natively_not_by_close_out(self):
+	def test_post_to_folio_under_bridge_never_calculates_line_tax_even_for_fnb_and_alcohol(self):
+		"""Hydrogen P0-2 (probe1): bridge KMR-TAX-001 forbids line tax on Folio Charges."""
 		fn = confirmed(self.f)
+		bq.add_service(fn, self.f["led"])
+		doc = sheet(fn)
+		doc.append("items", {
+			"item_type": "Alcohol", "item_name": "House Wine", "qty": 2, "uom": "Unit",
+			"list_rate": 5000, "rate": 5000, "chargeable": 1, "is_alcohol": 1, "gst_rate": 18,
+		})
+		doc.save()
+		mapping("Venue Rental", revenue_code("UT-BQ-HALL"))
+		mapping("Menu", revenue_code("UT-BQ-FOOD", charge_type="Food & Beverage"))
+		mapping("Audio Visual", revenue_code("UT-BQ-AV"))
+		mapping("Alcohol", revenue_code("UT-BQ-BAR", charge_type="Food & Beverage"))
 		with accounting_bridge():
-			bq.record_receipt(fn, 10000, mode="Cash", kind="Security Deposit")
-			with self.assertRaisesRegex(frappe.ValidationError, "native"):
+			out = bq.post_to_folio(fn)
+		folio = frappe.get_doc("Folio", out["folio"])
+		self.assertEqual(len(folio.charges), 4)
+		for row in folio.charges:
+			self.assertEqual(float(row.gst_rate or 0), 0.0, row.description)
+			self.assertEqual(float(row.gst_amount or 0), 0.0, row.description)
+			self.assertAlmostEqual(float(row.total), float(row.amount), 2, row.description)
+
+	def test_no_hardcoded_18_percent_tax_on_zero_tax_uganda_property(self):
+		"""Hydrogen P0-2: tax comes from property/item config, never hardcoded 18."""
+		ug_prop = _upsert("Property", {"property_name": "UT Uganda Banquet Hotel"}, {
+			"property_name": "UT Uganda Banquet Hotel", "country": "Uganda", "currency": "UGX",
+			"gst_rate_low": 0, "gst_rate_high": 0, "business_date": nowdate(),
+		})
+		ug_hall = _upsert("Venue", {"property": ug_prop, "venue_name": "UT Uganda Hall"}, {
+			"property": ug_prop, "venue_name": "UT Uganda Hall", "venue_type": "Banquet Hall",
+			"capacity": 100, "base_price": 500000, "gst_rate": 0,
+		})
+		ug_av = _upsert("Banquet Service Item", {"property": ug_prop, "item_name": "UT Uganda PA"}, {
+			"property": ug_prop, "item_name": "UT Uganda PA", "category": "Audio Visual",
+			"uom": "Per Event", "rate": 100000, "cost_rate": 50000, "gst_rate": 0, "cost_gst_rate": 0,
+			"chargeable": 1,
+		})
+		res = bq.create_enquiry(
+			ug_prop, ug_hall, add_days(nowdate(), 20), "Uganda Client",
+			event_type="Conference", attendees=50, with_venue_line=1,
+		)
+		bq.add_service(res["function"], ug_av)
+		doc = sheet(res["function"])
+		self.assertEqual(len(doc.items), 2)
+		for row in doc.items:
+			self.assertEqual(float(row.gst_rate or 0), 0.0, row.item_name)
+			self.assertEqual(float(row.gst_amount or 0), 0.0, row.item_name)
+			self.assertEqual(float(row.input_tax or 0), 0.0, row.item_name)
+		self.assertEqual(float(doc.tax_amount or 0), 0.0)
+
+	def test_record_receipt_refuses_after_event_folio_is_closed(self):
+		"""Hydrogen P1-2 (probe2a): closed event folio refuses receipts, never opens a second folio."""
+		from kamra.folio import close_folio
+
+		fn = confirmed(self.f)
+		mapping("Venue Rental", revenue_code("UT-BQ-HALL"))
+		mapping("Menu", revenue_code("UT-BQ-FOOD", charge_type="Food & Beverage"))
+		with accounting_bridge():
+			out = bq.post_to_folio(fn)
+			folio_doc = frappe.get_doc("Folio", out["folio"])
+			bq.record_receipt(fn, float(folio_doc.balance), mode="Cash", kind="Payment")
+			close_folio(out["folio"])
+			with self.assertRaisesRegex(frappe.ValidationError, "closed"):
+				bq.record_receipt(fn, 1000, mode="Cash", kind="Payment")
+		self.assertEqual(frappe.db.count("Folio", {"venue_booking": fn}), 1)
+		self.assertEqual(sheet(fn).folio, out["folio"])
+
+	def test_a_held_deposit_is_refunded_natively_and_unblocks_close_out_with_property_currency(self):
+		"""Hydrogen P1-3 (probe3a-3d): UGX error text (no rupee sign) and native refund/cancel unblocks close_out."""
+		from kamra.ledger import write_ledger_entry
+
+		ug_prop = _upsert("Property", {"property_name": "UT Uganda Deposit Hotel"}, {
+			"property_name": "UT Uganda Deposit Hotel", "country": "Uganda", "currency": "UGX",
+			"gst_rate_low": 0, "gst_rate_high": 0, "business_date": nowdate(),
+		})
+		ug_hall = _upsert("Venue", {"property": ug_prop, "venue_name": "UT Deposit Hall"}, {
+			"property": ug_prop, "venue_name": "UT Deposit Hall", "venue_type": "Banquet Hall",
+			"capacity": 100, "base_price": 500000, "gst_rate": 0,
+		})
+		fn = bq.create_enquiry(
+			ug_prop, ug_hall, add_days(nowdate(), 22), "Deposit Client",
+			event_type="Conference", attendees=50, with_venue_line=1,
+		)["function"]
+		bq.set_status(fn, "Confirmed")
+		with accounting_bridge():
+			bq.record_receipt(fn, 200000, mode="Cash", kind="Advance")
+			bq.record_receipt(fn, 100000, mode="Cash", kind="Security Deposit")
+			# Advance is not counted in deposit_held; only the 100,000 security deposit is held.
+			self.assertEqual(bq.function_sheet(fn)["deposit_held"], 100000.0)
+			with self.assertRaises(frappe.ValidationError) as ctx:
 				bq.close_out(fn, refund_deposit=1)
-		self.assertNotEqual(sheet(fn).status, "Completed")
+			msg = str(ctx.exception)
+			self.assertIn("native", msg)
+			self.assertNotIn("₹", msg)
+			self.assertIn("100,000", msg)
+			self.assertNotEqual(sheet(fn).status, "Completed")
+			# Simulate Finance's native Pay refund PE copied to the event folio + Deposit ledger debit 9004.
+			folio = frappe.get_doc("Folio", sheet(fn).folio)
+			folio.append("payments", {
+				"posting_date": nowdate(), "payment_kind": "Refund", "mode": "Cash",
+				"amount": -100000.0, "currency": "UGX", "reference": "PE-REF-1",
+			})
+			folio.save(ignore_permissions=True)
+			write_ledger_entry(
+				property=ug_prop, folio=folio.name, ledger="Deposit", transaction_code="9004",
+				debit=100000.0, credit=0.0, description="Refund Cash",
+				source_doctype="Folio Payment", source_name=folio.payments[-1].name,
+			)
+			self.assertEqual(bq.function_sheet(fn)["deposit_held"], 0.0)
+			closed = bq.close_out(fn, refund_deposit=1)
+			self.assertEqual((closed["status"], closed["deposit_held"]), ("Completed", 0.0))
+
+	def test_post_to_folio_only_allows_roles_with_native_folio_and_banquet_write(self):
+		"""Hydrogen P1-4a (probe5): Front Desk & Hotel Admin may post; Kamra Agent, Revenue Manager, Finance refused."""
+		from kamra.tests.audit_fixtures import ensure_user
+
+		fn = confirmed(self.f)
+		mapping("Venue Rental", revenue_code("UT-BQ-HALL"))
+		mapping("Menu", revenue_code("UT-BQ-FOOD", charge_type="Food & Beverage"))
+		for role in ("Kamra Agent", "Revenue Manager", "Finance"):
+			with self.subTest(role=role):
+				user = ensure_user(f"bq-{role.lower().replace(' ', '-')}@test.local", [role])
+				frappe.set_user(user)  # nosemgrep: frappe-setuser -- test single-role permission gate
+				try:
+					with accounting_bridge(), self.assertRaises(frappe.PermissionError):
+						bq.post_to_folio(fn)
+				finally:
+					frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- restore admin
+		desk = ensure_user("bq-front-desk@test.local", ["Front Desk"])
+		frappe.set_user(desk)  # nosemgrep: frappe-setuser -- test permitted Front Desk role
+		try:
+			with accounting_bridge():
+				out = bq.post_to_folio(fn)
+			self.assertTrue(out["ok"])
+		finally:
+			frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- restore admin
+
+	def test_corporate_event_settles_to_city_ledger_and_invoices_company(self):
+		"""Hydrogen P1-4b (probe6/6b): corporate event settles on credit to city ledger like OPERA."""
+		from kamra import api, ledger
+
+		corp_credit = _upsert("Corporate Account", {"company_name": "UT Event Credit Corp"}, {
+			"company_name": "UT Event Credit Corp", "credit_allowed": 1,
+		})
+		corp_cash = _upsert("Corporate Account", {"company_name": "UT Event Cash Corp"}, {
+			"company_name": "UT Event Cash Corp", "credit_allowed": 0,
+		})
+		mapping("Venue Rental", revenue_code("UT-BQ-HALL"))
+		mapping("Menu", revenue_code("UT-BQ-FOOD", charge_type="Food & Beverage"))
+
+		fn_cash = confirmed(self.f, company=corp_cash)
+		with accounting_bridge():
+			bq.post_to_folio(fn_cash)
+			with self.assertRaisesRegex(frappe.ValidationError, "credit"):
+				bq.settle_event_folio(fn_cash, to_city_ledger=1)
+
+		fn = confirmed(self.f, company=corp_credit)
+		with accounting_bridge():
+			out = bq.post_to_folio(fn)
+			folio_doc = frappe.get_doc("Folio", out["folio"])
+			self.assertEqual(ledger.company_payer_of(folio_doc), corp_credit)
+			settled = bq.settle_event_folio(fn, to_city_ledger=1)
+		self.assertTrue(settled["ok"])
+		self.assertTrue(settled["city_ledger"])
+		closed_folio = frappe.get_doc("Folio", out["folio"])
+		self.assertEqual((closed_folio.status, float(closed_folio.balance)), ("Closed", 0.0))
+		self.assertEqual(api.folio_invoice(out["folio"])["bill_to"]["name"], "UT Event Credit Corp")
+
+	def test_banquet_receipt_accepts_mobile_money_from_config_and_rejects_unconfigured(self):
+		"""Hydrogen P1-4c (probe4a): Banquet Receipt payment modes come from configuration, not a hardcoded Select."""
+		ug_prop = _upsert("Property", {"property_name": "UT Uganda Tender Hotel"}, {
+			"property_name": "UT Uganda Tender Hotel", "country": "Uganda", "currency": "UGX",
+			"gst_rate_low": 0, "gst_rate_high": 0, "business_date": nowdate(),
+		})
+		ug_hall = _upsert("Venue", {"property": ug_prop, "venue_name": "UT Tender Hall"}, {
+			"property": ug_prop, "venue_name": "UT Tender Hall", "venue_type": "Banquet Hall",
+			"capacity": 100, "base_price": 500000, "gst_rate": 0,
+		})
+		fn = bq.create_enquiry(
+			ug_prop, ug_hall, add_days(nowdate(), 25), "Mobile Client",
+			event_type="Conference", attendees=40, with_venue_line=1,
+		)["function"]
+		bq.set_status(fn, "Confirmed")
+		# Off-bridge Uganda pack allows Mobile Money and refuses India's UPI.
+		bq.record_receipt(fn, 25000, mode="Mobile Money", kind="Advance", reference="MM-001")
+		self.assertEqual(sheet(fn).receipts[-1].mode, "Mobile Money")
+		with self.assertRaises(frappe.ValidationError):
+			bq.record_receipt(fn, 10000, mode="UPI", kind="Advance", reference="BAD-1")
+		# On-bridge with configured tender_modes allows Mobile Money and rejects unconfigured tenders.
+		fn2 = bq.create_enquiry(
+			ug_prop, ug_hall, add_days(nowdate(), 26), "Mobile Bridge Client",
+			event_type="Conference", attendees=40, with_venue_line=1,
+		)["function"]
+		bq.set_status(fn2, "Confirmed")
+		tenders = [{"mode": "Cash", "currencies": ["UGX"]}, {"mode": "Mobile Money", "currencies": ["UGX"]}]
+		with accounting_bridge(), patch("kamra.localization.tender_modes", return_value=tenders):
+			bq.record_receipt(fn2, 30000, mode="Mobile Money", kind="Advance", reference="MM-002")
+			self.assertEqual(sheet(fn2).receipts[-1].mode, "Mobile Money")
+			with self.assertRaises(frappe.ValidationError):
+				bq.record_receipt(fn2, 5000, mode="Cheque", kind="Advance", reference="CHQ-1")
+
+	def test_post_to_folio_includes_service_charge_on_fnb_lines(self):
+		"""Hydrogen P1-4d: VenueBooking.service_charge on F&B lines posts to the folio."""
+		fn = confirmed(self.f)
+		bq.update_function(fn, {"service_charge_percent": 10})
+		doc = sheet(fn)
+		expected_sc = float(doc.service_charge)
+		self.assertGreater(expected_sc, 0)
+		mapping("Venue Rental", revenue_code("UT-BQ-HALL"))
+		mapping("Menu", revenue_code("UT-BQ-FOOD", charge_type="Food & Beverage"))
+		mapping("Service Charge", revenue_code("UT-BQ-SC"))
+		with accounting_bridge():
+			out = bq.post_to_folio(fn)
+		folio = frappe.get_doc("Folio", out["folio"])
+		sc_lines = [c for c in folio.charges if c.transaction_code == "UT-BQ-SC"]
+		self.assertEqual(len(sc_lines), 1)
+		self.assertAlmostEqual(float(sc_lines[0].amount), expected_sc, 2)
+		self.assertAlmostEqual(float(folio.charges_total), float(doc.taxable_amount), 2)
+
+	def test_folio_history_includes_event_account_folios(self):
+		"""Hydrogen P1-4e: OPERA Folio History includes standalone event Account folios."""
+		from kamra import ledger
+		from kamra.folio import close_folio
+
+		fn = confirmed(self.f)
+		mapping("Venue Rental", revenue_code("UT-BQ-HALL"))
+		mapping("Menu", revenue_code("UT-BQ-FOOD", charge_type="Food & Beverage"))
+		with accounting_bridge():
+			out = bq.post_to_folio(fn)
+			folio_doc = frappe.get_doc("Folio", out["folio"])
+			bq.record_receipt(fn, float(folio_doc.balance), mode="Cash", kind="Payment")
+			close_folio(out["folio"])
+		hist = ledger.folio_history(PROPERTY)["folios"]
+		by_name = {r.name: r for r in hist}
+		self.assertIn(out["folio"], by_name)
+		self.assertEqual(by_name[out["folio"]].get("venue_booking"), fn)
+		queried = ledger.folio_history(PROPERTY, query=fn)["folios"]
+		self.assertIn(out["folio"], [r.name for r in queried])
 
 	def test_the_function_sheet_says_money_runs_through_the_event_folio(self):
 		fn = confirmed(self.f)
@@ -157,6 +394,7 @@ class TestRevenueTypeMapping(BanquetFiscalCase):
 	def setUp(self):
 		super().setUp()
 		frappe.db.delete("Banquet Revenue Mapping", {"property": PROPERTY})
+		frappe.db.delete("Property Setting", {"property": PROPERTY, "setting_key": "banquet_default_transaction_code"})
 
 	def posted(self, fn):
 		folio = frappe.get_doc({"doctype": "Folio", "property": PROPERTY, "folio_type": "Account",
@@ -170,12 +408,14 @@ class TestRevenueTypeMapping(BanquetFiscalCase):
 		bq.add_service(fn, self.f["led"])
 		mapping("Audio Visual", revenue_code("UT-BQ-AV"))
 		mapping("Venue Rental", revenue_code("UT-BQ-HALL"))
+		mapping("Menu", revenue_code("UT-BQ-FOOD", charge_type="Food & Beverage"))
 		lines = self.posted(fn)
 		self.assertEqual(lines["Test LED wall"], ("Misc", "UT-BQ-AV"))
 		self.assertEqual(lines["Test Hall rental"], ("Misc", "UT-BQ-HALL"))
 
 	def test_the_most_specific_mapping_wins(self):
 		fn = confirmed(self.f, event_type="Conference")
+		mapping("Menu", revenue_code("UT-BQ-FOOD", charge_type="Food & Beverage"))
 		mapping("Venue Rental", revenue_code("UT-BQ-HALL"))
 		mapping("Venue Rental", revenue_code("UT-BQ-CONF"), event_type="Conference")
 		mapping("Venue Rental", revenue_code("UT-BQ-THIS-HALL"), venue=self.f["hall"])
@@ -184,14 +424,35 @@ class TestRevenueTypeMapping(BanquetFiscalCase):
 
 	def test_a_mapped_code_keeps_its_own_charge_type(self):
 		fn = confirmed(self.f)
+		mapping("Venue Rental", revenue_code("UT-BQ-HALL"))
 		mapping("Menu", revenue_code("UT-BQ-FOOD", charge_type="Food & Beverage"))
 		self.assertEqual(self.posted(fn)["Test Buffet"], ("Food & Beverage", "UT-BQ-FOOD"))
 
-	def test_an_unmapped_revenue_type_keeps_the_default_code(self):
+	def test_unmapped_revenue_types_are_refused_and_post_nothing(self):
+		"""Hydrogen P1-4f (probe10): unmapped revenue lines never silently default to Misc/8000."""
 		fn = confirmed(self.f)
 		bq.add_service(fn, self.f["led"])
-		from kamra.ledger import code_for_charge_type
-		self.assertEqual(self.posted(fn)["Test LED wall"], ("Misc", code_for_charge_type("Misc")))
+		mapping("Venue Rental", revenue_code("UT-BQ-HALL"))
+		mapping("Menu", revenue_code("UT-BQ-FOOD", charge_type="Food & Beverage"))
+		folio = frappe.get_doc({"doctype": "Folio", "property": PROPERTY, "folio_type": "Account",
+		                        "guest_name": "Unmapped test", "status": "Open"}).insert(ignore_permissions=True)
+		with self.assertRaisesRegex(frappe.ValidationError, "Audio Visual"):
+			bq.post_to_folio(fn, folio.name)
+		self.assertFalse(frappe.get_doc("Folio", folio.name).charges)
+		self.assertFalse(sheet(fn).posted_to_folio)
+
+	def test_explicit_banquet_default_transaction_code_setting_maps_unmapped_types(self):
+		"""Hydrogen P1-4f: an explicit configured default code maps unmapped types without silent Misc/8000."""
+		from kamra.settings import save_settings
+
+		fn = confirmed(self.f)
+		bq.add_service(fn, self.f["led"])
+		fallback = revenue_code("UT-BQ-FALLBACK")
+		save_settings(PROPERTY, "events", {"banquet_default_transaction_code": fallback})
+		mapping("Venue Rental", revenue_code("UT-BQ-HALL"))
+		mapping("Menu", revenue_code("UT-BQ-FOOD", charge_type="Food & Beverage"))
+		lines = self.posted(fn)
+		self.assertEqual(lines["Test LED wall"], ("Misc", fallback))
 
 	def test_two_equally_specific_mappings_refuse_and_post_nothing(self):
 		fn = confirmed(self.f)
