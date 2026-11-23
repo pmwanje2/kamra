@@ -97,7 +97,7 @@ const OPTIONS = {
   default_plan: "TARIFF", rate_plan_required: true, can_set_rate: false,
   can_discount: true, rate_override_limit_pct: 10, discount_reasons: REASONS,
   property: { sell_message: "", free_cancel_days: 0, cancellation_fee: "None", no_show_charge: "None",
-    deposit_pct: 0, country: "Uganda", pets_allowed: 0, pet_charge: 0, pet_charge_basis: "Per stay",
+    deposit_pct: 0, country: "Kenya", pets_allowed: 0, pet_charge: 0, pet_charge_basis: "Per stay",
     checkin_time: "14:00", checkout_time: "11:00" },
 }
 
@@ -129,7 +129,7 @@ function serve(method: string, params: Record<string, unknown>) {
     case "kamra.api.booking_options": return Promise.resolve({ ...OPTIONS, ...optionsOver })
     case "kamra.api.get_quote": return Promise.resolve({ ...quoteFor(params), ...quoteOver(params) })
     case "kamra.api.available_rooms": return Promise.resolve([{ name: "STD-101", room_number: "101", housekeeping_status: "Clean" }])
-    case "kamra.api.property_locale": return Promise.resolve({ currency: "UGX", currency_symbol: "UGX ", locale: "en", tax_label: "VAT", tax_rates: [0], payment_modes: ["Cash"] })
+    case "kamra.api.property_locale": return Promise.resolve({ currency: "KES", currency_symbol: "KES ", locale: "en", tax_label: "VAT", tax_rates: [0], payment_modes: ["Cash"] })
     case "kamra.rates.rate_options": return Promise.resolve({ nights: [], plans: [], voucher: null,
       plain: { room_total: 2000, amount_after_tax: 2000, discount: 0 }, tax_inclusive: false })
     case "kamra.cashier.my_till": return Promise.resolve({ open: true })
@@ -310,7 +310,7 @@ describe("BookingDialog: inline discount for new bookings and walk-ins", () => {
   })
 
   it("shows a discounted contract tariff as base, discount and net only (P1-10)", async () => {
-    quoteOver = () => ({ agreed_rate: 1000, tariff: { currency: "USD", nightly: 100, property_currency: "UGX",
+    quoteOver = () => ({ agreed_rate: 1000, tariff: { currency: "USD", nightly: 100, property_currency: "KES",
       fx_rate: 10, fx_date: "2031-03-01" } })
     await open(false)
     await vi.waitFor(() => expect(text()).toContain("Room tariff subtotal"), { timeout: 3000, interval: 20 })

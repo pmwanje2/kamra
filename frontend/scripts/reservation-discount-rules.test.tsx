@@ -156,7 +156,7 @@ describe("DiscountPanel", () => {
     return <DiscountPanel value={props.initial ?? emptyDiscount()} onChange={props.onChange ?? (() => {})}
       reasons={REASONS} eligible={props.eligible ?? true} governance={props.governance ?? null}
       nights={props.nights} supervisor="" pin="" onSupervisor={() => {}} onPin={() => {}}
-      money={(n) => `UGX ${n.toLocaleString("en")}`} />
+      money={(n) => `KES ${n.toLocaleString("en")}`} />
   }
 
   it("offers % or an amount per night, a value and a mandatory reason", async () => {

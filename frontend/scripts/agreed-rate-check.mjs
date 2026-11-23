@@ -63,7 +63,9 @@ assert.equal(agreedRateReady({ ...base, preview: { ...within, raises: true, can_
 const panel = read("components/AgreedRatePanel.tsx")
 assert.ok(panel.includes('"kamra.api.rate_override_preview"'), "the panel previews with rate_override_preview")
 assert.ok(panel.includes('"kamra.api.set_agreed_rate"'), "the panel saves with set_agreed_rate")
-assert.ok(panel.includes('category: "Rate Change"'), "the panel lists Rate Change reason codes")
+// one list_reason_codes request serves the discount and the agreed rate;
+// the agreed rate offers the Rate Change codes among them
+assert.match(panel, /\.category === "Rate Change"/, "the panel lists Rate Change reason codes")
 for (const arg of ["reason_code", "confirm_price", "supervisor", "pin"])
   assert.match(panel, new RegExp(`\\b${arg}\\b`), `set_agreed_rate gets ${arg}`)
 assert.ok(panel.includes("agreedRateRows(") && panel.includes("agreedRateReady("),
