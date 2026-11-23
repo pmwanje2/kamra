@@ -17,6 +17,13 @@ Room revenue is what kamra.ledger books to the Rooms group's room-rate codes:
 Room (1000) and Rate Adjustment (1010). A room sold is one reservation on one
 posting date with a Room line that stands on that date
 (folio.STANDS_ON_ITS_DATE).
+
+A stay keeps the category it was booked on (Reservation.rate_category, set
+when the stay is put on its plan): OPERA's rate code changes reach no
+reservation already booked, and its End of Day statistics stay as the night
+closed. Only the configuration privilege (CONFIGURES: the property's
+administrators, never the approvers as such) changes a plan's category or
+the category and approver settings, and each change is logged.
 """
 
 from __future__ import annotations
@@ -31,6 +38,18 @@ FIGURES = ("adr", "revpar", "occupancy")
 # the words a rate_categories line may carry after its category
 FLAGS = {"sign-off": "sign_off", "sign off": "sign_off", "no adr": "adr",
          "no revpar": "revpar", "no occupancy": "occupancy"}
+# a stay's category as it was booked (blank: booked before categories, the
+# default)
+STAY_CATEGORY = "IFNULL(r.rate_category, '')"
+
+
+def can_configure() -> bool:
+	"""The configuration privilege: who may change a plan's category, the
+	categories and their approvers (OPERA keeps rate code configuration and
+	comp authorization apart). The property's administrators
+	(kamra.authz.ADMIN), whoever the approvers are."""
+	from kamra.authz import ADMIN
+	return frappe.session.user == "Administrator" or bool(set(ADMIN) & set(frappe.get_roles()))
 
 
 @dataclass(frozen=True)
@@ -60,6 +79,11 @@ class CategoryRules:
 		"""A plan's category for the statistics: one the list no longer
 		names counts as the default."""
 		return self.canonical(value) or self.default
+
+	def counts(self, figure: str, value) -> bool:
+		"""A stay on this category counts in `figure` (adr, revpar,
+		occupancy)."""
+		return self.of(value) not in self.out_of.get(figure, ())
 
 
 def _seeded(key: str) -> str:
@@ -117,6 +141,15 @@ def occupancy_pct(occupied, rooms) -> float:
 	return round(100 * occupied / rooms, 1) if rooms else 0
 
 
+def counted_occupied(rules: CategoryRules, occupied, by_category: dict | None) -> int:
+	"""The rooms occupied that occupancy counts: `occupied` less the rooms of
+	the categories left out of occupancy (by_category: {category: rooms
+	occupied}). Every reader of occupancy counts its rooms with this."""
+	out = sum(int(n or 0) for c, n in (by_category or {}).items()
+	          if not rules.counts("occupancy", c))
+	return max(0, int(occupied or 0) - out)
+
+
 def room_figures(rules: CategoryRules, *, room_revenue, rooms_sold, by_category=None,
                  rooms_occupied=None, occupancy_rooms=0, revpar_rooms=None) -> dict:
 	"""ADR, RevPAR, occupancy and rooms by category from a period's room
@@ -132,22 +165,28 @@ def room_figures(rules: CategoryRules, *, room_revenue, rooms_sold, by_category=
 
 	def left_out(figure: str, what: str) -> float:
 		rows = [v for c, v in by.items() if c in rules.out_of.get(figure, ())]
-		if what == "occupied":
-			return sum(v.get("occupied", v.get("rooms", 0)) for v in rows)
 		return sum(v.get(what, 0) for v in rows)
 
 	paid = rooms_sold - left_out("adr", "rooms")
-	occupied = (rooms_sold if rooms_occupied is None else rooms_occupied) - left_out(
-		"occupancy", "occupied")
+	occupied = counted_occupied(rules, rooms_sold if rooms_occupied is None else rooms_occupied,
+	                            occupied_by_category(by))
 	revpar_rooms = occupancy_rooms if revpar_rooms is None else revpar_rooms
 	return {
-		"rooms_by_category": {c: int((by.get(c) or {}).get("rooms", 0))
+		# each category's rooms occupied: the nights posted, or the house in
+		# house on an open date (with_occupied)
+		"rooms_by_category": {c: int(occupied_by_category(by).get(c, 0))
 		                      for c in rules.categories if c != rules.default},
 		"occupancy_pct": occupancy_pct(occupied, occupancy_rooms),
 		"adr": round((room_revenue - left_out("adr", "revenue")) / paid, 0) if paid > 0 else 0,
 		"revpar": round((room_revenue - left_out("revpar", "revenue")) / revpar_rooms, 0)
 		if revpar_rooms else 0,
 	}
+
+
+def occupied_by_category(by_category: dict | None) -> dict:
+	"""{category: rooms occupied} out of a by_category ("occupied", else
+	"rooms")."""
+	return {c: v.get("occupied", v.get("rooms", 0)) for c, v in (by_category or {}).items()}
 
 
 def add_rooms(by: dict, category: str, rooms=0, revenue=0.0, occupied=0) -> None:
@@ -176,17 +215,16 @@ def posted_rooms(property: str, start, end, rules: CategoryRules | None = None) 
 	by: dict = {}
 	for category, rooms, revenue in frappe.db.sql(
 			"""
-			SELECT IFNULL(rp.rate_category, ''),
+			SELECT """ + STAY_CATEGORY + """,
 			  COUNT(DISTINCT CASE WHEN fc.charge_type = 'Room' AND """ + STANDS_ON_ITS_DATE + """
 			        THEN """ + key + """ END),
 			  COALESCE(SUM(fc.amount), 0)
 			FROM `tabFolio Charge` fc
 			JOIN `tabFolio` f ON fc.parent = f.name
 			LEFT JOIN `tabReservation` r ON r.name = COALESCE(fc.reservation, f.reservation)
-			LEFT JOIN `tabRate Plan` rp ON rp.name = r.rate_plan
 			WHERE f.property = %(p)s AND fc.posting_date BETWEEN %(s)s AND %(e)s
 			  AND fc.charge_type IN %(types)s
-			GROUP BY IFNULL(rp.rate_category, '')
+			GROUP BY """ + STAY_CATEGORY + """
 			""",
 			{"p": property, "s": str(start), "e": str(end), "types": ROOM_REVENUE_TYPES}):
 		add_rooms(by, rules.of(category), rooms, revenue, rooms)
@@ -196,16 +234,14 @@ def posted_rooms(property: str, start, end, rules: CategoryRules | None = None) 
 
 
 def stay_categories(rules: CategoryRules, reservations) -> dict:
-	"""Each of these stays' rate category: {reservation: category}."""
+	"""Each of these stays' rate category, as booked: {reservation:
+	category}."""
 	if not reservations:
 		return {}
-	plans = dict(frappe.db.sql(
-		"""
-		SELECT r.name, IFNULL(rp.rate_category, '') FROM `tabReservation` r
-		LEFT JOIN `tabRate Plan` rp ON rp.name = r.rate_plan
-		WHERE r.name IN %(r)s
-		""", {"r": tuple(reservations)}))
-	return {name: rules.of(plans.get(name)) for name in reservations}
+	booked = dict(frappe.db.sql(
+		"SELECT r.name, " + STAY_CATEGORY + " FROM `tabReservation` r WHERE r.name IN %(r)s",
+		{"r": tuple(reservations)}))
+	return {name: rules.of(booked.get(name)) for name in reservations}
 
 
 def in_house_by_category(rules: CategoryRules, property: str, date=None) -> dict:
@@ -214,13 +250,12 @@ def in_house_by_category(rules: CategoryRules, property: str, date=None) -> dict
 	out: dict = {}
 	for category, rooms in frappe.db.sql(
 			"""
-			SELECT IFNULL(rp.rate_category, ''),
+			SELECT """ + STAY_CATEGORY + """,
 			       COUNT(DISTINCT COALESCE(NULLIF(r.room, ''), r.name))
 			FROM `tabReservation` r
-			LEFT JOIN `tabRate Plan` rp ON rp.name = r.rate_plan
 			WHERE r.property = %(p)s AND r.status = 'Checked In'
 			  AND (%(d)s IS NULL OR r.check_in_date <= %(d)s)
-			GROUP BY IFNULL(rp.rate_category, '')
+			GROUP BY """ + STAY_CATEGORY + """
 			""", {"p": property, "d": str(date) if date else None}):
 		category = rules.of(category)
 		out[category] = out.get(category, 0) + int(rooms or 0)
@@ -234,4 +269,31 @@ def with_occupied(by_category: dict, occupied: dict) -> dict:
 	out = {c: {**v, "occupied": 0} for c, v in (by_category or {}).items()}
 	for category, rooms in (occupied or {}).items():
 		add_rooms(out, category, occupied=rooms)
+	return out
+
+
+def booked_by_night(rules: CategoryRules, property: str, start, end, statuses, *,
+                    day_use: bool = False) -> dict:
+	"""Rooms on the books each night from start to end (end excluded), by
+	the stays' rate categories: {date: {category: rooms}}. A stay in one of
+	`statuses` covers the nights from its arrival to the night before it
+	leaves; with day_use a same-day stay covers its own date (as the
+	occupancy forecast counts it)."""
+	from frappe.utils import add_days, getdate
+	leaves = ("GREATEST(r.check_out_date, DATE_ADD(r.check_in_date, INTERVAL 1 DAY))"
+	          if day_use else "r.check_out_date")
+	start, end = getdate(start), getdate(end)
+	out: dict = {}
+	for arrives, departs, category in frappe.db.sql(
+			"SELECT r.check_in_date, " + leaves + ", " + STAY_CATEGORY + """
+			FROM `tabReservation` r
+			WHERE r.property = %(p)s AND r.status IN %(st)s
+			  AND r.check_in_date < %(e)s AND """ + leaves + " > %(s)s",
+			{"p": property, "st": tuple(statuses), "s": str(start), "e": str(end)}):
+		category = rules.of(category)
+		night = max(getdate(arrives), start)
+		while night < min(getdate(departs), end):
+			by = out.setdefault(str(night), {})
+			by[category] = by.get(category, 0) + 1
+			night = getdate(add_days(night, 1))
 	return out

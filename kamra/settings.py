@@ -41,6 +41,9 @@ class S:
 	min: float | None = None
 	max: float | None = None
 	unit: str = ""  # shown after a number input: min, %, days, x
+	# the roles that may change this one setting (admins always may), when
+	# it is narrower than its page's editors; None: the page's editors
+	editors: tuple | None = None
 
 
 @dataclass(frozen=True)
@@ -413,13 +416,16 @@ MODULES: tuple[Module, ...] = (
 			Section("rate_categories", "Complimentary and house use",
 			        "Each rate plan has a category. A category can be left out of ADR, RevPAR or "
 			        "occupancy, and a booking on it can need a manager's sign-off.", (
+				# the configuration privilege's only, not the page's editors nor
+				# the approvers (kamra.room_statistics.can_configure)
 				S("rate_categories", "Rate categories", "textarea",
-				  "Standard\nComplimentary: sign-off, no ADR\nHouse Use: sign-off, no ADR",
+				  "Standard\nComplimentary: sign-off, no ADR\nHouse Use: sign-off, no ADR", editors=(),
 				  hint="One category a line, then what it means: sign-off, no ADR, no RevPAR, no "
 				       "occupancy. A category left out of a figure adds neither rooms nor revenue to "
 				       "it. The first line is the category of a plan that names none. OPERA's "
 				       "defaults count comp and house-use rooms as occupied but not in ADR."),
 				S("rate_category_approvers", "Who signs them off", "textarea", "Hotel Admin\nFinance",
+				  editors=(),
 				  hint="One role a line. A user with one of these roles and a cashier PIN signs off a "
 				       "booking on a category that needs it, never their own. AI agents can't."),
 			)),
@@ -746,6 +752,14 @@ def can_edit(module: Module, roles: set | None = None) -> bool:
 	return bool(roles & (set(ADMIN) | set(module.editors)))
 
 
+def can_edit_setting(spec: S, roles: set | None = None) -> bool:
+	"""A setting narrower than its page (S.editors): admins and those roles."""
+	if spec.editors is None:
+		return True
+	roles = roles if roles is not None else _roles()
+	return bool(roles & (set(ADMIN) | set(spec.editors)))
+
+
 def _enabled_modules(property: str) -> list:
 	from kamra.api import ALL_MODULES
 	raw = frappe.db.get_value("Property", property, "enabled_modules")
@@ -755,9 +769,12 @@ def _enabled_modules(property: str) -> list:
 
 # --- endpoints ---------------------------------------------------------------
 
-def _spec_json(s: S, property: str | None = None) -> dict:
+def _spec_json(s: S, property: str | None = None, roles: set | None = None) -> dict:
 	d = {"key": s.key, "label": s.label, "type": s.type, "default": _default(property, s),
 	     "hint": s.hint, "store": s.store}
+	if s.editors is not None:
+		# shown read-only to the page's other editors (save_settings refuses it)
+		d["can_edit"] = can_edit_setting(s, roles)
 	for k in ("options", "options_source", "min", "max", "unit"):
 		v = getattr(s, k)
 		if v not in (None, "", ()):
@@ -805,7 +822,8 @@ def settings_schema(property: str) -> dict:
 			"editors": list(m.editors), "can_edit": editable,
 			"related": [{"label": a, "to": b} for a, b in m.related],
 			"sections": [{"id": sec.id, "title": sec.title, "description": sec.description,
-			              "settings": [_spec_json(s, property) for s in sec.settings]} for sec in m.sections],
+			              "settings": [_spec_json(s, property, roles) for s in sec.settings]}
+			             for sec in m.sections],
 			"values": _values(property, m),
 		})
 	return {
@@ -863,11 +881,16 @@ def save_settings(property: str, module: str, changes) -> dict:
 
 	before_all = _values(property, mod)
 	clean: dict = {}
+	roles = _roles()
 	for key, val in (changes or {}).items():
 		owner = SETTINGS.get(key)
 		if not owner or owner[0].id != module:
 			frappe.throw(_("{0} isn't a setting on this page.").format(key))
 		clean[key] = _validate(owner[1], val)
+		# a setting narrower than its page: refused when it would change
+		if clean[key] != before_all.get(key) and not can_edit_setting(owner[1], roles):
+			frappe.throw(_("Your role can't change {0}.").format(_(owner[1].label)),
+			             frappe.PermissionError)
 	if not clean:
 		return {"ok": True, "values": before_all}
 

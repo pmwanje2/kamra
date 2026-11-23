@@ -502,13 +502,17 @@ export function BookingDialog(props: {
   const discountGov: DiscountGovernance | null = quote?.discount_governance ?? null
   // a Complimentary or House Use plan: a manager signs the booking off
   // (kamra.api.comp_rate_governance). When the discount asks for a manager
-  // too, its sign-off covers both.
+  // too, one whose roles cover both signs both off (OPERA's one authorizer
+  // for both prompts); otherwise the comp takes its own sign-off.
   const compGov = quote?.comp_governance ?? null
-  const compAsks = !!compGov?.needs_supervisor && !discountGov?.needs_supervisor
+  const discountCoversComp = !!discountGov?.needs_supervisor && !!discountSupervisor &&
+    !!compGov?.supervisors.some((s) => s.user === discountSupervisor)
+  const compAsks = !!compGov?.needs_supervisor && !discountCoversComp
+  const compSignOff = compAsks && compSupervisor && compPin.trim()
+    ? { comp_supervisor_user: compSupervisor, comp_supervisor_pin: compPin.trim() } : {}
   const discountSignOff = {
     ...supervisorArgs(discountGov, discountSupervisor, discountPin),
-    ...(compAsks && compSupervisor && compPin.trim()
-      ? { supervisor_user: compSupervisor, supervisor_pin: compPin.trim() } : {}),
+    ...compSignOff,
     // the desk's optional note goes with the booking, never with a quote
     ...discountNote(discount, discountEntered),
   }
@@ -799,6 +803,8 @@ export function BookingDialog(props: {
           company: form.company || undefined,
           rate_plan: form.rate_plan || undefined,
           ...viaArgs,
+          // a comp or house-use plan: one sign-off for every room
+          ...compSignOff,
         })
         if (out.skipped.length > 0) {
           setError(

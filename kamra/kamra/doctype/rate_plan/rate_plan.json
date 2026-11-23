@@ -18,6 +18,7 @@
   "is_default",
   "discount_eligible",
   "rate_category",
+  "rate_category_set_by",
   "disabled",
   "sb_day_use",
   "billing_basis",
@@ -84,11 +85,18 @@
    "label": "Discount Eligible"
   },
   {
-   "default": "Standard",
-   "description": "One of the property's rate categories (Settings, Revenue, Complimentary and house use; OPERA's Complimentary and House Use rate code flags). A category can need a manager's sign-off and be left out of ADR, RevPAR or occupancy.",
+   "description": "One of the property's rate categories (Settings, Revenue, Complimentary and house use; OPERA's Complimentary and House Use rate code flags); blank is the property's first. A category can need a manager's sign-off and be left out of ADR, RevPAR or occupancy. Only the property's administrators change it.",
    "fieldname": "rate_category",
    "fieldtype": "Data",
    "label": "Rate Category"
+  },
+  {
+   "description": "Who last set the plan's category. They never sign off a booking on it.",
+   "fieldname": "rate_category_set_by",
+   "fieldtype": "Link",
+   "label": "Rate Category Set By",
+   "options": "User",
+   "read_only": 1
   },
   {
    "default": "0",
@@ -143,7 +151,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-11-23 18:30:00.000000",
+ "modified": "2026-11-23 21:00:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Rate Plan",

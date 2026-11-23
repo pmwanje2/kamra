@@ -496,22 +496,38 @@ class Reservation(Document):
 			self.rate_plan = plan
 
 	def govern_rate_category(self):
-		"""A stay booked on a Complimentary or House Use rate plan, or moved to
-		one, is signed off by another supervisor with their PIN (OPERA's comp
-		authorizer; kamra.api.comp_rate_governance). The governed writers
-		(create_booking, walk_in, amend_stay) hand the sign-off over in
-		flags.kamra_discount_supervisor ({user, pin}). Frappe never fills
+		"""The stay's rate category is its plan's when the stay is put on the
+		plan (booked, or moved to it), and stays as it was booked: a plan's
+		category changed later re-classifies no stay (OPERA: a rate code
+		change reaches no reservation already booked; End of Day statistics
+		stay as the night closed). Only putting the stay on a plan writes it,
+		so a save that keeps the plan and writes the category (a REST PUT) is
+		refused.
+
+		A stay booked on a plan whose category needs a sign-off (OPERA's
+		Complimentary and House Use), or moved to one, is signed off by
+		another supervisor with their PIN (OPERA's comp authorizer;
+		kamra.api.comp_rate_governance). The governed writers (create_booking,
+		walk_in, amend_stay) hand it over in flags.kamra_comp_supervisor
+		({user, pin}), else the discount's flags.kamra_discount_supervisor:
+		one manager whose roles cover both signs both. Frappe never fills
 		doc.flags from a REST payload, so a plain save or PUT that puts a stay
 		on such a plan is refused. A save that keeps the stay's plan asks
 		nothing again. The approver is logged by on_update."""
+		from kamra.room_statistics import rate_category
+		old = None if self.is_new() else self.get_doc_before_save()
+		if old is not None and (old.get("rate_plan") or "") == (self.get("rate_plan") or ""):
+			if (self.get("rate_category") or "") != (old.get("rate_category") or ""):
+				frappe.throw(_("A stay's rate category is its rate plan's when it was booked. It "
+				               "changes only when the stay moves to another plan."),
+				             frappe.PermissionError, title=_("Rate category"))
+			return
+		self.rate_category = rate_category(self.property, self.get("rate_plan"))
 		if not self.get("rate_plan"):
 			return
-		if not self.is_new():
-			old = self.get_doc_before_save()
-			if old is not None and (old.get("rate_plan") or "") == self.rate_plan:
-				return
 		from kamra.api import comp_rate_governance
-		sign = self.flags.get("kamra_discount_supervisor") or {}
+		sign = (self.flags.get("kamra_comp_supervisor")
+		        or self.flags.get("kamra_discount_supervisor") or {})
 		gov = comp_rate_governance(self.property, self.rate_plan, check=True,
 		                           supervisor_user=sign.get("user"),
 		                           supervisor_pin=sign.get("pin"))
@@ -520,10 +536,12 @@ class Reservation(Document):
 
 	def log_comp_sign_off(self):
 		"""The audit row for a Complimentary or House Use plan's sign-off:
-		who booked it, the plan and who approved it."""
+		who booked it, the plan and who approved it. The approver stays in
+		flags.kamra_comp_approver for the action's own row (amend_stay)."""
 		gov = self.flags.pop("kamra_comp_governance", None)
 		if not gov:
 			return
+		self.flags.kamra_comp_approver = gov["approver"]
 		from kamra.savings import log_action
 		log_action("comp_rate_sign_off", "Reservation", self.name, self.property,
 		           rationale=f"{gov['rate_category']} rate plan {self.rate_plan}: "
@@ -957,6 +975,26 @@ class Reservation(Document):
 			               "or a discount).").format(", ".join(_(c) for c in changed)),
 			             frappe.PermissionError, title=_("Locked night rate"))
 
+	def guard_lock_key(self, key):
+		"""The rate-lock key is written by the booking's own pricing: a save
+		that rewrites it to anything but the key of what the stay holds now
+		(key) would re-quote the locked nights from today's rate card. read_only
+		is not enforced on a REST PUT, so that save is refused, as a locked
+		night is (guard_locked_nights). A rate correction
+		(flags.correct_charged_nights), the channel manager and the imports
+		(night_rates_writer) clear it to re-quote."""
+		if self.is_new() or self.night_rates_writer() or self.flags.get("correct_charged_nights"):
+			return
+		old = self.get_doc_before_save()
+		if not old:
+			return
+		now = self.get("rate_lock_key") or None
+		if now in ((old.get("rate_lock_key") or None), key):
+			return
+		frappe.throw(_("The stay's rate lock changes only through the booking's own pricing "
+		               "(amend the stay, move the room, an agreed rate or a discount)."),
+		             frappe.PermissionError, title=_("Locked night rate"))
+
 	@staticmethod
 	def refuse_locked_nights(days):
 		frappe.throw(_("The locked rate of {0} is changed only by the booking's own pricing "
@@ -1235,6 +1273,7 @@ class Reservation(Document):
 			return
 		inputs = self.quote_inputs()
 		key = self.rate_lock_key_for(inputs)
+		self.guard_lock_key(key)
 		if (not self.is_new() and self.get("night_rates")
 				and self.get("rate_lock_key") == key
 				and not self.has_value_changed("auto_price")):

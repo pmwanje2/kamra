@@ -556,15 +556,20 @@ def _compute_insights(property: str, days: int, today, money: bool,
 		"room_type_name": rt_names.get(r.room_type, r.room_type),
 		"floor": r.floor, "nights": 0, "stays": 0, "revenue": 0.0,
 		"out_of_service_nights": 0, "cleans": 0, "clean_minutes": [],
+		"occupied_nights": 0,
 	} for r in rooms}
 
-	# nights actually stayed (in-house or departed), whatever was posted
+	# nights actually stayed (in-house or departed), whatever was posted;
+	# occupancy leaves out a stay on a category left out of it, as every
+	# report does (kamra.room_statistics)
+	from kamra.room_statistics import STAY_CATEGORY, category_rules
+	rules = category_rules(property)
 	for s in frappe.db.sql(
-			"""
-			SELECT room, check_in_date, check_out_date FROM `tabReservation`
-			WHERE property = %(p)s AND room IS NOT NULL AND room != ''
-			  AND status IN ('Checked In', 'Checked Out')
-			  AND check_in_date < %(end)s AND check_out_date > %(start)s
+			"SELECT r.room, r.check_in_date, r.check_out_date, " + STAY_CATEGORY + """ AS category
+			FROM `tabReservation` r
+			WHERE r.property = %(p)s AND r.room IS NOT NULL AND r.room != ''
+			  AND r.status IN ('Checked In', 'Checked Out')
+			  AND r.check_in_date < %(end)s AND r.check_out_date > %(start)s
 			""", {"p": property, "start": start, "end": end}, as_dict=True):
 		row = stats.get(s.room)
 		if not row:
@@ -573,6 +578,8 @@ def _compute_insights(property: str, days: int, today, money: bool,
 		if n:
 			row["nights"] += n
 			row["stays"] += 1
+			if rules.counts("occupancy", s.category):
+				row["occupied_nights"] += n
 
 	if money:
 		for x in frappe.db.sql(
@@ -625,10 +632,13 @@ def _compute_insights(property: str, days: int, today, money: bool,
 
 	all_minutes = []
 	out_rooms = []
+	occupied_nights = 0
 	for row in stats.values():
 		sellable = max(0, days - row["out_of_service_nights"])
 		row["sellable_nights"] = sellable
-		row["occupancy_pct"] = round(100 * row["nights"] / sellable, 1) if sellable else 0.0
+		occupied = row.pop("occupied_nights")
+		occupied_nights += occupied
+		row["occupancy_pct"] = round(100 * occupied / sellable, 1) if sellable else 0.0
 		mins = row.pop("clean_minutes")
 		all_minutes += mins
 		row["avg_clean_minutes"] = round(sum(mins) / len(mins), 1) if mins else None
@@ -649,7 +659,7 @@ def _compute_insights(property: str, days: int, today, money: bool,
 		"summary": {
 			"rooms": len(out_rooms),
 			"room_nights": total_nights,
-			"occupancy_pct": round(100 * total_nights / sellable, 1) if sellable else 0.0,
+			"occupancy_pct": round(100 * occupied_nights / sellable, 1) if sellable else 0.0,
 			"revenue": round(sum(r["revenue"] or 0 for r in out_rooms), 2) if money else None,
 			"out_of_service_nights": sum(r["out_of_service_nights"] for r in out_rooms),
 			"avg_clean_minutes": round(sum(all_minutes) / len(all_minutes), 1)

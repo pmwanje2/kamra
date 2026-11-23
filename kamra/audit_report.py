@@ -12,8 +12,11 @@ Where each number comes from, so nothing is counted twice:
   event date: food and beverage spend, hall rent, the rest. A function's
   lines posted to a folio start with its "EVT-..." name and are left out
   of the folio figures, so they count once.
-- discounts on the room come off room revenue; the room levy is a tax
-  collected for someone else, not revenue
+- room revenue is Room and Rate Adjustment (kamra.room_statistics), the
+  same revenue ADR and RevPAR divide; a discount posted on its own line (a
+  booking voucher: Discount, booked to the Adjustment group) is with the
+  allowances; the room levy is a tax collected for someone else, not
+  revenue
 - brought forward / carried forward: the Guest, Advance deposit and City
   ledger (AR) balances before and after the day, with the day's movement
 
@@ -34,25 +37,29 @@ FNB_TYPES = ("Food & Beverage",)
 LEDGERS = (("Guest", "Guest ledger"), ("Deposit", "Advance deposits"), ("AR", "City ledger"))
 
 
+# the folio's own lines in no other column: room revenue
+# (room_statistics.ROOM_REVENUE_TYPES), meal plans and minibar, the
+# allowances and discounts, food and beverage
+NOT_OTHER = ("Room", "Rate Adjustment", "Discount", "Meal Plan", "Minibar", "Allowance")
+
+
 def _folio(property: str, start, end) -> dict:
 	row = frappe.db.sql(
 		"""
 		SELECT
-		  COALESCE(SUM(CASE WHEN fc.charge_type IN ('Room', 'Discount')
-		        THEN fc.amount END), 0) AS rooms,
 		  COALESCE(SUM(CASE WHEN fc.charge_type IN ('Meal Plan', 'Minibar')
 		        THEN fc.amount END), 0) AS meal_plan_minibar,
 		  COALESCE(SUM(CASE WHEN fc.charge_type IN %(fnb)s AND fc.is_alcohol = 0
 		        THEN fc.amount END), 0) AS food,
 		  COALESCE(SUM(CASE WHEN fc.charge_type IN %(fnb)s AND fc.is_alcohol = 1
 		        THEN fc.amount END), 0) AS beverage,
-		  COALESCE(SUM(CASE WHEN fc.charge_type = 'Allowance'
+		  COALESCE(SUM(CASE WHEN fc.charge_type IN ('Allowance', 'Discount')
 		        THEN fc.amount END), 0) AS allowances,
-		  COALESCE(SUM(CASE WHEN fc.charge_type NOT IN ('Room', 'Discount', 'Meal Plan', 'Minibar', 'Allowance')
+		  COALESCE(SUM(CASE WHEN fc.charge_type NOT IN %(not_other)s
 		        AND fc.charge_type NOT IN %(fnb)s AND fc.charge_type NOT IN %(skip)s
 		        THEN fc.amount END), 0) AS other
 		""" + _FOLIO_FROM, {"p": property, "s": start, "e": end, "skip": FOLIO_SKIP,
-		                     "fnb": FNB_TYPES}, as_dict=True)[0]
+		                     "fnb": FNB_TYPES, "not_other": NOT_OTHER}, as_dict=True)[0]
 	return {k: flt(v) for k, v in row.items()}
 
 
@@ -80,10 +87,11 @@ def departments(property: str, start, end) -> list[dict]:
 	         ("Meal plans and minibar", p["meal_plan_minibar"])]
 	rows += frappe.db.sql(
 		"""SELECT fc.charge_type, SUM(fc.amount)""" + _FOLIO_FROM + """
-		  AND fc.charge_type NOT IN ('Room', 'Discount', 'Meal Plan', 'Minibar', 'Allowance')
+		  AND fc.charge_type NOT IN %(not_other)s
 		  AND fc.charge_type NOT IN %(fnb)s AND fc.charge_type NOT IN %(skip)s
 		GROUP BY fc.charge_type ORDER BY fc.charge_type""",
-		{"p": property, "s": start, "e": end, "skip": FOLIO_SKIP, "fnb": FNB_TYPES})
+		{"p": property, "s": start, "e": end, "skip": FOLIO_SKIP, "fnb": FNB_TYPES,
+		 "not_other": NOT_OTHER})
 	rows.append(("Discounts and allowances", p["allowances"]))
 	return [{"department": frappe._(name), "amount": round(flt(amt), 2)}
 	        for name, amt in rows if name == "Rooms" or round(flt(amt), 2)]
@@ -169,12 +177,13 @@ def _period(property: str, label: str, start, end, total_rooms: int) -> dict:
 	                       by_category=rooms["by_category"], occupancy_rooms=available)
 	# discounts and allowances given after a charge (negative) get their own
 	# column: inside "other" they made it negative and hid the other income
-	total = (f["rooms"] + food + bev + banq["total"] + f["meal_plan_minibar"]
+	total = (rooms["room_revenue"] + food + bev + banq["total"] + f["meal_plan_minibar"]
 	         + f["other"] + f["allowances"])
 	return {
 		"label": label, "from_date": str(start), "to_date": str(end),
 		"rooms_sold": nights,
-		"room_revenue": f["rooms"],
+		# the room revenue ADR and RevPAR divide (kamra.room_statistics)
+		"room_revenue": rooms["room_revenue"],
 		# rooms_by_category, occupancy_pct, adr, revpar
 		**figures,
 		"food": round(food, 2), "beverage": round(bev, 2),

@@ -153,8 +153,8 @@ export const ratePlansConfig: ScreenConfig = {
     { field: "is_default", label: "Default plan", type: "check" },
     { field: "discount_eligible", label: "Discount eligible", type: "check", default: 1, hint: "Untick for rates that never take a desk discount (non-refundable, packages)." },
     // the property's own list (Settings → Revenue → Complimentary and house
-    // use), OPERA's three until it loads
-    { field: "rate_category", label: "Rate category", type: "select", optionsFrom: "rate_categories", options: ["Standard", "Complimentary", "House Use"], default: "Standard", hint: "Settings → Revenue says which categories a manager signs off, and which are left out of ADR, RevPAR or occupancy." },
+    // use); left blank, the server gives a new plan the list's first
+    { field: "rate_category", label: "Rate category", type: "select", optionsFrom: "rate_categories", hint: "Settings → Revenue says which categories a manager signs off, and which are left out of ADR, RevPAR or occupancy." },
     { field: "disabled", label: "Disabled (unpublished)", type: "check", hint: "Tick to unpublish; clear to activate at booking" },
   ],
 }

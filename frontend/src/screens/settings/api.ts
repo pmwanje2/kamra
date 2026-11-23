@@ -18,6 +18,9 @@ export interface SettingSpec {
   min?: number
   max?: number
   unit?: string
+  /** false: narrower than its page, and this user's role can't change it
+   * (kamra.settings S.editors) */
+  can_edit?: boolean
 }
 
 export interface SettingsSection {

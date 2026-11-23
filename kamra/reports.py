@@ -90,7 +90,9 @@ def _day_parts(property: str, date: str, total_rooms: int) -> tuple[dict, dict]:
 	totals for a span."""
 	from kamra.room_statistics import (
 		category_rules,
+		counted_occupied,
 		in_house_by_category,
+		occupied_by_category,
 		posted_rooms,
 		room_figures,
 		with_occupied,
@@ -151,7 +153,8 @@ def _day_parts(property: str, date: str, total_rooms: int) -> tuple[dict, dict]:
 		**projected,
 		"date": str(date),
 		"rooms_sold": sold,
-		"rooms_occupied": occupied,
+		# the rooms the occupancy counts (a category left out of it is not)
+		"rooms_occupied": counted_occupied(rules, occupied, occupied_by_category(by)),
 		"available_rooms": available,
 		"occupancy_basis": "in_house" if in_house else "posted",
 		"pax": pax,
@@ -269,7 +272,12 @@ def manager_flash(property: str, date: str | None = None,
 	the day figures, trend, movement and collections cover from_date..date."""
 	from kamra.business_date import report_range_end
 	from kamra.movements import report_dates
-	from kamra.room_statistics import occupancy_pct
+	from kamra.room_statistics import (
+		booked_by_night,
+		category_rules,
+		counted_occupied,
+		occupancy_pct,
+	)
 	dates = report_dates(property, date)
 	date = dates["report_date"]
 	start = from_date or date
@@ -285,18 +293,19 @@ def manager_flash(property: str, date: str | None = None,
 	from kamra.api import cash_summary
 	collections = cash_summary(property, start, date)
 
+	# the next 7 nights on the books, occupancy by the property's rate
+	# categories (kamra.room_statistics)
+	rules = category_rules(property)
+	nights = booked_by_night(rules, property, add_days(date, 1), add_days(date, 8),
+	                         ("Confirmed", "Checked In"))
 	outlook = []
 	for i in range(1, 8):
-		od = str(add_days(date, i))
-		booked = frappe.db.sql(
-			"""
-			SELECT COUNT(*) FROM `tabReservation`
-			WHERE property = %(p)s AND status IN ('Confirmed', 'Checked In')
-			  AND check_in_date <= %(d)s AND check_out_date > %(d)s
-			""", {"p": property, "d": od})[0][0]
+		od = str(getdate(add_days(date, i)))
+		by = nights.get(od) or {}
+		booked = sum(by.values())
 		outlook.append({
-			"date": od, "booked": int(booked),
-			"occupancy_pct": occupancy_pct(booked, sellable),
+			"date": od, "booked": booked,
+			"occupancy_pct": occupancy_pct(counted_occupied(rules, booked, by), sellable),
 		})
 
 	return {
@@ -325,14 +334,21 @@ def _days(property: str, d, end, total_rooms: int) -> tuple[list[dict], list[dic
 def _sum_days(property: str, days: list[dict], by_category: list[dict],
               total_rooms: int) -> dict:
 	"""Several days' stats as one: totals, with rates over the whole span."""
-	from kamra.room_statistics import category_rules, room_figures, sum_categories
+	from kamra.room_statistics import (
+		category_rules,
+		occupied_by_category,
+		room_figures,
+		sum_categories,
+	)
 	tot = {k: sum(d[k] for d in days) for k in
 	       ("rooms_sold", "rooms_occupied", "available_rooms", "pax", "room_revenue",
 	        "fnb_revenue", "other_revenue", "total_revenue")}
 	n = total_rooms * len(days)
+	by = sum_categories(by_category)
+	# every room occupied, each day's rooms_occupied being the counted ones
 	figures = room_figures(category_rules(property), room_revenue=tot["room_revenue"],
-	                       rooms_sold=tot["rooms_sold"], by_category=sum_categories(by_category),
-	                       rooms_occupied=tot["rooms_occupied"],
+	                       rooms_sold=tot["rooms_sold"], by_category=by,
+	                       rooms_occupied=sum(occupied_by_category(by).values()),
 	                       occupancy_rooms=tot["available_rooms"], revpar_rooms=n)
 	return {**tot,
 	        "occupancy_basis": "in_house" if any(
