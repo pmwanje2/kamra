@@ -128,12 +128,17 @@ def pos_post_room_charge(property: str, ticket_id: str, amount: float,
 	is_alcohol = 1 if cint(is_alcohol) else 0
 	# the posting path checks these again; checking first means a bad ticket
 	# never claims its ticket number
-	from kamra.api import _check_charge_amount_and_tax
-	from kamra.ledger import resolve_transaction_code
+	from kamra.api import (
+		_check_charge_amount_and_tax,
+		_post_stay_charge_once,
+		_with_snapshot_retry,
+	)
+	from kamra.ledger import code_is_alcohol, resolve_transaction_code
 	_check_charge_amount_and_tax(property, amount, tax_rate)
 	resolved_code = resolve_transaction_code(
 		charge_type, transaction_code=transaction_code,
 		is_alcohol=is_alcohol, property=property)
+	is_alcohol = 1 if (is_alcohol or code_is_alcohol(resolved_code)) else 0
 	amount = flt(amount)
 
 	key = _charge_name(property, ticket_id)
@@ -162,37 +167,44 @@ def pos_post_room_charge(property: str, ticket_id: str, amount: float,
 		               "desk.").format(amount, limit))
 
 	# claim the ticket first: a concurrent retry now waits on this row and
-	# then sees the duplicate, instead of posting a second time
-	rec = frappe.get_doc({
-		"doctype": CHARGE, "name": key, "property": property,
-		"ticket_id": ticket_id, "outlet_name": (outlet_name or "").strip()[:140] or None,
-		"posted_by": frappe.session.user, "reservation": reservation,
-		"room": room_id, "charge_type": charge_type,
-		"transaction_code": resolved_code,
-		"description": description[:140], "amount": amount,
-		"is_alcohol": is_alcohol,
-	})
-	try:
-		rec.insert(ignore_permissions=True)  # role + property checked above
-	except frappe.DuplicateEntryError:
-		frappe.clear_messages()
-		return _result(frappe.get_doc(CHARGE, key), duplicate=True)
-
-	# the one write path; the integrator was authorised above and is limited
-	# to room-chargeable types, the same pattern as housekeeping's minibar
-	from kamra.api import post_stay_charge
+	# then sees the duplicate, instead of posting a second time. Wrap with
+	# snapshot-isolation retry so MariaDB 11.8 error 1020 never bubbles as 500.
 	text = f"{description} (POS {ticket_id})"[:140]
-	with act_as(AGENT_EMAIL):
-		out = post_stay_charge(reservation, charge_type, text, amount,
-		                       gst_rate=flt(tax_rate), is_alcohol=is_alcohol,
-		                       transaction_code=resolved_code)
-	rec.db_set({"folio": out.get("folio"), "balance_after": flt(out.get("balance"))},
-	           update_modified=False)
+	posted_by = frappe.session.user
 
-	from kamra.savings import log_action
-	log_action("pos_room_charge", "Folio", out.get("folio"), property,
-	           rationale=f"{outlet_name or 'External POS'} ticket {ticket_id}: "
-	                     f"{charge_type} {amount} -> {out.get('folio')}"
-	                     f" by {frappe.session.user}",
-	           channel="API")
-	return _result(rec, duplicate=False)
+	def _post_once():
+		if frappe.db.exists(CHARGE, key):
+			return _result(frappe.get_doc(CHARGE, key), duplicate=True)
+		rec = frappe.get_doc({
+			"doctype": CHARGE, "name": key, "property": property,
+			"ticket_id": ticket_id, "outlet_name": (outlet_name or "").strip()[:140] or None,
+			"posted_by": posted_by, "reservation": reservation,
+			"room": room_id, "charge_type": charge_type,
+			"transaction_code": resolved_code,
+			"description": description[:140], "amount": amount,
+			"is_alcohol": is_alcohol,
+		})
+		try:
+			rec.insert(ignore_permissions=True)  # role + property checked above
+		except frappe.DuplicateEntryError:
+			frappe.clear_messages()
+			return _result(frappe.get_doc(CHARGE, key), duplicate=True)
+
+		# the one write path; the integrator was authorised above and is limited
+		# to room-chargeable types, the same pattern as housekeeping's minibar
+		with act_as(AGENT_EMAIL):
+			out = _post_stay_charge_once(reservation, charge_type, text, amount,
+			                             gst_rate=flt(tax_rate), is_alcohol=is_alcohol,
+			                             transaction_code=resolved_code)
+		rec.db_set({"folio": out.get("folio"), "balance_after": flt(out.get("balance"))},
+		           update_modified=False)
+
+		from kamra.savings import log_action
+		log_action("pos_room_charge", "Folio", out.get("folio"), property,
+		           rationale=f"{outlet_name or 'External POS'} ticket {ticket_id}: "
+		                     f"{charge_type} {amount} -> {out.get('folio')}"
+		                     f" by {posted_by}",
+		           channel="API")
+		return _result(rec, duplicate=False)
+
+	return _with_snapshot_retry(_post_once)

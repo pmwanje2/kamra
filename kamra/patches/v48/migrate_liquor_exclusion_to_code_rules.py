@@ -32,7 +32,7 @@ from __future__ import annotations
 import frappe
 from frappe.utils import cint
 
-from kamra.folio import _ROOM_CHARGES, open_group_folio
+from kamra.folio import _ROOM_CHARGES, open_company_folio, open_group_folio
 from kamra.ledger import ensure_default_transaction_codes
 from kamra.routing import _overlap, copy_group_instructions
 
@@ -147,6 +147,12 @@ def _migrate_ruleless_credit_companies() -> None:
 	if not liquor_props:
 		return
 
+	all_props = set(
+		frappe.get_all("Property", filters={"disabled": 0}, pluck="name")
+		or frappe.get_all("Property", pluck="name")
+	)
+	all_props_liquor_excl = bool(all_props) and all_props.issubset(set(liquor_props))
+
 	credit_companies = frappe.get_all(
 		"Corporate Account",
 		filters={"credit_allowed": 1},
@@ -160,14 +166,24 @@ def _migrate_ruleless_credit_companies() -> None:
 		) | set(
 			frappe.get_all("Group Booking", filters={"company": name}, pluck="property")
 		)
-		matched_presets = [
-			liquor_props[p] for p in linked_props if p in liquor_props
-		]
-		if not matched_presets:
-			if linked_props:
-				# Company only operates at properties whose preset did not exclude liquor
+		if not linked_props:
+			if not all_props_liquor_excl:
+				# Multi-property site with mixed presets (e.g. "Room only" alongside
+				# liquor-excluding): do not attach global F&B rules to an orphan company.
 				continue
 			matched_presets = list(liquor_props.values())
+		elif linked_props.issubset(liquor_props):
+			matched_presets = [liquor_props[p] for p in linked_props]
+		else:
+			# Spans both liquor-excluding and non-liquor-excluding properties: keep
+			# global Corporate Account rules untouched so "Room only" properties stay
+			# unaffected, and attach stay-level non-alcohol Routing Instructions to
+			# active stays at the liquor-excluding properties.
+			liquor_linked = linked_props & set(liquor_props)
+			if liquor_linked:
+				_migrate_multi_property_company_stays(name, {p: liquor_props[p] for p in liquor_linked})
+			continue
+
 		covered = _covered_for_presets(matched_presets)
 		codes = _non_alcohol_codes(covered)
 		if not codes:
@@ -180,22 +196,99 @@ def _migrate_ruleless_credit_companies() -> None:
 		doc.save(ignore_permissions=True)
 
 
+def _alcohol_codes(charge_types: frozenset[str] | set[str] | None) -> list[str]:
+	rows = frappe.get_all(
+		"Transaction Code",
+		filters={"disabled": 0, "is_alcohol": 1, "txn_type": ("!=", "Payment")},
+		fields=["name", "charge_type"],
+		order_by="name asc",
+	)
+	out: list[str] = []
+	for r in rows:
+		if not r.charge_type:
+			continue
+		if charge_types is None:
+			if r.charge_type in ("Allowance", "Opening Balance"):
+				continue
+			out.append(r.name)
+		elif r.charge_type in charge_types:
+			out.append(r.name)
+	return out
+
+
+def _migrate_multi_property_company_stays(company: str, prop_presets: dict[str, str]) -> None:
+	stays = frappe.get_all(
+		"Reservation",
+		filters={
+			"company": company,
+			"property": ("in", list(prop_presets)),
+			"status": ("not in", ["Cancelled", "No Show", "Checked Out"]),
+		},
+		pluck="name",
+	)
+	for res_name in stays:
+		res = frappe.get_doc("Reservation", res_name)
+		covered = LIQUOR_EXCLUDING_PRESETS[prop_presets[res.property]]
+		codes = _non_alcohol_codes(covered)
+		if not codes:
+			continue
+		cf = open_company_folio(res)
+		win_no = int(frappe.db.get_value("Folio", cf, "window_no") or 2)
+		existing = [
+			frappe.get_doc("Routing Instruction", n)
+			for n in frappe.get_all(
+				"Routing Instruction",
+				filters={"reservation": res.name, "disabled": 0},
+				pluck="name",
+			)
+		]
+		# Route non-alcohol codes to the company window, and explicitly pin
+		# alcohol codes to Window 1 (Guest) so renaming the property's preset
+		# to "Room and F&B" / "Everything" cannot pull alcohol onto Window 2
+		# via _legacy_target fallback.
+		candidates = [
+			(win_no, codes, "Migrated from pre-K1 liquor-excluding property preset (multi-property company)"),
+		]
+		alc_codes = _alcohol_codes(covered)
+		if alc_codes:
+			candidates.append(
+				(1, alc_codes, "Keep alcohol on Window 1 after pre-K1 preset rename (multi-property company)"),
+			)
+		for target_win, target_codes, note in candidates:
+			candidate = frappe.get_doc({
+				"doctype": "Routing Instruction",
+				"property": res.property,
+				"reservation": res.name,
+				"target_type": "Window",
+				"target_window": target_win,
+				"all_codes": 0,
+				"codes": [{"transaction_code": c} for c in target_codes],
+				"limit_type": "None",
+				"monday": 1, "tuesday": 1, "wednesday": 1, "thursday": 1,
+				"friday": 1, "saturday": 1, "sunday": 1,
+				"notes": note,
+			})
+			if not any(_overlap(candidate, other) for other in existing):
+				candidate.insert(ignore_permissions=True)
+				existing.append(candidate)
+
+
 def _migrate_master_groups() -> None:
 	groups = frappe.get_all(
 		"Group Booking",
 		filters={
 			"status": ("!=", "Cancelled"),
-			"master_reservation": ("is", "set"),
 			"master_pays": ("in", list(LIQUOR_EXCLUDING_PRESETS)),
 		},
-		fields=["name", "property", "master_pays"],
+		fields=["name", "property", "master_pays", "master_reservation"],
 	)
 	for gb in groups:
 		covered = LIQUOR_EXCLUDING_PRESETS[gb.master_pays]
 		codes = _non_alcohol_codes(covered)
 		if not codes:
 			continue
-		open_group_folio(gb.name)
+		if gb.master_reservation:
+			open_group_folio(gb.name)
 		candidate = frappe.get_doc({
 			"doctype": "Routing Instruction",
 			"property": gb.property,
@@ -220,22 +313,23 @@ def _migrate_master_groups() -> None:
 		if not any(_overlap(candidate, other) for other in existing):
 			candidate.insert(ignore_permissions=True)
 
-		members = frappe.get_all(
-			"Reservation",
-			filters={
-				"group_booking": gb.name,
-				"status": ("not in", ["Cancelled", "No Show", "Checked Out"]),
-			},
-			fields=["name", "group_booking", "pays_own_charges"],
-		)
-		for m in members:
-			if cint(m.pays_own_charges):
-				continue
-			try:
-				copy_group_instructions(m)
-			except frappe.ValidationError:
-				# Stay already has a custom overlapping instruction; leave it intact.
-				frappe.clear_messages()
+		if gb.master_reservation:
+			members = frappe.get_all(
+				"Reservation",
+				filters={
+					"group_booking": gb.name,
+					"status": ("not in", ["Cancelled", "No Show", "Checked Out"]),
+				},
+				fields=["name", "group_booking", "pays_own_charges"],
+			)
+			for m in members:
+				if cint(m.pays_own_charges):
+					continue
+				try:
+					copy_group_instructions(m)
+				except frappe.ValidationError:
+					# Stay already has a custom overlapping instruction; leave it intact.
+					frappe.clear_messages()
 
 		frappe.db.set_value(
 			"Group Booking", gb.name, "master_pays", NO_MASTER_PRESET,

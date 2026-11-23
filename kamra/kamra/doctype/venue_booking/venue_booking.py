@@ -140,7 +140,15 @@ class VenueBooking(Document):
 				"Banquet Service Item", row.service_item, "gst_rate")
 			if rate:
 				return float(rate)
-		if row.item_type in _FNB_TYPES and not row.is_alcohol:
+		from kamra.ledger import code_default_tax_rate, code_is_alcohol
+		row_code = row.get("transaction_code") or (
+			frappe.db.get_value("Banquet Service Item", row.service_item, "transaction_code")
+			if row.get("service_item") else None
+		)
+		tc_rate = code_default_tax_rate(row_code)
+		if tc_rate is not None:
+			return tc_rate
+		if row.item_type in _FNB_TYPES and not row.is_alcohol and not code_is_alcohol(row_code):
 			from kamra.folio import _fnb_gst
 			return float(_fnb_gst(self.property))
 		return _SERVICE_GST

@@ -306,3 +306,43 @@ Channel review status can only be cleared via the review action.,لا يمكن �
 Update In-House Reservations,تحديث الحجوزات المقيمة حاليًا
 "Update In-House Reservations = Y is not yet enabled: OXI Y requires arrival-date, room-type, billed-night, and assigned-room safety bounds. Keep N so OTA changes to checked-in stays are rejected and flagged for review.",تحديث الحجوزات المقيمة حاليًا = Y غير مفعَّل بعد: يتطلب OXI Y ضوابط تاريخ الوصول ونوع الغرفة والليالي المفوترة والغرفة المخصَّصة. أبقِ القيمة N لرفض تعديلات OTA على الإقامات المسجَّلة دخولًا وتعليمها للمراجعة.
 OTA Tax Rules row {0}: a CJK rule needs at least two characters so it does not match unrelated taxes.,الصف {0} من قواعد ضرائب OTA: تحتاج قاعدة CJK إلى حرفين على الأقل حتى لا تطابق ضرائب غير ذات صلة.
+Transaction code {0} is not an enabled charge code.,رمز المعاملة {0} ليس رمز رسوم مفعّلًا.
+Transaction code {0} has no charge type. Set one under Transaction codes.,رمز المعاملة {0} ليس له نوع رسوم. حدّد نوعًا ضمن رموز المعاملات.
+Unexpected parameter(s) for route_outlet_charge: {0}. Pass a transaction_code instead (is_alcohol was removed).,معامل(ات) غير متوقعة في route_outlet_charge: {0}. مرّر transaction_code بدلًا من ذلك (تمت إزالة is_alcohol).
+Cannot route to reservation {0} because its status is {1}.,لا يمكن التوجيه إلى الحجز {0} لأن حالته هي {1}.
+Cannot route to cancelled group {0}.,لا يمكن التوجيه إلى المجموعة الملغاة {0}.
+Cannot create or keep an active routing instruction for cancelled group {0}.,لا يمكن إنشاء أو الإبقاء على تعليمة توجيه نشطة للمجموعة الملغاة {0}.
+"A company window names the paying company, and only that.",نافذة الشركة تحدّد الشركة الدافعة فقط.
+A guest window names no company or agent.,نافذة الضيف لا تحدّد شركة أو وكيلًا.
+"A travel agent window names the paying agent, and only that.",نافذة وكيل السفر تحدّد الوكيل الدافع فقط.
+A group's master bill needs its Group Booking.,الفاتورة الرئيسية للمجموعة تتطلب ربطها بحجز المجموعة.
+A group's master bill must be at the group's property.,يجب أن تكون الفاتورة الرئيسية للمجموعة في منشأة المجموعة نفسها.
+Window must be from 1 to {0}.,يجب أن تكون النافذة من 1 إلى {0}.
+Window {0} already has an open bill.,النافذة {0} لديها بالفعل فاتورة مفتوحة.
+A bill can have at most {0} windows. Close a window or move its charges to another one.,يمكن أن تحتوي الفاتورة على {0} نوافذ كحد أقصى. أغلق نافذة أو انقل رسومها إلى نافذة أخرى.
+Open a window on a stay or on a group's master bill.,افتح نافذة على إقامة أو على الفاتورة الرئيسية لمجموعة.
+Reservation {0} not found.,الحجز {0} غير موجود.
+Group {0} not found.,المجموعة {0} غير موجودة.
+"Group {0} is cancelled, so it has no master bill.",المجموعة {0} ملغاة، لذا ليس لديها فاتورة رئيسية.
+A routing instruction is for one stay or for one group.,تعليمة التوجيه تكون لإقامة واحدة أو لمجموعة واحدة.
+The stay or group must be at {0}.,يجب أن تكون الإقامة أو المجموعة في {0}.
+Target window must be from 1 to {0}.,يجب أن تكون النافذة المستهدفة من 1 إلى {0}.
+Choose the window to route to.,اختر النافذة المراد التوجيه إليها.
+A window instruction routes within the stay; leave the target room empty.,تعليمة النافذة توجّه داخل الإقامة نفسها؛ اترك الغرفة المستهدفة فارغة.
+Choose the room to route to.,اختر الغرفة المراد التوجيه إليها.
+Charges can only be routed to a room at the same property.,لا يمكن توجيه الرسوم إلا إلى غرفة في المنشأة نفسها.
+"To route within the stay, route to one of its windows.",للتوجيه داخل الإقامة نفسها، وجّه إلى إحدى نوافذها.
+"This stay is not part of a group, so it has no group master.",هذه الإقامة ليست جزءًا من مجموعة، لذا ليس لديها فاتورة رئيسية للمجموعة.
+The group's bill must be at the same property.,يجب أن تكون فاتورة المجموعة في المنشأة نفسها.
+A group master instruction has no target room.,تعليمة الفاتورة الرئيسية للمجموعة لا تحتوي على غرفة مستهدفة.
+"Route to a window, a room or the group master.",وجّه إلى نافذة أو غرفة أو الفاتورة الرئيسية للمجموعة.
+"Each row names a charge type or a transaction code, not both.",كل صف يحدّد نوع رسوم أو رمز معاملة، وليس كليهما.
+All Charges routes everything; remove the rows.,خيار جميع الرسوم يوجّه كل شيء؛ أزِل الصفوف.
+"Choose the charge types or codes to route, or tick All Charges.",اختر أنواع الرسوم أو الرموز المراد توجيهها، أو حدّد جميع الرسوم.
+An instruction for all charges cannot carry a limit.,تعليمة جميع الرسوم لا يمكن أن تحمل حدًا.
+An amount limit must be more than zero.,يجب أن يكون حد المبلغ أكبر من صفر.
+A percent limit must be more than 0 and at most 100.,يجب أن يكون حد النسبة المئوية أكبر من 0 وألا يتجاوز 100.
+To Date is before From Date.,تاريخ الانتهاء يسبق تاريخ البدء.
+Tick at least one day of the week.,حدّد يومًا واحدًا على الأقل من أيام الأسبوع.
+"Instruction {0} already routes some of these charges on some of these days. Only one instruction may cover a charge on a date: change its dates or charges, or disable it.",التعليمة {0} توجّه بالفعل بعض هذه الرسوم في بعض هذه الأيام. يمكن لتعليمة واحدة فقط تغطية رسم في تاريخ معين: غيّر تواريخها أو رسومها أو عطّلها.
+Bill-to for {0}: {1}.,الفوترة لحساب {0}: {1}.

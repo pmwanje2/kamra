@@ -113,3 +113,43 @@ Channel review status can only be cleared via the review action.,O estado de rev
 Update In-House Reservations,Atualizar reservas hospedadas
 "Update In-House Reservations = Y is not yet enabled: OXI Y requires arrival-date, room-type, billed-night, and assigned-room safety bounds. Keep N so OTA changes to checked-in stays are rejected and flagged for review.","Atualizar reservas hospedadas = Y ainda não está ativado: o OXI Y requer limites de segurança de data de chegada, tipo de quarto, noites faturadas e quarto atribuído. Mantenha N para que as alterações da OTA em estadias com check-in sejam rejeitadas e marcadas para revisão."
 OTA Tax Rules row {0}: a CJK rule needs at least two characters so it does not match unrelated taxes.,Linha {0} de Regras de impostos OTA: uma regra CJK precisa de pelo menos dois caracteres para não corresponder a impostos não relacionados.
+Transaction code {0} is not an enabled charge code.,O código de transação {0} não é um código de lançamento ativado.
+Transaction code {0} has no charge type. Set one under Transaction codes.,O código de transação {0} não tem tipo de lançamento. Defina um em Códigos de transação.
+Unexpected parameter(s) for route_outlet_charge: {0}. Pass a transaction_code instead (is_alcohol was removed).,Parâmetro(s) inesperado(s) para route_outlet_charge: {0}. Passe transaction_code em vez disso (is_alcohol foi removido).
+Cannot route to reservation {0} because its status is {1}.,Não é possível rotear para a reserva {0} porque o estado dela é {1}.
+Cannot route to cancelled group {0}.,Não é possível rotear para o grupo cancelado {0}.
+Cannot create or keep an active routing instruction for cancelled group {0}.,Não é possível criar ou manter uma instrução de roteamento ativa para o grupo cancelado {0}.
+"A company window names the paying company, and only that.",Uma janela de empresa indica apenas a empresa pagadora.
+A guest window names no company or agent.,Uma janela de hóspede não indica empresa nem agente.
+"A travel agent window names the paying agent, and only that.",Uma janela de agente de viagens indica apenas o agente pagador.
+A group's master bill needs its Group Booking.,A conta mestre de um grupo precisa da sua Reserva Grupal.
+A group's master bill must be at the group's property.,A conta mestre de um grupo deve estar na mesma propriedade do grupo.
+Window must be from 1 to {0}.,A janela deve ser de 1 a {0}.
+Window {0} already has an open bill.,A janela {0} já tem uma conta aberta.
+A bill can have at most {0} windows. Close a window or move its charges to another one.,Uma conta pode ter no máximo {0} janelas. Feche uma janela ou mova os lançamentos dela para outra.
+Open a window on a stay or on a group's master bill.,Abra uma janela em uma estadia ou na conta mestre de um grupo.
+Reservation {0} not found.,Reserva {0} não encontrada.
+Group {0} not found.,Grupo {0} não encontrado.
+"Group {0} is cancelled, so it has no master bill.","O grupo {0} está cancelado, portanto não tem conta mestre."
+A routing instruction is for one stay or for one group.,Uma instrução de roteamento é para uma estadia ou para um grupo.
+The stay or group must be at {0}.,A estadia ou o grupo deve estar em {0}.
+Target window must be from 1 to {0}.,A janela de destino deve ser de 1 a {0}.
+Choose the window to route to.,Escolha a janela de destino para o roteamento.
+A window instruction routes within the stay; leave the target room empty.,Uma instrução de janela roteia dentro da própria estadia; deixe o quarto de destino vazio.
+Choose the room to route to.,Escolha o quarto de destino para o roteamento.
+Charges can only be routed to a room at the same property.,Os lançamentos só podem ser roteados para um quarto na mesma propriedade.
+"To route within the stay, route to one of its windows.","Para rotear dentro da própria estadia, roteie para uma de suas janelas."
+"This stay is not part of a group, so it has no group master.","Esta estadia não faz parte de um grupo, portanto não tem conta mestre de grupo."
+The group's bill must be at the same property.,A conta do grupo deve estar na mesma propriedade.
+A group master instruction has no target room.,Uma instrução de conta mestre de grupo não tem quarto de destino.
+"Route to a window, a room or the group master.","Roteie para uma janela, um quarto ou a conta mestre do grupo."
+"Each row names a charge type or a transaction code, not both.","Cada linha indica um tipo de lançamento ou um código de transação, não ambos."
+All Charges routes everything; remove the rows.,Todos os lançamentos roteia tudo; remova as linhas.
+"Choose the charge types or codes to route, or tick All Charges.","Escolha os tipos de lançamento ou códigos para rotear, ou marque Todos os lançamentos."
+An instruction for all charges cannot carry a limit.,Uma instrução para todos os lançamentos não pode ter limite.
+An amount limit must be more than zero.,Um limite de valor deve ser maior que zero.
+A percent limit must be more than 0 and at most 100.,Um limite percentual deve ser maior que 0 e no máximo 100.
+To Date is before From Date.,A data final é anterior à data inicial.
+Tick at least one day of the week.,Marque pelo menos um dia da semana.
+"Instruction {0} already routes some of these charges on some of these days. Only one instruction may cover a charge on a date: change its dates or charges, or disable it.","A instrução {0} já roteia alguns destes lançamentos em alguns destes dias. Apenas uma instrução pode cobrir um lançamento em uma data: altere as datas ou os lançamentos dela, ou desative-a."
+Bill-to for {0}: {1}.,Faturar para {0}: {1}.

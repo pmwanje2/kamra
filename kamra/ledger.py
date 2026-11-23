@@ -140,6 +140,19 @@ def beverage_transaction_code(property: str | None = None) -> str:
 	return DEFAULT_BEVERAGE_CODE
 
 
+def code_is_alcohol(code: str | None) -> bool:
+	"""True when `code` names a Transaction Code flagged is_alcohol=1."""
+	return bool(code and cint(frappe.db.get_value("Transaction Code", code, "is_alcohol")))
+
+
+def code_default_tax_rate(code: str | None) -> float | None:
+	"""Configured default tax % on a Transaction Code (OPERA Generates), or None when unset."""
+	if not code:
+		return None
+	val = frappe.db.get_value("Transaction Code", code, "default_tax_rate")
+	return float(val) if val is not None and float(val) > 0 else None
+
+
 def resolve_transaction_code(charge_type: str, *,
                              transaction_code: str | None = None,
                              is_alcohol: int = 0,

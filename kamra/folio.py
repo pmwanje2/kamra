@@ -39,10 +39,12 @@ def _fnb_gst(property):
 
 
 def _recalculate(folio):
+	from kamra.ledger import minor_unit
+	unit = minor_unit(folio.property) if folio.get("property") else None
 	charges = tax = Decimal(0)
 	for c in folio.charges:
 		amount = Decimal(str(c.amount or 0))
-		line_tax = _line_tax(c, amount)
+		line_tax = _line_tax(c, amount, unit)
 		c.gst_amount = float(line_tax)
 		c.total = float(amount + line_tax)
 		charges += amount
@@ -55,12 +57,17 @@ def _recalculate(folio):
 	folio.balance = float(charges + tax - paid)
 
 
-def _line_tax(c, amount: Decimal) -> Decimal:
-	"""A line's tax: worked out from its rate, or, for a line split to the
-	currency's minor unit (tax_as_posted), the tax it was posted with."""
+def _line_tax(c, amount: Decimal, unit: Decimal | None = None) -> Decimal:
+	"""A line's tax: worked out from its rate (quantized to the property's
+	minor unit whenever the line's base is in minor units), or, for a line
+	split to the currency's minor unit (tax_as_posted), the tax it was
+	posted with."""
 	if c.get("tax_as_posted"):
 		return Decimal(str(c.gst_amount or 0))
-	return amount * Decimal(str(c.gst_rate or 0)) / 100
+	tax = amount * Decimal(str(c.gst_rate or 0)) / 100
+	if unit is not None and amount == amount.quantize(unit):
+		return tax.quantize(unit, rounding=ROUND_HALF_UP)
+	return tax
 
 
 def open_folio(reservation) -> str:
@@ -735,9 +742,11 @@ def _pending_routed(folios) -> list[tuple]:
 	"""Routed lines appended to the loaded folios and not saved yet, so a
 	multi-night posting run spends a routing limit only once:
 	[(instruction, posting_date, figure)]."""
+	from kamra.ledger import minor_unit
 	return [(c.routing_instruction, c.posting_date,
 	         routed_figure(doc.property, c.charge_type, c.amount,
-	                       _line_tax(c, Decimal(str(c.amount or 0)))))
+	                       _line_tax(c, Decimal(str(c.amount or 0)),
+	                                 minor_unit(doc.property) if doc.get("property") else None)))
 	        for doc in folios.values() for c in doc.charges
 	        if c.get("routing_instruction") and not c.get("creation")]
 
@@ -1154,6 +1163,7 @@ def split_charge(from_folio: str, charge_row: str, to_folio: str,
 	row, sign, line = _split_line(src, charge_row, credit)
 	units = Decimal(str(row.qty or 1))
 	part_units = Decimal(1)
+	whole = _split_whole(line)
 	if qty:
 		part_units = Decimal(str(qty))
 		if units <= 1:
@@ -1161,21 +1171,27 @@ def split_charge(from_folio: str, charge_row: str, to_folio: str,
 		if part_units != part_units.to_integral_value() or not 1 <= part_units < units:
 			frappe.throw(frappe._("Split off between 1 and {0} of its {1} units.").format(
 				int(units) - 1, f"{units.normalize():f}"))
-		part = _cut(line, part_units / units)
+		part, kept = split_figure(line, line["figure"] * part_units / units)
 	elif percent is not None:
-		part = _cut(line, Decimal(str(percent)) / 100)
+		part, kept = split_figure(line, line["figure"] * Decimal(str(percent)) / 100)
 	elif amount is not None:
 		if Decimal(str(amount)) <= 0:
 			frappe.throw(frappe._("Give an amount above zero to split off."))
-		base = Decimal(str(amount)).quantize(line["unit"], rounding=ROUND_HALF_UP)
-		part = (base, (base * line["rate"]).quantize(line["unit"], rounding=ROUND_HALF_UP))
+		if line["priced_with_tax"]:
+			base = Decimal(str(amount)).quantize(line["unit"], rounding=ROUND_HALF_UP)
+			part = (base, (base * line["rate"]).quantize(line["unit"], rounding=ROUND_HALF_UP))
+			kept = (whole[0] - part[0], whole[1] - part[1])
+		else:
+			part, kept = split_figure(line, amount)
 	else:
 		frappe.throw("Give a percent, an amount or a quantity to split off.")
+	if whole != cut_figure(line, line["figure"]):
+		kept = (whole[0] - part[0], whole[1] - part[1])
 	if not 0 < _figure(line, part) < line["figure"]:
 		from kamra.localization import money_text
 		frappe.throw(f"Split must be between 0 and {money_text(src.property, line['figure'])} (exclusive).")
 	return _post_split(src, row, sign, line, [(dst, part, part_units)],
-	                   units - part_units if qty else Decimal(1))
+	                   units - part_units if qty else Decimal(1), kept=kept)
 
 
 def _split_target(src, to_folio: str):
@@ -1211,7 +1227,9 @@ def _split_line(src, charge_row: str, credit: bool):
 	base = Decimal(str(row.amount or 0)) * sign
 	if base <= 0 or (credit and row.charge_type != "Allowance"):
 		frappe.throw("Only positive charge lines can be split.")
-	tax = _line_tax(row, Decimal(str(row.amount or 0))) * sign
+	from kamra.ledger import minor_unit
+	tax = _line_tax(row, Decimal(str(row.amount or 0)),
+	                minor_unit(src.property) if src.get("property") else None) * sign
 	return row, sign, line_figures(src.property, row.charge_type, base, tax,
 	                               row.gst_rate)
 
@@ -1275,7 +1293,17 @@ def split_figure(line: dict, part_figure) -> tuple[tuple[Decimal, Decimal], tupl
 	return part, (whole[0] - part[0], whole[1] - part[1])
 
 
-def _post_split(src, row, sign: int, line: dict, cuts: list, kept_units: Decimal) -> dict:
+def _split_whole(line: dict) -> tuple[Decimal, Decimal]:
+	"""Whole (base, tax) to conserve across split parts: quantized to the
+	currency's minor unit via cut_figure, except when a tax-inclusive room
+	night carries a sub-unit net locked by pricing.night_rate_places."""
+	if line["priced_with_tax"] and line["base"] != line["base"].quantize(line["unit"]):
+		return line["base"], line["tax"]
+	return cut_figure(line, line["figure"])
+
+
+def _post_split(src, row, sign: int, line: dict, cuts: list, kept_units: Decimal,
+                kept: tuple[Decimal, Decimal] | None = None) -> dict:
 	"""Void the line and post its parts: each cut (folio, (base, tax), units)
 	on its folio, and the rest of the line's base and tax on this one."""
 	same_line = {
@@ -1306,8 +1334,12 @@ def _post_split(src, row, sign: int, line: dict, cuts: list, kept_units: Decimal
 		"voided_by": frappe.session.user,
 	})
 	reversal = src.charges[-1]
-	kept_base = line["base"] - sum(p[0] for _f, p, _u in cuts)
-	kept_tax = line["tax"] - sum(p[1] for _f, p, _u in cuts)
+	if kept is not None:
+		kept_base, kept_tax = kept
+	else:
+		whole = _split_whole(line)
+		kept_base = whole[0] - sum(p[0] for _f, p, _u in cuts)
+		kept_tax = whole[1] - sum(p[1] for _f, p, _u in cuts)
 
 	def part_line(base, tax, units, folio):
 		# a part left on the folio a routing instruction put the line on is
@@ -1412,14 +1444,22 @@ def share_charges(from_folio: str, charge_rows: list, to_folios: list,
 		src = frappe.get_doc("Folio", from_folio)
 		targets = [_split_target(src, f) for f in to_folios]
 		line_row, sign, line = _split_line(src, row, False)
+		whole = _split_whole(line)
+		rem_base, rem_tax = whole
 		cuts, left = [], line["figure"]
 		for dst, share in zip(targets, shares):
-			part = _cut(line, share)
+			part = cut_figure(line, line["figure"] * share)
 			if 0 < _figure(line, part) < left:
+				if not line["priced_with_tax"] and part[1] > rem_tax:
+					part = (part[0], rem_tax)
 				cuts.append((dst, part, Decimal(1)))
 				left -= _figure(line, part)
+				rem_base -= part[0]
+				rem_tax -= part[1]
 		if cuts:
-			moved += Decimal(str(_post_split(src, line_row, sign, line, cuts, Decimal(1))["moved"]))
+			moved += Decimal(str(_post_split(
+				src, line_row, sign, line, cuts, Decimal(1),
+				kept=(rem_base, rem_tax))["moved"]))
 	return {"lines": len(charge_rows), "moved": float(moved)}
 
 

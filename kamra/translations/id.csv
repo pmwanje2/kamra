@@ -1,0 +1,40 @@
+Transaction code {0} is not an enabled charge code.,Kode transaksi {0} bukan kode biaya yang aktif.
+Transaction code {0} has no charge type. Set one under Transaction codes.,Kode transaksi {0} tidak memiliki jenis biaya. Atur di Kode transaksi.
+Unexpected parameter(s) for route_outlet_charge: {0}. Pass a transaction_code instead (is_alcohol was removed).,Parameter tidak terduga untuk route_outlet_charge: {0}. Gunakan transaction_code sebagai gantinya (is_alcohol telah dihapus).
+Cannot route to reservation {0} because its status is {1}.,Tidak dapat merutekan ke reservasi {0} karena statusnya {1}.
+Cannot route to cancelled group {0}.,Tidak dapat merutekan ke grup yang dibatalkan {0}.
+Cannot create or keep an active routing instruction for cancelled group {0}.,Tidak dapat membuat atau mempertahankan instruksi perutean aktif untuk grup yang dibatalkan {0}.
+"A company window names the paying company, and only that.",Jendela perusahaan hanya menyebutkan perusahaan yang membayar.
+A guest window names no company or agent.,Jendela tamu tidak mencantumkan perusahaan atau agen.
+"A travel agent window names the paying agent, and only that.",Jendela agen perjalanan hanya menyebutkan agen yang membayar.
+A group's master bill needs its Group Booking.,Tagihan induk grup memerlukan Pemesanan Grupnya.
+A group's master bill must be at the group's property.,Tagihan induk grup harus berada di properti yang sama dengan grupnya.
+Window must be from 1 to {0}.,Jendela harus antara 1 hingga {0}.
+Window {0} already has an open bill.,Jendela {0} sudah memiliki tagihan yang terbuka.
+A bill can have at most {0} windows. Close a window or move its charges to another one.,Satu tagihan maksimal memiliki {0} jendela. Tutup satu jendela atau pindahkan biayanya ke jendela lain.
+Open a window on a stay or on a group's master bill.,Buka jendela pada masa inap atau pada tagihan induk grup.
+Reservation {0} not found.,Reservasi {0} tidak ditemukan.
+Group {0} not found.,Grup {0} tidak ditemukan.
+"Group {0} is cancelled, so it has no master bill.",Grup {0} dibatalkan sehingga tidak memiliki tagihan induk.
+A routing instruction is for one stay or for one group.,Satu instruksi perutean hanya untuk satu masa inap atau satu grup.
+The stay or group must be at {0}.,Masa inap atau grup harus berada di {0}.
+Target window must be from 1 to {0}.,Jendela tujuan harus antara 1 hingga {0}.
+Choose the window to route to.,Pilih jendela tujuan perutean.
+A window instruction routes within the stay; leave the target room empty.,Instruksi jendela merutekan di dalam masa inap yang sama; kosongkan kamar tujuan.
+Choose the room to route to.,Pilih kamar tujuan perutean.
+Charges can only be routed to a room at the same property.,Biaya hanya dapat dirutekan ke kamar di properti yang sama.
+"To route within the stay, route to one of its windows.","Untuk merutekan di dalam masa inap yang sama, rutekan ke salah satu jendelanya."
+"This stay is not part of a group, so it has no group master.",Masa inap ini bukan bagian dari grup sehingga tidak memiliki tagihan induk grup.
+The group's bill must be at the same property.,Tagihan grup harus berada di properti yang sama.
+A group master instruction has no target room.,Instruksi tagihan induk grup tidak memiliki kamar tujuan.
+"Route to a window, a room or the group master.","Rutekan ke jendela, kamar, atau tagihan induk grup."
+"Each row names a charge type or a transaction code, not both.","Setiap baris menyebutkan jenis biaya atau kode transaksi, bukan keduanya."
+All Charges routes everything; remove the rows.,Semua Biaya merutekan semuanya; hapus baris-baris yang ada.
+"Choose the charge types or codes to route, or tick All Charges.","Pilih jenis biaya atau kode yang akan dirutekan, atau centang Semua Biaya."
+An instruction for all charges cannot carry a limit.,Instruksi untuk semua biaya tidak dapat memiliki batas.
+An amount limit must be more than zero.,Batas nominal harus lebih dari nol.
+A percent limit must be more than 0 and at most 100.,Batas persentase harus lebih dari 0 dan paling banyak 100.
+To Date is before From Date.,Tanggal Selesai mendahului Tanggal Mulai.
+Tick at least one day of the week.,Centang setidaknya satu hari dalam seminggu.
+"Instruction {0} already routes some of these charges on some of these days. Only one instruction may cover a charge on a date: change its dates or charges, or disable it.","Instruksi {0} sudah merutekan sebagian biaya ini pada sebagian hari tersebut. Hanya satu instruksi yang boleh mencakup suatu biaya pada satu tanggal: ubah tanggal atau biayanya, atau nonaktifkan."
+Bill-to for {0}: {1}.,Ditagihkan untuk {0}: {1}.

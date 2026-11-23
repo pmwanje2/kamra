@@ -8,6 +8,45 @@ from frappe.model.document import Document
 from kamra.localization import money_text
 
 
+def _folio_charge_description(outlet_label: str, detail: str, order_name: str,
+                              limit: int = 140) -> str:
+	"""Format a POS room-charge description within Folio Charge's 140-char limit
+	while always keeping the trailing ` (ORD-...)` marker so moves and audit
+	reports recognize the order."""
+	suffix = f" ({order_name})"
+	prefix = f"{outlet_label}: " if outlet_label else ""
+	full = f"{prefix}{detail}{suffix}"
+	if len(full) <= limit:
+		return full
+	room = limit - len(prefix) - len(suffix)
+	if room <= 1:
+		return (f"{prefix}{detail}"[:max(0, limit - len(suffix))] + suffix)[:limit]
+	return f"{prefix}{detail[:room - 1].rstrip(' ,')}…{suffix}"
+
+
+def _code_gst_rate(property: str, code: str | None, *, is_alcohol: bool,
+                   outlet_gst: float) -> float:
+	"""OPERA Cloud taxes by transaction code (Generates):
+	https://docs.oracle.com/en/industries/hospitality/opera-cloud/25.5/ocsuh/t_admin_financial_transaction_management_configuring_generates.htm
+	1. Explicit Transaction Code.default_tax_rate wins when configured.
+	2. Otherwise an alcohol code uses the country pack's alcohol/services rate
+	   when the pack distinguishes it from food (e.g. India 18% vs 5% F&B).
+	3. Otherwise fall back to the outlet's configured gst_rate."""
+	from kamra.ledger import code_default_tax_rate
+	tc_rate = code_default_tax_rate(code)
+	if tc_rate is not None:
+		return tc_rate
+	if is_alcohol:
+		from kamra.localization import pack_for, services_tax_rate
+		pack = pack_for(property)
+		alc_fn = getattr(pack, "alcohol_tax_rate", None)
+		if alc_fn is not None:
+			return float(alc_fn(property))
+		if hasattr(pack, "services_tax_rate"):
+			return float(services_tax_rate(pack, property))
+	return float(outlet_gst)
+
+
 class POSOrder(Document):
 	def validate(self):
 		subtotal = 0.0
@@ -216,6 +255,8 @@ class POSOrder(Document):
 				any(alc for _, alc in entries)
 				or cint(frappe.db.get_value("Transaction Code", code, "is_alcohol"))
 			) else 0
+			bucket_gst = _code_gst_rate(
+				self.property, code, is_alcohol=bool(has_alcohol), outlet_gst=float(gst))
 			target, instruction = routed_target(
 				res, "Food & Beverage", amount=amt,
 				posting_date=bd, transaction_code=code, pending=pending)
@@ -231,11 +272,12 @@ class POSOrder(Document):
 				"charge_type": "Food & Beverage",
 				"transaction_code": code,
 				"reservation": self.reservation,
-				"description": f"{self.outlet.split('-')[-1]}: {b_detail} ({self.name})",
+				"description": _folio_charge_description(
+					self.outlet.split("-")[-1], b_detail, self.name),
 				"qty": 1,
 				"rate": amt,
 				"amount": amt,
-				"gst_rate": float(gst),
+				"gst_rate": bucket_gst,
 				"auto_posted": 1,
 				"is_alcohol": has_alcohol,
 				"routing_instruction": instruction,
@@ -243,7 +285,7 @@ class POSOrder(Document):
 			appended.append((target, len(fdoc.charges) - 1))
 			if instruction:
 				pending.append((instruction, bd, routed_figure(
-					self.property, "Food & Beverage", amt, amt * float(gst) / 100)))
+					self.property, "Food & Beverage", amt, amt * bucket_gst / 100)))
 
 		for fdoc in folios.values():
 			_recalculate(fdoc)

@@ -1565,16 +1565,18 @@ def _post_folio_charge(folio: str, charge_type: str, description: str,
 	doc = frappe.get_doc("Folio", folio)
 	if doc.status == "Closed":
 		frappe.throw("Folio is closed.")
-	# tax is the hotel's rule, not the caller's guess - without this an
-	# F&B/minibar charge posted without a rate lands on the bill untaxed
-	gst_rate = _resolve_charge_gst(doc.property, charge_type, description,
-	                               int(is_alcohol or 0), float(gst_rate or 0))
 	from kamra.business_date import assert_transaction_date
-	from kamra.ledger import record_charge_ledger, resolve_transaction_code
+	from kamra.ledger import code_is_alcohol, record_charge_ledger, resolve_transaction_code
 	bd = assert_transaction_date(doc.property, posting_date, label="Posting date")
 	code = resolve_transaction_code(
 		charge_type, transaction_code=transaction_code,
 		is_alcohol=int(is_alcohol or 0), property=doc.property)
+	effective_alcohol = 1 if (int(is_alcohol or 0) or code_is_alcohol(code)) else 0
+	# tax is the hotel's rule, not the caller's guess - without this an
+	# F&B/minibar charge posted without a rate lands on the bill untaxed
+	gst_rate = _resolve_charge_gst(doc.property, charge_type, description,
+	                               effective_alcohol, float(gst_rate or 0),
+	                               transaction_code=code)
 	doc.append("charges", {
 		"posting_date": bd,
 		"charge_type": charge_type,
@@ -1585,7 +1587,7 @@ def _post_folio_charge(folio: str, charge_type: str, description: str,
 		"rate": float(amount),
 		"amount": float(amount),
 		"gst_rate": float(gst_rate),
-		"is_alcohol": 1 if int(is_alcohol or 0) else 0,
+		"is_alcohol": effective_alcohol,
 		"routing_instruction": routing_instruction,
 		**({"gst_amount": float(tax), "tax_as_posted": 1} if tax is not None else {}),
 	})
@@ -2103,14 +2105,33 @@ def _check_charge_amount_and_tax(property: str, amount, gst_rate):
 
 
 def _resolve_charge_gst(property: str, charge_type: str, description: str,
-                        is_alcohol: int, provided: float) -> float:
+                        is_alcohol: int, provided: float,
+                        transaction_code: str | None = None) -> float:
 	"""The tax rate a charge actually carries, decided server-side so a caller
-	(human or agent) cannot mis-tax it. Food & beverage uses the F&B rate from
-	the localization pack; alcohol its own rate; a taxi with no rate the
-	services rate; otherwise the given rate."""
+	(human or agent) cannot mis-tax it. A Transaction Code's own default tax %
+	(OPERA Generates) applies first; alcohol carries its own rate (explicit
+	provided rate, transaction code default, or the pack's alcohol/services
+	rate); food & beverage uses the F&B rate from the localization pack; a taxi
+	with no rate the services rate; otherwise the given rate."""
+	from kamra.ledger import code_default_tax_rate, code_is_alcohol
+	alc = bool(int(is_alcohol or 0)) or (bool(transaction_code) and code_is_alcohol(transaction_code))
+	tc_rate = code_default_tax_rate(transaction_code)
+	if alc:
+		if provided:
+			return float(provided)
+		if tc_rate is not None:
+			return tc_rate
+		from kamra.localization import pack_for, services_tax_rate
+		pack = pack_for(property)
+		alc_fn = getattr(pack, "alcohol_tax_rate", None)
+		if alc_fn is not None:
+			return float(alc_fn(property))
+		if hasattr(pack, "services_tax_rate"):
+			return float(services_tax_rate(pack, property))
+		return 18.0
+	if tc_rate is not None:
+		return tc_rate
 	text = f"{charge_type} {description}".lower()
-	if is_alcohol:
-		return float(provided) if provided else 18.0
 	if any(w in text for w in _FNB_WORDS):
 		from kamra.folio import _fnb_gst
 		return float(_fnb_gst(property))
@@ -2147,6 +2168,34 @@ _UNCORRECTABLE = ("Room", "Room Levy", "Rate Adjustment", "Allowance",
                   "Discount", "Opening Balance")
 
 
+_SNAPSHOT_CONFLICT_CODES = frozenset({1020, 1205, 1213})
+_FOLIO_CONFLICT_RETRIES = 5
+
+
+def _is_snapshot_conflict(exc: Exception) -> bool:
+	"""True when MariaDB rejects a locking read or write under snapshot
+	isolation (error 1020 "Record has changed since last read") or a transient
+	deadlock/lock-wait/timestamp conflict that succeeds after rollback on a
+	fresh snapshot (matches kamra.channel_manager._WEBHOOK_CONFLICT_RETRIES)."""
+	if isinstance(exc, (frappe.QueryDeadlockError, frappe.TimestampMismatchError)):
+		return True
+	args = getattr(exc, "args", ())
+	if args and isinstance(args[0], int) and args[0] in _SNAPSHOT_CONFLICT_CODES:
+		return True
+	return "Record has changed since last read" in str(exc)
+
+
+def _with_snapshot_retry(fn):
+	for attempt in range(1, _FOLIO_CONFLICT_RETRIES + 1):
+		try:
+			return fn()
+		except Exception as exc:
+			if not _is_snapshot_conflict(exc) or attempt >= _FOLIO_CONFLICT_RETRIES:
+				raise
+			frappe.db.rollback()
+			frappe.clear_messages()
+
+
 def _still_covers(instruction: str, charge_type: str, transaction_code: str | None) -> bool:
 	"""Does this routing instruction still route a line of this type and code?"""
 	from kamra.routing import covers, line_code
@@ -2170,7 +2219,34 @@ def correct_folio_charge(folio: str, charge_row: str, reason: str = "",
 	type, both linked to the original (corrects_row). Same roles, PIN and
 	Void reason codes as void_folio_charge. A retry with the same
 	idempotency_key returns the first correction."""
+	return _with_snapshot_retry(
+		lambda: _correct_folio_charge_once(
+			folio, charge_row, reason=reason, amount=amount, gst_rate=gst_rate,
+			charge_type=charge_type, description=description, pin=pin,
+			reason_code=reason_code, supervisor_pin=supervisor_pin,
+			idempotency_key=idempotency_key,
+		)
+	)
+
+
+def _correct_folio_charge_once(folio: str, charge_row: str, reason: str = "",
+                               amount: float | None = None,
+                               gst_rate: float | None = None,
+                               charge_type: str | None = None,
+                               description: str | None = None,
+                               pin: str | None = None,
+                               reason_code: str | None = None,
+                               supervisor_pin: str | None = None,
+                               idempotency_key: str | None = None):
 	key = (idempotency_key or "").strip() or None
+	# Lock Reservation before Folio (same order as post_stay_charge) so concurrent
+	# posts and corrections serialize cleanly without AB/BA deadlocks.
+	lock_res = (
+		frappe.db.get_value("Folio", folio, "reservation")
+		or frappe.db.get_value("Folio Charge", charge_row, "reservation")
+	)
+	if lock_res:
+		frappe.db.get_value("Reservation", lock_res, "name", for_update=True)
 	frappe.db.get_value("Folio", folio, "name", for_update=True)
 	doc = frappe.get_doc("Folio", folio)
 	if key:
@@ -2179,9 +2255,21 @@ def correct_folio_charge(folio: str, charge_row: str, reason: str = "",
 			if done[0].corrects_row != charge_row:
 				frappe.throw(_("This idempotency_key was already used for "
 				               "another correction."))
-			return {"ok": True, "idempotent_replay": 1, "folio": doc.name,
-			        "reversal": done[0].name, "repost": done[-1].name,
-			        "balance": doc.balance}
+			rev_row = next((c for c in done if float(c.amount or 0) < 0), done[0])
+			rep_row = next((c for c in done if float(c.amount or 0) >= 0), None)
+			ov = frappe.db.get_value(
+				"Folio Charge",
+				{"parenttype": "Folio", "parent": ("!=", doc.name),
+				 "idempotency_key": key, "corrects_row": charge_row},
+				["parent", "name"], as_dict=True)
+			primary_repost = rep_row.name if rep_row else (ov.name if ov else done[-1].name)
+			out = {"ok": True, "idempotent_replay": 1, "folio": doc.name,
+			       "reversal": rev_row.name, "repost": primary_repost,
+			       "balance": doc.balance}
+			if ov:
+				out["overflow_folio"] = ov.parent
+				out["overflow_row"] = ov.name
+			return out
 	_pin_guard(folio, pin)
 	if doc.status == "Closed":
 		frappe.throw(_("This folio is settled - issue a credit note, or "
@@ -2203,7 +2291,13 @@ def correct_folio_charge(folio: str, charge_row: str, reason: str = "",
 		frappe.throw(_("A {0} line can't be corrected here. Room nights change "
 		               "through the stay's rate; reverse an allowance or "
 		               "discount with a charge.").format(_(orig.charge_type)))
-	from kamra.ledger import _original_charge_entry, record_charge_ledger, require_reason
+	from kamra.ledger import (
+		_original_charge_entry,
+		code_is_alcohol,
+		record_charge_ledger,
+		require_reason,
+		resolve_transaction_code,
+	)
 	reason_text = str(require_reason(
 		"Void", reason_code, reason or "",
 		supervisor_pin=supervisor_pin, property=doc.property))
@@ -2213,11 +2307,20 @@ def correct_folio_charge(folio: str, charge_row: str, reason: str = "",
 	_refuse_opening_balance(new_type)
 	if new_type in _UNCORRECTABLE:
 		frappe.throw(_("A correction can't repost as {0}.").format(_(new_type)))
-	is_alcohol = int(orig.is_alcohol or 0)
+	orig_alcohol = int(orig.is_alcohol or 0)
+	repost_code = (
+		orig.transaction_code if new_type == orig.charge_type
+		else resolve_transaction_code(new_type, is_alcohol=0, property=doc.property)
+	)
+	repost_alcohol = (
+		orig_alcohol if new_type == orig.charge_type
+		else (1 if code_is_alcohol(repost_code) else 0)
+	)
 	rate_in = float(orig.gst_rate or 0) if gst_rate in (None, "") else float(gst_rate)
 	_check_charge_amount_and_tax(doc.property, new_amount, rate_in)
 	new_rate = _resolve_charge_gst(doc.property, new_type, new_desc,
-	                               is_alcohol, rate_in)
+	                               repost_alcohol, rate_in,
+	                               transaction_code=repost_code)
 	if (new_type, new_desc, round(new_amount, 2), new_rate) == (
 			orig.charge_type, orig.description, round(float(orig.amount), 2),
 			float(orig.gst_rate or 0)):
@@ -2225,42 +2328,76 @@ def correct_folio_charge(folio: str, charge_row: str, reason: str = "",
 	from kamra.business_date import get_business_date
 	bd = get_business_date(doc.property)
 	common = {"posting_date": bd, "stay_date": orig.stay_date,
-	          "reservation": orig.reservation, "is_alcohol": is_alcohol,
+	          "reservation": orig.reservation, "is_alcohol": orig_alcohol,
 	          "corrects_row": orig.name, "idempotency_key": key, "qty": 1}
-	# a routed line's correction stays routed: the reversal takes the
-	# original's usage back, the repost spends it while the instruction still
-	# covers it (routing.used counts both, on the original's date). An upward
-	# correction under an Amount routing limit is capped just like at posting,
-	# with any overflow sent to the stay's window 1.
-	from kamra.ledger import resolve_transaction_code
-	repost_code = (
-		orig.transaction_code if new_type == orig.charge_type
-		else resolve_transaction_code(new_type, is_alcohol=is_alcohol, property=doc.property)
-	)
+	repost_common = {**common, "is_alcohol": repost_alcohol}
+	# a routed line's correction stays routed while the instruction still covers
+	# it, re-applying Amount and Percent limits on the original posting date with
+	# any overflow sent to Window 1. A reclassification no longer covered by its
+	# instruction or company/group billing rules re-routes via line_parts.
+	from decimal import ROUND_DOWN, Decimal
+
+	from kamra import folio as fm
+	from kamra import routing as routing_mod
+
 	routed = orig.get("routing_instruction")
 	repost_routed = routed if routed and _still_covers(routed, new_type, repost_code) else None
-	routed_part = None
-	overflow_part = None
+	doc_part: tuple[Decimal, Decimal] | None = None
+	extra_posts: list[tuple[str, tuple[Decimal, Decimal], str | None]] = []
 	if repost_routed and orig.reservation:
 		ri = frappe.get_doc("Routing Instruction", repost_routed)
+		line = fm.line_figures(doc.property, new_type, new_amount, gst_rate=new_rate)
 		if ri.limit_type == "Amount":
-			from decimal import ROUND_DOWN, Decimal
-
-			from kamra import folio as fm
-			from kamra import routing as routing_mod
 			orig_fig = fm.routed_figure(
 				doc.property, orig.charge_type, orig.amount, orig.gst_amount)
 			used_before = routing_mod.used(
 				ri.name, orig.posting_date if cint(ri.per_day) else None)
 			left = Decimal(str(ri.limit_value or 0)) - (used_before - orig_fig)
-			line = fm.line_figures(doc.property, new_type, new_amount, gst_rate=new_rate)
 			if left < line["figure"]:
 				if left <= 0:
-					routed_part = (Decimal(0), Decimal(0))
-					overflow_part = fm.cut_figure(line, line["figure"])
+					doc_part = (Decimal(0), Decimal(0))
+					ov_part = fm.cut_figure(line, line["figure"])
 				else:
-					routed_part, overflow_part = fm.split_figure(
+					doc_part, ov_part = fm.split_figure(
 						line, left.quantize(line["unit"], ROUND_DOWN))
+				if ov_part[0] + ov_part[1] > 0:
+					extra_posts.append((
+						fm.window_folio(reservation=orig.reservation, window_no=1),
+						ov_part, None,
+					))
+		elif ri.limit_type == "Percent":
+			routed_p, ov_part = fm.split_figure(
+				line, line["figure"] * Decimal(str(ri.limit_value or 0)) / 100)
+			if ov_part[0] + ov_part[1] > 0:
+				doc_part = routed_p
+				extra_posts.append((
+					fm.window_folio(reservation=orig.reservation, window_no=1),
+					ov_part, None,
+				))
+	elif orig.reservation and (
+		routed or (new_type != orig.charge_type and doc.folio_type in ("Company", "Group"))
+	):
+		res_doc = frappe.get_doc("Reservation", orig.reservation)
+		parts = fm.line_parts(
+			res_doc, new_type, new_amount, orig.posting_date,
+			transaction_code=repost_code, gst_rate=new_rate,
+		)
+		if len(parts) == 1 and parts[0]["folio"] == doc.name:
+			repost_routed = parts[0]["routing_instruction"]
+		else:
+			doc_part = (Decimal(0), Decimal(0))
+			for p in parts:
+				if "gst_amount" in p:
+					pt = (Decimal(str(p["amount"])), Decimal(str(p["gst_amount"])))
+				else:
+					pl = fm.line_figures(doc.property, new_type, p["amount"], gst_rate=new_rate)
+					pt = fm.cut_figure(pl, pl["figure"])
+				if p["folio"] == doc.name:
+					doc_part = pt
+					repost_routed = p["routing_instruction"]
+				elif pt[0] + pt[1] > 0:
+					extra_posts.append((p["folio"], pt, p["routing_instruction"]))
+
 	# the reversal books back at the codes the original was posted with
 	doc.append("charges", {
 		**common, "charge_type": orig.charge_type, "routing_instruction": routed,
@@ -2273,33 +2410,33 @@ def correct_folio_charge(folio: str, charge_row: str, reason: str = "",
 		"gst_amount": -float(orig.gst_amount or 0),
 	})
 	rev_idx = len(doc.charges) - 1
-	overflow_doc = None
-	overflow_idx = None
 	rep_idx = None
-	if overflow_part is not None and (overflow_part[0] + overflow_part[1] > 0):
-		from kamra.folio import window_folio
-		if routed_part[0] + routed_part[1] > 0:
+	extra_docs: dict[str, object] = {}
+	extra_indices: list[tuple[str, int]] = []
+	if extra_posts:
+		if doc_part is not None and (doc_part[0] + doc_part[1] > 0):
 			doc.append("charges", {
-				**common, "charge_type": new_type, "transaction_code": repost_code,
+				**repost_common, "charge_type": new_type, "transaction_code": repost_code,
 				"description": new_desc,
-				"rate": float(routed_part[0]), "amount": float(routed_part[0]),
-				"gst_rate": new_rate, "gst_amount": float(routed_part[1]),
+				"rate": float(doc_part[0]), "amount": float(doc_part[0]),
+				"gst_rate": new_rate, "gst_amount": float(doc_part[1]),
 				"tax_as_posted": 1, "routing_instruction": repost_routed,
 			})
 			rep_idx = len(doc.charges) - 1
-		w1_name = window_folio(reservation=orig.reservation, window_no=1)
-		overflow_doc = doc if w1_name == doc.name else frappe.get_doc("Folio", w1_name)
-		overflow_doc.append("charges", {
-			**common, "charge_type": new_type, "transaction_code": repost_code,
-			"description": new_desc,
-			"rate": float(overflow_part[0]), "amount": float(overflow_part[0]),
-			"gst_rate": new_rate, "gst_amount": float(overflow_part[1]),
-			"tax_as_posted": 1, "routing_instruction": None,
-		})
-		overflow_idx = len(overflow_doc.charges) - 1
+		for target_folio, ov_part, ov_ri in extra_posts:
+			ov_doc = doc if target_folio == doc.name else extra_docs.setdefault(
+				target_folio, frappe.get_doc("Folio", target_folio))
+			ov_doc.append("charges", {
+				**repost_common, "charge_type": new_type, "transaction_code": repost_code,
+				"description": new_desc,
+				"rate": float(ov_part[0]), "amount": float(ov_part[0]),
+				"gst_rate": new_rate, "gst_amount": float(ov_part[1]),
+				"tax_as_posted": 1, "routing_instruction": ov_ri,
+			})
+			extra_indices.append((target_folio, len(ov_doc.charges) - 1))
 	else:
 		doc.append("charges", {
-			**common, "charge_type": new_type, "transaction_code": repost_code,
+			**repost_common, "charge_type": new_type, "transaction_code": repost_code,
 			"description": new_desc,
 			"rate": new_amount, "amount": new_amount, "gst_rate": new_rate,
 			"routing_instruction": repost_routed,
@@ -2310,13 +2447,16 @@ def correct_folio_charge(folio: str, charge_row: str, reason: str = "",
 	doc.save(ignore_permissions=True)
 	rev = doc.charges[rev_idx]
 	rep = doc.charges[rep_idx] if rep_idx is not None else None
-	overflow_row = None
-	if overflow_doc is doc and overflow_idx is not None:
-		overflow_row = doc.charges[overflow_idx]
-	elif overflow_doc is not None and overflow_idx is not None:
-		_recalculate(overflow_doc)
-		overflow_doc.save(ignore_permissions=True)
-		overflow_row = overflow_doc.charges[overflow_idx]
+	for ov_doc in extra_docs.values():
+		_recalculate(ov_doc)
+		ov_doc.save(ignore_permissions=True)
+	extra_rows = [
+		(doc if tf == doc.name else extra_docs[tf],
+		 (doc if tf == doc.name else extra_docs[tf]).charges[idx])
+		for tf, idx in extra_indices
+	]
+	overflow_doc = extra_rows[0][0] if extra_rows else None
+	overflow_row = extra_rows[0][1] if extra_rows else None
 	first = _original_charge_entry(doc.name, orig.name)
 	record_charge_ledger(doc, rev.as_dict(), reversal_of=first.name if first else None)
 	from kamra.webhooks import emit_folio_posted
@@ -2324,9 +2464,9 @@ def correct_folio_charge(folio: str, charge_row: str, reason: str = "",
 	if rep is not None:
 		record_charge_ledger(doc, rep.as_dict())
 		emit_folio_posted(doc, rep)
-	if overflow_row is not None:
-		record_charge_ledger(overflow_doc, overflow_row.as_dict())
-		emit_folio_posted(overflow_doc, overflow_row)
+	for ov_d, ov_r in extra_rows:
+		record_charge_ledger(ov_d, ov_r.as_dict())
+		emit_folio_posted(ov_d, ov_r)
 	primary_repost = rep or overflow_row
 	from kamra.localization import money_text
 	from kamra.savings import log_action
@@ -2360,26 +2500,43 @@ def post_stay_charge(reservation: str, charge_type: str, description: str,
 	A routing limit splits the charge (`parts`). Liquor posts under its own
 	transaction code (default 2010) and bills where the rules send that code.
 	The agent-facing way to post charges."""
+	return _with_snapshot_retry(
+		lambda: _post_stay_charge_once(
+			reservation, charge_type, description, amount,
+			gst_rate=gst_rate, is_alcohol=is_alcohol,
+			transaction_code=transaction_code,
+		)
+	)
+
+
+def _post_stay_charge_once(reservation: str, charge_type: str, description: str,
+                           amount: float, gst_rate: float = 0, is_alcohol: int = 0,
+                           transaction_code: str | None = None):
+	# Serialize concurrent posts and corrections for this stay under MariaDB 11.8
+	# snapshot isolation so routing-limit checks see committed usage cleanly.
+	frappe.db.get_value("Reservation", reservation, "name", for_update=True)
 	res = frappe.get_doc("Reservation", reservation)
 	if res.status not in ("Confirmed", "Checked In", "Checked Out"):
 		frappe.throw("Reservation is not active.")
 	from kamra.business_date import get_business_date
 	from kamra.folio import line_parts
-	from kamra.ledger import resolve_transaction_code
-	is_alcohol = 1 if int(is_alcohol or 0) else 0
+	from kamra.ledger import code_is_alcohol, resolve_transaction_code
+	raw_alcohol = 1 if int(is_alcohol or 0) else 0
 	# check what the caller sent, not the rate the hotel picks below
 	_check_charge_amount_and_tax(res.property, amount, gst_rate)
 	code = resolve_transaction_code(
 		charge_type, transaction_code=transaction_code,
-		is_alcohol=is_alcohol, property=res.property)
+		is_alcohol=raw_alcohol, property=res.property)
+	effective_alcohol = 1 if (raw_alcohol or code_is_alcohol(code)) else 0
 	# GST is decided by the hotel's tax rules, not by the caller's guess:
 	# food & beverage carries the F&B rate (5% in India), not 12/18.
 	gst_rate = _resolve_charge_gst(res.property, charge_type, description,
-	                               is_alcohol, gst_rate)
+	                               effective_alcohol, gst_rate,
+	                               transaction_code=code)
 	parts = line_parts(res, charge_type, float(amount), get_business_date(res.property),
 	                   transaction_code=code, gst_rate=gst_rate)
 	outs = [_post_folio_charge(p["folio"], charge_type, description, p["amount"],
-	                           gst_rate, is_alcohol=is_alcohol, reservation=res.name,
+	                           gst_rate, is_alcohol=effective_alcohol, reservation=res.name,
 	                           routing_instruction=p["routing_instruction"],
 	                           tax=p.get("gst_amount"), transaction_code=code)
 	        for p in parts]

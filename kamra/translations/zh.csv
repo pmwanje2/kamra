@@ -2236,3 +2236,42 @@ Channel review status can only be cleared via the review action.,渠道审核状
 Update In-House Reservations,更新在住预订
 "Update In-House Reservations = Y is not yet enabled: OXI Y requires arrival-date, room-type, billed-night, and assigned-room safety bounds. Keep N so OTA changes to checked-in stays are rejected and flagged for review.",更新在住预订 = Y 尚未启用：OXI Y 需要到店日期、房型、已入账房晚和已分配房间的安全边界。请保持 N，以便拒绝 OTA 对已入住预订的修改并标记待审核。
 OTA Tax Rules row {0}: a CJK rule needs at least two characters so it does not match unrelated taxes.,OTA 税费规则第 {0} 行：CJK 规则至少需要两个字符，以免误匹配无关税费。
+Transaction code {0} is not an enabled charge code.,交易代码 {0} 不是已启用的入账代码。
+Transaction code {0} has no charge type. Set one under Transaction codes.,交易代码 {0} 未设置费用类型。请在交易代码中设置。
+Unexpected parameter(s) for route_outlet_charge: {0}. Pass a transaction_code instead (is_alcohol was removed).,route_outlet_charge 收到意外参数：{0}。请改传 transaction_code（is_alcohol 已移除）。
+Cannot route to reservation {0} because its status is {1}.,无法路由到预订 {0}，因为其状态为 {1}。
+Cannot route to cancelled group {0}.,无法路由到已取消的团队 {0}。
+Cannot create or keep an active routing instruction for cancelled group {0}.,无法为已取消的团队 {0} 创建或保留生效中的路由指令。
+"A company window names the paying company, and only that.",公司账单窗口必须且仅可指定付款公司。
+A guest window names no company or agent.,宾客账单窗口不可指定公司或旅行社。
+"A travel agent window names the paying agent, and only that.",旅行社账单窗口必须且仅可指定付款旅行社。
+A group's master bill needs its Group Booking.,团队主账单必须关联其团队预订。
+A group's master bill must be at the group's property.,团队主账单必须属于该团队所在的酒店。
+Window must be from 1 to {0}.,账单窗口编号必须在 1 到 {0} 之间。
+Window {0} already has an open bill.,窗口 {0} 已有未结账单。
+A bill can have at most {0} windows. Close a window or move its charges to another one.,一张账单最多可有 {0} 个窗口。请先关闭一个窗口或将其费用移至其他窗口。
+Open a window on a stay or on a group's master bill.,请在某次入住或团队主账单上打开窗口。
+Group {0} not found.,未找到团队 {0}。
+"Group {0} is cancelled, so it has no master bill.",团队 {0} 已取消，因此没有主账单。
+A routing instruction is for one stay or for one group.,一条路由指令只能关联一次入住或一个团队。
+The stay or group must be at {0}.,该入住或团队必须位于 {0}。
+Target window must be from 1 to {0}.,目标窗口必须在 1 到 {0} 之间。
+Choose the window to route to.,请选择要路由至的账单窗口。
+A window instruction routes within the stay; leave the target room empty.,窗口路由仅在本次入住内流转；请将目标房间留空。
+Choose the room to route to.,请选择要路由至的房间。
+Charges can only be routed to a room at the same property.,费用只能路由到同一酒店内的房间。
+"To route within the stay, route to one of its windows.",若要在本次入住内路由，请路由到其某一个账单窗口。
+"This stay is not part of a group, so it has no group master.",此次入住不属于任何团队，因此没有团队主账单。
+The group's bill must be at the same property.,团队账单必须位于同一酒店。
+A group master instruction has no target room.,团队主账单路由指令不可指定目标房间。
+"Route to a window, a room or the group master.",请路由到账单窗口、房间或团队主账单。
+"Each row names a charge type or a transaction code, not both.",每一行只能指定费用类型或交易代码，不能同时填写两项。
+All Charges routes everything; remove the rows.,“所有费用”会路由全部项目；请先移除明细行。
+"Choose the charge types or codes to route, or tick All Charges.",请选择要路由的费用类型或交易代码，或勾选“所有费用”。
+An instruction for all charges cannot carry a limit.,针对所有费用的路由指令不能设置限额。
+An amount limit must be more than zero.,金额限额必须大于零。
+A percent limit must be more than 0 and at most 100.,百分比限额必须大于 0 且不超过 100。
+To Date is before From Date.,结束日期不能早于开始日期。
+Tick at least one day of the week.,请至少勾选一周中的一天。
+"Instruction {0} already routes some of these charges on some of these days. Only one instruction may cover a charge on a date: change its dates or charges, or disable it.",路由指令 {0} 已在部分日期覆盖了其中部分费用。同一日期的同一费用只能由一条指令覆盖：请修改其日期或费用，或将其停用。
+Bill-to for {0}: {1}.,{0} 记账规则：{1}。

@@ -1572,29 +1572,44 @@ def post_to_folio(function: str, folio: str | None = None):
 		frappe.throw(_("There's no bill to post to. Tie the function to a "
 		              "group booking, or pass a folio."))
 
-	from kamra.ledger import resolve_transaction_code
+	from kamra.kamra.doctype.venue_booking.venue_booking import SERVICE_CHARGE_TYPES
+	from kamra.ledger import code_is_alcohol, resolve_transaction_code
 	posted = []
 	for r in doc.items:
 		if not r.chargeable or not float(r.net_amount or 0):
 			continue
 		ct = _FOLIO_CHARGE_TYPE.get(r.item_type, "Misc")
-		is_alc = 1 if (r.is_alcohol or r.item_type == "Alcohol") else 0
+		row_alc = 1 if (r.is_alcohol or r.item_type == "Alcohol") else 0
 		row_code = r.get("transaction_code") or (
 			frappe.db.get_value("Banquet Service Item", r.service_item, "transaction_code")
 			if r.get("service_item") else None
 		)
 		code = resolve_transaction_code(
-			ct, transaction_code=row_code, is_alcohol=is_alc, property=doc.property)
+			ct, transaction_code=row_code, is_alcohol=row_alc, property=doc.property)
+		is_alc = 1 if (row_alc or code_is_alcohol(code)) else 0
 		_post_folio_charge(
 			target,
 			ct,
-			f"{doc.name} · {r.item_name}"
-			+ (f" ({r.qty:g} {r.uom})" if r.qty else ""),
+			(f"{doc.name} · {r.item_name}"
+			 + (f" ({r.qty:g} {r.uom})" if r.qty else ""))[:140],
 			float(r.net_amount),
 			gst_rate=float(r.gst_rate or 0),
 			is_alcohol=is_alc,
 			transaction_code=code)
 		posted.append({"item_name": r.item_name, "amount": float(r.net_amount)})
+
+	sc = float(doc.service_charge or 0)
+	if sc > 0:
+		sc_rates = {float(r.gst_rate or 0) for r in doc.items
+		            if r.chargeable and r.item_type in SERVICE_CHARGE_TYPES}
+		sc_gst = max(sc_rates) if sc_rates else 0.0
+		_post_folio_charge(
+			target,
+			"Misc",
+			f"{doc.name} · Service charge ({float(doc.service_charge_percent or 0):g}%)"[:140],
+			sc,
+			gst_rate=sc_gst)
+		posted.append({"item_name": "Service charge", "amount": sc})
 
 	doc.folio = target
 	# the flag is the double-post guard, so it goes up the moment anything
