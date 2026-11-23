@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import csv
 import io
+import itertools
 import json
 import math
 import re
@@ -31,8 +32,12 @@ from kamra.authz import assert_property_access, require_roles
 
 RATE_ROLES = ("Front Desk", "Revenue Manager", "Hotel Admin", "Kamra Agent")
 TARIFF_EDITORS = ("Revenue Manager", "Hotel Admin")
-# rows in one mass change, import or bulk decision
-TARIFF_BATCH_LIMIT = 500
+# rows in one mass change, import or bulk decision: hospitality-tariffs@11 refuses more (HSP-TARIFF-005)
+TARIFF_BATCH_LIMIT = 200
+# the largest spreadsheet an import reads (1 MiB), checked before it is parsed
+TARIFF_IMPORT_BYTES = 1_048_576
+# the export's customer filter for the public (no-customer) tariffs only
+PUBLIC_TARIFFS = "__public__"
 TARIFF_CSV_COLUMNS = ["Price List", "Currency", "Customer", "Item Code", "Room Type", "Occupancy Tier", "Rate",
                       "Valid From", "Valid Upto", "Status"]
 RATE_PLAN_POLICY_FIELDS = ["name", "rate_plan_name", "code", "currency", "fx_lock_policy", "base_rate_plan",
@@ -77,15 +82,21 @@ def list_contract_tariffs(property: str, price_list: str | None = None, customer
 		policies = _rate_plan_policies(property, result)
 		if policies:
 			result["rate_plan_policies"] = policies
+		# Separation of duties keeps a maker from approving their own draft,
+		# not from withdrawing it: a Hotel Admin with tariff access discards.
+		result["can_discard"] = "Hotel Admin" in frappe.get_roles() and bool(
+			result.get("can_propose") or result.get("can_approve"))
 		return result
 	return {"supported": False, "property": property, "price_lists": [], "items": [],
-	        "can_propose": False, "can_approve": False}
+	        "can_propose": False, "can_approve": False, "can_discard": False}
 
 
 def _rate_plan_policies(property: str, directory: dict) -> dict:
 	"""The policies of the plans the directory's price lists name, and of their base plans."""
-	named = [plan for price_list in directory.get("price_lists") or []
+	named = [plan.get("name") if isinstance(plan, dict) else plan
+	         for price_list in directory.get("price_lists") or []
 	         for plan in price_list.get("rate_plans") or []]
+	named = [name for name in named if isinstance(name, str) and name]
 	if not named:
 		return {}
 	plans = {plan["name"]: plan for plan in frappe.get_all(
@@ -109,14 +120,27 @@ def _rate_plan_policies(property: str, directory: dict) -> dict:
 @frappe.whitelist(methods=["POST"])
 @require_roles("Revenue Manager", "Hotel Admin")
 def propose_contract_tariff(property: str, price_list: str, item_code: str,
-                            price_list_rate: float, valid_from: str, valid_upto: str | None = None):
-	"""Propose a new version; the integration owns effective-date validation."""
+                            price_list_rate: float, valid_from: str, valid_upto: str | None = None,
+                            customer: str | None = None):
+	"""Propose a new version; the integration owns effective-date validation.
+
+	With `customer` the version is that customer's own price (SAP PR02
+	A305). An integration that answers without that customer ignored it
+	and drafted the public rate: the request is refused, so its draft rolls
+	back with it, rather than publishing a corporate rate to everyone."""
 	from kamra.erp_bridge import bridge_call
 
 	assert_property_access(property)
-	return bridge_call("hospitality_tariffs.propose_tariff", property=property, price_list=price_list,
-	                   item_code=item_code, price_list_rate=price_list_rate,
-	                   valid_from=valid_from, valid_upto=valid_upto)
+	customer = _text(customer)
+	form = {"property": property, "price_list": price_list, "item_code": item_code,
+	        "price_list_rate": price_list_rate, "valid_from": valid_from, "valid_upto": valid_upto}
+	if customer:
+		form["customer"] = customer
+	result = bridge_call("hospitality_tariffs.propose_tariff", **form)
+	if customer and result is not None and _text(result.get("customer")) != customer:
+		frappe.throw(_("This tariff integration cannot propose a customer's own rate, so nothing was saved. "
+		               "Update the tariff integration, then try again."))
+	return result
 
 
 @frappe.whitelist(methods=["POST"])
@@ -311,19 +335,32 @@ def _export_versions(item: dict, today: str) -> list[tuple[dict, str]]:
 
 @frappe.whitelist()
 @require_roles(*RATE_ROLES)
-def export_contract_tariffs_csv(property: str, price_list: str | None = None):
+def export_contract_tariffs_csv(property: str, price_list: str | None = None, customer: str | None = None,
+                                as_of_date: str | None = None):
 	"""The tariff directory as spreadsheet rows for offline editing: one row
 	per current, scheduled or in-review version (or an empty-rate row for an
-	item with none). The screen writes the file; import reads it back."""
+	item with none), for what the screen shows - one price list, one
+	customer's own tariffs (or PUBLIC_TARIFFS for the public ones only) and
+	the effective date being viewed.
+
+	The cells are raw values (numbers, ISO dates, text as stored). The
+	screen writes the file with frontend/src/lib/csv.ts, which quotes each
+	cell and neutralises a cell that would run as a spreadsheet formula;
+	the import's _unguard reads that guard back. Nothing here is a file."""
 	assert_property_access(property)
-	directory = _tariff_directory(property, price_list=price_list)
+	customer = _text(customer)
+	directory = _tariff_directory(property, price_list=price_list,
+	                              customer=customer if customer != PUBLIC_TARIFFS else None,
+	                              as_of_date=as_of_date)
 	if directory is None:
 		return {"supported": False, "business_date": None, "columns": TARIFF_CSV_COLUMNS, "rows": []}
 	currencies = {pl.get("name"): pl.get("currency") for pl in directory.get("price_lists") or []}
-	today = directory.get("business_date") or ""
+	today = directory.get("as_of_date") or as_of_date or directory.get("business_date") or ""
 	rows = []
 	for item in directory.get("items") or []:
 		if price_list and item.get("price_list") != price_list:
+			continue
+		if customer and (item.get("customer") or "") != ("" if customer == PUBLIC_TARIFFS else customer):
 			continue
 		head = [item.get("price_list"), item.get("currency") or currencies.get(item.get("price_list")) or "",
 		        item.get("customer") or "", item.get("item_code"), item.get("room_type") or "",
@@ -343,11 +380,15 @@ def _column_key(header) -> str:
 
 
 def _import_records(rows) -> list[dict]:
-	"""Import rows: the exported CSV text, or a list of row objects."""
+	"""Import rows: the exported CSV text, or a list of row objects. Text
+	over TARIFF_IMPORT_BYTES is refused before it is parsed, and a CSV is
+	read only to one row past TARIFF_BATCH_LIMIT."""
 	if isinstance(rows, str):
+		if len(rows.encode("utf-8")) > TARIFF_IMPORT_BYTES:
+			frappe.throw(_("The file is larger than 1 MB. Split it and import each part."))
 		text = rows.lstrip("\ufeff")
 		rows = (_json_list(text, _("Send the tariff rows as a list.")) if text.lstrip().startswith("[")
-		        else list(csv.DictReader(io.StringIO(text))))
+		        else list(itertools.islice(csv.DictReader(io.StringIO(text)), TARIFF_BATCH_LIMIT + 1)))
 	if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
 		frappe.throw(_("Send the tariff rows as a list."))
 	if len(rows) > TARIFF_BATCH_LIMIT:
@@ -355,9 +396,21 @@ def _import_records(rows) -> list[dict]:
 	return [{_column_key(key): _unguard(value) for key, value in row.items() if key} for row in rows]
 
 
+# frontend/src/lib/csv.ts csvCell: a text cell whose first non-blank
+# character would start a formula (ASCII or fullwidth), and that is not a
+# plain number, is written with a leading quote.
+_FORMULA_START = re.compile(r"[=+\-@\t\r\n\uff1d\uff0b\uff0d\uff20]")
+_PLAIN_NUMBER = re.compile(r"-?\d+(\.\d+)?")
+
+
 def _unguard(value):
-	"""A cell the export guarded against running as a formula ('+, '=, '-, '@) reads back as typed."""
-	return value[1:] if isinstance(value, str) and re.match(r"'[=+\-@]", value) else value
+	"""A cell the export guarded against running as a formula reads back as typed: the exact inverse of csvCell."""
+	if not isinstance(value, str) or not value.startswith("'"):
+		return value
+	typed = value[1:]
+	if _FORMULA_START.match(typed.lstrip()) and not _PLAIN_NUMBER.fullmatch(typed.strip()):
+		return typed
+	return value
 
 
 def _unchanged(item: dict | None, entry: dict) -> bool:

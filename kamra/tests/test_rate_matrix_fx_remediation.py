@@ -62,9 +62,9 @@ class CheckInRelockFxOnlyTest(ContractStayHarness):
 		self.assertFalse(self.res.flags.get("kamra_fx_checkin_relock"))
 		self.assertTrue(self.res.flags.get("kamra_contract_relocked"))
 		self.assertEqual(self.res.contract_tariff["tariff"]["derived_from"], "CON")
+		# a fresh booking of a stay the tariff resolver priced
 		self.res.flags.clear()
-		self.res.custom_tariff_currency = "USD"
-		self.res.contract_tariff = json.dumps(BOOKED)
+		self.res.update(custom_tariff_currency="USD", agreed_rate=474500, contract_tariff=json.dumps(BOOKED))
 		self.assertTrue(self.pricing.relock_contract_fx_at_check_in(self.res))
 		self.assertTrue(self.res.flags.get("kamra_fx_checkin_relock"))
 

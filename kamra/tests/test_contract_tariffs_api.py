@@ -525,7 +525,7 @@ class TestContractTariffRemediationAPI(ContractTariffHarness):
 		unguard = self.rates._unguard
 		# mirrors frontend/src/lib/csv.ts csvCell: a formula start after any leading whitespace, ASCII or fullwidth
 		for typed in ("=SUM(A1)", "+Partner", "-Partner", "@Partner", " =x", "\t=x", "\r=x", "\n@x",
-		              "＝x", "＋x", "－x", "＠x", "　=x"):
+		              "\uff1dx", "\uff0bx", "\uff0dx", "\uff20x", "\u3000=x"):
 			with self.subTest(typed=typed):
 				self.assertEqual(unguard("'" + typed), typed)
 		# what the export never guards keeps its quote: plain text and plain numbers

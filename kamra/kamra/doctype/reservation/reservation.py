@@ -435,10 +435,11 @@ class Reservation(Document):
 
 	def capture_contract_tariff(self):
 		"""Freeze the read resolver's reference at booking, not on later reads.
-		The one exception is a contract locked at check-in, which check-in
-		has just re-resolved (pricing.relock_contract_fx_at_check_in)."""
+		The one exception is a contract locked at check-in, whose exchange
+		rate check-in has just converted again (pricing.relock_contract_fx_at_check_in;
+		kamra_fx_checkin_relock is the tariff resolver's flag for a stay it priced)."""
 		if not self.is_new():
-			if self.flags.get("kamra_fx_checkin_relock"):
+			if self.flags.get("kamra_contract_relocked") or self.flags.get("kamra_fx_checkin_relock"):
 				return
 			previous = self.get_doc_before_save()
 			self.contract_tariff = previous.get("contract_tariff") if previous else None
@@ -812,9 +813,10 @@ class Reservation(Document):
 		"""The quote's nights as night-rate rows.
 
 		A rate plan works on the stay total, so each night carries its share
-		of the planned total (same spread as folio._rate_plan_factor), and
-		the last night absorbs rounding so the nights add up to the quote's
-		room total exactly."""
+		of the planned total (same spread as pricing.plan_stay_nights) - or,
+		when the plan rounds, the night's own rounded price (planned_rate) -
+		and the last night absorbs rounding so the nights add up to the
+		quote's room total exactly."""
 		nightly = q.get("nightly") or []
 		plan_free = sum(float(n["rate"]) for n in nightly)
 		room_total = float(q.get("room_total") or 0)
@@ -828,7 +830,7 @@ class Reservation(Document):
 			        + (self.children or 0) * float(mp.get("price_per_child") or 0))
 		rows, running = [], 0.0
 		for i, n in enumerate(nightly):
-			rate = round(float(n["rate"]) * factor, 2)
+			rate = round(float(n["planned_rate"]) if "planned_rate" in n else float(n["rate"]) * factor, 2)
 			if i == len(nightly) - 1 and plan_free:
 				rate = round(room_total - running, 2)
 			running += rate

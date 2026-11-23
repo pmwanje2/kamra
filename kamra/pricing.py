@@ -96,6 +96,41 @@ def rate_plan_currency(chain: list) -> str:
 	return property_currency(chain[-1].property)
 
 
+def _fx_stale_window() -> int:
+	"""Days a published rate stays valid: ERPNext Accounts Settings.stale_days, at least 1."""
+	if not frappe.db.exists("DocType", "Accounts Settings") or not frappe.get_meta(
+			"Accounts Settings").has_field("stale_days"):
+		return 1
+	return max(1, cint(frappe.db.get_single_value("Accounts Settings", "stale_days")))
+
+
+def posting_fx_rate(property: str, currency: str, on_date=None) -> tuple[Decimal, str] | None:
+	"""The governed selling rate for one foreign unit in the property's
+	currency on a date (never later than the business date), read the way
+	the tariff resolver reads it (hospitality_tariffs.tariff_rate, SAP OB08
+	valid-from): the latest ERPNext Currency Exchange row on or before that
+	date and within Accounts Settings.stale_days. Only the rate - a contract
+	is never re-priced here. (rate, its date), or None without exactly one
+	positive row on that latest date."""
+	from kamra.business_date import get_business_date
+
+	home = property_currency(property)
+	if not currency or currency == home:
+		return Decimal(1), str(getdate(on_date or get_business_date(property)))
+	if not frappe.db.exists("DocType", "Currency Exchange"):
+		return None
+	business = getdate(get_business_date(property))
+	day = min(getdate(on_date), business) if on_date else business
+	rows = frappe.get_all("Currency Exchange", fields=["exchange_rate", "date"], filters={
+		"from_currency": currency, "to_currency": home, "for_selling": 1,
+		"date": ["between", [str(add_days(day, 1 - _fx_stale_window())), str(day)]]})
+	latest = max((str(getdate(row.date)) for row in rows), default=None)
+	rows = [row for row in rows if latest and str(getdate(row.date)) == latest]
+	if len(rows) != 1 or _dec(rows[0].exchange_rate) <= 0:
+		return None
+	return _dec(rows[0].exchange_rate), latest
+
+
 def rate_plan_fx_policy(rate_plan: str | None) -> str:
 	"""The plan's exchange-rate lock; Fixed at Reservation when unset."""
 	if not rate_plan:
@@ -681,7 +716,7 @@ def consume_voucher_use(voucher: str) -> None:
 
 
 def apply_rate_plan(rate_plan: str | None, room_total: Decimal,
-                    extra_person_total: Decimal = Decimal(0)) -> Decimal:
+                    extra_person_total: Decimal = Decimal(0), nights: int = 1) -> Decimal:
 	"""The stay's room total after its rate plan's modifier.
 
 	The plan works on the whole stay's (season- and occupancy-priced) room
@@ -693,57 +728,74 @@ def apply_rate_plan(rate_plan: str | None, room_total: Decimal,
 	first), then applies its own modifier. `extra_person_total` is the part
 	of room_total extra adults and children add: a derived plan leaves that
 	part as its base priced it unless the plan sets adjust_extra_person
-	(OPERA Base Rate Extra Person Calculation).
+	(OPERA Base Rate Extra Person Calculation). A derived plan's Amount or
+	Absolute is per night (`nights` of them), as on a contract night; a
+	root plan's stays per stay.
 	"""
 	room_total = _dec(room_total)
 	if not rate_plan:
 		return room_total
-	return _price_through(resolve_rate_plan_chain(rate_plan), room_total, _dec(extra_person_total), root=True)
+	return _price_through(resolve_rate_plan_chain(rate_plan), room_total, _dec(extra_person_total), root=True,
+	                      nights=max(cint(nights), 1))
 
 
-def _apply_modifier(rp, amount: Decimal) -> Decimal:
+def _apply_modifier(rp, amount: Decimal, nights: int = 1) -> Decimal:
 	v = _dec(rp.modifier_value)
 	if rp.modifier_type == "Percent":
 		return amount * (Decimal(1) + v / Decimal(100))
 	if rp.modifier_type == "Amount":
-		return amount + v
+		return amount + v * nights
 	if rp.modifier_type == "Absolute":
-		return v
+		return v * nights
 	return amount
 
 
-def _price_through(plans: list, total: Decimal, extras: Decimal, root: bool) -> Decimal:
+def _price_through(plans: list, total: Decimal, extras: Decimal, root: bool, nights: int = 1) -> Decimal:
 	"""Apply each plan's modifier in turn. A root plan (no base) works on the
-	whole price; a derived plan leaves the extra-person part as its base left
-	it unless the plan's adjust_extra_person is set."""
+	whole price, its amount once; a derived plan leaves the extra-person
+	part as its base left it unless the plan's adjust_extra_person is set,
+	and adds or fixes its amount for each of the `nights`."""
 	extras = min(max(extras, Decimal(0)), max(total, Decimal(0)))
 	room = total - extras
 	for depth, rp in enumerate(plans):
-		if (depth or not root) and not cint(rp.get("adjust_extra_person")):
-			room = _apply_modifier(rp, room)
+		derived = bool(depth or not root)
+		count = nights if derived else 1
+		if derived and not cint(rp.get("adjust_extra_person")):
+			room = _apply_modifier(rp, room, count)
 			continue
 		whole = room + extras
-		priced = _apply_modifier(rp, whole)
+		priced = _apply_modifier(rp, whole, count)
 		extras = extras * priced / whole if whole else Decimal(0)
 		room = priced - extras
 	return room + extras
 
 
-def round_planned_stay(rate_plan: str, room_total: Decimal, room_tax: Decimal, inclusive: bool,
-                       floor: Decimal = Decimal(0)) -> tuple[Decimal, Decimal]:
-	"""The plan's rounding step on the stay's room price as the guest sees
-	it - the gross price in a tax-inclusive house, the net one otherwise.
-	Tax keeps its share; a step of 0 leaves the quote as it is, and rounding
-	never takes the stay below its long-stay floor."""
+def plan_stay_nights(rate_plan: str, nights: list[tuple[Decimal, Decimal]], extra_person_total: Decimal,
+                     inclusive: bool, floor: Decimal = Decimal(0)) -> tuple[list[Decimal], bool]:
+	"""Each night's taxable room rate under the plan, for (taxable rate, GST
+	%) nights before it. The plan's modifier works on the stay (a derived
+	Amount or Absolute once per night), its result spread over the nights
+	in proportion and held at the long-stay floor; the plan's rounding step
+	then rounds each night's price as the guest sees it (OPERA per-night
+	commercial rounding) - gross in a tax-inclusive house, net otherwise -
+	unless that would take the stay below its floor. The quote and the
+	folio's unlocked nights both price through here. (rates, rounded)."""
+	total = sum((_dec(rate) for rate, _gst in nights), Decimal(0))
+	planned = max(apply_rate_plan(rate_plan, total, extra_person_total, nights=len(nights)), _dec(floor))
+	factor = planned / total if total else Decimal(1)
+	rates = [_dec(rate) * factor for rate, _gst in nights]
 	rp = frappe.get_doc("Rate Plan", rate_plan)
 	step = _dec(rp.get("rounding_step"))
-	shown = room_total + room_tax if inclusive else room_total
-	if step <= 0 or shown <= 0:
-		return room_total, room_tax
-	factor = round_rate_amount(shown, step, rp.get("rounding_mode") or "Nearest") / shown
-	if room_total * factor < floor:
-		return room_total, room_tax
-	return room_total * factor, room_tax * factor
+	if step <= 0:
+		return rates, False
+	mode = rp.get("rounding_mode") or "Nearest"
+	rounded = []
+	for rate, (_rate, gst) in zip(rates, nights, strict=True):
+		tax = Decimal(1) + _dec(gst) / Decimal(100) if inclusive else Decimal(1)
+		rounded.append(round_rate_amount(rate * tax, step, mode) / tax if rate > 0 else rate)
+	if sum(rounded, Decimal(0)) < _dec(floor):
+		return rates, False
+	return rounded, True
 
 
 def rate_plan_factor(rate_plan: str | None, room_total: Decimal) -> Decimal:
@@ -859,29 +911,46 @@ def relock_contract_fx_at_check_in(reservation) -> bool:
 	"""OPERA Exchange Type "Fixed at Check In": a foreign contract converts
 	at the posting rate of the check-in business date, not the booking's.
 
-	Re-resolves the contract for that date and puts the new agreed rate and
-	snapshot on the (unsaved) booking; its save re-locks the nights not yet
-	charged, and charged nights keep what the folio holds. Other policies,
-	home-currency contracts and stays without one keep the booked rate.
+	Only the exchange rate moves: the booked contract amount (tariff
+	nightly, a derived plan's modifier already in it) is converted again at
+	the governed Currency Exchange rate for the business date and rounded
+	as the plan rounds - the Item Price is never re-read, so a tariff
+	revised after booking never re-prices the stay. The new agreed rate and
+	snapshot go on the (unsaved) booking; its save re-locks the nights not
+	yet charged. A booking whose agreed rate no longer matches the contract
+	(a manager's override or a reservation discount) keeps it. The tariff
+	resolver's own re-lock (kamra_fx_checkin_relock) is asked for only on a
+	stay it priced (custom_tariff_currency); a derived plan's stay re-locks
+	under kamra_contract_relocked. No published rate refuses the check-in.
 	True when the booking was relocked."""
 	if rate_plan_fx_policy(reservation.get("rate_plan")) != "Fixed at Check In":
 		return False
-	tariff = saved_contract_tariff(reservation).get("tariff") or {}
-	currency = tariff.get("currency") or reservation.get("custom_tariff_currency")
-	if not currency or currency == (tariff.get("property_currency") or property_currency(reservation.property)):
+	snapshot = saved_contract_tariff(reservation)
+	tariff = snapshot.get("tariff") or {}
+	home = tariff.get("property_currency") or property_currency(reservation.property)
+	currency = tariff.get("currency")
+	nightly = _dec(tariff.get("nightly"))
+	if not currency or currency == home or nightly <= 0:
 		return False
+	booked = snapshot.get("agreed_rate")
+	if booked is not None and abs(_dec(reservation.get("agreed_rate")) - _dec(booked)) > Decimal("0.005"):
+		return False  # an override or a discount is the manager's price now
 	from kamra.business_date import get_business_date
-	resolved = contract_rate(
-		reservation.property, reservation.room_type, reservation.rate_plan, reservation.check_in_date,
-		reservation.check_out_date, reservation.adults, reservation.children, reservation.get("extra_beds"),
-		company=reservation.get("company"), pricing_event="check_in",
-		fx_date=get_business_date(reservation.property))
-	if not resolved:
-		return False
-	agreed_rate, fresh = resolved
-	reservation.agreed_rate = agreed_rate
-	reservation.contract_tariff = {"tariff": fresh, "agreed_rate": agreed_rate}
-	reservation.flags.kamra_fx_checkin_relock = True
+	business = get_business_date(reservation.property)
+	posting = posting_fx_rate(reservation.property, currency, business)
+	if not posting:
+		raise ContractRateRefused(_(
+			"No single published {0} exchange rate for {1}. Finance enters the current rate before this "
+			"contract stay checks in.").format(currency, business))
+	fx, fx_date = posting
+	rp = frappe.get_doc("Rate Plan", reservation.rate_plan)
+	agreed = float(round_rate_amount(nightly * fx, rp.get("rounding_step"), rp.get("rounding_mode") or "Nearest", home))
+	reservation.agreed_rate = agreed
+	reservation.contract_tariff = {"tariff": {**tariff, "nightly": float(nightly), "fx_rate": float(fx),
+	                                          "fx_date": fx_date}, "agreed_rate": agreed}
+	reservation.flags.kamra_contract_relocked = True
+	if reservation.get("custom_tariff_currency"):
+		reservation.flags.kamra_fx_checkin_relock = True
 	return True
 
 
@@ -1271,11 +1340,17 @@ def quote(
 
 	if rate_plan and not agreed_rate and not rate_plan_applied:
 		old_room_total = room_total
-		room_total = max(apply_rate_plan(rate_plan, room_total, extra_person_total), los_floor)
+		planned, rounded = plan_stay_nights(rate_plan, [(_dec(n["rate"]), _dec(n["gst_rate"])) for n in nightly],
+		                                    extra_person_total, inclusive, los_floor)
+		room_total = sum(planned, Decimal(0))
+		room_tax = sum((rate * _dec(n["gst_rate"]) / Decimal(100) for rate, n in zip(planned, nightly, strict=True)),
+		               Decimal(0))
 		if old_room_total:
-			room_tax *= room_total / old_room_total
 			los_saved *= room_total / old_room_total
-		room_total, room_tax = round_planned_stay(rate_plan, room_total, room_tax, inclusive, los_floor)
+		if rounded:
+			# each night's own rounded price: the booking locks exactly these
+			for night, rate in zip(nightly, planned, strict=True):
+				night["planned_rate"] = float(rate)
 
 	from kamra.folio import _fnb_gst
 	FNB_GST = _fnb_gst(property)
