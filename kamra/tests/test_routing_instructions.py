@@ -661,3 +661,18 @@ class RoutingTestCase(AuditTestCase):
 		company = folio_mod.open_company_folio(other)
 		self.assertEqual([r.charge_type for r in lines(company)], ["Room Levy"])
 		self.assertEqual([r.charge_type for r in lines(guest_folio(other.name))], ["Room"])
+
+	def test_no_desk_field_or_agent_tool_promises_a_liquor_rule(self):
+		# liquor routes like any code: no Desk help text or agent tool may
+		# still promise that it never reaches a company bill
+		import re
+
+		from kamra import mcp_tools
+		promise = re.compile(r"\b(liquor|alcohol)\b[^.;:]*\b(never|always)\b"
+		                     r"|\b(never|always)\b[^.;:]*\b(liquor|alcohol)\b", re.I)
+		found = [f"{dt}.{df.fieldname}"
+		         for dt in frappe.get_all("DocType", filters={"module": "Kamra"}, pluck="name")
+		         for df in frappe.get_meta(dt).fields
+		         if promise.search(df.description or "")]
+		found += [t.name for t in mcp_tools.TOOLS if promise.search(t.description)]
+		self.assertEqual(found, [])
