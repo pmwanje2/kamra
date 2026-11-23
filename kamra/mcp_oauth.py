@@ -18,7 +18,7 @@ from urllib.parse import parse_qs, quote, urlencode, urlparse
 import frappe
 from frappe.utils import add_to_date, get_url, now_datetime
 
-from kamra.branding import product_name, white_label
+from kamra.branding import app_path, product_name, product_token, white_label
 from kamra.authz import require_roles
 from kamra.mcp_tools import TOOL_COUNT
 
@@ -138,7 +138,7 @@ def authorization_server_doc() -> dict:
 
 def claude_install_url(property_name: str, mcp_url: str | None = None) -> str:
 	url = mcp_url or mcp_resource_url()
-	name = f"{property_name} (Kamra)"
+	name = f"{property_name} ({product_name()})"
 	return (
 		"https://claude.ai/customize/connectors"
 		"?modal=add-custom-connector"
@@ -445,7 +445,7 @@ def connect_info(property: str) -> dict:
 		"mcp_url": mcp_url,
 		"issuer": issuer_url(),
 		"claude_install_url": claude_install_url(prop_name, mcp_url),
-		"claude_code": f"claude mcp add --transport http kamra {mcp_url}",
+		"claude_code": f"claude mcp add --transport http {product_token().lower()} {mcp_url}",
 		"is_public_https": is_public_https(),
 		"property": property,
 		"property_name": prop_name,
@@ -473,7 +473,7 @@ def revoke_my_grants(property: str | None = None) -> dict:
 
 
 def _error_page(message: str) -> str:
-	back = "/kamra" if white_label() else "/kamra/assistant"
+	back = app_path() if white_label() else app_path("assistant")
 	return _html_shell(
 		"Could not connect",
 		f"<p>{frappe.utils.escape_html(message)}</p>"
@@ -528,7 +528,7 @@ def _html_shell(title: str, body: str) -> str:
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{frappe.utils.escape_html(title)} · Kamra</title>
+<title>{frappe.utils.escape_html(title)} · {frappe.utils.escape_html(product_name())}</title>
 <style>
   :root {{ color-scheme: light; }}
   body {{ margin:0; font: 16px/1.45 ui-sans-serif, system-ui, sans-serif;

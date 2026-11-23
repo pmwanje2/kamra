@@ -12,7 +12,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, cint, flt, get_datetime, getdate, now_datetime, nowdate
 
-from kamra.branding import product_name
+from kamra.branding import product_name, public_url
 from kamra.authz import act_as, assert_property_access, require_it_admin, require_roles
 from kamra.install import AGENT_EMAIL
 
@@ -6070,7 +6070,7 @@ def send_precheckin_link(reservation: str, channel: str = "WhatsApp"):
 		frappe.db.set_value("Reservation", reservation, "precheckin_token",
 		                    res.precheckin_token)
 
-	link = f"{frappe.utils.get_url()}/kamra/checkin/{res.precheckin_token}"
+	link = public_url(f"checkin/{res.precheckin_token}")
 	phone = frappe.db.get_value("Guest", res.guest, "phone") if res.guest else None
 	sent = False
 	if phone:
@@ -8112,7 +8112,7 @@ def rooming_list_template(property: str):
 		"Room type: pick from the list. Empty = any room of the group.",
 		"Other guests: everyone else staying in that room, separated by ; (e.g. Ravi Rao; Meera Rao).",
 		"Do not add the main guest - they are already room 1.",
-		"In Kamra: copy the rows (with the header) and use Paste from Excel,",
+		f"In {product_name()}: copy the rows (with the header) and use Paste from Excel,",
 		"or File > Save As > CSV and use Upload CSV.",
 	], 1):
 		help_ws.cell(row=i, column=1, value=line).font = Font(name="Arial")

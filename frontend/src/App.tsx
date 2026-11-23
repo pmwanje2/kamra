@@ -192,6 +192,11 @@ function WhiteLabelRoutes() {
     : <Outlet context={shell} />
 }
 
+function BookIndex() {
+  const { search } = useLocation()
+  return <Navigate to={`/book${search}`} replace />
+}
+
 export default function App() {
   useUILanguage()
   // guest pages and the desk keep separate languages; re-apply on crossing
@@ -214,13 +219,18 @@ export default function App() {
           path="book/:checkin/:checkout?/:adults?/:children?"
           element={<PublicBooking />}
         />
+        <Route path="book/*" element={<BookIndex />} />
+        <Route path="stay" element={<BookIndex />} />
         <Route path="stay/:slug" element={<PublicListing />} />
         <Route
           path="stay/:slug/:checkin/:checkout?/:adults?/:children?"
           element={<PublicListing />}
         />
+        <Route path="stay/*" element={<BookIndex />} />
         {/* pre-arrival self check-in, tokenized per reservation */}
+        <Route path="checkin" element={<PublicCheckin />} />
         <Route path="checkin/:token" element={<PublicCheckin />} />
+        <Route path="checkin/*" element={<PublicCheckin />} />
         {/* housekeeping phone app - share the /hk URL with the HK team */}
         <Route path="hk" element={<HkApp />} />
         {/* dedicated login route so signing out changes the URL */}

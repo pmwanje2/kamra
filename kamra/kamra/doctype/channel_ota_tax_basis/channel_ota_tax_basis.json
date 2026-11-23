@@ -1,0 +1,43 @@
+{
+ "actions": [],
+ "creation": "2026-11-24 09:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "channel",
+  "amounts"
+ ],
+ "fields": [
+  {
+   "description": "The OTA as the channel manager names it on a booking (Expedia, Agoda, Booking.com).",
+   "fieldname": "channel",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "OTA",
+   "reqd": 1
+  },
+  {
+   "default": "Including tax",
+   "description": "What this OTA's booking amounts are, as set on the channel manager for it (Expedia: Total Amount / Total Amount Excluding Taxes; Agoda: Inclusive with Commissions / Exclusive). Excluding tax: a booking that lists no room tax is held for review instead of billed.",
+   "fieldname": "amounts",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Booking Amounts",
+   "options": "Including tax\nExcluding tax",
+   "reqd": 1
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-11-24 09:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Kamra",
+ "name": "Channel OTA Tax Basis",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

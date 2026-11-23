@@ -19,6 +19,7 @@ const imports = {
   "./brand": { deskLabel: () => undefined, upstreamOnly: () => false, whiteLabel: () => true },
   // a site that keeps its own books: no screen is handed to the ERP
   "./erpBooks": { keptInErp: () => undefined },
+  "./routing": { toFullPath: (path) => `/kamra${path}` },
 }
 const appRegistry = {}
 const js = ts.transpileModule(source.replaceAll("import.meta.env.PROD", "true"), {
