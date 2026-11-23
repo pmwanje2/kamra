@@ -1131,7 +1131,6 @@
   "Venue": "Lugar ng kaganapan",
   "Version history": "Kasaysayan ng mga bersyon",
   "All customers": "Lahat ng customer",
-  "Amount change": "Pagbabago sa halaga",
   "Approve selected": "Aprubahan ang mga napili",
   "Approve {n} tariff version?": "Aprubahan ang {n} bersyon ng taripa?",
   "Approve {n} tariff versions?": "Aprubahan ang {n} bersyon ng taripa?",
@@ -1164,7 +1163,6 @@
   "Public (standard)": "Pampubliko (karaniwan)",
   "Room matrix": "Matrix ng kuwarto",
   "Room pricing matrix": "Matrix ng presyo ng kuwarto",
-  "Round to (0 = the currency's smallest unit)": "I-round sa (0 = pinakamaliit na yunit ng pera)",
   "Rounding": "Pag-round",
   "Row {row}: {message}": "Hilera {row}: {message}",
   "Scheduled: {rate} from {date}": "Nakaiskedyul: {rate} mula {date}",
@@ -1248,5 +1246,15 @@
   "Reference currency {currency} · Current: 1 {currency} = {rate} {home} ({date})": "Reference na currency {currency} · Kasalukuyan: 1 {currency} = {rate} {home} ({date})",
   "Rate {n} night posted at": "Rate kung saan nai-post ang {n} gabi",
   "Average of the rates {n} nights posted at": "Average ng mga rate kung saan nai-post ang {n} gabi",
-  "Total {total} · Balance {balance}": "Kabuuan {total} · Balanse {balance}"
+  "Total {total} · Balance {balance}": "Kabuuan {total} · Balanse {balance}",
+  "Public": "Pampubliko",
+  "Amount change ({currency})": "Pagbabago sa halaga ({currency})",
+  "New rate ({currency})": "Bagong presyo ({currency})",
+  "Amount change (in each tariff's currency)": "Pagbabago sa halaga (sa pera ng bawat taripa)",
+  "New rate (in each tariff's currency)": "Bagong presyo (sa pera ng bawat taripa)",
+  "Round to ({currency} — tariff currency; 0 = the currency's smallest unit)": "I-round sa ({currency} — pera ng taripa; 0 = pinakamaliit na yunit ng pera)",
+  "Round to (in each tariff's currency; 0 = the currency's smallest unit)": "I-round sa (sa pera ng bawat taripa; 0 = pinakamaliit na yunit ng pera)",
+  "Prefilled from the rate plan rounding rule": "Paunang pinunan mula sa tuntunin ng pag-round ng rate plan",
+  "Tariffs are edited in the price list's contract currency; the {home} posting converts at booking or check-in under the rate plan's exchange rate lock.": "Ine-edit ang mga taripa sa pera ng kontrata ng listahan ng presyo; kino-convert ang pag-post sa {home} sa booking o check-in ayon sa pag-lock ng palitan ng rate plan.",
+  "Corporate": "Pangkorporasyon"
 }

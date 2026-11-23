@@ -411,7 +411,6 @@
   "Venue": "Veranstaltungsraum",
   "Version history": "Versionsverlauf",
   "All customers": "Alle Kunden",
-  "Amount change": "Betragsänderung",
   "Approve selected": "Auswahl freigeben",
   "Approve {n} tariff version?": "{n} Tarifversion freigeben?",
   "Approve {n} tariff versions?": "{n} Tarifversionen freigeben?",
@@ -444,7 +443,6 @@
   "Public (standard)": "Öffentlich (Standard)",
   "Room matrix": "Zimmermatrix",
   "Room pricing matrix": "Zimmerpreismatrix",
-  "Round to (0 = the currency's smallest unit)": "Runden auf (0 = kleinste Währungseinheit)",
   "Rounding": "Rundung",
   "Row {row}: {message}": "Zeile {row}: {message}",
   "Scheduled: {rate} from {date}": "Geplant: {rate} ab {date}",
@@ -529,5 +527,15 @@
   "Reference currency {currency} · Current: 1 {currency} = {rate} {home} ({date})": "Referenzwährung {currency} · Aktuell: 1 {currency} = {rate} {home} ({date})",
   "Rate {n} night posted at": "Kurs, zu dem {n} Nacht gebucht wurde",
   "Average of the rates {n} nights posted at": "Durchschnitt der Kurse, zu denen {n} Nächte gebucht wurden",
-  "Total {total} · Balance {balance}": "Gesamt {total} · Saldo {balance}"
+  "Total {total} · Balance {balance}": "Gesamt {total} · Saldo {balance}",
+  "Public": "Öffentlich",
+  "Amount change ({currency})": "Betragsänderung ({currency})",
+  "New rate ({currency})": "Neuer Preis ({currency})",
+  "Amount change (in each tariff's currency)": "Betragsänderung (in der Währung des jeweiligen Tarifs)",
+  "New rate (in each tariff's currency)": "Neuer Preis (in der Währung des jeweiligen Tarifs)",
+  "Round to ({currency} — tariff currency; 0 = the currency's smallest unit)": "Runden auf ({currency} — Tarifwährung; 0 = kleinste Währungseinheit)",
+  "Round to (in each tariff's currency; 0 = the currency's smallest unit)": "Runden auf (in der Währung des jeweiligen Tarifs; 0 = kleinste Währungseinheit)",
+  "Prefilled from the rate plan rounding rule": "Aus der Rundungsregel des Ratenplans vorausgefüllt",
+  "Tariffs are edited in the price list's contract currency; the {home} posting converts at booking or check-in under the rate plan's exchange rate lock.": "Tarife werden in der Vertragswährung der Preisliste bearbeitet; die Buchung in {home} wird bei Buchung oder Check-in gemäß der Wechselkursbindung des Ratenplans umgerechnet.",
+  "Corporate": "Firmenkunde"
 }

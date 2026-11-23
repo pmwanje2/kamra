@@ -196,6 +196,17 @@ function TariffDirectory({ property }: { property: string }) {
       ? t("{from} – {until}", { from: tariffDate(version.valid_from, dateLocale), until: tariffDate(version.valid_upto, dateLocale) })
       : tariffDate(version.valid_from, dateLocale),
   }
+  // a bulk version edits the selection's one tariff currency; a plan's rounding step rounds the posting
+  // currency, so the plans' shared rule prefills only tariffs priced in it (never a foreign tariff)
+  const bulkVersion = (items: ContractTariffItem[]): MassAction => {
+    const currencies = new Set(items.map((item) => itemCurrency(item, lists.get(item.price_list))))
+    const currency = currencies.size === 1 ? [...currencies][0] : null
+    const rules = [...new Set(items.map((item) => item.price_list))].map((name) => view.rounding(name))
+    const [rule] = rules
+    const prefill = currency === directory.property_currency && !!rule && rule.step > 0
+      && rules.every((other) => other?.step === rule.step && other.mode === rule.mode)
+    return { kind: "version", items, currency, rounding: prefill ? rule : null }
+  }
   const roundingText = (rule: Rounding) => {
     if (!rule) return ""
     if (!rule.step) return t("standard currency rounding")
@@ -323,7 +334,7 @@ function TariffDirectory({ property }: { property: string }) {
         {chosen.length ? tn(chosen.length, "{n} tariff selected", "{n} tariffs selected") : t("Select all")}
       </label>}
       {directory.can_propose && chosen.length > 0 && <Button type="button" variant="outline" disabled={loading}
-        onClick={() => setMass({ kind: "version", items: chosen })}><Layers aria-hidden className="size-4" />{t("Create new version in bulk")}</Button>}
+        onClick={() => setMass(bulkVersion(chosen))}><Layers aria-hidden className="size-4" />{t("Create new version in bulk")}</Button>}
       {directory.can_approve && chosenDrafts.some(({ draft }) => draft.can_approve !== false) &&
         <Button type="button" variant="outline" className={decisionTone.approve} disabled={loading}
           onClick={() => setMass({ kind: "approve", drafts: chosenDrafts })}>{t("Approve selected")}</Button>}
@@ -352,7 +363,8 @@ function TariffDirectory({ property }: { property: string }) {
       list={lists.get(action.item.price_list)} rounding={view.rounding(action.item.price_list)}
       onClose={() => setAction(null)} onSuccess={() => finish(action.kind === "propose" ? t("Tariff version submitted for approval")
         : action.kind === "approve" ? t("Tariff version approved") : t("Tariff draft discarded"))} />}
-    {mass && <TariffMassDialog action={mass} property={directory.property} businessDate={directory.business_date}
+    {mass && <TariffMassDialog action={mass} property={directory.property} propertyCurrency={directory.property_currency}
+      businessDate={directory.business_date}
       lists={lists} locale={locale} dateLocale={dateLocale} onClose={() => setMass(null)} onDone={finish} />}
   </div>
 }
@@ -393,8 +405,13 @@ function MatrixRowView({ row, tiers, others, columns, view }: {
   const keys = items.map(itemKey)
   const name = [row.roomType, row.priceList, row.customer].filter(Boolean).join(" · ")
   const withHistory = items.filter((item) => item.history.length > 0)
+  // a customer's negotiated price (SAP customer-specific condition) reads apart from the public one
+  const scope = row.customer
+    ? "border-s-2 border-s-indigo-500 bg-indigo-50/25 xl:border-s-2"
+    : "bg-white"
   return <Fragment>
-    <tr role="row" data-room={row.key} className="block rounded-xl border border-zinc-200 bg-white py-1 xl:table-row xl:rounded-none xl:border-0 xl:border-t">
+    <tr role="row" data-room={row.key} data-scope={row.customer ? "corporate" : "public"}
+      className={"block rounded-xl border border-zinc-200 py-1 xl:table-row xl:rounded-none xl:border-0 xl:border-t " + scope}>
       {view.selectable && <td role="cell" className="block px-3 pt-2 xl:table-cell xl:py-3 xl:align-top">
         <input type="checkbox" className="size-4" aria-label={t("Select {name}", { name })}
           checked={keys.every((key) => view.selected.has(key))} onChange={(event) => view.toggle(keys, event.target.checked)} />
@@ -402,7 +419,13 @@ function MatrixRowView({ row, tiers, others, columns, view }: {
       <th role="rowheader" scope="row" className="block px-3 py-2 text-start xl:table-cell xl:py-3 xl:align-top">
         <span className="block font-semibold text-zinc-950">{row.roomType}</span>
         <span className="block break-words text-xs font-normal text-zinc-600">{row.priceList}</span>
-        {row.customer && <span className={pill + " mt-1 bg-brand-50 text-brand-800"}>{row.customer}</span>}
+        {row.customer
+          ? <span data-scope-badge className={pill + " mt-1 inline-flex max-w-full items-center gap-1 border border-indigo-200 bg-indigo-50 text-indigo-800"}>
+            <span className="font-semibold">{t("Corporate")}</span>
+            <span aria-hidden>·</span>
+            <span className="break-words">{row.customer}</span>
+          </span>
+          : <span data-scope-badge className={pill + " mt-1 bg-zinc-100 text-zinc-600"}>{t("Public")}</span>}
       </th>
       {tiers.map((n) => {
         const item = row.tiers.get(n)

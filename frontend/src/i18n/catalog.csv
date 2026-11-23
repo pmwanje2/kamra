@@ -931,7 +931,8 @@ Amount (before tax),Amount (before tax),المبلغ (قبل الضريبة),Imp
 Amount (held {amt}),Amount (held {amt}),المبلغ (المحتجز {amt}),Importe (retenido: {amt}),Montante (detido {amt}),金额（已收 {amt}）,components/SecurityDepositPanel.tsx,amt,translated
 Amount {cur},Amount {cur},المبلغ {cur},Importe {cur},Montante {cur},金额 {cur},screens/FolioView.tsx; screens/HkApp.tsx,cur,translated
 Amount before tax,Amount before tax,المبلغ قبل الضريبة,Monto antes de impuestos,Valor antes de impostos,税前金额,,,translated
-Amount change,Amount change,تغيير المبلغ,Cambio de importe,Alteração de valor,金额调整,components/TariffMassActions.tsx,,translated
+Amount change ({currency}),Amount change ({currency}),تغيير المبلغ ({currency}),Cambio de importe ({currency}),Alteração de valor ({currency}),金额调整（{currency}）,components/TariffMassActions.tsx,currency,translated
+Amount change (in each tariff's currency),Amount change (in each tariff's currency),تغيير المبلغ (بعملة كل تعرفة),Cambio de importe (en la moneda de cada tarifa),Alteração de valor (na moeda de cada tarifa),金额调整（按各价格的币种）,components/TariffMassActions.tsx,,translated
 Amount collected,Amount collected,المبلغ المحصّل,Importe cobrado,Montante arrecadado,已收金额,components/BookingDialog.tsx,,translated
 Amount received,Amount received,المبلغ المستلم,Importe recibido,Montante recebido,已收金额,screens/CityLedgerPayment.tsx,,translated
 Amount to bank,Amount to bank,المبلغ المودع في البنك,Importe a depositar en el banco,Montante a depositar,存入银行金额,screens/CashierBoard.tsx,,translated
@@ -1912,7 +1913,7 @@ Copy message,Copy message,نسخ الرسالة,Copiar mensaje,Copiar mensagem,�
 "Copy the self check-in link - send to the booker, {name}{phone}","Copy the self check-in link - send to the booker, {name}{phone}",انسخ رابط التسجيل الذاتي - أرسله للحاجز، {name}{phone},"Copie el enlace de registro de entrada en línea y envíelo al responsable de la reserva, {name}{phone}","Copie o link de self check-in - envie para o responsável pela reserva, {name}{phone}",复制自助入住链接 - 发送给订房人 {name}{phone},screens/Today.tsx,name phone,translated
 Copy the self check-in link - send to the guest,Copy the self check-in link - send to the guest,انسخ رابط التسجيل الذاتي - أرسله للضيف,Copie el enlace de registro de entrada en línea y envíelo al huésped,Copie o link do self check-in - envie ao hóspede,复制自助入住链接 - 发送给宾客,screens/Today.tsx,,translated
 Copy the self check-in link - send to the guest and the booker ({name}),Copy the self check-in link - send to the guest and the booker ({name}),انسخ رابط التسجيل الذاتي - أرسله للضيف والحاجز ({name}),Copie el enlace de registro de entrada en línea y envíelo al huésped y al responsable de la reserva ({name}),Copie o link de self check-in - envie ao hóspede e ao reservador ({name}),复制自助入住链接 - 发送给宾客与订房人（{name}）,screens/Today.tsx,name,translated
-Corporate,Corporate,شركات,Corporativo,Corporativo,公司客户,components/BookingDialog.tsx; screens/TapeChart.tsx,,translated
+Corporate,Corporate,شركات,Corporativo,Corporativo,公司客户,components/BookingDialog.tsx; screens/ContractTariffs.tsx; screens/TapeChart.tsx,,translated
 Corporate Account,Corporate Account,حساب الشركة,Cuenta de empresa,Conta Corporativa,公司账户,,,translated
 Corporate Accounts,Corporate Accounts,حسابات الشركات,Cuentas de empresas,Contas Corporativas,公司账户,,,translated
 Corporate accounts and credit terms,Corporate accounts and credit terms,حسابات الشركات وشروط الائتمان,Cuentas de empresas y condiciones de crédito,Contas empresariais e condições de crédito,企业账户与信用条款,,,translated
@@ -2337,6 +2338,8 @@ Local equivalent preview,Local equivalent preview,معاينة المعادل ب
 Manage tariffs,Manage tariffs,إدارة التعرفة,Gestionar tarifas,Gerenciar tarifas,管理价格,components/ManageTariffsLink.tsx,,translated
 Nearest,Nearest,للأقرب,Al más cercano,Mais próximo,四舍五入,components/TariffMassActions.tsx,,translated
 New rate,New rate,السعر الجديد,Nueva tarifa,Nova tarifa,新价格,screens/ContractTariffs.tsx,,translated
+New rate ({currency}),New rate ({currency}),السعر الجديد ({currency}),Nueva tarifa ({currency}),Nova tarifa ({currency}),新价格（{currency}）,components/TariffMassActions.tsx,currency,translated
+New rate (in each tariff's currency),New rate (in each tariff's currency),السعر الجديد (بعملة كل تعرفة),Nueva tarifa (en la moneda de cada tarifa),Nova tarifa (na moeda de cada tarifa),新价格（按各价格的币种）,components/TariffMassActions.tsx,,translated
 New tariff version,New tariff version,نسخة تعرفة جديدة,Nueva versión de tarifa,Nova versão da tarifa,新建价格版本,screens/ContractTariffs.tsx,,translated
 New version,New version,نسخة جديدة,Nueva versión,Nova versão,新建版本,screens/ContractTariffs.tsx,,translated
 New versions,New versions,النسخ الجديدة,Nuevas versiones,Novas versões,新版本,components/TariffMassActions.tsx,,translated
@@ -2351,7 +2354,9 @@ Other occupancy,Other occupancy,إشغال آخر,Otra ocupación,Outra ocupaç�
 Pending approval ({n}),Pending approval ({n}),بانتظار الموافقة ({n}),Pendiente de aprobación ({n}),Pendente de aprovação ({n}),待审批（{n}）,screens/ContractTariffs.tsx,n,translated
 Percent (+/-),Percent (+/-),نسبة مئوية (+/-),Porcentaje (+/-),Percentual (+/-),百分比（+/-）,components/TariffMassActions.tsx,,translated
 Percent change,Percent change,تغيير النسبة,Cambio porcentual,Variação percentual,百分比调整,components/TariffMassActions.tsx,,translated
+Prefilled from the rate plan rounding rule,Prefilled from the rate plan rounding rule,مُعبأ مسبقًا من قاعدة التقريب في خطة السعر,Rellenado a partir de la regla de redondeo del plan tarifario,Preenchido a partir da regra de arredondamento do plano tarifário,已按房价计划的取整规则预填,components/TariffMassActions.tsx,,translated
 Price list,Price list,قائمة الأسعار,Lista de precios,Lista de preços,价格表,screens/ContractTariffs.tsx,,translated
+Public,Public,عامة,Pública,Pública,公开,screens/ContractTariffs.tsx,,translated
 Public (standard),Public (standard),عامة (قياسية),Pública (estándar),Pública (padrão),公开（标准）,screens/ContractTariffs.tsx,,translated
 Published selling rate: 1 {foreign} = {rate} {home} · {date},Published selling rate: 1 {foreign} = {rate} {home} · {date},,,,,components/RoomTypeTariffs.tsx,foreign rate home date,needs_translation
 Recompute the signature over the raw body and reject old timestamps.,Recompute the signature over the raw body and reject old timestamps.,يحمل كل طلب X-شريك التحقق من الهوية-Event وX-شريك التحقق من الهوية-Event-Id وX-شريك التحقق من الهوية-Timestamp وX-شريك التحقق من الهوية-Signature. أعد حساب التوقيع على النص الخام وارفض الطوابع الزمنية القديمة:,"Cada solicitud lleva X-el servicio de verificación de identidad-Event, X-el servicio de verificación de identidad-Event-Id, X-el servicio de verificación de identidad-Timestamp y X-el servicio de verificación de identidad-Signature. Vuelva a calcular la firma sobre el cuerpo sin procesar y rechace las marcas de tiempo antiguas:","Cada solicitação carrega X-o serviço de verificação de identidade-Event, X-o serviço de verificação de identidade-Event-Id, X-o serviço de verificação de identidade-Timestamp e X-o serviço de verificação de identidade-Signature. Recalcule a assinatura sobre o corpo bruto e rejeite os carimbos de data/hora antigos:",每个请求携带 X-证件核验合作方-Event、X-证件核验合作方-Event-Id、X-证件核验合作方-Timestamp 与 X-证件核验合作方-Signature。请对原始报文重算签名并拒绝过期时间戳：,screens/settings/WebhooksPage.tsx,,translated
@@ -2739,7 +2744,8 @@ Revenue · Contract Tariffs,Revenue · Contract Tariffs,الإيرادات · ا
 Room matrix,Room matrix,مصفوفة الغرف,Matriz de habitaciones,Matriz de quartos,房型价格矩阵,screens/ContractTariffs.tsx,,translated
 Room pricing matrix,Room pricing matrix,مصفوفة أسعار الغرف,Matriz de precios de habitaciones,Matriz de preços dos quartos,房型价格矩阵表,screens/ContractTariffs.tsx,,translated
 Round the local price to this multiple (for example 1000 for a currency with no cents). 0 = the currency's smallest unit.,Round the local price to this multiple (for example 1000 for a currency with no cents). 0 = the currency's smallest unit.,قرّب السعر المحلي إلى مضاعفات هذا الرقم (مثلًا 1000 لعملة بلا كسور). 0 = أصغر وحدة للعملة.,"Redondea el precio local a este múltiplo (por ejemplo, 1000 para una moneda sin céntimos). 0 = la unidad más pequeña de la moneda.","Arredonda o preço local para este múltiplo (por exemplo, 1000 para uma moeda sem centavos). 0 = a menor unidade da moeda.",将本币价格取整到此倍数（例如无小数的货币可设为 1000）。0 = 货币最小单位。,,,translated
-Round to (0 = the currency's smallest unit),Round to (0 = the currency's smallest unit),التقريب إلى (0 = أصغر وحدة للعملة),Redondear a (0 = la unidad más pequeña de la moneda),Arredondar para (0 = a menor unidade da moeda),取整单位（0 = 货币最小单位）,components/TariffMassActions.tsx,,translated
+Round to ({currency} — tariff currency; 0 = the currency's smallest unit),Round to ({currency} — tariff currency; 0 = the currency's smallest unit),التقريب إلى ({currency} — عملة التعرفة؛ 0 = أصغر وحدة للعملة),Redondear a ({currency} — moneda de la tarifa; 0 = la unidad más pequeña de la moneda),Arredondar para ({currency} — moeda da tarifa; 0 = a menor unidade da moeda),取整单位（{currency}，价格币种；0 = 货币最小单位）,components/TariffMassActions.tsx,currency,translated
+Round to (in each tariff's currency; 0 = the currency's smallest unit),Round to (in each tariff's currency; 0 = the currency's smallest unit),التقريب إلى (بعملة كل تعرفة؛ 0 = أصغر وحدة للعملة),Redondear a (en la moneda de cada tarifa; 0 = la unidad más pequeña de la moneda),Arredondar para (na moeda de cada tarifa; 0 = a menor unidade da moeda),取整单位（按各价格的币种；0 = 货币最小单位）,components/TariffMassActions.tsx,,translated
 rounded down to {step},rounded down to {step},مقرَّب للأسفل إلى {step},redondeado hacia abajo a {step},arredondado para baixo a {step},向下取整至 {step},screens/ContractTariffs.tsx,step,translated
 rounded to nearest {step},rounded to nearest {step},مقرَّب لأقرب {step},redondeado al {step} más cercano,arredondado ao {step} mais próximo,四舍五入至 {step},screens/ContractTariffs.tsx,step,translated
 rounded up to {step},rounded up to {step},مقرَّب للأعلى إلى {step},redondeado hacia arriba a {step},arredondado para cima a {step},向上取整至 {step},screens/ContractTariffs.tsx,step,translated
@@ -3379,6 +3385,7 @@ Lake view
 Free Wi-Fi","King bed
 Lake view
 Free Wi-Fi","سرير كينج
+Tariffs are edited in the price list's contract currency; the {home} posting converts at booking or check-in under the rate plan's exchange rate lock.,Tariffs are edited in the price list's contract currency; the {home} posting converts at booking or check-in under the rate plan's exchange rate lock.,تُحرَّر التعرفة بعملة العقد في قائمة الأسعار؛ ويُحوَّل الترحيل بعملة {home} عند الحجز أو تسجيل الوصول وفق تثبيت سعر الصرف في خطة السعر.,Las tarifas se editan en la moneda del contrato de la lista de precios; la contabilización en {home} se convierte al reservar o en el check-in según la fijación del tipo de cambio del plan tarifario.,As tarifas são editadas na moeda do contrato da lista de preços; o lançamento em {home} é convertido na reserva ou no check-in conforme a fixação do câmbio do plano tarifário.,价格按价格表的合同币种编辑；{home} 入账金额在预订或入住时按房价计划的汇率锁定规则换算。,components/TariffMassActions.tsx,home,translated
 إطلالة على البحيرة
 واي فاي مجاني","Cama king
 Vista al lago

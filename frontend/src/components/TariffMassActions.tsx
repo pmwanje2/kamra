@@ -11,7 +11,9 @@ import {
 
 export type DraftChoice = { item: ContractTariffItem; draft: TariffVersion }
 export type MassAction =
-  | { kind: "version"; items: ContractTariffItem[] }
+  /** currency: the selection's one tariff currency (null when it spans several); rounding: the plans'
+   *  shared rule, only when it rounds that currency (ContractTariffs decides) */
+  | { kind: "version"; items: ContractTariffItem[]; currency: string | null; rounding: { step: number; mode: RoundingMode } | null }
   | { kind: "approve" | "discard"; drafts: DraftChoice[] }
   | { kind: "import" }
 
@@ -61,6 +63,8 @@ export function TariffModal({ title, subtitle, busy, onClose, onSubmit, children
 interface MassProps {
   action: MassAction
   property: string
+  /** the property's home (posting) currency */
+  propertyCurrency: string
   businessDate: string
   lists: Map<string, PriceList>
   locale: string
@@ -71,7 +75,8 @@ interface MassProps {
 
 export function TariffMassDialog(props: MassProps) {
   const { action } = props
-  if (action.kind === "version") return <BulkVersionDialog {...props} items={action.items} />
+  if (action.kind === "version")
+    return <BulkVersionDialog {...props} items={action.items} currency={action.currency} rounding={action.rounding} />
   if (action.kind === "import") return <ImportDialog {...props} />
   return <DecisionDialog {...props} kind={action.kind} drafts={action.drafts} />
 }
@@ -111,8 +116,10 @@ function OverLimit({ count }: { count: number }) {
   </p> : null
 }
 
-function BulkVersionDialog({ items, property, businessDate, lists, locale, dateLocale, onClose, onDone }: MassProps & {
-  items: ContractTariffItem[]
+function BulkVersionDialog({
+  items, currency: shared, rounding, property, propertyCurrency, businessDate, lists, locale, dateLocale, onClose, onDone,
+}: MassProps & {
+  items: ContractTariffItem[]; currency: string | null; rounding: { step: number; mode: RoundingMode } | null
 }) {
   const { t, tn } = useT()
   const [kind, setKind] = useState<Adjustment["kind"]>("percent")
@@ -121,9 +128,10 @@ function BulkVersionDialog({ items, property, businessDate, lists, locale, dateL
   const [validFrom, setValidFrom] = useState(() => addDays(businessDate, 1))
   const [validUntil, setValidUntil] = useState("")
   const [shift, setShift] = useState("")
-  const [step, setStep] = useState("")
-  const [mode, setMode] = useState<RoundingMode>("Nearest")
+  const [step, setStep] = useState(() => rounding ? String(rounding.step) : "")
+  const [mode, setMode] = useState<RoundingMode>(() => rounding?.mode ?? "Nearest")
   const { busy, failure, setFailure, run } = useSubmission()
+  const prefillId = useId()
 
   const amount = Number(value)
   const days = Number(shift)
@@ -162,7 +170,12 @@ function BulkVersionDialog({ items, property, businessDate, lists, locale, dateL
     }, t("The tariff changes could not be saved. Check the latest versions before retrying."))
   }
 
-  const valueLabel = kind === "percent" ? t("Percent change") : kind === "amount" ? t("Amount change") : t("New rate")
+  // tariffs are edited in their price list's contract currency, never the posting currency
+  const valueLabel = kind === "percent" ? t("Percent change")
+    : kind === "amount" ? shared ? t("Amount change ({currency})", { currency: shared }) : t("Amount change (in each tariff's currency)")
+    : shared ? t("New rate ({currency})", { currency: shared }) : t("New rate (in each tariff's currency)")
+  const prefilled = !!rounding && step === String(rounding.step) && mode === rounding.mode
+  const converts = items.some((item) => itemCurrency(item, lists.get(item.price_list)) !== propertyCurrency)
   return <TariffModal title={t("Create new version in bulk")} busy={busy} onClose={onClose} onSubmit={submit}
     subtitle={tn(items.length, "{n} tariff selected", "{n} tariffs selected")}
     footer={<>
@@ -212,11 +225,16 @@ function BulkVersionDialog({ items, property, businessDate, lists, locale, dateL
             onChange={(event) => setValidUntil(event.target.value)} disabled={busy} />
         </label>
       </>}
-      <label className="flex min-w-0 flex-col gap-1.5 text-sm font-medium">
-        {t("Round to (0 = the currency's smallest unit)")}
-        <input name="rounding_step" type="number" min="0" step="any" className={field + " tabular-nums"} value={step}
-          onChange={(event) => setStep(event.target.value)} disabled={busy} placeholder="0" />
-      </label>
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <label className="flex min-w-0 flex-col gap-1.5 text-sm font-medium">
+          {shared ? t("Round to ({currency} — tariff currency; 0 = the currency's smallest unit)", { currency: shared })
+            : t("Round to (in each tariff's currency; 0 = the currency's smallest unit)")}
+          <input name="rounding_step" type="number" min="0" step="any" className={field + " tabular-nums"} value={step}
+            onChange={(event) => setStep(event.target.value)} disabled={busy} placeholder="0"
+            aria-describedby={prefilled ? prefillId : undefined} />
+        </label>
+        {prefilled && <p id={prefillId} className="text-xs text-zinc-600">{t("Prefilled from the rate plan rounding rule")}</p>}
+      </div>
       <label className="flex min-w-0 flex-col gap-1.5 text-sm font-medium">
         {t("Rounding")}
         <select name="rounding_mode" className={field} value={mode} disabled={busy}
@@ -227,6 +245,9 @@ function BulkVersionDialog({ items, property, businessDate, lists, locale, dateL
         </select>
       </label>
     </div>
+    {converts && <p className="text-xs text-zinc-600">
+      {t("Tariffs are edited in the price list's contract currency; the {home} posting converts at booking or check-in under the rate plan's exchange rate lock.", { home: propertyCurrency })}
+    </p>}
     {ready && <div className="space-y-2 rounded-lg border border-brand-200 bg-brand-50 p-3 text-sm" aria-live="polite">
       <p className="font-medium">{t("New versions")}</p>
       <ul className="max-h-48 space-y-1 overflow-y-auto tabular-nums">

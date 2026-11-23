@@ -411,7 +411,6 @@
   "Venue": "Ruang acara",
   "Version history": "Riwayat versi",
   "All customers": "Semua pelanggan",
-  "Amount change": "Perubahan jumlah",
   "Approve selected": "Setujui yang dipilih",
   "Approve {n} tariff version?": "Setujui {n} versi tarif?",
   "Approve {n} tariff versions?": "Setujui {n} versi tarif?",
@@ -444,7 +443,6 @@
   "Public (standard)": "Publik (standar)",
   "Room matrix": "Matriks kamar",
   "Room pricing matrix": "Matriks harga kamar",
-  "Round to (0 = the currency's smallest unit)": "Bulatkan ke (0 = satuan terkecil mata uang)",
   "Rounding": "Pembulatan",
   "Row {row}: {message}": "Baris {row}: {message}",
   "Scheduled: {rate} from {date}": "Terjadwal: {rate} mulai {date}",
@@ -529,5 +527,15 @@
   "Reference currency {currency} · Current: 1 {currency} = {rate} {home} ({date})": "Mata uang referensi {currency} · Saat ini: 1 {currency} = {rate} {home} ({date})",
   "Rate {n} night posted at": "Kurs saat {n} malam diposting",
   "Average of the rates {n} nights posted at": "Rata-rata kurs saat {n} malam diposting",
-  "Total {total} · Balance {balance}": "Total {total} · Saldo {balance}"
+  "Total {total} · Balance {balance}": "Total {total} · Saldo {balance}",
+  "Public": "Publik",
+  "Amount change ({currency})": "Perubahan jumlah ({currency})",
+  "New rate ({currency})": "Tarif baru ({currency})",
+  "Amount change (in each tariff's currency)": "Perubahan jumlah (dalam mata uang tiap tarif)",
+  "New rate (in each tariff's currency)": "Tarif baru (dalam mata uang tiap tarif)",
+  "Round to ({currency} — tariff currency; 0 = the currency's smallest unit)": "Bulatkan ke ({currency} — mata uang tarif; 0 = satuan terkecil mata uang)",
+  "Round to (in each tariff's currency; 0 = the currency's smallest unit)": "Bulatkan ke (dalam mata uang tiap tarif; 0 = satuan terkecil mata uang)",
+  "Prefilled from the rate plan rounding rule": "Terisi dari aturan pembulatan paket tarif",
+  "Tariffs are edited in the price list's contract currency; the {home} posting converts at booking or check-in under the rate plan's exchange rate lock.": "Tarif diedit dalam mata uang kontrak daftar harga; posting dalam {home} dikonversi saat pemesanan atau check-in sesuai penguncian kurs paket tarif.",
+  "Corporate": "Korporat"
 }

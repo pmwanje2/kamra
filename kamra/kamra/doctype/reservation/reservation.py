@@ -831,7 +831,8 @@ class Reservation(Document):
 		rows, running = [], 0.0
 		for i, n in enumerate(nightly):
 			rate = round(float(n["planned_rate"]) if "planned_rate" in n else float(n["rate"]) * factor, 2)
-			if i == len(nightly) - 1 and plan_free:
+			# a zero-priced room's spread nights carry planned_rate: they absorb too
+			if i == len(nightly) - 1 and (plan_free or "planned_rate" in n):
 				rate = round(room_total - running, 2)
 			running += rate
 			rows.append({

@@ -6684,7 +6684,6 @@
   "Valid until {date}": "Válida hasta el {date}",
   "Version history": "Historial de versiones",
   "All customers": "Todos los clientes",
-  "Amount change": "Cambio de importe",
   "Approve selected": "Aprobar selección",
   "Approve {n} tariff version?": "¿Aprobar {n} versión de tarifa?",
   "Approve {n} tariff versions?": "¿Aprobar {n} versiones de tarifa?",
@@ -6717,7 +6716,6 @@
   "Public (standard)": "Pública (estándar)",
   "Room matrix": "Matriz de habitaciones",
   "Room pricing matrix": "Matriz de precios de habitaciones",
-  "Round to (0 = the currency's smallest unit)": "Redondear a (0 = la unidad más pequeña de la moneda)",
   "Rounding": "Redondeo",
   "Row {row}: {message}": "Fila {row}: {message}",
   "Scheduled: {rate} from {date}": "Programada: {rate} desde el {date}",
@@ -6793,5 +6791,14 @@
   "Reference currency {currency} · Current: 1 {currency} = {rate} {home} ({date})": "Moneda de referencia {currency} · Actual: 1 {currency} = {rate} {home} ({date})",
   "Rate {n} night posted at": "Tipo con el que se registró {n} noche",
   "Average of the rates {n} nights posted at": "Promedio de los tipos con que se registraron {n} noches",
-  "Total {total} · Balance {balance}": "Total {total} · Saldo {balance}"
+  "Total {total} · Balance {balance}": "Total {total} · Saldo {balance}",
+  "Public": "Pública",
+  "Amount change ({currency})": "Cambio de importe ({currency})",
+  "New rate ({currency})": "Nueva tarifa ({currency})",
+  "Amount change (in each tariff's currency)": "Cambio de importe (en la moneda de cada tarifa)",
+  "New rate (in each tariff's currency)": "Nueva tarifa (en la moneda de cada tarifa)",
+  "Round to ({currency} — tariff currency; 0 = the currency's smallest unit)": "Redondear a ({currency} — moneda de la tarifa; 0 = la unidad más pequeña de la moneda)",
+  "Round to (in each tariff's currency; 0 = the currency's smallest unit)": "Redondear a (en la moneda de cada tarifa; 0 = la unidad más pequeña de la moneda)",
+  "Prefilled from the rate plan rounding rule": "Rellenado a partir de la regla de redondeo del plan tarifario",
+  "Tariffs are edited in the price list's contract currency; the {home} posting converts at booking or check-in under the rate plan's exchange rate lock.": "Las tarifas se editan en la moneda del contrato de la lista de precios; la contabilización en {home} se convierte al reservar o en el check-in según la fijación del tipo de cambio del plan tarifario."
 }

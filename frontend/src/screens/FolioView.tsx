@@ -281,6 +281,38 @@ function VerifyTaxId({ taxId, name }: { taxId: string; name: string }) {
   )
 }
 
+/** A charge line's actions on one compact line (OPERA folio billing); while the inline
+ *  correction form is open it has the cell to itself, and Move comes back when it closes. */
+function ChargeActions({ folio, row, correct, onMove, act }: {
+  folio: string
+  row: string
+  correct: boolean
+  onMove: (() => void) | null
+  act: (fn: () => Promise<unknown>, onError: (message: string) => void) => Promise<void>
+}) {
+  const { t } = useT()
+  const [open, setOpen] = useState(false)
+  // a line that stops being correctable (voided by the correction) never keeps Move hidden
+  const correcting = correct && open
+  if (!correct && !onMove) return null
+  return (
+    <div data-row-actions
+      className={correcting ? "grid min-w-56 gap-1.5 text-left" : "inline-flex items-center justify-end gap-1.5"}>
+      {correct && <RowCorrection folio={folio} row={row} modes={[]} act={act} onOpenChange={setOpen} />}
+      {onMove && !correcting && (
+        <button
+          aria-label={t("Move or split this charge")}
+          className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2 py-1 text-xs text-zinc-500 hover:border-brand-400 hover:text-zinc-800"
+          onClick={onMove}
+        >
+          <ArrowRightLeft className="size-3" aria-hidden />
+          {t("Move")}
+        </button>
+      )}
+    </div>
+  )
+}
+
 export default function FolioView() {
   const { t } = useT()
   const { name } = useParams()
@@ -1209,19 +1241,10 @@ export default function FolioView() {
                           <Popin label={t("Total")} importance="medium" className="py-2 text-right font-medium">{inr(c.total)}</Popin>
                           {editable && (
                             <Popin label={t("Actions")} importance="medium" className="relative whitespace-nowrap py-2 pl-3 text-right print:hidden">
-                              {canRequestCorrection && c.charge_type !== "Allowance" && !voided && <RowCorrection folio={folio.name} row={c.name} modes={[]} act={act} />}
-                              {open && !voided && !selected.has(c.name) && (
-                                <button
-                                  aria-label={t("Move or split this charge")}
-                                  className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2 py-1 text-xs text-zinc-500 hover:border-brand-400 hover:text-zinc-800"
-                                  onClick={() =>
-                                    setSelected((prev) => new Set(prev).add(c.name))
-                                  }
-                                >
-                                  <ArrowRightLeft className="size-3" aria-hidden />
-                                  {t("Move")}
-                                </button>
-                              )}
+                              <ChargeActions folio={folio.name} row={c.name} act={act}
+                                correct={canRequestCorrection && c.charge_type !== "Allowance" && !voided}
+                                onMove={open && !voided && !selected.has(c.name)
+                                  ? () => setSelected((prev) => new Set(prev).add(c.name)) : null} />
                             </Popin>
                           )}
                         </tr>

@@ -6499,7 +6499,6 @@
   "Valid until {date}": "ساري حتى {date}",
   "Version history": "سجل النسخ",
   "All customers": "جميع العملاء",
-  "Amount change": "تغيير المبلغ",
   "Approve selected": "الموافقة على المحدد",
   "Approve {n} tariff version?": "الموافقة على {n} نسخة تعرفة؟",
   "Approve {n} tariff versions?": "الموافقة على {n} نسخ تعرفة؟",
@@ -6532,7 +6531,6 @@
   "Public (standard)": "عامة (قياسية)",
   "Room matrix": "مصفوفة الغرف",
   "Room pricing matrix": "مصفوفة أسعار الغرف",
-  "Round to (0 = the currency's smallest unit)": "التقريب إلى (0 = أصغر وحدة للعملة)",
   "Rounding": "التقريب",
   "Row {row}: {message}": "الصف {row}: {message}",
   "Scheduled: {rate} from {date}": "مجدولة: {rate} من {date}",
@@ -6608,5 +6606,14 @@
   "Reference currency {currency} · Current: 1 {currency} = {rate} {home} ({date})": "عملة المرجع {currency} · الحالي: ١ {currency} = {rate} {home} ({date})",
   "Rate {n} night posted at": "السعر الذي رُحّلت به {n} ليلة",
   "Average of the rates {n} nights posted at": "متوسط الأسعار التي رُحّلت بها {n} ليالٍ",
-  "Total {total} · Balance {balance}": "الإجمالي {total} · الرصيد {balance}"
+  "Total {total} · Balance {balance}": "الإجمالي {total} · الرصيد {balance}",
+  "Public": "عامة",
+  "Amount change ({currency})": "تغيير المبلغ ({currency})",
+  "New rate ({currency})": "السعر الجديد ({currency})",
+  "Amount change (in each tariff's currency)": "تغيير المبلغ (بعملة كل تعرفة)",
+  "New rate (in each tariff's currency)": "السعر الجديد (بعملة كل تعرفة)",
+  "Round to ({currency} — tariff currency; 0 = the currency's smallest unit)": "التقريب إلى ({currency} — عملة التعرفة؛ 0 = أصغر وحدة للعملة)",
+  "Round to (in each tariff's currency; 0 = the currency's smallest unit)": "التقريب إلى (بعملة كل تعرفة؛ 0 = أصغر وحدة للعملة)",
+  "Prefilled from the rate plan rounding rule": "مُعبأ مسبقًا من قاعدة التقريب في خطة السعر",
+  "Tariffs are edited in the price list's contract currency; the {home} posting converts at booking or check-in under the rate plan's exchange rate lock.": "تُحرَّر التعرفة بعملة العقد في قائمة الأسعار؛ ويُحوَّل الترحيل بعملة {home} عند الحجز أو تسجيل الوصول وفق تثبيت سعر الصرف في خطة السعر."
 }

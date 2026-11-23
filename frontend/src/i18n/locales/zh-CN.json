@@ -6758,7 +6758,6 @@
   "Valid until {date}": "有效期至 {date}",
   "Version history": "版本历史",
   "All customers": "所有客户",
-  "Amount change": "金额调整",
   "Approve selected": "批准所选",
   "Approve {n} tariff version?": "批准 {n} 个价格版本？",
   "Approve {n} tariff versions?": "批准 {n} 个价格版本？",
@@ -6791,7 +6790,6 @@
   "Public (standard)": "公开（标准）",
   "Room matrix": "房型价格矩阵",
   "Room pricing matrix": "房型价格矩阵表",
-  "Round to (0 = the currency's smallest unit)": "取整单位（0 = 货币最小单位）",
   "Rounding": "取整",
   "Row {row}: {message}": "第 {row} 行：{message}",
   "Scheduled: {rate} from {date}": "已排期：{date} 起 {rate}",
@@ -6867,5 +6865,14 @@
   "Reference currency {currency} · Current: 1 {currency} = {rate} {home} ({date})": "参考货币 {currency} · 当前：1 {currency} = {rate} {home}（{date}）",
   "Rate {n} night posted at": "{n} 晚入账时的汇率",
   "Average of the rates {n} nights posted at": "{n} 晚入账汇率的平均值",
-  "Total {total} · Balance {balance}": "合计 {total} · 余额 {balance}"
+  "Total {total} · Balance {balance}": "合计 {total} · 余额 {balance}",
+  "Public": "公开",
+  "Amount change ({currency})": "金额调整（{currency}）",
+  "New rate ({currency})": "新价格（{currency}）",
+  "Amount change (in each tariff's currency)": "金额调整（按各价格的币种）",
+  "New rate (in each tariff's currency)": "新价格（按各价格的币种）",
+  "Round to ({currency} — tariff currency; 0 = the currency's smallest unit)": "取整单位（{currency}，价格币种；0 = 货币最小单位）",
+  "Round to (in each tariff's currency; 0 = the currency's smallest unit)": "取整单位（按各价格的币种；0 = 货币最小单位）",
+  "Prefilled from the rate plan rounding rule": "已按房价计划的取整规则预填",
+  "Tariffs are edited in the price list's contract currency; the {home} posting converts at booking or check-in under the rate plan's exchange rate lock.": "价格按价格表的合同币种编辑；{home} 入账金额在预订或入住时按房价计划的汇率锁定规则换算。"
 }
