@@ -240,8 +240,9 @@ describe("Stay rate & daily details panel", () => {
     })
   })
   async function openPanel(props: Partial<Parameters<typeof AgreedRatePanel>[0]> = {}) {
+    // the categories are the server's (reservation_detail.reason_categories, R6)
     await act(async () => root.render(<AgreedRatePanel reservation="RES-9" onSaved={() => {}}
-      nightRates={nightRates} {...props} />))
+      nightRates={nightRates} reasonCategories={{ discount: ["Rate Change", "Adjust"], agreed_rate: ["Rate Change"] }} {...props} />))
     await press("Stay rate & daily details")
     await until(() => expect(optionValues(byLabel("Discount reason")).length).toBeGreaterThan(1))
   }

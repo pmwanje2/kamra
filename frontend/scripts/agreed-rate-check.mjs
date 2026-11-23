@@ -72,13 +72,17 @@ const code = (name, category) => ({ name, code: name, description: name, categor
 const served = [code("RATE-PROMO", "Rate Change"), code("ADJ-RATE", "Adjust"), code("VOID-ERR", "Void"),
   code("RATE-MGR", "Rate Change"), code("RATE-PROMO", "Rate Change"), code("ADJ-RATE", "Adjust"),
   code("PAY-REFUND", "Refund")]
-const forDiscount = discountReasonCodes(served)
+// the categories are the property's settings, sent by the server (R6)
+const forDiscount = discountReasonCodes(served, ["Rate Change", "Adjust"])
 assert.deepEqual(forDiscount.map((r) => r.name), ["RATE-PROMO", "ADJ-RATE", "RATE-MGR"],
-  "Rate Change and Adjust codes only, each once by name, in the server's order")
-assert.deepEqual(agreedRateReasonCodes(forDiscount).map((r) => r.name), ["RATE-PROMO", "RATE-MGR"],
-  "the agreed rate offers the Rate Change codes")
-assert.deepEqual(discountReasonCodes(null), [], "no answer yet: no codes")
-assert.deepEqual(discountReasonCodes(served.filter((r) => r.category === "Void")), [], "no usable code")
+  "the discount's categories only, each code once by name, in the server's order")
+assert.deepEqual(agreedRateReasonCodes(served, ["Rate Change"]).map((r) => r.name), ["RATE-PROMO", "RATE-MGR"],
+  "the agreed rate offers its own categories' codes, each once")
+assert.deepEqual(agreedRateReasonCodes(served, ["Adjust"]).map((r) => r.name), ["ADJ-RATE"],
+  "a property that sets other categories for the agreed rate gets those")
+assert.deepEqual(discountReasonCodes(null, ["Rate Change", "Adjust"]), [], "no answer yet: no codes")
+assert.deepEqual(discountReasonCodes(served.filter((r) => r.category === "Void"), ["Rate Change", "Adjust"]), [],
+  "no usable code")
 // the panel asks once, for every category, and keeps what these rules keep
 assert.ok(panel.includes('"kamra.ledger.list_reason_codes", {}'), "one list_reason_codes request, every category")
 assert.ok(panel.includes("discountReasonCodes(") && panel.includes("agreedRateReasonCodes("),

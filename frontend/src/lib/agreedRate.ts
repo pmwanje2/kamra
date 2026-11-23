@@ -3,26 +3,37 @@
 
 import type { DiscountGovernance, DiscountReason } from "./reservationDiscount"
 
-/** the reason codes a discount takes (kamra.api.DISCOUNT_REASON_CATEGORIES) */
-const DISCOUNT_CATEGORIES = ["Rate Change", "Adjust"]
+/** The reason-code categories a discount and an agreed rate take: the
+ * property's settings, sent by the server (reservation_detail.reason_categories). */
+export interface ReasonCategories {
+  discount?: string[]
+  agreed_rate?: string[]
+}
 
-/** The reason codes a discount can carry, from one list_reason_codes
- * answer: the Rate Change and Adjust codes, each once by name, in the
- * server's order. */
-export function discountReasonCodes(all: DiscountReason[] | null | undefined): DiscountReason[] {
+/** The codes of the given categories from one list_reason_codes answer,
+ * each once by name, in the server's order (every category when none are
+ * given). */
+function codesOf(all: DiscountReason[] | null | undefined, categories?: readonly string[] | null) {
   const seen = new Set<string>()
   const out: DiscountReason[] = []
   for (const r of all ?? []) {
-    if (!DISCOUNT_CATEGORIES.includes(r.category) || seen.has(r.name)) continue
+    if ((categories && !categories.includes(r.category)) || seen.has(r.name)) continue
     seen.add(r.name)
     out.push(r)
   }
   return out
 }
 
-/** The reason codes an agreed rate can carry: the Rate Change ones. */
-export function agreedRateReasonCodes(codes: DiscountReason[]): DiscountReason[] {
-  return codes.filter((c) => c.category === "Rate Change")
+/** The reason codes a discount can carry: its categories' codes. */
+export function discountReasonCodes(all: DiscountReason[] | null | undefined,
+  categories?: readonly string[] | null): DiscountReason[] {
+  return codesOf(all, categories)
+}
+
+/** The reason codes an agreed rate can carry: its categories' codes. */
+export function agreedRateReasonCodes(all: DiscountReason[] | null | undefined,
+  categories?: readonly string[] | null): DiscountReason[] {
+  return codesOf(all, categories)
 }
 
 export interface AgreedRatePreview {

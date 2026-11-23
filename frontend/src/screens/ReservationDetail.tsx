@@ -222,9 +222,9 @@ export default function ReservationDetail({
   const { roles } = useAuth()
   const canAgreeRate = ["Front Desk", "Revenue Manager", "Hotel Admin", "System Manager"]
     .some((r) => roles.includes(r))
-  // who may fix a rate over a plan that takes no discount (kamra.api._can_set_rate)
-  const canOverrideFixed = ["Revenue Manager", "Hotel Admin", "System Manager"]
-    .some((r) => roles.includes(r))
+  // who may fix a rate over a plan that takes no discount: the server's
+  // answer (actions.can_set_rate, kamra.api._can_set_rate), not a role list
+  const canOverrideFixed = !!d?.actions.can_set_rate
   // booking_quotation / email_booking_quotation: Front Desk and above
   const canQuote = ["Front Desk", "Revenue Manager", "Hotel Admin", "System Manager"]
     .some((r) => roles.includes(r))
@@ -608,7 +608,8 @@ export default function ReservationDetail({
           </dl>
           {d.actions.can_amend && (d.night_rates?.length ?? 0) > 0 && canAgreeRate && (
             <AgreedRatePanel reservation={name} nightRates={d.night_rates ?? []} current={d.discount}
-              canOverrideFixed={canOverrideFixed} onSaved={() => { refresh(); reload() }} />
+              canOverrideFixed={canOverrideFixed} reasonCategories={d.reason_categories}
+              onSaved={() => { refresh(); reload() }} />
           )}
           <ChangesLog reservation={name} money={inr} />
           {d.booked_check_out_date && (
