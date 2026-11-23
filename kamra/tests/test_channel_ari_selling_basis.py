@@ -859,6 +859,110 @@ class ChannexTaxRuleTestCase(_SellingBasisFixture, IntegrationTestCase):
 			with self.subTest(taxes=len(taxes)):
 				self.assertHeld(self.landed(h, *taxes), "OTA tax rules")
 
+	def test_tax_words_splits_letter_digit_and_script_boundaries(self):
+		"""Adjacent letters and digits ("VAT18%", "增值税6%") and Latin/CJK
+		boundaries ("Hotel增值税") split into distinct words so rules do not
+		miss joined rate percentages."""
+		self.assertEqual(channex.tax_words("VAT18%"), ["vat", "18"])
+		self.assertEqual(channex.tax_words("18%VAT"), ["18", "vat"])
+		self.assertEqual(channex.tax_words("GST5"), ["gst", "5"])
+		self.assertEqual(channex.tax_words("增值税6%"), ["增值税", "6"])
+		self.assertEqual(channex.tax_words("Hotel增值税"), ["hotel", "增值税"])
+		self.assertEqual(channex.tax_words("VAT (18%)"), ["vat", "18"])
+
+	def test_letter_digit_joined_and_cjk_compound_taxes_match_and_still_fail_closed(self):
+		"""Joined percentages ("VAT18%", "增值税6%") and unspaced CJK phrases
+		("酒店增值税" containing "增值税") match their rules; unmatched CJK and
+		Latin substring near-misses still fail closed."""
+		h = self.hotel(inclusive=0)
+		self.rules(h, [
+			("Type or Name", "Contains", "vat", "Room tax"),
+			("Type or Name", "Contains", "gst", "Room tax"),
+			("Type or Name", "Contains", "增值税", "Room tax"),
+			("Type or Name", "Contains", "宿泊税", "Room tax"),
+			("Type or Name", "Contains", "부가가치세", "Room tax"),
+		])
+		for label in ("VAT18%", "GST5%", "增值税6%", "酒店增值税", "酒店增值税6%", "東京都宿泊税", "호텔부가가치세10%"):
+			with self.subTest(label=label):
+				self.assertEqual(self.booked(h, _tax(label, "27000.00")), (177000.0, True))
+		# Fail closed: unmatched CJK exclusive tax and Latin partial-word "Private"
+		self.assertHeld(self.landed(h, _tax("酒店城市税", "5000.00")), "酒店城市税")
+		self.assertHeld(self.landed(h, _tax("Private transfer", "27000.00")), "Private transfer")
+		# "Is" stays exact even for CJK
+		self.rules(h, [("Name", "Is", "增值税", "Room tax")])
+		exact = self.landed(h, _tax("增值税", "27000.00"))
+		self.assertEqual((exact.status, flt(exact.amount_after_tax)), ("Confirmed", 177000.0))
+		self.assertHeld(self.landed(h, _tax("酒店增值税", "27000.00")), "酒店增值税")
+
+	def test_single_character_cjk_tax_rule_is_refused_on_save(self):
+		"""A single-character CJK rule phrase (e.g. "税") matches unrelated
+		city/tourism/exempt taxes: refuse it on save, while allowing 2+ char
+		CJK rules."""
+		h = self.hotel(inclusive=0)
+		for match_type, bad in (
+			("Contains", "税"),
+			("Contains", "料"),
+			("Contains", "세"),
+			("Contains", "税%"),
+			("Contains", "Hotel 税 6%"),
+			("Is", "税"),
+		):
+			with self.subTest(match_type=match_type, text=bad), self.assertRaises(frappe.ValidationError):
+				self.rules(h, [("Type or Name", match_type, bad, "Room tax")])
+		# 2+ char CJK phrases (and mixed-script phrases with 2+ char CJK) save cleanly
+		self.rules(h, [
+			("Type or Name", "Contains", "城市税", "Ignored"),
+			("Type or Name", "Contains", "增值税", "Room tax"),
+			("Type or Name", "Contains", "宿泊税", "Room tax"),
+			("Type or Name", "Contains", "Hotel 增值税 6%", "Room tax"),
+			("Name", "Is", "增值税", "Room tax"),
+		])
+
+	def test_mixed_script_middle_and_boundary_cjk_tokens_match_and_fail_closed(self):
+		"""Mixed-script Contains rules match CJK substrings at leading, middle,
+		and trailing positions ("Hotel 增值税 6%" matches "Hotel 酒店增值税 6%",
+		"Hotel 增值税" matches "Hotel 酒店增值税", "增值税 6%" matches "增值税率 6%"),
+		while non-CJK tokens stay whole-word and unmatched taxes fail closed."""
+		h = self.hotel(inclusive=0)
+		self.rules(h, [("Type or Name", "Contains", "Hotel 增值税 6%", "Room tax")])
+		for label in ("Hotel 增值税 6%", "Hotel 酒店增值税 6%", "Hotel 增值税率 6%"):
+			with self.subTest(rule="middle", label=label):
+				self.assertEqual(self.booked(h, _tax(label, "27000.00")), (177000.0, True))
+		for bad in ("Hotel 酒店增值税 60%", "Hotels 酒店增值税 6%", "Hotel 酒店城市税 6%"):
+			with self.subTest(rule="middle-miss", label=bad):
+				self.assertHeld(self.landed(h, _tax(bad, "27000.00")), bad)
+
+		self.rules(h, [("Type or Name", "Contains", "Hotel 增值税", "Room tax")])
+		self.assertEqual(self.booked(h, _tax("Hotel 酒店增值税", "27000.00")), (177000.0, True))
+		self.assertHeld(self.landed(h, _tax("Hotels 酒店增值税", "27000.00")), "Hotels 酒店增值税")
+
+		self.rules(h, [("Type or Name", "Contains", "增值税 6%", "Room tax")])
+		self.assertEqual(self.booked(h, _tax("增值税率 6%", "27000.00")), (177000.0, True))
+		self.assertHeld(self.landed(h, _tax("增值税率 60%", "27000.00")), "增值税率 60%")
+
+	def test_ignored_cjk_rule_above_broader_room_tax_rule_wins_by_precedence(self):
+		"""First matching rule wins: STANDARD_RULES keeps every Ignored rule
+		above every Room tax rule, and placing an Ignored CJK rule above a
+		broader Room tax rule prevents misclassifying city/tourism tax."""
+		from kamra.kamra.doctype.channel_ota_tax_rule.channel_ota_tax_rule import STANDARD_RULES
+
+		seen_room_tax = False
+		for _on, _how, _text, counts_as in STANDARD_RULES:
+			if counts_as == "Room tax":
+				seen_room_tax = True
+			else:
+				self.assertFalse(seen_room_tax, "STANDARD_RULES must place all Ignored rules above Room tax rules")
+
+		h = self.hotel(inclusive=0)
+		self.rules(h, [
+			("Type or Name", "Contains", "城市税", "Ignored"),
+			("Type or Name", "Contains", "增值税", "Room tax"),
+			("Type", "Is", "tax", "Room tax"),
+		])
+		# City tax with type="tax" is matched by the earlier Ignored rule, not Type Is tax
+		doc = self.landed(h, VAT_ON_TOP, _tax("酒店城市税", "5000.00", type="tax"))
+		self.assertEqual((doc.status, flt(doc.amount_after_tax)), ("Confirmed", 177000.0))
+
 
 class ChannexTaxBasisTestCase(_SellingBasisFixture, IntegrationTestCase):
 	"""Whether an OTA's amounts include tax is that OTA's setting on the
@@ -1054,3 +1158,597 @@ class ChannexTaxBasisTestCase(_SellingBasisFixture, IntegrationTestCase):
 				conn.set("ota_tax_basis", [{"channel": a, "amounts": "Including tax"},
 				                           {"channel": b, "amounts": "Excluding tax"}])
 				conn.save(ignore_permissions=True)
+
+	def test_an_ota_basis_row_with_no_word_is_refused(self):
+		"""A punctuation-only OTA name ("---", "...", "___") has an empty
+		ota_key and can never match any booking: refused when saved, matching
+		the rule-phrase check."""
+		h = self.hotel(inclusive=0)
+		for bad in ("---", "...", "!!!@@@", "___", "   "):
+			with self.subTest(channel=bad), self.assertRaises(frappe.ValidationError):
+				conn = frappe.get_doc("Channel Manager Connection", h.conn.name)
+				conn.set("ota_tax_basis", [{"channel": bad, "amounts": "Excluding tax"}])
+				conn.save(ignore_permissions=True)
+
+
+class ChannelModifySafetyTestCase(_SellingBasisFixture, IntegrationTestCase):
+	"""OPERA Cloud OXI safety for in-house and closed stays:
+	- UPDATE INHOUSE RES = N: an OTA modify for a Checked In stay never alters
+	  financials, room, dates, or status; it flags the stay and logs
+	  channel.modify_needs_review for front-desk review.
+	- Closed stays (Checked Out, No Show, Cancelled) are immutable to OTA
+	  modifies and record the unapplied update for review.
+	- Inbound OTA cancellations never cancel Checked In, Checked Out, or
+	  No Show stays; they leave the stay untouched and record it for review,
+	  while duplicate cancels on already-Cancelled stays remain idempotent."""
+
+	def add_deluxe_room_type(self, h) -> str:
+		tag = frappe.generate_hash(length=5).upper()
+		dlx = frappe.get_doc({
+			"doctype": "Room Type", "property": h.property,
+			"room_type_code": "DLX" + tag, "room_type_name": "Deluxe",
+			"base_price": 250000, "adults_capacity": 2,
+		}).insert(ignore_permissions=True).name
+		for i in range(2):
+			frappe.get_doc({
+				"doctype": "Room", "property": h.property, "room_type": dlx,
+				"room_number": f"D{tag}-{i + 1}",
+			}).insert(ignore_permissions=True)
+		frappe.get_doc({
+			"doctype": "Channel Room Mapping", "connection": h.conn.name,
+			"room_type": dlx, "external_room_id": "rt-dlx", "external_rate_id": "rp-dlx",
+		}).insert(ignore_permissions=True)
+		return dlx
+
+	def book_today(self, h, ota_name: str = "Booking.com", notes: str = ""):
+		payload = self.channex_payload(h, Decimal("177000"), n=0, report="exclusive")
+		payload["payload"]["ota_name"] = ota_name
+		payload["payload"]["notes"] = notes
+		self.deliver(h, payload)
+		ref = payload["payload"]["ota_reservation_code"]
+		return self.received(h, ref), ref
+
+	def modify_event(self, h, ref: str, *, ota_name: str = "Booking.com",
+	                 ext_room: str = "rt-dlx", nights: int = 2,
+	                 gross: list[Decimal] | None = None, notes: str = "Changed via OTA") -> dict:
+		gross = gross or [Decimal("295000")] * nights
+		payload = self.channex_payload(h, gross, n=0, report="exclusive")
+		body = payload["payload"]
+		body.update(status="modified", ota_reservation_code=ref, ota_name=ota_name, notes=notes)
+		body["rooms"][0]["room_type_id"] = ext_room
+		body["rooms"][0]["occupancy"] = {"adults": 1, "children": 1}
+		conn = frappe.get_doc("Channel Manager Connection", h.conn.name)
+		return channex.parse_webhook(conn, payload)[0]
+
+	def cancel_event(self, h, ref: str, ota_name: str = "Booking.com") -> dict:
+		payload = {
+			"event": "booking",
+			"payload": {
+				"status": "cancelled",
+				"ota_reservation_code": ref,
+				"ota_name": ota_name,
+				"rooms": [{"room_type_id": "rt-std", "days": {}}],
+			},
+		}
+		conn = frappe.get_doc("Channel Manager Connection", h.conn.name)
+		return channex.parse_webhook(conn, payload)[0]
+
+	def check_in_real(self, h, doc):
+		from kamra import api, folio as folio_mod
+
+		room = frappe.db.get_value("Room", {"property": h.property, "room_type": h.room_type}, "name")
+		api.check_in(doc.name, room=room)
+		doc.reload()
+		folio_mod.post_remaining_nights(doc)
+		folio_name = frappe.db.get_value("Folio", {"reservation": doc.name, "folio_type": "Guest"}, "name")
+		self.assertTrue(folio_name, "Expected open guest folio after check-in")
+		return frappe.get_doc("Reservation", doc.name), frappe.get_doc("Folio", folio_name)
+
+	def check_out_real(self, h, doc):
+		from kamra import api, folio as folio_mod
+
+		doc, folio = self.check_in_real(h, doc)
+		api.add_folio_payment(folio.name, "Cash", flt(folio.grand_total))
+		api.check_out(doc.name)
+		folio_mod.close_folio(folio.name)
+		return frappe.get_doc("Reservation", doc.name), frappe.get_doc("Folio", folio.name)
+
+	def night_snapshot(self, doc):
+		return [(str(r.stay_date), flt(r.rate, 2), flt(r.gst_rate, 2)) for r in doc.night_rates]
+
+	def folio_snapshot(self, folio_name: str):
+		f = frappe.get_doc("Folio", folio_name)
+		return (f.status, flt(f.grand_total, 2), flt(f.balance, 2),
+		        [(c.description, flt(c.amount, 2), flt(c.gst_amount, 2)) for c in f.charges])
+
+	def test_readable_modify_leaves_checked_in_stay_and_folio_unchanged_and_flags_review(self):
+		from kamra import api
+
+		h = self.hotel(inclusive=0)
+		self.add_deluxe_room_type(h)
+		booked, ref = self.book_today(h, notes="Early check-in")
+		doc, folio = self.check_in_real(h, booked)
+		before_nights = self.night_snapshot(doc)
+		before_folio = self.folio_snapshot(folio.name)
+		before_state = (doc.status, doc.room_type, doc.room, str(doc.check_in_date),
+		                str(doc.check_out_date), doc.adults, doc.children,
+		                flt(doc.amount_after_tax, 2), flt(doc.amount_before_tax, 2),
+		                flt(doc.tax_amount, 2), doc.auto_price)
+
+		conn = frappe.get_doc("Channel Manager Connection", h.conn.name)
+		# First: same room type with changed dates + price (silently rewrote Checked In on base)
+		out = cm._apply_event(conn, self.modify_event(h, ref, ext_room="rt-std"))
+		self.assertEqual(out["result"], "held_for_review")
+		self.assertEqual(out["reservation"], doc.name)
+		# Second: different room type change must also hold cleanly without mutating or throwing
+		out_rt = cm._apply_event(conn, self.modify_event(h, ref, ext_room="rt-dlx"))
+		self.assertEqual(out_rt["result"], "held_for_review")
+
+		doc.reload()
+		after_state = (doc.status, doc.room_type, doc.room, str(doc.check_in_date),
+		               str(doc.check_out_date), doc.adults, doc.children,
+		               flt(doc.amount_after_tax, 2), flt(doc.amount_before_tax, 2),
+		               flt(doc.tax_amount, 2), doc.auto_price)
+		self.assertEqual(after_state, before_state)
+		self.assertEqual(self.night_snapshot(doc), before_nights)
+		self.assertEqual(self.folio_snapshot(folio.name), before_folio)
+		self.assertEqual(doc.channel_review_needed, 1)
+		self.assertIn("Early check-in", doc.special_requests or "")
+		self.assertIn("not applied: the stay is Checked In", doc.special_requests or "")
+		self.assertTrue(frappe.db.exists("Agent Action Log", {
+			"reference_doctype": "Reservation", "reference_name": doc.name,
+			"action_type": "channel.modify_needs_review"}))
+
+		detail = api.reservation_detail(doc.name)
+		self.assertEqual(detail["channel_review_needed"], 1)
+		self.assertTrue(detail["warnings"]["channel_review_needed"])
+		self.assertTrue(detail["channel_reviews"])
+		self.assertEqual(detail["channel_reviews"][0]["action_type"], "channel.modify_needs_review")
+
+		cleared = cm.clear_channel_review(doc.name)
+		self.assertTrue(cleared["ok"])
+		doc.reload()
+		self.assertEqual(doc.channel_review_needed, 0)
+		self.assertEqual(self.night_snapshot(doc), before_nights)
+		self.assertTrue(frappe.db.exists("Agent Action Log", {
+			"reference_doctype": "Reservation", "reference_name": doc.name,
+			"action_type": "channel.review_cleared"}))
+
+	def test_readable_modify_leaves_checked_out_stay_unchanged_and_flags_review(self):
+		h = self.hotel(inclusive=0)
+		self.add_deluxe_room_type(h)
+		booked, ref = self.book_today(h, notes="VIP pillow")
+		doc, folio = self.check_out_real(h, booked)
+		before_nights = self.night_snapshot(doc)
+		before_folio = self.folio_snapshot(folio.name)
+		before_state = (doc.status, doc.room_type, doc.room, str(doc.check_in_date),
+		                str(doc.check_out_date), flt(doc.amount_after_tax, 2))
+
+		conn = frappe.get_doc("Channel Manager Connection", h.conn.name)
+		# Same room type with changed dates + price (silently rewrote Checked Out on base)
+		out = cm._apply_event(conn, self.modify_event(h, ref, ext_room="rt-std"))
+		self.assertEqual(out["result"], "held_for_review")
+		# Different room type change must also hold cleanly without mutating or throwing
+		out_rt = cm._apply_event(conn, self.modify_event(h, ref, ext_room="rt-dlx"))
+		self.assertEqual(out_rt["result"], "held_for_review")
+
+		doc.reload()
+		self.assertEqual((doc.status, doc.room_type, doc.room, str(doc.check_in_date),
+		                  str(doc.check_out_date), flt(doc.amount_after_tax, 2)), before_state)
+		self.assertEqual(self.night_snapshot(doc), before_nights)
+		self.assertEqual(self.folio_snapshot(folio.name), before_folio)
+		self.assertEqual(doc.channel_review_needed, 1)
+		self.assertIn("VIP pillow", doc.special_requests or "")
+		self.assertIn("not applied: the stay is Checked Out", doc.special_requests or "")
+		self.assertTrue(frappe.db.exists("Agent Action Log", {
+			"reference_doctype": "Reservation", "reference_name": doc.name,
+			"action_type": "channel.modify_needs_review"}))
+
+	def test_readable_modify_leaves_no_show_and_cancelled_stays_unchanged_and_flags_review(self):
+		for status in ("No Show", "Cancelled"):
+			with self.subTest(status=status):
+				h = self.hotel(inclusive=0)
+				self.add_deluxe_room_type(h)
+				doc, ref = self.book_today(h)
+				frappe.db.set_value("Reservation", doc.name, "status", status)
+				doc.reload()
+				before_nights = self.night_snapshot(doc)
+				before_state = (doc.status, doc.room_type, str(doc.check_in_date),
+				                str(doc.check_out_date), flt(doc.amount_after_tax, 2))
+
+				conn = frappe.get_doc("Channel Manager Connection", h.conn.name)
+				out = cm._apply_event(conn, self.modify_event(h, ref))
+				self.assertEqual(out["result"], "held_for_review")
+
+				doc.reload()
+				self.assertEqual((doc.status, doc.room_type, str(doc.check_in_date),
+				                  str(doc.check_out_date), flt(doc.amount_after_tax, 2)), before_state)
+				self.assertEqual(self.night_snapshot(doc), before_nights)
+				self.assertEqual(doc.channel_review_needed, 1)
+				self.assertIn(f"not applied: the stay is {status}", doc.special_requests or "")
+				self.assertTrue(frappe.db.exists("Agent Action Log", {
+					"reference_doctype": "Reservation", "reference_name": doc.name,
+					"action_type": "channel.modify_needs_review"}))
+
+	def test_modify_with_unmapped_room_on_checked_in_stay_still_flags_review(self):
+		h = self.hotel(inclusive=0)
+		booked, ref = self.book_today(h)
+		doc, _folio = self.check_in_real(h, booked)
+		conn = frappe.get_doc("Channel Manager Connection", h.conn.name)
+		out = cm._apply_event(conn, self.modify_event(h, ref, ext_room="rt-unmapped"))
+		self.assertEqual(out["result"], "held_for_review")
+		doc.reload()
+		self.assertEqual(doc.status, "Checked In")
+		self.assertEqual(doc.channel_review_needed, 1)
+		self.assertIn("rt-unmapped", doc.special_requests or "")
+		self.assertTrue(frappe.db.exists("Agent Action Log", {
+			"reference_doctype": "Reservation", "reference_name": doc.name,
+			"action_type": "channel.modify_needs_review"}))
+
+	def test_cancel_leaves_checked_in_checked_out_and_no_show_stays_unchanged_and_flags_review(self):
+		for mode in ("Checked In", "Checked Out", "No Show"):
+			with self.subTest(status=mode):
+				h = self.hotel(inclusive=0)
+				booked, ref = self.book_today(h)
+				folio = None
+				if mode == "Checked In":
+					doc, folio = self.check_in_real(h, booked)
+				elif mode == "Checked Out":
+					doc, folio = self.check_out_real(h, booked)
+				else:
+					frappe.db.set_value("Reservation", booked.name, "status", "No Show")
+					doc = frappe.get_doc("Reservation", booked.name)
+				before_nights = self.night_snapshot(doc)
+				before_folio = self.folio_snapshot(folio.name) if folio else None
+
+				conn = frappe.get_doc("Channel Manager Connection", h.conn.name)
+				out = cm._apply_event(conn, self.cancel_event(h, ref))
+				self.assertEqual(out["result"], "held_for_review")
+				self.assertEqual(out.get("reservations"), [])
+				self.assertEqual(out.get("credit_notes"), [])
+
+				doc.reload()
+				self.assertEqual(doc.status, mode)
+				self.assertEqual(self.night_snapshot(doc), before_nights)
+				if folio:
+					self.assertEqual(self.folio_snapshot(folio.name), before_folio)
+				self.assertEqual(doc.channel_review_needed, 1)
+				self.assertIn(f"not applied: the stay is {mode}", doc.special_requests or "")
+				self.assertTrue(frappe.db.exists("Agent Action Log", {
+					"reference_doctype": "Reservation", "reference_name": doc.name,
+					"action_type": "channel.cancel_needs_review"}))
+
+	def test_cancel_on_already_cancelled_stay_is_idempotent_without_review_flag(self):
+		h = self.hotel(inclusive=0)
+		doc, ref = self.book_today(h)
+		conn = frappe.get_doc("Channel Manager Connection", h.conn.name)
+		first = cm._apply_event(conn, self.cancel_event(h, ref))
+		self.assertEqual(first["result"], "cancelled")
+		second = cm._apply_event(conn, self.cancel_event(h, ref))
+		self.assertEqual(second["result"], "already_cancelled")
+		doc.reload()
+		self.assertEqual(doc.status, "Cancelled")
+		self.assertEqual(doc.channel_review_needed, 0)
+		self.assertFalse(frappe.db.exists("Agent Action Log", {
+			"reference_doctype": "Reservation", "reference_name": doc.name,
+			"action_type": "channel.cancel_needs_review"}))
+
+	def test_clear_channel_review_enforces_roles(self):
+		h = self.hotel(inclusive=0)
+		booked, ref = self.book_today(h)
+		doc, _folio = self.check_in_real(h, booked)
+		conn = frappe.get_doc("Channel Manager Connection", h.conn.name)
+		cm._apply_event(conn, self.modify_event(h, ref))
+
+		hk_email = f"hk-{frappe.generate_hash(length=6)}@example.test"
+		frappe.get_doc({
+			"doctype": "User", "email": hk_email, "first_name": "HK",
+			"enabled": 1, "roles": [{"role": "Housekeeping"}],
+		}).insert(ignore_permissions=True)
+		fd_email = f"fd-{frappe.generate_hash(length=6)}@example.test"
+		frappe.get_doc({
+			"doctype": "User", "email": fd_email, "first_name": "FD",
+			"enabled": 1, "roles": [{"role": "Front Desk"}],
+		}).insert(ignore_permissions=True)
+		try:
+			frappe.set_user(hk_email)  # nosemgrep: frappe-setuser -- test RBAC check
+			with self.assertRaises(frappe.PermissionError):
+				cm.clear_channel_review(doc.name)
+			frappe.set_user(fd_email)  # nosemgrep: frappe-setuser -- test RBAC check
+			self.assertTrue(cm.clear_channel_review(doc.name)["ok"])
+		finally:
+			frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- restore test user
+		self.assertEqual(frappe.db.get_value("Reservation", doc.name, "channel_review_needed"), 0)
+
+	def test_channel_review_needed_cannot_be_forged_or_cleared_outside_review_action(self):
+		"""Reservation.channel_review_needed is server-owned: REST PUT
+		(v1.update_doc), frappe.client.set_value, doc.save(), and client insert
+		cannot clear or forge it for any role (including Front Desk, Hotel Admin,
+		and Kamra Agent), even when sending forged flags. Only clear_channel_review
+		clears it (and enforces roles + channel.review_cleared audit log), while
+		unrelated edits to the flagged stay still succeed."""
+		from frappe import client
+		from frappe.api import v1
+
+		h = self.hotel(inclusive=0)
+		booked, ref = self.book_today(h)
+		doc, _folio = self.check_in_real(h, booked)
+		conn = frappe.get_doc("Channel Manager Connection", h.conn.name)
+		cm._apply_event(conn, self.modify_event(h, ref))
+		doc.reload()
+		self.assertEqual(doc.channel_review_needed, 1)
+
+		users = {}
+		for role in ("Front Desk", "Hotel Admin", "Kamra Agent"):
+			email = f"{role.lower().replace(' ', '-')}-{frappe.generate_hash(length=6)}@example.test"
+			frappe.get_doc({
+				"doctype": "User", "email": email, "first_name": role,
+				"enabled": 1, "roles": [{"role": role}],
+			}).insert(ignore_permissions=True)
+			users[role] = email
+
+		try:
+			# Kamra Agent is excluded from clear_channel_review
+			frappe.set_user(users["Kamra Agent"])  # nosemgrep: frappe-setuser -- test RBAC check
+			with self.assertRaises(frappe.PermissionError):
+				cm.clear_channel_review(doc.name)
+
+			# None of Front Desk, Hotel Admin, or Kamra Agent can clear channel_review_needed directly
+			for role, email in users.items():
+				with self.subTest(role=role, attack="direct_clear"):
+					frappe.set_user(email)  # nosemgrep: frappe-setuser -- test RBAC check
+					with self.assertRaises(frappe.PermissionError):
+						client.set_value("Reservation", doc.name, "channel_review_needed", 0)
+					with self.assertRaises(frappe.PermissionError):
+						client.set_value("Reservation", doc.name, {
+							"channel_review_needed": 0,
+							"flags": {"kamra_channel_review": 1},
+						})
+					frappe.local.form_dict = frappe._dict({
+						"data": json.dumps({"channel_review_needed": 0, "flags": {"kamra_channel_review": 1}})
+					})
+					with self.assertRaises(frappe.PermissionError):
+						v1.update_doc("Reservation", doc.name)
+					target = frappe.get_doc("Reservation", doc.name)
+					target.channel_review_needed = 0
+					with self.assertRaises(frappe.PermissionError):
+						target.save()
+
+			# Still flagged and zero forged review_cleared logs
+			frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- inspect DB
+			self.assertEqual(frappe.db.get_value("Reservation", doc.name, "channel_review_needed"), 1)
+			self.assertFalse(frappe.db.exists("Agent Action Log", {
+				"reference_doctype": "Reservation", "reference_name": doc.name,
+				"action_type": "channel.review_cleared"}))
+
+			# Unrelated edits to a flagged stay still succeed and keep the flag intact
+			frappe.set_user(users["Front Desk"])  # nosemgrep: frappe-setuser -- test unrelated edit
+			updated_note = (doc.special_requests or "") + "\nGuest contacted front desk"
+			client.set_value("Reservation", doc.name, "special_requests", updated_note)
+			self.assertEqual(frappe.db.get_value("Reservation", doc.name, "channel_review_needed"), 1)
+
+			# Authorized clear_channel_review succeeds and logs channel.review_cleared
+			self.assertTrue(cm.clear_channel_review(doc.name)["ok"])
+			self.assertEqual(frappe.db.get_value("Reservation", doc.name, "channel_review_needed"), 0)
+			self.assertTrue(frappe.db.exists("Agent Action Log", {
+				"reference_doctype": "Reservation", "reference_name": doc.name,
+				"action_type": "channel.review_cleared"}))
+
+			# Forging 0 -> 1 on an existing stay or inserting with channel_review_needed=1 is refused
+			for role in ("Front Desk", "Kamra Agent"):
+				with self.subTest(role=role, attack="forge_set"):
+					frappe.set_user(users[role])  # nosemgrep: frappe-setuser -- test RBAC check
+					with self.assertRaises(frappe.PermissionError):
+						client.set_value("Reservation", doc.name, "channel_review_needed", 1)
+					frappe.local.form_dict = frappe._dict({"data": json.dumps({"channel_review_needed": 1})})
+					with self.assertRaises(frappe.PermissionError):
+						v1.update_doc("Reservation", doc.name)
+
+			frappe.set_user(users["Front Desk"])  # nosemgrep: frappe-setuser -- test insert forge
+			with self.assertRaises(frappe.PermissionError):
+				client.insert(json.dumps({
+					"doctype": "Reservation", "property": h.property, "room_type": h.room_type,
+					"guest": self.guest(), "status": "Confirmed",
+					"check_in_date": day(5), "check_out_date": day(6), "adults": 2,
+					"channel_review_needed": 1,
+				}))
+		finally:
+			frappe.local.form_dict = frappe._dict()
+			frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- restore test user
+
+	def test_update_inhouse_res_defaults_to_n_and_refuses_y_until_bounds_exist(self):
+		"""OPERA Cloud 26.2 OXI UPDATE INHOUSE RES is configurable per Channel
+		Manager Connection, defaults to N, and refuses Y on save with a clear
+		message citing arrival-date, room-type, billed-night, and assigned-room
+		bounds until OXI Y is implemented."""
+		meta = frappe.get_meta("Channel Manager Connection")
+		field = meta.get_field("update_inhouse_res")
+		self.assertIsNotNone(field, "Channel Manager Connection must define update_inhouse_res")
+		self.assertEqual(field.fieldtype, "Select")
+		self.assertEqual(field.default, "N")
+		self.assertEqual([o.strip() for o in (field.options or "").splitlines() if o.strip()], ["N", "Y"])
+
+		h = self.hotel(inclusive=0)
+		conn = frappe.get_doc("Channel Manager Connection", h.conn.name)
+		self.assertEqual(conn.update_inhouse_res, "N")
+
+		conn.update_inhouse_res = "N"
+		conn.save(ignore_permissions=True)
+
+		conn.update_inhouse_res = "Y"
+		with self.assertRaises(frappe.ValidationError) as ctx:
+			conn.save(ignore_permissions=True)
+		msg = str(ctx.exception).lower()
+		for term in ("arrival", "room", "billed"):
+			self.assertIn(term, msg)
+
+	def _cleanup_committed_property(self, prop: str, conn_name: str, guest_names: list[str],
+	                                error_cutoff: str) -> None:
+		frappe.db.rollback()
+		folios = frappe.get_all("Folio", filters={"property": prop}, pluck="name")
+		for f in folios:
+			frappe.db.delete("Folio Charge", {"parent": f})
+			frappe.db.delete("Folio Payment", {"parent": f})
+		res_names = frappe.get_all("Reservation", filters={"property": prop}, pluck="name")
+		for r in res_names:
+			frappe.db.delete("Reservation Night Rate", {"parent": r})
+		frappe.db.delete("Channel ARI Outbox", {"connection": conn_name})
+		frappe.db.delete("Channel Room Mapping", {"connection": conn_name})
+		frappe.db.delete("Channel OTA Tax Rule", {"parent": conn_name})
+		frappe.db.delete("Channel OTA Tax Basis", {"parent": conn_name})
+		for dt in frappe.get_all("DocType", filters={"module": "Kamra", "istable": 0}, pluck="name"):
+			if dt != "Property" and frappe.get_meta(dt).has_field("property"):
+				frappe.db.delete(dt, {"property": prop})
+		for g in guest_names:
+			frappe.db.delete("Guest", {"name": g})
+		frappe.db.delete("Property", {"name": prop})
+		frappe.db.delete("Error Log", {"creation": (">=", error_cutoff), "method": ("like", "OTA webhook%")})
+		frappe.db.commit()  # nosemgrep: frappe-manual-commit -- clean up committed concurrency test fixture
+
+	def _check_in_in_other_connection(self, site: str, sites_path: str, res_name: str, room: str) -> None:
+		import threading
+
+		errors: list[BaseException] = []
+
+		def worker():
+			frappe.init(site, sites_path=sites_path)
+			frappe.connect()
+			try:
+				frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- test concurrency worker
+				from kamra import api, folio as folio_mod
+
+				api.check_in(res_name, room=room)
+				doc = frappe.get_doc("Reservation", res_name)
+				folio_mod.post_remaining_nights(doc)
+				frappe.db.commit()  # nosemgrep: frappe-manual-commit -- commit check-in on second DB connection
+			except BaseException as exc:
+				frappe.db.rollback()
+				errors.append(exc)
+			finally:
+				frappe.destroy()
+
+		t = threading.Thread(target=worker)
+		t.start()
+		t.join(timeout=30)
+		self.assertFalse(t.is_alive(), "Concurrent check-in thread timed out")
+		if errors:
+			raise errors[0]
+
+	def test_concurrent_check_in_and_ota_modify_under_repeatable_read_1020_retries_and_flags_review(self):
+		"""Real two-connection MariaDB 11.8 REPEATABLE-READ snapshot race:
+		Connection A opens its read snapshot before Connection B commits
+		check_in. Both process_webhook_events and synchronous webhook hit
+		MariaDB 1020 on FOR UPDATE, roll back to a fresh snapshot, see
+		Checked In, leave the stay/folio untouched, and flag review instead
+		of silently dropping or returning 500."""
+		iso = frappe.db.sql("SELECT @@transaction_isolation, @@innodb_snapshot_isolation")[0]
+		self.assertEqual(iso, ("REPEATABLE-READ", 1))
+
+		for mode in ("worker", "sync_webhook"):
+			with self.subTest(mode=mode):
+				cutoff = frappe.utils.now()
+				h = self.hotel(inclusive=0)
+				booked, ref = self.book_today(h, notes="Before race")
+				room = frappe.db.get_value("Room", {"property": h.property, "room_type": h.room_type}, "name")
+				guests = [booked.guest]
+				frappe.db.commit()  # nosemgrep: frappe-manual-commit -- publish fixture to second DB connection
+				self.addCleanup(self._cleanup_committed_property, h.property, h.conn.name, guests, cutoff)
+
+				# Open Connection A's REPEATABLE-READ snapshot BEFORE check-in commits
+				frappe.db.sql("SELECT name FROM `tabChannel Manager Connection` WHERE name = %s", (h.conn.name,))
+				self.assertEqual(frappe.db.get_value("Reservation", booked.name, "status"), "Confirmed")
+
+				# Connection B checks the guest in and commits
+				self._check_in_in_other_connection(frappe.local.site, frappe.local.sites_path, booked.name, room)
+
+				# Connection A still holds the stale pre-check-in snapshot
+				self.assertEqual(frappe.db.get_value("Reservation", booked.name, "status"), "Confirmed")
+
+				mod_payload = self.channex_payload(h, [Decimal("295000"), Decimal("295000")], n=0, report="exclusive")
+				mod_payload["payload"].update(
+					status="modified", ota_reservation_code=ref, ota_name="Booking.com", notes="Race modify"
+				)
+				if mode == "worker":
+					cm.process_webhook_events(h.conn.name, mod_payload)
+				else:
+					out = cm.webhook(connection=h.conn.name, secret="basis-hook", **mod_payload)
+					self.assertTrue(out["ok"])
+					self.assertEqual(out["results"][0]["result"], "held_for_review")
+					frappe.db.commit()  # nosemgrep: frappe-manual-commit -- persist sync webhook result in concurrency test
+
+				doc = frappe.get_doc("Reservation", booked.name)
+				self.assertEqual(doc.status, "Checked In")
+				self.assertEqual(doc.room, room)
+				self.assertEqual(flt(doc.amount_after_tax, 2), 177000.0)
+				self.assertEqual(doc.channel_review_needed, 1)
+				self.assertIn("not applied: the stay is Checked In", doc.special_requests or "")
+				self.assertTrue(frappe.db.exists("Agent Action Log", {
+					"reference_doctype": "Reservation", "reference_name": doc.name,
+					"action_type": "channel.modify_needs_review"}))
+				failed_logs = frappe.db.count("Error Log", {
+					"creation": (">=", cutoff),
+					"method": ("like", f"OTA webhook apply failed: {h.conn.name}%"),
+				})
+				self.assertEqual(failed_logs, 0)
+
+	def test_concurrent_check_in_and_ota_cancel_under_repeatable_read_1020_retries_and_flags_review(self):
+		"""Same real two-connection MariaDB 11.8 REPEATABLE-READ 1020 race for
+		an inbound OTA cancel arriving as check_in commits: rolls back, retries
+		on a fresh snapshot, leaves stay Checked In, and flags review."""
+		iso = frappe.db.sql("SELECT @@transaction_isolation, @@innodb_snapshot_isolation")[0]
+		self.assertEqual(iso, ("REPEATABLE-READ", 1))
+
+		cutoff = frappe.utils.now()
+		h = self.hotel(inclusive=0)
+		booked, ref = self.book_today(h, notes="Before cancel race")
+		room = frappe.db.get_value("Room", {"property": h.property, "room_type": h.room_type}, "name")
+		guests = [booked.guest]
+		frappe.db.commit()  # nosemgrep: frappe-manual-commit -- publish fixture to second DB connection
+		self.addCleanup(self._cleanup_committed_property, h.property, h.conn.name, guests, cutoff)
+
+		frappe.db.sql("SELECT name FROM `tabChannel Manager Connection` WHERE name = %s", (h.conn.name,))
+		self.assertEqual(frappe.db.get_value("Reservation", booked.name, "status"), "Confirmed")
+
+		self._check_in_in_other_connection(frappe.local.site, frappe.local.sites_path, booked.name, room)
+		self.assertEqual(frappe.db.get_value("Reservation", booked.name, "status"), "Confirmed")
+
+		cancel_payload = {
+			"event": "booking",
+			"payload": {
+				"status": "cancelled",
+				"ota_reservation_code": ref,
+				"ota_name": "Booking.com",
+				"rooms": [{"room_type_id": "rt-std", "days": {}}],
+			},
+		}
+		cm.process_webhook_events(h.conn.name, cancel_payload)
+
+		doc = frappe.get_doc("Reservation", booked.name)
+		self.assertEqual(doc.status, "Checked In")
+		self.assertEqual(doc.room, room)
+		self.assertEqual(doc.channel_review_needed, 1)
+		self.assertIn("not applied: the stay is Checked In", doc.special_requests or "")
+		self.assertTrue(frappe.db.exists("Agent Action Log", {
+			"reference_doctype": "Reservation", "reference_name": doc.name,
+			"action_type": "channel.cancel_needs_review"}))
+		failed_logs = frappe.db.count("Error Log", {
+			"creation": (">=", cutoff),
+			"method": ("like", f"OTA webhook apply failed: {h.conn.name}%"),
+		})
+		self.assertEqual(failed_logs, 0)
+
+	def test_exhausted_snapshot_conflicts_requeue_webhook_instead_of_dropping(self):
+		"""If snapshot conflicts persist past the inline retry cap,
+		process_webhook_events re-enqueues itself rather than silently
+		dropping the OTA event."""
+		h = self.hotel(inclusive=0)
+		payload = self.channex_payload(h, Decimal("177000"), n=0, report="exclusive")
+		with patch.object(cm, "_apply_event", side_effect=frappe.QueryDeadlockError("1020")), \
+		     patch.object(frappe.db, "rollback", return_value=None), \
+		     patch.object(frappe, "enqueue") as enqueue_mock:
+			cm.process_webhook_events(h.conn.name, payload)
+		self.assertTrue(enqueue_mock.called, "Expected webhook event to be re-queued on retry exhaustion")
+		args, kwargs = enqueue_mock.call_args
+		self.assertEqual(args[0], "kamra.channel_manager.process_webhook_events")
+		self.assertEqual(kwargs.get("connection"), h.conn.name)
+		self.assertEqual(kwargs.get("payload"), payload)

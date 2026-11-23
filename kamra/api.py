@@ -4579,6 +4579,30 @@ def reservation_detail(reservation: str):
 				"group_booking": res.group_booking, "status": "Confirmed"}),
 		}
 
+	channel_review_needed = int(res.get("channel_review_needed") or 0)
+	channel_reviews = []
+	if channel_review_needed:
+		last_cleared = frappe.db.get_value(
+			"Agent Action Log",
+			{"reference_doctype": "Reservation", "reference_name": res.name,
+			 "action_type": "channel.review_cleared"},
+			"creation", order_by="creation desc")
+		review_filters = {
+			"reference_doctype": "Reservation",
+			"reference_name": res.name,
+			"action_type": ("in", ["channel.modify_needs_review", "channel.cancel_needs_review"]),
+		}
+		if last_cleared:
+			review_filters["creation"] = (">", last_cleared)
+		channel_reviews = [
+			{"name": row.name, "action_type": row.action_type,
+			 "rationale": row.rationale, "executed_at": _dt(row.executed_at or row.creation)}
+			for row in frappe.get_all(
+				"Agent Action Log", filters=review_filters,
+				fields=["name", "action_type", "rationale", "executed_at", "creation"],
+				order_by="creation desc", limit_page_length=10)
+		]
+
 	return {
 		"name": res.name,
 		**saved_contract_tariff(res),
@@ -4586,6 +4610,8 @@ def reservation_detail(reservation: str):
 		"status": res.status,
 		"source": res.source,
 		"channel": res.channel,
+		"channel_review_needed": channel_review_needed,
+		"channel_reviews": channel_reviews,
 		"booking_type": res.booking_type,
 		"property": res.property,
 		"check_in_date": res.check_in_date,
@@ -4665,6 +4691,7 @@ def reservation_detail(reservation: str):
 			"id_document_missing": not res.get("id_document")
 			and not res.get("id_document_discarded"),
 			"id_unverified": res.precheckin_status == "Submitted",
+			"channel_review_needed": bool(channel_review_needed),
 		},
 		"checkin_backfill": _checkin_backfill(res),
 	}

@@ -380,6 +380,15 @@ class Reservation(Document):
 			from kamra.api import AdvancePaidIsLedgerOwned
 			frappe.throw(_("Advance paid follows the payments on the folio; take a payment or refund there."),
 			             AdvancePaidIsLedgerOwned)
+		# Channel review flag is owned by _flag_for_review (db_set) and
+		# cleared only through clear_channel_review (role check + audit log).
+		# Any insert with it set or save that changes it is refused.
+		prev_review = 0 if self.is_new() else cint((self.get_doc_before_save() or {}).get("channel_review_needed"))
+		if cint(self.get("channel_review_needed")) != prev_review:
+			frappe.throw(
+				_("Channel review status can only be cleared via the review action."),
+				frappe.PermissionError,
+			)
 		# Before any other inventory lock, so villa vs room and category
 		# capacity take this row in the same order as booking and accept.
 		if self.property:
