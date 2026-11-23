@@ -13,7 +13,8 @@ from __future__ import annotations
 
 import frappe
 
-from kamra import api, folio as folio_mod
+from kamra import api
+from kamra import folio as folio_mod
 from kamra.ledger import save_folio
 from kamra.tests.audit_fixtures import (
 	PROP_A,

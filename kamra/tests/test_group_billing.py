@@ -11,7 +11,8 @@ from __future__ import annotations
 
 import frappe
 
-from kamra import api, folio as folio_mod, ledger
+from kamra import api, ledger
+from kamra import folio as folio_mod
 from kamra.checkout import settlement_position
 from kamra.tests.audit_fixtures import (
 	PROP_A,
