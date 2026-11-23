@@ -46,6 +46,8 @@ import RoomChangeDialog from "../components/RoomChangeDialog"
 import CheckOutDialog from "../components/CheckOutDialog"
 import CheckInDialog from "../components/CheckInDialog"
 import AgreedRatePanel from "../components/AgreedRatePanel"
+import SupervisorSignOff, { SignOffReasons } from "../components/SupervisorSignOff"
+import { supervisorArgs } from "../lib/reservationDiscount"
 import { useAuth } from "../lib/auth"
 import StayInstructions from "../components/StayInstructions"
 import { cur, moneyLocale } from "../lib/money"
@@ -53,6 +55,10 @@ import { t as translate, useUILanguage } from "../lib/i18n"
 
 const inr = (n: number) =>
   `${cur()}` + Number(n || 0).toLocaleString(moneyLocale(), { maximumFractionDigits: 0 })
+
+/** One amount, or the lowest to the highest when the nights differ. */
+const rangeOf = (values: number[]) =>
+  new Set(values).size === 1 ? inr(values[0]) : `${inr(Math.min(...values))}-${inr(Math.max(...values))}`
 
 /** Whole nights from `a` to `b` (YYYY-MM-DD). */
 const nightsBetween = (a: string, b: string) =>
@@ -268,14 +274,25 @@ export default function ReservationDetail({
   // and the save sends confirm_price from it. A window.confirm() gate here
   // dropped the save silently whenever the browser suppressed the dialog.
   const [datePreview, setDatePreview] = useState<RepricePreview | null>(null)
+  // a discounted stay's new dates may need a manager's sign-off, given here
+  const [dateSupervisor, setDateSupervisor] = useState("")
+  const [datePin, setDatePin] = useState("")
+  const dateGov = datePreview?.discount_governance ?? null
+  const dateSignOff = supervisorArgs(dateGov, dateSupervisor, datePin)
+  const dateSigned = !dateGov?.needs_supervisor || !!dateSignOff.supervisor_user
   const datesDiffer = !!savedCi && (ci !== savedCi || co !== savedCo)
   const datesValid = !!ci && !!co && ci < co
   useEffect(() => {
     setDatePreview(null)
+    setDatePin("")
     if (!datesDiffer || !datesValid) return
     let live = true
     amendStayPreview(name, ci, co)
-      .then((p) => live && setDatePreview(p))
+      .then((p) => {
+        if (!live) return
+        setDatePreview(p)
+        if (p.supervisors?.length === 1) setDateSupervisor(p.supervisors[0].user)
+      })
       .catch((e) => live && setError(serverError(e)))
     return () => {
       live = false
@@ -342,6 +359,15 @@ export default function ReservationDetail({
 
   const datesChanged = ci !== d.check_in_date || co !== d.check_out_date
   const money = d.money
+  // the desk's discount at a glance (OPERA Stay Details): what it takes off
+  // and its reason, without opening the editor
+  const disc = d.discount
+  const stayDiscount = disc?.discount_type
+    ? [disc.discount_type === "Percent"
+        ? translate("{pct}% off", { pct: disc.discount_value })
+        : translate("{amount} off a night", { amount: inr(disc.discount_value) }),
+      disc.discount_reason].filter(Boolean).join(" · ")
+    : null
 
   return (
     <div className="space-y-4">
@@ -510,11 +536,16 @@ export default function ReservationDetail({
                       })}
                 </p>
               )}
+              {dateGov?.needs_supervisor && (
+                <SupervisorSignOff reason={<SignOffReasons gov={dateGov} />}
+                  supervisors={datePreview?.supervisors ?? dateGov.supervisors}
+                  supervisor={dateSupervisor} pin={datePin} onSupervisor={setDateSupervisor} onPin={setDatePin} />
+              )}
               <Button
-                disabled={busy || !datesValid || !datePreview}
+                disabled={busy || !datesValid || !datePreview || !dateSigned}
                 onClick={() =>
                   datePreview &&
-                  act(() => amendStay(name, ci, co, datePreview.needs_confirmation ? 1 : 0))
+                  act(() => amendStay(name, ci, co, datePreview.needs_confirmation ? 1 : 0, dateSignOff))
                 }
               >
                 {busy
@@ -547,15 +578,19 @@ export default function ReservationDetail({
               }`}
             />
             {d.eta && <Field label={translate("ETA")} value={d.eta} />}
+            {stayDiscount && <Field label={translate("Discount")} value={stayDiscount} />}
+            {stayDiscount && d.night_rates && d.night_rates.length > 0 && (
+              <Field label={translate("Base rate / night")} value={rangeOf(d.night_rates.map(
+                (n) => n.entry_base_rate ?? n.base_rate ?? n.rate))} />
+            )}
             {d.night_rates && d.night_rates.length > 0 && (
               <Field
                 label={translate("Confirmed rate / night")}
                 value={
-                  new Set(d.night_rates.map((n) => n.rate)).size === 1
-                    ? inr(d.night_rates[0].rate)
-                    : `${inr(Math.min(...d.night_rates.map((n) => n.rate)))}-${inr(
-                        Math.max(...d.night_rates.map((n) => n.rate)),
-                      )}`
+                  <>
+                    {rangeOf(d.night_rates.map((n) => n.rate))}
+                    {d.discount?.fixed_rate ? <Badge className="ms-2">{translate("Fixed rate")}</Badge> : null}
+                  </>
                 }
               />
             )}

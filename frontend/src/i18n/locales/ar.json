@@ -1,4 +1,8 @@
 {
+  "{amount} off a night": "خصم {amount} لكل ليلة",
+  "{pct}% off": "خصم {pct}%",
+  "Base rate / night": "السعر الأساسي / الليلة",
+  "Discount note": "ملاحظة الخصم",
   "Discounts & allowances": "الخصومات والتسويات",
   ": who makes up the balance": ": من يكوّن الرصيد",
   "Added at check-out when a bill goes to a company, or by a direct company invoice. Reduced by a recorded company payment or a credit note.": "يُضاف عند المغادرة حين تُحوَّل الفاتورة إلى شركة، أو بفاتورة مباشرة للشركة. وينقص بدفعة مسجلة من الشركة أو بإشعار دائن.",
@@ -23,6 +27,8 @@
   "Open Receivables": "فتح الذمم المدينة",
   "Receivables: each company's page shows every invoice, every payment and the bills it paid, with the running balance.": "في الذمم المدينة: صفحة كل شركة تعرض كل فاتورة وكل دفعة والفواتير التي سددتها، مع الرصيد المتراكم.",
   "Refund the advance from the booking's folio, or cancel the payment the same day. Nothing is edited in place.": "استرد العربون من فاتورة الحجز، أو ألغِ الدفعة في اليوم نفسه. لا يُعدَّل شيء في مكانه.",
+  "Same reason as the stay": "نفس سبب الإقامة",
+  "The agreed rate replaces this stay's discount.": "السعر المتفق عليه يحل محل خصم هذه الإقامة.",
   "What companies and travel agents owe (the city ledger). A company's guest bill lands here at check-out; the company's payments take it off.": "ما تدين به الشركات ووكلاء السفر (حساب المدينين). فاتورة نزيل الشركة تصل إلى هنا عند المغادرة، ودفعات الشركة تُنقصها.",
   "What guests owe on their bills right now: every charge posted to a guest's folio (room nights, restaurant and laundry charged to the room, extras) less what they paid, advances applied at check-in, and bills moved to a company. Positive means guests owe the hotel.": "ما يدين به النزلاء على فواتيرهم الآن: كل رسم مرحّل إلى فاتورة النزيل (ليالي الغرف، والمطعم والمغسلة على الغرفة، والإضافات) ناقص ما دفعوه، والعربون المطبّق عند الوصول، والفواتير المحوّلة إلى شركة. القيمة الموجبة تعني أن النزلاء مدينون للفندق.",
   "What is this ledger?": "ما هذا الحساب؟",

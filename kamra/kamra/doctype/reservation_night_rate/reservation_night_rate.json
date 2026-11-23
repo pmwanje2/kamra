@@ -12,6 +12,7 @@
   "meal_amount",
   "demand_premium_pct",
   "hand_price",
+  "rate_code_amount",
   "base_rate",
   "discount_type",
   "discount_value",
@@ -64,6 +65,13 @@
    "read_only": 1
   },
   {
+   "description": "The night's price on the stay's rate code (rate card and rate plan, or a contract or group rate), before an agreed rate or the desk's discount, on the basis the desk enters prices (gross where rates include tax). An agreed rate's or a discount's cut is measured from it.",
+   "fieldname": "rate_code_amount",
+   "fieldtype": "Currency",
+   "label": "Rate Code Amount",
+   "read_only": 1
+  },
+  {
    "description": "The night's room rate before the desk's discount (season, demand premium, rate plan or contract rate applied). Room Rate is this less the discount.",
    "fieldname": "base_rate",
    "fieldtype": "Currency",
@@ -87,7 +95,7 @@
   },
   {
    "default": "0",
-   "description": "What the discount took off this night's room rate, before tax.",
+   "description": "What the discount took off this night's room rate, on the basis the desk entered it: gross where the property's rates include tax, else before tax.",
    "fieldname": "discount_amount",
    "fieldtype": "Currency",
    "label": "Discount",
@@ -112,7 +120,7 @@
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-11-23 12:00:00.000000",
+ "modified": "2026-11-23 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Reservation Night Rate",

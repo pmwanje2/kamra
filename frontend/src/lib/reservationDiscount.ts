@@ -10,6 +10,8 @@ export type DiscountType = "Percent" | "Amount"
 export interface NightEntry {
   type: DiscountType
   value: string
+  /** the night's own Reason Code ("" or missing: the stay's reason) */
+  reason?: string
 }
 
 export interface DiscountState {
@@ -20,6 +22,9 @@ export interface DiscountState {
   reason: string
   /** date -> the night's own discount ("" value: the night follows the stay) */
   nights: Record<string, NightEntry>
+  /** the desk's optional free text beside the reason; it goes on the audit
+   * row with the save, never with a preview (discountNote) */
+  note?: string
 }
 
 export interface DiscountReason {
@@ -53,7 +58,7 @@ export interface DiscountArgs {
   discount_type?: DiscountType
   discount_value?: number
   discount_reason?: string
-  night_discounts?: { date: string; discount_type: DiscountType; discount_value: number }[]
+  night_discounts?: { date: string; discount_type: DiscountType; discount_value: number; discount_reason?: string }[]
   /** a manager's fixed-rate override of a plan that takes no discount */
   fixed_rate?: 0 | 1
 }
@@ -69,7 +74,13 @@ export function entryBase(
   return Math.round((net + (n.discount_amount ?? 0)) * 100) / 100
 }
 
-export const emptyDiscount = (): DiscountState => ({ type: "Percent", value: "", reason: "", nights: {} })
+export const emptyDiscount = (): DiscountState => ({ type: "Percent", value: "", reason: "", nights: {}, note: "" })
+
+/** The note a save sends (discount_note), only beside a discount. */
+export function discountNote(state: Pick<DiscountState, "note">, args: DiscountArgs): { discount_note?: string } {
+  const note = state.note?.trim()
+  return note && (args.discount_type || args.night_discounts?.length) ? { discount_note: note } : {}
+}
 
 const num = (s: string) => (s.trim() === "" ? null : Number(s))
 
@@ -85,6 +96,7 @@ export function discountArgs(state: DiscountState, stayNights: string[]): Discou
       date,
       discount_type: state.nights[date].type,
       discount_value: Number(state.nights[date].value),
+      ...(state.nights[date].reason ? { discount_reason: state.nights[date].reason } : {}),
     }))
   if (!stay && !nights.length) return {}
   return {

@@ -1976,6 +1976,11 @@ export interface RepricePreview {
   difference: number
   needs_confirmation: boolean
   nights: { date: string; rate: number; demand_premium_pct: number }[]
+  /** a discounted stay: the discount rules the amendment runs, and who can
+   * sign them off when they need a manager (kamra.api._repriced_governance) */
+  discount_governance?: DiscountGovernance | null
+  needs_supervisor?: boolean
+  supervisors?: { user: string; full_name: string }[]
   /** a stay in house: what the rate-change policy does to nights already
    * on the folio (kept at their charged rate, or credited by Kamra) */
   charged_nights?: {
@@ -2002,12 +2007,15 @@ export const amendStay = (
   check_in_date: string,
   check_out_date: string,
   confirm_price = 0,
+  /** a manager's sign-off when the discount needs one (supervisorArgs) */
+  signOff: { supervisor_user?: string; supervisor_pin?: string } = {},
 ) =>
   call<{ nights: number; amount_after_tax: number }>("kamra.api.amend_stay", {
     reservation,
     check_in_date,
     check_out_date,
     confirm_price,
+    ...signOff,
   })
 
 export const setLateArrival = (reservation: string, late_arrival: boolean, eta?: string) =>

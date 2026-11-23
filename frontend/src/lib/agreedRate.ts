@@ -1,7 +1,29 @@
 /** Rules for the Agreed rate action on a booking (kamra.api.set_agreed_rate):
  * an agreed nightly rate for one stay, in place (OPERA rate override). */
 
-import type { DiscountGovernance } from "./reservationDiscount"
+import type { DiscountGovernance, DiscountReason } from "./reservationDiscount"
+
+/** the reason codes a discount takes (kamra.api.DISCOUNT_REASON_CATEGORIES) */
+const DISCOUNT_CATEGORIES = ["Rate Change", "Adjust"]
+
+/** The reason codes a discount can carry, from one list_reason_codes
+ * answer: the Rate Change and Adjust codes, each once by name, in the
+ * server's order. */
+export function discountReasonCodes(all: DiscountReason[] | null | undefined): DiscountReason[] {
+  const seen = new Set<string>()
+  const out: DiscountReason[] = []
+  for (const r of all ?? []) {
+    if (!DISCOUNT_CATEGORIES.includes(r.category) || seen.has(r.name)) continue
+    seen.add(r.name)
+    out.push(r)
+  }
+  return out
+}
+
+/** The reason codes an agreed rate can carry: the Rate Change ones. */
+export function agreedRateReasonCodes(codes: DiscountReason[]): DiscountReason[] {
+  return codes.filter((c) => c.category === "Rate Change")
+}
 
 export interface AgreedRatePreview {
   current_amount: number
@@ -20,9 +42,12 @@ export interface AgreedRatePreview {
   nights: { date: string; rate: number }[]
   /** who can sign it off here (Hotel Admin / Finance with a cashier PIN) */
   supervisors: { user: string; full_name: string }[]
-  /** a discounted stay: its discount on the new rate, judged as the whole
-   * cut from the base it was booked at (a full comp needs another
-   * manager's PIN, whoever sets it) */
+  /** nights the new rate takes under the rate guardrail floor */
+  floor_breach?: string[]
+  /** the stay had a desk discount: the agreed rate replaces it */
+  replaces_discount?: boolean
+  /** a stay's discount judged with the rate (older servers; an agreed rate
+   * now replaces the discount, so the server no longer sends one) */
   discount_governance?: DiscountGovernance
 }
 

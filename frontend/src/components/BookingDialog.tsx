@@ -27,6 +27,7 @@ import { nightsBetween, parseDate, shiftDate } from "../lib/stay"
 import { typedNights, type NightPrice } from "../lib/nightPrices"
 import {
   discountArgs,
+  discountNote,
   discountEligible,
   discountError,
   discountReady,
@@ -491,7 +492,11 @@ export function BookingDialog(props: {
   const discountParam = discountOk || !(discountEntered.discount_type || discountEntered.night_discounts)
     ? discountEntered : { ...discountEntered, fixed_rate: 1 as const }
   const discountGov: DiscountGovernance | null = quote?.discount_governance ?? null
-  const discountSignOff = supervisorArgs(discountGov, discountSupervisor, discountPin)
+  const discountSignOff = {
+    ...supervisorArgs(discountGov, discountSupervisor, discountPin),
+    // the desk's optional note goes with the booking, never with a quote
+    ...discountNote(discount, discountEntered),
+  }
   // the dates the quote priced, so the Total always names its own nights:
   // its first night to the day after its last
   const quoteStay = (() => {

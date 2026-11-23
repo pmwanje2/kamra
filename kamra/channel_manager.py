@@ -519,6 +519,10 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 		# the OTA already sold at its price - keep their number, don't reprice
 		"auto_price": 0 if requested_reason or e.get("total") else 1,
 	})
+	if not doc.auto_price:
+		# the channel's own price: the channel manager is its writer
+		# (Reservation.guard_locked_nights), with or without a total yet
+		doc.flags.kamra_night_rates_writer = True
 	if e.get("total"):
 		doc.amount_after_tax = e["total"]
 		lock_channel_rates(doc, e["total"], e.get("nightly"))

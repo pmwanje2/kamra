@@ -12,16 +12,27 @@
     rate, new rate and difference plus the new total; kamra.api.set_agreed_rate
     saves it with a Rate Change reason code.
 
-    Either way the front desk works within the property's limit; a bigger
-    cut, or a reason code that needs a supervisor, is signed off by a Hotel
-    Admin or Finance user with their PIN. The rate card is never touched. */
+    An agreed rate is OPERA's Fixed Rate: it replaces the stay's discount,
+    so the rate entered is what the guest pays, and its cut is measured from
+    each night's rate-code amount. Either way the front desk works within
+    the property's limit and above the rate floor; past them, or for a
+    reason code that needs a supervisor, a Hotel Admin or Finance user signs
+    it off with their PIN. The rate card is never touched. */
 
 import { useEffect, useState } from "react"
 import { call } from "../lib/api"
-import { agreedRateNeedsSupervisor, agreedRateReady, agreedRateRows, type AgreedRatePreview } from "../lib/agreedRate"
+import {
+  agreedRateNeedsSupervisor,
+  agreedRateReady,
+  agreedRateReasonCodes,
+  agreedRateRows,
+  discountReasonCodes,
+  type AgreedRatePreview,
+} from "../lib/agreedRate"
 import { cur, moneyLocale } from "../lib/money"
 import {
   discountArgs,
+  discountNote,
   discountReady,
   emptyDiscount,
   supervisorArgs,
@@ -33,21 +44,12 @@ import {
 import { serverError } from "../lib/resource"
 import { useT } from "../lib/i18n"
 import DiscountPanel from "./DiscountPanel"
+import SupervisorSignOff from "./SupervisorSignOff"
 import { Button } from "./ui/button"
 
 const inputCls =
   "rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm " +
   "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
-
-/** the reason codes a discount takes (kamra.api.DISCOUNT_REASON_CATEGORIES);
- * an agreed rate takes the Rate Change ones */
-const DISCOUNT_CATEGORIES = ["Rate Change", "Adjust"]
-
-/** Each usable code once, in the server's order. */
-function discountReasons(all: DiscountReason[] | null): DiscountReason[] {
-  const seen = new Set<string>()
-  return (all ?? []).filter((r) => DISCOUNT_CATEGORIES.includes(r.category) && !seen.has(r.name) && !!seen.add(r.name))
-}
 
 // whole currency units, like the rest of the reservation drawer
 const money = (n: number) =>
@@ -136,7 +138,7 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
   const [fixedOverride, setFixedOverride] = useState(seededOverride)
   const [discountCodes, setDiscountCodes] = useState<DiscountReason[]>([])
   // the agreed rate's reasons: the Rate Change codes among them
-  const codes = discountCodes.filter((c) => c.category === "Rate Change")
+  const codes = agreedRateReasonCodes(discountCodes)
   const [plan, setPlan] = useState<DiscountPlan | null>(null)
   const stayNights = openNights.map((n) => n.date)
   const args = discountArgs(discount, stayNights)
@@ -149,7 +151,7 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
   useEffect(() => {
     if (!open) return
     call<DiscountReason[]>("kamra.ledger.list_reason_codes", {})
-      .then((all) => setDiscountCodes(discountReasons(all)))
+      .then((all) => setDiscountCodes(discountReasonCodes(all)))
       .catch((e) => setError(serverError(e)))
   }, [open])
 
@@ -195,6 +197,7 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
         night_discounts: args.night_discounts,
         fixed_rate: fixedOverride ? 1 : 0,
         ...supervisorArgs(plan, supervisor, pin),
+        ...discountNote(discount, args),
         // the desk has seen the new price in the preview
         confirm_price: 1,
       })
@@ -349,6 +352,9 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
       <div className="text-xs font-medium uppercase tracking-wider text-zinc-400">
         {t("Agreed rate")}
       </div>
+      {hadDiscount && (
+        <p className="text-xs text-zinc-500">{t("The agreed rate replaces this stay's discount.")}</p>
+      )}
       <label className="block">
         <span className="text-xs text-zinc-400">{t("New rate / night")}</span>
         <input className={`${inputCls} mt-0.5 w-full`} type="number" min="0" inputMode="decimal"
@@ -406,32 +412,19 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
       </div>
 
       {askSupervisor && preview && (
-        <div className="space-y-2 rounded-lg bg-amber-50 p-2">
-          <p className="text-xs text-amber-800">
-            {preview.discount_governance?.comp
-              ? t("A 100% discount (comp) needs a manager's sign-off.")
-              : preview.needs_supervisor
-                ? t("A cut of {pct}% is over the front desk's limit of {limit}%.", {
-                    pct: preview.reduction_pct, limit: preview.limit_pct,
-                  })
-                : null}{" "}
-            {t("A manager signs this off with their PIN.")}
-          </p>
-          {preview.supervisors.length === 0 ? (
-            <p className="text-xs text-rose-700">{t("No manager with a cashier PIN can approve here yet.")}</p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              <select className={inputCls} aria-label={t("Manager")} value={supervisor}
-                onChange={(e) => setSupervisor(e.target.value)}>
-                <option value="">{t("Manager…")}</option>
-                {preview.supervisors.map((s) => <option key={s.user} value={s.user}>{s.full_name}</option>)}
-              </select>
-              <input className={`${inputCls} w-24`} type="password" inputMode="numeric" autoComplete="off"
-                value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 8))}
-                placeholder={t("Their PIN")} aria-label={t("Manager PIN")} />
-            </div>
-          )}
-        </div>
+        <SupervisorSignOff supervisors={preview.supervisors} supervisor={supervisor} pin={pin}
+          onSupervisor={setSupervisor} onPin={setPin}
+          reason={preview.discount_governance?.comp
+            ? t("A 100% discount (comp) needs a manager's sign-off.")
+            : <>
+                {preview.needs_supervisor && preview.reduction_pct > preview.limit_pct
+                  ? t("A cut of {pct}% is over the front desk's limit of {limit}%.", {
+                      pct: preview.reduction_pct, limit: preview.limit_pct,
+                    }) + " " : ""}
+                {preview.floor_breach?.length
+                  ? t("Below the rate floor on {dates}.", { dates: preview.floor_breach.join(", ") }) + " " : ""}
+                {codeNeedsSupervisor ? t("This reason needs a manager's sign-off.") : ""}
+              </>} />
       )}
 
       {error && <p className="text-xs text-rose-600">{t(error)}</p>}

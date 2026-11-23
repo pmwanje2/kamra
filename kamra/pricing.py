@@ -11,7 +11,7 @@ from decimal import Decimal, InvalidOperation
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, cint, date_diff, getdate, nowdate
+from frappe.utils import add_days, cint, date_diff, flt, getdate, nowdate
 
 from kamra.branding import product_name
 from kamra.localization import default_currency, pack_for
@@ -962,6 +962,45 @@ def _discount_nights(property, rt, nightly: list, room_total: Decimal, disc: dic
 	return new_total, new_tax, oc_net, oc_tax, base_total, off_total
 
 
+def stay_room_tax_rate(room_tax: Decimal, room_total: Decimal, nightly: list) -> Decimal:
+	"""The room tax rate of a stay, for the lines taxed like the room
+	(cleaning, pets, a taxable levy): the rate the room nights carry on
+	average. A stay whose room is at no charge (a full comp) still carries
+	its nights' own tax rate - the rate the folio posts the levy at
+	(folio._nightly_gst reads the locked night) - so a fee is never untaxed
+	because the room was given away."""
+	if room_total:
+		return room_tax / room_total * Decimal(100)
+	rates = [_dec(n.get("gst_rate")) for n in nightly or []]
+	return sum(rates, Decimal(0)) / len(rates) if rates else Decimal(0)
+
+
+def _pin_nights(nightly: list, locked: dict, inclusive: bool, night_over_cap: Decimal) -> tuple:
+	"""Put each booked night's locked room price back on the quote's night
+	(quote locked_nights) and total the room from them: (room total, room
+	tax, base and discount on the desk's basis, extra guests and their tax,
+	each at the night's own tax rate)."""
+	room_total = room_tax = base_total = off_total = oc = oc_tax = Decimal(0)
+	for n in nightly:
+		row = locked.get(str(n["date"]))
+		if row:
+			n.update(rate=flt(row.get("rate")), gst_rate=flt(row.get("gst_rate")),
+			         base_rate=flt(row.get("base_rate")) or flt(row.get("rate")),
+			         discount_amount=flt(row.get("discount_amount")),
+			         demand_premium_pct=flt(row.get("demand_premium_pct")),
+			         rate_code_amount=flt(row.get("rate_code_amount")))
+		rate, gst, off = _dec(n["rate"]), _dec(n["gst_rate"]), _dec(n.get("discount_amount"))
+		room_total += rate
+		room_tax += rate * gst / Decimal(100)
+		base_total += entry_rate(rate, gst, inclusive) + off
+		off_total += off
+		if night_over_cap:
+			net = night_over_cap / (Decimal(1) + gst / Decimal(100)) if inclusive else night_over_cap
+			oc += net
+			oc_tax += net * gst / Decimal(100)
+	return room_total, room_tax, base_total, off_total, oc, oc_tax
+
+
 def quote(
 	property: str,
 	room_type: str,
@@ -984,7 +1023,12 @@ def quote(
 	discount_type: str | None = None,
 	discount_value: float = 0,
 	night_discounts=None,
+	locked_nights: dict | None = None,
 ) -> dict:
+	"""locked_nights ({date: a locked night row}): a booked stay's room
+	nights that keep their price (Reservation.pinned_room_nights); the
+	meals, the voucher, the fees, the levy and the tax are priced around
+	them as usual."""
 	# a stay for a company is priced on the plan the company negotiated,
 	# unless the caller named a plan of its own
 	company_plan = False
@@ -1285,6 +1329,9 @@ def quote(
 		n.setdefault("discount_amount", 0)
 		n.setdefault("discount_source", None)
 		n.setdefault("fixed_rate", 1 if agreed_rate else 0)
+	if locked_nights and not pkg and not day_use:
+		room_total, room_tax, room_base_total, reservation_discount, over_cap, over_cap_tax = \
+			_pin_nights(nightly, locked_nights, inclusive, night_over_cap)
 
 	from kamra.folio import _fnb_gst
 	FNB_GST = _fnb_gst(property)
@@ -1326,9 +1373,10 @@ def quote(
 	prop = frappe.get_cached_doc("Property", property)
 	cleaning = _dec(prop.get("cleaning_fee") or 0)
 	cleaning_tax = Decimal(0)
+	# the lines taxed like the room (cleaning, pets, a taxable levy) take the
+	# room's own tax rate, a full comp included
+	avg_gst = stay_room_tax_rate(room_tax, room_total, nightly)
 	if cleaning > 0:
-		# Use the stay's average room GST as the cleaning tax rate.
-		avg_gst = (room_tax / room_total * Decimal(100)) if room_total else Decimal(0)
 		if cint(prop.get("cleaning_fee_taxable") if prop.get("cleaning_fee_taxable") is not None else 1):
 			if inclusive:
 				cleaning = cleaning / (Decimal(1) + avg_gst / Decimal(100))
@@ -1352,7 +1400,6 @@ def quote(
 	pet_fee = pet_charge_amount(prop, pets, billable_nights)
 	pet_tax = Decimal(0)
 	if pet_fee > 0:
-		avg_gst = (room_tax / room_total * Decimal(100)) if room_total else Decimal(0)
 		if inclusive:
 			pet_fee = pet_fee / (Decimal(1) + avg_gst / Decimal(100))
 		pet_tax = pet_fee * avg_gst / Decimal(100)
@@ -1371,9 +1418,8 @@ def quote(
 	if levy_fixed > 0:
 		levy += levy_fixed * billable_nights
 	if levy:
-		if room_total and cint(prop.get("room_levy_taxable")
-		                       if prop.get("room_levy_taxable") is not None else 1):
-			avg_gst = room_tax / room_total * Decimal(100)
+		if cint(prop.get("room_levy_taxable")
+		        if prop.get("room_levy_taxable") is not None else 1):
 			levy_tax = levy * avg_gst / Decimal(100)
 		tax += levy_tax
 		total_base += levy

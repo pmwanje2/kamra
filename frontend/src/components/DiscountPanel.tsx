@@ -17,6 +17,7 @@ import {
   type DiscountType,
 } from "../lib/reservationDiscount"
 import { useT } from "../lib/i18n"
+import SupervisorSignOff, { SignOffReasons } from "./SupervisorSignOff"
 
 const inputCls =
   "rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm disabled:bg-zinc-100 disabled:text-zinc-400 " +
@@ -62,7 +63,7 @@ export default function DiscountPanel(props: {
   function setType(type: DiscountType) {
     onChange({ ...d, type })
   }
-  function setNight(date: string, entry: { type: DiscountType; value: string }) {
+  function setNight(date: string, entry: { type: DiscountType; value: string; reason?: string }) {
     const nights = future
       ? applyToFutureNights(d.nights, stayNights, date, entry)
       : { ...d.nights, [date]: entry }
@@ -96,6 +97,9 @@ export default function DiscountPanel(props: {
           <option value="">{t("Reason…")}</option>
           {props.reasons.map((r) => <option key={r.name} value={r.name}>{t(r.description || r.name)}</option>)}
         </select>
+        <input className={`${inputCls} min-w-40 flex-1`} aria-label={t("Discount note")} disabled={off}
+          placeholder={t("Details (optional)")} maxLength={140} value={off ? "" : d.note ?? ""}
+          onChange={(e) => onChange({ ...d, note: e.target.value })} />
       </div>
       <p className="text-xs text-zinc-500">
         {off ? t("This rate plan does not allow discounts.")
@@ -141,6 +145,12 @@ export default function DiscountPanel(props: {
                             <input className={`${inputCls} w-24`} type="number" min="0" step="0.01" inputMode="decimal"
                               disabled={n.charged} value={own.value} placeholder={d.value || "0"}
                               onChange={(e) => setNight(n.date, { ...own, value: e.target.value })} />
+                            <select className={inputCls} aria-label={`${t("Discount reason")} ${n.date}`}
+                              disabled={n.charged} value={own.reason ?? ""}
+                              onChange={(e) => setNight(n.date, { ...own, reason: e.target.value })}>
+                              <option value="">{t("Same reason as the stay")}</option>
+                              {props.reasons.map((r) => <option key={r.name} value={r.name}>{t(r.description || r.name)}</option>)}
+                            </select>
                           </td>
                         </tr>
                       )
@@ -156,33 +166,8 @@ export default function DiscountPanel(props: {
       {props.children}
 
       {!off && gov?.needs_supervisor && (
-        <div className="space-y-2 rounded-lg bg-amber-50 p-2">
-          <p className="text-xs text-amber-800">
-            {!gov.can_set_rate && gov.max_pct > gov.limit_pct
-              ? t("A cut of {pct}% is over the front desk's limit of {limit}%.", {
-                  pct: gov.max_pct, limit: gov.limit_pct,
-                }) + " " : ""}
-            {gov.comp ? t("A 100% discount (comp) needs a manager's sign-off.") + " " : ""}
-            {gov.floor_breach.length
-              ? t("Below the rate floor on {dates}.", { dates: gov.floor_breach.join(", ") }) + " " : ""}
-            {gov.reason_requires_supervisor ? t("This reason needs a manager's sign-off.") + " " : ""}
-            {t("A manager signs this off with their PIN.")}
-          </p>
-          {gov.supervisors.length === 0 ? (
-            <p className="text-xs text-rose-700">{t("No manager with a cashier PIN can approve here yet.")}</p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              <select className={inputCls} aria-label={t("Manager")} value={props.supervisor}
-                onChange={(e) => props.onSupervisor(e.target.value)}>
-                <option value="">{t("Manager…")}</option>
-                {gov.supervisors.map((s) => <option key={s.user} value={s.user}>{s.full_name}</option>)}
-              </select>
-              <input className={`${inputCls} w-24`} type="password" inputMode="numeric" autoComplete="off"
-                value={props.pin} onChange={(e) => props.onPin(e.target.value.replace(/\D/g, "").slice(0, 8))}
-                placeholder={t("Their PIN")} aria-label={t("Manager PIN")} />
-            </div>
-          )}
-        </div>
+        <SupervisorSignOff reason={<SignOffReasons gov={gov} />} supervisors={gov.supervisors}
+          supervisor={props.supervisor} pin={props.pin} onSupervisor={props.onSupervisor} onPin={props.onPin} />
       )}
     </div>
   )
