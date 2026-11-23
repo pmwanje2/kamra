@@ -631,4 +631,99 @@ describe("Contract Tariffs", () => {
     expect(rpc).toHaveBeenLastCalledWith("kamra.rates.export_contract_tariffs_csv", { property: "Test Hotel",
       price_list: usd.name, customer: "__public__", as_of_date: "2026-12-15" })
   })
+
+  // ── Round 3: matrix and bulk-version UX (B-1, B-2) ─────────────────────────
+  it("tells a customer's negotiated row apart from the public row at a glance", async () => {
+    await render()
+    const publicRow = row("Corporate USD|Deluxe|")
+    const corporateRow = row("Corporate USD|Deluxe|Client Co")
+    expect(publicRow.dataset.scope).toBe("public")
+    expect(corporateRow.dataset.scope).toBe("corporate")
+    const badge = (scope: HTMLElement) => scope.querySelector<HTMLElement>("th[role=rowheader] [data-scope-badge]")
+    expect(text(badge(publicRow)!)).toBe("Public")
+    expect(badge(publicRow)!.className).toContain("bg-zinc-100")
+    expect(text(badge(corporateRow)!)).toContain("Corporate")
+    expect(text(badge(corporateRow)!)).toContain("Client Co")
+    expect(badge(corporateRow)!.className).toContain("bg-indigo-50")
+    // the negotiated row carries an accent edge and tint; the public row stays plain
+    expect(corporateRow.className).toContain("border-s-indigo-500")
+    expect(corporateRow.className).not.toContain("bg-white")
+    expect(publicRow.className).not.toContain("indigo")
+    // the row's controls are unchanged
+    expect(host.querySelector("input[aria-label='Select Deluxe · Corporate USD · Client Co']")).not.toBeNull()
+    expect(text(corporateRow)).toContain("USD 120.00")
+  })
+
+  it("names the tariff currency in a bulk edit and keeps a posting-currency step out of a foreign tariff", async () => {
+    await render()
+    const dialog = await openBulk()
+    // the plan rounds the UGX posting to 1,000; a USD tariff must not round to 1,000 dollars
+    expect(field<HTMLInputElement>(dialog, "rounding_step").value).toBe("")
+    expect(field<HTMLSelectElement>(dialog, "rounding_mode").value).toBe("Nearest")
+    expect(text(dialog)).not.toContain("Prefilled from the rate plan rounding rule")
+    expect(text(dialog)).toContain("Round to (USD — tariff currency; 0 = the currency's smallest unit)")
+    expect(text(dialog)).toContain("Tariffs are edited in the price list's contract currency; the UGX posting converts "
+      + "at booking or check-in under the rate plan's exchange rate lock.")
+    await choose(field(dialog, "adjustment"), "amount")
+    expect(text(dialog)).toContain("Amount change (USD)")
+    await choose(field(dialog, "adjustment"), "exact")
+    expect(text(dialog)).toContain("New rate (USD)")
+    await input(field(dialog, "adjustment_value"), "125.5")
+    expect(text(dialog)).toContain("Deluxe King: USD 130.00 → USD 125.50")
+  })
+
+  it("prefills the bulk rounding from the plans' shared rule on tariffs priced in the posting currency", async () => {
+    rpc.mockImplementationOnce(async () => ({ ...data,
+      price_lists: [usd, { ...local, rate_plans: ["Test Hotel-LOC", "Test Hotel-LOC2"] }],
+      rate_plan_policies: { ...policies,
+        "Test Hotel-LOC": { label: "Local", code: "LOC", currency: null, fx_lock_policy: "Fixed at Reservation",
+          base_rate_plan: null, adjust_extra_person: false, rounding_step: 500, rounding_mode: "Up" },
+        "Test Hotel-LOC2": { label: "Local weekend", code: "LOC2", currency: null, fx_lock_policy: "Fixed at Reservation",
+          base_rate_plan: null, adjust_extra_person: false, rounding_step: 500, rounding_mode: "Up" } } }))
+      .mockImplementationOnce(async () => ({ proposed: ["N1"] }))
+      .mockImplementationOnce(async () => data)
+    await render()
+    await choose(field<HTMLSelectElement>(host, "price_list"), local.name)
+    await click("Venues")
+    await check("Select all")
+    await click("Create new version in bulk")
+    const dialog = host.querySelector("dialog[open]")!
+    expect(field<HTMLInputElement>(dialog, "rounding_step").value).toBe("500")
+    expect(field<HTMLSelectElement>(dialog, "rounding_mode").value).toBe("Up")
+    expect(text(dialog)).toContain("Prefilled from the rate plan rounding rule")
+    expect(text(dialog)).toContain("Round to (UGX — tariff currency; 0 = the currency's smallest unit)")
+    // a tariff in the posting currency needs no conversion note
+    expect(text(dialog)).not.toContain("Tariffs are edited in the price list's contract currency")
+    await choose(field(dialog, "adjustment"), "amount")
+    expect(text(dialog)).toContain("Amount change (UGX)")
+    await input(field(dialog, "adjustment_value"), "1234")
+    expect(text(dialog)).toContain("Garden Hall: UGX 850,000 → UGX 851,500")
+    // the prefill stays editable
+    await input(field(dialog, "rounding_step"), "0")
+    expect(text(dialog)).toContain("Garden Hall: UGX 850,000 → UGX 851,234")
+    await click("Submit 1 for approval", dialog)
+    expect(rpc.mock.calls[1]).toEqual(["kamra.rates.bulk_propose_contract_tariffs", { property: "Test Hotel", entries: [
+      { price_list: local.name, item_code: "HALL", price_list_rate: 851234, valid_from: "2026-11-23", valid_upto: null },
+    ] }])
+  })
+
+  it("says each tariff keeps its own currency when a bulk edit spans currencies", async () => {
+    const terrace = { ...hall, item_code: "TERRACE", item_name: "Sky Terrace", price_list: usd.name, currency: "USD",
+      active: { ...active, name: "TER-1", rate: 400, local_equiv: null } }
+    rpc.mockImplementationOnce(async () => ({ ...data, price_lists: [usd, { ...local, rate_plans: ["Test Hotel-CORP"] }],
+      items: [...data.items, terrace] }))
+    await render()
+    await choose(field<HTMLSelectElement>(host, "price_list"), "")
+    await click("Venues")
+    await check("Select all")
+    await click("Create new version in bulk")
+    const dialog = host.querySelector("dialog[open]")!
+    expect(field<HTMLInputElement>(dialog, "rounding_step").value).toBe("")
+    expect(text(dialog)).toContain("Round to (in each tariff's currency; 0 = the currency's smallest unit)")
+    expect(text(dialog)).toContain("Tariffs are edited in the price list's contract currency")
+    await choose(field(dialog, "adjustment"), "amount")
+    expect(text(dialog)).toContain("Amount change (in each tariff's currency)")
+    await choose(field(dialog, "adjustment"), "exact")
+    expect(text(dialog)).toContain("New rate (in each tariff's currency)")
+  })
 })

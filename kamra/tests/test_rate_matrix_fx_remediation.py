@@ -559,3 +559,16 @@ class ZeroPricedRoomPlanTest(CardStayHarness):
 		                    rate_plan="FEE", check_in_date="2026-12-01", check_out_date="2026-12-03", adults=2,
 		                    children=0, night_rates=[])
 		self.assertAlmostEqual(self.folio._nightly_room_rate(unlocked, "2026-12-01"), 25000, places=2)
+
+	def test_a_tax_inclusive_rounded_spread_books_nights_that_add_up_to_the_cent(self):
+		# P2-R3: 18% inclusive, 250,000 over three nights rounded to 1,000 gross. Each night backs
+		# out to 98,000 / 1.18 = 83,050.847...; the last night must absorb the sub-cent remainder
+		self.docs["Property", "Test Hotel"].update(rates_include_tax=1)
+		self.room_tax = 18
+		self.plan("PKG", modifier_type="Absolute", modifier_value=250000, rounding_step=1000)
+		quoted = self.quote("PKG", adults=2, children=0, check_out="2026-12-04")
+		self.assertTrue(all("planned_rate" in night for night in quoted["nightly"]), quoted["nightly"])
+		self.assertEqual(round(quoted["room_total"], 2), 249152.54)
+		nights = self.book(quoted)
+		self.assertEqual(nights, [83050.85, 83050.85, 83050.84])
+		self.assertEqual(round(sum(nights), 2), round(quoted["room_total"], 2))
