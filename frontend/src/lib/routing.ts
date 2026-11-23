@@ -4,7 +4,7 @@
 // with no redirect to a mount.
 const pathname = typeof window === "undefined" ? "" : window.location.pathname
 const hotelAlias = /^\/hotel(?:\/|$)/.test(pathname)
-const rootRoute = /^\/(?:(?:book|stay)(?:\/|$)|hk\/?$|checkin\/)/.test(pathname)
+const rootRoute = /^\/(?:(?:book|stay)(?:\/|$)|hk\/?$|checkin\/.+)/.test(pathname)
 export const ROUTER_BASENAME = hotelAlias ? "/hotel" : rootRoute ? "/" : import.meta.env.PROD ? "/kamra" : "/"
 
 // Prefix an in-app path with the basename for a full-page navigation
