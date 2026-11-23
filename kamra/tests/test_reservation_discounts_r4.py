@@ -587,8 +587,10 @@ class ChangesLogTests(RoundFourTestCase):
 		self.assertEqual([(n["date"], n["from"], n["to"]) for n in agreed["nights"]],
 		                 [(d(5), 700, 650), (d(6), 700, 650)])
 		# Frappe's Version rows: the fields and nights the discount save changed
+		# (the agreed rate's later save clears the discount it replaces)
 		change = next(e for e in entries if e["kind"] == "change"
-		              and any(f["field"] == "discount_type" for f in e["fields"]))
+		              and any(f["field"] == "discount_type" and f["to"] == "Percent"
+		                      for f in e["fields"]))
 		field = next(f for f in change["fields"] if f["field"] == "discount_type")
 		self.assertEqual((field["label"], field["from"], field["to"]), ("Discount Type", "", "Percent"))
 		self.assertEqual(change["by"], DESK)
