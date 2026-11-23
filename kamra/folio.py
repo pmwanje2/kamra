@@ -670,19 +670,25 @@ def _posted_contract_fx(reservation, currency: str) -> tuple[Decimal, str, int] 
 	"""The rates a Current Date stay's room nights actually posted at, from
 	the charges themselves (voided nights and their reversals left out):
 	their average - each night is the same contract amount - the latest
-	rate date, and how many nights."""
+	rate date, and how many nights. A void_charge reversal carries no
+	contract currency, so every Room line of the stay is read to find
+	them. A night split over two folios is one night."""
 	rows = frappe.get_all("Folio Charge", filters={
-		"parenttype": "Folio", "reservation": reservation.name, "charge_type": "Room",
-		"contract_currency": currency}, fields=["name", "contract_fx_rate", "contract_fx_date", "reversal_of"])
+		"parenttype": "Folio", "reservation": reservation.name, "charge_type": "Room"},
+		fields=["name", "posting_date", "contract_currency", "contract_fx_rate", "contract_fx_date", "reversal_of"])
 	reversed_rows = {row.reversal_of for row in rows if row.get("reversal_of")}
 	posted = [row for row in rows if not row.get("reversal_of") and row.name not in reversed_rows
-	          and Decimal(str(row.contract_fx_rate or 0)) > 0]
+	          and row.get("contract_currency") == currency and Decimal(str(row.contract_fx_rate or 0)) > 0]
 	if not posted:
 		return None
-	average = sum((Decimal(str(row.contract_fx_rate)) for row in posted), Decimal(0)) / len(posted)
+	nights: dict[str, list[Decimal]] = {}
+	for row in posted:
+		night = str(getdate(row.posting_date)) if row.get("posting_date") else row.name
+		nights.setdefault(night, []).append(Decimal(str(row.contract_fx_rate)))
+	average = sum((sum(rates, Decimal(0)) / len(rates) for rates in nights.values()), Decimal(0)) / len(nights)
 	latest = max(str(getdate(row.contract_fx_date)) for row in posted if row.contract_fx_date) \
 		if any(row.contract_fx_date for row in posted) else None
-	return average.quantize(Decimal("0.000000001")), latest, len(posted)
+	return average.quantize(Decimal("0.000000001")), latest, len(nights)
 
 
 def reference_currency(reservation, grand_total=None, balance=None) -> dict | None:
@@ -723,11 +729,14 @@ def reference_currency(reservation, grand_total=None, balance=None) -> dict | No
 	return out
 
 
-def post_room_night(reservation, date, folios=None) -> bool:
+def post_room_night(reservation, date, folios=None, *, room_posted: list | None = None) -> bool:
 	"""Post one night's room (and meal plan) charge, routed by the
 	company's billing rules. Skips dates already posted - safe to call
 	from both audit and checkout. Pass `folios` (a dict) to batch saves
-	across nights; when omitted the touched folios save immediately."""
+	across nights; when omitted the touched folios save immediately.
+	`room_posted` (a list) takes the amount of the room line this call
+	posted - a Current Date night at its posting rate - for Night Audit's
+	total."""
 	date = str(date)
 	own_batch = folios is None
 	if own_batch:
@@ -770,6 +779,8 @@ def post_room_night(reservation, date, folios=None) -> bool:
 			"auto_posted": 1,
 		})
 		posted = True
+		if room_posted is not None:
+			room_posted.append(night_rate)
 		_post_room_levy(folios, reservation, date, night_rate)
 
 	# Its own charge type, not the shared Misc bucket: dedupe is by type and
@@ -1028,6 +1039,15 @@ def transfer_charges(from_folio: str, charge_rows: list, to_folio: str):
 	move_charges(src, dst, charge_rows)
 
 
+CONTRACT_FX_FIELDS = ("contract_currency", "contract_fx_rate", "contract_fx_date", "contract_fx_stale")
+
+
+def _contract_fx_trail(row) -> dict:
+	"""The rate a Current Date room night posted at, for a line that carries
+	it to another folio (ACTUAL reference currency reads it there)."""
+	return {field: row.get(field) for field in CONTRACT_FX_FIELDS}
+
+
 def move_charges(src, dst, charge_rows: list, reservation: str | None = None,
                  key: str | None = None):
 	"""Take charge lines off one open folio and put them on another, ledger
@@ -1059,9 +1079,10 @@ def move_charges(src, dst, charge_rows: list, reservation: str | None = None,
 			"gst_rate": row.gst_rate,
 			"auto_posted": row.auto_posted,
 			"is_alcohol": row.get("is_alcohol"),
-			# the line keeps the codes it was posted with
+			# the line keeps the codes, and a Current Date night the rate, it was posted with
 			"transaction_code": row.get("transaction_code"),
 			"gl_code": row.get("gl_code"),
+			**_contract_fx_trail(row),
 			"idempotency_key": key,
 		})
 		moved.append(dst.charges[-1])
@@ -1136,6 +1157,7 @@ def split_charge(from_folio: str, charge_row: str, to_folio: str,
 		"is_alcohol": row.get("is_alcohol"),
 		"transaction_code": row.get("transaction_code"),
 		"gl_code": row.get("gl_code"),
+		**_contract_fx_trail(row),
 	})
 	part_row = dst.charges[-1]
 	_recalculate(src)
@@ -1782,9 +1804,11 @@ def run_night_audit(property: str, business_date: str | None = None,
 			folio_name = open_folio(res)
 			folios_opened += 1
 			log_lines.append(f"opened folio {folio_name} for {res.name}")
-		if post_room_night(res, business_date):
+		room_posted: list = []
+		if post_room_night(res, business_date, room_posted=room_posted):
 			charges_posted += 1
-			amount_posted += Decimal(str(_nightly_room_rate(res, business_date)))
+			# what the room line posted at (a Current Date night at today's rate), not the booked night
+			amount_posted += sum((Decimal(str(amount)) for amount in room_posted), Decimal(0))
 			log_lines.append(f"posted room night {business_date} for {res.name}")
 
 	# no-shows: closing day D ends D's arrivals too (Opera end of day), so

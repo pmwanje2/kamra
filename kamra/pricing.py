@@ -778,23 +778,31 @@ def plan_stay_nights(rate_plan: str, nights: list[tuple[Decimal, Decimal]], extr
 	in proportion and held at the long-stay floor; the plan's rounding step
 	then rounds each night's price as the guest sees it (OPERA per-night
 	commercial rounding) - gross in a tax-inclusive house, net otherwise -
-	unless that would take the stay below its floor. The quote and the
-	folio's unlocked nights both price through here. (rates, rounded)."""
+	unless that would take the stay below its floor. Nights with no price
+	of their own (an Absolute or Amount plan on a zero-priced room) share
+	the plan's price evenly, the last night taking the remainder. The
+	quote and the folio's unlocked nights both price through here. (rates,
+	rounded): rounded when each night carries its own price to lock."""
 	total = sum((_dec(rate) for rate, _gst in nights), Decimal(0))
 	planned = max(apply_rate_plan(rate_plan, total, extra_person_total, nights=len(nights)), _dec(floor))
-	factor = planned / total if total else Decimal(1)
-	rates = [_dec(rate) * factor for rate, _gst in nights]
 	rp = frappe.get_doc("Rate Plan", rate_plan)
+	spread = bool(nights) and not total and planned > 0
+	if spread:
+		share = round_rate_amount(planned / len(nights), 0, currency=rp.get("currency"))
+		rates = [share] * (len(nights) - 1) + [planned - share * (len(nights) - 1)]
+	else:
+		factor = planned / total if total else Decimal(1)
+		rates = [_dec(rate) * factor for rate, _gst in nights]
 	step = _dec(rp.get("rounding_step"))
 	if step <= 0:
-		return rates, False
+		return rates, spread
 	mode = rp.get("rounding_mode") or "Nearest"
 	rounded = []
 	for rate, (_rate, gst) in zip(rates, nights, strict=True):
 		tax = Decimal(1) + _dec(gst) / Decimal(100) if inclusive else Decimal(1)
 		rounded.append(round_rate_amount(rate * tax, step, mode) / tax if rate > 0 else rate)
 	if sum(rounded, Decimal(0)) < _dec(floor):
-		return rates, False
+		return rates, spread
 	return rounded, True
 
 
