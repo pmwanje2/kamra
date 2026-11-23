@@ -571,10 +571,10 @@ def _channel_contract(conn, e: dict, home: str) -> tuple[dict | None, str | None
 	contract snapshot of them in the contract's per-night shape (each night's
 	own amounts, the scalar figures the check-in night's, as
 	pricing.contract_rate keeps a stay over a tariff change). An
-	OTA-collected booking (prepaid or a virtual
-	card; also when the channel does not say) is fixed at reservation; a
-	property-collected one follows its rate plan's lock, as a desk booking
-	does (pricing.reservation_fx_policy).
+	OTA-collected booking (prepaid or a virtual card; also when the channel
+	does not say) is fixed at reservation; a property-collected one follows
+	its rate plan's lock, as a desk booking does
+	(pricing.reservation_fx_policy).
 
 	({rate_plan, total, nightly, agreed_rate, snapshot}, None); (None, why)
 	when no rate is published for C; (None, None) when the booking is not in

@@ -949,6 +949,12 @@ class ChannexAriImportTestCase(_AriFixture, IntegrationTestCase):
 		self.assertNotIn("rp-twin-bar", self.mapped())
 
 
+# CORP's contract night, as hospitality_tariffs.tariff_rate answers it, and
+# the resolver's refusal when Finance has published no exchange rate
+CORP_PRICED = {"is_tariff": 1, "currency": "EUR", "nightly": 90, "fx_rate": 1.1, "agreed_rate": 99}
+CORP_FX_REFUSAL = {"is_tariff": 1, "refusal": "HSP-TARIFF-003: No single Currency Exchange rate for the business date."}
+
+
 class ChannexAriCurrencyTestCase(_AriWorkerMixin, IntegrationTestCase):
 	"""A EUR contract plan on Twin at this USD property: CORP, EUR 90 a night,
 	1.1 dollars a euro on the business date, so USD 99. Each case maps
@@ -956,15 +962,13 @@ class ChannexAriCurrencyTestCase(_AriWorkerMixin, IntegrationTestCase):
 	USD 99, anything else nothing. Channex never converts."""
 
 	BASELINE_DAYS = 8
-	PRICED = {"is_tariff": 1, "currency": "EUR", "nightly": 90, "fx_rate": 1.1, "agreed_rate": 99}
-	FX_REFUSAL = {"is_tariff": 1, "refusal": "HSP-TARIFF-003: No single Currency Exchange rate for the business date."}
 
 	def setUp(self):
 		super().setUp()
 		self.corp = frappe.get_doc({"doctype": "Rate Plan", "property": self.property,
 			"rate_plan_name": "Corporate EUR", "code": "CORP" + frappe.generate_hash(length=4).upper(),
 			"currency": "EUR", "modifier_type": "Percent", "modifier_value": 0}).insert(ignore_permissions=True).name
-		self.tariff = dict(self.PRICED, fx_date=nowdate())
+		self.tariff = dict(CORP_PRICED, fx_date=nowdate())
 		bridge = patch("kamra.erp_bridge.bridge_call", side_effect=self.bridge)
 		bridge.start()
 		self.addCleanup(bridge.stop)
@@ -1039,7 +1043,7 @@ class ChannexAriCurrencyTestCase(_AriWorkerMixin, IntegrationTestCase):
 		self.map_corp("USD")
 		self.flush()
 		self.assertEqual(self.sent("restrictions", "rp-twin-corp")[day(5)]["rate"], "99.00")
-		self.tariff = dict(self.FX_REFUSAL)
+		self.tariff = dict(CORP_FX_REFUSAL)
 		self.season(self.twin, 5, 6, value=150)
 		t0 = self.clock[0]
 		out = self.flush()
@@ -1058,7 +1062,7 @@ class ChannexAriCurrencyTestCase(_AriWorkerMixin, IntegrationTestCase):
 		self.flush()
 		self.assertEqual(self.finance_alerts(), 1)
 		# Finance publishes the rate: the retry sends the held night, nothing was stopped
-		self.tariff = dict(self.PRICED, fx_date=nowdate())
+		self.tariff = dict(CORP_PRICED, fx_date=nowdate())
 		self.tick(60)
 		self.flush()
 		self.assertEqual({r.status for r in self.rows()}, {"Sent"})
