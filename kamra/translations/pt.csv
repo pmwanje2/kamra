@@ -103,3 +103,7 @@ Extra guests by arrangement,Hóspedes adicionais conforme acordado
 Room levy,Taxa por quarto
 Room nights,Noites de quarto
 "No nights are posted yet. Use Advance bill to post the stay now, then give the discount, or use a rate plan or promo code at booking.","Ainda não há diárias lançadas. Use «Fatura antecipada» para lançar a estadia agora e depois dê o desconto, ou use um plano tarifário ou código promocional na reserva."
+OTA Tax Rules row {0}: the text needs a letter or a digit.,Linha {0} das Regras de impostos OTA: o texto precisa de uma letra ou um dígito.
+OTA Tax Basis rows {0} and {1} are the same OTA ({2}): keep one.,As linhas {0} e {1} da Base de impostos OTA são a mesma OTA ({2}): mantenha uma.
+OTA Tax Rules,Regras de impostos OTA
+OTA Tax Basis,Base de impostos OTA
