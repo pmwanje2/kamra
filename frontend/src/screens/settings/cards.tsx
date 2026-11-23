@@ -15,6 +15,7 @@ import { Button } from "../../components/ui/button"
 import ImageField from "../../components/ImageField"
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card"
 import { cur, moneyLocale, useLocale } from "../../lib/money"
+import { toFullPath } from "../../lib/routing"
 
 
 /** Self-contained cards the settings hub (./SettingsHub) places on its
@@ -750,7 +751,7 @@ function AiAssistantCard({
         )}
         <p className="text-xs text-zinc-400">
           {t("Want Claude the app?")}{" "}
-          <a href="/kamra/assistant" className="font-medium text-brand-700 hover:underline">
+          <a href={toFullPath("/assistant")} className="font-medium text-brand-700 hover:underline">
             {t("{assistant} → Connect your AI")}
           </a>
           . {t("Want Claude the model in this chat? Use the OpenRouter preset.")}

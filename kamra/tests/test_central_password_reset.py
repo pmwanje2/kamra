@@ -34,11 +34,21 @@ class CentralPasswordResetTest(unittest.TestCase):
 		self.assertEqual([r for r in hooks.website_redirects
 		                  if re.search(r"update-password", r["source"])], [])
 
-	def test_kamra_guest_redirects_are_kept(self):
-		self.assertEqual(_redirected("/book")[0]["target"], "/kamra/book")
-		self.assertEqual(_redirected("/stay/abc")[0]["target"], r"/kamra/stay/\1")
-		self.assertEqual(_redirected("/hk")[0]["target"], "/kamra/hk")
-		self.assertEqual(_redirected("/checkin/tok")[0]["target"], r"/kamra/checkin/\1")
+	def test_kamra_public_routes_are_answered_in_place(self):
+		# No redirect of Kamra's own: a 301 to /kamra/... is cached by browsers
+		# and comes ahead of a later app's mask (maximus_branding).
+		for path in ("/book", "/book/2026-07-10/2026-07-12/2/0", "/stay", "/stay/abc", "/hk"):
+			self.assertEqual(_redirected(path), [], path)
+		for from_route in ("/book", "/book/<path:app_path>", "/stay", "/stay/<path:app_path>", "/hk"):
+			self.assertIn({"from_route": from_route, "to_route": "kamra"},
+			              hooks.website_route_rules)
+
+	def test_guest_check_in_link_is_answered_in_place(self):
+		# No redirect of Kamra's own: a 301 to /kamra/checkin/... is cached by the
+		# guest's browser and comes ahead of a later app's mask (maximus_branding).
+		self.assertEqual(_redirected("/checkin/tok"), [])
+		self.assertIn({"from_route": "/checkin/<path:app_path>", "to_route": "kamra"},
+		              hooks.website_route_rules)
 
 	def test_kamra_own_update_password_page_is_still_served(self):
 		# /kamra/update-password is a SPA route behind the /kamra catch-all

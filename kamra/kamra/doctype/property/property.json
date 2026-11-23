@@ -443,7 +443,7 @@
    "fieldname": "enabled_modules",
    "fieldtype": "Small Text",
    "label": "Modules In Use",
-   "description": "Which parts of Kamra this property actually runs, comma separated. Empty = everything. A serviced-apartment operator has no restaurant and no banquet hall, and shouldn't be shown three empty menus on their first morning."
+   "description": "Which parts of the system this property actually runs, comma separated. Empty = everything. A serviced-apartment operator has no restaurant and no banquet hall, and shouldn't be shown three empty menus on their first morning."
   },
   {
    "default": "1",
@@ -763,7 +763,7 @@
   },
   {
    "default": "1",
-   "description": "Let staff with MCP Read or MCP Manage connect Claude or another MCP client to this property. The site setting kamra_mcp_disabled still turns MCP off everywhere.",
+   "description": "Let staff with MCP Read or MCP Manage connect Claude or another MCP client to this property. When IT turns MCP off for the whole site, that still wins.",
    "fieldname": "mcp_enabled",
    "fieldtype": "Check",
    "label": "AI access over MCP"

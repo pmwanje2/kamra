@@ -576,6 +576,22 @@ def rates_include_tax(property: str) -> bool:
 	return bool(frappe.get_cached_doc("Property", property).get("rates_include_tax"))
 
 
+def selling_currency(property: str | None) -> str | None:
+	"""The currency a property prices in: its own, else its country pack's."""
+	if not property:
+		return None
+	from kamra.localization import default_currency, pack_for
+	return frappe.get_cached_doc("Property", property).currency or default_currency(pack_for(property))
+
+
+def night_rate_places(property: str | None) -> int:
+	"""The decimals a booking's locked night rate keeps: the ISO 4217 minor
+	unit of the property's currency (three for KWD), never fewer than two.
+	The net share of a tax-inclusive price is not a whole UGX: 127,118.64 of
+	a 150,000 night at 18%, where 127,119 would bill 150,000.42."""
+	return max(2, _minor_unit(selling_currency(property)))
+
+
 def stay_season_rules(property: str, check_in, check_out,
                       room_type: str | None = None) -> dict:
 	"""The strictest season rules a stay runs into.

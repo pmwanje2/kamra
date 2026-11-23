@@ -826,7 +826,10 @@ class Reservation(Document):
 		of the planned total (same spread as pricing.plan_stay_nights) - or,
 		when the plan rounds, the night's own rounded price (planned_rate) -
 		and the last night absorbs rounding so the nights add up to the
-		quote's room total exactly."""
+		quote's room total exactly - to the currency's decimals, never fewer
+		than two (pricing.night_rate_places)."""
+		from kamra.pricing import night_rate_places
+		places = night_rate_places(self.property)
 		nightly = q.get("nightly") or []
 		plan_free = sum(float(n["rate"]) for n in nightly)
 		room_total = float(q.get("room_total") or 0)
@@ -840,10 +843,10 @@ class Reservation(Document):
 			        + (self.children or 0) * float(mp.get("price_per_child") or 0))
 		rows, running = [], 0.0
 		for i, n in enumerate(nightly):
-			rate = round(float(n["planned_rate"]) if "planned_rate" in n else float(n["rate"]) * factor, 2)
+			rate = round(float(n["planned_rate"]) if "planned_rate" in n else float(n["rate"]) * factor, places)
 			# a zero-priced room's spread nights carry planned_rate: they absorb too
 			if i == len(nightly) - 1 and (plan_free or "planned_rate" in n):
-				rate = round(room_total - running, 2)
+				rate = round(room_total - running, places)
 			running += rate
 			rows.append({
 				"stay_date": n["date"],

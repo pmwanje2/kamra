@@ -168,7 +168,10 @@ export default function PublicCheckin() {
     setOthers((os) => os.map((o, j) => (j === i ? { ...o, ...patch } : o)))
 
   useEffect(() => {
-    if (!token) return
+    if (!token) {
+      setError(t("This check-in link isn't valid. Please contact the hotel."))
+      return
+    }
     call<Info>("kamra.public_api.precheckin_info", { token })
       .then((i) => {
         adoptUiLocale((i as unknown as { ui_locale?: { currency_symbol?: string; locale?: string } }).ui_locale)

@@ -36,7 +36,7 @@
  ],
  "fields": [
   {
-   "description": "The property this connection belongs to. HeyKoala provisions a phone number per property.",
+   "description": "The property this connection belongs to. The voice partner provisions a phone number per property.",
    "fieldname": "property",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -59,7 +59,7 @@
   },
   {
    "default": "HeyKoala",
-   "description": "First-party is HeyKoala (rock8v2 for voice, HeyKoala Concierge for WhatsApp). Twilio/Retell/Vapi/Meta Business are BYO providers using the same webhook contract.",
+   "description": "The first option is the voice partner (voice calls and a WhatsApp concierge). Twilio/Retell/Vapi/Meta Business are BYO providers using the same webhook contract.",
    "fieldname": "provider",
    "fieldtype": "Select",
    "in_list_view": 1,
@@ -98,7 +98,7 @@
    "fieldtype": "Column Break"
   },
   {
-   "description": "The provider-side account or line identifier (e.g. HeyKoala tenant id, Twilio SID).",
+   "description": "The provider-side account or line identifier (e.g. the voice partner's tenant id, a Twilio SID).",
    "fieldname": "external_account_id",
    "fieldtype": "Data",
    "label": "External Account ID"
@@ -109,13 +109,13 @@
    "label": "Auth"
   },
   {
-   "description": "HMAC secret Kamra uses to verify inbound webhooks. Rotate freely — the provider is told the new value when they re-connect.",
+   "description": "HMAC secret used to verify inbound webhooks. Rotate freely — the provider is told the new value when they re-connect.",
    "fieldname": "webhook_secret",
    "fieldtype": "Password",
    "label": "Inbound Webhook Secret"
   },
   {
-   "description": "Where Kamra POSTs outbound replies (voice utterances, WhatsApp messages). Provider-specific; HeyKoala fills this in automatically at connect time.",
+   "description": "Where outbound replies (voice utterances, WhatsApp messages) are POSTed. Provider-specific; the voice partner fills this in automatically at connect time.",
    "fieldname": "outbound_send_url",
    "fieldtype": "Data",
    "label": "Outbound URL"
@@ -132,7 +132,7 @@
   },
   {
    "depends_on": "eval:doc.provider==\"Meta Business\"",
-   "description": "Meta App Secret (App settings > Basic). Kamra checks the X-Hub-Signature-256 on every inbound WhatsApp webhook with it; without it inbound messages are rejected.",
+   "description": "Meta App Secret (App settings > Basic). The X-Hub-Signature-256 on every inbound WhatsApp webhook is checked with it; without it inbound messages are rejected.",
    "fieldname": "app_secret",
    "fieldtype": "Password",
    "label": "App Secret"
