@@ -189,12 +189,15 @@ def ari_snapshot(property: str, connection: str, days: int = 90, start=None,
 
 
 def _one_night_rate(property: str, room_type: str, d, d2) -> float:
-	"""The pricing engine's one-night sell rate (2 adults), 0 when the
-	night cannot be quoted - availability still goes out for that day."""
+	"""The pricing engine's one-night sell rate (2 adults), as the channels
+	sell it (channel_ari.channel_rate: gross where the property's rates
+	include tax), 0 when the night cannot be quoted - availability still
+	goes out for that day."""
+	from kamra.channel_ari import channel_rate
 	from kamra.pricing import quote
 	try:
 		q = quote(property, room_type, str(d), str(d2), 2, 0)
-		return round(float(q["nightly"][0]["rate"]), 2)
+		return float(channel_rate(property, q))
 	except Exception:
 		return 0.0
 

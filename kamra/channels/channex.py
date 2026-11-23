@@ -113,10 +113,11 @@ def _attributes(item: dict) -> dict:
 _ARI_ID_FIELD = {"availability": "room_type_id", "restrictions": "rate_plan_id"}
 
 
-def _ari_value(field: str, value):
+def _ari_value(field: str, value, quantum: Decimal):
 	if field == "rate":
-		# a decimal string: Channex refuses a bare float with decimals
-		return str(Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+		# a decimal string with the currency's decimals (none for UGX, three
+		# for KWD): Channex refuses a bare float with decimals
+		return str(Decimal(str(value)).quantize(quantum, rounding=ROUND_HALF_UP))
 	if field == "availability":
 		return int(value)
 	return value
@@ -134,7 +135,9 @@ def push_ari_changes(conn, kind: str, changes: list[dict]) -> dict:
 	"wait": seconds the RateLimit header asks to hold back}. A rejected value
 	does not fail the call: Channex applies the others and lists it under
 	meta.warnings. ChannexRateLimited on a 429, ChannexError otherwise."""
+	from kamra.channel_ari import rate_quantum
 	id_field = _ARI_ID_FIELD[kind]
+	quantum = rate_quantum(conn.get("property"))
 	values, by_key = [], {}
 	for change in changes:
 		obj = {"property_id": conn.external_property_id, id_field: change["external_id"]}
@@ -143,7 +146,7 @@ def push_ari_changes(conn, kind: str, changes: list[dict]) -> dict:
 		else:
 			obj["date_from"], obj["date_to"] = change["date_from"], change["date_to"]
 		for field, value in (change.get("values") or {}).items():
-			obj[field] = _ari_value(field, value)
+			obj[field] = _ari_value(field, value, quantum)
 		values.append(obj)
 		by_key.setdefault(_change_key(id_field, obj), change)
 	body, headers = _send(conn, "POST", kind, payload={"values": values})

@@ -81,17 +81,43 @@ def availability_cells(conn, date_from, date_to) -> dict[str, dict[str, dict]]:
 	return out
 
 
+def rate_quantum(property: str | None) -> Decimal:
+	"""The smallest step of a rate sent to a channel: the ISO 4217 minor unit
+	of the currency the property sells in, as pricing.quote prices it (1 for
+	UGX, 0.001 for KWD); 0.01 without a property."""
+	from kamra.pricing import _minor_unit
+	currency = None
+	if property:
+		from kamra.localization import default_currency, pack_for
+		currency = frappe.get_cached_doc("Property", property).currency or default_currency(pack_for(property))
+	return Decimal(1).scaleb(-_minor_unit(currency))
+
+
+def channel_rate(property: str, q: dict) -> Decimal:
+	"""One night's room price as the channels sell it, from a one-night
+	quote, on the property's selling basis: gross - the night's room tax put
+	back on - where its rates include tax, net otherwise (the OTA adds the
+	tax, its extranet set to match). An OTA booking's total is read as gross
+	(channel_manager.lock_channel_rates), so one that comes back at this
+	price bills what the desk would. To the currency's minor unit."""
+	from kamra.pricing import rates_include_tax
+	rate = Decimal(str(q["room_total"]))
+	if rates_include_tax(property):
+		rate *= 1 + Decimal(str(q["nightly"][0].get("gst_rate") or 0)) / 100
+	return rate.quantize(rate_quantum(property), rounding=ROUND_HALF_UP)
+
+
 def _plan_night_rate(property: str, room_type: str, rate_plan: str | None, d) -> Decimal | None:
 	"""The pricing engine's room total for one night from `d`, on `rate_plan`
 	(None: the room type's base price), for the type's base occupancy (or 2
-	adults), to 2 decimals. None when the night cannot be quoted or is not
-	worth more than 0."""
+	adults), as the channels sell it (channel_rate). None when the night
+	cannot be quoted or is not worth more than 0."""
 	from kamra.pricing import quote
 	adults = frappe.db.get_value("Room Type", room_type, "base_occupancy") or 2
 	try:
 		q = quote(property, room_type, str(d), str(add_days(d, 1)), adults=int(adults),
 		          children=0, rate_plan=rate_plan or None)
-		total = Decimal(str(q["room_total"])).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+		total = channel_rate(property, q)
 	except Exception:
 		return None
 	return total if total > 0 else None
@@ -128,10 +154,13 @@ def restriction_cells(conn, date_from, date_to) -> dict[str, dict[str, dict]]:
 
 
 def _canon(value):
-	"""A cell value as stored in Channel ARI State (JSON): rates as 2-decimal
-	strings, so 241 and "241.00" compare equal."""
+	"""A cell value as stored in Channel ARI State (JSON): rates as decimal
+	strings with every decimal they carry and at least 2, so 241 and
+	"241.00" compare equal and a KWD 12.349 is not taken for 12.345."""
 	if isinstance(value, Decimal | float) and not isinstance(value, bool):
-		return str(Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+		rate = Decimal(str(value))
+		places = max(2, -rate.normalize().as_tuple().exponent)
+		return str(rate.quantize(Decimal(1).scaleb(-places)))
 	return value
 
 

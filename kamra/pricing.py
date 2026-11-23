@@ -20,6 +20,14 @@ def _dec(v) -> Decimal:
 	return Decimal(str(v or 0))
 
 
+def _minor_unit(currency: str | None) -> int:
+	"""ISO 4217 decimals of a currency (CLDR data, as payment rounding uses)."""
+	if not currency:
+		return 2
+	from babel.numbers import get_currency_precision
+	return get_currency_precision(currency)
+
+
 def pet_charge_amount(prop, pets: int, nights: int) -> Decimal:
 	"""What the property charges for this many pets over the stay, before
 	tax. Per stay by default - most homestays charge once per pet, not per
