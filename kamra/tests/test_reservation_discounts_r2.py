@@ -262,9 +262,11 @@ class TaxInclusiveSlabTests(RoundTwoTestCase):
 		folio_mod.open_folio(res)
 		folio_mod.post_room_night(res, d(5))
 		room = frappe.get_all("Folio Charge", filters={"reservation": res.name, "charge_type": "Room"},
-		                      fields=["amount", "gst_rate"])
+		                      fields=["amount", "gst_rate", "description"])
 		self.assertEqual([(round(flt(c.amount), 2), flt(c.gst_rate)) for c in room], [(6857.14, 5)])
 		self.assertAlmostEqual(flt(room[0].amount) * 1.05, 7200, places=1)
+		# the line names the base and the discount on the one basis they were given
+		self.assertIn("8,000.00 less discount 800.00", room[0].description)
 
 	def test_a_booked_slab_night_is_re_discounted_and_cleared_on_its_own_base(self):
 		out = self.lux(discount_type="Percent", discount_value=10, discount_reason="RATE-PROMO")
