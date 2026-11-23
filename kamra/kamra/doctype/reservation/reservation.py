@@ -810,7 +810,10 @@ class Reservation(Document):
 		A rate plan works on the stay total, so each night carries its share
 		of the planned total (same spread as folio._rate_plan_factor), and
 		the last night absorbs rounding so the nights add up to the quote's
-		room total exactly."""
+		room total exactly - to the currency's decimals, never fewer than two
+		(pricing.night_rate_places)."""
+		from kamra.pricing import night_rate_places
+		places = night_rate_places(self.property)
 		nightly = q.get("nightly") or []
 		plan_free = sum(float(n["rate"]) for n in nightly)
 		room_total = float(q.get("room_total") or 0)
@@ -824,9 +827,9 @@ class Reservation(Document):
 			        + (self.children or 0) * float(mp.get("price_per_child") or 0))
 		rows, running = [], 0.0
 		for i, n in enumerate(nightly):
-			rate = round(float(n["rate"]) * factor, 2)
+			rate = round(float(n["rate"]) * factor, places)
 			if i == len(nightly) - 1 and plan_free:
-				rate = round(room_total - running, 2)
+				rate = round(room_total - running, places)
 			running += rate
 			rows.append({
 				"stay_date": n["date"],
