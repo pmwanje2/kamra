@@ -152,7 +152,7 @@ export const ratePlansConfig: ScreenConfig = {
     { field: "currency", label: "Currency (blank = property currency)", type: "link", linkDoctype: "Currency" },
     { field: "fx_lock_policy", label: "Exchange rate lock", type: "select",
       options: ["Fixed at Reservation", "Fixed at Check In", "Current Date"],
-      hint: "When a foreign-currency contract converts to the property's currency: at booking, at check-in, on each night's posting date, or when the group block is created." },
+      hint: "When a foreign-currency contract converts to the property's currency: at booking, at check-in, or on each night's posting date." },
     { field: "base_rate_plan", label: "Base rate plan (derived rate)", type: "link", linkDoctype: "Rate Plan", linkPropertyScoped: true,
       hint: "Blank: priced from the room type's card or this plan's own tariff. Set: this plan's modifier applies to the base plan's price." },
     { field: "adjust_extra_person", label: "Adjust extra person charges", type: "check",

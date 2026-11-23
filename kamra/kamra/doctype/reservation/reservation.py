@@ -437,12 +437,15 @@ class Reservation(Document):
 		"""Freeze the read resolver's reference at booking, not on later reads.
 		The one exception is a contract locked at check-in, whose exchange
 		rate check-in has just converted again (pricing.relock_contract_fx_at_check_in;
-		kamra_fx_checkin_relock is the tariff resolver's flag for a stay it priced)."""
+		kamra_fx_checkin_relock is the tariff resolver's flag for a stay it priced).
+		New dates price the nights the contract never priced (reprice_contract_nights)."""
 		if not self.is_new():
 			if self.flags.get("kamra_contract_relocked") or self.flags.get("kamra_fx_checkin_relock"):
 				return
 			previous = self.get_doc_before_save()
 			self.contract_tariff = previous.get("contract_tariff") if previous else None
+			if previous:
+				self.reprice_contract_nights(previous.get("check_in_date"), previous.get("check_out_date"))
 			return
 		self.contract_tariff = None
 		if not self.auto_price or self.group_booking:
@@ -459,6 +462,16 @@ class Reservation(Document):
 			frappe.throw(_("The contract rate changed. Refresh the quote before booking."))
 		self.agreed_rate = agreed_rate
 		self.contract_tariff = {"tariff": tariff, "agreed_rate": agreed_rate}
+
+	def reprice_contract_nights(self, booked_check_in, booked_check_out):
+		"""The contract for the stay's new dates, from the ones it was priced
+		for (pricing.contract_tariff_for_new_dates): an added night is
+		resolved at its own tariff, or the new dates are refused; the save and
+		the amendment previews both run it, so they agree."""
+		from kamra.pricing import contract_tariff_for_new_dates
+		snapshot = contract_tariff_for_new_dates(self, booked_check_in, booked_check_out)
+		if snapshot is not None:
+			self.contract_tariff = snapshot
 
 	def validate_minimum_nights(self):
 		"""Property.minimum_nights is a hard floor for overnight stays."""

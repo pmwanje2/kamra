@@ -53,19 +53,21 @@ class RatePlan(Document):
 
 	def validate_derived_plans(self):
 		"""The plans derived from this one (and from them) price in its
-		currency and need it enabled: a currency their own currency no
-		longer matches, or disabling it under an enabled derived plan, is
-		refused."""
+		currency and need it enabled: a currency their own currency, or the
+		tariff price list of a plan that inherits it, no longer matches, or
+		disabling it under an enabled derived plan, is refused."""
 		if not self.name:
 			return
 		from kamra.pricing import RATE_PLAN_CHAIN_LIMIT, rate_plan_currency, resolve_rate_plan_chain
 
 		currency = None
+		lists = frappe.db.exists("DocType", "Price List") and frappe.get_meta("Rate Plan").has_field(
+			"custom_tariff_price_list")
+		fields = ["name", "rate_plan_name", "currency", "disabled", *(["custom_tariff_price_list"] if lists else [])]
 		bases, seen = [self.name], {self.name}
 		for _depth in range(RATE_PLAN_CHAIN_LIMIT):
 			children = [child for base in bases for child in frappe.get_all(
-				"Rate Plan", filters={"base_rate_plan": base},
-				fields=["name", "rate_plan_name", "currency", "disabled"]) if child.name not in seen]
+				"Rate Plan", filters={"base_rate_plan": base}, fields=fields) if child.name not in seen]
 			if not children:
 				return
 			if cint(self.disabled) and bases == [self.name] and any(not cint(child.disabled) for child in children):
@@ -78,5 +80,11 @@ class RatePlan(Document):
 					frappe.throw(_("The derived rate plan {0} uses {1}; this plan's currency would be {2}. Change "
 					               "the derived plan first.").format(child.rate_plan_name or child.name,
 					                                                  child.currency, currency))
+				price_list = None if child.currency else child.get("custom_tariff_price_list")
+				list_currency = price_list and frappe.db.get_value("Price List", price_list, "currency")
+				if list_currency and list_currency != currency:
+					frappe.throw(_("The derived rate plan {0} uses the tariff price list {1} in {2}; this plan's "
+					               "currency would be {3}. Change the derived plan first.").format(
+						child.rate_plan_name or child.name, price_list, list_currency, currency))
 			seen.update(child.name for child in children)
 			bases = [child.name for child in children if not child.currency]

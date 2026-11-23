@@ -659,7 +659,10 @@ function ActionDialog({ action, data, locale, dateLocale, list, rounding, custom
   const [customer, setCustomer] = useState("")
   // a customer row's version is that customer's own price; a public row's may be a new customer's first (SAP A305)
   const target = item.customer || customer.trim()
-  const minDate = item.active?.valid_from === data.business_date ? addDays(data.business_date, 1) : data.business_date
+  // a customer's first price follows no version of its own (as the bulk dialog has it)
+  const fresh = !item.customer && target !== ""
+  const minDate = !fresh && item.active?.valid_from === data.business_date ? addDays(data.business_date, 1)
+    : data.business_date
   const [amount, setAmount] = useState("")
   const [validFrom, setValidFrom] = useState(() => minDate > todayPlus(1) || item.active?.valid_from === data.business_date ? minDate : todayPlus(1))
   const [validUntil, setValidUntil] = useState("")

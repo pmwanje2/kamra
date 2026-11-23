@@ -870,4 +870,44 @@ describe("Contract Tariffs", () => {
     await vi.waitFor(() => expect(host.textContent).not.toContain("Refreshing contract tariffs…"))
     expect(text(row("Corporate USD|Deluxe|"))).not.toContain("Scheduled: USD 150.00")
   })
+
+  // ── Round 7 (Gemini 4 Neon re-review R6) ───────────────────────────────────
+  const fxLockHint = "When a foreign-currency contract converts to the property's currency: at booking, at check-in, "
+    + "or on each night's posting date."
+  const groupBlockHint = "When a foreign-currency contract converts to the property's currency: at booking, at "
+    + "check-in, on each night's posting date, or when the group block is created."
+
+  it("explains the exchange rate lock without the group block lock it no longer offers", async () => {
+    await render("/rate-plans")
+    await click("New")
+    expect(text()).toContain(fxLockHint)
+    expect(text()).not.toMatch(/group block/i)
+  })
+
+  it.each(["ar", "de", "es", "fil", "id", "pt", "zh-CN"])("translates the exchange rate lock hint in %s", async (language) => {
+    const dictionary = await ensureDictionary(language)
+    expect(dictionary[fxLockHint]?.trim(), `${language}: ${fxLockHint}`).toBeTruthy()
+    expect(dictionary).not.toHaveProperty([groupBlockHint])
+  })
+
+  it("lets a new customer's first own rate start on the business date when the public version did", async () => {
+    rpc.mockImplementationOnce(async () => data)
+      .mockImplementationOnce(async () => ({ name: "NEW", customer: "New Client" }))
+      .mockImplementationOnce(async () => data)
+    await render("/tariffs?q=Deluxe")
+    await click("New version", row("Corporate USD|Deluxe|").querySelector("[data-item='DLX']")!)
+    const dialog = host.querySelector("dialog[open]")!
+    const from = field<HTMLInputElement>(dialog, "valid_from")
+    // the public row's own version started on the business date: its next public version starts tomorrow
+    expect(from.min).toBe("2026-11-23")
+    // a customer's first price follows no version of its own (as the bulk dialog has it)
+    await input(field<HTMLInputElement>(dialog, "customer"), "New Client")
+    expect(from.min).toBe("2026-11-22")
+    await input(from, "2026-11-22")
+    await input(dialog.querySelector("input[type=number]")!, "118")
+    await click("Submit for approval", dialog)
+    expect(rpc.mock.calls[1]).toEqual(["kamra.rates.propose_contract_tariff", { property: "Test Hotel",
+      price_list: usd.name, item_code: "DLX", price_list_rate: 118, valid_from: "2026-11-22", valid_upto: null,
+      customer: "New Client" }])
+  })
 })
