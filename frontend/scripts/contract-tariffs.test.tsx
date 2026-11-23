@@ -813,6 +813,8 @@ describe("Contract Tariffs", () => {
     const amount = dialog.querySelector<HTMLInputElement>("input[type=number]")!
     expect(amount.min).toBe("0")
     await input(amount, "0")
+    // the default effective date follows the clock for a version that did not start on the business date
+    await input(field(dialog, "valid_from"), "2026-11-23")
     await click("Submit for approval", dialog)
     expect(rpc.mock.calls[1]).toEqual(["kamra.rates.propose_contract_tariff", { property: "Test Hotel",
       price_list: usd.name, item_code: "TAR-EXTRA-ADULT", price_list_rate: 0, valid_from: "2026-11-23", valid_upto: null }])
