@@ -1038,7 +1038,8 @@ def contract_night_rates(reservation) -> dict[str, float]:
 	return {str(night["date"]): float(night["agreed_rate"]) for night in nights}
 
 
-def contract_tariff_for_new_dates(reservation, booked_check_in, booked_check_out) -> dict | None:
+def contract_tariff_for_new_dates(reservation, booked_check_in, booked_check_out,
+                                  *, booked_agreed_rate=None) -> dict | None:
 	"""The booking's frozen contract for its new dates (amend_stay, an early
 	check-out, any save that moves them), or None when it does not change.
 
@@ -1049,18 +1050,21 @@ def contract_tariff_for_new_dates(reservation, booked_check_in, booked_check_out
 	than bill another night's tariff, as does a night priced in another
 	currency than the contract's (the rate plan's currency changed since
 	booking: the contract is re-priced first, never re-denominated). A night that left the stay leaves the
-	contract. A one-rate contract stays one rate while its rate still
-	prices every night. A manager's agreed rate, a fixed rate (OPERA Fixed
-	Rate), a stay priced by hand or by its group block keeps its price:
-	None."""
+	contract. When the contract's nights change, the stay's headline rate
+	(contract_tariff["agreed_rate"] and tariff["nightly"]) follows the new
+	first night (OPERA Daily Details / refresh-all-nights). A one-rate
+	contract stays one rate while its rate still prices every night. A
+	manager's agreed rate, a fixed rate (OPERA Fixed Rate), a stay priced by
+	hand or by its group block keeps its price: None."""
 	if not cint(reservation.get("auto_price")) or reservation.get("group_booking") \
 			or cint(reservation.get("fixed_rate")):
 		return None
 	snapshot = saved_contract_tariff(reservation)
 	tariff = snapshot.get("tariff") or {}
 	booked = snapshot.get("agreed_rate")
+	previous_agreed = reservation.get("agreed_rate") if booked_agreed_rate is None else booked_agreed_rate
 	if not tariff.get("currency") or booked is None \
-			or abs(_dec(reservation.get("agreed_rate")) - _dec(booked)) > Decimal("0.005"):
+			or abs(_dec(previous_agreed) - _dec(booked)) > Decimal("0.005"):
 		return None
 	stay = _stay_nights(reservation.check_in_date, reservation.check_out_date)
 	own = tariff.get("nights")
@@ -1103,7 +1107,13 @@ def contract_tariff_for_new_dates(reservation, booked_check_in, booked_check_out
 	if not own and all(_dec(night["nightly"]) == _dec(tariff["nightly"])
 	                   and abs(_dec(night["agreed_rate"]) - _dec(booked)) <= Decimal("0.005") for night in nights):
 		return None
-	return {**snapshot, "tariff": {**tariff, "nights": nights}}
+	first = nights[0]
+	if booked_agreed_rate is not None \
+			and abs(_dec(reservation.get("agreed_rate")) - _dec(booked)) > Decimal("0.005") \
+			and abs(_dec(reservation.get("agreed_rate")) - _dec(first["agreed_rate"])) > Decimal("0.005"):
+		return None
+	return {**snapshot, "agreed_rate": float(first["agreed_rate"]),
+	        "tariff": {**tariff, "nightly": float(first["nightly"]), "nights": nights}}
 
 
 def _stay_nights(check_in, check_out) -> list[str]:

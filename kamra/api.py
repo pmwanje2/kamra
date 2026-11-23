@@ -6725,6 +6725,7 @@ def _reprice_preview(res, **changes) -> dict:
 	current = float(res.amount_after_tax or 0)
 	old_key = res.get("rate_lock_key")
 	booked = (res.get("check_in_date"), res.get("check_out_date"))
+	original_agreed = res.get("agreed_rate")
 	for k, v in changes.items():
 		res.set(k, v)
 	out = {"current_amount": current, "new_amount": current,
@@ -6737,26 +6738,30 @@ def _reprice_preview(res, **changes) -> dict:
 		return out
 	# new dates: the contract prices the nights it never priced, as the save will
 	res.reprice_contract_nights(*booked)
-	inputs = res.quote_inputs()
-	if res.get("night_rates") and old_key == res.rate_lock_key_for(inputs):
-		return out  # same stay, same locked rates
-	q = res.requote()
-	# the same nights the save locks: charged nights held by the policy
-	rows = res.quote_night_rows(q)
-	hold = res.hold_charged_nights(rows)
-	new = round(float(q["amount_after_tax"]) + hold["base"] + hold["tax"], 2)
-	out.update({
-		"new_amount": new,
-		"difference": round(new - current, 2),
-		"reprices": True,
-		"needs_confirmation": abs(new - current) >= 0.01,
-		"nights": [{"date": str(r["stay_date"]), "rate": r["rate"],
-		            "demand_premium_pct": r["demand_premium_pct"]}
-		           for r in rows],
-	})
-	if hold["nights"]:
-		out["charged_nights"] = _charged_nights_summary(hold)
-	return out
+	try:
+		inputs = res.quote_inputs()
+		if res.get("night_rates") and old_key == res.rate_lock_key_for(inputs):
+			return out  # same stay, same locked rates
+		q = res.requote()
+		# the same nights the save locks: charged nights held by the policy
+		rows = res.quote_night_rows(q)
+		hold = res.hold_charged_nights(rows)
+		new = round(float(q["amount_after_tax"]) + hold["base"] + hold["tax"], 2)
+		out.update({
+			"new_amount": new,
+			"difference": round(new - current, 2),
+			"reprices": True,
+			"needs_confirmation": abs(new - current) >= 0.01,
+			"nights": [{"date": str(r["stay_date"]), "rate": r["rate"],
+			            "demand_premium_pct": r["demand_premium_pct"]}
+			           for r in rows],
+		})
+		if hold["nights"]:
+			out["charged_nights"] = _charged_nights_summary(hold)
+		return out
+	finally:
+		if "agreed_rate" not in changes:
+			res.agreed_rate = original_agreed
 
 
 def _charged_nights_summary(hold: dict) -> dict:

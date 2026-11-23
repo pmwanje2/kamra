@@ -445,7 +445,8 @@ class Reservation(Document):
 			previous = self.get_doc_before_save()
 			self.contract_tariff = previous.get("contract_tariff") if previous else None
 			if previous:
-				self.reprice_contract_nights(previous.get("check_in_date"), previous.get("check_out_date"))
+				self.reprice_contract_nights(previous.get("check_in_date"), previous.get("check_out_date"),
+					booked_agreed_rate=previous.get("agreed_rate"))
 			return
 		self.contract_tariff = None
 		if not self.auto_price or self.group_booking:
@@ -463,15 +464,18 @@ class Reservation(Document):
 		self.agreed_rate = agreed_rate
 		self.contract_tariff = {"tariff": tariff, "agreed_rate": agreed_rate}
 
-	def reprice_contract_nights(self, booked_check_in, booked_check_out):
+	def reprice_contract_nights(self, booked_check_in, booked_check_out, booked_agreed_rate=None):
 		"""The contract for the stay's new dates, from the ones it was priced
 		for (pricing.contract_tariff_for_new_dates): an added night is
 		resolved at its own tariff, or the new dates are refused; the save and
 		the amendment previews both run it, so they agree."""
 		from kamra.pricing import contract_tariff_for_new_dates
-		snapshot = contract_tariff_for_new_dates(self, booked_check_in, booked_check_out)
+		snapshot = contract_tariff_for_new_dates(self, booked_check_in, booked_check_out,
+			booked_agreed_rate=booked_agreed_rate)
 		if snapshot is not None:
 			self.contract_tariff = snapshot
+			if snapshot.get("agreed_rate") is not None:
+				self.agreed_rate = snapshot["agreed_rate"]
 
 	def validate_minimum_nights(self):
 		"""Property.minimum_nights is a hard floor for overnight stays."""
