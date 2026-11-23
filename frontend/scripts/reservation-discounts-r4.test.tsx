@@ -380,3 +380,60 @@ describe("Agent guide (R4-14)", () => {
     }
   })
 })
+
+describe("Changes log (R4-10)", () => {
+  const entries = [
+    { kind: "action", action_type: "reservation_discount", title: "Discount", at: "2031-03-12 10:05:00",
+      by: "desk@test", by_name: "Front Desk", approver: GM.user, approver_name: GM.full_name,
+      rationale: "RATE-PROMO: 30% off", fields: [],
+      nights: [{ date: NIGHTS[0], from: 1000, to: 700 }, { date: NIGHTS[1], from: 1000, to: 700 }] },
+    { kind: "change", action_type: null, title: null, at: "2031-03-12 10:05:00", by: "desk@test",
+      by_name: "Front Desk", approver: null, approver_name: null, rationale: null,
+      fields: [{ field: "discount_type", label: "Discount Type", from: "", to: "Percent" }], nights: [] },
+  ]
+  beforeEach(() => {
+    rpc.mockReset().mockImplementation((method: string) => {
+      if (method === "kamra.api.reservation_detail") return Promise.resolve(detail())
+      if (method === "kamra.api.reservation_changes") return Promise.resolve({ entries })
+      return Promise.resolve(null)
+    })
+  })
+
+  it("lists who changed what, each night's rate and who signed it off", async () => {
+    await act(async () => root.render(<MemoryRouter><ReservationDetail row={{ name: "RES-9" }}
+      reload={() => {}} onClose={() => {}} /></MemoryRouter>))
+    await until(() => expect(text()).toContain("Ada Guest"))
+    expect(calls("kamra.api.reservation_changes")).toHaveLength(0)
+    await press("Changes log")
+    await until(() => expect(calls("kamra.api.reservation_changes")).toEqual([{ reservation: "RES-9" }]))
+    await until(() => expect(text()).toContain(`Signed off by ${GM.full_name}`))
+    expect(text()).toContain("RATE-PROMO: 30% off")
+    expect(text()).toContain("Discount Type: - → Percent")
+    expect(text()).toMatch(new RegExp(`${NIGHTS[0]}: \\D*1,000 → \\D*700`))
+    expect(text()).toContain("Front Desk")
+  })
+})
+
+describe("Daily Details reasons round-trip (R4-15)", () => {
+  beforeEach(() => {
+    rpc.mockReset().mockImplementation((method: string) => {
+      if (method === "kamra.ledger.list_reason_codes") return Promise.resolve(REASONS)
+      if (method === "kamra.api.discount_preview") return Promise.resolve({
+        ...governance(), current_amount: 2000, new_amount: 1850, difference: -150, needs_confirmation: true,
+        nights: NIGHTS.map((date) => ({ date, base_rate: 1000, discount_amount: 75, rate: 925, charged: false })) })
+      return Promise.resolve(null)
+    })
+  })
+
+  it("reopens a night with its own reason", async () => {
+    await act(async () => root.render(<AgreedRatePanel reservation="RES-9" onSaved={() => {}}
+      current={{ discount_type: "Percent", discount_value: 5, discount_reason: "RATE-PROMO" }}
+      nightRates={[{ date: NIGHTS[0], rate: 950, base_rate: 1000 },
+        { date: NIGHTS[1], rate: 900, base_rate: 1000, discount_type: "Percent", discount_value: 10,
+          discount_reason: "ADJ-RATE" }]} />))
+    await press("Stay rate & daily details")
+    await until(() => expect(calls("kamra.api.discount_preview").length).toBeGreaterThan(0))
+    expect(calls("kamra.api.discount_preview")[0].night_discounts).toEqual([
+      { date: NIGHTS[1], discount_type: "Percent", discount_value: 10, discount_reason: "ADJ-RATE" }])
+  })
+})

@@ -557,3 +557,45 @@ class GovernedWritersStillWriteTests(RoundFourTestCase):
 		self.as_user(REVENUE, api.set_agreed_rate, res.name, 1200, "RATE-MGR", confirm_price=1)
 		self.assertEqual(self.rows(res.name), [(1200, 0, 1200)] * 2)
 		self.assertEqual(rate_codes(self.doc(res.name)), [1000, 1000])
+
+
+class ChangesLogTests(RoundFourTestCase):
+	"""R4-10: the reservation's Changes Log (OPERA Actions > Changes Log, SAP
+	Environment > Changes), read from Frappe's own Version rows and the
+	audit rows: who changed what, each night's rate, who signed it off."""
+
+	def test_the_changes_log_names_each_change_its_nights_and_its_approver(self):
+		set_setting(PROP_A, "rate_override_limit_pct", 10)
+		res = self.stay()
+		self.discount(res.name, discount_type="Percent", discount_value=30,
+		              supervisor_user=GM, supervisor_pin="4321", **PROMO)
+		self.agree(res.name, 650, supervisor=GM, pin="4321")
+		entries = self.as_user(DESK, api.reservation_changes, res.name)["entries"]
+		actions = [e["action_type"] for e in entries if e["kind"] == "action"]
+		self.assertEqual(actions[:2], ["rate_override", "reservation_discount"])
+		disc = next(e for e in entries if e.get("action_type") == "reservation_discount")
+		self.assertEqual((disc["by"], disc["approver"]), (DESK, GM))
+		self.assertTrue(disc["title"])
+		self.assertIn("RATE-PROMO", disc["rationale"])
+		self.assertEqual([(n["date"], n["from"], n["to"]) for n in disc["nights"]],
+		                 [(d(5), 1000, 700), (d(6), 1000, 700)])
+		agreed = next(e for e in entries if e.get("action_type") == "rate_override")
+		self.assertEqual([(n["date"], n["from"], n["to"]) for n in agreed["nights"]],
+		                 [(d(5), 700, 650), (d(6), 700, 650)])
+		# Frappe's Version rows: the fields and nights the discount save changed
+		change = next(e for e in entries if e["kind"] == "change"
+		              and any(f["field"] == "discount_type" for f in e["fields"]))
+		field = next(f for f in change["fields"] if f["field"] == "discount_type")
+		self.assertEqual((field["label"], field["from"], field["to"]), ("Discount Type", "", "Percent"))
+		self.assertEqual(change["by"], DESK)
+		self.assertEqual([(n["date"], n["from"], n["to"]) for n in change["nights"]],
+		                 [(d(5), 1000, 700), (d(6), 1000, 700)])
+		shown = {f["field"] for e in entries if e["kind"] == "change" for f in e["fields"]}
+		self.assertFalse(shown & {"rate_lock_key", "quote_snapshot", "modified", "precheckin_token"})
+
+	def test_reservation_detail_names_each_nights_own_reason(self):
+		res = self.stay()
+		self.discount(res.name, discount_type="Percent", discount_value=5, **PROMO, night_discounts=[
+			{"date": d(6), "discount_type": "Percent", "discount_value": 10, "discount_reason": "ADJ-RATE"}])
+		detail = self.as_user(DESK, api.reservation_detail, res.name)
+		self.assertEqual([n.get("discount_reason") for n in detail["night_rates"]], [None, "ADJ-RATE"])
