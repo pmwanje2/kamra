@@ -41,6 +41,7 @@ describe("links outside the router", () => {
 describe("the production router's mount", () => {
   it("answers a guest's check-in link where it was sent, at the site root", async () => {
     expect(await productionMount("/checkin/tok123")).toBe("/")
+    expect(await productionMount("/checkin/tok123/extra")).toBe("/")
   })
 
   it.each([
@@ -67,6 +68,8 @@ describe("the production router's mount", () => {
     "/staying",
     "/hks",
     "/hk/extra",
+    "/checkin",
+    "/checkin/",
     "/",
   ])("does not over-match %s as a bare public route", async (path) => {
     expect(await productionMount(path)).toBe("/kamra")

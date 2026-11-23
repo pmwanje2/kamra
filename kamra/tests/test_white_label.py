@@ -596,3 +596,42 @@ class WhiteLabelTest(unittest.TestCase):
 			with self.subTest(unrelated=unrelated):
 				self.assertEqual(respond(unrelated, [kamra]), (404, None))
 				self.assertEqual(respond(unrelated, [kamra, MASK]), (404, None))
+
+	# -- R4: every server-served public route has a public client route -------
+
+	def test_every_served_public_route_has_a_client_route_and_clean_chain(self):
+		from kamra import hooks
+
+		kamra = {"website_redirects": hooks.website_redirects, "website_route_rules": hooks.website_route_rules}
+		deep_routes = (
+			("/stay", "/hotel/stay"),
+			("/book/2026-07-10/2026-07-12/2/0/extra", "/hotel/book/2026-07-10/2026-07-12/2/0/extra"),
+			("/stay/grand-villa/2026-07-10/2026-07-12/2/0/extra", "/hotel/stay/grand-villa/2026-07-10/2026-07-12/2/0/extra"),
+			("/checkin/tok123/extra", "/hotel/checkin/tok123/extra"),
+		)
+		for path, hotel_target in deep_routes:
+			with self.subTest(path=path):
+				self.assertEqual(response_chain(path, [kamra, MASK]), [(302, hotel_target), (200, "kamra")])
+				self.assertEqual(response_chain(path, [MASK, kamra]), [(302, hotel_target), (200, "kamra")])
+				self.assertEqual(response_chain(path, [kamra]), [(200, "kamra")])
+		# Bare /checkin has no token and no maximus_branding redirect, so server stays 404.
+		self.assertEqual(respond("/checkin", [kamra]), (404, None))
+		self.assertEqual(respond("/checkin", [kamra, MASK]), (404, None))
+
+		# Every non-/kamra route rule in hooks.py must map to a public client <Route>
+		# outside <RequireAuth />, so guests never fall through to staff Sign-in.
+		app_source = (KAMRA.parent / "frontend/src/App.tsx").read_text(encoding="utf-8")
+		public_section = app_source.split("<Route element={<RequireAuth />}>", 1)[0]
+		public_routes = set(re.findall(r'<Route\b[^>]*\bpath="([^"]+)"', public_section))
+		for rule in hooks.website_route_rules:
+			from_route = rule["from_route"]
+			if from_route.startswith("/kamra/"):
+				continue
+			with self.subTest(from_route=from_route):
+				if "/<path:" in from_route:
+					prefix = from_route.split("/<path:", 1)[0].lstrip("/")
+					self.assertIn(f"{prefix}/*", public_routes)
+				else:
+					self.assertIn(from_route.lstrip("/"), public_routes)
+		# /hotel/checkin and /kamra/checkin are served by the mount catch-alls.
+		self.assertIn("checkin", public_routes)

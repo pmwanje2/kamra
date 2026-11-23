@@ -4,14 +4,15 @@
 // both the bare root mount and the white-labelled /hotel mount in production.
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import { BrowserRouter } from "react-router-dom"
+import { BrowserRouter, Outlet } from "react-router-dom"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import App from "../src/App"
 
-const { callMock, callGuestMock, whoamiMock } = vi.hoisted(() => ({
+const { callMock, callGuestMock, whoamiMock, authState } = vi.hoisted(() => ({
   callMock: vi.fn(),
   callGuestMock: vi.fn(),
   whoamiMock: vi.fn(),
+  authState: { status: "anon" as "anon" | "authed", roles: [] as string[] },
 }))
 
 vi.mock("../src/lib/api", () => ({
@@ -20,7 +21,10 @@ vi.mock("../src/lib/api", () => ({
   getCurrentProperty: () => "Fixture Hotel",
   getDefaultProperty: () => Promise.resolve("Fixture Hotel"),
   isNetworkError: () => false,
+  login: vi.fn(),
   logout: () => Promise.resolve(),
+  requestPasswordReset: vi.fn(),
+  serverError: (error: Error) => error.message,
   uploadTo: vi.fn(),
   whoami: () => whoamiMock(),
 }))
@@ -30,7 +34,11 @@ vi.mock("../src/lib/realtime", () => ({
 }))
 
 vi.mock("../src/lib/auth", () => ({
-  useAuth: () => ({ status: "anon", roles: [], refresh: vi.fn() }),
+  useAuth: () => ({ status: authState.status, roles: authState.roles, refresh: vi.fn() }),
+}))
+
+vi.mock("../src/AppShell", () => ({
+  default: () => <Outlet />,
 }))
 
 const SHOWCASE = {
@@ -119,8 +127,10 @@ describe("in-app navigation under production bare and /hotel mounts", () => {
 
   beforeEach(() => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true)
-    callMock.mockReset()
-    callGuestMock.mockReset()
+    authState.status = "anon"
+    authState.roles = []
+    callMock.mockReset().mockResolvedValue({})
+    callGuestMock.mockReset().mockResolvedValue({})
     whoamiMock.mockReset()
     host = document.createElement("div")
     document.body.append(host)
@@ -151,11 +161,25 @@ describe("in-app navigation under production bare and /hotel mounts", () => {
     return ROUTER_BASENAME
   }
 
+  async function waitForSettled() {
+    for (let i = 0; i < 60; i++) {
+      const text = host.textContent?.trim() ?? ""
+      if (text && !/^Loading[….]+$/.test(text)) return text
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 15))
+      })
+    }
+    return host.textContent?.trim() ?? ""
+  }
+
   async function waitForText(expected: string) {
-    await vi.waitFor(async () => {
-      await act(() => new Promise((resolve) => setTimeout(resolve, 10)))
-      expect(host.textContent).toContain(expected)
-    }, { interval: 10, timeout: 4000 })
+    for (let i = 0; i < 60; i++) {
+      if ((host.textContent ?? "").includes(expected)) return
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 15))
+      })
+    }
+    expect(host.textContent).toContain(expected)
   }
 
   it.each([
@@ -287,5 +311,138 @@ describe("in-app navigation under production bare and /hotel mounts", () => {
     await waitForText("No unassigned rooms right now.")
     expect(window.location.pathname).toBe(`${prefix}/hk`)
     expect(window.location.pathname).not.toContain("/kamra")
+  })
+
+  it.each([
+    ["bare root (guest)", "", "/", "anon", []],
+    ["white-label /hotel (guest)", "/hotel", "/hotel", "anon", []],
+    ["bare root (staff)", "", "/", "authed", ["Hotel Admin"]],
+    ["white-label /hotel (staff)", "/hotel", "/hotel", "authed", ["Hotel Admin"]],
+  ] as const)("routes bare /stay to the public booking engine under %s", async (_label, prefix, expectedBase, status, roles) => {
+    authState.status = status
+    authState.roles = [...roles]
+    callGuestMock.mockImplementation((method: string) => {
+      if (method === "kamra.public_api.catalog_index") {
+        return Promise.resolve({
+          mode: "properties",
+          properties: [{
+            name: "Fixture Hotel",
+            property_name: "Fixture Hotel",
+            property_slug: "fixture-hotel",
+            city: "Kampala",
+            state: "Central",
+            hero_image: null,
+            logo_url: null,
+            property_kind: "Hotel",
+            description: "Direct booking fixture",
+            from_rate: 250,
+          }],
+        })
+      }
+      throw new Error(`Unexpected guest RPC: ${method}`)
+    })
+
+    const basename = await mountAt(`${prefix}/stay?utm_source=ig`)
+    expect(basename).toBe(expectedBase)
+    await waitForSettled()
+    expect(host.textContent).toContain("Places to stay")
+    expect(host.textContent).not.toContain("Sign in")
+    expect(host.textContent).not.toContain("Page not found.")
+    expect(window.location.pathname).toMatch(new RegExp(`^${prefix}/book/\\d{4}-\\d{2}-\\d{2}/\\d{4}-\\d{2}-\\d{2}/2/0$`))
+    expect(new URLSearchParams(window.location.search).get("utm_source")).toBe("ig")
+    expect(window.location.pathname).not.toContain("/login")
+    expect(window.location.pathname).not.toContain("/kamra")
+  })
+
+  it.each([
+    ["bare root /book overflow", "", "/", "/book/2026-07-10/2026-07-12/2/0/extra"],
+    ["white-label /hotel/book overflow", "/hotel", "/hotel", "/hotel/book/2026-07-10/2026-07-12/2/0/extra"],
+    ["bare root /stay overflow", "", "/", "/stay/ocean-villa/2026-07-10/2026-07-12/2/0/extra"],
+    ["white-label /hotel/stay overflow", "/hotel", "/hotel", "/hotel/stay/ocean-villa/2026-07-10/2026-07-12/2/0/extra"],
+  ])("keeps %s on the public booking engine instead of staff login", async (_label, prefix, expectedBase, startPath) => {
+    callGuestMock.mockImplementation((method: string) => {
+      if (method === "kamra.public_api.catalog_index") {
+        return Promise.resolve({ mode: "hotel", property: "Fixture Hotel" })
+      }
+      if (method === "kamra.public_api.showcase") return Promise.resolve(SHOWCASE)
+      if (method === "kamra.public_api.search_stay") return Promise.resolve([])
+      throw new Error(`Unexpected guest RPC: ${method}`)
+    })
+
+    const basename = await mountAt(startPath)
+    expect(basename).toBe(expectedBase)
+    await waitForSettled()
+    expect(host.textContent).toContain("Choose your room")
+    expect(host.textContent).not.toContain("Sign in")
+    expect(window.location.pathname).toMatch(new RegExp(`^${prefix}/book/`))
+    expect(window.location.pathname).not.toContain("/login")
+    expect(window.location.pathname).not.toContain("/kamra")
+  })
+
+  it.each([
+    ["bare root /checkin/<token>/extra", "/", "/checkin/tok123/extra"],
+    ["white-label /hotel/checkin/<token>/extra", "/hotel", "/hotel/checkin/tok123/extra"],
+    ["white-label bare /hotel/checkin", "/hotel", "/hotel/checkin"],
+  ])("shows an invalid check-in link message for %s instead of staff login", async (_label, expectedBase, startPath) => {
+    const basename = await mountAt(startPath)
+    expect(basename).toBe(expectedBase)
+    await waitForSettled()
+    expect(host.textContent).toContain("This check-in link isn't valid. Please contact the hotel.")
+    expect(host.textContent).not.toContain("Sign in")
+    expect(host.textContent).not.toContain("Page not found.")
+    expect(callMock).not.toHaveBeenCalled()
+    expect(window.location.pathname).toBe(startPath)
+  })
+
+  it.each([
+    ["bare root", "", "/"],
+    ["white-label /hotel", "/hotel", "/hotel"],
+  ])("still serves a valid /checkin/<token> link under the %s mount", async (_label, prefix, expectedBase) => {
+    callMock.mockImplementation((method: string) => {
+      if (method === "kamra.public_api.precheckin_info") {
+        return Promise.resolve({
+          id_types: ["Passport"],
+          property: {
+            property_name: "Fixture Hotel",
+            logo_url: null,
+            city: "Kampala",
+            checkin_time: "14:00:00",
+            phone: null,
+            house_rules: null,
+            pets_policy: null,
+            children_policy: null,
+            extra_bed_policy: null,
+            id_retention: "Verify & Discard",
+          },
+          stay: {
+            reservation: "RES-1",
+            room_type: "Pool Suite",
+            check_in_date: "2026-07-10",
+            check_out_date: "2026-07-12",
+            nights: 2,
+            adults: 2,
+            children: 0,
+            status: "Pending",
+          },
+          guest: {
+            full_name: "Ada Guest",
+            phone: "+256700000001",
+            email: null,
+            id_type: null,
+            nationality: null,
+            has_id_document: false,
+            id_document_on: "",
+          },
+        })
+      }
+      if (method === "kamra.laundry.guest_laundry") return Promise.resolve({ active: false })
+      return Promise.resolve(null)
+    })
+
+    const basename = await mountAt(`${prefix}/checkin/tok123`)
+    expect(basename).toBe(expectedBase)
+    await waitForText("Online check-in")
+    expect(host.textContent).toContain("Ada Guest")
+    expect(window.location.pathname).toBe(`${prefix}/checkin/tok123`)
   })
 })
