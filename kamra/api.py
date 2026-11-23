@@ -8112,7 +8112,7 @@ def rooming_list_template(property: str):
 		"Room type: pick from the list. Empty = any room of the group.",
 		"Other guests: everyone else staying in that room, separated by ; (e.g. Ravi Rao; Meera Rao).",
 		"Do not add the main guest - they are already room 1.",
-		"In Kamra: copy the rows (with the header) and use Paste from Excel,",
+		f"In {product_name()}: copy the rows (with the header) and use Paste from Excel,",
 		"or File > Save As > CSV and use Upload CSV.",
 	], 1):
 		help_ws.cell(row=i, column=1, value=line).font = Font(name="Arial")

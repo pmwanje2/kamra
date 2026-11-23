@@ -754,7 +754,7 @@
   },
   {
    "default": "1",
-   "description": "Let staff with MCP Read or MCP Manage connect Claude or another MCP client to this property. The site setting kamra_mcp_disabled still turns MCP off everywhere.",
+   "description": "Let staff with MCP Read or MCP Manage connect Claude or another MCP client to this property. When IT turns MCP off for the whole site, that still wins.",
    "fieldname": "mcp_enabled",
    "fieldtype": "Check",
    "label": "AI access over MCP"
