@@ -14,13 +14,21 @@ export type Fiscal = {
   issued: string | null
   sandbox: boolean
   efris_status: string | null
+  tax_template?: string | null
+  charges_tax?: 0 | 1 | boolean
+  efris_enrolled?: 0 | 1 | boolean
+  outstanding_amount?: number
+  credit_notes?: { name: string; grand_total?: number; efris_irn?: string | null }[]
+  replaced_by?: string | null
 }
 
 export function FiscalDocument({ fiscal, internalNumber }: { fiscal: Fiscal; internalNumber?: string | null }) {
+  const effectiveState =
+    fiscal.state === "not_efris" && fiscal.efris_enrolled ? "pending" : fiscal.state
   const warning =
-    fiscal.state === "pending"
+    effectiveState === "pending"
       ? t("Fiscal document pending")
-      : fiscal.state === "unverified"
+      : effectiveState === "unverified"
         ? t("Fiscal status unavailable")
         : fiscal.sandbox
           ? t("Test fiscal number - not a valid tax invoice")
@@ -30,15 +38,15 @@ export function FiscalDocument({ fiscal, internalNumber }: { fiscal: Fiscal; int
       {warning && (
         <div className="rounded border border-amber-300 bg-amber-50 px-2 py-1 text-amber-800">
           <p className="font-semibold">{warning}</p>
-          {fiscal.state !== "fiscalised" && (
+          {effectiveState !== "fiscalised" && (
             <p>{t("This is not a tax invoice yet. It becomes one when the fiscal number is issued.")}</p>
           )}
-          {fiscal.state === "pending" && fiscal.efris_status && (
+          {effectiveState === "pending" && fiscal.efris_status && (
             <p>{t("Status: {status}", { status: fiscal.efris_status })}</p>
           )}
         </div>
       )}
-      {fiscal.state === "fiscalised" && (
+      {effectiveState === "fiscalised" && (
         <div className="flex items-start justify-end gap-3">
           <div className="space-y-0.5">
             <p>

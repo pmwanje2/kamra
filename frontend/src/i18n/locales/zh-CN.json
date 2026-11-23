@@ -6787,5 +6787,21 @@
   "Y": "Y（是）",
   "Update in-house reservations": "更新在住预订",
   "OXI UPDATE INHOUSE RES: N rejects OTA changes to checked-in stays and flags them for review. Y requires arrival-date, room-type, billed-night, and assigned-room bounds and is not yet enabled.": "OXI UPDATE INHOUSE RES：N 会拒绝 OTA 对已入住预订的修改并标记待审核。Y 需要到店日期、房型、已入账房晚及已分配房间的安全边界，尚未启用。",
-  "Which of the taxes an OTA lists on a booking is the room tax, tried top to bottom: the first rule that matches decides. Put specific or Ignored rules (such as city or tourism taxes) above broader Room tax rules. A tax on top of the price that no rule reads holds the booking for review. A new Channex connection, or one switched to Channex, starts with the standard rules.": "OTA 在预订中列出的哪项税费是客房税，从上到下依次匹配：第一条匹配的规则决定。请将具体或忽略规则（如城市税、旅游税）放在较宽泛的客房税规则之上。价格之外加收、且没有规则能识别的税费会使预订暂缓待审。新的 Channex 连接，或改为 Channex 的连接，从标准规则开始。"
+  "Which of the taxes an OTA lists on a booking is the room tax, tried top to bottom: the first rule that matches decides. Put specific or Ignored rules (such as city or tourism taxes) above broader Room tax rules. A tax on top of the price that no rule reads holds the booking for review. A new Channex connection, or one switched to Channex, starts with the standard rules.": "OTA 在预订中列出的哪项税费是客房税，从上到下依次匹配：第一条匹配的规则决定。请将具体或忽略规则（如城市税、旅游税）放在较宽泛的客房税规则之上。价格之外加收、且没有规则能识别的税费会使预订暂缓待审。新的 Channex 连接，或改为 Channex 的连接，从标准规则开始。",
+  "Fiscal document pending": "税务凭证待签发",
+  "Fiscal status unavailable": "税务状态暂不可用",
+  "Test fiscal number - not a valid tax invoice": "测试税号 - 非有效税务发票",
+  "This is not a tax invoice yet. It becomes one when the fiscal number is issued.": "此单据尚未成为税务发票，签发税号后方可生效。",
+  "Status: {status}": "状态：{status}",
+  "Fiscal Document Number (FDN)": "税务凭证编号（FDN）",
+  "Verification code": "验证码",
+  "Issued {when}": "签发时间 {when}",
+  "Fiscal QR code": "税务二维码",
+  "Internal folio no. {number}": "内部账单号 {number}",
+  "Reprint fiscal invoice": "重打税务发票",
+  "Copy - reprint {n}": "副本 - 第 {n} 次重打",
+  "Posts to this function's own folio. Its deposits are taken there, and its tax invoice is issued when that folio is settled.": "将入账至本活动的专属账单。定金均记入该账单，结账后签发税务发票。",
+  "Open the function's folio": "打开活动账单",
+  "The tax invoice is issued from the function's folio.": "税务发票由活动账单签发。",
+  "Service Charge": "服务费"
 }

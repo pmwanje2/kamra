@@ -16,6 +16,7 @@ type FolioRow = {
   name: string
   guest_name: string
   reservation: string
+  venue_booking?: string | null
   status: string
   invoice_number?: string
   grand_total: number
@@ -160,7 +161,7 @@ export default function FolioHistory() {
                   >
                     {r.guest_name || r.name}
                   </Link>
-                  <div className="text-xs text-zinc-400">{r.reservation}</div>
+                  <div className="text-xs text-zinc-400">{r.reservation || r.venue_booking}</div>
                 </td>
                 <td className="px-3 py-2 font-mono text-xs">
                   {r.invoice_number || "-"}

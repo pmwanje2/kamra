@@ -1838,15 +1838,16 @@ function MoneyTab({
               <Receipt className="size-4" />{translate("Receipts")}</span>
           </CardTitle>
           <Button
-            onClick={() =>
+            onClick={() => {
+              const modes = payModes()
               setReceipt({
                 amount: "",
-                mode: "Bank Transfer",
+                mode: modes.includes("Bank Transfer") ? "Bank Transfer" : (modes[0] ?? "Cash"),
                 kind: "Advance",
                 reference: "",
                 settle_term: "",
               })
-            }
+            }}
           >
             <Plus className="size-4" />{translate("Record money in")}</Button>
         </CardHeader>
@@ -2071,7 +2072,10 @@ function CloseOutCard({
   const [damage, setDamage] = useState("")
   const [note, setNote] = useState("")
   const [refund, setRefund] = useState(true)
-  const [mode, setMode] = useState("Bank Transfer")
+  const [mode, setMode] = useState(() => {
+    const modes = payModes()
+    return modes.includes("Bank Transfer") ? "Bank Transfer" : (modes[0] ?? "Cash")
+  })
 
   const held = fn.deposit_held || 0
   // reopened after a close-out: the money settled then stands, closing

@@ -465,7 +465,13 @@ export default function FolioView() {
   }, [wantsAdvanceBill, data])
 
   if (!data)
-    return <p className="py-10 text-center text-sm text-zinc-400">{t("Loading…")}</p>
+    return error ? (
+      <div className="my-6 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+        {translate(error)}
+      </div>
+    ) : (
+      <p className="py-10 text-center text-sm text-zinc-400">{t("Loading…")}</p>
+    )
 
   const { folio, property, stay, gst_summary } = data
   const doc = data.document

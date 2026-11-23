@@ -6528,5 +6528,21 @@
   "Y": "Y (نعم)",
   "Update in-house reservations": "تحديث الحجوزات المقيمة حاليًا",
   "OXI UPDATE INHOUSE RES: N rejects OTA changes to checked-in stays and flags them for review. Y requires arrival-date, room-type, billed-night, and assigned-room bounds and is not yet enabled.": "معلمة OXI UPDATE INHOUSE RES: الخيار N يرفض تعديلات وكالات السفر على الإقامات المسجَّلة دخولًا ويعلمها للمراجعة. الخيار Y يتطلب ضوابط تاريخ الوصول ونوع الغرفة والليالي المفوترة والغرفة المخصَّصة وغير مفعَّل بعد.",
-  "Which of the taxes an OTA lists on a booking is the room tax, tried top to bottom: the first rule that matches decides. Put specific or Ignored rules (such as city or tourism taxes) above broader Room tax rules. A tax on top of the price that no rule reads holds the booking for review. A new Channex connection, or one switched to Channex, starts with the standard rules.": "أي من الضرائب التي تدرجها OTA في الحجز هي ضريبة الإقامة، وتُجرَّب القواعد من الأعلى إلى الأسفل: أول قاعدة مطابقة هي التي تقرر. ضع القواعد المحددة أو المتجاهلة (مثل ضرائب المدينة أو السياحة) فوق قواعد ضريبة الإقامة الأوسع. الضريبة المضافة فوق السعر التي لا تقرأها أي قاعدة توقف الحجز للمراجعة. يبدأ اتصال Channex الجديد، أو الاتصال الذي حُوِّل إلى Channex، بالقواعد القياسية."
+  "Which of the taxes an OTA lists on a booking is the room tax, tried top to bottom: the first rule that matches decides. Put specific or Ignored rules (such as city or tourism taxes) above broader Room tax rules. A tax on top of the price that no rule reads holds the booking for review. A new Channex connection, or one switched to Channex, starts with the standard rules.": "أي من الضرائب التي تدرجها OTA في الحجز هي ضريبة الإقامة، وتُجرَّب القواعد من الأعلى إلى الأسفل: أول قاعدة مطابقة هي التي تقرر. ضع القواعد المحددة أو المتجاهلة (مثل ضرائب المدينة أو السياحة) فوق قواعد ضريبة الإقامة الأوسع. الضريبة المضافة فوق السعر التي لا تقرأها أي قاعدة توقف الحجز للمراجعة. يبدأ اتصال Channex الجديد، أو الاتصال الذي حُوِّل إلى Channex، بالقواعد القياسية.",
+  "Fiscal document pending": "المستند الضريبي قيد الانتظار",
+  "Fiscal status unavailable": "الحالة الضريبية غير متاحة",
+  "Test fiscal number - not a valid tax invoice": "رقم ضريبي تجريبي - ليست فاتورة ضريبية صالحة",
+  "This is not a tax invoice yet. It becomes one when the fiscal number is issued.": "ليست هذه فاتورة ضريبية بعد. تصبح كذلك عند إصدار الرقم الضريبي.",
+  "Status: {status}": "الحالة: {status}",
+  "Fiscal Document Number (FDN)": "رقم المستند الضريبي (FDN)",
+  "Verification code": "رمز التحقق",
+  "Issued {when}": "صدرت في {when}",
+  "Fiscal QR code": "رمز QR الضريبي",
+  "Internal folio no. {number}": "رقم الفوليو الداخلي {number}",
+  "Reprint fiscal invoice": "إعادة طباعة الفاتورة الضريبية",
+  "Copy - reprint {n}": "نسخة - إعادة طباعة {n}",
+  "Posts to this function's own folio. Its deposits are taken there, and its tax invoice is issued when that folio is settled.": "يُرحَّل إلى فوليو هذه الفعالية الخاص. تُسجَّل الودائع فيه وتُصدر الفاتورة الضريبية عند تسوية هذا الفوليو.",
+  "Open the function's folio": "فتح فوليو الفعالية",
+  "The tax invoice is issued from the function's folio.": "تُصدر الفاتورة الضريبية من فوليو الفعالية.",
+  "Service Charge": "رسوم الخدمة"
 }

@@ -6720,5 +6720,21 @@
   "Y": "Y (Sim)",
   "Update in-house reservations": "Atualizar reservas hospedadas",
   "OXI UPDATE INHOUSE RES: N rejects OTA changes to checked-in stays and flags them for review. Y requires arrival-date, room-type, billed-night, and assigned-room bounds and is not yet enabled.": "OXI UPDATE INHOUSE RES: N rejeita alterações da OTA em estadias com check-in e marca-as para revisão. Y requer limites de data de chegada, tipo de quarto, noites faturadas e quarto atribuído e ainda não está ativado.",
-  "Which of the taxes an OTA lists on a booking is the room tax, tried top to bottom: the first rule that matches decides. Put specific or Ignored rules (such as city or tourism taxes) above broader Room tax rules. A tax on top of the price that no rule reads holds the booking for review. A new Channex connection, or one switched to Channex, starts with the standard rules.": "Qual dos impostos que uma OTA indica numa reserva é a taxa de quarto, testando de cima para baixo: decide a primeira regra que corresponder. Coloque regras específicas ou ignoradas (como taxas municipais ou turísticas) acima de regras mais amplas de taxa de quarto. Um imposto acima do preço que nenhuma regra reconhece retém a reserva para revisão. Uma nova conexão Channex, ou uma alterada para Channex, começa com as regras padrão."
+  "Which of the taxes an OTA lists on a booking is the room tax, tried top to bottom: the first rule that matches decides. Put specific or Ignored rules (such as city or tourism taxes) above broader Room tax rules. A tax on top of the price that no rule reads holds the booking for review. A new Channex connection, or one switched to Channex, starts with the standard rules.": "Qual dos impostos que uma OTA indica numa reserva é a taxa de quarto, testando de cima para baixo: decide a primeira regra que corresponder. Coloque regras específicas ou ignoradas (como taxas municipais ou turísticas) acima de regras mais amplas de taxa de quarto. Um imposto acima do preço que nenhuma regra reconhece retém a reserva para revisão. Uma nova conexão Channex, ou uma alterada para Channex, começa com as regras padrão.",
+  "Fiscal document pending": "Documento fiscal pendente",
+  "Fiscal status unavailable": "Estado fiscal indisponível",
+  "Test fiscal number - not a valid tax invoice": "Número fiscal de teste - não é uma fatura fiscal válida",
+  "This is not a tax invoice yet. It becomes one when the fiscal number is issued.": "Ainda não é uma fatura fiscal. Torna-se uma quando o número fiscal for emitido.",
+  "Status: {status}": "Estado: {status}",
+  "Fiscal Document Number (FDN)": "Número do documento fiscal (FDN)",
+  "Verification code": "Código de verificação",
+  "Issued {when}": "Emitido em {when}",
+  "Fiscal QR code": "Código QR fiscal",
+  "Internal folio no. {number}": "N.º de fólio interno {number}",
+  "Reprint fiscal invoice": "Reimprimir fatura fiscal",
+  "Copy - reprint {n}": "Cópia - reimpressão {n}",
+  "Posts to this function's own folio. Its deposits are taken there, and its tax invoice is issued when that folio is settled.": "Lança no fólio próprio deste evento. Os depósitos são recebidos nele e a fatura fiscal é emitida quando esse fólio é liquidado.",
+  "Open the function's folio": "Abrir o fólio do evento",
+  "The tax invoice is issued from the function's folio.": "A fatura fiscal é emitida a partir do fólio do evento.",
+  "Service Charge": "Taxa de serviço"
 }
