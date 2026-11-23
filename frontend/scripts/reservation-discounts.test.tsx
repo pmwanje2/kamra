@@ -253,7 +253,12 @@ describe("BookingDialog: inline discount for new bookings and walk-ins", () => {
     // 1,500 off a 1,000 night: refused here, not left to the server
     expect(walkInButton().disabled).toBe(true)
     await typeInto(byLabel<HTMLInputElement>("Discount value")!, "")
-    await settle()
+    // Daily Details list the quote's nights: wait for the re-quote
+    await vi.waitFor(async () => {
+      await settle()
+      expect(Array.from(host.querySelectorAll("button")).some((b) =>
+        b.textContent?.trim() === "Per-night daily details")).toBe(true)
+    }, { timeout: 3000, interval: 20 })
     await press("Per-night daily details")
     const night = host.querySelector<HTMLInputElement>(`tr[data-night="${NIGHTS[0]}"] input[type=number]`)!
     await press("% off")

@@ -331,7 +331,7 @@ class PlainSaveGuardTests(RoundTwoTestCase):
 		res = make_reservation(PROP_A, self.rt, d(5), d(7), room=self.rooms[0])
 		self.discount(res.name, discount_type="Percent", discount_value=10, **PROMO)
 		for field, value in (("rate", 1), ("base_rate", 1), ("discount_amount", 999),
-		                     ("gst_rate", 0), ("meal_amount", 5)):
+		                     ("gst_rate", 37), ("meal_amount", 5)):
 			with self.subTest(field=field):
 				doc = self.doc(res.name)
 				doc.night_rates[0].set(field, value)
