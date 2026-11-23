@@ -6778,6 +6778,14 @@
   "Including tax": "含税",
   "Excluding tax": "不含税",
   "Add row": "添加行",
-  "Which of the taxes an OTA lists on a booking is the room tax, tried top to bottom: the first rule that matches decides. A tax on top of the price that no rule reads holds the booking for review. A new Channex connection, or one switched to Channex, starts with the standard rules.": "OTA 在预订中列出的哪项税费是客房税，从上到下依次匹配：第一条匹配的规则决定。价格之外加收、且没有规则能识别的税费会使预订暂缓待审。新的 Channex 连接，或改为 Channex 的连接，从标准规则开始。",
-  "Whether each OTA's booking amounts include tax, as set for it on the channel manager: a booking does not say. Excluding tax: a booking from that OTA that lists no room tax is held for review.": "各 OTA 的预订金额是否含税，以其在渠道管理器中的设置为准：预订本身不会注明。不含税：该 OTA 的预订若未列出客房税，将暂缓待审。"
+  "Whether each OTA's booking amounts include tax, as set for it on the channel manager: a booking does not say. Excluding tax: a booking from that OTA that lists no room tax is held for review.": "各 OTA 的预订金额是否含税，以其在渠道管理器中的设置为准：预订本身不会注明。不含税：该 OTA 的预订若未列出客房税，将暂缓待审。",
+  "Channel review needed": "需要渠道复核",
+  "Channel update not applied — review required": "渠道更新未应用 — 需要复核",
+  "The stay's dates, room, and charges were left unchanged. Review what the channel sent below and update the stay manually if needed.": "本次入住的日期、房间及费用均未更改。请在下方核对渠道发来的内容，如需调整请手动更新。",
+  "Mark as reviewed": "标记为已复核",
+  "N": "N（否）",
+  "Y": "Y（是）",
+  "Update in-house reservations": "更新在住预订",
+  "OXI UPDATE INHOUSE RES: N rejects OTA changes to checked-in stays and flags them for review. Y requires arrival-date, room-type, billed-night, and assigned-room bounds and is not yet enabled.": "OXI UPDATE INHOUSE RES：N 会拒绝 OTA 对已入住预订的修改并标记待审核。Y 需要到店日期、房型、已入账房晚及已分配房间的安全边界，尚未启用。",
+  "Which of the taxes an OTA lists on a booking is the room tax, tried top to bottom: the first rule that matches decides. Put specific or Ignored rules (such as city or tourism taxes) above broader Room tax rules. A tax on top of the price that no rule reads holds the booking for review. A new Channex connection, or one switched to Channex, starts with the standard rules.": "OTA 在预订中列出的哪项税费是客房税，从上到下依次匹配：第一条匹配的规则决定。请将具体或忽略规则（如城市税、旅游税）放在较宽泛的客房税规则之上。价格之外加收、且没有规则能识别的税费会使预订暂缓待审。新的 Channex 连接，或改为 Channex 的连接，从标准规则开始。"
 }

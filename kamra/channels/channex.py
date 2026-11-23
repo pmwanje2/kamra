@@ -227,17 +227,56 @@ def push_ari(conn, snapshot) -> tuple[bool, str]:
 	return True, f"{sent.get('availability', 0)} availability, {sent.get('restrictions', 0)} rate values"
 
 
+def _is_cjk_char(ch: str) -> bool:
+	"""Han ideographs, Japanese Kana, Korean Hangul, and CJK iteration mark:
+	scripts written without spaces between words."""
+	cp = ord(ch)
+	return (
+		cp == 0x3005
+		or 0x3040 <= cp <= 0x30FF
+		or 0x31F0 <= cp <= 0x31FF
+		or 0x3400 <= cp <= 0x4DBF
+		or 0x4E00 <= cp <= 0x9FFF
+		or 0xAC00 <= cp <= 0xD7AF
+		or 0xF900 <= cp <= 0xFAFF
+		or 0x20000 <= cp <= 0x323AF
+	)
+
+
+def _char_kind(ch: str) -> str | None:
+	cat = unicodedata.category(ch)[0]
+	if cat == "N":
+		return "N"
+	if cat in "LM":
+		return "C" if _is_cjk_char(ch) else "L"
+	return None
+
+
+def is_cjk_word(word: str) -> bool:
+	return bool(word) and all(_is_cjk_char(ch) for ch in word)
+
+
+_is_cjk_word = is_cjk_word
+
+
 def tax_words(value) -> list[str]:
-	"""A tax label as its words: runs of letters, marks and digits in any
-	script, case folded ("MwSt" and "MWST" are "mwst"; "ضريبة", "增值税"
-	and "séjour" are one word each). Punctuation and spaces only part them."""
-	words, word = [], []
+	"""A tax label as its words: runs of letters/marks or digits in any
+	script, case folded, split at letter/digit and CJK/non-CJK boundaries
+	("VAT18%" -> ["vat", "18"], "增值税6%" -> ["增值税", "6"], "Hotel增值税" ->
+	["hotel", "增值税"]). Punctuation and spaces only part them."""
+	words, word, kind = [], [], None
 	for ch in unicodedata.normalize("NFKC", str(value or "")).casefold():
-		if unicodedata.category(ch)[0] in "LMN":
+		k = _char_kind(ch)
+		if k is None:
+			if word:
+				words.append("".join(word))
+				word, kind = [], None
+		elif k == kind:
 			word.append(ch)
-		elif word:
-			words.append("".join(word))
-			word = []
+		else:
+			if word:
+				words.append("".join(word))
+			word, kind = [ch], k
 	if word:
 		words.append("".join(word))
 	return words
@@ -245,13 +284,43 @@ def tax_words(value) -> list[str]:
 
 def _rule_matches(rule, label: list[str]) -> bool:
 	"""Is: the label is the rule's words. Contains: they appear in it, in
-	order and whole ("vat" is in "VAT (18%)", not in "Private")."""
+	order and whole ("vat" is in "VAT (18%)" and "VAT18%", not in "Private").
+	CJK phrases carry no spaces, so a CJK Contains rule matches as a substring
+	within CJK runs ("增值税" in "酒店增值税"), while non-CJK stays whole-word
+	and unmatched exclusive taxes still fail closed."""
 	want = tax_words(rule.get("match_text"))
 	if not want or not label:
 		return False
 	if rule.get("match_type") == "Is":
 		return label == want
-	return any(label[i:i + len(want)] == want for i in range(len(label) - len(want) + 1))
+	if any(label[i:i + len(want)] == want for i in range(len(label) - len(want) + 1)):
+		return True
+	if not any(_is_cjk_word(w) for w in want):
+		return False
+	if all(_is_cjk_word(w) for w in want):
+		needle = "".join(want)
+		run = []
+		for tok in label:
+			if _is_cjk_word(tok):
+				run.append(tok)
+				if needle in "".join(run):
+					return True
+			else:
+				run = []
+		return False
+	for i in range(len(label) - len(want) + 1):
+		window = label[i:i + len(want)]
+		ok = True
+		for got, exp in zip(window, want, strict=True):
+			if got == exp:
+				continue
+			if is_cjk_word(exp) and is_cjk_word(got) and exp in got:
+				continue
+			ok = False
+			break
+		if ok:
+			return True
+	return False
 
 
 def _counts_as(conn, tax: dict) -> str | None:
