@@ -18,16 +18,35 @@ export function tariffDate(value: string, locale: string) {
     .format(date)
 }
 
+/** A server timestamp ("YYYY-MM-DD HH:MM:SS", the site's own clock) as the site shows it. */
+export function tariffDateTime(value: string, locale: string) {
+  const date = new Date(`${value.slice(0, 19).replace(" ", "T")}Z`)
+  if (!Number.isFinite(date.getTime())) return value
+  return new Intl.DateTimeFormat(locale, {
+    day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC",
+  }).format(date)
+}
+
 export function TariffNight({ tariff, agreed_rate }: TariffReference) {
   const { t } = useT()
   const locale = moneyLocale()
   if (!tariff || agreed_rate == null) return null
+  // a stay over a tariff change: the nights priced apart from the check-in night
+  const changes = (tariff.nights ?? []).filter((night) => night.nightly !== tariff.nightly || night.agreed_rate !== agreed_rate)
   return <span className="tabular-nums">{t("{contract} / night · {home} at {rate} ({date})", {
     contract: currencyText(tariff.currency, tariff.nightly, locale),
     home: currencyText(tariff.property_currency, agreed_rate, locale),
     rate: formatFxRate(tariff.fx_rate, locale),
     date: tariffDate(tariff.fx_date, locale),
-  })}</span>
+  })}
+    {changes.map((night) => <span key={night.date} className="block text-xs text-zinc-600">
+      {t("{date}: {contract} · {home}", {
+        date: tariffDate(night.date, locale),
+        contract: currencyText(tariff.currency, night.nightly, locale),
+        home: currencyText(tariff.property_currency, night.agreed_rate, locale),
+      })}
+    </span>)}
+  </span>
 }
 
 /** The bill in its contract currency: which rate (Actual or Current), its date, and the total and balance at it. */
@@ -57,8 +76,12 @@ export function TariffRoomTotal({ tariff, nights, agreedRate, locale }: {
   tariff: ContractTariff; nights: number; agreedRate: number; locale: string
 }) {
   const { t } = useT()
+  // a stay over a tariff change adds up each night's own tariff
+  const own = tariff.nights?.length ? tariff.nights : null
   return <span className="tabular-nums">{t("Room tariff subtotal: {contract} · {home}", {
-    contract: currencyText(tariff.currency, tariff.nightly * Math.max(1, nights), locale),
-    home: currencyText(tariff.property_currency, agreedRate * Math.max(1, nights), locale),
+    contract: currencyText(tariff.currency, own ? own.reduce((sum, night) => sum + night.nightly, 0)
+      : tariff.nightly * Math.max(1, nights), locale),
+    home: currencyText(tariff.property_currency, own ? own.reduce((sum, night) => sum + night.agreed_rate, 0)
+      : agreedRate * Math.max(1, nights), locale),
   })}</span>
 }

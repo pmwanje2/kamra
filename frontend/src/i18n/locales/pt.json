@@ -6776,7 +6776,6 @@
   "Fixed at Reservation": "Fixo na reserva",
   "Fixed at Check In": "Fixo no check-in",
   "Current Date": "Data atual",
-  "Fixed at Block": "Fixo no bloqueio",
   "Base rate plan (derived rate)": "Plano tarifário base (tarifa derivada)",
   "Adjust extra person charges": "Ajustar cobranças por pessoa extra",
   "Rounding step": "Passo de arredondamento",
@@ -6807,5 +6806,17 @@
   "Round to ({currency} — tariff currency; 0 = the currency's smallest unit)": "Arredondar para ({currency} — moeda da tarifa; 0 = a menor unidade da moeda)",
   "Round to (in each tariff's currency; 0 = the currency's smallest unit)": "Arredondar para (na moeda de cada tarifa; 0 = a menor unidade da moeda)",
   "Prefilled from the rate plan rounding rule": "Preenchido a partir da regra de arredondamento do plano tarifário",
-  "Tariffs are edited in the price list's contract currency; the {home} posting converts at booking or check-in under the rate plan's exchange rate lock.": "As tarifas são editadas na moeda do contrato da lista de preços; o lançamento em {home} é convertido na reserva ou no check-in conforme a fixação do câmbio do plano tarifário."
+  "Tariffs are edited in the price list's contract currency; the {home} posting converts at booking or check-in under the rate plan's exchange rate lock.": "As tarifas são editadas na moeda do contrato da lista de preços; o lançamento em {home} é convertido na reserva ou no check-in conforme a fixação do câmbio do plano tarifário.",
+  "Customer (optional)": "Cliente (opcional)",
+  "Leave empty for the public rate.": "Deixe em branco para a tarifa pública.",
+  "Leave empty to keep each tariff's own customer.": "Deixe em branco para manter o cliente de cada tarifa.",
+  "Proposed by {user}": "Proposto por {user}",
+  "Approved by {user}": "Aprovado por {user}",
+  "Rejected by {user}": "Rejeitado por {user}",
+  "Reason: {reason}": "Motivo: {reason}",
+  "{date}: {contract} · {home}": "{date}: {contract} · {home}",
+  "Foreign-currency contracts": "Contratos em moeda estrangeira",
+  "How a bill shows a stay priced in a foreign-currency contract beside the home amounts.": "Como uma conta mostra uma estadia com preço em contrato em moeda estrangeira ao lado dos valores em moeda local.",
+  "Reference currency on bills": "Moeda de referência nas contas",
+  "ACTUAL: each charge and payment at the exchange rate of the day it was priced or posted. CURRENT: the whole bill at today's published rate.": "ACTUAL: cada lançamento e pagamento à taxa de câmbio do dia em que foi precificado ou lançado. CURRENT: a conta inteira à taxa publicada hoje."
 }

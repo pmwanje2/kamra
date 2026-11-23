@@ -856,12 +856,21 @@ def contract_rate(property, room_type, rate_plan, check_in, check_out, adults, c
 	"""Resolve an optional contract without reading the provider's records.
 
 	The resolver is told the plan's exchange-rate lock and rounding, the
-	pricing event ("reservation", "check_in", "posting" or "block") with
-	the FX date it prices at, and the company for a customer price. An
-	older resolver ignores what it does not know. A derived plan with no
+	pricing event ("reservation", "check_in" or "posting") with the FX
+	date it prices at, and the company for a customer price. An older
+	resolver ignores what it does not know. A derived plan with no
 	contract of its own takes its base plan's contract and applies its own
-	modifier per night, in the contract currency. The local rate is rounded
-	to the plan's rounding step; a resolver's figure is otherwise kept."""
+	modifier per night, in the contract currency, and its local rate is
+	held to the property's Rate Guardrails as the resolver holds a base
+	plan's. The local rate is rounded to the plan's rounding step; a
+	resolver's figure is otherwise kept.
+
+	A stay over a season or tariff change (OPERA Rate Changes During Stay,
+	SAP condition validity) comes back with `nights`: one {date, nightly,
+	agreed_rate, item_price} per stay night in date order, the scalar
+	figures being the check-in night's. Each night is derived, rounded and
+	checked on its own and kept as tariff["nights"]; a list that does not
+	cover the stay night by night is refused."""
 	if not rate_plan:
 		return None
 	from kamra.erp_bridge import bridge_call
@@ -894,25 +903,103 @@ def contract_rate(property, room_type, rate_plan, check_in, check_out, adults, c
 		currency = result["currency"]
 		if not currency or not price_date:
 			raise ValueError
+		nights = _resolver_nights(result["nights"], check_in, check_out) if "nights" in result else None
 	except (KeyError, TypeError, ValueError, InvalidOperation):
 		raise ContractRateRefused(_("The contract rate is incomplete. Ask a manager to check the tariff."))
 	prop_currency = property_currency(property)
 	step, mode = plan.get("rounding_step"), plan.get("rounding_mode") or "Nearest"
 	derived = chain[depth + 1:]
-	if derived:
-		nightly = _price_through(derived, nightly, _dec(result.get("extra_person")), root=False)
-		if nightly <= 0:
-			raise ContractRateRefused(_("The derived rate plan prices this stay at zero or less. "
-			                            "Ask a manager to check the rate plan."))
-		nightly = round_rate_amount(nightly, 0, currency=currency)
-		agreed = round_rate_amount(nightly * fx, step, mode, prop_currency)
-	elif _dec(step) > 0:
-		agreed = round_rate_amount(agreed, step, mode, prop_currency)
+
+	def price_night(nightly, agreed):
+		if derived:
+			nightly = _price_through(derived, nightly, _dec(result.get("extra_person")), root=False)
+			if nightly <= 0:
+				raise ContractRateRefused(_("The derived rate plan prices this stay at zero or less. "
+				                            "Ask a manager to check the rate plan."))
+			nightly = round_rate_amount(nightly, 0, currency=currency)
+			agreed = round_rate_amount(nightly * fx, step, mode, prop_currency)
+		elif _dec(step) > 0:
+			agreed = round_rate_amount(agreed, step, mode, prop_currency)
+		return nightly, agreed
+
+	nightly, agreed = price_night(nightly, agreed)
 	tariff = {"currency": currency, "nightly": float(nightly), "fx_rate": float(fx),
 	          "fx_date": price_date, "property_currency": prop_currency}
+	if nights is not None:
+		tariff["nights"] = []
+		for night in nights:
+			night_nightly, night_agreed = price_night(night["nightly"], night["agreed_rate"])
+			tariff["nights"].append({"date": night["date"], "nightly": float(night_nightly),
+			                         "agreed_rate": float(night_agreed), "item_price": night["item_price"]})
 	if derived:
 		tariff["derived_from"] = chain[depth].name
+		priced = ([(night["date"], _dec(night["agreed_rate"])) for night in tariff["nights"]] if nights is not None
+		          else [(str(getdate(add_days(check_in, i))), agreed)
+		                for i in range(max(date_diff(check_out, check_in), 1))])
+		_hold_to_guardrails(property, room_type, priced)
 	return float(agreed), tariff
+
+
+def _resolver_nights(raw, check_in, check_out) -> list[dict]:
+	"""The resolver's per-night tariff, checked: exactly one {date, nightly,
+	agreed_rate, item_price} for each night of the stay (its check-in date
+	for a day-use stay), in date order, each amount above zero. Anything
+	else raises ValueError."""
+	if not isinstance(raw, list):
+		raise ValueError
+	dates = [str(getdate(add_days(check_in, i))) for i in range(max(date_diff(check_out, check_in), 1))]
+	if len(raw) != len(dates):
+		raise ValueError
+	nights = []
+	for day, night in zip(dates, raw, strict=True):
+		if not isinstance(night, dict) or str(night.get("date") or "")[:10] != day:
+			raise ValueError
+		nightly, agreed = _dec(night["nightly"]), _dec(night["agreed_rate"])
+		if not all(value.is_finite() and value > 0 for value in (nightly, agreed)):
+			raise ValueError
+		nights.append({"date": day, "nightly": nightly, "agreed_rate": agreed, "item_price": night.get("item_price")})
+	return nights
+
+
+def _hold_to_guardrails(property: str, room_type: str, nights: list) -> None:
+	"""A derived contract's local rate, (date, rate) a night, within the
+	property's Rate Guardrails: the most specific rail for each night's
+	weekday (rail_for_day), as hospitality_tariffs.tariff_rate holds a
+	base plan's tariff (HSP-TARIFF-004). Refused below its floor or above
+	its ceiling."""
+	rails = [rail for rail in frappe.get_all(
+		"Rate Guardrail", filters={"property": property, "disabled": 0},
+		fields=["room_type", "floor_price", "ceiling_price", "days_of_week"])
+		if not rail.room_type or rail.room_type == room_type]
+	if not rails:
+		return
+	for day, rate in nights:
+		rail = rail_for_day(rails, room_type, getdate(day).strftime("%a").lower())
+		if rail and rate < _dec(rail.floor_price):
+			raise ContractRateRefused(_(
+				"The derived rate plan prices the night of {0} below the Rate Guardrail floor. Revenue "
+				"Management reviews the rate plan or the guardrail.").format(day))
+		if rail and rate > _dec(rail.ceiling_price):
+			raise ContractRateRefused(_(
+				"The derived rate plan prices the night of {0} above the Rate Guardrail ceiling. Revenue "
+				"Management reviews the rate plan or the guardrail.").format(day))
+
+
+def contract_night_rates(reservation) -> dict[str, float]:
+	"""Each night's own contract rate, {date: agreed_rate}, from the
+	booking's frozen contract: a stay over a tariff change (OPERA Rate
+	Changes During Stay), while its agreed rate is still the contract as
+	booked. A manager's agreed rate (set_agreed_rate) or a fixed rate is one
+	price for every night (OPERA Fixed Rate), so it is empty then - and for
+	a contract with one rate for the stay."""
+	if cint(reservation.get("fixed_rate")):
+		return {}
+	snapshot = saved_contract_tariff(reservation)
+	nights = (snapshot.get("tariff") or {}).get("nights") or []
+	booked = snapshot.get("agreed_rate")
+	if not nights or booked is None or abs(_dec(reservation.get("agreed_rate")) - _dec(booked)) > Decimal("0.005"):
+		return {}
+	return {str(night["date"]): float(night["agreed_rate"]) for night in nights}
 
 
 def relock_contract_fx_at_check_in(reservation) -> bool:
@@ -930,8 +1017,12 @@ def relock_contract_fx_at_check_in(reservation) -> bool:
 	resolver's own re-lock (kamra_fx_checkin_relock) is asked for only on a
 	stay it priced (custom_tariff_currency); a derived plan's stay re-locks
 	under kamra_contract_relocked. No published rate refuses the check-in.
+	A contract over a tariff change converts each booked night's own
+	amount. A fixed rate is the manager's price and is never relocked.
 	True when the booking was relocked."""
 	if rate_plan_fx_policy(reservation.get("rate_plan")) != "Fixed at Check In":
+		return False
+	if cint(reservation.get("fixed_rate")):
 		return False
 	snapshot = saved_contract_tariff(reservation)
 	tariff = snapshot.get("tariff") or {}
@@ -953,9 +1044,13 @@ def relock_contract_fx_at_check_in(reservation) -> bool:
 	fx, fx_date = posting
 	rp = frappe.get_doc("Rate Plan", reservation.rate_plan)
 	agreed = float(round_rate_amount(nightly * fx, rp.get("rounding_step"), rp.get("rounding_mode") or "Nearest", home))
+	relocked = {**tariff, "nightly": float(nightly), "fx_rate": float(fx), "fx_date": fx_date}
+	if tariff.get("nights"):
+		relocked["nights"] = [{**night, "agreed_rate": float(round_rate_amount(
+			_dec(night["nightly"]) * fx, rp.get("rounding_step"), rp.get("rounding_mode") or "Nearest", home))}
+			for night in tariff["nights"]]
 	reservation.agreed_rate = agreed
-	reservation.contract_tariff = {"tariff": {**tariff, "nightly": float(nightly), "fx_rate": float(fx),
-	                                          "fx_date": fx_date}, "agreed_rate": agreed}
+	reservation.contract_tariff = {"tariff": relocked, "agreed_rate": agreed}
 	reservation.flags.kamra_contract_relocked = True
 	if reservation.get("custom_tariff_currency"):
 		reservation.flags.kamra_fx_checkin_relock = True
@@ -982,8 +1077,10 @@ def quote_with_contract(property, room_type, check_in_date, check_out_date, adul
 	resolved = contract_rate(property, room_type,
 		rate_plan or negotiated_rate_plan(property, kwargs.get("company")),
 		check_in_date, check_out_date, adults, children, extra_beds, company=kwargs.get("company"))
+	nights = {night["date"]: night["agreed_rate"] for night in (resolved[1].get("nights") or [])} if resolved else {}
 	q = quote(property, room_type, check_in_date, check_out_date, adults, children,
-	          meal_plan, rate_plan, voucher_code, agreed_rate=resolved[0] if resolved else 0, **kwargs)
+	          meal_plan, rate_plan, voucher_code, agreed_rate=resolved[0] if resolved else 0,
+	          agreed_nights=nights or None, **kwargs)
 	if resolved:
 		q.update(agreed_rate=resolved[0], tariff=resolved[1])
 	return q
@@ -1073,6 +1170,7 @@ def quote(
 	check_in_time: str | None = None,
 	check_out_time: str | None = None,
 	night_prices=None,
+	agreed_nights: dict | None = None,
 ) -> dict:
 	# a stay for a company is priced on the plan the company negotiated,
 	# unless the caller named a plan of its own
@@ -1256,8 +1354,9 @@ def quote(
 			rate, tier = demand_adjust(property, room_type, date, rate,
 			                           occupancy=occ_cache[str(date)])
 			if agreed_rate:
-				# a rate the desk agreed replaces the card and the premium
-				rate, tier = _dec(agreed_rate), None
+				# a rate the desk agreed replaces the card and the premium; a
+				# contract over a tariff change agrees each night's own rate
+				rate, tier = _dec((agreed_nights or {}).get(str(date), agreed_rate)), None
 			hand = typed.get(str(date))
 			if hand is not None:
 				# a night the desk priced: replaces the card, the season and

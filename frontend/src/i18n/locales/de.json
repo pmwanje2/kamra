@@ -496,7 +496,6 @@
   "Fixed at Reservation": "Fest bei Buchung",
   "Fixed at Check In": "Fest beim Check-in",
   "Current Date": "Aktuelles Datum",
-  "Fixed at Block": "Fest beim Kontingent",
   "Base rate plan (derived rate)": "Basis-Ratenplan (abgeleiteter Preis)",
   "Adjust extra person charges": "Zuschläge für Zusatzpersonen anpassen",
   "Rounding step": "Rundungsschritt",
@@ -537,5 +536,17 @@
   "Round to (in each tariff's currency; 0 = the currency's smallest unit)": "Runden auf (in der Währung des jeweiligen Tarifs; 0 = kleinste Währungseinheit)",
   "Prefilled from the rate plan rounding rule": "Aus der Rundungsregel des Ratenplans vorausgefüllt",
   "Tariffs are edited in the price list's contract currency; the {home} posting converts at booking or check-in under the rate plan's exchange rate lock.": "Tarife werden in der Vertragswährung der Preisliste bearbeitet; die Buchung in {home} wird bei Buchung oder Check-in gemäß der Wechselkursbindung des Ratenplans umgerechnet.",
-  "Corporate": "Firmenkunde"
+  "Corporate": "Firmenkunde",
+  "Customer (optional)": "Kunde (optional)",
+  "Leave empty for the public rate.": "Leer lassen für den öffentlichen Preis.",
+  "Leave empty to keep each tariff's own customer.": "Leer lassen, um den Kunden jedes Tarifs beizubehalten.",
+  "Proposed by {user}": "Vorgeschlagen von {user}",
+  "Approved by {user}": "Freigegeben von {user}",
+  "Rejected by {user}": "Abgelehnt von {user}",
+  "Reason: {reason}": "Grund: {reason}",
+  "{date}: {contract} · {home}": "{date}: {contract} · {home}",
+  "Foreign-currency contracts": "Verträge in Fremdwährung",
+  "How a bill shows a stay priced in a foreign-currency contract beside the home amounts.": "Wie eine Rechnung einen in einem Fremdwährungsvertrag bepreisten Aufenthalt neben den Beträgen in Hauswährung zeigt.",
+  "Reference currency on bills": "Referenzwährung auf Rechnungen",
+  "ACTUAL: each charge and payment at the exchange rate of the day it was priced or posted. CURRENT: the whole bill at today's published rate.": "ACTUAL: jede Belastung und Zahlung zum Wechselkurs des Tages, an dem sie bepreist oder gebucht wurde. CURRENT: die ganze Rechnung zum heute veröffentlichten Kurs."
 }

@@ -496,7 +496,6 @@
   "Fixed at Reservation": "Tetap saat reservasi",
   "Fixed at Check In": "Tetap saat check-in",
   "Current Date": "Tanggal saat ini",
-  "Fixed at Block": "Tetap saat blok",
   "Base rate plan (derived rate)": "Paket tarif dasar (tarif turunan)",
   "Adjust extra person charges": "Sesuaikan biaya orang tambahan",
   "Rounding step": "Kelipatan pembulatan",
@@ -537,5 +536,17 @@
   "Round to (in each tariff's currency; 0 = the currency's smallest unit)": "Bulatkan ke (dalam mata uang tiap tarif; 0 = satuan terkecil mata uang)",
   "Prefilled from the rate plan rounding rule": "Terisi dari aturan pembulatan paket tarif",
   "Tariffs are edited in the price list's contract currency; the {home} posting converts at booking or check-in under the rate plan's exchange rate lock.": "Tarif diedit dalam mata uang kontrak daftar harga; posting dalam {home} dikonversi saat pemesanan atau check-in sesuai penguncian kurs paket tarif.",
-  "Corporate": "Korporat"
+  "Corporate": "Korporat",
+  "Customer (optional)": "Pelanggan (opsional)",
+  "Leave empty for the public rate.": "Kosongkan untuk tarif umum.",
+  "Leave empty to keep each tariff's own customer.": "Kosongkan untuk mempertahankan pelanggan masing-masing tarif.",
+  "Proposed by {user}": "Diusulkan oleh {user}",
+  "Approved by {user}": "Disetujui oleh {user}",
+  "Rejected by {user}": "Ditolak oleh {user}",
+  "Reason: {reason}": "Alasan: {reason}",
+  "{date}: {contract} · {home}": "{date}: {contract} · {home}",
+  "Foreign-currency contracts": "Kontrak mata uang asing",
+  "How a bill shows a stay priced in a foreign-currency contract beside the home amounts.": "Cara tagihan menampilkan inap yang diberi harga dalam kontrak mata uang asing di samping jumlah dalam mata uang lokal.",
+  "Reference currency on bills": "Mata uang referensi pada tagihan",
+  "ACTUAL: each charge and payment at the exchange rate of the day it was priced or posted. CURRENT: the whole bill at today's published rate.": "ACTUAL: setiap tagihan dan pembayaran pada kurs hari saat diberi harga atau dibukukan. CURRENT: seluruh tagihan pada kurs yang diterbitkan hari ini."
 }

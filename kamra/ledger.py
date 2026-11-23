@@ -1805,6 +1805,14 @@ def generate_proforma(folio: str, notes: str | None = None,
 		inv["estimate"] = {"posted_total": round(posted, 2), "projected_total": ahead,
 		                   "grand_total": round(posted + ahead, 2),
 		                   "balance": round(flt(f.get("balance")) + ahead, 2)}
+		stay = inv.get("stay") or {}
+		if stay.get("reservation") and stay.get("reference_currency"):
+			# the estimate in the contract currency, the projected nights at the rate they would post at
+			from kamra.folio import reference_currency
+			stay["reference_currency"] = reference_currency(
+				frappe.get_doc("Reservation", stay["reservation"]), grand_total=inv["estimate"]["grand_total"],
+				balance=inv["estimate"]["balance"], charges=[*(f.get("charges") or []), *inv["projected_lines"]],
+				payments=f.get("payments") or [])
 	doc = frappe.get_doc({
 		"doctype": "Proforma Folio",
 		"property": f.get("property"),
@@ -1845,6 +1853,9 @@ def _projected_lines(f) -> list[dict]:
 				"description": c.description, "qty": c.qty, "rate": c.rate,
 				"amount": c.amount, "gst_rate": c.gst_rate,
 				"gst_amount": c.gst_amount, "total": c.total, "projected": True,
+				# the rate a Current Date night would post at (ACTUAL reference currency reads it)
+				"contract_currency": c.get("contract_currency"), "contract_fx_rate": c.get("contract_fx_rate"),
+				"contract_fx_date": str(c.contract_fx_date) if c.get("contract_fx_date") else None,
 			})
 	return sorted(lines, key=lambda l: (l["posting_date"], l["charge_type"]))
 

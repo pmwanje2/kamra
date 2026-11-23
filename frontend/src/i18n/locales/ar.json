@@ -6584,7 +6584,6 @@
   "Fixed at Reservation": "ثابت عند الحجز",
   "Fixed at Check In": "ثابت عند تسجيل الوصول",
   "Current Date": "التاريخ الحالي",
-  "Fixed at Block": "ثابت عند الحجز الجماعي",
   "Base rate plan (derived rate)": "خطة السعر الأساسية (سعر مشتق)",
   "Adjust extra person charges": "تعديل رسوم الأشخاص الإضافيين",
   "Rounding step": "خطوة التقريب",
@@ -6615,5 +6614,17 @@
   "Round to ({currency} — tariff currency; 0 = the currency's smallest unit)": "التقريب إلى ({currency} — عملة التعرفة؛ 0 = أصغر وحدة للعملة)",
   "Round to (in each tariff's currency; 0 = the currency's smallest unit)": "التقريب إلى (بعملة كل تعرفة؛ 0 = أصغر وحدة للعملة)",
   "Prefilled from the rate plan rounding rule": "مُعبأ مسبقًا من قاعدة التقريب في خطة السعر",
-  "Tariffs are edited in the price list's contract currency; the {home} posting converts at booking or check-in under the rate plan's exchange rate lock.": "تُحرَّر التعرفة بعملة العقد في قائمة الأسعار؛ ويُحوَّل الترحيل بعملة {home} عند الحجز أو تسجيل الوصول وفق تثبيت سعر الصرف في خطة السعر."
+  "Tariffs are edited in the price list's contract currency; the {home} posting converts at booking or check-in under the rate plan's exchange rate lock.": "تُحرَّر التعرفة بعملة العقد في قائمة الأسعار؛ ويُحوَّل الترحيل بعملة {home} عند الحجز أو تسجيل الوصول وفق تثبيت سعر الصرف في خطة السعر.",
+  "Customer (optional)": "العميل (اختياري)",
+  "Leave empty for the public rate.": "اتركه فارغًا للسعر العام.",
+  "Leave empty to keep each tariff's own customer.": "اتركه فارغًا للإبقاء على عميل كل تعرفة.",
+  "Proposed by {user}": "اقترحه {user}",
+  "Approved by {user}": "اعتمده {user}",
+  "Rejected by {user}": "رفضه {user}",
+  "Reason: {reason}": "السبب: {reason}",
+  "{date}: {contract} · {home}": "{date}: {contract} · {home}",
+  "Foreign-currency contracts": "عقود بالعملات الأجنبية",
+  "How a bill shows a stay priced in a foreign-currency contract beside the home amounts.": "كيف تعرض الفاتورة إقامة مسعّرة بعقد بعملة أجنبية بجانب المبالغ بالعملة المحلية.",
+  "Reference currency on bills": "العملة المرجعية في الفواتير",
+  "ACTUAL: each charge and payment at the exchange rate of the day it was priced or posted. CURRENT: the whole bill at today's published rate.": "ACTUAL: كل رسم ودفعة بسعر صرف اليوم الذي سُعّر أو رُحّل فيه. CURRENT: الفاتورة كاملة بالسعر المنشور اليوم."
 }

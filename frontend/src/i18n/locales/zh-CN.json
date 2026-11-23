@@ -6843,7 +6843,6 @@
   "Fixed at Reservation": "预订时锁定",
   "Fixed at Check In": "入住时锁定",
   "Current Date": "按当日汇率",
-  "Fixed at Block": "团队预留时锁定",
   "Base rate plan (derived rate)": "基础房价计划（派生价格）",
   "Adjust extra person charges": "调整加人费用",
   "Rounding step": "取整步长",
@@ -6874,5 +6873,17 @@
   "Round to ({currency} — tariff currency; 0 = the currency's smallest unit)": "取整单位（{currency}，价格币种；0 = 货币最小单位）",
   "Round to (in each tariff's currency; 0 = the currency's smallest unit)": "取整单位（按各价格的币种；0 = 货币最小单位）",
   "Prefilled from the rate plan rounding rule": "已按房价计划的取整规则预填",
-  "Tariffs are edited in the price list's contract currency; the {home} posting converts at booking or check-in under the rate plan's exchange rate lock.": "价格按价格表的合同币种编辑；{home} 入账金额在预订或入住时按房价计划的汇率锁定规则换算。"
+  "Tariffs are edited in the price list's contract currency; the {home} posting converts at booking or check-in under the rate plan's exchange rate lock.": "价格按价格表的合同币种编辑；{home} 入账金额在预订或入住时按房价计划的汇率锁定规则换算。",
+  "Customer (optional)": "客户（可选）",
+  "Leave empty for the public rate.": "留空表示公开价格。",
+  "Leave empty to keep each tariff's own customer.": "留空则保留每个价目各自的客户。",
+  "Proposed by {user}": "提议人：{user}",
+  "Approved by {user}": "批准人：{user}",
+  "Rejected by {user}": "拒绝人：{user}",
+  "Reason: {reason}": "原因：{reason}",
+  "{date}: {contract} · {home}": "{date}：{contract} · {home}",
+  "Foreign-currency contracts": "外币合同",
+  "How a bill shows a stay priced in a foreign-currency contract beside the home amounts.": "账单如何在本币金额旁显示以外币合同定价的住宿。",
+  "Reference currency on bills": "账单上的参考货币",
+  "ACTUAL: each charge and payment at the exchange rate of the day it was priced or posted. CURRENT: the whole bill at today's published rate.": "ACTUAL：每笔费用和付款按其定价或入账当天的汇率。CURRENT：整张账单按今天公布的汇率。"
 }
