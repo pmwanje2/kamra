@@ -138,6 +138,12 @@ def rate_plan_fx_policy(rate_plan: str | None) -> str:
 	return frappe.db.get_value("Rate Plan", rate_plan, "fx_lock_policy") or DEFAULT_FX_LOCK
 
 
+def contract_local_amount(rate_plan, nightly, fx_rate, home_currency) -> Decimal:
+	"""A contract amount in the posting currency: converted at `fx_rate` and rounded as the plan rounds."""
+	return round_rate_amount(_dec(nightly) * _dec(fx_rate), rate_plan.get("rounding_step"),
+	                         rate_plan.get("rounding_mode") or "Nearest", home_currency)
+
+
 def pet_charge_amount(prop, pets: int, nights: int) -> Decimal:
 	"""What the property charges for this many pets over the stay, before
 	tax. Per stay by default - most homestays charge once per pet, not per
