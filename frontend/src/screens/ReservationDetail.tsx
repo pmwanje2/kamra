@@ -309,7 +309,7 @@ export default function ReservationDetail({
     setCompPin("")
     if ((!datesDiffer && !planDiffers) || !datesValid) return
     let live = true
-    ;(planDiffers ? amendStayPreview(name, ci, co, { rate_plan: plan }) : amendStayPreview(name, ci, co))
+    amendStayPreview(name, ci, co, planDiffers ? { rate_plan: plan } : undefined)
       .then((p) => {
         if (!live) return
         setDatePreview(p)
