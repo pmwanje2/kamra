@@ -125,7 +125,7 @@ function serve(method: string, params: Record<string, unknown>) {
     case "kamra.api.booking_options": return Promise.resolve(OPTIONS)
     case "kamra.api.get_quote": return Promise.resolve(quoteFor(params))
     case "kamra.api.available_rooms": return Promise.resolve([{ name: "STD-101", room_number: "101", housekeeping_status: "Clean" }])
-    case "kamra.api.property_locale": return Promise.resolve({ currency: "UGX", currency_symbol: "UGX ", locale: "en", tax_label: "VAT", tax_rates: [0] })
+    case "kamra.api.property_locale": return Promise.resolve({ currency: "UGX", currency_symbol: "UGX ", locale: "en", tax_label: "VAT", tax_rates: [0], payment_modes: ["Cash"] })
     case "kamra.rates.rate_options": return Promise.resolve({ nights: [], plans: [], voucher: null,
       plain: { room_total: 2000, amount_after_tax: 2000, discount: 0 }, tax_inclusive: false })
     case "kamra.cashier.my_till": return Promise.resolve({ open: true })

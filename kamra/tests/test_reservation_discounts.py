@@ -323,12 +323,15 @@ class ReservationDiscountBookingTests(DiscountTestCase):
 		self.assertEqual(float(frappe.db.get_value("Room Type", self.rt, "base_price")), 1000)
 
 	def test_the_folio_bills_the_net_night_and_never_discounts_twice(self):
-		out = self.book(discount_type="Amount", discount_value=250,
+		# 150 off a 1,000 night is 15%: the desk's own limit here
+		out = self.book(discount_type="Amount", discount_value=150,
 		                discount_reason="RATE-PROMO")
 		res = frappe.get_doc("Reservation", out["reservation"])
 		folio_mod.open_folio(res)
 		folio_mod.post_room_night(res, d(5))
-		self.assertEqual([round(float(c.amount), 2) for c in charges(res.name, "Room")], [750])
+		self.assertEqual([round(float(c.amount), 2) for c in charges(res.name, "Room")], [850])
+		room = charges(res.name, "Room")[0]
+		self.assertIn("1,000.00 less discount 150.00", room.description)
 		self.assertFalse(frappe.get_all("Folio Charge", filters={
 			"parent": folio_mod.target_folio(res, "Room"), "charge_type": "Discount"}))
 
@@ -507,19 +510,21 @@ class ReservationDiscountGovernanceTests(DiscountTestCase):
 		                    "UT Agent Guest", **args)
 		self.assertEqual(self.rows(out["reservation"]), [(1000, 50, 950), (1000, 50, 950)])
 		over = dict(args, discount_value=25)
+		# each call books a different guest: an identical agent booking
+		# moments later is answered as a retry of the first one
 		for user in (DESK, RATEDESK, GM):
 			with self.subTest(user=user):
 				with self.assertRaises(frappe.PermissionError) as raised:
 					self.as_agent(user, api.create_booking, PROP_A, self.rt, d(5), d(7),
-					              "UT Agent Guest", **over)
+					              f"UT Agent Over {user}", **over)
 				self.assertIn("hotel screen", str(raised.exception))
 				with self.assertRaises(frappe.PermissionError):
 					self.as_agent(user, api.create_booking, PROP_A, self.rt, d(5), d(7),
-					              "UT Agent Guest", **args, supervisor_user=GM,
+					              f"UT Agent Pin {user}", **args, supervisor_user=GM,
 					              supervisor_pin="4321")
 		with self.assertRaises(frappe.PermissionError):
 			self.as_agent(AGENT, api.create_booking, PROP_A, self.rt, d(5), d(7),
-			              "UT Agent Guest", **args)
+			              "UT Agent Alone", **args)
 
 	def test_booking_and_rate_options_describe_discounting(self):
 		set_setting(PROP_A, "rate_override_limit_pct", 12)
@@ -617,6 +622,22 @@ class SetReservationDiscountTests(DiscountTestCase):
 		folio_mod.post_remaining_nights(frappe.get_doc("Reservation", stay.name))
 		self.assertEqual(sorted(round(float(c.amount), 2) for c in charges(stay.name, "Room")),
 		                 [900, 900, 1000])
+
+	def test_clearing_an_in_house_discount_needs_no_sign_off_for_billed_nights(self):
+		"""A night already on the folio keeps the discount it was billed with;
+		taking the discount off the nights still to come is not a new cut."""
+		set_setting(PROP_A, "rate_override_limit_pct", 0)
+		stay = make_reservation(PROP_A, self.rt, d(0), d(3), status="Checked In",
+		                        room=self.rooms[2])
+		self.as_user(DESK, api.set_reservation_discount, stay.name,
+		             discount_type="Percent", discount_value=10, reason_code="RATE-PROMO",
+		             supervisor_user=GM, supervisor_pin="4321")
+		folio_mod.post_room_night(frappe.get_doc("Reservation", stay.name), d(0))
+		pv = self.as_user(DESK, api.discount_preview, stay.name)
+		self.assertFalse(pv["needs_supervisor"])
+		self.as_user(DESK, api.set_reservation_discount, stay.name)
+		self.assertEqual(self.rows(stay.name),
+		                 [(1000, 100, 900), (1000, 0, 1000), (1000, 0, 1000)])
 
 	def test_the_preview_writes_nothing_and_says_when_a_pin_is_needed(self):
 		pv = self.as_user(DESK, api.discount_preview, self.res.name,
