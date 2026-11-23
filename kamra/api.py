@@ -1718,6 +1718,11 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 		# an advance taken from a guest already in house pays the stay
 		from kamra.ledger import transfer_advances_to_guest
 		transfer_advances_to_guest(doc.reservation)
+	elif kind == "Advance" and doc.folio_type == "Group" and doc.get("group_booking"):
+		# the group's bill: paid in advance while any room of the group is in
+		# house, it pays the group at once, whichever room it is anchored to
+		from kamra.ledger import transfer_group_advances
+		transfer_group_advances(doc.group_booking)
 	if kind == "Security Deposit" and doc.reservation and \
 	   (doc.folio_type or "Guest") == "Guest":
 		# keep the stay's Security Deposit record in step, whichever screen
@@ -2171,6 +2176,10 @@ def correct_folio_charge(folio: str, charge_row: str, reason: str = "",
 	orig = next((c for c in doc.charges if c.name == charge_row), None)
 	if not orig:
 		frappe.throw(_("That charge line is not on this folio."))
+	from kamra.folio import void_pairs
+	if orig.name in void_pairs(doc):
+		frappe.throw(_("This line was voided or split. Correct the line that stands "
+		               "in its place."))
 	if orig.corrects_row:
 		frappe.throw(_("This line is itself a correction. Correct the "
 		               "reposted line instead."))
@@ -2214,6 +2223,9 @@ def correct_folio_charge(folio: str, charge_row: str, reason: str = "",
 		"description": f"Reversal: {orig.description}"[:140],
 		"rate": -float(orig.amount), "amount": -float(orig.amount),
 		"gst_rate": float(orig.gst_rate or 0),
+		# a line split to the minor unit is reversed with the tax it was posted with
+		"tax_as_posted": orig.get("tax_as_posted"),
+		"gst_amount": -float(orig.gst_amount or 0),
 	})
 	doc.append("charges", {
 		**common, "charge_type": new_type, "description": new_desc,
@@ -2592,18 +2604,20 @@ def transfer_folio_charges(from_folio: str, charge_rows, to_folio: str | None = 
 @require_roles("Finance", "Front Desk", "Kamra Agent")
 def split_folio_charge(from_folio: str, charge_row: str, to_folio: str,
                        percent: float | None = None,
-                       amount: float | None = None):
-	"""Split one charge line between two folios - by percent or amount."""
+                       amount: float | None = None, qty: float | None = None):
+	"""Split one charge line in two - by percent, amount or quantity - on
+	its own folio or onto another of the stay or group."""
 	from kamra.folio import split_charge
 	out = split_charge(from_folio, charge_row, to_folio,
 	                   percent=float(percent) if percent else None,
-	                   amount=float(amount) if amount else None)
+	                   amount=float(amount) if amount else None,
+	                   qty=float(qty) if qty else None)
 	from kamra.savings import log_action
 	from kamra.localization import money_text
 	log_action("split_charge", "Folio", to_folio,
 	           rationale=f"Split {money_text(frappe.db.get_value('Folio', to_folio, 'property'), out['moved'])} of {charge_row} "
 	                     f"{from_folio} → {to_folio}")
-	return out
+	return {"kept": out["kept"], "moved": out["moved"]}
 
 
 @frappe.whitelist(methods=["POST"])
@@ -2701,18 +2715,27 @@ def change_stay_company(reservation: str, reason: str,
 	guest = frappe.db.get_value(
 		"Folio", {"reservation": res.name, "folio_type": "Guest",
 		          "status": "Open"})
+	from kamra.folio import void_pairs
+
+	def live(folio_doc):
+		# a voided (or split) line and its reversal net to nothing and stay on
+		# the bill they were posted to; what stands in their place moves
+		pairs = void_pairs(folio_doc)
+		return [c for c in folio_doc.charges if c.name not in pairs]
+
 	for f in company_folios:
 		doc = frappe.get_doc("Folio", f.name)
+		lines = live(doc)
 		# rules: an allowance stays with the bill it wrote down
-		back = [c.name for c in doc.charges
+		back = [c.name for c in lines
 		        if move == "guest" or not company
 		        or (c.charge_type != "Allowance" and not company_pays(c))]
 		# an allowance wrote down the charges on this bill and has no link to
 		# one line: it follows the charges that leave, in proportion
-		allowances = [c for c in doc.charges
+		allowances = [c for c in lines
 		              if c.charge_type == "Allowance" and c.name not in back]
-		out_total = sum(flt(c.amount) for c in doc.charges if c.name in back)
-		kept_total = sum(flt(c.amount) for c in doc.charges
+		out_total = sum(flt(c.amount) for c in lines if c.name in back)
+		kept_total = sum(flt(c.amount) for c in lines
 		                 if c.charge_type != "Allowance" and c.name not in back)
 		if allowances and out_total > 0 and kept_total <= 0:
 			back += [c.name for c in allowances]
@@ -2733,7 +2756,7 @@ def change_stay_company(reservation: str, reason: str,
 	# a group stay's routing is the group's: only its own company bill moves
 	if move == "rules" and company and guest and not res.get("group_booking"):
 		gdoc = frappe.get_doc("Folio", guest)
-		inbound = [c.name for c in gdoc.charges
+		inbound = [c.name for c in live(gdoc)
 		           if c.charge_type != "Allowance" and company_pays(c)]
 		if inbound:
 			transfer_charges(guest, inbound, open_company_folio(res))
@@ -3460,9 +3483,29 @@ def part_settle_folio(folio: str, pin: str | None = None):
 @frappe.whitelist(methods=["POST"])
 @require_roles("Finance", "Front Desk", "Kamra Agent")
 def cancel_invoice(folio: str, reason: str, pin: str | None = None):
-	"""Void an invoice into the register and reopen the folio for correction."""
+	"""Void an invoice into the register and reopen the folio for correction.
+	An invoice the ERPNext bridge issued goes to the bridge's credit and
+	re-bill instead; the folio is not reopened here."""
 	_pin_guard(folio, pin)
-	from kamra.folio import cancel_invoice as _cancel
+	from kamra.folio import bridge_invoice, cancel_invoice as _cancel, route_to_credit_and_rebill
+	doc = frappe.get_doc("Folio", folio)
+	if bridge_invoice(doc):
+		# the whole invoice credited and re-billed: the same roles as a credit
+		# note, the same checks and the same record as a cancellation here
+		from kamra.authz import require_invoice_correction_role
+		require_invoice_correction_role()
+		if doc.status != "Closed":
+			frappe.throw(_("Only a settled folio with an invoice can be cancelled."))
+		if doc.folio_type == "Account":
+			frappe.throw(_("An account invoice can't be cancelled - issue a credit "
+			               "note against it instead."))
+		if not (reason or "").strip():
+			frappe.throw(_("A cancellation needs a reason - it goes on the record."))
+		out = route_to_credit_and_rebill(doc, reason.strip())
+		from kamra.savings import log_action
+		log_action("cancel_invoice", "Folio", folio,
+		           rationale=f"Invoice {bridge_invoice(doc)} sent for credit and re-bill: {reason}")
+		return out
 	out = _cancel(folio, reason)
 	from kamra.savings import log_action
 	log_action("cancel_invoice", "Folio", folio,
@@ -3488,8 +3531,10 @@ def folio_invoice(folio: str):
 	- `lines`: each charge line: row, posting_date, stay_date,
 	  charge_type, description, qty, rate, amount (pre-tax), gst_rate,
 	  gst_amount, total, service_code, transaction_code, gl_code (as
-	  posted), corrects_row (a correction's original line), reservation,
-	  is_alcohol, auto_posted
+	  posted), corrects_row (a correction's original line), reversal_of
+	  and void_reason (a void's or a split's reversal), split_of (the line
+	  a split part or reversal came from), reservation, is_alcohol,
+	  auto_posted
 	- `payments`: row, posting_date, payment_kind, mode, amount (refunds
 	  negative), reference, currency, fx_amount, exchange_rate,
 	  transaction_code, gl_code, refund_of (the payment a refund is against)
@@ -3500,9 +3545,11 @@ def folio_invoice(folio: str):
 	- `tax_summary`: per rate, taxable, total_tax and the country's parts
 	- `allocations`: company payments that cleared this bill: payment,
 	  account, posting_date, reference, amount
+	- `credited`: what the issued credit notes on this invoice add up to
 	- `folio`, `bill_to`, `guest`, `stay`, `property`, `document`
 	"""
 	from kamra import localization as loc
+	from kamra.ledger import credited_total
 	from kamra.pricing import saved_contract_tariff
 
 	doc = frappe.get_doc("Folio", folio)
@@ -3540,6 +3587,8 @@ def folio_invoice(folio: str):
 	split = loc.tax_split(pack, prop, buyer_tax_id)
 
 	# per-line service codes + a summary of what was actually bought
+	from kamra.folio import void_pairs
+	pairs = void_pairs(doc)
 	lines, by_rate, by_head = [], {}, {}
 	for c in doc.charges:
 		code = loc.service_code_for(pack, prop, c.charge_type)
@@ -3554,6 +3603,10 @@ def folio_invoice(folio: str):
 			"transaction_code": c.get("transaction_code"),
 			"gl_code": c.get("gl_code"),
 			"corrects_row": c.get("corrects_row"),
+			# a void's (or a split's) reversal, and the line it reverses
+			"reversal_of": c.get("reversal_of"),
+			"void_reason": c.get("void_reason"),
+			"split_of": c.get("split_of"),
 			"reservation": c.get("reservation"),
 			"stay_date": str(c.stay_date) if c.get("stay_date") else None,
 		})
@@ -3570,7 +3623,8 @@ def folio_invoice(folio: str):
 		head["amount"] += float(c.amount or 0)
 		head["tax"] += float(c.gst_amount or 0)
 		head["total"] += float(c.total or 0)
-		head["lines"] += 1
+		# a voided line and its reversal net to nothing: not a line bought
+		head["lines"] += c.name not in pairs
 
 	settled = bool(doc.invoice_number)
 	# what the tax authority requires ON the bill (ZATCA: QR + Arabic title)
@@ -3592,6 +3646,9 @@ def folio_invoice(folio: str):
 		"payments": payments,
 		"statement": _folio_statement(lines, payments),
 		"allocations": _folio_allocations(doc.name),
+		# what the issued credit notes on this invoice add up to: the most a
+		# new one may credit is the invoice total less this
+		"credited": float(credited_total(doc.name)),
 		"bill_to": bill_to,
 		"statutory": statutory,
 		"document": {
@@ -5401,8 +5458,9 @@ def _assert_settled(doc, credit_override_reason: str | None = None) -> list[dict
 
 	Every night is posted first, because night audit may not have run for the
 	last one. Only what the company pays moves to the city ledger: the stay's
-	Company folio, or the group master when the group's company has credit.
-	The guest's own folios (Guest, Extra) - liquor, extras, anything the
+	Company folio. A group's master bill is settled with the group
+	(settle_group_bill), never by one member's check-out. The guest's own
+	folios (Guest, Extra) - liquor, extras, anything the
 	billing rules left on the guest - are the guest's to settle, so a balance
 	there refuses the check-out. Closed folios count too: a bill closed with
 	money still on it is still owed. frappe.flags.allow_unsettled_checkout is
@@ -5504,7 +5562,10 @@ def _reverse_check_in_blocker(doc) -> str | None:
 	   str(getdate(doc.check_in_date)) != str(get_business_date(doc.property)):
 		return _("The night audit has run since this check-in, so it can't be "
 		         "reversed. Check the guest out instead.")
-	folios = frappe.get_all("Folio", filters={"reservation": doc.name}, pluck="name")
+	# the group's bill anchored to this stay is the group's: what other rooms
+	# posted to it is no reason to keep this check-in
+	folios = frappe.get_all("Folio", filters={"reservation": doc.name,
+	                                          "folio_type": ("!=", "Group")}, pluck="name")
 	if folios and frappe.db.exists("Folio Charge", {"parent": ("in", folios),
 	                                                "charge_type": "Room"}):
 		return _("A room night is posted for this stay: check the guest out instead.")
@@ -5628,7 +5689,7 @@ def reinstate_checkout(reservation: str, reason: str, pin: str | None = None):
 	in house again in the same room. Refused once the night audit has run,
 	when someone else is in the room, or when the company has paid."""
 	from kamra.authz import require_cashier_pin
-	from kamra.folio import cancel_invoice
+	from kamra.folio import bridge_invoice, cancel_invoice, invoiced, refuse_bridge_correction
 	from kamra.ledger import reverse_city_ledger_transfer
 
 	reason = (reason or "").strip()
@@ -5665,14 +5726,23 @@ def reinstate_checkout(reservation: str, reason: str, pin: str | None = None):
 	day_start = frappe.db.get_value(
 		"Night Audit Run", {"property": doc.property, "status": ("!=", "Draft")},
 		"creation", order_by="creation desc")
+	# the group's bill anchored to this stay is the group's: settled with the
+	# group, it keeps its invoice when one room's check-out is undone
+	fields = ["name", "status", "invoice_number", "closed_on", "modified", "folio_type"]
+	if frappe.db.has_column("Folio", "sales_invoice"):
+		fields.append("sales_invoice")
 	folios = [f for f in frappe.get_all(
-		"Folio", filters={"reservation": doc.name},
-		fields=["name", "status", "invoice_number", "closed_on"])
-		if f.status != "Closed" or not day_start
-		or (f.closed_on and get_datetime(f.closed_on) >= get_datetime(day_start))]
+		"Folio", filters={"reservation": doc.name}, fields=fields)
+		if f.folio_type != "Group"
+		and (f.status != "Closed" or not day_start
+		     or ((f.closed_on or f.modified)
+		         and get_datetime(f.closed_on or f.modified) >= get_datetime(day_start)))]
+	for f in folios:
+		if f.status == "Closed" and bridge_invoice(f):
+			refuse_bridge_correction(f)
 	cancelled, brought_back = [], 0.0
 	for f in folios:
-		if f.status == "Closed" and f.invoice_number:
+		if f.status == "Closed" and invoiced(f):
 			cancelled.append(cancel_invoice(f.name, f"Checkout reinstated: {reason}")["cancelled"])
 	for f in folios:
 		brought_back += reverse_city_ledger_transfer(f.name, reason)

@@ -223,21 +223,29 @@ def _revenue(property: str, start, end) -> dict:
 		     AND {BANQUET_HELD}""",
 		{"p": property, "s": start, "e": end, "t": nowdate()})[0][0])
 	# a credit note on a closed bill writes no charge line (on an open one
-	# it is an Allowance line, already counted above)
+	# it is an Allowance line, already counted above); the P&L is before
+	# tax, so it takes off what is credited less the tax given back
 	rev["allowances"] -= flt(frappe.db.sql(
-		"""SELECT COALESCE(SUM(cn.amount), 0) FROM `tabCredit Note` cn
-		   WHERE cn.property = %(p)s AND cn.status = 'Issued'
-		     AND cn.issue_date BETWEEN %(s)s AND %(e)s
-		     AND NOT EXISTS (SELECT 1 FROM `tabFolio Charge` fc
-		                     WHERE fc.parent = cn.folio AND fc.charge_type = 'Allowance'
-		                       AND fc.description LIKE CONCAT('Credit note ', cn.credit_note_number, ':%%'))""",
+		"""SELECT COALESCE(SUM(cn.amount - IFNULL(cn.tax_amount, 0)), 0)
+		   FROM `tabCredit Note` cn""" + CLOSED_BILL_CREDIT_NOTES,
 		{"p": property, "s": start, "e": end})[0][0])
 	return {k: _r(v) for k, v in rev.items()}
 
 
+# SQL from `tabCredit Note` cn: the period's issued credit notes on closed
+# bills (on an open bill a credit note is an Allowance line, counted there)
+CLOSED_BILL_CREDIT_NOTES = """
+		   WHERE cn.property = %(p)s AND cn.status = 'Issued'
+		     AND cn.issue_date BETWEEN %(s)s AND %(e)s
+		     AND NOT EXISTS (SELECT 1 FROM `tabFolio Charge` fc
+		                     WHERE fc.parent = cn.folio AND fc.charge_type = 'Allowance'
+		                       AND fc.description LIKE CONCAT('Credit note ', cn.credit_note_number, ':%%'))"""
+
+
 def tax_collected(property: str, start, end) -> float:
 	"""Tax on guest bills (folio charges) plus banquets billed outside a
-	folio. Tax on restaurant bills paid at the outlet is not split out."""
+	folio, less the tax given back by credit notes on closed bills. Tax on
+	restaurant bills paid at the outlet is not split out."""
 	folio = frappe.db.sql(
 		"""SELECT COALESCE(SUM(fc.gst_amount), 0)
 		   FROM `tabFolio Charge` fc JOIN `tabFolio` f ON fc.parent = f.name
@@ -249,7 +257,11 @@ def tax_collected(property: str, start, end) -> float:
 		   WHERE property = %(p)s AND event_date BETWEEN %(s)s AND %(e)s
 		     AND {BANQUET_HELD} AND IFNULL(posted_to_folio, 0) = 0""",
 		{"p": property, "s": start, "e": end, "t": nowdate()})[0][0]
-	return _r(flt(folio) + flt(banquet))
+	credited = frappe.db.sql(
+		"""SELECT COALESCE(SUM(IFNULL(cn.tax_amount, 0)), 0)
+		   FROM `tabCredit Note` cn""" + CLOSED_BILL_CREDIT_NOTES,
+		{"p": property, "s": start, "e": end})[0][0]
+	return _r(flt(folio) + flt(banquet) - flt(credited))
 
 
 def _bills_in(property: str, start, end):
