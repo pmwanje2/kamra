@@ -57,7 +57,7 @@ class GroupBillingTestCase(AuditTestCase):
 		                            is_alcohol=alcohol)
 
 	def test_main_room_pays_room_guest_pays_extras(self):
-		r1, r2 = self.group()[1][:2]
+		_r1, r2 = self.group()[1][:2]
 		room = self.post(r2, "Room", "UT R2 night")
 		self.assertEqual(room["folio_type"], "Group")
 		# the posting master has no stay of its own (OPERA PM), not the main room's
@@ -151,7 +151,7 @@ class GroupBillingTestCase(AuditTestCase):
 		self.assertEqual(_held(own), 300)
 
 	def test_group_advance_taken_while_the_group_is_in_house_applies_at_once(self):
-		gb, (r1, r2, _r3) = self.group(company=_corp(), master=False, status="Confirmed")
+		gb, (_r1, r2, _r3) = self.group(company=_corp(), master=False, status="Confirmed")
 		_check_in(r2)
 		bill = folio_mod.open_group_folio(gb.name)
 		self.assertIsNone(frappe.db.get_value("Folio", bill, "reservation"))
