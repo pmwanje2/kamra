@@ -110,7 +110,7 @@ class TestContractTariffsAPI(ContractTariffHarness):
 		result = self.endpoint("list_contract_tariffs")("Test Hotel")
 		self.assertEqual(result, {
 			"supported": False, "property": "Test Hotel", "price_lists": [], "items": [],
-			"can_propose": False, "can_approve": False})
+			"can_propose": False, "can_approve": False, "can_discard": False})
 		self.assertEqual(self.lookups, ["hospitality_tariffs.list_tariffs"])
 		self.assertEqual(self.calls, [])
 
@@ -265,7 +265,7 @@ class TestContractTariffBulkAPI(ContractTariffHarness):
 		missing_from = {key: value for key, value in ENTRY.items() if key != "valid_from"}
 		for entries, message in (
 			("not json", "as a list"), ([1], "as a list"), ([], "at least one"),
-			([ENTRY] * 501, "at most 500"),
+			([ENTRY] * 201, "at most 200"),
 			([{**ENTRY, "item_code": ""}], "Row 1: Choose the price list and the item"),
 			([{**ENTRY, "price_list_rate": "abc"}], "Row 1: The rate must be a number"),
 			([{**ENTRY, "price_list_rate": "inf"}], "Row 1: The rate must be a number"),
@@ -315,7 +315,7 @@ class TestContractTariffBulkAPI(ContractTariffHarness):
 
 	def test_bulk_decisions_need_named_drafts(self):
 		self.scripts = {"hospitality_tariffs.bulk_approve_tariffs": {"done": 0}}
-		for names, message in (([], "at least one"), ([""], "at least one"), ([f"IP-{n}" for n in range(501)], "at most 500"),
+		for names, message in (([], "at least one"), ([""], "at least one"), ([f"IP-{n}" for n in range(201)], "at most 200"),
 		                       ("IP-1", "as a list"), ([{"name": "IP-1"}], "as a list")):
 			with self.subTest(message=message), self.assertRaisesRegex(Refused, message):
 				self.endpoint("bulk_approve_contract_tariffs")(names)
@@ -437,3 +437,117 @@ class TestContractTariffBulkAPI(ContractTariffHarness):
 	def test_import_without_the_directory_returns_none(self):
 		self.assertIsNone(self.endpoint("import_contract_tariffs_rows")("Test Hotel", self.csv(
 			"Corporate USD,USD,,DLX,,,145,2026-12-15,,")))
+
+
+class TestContractTariffRemediationAPI(ContractTariffHarness):
+	"""Round 2 (Gap Record #8556): customer scope, the integration's limits and the CSV round trip."""
+
+	csv = TestContractTariffBulkAPI.csv
+
+	def test_a_customer_version_forwards_the_customer(self):
+		self.roles = ["Revenue Manager"]
+		self.script = lambda form: {"name": "IP-21", "customer": form.get("customer")}
+		result = self.endpoint("propose_contract_tariff")(
+			"Test Hotel", "Corporate USD", "DLX", 120, "2026-12-01", customer="Client Co")
+		self.assertEqual(result, {"name": "IP-21", "customer": "Client Co"})
+		self.assertEqual(self.calls, [("hospitality_tariffs.propose_tariff", {
+			"property": "Test Hotel", "price_list": "Corporate USD", "item_code": "DLX", "price_list_rate": 120,
+			"valid_from": "2026-12-01", "valid_upto": None, "customer": "Client Co"})])
+
+	def test_an_integration_that_drops_the_customer_is_refused_not_published(self):
+		# a pre-v11 single proposal ignores customer: its draft would be the public rate
+		self.script = {"name": "IP-22", "customer": None}
+		with self.assertRaisesRegex(Refused, "customer"):
+			self.endpoint("propose_contract_tariff")("Test Hotel", "Corporate USD", "DLX", 120, "2026-12-01",
+			                                         customer="Client Co")
+		self.script = {"name": "IP-23"}
+		with self.assertRaisesRegex(Refused, "customer"):
+			self.endpoint("propose_contract_tariff")("Test Hotel", "Corporate USD", "DLX", 120, "2026-12-01",
+			                                         customer="Client Co")
+
+	def test_batches_follow_the_integration_limit_of_200(self):
+		self.assertEqual(self.rates.TARIFF_BATCH_LIMIT, 200)
+		self.scripts = {"hospitality_tariffs.bulk_propose_tariffs": {"proposed": []},
+		                "hospitality_tariffs.bulk_approve_tariffs": {"approved": 0}}
+		rows = [{**ENTRY, "valid_from": f"2027-{1 + n // 28:02d}-{1 + n % 28:02d}"} for n in range(200)]
+		self.endpoint("bulk_propose_contract_tariffs")("Test Hotel", rows)
+		self.endpoint("bulk_approve_contract_tariffs")([f"IP-{n}" for n in range(200)])
+		with self.assertRaisesRegex(Refused, "at most 200"):
+			self.endpoint("bulk_propose_contract_tariffs")("Test Hotel", [*rows, {**ENTRY, "valid_from": "2028-01-01"}])
+
+	def test_rate_plan_objects_in_a_price_list_never_break_the_policies(self):
+		self.rate_plans = [{"name": "Test Hotel-CORP", "rate_plan_name": "Corporate", "code": "CORP", "currency": "USD",
+		                    "fx_lock_policy": "Current Date", "base_rate_plan": None, "adjust_extra_person": 0,
+		                    "rounding_step": 0, "rounding_mode": "Nearest"}]
+		listing = directory()
+		listing["price_lists"][0]["rate_plans"] = [{"name": "Test Hotel-CORP", "label": "Corporate"}]
+		self.script = listing
+		policies = self.endpoint("list_contract_tariffs")("Test Hotel")["rate_plan_policies"]
+		self.assertEqual(list(policies), ["Test Hotel-CORP"])
+		self.assertEqual(policies["Test Hotel-CORP"]["fx_lock_policy"], "Current Date")
+
+	def test_the_directory_says_who_may_discard_a_draft(self):
+		# a maker may not approve their own draft, but a Hotel Admin may withdraw it
+		self.script = {**directory(), "can_approve": False}
+		self.assertTrue(self.endpoint("list_contract_tariffs")("Test Hotel")["can_discard"])
+		self.roles = ["Revenue Manager"]
+		self.script = directory()
+		self.assertFalse(self.endpoint("list_contract_tariffs")("Test Hotel")["can_discard"])
+		self.roles = ["Hotel Admin"]
+		self.script = {**directory(), "can_propose": False, "can_approve": False}
+		self.assertFalse(self.endpoint("list_contract_tariffs")("Test Hotel")["can_discard"])
+
+	def test_an_oversized_import_is_refused_before_it_is_parsed(self):
+		self.assertEqual(self.rates.TARIFF_IMPORT_BYTES, 1_048_576)
+		self.scripts = {"hospitality_tariffs.list_tariffs": directory()}
+		big = self.csv("Corporate USD,USD,,DLX,Deluxe,Double,145,2026-12-15,," + " " * 1_048_576)
+		with patch.object(self.rates.csv, "DictReader", side_effect=AssertionError("parsed")), \
+				patch.object(self.rates.json, "loads", side_effect=AssertionError("parsed")), \
+				self.assertRaisesRegex(Refused, "1 MB"):
+			self.endpoint("import_contract_tariffs_rows")("Test Hotel", big)
+		self.assertEqual(self.calls, [])
+
+	def test_an_import_reads_at_most_one_row_past_the_limit(self):
+		self.scripts = {"hospitality_tariffs.list_tariffs": directory()}
+		real, pulled = self.rates.csv.DictReader, []
+
+		def counting(*args, **kwargs):
+			for row in real(*args, **kwargs):
+				pulled.append(row)
+				yield row
+
+		rows = [f"Corporate USD,USD,,DLX,Deluxe,Double,145,2027-01-{1 + n % 28:02d},," for n in range(5000)]
+		with patch.object(self.rates.csv, "DictReader", counting), self.assertRaisesRegex(Refused, "at most 200"):
+			self.endpoint("import_contract_tariffs_rows")("Test Hotel", self.csv(*rows))
+		self.assertLessEqual(len(pulled), 201)
+
+	def test_import_reads_back_every_cell_the_export_guards(self):
+		unguard = self.rates._unguard
+		# mirrors frontend/src/lib/csv.ts csvCell: a formula start after any leading whitespace, ASCII or fullwidth
+		for typed in ("=SUM(A1)", "+Partner", "-Partner", "@Partner", " =x", "\t=x", "\r=x", "\n@x",
+		              "＝x", "＋x", "－x", "＠x", "　=x"):
+			with self.subTest(typed=typed):
+				self.assertEqual(unguard("'" + typed), typed)
+		# what the export never guards keeps its quote: plain text and plain numbers
+		for kept in ("'Client Co", "'-5", "'12.5", "'", "plain"):
+			with self.subTest(kept=kept):
+				self.assertEqual(unguard(kept), kept)
+
+	def test_export_follows_the_customer_and_effective_date_on_screen(self):
+		self.script = directory()
+		export = self.endpoint("export_contract_tariffs_csv")
+		result = export("Test Hotel", customer="Client Co", as_of_date="2026-12-15")
+		self.assertEqual(self.calls[-1][1], {"property": "Test Hotel", "customer": "Client Co",
+		                                     "as_of_date": "2026-12-15"})
+		self.assertEqual({row[2] for row in result["rows"]}, {"Client Co"})
+		public = export("Test Hotel", customer=self.rates.PUBLIC_TARIFFS)
+		self.assertEqual(self.calls[-1][1], {"property": "Test Hotel"})  # the integration has no public-only filter
+		self.assertEqual({row[2] for row in public["rows"]}, {""})
+		self.assertEqual(self.rates.PUBLIC_TARIFFS, "__public__")
+
+	def test_export_schedules_versions_from_the_effective_date_on_screen(self):
+		self.script = {**directory(), "as_of_date": "2027-02-01"}
+		rows = self.endpoint("export_contract_tariffs_csv")("Test Hotel", as_of_date="2027-02-01")["rows"]
+		# IP-3 (from 2027-01-01) is no longer ahead of the date being viewed
+		self.assertNotIn(["Corporate USD", "USD", "", "DLX", "Deluxe", "Double", 150.0, "2027-01-01", "", "Scheduled"],
+		                 rows)

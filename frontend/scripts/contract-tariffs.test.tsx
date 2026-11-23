@@ -52,7 +52,7 @@ const policies = {
     base_rate_plan: null, adjust_extra_person: false, rounding_step: 0, rounding_mode: "Nearest" },
 }
 const data = { supported: true, property: "Test Hotel", property_currency: "UGX", business_date: "2026-11-22",
-  can_propose: true, can_approve: true, price_lists: [usd, local], rate_plan_policies: policies,
+  can_propose: true, can_approve: true, can_discard: true, price_lists: [usd, local], rate_plan_policies: policies,
   items: [item, single, triple, corporate, extraAdult, bed, hall] }
 
 describe("Contract Tariffs", () => {
@@ -433,7 +433,7 @@ describe("Contract Tariffs", () => {
   })
 
   it("honors both property and row authorization without hiding the draft", async () => {
-    rpc.mockResolvedValueOnce({ ...data, can_propose: false, can_approve: false,
+    rpc.mockResolvedValueOnce({ ...data, can_propose: false, can_approve: false, can_discard: false,
       items: [{ ...item, pending: [{ ...draft, can_approve: false }] }] })
     await render()
     expect(text()).toContain("In review: USD 140.00")
@@ -511,5 +511,124 @@ describe("Contract Tariffs", () => {
     const options = Array.from(host.querySelectorAll("select option"), (node) => node.textContent)
     expect(options).toEqual(expect.arrayContaining(["Fixed at Reservation", "Fixed at Check In", "Current Date",
       "Fixed at Block", "Nearest", "Up", "Down"]))
+  })
+
+  // ── Round 2 (Gap Record #8556) ─────────────────────────────────────────────
+  it("proposes a customer's own version from its row and names the customer", async () => {
+    rpc.mockImplementationOnce(async () => data)
+      .mockImplementationOnce(async () => ({ name: "NEW", customer: "Client Co" }))
+      .mockImplementationOnce(async () => data)
+    await render("/tariffs?q=Deluxe")
+    await click("New version", row("Corporate USD|Deluxe|Client Co").querySelector("[data-item='DLX']")!)
+    const dialog = host.querySelector("dialog[open]")!
+    expect(text(dialog.querySelector("header")!)).toContain("Client Co")
+    await input(dialog.querySelector("input[type=number]")!, "125")
+    await click("Submit for approval", dialog)
+    expect(rpc.mock.calls[1]).toEqual(["kamra.rates.propose_contract_tariff", { property: "Test Hotel",
+      price_list: usd.name, item_code: "DLX", price_list_rate: 125, valid_from: "2026-11-23", valid_upto: null,
+      customer: "Client Co" }])
+  })
+
+  it("reports the drafts a bulk approval skipped and why", async () => {
+    const second = { ...draft, name: "DRAFT-2", rate: 150, valid_from: "2026-12-15" }
+    const queue = { ...data, items: [{ ...item, pending: [draft, second] }, single, triple, corporate, extraAdult, bed, hall] }
+    rpc.mockImplementationOnce(async () => queue)
+      .mockImplementationOnce(async () => ({ ok: true, approved: 1, skipped: 1, results: [
+        { name: draft.name, status: "approved" },
+        { name: second.name, status: "skipped", reason: "HSP-TARIFF-005: Only a saved Draft can be approved." }] }))
+      .mockImplementationOnce(async () => queue)
+    await render()
+    await click("Pending approval (2)")
+    await check("Select all")
+    await click("Approve selected")
+    await click("Approve", host.querySelector("dialog[open]")!)
+    await vi.waitFor(() => expect(text()).toContain(
+      "1 tariff version approved · 1 skipped: HSP-TARIFF-005: Only a saved Draft can be approved."))
+  })
+
+  it("keeps a bulk decision open when every draft was skipped", async () => {
+    rpc.mockImplementationOnce(async () => data)
+      .mockImplementationOnce(async () => ({ ok: true, discarded: 0, skipped: 1, results: [
+        { name: draft.name, status: "skipped", reason: "HSP-TARIFF-005: You may not delete this draft tariff." }] }))
+    await render()
+    await click("Pending approval (1)")
+    await check("Select all")
+    await click("Discard selected")
+    const dialog = host.querySelector("dialog[open]")!
+    await click("Discard", dialog)
+    await vi.waitFor(() => expect(dialog.querySelector("[role=alert]")?.textContent).toContain(
+      "No tariff drafts were discarded · 1 skipped: HSP-TARIFF-005: You may not delete this draft tariff."))
+    expect(host.querySelector("dialog[open]")).not.toBeNull()
+    expect(text()).not.toContain("tariff draft discarded")
+  })
+
+  it("lets a Hotel Admin discard, but not approve, a draft they proposed", async () => {
+    const own = { ...draft, owner: "me", can_approve: false }
+    const mine = { ...data, can_approve: false, can_discard: true, items: [{ ...item, pending: [own] }, single, hall] }
+    rpc.mockImplementationOnce(async () => mine)
+      .mockImplementationOnce(async () => ({ ok: true, discarded: 1, skipped: 0, results: [] }))
+      .mockImplementationOnce(async () => mine)
+    await render()
+    await click("Pending approval (1)")
+    expect(labels()).toContain("Discard")
+    expect(labels()).not.toContain("Approve")
+    await check("Select all")
+    expect(labels()).toContain("Discard selected")
+    expect(labels()).not.toContain("Approve selected")
+    await click("Discard selected")
+    const dialog = host.querySelector("dialog[open]")!
+    expect(text(dialog)).toContain("Discard 1 tariff draft?")
+    await click("Discard", dialog)
+    expect(rpc.mock.calls[1]).toEqual(["kamra.rates.bulk_discard_contract_tariffs", { item_prices: [own.name] }])
+    await vi.waitFor(() => expect(text()).toContain("1 tariff draft discarded"))
+  })
+
+  it("holds a bulk change to the integration's 200-row limit", async () => {
+    const halls = Array.from({ length: 201 }, (_, n) => ({ ...hall, item_code: `HALL-${n}`, item_name: `Hall ${n}`,
+      pending: [{ ...draft, name: `HALL-DRAFT-${n}` }] }))
+    rpc.mockImplementationOnce(async () => ({ ...data, items: halls }))
+    await render()
+    await choose(field<HTMLSelectElement>(host, "price_list"), local.name)
+    await click("Venues")
+    await check("Select all")
+    await click("Create new version in bulk")
+    const versions = host.querySelector("dialog[open]")!
+    expect(text(versions)).toContain("Choose at most 200 tariffs at a time.")
+    await input(field<HTMLInputElement>(versions, "adjustment_value"), "5")
+    expect(button("Submit 201 for approval", versions).disabled).toBe(true)
+    await click("Cancel", versions)
+    await click("Approve selected")
+    const decision = host.querySelector("dialog[open]")!
+    expect(text(decision)).toContain("Choose at most 200 tariffs at a time.")
+    expect(button("Approve", decision).disabled).toBe(true)
+    expect(rpc).toHaveBeenCalledTimes(1)
+  })
+
+  it("refuses an import file over 1 MB before reading it", async () => {
+    rpc.mockImplementationOnce(async () => data)
+    await render()
+    await click("Import CSV")
+    const dialog = host.querySelector("dialog[open]")!
+    await chooseFile(dialog, "Price List,Currency,Item Code,Rate,Valid From\r\n" + "x".repeat(1_048_576))
+    await click("Import as drafts", dialog)
+    expect(dialog.querySelector("[role=alert]")?.textContent).toContain("The file is larger than 1 MB. Split it and import each part.")
+    expect(rpc).toHaveBeenCalledTimes(1)
+  })
+
+  it("exports only the customer and effective date on screen", async () => {
+    const columns = ["Price List"]
+    rpc.mockImplementation(async (method: string) => method === listMethod ? data
+      : { supported: true, business_date: "2026-11-22", columns, rows: [] })
+    await render()
+    await choose(field<HTMLSelectElement>(host, "customer"), "Client Co")
+    await input(field<HTMLInputElement>(host, "as_of_date"), "2026-12-15")
+    await vi.waitFor(() => expect(rpc).toHaveBeenLastCalledWith(listMethod, { property: "Test Hotel", as_of_date: "2026-12-15" }))
+    await click("Export CSV")
+    expect(rpc).toHaveBeenLastCalledWith("kamra.rates.export_contract_tariffs_csv", { property: "Test Hotel",
+      price_list: usd.name, customer: "Client Co", as_of_date: "2026-12-15" })
+    await choose(field<HTMLSelectElement>(host, "customer"), "__public__")
+    await click("Export CSV")
+    expect(rpc).toHaveBeenLastCalledWith("kamra.rates.export_contract_tariffs_csv", { property: "Test Hotel",
+      price_list: usd.name, customer: "__public__", as_of_date: "2026-12-15" })
   })
 })

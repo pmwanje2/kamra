@@ -93,6 +93,12 @@ class RateMatrixHarness(unittest.TestCase):
 		self.docs: dict[tuple[str, str], Doc] = {}
 		self.tariffs: dict[str, dict] = {}
 		self.bridge_calls: list[tuple[str, dict]] = []
+		# ERPNext Currency Exchange rows (selling), other records for get_all, and what was asked of them
+		self.exchange_rates: list[Doc] = []
+		self.records: dict[str, list[Doc]] = {}
+		self.fx_queries: list[dict] = []
+		self.stale_days = 1
+		self.logged: list[tuple[tuple, dict]] = []
 		self.roles = ["Hotel Admin"]
 		self.frappe = self.frappe_module()
 		self.utils = utils_module()
@@ -166,6 +172,42 @@ class RateMatrixHarness(unittest.TestCase):
 			return values if as_dict else tuple(values.values())
 		return doc.get(fieldname)
 
+	def rate(self, currency, exchange_rate, on, to="UGX"):
+		"""Publish a selling Currency Exchange row (1 `currency` = `exchange_rate` `to`) dated `on`."""
+		row = Doc(from_currency=currency, to_currency=to, exchange_rate=exchange_rate, date=on, for_selling=1)
+		self.exchange_rates.append(row)
+		return row
+
+	@staticmethod
+	def matches(row, filters) -> bool:
+		for key, wanted in (filters or {}).items():
+			value = row.get(key)
+			if isinstance(wanted, (list, tuple)) and wanted and wanted[0] == "between":
+				low, high = wanted[1]
+				if value is None or not str(low) <= str(value) <= str(high):
+					return False
+			elif isinstance(wanted, (list, tuple)) and wanted and wanted[0] == "in":
+				if value not in wanted[1]:
+					return False
+			elif value != wanted:
+				return False
+		return True
+
+	def get_all(self, doctype, filters=None, fields=None, pluck=None, **kwargs):
+		if doctype == "Currency Exchange":
+			self.fx_queries.append(dict(filters or {}))
+		rows = self.exchange_rates if doctype == "Currency Exchange" else self.records.get(doctype, [])
+		found = [Doc(row) for row in rows if self.matches(row, filters)]
+		return [row.get(pluck) for row in found] if pluck else found
+
+	def exists(self, doctype, name=None):
+		if doctype == "DocType":
+			return name in ("Currency Exchange", "Accounts Settings")
+		return (doctype, name) in self.docs
+
+	def get_single_value(self, doctype, field):
+		return self.stale_days if (doctype, field) == ("Accounts Settings", "stale_days") else None
+
 	def throw(self, message, exc=None, title=None):
 		raise (exc or ValidationError)(message)
 
@@ -180,7 +222,10 @@ class RateMatrixHarness(unittest.TestCase):
 		frappe.whitelist = lambda *args, **kwargs: (lambda fn: fn)
 		frappe.get_doc = self.get_doc
 		frappe.get_cached_doc = self.get_doc
-		frappe.db = SimpleNamespace(get_value=self.get_value)
+		frappe.db = SimpleNamespace(get_value=self.get_value, exists=self.exists,
+		                            get_single_value=self.get_single_value)
+		frappe.get_all = self.get_all
+		frappe.get_meta = lambda doctype: SimpleNamespace(has_field=lambda field: True)
 		frappe.parse_json = lambda value: json.loads(value) if isinstance(value, str) else value
 		frappe.as_json = json.dumps
 		frappe.get_roles = lambda user=None: self.roles
@@ -188,7 +233,7 @@ class RateMatrixHarness(unittest.TestCase):
 		frappe.local = SimpleNamespace(form_dict={}, lang="en")
 		frappe.response = {}
 		frappe.flags = Doc()
-		frappe.log_error = lambda *args, **kwargs: None
+		frappe.log_error = lambda *args, **kwargs: self.logged.append((args, kwargs))
 		frappe.__getattr__ = lambda name: MagicMock(name=f"frappe.{name}")
 		return frappe
 

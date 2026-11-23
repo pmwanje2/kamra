@@ -195,11 +195,14 @@ class QuoteDerivationTest(RateMatrixHarness):
 		self.docs["Rate Plan", "CORP"].adjust_extra_person = 1
 		self.assertEqual(self.quote("CORP")["room_total"], 257400)
 
-	def test_the_plan_rounding_step_rounds_the_guest_facing_stay_price(self):
+	def test_the_plan_rounding_step_rounds_each_guest_facing_night_price(self):
+		# CORP prices each night at 126,000: nearest 5,000 is 125,000 a night, up is 130,000 a night
 		self.docs["Rate Plan", "CORP"].rounding_step = 5000
 		self.assertEqual(self.quote("CORP")["room_total"], 250000)
 		self.docs["Rate Plan", "CORP"].rounding_mode = "Up"
-		self.assertEqual(self.quote("CORP")["room_total"], 255000)
+		quoted = self.quote("CORP")
+		self.assertEqual(quoted["room_total"], 260000)
+		self.assertEqual([night["planned_rate"] for night in quoted["nightly"]], [130000, 130000])
 		# tax-inclusive house: the gross price is rounded, the tax backed out of it
 		self.docs["Property", "Test Hotel"].rates_include_tax = 1
 		self.room_tax = 18
@@ -324,16 +327,20 @@ class FxLockPolicyTest(RateMatrixHarness):
 		                    night_rates=[Doc(stay_date="2026-12-01", rate=474500, gst_rate=0),
 		                                 Doc(stay_date="2026-12-02", rate=474500, gst_rate=0)])
 		self.tariffs["CORP"] = self.tariff(fx_rate=3712.5, fx_date="2026-12-01", agreed_rate=482625)
+		# Finance's published selling rate for the business date (ERPNext Currency Exchange)
+		self.rate("USD", 3712.5, "2026-12-01")
 
 	def test_check_in_relocks_a_fixed_at_check_in_contract_at_the_business_date(self):
+		self.res.custom_tariff_currency = "USD"  # priced by the tariff resolver (Track C)
 		self.assertTrue(self.pricing.relock_contract_fx_at_check_in(self.res))
-		form, = self.tariff_forms()
-		self.assertEqual((form["pricing_event"], form["fx_date"], form["company"]),
-		                 ("check_in", "2026-12-01", "Client Co"))
+		# only the exchange rate is converted again: the booked contract is never re-priced
+		self.assertEqual(self.tariff_forms(), [])
+		self.assertEqual(self.fx_queries[-1]["date"], ["between", ["2026-12-01", "2026-12-01"]])
 		self.assertEqual(self.res.agreed_rate, 483000)
 		self.assertEqual(self.res.contract_tariff, {"agreed_rate": 483000, "tariff": {
 			"currency": "USD", "nightly": 130.0, "fx_rate": 3712.5, "fx_date": "2026-12-01",
 			"property_currency": "UGX"}})
+		self.assertTrue(self.res.flags.kamra_contract_relocked)
 		self.assertTrue(self.res.flags.kamra_fx_checkin_relock)
 
 	def test_other_policies_and_home_currency_contracts_keep_the_booked_rate(self):
@@ -370,10 +377,10 @@ class FxLockPolicyTest(RateMatrixHarness):
 	def test_current_date_posts_the_contract_night_at_the_posting_business_date_rate(self):
 		self.docs["Rate Plan", "CORP"].fx_lock_policy = "Current Date"
 		self.docs["Property", "Test Hotel"].business_date = "2026-12-02"
-		self.tariffs["CORP"] = self.tariff(fx_rate=3712.5, fx_date="2026-12-02", agreed_rate=482625)
+		self.rate("USD", 3712.5, "2026-12-02")
 		room = self.post_night()
-		form, = self.tariff_forms()
-		self.assertEqual((form["pricing_event"], form["fx_date"]), ("posting", "2026-12-02"))
+		self.assertEqual(self.tariff_forms(), [])
+		self.assertEqual(self.fx_queries[-1]["date"], ["between", ["2026-12-02", "2026-12-02"]])
 		self.assertEqual((room["rate"], room["amount"]), (483000, 483000))  # USD 130 x 3,712.5, nearest 1,000
 		self.assertIn("USD 130.00 at 3,712.5", room["description"])
 
@@ -390,8 +397,10 @@ class FxLockPolicyTest(RateMatrixHarness):
 		self.assertEqual(room["rate"], 474500)
 		self.assertEqual(self.bridge_calls, [])
 		self.docs["Rate Plan", "CORP"].fx_lock_policy = "Current Date"
-		self.tariffs["CORP"] = {"is_tariff": 1, "refusal": "HSP-TARIFF-003: No rate."}
-		self.assertEqual(self.post_night()["rate"], 474500)
+		self.exchange_rates.clear()
+		room = self.post_night()
+		self.assertEqual(room["rate"], 474500)
+		self.assertIn("[stale booking FX]", room["description"])
 
 	def test_reference_currency_follows_the_property_calculation(self):
 		self.assertEqual(self.folio.reference_currency(self.res), {
@@ -402,9 +411,9 @@ class FxLockPolicyTest(RateMatrixHarness):
 		self.assertEqual(self.folio.reference_currency(self.res), {
 			"currency": "USD", "home_currency": "UGX", "calculation": "CURRENT",
 			"fx_rate": 3712.5, "fx_date": "2026-12-01"})
-		form, = self.tariff_forms()
-		self.assertEqual((form["pricing_event"], form["fx_date"]), ("posting", "2026-12-01"))
-		self.tariffs["CORP"] = {"is_tariff": 1, "refusal": "HSP-TARIFF-003: No rate."}
+		self.assertEqual(self.tariff_forms(), [])
+		self.assertEqual(self.fx_queries[-1]["date"], ["between", ["2026-12-01", "2026-12-01"]])
+		self.exchange_rates.clear()
 		self.assertIsNone(self.folio.reference_currency(self.res))
 		self.res.contract_tariff = None
 		self.assertIsNone(self.folio.reference_currency(self.res))
@@ -439,16 +448,17 @@ class CheckInRelockTest(RateMatrixHarness):
 		                        "fx_date": "2026-11-20", "property_currency": "UGX"}})
 		self.res.save = lambda: self.saved.append(SimpleNamespace(
 			status=self.res.status, agreed_rate=self.res.agreed_rate,
-			relocked=bool(self.res.flags.get("kamra_fx_checkin_relock")),
+			relocked=bool(self.res.flags.get("kamra_contract_relocked")),
 			fx_rate=self.res.contract_tariff["tariff"]["fx_rate"]))
 		self.tariffs["CORP"] = self.tariff(fx_rate=3712.5, fx_date="2026-12-01", agreed_rate=482625)
+		self.rate("USD", 3712.5, "2026-12-01")
 
 	def test_check_in_relocks_the_contract_fx_before_the_stay_is_saved(self):
 		self.api.check_in("RES-1")
 		saved, = self.saved
 		self.assertEqual((saved.status, saved.agreed_rate, saved.relocked, saved.fx_rate),
 		                 ("Checked In", 483000, True, 3712.5))
-		self.assertEqual(self.tariff_forms()[0]["pricing_event"], "check_in")
+		self.assertEqual(self.tariff_forms(), [])
 
 	def test_check_in_keeps_a_booking_locked_rate_under_other_policies(self):
 		self.docs["Rate Plan", "CORP"].fx_lock_policy = "Fixed at Reservation"
@@ -486,6 +496,8 @@ class ReservationSnapshotTest(RateMatrixHarness):
 
 	def test_a_check_in_relock_survives_the_save(self):
 		self.assertEqual(self.snapshot(kamra_fx_checkin_relock=True)["tariff"]["fx_rate"], 3712.5)
+		# a derived plan the tariff resolver never priced re-locks under the hotel app's own flag
+		self.assertEqual(self.snapshot(kamra_contract_relocked=True)["tariff"]["fx_rate"], 3712.5)
 
 	def test_an_ordinary_save_keeps_the_booking_snapshot(self):
 		self.assertEqual(self.snapshot()["tariff"]["fx_rate"], 3650)
