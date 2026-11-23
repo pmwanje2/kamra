@@ -217,7 +217,7 @@ def in_house_rooms(property: str):
 def charge_to_room(order: str, room: str):
 	"""Point a running bill (a dine-in table, say) at an in-house guest's
 	room, so Deliver posts it to their folio through the same controller
-	path as room service - billing rules and the alcohol rule included."""
+	path as room service - routing and billing rules included."""
 	doc = frappe.get_doc("POS Order", order)
 	if doc.status in ("Delivered", "Cancelled"):
 		frappe.throw(_("This order is already closed."))
@@ -234,8 +234,8 @@ def charge_to_room(order: str, room: str):
 def move_room_bill(order: str, room: str, reason: str, pin: str | None = None):
 	"""A bill charged to the wrong room: move it to the right one, the same
 	business day it was posted. The charge leaves the first guest's folio
-	(ledger reversed) and lands on the right guest's, by the same billing
-	rules as room service, so liquor never reaches a company bill. Later
+	(ledger reversed) and lands on the right guest's, by the same routing
+	and billing rules as room service (liquor like any other line). Later
 	than that day it is a correction for Finance (allowance, then repost)."""
 	from kamra.authz import require_cashier_pin
 	from kamra.business_date import get_business_date
@@ -283,8 +283,7 @@ def move_room_bill(order: str, room: str, reason: str, pin: str | None = None):
 		frappe.throw(_("The bill is already on this room."))
 	src = frappe.get_doc("Folio", row.parent)
 	target, instruction = routed_target(
-		frappe.get_doc("Reservation", new_res), "Food & Beverage",
-		is_alcohol=1 if row.is_alcohol else 0, amount=row.amount,
+		frappe.get_doc("Reservation", new_res), "Food & Beverage", amount=row.amount,
 		posting_date=row.posting_date, transaction_code=row.transaction_code)
 	dst = frappe.get_doc("Folio", target)
 	from kamra.webhooks import emit_folio_posted

@@ -430,5 +430,11 @@
   "How many separate bills a stay or a group's master bill can have, each with its own payer and invoice. Window 1 is the guest's and takes every charge that is not routed elsewhere.": "Wie viele getrennte Rechnungen ein Aufenthalt oder die Hauptrechnung einer Gruppe haben kann, jede mit eigenem Zahler und eigener Rechnung. Fenster 1 gehört dem Gast und nimmt jede Belastung auf, die nicht anderswohin geleitet wird.",
   "The accounting system issued invoice {document} for this bill. It is corrected there with a credit note and a new invoice; this bill is not reopened or credited here.": "Die Buchhaltung hat die Rechnung {document} für diese Abrechnung ausgestellt. Sie wird dort mit einer Gutschrift und einer neuen Rechnung korrigiert; diese Abrechnung wird hier weder wieder geöffnet noch gutgeschrieben.",
   "At most {amount} can still be credited on this invoice.": "Auf diese Rechnung können höchstens noch {amount} gutgeschrieben werden.",
-  "status|Split": "Aufgeteilt"
+  "status|Split": "Aufgeteilt",
+  " (every charge).": " (alle Belastungen).",
+  "Who pays what on a credit company's stay when that company has no billing rules of its own. A company's own rules always win.": "Wer was zahlt bei einem Aufenthalt einer Firma mit Kredit, wenn diese Firma keine eigenen Abrechnungsregeln hat. Die eigenen Regeln einer Firma haben immer Vorrang.",
+  "Room covers the room night, its meal plan, levies, early check-in / late checkout and the cleaning fee. Laundry, minibar, spa and misc extras stay with the guest unless 'Everything' is chosen.": "Zimmer umfasst die Übernachtung, ihre Verpflegung, Abgaben, frühen Check-in / späten Check-out und die Reinigungsgebühr. Wäsche, Minibar, Spa und sonstige Extras bleiben beim Gast, außer 'Alles' ist gewählt.",
+  "Marks the item as liquor for tax and reports. It bills where the stay's routing sends it, like any other item.": "Kennzeichnet den Artikel als Alkohol für Steuer und Berichte. Er wird wie jeder andere Artikel dort berechnet, wohin die Weiterleitung des Aufenthalts ihn schickt.",
+  "Marks a liquor code. It routes like any other code: leave it out of a company's billing rules or a routing instruction and the guest pays it.": "Kennzeichnet einen Alkohol-Code. Er wird wie jeder andere Code weitergeleitet: Lassen Sie ihn aus den Abrechnungsregeln einer Firma oder einer Weiterleitungsanweisung heraus, dann zahlt der Gast.",
+  "Confirm which charges bill to the company vs the guest.": "Bestätigen Sie, welche Belastungen an die Firma und welche an den Gast gehen."
 }

@@ -112,9 +112,11 @@ def _lock_city_ledger_account(account: str | None) -> None:
 
 def in_house_exposure(company: str, property: str,
                       exclude_folios=None, *, for_update: bool = False) -> float:
-	"""What the company's stays in house owe on their company / group master
-	folios right now (not yet on the city ledger). An open posting master
-	has no stay and counts as in house (OPERA: a checked-in PM)."""
+	"""What the company's stays in house owe on the windows it pays right
+	now (not yet on the city ledger): any window whose payee is the company
+	on credit (ledger.company_payer_of), whatever its kind of account. An
+	open posting master has no stay and counts as in house (OPERA: a
+	checked-in PM)."""
 	from kamra.ledger import company_payer_of
 	skip = set(exclude_folios or ())
 	in_house_sql = """
@@ -122,7 +124,7 @@ def in_house_exposure(company: str, property: str,
 		FROM `tabFolio` f
 		LEFT JOIN `tabReservation` r ON r.name = f.reservation
 		WHERE f.property = %(p)s AND f.status = 'Open'
-		  AND f.folio_type IN ('Company', 'Group')
+		  AND (f.folio_type IN ('Company', 'Group') OR f.payee_company = %(c)s)
 		  AND (r.status = 'Checked In'
 		       OR (f.folio_type = 'Group' AND IFNULL(f.reservation, '') = ''))
 		  AND (r.company = %(c)s OR f.payee_company = %(c)s OR f.group_booking IN (

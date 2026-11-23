@@ -14,7 +14,6 @@
   "group_type",
   "master_reservation",
   "master_pays",
-  "route_alcohol",
   "column_break_a",
   "check_in_date",
   "check_out_date",
@@ -69,7 +68,7 @@
    "fieldname": "master_pays",
    "fieldtype": "Select",
    "label": "Main Room Pays",
-   "options": "Room only\nRoom and F&B (liquor to guest)\nEverything except liquor\nNothing (guest pays unless rules say so)"
+   "options": "Room only\nRoom and F&B\nEverything\nNothing (guest pays unless rules say so)"
   },
   {
    "fieldname": "column_break_a",
@@ -143,19 +142,12 @@
    "fieldtype": "Table",
    "label": "Blocked Rooms",
    "options": "Group Room Block"
-  },
-  {
-   "default": "0",
-   "description": "Off: liquor never routes to the group's bill. On: the group's routing instructions include liquor by default, and staff may move liquor onto the group's bill.",
-   "fieldname": "route_alcohol",
-   "fieldtype": "Check",
-   "label": "Route Alcohol to the Group Bill"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-11-23 20:00:00.000000",
+ "modified": "2026-11-24 09:00:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Group Booking",

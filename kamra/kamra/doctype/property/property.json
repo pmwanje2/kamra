@@ -318,12 +318,12 @@
    "default": "1"
   },
   {
-   "default": "Room and F&B (liquor to guest)",
-   "description": "What a credit company pays when it has no billing rules of its own. Explicit rules always win; liquor never bills to a company.",
+   "default": "Room and F&B",
+   "description": "What a credit company pays when it has no billing rules of its own. Explicit rules always win.",
    "fieldname": "default_company_billing",
    "fieldtype": "Select",
    "label": "Default company billing",
-   "options": "Room and F&B (liquor to guest)\nRoom only\nEverything except liquor\nNothing (guest pays unless rules say so)"
+   "options": "Room and F&B\nRoom only\nEverything\nNothing (guest pays unless rules say so)"
   },
   {
    "description": "Released to the guest only after payment, deposit, and optional pre-check-in gates pass.",
@@ -776,7 +776,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-11-15 09:00:00.000000",
+ "modified": "2026-11-24 09:00:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Property",

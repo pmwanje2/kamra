@@ -1150,5 +1150,11 @@
   "How many separate bills a stay or a group's master bill can have, each with its own payer and invoice. Window 1 is the guest's and takes every charge that is not routed elsewhere.": "Ilang hiwalay na bill ang maaaring magkaroon ang isang stay o ang master bill ng isang grupo, bawat isa ay may sariling nagbabayad at invoice. Ang window 1 ay sa bisita at tumatanggap ng bawat singil na hindi inilipat sa iba.",
   "The accounting system issued invoice {document} for this bill. It is corrected there with a credit note and a new invoice; this bill is not reopened or credited here.": "Inilabas ng sistema ng accounting ang invoice {document} para sa bill na ito. Doon ito itinatama sa pamamagitan ng credit note at bagong invoice; hindi muling binubuksan o kinikredito ang bill na ito dito.",
   "At most {amount} can still be credited on this invoice.": "Hanggang {amount} na lang ang maaaring ikredito sa invoice na ito.",
-  "status|Split": "Hinati"
+  "status|Split": "Hinati",
+  " (every charge).": " (lahat ng singil).",
+  "Who pays what on a credit company's stay when that company has no billing rules of its own. A company's own rules always win.": "Sino ang nagbabayad ng ano sa pananatili ng kumpanyang may credit kapag walang sariling patakaran sa pagsingil ang kumpanya. Laging nananaig ang sariling patakaran ng kumpanya.",
+  "Room covers the room night, its meal plan, levies, early check-in / late checkout and the cleaning fee. Laundry, minibar, spa and misc extras stay with the guest unless 'Everything' is chosen.": "Saklaw ng Room ang gabi ng kuwarto, ang meal plan nito, mga levy, maagang check-in / huling checkout at ang cleaning fee. Ang laundry, minibar, spa at iba pang extra ay sa bisita maliban kung 'Lahat' ang pinili.",
+  "Marks the item as liquor for tax and reports. It bills where the stay's routing sends it, like any other item.": "Minamarkahan ang item bilang alak para sa buwis at mga ulat. Sinisingil ito kung saan ito ipinapadala ng routing ng pananatili, gaya ng ibang item.",
+  "Marks a liquor code. It routes like any other code: leave it out of a company's billing rules or a routing instruction and the guest pays it.": "Minamarkahan ang code ng alak. Niru-route ito gaya ng ibang code: iwan ito sa labas ng patakaran sa pagsingil ng kumpanya o ng routing instruction at ang bisita ang magbabayad.",
+  "Confirm which charges bill to the company vs the guest.": "Kumpirmahin kung aling singil ang sa kumpanya at alin ang sa bisita."
 }

@@ -9,8 +9,8 @@ Both are for a service user holding the "POS Integrator" role (or Kamra
 Agent), limited to its property with a Property User Permission, calling
 with its API key. Nothing here is a second way to bill: the charge goes
 through api.post_stay_charge - the same path as the desk, housekeeping and
-the AI agent - so the billing rules pick the folio, tax comes from the
-country pack, and alcohol never lands on a Company or Group folio.
+the AI agent - so the routing and billing rules pick the folio and tax
+comes from the country pack. Liquor routes like any other charge.
 
 Every ticket is posted at most once: `ticket_id` (the POS's own check
 number) is the idempotency key per property. Retrying a ticket returns the
@@ -111,9 +111,9 @@ def pos_post_room_charge(property: str, ticket_id: str, amount: float,
 
 	`ticket_id` is the idempotency key: the same ticket again returns the
 	first posting with duplicate=true. Name the stay by room (number or id)
-	and/or reservation. The billing rules choose the folio; anything with
-	alcohol (is_alcohol=1) always goes to the guest's own folio, never the
-	company's. Tax is the hotel's rule for the charge type, not the POS's."""
+	and/or reservation. The routing and billing rules choose the folio,
+	liquor (is_alcohol=1) included. Tax is the hotel's rule for the charge
+	type, not the POS's."""
 	ticket_id = (ticket_id or "").strip()
 	if not ticket_id or len(ticket_id) > 140:
 		frappe.throw(_("ticket_id is required (the POS check number, up to 140 characters)."))

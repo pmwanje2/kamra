@@ -430,5 +430,11 @@
   "How many separate bills a stay or a group's master bill can have, each with its own payer and invoice. Window 1 is the guest's and takes every charge that is not routed elsewhere.": "Berapa banyak tagihan terpisah yang dapat dimiliki sebuah menginap atau tagihan induk grup, masing-masing dengan pembayar dan fakturnya sendiri. Jendela 1 milik tamu dan menerima setiap tagihan yang tidak dialihkan ke tempat lain.",
   "The accounting system issued invoice {document} for this bill. It is corrected there with a credit note and a new invoice; this bill is not reopened or credited here.": "Sistem akuntansi menerbitkan invoice {document} untuk tagihan ini. Invoice dikoreksi di sana dengan credit note dan invoice baru; tagihan ini tidak dibuka kembali atau dikreditkan di sini.",
   "At most {amount} can still be credited on this invoice.": "Paling banyak {amount} masih dapat dikreditkan pada invoice ini.",
-  "status|Split": "Dibagi"
+  "status|Split": "Dibagi",
+  " (every charge).": " (semua tagihan).",
+  "Who pays what on a credit company's stay when that company has no billing rules of its own. A company's own rules always win.": "Siapa membayar apa pada inap perusahaan kredit bila perusahaan itu tidak punya aturan tagihan sendiri. Aturan perusahaan sendiri selalu didahulukan.",
+  "Room covers the room night, its meal plan, levies, early check-in / late checkout and the cleaning fee. Laundry, minibar, spa and misc extras stay with the guest unless 'Everything' is chosen.": "Kamar mencakup malam kamar, paket makannya, pungutan, check-in awal / check-out terlambat, dan biaya kebersihan. Laundry, minibar, spa, dan tambahan lain ditanggung tamu kecuali 'Semua' dipilih.",
+  "Marks the item as liquor for tax and reports. It bills where the stay's routing sends it, like any other item.": "Menandai item sebagai minuman beralkohol untuk pajak dan laporan. Item ditagihkan ke tempat yang ditentukan perutean inap, seperti item lainnya.",
+  "Marks a liquor code. It routes like any other code: leave it out of a company's billing rules or a routing instruction and the guest pays it.": "Menandai kode minuman beralkohol. Kode ini dirutekan seperti kode lain: keluarkan dari aturan tagihan perusahaan atau instruksi perutean, maka tamu yang membayar.",
+  "Confirm which charges bill to the company vs the guest.": "Konfirmasi tagihan mana yang ke perusahaan dan mana yang ke tamu."
 }

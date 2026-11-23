@@ -62,8 +62,8 @@ const GROUP_TYPES = ["Corporate", "Wedding", "Event", "Tour", "Other"]
 // what the main room pays: keys of folio.COMPANY_BILLING_DEFAULTS
 const MASTER_PAYS: { value: string; label: string }[] = [
   { value: "Room only", label: "Room + tax" },
-  { value: "Room and F&B (liquor to guest)", label: "Room and F&B (liquor to guest)" },
-  { value: "Everything except liquor", label: "Everything except liquor" },
+  { value: "Room and F&B", label: "Room and F&B" },
+  { value: "Everything", label: "Everything" },
 ]
 
 const inputCls =

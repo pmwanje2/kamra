@@ -1546,11 +1546,8 @@ _FOLIO_CHARGE_TYPE = {
 @require_roles(*BANQUET_ROLES, "Finance")
 def post_to_folio(function: str, folio: str | None = None):
 	"""Push the chargeable lines onto a bill. A function tied to a group
-	rides the group's master folio; otherwise pass one explicitly.
-
-	Alcohol is reported back rather than posted when the bill is a company
-	or group folio - the same rule the folio itself enforces - so it can be
-	settled separately instead of failing the whole post."""
+	rides the group's master folio; otherwise pass one explicitly. Liquor
+	posts with the rest: the bill chosen is the one that pays the function."""
 	from kamra.api import _post_folio_charge
 
 	doc = _fn(function)
@@ -1572,15 +1569,9 @@ def post_to_folio(function: str, folio: str | None = None):
 		frappe.throw(_("There's no bill to post to. Tie the function to a "
 		              "group booking, or pass a folio."))
 
-	from kamra.folio import _alcohol_allowed
-	liquor_ok = _alcohol_allowed(frappe.get_doc("Folio", target))
-	posted, deferred = [], []
+	posted = []
 	for r in doc.items:
 		if not r.chargeable or not float(r.net_amount or 0):
-			continue
-		if r.is_alcohol and not liquor_ok:
-			deferred.append({"item_name": r.item_name,
-			                 "amount": float(r.total or 0)})
 			continue
 		_post_folio_charge(
 			target,
@@ -1594,26 +1585,16 @@ def post_to_folio(function: str, folio: str | None = None):
 
 	doc.folio = target
 	# the flag is the double-post guard, so it goes up the moment anything
-	# reached the bill - alcohol lines that couldn't ride a company folio
-	# are reported back, not silently left for a second run to duplicate
+	# reached the bill
 	doc.posted_to_folio = 1 if posted else 0
-	if deferred:
-		note = _("Settle separately (alcohol can't ride a company bill): "
-		         "{0}").format(", ".join(d["item_name"] for d in deferred))
-		doc.internal_notes = ((doc.internal_notes + "\n")
-		                      if doc.internal_notes else "") + note
 	doc.save()
 	from kamra.savings import log_action
 	log_action("banquet_billed", "Venue Booking", doc.name, doc.property,
 	           minutes_saved=15,
 	           rationale=f"{len(posted)} line(s) of {doc.customer_name}'s "
-	                     f"function posted to {target}"
-	                     + (f"; {len(deferred)} to settle separately"
-	                        if deferred else ""))
+	                     f"function posted to {target}")
 	return {"ok": True, "folio": target, "posted": posted,
-	        "settle_separately": deferred,
-	        "note": _("Alcohol can't ride a company bill - settle those lines "
-	                  "separately.") if deferred else None}
+	        "settle_separately": [], "note": None}
 
 
 # ══ the close-out ════════════════════════════════════════════════════════

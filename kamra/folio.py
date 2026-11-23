@@ -270,10 +270,13 @@ def open_window(reservation: str | None = None, group_booking: str | None = None
 		prop, guest = res.property, res.guest
 	else:
 		gb = frappe.db.get_value("Group Booking", group_booking,
-		                         ["name", "property", "company", "master_reservation"],
+		                         ["name", "property", "company", "master_reservation", "status"],
 		                         as_dict=True)
 		if not gb:
 			frappe.throw(frappe._("Group {0} not found.").format(group_booking))
+		if gb.status == "Cancelled":
+			frappe.throw(frappe._("Group {0} is cancelled, so it has no master bill.").format(
+				group_booking))
 		prop = gb.property
 		guest = gb.master_reservation and frappe.db.get_value(
 			"Reservation", gb.master_reservation, "guest")
@@ -349,7 +352,8 @@ def open_company_folio(reservation) -> str:
 	if company:
 		key = _window_key(reservation.name)
 		existing = frappe.db.get_value(
-			"Folio", {**key, "payee_type": "Company", "payee_company": company},
+			"Folio", {**key, "payee_type": "Company", "payee_company": company,
+			          "window_no": (">", 0)},
 			["name", "window_no", "status"], as_dict=True, order_by="window_no asc")
 		if existing:
 			return existing.name if existing.status == "Open" else \
@@ -364,41 +368,24 @@ def open_company_folio(reservation) -> str:
 	return split_folio(reservation.name, "Company")
 
 
-def _alcohol_allowed(folio, routing_instruction: str | None = None) -> bool:
-	"""May a liquor line land on this folio? A line routed by an instruction
-	that includes alcohol may. A group's posting master takes liquor only
-	when the group routes alcohol (Group Booking.route_alcohol). Otherwise
-	only a window the guest pays takes it: liquor never bills to a company
-	unless an instruction says so."""
-	if routing_instruction:
-		return bool(frappe.db.get_value("Routing Instruction", routing_instruction,
-		                                "include_alcohol"))
-	if folio.get("folio_type") == "Group" and folio.get("group_booking"):
-		return bool(frappe.db.get_value("Group Booking", folio.group_booking,
-		                                "route_alcohol"))
-	payee = folio.get("payee_type")
-	if payee:
-		return payee == "Guest"
-	return folio.get("folio_type") not in ("Company", "Group")
-
-
 # What a credit company pays when it has NO billing rules of its own - the
 # property's `default_company_billing` setting. "Room" means the stay as sold:
 # the room night, its meal plan, the levies on it, early/late fees, the
 # cleaning fee, the extra beds agreed on it and any discount against it.
-# Alcohol is filtered out before any of this (_legacy_target), so no option can
-# bill liquor to a company.
+# Liquor is Food & Beverage like the food: a preset has no liquor rule (OPERA
+# routes only what is included). A company that does not pay for liquor names
+# the codes it does pay in its own billing rules.
 _ROOM_CHARGES = frozenset({
 	"Room", "Meal Plan", "Room Levy", "Early Check-in", "Late Checkout", "Early Departure",
 	"Cleaning Fee", "Extra Guests", "Discount", "Rate Adjustment",
 })
 COMPANY_BILLING_DEFAULTS = {
-	"Room and F&B (liquor to guest)": _ROOM_CHARGES | {"Food & Beverage"},
+	"Room and F&B": _ROOM_CHARGES | {"Food & Beverage"},
 	"Room only": _ROOM_CHARGES,
-	"Everything except liquor": None,  # every charge type
+	"Everything": None,  # every charge type
 	"Nothing (guest pays unless rules say so)": frozenset(),
 }
-DEFAULT_COMPANY_BILLING = "Room and F&B (liquor to guest)"
+DEFAULT_COMPANY_BILLING = "Room and F&B"
 
 
 def default_company_billing(property: str | None) -> str:
@@ -408,102 +395,110 @@ def default_company_billing(property: str | None) -> str:
 
 
 def _company_pays(company: str, charge_type: str,
-                  property: str | None = None) -> bool:
-	"""Does the company pay this charge type? Its own billing rules decide
-	when it has any. A credit company with none falls back to the
+                  property: str | None = None, code: str | None = None) -> bool:
+	"""Does the company pay this charge? Its own billing rules decide when it
+	has any (OPERA profile routing): a rule names a charge type, every code
+	of it, or one transaction code; the company pays what a rule includes
+	and nothing else. A credit company with none falls back to the
 	property's default; a company without credit pays nothing by default."""
 	rules = frappe.get_all(
 		"Company Billing Rule",
 		filters={"parent": company},
-		fields=["charge_type", "pay_by"])
+		fields=["charge_type", "transaction_code", "pay_by"])
 	if rules:
-		return any(r.charge_type == charge_type and r.pay_by == "Company"
-		           for r in rules)
+		# a rule that names a transaction code covers that code alone
+		return any(r.pay_by == "Company" and (
+			r.transaction_code == code if r.transaction_code
+			else r.charge_type == charge_type) for r in rules)
 	if not frappe.db.get_value("Corporate Account", company, "credit_allowed"):
 		return False
 	covered = COMPANY_BILLING_DEFAULTS[default_company_billing(property)]
 	return covered is None or charge_type in covered
 
 
-def target_folio(reservation, charge_type: str, is_alcohol: int = 0, *,
-                 amount=None, posting_date=None, transaction_code: str | None = None) -> str:
+def target_folio(reservation, charge_type: str, *, amount=None, posting_date=None,
+                 transaction_code: str | None = None) -> str:
 	"""Route a whole charge to the right folio of the stay: the stay's
 	Routing Instruction for it first (kamra.routing), else the legacy
 	presets (_legacy_target). A line routed whole is never split; with
 	`amount` None an instruction with a limit is skipped."""
 	from kamra.routing import route
 	parts = route(reservation, charge_type, amount, posting_date,
-	              transaction_code=transaction_code, is_alcohol=is_alcohol, whole=True)
+	              transaction_code=transaction_code, whole=True)
 	if parts:
 		return parts[0]["folio"]
-	return _legacy_target(reservation, charge_type, is_alcohol)
+	return _legacy_target(reservation, charge_type, transaction_code)
 
 
-def routed_target(reservation, charge_type: str, is_alcohol: int = 0, *, amount=None,
-                  posting_date=None, transaction_code: str | None = None) -> tuple[str, str | None]:
+def routed_target(reservation, charge_type: str, *, amount=None, posting_date=None,
+                  transaction_code: str | None = None) -> tuple[str, str | None]:
 	"""(open folio, routing instruction) for a charge that moves whole, such
 	as an outlet check or a bill moved to another room."""
 	from kamra.routing import route
 	parts = route(reservation, charge_type, amount, posting_date,
-	              transaction_code=transaction_code, is_alcohol=is_alcohol, whole=True)
+	              transaction_code=transaction_code, whole=True)
 	if parts:
 		return parts[0]["folio"], parts[0]["routing_instruction"]
-	return open_line_target(reservation, charge_type, is_alcohol,
-	                        name=_legacy_target(reservation, charge_type, is_alcohol)), None
+	return open_line_target(reservation, charge_type, name=_legacy_target(
+		reservation, charge_type, transaction_code)), None
 
 
 def line_parts(reservation, charge_type: str, amount, posting_date=None, *,
-               is_alcohol: int = 0, transaction_code: str | None = None,
+               transaction_code: str | None = None, gst_rate=0,
                pending=()) -> list[dict]:
 	"""Where a hotel line goes: [{folio, amount, routing_instruction}], never
 	an invoiced folio. A routing limit splits it into the routed part and
-	the remainder on window 1; `pending` are routed lines not saved yet."""
+	the remainder on window 1, each with its tax to the currency's minor unit
+	(gst_amount, tax_as_posted); `pending` are routed lines not saved yet."""
 	from kamra.routing import route
 	parts = route(reservation, charge_type, amount, posting_date,
-	              transaction_code=transaction_code, is_alcohol=is_alcohol,
-	              pending=pending)
+	              transaction_code=transaction_code, gst_rate=gst_rate, pending=pending)
 	if parts:
 		return parts
-	# the same line, routed whole on its own date: the legacy presets
-	name = open_line_target(reservation, charge_type, is_alcohol, name=target_folio(
-		reservation, charge_type, is_alcohol, amount=amount, posting_date=posting_date,
-		transaction_code=transaction_code))
+	# no instruction covers it: the legacy presets, on an open folio
+	name = open_line_target(reservation, charge_type, name=_legacy_target(
+		reservation, charge_type, transaction_code))
 	return [{"folio": name, "amount": amount, "routing_instruction": None}]
 
 
-def _legacy_target(reservation, charge_type: str, is_alcohol: int = 0) -> str:
+def _legacy_target(reservation, charge_type: str, transaction_code: str | None = None) -> str:
 	"""The presets, used only when no Routing Instruction covers a charge.
 
-	Group stays route company-payable charge types to the group's posting
-	master (company pays the stay for every room, each guest pays their own
+	Group stays route company-payable charges to the group's posting master
+	(company pays the stay for every room, each guest pays their own
 	extras). Individual corporate stays route to the stay's company window.
-	The company's billing rules pick the charge types; a credit company with
-	no rules uses the property's default (`default_company_billing`).
-	Alcohol never routes here.
+	The company's billing rules pick the charge types and transaction codes;
+	a credit company with no rules uses the property's default
+	(`default_company_billing`). Nothing else decides: no hidden default
+	keeps a charge off a company that includes its code.
 
 	A group with a main room (`master_reservation`) and no paying company
 	routes what `master_pays` covers to the same posting master. A room that
 	opted out (`pays_own_charges`) keeps its own charges, on a company group
 	too: the group's company does not pick them up through the stay either.
+	A cancelled group has no posting master.
 	"""
-	if not is_alcohol:
-		group = reservation.get("group_booking")
-		g = frappe.db.get_value(
-			"Group Booking", group,
-			["company", "master_reservation", "master_pays"], as_dict=True) if group else None
-		opted_out = bool(g) and bool(reservation.get("pays_own_charges"))
-		if g and not opted_out:
-			if g.company and _company_pays(
-					g.company, charge_type, reservation.get("property")):
+	from kamra.routing import line_code
+	code = line_code(charge_type, transaction_code)
+	group = reservation.get("group_booking")
+	g = frappe.db.get_value(
+		"Group Booking", group,
+		["company", "master_reservation", "master_pays", "status"], as_dict=True) if group else None
+	if g and g.status == "Cancelled":
+		g = None
+	opted_out = bool(g) and bool(reservation.get("pays_own_charges"))
+	if g and not opted_out:
+		if g.company and _company_pays(
+				g.company, charge_type, reservation.get("property"), code):
+			return open_group_folio(group)
+		if g.master_reservation:
+			covered = COMPANY_BILLING_DEFAULTS.get(g.master_pays, frozenset())
+			if covered is None or charge_type in covered:
 				return open_group_folio(group)
-			if g.master_reservation:
-				covered = COMPANY_BILLING_DEFAULTS.get(g.master_pays, frozenset())
-				if covered is None or charge_type in covered:
-					return open_group_folio(group)
-		company = reservation.get("company")
-		if company and not (opted_out and company == g.company) and _company_pays(
-				company, charge_type, reservation.get("property")):
-			return open_company_folio(reservation)
+	company = reservation.get("company")
+	if company and not (opted_out and company == g.company) and _company_pays(
+			company, charge_type, reservation.get("property"), code):
+		return open_company_folio(reservation)
 	return open_folio(reservation)
 
 
@@ -694,13 +689,12 @@ def _nightly_gst(reservation, date) -> float:
 	                           gross + _over_cap_night(reservation)))
 
 
-def open_line_target(reservation, charge_type: str, is_alcohol: int = 0,
-                     name: str | None = None) -> str:
+def open_line_target(reservation, charge_type: str, name: str | None = None) -> str:
 	"""target_folio (or `name`), never an invoiced folio: when the folio the
 	line would go to is closed, it goes on the open folio of the same window,
 	and one opens when there is none, with the same payee (the part_settle
 	shape, without repeating the one-time fees the first folio carried)."""
-	name = name or target_folio(reservation, charge_type, is_alcohol)
+	name = name or target_folio(reservation, charge_type)
 	row = frappe.db.get_value("Folio", name, ["status", "folio_type", "group_booking",
 	                                         "window_no"], as_dict=True)
 	if not row or row.status != "Closed":
@@ -710,28 +704,41 @@ def open_line_target(reservation, charge_type: str, is_alcohol: int = 0,
 	return window_folio(reservation=reservation.name, window_no=row.window_no or 1)
 
 
+def routed_figure(property: str, charge_type: str, amount, tax) -> Decimal:
+	"""What a routing limit counts of a line: its price, tax included, for a
+	line priced with tax (OPERA: an inclusive code routes its value with its
+	taxes), else its base (an exclusive code's taxes are not routed)."""
+	amount = Decimal(str(amount or 0))
+	return amount + Decimal(str(tax or 0)) if priced_with_tax(property, charge_type) else amount
+
+
 def _pending_routed(folios) -> list[tuple]:
 	"""Routed lines appended to the loaded folios and not saved yet, so a
-	multi-night posting run spends a routing limit only once."""
-	return [(c.routing_instruction, c.posting_date, c.amount)
+	multi-night posting run spends a routing limit only once:
+	[(instruction, posting_date, figure)]."""
+	return [(c.routing_instruction, c.posting_date,
+	         routed_figure(doc.property, c.charge_type, c.amount,
+	                       _line_tax(c, Decimal(str(c.amount or 0)))))
 	        for doc in folios.values() for c in doc.charges
 	        if c.get("routing_instruction") and not c.get("creation")]
 
 
-def _append_charge(folios, reservation, charge_type, line, is_alcohol=0):
+def _append_charge(folios, reservation, charge_type, line):
 	"""Append a line to the folio(s) routing sends it to, reusing loaded docs
 	so a multi-night posting run saves each folio once. A routing limit
-	splits it: the routed part and the remainder are each a line."""
+	splits it: the routed part and the remainder are each a line, with their
+	tax to the minor unit."""
 	parts = line_parts(reservation, charge_type, line["amount"], line["posting_date"],
-	                   is_alcohol=is_alcohol, transaction_code=line.get("transaction_code"),
-	                   pending=_pending_routed(folios))
+	                   transaction_code=line.get("transaction_code"),
+	                   gst_rate=line.get("gst_rate"), pending=_pending_routed(folios))
 	for part in parts:
 		name = part["folio"]
 		if name not in folios:
 			folios[name] = frappe.get_doc("Folio", name)
 		row = {**line, "routing_instruction": part["routing_instruction"]}
 		if len(parts) > 1:
-			row.update(qty=1, rate=part["amount"], amount=part["amount"])
+			row.update(qty=1, rate=part["amount"], amount=part["amount"],
+			           gst_amount=part["gst_amount"], tax_as_posted=1)
 		folios[name].append("charges", row)
 
 
@@ -1050,8 +1057,6 @@ def move_charges(src, dst, charge_rows: list, reservation: str | None = None,
 		row = next((c for c in src.charges if c.name == charge_row), None)
 		if not row:
 			frappe.throw(f"Charge {charge_row} not found on {src.name}.")
-		if row.get("is_alcohol") and not _alcohol_allowed(dst, routing_instruction):
-			frappe.throw("Alcohol cannot be billed to a company folio.")
 		# an outlet charge (the bridge's source_ref) was fiscalised at the
 		# outlet: it moves whole and only within its stay or group, so the
 		# outlet's own record still names the right bill
@@ -1127,7 +1132,7 @@ def split_charge(from_folio: str, charge_row: str, to_folio: str,
 	wrote down."""
 	src = frappe.get_doc("Folio", from_folio)
 	dst = _split_target(src, to_folio)
-	row, sign, line = _split_line(src, charge_row, credit, dst)
+	row, sign, line = _split_line(src, charge_row, credit)
 	units = Decimal(str(row.qty or 1))
 	part_units = Decimal(1)
 	if qty:
@@ -1164,7 +1169,7 @@ def _split_target(src, to_folio: str):
 	return dst
 
 
-def _split_line(src, charge_row: str, credit: bool, dst=None):
+def _split_line(src, charge_row: str, credit: bool):
 	"""The line to split, refused where OPERA refuses a split, and its
 	figures (magnitudes; `sign` puts an allowance's back): the base and tax
 	as they stand, the rate, the currency's minor unit and the figure a split
@@ -1187,25 +1192,47 @@ def _split_line(src, charge_row: str, credit: bool, dst=None):
 	base = Decimal(str(row.amount or 0)) * sign
 	if base <= 0 or (credit and row.charge_type != "Allowance"):
 		frappe.throw("Only positive charge lines can be split.")
-	if dst is not None and row.get("is_alcohol") and not _alcohol_allowed(dst):
-		frappe.throw("Alcohol cannot be billed to a company folio.")
-	from kamra.ledger import minor_unit
-	from kamra.pricing import rates_include_tax
-	unit = minor_unit(src.property)
 	tax = _line_tax(row, Decimal(str(row.amount or 0))) * sign
-	priced_with_tax = row.charge_type == "Room" and bool(rates_include_tax(src.property))
-	line = {"base": base, "tax": tax, "rate": Decimal(str(row.gst_rate or 0)) / 100,
-	        "unit": unit, "priced_with_tax": priced_with_tax}
-	line["figure"] = ((base + tax) if priced_with_tax else base).quantize(
-		unit, rounding=ROUND_HALF_UP)
-	return row, sign, line
+	return row, sign, line_figures(src.property, row.charge_type, base, tax,
+	                               row.gst_rate)
+
+
+def priced_with_tax(property: str, charge_type: str) -> bool:
+	"""A room night at a property whose rates include tax is priced with its
+	tax (OPERA: an inclusive transaction code): it is split, and a routing
+	limit caps it, on its price. Every other line on its base."""
+	from kamra.pricing import rates_include_tax
+	return charge_type == "Room" and bool(rates_include_tax(property))
+
+
+def line_figures(property: str, charge_type: str, base, tax=None, gst_rate=0) -> dict:
+	"""The figures one splitter cuts a line by - split_charge, share_charges
+	and routing limits alike: its base and tax as they stand (tax worked out
+	from the rate when not given), the rate, the currency's minor unit and the
+	figure that is cut - the price for a line priced with tax, else the base."""
+	from kamra.ledger import minor_unit
+	base = Decimal(str(base or 0))
+	rate = Decimal(str(gst_rate or 0)) / 100
+	tax = base * rate if tax is None else Decimal(str(tax))
+	unit = minor_unit(property)
+	with_tax = priced_with_tax(property, charge_type)
+	return {"base": base, "tax": tax, "rate": rate, "unit": unit,
+	        "priced_with_tax": with_tax,
+	        "figure": ((base + tax) if with_tax else base).quantize(unit, rounding=ROUND_HALF_UP)}
 
 
 def _cut(line: dict, share: Decimal) -> tuple[Decimal, Decimal]:
 	"""`share` of the line, to the minor unit, with its own tax to the minor
 	unit: (base, tax). A line priced with tax included is cut on its price."""
+	return cut_figure(line, line["figure"] * share)
+
+
+def cut_figure(line: dict, figure) -> tuple[Decimal, Decimal]:
+	"""The part of the line whose figure (its price, or its base) is
+	`figure`, to the minor unit, with its own tax to the minor unit:
+	(base, tax). The line keeps the rest of both."""
 	unit, rate = line["unit"], line["rate"]
-	part = (line["figure"] * share).quantize(unit, rounding=ROUND_HALF_UP)
+	part = Decimal(str(figure)).quantize(unit, rounding=ROUND_HALF_UP)
 	if line["priced_with_tax"]:
 		tax = (part * rate / (1 + rate)).quantize(unit, rounding=ROUND_HALF_UP)
 		return part - tax, tax
@@ -1250,17 +1277,20 @@ def _post_split(src, row, sign: int, line: dict, cuts: list, kept_units: Decimal
 	kept_base = line["base"] - sum(p[0] for _f, p, _u in cuts)
 	kept_tax = line["tax"] - sum(p[1] for _f, p, _u in cuts)
 
-	def part_line(base, tax, units):
+	def part_line(base, tax, units, folio):
+		# a part left on the folio a routing instruction put the line on is
+		# still routed by it, so its usage follows; a part moved off is not
+		routed = row.get("routing_instruction") if folio is src else None
 		return {**same_line, "qty": float(units), "rate": float(base * sign / units),
 		        "amount": float(base * sign), "gst_amount": float(tax * sign),
-		        "tax_as_posted": 1}
+		        "tax_as_posted": 1, "routing_instruction": routed}
 
-	src.append("charges", part_line(kept_base, kept_tax, kept_units))
+	src.append("charges", part_line(kept_base, kept_tax, kept_units, src))
 	kept = src.charges[-1]
 	folios, moved = {src.name: src}, []
 	for f, (base, tax), units in cuts:
 		f = folios.setdefault(f.name, f)
-		f.append("charges", part_line(base, tax, units))
+		f.append("charges", part_line(base, tax, units, f))
 		moved.append((f, f.charges[-1]))
 	for f in folios.values():
 		_recalculate(f)
@@ -1352,8 +1382,6 @@ def share_charges(from_folio: str, charge_rows: list, to_folios: list,
 		line_row, sign, line = _split_line(src, row, False)
 		cuts, left = [], line["figure"]
 		for dst, share in zip(targets, shares):
-			if line_row.get("is_alcohol") and dst.folio_type in ("Company", "Group"):
-				frappe.throw("Alcohol cannot be billed to a company folio.")
 			part = _cut(line, share)
 			if 0 < _figure(line, part) < left:
 				cuts.append((dst, part, Decimal(1)))

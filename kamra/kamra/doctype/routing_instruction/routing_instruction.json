@@ -17,7 +17,6 @@
   "sb_codes",
   "all_codes",
   "codes",
-  "include_alcohol",
   "sb_when",
   "from_date",
   "to_date",
@@ -112,12 +111,6 @@
    "fieldtype": "Table",
    "label": "Charge Types and Codes",
    "options": "Routing Instruction Code"
-  },
-  {
-   "description": "Off by default: liquor stays on window 1 unless this is ticked. A group's instructions take the group's Route Alcohol setting.",
-   "fieldname": "include_alcohol",
-   "fieldtype": "Check",
-   "label": "Include Alcohol"
   },
   {
    "fieldname": "sb_when",
@@ -233,7 +226,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-11-23 20:00:00.000000",
+ "modified": "2026-11-24 09:00:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Routing Instruction",

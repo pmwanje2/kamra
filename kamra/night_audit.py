@@ -464,9 +464,11 @@ def check_high_balance(property: str) -> dict:
 			SELECT f.name, f.folio_type, f.balance, f.reservation,
 			       r.guest_name, r.room, r.check_out_date
 			FROM `tabFolio` f
-			JOIN `tabReservation` r ON r.name = f.reservation
+			LEFT JOIN `tabReservation` r ON r.name = f.reservation
 			WHERE f.property = %(p)s AND f.status = 'Open'
-			  AND r.status = 'Checked In' AND f.balance > %(t)s
+			  AND (r.status = 'Checked In'
+			       OR (f.folio_type = 'Group' AND IFNULL(f.reservation, '') = ''))
+			  AND f.balance > %(t)s
 			ORDER BY f.balance DESC
 			""", {"p": property, "t": threshold}, as_dict=True)
 		items = [{
@@ -495,10 +497,11 @@ def check_credit_limit(property: str) -> dict:
 			SELECT f.name, f.folio_type, f.reservation, f.group_booking,
 			       f.balance, r.guest_name, r.room
 			FROM `tabFolio` f
-			JOIN `tabReservation` r ON r.name = f.reservation
+			LEFT JOIN `tabReservation` r ON r.name = f.reservation
 			WHERE f.property = %(p)s AND f.status = 'Open'
-			  AND f.folio_type IN ('Company', 'Group')
-			  AND r.status = 'Checked In'
+			  AND f.folio_type != 'Account'
+			  AND (r.status = 'Checked In'
+			       OR (f.folio_type = 'Group' AND IFNULL(f.reservation, '') = ''))
 			""", {"p": property}, as_dict=True)
 		by_company: dict[str, list] = {}
 		for f in folios:

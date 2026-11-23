@@ -10,36 +10,36 @@ in order:
    instruction covers the charge (folio._legacy_target);
 3. window 1, the guest's.
 
-Only one active instruction may cover a code on a date (OPERA's rule), so at
-most one matches. An amount or percent limit splits a hotel line into a
-routed part and a remainder, both in the property currency's minor unit, and
-the remainder stays on window 1. An outlet check (`whole`) routes whole or
-not at all: a percent never splits it, and it routes only when it fits in
-what the limit has left. Usage is never counted: it is the sum of the posted,
-non-voided lines that carry the instruction, so a void lowers it.
+An instruction routes what it includes - charge types (OPERA routing codes),
+transaction codes, or all charges - and nothing else: liquor is a code like
+any other. Only one active instruction may cover a code on a date (OPERA's
+rule), so at most one matches. Once one matches, the charge never falls back
+to the presets: when its target cannot take charges now (the other room is
+not in house, the group is cancelled) it stays on window 1.
+
+An amount or percent limit splits a hotel line into a routed part and a
+remainder on window 1, cut by folio's one splitter (folio.line_figures): to
+the currency's minor unit, each part with its own tax, the remainder keeping
+the rest of base and tax. A line priced with tax is cut and capped on its
+price, every other line on its base (OPERA: an inclusive code routes its
+value with its taxes, an exclusive code's taxes are not routed). An outlet
+check (`whole`) routes whole or not at all: a percent never splits it, and it
+routes only when it fits in what the limit has left. Usage is never counted:
+it is the sum of the posted, non-voided lines that carry the instruction -
+corrections and split parts left on the window included - so a void, a
+correction or a split moves it exactly.
 """
 
 from __future__ import annotations
 
-from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal
+from datetime import timedelta
+from decimal import ROUND_DOWN, Decimal
 
 import frappe
 from frappe import _
 from frappe.utils import cint, flt, getdate
 
 DAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
-
-
-def currency_unit(property: str) -> Decimal:
-	"""The property currency's minor unit: 1 for UGX, 0.01 for INR."""
-	from babel.numbers import get_currency_precision
-
-	from kamra.ledger import home_currency
-	try:
-		digits = get_currency_precision(home_currency(property))
-	except Exception:
-		digits = 2
-	return Decimal(1).scaleb(-int(digits))
 
 
 def line_code(charge_type: str, transaction_code: str | None = None) -> str | None:
@@ -77,38 +77,43 @@ def applies_on(ri, day) -> bool:
 def used(instruction: str, day=None, pending=()) -> Decimal:
 	"""What the lines routed by this instruction add up to - the day's when
 	`day` is given - plus `pending` lines not saved yet
-	([(instruction, posting_date, amount)])."""
-	from kamra.folio import NOT_VOIDED
-	total = Decimal(str(frappe.db.sql(
-		"""SELECT COALESCE(SUM(fc.amount), 0) FROM `tabFolio Charge` fc
+	([(instruction, posting_date, figure)]). A line counts its figure
+	(folio.routed_figure): its price for a line priced with tax, else its
+	base. A correction counts on the date of the line it corrects."""
+	from kamra.folio import NOT_VOIDED, routed_figure
+	rows = frappe.db.sql(
+		"""SELECT f.property, fc.charge_type, fc.amount, fc.gst_amount,
+		          COALESCE(o.posting_date, fc.posting_date) AS day
+		   FROM `tabFolio Charge` fc
+		   JOIN `tabFolio` f ON f.name = fc.parent
+		   LEFT JOIN `tabFolio Charge` o ON o.name = fc.corrects_row
 		   WHERE fc.parenttype = 'Folio' AND fc.routing_instruction = %(ri)s
-		     AND (%(day)s IS NULL OR fc.posting_date = %(day)s)
 		     AND """ + NOT_VOIDED,
-		{"ri": instruction, "day": str(getdate(day)) if day else None})[0][0] or 0))
-	for name, posting_date, amount in pending:
+		{"ri": instruction}, as_dict=True)
+	total = sum((routed_figure(r.property, r.charge_type, r.amount, r.gst_amount)
+	             for r in rows if not day or getdate(r.day) == getdate(day)), Decimal(0))
+	for name, posting_date, figure in pending:
 		if name == instruction and (not day or getdate(posting_date) == getdate(day)):
-			total += Decimal(str(amount or 0))
+			total += Decimal(str(figure or 0))
 	return total
 
 
-def matching(reservation: str, charge_type: str, code: str | None, day, alcohol: bool):
+def matching(reservation: str, charge_type: str, code: str | None, day):
 	"""The stay's one active instruction that covers this charge on this
-	day, or None. Liquor matches only an instruction that includes it."""
+	day, or None."""
 	for name in frappe.get_all("Routing Instruction",
 	                           filters={"reservation": reservation, "disabled": 0},
 	                           pluck="name", order_by="creation asc"):
 		ri = frappe.get_doc("Routing Instruction", name)
-		if not applies_on(ri, day) or not covers(ri, charge_type, code):
-			continue
-		if alcohol and not cint(ri.include_alcohol):
-			return None
-		return ri
+		if applies_on(ri, day) and covers(ri, charge_type, code):
+			return ri
 	return None
 
 
 def target(ri, res) -> str | None:
 	"""The open folio the instruction sends charges to, or None when its
-	target cannot take them now (the other room is not in house)."""
+	target cannot take them now (the other room is not in house, the group
+	is cancelled)."""
 	from kamra import folio as fm
 	window = cint(ri.target_window) or 1
 	if ri.target_type == "Window":
@@ -121,22 +126,29 @@ def target(ri, res) -> str | None:
 		return fm.window_folio(reservation=other.name, window_no=window)
 	if ri.target_type == "Group Master":
 		group = res.get("group_booking")
-		if not group or frappe.db.get_value("Group Booking", group, "property") != ri.property:
+		gb = group and frappe.db.get_value("Group Booking", group, ["property", "status"],
+		                                   as_dict=True)
+		if not gb or gb.property != ri.property or gb.status == "Cancelled":
 			return None
 		return fm.window_folio(group_booking=group, window_no=window)
 	return None
 
 
-def _part(folio: str, amount, instruction: str | None) -> dict:
-	return {"folio": folio, "amount": amount, "routing_instruction": instruction}
+def _part(folio: str, amount, instruction: str | None, tax=None) -> dict:
+	part = {"folio": folio, "amount": amount, "routing_instruction": instruction}
+	if tax is not None:
+		part["gst_amount"] = float(tax)
+	return part
 
 
 def route(reservation, charge_type: str, amount=None, posting_date=None, *,
-          transaction_code: str | None = None, is_alcohol=0, whole: bool = False,
+          transaction_code: str | None = None, gst_rate=0, whole: bool = False,
           pending=()) -> list[dict] | None:
 	"""Where an instruction sends this charge: [{folio, amount,
 	routing_instruction}], the routed part first, or None when no
-	instruction applies (the caller then uses the legacy presets).
+	instruction covers it (the caller then uses the legacy presets). A
+	split's parts also carry their tax (gst_amount), worked out to the
+	currency's minor unit, which the line must keep as posted.
 
 	`whole` is an outlet check or a caller that moves a line whole: it is
 	never split. `amount` None (a caller that does not know it yet) skips an
@@ -151,44 +163,46 @@ def route(reservation, charge_type: str, amount=None, posting_date=None, *,
 		from kamra.business_date import get_business_date
 		posting_date = get_business_date(res.property)
 	day = getdate(posting_date)
-	code = line_code(charge_type, transaction_code)
-	alcohol = bool(cint(is_alcohol)) or bool(
-		code and cint(frappe.db.get_value("Transaction Code", code, "is_alcohol")))
-	ri = matching(res.name, charge_type, code, day, alcohol)
+	ri = matching(res.name, charge_type, line_code(charge_type, transaction_code), day)
 	if not ri:
 		return None
+
+	def window_1():
+		return [_part(fm.window_folio(reservation=res.name, window_no=1), amount, None)]
+
 	dst = target(ri, res)
 	if not dst:
-		return None
+		return window_1()
 	kind = ri.limit_type or "None"
 	if kind == "None":
 		return [_part(dst, amount, ri.name)]
 	if amount is None:
 		return None
-	total = Decimal(str(amount))
-	if total <= 0:
+	line = fm.line_figures(res.property, charge_type, amount, gst_rate=gst_rate)
+	if line["base"] <= 0:
 		return [_part(dst, amount, ri.name)]
-	unit = currency_unit(res.property)
 	if kind == "Percent":
 		if whole:
-			return [_part(fm.window_folio(reservation=res.name, window_no=1), amount, None)]
-		routed = (total * Decimal(str(ri.limit_value or 0)) / 100).quantize(unit, ROUND_HALF_UP)
+			return window_1()
+		routed = fm.cut_figure(line, line["figure"] * Decimal(str(ri.limit_value or 0)) / 100)
 	else:
 		left = Decimal(str(ri.limit_value or 0)) - used(
 			ri.name, day if cint(ri.per_day) else None, pending)
-		if left >= total:
+		if left >= line["figure"]:
 			return [_part(dst, amount, ri.name)]
 		if left <= 0 or whole:
-			return [_part(fm.window_folio(reservation=res.name, window_no=1), amount, None)]
-		routed = left.quantize(unit, ROUND_DOWN)
-	routed = min(max(routed, Decimal(0)), total)
-	rest = total - routed
+			return window_1()
+		routed = fm.cut_figure(line, left.quantize(line["unit"], ROUND_DOWN))
+	rest = (line["base"] - routed[0], line["tax"] - routed[1])
 	parts = []
-	if routed > 0:
-		parts.append(_part(dst, float(routed), ri.name))
-	if rest > 0:
+	if routed[0] + routed[1] > 0:
+		parts.append(_part(dst, float(routed[0]), ri.name, routed[1]))
+	if rest[0] + rest[1] > 0:
 		parts.append(_part(fm.window_folio(reservation=res.name, window_no=1),
-		                   float(rest), None))
+		                   float(rest[0]), None, rest[1]))
+	if len(parts) == 1:  # nothing to split off after all: the line goes whole
+		parts[0].pop("gst_amount")
+		parts[0]["amount"] = amount
 	return parts
 
 
@@ -217,10 +231,10 @@ def copy_group_instructions(reservation) -> list[str]:
 	return out
 
 
-def _codes(ri) -> tuple[bool, set, set]:
-	"""(all codes, charge types, transaction codes) an instruction covers;
-	a transaction code also counts under its own charge type."""
-	types, codes = set(), set()
+def _codes(ri) -> tuple[bool, set, set, set]:
+	"""(all codes, charge types, transaction codes, the charge types of those
+	codes) an instruction covers."""
+	types, codes, parents = set(), set(), set()
 	for row in ri.get("codes") or []:
 		if row.charge_type:
 			types.add(row.charge_type)
@@ -228,25 +242,38 @@ def _codes(ri) -> tuple[bool, set, set]:
 			codes.add(row.transaction_code)
 			parent = code_charge_type(row.transaction_code)
 			if parent:
-				types.add(parent)
-	return bool(cint(ri.all_codes)), types, codes
+				parents.add(parent)
+	return bool(cint(ri.all_codes)), types, codes, parents
 
 
-def _overlap(a, b) -> bool:
-	"""Do two instructions cover a common code on a common day?"""
+def _common_day(a, b) -> bool:
+	"""Is there a date both instructions run on: in both date ranges and on
+	a day of the week both have ticked?"""
 	lo = max(getdate(a.from_date) if a.from_date else getdate("1900-01-01"),
 	         getdate(b.from_date) if b.from_date else getdate("1900-01-01"))
 	hi = min(getdate(a.to_date) if a.to_date else getdate("2999-12-31"),
 	         getdate(b.to_date) if b.to_date else getdate("2999-12-31"))
-	if lo > hi:
+	day = lo
+	while day <= min(hi, lo + timedelta(days=6)):
+		weekday = DAYS[day.weekday()]
+		if cint(a.get(weekday)) and cint(b.get(weekday)):
+			return True
+		day += timedelta(days=1)
+	return False
+
+
+def _overlap(a, b) -> bool:
+	"""Do two instructions cover a common code on a common day? A charge
+	type covers every code of it; two different codes of one charge type
+	(the restaurant's food and the bar's) do not overlap."""
+	if not _common_day(a, b):
 		return False
-	if not any(cint(a.get(d)) and cint(b.get(d)) for d in DAYS):
-		return False
-	all_a, types_a, codes_a = _codes(a)
-	all_b, types_b, codes_b = _codes(b)
+	all_a, types_a, codes_a, parents_a = _codes(a)
+	all_b, types_b, codes_b, parents_b = _codes(b)
 	if all_a or all_b:
 		return True
-	return bool(types_a & types_b) or bool(codes_a & codes_b)
+	return bool(types_a & types_b or codes_a & codes_b
+	            or types_a & parents_b or types_b & parents_a)
 
 
 def validate_instruction(ri) -> None:

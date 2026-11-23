@@ -383,16 +383,6 @@ class VenueBooking(Document):
 			over = self._over_capacity()
 			if over:
 				frappe.msgprint(over, indicator="orange", alert=True)
-		alcohol_on_company = [
-			r.item_name for r in self.items
-			if r.is_alcohol and r.chargeable and self.company]
-		if alcohol_on_company:
-			# same rule the folio enforces: alcohol never rides a company bill
-			frappe.msgprint(
-				_("Alcohol ({0}) can't be billed to {1} - it will have to "
-				  "settle separately.").format(
-					", ".join(alcohol_on_company[:3]), self.company),
-				indicator="orange", alert=True)
 
 	def _over_capacity(self):
 		cap = frappe.db.get_value("Venue", self.venue, "capacity")

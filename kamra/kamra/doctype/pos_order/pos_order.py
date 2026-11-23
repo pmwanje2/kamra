@@ -124,18 +124,21 @@ class POSOrder(Document):
 		# complimentary - there is nothing to charge anywhere
 		if self.nc:
 			return
-		# room-service charge routed by the company's billing rules; any
-		# alcohol on the order forces the whole order to the guest folio
-		from kamra.folio import _recalculate, target_folio
+		# room-service charge routed whole by the stay's routing instructions
+		# (with its amount, so a limit applies) or its billing rules
+		from kamra.folio import _recalculate, routed_target
 
 		res = frappe.get_doc("Reservation", self.reservation)
+		# liquor on the order is flagged on the line (its tax and the F&B
+		# report), and routes like the rest of the order
 		has_alcohol = any(
 			frappe.db.get_value("Menu Item", it.menu_item, "is_alcohol")
 			for it in self.items if it.menu_item and not it.voided
 		)
-		folio = frappe.get_doc(
-			"Folio",
-			target_folio(res, "Food & Beverage", is_alcohol=has_alcohol))
+		target, instruction = routed_target(
+			res, "Food & Beverage", amount=self.order_total,
+			posting_date=get_business_date(self.property))
+		folio = frappe.get_doc("Folio", target)
 		if folio.status == "Closed":
 			frappe.throw("Folio is closed — settle the order directly.")
 		# the outlet's own rate, 0 included (the field defaults new outlets to 5;
@@ -156,6 +159,7 @@ class POSOrder(Document):
 			"gst_rate": float(gst),
 			"auto_posted": 1,
 			"is_alcohol": 1 if has_alcohol else 0,
+			"routing_instruction": instruction,
 		})
 		_recalculate(folio)
 		from kamra.ledger import save_folio
