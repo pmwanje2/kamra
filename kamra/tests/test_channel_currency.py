@@ -150,6 +150,26 @@ class RestrictionCellsCurrencyTest(OutboundCurrencyHarness):
 		self.assertIn("HSP-TARIFF-003", problems["held"]["rp-usd"]["reason"])
 		self.assertFalse(problems.get("refused"))
 
+	def test_each_date_goes_at_its_own_contract_night(self):
+		"""Guard (R6, OPERA Rate Changes During Stay): every pushed date is its
+		own one-night contract quote, so a tariff change inside the window
+		shows on the day it starts - never one figure for the horizon."""
+		self.map("rp-usd", "CONTRACT", "USD")
+		self.map("rp-ugx", "CONTRACT", "UGX")
+		first = self.tariff(fx_rate=3648.2, agreed_rate=474266)
+		second = self.tariff(nightly=140, fx_rate=3648.2, agreed_rate=510748)
+		self.tariffs["CONTRACT"] = lambda form: dict(
+			first if form["check_in"] == NIGHT else second,
+			nights=[{"date": form["check_in"], "nightly": (first if form["check_in"] == NIGHT else second)["nightly"],
+			         "agreed_rate": (first if form["check_in"] == NIGHT else second)["agreed_rate"],
+			         "item_price": "IP-" + form["check_in"]}])
+		cells, _problems = self.cells()
+		self.assertEqual({d: v["rate"] for d, v in cells["rp-usd"].items()},
+		                 {NIGHT: Decimal("130.00"), NEXT: Decimal("140.00")})
+		# 510,748 to the plan's 1,000 step
+		self.assertEqual({d: v["rate"] for d, v in cells["rp-ugx"].items()},
+		                 {NIGHT: Decimal("474000.00"), NEXT: Decimal("511000.00")})
+
 	def test_a_missing_tariff_still_stops_sale(self):
 		self.map("rp-usd", "CONTRACT", "USD")
 		self.tariffs["CONTRACT"] = {"is_tariff": 1, "refusal": NO_TARIFF}
@@ -160,11 +180,13 @@ class RestrictionCellsCurrencyTest(OutboundCurrencyHarness):
 
 
 # An OTA booking in USD on CORP, booked at 3,650: the OTA sold the first night
-# at USD 130 and the second at USD 120 (its own discount). 475,000 and 438,000
-# UGX locked, an average of USD 125 = UGX 456,000 as the booking's agreed rate.
-CHANNEL = {"agreed_rate": 456000, "tariff": {
-	"currency": "USD", "nightly": 125, "fx_rate": 3650, "fx_date": "2026-11-20", "property_currency": "UGX",
-	"source": "channel", "nights": {"2026-12-01": 130, "2026-12-02": 120}}}
+# at USD 130 and the second at USD 120 (its own discount), UGX 475,000 and
+# 438,000 locked. The snapshot is the contract's per-night shape (R6): each
+# night's own amounts in `nights`, the scalar figures the check-in night's.
+CHANNEL = {"agreed_rate": 475000, "tariff": {
+	"currency": "USD", "nightly": 130, "fx_rate": 3650, "fx_date": "2026-11-20", "property_currency": "UGX",
+	"source": "channel", "nights": [{"date": "2026-12-01", "nightly": 130, "agreed_rate": 475000},
+	                                {"date": "2026-12-02", "nightly": 120, "agreed_rate": 438000}]}}
 
 
 class ChannelBookingFxLockTest(RateMatrixHarness):
@@ -184,7 +206,7 @@ class ChannelBookingFxLockTest(RateMatrixHarness):
 		self.res = self.add(
 			"Reservation", "RES-OTA", property="Test Hotel", room="Test Hotel-101", room_type="Test Hotel-DLX",
 			rate_plan="CORP", check_in_date="2026-12-01", check_out_date="2026-12-03", adults=2, children=0,
-			extra_beds=0, agreed_rate=456000, auto_price=0, status="Confirmed", source="OTA",
+			extra_beds=0, agreed_rate=475000, auto_price=0, status="Confirmed", source="OTA",
 			amount_after_tax=913000, contract_tariff=json.dumps(CHANNEL),
 			night_rates=[Doc(stay_date="2026-12-01", rate=475000, gst_rate=0),
 			             Doc(stay_date="2026-12-02", rate=438000, gst_rate=0)])
@@ -198,7 +220,7 @@ class ChannelBookingFxLockTest(RateMatrixHarness):
 		self.assertEqual(self.pricing.reservation_fx_policy(self.res), "Fixed at Reservation")
 		self.assertFalse(self.pricing.relock_contract_fx_at_check_in(self.res))
 		self.assertEqual(self.locked, [])
-		self.assertEqual(self.res.agreed_rate, 456000)
+		self.assertEqual(self.res.agreed_rate, 475000)
 		self.docs["Rate Plan", "CORP"].fx_lock_policy = "Current Date"
 		self.assertIsNone(self.folio.current_date_contract_night(self.res, "2026-12-01"))
 
@@ -219,8 +241,9 @@ class ChannelBookingFxLockTest(RateMatrixHarness):
 		self.assertEqual(self.res.amount_after_tax, 929000)
 		tariff = self.res.contract_tariff["tariff"]
 		self.assertEqual((tariff["fx_rate"], tariff["fx_date"]), (3712.5, "2026-12-01"))
-		self.assertEqual(tariff["nights"], CHANNEL["tariff"]["nights"])
-		self.assertEqual(self.res.agreed_rate, 464000)  # USD 125 x 3,712.5 = 464,062.5
+		self.assertEqual([(n["date"], n["nightly"], n["agreed_rate"]) for n in tariff["nights"]],
+		                 [("2026-12-01", 130, 483000), ("2026-12-02", 120, 446000)])
+		self.assertEqual(self.res.agreed_rate, 483000)  # the check-in night's
 
 	def test_a_property_collected_booking_on_a_current_date_plan_posts_each_ota_night_at_its_date(self):
 		self.docs["Rate Plan", "CORP"].fx_lock_policy = "Current Date"

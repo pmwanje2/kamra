@@ -281,8 +281,13 @@ class ChannexForeignContractBookingTestCase(IntegrationTestCase):
 		snapshot = frappe.parse_json(doc.contract_tariff)
 		tariff = snapshot["tariff"]
 		self.assertEqual((tariff["currency"], tariff["property_currency"], tariff["fx_rate"]), ("USD", "UGX", 3650))
-		self.assertEqual(tariff["nights"], {self.nights[0]: 130.0, self.nights[1]: 120.0})
-		self.assertEqual((tariff["nightly"], snapshot["agreed_rate"], float(doc.agreed_rate)), (125.0, 456000, 456000))
+		# the contract's per-night shape (R6): each night's own amounts, the
+		# scalar figures the check-in night's
+		self.assertEqual(tariff["nights"], [
+			{"date": self.nights[0], "nightly": 130.0, "agreed_rate": 475000.0},
+			{"date": self.nights[1], "nightly": 120.0, "agreed_rate": 438000.0}])
+		self.assertEqual((tariff["nightly"], snapshot["agreed_rate"], float(doc.agreed_rate)), (130.0, 475000, 475000))
+		self.assertEqual(pricing.contract_night_rates(doc), {self.nights[0]: 475000.0, self.nights[1]: 438000.0})
 		# property-collected: the rate plan's own lock, as for a desk booking
 		self.assertNotIn("fx_lock_policy", snapshot)
 		self.assertEqual(pricing.reservation_fx_policy(doc), "Fixed at Check In")
@@ -305,8 +310,9 @@ class ChannexForeignContractBookingTestCase(IntegrationTestCase):
 		self.assertEqual(doc.status, "Confirmed")
 		self.assertEqual(self.gross_nights(doc), [511000, 511000])
 		self.assertEqual(float(doc.amount_after_tax), 1022000)
-		self.assertEqual(frappe.parse_json(doc.contract_tariff)["tariff"]["nights"],
-		                 {self.nights[0]: 140.0, self.nights[1]: 140.0})
+		self.assertEqual([(n["date"], n["nightly"], n["agreed_rate"])
+		                  for n in frappe.parse_json(doc.contract_tariff)["tariff"]["nights"]],
+		                 [(self.nights[0], 140.0, 511000.0), (self.nights[1], 140.0, 511000.0)])
 
 	def test_without_a_published_rate_the_booking_is_requested_for_finance(self):
 		self.rates = {}
