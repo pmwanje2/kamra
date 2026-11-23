@@ -5,12 +5,19 @@ rate; a Current Date night converts at its own posting date's published
 rate (ERPNext Currency Exchange), keeps a discount or override, and says
 so when it has to fall back; bills show the reference currency with their
 totals; card-rate plans round each night; derived plans add amounts per
-night; a base plan's children follow its currency and enablement."""
+night; a base plan's children follow its currency and enablement.
+
+Round 3: ACTUAL leaves out nights void_charge reversed and keeps the rate
+a night posted at when it is moved or split (counting a split night once);
+an Absolute or Amount plan on a zero-priced room still prices each night;
+the Night Audit Run records the amount its room nights actually posted."""
 
 from __future__ import annotations
 
 import json
+import sys
 from decimal import Decimal
+from types import ModuleType
 from unittest.mock import patch
 
 from kamra.tests.rate_matrix_harness import Doc, RateMatrixHarness, ValidationError
@@ -341,3 +348,214 @@ class RatePlanParentValidationTest(RateMatrixHarness):
 		self.records["Rate Plan"][0].disabled = 1
 		self.validate(disabled=1)
 
+
+
+# -- Round 3 (R2 review): the folio trail, zero-priced plans, the audit total --
+
+_ROW_NAMES = iter(range(1, 10**6))
+
+
+class Folio(Doc):
+	"""A loaded Folio: an appended line becomes a named child row of it, as in Frappe."""
+
+	def append(self, field, row):
+		row = Doc(row, name=row.get("name") or f"FC-{next(_ROW_NAMES)}", parent=self.name,
+		          parenttype="Folio", parentfield=field)
+		self[field].append(row)
+		return row
+
+	def save(self, **kwargs):
+		return self
+
+
+def stub_module(name, **attrs):
+	module = ModuleType(name)
+	for key, value in attrs.items():
+		setattr(module, key, value)
+	return module
+
+
+class CurrentDateTrailHarness(ContractStayHarness):
+	"""A Current Date stay whose nights post, void, move and split through the real folio code."""
+
+	policy = "Current Date"
+
+	def extra_modules(self):
+		self.ledger_calls = []
+
+		def record(name):
+			return lambda *args, **kwargs: self.ledger_calls.append(name)
+
+		return {
+			"kamra.ledger": stub_module("kamra.ledger", ledger_charges=record("ledger_charges"),
+			                            reverse_ledger_for_charge=record("reverse_ledger_for_charge"),
+			                            _original_charge_entry=lambda *args: None,
+			                            code_for_charge_type=lambda charge_type: charge_type.upper(),
+			                            record_charge_ledger=record("record_charge_ledger")),
+			"kamra.webhooks": stub_module("kamra.webhooks", emit_charge_voided=lambda *args: None,
+			                              emit_night_audit_closed=lambda *args: None),
+			"kamra.savings": stub_module("kamra.savings", log_action=lambda *args, **kwargs: None),
+		}
+
+	def setUp(self):
+		super().setUp()
+		sys.modules["kamra.localization"].money_text = lambda property, amount: f"{amount:,}"
+		self.docs["Property", "Test Hotel"].business_date = "2026-12-05"
+		self.guest = self.folio_doc("F-GUEST", "Guest")
+		self.company = self.folio_doc("F-CO", "Company")
+		for name, value in (("_charge_posted", lambda *args: False), ("_post_room_levy", lambda *args: None),
+		                    ("_append_charge", self.append_to_guest_folio)):
+			patcher = patch.object(self.folio, name, value)
+			patcher.start()
+			self.addCleanup(patcher.stop)
+
+	def folio_doc(self, name, folio_type):
+		doc = Folio(doctype="Folio", name=name, property="Test Hotel", reservation="RES-1", folio_type=folio_type,
+		            status="Open", charges=[], payments=[], flags=Doc())
+		self.docs["Folio", name] = doc
+		return doc
+
+	def append_to_guest_folio(self, folios, reservation, charge_type, line, *args):
+		self.guest.append("charges", line)
+
+	def post(self, night, fx):
+		self.exchange_rates[:] = [row for row in self.exchange_rates if row.date != night]
+		self.rate("USD", fx, night)
+		self.assertTrue(self.folio.post_room_night(self.res, night, folios={}))
+		return self.guest.charges[-1]
+
+	def shown(self):
+		self.records["Folio Charge"] = [row for doc in (self.guest, self.company) for row in doc.charges]
+		shown = self.folio.reference_currency(self.res, grand_total=0, balance=0)
+		return shown["fx_rate"], shown["fx_date"], shown.get("posted_nights")
+
+	@staticmethod
+	def fx_trail(row):
+		return (row.get("contract_currency"), row.get("contract_fx_rate"), str(row.get("contract_fx_date")),
+		        row.get("contract_fx_stale"))
+
+
+class PostedContractFxTrailTest(CurrentDateTrailHarness):
+	"""P1-R2-1: ACTUAL reads the rates the stay's nights still stand at."""
+
+	def test_a_night_voided_by_void_charge_leaves_the_average(self):
+		self.post("2026-12-01", 3700)
+		wrong = self.post("2026-12-02", 9999)  # Finance mis-published the rate; the night posted at it
+		self.folio.void_charge(self.guest.name, wrong.name, "wrong exchange rate")
+		reversal = self.guest.charges[-1]
+		self.assertEqual(reversal.reversal_of, wrong.name)
+		self.assertIsNone(reversal.get("contract_currency"))  # void_charge never copies the FX trail
+		self.post("2026-12-02", 3800)  # the night again, at the corrected rate
+		self.assertEqual(self.shown(), (3750.0, "2026-12-02", 2))
+
+	def test_a_moved_night_keeps_the_rate_it_posted_at(self):
+		self.post("2026-12-01", 3700)
+		night = self.post("2026-12-02", 3800)
+		moved, = self.folio.move_charges(self.guest, self.company, [night.name])
+		self.assertEqual(self.fx_trail(moved), ("USD", 3800.0, "2026-12-02", 0))
+		self.assertEqual(self.shown(), (3750.0, "2026-12-02", 2))
+
+	def test_a_split_night_keeps_its_rate_and_counts_once(self):
+		night = self.post("2026-12-01", 3700)
+		self.post("2026-12-02", 3800)
+		self.assertEqual(self.folio.split_charge(self.guest.name, night.name, self.company.name, percent=40),
+		                 {"kept": 288600.0, "moved": 192400.0})
+		part, = self.company.charges
+		self.assertEqual(self.fx_trail(part), ("USD", 3700.0, "2026-12-01", 0))
+		self.assertEqual(self.fx_trail(night), ("USD", 3700.0, "2026-12-01", 0))
+		# two rows, one night: 3,700 is not weighted twice against 3,800
+		self.assertEqual(self.shown(), (3750.0, "2026-12-02", 2))
+
+
+class NightAuditPostedAmountTest(CurrentDateTrailHarness):
+	"""P2-R2-3: the Night Audit Run records what the night actually posted."""
+
+	def extra_modules(self):
+		stubs = super().extra_modules()
+		stubs["kamra.night_audit"] = stub_module(
+			"kamra.night_audit", HOLD_AND_ALERT="Hold and alert", auto_extend_departures=lambda *args: [],
+			run_checks=lambda *args: [], open_blockers=lambda checks: [], build_pack=lambda *args, **kwargs: {})
+		stubs["kamra.no_show"] = stub_module(
+			"kamra.no_show", ONE_DAY_LATER="One day later", policy=lambda property: Doc(timing="At audit"),
+			property_now=lambda property: None)
+		return stubs
+
+	def setUp(self):
+		super().setUp()
+		self.docs["Property", "Test Hotel"].business_date = "2026-12-02"
+		self.res.status = "Checked In"
+		self.audits = []
+		harness_get_all, harness_get_doc = self.frappe.get_all, self.frappe.get_doc
+
+		def get_all(doctype, filters=None, **kwargs):
+			if doctype == "Reservation":
+				return [Doc(name="RES-1")] if (filters or {}).get("status") == "Checked In" else []
+			return harness_get_all(doctype, filters, **kwargs)
+
+		def get_doc(doctype, name=None):
+			if isinstance(doctype, dict) and doctype.get("doctype") == "Night Audit Run":
+				audit = Doc(doctype, name="NAR-1")
+				audit.insert = lambda **kwargs: self.audits.append(audit)
+				return audit
+			return harness_get_doc(doctype, name)
+
+		patches = (
+			patch.object(self.frappe, "get_all", get_all), patch.object(self.frappe, "get_doc", get_doc),
+			patch.object(self.frappe.db, "commit", lambda: None, create=True),
+			patch.object(self.frappe.db, "set_value", lambda *args, **kwargs: None, create=True),
+			patch.object(self.folio, "nowdate", lambda: "2026-12-03"),
+			patch.object(self.folio, "open_folio", lambda reservation: self.guest.name),
+			patch.object(self.folio, "save_folios", lambda folios: None),
+		)
+		for patcher in patches:
+			patcher.start()
+			self.addCleanup(patcher.stop)
+
+	def test_amount_posted_is_the_current_date_night_not_the_booked_one(self):
+		self.rate("USD", 3712.5, "2026-12-02")
+		out = self.folio.run_night_audit("Test Hotel")
+		room, = self.guest.charges
+		self.assertEqual(room.amount, 483000)  # USD 130 x 3,712.5, nearest 1,000 - not the booked 474,500
+		self.assertEqual((out["room_charges_posted"], out["amount_posted"]), (1, 483000.0))
+		audit, = self.audits
+		self.assertEqual(audit.amount_posted, 483000.0)
+
+
+class ZeroPricedRoomPlanTest(CardStayHarness):
+	"""P2-R2-2: an Absolute or Amount plan on a room with no card price still prices the stay."""
+
+	modules = ("kamra.pricing", "kamra.folio", "kamra.kamra.doctype.reservation.reservation")
+
+	def setUp(self):
+		super().setUp()
+		self.docs["Room Type", "Test Hotel-DLX"].update(base_price=0, extra_adult_price=0, child_price=0)
+
+	def book(self, quoted):
+		return [row["rate"] for row in self.reservation.Reservation(meal_plan=None, flags=Doc()).quote_night_rows(quoted)]
+
+	def test_an_absolute_plan_spreads_its_price_over_the_nights_and_rounds_each(self):
+		self.plan("PKG", modifier_type="Absolute", modifier_value=300000, rounding_step=1000)
+		quoted = self.quote("PKG", adults=2, children=0, check_out="2026-12-04")
+		self.assertEqual([night["planned_rate"] for night in quoted["nightly"]], [100000, 100000, 100000])
+		self.assertEqual(quoted["room_total"], 300000)
+		self.assertEqual(self.book(quoted), [100000, 100000, 100000])
+
+	def test_an_unrounded_plan_spreads_its_price_and_the_nights_add_up(self):
+		self.plan("PKG", modifier_type="Absolute", modifier_value=1000000)
+		quoted = self.quote("PKG", adults=2, children=0, check_out="2026-12-04")
+		self.assertEqual(quoted["room_total"], 1000000)
+		nights = self.book(quoted)
+		self.assertEqual(len(nights), 3)
+		self.assertAlmostEqual(sum(nights), 1000000, places=2)
+		self.assertTrue(all(night > 0 for night in nights), nights)
+
+	def test_a_root_amount_plan_on_a_zero_priced_room_bills_its_amount(self):
+		self.plan("FEE", modifier_type="Amount", modifier_value=50000)
+		quoted = self.quote("FEE", adults=2, children=0)
+		self.assertEqual(quoted["room_total"], 50000)
+		self.assertAlmostEqual(sum(self.book(quoted)), 50000, places=2)
+		# a stay booked before nights were locked posts the same share
+		unlocked = self.add("Reservation", "RES-3", property="Test Hotel", room_type="Test Hotel-DLX",
+		                    rate_plan="FEE", check_in_date="2026-12-01", check_out_date="2026-12-03", adults=2,
+		                    children=0, night_rates=[])
+		self.assertAlmostEqual(self.folio._nightly_room_rate(unlocked, "2026-12-01"), 25000, places=2)
