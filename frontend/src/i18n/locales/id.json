@@ -438,5 +438,9 @@
   "Type": "Jenis",
   "Room tax": "Pajak kamar",
   "Remove": "Hapus",
-  "Nothing here yet.": "Belum ada apa-apa di sini."
+  "Nothing here yet.": "Belum ada apa-apa di sini.",
+  "Channel review needed": "Perlu tinjauan kanal",
+  "Channel update not applied — review required": "Pembaruan kanal tidak diterapkan — perlu ditinjau",
+  "The stay's dates, room, and charges were left unchanged. Review what the channel sent below and update the stay manually if needed.": "Tanggal, kamar, dan tagihan masa inap tidak diubah. Tinjau pesan dari kanal di bawah ini dan perbarui masa inap secara manual jika diperlukan.",
+  "Mark as reviewed": "Tandai sudah ditinjau"
 }

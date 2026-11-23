@@ -61,3 +61,4 @@ OTA Tax Rules row {0}: the text needs a letter or a digit.,Hilera {0} ng Mga pan
 OTA Tax Basis rows {0} and {1} are the same OTA ({2}): keep one.,Ang mga hilera {0} at {1} ng Batayan ng buwis ng OTA ay iisang OTA ({2}): panatilihin ang isa.
 OTA Tax Rules,Mga panuntunan sa buwis ng OTA
 OTA Tax Basis,Batayan ng buwis ng OTA
+OTA Tax Basis row {0}: the OTA name needs a letter or a digit.,Hilera {0} ng OTA Tax Basis: kailangan ng titik o numero ang pangalan ng OTA.

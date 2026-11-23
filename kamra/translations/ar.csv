@@ -300,3 +300,4 @@ OTA Tax Rules row {0}: the text needs a letter or a digit.,صف قواعد ضر�
 OTA Tax Basis rows {0} and {1} are the same OTA ({2}): keep one.,صفا أساس ضرائب OTA رقم {0} و{1} يخصان OTA نفسها ({2}): احتفظ بواحد.
 OTA Tax Rules,قواعد ضرائب OTA
 OTA Tax Basis,أساس ضرائب OTA
+OTA Tax Basis row {0}: the OTA name needs a letter or a digit.,صف أساس ضريبة OTA رقم {0}: يجب أن يحتوي اسم OTA على حرف أو رقم.

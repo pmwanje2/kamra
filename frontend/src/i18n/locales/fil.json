@@ -1158,5 +1158,9 @@
   "Room tax": "Buwis sa kuwarto",
   "Move up": "Ilipat pataas",
   "Move down": "Ilipat pababa",
-  "Nothing here yet.": "Wala pang laman dito."
+  "Nothing here yet.": "Wala pang laman dito.",
+  "Channel review needed": "Kailangan ng pagsusuri ng channel",
+  "Channel update not applied — review required": "Hindi nailapat ang update ng channel — kailangan ng pagsusuri",
+  "The stay's dates, room, and charges were left unchanged. Review what the channel sent below and update the stay manually if needed.": "Hindi binago ang mga petsa, kuwarto, at singil ng pananatili. Suriin sa ibaba ang ipinadala ng channel at manu-manong i-update ang pananatili kung kinakailangan.",
+  "Mark as reviewed": "Markahan bilang nasuri"
 }

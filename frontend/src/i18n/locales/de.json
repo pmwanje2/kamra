@@ -438,5 +438,9 @@
   "Type": "Typ",
   "Room tax": "Zimmersteuer",
   "Remove": "Entfernen",
-  "Nothing here yet.": "Noch nichts vorhanden."
+  "Nothing here yet.": "Noch nichts vorhanden.",
+  "Channel review needed": "Kanalprüfung erforderlich",
+  "Channel update not applied — review required": "Kanalaktualisierung nicht angewendet — Prüfung erforderlich",
+  "The stay's dates, room, and charges were left unchanged. Review what the channel sent below and update the stay manually if needed.": "Daten, Zimmer und Gebühren des Aufenthalts blieben unverändert. Prüfen Sie unten die Nachricht des Kanals und aktualisieren Sie den Aufenthalt bei Bedarf manuell.",
+  "Mark as reviewed": "Als geprüft markieren"
 }

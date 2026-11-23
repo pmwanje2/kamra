@@ -107,3 +107,4 @@ OTA Tax Rules row {0}: the text needs a letter or a digit.,Linha {0} das Regras 
 OTA Tax Basis rows {0} and {1} are the same OTA ({2}): keep one.,As linhas {0} e {1} da Base de impostos OTA são a mesma OTA ({2}): mantenha uma.
 OTA Tax Rules,Regras de impostos OTA
 OTA Tax Basis,Base de impostos OTA
+OTA Tax Basis row {0}: the OTA name needs a letter or a digit.,Linha {0} da Base de impostos OTA: o nome da OTA precisa de uma letra ou dígito.

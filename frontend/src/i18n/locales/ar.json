@@ -6520,5 +6520,9 @@
   "Excluding tax": "غير شاملة الضريبة",
   "Add row": "إضافة صف",
   "Which of the taxes an OTA lists on a booking is the room tax, tried top to bottom: the first rule that matches decides. A tax on top of the price that no rule reads holds the booking for review. A new Channex connection, or one switched to Channex, starts with the standard rules.": "أي من الضرائب التي تدرجها OTA في الحجز هي ضريبة الإقامة، وتُجرَّب القواعد من الأعلى إلى الأسفل: أول قاعدة مطابقة هي التي تقرر. الضريبة المضافة فوق السعر التي لا تقرأها أي قاعدة توقف الحجز للمراجعة. يبدأ اتصال Channex الجديد، أو الاتصال الذي حُوِّل إلى Channex، بالقواعد القياسية.",
-  "Whether each OTA's booking amounts include tax, as set for it on the channel manager: a booking does not say. Excluding tax: a booking from that OTA that lists no room tax is held for review.": "ما إذا كانت مبالغ حجوزات كل OTA تشمل الضريبة، كما هو مضبوط لها في مدير القنوات: فالحجز لا يذكر ذلك. غير شاملة الضريبة: يُوقف للمراجعة أي حجز من تلك OTA لا يدرج ضريبة الإقامة."
+  "Whether each OTA's booking amounts include tax, as set for it on the channel manager: a booking does not say. Excluding tax: a booking from that OTA that lists no room tax is held for review.": "ما إذا كانت مبالغ حجوزات كل OTA تشمل الضريبة، كما هو مضبوط لها في مدير القنوات: فالحجز لا يذكر ذلك. غير شاملة الضريبة: يُوقف للمراجعة أي حجز من تلك OTA لا يدرج ضريبة الإقامة.",
+  "Channel review needed": "مراجعة القناة مطلوبة",
+  "Channel update not applied — review required": "لم يُطبَّق تحديث القناة — المراجعة مطلوبة",
+  "The stay's dates, room, and charges were left unchanged. Review what the channel sent below and update the stay manually if needed.": "بقيت تواريخ الإقامة والغرفة والرسوم دون تغيير. راجع ما أرسلته القناة أدناه وحدّث الإقامة يدوياً عند الحاجة.",
+  "Mark as reviewed": "تحديد كمُراجَع"
 }

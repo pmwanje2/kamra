@@ -23,6 +23,7 @@
   "channel",
   "ota_ref",
   "ota_live_key",
+  "channel_review_needed",
   "idempotency_key",
   "hold_expires_on",
   "travel_agent",
@@ -204,6 +205,15 @@
    "read_only": 1,
    "hidden": 1,
    "description": "property and OTA reference while this stay is not cancelled and not a group room that shares the reference. Empty otherwise, so a duplicate delivery cannot insert a second live stay."
+  },
+  {
+   "default": "0",
+   "description": "An OTA modify or cancel arrived after check-in or close and was not applied. Review the note and clear once handled.",
+   "fieldname": "channel_review_needed",
+   "fieldtype": "Check",
+   "label": "Channel Review Needed",
+   "no_copy": 1,
+   "read_only": 1
   },
   {
    "description": "Caller-supplied key so duplicate public/OTA book requests return the same reservation (ADR-007).",

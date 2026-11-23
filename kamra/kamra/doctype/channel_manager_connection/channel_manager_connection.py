@@ -47,6 +47,9 @@ class ChannelManagerConnection(Document):
 		seen = {}
 		for row in self.get("ota_tax_basis") or []:
 			key = ota_key(row.channel)
+			if not key:
+				frappe.throw(_("OTA Tax Basis row {0}: the OTA name needs a letter or a digit.").format(row.idx),
+				             title=_("OTA Tax Basis"))
 			if key in seen:
 				frappe.throw(_("OTA Tax Basis rows {0} and {1} are the same OTA ({2}): keep one.").format(
 					seen[key], row.idx, row.channel.strip()), title=_("OTA Tax Basis"))
