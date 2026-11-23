@@ -811,3 +811,443 @@ class RatePlanChangeGuardTests(CompCase):
 		stay_doc = frappe.get_doc("Reservation", comp_stay)
 		stay_doc.special_requests = "UT quiet floor"
 		self.as_user(DESK, stay_doc.save)
+
+
+# ---------------------------------------------------------------------------
+# Round 4 (Hydrogen's R3 review & live check of #38)
+# ---------------------------------------------------------------------------
+
+PROP_R4 = "UT Comp R4"
+
+
+class ClosedNightVoidAndRepostTests(AuditTestCase):
+	"""R4 P1 #1 & P2 #3:
+	- Voiding a posted Room night on a later business date leaves the original
+	  standing on its closed date (STANDS_ON_ITS_DATE); _charge_posted must use
+	  that same standing rule so post_room_night and post_remaining_nights
+	  (check-out) never re-post a second charge onto the closed date.
+	- On the same open business date, a voided night drops out of standing
+	  rows and re-posting uses the rate code in effect at posting time.
+	- reports._projected_room_revenue must apply STANDS_ON_ITS_DATE so voided
+	  same-date lines never skew the projected category or suppress unposted
+	  nights."""
+
+	properties = (PROP_R4,)
+
+	def setUp(self):
+		super().setUp()
+		self.at(YESTERDAY, "kamra.folio", "kamra.business_date", "kamra.ledger", "kamra.api")
+		make_property(PROP_R4, business_date=YESTERDAY)
+		frappe.db.delete("Rate Guardrail", {"property": PROP_R4})
+		frappe.db.delete("Property Setting", {"property": PROP_R4})
+		from kamra.settings import clear_cache
+		clear_cache(PROP_R4)
+		set_setting(
+			PROP_R4,
+			"rate_categories",
+			"Standard\nComplimentary: sign-off, no ADR\nHouse Use: sign-off, no ADR, no occupancy",
+		)
+		self.rt = make_room_type(PROP_R4, "STD", base_price=1000)
+		frappe.db.set_value("Room Type", self.rt, "base_price", 1000)
+		frappe.clear_document_cache("Room Type", self.rt)
+		self.rooms = [make_room(PROP_R4, self.rt, f"40{i}") for i in range(1, 5)]
+		ensure_user(DESK, ["Front Desk"])
+		ensure_user(GM, ["Hotel Admin", "Finance"])
+		frappe.db.delete("Cashier PIN", {"name": GM})
+		frappe.get_doc({"doctype": "Cashier PIN", "user": GM, "pin": "4321"}
+		               ).insert(ignore_permissions=True)
+		self.bar = self._plan("BAR", 0, "Standard")
+		self.comp = self._plan("COMP", -100, "Complimentary")
+		self.house = self._plan("HOUSE", -100, "House Use")
+
+	def _plan(self, code, modifier, category):
+		name = f"{PROP_R4}-{code}"
+		if frappe.db.exists("Rate Plan", name):
+			frappe.delete_doc("Rate Plan", name, force=True, ignore_permissions=True)
+		return frappe.get_doc({
+			"doctype": "Rate Plan", "property": PROP_R4, "rate_plan_name": code, "code": code,
+			"modifier_type": "Percent", "modifier_value": modifier, "rate_category": category,
+		}).insert(ignore_permissions=True).name
+
+	def _stay(self, room, plan, ci=YESTERDAY, co=None):
+		doc = frappe.get_doc({
+			"doctype": "Reservation", "property": PROP_R4, "room_type": self.rt,
+			"guest": make_guest(), "status": "Confirmed", "room": room, "rate_plan": plan,
+			"check_in_date": ci, "check_out_date": co or d(2), "adults": 2, "children": 0,
+		})
+		doc.flags.allow_past_check_in = True
+		doc.flags.kamra_discount_supervisor = {"user": GM, "pin": "4321"}
+		doc.insert(ignore_permissions=True)
+		doc.status = "Checked In"
+		doc.save(ignore_permissions=True)
+		return doc
+
+	def _as_user(self, user, fn, *args, **kwargs):
+		frappe.set_user(user)  # nosemgrep: frappe-setuser -- acting as the persona
+		try:
+			return fn(*args, **kwargs)
+		finally:
+			frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- restore
+
+	def _set_business_date(self, day):
+		frappe.db.set_value("Property", PROP_R4, "business_date", day, update_modified=False)
+		frappe.clear_document_cache("Property", PROP_R4)
+		self.at(day, "kamra.folio", "kamra.business_date", "kamra.ledger", "kamra.api")
+
+	def _active_room_row(self, res_name):
+		folio = frappe.get_doc("Folio", guest_folio(res_name))
+		from kamra import folio as folio_mod
+		voided = folio_mod.voided_rows(folio)
+		row = next(
+			c for c in folio.charges
+			if c.charge_type == "Room" and not c.get("reversal_of") and c.name not in voided
+		)
+		return folio.name, row.name
+
+	def test_voiding_a_closed_night_on_a_later_date_never_reposts_or_doubles_stats(self):
+		from kamra import audit_report, folio as folio_mod, reports, room_statistics
+		stay = self._stay(self.rooms[0], self.bar, ci=YESTERDAY, co=d(1))
+		self.assertTrue(folio_mod.post_room_night(frappe.get_doc("Reservation", stay.name), YESTERDAY))
+
+		# Roll to TODAY (YESTERDAY is now closed), switch to COMP, void YESTERDAY on TODAY
+		self._set_business_date(TODAY)
+		self._as_user(
+			DESK, api.amend_stay, stay.name, YESTERDAY, d(1), confirm_price=1,
+			rate_plan=self.comp, comp_supervisor_user=GM, comp_supervisor_pin="4321",
+		)
+		folio_name, orig_row = self._active_room_row(stay.name)
+		self._as_user(GM, api.void_folio_charge, folio_name, orig_row, reason="UT later-date void", pin="4321")
+
+		# Closed YESTERDAY must never be re-posted by post_room_night or check-out post_remaining_nights
+		self.assertFalse(folio_mod.post_room_night(frappe.get_doc("Reservation", stay.name), YESTERDAY))
+		remaining = folio_mod.post_remaining_nights(frappe.get_doc("Reservation", stay.name))
+		self.assertEqual(remaining, 1)  # TODAY only, never YESTERDAY again
+
+		yest_rooms = frappe.get_all(
+			"Folio Charge",
+			filters={"reservation": stay.name, "charge_type": "Room", "posting_date": YESTERDAY},
+			fields=["amount", "rate_category", "reversal_of"],
+		)
+		self.assertEqual(len(yest_rooms), 1)
+		self.assertEqual((flt(yest_rooms[0].amount), yest_rooms[0].rate_category), (1000.0, "Standard"))
+
+		posted_yest = room_statistics.posted_rooms(PROP_R4, YESTERDAY, YESTERDAY)
+		self.assertEqual(posted_yest["rooms_sold"], 1)
+		self.assertEqual(flt(posted_yest["room_revenue"]), 1000.0)
+		self.assertEqual(set(posted_yest["by_category"]), {"Standard"})
+
+		flash_yest = reports._day_stats(PROP_R4, YESTERDAY, 4)
+		self.assertEqual((flash_yest["rooms_sold"], flash_yest["occupancy_pct"], flash_yest["adr"]), (1, 25.0, 1000))
+		self.assertEqual(flash_yest["rooms_by_category"], {"Complimentary": 0, "House Use": 0})
+
+		audit_yest = audit_report.build(PROP_R4, YESTERDAY)["periods"][0]
+		self.assertEqual((audit_yest["rooms_sold"], audit_yest["room_revenue"], audit_yest["adr"]), (1, 1000.0, 1000))
+
+	def test_same_date_void_and_repost_uses_active_category_and_standing_projected_revenue(self):
+		from kamra import folio as folio_mod, reports, room_statistics
+		self._set_business_date(TODAY)
+		# Stay 1 starts on BAR, posts TODAY (Standard 1000), voids same day, switches to HOUSE, re-posts (House Use 0)
+		stay_house = self._stay(self.rooms[0], self.bar, ci=TODAY, co=d(2))
+		# Stay 2 stays unposted on BAR (Standard 1000) so projected ADR isolates Stay 1's category
+		self._stay(self.rooms[1], self.bar, ci=TODAY, co=d(2))
+
+		self.assertTrue(folio_mod.post_room_night(frappe.get_doc("Reservation", stay_house.name), TODAY))
+		folio_name, orig_row = self._active_room_row(stay_house.name)
+		self._as_user(GM, api.void_folio_charge, folio_name, orig_row, reason="UT same-day switch", pin="4321")
+		self._as_user(
+			DESK, api.amend_stay, stay_house.name, TODAY, d(2), confirm_price=1,
+			rate_plan=self.house, comp_supervisor_user=GM, comp_supervisor_pin="4321",
+		)
+		# Open business date: re-posting succeeds and uses the rate code in effect at posting time (House Use)
+		self.assertTrue(folio_mod.post_room_night(frappe.get_doc("Reservation", stay_house.name), TODAY))
+
+		posted = room_statistics.posted_rooms(PROP_R4, TODAY, TODAY)
+		self.assertEqual(posted["rooms_sold"], 1)
+		self.assertEqual(flt(posted["room_revenue"]), 0.0)
+		self.assertEqual(posted["by_category"]["House Use"]["rooms"], 1)
+		self.assertEqual(posted["by_category"].get("Standard", {}).get("rooms", 0), 0)
+
+		# Projected revenue must read only the standing House Use line (not MAX('Standard','House Use')='Standard')
+		proj = reports._projected_room_revenue(PROP_R4, TODAY, 4)
+		self.assertEqual(proj["projected_room_revenue"], 1000.0)
+		self.assertEqual(proj["projected_adr"], 1000)
+		self.assertEqual(proj["projected_revpar"], 250)
+
+	def test_projected_revenue_ignores_same_date_voided_room_before_repost(self):
+		from kamra import folio as folio_mod, reports
+		self._set_business_date(TODAY)
+		stay = self._stay(self.rooms[0], self.bar, ci=TODAY, co=d(2))
+		self.assertTrue(folio_mod.post_room_night(frappe.get_doc("Reservation", stay.name), TODAY))
+		folio_name, orig_row = self._active_room_row(stay.name)
+		self._as_user(GM, api.void_folio_charge, folio_name, orig_row, reason="UT void before audit", pin="4321")
+
+		# No standing Room line yet: night audit will still post TODAY at its locked 1000 rate
+		proj = reports._projected_room_revenue(PROP_R4, TODAY, 4)
+		self.assertEqual(proj["projected_room_revenue"], 1000.0)
+		self.assertEqual(proj["projected_adr"], 1000)
+		self.assertEqual(proj["projected_revpar"], 250)
+
+
+class GroupPreviewPricingParityTests(CompCase):
+	"""R4 P2 #2: group_price_preview, group_quotation and group_detail use the
+	same negotiated-rate pricing path as stay creation."""
+
+	def setUp(self):
+		super().setUp()
+		self.corp20 = self.plan("CORP20", "Percent", -20, rate_category="Standard")
+		self.co_comp = "UT Comp Corp R4"
+		self.co_disc = "UT Disc Corp R4"
+		for cname, plan in ((self.co_comp, self.comp), (self.co_disc, self.corp20)):
+			if frappe.db.exists("Corporate Account", cname):
+				frappe.delete_doc("Corporate Account", cname, force=True, ignore_permissions=True)
+			frappe.get_doc({
+				"doctype": "Corporate Account", "company_name": cname,
+				"negotiated_rate_plan": plan, "credit_allowed": 1,
+			}).insert(ignore_permissions=True)
+
+	def test_group_price_preview_quotation_and_detail_apply_company_negotiated_rate_plan(self):
+		blocks = [{"room_type": self.rt, "rooms_blocked": 2}]
+		# 1. Negotiated Complimentary (-100%) company: preview, quotation, detail and stays all agree at 0
+		pv_comp = self.as_user(DESK, api.group_price_preview, PROP_A, d(5), d(7), blocks, company=self.co_comp)
+		self.assertEqual(pv_comp["rows"][0]["rate"], 0.0)
+		self.assertEqual((pv_comp["before_tax"], pv_comp["tax"], pv_comp["total"]), (0.0, 0.0, 0.0))
+
+		grp = self.as_user(
+			DESK, api.create_group_with_rooming_list, PROP_A, "UT Comp Pricing Parity",
+			d(5), d(7), blocks,
+			guests=[{"room_type": self.rt, "guest_name": "Guest 1"}, {"room_type": self.rt, "guest_name": "Guest 2"}],
+			company=self.co_comp, comp_supervisor_user=GM, comp_supervisor_pin="4321",
+		)
+		for res_name in grp["created"]:
+			self.assertEqual(flt(frappe.db.get_value("Reservation", res_name, "amount_after_tax")), 0.0)
+		detail = self.as_user(DESK, api.group_detail, grp["group_booking"])
+		self.assertEqual(detail["money"]["block_value"], 0.0)
+		quot = self.as_user(DESK, api.group_quotation, grp["group_booking"])
+		self.assertEqual(quot["prices"]["total"], 0.0)
+
+		# 2. Negotiated Standard (-20%) company: preview rate matches created stay nightly rate (800)
+		pv_disc = self.as_user(DESK, api.group_price_preview, PROP_A, d(8), d(10), blocks, company=self.co_disc)
+		self.assertEqual(pv_disc["rows"][0]["rate"], 800.0)
+		self.assertEqual(pv_disc["before_tax"], 3200.0)
+
+		# 3. Explicit block_rate overrides the company's negotiated plan, matching create_booking
+		pv_override = self.as_user(
+			DESK, api.group_price_preview, PROP_A, d(5), d(7),
+			[{"room_type": self.rt, "rooms_blocked": 2, "block_rate": 650}],
+			company=self.co_comp,
+		)
+		self.assertEqual(pv_override["rows"][0]["rate"], 650.0)
+		self.assertEqual(pv_override["before_tax"], 2600.0)
+
+
+class BackfillRateCategoryChainTests(AuditTestCase):
+	"""R4 P2 #4: backfill follows same-date Room -> Version reconstruction ->
+	Reservation.rate_category -> Rate Plan.rate_category -> property default,
+	and logs ambiguous rows instead of guessing silently."""
+
+	properties = (PROP_R4,)
+
+	def setUp(self):
+		super().setUp()
+		self.at(YESTERDAY, "kamra.folio", "kamra.business_date", "kamra.ledger", "kamra.api")
+		make_property(PROP_R4, business_date=YESTERDAY)
+		frappe.db.delete("Rate Guardrail", {"property": PROP_R4})
+		frappe.db.delete("Property Setting", {"property": PROP_R4})
+		from kamra.settings import clear_cache
+		clear_cache(PROP_R4)
+		set_setting(
+			PROP_R4,
+			"rate_categories",
+			"Standard\nComplimentary: sign-off, no ADR\nHouse Use: sign-off, no ADR, no occupancy",
+		)
+		self.rt = make_room_type(PROP_R4, "STD", base_price=1000)
+		frappe.db.set_value("Room Type", self.rt, "base_price", 1000)
+		frappe.clear_document_cache("Room Type", self.rt)
+		self.rooms = [make_room(PROP_R4, self.rt, f"45{i}") for i in range(1, 6)]
+		ensure_user(DESK, ["Front Desk"])
+		ensure_user(GM, ["Hotel Admin", "Finance"])
+		frappe.db.delete("Cashier PIN", {"name": GM})
+		frappe.get_doc({"doctype": "Cashier PIN", "user": GM, "pin": "4321"}
+		               ).insert(ignore_permissions=True)
+		self.bar = self._plan("BAR", 0, "Standard")
+		self.comp = self._plan("COMP", -100, "Complimentary")
+
+	def _plan(self, code, modifier, category):
+		name = f"{PROP_R4}-{code}"
+		if frappe.db.exists("Rate Plan", name):
+			frappe.delete_doc("Rate Plan", name, force=True, ignore_permissions=True)
+		return frappe.get_doc({
+			"doctype": "Rate Plan", "property": PROP_R4, "rate_plan_name": code, "code": code,
+			"modifier_type": "Percent", "modifier_value": modifier, "rate_category": category,
+		}).insert(ignore_permissions=True).name
+
+	def _stay(self, room, plan=None, ci=YESTERDAY, co=None):
+		doc = frappe.get_doc({
+			"doctype": "Reservation", "property": PROP_R4, "room_type": self.rt,
+			"guest": make_guest(), "status": "Confirmed", "room": room, "rate_plan": plan,
+			"check_in_date": ci, "check_out_date": co or d(2), "adults": 2, "children": 0,
+		})
+		doc.flags.allow_past_check_in = True
+		doc.flags.kamra_discount_supervisor = {"user": GM, "pin": "4321"}
+		doc.insert(ignore_permissions=True)
+		doc.status = "Checked In"
+		doc.save(ignore_permissions=True)
+		return doc
+
+	def _as_user(self, user, fn, *args, **kwargs):
+		frappe.set_user(user)  # nosemgrep: frappe-setuser -- acting as the persona
+		try:
+			return fn(*args, **kwargs)
+		finally:
+			frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- restore
+
+	def test_backfill_follows_same_date_room_then_reservation_then_rate_plan_then_default(self):
+		from kamra import folio as folio_mod
+		from kamra.patches.v47 import backfill_folio_charge_rate_category
+
+		# 1. Pre-#38 comp stay: blank Reservation.rate_category, Rate Plan.rate_category = Complimentary
+		legacy_comp = self._stay(self.rooms[0], self.comp)
+		folio_mod.post_room_night(frappe.get_doc("Reservation", legacy_comp.name), YESTERDAY)
+		fc_legacy = frappe.db.get_value(
+			"Folio Charge", {"reservation": legacy_comp.name, "charge_type": "Room"}, "name",
+		)
+		frappe.db.set_value("Reservation", legacy_comp.name, "rate_category", "", update_modified=False)
+		frappe.db.set_value("Folio Charge", fc_legacy, "rate_category", "", update_modified=False)
+
+		# 2. Same-date Room row beats current Reservation.rate_category for a blank Rate Adjustment
+		adj_stay = self._stay(self.rooms[1], self.bar)
+		folio_mod.post_room_night(frappe.get_doc("Reservation", adj_stay.name), YESTERDAY)
+		frappe.db.set_value("Property", PROP_R4, "business_date", TODAY, update_modified=False)
+		frappe.clear_document_cache("Property", PROP_R4)
+		self.at(TODAY, "kamra.folio", "kamra.business_date", "kamra.ledger", "kamra.api")
+		f_adj = frappe.get_doc("Folio", guest_folio(adj_stay.name))
+		f_adj.append("charges", {
+			"posting_date": TODAY, "stay_date": YESTERDAY, "charge_type": "Rate Adjustment",
+			"reservation": adj_stay.name, "description": "UT adj credit",
+			"qty": 1, "rate": -500, "amount": -500, "gst_rate": 0,
+		})
+		f_adj.save(ignore_permissions=True)
+		fc_adj = f_adj.charges[-1].name
+		# Reservation switched to Complimentary after YESTERDAY's Standard Room row was stamped
+		frappe.db.set_value("Reservation", adj_stay.name, "rate_category", "Complimentary", update_modified=False)
+		frappe.db.set_value("Folio Charge", fc_adj, "rate_category", "", update_modified=False)
+
+		# 3. No Rate Plan and blank Reservation.rate_category -> falls back to property default
+		no_plan = self._stay(self.rooms[2], None)
+		folio_mod.post_room_night(frappe.get_doc("Reservation", no_plan.name), TODAY)
+		fc_no_plan = frappe.db.get_value(
+			"Folio Charge", {"reservation": no_plan.name, "charge_type": "Room"}, "name",
+		)
+		frappe.db.set_value("Reservation", no_plan.name, "rate_category", "", update_modified=False)
+		frappe.db.set_value("Folio Charge", fc_no_plan, "rate_category", "", update_modified=False)
+
+		backfill_folio_charge_rate_category.execute()
+
+		self.assertEqual(frappe.db.get_value("Folio Charge", fc_legacy, "rate_category"), "Complimentary")
+		self.assertEqual(frappe.db.get_value("Folio Charge", fc_adj, "rate_category"), "Standard")
+		self.assertEqual(frappe.db.get_value("Folio Charge", fc_no_plan, "rate_category"), "Standard")
+
+	def test_backfill_reconstructs_mid_stay_switch_from_version_and_logs_ambiguous_rows(self):
+		from unittest.mock import patch
+		from kamra import folio as folio_mod
+		from kamra.patches.v47 import backfill_folio_charge_rate_category
+
+		# 1. Deterministic Version reconstruction for a pre-R3 mid-stay BAR -> COMP switch
+		stay_v = self._stay(self.rooms[3], self.bar, ci=YESTERDAY, co=d(2))
+		folio_mod.post_room_night(frappe.get_doc("Reservation", stay_v.name), YESTERDAY)
+		fc_v_yest = frappe.db.get_value(
+			"Folio Charge", {"reservation": stay_v.name, "charge_type": "Room", "posting_date": YESTERDAY}, "name",
+		)
+
+		frappe.db.set_value("Property", PROP_R4, "business_date", TODAY, update_modified=False)
+		frappe.clear_document_cache("Property", PROP_R4)
+		self.at(TODAY, "kamra.folio", "kamra.business_date", "kamra.ledger", "kamra.api")
+		self._as_user(
+			DESK, api.amend_stay, stay_v.name, YESTERDAY, d(2), confirm_price=1,
+			rate_plan=self.comp, comp_supervisor_user=GM, comp_supervisor_pin="4321",
+		)
+		folio_mod.post_room_night(frappe.get_doc("Reservation", stay_v.name), TODAY)
+		fc_v_today = frappe.db.get_value(
+			"Folio Charge", {"reservation": stay_v.name, "charge_type": "Room", "posting_date": TODAY}, "name",
+		)
+		# Clear both rows to simulate pre-R3 unbackfilled state
+		frappe.db.set_value("Folio Charge", fc_v_yest, "rate_category", "", update_modified=False)
+		frappe.db.set_value("Folio Charge", fc_v_today, "rate_category", "", update_modified=False)
+
+		# 2. Ambiguous pre-R3 switch: Agent Action Log records amend_stay plan switch, but Version was purged
+		stay_amb = self._stay(self.rooms[4], self.bar, ci=YESTERDAY, co=d(2))
+		folio_mod.post_room_night(frappe.get_doc("Reservation", stay_amb.name), YESTERDAY)
+		fc_amb = frappe.db.get_value(
+			"Folio Charge", {"reservation": stay_amb.name, "charge_type": "Room", "posting_date": YESTERDAY}, "name",
+		)
+		self._as_user(
+			DESK, api.amend_stay, stay_amb.name, YESTERDAY, d(2), confirm_price=1,
+			rate_plan=self.comp, comp_supervisor_user=GM, comp_supervisor_pin="4321",
+		)
+		frappe.db.delete("Version", {"ref_doctype": "Reservation", "docname": stay_amb.name})
+		frappe.db.set_value("Folio Charge", fc_amb, "rate_category", "", update_modified=False)
+
+		with patch.object(frappe, "log_error") as mock_log:
+			backfill_folio_charge_rate_category.execute()
+
+		# Version-backed stay reconstructed both nights accurately
+		self.assertEqual(frappe.db.get_value("Folio Charge", fc_v_yest, "rate_category"), "Standard")
+		self.assertEqual(frappe.db.get_value("Folio Charge", fc_v_today, "rate_category"), "Complimentary")
+		# Ambiguous row was explicitly logged with count and charge name for operator review
+		self.assertTrue(mock_log.called, "Expected ambiguous backfill rows to be logged via frappe.log_error")
+		logged = " ".join(str(a) for call in mock_log.call_args_list for a in (*call.args, *call.kwargs.values()))
+		self.assertIn("1", logged)
+		self.assertIn(fc_amb, logged)
+
+
+class ReservationDetailRatePlanAmendTests(CompCase):
+	"""R4 UX #5: reservation_detail exposes the stay's rate plan metadata and
+	the property's active rate plans so Amend stay can change the rate plan
+	from the current business date for remaining nights with comp sign-off."""
+
+	def test_reservation_detail_exposes_rate_plans_and_amend_stay_changes_remaining_nights_with_signoff(self):
+		self.at(YESTERDAY, "kamra.folio", "kamra.business_date", "kamra.ledger", "kamra.api")
+		make_property(PROP_A, business_date=YESTERDAY)
+		doc = frappe.get_doc({
+			"doctype": "Reservation", "property": PROP_A, "room_type": self.rt,
+			"guest": make_guest(), "status": "Confirmed", "room": self.rooms[0], "rate_plan": self.bar,
+			"check_in_date": YESTERDAY, "check_out_date": d(2), "adults": 2, "children": 0,
+		})
+		doc.flags.allow_past_check_in = True
+		doc.insert(ignore_permissions=True)
+		doc.status = "Checked In"
+		doc.save(ignore_permissions=True)
+
+		from kamra import folio as folio_mod
+		folio_mod.post_room_night(frappe.get_doc("Reservation", doc.name), YESTERDAY)
+		frappe.db.set_value("Property", PROP_A, "business_date", TODAY, update_modified=False)
+		frappe.clear_document_cache("Property", PROP_A)
+		self.at(TODAY, "kamra.folio", "kamra.business_date", "kamra.ledger", "kamra.api")
+
+		detail = self.as_user(DESK, api.reservation_detail, doc.name)
+		self.assertEqual(detail["rate_plan"], self.bar)
+		self.assertEqual(detail["rate_category"], "Standard")
+		self.assertTrue(detail["rate_plan_name"])
+		plan_names = {p["name"] for p in detail["rate_plans"]}
+		self.assertIn(self.bar, plan_names)
+		self.assertIn(self.comp, plan_names)
+
+		# Previewing a move to COMP reports comp_governance and holds charged YESTERDAY
+		pv = self.as_user(DESK, api.amend_stay_preview, doc.name, YESTERDAY, d(2), rate_plan=self.comp)
+		self.assertTrue(pv["comp_governance"]["needs_supervisor"])
+		self.assertEqual(pv["comp_governance"]["rate_category"], "Complimentary")
+		self.assertTrue(any(n["date"] == YESTERDAY and n["action"] == "kept" for n in pv["charged_nights"]["nights"]))
+
+		# Unsigned amend_stay to COMP is refused; signed amend_stay applies COMP from TODAY forward
+		with self.assertRaises(frappe.PermissionError):
+			self.as_user(DESK, api.amend_stay, doc.name, YESTERDAY, d(2), confirm_price=1, rate_plan=self.comp)
+		self.as_user(
+			DESK, api.amend_stay, doc.name, YESTERDAY, d(2), confirm_price=1,
+			rate_plan=self.comp, comp_supervisor_user=GM, comp_supervisor_pin="4321",
+		)
+		updated = frappe.get_doc("Reservation", doc.name)
+		rates_by_date = {str(r.stay_date): flt(r.rate) for r in updated.night_rates}
+		self.assertGreater(rates_by_date[YESTERDAY], 0)  # closed night kept its billed rate
+		self.assertEqual(rates_by_date[TODAY], 0.0)      # open business date onward takes COMP
+		self.assertEqual(rates_by_date[d(1)], 0.0)
+
