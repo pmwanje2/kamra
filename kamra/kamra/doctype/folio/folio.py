@@ -12,6 +12,8 @@ class Folio(Document):
 		self.stamp_payment_currency()
 		from kamra.ledger import stamp_gl_codes
 		stamp_gl_codes(self)
+		from kamra.room_statistics import stamp_room_rate_category
+		stamp_room_rate_category(self)
 
 	def stamp_payment_currency(self):
 		"""Every payment row carries the property's currency unless a writer

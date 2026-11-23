@@ -7808,6 +7808,8 @@ def _amend_dates(doc, check_in_date: str, check_out_date: str,
 		_reprice_preview(doc, check_in_date=check_in_date,
 		                 check_out_date=check_out_date, **(party or {}), **(plan or {})),
 		confirm_price)
+	if plan:
+		doc.flags.kamra_rate_plan_change = True
 	doc.save()
 	from kamra.savings import log_action
 	discount_approver = (doc.flags.get("kamra_discount_governance") or {}).get("approver")
@@ -9159,7 +9161,9 @@ def create_group_with_rooming_list(property: str, group_name: str,
                                    master_pays: str | None = None,
                                    attrition_pct: float = 0,
                                    deposit_due: float = 0,
-                                   quotation_only: int = 0):
+                                   quotation_only: int = 0,
+                                   comp_supervisor_user: str | None = None,
+                                   comp_supervisor_pin: str | None = None):
 	"""The desk's group flow: group -> room blocks -> rooming list ->
 	reservations. A Confirmed group holds `blocks` ([{room_type,
 	rooms_blocked, block_rate, nightly_counts}]) off sale - nightly_counts
@@ -9251,6 +9255,17 @@ def create_group_with_rooming_list(property: str, group_name: str,
 	if with_master and not guests and not quote_only:
 		frappe.throw(_("Name the main room's guest in the rooming list."))
 
+	comp_approver = None
+	if not quote_only and guests and company:
+		from kamra.pricing import negotiated_rate_plan
+		comp_plan = negotiated_rate_plan(property, company)
+		if comp_plan:
+			comp_approver = comp_rate_governance(
+				property, comp_plan, check=True,
+				supervisor_user=comp_supervisor_user,
+				supervisor_pin=comp_supervisor_pin,
+			).get("approver")
+
 	blocked = {rt: max(c.values()) for rt, c in counts.items()}
 	group = frappe.get_doc({
 		"doctype": "Group Booking",
@@ -9290,7 +9305,9 @@ def create_group_with_rooming_list(property: str, group_name: str,
 				adults=cint(gst.get("adults")) or min(1 + len(others), capacity),
 				children=cint(gst.get("children")),
 				booking_type="Corporate" if company else "Group",
-				company=company, group_booking=group.name, source="Manual")
+				company=company, group_booking=group.name, source="Manual",
+				comp_supervisor_user=comp_supervisor_user,
+				comp_supervisor_pin=comp_supervisor_pin)
 		except Exception as e:
 			frappe.db.rollback(save_point=sp)
 			frappe.clear_messages()
@@ -9322,7 +9339,8 @@ def create_group_with_rooming_list(property: str, group_name: str,
 	                      if quote_only else
 	                      f"{group_name}: {sum(blocked.values())} rooms blocked, "
 	                      f"{len(created)} named on the rooming list"),
-	           channel=agent_channel() or "Desk")
+	           channel=agent_channel() or "Desk",
+	           **({"approver": comp_approver} if comp_approver else {}))
 	return {"group_booking": group.name, "status": group.status,
 	        "created": created, "skipped": skipped, "warnings": warnings,
 	        "blocked": sum(blocked.values()),
@@ -9660,13 +9678,16 @@ def _block_prices(property: str, check_in_date: str, check_out_date: str,
 @frappe.whitelist()
 @require_roles("Front Desk", "Revenue Manager", "Kamra Agent")
 def group_price_preview(property: str, check_in_date: str, check_out_date: str,
-                        blocks):
+                        blocks, company: str | None = None):
 	"""The price of a block before it is booked (New group booking)."""
 	from kamra.crs import assert_property_access
+	from kamra.pricing import negotiated_rate_plan
 	assert_property_access(property)
 	blocks = frappe.parse_json(blocks) if isinstance(blocks, str) else blocks
+	comp_plan = negotiated_rate_plan(property, company) if company else None
 	return {**_block_prices(property, check_in_date, check_out_date, blocks),
-	        "can_set_rate": _can_set_rate()}
+	        "can_set_rate": _can_set_rate(),
+	        "comp_governance": comp_rate_governance(property, comp_plan)}
 
 
 @frappe.whitelist()
@@ -10120,8 +10141,11 @@ def group_detail(group_booking: str):
 	rooms_total = sum(max(per_type.get(t, 0), live.get(t, 0))
 	                  for t in set(per_type) | set(live))
 	from kamra.business_date import get_business_date
+	from kamra.pricing import negotiated_rate_plan
+	comp_plan = negotiated_rate_plan(gb.property, gb.company) if gb.company else None
 	return {
 		"business_date": get_business_date(gb.property),
+		"comp_governance": comp_rate_governance(gb.property, comp_plan),
 		"group": {
 			"rooms_total": rooms_total,
 			"name": gb.name, "group_name": gb.group_name,
@@ -10468,11 +10492,14 @@ def save_group_blocks(group_booking: str, blocks, cutoff_date: str | None = None
 @require_roles("Front Desk", "Kamra Agent")
 def pickup_group_room(group_booking: str, room_type: str, guest_name: str,
                       phone: str | None = None, adults: int = 2,
-                      children: int = 0, idempotency_key: str | None = None):
+                      children: int = 0, idempotency_key: str | None = None,
+                      comp_supervisor_user: str | None = None,
+                      comp_supervisor_pin: str | None = None):
 	"""Name a guest into the block: creates a reservation on the group's
 	dates against its held inventory. Every call books a room (a block is
 	several identical rooms for one party); pass idempotency_key to make a
-	retry safe."""
+	retry safe. A company block whose negotiated plan needs a comp sign-off
+	takes comp_supervisor_user + comp_supervisor_pin."""
 	gb = frappe.get_doc("Group Booking", group_booking)
 	out = create_booking(
 		property=gb.property, room_type=room_type,
@@ -10482,13 +10509,21 @@ def pickup_group_room(group_booking: str, room_type: str, guest_name: str,
 		adults=int(adults), children=int(children),
 		booking_type="Group", company=gb.company,
 		group_booking=gb.name, source="Manual",
-		idempotency_key=idempotency_key)
+		idempotency_key=idempotency_key,
+		comp_supervisor_user=comp_supervisor_user,
+		comp_supervisor_pin=comp_supervisor_pin)
 	if not out.get("idempotent_replay"):
 		from kamra.savings import log_action
+		approver = frappe.db.get_value(
+			"Agent Action Log",
+			{"action_type": "comp_rate_sign_off", "reference_name": out["reservation"]},
+			"approver",
+		)
 		log_action("group_pickup", "Group Booking", gb.name, gb.property,
 		           rationale=f"{guest_name} picked up a {room_type.split('-')[-1]}"
 		                     f" from block {gb.group_name}",
-		           channel=agent_channel() or "Desk")
+		           channel=agent_channel() or "Desk",
+		           **({"approver": approver} if approver else {}))
 	return out
 
 

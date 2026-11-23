@@ -85,8 +85,35 @@ def occupancy_now(property: str, hk: dict) -> dict:
 	occupied = hk["occupied"]
 	rules = category_rules(property)
 	counted = counted_occupied(rules, occupied, in_house_by_category(rules, property))
-	return {"occupied": occupied, "sellable": sellable,
+	return {"occupied": counted, "sellable": sellable,
 	        "occupancy_pct": occupancy_pct(counted, sellable)}
+
+
+def forecast_summary(forecast: list[dict], sellable: int) -> dict:
+	"""30/60/90-day and weekly occupancy roll-ups of `occupancy_forecast`,
+	using the shared room_statistics rule (rooms_occupied over sellable
+	room-nights, rooms only, no money) so no frontend recomputes occupancy."""
+	from kamra.room_statistics import occupancy_pct
+	spans = []
+	for n in (30, 60, 90):
+		chunk = forecast[:n]
+		spans.append({
+			"days": n,
+			"occupancy_pct": occupancy_pct(sum(x["rooms_occupied"] for x in chunk),
+			                               sellable * len(chunk)),
+		})
+	weeks = []
+	for i in range(0, len(forecast), 7):
+		chunk = forecast[i:i + 7]
+		weeks.append({
+			"week_of": chunk[0]["date"],
+			"booked": sum(x["booked"] for x in chunk),
+			"rooms_occupied": sum(x["rooms_occupied"] for x in chunk),
+			"held": sum(x["held"] for x in chunk),
+			"occupancy_pct": occupancy_pct(sum(x["rooms_occupied"] for x in chunk),
+			                               sellable * len(chunk)),
+		})
+	return {"spans": spans, "weeks": weeks}
 
 
 def occupancy_forecast(property: str, date: str, days: int = FORECAST_DAYS) -> list[dict]:
@@ -212,6 +239,7 @@ def property_dashboard(property: str, date: str | None = None, with_comparison: 
 	date = dates["report_date"]
 	hk = _housekeeping_slice(property)
 	forecast = occupancy_forecast(property, date)
+	summary = forecast_summary(forecast, _sellable(property))
 	if not sees_figures():
 		from kamra.reports import movement_counts
 		move = movement_counts(property, date, date)
@@ -225,6 +253,7 @@ def property_dashboard(property: str, date: str | None = None, with_comparison: 
 			"housekeeping": hk,
 			"occupancy_now": occupancy_now(property, hk),
 			"forecast": forecast,
+			"forecast_summary": summary,
 		}
 	from kamra.reports import manager_flash
 	flash = manager_flash(property, date)
@@ -271,6 +300,7 @@ def property_dashboard(property: str, date: str | None = None, with_comparison: 
 		"outlook": flash.get("outlook", []),
 		"occupancy_now": occupancy_now(property, hk),
 		"forecast": forecast,
+		"forecast_summary": summary,
 		**({"comparison": comparison(property, date, flash.get("total_rooms", 0), forecast)}
 		   if int(with_comparison or 0) else {}),
 	}

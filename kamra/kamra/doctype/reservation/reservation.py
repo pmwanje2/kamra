@@ -471,7 +471,25 @@ class Reservation(Document):
 		self.keep_hand_set_nights()
 		self.apply_pricing()
 		self.govern_discount()
+		self.guard_rate_plan()
 		self.stamp_room_assignment()
+
+	def guard_rate_plan(self):
+		"""An existing stay's rate plan changes only through the governed path
+		(amend_stay, which previews and confirms the new price and checks any
+		comp or discount sign-off) or a channel-manager / import writer
+		(night_rates_writer). Frappe never fills doc.flags from a REST payload,
+		so a plain save or frappe.client.set_value on rate_plan is refused.
+		Runs after govern_discount so a plan refusing a discount still raises
+		its ValidationError."""
+		if self.is_new() or self.flags.get("kamra_rate_plan_change") or self.night_rates_writer():
+			return
+		old = self.get_doc_before_save()
+		if old and (old.get("rate_plan") or "") != (self.get("rate_plan") or ""):
+			frappe.throw(
+				_("A stay's rate plan changes only through Amend stay, which shows "
+				  "the new price and checks any required sign-off."),
+				frappe.PermissionError, title=_("Rate plan"))
 
 	def stamp_room_assignment(self):
 		"""Who put the guest in this room, and when. Every writer that

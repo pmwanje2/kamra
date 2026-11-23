@@ -559,13 +559,27 @@ def _compute_insights(property: str, days: int, today, money: bool,
 		"occupied_nights": 0,
 	} for r in rooms}
 
-	# nights actually stayed (in-house or departed), whatever was posted;
-	# occupancy leaves out a stay on a category left out of it, as every
-	# report does (kamra.room_statistics)
-	from kamra.room_statistics import STAY_CATEGORY, category_rules
+	# nights actually stayed (in-house or departed): closed nights keep the
+	# rate category stamped when they posted (OPERA End of Day), unposted
+	# nights follow the stay's current category (kamra.room_statistics)
+	from kamra.folio import STANDS_ON_ITS_DATE
+	from kamra.room_statistics import POSTED_CATEGORY, STAY_CATEGORY, category_rules
 	rules = category_rules(property)
+	posted_cats = {
+		(r_name, str(p_date)): cat
+		for r_name, p_date, cat in frappe.db.sql(
+			"""
+			SELECT COALESCE(fc.reservation, f.reservation), fc.posting_date, """ + POSTED_CATEGORY + """
+			FROM `tabFolio Charge` fc
+			JOIN `tabFolio` f ON fc.parent = f.name
+			LEFT JOIN `tabReservation` r ON r.name = COALESCE(fc.reservation, f.reservation)
+			WHERE f.property = %(p)s AND fc.charge_type = 'Room'
+			  AND """ + STANDS_ON_ITS_DATE + """
+			  AND fc.posting_date >= %(start)s AND fc.posting_date < %(end)s
+			""", {"p": property, "start": start, "end": end})
+	}
 	for s in frappe.db.sql(
-			"SELECT r.room, r.check_in_date, r.check_out_date, " + STAY_CATEGORY + """ AS category
+			"SELECT r.name, r.room, r.check_in_date, r.check_out_date, " + STAY_CATEGORY + """ AS category
 			FROM `tabReservation` r
 			WHERE r.property = %(p)s AND r.room IS NOT NULL AND r.room != ''
 			  AND r.status IN ('Checked In', 'Checked Out')
@@ -574,12 +588,20 @@ def _compute_insights(property: str, days: int, today, money: bool,
 		row = stats.get(s.room)
 		if not row:
 			continue
-		n = _overlap(s.check_in_date, s.check_out_date, start, end)
-		if n:
-			row["nights"] += n
-			row["stays"] += 1
-			if rules.counts("occupancy", s.category):
-				row["occupied_nights"] += n
+		lo = max(getdate(s.check_in_date), start)
+		hi = min(getdate(s.check_out_date), end)
+		if lo >= hi:
+			continue
+		n = 0
+		day = lo
+		while day < hi:
+			n += 1
+			cat = posted_cats.get((s.name, str(day)), s.category)
+			if rules.counts("occupancy", cat):
+				row["occupied_nights"] += 1
+			day = getdate(add_days(day, 1))
+		row["nights"] += n
+		row["stays"] += 1
 
 	if money:
 		for x in frappe.db.sql(

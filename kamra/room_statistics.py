@@ -41,6 +41,9 @@ FLAGS = {"sign-off": "sign_off", "sign off": "sign_off", "no adr": "adr",
 # a stay's category as it was booked (blank: booked before categories, the
 # default)
 STAY_CATEGORY = "IFNULL(r.rate_category, '')"
+# a posted room night's category as it was posted (blank: pre-R3 line before
+# backfill, falls back to the stay's category)
+POSTED_CATEGORY = "COALESCE(NULLIF(fc.rate_category, ''), IFNULL(r.rate_category, ''))"
 
 
 def can_configure() -> bool:
@@ -215,7 +218,7 @@ def posted_rooms(property: str, start, end, rules: CategoryRules | None = None) 
 	by: dict = {}
 	for category, rooms, revenue in frappe.db.sql(
 			"""
-			SELECT """ + STAY_CATEGORY + """,
+			SELECT """ + POSTED_CATEGORY + """,
 			  COUNT(DISTINCT CASE WHEN fc.charge_type = 'Room' AND """ + STANDS_ON_ITS_DATE + """
 			        THEN """ + key + """ END),
 			  COALESCE(SUM(fc.amount), 0)
@@ -224,13 +227,63 @@ def posted_rooms(property: str, start, end, rules: CategoryRules | None = None) 
 			LEFT JOIN `tabReservation` r ON r.name = COALESCE(fc.reservation, f.reservation)
 			WHERE f.property = %(p)s AND fc.posting_date BETWEEN %(s)s AND %(e)s
 			  AND fc.charge_type IN %(types)s
-			GROUP BY """ + STAY_CATEGORY + """
+			GROUP BY """ + POSTED_CATEGORY + """
 			""",
 			{"p": property, "s": str(start), "e": str(end), "types": ROOM_REVENUE_TYPES}):
 		add_rooms(by, rules.of(category), rooms, revenue, rooms)
 	return {"rooms_sold": sum(v["rooms"] for v in by.values()),
 	        "room_revenue": sum(v["revenue"] for v in by.values()),
 	        "by_category": by}
+
+
+def posted_night_category(property: str | None, reservation: str | None, stay_date) -> str:
+	"""The rate category stamped on the standing Room charge for
+	(reservation, stay_date), falling back to the stay's current category."""
+	rules = category_rules(property)
+	if reservation and stay_date:
+		from kamra.folio import STANDS_ON_ITS_DATE
+		row = frappe.db.sql(
+			"""
+			SELECT NULLIF(fc.rate_category, '')
+			FROM `tabFolio Charge` fc
+			WHERE fc.reservation = %(r)s AND fc.charge_type = 'Room'
+			  AND fc.posting_date = %(d)s AND """ + STANDS_ON_ITS_DATE + """
+			ORDER BY fc.creation DESC LIMIT 1
+			""", {"r": reservation, "d": str(stay_date)})
+		if row and row[0][0]:
+			return rules.of(row[0][0])
+	cat = frappe.db.get_value("Reservation", reservation, "rate_category") if reservation else None
+	return rules.of(cat)
+
+
+def stamp_room_rate_category(folio_doc) -> None:
+	"""Keep each saved room charge's posted rate category immutable, and stamp
+	any newly added Room / Rate Adjustment line from the original posted night
+	(for Rate Adjustment with stay_date) or the stay's current rate category."""
+	old = None if folio_doc.is_new() else folio_doc.get_doc_before_save()
+	old_by_name = {c.name: c for c in (old.charges if old else []) if c.name}
+	rules = None
+	stay_cache: dict[str, str] = {}
+	for c in folio_doc.charges or []:
+		prev = old_by_name.get(c.name) if c.name else None
+		if prev is not None:
+			if prev.get("rate_category"):
+				c.rate_category = prev.rate_category
+			continue
+		if c.charge_type not in ROOM_REVENUE_TYPES or c.get("rate_category"):
+			continue
+		res_name = c.get("reservation") or folio_doc.get("reservation")
+		if not res_name:
+			continue
+		if c.charge_type == "Rate Adjustment" and c.get("stay_date"):
+			c.rate_category = posted_night_category(folio_doc.property, res_name, c.stay_date)
+			continue
+		if rules is None:
+			rules = category_rules(folio_doc.property)
+		if res_name not in stay_cache:
+			stay_cache[res_name] = rules.of(
+				frappe.db.get_value("Reservation", res_name, "rate_category"))
+		c.rate_category = stay_cache[res_name]
 
 
 def stay_categories(rules: CategoryRules, reservations) -> dict:

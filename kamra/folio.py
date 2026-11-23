@@ -653,10 +653,13 @@ def post_room_night(reservation, date, folios=None) -> bool:
 				base = float(entry_rate(locked.rate, locked.gst_rate,
 				                        rates_include_tax(reservation.property))) + off
 				desc += f" · {base:,.2f} less discount {off:,.2f}"
+		from kamra.room_statistics import category_rules
 		_append_charge(folios, reservation, "Room", {
 			"posting_date": date,
 			"charge_type": "Room",
 			"reservation": reservation.name,
+			"rate_category": category_rules(reservation.property).of(
+				reservation.get("rate_category")),
 			"description": desc,
 			"qty": 1,
 			"rate": night_rate,
@@ -797,6 +800,7 @@ def post_rate_lines(reservation, lines: list) -> None:
 	the business date. Posted lines are never edited or deleted; a night
 	whose folio has since been invoiced takes its line on the open folio."""
 	from kamra.business_date import get_business_date
+	from kamra.room_statistics import posted_night_category
 	day = get_business_date(reservation.property)
 	folios: dict = {}
 	for line in lines:
@@ -810,6 +814,8 @@ def post_rate_lines(reservation, lines: list) -> None:
 			"stay_date": line["night"],
 			"charge_type": RATE_ADJUSTMENT,
 			"reservation": reservation.name,
+			"rate_category": posted_night_category(
+				reservation.property, reservation.name, line["night"]),
 			"description": line["description"],
 			"qty": 1,
 			"rate": line["amount"],
@@ -947,6 +953,7 @@ def move_charges(src, dst, charge_rows: list, reservation: str | None = None,
 			"stay_date": row.get("stay_date"),
 			"charge_type": row.charge_type,
 			"reservation": reservation or row.get("reservation"),
+			"rate_category": row.get("rate_category"),
 			"description": row.description,
 			"qty": row.qty,
 			"rate": row.rate,
@@ -1021,6 +1028,7 @@ def split_charge(from_folio: str, charge_row: str, to_folio: str,
 		"stay_date": row.get("stay_date"),
 		"charge_type": row.charge_type,
 		"reservation": row.get("reservation"),
+		"rate_category": row.get("rate_category"),
 		"description": f"{row.description} · split",
 		"allowance_serial": row.get("allowance_serial"),
 		"qty": 1,
@@ -1330,6 +1338,7 @@ def void_charge(folio_name: str, charge_row: str, reason: str = "", *, correctio
 		"transaction_code": row.get("transaction_code")
 		or code_for_charge_type(row.charge_type),
 		"reservation": row.get("reservation"),
+		"rate_category": row.get("rate_category"),
 		"description": f"VOID: {row.description or row.charge_type} - {reason.strip()}"[:140],
 		"allowance_serial": row.get("allowance_serial"),
 		"qty": row.qty,

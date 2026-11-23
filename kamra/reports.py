@@ -45,15 +45,18 @@ def _projected_room_revenue(property: str, date: str, total_rooms: int) -> dict:
 	stays = frappe.get_all("Reservation", filters={
 		"property": property, "status": "Checked In",
 		"check_in_date": ("<=", date), "check_out_date": (">", date)}, pluck="name")
-	posted = dict(frappe.db.sql(
+	posted_rows = frappe.db.sql(
 		"""
-		SELECT fc.reservation, SUM(fc.amount) FROM `tabFolio Charge` fc
+		SELECT fc.reservation, SUM(fc.amount), MAX(NULLIF(fc.rate_category, ''))
+		FROM `tabFolio Charge` fc
 		WHERE fc.reservation IN %(r)s AND fc.charge_type = 'Room'
 		  AND fc.posting_date = %(d)s
 		GROUP BY fc.reservation
-		""", {"r": stays or [""], "d": date}))
+		""", {"r": stays or [""], "d": date})
+	posted = {n: float(v or 0) for n, v, _c in posted_rows}
+	posted_cat = {n: c for n, _v, c in posted_rows if c}
 	unposted = [n for n in stays if n not in posted]
-	each = {n: float(v or 0) for n, v in posted.items()}
+	each = dict(posted)
 	if unposted:
 		# one read for every unposted stay's locked nights, not a get_doc each
 		rates: dict = {}
@@ -70,7 +73,7 @@ def _projected_room_revenue(property: str, date: str, total_rooms: int) -> dict:
 	rules = category_rules(property)
 	by: dict = {}
 	for name, category in stay_categories(rules, stays).items():
-		add_rooms(by, category, 1, each.get(name, 0), 1)
+		add_rooms(by, rules.of(posted_cat.get(name) or category), 1, each.get(name, 0), 1)
 	figures = room_figures(rules, room_revenue=revenue, rooms_sold=len(stays), by_category=by,
 	                       occupancy_rooms=total_rooms)
 	return {
