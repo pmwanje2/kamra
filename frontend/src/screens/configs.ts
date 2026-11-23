@@ -9,7 +9,8 @@ import { voicePartner } from "../lib/brand"
 const CompanyExtras = lazy(() => import("../components/CompanyExtras"))
 const EventLinks = lazy(() => import("../components/EventLinks"))
 const GroupControl = lazy(() => import("../components/GroupControl"))
-const RoomTypeExtras = lazy(() => import("../components/RoomTypeTariffs"))
+const RoomTypeTariffs = lazy(() => import("../components/RoomTypeTariffs"))
+const RoomTypeMedia = lazy(() => import("../components/RoomTypeMedia"))
 const OutletWaiters = lazy(() => import("../components/OutletWaiters"))
 const ChannelConnectionActions = lazy(() => import("../components/ChannelConnectionActions"))
 const HkTaskMediaPanel = lazy(() =>
@@ -70,7 +71,7 @@ export function roomTypesConfig(currency: string, taxBasis?: TaxBasis | null): S
   return {
   doctype: "Room Type",
   title: "Room Types",
-  description: "Room types with occupancy-based pricing.",
+  description: "What each unit is and how many it sleeps. Rate plans and contract tariffs set the selling price.",
   propertyScoped: true,
   orderBy: "base_price asc",
   columns: [
@@ -87,21 +88,20 @@ export function roomTypesConfig(currency: string, taxBasis?: TaxBasis | null): S
     { field: "room_type_code", label: "Code (e.g. DLX)", type: "data", required: true },
     { field: "listing_slug", label: "Public listing URL slug (/stay/…)", type: "data" },
     { field: "room_category", label: "Unit kind", type: "select", options: ["Villa", "Private", "Shared"] },
-    { field: "base_price", label: cardLabel, type: "currency", required: true,
-      hint: "Used only by rate plans without a contract tariff" },
+    { field: "base_price", label: cardLabel, type: "currency", required: true, section: "card" },
     { field: "base_occupancy", label: "Adults included in base price", type: "int" },
-    { field: "single_occupancy_price", label: "Single occupancy price", type: "currency", dependsOn: (d) => d.room_category !== "Villa" },
-    { field: "extra_adult_price", label: "Extra adult / night", type: "currency" },
-    { field: "child_price", label: "Extra child / night", type: "currency", hint: "Additional charge per child per night (0 = free)" },
+    { field: "single_occupancy_price", label: "Single occupancy price", type: "currency", section: "card", dependsOn: (d) => d.room_category !== "Villa" },
+    { field: "extra_adult_price", label: "Extra adult / night", type: "currency", section: "card" },
+    { field: "child_price", label: "Extra child / night", type: "currency", section: "card", hint: "Additional charge per child per night (0 = free)" },
     ...(taxBasis ? [] : [{ field: "tax_percent", label: "Tax %", type: "float" as const }]),
-    { field: "children_within_base_occupancy", label: "Children count towards base occupancy", type: "check", hint: "Only guests beyond the base occupancy are charged, children included" },
+    { field: "children_within_base_occupancy", label: "Children count towards base occupancy", type: "check", section: "card", hint: "Only guests beyond the base occupancy are charged, children included" },
     { field: "adults_capacity", label: "Max adults", type: "int" },
     { field: "children_capacity", label: "Max children", type: "int" },
     { field: "max_extra_beds", label: "Guests allowed above capacity", type: "int", hint: "Only for a single unit with no second room to split into. 0 = never over capacity; the price is agreed on each booking" },
-    { field: "small_group_max_adults", label: "Small-group threshold (adults)", type: "int", hint: "Below this many adults, price per person instead of the house rate. Blank or 0 = off" },
-    { field: "small_group_price_per_adult", label: "Small-group price / adult", type: "currency", dependsOn: (d) => Number(d.small_group_max_adults) > 0 },
-    { field: "small_group_days", label: "Small-group days (e.g. sun, mon, tue, wed, thu)", type: "data", hint: "Blank = every day", dependsOn: (d) => Number(d.small_group_max_adults) > 0 },
-    { field: "small_group_whole_stay", label: "Small-group rate needs the whole stay", type: "check", hint: "A stay touching a non-small-group day is charged at the house rate throughout", dependsOn: (d) => Number(d.small_group_max_adults) > 0 },
+    { field: "small_group_max_adults", label: "Small-group threshold (adults)", type: "int", section: "card", hint: "Below this many adults, price per person instead of the house rate. Blank or 0 = off" },
+    { field: "small_group_price_per_adult", label: "Small-group price / adult", type: "currency", section: "card", dependsOn: (d) => Number(d.small_group_max_adults) > 0 },
+    { field: "small_group_days", label: "Small-group days (e.g. sun, mon, tue, wed, thu)", type: "data", section: "card", hint: "Blank = every day", dependsOn: (d) => Number(d.small_group_max_adults) > 0 },
+    { field: "small_group_whole_stay", label: "Small-group rate needs the whole stay", type: "check", section: "card", hint: "A stay touching a non-small-group day is charged at the house rate throughout", dependsOn: (d) => Number(d.small_group_max_adults) > 0 },
     { field: "bed_type", label: "Bed type", type: "select", options: ["King", "Queen", "Twin", "Double", "Single"], dependsOn: (d) => d.room_category !== "Villa" },
     { field: "air_conditioning", label: "Air Conditioning", type: "select", options: ["AC", "Non AC"], dependsOn: (d) => d.room_category !== "Villa" },
     // { field: "bathroom", label: "Bathroom Type", type: "select", options: ["Attached", "Common"], dependsOn: (d) => d.room_category !== "Villa" },
@@ -117,7 +117,10 @@ export function roomTypesConfig(currency: string, taxBasis?: TaxBasis | null): S
   formNote: taxBasis?.inclusive
     ? t("Tax is applied by the invoice ({tax} included).", { tax: taxBasis.label })
     : taxBasis ? t("Tax is applied by the invoice ({tax}).", { tax: taxBasis.label }) : undefined,
-  extra: RoomTypeExtras,
+  sections: [{ key: "card", label: "Card rate (BAR) and extra-person prices",
+    hint: "Prices stays booked without a rate plan, and rate plans with no contract tariff for this room type." }],
+  lead: RoomTypeTariffs,
+  extra: RoomTypeMedia,
   }
 }
 

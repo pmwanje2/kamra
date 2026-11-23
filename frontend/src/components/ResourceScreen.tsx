@@ -124,6 +124,8 @@ export interface FieldSpec {
   dependsOn?: (draft: Record<string, unknown>) => boolean
   /** Block dates before today unless the user may backdate (Finance / Hotel Admin). */
   notPast?: boolean
+  /** Key of a `ScreenConfig.sections` entry: the field renders in that collapsible section. */
+  section?: string
 }
 
 export interface ScreenConfig {
@@ -153,6 +155,11 @@ export interface ScreenConfig {
   dateFilter?: { field: string; label: string }
   /** Custom section rendered in the drawer below the form (existing rows only). */
   extra?: ComponentType<{ row: Row; reload: () => void }>
+  /** Custom section rendered in the drawer above the form (existing rows only). */
+  lead?: ComponentType<{ row: Row; reload: () => void }>
+  /** Collapsible groups of form fields (see FieldSpec.section), after the other
+   *  fields: closed for an existing row, open for a new one. */
+  sections?: { key: string; label: string; hint?: string }[]
   /** Replace the generic edit form with a bespoke detail panel (existing rows).
    *  When set, the drawer opens wide and the panel owns its own actions. */
   detailPanel?: ComponentType<{
@@ -983,41 +990,63 @@ export function ResourceScreen({
             </Suspense>
           ) : (
             <div className="space-y-4">
+              {editing !== "new" && config.lead && (
+                <Suspense fallback={null}>
+                  <config.lead row={editing} reload={load} />
+                </Suspense>
+              )}
               {config.formNote && <p className="rounded-lg bg-zinc-50 p-3 text-sm text-zinc-700">{config.formNote}</p>}
-              <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
-                {config.form.filter(spec => spec.dependsOn ? spec.dependsOn(draft) : true).map((spec) => (
-                  <label
-                    key={spec.field}
-                    className={
-                      "block" +
-                      (spec.type === "check" || spec.type === "tags"
-                        ? " sm:col-span-2"
-                        : "")
-                    }
-                  >
-                    <span className="mb-1.5 block text-sm font-medium text-zinc-600">
-                      {t(spec.label)}
-                      {spec.required && <span className="text-rose-500"> *</span>}
-                    </span>
-                    <FieldInput
-                      spec={spec}
-                      value={draft[spec.field]}
-                      onChange={(v) =>
-                        setDraft((d) => ({ ...d, [spec.field]: v }))
-                      }
-                      linkOptions={linkOptions}
-                      masterOptions={masterOptions}
-                      t={t}
-                      canBackdate={canBackdate}
-                    />
-                    {spec.hint && spec.type !== "image" && (
-                      <span className="mt-1 block text-xs leading-relaxed text-zinc-400">
-                        {t(spec.hint)}
-                      </span>
-                    )}
-                  </label>
-                ))}
-              </div>
+              {(() => {
+                const shown = config.form.filter(spec => spec.dependsOn ? spec.dependsOn(draft) : true)
+                const sectioned = new Set((config.sections ?? []).map((section) => section.key))
+                const grid = (specs: FieldSpec[]) => (
+                  <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
+                    {specs.map((spec) => (
+                      <label
+                        key={spec.field}
+                        className={
+                          "block" +
+                          (spec.type === "check" || spec.type === "tags"
+                            ? " sm:col-span-2"
+                            : "")
+                        }
+                      >
+                        <span className="mb-1.5 block text-sm font-medium text-zinc-600">
+                          {t(spec.label)}
+                          {spec.required && <span className="text-rose-500"> *</span>}
+                        </span>
+                        <FieldInput
+                          spec={spec}
+                          value={draft[spec.field]}
+                          onChange={(v) =>
+                            setDraft((d) => ({ ...d, [spec.field]: v }))
+                          }
+                          linkOptions={linkOptions}
+                          masterOptions={masterOptions}
+                          t={t}
+                          canBackdate={canBackdate}
+                        />
+                        {spec.hint && spec.type !== "image" && (
+                          <span className="mt-1 block text-xs leading-relaxed text-zinc-400">
+                            {t(spec.hint)}
+                          </span>
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                )
+                return <>
+                  {grid(shown.filter((spec) => !spec.section || !sectioned.has(spec.section)))}
+                  {(config.sections ?? []).map((section) => (
+                    <details key={section.key} open={editing === "new"}
+                      className="rounded-xl border border-zinc-200 px-4 py-3 [&[open]>summary]:mb-3">
+                      <summary className="cursor-pointer text-sm font-semibold text-zinc-700">{t(section.label)}</summary>
+                      {section.hint && <p className="mb-3 text-xs leading-relaxed text-zinc-500">{t(section.hint)}</p>}
+                      {grid(shown.filter((spec) => spec.section === section.key))}
+                    </details>
+                  ))}
+                </>
+              })()}
               {editing !== "new" && config.extra && (
                 <Suspense fallback={null}>
                   <config.extra row={editing} reload={load} />
