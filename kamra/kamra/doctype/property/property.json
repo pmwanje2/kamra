@@ -434,7 +434,7 @@
    "fieldname": "enabled_modules",
    "fieldtype": "Small Text",
    "label": "Modules In Use",
-   "description": "Which parts of Kamra this property actually runs, comma separated. Empty = everything. A serviced-apartment operator has no restaurant and no banquet hall, and shouldn't be shown three empty menus on their first morning."
+   "description": "Which parts of the system this property actually runs, comma separated. Empty = everything. A serviced-apartment operator has no restaurant and no banquet hall, and shouldn't be shown three empty menus on their first morning."
   },
   {
    "default": "1",

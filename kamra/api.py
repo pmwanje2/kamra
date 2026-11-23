@@ -12,7 +12,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, cint, flt, get_datetime, getdate, now_datetime, nowdate
 
-from kamra.branding import product_name
+from kamra.branding import product_name, public_url
 from kamra.authz import act_as, assert_property_access, require_it_admin, require_roles
 from kamra.install import AGENT_EMAIL
 
@@ -6070,7 +6070,7 @@ def send_precheckin_link(reservation: str, channel: str = "WhatsApp"):
 		frappe.db.set_value("Reservation", reservation, "precheckin_token",
 		                    res.precheckin_token)
 
-	link = f"{frappe.utils.get_url()}/kamra/checkin/{res.precheckin_token}"
+	link = public_url(f"checkin/{res.precheckin_token}")
 	phone = frappe.db.get_value("Guest", res.guest, "phone") if res.guest else None
 	sent = False
 	if phone:

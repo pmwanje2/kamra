@@ -1449,7 +1449,7 @@ What {product} does and where to find it:
   Housekeeping, F&B, Hotel Manager) and custom reports (build, save, group
   and drill down, email daily or weekly). Which reports a user sees follows their
   role.
-- Housekeeping: room board + a phone app at /kamra/hk.
+- Housekeeping: room board + a phone app at /hk.
 - Revenue: rate plans, seasons, vouchers, rate guardrails.
 - Events: Venue Bookings and a Venue Calendar (banquet/function diary);
   Experiences cover spa/tours as booking add-ons.

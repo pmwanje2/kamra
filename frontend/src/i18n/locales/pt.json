@@ -3128,7 +3128,7 @@
   "Max guests (base)": "Máximo de hóspedes (base)",
   "Max uses": "Max usa",
   "Max uses (0 = unlimited)": "Máximo de usos (0 = ilimitado)",
-  "MCP is turned off for this whole site (kamra_mcp_disabled), so nothing below takes effect until IT turns it back on.": "O MCP está desativado para todo o site (kamra_mcp_disabled), portanto nada abaixo entra em vigor até que a TI o ative novamente.",
+  "MCP is turned off for this whole site, so nothing below takes effect until IT turns it back on.": "O MCP está desativado para todo o site, portanto nada abaixo entra em vigor até que a TI o ative novamente.",
   "MICE": "MICE (eventos corporativos)",
   "MCP Read lets the AI look; MCP Manage also lets it make changes. Hotel admins and IT always have full access. A person never gets more through the AI than their own roles allow. A change applies to their next request, no reconnect needed.": "MCP Read permite a aparência da IA; O MCP Manage também permite fazer alterações. Os administradores do hotel e a TI sempre têm acesso total. Uma pessoa nunca consegue mais através da IA ​​do que suas próprias funções permitem. Uma alteração se aplica à próxima solicitação, sem necessidade de reconexão.",
   "MCP URL · ": "URL do PCM · ",
