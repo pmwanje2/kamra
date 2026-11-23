@@ -60,8 +60,8 @@ class GroupBillingTestCase(AuditTestCase):
 		r1, r2 = self.group()[1][:2]
 		room = self.post(r2, "Room", "UT R2 night")
 		self.assertEqual(room["folio_type"], "Group")
-		self.assertEqual(frappe.db.get_value("Folio", room["folio"], "reservation"),
-		                 r1.name)
+		# the posting master has no stay of its own (OPERA PM), not the main room's
+		self.assertIsNone(frappe.db.get_value("Folio", room["folio"], "reservation"))
 		self.assertEqual(self.post(r2, "Minibar", "UT R2 minibar", 200)["folio_type"],
 		                 "Guest")
 
@@ -105,20 +105,12 @@ class GroupBillingTestCase(AuditTestCase):
 		self.assertTrue(frappe.db.exists("City Ledger Entry",
 		                                 {"folio": bill, "kind": "Invoice"}))
 
-	def test_set_group_master_reanchors_the_open_bill(self):
-		gb, (_r1, r2, _r3) = self.group()
-		bill = self.post(r2, "Room", "UT R2 night")["folio"]
-		api.set_group_master(gb.name, r2.name)
-		self.assertEqual(frappe.db.get_value("Folio", bill, "reservation"), r2.name)
-		self.assertEqual(frappe.db.get_value("Group Booking", gb.name,
-		                                     "master_reservation"), r2.name)
-
 	def test_company_group_bill_stays_open_when_the_first_room_leaves(self):
 		gb, (r1, r2, _r3) = self.group(company=_corp(), master=False)
 		bill = self.post(r2, "Room", "UT R2 night")["folio"]
-		# anchored to the first room, but the group's bill, not that stay's
+		# the group's bill, with no stay of its own
 		self.assertEqual(frappe.db.get_value("Folio", bill, ["folio_type", "reservation"]),
-		                 ("Group", r1.name))
+		                 ("Group", None))
 		position = settlement_position(r1.name)
 		self.assertNotIn(bill, [f for f, _c, _b in position["to_city_ledger"]])
 		self.assertNotIn(bill, [f["name"] for f in position["folios"]])
@@ -146,7 +138,7 @@ class GroupBillingTestCase(AuditTestCase):
 	def test_group_advance_follows_the_group_not_the_first_room(self):
 		gb, (r1, r2, _r3) = self.group(company=_corp(), master=False, status="Confirmed")
 		bill = folio_mod.open_group_folio(gb.name)
-		self.assertEqual(frappe.db.get_value("Folio", bill, "reservation"), r1.name)
+		self.assertIsNone(frappe.db.get_value("Folio", bill, "reservation"))
 		api.add_folio_payment(bill, "Cash", 500, kind="Advance")
 		own = folio_mod.open_folio(r1)
 		api.add_folio_payment(own, "Cash", 300, kind="Advance")
@@ -162,7 +154,7 @@ class GroupBillingTestCase(AuditTestCase):
 		gb, (r1, r2, _r3) = self.group(company=_corp(), master=False, status="Confirmed")
 		_check_in(r2)
 		bill = folio_mod.open_group_folio(gb.name)
-		self.assertEqual(frappe.db.get_value("Folio", bill, "reservation"), r1.name)
+		self.assertIsNone(frappe.db.get_value("Folio", bill, "reservation"))
 		api.add_folio_payment(bill, "Cash", 500, kind="Advance")
 		self.assertEqual((_held(bill), _applied(bill)), (0, 500))
 
