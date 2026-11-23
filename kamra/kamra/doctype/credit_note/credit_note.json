@@ -30,7 +30,8 @@
    "label": "Folio",
    "options": "Folio",
    "reqd": 1,
-   "in_list_view": 1
+   "in_list_view": 1,
+   "search_index": 1
   },
   {
    "fieldname": "original_invoice",
@@ -91,7 +92,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-30 10:00:00.000000",
+ "modified": "2026-11-23 20:00:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Credit Note",
