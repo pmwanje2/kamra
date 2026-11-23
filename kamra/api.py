@@ -4666,6 +4666,8 @@ def reservation_detail(reservation: str):
 			"can_no_show": res.status == "Confirmed"
 			and getdate(res.check_in_date) <= getdate(get_business_date(res.property)),
 			"can_amend": res.status in ("Confirmed", "Checked In"),
+			# may fix a rate over a plan that takes no discount (_can_set_rate)
+			"can_set_rate": _can_set_rate(),
 			# undo checkout: same business day only (reinstate_checkout)
 			"can_reinstate": res.status == "Checked Out" and bool(res.get("check_out_business_date"))
 			and str(res.check_out_business_date) == str(get_business_date(res.property)),
@@ -4683,6 +4685,9 @@ def reservation_detail(reservation: str):
 			"id_unverified": res.precheckin_status == "Submitted",
 		},
 		"checkin_backfill": _checkin_backfill(res),
+		# the reason-code categories the screen offers (the property's settings)
+		"reason_categories": {"discount": discount_reason_categories(res.property),
+		                      "agreed_rate": agreed_rate_reason_categories(res.property)},
 	}
 
 
@@ -6738,14 +6743,16 @@ def set_agreed_rate(reservation: str, agreed_rate: float, reason_code: str,
 	code = frappe.db.get_value("Reason Code", reason_code or "",
 	                           ["category", "requires_supervisor", "disabled"],
 	                           as_dict=True)
-	if code and not code.disabled and code.category == "Rate Change":
+	categories = agreed_rate_reason_categories(doc.property)
+	if code and not code.disabled and code.category in categories:
 		why = reason_code
-	elif not reason_code and (reason or "").strip() and not frappe.db.exists(
-			"Reason Code", {"category": "Rate Change", "disabled": 0}):
-		# the hotel switched every Rate Change code off: a written reason
+	elif not reason_code and (reason or "").strip() and not (categories and frappe.db.exists(
+			"Reason Code", {"category": ["in", categories], "disabled": 0})):
+		# the hotel switched every code of those categories off: a written reason
 		why, code = reason.strip()[:140], frappe._dict(requires_supervisor=0)
 	else:
-		frappe.throw(_("Pick a Rate Change reason code for the agreed rate."))
+		frappe.throw(_("Pick a {0} reason code for the agreed rate.").format(
+			_categories_text(categories)))
 	old_nightly = _current_nightly(doc)
 	old_amount = flt(doc.amount_after_tax)
 	before = _discount_snapshot(doc)
@@ -6811,17 +6818,34 @@ def set_agreed_rate(reservation: str, agreed_rate: float, reason_code: str,
 # sign-off above it. One set of rules, discount_governance, for every place a
 # discount is given; Reservation.validate runs it on the nights it locks.
 
-# the reason codes a discount may carry (RATE-PROMO, RATE-MGR, ADJ-RATE, ...)
-DISCOUNT_REASON_CATEGORIES = ("Rate Change", "Adjust")
+def discount_reason_categories(property: str) -> list[str]:
+	"""The Reason Code categories a discount takes (RATE-PROMO, ADJ-RATE, ...):
+	the property's discount_reason_categories setting (OPERA's discount
+	reasons, SAP's order reasons for the purpose). The codes themselves are
+	the Reason Code records."""
+	from kamra.settings import list_setting
+	return list_setting(property, "discount_reason_categories")
+
+
+def agreed_rate_reason_categories(property: str) -> list[str]:
+	"""The Reason Code categories an agreed rate takes: the property's
+	agreed_rate_reason_categories setting."""
+	from kamra.settings import list_setting
+	return list_setting(property, "agreed_rate_reason_categories")
+
+
+def _categories_text(categories: list[str]) -> str:
+	return " or ".join(_(c) for c in categories)
 
 
 def desk_limit_pct(property: str) -> float:
 	"""The cut the person asking may give at the desk, in % (OPERA's
 	authorizer levels, SAP's condition limits by responsibility): the
 	highest of their roles' limits in rate_override_limits_by_role, else the
-	property's rate_override_limit_pct. An AI agent is held to the Front
-	Desk's limit whoever it acts for. Revenue Managers and Hotel Admins are
-	not held to it (_can_set_rate)."""
+	property's rate_override_limit_pct. An AI agent takes its own role's
+	line (AGENT_ROLE) whoever it acts for, and with none the lowest limit
+	the property sets, so it never gives more than anyone at the desk.
+	Revenue Managers and Hotel Admins are not held to it (_can_set_rate)."""
 	from kamra.credit import _is_agent
 	from kamra.settings import get_setting
 	base = flt(get_setting(property, "rate_override_limit_pct"))
@@ -6838,18 +6862,22 @@ def desk_limit_pct(property: str) -> float:
 	if not tiers:
 		return base
 	if _is_agent():
-		return tiers.get("Front Desk", base)
+		from kamra.install import AGENT_ROLE
+		return tiers.get(AGENT_ROLE, min(base, *tiers.values()))
 	mine = [pct for role, pct in tiers.items() if role in set(frappe.get_roles())]
 	return max(mine) if mine else base
 
 
-def discount_reasons() -> list[dict]:
+def discount_reasons(property: str) -> list[dict]:
 	"""The active reason codes a reservation discount can be given with."""
 	from kamra.ledger import ensure_default_reason_codes
 	ensure_default_reason_codes()
+	categories = discount_reason_categories(property)
+	if not categories:
+		return []
 	return frappe.get_all(
 		"Reason Code",
-		filters={"disabled": 0, "category": ["in", list(DISCOUNT_REASON_CATEGORIES)]},
+		filters={"disabled": 0, "category": ["in", categories]},
 		fields=["name", "code", "description", "category", "requires_supervisor"],
 		order_by="category asc, code asc")
 
@@ -6857,18 +6885,19 @@ def discount_reasons() -> list[dict]:
 def discount_options(property: str) -> dict:
 	"""What a booking screen needs to offer a discount: whether this user
 	may give one, the front desk's limit and the reasons to pick from."""
+	# who may call the discount action (its declared roles, require_roles)
+	allowed = getattr(set_reservation_discount, "_kamra_roles", None) or ()
 	return {
-		"can_discount": bool(set(frappe.get_roles()) & {
-			"Front Desk", "Revenue Manager", "Kamra Agent"}) or _is_admin(),
+		"can_discount": bool(set(allowed) & set(frappe.get_roles())),
 		# this person's own limit (desk_limit_pct)
 		"rate_override_limit_pct": desk_limit_pct(property),
-		"discount_reasons": discount_reasons(),
+		"discount_reasons": discount_reasons(property),
 	}
 
 
-def _discount_reason(reason_code) -> frappe._dict:
-	"""The discount's reason code, or a refusal: it must be an active Rate
-	Change or Adjust code (SAP's mandatory order reason)."""
+def _discount_reason(reason_code, property: str) -> frappe._dict:
+	"""The discount's reason code, or a refusal: it must be an active code of
+	a category the property's discounts take (SAP's mandatory order reason)."""
 	from kamra.ledger import ensure_default_reason_codes
 	ensure_default_reason_codes()
 	code = None
@@ -6876,8 +6905,9 @@ def _discount_reason(reason_code) -> frappe._dict:
 		code = frappe.db.get_value(
 			"Reason Code", reason_code.strip(),
 			["name", "category", "requires_supervisor", "disabled"], as_dict=True)
-	if not code or code.disabled or code.category not in DISCOUNT_REASON_CATEGORIES:
-		frappe.throw(_("Pick a Rate Change or Adjust reason code for the discount."),
+	categories = discount_reason_categories(property)
+	if not code or code.disabled or code.category not in categories:
+		frappe.throw(_("Pick a {0} reason code for the discount.").format(_categories_text(categories)),
 		             title=_("Discount reason"))
 	return code
 
@@ -6968,7 +6998,7 @@ def discount_governance(property: str, room_type: str | None, rate_plan: str | N
 		if why in codes:
 			continue
 		try:
-			codes[why] = _discount_reason(why)
+			codes[why] = _discount_reason(why, property)
 		except frappe.ValidationError:
 			if check:
 				raise

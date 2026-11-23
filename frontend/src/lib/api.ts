@@ -1866,6 +1866,9 @@ export interface ReservationDetail extends TariffReference {
     discount_reason: string | null
     fixed_rate: 0 | 1
   }
+  /** the reason-code categories a discount and an agreed rate take (the
+   *  property's settings, discount_reason_categories / agreed_rate_reason_categories) */
+  reason_categories?: { discount?: string[]; agreed_rate?: string[] }
   precheckin_status: string | null
   precheckin_token: string | null
   amount_after_tax: number
@@ -1924,6 +1927,8 @@ export interface ReservationDetail extends TariffReference {
     can_cancel: boolean
     can_no_show?: boolean
     can_amend: boolean
+    /** may fix a rate over a plan that takes no discount (kamra.api._can_set_rate) */
+    can_set_rate?: boolean
     can_reinstate: boolean
     /** same-day check-in with nothing on the bill (api.reverse_check_in) */
     can_reverse_check_in?: boolean

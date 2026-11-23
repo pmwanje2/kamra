@@ -27,6 +27,7 @@ import {
   agreedRateReasonCodes,
   agreedRateRows,
   discountReasonCodes,
+  type ReasonCategories,
   type AgreedRatePreview,
 } from "../lib/agreedRate"
 import { cur, moneyLocale } from "../lib/money"
@@ -69,7 +70,8 @@ interface DiscountPlan extends DiscountGovernance {
   }[]
 }
 
-export default function AgreedRatePanel({ reservation, nightRates, current, canOverrideFixed = false, onSaved }: {
+export default function AgreedRatePanel({ reservation, nightRates, current, canOverrideFixed = false,
+  reasonCategories, onSaved }: {
   reservation: string
   /** the nightly rates the folio bills now (reservation_detail.night_rates) */
   nightRates: {
@@ -89,6 +91,9 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
   /** a Revenue Manager / Hotel Admin: may override a plan that takes no
    * discount with a fixed rate (kamra.api._can_set_rate) */
   canOverrideFixed?: boolean
+  /** the reason-code categories the discount and the agreed rate take (the
+   * property's settings, reservation_detail.reason_categories) */
+  reasonCategories?: ReasonCategories | null
   onSaved: () => void
 }) {
   const { t } = useT()
@@ -139,9 +144,10 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
   // a stay that holds a manager's fixed-rate override reopens with it on
   const seededOverride = () => Boolean(current?.fixed_rate && canOverrideFixed)
   const [fixedOverride, setFixedOverride] = useState(seededOverride)
-  const [discountCodes, setDiscountCodes] = useState<DiscountReason[]>([])
-  // the agreed rate's reasons: the Rate Change codes among them
-  const codes = agreedRateReasonCodes(discountCodes)
+  const [allCodes, setAllCodes] = useState<DiscountReason[]>([])
+  // each one's reasons: the codes of the categories the property set
+  const discountCodes = discountReasonCodes(allCodes, reasonCategories?.discount)
+  const codes = agreedRateReasonCodes(allCodes, reasonCategories?.agreed_rate)
   const [plan, setPlan] = useState<DiscountPlan | null>(null)
   const stayNights = openNights.map((n) => n.date)
   const args = discountArgs(discount, stayNights)
@@ -154,7 +160,7 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
   useEffect(() => {
     if (!open) return
     call<DiscountReason[]>("kamra.ledger.list_reason_codes", {})
-      .then((all) => setDiscountCodes(discountReasonCodes(all)))
+      .then((all) => setAllCodes(all ?? []))
       .catch((e) => setError(serverError(e)))
   }, [open])
 
