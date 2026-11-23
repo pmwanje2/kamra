@@ -52,4 +52,25 @@ describe("Contract tariff nights", () => {
     expect(host.textContent).toContain("Jan 1, 2027: USD 200.00 · UGX 730,000")
     expect(host.textContent).not.toContain("Dec 31, 2026:")
   })
+
+  // Round 8 (P2-R7-2): a stay shortened from the front, or moved to other dates, keeps its check-in
+  // night's scalars for the override check; the headline is the stay's own first night.
+  it("heads a stay that no longer has its check-in night with its first remaining night", async () => {
+    for (const remaining of [[nights[2]], [{ ...nights[2], date: "2027-01-05" }, { ...nights[2], date: "2027-01-06" }]]) {
+      await act(async () => root.render(<TariffNight tariff={{ ...tariff, nights: remaining }} agreed_rate={365000} />))
+      expect(host.textContent).toBe("USD 200.00 / night · UGX 730,000 at 3,650 (Dec 20, 2026)")
+    }
+  })
+
+  it("lists the nights whose tariff differs from the stay's first night", async () => {
+    const shortened = [nights[1], nights[2]]
+    await act(async () => root.render(<TariffNight tariff={{ ...tariff, nights: shortened }} agreed_rate={365000} />))
+    expect(host.textContent).toContain("USD 100.00 / night · UGX 365,000 at 3,650 (Dec 20, 2026)")
+    expect(host.textContent).toContain("Jan 1, 2027: USD 200.00 · UGX 730,000")
+    const moved = [nights[2], { ...nights[0], date: "2027-01-02" }]
+    await act(async () => root.render(<TariffNight tariff={{ ...tariff, nights: moved }} agreed_rate={365000} />))
+    expect(host.textContent).toContain("USD 200.00 / night · UGX 730,000 at 3,650 (Dec 20, 2026)")
+    expect(host.textContent).toContain("Jan 2, 2027: USD 100.00 · UGX 365,000")
+    expect(host.textContent).not.toContain("Jan 1, 2027:")
+  })
 })
