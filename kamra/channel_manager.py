@@ -848,10 +848,12 @@ def import_room_mappings(connection: str, dry_run: int = 0):
 
 def _sends_in(property: str, room_type: str, rate_plan: str | None, currency: str) -> bool:
 	"""Whether a night of `rate_plan` can go in `currency`, asked of the
-	push's own channel_ari._plan_night_rate for the business date: False
-	only when it cannot (no contract tariff prices a foreign plan, so its
-	card price goes only in the property's currency). A missing exchange
-	rate or an error is the push's to report, not a currency mismatch."""
+	push's own channel_ari._plan_night_rate for the business date (a plan
+	sold in its contract currency reads the tariff directory, so no exchange
+	rate is needed): False only when it cannot (no listed contract prices a
+	foreign plan, so its card price goes only in the property's currency, or
+	the contract is listed in another currency). An error is the push's to
+	report, not a currency mismatch."""
 	from kamra.business_date import get_business_date
 	from kamra.channel_ari import AriCurrencyRefused, AriPriceHeld, AriPricingFailed, _plan_night_rate
 	try:

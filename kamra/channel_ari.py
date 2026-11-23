@@ -29,13 +29,17 @@ fixed-currency channel at the governed rate of the pricing date. So with H
 the property's currency and C the contract's: E == C sends the contract
 nightly, E == H the property-currency agreed rate the desk books (a plan
 priced from the card only this), and anything else - an unknown E included,
-for every plan - nothing: the outbox row fails and says why. Only the
-resolver's refusal of a night (a missing tariff) or no price above zero
-stops sale. A missing exchange rate (HSP-TARIFF-003) is a pricing error that
-passes, not a delisting, and so is any other error while pricing (a
-permission refusal, the database, the bridge): the night is held at what the
-provider last accepted, retried on its own, and Finance (an exchange rate)
-or Revenue (anything else) is told. The worker prices as the system, never
+for every plan - nothing: the outbox row fails and says why. E == C
+converts nothing, so it is read from the approved tariff master data
+(hospitality_tariffs.list_tariffs, SAP's condition-record replicate), never
+from a quote, and needs no exchange rate: a tariff quote that converts
+refuses without one (SAP SG 105), so only E == H needs it. Only a night
+with no approved price (a missing tariff) or no price above zero stops
+sale. A missing exchange rate (HSP-TARIFF-003) on an E == H night is a
+pricing error that passes, not a delisting, and so is any other error while
+pricing (a permission refusal, the database, the bridge): the night is held
+at what the provider last accepted, retried on its own, and Finance (an
+exchange rate) or Revenue (anything else) is told. The worker prices as the system, never
 as the user whose change queued it.
 """
 
@@ -44,6 +48,7 @@ from __future__ import annotations
 import json
 import math
 import time
+from contextvars import ContextVar
 from datetime import datetime
 from decimal import ROUND_HALF_UP, Decimal
 
@@ -56,6 +61,8 @@ from kamra.authz import act_as, require_roles
 ARI_HORIZON_DAYS = 500  # the full sync and the nightly sweep
 ARI_MAX_DAYS = 730  # a user's change is sent whole up to here
 KINDS = ("availability", "restrictions")
+# the tariff directory of one restriction_cells pass, read once for all its nights
+_pass_directory: ContextVar[dict | None] = ContextVar("kamra_ari_tariff_directory", default=None)
 
 
 def _now() -> float:
@@ -131,37 +138,54 @@ def _plan_night_rate(property: str, room_type: str, rate_plan: str | None, d,
                      currency: str | None = None) -> Decimal | None:
 	"""One night from `d` on `rate_plan` (None: the room type's base price),
 	for the type's base occupancy (or 2 adults), to 2 decimals, in `currency`
-	(E; None: see _sold_currency), priced as the desk prices it
-	(pricing.quote_with_contract). A contract night in its own currency is the
-	contract nightly (a derived plan's modifier in it); in the property's it
-	is the agreed rate; a card night goes only in the property's.
+	(E; None: see _sold_currency). In the property's currency it is priced as
+	the desk prices it (pricing.quote_with_contract): the agreed rate of a
+	contract night, else the card. In the contract's own currency it is the
+	contract nightly (a derived plan's modifier in it) from the approved
+	tariff master data (pricing.contract_list_nightly, read once in a
+	restriction_cells pass), which converts nothing and so needs no exchange
+	rate (SAP SG 105: only a quote that converts does). A card night goes only in the
+	property's.
 
-	None when the resolver refuses the night (a missing tariff among them) or
-	it is not worth more than 0: stop sale. AriPriceHeld when its exchange
-	rate is missing or stale, AriPricingFailed on any other error while
-	pricing it, AriCurrencyRefused when it cannot go in `currency`."""
-	from kamra.pricing import ContractRateRefused, property_currency, quote_with_contract
+	None when the night has no approved price (a missing tariff among them)
+	or it is not worth more than 0: stop sale. AriPriceHeld when the
+	property-currency night's exchange rate is missing or stale,
+	AriPricingFailed on any other error while pricing it,
+	AriCurrencyRefused when it cannot go in `currency`."""
+	from kamra.pricing import (
+		ContractRateRefused,
+		contract_list_nightly,
+		property_currency,
+		quote_with_contract,
+	)
 	home = property_currency(property)
 	if not currency:
 		currency = _sold_currency(rate_plan, None, home)
 	adults = frappe.db.get_value("Room Type", room_type, "base_occupancy") or 2
 	try:
-		q = quote_with_contract(property, room_type, str(d), str(add_days(d, 1)), adults=int(adults),
-		                        children=0, rate_plan=rate_plan or None)
+		if currency != home:
+			listed = contract_list_nightly(property, room_type, rate_plan, d, int(adults), _pass_directory.get()) \
+				if rate_plan else None
+		else:
+			q = quote_with_contract(property, room_type, str(d), str(add_days(d, 1)), adults=int(adults),
+			                        children=0, rate_plan=rate_plan or None)
 	except ContractRateRefused as exc:
 		if "HSP-TARIFF-003" in str(exc):
 			raise AriPriceHeld(str(exc)) from None
 		return None
 	except Exception as exc:
 		raise AriPricingFailed(f"{type(exc).__name__}: {exc}") from exc
-	tariff = q.get("tariff")
-	if tariff and currency == tariff.get("currency"):
-		amount = tariff.get("nightly")
-	elif currency == home:
-		amount = q.get("agreed_rate") if tariff else q.get("room_total")
+	if currency != home:
+		if not listed or listed[0] != currency:
+			raise AriCurrencyRefused(_("sells in {0}; this night is priced in {1}").format(
+				currency, " or ".join(sorted({listed[0] or _("no currency"), home} if listed else {home}))))
+		amount = listed[1]
 	else:
-		raise AriCurrencyRefused(_("sells in {0}; this night is priced in {1}").format(
-			currency, " or ".join(sorted({tariff.get("currency"), home} if tariff else {home}))))
+		tariff = q.get("tariff")
+		if tariff and currency == tariff.get("currency"):
+			amount = tariff.get("nightly")
+		else:
+			amount = q.get("agreed_rate") if tariff else q.get("room_total")
 	try:
 		total = Decimal(str(amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 	except Exception as exc:
@@ -181,15 +205,14 @@ def _restriction_day(rate: Decimal | None) -> dict:
 def restriction_cells(conn, date_from, date_to, problems: dict | None = None) -> dict[str, dict[str, dict]]:
 	"""{external_rate_id: {"YYYY-MM-DD": {"rate": Decimal, "stop_sell": False}}}
 	for each mapping with a provider rate plan id, priced by _plan_night_rate
-	in the mapping's currency; a day without a price is {"stop_sell": True}
-	and carries no rate.
+	in the mapping's currency (the tariff directory read once for the pass);
+	a day without a price is {"stop_sell": True} and carries no rate.
 
 	A mapping that cannot go in its currency has no cells at all, and a night
 	whose exchange rate is missing, or that errs while it is priced, has none
 	either. `problems` (when given) collects them: "refused"
 	{external_rate_id: why}, "held" and "errored" {external_rate_id:
 	{"dates": [...], "reason": ..., "rate_plan": ...}}."""
-	from kamra.channel_manager import _mappings
 	from kamra.pricing import property_currency
 	problems = {} if problems is None else problems
 	window = _clip(date_from, date_to)
@@ -198,6 +221,16 @@ def restriction_cells(conn, date_from, date_to, problems: dict | None = None) ->
 	start, end = window
 	days = date_diff(end, start) + 1
 	home = property_currency(conn.property)
+	token = _pass_directory.set({})
+	try:
+		return _restriction_cells(conn, start, days, home, problems)
+	finally:
+		_pass_directory.reset(token)
+
+
+def _restriction_cells(conn, start: str, days: int, home: str, problems: dict) -> dict[str, dict[str, dict]]:
+	"""restriction_cells for `days` days from `start`, inside its pass."""
+	from kamra.channel_manager import _mappings
 	out: dict[str, dict[str, dict]] = {}
 	for m in _mappings(conn.name):
 		if not m.external_rate_id:
