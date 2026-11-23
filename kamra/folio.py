@@ -768,24 +768,31 @@ def charged_nights(reservation_name: str) -> dict:
 	"""What the folios hold for each night of the stay already charged: the
 	room line(s) posted for the night plus every rate adjustment made to it
 	since, and the night's levy. {night: {base, tax, gst_rate, levy_base,
-	levy_tax, folio}} - folio is where the night's room line went."""
+	levy_tax, folio}} - folio is where the night's room line went.
+
+	A night counts as charged under STANDS_ON_ITS_DATE, the same standing
+	rule _charge_posted uses: a same-date void drops out, while a closed
+	night voided on a later business date stays in the map (it will never
+	be posted again) at the net amount the folio still holds for it."""
 	rows = frappe.db.sql(
 		"""
 		SELECT IF(fc.charge_type = %(adj)s, fc.stay_date, fc.posting_date) AS night,
-		       fc.charge_type, fc.amount, fc.gst_rate, fc.parent
+		       fc.charge_type, fc.amount, fc.gst_rate, fc.parent,
+		       CASE WHEN """ + NOT_VOIDED + """ THEN 1 ELSE 0 END AS live
 		FROM `tabFolio Charge` fc
 		JOIN `tabFolio` f ON fc.parent = f.name
 		WHERE (fc.reservation = %(res)s
 		       OR (IFNULL(fc.reservation, '') = '' AND f.reservation = %(res)s))
-		  AND """ + NOT_VOIDED + """
-		  AND (fc.charge_type IN ('Room', 'Room Levy')
-		       OR (fc.charge_type = %(adj)s AND fc.stay_date IS NOT NULL))
-		ORDER BY fc.charge_type = 'Room' DESC, fc.amount DESC
+		  AND ((fc.charge_type = 'Room' AND """ + STANDS_ON_ITS_DATE + """)
+		       OR (fc.charge_type = 'Room Levy' AND """ + NOT_VOIDED + """)
+		       OR (fc.charge_type = %(adj)s AND fc.stay_date IS NOT NULL
+		           AND """ + NOT_VOIDED + """))
+		ORDER BY fc.charge_type = 'Room' DESC, live DESC, fc.amount DESC
 		""", {"res": reservation_name, "adj": RATE_ADJUSTMENT}, as_dict=True)
 	out: dict = {}
 	for r in rows:
 		key = str(r.night)
-		amount = float(r.amount or 0)
+		amount = float(r.amount or 0) if r.live else 0.0
 		tax = amount * float(r.gst_rate or 0) / 100
 		if r.charge_type == "Room Levy":
 			if key in out:
