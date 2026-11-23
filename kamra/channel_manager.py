@@ -484,6 +484,9 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 		if e.get("total") or requested_reason:
 			doc.amount_after_tax = e.get("total") or 0
 		if not doc.auto_price:
+			# the channel's own price: the channel manager is its writer
+			# (Reservation.guard_locked_nights), with or without a total yet
+			doc.flags.kamra_night_rates_writer = True
 			lock_channel_rates(doc, e.get("total"), e.get("nightly"))
 		old_transition = frappe.flags.kamra_status_transition
 		try:

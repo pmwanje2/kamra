@@ -40,6 +40,9 @@ ROOM_NEUTRAL_INPUTS = ("meal_plan",)
 PARTY_INPUTS = ("adults", "children")
 # the columns that say a locked night's price moved
 NIGHT_PRICE_COLUMNS = ("rate", "base_rate", "discount_amount")
+# what a night on the folio keeps from when it was charged, besides the rate
+# and tax rate the folio holds (Reservation.hold_charged_nights)
+CHARGED_NIGHT_HISTORY = ("base_rate", "discount_amount", "rate_code_amount")
 # the quote inputs that are the desk's discount, not what is being sold
 DISCOUNT_INPUT_KEYS = ("discount_type", "discount_value", "night_discounts")
 # every column a locked night row carries
@@ -827,26 +830,27 @@ class Reservation(Document):
 		A new booking carries night rows, or is priced by hand (auto_price
 		off), only from a writer that checked it: create_booking's typed
 		nights (after _check_night_prices: flags.kamra_night_prices_writer),
-		an OTA total, the channel manager or an import
-		(flags.kamra_night_rates_writer). Any other insert (REST POST) is
-		refused: its nights are priced by this save, never by the caller."""
+		an OTA total, the channel manager or an import (night_rates_writer).
+		Any other insert (REST POST) is refused: its nights are priced by this
+		save, never by the caller. An existing stay's pricing is turned off
+		(auto_price 1 to 0) only by those same writers."""
 		if self.is_new():
-			if self.flags.get("kamra_night_rates_writer") or self.flags.get("kamra_night_prices_writer"):
+			if self.night_rates_writer() or self.flags.get("kamra_night_prices_writer"):
 				return
 			days = sorted({str(getdate(r.stay_date)) for r in self.get("night_rates") or []
 			               if r.get("stay_date")})
 			if self.get("night_rates"):
 				self.refuse_locked_nights(days or [_("a night")])
 			if not cint(self.get("auto_price")):
-				frappe.throw(_("A booking is priced by hand only from the booking screen (nightly "
-				               "prices or an OTA total), the channel manager or an import."),
-				             frappe.PermissionError, title=_("Locked night rate"))
+				self.refuse_hand_price()
 			return
-		if self.flags.get("kamra_night_rates_writer"):
+		if self.night_rates_writer():
 			return
 		old = self.get_doc_before_save()
 		if not old:
 			return
+		if cint(old.get("auto_price")) and not cint(self.get("auto_price")):
+			self.refuse_hand_price()
 
 		def by_date(doc):
 			out: dict = {}
@@ -877,6 +881,21 @@ class Reservation(Document):
 		tampered += [day for day in was if day not in now and inside(day)]
 		if tampered:
 			self.refuse_locked_nights(tampered)
+
+	def night_rates_writer(self) -> bool:
+		"""This save writes the stay's locked nights besides its own pricing:
+		the channel manager or one of Kamra's imports
+		(flags.kamra_night_rates_writer), or Frappe's own Data Import, which
+		the server runs with frappe.flags.in_import set (Document.insert then
+		skips the DocType's defaults, auto_price among them). Frappe resets
+		frappe.flags for every request and fills neither from a payload."""
+		return bool(self.flags.get("kamra_night_rates_writer") or frappe.flags.get("in_import"))
+
+	@staticmethod
+	def refuse_hand_price():
+		frappe.throw(_("A booking is priced by hand only from the booking screen (nightly "
+		               "prices or an OTA total), the channel manager or an import."),
+		             frappe.PermissionError, title=_("Locked night rate"))
 
 	@staticmethod
 	def refuse_locked_nights(days):
@@ -1479,7 +1498,9 @@ class Reservation(Document):
 		  posts it again at the new rate.
 
 		Mutates `rows` so each charged night carries what the folio will
-		hold for it. Returns {base, tax} - the change against the quote's
+		hold for it; a night it keeps is history (OPERA's posted Daily
+		Details): it keeps the base, discount and rate-code amount it was
+		charged with. Returns {base, tax} - the change against the quote's
 		totals - plus `lines` to post and `nights` for a preview."""
 		out = {"base": 0.0, "tax": 0.0, "lines": [], "nights": [],
 		       "policy": None}
@@ -1489,6 +1510,9 @@ class Reservation(Document):
 		charged = charged_nights(self.name)
 		if not charged:
 			return out
+		# the nights as they are locked now, before this quote replaces them
+		held = {str(getdate(r.stay_date)): r for r in self.get("night_rates") or []
+		        if r.get("stay_date")}
 		from kamra.settings import get_setting
 		policy = get_setting(self.property, "charged_night_rate_change")
 		out["policy"] = policy
@@ -1539,7 +1563,14 @@ class Reservation(Document):
 			# replaces the quote's
 			entry = flt(entry_rate(new, new_gst, inclusive)) + flt(row.get("discount_amount"))
 			row["rate"], row["gst_rate"] = round(base, 2), gst
-			if "base_rate" in row:
+			was = held.get(night)
+			if action in ("kept", "same") and was is not None and flt(was.get("base_rate")):
+				# kept as charged: its base, discount and rate-code amount as
+				# billed (a row locked before base_rate existed is worked out below)
+				for f in CHARGED_NIGHT_HISTORY:
+					if f in row:
+						row[f] = flt(was.get(f))
+			elif "base_rate" in row:
 				# what the folio holds for the night, against the night's base
 				off = round(max(entry - flt(entry_rate(row["rate"], gst, inclusive)), 0), 2)
 				row["discount_amount"] = off
