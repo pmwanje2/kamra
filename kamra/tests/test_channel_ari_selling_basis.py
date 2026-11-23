@@ -991,6 +991,23 @@ class ChannexTaxBasisTestCase(_SellingBasisFixture, IntegrationTestCase):
 			"reference_doctype": "Reservation", "reference_name": doc.name,
 			"action_type": "channel.modify_needs_review"}))
 
+	def test_a_held_modify_leaves_a_departed_stay_as_it_is(self):
+		"""Nor a stay the guest has left (Neon R1 P1-3: never demote Checked
+		In / Checked Out): it stays Checked Out, its nights and amount as
+		billed, flagged for staff."""
+		h = self.hotel(inclusive=0)
+		self.before_tax(h)
+		first = self.booking(h, listed=True)
+		booked = self.land(h, first)
+		frappe.db.set_value("Reservation", booked.name, "status", "Checked Out")
+		nights = lambda doc: [(str(r.stay_date), flt(r.rate, 2), flt(r.gst_rate, 2))  # noqa: E731
+		                      for r in doc.night_rates]
+		doc = self.land(h, self.booking(h, status="modified", ref=first["payload"]["ota_reservation_code"]))
+		self.assertEqual(doc.status, "Checked Out")
+		self.assertEqual(flt(doc.amount_after_tax), flt(booked.amount_after_tax))
+		self.assertEqual(nights(doc), nights(booked))
+		self.assertIn("resolve", doc.special_requests or "")
+
 	def test_a_later_modify_listing_the_tax_releases_the_hold(self):
 		"""Held for a missing tax, then modified with it: confirmed, priced
 		like the desk, and holding its room again (Neon R1 P1-3, c3)."""
