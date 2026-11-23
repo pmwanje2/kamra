@@ -1200,6 +1200,35 @@ class BackfillRateCategoryChainTests(AuditTestCase):
 		self.assertIn(fc_amb, logged)
 
 
+	def test_backfill_gives_a_reversal_the_category_of_the_charge_it_reverses(self):
+		from kamra import folio as folio_mod
+		from kamra.patches.v47 import backfill_folio_charge_rate_category
+
+		# A night posted on BAR (Standard), the stay moved to COMP, then the night voided:
+		# the reversal is created after the switch but reverses a Standard line.
+		stay = self._stay(self.rooms[0], self.bar, ci=YESTERDAY, co=d(2))
+		folio_mod.post_room_night(frappe.get_doc("Reservation", stay.name), YESTERDAY)
+		frappe.db.set_value("Property", PROP_R4, "business_date", TODAY, update_modified=False)
+		frappe.clear_document_cache("Property", PROP_R4)
+		self.at(TODAY, "kamra.folio", "kamra.business_date", "kamra.ledger", "kamra.api")
+		self._as_user(
+			DESK, api.amend_stay, stay.name, YESTERDAY, d(2), confirm_price=1,
+			rate_plan=self.comp, comp_supervisor_user=GM, comp_supervisor_pin="4321",
+		)
+		folio = frappe.get_doc("Folio", guest_folio(stay.name))
+		original = next(c.name for c in folio.charges if c.charge_type == "Room" and not c.get("reversal_of"))
+		self._as_user(GM, api.void_folio_charge, folio.name, original, reason="UT void after switch", pin="4321")
+		reversal = frappe.db.get_value("Folio Charge", {"reversal_of": original}, "name")
+		self.assertTrue(reversal)
+		for name in (original, reversal):
+			frappe.db.set_value("Folio Charge", name, "rate_category", "", update_modified=False)
+
+		backfill_folio_charge_rate_category.execute()
+
+		self.assertEqual(frappe.db.get_value("Folio Charge", original, "rate_category"), "Standard")
+		self.assertEqual(frappe.db.get_value("Folio Charge", reversal, "rate_category"), "Standard")
+
+
 class ReservationDetailRatePlanAmendTests(CompCase):
 	"""R4 UX #5: reservation_detail exposes the stay's rate plan metadata and
 	the property's active rate plans so Amend stay can change the rate plan
