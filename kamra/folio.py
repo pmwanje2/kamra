@@ -766,8 +766,9 @@ def reference_currency(reservation, grand_total=None, balance=None, *, charges=N
 	With the bill's grand_total and balance, their equivalents in the
 	contract currency at that rate; for ACTUAL on a Current Date stay with
 	the bill's `charges` and `payments`, the sum of each transaction at its
-	own posting rate instead. None for a home-currency stay, or when
-	CURRENT has no published rate today."""
+	own posting rate instead. A fixed rate (OPERA Fixed Rate) is billed at
+	its locked rate on any plan, so ACTUAL converts it at that rate. None
+	for a home-currency stay, or when CURRENT has no published rate today."""
 	from kamra.business_date import get_business_date
 	from kamra.pricing import posting_fx_rate, rate_plan_fx_policy, round_rate_amount, saved_contract_tariff
 
@@ -785,7 +786,9 @@ def reference_currency(reservation, grand_total=None, balance=None, *, charges=N
 		if not posting:
 			return None
 		fx, fx_date = posting
-	elif rate_plan_fx_policy(reservation.get("rate_plan")) == "Current Date":
+	elif rate_plan_fx_policy(reservation.get("rate_plan")) == "Current Date" \
+			and not cint(reservation.get("fixed_rate")):
+		# a fixed rate is never re-converted (current_date_contract_night): it stays at its locked rate
 		per_transaction = charges is not None
 		posted = _posted_contract_fx(reservation, currency, [row for row in charges or [] if row.get("projected")])
 		if posted:

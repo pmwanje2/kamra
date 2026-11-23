@@ -926,7 +926,8 @@ def contract_rate(property, room_type, rate_plan, check_in, check_out, adults, c
 			agreed = round_rate_amount(agreed, step, mode, prop_currency)
 		return nightly, agreed
 
-	nightly, agreed = price_night(nightly, agreed)
+	# the scalars are the first night's: its own extra-person charge when the resolver gave one
+	nightly, agreed = price_night(nightly, agreed, nights[0]["extra_person"] if nights else None)
 	tariff = {"currency": currency, "nightly": float(nightly), "fx_rate": float(fx),
 	          "fx_date": price_date, "property_currency": prop_currency}
 	if nights is not None:
@@ -1026,7 +1027,9 @@ def contract_tariff_for_new_dates(reservation, booked_check_in, booked_check_out
 	it never priced is resolved now through the tariff resolver (OPERA
 	re-prices added nights from the rate code), at the booking's exchange
 	rate date, and a night with no valid price refuses the new dates rather
-	than bill another night's tariff. A night that left the stay leaves the
+	than bill another night's tariff, as does a night priced in another
+	currency than the contract's (the rate plan's currency changed since
+	booking: the contract is re-priced first, never re-denominated). A night that left the stay leaves the
 	contract. A one-rate contract stays one rate while its rate still
 	prices every night. A manager's agreed rate, a fixed rate (OPERA Fixed
 	Rate), a stay priced by hand or by its group block keeps its price:
@@ -1067,6 +1070,11 @@ def contract_tariff_for_new_dates(reservation, booked_check_in, booked_check_out
 			frappe.throw(_("The contract has no valid rate for the added nights {0} to {1}. Ask a manager to check "
 			               "the tariff, or keep the stay's dates.").format(start, end), ContractRateRefused)
 		agreed, priced = resolved
+		if priced.get("currency") != tariff["currency"]:
+			# a rate code's currency change never re-denominates a booking: OPERA refreshes it first
+			frappe.throw(_("The rate plan now prices the added nights {0} to {1} in {2}, but this stay's contract "
+			               "is in {3}. Ask a manager to re-price the stay's contract, or keep the stay's dates.")
+			             .format(start, end, priced.get("currency"), tariff["currency"]), ContractRateRefused)
 		by_date = {night["date"]: night for night in priced.get("nights") or []}
 		for day in run:
 			night = by_date.get(day) or {"nightly": priced["nightly"], "agreed_rate": agreed}

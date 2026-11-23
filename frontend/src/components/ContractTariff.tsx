@@ -31,11 +31,13 @@ export function TariffNight({ tariff, agreed_rate }: TariffReference) {
   const { t } = useT()
   const locale = moneyLocale()
   if (!tariff || agreed_rate == null) return null
-  // a stay over a tariff change: the nights priced apart from the check-in night
-  const changes = (tariff.nights ?? []).filter((night) => night.nightly !== tariff.nightly || night.agreed_rate !== agreed_rate)
+  // the stay's own first night: a stay shortened from the front or moved keeps its check-in night's scalars
+  const first = tariff.nights?.[0] ?? { nightly: tariff.nightly, agreed_rate }
+  // a stay over a tariff change: the nights priced apart from the first night
+  const changes = (tariff.nights ?? []).filter((night) => night.nightly !== first.nightly || night.agreed_rate !== first.agreed_rate)
   return <span className="tabular-nums">{t("{contract} / night · {home} at {rate} ({date})", {
-    contract: currencyText(tariff.currency, tariff.nightly, locale),
-    home: currencyText(tariff.property_currency, agreed_rate, locale),
+    contract: currencyText(tariff.currency, first.nightly, locale),
+    home: currencyText(tariff.property_currency, first.agreed_rate, locale),
     rate: formatFxRate(tariff.fx_rate, locale),
     date: tariffDate(tariff.fx_date, locale),
   })}
