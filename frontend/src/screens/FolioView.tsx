@@ -1,13 +1,13 @@
 import { SettlementPreview, useSettlementQuote } from "../components/SettlementPreview"
 import TenderPicker, { TenderInput, resolveTender, tenderAmount, tenderModes, tenderReady, useTenderRates } from "../components/TenderPicker"
-import { currencyText, formatFxRate, TariffNight } from "../components/ContractTariff"
+import { currencyText, formatFxRate, ReferenceCurrencyNote, TariffNight } from "../components/ContractTariff"
 import RowCorrection from "../components/RowCorrection"
 import { ResponsiveList, Popin } from "../components/ui/responsive-list"
 import { Fragment, useCallback, useEffect, useRef, useState } from "react"
 import { ArrowLeft, ArrowRightLeft, Printer, X } from "lucide-react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { formatDate, roomLabel } from "../lib/utils"
-import { call, getCurrentProperty, newIdempotencyKey, type TariffReference } from "../lib/api"
+import { call, getCurrentProperty, newIdempotencyKey, type ReferenceCurrency, type TariffReference } from "../lib/api"
 import EditableNationality from "../components/EditableNationality"
 import LinkedRecords from "../components/LinkedRecords"
 import AllowanceRequests from "../components/AllowanceRequests"
@@ -94,6 +94,8 @@ interface InvoiceData {
   /** an Account folio (raised on a company's AR account) has no stay:
    *  only reservation (null) and company come back */
   stay: TariffReference & {
+    /** the contract currency, its rate and the bill in it (Property reference currency calculation) */
+    reference_currency?: ReferenceCurrency | null
     reservation: string | null
     check_in: string
     check_out: string
@@ -910,6 +912,8 @@ export default function FolioView() {
           {stay.tariff && <p className="mb-3 text-sm text-zinc-600">
             {t("Booked contract tariff")}: <TariffNight {...stay} />
           </p>}
+          {/* on screen, on the pro-forma and on the printed invoice alike */}
+          <ReferenceCurrencyNote reference={stay.reference_currency} />
           <dl className="mb-6 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
             <Fact label={t("Guest")}>
               <span className="font-medium">

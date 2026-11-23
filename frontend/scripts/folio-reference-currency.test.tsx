@@ -78,14 +78,14 @@ describe("Folio reference currency", () => {
       grand_total_reference: 260, balance_reference: 130 })
     const note = reference()
     expect(note, "the bill must show its reference currency").not.toBeNull()
-    expect(note!.textContent).toContain("Reference currency USD · Actual: 1 USD = 3,650 UGX (20 Nov 2026)")
+    expect(note!.textContent).toContain("Reference currency USD · Actual: 1 USD = 3,650 UGX (Nov 20, 2026)")
     expect(note!.textContent).toContain("Total USD 260.00 · Balance USD 130.00")
   })
 
   it("names a Current calculation and the nights an Actual rate was posted at", async () => {
     await render({ currency: "USD", home_currency: "UGX", calculation: "CURRENT", fx_rate: 3800, fx_date: "2026-11-22",
       grand_total_reference: 249.74, balance_reference: 124.87 })
-    expect(reference()!.textContent).toContain("Reference currency USD · Current: 1 USD = 3,800 UGX (22 Nov 2026)")
+    expect(reference()!.textContent).toContain("Reference currency USD · Current: 1 USD = 3,800 UGX (Nov 22, 2026)")
     await act(async () => root.unmount())
     root = createRoot(host)
     await render({ currency: "USD", home_currency: "UGX", calculation: "ACTUAL", fx_rate: 3750, fx_date: "2026-11-22",

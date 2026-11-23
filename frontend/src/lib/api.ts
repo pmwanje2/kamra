@@ -469,6 +469,21 @@ export interface TariffReference {
   agreed_rate?: number | null
 }
 
+/** A bill's contract currency beside its home amounts (kamra.folio.reference_currency): Property
+ *  reference_currency_calculation ACTUAL - the rate the stay was priced or its nights posted at - or
+ *  CURRENT - today's published rate - with the bill's total and balance in that currency. */
+export interface ReferenceCurrency {
+  currency: string
+  home_currency: string
+  calculation: "ACTUAL" | "CURRENT"
+  fx_rate: number
+  fx_date: string | null
+  /** an ACTUAL Current Date stay: how many posted nights the average rate is of */
+  posted_nights?: number
+  grand_total_reference?: number
+  balance_reference?: number
+}
+
 export interface TaxBasis {
   label: string
   rate: number

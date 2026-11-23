@@ -4,6 +4,11 @@
 // "create with reference" arithmetic the mass actions share. Pure: no
 // storage or locale state, so the screen and its tests share one copy.
 
+/** Rows in one bulk change or decision: hospitality-tariffs@11 refuses more (kamra.rates.TARIFF_BATCH_LIMIT). */
+export const TARIFF_BATCH_LIMIT = 200
+/** The largest tariff spreadsheet an import sends (kamra.rates.TARIFF_IMPORT_BYTES, 1 MiB). */
+export const TARIFF_IMPORT_BYTES = 1_048_576
+
 export type RoundingMode = "Nearest" | "Up" | "Down"
 export type Adjustment = { kind: "percent" | "amount" | "exact"; value: number }
 export type ExtraKind = "adult" | "child" | "bed"
@@ -26,6 +31,25 @@ export interface PriceList {
   fx_rate?: number | null
   fx_date?: string | null
   rate_plans?: string[]
+}
+
+/** What a bulk approve or discard answered: hospitality-tariffs@11 counts and per-draft results, or the
+ *  single-endpoint fallback's list of decided drafts. */
+export interface DecisionResult {
+  approved?: number | unknown[]
+  discarded?: number | unknown[]
+  skipped?: number
+  results?: { name: string; status: string; reason?: string }[]
+}
+
+/** How many drafts a bulk decision decided and skipped, and why the skipped ones were. */
+export function decisionOutcome(result: DecisionResult, kind: "approve" | "discard", sent: number) {
+  const value = kind === "approve" ? result.approved : result.discarded
+  const skippedRows = (result.results ?? []).filter((row) => row.status === "skipped")
+  const skipped = typeof result.skipped === "number" ? result.skipped : skippedRows.length
+  const done = typeof value === "number" ? value : Array.isArray(value) ? value.length : sent - skipped
+  const reasons = [...new Set(skippedRows.map((row) => row.reason?.trim()).filter((reason): reason is string => !!reason))]
+  return { done, skipped, reasons }
 }
 
 export interface ContractTariffItem {

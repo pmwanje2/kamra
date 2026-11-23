@@ -23,6 +23,8 @@ interface ContractTariffsResponse {
   business_date: string
   can_propose: boolean
   can_approve: boolean
+  /** a Hotel Admin with tariff access may discard any draft, their own included (kamra.rates) */
+  can_discard?: boolean
   price_lists: PriceList[]
   items: ContractTariffItem[]
   rate_plan_policies?: Record<string, RatePlanPolicy>
@@ -33,6 +35,7 @@ type TariffsPayload = ContractTariffsResponse | {
   property: string
   can_propose: false
   can_approve: false
+  can_discard?: false
   price_lists: []
   items: []
 }
@@ -178,7 +181,7 @@ function TariffDirectory({ property }: { property: string }) {
   const allChosen = visible.length > 0 && chosen.length === visible.length
   const view: TariffView = {
     data: directory, lists, locale, dateLocale, loading, open,
-    selectable: directory.can_propose || directory.can_approve,
+    selectable: directory.can_propose || directory.can_approve || !!directory.can_discard,
     selected,
     toggle: (keys, on) => setSelected((current) => {
       const next = new Set(current)
@@ -237,8 +240,11 @@ function TariffDirectory({ property }: { property: string }) {
     setExporting(true)
     setExportFailed(false)
     try {
-      const out = await call<CsvExport | null>("kamra.rates.export_contract_tariffs_csv",
-        selectedList && filter !== "pending" ? { property, price_list: selectedList.name } : { property })
+      // the file holds what the screen shows: its price list, customer and effective date
+      const out = await call<CsvExport | null>("kamra.rates.export_contract_tariffs_csv", {
+        property, ...(selectedList && filter !== "pending" ? { price_list: selectedList.name } : {}),
+        ...(customer ? { customer } : {}), ...(asOf ? { as_of_date: asOf } : {}),
+      })
       if (out?.supported) downloadCsv(`contract-tariffs-${out.business_date ?? directory.business_date}`, out.columns, out.rows)
       else setExportFailed(true)
     } catch {
@@ -318,12 +324,12 @@ function TariffDirectory({ property }: { property: string }) {
       </label>}
       {directory.can_propose && chosen.length > 0 && <Button type="button" variant="outline" disabled={loading}
         onClick={() => setMass({ kind: "version", items: chosen })}><Layers aria-hidden className="size-4" />{t("Create new version in bulk")}</Button>}
-      {directory.can_approve && chosenDrafts.length > 0 && <>
+      {directory.can_approve && chosenDrafts.some(({ draft }) => draft.can_approve !== false) &&
         <Button type="button" variant="outline" className={decisionTone.approve} disabled={loading}
-          onClick={() => setMass({ kind: "approve", drafts: chosenDrafts })}>{t("Approve selected")}</Button>
+          onClick={() => setMass({ kind: "approve", drafts: chosenDrafts })}>{t("Approve selected")}</Button>}
+      {directory.can_discard && chosenDrafts.length > 0 &&
         <Button type="button" variant="outline" className={decisionTone.discard} disabled={loading}
-          onClick={() => setMass({ kind: "discard", drafts: chosenDrafts })}>{t("Discard selected")}</Button>
-      </>}
+          onClick={() => setMass({ kind: "discard", drafts: chosenDrafts })}>{t("Discard selected")}</Button>}
       <span className="ms-auto flex flex-wrap gap-2">
         <Button type="button" variant="outline" onClick={exportCsv} disabled={exporting}>
           <Download aria-hidden className="size-4" />{t("Export CSV")}
@@ -464,12 +470,16 @@ function Versions({ item, view }: { item: ContractTariffItem; view: TariffView }
       <span className={pill + " bg-amber-50 text-amber-900 tabular-nums"}>
         {t("In review: {rate} from {date}", { rate: currencyText(currency, draft.rate, view.locale), date: view.validity(draft) })}
       </span>
-      {view.data.can_approve && draft.can_approve !== false && <div className="flex flex-wrap justify-end gap-1.5 xl:justify-start">
-        <Button type="button" variant="outline" className={decisionTone.approve} disabled={view.loading}
-          onClick={() => view.open({ kind: "approve", item, draft })}>{t("Approve")}</Button>
-        <Button type="button" variant="outline" className={decisionTone.discard} disabled={view.loading}
-          onClick={() => view.open({ kind: "discard", item, draft })}>{t("Discard")}</Button>
-      </div>}
+      {/* a maker never approves their own draft (can_approve false), but may discard it */}
+      {((view.data.can_approve && draft.can_approve !== false) || view.data.can_discard) &&
+        <div className="flex flex-wrap justify-end gap-1.5 xl:justify-start">
+          {view.data.can_approve && draft.can_approve !== false &&
+            <Button type="button" variant="outline" className={decisionTone.approve} disabled={view.loading}
+              onClick={() => view.open({ kind: "approve", item, draft })}>{t("Approve")}</Button>}
+          {view.data.can_discard &&
+            <Button type="button" variant="outline" className={decisionTone.discard} disabled={view.loading}
+              onClick={() => view.open({ kind: "discard", item, draft })}>{t("Discard")}</Button>}
+        </div>}
     </div>)}
   </div>
 }
@@ -604,6 +614,8 @@ function ActionDialog({ action, data, locale, dateLocale, list, rounding, onClos
       const result = await call(editMethods[action.kind], action.kind === "propose" ? {
         property: data.property, price_list: item.price_list, item_code: item.item_code,
         price_list_rate: value, valid_from: validFrom, valid_upto: validUntil || null,
+        // a customer row's version is that customer's own price, never the public rate
+        ...(item.customer ? { customer: item.customer } : {}),
       } : { item_price: action.draft.name })
       if (result == null) setFailure("absent")
       else onSuccess()
@@ -623,7 +635,12 @@ function ActionDialog({ action, data, locale, dateLocale, list, rounding, onClos
   const showPreview = currency !== data.property_currency && rate != null && rate > 0
     && Number.isFinite(Number(amount)) && Number(amount) > 0
   const local = showPreview ? Number(amount) * rate : 0
-  return <TariffModal title={title} subtitle={`${item.item_name} · ${item.price_list}`} busy={busy} onClose={onClose} onSubmit={submit}
+  const subtitle = <>
+    {item.item_name} · {item.price_list}
+    {item.customer && <> · <strong className="font-semibold text-brand-800">
+      {t("Customer rate: {customer}", { customer: item.customer })}</strong></>}
+  </>
+  return <TariffModal title={title} subtitle={subtitle} busy={busy} onClose={onClose} onSubmit={submit}
     footer={<>
       <Button type="button" variant="outline" onClick={onClose} disabled={busy}>{t("Cancel")}</Button>
       <Button type="submit" variant={kind === "propose" ? "primary" : "outline"}

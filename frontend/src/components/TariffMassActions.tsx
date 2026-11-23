@@ -5,7 +5,8 @@ import { call, serverError } from "../lib/api"
 import { useT } from "../lib/i18n"
 import { addDays } from "../lib/stay"
 import {
-  adjustRate, roundRate, type Adjustment, type ContractTariffItem, type PriceList, type RoundingMode, type TariffVersion,
+  adjustRate, decisionOutcome, roundRate, TARIFF_BATCH_LIMIT, TARIFF_IMPORT_BYTES, type Adjustment,
+  type ContractTariffItem, type DecisionResult, type PriceList, type RoundingMode, type TariffVersion,
 } from "../lib/tariffMatrix"
 
 export type DraftChoice = { item: ContractTariffItem; draft: TariffVersion }
@@ -101,6 +102,15 @@ function Failure({ message }: { message: string | null }) {
   return message ? <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-800">{message}</p> : null
 }
 
+/** The integration takes at most TARIFF_BATCH_LIMIT rows at once: say so instead of sending more. */
+function OverLimit({ count }: { count: number }) {
+  const { t } = useT()
+  const over = Math.max(count - TARIFF_BATCH_LIMIT, 0)
+  return over ? <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+    {t("Choose at most {n} tariffs at a time.", { n: TARIFF_BATCH_LIMIT })}
+  </p> : null
+}
+
 function BulkVersionDialog({ items, property, businessDate, lists, locale, dateLocale, onClose, onDone }: MassProps & {
   items: ContractTariffItem[]
 }) {
@@ -135,10 +145,11 @@ function BulkVersionDialog({ items, property, businessDate, lists, locale, dateL
   const entries = plan.filter((entry) => entry != null)
   const leftOut = plan.length - entries.length
   const invalid = entries.filter((entry) => !entry.valid).length
+  const tooMany = Math.max(items.length - TARIFF_BATCH_LIMIT, 0) !== 0
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!ready || !entries.length || invalid) return
+    if (!ready || !entries.length || invalid || tooMany) return
     void run(async () => {
       const result = await call("kamra.rates.bulk_propose_contract_tariffs", {
         property, entries: entries.map(({ item, rate, from, upto }) => ({
@@ -156,10 +167,11 @@ function BulkVersionDialog({ items, property, businessDate, lists, locale, dateL
     subtitle={tn(items.length, "{n} tariff selected", "{n} tariffs selected")}
     footer={<>
       <Button type="button" variant="outline" onClick={onClose} disabled={busy}>{t("Cancel")}</Button>
-      <Button type="submit" disabled={busy || !ready || !entries.length || invalid > 0}>
+      <Button type="submit" disabled={busy || !ready || !entries.length || invalid > 0 || tooMany}>
         {busy ? t("Saving…") : t("Submit {n} for approval", { n: entries.length })}
       </Button>
     </>}>
+    <OverLimit count={items.length} />
     <div className="grid gap-3 sm:grid-cols-2">
       <label className="flex min-w-0 flex-col gap-1.5 text-sm font-medium">
         {t("Adjustment")}
@@ -243,19 +255,32 @@ function DecisionDialog({ kind, drafts, locale, dateLocale, lists, onClose, onDo
 }) {
   const { t, tn } = useT()
   const { busy, failure, setFailure, run } = useSubmission()
-  // the integration decides separation of duties per draft; a maker's own draft is not offered
-  const decidable = drafts.filter(({ draft }) => draft.can_approve !== false)
+  // separation of duties keeps a maker from approving their own draft, never from discarding it
+  const decidable = kind === "approve" ? drafts.filter(({ draft }) => draft.can_approve !== false) : drafts
   const excluded = drafts.length - decidable.length
   const n = decidable.length
+  const tooMany = Math.max(n - TARIFF_BATCH_LIMIT, 0) !== 0
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!n) return
+    if (!n || tooMany) return
     void run(async () => {
-      const result = await call(`kamra.rates.bulk_${kind}_contract_tariffs`, { item_prices: decidable.map(({ draft }) => draft.name) })
-      if (result == null) setFailure(t("Tariff editing is not available for this property."))
-      else onDone(kind === "approve" ? tn(n, "{n} tariff version approved", "{n} tariff versions approved")
-        : tn(n, "{n} tariff draft discarded", "{n} tariff drafts discarded"))
+      const result = await call<DecisionResult | null>(`kamra.rates.bulk_${kind}_contract_tariffs`,
+        { item_prices: decidable.map(({ draft }) => draft.name) })
+      if (result == null) {
+        setFailure(t("Tariff editing is not available for this property."))
+        return
+      }
+      // the integration skips a draft that fails a guard: report what it did, never the count sent
+      const { done, skipped, reasons } = decisionOutcome(result, kind, n)
+      const summary = [
+        done ? kind === "approve" ? tn(done, "{n} tariff version approved", "{n} tariff versions approved")
+          : tn(done, "{n} tariff draft discarded", "{n} tariff drafts discarded")
+          : kind === "approve" ? t("No tariff versions were approved") : t("No tariff drafts were discarded"),
+        skipped ? tn(skipped, "{n} skipped: {reasons}", "{n} skipped: {reasons}", { reasons: reasons.join("; ") || "—" }) : "",
+      ].filter(Boolean).join(" · ")
+      if (done) onDone(summary)
+      else setFailure(summary)
     }, t("The tariff change could not be saved. Check the latest versions before retrying."))
   }
 
@@ -264,10 +289,11 @@ function DecisionDialog({ kind, drafts, locale, dateLocale, lists, onClose, onDo
       : tn(n, "Discard {n} tariff draft?", "Discard {n} tariff drafts?")}
     footer={<>
       <Button type="button" variant="outline" onClick={onClose} disabled={busy}>{t("Cancel")}</Button>
-      <Button type="submit" variant="outline" className={decisionTone[kind]} disabled={busy || !n}>
+      <Button type="submit" variant="outline" className={decisionTone[kind]} disabled={busy || !n || tooMany}>
         {busy ? t("Saving…") : kind === "approve" ? t("Approve") : t("Discard")}
       </Button>
     </>}>
+    <OverLimit count={n} />
     <ul className="max-h-48 space-y-1 overflow-y-auto text-sm tabular-nums">
       {decidable.map(({ item, draft }) => <li key={draft.name}>{t("{item}: {rate} from {date}", {
         item: [item.item_name, item.price_list, item.customer].filter(Boolean).join(" · "),
@@ -275,10 +301,9 @@ function DecisionDialog({ kind, drafts, locale, dateLocale, lists, onClose, onDo
         date: tariffDate(draft.valid_from, dateLocale),
       })}</li>)}
     </ul>
-    {excluded > 0 && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{kind === "approve"
-      ? tn(excluded, "{n} draft is left out: a different approver must release a draft its maker proposed.",
-        "{n} drafts are left out: a different approver must release a draft its maker proposed.")
-      : tn(excluded, "{n} draft is left out: you cannot decide on it.", "{n} drafts are left out: you cannot decide on them.")}</p>}
+    {excluded > 0 && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+      {tn(excluded, "{n} draft is left out: a different approver must release a draft its maker proposed.",
+        "{n} drafts are left out: a different approver must release a draft its maker proposed.")}</p>}
     <p className="text-sm text-zinc-700">{kind === "approve"
       ? t("These versions take effect on their effective dates once approved.")
       : t("Discarding drafts cannot be undone. Released tariffs do not change.")}</p>
@@ -313,6 +338,11 @@ function ImportDialog({ property, onClose, onDone }: MassProps) {
     event.preventDefault()
     if (!file) return
     setErrors([])
+    if (file.size > TARIFF_IMPORT_BYTES) {
+      // the server refuses it too; never read or send a file that large
+      setFailure(t("The file is larger than 1 MB. Split it and import each part."))
+      return
+    }
     void run(async () => {
       const result = await call<ImportResult | null>("kamra.rates.import_contract_tariffs_rows", { property, rows: await readText(file) })
       if (result == null) setFailure(t("Tariff editing is not available for this property."))
@@ -332,6 +362,7 @@ function ImportDialog({ property, onClose, onDone }: MassProps) {
       <Button type="submit" disabled={busy || !file}>{busy ? t("Saving…") : t("Import as drafts")}</Button>
     </>}>
     <p className="text-sm text-zinc-700">{t("Use a file exported from this screen. Each changed row becomes a draft version for approval; nothing is released until it is approved.")}</p>
+    <p className="text-sm text-zinc-600">{t("Up to {n} rows and 1 MB per file.", { n: TARIFF_BATCH_LIMIT })}</p>
     <label className="flex flex-col gap-1.5 text-sm font-medium">
       {t("CSV file")}
       <input name="tariff_file" type="file" accept=".csv,text/csv" className="text-sm" disabled={busy}

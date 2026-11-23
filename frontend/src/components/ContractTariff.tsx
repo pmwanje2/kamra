@@ -1,4 +1,4 @@
-import type { ContractTariff, TariffReference } from "../lib/api"
+import type { ContractTariff, ReferenceCurrency, TariffReference } from "../lib/api"
 import { useT } from "../lib/i18n"
 import { moneyDigits, moneyLocale } from "../lib/money"
 
@@ -28,6 +28,29 @@ export function TariffNight({ tariff, agreed_rate }: TariffReference) {
     rate: formatFxRate(tariff.fx_rate, locale),
     date: tariffDate(tariff.fx_date, locale),
   })}</span>
+}
+
+/** The bill in its contract currency: which rate (Actual or Current), its date, and the total and balance at it. */
+export function ReferenceCurrencyNote({ reference }: { reference?: ReferenceCurrency | null }) {
+  const { t, tn } = useT()
+  const locale = moneyLocale()
+  if (!reference?.currency || !Number.isFinite(reference.fx_rate) || reference.fx_rate <= 0) return null
+  const current = reference.calculation === "CURRENT"
+  const nights = reference.posted_nights ?? 0
+  const hasTotals = reference.grand_total_reference != null && reference.balance_reference != null
+  return <p data-reference-currency className="mb-3 text-sm text-zinc-600 tabular-nums"
+    title={current ? t("Converted at today's published rate.") : t("Converted at the rate the stay was priced or posted at.")}>
+    {t(current ? "Reference currency {currency} · Current: 1 {currency} = {rate} {home} ({date})"
+      : "Reference currency {currency} · Actual: 1 {currency} = {rate} {home} ({date})", {
+      currency: reference.currency, rate: formatFxRate(reference.fx_rate, locale), home: reference.home_currency,
+      date: reference.fx_date ? tariffDate(reference.fx_date, locale) : "—",
+    })}
+    {nights > 0 && <> · {tn(nights, "Rate {n} night posted at", "Average of the rates {n} nights posted at")}</>}
+    {hasTotals && <span className="block font-medium text-zinc-800">{t("Total {total} · Balance {balance}", {
+      total: currencyText(reference.currency, reference.grand_total_reference!, locale),
+      balance: currencyText(reference.currency, reference.balance_reference!, locale),
+    })}</span>}
+  </p>
 }
 
 export function TariffRoomTotal({ tariff, nights, agreedRate, locale }: {
