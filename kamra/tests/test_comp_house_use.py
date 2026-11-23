@@ -1,24 +1,33 @@
 """Complimentary and House Use rate plans (OPERA Cloud rate code flags;
 the parity check's item 11b on #32).
 
-- A Rate Plan carries rate_category: Standard, Complimentary or House Use
-  (OPERA's rate code Complimentary and House Use check boxes).
-- kamra.room_statistics is the one rule for rooms sold, complimentary and
-  house-use rooms, ADR, RevPAR and occupancy, and every report reads it:
+- A Rate Plan carries a rate_category from the property's own list
+  (Settings > Revenue > Complimentary and house use: rate_categories),
+  seeded with OPERA's rate code Complimentary and House Use flags:
+      Standard
+      Complimentary: sign-off, no ADR
+      House Use: sign-off, no ADR
+  Each line can also say "no RevPAR" or "no occupancy". The approvers are
+  configured too (rate_category_approvers, seeded Hotel Admin and Finance).
+- kamra.room_statistics is the one rule for rooms sold, rooms by category,
+  ADR, RevPAR and occupancy, and every report reads it. A category left out
+  of a figure adds neither rooms nor revenue to it. With OPERA's defaults:
   - ADR is room revenue over the rooms sold minus comp and house use (OPERA
     Manager Report, "ADR minus Comp and House");
   - RevPAR is room revenue over the rooms;
   - occupancy counts comp and house-use rooms, because they are occupied.
   So the same nights give the same figures in every report.
-- Booking a stay on a Complimentary or House Use plan, or moving a stay to
-  one, needs another supervisor's sign-off with their PIN. This is OPERA's
-  comp authorizer, through the PIN route the discounts use. Nobody signs
-  off their own, and an AI agent can't.
+- Booking a stay on a plan whose category needs a sign-off, or moving a
+  stay to one, needs another supervisor's sign-off with their PIN. This is
+  OPERA's comp authorizer, through the PIN route the discounts use. Nobody
+  signs off their own, and an AI agent can't.
 - A comp stay still taxes the lines taxed like the room (cleaning, the levy).
 - A plain save (REST PUT) never writes an auto-priced stay's header totals.
 """
 
 from __future__ import annotations
+
+from typing import ClassVar
 
 import frappe
 from frappe.utils import flt
@@ -38,11 +47,25 @@ from kamra.tests.audit_fixtures import (
 	make_room,
 	make_room_type,
 )
-from kamra.tests.test_reservation_discounts import AGENT, DESK, GM, PROP_A, SELF, DiscountTestCase
+from kamra.tests.test_reservation_discounts import (
+	AGENT,
+	DESK,
+	GM,
+	PROP_A,
+	REVENUE,
+	SELF,
+	DiscountTestCase,
+	set_setting,
+)
 
 PROP_S = "UT Comp Stats"
 PROP_V = "UT Comp VAT"
-FIGURES = ("rooms_sold", "comp_rooms", "house_use_rooms", "adr", "revpar", "occupancy_pct")
+FIGURES = ("rooms_sold", "rooms_by_category", "adr", "revpar", "occupancy_pct")
+OPERA = {"Complimentary": 1, "House Use": 1}
+# a property that counts comps in ADR, leaves house use out of ADR and
+# occupancy, and has a Staff category out of ADR and RevPAR
+CONFIGURED = ("Standard\nComplimentary: sign-off\nHouse Use: sign-off, no ADR, no occupancy\n"
+              "Staff: no ADR, no RevPAR")
 
 
 def sign_off_logs(name):
@@ -51,15 +74,76 @@ def sign_off_logs(name):
 	                      fields=["actor", "approver", "rationale"])
 
 
-class RateCategoryFieldTests(AuditTestCase):
-	properties = ()
+class RateCategoryFieldTests(DiscountTestCase):
+	"""Rate Plan.rate_category holds one of the property's categories."""
 
-	def test_the_rate_plan_has_operas_two_categories_and_standard(self):
+	def test_the_field_takes_its_values_from_the_propertys_list(self):
 		field = frappe.get_meta("Rate Plan").get_field("rate_category")
 		self.assertIsNotNone(field)
-		self.assertEqual(field.fieldtype, "Select")
-		self.assertEqual(field.options.split("\n"), ["Standard", "Complimentary", "House Use"])
+		# not a fixed Select: the property's own list (Settings) decides
+		self.assertEqual(field.fieldtype, "Data")
 		self.assertEqual(field.default, "Standard")
+
+	def test_a_plan_takes_only_a_category_the_property_lists(self):
+		with self.assertRaises(frappe.ValidationError):
+			self.plan("STAFF", rate_category="Staff")
+		set_setting(PROP_A, "rate_categories", CONFIGURED)
+		# matched without regard to case, stored as the list spells it
+		staff = self.plan("STAFF", rate_category="staff")
+		self.assertEqual(frappe.db.get_value("Rate Plan", staff, "rate_category"), "Staff")
+		# a plan with none takes the list's first category
+		bar = self.plan("BAR", rate_category="")
+		self.assertEqual(frappe.db.get_value("Rate Plan", bar, "rate_category"), "Standard")
+
+	def test_the_rate_plans_form_lists_the_propertys_categories(self):
+		from kamra.settings import menu_masters
+		set_setting(PROP_A, "rate_categories", CONFIGURED)
+		out = self.as_user(REVENUE, menu_masters, PROP_A)
+		self.assertEqual(out["rate_categories"], ["Standard", "Complimentary", "House Use", "Staff"])
+
+
+class CategoryRulesTests(AuditTestCase):
+	"""kamra.room_statistics.category_rules: the property's categories and
+	what each is left out of, seeded with OPERA's defaults."""
+
+	properties = (PROP_A,)
+
+	def setUp(self):
+		super().setUp()
+		make_property(PROP_A)
+		frappe.db.delete("Property Setting", {"property": PROP_A, "setting_key": (
+			"in", ["rate_categories", "rate_category_approvers"])})
+		from kamra.settings import clear_cache
+		clear_cache(PROP_A)
+
+	def test_the_seeded_rules_are_operas(self):
+		from kamra.room_statistics import category_rules
+		rules = category_rules(PROP_A)
+		self.assertEqual(rules.categories, ("Standard", "Complimentary", "House Use"))
+		self.assertEqual(rules.default, "Standard")
+		self.assertEqual(rules.sign_off, frozenset({"Complimentary", "House Use"}))
+		self.assertEqual(rules.out_of["adr"], frozenset({"Complimentary", "House Use"}))
+		self.assertEqual((rules.out_of["revpar"], rules.out_of["occupancy"]),
+		                 (frozenset(), frozenset()))
+		self.assertEqual(rules.approvers, ("Hotel Admin", "Finance"))
+
+	def test_each_line_names_a_category_and_what_it_is_left_out_of(self):
+		from kamra.room_statistics import parse_rules
+		rules = parse_rules(CONFIGURED + "\n staff : NO occupancy\n\nVIP: no ADR, upgrade")
+		# a category listed twice keeps its first line; an unknown word is ignored
+		self.assertEqual(rules.categories, ("Standard", "Complimentary", "House Use", "Staff", "VIP"))
+		self.assertEqual(rules.sign_off, frozenset({"Complimentary", "House Use"}))
+		self.assertEqual(rules.out_of["adr"], frozenset({"House Use", "Staff", "VIP"}))
+		self.assertEqual(rules.out_of["revpar"], frozenset({"Staff"}))
+		self.assertEqual(rules.out_of["occupancy"], frozenset({"House Use"}))
+		self.assertEqual(rules.canonical("house use"), "House Use")
+		self.assertEqual(rules.canonical(""), "Standard")
+		self.assertIsNone(rules.canonical("Unknown"))
+
+	def test_the_approvers_are_configured(self):
+		from kamra.room_statistics import category_rules
+		set_setting(PROP_A, "rate_category_approvers", "Revenue Manager")
+		self.assertEqual(category_rules(PROP_A).approvers, ("Revenue Manager",))
 
 
 class RoomFiguresTests(AuditTestCase):
@@ -67,26 +151,44 @@ class RoomFiguresTests(AuditTestCase):
 
 	properties = ()
 
+	@staticmethod
+	def nights(**by_category):
+		return {cat.replace("_", " "): {"rooms": rooms, "revenue": revenue}
+		        for cat, (rooms, revenue) in by_category.items()}
+
 	def test_adr_leaves_out_comp_and_house_use_rooms_occupancy_counts_them(self):
-		from kamra.room_statistics import room_figures
-		out = room_figures(room_revenue=2600, rooms_sold=4, comp_rooms=1, house_use_rooms=1,
-		                   occupancy_rooms=4)
-		self.assertEqual(out, {"comp_rooms": 1, "house_use_rooms": 1, "occupancy_pct": 100.0,
+		from kamra.room_statistics import parse_rules, room_figures
+		out = room_figures(parse_rules(""), room_revenue=2600, rooms_sold=4, occupancy_rooms=4,
+		                   by_category=self.nights(Standard=(2, 2600), Complimentary=(1, 0),
+		                                           House_Use=(1, 0)))
+		self.assertEqual(out, {"rooms_by_category": OPERA, "occupancy_pct": 100.0,
 		                       "adr": 1300, "revpar": 650})
 
 	def test_a_house_of_comps_has_no_adr(self):
-		from kamra.room_statistics import room_figures
-		out = room_figures(room_revenue=0, rooms_sold=2, comp_rooms=1, house_use_rooms=1,
-		                   occupancy_rooms=4)
+		from kamra.room_statistics import parse_rules, room_figures
+		out = room_figures(parse_rules(""), room_revenue=0, rooms_sold=2, occupancy_rooms=4,
+		                   by_category=self.nights(Complimentary=(1, 0), House_Use=(1, 0)))
 		self.assertEqual((out["adr"], out["revpar"], out["occupancy_pct"]), (0, 0, 50.0))
 
 	def test_the_occupied_rooms_and_revpar_rooms_can_differ_from_the_rooms_sold(self):
-		from kamra.room_statistics import room_figures
+		from kamra.room_statistics import parse_rules, room_figures
 		# in house tonight (occupied) over rooms not out of order; RevPAR
 		# over every room, as reports._day_stats reports them
-		out = room_figures(room_revenue=900, rooms_sold=1, rooms_occupied=3,
+		out = room_figures(parse_rules(""), room_revenue=900, rooms_sold=1,
+		                   by_category=self.nights(Standard=(1, 900)), rooms_occupied=3,
 		                   occupancy_rooms=3, revpar_rooms=4)
 		self.assertEqual((out["adr"], out["revpar"], out["occupancy_pct"]), (900, 225, 100.0))
+
+	def test_a_category_left_out_of_a_figure_adds_neither_rooms_nor_revenue(self):
+		from kamra.room_statistics import parse_rules, room_figures
+		out = room_figures(parse_rules(CONFIGURED), room_revenue=2600, rooms_sold=4,
+		                   occupancy_rooms=4,
+		                   by_category=self.nights(Standard=(1, 1100), Staff=(1, 1500),
+		                                           Complimentary=(1, 0), House_Use=(1, 0)))
+		# ADR: the standard room and the comp (1,100 / 2); RevPAR: all but
+		# Staff (1,100 / 4); occupancy: all but house use (3 / 4)
+		self.assertEqual(out, {"rooms_by_category": {"Complimentary": 1, "House Use": 1, "Staff": 1},
+		                       "adr": 550, "revpar": 275, "occupancy_pct": 75.0})
 
 
 class CrossReportConsistencyTests(AuditTestCase):
@@ -97,8 +199,10 @@ class CrossReportConsistencyTests(AuditTestCase):
 	occupancy (100%)."""
 
 	properties = (PROP_S,)
-	EXPECTED = {"rooms_sold": 4, "comp_rooms": 1, "house_use_rooms": 1,
-	            "adr": 1300, "revpar": 650, "occupancy_pct": 100.0}
+	EXPECTED: ClassVar[dict] = {"rooms_sold": 4, "rooms_by_category": OPERA,
+	                            "adr": 1300, "revpar": 650, "occupancy_pct": 100.0}
+	PROJECTED: ClassVar[tuple] = (2500, 1250, 625)
+	TONIGHT_OCCUPANCY: ClassVar[float] = 100.0
 
 	def setUp(self):
 		super().setUp()
@@ -117,7 +221,7 @@ class CrossReportConsistencyTests(AuditTestCase):
 		plans = [("BAR", 0, "Standard"), ("UP", 50, "Standard"),
 		         ("COMP", -100, "Complimentary"), ("HOUSE", -100, "House Use")]
 		self.stays = []
-		for room, (code, modifier, category) in zip(self.rooms, plans):
+		for room, (code, modifier, category) in zip(self.rooms, plans, strict=True):
 			self.stays.append(self.stay(room, self.plan(code, modifier, category)))
 		for res in self.stays:
 			folio_mod.post_room_night(frappe.get_doc("Reservation", res.name), YESTERDAY)
@@ -192,16 +296,13 @@ class CrossReportConsistencyTests(AuditTestCase):
 		# the owner's briefing: yesterday's revenue figures (its occupancy
 		# is the house tonight, not yesterday's)
 		with self.subTest(report="api.owner_briefing yesterday"):
-			self.assertEqual(self.figures(owner, ("comp_rooms", "house_use_rooms", "adr", "revpar")),
-			                 self.figures(self.EXPECTED, ("comp_rooms", "house_use_rooms", "adr",
-			                                              "revpar")))
+			keys = ("rooms_by_category", "adr", "revpar")
+			self.assertEqual(self.figures(owner, keys), self.figures(self.EXPECTED, keys))
 		# month to date: the same night is the only one posted, so the
 		# average rate is the same; RevPAR and occupancy divide by the month
 		with self.subTest(report="reports.manager_flash mtd"):
-			self.assertEqual(self.figures(flash["mtd"], ("rooms_sold", "comp_rooms",
-			                                             "house_use_rooms", "adr")),
-			                 self.figures(self.EXPECTED, ("rooms_sold", "comp_rooms",
-			                                              "house_use_rooms", "adr")))
+			keys = ("rooms_sold", "rooms_by_category", "adr")
+			self.assertEqual(self.figures(flash["mtd"], keys), self.figures(self.EXPECTED, keys))
 		with self.subTest(report="reports.budget_vs_actual"):
 			self.assertEqual(budget["adr"], self.EXPECTED["adr"])
 
@@ -209,9 +310,33 @@ class CrossReportConsistencyTests(AuditTestCase):
 		# tonight (the open business date): the four stays in house at their
 		# locked rates - 1,000, 1,500 and two at no charge
 		tonight = reports._day_stats(PROP_S, TODAY, 4)
-		self.assertEqual(tonight["projected_room_revenue"], 2500)
-		self.assertEqual(tonight["projected_adr"], 1250)
-		self.assertEqual(tonight["projected_revpar"], 625)
+		self.assertEqual((tonight["projected_room_revenue"], tonight["projected_adr"],
+		                  tonight["projected_revpar"]), self.PROJECTED)
+		# the rooms in house tonight, by the same rule
+		self.assertEqual((tonight["occupancy_basis"], tonight["occupancy_pct"]),
+		                 ("in_house", self.TONIGHT_OCCUPANCY))
+
+
+class ConfiguredStatisticsTests(CrossReportConsistencyTests):
+	"""The same night at a property that configured its own categories
+	(CONFIGURED): the comp counts in ADR, house use is out of ADR and
+	occupancy, and the 1,500 room is on a Staff plan, out of ADR and RevPAR.
+	Every report still agrees: ADR 1,100 / 2 = 550, RevPAR 1,100 / 4 = 275,
+	occupancy 3 / 4 = 75%."""
+
+	EXPECTED: ClassVar[dict] = {"rooms_sold": 4,
+	                            "rooms_by_category": {"Complimentary": 1, "House Use": 1, "Staff": 1},
+	                            "adr": 550, "revpar": 275, "occupancy_pct": 75.0}
+	# tonight's locked rates: 1,000 standard, 1,500 Staff, two at no charge
+	PROJECTED: ClassVar[tuple] = (2500, 500, 250)
+	TONIGHT_OCCUPANCY: ClassVar[float] = 75.0
+
+	def setUp(self):
+		super().setUp()
+		set_setting(PROP_S, "rate_categories", CONFIGURED)
+		# the 1,500 plan moves to Staff once its night is posted: the reports
+		# read each plan's category as configured now
+		frappe.db.set_value("Rate Plan", f"{PROP_S}-UP", "rate_category", "Staff")
 
 
 class CompSignOffTests(DiscountTestCase):
@@ -304,6 +429,37 @@ class CompSignOffTests(DiscountTestCase):
 		doc.special_requests = "UT late arrival"
 		self.as_user(DESK, doc.save)
 		self.assertEqual(len(sign_off_logs(doc.name)), 1)
+
+	def test_a_category_without_a_sign_off_books_straight_away(self):
+		# this property's comps take no sign-off; house use still does
+		set_setting(PROP_A, "rate_categories",
+		            "Standard\nComplimentary: no ADR\nHouse Use: sign-off, no ADR")
+		out = self.book(DESK, rate_plan=self.comp)
+		self.assertEqual(frappe.db.get_value("Reservation", out["reservation"], "rate_plan"),
+		                 self.comp)
+		self.assertEqual(sign_off_logs(out["reservation"]), [])
+		gov = self.as_user(DESK, api.get_quote, PROP_A, self.rt, d(5), d(7),
+		                   rate_plan=self.comp)["comp_governance"]
+		self.assertEqual((gov["rate_category"], gov["needs_supervisor"]), ("Complimentary", False))
+		with self.assertRaises(frappe.PermissionError):
+			self.as_user(DESK, api.create_booking, PROP_A, self.rt, d(5), d(7),
+			             "UT House Unsigned", rate_plan=self.house)
+
+	def test_the_approvers_come_from_the_propertys_settings(self):
+		set_setting(PROP_A, "rate_category_approvers", "Revenue Manager")
+		frappe.db.delete("Cashier PIN", {"name": REVENUE})
+		frappe.get_doc({"doctype": "Cashier PIN", "user": REVENUE, "pin": "2468"}
+		               ).insert(ignore_permissions=True)
+		gov = self.as_user(DESK, api.get_quote, PROP_A, self.rt, d(5), d(7),
+		                   rate_plan=self.comp)["comp_governance"]
+		approvers = [s["user"] for s in gov["supervisors"]]
+		self.assertIn(REVENUE, approvers)
+		self.assertNotIn(GM, approvers)
+		# a Hotel Admin is not an approver here
+		with self.assertRaises(frappe.PermissionError):
+			self.book(DESK, rate_plan=self.comp, supervisor_user=GM, supervisor_pin="4321")
+		out = self.book(DESK, rate_plan=self.comp, supervisor_user=REVENUE, supervisor_pin="2468")
+		self.assertEqual([r.approver for r in sign_off_logs(out["reservation"])], [REVENUE])
 
 	def test_the_quote_says_a_comp_needs_a_supervisor_and_who_can_sign(self):
 		gov = self.as_user(DESK, api.get_quote, PROP_A, self.rt, d(5), d(7),

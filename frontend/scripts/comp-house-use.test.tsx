@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 /* Complimentary and House Use rate plans (OPERA Cloud rate code
  * Complimentary / House Use flags; the parity check's item 11b on #32): the
- * Rate Plans form sets a plan's category, and a booking on a Complimentary or
- * House Use plan asks for a manager's PIN in the dialog (OPERA's comp
+ * Rate Plans form sets a plan's category from the property's own list
+ * (Settings, seeded with OPERA's), and a booking on a plan whose category
+ * needs a sign-off asks for a manager's PIN in the dialog (OPERA's comp
  * authorizer, through the sign-off the discounts use) before it is sent. */
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
@@ -81,6 +82,7 @@ const OPTIONS = {
   rate_plans: [
     { name: "BAR", rate_plan_name: "Best available", code: "BAR", discount_eligible: 1 },
     { name: "COMP", rate_plan_name: "Complimentary", code: "COMP", discount_eligible: 0 },
+    { name: "STAFF", rate_plan_name: "Staff rate", code: "STAFF", discount_eligible: 0 },
   ],
   default_plan: "BAR", rate_plan_required: true, can_set_rate: false,
   can_discount: true, rate_override_limit_pct: 10, discount_reasons: [],
@@ -89,8 +91,12 @@ const OPTIONS = {
     checkin_time: "14:00", checkout_time: "11:00" },
 }
 
+// each plan's category, as the property configured them
+const CATEGORY: Record<string, string> = { BAR: "Standard", COMP: "Complimentary", STAFF: "Staff" }
+
 function quoteFor(params: Record<string, unknown>) {
-  const comp = params.rate_plan === "COMP"
+  const category = CATEGORY[String(params.rate_plan)] ?? "Standard"
+  const comp = category !== "Standard"
   const rate = comp ? 0 : 1000
   return {
     nights: 2, nightly: NIGHTS.map((date) => ({ date, rate, base_rate: rate, discount_amount: 0,
@@ -101,7 +107,7 @@ function quoteFor(params: Record<string, unknown>) {
     advance: { percent: 0, season: null, amount: 0 }, tax_basis: null,
     cancellation: { free_now: true, free_until: null, fee_basis: "None", fee_label: "", non_refundable_season: null },
     // kamra.api.comp_rate_governance: who signs off a comp / house-use plan
-    comp_governance: { rate_category: comp ? "Complimentary" : "Standard", needs_supervisor: comp,
+    comp_governance: { rate_category: category, needs_supervisor: comp,
       agent: false, supervisors: comp ? [GM] : [] },
   }
 }
@@ -123,11 +129,11 @@ function serve(method: string, params: Record<string, unknown>) {
 }
 
 describe("Rate Plans: the plan's category", () => {
-  it("offers Standard, Complimentary and House Use, Standard by default", () => {
+  it("offers the property's categories (kamra.settings.menu_masters), OPERA's until they load", () => {
     const field = ratePlansConfig.form.find((f) => f.field === "rate_category")
     expect(field).toBeDefined()
-    expect(field).toMatchObject({ type: "select", options: ["Standard", "Complimentary", "House Use"],
-      default: "Standard" })
+    expect(field).toMatchObject({ type: "select", optionsFrom: "rate_categories",
+      options: ["Standard", "Complimentary", "House Use"], default: "Standard" })
     expect(ratePlansConfig.columns.some((c) => c.field === "rate_category")).toBe(true)
   })
 })
@@ -137,14 +143,15 @@ describe("BookingDialog: a Complimentary or House Use plan is signed off", () =>
   const quoteCalls = () => rpc.mock.calls.filter(([m]) => m === "kamra.api.get_quote").map(([, p]) => p)
   const booked = () => rpc.mock.calls.filter(([m]) => m === "kamra.api.create_booking").map(([, p]) => p)
 
-  async function openOnComp() {
+  async function openOn(plan: string) {
     await act(async () => root.render(<MemoryRouter><BookingDialog initial={{ room_type: "STD" }}
       onClose={() => {}} onBooked={() => {}} /></MemoryRouter>))
     await until(() => expect(quoteCalls().length).toBeGreaterThan(0))
     await typeInto(host.querySelector<HTMLInputElement>("#booking-guest")!, "Ada Guest")
-    await choose(host.querySelector<HTMLSelectElement>("#booking-rate-plan")!, "COMP")
-    await until(() => expect(quoteCalls().at(-1)).toMatchObject({ rate_plan: "COMP" }))
+    await choose(host.querySelector<HTMLSelectElement>("#booking-rate-plan")!, plan)
+    await until(() => expect(quoteCalls().at(-1)).toMatchObject({ rate_plan: plan }))
   }
+  const openOnComp = () => openOn("COMP")
 
   it("asks for a manager's PIN, names why, and sends it with the booking", async () => {
     await openOnComp()
@@ -164,6 +171,12 @@ describe("BookingDialog: a Complimentary or House Use plan is signed off", () =>
     await settle()
     expect(booked()).toEqual([])
     expect(text()).toContain("A manager signs this off with their PIN.")
+  })
+
+  it("names a category the property configured", async () => {
+    await openOn("STAFF")
+    await until(() => expect(byLabel("Manager PIN")).not.toBeNull())
+    expect(text()).toContain("A Staff rate plan needs a manager's sign-off.")
   })
 
   it("asks nothing on a standard plan", async () => {
