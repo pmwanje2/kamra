@@ -192,3 +192,98 @@ class ChannelManagerBookingTestCase(IntegrationTestCase):
 		self.assertEqual(doc.status, "Requested")
 		self.assertIn("OTA overbooking — resolve", doc.special_requests)
 		self.assertFalse(doc.room)
+
+	def test_readable_modify_on_overbooking_hold_keeps_hold_note_and_appends_ota_notes(self):
+		"""A readable modify on a stay held for a non-tax reason (e.g.
+		overbooking) must keep the hold note and append the OTA's notes."""
+		self.sold_out()
+		self.deliver(self.payload())
+		held = self.received()
+		self.assertEqual(held.status, "Requested")
+		self.assertIn("OTA overbooking — resolve", held.special_requests)
+
+		# Modify with empty OTA notes: hold note must NOT be wiped to None
+		mod_empty = self.payload()
+		mod_empty["action"] = "modify"
+		mod_empty["specialRequests"] = ""
+		self.deliver(mod_empty)
+		doc = self.received()
+		self.assertEqual(doc.status, "Requested")
+		self.assertIn("OTA overbooking — resolve", doc.special_requests or "")
+
+		# Modify with new OTA notes: keep the hold note and append the OTA notes
+		mod_notes = self.payload()
+		mod_notes["action"] = "modify"
+		mod_notes["specialRequests"] = "High floor please"
+		self.deliver(mod_notes)
+		doc = self.received()
+		self.assertEqual(doc.status, "Requested")
+		self.assertIn("OTA overbooking — resolve", doc.special_requests or "")
+		self.assertIn("High floor please", doc.special_requests or "")
+		self.assertEqual((doc.special_requests or "").count("OTA overbooking — resolve"), 1)
+
+		# Repeating the same modify stays idempotent without duplicating the hold line
+		self.deliver(mod_notes)
+		doc = self.received()
+		self.assertEqual((doc.special_requests or "").count("OTA overbooking — resolve"), 1)
+		self.assertIn("High floor please", doc.special_requests or "")
+
+	def test_modify_dropping_a_checked_in_room_flags_review_instead_of_ignoring(self):
+		"""When a multi-room modify omits a room that is already Checked In,
+		that room is neither cancelled nor silently ignored: it stays Checked In
+		and is flagged for front-desk review."""
+		for n in ("102", "103"):
+			frappe.get_doc({"doctype": "Room", "property": self.property,
+				"room_type": self.room_type, "room_number": n}).insert(ignore_permissions=True)
+		self.deliver(self.payload(rooms=3))
+		dropped = self.received(f"{self.ref}-2")
+		frappe.db.set_value("Reservation", dropped.name, "status", "Checked In")
+
+		payload = self.payload(rooms=2)
+		payload["action"] = "modify"
+		self.deliver(payload)
+
+		dropped.reload()
+		self.assertEqual(dropped.status, "Checked In")
+		self.assertEqual(dropped.channel_review_needed, 1)
+		self.assertIn("not applied: the stay is Checked In", dropped.special_requests or "")
+		self.assertTrue(frappe.db.exists("Agent Action Log", {
+			"reference_doctype": "Reservation", "reference_name": dropped.name,
+			"action_type": "channel.modify_needs_review"}))
+
+	def test_capacity_refusal_on_multi_room_modify_still_reconciles_dropped_rooms(self):
+		"""When a multi-room modify hits InventoryRefused and falls back to
+		retaining the remaining lines as Requested, omitted rooms are still
+		reconciled: Confirmed dropped rooms are cancelled and Checked In
+		dropped rooms stay Checked In with channel_review_needed flagged."""
+		for n in ("102", "103", "104"):
+			frappe.get_doc({"doctype": "Room", "property": self.property,
+				"room_type": self.room_type, "room_number": n}).insert(ignore_permissions=True)
+
+		# Book 4 rooms on future dates (all Confirmed: -0, -1, -2, -3)
+		book = self.payload(rooms=4)
+		book["checkin"] = str(add_days(nowdate(), 4))
+		book["checkout"] = str(add_days(nowdate(), 5))
+		self.deliver(book)
+		for i in range(4):
+			self.assertEqual(self.received(f"{self.ref}-{i}").status, "Confirmed")
+
+		# Room -3 is already Checked In; room -2 is still Confirmed
+		dropped_inhouse = self.received(f"{self.ref}-3")
+		frappe.db.set_value("Reservation", dropped_inhouse.name, "status", "Checked In")
+
+		# Sell out today completely (4 rooms) so moving rooms -0 and -1 to today hits InventoryRefused
+		for _ in range(4):
+			self.sold_out()
+
+		# Modify moves to today and drops rooms -2 (Confirmed) and -3 (Checked In)
+		mod = self.payload(rooms=2)
+		mod["action"] = "modify"
+		self.deliver(mod)
+
+		self.assertEqual(self.received(f"{self.ref}-0").status, "Requested")
+		self.assertEqual(self.received(f"{self.ref}-1").status, "Requested")
+		self.assertEqual(self.received(f"{self.ref}-2").status, "Cancelled")
+		dropped_inhouse.reload()
+		self.assertEqual(dropped_inhouse.status, "Checked In")
+		self.assertEqual(dropped_inhouse.channel_review_needed, 1)

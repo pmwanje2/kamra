@@ -17,6 +17,7 @@ rate limit.
 
 from __future__ import annotations
 
+import unicodedata
 from decimal import ROUND_HALF_UP, Decimal
 
 DEFAULT_ENDPOINT = "https://app.channex.io/api/v1"
@@ -113,10 +114,11 @@ def _attributes(item: dict) -> dict:
 _ARI_ID_FIELD = {"availability": "room_type_id", "restrictions": "rate_plan_id"}
 
 
-def _ari_value(field: str, value):
+def _ari_value(field: str, value, quantum: Decimal):
 	if field == "rate":
-		# a decimal string: Channex refuses a bare float with decimals
-		return str(Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+		# a decimal string with the currency's decimals (none for UGX, three
+		# for KWD): Channex refuses a bare float with decimals
+		return str(Decimal(str(value)).quantize(quantum, rounding=ROUND_HALF_UP))
 	if field == "availability":
 		return int(value)
 	return value
@@ -134,7 +136,9 @@ def push_ari_changes(conn, kind: str, changes: list[dict]) -> dict:
 	"wait": seconds the RateLimit header asks to hold back}. A rejected value
 	does not fail the call: Channex applies the others and lists it under
 	meta.warnings. ChannexRateLimited on a 429, ChannexError otherwise."""
+	from kamra.channel_ari import rate_quantum
 	id_field = _ARI_ID_FIELD[kind]
+	quantum = rate_quantum(conn.get("property"))
 	values, by_key = [], {}
 	for change in changes:
 		obj = {"property_id": conn.external_property_id, id_field: change["external_id"]}
@@ -143,7 +147,7 @@ def push_ari_changes(conn, kind: str, changes: list[dict]) -> dict:
 		else:
 			obj["date_from"], obj["date_to"] = change["date_from"], change["date_to"]
 		for field, value in (change.get("values") or {}).items():
-			obj[field] = _ari_value(field, value)
+			obj[field] = _ari_value(field, value, quantum)
 		values.append(obj)
 		by_key.setdefault(_change_key(id_field, obj), change)
 	body, headers = _send(conn, "POST", kind, payload={"values": values})
@@ -223,12 +227,163 @@ def push_ari(conn, snapshot) -> tuple[bool, str]:
 	return True, f"{sent.get('availability', 0)} availability, {sent.get('restrictions', 0)} rate values"
 
 
+def _is_cjk_char(ch: str) -> bool:
+	"""Han ideographs, Japanese Kana, Korean Hangul, and CJK iteration mark:
+	scripts written without spaces between words."""
+	cp = ord(ch)
+	return (
+		cp == 0x3005
+		or 0x3040 <= cp <= 0x30FF
+		or 0x31F0 <= cp <= 0x31FF
+		or 0x3400 <= cp <= 0x4DBF
+		or 0x4E00 <= cp <= 0x9FFF
+		or 0xAC00 <= cp <= 0xD7AF
+		or 0xF900 <= cp <= 0xFAFF
+		or 0x20000 <= cp <= 0x323AF
+	)
+
+
+def _char_kind(ch: str) -> str | None:
+	cat = unicodedata.category(ch)[0]
+	if cat == "N":
+		return "N"
+	if cat in "LM":
+		return "C" if _is_cjk_char(ch) else "L"
+	return None
+
+
+def is_cjk_word(word: str) -> bool:
+	return bool(word) and all(_is_cjk_char(ch) for ch in word)
+
+
+_is_cjk_word = is_cjk_word
+
+
+def tax_words(value) -> list[str]:
+	"""A tax label as its words: runs of letters/marks or digits in any
+	script, case folded, split at letter/digit and CJK/non-CJK boundaries
+	("VAT18%" -> ["vat", "18"], "增值税6%" -> ["增值税", "6"], "Hotel增值税" ->
+	["hotel", "增值税"]). Punctuation and spaces only part them."""
+	words, word, kind = [], [], None
+	for ch in unicodedata.normalize("NFKC", str(value or "")).casefold():
+		k = _char_kind(ch)
+		if k is None:
+			if word:
+				words.append("".join(word))
+				word, kind = [], None
+		elif k == kind:
+			word.append(ch)
+		else:
+			if word:
+				words.append("".join(word))
+			word, kind = [ch], k
+	if word:
+		words.append("".join(word))
+	return words
+
+
+def _rule_matches(rule, label: list[str]) -> bool:
+	"""Is: the label is the rule's words. Contains: they appear in it, in
+	order and whole ("vat" is in "VAT (18%)" and "VAT18%", not in "Private").
+	CJK phrases carry no spaces, so a CJK Contains rule matches as a substring
+	within CJK runs ("增值税" in "酒店增值税"), while non-CJK stays whole-word
+	and unmatched exclusive taxes still fail closed."""
+	want = tax_words(rule.get("match_text"))
+	if not want or not label:
+		return False
+	if rule.get("match_type") == "Is":
+		return label == want
+	if any(label[i:i + len(want)] == want for i in range(len(label) - len(want) + 1)):
+		return True
+	if not any(_is_cjk_word(w) for w in want):
+		return False
+	if all(_is_cjk_word(w) for w in want):
+		needle = "".join(want)
+		run = []
+		for tok in label:
+			if _is_cjk_word(tok):
+				run.append(tok)
+				if needle in "".join(run):
+					return True
+			else:
+				run = []
+		return False
+	for i in range(len(label) - len(want) + 1):
+		window = label[i:i + len(want)]
+		ok = True
+		for got, exp in zip(window, want, strict=True):
+			if got == exp:
+				continue
+			if is_cjk_word(exp) and is_cjk_word(got) and exp in got:
+				continue
+			ok = False
+			break
+		if ok:
+			return True
+	return False
+
+
+def _counts_as(conn, tax: dict) -> str | None:
+	"""What the connection's OTA tax rules (Channel Manager Connection >
+	OTA tax rules) read a booking room's taxes[] entry as: "Room tax" (the
+	tax the folio bills with the room), "Ignored" (the OTA's own: a fee, a
+	city tax), or None when no rule reads it. The first rule its type
+	and/or name matches decides. Channex relays an OTA's labels as it gets
+	them (BookingRoomTax: type a string or null, name a string), so both
+	are read."""
+	labels = {"Type": tax_words(tax.get("type")), "Name": tax_words(tax.get("name"))}
+	for rule in conn.get("ota_tax_rules") or []:
+		on = rule.get("match_on") or "Type or Name"
+		fields = ("Type", "Name") if on == "Type or Name" else (on,)
+		if any(_rule_matches(rule, labels.get(f) or []) for f in fields):
+			return rule.get("counts_as")
+	return None
+
+
+def _owed(tax: dict) -> bool:
+	"""A tax the guest owes the property on this booking: an amount above
+	nothing that the OTA did not withhold. Channex marks is_withheld on the
+	taxes an OTA collected and remits itself (docs.channex.io changelog,
+	Airbnb tax_withholding_details; bookings collection, collected taxes):
+	those are not the property's to bill."""
+	return float(tax.get("total_price") or 0) > 0 and not tax.get("is_withheld")
+
+
+def _tax_on_top(conn, room: dict) -> float:
+	"""The room tax a booking room lists on top of its day prices
+	(is_inclusive false - docs.channex.io, bookings collection: Expedia
+	"Total Amount Excluding Tax", Agoda "Exclusive"); 0 when the prices hold
+	it. A tax the OTA withheld is not the property's to bill."""
+	return sum(float(tax.get("total_price") or 0) for tax in room.get("taxes") or []
+	           if tax.get("is_inclusive") is False and _owed(tax) and _counts_as(conn, tax) == "Room tax")
+
+
+def _unread_taxes(conn, room: dict) -> list[str]:
+	"""The taxes a booking room lists on top of its day prices (is_inclusive
+	false), owed to the property, that no OTA tax rule reads, as "name
+	(amount)". The guest paid them on top: they are not in the price, so
+	the booking is held until a rule says what they are. One inside the
+	price (is_inclusive true) is already in what the folio bills."""
+	return [f"{tax.get('name') or tax.get('type') or 'tax'} ({tax.get('total_price')})"
+	        for tax in room.get("taxes") or []
+	        if tax.get("is_inclusive") is False and _owed(tax) and _counts_as(conn, tax) is None]
+
+
 def parse_webhook(conn, payload) -> list[dict]:
 	"""Channex booking webhook -> normalized events.
 
 	Payload: {event: "booking", payload: {status, ota_reservation_code,
 	ota_name, arrival_date, departure_date, customer{...}, rooms[...]}}
-	"""
+
+	A room's total is what the guest paid for it: its day prices, plus the
+	room tax when the channel lists it on top of them (then the day prices
+	are before tax: nightly_net). room_tax_listed says whether its taxes[]
+	name a room tax owed (above nothing, not withheld): a booking does not
+	carry its OTA's tax setting, so one from an OTA set to amounts before
+	tax that lists none is held for review (channel_manager, the
+	connection's OTA tax basis). unread_taxes are the taxes on top no rule
+	reads, and tax_rules whether the connection has any rules at all: either
+	holds the booking for review too (channel_manager.tax_hold)."""
 	body = payload.get("payload") or payload
 	status = (body.get("status") or "new").lower()
 	event = {"new": "book", "modified": "modify",
@@ -237,8 +392,9 @@ def parse_webhook(conn, payload) -> list[dict]:
 	out = []
 	for room in body.get("rooms") or [{}]:
 		days = room.get("days") or {}
-		total = sum(float(v or 0) for v in days.values()) or \
-			float(body.get("amount") or 0)
+		on_top = _tax_on_top(conn, room)
+		total = (sum(float(v or 0) for v in days.values())
+		         or float(body.get("amount") or 0)) + on_top
 		occ = room.get("occupancy") or {}
 		out.append({
 			"event": event,
@@ -257,6 +413,11 @@ def parse_webhook(conn, payload) -> list[dict]:
 			"email": customer.get("mail") or customer.get("email") or "",
 			"total": total,
 			"nightly": [{"date": k, "amount": float(v or 0)} for k, v in sorted(days.items())],
+			"nightly_net": bool(on_top),
+			"room_tax_listed": any(_owed(t) and _counts_as(conn, t) == "Room tax"
+			                       for t in room.get("taxes") or []),
+			"unread_taxes": _unread_taxes(conn, room),
+			"tax_rules": bool(conn.get("ota_tax_rules")),
 			"currency": body.get("currency") or "",
 			"notes": body.get("notes") or "",
 		})

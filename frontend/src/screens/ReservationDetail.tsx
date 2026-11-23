@@ -22,6 +22,7 @@ import {
   amendStay,
   amendStayPreview,
   call,
+  clearChannelReview,
   declineBookingRequest,
   idDocumentImage,
   promoteWaitlist,
@@ -216,6 +217,8 @@ export default function ReservationDetail({
   // booking_quotation / email_booking_quotation: Front Desk and above
   const canQuote = ["Front Desk", "Revenue Manager", "Hotel Admin", "System Manager"]
     .some((r) => roles.includes(r))
+  const canClearChannelReview = ["Front Desk", "Revenue Manager", "Hotel Admin", "System Manager"]
+    .some((r) => roles.includes(r))
 
   const refresh = useCallback(() => {
     reservationDetail(name)
@@ -362,7 +365,48 @@ export default function ReservationDetail({
           </span>
         )}
         {d.guest?.blacklisted === 1 && <Badge tone="rose">{translate("Blacklisted")}</Badge>}
+        {d.channel_review_needed === 1 && (
+          <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
+            <TriangleAlert className="size-3" />
+            {translate("Channel review needed")}
+          </span>
+        )}
       </div>
+
+      {d.channel_review_needed === 1 && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="flex items-center gap-1.5 font-semibold">
+              <TriangleAlert className="size-4 shrink-0 text-amber-700" />
+              {translate("Channel update not applied — review required")}
+            </div>
+            {canClearChannelReview && (
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={() => act(() => clearChannelReview(name))}
+              >
+                {translate("Mark as reviewed")}
+              </Button>
+            )}
+          </div>
+          <p className="mt-1 text-xs text-amber-800">
+            {translate("The stay's dates, room, and charges were left unchanged. Review what the channel sent below and update the stay manually if needed.")}
+          </p>
+          {(d.channel_reviews ?? []).length > 0 && (
+            <ul className="mt-2 space-y-1 text-xs text-amber-900">
+              {(d.channel_reviews ?? []).map((item) => (
+                <li key={item.name} className="rounded-md bg-white/70 px-2.5 py-1.5">
+                  <span>{item.rationale}</span>
+                  {item.executed_at && (
+                    <span className="ml-2 text-amber-700/80">{item.executed_at.slice(0, 16)}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {error && (
         <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">

@@ -34,6 +34,7 @@ import frappe
 from frappe import _
 
 from kamra.authz import require_roles
+from kamra.branding import public_url
 
 GRAPH_BASE = "https://graph.facebook.com/v19.0"
 
@@ -185,7 +186,7 @@ def notify_booking_confirmed(reservation: str) -> dict:
 	# follow with the self check-in link when that template exists too
 	tpl_pre = conn.get("tpl_precheckin")
 	if out.get("sent") and tpl_pre and res.get("precheckin_token"):
-		link = f"{frappe.utils.get_url()}/kamra/checkin/{res.precheckin_token}"
+		link = public_url(f"checkin/{res.precheckin_token}")
 		send_template(res.property, phone, tpl_pre,
 		              [res.guest_name or "Guest", link],
 		              guest=res.guest, reservation=res.name)

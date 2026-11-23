@@ -12,7 +12,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, cint, flt, get_datetime, getdate, now_datetime, nowdate
 
-from kamra.branding import product_name
+from kamra.branding import product_name, public_url
 from kamra.authz import act_as, assert_property_access, require_it_admin, require_roles
 from kamra.install import AGENT_EMAIL
 
@@ -4633,6 +4633,30 @@ def reservation_detail(reservation: str):
 				"group_booking": res.group_booking, "status": "Confirmed"}),
 		}
 
+	channel_review_needed = int(res.get("channel_review_needed") or 0)
+	channel_reviews = []
+	if channel_review_needed:
+		last_cleared = frappe.db.get_value(
+			"Agent Action Log",
+			{"reference_doctype": "Reservation", "reference_name": res.name,
+			 "action_type": "channel.review_cleared"},
+			"creation", order_by="creation desc")
+		review_filters = {
+			"reference_doctype": "Reservation",
+			"reference_name": res.name,
+			"action_type": ("in", ["channel.modify_needs_review", "channel.cancel_needs_review"]),
+		}
+		if last_cleared:
+			review_filters["creation"] = (">", last_cleared)
+		channel_reviews = [
+			{"name": row.name, "action_type": row.action_type,
+			 "rationale": row.rationale, "executed_at": _dt(row.executed_at or row.creation)}
+			for row in frappe.get_all(
+				"Agent Action Log", filters=review_filters,
+				fields=["name", "action_type", "rationale", "executed_at", "creation"],
+				order_by="creation desc", limit_page_length=10)
+		]
+
 	return {
 		"name": res.name,
 		**saved_contract_tariff(res),
@@ -4640,6 +4664,8 @@ def reservation_detail(reservation: str):
 		"status": res.status,
 		"source": res.source,
 		"channel": res.channel,
+		"channel_review_needed": channel_review_needed,
+		"channel_reviews": channel_reviews,
 		"booking_type": res.booking_type,
 		"property": res.property,
 		"check_in_date": res.check_in_date,
@@ -4719,6 +4745,7 @@ def reservation_detail(reservation: str):
 			"id_document_missing": not res.get("id_document")
 			and not res.get("id_document_discarded"),
 			"id_unverified": res.precheckin_status == "Submitted",
+			"channel_review_needed": bool(channel_review_needed),
 		},
 		"checkin_backfill": _checkin_backfill(res),
 	}
@@ -6128,7 +6155,7 @@ def send_precheckin_link(reservation: str, channel: str = "WhatsApp"):
 		frappe.db.set_value("Reservation", reservation, "precheckin_token",
 		                    res.precheckin_token)
 
-	link = f"{frappe.utils.get_url()}/kamra/checkin/{res.precheckin_token}"
+	link = public_url(f"checkin/{res.precheckin_token}")
 	phone = frappe.db.get_value("Guest", res.guest, "phone") if res.guest else None
 	sent = False
 	if phone:
@@ -8170,7 +8197,7 @@ def rooming_list_template(property: str):
 		"Room type: pick from the list. Empty = any room of the group.",
 		"Other guests: everyone else staying in that room, separated by ; (e.g. Ravi Rao; Meera Rao).",
 		"Do not add the main guest - they are already room 1.",
-		"In Kamra: copy the rows (with the header) and use Paste from Excel,",
+		f"In {product_name()}: copy the rows (with the header) and use Paste from Excel,",
 		"or File > Save As > CSV and use Upload CSV.",
 	], 1):
 		help_ws.cell(row=i, column=1, value=line).font = Font(name="Arial")
