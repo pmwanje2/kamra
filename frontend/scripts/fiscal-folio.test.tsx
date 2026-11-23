@@ -1,10 +1,38 @@
+import fs from "node:fs"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
 import { describe, it, expect, vi } from "vitest"
 import { renderToStaticMarkup } from "react-dom/server"
-import { FiscalDocument } from "../src/components/FiscalDocument"
+import { FiscalDocument, type Fiscal } from "../src/components/FiscalDocument"
 import { eventBilling } from "../src/lib/eventBilling"
+import { ITEM_TYPES, payModes } from "../src/screens/banquet/shared"
+
+const mockLocale: {
+  currency: string
+  currency_symbol: string
+  locale: string
+  payment_modes: string[]
+  instant_payment_modes: string[]
+  tender_modes: { mode: string; currencies: string[] }[] | null
+} = {
+  currency: "UGX",
+  currency_symbol: "Sh",
+  locale: "en-UG",
+  payment_modes: ["Cash", "Card", "Bank Transfer", "Mobile Money"],
+  instant_payment_modes: ["Mobile Money"],
+  tender_modes: null,
+}
+
+vi.mock("../src/lib/money", () => ({
+  cur: () => mockLocale.currency_symbol,
+  locale: () => mockLocale,
+  moneyLocale: () => mockLocale.locale,
+}))
 vi.mock("../src/lib/i18n", () => ({
   t: (s: string, vars?: Record<string, unknown>) =>
     s.replace(/\{(\w+)\}/g, (_m, k: string) => String(vars?.[k] ?? `{${k}}`)),
+  useUILanguage: () => "en",
+  uiDateLocale: () => "en-US",
 }))
 
 const fiscalised = {
@@ -39,6 +67,19 @@ describe("fiscal folio", () => {
     expect(html).not.toContain("FDN")
     expect(html).not.toContain("not a tax invoice")
   })
+  it("treats not_efris as pending when the company is enrolled in EFRIS (PR-9)", () => {
+    const enrolled = {
+      ...fiscalised,
+      state: "not_efris" as const,
+      fdn: null,
+      verification_code: null,
+      qr: null,
+      efris_enrolled: 1 as const,
+    } as Fiscal
+    const html = renderToStaticMarkup(<FiscalDocument fiscal={enrolled} internalNumber="INV-UTA-26-00001" />)
+    expect(html).toContain("Fiscal document pending")
+    expect(html).toContain("not a tax invoice")
+  })
 })
 
 describe("event billing", () => {
@@ -57,5 +98,68 @@ describe("event billing", () => {
   it("never bills an enquiry", () => {
     expect(eventBilling({ fiscal_bridge: 1, group_booking: "GRP-1", status: "Enquiry", event_folio: null }).canPost)
       .toBe(false)
+  })
+})
+
+describe("banquet tender modes and item types", () => {
+  it("includes Service Charge in banquet ITEM_TYPES", () => {
+    expect(ITEM_TYPES).toContain("Service Charge")
+  })
+
+  it("derives banquet payModes from configured home-currency tender_modes without hardcoded Cheque/Other", () => {
+    mockLocale.currency = "UGX"
+    mockLocale.tender_modes = [
+      { mode: "Cash", currencies: ["UGX", "USD"] },
+      { mode: "Mobile Money", currencies: ["UGX"] },
+      { mode: "Foreign Cash", currencies: ["USD"] },
+    ]
+    expect(payModes()).toEqual(["Cash", "Mobile Money"])
+  })
+
+  it("falls back to locale payment_modes without appending Cheque or Other when tender_modes is unset", () => {
+    mockLocale.currency = "UGX"
+    mockLocale.tender_modes = null
+    mockLocale.payment_modes = ["Cash", "Card", "Bank Transfer", "Mobile Money"]
+    expect(payModes()).toEqual(["Cash", "Card", "Bank Transfer", "Mobile Money"])
+  })
+})
+
+describe("PR #45 i18n catalog and 7-locale coverage", () => {
+  const frontendRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
+  const requiredKeys = [
+    "Fiscal document pending",
+    "Fiscal status unavailable",
+    "Test fiscal number - not a valid tax invoice",
+    "This is not a tax invoice yet. It becomes one when the fiscal number is issued.",
+    "Status: {status}",
+    "Fiscal Document Number (FDN)",
+    "Verification code",
+    "Issued {when}",
+    "Fiscal QR code",
+    "Internal folio no. {number}",
+    "Reprint fiscal invoice",
+    "Copy - reprint {n}",
+    "Posts to this function's own folio. Its deposits are taken there, and its tax invoice is issued when that folio is settled.",
+    "Open the function's folio",
+    "The tax invoice is issued from the function's folio.",
+    "Service Charge",
+    "Invoice",
+    "Tax Invoice",
+  ]
+  const placeholders = (s: string) => [...new Set([...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]))].sort()
+
+  it("ships every fiscal/event UI string in catalog.csv and all 7 locale dictionaries", () => {
+    const csv = fs.readFileSync(path.join(frontendRoot, "src/i18n/catalog.csv"), "utf8")
+    const missingCatalog = requiredKeys.filter((key) => !csv.includes(key))
+    expect(missingCatalog, "missing from catalog.csv").toEqual([])
+    const localesDir = path.join(frontendRoot, "src/i18n/locales")
+    const langs = ["ar", "de", "es", "fil", "id", "pt", "zh-CN"]
+    for (const lang of langs) {
+      const dict = JSON.parse(fs.readFileSync(path.join(localesDir, `${lang}.json`), "utf8")) as Record<string, string>
+      for (const key of requiredKeys) {
+        expect(typeof dict[key] === "string" && dict[key].trim().length > 0, `${lang}.json missing ${key}`).toBe(true)
+        expect(placeholders(dict[key]), `${lang}.json placeholder mismatch for ${key}`).toEqual(placeholders(key))
+      }
+    }
   })
 })
