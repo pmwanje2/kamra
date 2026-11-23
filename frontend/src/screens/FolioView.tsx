@@ -59,6 +59,8 @@ interface InvoiceData {
       voided_by?: string | null
       /** the line a split part, or a split's reversal, came from */
       split_of?: string | null
+      /** outlet charge reference (e.g. POS order) — moves whole, never splits */
+      source_ref?: string | null
       amount: number
       gst_rate: number
       gst_amount: number
@@ -976,18 +978,20 @@ export default function FolioView() {
                   const sel = folio.charges.filter((c) => selected.has(c.name))
                   const selTotal = sel.reduce((s, c) => s + (c.total || 0), 0)
                   const one = sel.length === 1 ? sel[0] : null
+                  const canSplit =
+                    !!one && !one.source_ref && one.charge_type !== "Meal Plan" && (one.amount || 0) > 0
                   const v = partVal.trim()
                   const isPct = v.endsWith("%")
                   const num = Number(v.replace("%", ""))
                   const partOk =
-                    !!one && !!v && num > 0 &&
-                    (isPct ? num < 100 : num < (one.amount || 0))
-                  const partBad = !!one && !!v && !partOk
-                  const movedTotal = !one || !partOk
+                    canSplit && !!v && num > 0 &&
+                    (isPct ? num < 100 : num < (one!.amount || 0))
+                  const partBad = canSplit && !!v && !partOk
+                  const movedTotal = !partOk
                     ? selTotal
                     : isPct
-                      ? ((one.total || 0) * num) / 100
-                      : num * (1 + (one.gst_rate || 0) / 100)
+                      ? ((one!.total || 0) * num) / 100
+                      : num * (1 + (one!.gst_rate || 0) / 100)
                   const moveTo = (to: string) =>
                     act(async () => {
                       if (one && partOk) {
@@ -1043,7 +1047,7 @@ export default function FolioView() {
                             amount: inr(selTotal),
                           })}
                         </span>
-                        {one && (
+                        {canSplit ? (
                           <span className="inline-flex items-center gap-1.5 text-xs text-zinc-600">
                             <span>· {t("move only")}</span>
                             <input
@@ -1057,7 +1061,11 @@ export default function FolioView() {
                               ({cur()} = {t("before {tax}", { tax: taxLabel() })})
                             </span>
                           </span>
-                        )}
+                        ) : one ? (
+                          <span className="text-xs text-zinc-500">
+                            · {t("Moves whole (cannot be split)")}
+                          </span>
+                        ) : null}
                         <button
                           className="ml-auto text-xs text-zinc-400 hover:text-zinc-700"
                           onClick={() => {

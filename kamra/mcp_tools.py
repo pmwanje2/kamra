@@ -56,7 +56,7 @@ def _p(typ: str, **extra: Any) -> dict[str, Any]:
 # list of valid options - it never guesses.
 ROOM_TYPE_PARAM = _p(
 	"string",
-	description="Room type: its id (e.g. 'Kamra Demo Palace-DLX'), its code "
+	description="Room type: its id (e.g. 'Grand Palace-DLX'), its code "
 	"('DLX') or its exact name ('Deluxe'). See booking_options.",
 )
 MEAL_PLAN_PARAM = _p(
@@ -2535,8 +2535,8 @@ TOOLS: tuple[ToolSpec, ...] = (
 
 BY_NAME: dict[str, ToolSpec] = {t.name: t for t in TOOLS}
 TOOL_COUNT = len(TOOLS)
-INSTRUCTIONS = (
-	"You are operating a hotel through Kamra PMS. Money and "
+_INSTRUCTIONS = (
+	"You are operating a hotel through {product}. Money and "
 	"availability are computed by the PMS, never estimate them "
 	"yourself - always quote before booking. Confirm irreversible "
 	"actions (checkout, cancelling a stay, closing a folio) with the "
@@ -2545,6 +2545,14 @@ INSTRUCTIONS = (
 	"it, book first, then call waive_security_deposit with the user's "
 	"reason."
 )
+# The stdio server (mcp/kamra_mcp.py) runs outside a site; the site's own
+# remote server names its product with instructions().
+INSTRUCTIONS = _INSTRUCTIONS.format(product="Kamra PMS")
+
+
+def instructions(product: str) -> str:
+	return _INSTRUCTIONS.format(product=product)
+
 
 def input_schema(spec: ToolSpec) -> dict[str, Any]:
 	schema: dict[str, Any] = {"type": "object", "properties": spec.parameters}

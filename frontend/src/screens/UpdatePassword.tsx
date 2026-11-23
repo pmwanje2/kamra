@@ -7,6 +7,7 @@ import { serverError, updatePassword } from "../lib/api"
 import BrandMark from "../components/BrandMark"
 import { product, whiteLabel } from "../lib/brand"
 import { useAuth } from "../lib/auth"
+import { toFullPath } from "../lib/routing"
 import { useT, t as translate } from "../lib/i18n"
 import { Button } from "../components/ui/button"
 
@@ -74,7 +75,7 @@ export default function UpdatePassword() {
       setDone(true)
       await refresh()
       if (import.meta.env.PROD) {
-        window.location.assign("/kamra/")
+        window.location.assign(toFullPath("/"))
       } else {
         navigate("/", { replace: true })
       }
