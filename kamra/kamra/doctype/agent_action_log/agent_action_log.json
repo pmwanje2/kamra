@@ -76,7 +76,7 @@
   {
    "fieldname": "action_channel",
    "fieldtype": "Select",
-   "description": "Where the action came from. Chat = the in-app Kamra Agent copilot; MCP = an external AI (Claude) over MCP.",
+   "description": "Where the action came from. Chat = the in-app assistant; MCP = an external AI (Claude) over MCP.",
    "label": "Channel",
    "options": "\nDesk\nVoice\nWhatsApp\nAPI\nChat\nMCP"
   },

@@ -124,18 +124,22 @@ kamra_localization = {
 # (front desk, booking engine, housekeeping, self check-in). The `kamra` www
 # page (kamra/www/kamra.py) serves the built shell with the CSRF token
 # injected; every deep link falls through to it so browser refresh works.
+# Clean, shareable links (/book, /stay, /hk, /checkin/<token>) are answered
+# where they were opened, with no redirect: Frappe resolves every app's
+# redirects before any route rule, so a later app's mask (maximus_branding
+# sends them to /hotel/... with a 302) is the only hop, and a 301 to /kamra
+# is never cached.
 website_route_rules = [
 	{"from_route": "/kamra/<path:app_path>", "to_route": "kamra"},
+	{"from_route": "/book", "to_route": "kamra"},
+	{"from_route": "/book/<path:app_path>", "to_route": "kamra"},
+	{"from_route": "/stay", "to_route": "kamra"},
+	{"from_route": "/stay/<path:app_path>", "to_route": "kamra"},
+	{"from_route": "/hk", "to_route": "kamra"},
+	{"from_route": "/checkin/<path:app_path>", "to_route": "kamra"},
 ]
 
-# Clean, shareable guest URLs redirect into the SPA's routes.
 website_redirects = [
-	{"source": r"/book$", "target": "/kamra/book"},
-	{"source": r"/book/(.*)", "target": r"/kamra/book/\1"},
-	{"source": r"/stay$", "target": "/kamra/stay"},
-	{"source": r"/stay/(.*)", "target": r"/kamra/stay/\1"},
-	{"source": r"/hk$", "target": "/kamra/hk"},
-	{"source": r"/checkin/(.*)", "target": r"/kamra/checkin/\1"},
 	# maximus D23: no /update-password redirect. Frappe's reset email sends
 	# every user of the site, ERPNext Desk users included, to
 	# /update-password?key=…; a site-wide rule here would hand their reset

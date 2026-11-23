@@ -15,7 +15,7 @@ import json
 import frappe
 from werkzeug.wrappers import Response
 
-from kamra.branding import product_name
+from kamra.branding import product_name, white_label
 from kamra.mcp_oauth import (
 	authorization_server_doc,
 	handle_authorize_get,
@@ -37,10 +37,10 @@ from kamra.mcp_access import (
 )
 from kamra.mcp_tools import (
 	BY_NAME,
-	INSTRUCTIONS,
 	TOOL_COUNT,
 	allowed_tools,
 	call_tool,
+	instructions,
 	mcp_tool_list,
 )
 
@@ -112,7 +112,8 @@ def after_request(request, response):
 
 
 def _auth_challenge() -> str:
-	return ('Bearer realm="Kamra", '
+	realm = "".join(c for c in product_name() if c.isprintable() and c not in '"\\')
+	return (f'Bearer realm="{realm}", '
 	        f'resource_metadata="{protected_resource_url()}", '
 	        'scope="kamra.mcp"')
 
@@ -328,7 +329,7 @@ def _dispatch_method(method: str, params: dict, grant) -> dict:
 			"protocolVersion": version,
 			"capabilities": {"tools": {"listChanged": False}},
 			"serverInfo": {"name": "kamra", "version": str(TOOL_COUNT), "title": product_name()},
-			"instructions": INSTRUCTIONS,
+			"instructions": instructions(product_name() if white_label() else f"{product_name()} PMS"),
 		}
 	if method in ("notifications/initialized", "notifications/cancelled"):
 		return {}

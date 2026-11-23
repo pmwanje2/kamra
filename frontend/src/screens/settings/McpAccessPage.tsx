@@ -138,7 +138,7 @@ export function McpAccessPage() {
     <div className="space-y-4">
       {data.site_disabled && (
         <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          {t("MCP is turned off for this whole site (kamra_mcp_disabled), so nothing below takes effect until IT turns it back on.")}
+          {t("MCP is turned off for this whole site, so nothing below takes effect until IT turns it back on.")}
         </p>
       )}
       {notice && <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{notice}</p>}

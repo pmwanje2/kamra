@@ -4414,7 +4414,7 @@
   "Max children": "الحد الأقصى للأطفال",
   "Max uses": "الحد الأقصى للاستخدام",
   "Max uses (0 = unlimited)": "الحد الأقصى للاستخدام (0 = غير محدود)",
-  "MCP is turned off for this whole site (kamra_mcp_disabled), so nothing below takes effect until IT turns it back on.": "MCP متوقف لهذا الموقع بالكامل (kamra_mcp_disabled)، لذا لن يسري أي مما يلي حتى يعيد قسم تقنية المعلومات تشغيله.",
+  "MCP is turned off for this whole site, so nothing below takes effect until IT turns it back on.": "MCP متوقف لهذا الموقع بالكامل، لذا لن يسري أي مما يلي حتى يعيد قسم تقنية المعلومات تشغيله.",
   "MICE": "اجتماعات ومؤتمرات (MICE)",
   "MCP Read lets the AI look; MCP Manage also lets it make changes. Hotel admins and IT always have full access. A person never gets more through the AI than their own roles allow. A change applies to their next request, no reconnect needed.": "MCP Read يتيح للذكاء الاصطناعي الاطلاع، وMCP Manage يتيح له أيضا إجراء تغييرات. لمسؤولي الفندق وتقنية المعلومات وصول كامل دائما. لا يحصل الشخص عبر الذكاء الاصطناعي على أكثر مما تسمح به أدواره. يسري التغيير على طلبه التالي دون الحاجة لإعادة الاتصال.",
   "MCP URL · ": "URL MCP · ",
