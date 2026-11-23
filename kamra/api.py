@@ -4839,6 +4839,11 @@ def check_in(reservation: str, room: str | None = None):
 		assert_ready(doc, room=room)
 	if room:
 		doc.room = room
+	if doc.status != "Checked In":
+		# a contract whose plan fixes its exchange rate at check-in converts
+		# at today's posting rate; the save re-locks the uncharged nights
+		from kamra.pricing import relock_contract_fx_at_check_in
+		relock_contract_fx_at_check_in(doc)
 	doc.status = "Checked In"
 	doc.save()
 	from kamra.savings import log_action

@@ -30,12 +30,17 @@ def run_bridge_script(script, form: dict):
 			frappe.response["message"] = previous_message
 
 
+def call_bridge_script(script, form: dict, response_types=(dict, NoneType)) -> dict | list | None:
+	"""Run a bridge script already looked up, refusing an unexpected answer type."""
+	result = run_bridge_script(script, form)
+	if not isinstance(result, response_types):
+		raise TypeError("Unexpected integration response.")
+	return result
+
+
 def bridge_call(api_method: str, *, response_types=(dict, NoneType), **form) -> dict | list | None:
 	"""Return an optional bridge's result; never substitute the outer response."""
 	script = get_bridge_script(api_method)
 	if script is None:
 		return None
-	result = run_bridge_script(script, form)
-	if not isinstance(result, response_types):
-		raise TypeError("Unexpected integration response.")
-	return result
+	return call_bridge_script(script, form, response_types)

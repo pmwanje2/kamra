@@ -1,0 +1,340 @@
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react"
+import { currencyText, tariffDate } from "./ContractTariff"
+import { Button } from "./ui/button"
+import { call, serverError } from "../lib/api"
+import { useT } from "../lib/i18n"
+import { addDays } from "../lib/stay"
+import {
+  adjustRate, roundRate, type Adjustment, type ContractTariffItem, type PriceList, type RoundingMode, type TariffVersion,
+} from "../lib/tariffMatrix"
+
+export type DraftChoice = { item: ContractTariffItem; draft: TariffVersion }
+export type MassAction =
+  | { kind: "version"; items: ContractTariffItem[] }
+  | { kind: "approve" | "discard"; drafts: DraftChoice[] }
+  | { kind: "import" }
+
+export const field = "min-h-10 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 focus:border-brand-600 focus:outline-2 focus:outline-brand-600"
+export const decisionTone = {
+  approve: "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100",
+  discard: "border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100",
+}
+export const itemCurrency = (item: ContractTariffItem, list?: PriceList) => item.currency || list?.currency || ""
+
+/** A server refusal worth showing as it is; integration internals are not. */
+export function tariffReason(error: unknown) {
+  const message = serverError(error)
+  return /\b(?:ERPNext|Frappe|Kamra)\b/i.test(message) ? "" : message
+}
+
+/** The modal form every tariff action uses: focus returns to the opener on close. */
+export function TariffModal({ title, subtitle, busy, onClose, onSubmit, children, footer }: {
+  title: string; subtitle?: ReactNode; busy: boolean; onClose: () => void
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void; children: ReactNode; footer: ReactNode
+}) {
+  const dialog = useRef<HTMLDialogElement>(null)
+  const titleId = useId()
+  useEffect(() => {
+    const node = dialog.current
+    const opener = document.activeElement
+    node?.showModal()
+    return () => {
+      if (node?.open) node.close()
+      if (opener instanceof HTMLElement && opener.isConnected) opener.focus()
+    }
+  }, [])
+  return <dialog ref={dialog} aria-labelledby={titleId}
+    onCancel={(event) => { event.preventDefault(); if (!busy) onClose() }}
+    className="m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-2xl border border-zinc-200 bg-white p-0 text-zinc-900 shadow-xl backdrop:bg-zinc-950/40">
+    <form onSubmit={onSubmit}>
+      <header className="space-y-1 border-b border-zinc-200 px-5 py-4">
+        <h2 id={titleId} className="text-lg font-semibold">{title}</h2>
+        {subtitle && <p className="text-sm text-zinc-700">{subtitle}</p>}
+      </header>
+      <div className="space-y-4 px-5 py-4">{children}</div>
+      <footer className="flex flex-wrap justify-end gap-2 border-t border-zinc-200 bg-zinc-50 px-5 py-3">{footer}</footer>
+    </form>
+  </dialog>
+}
+
+interface MassProps {
+  action: MassAction
+  property: string
+  businessDate: string
+  lists: Map<string, PriceList>
+  locale: string
+  dateLocale: string
+  onClose: () => void
+  onDone: (message: string) => void
+}
+
+export function TariffMassDialog(props: MassProps) {
+  const { action } = props
+  if (action.kind === "version") return <BulkVersionDialog {...props} items={action.items} />
+  if (action.kind === "import") return <ImportDialog {...props} />
+  return <DecisionDialog {...props} kind={action.kind} drafts={action.drafts} />
+}
+
+/** Hold a submit until the previous one answers, and keep the dialog's own error. */
+function useSubmission() {
+  const submitting = useRef(false)
+  const [busy, setBusy] = useState(false)
+  const [failure, setFailure] = useState<string | null>(null)
+  async function run(work: () => Promise<void>, fallback: string) {
+    if (submitting.current) return
+    submitting.current = true
+    setBusy(true)
+    setFailure(null)
+    try {
+      await work()
+    } catch (error) {
+      setFailure(tariffReason(error) || fallback)
+    } finally {
+      submitting.current = false
+      setBusy(false)
+    }
+  }
+  return { busy, failure, setFailure, run }
+}
+
+function Failure({ message }: { message: string | null }) {
+  return message ? <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-800">{message}</p> : null
+}
+
+function BulkVersionDialog({ items, property, businessDate, lists, locale, dateLocale, onClose, onDone }: MassProps & {
+  items: ContractTariffItem[]
+}) {
+  const { t, tn } = useT()
+  const [kind, setKind] = useState<Adjustment["kind"]>("percent")
+  const [value, setValue] = useState("")
+  const [dateMode, setDateMode] = useState<"set" | "shift">("set")
+  const [validFrom, setValidFrom] = useState(() => addDays(businessDate, 1))
+  const [validUntil, setValidUntil] = useState("")
+  const [shift, setShift] = useState("")
+  const [step, setStep] = useState("")
+  const [mode, setMode] = useState<RoundingMode>("Nearest")
+  const { busy, failure, setFailure, run } = useSubmission()
+
+  const amount = Number(value)
+  const days = Number(shift)
+  const multiple = Math.max(0, Number(step) || 0)
+  const ready = value.trim() !== "" && Number.isFinite(amount)
+    && (dateMode === "set" ? !!validFrom && (!validUntil || validUntil >= validFrom) : shift.trim() !== "" && Number.isInteger(days))
+  const plan = items.map((item) => {
+    const reference = item.active
+    if (!reference) return null
+    const currency = itemCurrency(item, lists.get(item.price_list))
+    const rate = roundRate(adjustRate(reference.rate, { kind, value: amount }), multiple, mode, currency)
+    const from = dateMode === "set" ? validFrom : addDays(reference.valid_from, days)
+    const upto = dateMode === "set" ? validUntil || null : reference.valid_upto ? addDays(reference.valid_upto, days) : null
+    return { item, reference, currency, rate, from, upto }
+  })
+  const entries = plan.filter((entry) => entry != null)
+  const leftOut = plan.length - entries.length
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!ready || !entries.length) return
+    void run(async () => {
+      const result = await call("kamra.rates.bulk_propose_contract_tariffs", {
+        property, entries: entries.map(({ item, rate, from, upto }) => ({
+          price_list: item.price_list, item_code: item.item_code, price_list_rate: rate, valid_from: from,
+          valid_upto: upto, ...(item.customer ? { customer: item.customer } : {}),
+        })),
+      })
+      if (result == null) setFailure(t("Tariff editing is not available for this property."))
+      else onDone(tn(entries.length, "{n} tariff version submitted for approval", "{n} tariff versions submitted for approval"))
+    }, t("The tariff changes could not be saved. Check the latest versions before retrying."))
+  }
+
+  const valueLabel = kind === "percent" ? t("Percent change") : kind === "amount" ? t("Amount change") : t("New rate")
+  return <TariffModal title={t("Create new version in bulk")} busy={busy} onClose={onClose} onSubmit={submit}
+    subtitle={tn(items.length, "{n} tariff selected", "{n} tariffs selected")}
+    footer={<>
+      <Button type="button" variant="outline" onClick={onClose} disabled={busy}>{t("Cancel")}</Button>
+      <Button type="submit" disabled={busy || !ready || !entries.length}>
+        {busy ? t("Saving…") : t("Submit {n} for approval", { n: entries.length })}
+      </Button>
+    </>}>
+    <div className="grid gap-3 sm:grid-cols-2">
+      <label className="flex min-w-0 flex-col gap-1.5 text-sm font-medium">
+        {t("Adjustment")}
+        <select name="adjustment" className={field} value={kind} disabled={busy}
+          onChange={(event) => setKind(event.target.value as Adjustment["kind"])}>
+          <option value="percent">{t("Percent (+/-)")}</option>
+          <option value="amount">{t("Fixed amount (+/-)")}</option>
+          <option value="exact">{t("Set exact rate")}</option>
+        </select>
+      </label>
+      <label className="flex min-w-0 flex-col gap-1.5 text-sm font-medium">
+        {valueLabel}
+        <input name="adjustment_value" type="number" inputMode="decimal" step="any" className={field + " tabular-nums"}
+          value={value} onChange={(event) => setValue(event.target.value)} required disabled={busy} autoFocus />
+      </label>
+      <label className="flex min-w-0 flex-col gap-1.5 text-sm font-medium">
+        {t("Dates")}
+        <select name="date_mode" className={field} value={dateMode} disabled={busy}
+          onChange={(event) => setDateMode(event.target.value as "set" | "shift")}>
+          <option value="set">{t("Set new dates")}</option>
+          <option value="shift">{t("Shift current dates")}</option>
+        </select>
+      </label>
+      {dateMode === "shift" ? <label className="flex min-w-0 flex-col gap-1.5 text-sm font-medium">
+        {t("Shift by days")}
+        <input name="shift_days" type="number" step="1" className={field + " tabular-nums"} value={shift}
+          onChange={(event) => setShift(event.target.value)} required disabled={busy} />
+      </label> : <span aria-hidden className="hidden sm:block" />}
+      {dateMode === "set" && <>
+        <label className="flex min-w-0 flex-col gap-1.5 text-sm font-medium">
+          {t("Effective from")}
+          <input name="valid_from" type="date" className={field} min={businessDate} value={validFrom}
+            onChange={(event) => setValidFrom(event.target.value)} required disabled={busy} />
+        </label>
+        <label className="flex min-w-0 flex-col gap-1.5 text-sm font-medium">
+          {t("Valid until (optional)")}
+          <input name="valid_upto" type="date" className={field} min={validFrom} value={validUntil}
+            onChange={(event) => setValidUntil(event.target.value)} disabled={busy} />
+        </label>
+      </>}
+      <label className="flex min-w-0 flex-col gap-1.5 text-sm font-medium">
+        {t("Round to (0 = the currency's smallest unit)")}
+        <input name="rounding_step" type="number" min="0" step="any" className={field + " tabular-nums"} value={step}
+          onChange={(event) => setStep(event.target.value)} disabled={busy} placeholder="0" />
+      </label>
+      <label className="flex min-w-0 flex-col gap-1.5 text-sm font-medium">
+        {t("Rounding")}
+        <select name="rounding_mode" className={field} value={mode} disabled={busy}
+          onChange={(event) => setMode(event.target.value as RoundingMode)}>
+          <option value="Nearest">{t("Nearest")}</option>
+          <option value="Up">{t("Up")}</option>
+          <option value="Down">{t("Down")}</option>
+        </select>
+      </label>
+    </div>
+    {ready && <div className="space-y-2 rounded-lg border border-brand-200 bg-brand-50 p-3 text-sm" aria-live="polite">
+      <p className="font-medium">{t("New versions")}</p>
+      <ul className="max-h-48 space-y-1 overflow-y-auto tabular-nums">
+        {entries.map(({ item, reference, currency, rate, from, upto }) =>
+          <li key={[item.price_list, item.item_code, item.customer ?? ""].join("|")}>
+            {t("{item}: {from} → {to}", {
+              item: [item.item_name, item.customer].filter(Boolean).join(" · "),
+              from: currencyText(currency, reference.rate, locale),
+              to: currencyText(currency, rate, locale),
+            })} <span className="text-zinc-600">{upto
+              ? t("{from} – {until}", { from: tariffDate(from, dateLocale), until: tariffDate(upto, dateLocale) })
+              : tariffDate(from, dateLocale)}</span>
+          </li>)}
+      </ul>
+      {leftOut > 0 && <p>{tn(leftOut, "{n} tariff has no current rate and is left out.", "{n} tariffs have no current rate and are left out.")}</p>}
+    </div>}
+    <Failure message={failure} />
+  </TariffModal>
+}
+
+function DecisionDialog({ kind, drafts, locale, dateLocale, lists, onClose, onDone }: MassProps & {
+  kind: "approve" | "discard"; drafts: DraftChoice[]
+}) {
+  const { t, tn } = useT()
+  const { busy, failure, setFailure, run } = useSubmission()
+  // the integration decides separation of duties per draft; a maker's own draft is not offered
+  const decidable = drafts.filter(({ draft }) => draft.can_approve !== false)
+  const excluded = drafts.length - decidable.length
+  const n = decidable.length
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!n) return
+    void run(async () => {
+      const result = await call(`kamra.rates.bulk_${kind}_contract_tariffs`, { item_prices: decidable.map(({ draft }) => draft.name) })
+      if (result == null) setFailure(t("Tariff editing is not available for this property."))
+      else onDone(kind === "approve" ? tn(n, "{n} tariff version approved", "{n} tariff versions approved")
+        : tn(n, "{n} tariff draft discarded", "{n} tariff drafts discarded"))
+    }, t("The tariff change could not be saved. Check the latest versions before retrying."))
+  }
+
+  return <TariffModal busy={busy} onClose={onClose} onSubmit={submit}
+    title={kind === "approve" ? tn(n, "Approve {n} tariff version?", "Approve {n} tariff versions?")
+      : tn(n, "Discard {n} tariff draft?", "Discard {n} tariff drafts?")}
+    footer={<>
+      <Button type="button" variant="outline" onClick={onClose} disabled={busy}>{t("Cancel")}</Button>
+      <Button type="submit" variant="outline" className={decisionTone[kind]} disabled={busy || !n}>
+        {busy ? t("Saving…") : kind === "approve" ? t("Approve") : t("Discard")}
+      </Button>
+    </>}>
+    <ul className="max-h-48 space-y-1 overflow-y-auto text-sm tabular-nums">
+      {decidable.map(({ item, draft }) => <li key={draft.name}>{t("{item}: {rate} from {date}", {
+        item: [item.item_name, item.price_list, item.customer].filter(Boolean).join(" · "),
+        rate: currencyText(itemCurrency(item, lists.get(item.price_list)), draft.rate, locale),
+        date: tariffDate(draft.valid_from, dateLocale),
+      })}</li>)}
+    </ul>
+    {excluded > 0 && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{kind === "approve"
+      ? tn(excluded, "{n} draft is left out: a different approver must release a draft its maker proposed.",
+        "{n} drafts are left out: a different approver must release a draft its maker proposed.")
+      : tn(excluded, "{n} draft is left out: you cannot decide on it.", "{n} drafts are left out: you cannot decide on them.")}</p>}
+    <p className="text-sm text-zinc-700">{kind === "approve"
+      ? t("These versions take effect on their effective dates once approved.")
+      : t("Discarding drafts cannot be undone. Released tariffs do not change.")}</p>
+    <Failure message={failure} />
+  </TariffModal>
+}
+
+interface ImportResult {
+  created: number
+  unchanged: number
+  skipped: number
+  errors: { row: number; message: string }[]
+}
+
+/** A chosen file's text (FileReader also covers browsers without Blob.text). */
+function readText(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result ?? ""))
+    reader.onerror = () => reject(reader.error)
+    reader.readAsText(file)
+  })
+}
+
+function ImportDialog({ property, onClose, onDone }: MassProps) {
+  const { t, tn } = useT()
+  const [file, setFile] = useState<File | null>(null)
+  const [errors, setErrors] = useState<ImportResult["errors"]>([])
+  const { busy, failure, setFailure, run } = useSubmission()
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!file) return
+    setErrors([])
+    void run(async () => {
+      const result = await call<ImportResult | null>("kamra.rates.import_contract_tariffs_rows", { property, rows: await readText(file) })
+      if (result == null) setFailure(t("Tariff editing is not available for this property."))
+      else if (result.errors.length) setErrors(result.errors)
+      else onDone([
+        tn(result.created, "{n} draft version created for approval", "{n} draft versions created for approval"),
+        result.unchanged ? t("{n} unchanged", { n: result.unchanged }) : "",
+        result.skipped ? tn(result.skipped, "{n} row without a rate skipped", "{n} rows without a rate skipped") : "",
+      ].filter(Boolean).join(" · "))
+    }, t("The tariff file could not be imported. Check the file and try again."))
+  }
+
+  return <TariffModal title={t("Import tariffs from CSV")} busy={busy} onClose={onClose} onSubmit={submit}
+    footer={<>
+      <Button type="button" variant="outline" onClick={onClose} disabled={busy}>{t("Cancel")}</Button>
+      <Button type="submit" disabled={busy || !file}>{busy ? t("Saving…") : t("Import as drafts")}</Button>
+    </>}>
+    <p className="text-sm text-zinc-700">{t("Use a file exported from this screen. Each changed row becomes a draft version for approval; nothing is released until it is approved.")}</p>
+    <label className="flex flex-col gap-1.5 text-sm font-medium">
+      {t("CSV file")}
+      <input name="tariff_file" type="file" accept=".csv,text/csv" className="text-sm" disabled={busy}
+        onChange={(event) => { setFile(event.target.files?.[0] ?? null); setErrors([]) }} />
+    </label>
+    {errors.length > 0 && <div role="alert" className="space-y-1 rounded-lg bg-rose-50 p-3 text-sm text-rose-800">
+      <p className="font-medium">{t("Nothing was imported. Fix these rows and import again:")}</p>
+      <ul className="max-h-48 list-disc space-y-0.5 overflow-y-auto ps-5">
+        {errors.map((error) => <li key={`${error.row}:${error.message}`}>{t("Row {row}: {message}", error)}</li>)}
+      </ul>
+    </div>}
+    <Failure message={failure} />
+  </TariffModal>
+}

@@ -26,6 +26,7 @@
   "timezone",
   "sb_ops",
   "currency",
+  "reference_currency_calculation",
   "checkin_time",
   "checkout_time",
   "late_checkout_fee_mode",
@@ -221,6 +222,14 @@
    "fieldtype": "Link",
    "label": "Currency",
    "options": "Currency"
+  },
+  {
+   "default": "ACTUAL",
+   "description": "How bills show a foreign-currency contract beside home amounts. ACTUAL: at the rate the stay was priced or posted at. CURRENT: at today's posting rate.",
+   "fieldname": "reference_currency_calculation",
+   "fieldtype": "Select",
+   "label": "Reference Currency Calculation",
+   "options": "ACTUAL\nCURRENT"
   },
   {
    "default": "14:00:00",
@@ -776,7 +785,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-11-15 09:00:00.000000",
+ "modified": "2026-11-23 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Property",

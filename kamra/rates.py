@@ -16,6 +16,13 @@ same pricing functions the quote uses, so what is shown is what is charged."""
 
 from __future__ import annotations
 
+import csv
+import io
+import json
+import math
+import re
+from datetime import date
+
 import frappe
 from frappe import _
 from frappe.utils import add_days, date_diff, getdate
@@ -23,6 +30,13 @@ from frappe.utils import add_days, date_diff, getdate
 from kamra.authz import assert_property_access, require_roles
 
 RATE_ROLES = ("Front Desk", "Revenue Manager", "Hotel Admin", "Kamra Agent")
+TARIFF_EDITORS = ("Revenue Manager", "Hotel Admin")
+# rows in one mass change, import or bulk decision
+TARIFF_BATCH_LIMIT = 500
+TARIFF_CSV_COLUMNS = ["Price List", "Currency", "Customer", "Item Code", "Room Type", "Occupancy Tier", "Rate",
+                      "Valid From", "Valid Upto", "Status"]
+RATE_PLAN_POLICY_FIELDS = ["name", "rate_plan_name", "code", "currency", "fx_lock_policy", "base_rate_plan",
+                           "adjust_extra_person", "rounding_step", "rounding_mode"]
 
 
 def default_plan(plans):
@@ -40,18 +54,56 @@ def room_type_tariffs(room_type: str):
 	return bridge_call("hospitality_tariffs.room_type_tariffs", room_type=room_type)
 
 
-@frappe.whitelist()
-@require_roles(*RATE_ROLES)
-def list_contract_tariffs(property: str):
-	"""Read the property's tariff directory if the integration is installed."""
+def _tariff_directory(property: str, **filters):
+	"""The integration's tariff directory, with only the filters given."""
 	from kamra.erp_bridge import bridge_call
 
+	return bridge_call("hospitality_tariffs.list_tariffs", property=property,
+	                   **{key: value for key, value in filters.items() if value})
+
+
+@frappe.whitelist()
+@require_roles(*RATE_ROLES)
+def list_contract_tariffs(property: str, price_list: str | None = None, customer: str | None = None,
+                          as_of_date: str | None = None):
+	"""Read the property's tariff directory if the integration is installed.
+
+	The optional filters pass through to the integration. The Rate Plans
+	behind its price lists - currency, exchange-rate lock, base plan and
+	rounding - are this app's own records and are added here."""
 	assert_property_access(property)
-	result = bridge_call("hospitality_tariffs.list_tariffs", property=property)
+	result = _tariff_directory(property, price_list=price_list, customer=customer, as_of_date=as_of_date)
 	if result is not None:
+		policies = _rate_plan_policies(property, result)
+		if policies:
+			result["rate_plan_policies"] = policies
 		return result
 	return {"supported": False, "property": property, "price_lists": [], "items": [],
 	        "can_propose": False, "can_approve": False}
+
+
+def _rate_plan_policies(property: str, directory: dict) -> dict:
+	"""The policies of the plans the directory's price lists name, and of their base plans."""
+	named = [plan for price_list in directory.get("price_lists") or []
+	         for plan in price_list.get("rate_plans") or []]
+	if not named:
+		return {}
+	plans = {plan["name"]: plan for plan in frappe.get_all(
+		"Rate Plan", filters={"property": property}, fields=RATE_PLAN_POLICY_FIELDS)}
+	wanted = []
+	for name in named:
+		while name in plans and name not in wanted:
+			wanted.append(name)
+			name = plans[name].get("base_rate_plan")
+	return {name: {
+		"label": plans[name].get("rate_plan_name"), "code": plans[name].get("code"),
+		"currency": plans[name].get("currency") or None,
+		"fx_lock_policy": plans[name].get("fx_lock_policy") or "Fixed at Reservation",
+		"base_rate_plan": plans[name].get("base_rate_plan") or None,
+		"adjust_extra_person": bool(int(plans[name].get("adjust_extra_person") or 0)),
+		"rounding_step": float(plans[name].get("rounding_step") or 0),
+		"rounding_mode": plans[name].get("rounding_mode") or "Nearest",
+	} for name in wanted}
 
 
 @frappe.whitelist(methods=["POST"])
@@ -85,6 +137,284 @@ def discard_contract_tariff(item_price: str):
 	from kamra.erp_bridge import bridge_call
 
 	return bridge_call("hospitality_tariffs.discard_tariff", item_price=item_price)
+
+
+# ── Mass maintenance (create with reference, bulk decisions, CSV) ──────────
+
+def _text(value) -> str:
+	return "" if value is None else str(value).strip()
+
+
+def _json_list(value, message: str) -> list:
+	if isinstance(value, str):
+		try:
+			value = json.loads(value)
+		except ValueError:
+			frappe.throw(message)
+	if not isinstance(value, list):
+		frappe.throw(message)
+	return value
+
+
+def _rate(value) -> float | None:
+	if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+		return None
+	try:
+		rate = float(str(value).strip())
+	except ValueError:
+		return None
+	return rate if math.isfinite(rate) else None
+
+
+def _iso_date(value) -> str | None:
+	if isinstance(value, date):
+		return value.isoformat()
+	text = _text(value)
+	if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+		return None
+	try:
+		return date.fromisoformat(text).isoformat()
+	except ValueError:
+		return None
+
+
+def _tariff_entry(row: dict) -> tuple[dict | None, str | None]:
+	"""One proposed version from a row, or the reason it cannot be one."""
+	price_list, item_code = _text(row.get("price_list")), _text(row.get("item_code"))
+	if not price_list or not item_code:
+		return None, _("Choose the price list and the item.")
+	rate = _rate(row.get("price_list_rate"))
+	if rate is None:
+		return None, _("The rate must be a number.")
+	if rate < 0:
+		return None, _("The rate cannot be negative.")
+	valid_from = _iso_date(row.get("valid_from"))
+	if not valid_from:
+		return None, _("Effective from must be a date (YYYY-MM-DD).")
+	valid_upto = None
+	if _text(row.get("valid_upto")):
+		valid_upto = _iso_date(row.get("valid_upto"))
+		if not valid_upto:
+			return None, _("Valid until must be a date (YYYY-MM-DD).")
+		if valid_upto < valid_from:
+			return None, _("Valid until cannot be before Effective from.")
+	entry = {"price_list": price_list, "item_code": item_code, "price_list_rate": rate,
+	         "valid_from": valid_from, "valid_upto": valid_upto}
+	if _text(row.get("customer")):
+		entry["customer"] = _text(row.get("customer"))
+	return entry, None
+
+
+def _entry_key(entry: dict) -> tuple:
+	return entry["price_list"], entry["item_code"], entry.get("customer", ""), entry["valid_from"]
+
+
+def _checked_entries(entries) -> list[dict]:
+	rows = _json_list(entries, _("Send the tariff rows as a list."))
+	if not rows:
+		frappe.throw(_("Send at least one tariff row."))
+	if len(rows) > TARIFF_BATCH_LIMIT:
+		frappe.throw(_("Send at most {0} tariff rows at a time.").format(TARIFF_BATCH_LIMIT))
+	checked, seen = [], set()
+	for number, row in enumerate(rows, start=1):
+		if not isinstance(row, dict):
+			frappe.throw(_("Send the tariff rows as a list."))
+		entry, problem = _tariff_entry(row)
+		if not problem and _entry_key(entry) in seen:
+			problem = _("The same item, customer and date appear twice.")
+		if problem:
+			frappe.throw(_("Row {0}: {1}").format(number, problem))
+		seen.add(_entry_key(entry))
+		checked.append(entry)
+	return checked
+
+
+def _propose(property: str, entries: list[dict]):
+	"""Draft versions through the bulk integration, or one proposal each."""
+	from kamra.erp_bridge import call_bridge_script, get_bridge_script
+
+	bulk = get_bridge_script("hospitality_tariffs.bulk_propose_tariffs")
+	if bulk:
+		return call_bridge_script(bulk, {"property": property, "entries": entries})
+	single = get_bridge_script("hospitality_tariffs.propose_tariff")
+	if not single:
+		return None
+	# the single proposal has no customer: it would publish a corporate rate
+	if any(entry.get("customer") for entry in entries):
+		frappe.throw(_("Customer-specific tariffs need the bulk tariff integration."))
+	proposed = [call_bridge_script(single, {"property": property, **entry}) for entry in entries]
+	return {"proposed": proposed, "count": len(proposed)}
+
+
+@frappe.whitelist(methods=["POST"])
+@require_roles(*TARIFF_EDITORS)
+def bulk_propose_contract_tariffs(property: str, entries):
+	"""Propose many new versions at once (create with reference): each entry
+	is {price_list, item_code, price_list_rate, valid_from, valid_upto,
+	customer}. Every entry is checked before anything is sent; the versions
+	are Drafts for approval, and the integration owns effective-date rules."""
+	assert_property_access(property)
+	return _propose(property, _checked_entries(entries))
+
+
+def _item_price_names(item_prices) -> list[str]:
+	names = _json_list(item_prices, _("Send the tariff versions as a list."))
+	if not all(isinstance(name, str) for name in names):
+		frappe.throw(_("Send the tariff versions as a list."))
+	names = list(dict.fromkeys(name.strip() for name in names if name.strip()))
+	if not names:
+		frappe.throw(_("Choose at least one tariff version."))
+	if len(names) > TARIFF_BATCH_LIMIT:
+		frappe.throw(_("Choose at most {0} tariff versions at a time.").format(TARIFF_BATCH_LIMIT))
+	return names
+
+
+def _decide(action: str, names: list[str]):
+	"""Approve or discard drafts through the bulk integration, or one at a
+	time through the single endpoint and its separation-of-duties check; a
+	refusal stops the batch and the request rolls back."""
+	from kamra.erp_bridge import call_bridge_script, get_bridge_script
+
+	bulk = get_bridge_script(f"hospitality_tariffs.bulk_{action}_tariffs")
+	if bulk:
+		return call_bridge_script(bulk, {"item_prices": names})
+	single = get_bridge_script(f"hospitality_tariffs.{action}_tariff")
+	if not single:
+		return None
+	done = [call_bridge_script(single, {"item_price": name}) for name in names]
+	return {{"approve": "approved", "discard": "discarded"}[action]: done, "count": len(done)}
+
+
+@frappe.whitelist(methods=["POST"])
+@require_roles("Hotel Admin")
+def bulk_approve_contract_tariffs(item_prices):
+	"""Release many drafts at once; the maker of a draft still cannot release it."""
+	return _decide("approve", _item_price_names(item_prices))
+
+
+@frappe.whitelist(methods=["POST"])
+@require_roles("Hotel Admin")
+def bulk_discard_contract_tariffs(item_prices):
+	"""Discard many drafts at once through the same property-scoped integration."""
+	return _decide("discard", _item_price_names(item_prices))
+
+
+def _export_versions(item: dict, today: str) -> list[tuple[dict, str]]:
+	"""The versions a spreadsheet carries: current, scheduled and in review."""
+	versions = [(item["active"], "Approved")] if item.get("active") else []
+	scheduled = [version for version in item.get("history") or []
+	             if version.get("workflow_state") == "Approved" and (version.get("valid_from") or "") > today]
+	versions += [(version, "Scheduled") for version in sorted(scheduled, key=lambda v: v.get("valid_from") or "")]
+	pending = sorted(item.get("pending") or [], key=lambda v: v.get("valid_from") or "")
+	return versions + [(version, "In Review") for version in pending]
+
+
+@frappe.whitelist()
+@require_roles(*RATE_ROLES)
+def export_contract_tariffs_csv(property: str, price_list: str | None = None):
+	"""The tariff directory as spreadsheet rows for offline editing: one row
+	per current, scheduled or in-review version (or an empty-rate row for an
+	item with none). The screen writes the file; import reads it back."""
+	assert_property_access(property)
+	directory = _tariff_directory(property, price_list=price_list)
+	if directory is None:
+		return {"supported": False, "business_date": None, "columns": TARIFF_CSV_COLUMNS, "rows": []}
+	currencies = {pl.get("name"): pl.get("currency") for pl in directory.get("price_lists") or []}
+	today = directory.get("business_date") or ""
+	rows = []
+	for item in directory.get("items") or []:
+		if price_list and item.get("price_list") != price_list:
+			continue
+		head = [item.get("price_list"), item.get("currency") or currencies.get(item.get("price_list")) or "",
+		        item.get("customer") or "", item.get("item_code"), item.get("room_type") or "",
+		        item.get("occupancy") or ""]
+		versions = _export_versions(item, today)
+		if not versions:
+			rows.append([*head, "", "", "", "No active tariff"])
+		for version, status in versions:
+			rows.append([*head, float(version.get("rate") or 0), version.get("valid_from") or "",
+			             version.get("valid_upto") or "", status])
+	return {"supported": True, "business_date": directory.get("business_date"),
+	        "columns": TARIFF_CSV_COLUMNS, "rows": rows}
+
+
+def _column_key(header) -> str:
+	return re.sub(r"\s+", "_", _text(header).lstrip("\ufeff").lower())
+
+
+def _import_records(rows) -> list[dict]:
+	"""Import rows: the exported CSV text, or a list of row objects."""
+	if isinstance(rows, str):
+		text = rows.lstrip("\ufeff")
+		rows = (_json_list(text, _("Send the tariff rows as a list.")) if text.lstrip().startswith("[")
+		        else list(csv.DictReader(io.StringIO(text))))
+	if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+		frappe.throw(_("Send the tariff rows as a list."))
+	if len(rows) > TARIFF_BATCH_LIMIT:
+		frappe.throw(_("Send at most {0} tariff rows at a time.").format(TARIFF_BATCH_LIMIT))
+	return [{_column_key(key): value for key, value in row.items() if key} for row in rows]
+
+
+def _unchanged(item: dict | None, entry: dict) -> bool:
+	versions = [item.get("active")] + (item.get("pending") or []) + (item.get("history") or []) if item else []
+	return any(version and abs(float(version.get("rate") or 0) - entry["price_list_rate"]) < 1e-9
+	           and version.get("valid_from") == entry["valid_from"]
+	           and (version.get("valid_upto") or None) == entry["valid_upto"] for version in versions)
+
+
+@frappe.whitelist(methods=["POST"])
+@require_roles(*TARIFF_EDITORS)
+def import_contract_tariffs_rows(property: str, rows):
+	"""Spreadsheet import: every new row becomes a Draft version for
+	approval - nothing is released here. A row needs a price list of this
+	property, its currency, an item on that list, a rate of zero or more and
+	an Effective from date. Rows without a rate are skipped and rows that
+	repeat an existing version are left alone; with any bad row nothing is
+	created and every problem is listed by spreadsheet row."""
+	assert_property_access(property)
+	records = _import_records(rows)
+	directory = _tariff_directory(property)
+	if directory is None:
+		return None
+	currencies = {pl.get("name"): pl.get("currency") or "" for pl in directory.get("price_lists") or []}
+	items = {(item.get("price_list"), item.get("item_code"), item.get("customer") or ""): item
+	         for item in directory.get("items") or []}
+	codes = {(price_list, code) for price_list, code, _customer in items}
+	entries, errors, seen = [], [], set()
+	unchanged = skipped = 0
+	for number, record in enumerate(records, start=2):  # row 1 is the header
+		if not _text(record.get("rate")):
+			skipped += 1
+			continue
+		entry, problem = _tariff_entry({**record, "price_list_rate": record.get("rate")})
+		if not problem:
+			price_list, currency = entry["price_list"], _text(record.get("currency")).upper()
+			if price_list not in currencies:
+				problem = _("{0} is not a price list of this property.").format(price_list)
+			elif not currency:
+				problem = _("Give the price list currency.")
+			elif currency != currencies[price_list].upper():
+				problem = _("{0} does not match the {1} price list currency ({2}).").format(
+					currency, price_list, currencies[price_list])
+			elif (price_list, entry["item_code"]) not in codes:
+				problem = _("{0} is not on the {1} price list.").format(entry["item_code"], price_list)
+			elif _entry_key(entry) in seen:
+				problem = _("The same item, customer and date appear twice.")
+		if problem:
+			errors.append({"row": number, "message": problem})
+			continue
+		seen.add(_entry_key(entry))
+		if _unchanged(items.get((entry["price_list"], entry["item_code"], entry.get("customer", ""))), entry):
+			unchanged += 1
+		else:
+			entries.append(entry)
+	result = {"created": 0, "unchanged": unchanged, "skipped": skipped, "errors": errors}
+	if errors or not entries:
+		return result
+	proposed = _propose(property, entries)
+	if proposed is None:
+		return None
+	return {**result, "created": len(entries), "proposed": proposed}
 
 
 def _season_label(s) -> dict:

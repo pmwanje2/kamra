@@ -268,8 +268,7 @@ class ContractRateTest(RateMatrixHarness):
 		self.plan("CON")
 		self.plan("CON-NR", base_rate_plan="CON", modifier_type="Percent", modifier_value=-10)
 		self.tariffs["CON-NR"] = self.tariff(nightly=120, agreed_rate=438000)
-		agreed, tariff = self.resolve("CON-NR")
-		self.assertEqual(agreed, 438000)
+		self.assertEqual(self.resolve("CON-NR")[0], 438000)
 		self.assertEqual([form["rate_plan"] for form in self.tariff_forms()], ["CON-NR"])
 
 	def test_a_base_contract_refusal_refuses_the_derived_plan(self):

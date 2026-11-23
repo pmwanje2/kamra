@@ -266,16 +266,16 @@ class TestContractTariffBulkAPI(ContractTariffHarness):
 		for entries, message in (
 			("not json", "as a list"), ([1], "as a list"), ([], "at least one"),
 			([ENTRY] * 501, "at most 500"),
-			([{**ENTRY, "item_code": ""}], "Row 1: choose the price list and the item"),
-			([{**ENTRY, "price_list_rate": "abc"}], "Row 1: the rate must be a number"),
-			([{**ENTRY, "price_list_rate": "inf"}], "Row 1: the rate must be a number"),
-			([{**ENTRY, "price_list_rate": True}], "Row 1: the rate must be a number"),
-			([ENTRY, {**ENTRY, "item_code": "SGL", "price_list_rate": -1}], "Row 2: the rate cannot be negative"),
+			([{**ENTRY, "item_code": ""}], "Row 1: Choose the price list and the item"),
+			([{**ENTRY, "price_list_rate": "abc"}], "Row 1: The rate must be a number"),
+			([{**ENTRY, "price_list_rate": "inf"}], "Row 1: The rate must be a number"),
+			([{**ENTRY, "price_list_rate": True}], "Row 1: The rate must be a number"),
+			([ENTRY, {**ENTRY, "item_code": "SGL", "price_list_rate": -1}], "Row 2: The rate cannot be negative"),
 			([missing_from], "Row 1: Effective from must be a date"),
 			([{**ENTRY, "valid_from": "01/12/2026"}], "Row 1: Effective from must be a date"),
 			([{**ENTRY, "valid_upto": "soon"}], "Row 1: Valid until must be a date"),
 			([{**ENTRY, "valid_upto": "2026-11-30"}], "Row 1: Valid until cannot be before"),
-			([ENTRY, {**ENTRY, "price_list_rate": 140}], "Row 2: the same item, customer and date appear twice"),
+			([ENTRY, {**ENTRY, "price_list_rate": 140}], "Row 2: The same item, customer and date appear twice"),
 		):
 			with self.subTest(message=message, entries=str(entries)[:60]), self.assertRaisesRegex(Refused, message):
 				self.endpoint("bulk_propose_contract_tariffs")("Test Hotel", entries)

@@ -434,8 +434,12 @@ class Reservation(Document):
 			self.rate_plan = plan
 
 	def capture_contract_tariff(self):
-		"""Freeze the read resolver's reference at booking, not on later reads."""
+		"""Freeze the read resolver's reference at booking, not on later reads.
+		The one exception is a contract locked at check-in, which check-in
+		has just re-resolved (pricing.relock_contract_fx_at_check_in)."""
 		if not self.is_new():
+			if self.flags.get("kamra_fx_checkin_relock"):
+				return
 			previous = self.get_doc_before_save()
 			self.contract_tariff = previous.get("contract_tariff") if previous else None
 			return

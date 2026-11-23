@@ -4,9 +4,13 @@ Deterministic by design: agents and humans both get quotes from this module;
 no LLM ever computes money. Resolution order per night:
   season-adjusted occupancy rate -> long-stay discount (guardrail floor)
   -> rate-plan modifier -> meal plan -> voucher discount -> tax.
+
+A rate plan may derive from a base plan (OPERA Cloud Base Rates / Derived
+Rates): the base's price first, then the derived plan's own modifier, with
+the plan's rounding step (SAP rounding DIFF) on the price the guest sees.
 """
 
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_UP, Decimal, InvalidOperation
 
 import frappe
 from frappe import _
@@ -18,6 +22,85 @@ from kamra.localization import default_currency, pack_for
 
 def _dec(v) -> Decimal:
 	return Decimal(str(v or 0))
+
+
+# OPERA Cloud Rate Code "Exchange Type": when a foreign contract's rate is fixed.
+DEFAULT_FX_LOCK = "Fixed at Reservation"
+ROUNDING_MODES = {"Nearest": ROUND_HALF_UP, "Up": ROUND_CEILING, "Down": ROUND_FLOOR}
+# The most rate plans one derivation chain may hold, its root base included.
+RATE_PLAN_CHAIN_LIMIT = 5
+
+
+class RatePlanChainError(frappe.ValidationError):
+	"""A rate plan's base plans loop back to it or run too deep."""
+
+
+def _minor_unit(currency: str | None) -> int:
+	"""ISO 4217 decimals of a currency (CLDR data, as payment rounding uses)."""
+	if not currency:
+		return 2
+	from babel.numbers import get_currency_precision
+	return get_currency_precision(currency)
+
+
+def round_rate_amount(amount, step, mode: str = "Nearest", currency: str | None = None) -> Decimal:
+	"""A price rounded the way its rate plan says.
+
+	`step` is the multiple to round to, for example 1,000 or 5,000 in a
+	currency with no cents. A step of 0 rounds to the currency's ISO 4217
+	minor unit: whole units for UGX or JPY, cents for USD, two decimals
+	without a currency. Nearest rounds half up; Up and Down go to the
+	higher or lower multiple."""
+	rounding = ROUNDING_MODES.get(mode or "Nearest")
+	if rounding is None:
+		frappe.throw(_("Rounding mode must be Nearest, Up or Down."))
+	step = _dec(step)
+	if not step.is_finite() or step < 0:
+		frappe.throw(_("The rounding step cannot be negative."))
+	amount = _dec(amount)
+	if step:
+		return (amount / step).quantize(Decimal(1), rounding=rounding) * step
+	return amount.quantize(Decimal(1).scaleb(-_minor_unit(currency)), rounding=rounding)
+
+
+def resolve_rate_plan_chain(rate_plan) -> list:
+	"""A rate plan and the base plans it derives from, root first - the
+	order their modifiers apply. Takes a plan name or a Rate Plan document
+	(an unsaved one too). A plan whose bases loop back to it is refused, and
+	so is a chain of more than RATE_PLAN_CHAIN_LIMIT plans."""
+	plan = frappe.get_doc("Rate Plan", rate_plan) if isinstance(rate_plan, str) else rate_plan
+	chain = [plan]
+	seen = {plan.name} if plan.name else set()
+	while chain[0].get("base_rate_plan"):
+		base = chain[0].base_rate_plan
+		if base in seen:
+			frappe.throw(_("The base rate plans of {0} loop back to it. Choose a base plan that does not "
+			               "derive from it.").format(plan.get("rate_plan_name") or plan.name), RatePlanChainError)
+		if len(chain) >= RATE_PLAN_CHAIN_LIMIT:
+			frappe.throw(_("A rate plan can derive through at most {0} plans.").format(RATE_PLAN_CHAIN_LIMIT),
+			             RatePlanChainError)
+		seen.add(base)
+		chain.insert(0, frappe.get_doc("Rate Plan", base))
+	return chain
+
+
+def property_currency(property: str) -> str:
+	return frappe.get_cached_doc("Property", property).currency or default_currency(pack_for(property))
+
+
+def rate_plan_currency(chain: list) -> str:
+	"""A plan's currency: its own, else its nearest base plan's, else the property's."""
+	for plan in reversed(chain):
+		if plan.get("currency"):
+			return plan.currency
+	return property_currency(chain[-1].property)
+
+
+def rate_plan_fx_policy(rate_plan: str | None) -> str:
+	"""The plan's exchange-rate lock; Fixed at Reservation when unset."""
+	if not rate_plan:
+		return DEFAULT_FX_LOCK
+	return frappe.db.get_value("Rate Plan", rate_plan, "fx_lock_policy") or DEFAULT_FX_LOCK
 
 
 def pet_charge_amount(prop, pets: int, nights: int) -> Decimal:
@@ -109,6 +192,20 @@ def occupancy_rate(rt, adults: int, children: int, date=None,
 	`small_group_days`. `allow_small_group=False` switches that rate off for
 	the whole stay - see small_group_allows_stay().
 	"""
+	room, extra = _occupancy_parts(rt, adults, children, date, allow_small_group)
+	return room + extra
+
+
+def extra_person_charge(rt, adults: int, children: int, date=None,
+                        allow_small_group: bool = True) -> Decimal:
+	"""The part of occupancy_rate() that extra adults and children add
+	(OPERA Extra Adult / Extra Child). A per-head small-group price has none."""
+	return _occupancy_parts(rt, adults, children, date, allow_small_group)[1]
+
+
+def _occupancy_parts(rt, adults: int, children: int, date=None,
+                     allow_small_group: bool = True) -> tuple[Decimal, Decimal]:
+	"""occupancy_rate() as (the room as sold, what extra guests add)."""
 	adults = max(1, int(adults or 1))
 	children = int(children or 0)
 
@@ -119,19 +216,17 @@ def occupancy_rate(rt, adults: int, children: int, date=None,
 	guests = adults + children if counts_children else adults
 	small = _small_group_rate(rt, guests, date) if allow_small_group else None
 	if small is not None and counts_children:
-		return small  # every guest, child or adult, is in the per-head price
+		return small, Decimal(0)  # every guest, child or adult, is in the per-head price
 	if small is not None:
-		rate = small
+		room, extra = small, Decimal(0)
 	elif adults == 1 and rt.single_occupancy_price:
-		rate = _dec(rt.single_occupancy_price)
+		room, extra = _dec(rt.single_occupancy_price), Decimal(0)
 	else:
-		rate = _dec(rt.base_price)
-		rate += _extra_adult_charge(rt, adults)
+		room, extra = _dec(rt.base_price), _extra_adult_charge(rt, adults)
 
 	# children between free_child_age and child_age_limit pay child_price;
 	# the API treats older children as adults upstream.
-	rate += _child_charge(rt, adults, children, priced_per_head=small is not None)
-	return rate
+	return room, extra + _child_charge(rt, adults, children, priced_per_head=small is not None)
 
 
 def _child_charge(rt, adults: int, children: int,
@@ -585,26 +680,67 @@ def consume_voucher_use(voucher: str) -> None:
 		voucher)
 
 
-def apply_rate_plan(rate_plan: str | None, room_total: Decimal) -> Decimal:
+def apply_rate_plan(rate_plan: str | None, room_total: Decimal,
+                    extra_person_total: Decimal = Decimal(0)) -> Decimal:
 	"""The stay's room total after its rate plan's modifier.
 
 	The plan works on the whole stay's (season- and occupancy-priced) room
 	total: Percent scales it, Amount adds to it, Absolute replaces it. The
 	quote calls this, and so does the folio when it posts a night, so a
 	booking and its room nights can never disagree about the plan.
+
+	A derived plan first takes its base plan's price (the base's own base
+	first), then applies its own modifier. `extra_person_total` is the part
+	of room_total extra adults and children add: a derived plan leaves that
+	part as its base priced it unless the plan sets adjust_extra_person
+	(OPERA Base Rate Extra Person Calculation).
 	"""
 	room_total = _dec(room_total)
 	if not rate_plan:
 		return room_total
-	rp = frappe.get_doc("Rate Plan", rate_plan)
+	return _price_through(resolve_rate_plan_chain(rate_plan), room_total, _dec(extra_person_total), root=True)
+
+
+def _apply_modifier(rp, amount: Decimal) -> Decimal:
 	v = _dec(rp.modifier_value)
 	if rp.modifier_type == "Percent":
-		return room_total * (Decimal(1) + v / Decimal(100))
+		return amount * (Decimal(1) + v / Decimal(100))
 	if rp.modifier_type == "Amount":
-		return room_total + v
+		return amount + v
 	if rp.modifier_type == "Absolute":
 		return v
-	return room_total
+	return amount
+
+
+def _price_through(plans: list, total: Decimal, extras: Decimal, root: bool) -> Decimal:
+	"""Apply each plan's modifier in turn. A root plan (no base) works on the
+	whole price; a derived plan leaves the extra-person part as its base left
+	it unless the plan's adjust_extra_person is set."""
+	extras = min(max(extras, Decimal(0)), max(total, Decimal(0)))
+	room = total - extras
+	for depth, rp in enumerate(plans):
+		if (depth or not root) and not cint(rp.get("adjust_extra_person")):
+			room = _apply_modifier(rp, room)
+			continue
+		whole = room + extras
+		priced = _apply_modifier(rp, whole)
+		extras = extras * priced / whole if whole else Decimal(0)
+		room = priced - extras
+	return room + extras
+
+
+def round_planned_stay(rate_plan: str, room_total: Decimal, room_tax: Decimal,
+                       inclusive: bool) -> tuple[Decimal, Decimal]:
+	"""The plan's rounding step on the stay's room price as the guest sees
+	it - the gross price in a tax-inclusive house, the net one otherwise.
+	Tax keeps its share; a step of 0 leaves the quote as it is."""
+	rp = frappe.get_doc("Rate Plan", rate_plan)
+	step = _dec(rp.get("rounding_step"))
+	shown = room_total + room_tax if inclusive else room_total
+	if step <= 0 or shown <= 0:
+		return room_total, room_tax
+	factor = round_rate_amount(shown, step, rp.get("rounding_mode") or "Nearest") / shown
+	return room_total * factor, room_tax * factor
 
 
 def rate_plan_factor(rate_plan: str | None, room_total: Decimal) -> Decimal:
@@ -652,20 +788,40 @@ class ContractRateRefused(frappe.ValidationError):
 	"""The resolver did not authorize a price for this option."""
 
 
-def contract_rate(property, room_type, rate_plan, check_in, check_out, adults, children, extra_beds=0):
-	"""Resolve an optional contract without reading the provider's records."""
+def contract_rate(property, room_type, rate_plan, check_in, check_out, adults, children, extra_beds=0, *,
+                  company=None, pricing_event="reservation", fx_date=None):
+	"""Resolve an optional contract without reading the provider's records.
+
+	The resolver is told the plan's exchange-rate lock and rounding, the
+	pricing event ("reservation", "check_in", "posting" or "block") with
+	the FX date it prices at, and the company for a customer price. An
+	older resolver ignores what it does not know. A derived plan with no
+	contract of its own takes its base plan's contract and applies its own
+	modifier per night, in the contract currency. The local rate is rounded
+	to the plan's rounding step; a resolver's figure is otherwise kept."""
 	if not rate_plan:
 		return None
 	from kamra.erp_bridge import bridge_call
-	response = bridge_call("hospitality_tariffs.tariff_rate", property=property, room_type=room_type,
-		                   rate_plan=rate_plan, check_in=str(check_in), check_out=str(check_out),
-		                   adults=cint(adults), children=cint(children), extra_beds=cint(extra_beds)) or {}
-	result = response.get("tariff", response)
-	if not result:
-		return None
-	if result.get("refusal"):
-		raise ContractRateRefused(result["refusal"])
-	if not cint(result.get("is_tariff")):
+	chain = resolve_rate_plan_chain(rate_plan)
+	plan = chain[-1]
+	form = {"property": property, "room_type": room_type, "check_in": str(check_in), "check_out": str(check_out),
+	        "adults": cint(adults), "children": cint(children), "extra_beds": cint(extra_beds),
+	        "fx_lock_policy": plan.get("fx_lock_policy") or DEFAULT_FX_LOCK,
+	        "rounding_step": float(_dec(plan.get("rounding_step"))),
+	        "rounding_mode": plan.get("rounding_mode") or "Nearest", "pricing_event": pricing_event}
+	if company:
+		form["company"] = company
+	if fx_date:
+		form["fx_date"] = str(getdate(fx_date))
+	# the plan's own contract, else the nearest base plan's
+	for depth in range(len(chain) - 1, -1, -1):
+		response = bridge_call("hospitality_tariffs.tariff_rate", **form, rate_plan=chain[depth].name) or {}
+		result = response.get("tariff", response)
+		if result and result.get("refusal"):
+			raise ContractRateRefused(result["refusal"])
+		if result and cint(result.get("is_tariff")):
+			break
+	else:
 		return None
 	try:
 		agreed, nightly, fx = (_dec(result.get(k)) for k in ("agreed_rate", "nightly", "fx_rate"))
@@ -677,11 +833,50 @@ def contract_rate(property, room_type, rate_plan, check_in, check_out, adults, c
 			raise ValueError
 	except (KeyError, TypeError, ValueError, InvalidOperation):
 		raise ContractRateRefused(_("The contract rate is incomplete. Ask a manager to check the tariff."))
-	prop_currency = frappe.get_cached_doc("Property", property).currency or default_currency(pack_for(property))
-	return float(agreed), {
-		"currency": currency, "nightly": float(nightly), "fx_rate": float(fx),
-		"fx_date": price_date, "property_currency": prop_currency,
-	}
+	prop_currency = property_currency(property)
+	step, mode = plan.get("rounding_step"), plan.get("rounding_mode") or "Nearest"
+	derived = chain[depth + 1:]
+	if derived:
+		nightly = _price_through(derived, nightly, _dec(result.get("extra_person")), root=False)
+		nightly = round_rate_amount(nightly, 0, currency=currency)
+		agreed = round_rate_amount(nightly * fx, step, mode, prop_currency)
+	elif _dec(step) > 0:
+		agreed = round_rate_amount(agreed, step, mode, prop_currency)
+	tariff = {"currency": currency, "nightly": float(nightly), "fx_rate": float(fx),
+	          "fx_date": price_date, "property_currency": prop_currency}
+	if derived:
+		tariff["derived_from"] = chain[depth].name
+	return float(agreed), tariff
+
+
+def relock_contract_fx_at_check_in(reservation) -> bool:
+	"""OPERA Exchange Type "Fixed at Check In": a foreign contract converts
+	at the posting rate of the check-in business date, not the booking's.
+
+	Re-resolves the contract for that date and puts the new agreed rate and
+	snapshot on the (unsaved) booking; its save re-locks the nights not yet
+	charged, and charged nights keep what the folio holds. Other policies,
+	home-currency contracts and stays without one keep the booked rate.
+	True when the booking was relocked."""
+	if rate_plan_fx_policy(reservation.get("rate_plan")) != "Fixed at Check In":
+		return False
+	tariff = saved_contract_tariff(reservation).get("tariff") or {}
+	currency = tariff.get("currency") or reservation.get("custom_tariff_currency")
+	if not currency or currency == (tariff.get("property_currency") or property_currency(reservation.property)):
+		return False
+	from kamra.business_date import get_business_date
+	resolved = contract_rate(
+		reservation.property, reservation.room_type, reservation.rate_plan, reservation.check_in_date,
+		reservation.check_out_date, reservation.adults, reservation.children, reservation.get("extra_beds"),
+		company=reservation.get("company"), pricing_event="check_in",
+		fx_date=get_business_date(reservation.property))
+	if not resolved:
+		return False
+	agreed_rate, fresh = resolved
+	reservation.agreed_rate = agreed_rate
+	reservation.contract_tariff = {"tariff": fresh, "agreed_rate": agreed_rate}
+	reservation.flags.kamra_fx_checkin_relock = True
+	return True
 
 
 def tax_basis(property):
@@ -819,6 +1014,8 @@ def quote(
 	nightly = []
 	room_total = Decimal(0)
 	room_tax = Decimal(0)
+	# what extra adults and children add to the card nights (for a derived plan)
+	extra_person_total = Decimal(0)
 	# Guests above the room's capacity, at the price agreed on this booking:
 	# gathered per night so each night is taxed at its own rate.
 	night_over_cap = _dec(over_capacity_charge)
@@ -985,6 +1182,8 @@ def quote(
 				# figure is gross, and the slab / back-out below read it the
 				# way they read the card.
 				rate, tier = hand, None
+			night_extra = (Decimal(0) if agreed_rate or hand is not None else
+			               extra_person_charge(rt, adults, children, date, allow_small_group=small_ok))
 			if los_pct:
 				off = rate * (Decimal(1) - los_pct / Decimal(100))
 				# never below the owner's floor or the hurdle tier's minimum for
@@ -1010,6 +1209,8 @@ def quote(
 			if inclusive:
 				# configured price is gross — back out the taxable value
 				rate = rate / (Decimal(1) + gst / Decimal(100))
+				night_extra = night_extra / (Decimal(1) + gst / Decimal(100))
+			extra_person_total += min(night_extra, rate)
 			if night_over_cap:
 				net = (night_over_cap / (Decimal(1) + gst / Decimal(100))
 				       if inclusive else night_over_cap)
@@ -1064,10 +1265,11 @@ def quote(
 
 	if rate_plan and not agreed_rate and not rate_plan_applied:
 		old_room_total = room_total
-		room_total = max(apply_rate_plan(rate_plan, room_total), los_floor)
+		room_total = max(apply_rate_plan(rate_plan, room_total, extra_person_total), los_floor)
 		if old_room_total:
 			room_tax *= room_total / old_room_total
 			los_saved *= room_total / old_room_total
+		room_total, room_tax = round_planned_stay(rate_plan, room_total, room_tax, inclusive)
 
 	from kamra.folio import _fnb_gst
 	FNB_GST = _fnb_gst(property)
