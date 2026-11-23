@@ -431,7 +431,6 @@
   "Including tax": "Termasuk pajak",
   "Excluding tax": "Tidak termasuk pajak",
   "Add row": "Tambah baris",
-  "Which of the taxes an OTA lists on a booking is the room tax, tried top to bottom: the first rule that matches decides. A tax on top of the price that no rule reads holds the booking for review. A new Channex connection, or one switched to Channex, starts with the standard rules.": "Pajak mana yang dicantumkan OTA pada pemesanan yang merupakan pajak kamar, dicoba dari atas ke bawah: aturan pertama yang cocok yang menentukan. Pajak di atas harga yang tidak dikenali aturan mana pun menahan pemesanan untuk ditinjau. Koneksi Channex baru, atau yang dialihkan ke Channex, dimulai dengan aturan standar.",
   "Whether each OTA's booking amounts include tax, as set for it on the channel manager: a booking does not say. Excluding tax: a booking from that OTA that lists no room tax is held for review.": "Apakah jumlah pemesanan setiap OTA sudah termasuk pajak, sesuai pengaturannya di channel manager: pemesanan tidak menyebutkannya. Tidak termasuk pajak: pemesanan dari OTA tersebut yang tidak mencantumkan pajak kamar ditahan untuk ditinjau.",
   "Text": "Teks",
   "OTA": "OTA",
@@ -442,5 +441,10 @@
   "Channel review needed": "Perlu tinjauan kanal",
   "Channel update not applied — review required": "Pembaruan kanal tidak diterapkan — perlu ditinjau",
   "The stay's dates, room, and charges were left unchanged. Review what the channel sent below and update the stay manually if needed.": "Tanggal, kamar, dan tagihan masa inap tidak diubah. Tinjau pesan dari kanal di bawah ini dan perbarui masa inap secara manual jika diperlukan.",
-  "Mark as reviewed": "Tandai sudah ditinjau"
+  "Mark as reviewed": "Tandai sudah ditinjau",
+  "N": "N (Tidak)",
+  "Y": "Y (Ya)",
+  "Update in-house reservations": "Perbarui reservasi in-house",
+  "OXI UPDATE INHOUSE RES: N rejects OTA changes to checked-in stays and flags them for review. Y requires arrival-date, room-type, billed-night, and assigned-room bounds and is not yet enabled.": "OXI UPDATE INHOUSE RES: N menolak perubahan OTA pada tamu yang sudah check-in dan menandainya untuk ditinjau. Y memerlukan batasan tanggal kedatangan, tipe kamar, malam tertagih, dan kamar yang ditetapkan serta belum diaktifkan.",
+  "Which of the taxes an OTA lists on a booking is the room tax, tried top to bottom: the first rule that matches decides. Put specific or Ignored rules (such as city or tourism taxes) above broader Room tax rules. A tax on top of the price that no rule reads holds the booking for review. A new Channex connection, or one switched to Channex, starts with the standard rules.": "Pajak mana yang dicantumkan OTA pada pemesanan yang merupakan pajak kamar, diperiksa dari atas ke bawah: aturan pertama yang cocok menentukan. Tempatkan aturan khusus atau Diabaikan (seperti pajak kota atau pariwisata) di atas aturan pajak kamar yang lebih luas. Pajak di luar harga yang tidak dikenali aturan mana pun menahan pemesanan untuk ditinjau. Koneksi Channex baru, atau yang dialihkan ke Channex, dimulai dengan aturan standar."
 }

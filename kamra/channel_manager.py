@@ -333,6 +333,23 @@ def on_reservation_change(doc, method=None):
 # ---------------------------------------------------------------------------
 
 
+_SNAPSHOT_CONFLICT_CODES = frozenset({1020, 1205, 1213})
+_WEBHOOK_CONFLICT_RETRIES = 3
+
+
+def _is_snapshot_conflict(exc: Exception) -> bool:
+	"""True when MariaDB rejects a locking read or write under snapshot
+	isolation (error 1020 "Record has changed since last read") or a transient
+	deadlock/lock-wait (1213/1205) that succeeds after rollback on a fresh
+	transaction snapshot."""
+	if isinstance(exc, frappe.QueryDeadlockError):
+		return True
+	args = getattr(exc, "args", ())
+	if args and isinstance(args[0], int) and args[0] in _SNAPSHOT_CONFLICT_CODES:
+		return True
+	return "Record has changed since last read" in str(exc)
+
+
 @frappe.whitelist(allow_guest=True, methods=["POST"])
 def webhook(connection: str, **kwargs):
 	"""One URL per connection:
@@ -355,9 +372,20 @@ def webhook(connection: str, **kwargs):
 	except Exception:
 		payload = dict(kwargs)
 
-	events = provider_for(conn.provider).parse_webhook(conn, payload)
-	results = [_apply_event(conn, e) for e in events]
-	return {"ok": True, "results": results}
+	for attempt in range(1, _WEBHOOK_CONFLICT_RETRIES + 1):
+		try:
+			if attempt > 1:
+				conn = frappe.get_doc("Channel Manager Connection", connection)
+				if not conn.active:
+					return {"ok": False, "reason": "connection_inactive"}
+			events = provider_for(conn.provider).parse_webhook(conn, payload)
+			results = _apply_webhook_batch(conn, events)
+			return {"ok": True, "results": results}
+		except Exception as exc:
+			if not _is_snapshot_conflict(exc) or attempt >= _WEBHOOK_CONFLICT_RETRIES:
+				raise
+			frappe.db.rollback()
+	return {"ok": True, "results": []}
 
 
 def _room_type_for(connection: str, external_id: str) -> str | None:
@@ -391,17 +419,21 @@ def _find_or_create_guest(name: str, phone: str, email: str,
 	return guest
 
 
-def _reservations_for_booking(property: str, booking_id: str) -> list[dict]:
+def _reservations_for_booking(property: str, booking_id: str, *, for_update: bool = False) -> list[dict]:
 	"""Every Kamra reservation for one OTA booking: the single-room case
 	(ota_ref == bookingId) and each line of a multi-room booking
 	(ota_ref == "bookingId-<n>"). A cancel payload carries only the base
 	bookingId, so it must reach all of them."""
 	if not booking_id:
 		return []
+	if for_update:
+		from kamra.kamra.doctype.reservation.reservation import lock_property_for_inventory
+		lock_property_for_inventory(property)
+	lock = " FOR UPDATE" if for_update else ""
 	return frappe.db.sql(
-		"""SELECT name, status, ota_ref FROM `tabReservation`
+		f"""SELECT name, status, ota_ref FROM `tabReservation`
 		   WHERE property = %(p)s
-		     AND (ota_ref = %(b)s OR ota_ref LIKE %(bl)s)""",
+		     AND (ota_ref = %(b)s OR ota_ref LIKE %(bl)s){lock}""",
 		{"p": property, "b": booking_id, "bl": booking_id + "-%"},
 		as_dict=True)
 
@@ -582,7 +614,6 @@ def clear_channel_review(reservation: str):
 def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 	"""One normalized OTA event -> the same paths a human would take."""
 	e["channel"] = canonical_channel(e.get("channel")) or "OTA"
-	existing = _locked_live_ota(conn.property, e.get("ota_ref"))
 
 	if e["event"] == "cancel":
 		# A cancel frees pre-arrival rooms through the property's cancellation
@@ -592,15 +623,17 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 		# on an already-Cancelled stay stay idempotent.
 		from kamra.api import _do_cancel
 		rows = _reservations_for_booking(
-			conn.property, e.get("booking_id") or e.get("ota_ref"))
+			conn.property, e.get("booking_id") or e.get("ota_ref"), for_update=True)
 		if not rows:
 			return {"ota_ref": e.get("ota_ref"), "result": "cancel_unmatched"}
 		cancelled, vouchers, review = [], [], []
 		for r in rows:
 			if r.status == "Cancelled":
 				continue  # idempotent: already cancelled
-			res = frappe.get_doc("Reservation", r.name)
-			if r.status not in ("Confirmed", "Requested"):
+			res = frappe.get_doc("Reservation", r.name, for_update=True)
+			if res.status == "Cancelled":
+				continue
+			if res.status not in ("Confirmed", "Requested"):
 				reason = (f"OTA cancel — resolve: {e.get('channel') or 'OTA'} "
 				          f"cancelled {e.get('booking_id') or e.get('ota_ref')}")
 				_flag_for_review(conn, res, e, reason, action="cancel",
@@ -609,7 +642,7 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 				continue
 			note = (f"Cancelled by {e.get('channel') or 'OTA'} "
 			        f"({e.get('booking_id') or e.get('ota_ref')})")
-			if r.status == "Requested":
+			if res.status == "Requested":
 				# a retained OTA sale holds no room and took no money
 				_release(res, "Booked elsewhere", note)
 				cancelled.append(r.name)
@@ -627,6 +660,8 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 		if review:
 			payload["review_reservations"] = review
 		return payload
+
+	existing = _locked_live_ota(conn.property, e.get("ota_ref"))
 
 	room_type = _room_type_for(conn.name, e.get("room_type_external_id"))
 	locked_modify = e["event"] == "modify" and existing and existing.status in _LOCKED_MODIFY
@@ -646,9 +681,10 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 
 	if e["event"] == "modify" and existing:
 		# A modify payload is the full new state for pre-arrival stays. Once
-		# checked in or closed, OPERA Cloud never lets an external modify alter
-		# financials, room, dates or status: record it for front-desk review.
-		doc = frappe.get_doc("Reservation", existing.name)
+		# checked in or closed, OPERA Cloud (OXI UPDATE INHOUSE RES = N on the
+		# connection, and closed-stay immutability) never lets an external
+		# modify alter financials, room, dates or status: record it for review.
+		doc = frappe.get_doc("Reservation", existing.name, for_update=True)
 		if doc.status in _LOCKED_MODIFY:
 			reason = requested_reason or _describe_requested_modify(conn, e, room_type)
 			return _flag_for_review(conn, doc, e, reason)
@@ -810,11 +846,13 @@ def _reconcile_booking_rooms(conn, booking_id: str, keep: set) -> None:
 	guest dropped. Release Confirmed/Requested rooms (no credit note - a modify
 	is not a cancel); leave in-house or closed rooms untouched and flag them
 	for front-desk review."""
-	for r in _reservations_for_booking(conn.property, booking_id):
+	for r in _reservations_for_booking(conn.property, booking_id, for_update=True):
 		if r.ota_ref in keep or r.status == "Cancelled":
 			continue
-		doc = frappe.get_doc("Reservation", r.name)
-		if r.status not in ("Confirmed", "Requested"):
+		doc = frappe.get_doc("Reservation", r.name, for_update=True)
+		if doc.status == "Cancelled":
+			continue
+		if doc.status not in ("Confirmed", "Requested"):
 			reason = f"OTA modify removed room — resolve: {r.ota_ref} omitted by {conn.provider}"
 			_flag_for_review(conn, doc, {"ota_ref": r.ota_ref, "channel": doc.channel or "OTA"}, reason)
 			continue
@@ -833,38 +871,82 @@ def _release(doc, reason: str, note: str) -> None:
 		frappe.flags.kamra_cancelling = False
 
 
+def _apply_webhook_batch(conn, events: list[dict], *, requested_reason: str | None = None) -> list[dict]:
+	if not events:
+		return []
+	action = events[0].get("event")
+	booking_id = events[0].get("booking_id") or events[0].get("ota_ref")
+	results = [_apply_event(conn, e, requested_reason=requested_reason) for e in events]
+	if action == "modify":
+		_reconcile_booking_rooms(conn, booking_id, keep={e.get("ota_ref") for e in events})
+	return results
+
+
 def process_webhook_events(connection: str, payload: dict) -> None:
 	"""Enqueued worker for an inbound OTA webhook (one delivery = one booking).
 
 	Kept off the request path so the endpoint can answer Aiosell instantly.
 	The whole booking is applied atomically. A capacity refusal rolls back
-	all lines, then retains them as Requested for staff to resolve."""
-	conn = frappe.get_doc("Channel Manager Connection", connection)
-	if not conn.active:
-		return
-	events = provider_for(conn.provider).parse_webhook(conn, payload)
-	if not events:
-		return
-	action = events[0].get("event")
-	booking_id = events[0].get("booking_id") or events[0].get("ota_ref")
-	try:
-		for e in events:
-			_apply_event(conn, e)
-		if action == "modify":
-			_reconcile_booking_rooms(
-				conn, booking_id, keep={e.get("ota_ref") for e in events})
-		frappe.db.commit()  # nosemgrep: frappe-manual-commit -- background webhook worker persists the completed booking before returning; reviewed as intentional
-	except Exception as exc:
-		from kamra.kamra.doctype.reservation.reservation import InventoryRefused
-		capacity_refused = isinstance(exc, InventoryRefused)
-		frappe.db.rollback()
-		if capacity_refused and action in ("book", "modify"):
-			for e in events:
-				_apply_event(conn, e, requested_reason="OTA overbooking — resolve")
-			frappe.db.commit()  # nosemgrep: frappe-manual-commit -- background worker persists the non-inventory booking for resolution
+	all lines, then retains them as Requested for staff to resolve. A MariaDB
+	snapshot-isolation conflict (1020) or deadlock rolls back to a fresh
+	snapshot and retries; if retries are exhausted, the event is re-queued
+	rather than silently dropped."""
+	from kamra.kamra.doctype.reservation.reservation import InventoryRefused
+
+	for attempt in range(1, _WEBHOOK_CONFLICT_RETRIES + 1):
+		conn = frappe.get_doc("Channel Manager Connection", connection)
+		if not conn.active:
 			return
-		frappe.log_error(
-			title=f"OTA webhook apply failed: {conn.name} / {booking_id}")
+		events = provider_for(conn.provider).parse_webhook(conn, payload)
+		if not events:
+			return
+		action = events[0].get("event")
+		booking_id = events[0].get("booking_id") or events[0].get("ota_ref")
+		try:
+			_apply_webhook_batch(conn, events)
+			frappe.db.commit()  # nosemgrep: frappe-manual-commit -- background webhook worker persists the completed booking before returning; reviewed as intentional
+			return
+		except Exception as exc:
+			capacity_refused = isinstance(exc, InventoryRefused)
+			conflict = _is_snapshot_conflict(exc)
+			frappe.db.rollback()
+			if conflict:
+				if attempt < _WEBHOOK_CONFLICT_RETRIES:
+					continue
+				frappe.enqueue(
+					"kamra.channel_manager.process_webhook_events",
+					queue="short",
+					connection=connection,
+					payload=payload,
+				)
+				frappe.log_error(
+					title=f"OTA webhook re-queued after snapshot conflict: {conn.name} / {booking_id}")
+				return
+			if capacity_refused and action in ("book", "modify"):
+				try:
+					_apply_webhook_batch(conn, events, requested_reason="OTA overbooking — resolve")
+					frappe.db.commit()  # nosemgrep: frappe-manual-commit -- background worker persists the non-inventory booking for resolution
+					return
+				except Exception as retry_exc:
+					frappe.db.rollback()
+					if _is_snapshot_conflict(retry_exc):
+						if attempt < _WEBHOOK_CONFLICT_RETRIES:
+							continue
+						frappe.enqueue(
+							"kamra.channel_manager.process_webhook_events",
+							queue="short",
+							connection=connection,
+							payload=payload,
+						)
+						frappe.log_error(
+							title=f"OTA webhook re-queued after snapshot conflict: {conn.name} / {booking_id}")
+						return
+					frappe.log_error(
+						title=f"OTA webhook apply failed: {conn.name} / {booking_id}")
+					return
+			frappe.log_error(
+				title=f"OTA webhook apply failed: {conn.name} / {booking_id}")
+			return
 
 
 def _norm(s: str) -> str:

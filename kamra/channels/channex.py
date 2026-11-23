@@ -252,8 +252,11 @@ def _char_kind(ch: str) -> str | None:
 	return None
 
 
-def _is_cjk_word(word: str) -> bool:
+def is_cjk_word(word: str) -> bool:
 	return bool(word) and all(_is_cjk_char(ch) for ch in word)
+
+
+_is_cjk_word = is_cjk_word
 
 
 def tax_words(value) -> list[str]:
@@ -308,14 +311,11 @@ def _rule_matches(rule, label: list[str]) -> bool:
 	for i in range(len(label) - len(want) + 1):
 		window = label[i:i + len(want)]
 		ok = True
-		for j, (got, exp) in enumerate(zip(window, want, strict=True)):
+		for got, exp in zip(window, want, strict=True):
 			if got == exp:
 				continue
-			if _is_cjk_word(exp) and _is_cjk_word(got):
-				if j == 0 and got.endswith(exp):
-					continue
-				if j == len(want) - 1 and got.startswith(exp):
-					continue
+			if is_cjk_word(exp) and is_cjk_word(got) and exp in got:
+				continue
 			ok = False
 			break
 		if ok:

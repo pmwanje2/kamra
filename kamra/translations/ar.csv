@@ -301,3 +301,8 @@ OTA Tax Basis rows {0} and {1} are the same OTA ({2}): keep one.,صفا أساس
 OTA Tax Rules,قواعد ضرائب OTA
 OTA Tax Basis,أساس ضرائب OTA
 OTA Tax Basis row {0}: the OTA name needs a letter or a digit.,صف أساس ضريبة OTA رقم {0}: يجب أن يحتوي اسم OTA على حرف أو رقم.
+
+Channel review status can only be cleared via the review action.,لا يمكن مسح حالة مراجعة القناة إلا عبر إجراء المراجعة.
+Update In-House Reservations,تحديث الحجوزات المقيمة حاليًا
+"Update In-House Reservations = Y is not yet enabled: OXI Y requires arrival-date, room-type, billed-night, and assigned-room safety bounds. Keep N so OTA changes to checked-in stays are rejected and flagged for review.",تحديث الحجوزات المقيمة حاليًا = Y غير مفعَّل بعد: يتطلب OXI Y ضوابط تاريخ الوصول ونوع الغرفة والليالي المفوترة والغرفة المخصَّصة. أبقِ القيمة N لرفض تعديلات OTA على الإقامات المسجَّلة دخولًا وتعليمها للمراجعة.
+OTA Tax Rules row {0}: a CJK rule needs at least two characters so it does not match unrelated taxes.,الصف {0} من قواعد ضرائب OTA: تحتاج قاعدة CJK إلى حرفين على الأقل حتى لا تطابق ضرائب غير ذات صلة.

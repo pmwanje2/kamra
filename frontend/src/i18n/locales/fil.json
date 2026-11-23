@@ -1151,7 +1151,6 @@
   "Including tax": "Kasama ang buwis",
   "Excluding tax": "Hindi kasama ang buwis",
   "Add row": "Magdagdag ng hilera",
-  "Which of the taxes an OTA lists on a booking is the room tax, tried top to bottom: the first rule that matches decides. A tax on top of the price that no rule reads holds the booking for review. A new Channex connection, or one switched to Channex, starts with the standard rules.": "Alin sa mga buwis na nakalista ng OTA sa isang booking ang buwis sa kuwarto, sinusubukan mula itaas pababa: ang unang panuntunang tumugma ang magpapasya. Ang buwis na idinagdag sa presyo na walang panuntunang bumabasa ay nagpapahinto sa booking para masuri. Ang bagong koneksyon sa Channex, o inilipat sa Channex, ay nagsisimula sa mga karaniwang panuntunan.",
   "Whether each OTA's booking amounts include tax, as set for it on the channel manager: a booking does not say. Excluding tax: a booking from that OTA that lists no room tax is held for review.": "Kung kasama ang buwis sa mga halaga ng booking ng bawat OTA, ayon sa setting nito sa channel manager: hindi ito sinasabi ng booking. Hindi kasama ang buwis: ang booking mula sa OTA na iyon na walang nakalistang buwis sa kuwarto ay ihihinto para masuri.",
   "Text": "Teksto",
   "OTA": "OTA",
@@ -1162,5 +1161,10 @@
   "Channel review needed": "Kailangan ng pagsusuri ng channel",
   "Channel update not applied — review required": "Hindi nailapat ang update ng channel — kailangan ng pagsusuri",
   "The stay's dates, room, and charges were left unchanged. Review what the channel sent below and update the stay manually if needed.": "Hindi binago ang mga petsa, kuwarto, at singil ng pananatili. Suriin sa ibaba ang ipinadala ng channel at manu-manong i-update ang pananatili kung kinakailangan.",
-  "Mark as reviewed": "Markahan bilang nasuri"
+  "Mark as reviewed": "Markahan bilang nasuri",
+  "N": "N (Hindi)",
+  "Y": "Y (Oo)",
+  "Update in-house reservations": "I-update ang mga naka-check-in na reserbasyon",
+  "OXI UPDATE INHOUSE RES: N rejects OTA changes to checked-in stays and flags them for review. Y requires arrival-date, room-type, billed-night, and assigned-room bounds and is not yet enabled.": "OXI UPDATE INHOUSE RES: Tinatanggihan ng N ang mga pagbabago ng OTA sa mga naka-check-in na pananatili at minamarkahan ang mga ito para sa pagsusuri. Ang Y ay nangangailangan ng proteksyon sa petsa ng pagdating, uri ng kuwarto, nasingil na gabi, at nakatalagang kuwarto at hindi pa pinapagana.",
+  "Which of the taxes an OTA lists on a booking is the room tax, tried top to bottom: the first rule that matches decides. Put specific or Ignored rules (such as city or tourism taxes) above broader Room tax rules. A tax on top of the price that no rule reads holds the booking for review. A new Channex connection, or one switched to Channex, starts with the standard rules.": "Alin sa mga buwis na nakalista ng OTA sa isang booking ang buwis sa kuwarto, sinusuri mula itaas pababa: ang unang tugmang panuntunan ang magpapasya. Ilagay ang mga tiyak o binabalewalang panuntunan (tulad ng buwis sa lungsod o turismo) sa itaas ng mas malawak na mga panuntunan sa buwis sa kuwarto. Ang buwis na idinagdag sa presyo na walang panuntunang nakakabasa ay nagtatabi sa booking para sa pagsusuri. Ang bagong koneksyon sa Channex, o ang inilipat sa Channex, ay nagsisimula sa mga karaniwang panuntunan."
 }

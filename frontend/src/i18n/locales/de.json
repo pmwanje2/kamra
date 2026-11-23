@@ -431,7 +431,6 @@
   "Including tax": "Inklusive Steuer",
   "Excluding tax": "Ohne Steuer",
   "Add row": "Zeile hinzufügen",
-  "Which of the taxes an OTA lists on a booking is the room tax, tried top to bottom: the first rule that matches decides. A tax on top of the price that no rule reads holds the booking for review. A new Channex connection, or one switched to Channex, starts with the standard rules.": "Welche der Steuern, die eine OTA in einer Buchung aufführt, die Zimmersteuer ist – von oben nach unten geprüft: Die erste passende Regel entscheidet. Eine Steuer zusätzlich zum Preis, die keine Regel erkennt, hält die Buchung zur Prüfung zurück. Eine neue Channex-Verbindung oder eine auf Channex umgestellte beginnt mit den Standardregeln.",
   "Whether each OTA's booking amounts include tax, as set for it on the channel manager: a booking does not say. Excluding tax: a booking from that OTA that lists no room tax is held for review.": "Ob die Buchungsbeträge jeder OTA die Steuer enthalten, wie im Channel-Manager für sie eingestellt: Eine Buchung sagt es nicht. Ohne Steuer: Eine Buchung dieser OTA, die keine Zimmersteuer aufführt, wird zur Prüfung zurückgehalten.",
   "Text": "Text",
   "OTA": "OTA",
@@ -442,5 +441,10 @@
   "Channel review needed": "Kanalprüfung erforderlich",
   "Channel update not applied — review required": "Kanalaktualisierung nicht angewendet — Prüfung erforderlich",
   "The stay's dates, room, and charges were left unchanged. Review what the channel sent below and update the stay manually if needed.": "Daten, Zimmer und Gebühren des Aufenthalts blieben unverändert. Prüfen Sie unten die Nachricht des Kanals und aktualisieren Sie den Aufenthalt bei Bedarf manuell.",
-  "Mark as reviewed": "Als geprüft markieren"
+  "Mark as reviewed": "Als geprüft markieren",
+  "N": "N (Nein)",
+  "Y": "Y (Ja)",
+  "Update in-house reservations": "Eingecheckte Reservierungen aktualisieren",
+  "OXI UPDATE INHOUSE RES: N rejects OTA changes to checked-in stays and flags them for review. Y requires arrival-date, room-type, billed-night, and assigned-room bounds and is not yet enabled.": "OXI UPDATE INHOUSE RES: N lehnt OTA-Änderungen an eingecheckten Aufenthalten ab und markiert sie zur Prüfung. Y erfordert Schutzregeln für Anreisedatum, Zimmertyp, abgerechnete Nächte und zugewiesenes Zimmer und ist noch nicht aktiviert.",
+  "Which of the taxes an OTA lists on a booking is the room tax, tried top to bottom: the first rule that matches decides. Put specific or Ignored rules (such as city or tourism taxes) above broader Room tax rules. A tax on top of the price that no rule reads holds the booking for review. A new Channex connection, or one switched to Channex, starts with the standard rules.": "Welche der von einer OTA aufgeführten Steuern die Zimmersteuer ist, wird von oben nach unten geprüft: die erste zutreffende Regel entscheidet. Setzen Sie spezifische oder ignorierte Regeln (wie Stadt- oder Tourismussteuern) über allgemeinere Zimmersteuerregeln. Eine zusätzliche Steuer außerhalb des Preises, die keine Regel erkennt, hält die Buchung zur Prüfung zurück. Eine neue oder auf Channex umgestellte Verbindung beginnt mit den Standardregeln."
 }
