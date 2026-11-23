@@ -407,7 +407,9 @@ class RoutingTestCase(AuditTestCase):
 		self.assertEqual(used(ri.name), 80000)
 		self.charge("Laundry", 100000)
 		self.assertEqual(used(ri.name), 100000)
-		self.assertEqual(sum(r.amount for r in lines(self.w2)), 100000)
+		# the split line and its reversal net to nothing and stay on the bill
+		pairs = folio_mod.void_pairs(frappe.get_doc("Folio", self.w2))
+		self.assertEqual(sum(r.amount for r in lines(self.w2) if r.name not in pairs), 100000)
 		# a split that stays on the window keeps both parts routed
 		other = lines(self.w2)[-1].name
 		folio_mod.split_charge(self.w2, other, self.w2, percent=50)

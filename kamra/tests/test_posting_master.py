@@ -195,7 +195,7 @@ class PostingMasterTestCase(AuditTestCase):
 		company = corp()
 		gb = self.group(company=company)
 		pm = folio_mod.open_group_folio(gb.name)
-		api.add_folio_charge(pm, "Misc", "UT group dinner", 5000, gst_rate=0)
+		api.add_folio_charge(pm, "Misc", "UT group sundry", 5000, gst_rate=0)
 		settings.write_kv(PROP_A, "na_high_balance_threshold", 2000)
 		settings.clear_cache(PROP_A)
 		high = night_audit.check_high_balance(PROP_A)
