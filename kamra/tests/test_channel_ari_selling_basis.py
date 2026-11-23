@@ -10,8 +10,22 @@ end: push -> the OTA charges the guest under a matching extranet setting
 tax where it does not) -> the booking webhook -> the locked night rates
 equal a desk booking's of the same stay.
 
+How a channel reports what the guest paid is its own setting, not the
+property's: Channex lists a room's taxes in rooms[].taxes[] and marks each
+is_inclusive - true when the day prices already hold it, false when it is
+added on top (Expedia "Total Amount Excluding Tax", Agoda "Exclusive";
+docs.channex.io, bookings collection). Both are pinned on both bases. Only
+the room tax (VAT/GST) is what the desk charges; an OTA's fees and city
+taxes are not.
+
 Rates go out with the currency's ISO 4217 decimals: none for UGX, three
-for KWD, two for USD.
+for KWD, two for USD. A locked night rate keeps the currency's decimals and
+never fewer than two: the net share of a tax-inclusive UGX price is not a
+whole shilling.
+
+A property's own selling basis (whether its rates include tax, its
+currency, country and room tax rates) moves what every channel is offered,
+so an edit to it queues the change at once.
 
 No HTTP: FakeChannex stands in for channex._send. Dates are relative to
 today."""
@@ -42,11 +56,15 @@ class _SellingBasisFixture:
 		frappe.local.lang = "en"
 
 	def hotel(self, inclusive: int, currency: str = "UGX", country: str = "Uganda",
-	          price=150000, tax=18, provider: str = "Channex", plans=()) -> frappe._dict:
+	          price=150000, tax=18, provider: str = "Channex", plans=(), slabs=None) -> frappe._dict:
+		"""`slabs` (threshold, low %, high %): India's GST slab instead of
+		one rate."""
 		tag = frappe.generate_hash(length=6).upper()
+		rates = ({"gst_mode": "Slab", "gst_slab_threshold": slabs[0], "gst_rate_low": slabs[1],
+		          "gst_rate_high": slabs[2]} if slabs else {"gst_rate_low": tax, "gst_rate_high": tax})
 		prop = frappe.get_doc({"doctype": "Property", "property_name": "TEST BASIS " + tag,
 			"country": country, "currency": currency, "rates_include_tax": inclusive,
-			"gst_rate_low": tax, "gst_rate_high": tax}).insert(ignore_permissions=True).name
+			**rates}).insert(ignore_permissions=True).name
 		rt = frappe.get_doc({"doctype": "Room Type", "property": prop, "room_type_code": "STD" + tag,
 			"room_type_name": "Standard", "base_price": price,
 			"adults_capacity": 2}).insert(ignore_permissions=True).name
@@ -116,12 +134,15 @@ class _SellingBasisFixture:
 		self.assertEqual(len(rates), 1, rates)
 		return rates[0]["rates"][0]["rate"]
 
-	def charged(self, h, pushed) -> Decimal:
+	def charged(self, h, pushed, tax=None) -> Decimal:
 		"""What the guest pays the OTA for a night offered at `pushed`, its
 		extranet's tax setting matching the property: the price itself
-		where it includes tax, the price plus the room tax where not."""
+		where it includes tax, the price plus the room tax (`tax` %, default
+		the property's) where not. That is the money; how the channel then
+		reports it is channex_booking's `report`."""
 		price = Decimal(str(pushed))
-		return price if h.inclusive else price * (1 + h.tax / 100)
+		tax = h.tax if tax is None else Decimal(str(tax))
+		return price if h.inclusive else price * (1 + tax / 100)
 
 	# -- the desk and the inbound booking ------------------------------------
 
@@ -129,11 +150,18 @@ class _SellingBasisFixture:
 		return frappe.get_doc({"doctype": "Guest", "first_name": "Basis",
 			"last_name": frappe.generate_hash(length=6)}).insert(ignore_permissions=True).name
 
-	def desk_booking(self, h, n: int = NIGHT, rate_plan=None):
+	def desk_booking(self, h, n: int = NIGHT, rate_plan=None, nights: int = 1):
 		return frappe.get_doc({"doctype": "Reservation", "property": h.property,
 			"room_type": h.room_type, "guest": self.guest(), "status": "Confirmed",
-			"check_in_date": day(n), "check_out_date": day(n + 1), "adults": 2,
+			"check_in_date": day(n), "check_out_date": day(n + nights), "adults": 2,
 			"rate_plan": rate_plan}).insert(ignore_permissions=True)
+
+	def season(self, h, n: int, price) -> None:
+		"""Night n sells for `price` (an Absolute season on the room type)."""
+		frappe.get_doc({"doctype": "Season", "property": h.property, "season_name": f"Night {n}",
+			"room_type": h.room_type, "start_date": day(n), "end_date": day(n),
+			"adjustment_type": "Absolute", "adjustment_value": price,
+			"priority": 10}).insert(ignore_permissions=True)
 
 	def deliver(self, h, payload):
 		sp = "basis_hook_" + frappe.generate_hash(length=8)
@@ -152,25 +180,66 @@ class _SellingBasisFixture:
 		self.assertTrue(name, f"the OTA booking {ref} did not land")
 		return frappe.get_doc("Reservation", name)
 
-	def channex_booking(self, h, charged, n: int = NIGHT):
-		ref = "BDC-" + frappe.generate_hash(length=8)
-		self.deliver(h, {"event": "booking", "payload": {
-			"status": "new", "ota_reservation_code": ref, "ota_name": "Booking.com",
-			"arrival_date": day(n), "departure_date": day(n + 1), "currency": h.currency,
-			"amount": str(charged), "customer": {"name": "Ota", "surname": "Guest"},
-			"rooms": [{"room_type_id": "rt-std", "checkin_date": day(n), "checkout_date": day(n + 1),
-			           "occupancy": {"adults": 2, "children": 0},
-			           "days": {day(n): str(charged)}}]}})
-		return self.received(h, ref)
+	def channex_payload(self, h, charged, n: int = NIGHT, report: str = "inclusive",
+	                    taxes=None, tax_type: str = "tax", extra_taxes=()) -> dict:
+		"""The booking webhook Channex sends for a stay from day n the guest
+		paid `charged` for (one night's gross price, or a list of them, one a
+		night), the room tax at `taxes` % a night (default the property's).
 
-	def aiosell_booking(self, h, pushed, charged, n: int = NIGHT):
+		`report` is how the channel reports that room tax
+		(docs.channex.io, bookings collection, rooms[].taxes[].is_inclusive):
+		- "inclusive": the day prices hold the tax; it is listed with
+		  is_inclusive true (Booking.com's VAT, Expedia "Total Amount", Agoda
+		  "Inclusive");
+		- "exclusive": the day prices are before tax and the tax is listed on
+		  top, is_inclusive false (Expedia "Total Amount Excluding Tax", Agoda
+		  "Exclusive"). The booking amount is then before tax too.
+		`tax_type` is the room tax's type as the channel names it; extra_taxes
+		go into taxes[] as given (an OTA's fees and city taxes)."""
+		gross = [Decimal(str(c)) for c in (charged if isinstance(charged, list | tuple) else [charged])]
+		pcts = [Decimal(str(t)) for t in (taxes or [h.tax] * len(gross))]
+		quantum = min(Decimal("0.01"), channel_ari.rate_quantum(h.property))
+		money = lambda v: str(Decimal(v).quantize(quantum))  # noqa: E731
+		inclusive = report == "inclusive"
+		days = {day(n + i): money(g if inclusive else g / (1 + t / 100))
+		        for i, (g, t) in enumerate(zip(gross, pcts, strict=True))}
+		room_amount = sum(Decimal(v) for v in days.values())
+		tax = sum(gross) - (room_amount if not inclusive else sum(
+			g / (1 + t / 100) for g, t in zip(gross, pcts, strict=True)))
+		room_taxes = [{"is_inclusive": inclusive, "name": "VAT", "total_price": money(tax),
+		               "type": tax_type}] if tax else []
+		ref = "BDC-" + frappe.generate_hash(length=8)
+		return {"event": "booking", "payload": {
+			"status": "new", "ota_reservation_code": ref, "ota_name": "Booking.com",
+			"arrival_date": day(n), "departure_date": day(n + len(gross)), "currency": h.currency,
+			"amount": money(room_amount), "customer": {"name": "Ota", "surname": "Guest"},
+			"rooms": [{"room_type_id": "rt-std", "checkin_date": day(n),
+			           "checkout_date": day(n + len(gross)), "occupancy": {"adults": 2, "children": 0},
+			           "amount": money(room_amount), "days": days,
+			           "taxes": room_taxes + list(extra_taxes)}]}}
+
+	def channex_booking(self, h, charged, n: int = NIGHT, **report):
+		payload = self.channex_payload(h, charged, n, **report)
+		self.deliver(h, payload)
+		return self.received(h, payload["payload"]["ota_reservation_code"])
+
+	def aiosell_booking(self, h, pushed, charged, n: int = NIGHT, before_tax=None):
+		"""`pushed` and `charged`: one night's price, or a list, one a night.
+		before_tax: the booking's amountBeforeTax, as AioSell's own sample
+		booking carries it (kamra/tests/test_aiosell.py), when given."""
+		as_list = lambda v: list(v) if isinstance(v, list | tuple) else [v]  # noqa: E731
+		pushed, charged = as_list(pushed), as_list(charged)
+		amount = {"amountAfterTax": float(sum(Decimal(str(c)) for c in charged)), "currency": h.currency}
+		if before_tax is not None:
+			amount.update(amountBeforeTax=float(before_tax),
+			              tax=amount["amountAfterTax"] - float(before_tax))
 		ref = "AIO-" + frappe.generate_hash(length=8)
 		self.deliver(h, {"action": "book", "hotelCode": "demo", "channel": "Booking.com",
-			"bookingId": ref, "checkin": day(n), "checkout": day(n + 1),
-			"guest": {"firstName": "Ota", "lastName": "Guest"},
-			"amount": {"amountAfterTax": float(charged), "currency": h.currency},
+			"bookingId": ref, "checkin": day(n), "checkout": day(n + len(pushed)),
+			"guest": {"firstName": "Ota", "lastName": "Guest"}, "amount": amount,
 			"rooms": [{"roomCode": "rt-std", "occupancy": {"adults": 2, "children": 0},
-			           "prices": [{"date": day(n), "sellRate": float(pushed)}]}]})
+			           "prices": [{"date": day(n + i), "sellRate": float(p)}
+			                      for i, p in enumerate(pushed)]}]})
 		return self.received(h, ref)
 
 	def assertBillsLikeTheDesk(self, ota, desk):
@@ -206,17 +275,69 @@ class ChannexSellingBasisTestCase(_SellingBasisFixture, IntegrationTestCase):
 		self.assertEqual(Decimal(self.channex_push(h, ext_rate="rp-std-bb")), Decimal("165000"))
 
 	def test_round_trip_on_a_tax_inclusive_property_bills_like_the_desk(self):
+		"""The guest pays 150,000; Channex reports the 22,881.36 of VAT
+		inside the day price (is_inclusive: true)."""
 		h = self.hotel(inclusive=1)
 		pushed = self.channex_push(h)
 		desk = self.desk_booking(h)
-		ota = self.channex_booking(h, self.charged(h, pushed))
+		ota = self.channex_booking(h, self.charged(h, pushed), report="inclusive")
+		self.assertBillsLikeTheDesk(ota, desk)
+
+	def test_round_trip_on_a_tax_inclusive_property_reported_before_tax(self):
+		"""The guest pays 150,000, but the channel records bookings before
+		tax (Expedia "Total Amount Excluding Tax"): the day price is
+		127,118.64 and the 22,881.36 of VAT is listed on top
+		(is_inclusive: false). The folio still bills 150,000."""
+		h = self.hotel(inclusive=1)
+		pushed = self.channex_push(h)
+		desk = self.desk_booking(h)
+		ota = self.channex_booking(h, self.charged(h, pushed), report="exclusive")
 		self.assertBillsLikeTheDesk(ota, desk)
 
 	def test_round_trip_on_a_tax_exclusive_property_bills_like_the_desk(self):
+		"""Rates exclude 18% VAT: 150,000 is offered, the guest pays
+		177,000, and Channex reports the day at 150,000 with 27,000 of VAT
+		on top (is_inclusive: false). The folio bills 150,000 + 18%, not
+		127,118.64 + 18% (the VAT dropped, then backed out of the net)."""
 		h = self.hotel(inclusive=0)
 		pushed = self.channex_push(h)
 		desk = self.desk_booking(h)
-		ota = self.channex_booking(h, self.charged(h, pushed))
+		ota = self.channex_booking(h, self.charged(h, pushed), report="exclusive")
+		self.assertBillsLikeTheDesk(ota, desk)
+
+	def test_round_trip_on_a_tax_exclusive_property_reported_with_tax(self):
+		"""The same stay, the channel reporting the 177,000 the guest paid
+		in the day price and the VAT as inside it (is_inclusive: true)."""
+		h = self.hotel(inclusive=0)
+		pushed = self.channex_push(h)
+		desk = self.desk_booking(h)
+		ota = self.channex_booking(h, self.charged(h, pushed), report="inclusive")
+		self.assertBillsLikeTheDesk(ota, desk)
+
+	def test_round_trip_reads_an_ota_named_vat_as_the_room_tax(self):
+		"""Channex relays an OTA's own tax names (Booking.com: "Value Added
+		Tax (VAT)") as the type: that is the room tax too."""
+		h = self.hotel(inclusive=0)
+		pushed = self.channex_push(h)
+		desk = self.desk_booking(h)
+		ota = self.channex_booking(h, self.charged(h, pushed), report="exclusive",
+		                           tax_type="Value Added Tax (VAT)")
+		self.assertBillsLikeTheDesk(ota, desk)
+
+	def test_round_trip_leaves_out_the_otas_fees_and_city_taxes(self):
+		"""Fees and city taxes the OTA lists on top are not the room tax the
+		desk charges: only the VAT is added. A withheld tax (collected by the
+		OTA, collected_taxes) is not added either."""
+		h = self.hotel(inclusive=0)
+		pushed = self.channex_push(h)
+		desk = self.desk_booking(h)
+		ota = self.channex_booking(h, self.charged(h, pushed), report="exclusive", extra_taxes=[
+			{"is_inclusive": False, "name": "Cleaning fee", "total_price": "20000.00", "type": "fee"},
+			{"is_inclusive": False, "name": "City tax", "total_price": "5000.00", "type": "city_tax"},
+			{"is_inclusive": False, "name": "CITY_TAX (7.20%)", "total_price": "10800.00",
+			 "type": "City Tax"},
+			{"is_inclusive": False, "is_withheld": True, "name": "VAT (Withheld Tax)",
+			 "total_price": "27000.00", "type": "tax"}])
 		self.assertBillsLikeTheDesk(ota, desk)
 
 	def test_round_trip_of_a_rate_plan_on_a_tax_inclusive_property(self):
@@ -313,3 +434,151 @@ class ChannexMinorUnitTestCase(_SellingBasisFixture, IntegrationTestCase):
 		state = json.loads(frappe.db.get_value("Channel ARI State",
 			f"{h.conn.name}|restrictions|rp-std", "sent_values") or "{}")
 		self.assertEqual(Decimal(state[day(NIGHT)]["rate"]), Decimal("12.349"))
+
+
+class MultiNightSellingBasisTestCase(_SellingBasisFixture, IntegrationTestCase):
+	"""Two nights at two prices: each night bills what the desk locks for
+	it, the rounding left on the last night as the desk leaves it, and each
+	night's room tax at its own slab."""
+
+	def test_two_nights_across_a_season_on_channex(self):
+		"""18% inclusive, 150,000 then 180,000: the desk locks 127,118.64
+		and 152,542.38 (the last night takes the rounding so the nights add
+		up to the stay); the OTA booking locks the same, not 152,542.37."""
+		h = self.hotel(inclusive=1)
+		pushed = [self.channex_push(h)]
+		self.season(h, NIGHT + 1, 180000)
+		pushed.append(self.channex_push(h, NIGHT + 1))
+		desk = self.desk_booking(h, nights=2)
+		ota = self.channex_booking(h, [self.charged(h, p) for p in pushed])
+		self.assertBillsLikeTheDesk(ota, desk)
+
+	def test_two_nights_across_a_season_on_aiosell(self):
+		h = self.hotel(inclusive=1, provider="AioSell")
+		pushed = [self.aiosell_push(h)]
+		self.season(h, NIGHT + 1, 180000)
+		pushed.append(self.aiosell_push(h, NIGHT + 1))
+		desk = self.desk_booking(h, nights=2)
+		ota = self.aiosell_booking(h, pushed, [self.charged(h, p) for p in pushed])
+		self.assertBillsLikeTheDesk(ota, desk)
+
+	def india(self, provider: str) -> frappe._dict:
+		"""Rates exclude GST, slab 5% up to 7,500 and 18% above: 7,000 the
+		first night, 10,000 the second."""
+		h = self.hotel(inclusive=0, currency="INR", country="India", price=7000, provider=provider,
+		               slabs=(7500, 5, 18))
+		self.season(h, NIGHT + 1, 10000)
+		return h
+
+	def test_two_nights_in_two_gst_slabs_on_aiosell(self):
+		"""AioSell's prices are before tax (they add up to amountBeforeTax,
+		17,000); the guest pays 7,350 + 11,800 = 19,150. Each night keeps its
+		own price and slab, not one blended 19,150 / 17,000 mark-up."""
+		h = self.india("AioSell")
+		pushed = [self.aiosell_push(h), self.aiosell_push(h, NIGHT + 1)]
+		self.assertEqual([Decimal(str(p)) for p in pushed], [Decimal("7000"), Decimal("10000")])
+		desk = self.desk_booking(h, nights=2)
+		ota = self.aiosell_booking(h, pushed, [self.charged(h, 7000, 5), self.charged(h, 10000, 18)],
+		                           before_tax=17000)
+		self.assertBillsLikeTheDesk(ota, desk)
+
+	def test_two_nights_in_two_gst_slabs_on_channex(self):
+		"""Channex reports the day prices before tax and 2,150 of GST on top."""
+		h = self.india("Channex")
+		pushed = [self.channex_push(h), self.channex_push(h, NIGHT + 1)]
+		self.assertEqual([Decimal(p) for p in pushed], [Decimal("7000"), Decimal("10000")])
+		desk = self.desk_booking(h, nights=2)
+		ota = self.channex_booking(h, [self.charged(h, 7000, 5), self.charged(h, 10000, 18)],
+		                           report="exclusive", taxes=[5, 18])
+		self.assertBillsLikeTheDesk(ota, desk)
+
+
+class NightRateMinorUnitTestCase(_SellingBasisFixture, IntegrationTestCase):
+	"""A locked night rate keeps the currency's ISO 4217 decimals (three for
+	KWD) and never fewer than two."""
+
+	def kwd(self, provider: str = "Channex") -> frappe._dict:
+		return self.hotel(inclusive=0, currency="KWD", country="Kuwait", price=12.345, tax=0,
+		                  provider=provider)
+
+	def locked(self, doc) -> list:
+		return [(str(r.stay_date), Decimal(str(r.rate))) for r in doc.night_rates]
+
+	def test_a_kwd_desk_booking_locks_the_third_decimal(self):
+		h = self.kwd()
+		self.assertEqual(self.locked(self.desk_booking(h)), [(day(NIGHT), Decimal("12.345"))])
+
+	def test_a_kwd_channex_booking_locks_the_third_decimal(self):
+		h = self.kwd()
+		pushed = self.channex_push(h)
+		self.assertEqual(pushed, "12.345")
+		ota = self.channex_booking(h, self.charged(h, pushed))
+		self.assertEqual(self.locked(ota), [(day(NIGHT), Decimal("12.345"))])
+		self.assertEqual(Decimal(str(ota.amount_after_tax)), Decimal("12.345"))
+
+	def test_aiosell_is_offered_a_kwd_price_with_three_decimals(self):
+		h = self.kwd(provider="AioSell")
+		self.assertEqual(Decimal(str(self.aiosell_push(h))), Decimal("12.345"))
+
+	def test_a_kwd_aiosell_booking_locks_the_third_decimal(self):
+		h = self.kwd(provider="AioSell")
+		pushed = self.aiosell_push(h)
+		ota = self.aiosell_booking(h, pushed, self.charged(h, pushed))
+		self.assertEqual(self.locked(ota), [(day(NIGHT), Decimal("12.345"))])
+
+	def test_ugx_night_rates_keep_two_decimals_on_a_tax_inclusive_property(self):
+		"""UGX has no decimals, but the net share of a tax-inclusive 150,000
+		is 127,118.64: rounding it to a whole 127,119 would bill
+		150,000.42 with the 18% on top, not the 150,000 the guest was
+		quoted."""
+		h = self.hotel(inclusive=1)
+		pushed = self.channex_push(h)
+		desk = self.desk_booking(h)
+		ota = self.channex_booking(h, self.charged(h, pushed))
+		for doc in (desk, ota):
+			self.assertEqual(self.locked(doc), [(day(NIGHT), Decimal("127118.64"))])
+
+
+class PropertyBasisChangeTestCase(_SellingBasisFixture, IntegrationTestCase):
+	"""Editing what a property's prices are offered on - whether its rates
+	include tax, its currency, its country (the tax pack) and its room tax
+	rates - queues the channels' rates at once, not at the nightly sweep."""
+
+	def queued(self, h) -> list:
+		return frappe.get_all("Channel ARI Outbox", filters={"connection": h.conn.name, "status": "Pending"},
+		                      fields=["kinds", "date_from", "date_to"])
+
+	def edit(self, h, **values) -> None:
+		prop = frappe.get_doc("Property", h.property)
+		prop.update(values)
+		prop.save(ignore_permissions=True)
+
+	def test_each_selling_basis_field_queues_the_rates(self):
+		edits = {"rates_include_tax": 1, "currency": "USD", "country": "Kenya", "gst_mode": "Fixed",
+		         "gst_slab_threshold": 9000, "gst_rate_low": 12, "gst_rate_high": 12}
+		for field, value in edits.items():
+			with self.subTest(field=field):
+				h = self.hotel(inclusive=0)
+				self.edit(h, **{field: value})
+				self.assertEqual([r.kinds for r in self.queued(h)], ["restrictions"], field)
+
+	def test_an_edit_that_moves_no_price_queues_nothing(self):
+		h = self.hotel(inclusive=0)
+		self.edit(h, house_rules="No smoking", website="https://basis.example")
+		self.assertEqual(self.queued(h), [])
+
+	def test_the_new_basis_goes_out_without_waiting_for_the_sweep(self):
+		"""A plan 10,000 over the base price: offered at 160,000 while rates
+		exclude tax; once they include it, 161,800 (127,118.64 + 10,000 with
+		the 18% put back), sent by the edit's own change."""
+		h = self.hotel(inclusive=0, plans={"amt": ("Amount", 10000)})
+		self.assertEqual(Decimal(self.channex_push(h, ext_rate="rp-std-amt")), Decimal("160000"))
+		with patch.object(channel_ari, "ARI_HORIZON_DAYS", NIGHT + 2):
+			self.edit(h, rates_include_tax=1)
+			fake = FakeChannex()
+			self.flush(h.conn, fake)
+		offered = {v.get("date") or (v["date_from"], v["date_to"]): v["rate"]
+		           for call in fake.posts("restrictions") for v in call if v["rate_plan_id"] == "rp-std-amt"}
+		self.assertTrue(any(Decimal(rate) == Decimal("161800") and (
+			key == day(NIGHT) or (isinstance(key, tuple) and key[0] <= day(NIGHT) <= key[1]))
+			for key, rate in offered.items()), offered)
