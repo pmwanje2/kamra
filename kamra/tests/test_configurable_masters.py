@@ -11,11 +11,14 @@ and the desk, the till and check-in use them like any other.
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import frappe
 
 from kamra import api, checkin, localization
 from kamra.tests.audit_fixtures import (
 	PROP_A,
+	PROP_B,
 	TODAY,
 	YESTERDAY,
 	AuditTestCase,
@@ -47,7 +50,7 @@ SEEDS = {
 	                        "Payment failed", "Weather / travel disruption",
 	                        "Booked elsewhere", "Other"],
 	"Payment Method": ["Cash", "Foreign Cash", "Card", "UPI", "Bank Transfer", "Mobile Money",
-	                   "OTA Prepaid", "Company Credit", "Payment Link", "Other"],
+	                   "OTA Prepaid", "Company Credit", "Payment Link", "Cheque", "Other"],
 	"Meal Plan Code": ["EP", "CP", "MAP", "AP"],
 	"Payer Type": ["OTA prepaid", "OTA, guest pays here", "Guest", "Company", "Group"],
 	"Check-in Request": ["extra_bed", "wake_up_call", "airport_drop", "dietary",
@@ -61,7 +64,7 @@ def add_code(doctype: str, code: str, **fields) -> str:
 
 
 class ConfigurableMastersTestCase(AuditTestCase):
-	properties = (PROP_A,)
+	properties = (PROP_A, PROP_B)
 
 	def setUp(self):
 		super().setUp()
@@ -164,11 +167,11 @@ class ConfigurableMastersTestCase(AuditTestCase):
 
 	def test_a_client_payment_method_is_offered_validated_and_counted(self):
 		from kamra import cashier
-		add_code("Payment Method", "UT Airtel Money", tender_type="Instant",
+		add_code("Payment Method", "UT Airtel Money", property=PROP_A, tender_type="Instant",
 		         mode_of_payment="Airtel Money")
 		pack = localization.pack_for(PROP_A)
-		self.assertIn("UT Airtel Money", localization.payment_modes(pack))
-		self.assertIn("UT Airtel Money", localization.instant_payment_modes(pack))
+		self.assertIn("UT Airtel Money", localization.payment_modes(pack, PROP_A))
+		self.assertIn("UT Airtel Money", localization.instant_payment_modes(pack, PROP_A))
 		localization.assert_payment_mode(PROP_A, "UT Airtel Money")
 		self.at(TODAY)
 		session = cashier.open_session(PROP_A, opening_float=0)["name"]
@@ -178,11 +181,101 @@ class ConfigurableMastersTestCase(AuditTestCase):
 		self.assertEqual(totals["other"], 0)
 
 	def test_a_switched_off_payment_method_is_refused(self):
-		add_code("Payment Method", "UT Old Wallet", tender_type="Instant", disabled=1)
+		add_code("Payment Method", "UT Old Wallet", property=PROP_A, tender_type="Instant", disabled=1)
 		pack = localization.pack_for(PROP_A)
-		self.assertNotIn("UT Old Wallet", localization.payment_modes(pack))
+		self.assertNotIn("UT Old Wallet", localization.payment_modes(pack, PROP_A))
 		with self.assertRaises(frappe.ValidationError):
 			localization.assert_payment_mode(PROP_A, "UT Old Wallet")
+
+	def test_payment_methods_are_scoped_to_their_property_and_never_leak(self):
+		from kamra.localization import germany, nicaragua, philippines
+
+		meta = frappe.get_meta("Payment Method")
+		df = meta.get_field("property")
+		self.assertIsNotNone(df)
+		self.assertEqual(df.fieldtype, "Link")
+		self.assertEqual(df.options, "Property")
+
+		make_property(PROP_B, country="Uganda", currency="UGX", business_date=YESTERDAY)
+		add_code("Payment Method", "UT Property A Wallet", property=PROP_A,
+		         tender_type="Instant", mode_of_payment="Airtel Money")
+
+		pack_a = localization.pack_for(PROP_A)
+		pack_b = localization.pack_for(PROP_B)
+		self.assertIn("UT Property A Wallet", localization.payment_modes(pack_a, PROP_A))
+		self.assertIn("UT Property A Wallet", localization.instant_payment_modes(pack_a, PROP_A))
+		self.assertIn("UT Property A Wallet", api.property_locale(PROP_A)["payment_modes"])
+
+		self.assertNotIn("UT Property A Wallet", localization.payment_modes(pack_b, PROP_B))
+		self.assertNotIn("UT Property A Wallet", localization.instant_payment_modes(pack_b, PROP_B))
+		self.assertNotIn("UT Property A Wallet", api.property_locale(PROP_B)["payment_modes"])
+		with self.assertRaises(frappe.ValidationError):
+			localization.assert_payment_mode(PROP_B, "UT Property A Wallet")
+
+		# pack-only calls without a property never pick up any property's custom payment methods
+		for pack in (nicaragua, germany, philippines):
+			with self.subTest(pack=pack.__name__):
+				self.assertEqual(localization.payment_modes(pack), ["Cash", "Card", "Bank Transfer"])
+
+	def test_adopted_payment_method_is_scoped_to_the_property_that_used_it(self):
+		from kamra.folio import open_folio
+		from kamra.localization import nicaragua
+		from kamra.patches.v48 import configurable_masters
+
+		make_property(PROP_B, country="Uganda", currency="UGX", business_date=YESTERDAY)
+		res = self.booking()
+		folio_name = open_folio(res)
+		folio_doc = frappe.get_doc("Folio", folio_name)
+		folio_doc.append("payments", {
+			"posting_date": YESTERDAY, "payment_kind": "Payment",
+			"mode": "Cash", "amount": 10000, "currency": "UGX",
+		})
+		folio_doc.save(ignore_permissions=True)
+		row_name = folio_doc.payments[-1].name
+		frappe.db.set_value("Folio Payment", row_name, "mode", "UT Legacy Voucher A",
+		                    update_modified=False)
+		frappe.db.delete("Payment Method", {"name": "UT Legacy Voucher A"})
+
+		configurable_masters.execute()
+		row = frappe.db.get_value(
+			"Payment Method", "UT Legacy Voucher A",
+			["property", "system", "disabled"], as_dict=True,
+		)
+		self.assertIsNotNone(row)
+		self.assertEqual(row.property, PROP_A)
+		self.assertEqual(int(row.system), 0)
+		self.assertEqual(int(row.disabled), 0)
+
+		self.assertIn("UT Legacy Voucher A", localization.payment_modes(localization.pack_for(PROP_A), PROP_A))
+		self.assertNotIn("UT Legacy Voucher A", localization.payment_modes(localization.pack_for(PROP_B), PROP_B))
+		self.assertEqual(localization.payment_modes(nicaragua), ["Cash", "Card", "Bank Transfer"])
+
+	def test_assert_payment_mode_uses_tender_type_for_foreign_currency(self):
+		add_code("Payment Method", "UT USD Wire", property=PROP_A,
+		         tender_type="Bank Transfer", mode_of_payment="USD Wire")
+		add_code("Payment Method", "UT USD Box", property=PROP_A,
+		         tender_type="Foreign Cash", mode_of_payment="USD Cash Box")
+		add_code("Payment Method", "UT Airtel FX", property=PROP_A,
+		         tender_type="Instant", mode_of_payment="Airtel Money")
+		mapped = [
+			{"mode": "UT USD Wire", "currencies": ["UGX", "USD"]},
+			{"mode": "UT USD Box", "currencies": ["UGX", "USD"]},
+			{"mode": "UT Airtel FX", "currencies": ["UGX", "USD"]},
+		]
+		with patch.object(localization, "tender_modes", return_value=mapped):
+			localization.assert_payment_mode(PROP_A, "UT USD Wire", "USD")
+			localization.assert_payment_mode(PROP_A, "UT USD Box", "USD")
+			localization.assert_payment_mode(PROP_A, "UT Airtel FX", "UGX")
+			with self.assertRaises(frappe.ValidationError):
+				localization.assert_payment_mode(PROP_A, "UT USD Box", "UGX")
+			with self.assertRaises(frappe.ValidationError):
+				localization.assert_payment_mode(PROP_A, "UT Airtel FX", "USD")
+
+	def test_bridge_fields_on_payment_method_remain_stable(self):
+		meta = frappe.get_meta("Payment Method")
+		for fieldname in ("code", "mode_of_payment", "tender_type", "property", "disabled"):
+			with self.subTest(fieldname=fieldname):
+				self.assertTrue(meta.has_field(fieldname))
 
 	# ── check-in: who pays, quick requests ──────────────────────────────
 

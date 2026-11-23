@@ -9,10 +9,12 @@ Values the caller gives, and values already saved, always win."""
 
 from __future__ import annotations
 
+from unittest.mock import Mock, patch
+
 import frappe
 from frappe.utils import flt
 
-from kamra import cashier, settings
+from kamra import api, cashier, erp_bridge, settings
 from kamra.tests.audit_fixtures import AuditTestCase, d, make_reservation, make_room_type
 
 UG = "UT Country Uganda"
@@ -58,12 +60,71 @@ class CountryDefaultsTestCase(AuditTestCase):
 		self.assertEqual(loc["locale"], "en-UG")
 
 	def test_a_uganda_property_has_no_india_tax_slab_or_inr_deposit(self):
-		bare_property(UG, "Uganda")
-		row = stored(UG, "gst_mode", *MONEY_FIELDS)
+		with patch.object(erp_bridge, "get_bridge_script", return_value=None):
+			bare_property(UG, "Uganda")
+		row = stored(UG, "gst_mode", "room_levy_label", *MONEY_FIELDS)
 		self.assertNotEqual(row.gst_mode, "Slab")
-		for field in MONEY_FIELDS:
+		self.assertEqual(row.room_levy_label, "Local Hotel Tax")
+		for field in ("gst_slab_threshold", "gst_rate_high", "security_deposit_amount"):
 			with self.subTest(field=field):
 				self.assertEqual(flt(row[field]), 0)
+		# standalone Uganda defaults to 18% VAT
+		self.assertEqual(flt(row.gst_rate_low), 18)
+
+	def test_uganda_property_on_erp_bridge_keeps_zero_folio_tax(self):
+		from decimal import Decimal
+		from kamra.localization import pack_for
+
+		with patch.object(erp_bridge, "get_bridge_script", return_value=Mock()):
+			bare_property(UG, "Uganda")
+			row = stored(UG, "gst_rate_low", "gst_slab_threshold")
+			self.assertEqual(flt(row.gst_rate_low), 0)
+			self.assertEqual(flt(row.gst_slab_threshold), 0)
+			pack = pack_for(UG)
+			self.assertEqual(pack.calculate_room_tax(UG, {}, Decimal("250000")), Decimal("0"))
+			self.assertEqual(pack.fnb_tax_rate(UG), 0.0)
+
+	def test_uganda_settings_schema_hides_slab_fields_and_exposes_locale(self):
+		bare_property(UG, "Uganda")
+		bare_property(IN, "India")
+
+		ug_schema = settings.settings_schema(UG)
+		ug_mods = {m["id"]: m for m in ug_schema["modules"]}
+		ug_tax_keys = [
+			s["key"]
+			for sec in ug_mods["finance"]["sections"] if sec["id"] == "tax"
+			for s in sec["settings"]
+		]
+		for hidden in ("gst_mode", "gst_slab_threshold", "gst_rate_high"):
+			self.assertNotIn(hidden, ug_tax_keys)
+		self.assertIn("gst_rate_low", ug_tax_keys)
+		self.assertIn("rates_include_tax", ug_tax_keys)
+
+		ug_loc_keys = [
+			s["key"]
+			for sec in ug_mods["general"]["sections"] if sec["id"] == "location"
+			for s in sec["settings"]
+		]
+		for key in ("country", "currency", "timezone", "locale", "date_format", "booking_language"):
+			self.assertIn(key, ug_loc_keys)
+
+		in_schema = settings.settings_schema(IN)
+		in_mods = {m["id"]: m for m in in_schema["modules"]}
+		in_tax_keys = [
+			s["key"]
+			for sec in in_mods["finance"]["sections"] if sec["id"] == "tax"
+			for s in sec["settings"]
+		]
+		for kept in ("gst_mode", "gst_slab_threshold", "gst_rate_low", "gst_rate_high"):
+			self.assertIn(kept, in_tax_keys)
+
+	def test_property_locale_and_date_format_roundtrip_via_settings(self):
+		bare_property(UG, "Uganda")
+		settings.save_settings(UG, "general", {"locale": "en-GB", "date_format": "dd/mm/yyyy"})
+		frappe.clear_document_cache("Property", UG)
+		loc = api.property_locale(UG)
+		self.assertEqual(loc["locale"], "en-GB")
+		self.assertEqual(loc["date_format"], "dd/mm/yyyy")
 
 	def test_an_india_property_keeps_every_default_it_had(self):
 		bare_property(IN, "India")
