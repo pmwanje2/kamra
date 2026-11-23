@@ -42,6 +42,7 @@ class WhiteLabelTest(unittest.TestCase):
 		frappe.whitelist = lambda **kw: lambda fn: fn
 		frappe.sessions = SimpleNamespace(get_csrf_token=lambda: "fixture-csrf")
 		frappe.local = SimpleNamespace(site="fixture.test")
+		frappe.session = SimpleNamespace(user="Guest")  # the boot asks nothing for a signed-out visitor
 		frappe.request = SimpleNamespace(path="/kamra/settings")
 		utils = ModuleType("frappe.utils")
 		utils.get_url = lambda path: "https://fixture.test" + path
