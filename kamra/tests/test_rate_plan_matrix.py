@@ -148,7 +148,7 @@ class RatePlanValidationTest(RateMatrixHarness):
 		# Select options (lock policy, rounding mode) are Frappe's own select validation.
 		with self.assertRaisesRegex(ValidationError, "negative"):
 			self.validate(rounding_step=-1)
-		for policy in ("Fixed at Reservation", "Fixed at Check In", "Current Date", "Fixed at Block"):
+		for policy in ("Fixed at Reservation", "Fixed at Check In", "Current Date"):
 			self.validate(fx_lock_policy=policy, rounding_step=5000)
 
 
@@ -344,7 +344,7 @@ class FxLockPolicyTest(RateMatrixHarness):
 		self.assertTrue(self.res.flags.kamra_fx_checkin_relock)
 
 	def test_other_policies_and_home_currency_contracts_keep_the_booked_rate(self):
-		for policy in ("Fixed at Reservation", "Current Date", "Fixed at Block"):
+		for policy in ("Fixed at Reservation", "Current Date"):
 			with self.subTest(policy=policy):
 				self.docs["Rate Plan", "CORP"].fx_lock_policy = policy
 				self.assertFalse(self.pricing.relock_contract_fx_at_check_in(self.res))

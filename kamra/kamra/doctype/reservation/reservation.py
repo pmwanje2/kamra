@@ -677,6 +677,12 @@ class Reservation(Document):
 		# same rule: only when set, so existing rate-lock keys stay put
 		if flt(self.get("agreed_rate")) > 0:
 			inputs["agreed_rate"] = flt(self.get("agreed_rate"))
+			# a contract over a tariff change: each night's own rate, only
+			# then - a one-rate contract keeps its rate-lock key
+			from kamra.pricing import contract_night_rates
+			nights = contract_night_rates(self)
+			if nights:
+				inputs["agreed_nights"] = nights
 		# nights the desk priced by hand: only when there are some, so every
 		# other booking's rate-lock key stays the same
 		hand = self.hand_set_prices()

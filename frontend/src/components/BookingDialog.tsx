@@ -1862,6 +1862,7 @@ export function BookingDialog(props: {
                     mealPlan={form.meal_plan || undefined}
                     voucher={form.voucher_code || undefined}
                     ratePlan={form.rate_plan}
+                    company={form.company || undefined}
                     planRequired={planRequired}
                     onPickPlan={(p) => set("rate_plan", p)}
                     nightPrices={nightPrices}

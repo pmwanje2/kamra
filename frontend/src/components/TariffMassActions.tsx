@@ -66,6 +66,8 @@ interface MassProps {
   /** the property's home (posting) currency */
   propertyCurrency: string
   businessDate: string
+  /** customers a version may be for: the directory's own and the ERPNext Customers the user can read */
+  customers?: string[]
   lists: Map<string, PriceList>
   locale: string
   dateLocale: string
@@ -117,7 +119,8 @@ function OverLimit({ count }: { count: number }) {
 }
 
 function BulkVersionDialog({
-  items, currency: shared, rounding, property, propertyCurrency, businessDate, lists, locale, dateLocale, onClose, onDone,
+  items, currency: shared, rounding, property, propertyCurrency, businessDate, customers = [], lists, locale, dateLocale,
+  onClose, onDone,
 }: MassProps & {
   items: ContractTariffItem[]; currency: string | null; rounding: { step: number; mode: RoundingMode } | null
 }) {
@@ -132,23 +135,36 @@ function BulkVersionDialog({
   const [mode, setMode] = useState<RoundingMode>(() => rounding?.mode ?? "Nearest")
   const { busy, failure, setFailure, run } = useSubmission()
   const prefillId = useId()
+  const customerList = useId()
+  // SAP Create with Reference to a customer: the selection's versions become that customer's own prices
+  const [customer, setCustomer] = useState("")
+  const target = customer.trim()
 
   const amount = Number(value)
   const days = Number(shift)
   const multiple = Math.max(0, Number(step) || 0)
   const ready = value.trim() !== "" && Number.isFinite(amount)
     && (dateMode === "set" ? !!validFrom && (!validUntil || validUntil >= validFrom) : shift.trim() !== "" && Number.isInteger(days))
-  const plan = items.map((item) => {
+  // one version per item for the customer: its own row when selected, else the first selected row
+  const itemKey = (item: ContractTariffItem) => `${item.price_list}|${item.item_code}`
+  const sources = target ? items.filter((item, index) => {
+    const own = items.find((other) => itemKey(other) === itemKey(item) && other.customer === target)
+    return own ? own === item : items.findIndex((other) => itemKey(other) === itemKey(item)) === index
+  }) : items
+  const plan = sources.map((item) => {
     const reference = item.active ?? null
+    const owner = target || item.customer || null
     // a shift needs dates to move, and only an exact rate needs no current rate
     if (!reference && (kind !== "exact" || dateMode === "shift")) return null
     const currency = itemCurrency(item, lists.get(item.price_list))
     const rate = roundRate(adjustRate(reference?.rate ?? 0, { kind, value: amount }), multiple, mode, currency)
     const from = dateMode === "set" || !reference ? validFrom : addDays(reference.valid_from, days)
     const upto = dateMode === "set" ? validUntil || null : reference?.valid_upto ? addDays(reference.valid_upto, days) : null
-    const earliest = reference && reference.valid_from >= businessDate ? addDays(reference.valid_from, 1) : businessDate
+    // a customer's first price follows no version of its own
+    const fresh = owner !== (item.customer || null)
+    const earliest = !fresh && reference && reference.valid_from >= businessDate ? addDays(reference.valid_from, 1) : businessDate
     const valid = Number.isFinite(rate) && rate >= 0 && from >= earliest && (!upto || upto >= from)
-    return { item, reference, currency, rate, from, upto, valid }
+    return { item, reference, currency, rate, from, upto, valid, owner }
   })
   const entries = plan.filter((entry) => entry != null)
   const leftOut = plan.length - entries.length
@@ -160,9 +176,9 @@ function BulkVersionDialog({
     if (!ready || !entries.length || invalid || tooMany) return
     void run(async () => {
       const result = await call("kamra.rates.bulk_propose_contract_tariffs", {
-        property, entries: entries.map(({ item, rate, from, upto }) => ({
+        property, entries: entries.map(({ item, rate, from, upto, owner }) => ({
           price_list: item.price_list, item_code: item.item_code, price_list_rate: rate, valid_from: from,
-          valid_upto: upto, ...(item.customer ? { customer: item.customer } : {}),
+          valid_upto: upto, ...(owner ? { customer: owner } : {}),
         })),
       })
       if (result == null) setFailure(t("Tariff editing is not available for this property."))
@@ -185,6 +201,13 @@ function BulkVersionDialog({
       </Button>
     </>}>
     <OverLimit count={items.length} />
+    <label className="flex min-w-0 flex-col gap-1.5 text-sm font-medium">
+      {t("Customer (optional)")}
+      <input name="customer" list={customerList} autoComplete="off" className={field} value={customer}
+        onChange={(event) => setCustomer(event.target.value)} disabled={busy} />
+      <datalist id={customerList}>{customers.map((name) => <option key={name} value={name} />)}</datalist>
+      <span className="text-xs font-normal text-zinc-600">{t("Leave empty to keep each tariff's own customer.")}</span>
+    </label>
     <div className="grid gap-3 sm:grid-cols-2">
       <label className="flex min-w-0 flex-col gap-1.5 text-sm font-medium">
         {t("Adjustment")}
@@ -251,10 +274,10 @@ function BulkVersionDialog({
     {ready && <div className="space-y-2 rounded-lg border border-brand-200 bg-brand-50 p-3 text-sm" aria-live="polite">
       <p className="font-medium">{t("New versions")}</p>
       <ul className="max-h-48 space-y-1 overflow-y-auto tabular-nums">
-        {entries.map(({ item, reference, currency, rate, from, upto, valid }) =>
-          <li key={[item.price_list, item.item_code, item.customer ?? ""].join("|")} className={valid ? "" : "text-rose-800"}>
+        {entries.map(({ item, reference, currency, rate, from, upto, valid, owner }) =>
+          <li key={[item.price_list, item.item_code, item.customer ?? "", owner ?? ""].join("|")} className={valid ? "" : "text-rose-800"}>
             {t("{item}: {from} → {to}", {
-              item: [item.item_name, item.customer].filter(Boolean).join(" · "),
+              item: [item.item_name, owner].filter(Boolean).join(" · "),
               from: reference ? currencyText(currency, reference.rate, locale) : "—",
               to: currencyText(currency, rate, locale),
             })} <span className="text-zinc-600">{upto

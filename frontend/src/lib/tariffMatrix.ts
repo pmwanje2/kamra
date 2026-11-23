@@ -12,7 +12,7 @@ export const TARIFF_IMPORT_BYTES = 1_048_576
 export type RoundingMode = "Nearest" | "Up" | "Down"
 export type Adjustment = { kind: "percent" | "amount" | "exact"; value: number }
 export type ExtraKind = "adult" | "child" | "bed"
-export type FxLockPolicy = "Fixed at Reservation" | "Fixed at Check In" | "Current Date" | "Fixed at Block"
+export type FxLockPolicy = "Fixed at Reservation" | "Fixed at Check In" | "Current Date"
 
 export interface TariffVersion {
   name: string
@@ -21,7 +21,14 @@ export interface TariffVersion {
   valid_from: string
   valid_upto?: string | null
   workflow_state: string
+  /** who proposed it and when (the Item Price's owner and creation) */
   owner?: string | null
+  creation?: string | null
+  /** the release or rejection: who decided and when; modified_by stands in for an older integration */
+  approver?: string | null
+  modified_by?: string | null
+  modified?: string | null
+  rejection_reason?: string | null
   can_approve?: boolean
 }
 
