@@ -1,7 +1,7 @@
 /** Rate calendar: what every room type costs, date by date, and what moved
  *  it. BAR (the base price) is the starting point; seasons and busy-house
  *  rules move it. This screen explains the rate; the quote is what charges. */
-import { useCallback, useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 import { Link, useSearchParams } from "react-router-dom"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { call, getCurrentProperty, type ContractTariff } from "../lib/api"
@@ -9,14 +9,11 @@ import { listResource, serverError } from "../lib/resource"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { InfoTip } from "../components/InfoTip"
-import { cur, moneyLocale } from "../lib/money"
+import { cur, moneyDigits, moneyLocale } from "../lib/money"
 import { useT, t as translate, uiDateLocale } from "../lib/i18n"
 import { cn } from "../lib/utils"
 import type { NightRate } from "../components/RateOptions"
 import { currencyText, fxLockNote, roundingRule, TariffNight } from "../components/ContractTariff"
-
-
-const n0 = (n: number) => Number(n ?? 0).toLocaleString(moneyLocale(), { maximumFractionDigits: 0 })
 
 interface RatePlanPolicy {
   name: string
@@ -65,8 +62,14 @@ export default function RateCalendar() {
   const [err, setErr] = useState<string | null>(null)
   const [pick, setPick] = useState<{ rt: string; i: number } | null>(null)
   const [params, setParams] = useSearchParams()
-  const ratePlan = params.get("rate_plan") ?? ""
+  // ?rate_plan absent: the customer's negotiated plan, else the card rate; ?rate_plan= (empty): the card
+  // rate, chosen; else that plan. The card is every customer's price, so it is asked for with no customer.
+  const rateParam = params.get("rate_plan")
+  const ratePlan = rateParam ?? ""
   const company = params.get("company") ?? ""
+  const cardChosen = rateParam === ""
+  // the property's active plans, kept from the last answer so a refused query still offers a way back
+  const [plans, setPlans] = useState<RatePlanPolicy[]>([])
   // customers are offered only to a user native DocPerm lets list Corporate Accounts
   const [customers, setCustomers] = useState<{ name: string; label: string }[] | null>(null)
   useEffect(() => {
@@ -76,27 +79,47 @@ export default function RateCalendar() {
       .catch(() => setCustomers(null))
   }, [])
 
-  const load = useCallback(() => {
+  useEffect(() => {
+    // a superseded query (a slower plan, an earlier date) never reaches the grid
+    let live = true
+    setData(null)
+    setErr(null)
     call<Calendar>("kamra.rates.rate_calendar", { property: getCurrentProperty(), from_date: from, days,
-      ...(ratePlan ? { rate_plan: ratePlan } : {}), ...(company ? { company } : {}) })
+      ...(ratePlan ? { rate_plan: ratePlan } : {}), ...(company && !cardChosen ? { company } : {}) })
       .then((d) => {
+        if (!live) return
         setData(d)
-        setErr(null)
+        setPlans(d.rate_plans ?? [])
       })
-      .catch((e) => setErr(serverError(e)))
-  }, [from, days, ratePlan, company])
-  useEffect(load, [load])
+      .catch((e) => { if (live) setErr(serverError(e)) })
+    return () => { live = false }
+  }, [from, days, ratePlan, company, cardChosen])
   const choose = (key: "rate_plan" | "company", value: string) => {
     setPick(null)
     setParams((p) => {
-      if (value) p.set(key, value)
+      // with a customer, the card rate stays chosen as ?rate_plan= so the negotiated plan does not replace it
+      if (value || (key === "rate_plan" && p.get("company"))) p.set(key, value)
       else p.delete(key)
+      return p
+    }, { replace: true })
+  }
+  const reset = () => {
+    setPick(null)
+    setParams((p) => {
+      p.delete("rate_plan")
+      p.delete("company")
       return p
     }, { replace: true })
   }
 
   const plan = data?.rate_plan ?? null
+  // the server priced the customer's negotiated plan: no plan was chosen
+  const negotiated = !!plan && rateParam === null && !!company
+  const customerLabel = customers?.find((c) => c.name === company)?.label ?? company
   const locale = moneyLocale()
+  const digits = moneyDigits(data?.property_currency || undefined)
+  const amount = (n: number) => Number(n ?? 0).toLocaleString(locale,
+    { minimumFractionDigits: digits, maximumFractionDigits: digits })
   const contractCurrency = plan?.currency || data?.room_types.flatMap((r) => r.nights)
     .find((x) => x.contract)?.contract?.currency
 
@@ -119,6 +142,11 @@ export default function RateCalendar() {
           </p>
           {plan && (
             <p data-rate-plan-policy className="mt-1 text-sm text-zinc-600">
+              <span className="block font-medium text-zinc-800">
+                {t("Rate plan: {plan}", { plan: plan.code && plan.code !== plan.label
+                  ? `${plan.label || plan.name} (${plan.code})` : plan.label || plan.name })}
+                {negotiated && <>{" · "}{t("Negotiated rate plan for {customer}", { customer: customerLabel })}</>}
+              </span>
               {t("Exchange rate lock: {policy}", { policy: t(plan.fx_lock_policy) })}
               {" · "}{roundingRule(plan.rounding_step, plan.rounding_mode, locale)}
               <span className="block text-xs text-zinc-500">{fxLockNote(plan.fx_lock_policy)}</span>
@@ -133,12 +161,14 @@ export default function RateCalendar() {
         <div className="flex flex-wrap items-center gap-2">
           <select
             className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
-            value={ratePlan}
+            value={negotiated ? plan!.name : ratePlan}
             onChange={(e) => choose("rate_plan", e.target.value)}
             aria-label={t("Rate plan")}
           >
             <option value="">{t("Card rate (no rate plan)")}</option>
-            {(data?.rate_plans ?? []).map((p) => <option key={p.name} value={p.name}>{p.label || p.name}</option>)}
+            {plans.map((p) => <option key={p.name} value={p.name}>{p.label || p.name}</option>)}
+            {/* a linked plan that is not (or not yet) one of the active plans: named as asked, never as the card */}
+            {ratePlan && !plans.some((p) => p.name === ratePlan) && <option value={ratePlan}>{ratePlan}</option>}
           </select>
           {customers && (
             <select
@@ -171,7 +201,14 @@ export default function RateCalendar() {
         </div>
       </div>
 
-      {err && <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{translate(err)}</p>}
+      {err && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          <p>{translate(err)}</p>
+          {(rateParam !== null || company) && (
+            <Button variant="outline" onClick={reset}>{t("Clear rate plan and customer")}</Button>
+          )}
+        </div>
+      )}
 
       {data && (
         <Card>
@@ -199,7 +236,7 @@ export default function RateCalendar() {
                     <td className="sticky start-0 bg-white px-3 py-2 font-medium">{r.name}</td>
                     {!plan && (
                       <td className="px-2 py-2 text-end tabular-nums text-zinc-500">
-                        {cur()}{n0(r.base_price)}
+                        {cur()}{amount(r.base_price)}
                       </td>
                     )}
                     {r.nights.map((x, i) => {
@@ -235,10 +272,11 @@ export default function RateCalendar() {
                               on && "ring-2 ring-brand-600",
                             )}
                           >
-                            {x.contract && (
+                            {/* a home-currency contract's figure is the rate below: shown once */}
+                            {x.contract && x.contract.currency !== data.property_currency && (
                               <span className="block text-xs text-zinc-500">{currencyText(x.contract.currency, x.contract.nightly, locale)}</span>
                             )}
-                            {n0(x.rate)}
+                            {amount(x.rate)}
                             {(x.season || x.demand) && (
                               <span className="ms-1 inline-block size-1.5 rounded-full bg-current align-middle opacity-60" aria-hidden />
                             )}
@@ -291,11 +329,11 @@ export default function RateCalendar() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-1.5 text-sm">
-            <p>{t("BAR")}: <span className="font-medium tabular-nums">{cur()}{n0(picked.bar)}</span></p>
+            <p>{t("BAR")}: <span className="font-medium tabular-nums">{cur()}{amount(picked.bar)}</span></p>
             {picked.season ? (
               <p>
                 {t("Season")}: <span className="font-medium">{picked.season.label}</span> ({picked.season.change}) {"->"}{" "}
-                <span className="tabular-nums">{cur()}{n0(picked.after_season)}</span>
+                <span className="tabular-nums">{cur()}{amount(picked.after_season)}</span>
               </p>
             ) : (
               <p className="text-zinc-400">{t("No season covers this date.")}</p>
@@ -303,7 +341,7 @@ export default function RateCalendar() {
             {picked.demand ? (
               <p>
                 {t("Busy house")}: {Math.round(picked.occupancy)}% {t("full")}, +{picked.demand.premium_pct}%
-                {picked.demand.min_rate ? `, ${t("never below")} ${cur()}${n0(picked.demand.min_rate)}` : ""}
+                {picked.demand.min_rate ? `, ${t("never below")} ${cur()}${amount(picked.demand.min_rate)}` : ""}
               </p>
             ) : (
               <p className="text-zinc-400">{t("No busy-house rule applies ({p}% full).", { p: Math.round(picked.occupancy) })}</p>
@@ -311,7 +349,7 @@ export default function RateCalendar() {
             {picked.source === "card" && (
               <p className="text-zinc-500">{t("No contract tariff for this room type: priced from the card rate.")}</p>
             )}
-            <p className="font-semibold">{t("Rate")}: <span className="tabular-nums">{cur()}{n0(picked.rate)}</span></p>
+            <p className="font-semibold">{t("Rate")}: <span className="tabular-nums">{cur()}{amount(picked.rate)}</span></p>
           </CardContent>
         </Card>
       )}

@@ -12,6 +12,7 @@ class RatePlan(Document):
 		if flt(self.rounding_step) < 0:
 			frappe.throw(_("The rounding step cannot be negative."))
 		self.validate_base_rate_plan()
+		self.validate_tariff_price_list()
 		self.validate_derived_plans()
 
 	def validate_base_rate_plan(self):
@@ -30,6 +31,25 @@ class RatePlan(Document):
 		base_currency = rate_plan_currency(chain[:-1])
 		if self.currency and self.currency != base_currency:
 			frappe.throw(_("A derived rate plan must use its base plan's currency ({0}).").format(base_currency))
+
+	def validate_tariff_price_list(self):
+		"""A plan priced by a tariff price list (custom_tariff_price_list) is
+		in that list's currency: one currency per rate code, as OPERA Cloud
+		keeps it, so its badges and its derived plans never disagree with the
+		tariff they convert."""
+		price_list = self.get("custom_tariff_price_list")
+		if not price_list or not frappe.db.exists("DocType", "Price List"):
+			return
+		list_currency = frappe.db.get_value("Price List", price_list, "currency")
+		if not list_currency:
+			return
+		from kamra.pricing import rate_plan_currency, resolve_rate_plan_chain
+
+		currency = rate_plan_currency(resolve_rate_plan_chain(self))
+		if currency != list_currency:
+			frappe.throw(_("The tariff price list {0} is in {1}, so this rate plan must be in {1} too, not {2}. "
+			               "Set the plan's currency to {1}, or choose a {2} price list.").format(
+				price_list, list_currency, currency))
 
 	def validate_derived_plans(self):
 		"""The plans derived from this one (and from them) price in its

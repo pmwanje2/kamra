@@ -617,7 +617,7 @@ def rate_calendar(property: str, from_date: str | None = None, days: int = 14,
 		rates_include_tax,
 		small_group_allows_stay,
 	)
-	active =frappe.get_all("Rate Plan", filters={"property": property, "disabled": 0},
+	active = frappe.get_all("Rate Plan", filters={"property": property, "disabled": 0},
 	                        fields=["name", "rate_plan_name", "code", "currency", "fx_lock_policy", "rounding_step",
 	                                "rounding_mode", "base_rate_plan", "is_default"],
 	                        order_by="rate_plan_name asc, name asc")
@@ -661,13 +661,22 @@ def rate_calendar(property: str, from_date: str | None = None, days: int = 14,
 def rate_options(property: str, room_type: str, check_in_date: str, check_out_date: str,
                  adults: int = 2, children: int = 0, meal_plan: str | None = None,
                  voucher_code: str | None = None, rate_plan: str | None = None,
-                 extra_beds: int = 0):
+                 extra_beds: int = 0, company: str | None = None):
 	"""For the booking dialog: this stay night by night (BAR, season,
 	demand), the whole stay under each active rate plan against the plain
-	rate, and what the voucher would do. Each total is a real quote."""
+	rate, and what the voucher would do. Each total is a real quote.
+
+	With the booking's `company` each plan is priced at that company's own
+	tariff (OPERA Rate Query with a Company, SAP PR02 A305), and
+	`company_plan` names its negotiated plan, which prices the stay when no
+	plan is picked - as get_quote does. Each plan says how it fixes its
+	exchange rate and which plan it derives from; a contract plan's nights
+	show each night's own rate."""
 	assert_property_access(property)
 	from kamra.pricing import (
+		DEFAULT_FX_LOCK,
 		ContractRateRefused,
+		negotiated_rate_plan,
 		quote_with_contract,
 		rates_include_tax,
 		small_group_allows_stay,
@@ -684,21 +693,34 @@ def rate_options(property: str, room_type: str, check_in_date: str, check_out_da
 	night_rows = [explain_night(property, rt, add_days(check_in_date, i), int(adults), int(children),
 	                            small_ok=small_ok) for i in range(max(nights, 1))]
 
+	company = company or None
+	company_plan = None if rate_plan else negotiated_rate_plan(property, company)
+
 	def total(plan=None, voucher=None):
 		return quote_with_contract(property, room_type, check_in_date, check_out_date, int(adults),
 		                           int(children), meal_plan or None, plan, voucher,
-		                           extra_beds=extra_beds, check_voucher_limits=False)
+		                           extra_beds=extra_beds, check_voucher_limits=False,
+		                           # the plain rate is the house's own; a plan is the company's price
+		                           **({"company": company} if plan and company else {}))
 
 	plain = total()
 	plans = []
 	active = frappe.get_all("Rate Plan", filters={"property": property, "disabled": 0},
-	                        fields=["name", "rate_plan_name", "code", "modifier_type",
-	                                "modifier_value", "is_default"], order_by="rate_plan_name asc, name asc")
+	                        fields=["name", "rate_plan_name", "code", "modifier_type", "modifier_value",
+	                                "is_default", "fx_lock_policy", "base_rate_plan"],
+	                        order_by="rate_plan_name asc, name asc")
+	labels = {rp.name: rp.rate_plan_name for rp in active}
+	pricing_plan = rate_plan or company_plan
 	for rp in active:
+		base = rp.get("base_rate_plan")
 		row = {
 			"name": rp.name, "label": rp.rate_plan_name, "code": rp.code,
 			"modifier": f"{rp.modifier_type} {float(rp.modifier_value or 0):g}",
 			"is_default": bool(rp.is_default),
+			# OPERA Exchange Type and Base Rate, shown before booking
+			"fx_lock_policy": rp.get("fx_lock_policy") or DEFAULT_FX_LOCK,
+			"derived_from": (labels.get(base) or frappe.db.get_value("Rate Plan", base, "rate_plan_name") or base)
+			if base else None,
 		}
 		try:
 			q = total(rp.name)
@@ -709,22 +731,27 @@ def rate_options(property: str, room_type: str, check_in_date: str, check_out_da
 		              "agreed_rate": q.get("agreed_rate"),
 		              "room_total": q["room_total"], "amount_after_tax": q["amount_after_tax"],
 		              "vs_plain": round(q["room_total"] - plain["room_total"], 2)})
-		if rp.name == rate_plan and q.get("tariff"):
-			night_rows = [{"date": r["date"], "rate": q["agreed_rate"], "bar": q["agreed_rate"],
-			               "after_season": q["agreed_rate"], "season": None, "demand": None,
-			               "occupancy": r.get("occupancy", 0)} for r in q["nightly"]]
+		if rp.name == pricing_plan and q.get("tariff"):
+			# each night's own contract rate (a stay over a tariff change), else the stay's
+			own = {night["date"]: night["agreed_rate"] for night in q["tariff"].get("nights") or []}
+			night_rows = []
+			for r in q["nightly"]:
+				rate = own.get(str(r["date"]), q["agreed_rate"])
+				night_rows.append({"date": r["date"], "rate": rate, "bar": rate, "after_season": rate, "season": None,
+				                   "demand": None, "occupancy": r.get("occupancy", 0)})
 	voucher = None
 	if (voucher_code or "").strip():
 		code = voucher_code.strip().upper()
 		try:
 			v = validate_voucher(property, code, max(nights, 1))
-			t = total(rate_plan if any(p.name == rate_plan for p in active) else None, code)
+			t = total(pricing_plan if any(p.name == pricing_plan for p in active) else None, code)
 			voucher = {"code": code, "valid": True, "discount": t["discount"],
 			           "kind": v.discount_type, "value": float(v.value or 0)}
 		except frappe.ValidationError as e:
 			voucher = {"code": code, "valid": False, "reason": str(e)}
 	return {"nights": night_rows, "plans": plans, "voucher": voucher,
 	        "plain": {k: plain[k] for k in ("room_total", "amount_after_tax", "discount")},
+	        "company_plan": company_plan,
 	        "default_plan": default_plan(active), "rate_plan_required": bool(get_setting(property, "rate_plan_required")),
 	        # the basis of every nightly figure above (and of a typed night price)
 	        "tax_inclusive": bool(rates_include_tax(property))}

@@ -60,6 +60,22 @@ const priced = { ...base, rate_plan: plans[0], room_types: [
   ] },
 ] }
 
+type CalendarParams = { rate_plan?: string; company?: string }
+// kamra.rates.rate_calendar: a customer with no rate plan resolves to the
+// customer's negotiated plan (ACME's is CONTRACT); nothing at all is the card.
+function calendarServer(method: string, params: CalendarParams) {
+  if (method === "kamra.rates.rate_calendar") {
+    if (!params.rate_plan && !params.company) return Promise.resolve(bar)
+    const plan = plans.find((p) => p.name === (params.rate_plan || "CONTRACT"))
+    return Promise.resolve({ ...priced, rate_plan: plan, company: params.company ?? null })
+  }
+  return Promise.reject(new Error(`Unexpected method: ${method}`))
+}
+const refuse = (message: string, status = 417) => Promise.reject(Object.assign(new Error(message), { status }))
+const languages = [
+  ["ar", ar], ["de", de], ["es", es], ["fil", fil], ["id", id], ["pt", pt], ["zh-CN", zh],
+] as [string, Record<string, string>][]
+
 describe("Rate Calendar by rate plan and customer", () => {
   let host: HTMLDivElement
   let root: Root
@@ -67,14 +83,7 @@ describe("Rate Calendar by rate plan and customer", () => {
   beforeEach(() => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true)
     vi.stubGlobal("localStorage", jsdom.window.localStorage)
-    rpc.mockReset().mockImplementation((method: string, params: { rate_plan?: string; company?: string }) => {
-      if (method === "kamra.rates.rate_calendar") {
-        if (!params.rate_plan && !params.company) return Promise.resolve(bar)
-        const plan = plans.find((p) => p.name === (params.rate_plan ?? "CONTRACT"))
-        return Promise.resolve({ ...priced, rate_plan: plan, company: params.company ?? null })
-      }
-      return Promise.reject(new Error(`Unexpected method: ${method}`))
-    })
+    rpc.mockReset().mockImplementation(calendarServer)
     list.mockReset().mockImplementation(async (doctype: string) => {
       if (doctype === "Corporate Account") return [{ name: "ACME", company_name: "Acme Ltd" }]
       return []
@@ -115,6 +124,18 @@ describe("Rate Calendar by rate plan and customer", () => {
   }
   const row = (name: string) => Array.from(host.querySelectorAll("tbody tr")).find((tr) =>
     tr.querySelector("td")?.textContent?.trim() === name)!
+  const policyHeader = () => host.querySelector("[data-rate-plan-policy]")
+  const button = (label: string) => Array.from(host.querySelectorAll("button"))
+    .find((node) => node.textContent?.trim() === label) ?? null
+  /** Render a link the server refuses: no grid ever arrives, so wait for the error. */
+  async function renderRefused(path: string, message: string) {
+    await act(async () => root.render(<MemoryRouter initialEntries={[path]}><App /></MemoryRouter>))
+    await vi.waitFor(async () => {
+      await settle()
+      expect(text()).toContain(message)
+    }, { interval: 1, timeout: 3000 })
+    await settle()
+  }
 
   it("opens on the card view: no rate plan sent, the BAR column and legend as before", async () => {
     await render()
@@ -183,6 +204,130 @@ describe("Rate Calendar by rate plan and customer", () => {
       "USD contract tariff · local price at the published rate, rounded as the rate plan rounds")
   })
 
+  // OPERA Rate Query: the screen names the rate code it prices, and the user's own choice wins.
+  it("names the customer's negotiated rate plan it prices, in the selector and the header", async () => {
+    await render("/rate-calendar?company=ACME")
+    expect(calendarCalls()[0]).toMatchObject({ company: "ACME" })
+    expect(calendarCalls()[0]).not.toHaveProperty("rate_plan")
+    const plan = select("Rate plan")!
+    expect(plan.value, "The selector claims a plan the grid is not priced at").toBe("CONTRACT")
+    expect(plan.selectedOptions[0]?.textContent).toBe("Corporate tariff")
+    expect(policyHeader(), "Missing rate plan header").not.toBeNull()
+    expect(text(policyHeader()!)).toContain("Rate plan: Corporate tariff")
+    expect(text(policyHeader()!)).toContain("CONTRACT")
+    expect(text(policyHeader()!)).toContain("Negotiated rate plan for Acme Ltd")
+  })
+
+  it("names an explicitly chosen rate plan without calling it the customer's negotiated one", async () => {
+    await render("/rate-calendar?rate_plan=CORP&company=ACME")
+    expect(text(policyHeader()!)).toContain("Rate plan: Corporate card")
+    expect(text(policyHeader()!)).not.toContain("Negotiated rate plan")
+  })
+
+  it("prices the card rate when the user picks it, not the customer's negotiated plan", async () => {
+    await render("/rate-calendar?rate_plan=CORP&company=ACME")
+    await choose(select("Rate plan")!, "")
+    await vi.waitFor(() => expect(Array.from(host.querySelectorAll("thead th"),
+      (node) => node.textContent?.trim())).toContain("BAR"))
+    expect(select("Rate plan")!.value).toBe("")
+    expect(select("Customer")!.value, "The user's customer choice is kept").toBe("ACME")
+    expect(policyHeader()).toBeNull()
+    expect(text(row("Standard"))).toContain("110,000")
+    expect(text()).not.toContain("474,000")
+  })
+
+  it("never lets a slower, superseded query overwrite the grid", async () => {
+    await render()
+    let release: (value: unknown) => void = () => undefined
+    rpc.mockImplementation((method: string, params: CalendarParams) => {
+      if (method === "kamra.rates.rate_calendar" && params.rate_plan === "CONTRACT")
+        return new Promise((resolve) => { release = resolve })
+      return calendarServer(method, params)
+    })
+    await choose(select("Rate plan")!, "CONTRACT")
+    await choose(select("Rate plan")!, "")
+    await vi.waitFor(() => expect(text(row("Standard"))).toContain("110,000"))
+    await act(async () => release({ ...priced, rate_plan: plans[0] }))
+    await settle()
+    expect(select("Rate plan")!.value).toBe("")
+    expect(text(row("Standard"))).toContain("110,000")
+    expect(text()).not.toContain("474,000")
+    expect(policyHeader()).toBeNull()
+  })
+
+  it("shows every amount in the property currency's minor unit, and a home-currency contract once", async () => {
+    const usd = { ...base, property_currency: "USD", rate_plans: plans, rate_plan: null }
+    const fx = { fx_date: "2026-11-20", property_currency: "USD" }
+    rpc.mockImplementation((method: string, params: CalendarParams) => {
+      if (method !== "kamra.rates.rate_calendar") return calendarServer(method, params)
+      if (!params.rate_plan) return Promise.resolve({ ...usd, room_types: [{ room_type: "STD", code: "STD",
+        name: "Standard", base_price: 89.99,
+        nights: [night("2026-12-01", 89.99, { bar: 89.99 }), night("2026-12-02", 99.5, { bar: 89.99 })] }] })
+      return Promise.resolve({ ...usd, rate_plan: { ...plans[0], currency: null }, room_types: [
+        { room_type: "STD", code: "STD", name: "Standard", base_price: 89.99, nights: [
+          { date: "2026-12-01", available: true, rate: 130.5, bar: 130.5, after_season: 130.5, season: null,
+            demand: null, package: null, occupancy: 40, source: "contract",
+            contract: { currency: "USD", nightly: 130.5, fx_rate: 1, ...fx } },
+          { date: "2026-12-02", available: true, rate: 108.45, bar: 108.45, after_season: 108.45, season: null,
+            demand: null, package: null, occupancy: 40, source: "contract",
+            contract: { currency: "EUR", nightly: 100, fx_rate: 1.0845, ...fx } },
+        ] },
+      ] })
+    })
+    await render()
+    const card = row("Standard").querySelectorAll("td")
+    expect(text(card[1]), "BAR column").toContain("89.99")
+    expect(text(card[2])).toContain("89.99")
+    expect(text(card[3])).toContain("99.50")
+    await choose(select("Rate plan")!, "CONTRACT")
+    await vi.waitFor(() => expect(text(row("Standard"))).toContain("EUR 100.00"))
+    const [, home, foreign] = row("Standard").querySelectorAll("td")
+    expect(text(home).match(/130\.50/g), "A home-currency contract shows its figure once").toHaveLength(1)
+    expect(text(home)).not.toContain("131")
+    expect(text(foreign)).toContain("EUR 100.00")
+    expect(text(foreign)).toContain("108.45")
+  })
+
+  it("clears the grid when a query fails, keeps the rate plans to recover with, and resets", async () => {
+    await render()
+    rpc.mockImplementation((method: string, params: CalendarParams) =>
+      method === "kamra.rates.rate_calendar" && params.company ? refuse("Not permitted", 403) : calendarServer(method, params))
+    await choose(select("Customer")!, "ACME")
+    await vi.waitFor(() => expect(text()).toContain("Not permitted"))
+    expect(host.querySelector("table"), "Stale prices stay under the error").toBeNull()
+    expect(Array.from(select("Rate plan")!.options, (option) => option.value)).toEqual(["", "CONTRACT", "CORP"])
+    const reset = button("Clear rate plan and customer")
+    expect(reset, "Missing reset").not.toBeNull()
+    await act(async () => reset!.click())
+    await vi.waitFor(() => expect(host.querySelector("table")).not.toBeNull())
+    expect(calendarCalls().at(-1)).not.toHaveProperty("company")
+    expect(calendarCalls().at(-1)).not.toHaveProperty("rate_plan")
+    expect(select("Customer")!.value).toBe("")
+    expect(text()).not.toContain("Not permitted")
+  })
+
+  it("recovers from a deep link to a plan and customer the server refuses", async () => {
+    const REFUSED = "OLD is not an active rate plan of this property."
+    list.mockImplementation(async (doctype: string) => {
+      if (doctype === "Corporate Account") throw Object.assign(new Error("Not permitted"), { status: 403 })
+      return []
+    })
+    rpc.mockImplementation((method: string, params: CalendarParams) =>
+      method === "kamra.rates.rate_calendar" && (params.rate_plan === "OLD" || params.company)
+        ? refuse(REFUSED) : calendarServer(method, params))
+    await renderRefused("/rate-calendar?rate_plan=OLD&company=ACME", REFUSED)
+    expect(host.querySelector("table")).toBeNull()
+    expect(select("Rate plan")!.value, "The selector names the plan asked for, not the card rate").toBe("OLD")
+    expect(select("Customer")).toBeNull()
+    const reset = button("Clear rate plan and customer")
+    expect(reset, "No way to clear ?company= without the customer list").not.toBeNull()
+    await act(async () => reset!.click())
+    await vi.waitFor(() => expect(host.querySelector("table")).not.toBeNull())
+    expect(calendarCalls().at(-1)).not.toHaveProperty("company")
+    expect(calendarCalls().at(-1)).not.toHaveProperty("rate_plan")
+    expect(Array.from(select("Rate plan")!.options, (option) => option.value)).toEqual(["", "CONTRACT", "CORP"])
+  })
+
   it("offers customers only to a user who may read Corporate Accounts", async () => {
     await render()
     expect(select("Customer"), "Missing customer selector").not.toBeNull()
@@ -209,17 +354,18 @@ describe("Rate Calendar by rate plan and customer", () => {
   const fill = (template: string, vars: Record<string, string>) =>
     template.replace(/\{(\w+)\}/g, (match, key) => vars[key] ?? match)
 
-  it.each([
-    ["ar", ar], ["de", de], ["es", es], ["fil", fil], ["id", id], ["pt", pt], ["zh-CN", zh],
-  ] as [string, Record<string, string>][])("translates the rate query in %s", async (language, dict) => {
-    await ensureDictionary(language)
-    setLang(language)
-    await render("/rate-calendar?rate_plan=CONTRACT")
-    const translated = (key: string, vars: Record<string, string> = {}) => {
+  const translator = (language: string, dict: Record<string, string>) =>
+    (key: string, vars: Record<string, string> = {}) => {
       expect(dict[key], `${language}: missing translation for ${JSON.stringify(key)}`).toBeTruthy()
       expect(dict[key], `${language}: ${JSON.stringify(key)} is not translated`).not.toBe(key)
       return fill(dict[key], vars)
     }
+
+  it.each(languages)("translates the rate query in %s", async (language, dict) => {
+    await ensureDictionary(language)
+    setLang(language)
+    await render("/rate-calendar?rate_plan=CONTRACT")
+    const translated = translator(language, dict)
     const options = Array.from(host.querySelectorAll("select option"), (option) => option.textContent)
     expect(options).toEqual(expect.arrayContaining([translated("Card rate (no rate plan)"),
       translated("Public rate (no customer)")]))
@@ -233,9 +379,22 @@ describe("Rate Calendar by rate plan and customer", () => {
         { currency: "USD" }),
       translated("Price each rate plan per room type and occupancy, in the contract currency."),
       translated("Rate calendar"),
+      translated("Rate plan: {plan}", { plan: "Corporate tariff" }),
     ]) expect(body).toContain(expected)
     expect(host.querySelector(`[aria-label="${fill(translated("Not available: {reason}"), { reason: REFUSAL })}"]`))
       .not.toBeNull()
     expect(host.querySelector(`select[aria-label="${translated("Rate plan")}"]`)).not.toBeNull()
+  })
+
+  it.each(languages)("translates the negotiated rate plan and the reset in %s", async (language, dict) => {
+    await ensureDictionary(language)
+    setLang(language)
+    await render("/rate-calendar?company=ACME")
+    const translated = translator(language, dict)
+    expect(text(policyHeader()!)).toContain(translated("Negotiated rate plan for {customer}", { customer: "Acme Ltd" }))
+    rpc.mockImplementation((method: string, params: CalendarParams) =>
+      method === "kamra.rates.rate_calendar" && params.rate_plan === "CORP" ? refuse("Refused") : calendarServer(method, params))
+    await choose(select(translated("Rate plan"))!, "CORP")
+    await vi.waitFor(() => expect(button(translated("Clear rate plan and customer"))).not.toBeNull())
   })
 })

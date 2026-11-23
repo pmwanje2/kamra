@@ -103,12 +103,12 @@
   },
   {
    "default": "Fixed at Reservation",
-   "description": "When a foreign-currency contract converts to the property's currency: at booking, at check-in, at each night's posting date, or when the group block is created.",
+   "description": "When a foreign-currency contract converts to the property's currency: at booking, at check-in, or at each night's posting date.",
    "fieldname": "fx_lock_policy",
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Exchange Rate Lock",
-   "options": "Fixed at Reservation\nFixed at Check In\nCurrent Date\nFixed at Block"
+   "options": "Fixed at Reservation\nFixed at Check In\nCurrent Date"
   },
   {
    "fieldname": "column_break_fx",
@@ -191,7 +191,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-11-23 12:00:00.000000",
+ "modified": "2026-11-23 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Rate Plan",

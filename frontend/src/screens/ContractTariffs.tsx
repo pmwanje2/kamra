@@ -1,12 +1,12 @@
 import { Fragment, useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react"
 import { Check, ChevronDown, Download, Info, Layers, Plus, Search, Upload, X } from "lucide-react"
 import { useSearchParams } from "react-router-dom"
-import { currencyText, formatFxRate, tariffDate } from "../components/ContractTariff"
+import { currencyText, formatFxRate, tariffDate, tariffDateTime } from "../components/ContractTariff"
 import {
   decisionTone, field, itemCurrency, TariffMassDialog, TariffModal, tariffReason, type DraftChoice, type MassAction,
 } from "../components/TariffMassActions"
 import { Button } from "../components/ui/button"
-import { call, getCurrentProperty } from "../lib/api"
+import { call, frappeFetch, getCurrentProperty } from "../lib/api"
 import { downloadCsv } from "../lib/csv"
 import { uiDateLocale, useT } from "../lib/i18n"
 import { useLocale } from "../lib/money"
@@ -68,6 +68,8 @@ interface TariffView {
   locale: string
   dateLocale: string
   loading: boolean
+  /** the effective date the directory is read at: a version starting after it is Scheduled */
+  asOf: string
   selectable: boolean
   selected: Set<string>
   toggle: (keys: string[], on: boolean) => void
@@ -122,6 +124,21 @@ function TariffDirectory({ property }: { property: string }) {
 
   const data = result?.data
   const loading = !!property && result?.key !== requestKey
+  // the ERPNext Customers a new customer-specific tariff may be for (SAP A305), as native DocPerm lets the user read them
+  const [customerNames, setCustomerNames] = useState<string[]>([])
+  const canPropose = !!data?.supported && data.can_propose
+  useEffect(() => {
+    if (!canPropose) return
+    let current = true
+    const query = new URLSearchParams({ fields: JSON.stringify(["name"]), filters: JSON.stringify([["disabled", "=", 0]]),
+      limit_page_length: "500", order_by: "name asc" })
+    frappeFetch<{ data?: { name?: string }[] }>(`/api/resource/Customer?${query}`)
+      .then((out) => {
+        if (current) setCustomerNames((out?.data ?? []).map((row) => row.name ?? "").filter(Boolean))
+      })
+      .catch(() => { /* no read access: the customers the directory already names are offered */ })
+    return () => { current = false }
+  }, [property, canPropose])
   const reload = () => setRevision((value) => value + 1)
   const open = (next: TariffAction) => {
     setNotice(null)
@@ -166,6 +183,7 @@ function TariffDirectory({ property }: { property: string }) {
   const selectedList = lists.get(selectedName)
   const pendingCount = directory.items.reduce((total, item) => total + drafts(item).length, 0)
   const customers = [...new Set(directory.items.map((item) => item.customer).filter((name): name is string => !!name))].sort()
+  const customerOptions = [...new Set([...customers, ...customerNames])].sort()
   const needle = query.trim().toLowerCase()
   const matches = (item: ContractTariffItem) => (filter === "pending" || !selectedList || item.price_list === selectedList.name)
     && (!customer || (customer === PUBLIC ? !item.customer : item.customer === customer))
@@ -180,7 +198,7 @@ function TariffDirectory({ property }: { property: string }) {
   const chosenDrafts: DraftChoice[] = chosen.flatMap((item) => drafts(item).map((draft) => ({ item, draft })))
   const allChosen = visible.length > 0 && chosen.length === visible.length
   const view: TariffView = {
-    data: directory, lists, locale, dateLocale, loading, open,
+    data: directory, lists, locale, dateLocale, loading, open, asOf: asOf || directory.business_date,
     selectable: directory.can_propose || directory.can_approve || !!directory.can_discard,
     selected,
     toggle: (keys, on) => setSelected((current) => {
@@ -360,11 +378,11 @@ function TariffDirectory({ property }: { property: string }) {
       </p>}
     {statusToast}
     {action && <ActionDialog action={action} data={directory} locale={locale} dateLocale={dateLocale}
-      list={lists.get(action.item.price_list)} rounding={view.rounding(action.item.price_list)}
+      list={lists.get(action.item.price_list)} rounding={view.rounding(action.item.price_list)} customers={customerOptions}
       onClose={() => setAction(null)} onSuccess={() => finish(action.kind === "propose" ? t("Tariff version submitted for approval")
         : action.kind === "approve" ? t("Tariff version approved") : t("Tariff draft discarded"))} />}
     {mass && <TariffMassDialog action={mass} property={directory.property} propertyCurrency={directory.property_currency}
-      businessDate={directory.business_date}
+      businessDate={directory.business_date} customers={customerOptions}
       lists={lists} locale={locale} dateLocale={dateLocale} onClose={() => setMass(null)} onDone={finish} />}
   </div>
 }
@@ -481,7 +499,7 @@ function TierCell({ item, view }: { item: ContractTariffItem; view: TariffView }
 function Versions({ item, view }: { item: ContractTariffItem; view: TariffView }) {
   const { t } = useT()
   const currency = itemCurrency(item, view.lists.get(item.price_list))
-  const upcoming = scheduled(item, view.data.business_date)
+  const upcoming = scheduled(item, view.asOf)
   const pending = drafts(item)
   return <div className="flex flex-col items-end gap-1.5 xl:items-start">
     {item.active ? <span className={pill + " bg-emerald-50 text-emerald-800"}>{t("Approved")}</span>
@@ -493,6 +511,7 @@ function Versions({ item, view }: { item: ContractTariffItem; view: TariffView }
       <span className={pill + " bg-amber-50 text-amber-900 tabular-nums"}>
         {t("In review: {rate} from {date}", { rate: currencyText(currency, draft.rate, view.locale), date: view.validity(draft) })}
       </span>
+      <VersionAudit version={draft} view={view} />
       {/* a maker never approves their own draft (can_approve false), but may discard it */}
       {((view.data.can_approve && draft.can_approve !== false) || view.data.can_discard) &&
         <div className="flex flex-wrap justify-end gap-1.5 xl:justify-start">
@@ -529,8 +548,27 @@ function History({ item, view }: { item: ContractTariffItem; view: TariffView })
       <span className="font-medium tabular-nums">{currencyText(currency, version.rate, view.locale)}</span>
       <span>{view.validity(version)}</span>
       <span>{t(version.workflow_state)}</span>
+      <VersionAudit version={version} view={view} />
     </li>)}
   </ul>
+}
+
+/** Who proposed a version and who released or rejected it, and when (SAP condition change log, OPERA rate
+ *  history). An integration that answers none of it shows nothing. */
+function VersionAudit({ version, view }: { version: TariffVersion; view: TariffView }) {
+  const { t } = useT()
+  const when = (value?: string | null) => value ? <> · {tariffDateTime(value, view.dateLocale)}</> : null
+  // an older integration has no approver: the last editor decided, unless that is the proposer
+  const decider = version.approver || (version.modified_by && version.modified_by !== version.owner ? version.modified_by : null)
+  const lines: ReactNode[] = []
+  if (version.owner) lines.push(<span key="proposed">{t("Proposed by {user}", { user: version.owner })}{when(version.creation)}</span>)
+  if (decider && version.workflow_state === "Approved")
+    lines.push(<span key="approved">{t("Approved by {user}", { user: decider })}{when(version.modified)}</span>)
+  if (decider && version.workflow_state === "Rejected")
+    lines.push(<span key="rejected">{t("Rejected by {user}", { user: decider })}{when(version.modified)}</span>)
+  if (version.rejection_reason)
+    lines.push(<span key="reason">{t("Reason: {reason}", { reason: version.rejection_reason })}</span>)
+  return lines.length ? <span className="flex basis-full flex-col text-xs text-zinc-600">{lines}</span> : null
 }
 
 function TariffList({ items, view, labels }: { items: ContractTariffItem[]; view: TariffView; labels: Labels }) {
@@ -607,14 +645,20 @@ function Cell({ label, children }: { label: string; children: ReactNode }) {
   </td>
 }
 
-function ActionDialog({ action, data, locale, dateLocale, list, rounding, onClose, onSuccess }: {
+function ActionDialog({ action, data, locale, dateLocale, list, rounding, customers, onClose, onSuccess }: {
   action: TariffAction; data: ContractTariffsResponse; locale: string; dateLocale: string
-  list?: PriceList; rounding: Rounding; onClose: () => void; onSuccess: () => void
+  list?: PriceList; rounding: Rounding; customers: string[]; onClose: () => void; onSuccess: () => void
 }) {
   const { t } = useT()
   const submitting = useRef(false)
+  const customerList = useId()
   const { item, kind } = action
   const currency = itemCurrency(item, list)
+  // a supplement, venue or other line may be complimentary (OPERA 0.00); a room rate never is
+  const free = item.category !== "Room"
+  const [customer, setCustomer] = useState("")
+  // a customer row's version is that customer's own price; a public row's may be a new customer's first (SAP A305)
+  const target = item.customer || customer.trim()
   const minDate = item.active?.valid_from === data.business_date ? addDays(data.business_date, 1) : data.business_date
   const [amount, setAmount] = useState("")
   const [validFrom, setValidFrom] = useState(() => minDate > todayPlus(1) || item.active?.valid_from === data.business_date ? minDate : todayPlus(1))
@@ -627,8 +671,8 @@ function ActionDialog({ action, data, locale, dateLocale, list, rounding, onClos
     event.preventDefault()
     if (submitting.current) return
     const value = Number(amount)
-    if (action.kind === "propose" && (!Number.isFinite(value) || value <= 0 || !validFrom ||
-      validFrom < minDate || (validUntil && validUntil < validFrom))) return
+    if (action.kind === "propose" && (amount.trim() === "" || !Number.isFinite(value) || (free ? value < 0 : value <= 0)
+      || !validFrom || validFrom < minDate || (validUntil && validUntil < validFrom))) return
     submitting.current = true
     setBusy(true)
     setFailure(null)
@@ -637,8 +681,8 @@ function ActionDialog({ action, data, locale, dateLocale, list, rounding, onClos
       const result = await call(editMethods[action.kind], action.kind === "propose" ? {
         property: data.property, price_list: item.price_list, item_code: item.item_code,
         price_list_rate: value, valid_from: validFrom, valid_upto: validUntil || null,
-        // a customer row's version is that customer's own price, never the public rate
-        ...(item.customer ? { customer: item.customer } : {}),
+        // a customer's version is that customer's own price, never the public rate
+        ...(target ? { customer: target } : {}),
       } : { item_price: action.draft.name })
       if (result == null) setFailure("absent")
       else onSuccess()
@@ -660,8 +704,8 @@ function ActionDialog({ action, data, locale, dateLocale, list, rounding, onClos
   const local = showPreview ? Number(amount) * rate : 0
   const subtitle = <>
     {item.item_name} · {item.price_list}
-    {item.customer && <> · <strong className="font-semibold text-brand-800">
-      {t("Customer rate: {customer}", { customer: item.customer })}</strong></>}
+    {target && <> · <strong className="font-semibold text-brand-800">
+      {t("Customer rate: {customer}", { customer: target })}</strong></>}
   </>
   return <TariffModal title={title} subtitle={subtitle} busy={busy} onClose={onClose} onSubmit={submit}
     footer={<>
@@ -675,11 +719,18 @@ function ActionDialog({ action, data, locale, dateLocale, list, rounding, onClos
       <p className="text-sm text-zinc-600">{item.active
         ? t("Current rate: {rate}", { rate: currencyText(currency, item.active.rate, locale) })
         : t("No active tariff")}</p>
+      {!item.customer && <label className="block space-y-1.5 text-sm font-medium">
+        <span>{t("Customer (optional)")}</span>
+        <input name="customer" list={customerList} autoComplete="off" className={field + " w-full"} value={customer}
+          onChange={(event) => setCustomer(event.target.value)} disabled={busy} />
+        <datalist id={customerList}>{customers.map((name) => <option key={name} value={name} />)}</datalist>
+        <span className="block text-xs font-normal text-zinc-600">{t("Leave empty for the public rate.")}</span>
+      </label>}
       <label className="block space-y-1.5 text-sm font-medium">
         <span>{t("New rate")}</span>
         <span className="flex items-center gap-2">
           <span className="rounded-lg bg-zinc-100 px-2 py-2 text-zinc-700">{currency}</span>
-          <input type="number" inputMode="decimal" className={field + " min-w-0 flex-1 tabular-nums"} min="0.01" step="0.01"
+          <input type="number" inputMode="decimal" className={field + " min-w-0 flex-1 tabular-nums"} min={free ? "0" : "0.01"} step="0.01"
             value={amount} onChange={(event) => setAmount(event.target.value)} required disabled={busy} autoFocus />
         </span>
       </label>

@@ -456,12 +456,25 @@ export interface BookingOptions {
   }
 }
 
+/** One night of a contract stay over a season or tariff change (OPERA Rate Changes During Stay):
+ *  its own tariff amount and the home-currency rate it locks. */
+export interface ContractTariffNight {
+  date: string
+  nightly: number
+  agreed_rate: number
+  item_price?: string | null
+}
+
 export interface ContractTariff {
   currency: string
   nightly: number
   property_currency: string
   fx_rate: number
   fx_date: string
+  /** each night's own tariff, when the stay crosses a tariff change; the figures above are the check-in night's */
+  nights?: ContractTariffNight[]
+  /** a derived plan's base plan, whose contract it prices from */
+  derived_from?: string
 }
 
 export interface TariffReference {
