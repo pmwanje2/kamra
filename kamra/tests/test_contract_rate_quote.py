@@ -100,7 +100,11 @@ class ContractRateQuoteTest(AuditTestCase):
 		self.assertEqual(float(res.amount_after_tax), quote["amount_after_tax"])
 		self.script.db_set("disabled", 1)
 		self.assertEqual(api.reservation_detail(res.name)["tariff"], self.tariff)
-		self.assertEqual(api.folio_invoice(open_folio(res))["stay"]["tariff"], self.tariff)
+		stay = api.folio_invoice(open_folio(res))["stay"]
+		self.assertEqual(stay["tariff"], self.tariff)
+		# a bill shows the contract currency at the rate the stay was priced at (Property ACTUAL)
+		self.assertEqual(stay["reference_currency"], {"currency": "USD", "home_currency": "UGX",
+			"calculation": "ACTUAL", "fx_rate": 3650.0, "fx_date": "2026-11-21"})
 
 	def test_room_tariffs_are_a_property_scoped_read(self):
 		payload = {"tariffs": [{"rate_plan": self.plan, "currency": "USD", "room": 130,

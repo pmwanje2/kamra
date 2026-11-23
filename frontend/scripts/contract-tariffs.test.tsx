@@ -126,6 +126,18 @@ describe("Contract Tariffs", () => {
   }
   const row = (key: string) => host.querySelector<HTMLElement>(`tr[data-room="${key}"]`)!
   const field = <T extends Element>(scope: ParentNode, name: string) => scope.querySelector<T>(`[name=${name}]`)!
+  async function chooseFile(dialog: ParentNode, csv: string) {
+    const file = field<HTMLInputElement>(dialog, "tariff_file")
+    await act(async () => {
+      Object.defineProperty(file, "files", { configurable: true, value: [new File([csv], "tariffs.csv", { type: "text/csv" })] })
+      file.dispatchEvent(new Event("change", { bubbles: true }))
+    })
+  }
+  async function openBulk() {
+    await check("Select Deluxe · Corporate USD")
+    await click("Create new version in bulk")
+    return host.querySelector("dialog[open]")!
+  }
 
   it("shows one pricing row per room type with occupancy columns, extras and rounded local amounts", async () => {
     await render()
@@ -276,6 +288,61 @@ describe("Contract Tariffs", () => {
     ] }])
   })
 
+  it("keeps bulk versions that would start before their current version from being submitted", async () => {
+    await render()
+    const dialog = await openBulk()
+    await input(field(dialog, "adjustment_value"), "5")
+    await input(field(dialog, "valid_from"), "2026-11-22")
+    expect(text(dialog)).toContain("2 versions would start before their current versions or end before they start. Change the dates.")
+    expect(button("Submit 2 for approval", dialog).disabled).toBe(true)
+  })
+
+  it("sets an exact rate in bulk, including a tariff with no current rate", async () => {
+    rpc.mockImplementationOnce(async () => data)
+      .mockImplementationOnce(async () => ({ proposed: ["N1", "N2", "N3"] }))
+      .mockImplementationOnce(async () => data)
+    await render()
+    const dialog = await openBulk()
+    await choose(field(dialog, "adjustment"), "exact")
+    await input(field(dialog, "adjustment_value"), "160")
+    expect(text(dialog)).toContain("Deluxe King triple: — → USD 160.00")
+    expect(text(dialog)).not.toContain("left out")
+    await click("Submit 3 for approval", dialog)
+    const { entries } = rpc.mock.calls[1][1] as { entries: { item_code: string; price_list_rate: number }[] }
+    expect(entries.map((entry) => [entry.item_code, entry.price_list_rate])).toEqual([["DLX-1A", 160], ["DLX", 160], ["DLX-3A", 160]])
+  })
+
+  it.each([
+    [1000, "Up", "rounded up to 1,000"],
+    [500, "Down", "rounded down to 500"],
+    [0, "Nearest", "standard currency rounding"],
+  ])("labels a %s %s rounding rule and shows a derived plan's inherited currency", async (step, mode, label) => {
+    rpc.mockResolvedValueOnce({ ...data, rate_plan_policies: {
+      "Test Hotel-CORP": { ...policies["Test Hotel-CORP"], currency: null, rounding_step: step, rounding_mode: mode },
+      "Test Hotel-BAR": { ...policies["Test Hotel-BAR"], currency: "USD" },
+    } })
+    await render()
+    expect(text()).toContain(`Governed posting FX: 1 USD = 4,048.22 UGX · Nov 22, 2026 · ${label}`)
+    expect(text()).toContain("Corporate · USD · Fixed at Check In · Derived from Best available")
+  })
+
+  it("leaves local amounts unrounded when the price list's rate plans round differently", async () => {
+    rpc.mockResolvedValueOnce({ ...data, price_lists: [{ ...usd, rate_plans: ["Test Hotel-CORP", "Test Hotel-BAR"] }, local] })
+    await render()
+    expect(text()).toContain("Governed posting FX: 1 USD = 4,048.22 UGX · Nov 22, 2026 · rounding set per rate plan")
+    expect(text(row("Corporate USD|Deluxe|"))).toContain("≈ UGX 526,268")
+  })
+
+  it("shows an occupancy that is not an adult count in its own column", async () => {
+    const family = { ...deluxe, item_code: "DLX-FAM", item_name: "Deluxe King family", occupancy: "Family",
+      active: { ...active, name: "FAM", rate: 180, local_equiv: 728680 }, pending: [], history: [] }
+    rpc.mockResolvedValueOnce({ ...data, items: [...data.items, family] })
+    await render()
+    expect(Array.from(host.querySelectorAll("thead th"), (node) => node.textContent?.trim())).toContain("Other occupancy")
+    expect(text(row("Corporate USD|Deluxe|").querySelector("[data-item='DLX-FAM']")!)).toContain("USD 180.00")
+    expect(text(row("Corporate USD|Deluxe|"))).toContain("Family")
+  })
+
   it("approves the selected drafts but leaves out the ones the approver proposed", async () => {
     const own = { ...draft, name: "OWN-DRAFT", rate: 112, owner: "me", can_approve: false }
     const queue = { ...data, items: [item, { ...single, pending: [own] }, triple, corporate, extraAdult, bed, hall] }
@@ -345,6 +412,26 @@ describe("Contract Tariffs", () => {
     expect(rpc.mock.calls.flat()).not.toContain("kamra.rates.bulk_approve_contract_tariffs")
   })
 
+  it("reports an export the server could not produce", async () => {
+    rpc.mockImplementationOnce(async () => data).mockImplementationOnce(async () => { throw new Error("Export failed") })
+    await render()
+    await click("Export CSV")
+    await vi.waitFor(() => expect(text()).toContain("The contract tariffs could not be exported."))
+    expect(download).not.toHaveBeenCalled()
+  })
+
+  it("says when an import has nothing new to create", async () => {
+    rpc.mockImplementationOnce(async () => data)
+      .mockImplementationOnce(async () => ({ created: 0, unchanged: 2, skipped: 0, errors: [] }))
+      .mockImplementationOnce(async () => data)
+    await render()
+    await click("Import CSV")
+    const dialog = host.querySelector("dialog[open]")!
+    await chooseFile(dialog, "Price List,Currency,Item Code,Rate,Valid From\r\nCorporate USD,USD,DLX,130,2026-11-22")
+    await click("Import as drafts", dialog)
+    await vi.waitFor(() => expect(text()).toContain("No new versions to create · 2 unchanged"))
+  })
+
   it("honors both property and row authorization without hiding the draft", async () => {
     rpc.mockResolvedValueOnce({ ...data, can_propose: false, can_approve: false,
       items: [{ ...item, pending: [{ ...draft, can_approve: false }] }] })
@@ -377,19 +464,20 @@ describe("Contract Tariffs", () => {
   })
 
   it.each([
-    ["ar", "التعرفة التعاقدية", "نسخة جديدة"],
-    ["de", "Vertragstarife", "Neue Version"],
-    ["es", "Tarifas contractuales", "Nueva versión"],
-    ["fil", "Mga kontratang taripa", "Bagong bersyon"],
-    ["id", "Tarif kontrak", "Versi baru"],
-    ["pt", "Tarifas contratuais", "Nova versão"],
-    ["zh-CN", "合同价格", "新建版本"],
-  ])("translates tariff-specific controls in %s", async (language, heading, action) => {
+    ["ar", "التعرفة التعاقدية", "نسخة جديدة", "مصفوفة الغرف", "تصدير CSV"],
+    ["de", "Vertragstarife", "Neue Version", "Zimmermatrix", "CSV exportieren"],
+    ["es", "Tarifas contractuales", "Nueva versión", "Matriz de habitaciones", "Exportar CSV"],
+    ["fil", "Mga kontratang taripa", "Bagong bersyon", "Matrix ng kuwarto", "I-export ang CSV"],
+    ["id", "Tarif kontrak", "Versi baru", "Matriks kamar", "Ekspor CSV"],
+    ["pt", "Tarifas contratuais", "Nova versão", "Matriz de quartos", "Exportar CSV"],
+    ["zh-CN", "合同价格", "新建版本", "房型价格矩阵", "导出 CSV"],
+  ])("translates tariff-specific controls in %s", async (language, heading, action, matrix, exportLabel) => {
     await ensureDictionary(language)
     setLang(language)
     await render()
     expect(host.querySelector("h1")?.textContent).toBe(heading)
     expect(text()).toContain(action)
+    expect(labels()).toEqual(expect.arrayContaining([matrix, exportLabel]))
   })
 
   it("is discoverable in Revenue and through staff search", () => {

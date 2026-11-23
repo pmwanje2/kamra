@@ -208,6 +208,15 @@ class QuoteDerivationTest(RateMatrixHarness):
 		self.assertAlmostEqual(quoted["amount_after_tax"], 250000, places=6)
 		self.assertAlmostEqual(quoted["room_total"], 250000 / 1.18, places=6)
 
+	def test_rounding_never_takes_a_long_stay_below_its_floor(self):
+		# 10% long-stay discount held at a 125,500 nightly rail: the stay floors at 251,000
+		rule = self.add("Long Stay Rule", "LOS-1", min_nights=2, discount_percent=10)
+		rails = [self.add("Rate Guardrail", "RAIL-1", room_type=None, floor_price=125500, days_of_week=None)]
+		self.frappe.get_all = lambda doctype, **kwargs: rails if doctype == "Rate Guardrail" else []
+		self.docs["Rate Plan", "CORP"].update(rounding_step=5000, rounding_mode="Down")
+		with patch.object(self.pricing, "long_stay_rule", lambda *args: rule):
+			self.assertEqual(self.quote("CORP")["room_total"], 251000)
+
 
 class ContractRateTest(RateMatrixHarness):
 	def resolve(self, plan="CORP", **kwargs):
@@ -270,6 +279,25 @@ class ContractRateTest(RateMatrixHarness):
 		self.tariffs["CON-NR"] = self.tariff(nightly=120, agreed_rate=438000)
 		self.assertEqual(self.resolve("CON-NR")[0], 438000)
 		self.assertEqual([form["rate_plan"] for form in self.tariff_forms()], ["CON-NR"])
+
+	def test_a_derived_plan_never_prices_a_night_at_zero_or_less(self):
+		self.plan("CON")
+		self.plan("CON-FREE", base_rate_plan="CON", modifier_type="Absolute", modifier_value=0)
+		self.plan("CON-CUT", base_rate_plan="CON", modifier_type="Amount", modifier_value=-200)
+		self.tariffs["CON"] = self.tariff()
+		for plan in ("CON-FREE", "CON-CUT"):
+			with self.subTest(plan=plan), self.assertRaisesRegex(self.pricing.ContractRateRefused, "zero or less"):
+				self.resolve(plan)
+
+	def test_a_quote_resolves_the_company_price(self):
+		self.plan("CORP")
+		self.tariffs["CORP"] = self.tariff()
+		with patch.object(self.pricing, "quote", lambda *args, **kwargs: {"nightly": []}), \
+				patch.object(self.pricing, "negotiated_rate_plan", lambda property, company: "CORP"):
+			self.pricing.quote_with_contract(*STAY[:2], *STAY[2:4], 2, 0, rate_plan="CORP", company="Client Co")
+			self.pricing.quote_with_contract(*STAY[:2], *STAY[2:4], 2, 0, company="Client Co")
+		self.assertEqual([(form["rate_plan"], form["company"]) for form in self.tariff_forms()],
+		                 [("CORP", "Client Co"), ("CORP", "Client Co")])
 
 	def test_a_base_contract_refusal_refuses_the_derived_plan(self):
 		self.plan("CON")
@@ -442,6 +470,19 @@ class ReservationSnapshotTest(RateMatrixHarness):
 		doc.get_doc_before_save = lambda: before
 		doc.capture_contract_tariff()
 		return doc.contract_tariff
+
+	def test_a_new_booking_resolves_its_contract_for_the_company(self):
+		self.plan("CORP")
+		self.tariffs["CORP"] = self.tariff()
+		doc = self.reservation.Reservation(
+			property="Test Hotel", room_type="Test Hotel-DLX", rate_plan="CORP", check_in_date="2026-12-01",
+			check_out_date="2026-12-03", adults=2, children=0, extra_beds=0, company="Client Co",
+			auto_price=1, agreed_rate=0, flags=Doc())
+		doc.is_new = lambda: True
+		doc.capture_contract_tariff()
+		form, = self.tariff_forms()
+		self.assertEqual((form["company"], form["pricing_event"]), ("Client Co", "reservation"))
+		self.assertEqual(doc.contract_tariff["agreed_rate"], 474500)
 
 	def test_a_check_in_relock_survives_the_save(self):
 		self.assertEqual(self.snapshot(kamra_fx_checkin_relock=True)["tariff"]["fx_rate"], 3712.5)

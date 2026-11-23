@@ -390,6 +390,13 @@ class TestContractTariffBulkAPI(ContractTariffHarness):
 				 "valid_from": "2026-12-01", "valid_upto": "2026-12-31"}]})])
 		self.assertEqual(self.whitelisted["import_contract_tariffs_rows"], ["POST"])
 
+	def test_import_reads_back_a_cell_the_export_guarded_against_formulas(self):
+		self.scripts = {"hospitality_tariffs.list_tariffs": directory(),
+		                "hospitality_tariffs.bulk_propose_tariffs": {"proposed": ["IP-13"]}}
+		self.endpoint("import_contract_tariffs_rows")("Test Hotel", self.csv(
+			"Corporate USD,USD,'+Partner,DLX,Deluxe,Double,118,2026-12-20,,"))
+		self.assertEqual(self.calls[-1][1]["entries"][0]["customer"], "+Partner")
+
 	def test_import_accepts_row_objects(self):
 		self.scripts = {"hospitality_tariffs.list_tariffs": directory(),
 		                "hospitality_tariffs.bulk_propose_tariffs": {"proposed": ["IP-12"]}}
