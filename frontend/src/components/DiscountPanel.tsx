@@ -52,9 +52,12 @@ export default function DiscountPanel(props: {
   const [daily, setDaily] = useState(false)
   const [future, setFuture] = useState(false)
   const off = !eligible
-  const lowest = props.nights?.length ? Math.min(...props.nights.map((n) => n.base_rate)) : undefined
-  const error = discountError(d, lowest)
-  const stayNights = (props.nights ?? []).map((n) => n.date)
+  // a night already on the folio keeps its discount there (a folio
+  // allowance): the bounds and "Apply to future nights" are the others'
+  const open = (props.nights ?? []).filter((n) => !n.charged)
+  const lowest = open.length ? Math.min(...open.map((n) => n.base_rate)) : undefined
+  const error = discountError(d, open)
+  const stayNights = open.map((n) => n.date)
 
   function setType(type: DiscountType) {
     onChange({ ...d, type })

@@ -31,6 +31,7 @@ import {
   discountError,
   discountReady,
   emptyDiscount,
+  entryBase,
   supervisorArgs,
   type DiscountGovernance,
   type DiscountState,
@@ -108,14 +109,12 @@ interface WalkInResult {
   checked_in?: 0 | 1
 }
 
-/** The quote's nights for Daily Details, on the basis the desk sees a rate:
- * gross where the property's rates include tax. */
+/** The quote's nights for Daily Details and the discount bounds, on the
+ * basis the desk sees a rate: gross where the property's rates include tax
+ * (the night's net plus the discount, so a lower tax slab never moves it). */
 function discountNights(q: Quote) {
   const inclusive = !!q.line_items?.[0]?.is_tax_inclusive
-  return q.nightly.map((n) => {
-    const base = n.base_rate ?? n.rate
-    return { date: n.date, base_rate: Math.round(base * (inclusive ? 1 + (n.gst_rate ?? 0) / 100 : 1) * 100) / 100 }
-  })
+  return q.nightly.map((n) => ({ date: n.date, base_rate: entryBase(n, inclusive) }))
 }
 
 function todayLocal() {
@@ -470,14 +469,23 @@ export function BookingDialog(props: {
   const canDiscount = !!options?.can_discount && otaTotal <= 0 && moreRooms.length === 0
   const discountPlan = form.rate_plan || quote?.rate_plan || ""
   const discountOk = discountEligible(options?.rate_plans, discountPlan)
+  // OPERA's Fixed Rate: a Revenue Manager / Hotel Admin may fix the rate of a
+  // plan that takes no discount and discount it (kamra.api fixed_rate)
+  const [fixedOverride, setFixedOverride] = useState(false)
+  const canFixRate = !discountOk && !!options?.can_set_rate
+  const discountAllowed = discountOk || (canFixRate && fixedOverride)
   useEffect(() => {
-    // a plan that can't be discounted clears what was entered (OPERA)
-    if (discountOk) return
+    // a plan that can be discounted needs no override; one that can't
+    // clears what was entered unless a manager fixes its rate (OPERA)
+    if (discountOk) setFixedOverride(false)
+    if (discountAllowed) return
     setDiscount(emptyDiscount())
     setDiscountSupervisor("")
     setDiscountPin("")
-  }, [discountOk])
-  const discountParam = canDiscount && discountOk ? discountArgs(discount, stayNights) : {}
+  }, [discountOk, discountAllowed])
+  const discountEntered = canDiscount && discountAllowed ? discountArgs(discount, stayNights) : {}
+  const discountParam = discountOk || !(discountEntered.discount_type || discountEntered.night_discounts)
+    ? discountEntered : { ...discountEntered, fixed_rate: 1 as const }
   const discountGov: DiscountGovernance | null = quote?.discount_governance ?? null
   const discountSignOff = supervisorArgs(discountGov, discountSupervisor, discountPin)
   const discountReasonText = (() => {
@@ -868,6 +876,12 @@ export function BookingDialog(props: {
   )
 
   async function submitWalkIn() {
+    // never reach the cashier PIN or the payment with a discount that
+    // would be refused: the button is off, and this holds it too
+    if (discountProblem) {
+      setError(t(discountProblem))
+      return
+    }
     setBusy(true)
     setError(null)
     try {
@@ -952,12 +966,18 @@ export function BookingDialog(props: {
   requireField(creditBlocked, "credit", t("Resolve the company credit restriction."))
   requireField(extraNeedsReason, "extra", t("Enter the reason for the extra guests."))
   requireField(planRequired && !form.rate_plan && !companyPlan, "rate-plan", t("Choose a rate plan for this booking."))
-  const discountBad = canDiscount && discountOk ? discountError(discount) : null
-  if (discountBad) requireField(true, "discount", t(discountBad))
-  requireField(!discountBad &&!!(discountParam.discount_type || discountParam.night_discounts) && !discountParam.discount_reason,
-    "discount", t("Pick a reason for the discount."))
-  requireField(!!discountParam.discount_reason && !discountReady({ args: discountParam, governance: discountGov,
-    supervisor: discountSupervisor, pin: discountPin }), "discount", t("A manager signs this off with their PIN."))
+  // the discount's own checks, for a booking and a walk-in alike: the
+  // bounds (the stay's against its lowest night, each Daily Details night
+  // against its own), a reason, and a manager's PIN when the server asks
+  const discountBad = canDiscount && discountAllowed
+    ? discountError(discount, quote ? discountNights(quote) : undefined) : null
+  const discountAsked = !!(discountParam.discount_type || discountParam.night_discounts)
+  const discountProblem = discountBad
+    ?? (discountAsked && !discountParam.discount_reason ? "Pick a reason for the discount."
+      : discountAsked && !discountReady({ args: discountParam, governance: discountGov,
+          supervisor: discountSupervisor, pin: discountPin, fixedOverride: discountAllowed && !discountOk })
+        ? "A manager signs this off with their PIN." : null)
+  if (discountProblem) requireField(true, "discount", t(discountProblem))
   const messages = attempted ? [...problems, ...(submitError ? [{field: "server", message: submitError}] : [])] : []
   const target = (field: string) => ({id: `booking-${field}`, "aria-invalid": attempted && problems.some(p => p.field === field) || undefined})
   function jump(field: string) {
@@ -1032,6 +1052,8 @@ export function BookingDialog(props: {
   const tillClosed = walkIn && payAmount > 0 && !!till && !till.open
   const walkInBlocked =
     blacklistBlocked ||
+    // the same discount checks as a booking, before any money or PIN
+    !!discountProblem ||
     busy ||
     !form.guest_name ||
     !quote ||
@@ -1915,11 +1937,19 @@ export function BookingDialog(props: {
                 {canDiscount && (
                   <div id="booking-discount" tabIndex={-1}>
                     <DiscountPanel value={discount} onChange={setDiscount}
-                      reasons={options?.discount_reasons ?? []} eligible={discountOk}
+                      reasons={options?.discount_reasons ?? []} eligible={discountAllowed}
                       governance={discountGov}
                       nights={dayUse || !quote ? undefined : discountNights(quote)}
                       supervisor={discountSupervisor} pin={discountPin}
-                      onSupervisor={setDiscountSupervisor} onPin={setDiscountPin} money={homeText} />
+                      onSupervisor={setDiscountSupervisor} onPin={setDiscountPin} money={homeText}>
+                      {canFixRate && (
+                        <label className="flex items-center gap-2 text-xs text-zinc-600">
+                          <input type="checkbox" aria-label={t("Fixed rate override")} checked={fixedOverride}
+                            onChange={(e) => setFixedOverride(e.target.checked)} />
+                          {t("Fixed rate override")}
+                        </label>
+                      )}
+                    </DiscountPanel>
                   </div>
                 )}
 
@@ -2567,10 +2597,15 @@ export function BookingDialog(props: {
                       </div>
                       <div className="flex justify-between text-zinc-600">
                         <span>{t("Net room rate")}</span>
-                        <span className="tabular-nums">{homeText(quote.room_total)}</span>
+                        {/* base less discount, on the basis both are entered
+                            (gross where rates include tax) */}
+                        <span className="tabular-nums">{homeText(
+                          (quote.room_base_total ?? quote.room_total) - (quote.reservation_discount_total ?? 0))}</span>
                       </div>
                     </>)}
-                    {quoteTariff && <div className="space-y-1 text-sm">
+                    {/* a discounted tariff shows base, discount and net above,
+                        never the undiscounted tariff total beside them */}
+                    {quoteTariff && !(quote.reservation_discount_total ?? 0) && <div className="space-y-1 text-sm">
                       <p><TariffRoomTotal tariff={quoteTariff} nights={quote.nights}
                         agreedRate={quote.agreed_rate ?? 0} locale={loc.locale} /></p>
                     </div>}

@@ -54,6 +54,19 @@ export interface DiscountArgs {
   discount_value?: number
   discount_reason?: string
   night_discounts?: { date: string; discount_type: DiscountType; discount_value: number }[]
+  /** a manager's fixed-rate override of a plan that takes no discount */
+  fixed_rate?: 0 | 1
+}
+
+/** A night's room rate before the discount on the basis the desk enters one:
+ * the net rate after the discount (gross where the property's rates include
+ * tax) plus the discount, which the server reports on that same basis. */
+export function entryBase(
+  n: { rate: number; gst_rate?: number; base_rate?: number; discount_amount?: number },
+  inclusive: boolean,
+): number {
+  const net = inclusive ? Math.round(n.rate * (1 + (n.gst_rate ?? 0) / 100) * 100) / 100 : n.rate
+  return Math.round((net + (n.discount_amount ?? 0)) * 100) / 100
 }
 
 export const emptyDiscount = (): DiscountState => ({ type: "Percent", value: "", reason: "", nights: {} })
@@ -94,29 +107,59 @@ export function applyToFutureNights(
   return out
 }
 
-/** The bounds the server holds too (SAP OVB2): 0 to 100%, never below zero,
- * and an amount never more than the night's rate. null when it is fine. */
-export function discountError(state: Pick<DiscountState, "type" | "value">, nightRate?: number): string | null {
-  const value = num(state.value)
+/** A night as the discount bounds read it: its room rate before the
+ * discount, on the basis the desk enters one (gross where rates include tax). */
+export interface NightBase {
+  date: string
+  base_rate: number
+}
+
+function entryError(type: DiscountType, raw: string, nightRate?: number): string | null {
+  const value = num(raw)
   if (value === null) return null
   if (!Number.isFinite(value) || value < 0) return "Enter a discount of zero or more."
-  if (state.type === "Percent" && value > 100) return "A percentage is between 0 and 100."
-  if (state.type === "Amount" && nightRate !== undefined && value > nightRate + 0.005)
+  if (type === "Percent" && value > 100) return "A percentage is between 0 and 100."
+  if (type === "Amount" && nightRate !== undefined && value > nightRate + 0.005)
     return "The discount is more than the night's rate."
   return null
 }
 
+/** The bounds the server holds too (SAP OVB2): 0 to 100%, never below zero,
+ * and an amount never more than the night's rate - the stay's discount
+ * against its lowest night, each Daily Details night against its own.
+ * `nights` is the stay's nights (or just the lowest rate). null when fine. */
+export function discountError(
+  state: Pick<DiscountState, "type" | "value"> & { nights?: DiscountState["nights"] },
+  nights?: number | NightBase[],
+): string | null {
+  const list = Array.isArray(nights) ? nights : []
+  const lowest = typeof nights === "number" ? nights
+    : list.length ? Math.min(...list.map((n) => n.base_rate)) : undefined
+  const stay = entryError(state.type, state.value, lowest)
+  if (stay) return stay
+  for (const night of list) {
+    const own = state.nights?.[night.date]
+    const bad = own && entryError(own.type, own.value, night.base_rate)
+    if (bad) return bad
+  }
+  return null
+}
+
 /** Whether the booking (or Save) can go ahead: a discount needs a reason,
- * and a supervisor with their PIN when the server says it is over the
- * desk's limit (or a comp, under the floor, or a reason that needs one). */
+ * a rate plan that takes one (or a manager's fixed-rate override), and a
+ * supervisor with their PIN when the server says it is over the desk's
+ * limit (or a comp, under the floor, or a reason that needs one). */
 export function discountReady(s: {
   args: DiscountArgs
   governance: DiscountGovernance | null | undefined
   supervisor: string
   pin: string
+  /** a Revenue Manager / Hotel Admin fixed the rate of a plan that takes none */
+  fixedOverride?: boolean
 }): boolean {
   if (!s.args.discount_type && !s.args.night_discounts?.length) return true
   if (!s.args.discount_reason) return false
+  if (s.governance && s.governance.eligible === false && !s.fixedOverride) return false
   if (s.governance?.needs_supervisor) return !!s.supervisor && !!s.pin.trim()
   return true
 }

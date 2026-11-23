@@ -101,7 +101,21 @@ def voucher_discount(reservation) -> float:
 	"""The part of the booking's discount the folio posts as its own line:
 	the voucher. The desk's reservation discount is already inside each
 	locked night's rate (Room Rate is the base less the discount), so
-	posting it again would discount the stay twice."""
+	posting it again would discount the stay twice.
+
+	Read as the voucher the booking was priced with (its quote snapshot's
+	voucher_discount), never as what is left of discount_amount after the
+	nights: a billed night that kept a discount the stay later dropped
+	would hide a real voucher, and one that never got it would invent one.
+	A booking priced before the snapshot kept it falls back to that sum."""
+	snap = reservation.get("quote_snapshot")
+	if snap:
+		try:
+			data = json.loads(snap) if isinstance(snap, str) else snap
+			if isinstance(data, dict) and "voucher_discount" in data:
+				return round(max(float(data.get("voucher_discount") or 0), 0), 2)
+		except (TypeError, ValueError):
+			pass  # unreadable snapshot: the stored discount less the nights'
 	total = float(reservation.get("discount_amount") or 0)
 	in_nights = sum(float(r.get("discount_amount") or 0)
 	                for r in reservation.get("night_rates") or [])
@@ -438,15 +452,17 @@ def _day_use_room_charge(reservation, date) -> tuple[float, float, str] | None:
 		overstay=overstay_rule(reservation.property),
 		planned_hours=planned,
 	)
+	rt = frappe.get_doc("Room Type", reservation.room_type)
+	inclusive = rates_include_tax(reservation.property)
 	if units["full_day"]:
 		# Overstay past planned ETD under "Full day": one card night.
 		amount = float(_plan_free_night_rate(reservation, date))
-		return amount, _nightly_gst(reservation, date), "day use · full day"
+		return _day_use_discount(reservation, date, rt, inclusive, amount,
+		                         _nightly_gst(reservation, date), "day use · full day")
 	gross = Decimal(str(units["amount"]))
-	rt = frappe.get_doc("Room Type", reservation.room_type)
 	gst = float(room_gst_rate(reservation.property, rt,
 	                          gross + _over_cap_night(reservation)))
-	if rates_include_tax(reservation.property):
+	if inclusive:
 		amount = float(gross / (Decimal(1) + Decimal(str(gst)) / Decimal(100)))
 	else:
 		amount = float(gross)
@@ -455,7 +471,39 @@ def _day_use_room_charge(reservation, date) -> tuple[float, float, str] | None:
 	else:
 		label = (f"day use · {units['units']:g} × "
 		         f"{plan['block_hours']:g}h")
-	return amount, gst, label
+	return _day_use_discount(reservation, date, rt, inclusive, amount, gst, label)
+
+
+def _day_use_discount(reservation, date, rt, inclusive: bool, amount: float, gst: float,
+                      label: str) -> tuple[float, float, str]:
+	"""The desk's discount on an hourly / block day-use charge: the hours are
+	only known at check-out, so the discount the booking locked (its night
+	row's own, else the stay's) comes off the booked base charge - up to the
+	hours actually used; hours past the booking bill at the plan's rate.
+	Without a discount the charge is as worked out."""
+	from kamra.pricing import _dec, entry_rate, room_gst_rate
+	locked = locked_night(reservation, date)
+	if locked is None:
+		return amount, gst, label
+	kind = locked.get("discount_type")
+	value = float(locked.get("discount_value") or 0) if kind else 0.0
+	if not kind:
+		kind = reservation.get("discount_type")
+		value = float(reservation.get("discount_value") or 0)
+	if not kind or value <= 0:
+		return amount, gst, label
+	used = entry_rate(amount, gst, inclusive)
+	booked = entry_rate(locked.rate, locked.gst_rate, inclusive) + _dec(locked.get("discount_amount"))
+	base = min(used, booked)
+	off = (base * _dec(value) / Decimal(100) if kind == "Percent" else min(_dec(value), base)).quantize(
+		Decimal("0.01"))
+	if off <= 0:
+		return amount, gst, label
+	net = used - off
+	new_gst = room_gst_rate(reservation.property, rt, net + _over_cap_night(reservation))
+	charge = net / (Decimal(1) + new_gst / Decimal(100)) if inclusive else net
+	return (float(charge.quantize(Decimal("0.01"))), float(new_gst),
+	        f"{label} · {float(used):,.2f} less discount {float(off):,.2f}")
 
 
 def _rate_plan_factor(reservation, plan) -> Decimal:

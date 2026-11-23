@@ -52,13 +52,23 @@ interface DiscountPlan extends DiscountGovernance {
   new_amount: number
   difference: number
   needs_confirmation: boolean
-  nights: { date: string; base_rate: number; discount_amount: number; rate: number; charged: boolean }[]
+  nights: {
+    date: string; base_rate: number; discount_amount: number; rate: number; charged: boolean
+    /** base and net on the basis the desk enters a discount (gross where rates include tax) */
+    entry_base_rate?: number; entry_rate?: number
+  }[]
 }
 
 export default function AgreedRatePanel({ reservation, nightRates, current, onSaved }: {
   reservation: string
   /** the nightly rates the folio bills now (reservation_detail.night_rates) */
-  nightRates: { date: string; rate: number; base_rate?: number; discount_type?: DiscountType | null; discount_value?: number }[]
+  nightRates: {
+    date: string; rate: number; base_rate?: number; discount_type?: DiscountType | null; discount_value?: number
+    /** the night's base on the basis the desk enters a discount */
+    entry_base_rate?: number
+    /** already on the folio: its discount is a folio allowance, never re-sent */
+    charged?: boolean
+  }[]
   /** the stay's discount now (reservation_detail.discount) */
   current?: { discount_type: DiscountType | null; discount_value: number; discount_reason: string | null } | null
   onSaved: () => void
@@ -103,22 +113,24 @@ export default function AgreedRatePanel({ reservation, nightRates, current, onSa
     }
   }, [open, mode, rate, reservation])
 
-  // --- Discount: the stay's, or Daily Details nights of their own
+  // --- Discount: the stay's, or Daily Details nights of their own. A night
+  // already on the folio keeps its discount there and is never sent again.
+  const openNights = nightRates.filter((n) => !n.charged)
   const initial = (): DiscountState => ({
     ...emptyDiscount(),
     type: current?.discount_type ?? "Percent",
     value: current?.discount_type ? String(current.discount_value) : "",
     reason: current?.discount_reason ?? "",
-    nights: Object.fromEntries(nightRates.filter((n) => n.discount_type)
+    nights: Object.fromEntries(openNights.filter((n) => n.discount_type)
       .map((n) => [n.date, { type: n.discount_type as DiscountType, value: String(n.discount_value ?? 0) }])),
   })
   const [discount, setDiscount] = useState<DiscountState>(initial)
   const [fixedOverride, setFixedOverride] = useState(false)
   const [discountCodes, setDiscountCodes] = useState<DiscountReason[]>([])
   const [plan, setPlan] = useState<DiscountPlan | null>(null)
-  const stayNights = nightRates.map((n) => n.date)
+  const stayNights = openNights.map((n) => n.date)
   const args = discountArgs(discount, stayNights)
-  const hadDiscount = !!current?.discount_type || nightRates.some((n) => n.discount_type)
+  const hadDiscount = !!current?.discount_type || openNights.some((n) => n.discount_type)
   // clearing a discount the stay has is a change too
   const asks = !!(args.discount_type || args.night_discounts?.length) || hadDiscount
   const argsKey = JSON.stringify([args, fixedOverride])
@@ -156,8 +168,9 @@ export default function AgreedRatePanel({ reservation, nightRates, current, onSa
     // argsKey stands for args and the override
   }, [open, mode, argsKey, reservation])
 
-  // a cleared discount is ready too (it puts the stay back on its rate)
-  const discountOk = !!plan && discountReady({ args, governance: plan, supervisor, pin })
+  // a cleared discount is ready too (it puts the stay back on its rate); a
+  // plan that takes no discount needs a manager's fixed-rate override
+  const discountOk = !!plan && discountReady({ args, governance: plan, supervisor, pin, fixedOverride })
 
   async function saveDiscount() {
     if (!plan || !discountOk) return
@@ -227,9 +240,18 @@ export default function AgreedRatePanel({ reservation, nightRates, current, onSa
     }
   }
 
+  // every time it opens, it starts from the stay as it is now (a save
+  // elsewhere, or this panel's own, re-renders it with fresh props)
+  function openPanel() {
+    setDiscount(initial())
+    setFixedOverride(false)
+    setPlan(null)
+    setOpen(true)
+  }
+
   if (!open)
     return (
-      <Button variant="outline" className="mt-3" onClick={() => setOpen(true)}>
+      <Button variant="outline" className="mt-3" onClick={openPanel}>
         {t("Stay rate & daily details")}
       </Button>
     )
@@ -258,11 +280,14 @@ export default function AgreedRatePanel({ reservation, nightRates, current, onSa
       {mode === "discount" && (<>
         <DiscountPanel value={discount} onChange={setDiscount} reasons={discountCodes}
           eligible={!plan || plan.eligible || fixedOverride} governance={plan}
-          nights={nightRates.map((n) => ({
-            date: n.date,
-            base_rate: planNights.get(n.date)?.base_rate ?? n.base_rate ?? n.rate,
-            charged: planNights.get(n.date)?.charged,
-          }))}
+          nights={nightRates.map((n) => {
+            const p = planNights.get(n.date)
+            return {
+              date: n.date,
+              base_rate: p?.entry_base_rate ?? p?.base_rate ?? n.entry_base_rate ?? n.base_rate ?? n.rate,
+              charged: !!(n.charged || p?.charged),
+            }
+          })}
           supervisor={supervisor} pin={pin} onSupervisor={setSupervisor} onPin={setPin} money={money}>
           {plan && !plan.eligible && plan.can_set_rate && (
             <label className="flex items-center gap-2 text-xs text-zinc-600">
@@ -286,9 +311,9 @@ export default function AgreedRatePanel({ reservation, nightRates, current, onSa
                 {plan.nights.map((n) => (
                   <tr key={n.date} className={n.charged ? "text-zinc-400" : ""}>
                     <td className="pe-2">{n.date}</td>
-                    <td className="px-2 text-end">{money(n.base_rate)}</td>
+                    <td className="px-2 text-end">{money(n.entry_base_rate ?? n.base_rate)}</td>
                     <td className="px-2 text-end text-emerald-700">{n.discount_amount ? signed(-n.discount_amount) : "-"}</td>
-                    <td className="ps-2 text-end">{money(n.rate)}</td>
+                    <td className="ps-2 text-end">{money(n.entry_rate ?? n.rate)}</td>
                   </tr>
                 ))}
                 <tr className="border-t border-zinc-200 font-medium">

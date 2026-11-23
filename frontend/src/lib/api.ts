@@ -494,7 +494,7 @@ export interface Quote extends TariffReference {
     rate: number
     hand_set?: boolean
     gst_rate?: number
-    /** the night's room rate before the desk's discount */
+    /** the night's room rate before the desk's discount, before tax */
     base_rate?: number
     discount_type?: "Percent" | "Amount" | null
     discount_value?: number
@@ -503,9 +503,10 @@ export interface Quote extends TariffReference {
   }[]
   /** net accommodation, after the desk's discount */
   room_total: number
-  /** accommodation before the desk's discount */
+  /** accommodation before the desk's discount, on the basis the desk
+   * entered it (gross where rates include tax) */
   room_base_total?: number
-  /** the desk's discount, already inside room_total */
+  /** the desk's discount on that same basis; already inside room_total */
   reservation_discount_total?: number
   /** the voucher's part of `discount` */
   voucher_discount?: number
@@ -617,6 +618,8 @@ export interface QuoteParams {
   discount_value?: number
   discount_reason?: string
   night_discounts?: DiscountArgs["night_discounts"]
+  /** a manager's fixed-rate override of a plan that takes no discount */
+  fixed_rate?: 0 | 1
   supervisor_user?: string
   supervisor_pin?: string
 }
@@ -1841,12 +1844,18 @@ export interface ReservationDetail extends TariffReference {
     date: string
     rate: number
     demand_premium_pct: number
-    /** before the desk's discount; rate is this less discount_amount */
+    /** the night's room rate before the desk's discount, before tax */
     base_rate?: number
+    /** the discount, on the basis the desk entered it (gross where rates include tax) */
     discount_amount?: number
+    /** base and net on that same basis: entry_base_rate less discount_amount is entry_rate */
+    entry_base_rate?: number
+    entry_rate?: number
     /** the night's own Daily Details discount (blank: follows the stay) */
     discount_type?: "Percent" | "Amount" | null
     discount_value?: number
+    /** already on the folio: its discount is settled there */
+    charged?: boolean
   }[]
   /** the desk's discount on the stay */
   discount?: {
