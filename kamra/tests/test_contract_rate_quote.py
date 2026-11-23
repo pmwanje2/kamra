@@ -100,11 +100,18 @@ class ContractRateQuoteTest(AuditTestCase):
 		self.assertEqual(float(res.amount_after_tax), quote["amount_after_tax"])
 		self.script.db_set("disabled", 1)
 		self.assertEqual(api.reservation_detail(res.name)["tariff"], self.tariff)
-		stay = api.folio_invoice(open_folio(res))["stay"]
+		folio = open_folio(res)
+		stay = api.folio_invoice(folio)["stay"]
 		self.assertEqual(stay["tariff"], self.tariff)
-		# a bill shows the contract currency at the rate the stay was priced at (Property ACTUAL)
-		self.assertEqual(stay["reference_currency"], {"currency": "USD", "home_currency": "UGX",
-			"calculation": "ACTUAL", "fx_rate": 3650.0, "fx_date": "2026-11-21"})
+		# a bill shows the contract currency at the rate the stay was priced at (Property ACTUAL),
+		# with the bill's total and balance in it
+		reference = stay["reference_currency"]
+		self.assertEqual({key: reference[key] for key in ("currency", "home_currency", "calculation", "fx_rate",
+			"fx_date")}, {"currency": "USD", "home_currency": "UGX", "calculation": "ACTUAL", "fx_rate": 3650.0,
+			"fx_date": "2026-11-21"})
+		bill = frappe.get_doc("Folio", folio)
+		self.assertAlmostEqual(reference["grand_total_reference"], float(bill.grand_total or 0) / 3650, delta=0.006)
+		self.assertAlmostEqual(reference["balance_reference"], float(bill.balance or 0) / 3650, delta=0.006)
 
 	def test_room_tariffs_are_a_property_scoped_read(self):
 		payload = {"tariffs": [{"rate_plan": self.plan, "currency": "USD", "room": 130,
