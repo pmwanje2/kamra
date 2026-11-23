@@ -74,10 +74,11 @@ def _sellable(property: str) -> int:
 
 def occupancy_now(property: str, hk: dict) -> dict:
 	"""Rooms occupied right now over sellable rooms."""
+	from kamra.room_statistics import occupancy_pct
 	sellable = _sellable(property)
 	occupied = hk["occupied"]
 	return {"occupied": occupied, "sellable": sellable,
-	        "occupancy_pct": round(100 * occupied / sellable, 1) if sellable else 0}
+	        "occupancy_pct": occupancy_pct(occupied, sellable)}
 
 
 def occupancy_forecast(property: str, date: str, days: int = FORECAST_DAYS) -> list[dict]:
@@ -98,7 +99,8 @@ def occupancy_forecast(property: str, date: str, days: int = FORECAST_DAYS) -> l
 		{"p": property, "s": str(start), "e": str(end), "live": tuple(LIVE_STATUSES)},
 		as_dict=True)
 	held_by_night = _held_by_night(property, start, end)
-	pct = lambda n: round(100 * n / sellable, 1) if sellable else 0  # noqa: E731
+	from kamra.room_statistics import occupancy_pct
+	pct = lambda n: occupancy_pct(n, sellable)  # noqa: E731
 	out = []
 	for i in range(days):
 		d = getdate(add_days(start, i))
@@ -144,6 +146,7 @@ def comparison(property: str, date: str, total_rooms: int, forecast: list[dict])
 	forecast's nights from tonight, over sellable rooms like the forecast."""
 	from kamra.localization import financial_year_start, pack_for
 	from kamra.reports import range_stats
+	from kamra.room_statistics import occupancy_pct
 	d = getdate(date)
 	ly = lambda x: getdate(add_years(x, -1))  # noqa: E731 - 29 Feb -> 28 Feb
 	fy = financial_year_start(pack_for(property), d)
@@ -161,7 +164,7 @@ def comparison(property: str, date: str, total_rooms: int, forecast: list[dict])
 		sellable = _sellable(property)
 		sold = sum(x["booked"] for x in forecast)
 		n = sellable * len(forecast)
-		this = {"rooms_sold": sold, "occupancy_pct": round(100 * sold / n, 1) if n else 0}
+		this = {"rooms_sold": sold, "occupancy_pct": occupancy_pct(sold, n)}
 		last = range_stats(property, ly(start), ly(end), sellable)
 		periods.append({"id": "on_the_books", "rooms_basis": "sellable",
 		                "from_date": str(start), "to_date": str(end),
@@ -308,12 +311,13 @@ def portfolio_dashboard(date: str | None = None):
 	days = {row["report_date"] for row in rows}
 	date = date or (days.pop() if len(days) == 1 else None)
 
+	from kamra.room_statistics import occupancy_pct
 	rooms = sum(r["total_rooms"] for r in rows)
 	sold = sum(r["rooms_sold"] for r in rows)
 	totals = {
 		"properties": len(rows),
 		"total_rooms": rooms,
-		"occupancy_pct": round(100 * sold / rooms, 1) if rooms else 0,
+		"occupancy_pct": occupancy_pct(sold, rooms),
 		"arrivals": sum(r["arrivals"] for r in rows),
 		"departures": sum(r["departures"] for r in rows),
 		"in_house": sum(r["in_house"] for r in rows),

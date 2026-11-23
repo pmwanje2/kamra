@@ -6542,5 +6542,9 @@
   "The discount is more than the night's rate.": "الخصم أكبر من سعر الليلة.",
   "This rate plan does not allow discounts.": "خطة الأسعار هذه لا تسمح بالخصومات.",
   "This reason needs a manager's sign-off.": "هذا السبب يحتاج إلى موافقة المدير.",
-  "Untick for rates that never take a desk discount (non-refundable, packages).": "ألغِ التحديد للأسعار التي لا تقبل خصم الاستقبال أبدًا (غير القابلة للاسترداد، الباقات)."
+  "Untick for rates that never take a desk discount (non-refundable, packages).": "ألغِ التحديد للأسعار التي لا تقبل خصم الاستقبال أبدًا (غير القابلة للاسترداد، الباقات).",
+  "A Complimentary rate plan needs a manager's sign-off.": "خطة الأسعار المجانية تحتاج إلى موافقة المدير.",
+  "A House Use rate plan needs a manager's sign-off.": "خطة أسعار استخدام الفندق تحتاج إلى موافقة المدير.",
+  "Rate category": "فئة السعر",
+  "Complimentary or House Use: a manager signs off each booking, and its rooms count in occupancy but not in ADR.": "مجاني أو استخدام الفندق: يوافق المدير على كل حجز، وتُحتسب غرفه في الإشغال لا في متوسط السعر اليومي (ADR)."
 }

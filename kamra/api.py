@@ -282,27 +282,17 @@ def owner_briefing(property: str, date: str | None = None):
 		{"property": property, "status": "Checked In", "check_out_date": date},
 	)
 
-	# yesterday's room revenue + rooms sold from posted folio charges
-	from kamra.folio import STANDS_ON_ITS_DATE
-	rev, rooms_sold = frappe.db.sql(
-		"""
-		SELECT COALESCE(SUM(fc.amount), 0),
-		       COUNT(DISTINCT CASE WHEN fc.charge_type = 'Room' AND """ + STANDS_ON_ITS_DATE + """
-		                           THEN f.name END)
-		FROM `tabFolio Charge` fc
-		JOIN `tabFolio` f ON fc.parent = f.name
-		WHERE f.property = %(property)s
-		  AND fc.posting_date = %(date)s
-		  AND fc.charge_type IN ('Room', 'Meal Plan', 'Rate Adjustment')
-		""",
-		{"property": property, "date": yesterday},
-	)[0]
-	room_revenue = float(rev or 0)
-	rooms_sold = int(rooms_sold or 0)
-
-	occupancy_pct = round(occupied / rooms_total * 100, 1) if rooms_total else 0
-	adr = round(room_revenue / rooms_sold, 0) if rooms_sold else 0
-	revpar = round(room_revenue / rooms_total, 0) if rooms_total else 0
+	# yesterday's room revenue + rooms sold from posted folio charges, as
+	# every report counts them (kamra.room_statistics); occupancy is the
+	# house now
+	from kamra.room_statistics import posted_rooms, room_figures
+	rooms = posted_rooms(property, yesterday, yesterday)
+	room_revenue = rooms["room_revenue"]
+	figures = room_figures(room_revenue=room_revenue, rooms_sold=rooms["rooms_sold"],
+	                       comp_rooms=rooms["comp_rooms"],
+	                       house_use_rooms=rooms["house_use_rooms"],
+	                       rooms_occupied=occupied, occupancy_rooms=rooms_total)
+	occupancy_pct, adr, revpar = figures["occupancy_pct"], figures["adr"], figures["revpar"]
 
 	open_tickets = frappe.get_all(
 		"Service Ticket",
@@ -343,6 +333,8 @@ def owner_briefing(property: str, date: str | None = None):
 		"departures_today": departures,
 		"yesterday": {
 			"room_revenue": room_revenue, "adr": adr, "revpar": revpar,
+			"comp_rooms": figures["comp_rooms"],
+			"house_use_rooms": figures["house_use_rooms"],
 			"night_audit": audit,
 			"agent_minutes_saved": float(minutes or 0),
 		},
@@ -7026,6 +7018,44 @@ def discount_governance(property: str, room_type: str | None, rate_plan: str | N
 	return out
 
 
+def comp_rate_governance(property: str, rate_plan: str | None, *, check: bool = False,
+                         supervisor_user: str | None = None,
+                         supervisor_pin: str | None = None) -> dict:
+	"""A Complimentary or House Use rate plan (OPERA's rate code
+	Complimentary and House Use flags; Rate Plan.rate_category) is signed
+	off by another supervisor with their PIN whoever books it, as a full comp
+	is (discount_governance): OPERA's comp authorizer. Nobody signs off their
+	own (verify_supervisor), and an AI agent can't book one or use a PIN.
+
+	check=False is the preview (get_quote, amend_stay_preview): nothing is
+	refused and no PIN is checked. check=True enforces it and returns the
+	approver (Reservation.govern_rate_category).
+	{rate_category, needs_supervisor, agent, supervisors, approver}"""
+	from kamra.authz import supervisors_for, verify_supervisor
+	from kamra.credit import _is_agent
+	from kamra.room_statistics import COMP_CATEGORIES, COMPLIMENTARY, rate_category
+	category = rate_category(rate_plan)
+	needs = category in COMP_CATEGORIES
+	agent = _is_agent()
+	out = {"rate_category": category, "needs_supervisor": needs, "agent": agent,
+	       # who can sign it off here (names only); nobody signs their own
+	       "supervisors": supervisors_for(property, exclude=frappe.session.user)
+	       if needs and not agent else [],
+	       "approver": None}
+	if not check or not needs:
+		return out
+	why = (_("A Complimentary rate plan") if category == COMPLIMENTARY
+	       else _("A House Use rate plan"))
+	if agent:
+		_refuse_agent_rate(_("{0} needs a manager's sign-off.").format(why))
+	if not (supervisor_user or "").strip():
+		frappe.throw(_("{0} needs a manager's sign-off: a Hotel Admin or Finance user signs "
+		               "it off with their PIN.").format(why), frappe.PermissionError)
+	out["approver"] = verify_supervisor(property, supervisor_user, supervisor_pin,
+	                                    requester=frappe.session.user)
+	return out
+
+
 def _night_rows_as_nights(rows, doc) -> list[dict]:
 	"""A booking's night rows in the shape discount_governance reads: each
 	night's own Daily Details discount, else the stay's (doc's)."""
@@ -7614,7 +7644,8 @@ def movable_rooms(reservation: str, check_in_date: str | None = None,
 @frappe.whitelist()
 @require_roles("Front Desk", "Kamra Agent")
 def amend_stay_preview(reservation: str, check_in_date: str, check_out_date: str,
-                       adults: int | None = None, children: int | None = None):
+                       adults: int | None = None, children: int | None = None,
+                       rate_plan: str | None = None):
 	"""What new dates (or a new party: adults, children) would do to the
 	bill, before anything changes: the current and new totals and the new
 	nightly rates, priced by the engine from today's rules. amend_stay needs
@@ -7624,13 +7655,27 @@ def amend_stay_preview(reservation: str, check_in_date: str, check_out_date: str
 	is what the desk may give back as an allowance) or credited
 	(credit_total, posted by Kamra). A discounted stay also gets the
 	discount rules the amendment will run (discount_governance,
-	needs_supervisor and who can sign it off: supervisors)."""
+	needs_supervisor and who can sign it off: supervisors). A new rate_plan
+	gets comp_governance: a Complimentary or House Use plan's sign-off."""
 	doc = frappe.get_doc("Reservation", reservation)
 	from kamra.crs import assert_property_access
 	assert_property_access(doc.property)
+	plan = _plan_change(doc, rate_plan)
 	pv = _reprice_preview(doc, check_in_date=check_in_date,
-	                      check_out_date=check_out_date, **_party(adults, children))
-	return {**pv, **_repriced_governance(doc)}
+	                      check_out_date=check_out_date, **_party(adults, children), **plan)
+	return {**pv, **_repriced_governance(doc),
+	        "comp_governance": comp_rate_governance(doc.property, plan["rate_plan"])
+	        if plan else None}
+
+
+def _plan_change(doc, rate_plan) -> dict:
+	"""amend_stay's rate plan change: the plan resolved at the stay's
+	property, when it is another plan than the stay's."""
+	if rate_plan in (None, ""):
+		return {}
+	from kamra.booking_refs import resolve_rate_plan
+	plan = resolve_rate_plan(doc.property, rate_plan)
+	return {"rate_plan": plan} if plan and plan != doc.get("rate_plan") else {}
 
 
 def _party(adults=None, children=None) -> dict:
@@ -7653,7 +7698,7 @@ def _party(adults=None, children=None) -> dict:
 def amend_stay(reservation: str, check_in_date: str, check_out_date: str,
                confirm_price: int = 0, supervisor_user: str | None = None,
                supervisor_pin: str | None = None, adults: int | None = None,
-               children: int | None = None):
+               children: int | None = None, rate_plan: str | None = None):
 	"""Extend / shorten a stay; the overlap guard validates the new window.
 
 	An auto-priced stay is re-quoted for its new dates and its nightly
@@ -7671,27 +7716,34 @@ def amend_stay(reservation: str, check_in_date: str, check_out_date: str,
 	adults / children change the party the same way (the governed party
 	change): the room is re-priced for it - unless the stay holds a fixed
 	rate, which keeps its room rate (OPERA) - and the discount rules run
-	again, with the same sign-off."""
+	again, with the same sign-off.
+
+	rate_plan moves the stay to another plan (OPERA Stay Details), re-priced
+	the same way. A Complimentary or House Use plan is signed off with
+	supervisor_user + supervisor_pin (comp_rate_governance)."""
 	doc = frappe.get_doc("Reservation", reservation)
 	from kamra.crs import assert_property_access
 	assert_property_access(doc.property)
 	_discount_sign_off(doc, supervisor_user, supervisor_pin)
 	return _amend_dates(doc, check_in_date, check_out_date, confirm_price,
-	                    party=_party(adults, children))
+	                    party=_party(adults, children), plan=_plan_change(doc, rate_plan))
 
 
 def _amend_dates(doc, check_in_date: str, check_out_date: str,
-                 confirm_price: int = 0, note: str = "", party: dict | None = None) -> dict:
+                 confirm_price: int = 0, note: str = "", party: dict | None = None,
+                 plan: dict | None = None) -> dict:
 	"""amend_stay's writer, for callers that already checked access (the
 	early check-out shortens a stay through it)."""
 	if doc.status not in ("Confirmed", "Checked In"):
 		frappe.throw("Only active reservations can be amended.")
 	old = f"{doc.check_in_date}→{doc.check_out_date}"
 	old_party = f"{cint(doc.adults)}+{cint(doc.children)}"
+	old_plan = doc.get("rate_plan")
 	old_amount = float(doc.amount_after_tax or 0)
 	_require_price_confirmation(
 		_reprice_preview(doc, check_in_date=check_in_date,
-		                 check_out_date=check_out_date, **(party or {})), confirm_price)
+		                 check_out_date=check_out_date, **(party or {}), **(plan or {})),
+		confirm_price)
 	doc.save()
 	from kamra.savings import log_action
 	approver = (doc.flags.get("kamra_discount_governance") or {}).get("approver")
@@ -7699,6 +7751,7 @@ def _amend_dates(doc, check_in_date: str, check_out_date: str,
 	           rationale=f"{old} → {check_in_date}→{check_out_date}; "
 	                     + (f"party {old_party} → {cint(doc.adults)}+{cint(doc.children)}; "
 	                        if party else "")
+	                     + (f"rate plan {old_plan or 'none'} → {doc.rate_plan}; " if plan else "")
 	                     + f"total {old_amount:,.2f} → "
 	                     f"{float(doc.amount_after_tax or 0):,.2f}"
 	                     + (" (new price confirmed)" if cint(confirm_price) else "")
@@ -7966,6 +8019,8 @@ def get_quote(property: str, room_type: str, check_in_date: str,
 		q["discount_governance"] = discount_governance(
 			property, room_type, q.get("rate_plan"), q["nightly"],
 			reason_code=discount_reason, fixed_rate=fixed_rate)
+	# a Complimentary or House Use plan: who signs the booking off
+	q["comp_governance"] = comp_rate_governance(property, q.get("rate_plan") or rate_plan)
 	q["tax_basis"] = tax_basis(property)
 	q["cancellation"] = cancellation_outlook(property, room_type, check_in_date, check_out_date)
 	return q
@@ -8607,6 +8662,9 @@ def create_booking(property: str, room_type: str, check_in_date: str,
 	discount_request = dict(supervisor_user=supervisor_user, supervisor_pin=supervisor_pin)
 	if disc:
 		_set_discount_inputs(doc, disc, discount_reason, fixed_rate, **discount_request)
+	# a Complimentary or House Use plan is signed off on the insert too
+	# (Reservation.govern_rate_category)
+	_discount_sign_off(doc, supervisor_user, supervisor_pin)
 
 	# extras chosen at booking - priced from the Experience, posted to the
 	# folio the moment it opens
@@ -8731,6 +8789,7 @@ def create_booking(property: str, room_type: str, check_in_date: str,
 				doc.flags.kamra_agreed_rate_override = True
 			if disc:
 				_set_discount_inputs(doc, disc, discount_reason, fixed_rate, **discount_request)
+			_discount_sign_off(doc, supervisor_user, supervisor_pin)
 	if via:
 		set_ota_commission(doc, ota_commission_pct)
 	if typed:

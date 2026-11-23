@@ -512,6 +512,9 @@ export interface Quote extends TariffReference {
   voucher_discount?: number
   /** what the desk's discount takes to book (kamra.api.discount_governance) */
   discount_governance?: DiscountGovernance
+  /** a Complimentary or House Use plan: who signs the booking off
+   * (kamra.api.comp_rate_governance) */
+  comp_governance?: CompGovernance
   line_items?: { component: string; is_tax_inclusive?: boolean }[]
   meal_total: number
   /** the rate plan the price is on - picked, or the company's negotiated one */
@@ -1972,6 +1975,15 @@ export const generateApiKey = () =>
  * room_move_preview). A booking bills the nightly rates confirmed at
  * booking; a change to what is sold re-quotes them, and the server refuses
  * the change unless the new price is confirmed. */
+/** OPERA's rate code Complimentary / House Use flags (Rate Plan.rate_category):
+ * a booking on such a plan is signed off by another manager with their PIN. */
+export interface CompGovernance {
+  rate_category: "Standard" | "Complimentary" | "House Use"
+  needs_supervisor: boolean
+  agent: boolean
+  supervisors: { user: string; full_name: string }[]
+}
+
 export interface RepricePreview {
   current_amount: number
   new_amount: number

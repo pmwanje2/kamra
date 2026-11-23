@@ -38,6 +38,7 @@ import {
   type DiscountState,
 } from "../lib/reservationDiscount"
 import DiscountPanel from "./DiscountPanel"
+import SupervisorSignOff from "./SupervisorSignOff"
 import PhoneInput from "./PhoneInput"
 import { clampGuests, sleeps } from "../lib/occupancy"
 import { useT, t as translate, useUILanguage } from "../lib/i18n"
@@ -471,6 +472,13 @@ export function BookingDialog(props: {
   const [discount, setDiscount] = useState<DiscountState>(emptyDiscount)
   const [discountSupervisor, setDiscountSupervisor] = useState("")
   const [discountPin, setDiscountPin] = useState("")
+  const [compSupervisor, setCompSupervisor] = useState("")
+  const [compPin, setCompPin] = useState("")
+  useEffect(() => {
+    // a PIN given for one plan is never sent for another
+    setCompSupervisor("")
+    setCompPin("")
+  }, [form.rate_plan])
   const canDiscount = !!options?.can_discount && otaTotal <= 0 && moreRooms.length === 0
   const discountPlan = form.rate_plan || quote?.rate_plan || ""
   const discountOk = discountEligible(options?.rate_plans, discountPlan)
@@ -492,8 +500,15 @@ export function BookingDialog(props: {
   const discountParam = discountOk || !(discountEntered.discount_type || discountEntered.night_discounts)
     ? discountEntered : { ...discountEntered, fixed_rate: 1 as const }
   const discountGov: DiscountGovernance | null = quote?.discount_governance ?? null
+  // a Complimentary or House Use plan: a manager signs the booking off
+  // (kamra.api.comp_rate_governance). When the discount asks for a manager
+  // too, its sign-off covers both.
+  const compGov = quote?.comp_governance ?? null
+  const compAsks = !!compGov?.needs_supervisor && !discountGov?.needs_supervisor
   const discountSignOff = {
     ...supervisorArgs(discountGov, discountSupervisor, discountPin),
+    ...(compAsks && compSupervisor && compPin.trim()
+      ? { supervisor_user: compSupervisor, supervisor_pin: compPin.trim() } : {}),
     // the desk's optional note goes with the booking, never with a quote
     ...discountNote(discount, discountEntered),
   }
@@ -994,6 +1009,8 @@ export function BookingDialog(props: {
           supervisor: discountSupervisor, pin: discountPin, fixedOverride: discountAllowed && !discountOk })
         ? "A manager signs this off with their PIN." : null)
   if (discountProblem) requireField(true, "discount", t(discountProblem))
+  const compProblem = compAsks && !(compSupervisor && compPin.trim())
+  requireField(compProblem, "comp", t("A manager signs this off with their PIN."))
   const messages = attempted ? [...problems, ...(submitError ? [{field: "server", message: submitError}] : [])] : []
   const target = (field: string) => ({id: `booking-${field}`, "aria-invalid": attempted && problems.some(p => p.field === field) || undefined})
   function jump(field: string) {
@@ -1070,6 +1087,7 @@ export function BookingDialog(props: {
     blacklistBlocked ||
     // the same discount checks as a booking, before any money or PIN
     !!discountProblem ||
+    compProblem ||
     busy ||
     !form.guest_name ||
     !quote ||
@@ -1949,6 +1967,17 @@ export function BookingDialog(props: {
                     />
                   </Field>
                 </div>
+
+                {compAsks && compGov && (
+                  <div id="booking-comp" tabIndex={-1}>
+                    <SupervisorSignOff
+                      reason={compGov.rate_category === "House Use"
+                        ? t("A House Use rate plan needs a manager's sign-off.")
+                        : t("A Complimentary rate plan needs a manager's sign-off.")}
+                      supervisors={compGov.supervisors} supervisor={compSupervisor} pin={compPin}
+                      onSupervisor={setCompSupervisor} onPin={setCompPin} />
+                  </div>
+                )}
 
                 {canDiscount && (
                   <div id="booking-discount" tabIndex={-1}>

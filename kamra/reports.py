@@ -36,9 +36,11 @@ def _projected_room_revenue(property: str, date: str, total_rooms: int) -> dict:
 	house (OPERA's daytime flash): each stay the night audit will post a
 	night for - arrival <= date < departure, as folio.run_night_audit
 	selects them - at the rate the audit posts (the locked nightly rate),
-	or what is already posted for it. ADR is over those stays. The posted
-	figures are left as they are; these are labelled projected."""
+	or what is already posted for it. ADR is over those stays, comp and
+	house-use stays left out (kamra.room_statistics). The posted figures are
+	left as they are; these are labelled projected."""
 	from kamra.folio import _nightly_room_rate
+	from kamra.room_statistics import room_figures, stay_categories
 	stays = frappe.get_all("Reservation", filters={
 		"property": property, "status": "Checked In",
 		"check_in_date": ("<=", date), "check_out_date": (">", date)}, pluck="name")
@@ -64,21 +66,21 @@ def _projected_room_revenue(property: str, date: str, total_rooms: int) -> dict:
 			else:  # booked before rates were locked: priced as the audit prices it
 				revenue += _nightly_room_rate(frappe.get_doc("Reservation", name), date)
 	revenue = round(revenue, 2)
+	figures = room_figures(room_revenue=revenue, rooms_sold=len(stays),
+	                       **stay_categories(stays), occupancy_rooms=total_rooms)
 	return {
 		"projected_room_revenue": revenue,
-		"projected_adr": round(revenue / len(stays), 0) if stays else 0,
-		"projected_revpar": round(revenue / total_rooms, 0) if total_rooms else 0,
+		"projected_adr": figures["adr"],
+		"projected_revpar": figures["revpar"],
 	}
 
 
 def _day_stats(property: str, date: str, total_rooms: int) -> dict:
+	from kamra.room_statistics import posted_rooms, room_figures
+	rooms = posted_rooms(property, date, date)
 	row = frappe.db.sql(
 		"""
 		SELECT
-		  COUNT(DISTINCT CASE WHEN fc.charge_type = 'Room' AND """ + STANDS_ON_ITS_DATE + """
-		        THEN COALESCE(fc.reservation, f.reservation) END) AS rooms_sold,
-		  COALESCE(SUM(CASE WHEN fc.charge_type IN ('Room', 'Rate Adjustment')
-		        THEN fc.amount ELSE 0 END), 0) AS room_revenue,
 		  COALESCE(SUM(CASE WHEN fc.charge_type IN ('Food & Beverage',
 		        'Meal Plan', 'Minibar') THEN fc.amount ELSE 0 END), 0)
 		        AS fnb_revenue,
@@ -94,8 +96,8 @@ def _day_stats(property: str, date: str, total_rooms: int) -> dict:
 		WHERE f.property = %(p)s AND fc.posting_date = %(d)s
 		""",
 		{"p": property, "d": date}, as_dict=True)[0]
-	sold = int(row.rooms_sold or 0)
-	rev = float(row.room_revenue or 0)
+	sold = rooms["rooms_sold"]
+	rev = rooms["room_revenue"]
 	fnb = float(row.fnb_revenue or 0)
 	other = float(row.other_revenue or 0)
 	allowances = float(row.allowances or 0)
@@ -127,6 +129,9 @@ def _day_stats(property: str, date: str, total_rooms: int) -> dict:
 	available = max(total_rooms - _out_of_order(property, date, in_house), 0)
 	projected = _projected_room_revenue(property, date, total_rooms) \
 		if in_house else {}
+	figures = room_figures(room_revenue=rev, rooms_sold=sold, comp_rooms=rooms["comp_rooms"],
+	                       house_use_rooms=rooms["house_use_rooms"], rooms_occupied=occupied,
+	                       occupancy_rooms=available, revpar_rooms=total_rooms)
 	return {
 		**projected,
 		"date": str(date),
@@ -135,14 +140,13 @@ def _day_stats(property: str, date: str, total_rooms: int) -> dict:
 		"available_rooms": available,
 		"occupancy_basis": "in_house" if in_house else "posted",
 		"pax": pax,
-		"occupancy_pct": round(100 * occupied / available, 1) if available else 0,
 		"room_revenue": rev,
 		"fnb_revenue": fnb,
 		"other_revenue": other,
 		"allowances": allowances,
 		"total_revenue": total_rev,
-		"adr": round(rev / sold, 0) if sold else 0,
-		"revpar": round(rev / total_rooms, 0) if total_rooms else 0,
+		# comp_rooms, house_use_rooms, occupancy_pct, adr, revpar
+		**figures,
 		# RevPAX — total guest spend (room + all ancillary) per in-house guest.
 		# Captures the F&B / experiences / upgrades revenue that RevPAR misses.
 		"revpax": round(total_rev / pax, 0) if pax else 0,
@@ -250,6 +254,7 @@ def manager_flash(property: str, date: str | None = None,
 	the day figures, trend, movement and collections cover from_date..date."""
 	from kamra.business_date import report_range_end
 	from kamra.movements import report_dates
+	from kamra.room_statistics import occupancy_pct
 	dates = report_dates(property, date)
 	date = dates["report_date"]
 	start = from_date or date
@@ -276,8 +281,7 @@ def manager_flash(property: str, date: str | None = None,
 			""", {"p": property, "d": od})[0][0]
 		outlook.append({
 			"date": od, "booked": int(booked),
-			"occupancy_pct": round(100 * booked / sellable, 1)
-			if sellable else 0,
+			"occupancy_pct": occupancy_pct(booked, sellable),
 		})
 
 	return {
@@ -301,17 +305,20 @@ def _days(property: str, d, end, total_rooms: int) -> list[dict]:
 
 def _sum_days(days: list[dict], total_rooms: int) -> dict:
 	"""Several days' stats as one: totals, with rates over the whole span."""
+	from kamra.room_statistics import room_figures
 	tot = {k: sum(d[k] for d in days) for k in
-	       ("rooms_sold", "rooms_occupied", "available_rooms", "pax", "room_revenue",
-	        "fnb_revenue", "other_revenue", "total_revenue")}
+	       ("rooms_sold", "comp_rooms", "house_use_rooms", "rooms_occupied",
+	        "available_rooms", "pax", "room_revenue", "fnb_revenue", "other_revenue",
+	        "total_revenue")}
 	n = total_rooms * len(days)
-	avail = tot["available_rooms"]
+	figures = room_figures(room_revenue=tot["room_revenue"], rooms_sold=tot["rooms_sold"],
+	                       comp_rooms=tot["comp_rooms"], house_use_rooms=tot["house_use_rooms"],
+	                       rooms_occupied=tot["rooms_occupied"],
+	                       occupancy_rooms=tot["available_rooms"], revpar_rooms=n)
 	return {**tot,
 	        "occupancy_basis": "in_house" if any(
 	            d["occupancy_basis"] == "in_house" for d in days) else "posted",
-	        "occupancy_pct": round(100 * tot["rooms_occupied"] / avail, 1) if avail else 0,
-	        "adr": round(tot["room_revenue"] / tot["rooms_sold"], 0) if tot["rooms_sold"] else 0,
-	        "revpar": round(tot["room_revenue"] / n, 0) if n else 0,
+	        **figures,
 	        "revpax": round(tot["total_revenue"] / tot["pax"], 0) if tot["pax"] else 0,
 	        "allowances": sum(d["allowances"] for d in days)}
 
@@ -320,14 +327,11 @@ def range_stats(property: str, start, end, total_rooms: int) -> dict:
 	"""start..end as one span in a single query: the totals _sum_days(_days())
 	would give (a room sold is one reservation on one posting date), without
 	a query per day - year to date is a year of days."""
+	from kamra.room_statistics import posted_rooms, room_figures
+	rooms = posted_rooms(property, start, end)
 	row = frappe.db.sql(
 		"""
 		SELECT
-		  COUNT(DISTINCT CASE WHEN fc.charge_type = 'Room' AND """ + STANDS_ON_ITS_DATE + """ THEN CONCAT(
-		        COALESCE(fc.reservation, f.reservation), '|', fc.posting_date) END)
-		        AS rooms_sold,
-		  COALESCE(SUM(CASE WHEN fc.charge_type = 'Room'
-		        THEN fc.amount ELSE 0 END), 0) AS room_revenue,
 		  COALESCE(SUM(CASE WHEN fc.charge_type NOT IN ('Discount', 'Opening Balance')
 		        THEN fc.amount ELSE 0 END), 0) AS total_revenue
 		FROM `tabFolio Charge` fc
@@ -335,14 +339,12 @@ def range_stats(property: str, start, end, total_rooms: int) -> dict:
 		WHERE f.property = %(p)s AND fc.posting_date BETWEEN %(s)s AND %(e)s
 		""",
 		{"p": property, "s": str(start), "e": str(end)}, as_dict=True)[0]
-	sold = int(row.rooms_sold or 0)
-	rev = float(row.room_revenue or 0)
 	n = total_rooms * ((getdate(end) - getdate(start)).days + 1)
-	return {"rooms_sold": sold, "room_revenue": rev,
+	return {"rooms_sold": rooms["rooms_sold"], "room_revenue": rooms["room_revenue"],
 	        "total_revenue": float(row.total_revenue or 0),
-	        "occupancy_pct": round(100 * sold / n, 1) if n else 0,
-	        "adr": round(rev / sold, 0) if sold else 0,
-	        "revpar": round(rev / n, 0) if n else 0}
+	        **room_figures(room_revenue=rooms["room_revenue"], rooms_sold=rooms["rooms_sold"],
+	                       comp_rooms=rooms["comp_rooms"],
+	                       house_use_rooms=rooms["house_use_rooms"], occupancy_rooms=n)}
 
 
 def _month_bounds(period: str):
@@ -386,21 +388,19 @@ def budget_vs_actual(property: str, period: str | None = None):
 	elapsed = date_diff(window_end, start)
 	room_nights = total_rooms * elapsed
 
+	from kamra.room_statistics import posted_rooms, room_figures
+	rooms = posted_rooms(property, start, add_days(nxt, -1))
 	agg = frappe.db.sql(
 		"""
 		SELECT
-		  COUNT(DISTINCT CASE WHEN fc.charge_type='Room' AND """ + STANDS_ON_ITS_DATE + """
-		        THEN CONCAT(COALESCE(fc.reservation,f.reservation),'|',fc.posting_date) END) AS rooms_sold,
-		  COALESCE(SUM(CASE WHEN fc.charge_type IN ('Room','Rate Adjustment')
-		                    THEN fc.amount ELSE 0 END),0) AS room_revenue,
 		  MAX(CASE WHEN fc.charge_type='Room' AND """ + STANDS_ON_ITS_DATE + """
 		      THEN fc.posting_date END) AS posted_through
 		FROM `tabFolio Charge` fc JOIN `tabFolio` f ON fc.parent=f.name
 		WHERE f.property=%(p)s AND fc.posting_date>=%(s)s AND fc.posting_date<%(n)s
 		""",
 		{"p": property, "s": start, "n": nxt}, as_dict=True)[0]
-	sold = int(agg.rooms_sold or 0)
-	room_rev = float(agg.room_revenue or 0)
+	sold = rooms["rooms_sold"]
+	room_rev = rooms["room_revenue"]
 	# sold nights in the same elapsed window, whether posted yet or not -
 	# and, stay by stay, how many of them End of Day hasn't posted. Per stay,
 	# not house totals: a no-show or cancellation fee posts a Room charge for
@@ -430,11 +430,13 @@ def budget_vs_actual(property: str, period: str | None = None):
 	unposted = sum(max(0, int(r.nights or 0) - int(posted_by_stay.get(r.name) or 0))
 	               for r in stays)
 
+	figures = room_figures(room_revenue=room_rev, rooms_sold=sold, comp_rooms=rooms["comp_rooms"],
+	                       house_use_rooms=rooms["house_use_rooms"], occupancy_rooms=room_nights)
 	actual = {
 		"room_revenue": round(room_rev, 0),
-		"occupancy_pct": round(100 * sold / room_nights, 1) if room_nights else 0,
-		"adr": round(room_rev / sold, 0) if sold else 0,
-		"revpar": round(room_rev / room_nights, 0) if room_nights else 0,
+		"occupancy_pct": figures["occupancy_pct"],
+		"adr": figures["adr"],
+		"revpar": figures["revpar"],
 	}
 	b = frappe.db.get_value(
 		"Revenue Budget", {"property": property, "period": period},

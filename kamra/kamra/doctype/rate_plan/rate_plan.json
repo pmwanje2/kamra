@@ -17,6 +17,7 @@
   "cancellation_policy",
   "is_default",
   "discount_eligible",
+  "rate_category",
   "disabled",
   "sb_day_use",
   "billing_basis",
@@ -83,6 +84,14 @@
    "label": "Discount Eligible"
   },
   {
+   "default": "Standard",
+   "description": "Complimentary or House Use (OPERA's rate code Complimentary and House Use flags): a booking on this plan needs a manager's sign-off, and its rooms count in occupancy but not in ADR.",
+   "fieldname": "rate_category",
+   "fieldtype": "Select",
+   "label": "Rate Category",
+   "options": "Standard\nComplimentary\nHouse Use"
+  },
+  {
    "default": "0",
    "fieldname": "disabled",
    "fieldtype": "Check",
@@ -135,7 +144,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-11-23 12:00:00.000000",
+ "modified": "2026-11-23 18:30:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Rate Plan",

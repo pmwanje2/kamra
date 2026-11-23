@@ -6802,5 +6802,9 @@
   "The discount is more than the night's rate.": "折扣超过了当晚房价。",
   "This rate plan does not allow discounts.": "此价格计划不允许折扣。",
   "This reason needs a manager's sign-off.": "此原因需要经理批准。",
-  "Untick for rates that never take a desk discount (non-refundable, packages).": "对从不接受前台折扣的房价（不可退款、套餐）取消勾选。"
+  "Untick for rates that never take a desk discount (non-refundable, packages).": "对从不接受前台折扣的房价（不可退款、套餐）取消勾选。",
+  "A Complimentary rate plan needs a manager's sign-off.": "免费房价计划需要经理批准。",
+  "A House Use rate plan needs a manager's sign-off.": "内部用房房价计划需要经理批准。",
+  "Rate category": "房价类别",
+  "Complimentary or House Use: a manager signs off each booking, and its rooms count in occupancy but not in ADR.": "免费或内部用房：每笔预订均需经理批准，其客房计入出租率，但不计入平均房价（ADR）。"
 }
