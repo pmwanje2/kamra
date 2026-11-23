@@ -6449,10 +6449,10 @@ def move_reservation(reservation: str, new_room: str,
 	_require_price_confirmation(
 		_move_price(doc, new_type, rate_mode, agreed_rate), confirm_price)
 	doc.room = new_room
-	if abs(flt(doc.get("agreed_rate")) - before_rate) >= 0.005:
+	if rate_mode == "custom" or abs(flt(doc.get("agreed_rate")) - before_rate) >= 0.005:
 		# the room move is a governed writer of the agreed rate
-		# (Reservation.guard_agreed_rate): a custom rate is a manager's,
-		# the new room's own rate clears it
+		# (Reservation.guard_agreed_rate): a custom rate is a manager's, even
+		# at the rate the stay already holds; the new room's own rate clears it
 		doc.flags.kamra_agreed_rate_override = True
 	if rate_mode == "custom":
 		doc.fixed_rate = 1  # a rate set by hand: OPERA's Fixed Rate
@@ -6668,20 +6668,17 @@ def _discount_snapshot(doc) -> dict:
 
 def _clear_desk_discount(doc) -> dict | None:
 	"""OPERA's Fixed Rate: a rate set by hand (set_agreed_rate, a custom-rate
-	room move) replaces the desk's discount on every night still to come, so
-	the rate entered is what the guest pays. Clears it in memory and marks
-	the save a governed discount change; returns the discount as it was
-	(_discount_snapshot), or None when the stay had none. A night already on
-	the folio keeps what it holds."""
+	room move) replaces the desk's discount, so the rate entered is what the
+	guest pays. Clears it in memory - the stay's and every night's Daily
+	Details, so the re-quote never takes a discount off the agreed rate - and
+	marks the save a governed discount change; returns the discount as it
+	was (_discount_snapshot), or None when the stay had none. A night already
+	on the folio keeps what it was charged (Reservation.hold_charged_nights)."""
 	if not doc.has_discount():
 		return None
-	from kamra.folio import charged_nights
 	was = _discount_snapshot(doc)
-	charged = set(charged_nights(doc.name))
 	doc.discount_type, doc.discount_value, doc.discount_reason = None, 0, None
 	for r in doc.get("night_rates") or []:
-		if str(getdate(r.stay_date)) in charged:
-			continue
 		r.discount_type, r.discount_value, r.discount_reason, r.fixed_rate = None, 0, None, 0
 	doc.flags.kamra_reservation_discount = True
 	return was
@@ -6833,7 +6830,8 @@ def desk_limit_pct(property: str) -> float:
 			value = float(pct) if sep and role.strip() else None
 		except ValueError:
 			value = None
-		if value is not None:
+		# nan or inf is no limit at all (nan compares False with every cut)
+		if value is not None and math.isfinite(value):
 			tiers[role.strip()] = min(max(value, 0.0), 100.0)
 	if not tiers:
 		return base
@@ -7407,15 +7405,20 @@ def _version_nights(data: dict) -> list[dict]:
 
 
 def _snapshot_nights(before, after) -> list[dict]:
-	"""The nights an audit row's before / after snapshots hold (_discount_snapshot)."""
-	def rates(snap):
+	"""The nights an audit row's before / after snapshots hold
+	(_discount_snapshot). A discount given at booking has nothing before
+	it: each night goes from its base to its rate."""
+	def rates(snap, column="rate"):
 		try:
 			snap = json.loads(snap) if isinstance(snap, str) else snap
 		except ValueError:
 			return {}
-		return {str(n["date"]): flt(n.get("rate")) for n in (snap or {}).get("nights") or []
+		return {str(n["date"]): flt(n.get(column)) or flt(n.get("rate"))
+		        for n in (snap or {}).get("nights") or []
 		        if isinstance(n, dict) and n.get("date")} if isinstance(snap, dict) else {}
 	was, now = rates(before), rates(after)
+	if now and not before:
+		was = rates(after, "base_rate")
 	return _night_rate_changes(was, now) if was and now else []
 
 
@@ -7476,10 +7479,15 @@ def _move_price(res, new_type: str | None, rate_mode: str,
 		frappe.throw(_("Unknown rate option: {0}").format(rate_mode))
 	changes = {} if not new_type or new_type == res.room_type else {"room_type": new_type}
 	if rate_mode == "source":
-		pv = _reprice_preview(res, **changes)
-		pv.update(new_amount=pv["current_amount"], difference=0.0,
-		          needs_confirmation=False, reprices=False)
-		return pv
+		# keep what the guest pays: nothing is re-priced (move_reservation
+		# re-keys the lock), so nothing is judged again and no sign-off is due
+		for k, v in changes.items():
+			res.set(k, v)
+		res.flags.kamra_repriced_rows = None
+		current = float(res.amount_after_tax or 0)
+		return {"current_amount": current, "new_amount": current, "difference": 0.0,
+		        "auto_price": bool(res.get("auto_price")), "reprices": False,
+		        "needs_confirmation": False, "nights": []}
 	if rate_mode == "custom":
 		if not _can_set_rate():
 			frappe.throw(_("Only a Revenue Manager or Hotel Admin can enter a new rate."),

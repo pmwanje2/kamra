@@ -363,12 +363,19 @@ export default function ReservationDetail({
   // the desk's discount at a glance (OPERA Stay Details): what it takes off
   // and its reason, without opening the editor
   const disc = d.discount
+  const offText = (type: "Percent" | "Amount", value: number, reason?: string | null) =>
+    [type === "Percent"
+      ? translate("{pct}% off", { pct: value })
+      : translate("{amount} off a night", { amount: inr(value) }),
+    reason].filter(Boolean).join(" · ")
+  // a discount given only in Daily Details: each night's own, and its reason
+  const ownNights = (d.night_rates ?? []).filter((n) => n.discount_type && Number(n.discount_value) > 0)
   const stayDiscount = disc?.discount_type
-    ? [disc.discount_type === "Percent"
-        ? translate("{pct}% off", { pct: disc.discount_value })
-        : translate("{amount} off a night", { amount: inr(disc.discount_value) }),
-      disc.discount_reason].filter(Boolean).join(" · ")
-    : null
+    ? offText(disc.discount_type, disc.discount_value, disc.discount_reason)
+    : ownNights.length
+      ? [...new Set(ownNights.map((n) => offText(n.discount_type!, Number(n.discount_value), n.discount_reason)))]
+          .join(", ")
+      : null
 
   return (
     <div className="space-y-4">
