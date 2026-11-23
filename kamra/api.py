@@ -6604,14 +6604,13 @@ def _rate_override_plan(res, agreed_rate) -> dict:
 	from kamra.credit import _is_agent
 	from kamra.folio import charged_nights
 	from kamra.pricing import entry_rate, rail_for_day, rates_include_tax
-	from kamra.settings import get_setting
 	agreed_rate = flt(agreed_rate)
 	if agreed_rate <= 0:
 		frappe.throw(_("Enter the new nightly rate."))
 	if not res.get("auto_price"):
 		frappe.throw(_("This booking is priced by hand; change its amount instead."))
 	current = _current_nightly(res)
-	limit = flt(get_setting(res.property, "rate_override_limit_pct"))
+	limit = desk_limit_pct(res.property)
 	agent = _is_agent()
 	manager = _can_set_rate() and not agent
 	cleared = _clear_desk_discount(res)
@@ -6819,6 +6818,33 @@ def set_agreed_rate(reservation: str, agreed_rate: float, reason_code: str,
 DISCOUNT_REASON_CATEGORIES = ("Rate Change", "Adjust")
 
 
+def desk_limit_pct(property: str) -> float:
+	"""The cut the person asking may give at the desk, in % (OPERA's
+	authorizer levels, SAP's condition limits by responsibility): the
+	highest of their roles' limits in rate_override_limits_by_role, else the
+	property's rate_override_limit_pct. An AI agent is held to the Front
+	Desk's limit whoever it acts for. Revenue Managers and Hotel Admins are
+	not held to it (_can_set_rate)."""
+	from kamra.credit import _is_agent
+	from kamra.settings import get_setting
+	base = flt(get_setting(property, "rate_override_limit_pct"))
+	tiers = {}
+	for line in str(get_setting(property, "rate_override_limits_by_role") or "").splitlines():
+		role, sep, pct = line.rpartition(":")
+		try:
+			value = float(pct) if sep and role.strip() else None
+		except ValueError:
+			value = None
+		if value is not None:
+			tiers[role.strip()] = min(max(value, 0.0), 100.0)
+	if not tiers:
+		return base
+	if _is_agent():
+		return tiers.get("Front Desk", base)
+	mine = [pct for role, pct in tiers.items() if role in set(frappe.get_roles())]
+	return max(mine) if mine else base
+
+
 def discount_reasons() -> list[dict]:
 	"""The active reason codes a reservation discount can be given with."""
 	from kamra.ledger import ensure_default_reason_codes
@@ -6833,11 +6859,11 @@ def discount_reasons() -> list[dict]:
 def discount_options(property: str) -> dict:
 	"""What a booking screen needs to offer a discount: whether this user
 	may give one, the front desk's limit and the reasons to pick from."""
-	from kamra.settings import get_setting
 	return {
 		"can_discount": bool(set(frappe.get_roles()) & {
 			"Front Desk", "Revenue Manager", "Kamra Agent"}) or _is_admin(),
-		"rate_override_limit_pct": flt(get_setting(property, "rate_override_limit_pct")),
+		# this person's own limit (desk_limit_pct)
+		"rate_override_limit_pct": desk_limit_pct(property),
 		"discount_reasons": discount_reasons(),
 	}
 
@@ -6898,7 +6924,6 @@ def discount_governance(property: str, room_type: str | None, rate_plan: str | N
 	from kamra.authz import supervisors_for, verify_supervisor
 	from kamra.credit import _is_agent
 	from kamra.pricing import entry_rate, rail_for_day, rates_include_tax
-	from kamra.settings import get_setting
 
 	inclusive = rates_include_tax(property)
 
@@ -6932,7 +6957,7 @@ def discount_governance(property: str, room_type: str | None, rate_plan: str | N
 			# the floor is on the price basis the rate card uses
 			if rail and flt(rail.floor_price) and entry(n) < flt(rail.floor_price) - 0.005:
 				floor_breach.append(str(n["date"]))
-	limit = flt(get_setting(property, "rate_override_limit_pct"))
+	limit = desk_limit_pct(property)
 	agent = _is_agent()
 	manager = _can_set_rate() and not agent
 	flag = frappe.db.get_value("Rate Plan", rate_plan, "discount_eligible") if rate_plan else None

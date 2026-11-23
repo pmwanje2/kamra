@@ -500,6 +500,11 @@ MODULES: tuple[Module, ...] = (
 				  hint="An agreed rate for one stay (Agreed rate on the reservation), with a reason. A bigger "
 				       "cut needs a Hotel Admin or Finance PIN; the desk never raises a rate. Revenue "
 				       "Managers and Hotel Admins set any rate. 0 sends every cut by the desk to a manager."),
+				S("rate_override_limits_by_role", "Limits by role", "textarea", "",
+				  hint="One role a line with its own limit, for example Front Desk: 5 and Duty Manager: 15. "
+				       "A person takes the highest limit among their roles; anyone with none of them takes "
+				       "the limit above. An AI agent takes the Front Desk's. Revenue Managers and Hotel "
+				       "Admins set any rate."),
 			)),
 			Section("fx", "Exchange rates",
 			        "A guest paying in foreign money needs today's rate: typed in on the Currency Desk, "
