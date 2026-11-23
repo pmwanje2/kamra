@@ -4,7 +4,7 @@
 // the card (BAR) view it was.
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import { MemoryRouter, Outlet } from "react-router-dom"
+import { MemoryRouter, Outlet, useLocation } from "react-router-dom"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import App from "../src/App"
 import { setLang } from "../src/lib/dir"
@@ -72,6 +72,13 @@ function calendarServer(method: string, params: CalendarParams) {
   return Promise.reject(new Error(`Unexpected method: ${method}`))
 }
 const refuse = (message: string, status = 417) => Promise.reject(Object.assign(new Error(message), { status }))
+// the screen's query string, as the router holds it
+let search = ""
+function Url() {
+  search = useLocation().search
+  return null
+}
+const query = () => new URLSearchParams(search)
 const languages = [
   ["ar", ar], ["de", de], ["es", es], ["fil", fil], ["id", id], ["pt", pt], ["zh-CN", zh],
 ] as [string, Record<string, string>][]
@@ -107,7 +114,7 @@ describe("Rate Calendar by rate plan and customer", () => {
     .map(([, params]) => params as Record<string, unknown>)
 
   async function render(path = "/rate-calendar") {
-    await act(async () => root.render(<MemoryRouter initialEntries={[path]}><App /></MemoryRouter>))
+    await act(async () => root.render(<MemoryRouter initialEntries={[path]}><App /><Url /></MemoryRouter>))
     await vi.waitFor(async () => {
       await settle()
       expect(host.querySelector("table")).not.toBeNull()
@@ -234,6 +241,81 @@ describe("Rate Calendar by rate plan and customer", () => {
     expect(policyHeader()).toBeNull()
     expect(text(row("Standard"))).toContain("110,000")
     expect(text()).not.toContain("474,000")
+  })
+
+  // SAP Fiori smart filter bar: Customer is the controlling field and Rate plan depends on it (IN/OUT
+  // parameter). A Rate plan choice holds only for the Customer it was made with; a new Customer fills it again.
+  describe("Customer controls Rate plan", () => {
+    const customersOf = (...rows: [string, string][]) => list.mockImplementation(async (doctype: string) =>
+      doctype === "Corporate Account" ? rows.map(([name, company_name]) => ({ name, company_name })) : [])
+    // BETA negotiated CORP; ACME (as everywhere here) CONTRACT
+    const withBeta = () => {
+      customersOf(["ACME", "Acme Ltd"], ["BETA", "Beta plc"])
+      rpc.mockImplementation((method: string, params: CalendarParams) =>
+        method === "kamra.rates.rate_calendar" && params.company === "BETA" && !params.rate_plan
+          ? Promise.resolve({ ...priced, rate_plan: plans[1], company: "BETA" }) : calendarServer(method, params))
+    }
+    const headers = () => Array.from(host.querySelectorAll("thead th"), (node) => node.textContent?.trim())
+
+    it.each([
+      ["the card rate", "/rate-calendar?company=ACME", ""],
+      ["a named rate plan", "/rate-calendar?company=ACME", "CORP"],
+    ])("clearing the customer drops %s chosen for it: the card rate, with no customer", async (_, path, chosen) => {
+      await render(path)
+      await choose(select("Rate plan")!, chosen)
+      expect(query().get("rate_plan")).toBe(chosen)
+      await choose(select("Customer")!, "")
+      await vi.waitFor(() => expect(headers()).toContain("BAR"))
+      expect(query().has("rate_plan"), "?rate_plan= is left stranded").toBe(false)
+      expect(query().has("company")).toBe(false)
+      expect(calendarCalls().at(-1)).not.toHaveProperty("rate_plan")
+      expect(calendarCalls().at(-1)).not.toHaveProperty("company")
+      expect(select("Rate plan")!.value).toBe("")
+      expect(text(row("Standard"))).toContain("110,000")
+    })
+
+    it.each([
+      ["the card rate", ""],
+      ["a named rate plan", "CONTRACT"],
+    ])("switching customer drops %s chosen for the last one: the new customer's negotiated plan", async (_, chosen) => {
+      withBeta()
+      await render("/rate-calendar?company=ACME")
+      await choose(select("Rate plan")!, chosen)
+      await choose(select("Customer")!, "BETA")
+      await vi.waitFor(() => expect(policyHeader()).not.toBeNull())
+      expect(calendarCalls().at(-1), "The new customer is not asked for").toMatchObject({ company: "BETA" })
+      expect(calendarCalls().at(-1)).not.toHaveProperty("rate_plan")
+      expect(query().get("company")).toBe("BETA")
+      expect(query().has("rate_plan")).toBe(false)
+      expect(select("Rate plan")!.value).toBe("CORP")
+      expect(text(policyHeader()!)).toContain("Rate plan: Corporate card")
+      expect(text(policyHeader()!)).toContain("Negotiated rate plan for Beta plc")
+    })
+
+    it("re-selecting the customer after clearing it prices its negotiated plan again", async () => {
+      await render("/rate-calendar?company=ACME")
+      await choose(select("Rate plan")!, "")
+      await choose(select("Customer")!, "")
+      await choose(select("Customer")!, "ACME")
+      await vi.waitFor(() => expect(policyHeader()).not.toBeNull())
+      expect(calendarCalls().at(-1), "The customer is dropped from the query").toMatchObject({ company: "ACME" })
+      expect(calendarCalls().at(-1)).not.toHaveProperty("rate_plan")
+      expect(Object.fromEntries(query())).toEqual({ company: "ACME" })
+      expect(select("Rate plan")!.value).toBe("CONTRACT")
+      expect(text(policyHeader()!)).toContain("Negotiated rate plan for Acme Ltd")
+      expect(text(row("Standard"))).toContain("474,000")
+    })
+
+    // as a linked rate plan that is not active: named as asked, never shown as the public rate
+    it("names a linked customer that is not an active Corporate Account, flagged as not available", async () => {
+      await render("/rate-calendar?company=GONE")
+      expect(calendarCalls()[0], "The linked customer is still the one priced").toMatchObject({ company: "GONE" })
+      const customer = select("Customer")!
+      expect(customer.value, "The selector shows the public rate for a customer's prices").toBe("GONE")
+      expect(customer.selectedOptions[0]?.textContent).toBe("Not available: GONE")
+      expect(Array.from(customer.options, (option) => [option.value, option.textContent])).toEqual([
+        ["", "Public rate (no customer)"], ["ACME", "Acme Ltd"], ["GONE", "Not available: GONE"]])
+    })
   })
 
   it("never lets a slower, superseded query overwrite the grid", async () => {
