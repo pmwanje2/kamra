@@ -288,7 +288,7 @@ def owner_briefing(property: str, date: str | None = None):
 		"""
 		SELECT COALESCE(SUM(fc.amount), 0),
 		       COUNT(DISTINCT CASE WHEN fc.charge_type = 'Room' AND """ + STANDS_ON_ITS_DATE + """
-		                           THEN f.name END)
+		                           THEN COALESCE(fc.reservation, f.reservation) END)
 		FROM `tabFolio Charge` fc
 		JOIN `tabFolio` f ON fc.parent = f.name
 		WHERE f.property = %(property)s
