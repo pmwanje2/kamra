@@ -426,15 +426,22 @@ def _reservations_for_booking(property: str, booking_id: str, *, for_update: boo
 	bookingId, so it must reach all of them."""
 	if not booking_id:
 		return []
+	params = {"p": property, "b": booking_id, "bl": booking_id + "-%"}
 	if for_update:
 		from kamra.kamra.doctype.reservation.reservation import lock_property_for_inventory
 		lock_property_for_inventory(property)
-	lock = " FOR UPDATE" if for_update else ""
+		return frappe.db.sql(
+			"""SELECT name, status, ota_ref FROM `tabReservation`
+			   WHERE property = %(p)s
+			     AND (ota_ref = %(b)s OR ota_ref LIKE %(bl)s)
+			   FOR UPDATE""",
+			params,
+			as_dict=True)
 	return frappe.db.sql(
-		f"""SELECT name, status, ota_ref FROM `tabReservation`
+		"""SELECT name, status, ota_ref FROM `tabReservation`
 		   WHERE property = %(p)s
-		     AND (ota_ref = %(b)s OR ota_ref LIKE %(bl)s){lock}""",
-		{"p": property, "b": booking_id, "bl": booking_id + "-%"},
+		     AND (ota_ref = %(b)s OR ota_ref LIKE %(bl)s)""",
+		params,
 		as_dict=True)
 
 
