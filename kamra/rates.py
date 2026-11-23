@@ -617,7 +617,7 @@ def rate_calendar(property: str, from_date: str | None = None, days: int = 14,
 		rates_include_tax,
 		small_group_allows_stay,
 	)
-	active =frappe.get_all("Rate Plan", filters={"property": property, "disabled": 0},
+	active = frappe.get_all("Rate Plan", filters={"property": property, "disabled": 0},
 	                        fields=["name", "rate_plan_name", "code", "currency", "fx_lock_policy", "rounding_step",
 	                                "rounding_mode", "base_rate_plan", "is_default"],
 	                        order_by="rate_plan_name asc, name asc")
