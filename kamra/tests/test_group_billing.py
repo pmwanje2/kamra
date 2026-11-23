@@ -175,7 +175,9 @@ class GroupBillingTestCase(AuditTestCase):
 	def test_a_first_room_that_never_arrives_leaves_the_group_advance_held(self):
 		gb, (r1, _r2, _r3) = self.group(company=_corp(), master=False, status="Confirmed")
 		bill = folio_mod.open_group_folio(gb.name)
-		self.assertEqual(frappe.db.get_value("Folio", bill, "reservation"), r1.name)
+		# a posting master from before K1 still carries its first room
+		# (the window backfill leaves reservation as it was)
+		frappe.db.set_value("Folio", bill, "reservation", r1.name)
 		api.add_folio_payment(bill, "Cash", 5000, kind="Advance")
 		# the first room's no-show or cancellation fee applies that room's own
 		# advances; the group's stay held while no room of it is in house
@@ -200,7 +202,9 @@ class GroupBillingTestCase(AuditTestCase):
 	def test_the_first_rooms_check_out_sheet_leaves_the_group_bill_out(self):
 		_gb, (r1, r2, _r3) = self.group(company=_corp(), master=False)
 		bill = self.post(r2, "Room", "UT R2 night", amount=5000)["folio"]
-		self.assertEqual(frappe.db.get_value("Folio", bill, "reservation"), r1.name)
+		# a posting master from before K1 still carries its first room
+		# (the window backfill leaves reservation as it was)
+		frappe.db.set_value("Folio", bill, "reservation", r1.name)
 		ctx = api.checkout_context(r1.name)
 		self.assertEqual(ctx["bill_split"]["on_folio_now"], 0)
 
@@ -213,7 +217,9 @@ class GroupBillingTestCase(AuditTestCase):
 		                           room=room, group_booking=gb.name)
 		          for room in self.rooms[:2])
 		bill = self.post(r2, "Room", "UT R2 night")["folio"]
-		self.assertEqual(frappe.db.get_value("Folio", bill, "reservation"), r1.name)
+		# a posting master from before K1 still carries its first room
+		# (the window backfill leaves reservation as it was)
+		frappe.db.set_value("Folio", bill, "reservation", r1.name)
 		self.assertIsNone(api._reverse_check_in_blocker(frappe.get_doc("Reservation", r1.name)))
 
 	def test_plain_group_without_main_room_routes_nothing(self):
