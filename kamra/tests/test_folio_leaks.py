@@ -202,7 +202,6 @@ class FolioLeaksTestCase(AuditTestCase):
 	def test_dine_in_bill_charged_to_room_keeps_billing_rules(self):
 		outlet, dosa, gin = self.outlet()
 		res = self.corporate_stay()
-		guest = guest_folio(res.name)
 		# food only: the company pays F&B, so it lands on the company folio
 		food = pos.create_order(outlet, [{"menu_item": dosa, "qty": 1}],
 		                        table_no="T1", order_type="Dine In")
