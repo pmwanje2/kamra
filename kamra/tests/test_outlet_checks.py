@@ -146,6 +146,36 @@ class OutletChecksTestCase(AuditTestCase):
 			checkout.assert_no_open_bills(res)
 		self.assertIn("PSINV-0001", str(caught.exception))
 		self.assertIn("Lakeside Grill", str(caught.exception))
+		# external outlet checks cannot be posted from the desk's check-out sheet
+		self.assertIn("outlet", str(caught.exception).lower())
+		self.assertNotIn("Post them to the room", str(caught.exception))
+
+	def test_check_out_locks_reservation_for_update_before_checking_open_bills(self):
+		from kamra import api
+
+		res = self.in_house()
+		self.answer = {"checks": [check(reservation=res.name)]}
+		events: list[tuple[str, str]] = []
+		real_get_doc = frappe.get_doc
+		real_assert = checkout.assert_no_open_bills
+
+		def tracked_get_doc(*args, **kwargs):
+			if len(args) >= 2 and args[0] == "Reservation" and args[1] == res.name and kwargs.get("for_update"):
+				events.append(("lock", res.name))
+			return real_get_doc(*args, **kwargs)
+
+		def tracked_assert(doc):
+			events.append(("assert_no_open_bills", doc.name))
+			return real_assert(doc)
+
+		with self.installed(), \
+				patch.object(frappe, "get_doc", side_effect=tracked_get_doc), \
+				patch.object(checkout, "assert_no_open_bills", side_effect=tracked_assert), \
+				self.assertRaises(frappe.ValidationError):
+			api.check_out(res.name)
+		self.assertIn(("lock", res.name), events)
+		self.assertIn(("assert_no_open_bills", res.name), events)
+		self.assertLess(events.index(("lock", res.name)), events.index(("assert_no_open_bills", res.name)))
 
 	def test_check_out_sheet_lists_the_outlet_check_as_a_blocker(self):
 		res = self.in_house()
