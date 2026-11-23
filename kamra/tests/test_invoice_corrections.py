@@ -50,6 +50,10 @@ class InvoiceCorrectionTestCase(AuditTestCase):
 	def setUp(self):
 		super().setUp()
 		self.at(TODAY, "kamra.folio", "kamra.business_date", "kamra.ledger")
+		self.invoice()
+
+	def invoice(self):
+		"""A 1,000 + 18% hall hire on its own bill, paid and invoiced."""
 		make_property(PROP_A, business_date=TODAY)
 		frappe.db.delete("Property Setting", {"property": PROP_A})
 		rt = make_room_type(PROP_A, "STD", base_price=1000)
@@ -200,6 +204,12 @@ class InvoiceCorrectionTestCase(AuditTestCase):
 		the cap reads the credit notes with a locking read, which either
 		returns the committed row or (MariaDB 11.8, innodb_snapshot_isolation)
 		refuses with error 1020. Either way nothing is over-credited."""
+		# the tests of this class share one transaction, and a rollback to a
+		# savepoint keeps the row locks taken after it (credit notes read
+		# under lock): start afresh, so the other desk waits on nothing of theirs
+		frappe.db.rollback()
+		frappe.db.savepoint(SAVEPOINT)
+		self.invoice()
 		other = _second_connection()
 		name = f"UT-CN-RACE-{frappe.generate_hash(length=6)}"
 		mine = None
