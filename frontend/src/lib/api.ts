@@ -901,6 +901,11 @@ export interface FunctionSheet {
   group_booking: string | null
   folio: string | null
   posted_to_folio: 0 | 1
+  /** 1 when the ERP accounting bridge issues the fiscal documents: money
+   *  and the tax invoice run through a folio */
+  fiscal_bridge?: 0 | 1
+  /** the standalone function's own (stay-less) folio, once opened */
+  event_folio?: string | null
   items: FunctionItem[]
   selections: {
     name: string

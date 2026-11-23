@@ -2,6 +2,7 @@ import { SettlementPreview, useSettlementQuote } from "../components/SettlementP
 import TenderPicker, { TenderInput, resolveTender, tenderAmount, tenderModes, tenderReady, useTenderRates } from "../components/TenderPicker"
 import { currencyText, formatFxRate, TariffNight } from "../components/ContractTariff"
 import RowCorrection from "../components/RowCorrection"
+import { FiscalDocument, type Fiscal } from "../components/FiscalDocument"
 import { ResponsiveList, Popin } from "../components/ui/responsive-list"
 import { Fragment, useCallback, useEffect, useRef, useState } from "react"
 import { ArrowLeft, ArrowRightLeft, Printer, X } from "lucide-react"
@@ -132,11 +133,17 @@ interface InvoiceData {
     icv: number
     status: string
   } | null
+  /** Under the ERP accounting bridge: the Sales Invoice behind a settled
+   *  folio and its fiscal identifiers (null on an open folio or without it). */
+  fiscal?: Fiscal | null
   document: {
     title: string
     title_local?: string | null
     is_final: boolean
     number: string
+    /** this folio's own number, when the ERP invoice is the tax invoice */
+    internal_number?: string | null
+    reprint?: number | null
     date: string
     amount_in_words: string
     footer: string | null
@@ -639,15 +646,30 @@ export default function FolioView() {
               {t("Credit note")}
             </Button>
           ) : null}
-          <Button variant="outline" onClick={() => {
-            void call("kamra.ledger.record_folio_reprint", {
-              folio: folio.name,
-              document: folio.invoice_number ? "Guest Folio" : "Proforma",
-            }).finally(() => window.print())
-          }}>
-            <Printer className="size-4" aria-hidden />
-            {folio.invoice_number ? t("Print invoice") : t("Print folio")}
-          </Button>
+          {data.fiscal ? (
+            // the tax invoice is the ERP fiscal document: reprint it (logged
+            // with its number) only once it is final
+            <Button variant="outline" disabled={busy} onClick={() => {
+              if (!doc.is_final) return window.print()
+              void call<InvoiceData>("kamra.api.reprint_fiscal_folio", { folio: folio.name })
+                .then((d) => setData(d))
+                .then(() => window.setTimeout(() => window.print(), 0))
+                .catch((e) => setError(serverError(e)))
+            }}>
+              <Printer className="size-4" aria-hidden />
+              {doc.is_final ? t("Reprint fiscal invoice") : t("Print folio")}
+            </Button>
+          ) : (
+            <Button variant="outline" onClick={() => {
+              void call("kamra.ledger.record_folio_reprint", {
+                folio: folio.name,
+                document: folio.invoice_number ? "Guest Folio" : "Proforma",
+              }).finally(() => window.print())
+            }}>
+              <Printer className="size-4" aria-hidden />
+              {folio.invoice_number ? t("Print invoice") : t("Print folio")}
+            </Button>
+          )}
           {open &&
             folio.balance === 0 &&
             folio.charges.length > 0 && (
@@ -883,7 +905,14 @@ export default function FolioView() {
                   {t("Place of supply")}: {property.place_of_supply}
                 </p>
               )}
-              {!doc?.is_final && (
+              {doc?.reprint ? (
+                <p className="mt-1 text-xs font-semibold uppercase text-zinc-600">
+                  {t("Copy - reprint {n}", { n: doc.reprint })}
+                </p>
+              ) : null}
+              {data.fiscal ? (
+                <FiscalDocument fiscal={data.fiscal} internalNumber={doc?.internal_number} />
+              ) : !doc?.is_final && (
                 <p className="mt-1 max-w-52 text-xs text-amber-700">
                   {t("Not a tax invoice yet - the number is issued when the folio is settled.")}
                 </p>

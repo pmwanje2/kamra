@@ -66,6 +66,7 @@ import { Steps, stepsFor, type StepId } from "./banquet/Steps"
 import Economics from "./banquet/Economics"
 import MenuComposer from "./banquet/MenuComposer"
 import { t as translate, useUILanguage } from "../lib/i18n"
+import { eventBilling } from "../lib/eventBilling"
 
 export default function BanquetFunction() {
   useUILanguage()
@@ -1928,11 +1929,21 @@ function MoneyTab({
               <p className="text-sm text-zinc-500">
                 {fn.group_detail
                   ? translate("Posts to {v0}'s master folio - one bill for the rooms and the function.", { v0: String(fn.group_detail.group_name) })
-                  : translate("Tie this function to a group booking to bill it onto the group's master folio.")}
+                  : eventBilling(fn).invoiceOnFolio
+                    ? translate("Posts to this function's own folio. Its deposits are taken there, and its tax invoice is issued when that folio is settled.")
+                    : translate("Tie this function to a group booking to bill it onto the group's master folio.")}
               </p>
+              {eventBilling(fn).folio && (
+                <p className="text-sm">
+                  <Link className="font-medium hover:underline"
+                        to={`/billing/${encodeURIComponent(eventBilling(fn).folio ?? "")}`}>
+                    {translate("Open the function's folio")}
+                  </Link>
+                </p>
+              )}
               <GroupLinkField fn={fn} busy={busy} act={act} />
               <Button
-                disabled={busy || !fn.group_booking || fn.status === "Enquiry"}
+                disabled={busy || !eventBilling(fn).canPost}
                 onClick={() => act(() => banquet.postToFolio(fn.name))}
               >{translate("Post to the bill")}</Button>
             </>
@@ -2282,8 +2293,10 @@ function PaperTab({
       kind: "invoice",
       title: "Invoice",
       blurb: "The bill against what's already been received.",
-      ready: fn.status === "Confirmed" || fn.status === "Completed",
-      why: "Confirm the function first.",
+      ready: !eventBilling(fn).invoiceOnFolio && (fn.status === "Confirmed" || fn.status === "Completed"),
+      why: eventBilling(fn).invoiceOnFolio
+        ? "The tax invoice is issued from the function's folio."
+        : "Confirm the function first.",
     },
   ]
 
