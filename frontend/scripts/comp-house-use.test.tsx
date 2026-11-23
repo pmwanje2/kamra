@@ -129,11 +129,14 @@ function serve(method: string, params: Record<string, unknown>) {
 }
 
 describe("Rate Plans: the plan's category", () => {
-  it("offers the property's categories (kamra.settings.menu_masters), OPERA's until they load", () => {
+  it("offers the property's categories (kamra.settings.menu_masters) and names none of its own", () => {
     const field = ratePlansConfig.form.find((f) => f.field === "rate_category")
     expect(field).toBeDefined()
-    expect(field).toMatchObject({ type: "select", optionsFrom: "rate_categories",
-      options: ["Standard", "Complimentary", "House Use"], default: "Standard" })
+    expect(field).toMatchObject({ type: "select", optionsFrom: "rate_categories" })
+    // R2: a blank category is the property's first; no category name is
+    // hardcoded (a property may call its first one Rack)
+    expect(field!.default).toBeUndefined()
+    expect(field!.options ?? []).toEqual([])
     expect(ratePlansConfig.columns.some((c) => c.field === "rate_category")).toBe(true)
   })
 })
@@ -161,7 +164,10 @@ describe("BookingDialog: a Complimentary or House Use plan is signed off", () =>
     await typeInto(byLabel<HTMLInputElement>("Manager PIN")!, "4321")
     await press("Confirm booking")
     await until(() => expect(booked().length).toBe(1))
-    expect(booked()[0]).toMatchObject({ rate_plan: "COMP", supervisor_user: GM.user, supervisor_pin: "4321" })
+    // the comp's own sign-off (R2: a discount's sign-off is supervisor_user)
+    expect(booked()[0]).toMatchObject({ rate_plan: "COMP", comp_supervisor_user: GM.user,
+      comp_supervisor_pin: "4321" })
+    expect(booked()[0]).not.toHaveProperty("supervisor_user")
   })
 
   it("does not send the booking until the manager has signed it off", async () => {

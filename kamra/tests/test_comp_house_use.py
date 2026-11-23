@@ -82,7 +82,14 @@ class RateCategoryFieldTests(DiscountTestCase):
 		self.assertIsNotNone(field)
 		# not a fixed Select: the property's own list (Settings) decides
 		self.assertEqual(field.fieldtype, "Data")
-		self.assertEqual(field.default, "Standard")
+		# and no category name of its own (R2: the list's first is the default)
+		self.assertFalse(field.default)
+
+	def test_a_new_plan_takes_the_first_category_the_property_lists(self):
+		# a property that calls its first category Rack, not Standard
+		set_setting(PROP_A, "rate_categories", "Rack\nComplimentary: sign-off, no ADR")
+		rack = self.plan("RACK")
+		self.assertEqual(frappe.db.get_value("Rate Plan", rack, "rate_category"), "Rack")
 
 	def test_a_plan_takes_only_a_category_the_property_lists(self):
 		with self.assertRaises(frappe.ValidationError):
@@ -203,6 +210,15 @@ class CrossReportConsistencyTests(AuditTestCase):
 	                            "adr": 1300, "revpar": 650, "occupancy_pct": 100.0}
 	PROJECTED: ClassVar[tuple] = (2500, 1250, 625)
 	TONIGHT_OCCUPANCY: ClassVar[float] = 100.0
+	# tonight (the open business date): the rooms counted as occupied, and
+	# the comp and house-use rooms in house (rooms_by_category)
+	TONIGHT_ROOMS: ClassVar[int] = 4
+	TONIGHT_BY_CATEGORY: ClassVar[dict] = OPERA
+	# the property's rate_categories (None: OPERA's seeded list) and each
+	# plan's (code, modifier %, category), one stay on each
+	CATEGORIES: ClassVar[str | None] = None
+	PLANS: ClassVar[tuple] = (("BAR", 0, "Standard"), ("UP", 50, "Standard"),
+	                          ("COMP", -100, "Complimentary"), ("HOUSE", -100, "House Use"))
 
 	def setUp(self):
 		super().setUp()
@@ -210,6 +226,10 @@ class CrossReportConsistencyTests(AuditTestCase):
 		make_property(PROP_S, business_date=TODAY)
 		frappe.db.delete("Rate Guardrail", {"property": PROP_S})
 		frappe.db.delete("Property Setting", {"property": PROP_S})
+		from kamra.settings import clear_cache
+		clear_cache(PROP_S)
+		if self.CATEGORIES:
+			set_setting(PROP_S, "rate_categories", self.CATEGORIES)
 		self.rt = make_room_type(PROP_S, "STD", base_price=1000)
 		frappe.db.set_value("Room Type", self.rt, "base_price", 1000)
 		frappe.clear_document_cache("Room Type", self.rt)
@@ -218,10 +238,8 @@ class CrossReportConsistencyTests(AuditTestCase):
 		frappe.db.delete("Cashier PIN", {"name": GM})
 		frappe.get_doc({"doctype": "Cashier PIN", "user": GM, "pin": "4321"}
 		               ).insert(ignore_permissions=True)
-		plans = [("BAR", 0, "Standard"), ("UP", 50, "Standard"),
-		         ("COMP", -100, "Complimentary"), ("HOUSE", -100, "House Use")]
 		self.stays = []
-		for room, (code, modifier, category) in zip(self.rooms, plans, strict=True):
+		for room, (code, modifier, category) in zip(self.rooms, self.PLANS, strict=True):
 			self.stays.append(self.stay(room, self.plan(code, modifier, category)))
 		for res in self.stays:
 			folio_mod.post_room_night(frappe.get_doc("Reservation", res.name), YESTERDAY)
@@ -275,6 +293,79 @@ class CrossReportConsistencyTests(AuditTestCase):
 		self.assertEqual(day["room_revenue"], 2600)
 
 	def test_every_report_gives_the_same_figures_for_the_same_nights(self):
+		self.assert_every_report_gives_the_expected_figures()
+
+	def test_a_category_changed_after_the_night_leaves_every_report_as_it_was(self):
+		# OPERA keeps End of Day statistics as the night closed, and a rate
+		# code change reaches no reservation already booked (R2): the stay
+		# keeps the category it was booked on
+		plan = frappe.get_doc("Rate Plan", f"{PROP_S}-BAR")
+		plan.rate_category = "House Use"
+		plan.save()
+		self.assertEqual(frappe.db.get_value("Reservation", self.stays[0].name, "rate_category"),
+		                 self.PLANS[0][2])
+		self.assert_every_report_gives_the_expected_figures()
+
+	def test_every_occupancy_reader_counts_the_house_as_the_flash_does(self):
+		# tonight, the open business date: the four stays are in house. Every
+		# reader of occupancy applies the property's categories
+		# (kamra.room_statistics), so no-occupancy rooms are out of all of them
+		from unittest.mock import patch
+		day = reports._day_stats(PROP_S, TODAY, 4)
+		owner = api.owner_briefing(PROP_S, TODAY)
+		forecast = dashboards.occupancy_forecast(PROP_S, TODAY, days=1)
+		books = next(p for p in dashboards.comparison(PROP_S, TODAY, 4, forecast)["periods"]
+		             if p["id"] == "on_the_books")
+		with patch("kamra.api.my_properties",
+		           return_value=[{"name": PROP_S, "business_date": TODAY}]):
+			portfolio = dashboards.portfolio_dashboard(TODAY)
+		readers = {
+			"reports._day_stats": day["occupancy_pct"],
+			"api.owner_briefing": owner["occupancy_pct"],
+			"dashboards.occupancy_now": dashboards.occupancy_now(
+				PROP_S, {"occupied": 4})["occupancy_pct"],
+			"dashboards.occupancy_forecast": forecast[0]["occupancy_pct"],
+			"dashboards.occupancy_forecast with holds": forecast[0]["occupancy_with_holds_pct"],
+			"reports.manager_flash outlook": reports.manager_flash(
+				PROP_S, YESTERDAY)["outlook"][0]["occupancy_pct"],
+			"dashboards.comparison on_the_books": books["this_year"]["occupancy_pct"],
+			"dashboards.portfolio_dashboard row": portfolio["properties"][0]["occupancy_pct"],
+			"dashboards.portfolio_dashboard totals": portfolio["totals"]["occupancy_pct"],
+		}
+		for name, pct in readers.items():
+			with self.subTest(reader=name):
+				self.assertEqual(pct, self.TONIGHT_OCCUPANCY)
+		# the rooms occupied are the rooms the percentage counts, and the
+		# comp and house-use rooms are the ones in house
+		self.assertEqual((day["rooms_occupied"], owner["rooms_occupied"]),
+		                 (self.TONIGHT_ROOMS, self.TONIGHT_ROOMS))
+		self.assertEqual(day["rooms_by_category"], self.TONIGHT_BY_CATEGORY)
+		# a room on the books is not for sale, whatever its category
+		self.assertEqual((forecast[0]["booked"], forecast[0]["available"]), (4, 0))
+
+	def test_room_insights_count_the_night_as_every_report_does(self):
+		from kamra.rooms import room_insights
+		out = room_insights(PROP_S, from_date=YESTERDAY, to_date=YESTERDAY, refresh=1)
+		self.assertEqual(out["summary"]["occupancy_pct"], self.EXPECTED["occupancy_pct"])
+
+	def test_the_night_audit_report_counts_room_revenue_as_the_flash_does(self):
+		# a discount on its own line (a booking voucher) is an adjustment, as
+		# kamra.ledger books it (Discount, 9000), not room revenue
+		self.post(self.stays[0], "Discount", -200, YESTERDAY)
+		day = audit_report.build(PROP_S, YESTERDAY)["periods"][0]
+		flash = reports._day_stats(PROP_S, YESTERDAY, 4)
+		# Room and Rate Adjustment, as ADR and RevPAR count it
+		self.assertEqual((day["room_revenue"], flash["room_revenue"]), (2600, 2600))
+		self.assertEqual((day["other"], day["allowances"]), (0, -200))
+		self.assertEqual(day["total_revenue"],
+		                 day["room_revenue"] + day["food"] + day["beverage"] + day["banquets"]
+		                 + day["meal_plan_minibar"] + day["other"] + day["allowances"])
+		depts = {r["department"]: r["amount"]
+		         for r in audit_report.departments(PROP_S, YESTERDAY, YESTERDAY)}
+		self.assertEqual((depts["Rooms"], depts["Discounts and allowances"]), (2600, -200))
+		self.assertNotIn("Rate Adjustment", depts)
+
+	def assert_every_report_gives_the_expected_figures(self):
 		from kamra.custom_reports import _fetch_occupancy_by_day
 		flash = reports.manager_flash(PROP_S, YESTERDAY)
 		owner = api.owner_briefing(PROP_S, TODAY)["yesterday"]
@@ -322,7 +413,8 @@ class ConfiguredStatisticsTests(CrossReportConsistencyTests):
 	(CONFIGURED): the comp counts in ADR, house use is out of ADR and
 	occupancy, and the 1,500 room is on a Staff plan, out of ADR and RevPAR.
 	Every report still agrees: ADR 1,100 / 2 = 550, RevPAR 1,100 / 4 = 275,
-	occupancy 3 / 4 = 75%."""
+	occupancy 3 / 4 = 75%. Each stay is booked on its plan's category (R2: a
+	stay keeps the category it was booked on)."""
 
 	EXPECTED: ClassVar[dict] = {"rooms_sold": 4,
 	                            "rooms_by_category": {"Complimentary": 1, "House Use": 1, "Staff": 1},
@@ -330,13 +422,12 @@ class ConfiguredStatisticsTests(CrossReportConsistencyTests):
 	# tonight's locked rates: 1,000 standard, 1,500 Staff, two at no charge
 	PROJECTED: ClassVar[tuple] = (2500, 500, 250)
 	TONIGHT_OCCUPANCY: ClassVar[float] = 75.0
-
-	def setUp(self):
-		super().setUp()
-		set_setting(PROP_S, "rate_categories", CONFIGURED)
-		# the 1,500 plan moves to Staff once its night is posted: the reports
-		# read each plan's category as configured now
-		frappe.db.set_value("Rate Plan", f"{PROP_S}-UP", "rate_category", "Staff")
+	# the house-use room is in house but not counted as occupied
+	TONIGHT_ROOMS: ClassVar[int] = 3
+	TONIGHT_BY_CATEGORY: ClassVar[dict] = {"Complimentary": 1, "House Use": 1, "Staff": 1}
+	CATEGORIES: ClassVar[str | None] = CONFIGURED
+	PLANS: ClassVar[tuple] = (("BAR", 0, "Standard"), ("UP", 50, "Staff"),
+	                          ("COMP", -100, "Complimentary"), ("HOUSE", -100, "House Use"))
 
 
 class CompSignOffTests(DiscountTestCase):
@@ -422,6 +513,12 @@ class CompSignOffTests(DiscountTestCase):
 		self.assertEqual(doc.rate_plan, self.comp)
 		self.assertEqual([flt(r.rate) for r in doc.night_rates], [0, 0])
 		self.assertEqual([r.approver for r in sign_off_logs(res.name)], [GM])
+		# the amendment's own row names who signed it off too (R2)
+		amend = frappe.get_all("Agent Action Log", filters={
+			"action_type": "amend_stay", "reference_name": res.name}, pluck="approver")
+		self.assertEqual(amend, [GM])
+		# and the stay now has the plan's category
+		self.assertEqual(doc.rate_category, "Complimentary")
 
 	def test_a_save_that_keeps_the_plan_asks_nothing_again(self):
 		out = self.book(DESK, rate_plan=self.comp, supervisor_user=GM, supervisor_pin="4321")
