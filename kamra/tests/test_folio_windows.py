@@ -311,3 +311,46 @@ class FolioWindowsTestCase(AuditTestCase):
 		# the guest's own window is the guest's, even on a company's stay
 		own = folio_mod.open_folio(frappe.get_doc("Reservation", self.res.name))
 		self.assertIsNone(api.folio_invoice(own)["bill_to"])
+
+	# Hydrogen R2 P1: change_stay_company uses doc.save() (validate_payee + hooks)
+
+	def test_change_stay_company_saves_folio_and_runs_validate_payee(self):
+		from unittest.mock import patch
+		a, b = corp(CORP_A, rules=(("Room", "Company"),)), corp(CORP_B, rules=(("Room", "Company"),))
+		self.res.db_set({"company": a, "booking_type": "Corporate"})
+		folio_mod.open_folio(self.res)
+		w2 = folio_mod.open_company_folio(frappe.get_doc("Reservation", self.res.name))
+		seen = []
+		from kamra.kamra.doctype.folio.folio import Folio as FolioDoc
+		orig_validate_payee = FolioDoc.validate_payee
+
+		def spy_validate_payee(doc):
+			seen.append((doc.name, doc.payee_type, doc.payee_company))
+			return orig_validate_payee(doc)
+
+		with patch.object(FolioDoc, "validate_payee", spy_validate_payee):
+			api.change_stay_company(self.res.name, "UT bridge payee save", company=b)
+		self.assertIn((w2, "Company", b), seen)
+
+	# Hydrogen R2 P2: reservation_folios includes window_no and payee_* ---
+
+	def test_reservation_folios_returns_window_and_payee_fields(self):
+		a, b = corp(CORP_A), corp(CORP_B)
+		self.res.db_set({"company": a, "booking_type": "Corporate"})
+		w1 = folio_mod.open_folio(self.res)
+		w2 = folio_mod.open_window(reservation=self.res.name, window_no=2,
+		                           payee_type="Company", payee_company=b)
+		agent = frappe.get_doc({"doctype": "Travel Agent",
+		                        "agent_name": "UT Kigo Tours"}).insert(ignore_permissions=True).name
+		w3 = folio_mod.open_window(reservation=self.res.name, window_no=3,
+		                           payee_type="Travel Agent", payee_agent=agent)
+		rows = {r["name"]: r for r in api.reservation_folios(self.res.name)}
+		self.assertEqual((rows[w1]["window_no"], rows[w1]["payee_type"]), (1, "Guest"))
+		self.assertEqual(
+			(rows[w2]["window_no"], rows[w2]["payee_type"], rows[w2]["payee_company"],
+			 rows[w2]["company"]),
+			(2, "Company", b, b))
+		self.assertEqual(
+			(rows[w3]["window_no"], rows[w3]["payee_type"], rows[w3]["payee_agent"],
+			 rows[w3]["agent_name"]),
+			(3, "Travel Agent", agent, "UT Kigo Tours"))

@@ -207,3 +207,23 @@ class PostingMasterTestCase(AuditTestCase):
 		self.assertEqual([(i["company"], i["in_house"], i["over_by"]) for i in over["items"]],
 		                 [(company, 5000, 2000)])
 		settings.clear_cache(PROP_A)
+
+	# Hydrogen R2 P1: set_group_master uses doc.save() (validate_payee + hooks)
+
+	def test_set_group_master_saves_folio_and_runs_validate_payee(self):
+		from unittest.mock import patch
+		gb = self.group()
+		r1, r2 = self.members(gb)
+		gb.db_set({"master_reservation": r1.name, "master_pays": "Room only"})
+		bill = folio_mod.open_group_folio(gb.name)
+		seen = []
+		from kamra.kamra.doctype.folio.folio import Folio as FolioDoc
+		orig_validate_payee = FolioDoc.validate_payee
+
+		def spy_validate_payee(doc):
+			seen.append((doc.name, doc.guest, doc.payee_type))
+			return orig_validate_payee(doc)
+
+		with patch.object(FolioDoc, "validate_payee", spy_validate_payee):
+			api.set_group_master(gb.name, r2.name)
+		self.assertIn((bill, r2.guest, "Guest"), seen)
