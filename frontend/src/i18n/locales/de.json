@@ -500,7 +500,7 @@
   "Adjust extra person charges": "Zuschläge für Zusatzpersonen anpassen",
   "Rounding step": "Rundungsschritt",
   "Rounding mode": "Rundungsart",
-  "When a foreign-currency contract converts to the property's currency: at booking, at check-in, on each night's posting date, or when the group block is created.": "Wann ein Vertrag in Fremdwährung in die Währung des Betriebs umgerechnet wird: bei der Buchung, beim Check-in, am Buchungsdatum jeder Nacht oder beim Anlegen des Gruppenkontingents.",
+  "When a foreign-currency contract converts to the property's currency: at booking, at check-in, or on each night's posting date.": "Wann ein Vertrag in Fremdwährung in die Währung des Betriebs umgerechnet wird: bei der Buchung, beim Check-in oder am Buchungsdatum jeder Nacht.",
   "Blank: priced from the room type's card or this plan's own tariff. Set: this plan's modifier applies to the base plan's price.": "Leer: Preis aus der Zimmerkategorie oder dem eigenen Tarif dieses Plans. Gesetzt: Der Modifikator dieses Plans gilt für den Preis des Basisplans.",
   "Derived plans only. Off: extra adults and children keep the base plan's charge.": "Nur für abgeleitete Pläne. Aus: Zusätzliche Erwachsene und Kinder behalten den Preis des Basisplans.",
   "Round the local price to this multiple (for example 1000 for a currency with no cents). 0 = the currency's smallest unit.": "Den lokalen Preis auf ein Vielfaches davon runden (zum Beispiel 1000 bei einer Währung ohne Cent). 0 = kleinste Währungseinheit.",

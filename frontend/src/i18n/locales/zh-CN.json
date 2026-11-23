@@ -6847,7 +6847,7 @@
   "Adjust extra person charges": "调整加人费用",
   "Rounding step": "取整步长",
   "Rounding mode": "取整方式",
-  "When a foreign-currency contract converts to the property's currency: at booking, at check-in, on each night's posting date, or when the group block is created.": "外币合同何时折算为酒店币种：预订时、入住时、每晚入账日，或创建团队预留时。",
+  "When a foreign-currency contract converts to the property's currency: at booking, at check-in, or on each night's posting date.": "外币合同何时折算为酒店币种：预订时、入住时或每晚入账日。",
   "Blank: priced from the room type's card or this plan's own tariff. Set: this plan's modifier applies to the base plan's price.": "留空：按房型价目表或本计划自己的合同价计价。已选：本计划的调整作用于基础计划的价格。",
   "Derived plans only. Off: extra adults and children keep the base plan's charge.": "仅适用于派生计划。关闭时：加人（成人和儿童）沿用基础计划的收费。",
   "Round the local price to this multiple (for example 1000 for a currency with no cents). 0 = the currency's smallest unit.": "将本币价格取整到此倍数（例如无小数的货币可设为 1000）。0 = 货币最小单位。",

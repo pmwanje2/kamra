@@ -6588,7 +6588,7 @@
   "Adjust extra person charges": "تعديل رسوم الأشخاص الإضافيين",
   "Rounding step": "خطوة التقريب",
   "Rounding mode": "طريقة التقريب",
-  "When a foreign-currency contract converts to the property's currency: at booking, at check-in, on each night's posting date, or when the group block is created.": "متى يُحوَّل عقد بعملة أجنبية إلى عملة المنشأة: عند الحجز، أو عند تسجيل الوصول، أو في تاريخ ترحيل كل ليلة، أو عند إنشاء الحجز الجماعي.",
+  "When a foreign-currency contract converts to the property's currency: at booking, at check-in, or on each night's posting date.": "متى يُحوَّل عقد بعملة أجنبية إلى عملة المنشأة: عند الحجز، أو عند تسجيل الوصول، أو في تاريخ ترحيل كل ليلة.",
   "Blank: priced from the room type's card or this plan's own tariff. Set: this plan's modifier applies to the base plan's price.": "فارغ: يُسعَّر من بطاقة نوع الغرفة أو من تعرفة هذه الخطة. محدد: يُطبَّق معدِّل هذه الخطة على سعر الخطة الأساسية.",
   "Derived plans only. Off: extra adults and children keep the base plan's charge.": "للخطط المشتقة فقط. عند الإيقاف: يحتفظ البالغون والأطفال الإضافيون برسوم الخطة الأساسية.",
   "Round the local price to this multiple (for example 1000 for a currency with no cents). 0 = the currency's smallest unit.": "قرّب السعر المحلي إلى مضاعفات هذا الرقم (مثلًا 1000 لعملة بلا كسور). 0 = أصغر وحدة للعملة.",
