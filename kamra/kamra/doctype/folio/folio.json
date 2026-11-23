@@ -17,6 +17,7 @@
   "status",
   "folio_type",
   "group_booking",
+  "venue_booking",
   "opened_on",
   "closed_on",
   "invoice_number",
@@ -200,12 +201,21 @@
    "fieldtype": "Link",
    "label": "Group Booking",
    "options": "Group Booking"
+  },
+  {
+   "fieldname": "venue_booking",
+   "fieldtype": "Link",
+   "label": "Function",
+   "options": "Venue Booking",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "Set on an event folio: the function (banquet or venue booking) this bill belongs to. It has no stay."
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-10-29 18:00:00.000000",
+ "modified": "2026-11-23 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Folio",

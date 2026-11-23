@@ -1550,7 +1550,8 @@ def _refuse_opening_balance(charge_type: str):
 def _post_folio_charge(folio: str, charge_type: str, description: str,
                        amount: float, gst_rate: float = 0,
                        posting_date: str | None = None, is_alcohol: int = 0,
-                       reservation: str | None = None):
+                       reservation: str | None = None,
+                       transaction_code: str | None = None):
 	"""Put one charge on a bill. Not whitelisted and does no amount or rate
 	check: a caller that takes an amount or rate from outside calls
 	_check_charge_amount_and_tax on it first. Code that posts rates the
@@ -1570,7 +1571,8 @@ def _post_folio_charge(folio: str, charge_type: str, description: str,
 	from kamra.business_date import assert_transaction_date
 	from kamra.ledger import code_for_charge_type, record_charge_ledger
 	bd = assert_transaction_date(doc.property, posting_date, label="Posting date")
-	code = code_for_charge_type(charge_type)
+	# a configured code (banquet Revenue Type Mapping) else the charge type's default
+	code = transaction_code or code_for_charge_type(charge_type)
 	doc.append("charges", {
 		"posting_date": bd,
 		"charge_type": charge_type,
@@ -3576,6 +3578,23 @@ def folio_invoice(folio: str):
 	# what the tax authority requires ON the bill (ZATCA: QR + Arabic title)
 	statutory = loc.invoice_print_block(
 		pack, "Folio", doc.name, doc.invoice_number) if settled else None
+	# under the ERPNext accounting bridge the tax invoice is the ERP Sales
+	# Invoice and its fiscal identifiers (EFRIS FDN, verification code, QR);
+	# this folio's own number is then an internal reference only
+	from kamra.fiscal import fiscal_status
+	from kamra.fiscal import is_final as fiscal_final
+	fiscal = fiscal_status(doc)
+	title = (statutory or {}).get("title") or (
+		_(loc.invoice_title(pack)) if settled else _("Provisional Bill"))
+	number, final, internal_number = doc.invoice_number or doc.name, settled, None
+	if fiscal:
+		number, final, internal_number = fiscal["sales_invoice"] or doc.name, fiscal_final(fiscal), doc.invoice_number
+		if fiscal["state"] == "unverified":
+			title = _("Fiscal status unavailable")
+		elif fiscal["sandbox"]:
+			title = _("Test fiscal number - not a valid tax invoice")
+		elif not final:
+			title = _("Fiscal document pending")
 	payments = [{
 		"row": p.name, "posting_date": str(p.posting_date),
 		"payment_kind": p.payment_kind, "mode": p.mode,
@@ -3594,14 +3613,17 @@ def folio_invoice(folio: str):
 		"allocations": _folio_allocations(doc.name),
 		"bill_to": bill_to,
 		"statutory": statutory,
+		"fiscal": fiscal,
 		"document": {
 			# a bill before settlement is provisional and must say so - the
-			# invoice number only exists once the folio closes
-			"title": (statutory or {}).get("title") or (
-				_(loc.invoice_title(pack)) if settled else _("Provisional Bill")),
+			# invoice number only exists once the folio closes, and under the
+			# bridge only once the fiscal document is issued
+			"title": title,
 			"title_local": (statutory or {}).get("title_ar"),
-			"is_final": settled,
-			"number": doc.invoice_number or doc.name,
+			"is_final": final,
+			"number": number,
+			"internal_number": internal_number,
+			"reprint": None,
 			"date": str(doc.closed_on or "")[:10] or nowdate(),
 			"amount_in_words": loc.amount_in_words(pack, prop, doc.grand_total),
 			"footer": _loc_ctx.get("footer"),
@@ -3666,6 +3688,42 @@ def folio_invoice(folio: str):
 			for rate, v in sorted(by_rate.items())
 		],
 	}
+
+
+@frappe.whitelist(methods=["POST"])
+@require_roles("Front Desk", "Finance", "Kamra Agent")
+def reprint_fiscal_folio(folio: str, reason: str | None = None):
+	"""Reprint a settled folio's tax invoice (OPERA Folio History, Reprint).
+
+	Under the ERPNext accounting bridge that is the fiscal document: the ERP
+	Sales Invoice number with its fiscal identifiers. A fiscal document that
+	is still pending, from a test fiscal service, or whose status can't be
+	read is not a tax invoice, so it is not reprinted as one. Each reprint is
+	logged with its revision."""
+	data = folio_invoice(folio)
+	if data["folio"]["status"] != "Closed":
+		frappe.throw(_("Only a settled folio has an invoice to reprint."))
+	fiscal, document = data["fiscal"], data["document"]
+	if fiscal and not document["is_final"]:
+		if fiscal["state"] == "unverified":
+			frappe.throw(_("The fiscal status is unavailable, so this can't be reprinted as a tax invoice. Try again, or ask Finance."))
+		if fiscal["sandbox"]:
+			frappe.throw(_("This fiscal number comes from a test fiscal service and is not a valid tax invoice."))
+		frappe.throw(_("The fiscal document is still pending, so there is nothing final to reprint yet."))
+	revision = frappe.db.count("Folio Reprint", {"folio": folio}) + 1
+	reprint = frappe.get_doc({
+		"doctype": "Folio Reprint",
+		"property": data["folio"]["property"],
+		"folio": folio,
+		"invoice_number": document["number"],
+		"reprint_of": "Guest Folio",
+		"printed_on": now_datetime(),
+		"printed_by": frappe.session.user,
+		"reason": reason,
+		"revision": revision,
+	}).insert(ignore_permissions=True)
+	document["reprint"] = revision
+	return {**data, "reprint": reprint.name, "revision": revision}
 
 
 def _folio_statement(lines: list, payments: list) -> list[dict]:

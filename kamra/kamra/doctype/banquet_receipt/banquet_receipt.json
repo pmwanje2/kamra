@@ -11,7 +11,8 @@
   "mode",
   "amount",
   "reference",
-  "received_by"
+  "received_by",
+  "folio_payment"
  ],
  "fields": [
   {
@@ -54,11 +55,19 @@
    "label": "Received By",
    "options": "User",
    "read_only": 1
+  },
+  {
+   "fieldname": "folio_payment",
+   "fieldtype": "Data",
+   "label": "Folio Payment",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "The event folio payment this receipt mirrors, when the money was taken on the function's folio."
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-31 10:00:00.000000",
+ "modified": "2026-11-23 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Banquet Receipt",

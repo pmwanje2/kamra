@@ -463,11 +463,22 @@ class VenueBooking(Document):
 				self.green_room, str(e)))
 
 
+def _piece(label) -> str:
+	"""One spelling for a piece of floor, whatever its case and spacing."""
+	return " ".join(str(label or "").split()).casefold()
+
+
 def _sections_of(venue: str) -> set:
-	"""The physical pieces a bookable space occupies."""
-	return set(frappe.get_all(
+	"""The physical pieces a bookable space occupies: its sections, and the
+	space itself by its name. A combination hall that lists the halls it is
+	made of (OPERA's combination function space) therefore shares a piece
+	with each of them, as one that lists their physical sections does."""
+	pieces = {_piece(s) for s in frappe.get_all(
 		"Venue Section", filters={"parent": venue, "parenttype": "Venue"},
-		pluck="section"))
+		pluck="section")}
+	pieces.add(_piece(frappe.db.get_value("Venue", venue, "venue_name")))
+	pieces.discard("")
+	return pieces
 
 
 def clashing_venues(property: str, venue: str) -> list:
@@ -479,12 +490,10 @@ def clashing_venues(property: str, venue: str) -> list:
 	sold twice on the same evening and nobody finds out until the trucks
 	arrive.
 
-	A venue with no sections declared behaves exactly as before: it only
-	conflicts with itself.
+	A venue with no sections declared conflicts with itself, and with any
+	combination hall that lists it by name.
 	"""
 	mine = _sections_of(venue)
-	if not mine:
-		return [venue]
 	out = [venue]
 	for other in frappe.get_all(
 		"Venue", filters={"property": property, "name": ("!=", venue)},
