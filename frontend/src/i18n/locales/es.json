@@ -6697,5 +6697,8 @@
   "Invoice {invoice} was issued by the accounting system as {document}. It is corrected there with a credit note and a new invoice; this bill is not reopened or credited here.": "El sistema contable emitió la factura {invoice} como {document}. Se corrige allí con una nota de crédito y una nueva factura; esta cuenta no se reabre ni se acredita aquí.",
   "Issue credit note": "Emitir nota de crédito",
   "Send for credit note and re-bill": "Enviar para nota de crédito y refacturación",
-  "Tax in this credit note: {amount}": "Impuesto en esta nota de crédito: {amount}"
+  "Tax in this credit note: {amount}": "Impuesto en esta nota de crédito: {amount}",
+  "The accounting system issued invoice {document} for this bill. It is corrected there with a credit note and a new invoice; this bill is not reopened or credited here.": "El sistema contable emitió la factura {document} para esta cuenta. Se corrige allí con una nota de crédito y una nueva factura; esta cuenta no se reabre ni se acredita aquí.",
+  "At most {amount} can still be credited on this invoice.": "En esta factura se puede acreditar como máximo {amount}.",
+  "status|Split": "Dividido"
 }

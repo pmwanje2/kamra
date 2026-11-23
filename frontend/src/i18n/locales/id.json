@@ -425,5 +425,8 @@
   "Issue credit note": "Terbitkan credit note",
   "Send for credit note and re-bill": "Kirim untuk credit note dan penagihan ulang",
   "Tax in this credit note: {amount}": "Pajak dalam credit note ini: {amount}",
-  "Credit note": "Credit note"
+  "Credit note": "Credit note",
+  "The accounting system issued invoice {document} for this bill. It is corrected there with a credit note and a new invoice; this bill is not reopened or credited here.": "Sistem akuntansi menerbitkan invoice {document} untuk tagihan ini. Invoice dikoreksi di sana dengan credit note dan invoice baru; tagihan ini tidak dibuka kembali atau dikreditkan di sini.",
+  "At most {amount} can still be credited on this invoice.": "Paling banyak {amount} masih dapat dikreditkan pada invoice ini.",
+  "status|Split": "Dibagi"
 }

@@ -1145,5 +1145,8 @@
   "Issue credit note": "Ilabas ang credit note",
   "Send for credit note and re-bill": "Ipadala para sa credit note at muling pag-bill",
   "Tax in this credit note: {amount}": "Buwis sa credit note na ito: {amount}",
-  "Credit note": "Credit note"
+  "Credit note": "Credit note",
+  "The accounting system issued invoice {document} for this bill. It is corrected there with a credit note and a new invoice; this bill is not reopened or credited here.": "Inilabas ng sistema ng accounting ang invoice {document} para sa bill na ito. Doon ito itinatama sa pamamagitan ng credit note at bagong invoice; hindi muling binubuksan o kinikredito ang bill na ito dito.",
+  "At most {amount} can still be credited on this invoice.": "Hanggang {amount} na lang ang maaaring ikredito sa invoice na ito.",
+  "status|Split": "Hinati"
 }

@@ -56,6 +56,8 @@ interface InvoiceData {
       reversal_of?: string | null
       void_reason?: string | null
       voided_by?: string | null
+      /** the line a split part, or a split's reversal, came from */
+      split_of?: string | null
       amount: number
       gst_rate: number
       gst_amount: number
@@ -172,6 +174,8 @@ interface InvoiceData {
     address: string
     id_type: string | null
   }
+  /** what the issued credit notes on this invoice add up to */
+  credited?: number
   summary_by_head: {
     head: string
     amount: number
@@ -346,6 +350,10 @@ export default function FolioView() {
   const canRequestCorrection = roles.some(r => ["Front Desk","Finance","Hotel Admin","System Manager","Administrator"].includes(r))
   const canCorrect = roles.some((r) =>
     ["Finance", "Hotel Admin", "System Manager", "Administrator"].includes(r))
+  // who may correct an issued invoice - a credit note, or the accounting
+  // system's credit and re-bill: the server's INVOICE_CORRECTION_ROLES
+  const canCreditInvoice = roles.some((r) =>
+    ["Finance", "Hotel Admin", "System Manager", "Administrator"].includes(r))
   const [toCorrect, setToCorrect] = useState<
     { date: string; charged: number; new: number }[]>([])
   const [correction, setCorrection] = useState({ reason: "", pin: "" })
@@ -475,6 +483,9 @@ export default function FolioView() {
   const taxed = Number(folio.tax_total) !== 0 ||
     folio.charges.some((c) => Number(c.gst_rate) !== 0 || Number(c.gst_amount) !== 0)
   const open = folio.status === "Open"
+  // invoiced here, or by the accounting system: its check-out close sets only
+  // its own invoice (sales_invoice), and that bill is corrected all the same
+  const invoiced = !!(folio.invoice_number || folio.sales_invoice)
 
   return (
     <div>
@@ -633,7 +644,7 @@ export default function FolioView() {
               {t("Advance bill")}
             </Button>
           ) : null}
-          {!open && folio.invoice_number ? (
+          {!open && invoiced && canCreditInvoice ? (
             <Button variant="outline" disabled={busy} onClick={() => setShowCredit(true)}>
               {t("Credit note")}
             </Button>
@@ -667,7 +678,8 @@ export default function FolioView() {
                 {t("Settle & continue stay")}
               </Button>
             )}
-          {!open && folio.invoice_number && folio.folio_type !== "Account" && (
+          {!open && invoiced && folio.folio_type !== "Account"
+            && (!folio.sales_invoice || canCreditInvoice) && (
             <Button
               variant="outline"
               disabled={busy}
@@ -689,8 +701,9 @@ export default function FolioView() {
         </div>
       </div>
 
-      {showCredit && !open && folio.invoice_number && (
-        <InvoiceCorrectionDialog folio={folio} onClose={() => setShowCredit(false)}
+      {showCredit && !open && invoiced && (
+        <InvoiceCorrectionDialog folio={folio} credited={data.credited ?? 0}
+          onClose={() => setShowCredit(false)}
           onDone={() => { setShowCredit(false); load() }} />
       )}
 
@@ -699,7 +712,7 @@ export default function FolioView() {
           <span className="text-amber-800">
             {folio.sales_invoice
               ? t("Cancel {invoice}? The accounting system credits it and issues a new invoice; this bill is not reopened here.", {
-                  invoice: folio.invoice_number ?? "",
+                  invoice: folio.invoice_number || folio.sales_invoice,
                 })
               : t("Cancel {invoice}? The number goes on the cancelled register and the folio reopens for correction.", {
                   invoice: folio.invoice_number ?? "",
@@ -1165,9 +1178,15 @@ export default function FolioView() {
                     {folio.charges.map((c, i) => {
                       // a voided line and its reversal stay on the bill; neither is voided or moved again
                       const voided = !!c.reversal_of || folio.charges.some((r) => r.reversal_of === c.name)
+                      // a split's line and its reversal: the trail of the split, shown as
+                      // such here and left off the printed bill, which shows the parts
+                      const split = voided && (c.reversal_of
+                        ? !!c.split_of
+                        : folio.charges.some((r) => r.reversal_of === c.name && !!r.split_of))
                       return (
                       <Fragment key={c.name ?? i}>
-                        <tr className={voided ? "text-zinc-400" : undefined}>
+                        <tr className={[voided && "text-zinc-400", split && "print:hidden"]
+                          .filter(Boolean).join(" ") || undefined}>
                           {open && (
                             <Popin label={t("Select")} importance="medium" className="py-2 pr-2 print:hidden">
                               {!voided && <input
@@ -1194,7 +1213,9 @@ export default function FolioView() {
                               <span className="text-zinc-500"> - {c.description}</span>
                             )}
                             {voided && (
-                              <span className="ml-1 rounded bg-zinc-100 px-1 text-xs text-zinc-500">{t("Voided")}</span>
+                              <span className="ml-1 rounded bg-zinc-100 px-1 text-xs text-zinc-500">
+                                {split ? t("status|Split") : t("Voided")}
+                              </span>
                             )}
                             {c.allowance_serial && (
                               <Link to={`/allowance-voucher/${encodeURIComponent(c.allowance_serial)}`}

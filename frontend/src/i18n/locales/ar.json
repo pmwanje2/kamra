@@ -6512,5 +6512,8 @@
   "Invoice {invoice} was issued by the accounting system as {document}. It is corrected there with a credit note and a new invoice; this bill is not reopened or credited here.": "أصدر النظام المحاسبي الفاتورة {invoice} بالرقم {document}. تُصحَّح هناك بإشعار دائن وفاتورة جديدة؛ ولا يُعاد فتح هذا الحساب أو قيده دائنًا هنا.",
   "Issue credit note": "إصدار إشعار دائن",
   "Send for credit note and re-bill": "إرسال لإشعار دائن وإعادة الفوترة",
-  "Tax in this credit note: {amount}": "الضريبة في إشعار الدائن هذا: {amount}"
+  "Tax in this credit note: {amount}": "الضريبة في إشعار الدائن هذا: {amount}",
+  "The accounting system issued invoice {document} for this bill. It is corrected there with a credit note and a new invoice; this bill is not reopened or credited here.": "أصدر النظام المحاسبي الفاتورة {document} لهذا الحساب. تُصحَّح هناك بإشعار دائن وفاتورة جديدة؛ ولا يُعاد فتح هذا الحساب أو قيده دائنًا هنا.",
+  "At most {amount} can still be credited on this invoice.": "يمكن قيد {amount} دائنًا على هذه الفاتورة كحد أقصى.",
+  "status|Split": "مُقسَّم"
 }

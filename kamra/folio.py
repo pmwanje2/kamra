@@ -6,7 +6,7 @@ a correct multi-rate invoice - the PRD's FR-60.
 """
 
 import json
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 import frappe
 from frappe.utils import add_days, getdate, now_datetime, nowdate
@@ -42,17 +42,25 @@ def _recalculate(folio):
 	charges = tax = Decimal(0)
 	for c in folio.charges:
 		amount = Decimal(str(c.amount or 0))
-		rate = Decimal(str(c.gst_rate or 0))
-		c.gst_amount = float(amount * rate / 100)
-		c.total = float(amount + amount * rate / 100)
+		line_tax = _line_tax(c, amount)
+		c.gst_amount = float(line_tax)
+		c.total = float(amount + line_tax)
 		charges += amount
-		tax += amount * rate / 100
+		tax += line_tax
 	paid = sum(Decimal(str(p.amount or 0)) for p in folio.payments)
 	folio.charges_total = float(charges)
 	folio.tax_total = float(tax)
 	folio.grand_total = float(charges + tax)
 	folio.payments_total = float(paid)
 	folio.balance = float(charges + tax - paid)
+
+
+def _line_tax(c, amount: Decimal) -> Decimal:
+	"""A line's tax: worked out from its rate, or, for a line split to the
+	currency's minor unit (tax_as_posted), the tax it was posted with."""
+	if c.get("tax_as_posted"):
+		return Decimal(str(c.gst_amount or 0))
+	return amount * Decimal(str(c.gst_rate or 0)) / 100
 
 
 def open_folio(reservation) -> str:
@@ -829,12 +837,13 @@ def transfer_charge(from_folio: str, charge_row: str, to_folio: str):
 
 
 def _folio_group(folio) -> str | None:
-	return folio.get("group_booking") or frappe.db.get_value(
-		"Reservation", folio.reservation, "group_booking")
+	return folio.get("group_booking") or (folio.reservation and frappe.db.get_value(
+		"Reservation", folio.reservation, "group_booking"))
 
 
 def _same_stay_or_group(src, dst) -> bool:
-	if src.reservation == dst.reservation:
+	# an Account folio has no stay: two of them are never the same one
+	if src.reservation and src.reservation == dst.reservation:
 		return True
 	sg, dg = _folio_group(src), _folio_group(dst)
 	return bool(sg and sg == dg)
@@ -866,13 +875,18 @@ def move_charges(src, dst, charge_rows: list, reservation: str | None = None,
 		frappe.throw("Both folios must be open to transfer charges.")
 	from kamra.ledger import ledger_charges, reverse_ledger_for_charge
 	moved = []
-	voided = voided_rows(src)
+	# a voided line and its reversal (a split's too) net to nothing and stay
+	# on the folio they were posted to, as the bridge's void fences need: a
+	# move of the whole bill leaves them, and moves what stands in their place
+	pairs = void_pairs(src)
+	if charge_rows and all(r in pairs for r in charge_rows):
+		frappe.throw("A voided line and its reversal stay on the folio they were posted to.")
 	for charge_row in charge_rows:
+		if charge_row in pairs:
+			continue
 		row = next((c for c in src.charges if c.name == charge_row), None)
 		if not row:
 			frappe.throw(f"Charge {charge_row} not found on {src.name}.")
-		if row.get("reversal_of") or voided.get(row.name):
-			frappe.throw("A voided line and its reversal stay on the folio they were posted to.")
 		if row.get("is_alcohol") and dst.folio_type in ("Company", "Group"):
 			frappe.throw("Alcohol cannot be billed to a company folio.")
 		# an outlet charge (the bridge's source_ref) was fiscalised at the
@@ -899,6 +913,10 @@ def move_charges(src, dst, charge_rows: list, reservation: str | None = None,
 			# and its outlet reference, so the hotel invoice never bills an
 			# outlet charge again (the source row is saved away first)
 			"source_ref": row.get("source_ref"),
+			# a split part keeps its lineage and the tax it was split with
+			"split_of": row.get("split_of"),
+			"tax_as_posted": row.get("tax_as_posted"),
+			"gst_amount": row.gst_amount,
 			"idempotency_key": key,
 		})
 		moved.append(dst.charges[-1])
@@ -920,35 +938,79 @@ def split_charge(from_folio: str, charge_row: str, to_folio: str,
                  qty: float | None = None) -> dict:
 	"""Split one charge line in two - the 70/30 corporate deal, the shared
 	room, the disputed minibar - as OPERA does: by a percent of the line, an
-	amount (pre-tax) or a number of its units. Both parts may stay on this
-	folio, or one may go to another open folio of the same stay or group.
+	amount (before tax) or a number of its units. Both parts may stay on
+	this folio, or one may go to another open folio of the same stay or
+	group.
 
-	The posted line is never rewritten. It stays, a reversal cancels it and
-	the two parts are posted new, each pointing back at it (corrects_row), so
-	the bill keeps its trail. Tax is worked out on each part and gross and
-	tax are conserved exactly: the part split off is rounded to the minor
-	unit and the line keeps the rest. A room night priced with tax included
+	The posted line is never rewritten. A reversal voids it (reversal_of,
+	the void pair the ERPNext bridge's KMR-VOID-001 fences admit) and the two
+	parts are posted new as ordinary lines, each naming the line it was split
+	from (split_of), so either part can be corrected, voided, moved or split
+	again. All three keep the line's description, so a banquet (EVT-) or
+	outlet (ORD-) line is still recognised by the reports.
+
+	The part split off is worked out to the currency's minor unit, and so is
+	its tax; the line keeps the rest of both, so gross and tax add up exactly
+	across the bills (tax_as_posted). A room night priced with tax included
 	is split on its price, the figure the guest was quoted.
 
 	Refused, as OPERA refuses them: a payment, a package line (the meal plan
 	posted with the room) and an outlet charge (the bridge's source_ref),
-	which moves only whole (move_charges). credit=True splits an allowance
-	line instead (both parts stay negative); only the server does that,
-	following the charges it wrote down."""
+	which moves only whole (move_charges); and an amount or percent that is
+	not above zero. credit=True splits an allowance line instead (both parts
+	stay negative); only the server does that, following the charges it
+	wrote down."""
 	src = frappe.get_doc("Folio", from_folio)
-	same = from_folio == to_folio
-	dst = src if same else frappe.get_doc("Folio", to_folio)
-	if not same:
+	dst = _split_target(src, to_folio)
+	row, sign, line = _split_line(src, charge_row, credit, dst)
+	units = Decimal(str(row.qty or 1))
+	part_units = Decimal(1)
+	if qty:
+		part_units = Decimal(str(qty))
+		if units <= 1:
+			frappe.throw(frappe._("This line is one unit: split it by amount or percent."))
+		if part_units != part_units.to_integral_value() or not 1 <= part_units < units:
+			frappe.throw(frappe._("Split off between 1 and {0} of its {1} units.").format(
+				int(units) - 1, f"{units.normalize():f}"))
+		part = _cut(line, part_units / units)
+	elif percent is not None:
+		part = _cut(line, Decimal(str(percent)) / 100)
+	elif amount is not None:
+		if Decimal(str(amount)) <= 0:
+			frappe.throw(frappe._("Give an amount above zero to split off."))
+		base = Decimal(str(amount)).quantize(line["unit"], rounding=ROUND_HALF_UP)
+		part = (base, (base * line["rate"]).quantize(line["unit"], rounding=ROUND_HALF_UP))
+	else:
+		frappe.throw("Give a percent, an amount or a quantity to split off.")
+	if not 0 < _figure(line, part) < line["figure"]:
+		from kamra.localization import money_text
+		frappe.throw(f"Split must be between 0 and {money_text(src.property, line['figure'])} (exclusive).")
+	return _post_split(src, row, sign, line, [(dst, part, part_units)],
+	                   units - part_units if qty else Decimal(1))
+
+
+def _split_target(src, to_folio: str):
+	"""The folio a part goes to: this one, or an open one of its stay or group."""
+	dst = src if to_folio == src.name else frappe.get_doc("Folio", to_folio)
+	if dst is not src:
 		_assert_same_stay(src, dst)
 	if "Closed" in (src.status, dst.status):
 		frappe.throw("Both folios must be open to split charges.")
+	return dst
+
+
+def _split_line(src, charge_row: str, credit: bool, dst=None):
+	"""The line to split, refused where OPERA refuses a split, and its
+	figures (magnitudes; `sign` puts an allowance's back): the base and tax
+	as they stand, the rate, the currency's minor unit and the figure a split
+	cuts - the price for a night priced with tax included, else the base."""
 	row = next((c for c in src.charges if c.name == charge_row), None)
 	if not row:
 		if any(p.name == charge_row for p in src.payments):
 			frappe.throw(frappe._("A payment can't be split. Refund it or move the "
 			                      "charges instead."))
-		frappe.throw(f"Charge {charge_row} not found on {from_folio}.")
-	if row.get("reversal_of") or voided_rows(src).get(row.name):
+		frappe.throw(f"Charge {charge_row} not found on {src.name}.")
+	if row.name in void_pairs(src):
 		frappe.throw("A voided line and its reversal can't be split.")
 	if row.get("source_ref"):
 		frappe.throw(frappe._("An outlet charge can't be split. Move it whole to the "
@@ -957,85 +1019,85 @@ def split_charge(from_folio: str, charge_row: str, to_folio: str,
 		frappe.throw(frappe._("A package line (the meal plan posted with the room) "
 		                      "can't be split."))
 	sign = -1 if credit else 1
-	base = Decimal(str(row.amount or 0)) * sign  # the line's size; sign goes back below
+	base = Decimal(str(row.amount or 0)) * sign
 	if base <= 0 or (credit and row.charge_type != "Allowance"):
 		frappe.throw("Only positive charge lines can be split.")
-	cent = Decimal("0.01")
-	units = Decimal(str(row.qty or 1))
-	part_units = None
-	if qty:
-		part_units = Decimal(str(qty))
-		if units <= 1:
-			frappe.throw(frappe._("This line is one unit: split it by amount or percent."))
-		if part_units != part_units.to_integral_value() or not 1 <= part_units < units:
-			frappe.throw(frappe._("Split off between 1 and {0} of its {1} units.").format(
-				int(units) - 1, f"{units.normalize():f}"))
-		part = (base * part_units / units).quantize(cent)
-	elif percent:
-		share = Decimal(str(percent)) / 100
-		from kamra.pricing import rates_include_tax
-		if row.charge_type == "Room" and rates_include_tax(src.property):
-			# the night's price includes tax: split the price, tax inside it
-			with_tax = 1 + Decimal(str(row.gst_rate or 0)) / 100
-			part = (base * with_tax * share).quantize(cent) / with_tax
-		else:
-			part = (base * share).quantize(cent)
-	elif amount:
-		part = abs(Decimal(str(amount))).quantize(cent)
-	else:
-		frappe.throw("Give a percent, an amount or a quantity to split off.")
-	if part <= 0 or part >= base:
-		from kamra.localization import money_text
-		frappe.throw(f"Split must be between 0 and {money_text(src.property, base)} (exclusive).")
-	if row.get("is_alcohol") and dst.folio_type in ("Company", "Group"):
+	if dst is not None and row.get("is_alcohol") and dst.folio_type in ("Company", "Group"):
 		frappe.throw("Alcohol cannot be billed to a company folio.")
+	from kamra.ledger import minor_unit
+	from kamra.pricing import rates_include_tax
+	unit = minor_unit(src.property)
+	tax = _line_tax(row, Decimal(str(row.amount or 0))) * sign
+	priced_with_tax = row.charge_type == "Room" and bool(rates_include_tax(src.property))
+	line = {"base": base, "tax": tax, "rate": Decimal(str(row.gst_rate or 0)) / 100,
+	        "unit": unit, "priced_with_tax": priced_with_tax}
+	line["figure"] = ((base + tax) if priced_with_tax else base).quantize(
+		unit, rounding=ROUND_HALF_UP)
+	return row, sign, line
 
-	remainder = base - part
-	kept_units = units - part_units if part_units else Decimal(1)
-	part_units = part_units or Decimal(1)
+
+def _cut(line: dict, share: Decimal) -> tuple[Decimal, Decimal]:
+	"""`share` of the line, to the minor unit, with its own tax to the minor
+	unit: (base, tax). A line priced with tax included is cut on its price."""
+	unit, rate = line["unit"], line["rate"]
+	part = (line["figure"] * share).quantize(unit, rounding=ROUND_HALF_UP)
+	if line["priced_with_tax"]:
+		tax = (part * rate / (1 + rate)).quantize(unit, rounding=ROUND_HALF_UP)
+		return part - tax, tax
+	return part, (part * rate).quantize(unit, rounding=ROUND_HALF_UP)
+
+
+def _figure(line: dict, part: tuple[Decimal, Decimal]) -> Decimal:
+	return part[0] + part[1] if line["priced_with_tax"] else part[0]
+
+
+def _post_split(src, row, sign: int, line: dict, cuts: list, kept_units: Decimal) -> dict:
+	"""Void the line and post its parts: each cut (folio, (base, tax), units)
+	on its folio, and the rest of the line's base and tax on this one."""
 	same_line = {
 		"posting_date": row.posting_date,
 		"stay_date": row.get("stay_date"),
 		"charge_type": row.charge_type,
 		"reservation": row.get("reservation"),
+		"description": row.description,
 		"allowance_serial": row.get("allowance_serial"),
 		"gst_rate": row.gst_rate,
 		"auto_posted": row.auto_posted,
 		"is_alcohol": row.get("is_alcohol"),
 		"transaction_code": row.get("transaction_code"),
 		"gl_code": row.get("gl_code"),
+		"split_of": row.name,
 	}
-	# the posted line stays; its reversal cancels it on its own date
+	names = ", ".join(dict.fromkeys(f.name for f, _p, _u in cuts if f is not src))
+	# the posted line stays; its reversal voids it on its own date, tax and all
 	src.append("charges", {
 		**same_line,
-		"description": f"Split: {row.description or row.charge_type}"[:140],
 		"qty": row.qty,
 		"rate": -float(row.rate or 0),
 		"amount": -float(row.amount or 0),
+		"tax_as_posted": row.get("tax_as_posted"),
+		"gst_amount": -float(row.gst_amount or 0),
 		"reversal_of": row.name,
-		"void_reason": f"Split to {dst.name}" if not same else "Split",
+		"void_reason": f"Split to {names}" if names else "Split",
 		"voided_by": frappe.session.user,
 	})
 	reversal = src.charges[-1]
-	src.append("charges", {
-		**same_line,
-		"description": row.description,
-		"corrects_row": row.name,
-		"qty": float(kept_units),
-		"rate": float(remainder * sign / kept_units),
-		"amount": float(remainder * sign),
-	})
+	kept_base = line["base"] - sum(p[0] for _f, p, _u in cuts)
+	kept_tax = line["tax"] - sum(p[1] for _f, p, _u in cuts)
+
+	def part_line(base, tax, units):
+		return {**same_line, "qty": float(units), "rate": float(base * sign / units),
+		        "amount": float(base * sign), "gst_amount": float(tax * sign),
+		        "tax_as_posted": 1}
+
+	src.append("charges", part_line(kept_base, kept_tax, kept_units))
 	kept = src.charges[-1]
-	dst.append("charges", {
-		**same_line,
-		"description": f"{row.description} · split"[:140],
-		"corrects_row": row.name,
-		"qty": float(part_units),
-		"rate": float(part * sign / part_units),
-		"amount": float(part * sign),
-	})
-	moved = dst.charges[-1]
-	for f in (src,) if same else (src, dst):
+	folios, moved = {src.name: src}, []
+	for f, (base, tax), units in cuts:
+		f = folios.setdefault(f.name, f)
+		f.append("charges", part_line(base, tax, units))
+		moved.append((f, f.charges[-1]))
+	for f in folios.values():
 		_recalculate(f)
 		f.save(ignore_permissions=True)
 	# the reversal takes the posted line off the ledger; each part is posted
@@ -1045,9 +1107,12 @@ def split_charge(from_folio: str, charge_row: str, to_folio: str,
 	if first:
 		record_charge_ledger(src, reversal.as_dict(), reversal_of=first.name)
 	ledger_charges(src, [kept])
-	ledger_charges(dst, [moved])
-	return {"kept": float(remainder * sign), "moved": float(part * sign),
-	        "reversal": reversal.name, "kept_row": kept.name, "moved_row": moved.name}
+	for f, part in moved:
+		ledger_charges(f, [part])
+	return {"kept": float(kept_base * sign),
+	        "moved": float(sum(p[0] for _f, p, _u in cuts) * sign),
+	        "reversal": reversal.name, "kept_row": kept.name,
+	        "moved_row": moved[0][1].name, "moved_rows": [p.name for _f, p in moved]}
 
 
 def open_guest_bills(reservation: str, names: list | None = None) -> list[dict]:
@@ -1093,8 +1158,12 @@ def share_charges(from_folio: str, charge_rows: list, to_folios: list,
 	"""Share charge lines (the room nights, usually) between the guests'
 	bills: each line is cut into one part per target bill, evenly by
 	default or by `shares` (a percent per target), and the source bill
-	keeps the rest, rounding included. Every cut goes through split_charge,
-	so each part keeps its line's tax rate and its own ledger legs."""
+	keeps the rest. Each line is split once (split_charge's trail: one
+	reversal, the parts and the rest), every part a share of the line's
+	figure - its price, for a night priced with tax included - to the
+	currency's minor unit with its tax, so the bills add up to the line
+	exactly. A part that rounds to nothing, or would take all that is left
+	(0.02 three ways), is skipped."""
 	to_folios = [f for f in to_folios if f and f != from_folio]
 	if not to_folios or len(set(to_folios)) != len(to_folios):
 		frappe.throw(frappe._("Pick the other guests' bills to share with."))
@@ -1108,27 +1177,31 @@ def share_charges(from_folio: str, charge_rows: list, to_folios: list,
 				or sum(shares) >= 100:
 			frappe.throw(frappe._("Give each other bill a share above 0%; "
 			                      "together under 100%."))
+		shares = [x / 100 for x in shares]
 	else:
-		shares = [Decimal(100) / (len(to_folios) + 1)] * len(to_folios)
+		shares = [Decimal(1) / (len(to_folios) + 1)] * len(to_folios)
 	src = frappe.get_doc("Folio", from_folio)
-	bases = {c.name: Decimal(str(c.amount or 0)) for c in src.charges}
+	present = {c.name: c for c in src.charges}
+	for row in charge_rows:
+		if row not in present:
+			frappe.throw(frappe._("Charge {0} is not on {1}.").format(row, from_folio))
+		if Decimal(str(present[row].amount or 0)) <= 0:
+			frappe.throw(frappe._("Only charges above zero can be shared."))
 	moved = Decimal(0)
 	for row in charge_rows:
-		if row not in bases:
-			frappe.throw(frappe._("Charge {0} is not on {1}.").format(row, from_folio))
-		if bases[row] <= 0:
-			frappe.throw(frappe._("Only charges above zero can be shared."))
-		left = bases[row]
-		current = row  # a split posts the rest anew: cut that line next
-		for target, pct in zip(to_folios, shares):
-			part = (bases[row] * pct / 100).quantize(Decimal("0.01"))
-			# a line too small to cut for everyone (0.02 three ways): skip
-			# the parts that would round to nothing or take all of it
-			if 0 < part < left:
-				current = split_charge(from_folio, current, target,
-				                       amount=float(part))["kept_row"]
-				moved += part
-				left -= part
+		src = frappe.get_doc("Folio", from_folio)
+		targets = [_split_target(src, f) for f in to_folios]
+		line_row, sign, line = _split_line(src, row, False)
+		cuts, left = [], line["figure"]
+		for dst, share in zip(targets, shares):
+			if line_row.get("is_alcohol") and dst.folio_type in ("Company", "Group"):
+				frappe.throw("Alcohol cannot be billed to a company folio.")
+			part = _cut(line, share)
+			if 0 < _figure(line, part) < left:
+				cuts.append((dst, part, Decimal(1)))
+				left -= _figure(line, part)
+		if cuts:
+			moved += Decimal(str(_post_split(src, line_row, sign, line, cuts, Decimal(1))["moved"]))
 	return {"lines": len(charge_rows), "moved": float(moved)}
 
 
@@ -1341,6 +1414,9 @@ def void_charge(folio_name: str, charge_row: str, reason: str = "", *, correctio
 		"rate": -float(row.rate or 0),
 		"amount": -float(row.amount or 0),
 		"gst_rate": row.gst_rate,
+		# a line split to the minor unit is voided with the tax it was posted with
+		"tax_as_posted": row.get("tax_as_posted"),
+		"gst_amount": -float(row.gst_amount or 0),
 		"auto_posted": row.auto_posted,
 		"is_alcohol": row.get("is_alcohol"),
 		"reversal_of": row.name,
@@ -1372,6 +1448,12 @@ def void_charge(folio_name: str, charge_row: str, reason: str = "", *, correctio
 def voided_rows(folio) -> dict:
 	"""{voided line: its reversal line} on a loaded folio."""
 	return {c.reversal_of: c.name for c in folio.charges if c.get("reversal_of")}
+
+
+def void_pairs(folio) -> set:
+	"""Every line of a void pair on a loaded folio: each voided (or split)
+	line and its reversal. Together they net to nothing."""
+	return {n for c in folio.charges if c.get("reversal_of") for n in (c.name, c.reversal_of)}
 
 
 def part_settle(folio_name: str) -> dict:
@@ -1417,6 +1499,12 @@ def bridge_invoice(folio) -> str | None:
 	return folio.get("sales_invoice") or None
 
 
+def invoiced(folio) -> bool:
+	"""The bill was invoiced: here (invoice_number) or by the bridge, whose
+	check-out close sets only its Sales Invoice (sales_invoice)."""
+	return bool(folio.get("invoice_number") or bridge_invoice(folio))
+
+
 def refuse_bridge_correction(folio):
 	frappe.throw(frappe._(
 		"Invoice {0} was issued by the accounting system as {1}. Correct it there "
@@ -1443,10 +1531,10 @@ def cancel_invoice(folio_name: str, reason: str) -> dict:
 	corrected and re-closed under a fresh number. An invoice the ERPNext
 	bridge issued is never reopened here (bridge_invoice)."""
 	folio = frappe.get_doc("Folio", folio_name)
-	if folio.status != "Closed" or not folio.invoice_number:
-		frappe.throw("Only a settled folio with an invoice can be cancelled.")
 	if bridge_invoice(folio):
 		refuse_bridge_correction(folio)
+	if folio.status != "Closed" or not folio.invoice_number:
+		frappe.throw("Only a settled folio with an invoice can be cancelled.")
 	if folio.folio_type == "Account":
 		# reopened, an account invoice has no stay to correct it from and
 		# nothing would reissue it: the AR way out is a credit note
