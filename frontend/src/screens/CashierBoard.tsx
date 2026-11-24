@@ -17,6 +17,17 @@ import { useT, t as translate } from "../lib/i18n"
 const inr = (n: unknown) =>
   Number(n ?? 0).toLocaleString(moneyLocale(), { maximumFractionDigits: 0 })
 
+const fmtFx = (n: unknown) =>
+  Number(n ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+type ForeignDrawer = {
+  currency: string
+  expected_fx: number
+  counted_fx: number | null
+  variance_fx: number | null
+  home_equivalent: number
+}
+
 const WRITE_ROLES = ["Finance", "Hotel Admin", "System Manager", "Administrator"]
 const KINDS = ["Front Desk", "Restaurant", "Bar", "Spa", "Cash Office", "Other"]
 
@@ -26,6 +37,7 @@ type BoardSession = {
   cashier_id?: string
   opened_at: string
   expected_cash: number
+  foreign_drawers?: ForeignDrawer[]
 }
 type Till = {
   name: string | null
@@ -47,7 +59,13 @@ type Board = {
     to_terminal: string
     requested_by: string
   }[]
-  variance_review: { name: string; user: string; variance: number; business_date: string }[]
+  variance_review: {
+    name: string
+    user: string
+    variance: number
+    business_date: string
+    foreign_drawers?: ForeignDrawer[]
+  }[]
 }
 type TerminalRow = {
   name: string
@@ -214,14 +232,28 @@ export default function CashierBoard() {
             </CardHeader>
             <CardContent className="space-y-2 pt-0 text-sm">
               {tl.sessions.map((s) => (
-                <div key={s.name} className="flex items-baseline justify-between gap-2">
-                  <span className="truncate text-zinc-700">{s.cashier_id || s.user}</span>
-                  <span className="tabular-nums text-zinc-900">
-                    {inr(s.expected_cash)}
-                    <span className="ml-1 text-xs text-zinc-400">
-                      {String(s.opened_at).replace(" ", "T").slice(11, 16)}
+                <div key={s.name} className="space-y-1">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="truncate text-zinc-700">{s.cashier_id || s.user}</span>
+                    <span className="tabular-nums text-zinc-900">
+                      {inr(s.expected_cash)}
+                      <span className="ml-1 text-xs text-zinc-400">
+                        {String(s.opened_at).replace(" ", "T").slice(11, 16)}
+                      </span>
                     </span>
-                  </span>
+                  </div>
+                  {(s.foreign_drawers?.length ?? 0) > 0 ? (
+                    <div className="flex flex-wrap gap-1.5 text-xs text-zinc-500">
+                      {s.foreign_drawers!.map((fd) => (
+                        <span
+                          key={fd.currency}
+                          className="rounded bg-zinc-100 px-1.5 py-0.5 tabular-nums"
+                        >
+                          {fd.currency} {fmtFx(fd.expected_fx)}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               ))}
               {tl.is_default && tl.sessions.length ? (
@@ -298,21 +330,46 @@ export default function CashierBoard() {
             </p>
           </CardHeader>
           <CardContent className="space-y-2 pt-0">
-            {board.variance_review.map((v) => (
-              <div key={v.name} className="flex items-center justify-between gap-3 text-sm">
-                <span className="text-zinc-600">
-                  {v.user} · {v.business_date}
-                </span>
-                <span className="flex items-center gap-3">
-                  <span className="font-semibold tabular-nums text-rose-700">{inr(v.variance)}</span>
-                  {canEdit ? (
-                    <Button variant="outline" disabled={busy} onClick={() => approve(v.name)}>
-                      {t("Approve")}
-                    </Button>
-                  ) : null}
-                </span>
-              </div>
-            ))}
+            {board.variance_review.map((v) => {
+              const fxWithVar = (v.foreign_drawers || []).filter(
+                (fd) => fd.variance_fx !== null && fd.variance_fx !== undefined && Math.abs(fd.variance_fx) > 0.004,
+              )
+              return (
+                <div key={v.name} className="flex flex-wrap items-center justify-between gap-3 text-sm">
+                  <div className="min-w-0">
+                    <span className="text-zinc-600">
+                      {v.user} · {v.business_date}
+                    </span>
+                    {fxWithVar.length ? (
+                      <div className="mt-1 flex flex-wrap gap-1.5 text-xs">
+                        {fxWithVar.map((fd) => (
+                          <span
+                            key={fd.currency}
+                            className="rounded bg-rose-50 px-1.5 py-0.5 font-medium tabular-nums text-rose-700"
+                          >
+                            {fd.currency} {fmtFx(fd.variance_fx)}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                  <span className="flex flex-wrap items-center gap-3">
+                    <span className="font-semibold tabular-nums text-rose-700">{inr(v.variance)}</span>
+                    <Link
+                      to={`/cashier/shift-report?session=${v.name}`}
+                      className="text-xs text-brand-700 hover:underline"
+                    >
+                      {t("View report")}
+                    </Link>
+                    {canEdit ? (
+                      <Button variant="outline" disabled={busy} onClick={() => approve(v.name)}>
+                        {t("Approve")}
+                      </Button>
+                    ) : null}
+                  </span>
+                </div>
+              )
+            })}
           </CardContent>
         </Card>
       ) : null}
@@ -332,9 +389,9 @@ export default function CashierBoard() {
             </Button>
           ) : null}
         </CardHeader>
-        <CardContent className="pt-0">
+        <CardContent className="overflow-x-auto pt-0">
           {terminals.length ? (
-            <table className="w-full text-left text-sm">
+            <table className="min-w-[520px] w-full text-left text-sm">
               <thead className="text-xs uppercase tracking-wide text-zinc-400">
                 <tr>
                   <th className="py-2 pr-3">{t("Name")}</th>

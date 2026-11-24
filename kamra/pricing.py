@@ -2328,7 +2328,6 @@ def quote(
 				if prop.get("pet_charge_basis") == "Per night" else 0,
 		})
 	if levy:
-		from kamra.localization import pack_for
 		levy_label = prop.get("room_levy_label") or getattr(pack_for(property), "ROOM_LEVY_LABEL", None) or "Room levy"
 		line_items.append({
 			"component": "room_levy",

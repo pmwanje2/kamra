@@ -769,5 +769,22 @@
   "Tax summary": "Steuerübersicht",
   "Total Tax": "Gesamtsteuer",
   "Credited": "Gutgeschrieben",
-  "Total {cur}": "Gesamt {cur}"
+  "Total {cur}": "Gesamt {cur}",
+  "Property": "Unterkunft",
+  "Shared": "Geteilt",
+  "Booking type": "Buchungsart",
+  "Foreign currency drawers": "Fremdwährungskassen",
+  "Foreign drawers": "Fremdwährung",
+  "Receipts (FX)": "Einnahmen (FX)",
+  "Refunds (FX)": "Erstattungen (FX)",
+  "Expected (FX)": "Erwartet (FX)",
+  "Counted (FX)": "Gezählt (FX)",
+  "Home equivalent": "Gegenwert in Hauswährung",
+  "Counted {currency}": "Gezählt in {currency}",
+  "Per-currency foreign note totals kept separate from home cash.": "Fremdwährungs-Bargeldsummen je Währung getrennt vom Bargeld in Hauswährung.",
+  "By payment method": "Nach Zahlungsart",
+  "View report": "Bericht anzeigen",
+  "Edit property override": "Haus-Überschreibung bearbeiten",
+  "This property already has its own override for {code}. Edit that property row instead.": "Dieses Haus hat bereits eine eigene Überschreibung für {code}. Bearbeiten Sie stattdessen die Hauszeile.",
+  "Saving creates a property override for {property}. The shared default stays unchanged for other properties.": "Beim Speichern wird eine Überschreibung für {property} angelegt. Der gemeinsame Standard bleibt für andere Häuser unverändert."
 }

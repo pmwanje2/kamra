@@ -9,6 +9,8 @@
   "kind",
   "mode",
   "amount",
+  "currency",
+  "fx_amount",
   "column_break_a",
   "business_date",
   "folio",
@@ -45,9 +47,8 @@
   },
   {
    "fieldname": "mode",
-   "fieldtype": "Link",
+   "fieldtype": "Data",
    "label": "Mode",
-   "options": "Payment Method",
    "default": "Cash",
    "in_list_view": 1
   },
@@ -57,6 +58,17 @@
    "label": "Amount",
    "reqd": 1,
    "in_list_view": 1
+  },
+  {
+   "fieldname": "currency",
+   "fieldtype": "Data",
+   "label": "Currency"
+  },
+  {
+   "fieldname": "fx_amount",
+   "fieldtype": "Float",
+   "label": "FX Amount",
+   "default": "0"
   },
   {
    "fieldname": "column_break_a",
@@ -113,7 +125,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-11-23 18:00:00.000000",
+ "modified": "2026-11-24 08:00:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Cashier Transaction",
