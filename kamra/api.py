@@ -6705,7 +6705,7 @@ def _rate_override_plan(res, agreed_rate) -> dict:
 	at the hotel screen, not the agent's."""
 	from kamra.credit import _is_agent
 	from kamra.folio import charged_nights
-	from kamra.pricing import entry_rate, rail_for_day, rates_include_tax
+	from kamra.pricing import entry_rate, night_rate_places, rail_for_day, rates_include_tax
 	agreed_rate = flt(agreed_rate)
 	if agreed_rate <= 0:
 		frappe.throw(_("Enter the new nightly rate."))
@@ -6721,6 +6721,7 @@ def _rate_override_plan(res, agreed_rate) -> dict:
 	rows = res.flags.get("kamra_repriced_rows") or res.get("night_rates") or []
 	charged = set(charged_nights(res.name))
 	inclusive = rates_include_tax(res.property)
+	places = night_rate_places(res.property)
 	rails = frappe.get_all(
 		"Rate Guardrail", filters={"property": res.property, "disabled": 0,
 		                           "room_type": ("in", [res.room_type, "", None])},
@@ -6730,7 +6731,7 @@ def _rate_override_plan(res, agreed_rate) -> dict:
 		day = str(getdate(r.get("stay_date")))
 		if day in charged:
 			continue  # on the folio: it keeps what it holds
-		net = flt(entry_rate(r.get("rate"), r.get("gst_rate"), inclusive))
+		net = flt(entry_rate(r.get("rate"), r.get("gst_rate"), inclusive, places))
 		code = flt(r.get("rate_code_amount")) or net
 		if code:
 			cut = max(cut, 100 * (code - net) / code)
@@ -7048,13 +7049,14 @@ def discount_governance(property: str, room_type: str | None, rate_plan: str | N
 	approver."""
 	from kamra.authz import supervisors_for, verify_supervisor
 	from kamra.credit import _is_agent
-	from kamra.pricing import entry_rate, rail_for_day, rates_include_tax
+	from kamra.pricing import entry_rate, night_rate_places, rail_for_day, rates_include_tax
 
 	inclusive = rates_include_tax(property)
+	places = night_rate_places(property)
 
 	def entry(n) -> float:
 		# what the desk sees for the night after the discount
-		return flt(entry_rate(n.get("rate"), n.get("gst_rate"), inclusive))
+		return flt(entry_rate(n.get("rate"), n.get("gst_rate"), inclusive, places))
 
 	discounted = [n for n in nightly if n.get("discount_type") and flt(n.get("discount_value")) > 0]
 	base_total = sum(entry(n) + flt(n.get("discount_amount")) for n in nightly)
@@ -7104,8 +7106,8 @@ def discount_governance(property: str, room_type: str | None, rate_plan: str | N
 	desk_needs = max_pct > limit + 0.005 or bool(floor_breach) or reason_sup
 	needs_supervisor = bool(discounted) and ((not manager and desk_needs) or comp)
 	out = {
-		"base_total": round(base_total, 2), "discount_total": round(discount_total, 2),
-		"net_total": round(base_total - discount_total, 2),
+		"base_total": round(base_total, places), "discount_total": round(discount_total, places),
+		"net_total": round(base_total - discount_total, places),
 		"effective_pct": round(100 * discount_total / base_total, 2) if base_total else 0.0,
 		"max_pct": round(max_pct, 2), "limit_pct": limit,
 		"needs_supervisor": needs_supervisor, "can_set_rate": manager, "agent": agent,
@@ -7342,7 +7344,7 @@ def _discount_plan(doc, discount_type=None, discount_value=0, reason_code=None,
 	if not doc.get("auto_price"):
 		frappe.throw(_("This booking is priced by hand; change its amount instead."))
 	disc = normalize_discounts(discount_type, discount_value, night_discounts,
-	                           doc.check_in_date, doc.check_out_date)
+	                           doc.check_in_date, doc.check_out_date, property=doc.property)
 	charged = set(charged_nights(doc.name))
 	rows_now = {str(getdate(r.stay_date)): r for r in doc.get("night_rates") or []}
 
@@ -7389,9 +7391,10 @@ def _entry_figures(property: str, row) -> dict:
 	"""A night's base and net room rate on the basis the desk enters a
 	discount (gross where the property's rates include tax), beside the
 	before-tax base_rate / rate: base less discount_amount is the net."""
-	from kamra.pricing import entry_rate, rates_include_tax
-	net = flt(entry_rate(row.get("rate"), row.get("gst_rate"), rates_include_tax(property)))
-	return {"entry_base_rate": round(net + flt(row.get("discount_amount")), 2), "entry_rate": net}
+	from kamra.pricing import entry_rate, night_rate_places, rates_include_tax
+	places = night_rate_places(property)
+	net = flt(entry_rate(row.get("rate"), row.get("gst_rate"), rates_include_tax(property), places))
+	return {"entry_base_rate": round(net + flt(row.get("discount_amount")), places), "entry_rate": net}
 
 
 @frappe.whitelist(methods=["POST"])
@@ -8543,7 +8546,7 @@ def create_booking(property: str, room_type: str, check_in_date: str,
 	# the desk's discount: its shape refused here, its rules on the priced nights
 	from kamra.pricing import normalize_discounts
 	disc = normalize_discounts(discount_type, discount_value, night_discounts,
-	                           check_in_date, check_out_date)
+	                           check_in_date, check_out_date, property=property)
 	if disc and booked_via and flt(ota_total) > 0:
 		frappe.throw(_("The OTA total already sets the price; it can't take a desk discount."))
 

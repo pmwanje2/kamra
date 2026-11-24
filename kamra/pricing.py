@@ -7,7 +7,7 @@ no LLM ever computes money. Resolution order per night:
   reservation discount -> meal plan -> voucher discount -> tax.
 """
 
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 import frappe
 from frappe import _
@@ -813,12 +813,15 @@ NIGHT_DISCOUNT_KEYS = frozenset(
 CENT = Decimal("0.01")
 
 
-def _discount_entry(discount_type, discount_value, where: str) -> tuple[str | None, Decimal]:
+def _discount_entry(discount_type, discount_value, where: str, places: int = 2) -> tuple[str | None, Decimal]:
 	"""(type, value) of one discount as the desk entered it: Percent (0 to
-	100) or Amount (zero or more, at most 2 decimals). A value without a
-	type, a type that is neither, or a figure that is not a number is
+	100, at most 2 decimals) or Amount (zero or more, at most `places`
+	decimals: 2 by default, 3 for KWD via night_rate_places). A value without
+	a type, a type that is neither, or a figure that is not a number is
 	refused - never coerced."""
 	raw = discount_value
+	kind = discount_type.strip() if isinstance(discount_type, str) else discount_type
+	max_dec = places if kind == "Amount" else 2
 	if raw in (None, ""):
 		value = Decimal(0)
 	else:
@@ -832,9 +835,10 @@ def _discount_entry(discount_type, discount_value, where: str) -> tuple[str | No
 			frappe.throw(_("The discount {0} must be a number.").format(where))
 		if value < 0:
 			frappe.throw(_("The discount {0} can't be below zero.").format(where))
-		if value.as_tuple().exponent < -2:
-			frappe.throw(_("The discount {0} can have at most 2 decimals.").format(where))
-	kind = discount_type.strip() if isinstance(discount_type, str) else discount_type
+		if value.as_tuple().exponent < -max_dec:
+			if max_dec == 2:
+				frappe.throw(_("The discount {0} can have at most 2 decimals.").format(where))
+			frappe.throw(_("The discount {0} can have at most {1} decimals.").format(where, max_dec))
 	if kind in (None, ""):
 		if value:
 			frappe.throw(_("Pick Percent or Amount for the discount {0}.").format(where))
@@ -847,7 +851,7 @@ def _discount_entry(discount_type, discount_value, where: str) -> tuple[str | No
 
 
 def normalize_discounts(discount_type, discount_value, night_discounts,
-                        check_in_date, check_out_date) -> dict:
+                        check_in_date, check_out_date, property: str | None = None) -> dict:
 	"""Validate the desk's reservation discount: one for the stay and,
 	optionally, Daily Details nights of their own ([{date, discount_type,
 	discount_value, discount_reason, fixed_rate}], a JSON string works too).
@@ -856,7 +860,8 @@ def normalize_discounts(discount_type, discount_value, night_discounts,
 	reason, fixed_rate}}}, or {} when there is no discount. A night listed
 	with no value is that night taken out of the stay's discount. Dates
 	outside the stay, a night listed twice and unknown keys are refused."""
-	kind, value = _discount_entry(discount_type, discount_value, _("for the stay"))
+	places = night_rate_places(property)
+	kind, value = _discount_entry(discount_type, discount_value, _("for the stay"), places=places)
 	stay = (kind, value) if kind and value > 0 else None
 	nights: dict = {}
 	if night_discounts not in (None, "", [], {}):
@@ -889,7 +894,7 @@ def normalize_discounts(discount_type, discount_value, night_discounts,
 			if fixed not in (None, "", 0, 1, True, False, "0", "1"):
 				frappe.throw(_("fixed_rate is 0 or 1."))
 			k, v = _discount_entry(row.get("discount_type"), row.get("discount_value"),
-			                       _("for {0}").format(day))
+			                       _("for {0}").format(day), places=places)
 			reason = row.get("discount_reason")
 			nights[str(day)] = {"type": k, "value": v,
 			                    "reason": reason if isinstance(reason, str) and reason else None,
@@ -899,13 +904,16 @@ def normalize_discounts(discount_type, discount_value, night_discounts,
 	return {"stay": stay, "nights": nights}
 
 
-def entry_rate(rate, gst_rate, inclusive: bool) -> Decimal:
+def entry_rate(rate, gst_rate, inclusive: bool, places: int = 2) -> Decimal:
 	"""A night's room rate on the basis the desk sees and enters it: gross
-	(in cents) where the property's rates include tax, else the net rate."""
+	(to `places` decimals) where the property's rates include tax, else the
+	net rate."""
+	unit = Decimal(1).scaleb(-places)
 	rate = _dec(rate)
 	if inclusive:
-		return (rate * (Decimal(1) + _dec(gst_rate) / Decimal(100))).quantize(CENT)
-	return rate.quantize(CENT)
+		return (rate * (Decimal(1) + _dec(gst_rate) / Decimal(100))).quantize(
+			unit, rounding=ROUND_HALF_UP)
+	return rate.quantize(unit, rounding=ROUND_HALF_UP)
 
 
 def discount_night(property, rt, base, base_gst, entry, kind, value, inclusive: bool,
@@ -922,6 +930,8 @@ def discount_night(property, rt, base, base_gst, entry, kind, value, inclusive: 
 	so a night is discounted the same way both times."""
 	if not (kind and value):
 		return _dec(base), _dec(base_gst), Decimal(0)
+	places = night_rate_places(property)
+	unit = Decimal(1).scaleb(-places)
 	entry = _dec(entry)
 	if kind == "Percent":
 		off = entry * _dec(value) / Decimal(100)
@@ -930,10 +940,11 @@ def discount_night(property, rt, base, base_gst, entry, kind, value, inclusive: 
 			frappe.throw(_("A discount of {0} is more than the room rate on {1} ({2}).").format(
 				f"{_dec(value):,.2f}", date, f"{entry:,.2f}"))
 		off = _dec(value)
-	net_entry = max(entry - off, Decimal(0)).quantize(CENT)
+	net_entry = max(entry - off, Decimal(0)).quantize(unit, rounding=ROUND_HALF_UP)
 	gst = room_gst_rate(property, rt, net_entry + _dec(night_over_cap))
-	net = (net_entry / (Decimal(1) + gst / Decimal(100))).quantize(CENT) if inclusive else net_entry
-	return net, gst, max(entry - entry_rate(net, gst, inclusive), Decimal(0))
+	net = (net_entry / (Decimal(1) + gst / Decimal(100))).quantize(
+		unit, rounding=ROUND_HALF_UP) if inclusive else net_entry
+	return net, gst, max(entry - entry_rate(net, gst, inclusive, places), Decimal(0))
 
 
 def _discount_nights(property, rt, nightly: list, room_total: Decimal, disc: dict,
@@ -944,18 +955,21 @@ def _discount_nights(property, rt, nightly: list, room_total: Decimal, disc: dic
 	demand, rate plan or agreed / contract rate already applied). The
 	discount comes off it on the basis the desk sees it - gross where the
 	property's rates include tax (discount_night). Nothing else on the stay
-	moves. The nights are left in cents, so the locked rows add up to the
-	quote. Returns (room_total, room_tax, extra-guest net change, extra-guest
-	tax change, base total and discount total on the desk's basis)."""
+	moves. The nights are left at the property's night-rate decimals
+	(night_rate_places), so the locked rows add up to the quote. Returns
+	(room_total, room_tax, extra-guest net change, extra-guest tax change,
+	base total and discount total on the desk's basis)."""
+	places = night_rate_places(property)
+	unit = Decimal(1).scaleb(-places)
 	plan_free = sum((_dec(n["rate"]) for n in nightly), Decimal(0))
 	factor = room_total / plan_free if plan_free else Decimal(1)
 	new_total = new_tax = base_total = off_total = oc_net = oc_tax = Decimal(0)
 	for n in nightly:
 		gst = _dec(n["gst_rate"])
-		base = (_dec(n["rate"]) * factor).quantize(CENT)
+		base = (_dec(n["rate"]) * factor).quantize(unit, rounding=ROUND_HALF_UP)
 		own = disc["nights"].get(n["date"])
 		kind, value = (own["type"], own["value"]) if own else (disc["stay"] or (None, Decimal(0)))
-		entry = entry_rate(base, gst, inclusive)
+		entry = entry_rate(base, gst, inclusive, places)
 		net, new_gst, off = discount_night(property, rt, base, gst, entry, kind, value,
 		                                   inclusive, night_over_cap, n["date"])
 		if night_over_cap and new_gst != gst:
@@ -999,7 +1013,8 @@ def stay_room_tax_rate(room_tax: Decimal, room_total: Decimal, nightly: list) ->
 	return sum(rates, Decimal(0)) / len(rates) if rates else Decimal(0)
 
 
-def _pin_nights(nightly: list, locked: dict, inclusive: bool, night_over_cap: Decimal) -> tuple:
+def _pin_nights(nightly: list, locked: dict, inclusive: bool, night_over_cap: Decimal,
+                places: int = 2) -> tuple:
 	"""Put each booked night's locked room price back on the quote's night
 	(quote locked_nights) and total the room from them: (room total, room
 	tax, base and discount on the desk's basis, extra guests and their tax,
@@ -1016,7 +1031,7 @@ def _pin_nights(nightly: list, locked: dict, inclusive: bool, night_over_cap: De
 		rate, gst, off = _dec(n["rate"]), _dec(n["gst_rate"]), _dec(n.get("discount_amount"))
 		room_total += rate
 		room_tax += rate * gst / Decimal(100)
-		base_total += entry_rate(rate, gst, inclusive) + off
+		base_total += entry_rate(rate, gst, inclusive, places) + off
 		off_total += off
 		if night_over_cap:
 			net = night_over_cap / (Decimal(1) + gst / Decimal(100)) if inclusive else night_over_cap
@@ -1107,7 +1122,7 @@ def quote(
 	# The desk's reservation discount, validated before anything is priced
 	# and taken off the room nights once the rate plan has priced them.
 	disc = normalize_discounts(discount_type, discount_value, night_discounts,
-	                           check_in_date, check_out_date)
+	                           check_in_date, check_out_date, property=property)
 	if typed:
 		refused = (
 			(voucher_code, _("a voucher")),
@@ -1355,7 +1370,8 @@ def quote(
 		n.setdefault("fixed_rate", 1 if agreed_rate else 0)
 	if locked_nights and not pkg and not day_use:
 		room_total, room_tax, room_base_total, reservation_discount, over_cap, over_cap_tax = \
-			_pin_nights(nightly, locked_nights, inclusive, night_over_cap)
+			_pin_nights(nightly, locked_nights, inclusive, night_over_cap,
+			            places=night_rate_places(property))
 
 	from kamra.folio import _fnb_gst
 	FNB_GST = _fnb_gst(property)

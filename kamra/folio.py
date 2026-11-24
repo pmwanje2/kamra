@@ -489,7 +489,7 @@ def _day_use_discount(reservation, date, rt, inclusive: bool, amount: float, gst
 	row's own, else the stay's) comes off the booked base charge - up to the
 	hours actually used; hours past the booking bill at the plan's rate.
 	Without a discount the charge is as worked out."""
-	from kamra.pricing import _dec, entry_rate, room_gst_rate
+	from kamra.pricing import _dec, entry_rate, night_rate_places, room_gst_rate
 	locked = locked_night(reservation, date)
 	if locked is None:
 		return amount, gst, label
@@ -500,17 +500,19 @@ def _day_use_discount(reservation, date, rt, inclusive: bool, amount: float, gst
 		value = float(reservation.get("discount_value") or 0)
 	if not kind or value <= 0:
 		return amount, gst, label
-	used = entry_rate(amount, gst, inclusive)
-	booked = entry_rate(locked.rate, locked.gst_rate, inclusive) + _dec(locked.get("discount_amount"))
+	places = night_rate_places(reservation.property)
+	unit = Decimal(1).scaleb(-places)
+	used = entry_rate(amount, gst, inclusive, places)
+	booked = entry_rate(locked.rate, locked.gst_rate, inclusive, places) + _dec(locked.get("discount_amount"))
 	base = min(used, booked)
 	off = (base * _dec(value) / Decimal(100) if kind == "Percent" else min(_dec(value), base)).quantize(
-		Decimal("0.01"))
+		unit, rounding=ROUND_HALF_UP)
 	if off <= 0:
 		return amount, gst, label
 	net = used - off
 	new_gst = room_gst_rate(reservation.property, rt, net + _over_cap_night(reservation))
 	charge = net / (Decimal(1) + new_gst / Decimal(100)) if inclusive else net
-	return (float(charge.quantize(Decimal("0.01"))), float(new_gst),
+	return (float(charge.quantize(unit, rounding=ROUND_HALF_UP)), float(new_gst),
 	        f"{label} · {float(used):,.2f} less discount {float(off):,.2f}")
 
 
@@ -656,10 +658,11 @@ def post_room_night(reservation, date, folios=None) -> bool:
 				# the net rate is what bills; the line says what it came from,
 				# base and discount on the basis the discount was given (gross
 				# where rates include tax)
-				from kamra.pricing import entry_rate, rates_include_tax
+				from kamra.pricing import entry_rate, night_rate_places, rates_include_tax
+				places = night_rate_places(reservation.property)
 				off = float(locked.discount_amount)
 				base = float(entry_rate(locked.rate, locked.gst_rate,
-				                        rates_include_tax(reservation.property))) + off
+				                        rates_include_tax(reservation.property), places)) + off
 				desc += f" · {base:,.2f} less discount {off:,.2f}"
 		_append_charge(folios, reservation, "Room", {
 			"posting_date": date,
@@ -793,8 +796,11 @@ def charged_nights(reservation_name: str) -> dict:
 		                         "levy_tax": 0.0, "folio": r.parent})
 		n["base"] += amount
 		n["tax"] += tax
+	from kamra.pricing import night_rate_places
+	prop = frappe.db.get_value("Reservation", reservation_name, "property")
+	places = night_rate_places(prop)
 	for n in out.values():
-		n["base"] = round(n["base"], 2)
+		n["base"] = round(n["base"], places)
 		n["gst_rate"] = round(n["tax"] / n["base"] * 100, 2) if n["base"] else 0.0
 	return out
 

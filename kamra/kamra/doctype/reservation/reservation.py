@@ -64,12 +64,12 @@ def discount_inputs(doc) -> tuple[tuple, set]:
 	return stay, nights
 
 
-def night_entry_base(row, inclusive: bool) -> float:
+def night_entry_base(row, inclusive: bool, places: int = 2) -> float:
 	"""A locked night's base before the desk's discount, on the basis the
 	desk enters a discount (gross where the property's rates include tax):
 	the night's net plus its discount."""
 	from kamra.pricing import entry_rate
-	return float(entry_rate(row.get("rate"), row.get("gst_rate"), inclusive)) \
+	return float(entry_rate(row.get("rate"), row.get("gst_rate"), inclusive, places)) \
 		+ flt(row.get("discount_amount"))
 
 
@@ -979,7 +979,8 @@ class Reservation(Document):
 		plan, takes its rate-code amount now (card_entry_bases)."""
 		if not self.agreed_rate_overrides():
 			return {}
-		from kamra.pricing import rates_include_tax
+		from kamra.pricing import night_rate_places, rates_include_tax
+		places = night_rate_places(self.property)
 		out: dict[str, float] = {}
 		old = self.stored()
 		if old and old.room_type == self.room_type and \
@@ -991,9 +992,9 @@ class Reservation(Document):
 				if not amount and not overrode:
 					# a night locked before rate-code amounts were kept: its
 					# base was the rate code's
-					amount = night_entry_base(r, inclusive)
+					amount = night_entry_base(r, inclusive, places)
 				if amount > 0:
-					out[str(getdate(r.stay_date))] = round(amount, 2)
+					out[str(getdate(r.stay_date))] = round(amount, places)
 		missing = [day for day in self.stay_nights() if day not in out]
 		if missing:
 			card = self.card_entry_bases()
@@ -1004,7 +1005,7 @@ class Reservation(Document):
 		"""Each night's rate-code amount now: the stay priced without its
 		agreed rate, typed nights or the desk's discount (the rate card,
 		season, demand and rate plan), on the desk's basis."""
-		from kamra.pricing import entry_rate, quote, rates_include_tax
+		from kamra.pricing import entry_rate, night_rate_places, quote, rates_include_tax
 		inputs = {k: v for k, v in self.quote_inputs().items()
 		          if k not in ("agreed_rate", "night_prices", *DISCOUNT_INPUT_KEYS)}
 		q = quote(**inputs, check_voucher_limits=False,
@@ -1013,8 +1014,9 @@ class Reservation(Document):
 		plan_free = sum(float(n["rate"]) for n in nightly)
 		factor = float(q.get("room_total") or 0) / plan_free if plan_free else 1.0
 		inclusive = rates_include_tax(self.property)
+		places = night_rate_places(self.property)
 		return {str(n["date"]): round(float(entry_rate(float(n["rate"]) * factor, n.get("gst_rate"),
-		                                               inclusive)), 2)
+		                                               inclusive, places)), places)
 		        for n in nightly}
 
 	def pinned_room_nights(self, inputs: dict) -> dict | None:
@@ -1248,16 +1250,19 @@ class Reservation(Document):
 			_dec,
 			discount_night,
 			entry_rate,
+			night_rate_places,
 			normalize_discounts,
 			rates_include_tax,
 			room_gst_rate,
 		)
 		disc = normalize_discounts(self.get("discount_type"), self.get("discount_value"),
 		                           self.night_discount_inputs(),
-		                           self.check_in_date, self.check_out_date)
+		                           self.check_in_date, self.check_out_date,
+		                           property=self.property)
 		stay = (disc or {}).get("stay")
 		own = (disc or {}).get("nights") or {}
 		inclusive = rates_include_tax(self.property)
+		places = night_rate_places(self.property)
 		rt = frappe.get_doc("Room Type", self.room_type)
 		over_cap = _dec(self.get("over_capacity_charge"))
 		charged = charged_nights(self.name)
@@ -1284,7 +1289,7 @@ class Reservation(Document):
 			rate, gst, off = _dec(r.rate), _dec(r.gst_rate), _dec(r.discount_amount)
 			base = _dec(r.base_rate) if flt(r.get("base_rate")) else rate
 			# the night's booked base on the desk's basis, and its tax rate
-			entry = entry_rate(rate, gst, inclusive) + off
+			entry = entry_rate(rate, gst, inclusive, places) + off
 			base_gst = room_gst_rate(self.property, rt, entry + over_cap) if off else gst
 			net, new_gst, new_off = discount_night(self.property, rt, base, base_gst, entry,
 			                                       kind, value, inclusive, over_cap, day)
@@ -1306,14 +1311,14 @@ class Reservation(Document):
 		except (TypeError, ValueError):
 			snap = {}
 		voucher = self.booked_voucher_discount(snap)
-		before = round(flt(self.amount_before_tax) + float(d_room + d_oc + d_levy), 2)
-		tax = round(flt(self.tax_amount) + float(d_tax + d_oc_tax + d_levy_tax), 2)
-		after = round(before + tax, 2)
-		base_total = sum(float(entry_rate(r["rate"], r["gst_rate"], inclusive))
+		before = round(flt(self.amount_before_tax) + float(d_room + d_oc + d_levy), places)
+		tax = round(flt(self.tax_amount) + float(d_tax + d_oc_tax + d_levy_tax), places)
+		after = round(before + tax, places)
+		base_total = sum(float(entry_rate(r["rate"], r["gst_rate"], inclusive, places))
 		                 + flt(r["discount_amount"]) for r in rows)
-		off_total = round(sum(flt(r["discount_amount"]) for r in rows), 2)
+		off_total = round(sum(flt(r["discount_amount"]) for r in rows), places)
 		snap.update(self._rediscounted_snapshot(
-			snap, rows, effective, voucher, off_total, round(base_total, 2),
+			snap, rows, effective, voucher, off_total, round(base_total, places),
 			room=float(d_room), room_tax=float(d_tax), over_cap=float(d_oc),
 			over_cap_tax=float(d_oc_tax), levy=float(d_levy), levy_tax=float(d_levy_tax),
 			before=before, tax=tax, after=after))
@@ -1469,11 +1474,11 @@ class Reservation(Document):
 				rate = round(room_total - running, places)
 			running += rate
 			# gross, discount and net side by side (the discounted quote's
-			# nights are already in cents, so the discount is exact)
-			off = round(float(n.get("discount_amount") or 0), 2)
+			# nights are already at night_rate_places, so the discount is exact)
+			off = round(float(n.get("discount_amount") or 0), places)
 			own = n.get("night_discount") or {}
 			code = codes.get(str(n["date"])) or flt(n.get("rate_code_amount")) or (
-				float(entry_rate(rate, n.get("gst_rate"), inclusive)) + off)
+				float(entry_rate(rate, n.get("gst_rate"), inclusive, places)) + off)
 			rows.append({
 				"stay_date": n["date"],
 				"rate": rate,
@@ -1482,10 +1487,10 @@ class Reservation(Document):
 				"demand_premium_pct": float(n.get("demand_premium_pct") or 0),
 				# what the desk typed for the night (0: Kamra priced it)
 				"hand_price": float(n.get("typed_price") or 0),
-				"rate_code_amount": round(float(code), 2),
+				"rate_code_amount": round(float(code), places),
 				# the night's base before tax (on a tax-inclusive slab the
 				# discount is on the gross, so the base is the quote's own)
-				"base_rate": round(float(n.get("base_rate") or rate), 2) if off else rate,
+				"base_rate": round(float(n.get("base_rate") or rate), places) if off else rate,
 				"discount_amount": off,
 				# the night's own Daily Details discount; blank follows the stay
 				"discount_type": own.get("discount_type"),
@@ -1528,8 +1533,10 @@ class Reservation(Document):
 		from kamra.settings import get_setting
 		policy = get_setting(self.property, "charged_night_rate_change")
 		out["policy"] = policy
-		from kamra.pricing import entry_rate, rates_include_tax
+		from kamra.pricing import entry_rate, night_rate_places, rates_include_tax
 		inclusive = rates_include_tax(self.property)
+		places = night_rate_places(self.property)
+		tol = 10 ** -places
 		prop = frappe.get_cached_doc("Property", self.property)
 		levy_pct = flt(prop.get("room_levy_percent")) / 100
 		levy_fixed = flt(prop.get("room_levy_per_night"))
@@ -1542,14 +1549,14 @@ class Reservation(Document):
 			night = str(row["stay_date"])
 			new, new_gst = flt(row["rate"]), flt(row["gst_rate"])
 			base, gst = c["base"], c["gst_rate"]
-			changed = abs(new - base) >= 0.01 or (correct and abs(new_gst - gst) >= 0.01)
+			changed = abs(new - base) >= tol or (correct and abs(new_gst - gst) >= 0.01)
 			action = "kept" if changed else "same"
 			if changed and correct:
 				out["lines"] += [
 					{"night": night, "folio": c["folio"], "amount": -base,
 					 "gst_rate": gst,
 					 "description": f"Rate correction: night of {night} reversed at {base:,.2f}"},
-					{"night": night, "folio": c["folio"], "amount": round(new, 2),
+					{"night": night, "folio": c["folio"], "amount": round(new, places),
 					 "gst_rate": new_gst,
 					 "description": f"Rate correction: night of {night} at {new:,.2f}"},
 				]
@@ -1557,7 +1564,7 @@ class Reservation(Document):
 			elif changed and policy == "Credit the difference" and new < base:
 				out["lines"].append(
 					{"night": night, "folio": c["folio"],
-					 "amount": round(new - base, 2), "gst_rate": gst,
+					 "amount": round(new - base, places), "gst_rate": gst,
 					 "description": f"Rate change: night of {night} {base:,.2f} to {new:,.2f}"})
 				action = "credited"
 				base = new
@@ -1570,11 +1577,11 @@ class Reservation(Document):
 				levy_new * new_gst / 100 if levy_taxed else 0)
 			if action != "same":
 				out["nights"].append({"date": night, "charged": c["base"],
-				                      "new": round(new, 2), "action": action})
+				                      "new": round(new, places), "action": action})
 			# the night's base on the desk's basis, before the folio's figure
 			# replaces the quote's
-			entry = flt(entry_rate(new, new_gst, inclusive)) + flt(row.get("discount_amount"))
-			row["rate"], row["gst_rate"] = round(base, 2), gst
+			entry = flt(entry_rate(new, new_gst, inclusive, places)) + flt(row.get("discount_amount"))
+			row["rate"], row["gst_rate"] = round(base, places), gst
 			was = held.get(night)
 			if action in ("kept", "same") and was is not None and flt(was.get("base_rate")):
 				# kept as charged: its base, discount and rate-code amount as
@@ -1584,11 +1591,11 @@ class Reservation(Document):
 						row[f] = flt(was.get(f))
 			elif "base_rate" in row:
 				# what the folio holds for the night, against the night's base
-				off = round(max(entry - flt(entry_rate(row["rate"], gst, inclusive)), 0), 2)
+				off = round(max(entry - flt(entry_rate(row["rate"], gst, inclusive, places)), 0), places)
 				row["discount_amount"] = off
 				if not inclusive or not off:
-					row["base_rate"] = round(row["rate"] + (off if not inclusive else 0), 2)
-		out["base"], out["tax"] = round(out["base"], 2), round(out["tax"], 2)
+					row["base_rate"] = round(row["rate"] + (off if not inclusive else 0), places)
+		out["base"], out["tax"] = round(out["base"], places), round(out["tax"], places)
 		return out
 
 	def _apply_commission(self):
