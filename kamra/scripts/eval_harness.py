@@ -3172,6 +3172,7 @@ def t53():
 
 	# nosemgrep: frappe-monkey-patching-not-allowed -- offline eval harness stubs the outbound transport for tests; not a production code path
 	from kamra.channels import channex
+	from kamra.pricing import property_currency
 
 	conn = frappe.get_doc({
 		"doctype": "Channel Manager Connection", "property": P,
@@ -3179,10 +3180,12 @@ def t53():
 		"external_property_id": "chx-prop-1", "webhook_secret": "eval-hook",
 		"sync_days": 5,
 	}).insert(ignore_permissions=True)
+	# the Channex rate plan sells in the property's currency, as
+	# import_room_mappings records it: an unknown one is never sent
 	frappe.get_doc({
 		"doctype": "Channel Room Mapping", "connection": conn.name,
 		"room_type": RT, "external_room_id": "chx-room-1",
-		"external_rate_id": "chx-rate-1",
+		"external_rate_id": "chx-rate-1", "external_currency": property_currency(P),
 	}).insert(ignore_permissions=True)
 
 	snap = cm.ari_snapshot(P, conn.name, days=3)

@@ -187,6 +187,14 @@ def rate_plan_fx_policy(rate_plan: str | None) -> str:
 	return frappe.db.get_value("Rate Plan", rate_plan, "fx_lock_policy") or DEFAULT_FX_LOCK
 
 
+def reservation_fx_policy(reservation) -> str:
+	"""The exchange-rate lock a stay follows: the one its booking fixed in
+	its contract snapshot, else its rate plan's. An OTA booking the OTA
+	collects (prepaid or a virtual card) is fixed at reservation whatever its
+	plan says (channel_manager); every other stay follows its rate plan."""
+	return saved_contract_tariff(reservation).get("fx_lock_policy") or rate_plan_fx_policy(reservation.get("rate_plan"))
+
+
 def contract_local_amount(rate_plan, nightly, fx_rate, home_currency) -> Decimal:
 	"""A contract amount in the posting currency: converted at `fx_rate` and rounded as the plan rounds."""
 	return round_rate_amount(_dec(nightly) * _dec(fx_rate), rate_plan.get("rounding_step"),
@@ -1104,6 +1112,104 @@ def _hold_to_guardrails(property: str, room_type: str, nights: list) -> None:
 				"Management reviews the rate plan or the guardrail.").format(day))
 
 
+def contract_list_nightly(property: str, room_type: str, rate_plan: str, night, adults: int,
+                          directory: dict | None = None) -> tuple[str, Decimal] | None:
+	"""One night of a contract in its own currency, from the approved tariff
+	master data (hospitality_tariffs.list_tariffs), never from a quote: SAP
+	replicates a condition record to a channel in its condition currency and
+	converts nothing, so it needs no exchange rate, while a tariff quote that
+	needs one refuses without it (SG 105, HSP-TARIFF-003).
+
+	The plan's own price list, else its nearest base plan's (as
+	contract_rate looks), and on it the general Approved Item Price in force
+	that night - the latest valid_from first, then the name - priced as
+	hospitality_tariffs.tariff_rate prices it for `adults` (the room type's
+	base occupancy) and no children or extra beds: the room line of the
+	largest occupancy tier up to `adults`, else the smallest, and for each
+	adult above that tier, up to the room's adults_capacity, the room type's
+	own Extra Adult supplement, else TAR-EXTRA-ADULT. A derived plan's
+	modifier then applies as contract_rate applies it. Rate Guardrails bind
+	the property-currency rate, so they do not bind this one.
+
+	(currency, nightly), or None when no price list prices the plan or a
+	base plan. ContractRateRefused when no approved price covers the night
+	(tariff_rate's HSP-TARIFF-002) or a derived plan prices it at zero or
+	less; any other error when the directory cannot say which price is the
+	contract's. `directory` (a dict) keeps the property's directory between
+	calls, so a pass over many nights reads it once."""
+	from kamra.erp_bridge import bridge_call
+	directory = {} if directory is None else directory
+	if property not in directory:
+		directory[property] = bridge_call("hospitality_tariffs.list_tariffs", property=property) or {}
+	listing = directory[property]
+	lists = {}
+	for price_list in listing.get("price_lists") or []:
+		for plan in [*(price_list.get("rate_plan_details") or []), *(price_list.get("rate_plans") or [])]:
+			lists.setdefault(plan.get("name") if isinstance(plan, dict) else plan, price_list)
+	chain = resolve_rate_plan_chain(rate_plan)
+	depth = next((i for i in range(len(chain) - 1, -1, -1) if chain[i].name in lists), None)
+	if depth is None:
+		return None
+	price_list = lists[chain[depth].name]
+	currency = price_list.get("currency")
+	day = str(getdate(night))
+	rt = frappe.db.get_value("Room Type", room_type, ["room_type_name", "adults_capacity"], as_dict=True) or {}
+	label = rt.get("room_type_name") or room_type
+	rows = [row for row in listing.get("items") or []
+	        if row.get("price_list") == price_list.get("name") and not row.get("customer")]
+	rooms = [row for row in rows if row.get("category") == "Room" and row.get("room_type") == label
+	         and cint(row.get("occupancy_tier")) > 0]
+	if not rooms:
+		raise ContractRateRefused(_("The contract has no room tariff for {0} on {1}.").format(label, day))
+	tiers = {cint(row["occupancy_tier"]) for row in rooms}
+	tier = max((count for count in tiers if count <= adults), default=min(tiers))
+	room = [row for row in rooms if cint(row["occupancy_tier"]) == tier]
+	if len(room) != 1:
+		frappe.throw(_("The tariff directory lists {0} room tariffs for {1} at {2} adults, so the contract's "
+		               "cannot be told apart. Give each room type its own name.").format(len(room), label, tier))
+	nightly = _approved_rate(room[0], day)
+	if nightly is None or nightly <= 0:
+		raise ContractRateRefused(_("The contract has no approved price for {0} on {1}.").format(label, day))
+	capacity = cint(rt.get("adults_capacity"))
+	extra_adults = max((capacity if capacity and adults > capacity else adults) - tier, 0)
+	extras = Decimal(0)
+	if extra_adults:
+		line = next((row for row in rows if row.get("category") == "Supplement" and row.get("room_type") == label
+		             and row.get("occupancy") == "Extra Adult"), None) \
+			or next((row for row in rows if row.get("item_code") == "TAR-EXTRA-ADULT"), None)
+		rate = _approved_rate(line, day) if line else None
+		if rate is None or rate < 0:
+			raise ContractRateRefused(_("The contract has no approved extra adult price for {0} on {1}.")
+			                          .format(label, day))
+		extras = rate * extra_adults
+	nightly += extras
+	derived = chain[depth + 1:]
+	if derived:
+		nightly = _price_through(derived, nightly, extras, root=False)
+		if nightly <= 0:
+			raise ContractRateRefused(_("The derived rate plan prices this stay at zero or less. "
+			                            "Ask a manager to check the rate plan."))
+		nightly = round_rate_amount(nightly, 0, currency=currency)
+	return currency, nightly
+
+
+def _approved_rate(row: dict, day: str) -> Decimal | None:
+	"""The rate of a directory row's Approved version in force on `day`
+	(YYYY-MM-DD): the latest valid_from, then the name, as tariff_rate
+	resolves it. None when no Approved version covers the day."""
+	versions = [version for version in [row.get("active"), *(row.get("history") or [])]
+	            if version and version.get("workflow_state") == "Approved"
+	            and str(version.get("valid_from") or "")[:10] <= day
+	            and (not version.get("valid_upto") or str(version["valid_upto"])[:10] >= day)]
+	if not versions:
+		return None
+	best = max(versions, key=lambda version: (str(version.get("valid_from") or "")[:10], str(version.get("name"))))
+	rate = Decimal(str(best.get("rate")))
+	if not rate.is_finite():
+		raise ValueError(f"{best.get('name')}: {best.get('rate')!r} is not a price")
+	return rate
+
+
 def contract_night_rates(reservation) -> dict[str, float]:
 	"""Each night's own contract rate, {date: agreed_rate}, from the
 	booking's frozen contract: a stay over a tariff change (OPERA Rate
@@ -1226,9 +1332,11 @@ def relock_contract_fx_at_check_in(reservation) -> bool:
 	OTA channel stays re-lock under kamra_contract_relocked only. No
 	published rate refuses the check-in.
 	A contract over a tariff change converts each booked night's own
-	amount. A fixed rate is the manager's price and is never relocked.
-	True when the booking was relocked."""
-	if rate_plan_fx_policy(reservation.get("rate_plan")) != "Fixed at Check In":
+	amount. A fixed rate is the manager's price and is never relocked. An
+	OTA booking in the contract currency (a "channel" snapshot of the OTA's
+	own nights) locks each converted night again. True when the booking was
+	relocked."""
+	if reservation_fx_policy(reservation) != "Fixed at Check In":
 		return False
 	if cint(reservation.get("fixed_rate")):
 		return False
@@ -1258,6 +1366,12 @@ def relock_contract_fx_at_check_in(reservation) -> bool:
 		                      for night in tariff["nights"]]
 	reservation.agreed_rate = agreed
 	reservation.contract_tariff = {**snapshot, "tariff": relocked, "agreed_rate": agreed}
+	if tariff.get("source") == "channel" and relocked.get("nights"):
+		# an OTA booking's nights are locked from the OTA's price, not re-quoted
+		from kamra.channel_manager import lock_channel_rates
+		nights = [{"date": night["date"], "amount": night["agreed_rate"]} for night in relocked["nights"]]
+		reservation.amount_after_tax = sum(night["amount"] for night in nights)
+		lock_channel_rates(reservation, reservation.amount_after_tax, nights)
 	reservation.flags.kamra_contract_relocked = True
 	if reservation.get("custom_tariff_currency") or (
 		tariff.get("source") != "channel"
