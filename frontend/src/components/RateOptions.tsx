@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { call, getCurrentProperty, type TariffReference } from "../lib/api"
+import { onSettingsChanged, onTariffsChanged } from "../lib/tariffSync"
 import { currencyText, formatFxRate, tariffDate } from "./ContractTariff"
 import { InfoTip } from "./InfoTip"
 import { locale, moneyDigits, moneyLocale } from "../lib/money"
@@ -93,7 +94,15 @@ export function RateOptions({
   const [err, setErr] = useState<string | null>(null)
   // what is being typed, before it is a valid price (a night's text, or the room total)
   const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const [syncRev, setSyncRev] = useState(0)
   const inputs = useRef<Record<string, HTMLInputElement | null>>({})
+
+  useEffect(() => {
+    const bump = () => setSyncRev((v) => v + 1)
+    const offTariffs = onTariffsChanged(bump)
+    const offSettings = onSettingsChanged(bump)
+    return () => { offTariffs(); offSettings() }
+  }, [])
 
   useEffect(() => {
     if (!roomType || !checkIn || !checkOut) return
@@ -124,7 +133,7 @@ export function RateOptions({
       live = false
       clearTimeout(h)
     }
-  }, [roomType, checkIn, checkOut, adults, children, extraBeds, mealPlan, voucher, ratePlan, company, t])
+  }, [roomType, checkIn, checkOut, adults, children, extraBeds, mealPlan, voucher, ratePlan, company, t, syncRev])
 
   if (err) return <p className="text-xs text-zinc-400">{translate(err)}</p>
   if (!data || !Array.isArray(data.plans) || !Array.isArray(data.nights)) return null

@@ -6954,5 +6954,18 @@
   "These room types have no contract tariff on this price list yet.": "Estos tipos de habitación aún no tienen tarifa contractual en esta lista de precios.",
   "{n} room": "{n} habitación",
   "Open room type": "Abrir tipo de habitación",
-  "Inherited from the base rate plan.": "Heredada del plan tarifario base."
+  "Inherited from the base rate plan.": "Heredada del plan tarifario base.",
+  "Rate plans set the price for all bookings at this property.": "Los planes tarifarios fijan el precio de todas las reservas en esta propiedad.",
+  "Tax comes from the accounting tax rules.": "Los impuestos se aplican según las reglas fiscales contables.",
+  "Rate plan readiness": "Preparación de planes tarifarios",
+  "Existing reservations are never repriced when this setting changes.": "Las reservas existentes nunca se recalculan al cambiar esta configuración.",
+  "No default rate plan is set yet.": "Todavía no se ha establecido un plan tarifario predeterminado.",
+  "Manage rate plans": "Gestionar planes tarifarios",
+  "All future bookings already have a rate plan.": "Todas las reservas futuras ya tienen un plan tarifario.",
+  "{n} future booking has no rate plan.": "{n} reserva futura no tiene plan tarifario.",
+  "{n} future bookings have no rate plan.": "{n} reservas futuras no tienen plan tarifario.",
+  "They keep their booked prices. Only new bookings will require a rate plan.": "Mantienen sus precios reservados. Solo las nuevas reservas requerirán un plan tarifario.",
+  "On: every new booking, walk-in, group pick-up, channel and online booking resolves a rate plan. Existing reservations are never repriced.": "Activado: cada nueva reserva, walk-in, asignación de grupo, canal y reserva en línea aplica un plan tarifario. Las reservas existentes nunca se recalculan.",
+  "Set a default rate plan in Rate Plans.": "Configura un plan tarifario predeterminado en Planes tarifarios.",
+  "No active rate plans are configured. Set up a default rate plan in Rate Plans.": "No hay planes tarifarios activos configurados. Configura un plan tarifario predeterminado en Planes tarifarios."
 }

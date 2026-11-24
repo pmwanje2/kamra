@@ -70,6 +70,10 @@ def setup():
 			"gst_mode": "Slab", "gst_slab_threshold": 7500,
 			"gst_rate_low": 5, "gst_rate_high": 18,
 		}).insert(ignore_permissions=True)
+	# Legacy eval checks exercise card-rate pricing and hand-set nights without a rate plan
+	from kamra.settings import clear_cache, write_kv
+	write_kv(P, "rate_plan_required", 0)
+	clear_cache(P)
 	# a demo-seeded site pins these personas to its demo hotel; property
 	# scope is enforced now, so give them the eval property too (rolled
 	# back with everything else)

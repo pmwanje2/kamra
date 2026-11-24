@@ -6769,5 +6769,18 @@
   "These room types have no contract tariff on this price list yet.": "لا تحتوي أنواع الغرف هذه على تعرفة تعاقدية في قائمة الأسعار هذه بعد.",
   "{n} room": "غرفة واحدة ({n})",
   "Open room type": "فتح نوع الغرفة",
-  "Inherited from the base rate plan.": "موروثة من خطة الأسعار الأساسية."
+  "Inherited from the base rate plan.": "موروثة من خطة الأسعار الأساسية.",
+  "Rate plans set the price for all bookings at this property.": "تحدد خطط الأسعار السعر لجميع الحجوزات في هذا الفندق.",
+  "Tax comes from the accounting tax rules.": "تُحتسب الضريبة من قواعد الضرائب المحاسبية.",
+  "Rate plan readiness": "جاهزية خطط الأسعار",
+  "Existing reservations are never repriced when this setting changes.": "لا يتم إعادة تسعير الحجوزات القائمة أبداً عند تغيير هذا الإعداد.",
+  "No default rate plan is set yet.": "لم يتم تعيين خطة أسعار افتراضية بعد.",
+  "Manage rate plans": "إدارة خطط الأسعار",
+  "All future bookings already have a rate plan.": "جميع الحجوزات المستقبلية لديها خطة أسعار بالفعل.",
+  "{n} future booking has no rate plan.": "حجز مستقبلي واحد ({n}) بدون خطة أسعار.",
+  "{n} future bookings have no rate plan.": "{n} حجوزات مستقبلية بدون خطة أسعار.",
+  "They keep their booked prices. Only new bookings will require a rate plan.": "تحتفظ بأسعارها المحجوزة. فقط الحجوزات الجديدة ستتطلب خطة أسعار.",
+  "On: every new booking, walk-in, group pick-up, channel and online booking resolves a rate plan. Existing reservations are never repriced.": "مفعّل: كل حجز جديد، ونزيل عابر، وسحب مجموعة، وحجز قناة وحجز إلكتروني يرتبط بخطة أسعار. لا يُعاد تسعير الحجوزات القائمة أبداً.",
+  "Set a default rate plan in Rate Plans.": "عيّن خطة أسعار افتراضية في خطط الأسعار.",
+  "No active rate plans are configured. Set up a default rate plan in Rate Plans.": "لا توجد خطط أسعار نشطة مهيأة. قم بإعداد خطة أسعار افتراضية في خطط الأسعار."
 }

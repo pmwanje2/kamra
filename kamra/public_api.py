@@ -453,19 +453,34 @@ def search_stay(property: str, check_in_date: str, check_out_date: str,
 			row.update(needs_confirmation=True,
 			           confirmation_reason=_over_capacity_note(above))
 		if left:
+			from kamra.pricing import ContractRateRefused, quote_with_contract, resolve_booking_rate_plan
+			from kamra.settings import get_setting
+			require_plan = bool(get_setting(property, "rate_plan_required"))
+			try:
+				resolved_plan = resolve_booking_rate_plan(
+					property, rt, check_in_date, check_out_date,
+					adults=a, children=c, required=require_plan,
+				)
+			except (frappe.ValidationError, ContractRateRefused) as exc:
+				row.update(available=False, reason=str(exc), quote=None)
+				results.append(row)
+				continue
 			try:
 				plans = []
 				for mp in meal_plans:
-					pq = quote(property, rt, check_in_date, check_out_date,
-					           a, c, mp or None, voucher_code=voucher,
-					           pets=int(pets or 0))
+					pq = quote_with_contract(
+						property, rt, check_in_date, check_out_date,
+						a, c, mp or None, rate_plan=resolved_plan, voucher_code=voucher,
+						pets=int(pets or 0),
+					)
 					plan = {"meal_plan": mp, "amount_after_tax": pq["amount_after_tax"],
 					        **_payment_split(prop, pq["amount_after_tax"],
 					                         pq.get("stay_rules"))}
 					if voucher:
-						plan["list_amount"] = quote(
+						plan["list_amount"] = quote_with_contract(
 							property, rt, check_in_date, check_out_date, a, c,
-							mp or None, pets=int(pets or 0))["amount_after_tax"]
+							mp or None, rate_plan=resolved_plan, pets=int(pets or 0),
+						)["amount_after_tax"]
 					if not plans:
 						q = pq
 					plans.append(plan)
@@ -479,6 +494,9 @@ def search_stay(property: str, check_in_date: str, check_out_date: str,
 					row.update(available=False, reason=(
 						f"These dates need a stay of at least {need} nights"
 						+ (f" ({rules['season']})." if rules.get("season") else ".")))
+			except (frappe.ValidationError, ContractRateRefused) as exc:
+				if require_plan:
+					row.update(available=False, reason=str(exc), quote=None)
 			except Exception:
 				pass  # still list the room type even if this date range cannot be quoted
 		results.append(row)
@@ -980,19 +998,28 @@ def book(property: str, room_type: str, check_in_date: str,
 	]
 
 	from kamra.api import create_booking
-	from kamra.pricing import quote as price_quote
+	from kamra.pricing import ContractRateRefused, quote_with_contract, resolve_booking_rate_plan
 	from kamra.reservation_state import resolve_instant_status
 
 	mode = getattr(prop, "booking_mode", None) or "Instant"
 	hold_minutes = cint(getattr(prop, "hold_minutes", None) or 120)
 	key = (idempotency_key or "").strip() or None
 
-	# Peek at payment terms before insert so Instant can choose status.
-	q = price_quote(
+	resolved_plan = resolve_booking_rate_plan(
 		property, room_type, check_in_date, check_out_date,
-		int(adults), int(children), meal_plan or None,
-		voucher_code=voucher_code or None, pets=int(pets or 0),
+		adults=int(adults), children=int(children),
 	)
+
+	# Peek at payment terms before insert so Instant can choose status.
+	try:
+		q = quote_with_contract(
+			property, room_type, check_in_date, check_out_date,
+			int(adults), int(children), meal_plan or None,
+			rate_plan=resolved_plan, voucher_code=voucher_code or None,
+			pets=int(pets or 0),
+		)
+	except ContractRateRefused as exc:
+		frappe.throw(str(exc))
 	stay_rules = q.get("stay_rules") or {}
 	advance_due, policy = _advance_terms(
 		prop, float(q["amount_after_tax"] or 0), stay_rules)
@@ -1026,6 +1053,7 @@ def book(property: str, room_type: str, check_in_date: str,
 				"confirms the sleeping arrangement and price") if above else None,
 			pets=int(pets or 0),
 			meal_plan=meal_plan or None,
+			rate_plan=resolved_plan,
 			voucher_code=voucher_code or None,
 			source="Website",
 			addons=safe_addons or None,

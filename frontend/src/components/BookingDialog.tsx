@@ -22,6 +22,7 @@ import { Button } from "./ui/button"
 import { useLocale } from "../lib/money"
 import { isPhoneComplete } from "../lib/phone"
 import { nightsBetween, parseDate, shiftDate } from "../lib/stay"
+import { onSettingsChanged, onTariffsChanged } from "../lib/tariffSync"
 import { typedNights, type NightPrice } from "../lib/nightPrices"
 import PhoneInput from "./PhoneInput"
 import { clampGuests, sleeps } from "../lib/occupancy"
@@ -106,6 +107,8 @@ export function BookingDialog(props: {
     room?: string
     room_number?: string
     date?: string
+    check_in_date?: string
+    nights?: number
     guest?: string
     guest_name?: string
     phone?: string
@@ -161,8 +164,8 @@ export function BookingDialog(props: {
     guest_name: props.initial.guest_name ?? "",
     phone: props.initial.phone ?? "",
     room_type: props.initial.room_type ?? "",
-    check_in_date: props.initial.date ?? todayLocal(),
-    nights: props.initial.stays ?? 1,
+    check_in_date: props.initial.date ?? props.initial.check_in_date ?? todayLocal(),
+    nights: props.initial.nights ?? props.initial.stays ?? 1,
     adults: props.initial.adults ?? 2,
     children: props.initial.children ?? 0,
     meal_plan: "",
@@ -378,6 +381,14 @@ export function BookingDialog(props: {
   // type that has rooms for the selected dates until they change it (#549).
   const autoRoomType = useRef(!props.initial.room_type)
 
+  const [syncRev, setSyncRev] = useState(0)
+  useEffect(() => {
+    const bump = () => setSyncRev((v) => v + 1)
+    const offTariffs = onTariffsChanged(bump)
+    const offSettings = onSettingsChanged(bump)
+    return () => { offTariffs(); offSettings() }
+  }, [])
+
   useEffect(() => {
     call<BookingOptions>("kamra.api.booking_options", { property: getCurrentProperty() }).then((o) => {
       setOptions(o)
@@ -387,7 +398,7 @@ export function BookingDialog(props: {
         rate_plan: f.rate_plan || o.default_plan || "",
       }))
     })
-  }, [])
+  }, [syncRev])
 
   useEffect(() => {
     document.body.style.overflow = "hidden"
@@ -547,6 +558,7 @@ export function BookingDialog(props: {
     checkOut,
     // a typed price re-quotes: the totals, tax and advance follow it
     JSON.stringify(nightPricesArg),
+    syncRev,
   ])
 
   // quotes for the additional rooms
@@ -576,7 +588,7 @@ export function BookingDialog(props: {
       ).then(setMoreQuotes)
     }, 300)
     return () => clearTimeout(t)
-  }, [moreRooms, form.check_in_date, checkOut, form.rate_plan, form.company, canSetPrice])
+  }, [moreRooms, form.check_in_date, checkOut, form.rate_plan, form.company, canSetPrice, syncRev])
 
   // walk-in: the actual rooms free tonight, clean ones first
   useEffect(() => {
@@ -978,6 +990,7 @@ export function BookingDialog(props: {
     badPhone ||
     badSlot ||
     !walk.room ||
+    (planRequired && !form.rate_plan && !companyPlan) ||
     payAmount < 0 ||
     (payAmount > 0 && (!paymentReady || (foreign && !fx?.quote))) ||
     (!!walk.id_number.trim() && !walk.id_type)

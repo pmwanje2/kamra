@@ -402,6 +402,7 @@ def parse_webhook(conn, payload) -> list[dict]:
 			           or body.get("unique_id") or "",
 			"channel": body.get("ota_name") or "OTA",
 			"room_type_external_id": room.get("room_type_id") or "",
+			"external_rate_id": room.get("rate_plan_id") or "",
 			"check_in": room.get("checkin_date") or body.get("arrival_date"),
 			"check_out": room.get("checkout_date") or body.get("departure_date"),
 			"adults": int(occ.get("adults") or 2),

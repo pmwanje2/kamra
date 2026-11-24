@@ -1425,5 +1425,18 @@
   "{n} room": "{n} kuwarto",
   "{n} rooms": "{n} na kuwarto",
   "Open room type": "Buksan ang uri ng kuwarto",
-  "Inherited from the base rate plan.": "Minana mula sa pangunahing rate plan."
+  "Inherited from the base rate plan.": "Minana mula sa pangunahing rate plan.",
+  "Rate plans set the price for all bookings at this property.": "Mga rate plan ang nagtatakda ng presyo para sa lahat ng booking sa property na ito.",
+  "Tax comes from the accounting tax rules.": "Ang buwis ay nakabatay sa mga tuntunin ng buwis sa accounting.",
+  "Rate plan readiness": "Kahandaan sa rate plan",
+  "Existing reservations are never repriced when this setting changes.": "Hindi kailanman muling pinipresyuhan ang mga kasalukuyang reserbasyon kapag binago ang setting na ito.",
+  "No default rate plan is set yet.": "Wala pang nakatakdang default na rate plan.",
+  "Manage rate plans": "Pamahalaan ang mga rate plan",
+  "All future bookings already have a rate plan.": "Lahat ng mga booking sa hinaharap ay may rate plan na.",
+  "{n} future booking has no rate plan.": "{n} booking sa hinaharap ang walang rate plan.",
+  "{n} future bookings have no rate plan.": "{n} mga booking sa hinaharap ang walang rate plan.",
+  "They keep their booked prices. Only new bookings will require a rate plan.": "Mananatili ang kanilang mga presyong na-book. Mga bagong booking lang ang mangangailangan ng rate plan.",
+  "On: every new booking, walk-in, group pick-up, channel and online booking resolves a rate plan. Existing reservations are never repriced.": "Naka-on: bawat bagong booking, walk-in, group pick-up, channel at online booking ay gagamit ng rate plan. Hindi kailanman muling pinipresyuhan ang mga kasalukuyang reserbasyon.",
+  "Set a default rate plan in Rate Plans.": "Magtakda ng default na rate plan sa Mga Rate Plan.",
+  "No active rate plans are configured. Set up a default rate plan in Rate Plans.": "Walang naka-configure na aktibong rate plan. Mag-set up ng default na rate plan sa Mga Rate Plan."
 }

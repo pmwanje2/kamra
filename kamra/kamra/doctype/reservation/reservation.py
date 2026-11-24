@@ -472,7 +472,7 @@ class Reservation(Document):
 					booked_agreed_rate=previous.get("agreed_rate"))
 			return
 		self.contract_tariff = None
-		if not self.auto_price or self.group_booking:
+		if not self.auto_price or (self.group_booking and flt(self.agreed_rate) > 0):
 			return  # external or block totals already set the room price
 		from kamra.pricing import billable_children, contract_rate
 		resolved = contract_rate(self.property, self.room_type, self.rate_plan, self.check_in_date,

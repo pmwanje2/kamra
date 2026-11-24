@@ -4,6 +4,7 @@ import { call } from "../lib/api"
 import { useT } from "../lib/i18n"
 import { useLocale } from "../lib/money"
 import type { Row } from "../lib/resource"
+import { onSettingsChanged, onTariffsChanged } from "../lib/tariffSync"
 import { currencyText, formatFxRate, roundingRule, tariffDate, TariffNight } from "./ContractTariff"
 import { ManageTariffsLink } from "./ManageTariffsLink"
 
@@ -27,6 +28,7 @@ interface TariffList {
     rounding_mode?: string
   }[]
   all_active_plans_tariff?: boolean | number
+  rate_plan_required?: boolean
   property_currency?: string
   /** the default active plan's tariff, else the only plan's */
   primary_rate_plan?: string | null
@@ -45,6 +47,13 @@ export default function RoomTypeTariffs({ row }: { row: Row; reload?: () => void
   const { currency, locale } = useLocale()
   const [data, setData] = useState<TariffList | null>(null)
   const [error, setError] = useState(false)
+  const [rev, setRev] = useState(0)
+  useEffect(() => {
+    const bump = () => setRev((v) => v + 1)
+    const offTariffs = onTariffsChanged(bump)
+    const offSettings = onSettingsChanged(bump)
+    return () => { offTariffs(); offSettings() }
+  }, [])
   useEffect(() => {
     let live = true
     setData(null)
@@ -53,7 +62,7 @@ export default function RoomTypeTariffs({ row }: { row: Row; reload?: () => void
       .then(result => { if (live) setData(result) })
       .catch(() => { if (live) setError(true) })
     return () => { live = false }
-  }, [roomType])
+  }, [roomType, rev])
 
   const home = data?.property_currency || currency
   const primary = data?.tariffs.find(tariff => tariff.rate_plan === data.primary_rate_plan)
@@ -115,6 +124,12 @@ export default function RoomTypeTariffs({ row }: { row: Row; reload?: () => void
     {!!data?.card_rate_plans?.length && <p className="text-sm text-zinc-600">
       {t("Priced from the card rate: {plans}", { plans: data.card_rate_plans.map(plan => plan.label || plan.name).join(", ") })}
     </p>}
-    {data && <p className="text-xs text-zinc-500">{t("Stays booked without a rate plan still use the card rate.")}</p>}
+    {data && (
+      <p className="text-xs text-zinc-500">
+        {data.rate_plan_required
+          ? t("Rate plans set the price for all bookings at this property.")
+          : t("Stays booked without a rate plan still use the card rate.")}
+      </p>
+    )}
   </section>
 }
