@@ -286,6 +286,7 @@ class ERPBooksFenceTestCase(AuditTestCase):
 
 	def test_city_ledger_aging_and_owner_snapshot_use_erp_receivables_when_bridged(self):
 		from frappe.utils import add_days
+
 		from kamra import dashboards, ledger
 
 		company, account, folio = self._seed_stale_city_ledger(credit_limit=2000.0, amount=5000.0, days_ago=60)
@@ -328,6 +329,7 @@ class ERPBooksFenceTestCase(AuditTestCase):
 
 	def test_night_audit_credit_and_overdue_checks_use_erp_receivables_when_bridged(self):
 		from frappe.utils import add_days
+
 		from kamra import night_audit
 
 		company, account, folio = self._seed_stale_city_ledger(credit_limit=2000.0, amount=5000.0, days_ago=60)
@@ -344,6 +346,10 @@ class ERPBooksFenceTestCase(AuditTestCase):
 			ov = night_audit.check_overdue_ar(PROP_A)
 		self.assertEqual(cl["items"], [])
 		self.assertEqual(ov["items"], [])
+		self.assertFalse(cl.get("unverified"))
+		self.assertFalse(ov.get("unverified"))
+		self.assertEqual(cl["resolve"], "/receivables")
+		self.assertEqual(ov["resolve"], "/receivables")
 
 		# Overdue & over limit in ERPNext -> Night Audit flags exact ERP figures.
 		self.ar_answer = {"accounts": [{
@@ -366,6 +372,7 @@ class ERPBooksFenceTestCase(AuditTestCase):
 
 	def test_credit_control_uses_erp_receivables_and_avoids_false_credit_blocked(self):
 		from frappe.utils import add_days
+
 		from kamra import credit
 		from kamra.settings import write_kv
 
@@ -421,23 +428,293 @@ class ERPBooksFenceTestCase(AuditTestCase):
 		# the refusal was handled: the screen must not also pop a "kept in the accounting system" message
 		self.assertEqual(list(frappe.local.message_log), before)
 
-	def test_kept_receivables_without_a_lookup_never_read_the_stale_city_ledger(self):
+	def test_receivables_source_never_conflates_unavailable_erp_with_empty_list(self):
+		from kamra.erp_books import ReceivablesSource, receivables_source
+
+		# Off-bridge: hotel app keeps receivables.
+		self.answer = None
+		with self.installed():
+			local = receivables_source(PROP_A, strict=False)
+		self.assertIsInstance(local, ReceivablesSource)
+		self.assertFalse(local.in_erp)
+		self.assertIsNone(local.rows)
+		self.assertFalse(local.unavailable)
+		with self.assertRaises(TypeError):
+			bool(local)
+
+		# Bridged & ERP answered genuinely empty -> rows=[], unavailable=False.
+		self.keeps(receivables=RECEIVABLES)
+		self.ar_answer = {"accounts": []}
+		with self.installed():
+			empty = receivables_source(PROP_A, strict=False)
+		self.assertTrue(empty.in_erp)
+		self.assertEqual(empty.rows, [])
+		self.assertFalse(empty.unavailable)
+
+		# Bridged & ERP unavailable -> strict=True refuses; strict=False returns rows=None (NEVER []).
+		self.ar_answer = None
+		with self.installed(), self.assertRaises(frappe.PermissionError) as caught:
+			receivables_source(PROP_A, strict=True)
+		self.assertIn("Accounts Receivable", str(caught.exception))
+		with self.installed():
+			unavail = receivables_source(PROP_A, strict=False)
+		self.assertTrue(unavail.in_erp)
+		self.assertIsNone(unavail.rows)
+		self.assertTrue(unavail.unavailable)
+		self.assertEqual(unavail.target, RECEIVABLES)
+
+	def test_kept_receivables_without_a_lookup_fail_closed_everywhere(self):
 		from kamra import credit, night_audit
 		from kamra.settings import write_kv
 
+		vendor_re = re.compile(r"\b(?:Kamra|ERPNext|Frappe|URY)\b", re.IGNORECASE)
 		company, _account, _folio = self._seed_stale_city_ledger(credit_limit=2000.0, amount=5000.0, days_ago=60)
 		write_kv(PROP_A, "credit_control", "block")
 		self.keeps(receivables=RECEIVABLES)
 		self.ar_answer = None
 		with self.installed():
-			self.assertEqual(night_audit.check_credit_limit(PROP_A)["items"], [])
-			self.assertEqual(night_audit.check_overdue_ar(PROP_A)["items"], [])
+			cl = night_audit.check_credit_limit(PROP_A)
+			ov = night_audit.check_overdue_ar(PROP_A)
 			res = credit.check_company_credit(company, PROP_A, 500.0)
+			with self.assertRaises(credit.CreditBlocked) as blocked_exc:
+				credit.enforce_company_credit(company, PROP_A, 500.0, context="check-out")
 			terms = credit.company_credit_terms(company, PROP_A)
-		self.assertEqual(res["ar_balance"], 0.0)
-		self.assertEqual(res["overdue_amount"], 0.0)
-		self.assertTrue(res["ok"])
-		self.assertEqual(terms["balance"], 0.0)
+
+		# Night audit marks both checks unverified (never green / never zero total).
+		self.assertTrue(cl.get("unverified"))
+		self.assertEqual(cl["items"], [])
+		self.assertEqual(cl["resolve"], "/receivables")
+		self.assertNotRegex(cl["action"], vendor_re)
+		self.assertTrue(ov.get("unverified"))
+		self.assertEqual(ov["items"], [])
+		self.assertIsNone(ov["total"])
+		self.assertEqual(ov["resolve"], "/receivables")
+		self.assertNotRegex(ov["action"], vendor_re)
+
+		# Credit control under Block refuses in plain words (never zero debt, never stale 5000).
+		self.assertFalse(res["ok"])
+		self.assertTrue(res["blocked"])
+		self.assertTrue(res.get("unverified"))
+		self.assertIsNone(res["ar_balance"])
+		self.assertIsNone(res["overdue_amount"])
+		self.assertIsNone(res["exposure"])
+		self.assertIsNone(res["over_limit_by"])
+		self.assertTrue(res["reasons"])
+		self.assertNotRegex(" ".join(res["reasons"]), vendor_re)
+		self.assertNotRegex(str(blocked_exc.exception), vendor_re)
+
+		# Credit terms screen receives balance=None (shows "—", never 0.0 or 5000.0).
+		self.assertIsNone(terms["balance"])
+
+		# Under Warn: unverified warning returned, never ok=True, never zero ar_balance.
+		write_kv(PROP_A, "credit_control", "warn")
+		with self.installed():
+			warn_res = credit.enforce_company_credit(company, PROP_A, 500.0, context="check-out")
+		self.assertFalse(warn_res["ok"])
+		self.assertFalse(warn_res["blocked"])
+		self.assertTrue(warn_res.get("unverified"))
+		self.assertIsNone(warn_res["ar_balance"])
+		self.assertTrue(warn_res.get("warning"))
+		self.assertNotRegex(warn_res["warning"], vendor_re)
+
+	def test_dso_and_audit_report_never_read_stale_city_ledger_when_bridged(self):
+		from frappe.utils import add_days
+
+		from kamra import audit_report, custom_reports
+
+		make_property(PROP_A, business_date=TODAY)
+		company, account, folio = self._seed_stale_city_ledger(credit_limit=2000.0, amount=5000.0, days_ago=60)
+		from_d = str(add_days(TODAY, -90))
+
+		# Off-bridge: both read City Ledger Entry as before.
+		self.answer = None
+		with self.installed():
+			dso_local = custom_reports._fetch_dso(PROP_A, from_date=from_d, to_date=TODAY)
+			ar_local = next(b for b in audit_report.build(PROP_A, TODAY)["balances"] if b["ledger"] == "AR")
+		co_row = next(r for r in dso_local if r["company"] == company)
+		self.assertEqual(co_row["closing_balance"], 5000.0)
+		self.assertEqual(ar_local["carried_forward"], 5000.0)
+
+		# Bridged with live ERP receivables: DSO refuses naming Accounts Receivable;
+		# audit_report never reads stale 5000 (uses live ERP balance for current BD, None for past dates).
+		self.keeps(receivables=RECEIVABLES)
+		self.ar_answer = {"accounts": [{
+			"account": account, "company": company, "customer": company, "account_number": "CL-UT-1",
+			"credit_limit": 2000.0, "balance": 400.0, "open_balance": 400.0, "unapplied_credit": 0.0,
+			"open_items": [{
+				"folio": folio, "invoice_number": "ACC-SINV-4", "voucher_type": "Sales Invoice",
+				"voucher_no": "ACC-SINV-4", "invoice_date": str(add_days(TODAY, -25)),
+				"due_date": str(add_days(TODAY, -10)), "outstanding": 400.0, "disputed": 0,
+			}],
+		}]}
+		with self.installed():
+			with self.assertRaises(frappe.PermissionError) as caught:
+				custom_reports._fetch_dso(PROP_A, from_date=from_d, to_date=TODAY)
+			self.assertIn("Accounts Receivable", str(caught.exception))
+			ar_today = next(b for b in audit_report.build(PROP_A, TODAY)["balances"] if b["ledger"] == "AR")
+			ar_past = next(
+				b for b in audit_report.build(PROP_A, str(add_days(TODAY, -1)))["balances"] if b["ledger"] == "AR"
+			)
+		self.assertTrue(ar_today.get("kept_in_erp"))
+		self.assertFalse(ar_today.get("unverified"))
+		self.assertIsNone(ar_today["brought_forward"])
+		self.assertIsNone(ar_today["debit"])
+		self.assertIsNone(ar_today["credit"])
+		self.assertEqual(ar_today["carried_forward"], 400.0)
+		self.assertTrue(ar_past.get("kept_in_erp"))
+		self.assertIsNone(ar_past["carried_forward"])
+
+		# Bridged with unavailable ERP lookup: DSO refuses, audit_report marks AR unverified with all None.
+		self.ar_answer = None
+		with self.installed():
+			with self.assertRaises(frappe.PermissionError):
+				custom_reports._fetch_dso(PROP_A, from_date=from_d, to_date=TODAY)
+			ar_unavail = next(b for b in audit_report.build(PROP_A, TODAY)["balances"] if b["ledger"] == "AR")
+		self.assertTrue(ar_unavail.get("kept_in_erp"))
+		self.assertTrue(ar_unavail.get("unverified"))
+		for col in ("brought_forward", "debit", "credit", "carried_forward"):
+			self.assertIsNone(ar_unavail[col])
+
+	def test_every_receivables_caller_is_verified_to_fail_closed_on_none(self):
+		"""Contract guard: every production caller must use the one helper receivables_source (never
+		erp_receivables directly), and every strict=False caller must be registered and proven to fail
+		closed when rows is None (never treating None as [] or zero debt)."""
+		import ast
+
+		from kamra import audit_report, credit, custom_reports, ledger, night_audit
+		from kamra.erp_books import ReceivablesSource
+		from kamra.settings import write_kv
+
+		app_root = Path(frappe.get_app_path("kamra"))
+		found_strict: set[tuple[str, str]] = set()
+		found_nonstrict: set[tuple[str, str]] = set()
+		direct_erp_receivables: list[str] = []
+		raw_cle_modules: set[str] = set()
+
+		for path in sorted(app_root.rglob("*.py")):
+			rel = path.relative_to(app_root.parent).as_posix()
+			if any(part in ("tests", "scripts", "patches") for part in path.parts):
+				continue
+			text = path.read_text(encoding="utf-8")
+			if "tabCity Ledger Entry" in text:
+				raw_cle_modules.add(rel)
+			tree = ast.parse(text, filename=rel)
+
+			def _walk(node, fn_name="<module>"):
+				if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+					fn_name = node.name
+				if isinstance(node, ast.Call):
+					callee = (
+						node.func.id if isinstance(node.func, ast.Name)
+						else node.func.attr if isinstance(node.func, ast.Attribute)
+						else None
+					)
+					if callee == "erp_receivables" and rel != "kamra/erp_books.py":
+						direct_erp_receivables.append(f"{rel}:{fn_name}")
+					if callee == "receivables_source" and rel != "kamra/erp_books.py":
+						strict_false = any(
+							kw.arg == "strict" and isinstance(kw.value, ast.Constant) and kw.value.value is False
+							for kw in node.keywords
+						)
+						(found_nonstrict if strict_false else found_strict).add((rel, fn_name))
+				for child in ast.iter_child_nodes(node):
+					_walk(child, fn_name)
+
+			_walk(tree)
+
+		self.assertEqual(direct_erp_receivables, [], "Call receivables_source(), never erp_receivables() directly")
+		self.assertEqual(
+			raw_cle_modules,
+			{
+				"kamra/audit_report.py",
+				"kamra/books.py",
+				"kamra/credit.py",
+				"kamra/custom_reports.py",
+				"kamra/golive.py",
+				"kamra/ledger.py",
+				"kamra/night_audit.py",
+				"kamra/receivables.py",
+				"kamra/statements.py",
+			},
+			"Unexpected raw tabCity Ledger Entry reader — route through receivables_source()",
+		)
+		expected_strict = {
+			("kamra/ledger.py", "city_ledger_aging"),
+			("kamra/custom_reports.py", "_fetch_dso"),
+		}
+		expected_nonstrict = {
+			("kamra/credit.py", "check_company_credit"),
+			("kamra/credit.py", "company_credit_terms"),
+			("kamra/night_audit.py", "check_credit_limit"),
+			("kamra/night_audit.py", "check_overdue_ar"),
+			("kamra/audit_report.py", "_balances"),
+		}
+		self.assertEqual(
+			found_strict, expected_strict,
+			"Update STRICT_CALLERS inventory and add a fail-closed assertion for any new receivables_source() caller",
+		)
+		self.assertEqual(
+			found_nonstrict, expected_nonstrict,
+			"New strict=False receivables_source() caller detected — register it here and assert fail-closed handling of rows=None",
+		)
+
+		# Execute every registered caller against an unavailable ReceivablesSource(in_erp=True, rows=None).
+		make_property(PROP_A, business_date=TODAY)
+		company, _account, _folio = self._seed_stale_city_ledger(credit_limit=2000.0, amount=5000.0, days_ago=60)
+		write_kv(PROP_A, "credit_control", "block")
+		unavail = ReceivablesSource(in_erp=True, rows=None, target=RECEIVABLES)
+
+		self.keeps(receivables=RECEIVABLES)
+		self.ar_answer = None
+		with self.installed():
+			for _mod, fn in sorted(expected_strict):
+				with self.subTest(strict_caller=fn), self.assertRaises(frappe.PermissionError):
+					if fn == "city_ledger_aging":
+						ledger.city_ledger_aging(PROP_A)
+					else:
+						custom_reports._fetch_dso(PROP_A, from_date=TODAY, to_date=TODAY)
+
+		with patch("kamra.erp_books.receivables_source", return_value=unavail), \
+				patch("kamra.ledger.receivables_source", return_value=unavail):
+			chk = credit.check_company_credit(company, PROP_A, 100.0)
+			self.assertFalse(chk["ok"])
+			self.assertTrue(chk["blocked"])
+			self.assertIsNone(chk["ar_balance"])
+			self.assertIsNone(credit.company_credit_terms(company, PROP_A)["balance"])
+			self.assertTrue(night_audit.check_credit_limit(PROP_A).get("unverified"))
+			ov = night_audit.check_overdue_ar(PROP_A)
+			self.assertTrue(ov.get("unverified"))
+			self.assertIsNone(ov["total"])
+			ar = next(b for b in audit_report._balances(PROP_A, TODAY) if b["ledger"] == "AR")
+			self.assertTrue(ar.get("unverified"))
+			self.assertIsNone(ar["carried_forward"])
+
+	def test_make_property_succeeds_when_country_and_currency_are_mandatory_without_defaults(self):
+		"""Under enterprise-hospitality@1, Property.country and Property.currency carry reqd=1 with blank
+		defaults; audit_fixtures.make_property must still create properties cleanly."""
+		setters = (
+			("Property-country-reqd", "country", "reqd", "Check", "1"),
+			("Property-country-default", "country", "default", "Text", ""),
+			("Property-currency-reqd", "currency", "reqd", "Check", "1"),
+			("Property-currency-default", "currency", "default", "Text", ""),
+		)
+		for name, field_name, prop, prop_type, value in setters:
+			if not frappe.db.exists("Property Setter", name):
+				frappe.get_doc({
+					"doctype": "Property Setter",
+					"doctype_or_field": "DocField",
+					"doc_type": "Property",
+					"field_name": field_name,
+					"property": prop,
+					"property_type": prop_type,
+					"value": value,
+				}).insert(ignore_permissions=True)
+		self.addCleanup(frappe.clear_cache, doctype="Property")
+		frappe.clear_cache(doctype="Property")
+		created = make_property("UT Mandatory Country Prop")
+		doc = frappe.get_doc("Property", created)
+		self.assertTrue(doc.country)
+		self.assertTrue(doc.currency)
 
 	def test_off_bridge_credit_control_still_reads_the_city_ledger(self):
 		from kamra import credit

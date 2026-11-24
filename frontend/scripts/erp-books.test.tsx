@@ -8,10 +8,14 @@ import { MemoryRouter, Outlet } from "react-router-dom"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import App from "../src/App"
 import CheckOutDialog from "../src/components/CheckOutDialog"
+import CreditTermsEditor from "../src/components/CreditTermsEditor"
 import { APPS, visibleApps } from "../src/lib/apps"
 import { keptInErp } from "../src/lib/erpBooks"
+import { AuditPackView } from "../src/screens/AuditPack"
+import CashierTill from "../src/screens/CashierTill"
 import Ledgers from "../src/screens/Ledgers"
 import Owner from "../src/screens/Owner"
+import PosDashboard from "../src/screens/PosDashboard"
 import Reports from "../src/screens/Reports"
 
 const { rpc } = vi.hoisted(() => ({ rpc: vi.fn() }))
@@ -29,7 +33,10 @@ vi.mock("../src/lib/auth", () => ({ useAuth: () => ({ status: "authed", roles: [
 vi.mock("../src/lib/cashierAuth", () => ({
   useCashierAuth: () => ({ ensureUnlocked: async () => undefined, withPin: async (_p: string, fn: () => Promise<unknown>) => fn() }),
 }))
-vi.mock("../src/lib/realtime", () => ({ useRealtime: () => undefined }))
+vi.mock("../src/lib/realtime", () => ({
+  useRealtime: () => undefined,
+  subscribeRealtime: () => () => undefined,
+}))
 vi.mock("../src/AppShell", () => ({ default: () => <Outlet /> }))
 
 const PAYABLES = { label: "Purchase Invoice", url: "/app/purchase-invoice" }
@@ -252,15 +259,165 @@ describe("ERP-kept books", () => {
   })
   const hrefsOf = () => Array.from(host.querySelectorAll("a")).map((a) => a.getAttribute("href"))
 
-  it("Ledgers: the receivables links point at the ERP Accounts Receivable report, never /kamra/receivables", async () => {
+  it("Ledgers: the receivables links (footer and AR help card) point at the ERP Accounts Receivable report, never /kamra/receivables", async () => {
     boot({ receivables: RECEIVABLES, accounting_export: EXPORT })
     bridgedScreensRpc()
     await act(async () => {
       root.render(<MemoryRouter basename="/kamra" initialEntries={["/kamra/ledgers"]}><Ledgers /></MemoryRouter>)
     })
     await vi.waitFor(() => { expect(host.textContent).toContain("Books check") })
-    expect(hrefsOf()).not.toContain("/kamra/receivables")
-    expect(hrefsOf()).toContain(RECEIVABLES.url)
+    const infoBtn = host.querySelector('button[aria-label="What is this ledger?"]') as HTMLButtonElement | null
+    expect(infoBtn).toBeTruthy()
+    await act(async () => { infoBtn!.click() })
+    await vi.waitFor(() => { expect(host.textContent).toContain("What it is") })
+    const hrefs = hrefsOf()
+    expect(hrefs).not.toContain("/kamra/receivables")
+    expect(hrefs.filter((h) => h === RECEIVABLES.url).length).toBeGreaterThanOrEqual(2)
+  })
+
+  it("EndOfDayWizard: unverified ERP checks show Not verified (not All clear), and overdue_ar links to ERP Receivables", async () => {
+    boot({ receivables: RECEIVABLES }, "/pos")
+    rpc.mockImplementation(async (method: string) => {
+      if (method === "kamra.night_audit.eod_session") {
+        return {
+          property: "Test Hotel", property_name: "Test Hotel", business_date: "2026-11-23",
+          server_date: "2026-11-24", server_time: "02:30", property_now: "02:30",
+          require_cashier_pin: 0, blind_count: 0, high_balance_threshold: 0,
+          auto_audit_with_blockers: "warn", reports: [], audit: "NA-1", ran: false, status: "Draft",
+          current_step: 0, notes: "", acknowledgements: [], sessions: [],
+          steps: [{
+            index: 0, key: "folios", title: "Open folios and high balances",
+            checks: ["credit_limit", "overdue_ar"], status: "pending", count: 0, blocking: [],
+          }],
+          checks: [
+            {
+              key: "credit_limit", title: "Companies over their credit limit", severity: "warn",
+              count: 0, unverified: true, items: [],
+              action: "Company receivables could not be verified in the accounting system.",
+              resolve: "/receivables",
+            },
+            {
+              key: "overdue_ar", title: "Companies with overdue bills", severity: "warn",
+              count: 0, total: null, unverified: true, items: [],
+              action: "Company receivables could not be verified in the accounting system.",
+              resolve: "/receivables",
+            },
+          ],
+        }
+      }
+      return null
+    })
+    await act(async () => {
+      root.render(
+        <MemoryRouter basename="/kamra" initialEntries={["/kamra/end-of-day/Test%20Hotel"]}>
+          <App />
+        </MemoryRouter>,
+      )
+    })
+    await vi.waitFor(() => {
+      expect(host.textContent).toContain("Companies over their credit limit")
+    }, { timeout: 5000 })
+    // Must appear in Needs you with "Not verified", never in green All clear or empty-clear tables.
+    expect(host.textContent).toContain("Needs you")
+    expect(host.textContent).toContain("Not verified")
+    expect(host.textContent).not.toContain("All clear")
+    expect(host.textContent).not.toContain("No company is over its credit limit.")
+    expect(host.textContent).not.toContain("No company has an overdue bill.")
+    // overdue_ar fix step and resolve links point at ERP Accounts Receivable, never /kamra/ledgers or /kamra/receivables.
+    const hrefs = hrefsOf()
+    expect(hrefs).not.toContain("/kamra/ledgers")
+    expect(hrefs).not.toContain("/kamra/receivables")
+    expect(hrefs.filter((h) => h === RECEIVABLES.url).length).toBeGreaterThanOrEqual(4)
+  })
+
+  it("CreditTermsEditor: shows a dash, not zero, when receivables balance is null", async () => {
+    boot({ receivables: RECEIVABLES })
+    rpc.mockImplementation(async (method: string) => method === "kamra.credit.company_credit_terms" ? {
+      company: "Acme Corp", credit_allowed: true, account: "CLA-1", credit_limit: 2000,
+      credit_days: 15, use_default_credit_days: false, effective_credit_days: 15,
+      default_credit_days: 30, balance: null, policy: "block", can_edit: true,
+    } : null)
+    await act(async () => {
+      root.render(
+        <MemoryRouter basename="/kamra" initialEntries={["/kamra"]}>
+          <CreditTermsEditor row={{ name: "Acme Corp" }} reload={() => undefined} />
+        </MemoryRouter>,
+      )
+    })
+    await vi.waitFor(() => { expect(host.textContent).toContain("Credit terms at this property") })
+    expect(host.textContent).toContain("Owes —")
+    expect(host.textContent).not.toMatch(/Owes\s+[^\s—]*0/)
+  })
+
+  it("PosDashboard and CashierTill: POS links use AppLink and point at external pos_url, never /kamra/pos", async () => {
+    boot({ receivables: RECEIVABLES }, "/pos")
+    rpc.mockImplementation(async (method: string) => {
+      if (method === "kamra.pos.outlets") return []
+      if (method === "kamra.cashier.current_session") {
+        return {
+          open: true, name: "CS-1", business_date: "2026-11-23", opening_float: 0,
+          expected_cash: 0, system_cash: 0, system_card: 0, system_upi: 0, system_other: 0,
+          paid_outs: 0, drops: 0, petty_cash: 0, transactions: [],
+        }
+      }
+      if (method === "kamra.cashier.terminals") return []
+      return null
+    })
+    await act(async () => {
+      root.render(<MemoryRouter basename="/kamra" initialEntries={["/kamra/pos-dashboard"]}><PosDashboard /></MemoryRouter>)
+    })
+    await vi.waitFor(() => { expect(host.textContent).toContain("Open POS") })
+    expect(hrefsOf()).toContain("/pos")
+    expect(hrefsOf()).not.toContain("/kamra/pos")
+
+    await act(async () => {
+      root.render(<MemoryRouter basename="/kamra" initialEntries={["/kamra/cashier"]}><CashierTill /></MemoryRouter>)
+    })
+    await vi.waitFor(() => { expect(host.textContent).toContain("Restaurant POS") })
+    expect(hrefsOf()).toContain("/pos")
+    expect(hrefsOf()).not.toContain("/kamra/pos")
+  })
+
+  it("AuditPack: shows dashes for unavailable ERP city ledger balances and Not verified on unverified prechecks", async () => {
+    boot({ receivables: RECEIVABLES })
+    rpc.mockImplementation(async (method: string) => method === "kamra.night_audit.night_audit_pack" ? {
+      audit: "NA-1", run: { name: "NA-1", status: "Completed", business_date: "2026-11-23" },
+      has_pack: true, can_rebuild: true,
+      pack: {
+        property_name: "Test Hotel", business_date: "2026-11-23", generated_at: "2026-11-24 02:00",
+        reports: [
+          { key: "audit_report", title: "Night audit report" },
+          { key: "exceptions", title: "Pre-checks and exceptions" },
+        ],
+        audit_report: {
+          periods: [],
+          balances: [
+            { ledger: "Guest", label: "Guest ledger", brought_forward: 100, debit: 50, credit: 20, carried_forward: 130 },
+            { ledger: "AR", label: "City ledger", brought_forward: null, debit: null, credit: null, carried_forward: null, kept_in_erp: true, unverified: true },
+          ],
+        },
+        prechecks: [
+          { key: "credit_limit", title: "Companies over their credit limit", severity: "warn", count: 0, unverified: true },
+        ],
+      },
+    } : null)
+    await act(async () => {
+      root.render(
+        <MemoryRouter basename="/kamra" initialEntries={["/kamra"]}>
+          <AuditPackView audit="NA-1" embedded />
+        </MemoryRouter>,
+      )
+    })
+    await vi.waitFor(() => { expect(host.textContent).toContain("City ledger") })
+    const arRow = Array.from(host.querySelectorAll("tr")).find((tr) => tr.textContent?.includes("City ledger"))
+    expect(arRow?.textContent).toContain("—")
+    expect(arRow?.textContent).not.toContain("0.00")
+
+    const excTab = Array.from(host.querySelectorAll("button")).find((b) => b.textContent?.includes("Pre-checks and exceptions"))
+    expect(excTab).toBeTruthy()
+    await act(async () => { excTab!.click() })
+    await vi.waitFor(() => { expect(host.textContent).toContain("Companies over their credit limit") })
+    expect(host.textContent).toContain("Not verified")
   })
 
   it("Reports: the accounting export link points at the ERP report, never /kamra/accounting-export", async () => {
