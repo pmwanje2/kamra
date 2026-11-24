@@ -56,7 +56,7 @@ def _p(typ: str, **extra: Any) -> dict[str, Any]:
 # list of valid options - it never guesses.
 ROOM_TYPE_PARAM = _p(
 	"string",
-	description="Room type: its id (e.g. 'Kamra Demo Palace-DLX'), its code "
+	description="Room type: its id (e.g. 'Grand Palace-DLX'), its code "
 	"('DLX') or its exact name ('Deluxe'). See booking_options.",
 )
 MEAL_PLAN_PARAM = _p(
@@ -204,9 +204,12 @@ TOOLS: tuple[ToolSpec, ...] = (
 			"rate_plan": RATE_PLAN_PARAM,
 			"voucher_code": _p("string"),
 			"company": COMPANY_PARAM,
-			"market_segment": _p("string", enum=[
-				"Corporate", "Leisure", "Group", "MICE", "Government", "Wedding",
-				"Long Stay", "Airline Crew", "Complimentary", "House Use"]),
+			"market_segment": _p(
+				"string",
+				description="Optional market code: one of the hotel's Market Codes "
+				"(by default Corporate, Leisure, Group, MICE, Government, Wedding, "
+				"Long Stay, Airline Crew, Complimentary, House Use). An unknown "
+				"code is refused. A company booking is Corporate unless given."),
 			"check_in_time": _p("string"),
 			"check_out_time": _p("string"),
 			"idempotency_key": IDEMPOTENCY_KEY_PARAM,
@@ -269,10 +272,11 @@ TOOLS: tuple[ToolSpec, ...] = (
 		"""Cancel a confirmed booking. The property's cancellation policy
 		applies automatically - free outside the window, else the configured
 		fee posts to the folio. Returns a cancellation number - always give
-		it to the guest. Reasons: Guest request, Change of plans, Duplicate
+		it to the guest. The reason is one of the hotel's cancellation
+		reason codes (by default Guest request, Change of plans, Duplicate
 		booking, Payment failed, Weather / travel disruption, Booked
-		elsewhere, Other. Only waive the fee when a manager authorizes it;
-		the waiver is logged.""",
+		elsewhere, Other); an unknown one is recorded as Other. Only waive
+		the fee when a manager authorizes it; the waiver is logged.""",
 		{
 			"reservation": _p("string"),
 			"reason": _p("string"),
@@ -2536,8 +2540,8 @@ TOOLS: tuple[ToolSpec, ...] = (
 
 BY_NAME: dict[str, ToolSpec] = {t.name: t for t in TOOLS}
 TOOL_COUNT = len(TOOLS)
-INSTRUCTIONS = (
-	"You are operating a hotel through Kamra PMS. Money and "
+_INSTRUCTIONS = (
+	"You are operating a hotel through {product}. Money and "
 	"availability are computed by the PMS, never estimate them "
 	"yourself - always quote before booking. Confirm irreversible "
 	"actions (checkout, cancelling a stay, closing a folio) with the "
@@ -2546,6 +2550,14 @@ INSTRUCTIONS = (
 	"it, book first, then call waive_security_deposit with the user's "
 	"reason."
 )
+# The stdio server (mcp/kamra_mcp.py) runs outside a site; the site's own
+# remote server names its product with instructions().
+INSTRUCTIONS = _INSTRUCTIONS.format(product="Kamra PMS")
+
+
+def instructions(product: str) -> str:
+	return _INSTRUCTIONS.format(product=product)
+
 
 def input_schema(spec: ToolSpec) -> dict[str, Any]:
 	schema: dict[str, Any] = {"type": "object", "properties": spec.parameters}

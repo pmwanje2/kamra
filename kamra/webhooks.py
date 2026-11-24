@@ -44,7 +44,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_to_date, cint, now_datetime
 
-from kamra.branding import product_name
+from kamra.branding import product_name, product_token, white_label
 from kamra.authz import require_roles
 
 WEBHOOK = "Outbound Webhook"
@@ -506,7 +506,7 @@ def deliver(delivery: str) -> dict:
 		resp = requests.post(url, data=body, timeout=TIMEOUT, allow_redirects=False,
 		                     headers={
 			"Content-Type": "application/json",
-			"User-Agent": "Kamra-Webhooks/1",
+			"User-Agent": f"{product_token() if white_label() else 'Kamra'}-Webhooks/1",
 			"X-Kamra-Event": d.event,
 			"X-Kamra-Event-Id": d.event_id,
 			"X-Kamra-Delivery": d.name,

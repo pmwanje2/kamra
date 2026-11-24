@@ -223,7 +223,8 @@ class RateMatrixHarness(unittest.TestCase):
 		frappe.get_doc = self.get_doc
 		frappe.get_cached_doc = self.get_doc
 		frappe.db = SimpleNamespace(get_value=self.get_value, exists=self.exists,
-		                            get_single_value=self.get_single_value)
+		                            get_single_value=self.get_single_value,
+		                            sql=lambda *args, **kwargs: [(0,)])
 		frappe.get_all = self.get_all
 		frappe.get_meta = lambda doctype: SimpleNamespace(has_field=lambda field: True)
 		frappe.parse_json = lambda value: json.loads(value) if isinstance(value, str) else value

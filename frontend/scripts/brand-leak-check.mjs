@@ -3,7 +3,9 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import ts from "typescript"
 
-export const forbidden = /\b(?:Kamra|Frappe|ERPNext|URY)\b|kamra-mark|kamrapms\.com|github\.com\/Kamra|HeyKoala/i
+// A letter or digit, not \b, bounds a name: "_" and "-" join words in
+// identifiers, so kamra_mcp_disabled or kamra-theme in prose still leaks.
+export const forbidden = /(?<![a-z0-9])(?:Kamra|Frappe|ERPNext|URY)(?![a-z0-9])|kamra-mark|kamrapms\.com|github\.com\/Kamra|HeyKoala/i
 
 const root = fileURLToPath(new URL("../", import.meta.url))
 
@@ -14,6 +16,8 @@ const exceptions = new Map(Object.entries({
     "https://github.com/Kamra-PMS/kamra-pms", "Frappe Desk", "ERPNext", "HeyKoala"],
   "src/lib/api.ts": ["kamra-session", "Kamra Demo Palace", "kamra.banquet."],
   "src/lib/dir.ts": ["kamra-guest-lang", "kamra-lang"],
+  // The one place the SPA's mount is named; links go through toFullPath().
+  "src/lib/routing.ts": ["/kamra"],
   "src/lib/theme.ts": ["kamra-theme"],
   "src/lib/thermal.ts": ["iframe[data-kamra-print]", "data-kamra-print"],
   "src/components/InfoTip.tsx": ["why-kamra"],
@@ -35,7 +39,9 @@ function identifier(value, node, filename) {
   if (!node || ts.isJsxText(node)) return false
   if (exceptions.get(filename)?.includes(value)) return true
   if (/^(?:kamra|frappe|erpnext)(?:[.:_]\w[\w:-]*)+$/.test(value)) return true
-  if (/^\/(?:assets\/kamra|api\/method\/(?:kamra|frappe)\.|kamra(?:\/|$))[\w./?=%&#:-]*$/.test(value)) return true
+  // Asset and API paths only. A screen path such as "/kamra/hk" is a link a
+  // person follows and sees, so it is built with toFullPath() instead.
+  if (/^\/(?:assets\/kamra\/|api\/method\/(?:kamra|frappe)\.)[\w./?=%&#:-]*$/.test(value)) return true
   if (/^x-(?:frappe-csrf-token|kamra-(?:event(?:-id)?|timestamp|signature|property))$/i.test(value)) return true
   if (filename === "src/screens/Login.tsx" && /^(?:admin|gm|frontdesk|revenue|finance|hk)@kamra\.local$/.test(value)) return true
   if (ts.isPropertyAssignment(node.parent) && node.parent.name.getText() === "doctype" &&
@@ -61,7 +67,7 @@ export function csvRows(text) {
   return rows
 }
 
-export function checkSource() {
+export function scanTree(base = root) {
   let sourceCount = 0
   const findings = []
   const scan = (value, location, node, filename) => {
@@ -76,7 +82,7 @@ export function checkSource() {
         function visit(node) {
           if (ts.isStringLiteralLike(node) || ts.isTemplateLiteralToken(node) || ts.isJsxText(node)) {
             const before = findings.length
-            const filename = path.relative(root, name)
+            const filename = path.relative(base, name)
             scan(node.text, `${filename}:${source.getLineAndCharacterOfPosition(node.getStart()).line + 1}`, node, filename)
             sourceCount += findings.length - before
           }
@@ -86,24 +92,29 @@ export function checkSource() {
       }
     }
   }
-  walk(path.join(root, "src"))
-  const locales = path.join(root, "src/i18n/locales")
+  walk(path.join(base, "src"))
+  const locales = path.join(base, "src/i18n/locales")
   for (const file of fs.readdirSync(locales).filter((f) => f.endsWith(".json"))) {
     for (const [key, value] of Object.entries(JSON.parse(fs.readFileSync(path.join(locales, file), "utf8")))) {
       scan(key, file); scan(value, `${file} (${key})`)
     }
   }
-  const [header, ...rows] = csvRows(fs.readFileSync(path.join(root, "src/i18n/catalog.csv"), "utf8"))
+  const [header, ...rows] = csvRows(fs.readFileSync(path.join(base, "src/i18n/catalog.csv"), "utf8"))
   const valuesEnd = header?.indexOf("sources")
   if (valuesEnd !== 6 || !rows.length) throw new Error("Unexpected catalog.csv schema")
   for (const [i, row] of rows.entries()) {
     if (row.length !== header.length) throw new Error(`catalog.csv:${i + 2}: unexpected column count`)
     for (let col = 0; col < valuesEnd; col++) scan(row[col], `catalog.csv:${i + 2}`)
   }
-  const html = fs.readFileSync(path.join(root, "index.html"), "utf8")
+  const html = fs.readFileSync(path.join(base, "index.html"), "utf8")
   for (const match of html.matchAll(/<title>([^<]*)<\/title>|\bcontent="([^"]*)"/g)) {
     scan(match[1] ?? match[2], "index.html")
   }
+  return { findings, sourceCount }
+}
+
+export function checkSource() {
+  const { findings, sourceCount } = scanTree()
   if (findings.length) {
     console.error(findings.join("\n"))
     throw new Error(`${sourceCount} UI source findings; ${findings.length} total branding findings`)

@@ -21,6 +21,7 @@
   "amount",
   "gst_rate",
   "gst_amount",
+  "tax_as_posted",
   "total",
   "contract_currency",
   "contract_fx_rate",
@@ -32,6 +33,7 @@
   "reversal_of",
   "void_reason",
   "voided_by",
+  "split_of",
   "correction_approved_by",
   "correction_signature"
  ],
@@ -133,6 +135,15 @@
    "read_only": 1
   },
   {
+   "fieldname": "tax_as_posted",
+   "fieldtype": "Check",
+   "label": "Tax As Posted",
+   "read_only": 1,
+   "no_copy": 1,
+   "default": "0",
+   "description": "The tax was worked out to the currency's minor unit when the line was split (the line split keeps the rest of it) and is kept as posted, not worked out again from the rate."
+  },
+  {
    "fieldname": "total",
    "fieldtype": "Currency",
    "in_list_view": 1,
@@ -215,6 +226,14 @@
    "read_only": 1
   },
   {
+   "fieldname": "split_of",
+   "fieldtype": "Data",
+   "label": "Split From Line",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "The line this one was split from (its reversal, or a part of it). Lineage only: a split part is an ordinary line."
+  },
+  {
    "fieldname": "correction_approved_by",
    "fieldtype": "Link",
    "label": "Correction Approved By",
@@ -234,7 +253,7 @@
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-11-23 18:00:00.000000",
+ "modified": "2026-11-23 20:00:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Folio Charge",

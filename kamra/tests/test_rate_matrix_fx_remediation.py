@@ -391,6 +391,7 @@ class CurrentDateTrailHarness(ContractStayHarness):
 			                            reverse_ledger_for_charge=record("reverse_ledger_for_charge"),
 			                            _original_charge_entry=lambda *args: None,
 			                            code_for_charge_type=lambda charge_type: charge_type.upper(),
+			                            minor_unit=lambda property: Decimal("1"),
 			                            record_charge_ledger=record("record_charge_ledger")),
 			"kamra.webhooks": stub_module("kamra.webhooks", emit_charge_voided=lambda *args: None,
 			                              emit_night_audit_closed=lambda *args: None),
@@ -458,12 +459,15 @@ class PostedContractFxTrailTest(CurrentDateTrailHarness):
 	def test_a_split_night_keeps_its_rate_and_counts_once(self):
 		night = self.post("2026-12-01", 3700)
 		self.post("2026-12-02", 3800)
-		self.assertEqual(self.folio.split_charge(self.guest.name, night.name, self.company.name, percent=40),
-		                 {"kept": 288600.0, "moved": 192400.0})
+		out = self.folio.split_charge(self.guest.name, night.name, self.company.name, percent=40)
+		self.assertEqual((out["kept"], out["moved"]), (288600.0, 192400.0))
 		part, = self.company.charges
+		kept = next(row for row in self.guest.charges if row.name == out["kept_row"])
+		reversal = next(row for row in self.guest.charges if row.name == out["reversal"])
 		self.assertEqual(self.fx_trail(part), ("USD", 3700.0, "2026-12-01", 0))
-		self.assertEqual(self.fx_trail(night), ("USD", 3700.0, "2026-12-01", 0))
-		# two rows, one night: 3,700 is not weighted twice against 3,800
+		self.assertEqual(self.fx_trail(kept), ("USD", 3700.0, "2026-12-01", 0))
+		self.assertIsNone(reversal.get("contract_currency"))
+		# two split parts, one night: 3,700 is not weighted twice against 3,800
 		self.assertEqual(self.shown(), (3750.0, "2026-12-02", 2))
 
 

@@ -2227,3 +2227,12 @@ None connected.,未建立连接。
 Property clock,酒店时钟
 Responding.,响应正常。
 Service is not responding.,服务未响应。
+OTA Tax Rules row {0}: the text needs a letter or a digit.,OTA 税费规则第 {0} 行：文本至少需要一个字母或数字。
+OTA Tax Basis rows {0} and {1} are the same OTA ({2}): keep one.,OTA 计税基础第 {0} 行和第 {1} 行是同一个 OTA（{2}）：请保留一行。
+OTA Tax Rules,OTA 税费规则
+OTA Tax Basis,OTA 计税基础
+OTA Tax Basis row {0}: the OTA name needs a letter or a digit.,OTA 计税基础第 {0} 行：OTA 名称至少需要一个字母或数字。
+Channel review status can only be cleared via the review action.,渠道审核状态只能通过审核操作清除。
+Update In-House Reservations,更新在住预订
+"Update In-House Reservations = Y is not yet enabled: OXI Y requires arrival-date, room-type, billed-night, and assigned-room safety bounds. Keep N so OTA changes to checked-in stays are rejected and flagged for review.",更新在住预订 = Y 尚未启用：OXI Y 需要到店日期、房型、已入账房晚和已分配房间的安全边界。请保持 N，以便拒绝 OTA 对已入住预订的修改并标记待审核。
+OTA Tax Rules row {0}: a CJK rule needs at least two characters so it does not match unrelated taxes.,OTA 税费规则第 {0} 行：CJK 规则至少需要两个字符，以免误匹配无关税费。

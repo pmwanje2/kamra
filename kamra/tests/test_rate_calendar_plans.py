@@ -202,3 +202,31 @@ class RateCalendarPlansTest(RateMatrixHarness):
 				self.assertEqual(self.calendar(rate_plan=name)["rate_plan"], policy)
 		listed = {plan["name"]: plan for plan in self.calendar()["rate_plans"]}
 		self.assertEqual(listed["CON-NR"], expected["CON-NR"])
+
+	def test_uganda_pack_room_levy_does_not_leak_into_card_or_contract_calendar_cells(self):
+		"""Merge pin (#34 + #44): Uganda country pack room levy (Local Hotel Tax)
+		appends after accommodation in quote(), so rate_calendar's card-fallback
+		cell keeps the accommodation gross rate and contract cells stay on contract_local_amount."""
+		import sys
+
+		pack = sys.modules["kamra.localization"].pack_for("Test Hotel")
+		pack.ROOM_LEVY_LABEL = "Local Hotel Tax"
+		self.addCleanup(delattr, pack, "ROOM_LEVY_LABEL")
+		self.docs["Property", "Test Hotel"].update(
+			country="Uganda", rates_include_tax=1, room_levy_per_night=2000, room_levy_label="",
+		)
+		self.room_tax = 18
+		self.records["Room Type"].append(self.add(
+			"Room Type", DLX, property="Test Hotel", disabled=0, room_type_code="DLX", room_type_name="Deluxe",
+			base_price=150000, base_occupancy=2, adults_capacity=2))
+		self.tariffs["CORP"] = lambda form: (
+			self.tariff(fx_rate=3648.2, agreed_rate=474266) if form["room_type"] == DLX else {"is_tariff": 0}
+		)
+		self.docs["Rate Plan", "CORP"].update(rounding_step=1000, rounding_mode="Nearest")
+		result = self.calendar(rate_plan="CORP")
+		# STD has no tariff -> card fallback: 100,000 gross - 10% = 90,000 (no +2,000 Uganda room levy)
+		self.assertEqual({n["rate"] for n in self.cells(result, STD)}, {90000})
+		self.assertEqual({n["source"] for n in self.cells(result, STD)}, {"card"})
+		# DLX has USD contract tariff -> rounded via contract_local_amount to 474,000
+		self.assertEqual({n["rate"] for n in self.cells(result, DLX)}, {474000})
+		self.assertEqual({n["source"] for n in self.cells(result, DLX)}, {"contract"})

@@ -122,6 +122,28 @@ class AriCurrencyRefused(Exception):
 	priced in: neither the contract's nor the property's, or not known."""
 
 
+def rate_quantum(property: str | None) -> Decimal:
+	"""The smallest step of a rate sent to a channel: the ISO 4217 minor unit
+	of the currency the property sells in, as pricing.quote prices it (1 for
+	UGX, 0.001 for KWD); 0.01 without a property."""
+	from kamra.pricing import _minor_unit, selling_currency
+	return Decimal(1).scaleb(-_minor_unit(selling_currency(property)))
+
+
+def channel_rate(property: str, q: dict) -> Decimal:
+	"""One night's room price as the channels sell it, from a one-night
+	quote, on the property's selling basis: gross - the night's room tax put
+	back on - where its rates include tax, net otherwise (the OTA adds the
+	tax, its extranet set to match). An OTA booking's total is read as gross
+	(channel_manager.lock_channel_rates), so one that comes back at this
+	price bills what the desk would. To the currency's minor unit."""
+	from kamra.pricing import rates_include_tax
+	rate = Decimal(str(q["room_total"]))
+	if rates_include_tax(property):
+		rate *= 1 + Decimal(str((q.get("nightly") or [{}])[0].get("gst_rate") or 0)) / 100
+	return rate.quantize(rate_quantum(property), rounding=ROUND_HALF_UP)
+
+
 def _sold_currency(rate_plan: str | None, external_currency: str | None, home: str) -> str:
 	"""The currency a mapping's rates go out in: the provider rate plan's
 	when it is the plan's own (C) or the property's (H). AriCurrencyRefused
@@ -137,15 +159,15 @@ def _sold_currency(rate_plan: str | None, external_currency: str | None, home: s
 def _plan_night_rate(property: str, room_type: str, rate_plan: str | None, d,
                      currency: str | None = None) -> Decimal | None:
 	"""One night from `d` on `rate_plan` (None: the room type's base price),
-	for the type's base occupancy (or 2 adults), to 2 decimals, in `currency`
-	(E; None: see _sold_currency). In the property's currency it is priced as
-	the desk prices it (pricing.quote_with_contract): the agreed rate of a
-	contract night, else the card. In the contract's own currency it is the
-	contract nightly (a derived plan's modifier in it) from the approved
-	tariff master data (pricing.contract_list_nightly, read once in a
-	restriction_cells pass), which converts nothing and so needs no exchange
-	rate (SAP SG 105: only a quote that converts does). A card night goes only in the
-	property's.
+	for the type's base occupancy (or 2 adults), at the currency's minor unit,
+	in `currency` (E; None: see _sold_currency). In the property's currency it
+	is priced as the desk prices it (pricing.quote_with_contract): the agreed
+	rate of a contract night, else the card on the property's selling basis
+	(channel_rate). In the contract's own currency it is the contract nightly
+	(a derived plan's modifier in it) from the approved tariff master data
+	(pricing.contract_list_nightly, read once in a restriction_cells pass),
+	which converts nothing and so needs no exchange rate (SAP SG 105: only a
+	quote that converts does). A card night goes only in the property's.
 
 	None when the night has no approved price (a missing tariff among them)
 	or it is not worth more than 0: stop sale. AriPriceHeld when the
@@ -154,6 +176,7 @@ def _plan_night_rate(property: str, room_type: str, rate_plan: str | None, d,
 	AriCurrencyRefused when it cannot go in `currency`."""
 	from kamra.pricing import (
 		ContractRateRefused,
+		_minor_unit,
 		contract_list_nightly,
 		property_currency,
 		quote_with_contract,
@@ -182,12 +205,16 @@ def _plan_night_rate(property: str, room_type: str, rate_plan: str | None, d,
 		amount = listed[1]
 	else:
 		tariff = q.get("tariff")
-		if tariff and currency == tariff.get("currency"):
-			amount = tariff.get("nightly")
-		else:
-			amount = q.get("agreed_rate") if tariff else q.get("room_total")
+		if not tariff:
+			try:
+				total = channel_rate(property, q)
+			except Exception as exc:
+				raise AriPricingFailed(f"{type(exc).__name__}: {q.get('room_total')!r} is not a price") from exc
+			return total if total > 0 else None
+		amount = tariff.get("nightly") if currency == tariff.get("currency") else q.get("agreed_rate")
 	try:
-		total = Decimal(str(amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+		quantum = Decimal(1).scaleb(-_minor_unit(currency))
+		total = Decimal(str(amount)).quantize(quantum, rounding=ROUND_HALF_UP)
 	except Exception as exc:
 		raise AriPricingFailed(f"{type(exc).__name__}: {amount!r} is not a price") from exc
 	return total if total > 0 else None
@@ -260,10 +287,13 @@ def _restriction_cells(conn, start: str, days: int, home: str, problems: dict) -
 
 
 def _canon(value):
-	"""A cell value as stored in Channel ARI State (JSON): rates as 2-decimal
-	strings, so 241 and "241.00" compare equal."""
+	"""A cell value as stored in Channel ARI State (JSON): rates as decimal
+	strings with every decimal they carry and at least 2, so 241 and
+	"241.00" compare equal and a KWD 12.349 is not taken for 12.345."""
 	if isinstance(value, Decimal | float) and not isinstance(value, bool):
-		return str(Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+		rate = Decimal(str(value))
+		places = max(2, -rate.normalize().as_tuple().exponent)
+		return str(rate.quantize(Decimal(1).scaleb(-places)))
 	return value
 
 
@@ -891,6 +921,10 @@ _HORIZON_SOURCES = ("Rate Plan", "Room Type", "Hurdle Rate", "Rate Guardrail")
 # hospitality_tariffs.tariff_rate read nothing else; Kamra's own Exchange
 # Rate is the FX desk's, and moves no channel price)
 _FX_SOURCES = ("Currency Exchange",)
+# What a property's prices are offered on (channel_rate, rate_quantum): its
+# selling basis, currency, tax pack and room tax rates.
+_PROPERTY_BASIS = ("rates_include_tax", "currency", "country", "gst_mode", "gst_slab_threshold",
+                   "gst_rate_low", "gst_rate_high")
 
 
 def _dates(*values) -> list:
@@ -935,6 +969,10 @@ def _source(doc, method) -> tuple[str, str | None, str | None, str] | None:
 		return (doc.property, *w, "restrictions") if w else None
 	if dt in _HORIZON_SOURCES:
 		return doc.property, None, None, "restrictions"
+	if dt == "Property":
+		if not before or not any(doc.has_value_changed(f) for f in _PROPERTY_BASIS):
+			return None
+		return doc.name, None, None, "restrictions"
 	if dt == "Room":
 		if method == "on_update":
 			if not before:

@@ -21,7 +21,7 @@
    "search_index": 1
   },
   {
-   "description": "Registry key from kamra/settings.py, e.g. hk_sla_urgent",
+   "description": "Settings registry key, e.g. hk_sla_urgent",
    "fieldname": "setting_key",
    "fieldtype": "Data",
    "in_list_view": 1,

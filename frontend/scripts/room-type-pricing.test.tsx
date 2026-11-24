@@ -7,6 +7,7 @@ import { createRoot, type Root } from "react-dom/client"
 import { MemoryRouter, Outlet } from "react-router-dom"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import App from "../src/App"
+import { ResourceScreen, type ScreenConfig } from "../src/components/ResourceScreen"
 import RoomTypeTariffs from "../src/components/RoomTypeTariffs"
 import { setLang } from "../src/lib/dir"
 import { ensureDictionary } from "../src/lib/locales"
@@ -18,13 +19,18 @@ import id from "../src/i18n/locales/id.json"
 import pt from "../src/i18n/locales/pt.json"
 import zh from "../src/i18n/locales/zh-CN.json"
 
-const { rpc, update, create } = vi.hoisted(() => ({ rpc: vi.fn(), update: vi.fn(), create: vi.fn() }))
+const { rpc, update, create, localeState } = vi.hoisted(() => ({
+  rpc: vi.fn(),
+  update: vi.fn(),
+  create: vi.fn(),
+  localeState: { value: { locale: "en", currency: "UGX" } as Record<string, unknown> },
+}))
 const roomType = { name: "STANDARD", room_type_name: "Standard Room", room_type_code: "STD", base_price: 410619,
   base_occupancy: 2, single_occupancy_price: 380000, extra_adult_price: 50000, child_price: 20000,
   adults_capacity: 2, children_capacity: 0 }
 vi.mock("../src/lib/api", () => ({
   call: (method: string, params: unknown) => method === "kamra.api.property_locale"
-    ? Promise.resolve({ locale: "en", currency: "UGX" }) : rpc(method, params),
+    ? Promise.resolve(localeState.value) : rpc(method, params),
   getCurrentProperty: () => "Test Hotel",
   frappeFetch: async (path: string) => ({ data: path.includes("?") ? [roomType] : roomType }),
   serverError: (error: Error) => error.message,
@@ -57,6 +63,7 @@ describe("Room Types pricing", () => {
   beforeEach(() => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true)
     vi.stubGlobal("localStorage", jsdom.window.localStorage)
+    localeState.value = { locale: "en", currency: "UGX" }
     tariffs = structuredClone(panel)
     update.mockReset().mockResolvedValue({ data: roomType })
     create.mockReset().mockResolvedValue({ data: roomType })
@@ -246,5 +253,51 @@ describe("Room Types pricing", () => {
       translated("Rate calendar"),
       translated("Rate plan"),
     ]) expect(body).toContain(expected)
+  })
+
+  it("composes #34 Room Types tariff lead and collapsed card rate with #44 Uganda tax_basis", async () => {
+    localeState.value = {
+      locale: "en-UG",
+      currency: "UGX",
+      tax_label: "VAT",
+      tax_basis: { label: "VAT", rate: 18, inclusive: 1, determined: 1 },
+    }
+    await render()
+    expect(text(dialog())).toContain("Tax is applied by the invoice (VAT included).")
+    expect(inputFor("Tax %")).toBeNull()
+    expect(text(region())).toContain("UGX 474,000")
+    expect(cardSection().open).toBe(false)
+  })
+
+  it("composes #34 collapsible sections with #44 readOnlyOnEdit/disabledWhen and #39 TableField", async () => {
+    const composed: ScreenConfig = {
+      doctype: "Room Type",
+      title: "Composed Master",
+      columns: [{ field: "room_type_code", label: "Code" }],
+      sections: [{ key: "card", label: "Protected pricing rules" }],
+      form: [
+        { field: "room_type_code", label: "Code", type: "data", readOnlyOnEdit: true },
+        { field: "base_price", label: "Locked card rate", type: "currency", section: "card",
+          disabledWhen: (d) => String(d.room_type_code) === "STD" },
+        { field: "rules", label: "Tax Rules", type: "table", section: "card",
+          columns: [{ field: "match_text", label: "Text", type: "data" }] },
+      ],
+    }
+    await act(async () => root.render(<MemoryRouter initialEntries={["/composed?open=STANDARD"]}>
+      <ResourceScreen config={composed} />
+    </MemoryRouter>))
+    await vi.waitFor(async () => {
+      await settle()
+      expect(host.querySelector("[role=dialog]")).not.toBeNull()
+    }, { interval: 1, timeout: 3000 })
+    const codeInput = inputFor("Code")
+    expect(codeInput?.disabled).toBe(true)
+    const section = Array.from(dialog().querySelectorAll("details")).find((n) =>
+      n.querySelector("summary")?.textContent?.trim() === "Protected pricing rules")
+    expect(section).toBeDefined()
+    expect(section!.open).toBe(false)
+    expect(inputFor("Locked card rate", section!)?.disabled).toBe(true)
+    expect(text(section!)).toContain("Tax Rules")
+    expect(Array.from(section!.querySelectorAll("button")).some((b) => b.textContent?.includes("Add row"))).toBe(true)
   })
 })

@@ -205,7 +205,7 @@ def after_reset():
 def _instant_modes() -> list[str]:
 	"""The demo country's instant modes (a wallet / instant transfer)."""
 	from kamra.localization import instant_payment_modes, pack_for
-	return instant_payment_modes(pack_for(PROPERTY))
+	return instant_payment_modes(pack_for(PROPERTY), PROPERTY)
 
 
 class History:

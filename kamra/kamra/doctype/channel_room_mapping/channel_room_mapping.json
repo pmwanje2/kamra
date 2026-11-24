@@ -64,7 +64,7 @@
    "label": "Rate Plan",
    "options": "Rate Plan",
    "in_list_view": 1,
-   "description": "The Kamra rate plan this provider rate plan sells. Blank: the room type's base price."
+   "description": "The hotel's rate plan this provider rate plan sells. Blank: the room type's base price."
   }
  ],
  "permissions": [

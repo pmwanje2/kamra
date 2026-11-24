@@ -161,7 +161,7 @@ def collect_deposit(reservation: str, amount: float, *, mode: str = "Cash",
 	if existing and existing.status == "Refunded":
 		frappe.throw(_("This deposit has already been refunded."))
 	from kamra.localization import pack_for, payment_modes
-	modes = payment_modes(pack_for(res.property))
+	modes = payment_modes(pack_for(res.property), res.property)
 	if mode not in modes:
 		frappe.throw(_("Pick a payment mode: {0}.").format(", ".join(modes)))
 
@@ -316,7 +316,7 @@ def refund_deposit(reservation: str, amount: float | None = None,
 			.format(max(credit, 0)))
 	mode = mode or _last_mode(folio) or "Cash"
 	from kamra.localization import pack_for, payment_modes
-	modes = payment_modes(pack_for(res.property))
+	modes = payment_modes(pack_for(res.property), res.property)
 	if mode not in modes:
 		frappe.throw(_("Pick a payment mode: {0}.").format(", ".join(modes)))
 	text = f"{REFUND_REASON} {dep.name}"
