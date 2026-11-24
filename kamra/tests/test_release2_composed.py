@@ -7,7 +7,7 @@ Covers all 11 composed Release 2 scenarios end-to-end on a real Frappe + ERPNext
  3. FX relock at check-in (Fixed at Check In) with % and flat Amount discounts + Current Date posting.
  4. contract_tariff / HSP-TARIFF-007 / HSP-TARIFF-008 guard vs governed discount vs hand-typed rate.
  5. Rate change (set_agreed_rate), extend, shorten (amend_stay), split (split_charge); charged nights kept.
- 6. proforma == folio == invoice == ledger after sync_folio_rounding_ledger.
+ 6. proforma == folio == invoice == ledger (through public posting, payment and close APIs).
  7. Printed tax invoice with bridged ERP Sales Invoice VAT + discount line + reference currency.
  8. OTA modify alert (channel_review_needed, reservation_discount, channel.modify_needs_review) on tariff stay.
  9. Room Types / Rate Calendar selling rate unaffected by a stay's discount.
@@ -804,19 +804,13 @@ else:
 		self.assertEqual(flt(fdoc.tax_total), 90214.0)
 		self.assertEqual(flt(fdoc.grand_total), 591402.0)
 
-		# Ledger reconciliation in balance after sync_folio_rounding_ledger
-		ledger.sync_folio_rounding_ledger(fdoc)
+		# Ledger reconciliation in balance via normal posting path (no internal rounding calls)
 		recon = ledger.folio_reconciliation(PROP_R2_VAT)
 		self.assertTrue(recon["in_balance"], recon)
 
-		# Pay exact whole shillings & close -> invoice agrees
-		fdoc.append("payments", {
-			"posting_date": TODAY, "payment_kind": "Payment", "mode": "Cash",
-			"amount": 591402.0, "currency": "UGX",
-		})
-		folio_mod._recalculate(fdoc)
-		fdoc.save(ignore_permissions=True)
-		ledger.record_payment_ledger(fdoc, fdoc.payments[-1].as_dict())
+		# Pay exact whole shillings through public API & close -> invoice agrees
+		set_setting(PROP_R2_VAT, "use_cashier_tills", 0)
+		self._as(GM_USER, api.add_folio_payment, fname, "Cash", 591402.0, pin=GM_PIN)
 		folio_mod.close_folio(fname)
 
 		inv = self._as(GM_USER, api.folio_invoice, fname)
