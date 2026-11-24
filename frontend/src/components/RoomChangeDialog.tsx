@@ -1,7 +1,9 @@
 /*  Change a booking's room from wherever the desk is - the reservation
     drawer or the GRC - not only the tape chart (#113). Same writer and the
     same availability rules as the tape chart (movable_rooms / move_reservation);
-    the price effect is previewed before anything changes. */
+    the price effect is previewed before anything changes, and a discounted
+    stay's discount rules with it: a manager signs the move off here when
+    they need one. */
 
 import { useEffect, useMemo, useState } from "react"
 import { ArrowRight, BedDouble, Loader2, Search, X } from "lucide-react"
@@ -10,6 +12,8 @@ import { serverError } from "../lib/resource"
 import { cur, fmtAmount } from "../lib/money"
 import { useT, t as translate } from "../lib/i18n"
 import { cn } from "../lib/utils"
+import { supervisorArgs, type DiscountGovernance } from "../lib/reservationDiscount"
+import SupervisorSignOff, { SignOffReasons } from "./SupervisorSignOff"
 import { Button } from "./ui/button"
 
 
@@ -34,6 +38,10 @@ interface Preview {
   auto_price: boolean
   in_house: boolean
   can_set_rate: boolean
+  /** a discounted stay: the discount rules the move runs (kamra.api._repriced_governance) */
+  discount_governance?: DiscountGovernance | null
+  needs_supervisor?: boolean
+  supervisors?: { user: string; full_name: string }[]
 }
 
 /** What the guest pays after the move: the new room's rate, what they pay
@@ -72,6 +80,8 @@ export default function RoomChangeDialog(props: {
   const [canSetRate, setCanSetRate] = useState(false)
   const [reason, setReason] = useState(REASONS[0])
   const [note, setNote] = useState("")
+  const [supervisor, setSupervisor] = useState("")
+  const [pin, setPin] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -103,6 +113,7 @@ export default function RoomChangeDialog(props: {
         if (!live) return
         setPreview(p)
         setCanSetRate(p.can_set_rate)
+        if (p.supervisors?.length === 1) setSupervisor(p.supervisors[0].user)
         setError(null)
       })
       .catch((e) => live && setError(serverError(e)))
@@ -139,8 +150,12 @@ export default function RoomChangeDialog(props: {
     return [...m.entries()]
   }, [shown])
 
+  const gov = preview?.discount_governance ?? null
+  const signOff = supervisorArgs(gov, supervisor, pin)
+  const signed = !gov?.needs_supervisor || !!signOff.supervisor_user
+
   async function confirm() {
-    if (!pick) return
+    if (!pick || !signed) return
     setBusy(true)
     setError(null)
     try {
@@ -153,6 +168,7 @@ export default function RoomChangeDialog(props: {
         confirm_price: 1,
         rate_mode: rateMode,
         agreed_rate: rateMode === "custom" ? Number(agreedRate) : undefined,
+        ...signOff,
       })
       props.onMoved(r)
       props.onClose()
@@ -352,6 +368,11 @@ export default function RoomChangeDialog(props: {
               )}
             </div>
           )}
+          {pick && gov?.needs_supervisor && (
+            <SupervisorSignOff reason={<SignOffReasons gov={gov} />}
+              supervisors={preview?.supervisors ?? gov.supervisors}
+              supervisor={supervisor} pin={pin} onSupervisor={setSupervisor} onPin={setPin} />
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <select
               value={reason}
@@ -371,7 +392,7 @@ export default function RoomChangeDialog(props: {
               placeholder={t("Note (optional)")}
               className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-2.5 py-2 text-sm"
             />
-            <Button disabled={!pick || !preview || busy} onClick={confirm}>
+            <Button disabled={!pick || !preview || busy || !signed} onClick={confirm}>
               {busy ? t("Moving…") : pick ? t("Move to {room}", { room: pick.room_number }) : t("Pick a room")}
             </Button>
           </div>

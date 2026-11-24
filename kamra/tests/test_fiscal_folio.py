@@ -169,10 +169,11 @@ class FiscalFolioTests(AuditTestCase):
 					api.reprint_fiscal_folio(self.folio)
 
 	def test_uganda_has_no_static_invoice_title_and_standalone_title_follows_configured_tax(self):
-		"""Tax plan PR-9: no static Uganda INVOICE_TITLE; standalone title follows configured tax."""
+		"""Tax plan PR-9 / #48: no static Uganda INVOICE_TITLE; standalone title follows VAT determination."""
 		from kamra.localization import uganda
 
 		self.assertIsNone(getattr(uganda, "INVOICE_TITLE", None))
+		self.assertEqual(getattr(uganda, "VAT_INVOICE_TITLE", None), "Tax Invoice")
 		frappe.db.set_value("Property", PROP_A, {"country": "Uganda", "currency": "UGX",
 		                                         "gst_rate_low": 0, "gst_rate_high": 0})
 		frappe.clear_document_cache("Property", PROP_A)
@@ -180,7 +181,14 @@ class FiscalFolioTests(AuditTestCase):
 		self.assertEqual(api.folio_invoice(self.folio)["document"]["title"], "Invoice")
 		frappe.db.set_value("Property", PROP_A, {"gst_rate_low": 18})
 		frappe.clear_document_cache("Property", PROP_A)
-		self.assertEqual(api.folio_invoice(self.folio)["document"]["title"], "Tax Invoice")
+		# Already-settled 0%-VAT invoice stays "Invoice"; a settled VAT-charged invoice prints "Tax Invoice".
+		self.assertEqual(api.folio_invoice(self.folio)["document"]["title"], "Invoice")
+		taxed_folio = api.split_folio(self.res.name, "Extra")["folio"]
+		api._post_folio_charge(taxed_folio, "Misc", "Taxed transfer", 1000, gst_rate=18)
+		owed = frappe.db.get_value("Folio", taxed_folio, "balance")
+		api.add_folio_payment(taxed_folio, "Cash", owed)
+		close_folio(taxed_folio)
+		self.assertEqual(api.folio_invoice(taxed_folio)["document"]["title"], "Tax Invoice")
 
 	def test_a_reader_error_falls_back_to_fiscal_status_unavailable_instead_of_500(self):
 		"""Hydrogen P1-1: bridge_call error must never crash folio_invoice with HTTP 500."""
