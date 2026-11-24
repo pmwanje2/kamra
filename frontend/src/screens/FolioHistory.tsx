@@ -19,6 +19,7 @@ type FolioRow = {
   venue_booking?: string | null
   status: string
   invoice_number?: string
+  sales_invoice?: string | null
   grand_total: number
   balance: number
   closed_on?: string
@@ -164,7 +165,7 @@ export default function FolioHistory() {
                   <div className="text-xs text-zinc-400">{r.reservation || r.venue_booking}</div>
                 </td>
                 <td className="px-3 py-2 font-mono text-xs">
-                  {r.invoice_number || "-"}
+                  {r.sales_invoice || r.invoice_number || "-"}
                   {r.fx_payments?.map((p,i)=><div className="tabular-nums" key={i}>{currencyText(p.currency, p.fx_amount, moneyLocale())} @ {formatFxRate(p.exchange_rate, moneyLocale())}{p.exchange_rate_date && ` · ${formatDate(p.exchange_rate_date)}`}</div>)}
                 </td>
                 <td className="px-3 py-2">

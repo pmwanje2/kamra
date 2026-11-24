@@ -144,6 +144,8 @@ interface InvoiceData {
   /** Under the ERP accounting bridge: the Sales Invoice behind a settled
    *  folio and its fiscal identifiers (null on an open folio or without it). */
   fiscal?: Fiscal | null
+  /** true when hospitality_kamra.credit_and_rebill is installed on this bridge site */
+  bridge_credit_and_rebill?: boolean
   document: {
     title: string
     title_local?: string | null
@@ -659,7 +661,8 @@ export default function FolioView() {
               {t("Advance bill")}
             </Button>
           ) : null}
-          {!open && invoiced && canCreditInvoice ? (
+          {!open && invoiced && canCreditInvoice
+            && (!folio.sales_invoice || data.bridge_credit_and_rebill !== false) ? (
             <Button variant="outline" disabled={busy} onClick={() => setShowCredit(true)}>
               {t("Credit note")}
             </Button>
@@ -675,7 +678,9 @@ export default function FolioView() {
                 .catch((e) => setError(serverError(e)))
             }}>
               <Printer className="size-4" aria-hidden />
-              {doc.is_final ? t("Reprint fiscal invoice") : t("Print folio")}
+              {doc.is_final
+                ? (data.fiscal.state === "fiscalised" ? t("Reprint fiscal invoice") : t("Reprint invoice"))
+                : t("Print folio")}
             </Button>
           ) : (
             <Button variant="outline" onClick={() => {
@@ -709,7 +714,7 @@ export default function FolioView() {
               </Button>
             )}
           {!open && invoiced && folio.folio_type !== "Account"
-            && (!folio.sales_invoice || canCreditInvoice) && (
+            && (!folio.sales_invoice || (canCreditInvoice && data.bridge_credit_and_rebill !== false)) && (
             <Button
               variant="outline"
               disabled={busy}

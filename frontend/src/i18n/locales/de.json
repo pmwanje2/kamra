@@ -547,5 +547,6 @@
   "The tax invoice is issued from the function's folio.": "Die Steuerrechnung wird über das Folio der Veranstaltung ausgestellt.",
   "Service Charge": "Servicegebühr",
   "Invoice": "Rechnung",
-  "Tax Invoice": "Steuerrechnung"
+  "Tax Invoice": "Steuerrechnung",
+  "Reprint invoice": "Rechnung erneut drucken"
 }

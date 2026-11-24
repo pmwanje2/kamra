@@ -6880,5 +6880,6 @@
   "Posts to this function's own folio. Its deposits are taken there, and its tax invoice is issued when that folio is settled.": "将入账至本活动的专属账单。定金均记入该账单，结账后签发税务发票。",
   "Open the function's folio": "打开活动账单",
   "The tax invoice is issued from the function's folio.": "税务发票由活动账单签发。",
-  "Service Charge": "服务费"
+  "Service Charge": "服务费",
+  "Reprint invoice": "重打发票"
 }

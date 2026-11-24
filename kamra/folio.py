@@ -36,6 +36,81 @@ def _fnb_gst(property):
 	return pack_for(property).fnb_tax_rate(property)
 
 
+def _payment_entry_is_security_deposit(key: str | None) -> bool:
+	if not key or not frappe.db.exists("DocType", "Payment Entry"):
+		return False
+	return frappe.db.get_value("Payment Entry", key, "kamra_payment_kind") == "Security Deposit"
+
+
+def _security_deposit_row_ids(folio) -> set[int]:
+	"""Indices in `folio.payments` belonging to the Security Deposit liability chain.
+
+	OPERA/SAP: a security deposit is a separate liability, never a payment toward
+	the bill balance. Refunds and cancellation reversals of security deposits
+	stay out of `payments_total` and `balance` too."""
+	payments = list(folio.get("payments") or [])
+	if not payments:
+		return set()
+	sec_names: set[str] = set()
+	sec_idx: set[int] = set()
+	non_dep_received = 0.0
+	for idx, p in enumerate(payments):
+		kind = p.get("payment_kind") or "Payment"
+		pe_key = p.get("payment_entry") or p.get("reversal_of")
+		if kind == "Security Deposit" or _payment_entry_is_security_deposit(pe_key):
+			sec_idx.add(idx)
+			if p.get("name"):
+				sec_names.add(p.name)
+		elif float(p.get("amount") or 0) > 0:
+			non_dep_received += float(p.get("amount") or 0)
+	if not sec_idx:
+		return set()
+	from kamra.deposit import REFUND_REASON
+	has_pe = bool(frappe.db.exists("DocType", "Payment Entry"))
+	for idx, p in enumerate(payments):
+		if idx in sec_idx or (p.get("payment_kind") or "") != "Refund":
+			continue
+		pe_key = p.get("payment_entry") or p.get("reversal_of")
+		if pe_key and has_pe:
+			# Bridge-backed refund: Payment Entry.kamra_payment_kind is authoritative.
+			continue
+		ref = (p.get("reference") or "").strip()
+		if ref.startswith(REFUND_REASON) or (p.get("refund_of") and p.get("refund_of") in sec_names):
+			sec_idx.add(idx)
+		elif p.get("name") and frappe.db.exists(
+			"Folio Ledger Entry",
+			{"folio": folio.name, "ledger": "Deposit",
+			 "source_doctype": "Folio Payment", "source_name": p.name},
+		):
+			sec_idx.add(idx)
+		elif folio.get("status") == "Closed" or non_dep_received <= 0.009:
+			sec_idx.add(idx)
+	return sec_idx
+
+
+def _stay_withheld_deposit(folio, has_sec_dep: bool) -> Decimal:
+	"""Explicitly withheld stay Security Deposit applied against its posted damage charge."""
+	if not has_sec_dep or not folio.get("reservation"):
+		return Decimal(0)
+	if (folio.get("folio_type") or "Guest") != "Guest":
+		return Decimal(0)
+	if not frappe.db.exists("DocType", "Security Deposit"):
+		return Decimal(0)
+	withheld = frappe.db.get_value(
+		"Security Deposit", {"reservation": folio.reservation}, "withheld_amount")
+	return Decimal(str(withheld or 0))
+
+
+def security_deposit_held_on_folio(folio) -> float:
+	"""Net held Security Deposit carried on this folio's Deposit ledger (excluded from folio.balance)."""
+	sec_idx = _security_deposit_row_ids(folio)
+	if not sec_idx:
+		return 0.0
+	payments = list(folio.get("payments") or [])
+	raw = sum((Decimal(str(payments[i].get("amount") or 0)) for i in sec_idx), Decimal(0))
+	return float(raw - _stay_withheld_deposit(folio, True))
+
+
 def _recalculate(folio):
 	charges = tax = Decimal(0)
 	for c in folio.charges:
@@ -45,7 +120,12 @@ def _recalculate(folio):
 		c.total = float(amount + line_tax)
 		charges += amount
 		tax += line_tax
-	paid = sum(Decimal(str(p.amount or 0)) for p in folio.payments)
+	sec_idx = _security_deposit_row_ids(folio)
+	paid = sum(
+		(Decimal(str(p.amount or 0)) for idx, p in enumerate(folio.payments) if idx not in sec_idx),
+		Decimal(0),
+	)
+	paid += _stay_withheld_deposit(folio, bool(sec_idx))
 	folio.charges_total = float(charges)
 	folio.tax_total = float(tax)
 	folio.grand_total = float(charges + tax)

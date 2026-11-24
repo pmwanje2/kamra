@@ -6621,5 +6621,6 @@
   "Posts to this function's own folio. Its deposits are taken there, and its tax invoice is issued when that folio is settled.": "يُرحَّل إلى فوليو هذه الفعالية الخاص. تُسجَّل الودائع فيه وتُصدر الفاتورة الضريبية عند تسوية هذا الفوليو.",
   "Open the function's folio": "فتح فوليو الفعالية",
   "The tax invoice is issued from the function's folio.": "تُصدر الفاتورة الضريبية من فوليو الفعالية.",
-  "Service Charge": "رسوم الخدمة"
+  "Service Charge": "رسوم الخدمة",
+  "Reprint invoice": "إعادة طباعة الفاتورة"
 }

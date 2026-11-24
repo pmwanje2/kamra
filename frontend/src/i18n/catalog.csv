@@ -6972,38 +6972,6 @@ Flat rate applied to room nights when the property calculates tax locally.,Flat 
 "Your own lines at the foot of every invoice - e.g. company registration, bank name and account details.","Your own lines at the foot of every invoice - e.g. company registration, bank name and account details.",السطور الخاصة بك في أسفل كل فاتورة - مثل السجل التجاري واسم البنك وتفاصيل الحساب.,"Sus propias líneas al pie de cada factura: p. ej., registro de la empresa, nombre del banco y datos de la cuenta.","Suas próprias linhas no rodapé de cada fatura - ex.: registro da empresa, banco e dados bancários.",显示在每张发票底部的自定义内容，例如公司注册号、银行名称和账号信息。,kamra/settings.py,,translated
 OTA Prepaid,OTA Prepaid,مدفوع مسبقاً عبر وكالة حجز,Prepago OTA,Pré-pago OTA,OTA 预付,screens/configs.ts,,translated
 Company Credit,Company Credit,ائتمان شركة,Crédito de empresa,Crédito corporativo,公司挂账,screens/configs.ts,,translated
-"King bed
-Lake view
-Free Wi-Fi","King bed
-إطلالة على البحيرة
-واي فاي مجاني","Cama king
-Vista al lago
-Wifi gratuito","Cama king size
-Vista para o lago
-Wi-Fi grátis","大床
-湖景
-免费 Wi-Fi",components/RoomTypeMedia.tsx,,translated
-"Swimming Pool
-Free Parking
-Complimentary Wi-Fi
-Fine-dining Restaurant
-Spa & Wellness","Swimming Pool
-موقف سيارات مجاني
-واي فاي مجاني
-مطعم راقٍ
-سبا وعافية","Piscina
-Estacionamiento gratuito
-Wifi de cortesía
-Restaurante de alta cocina
-Spa y bienestar","Piscina
-Estacionamento Gratuito
-Wi-Fi gratuito
-Restaurante requintado
-Spa e Bem-Estar","游泳池
-免费停车
-免费 Wi-Fi
-精致餐厅
-水疗与康体",screens/BookingEngine.tsx,,translated
 Fiscal document pending,Fiscal document pending,المستند الضريبي قيد الانتظار,Documento fiscal pendiente,Documento fiscal pendente,税务凭证待签发,components/FiscalDocument.tsx,,translated
 Fiscal status unavailable,Fiscal status unavailable,الحالة الضريبية غير متاحة,Estado fiscal no disponible,Estado fiscal indisponível,税务状态暂不可用,components/FiscalDocument.tsx,,translated
 Test fiscal number - not a valid tax invoice,Test fiscal number - not a valid tax invoice,رقم ضريبي تجريبي - ليست فاتورة ضريبية صالحة,Número fiscal de prueba - no es una factura fiscal válida,Número fiscal de teste - não é uma fatura fiscal válida,测试税号 - 非有效税务发票,components/FiscalDocument.tsx,,translated
@@ -7015,6 +6983,7 @@ Issued {when},Issued {when},صدرت في {when},Emitido el {when},Emitido em {w
 Fiscal QR code,Fiscal QR code,رمز QR الضريبي,Código QR fiscal,Código QR fiscal,税务二维码,components/FiscalDocument.tsx,,translated
 Internal folio no. {number},Internal folio no. {number},رقم الفوليو الداخلي {number},N.º de folio interno {number},N.º de fólio interno {number},内部账单号 {number},components/FiscalDocument.tsx,number,translated
 Reprint fiscal invoice,Reprint fiscal invoice,إعادة طباعة الفاتورة الضريبية,Reimprimir factura fiscal,Reimprimir fatura fiscal,重打税务发票,screens/FolioView.tsx,,translated
+Reprint invoice,Reprint invoice,إعادة طباعة الفاتورة,Reimprimir factura,Reimprimir fatura,重打发票,screens/FolioView.tsx,,translated
 Copy - reprint {n},Copy - reprint {n},نسخة - إعادة طباعة {n},Copia - reimpresión {n},Cópia - reimpressão {n},副本 - 第 {n} 次重打,screens/FolioView.tsx,n,translated
 "Posts to this function's own folio. Its deposits are taken there, and its tax invoice is issued when that folio is settled.","Posts to this function's own folio. Its deposits are taken there, and its tax invoice is issued when that folio is settled.",يُرحَّل إلى فوليو هذه الفعالية الخاص. تُسجَّل الودائع فيه وتُصدر الفاتورة الضريبية عند تسوية هذا الفوليو.,Se registra en el folio propio de este evento. Sus depósitos se reciben allí y su factura fiscal se emite al liquidar ese folio.,Lança no fólio próprio deste evento. Os depósitos são recebidos nele e a fatura fiscal é emitida quando esse fólio é liquidado.,将入账至本活动的专属账单。定金均记入该账单，结账后签发税务发票。,screens/BanquetFunction.tsx,,translated
 Open the function's folio,Open the function's folio,فتح فوليو الفعالية,Abrir el folio del evento,Abrir o fólio do evento,打开活动账单,screens/BanquetFunction.tsx,,translated

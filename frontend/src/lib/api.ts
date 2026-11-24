@@ -818,6 +818,8 @@ export interface BanquetReceipt {
   mode: string
   amount: number
   reference: string | null
+  folio_payment?: string | null
+  native?: 0 | 1
 }
 export interface FunctionAlert {
   kind: string

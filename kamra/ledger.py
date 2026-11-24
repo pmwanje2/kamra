@@ -493,10 +493,12 @@ def ledger_detail(property: str, ledger: str, business_date: str | None = None,
 
 def folio_reconciliation(property: str, limit: int = 20) -> dict:
 	"""Guest + Deposit ledger postings per folio against the folio's own
-	balance (charges less payments). A folio whose ledger nets to something
-	else - a posting that never reached the ledger, or one the folio lost -
-	is a genuine break; the rest is money guests owe, not an imbalance."""
-	rows = frappe.db.sql(
+	balance less any held security deposit (held deposits sit on the Deposit
+	ledger separately from folio.balance under OPERA/SAP). A folio whose
+	ledger nets to something else is a genuine break."""
+	from kamra.folio import security_deposit_held_on_folio
+
+	all_folios = frappe.db.sql(
 		"""
 		SELECT f.name AS folio, f.folio_type, f.status,
 		       COALESCE(f.balance, 0) AS balance,
@@ -509,27 +511,39 @@ def folio_reconciliation(property: str, limit: int = 20) -> dict:
 			GROUP BY folio
 		) e ON e.folio = f.name
 		WHERE f.property = %(p)s
-		  AND ABS(COALESCE(f.balance, 0) - COALESCE(e.net, 0)) >= 0.02
 		ORDER BY f.creation DESC
 		""", {"p": property}, as_dict=True)
+	sec_folios = set(frappe.get_all(
+		"Folio Payment",
+		filters={"parenttype": "Folio", "payment_kind": "Security Deposit"},
+		pluck="parent",
+	))
+	rows = []
+	folios_net = 0.0
+	for r in all_folios:
+		held = 0.0
+		if r.folio in sec_folios:
+			held = security_deposit_held_on_folio(frappe.get_doc("Folio", r.folio))
+		expected = float(r.balance) - held
+		folios_net += expected
+		if abs(expected - float(r.ledger)) >= 0.02:
+			r["expected"] = expected
+			rows.append(r)
 	ledger_net = float(frappe.db.sql(
 		"""SELECT COALESCE(SUM(debit - credit), 0) FROM `tabFolio Ledger Entry`
 		   WHERE property = %s AND ledger IN ('Guest', 'Deposit')""",
 		property)[0][0] or 0)
-	folios_net = float(frappe.db.sql(
-		"""SELECT COALESCE(SUM(balance), 0) FROM `tabFolio`
-		   WHERE property = %s""", property)[0][0] or 0)
 	return {
 		"in_balance": not rows,
 		"ledger_net": round(ledger_net, 2),
 		"folios_net": round(folios_net, 2),
-		"difference": round(sum(float(r.balance) - float(r.ledger)
+		"difference": round(sum(float(r["expected"]) - float(r.ledger)
 		                        for r in rows), 2),
 		"folios_out": len(rows),
 		"folios": [{"folio": r.folio, "folio_type": r.folio_type,
-		            "status": r.status, "balance": round(float(r.balance), 2),
+		            "status": r.status, "balance": round(float(r["expected"]), 2),
 		            "ledger": round(float(r.ledger), 2),
-		            "difference": round(float(r.balance) - float(r.ledger), 2)}
+		            "difference": round(float(r["expected"]) - float(r.ledger), 2)}
 		           for r in rows[:limit]],
 	}
 
@@ -2044,14 +2058,17 @@ def folio_history(property: str, query: str | None = None,
 
 		to = report_range_end(from_date, to_date)
 		filters.append(["closed_on", "between", [from_date, f"{to} 23:59:59"]])
+	fields = ["name", "guest_name", "reservation", "venue_booking", "folio_type",
+	          "status", "invoice_number",
+	          "grand_total", "payments_total", "balance", "closed_on",
+	          "modified"]
+	if frappe.db.has_column("Folio", "sales_invoice"):
+		fields.append("sales_invoice")
 	rows = frappe.get_all(
 		"Folio",
 		filters=filters,
 		or_filters=or_filters,
-		fields=["name", "guest_name", "reservation", "venue_booking", "folio_type",
-		        "status", "invoice_number",
-		        "grand_total", "payments_total", "balance", "closed_on",
-		        "modified"],
+		fields=fields,
 		order_by="modified desc",
 		limit_page_length=200,
 	)
@@ -2059,6 +2076,7 @@ def folio_history(property: str, query: str | None = None,
 		q = query.lower()
 		rows = [r for r in rows if q in (r.guest_name or "").lower()
 		        or q in (r.invoice_number or "").lower()
+		        or q in (r.get("sales_invoice") or "").lower()
 		        or q in (r.name or "").lower()
 		        or q in (r.reservation or "").lower()
 		        or q in (r.venue_booking or "").lower()]

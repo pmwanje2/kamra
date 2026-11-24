@@ -629,19 +629,19 @@ def _stay_money(res):
 		["name", "grand_total", "payments_total", "balance"], as_dict=True)
 	if not folio:
 		return None
-	rows = frappe.get_all(
-		"Folio Payment", filters={"parent": folio.name},
-		fields=["payment_kind", "amount"])
+	fdoc = frappe.get_doc("Folio", folio.name)
+	rows = fdoc.payments or []
 	def ksum(kind):
 		return sum(float(r.amount or 0) for r in rows
 		           if (r.payment_kind or "Payment") == kind)
+	from kamra.folio import security_deposit_held_on_folio
 	return {
 		"folio": folio.name,
 		"grand_total": float(folio.grand_total or 0),
 		"paid_total": float(folio.payments_total or 0),
 		"balance": float(folio.balance or 0),
 		"advance": ksum("Advance"),
-		"deposit_held": ksum("Security Deposit") + ksum("Refund"),
+		"deposit_held": round(max(0.0, security_deposit_held_on_folio(fdoc)), 2),
 		"refunded": -ksum("Refund"),
 	}
 
@@ -1922,7 +1922,8 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
                           ledger: str | None = None,
                           refund_of: str | None = None,
                           idempotency_key: str | None = None, correction: dict | None = None,
-                          bookkeeping_action: str | None = None, session: str | None = None):
+                          bookkeeping_action: str | None = None, session: str | None = None,
+                          allow_closed: bool = False):
 	"""The one refund writer (folio row, till, ledger). Not whitelisted:
 	ledger lets a security-deposit refund release the Deposit ledger -
 	callers that pass it have already checked the deposit's balance.
@@ -1935,21 +1936,24 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 		frappe.throw("A refund reason is required.")
 	_pin_guard(folio, pin)
 	doc = frappe.get_doc("Folio", folio)
-	if doc.status == "Closed":
+	if doc.status == "Closed" and not (allow_closed and ledger == "Deposit"):
 		frappe.throw("This folio is closed - refunds need a credit note "
 		             "via allowance on a new folio.")
 	from kamra.ledger import require_reason
 	reason_text = require_reason(
 		"Refund", reason_code, reason or "",
 		supervisor_pin=supervisor_pin, property=doc.property)
-	received = sum(float(p.amount or 0) for p in doc.payments
-	               if float(p.amount or 0) > 0)
-	refunded = -sum(float(p.amount or 0) for p in doc.payments
-	                if float(p.amount or 0) < 0)
-	if float(amount) > received - refunded:
-		from kamra.localization import money_text
-		frappe.throw(f"Only {money_text(doc.property, received - refunded)} was collected on "
-		             "this folio - can't refund more than that.")
+	if not ledger:
+		from kamra.folio import _security_deposit_row_ids
+		sec_idx = _security_deposit_row_ids(doc)
+		received = sum(float(p.amount or 0) for idx, p in enumerate(doc.payments)
+		               if idx not in sec_idx and float(p.amount or 0) > 0)
+		refunded = -sum(float(p.amount or 0) for idx, p in enumerate(doc.payments)
+		                if idx not in sec_idx and float(p.amount or 0) < 0)
+		if float(amount) > received - refunded:
+			from kamra.localization import money_text
+			frappe.throw(f"Only {money_text(doc.property, received - refunded)} was collected on "
+			             "this folio - can't refund more than that.")
 	# money goes back only when the guest is in credit; a guest who still
 	# owes settles first. A security deposit release (ledger set) has its
 	# own balance check in kamra.deposit.
@@ -3676,6 +3680,8 @@ def folio_invoice(folio: str):
 		"transaction_code": p.get("transaction_code"),
 		"gl_code": p.get("gl_code"), "refund_of": p.get("refund_of"),
 	} for p in doc.payments]
+	from kamra.erp_bridge import get_bridge_script
+	from kamra.folio import CREDIT_AND_REBILL
 	return {
 		"folio": doc.as_dict(),
 		"lines": lines,
@@ -3688,6 +3694,7 @@ def folio_invoice(folio: str):
 		"bill_to": bill_to,
 		"statutory": statutory,
 		"fiscal": fiscal,
+		"bridge_credit_and_rebill": bool(get_bridge_script(CREDIT_AND_REBILL)),
 		"document": {
 			# a bill before settlement is provisional and must say so - the
 			# invoice number only exists once the folio closes, and under the
@@ -5874,10 +5881,6 @@ def check_out(reservation: str, credit_override_reason: str | None = None,
 	from kamra.checkout import assert_no_open_bills
 	assert_no_open_bills(doc)
 	credit = _assert_settled(doc, credit_override_reason)
-	# a held security deposit that the settled bill used up is recorded as
-	# applied, so the Deposit ledger doesn't keep a departed guest's money
-	from kamra.deposit import apply_held_to_bill
-	apply_held_to_bill(doc)
 	doc.status = "Checked Out"
 	doc.flags.kamra_check_out = True  # passed the checks above (Reservation.validate)
 	doc.save()

@@ -547,5 +547,6 @@
   "The tax invoice is issued from the function's folio.": "Faktur pajak diterbitkan dari folio acara.",
   "Service Charge": "Biaya layanan",
   "Invoice": "Faktur",
-  "Tax Invoice": "Faktur Pajak"
+  "Tax Invoice": "Faktur Pajak",
+  "Reprint invoice": "Cetak ulang faktur"
 }

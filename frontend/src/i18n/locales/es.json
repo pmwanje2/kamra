@@ -6806,5 +6806,6 @@
   "Posts to this function's own folio. Its deposits are taken there, and its tax invoice is issued when that folio is settled.": "Se registra en el folio propio de este evento. Sus depósitos se reciben allí y su factura fiscal se emite al liquidar ese folio.",
   "Open the function's folio": "Abrir el folio del evento",
   "The tax invoice is issued from the function's folio.": "La factura fiscal se emite desde el folio del evento.",
-  "Service Charge": "Cargo por servicio"
+  "Service Charge": "Cargo por servicio",
+  "Reprint invoice": "Reimprimir factura"
 }

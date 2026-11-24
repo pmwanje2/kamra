@@ -158,11 +158,13 @@ def _event_folio(doc) -> str:
 	return current
 
 
-def event_folio_deposit_held(doc) -> float | None:
-	"""Net security deposit still held on a standalone function's event folio
-	under the ERP accounting bridge, derived purely from Folio Ledger Entry
-	(excluding ordinary Advance 9002 entries and their reversals), less any
-	withheld damage_amount. Returns None when off-bridge or no event folio."""
+def event_folio_deposit_summary(doc) -> dict | None:
+	"""Security deposit held/refunded and unmirrored native folio payments on a
+	standalone function's event folio under the ERP accounting bridge.
+
+	Derived from Folio Ledger Entry (excluding ordinary Advance 9002 entries and
+	non-Security-Deposit Payment Entries when ERPNext is present) and Folio Payment.
+	Returns None when off-bridge or no event folio."""
 	if not doc.get("folio") or not _fiscal_bridge():
 		return None
 	if frappe.db.get_value("Folio", doc.folio, "venue_booking") != doc.name:
@@ -170,10 +172,21 @@ def event_folio_deposit_held(doc) -> float | None:
 	entries = frappe.get_all(
 		"Folio Ledger Entry",
 		filters={"folio": doc.folio, "ledger": "Deposit"},
-		fields=["name", "transaction_code", "debit", "credit", "reversal_of"],
+		fields=["name", "transaction_code", "debit", "credit", "reversal_of",
+		        "source_doctype", "source_name"],
 	)
-	if not entries:
-		return 0.0
+	folio_doc = frappe.get_doc("Folio", doc.folio)
+	fp_by_name = {p.name: p for p in (folio_doc.payments or []) if p.get("name")}
+	has_pe = bool(frappe.db.exists("DocType", "Payment Entry"))
+	pe_kind_cache: dict[str, str | None] = {}
+
+	def _pe_kind(pe_name: str | None) -> str | None:
+		if not pe_name or not has_pe:
+			return None
+		if pe_name not in pe_kind_cache:
+			pe_kind_cache[pe_name] = frappe.db.get_value("Payment Entry", pe_name, "kamra_payment_kind")
+		return pe_kind_cache[pe_name]
+
 	by_name = {e.name: e for e in entries}
 
 	def _is_advance_chain(entry) -> bool:
@@ -184,14 +197,58 @@ def event_folio_deposit_held(doc) -> float | None:
 			if cur.get("transaction_code") == "9002":
 				return True
 			cur = by_name.get(cur.get("reversal_of"))
+		# Under ERPNext, a Pay refund of an ordinary Advance has kamra_payment_kind != "Security Deposit".
+		if entry.get("source_doctype") == "Folio Payment" and entry.get("source_name"):
+			fp = fp_by_name.get(entry.source_name)
+			pe_key = (fp.get("payment_entry") or fp.get("reversal_of")) if fp else None
+			if pe_key and has_pe and _pe_kind(pe_key) != "Security Deposit":
+				return True
 		return False
 
-	net = sum(
-		float(e.get("credit") or 0) - float(e.get("debit") or 0)
-		for e in entries
-		if not _is_advance_chain(e)
+	def _reverses_receive_deposit(entry) -> bool:
+		cur = by_name.get(entry.get("reversal_of"))
+		seen = {entry.name}
+		while cur and cur.name not in seen:
+			seen.add(cur.name)
+			if cur.get("transaction_code") == "9003":
+				return True
+			cur = by_name.get(cur.get("reversal_of"))
+		return False
+
+	sec_entries = [e for e in entries if not _is_advance_chain(e)]
+	net = sum(float(e.get("credit") or 0) - float(e.get("debit") or 0) for e in sec_entries)
+	refunded = sum(
+		float(e.get("debit") or 0) - float(e.get("credit") or 0)
+		for e in sec_entries
+		if e.get("transaction_code") != "9003" and not _reverses_receive_deposit(e)
 	)
-	return round(max(0.0, net - float(doc.get("damage_amount") or 0)), 2)
+	mirrored = {r.get("folio_payment") for r in (doc.get("receipts") or []) if r.get("folio_payment")}
+	native_receipts = []
+	for fp in folio_doc.payments or []:
+		if fp.name in mirrored:
+			continue
+		native_receipts.append({
+			"name": f"fp:{fp.name}",
+			"receipt_date": str(fp.posting_date or ""),
+			"kind": fp.payment_kind or "Payment",
+			"mode": fp.mode or "",
+			"amount": round(abs(float(fp.amount or 0)), 2),
+			"reference": fp.reference or fp.get("payment_entry") or fp.get("reversal_of") or "",
+			"folio_payment": fp.name,
+			"native": 1,
+		})
+	return {
+		"deposit_held": round(max(0.0, net - float(doc.get("damage_amount") or 0)), 2),
+		"deposit_refunded": round(max(0.0, refunded), 2),
+		"native_receipts": native_receipts,
+	}
+
+
+def event_folio_deposit_held(doc) -> float | None:
+	"""Net security deposit still held on a standalone function's event folio
+	under the ERP accounting bridge. Returns None when off-bridge or no event folio."""
+	summary = event_folio_deposit_summary(doc)
+	return None if summary is None else summary["deposit_held"]
 
 
 _FOLIO_INVOICE_ONLY = ("Under the ERP accounting bridge a function's tax invoice is issued from "
@@ -419,9 +476,12 @@ def function_sheet(function: str):
 	out["fiscal_bridge"] = 1 if _fiscal_bridge() else 0
 	out["event_folio"] = doc.folio if doc.folio and frappe.db.get_value(
 		"Folio", doc.folio, "venue_booking") == doc.name else None
-	folio_held = event_folio_deposit_held(doc)
-	if folio_held is not None:
-		out["deposit_held"] = folio_held
+	summary = event_folio_deposit_summary(doc)
+	if summary is not None:
+		out["deposit_held"] = summary["deposit_held"]
+		out["deposit_refunded"] = summary["deposit_refunded"]
+		if summary["native_receipts"]:
+			out["receipts"] = list(out.get("receipts") or []) + summary["native_receipts"]
 	return out
 
 

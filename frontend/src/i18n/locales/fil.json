@@ -1267,5 +1267,6 @@
   "The tax invoice is issued from the function's folio.": "Ang tax invoice ay ibinibigay mula sa folio ng event.",
   "Service Charge": "Bayad sa serbisyo",
   "Invoice": "Invoice",
-  "Tax Invoice": "Tax Invoice"
+  "Tax Invoice": "Tax Invoice",
+  "Reprint invoice": "I-print muli ang invoice"
 }

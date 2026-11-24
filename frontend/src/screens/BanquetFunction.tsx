@@ -1864,7 +1864,7 @@ function MoneyTab({
                     </td>
                     <td className="py-2">
                       {translate(r.kind)}
-                      {r.kind === "Security Deposit" && (
+                      {r.kind === "Security Deposit" && Number(fn.deposit_held || 0) > 0 && (
                         <span className="ml-1.5 rounded bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium text-violet-700">{translate("held")}</span>
                       )}
                     </td>
@@ -1881,15 +1881,17 @@ function MoneyTab({
                     </td>
                     <td className="w-8 py-2 text-right">
                       {/* every advance a banquet office takes needs a piece
-                          of paper against it */}
-                      <button
-                        title={translate("Print this receipt")}
-                        aria-label={translate("Print this receipt")}
-                        className="text-zinc-300 opacity-0 transition-opacity hover:text-brand-700 group-hover:opacity-100"
-                        onClick={() => setReceiptDoc(r.name)}
-                      >
-                        <Printer className="size-4" />
-                      </button>
+                          of paper against it; native ERP refund lines print from Accounting */}
+                      {!r.native && (
+                        <button
+                          title={translate("Print this receipt")}
+                          aria-label={translate("Print this receipt")}
+                          className="text-zinc-300 opacity-0 transition-opacity hover:text-brand-700 group-hover:opacity-100"
+                          onClick={() => setReceiptDoc(r.name)}
+                        >
+                          <Printer className="size-4" />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
