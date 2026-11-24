@@ -1668,3 +1668,216 @@ class CompRelease2AndInvoiceCompositionTests(AuditTestCase):
 		self.assertEqual(inv_half["document"]["title"], "Tax Invoice")
 		self.assertEqual(flt(inv_half["tax_summary"][0]["rate"]), 18.0)
 		self.assertEqual(flt(inv_half["folio"]["grand_total"]), 274163.0)
+
+	def test_amend_stay_checks_tariff_target_plan_with_amended_dates(self):
+		"""Hydrogen R1 note: when dates and rate plan change together in Amend
+		stay, _is_tariff_target_plan must probe contract_rate with the amended
+		check_in_date / check_out_date, not the reservation's old dates."""
+		from unittest.mock import patch
+
+		seen_forms: list[dict] = []
+
+		def date_scoped_bridge(api_method, *, response_types=None, **form):
+			if api_method != "hospitality_tariffs.tariff_rate":
+				return None
+			seen_forms.append(dict(form))
+			if (
+				form.get("rate_plan") == self.no_field_tariff
+				and str(form.get("check_in")) == d(10)
+				and str(form.get("check_out")) == d(12)
+			):
+				return {"tariff": dict(self.tariff_map[self.no_field_tariff])}
+			return {"tariff": {"is_tariff": 0}}
+
+		with patch("kamra.erp_bridge.bridge_call", side_effect=date_scoped_bridge):
+			booked = self._as_user(
+				DESK, api.create_booking, PROP_UGX_COMP, self.rt, d(1), d(3),
+				"Amended Date Tariff Guest", "+256700001007", rate_plan=self.comp, room=self.rooms[4],
+				comp_supervisor_user=GM, comp_supervisor_pin="4321",
+			)
+			res_name = booked["reservation"]
+			seen_forms.clear()
+
+			with self.assertRaises(frappe.ValidationError):
+				self._as_user(DESK, api.amend_stay_preview, res_name, d(10), d(12), rate_plan=self.no_field_tariff)
+			with self.assertRaises(frappe.ValidationError):
+				self._as_user(
+					DESK, api.amend_stay, res_name, d(10), d(12), confirm_price=1, rate_plan=self.no_field_tariff,
+				)
+
+		tariff_probes = [f for f in seen_forms if f.get("rate_plan") == self.no_field_tariff]
+		self.assertTrue(tariff_probes)
+		for probe in tariff_probes:
+			self.assertEqual((str(probe.get("check_in")), str(probe.get("check_out"))), (d(10), d(12)))
+
+
+PROP_KWD_R2 = "UT Comp KWD R2"
+PROP_UGX_R2 = "UT Comp UGX R2"
+
+
+class HydrogenR1GuardsAnd3dpToleranceTests(AuditTestCase):
+	"""Hydrogen R1 blockers on #38:
+	1. #36 x #38: Reservation.guard_rate_plan must exempt flags.kamra_channel_tariff
+	   (channel_manager._apply_event zero-total OTA modify clearing doc.rate_plan
+	   with auto_price=1) while still refusing direct unsignalled writes.
+	2. 3-decimal-place currency (KWD) tolerance in guard_header_totals and
+	   guard_agreed_rate: 0.5 * 10 ** -places (0.0005 KWD, 0.005 USD, 0.5 UGX)
+	   must block 0.004 KWD header tampering and agreed_rate tampering."""
+
+	properties = (PROP_KWD_R2, PROP_UGX_R2)
+
+	def setUp(self):
+		super().setUp()
+		self.at(TODAY, "kamra.folio", "kamra.business_date", "kamra.ledger", "kamra.api")
+		for code, sym, frac_name, frac_units in (
+			("KWD", "KWD ", "Fils", 1000),
+			("UGX", "UGX ", "", 1),
+		):
+			if not frappe.db.exists("Currency", code):
+				frappe.get_doc({
+					"doctype": "Currency", "currency_name": code, "symbol": sym,
+					"fraction": frac_name, "fraction_units": frac_units,
+					"number_format": "#,###.###" if frac_units == 1000 else "#,###.##", "enabled": 1,
+				}).insert(ignore_permissions=True)
+			else:
+				frappe.db.set_value("Currency", code, "enabled", 1)
+
+		make_property(
+			PROP_KWD_R2, business_date=TODAY, country="Kuwait", currency="KWD",
+			gst_mode="Fixed", gst_rate_low=0, gst_rate_high=0, rates_include_tax=0,
+		)
+		self.rt_kwd = make_room_type(PROP_KWD_R2, "KWD DLX", base_price=45.125, tax_percent=0)
+		frappe.db.set_value("Room Type", self.rt_kwd, {"base_price": 45.125, "tax_percent": 0})
+		frappe.clear_document_cache("Room Type", self.rt_kwd)
+		self.room_kwd = make_room(PROP_KWD_R2, self.rt_kwd, "K101")
+
+		make_property(
+			PROP_UGX_R2, business_date=TODAY, country="Uganda", currency="UGX",
+			gst_mode="Fixed", gst_rate_low=0, gst_rate_high=0, rates_include_tax=0,
+		)
+		self.rt_ugx = make_room_type(PROP_UGX_R2, "UGX R2", base_price=250000, tax_percent=0)
+		frappe.db.set_value("Room Type", self.rt_ugx, {"base_price": 250000, "tax_percent": 0})
+		frappe.clear_document_cache("Room Type", self.rt_ugx)
+		self.room_ugx = make_room(PROP_UGX_R2, self.rt_ugx, "U101")
+
+		ensure_user(DESK, ["Front Desk"])
+		ensure_user(GM, ["Hotel Admin", "Front Desk", "Finance"])
+		frappe.db.delete("Cashier PIN", {"name": GM})
+		frappe.get_doc({"doctype": "Cashier PIN", "user": GM, "pin": "4321"}).insert(ignore_permissions=True)
+
+		def mk_plan(prop, code, currency):
+			name = f"{prop}-{code}"
+			if frappe.db.exists("Rate Plan", name):
+				frappe.delete_doc("Rate Plan", name, force=True, ignore_permissions=True)
+			return frappe.get_doc({
+				"doctype": "Rate Plan", "property": prop,
+				"rate_plan_name": code, "code": code,
+				"modifier_type": "Percent", "modifier_value": 0, "currency": currency,
+			}).insert(ignore_permissions=True).name
+
+		self.bar_kwd = mk_plan(PROP_KWD_R2, "BAR", "KWD")
+		self.bar_ugx = mk_plan(PROP_UGX_R2, "BAR", "UGX")
+
+	def _as_user(self, user, fn, *args, **kwargs):
+		prev = frappe.session.user
+		frappe.set_user(user)  # nosemgrep: frappe-setuser -- acting as the persona
+		try:
+			return fn(*args, **kwargs)
+		finally:
+			frappe.set_user(prev)  # nosemgrep: frappe-setuser -- restore
+
+	def test_guard_rate_plan_exempts_channel_tariff_clear_while_refusing_direct_writes(self):
+		booked = self._as_user(
+			DESK, api.create_booking, PROP_UGX_R2, self.rt_ugx, d(1), d(3),
+			"Channel Clear Guest", "+256700002001", rate_plan=self.bar_ugx, room=self.room_ugx,
+		)
+		res_name = booked["reservation"]
+
+		# Direct REST / set_value clear of rate_plan must still be refused.
+		with self.assertRaises(frappe.PermissionError):
+			self._as_user(DESK, frappe.client.set_value, "Reservation", res_name, "rate_plan", "")
+		doc = frappe.get_doc("Reservation", res_name)
+		doc.rate_plan = None
+		with self.assertRaises(frappe.PermissionError):
+			self._as_user(DESK, doc.save)
+		self.assertEqual(frappe.db.get_value("Reservation", res_name, "rate_plan"), self.bar_ugx)
+
+		# Governed channel-tariff clear (auto_price=1, flags.kamra_channel_tariff=True,
+		# without kamra_night_rates_writer) must succeed cleanly.
+		doc = frappe.get_doc("Reservation", res_name)
+		doc.auto_price = 1
+		doc.rate_plan, doc.agreed_rate, doc.contract_tariff = None, 0, None
+		doc.flags.kamra_channel_tariff = True
+		doc.save(ignore_permissions=True)
+		doc.reload()
+		self.assertFalse(doc.rate_plan)
+		self.assertEqual(int(doc.auto_price), 1)
+		self.assertEqual(flt(doc.amount_after_tax), 500000.0)
+
+	def test_kwd_3dp_guard_header_totals_and_guard_agreed_rate_block_sub_cent_tamper(self):
+		booked = self._as_user(
+			DESK, api.create_booking, PROP_KWD_R2, self.rt_kwd, d(1), d(3),
+			"Kuwait Guest", "+96550001001", rate_plan=self.bar_kwd, room=self.room_kwd,
+		)
+		res_name = booked["reservation"]
+		before = frappe.db.get_value(
+			"Reservation", res_name, ["amount_before_tax", "amount_after_tax", "agreed_rate"], as_dict=True,
+		)
+		self.assertAlmostEqual(flt(before.amount_after_tax), 90.250, places=3)
+		self.assertEqual(flt(before.agreed_rate), 0.0)
+
+		# Unflagged 0.004 KWD header total tamper (90.250 -> 90.246) must raise PermissionError.
+		with self.assertRaises(frappe.PermissionError):
+			self._as_user(DESK, frappe.client.set_value, "Reservation", res_name, "amount_after_tax", 90.246)
+		self.assertAlmostEqual(flt(frappe.db.get_value("Reservation", res_name, "amount_after_tax")), 90.250, places=3)
+
+		# Even a 1-fils (0.001 KWD) tamper on amount_before_tax must raise PermissionError.
+		doc = frappe.get_doc("Reservation", res_name)
+		doc.amount_before_tax = 90.249
+		with self.assertRaises(frappe.PermissionError):
+			self._as_user(DESK, doc.save)
+
+		# Unflagged Front Desk setting agreed_rate to 0.004 KWD (repriced 45.125/night -> 0.004/night)
+		# must raise PermissionError.
+		with self.assertRaises(frappe.PermissionError):
+			self._as_user(DESK, frappe.client.set_value, "Reservation", res_name, "agreed_rate", 0.004)
+		after_refused = frappe.db.get_value(
+			"Reservation", res_name, ["agreed_rate", "amount_after_tax"], as_dict=True,
+		)
+		self.assertEqual(flt(after_refused.agreed_rate), 0.0)
+		self.assertAlmostEqual(flt(after_refused.amount_after_tax), 90.250, places=3)
+
+		# After a governed agreed_rate of 45.125 KWD, altering agreed_rate by 0.004 (45.125 -> 45.121)
+		# or down to 0.004 (45.125 -> 0.004) must also raise PermissionError.
+		gov_doc = frappe.get_doc("Reservation", res_name)
+		gov_doc.agreed_rate = 45.125
+		gov_doc.flags.kamra_agreed_rate_override = True
+		gov_doc.save(ignore_permissions=True)
+
+		with self.assertRaises(frappe.PermissionError):
+			self._as_user(DESK, frappe.client.set_value, "Reservation", res_name, "agreed_rate", 45.121)
+		with self.assertRaises(frappe.PermissionError):
+			self._as_user(DESK, frappe.client.set_value, "Reservation", res_name, "agreed_rate", 0.004)
+		self.assertAlmostEqual(flt(frappe.db.get_value("Reservation", res_name, "agreed_rate")), 45.125, places=3)
+
+		# Sub-tolerance KWD float noise (< 0.0005) on an unrelated save still succeeds.
+		ok_doc = frappe.get_doc("Reservation", res_name)
+		ok_doc.amount_after_tax = 90.2501
+		ok_doc.special_requests = "UT KWD float noise ok"
+		self._as_user(DESK, ok_doc.save)
+
+		# 0-dp UGX currency: 1 UGX header tamper and 0 -> 0.4 agreed_rate hijack are refused,
+		# while < 0.5 UGX header float noise passes.
+		ugx_booked = self._as_user(
+			DESK, api.create_booking, PROP_UGX_R2, self.rt_ugx, d(4), d(6),
+			"UGX Guard Guest", "+256700002002", rate_plan=self.bar_ugx, room=self.room_ugx,
+		)
+		ugx_name = ugx_booked["reservation"]
+		with self.assertRaises(frappe.PermissionError):
+			self._as_user(DESK, frappe.client.set_value, "Reservation", ugx_name, "amount_after_tax", 499999)
+		with self.assertRaises(frappe.PermissionError):
+			self._as_user(DESK, frappe.client.set_value, "Reservation", ugx_name, "agreed_rate", 0.4)
+		ugx_doc = frappe.get_doc("Reservation", ugx_name)
+		ugx_doc.amount_after_tax = 500000.1
+		ugx_doc.special_requests = "UT UGX float noise ok"
+		self._as_user(DESK, ugx_doc.save)

@@ -193,4 +193,47 @@ describe("BookingDialog: a Complimentary or House Use plan is signed off", () =>
     expect(byLabel("Manager PIN")).toBeNull()
     expect(text()).not.toContain("rate plan needs a manager's sign-off")
   })
+
+  it("clears the comp manager and PIN when the company changes", async () => {
+    rpc.mockReset().mockImplementation((method: string, params: Record<string, unknown>) => {
+      if (method === "kamra.api.booking_options") {
+        return Promise.resolve({
+          ...OPTIONS,
+          default_plan: "",
+          rate_plan_required: false,
+          companies: [
+            { name: "COMP-A", company_name: "Acme Comp Corp" },
+            { name: "COMP-B", company_name: "Beta Comp Corp" },
+          ],
+        })
+      }
+      if (method === "kamra.api.get_quote") {
+        // When rate_plan is blank, either company resolves to a negotiated Comp plan
+        const negotiated = params.company ? "COMP" : (params.rate_plan || "BAR")
+        return Promise.resolve(quoteFor({ ...params, rate_plan: negotiated }))
+      }
+      return serve(method, params)
+    })
+
+    await act(async () => root.render(<MemoryRouter><BookingDialog initial={{ room_type: "STD" }}
+      onClose={() => {}} onBooked={() => {}} /></MemoryRouter>))
+    await until(() => expect(quoteCalls().length).toBeGreaterThan(0))
+    await press("Company, add-ons & arrival details")
+    const companySelect = Array.from(host.querySelectorAll("label"))
+      .find((l) => l.textContent?.includes("Company (bill corporate)"))
+      ?.querySelector<HTMLSelectElement>("select")
+    expect(companySelect).toBeDefined()
+
+    await choose(companySelect!, "COMP-A")
+    await until(() => expect(byLabel("Manager PIN")).not.toBeNull())
+    await choose(byLabel<HTMLSelectElement>("Manager")!, GM.user)
+    await typeInto(byLabel<HTMLInputElement>("Manager PIN")!, "4321")
+    expect(byLabel<HTMLSelectElement>("Manager")!.value).toBe(GM.user)
+    expect(byLabel<HTMLInputElement>("Manager PIN")!.value).toBe("4321")
+
+    await choose(companySelect!, "COMP-B")
+    await until(() => expect(quoteCalls().at(-1)).toMatchObject({ company: "COMP-B" }))
+    expect(byLabel<HTMLSelectElement>("Manager")!.value).toBe("")
+    expect(byLabel<HTMLInputElement>("Manager PIN")!.value).toBe("")
+  })
 })
