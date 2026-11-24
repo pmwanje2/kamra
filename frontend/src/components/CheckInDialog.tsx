@@ -685,7 +685,7 @@ export default function CheckInDialog(props: {
             trigger="Check-In"
             reservation={props.reservation}
             guest={flow.guest.name ?? undefined}
-            initialAlerts={flow.alerts}
+            initialAlerts={flow.alerts ?? []}
             onAlertsChanged={() => void load()}
             onBlockingChange={setHasBlockingAlert}
           />

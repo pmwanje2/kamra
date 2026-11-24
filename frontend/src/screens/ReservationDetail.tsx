@@ -522,7 +522,7 @@ export default function ReservationDetail({
         property={d.property}
         reservation={name}
         guest={d.guest?.name ?? undefined}
-        initialAlerts={d.alerts?.items}
+        initialAlerts={d.alerts?.items ?? []}
         canCreate={!["Cancelled", "Checked Out", "No Show"].includes(d.status)}
         onAlertsChanged={refresh}
       />

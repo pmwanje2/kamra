@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { AlertTriangle, CheckCircle2, Info, Plus, ShieldAlert } from "lucide-react"
 import { call, getCurrentProperty } from "../lib/api"
 import { serverError } from "../lib/resource"
@@ -116,8 +116,12 @@ export default function AlertBanner({
   })
 
   const prop = property || getCurrentProperty()
+  const onAlertsChangedRef = useRef(onAlertsChanged)
+  const onBlockingChangeRef = useRef(onBlockingChange)
+  onAlertsChangedRef.current = onAlertsChanged
+  onBlockingChangeRef.current = onBlockingChange
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (notify = false) => {
     if (!prop || (!reservation && !guest)) return
     try {
       const rows = await call<GuestAlertItem[]>("kamra.traces.list_alerts", {
@@ -129,18 +133,18 @@ export default function AlertBanner({
       const list = Array.isArray(rows) ? rows : []
       setAlerts(list)
       setError(null)
-      onAlertsChanged?.(list)
+      if (notify) onAlertsChangedRef.current?.(list)
     } catch (e) {
       setError(serverError(e))
     }
-  }, [prop, reservation, guest, trigger, onAlertsChanged])
+  }, [prop, reservation, guest, trigger])
 
   useEffect(() => {
     if (initialAlerts !== undefined) {
       setAlerts(initialAlerts)
       return
     }
-    void load()
+    void load(false)
   }, [initialAlerts, load])
 
   const visible = useMemo(
@@ -160,8 +164,8 @@ export default function AlertBanner({
   )
 
   useEffect(() => {
-    onBlockingChange?.(hasBlocking)
-  }, [hasBlocking, onBlockingChange])
+    onBlockingChangeRef.current?.(hasBlocking)
+  }, [hasBlocking])
 
   async function handleAcknowledge(item: GuestAlertItem) {
     setBusyId(item.name)
@@ -173,9 +177,9 @@ export default function AlertBanner({
           a.name === item.name ? { ...a, status: "Acknowledged" as const } : a,
         )
         setAlerts(next)
-        onAlertsChanged?.(next)
+        onAlertsChangedRef.current?.(next)
       } else {
-        await load()
+        await load(true)
       }
     } catch (e) {
       setError(serverError(e))
@@ -202,9 +206,9 @@ export default function AlertBanner({
       if (initialAlerts !== undefined) {
         const next = alerts.filter((a) => a.name !== item.name)
         setAlerts(next)
-        onAlertsChanged?.(next)
+        onAlertsChangedRef.current?.(next)
       } else {
-        await load()
+        await load(true)
       }
     } catch (e) {
       setError(serverError(e))
@@ -237,7 +241,7 @@ export default function AlertBanner({
         message: "",
       })
       setCreating(false)
-      await load()
+      await load(true)
     } catch (err) {
       setError(serverError(err))
     } finally {

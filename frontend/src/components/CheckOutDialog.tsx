@@ -793,7 +793,7 @@ export default function CheckOutDialog(props: {
               trigger="Check-Out"
               reservation={props.reservation}
               guest={ctx.reservation.guest ?? undefined}
-              initialAlerts={ctx.alerts}
+              initialAlerts={ctx.alerts ?? []}
               onAlertsChanged={() => void load()}
               onBlockingChange={setHasBlockingAlert}
             />
