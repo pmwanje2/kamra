@@ -1634,9 +1634,9 @@ def city_ledger_aging(property: str):
 
 	While the ERP keeps the receivables these are its Customer receivables
 	(a Payment Entry there is seen), never this app's City Ledger Entry rows."""
-	erp_rows = receivables_source(property)
-	if erp_rows is not None:
-		out = _erp_aging(property, erp_rows)
+	src = receivables_source(property)
+	if src.in_erp:
+		out = _erp_aging(property, src.rows)
 	else:
 		accounts = frappe.get_all(
 			"City Ledger Account",

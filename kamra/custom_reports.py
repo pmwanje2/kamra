@@ -1147,7 +1147,13 @@ def _fetch_overdue_by_company(property: str, **_) -> list[dict]:
 def _fetch_dso(property: str, from_date: str, to_date: str, **kw) -> list[dict]:
 	"""DSO = closing AR / what was billed in the period x days in it. Billed
 	is invoices less credit notes and adjustments; a company billed nothing
-	has no DSO."""
+	has no DSO. While the ERP keeps receivables, period DSO lives in the
+	accounting system (never read unposted City Ledger Entry rows)."""
+	from kamra.erp_books import receivables_source, refuse_kept_in_erp
+
+	src = receivables_source(property)
+	if src.in_erp:
+		refuse_kept_in_erp(src.target)
 	rows = frappe.db.sql(
 		"""
 		SELECT a.company,

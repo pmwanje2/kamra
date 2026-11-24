@@ -335,23 +335,24 @@ function CheckBlock({
   if (!check) return null
   const ack = state.acknowledgements.find((a) => a.key === check.key)
   const blocking = check.severity === "block" && check.count > 0
+  const needsAttention = check.count > 0 || !!check.unverified
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-zinc-800">
           {t(check.title)}{" "}
-          <Badge tone={check.count === 0 ? "green" : check.severity === "block" ? "rose" : check.severity === "warn" ? "amber" : "zinc"}>
-            {check.count}
+          <Badge tone={check.unverified ? "amber" : check.count === 0 ? "green" : check.severity === "block" ? "rose" : check.severity === "warn" ? "amber" : "zinc"}>
+            {check.unverified ? t("Not verified") : check.count}
           </Badge>
         </h3>
-        {check.resolve && check.count > 0 && (
+        {check.resolve && needsAttention && (
           <AppLink to={check.resolve} className="text-xs text-brand-700 hover:underline">
             {t("Resolve")} →
           </AppLink>
         )}
       </div>
-      {check.count > 0 && <p className="text-xs text-zinc-500">{t(check.action)}</p>}
-      {check.count > 0 && !state.ran && check.severity !== "info" && (
+      {needsAttention && <p className="text-xs text-zinc-500">{t(check.action)}</p>}
+      {needsAttention && !state.ran && check.severity !== "info" && (
         <FixHelp check={check} date={state.business_date} />
       )}
       {children}
@@ -486,14 +487,14 @@ export default function EndOfDayWizard() {
   if (!state) return <p className="text-sm text-zinc-400">{t("Preparing the night audit…")}</p>
 
   const acked = new Set(state.acknowledgements.map((a) => a.key))
-  const open = (c: Check) => c.count > 0 && c.severity !== "info" && !acked.has(c.key)
+  const open = (c: Check) => (c.count > 0 || !!c.unverified) && c.severity !== "info" && !acked.has(c.key)
   const blockers = state.checks.filter((c) => c.severity === "block" && c.count > 0 && !acked.has(c.key))
   const needs = state.checks
     .filter(open)
     .sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 3) - (SEVERITY_ORDER[b.severity] ?? 3))
   const counted_ = state.checks.filter((c) => c.severity !== "info")
   const clearN = counted_.length - needs.length
-  const clear = counted_.filter((c) => c.count === 0)
+  const clear = counted_.filter((c) => c.count === 0 && !c.unverified)
   const fyi = state.checks.filter((c) => c.count > 0 && (c.severity === "info" || acked.has(c.key)))
   const ahead = state.business_date > state.server_date
   const canClose = !state.ran && !ahead && !state.stuck_date && blockers.length === 0
@@ -590,7 +591,9 @@ export default function EndOfDayWizard() {
       case "departed_balances":
         return <StepTable cols={FOLIO_COLS} rows={items} empty={translate("No balances on departed stays.")} />
       case "credit_limit":
-        return (
+        return c.unverified ? (
+          <Message tone="warn">{t("Not verified")} — {t(c.action)}</Message>
+        ) : (
           <StepTable
             cols={[
               { key: "company", label: "Company" },
@@ -605,7 +608,9 @@ export default function EndOfDayWizard() {
           />
         )
       case "overdue_ar":
-        return (
+        return c.unverified ? (
+          <Message tone="warn">{t("Not verified")} — {t(c.action)}</Message>
+        ) : (
           <StepTable
             cols={[
               { key: "company", label: "Company" },

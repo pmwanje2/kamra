@@ -157,24 +157,42 @@ def check_company_credit(account_or_company: str, property: str,
 		"overdue_amount": 0.0, "oldest_due_date": None,
 		"credit_limit": 0.0, "ar_balance": 0.0, "in_house": 0.0,
 		"exposure": amount, "grace_days": grace_days(property),
-		"blocked": False,
+		"blocked": False, "unverified": False,
 	}
 	if policy == "off" or not company:
 		return out
 	limit = 0.0
 	ar = 0.0
-	from kamra.erp_books import receivables_source
+	from kamra.erp_books import RECEIVABLES_UNAVAILABLE_REASON, receivables_source
 	from kamra.ledger import aging_date
 	# the ERP's Customer receivables when it keeps them (a Payment Entry there
 	# never reaches the hotel app's City Ledger), else the City Ledger as before
-	erp_rows = receivables_source(property, company=company, strict=False)
+	src = receivables_source(property, company=company, strict=False)
 	if account:
 		if lock:
 			_lock_city_ledger_account(account)
 		limit = flt(frappe.db.get_value("City Ledger Account", account,
 		                                "credit_limit"))
-	if erp_rows is not None:
-		row = next((a for a in erp_rows
+	if src.unavailable:
+		in_house = in_house_exposure(company, property, exclude_folios,
+		                             for_update=lock)
+		out.update(credit_limit=limit, ar_balance=None, overdue_amount=None,
+		           in_house=in_house, exposure=None, over_limit_by=None,
+		           unverified=True)
+		restricted = account and frappe.db.get_value(
+			"City Ledger Account", account, ["restricted", "restricted_reason"],
+			as_dict=True)
+		if restricted and restricted.restricted:
+			out["restricted"] = True
+			out["reasons"].append(_("The account is restricted{0}.").format(
+				f" ({restricted.restricted_reason})"
+				if restricted.restricted_reason else ""))
+		out["reasons"].append(_(RECEIVABLES_UNAVAILABLE_REASON))
+		out["ok"] = False
+		out["blocked"] = policy == "block"
+		return out
+	if src.in_erp:
+		row = next((a for a in src.rows
 		            if a.get("company") == company
 		            or (account and a.get("account") == account)), None)
 		if row:
@@ -391,9 +409,11 @@ def company_credit_terms(company: str, property: str):
 		["name", "credit_limit", "credit_days", "use_default_credit_days",
 		 "balance"], as_dict=True)
 	from kamra.erp_books import receivables_source
-	erp_rows = receivables_source(property, company=company, strict=False)
-	if erp_rows is not None:
-		row = next((a for a in erp_rows
+	src = receivables_source(property, company=company, strict=False)
+	if src.unavailable:
+		balance = None
+	elif src.in_erp:
+		row = next((a for a in src.rows
 		            if a.get("company") == company
 		            or (account and a.get("account") == account.name)), None)
 		balance = round(flt(row.get("balance")), 2) if row else 0.0

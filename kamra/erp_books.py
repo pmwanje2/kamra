@@ -29,6 +29,7 @@ refuses, naming the ERP report, and the others read nothing.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from functools import wraps
 from types import NoneType
 
@@ -36,10 +37,34 @@ import frappe
 
 ERP_BOOKS = "hospitality_kamra.erp_books"
 ERP_RECEIVABLES = "hospitality_kamra.erp_receivables"
+RECEIVABLES_UNAVAILABLE_REASON = "Company receivables could not be verified in the accounting system."
 SCREENS = ("payables", "cash_forecast", "profit_and_loss", "balance_sheet",
            "accounting_export", "receivables")
 # a path on this site: no scheme, no host, no control characters
 _SITE_PATH = re.compile(r"/(?!/)[^\s\\]*\Z")
+
+
+@dataclass(frozen=True)
+class ReceivablesSource:
+	"""Where a property's company receivables live and what was read.
+
+	- ``in_erp=False``: the hotel app keeps receivables (``rows=None, target=None``).
+	- ``in_erp=True, rows=[...]``: the ERP keeps receivables and answered with
+	  live Customer receivables (``[]`` means genuinely zero owed).
+	- ``in_erp=True, rows=None``: the ERP keeps receivables but answered no
+	  lookup; callers must fail closed (never zero, never stale City Ledger).
+	"""
+
+	in_erp: bool
+	rows: list[dict] | None
+	target: dict | None = None
+
+	@property
+	def unavailable(self) -> bool:
+		return self.in_erp and self.rows is None
+
+	def __bool__(self) -> bool:
+		raise TypeError("Check .in_erp and .rows (or .unavailable) explicitly.")
 
 
 def _books_payload() -> tuple[dict[str, dict], str | None]:
@@ -154,24 +179,25 @@ def erp_receivables(property: str, *, company: str | None = None) -> list[dict] 
 
 
 def receivables_source(property: str, *, company: str | None = None,
-                       strict: bool = True) -> list[dict] | None:
+                       strict: bool = True) -> ReceivablesSource:
 	"""Where the company receivables of `property` are read from.
 
-	None: the hotel app keeps them, so its City Ledger Entry rows are the
-	books. A list: the ERP keeps them, and these are its live Customer
-	receivables (a company the ERP holds nothing for is absent: nothing owed).
-	When the ERP keeps them but answers no lookup, `strict` refuses with the
-	ERP report it is kept in; otherwise the answer is the empty list. It is
-	never the stale City Ledger."""
+	Returns ``ReceivablesSource(in_erp=False, rows=None)`` while the hotel app
+	keeps them (read City Ledger Entry as before). When the ERP keeps them:
+	returns ``ReceivablesSource(in_erp=True, rows=[...], target=...)`` on a
+	live answer; when the lookup answers nothing, ``strict=True`` refuses
+	naming the ERP report and ``strict=False`` returns
+	``ReceivablesSource(in_erp=True, rows=None, target=...)`` so callers fail
+	closed instead of mistaking an outage for zero debt."""
 	target = erp_screens().get("receivables")
 	if not target:
-		return None
+		return ReceivablesSource(in_erp=False, rows=None)
 	rows = erp_receivables(property, company=company)
 	if rows is None:
 		if strict:
 			refuse_kept_in_erp(target)
-		return []
-	return rows
+		return ReceivablesSource(in_erp=True, rows=None, target=target)
+	return ReceivablesSource(in_erp=True, rows=rows, target=target)
 
 
 def refuse_kept_in_erp(target: dict) -> None:

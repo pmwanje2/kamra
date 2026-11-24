@@ -26,6 +26,8 @@ export interface Check {
   mismatches?: number
   acknowledgement?: Acknowledgement | null
   exception?: boolean
+  unverified?: boolean
+  total?: number | null
 }
 
 export interface Acknowledgement {

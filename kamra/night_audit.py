@@ -495,13 +495,19 @@ def check_high_balance(property: str) -> dict:
 
 
 def check_credit_limit(property: str) -> dict:
-	from kamra.erp_books import receivables_source
+	from kamra.erp_books import RECEIVABLES_UNAVAILABLE_REASON, receivables_source
 	from kamra.ledger import company_payer_of
 	# the ERP's Customer receivables when it keeps them (its Payment Entry
 	# receipts never reach this app's City Ledger), else the City Ledger
-	erp_rows = receivables_source(property, strict=False)
-	if erp_rows is not None:
-		accounts = [a for a in erp_rows if flt(a["credit_limit"]) > 0]
+	src = receivables_source(property, strict=False)
+	if src.unavailable:
+		return _check(
+			"credit_limit", "Companies over their credit limit", "warn", [],
+			f"{RECEIVABLES_UNAVAILABLE_REASON} Check company credit limits in "
+			"the accounting system before billing more.", "/receivables",
+			unverified=True)
+	if src.in_erp:
+		accounts = [a for a in src.rows if flt(a["credit_limit"]) > 0]
 	else:
 		accounts = frappe.get_all(
 			"City Ledger Account",
@@ -525,7 +531,7 @@ def check_credit_limit(property: str) -> dict:
 			if company:
 				by_company.setdefault(company, []).append(f)
 		for a in accounts:
-			if erp_rows is not None:
+			if src.in_erp:
 				name, company, number = a["account"], a["company"], a["account_number"]
 				limit = flt(a["credit_limit"])
 				ar = flt(a["balance"], 2)
@@ -553,19 +559,25 @@ def check_credit_limit(property: str) -> dict:
 	return _check(
 		"credit_limit", "Companies over their credit limit", "warn", items,
 		"Ask the company for a payment, or have Finance raise the limit "
-		"before more is billed to them.", "/ledgers")
+		"before more is billed to them.", "/receivables", unverified=False)
 
 
 def check_overdue_ar(property: str) -> dict:
 	"""Companies with city ledger bills past their due date (invoice date +
 	credit days), by company - what to chase before billing them more."""
-	from kamra.erp_books import receivables_source
+	from kamra.erp_books import RECEIVABLES_UNAVAILABLE_REASON, receivables_source
 	from kamra.ledger import _account_position, _age_buckets, aging_date, effective_credit_days
 	items = []
-	erp_rows = receivables_source(property, strict=False)
-	if erp_rows is not None:
+	src = receivables_source(property, strict=False)
+	if src.unavailable:
+		return _check(
+			"overdue_ar", "Companies with overdue bills", "warn", [],
+			f"{RECEIVABLES_UNAVAILABLE_REASON} Check overdue accounts in "
+			"the accounting system before billing more.", "/receivables",
+			total=None, unverified=True)
+	if src.in_erp:
 		today = aging_date(property)
-		for a in erp_rows:
+		for a in src.rows:
 			pos = _age_buckets(a["open_items"], a["unapplied_credit"], today)
 			if pos["overdue"] <= 0.005:
 				continue
@@ -602,8 +614,8 @@ def check_overdue_ar(property: str) -> dict:
 	return _check(
 		"overdue_ar", "Companies with overdue bills", "warn", items,
 		"Chase the company for payment. Credit control (Settings, Finance) can "
-		"warn or block more billing to a company with overdue bills.", "/ledgers",
-		total=round(sum(r["overdue"] for r in items), 2))
+		"warn or block more billing to a company with overdue bills.", "/receivables",
+		total=round(sum(r["overdue"] for r in items), 2), unverified=False)
 
 
 def check_room_status(property: str) -> dict:

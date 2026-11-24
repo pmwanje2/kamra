@@ -6867,5 +6867,6 @@
   "Company Credit": "公司挂账",
   "Still open at the outlet. Settle it there before check-out: charge it to the room, take payment or void it.": "该账单在营业点仍未结清。请在退房前在那里结清：挂房账、收款或作废。",
   "This is kept in the accounting system.": "此项在会计系统中管理。",
-  "Check-out waits for these. Settle them at the outlet.": "以下账单尚未处理，暂不能退房。请在营业点结清。"
+  "Check-out waits for these. Settle them at the outlet.": "以下账单尚未处理，暂不能退房。请在营业点结清。",
+  "Not verified": "未核实"
 }

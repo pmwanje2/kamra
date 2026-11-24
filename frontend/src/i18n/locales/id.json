@@ -532,5 +532,6 @@
   "Cheque": "Cek",
   "Still open at the outlet. Settle it there before check-out: charge it to the room, take payment or void it.": "Masih terbuka di outlet. Selesaikan di sana sebelum check-out: bebankan ke kamar, terima pembayaran, atau batalkan.",
   "This is kept in the accounting system.": "Ini dikelola di sistem akuntansi.",
-  "Check-out waits for these. Settle them at the outlet.": "Check-out menunggu tagihan ini. Selesaikan di outlet."
+  "Check-out waits for these. Settle them at the outlet.": "Check-out menunggu tagihan ini. Selesaikan di outlet.",
+  "Not verified": "Belum diverifikasi"
 }

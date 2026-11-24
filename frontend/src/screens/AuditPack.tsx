@@ -600,7 +600,7 @@ function Exceptions({ p }: { p: Pack }) {
         cols={[
           { key: "title", label: "Check", render: (r) => t(r.title) },
           { key: "severity", label: "Severity", render: (r) => t(r.severity) },
-          { key: "count", label: "Items", kind: "num" },
+          { key: "count", label: "Items", kind: "num", render: (r) => (r.unverified ? t("Not verified") : String(r.count ?? 0)) },
           {
             key: "acknowledgement",
             label: "Acknowledged",
@@ -671,8 +671,13 @@ function AuditReport({ p }: { p: Pack }) {
       <Sub>{t("Balances brought and carried forward")}</Sub>
       <DataTable
         cols={[
-          { key: "label", label: "" }, col("brought_forward", "Brought forward"),
-          col("debit", "Debits today"), col("credit", "Credits today"), col("carried_forward", "Carried forward"),
+          { key: "label", label: "" },
+          ...(["brought_forward", "debit", "credit", "carried_forward"] as const).map((key, idx) => ({
+            key,
+            label: ["Brought forward", "Debits today", "Credits today", "Carried forward"][idx],
+            kind: "money" as const,
+            render: (row: Period) => (row?.[key] == null ? "—" : money(row[key])),
+          })),
         ]}
         rows={(r.balances || []).map((b: Period) => ({ ...b, label: t(b.label) }))}
       />

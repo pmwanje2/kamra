@@ -75,6 +75,7 @@ def make_property(name: str, **fields) -> str:
 	"""A bare property, put back to these exact values if it exists."""
 	payload = {
 		"property_name": name, "city": "Testville", "state": "Karnataka",
+		"country": "India", "currency": "INR",
 		"gst_mode": "Fixed", "no_show_charge": "None", "business_date": None,
 		"disabled": 0, "rates_include_tax": 0, "room_levy_percent": 0,
 		"require_cashier_pin": 0, "guest_retention_months": 0,

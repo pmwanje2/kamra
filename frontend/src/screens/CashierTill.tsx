@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 import { Link } from "react-router-dom"
+import AppLink from "../components/AppLink"
 import {
   ArrowDownToLine,
   Banknote,
@@ -566,12 +567,12 @@ export default function CashierTill() {
                     >
                       {t("Front Desk")}
                     </Link>
-                    <Link
+                    <AppLink
                       to="/pos"
                       className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-50"
                     >
                       {t("Restaurant POS")}
-                    </Link>
+                    </AppLink>
                   </div>
                 </div>
               )}

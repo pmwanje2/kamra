@@ -183,23 +183,46 @@ def _period(property: str, label: str, start, end, total_rooms: int) -> dict:
 
 
 def _balances(property: str, d) -> list[dict]:
+	from kamra.business_date import get_business_date
+	from kamra.erp_books import receivables_source
 	from kamra.ledger import ledger_balances as guarded
 	from kamra.night_audit import _raw
 	# the report's own role check has run; the ledger endpoint's is narrower
 	ledger_balances = _raw(guarded)
 	before = {r["ledger"]: r for r in ledger_balances(property, str(add_days(d, -1)))["ledgers"]}
 	after = {r["ledger"]: r for r in ledger_balances(property, str(d))["ledgers"]}
-	# the city ledger is what companies owe: City Ledger Entry, as the
-	# Receivables screen and the credit limit check read it, so a company
-	# payment not yet applied to a folio counts too
-	before["AR"], after["AR"] = _city_ledger(property, add_days(d, -1)), _city_ledger(property, d)
-	return [{
-		"ledger": key, "label": label,
-		"brought_forward": round(before[key]["balance"], 2),
-		"debit": round(after[key]["debit"] - before[key]["debit"], 2),
-		"credit": round(after[key]["credit"] - before[key]["credit"], 2),
-		"carried_forward": round(after[key]["balance"], 2),
-	} for key, label in LEDGERS]
+	src = receivables_source(property, strict=False)
+	if not src.in_erp:
+		# the city ledger is what companies owe: City Ledger Entry, as the
+		# Receivables screen and the credit limit check read it, so a company
+		# payment not yet applied to a folio counts too
+		before["AR"], after["AR"] = _city_ledger(property, add_days(d, -1)), _city_ledger(property, d)
+	out = []
+	for key, label in LEDGERS:
+		if key == "AR" and src.in_erp:
+			# While the ERP keeps receivables, never read stale City Ledger Entry.
+			# Only the live balance for the current business date is known here.
+			if src.unavailable:
+				carried = None
+			elif str(getdate(d)) == str(getdate(get_business_date(property))):
+				carried = round(sum(flt(r["balance"]) for r in src.rows), 2)
+			else:
+				carried = None
+			out.append({
+				"ledger": key, "label": label,
+				"brought_forward": None, "debit": None, "credit": None,
+				"carried_forward": carried,
+				"kept_in_erp": True, "unverified": src.unavailable,
+			})
+		else:
+			out.append({
+				"ledger": key, "label": label,
+				"brought_forward": round(before[key]["balance"], 2),
+				"debit": round(after[key]["debit"] - before[key]["debit"], 2),
+				"credit": round(after[key]["credit"] - before[key]["credit"], 2),
+				"carried_forward": round(after[key]["balance"], 2),
+			})
+	return out
 
 
 def _city_ledger(property: str, d) -> dict:
