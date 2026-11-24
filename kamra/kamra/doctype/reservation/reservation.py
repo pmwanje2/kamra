@@ -842,8 +842,7 @@ class Reservation(Document):
 				total_dec = round_rate_amount(base_dec + tax_dec, 0, "Nearest", currency)
 				tax_dec = total_dec - base_dec
 			else:
-				total_dec = round_rate_amount(base_dec, 0, "Nearest", currency)
-				base_dec = total_dec
+				total_dec = base_dec
 			self.amount_before_tax = float(base_dec)
 			self.tax_amount = float(tax_dec)
 			self.amount_after_tax = float(total_dec)
