@@ -4065,8 +4065,16 @@ def folio_invoice(folio: str):
 			"reservation": res.name,
 			**saved_contract_tariff(res),
 			# the contract currency beside home amounts (Property reference currency calculation)
-			"reference_currency": reference_currency(res, grand_total=doc.grand_total, balance=doc.balance,
-			                                         charges=doc.charges, payments=doc.payments),
+			"reference_currency": reference_currency(
+				res,
+				grand_total=folio_dict["grand_total"],
+				balance=(
+					doc.balance
+					if abs(float(folio_dict["grand_total"] or 0) - float(doc.grand_total or 0)) < 0.01
+					else round(float(folio_dict["grand_total"] or 0) - float(folio_dict.get("payments_total") or 0), 2)
+				),
+				charges=doc.charges, payments=doc.payments,
+			),
 			"check_in": str(res.check_in_date),
 			"check_out": str(res.check_out_date),
 			"arrival": str(res.get("actual_check_in") or "") or None,
@@ -7737,7 +7745,11 @@ def _discount_plan(doc, discount_type=None, discount_value=0, reason_code=None,
 		q = doc.requote()
 		rows = doc.quote_night_rows(q)
 		hold = doc.hold_charged_nights(rows)
-		new = round(flt(q["amount_after_tax"]) + hold["base"] + hold["tax"], 2)
+		from kamra.pricing import property_currency, round_rate_amount
+		new = float(round_rate_amount(
+			flt(q["amount_after_tax"]) + hold["base"] + hold["tax"], 0, "Nearest",
+			property_currency(doc.property),
+		))
 	nights = _night_rows_as_nights(rows, doc)
 	plan = discount_governance(doc.property, doc.room_type, doc.rate_plan,
 	                           [n for n in nights if n["date"] not in charged],
@@ -8023,7 +8035,11 @@ def _reprice_preview(res, **changes) -> dict:
 		hold = res.hold_charged_nights(rows)
 		# for a caller that judges them (_rate_override_plan); never saved
 		res.flags.kamra_repriced_rows = rows
-		new = round(float(q["amount_after_tax"]) + hold["base"] + hold["tax"], 2)
+		from kamra.pricing import property_currency, round_rate_amount
+		new = float(round_rate_amount(
+			float(q["amount_after_tax"]) + hold["base"] + hold["tax"], 0, "Nearest",
+			property_currency(res.property),
+		))
 		out.update({
 			"new_amount": new,
 			"difference": round(new - current, 2),

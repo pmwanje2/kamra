@@ -764,15 +764,36 @@ def current_date_contract_night(reservation, date) -> dict | None:
 		        "currency": currency, "fx_rate": float(fx), "fx_date": fx_date, "stale": True}
 	fx, fx_date = posting
 	rp = frappe.get_doc("Rate Plan", plan)
-	gross = contract_local_amount(rp, nightly, fx, home)
-	share = _negotiated_share(reservation, snapshot, locked_night(reservation, date), night)
-	if share != 1:
-		gross = round_rate_amount(gross * share, 0, currency=home)
+	base_gross = contract_local_amount(rp, nightly, fx, home)
+	locked = locked_night(reservation, date)
+	if locked is not None and locked.get("discount_type"):
+		disc_kind = locked.get("discount_type")
+		disc_val = Decimal(str(locked.get("discount_value") or 0))
+	else:
+		disc_kind = reservation.get("discount_type")
+		disc_val = Decimal(str(reservation.get("discount_value") or 0))
+	discount_off = Decimal(0)
+	if disc_kind and disc_val > 0:
+		if disc_kind == "Percent":
+			net_foreign = round_rate_amount(
+				nightly * (Decimal(1) - disc_val / Decimal(100)),
+				0, currency=currency,
+			)
+			gross = max(round_rate_amount(net_foreign * fx, 0, currency=home), Decimal(0))
+		else:
+			gross = max(round_rate_amount(base_gross - disc_val, 0, currency=home), Decimal(0))
+		discount_off = max(base_gross - gross, Decimal(0))
+	else:
+		gross = base_gross
+		share = _negotiated_share(reservation, snapshot, locked, night)
+		if share != 1:
+			gross = round_rate_amount(gross * share, 0, currency=home)
 	rt = frappe.get_doc("Room Type", reservation.room_type)
 	gst = room_gst_rate(reservation.property, rt, gross + _over_cap_night(reservation))
 	rate = gross / (Decimal(1) + Decimal(str(gst)) / Decimal(100)) if rates_include_tax(reservation.property) else gross
 	return {"rate": float(rate), "gst_rate": float(gst), "label": f"{currency} {contract:,} at {fx:,} ({fx_date})",
-	        "currency": currency, "fx_rate": float(fx), "fx_date": fx_date, "stale": False}
+	        "currency": currency, "fx_rate": float(fx), "fx_date": fx_date, "stale": False,
+	        "base_entry": float(base_gross), "discount_amount": float(discount_off)}
 
 
 def _posted_contract_fx(reservation, currency: str, projected=()) -> tuple[Decimal, str, int] | None:
@@ -928,7 +949,11 @@ def post_room_night(reservation, date, folios=None, *, room_posted: list | None 
 			        + (" · day use" if getattr(reservation, "is_day_use", 0) else "")
 			        + (f" · {current['label']}" if current else ""))
 			locked = locked_night(reservation, date)
-			if locked is not None and float(locked.get("discount_amount") or 0) > 0:
+			if current and not current.get("stale") and float(current.get("discount_amount") or 0) > 0:
+				from kamra.localization import amount_text
+				desc += (f" · {amount_text(reservation.property, current['base_entry'])} "
+				         f"less discount {amount_text(reservation.property, current['discount_amount'])}")
+			elif locked is not None and float(locked.get("discount_amount") or 0) > 0:
 				# the net rate is what bills; the line says what it came from,
 				# base and discount on the basis the discount was given (gross
 				# where rates include tax)

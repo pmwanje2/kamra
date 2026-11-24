@@ -1276,6 +1276,7 @@ def quote_with_contract(property, room_type, check_in_date, check_out_date, adul
 	q = quote(property, room_type, check_in_date, check_out_date, adults, children,
 	          meal_plan, rate_plan, voucher_code, agreed_rate=resolved[0] if resolved else 0,
 	          agreed_nights=nights or None,
+	          contract_tariff=resolved[1] if resolved else None,
 	          discount_type=discount_type, discount_value=discount_value,
 	          night_discounts=night_discounts, **kwargs)
 	if resolved:
@@ -1459,39 +1460,79 @@ def entry_rate(rate, gst_rate, inclusive: bool, places: int = 2) -> Decimal:
 	return rate.quantize(unit, rounding=ROUND_HALF_UP)
 
 
+def contract_night_tariff(contract_tariff: dict | None, date: str | None = None) -> tuple[str, Decimal, Decimal] | None:
+	"""(currency, nightly, fx_rate) for one night of a foreign-currency contract
+	tariff, or None when the stay is not priced in a foreign tariff currency.
+	Accepts either the inner `tariff` dict or the full `contract_tariff` snapshot."""
+	if not isinstance(contract_tariff, dict):
+		return None
+	tariff = contract_tariff.get("tariff") if isinstance(contract_tariff.get("tariff"), dict) else contract_tariff
+	currency = tariff.get("currency")
+	home = tariff.get("property_currency")
+	fx = _dec(tariff.get("fx_rate"))
+	if not currency or (home and currency == home) or fx <= 0:
+		return None
+	nightly = _dec(tariff.get("nightly"))
+	if date and tariff.get("nights"):
+		key = str(getdate(date))
+		own = next((n for n in tariff["nights"] if str(n.get("date")) == key), None)
+		if own is not None:
+			nightly = _dec(own.get("nightly"))
+	if nightly <= 0:
+		return None
+	return currency, nightly, fx
+
+
 def discount_night(property, rt, base, base_gst, entry, kind, value, inclusive: bool,
-                   night_over_cap=Decimal(0), date=None) -> tuple[Decimal, Decimal, Decimal]:
+                   night_over_cap=Decimal(0), date=None, *,
+                   tariff_night: tuple[str, Decimal, Decimal] | None = None) -> tuple[Decimal, Decimal, Decimal]:
 	"""One night's desk discount, from the night's own base: `base` (before
 	tax) at `base_gst`, which the desk sees as `entry` (gross where rates
-	include tax). A percentage or an amount comes off `entry`; the tax rate is
-	read again from the discounted price (a slab can drop) and the tax backed
-	out of it. Returns (net rate before tax, its tax rate, the discount on the
-	desk's basis). The discount is what the guest is given: never negative,
-	even when a lower slab leaves more of a cheaper gross before tax.
+	include tax). A percentage or an amount comes off `entry`; on a foreign-
+	currency contract tariff (`tariff_night`), a percentage discount applies
+	in the tariff's own currency first, then converts at the contract FX rate
+	and rounds to the property currency's ISO minor unit (whole shillings for
+	UGX). The tax rate is read again from the discounted price (a slab can
+	drop) and the tax backed out of it. Returns (net rate before tax, its tax
+	rate, the discount on the desk's basis). The discount is what the guest is
+	given: never negative, even when a lower slab leaves more of a cheaper
+	gross before tax.
 
 	Used when a booking is priced and when a booked stay's discount changes,
 	so a night is discounted the same way both times."""
 	if not (kind and value):
 		return _dec(base), _dec(base_gst), Decimal(0)
+	currency = selling_currency(property)
+	entry_places = _minor_unit(currency)
+	entry_unit = Decimal(1).scaleb(-entry_places)
 	places = night_rate_places(property)
 	unit = Decimal(1).scaleb(-places)
 	entry = _dec(entry)
-	if kind == "Percent":
-		off = entry * _dec(value) / Decimal(100)
+	if kind == "Percent" and tariff_night is not None:
+		tariff_currency, tariff_nightly, fx_rate = tariff_night
+		net_foreign = round_rate_amount(
+			tariff_nightly * (Decimal(1) - _dec(value) / Decimal(100)),
+			0, "Nearest", tariff_currency,
+		)
+		net_entry = max(round_rate_amount(net_foreign * fx_rate, 0, "Nearest", currency), Decimal(0))
 	else:
-		if _dec(value) > entry:
-			frappe.throw(_("A discount of {0} is more than the room rate on {1} ({2}).").format(
-				f"{_dec(value):,.2f}", date, f"{entry:,.2f}"))
-		off = _dec(value)
-	net_entry = max(entry - off, Decimal(0)).quantize(unit, rounding=ROUND_HALF_UP)
+		if kind == "Percent":
+			off = entry * _dec(value) / Decimal(100)
+		else:
+			if _dec(value) > entry:
+				frappe.throw(_("A discount of {0} is more than the room rate on {1} ({2}).").format(
+					f"{_dec(value):,.2f}", date, f"{entry:,.2f}"))
+			off = _dec(value)
+		net_entry = max(entry - off, Decimal(0)).quantize(entry_unit, rounding=ROUND_HALF_UP)
 	gst = room_gst_rate(property, rt, net_entry + _dec(night_over_cap))
 	net = (net_entry / (Decimal(1) + gst / Decimal(100))).quantize(
 		unit, rounding=ROUND_HALF_UP) if inclusive else net_entry
-	return net, gst, max(entry - entry_rate(net, gst, inclusive, places), Decimal(0))
+	return net, gst, max(entry - entry_rate(net, gst, inclusive, entry_places), Decimal(0))
 
 
 def _discount_nights(property, rt, nightly: list, room_total: Decimal, disc: dict,
-                     inclusive: bool, night_over_cap: Decimal, agreed_rate) -> tuple:
+                     inclusive: bool, night_over_cap: Decimal, agreed_rate,
+                     contract_tariff: dict | None = None) -> tuple:
 	"""Take the reservation discount off each night's accommodation.
 
 	Each night's base is its share of the planned room total (season,
@@ -1513,8 +1554,11 @@ def _discount_nights(property, rt, nightly: list, room_total: Decimal, disc: dic
 		own = disc["nights"].get(n["date"])
 		kind, value = (own["type"], own["value"]) if own else (disc["stay"] or (None, Decimal(0)))
 		entry = entry_rate(base, gst, inclusive, places)
-		net, new_gst, off = discount_night(property, rt, base, gst, entry, kind, value,
-		                                   inclusive, night_over_cap, n["date"])
+		net, new_gst, off = discount_night(
+			property, rt, base, gst, entry, kind, value,
+			inclusive, night_over_cap, n["date"],
+			tariff_night=contract_night_tariff(contract_tariff, n["date"]),
+		)
 		if night_over_cap and new_gst != gst:
 			# the extra guests ride the night's tax rate
 			def _oc(rate):
@@ -1607,6 +1651,7 @@ def quote(
 	night_discounts=None,
 	locked_nights: dict | None = None,
 	agreed_nights: dict | None = None,
+	contract_tariff: dict | None = None,
 ) -> dict:
 	"""locked_nights ({date: a locked night row}): a booked stay's room
 	nights that keep their price (Reservation.pinned_room_nights); the
@@ -1916,7 +1961,8 @@ def quote(
 	reservation_discount = Decimal(0)
 	if disc:
 		room_total, room_tax, oc_net, oc_tax, room_base_total, reservation_discount = _discount_nights(
-			property, rt, nightly, room_total, disc, inclusive, night_over_cap, agreed_rate)
+			property, rt, nightly, room_total, disc, inclusive, night_over_cap, agreed_rate,
+			contract_tariff=contract_tariff)
 		over_cap += oc_net
 		over_cap_tax += oc_tax
 	for n in nightly:

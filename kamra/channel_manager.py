@@ -750,6 +750,15 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 		if doc.status in _LOCKED_MODIFY:
 			reason = requested_reason or _describe_requested_modify(conn, e, room_type)
 			return _flag_for_review(conn, doc, e, reason)
+		will_auto_price = 0 if requested_reason or e.get("total") else 1
+		if not will_auto_price and doc.get("custom_tariff_currency") and frappe.utils.cint(doc.get("auto_price")):
+			# Confirmed contract-tariff stays owned by hospitality-tariffs cannot
+			# switch auto_price off (HSP-TARIFF-008): hold the OTA modify for desk
+			# review rather than failing the channel event or dropping the tariff.
+			reason = requested_reason or _describe_requested_modify(conn, e, room_type)
+			if doc.has_discount():
+				reason = f"{reason}; active desk discount: {_describe_superseded_discount(doc)}"
+			return _flag_for_review(conn, doc, e, reason)
 		if requested_reason:
 			e = dict(e, notes="\n".join(s for s in (e.get("notes"), requested_reason) if s))
 		other_holds = _non_tax_hold_lines(doc.special_requests) if doc.status == "Requested" else []

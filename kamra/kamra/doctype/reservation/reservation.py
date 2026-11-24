@@ -564,6 +564,7 @@ class Reservation(Document):
 			self.contract_tariff = snapshot
 			if snapshot.get("agreed_rate") is not None:
 				self.agreed_rate = snapshot["agreed_rate"]
+				self.flags.kamra_contract_repriced = True
 
 	def validate_minimum_nights(self):
 		"""Property.minimum_nights is a hard floor for overnight stays."""
@@ -955,10 +956,14 @@ class Reservation(Document):
 		changed or cleared only by its writers: set_agreed_rate and a room
 		move (flags.kamra_agreed_rate_override, after the desk's limit and any
 		supervisor's sign-off), a group pickup (create_booking, the same flag)
-		and a contract tariff (capture_contract_tariff, just before this). The
-		field is read-only on the form, but read_only is not enforced on a REST
-		PUT or POST, so any other change is refused."""
-		if self.flags.get("kamra_agreed_rate_override"):
+		and a contract tariff (capture_contract_tariff, check-in FX relock or
+		multi-rate contract reprice, just before this). The field is read-only
+		on the form, but read_only is not enforced on a REST PUT or POST, so
+		any other change is refused."""
+		if (self.flags.get("kamra_agreed_rate_override")
+				or self.flags.get("kamra_contract_relocked")
+				or self.flags.get("kamra_fx_checkin_relock")
+				or self.flags.get("kamra_contract_repriced")):
 			return
 		if self.is_new():
 			changed = flt(self.get("agreed_rate")) > 0 and not self.get("contract_tariff")
@@ -1040,11 +1045,19 @@ class Reservation(Document):
 
 	def card_entry_bases(self) -> dict[str, float]:
 		"""Each night's rate-code amount now: the stay priced without its
-		agreed rate, typed nights or the desk's discount (the rate card,
-		season, demand and rate plan), on the desk's basis."""
-		from kamra.pricing import entry_rate, night_rate_places, quote, rates_include_tax
+		agreed rate, typed nights or the desk's discount (the contract tariff
+		when the stay carries one, else the rate card, season, demand and rate
+		plan), on the desk's basis."""
+		from kamra.pricing import entry_rate, night_rate_places, quote, rates_include_tax, saved_contract_tariff
 		inputs = {k: v for k, v in self.quote_inputs().items()
-		          if k not in ("agreed_rate", "night_prices", *DISCOUNT_INPUT_KEYS)}
+		          if k not in ("agreed_rate", "agreed_nights", "night_prices", *DISCOUNT_INPUT_KEYS)}
+		snapshot = saved_contract_tariff(self)
+		if snapshot and flt(snapshot.get("agreed_rate")) > 0:
+			tariff = snapshot.get("tariff") or {}
+			own = {str(n["date"]): flt(n["agreed_rate"]) for n in tariff.get("nights") or [] if n.get("date")}
+			places = night_rate_places(self.property)
+			return {day: round(own.get(day, flt(snapshot["agreed_rate"])), places)
+			        for day in self.stay_nights()}
 		q = quote(**inputs, check_voucher_limits=False,
 		          exclude_reservation=None if self.is_new() else self.name)
 		nightly = q.get("nightly") or []
@@ -1138,7 +1151,9 @@ class Reservation(Document):
 		is (kamra.api.discount_governance). So neither a chain of agreed rates
 		nor an agreed rate and a discount together step around the desk's
 		limit or the full-comp sign-off."""
-		if self.is_new() or not self.flags.get("kamra_repriced") or not self.has_discount():
+		if (self.is_new() or not self.flags.get("kamra_repriced") or not self.has_discount()
+				or self.flags.get("kamra_contract_relocked")
+				or self.flags.get("kamra_fx_checkin_relock")):
 			return
 		old = self.get_doc_before_save()
 		if not old:
@@ -1198,15 +1213,19 @@ class Reservation(Document):
 		"""Price the stay as it stands now, without counting this booking
 		in the house's occupancy. Used by the save path and the amendment
 		previews, so a preview and the save that follows agree."""
-		from kamra.pricing import quote
+		from kamra.pricing import quote, saved_contract_tariff
 		inputs = self.quote_inputs()
 		pinned = self.pinned_room_nights(inputs)
 		# a re-quote that keeps the booked room nights re-prices no night
 		self.flags.kamra_room_pinned = bool(pinned)
+		tariff = None
+		if flt(self.get("agreed_rate")) > 0 and not self.agreed_rate_overrides():
+			tariff = saved_contract_tariff(self).get("tariff") or None
 		return quote(**inputs,
 		             check_voucher_limits=check_voucher_limits,
 		             exclude_reservation=None if self.is_new() else self.name,
-		             **({"locked_nights": pinned} if pinned else {}))
+		             **({"locked_nights": pinned} if pinned else {}),
+		             **({"contract_tariff": tariff} if tariff else {}))
 
 	def apply_pricing(self):
 		"""Price the booking from the engine while auto_price is on, and lock
@@ -1285,12 +1304,16 @@ class Reservation(Document):
 		from kamra.folio import charged_nights
 		from kamra.pricing import (
 			_dec,
+			contract_night_tariff,
 			discount_night,
 			entry_rate,
 			night_rate_places,
 			normalize_discounts,
+			property_currency,
 			rates_include_tax,
 			room_gst_rate,
+			round_rate_amount,
+			saved_contract_tariff,
 		)
 		disc = normalize_discounts(self.get("discount_type"), self.get("discount_value"),
 		                           self.night_discount_inputs(),
@@ -1300,6 +1323,8 @@ class Reservation(Document):
 		own = (disc or {}).get("nights") or {}
 		inclusive = rates_include_tax(self.property)
 		places = night_rate_places(self.property)
+		tariff = (saved_contract_tariff(self).get("tariff")
+		          if flt(self.get("agreed_rate")) > 0 and not self.agreed_rate_overrides() else None)
 		rt = frappe.get_doc("Room Type", self.room_type)
 		over_cap = _dec(self.get("over_capacity_charge"))
 		charged = charged_nights(self.name)
@@ -1328,8 +1353,11 @@ class Reservation(Document):
 			# the night's booked base on the desk's basis, and its tax rate
 			entry = entry_rate(rate, gst, inclusive, places) + off
 			base_gst = room_gst_rate(self.property, rt, entry + over_cap) if off else gst
-			net, new_gst, new_off = discount_night(self.property, rt, base, base_gst, entry,
-			                                       kind, value, inclusive, over_cap, day)
+			net, new_gst, new_off = discount_night(
+				self.property, rt, base, base_gst, entry,
+				kind, value, inclusive, over_cap, day,
+				tariff_night=contract_night_tariff(tariff, day),
+			)
 			row.update(rate=float(net), gst_rate=float(new_gst), base_rate=float(base),
 			           discount_amount=float(new_off))
 			d_room += net - rate
@@ -1348,9 +1376,23 @@ class Reservation(Document):
 		except (TypeError, ValueError):
 			snap = {}
 		voucher = self.booked_voucher_discount(snap)
-		before = round(flt(self.amount_before_tax) + float(d_room + d_oc + d_levy), places)
-		tax = round(flt(self.tax_amount) + float(d_tax + d_oc_tax + d_levy_tax), places)
-		after = round(before + tax, places)
+		currency = property_currency(self.property)
+		raw_before = _dec(self.amount_before_tax) + d_room + d_oc + d_levy
+		snap_items = snap.get("line_items") if isinstance(snap.get("line_items"), list) else None
+		if snap_items and not voucher:
+			base_tax = sum((_dec(li.get("tax_amount")) for li in snap_items), Decimal(0))
+		else:
+			base_tax = _dec(self.tax_amount)
+		raw_tax = base_tax + d_tax + d_oc_tax + d_levy_tax
+		if raw_tax:
+			after_dec = round_rate_amount(raw_before + raw_tax, 0, "Nearest", currency)
+			tax_dec = after_dec - raw_before
+			before_dec = raw_before
+		else:
+			after_dec = round_rate_amount(raw_before, 0, "Nearest", currency)
+			before_dec = after_dec
+			tax_dec = Decimal(0)
+		before, tax, after = float(before_dec), float(tax_dec), float(after_dec)
 		base_total = sum(float(entry_rate(r["rate"], r["gst_rate"], inclusive, places))
 		                 + flt(r["discount_amount"]) for r in rows)
 		off_total = round(sum(flt(r["discount_amount"]) for r in rows), places)
