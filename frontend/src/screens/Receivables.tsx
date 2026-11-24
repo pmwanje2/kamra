@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Link, useNavigate, useParams } from "react-router-dom"
+import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom"
 import { ArrowLeft, ChevronDown, Plus, Printer } from "lucide-react"
+import type { ShellContext } from "../AppShell"
 import { call, getCurrentProperty } from "../lib/api"
 import { listResource, serverError } from "../lib/resource"
 import { Button } from "../components/ui/button"
@@ -53,11 +54,11 @@ type AccountRow = {
 
 // the work queues on top of the list: each is a filter over the same rows
 const QUEUES = {
-  all: { label: "All accounts", test: (_r: AccountRow) => true },
-  overdue: { label: "Overdue", test: (r: AccountRow) => r.overdue > moneyEps() },
-  over_limit: { label: "Over credit limit", test: (r: AccountRow) => overLimit(r) },
-  unbilled: { label: "In house, not billed", test: (r: AccountRow) => (r.unbilled ?? 0) > moneyEps() },
-  ahead: { label: "Paid ahead", test: (r: AccountRow) => r.unapplied_credit > moneyEps() },
+  all: { label: "All accounts", test: (_r: AccountRow, _eps: number) => true },
+  overdue: { label: "Overdue", test: (r: AccountRow, eps: number) => r.overdue > eps },
+  over_limit: { label: "Over credit limit", test: (r: AccountRow, _eps: number) => overLimit(r) },
+  unbilled: { label: "In house, not billed", test: (r: AccountRow, eps: number) => (r.unbilled ?? 0) > eps },
+  ahead: { label: "Paid ahead", test: (r: AccountRow, eps: number) => r.unapplied_credit > eps },
 } as const
 type Queue = keyof typeof QUEUES
 
@@ -178,6 +179,9 @@ export default function Receivables() {
 
 function AccountList() {
   const language = useUILanguage()
+  const loc = useLocale()
+  const eps = moneyEps(loc.currency)
+  const shell = useOutletContext<ShellContext | undefined>()
   const navigate = useNavigate()
   const { roles } = useAuth()
   const canEdit = roles.some((r) => FINANCE.includes(r))
@@ -199,17 +203,17 @@ function AccountList() {
       .then((r) => { setRows(r.accounts); setSummary(r.summary ?? null) })
       .catch((e) => setErr(serverError(e)))
   }, [])
-  useEffect(load, [load])
+  useEffect(load, [load, shell?.refreshKey])
 
   const shown = useMemo(() => {
     const s = q.trim().toLowerCase()
-    return (rows ?? []).filter((r) => QUEUES[queue].test(r) &&
+    return (rows ?? []).filter((r) => QUEUES[queue].test(r, eps) &&
       (!s || [r.company_name, r.company, r.account_number, r.contact_name, r.contact_email]
         .some((v) => (v ?? "").toLowerCase().includes(s))))
-  }, [rows, q, queue])
+  }, [rows, q, queue, eps])
 
   const tally = (k: Queue) => {
-    const list = (rows ?? []).filter(QUEUES[k].test)
+    const list = (rows ?? []).filter((r) => QUEUES[k].test(r, eps))
     const amount = k === "unbilled" ? list.reduce((a, r) => a + (r.unbilled ?? 0), 0)
       : k === "ahead" ? list.reduce((a, r) => a + r.unapplied_credit, 0)
       : k === "overdue" ? list.reduce((a, r) => a + r.overdue, 0)
@@ -384,6 +388,7 @@ function AccountPage({ account }: { account: string }) {
   const language = useUILanguage()
   const loc = useLocale()
   const eps = moneyEps(loc.currency)
+  const shell = useOutletContext<ShellContext | undefined>()
   const { roles } = useAuth()
   const isFinance = roles.some((r) => FINANCE.includes(r))
   const [acc, setAcc] = useState<Account | null>(null)
@@ -405,7 +410,7 @@ function AccountPage({ account }: { account: string }) {
       .then((r) => setHistory(r.entries))
       .catch(() => setHistory([]))
   }, [account])
-  useEffect(load, [load])
+  useEffect(load, [load, shell?.refreshKey])
 
   const done = (msg: string) => {
     setSheet(null)
@@ -721,6 +726,7 @@ function AccountPage({ account }: { account: string }) {
 // dispute a bill, reverse a payment, confirm or reject an agent's payment
 function AccountAction(props: { acc: Account; action: Action; onClose: () => void; onDone: (msg: string) => void }) {
   useUILanguage()
+  useLocale()
   const a = props.action
   const [note, setNote] = useState(a.kind === "dispute" ? a.item.dispute_note || "" : "")
   const [code, setCode] = useState("REV-BOUNCE")
@@ -840,6 +846,7 @@ function AccountAction(props: { acc: Account; action: Action; onClose: () => voi
 /** How old what the company owes is: one bar, green to red. */
 function AgingBar({ acc }: { acc: Account }) {
   useUILanguage()
+  const loc = useLocale()
   const parts = [
     { k: "Not due", v: acc.not_due, cls: "bg-emerald-600" },
     { k: "1 to 30 late", v: acc.d1_30, cls: "bg-amber-400" },
@@ -848,7 +855,7 @@ function AgingBar({ acc }: { acc: Account }) {
     { k: "90+ late", v: acc.d90p, cls: "bg-rose-800" },
   ]
   const total = parts.reduce((a, p) => a + Math.max(0, p.v), 0)
-  if (total < moneyEps()) return null
+  if (total < moneyEps(loc.currency)) return null
   return (
     <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2">
       <div className="text-xs text-zinc-500">{translate("Age of what is owed")}</div>
@@ -1275,6 +1282,7 @@ type Invoice = {
 
 function InvoiceView(props: { folio: string; company: string; onClose: () => void }) {
   useUILanguage()
+  useLocale()
   const [inv, setInv] = useState<Invoice | null>(null)
   const [err, setErr] = useState<string | null>(null)
   useEffect(() => {
@@ -1355,6 +1363,7 @@ function InvoiceView(props: { folio: string; company: string; onClose: () => voi
 
 function TransferInvoice(props: { acc: Account; item: OpenItem; onClose: () => void; onDone: (to: string) => void }) {
   useUILanguage()
+  useLocale()
   const [accounts, setAccounts] = useState<AccountRow[]>([])
   const [to, setTo] = useState("")
   const [reason, setReason] = useState("")
