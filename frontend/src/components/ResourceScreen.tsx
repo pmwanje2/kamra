@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
   Suspense,
   type ComponentType,
@@ -159,6 +160,8 @@ export interface ScreenConfig {
     statusCheck?: boolean
     /** Map a Check field (0/1) to explicit badge labels (e.g. System / Custom). */
     booleanBadge?: { truthy: string; falsy?: string }
+    /** Text shown when the cell value is blank (e.g. "Shared" for unscoped rows). */
+    emptyLabel?: string
   }[]
   form: FieldSpec[]
   formNote?: string
@@ -605,6 +608,8 @@ export function ResourceScreen({
   const [rows, setRows] = useState<Row[]>([])
   const [editing, setEditing] = useState<Row | "new" | null>(null)
   const [draft, setDraft] = useState<Record<string, unknown>>({})
+  const [canDeleteDoc, setCanDeleteDoc] = useState(false)
+  const deletePermReq = useRef(0)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [linkOptions, setLinkOptions] = useState<Record<string, string[]>>({})
@@ -792,6 +797,8 @@ export function ResourceScreen({
   function openEdit(row: Row | "new") {
     setEditing(row)
     setError(null)
+    setCanDeleteDoc(false)
+    const permReq = ++deletePermReq.current
     if (row === "new") {
       // ponytail: transaction dates default to today when notPast is set
       const defaults: Record<string, unknown> = {}
@@ -801,6 +808,20 @@ export function ResourceScreen({
       }
       setDraft(defaults)
       return
+    }
+    if (config.allowDelete !== false) {
+      call<{ has_permission?: boolean }>("frappe.client.has_permission", {
+        doctype: config.doctype,
+        docname: row.name,
+        perm_type: "delete",
+      })
+        .then((res) => {
+          if (deletePermReq.current === permReq)
+            setCanDeleteDoc(Boolean(res?.has_permission))
+        })
+        .catch(() => {
+          if (deletePermReq.current === permReq) setCanDeleteDoc(false)
+        })
     }
     // List rows only carry column fields - fetch the full document so
     // form extras (location, slugs, etc.) aren't blank and can't wipe DB values.
@@ -1004,15 +1025,13 @@ export function ResourceScreen({
             </div>
           </div>
         <div className="overflow-x-auto">
-          <table className="w-full table-fixed text-sm">
+          <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-zinc-200 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
-                {visibleCols.map((c, i) => (
+                {visibleCols.map((c) => (
                   <th
                     key={c.field}
-                    className={
-                      "py-2 pr-4" + (i === 0 ? " w-[22%]" : "")
-                    }
+                    className="whitespace-nowrap py-2 pr-4"
                   >
                     {t(c.label)}
                   </th>
@@ -1030,7 +1049,7 @@ export function ResourceScreen({
                     <td
                       key={c.field}
                       className={
-                        "truncate py-2.5 pr-4" +
+                        "max-w-52 truncate whitespace-nowrap py-2.5 pr-4" +
                         (typeof row[c.field] === "number"
                           ? " text-right tabular-nums"
                           : "")
@@ -1054,6 +1073,8 @@ export function ResourceScreen({
                         >
                           {t(String(row[c.field]))}
                         </Badge>
+                      ) : c.emptyLabel && (row[c.field] == null || row[c.field] === "") ? (
+                        <span className="text-zinc-400">{t(c.emptyLabel)}</span>
                       ) : (
                         cellValue(c.field === "provider" && typeof row[c.field] === "string"
                           ? providerLabel(String(row[c.field])) : row[c.field], t)
@@ -1116,6 +1137,7 @@ export function ResourceScreen({
             useDetail ? undefined : (
             <div className="flex items-center justify-between">
               {editing !== "new" &&
+              canDeleteDoc &&
               config.allowDelete !== false &&
               (!config.canDelete || config.canDelete(draft)) ? (
                 <Button

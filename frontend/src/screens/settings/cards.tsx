@@ -1705,7 +1705,7 @@ export function CashierLimitsCard({ property }: { property: string }) {
 
   return (
     <Card>
-      <CardContent className="pt-5">
+      <CardContent className="pt-5 overflow-x-auto">
         <h3 className="text-base font-semibold text-zinc-900">{t("Cashier limits")}</h3>
         <p className="mt-0.5 mb-4 text-xs text-zinc-500">
           {t("Per-cashier cash refund cap and allowed payment modes. Leave 0 for no cash refund limit.")}
@@ -1732,16 +1732,16 @@ export function CashierLimitsCard({ property }: { property: string }) {
                 const cid = String(row.cashier_id || row.name)
                 return (
                   <tr key={row.name}>
-                    <td className="py-2.5 pr-3 font-medium text-zinc-800">{cid}</td>
-                    <td className="py-2.5 pr-3 text-zinc-600">{row.user || "-"}</td>
-                    <td className="py-2.5 pr-3">
-                      <span className="inline-flex items-center gap-1.5">
+                    <td className="py-2.5 pr-2 font-medium whitespace-nowrap text-zinc-800">{cid}</td>
+                    <td className="max-w-36 truncate py-2.5 pr-2 text-zinc-600" title={row.user || undefined}>{row.user || "-"}</td>
+                    <td className="py-2.5 pr-2">
+                      <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
                         <input
                           type="number"
                           min={0}
                           step="any"
                           aria-label={t("Max cash refund for {id}", { id: cid })}
-                          className={`${inputCls} max-w-32 tabular-nums`}
+                          className={`${inputCls} w-36 min-w-36 px-2.5 tabular-nums`}
                           value={d.max_cash_refund}
                           onChange={(e) =>
                             setDrafts((prev) => ({
@@ -1750,15 +1750,15 @@ export function CashierLimitsCard({ property }: { property: string }) {
                             }))
                           }
                         />
-                        {cur() && <span className="text-xs text-zinc-500">{cur()}</span>}
+                        {cur() && <span className="shrink-0 text-xs text-zinc-500">{cur()}</span>}
                       </span>
                     </td>
-                    <td className="py-2.5 pr-3">
+                    <td className="py-2.5 pr-2">
                       <input
                         type="text"
                         aria-label={t("Allowed modes for {id}", { id: cid })}
                         placeholder={t("All modes")}
-                        className={`${inputCls} max-w-44`}
+                        className={`${inputCls} w-32 min-w-28`}
                         value={d.allowed_modes}
                         onChange={(e) =>
                           setDrafts((prev) => ({
@@ -1768,7 +1768,7 @@ export function CashierLimitsCard({ property }: { property: string }) {
                         }
                       />
                     </td>
-                    <td className="py-2.5 pr-3">
+                    <td className="py-2.5 pr-2">
                       <input
                         type="checkbox"
                         aria-label={t("Disable {id}", { id: cid })}

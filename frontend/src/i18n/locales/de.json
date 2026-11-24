@@ -529,5 +529,8 @@
   "OTA Prepaid": "OTA-Vorauszahlung",
   "Company Credit": "Firmenkredit",
   "Payment Link": "Zahlungslink",
-  "Cheque": "Scheck"
+  "Cheque": "Scheck",
+  "Property": "Unterkunft",
+  "Shared": "Geteilt",
+  "Booking type": "Buchungsart"
 }

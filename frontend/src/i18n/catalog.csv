@@ -6909,6 +6909,7 @@ Not available here,Not available here,غير متاح هنا,No disponible aquí
 Configuration,Configuration,الإعدادات المرجعية,Configuración,Configuração,配置,screens/settings/SettingsHub.tsx,,translated
 Market Codes,Market Codes,رموز السوق,Códigos de mercado,Códigos de mercado,市场代码,screens/configs.ts;screens/settings/SettingsHub.tsx,,translated
 Origin Codes,Origin Codes,رموز المصدر,Códigos de origen,Códigos de origem,来源代码,screens/configs.ts;screens/settings/SettingsHub.tsx,,translated
+Booking type,Booking type,نوع الحجز,Tipo de reserva,Tipo de reserva,预订类型,components/BookingDialog.tsx,,translated
 Booking Types,Booking Types,أنواع الحجز,Tipos de reserva,Tipos de reserva,预订类型,screens/configs.ts;screens/settings/SettingsHub.tsx,,translated
 Booker Relations,Booker Relations,صلات الحاجز,Relaciones del solicitante,Relações do solicitante,预订人关系,screens/configs.ts;screens/settings/SettingsHub.tsx,,translated
 Cancellation Reasons,Cancellation Reasons,أسباب الإلغاء,Motivos de cancelación,Motivos de cancelamento,取消原因,screens/configs.ts;screens/settings/SettingsHub.tsx,,translated

@@ -1646,7 +1646,8 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 			out["idempotent_replay"] = 1
 			return out
 	doc = frappe.get_doc("Folio", folio)
-	from kamra.localization import assert_payment_mode
+	from kamra.localization import FOREIGN_CURRENCY_TENDER_TYPES, assert_payment_mode
+	from kamra.masters import payment_tender_type
 	assert_payment_mode(doc.property, mode, currency)
 	from kamra.business_date import get_business_date
 	from kamra.cashier import record_cashier_txn, require_open_session
@@ -1657,12 +1658,12 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 	fx = None
 	currency = (currency or "").strip().upper()
 	foreign = bool(currency and currency != currency_home)
-	if mode == "Foreign Cash":
+	tender = payment_tender_type(mode, doc.property)
+	if tender == "Foreign Cash":
 		if not foreign:
 			frappe.throw(_("Foreign Cash needs the currency of the notes received."))
-		mode = "Cash"
 	if foreign:
-		if mode not in FX_PAYMENT_MODES:
+		if tender not in FOREIGN_CURRENCY_TENDER_TYPES:
 			frappe.throw("Foreign currency is taken as Cash or Bank Transfer "
 			             "only. A card is charged in the hotel's currency.")
 		if kind == "Security Deposit":
@@ -7191,7 +7192,8 @@ def _booking_property_policy(property: str) -> dict:
 	prop["deposit_pct"] = float(prop.get("deposit_pct") or 0)
 	prop["sell_message"] = prop.get("sell_message") or ""
 	# drives the dial-code prefix on guest phone inputs
-	prop["country"] = prop.get("country") or "India"
+	from kamra.localization import resolve_country
+	prop["country"] = resolve_country(property, prop)
 	return prop
 
 

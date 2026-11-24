@@ -37,22 +37,72 @@ from datetime import date
 import frappe
 
 
-def pack_for(property: str | None = None):
-	country = None
-	if property:
-		country = frappe.get_cached_value("Property", property, "country")
-	return pack_for_country(country or "India")
+def _clean_str(val) -> str:
+	return val.strip() if isinstance(val, str) else ""
 
 
-def pack_for_country(country: str):
-	mapping = frappe.get_hooks("kamra_localization") or {}
-	target = mapping.get(country)
-	if target:
-		path = target[-1] if isinstance(target, (list, tuple)) else target
+def company_country_for(property: str | None = None, prop_doc=None) -> str:
+	"""Country of the property's Company (or the site's default Company), or ''."""
+	if not getattr(frappe.local, "db", None):
+		return ""
+	try:
+		if not frappe.db.table_exists("Company"):
+			return ""
+		company = ""
+		if prop_doc is not None:
+			company = _clean_str(prop_doc.get("company"))
+		elif property and frappe.db.has_column("Property", "company"):
+			company = _clean_str(frappe.get_cached_value("Property", property, "company"))
+		if not company:
+			company = _clean_str(frappe.db.get_single_value("Global Defaults", "default_company"))
+		if company:
+			return _clean_str(frappe.db.get_value("Company", company, "country"))
+	except Exception:
+		pass
+	return ""
+
+
+def default_country(property: str | None = None, prop_doc=None) -> str:
+	"""Fallback country when Property.country is blank: Company country,
+	then System Settings.country, then '' (neutral / no country tax)."""
+	country = company_country_for(property=property, prop_doc=prop_doc)
+	if country:
+		return country
+	if getattr(frappe.local, "db", None):
 		try:
-			return importlib.import_module(path)
-		except ModuleNotFoundError:
+			country = _clean_str(frappe.db.get_single_value("System Settings", "country"))
+			if country:
+				return country
+		except Exception:
 			pass
+	return ""
+
+
+def resolve_country(property: str | None = None, prop_doc=None) -> str:
+	"""Effective country for a property: explicit Property.country, else
+	Company/System country, else '' (neutral)."""
+	country = ""
+	if prop_doc is not None:
+		country = _clean_str(prop_doc.get("country"))
+	elif property:
+		country = _clean_str(frappe.get_cached_value("Property", property, "country"))
+	return country or default_country(property=property, prop_doc=prop_doc)
+
+
+def pack_for(property: str | None = None):
+	return pack_for_country(resolve_country(property))
+
+
+def pack_for_country(country: str | None):
+	if country:
+		mapping = frappe.get_hooks("kamra_localization") or {}
+		target = mapping.get(country)
+		if target:
+			path = target[-1] if isinstance(target, (list, tuple)) else target
+			try:
+				return importlib.import_module(path)
+			except ModuleNotFoundError:
+				pass
 	from kamra.localization import generic
 	return generic
 
@@ -120,13 +170,14 @@ def uses_tax_slab(pack) -> bool:
 	return bool(getattr(pack, "USES_TAX_SLAB", False))
 
 
-def property_country_defaults(country: str | None) -> dict:
+def property_country_defaults(country: str | None, *, prop_doc=None) -> dict:
 	"""{Property field: value} a new property in this country starts with:
 	the pack's currency (when the Currency exists), clock, levy label, flat VAT
 	(when not on the ERP bridge) and its SETTING_DEFAULTS."""
 	from kamra.erp_bridge import is_bridge_active
 
-	pack = pack_for_country(country or "India")
+	resolved = _clean_str(country) or default_country(prop_doc=prop_doc)
+	pack = pack_for_country(resolved)
 	out = {}
 	currency = getattr(pack, "DEFAULT_CURRENCY", None)
 	if currency and frappe.db.exists("Currency", currency):
@@ -149,7 +200,7 @@ def fill_property_defaults(doc) -> None:
 	skips doctype defaults there too."""
 	if frappe.flags.in_import:
 		return
-	for key, value in property_country_defaults(doc.get("country")).items():
+	for key, value in property_country_defaults(doc.get("country"), prop_doc=doc).items():
 		if doc.get(key) in (None, ""):
 			doc.set(key, value)
 
@@ -255,17 +306,22 @@ FOREIGN_CURRENCY_TENDER_TYPES = ("Cash", "Foreign Cash", "Bank Transfer")
 
 
 def instant_payment_modes(pack, property: str | None = None) -> list[str]:
-	"""The pack's instant / wallet modes, then this property's own Instant
-	payment methods."""
-	from kamra.masters import client_payment_methods
-	return list(dict.fromkeys([*_pack_instant_modes(pack), *client_payment_methods("Instant", property=property)]))
+	"""The pack's instant / wallet modes (excluding property-disabled
+	overrides), then this property's own Instant payment methods."""
+	from kamra.masters import client_payment_methods, disabled_payment_methods
+	disabled = disabled_payment_methods(property)
+	base = [m for m in _pack_instant_modes(pack) if m not in disabled]
+	return list(dict.fromkeys([*base, *client_payment_methods("Instant", property=property)]))
 
 
 def payment_modes(pack, property: str | None = None) -> list[str]:
-	"""What the desk takes money in: the pack's modes, then this property's own
-	enabled payment methods."""
-	from kamra.masters import client_payment_methods
-	return list(dict.fromkeys([*_pack_payment_modes(pack), *client_payment_methods(property=property)]))
+	"""What the desk takes money in: the pack's modes (excluding
+	property-disabled overrides), then this property's own enabled payment
+	methods."""
+	from kamra.masters import client_payment_methods, disabled_payment_methods
+	disabled = disabled_payment_methods(property)
+	base = [m for m in _pack_payment_modes(pack) if m not in disabled]
+	return list(dict.fromkeys([*base, *client_payment_methods(property=property)]))
 
 
 def cash_denominations(pack) -> list[float]:
@@ -316,17 +372,29 @@ def assert_payment_mode(property: str, mode: str | None, currency: str | None = 
 	"""Validate a new folio tender against the property mapping, when installed."""
 	if not mode and not pack_only:
 		return
-	from kamra.masters import payment_tender_type
+	from kamra.masters import disabled_payment_methods, payment_tender_type
 
-	tender = payment_tender_type(mode)
+	tender = payment_tender_type(mode, property)
 	mapped = tender_modes(property)
 	if mapped is None:
+		if mode and mode in disabled_payment_methods(property):
+			modes = payment_modes(pack_for(property), property)
+			frappe.throw(frappe._("{0} is not a payment mode here. Pick one of: {1}.")
+			             .format(mode, ", ".join(modes)))
 		if pack_only:
 			modes = payment_modes(pack_for(property), property)
 			if mode not in modes and not (tender == "Foreign Cash" and currency):
 				frappe.throw(frappe._("Pick a payment mode: {0}.").format(", ".join(modes)))
 		else:
 			assert_pack_payment_mode(property, mode)
+		if currency or tender == "Foreign Cash":
+			from kamra.ledger import home_currency
+			home = home_currency(property)
+			code = (currency or "").strip().upper() or home
+			if code == home and tender == "Foreign Cash":
+				frappe.throw(frappe._("Foreign Cash needs the currency of the notes received."))
+			if code != home and tender not in FOREIGN_CURRENCY_TENDER_TYPES:
+				frappe.throw(frappe._("{0} is not available for payments in {1}.").format(mode, code))
 		return
 	from kamra.ledger import home_currency
 
@@ -350,11 +418,13 @@ def default_currency(pack) -> str:
 
 
 def front_desk_vocabulary(pack, property: str | None = None) -> dict:
+	from kamra.masters import payment_tender_types
 	return {
 		"id_types": id_types(pack),
 		# a help line per ID type, e.g. which copy of a national ID is fine
 		"id_type_hints": dict(getattr(pack, "ID_TYPE_HINTS", None) or {}),
 		"payment_modes": payment_modes(pack, property),
+		"payment_tender_types": payment_tender_types(property),
 		"instant_payment_modes": instant_payment_modes(pack, property),
 		"outlet_payment_modes": outlet_payment_modes(pack),
 		"default_nationality": getattr(pack, "DEFAULT_NATIONALITY", "") or "",

@@ -194,7 +194,7 @@
    "label": "Column Break B"
   },
   {
-   "default": "India",
+   "description": "Blank: falls back to the company or site country, or neutral (no country tax) if none.",
    "fieldname": "country",
    "fieldtype": "Data",
    "label": "Country"
@@ -775,7 +775,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-11-23 18:00:00.000000",
+ "modified": "2026-11-24 05:00:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Property",

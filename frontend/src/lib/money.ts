@@ -33,6 +33,8 @@ interface Locale {
   id_type_hints: Record<string, string>
   /** Ways to pay the desk offers - always canonical Folio Payment modes. */
   payment_modes: string[]
+  /** Resolved Payment Method.tender_type keyed by mode code for this property. */
+  payment_tender_types?: Record<string, string>
   tender_modes?: TenderMode[] | null
   fx_currencies?: string[]
   /** The pack's own instant / wallet modes; the till keeps
@@ -58,9 +60,10 @@ interface Locale {
   services_tax_rate?: number
   /** Off for a dry property: alcohol fields and labels are hidden. */
   sells_alcohol?: boolean
-  /** The hotel's own Market codes, booker relations and Cancellation
+  /** The hotel's own Market codes, booking types, booker relations and Cancellation
    *  Reasons (Settings data, OPERA codes) - never a list typed in a screen. */
   market_codes?: Choice[]
+  booking_types?: Choice[]
   booker_relations?: Choice[]
   cancellation_reasons?: Choice[]
 }
@@ -129,7 +132,7 @@ export function loadLocale(): Promise<Locale> {
   })
     .then((l) => {
       if (property !== getCurrentProperty()) return cache
-      cache = { ...cache, tender_modes: null, fx_currencies: [], tax_basis: null, ...l }
+      cache = { ...cache, payment_tender_types: {}, tender_modes: null, fx_currencies: [], tax_basis: null, ...l }
       syncDateFormat(cache.date_format)
       remember()
       return cache

@@ -6864,5 +6864,6 @@
   "Flat rate applied to room nights when the property calculates tax locally.": "当酒店在本地计税时应用于房晚的固定税率。",
   "Your own lines at the foot of every invoice - e.g. company registration, bank name and account details.": "显示在每张发票底部的自定义内容，例如公司注册号、银行名称和账号信息。",
   "OTA Prepaid": "OTA 预付",
-  "Company Credit": "公司挂账"
+  "Company Credit": "公司挂账",
+  "Booking type": "预订类型"
 }
