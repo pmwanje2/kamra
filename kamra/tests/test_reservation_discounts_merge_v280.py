@@ -758,6 +758,201 @@ class ChannelModifyDiscountTests(RoundFourTestCase):
 		self.assertIn("10% off (RATE-PROMO)", after3.special_requests or "")
 		self.assertEqual((after3.special_requests or "").count("10% off (RATE-PROMO)"), 1)
 
+	def test_r8_followup_tax_hold_releases_to_confirmed_after_desk_discount_removed(self):
+		"""Follow-up P2-1: a superseded-discount review note in special_requests
+		must not be mistaken for a non-tax hold, so a corrected OTA modify with
+		readable taxes releases a Requested stay back to Confirmed while still
+		preserving the review note and flag. A genuine non-tax hold (currency
+		mismatch) must still hold as Requested."""
+		conn = self._ota_conn()
+		ref = "OTA-FUP1-" + frappe.generate_hash(length=6)
+		res = self._pre_arrival_ota(ref)
+		self.discount(res.name, discount_type="Percent", discount_value=10, **PROMO)
+
+		# Modify 1: unreadable taxes -> held as Requested, desk discount removed
+		o1 = cm._apply_event(conn, {
+			"event": "modify", "ota_ref": ref, "booking_id": ref,
+			"channel": "Booking.com", "room_type_external_id": "std",
+			"check_in": d(5), "check_out": d(7), "adults": 2, "children": 0,
+			"total": 2400, "currency": "INR", "tax_rules": False,
+			"notes": "Initial OTA modify",
+		})
+		self.assertEqual(o1["result"], "modified")
+		d1 = self.doc(res.name)
+		self.assertEqual(d1.status, "Requested")
+		self.assertEqual(int(d1.channel_review_needed), 1)
+		self.assertEqual(d1.get("channel_review_reason"), "discount_removed")
+		self.assertEqual(flt(d1.amount_after_tax), 0.0)
+		self.assertIn("10% off (RATE-PROMO)", d1.special_requests or "")
+
+		# Modify 2: corrected OTA modify with readable taxes -> releases to Confirmed
+		o2 = cm._apply_event(conn, {
+			"event": "modify", "ota_ref": ref, "booking_id": ref,
+			"channel": "Booking.com", "room_type_external_id": "std",
+			"check_in": d(5), "check_out": d(7), "adults": 2, "children": 0,
+			"total": 2400, "currency": "INR",
+			"nightly": [{"date": d(5), "amount": 1200}, {"date": d(6), "amount": 1200}],
+			"notes": "Corrected OTA modify",
+		})
+		self.assertEqual(o2["result"], "modified")
+		d2 = self.doc(res.name)
+		self.assertEqual(d2.status, "Confirmed", "tax hold must release once OTA taxes are readable")
+		self.assertEqual(flt(d2.amount_after_tax), 2400.0)
+		self.assertAlmostEqual(flt(d2.amount_before_tax) + flt(d2.tax_amount), 2400.0, places=2)
+		self.assertEqual(flt(d2.discount_amount), 0.0)
+		self.assertEqual(len(d2.night_rates), 2)
+		self.assertEqual(int(d2.channel_review_needed), 1)
+		self.assertEqual(d2.get("channel_review_reason"), "discount_removed")
+		self.assertIn("10% off (RATE-PROMO)", d2.special_requests or "")
+		self.assertEqual((d2.special_requests or "").count("10% off (RATE-PROMO)"), 1)
+		self.assertIn("Corrected OTA modify", d2.special_requests or "")
+		self.assertNotIn("OTA tax rules missing", d2.special_requests or "")
+		self.assertNotIn("new total", (d2.special_requests or "").lower())
+
+		# Control: genuine non-tax hold (currency mismatch) with a superseded desk
+		# discount stays Requested and keeps both the hold note and review note
+		ref_fx = "OTA-FUPFX-" + frappe.generate_hash(length=6)
+		res_fx = make_reservation(
+			PROP_A, self.rt, d(8), d(10), status="Confirmed", room=self.rooms[1],
+			source="OTA", channel="Booking.com", ota_ref=ref_fx, auto_price=1,
+		)
+		self.discount(res_fx.name, discount_type="Percent", discount_value=10, **PROMO)
+		cm._apply_event(conn, {
+			"event": "modify", "ota_ref": ref_fx, "booking_id": ref_fx,
+			"channel": "Booking.com", "room_type_external_id": "std",
+			"check_in": d(8), "check_out": d(10), "adults": 2, "children": 0,
+			"total": 200, "currency": "USD", "notes": "Foreign currency",
+		})
+		cm._apply_event(conn, {
+			"event": "modify", "ota_ref": ref_fx, "booking_id": ref_fx,
+			"channel": "Booking.com", "room_type_external_id": "std",
+			"check_in": d(8), "check_out": d(10), "adults": 2, "children": 0,
+			"total": 2400, "currency": "INR", "notes": "Follow-up note",
+		})
+		dfx = self.doc(res_fx.name)
+		self.assertEqual(dfx.status, "Requested")
+		self.assertIn("OTA currency mismatch — resolve", dfx.special_requests or "")
+		self.assertIn("10% off (RATE-PROMO)", dfx.special_requests or "")
+
+	def test_r8_followup_second_no_total_modify_adding_night_logs_audit_and_avoids_stale_total(self):
+		"""Follow-up P2-2: a second no-total OTA modify as Guest that adds another
+		night to a stay holding night-level discounts must write a fresh audit row,
+		re-raise channel_review_needed (even if cleared after modify 1), and never
+		leave a stale 'new total' in special_requests; replaying the same modify
+		remains idempotent."""
+		from kamra.localization import money_text
+
+		conn, secret = self._ota_conn_with_secret()
+		ref = "OTA-FUP2-" + frappe.generate_hash(length=6)
+		res = self._pre_arrival_ota(ref)
+		self.discount(
+			res.name, discount_type="Percent", discount_value=25, **PROMO,
+			supervisor_user=GM, supervisor_pin="4321",
+		)
+		self.assertEqual(self.rows(res.name), [(1000, 250, 750), (1000, 250, 750)])
+
+		# Modify 1 (Guest, no total): extend d(5)..d(8), adding d(7) at rack
+		out1 = self._post_guest_webhook(conn.name, secret, {
+			"action": "modify", "hotelCode": "ut-disc-r8", "channel": "Booking.com",
+			"bookingId": ref, "checkin": d(5), "checkout": d(8),
+			"amount": {"currency": "INR"},
+			"specialRequests": "First extension",
+			"rooms": [{"roomCode": "std", "occupancy": {"adults": 2, "children": 0}, "prices": []}],
+		})
+		self.assertTrue(out1["ok"])
+		after1 = self.doc(res.name)
+		self.assertEqual(self.rows(res.name), [(1000, 250, 750), (1000, 250, 750), (1000, 0, 1000)])
+		self.assertEqual(int(after1.channel_review_needed), 1)
+		self.assertEqual(after1.get("channel_review_reason"), "discount_review")
+		total1_text = money_text(PROP_A, after1.amount_after_tax)
+
+		# Staff marks modify 1 as reviewed before modify 2 arrives
+		self.as_user(DESK, cm.clear_channel_review, res.name)
+		self.assertEqual(int(self.doc(res.name).channel_review_needed), 0)
+
+		# Modify 2 (Guest, no total): extend again d(5)..d(9), adding d(8) at rack
+		out2 = self._post_guest_webhook(conn.name, secret, {
+			"action": "modify", "hotelCode": "ut-disc-r8", "channel": "Booking.com",
+			"bookingId": ref, "checkin": d(5), "checkout": d(9),
+			"amount": {"currency": "INR"},
+			"specialRequests": "Second extension",
+			"rooms": [{"roomCode": "std", "occupancy": {"adults": 2, "children": 0}, "prices": []}],
+		})
+		self.assertTrue(out2["ok"])
+		after2 = self.doc(res.name)
+		self.assertEqual(
+			self.rows(res.name),
+			[(1000, 250, 750), (1000, 250, 750), (1000, 0, 1000), (1000, 0, 1000)],
+		)
+		self.assertAlmostEqual(flt(after2.amount_before_tax), 3500.0, places=2)
+		self.assertAlmostEqual(
+			flt(after2.amount_before_tax) + flt(after2.tax_amount),
+			flt(after2.amount_after_tax),
+			places=2,
+		)
+		self.assertEqual(int(after2.channel_review_needed), 1)
+		self.assertEqual(after2.get("channel_review_reason"), "discount_review")
+
+		total2_text = money_text(PROP_A, after2.amount_after_tax)
+		self.assertNotEqual(total1_text, total2_text)
+		self.assertIn(d(7), after2.special_requests or "")
+		self.assertIn(d(8), after2.special_requests or "")
+		self.assertIn("Second extension", after2.special_requests or "")
+		self.assertNotIn("new total", (after2.special_requests or "").lower())
+		self.assertNotIn(total1_text, after2.special_requests or "")
+
+		# Must write a 2nd channel.modify_discount_review AND 2nd reservation_discount API log
+		review_logs = frappe.get_all(
+			"Agent Action Log",
+			filters={
+				"reference_doctype": "Reservation", "reference_name": res.name,
+				"action_type": "channel.modify_discount_review", "action_channel": "API",
+			},
+			fields=["name", "rationale"],
+			order_by="creation desc",
+		)
+		self.assertEqual(len(review_logs), 2, f"Expected 2 review audit rows, got {review_logs}")
+		self.assertIn(d(8), review_logs[0].rationale or "")
+		self.assertIn(total2_text, review_logs[0].rationale or "")
+		self.assertNotRegex(review_logs[0].rationale or "", r"(?i)kamra|frappe|erpnext|ury")
+
+		disc_logs = frappe.get_all(
+			"Agent Action Log",
+			filters={
+				"reference_doctype": "Reservation", "reference_name": res.name,
+				"action_type": "reservation_discount", "action_channel": "API",
+			},
+			fields=["name", "rationale", "after_snapshot"],
+			order_by="creation desc",
+		)
+		self.assertEqual(len(disc_logs), 2, f"Expected 2 reservation_discount API rows, got {disc_logs}")
+		snap2 = json.loads(disc_logs[0].after_snapshot)
+		self.assertAlmostEqual(flt(snap2["amount_after_tax"]), flt(after2.amount_after_tax), places=2)
+
+		detail = self.as_user(DESK, api.reservation_detail, res.name)
+		self.assertEqual(detail["channel_review_needed"], 1)
+		self.assertEqual(detail["channel_review_reason"], "discount_review")
+		self.assertEqual(len(detail["channel_reviews"]), 2)
+		self.assertIn(d(8), detail["channel_reviews"][0]["rationale"] or "")
+		self.assertIn(total2_text, detail["channel_reviews"][0]["rationale"] or "")
+
+		# Replaying the exact Modify 2 payload must stay idempotent (no 3rd audit row)
+		out_replay = self._post_guest_webhook(conn.name, secret, {
+			"action": "modify", "hotelCode": "ut-disc-r8", "channel": "Booking.com",
+			"bookingId": ref, "checkin": d(5), "checkout": d(9),
+			"amount": {"currency": "INR"},
+			"specialRequests": "Second extension",
+			"rooms": [{"roomCode": "std", "occupancy": {"adults": 2, "children": 0}, "prices": []}],
+		})
+		self.assertTrue(out_replay["ok"])
+		self.assertEqual(
+			frappe.db.count("Agent Action Log", {
+				"reference_doctype": "Reservation", "reference_name": res.name,
+				"action_type": "channel.modify_discount_review", "action_channel": "API",
+			}),
+			2,
+		)
+
 
 class SplitDiscountedNightTests(RoundFourTestCase):
 	"""Pin (#37 x #32): splitting a posted discounted tax-inclusive room night
