@@ -34,10 +34,16 @@ LINKS = {
 	("Reservation", "booking_type"): "Booking Type",
 	("Reservation", "booker_relation"): "Booker Relation",
 	("Reservation", "cancellation_reason"): "Cancellation Reason",
-	("Folio Payment", "mode"): "Payment Method",
-	("Cashier Transaction", "mode"): "Payment Method",
 	("Meal Plan", "code"): "Meal Plan Code",
 }
+
+# Payment Method is keyed per property (property, code); payment rows store
+# the CODE text as Data and resolve/validate against (property, code).
+PAYMENT_CODE_FIELDS = (
+	("Folio Payment", "mode"),
+	("Cashier Transaction", "mode"),
+	("Banquet Receipt", "mode"),
+)
 
 # today's Select options and check-in constants: every one must still work
 SEEDS = {
@@ -82,6 +88,10 @@ class ConfigurableMastersTestCase(AuditTestCase):
 				df = frappe.get_meta(doctype).get_field(fieldname)
 				self.assertEqual(df.fieldtype, "Link")
 				self.assertEqual(df.options, master)
+		for doctype, fieldname in PAYMENT_CODE_FIELDS:
+			with self.subTest(field=f"{doctype}.{fieldname}"):
+				df = frappe.get_meta(doctype).get_field(fieldname)
+				self.assertEqual(df.fieldtype, "Data")
 
 	def test_todays_values_are_seeded(self):
 		for master, codes in SEEDS.items():
@@ -223,6 +233,7 @@ class ConfigurableMastersTestCase(AuditTestCase):
 		from kamra.patches.v48 import configurable_masters
 
 		make_property(PROP_B, country="Uganda", currency="UGX", business_date=YESTERDAY)
+		rt_b = make_room_type(PROP_B)
 		res = self.booking()
 		folio_name = open_folio(res)
 		folio_doc = frappe.get_doc("Folio", folio_name)
@@ -230,25 +241,241 @@ class ConfigurableMastersTestCase(AuditTestCase):
 			"posting_date": YESTERDAY, "payment_kind": "Payment",
 			"mode": "Cash", "amount": 10000, "currency": "UGX",
 		})
+		folio_doc.append("payments", {
+			"posting_date": YESTERDAY, "payment_kind": "Payment",
+			"mode": "Cash", "amount": 5000, "currency": "UGX",
+		})
 		folio_doc.save(ignore_permissions=True)
-		row_name = folio_doc.payments[-1].name
-		frappe.db.set_value("Folio Payment", row_name, "mode", "UT Legacy Voucher A",
+		frappe.db.set_value("Folio Payment", folio_doc.payments[-2].name, "mode", "UT Legacy Voucher A",
 		                    update_modified=False)
-		frappe.db.delete("Payment Method", {"name": "UT Legacy Voucher A"})
+		frappe.db.set_value("Folio Payment", folio_doc.payments[-1].name, "mode", "UT Legacy Voucher Both",
+		                    update_modified=False)
+
+		res_b = make_reservation(PROP_B, rt_b, d(1), d(2))
+		folio_b = frappe.get_doc("Folio", open_folio(res_b))
+		folio_b.append("payments", {
+			"posting_date": YESTERDAY, "payment_kind": "Payment",
+			"mode": "Cash", "amount": 5000, "currency": "UGX",
+		})
+		folio_b.save(ignore_permissions=True)
+		frappe.db.set_value("Folio Payment", folio_b.payments[-1].name, "mode", "UT Legacy Voucher Both",
+		                    update_modified=False)
+
+		frappe.db.delete("Payment Method", {"code": ("in", ["UT Legacy Voucher A", "UT Legacy Voucher Both"])})
 
 		configurable_masters.execute()
+		configurable_masters.execute()  # idempotent
 		row = frappe.db.get_value(
-			"Payment Method", "UT Legacy Voucher A",
-			["property", "system", "disabled"], as_dict=True,
+			"Payment Method", {"code": "UT Legacy Voucher A", "property": PROP_A},
+			["name", "code", "property", "system", "disabled"], as_dict=True,
 		)
 		self.assertIsNotNone(row)
 		self.assertEqual(row.property, PROP_A)
 		self.assertEqual(int(row.system), 0)
 		self.assertEqual(int(row.disabled), 0)
 
+		row_both_a = frappe.db.get_value(
+			"Payment Method", {"code": "UT Legacy Voucher Both", "property": PROP_A},
+			["name", "code", "property"], as_dict=True,
+		)
+		row_both_b = frappe.db.get_value(
+			"Payment Method", {"code": "UT Legacy Voucher Both", "property": PROP_B},
+			["name", "code", "property"], as_dict=True,
+		)
+		self.assertIsNotNone(row_both_a)
+		self.assertIsNotNone(row_both_b)
+		self.assertNotEqual(row_both_a.name, row_both_b.name)
+
 		self.assertIn("UT Legacy Voucher A", localization.payment_modes(localization.pack_for(PROP_A), PROP_A))
 		self.assertNotIn("UT Legacy Voucher A", localization.payment_modes(localization.pack_for(PROP_B), PROP_B))
 		self.assertEqual(localization.payment_modes(nicaragua), ["Cash", "Card", "Bank Transfer"])
+
+	def test_two_properties_can_define_same_payment_method_code_independently(self):
+		from kamra import cashier
+		from kamra.folio import open_folio
+		from kamra.masters import resolve_payment_method
+
+		make_property(PROP_B, country="Uganda", currency="UGX", business_date=YESTERDAY)
+		pm_a = add_code("Payment Method", "UT Airtel Money", property=PROP_A,
+		                tender_type="Instant", mode_of_payment="Airtel Money A")
+		pm_b = add_code("Payment Method", "UT Airtel Money", property=PROP_B,
+		                tender_type="Instant", mode_of_payment="Airtel Money B")
+		self.assertNotEqual(pm_a, pm_b)
+
+		# same property + same code is still a duplicate
+		with self.assertRaises(frappe.DuplicateEntryError):
+			add_code("Payment Method", "UT Airtel Money", property=PROP_A, tender_type="Instant")
+
+		self.assertEqual(resolve_payment_method("UT Airtel Money", PROP_A)["mode_of_payment"], "Airtel Money A")
+		self.assertEqual(resolve_payment_method("UT Airtel Money", PROP_B)["mode_of_payment"], "Airtel Money B")
+
+		# disable on PROP_B only -> PROP_A keeps working and stores the CODE text
+		frappe.db.set_value("Payment Method", pm_b, "disabled", 1)
+		pack_a, pack_b = localization.pack_for(PROP_A), localization.pack_for(PROP_B)
+		self.assertIn("UT Airtel Money", localization.payment_modes(pack_a, PROP_A))
+		self.assertNotIn("UT Airtel Money", localization.payment_modes(pack_b, PROP_B))
+		localization.assert_payment_mode(PROP_A, "UT Airtel Money")
+		with self.assertRaises(frappe.ValidationError):
+			localization.assert_payment_mode(PROP_B, "UT Airtel Money")
+
+		# folio payment and cashier transaction store the CODE text ("UT Airtel Money")
+		res = self.booking()
+		folio_name = open_folio(res)
+		self.at(TODAY)
+		sess = cashier.open_session(PROP_A, opening_float=0)["name"]
+		api.add_folio_payment(folio_name, "UT Airtel Money", 25000)
+		pay = frappe.get_doc("Folio", folio_name).payments[-1]
+		self.assertEqual(pay.mode, "UT Airtel Money")
+		txn_mode = frappe.db.get_value("Cashier Transaction", {"session": sess, "folio": folio_name}, "mode")
+		self.assertEqual(txn_mode, "UT Airtel Money")
+
+		# direct ORM write with an unknown code is rejected
+		folio_doc = frappe.get_doc("Folio", folio_name)
+		folio_doc.append("payments", {
+			"posting_date": TODAY, "payment_kind": "Payment",
+			"mode": "UT No Such Tender", "amount": 1000, "currency": "UGX",
+		})
+		with self.assertRaises(frappe.ValidationError):
+			folio_doc.save(ignore_permissions=True)
+
+	def test_property_payment_method_overrides_shared_row_of_same_code(self):
+		from kamra import cashier
+		from kamra.masters import payment_tender_type, resolve_payment_method
+
+		make_property(PROP_B, country="Uganda", currency="UGX", business_date=YESTERDAY)
+		# Shared system row remains untouched
+		self.assertTrue(frappe.db.exists("Payment Method", "Mobile Money"))
+		override = add_code("Payment Method", "Mobile Money", property=PROP_A,
+		                    tender_type="Instant", mode_of_payment="MTN MoMo A")
+		self.assertNotEqual(override, "Mobile Money")
+		self.assertEqual(resolve_payment_method("Mobile Money", PROP_A)["mode_of_payment"], "MTN MoMo A")
+		self.assertFalse(resolve_payment_method("Mobile Money", PROP_B).get("mode_of_payment"))
+
+		# Property override can disable Mobile Money for PROP_A without affecting PROP_B
+		frappe.db.set_value("Payment Method", override, "disabled", 1)
+		pack_a, pack_b = localization.pack_for(PROP_A), localization.pack_for(PROP_B)
+		self.assertNotIn("Mobile Money", localization.payment_modes(pack_a, PROP_A))
+		self.assertNotIn("Mobile Money", localization.instant_payment_modes(pack_a, PROP_A))
+		with self.assertRaises(frappe.ValidationError):
+			localization.assert_payment_mode(PROP_A, "Mobile Money")
+		self.assertIn("Mobile Money", localization.payment_modes(pack_b, PROP_B))
+		localization.assert_payment_mode(PROP_B, "Mobile Money")
+
+		# Property override of a shared custom row wins for tender_type and cashier bucketing
+		add_code("Payment Method", "UT Shared Wallet", tender_type="Other", mode_of_payment="Shared MoP")
+		add_code("Payment Method", "UT Shared Wallet", property=PROP_A,
+		         tender_type="Instant", mode_of_payment="Prop A MoP")
+		self.assertEqual(payment_tender_type("UT Shared Wallet", PROP_A), "Instant")
+		self.assertEqual(payment_tender_type("UT Shared Wallet", PROP_B), "Other")
+		self.at(TODAY)
+		sess = cashier.open_session(PROP_A, opening_float=0)["name"]
+		cashier.record_cashier_txn(PROP_A, "Payment", "UT Shared Wallet", 12000, session=sess)
+		totals = cashier._recompute_session_totals(sess, persist=False)
+		self.assertEqual(totals["upi"], 12000)
+
+	def test_payment_method_per_property_key_patch_is_idempotent(self):
+		from kamra.folio import open_folio
+		from kamra.patches.v48 import payment_method_per_property_key
+
+		make_property(PROP_B, country="Uganda", currency="UGX", business_date=YESTERDAY)
+		res = self.booking()
+		folio_doc = frappe.get_doc("Folio", open_folio(res))
+		folio_doc.append("payments", {
+			"posting_date": YESTERDAY, "payment_kind": "Payment",
+			"mode": "Cash", "amount": 15000, "currency": "UGX",
+		})
+		folio_doc.save(ignore_permissions=True)
+		pay_row = folio_doc.payments[-1].name
+		frappe.db.set_value("Folio Payment", pay_row, "mode", "UT Patch Airtel", update_modified=False)
+
+		# Insert a #44-shaped row (PK == code, with property set)
+		frappe.db.delete("Payment Method", {"code": "UT Patch Airtel"})
+		frappe.db.sql(
+			"""INSERT INTO `tabPayment Method`
+			   (name, code, description, property, tender_type, mode_of_payment, sort_order, system, disabled,
+			    creation, modified, owner, modified_by, docstatus, idx)
+			   VALUES (%s, %s, %s, %s, %s, %s, 0, 0, 0, NOW(), NOW(), 'Administrator', 'Administrator', 0, 0)""",
+			("UT Patch Airtel", "UT Patch Airtel", "UT Patch Airtel", PROP_A, "Instant", "Airtel Legacy"),
+		)
+
+		payment_method_per_property_key.execute()
+		payment_method_per_property_key.execute()  # idempotent
+
+		migrated = frappe.db.get_value(
+			"Payment Method", {"code": "UT Patch Airtel", "property": PROP_A},
+			["name", "code", "property", "mode_of_payment"], as_dict=True,
+		)
+		self.assertIsNotNone(migrated)
+		self.assertEqual(migrated.name, f"{PROP_A}::UT Patch Airtel")
+		self.assertEqual(migrated.mode_of_payment, "Airtel Legacy")
+		# Folio Payment keeps the CODE text, never rewritten to the composite PK
+		self.assertEqual(frappe.db.get_value("Folio Payment", pay_row, "mode"), "UT Patch Airtel")
+		# PROP_B can now define the same code independently
+		pm_b = add_code("Payment Method", "UT Patch Airtel", property=PROP_B, tender_type="Instant")
+		self.assertEqual(pm_b, f"{PROP_B}::UT Patch Airtel")
+
+	def test_standalone_fx_payment_gates_on_tender_type_and_locale_exposes_tender_types(self):
+		from kamra import cashier, ledger
+		from kamra.folio import open_folio
+
+		make_property(PROP_A, country="Uganda", currency="UGX", business_date=TODAY)
+		make_property(PROP_B, country="Uganda", currency="UGX", business_date=TODAY)
+		add_code("Payment Method", "UT USD Wire", property=PROP_A,
+		         tender_type="Bank Transfer", mode_of_payment="USD Wire")
+		add_code("Payment Method", "UT USD Box", property=PROP_A,
+		         tender_type="Foreign Cash", mode_of_payment="USD Cash Box")
+		add_code("Payment Method", "UT Airtel FX", property=PROP_A,
+		         tender_type="Instant", mode_of_payment="Airtel Money")
+
+		loc_a = api.property_locale(PROP_A)
+		loc_b = api.property_locale(PROP_B)
+		self.assertEqual(loc_a["payment_tender_types"]["UT USD Wire"], "Bank Transfer")
+		self.assertEqual(loc_a["payment_tender_types"]["UT USD Box"], "Foreign Cash")
+		self.assertEqual(loc_a["payment_tender_types"]["UT Airtel FX"], "Instant")
+		for code in ("UT USD Wire", "UT USD Box", "UT Airtel FX"):
+			self.assertNotIn(code, loc_b["payment_tender_types"])
+
+		self.at(TODAY, "kamra.folio", "kamra.business_date", "kamra.ledger")
+		ledger.upsert_exchange_rate(PROP_A, "USD", 3700, 3750)
+		res = self.booking()
+		folio_name = open_folio(res)
+		cashier.open_session(PROP_A, opening_float=0)
+
+		with patch.object(localization, "tender_modes", return_value=None):
+			localization.assert_payment_mode(PROP_A, "UT USD Wire", "USD")
+			localization.assert_payment_mode(PROP_A, "UT USD Box", "USD")
+			with self.assertRaises(frappe.ValidationError):
+				localization.assert_payment_mode(PROP_A, "UT USD Box", "UGX")
+			with self.assertRaises(frappe.ValidationError):
+				localization.assert_payment_mode(PROP_A, "UT Airtel FX", "USD")
+
+			api.add_folio_payment(folio_name, "UT USD Wire", 10, currency="USD")
+			api.add_folio_payment(folio_name, "UT USD Box", 5, currency="USD")
+			with self.assertRaises(frappe.ValidationError):
+				api.add_folio_payment(folio_name, "UT Airtel FX", 10, currency="USD")
+
+		payments = frappe.get_doc("Folio", folio_name).payments
+		self.assertEqual([(p.mode, p.currency) for p in payments],
+		                 [("UT USD Wire", "USD"), ("UT USD Box", "USD")])
+
+	def test_desk_vocabulary_includes_booking_types(self):
+		add_code("Booking Type", "UT Staycation", description="Staycation")
+		loc = api.property_locale(PROP_A)
+		self.assertIn({"value": "UT Staycation", "label": "Staycation"}, loc["booking_types"])
+		values = [c["value"] for c in loc["booking_types"]]
+		for seeded in ("Individual", "Group", "Corporate"):
+			self.assertIn(seeded, values)
+
+	def test_billing_payer_labels_includes_system_payers_and_rewording(self):
+		res = self.booking()
+		billing = checkin._billing(res)
+		for system_payer in ("OTA prepaid", "OTA, guest pays here", "Guest", "Company", "Group"):
+			with self.subTest(payer=system_payer):
+				self.assertIn(system_payer, billing["payer_labels"])
+		doc = frappe.get_doc("Payer Type", "Guest")
+		doc.description = "Walk-in Guest"
+		doc.save(ignore_permissions=True)
+		self.assertEqual(checkin._billing(res)["payer_labels"]["Guest"], "Walk-in Guest")
 
 	def test_assert_payment_mode_uses_tender_type_for_foreign_currency(self):
 		add_code("Payment Method", "UT USD Wire", property=PROP_A,
