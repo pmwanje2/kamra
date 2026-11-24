@@ -2673,7 +2673,7 @@ class RoutingTestCase(AuditTestCase):
 		})
 		folio_mod._recalculate(cf3_doc)
 		ledger_mod.save_folio(cf3_doc)
-		api.change_stay_company(stay3.name, comp_b, reason="KWD split test", move="rules")
+		api.change_stay_company(stay3.name, "KWD split test", company=comp_b, move="rules")
 		guest_allowances = [
 			c for c in frappe.get_doc("Folio", gf3).charges
 			if c.charge_type == "Allowance"
