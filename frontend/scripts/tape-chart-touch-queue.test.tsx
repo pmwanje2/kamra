@@ -407,8 +407,10 @@ describe("P22 TapeChart touch drag, unassigned dock, filters, HK toggle, 390px c
     )
 
     // Drag-to-room from Unassigned Queue Dock onto a room row invokes quick_assign_room
+    // and suppresses accidental text selection while dragging
     rpc.mockClear()
     const card = dock!.querySelector<HTMLElement>('[data-unassigned-reservation="RES-Q1"]')!
+    expect(card.className.split(/\s+/)).toContain("select-none")
     const room102 = host.querySelector<HTMLElement>('[data-room="PROP-A-102"]')!
     document.elementFromPoint = () => room102
     await act(async () => {
