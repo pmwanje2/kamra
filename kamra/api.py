@@ -5208,13 +5208,24 @@ def _checkin_backfill(res) -> list[dict]:
 	        for s in soft_pending(steps)]
 
 
-def _detail_rate_plans(property: str, current: str | None) -> list[dict]:
+def _detail_rate_plans(res) -> list[dict]:
 	"""The plans Amend stay can move a stay to (OPERA Stay Details' Rate
-	Code list): the property's enabled plans, and the stay's own when it has
-	since been disabled, so the picker can still show where it is."""
+	Code list): the property's enabled non-tariff plans, and the stay's own
+	when it has since been disabled, so the picker can still show where it is.
+	Contract-tariff stays keep their locked tariff and cannot switch rate plans
+	in Amend stay, so they return no selectable list."""
+	from kamra.channel_manager import _is_tariff_owned_stay, _rate_plan_has_tariff
+	if _is_tariff_owned_stay(res):
+		return []
+	current = res.rate_plan
 	fields = ["name", "rate_plan_name", "code", "rate_category"]
-	plans = frappe.get_all("Rate Plan", filters={"property": property, "disabled": 0},
-	                       fields=fields, order_by="rate_plan_name asc, name asc")
+	plans = [
+		p for p in frappe.get_all(
+			"Rate Plan", filters={"property": res.property, "disabled": 0},
+			fields=fields, order_by="rate_plan_name asc, name asc",
+		)
+		if not _rate_plan_has_tariff(p["name"])
+	]
 	if current and all(p["name"] != current for p in plans):
 		own = frappe.db.get_value("Rate Plan", current, fields, as_dict=True)
 		if own:
@@ -5356,7 +5367,7 @@ def reservation_detail(reservation: str):
 		"rate_plan_name": (frappe.db.get_value("Rate Plan", res.rate_plan, "rate_plan_name")
 		                   or res.rate_plan) if res.rate_plan else None,
 		"rate_category": res.get("rate_category") or None,
-		"rate_plans": _detail_rate_plans(res.property, res.rate_plan),
+		"rate_plans": _detail_rate_plans(res),
 		"special_requests": res.special_requests,
 		"eta": res.eta,
 		"late_arrival": int(res.get("late_arrival") or 0),
@@ -8559,14 +8570,51 @@ def amend_stay_preview(reservation: str, check_in_date: str, check_out_date: str
 	        if plan else None}
 
 
+def _is_tariff_target_plan(doc, plan: str) -> bool:
+	"""True when `plan` is priced by a contract tariff (via its own or base
+	plan's custom_tariff_price_list, or via the hospitality_tariffs resolver)."""
+	from kamra.channel_manager import _rate_plan_has_tariff
+	if _rate_plan_has_tariff(plan):
+		return True
+	if not doc.room_type:
+		return False
+	from kamra.pricing import ContractRateRefused, billable_children, contract_rate
+	try:
+		return bool(contract_rate(
+			doc.property, doc.room_type, plan, doc.check_in_date, doc.check_out_date,
+			doc.adults, billable_children(doc), doc.get("extra_beds"), company=doc.get("company"),
+		))
+	except ContractRateRefused:
+		return True
+
+
 def _plan_change(doc, rate_plan) -> dict:
 	"""amend_stay's rate plan change: the plan resolved at the stay's
-	property, when it is another plan than the stay's."""
+	property, when it is another plan than the stay's.
+
+	Contract-tariff stays keep their locked contract rate (hospitality-tariffs@11)
+	and cannot be switched onto or off a tariff plan in Amend stay: keeping the
+	tariff's agreed_rate on another plan would misclassify a paid stay as
+	Complimentary, and switching onto a tariff plan without resolving its
+	contract would fall back to the local card rate."""
 	if rate_plan in (None, ""):
 		return {}
 	from kamra.booking_refs import resolve_rate_plan
 	plan = resolve_rate_plan(doc.property, rate_plan)
-	return {"rate_plan": plan} if plan and plan != doc.get("rate_plan") else {}
+	if not plan or plan == doc.get("rate_plan"):
+		return {}
+	from kamra.channel_manager import _is_tariff_owned_stay
+	if _is_tariff_owned_stay(doc):
+		frappe.throw(
+			_("A contract-tariff stay's rate plan cannot be changed in Amend stay. "
+			  "Apply a reservation discount, set an agreed rate, or rebook on the new plan."),
+			title=_("Rate plan"))
+	if _is_tariff_target_plan(doc, plan):
+		frappe.throw(
+			_("A stay cannot be moved onto a contract-tariff rate plan in Amend stay. "
+			  "Rebook on the tariff plan so its contract rate and currency are resolved."),
+			title=_("Rate plan"))
+	return {"rate_plan": plan}
 
 
 def _party(adults=None, children=None) -> dict:
@@ -10511,7 +10559,7 @@ def _block_prices(property: str, check_in_date: str, check_out_date: str,
 			base = rate or flt(rt_doc.base_price)
 			plan = negotiated_rate_plan(property, company) if company and not rate else None
 			if plan and nights:
-				base = float(apply_rate_plan(plan, Decimal(str(base * len(nights))))) / len(nights)
+				base = float(apply_rate_plan(plan, Decimal(str(base * len(nights))), nights=len(nights))) / len(nights)
 			per = {d: base for d in nights}
 			levy_share = 0
 			tax_share = float(room_gst_rate(property, rt_doc, Decimal(str(base)))) / 100
