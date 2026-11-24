@@ -367,7 +367,7 @@ class ERPBooksFenceTestCase(AuditTestCase):
 	def test_list_response_through_real_bridge_call_raises_value_error(self):
 		from kamra.erp_books import erp_screens
 
-		sentinel = SimpleNamespace(api_method=ERP_BOOKS)
+		sentinel = SimpleNamespace(api_method=ERP_BOOKS, execute_method=lambda: None)
 		with patch("kamra.erp_bridge.get_bridge_script", return_value=sentinel), \
 				patch("kamra.erp_bridge.run_bridge_script", return_value=[{"payables": PAYABLES}]), \
 				self.assertRaisesRegex(ValueError, "accounting screen"):
