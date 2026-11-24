@@ -28,6 +28,7 @@ class ContractTariffHarness(unittest.TestCase):
 
 	def setUp(self):
 		self.roles = ["Hotel Admin"]
+		self.can_delete_item_price = True
 		self.allowed_properties = {"Test Hotel"}
 		self.script = None
 		self.scripts = {}
@@ -41,6 +42,7 @@ class ContractTariffHarness(unittest.TestCase):
 			_=lambda text: text,
 			whitelist=self.whitelist,
 			get_roles=lambda: self.roles,
+			has_permission=self.has_permission,
 			throw=throw,
 			PermissionError=PermissionDenied,
 			ValidationError=Refused,
@@ -94,6 +96,11 @@ class ContractTariffHarness(unittest.TestCase):
 			self.frappe.response["message"] = answer(form) if callable(answer) else answer
 
 		return SimpleNamespace(execute_method=execute)
+
+	def has_permission(self, doctype, ptype="read", *args, **kwargs):
+		if doctype == "Item Price" and ptype == "delete":
+			return self.can_delete_item_price
+		return True
 
 	def get_rate_plans(self, doctype, filters=None, fields=None, **kwargs):
 		if doctype == "Room Type":
@@ -494,15 +501,30 @@ class TestContractTariffRemediationAPI(ContractTariffHarness):
 		self.assertEqual(policies["Test Hotel-CORP"]["fx_lock_policy"], "Current Date")
 
 	def test_the_directory_says_who_may_discard_a_draft(self):
-		# a maker may not approve their own draft, but a Hotel Admin may withdraw it
+		# a maker may not approve their own draft, but a Hotel Admin with Item Price delete permission may withdraw it
 		self.script = {**directory(), "can_approve": False}
 		self.assertTrue(self.endpoint("list_contract_tariffs")("Test Hotel")["can_discard"])
+		# Hotel Admin without Item Price delete permission (gov20) must NOT be advertised can_discard=True (P2-1)
+		self.can_delete_item_price = False
+		self.script = directory()
+		self.assertFalse(self.endpoint("list_contract_tariffs")("Test Hotel")["can_discard"])
+		self.can_delete_item_price = True
 		self.roles = ["Revenue Manager"]
 		self.script = directory()
 		self.assertFalse(self.endpoint("list_contract_tariffs")("Test Hotel")["can_discard"])
 		self.roles = ["Hotel Admin"]
 		self.script = {**directory(), "can_propose": False, "can_approve": False}
 		self.assertFalse(self.endpoint("list_contract_tariffs")("Test Hotel")["can_discard"])
+
+	def test_unbackfilled_tariff_plan_policy_infers_price_list_currency(self):
+		self.rate_plans = [{
+			"name": "Test Hotel-CORP", "rate_plan_name": "Corporate", "code": "CORP", "currency": None,
+			"fx_lock_policy": "Fixed at Reservation", "base_rate_plan": None, "adjust_extra_person": 0,
+			"rounding_step": 0, "rounding_mode": "Nearest",
+		}]
+		self.script = directory()
+		policies = self.endpoint("list_contract_tariffs")("Test Hotel")["rate_plan_policies"]
+		self.assertEqual(policies["Test Hotel-CORP"]["currency"], "USD")
 
 	def test_an_oversized_import_is_refused_before_it_is_parsed(self):
 		self.assertEqual(self.rates.TARIFF_IMPORT_BYTES, 1_048_576)

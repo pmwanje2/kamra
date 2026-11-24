@@ -1591,6 +1591,9 @@ def _post_folio_charge(folio: str, charge_type: str, description: str,
 	charge = doc.charges[-1]
 	try:
 		record_charge_ledger(doc, charge.as_dict())
+		import kamra.ledger as _ledger_mod
+		if hasattr(_ledger_mod, "sync_folio_rounding_ledger"):
+			_ledger_mod.sync_folio_rounding_ledger(doc)
 	except Exception:
 		frappe.log_error(title="ledger charge write failed")
 	from kamra.localization import money_text
@@ -2240,6 +2243,9 @@ def correct_folio_charge(folio: str, charge_row: str, reason: str = "",
 	first = _original_charge_entry(doc.name, orig.name)
 	record_charge_ledger(doc, rev.as_dict(), reversal_of=first.name if first else None)
 	record_charge_ledger(doc, rep.as_dict())
+	import kamra.ledger as _ledger_mod
+	if hasattr(_ledger_mod, "sync_folio_rounding_ledger"):
+		_ledger_mod.sync_folio_rounding_ledger(doc)
 	from kamra.webhooks import emit_folio_posted
 	emit_folio_posted(doc, rev)
 	emit_folio_posted(doc, rep)
@@ -3655,6 +3661,20 @@ def folio_invoice(folio: str):
 		head["total"] += float(c.total or 0)
 		# a voided line and its reversal net to nothing: not a line bought
 		head["lines"] += c.name not in pairs
+
+	# Document-level currency rounding adjusts doc.tax_total to the currency's
+	# minor unit; fold that sub-unit delta onto the dominant taxable slab so
+	# tax_summary and gst_summary reconcile with doc.tax_total.
+	from decimal import Decimal
+	tax_delta = float(
+		Decimal(str(doc.tax_total or 0))
+		- sum((Decimal(str(v["tax"])) for v in by_rate.values()), Decimal(0))
+	)
+	if abs(tax_delta) > 1e-9:
+		taxable_rates = [(rate, v) for rate, v in by_rate.items() if rate > 0]
+		if taxable_rates:
+			_dominant_rate, dominant = max(taxable_rates, key=lambda item: (abs(item[1]["taxable"]), item[0]))
+			dominant["tax"] = float(Decimal(str(dominant["tax"])) + Decimal(str(tax_delta)))
 
 	settled = bool(doc.invoice_number)
 	# what the tax authority requires ON the bill (ZATCA: QR + Arabic title)

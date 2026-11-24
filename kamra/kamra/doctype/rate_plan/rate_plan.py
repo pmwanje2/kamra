@@ -8,6 +8,30 @@ from frappe.utils import cint, flt
 
 
 class RatePlan(Document):
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		# Frappe's make_new_doc() populates any Link field named `currency` with
+		# tabDefaultValue's global `currency` (e.g. INR) before REST/new_doc
+		# kwargs are applied via `.update(kwargs)`. Clear that template default
+		# on blank new-doc shells so omitted currency stays blank and takes the
+		# base plan's, tariff Price List's, or property's currency in validate().
+		if (
+			self.get("__islocal")
+			and not self.get("property")
+			and not self.get("rate_plan_name")
+			and not self.get("code")
+			and not self.get("base_rate_plan")
+		):
+			self.currency = None
+
+	def _set_defaults(self):
+		# Rate Plan.currency has intentional blank semantics (linked tariff
+		# Price List currency, base plan currency for derived plans, or property
+		# currency). Never let Frappe's global tabDefaultValue `currency` fill it.
+		if "currency" not in getattr(self, "dont_update_if_missing", ()):
+			self.dont_update_if_missing = [*getattr(self, "dont_update_if_missing", ()), "currency"]
+		super()._set_defaults()
+
 	def validate(self):
 		if flt(self.rounding_step) < 0:
 			frappe.throw(_("The rounding step cannot be negative."))
@@ -29,7 +53,16 @@ class RatePlan(Document):
 			frappe.throw(_("The base rate plan {0} is disabled. Choose an enabled base plan.").format(
 				chain[-2].get("rate_plan_name") or chain[-2].name))
 		base_currency = rate_plan_currency(chain[:-1])
-		if self.currency and self.currency != base_currency:
+		is_new = self.is_new() if callable(getattr(self, "is_new", None)) else False
+		reparented = (
+			not is_new
+			and callable(getattr(self, "has_value_changed", None))
+			and self.has_value_changed("base_rate_plan")
+			and not self.has_value_changed("currency")
+		)
+		if not self.currency or reparented:
+			self.currency = base_currency
+		elif self.currency != base_currency:
 			frappe.throw(_("A derived rate plan must use its base plan's currency ({0}).").format(base_currency))
 
 	def validate_tariff_price_list(self):
@@ -45,6 +78,8 @@ class RatePlan(Document):
 			return
 		from kamra.pricing import rate_plan_currency, resolve_rate_plan_chain
 
+		if not self.currency and not self.base_rate_plan:
+			self.currency = list_currency
 		currency = rate_plan_currency(resolve_rate_plan_chain(self))
 		if currency != list_currency:
 			frappe.throw(_("The tariff price list {0} is in {1}, so this rate plan must be in {1} too, not {2}. "

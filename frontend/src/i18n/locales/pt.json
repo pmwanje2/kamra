@@ -6960,5 +6960,6 @@
   "Room types without a tariff": "Tipos de quarto sem tarifa",
   "These room types have no contract tariff on this price list yet.": "Estes tipos de quarto ainda não têm tarifa contratual nesta tabela de preços.",
   "{n} room": "{n} quarto",
-  "Open room type": "Abrir tipo de quarto"
+  "Open room type": "Abrir tipo de quarto",
+  "Inherited from the base rate plan.": "Herdada do plano tarifário base."
 }

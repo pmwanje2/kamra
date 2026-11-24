@@ -46,11 +46,26 @@ def _recalculate(folio):
 		charges += amount
 		tax += line_tax
 	paid = sum(Decimal(str(p.amount or 0)) for p in folio.payments)
+	raw_grand = charges + tax
+	prop = folio.get("property")
+	if prop and folio.charges:
+		# Document-level currency minor-unit rounding (SAP TCURX style): round the
+		# folio total to the property currency's ISO decimals rather than per line.
+		from kamra.pricing import property_currency, round_rate_amount
+		currency = property_currency(prop)
+		if tax:
+			grand = round_rate_amount(raw_grand, 0, "Nearest", currency)
+			tax = grand - charges
+		else:
+			grand = round_rate_amount(charges, 0, "Nearest", currency)
+			charges = grand
+	else:
+		grand = raw_grand
 	folio.charges_total = float(charges)
 	folio.tax_total = float(tax)
-	folio.grand_total = float(charges + tax)
+	folio.grand_total = float(grand)
 	folio.payments_total = float(paid)
-	folio.balance = float(charges + tax - paid)
+	folio.balance = float(grand - paid)
 
 
 def _line_tax(c, amount: Decimal) -> Decimal:
@@ -1212,6 +1227,9 @@ def move_charges(src, dst, charge_rows: list, reservation: str | None = None,
 	src.save(ignore_permissions=True)
 	dst.save(ignore_permissions=True)
 	ledger_charges(dst, moved)
+	import kamra.ledger as _ledger_mod
+	if hasattr(_ledger_mod, "sync_folio_rounding_ledger"):
+		_ledger_mod.sync_folio_rounding_ledger(src)
 	return moved
 
 
@@ -1716,6 +1734,9 @@ def void_charge(folio_name: str, charge_row: str, reason: str = "", *, correctio
 	first = _original_charge_entry(folio.name, row.name)
 	if first:
 		record_charge_ledger(folio, folio.charges[-1].as_dict(), reversal_of=first.name)
+		import kamra.ledger as _ledger_mod
+		if hasattr(_ledger_mod, "sync_folio_rounding_ledger"):
+			_ledger_mod.sync_folio_rounding_ledger(folio)
 	from kamra.webhooks import emit_charge_voided
 	emit_charge_voided(folio, line, reason or "")
 	from kamra.localization import money_text
