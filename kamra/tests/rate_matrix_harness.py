@@ -157,7 +157,9 @@ class RateMatrixHarness(unittest.TestCase):
 
 	def get_doc(self, doctype, name=None):
 		if isinstance(doctype, dict):
-			return Doc(doctype)
+			doc = Doc(doctype)
+			doc["insert"] = lambda **kwargs: doc
+			return doc
 		try:
 			return self.docs[(doctype, name)]
 		except KeyError:

@@ -9,6 +9,7 @@ import { htmlToText } from "./utils"
 import { t as translate } from "./i18n"
 import { whiteLabel } from "./brand"
 import type { NightPrice } from "./nightPrices"
+import type { DiscountArgs, DiscountGovernance, DiscountReason } from "./reservationDiscount"
 
 function csrfToken(): string | undefined {
   const t = (window as unknown as { csrf_token?: string }).csrf_token
@@ -419,9 +420,17 @@ export interface BookingOptions {
     rate_plan_name: string
     code: string
     is_default?: 0 | 1
+    /** OPERA Rate Code "Discount": 0 = the desk can't discount this plan */
+    discount_eligible?: 0 | 1
   }[]
   default_plan?: string | null
   rate_plan_required?: boolean
+  /** may give a reservation / walk-in discount at all */
+  can_discount?: boolean
+  /** the front desk's discount limit, % (above it a supervisor signs off) */
+  rate_override_limit_pct?: number
+  /** active Rate Change / Adjust reason codes a discount can carry */
+  discount_reasons?: DiscountReason[]
   companies: {
     name: string
     company_name: string
@@ -518,8 +527,31 @@ export interface Quote extends TariffReference {
   nights: number
   /** same-day stay: nights is 0 and one date is billed */
   day_use?: boolean
-  nightly: { date: string; rate: number; hand_set?: boolean }[]
+  nightly: {
+    date: string
+    /** the night's net room rate (after the desk's discount), before tax */
+    rate: number
+    hand_set?: boolean
+    gst_rate?: number
+    /** the night's room rate before the desk's discount, before tax */
+    base_rate?: number
+    discount_type?: "Percent" | "Amount" | null
+    discount_value?: number
+    discount_amount?: number
+    fixed_rate?: 0 | 1
+  }[]
+  /** net accommodation, after the desk's discount */
   room_total: number
+  /** accommodation before the desk's discount, on the basis the desk
+   * entered it (gross where rates include tax) */
+  room_base_total?: number
+  /** the desk's discount on that same basis; already inside room_total */
+  reservation_discount_total?: number
+  /** the voucher's part of `discount` */
+  voucher_discount?: number
+  /** what the desk's discount takes to book (kamra.api.discount_governance) */
+  discount_governance?: DiscountGovernance
+  line_items?: { component: string; is_tax_inclusive?: boolean }[]
   meal_total: number
   /** the rate plan the price is on - picked, or the company's negotiated one */
   rate_plan?: string | null
@@ -620,6 +652,15 @@ export interface QuoteParams {
   check_out_time?: string
   /** nights the desk priced by hand; the rest are priced by Kamra */
   night_prices?: NightPrice[]
+  /** the desk's discount (DiscountArgs) and, above the limit, the sign-off */
+  discount_type?: "Percent" | "Amount"
+  discount_value?: number
+  discount_reason?: string
+  night_discounts?: DiscountArgs["night_discounts"]
+  /** a manager's fixed-rate override of a plan that takes no discount */
+  fixed_rate?: 0 | 1
+  supervisor_user?: string
+  supervisor_pin?: string
 }
 
 export const getQuote = (params: QuoteParams) =>
@@ -1838,7 +1879,35 @@ export interface ReservationDetail extends TariffReference {
   booked_check_out_date?: string | null
   early_departure_reason?: string | null
   /** Room rate confirmed per night at booking - what the folio bills. */
-  night_rates?: { date: string; rate: number; demand_premium_pct: number }[]
+  night_rates?: {
+    date: string
+    rate: number
+    demand_premium_pct: number
+    /** the night's room rate before the desk's discount, before tax */
+    base_rate?: number
+    /** the discount, on the basis the desk entered it (gross where rates include tax) */
+    discount_amount?: number
+    /** base and net on that same basis: entry_base_rate less discount_amount is entry_rate */
+    entry_base_rate?: number
+    entry_rate?: number
+    /** the night's own Daily Details discount (blank: follows the stay) */
+    discount_type?: "Percent" | "Amount" | null
+    discount_value?: number
+    /** the night's own reason (blank: the stay's) */
+    discount_reason?: string | null
+    /** already on the folio: its discount is settled there */
+    charged?: boolean
+  }[]
+  /** the desk's discount on the stay */
+  discount?: {
+    discount_type: "Percent" | "Amount" | null
+    discount_value: number
+    discount_reason: string | null
+    fixed_rate: 0 | 1
+  }
+  /** the reason-code categories a discount and an agreed rate take (the
+   *  property's settings, discount_reason_categories / agreed_rate_reason_categories) */
+  reason_categories?: { discount?: string[]; agreed_rate?: string[] }
   precheckin_status: string | null
   precheckin_token: string | null
   amount_after_tax: number
@@ -1897,6 +1966,8 @@ export interface ReservationDetail extends TariffReference {
     can_cancel: boolean
     can_no_show?: boolean
     can_amend: boolean
+    /** may fix a rate over a plan that takes no discount (kamra.api._can_set_rate) */
+    can_set_rate?: boolean
     can_reinstate: boolean
     /** same-day check-in with nothing on the bill (api.reverse_check_in) */
     can_reverse_check_in?: boolean
@@ -1909,12 +1980,15 @@ export interface ReservationDetail extends TariffReference {
     id_unverified: boolean
     channel_review_needed?: boolean
   }
-  /** Set when an OTA modify or cancel arrived after check-in or close and was
-   *  held for front-desk review instead of mutating the stay. */
+  /** Set when an OTA modify or cancel needs front-desk review (held in-house/closed
+   *  update, applied modify that removed a desk discount, or added nights priced
+   *  without an unapproved discount). */
   channel_review_needed?: number
+  channel_review_reason?: "update_not_applied" | "discount_removed" | "discount_review" | null
   channel_reviews?: {
     name: string
     action_type: string
+    reason?: "update_not_applied" | "discount_removed" | "discount_review"
     rationale: string
     executed_at: string | null
   }[]
@@ -1967,6 +2041,11 @@ export interface RepricePreview {
   difference: number
   needs_confirmation: boolean
   nights: { date: string; rate: number; demand_premium_pct: number }[]
+  /** a discounted stay: the discount rules the amendment runs, and who can
+   * sign them off when they need a manager (kamra.api._repriced_governance) */
+  discount_governance?: DiscountGovernance | null
+  needs_supervisor?: boolean
+  supervisors?: { user: string; full_name: string }[]
   /** a stay in house: what the rate-change policy does to nights already
    * on the folio (kept at their charged rate, or credited by Kamra) */
   charged_nights?: {
@@ -1993,12 +2072,15 @@ export const amendStay = (
   check_in_date: string,
   check_out_date: string,
   confirm_price = 0,
+  /** a manager's sign-off when the discount needs one (supervisorArgs) */
+  signOff: { supervisor_user?: string; supervisor_pin?: string } = {},
 ) =>
   call<{ nights: number; amount_after_tax: number }>("kamra.api.amend_stay", {
     reservation,
     check_in_date,
     check_out_date,
     confirm_price,
+    ...signOff,
   })
 
 export const setLateArrival = (reservation: string, late_arrival: boolean, eta?: string) =>

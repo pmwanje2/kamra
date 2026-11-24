@@ -347,10 +347,12 @@ class ZeroTaxChargesTotalAndBridgeAgreementTest(QuotePatches, RateMatrixHarness)
 		self.assertEqual(inv["tax_summary"][0]["taxable"], folio.charges_total)
 
 	def test_zero_tax_quote_and_proforma_do_not_mutate_unrounded_base(self):
+		# 0%-tax stay quote rounds nightly room rate at the line to currency minor unit (UGX 1,000),
+		# while folio/proforma still keep explicit charge lines unmutated (charges_total == sum(lines)).
 		q = self.pricing.quote("Test Hotel", "Test Hotel-DLX", "2026-12-01", "2026-12-02", 2, 0)
-		self.assertEqual(q["amount_before_tax"], 1000.4)
+		self.assertEqual(q["amount_before_tax"], 1000.0)
 		self.assertEqual(q["tax_amount"], 0.0)
-		self.assertEqual(q["amount_after_tax"], 1000.4)
+		self.assertEqual(q["amount_after_tax"], 1000.0)
 
 		charge = Doc(
 			name="FC-0",
@@ -404,3 +406,111 @@ class ZeroTaxChargesTotalAndBridgeAgreementTest(QuotePatches, RateMatrixHarness)
 		self.assertEqual(est["projected_total"], 1000.4)
 		self.assertEqual(est["grand_total"], 2000.8)
 		self.assertEqual(est["balance"], 2000.8)
+
+	def test_zero_tax_minor_unit_line_rounding_matrix_and_folio_currency_options(self):
+		# 1. UGX (prec=0) 1-night & 2-night via base_price=1000.40 -> 1,000 / 2,000
+		q1 = self.pricing.quote("Test Hotel", "Test Hotel-DLX", "2026-12-01", "2026-12-02", 2, 0)
+		q2 = self.pricing.quote("Test Hotel", "Test Hotel-DLX", "2026-12-01", "2026-12-03", 2, 0)
+		self.assertEqual([n["rate"] for n in q1["nightly"]], [1000.0])
+		self.assertEqual(q1["amount_after_tax"], 1000.0)
+		self.assertEqual([n["rate"] for n in q2["nightly"]], [1000.0, 1000.0])
+		self.assertEqual(q2["room_total"], 2000.0)
+		self.assertEqual(q2["amount_after_tax"], 2000.0)
+
+		# 2. UGX (prec=0) 1-night & 2-night via agreed_rate=1000.40 -> 1,000 / 2,000
+		qa1 = self.pricing.quote(
+			"Test Hotel", "Test Hotel-DLX", "2026-12-01", "2026-12-02", 2, 0, agreed_rate=1000.40,
+		)
+		qa2 = self.pricing.quote(
+			"Test Hotel", "Test Hotel-DLX", "2026-12-01", "2026-12-03", 2, 0, agreed_rate=1000.40,
+		)
+		self.assertEqual([n["rate"] for n in qa1["nightly"]], [1000.0])
+		self.assertEqual(qa1["amount_after_tax"], 1000.0)
+		self.assertEqual([n["rate"] for n in qa2["nightly"]], [1000.0, 1000.0])
+		self.assertEqual(qa2["amount_after_tax"], 2000.0)
+
+		# 3. Derived Rate Plan -15% on base_price=1,001.0 (rounding_step=0) -> 851 (not 850.85)
+		self.add(
+			"Room Type", "Test Hotel-1001", property="Test Hotel",
+			base_price=1001.0, base_occupancy=2, adults_capacity=4,
+		)
+		self.add(
+			"Rate Plan", "Test Hotel-BAR", property="Test Hotel",
+			rate_plan_name="BAR", code="BAR", currency="UGX",
+			modifier_type="Percent", modifier_value=0, rounding_step=0, rounding_mode="Nearest",
+		)
+		self.add(
+			"Rate Plan", "Test Hotel-D15", property="Test Hotel",
+			rate_plan_name="Derived 15", code="D15", currency="UGX",
+			base_rate_plan="Test Hotel-BAR",
+			modifier_type="Percent", modifier_value=-15, rounding_step=0, rounding_mode="Nearest",
+		)
+		qd = self.pricing.quote(
+			"Test Hotel", "Test Hotel-1001", "2026-12-01", "2026-12-03", 2, 0,
+			rate_plan="Test Hotel-D15",
+		)
+		self.assertEqual([n.get("planned_rate", n["rate"]) for n in qd["nightly"]], [851.0, 851.0])
+		self.assertEqual(qd["room_total"], 1702.0)
+		self.assertEqual(qd["amount_after_tax"], 1702.0)
+
+		# 4. Rate Plan +150% on base_price=1,000.40 (= 2,501.00 exact integer, step=0) must NOT clobber room_total
+		self.add(
+			"Rate Plan", "Test Hotel-P150", property="Test Hotel",
+			rate_plan_name="Plus 150", code="P150", currency="UGX",
+			modifier_type="Percent", modifier_value=150, rounding_step=0, rounding_mode="Nearest",
+		)
+		qp = self.pricing.quote(
+			"Test Hotel", "Test Hotel-DLX", "2026-12-01", "2026-12-02", 2, 0,
+			rate_plan="Test Hotel-P150",
+		)
+		self.assertEqual(qp["room_total"], 2501.0)
+		self.assertEqual(qp["amount_after_tax"], 2501.0)
+
+		# 5. Unlocked post_room_night on UGX 0%-tax rounds 1,000.40 -> 1,000 at line
+		res = self.add(
+			"Reservation", "RES-UNLOCKED-FRAC",
+			property="Test Hotel", room_type="Test Hotel-DLX", room="Test Hotel-101",
+			check_in_date="2026-12-01", check_out_date="2026-12-02",
+			adults=2, children=0, status="Checked In", night_rates=[],
+		)
+		folio = self.add(
+			"Folio", "FOL-UNLOCKED-FRAC", property="Test Hotel", reservation="RES-UNLOCKED-FRAC",
+			folio_type="Guest", status="Open", charges=[], payments=[],
+		)
+		folio.append = lambda f, row: folio[f].append(Doc(row, name=f"FC-{len(folio[f]) + 1}"))
+		folio.save = lambda **kw: folio
+		with patch.object(self.folio, "_charge_posted", lambda *a, **kw: False), \
+				patch.object(self.folio, "current_date_contract_night", lambda *a, **kw: None), \
+				patch.object(self.folio, "open_line_target", lambda r, ct, is_alcohol=0: "FOL-UNLOCKED-FRAC"), \
+				patch.object(self.folio, "_post_room_levy", lambda *a, **kw: None), \
+				patch.object(self.ledger, "save_folio", lambda f, **kw: f):
+			self.folio.post_room_night(res, "2026-12-01")
+		self.assertEqual(folio.charges[0].amount, 1000.0)
+		self.assertEqual(folio.charges_total, 1000.0)
+		self.assertEqual(folio.grand_total, 1000.0)
+
+		# 6. USD (2dp) and KWD (3dp) preserve exact ISO 4217 minor units
+		self.add("Property", "USD Zero", currency="USD", property_name="USD Zero", business_date="2026-11-24", rates_include_tax=0)
+		self.add("Room Type", "USD Zero-STD", property="USD Zero", base_price=100.45, base_occupancy=2, adults_capacity=4)
+		self.add("Property", "KWD Zero", currency="KWD", property_name="KWD Zero", business_date="2026-11-24", rates_include_tax=0)
+		self.add("Room Type", "KWD Zero-STD", property="KWD Zero", base_price=10.125, base_occupancy=2, adults_capacity=4)
+		qu = self.pricing.quote("USD Zero", "USD Zero-STD", "2026-12-01", "2026-12-03", 2, 0)
+		self.assertEqual([n["rate"] for n in qu["nightly"]], [100.45, 100.45])
+		self.assertEqual(qu["amount_after_tax"], 200.9)
+		qk = self.pricing.quote("KWD Zero", "KWD Zero-STD", "2026-12-01", "2026-12-03", 2, 0)
+		self.assertEqual([n["rate"] for n in qk["nightly"]], [10.125, 10.125])
+		self.assertEqual(qk["amount_after_tax"], 20.25)
+
+		# 7. Non-bridged VAT-inclusive 18% UGX (150,000 gross -> 127,118.64 net) does NOT break
+		self.add("Property", "UGX VAT Inc", currency="UGX", property_name="UGX VAT Inc", business_date="2026-11-24", rates_include_tax=1)
+		self.add("Room Type", "UGX VAT Inc-DLX", property="UGX VAT Inc", base_price=150000.0, base_occupancy=2, adults_capacity=4)
+		with patch.object(self.pricing, "room_gst_rate", lambda *a, **kw: Decimal("18")):
+			qinc = self.pricing.quote("UGX VAT Inc", "UGX VAT Inc-DLX", "2026-12-01", "2026-12-02", 2, 0)
+		self.assertEqual(round(qinc["nightly"][0]["rate"], 2), 127118.64)
+		self.assertEqual(qinc["amount_after_tax"], 150000.0)
+
+		# 8. Folio DocType currency fields declare Property:property:currency so Folio.precision == SI.precision
+		folio_json = Path(__file__).resolve().parents[1] / "kamra/doctype/folio/folio.json"
+		fields = {f["fieldname"]: f for f in json.loads(folio_json.read_text(encoding="utf-8"))["fields"]}
+		for fname in ("charges_total", "tax_total", "grand_total", "payments_total", "balance", "payment_link_amount"):
+			self.assertEqual(fields[fname].get("options"), "Property:property:currency", fname)

@@ -13,6 +13,7 @@ import frappe
 BRIDGE_FIELDS = {
 	("Folio Charge", "source_ref"): {"label": "Outlet Source Reference", "unique": 1},
 	("Folio", "sales_invoice"): {"label": "Sales Invoice", "unique": 1},
+	("Property", "company"): {"label": "Company"},
 }
 
 

@@ -21,6 +21,7 @@ import frappe
 from frappe import _
 
 from kamra.authz import ADMIN, assert_property_access, require_roles
+from kamra.install import AGENT_ROLE
 
 CACHE_KEY = "kamra_settings"
 # write_kv saves the Property Setting document, so its events, a site's own
@@ -514,6 +515,19 @@ MODULES: tuple[Module, ...] = (
 				  hint="An agreed rate for one stay (Agreed rate on the reservation), with a reason. A bigger "
 				       "cut needs a Hotel Admin or Finance PIN; the desk never raises a rate. Revenue "
 				       "Managers and Hotel Admins set any rate. 0 sends every cut by the desk to a manager."),
+				S("rate_override_limits_by_role", "Limits by role", "textarea", "",
+				  hint="One role a line with its own limit, for example Front Desk: 5 and Duty Manager: 15. "
+				       "A person takes the highest limit among their roles; anyone with none of them takes "
+				       f"the limit above. An AI agent takes its own line ({AGENT_ROLE}: 3), or with none the "
+				       "lowest limit here. Revenue Managers and Hotel Admins set any rate."),
+				S("discount_reason_categories", "Reason codes a discount takes", "textarea",
+				  "Rate Change\nAdjust",
+				  hint="One Reason Code category a line. A reservation or walk-in discount takes the active "
+				       "reason codes of these categories; add or switch off the codes under Reason Codes."),
+				S("agreed_rate_reason_categories", "Reason codes an agreed rate takes", "textarea",
+				  "Rate Change",
+				  hint="One Reason Code category a line. An agreed rate (or a custom rate on a room move) "
+				       "takes the active reason codes of these categories."),
 			)),
 			Section("fx", "Exchange rates",
 			        "A guest paying in foreign money needs today's rate: typed in on the Currency Desk, "

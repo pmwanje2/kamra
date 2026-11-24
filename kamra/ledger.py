@@ -809,7 +809,7 @@ def transfer_to_city_ledger(folio: str, company: str | None = None,
 		"reference": f"city-ledger:{account}",
 	})
 	from kamra.folio import _recalculate
-	_recalculate(doc)
+	_recalculate(doc, payments_only=True)
 	doc.save(ignore_permissions=True)
 
 	# Two legs, like any transfer: the Company Credit payment credits the
@@ -899,7 +899,7 @@ def reverse_city_ledger_transfer(folio: str, reason: str) -> float:
 		"amount": -net, "reference": f"city-ledger-back:{account}",
 	})
 	from kamra.folio import _recalculate
-	_recalculate(doc)
+	_recalculate(doc, payments_only=True)
 	doc.save(ignore_permissions=True)
 	record_payment_ledger(doc, row.as_dict())
 	company = frappe.db.get_value("City Ledger Account", account, "company")

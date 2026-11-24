@@ -141,10 +141,10 @@ export interface FieldSpec {
   readOnlyOnEdit?: boolean
   /** Disable a field dynamically (e.g. disabling a system master code). */
   disabledWhen?: (draft: Record<string, unknown>) => boolean
-  /** Initial value when creating a new record. */
-  default?: unknown
   /** Block dates before today unless the user may backdate (Finance / Hotel Admin). */
   notPast?: boolean
+  /** Initial value when creating a new record (e.g. the DocType's own default). */
+  default?: unknown
   /** Key of a `ScreenConfig.sections` entry: the field renders in that collapsible section. */
   section?: string
 }
@@ -914,8 +914,8 @@ export function ResourceScreen({
       // ponytail: transaction dates default to today when notPast is set
       const defaults: Record<string, unknown> = {}
       for (const spec of config.form) {
-        if (spec.default !== undefined) defaults[spec.field] = spec.default
         if (spec.type === "date" && spec.notPast) defaults[spec.field] = isoToday()
+        else if (spec.default !== undefined) defaults[spec.field] = spec.default
       }
       setDraft(defaults)
       return
@@ -1132,7 +1132,7 @@ export function ResourceScreen({
             </div>
           </div>
         <div className="overflow-x-auto">
-          <table className={"w-full text-sm " + (visibleCols.length > 7 ? "table-auto" : "table-fixed") + (config.tableMinWidth ? ` ${config.tableMinWidth}` : "")}>
+          <table className={`w-full text-sm ${visibleCols.length > 7 ? "table-auto" : "table-fixed"}${config.tableMinWidth ? ` ${config.tableMinWidth}` : ""}`}>
             <thead>
               <tr className="border-b border-zinc-200 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
                 {visibleCols.map((c, i) => (
@@ -1140,8 +1140,13 @@ export function ResourceScreen({
                     key={c.field}
                     className={
                       "py-2 pr-4" +
-                      (visibleCols.length > 7 ? " whitespace-nowrap" : "") +
-                      (c.width ? ` ${c.width}` : visibleCols.length > 7 ? "" : i === 0 ? " w-[22%]" : "")
+                      (c.width
+                        ? ` ${c.width}`
+                        : visibleCols.length > 7
+                          ? " whitespace-nowrap"
+                          : i === 0
+                            ? " w-[22%]"
+                            : "")
                     }
                   >
                     {t(c.label)}
