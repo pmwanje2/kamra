@@ -67,10 +67,13 @@ def _post(conn, path: str, payload, user: str, pwd: str):
 	import requests
 	from requests.auth import HTTPBasicAuth
 
-	res = requests.post(f"{_base(conn)}/{path}", json=payload,
-	                    auth=HTTPBasicAuth(user, pwd),
-	                    headers={"Content-Type": "application/json"},
-	                    timeout=20)
+	try:
+		res = requests.post(f"{_base(conn)}/{path}", json=payload,
+		                    auth=HTTPBasicAuth(user, pwd),
+		                    headers={"Content-Type": "application/json"},
+		                    timeout=20)
+	except requests.RequestException as exc:
+		return False, {"message": f"{type(exc).__name__}: {exc}"}
 	try:
 		body = res.json()
 	except Exception:
@@ -97,7 +100,41 @@ def _runs(days: list[dict]):
 # Push: Kamra -> AioSell
 # ---------------------------------------------------------------------------
 
-def build_push_bodies(hotel_code: str, snapshot) -> tuple[list, list]:
+_RESTRICTION_KEYS = ("stop_sell", "min_los", "max_los", "cta", "ctd",
+                     "min_stay_arrival", "max_stay", "closed_to_arrival", "closed_to_departure")
+
+
+def _quantize_rate(raw_rate, property: str | None = None, currency: str | None = None) -> float:
+	from decimal import ROUND_HALF_UP, Decimal
+	if not (property or currency):
+		return float(raw_rate)
+	from kamra.channel_ari import rate_quantum
+	quantum = rate_quantum(property, currency)
+	return float(Decimal(str(raw_rate)).quantize(quantum, rounding=ROUND_HALF_UP))
+
+
+def _day_restriction_fields(day_row: dict) -> dict:
+	"""Map normalized stay restriction fields onto AioSell rate-block keys, or {} when absent."""
+	if not any(k in day_row for k in _RESTRICTION_KEYS):
+		return {}
+	fields: dict = {}
+	if "stop_sell" in day_row:
+		fields["stopSell"] = bool(day_row["stop_sell"])
+	min_los = int(day_row.get("min_stay_arrival") or day_row.get("min_los") or 0)
+	if min_los > 0:
+		fields["minStay"] = min_los
+	max_los = int(day_row.get("max_stay") or day_row.get("max_los") or 0)
+	if max_los > 0:
+		fields["maxStay"] = max_los
+	if "cta" in day_row or "closed_to_arrival" in day_row:
+		fields["cta"] = bool(day_row.get("closed_to_arrival", day_row.get("cta")))
+	if "ctd" in day_row or "closed_to_departure" in day_row:
+		fields["ctd"] = bool(day_row.get("closed_to_departure", day_row.get("ctd")))
+	return fields
+
+
+def build_push_bodies(hotel_code: str, snapshot, *,
+                      property: str | None = None, currency: str | None = None) -> tuple[list, list]:
 	"""The exact (inventory, rates) update blocks we POST to /update and
 	/update-rates for `snapshot`. Split out from push_ari so it can be
 	previewed without credentials - handy for showing what a sync sends."""
@@ -105,6 +142,7 @@ def build_push_bodies(hotel_code: str, snapshot) -> tuple[list, list]:
 	for rt in snapshot:
 		room_code = rt["external_room_id"]
 		rate_code = rt.get("external_rate_id")
+		row_currency = rt.get("external_currency") or currency
 		# availability -> /update
 		for start, end, avail in _runs(
 				[{"date": d["date"], "value": int(d["available"])}
@@ -112,22 +150,27 @@ def build_push_bodies(hotel_code: str, snapshot) -> tuple[list, list]:
 			inv_updates.append({"startDate": start, "endDate": end,
 			                    "rooms": [{"roomCode": room_code,
 			                               "available": avail}]})
-		# rates -> /update-rates (needs a rate plan; skip rows without one),
-		# as the snapshot prices them: already to the currency's decimals
-		# (channel_ari.channel_rate), three for KWD
+		# rates + restrictions -> /update-rates (needs a rate plan; skip rows without one),
+		# quantized to the currency's decimals (0dp UGX, 2dp USD, 3dp KWD)
 		if rate_code:
-			for start, end, rate in _runs(
-					[{"date": d["date"], "value": float(d["rate"])}
-					 for d in rt["days"]]):
-				rate_updates.append({"startDate": start, "endDate": end,
-				                     "rates": [{"roomCode": room_code,
-				                                "rateplanCode": rate_code,
-				                                "rate": rate}]})
+			day_series = []
+			for d in rt["days"]:
+				rate_val = _quantize_rate(d["rate"], property=property, currency=row_currency)
+				rfields = _day_restriction_fields(d)
+				day_series.append({
+					"date": d["date"],
+					"value": (rate_val, tuple(sorted(rfields.items()))),
+				})
+			for start, end, (rate_val, restr_items) in _runs(day_series):
+				entry = {"roomCode": room_code, "rateplanCode": rate_code, "rate": rate_val}
+				if restr_items:
+					entry.update(dict(restr_items))
+				rate_updates.append({"startDate": start, "endDate": end, "rates": [entry]})
 	return inv_updates, rate_updates
 
 
 def push_ari(conn, snapshot) -> tuple[bool, str]:
-	"""Push availability (/update) and rates (/update-rates) for the mapped
+	"""Push availability (/update) and rates + restrictions (/update-rates) for the mapped
 	room types. `snapshot` is kamra.channel_manager.ari_snapshot's shape, with
 	the Villa lockout already applied to the `available` numbers."""
 	creds, reason = _creds(conn)
@@ -135,9 +178,27 @@ def push_ari(conn, snapshot) -> tuple[bool, str]:
 		return False, reason
 	user, pwd, pms, hotel = creds
 
-	inv_updates, rate_updates = build_push_bodies(hotel, snapshot)
+	prop = getattr(conn, "property", None)
+	inv_updates, rate_updates = build_push_bodies(hotel, snapshot, property=prop)
+	stay_through_days = sum(
+		1
+		for rt in snapshot
+		for d in (rt.get("days") or [])
+		if d.get("is_stay_through") and int(d.get("min_los") or d.get("min_stay_arrival") or 0) > 0
+	)
+	restriction_blocks = sum(
+		1
+		for blk in rate_updates
+		for entry in (blk.get("rates") or [])
+		if any(k in entry for k in ("stopSell", "minStay", "maxStay", "cta", "ctd"))
+	)
 
 	results, ok_all = [], True
+	capability_warnings: list[str] = []
+	if stay_through_days:
+		capability_warnings.append(
+			f"stay-through MinLOS on {stay_through_days} night(s) mapped to arrival minStay"
+		)
 	if inv_updates:
 		ok, body = _post(conn, f"update/{pms}",
 		                 {"hotelCode": hotel, "updates": inv_updates}, user, pwd)
@@ -147,10 +208,33 @@ def push_ari(conn, snapshot) -> tuple[bool, str]:
 		ok, body = _post(conn, f"update-rates/{pms}",
 		                 {"hotelCode": hotel, "updates": rate_updates}, user, pwd)
 		ok_all = ok_all and ok
-		results.append("rates " + ("ok" if ok else str(body.get("message") or body)[:120]))
+		warn = (
+			body.get("warning")
+			or body.get("warnings")
+			or body.get("unsupportedFields")
+			or body.get("ignoredFields")
+		)
+		if ok and warn:
+			capability_warnings.append(str(warn)[:100])
+		suffix = f" (capability warning: {'; '.join(capability_warnings)[:110]})" if ok and capability_warnings else ""
+		results.append("rates " + (("ok" + suffix) if ok else str(body.get("message") or body)[:120]))
 	if not results:
 		return False, "No room mappings to push."
-	detail = (f"{len(inv_updates)} inv + {len(rate_updates)} rate blocks; "
+	if capability_warnings and prop and getattr(conn, "name", None):
+		try:
+			from kamra.savings import log_action
+			log_action(
+				"channel.capability_warning",
+				"Channel Manager Connection",
+				conn.name,
+				prop,
+				rationale=f"AioSell restriction capability warning: {'; '.join(capability_warnings)[:220]}",
+				channel="API",
+			)
+		except Exception:
+			pass
+	restr_note = f", {restriction_blocks} restriction blocks" if restriction_blocks else ""
+	detail = (f"{len(inv_updates)} inv + {len(rate_updates)} rate blocks{restr_note}; "
 	          + "; ".join(results))
 	return ok_all, detail[:280]
 

@@ -114,13 +114,19 @@ def _attributes(item: dict) -> dict:
 _ARI_ID_FIELD = {"availability": "room_type_id", "restrictions": "rate_plan_id"}
 
 
+_INT_RESTRICTION_FIELDS = frozenset({"availability", "min_stay_arrival", "min_stay_through", "max_stay"})
+_BOOL_RESTRICTION_FIELDS = frozenset({"stop_sell", "closed_to_arrival", "closed_to_departure"})
+
+
 def _ari_value(field: str, value, quantum: Decimal):
 	if field == "rate":
 		# a decimal string with the currency's decimals (none for UGX, three
 		# for KWD): Channex refuses a bare float with decimals
 		return str(Decimal(str(value)).quantize(quantum, rounding=ROUND_HALF_UP))
-	if field == "availability":
+	if field in _INT_RESTRICTION_FIELDS:
 		return int(value)
+	if field in _BOOL_RESTRICTION_FIELDS:
+		return bool(value)
 	return value
 
 
@@ -157,6 +163,8 @@ def push_ari_changes(conn, kind: str, changes: list[dict]) -> dict:
 		currency = currencies.get(str(change["external_id"]))
 		quantum = rate_quantum(prop, currency) if currency else default_quantum
 		for field, value in (change.get("values") or {}).items():
+			if value is None:
+				continue
 			obj[field] = _ari_value(field, value, quantum)
 		values.append(obj)
 		by_key.setdefault(_change_key(id_field, obj), change)
@@ -223,8 +231,22 @@ def push_ari(conn, snapshot) -> tuple[bool, str]:
 		room = availability.setdefault(rt["external_room_id"], {})
 		for d in rt["days"]:
 			room[d["date"]] = {"availability": d["available"]}
-			if rt.get("external_rate_id") and float(d.get("rate") or 0) > 0:
-				rates.setdefault(rt["external_rate_id"], {})[d["date"]] = {"rate": d["rate"]}
+			if rt.get("external_rate_id"):
+				cell: dict = {}
+				if float(d.get("rate") or 0) > 0:
+					cell["rate"] = d["rate"]
+				if "stop_sell" in d:
+					cell["stop_sell"] = bool(d["stop_sell"])
+				if d.get("min_los") or d.get("min_stay_arrival"):
+					cell["min_stay_arrival"] = int(d.get("min_stay_arrival") or d.get("min_los"))
+				if d.get("max_los") or d.get("max_stay"):
+					cell["max_stay"] = int(d.get("max_stay") or d.get("max_los"))
+				if "cta" in d or "closed_to_arrival" in d:
+					cell["closed_to_arrival"] = bool(d.get("closed_to_arrival", d.get("cta")))
+				if "ctd" in d or "closed_to_departure" in d:
+					cell["closed_to_departure"] = bool(d.get("closed_to_departure", d.get("ctd")))
+				if cell:
+					rates.setdefault(rt["external_rate_id"], {})[d["date"]] = cell
 	sent = {}
 	try:
 		for kind, cells in (("availability", availability), ("restrictions", rates)):

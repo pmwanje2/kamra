@@ -258,6 +258,8 @@ export const APPS: AppDef[] = [
       { to: "/reports", label: "Reports", icon: ChartLine },
       { to: "/channel-manager", label: "Channel Manager", icon: Share2 },
       { to: "/ota-mappings", label: "OTA Room Mappings", icon: Network },
+      { to: "/channel-health", label: "Channel Health", icon: HeartPulse,
+        keywords: ["OTA parity", "ARI outbox", "channel sync", "restrictions"] },
       { to: "/rate-calendar", label: "Rate Calendar", icon: CalendarDays,
         keywords: ["bar", "best available rate", "base rate", "rack rate", "tariff", "pricing", "price by date"] },
       { to: "/rate-plans", label: "Rate Plans", icon: Tags },

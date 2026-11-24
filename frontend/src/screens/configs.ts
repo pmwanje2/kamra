@@ -1071,6 +1071,7 @@ export const channelRoomMappingsConfig: ScreenConfig = {
     { field: "external_room_id", label: "Provider room ID" },
     { field: "external_rate_id", label: "Provider rate ID" },
     { field: "rate_plan", label: "Rate plan" },
+    { field: "last_parity_status", label: "Parity", badge: true },
   ],
   form: [
     { field: "connection", label: "Connection", type: "link", linkDoctype: "Channel Manager Connection", linkPropertyScoped: true, required: true },

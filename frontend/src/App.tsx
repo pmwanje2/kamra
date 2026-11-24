@@ -58,6 +58,7 @@ const Reports = lazy(() => import("./screens/Reports"))
 const ReportsHub = lazy(() => import("./screens/ReportsHub"))
 const InHouse = lazy(() => import("./screens/InHouse"))
 const RateCalendar = lazy(() => import("./screens/RateCalendar"))
+const ChannelHealth = lazy(() => import("./screens/ChannelHealth"))
 const ContractTariffs = lazy(() => import("./screens/ContractTariffs"))
 const RevenueReports = lazy(() => import("./screens/RevenueReports"))
 const OpsSLA = lazy(() => import("./screens/OpsSLA"))
@@ -389,6 +390,7 @@ export default function App() {
             path="ota-mappings"
             element={<ConfiguredScreen config="channelRoomMappingsConfig" />}
           />
+          <Route path="channel-health" element={<ChannelHealth />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="owner" element={<Owner />} />
           <Route path="crs" element={<CRS />} />
