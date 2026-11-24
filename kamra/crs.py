@@ -642,7 +642,7 @@ def record_trip_advance(itinerary: str, amount: float, mode: str = "Cash",
 	paying = [leg for leg in plan["legs"] if leg["share"] > 0]
 	# every money guard of every hotel before the first write
 	for prop in dict.fromkeys(leg["property"] for leg in paying):
-		modes = payment_modes(pack_for(prop))
+		modes = payment_modes(pack_for(prop), prop)
 		if mode not in modes:
 			frappe.throw(_("Pick a payment mode: {0}.").format(", ".join(modes)))
 		require_cashier_pin(prop, pin)

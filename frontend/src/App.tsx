@@ -423,6 +423,42 @@ export default function App() {
             path="transaction-codes"
             element={<ConfiguredScreen config="transactionCodesConfig" />}
           />
+          <Route
+            path="market-codes"
+            element={<ConfiguredScreen config="marketCodesConfig" />}
+          />
+          <Route
+            path="origin-codes"
+            element={<ConfiguredScreen config="originCodesConfig" />}
+          />
+          <Route
+            path="booking-types"
+            element={<ConfiguredScreen config="bookingTypesConfig" />}
+          />
+          <Route
+            path="booker-relations"
+            element={<ConfiguredScreen config="bookerRelationsConfig" />}
+          />
+          <Route
+            path="cancellation-reasons"
+            element={<ConfiguredScreen config="cancellationReasonsConfig" />}
+          />
+          <Route
+            path="payment-methods"
+            element={<ConfiguredScreen config="paymentMethodsConfig" />}
+          />
+          <Route
+            path="meal-plan-codes"
+            element={<ConfiguredScreen config="mealPlanCodesConfig" />}
+          />
+          <Route
+            path="payer-types"
+            element={<ConfiguredScreen config="payerTypesConfig" />}
+          />
+          <Route
+            path="check-in-requests"
+            element={<ConfiguredScreen config="checkInRequestsConfig" />}
+          />
           <Route path="tickets" element={<Tickets />} />
           <Route path="laundry" element={<Laundry />} />
           <Route path="housekeeping-board" element={<HousekeepingBoard />} />

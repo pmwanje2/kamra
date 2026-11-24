@@ -131,7 +131,7 @@ class SnapshotLost(Exception):
 
 def _modes(property: str) -> list[str]:
 	from kamra.localization import pack_for, payment_modes
-	return payment_modes(pack_for(property))
+	return payment_modes(pack_for(property), property)
 
 
 def _outlet_modes(property: str) -> list[str]:

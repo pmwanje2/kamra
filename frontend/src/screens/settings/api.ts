@@ -14,7 +14,7 @@ export interface SettingSpec {
   hint: string
   store: "property" | "kv" | "turnover"
   options?: string[]
-  options_source?: "countries" | "timezones"
+  options_source?: "countries" | "timezones" | "locales" | "languages"
   min?: number
   max?: number
   unit?: string

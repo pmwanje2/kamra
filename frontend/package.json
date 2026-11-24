@@ -33,7 +33,8 @@
     "front-office:check": "node scripts/front-office-format-check.mjs",
     "front-office:browser": "node scripts/front-office-ux-check.mjs",
     "fx-preview:check": "node scripts/fx-preview-check.mjs",
-    "health-redaction:check": "node scripts/health-redaction-check.mjs"
+    "health-redaction:check": "node scripts/health-redaction-check.mjs",
+    "configurable-lists:check": "node scripts/configurable-lists-check.mjs"
   },
   "dependencies": {
     "libphonenumber-js": "^1.13.15",
