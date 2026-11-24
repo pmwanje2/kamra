@@ -275,10 +275,10 @@ Cancelled At,取消时间
 Cancelled By,取消人
 Cancelled On,取消日期
 Cancelling {0} · arrival {1}.,正在取消 {0} · 到店 {1}。
-"Cannot check out: the guest is owed {0}{1}. Issue the refund before departure.","无法退房：宾客尚有 {0}{1} 待退。请于离店前办理退款。"
-"Cannot check out: {0}{1} is still owed. Collect payment or transfer it to the city ledger before departure.","无法退房：仍有 {0}{1} 未结。请于离店前收款，或转入城市挂账。"
-"Cannot close the folio: {0}{1:,.2f} is owed back to the guest. Issue the refund first.","无法关闭客账：尚需退还宾客 {0}{1:,.2f}。请先办理退款。"
-"Cannot close the folio: {0}{1:,.2f} is still owed. Collect payment, or move the company's share to the city ledger, first.","无法关闭客账：仍有 {0}{1:,.2f} 未结。请先收款，或将公司承担部分转入城市挂账。"
+"Cannot check out: the guest is owed {0}. Issue the refund before departure.","无法退房：宾客尚有 {0} 待退。请于离店前办理退款。"
+"Cannot check out: {0} is still owed. Collect payment or transfer it to the city ledger before departure.","无法退房：仍有 {0} 未结。请于离店前收款，或转入城市挂账。"
+"Cannot close the folio: {0} is owed back to the guest. Issue the refund first.","无法关闭客账：尚需退还宾客 {0}。请先办理退款。"
+"Cannot close the folio: {0} is still owed. Collect payment, or move the company's share to the city ledger, first.","无法关闭客账：仍有 {0} 未结。请先收款，或将公司承担部分转入城市挂账。"
 Cannot move reservation from {0} to {1}.,无法将预订从 {0} 移到 {1}。
 Cannot release access yet. Failed gates: {0},暂不能释放门禁。未通过的检查：{0}
 Capacity,容量
@@ -1094,7 +1094,7 @@ Only an item the kitchen is cooking can be marked ready.,只有厨房正在制�
 Only an open ticket can be started.,只有未结工单才能开始处理。
 Only available while the payment gateway is in test mode.,仅在支付网关处于测试模式时可用。
 Only charges above zero can be shared.,只有大于零的费用可以分摊。
-"Only {0:,.2f} of the deposit is still held.","押金仅剩 {0:,.2f} 尚未退还。"
+"Only {0} of the deposit is still held.","押金仅剩 {0} 尚未退还。"
 Only {0} is due back to the guest - can't refund more than that.,仅需退还宾客 {0}——退款不能超过该金额。
 Only {0} of this payment is left to refund.,该笔付款仅剩 {0} 可退。
 Open Items,未结项目
@@ -1712,7 +1712,7 @@ The group account {0} pays as agreed.,团队账户 {0} 按约定付款。
 "The guest checked in online. Review what they sent, then confirm.",宾客已在线办理入住。请核对所提交内容后确认。
 The guest folio is already closed.,宾客客账已关闭。
 The guest folio is closed - withhold before closing it.,宾客客账已关闭——应在关闭前扣款。
-"The guest folio only has {0:,.2f} in credit. Settle the bill or withhold against it before refunding the deposit.","宾客客账仅有 {0:,.2f} 贷方余额。退押金前请先结清账单或从中扣款。"
+"The guest folio only has {0} in credit. Settle the bill or withhold against it before refunding the deposit.","宾客客账仅有 {0} 贷方余额。退押金前请先结清账单或从中扣款。"
 The guest has no open folio to take these charges.,宾客没有可承接这些费用的未结客账。
 The guest is already in house. Use Room move to change rooms.,宾客已在住。请使用「换房」更改客房。
 The guest list changed since you opened it. Reload and save again.,自你打开后宾客名单已变化。请重新加载并再次保存。

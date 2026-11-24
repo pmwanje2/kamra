@@ -40,7 +40,7 @@ import AppLink from "../components/AppLink"
 import { Badge } from "../components/ui/badge"
 import { Button } from "../components/ui/button"
 import { Card } from "../components/ui/card"
-import { fmtAmount, useLocale } from "../lib/money"
+import { fmtAmount, moneyEps, useLocale } from "../lib/money"
 import { useT, t as translate } from "../lib/i18n"
 import { cn } from "../lib/utils"
 import { AuditPackView, PackMoney, sessionCols, DataTable, fmtDay } from "./AuditPack"
@@ -547,7 +547,8 @@ export default function EndOfDayWizard() {
           />
         )
       case "departures_due": {
-        const zero = items.filter((r) => Math.abs(Number(r.balance ?? 0)) < 0.01)
+        const wizEps = Math.min(moneyEps(wizardCurrency), 0.005)
+        const zero = items.filter((r) => Math.abs(Number(r.balance ?? 0)) <= wizEps)
         return (
           <>
             {!state.ran && zero.length > 0 && (
