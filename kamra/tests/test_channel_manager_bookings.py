@@ -508,3 +508,52 @@ class ChannexForeignContractBookingTestCase(IntegrationTestCase):
 				snapshot = frappe.parse_json(doc.contract_tariff)
 				self.assertEqual((snapshot["tariff"]["fx_rate"], snapshot["fx_lock_policy"]),
 				                 (3650, "Fixed at Reservation"))
+
+	def test_foreign_currency_booking_still_enforces_ota_tax_hold(self):
+		"""Merge RED -> GREEN (#39 + #36): a foreign-currency booking from an
+		excluding-tax OTA with empty taxes[] (or an unread exclusive tax) must
+		still be held as Requested by tax_hold, never Confirmed."""
+		self.conn.reload()
+		self.conn.append("ota_tax_basis", {"channel": "Expedia", "amounts": "Excluding tax"})
+		self.conn.save(ignore_permissions=True)
+		# Empty taxes[] on an Excluding tax OTA -> must hold as Requested
+		self.deliver(self.payload(ota_name="Expedia"))
+		doc = self.received()
+		self.assertEqual(doc.status, "Requested")
+		self.assertEqual(float(doc.amount_after_tax or 0), 0)
+		self.assertFalse(doc.contract_tariff)
+		self.assertIn(cm.ROOM_TAX_MISSING, doc.special_requests)
+
+	def test_foreign_currency_booking_with_exclusive_room_tax_converts_gross_total(self):
+		"""Merge RED -> GREEN (#39 + #36): a foreign-currency booking reporting
+		net day prices plus an exclusive room tax (is_inclusive: false) must
+		convert the gross total (days + room tax), never drop the tax."""
+		p = self.payload(ota_name="Expedia", amounts=("100.00", "100.00"))
+		p["payload"]["rooms"][0]["taxes"] = [
+			{"name": "VAT", "type": "tax", "total_price": "36.00", "is_inclusive": False},
+		]
+		self.deliver(p)
+		doc = self.received()
+		self.assertEqual(doc.status, "Confirmed")
+		# $100 + 18% VAT = $118/night; $118 * 3,650 = 430,700 -> rounded to 1,000 = 431,000/night (862,000 total)
+		self.assertEqual(self.gross_nights(doc), [431000, 431000])
+		self.assertEqual(float(doc.amount_after_tax), 862000)
+		snapshot = frappe.parse_json(doc.contract_tariff)
+		self.assertEqual([n["nightly"] for n in snapshot["tariff"]["nights"]], [118.0, 118.0])
+
+	def test_inhouse_foreign_currency_modify_flags_review_with_foreign_currency_note(self):
+		"""Merge RED -> GREEN (#46 + #36): an OTA modify on a Checked In foreign-
+		currency stay must leave the stay untouched, flag channel_review_needed,
+		and record the OTA's foreign amount/currency (never UGX labelled USD)."""
+		self.deliver(self.payload(amounts=("130.00", "120.00")))
+		doc = self.received()
+		self.assertEqual(doc.status, "Confirmed")
+		orig_nights = self.gross_nights(doc)
+		frappe.db.set_value("Reservation", doc.name, "status", "Checked In")
+		self.deliver(self.payload(status="modified", amounts=("140.00", "130.00")))
+		doc.reload()
+		self.assertEqual(doc.status, "Checked In")
+		self.assertEqual(doc.channel_review_needed, 1)
+		self.assertEqual(self.gross_nights(doc), orig_nights)
+		self.assertIn("270.0 USD", doc.special_requests)
+		self.assertNotIn("986000", doc.special_requests)

@@ -1145,6 +1145,7 @@ class ChannexAriCurrencyTestCase(_AriWorkerMixin, IntegrationTestCase):
 			"rate_plan_name": "Corporate EUR", "code": "CORP" + frappe.generate_hash(length=4).upper(),
 			"currency": "EUR", "modifier_type": "Percent", "modifier_value": 0}).insert(ignore_permissions=True).name
 		self.tariff = dict(CORP_PRICED, fx_date=nowdate())
+		self.dir_rate = 90
 		self.quoted: list[dict] = []
 		bridge = patch("kamra.erp_bridge.bridge_call", side_effect=self.bridge)
 		bridge.start()
@@ -1152,9 +1153,9 @@ class ChannexAriCurrencyTestCase(_AriWorkerMixin, IntegrationTestCase):
 
 	def bridge(self, api_method, **form):
 		"""CORP's quote (self.tariff, each form kept in self.quoted) and its
-		approved EUR 90 in the tariff directory."""
+		approved EUR rate (default 90) in the tariff directory."""
 		if api_method == "hospitality_tariffs.list_tariffs" and form.get("property") == self.property:
-			return tariff_directory(self.corp, "EUR", 90)
+			return tariff_directory(self.corp, "EUR", self.dir_rate)
 		if api_method != "hospitality_tariffs.tariff_rate" or form.get("rate_plan") != self.corp:
 			return None
 		self.quoted.append(form)
@@ -1360,3 +1361,19 @@ class ChannexAriCurrencyTestCase(_AriWorkerMixin, IntegrationTestCase):
 		self.flush()
 		self.assertEqual({r.status for r in self.rows()}, {"Sent"})
 		self.assertEqual(self.sent("restrictions", "rp-twin-corp")[day(6)]["rate"], "99.00")
+
+	def test_a_ugx_property_pushing_a_foreign_contract_rate_keeps_its_minor_units(self):
+		"""Merge RED -> GREEN (#35 + #36): a UGX property (0 decimals) pushing a
+		USD/EUR contract rate with cents (130.50) must quantize in the channel
+		rate plan's currency (0.01), never in the property's currency (1)."""
+		frappe.db.set_value("Property", self.property, {"currency": "UGX", "country": "Uganda",
+		                                                "rates_include_tax": 1, "gst_rate_low": 18, "gst_rate_high": 18})
+		frappe.db.set_value("Channel Room Mapping", {"connection": self.conn.name, "external_rate_id": "rp-twin-bar"},
+		                    "external_currency", "UGX")
+		frappe.db.set_value("Channel Room Mapping", {"connection": self.conn.name, "external_rate_id": "rp-twin-bb"},
+		                    "external_currency", "UGX")
+		self.dir_rate = 130.5
+		self.map_corp("EUR")
+		self.flush()
+		self.assertEqual(self.corp_values(), [{"property_id": "cx-test", "rate_plan_id": "rp-twin-corp",
+		                                       "date": day(5), "rate": "130.50", "stop_sell": False}])
