@@ -1110,6 +1110,131 @@ class ERPBooksFenceTestCase(AuditTestCase):
 		self.assertEqual(out, {"sent": [], "no_email": []})
 		sendmail.assert_not_called()
 
+	def test_erp_receivables_preserves_property_currency_precision(self):
+		"""erp_receivables and its downstream readers must honour ISO 4217 minor units:
+		KWD 3dp (123.456, never 123.46), UGX 0dp (42000), USD 2dp (125.75)."""
+		from frappe.utils import add_days
+
+		from kamra import audit_report, credit, dashboards, ledger, night_audit
+		from kamra.erp_books import receivables_source
+
+		prop_kwd = "UT ERP KWD"
+		prop_ugx = "UT ERP UGX"
+		prop_usd = "UT ERP USD"
+		for prop, country, currency in (
+			(prop_kwd, "Kuwait", "KWD"),
+			(prop_ugx, "Uganda", "UGX"),
+			(prop_usd, "United States", "USD"),
+		):
+			make_property(prop, country=country, currency=currency, business_date=TODAY)
+			self.addCleanup(frappe.clear_document_cache, "Property", prop)
+
+		self.keeps(receivables=RECEIVABLES)
+
+		# KWD: 3 decimal places preserved through erp_receivables and every reader
+		self.ar_answer = {"accounts": [{
+			"account": "CLA-KWD-1",
+			"company": "Gulf Corp",
+			"customer": "Gulf Corp",
+			"account_number": "CL-KWD-1",
+			"credit_limit": 100.125,
+			"balance": 123.456,
+			"open_balance": 123.456,
+			"unapplied_credit": 1.005,
+			"open_items": [{
+				"folio": None,
+				"invoice_number": "ACC-SINV-KWD-1",
+				"voucher_type": "Sales Invoice",
+				"voucher_no": "ACC-SINV-KWD-1",
+				"invoice_date": str(add_days(TODAY, -25)),
+				"due_date": str(add_days(TODAY, -10)),
+				"outstanding": 124.461,
+				"disputed": 0,
+			}],
+		}]}
+		with self.installed():
+			kwd_src = receivables_source(prop_kwd, strict=False)
+			kwd_aging = ledger.city_ledger_aging(prop_kwd)
+			kwd_snap = dashboards.owner_snapshot(prop_kwd)
+			kwd_cl = night_audit.check_credit_limit(prop_kwd)
+			kwd_ov = night_audit.check_overdue_ar(prop_kwd)
+			kwd_terms = credit.company_credit_terms("Gulf Corp", prop_kwd)
+			kwd_chk = credit.check_company_credit("Gulf Corp", prop_kwd, 0.0)
+			kwd_ar = next(b for b in audit_report.build(prop_kwd, TODAY)["balances"] if b["ledger"] == "AR")
+
+		kwd_row = kwd_src.rows[0]
+		self.assertEqual(kwd_row["balance"], 123.456)
+		self.assertEqual(kwd_row["open_balance"], 123.456)
+		self.assertEqual(kwd_row["credit_limit"], 100.125)
+		self.assertEqual(kwd_row["unapplied_credit"], 1.005)
+		self.assertEqual(kwd_row["open_items"][0]["outstanding"], 124.461)
+		self.assertEqual(kwd_aging["totals"]["d1_30"], 123.456)
+		self.assertEqual(kwd_aging["totals"]["overdue"], 123.456)
+		self.assertEqual(kwd_snap["city_ledger"], 123.456)
+		self.assertEqual(kwd_snap["city_ledger_overdue"], 123.456)
+		self.assertEqual(kwd_cl["items"][0]["ar_balance"], 123.456)
+		self.assertEqual(kwd_cl["items"][0]["over_by"], 23.331)
+		self.assertEqual(kwd_ov["items"][0]["overdue"], 123.456)
+		self.assertEqual(kwd_ov["items"][0]["balance"], 123.456)
+		self.assertEqual(kwd_ov["total"], 123.456)
+		self.assertEqual(kwd_terms["balance"], 123.456)
+		self.assertEqual(kwd_chk["ar_balance"], 123.456)
+		self.assertEqual(kwd_chk["overdue_amount"], 123.456)
+		self.assertEqual(kwd_ar["carried_forward"], 123.456)
+
+		# UGX: 0 decimal places (whole shillings)
+		self.ar_answer = {"accounts": [{
+			"account": "CLA-UGX-1",
+			"company": "Kampala Corp",
+			"customer": "Kampala Corp",
+			"account_number": "CL-UGX-1",
+			"credit_limit": 500000,
+			"balance": 42000,
+			"open_balance": 42000.4,
+			"unapplied_credit": 0,
+			"open_items": [{
+				"folio": None,
+				"invoice_number": "ACC-SINV-UGX-1",
+				"voucher_type": "Sales Invoice",
+				"voucher_no": "ACC-SINV-UGX-1",
+				"invoice_date": str(add_days(TODAY, -25)),
+				"due_date": str(add_days(TODAY, -10)),
+				"outstanding": 42000.4,
+				"disputed": 0,
+			}],
+		}]}
+		with self.installed():
+			ugx_src = receivables_source(prop_ugx, strict=False)
+		ugx_row = ugx_src.rows[0]
+		self.assertEqual(ugx_row["balance"], 42000.0)
+		self.assertEqual(ugx_row["open_balance"], 42000.0)
+		self.assertEqual(ugx_row["open_items"][0]["outstanding"], 42000.0)
+
+		# USD: 2 decimal places
+		self.ar_answer = {"accounts": [{
+			"account": "CLA-USD-1",
+			"company": "Harbor Corp",
+			"customer": "Harbor Corp",
+			"account_number": "CL-USD-1",
+			"credit_limit": 1000.0,
+			"balance": 125.75,
+			"open_balance": 125.75,
+			"unapplied_credit": 0.0,
+			"open_items": [{
+				"folio": None,
+				"invoice_number": "ACC-SINV-USD-1",
+				"voucher_type": "Sales Invoice",
+				"voucher_no": "ACC-SINV-USD-1",
+				"invoice_date": str(add_days(TODAY, -25)),
+				"due_date": str(add_days(TODAY, -10)),
+				"outstanding": 125.75,
+				"disputed": 0,
+			}],
+		}]}
+		with self.installed():
+			usd_src = receivables_source(prop_usd, strict=False)
+		self.assertEqual(usd_src.rows[0]["balance"], 125.75)
+
 	def boot_value(self, html):
 		match = re.search(r"window\.kamra_erp_screens\s*=\s*(\{.*?\});", html)
 		self.assertIsNotNone(match, "the boot script does not carry the ERP screens")

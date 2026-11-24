@@ -234,3 +234,66 @@ class OutletChecksTestCase(AuditTestCase):
 		row = next(r for r in rows if r["property"] == PROP_A)
 		self.assertEqual(row["open_pos_bills"], 2)
 		self.assertIn("open_pos_bills", row["blocker_keys"])
+
+	def test_outlet_check_amounts_preserve_property_currency_precision(self):
+		"""KWD (3dp) must keep fils (12.345, never 12.35), UGX (0dp) must round to
+		whole shillings (42000), and USD (2dp) keeps cents (125.75)."""
+		from kamra.outlet_checks import open_outlet_checks
+
+		prop_kwd = "UT Outlet KWD"
+		prop_ugx = "UT Outlet UGX"
+		prop_usd = "UT Outlet USD"
+		for prop, country, currency in (
+			(prop_kwd, "Kuwait", "KWD"),
+			(prop_ugx, "Uganda", "UGX"),
+			(prop_usd, "United States", "USD"),
+		):
+			make_property(prop, country=country, currency=currency, business_date=YESTERDAY)
+			self.addCleanup(frappe.clear_document_cache, "Property", prop)
+
+		rt_kwd = make_room_type(prop_kwd, "KSTD", base_price=45)
+		room_kwd = make_room(prop_kwd, rt_kwd, "K-10")
+		res_kwd = make_reservation(prop_kwd, rt_kwd, d(-2), d(0), status="Checked In", room=room_kwd)
+
+		rt_ugx = make_room_type(prop_ugx, "USTD", base_price=250000)
+		room_ugx = make_room(prop_ugx, rt_ugx, "U-27")
+		res_ugx = make_reservation(prop_ugx, rt_ugx, d(-2), d(0), status="Checked In", room=room_ugx)
+
+		# KWD: 3 decimal places preserved through open_outlet_checks, checkout, and EOD
+		self.answer = {"checks": [
+			check(name="PSINV-KWD-01", outlet="Pearl Tea Room", amount=12.345,
+			      billed=0, room="K-10", reservation=res_kwd.name),
+			check(name="PSINV-KWD-02", outlet="Pearl Tea Room", amount=1.0055,
+			      billed=1, room="K-10", reservation=res_kwd.name),
+		]}
+		with self.installed():
+			kwd_rows = open_outlet_checks(prop_kwd, reservation=res_kwd.name, room=room_kwd)
+			kwd_bills = checkout._pending_bills(res_kwd, [])
+			kwd_eod = night_audit.check_open_pos_bills(prop_kwd, YESTERDAY)
+		self.assertEqual(kwd_rows[0]["amount"], 12.345)
+		self.assertEqual(kwd_rows[1]["amount"], 1.006)
+		self.assertEqual(kwd_bills[0]["amount"], 12.345)
+		self.assertEqual(kwd_eod["items"][0]["amount"], 12.345)
+		self.assertEqual(kwd_eod["amount"], 13.351)
+
+		# UGX: 0 decimal places (whole units)
+		self.answer = {"checks": [
+			check(name="PSINV-UGX-01", outlet="Rooftop Tapas Lounge", amount=42000,
+			      billed=0, room="U-27", reservation=res_ugx.name),
+			check(name="PSINV-UGX-02", outlet="Rooftop Tapas Lounge", amount=42000.4,
+			      billed=0, room="U-27", reservation=res_ugx.name),
+		]}
+		with self.installed():
+			ugx_rows = open_outlet_checks(prop_ugx, reservation=res_ugx.name, room=room_ugx)
+			ugx_bills = checkout._pending_bills(res_ugx, [])
+			ugx_eod = night_audit.check_open_pos_bills(prop_ugx, YESTERDAY)
+		self.assertEqual(ugx_rows[0]["amount"], 42000.0)
+		self.assertEqual(ugx_rows[1]["amount"], 42000.0)
+		self.assertEqual(ugx_bills[0]["amount"], 42000.0)
+		self.assertEqual(ugx_eod["amount"], 84000.0)
+
+		# USD: 2 decimal places
+		self.answer = {"checks": [check(name="PSINV-USD-01", amount=125.75, billed=0)]}
+		with self.installed():
+			usd_rows = open_outlet_checks(prop_usd, business_date=YESTERDAY)
+		self.assertEqual(usd_rows[0]["amount"], 125.75)
