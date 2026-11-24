@@ -545,6 +545,112 @@ def verify_supervisor_approval(property: str, supervisor: str | None = None, pin
 	return {"supervisor": approver}
 
 
+def resolve_property_for_pos_profile(pos_profile: str | None) -> str | None:
+	"""Resolve the Property bound to an ERPNext POS Profile, when available."""
+	if not pos_profile or not frappe.db.table_exists("POS Profile"):
+		return None
+	meta = frappe.get_meta("POS Profile")
+	if meta.has_field("custom_property"):
+		prop = frappe.db.get_value("POS Profile", pos_profile, "custom_property")
+		if prop:
+			return str(prop)
+	branch = frappe.db.get_value("POS Profile", pos_profile, "branch") if meta.has_field("branch") else None
+	if branch and frappe.db.table_exists("Branch") and frappe.get_meta("Branch").has_field("custom_property"):
+		prop = frappe.db.get_value("Branch", branch, "custom_property")
+		if prop:
+			return str(prop)
+	company = frappe.db.get_value("POS Profile", pos_profile, "company") if meta.has_field("company") else None
+	if company and frappe.get_meta("Property").has_field("company"):
+		props = frappe.get_all("Property", filters={"company": company, "disabled": 0}, pluck="name", limit=2)
+		if len(props) == 1:
+			return str(props[0])
+	props = frappe.get_all("Property", filters={"disabled": 0}, pluck="name", limit=2)
+	return str(props[0]) if len(props) == 1 else None
+
+
+def _scrub_pin_from_form_dict() -> None:
+	form = getattr(frappe.local, "form_dict", None)
+	if isinstance(form, dict):
+		for key in ("pin", "supervisor_pin", "override_pin"):
+			form.pop(key, None)
+
+
+def verify_pos_override_pin(
+	approver: str | None,
+	pin: str | None,
+	pos_profile: str | None = None,
+	*,
+	property: str | None = None,
+	requester: str | None = None,
+	privilege: str | None = None,
+) -> dict:
+	"""Frappe hook (`pos_override_pin_verifier`) called by POS override verification.
+
+	Reuses Kamra's existing Cashier PIN store through `verify_supervisor`:
+	same 5/15 lockout, self-approval refused, property scope enforced, AI agents
+	and Administrator/Guest refused, and `form_dict` PIN scrubbed.
+	Returns only yes/no + approver display name on success (and a neutral refusal
+	code on failure). Never introduces a second PIN store.
+	"""
+	try:
+		if (
+			getattr(frappe.flags, "kamra_agent_call", False)
+			or getattr(frappe.flags, "kamra_gate_bypass", False)
+			or "Kamra Agent" in frappe.get_roles()
+		):
+			return {"ok": False, "name": None, "code": "POS-AUTH-NOT-ELIGIBLE"}
+
+		req = (requester if requester is not None else getattr(frappe.session, "user", None)) or ""
+		if not req or req == "Guest":
+			return {"ok": False, "name": None, "code": "POS-AUTH-NOT-ELIGIBLE"}
+
+		approver_in = (approver or "").strip()
+		if not approver_in or approver_in.casefold() in ("administrator", "guest"):
+			return {"ok": False, "name": None, "code": "POS-AUTH-NOT-ELIGIBLE"}
+
+		canonical = frappe.db.exists("User", approver_in)
+		if not canonical:
+			return {"ok": False, "name": None, "code": "POS-AUTH-NOT-ELIGIBLE"}
+		approver_user = str(canonical)
+
+		if approver_user.casefold() == str(req).casefold():
+			return {"ok": False, "name": None, "code": "POS-AUTH-SELF"}
+
+		prop = property or resolve_property_for_pos_profile(pos_profile)
+		allowed_props = restricted_properties(approver_user)
+		if allowed_props is not None and (not prop or prop not in allowed_props):
+			return {"ok": False, "name": None, "code": "POS-AUTH-NOT-ELIGIBLE"}
+
+		try:
+			verified = verify_supervisor(
+				prop or "",
+				approver_user,
+				pin,
+				roles=POS_SUPERVISOR_ROLES,
+				requester=req,
+			)
+		except frappe.PermissionError as exc:
+			frappe.clear_messages()
+			msg = str(exc)
+			code = "POS-AUTH-SELF" if "SUPERVISOR_SELF_APPROVAL" in msg else "POS-AUTH-NOT-ELIGIBLE"
+			return {"ok": False, "name": None, "code": code}
+		except frappe.ValidationError as exc:
+			frappe.clear_messages()
+			msg = str(exc)
+			if "PIN_LOCKED" in msg:
+				code = "POS-AUTH-LOCKED"
+			elif "PIN_NOT_SET" in msg or "PIN_MUST_RESET" in msg:
+				code = "POS-AUTH-NO-PIN"
+			else:
+				code = "POS-AUTH-PIN"
+			return {"ok": False, "name": None, "code": code}
+
+		full_name = frappe.db.get_value("User", verified, "full_name") or verified
+		return {"ok": True, "name": str(full_name)}
+	finally:
+		_scrub_pin_from_form_dict()
+
+
 def _check_user_pin(user: str, pin, property: str | None):
 	"""Check `user`'s cashier PIN; wrong tries count towards the lock."""
 	max_attempts, lock_minutes = _pin_policy(property)

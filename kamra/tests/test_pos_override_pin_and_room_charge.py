@@ -486,13 +486,25 @@ class RoomChargeVerifyAndOverrideTestCase(AuditTestCase):
 
 	def test_adversarial_override_token_hook_missing_or_raising_fails_closed(self):
 		self.as_pos()
-		with patch("frappe.get_attr", side_effect=ImportError("no pos app")):
+		orig_get_attr = frappe.get_attr
+
+		def missing_consumer(path):
+			if "override.consume" in str(path):
+				raise ImportError("no pos app")
+			return orig_get_attr(path)
+
+		def raising_consumer(path):
+			if "override.consume" in str(path):
+				return lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom"))
+			return orig_get_attr(path)
+
+		with patch("frappe.get_attr", side_effect=missing_consumer):
 			with self.assertRaises((frappe.ValidationError, frappe.PermissionError)):
 				pi.pos_post_room_charge(
 					PROP_A, "T-HOOK-MISS", 1500, "Dinner", room="101",
 					override_token="tok-missing", pos_profile="Till A",
 				)
-		with patch("frappe.get_attr", return_value=lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom"))):
+		with patch("frappe.get_attr", side_effect=raising_consumer):
 			with self.assertRaises((frappe.ValidationError, frappe.PermissionError)):
 				pi.pos_post_room_charge(
 					PROP_A, "T-HOOK-ERR", 1500, "Dinner", room="101",
