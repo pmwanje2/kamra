@@ -115,6 +115,9 @@ def open_folio(reservation) -> str:
 	if existing:
 		_post_addons(reservation, existing)
 		_post_pet_charge(reservation, existing)
+		if not reservation.flags.get("carried_forward"):
+			from kamra.fixed_charges import post_arrival_fixed_charges
+			post_arrival_fixed_charges(reservation)
 		return existing
 	folio = frappe.get_doc({
 		"doctype": "Folio",
@@ -152,6 +155,8 @@ def open_folio(reservation) -> str:
 	_post_addons(reservation, folio.name)
 	_post_cleaning_fee(reservation, folio.name)
 	_post_pet_charge(reservation, folio.name)
+	from kamra.fixed_charges import post_arrival_fixed_charges
+	post_arrival_fixed_charges(reservation)
 	return folio.name
 
 
@@ -974,8 +979,9 @@ def reference_currency(reservation, grand_total=None, balance=None, *, charges=N
 	return out
 
 
-def post_room_night(reservation, date, folios=None, *, room_posted: list | None = None) -> bool:
-	"""Post one night's room (and meal plan) charge, routed by the
+def post_room_night(reservation, date, folios=None, *, room_posted: list | None = None,
+                    package_stats: dict | None = None) -> bool:
+	"""Post one night's room (and meal plan / package elements) charge, routed by the
 	company's billing rules. Skips dates already posted - safe to call
 	from both audit and checkout. Pass `folios` (a dict) to batch saves
 	across nights; when omitted the touched folios save immediately.
@@ -990,7 +996,10 @@ def post_room_night(reservation, date, folios=None, *, room_posted: list | None 
 	# the GST rate this call's room line posts at: its levy and extra guests follow it
 	room_gst = None
 
-	if not _charge_posted(reservation.name, "Room", date):
+	from kamra.packages import active_package_for_reservation, post_package_night_split
+	pkg_doc = active_package_for_reservation(reservation)
+
+	if pkg_doc is not None or not _charge_posted(reservation.name, "Room", date):
 		room_no = (reservation.room or "").split("-")[-1]
 		day_use = _day_use_room_charge(reservation, date)
 		current = None
@@ -1038,25 +1047,56 @@ def post_room_night(reservation, date, folios=None, *, room_posted: list | None 
 			fx_posted = {"contract_currency": current["currency"], "contract_fx_rate": current["fx_rate"],
 			             "contract_fx_date": current["fx_date"], "contract_fx_stale": int(current["stale"])}
 		from kamra.room_statistics import category_rules
-		_append_charge(folios, reservation, "Room", {
-			**fx_posted,
-			"posting_date": date,
-			"charge_type": "Room",
-			"reservation": reservation.name,
-			"rate_category": category_rules(reservation.property).of(
-				reservation.get("rate_category")),
-			"description": desc,
-			"qty": 1,
-			"rate": night_rate,
-			"amount": night_rate,
-			"gst_rate": gst_rate,
-			"auto_posted": 1,
-		})
-		posted = True
-		room_gst = gst_rate
-		if room_posted is not None:
-			room_posted.append(night_rate)
-		_post_room_levy(folios, reservation, date, night_rate, gst_rate)
+		rate_cat = category_rules(reservation.property).of(reservation.get("rate_category"))
+		if pkg_doc is not None:
+			pkg_res = post_package_night_split(
+				reservation,
+				pkg_doc,
+				night_rate,
+				gst_rate,
+				date,
+				folios=folios,
+				room_desc=desc,
+				fx_posted=fx_posted,
+				rate_category=rate_cat,
+			)
+			if package_stats is not None:
+				package_stats["elements_posted"] = (
+					int(package_stats.get("elements_posted") or 0) + pkg_res["elements_posted"]
+				)
+				package_stats["elements_amount"] = float(
+					Decimal(str(package_stats.get("elements_amount") or 0))
+					+ Decimal(str(pkg_res["elements_amount"]))
+				)
+				package_stats["addon_amount"] = float(
+					Decimal(str(package_stats.get("addon_amount") or 0))
+					+ Decimal(str(pkg_res["addon_amount"]))
+				)
+			if pkg_res["posted"]:
+				posted = True
+				room_gst = gst_rate
+				if room_posted is not None:
+					room_posted.append(pkg_res["night_total"])
+				_post_room_levy(folios, reservation, date, night_rate, gst_rate)
+		else:
+			_append_charge(folios, reservation, "Room", {
+				**fx_posted,
+				"posting_date": date,
+				"charge_type": "Room",
+				"reservation": reservation.name,
+				"rate_category": rate_cat,
+				"description": desc,
+				"qty": 1,
+				"rate": night_rate,
+				"amount": night_rate,
+				"gst_rate": gst_rate,
+				"auto_posted": 1,
+			})
+			posted = True
+			room_gst = gst_rate
+			if room_posted is not None:
+				room_posted.append(night_rate)
+			_post_room_levy(folios, reservation, date, night_rate, gst_rate)
 
 	# Its own charge type, not the shared Misc bucket: dedupe is by type and
 	# date, so a sundry the desk had already typed as Misc that day would
@@ -1281,7 +1321,12 @@ def post_remaining_nights(reservation) -> int:
 		if post_room_night(reservation, date, folios):
 			posted += 1
 		date = getdate(add_days(date, 1))
+	from kamra.fixed_charges import post_departure_fixed_charges
+	post_departure_fixed_charges(reservation, folios=folios)
 	save_folios(folios)
+	if reservation.get("status") == "Checked Out":
+		from kamra.packages import settle_package_breakage
+		settle_package_breakage(reservation.name)
 	return posted
 
 
@@ -2299,8 +2344,15 @@ def run_night_audit(property: str, business_date: str | None = None,
 
 	log_lines = []
 	folios_opened = charges_posted = no_shows = 0
+	fixed_charges_posted = package_elements_posted = package_breakage_count = 0
 	amount_posted = Decimal(0)
+	fixed_charges_amount = Decimal(0)
+	package_elements_amount = Decimal(0)
+	package_breakage_total = Decimal(0)
 	no_show_rows: list[dict] = []
+
+	from kamra.fixed_charges import post_fixed_charges_for_date
+	from kamra.packages import expire_daily_allowances
 
 	in_house = frappe.get_all(
 		"Reservation",
@@ -2320,11 +2372,32 @@ def run_night_audit(property: str, business_date: str | None = None,
 			folios_opened += 1
 			log_lines.append(f"opened folio {folio_name} for {res.name}")
 		room_posted: list = []
-		if post_room_night(res, business_date, room_posted=room_posted):
+		pkg_stats: dict = {}
+		if post_room_night(res, business_date, room_posted=room_posted, package_stats=pkg_stats):
 			charges_posted += 1
 			# what the room line posted at (a Current Date night at today's rate), not the booked night
 			amount_posted += sum((Decimal(str(amount)) for amount in room_posted), Decimal(0))
 			log_lines.append(f"posted room night {business_date} for {res.name}")
+		if pkg_stats.get("elements_posted"):
+			package_elements_posted += int(pkg_stats["elements_posted"])
+			package_elements_amount += Decimal(str(pkg_stats.get("elements_amount") or 0))
+			addon_amt = Decimal(str(pkg_stats.get("addon_amount") or 0))
+			if addon_amt:
+				amount_posted += addon_amt
+			log_lines.append(
+				f"posted {pkg_stats['elements_posted']} package element(s) for {res.name}"
+			)
+		fc_res = post_fixed_charges_for_date(res, business_date, trigger="night_audit")
+		if fc_res["count"]:
+			fixed_charges_posted += int(fc_res["count"])
+			fc_amt = Decimal(str(fc_res["amount"]))
+			fixed_charges_amount += fc_amt
+			amount_posted += fc_amt
+			log_lines.append(f"posted {fc_res['count']} fixed charge(s) for {res.name}")
+		brk_res = expire_daily_allowances(res, business_date)
+		if brk_res["count"]:
+			package_breakage_count += int(brk_res["count"])
+			package_breakage_total += Decimal(str(brk_res["breakage_amount"]))
 
 	# no-shows: closing day D ends D's arrivals too (Opera end of day), so
 	# a confirmed stay due on or before the closed date that never checked
@@ -2397,6 +2470,12 @@ def run_night_audit(property: str, business_date: str | None = None,
 	trigger = {"manual": "Manual", "scheduled": "Scheduled"}.get(mode or "", "System")
 	summary = {
 		"room_charges_posted": charges_posted,
+		"fixed_charges_posted": fixed_charges_posted,
+		"fixed_charges_amount": float(fixed_charges_amount),
+		"package_elements_posted": package_elements_posted,
+		"package_elements_amount": float(package_elements_amount),
+		"package_breakage_count": package_breakage_count,
+		"package_breakage_total": float(package_breakage_total),
 		"amount_posted": float(amount_posted),
 		"no_shows_flagged": no_shows,
 		"late_arrivals_held": len(held_late),
@@ -2498,6 +2577,12 @@ def run_night_audit(property: str, business_date: str | None = None,
 		"acknowledged": [a["key"] for a in acks],
 		"has_pack": bool(report_pack),
 		"room_charges_posted": charges_posted,
+		"fixed_charges_posted": fixed_charges_posted,
+		"fixed_charges_amount": float(fixed_charges_amount),
+		"package_elements_posted": package_elements_posted,
+		"package_elements_amount": float(package_elements_amount),
+		"package_breakage_count": package_breakage_count,
+		"package_breakage_total": float(package_breakage_total),
 		"amount_posted": float(amount_posted),
 		"no_shows_flagged": no_shows,
 		"late_arrivals_held": len(held_late),

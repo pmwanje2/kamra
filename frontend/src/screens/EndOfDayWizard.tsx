@@ -23,6 +23,7 @@ import { call } from "../lib/api"
 import CheckOutDialog from "../components/CheckOutDialog"
 import CheckInDialog from "../components/CheckInDialog"
 import NoShowDialog from "../components/NoShowDialog"
+import AuditSummaryCard from "../components/AuditSummaryCard"
 import {
   eodAcknowledge,
   eodProgress,
@@ -39,16 +40,16 @@ import { CHECK_FIXES } from "../lib/eodFixes"
 import { Badge } from "../components/ui/badge"
 import { Button } from "../components/ui/button"
 import { Card } from "../components/ui/card"
-import { cur, moneyLocale } from "../lib/money"
+import { cur, fmtAmount } from "../lib/money"
 import { useT, t as translate } from "../lib/i18n"
 import { cn } from "../lib/utils"
 import { AuditPackView, sessionCols, DataTable, fmtDay } from "./AuditPack"
 
 
-const money = (n: unknown) =>
+const formatMoney = (n: unknown, currency?: string) =>
   n === null || n === undefined || n === ""
     ? "-"
-    : Number(n).toLocaleString(moneyLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : fmtAmount(n, currency || undefined)
 
 interface Column {
   key: string
@@ -92,21 +93,21 @@ function StepTable({
     if (c.render) return c.render(r)
     const v = r[c.key]
     if (v === null || v === undefined || v === "") return "-"
-    if (c.kind === "money") return money(v)
+    if (c.kind === "money") return formatMoney(v)
     if (c.kind === "date") return fmtDay(v)
     return String(v)
   }
   const right = (c: Column) => (c.kind === "money" || c.kind === "num" ? "text-end tabular-nums" : "")
   return (
     <div className="rounded-lg border border-zinc-200">
-      <div className="flex items-center justify-between gap-2 border-b border-zinc-100 px-3 py-2">
-        <label className="relative">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-100 px-3 py-2">
+        <label className="relative min-w-0 flex-1 sm:flex-none">
           <Search className="pointer-events-none absolute start-2 top-2 size-4 text-zinc-400" aria-hidden />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder={t("Search")}
-            className="w-56 rounded-lg border border-zinc-300 bg-white py-1.5 ps-8 pe-2 text-sm"
+            className="w-full sm:w-56 rounded-lg border border-zinc-300 bg-white py-1.5 ps-8 pe-2 text-sm"
           />
         </label>
         <span className="text-xs text-zinc-400">{t("{n} of {m}", { n: shown.length, m: rows.length })}</span>
@@ -227,7 +228,7 @@ const ARRIVAL_COLS: Column[] = [
     kind: "money",
     render: (r) => (
       <div>
-        <div>{r.rate === null || r.rate === undefined || r.rate === "" ? "-" : money(r.rate)}</div>
+        <div>{r.rate === null || r.rate === undefined || r.rate === "" ? "-" : formatMoney(r.rate)}</div>
         {r.rate_plan ? <div className="text-xs text-zinc-500">{String(r.rate_plan)}</div> : null}
       </div>
     ),
@@ -513,7 +514,7 @@ export default function EndOfDayWizard() {
                 render: (r) => (
                   <span className={r.outcome === "no_show" ? "text-rose-700" : "text-amber-700"}>
                     {t(String(r.policy))}
-                    {Number(r.fee_amount) > 0 ? ` · ${cur()}${money(r.fee_amount)}` : ""}
+                    {Number(r.fee_amount) > 0 ? ` · ${cur()}${formatMoney(r.fee_amount, state.currency)}` : ""}
                   </span>
                 ),
               },
@@ -581,7 +582,7 @@ export default function EndOfDayWizard() {
         return (
           <>
             {c.enabled && (
-              <p className="text-xs text-zinc-500">{t("Threshold {cur}{n}", { cur: cur(), n: money(c.threshold) })}</p>
+              <p className="text-xs text-zinc-500">{t("Threshold {cur}{n}", { cur: cur(), n: formatMoney(c.threshold, state.currency) })}</p>
             )}
             <StepTable cols={FOLIO_COLS} rows={items} empty={translate("No in-house folio is over the threshold.")} />
           </>
@@ -864,14 +865,37 @@ export default function EndOfDayWizard() {
         <>
           <Message tone="ok">
             {runOut
-              ? t("Posted {n} room nights ({amount}), {ns} no-shows. The business date is now {next}.", {
+              ? t("Posted {n} room nights, {pkg} package splits, {fc} fixed charges ({amount}), {ns} no-shows. The business date is now {next}.", {
                   n: Number(runOut.room_charges_posted ?? 0),
-                  amount: `${cur()}${money(runOut.amount_posted)}`,
+                  pkg: Number(runOut.package_elements_posted ?? 0),
+                  fc: Number(runOut.fixed_charges_posted ?? 0),
+                  amount: `${cur()}${formatMoney(runOut.amount_posted, state.currency)}`,
                   ns: Number(runOut.no_shows_flagged ?? 0),
                   next: fmtDay(runOut.next_business_date),
                 })
               : t("Room and tax were posted and the business date rolled.")}
           </Message>
+          {runOut && (
+            <AuditSummaryCard
+              currency={state.currency}
+              summary={{
+                room_charges_posted: Number(runOut.room_charges_posted ?? 0),
+                package_elements_posted: Number(runOut.package_elements_posted ?? 0),
+                package_elements_amount:
+                  runOut.package_elements_amount !== undefined
+                    ? Number(runOut.package_elements_amount)
+                    : undefined,
+                fixed_charges_posted: Number(runOut.fixed_charges_posted ?? 0),
+                fixed_charges_amount: Number(runOut.fixed_charges_amount ?? 0),
+                package_breakage_count:
+                  runOut.package_breakage_count !== undefined
+                    ? Number(runOut.package_breakage_count)
+                    : undefined,
+                package_breakage_total: Number(runOut.package_breakage_total ?? 0),
+                amount_posted: Number(runOut.amount_posted ?? 0),
+              }}
+            />
+          )}
           <AuditPackView audit={state.audit} embedded />
         </>
       ) : (
