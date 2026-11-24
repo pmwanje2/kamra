@@ -7715,6 +7715,10 @@ def create_booking(property: str, room_type: str, check_in_date: str,
 	room_type = resolve_room_type(property, room_type)
 	meal_plan = resolve_meal_plan(property, meal_plan)
 	rate_plan = resolve_rate_plan(property, rate_plan)
+	if not int(waitlist or 0) and not room and room_type not in _sellable_room_types(property, [room_type]):
+		if frappe.db.exists("Room", {"property": property}):
+			from kamra.kamra.doctype.reservation.reservation import InventoryRefused
+			frappe.throw(_("{0} has no rooms configured.").format(room_type), exc=InventoryRefused)
 	# refused here, before the guest or any inventory is touched
 	typed = _check_night_prices(
 		property, room_type, check_in_date, check_out_date, night_prices,

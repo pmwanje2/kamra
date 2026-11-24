@@ -262,14 +262,6 @@ class Reservation(Document):
 		frappe.db.get_value("Room Type", self.room_type, "name", for_update=True)
 		total = frappe.db.count("Room", {"room_type": self.room_type})
 		if not total:
-			from kamra.siu.availability import has_active_sius
-			if has_active_sius(self.property, self.room_type):
-				return
-			if frappe.db.exists("Room", {"property": self.property}):
-				frappe.throw(
-					_("{0} has no rooms configured.").format(self.room_type),
-					exc=InventoryRefused,
-				)
 			return  # setup-time bookings before rooms exist
 		pct = float(frappe.db.get_value(
 			"Room Type", self.room_type, "overbooking_pct") or 0)
