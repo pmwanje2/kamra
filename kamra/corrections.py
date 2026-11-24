@@ -4,12 +4,18 @@ from __future__ import annotations
 
 import hashlib
 import json
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
 import frappe
 
 from kamra.business_date import get_business_date
-from kamra.ledger import _currency_places, _money, _round_currency, list_reason_codes
+from kamra.ledger import (
+	_currency_places,
+	_money,
+	_parse_currency_amount,
+	_round_currency,
+	list_reason_codes,
+)
 
 LABELS = {
 	"void_charge": "Void charge",
@@ -175,16 +181,7 @@ def correct(folio, name, action, code, note, key, pin, supervisor_user, supervis
 	doc = frappe.get_doc("Folio", folio, for_update=True)
 	if action == "partial_refund":
 		raw_places = _currency_places(doc.property)
-		unit = Decimal(1).scaleb(-raw_places)
-		try:
-			value = Decimal(str(amount))
-			if not value.is_finite() or value <= 0 or value != value.quantize(unit):
-				raise InvalidOperation
-		except InvalidOperation:
-			if raw_places == 0:
-				frappe.throw("Enter a positive whole-unit refund amount.")
-			frappe.throw(f"Enter a positive refund amount with at most {raw_places} decimal places.")
-		amount = float(value)
+		amount = float(_parse_currency_amount(amount, raw_places))
 	require_cashier_pin(doc.property, pin)
 	row, charge = _row(doc, name)
 	signature = hashlib.sha256(

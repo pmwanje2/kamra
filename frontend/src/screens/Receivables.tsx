@@ -7,7 +7,7 @@ import { Button } from "../components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { DataTable } from "../components/ui/data-table"
 import { Sheet } from "../components/ui/sheet"
-import { fmtMoney, loadLocale, taxLabel, useLocale } from "../lib/money"
+import { fmtMoney, loadLocale, moneyEps, moneyStep, roundMoney, taxLabel, useLocale } from "../lib/money"
 import { useAuth } from "../lib/auth"
 import { downloadCsv } from "../lib/csv"
 import CityLedgerPayment from "./CityLedgerPayment"
@@ -54,10 +54,10 @@ type AccountRow = {
 // the work queues on top of the list: each is a filter over the same rows
 const QUEUES = {
   all: { label: "All accounts", test: (_r: AccountRow) => true },
-  overdue: { label: "Overdue", test: (r: AccountRow) => r.overdue > 0.005 },
+  overdue: { label: "Overdue", test: (r: AccountRow) => r.overdue > moneyEps() },
   over_limit: { label: "Over credit limit", test: (r: AccountRow) => overLimit(r) },
-  unbilled: { label: "In house, not billed", test: (r: AccountRow) => (r.unbilled ?? 0) > 0.005 },
-  ahead: { label: "Paid ahead", test: (r: AccountRow) => r.unapplied_credit > 0.005 },
+  unbilled: { label: "In house, not billed", test: (r: AccountRow) => (r.unbilled ?? 0) > moneyEps() },
+  ahead: { label: "Paid ahead", test: (r: AccountRow) => r.unapplied_credit > moneyEps() },
 } as const
 type Queue = keyof typeof QUEUES
 
@@ -382,6 +382,8 @@ function lastMonth() {
 
 function AccountPage({ account }: { account: string }) {
   const language = useUILanguage()
+  const loc = useLocale()
+  const eps = moneyEps(loc.currency)
   const { roles } = useAuth()
   const isFinance = roles.some((r) => FINANCE.includes(r))
   const [acc, setAcc] = useState<Account | null>(null)
@@ -554,7 +556,7 @@ function AccountPage({ account }: { account: string }) {
               ) : <span>{it.due_date || "-"}</span> },
               { key: "billed", label: translate("Debit"), align: "right", render: (it) => fmtMoney(it.billed) },
               { key: "paid", label: translate("Credit"), align: "right", render: (it) => it.paid ? fmtMoney(it.paid) : "-" },
-              { key: "outstanding", label: translate("Total Balance"), align: "right", render: (it) => it.outstanding > 0.005
+              { key: "outstanding", label: translate("Total Balance"), align: "right", render: (it) => it.outstanding > eps
                 ? <span className="font-medium">{fmtMoney(it.outstanding)}</span>
                 : <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-xs font-medium text-emerald-700">{translate("Paid")}</span> },
               { key: "actions", label: "", noSort: true, align: "right", render: (it) => (
@@ -562,7 +564,7 @@ function AccountPage({ account }: { account: string }) {
                   <Button variant="outline" onClick={() => setSheet({ view: it.folio })}>{translate("View")}</Button>
                   {isFinance ? (
                     <>
-                      {it.outstanding > 0.005 ? (
+                      {it.outstanding > eps ? (
                         <Button variant="outline" onClick={() => setSheet({ transfer: it })}>{translate("Transfer")}</Button>
                       ) : null}
                       <Button variant="outline" onClick={() => setSheet({ action: { kind: "dispute", item: it } })}>
@@ -846,7 +848,7 @@ function AgingBar({ acc }: { acc: Account }) {
     { k: "90+ late", v: acc.d90p, cls: "bg-rose-800" },
   ]
   const total = parts.reduce((a, p) => a + Math.max(0, p.v), 0)
-  if (total < 0.005) return null
+  if (total < moneyEps()) return null
   return (
     <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2">
       <div className="text-xs text-zinc-500">{translate("Age of what is owed")}</div>
@@ -955,6 +957,8 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: str
 
 function AccountSetup(props: { acc?: Account; onClose: () => void; onSaved: (account: string) => void }) {
   useUILanguage()
+  const loc = useLocale()
+  const step = moneyStep(loc.currency)
   const a = props.acc
   const [companies, setCompanies] = useState<{ name: string; company_name: string }[]>([])
   const [company, setCompany] = useState(a?.company ?? "")
@@ -1037,7 +1041,7 @@ function AccountSetup(props: { acc?: Account; onClose: () => void; onSaved: (acc
         </label>
         <label className="block">
           <span className="mb-1 block text-zinc-500">{translate("Credit limit")}</span>
-          <input className={field} type="number" min="0" step="0.01" inputMode="decimal" value={limit}
+          <input className={field} type="number" min="0" step={step} inputMode="decimal" value={limit}
             placeholder={translate("0 = no limit")} onChange={(e) => setLimit(e.target.value)} />
         </label>
         <div>
@@ -1110,9 +1114,11 @@ function NewInvoice(props: { acc: Account; onClose: () => void; onCreated: (invo
       ? Number(loc.fnb_tax_rate) : null
   }
   const rateOf = (l: Line) => fnbRate(l) ?? l.gst_rate
-  const net = (l: Line) => Math.round((Number(l.amount) || 0) * (Number(l.qty) || 0) * 100) / 100
-  const subtotal = lines.reduce((s, l) => s + net(l), 0)
-  const tax = lines.reduce((s, l) => s + Math.round(net(l) * rateOf(l)) / 100, 0)
+  const step = moneyStep(loc.currency)
+  const net = (l: Line) => roundMoney((Number(l.amount) || 0) * (Number(l.qty) || 0), loc.currency)
+  const lineTax = (l: Line) => roundMoney((net(l) * rateOf(l)) / 100, loc.currency)
+  const subtotal = roundMoney(lines.reduce((s, l) => s + net(l), 0), loc.currency)
+  const tax = roundMoney(lines.reduce((s, l) => s + lineTax(l), 0), loc.currency)
 
   const set = (i: number, patch: Partial<Line>) =>
     setLines((cur) => cur.map((l, j) => (j === i ? { ...l, ...patch } : l)))
@@ -1209,7 +1215,7 @@ function NewInvoice(props: { acc: Account; onClose: () => void; onCreated: (invo
                         onChange={(e) => set(i, { description: e.target.value })} />
                     </td>
                     <td className="py-2 pr-2">
-                      <input className={`${field} text-right`} type="number" min="0" step="0.01" inputMode="decimal"
+                      <input className={`${field} text-right`} type="number" min="0" step={step} inputMode="decimal"
                         value={l.amount} onChange={(e) => set(i, { amount: e.target.value })} />
                     </td>
                     <td className="py-2 pr-2">
@@ -1225,7 +1231,7 @@ function NewInvoice(props: { acc: Account; onClose: () => void; onCreated: (invo
                       </select>
                     </td>
                     <td className="py-2 pr-2 pt-3.5 text-right tabular-nums">
-                      {fmtMoney(net(l) + Math.round(net(l) * rateOf(l)) / 100)}
+                      {fmtMoney(net(l) + lineTax(l))}
                     </td>
                     <td className="py-2">
                       <Button variant="ghost" aria-label={translate("Remove line")} disabled={lines.length === 1}

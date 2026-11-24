@@ -221,9 +221,54 @@ def _currency_places(property: str | None) -> int:
 	return _minor_unit(property_currency(property))
 
 
+_FLOAT_DUST = Decimal("1e-9")
+
+
 def _round_currency(value, places: int) -> float:
 	"""Half-up round to `places` decimals using Decimal."""
 	return float(_money(value).quantize(Decimal(1).scaleb(-places), rounding=ROUND_HALF_UP))
+
+
+def _parse_currency_amount(amount, places: int) -> Decimal:
+	"""Parse a positive amount to the currency's exact ISO 4217 minor unit.
+
+	Absorbs IEEE-754 binary float subtraction dust (< 1e-9, e.g.
+	11.944 - 11.943 == 0.0010000000000012221) while rejecting non-positive
+	values and genuine sub-minor fractions (e.g. 0.0004 KWD or 0.4 UGX)."""
+	from decimal import InvalidOperation
+
+	unit = Decimal(1).scaleb(-places)
+	try:
+		value = Decimal(str(amount))
+	except (InvalidOperation, TypeError, ValueError):
+		value = None
+	if value is None or not value.is_finite() or value <= 0:
+		frappe.throw("Refund amount must be positive.")
+	quantized = value.quantize(unit, rounding=ROUND_HALF_UP)
+	if quantized <= 0 or abs(value - quantized) >= _FLOAT_DUST:
+		if places == 0:
+			frappe.throw("Enter a positive whole-unit refund amount.")
+		frappe.throw(f"Enter a positive refund amount with at most {places} decimal places.")
+	return quantized
+
+
+def _format_currency_amount(property: str | None, amount) -> str:
+	"""Format an amount with the property currency symbol and exact ISO 4217
+	decimal places (0 for UGX/JPY, 2 for INR/USD keeping .00, 3 for KWD)."""
+	places = _currency_places(property)
+	symbol = ""
+	try:
+		if property:
+			from kamra.localization import pack_for
+			prop = frappe.get_cached_doc("Property", property)
+			symbol = pack_for(property).locale(prop).get("currency_symbol") or ""
+	except Exception:
+		symbol = ""
+	try:
+		value = float(amount or 0)
+	except (TypeError, ValueError):
+		return f"{symbol}{amount}"
+	return f"{'-' if value < 0 else ''}{symbol}{abs(value):,.{places}f}"
 
 
 def sync_folio_rounding_ledger(folio_doc, session: str | None = None) -> None:
@@ -2713,12 +2758,13 @@ def fx_to_home(fx_amount, rate, digits=2) -> float:
 		unit, rounding=ROUND_HALF_UP))
 
 
-def home_to_fx(amount, rate) -> float:
+def home_to_fx(amount, rate, digits: int = 2) -> float:
 	"""Home amount -> foreign amount shown to the guest. Rounded UP to the
-	cent so paying the shown figure always settles the bill; any extra is
-	change, given back in home currency."""
+	currency's minor unit so paying the shown figure always settles the bill;
+	any extra is change, given back in home currency."""
+	unit = Decimal(1).scaleb(-digits)
 	return float((_money(amount) / _money(rate)).quantize(
-		Decimal("0.01"), rounding=ROUND_UP))
+		unit, rounding=ROUND_UP))
 
 
 def _settlement_window() -> int:
@@ -2752,7 +2798,11 @@ def payment_rate(property: str, currency: str, amount: float | None = None) -> d
 	out = {"currency": currency, "rate": rate, "rate_date": str(row.rate_date),
 	       "home_currency": home, "max_exchange": row.max_exchange, "window_days": window}
 	if amount is not None:
-		foreign = round_cents(amount)
+		try:
+			fx_places = int(get_currency_precision(currency))
+		except (KeyError, TypeError, ValueError):
+			fx_places = 2
+		foreign = float(_money(amount).quantize(Decimal(1).scaleb(-fx_places), rounding=ROUND_HALF_UP))
 		if foreign <= 0 or (flt(row.max_exchange) > 0 and foreign > row.max_exchange):
 			frappe.throw("HSP-CASHIER-FX-LIMIT: Enter a positive amount within the published exchange limit.")
 		out["home_amount"] = fx_to_home(foreign, rate, get_currency_precision(home))
@@ -2767,13 +2817,15 @@ def payment_rate(property: str, currency: str, amount: float | None = None) -> d
 def folio_in_currency(folio: str, currency: str):
 	"""A folio's total and balance shown in another currency, at today's
 	rate. Display only: the bill and tax invoice stay in home currency."""
+	from babel.numbers import get_currency_precision
 	doc = frappe.get_doc("Folio", folio)
 	r = payment_rate(doc.property, currency)
+	fx_digits = get_currency_precision(r["currency"])
 	return {
 		**r,
 		"home_currency": home_currency(doc.property),
-		"grand_total": home_to_fx(doc.grand_total, r["rate"]),
-		"balance": home_to_fx(max(float(doc.balance or 0), 0), r["rate"]),
+		"grand_total": home_to_fx(doc.grand_total, r["rate"], fx_digits),
+		"balance": home_to_fx(max(float(doc.balance or 0), 0), r["rate"], fx_digits),
 	}
 
 

@@ -1915,11 +1915,12 @@ def refund_folio_payment(folio: str, amount: float | None = None,
 			return {"ok": True, "idempotent_replay": 1,
 			        "balance": frappe.db.get_value("Folio", folio, "balance")}
 	doc = frappe.get_doc("Folio", folio)
-	from decimal import Decimal
+	from decimal import ROUND_HALF_UP, Decimal
 	from babel.numbers import get_currency_precision
 	from kamra.ledger import (
 		_currency_places,
 		_money,
+		_parse_currency_amount,
 		_round_currency,
 		fx_to_home,
 		home_currency,
@@ -1930,8 +1931,8 @@ def refund_folio_payment(folio: str, amount: float | None = None,
 	from kamra.pricing import _minor_unit
 
 	home = home_currency(doc.property)
-	places = max(_currency_places(doc.property), 2)
-	eps = 0.5 * (10 ** -places)
+	raw_places = _currency_places(doc.property)
+	places = max(raw_places, 2)
 	req_ccy = (currency or "").strip().upper()
 	foreign = bool(req_ccy and req_ccy != home)
 	fx_meta: dict | None = None
@@ -1943,15 +1944,14 @@ def refund_folio_payment(folio: str, amount: float | None = None,
 		if pay.payment_kind == "Security Deposit":
 			frappe.throw(_("A security deposit is refunded from the stay's "
 			               "deposit (refund_deposit), not from the bill."))
-		left = _round_currency(
+		left_dec = (
 			_money(pay.amount) + sum(
 				(_money(p.amount) for p in doc.payments
 				 if p.get("refund_of") == payment_row),
 				Decimal(0),
-			),
-			places,
-		)
-		if left <= eps:
+			)
+		).quantize(Decimal(1).scaleb(-places), rounding=ROUND_HALF_UP)
+		if left_dec <= 0:
 			frappe.throw(_("This payment is already refunded in full."))
 		pay_tender = payment_tender_type(pay.mode, doc.property)
 		if foreign:
@@ -1964,13 +1964,13 @@ def refund_folio_payment(folio: str, amount: float | None = None,
 				frappe.throw(_("{0} cannot refund in foreign currency {1}.").format(mode, req_ccy))
 			if amount in (None, ""):
 				if pay.get("exchange_rate") and (pay.get("currency") or "").upper() == req_ccy:
-					fx_refund = _round_currency(_money(left) / _money(pay.exchange_rate), fx_places)
+					fx_refund = _round_currency(left_dec / _money(pay.exchange_rate), fx_places)
+					if fx_refund <= 0:
+						frappe.throw(_("Refund amount must be positive."))
 				else:
 					frappe.throw(_("Give the foreign currency amount to refund."))
 			else:
-				fx_refund = _round_currency(amount, fx_places)
-			if fx_refund <= 0:
-				frappe.throw(_("Refund amount must be positive."))
+				fx_refund = float(_parse_currency_amount(amount, fx_places))
 			if pay.get("exchange_rate") and (pay.get("currency") or "").upper() == req_ccy:
 				rate = float(pay.exchange_rate)
 				rate_date = pay.get("exchange_rate_date")
@@ -1980,9 +1980,9 @@ def refund_folio_payment(folio: str, amount: float | None = None,
 				rate = r["rate"]
 				rate_date = r["rate_date"]
 				home_amt = r["home_amount"]
-			if home_amt > left + eps:
+			if _money(home_amt) > left_dec:
 				frappe.throw(_("Only {0} of this payment is left to refund.").format(
-					money_text(doc.property, left)))
+					money_text(doc.property, float(left_dec))))
 			fx_meta = {
 				"currency": req_ccy,
 				"fx_amount": -fx_refund,
@@ -1992,10 +1992,13 @@ def refund_folio_payment(folio: str, amount: float | None = None,
 			amount = home_amt
 		else:
 			if amount in (None, ""):
-				amount = left
-			if float(amount) > left + eps:
+				amount_dec = left_dec
+			else:
+				amount_dec = _parse_currency_amount(amount, raw_places)
+			if amount_dec > left_dec:
 				frappe.throw(_("Only {0} of this payment is left to refund.").format(
-					money_text(doc.property, left)))
+					money_text(doc.property, float(left_dec))))
+			amount = float(amount_dec)
 			if not mode:
 				mode = (
 					default_mode_for_tender(doc.property, "Cash")
@@ -2008,9 +2011,7 @@ def refund_folio_payment(folio: str, amount: float | None = None,
 		if payment_tender_type(mode, doc.property) not in FOREIGN_CURRENCY_TENDER_TYPES:
 			frappe.throw(_("{0} cannot refund in foreign currency {1}.").format(mode, req_ccy))
 		fx_places = _minor_unit(req_ccy)
-		fx_refund = _round_currency(amount, fx_places)
-		if fx_refund <= 0:
-			frappe.throw(_("Refund amount must be positive."))
+		fx_refund = float(_parse_currency_amount(amount, fx_places))
 		r = payment_rate(doc.property, req_ccy, fx_refund)
 		fx_meta = {
 			"currency": r["currency"],
@@ -2061,31 +2062,44 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 		from kamra.masters import payment_tender_type
 		if payment_tender_type(mode, doc.property) == "Foreign Cash" and not fx and not (correction or {}).get("fx_amount"):
 			frappe.throw(_("Foreign Cash refund needs the foreign currency of the notes returned."))
-	from decimal import Decimal
-	from kamra.ledger import _currency_places, _money, _round_currency, require_reason
+	from decimal import ROUND_HALF_UP, Decimal
+	from kamra.ledger import (
+		_currency_places,
+		_money,
+		_parse_currency_amount,
+		_round_currency,
+		require_reason,
+	)
 	from kamra.pricing import _minor_unit
-	places = max(_currency_places(doc.property), 2)
-	eps = 0.5 * (10 ** -places)
+	raw_places = _currency_places(doc.property)
+	places = max(raw_places, 2)
+	if bookkeeping_action is None:
+		amount_dec = _parse_currency_amount(amount, raw_places)
+		amount = float(amount_dec)
+	else:
+		amount_dec = _money(amount)
 	reason_text = require_reason(
 		"Refund", reason_code, reason or "",
 		supervisor_pin=supervisor_pin, property=doc.property)
+	unit_calc = Decimal(1).scaleb(-places)
 	received = sum((_money(p.amount) for p in doc.payments if _money(p.amount) > 0), Decimal(0))
 	refunded = -sum((_money(p.amount) for p in doc.payments if _money(p.amount) < 0), Decimal(0))
-	collected_left = received - refunded
-	if _money(amount) > collected_left:
+	collected_left = (received - refunded).quantize(unit_calc, rounding=ROUND_HALF_UP)
+	if amount_dec > collected_left:
 		from kamra.localization import money_text
 		frappe.throw(f"Only {money_text(doc.property, float(collected_left))} was collected on "
 		             "this folio - can't refund more than that.")
 	# money goes back only when the guest is in credit; a guest who still
 	# owes settles first. A security deposit release (ledger set) has its
 	# own balance check in kamra.deposit.
-	if not ledger and (float(doc.balance or 0) >= 0 or float(amount) > -float(doc.balance or 0) + eps):
+	balance_dec = _money(doc.balance).quantize(unit_calc, rounding=ROUND_HALF_UP)
+	if not ledger and (balance_dec >= 0 or amount_dec > -balance_dec):
 		from kamra.localization import money_text
-		if float(doc.balance or 0) >= -eps:
+		if balance_dec >= 0:
 			frappe.throw(_("The guest owes {0} - nothing is due back to refund.").format(
-				money_text(doc.property, max(0.0, float(doc.balance or 0)))))
+				money_text(doc.property, max(0.0, float(balance_dec)))))
 		frappe.throw(_("Only {0} is due back to the guest - can't refund more than that.").format(
-			money_text(doc.property, -float(doc.balance))))
+			money_text(doc.property, float(-balance_dec))))
 	# Pre-arrival advance: release Deposit liability, not Guest (#343)
 	release_advance = False
 	if not ledger:
@@ -2160,7 +2174,7 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 			"Reservation", doc.reservation, "advance_paid") or 0
 		frappe.db.set_value(
 			"Reservation", doc.reservation, "advance_paid",
-			max(0.0, _round_currency(_money(paid) - _money(amount), places)))
+			max(0.0, _round_currency(_money(paid) - amount_dec, places)))
 	if ledger != "Deposit":  # a deposit refund logs itself (kamra.deposit)
 		from kamra.localization import money_text
 		from kamra.savings import log_action
@@ -6435,7 +6449,7 @@ def _assert_settled(doc, credit_override_reason: str | None = None) -> list[dict
 		return []
 	from kamra.checkout import settlement_position
 	from kamra.folio import post_remaining_nights
-	from kamra.localization import money_text
+	from kamra.ledger import _format_currency_amount
 
 	post_remaining_nights(doc)
 	# the one judgement of what is owed either way, shared with the desk's
@@ -6446,12 +6460,12 @@ def _assert_settled(doc, credit_override_reason: str | None = None) -> list[dict
 	if owed:
 		frappe.throw(_("Cannot check out: {0} is still owed. Collect payment "
 		               "or transfer it to the city ledger before departure.").format(
-			money_text(doc.property, owed)),
+			_format_currency_amount(doc.property, owed)),
 		             title=_("Settle before check-out"))
 	if refund:
 		frappe.throw(_("Cannot check out: the guest is owed {0}. Issue the "
 		               "refund before departure.").format(
-			money_text(doc.property, refund)),
+			_format_currency_amount(doc.property, refund)),
 		             title=_("Settle before check-out"))
 	# nothing moves until the guest's side is settled - and the company's
 	# credit is checked once for everything the stay bills to it

@@ -1808,20 +1808,19 @@ def close_folio(folio_name: str) -> str:
 		from kamra import ledger as _ledger_mod
 		if hasattr(_ledger_mod, "sync_folio_rounding_ledger"):
 			_ledger_mod.sync_folio_rounding_ledger(folio)
-	from kamra.ledger import _currency_places
+	from kamra.ledger import _currency_places, _format_currency_amount
 	places = max(_currency_places(folio.property), 2)
 	eps = 0.5 * (10 ** -places)
 	balance = float(folio.balance or 0)
 	if abs(balance) > eps:
-		from kamra.localization import money_text
 		if balance > 0:
 			frappe.throw(frappe._(
 				"Cannot close the folio: {0} is still owed. Collect "
 				"payment, or move the company's share to the city ledger, "
-				"first.").format(money_text(folio.property, balance)))
+				"first.").format(_format_currency_amount(folio.property, balance)))
 		frappe.throw(frappe._(
 			"Cannot close the folio: {0} is owed back to the guest. "
-			"Issue the refund first.").format(money_text(folio.property, -balance)))
+			"Issue the refund first.").format(_format_currency_amount(folio.property, -balance)))
 	from frappe.model.naming import make_autoname
 
 	folio.status = "Closed"

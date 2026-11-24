@@ -394,6 +394,7 @@ def _checkout_context(reservation: str) -> dict:
 	their credit check, and every refusal check-out would give (`blockers`,
 	each tied to the step it belongs to)."""
 	from kamra.authz import assert_property_access
+	from kamra.ledger import _currency_places
 	from kamra.localization import pack_for
 	from kamra.sop import group_for_charge
 
@@ -401,6 +402,7 @@ def _checkout_context(reservation: str) -> dict:
 	assert_property_access(res.property)
 	prop = frappe.get_cached_doc("Property", res.property)
 	places = _places(res.property)
+	display_places = _currency_places(res.property)
 	eps = _eps(places)
 	symbol = pack_for(res.property).locale(prop).get("currency_symbol", "")
 	modes = _modes(res.property)
@@ -567,7 +569,7 @@ def _checkout_context(reservation: str) -> dict:
 					"message": _("{0}{1} is owed back on folio {2}, which is "
 					             "already invoiced ({3}). A refund needs the invoice "
 					             "cancelled first: open the folio.").format(
-						symbol, _fmt_money(due, places), f["folio"], f["invoice_number"] or "")})
+						symbol, _fmt_money(due, display_places), f["folio"], f["invoice_number"] or "")})
 				continue
 			from_deposit = 0.0
 			if f["folio"] == dep_folio and held > eps:
@@ -596,15 +598,15 @@ def _checkout_context(reservation: str) -> dict:
 						             "favour but only {1}{3} was collected on it, "
 						             "so it can't all be refunded. Open the folio and "
 						             "correct it (move a charge or a payment).").format(
-							f["folio"], symbol, _fmt_money(rest, places),
-							_fmt_money(max(avail, 0.0), places))})
+							f["folio"], symbol, _fmt_money(rest, display_places),
+							_fmt_money(max(avail, 0.0), display_places))})
 
 	if held > eps and in_house and not any(r["kind"] == "deposit" for r in refunds):
 		notices.append({
 			"code": "deposit_applied",
 			"message": _("The security deposit of {0}{1} still held counts "
 			             "toward the bill; check-out records it as applied.")
-			.format(symbol, _fmt_money(held, places))})
+			.format(symbol, _fmt_money(held, display_places))})
 	companions = _companions(res)
 	if res.get("group_booking"):
 		notices.append({
@@ -665,11 +667,11 @@ def _checkout_context(reservation: str) -> dict:
 	if owed > eps:
 		blockers.append({"code": "owed", "step": "settle", "amount": owed,
 		                 "message": _("Collect {0} before departure.")
-		                 .format(f"{symbol}{_fmt_money(owed, places)}")})
+		                 .format(f"{symbol}{_fmt_money(owed, display_places)}")})
 	if refund_due > eps:
 		blockers.append({"code": "refund", "step": "settle", "amount": refund_due,
 		                 "message": _("Refund {0} before departure.")
-		                 .format(f"{symbol}{_fmt_money(refund_due, places)}")})
+		                 .format(f"{symbol}{_fmt_money(refund_due, display_places)}")})
 
 	checkout_charges = _r(sum(f["grand_total"] for f in own), places)
 	will_post = _r(sum(
