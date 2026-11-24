@@ -1956,4 +1956,154 @@ class R4HydrogenFollowupPrecisionTest(QuotePatches, RateMatrixHarness):
 		self.assertEqual(pay.amount, 38.82)
 
 
+class R5HydrogenFollowupTest(QuotePatches, RateMatrixHarness):
+	"""R5 RED->GREEN tests for Hydrogen R4 blocking findings #1 (P1) and #4 (P2):
+
+	1. RoomChargeConcurrencyTestCase (test_pos_override_pin_and_room_charge.py)
+	   must pass a valid positive base_price to make_room_type because
+	   audit_fixtures.make_property writes rate_plan_required=0 and
+	   RoomType.validate() enforces Base Price (BAR) > 0 when rate_plan_required=0.
+	4. Folio.guard_closed() must compare charge amounts using the property
+	   currency's minor-unit precision (at least 3dp for KWD, 2dp for USD/UGX)
+	   so +0.001 KWD and +0.003 KWD charge tampering on Closed KWD folios is
+	   refused while untampered closed-folio payment saves remain allowed.
+	"""
+
+	modules = (
+		"kamra.pricing",
+		"kamra.folio",
+		"kamra.authz",
+		"kamra.ledger",
+	)
+
+	def extra_modules(self):
+		return {
+			"kamra.localization": _tax_invoice_localization(Decimal("5")),
+			"kamra.settings": stub_module(
+				"kamra.settings",
+				get_setting=lambda prop, key: 0 if key == "rate_plan_required" else None,
+			),
+			"kamra.booking_slugs": stub_module(
+				"kamra.booking_slugs",
+				slugify=lambda s: str(s or "").lower().replace(" ", "-"),
+				unique_listing_slug=lambda prop, name, exclude=None: f"{prop}-{name}".lower().replace(" ", "-"),
+			),
+		}
+
+	def setUp(self):
+		super().setUp()
+		self.add(
+			"Property", "KWD Hotel", currency="KWD", country="Kuwait",
+			property_name="KWD Hotel", business_date="2026-11-24", rates_include_tax=0,
+		)
+		self.add(
+			"Property", "USD Hotel", currency="USD", country="United States",
+			property_name="USD Hotel", business_date="2026-11-24", rates_include_tax=0,
+		)
+		self.docs["Property", "Test Hotel"].update(
+			currency="UGX", country="Uganda",
+			property_name="Test Hotel", business_date="2026-11-24", rates_include_tax=0,
+		)
+		self.folio_doctype = self.load("kamra.kamra.doctype.folio.folio")
+		self.room_type_doctype = self.load("kamra.kamra.doctype.room_type.room_type")
+
+	def test_r5_p1_room_charge_concurrency_fixture_satisfies_room_type_bar_validation(self):
+		import ast
+
+		RoomType = self.room_type_doctype.RoomType
+		self.frappe.db.exists = lambda *a, **kw: None
+
+		# Confirm #49's RoomType.validate() BAR requirement is intact when rate_plan_required=0
+		zero_bar = RoomType(
+			doctype="Room Type", name="UT Race-R0", property="Test Hotel",
+			room_type_code="R0", room_type_name="UT R0", base_price=0,
+		)
+		with self.assertRaisesRegex(self.frappe.ValidationError, r"Base Price \(BAR\) is required"):
+			zero_bar.validate()
+
+		# Parse RoomChargeConcurrencyTestCase.test_two_checks_racing_under_one_limit_mariadb_snapshot_isolation
+		# and validate every make_room_type(..., base_price=...) call against real RoomType.validate()
+		src = (ROOT / "kamra/tests/test_pos_override_pin_and_room_charge.py").read_text(encoding="utf-8")
+		tree = ast.parse(src)
+		race_cls = next(
+			n for n in tree.body
+			if isinstance(n, ast.ClassDef) and n.name == "RoomChargeConcurrencyTestCase"
+		)
+		make_rt_calls = [
+			node for node in ast.walk(race_cls)
+			if isinstance(node, ast.Call)
+			and isinstance(node.func, ast.Name)
+			and node.func.id == "make_room_type"
+		]
+		self.assertGreaterEqual(len(make_rt_calls), 1)
+
+		for call_node in make_rt_calls:
+			kw = {k.arg: k.value for k in call_node.keywords if k.arg}
+			if "base_price" in kw:
+				base_price = ast.literal_eval(kw["base_price"])
+			elif len(call_node.args) >= 3:
+				base_price = ast.literal_eval(call_node.args[2])
+			else:
+				# audit_fixtures.make_room_type default is 1000
+				base_price = 1000
+			self.assertGreater(
+				base_price, 0,
+				f"RoomChargeConcurrencyTestCase make_room_type must use positive base_price, got {base_price}",
+			)
+			rt_doc = RoomType(
+				doctype="Room Type", name="UT Race-R1", property="Test Hotel",
+				room_type_code="R1", room_type_name="UT R1", base_price=base_price,
+			)
+			rt_doc.validate()
+
+	def test_r5_p2_guard_closed_blocks_one_fil_and_three_fil_kwd_charge_tampering(self):
+		Folio = self.folio_doctype.Folio
+		self.frappe.flags.kamra_invoice_cancel = False
+
+		def _closed_pair(prop: str, inv: str, old_amt: float, new_amt: float, *, extra_payment: bool = False):
+			old_charge = Doc(charge_type="Room", posting_date="2026-11-24", amount=old_amt, gst_rate=5.0)
+			new_charge = Doc(charge_type="Room", posting_date="2026-11-24", amount=new_amt, gst_rate=5.0)
+			old_payments = [Doc(name="FP-1", amount=old_amt, mode="Cash")]
+			new_payments = list(old_payments)
+			if extra_payment:
+				new_payments.append(Doc(name="FP-2", amount=0.001, mode="Cash"))
+			old_doc = Doc(
+				name="FOL-CLOSED", property=prop, status="Closed", invoice_number=inv,
+				charges=[old_charge], payments=old_payments,
+			)
+			doc = Folio(
+				name="FOL-CLOSED", property=prop, status="Closed", invoice_number=inv,
+				charges=[new_charge], payments=new_payments, _doc_before_save=old_doc,
+			)
+			return doc
+
+		# 1. KWD (3dp): +0.001, -0.001, +0.003, +0.004 KWD tampers MUST all be refused
+		for tampered in (11.376, 11.374, 11.378, 11.379):
+			with self.subTest(currency="KWD", tampered=tampered):
+				doc = _closed_pair("KWD Hotel", "INV-KBH-26-00002", 11.375, tampered)
+				with self.assertRaisesRegex(self.frappe.ValidationError, "charges are frozen"):
+					doc.guard_closed()
+
+		# 2. KWD (3dp): untouched charges (even with IEEE-754 float dust) + settling payment MUST be allowed
+		ok_kwd = _closed_pair("KWD Hotel", "INV-KBH-26-00002", 11.375, 11.375 + 1e-12, extra_payment=True)
+		ok_kwd.guard_closed()
+
+		# 3. USD (2dp): +0.01 USD tamper MUST be refused; untouched save allowed
+		bad_usd = _closed_pair("USD Hotel", "INV-USD-26-00001", 10.00, 10.01)
+		with self.assertRaisesRegex(self.frappe.ValidationError, "charges are frozen"):
+			bad_usd.guard_closed()
+		ok_usd = _closed_pair("USD Hotel", "INV-USD-26-00001", 10.00, 10.00, extra_payment=True)
+		ok_usd.guard_closed()
+
+		# 4. UGX (0dp): +1 UGX and +0.40 UGX tampers MUST both be refused; untouched save allowed
+		for tampered_ugx in (246714.0, 246713.40):
+			with self.subTest(currency="UGX", tampered=tampered_ugx):
+				bad_ugx = _closed_pair("Test Hotel", "INV-UGX-26-00001", 246713.0, tampered_ugx)
+				with self.assertRaisesRegex(self.frappe.ValidationError, "charges are frozen"):
+					bad_ugx.guard_closed()
+		ok_ugx = _closed_pair("Test Hotel", "INV-UGX-26-00001", 246713.0, 246713.0, extra_payment=True)
+		ok_ugx.guard_closed()
+
+
+
 
