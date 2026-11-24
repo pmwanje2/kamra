@@ -443,7 +443,7 @@ class RoomChargeVerifyAndOverrideTestCase(AuditTestCase):
 			"check_in_date": d(-1),
 			"check_out_date": d(2),
 			"master_reservation": self.res_a.name,
-			"master_pays": "Everything except liquor",
+			"master_pays": "Everything",
 		}).insert(ignore_permissions=True)
 		member = make_reservation(
 			PROP_A, self.rt_a, d(-1), d(2), room=self.room_102,
@@ -706,6 +706,79 @@ class RoomChargeVerifyAndOverrideTestCase(AuditTestCase):
 			pi.verify_room_charge(property=PROP_A, room="101", amount=100)
 		self.assertNotIn("ury", str(caught.exception).lower())
 
+	def test_verify_and_post_room_charge_follow_routing_instructions_and_transaction_codes(self):
+		"""#50 verify_room_charge and pos_post_room_charge must resolve K1 Routing Instructions
+		and transaction-code Company Billing Rules read-only so credit-limit checks inspect
+		the actual target folio rather than Window 1."""
+		from kamra import folio as folio_mod
+		from kamra import ledger as ledger_mod
+
+		frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- fixture
+		ledger_mod.ensure_default_transaction_codes()
+		_set_prop_setting(PROP_A, "pos_room_charge_limit", 0)
+		_set_prop_setting(PROP_A, "pos_room_charge_credit_check", 1)
+		_set_prop_setting(PROP_A, "pos_room_charge_allowance", 1000)
+
+		# 1. Active Routing Instruction routes 2000 (Food) to Window 2 (balance 850; Window 1 is 0)
+		w2 = folio_mod.open_window(reservation=self.res_a.name, payee_type="Guest")
+		frappe.db.set_value("Folio", w2, "balance", 850)
+		frappe.get_doc({
+			"doctype": "Routing Instruction",
+			"property": PROP_A,
+			"reservation": self.res_a.name,
+			"target_type": "Window",
+			"target_window": 2,
+			"codes": [{"transaction_code": "2000"}],
+			"from_date": d(-2),
+			"to_date": d(5),
+		}).insert(ignore_permissions=True)
+
+		self.as_pos()
+		v_routed = pi.verify_room_charge(
+			property=PROP_A, room="101", amount=200,
+			charge_type="Food & Beverage", transaction_code="2000",
+		)
+		self.assertTrue(v_routed["ok"])
+		self.assertEqual(v_routed["folio"], w2)
+		self.assertAlmostEqual(flt(v_routed["balance"]), 850.0, places=2)
+		self.assertFalse(v_routed["posting_allowed"])
+		self.assertEqual(v_routed["reason_code"], "POS-RC-OVER-LIMIT")
+
+		# pos_post_room_charge must also refuse 850 + 200 > 1000 on Window 2 (not inspect W1=0)
+		with self.assertRaisesRegex(frappe.ValidationError, "POS-RC-OVER-LIMIT"):
+			pi.pos_post_room_charge(
+				PROP_A, "T-K1-RI-OVER", 200, "Routed Dinner",
+				room="101", charge_type="Food & Beverage", transaction_code="2000",
+			)
+
+		# 2. Corporate stay with explicit Company Billing Rule for transaction_code 2010 (alcohol)
+		frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- fixture
+		comp = frappe.get_doc({
+			"doctype": "Corporate Account",
+			"company_name": "UT K1 Alcohol Corp",
+			"credit_allowed": 1,
+			"billing_rules": [{"transaction_code": "2010", "pay_by": "Company"}],
+		}).insert(ignore_permissions=True).name
+		corp_stay = make_reservation(
+			PROP_A, self.rt_a, d(-1), d(2), room=self.room_102,
+			status="Checked In", guest=make_guest("K1", last_name="Corp"),
+			company=comp,
+		)
+		cf = folio_mod.open_company_folio(corp_stay)
+		frappe.db.set_value("Folio", cf, "balance", 900)
+
+		self.as_pos()
+		v_alc = pi.verify_room_charge(
+			property=PROP_A, room="102", amount=200,
+			charge_type="Food & Beverage", is_alcohol=1, transaction_code="2010",
+		)
+		self.assertTrue(v_alc["ok"])
+		self.assertEqual(v_alc["folio"], cf)
+		self.assertEqual(v_alc["folio_type"], "Company")
+		self.assertAlmostEqual(flt(v_alc["balance"]), 900.0, places=2)
+		self.assertFalse(v_alc["posting_allowed"])
+		self.assertEqual(v_alc["reason_code"], "POS-RC-OVER-LIMIT")
+
 
 class RoomChargeConcurrencyTestCase(frappe.tests.IntegrationTestCase):
 	"""Real two-transaction MariaDB 11.8 REPEATABLE READ race under one cumulative
@@ -721,7 +794,7 @@ class RoomChargeConcurrencyTestCase(frappe.tests.IntegrationTestCase):
 		_set_prop_setting(prop_name, "pos_room_charge_limit", 0)
 		_set_prop_setting(prop_name, "pos_room_charge_credit_check", 1)
 		_set_prop_setting(prop_name, "pos_room_charge_allowance", 1000)
-		rt = make_room_type(prop_name, f"R{suffix}", base_price=0)
+		rt = make_room_type(prop_name, f"R{suffix}", base_price=1000)
 		room = make_room(prop_name, rt, f"3{suffix[:3]}")
 		res = make_reservation(
 			prop_name, rt, d(-1), d(2), room=room, status="Checked In",

@@ -372,11 +372,12 @@ class FolioWindowsTestCase(AuditTestCase):
 		self.assertNotEqual(df.fieldtype, "Select")
 
 		# Custom per-property payment methods on PROP_A and PROP_B, plus a disabled one
-		pm_a = frappe.get_doc({
+		pm_a_doc = frappe.get_doc({
 			"doctype": "Payment Method", "code": "UT PropA Airtel",
 			"description": "Airtel Money (Prop A)", "property": PROP_A,
 			"tender_type": "Instant",
-		}).insert(ignore_permissions=True).code
+		}).insert(ignore_permissions=True)
+		pm_a = pm_a_doc.code
 		pm_b = frappe.get_doc({
 			"doctype": "Payment Method", "code": "UT PropB MoMo",
 			"description": "MTN MoMo (Prop B)", "property": PROP_B,
@@ -408,7 +409,7 @@ class FolioWindowsTestCase(AuditTestCase):
 			                      payment_method="UT No Such Method")
 
 		# An existing folio keeps its payment_method even if that method is later disabled
-		frappe.db.set_value("Payment Method", pm_a, "disabled", 1)
+		frappe.db.set_value("Payment Method", pm_a_doc.name, "disabled", 1)
 		fdoc = frappe.get_doc("Folio", w2)
 		fdoc.bill_to_name = "UT Kept Disabled PM"
 		fdoc.save(ignore_permissions=True)

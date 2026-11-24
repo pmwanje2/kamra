@@ -1058,7 +1058,7 @@ class RoutingTestCase(AuditTestCase):
 		settings.clear_cache(PROP_A)
 		rt15 = make_room_type(PROP_A, "UGX15A", base_price=500000, tax_percent=15)
 		s_cap = make_reservation(PROP_A, rt15, TODAY, d(2), status="Checked In",
-		                         room=make_room(PROP_A, rt15, "311"), agreed_rate=500000)
+		                         room=make_room(PROP_A, rt15, "311"))
 		w1_cap = folio_mod.open_folio(s_cap)
 		w2_cap = folio_mod.open_window(reservation=s_cap.name, payee_type="Guest")
 		route(["Room"], reservation=s_cap.name, target_type="Window", target_window=2,
@@ -1078,7 +1078,7 @@ class RoutingTestCase(AuditTestCase):
 		# 3. Tax-inclusive post_room_night 500,003 @ 15% @ 33.333% (was 500003.003)
 		rt15b = make_room_type(PROP_A, "UGX15B", base_price=500003, tax_percent=15)
 		s_pct = make_reservation(PROP_A, rt15b, TODAY, d(2), status="Checked In",
-		                         room=make_room(PROP_A, rt15b, "312"), agreed_rate=500003)
+		                         room=make_room(PROP_A, rt15b, "312"))
 		w1_pct = folio_mod.open_folio(s_pct)
 		w2_pct = folio_mod.open_window(reservation=s_pct.name, payee_type="Guest")
 		route(["Room"], reservation=s_pct.name, target_type="Window", target_window=2,
@@ -1248,13 +1248,19 @@ class RoutingTestCase(AuditTestCase):
 		)
 		self.assertEqual(len(rows), 2)
 		for r in rows:
-			for val in (r.amount, r.gst_amount, r.total):
-				self.assertEqual(Decimal(str(val)) % 1, 0, f"fractional UGX on POS row: {r}")
+			# #51 doc-level rounding: line base is quantized to whole UGX; line tax is exact
+			# and document-level folio totals round half-up to whole UGX.
+			self.assertEqual(Decimal(str(r.amount)) % 1, 0, f"fractional UGX base on POS row: {r}")
 			self.assertEqual(Decimal(str(r.amount)) + Decimal(str(r.gst_amount)),
 			                 Decimal(str(r.total)))
 		self.assertEqual(sum(Decimal(str(r.amount)) for r in rows), Decimal("60000"))
-		self.assertEqual(sum(Decimal(str(r.gst_amount)) for r in rows), Decimal("9000"))
-		self.assertEqual(sum(Decimal(str(r.total)) for r in rows), Decimal("69000"))
+		target_folios = [frappe.get_doc("Folio", r.parent) for r in rows]
+		for fdoc in target_folios:
+			for val in (fdoc.charges_total, fdoc.tax_total, fdoc.grand_total):
+				self.assertEqual(Decimal(str(val)) % 1, 0, f"fractional UGX folio total on {fdoc.name}: {val}")
+		self.assertEqual(sum(Decimal(str(fdoc.charges_total)) for fdoc in target_folios), Decimal("60000"))
+		self.assertEqual(sum(Decimal(str(fdoc.tax_total)) for fdoc in target_folios), Decimal("9000"))
+		self.assertEqual(sum(Decimal(str(fdoc.grand_total)) for fdoc in target_folios), Decimal("69000"))
 		by_code = {r.transaction_code: frappe.db.get_value("Folio", r.parent, "folio_type") for r in rows}
 		self.assertEqual(by_code, {"2000": "Company", "2010": "Guest"})
 
@@ -1566,7 +1572,9 @@ class RoutingTestCase(AuditTestCase):
 			"    'default_company_billing': 'Nothing (guest pays unless rules say so)',\n"
 			"    'disabled': 0,\n"
 			"}).insert(ignore_permissions=True)\n"
-			"from kamra import api, ledger\n"
+			"from kamra import api, ledger, settings\n"
+			"settings.write_kv(pname, 'rate_plan_required', 0)\n"
+			"settings.clear_cache(pname)\n"
 			"ledger.ensure_default_transaction_codes()\n"
 			"rt = frappe.get_doc({\n"
 			"    'doctype': 'Room Type', 'property': pname, 'room_type_code': 'CSTD',\n"
@@ -2198,6 +2206,9 @@ class RoutingTestCase(AuditTestCase):
 			"    'default_company_billing': 'Nothing (guest pays unless rules say so)',\n"
 			"    'disabled': 0,\n"
 			"}).insert(ignore_permissions=True)\n"
+			"from kamra import settings as _settings\n"
+			"_settings.write_kv(pname, 'rate_plan_required', 0)\n"
+			"_settings.clear_cache(pname)\n"
 			"rt = frappe.get_doc({\n"
 			"    'doctype': 'Room Type', 'property': pname, 'room_type_code': 'R5ST',\n"
 			"    'room_type_name': 'R5 Std', 'base_price': 100000, 'adults_capacity': 2,\n"
@@ -2494,13 +2505,181 @@ class RoutingTestCase(AuditTestCase):
 		self.assertEqual((int(row.is_alcohol), float(row.gst_rate), float(row.gst_amount)),
 		                 (1, 18.0, 180.0))
 
-		# Direct UGX unsplit charge line quantizes tax to whole shilling (kills M1 even before share_charges)
+		# #51 doc-level rounding: line keeps exact unrounded tax (15000.15) while the
+		# UGX folio's document-level tax_total/grand_total round half-up to whole shillings.
 		make_property(PROP_A, business_date=TODAY, country="Uganda", currency="UGX",
 		              gst_mode="Fixed", gst_rate_low=15, gst_rate_high=15, rates_include_tax=0)
 		settings.clear_cache(PROP_A)
-		api.add_folio_charge(f, "Misc", "Unsplit UGX 15pct", 100001, gst_rate=15)
-		ugx_row = frappe.get_doc("Folio", f).charges[-1]
-		self.assertEqual((float(ugx_row.gst_amount), float(ugx_row.total)), (15000.0, 115001.0))
+		ugx_stay = self.stay(2)
+		f_ugx = guest_folio(ugx_stay.name)
+		api.add_folio_charge(f_ugx, "Misc", "Unsplit UGX 15pct", 100001, gst_rate=15)
+		ugx_doc = frappe.get_doc("Folio", f_ugx)
+		ugx_row = ugx_doc.charges[-1]
+		self.assertEqual((float(ugx_row.gst_amount), float(ugx_row.total)), (15000.15, 115001.15))
+		self.assertEqual((float(ugx_doc.tax_total), float(ugx_doc.grand_total)), (15000.0, 115001.0))
+
+	# R6: KWD 3dp currency precision across group settlement, checkout, credit, city ledger & routing
+
+	def test_kwd_3dp_precision_group_settle_checkout_credit_and_routing(self):
+		from kamra import checkout as checkout_mod
+		from kamra import credit as credit_mod
+		from kamra import ledger as ledger_mod
+
+		if not frappe.db.exists("Currency", "KWD"):
+			frappe.get_doc({
+				"doctype": "Currency", "currency_name": "KWD",
+				"symbol": "KD", "fraction": "Fils", "fraction_units": 1000, "enabled": 1,
+			}).insert(ignore_permissions=True)
+		elif not frappe.db.get_value("Currency", "KWD", "enabled"):
+			frappe.db.set_value("Currency", "KWD", "enabled", 1)
+
+		make_property(
+			PROP_A, business_date=TODAY, country="Kuwait", currency="KWD",
+			gst_mode="Fixed", gst_rate_low=0, gst_rate_high=0, rates_include_tax=0,
+			default_company_billing="Nothing (guest pays unless rules say so)",
+		)
+		settings.clear_cache(PROP_A)
+		settings.write_kv(PROP_A, "credit_control", "block")
+		settings.clear_cache(PROP_A)
+
+		rt_kwd = make_room_type(PROP_A, "KWD1", base_price=50.125)
+		comp = frappe.get_doc({
+			"doctype": "Corporate Account", "company_name": "UT KWD Corp", "credit_allowed": 1,
+		}).insert(ignore_permissions=True).name
+		gb = frappe.get_doc({
+			"doctype": "Group Booking", "property": PROP_A, "group_name": "UT KWD Summit",
+			"company": comp, "check_in_date": TODAY, "check_out_date": d(2),
+			"status": "Confirmed", "rooms_blocked": 2,
+			"master_pays": "Nothing (guest pays unless rules say so)",
+		}).insert(ignore_permissions=True).name
+		pm = folio_mod.open_group_folio(gb)
+		stay = make_reservation(
+			PROP_A, rt_kwd, TODAY, d(1), status="Checked In",
+			room=make_room(PROP_A, rt_kwd, "401"), company=comp, group_booking=gb,
+		)
+		w1 = guest_folio(stay.name)
+		w2 = folio_mod.open_window(reservation=stay.name, payee_type="Guest")
+
+		# 1. Routing Instruction to Group Master + group_detail + settle_group_bill preserve 3dp KWD
+		route(["Food & Beverage"], reservation=stay.name, target_type="Group Master")
+		api.post_stay_charge(stay.name, "Food & Beverage", "KWD Group Dinner", 100.125, gst_rate=0)
+		api.add_folio_charge(w1, "Misc", "KWD Coffee", 0.255, gst_rate=0)
+
+		detail = api.group_detail(gb)
+		self.assertEqual(detail["master_folio_balance"], 100.125)
+		self.assertEqual(detail["rooming_list"][0]["own_balance"], 0.255)
+		self.assertEqual(detail["money"]["booked"], 50.125)
+		self.assertEqual(detail["money"]["due"], 150.505)
+
+		# Partial settle leaving 0.005 KWD (5 fils) unpaid MUST NOT close the group bill
+		partial = api.settle_group_bill(gb, mode="Cash", amount=100.120)
+		self.assertFalse(partial["closed"])
+		self.assertEqual(partial["balance"], 0.005)
+		self.assertEqual(frappe.db.get_value("Folio", pm, "status"), "Open")
+
+		# Full settle_group_bill pays the exact remaining 0.005 KWD and closes with zero balance
+		settled = api.settle_group_bill(gb, mode="Cash")
+		self.assertTrue(settled["closed"])
+		self.assertEqual(settled["balance"], 0.0)
+		pm_doc = frappe.get_doc("Folio", pm)
+		self.assertEqual(Decimal(str(pm_doc.payments_total)), Decimal("100.125"))
+
+		# 2. 5 fils (0.005 KWD) unpaid blocks close_folio, part_settle, and checkout settlement_position
+		api.add_folio_charge(w2, "Misc", "KWD Laundry", 10.125, gst_rate=0)
+		api.add_folio_payment(w2, "Cash", 10.120)
+		with self.assertRaises(frappe.ValidationError):
+			folio_mod.close_folio(w2)
+		with self.assertRaises(frappe.ValidationError):
+			folio_mod.part_settle(w2)
+
+		pos = checkout_mod.settlement_position(stay.name)
+		self.assertEqual(pos["owed"], 0.26)  # 0.255 on w1 + 0.005 on w2
+		w2_row = next(f for f in pos["folios"] if f["name"] == w2)
+		self.assertEqual(w2_row["balance"], 0.005)
+
+		# Pay the last 5 fils -> close_folio succeeds; guard_closed rejects 3dp mutation (10.125 -> 10.124)
+		api.add_folio_payment(w2, "Cash", 0.005)
+		folio_mod.close_folio(w2)
+		closed_w2 = frappe.get_doc("Folio", w2)
+		closed_w2.charges[0].amount = 10.124
+		with self.assertRaises(frappe.ValidationError):
+			closed_w2.save(ignore_permissions=True)
+
+		# 3. correct_folio_charge accepts a 3dp KWD change (10.001 -> 10.004)
+		api.add_folio_charge(w1, "Misc", "KWD 3dp Line", 10.001, gst_rate=0)
+		row_3dp = frappe.get_doc("Folio", w1).charges[-1].name
+		corr = api.correct_folio_charge(w1, row_3dp, reason="Exact fils correction", amount=10.004)
+		self.assertTrue(corr.get("repost"))
+
+		# 4. Company credit exposure, 3dp allowance split, and city ledger transfer/reverse preserve fils
+		comp_a = frappe.get_doc({
+			"doctype": "Corporate Account", "company_name": "UT KWD Credit A", "credit_allowed": 1,
+			"billing_rules": [
+				{"charge_type": "Room", "pay_by": "Company"},
+				{"charge_type": "Food & Beverage", "pay_by": "Company"},
+			],
+		}).insert(ignore_permissions=True).name
+		comp_b = frappe.get_doc({
+			"doctype": "Corporate Account", "company_name": "UT KWD Credit B", "credit_allowed": 1,
+			"billing_rules": [{"charge_type": "Room", "pay_by": "Company"}],
+		}).insert(ignore_permissions=True).name
+
+		stay2 = make_reservation(
+			PROP_A, rt_kwd, TODAY, d(2), status="Checked In",
+			room=make_room(PROP_A, rt_kwd, "402"), company=comp_a,
+		)
+		cf = folio_mod.open_company_folio(stay2)
+		api.add_folio_charge(cf, "Room", "KWD Room", 10.000, gst_rate=0)
+		api.add_folio_charge(cf, "Food & Beverage", "KWD Meal", 10.000, gst_rate=0)
+		# Add an allowance directly of -0.250 KWD so 50% proportional share = 0.125 KWD
+		cf_doc = frappe.get_doc("Folio", cf)
+		cf_doc.append("charges", {
+			"posting_date": TODAY, "charge_type": "Allowance", "description": "KWD Allowance",
+			"qty": 1, "rate": -0.250, "amount": -0.250, "gst_rate": 0,
+		})
+		folio_mod._recalculate(cf_doc)
+		ledger_mod.save_folio(cf_doc)
+		api.add_folio_charge(cf, "Room", "KWD Micro", 0.125, gst_rate=0)
+		# Balance on cf is 10 + 10 - 0.250 + 0.125 = 19.875 KWD
+		self.assertEqual(credit_mod.in_house_exposure(comp_a, PROP_A), 19.875)
+
+		cl_acct = ledger_mod._ar_account(PROP_A, comp_a)
+		frappe.db.set_value("City Ledger Account", cl_acct, "credit_limit", 19.870)
+		chk = credit_mod.check_company_credit(comp_a, PROP_A, 0)
+		self.assertFalse(chk["ok"])
+		self.assertEqual(chk["over_limit_by"], 0.005)
+		frappe.db.set_value("City Ledger Account", cl_acct, "credit_limit", 0)
+
+		# Transfer 19.875 KWD to city ledger and reverse -> exact 19.875 brought back
+		ledger_mod.transfer_to_city_ledger(cf, comp_a, credit_check=False)
+		rev = ledger_mod.reverse_city_ledger_transfer(cf, "UT KWD reverse check")
+		self.assertEqual(rev, 19.875)
+		self.assertEqual(Decimal(str(frappe.db.get_value("Folio", cf, "balance"))), Decimal("19.875"))
+
+		# Change stay company to comp_b (Room only): F&B leaves; allowance splits to exact 3dp
+		# out_total=10.000, kept_total=10.125 -> wait: post cleanly on fresh stay3 for exact 50/50 split = 0.125
+		stay3 = make_reservation(
+			PROP_A, rt_kwd, TODAY, d(2), status="Checked In",
+			room=make_room(PROP_A, rt_kwd, "403"), company=comp_a,
+		)
+		gf3 = guest_folio(stay3.name)
+		cf3 = folio_mod.open_company_folio(stay3)
+		api.add_folio_charge(cf3, "Room", "KWD Room 3", 10.000, gst_rate=0)
+		api.add_folio_charge(cf3, "Food & Beverage", "KWD Meal 3", 10.000, gst_rate=0)
+		cf3_doc = frappe.get_doc("Folio", cf3)
+		cf3_doc.append("charges", {
+			"posting_date": TODAY, "charge_type": "Allowance", "description": "KWD Split Allow",
+			"qty": 1, "rate": -0.250, "amount": -0.250, "gst_rate": 0,
+		})
+		folio_mod._recalculate(cf3_doc)
+		ledger_mod.save_folio(cf3_doc)
+		api.change_stay_company(stay3.name, comp_b, reason="KWD split test", move="rules")
+		guest_allowances = [
+			c for c in frappe.get_doc("Folio", gf3).charges
+			if c.charge_type == "Allowance"
+		]
+		self.assertEqual(len(guest_allowances), 1)
+		self.assertEqual(Decimal(str(guest_allowances[0].amount)), Decimal("-0.125"))
 
 	# Hydrogen R4/R5: new backend _() strings translated in all 7 locale CSVs
 
