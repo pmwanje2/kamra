@@ -184,6 +184,23 @@ export function moneyDigits(currency = cache.currency) {
   }
   return 2
 }
+/** HTML number-input step matching a currency's ISO 4217 minor unit
+ *  ("1" for UGX/JPY, "0.01" for USD/INR, "0.001" for KWD/BHD). */
+export function moneyStep(currency = cache.currency): string {
+  const d = moneyDigits(currency)
+  return d <= 0 ? "1" : `0.${"0".repeat(d - 1)}1`
+}
+/** Half a minor unit for a currency (0.5 for 0dp, 0.005 for 2dp, 0.0005 for 3dp). */
+export function moneyEps(currency = cache.currency): number {
+  return 0.5 * 10 ** -moneyDigits(currency)
+}
+/** Round half-away-from-zero to the currency's ISO 4217 minor unit. */
+export function roundMoney(n: number, currency = cache.currency): number {
+  if (!Number.isFinite(n) || n === 0) return 0
+  const factor = 10 ** moneyDigits(currency)
+  const sign = n < 0 ? -1 : 1
+  return (sign * Math.round((Math.abs(n) + Number.EPSILON * Math.max(1, Math.abs(n))) * factor)) / factor
+}
 /** An amount with the currency's normal decimals, always the same count
  *  (2,27,255.40, never 2,27,255.4), so a column of figures lines up. */
 export const fmtAmount = (n: unknown, currency = cache.currency) => {
