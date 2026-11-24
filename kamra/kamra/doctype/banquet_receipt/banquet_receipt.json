@@ -31,11 +31,11 @@
   },
   {
    "fieldname": "mode",
-   "fieldtype": "Data",
+   "fieldtype": "Link",
    "label": "Mode",
    "default": "Bank Transfer",
    "in_list_view": 1,
-   "description": "Payment mode from the property's configured tenders."
+   "options": "Payment Method"
   },
   {
    "fieldname": "amount",

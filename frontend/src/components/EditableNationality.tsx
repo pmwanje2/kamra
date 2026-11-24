@@ -2,6 +2,7 @@ import { useEffect, useId, useState } from "react"
 import { updateResource, serverError } from "../lib/resource"
 import { Button } from "./ui/button"
 import { t as translate, useUILanguage } from "../lib/i18n"
+import { useLocale } from "../lib/money"
 
 const inputCls =
   "rounded-lg border border-zinc-300 bg-white px-2 py-1 text-sm " +
@@ -16,17 +17,18 @@ export default function EditableNationality(props: {
   variant?: "inline" | "row"
 }) {
   useUILanguage()
+  const defaultNat = useLocale().default_nationality || ""
   const listId = useId()
   const variant = props.variant ?? "inline"
   const displayed = props.value?.trim() || "-"
   const [editing, setEditing] = useState(false)
-  const [val, setVal] = useState(props.value ?? "Indian")
+  const [val, setVal] = useState(props.value ?? defaultNat)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!editing) setVal(props.value ?? "Indian")
-  }, [props.value, editing])
+    if (!editing) setVal(props.value ?? defaultNat)
+  }, [props.value, defaultNat, editing])
 
   async function save() {
     const next = val.trim()
@@ -45,10 +47,19 @@ export default function EditableNationality(props: {
   }
 
   function startEdit() {
-    setVal(props.value ?? "Indian")
+    setVal(props.value ?? defaultNat)
     setError(null)
     setEditing(true)
   }
+
+  const nationalities = Array.from(
+    new Set([
+      ...(defaultNat ? [defaultNat] : []),
+      "Ugandan", "Kenyan", "Tanzanian", "Rwandan", "Indian", "American",
+      "British", "Canadian", "Australian", "German", "French", "Japanese",
+      "Chinese", "Singaporean", "UAE", "Other",
+    ]),
+  )
 
   const editor = editing ? (
     <span className="flex flex-wrap items-center gap-1 print:hidden">
@@ -60,11 +71,9 @@ export default function EditableNationality(props: {
         list={listId}
       />
       <datalist id={listId}>
-        {["Indian", "American", "British", "Canadian", "Australian", "German", "French", "Japanese", "Chinese", "Singaporean", "UAE", "Other"].map(
-          (n) => (
-            <option key={n} value={n} />
-          ),
-        )}
+        {nationalities.map((n) => (
+          <option key={n} value={n} />
+        ))}
       </datalist>
       <Button
         variant="outline"
