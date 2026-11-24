@@ -932,7 +932,9 @@ class ChannelModifyDiscountTests(RoundFourTestCase):
 		detail = self.as_user(DESK, api.reservation_detail, res.name)
 		self.assertEqual(detail["channel_review_needed"], 1)
 		self.assertEqual(detail["channel_review_reason"], "discount_review")
-		self.assertEqual(len(detail["channel_reviews"]), 2)
+		# Modify 1 was cleared via clear_channel_review, so the active banner lists
+		# only the unreviewed Modify 2 alert while Agent Action Log keeps both rows
+		self.assertEqual(len(detail["channel_reviews"]), 1)
 		self.assertIn(d(8), detail["channel_reviews"][0]["rationale"] or "")
 		self.assertIn(total2_text, detail["channel_reviews"][0]["rationale"] or "")
 
