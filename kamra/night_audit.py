@@ -182,15 +182,39 @@ def check_open_tills(property: str, bd: str) -> dict:
 		SELECT s.name, s.user, s.cashier, s.business_date, s.opened_at,
 		       s.opening_float, s.terminal,
 		       (SELECT COUNT(*) FROM `tabCashier Transaction` t
-		        WHERE t.session = s.name) AS txns,
-		       (SELECT COALESCE(SUM(t.amount), 0) FROM `tabCashier Transaction` t
-		        WHERE t.session = s.name AND t.mode = 'Cash'
-		          AND t.kind IN ('Payment', 'Exchange', 'Refund')) AS cash_in
+		        WHERE t.session = s.name) AS txns
 		FROM `tabCashier Session` s
 		WHERE s.property = %(p)s AND s.status = 'Open'
 		  AND (s.business_date <= %(d)s OR s.business_date IS NULL)
 		ORDER BY s.opened_at
 		""", {"p": property, "d": bd}, as_dict=True)
+	from kamra.cashier import _session_foreign_drawers, _txn_has_currency_cols, tills_required
+	from kamra.ledger import home_currency
+	from kamra.masters import client_tender_types, payment_tender_type
+
+	sess_names = [r.name for r in rows]
+	cash_by_sess: dict[str, float] = {}
+	drawers_by_sess = _session_foreign_drawers(sess_names, property) if sess_names else {}
+	if sess_names:
+		home = home_currency(property)
+		tender_map = client_tender_types(property)
+		has_ccy = _txn_has_currency_cols()
+		txn_fields = ["session", "mode", "amount", "kind"] + (["currency", "fx_amount"] if has_ccy else [])
+		txns = frappe.get_all(
+			"Cashier Transaction",
+			filters={"session": ("in", sess_names), "kind": ("in", ["Payment", "Exchange", "Refund"])},
+			fields=txn_fields,
+			limit_page_length=0,
+		)
+		for t in txns:
+			tt = tender_map.get(t.mode or "Other") or payment_tender_type(t.mode, property)
+			if tt != "Cash":
+				continue
+			row_ccy = (t.get("currency") or "").strip().upper() if has_ccy else ""
+			is_fx = bool(has_ccy and ((row_ccy and row_ccy != home) or float(t.get("fx_amount") or 0)))
+			if is_fx and t.kind != "Exchange":
+				continue
+			cash_by_sess[t.session] = cash_by_sess.get(t.session, 0.0) + float(t.amount or 0)
 	items = [{
 		"session": r.name,
 		"user": r.user,
@@ -201,10 +225,10 @@ def check_open_tills(property: str, bd: str) -> dict:
 		"terminal": r.terminal,
 		"opening_float": flt(r.opening_float),
 		"transactions": cint(r.txns),
-		"cash_taken": flt(r.cash_in),
+		"cash_taken": flt(cash_by_sess.get(r.name, 0.0)),
+		"foreign_drawers": drawers_by_sess.get(r.name, []),
 	} for r in rows]
 	severity = _severity(property, "open_tills")
-	from kamra.cashier import tills_required
 	if not tills_required(property) and not any(i["transactions"] for i in items):
 		# tills are off here: an empty till holds no money to count. One that
 		# took money still blocks, so none is dropped from the count.
@@ -1271,6 +1295,8 @@ def _cashier_sessions(property: str, bd: str) -> list[dict]:
 		                                OR business_date IS NULL)))
 		ORDER BY opened_at
 		""", {"p": property, "d": bd}, as_dict=True)
+	from kamra.cashier import _session_foreign_drawers
+	drawers_by_sess = _session_foreign_drawers([r.name for r in rows], property) if rows else {}
 	out = []
 	for r in rows:
 		closed = r.status == "Closed"
@@ -1287,6 +1313,7 @@ def _cashier_sessions(property: str, bd: str) -> list[dict]:
 			"expected_cash": flt(r.expected_cash),
 			"counted_cash": flt(r.counted_cash) if closed else None,
 			"variance": flt(r.variance) if closed else None,
+			"foreign_drawers": drawers_by_sess.get(r.name, []),
 			"opened_at": _iso(r.opened_at), "closed_at": _iso(r.closed_at),
 		})
 	return out

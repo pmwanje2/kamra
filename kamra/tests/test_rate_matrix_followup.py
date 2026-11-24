@@ -61,7 +61,14 @@ class LegacyReopenThenPayBalanceTest(QuotePatches, RateMatrixHarness):
 			"kamra.cashier": stub_module(
 				"kamra.cashier",
 				require_open_session=lambda prop: None,
+				assert_cashier_mode_allowed=lambda prop, mode: None,
 				record_cashier_txn=lambda *a, **kw: None,
+			),
+			"kamra.masters": stub_module(
+				"kamra.masters",
+				default_mode_for_tender=lambda tender, prop=None: tender,
+				is_system_payment_method=lambda mode, prop=None: True,
+				payment_tender_type=lambda mode, prop=None: mode,
 			),
 			"kamra.savings": stub_module("kamra.savings", log_action=lambda *a, **kw: None),
 			"kamra.webhooks": stub_module("kamra.webhooks", emit_payment=lambda *a, **kw: None),
@@ -142,6 +149,7 @@ class LegacyReopenThenPayBalanceTest(QuotePatches, RateMatrixHarness):
 		folio = self._pre_r8_closed_folio()
 		self.frappe.db.set_value = lambda *a, **kw: None
 		loc = sys.modules["kamra.localization"]
+		loc.FOREIGN_CURRENCY_TENDER_TYPES = ("Cash", "Foreign Cash", "Bank Transfer")
 		loc.on_invoice_cancelled = lambda *a, **kw: None
 		loc.on_invoice_issued = lambda *a, **kw: None
 		loc.assert_payment_mode = lambda *a, **kw: None
@@ -186,6 +194,7 @@ class LegacyReopenThenPayBalanceTest(QuotePatches, RateMatrixHarness):
 		folio = self._pre_r8_closed_folio()
 		self.frappe.db.set_value = lambda *a, **kw: None
 		loc = sys.modules["kamra.localization"]
+		loc.FOREIGN_CURRENCY_TENDER_TYPES = ("Cash", "Foreign Cash", "Bank Transfer")
 		loc.on_invoice_cancelled = lambda *a, **kw: None
 
 		harness_get_doc = self.frappe.get_doc

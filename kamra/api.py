@@ -1624,10 +1624,6 @@ def _post_folio_charge(folio: str, charge_type: str, description: str,
 
 
 
-# foreign money arrives as notes or a wire; a card terminal charges home currency
-FX_PAYMENT_MODES = ("Cash", "Bank Transfer")
-
-
 def _pin_guard(folio: str, pin=None):
 	from kamra.authz import require_cashier_pin
 	require_cashier_pin(frappe.db.get_value("Folio", folio, "property"), pin)
@@ -1663,23 +1659,25 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 			out["idempotent_replay"] = 1
 			return out
 	doc = frappe.get_doc("Folio", folio)
-	from kamra.localization import assert_payment_mode
+	from kamra.localization import FOREIGN_CURRENCY_TENDER_TYPES, assert_payment_mode
+	from kamra.masters import default_mode_for_tender, is_system_payment_method, payment_tender_type
 	assert_payment_mode(doc.property, mode, currency)
 	from kamra.business_date import get_business_date
-	from kamra.cashier import record_cashier_txn, require_open_session
+	from kamra.cashier import assert_cashier_mode_allowed, record_cashier_txn, require_open_session
 	from kamra.ledger import home_currency, payment_rate, round_cents
+	assert_cashier_mode_allowed(doc.property, mode)
 	bd = get_business_date(doc.property)
 	# Property currency — never leave Folio Payment on the INR schema default (#341)
 	currency_home = home_currency(doc.property)
 	fx = None
 	currency = (currency or "").strip().upper()
 	foreign = bool(currency and currency != currency_home)
-	if mode == "Foreign Cash":
+	tender = payment_tender_type(mode, doc.property)
+	if tender == "Foreign Cash":
 		if not foreign:
 			frappe.throw(_("Foreign Cash needs the currency of the notes received."))
-		mode = "Cash"
 	if foreign:
-		if mode not in FX_PAYMENT_MODES:
+		if tender not in FOREIGN_CURRENCY_TENDER_TYPES:
 			frappe.throw("Foreign currency is taken as Cash or Bank Transfer "
 			             "only. A card is charged in the hotel's currency.")
 		if kind == "Security Deposit":
@@ -1694,10 +1692,11 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 		if amount <= 0:
 			frappe.throw("Amount must be positive.")
 	currency = currency_home
-	if fx and mode == "Cash":
-		# foreign notes are not home cash: their own mode on the folio and
-		# the till, so reports agree and the drawer count stays home cash
-		mode = "Foreign Cash"
+	if fx and tender == "Cash" and is_system_payment_method(mode, doc.property):
+		# system Cash + foreign currency maps to the Foreign Cash tender code;
+		# custom Cash-type tenders keep their own mode and stay out of home cash
+		# via currency/fx_amount on Cashier Transaction.
+		mode = default_mode_for_tender(doc.property, "Foreign Cash")
 	sess = None
 	try:
 		sess = require_open_session(doc.property)
@@ -1724,7 +1723,8 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 	           if fx else None)
 	record_cashier_txn(
 		doc.property, "Payment", mode, float(amount),
-		folio=doc.name, reference=reference, notes=fx_note, session=sess, tender_validated=True)
+		folio=doc.name, reference=reference, notes=fx_note, session=sess,
+		tender_validated=True, currency=pay.currency, fx_amount=float(pay.fx_amount or 0))
 	try:
 		from kamra import ledger as _ledger_mod
 		_ledger_mod.record_payment_ledger(doc, pay.as_dict(), session=sess)
@@ -1891,15 +1891,18 @@ def refund_folio_payment(folio: str, amount: float | None = None,
                          reason_code: str | None = None,
                          supervisor_pin: str | None = None,
                          payment_row: str | None = None,
-                         idempotency_key: str | None = None):
+                         idempotency_key: str | None = None,
+                         currency: str | None = None):
 	"""Give money back on an open folio - a held security deposit at
 	checkout, or an over-collected advance. Stored as a negative ledger
 	row so every balance still sums exactly; a reason is mandatory.
 
 	payment_row refunds against one payment line: mode defaults to that
-	payment's mode (pass Cash to give cash back instead) and amount to what
-	is left of it. A retry with the same idempotency_key returns the first
-	refund instead of paying out twice."""
+	payment's mode (or the home Cash tender for home-currency refunds of a
+	Foreign Cash tender) and amount to what is left of it. Pass currency for
+	a foreign-currency refund so the foreign drawer and tender stay aligned.
+	A retry with the same idempotency_key returns the first refund instead of
+	paying out twice."""
 	key = (idempotency_key or "").strip() or None
 	if key:
 		# serialize refunds on this folio so a double submit sees the first
@@ -1907,8 +1910,18 @@ def refund_folio_payment(folio: str, amount: float | None = None,
 		if _paid_with_key(key, folio=folio):
 			return {"ok": True, "idempotent_replay": 1,
 			        "balance": frappe.db.get_value("Folio", folio, "balance")}
+	doc = frappe.get_doc("Folio", folio)
+	from babel.numbers import get_currency_precision
+	from kamra.ledger import fx_to_home, home_currency, payment_rate, round_cents
+	from kamra.localization import FOREIGN_CURRENCY_TENDER_TYPES, money_text
+	from kamra.masters import default_mode_for_tender, payment_tender_type
+
+	home = home_currency(doc.property)
+	req_ccy = (currency or "").strip().upper()
+	foreign = bool(req_ccy and req_ccy != home)
+	fx_meta: dict | None = None
+
 	if payment_row:
-		doc = frappe.get_doc("Folio", folio)
 		pay = next((p for p in doc.payments if p.name == payment_row), None)
 		if not pay or float(pay.amount or 0) <= 0:
 			frappe.throw(_("That payment is not on this folio."))
@@ -1920,19 +1933,80 @@ def refund_folio_payment(folio: str, amount: float | None = None,
 			if p.get("refund_of") == payment_row), 2)
 		if left <= 0:
 			frappe.throw(_("This payment is already refunded in full."))
-		if amount in (None, ""):
-			amount = left
-		if float(amount) > left + 0.005:
-			from kamra.localization import money_text
-			frappe.throw(_("Only {0} of this payment is left to refund.").format(
-				money_text(doc.property, left)))
-		mode = mode or ("Cash" if pay.mode == "Foreign Cash" else pay.mode)
+		pay_tender = payment_tender_type(pay.mode, doc.property)
+		if foreign:
+			mode = mode or (
+				pay.mode if pay_tender in FOREIGN_CURRENCY_TENDER_TYPES
+				else default_mode_for_tender(doc.property, "Foreign Cash")
+			)
+			if payment_tender_type(mode, doc.property) not in FOREIGN_CURRENCY_TENDER_TYPES:
+				frappe.throw(_("{0} cannot refund in foreign currency {1}.").format(mode, req_ccy))
+			if amount in (None, ""):
+				if pay.get("exchange_rate") and (pay.get("currency") or "").upper() == req_ccy:
+					fx_refund = round_cents(left / float(pay.exchange_rate))
+				else:
+					frappe.throw(_("Give the foreign currency amount to refund."))
+			else:
+				fx_refund = round_cents(amount)
+			if fx_refund <= 0:
+				frappe.throw(_("Refund amount must be positive."))
+			if pay.get("exchange_rate") and (pay.get("currency") or "").upper() == req_ccy:
+				rate = float(pay.exchange_rate)
+				rate_date = pay.get("exchange_rate_date")
+				home_amt = fx_to_home(fx_refund, rate, get_currency_precision(home))
+			else:
+				r = payment_rate(doc.property, req_ccy, fx_refund)
+				rate = r["rate"]
+				rate_date = r["rate_date"]
+				home_amt = r["home_amount"]
+			if home_amt > left + 0.005:
+				frappe.throw(_("Only {0} of this payment is left to refund.").format(
+					money_text(doc.property, left)))
+			fx_meta = {
+				"currency": req_ccy,
+				"fx_amount": -fx_refund,
+				"exchange_rate": rate,
+				"exchange_rate_date": rate_date,
+			}
+			amount = home_amt
+		else:
+			if amount in (None, ""):
+				amount = left
+			if float(amount) > left + 0.005:
+				frappe.throw(_("Only {0} of this payment is left to refund.").format(
+					money_text(doc.property, left)))
+			if not mode:
+				mode = (
+					default_mode_for_tender(doc.property, "Cash")
+					if pay_tender == "Foreign Cash"
+					else pay.mode
+				)
+	elif foreign:
+		if amount in (None, "") or not mode:
+			frappe.throw(_("Give the amount and the mode to refund."))
+		if payment_tender_type(mode, doc.property) not in FOREIGN_CURRENCY_TENDER_TYPES:
+			frappe.throw(_("{0} cannot refund in foreign currency {1}.").format(mode, req_ccy))
+		fx_refund = round_cents(amount)
+		if fx_refund <= 0:
+			frappe.throw(_("Refund amount must be positive."))
+		r = payment_rate(doc.property, req_ccy, fx_refund)
+		fx_meta = {
+			"currency": r["currency"],
+			"fx_amount": -fx_refund,
+			"exchange_rate": r["rate"],
+			"exchange_rate_date": r["rate_date"],
+		}
+		amount = r["home_amount"]
+
 	if amount in (None, "") or not mode:
 		frappe.throw(_("Give the amount and the mode to refund."))
+	if not foreign and payment_tender_type(mode, doc.property) == "Foreign Cash":
+		frappe.throw(_("Foreign Cash refund needs the foreign currency of the notes returned."))
 	return _refund_folio_payment(folio, amount, mode, reason, pin=pin,
 	                             reason_code=reason_code,
 	                             supervisor_pin=supervisor_pin,
-	                             refund_of=payment_row, idempotency_key=key)
+	                             refund_of=payment_row, idempotency_key=key,
+	                             fx=fx_meta)
 
 
 def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
@@ -1942,7 +2016,8 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
                           ledger: str | None = None,
                           refund_of: str | None = None,
                           idempotency_key: str | None = None, correction: dict | None = None,
-                          bookkeeping_action: str | None = None, session: str | None = None):
+                          bookkeeping_action: str | None = None, session: str | None = None,
+                          fx: dict | None = None):
 	"""The one refund writer (folio row, till, ledger). Not whitelisted:
 	ledger lets a security-deposit refund release the Deposit ledger -
 	callers that pass it have already checked the deposit's balance.
@@ -1958,6 +2033,12 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 	if doc.status == "Closed":
 		frappe.throw("This folio is closed - refunds need a credit note "
 		             "via allowance on a new folio.")
+	from kamra.cashier import assert_cashier_mode_allowed, record_cashier_txn, require_open_session
+	if bookkeeping_action is None:
+		assert_cashier_mode_allowed(doc.property, mode)
+		from kamra.masters import payment_tender_type
+		if payment_tender_type(mode, doc.property) == "Foreign Cash" and not fx and not (correction or {}).get("fx_amount"):
+			frappe.throw(_("Foreign Cash refund needs the foreign currency of the notes returned."))
 	from kamra.ledger import require_reason
 	reason_text = require_reason(
 		"Refund", reason_code, reason or "",
@@ -1986,7 +2067,6 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 		ledger = _prearrival_advance_refund_ledger(doc)
 		release_advance = ledger == "Deposit"
 	from kamra.business_date import get_business_date
-	from kamra.cashier import record_cashier_txn, require_open_session
 	bd = get_business_date(doc.property)
 	from kamra.localization import default_currency, pack_for
 	currency = (frappe.get_cached_value("Property", doc.property, "currency")
@@ -2008,6 +2088,7 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 		"currency": currency,
 		"refund_of": refund_of,
 		"idempotency_key": idempotency_key,
+		**(fx or {}),
 		**(correction or {}),
 	})
 	prev_grand = doc.get("grand_total")
@@ -2015,10 +2096,17 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 	_recalculate(doc, payments_only=True)
 	doc.save()
 	pay = doc.payments[-1]
+	fx_amt_val = float(pay.get("fx_amount") or 0)
+	fx_note = (
+		f"{pay.currency} {abs(fx_amt_val):,.2f} @ {pay.exchange_rate}"
+		if fx_amt_val and pay.get("exchange_rate") else None
+	)
 	if sess or correction is None:
 		record_cashier_txn(
 			doc.property, "Refund", mode, -float(amount),
-			folio=doc.name, reference=str(reason_text)[:140], session=sess)
+			folio=doc.name, reference=str(reason_text)[:140], notes=fx_note,
+			session=sess, tender_validated=bool(fx or correction),
+			currency=pay.get("currency"), fx_amount=fx_amt_val)
 	try:
 		from kamra import ledger as _ledger_mod
 		_ledger_mod.record_payment_ledger(doc, pay.as_dict(), session=sess, ledger=ledger)
@@ -8869,7 +8957,8 @@ def _booking_property_policy(property: str) -> dict:
 	prop["deposit_pct"] = float(prop.get("deposit_pct") or 0)
 	prop["sell_message"] = prop.get("sell_message") or ""
 	# drives the dial-code prefix on guest phone inputs
-	prop["country"] = prop.get("country") or "India"
+	from kamra.localization import resolve_country
+	prop["country"] = resolve_country(property, prop)
 	return prop
 
 
@@ -9802,6 +9891,7 @@ def create_group_booking(property: str, group_name: str, check_in_date: str,
                          ota_total: float = 0,
                          ota_commission_pct: float | None = None,
                          group_type: str | None = None,
+                         booking_type: str | None = None,
                          master_index: int | None = None,
                          master_pays: str | None = None):
 	"""Create a Group Booking plus one reservation per requested room.
@@ -9890,7 +9980,7 @@ def create_group_booking(property: str, group_name: str, check_in_date: str,
 				children=int(spec.get("children", 0)),
 				meal_plan=spec.get("meal_plan") or meal_plan,
 				rate_plan=rate_plan,
-				booking_type="Corporate" if company else "Group",
+				booking_type=booking_type or ("Corporate" if company else "Group"),
 				company=company,
 				group_booking=group.name,
 				booked_via=booked_via,
@@ -11527,13 +11617,24 @@ def property_locale(property: str):
 			date_fmt = candidate if isinstance(candidate, str) else ""
 		except Exception:
 			date_fmt = ""
-	return {**loc, **front_desk_vocabulary(pack, property),
+	from kamra.cashier import cashier_allowed_modes
+	vocab = front_desk_vocabulary(pack, property)
+	t_modes = tender_modes(property)
+	allowed = cashier_allowed_modes(property)
+	if allowed is not None:
+		allowed_set = set(allowed)
+		vocab["payment_modes"] = [m for m in vocab["payment_modes"] if m in allowed_set]
+		vocab["outlet_payment_modes"] = [m for m in vocab["outlet_payment_modes"] if m in allowed_set]
+		if t_modes is not None:
+			t_modes = [row for row in t_modes if row["mode"] in allowed_set]
+	return {**loc, **vocab,
+	        "cashier_allowed_modes": allowed,
 	        "date_format": date_fmt,
 	        # the hotel's own Market codes, booker relations and Cancellation
 	        # Reasons, [{value, label}], for the booking and cancel screens
 	        **desk_vocabulary(),
 	        "integrations": integrations(pack),
-	        "tender_modes": tender_modes(property),
+	        "tender_modes": t_modes,
 	        "fx_currencies": list_setting(property, "fx_currencies"),
 	        "tax_basis": tax_basis(property),
 	        # the rate the server puts on any food & beverage charge, whatever

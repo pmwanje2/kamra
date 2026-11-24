@@ -1,5 +1,5 @@
 import { SettlementPreview, useSettlementQuote } from "../components/SettlementPreview"
-import TenderPicker, { TenderInput, resolveTender, tenderAmount, tenderModes, tenderReady, useTenderRates } from "../components/TenderPicker"
+import TenderPicker, { TenderInput, resolveTender, tenderAmount, tenderModes, tenderReady, tenderTypeOf, useTenderRates } from "../components/TenderPicker"
 import { currencyText, formatFxRate, ReferenceCurrencyNote, TariffNight } from "../components/ContractTariff"
 import RowCorrection from "../components/RowCorrection"
 import InvoiceCorrectionDialog from "../components/InvoiceCorrectionDialog"
@@ -1490,7 +1490,8 @@ export default function FolioView() {
                     <span className={Number(p.amount) < 0 ? "font-medium text-rose-600" : ""}>{property.currency} {fmtAmount(p.amount, property.currency)}</span>
                     {canRequestCorrection && <RowCorrection folio={folio.name} row={p.name}
                       home={home} currency={Number(p.fx_amount) > 0 ? p.currency || home : home}
-                      modes={availableTenders.filter(({ mode }) => mode !== p.mode && mode !== "Payment Link")} act={act} />}
+                      tenderTypes={loc.payment_tender_types}
+                      modes={availableTenders.filter(({ mode }) => mode !== p.mode && tenderTypeOf(loc, mode) !== "Payment Link")} act={act} />}
                   </li>
                 ))}
               </ul>

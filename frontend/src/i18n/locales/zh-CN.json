@@ -7075,5 +7075,20 @@
   "Tax as per the accounting invoice": "税额以财务发票为准",
   "Tax summary": "税费汇总",
   "Total Tax": "税费合计",
-  "Credited": "已冲减"
+  "Credited": "已冲减",
+  "Booking type": "预订类型",
+  "Foreign currency drawers": "外币钱箱",
+  "Foreign drawers": "外币箱",
+  "Receipts (FX)": "收款（外币）",
+  "Refunds (FX)": "退款（外币）",
+  "Expected (FX)": "应收（外币）",
+  "Counted (FX)": "实点（外币）",
+  "Home equivalent": "折合本币",
+  "Counted {currency}": "实点 {currency}",
+  "Per-currency foreign note totals kept separate from home cash.": "各外币现钞合计与本币现金分开统计。",
+  "By payment method": "按付款方式",
+  "View report": "查看报表",
+  "Edit property override": "编辑本酒店覆盖项",
+  "This property already has its own override for {code}. Edit that property row instead.": "本酒店已为 {code} 设置了专属覆盖项，请改为编辑该酒店行。",
+  "Saving creates a property override for {property}. The shared default stays unchanged for other properties.": "保存将为 {property} 创建专属覆盖项，共享默认设置对其他酒店保持不变。"
 }

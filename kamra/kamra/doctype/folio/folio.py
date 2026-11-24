@@ -9,9 +9,16 @@ from frappe.model.document import Document
 class Folio(Document):
 	def validate(self):
 		self.guard_closed()
+		self.validate_payment_modes()
 		self.stamp_payment_currency()
 		from kamra.ledger import stamp_gl_codes
 		stamp_gl_codes(self)
+
+	def validate_payment_modes(self):
+		from kamra.masters import assert_known_payment_method
+		for p in self.payments or ():
+			if p.mode:
+				assert_known_payment_method(self.property, p.mode)
 
 	def stamp_payment_currency(self):
 		"""Every payment row carries the property's currency unless a writer

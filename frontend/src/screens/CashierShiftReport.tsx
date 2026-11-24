@@ -10,11 +10,36 @@ import { useT, t as translate } from "../lib/i18n"
 const inr = (n: unknown) =>
   Number(n ?? 0).toLocaleString(moneyLocale(), { maximumFractionDigits: 0 })
 
+const fmtFx = (n: unknown) =>
+  Number(n ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+type ForeignDrawer = {
+  currency: string
+  receipts_fx: number
+  refunds_fx: number
+  expected_fx: number
+  home_equivalent: number
+  counted_fx: number | null
+  variance_fx: number | null
+  txns: number
+}
+
+type MethodRow = {
+  mode: string
+  receipts: number
+  refunds: number
+  net: number
+  system: number
+  counted: number | null
+  variance: number | null
+}
+
 type SessionRow = Record<string, unknown> & {
   name: string
   cashier_id?: string
   user?: string
   status?: string
+  foreign_drawers?: ForeignDrawer[]
 }
 
 type Totals = {
@@ -22,6 +47,7 @@ type Totals = {
   card?: number
   upi?: number
   other?: number
+  foreign_cash?: number
   paid_outs?: number
   drops?: number
   petty_cash?: number
@@ -49,6 +75,8 @@ export default function CashierShiftReport() {
     expected_cash?: number
     counted_cash?: number
     variance?: number
+    foreign_drawers?: ForeignDrawer[]
+    by_method?: MethodRow[]
   } | null>(null)
   const [err, setErr] = useState<string | null>(null)
 
@@ -143,20 +171,22 @@ export default function CashierShiftReport() {
       {err ? <p className="text-sm text-rose-600">{translate(err)}</p> : null}
 
       <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white">
-        <table className="w-full table-fixed text-left text-sm">
+        <table className="min-w-[600px] w-full text-left text-sm">
           <thead className="border-b text-xs uppercase text-zinc-400">
             <tr>
-              <th className="w-[28%] px-3 py-2">{t("Cashier")}</th>
-              <th className="w-[12%] px-3 py-2">{t("Status")}</th>
+              <th className="px-3 py-2">{t("Cashier")}</th>
+              <th className="px-3 py-2">{t("Status")}</th>
               <th className="px-3 py-2">{t("Cash")}</th>
               <th className="px-3 py-2">{t("Card")}</th>
               {instant ? <th className="px-3 py-2">{t(instant)}</th> : null}
+              <th className="px-3 py-2">{t("Foreign drawers")}</th>
               <th className="px-3 py-2">{t("Variance")}</th>
             </tr>
           </thead>
           <tbody>
             {(report?.sessions || []).map((s) => {
               const active = selected === s.name
+              const fds = s.foreign_drawers || []
               return (
                 <tr
                   key={String(s.name)}
@@ -166,24 +196,29 @@ export default function CashierShiftReport() {
                   }
                   onClick={() => pickSession(String(s.name))}
                 >
-                  <td className="px-3 py-2.5 font-medium text-zinc-800">
+                  <td className="whitespace-nowrap px-3 py-2.5 font-medium text-zinc-800">
                     {String(s.cashier_id || s.user)}
                   </td>
-                  <td className="px-3 py-2.5">
+                  <td className="whitespace-nowrap px-3 py-2.5">
                     <Badge tone={s.status === "Open" ? "green" : "zinc"}>
                       {String(s.status)}
                     </Badge>
                   </td>
-                  <td className="px-3 py-2.5 tabular-nums">{inr(s.system_cash)}</td>
-                  <td className="px-3 py-2.5 tabular-nums">{inr(s.system_card)}</td>
-                  {instant ? <td className="px-3 py-2.5 tabular-nums">{inr(s.system_upi)}</td> : null}
-                  <td className="px-3 py-2.5 tabular-nums">{inr(s.variance)}</td>
+                  <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{inr(s.system_cash)}</td>
+                  <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{inr(s.system_card)}</td>
+                  {instant ? <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{inr(s.system_upi)}</td> : null}
+                  <td className="whitespace-nowrap px-3 py-2.5 text-xs tabular-nums text-zinc-600">
+                    {fds.length
+                      ? fds.map((fd) => `${fd.currency} ${fmtFx(fd.expected_fx)}`).join(" · ")
+                      : "-"}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{inr(s.variance)}</td>
                 </tr>
               )
             })}
             {!report?.sessions?.length ? (
               <tr>
-                <td colSpan={instant ? 6 : 5} className="px-3 py-10 text-center text-zinc-400">
+                <td colSpan={instant ? 7 : 6} className="px-3 py-10 text-center text-zinc-400">
                   {t("No sessions on this date. Open a till on My Till to start a shift.")}
                 </td>
               </tr>
@@ -193,7 +228,7 @@ export default function CashierShiftReport() {
       </div>
 
       {sessionDetail && totals ? (
-        <div className="space-y-2">
+        <div className="space-y-4">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="text-sm font-semibold text-zinc-800">
               {t("Till detail")} ·{" "}
@@ -212,6 +247,7 @@ export default function CashierShiftReport() {
                 [t("Cash"), totals.cash],
                 [t("Card"), totals.card],
                 ...(instant ? [[t(instant), totals.upi]] : []),
+                ...(Number(totals.foreign_cash) ? [[t("Foreign cash"), totals.foreign_cash]] : []),
                 [t("Paid outs"), totals.paid_outs],
                 [t("Drops"), totals.drops],
                 [t("Petty cash"), totals.petty_cash],
@@ -233,6 +269,89 @@ export default function CashierShiftReport() {
               </div>
             ))}
           </div>
+
+          {(sessionDetail.foreign_drawers?.length ?? 0) > 0 ? (
+            <div>
+              <h3 className="mb-2 text-sm font-semibold text-zinc-700">
+                {t("Foreign currency drawers")}
+              </h3>
+              <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white">
+                <table className="min-w-[560px] w-full text-left text-sm">
+                  <thead className="border-b text-xs uppercase text-zinc-400">
+                    <tr>
+                      <th className="px-3 py-2">{t("Currency")}</th>
+                      <th className="px-3 py-2 text-right">{t("Receipts (FX)")}</th>
+                      <th className="px-3 py-2 text-right">{t("Refunds (FX)")}</th>
+                      <th className="px-3 py-2 text-right">{t("Expected (FX)")}</th>
+                      <th className="px-3 py-2 text-right">{t("Counted (FX)")}</th>
+                      <th className="px-3 py-2 text-right">{t("Variance")}</th>
+                      <th className="px-3 py-2 text-right">{t("Home equivalent")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sessionDetail.foreign_drawers!.map((fd) => (
+                      <tr key={fd.currency} className="border-t">
+                        <td className="whitespace-nowrap px-3 py-2 font-medium text-zinc-800">{fd.currency}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{fmtFx(fd.receipts_fx)}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{fmtFx(fd.refunds_fx)}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-right font-medium tabular-nums">{fmtFx(fd.expected_fx)}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
+                          {fd.counted_fx !== null && fd.counted_fx !== undefined ? fmtFx(fd.counted_fx) : "-"}
+                        </td>
+                        <td
+                          className={
+                            "whitespace-nowrap px-3 py-2 text-right font-semibold tabular-nums " +
+                            (fd.variance_fx && Math.abs(fd.variance_fx) > 0.004 ? "text-rose-700" : "")
+                          }
+                        >
+                          {fd.variance_fx !== null && fd.variance_fx !== undefined ? fmtFx(fd.variance_fx) : "-"}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-zinc-600">{inr(fd.home_equivalent)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : null}
+
+          {(sessionDetail.by_method?.length ?? 0) > 0 ? (
+            <div>
+              <h3 className="mb-2 text-sm font-semibold text-zinc-700">
+                {t("By payment method")}
+              </h3>
+              <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white">
+                <table className="min-w-[520px] w-full text-left text-sm">
+                  <thead className="border-b text-xs uppercase text-zinc-400">
+                    <tr>
+                      <th className="px-3 py-2">{t("Mode")}</th>
+                      <th className="px-3 py-2 text-right">{t("Receipts")}</th>
+                      <th className="px-3 py-2 text-right">{t("Refunds")}</th>
+                      <th className="px-3 py-2 text-right">{t("System")}</th>
+                      <th className="px-3 py-2 text-right">{t("Counted")}</th>
+                      <th className="px-3 py-2 text-right">{t("Variance")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sessionDetail.by_method!.map((m) => (
+                      <tr key={m.mode} className="border-t">
+                        <td className="whitespace-nowrap px-3 py-2 font-medium text-zinc-800">{translate(m.mode)}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{inr(m.receipts)}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{inr(m.refunds)}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{inr(m.system)}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
+                          {m.counted !== null && m.counted !== undefined ? inr(m.counted) : "-"}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
+                          {m.variance !== null && m.variance !== undefined ? inr(m.variance) : "-"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -241,11 +360,11 @@ export default function CashierShiftReport() {
           {t("Journal by kind / mode")}
         </h2>
         <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white">
-          <table className="w-full table-fixed text-left text-sm">
+          <table className="min-w-[460px] w-full text-left text-sm">
             <thead className="border-b text-xs uppercase text-zinc-400">
               <tr>
-                <th className="w-[30%] px-3 py-2">{t("Kind")}</th>
-                <th className="w-[25%] px-3 py-2">{t("Mode")}</th>
+                <th className="px-3 py-2">{t("Kind")}</th>
+                <th className="px-3 py-2">{t("Mode")}</th>
                 <th className="px-3 py-2">{t("Txns")}</th>
                 <th className="px-3 py-2">{t("Total")}</th>
               </tr>
