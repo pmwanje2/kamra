@@ -1980,12 +1980,15 @@ export interface ReservationDetail extends TariffReference {
     id_unverified: boolean
     channel_review_needed?: boolean
   }
-  /** Set when an OTA modify or cancel arrived after check-in or close and was
-   *  held for front-desk review instead of mutating the stay. */
+  /** Set when an OTA modify or cancel needs front-desk review (held in-house/closed
+   *  update, applied modify that removed a desk discount, or added nights priced
+   *  without an unapproved discount). */
   channel_review_needed?: number
+  channel_review_reason?: "update_not_applied" | "discount_removed" | "discount_review" | null
   channel_reviews?: {
     name: string
     action_type: string
+    reason?: "update_not_applied" | "discount_removed" | "discount_review"
     rationale: string
     executed_at: string | null
   }[]

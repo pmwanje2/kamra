@@ -436,11 +436,13 @@ class Reservation(Document):
 			             AdvancePaidIsLedgerOwned)
 		self.guard_discount_inputs()
 		self.guard_locked_nights()
-		# Channel review flag is owned by _flag_for_review (db_set) and
-		# cleared only through clear_channel_review (role check + audit log).
-		# Any insert with it set or save that changes it is refused.
-		prev_review = 0 if self.is_new() else cint((self.get_doc_before_save() or {}).get("channel_review_needed"))
-		if cint(self.get("channel_review_needed")) != prev_review:
+		# Channel review flag and reason are owned by channel_manager (db_set)
+		# and cleared only through clear_channel_review (role check + audit log).
+		# Any insert with them set or save that changes them is refused.
+		prev_doc = None if self.is_new() else self.get_doc_before_save()
+		prev_review = 0 if not prev_doc else cint(prev_doc.get("channel_review_needed"))
+		prev_reason = "" if not prev_doc else (prev_doc.get("channel_review_reason") or "")
+		if cint(self.get("channel_review_needed")) != prev_review or (self.get("channel_review_reason") or "") != prev_reason:
 			frappe.throw(
 				_("Channel review status can only be cleared via the review action."),
 				frappe.PermissionError,
