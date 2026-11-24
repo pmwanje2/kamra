@@ -411,3 +411,147 @@ class RestrictionsMatrixTestCase(IntegrationTestCase):
 			bulk_set_restrictions(h_a.property, d4, d4, room_type=h_a.std, stop_sell=1)
 		with self.assertRaises(frappe.PermissionError):
 			bulk_grid_update(h_a.property, rate_updates=[{"room_type": h_a.std, "date": d4, "rate": 200}])
+
+	def test_r2_p1_rate_plan_required_default_bar_grid_update_and_ota_sync(self):
+		"""P1 #1: On #49 default properties (rate_plan_required=1), editing BAR on the
+		default BAR plan updates nightly rates at exact 0/2/3dp and queues OTA ARI sync."""
+		d3, d4 = day(3), day(4)
+		cases = [
+			("UGX", "Uganda", 250000, 350000.4, 350000.0),
+			("USD", "United States", 100.00, 129.555, 129.56),
+			("KWD", "Kuwait", 30.000, 48.3754, 48.375),
+		]
+		for currency, country, base_price, raw_rate, expected_rate in cases:
+			with self.subTest(currency=currency):
+				h = self._make_hotel(
+					currency=currency, country=country, base_price=base_price, with_channex=True,
+				)
+				write_kv(h.property, "rate_plan_required", 1)
+				clear_cache(h.property)
+				bar_plan = frappe.get_doc({
+					"doctype": "Rate Plan",
+					"property": h.property,
+					"rate_plan_name": "Best Available Rate",
+					"code": f"BAR{h.tag}",
+					"modifier_type": "Percent",
+					"modifier_value": 0,
+					"is_default": 1,
+				}).insert(ignore_permissions=True).name
+
+				cal_before = rates.rate_calendar(h.property, from_date=d3, days=2)
+				self.assertTrue(cal_before["rate_plan_required"])
+				self.assertEqual(cal_before["default_plan"], bar_plan)
+				self.assertEqual(cal_before["rate_plan"]["name"], bar_plan)
+				self.assertIsNone(cal_before["rate_plan"]["base_rate_plan"])
+
+				out = bulk_grid_update(
+					property=h.property,
+					rate_updates=[{
+						"room_type": h.std,
+						"start_date": d3,
+						"end_date": d4,
+						"rate": raw_rate,
+					}],
+					restriction_updates=[],
+					reason=f"R2 BAR edit {currency}",
+				)
+				self.assertTrue(out["ok"])
+				self.assertEqual(out["rates_updated"], 2)
+				self.assertTrue(out["ari_queued"])
+
+				cal_after = rates.rate_calendar(h.property, from_date=d3, days=2)
+				std_row = next(r for r in cal_after["room_types"] if r["room_type"] == h.std)
+				for night in std_row["nights"]:
+					self.assertAlmostEqual(night["rate"], expected_rate, places=3)
+
+	def test_r2_p2_checked_in_checkout_amendment_allows_cta_and_held_stop_sell_but_enforces_new_nights(self):
+		"""P2: Amending check-out on an already-Checked In stay whose check_in_date
+		has not changed must NOT falsely reject CTA or Stop-Sell on already-held nights,
+		while still enforcing Stop-Sell on newly added nights and CTD on new departure."""
+		h = self._make_hotel(currency="USD", base_price=150.0)
+		d0, d1, d2, d3, d4 = day(0), day(1), day(2), day(3), day(4)
+
+		booking = api.create_booking(
+			property=h.property, room_type=h.dlx, room=h.dlx_room,
+			check_in_date=d0, check_out_date=d2,
+			guest_name="InHouse Guest", phone="+12025550199", adults=2,
+		)
+		res_name = booking["reservation"]
+		api.check_in(res_name, room=h.dlx_room)
+		self.assertEqual(frappe.db.get_value("Reservation", res_name, "status"), "Checked In")
+
+		# After check-in, close arrival date (CTA + Stop-Sell) and held night d1 (Stop-Sell)
+		bulk_set_restrictions(h.property, d0, d0, room_type=h.dlx, cta=1, stop_sell=1, reason="Sold out today")
+		bulk_set_restrictions(h.property, d1, d1, room_type=h.dlx, stop_sell=1, reason="Sold out tonight")
+
+		# Extending check-out from d2 -> d3 (new night d2 is open, d3 has no CTD) MUST SUCCEED
+		amended = api.amend_stay(res_name, d0, d3, confirm_price=1)
+		self.assertTrue(amended["ok"])
+		self.assertEqual(str(frappe.db.get_value("Reservation", res_name, "check_out_date")), d3)
+
+		# Extending into a NEW night (d3) that has Stop-Sell=1 MUST STILL BE BLOCKED
+		bulk_set_restrictions(h.property, d3, d3, room_type=h.dlx, stop_sell=1, reason="New night closed")
+		with self.assertRaises(StayRestrictionError):
+			api.amend_stay(res_name, d0, d4, confirm_price=1)
+
+		# Clearing d3 Stop-Sell and setting CTD=1 on new departure d4 MUST STILL BE BLOCKED
+		bulk_set_restrictions(h.property, d3, d3, room_type=h.dlx, stop_sell=0, reason="Open d3")
+		bulk_set_restrictions(h.property, d4, d4, room_type=h.dlx, ctd=1, reason="No checkout d4")
+		with self.assertRaises(StayRestrictionError):
+			api.amend_stay(res_name, d0, d4, confirm_price=1)
+
+	def test_r2_p2_scope_key_length_255_supports_long_composite_keys(self):
+		"""P2: Rate Restriction.scope_key must have column length 255 so long
+		property|date|room_type|rate_plan composite keys never truncate."""
+		import json
+		from pathlib import Path
+
+		json_path = Path(frappe.get_app_path("kamra", "kamra", "doctype", "rate_restriction", "rate_restriction.json"))
+		schema = json.loads(json_path.read_text(encoding="utf-8"))
+		scope_field = next(f for f in schema["fields"] if f["fieldname"] == "scope_key")
+		self.assertGreaterEqual(int(scope_field.get("length") or 0), 255)
+
+		meta = frappe.get_meta("Rate Restriction")
+		self.assertGreaterEqual(int(meta.get_field("scope_key").length or 0), 255)
+
+		tag = frappe.generate_hash(length=6).upper()
+		long_prop_name = f"GRAND INTERNATIONAL RESORT CENTER {tag}"
+		prop = frappe.get_doc({
+			"doctype": "Property",
+			"property_name": long_prop_name,
+			"country": "United States",
+			"currency": "USD",
+			"business_date": nowdate(),
+		}).insert(ignore_permissions=True).name
+		write_kv(prop, "rate_plan_required", 0)
+		clear_cache(prop)
+
+		rt = frappe.get_doc({
+			"doctype": "Room Type",
+			"property": prop,
+			"room_type_code": f"PRESIDENTIAL-PENTHOUSE-{tag}",
+			"room_type_name": "Presidential Oceanfront Penthouse Suite",
+			"base_price": 500.0,
+			"base_occupancy": 2,
+			"adults_capacity": 4,
+		}).insert(ignore_permissions=True).name
+		rp = frappe.get_doc({
+			"doctype": "Rate Plan",
+			"property": prop,
+			"rate_plan_name": "Executive Corporate Flexible Package Rate",
+			"code": f"EXEC-CORP-FLEX-{tag}",
+			"modifier_type": "Percent",
+			"modifier_value": 0,
+		}).insert(ignore_permissions=True).name
+
+		d9 = day(9)
+		expected_key = f"{prop}|{d9}|{rt}|{rp}"
+		self.assertGreater(len(expected_key), 140)
+		out = bulk_set_restrictions(prop, d9, d9, room_type=rt, rate_plan=rp, stop_sell=1, reason="Long key")
+		self.assertEqual(out["updated"], 1)
+		stored = frappe.db.get_value(
+			"Rate Restriction",
+			{"property": prop, "restriction_date": d9, "room_type": rt, "rate_plan": rp},
+			"scope_key",
+		)
+		self.assertEqual(stored, expected_key)

@@ -390,3 +390,127 @@ class OtaRestrictionsParityTestCase(IntegrationTestCase):
 			channel_health_snapshot(h_a.property)
 		with self.assertRaises(frappe.PermissionError):
 			retry_outbox_failures(h_a.conn.name)
+
+	def test_r2_p1_restriction_mismatch_populates_reservation_detail_channel_reviews(self):
+		"""P1 #2: Inbound OTA booking accepted despite active stay restrictions must
+		populate reservation_detail.channel_reviews with action_type 'channel.restriction_mismatch'."""
+		from kamra import api
+
+		h = self._make_channel_hotel(currency="KWD", country="Kuwait", price=48.375)
+		d8, d9 = day(8), day(9)
+		bulk_set_restrictions(
+			h.property, d8, d8, room_type=h.room_type,
+			cta=1, min_los=3, reason="OTA mismatch review test",
+		)
+		event = {
+			"event": "book",
+			"ota_ref": f"OTA-DETAIL-{h.tag}",
+			"channel": "Booking.com",
+			"room_type_external_id": h.mapping.external_room_id,
+			"rate_plan_external_id": h.mapping.external_rate_id,
+			"check_in": d8,
+			"check_out": d9,
+			"adults": 2,
+			"children": 0,
+			"guest_name": "Review Detail Guest",
+			"phone": "+96550000201",
+			"email": "reviewdetail@example.test",
+			"total": 48.375,
+			"nightly": [{"date": d8, "amount": 48.375}],
+			"currency": "KWD",
+			"notes": "",
+		}
+		res = cm._apply_event(h.conn, dict(event))
+		self.assertEqual(res["result"], "booked")
+		self.assertTrue(res.get("restriction_mismatch"))
+
+		detail = api.reservation_detail(res["reservation"])
+		self.assertEqual(detail["channel_review_needed"], 1)
+		self.assertEqual(detail["channel_review_reason"], "restriction_mismatch")
+		reviews = detail.get("channel_reviews") or []
+		self.assertGreaterEqual(len(reviews), 1, f"Expected populated channel_reviews, got: {detail}")
+		mismatch_row = next((r for r in reviews if r["action_type"] == "channel.restriction_mismatch"), None)
+		self.assertIsNotNone(mismatch_row, reviews)
+		self.assertEqual(mismatch_row["reason"], "restriction_mismatch")
+		self.assertIn("Closed to arrival", mismatch_row["rationale"])
+
+	def test_r2_p1_clearing_restrictions_emits_explicit_false_in_ari_snapshot_aiosell_and_channex_push(self):
+		"""P1 #3: Once restrictions are cleared/deleted, ari_snapshot, aiosell.push_ari,
+		and direct channex.push_ari MUST emit explicit cleared defaults so OTAs lift them."""
+		from kamra.channels import channex
+
+		receiver = _LoopbackReceiver()
+		self.addCleanup(receiver.close)
+
+		d4, d5 = day(4), day(5)
+
+		# 1. AioSell: set restrictions, then clear them -> ari_snapshot & push_ari emit explicit false/defaults
+		h_aio = self._make_channel_hotel(
+			currency="KWD", country="Kuwait", price=45.125,
+			provider="AioSell", endpoint=receiver.base_url,
+		)
+		bulk_set_restrictions(
+			h_aio.property, d4, d5, room_type=h_aio.room_type,
+			stop_sell=1, min_los=3, max_los=7, cta=1, ctd=1,
+			reason="Set before clear",
+		)
+		bulk_set_restrictions(
+			h_aio.property, d4, d5, room_type=h_aio.room_type,
+			stop_sell=0, min_los=0, max_los=0, cta=0, ctd=0,
+			reason="Lift all",
+		)
+		snap_aio = cm.ari_snapshot(h_aio.property, h_aio.conn.name, days=2, start=d4)
+		for day_row in snap_aio[0]["days"]:
+			self.assertIs(day_row.get("stop_sell"), False, day_row)
+			self.assertIs(day_row.get("cta"), False, day_row)
+			self.assertIs(day_row.get("ctd"), False, day_row)
+			self.assertIn(day_row.get("min_los"), (0, 1), day_row)
+			self.assertEqual(day_row.get("max_los"), 0, day_row)
+
+		receiver.requests.clear()
+		ok, detail = aiosell.push_ari(h_aio.conn, snap_aio)
+		self.assertTrue(ok, detail)
+		rate_posts = [r["body"] for r in receiver.requests if "update-rates/" in r["path"]]
+		self.assertEqual(len(rate_posts), 1, receiver.requests)
+		entry = rate_posts[0]["updates"][0]["rates"][0]
+		self.assertIs(entry.get("stopSell"), False, entry)
+		self.assertIs(entry.get("cta"), False, entry)
+		self.assertIs(entry.get("ctd"), False, entry)
+		self.assertEqual(entry.get("minStay"), 1, entry)
+		self.assertEqual(entry.get("maxStay"), 0, entry)
+
+		# 2. Direct channex.push_ari on cleared snapshot also emits explicit false/defaults
+		h_chx = self._make_channel_hotel(
+			currency="KWD", country="Kuwait", price=45.125,
+			provider="Channex", endpoint=receiver.base_url,
+		)
+		bulk_set_restrictions(
+			h_chx.property, d4, d5, room_type=h_chx.room_type,
+			stop_sell=1, min_los=2, max_los=6, cta=1, ctd=1,
+			reason="Set Channex direct",
+		)
+		bulk_set_restrictions(
+			h_chx.property, d4, d5, room_type=h_chx.room_type,
+			stop_sell=0, min_los=0, max_los=0, cta=0, ctd=0,
+			reason="Lift Channex direct",
+		)
+		snap_chx = cm.ari_snapshot(h_chx.property, h_chx.conn.name, days=2, start=d4)
+		receiver.requests.clear()
+		ok_chx, detail_chx = channex.push_ari(h_chx.conn, snap_chx)
+		self.assertTrue(ok_chx, detail_chx)
+		restr_posts = [r["body"]["values"] for r in receiver.requests if r["path"].endswith("/restrictions")]
+		self.assertEqual(len(restr_posts), 1, receiver.requests)
+		chx_entry = restr_posts[0][0]
+		self.assertIs(chx_entry.get("stop_sell"), False, chx_entry)
+		self.assertIs(chx_entry.get("closed_to_arrival"), False, chx_entry)
+		self.assertIs(chx_entry.get("closed_to_departure"), False, chx_entry)
+		self.assertEqual(chx_entry.get("min_stay_arrival"), 1, chx_entry)
+		self.assertEqual(chx_entry.get("max_stay"), 0, chx_entry)
+
+	def test_r2_p2_channel_health_snapshot_is_strictly_read_only(self):
+		"""P2: GET channel_health_snapshot must NOT perform any frappe.db.set_value writes."""
+		h = self._make_channel_hotel(currency="USD", country="United States", price=120.00)
+		with patch.object(frappe.db, "set_value", wraps=frappe.db.set_value) as spy_set_value:
+			snap = channel_health_snapshot(h.property, days=7)
+		self.assertEqual(snap["property"], h.property)
+		spy_set_value.assert_not_called()
