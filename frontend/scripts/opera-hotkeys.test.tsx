@@ -8,17 +8,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { CommandPalette } from "../src/components/CommandPalette"
 import EndOfDayWizard from "../src/screens/EndOfDayWizard"
 import ReservationDetail from "../src/screens/ReservationDetail"
+import { matchOperaHotkey } from "../src/lib/hotkeys"
 import { loadLocale } from "../src/lib/money"
 
-const { rpc } = vi.hoisted(() => {
+const { rpc, propState } = vi.hoisted(() => {
   Object.defineProperty(globalThis, "localStorage", { configurable: true, value: jsdom.window.localStorage })
-  return { rpc: vi.fn() }
+  return { rpc: vi.fn(), propState: { current: "PROP-A" } }
 })
 
 vi.mock("../src/lib/api", async (original) => ({
   ...await original<typeof import("../src/lib/api")>(),
   call: (method: string, params: unknown) => rpc(method, params),
-  getCurrentProperty: () => "PROP-A",
+  getCurrentProperty: () => propState.current,
+  setCurrentProperty: (p: string) => {
+    propState.current = p
+  },
   reservationDetail: (name: string) => rpc("kamra.api.reservation_detail", { reservation: name }),
 }))
 
@@ -208,6 +212,7 @@ describe("P56 OPERA hotkeys, CommandPalette room search, EndOfDayWizard & Reserv
   beforeEach(async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true)
     vi.stubGlobal("localStorage", jsdom.window.localStorage)
+    propState.current = "PROP-A"
     host = document.createElement("div")
     document.body.appendChild(host)
     root = createRoot(host)
@@ -493,6 +498,154 @@ describe("P56 OPERA hotkeys, CommandPalette room search, EndOfDayWizard & Reserv
     })
     await vi.waitFor(() => {
       expect(rpc).toHaveBeenCalledWith("kamra.checkin.checkin_flow", { reservation: "RES-56" })
+    })
+  })
+
+  it("skips F4 room search inside input, textarea, select, and contenteditable targets", async () => {
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={["/tape"]}>
+          <CommandPalette />
+          <input data-testid="f4-input" />
+          <textarea data-testid="f4-textarea" />
+          <select data-testid="f4-select">
+            <option value="1">1</option>
+          </select>
+          <div data-testid="f4-ce" contentEditable="true">
+            <span data-testid="f4-ce-child">Editable</span>
+          </div>
+        </MemoryRouter>,
+      )
+    })
+
+    const targets = [
+      host.querySelector<HTMLElement>('[data-testid="f4-input"]')!,
+      host.querySelector<HTMLElement>('[data-testid="f4-textarea"]')!,
+      host.querySelector<HTMLElement>('[data-testid="f4-select"]')!,
+      host.querySelector<HTMLElement>('[data-testid="f4-ce"]')!,
+      host.querySelector<HTMLElement>('[data-testid="f4-ce-child"]')!,
+    ]
+
+    for (const el of targets) {
+      const synthetic = new KeyboardEvent("keydown", { key: "F4", bubbles: true })
+      Object.defineProperty(synthetic, "target", { value: el })
+      expect(matchOperaHotkey(synthetic, "/tape")).toBeNull()
+
+      await act(async () => {
+        el.dispatchEvent(new KeyboardEvent("keydown", { key: "F4", bubbles: true }))
+      })
+      expect(host.querySelector('[role="dialog"]')).toBeNull()
+    }
+
+    // Outside text inputs, F4 still opens room search mode
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "F4", bubbles: true }))
+    })
+    expect(host.querySelector<HTMLElement>('[role="dialog"]')?.dataset.paletteMode).toBe("room")
+  })
+
+  it("subscribes EndOfDayWizard and ReservationDetail to reactive useLocale() when property_locale resolves late (UGX 0dp -> KWD 3dp)", async () => {
+    const UGX_LOCALE = {
+      ...KWD_LOCALE,
+      currency: "UGX",
+      currency_symbol: "UGX ",
+      locale: "en-UG",
+    }
+
+    // 1. Prime cache with UGX (0dp, eps=0.5) on PROP-UGX
+    propState.current = "PROP-UGX"
+    const baseImpl = rpc.getMockImplementation()!
+    rpc.mockImplementation(async (method: string, params: unknown) => {
+      if (method === "kamra.api.property_locale") return UGX_LOCALE
+      return baseImpl(method, params)
+    })
+    await loadLocale()
+
+    // 2. Defer property_locale so eod_session wins the race while cache is still UGX 0dp
+    const localeResolvers: Array<(val: typeof KWD_LOCALE) => void> = []
+    const requestedLocaleProps: string[] = []
+    rpc.mockImplementation((method: string, params: Record<string, unknown>) => {
+      if (method === "kamra.api.property_locale") {
+        requestedLocaleProps.push(String(params?.property ?? ""))
+        return new Promise((resolve) => {
+          localeResolvers.push(resolve)
+        })
+      }
+      if (method === "kamra.night_audit.eod_session") {
+        return Promise.resolve({ ...EOD_FIXTURE, property: "PROP-KWD", currency: undefined })
+      }
+      return baseImpl(method, params)
+    })
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={["/end-of-day/PROP-KWD"]}>
+          <Routes>
+            <Route path="/end-of-day/:property" element={<EndOfDayWizard />} />
+          </Routes>
+        </MemoryRouter>,
+      )
+    })
+    await vi.waitFor(() => {
+      expect(host.textContent).toContain("Alan Turing")
+    })
+    expect(propState.current).toBe("PROP-KWD")
+    expect(requestedLocaleProps).toContain("PROP-KWD")
+    // Still at UGX 0dp before KWD locale resolves: 0.005 < 0.5 falsely counts as zero-balance
+    expect(host.textContent).toContain("Quick check out 2 zero-balance departures")
+    expect(host.textContent).not.toContain("KWD 12.500")
+
+    // Resolve KWD 3dp locale asynchronously — EndOfDayWizard must re-render immediately
+    await act(async () => {
+      while (localeResolvers.length > 0) localeResolvers.shift()!(KWD_LOCALE)
+      await Promise.resolve()
+    })
+    await vi.waitFor(() => {
+      expect(host.textContent).toContain("KWD 12.500")
+      expect(host.textContent).toContain("0.005")
+      expect(host.textContent).toContain("Quick check out 1 zero-balance departures")
+      expect(host.textContent).not.toContain("Quick check out 2 zero-balance departures")
+    })
+
+    // 3. Re-prime UGX 0dp and verify ReservationDetail re-renders reactively on late KWD locale resolution
+    await act(async () => root.unmount())
+    root = createRoot(host)
+    rpc.mockImplementation(async (method: string, params: unknown) => {
+      if (method === "kamra.api.property_locale") return UGX_LOCALE
+      return baseImpl(method, params)
+    })
+    await loadLocale()
+
+    const detailResolvers: Array<(val: typeof KWD_LOCALE) => void> = []
+    rpc.mockImplementation((method: string, params: unknown) => {
+      if (method === "kamra.api.property_locale") {
+        return new Promise((resolve) => {
+          detailResolvers.push(resolve)
+        })
+      }
+      return baseImpl(method, params)
+    })
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={["/reservations"]}>
+          <ReservationDetail row={{ name: "RES-56" }} reload={vi.fn()} onClose={vi.fn()} />
+        </MemoryRouter>,
+      )
+    })
+    await vi.waitFor(() => {
+      expect(host.textContent).toContain("Ada Lovelace")
+    })
+    expect(host.textContent).not.toContain("KWD 120.000")
+
+    await act(async () => {
+      while (detailResolvers.length > 0) detailResolvers.shift()!(KWD_LOCALE)
+      await Promise.resolve()
+    })
+    await vi.waitFor(() => {
+      expect(host.textContent).toContain("KWD 120.000")
+      expect(host.textContent).toContain("KWD 20.000")
+      expect(host.textContent).toContain("KWD 100.000")
     })
   })
 })

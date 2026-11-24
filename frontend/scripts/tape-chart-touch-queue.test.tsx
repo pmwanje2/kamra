@@ -7,9 +7,14 @@ import TapeChart from "../src/screens/TapeChart"
 import { loadLocale } from "../src/lib/money"
 import type { ShellContext } from "../src/AppShell"
 
-const { rpc, openBookingSpy, propState } = vi.hoisted(() => {
+const { rpc, openBookingSpy, propState, authState } = vi.hoisted(() => {
   Object.defineProperty(globalThis, "localStorage", { configurable: true, value: jsdom.window.localStorage })
-  return { rpc: vi.fn(), openBookingSpy: vi.fn(), propState: { current: "PROP-A" } }
+  return {
+    rpc: vi.fn(),
+    openBookingSpy: vi.fn(),
+    propState: { current: "PROP-A" },
+    authState: { roles: ["Front Desk", "Housekeeping Supervisor", "Hotel Admin"] },
+  }
 })
 
 vi.mock("../src/lib/api", async (original) => ({
@@ -25,7 +30,7 @@ vi.mock("../src/lib/api", async (original) => ({
 }))
 
 vi.mock("../src/lib/auth", () => ({
-  useAuth: () => ({ status: "authed", roles: ["Front Desk", "Housekeeping Supervisor", "Hotel Admin"] }),
+  useAuth: () => ({ status: "authed", roles: authState.roles }),
 }))
 
 const TODAY = (() => {
@@ -201,6 +206,7 @@ describe("P22 TapeChart touch drag, unassigned dock, filters, HK toggle, 390px c
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true)
     vi.stubGlobal("localStorage", jsdom.window.localStorage)
     propState.current = "PROP-A"
+    authState.roles = ["Front Desk", "Housekeeping Supervisor", "Hotel Admin"]
     openBookingSpy.mockReset()
     origElementFromPoint = document.elementFromPoint
     host = document.createElement("div")
@@ -545,5 +551,130 @@ describe("P22 TapeChart touch drag, unassigned dock, filters, HK toggle, 390px c
     await act(async () => toggle102.click())
     expect(row102.className.split(/\s+/)).toContain("z-30")
     expect(cell102.className.split(/\s+/)).toContain("z-30")
+  })
+
+  it("opens HK popover upward on a 1-room last Room Type group and downward on the top row", async () => {
+    await mountTape()
+
+    // Last Room Type group ("Standard Twin") has only 1 room (PROP-A-201, rIdx === 0)
+    const toggle201 = host.querySelector<HTMLButtonElement>('[data-testid="hk-toggle-PROP-A-201"]')!
+    await act(async () => toggle201.click())
+    const pop201 = host.querySelector<HTMLElement>('[data-testid="hk-popover-PROP-A-201"]')!
+    expect(pop201).not.toBeNull()
+    expect(pop201.className.split(/\s+/)).toContain("bottom-full")
+    expect(pop201.className.split(/\s+/)).not.toContain("top-full")
+
+    // Top row (PROP-A-101) opens downward cleanly
+    const toggle101 = host.querySelector<HTMLButtonElement>('[data-testid="hk-toggle-PROP-A-101"]')!
+    await act(async () => toggle101.click())
+    const pop101 = host.querySelector<HTMLElement>('[data-testid="hk-popover-PROP-A-101"]')!
+    expect(pop101).not.toBeNull()
+    expect(pop101.className.split(/\s+/)).toContain("top-full")
+    expect(pop101.className.split(/\s+/)).not.toContain("bottom-full")
+  })
+
+  it("gates HK_TOGGLE_OPTIONS.supervisorOnly options for non-supervisors on desktop and mobile", async () => {
+    authState.roles = ["Housekeeping"]
+    await mountTape()
+
+    // Desktop HK popover hides supervisor-only options (Inspected, Ready, Out of Order)
+    const desktopToggle = host.querySelector<HTMLButtonElement>('[data-testid="hk-toggle-PROP-A-102"]')!
+    await act(async () => desktopToggle.click())
+    const desktopPop = host.querySelector<HTMLElement>('[data-testid="hk-popover-PROP-A-102"]')!
+    expect(desktopPop.querySelector('[data-hk-option="Clean"]')).not.toBeNull()
+    expect(desktopPop.querySelector('[data-hk-option="Dirty"]')).not.toBeNull()
+    expect(desktopPop.querySelector('[data-hk-option="Inspected"]')).toBeNull()
+    expect(desktopPop.querySelector('[data-hk-option="Ready"]')).toBeNull()
+    expect(desktopPop.querySelector('[data-hk-option="Out of Order"]')).toBeNull()
+    expect(desktopPop.querySelector('input[placeholder="Out of Order reason"]')).toBeNull()
+
+    // Mobile cards HK menu hides supervisor-only options too
+    const mobileCard = host.querySelector<HTMLElement>('[data-mobile-room="PROP-A-102"]')!
+    const mobileToggle = mobileCard.querySelector<HTMLButtonElement>('[data-testid="hk-toggle-mobile-PROP-A-102"]')!
+    await act(async () => mobileToggle.click())
+    const mobileBtnTexts = Array.from(mobileCard.querySelectorAll("button")).map((b) => b.textContent?.trim())
+    expect(mobileBtnTexts).toContain("Clean")
+    expect(mobileBtnTexts).toContain("Dirty")
+    expect(mobileBtnTexts).not.toContain("Inspected")
+    expect(mobileBtnTexts).not.toContain("Ready")
+    expect(mobileBtnTexts).not.toContain("Out of Order")
+    expect(mobileCard.querySelector('input[placeholder="Out of Order reason"]')).toBeNull()
+
+    // Supervisor role sees all 5 statuses on both desktop and mobile
+    await act(async () => root.unmount())
+    root = createRoot(host)
+    authState.roles = ["Front Desk"]
+    await mountTape()
+    await act(async () => {
+      host.querySelector<HTMLButtonElement>('[data-testid="hk-toggle-PROP-A-102"]')!.click()
+      host.querySelector<HTMLButtonElement>('[data-testid="hk-toggle-mobile-PROP-A-102"]')!.click()
+    })
+    const supPop = host.querySelector<HTMLElement>('[data-testid="hk-popover-PROP-A-102"]')!
+    expect(supPop.querySelector('[data-hk-option="Inspected"]')).not.toBeNull()
+    expect(supPop.querySelector('[data-hk-option="Ready"]')).not.toBeNull()
+    expect(supPop.querySelector('[data-hk-option="Out of Order"]')).not.toBeNull()
+    const supMobileCard = host.querySelector<HTMLElement>('[data-mobile-room="PROP-A-102"]')!
+    const supMobileTexts = Array.from(supMobileCard.querySelectorAll("button")).map((b) => b.textContent?.trim())
+    expect(supMobileTexts).toContain("Inspected")
+    expect(supMobileTexts).toContain("Ready")
+    expect(supMobileTexts).toContain("Out of Order")
+  })
+
+  it("re-renders TapeChart hurdle currency precision reactively via useLocale() when property_locale resolves late", async () => {
+    const UGX_LOCALE = {
+      currency: "UGX",
+      currency_symbol: "UGX ",
+      locale: "en-UG",
+      tax_label: "Tax",
+      tax_id_label: "Tax ID",
+      tax_rates: [],
+      id_types: [],
+      id_type_hints: {},
+      payment_modes: ["Cash"],
+      instant_payment_modes: [],
+      outlet_payment_modes: ["Cash"],
+      default_nationality: "",
+      adult_age: 18,
+      minor_ids: "foreign",
+      integrations: { payment_gateways: [], tax_return: false, verify_tax_id: false, verify_guest_id: false },
+    }
+    const KWD_LOCALE = {
+      ...UGX_LOCALE,
+      currency: "KWD",
+      currency_symbol: "KWD ",
+      locale: "en-GB",
+    }
+
+    const baseImpl = rpc.getMockImplementation()!
+    rpc.mockImplementation(async (method: string, params: Record<string, unknown>) => {
+      if (method === "kamra.api.property_locale") return UGX_LOCALE
+      return baseImpl(method, params)
+    })
+    await loadLocale()
+
+    const resolvers: Array<(val: typeof KWD_LOCALE) => void> = []
+    rpc.mockImplementation((method: string, params: Record<string, unknown>) => {
+      if (method === "kamra.api.property_locale") {
+        return new Promise((resolve) => {
+          resolvers.push(resolve)
+        })
+      }
+      return baseImpl(method, params)
+    })
+
+    await mountTape(0)
+    const getHurdleTitle = () =>
+      Array.from(host.querySelectorAll<HTMLElement>("[title]")).find((el) => el.title.includes("hurdle"))?.title ?? ""
+    expect(getHurdleTitle()).toContain("UGX")
+    expect(getHurdleTitle()).not.toContain("KWD 12.500")
+
+    // Resolve KWD locale asynchronously without bumping ShellContext refreshKey
+    await act(async () => {
+      while (resolvers.length > 0) resolvers.shift()!(KWD_LOCALE)
+      await Promise.resolve()
+    })
+    await vi.waitFor(() => {
+      expect(getHurdleTitle()).toContain("KWD 12.500")
+    })
   })
 })

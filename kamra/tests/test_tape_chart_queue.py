@@ -88,9 +88,11 @@ def _build_offline_stubs(allowed_properties=None, db_state=None):
 	frappe_mod.throw = _throw
 
 	perm_calls = []
+	perm_doc_calls = []
 
 	def _has_permission(doctype, ptype="read", doc=None, throw=False):
 		perm_calls.append((doctype, ptype))
+		perm_doc_calls.append((doctype, ptype, doc, throw))
 		if state.get("deny_permission") == (doctype, ptype):
 			if throw:
 				raise _PermissionError(f"No {ptype} permission for {doctype}")
@@ -99,6 +101,7 @@ def _build_offline_stubs(allowed_properties=None, db_state=None):
 
 	frappe_mod.has_permission = _has_permission
 	frappe_mod._perm_calls = perm_calls
+	frappe_mod._perm_doc_calls = perm_doc_calls
 
 	sql_calls = []
 
@@ -250,6 +253,26 @@ class TestTapeQueueUnit(unittest.TestCase):
 					for sub in ast.walk(node.args[0]):
 						if isinstance(sub, ast.Constant) and isinstance(sub.value, str):
 							self.assertNotRegex(sub.value, forbidden_vendor)
+
+	def test_assignment_endpoints_align_roles_with_reservation_write_and_available_rooms(self):
+		path = KAMRA_ROOT / "tape_queue.py"
+		tree = ast.parse(path.read_text(encoding="utf-8"))
+		roles_by_fn: dict[str, tuple[str, ...]] = {}
+		for node in tree.body:
+			if isinstance(node, ast.FunctionDef):
+				for dec in node.decorator_list:
+					if isinstance(dec, ast.Call) and ast.unparse(dec.func) == "require_roles":
+						roles_by_fn[node.name] = tuple(
+							arg.value for arg in dec.args if isinstance(arg, ast.Constant) and isinstance(arg.value, str)
+						)
+		for endpoint in ("suggest_queue_allocation", "candidate_rooms", "quick_assign_room"):
+			self.assertIn(endpoint, roles_by_fn, f"{endpoint} must carry @require_roles")
+			self.assertNotIn(
+				"Revenue Manager",
+				roles_by_fn[endpoint],
+				f"{endpoint} must not grant Revenue Manager where available_rooms/Reservation write deny it",
+			)
+			self.assertEqual(roles_by_fn[endpoint], ("Front Desk", "Kamra Agent"), endpoint)
 
 
 if not _HAS_FRAPPE:
@@ -461,6 +484,49 @@ if not _HAS_FRAPPE:
 			with self.assertRaisesRegex(_ValidationError, "no longer free"):
 				tq.quick_assign_room("PROP-A", "RES-1", "P-101")
 
+		def test_quick_assign_room_enforces_reservation_write_permission_before_apply(self):
+			rooms = {
+				"P-101": _AttrDict(property="PROP-A", room_type="DLX", housekeeping_status="Inspected"),
+			}
+			res_docs = {
+				"RES-1": _AttrDict(property="PROP-A", room_type="DLX", status="Confirmed", room=""),
+			}
+			apply_calls = []
+
+			def _get_value(doctype, name, fieldname=None, as_dict=False):
+				if doctype == "Room":
+					return rooms.get(name)
+				if doctype == "Reservation":
+					return res_docs.get(name)
+				return None
+
+			def _apply(prop, assignments):
+				apply_calls.append((prop, assignments))
+				return {"executed": [{"reservation": "RES-1", "room": "P-101"}], "skipped": []}
+
+			tq, stubs = self._load(
+				allowed_properties={"PROP-A"},
+				db_state={"get_value": _get_value, "apply_allocation": _apply},
+			)
+			out = tq.quick_assign_room("PROP-A", "RES-1", "P-101", "Desk drag")
+			self.assertTrue(out["ok"])
+			self.assertIn(("Reservation", "write", "RES-1", True), stubs["frappe"]._perm_doc_calls)
+			self.assertEqual(len(apply_calls), 1)
+
+			apply_calls.clear()
+			tq_denied, stubs_denied = self._load(
+				allowed_properties={"PROP-A"},
+				db_state={
+					"get_value": _get_value,
+					"apply_allocation": _apply,
+					"deny_permission": ("Reservation", "write"),
+				},
+			)
+			with self.assertRaises(_PermissionError):
+				tq_denied.quick_assign_room("PROP-A", "RES-1", "P-101", "Desk drag")
+			self.assertIn(("Reservation", "write", "RES-1", True), stubs_denied["frappe"]._perm_doc_calls)
+			self.assertEqual(apply_calls, [], "apply_allocation must not run when Reservation write is denied")
+
 
 if _HAS_FRAPPE:
 
@@ -605,6 +671,69 @@ if _HAS_FRAPPE:
 					tape_queue.suggest_queue_allocation(PROP_B, TODAY)
 			finally:
 				frappe.set_user(prev_user)  # nosemgrep: frappe-setuser -- restore prior session user after isolation test
+
+		def test_live_quick_assign_enforces_reservation_write_docperm_and_role_alignment(self):
+			from kamra import tape_queue
+
+			res_perm = self._book_unassigned(PROP_A, self.rt_dlx, "DocPerm Guest", "+256700100099", TODAY, d(2), vip=0)
+
+			fd_user = ensure_user("ut_tape_fd_docperm@example.test", ["Front Desk"])
+			rev_user = ensure_user("ut_tape_revmgr@example.test", ["Revenue Manager"])
+			for u in (fd_user, rev_user):
+				if not frappe.db.exists("User Permission", {"user": u, "allow": "Property", "for_value": PROP_A}):
+					frappe.get_doc({
+						"doctype": "User Permission",
+						"user": u,
+						"allow": "Property",
+						"for_value": PROP_A,
+					}).insert(ignore_permissions=True)
+				frappe.clear_cache(user=u)
+
+			prev_user = frappe.session.user
+			custom_rows = frappe.get_all(
+				"Custom DocPerm",
+				filters={"parent": "Reservation", "role": "Front Desk"},
+				fields=["name", "write"],
+			)
+			std_rows = frappe.get_all(
+				"DocPerm",
+				filters={"parent": "Reservation", "role": "Front Desk"},
+				fields=["name", "write"],
+			)
+			try:
+				# Revenue Manager can read unassigned queue, but assignment/availability endpoints reject cleanly
+				frappe.set_user(rev_user)  # nosemgrep: frappe-setuser -- test Revenue Manager role alignment on tape_queue
+				self.assertEqual(tape_queue.unassigned_queue(PROP_A, TODAY, 14)["property"], PROP_A)
+				with self.assertRaises(frappe.PermissionError):
+					tape_queue.suggest_queue_allocation(PROP_A, TODAY)
+				with self.assertRaises(frappe.PermissionError):
+					tape_queue.candidate_rooms(PROP_A, res_perm)
+				with self.assertRaises(frappe.PermissionError):
+					tape_queue.quick_assign_room(PROP_A, res_perm, self.r_inspected)
+
+				# Revoking Reservation write DocPerm for Front Desk must block quick_assign_room
+				frappe.set_user(prev_user)  # nosemgrep: frappe-setuser -- restore admin to toggle Reservation DocPerm for negative test
+				target_dt = "Custom DocPerm" if custom_rows else "DocPerm"
+				target_rows = custom_rows if custom_rows else std_rows
+				for row in target_rows:
+					frappe.db.set_value(target_dt, row.name, "write", 0, update_modified=False)
+				frappe.clear_cache(doctype="Reservation")
+				frappe.clear_cache(user=fd_user)
+
+				frappe.set_user(fd_user)  # nosemgrep: frappe-setuser -- test revoked Reservation write DocPerm enforcement
+				self.assertFalse(frappe.has_permission("Reservation", "write", doc=res_perm))
+				with self.assertRaises(frappe.PermissionError):
+					tape_queue.quick_assign_room(PROP_A, res_perm, self.r_inspected)
+				self.assertFalse(frappe.db.get_value("Reservation", res_perm, "room"))
+			finally:
+				frappe.set_user(prev_user)  # nosemgrep: frappe-setuser -- restore prior session user and Reservation DocPerm
+				for row in custom_rows:
+					frappe.db.set_value("Custom DocPerm", row.name, "write", row.write, update_modified=False)
+				for row in std_rows:
+					frappe.db.set_value("DocPerm", row.name, "write", row.write, update_modified=False)
+				frappe.clear_cache(doctype="Reservation")
+				frappe.clear_cache(user=fd_user)
+				frappe.clear_cache(user=rev_user)
 
 
 if __name__ == "__main__":
