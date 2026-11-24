@@ -448,4 +448,49 @@ describe("Room Types pricing", () => {
     }, { interval: 1, timeout: 3000 })
     expect(text(dialog())).toContain(translated("No tariff set for: {plans}", { plans: "Standard USD" }))
   })
+
+  // ── Round 8 (Hydrogen R8 P1 mobile table min-width + derived drawer rows) ──
+  it("gives the Room Types table a minimum width inside overflow-x-auto so 390px phones scroll instead of clipping", async () => {
+    listState.value = tankHillTypes
+    rpc.mockImplementation((method: string) => {
+      if (method === "kamra.rates.room_types_summary") return Promise.resolve(tankHillSummary)
+      return Promise.resolve(tariffs)
+    })
+    await render("/room-types")
+    await vi.waitFor(() => expect(text(host)).toContain("USD 150.00"))
+    const table = host.querySelector<HTMLTableElement>(".overflow-x-auto table")
+    expect(table, "Missing table inside overflow-x-auto").not.toBeNull()
+    expect(table!.className).toMatch(/\bmin-w-\[\d+px\]/)
+  })
+
+  it("renders calculated derived rate plan rows with base attribution in the Room Type drawer", async () => {
+    const derivedRow = {
+      rate_plan: "HALF-USD",
+      label: "Half Price USD (-50%)",
+      currency: "USD",
+      room: 75,
+      single: 60,
+      extra: 30,
+      approval_state: "Approved",
+      valid_from: "2026-11-01",
+      fx_rate: 4084.953333,
+      fx_date: "2026-11-24",
+      local_room: 306371,
+      local_single: 245097,
+      fx_lock_policy: "Fixed at Check In",
+      rounding_step: 0,
+      rounding_mode: "Nearest",
+      derived_from: "CONTRACT",
+      derived_from_label: "Corporate tariff",
+    }
+    tariffs = { ...structuredClone(panel), tariffs: [row, derivedRow] } as typeof panel
+    await render()
+    const body = text(region())
+    expect(body).toContain("Half Price USD (-50%)")
+    expect(body).toContain("Derived from Corporate tariff")
+    expect(body).toContain("USD 75.00")
+    expect(body).toContain("UGX 306,371")
+    const links = Array.from(region().querySelectorAll("a"), (a) => a.getAttribute("href"))
+    expect(links).toContain("/rate-calendar?rate_plan=HALF-USD")
+  })
 })

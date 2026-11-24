@@ -35,6 +35,7 @@ class ContractTariffHarness(unittest.TestCase):
 		self.rate_plans = []
 		self.room_types = []
 		self.rooms = []
+		self.sellable_units = []
 		self.lookups = []
 		self.calls = []
 		self.whitelisted = {}
@@ -49,7 +50,7 @@ class ContractTariffHarness(unittest.TestCase):
 			local=SimpleNamespace(form_dict={}),
 			response={},
 			_dict=dict,
-			db=SimpleNamespace(get_value=self.find_script),
+			db=SimpleNamespace(get_value=self.find_script, exists=self.db_exists),
 			get_doc=self.get_script,
 			get_all=self.get_rate_plans,
 			parse_json=lambda value: json.loads(value) if isinstance(value, str) else value,
@@ -102,12 +103,19 @@ class ContractTariffHarness(unittest.TestCase):
 			return self.can_delete_item_price
 		return True
 
+	def db_exists(self, doctype, name=None):
+		return doctype == "DocType" and name == "Sellable Unit" and bool(self.sellable_units)
+
 	def get_rate_plans(self, doctype, filters=None, fields=None, **kwargs):
 		if doctype == "Room Type":
 			rows = [rt for rt in self.room_types if not (filters or {}).get("disabled") == 0 or not rt.get("disabled")]
 			return [{field: row.get(field) for field in fields} for row in rows] if fields else rows
 		if doctype == "Room":
 			return [{field: row.get(field) for field in fields} for row in self.rooms] if fields else self.rooms
+		if doctype == "Sellable Unit":
+			rows = [u for u in self.sellable_units
+			        if (filters or {}).get("is_active") is None or u.get("is_active") == (filters or {}).get("is_active")]
+			return [{field: row.get(field) for field in fields} for row in rows] if fields else rows
 		self.assertEqual(doctype, "Rate Plan")
 		self.assertEqual(filters, {"property": "Test Hotel"})
 		return [{field: plan.get(field) for field in fields} for plan in self.rate_plans]
@@ -604,3 +612,20 @@ class TestContractTariffRemediationAPI(ContractTariffHarness):
 			{"name": "Test Hotel-STD", "room_type_name": "Standard", "room_type_code": "STD",
 			 "room_count": 0, "price_lists": ["Corporate USD", "Local rates"]},
 		])
+
+	def test_unpriced_room_types_counts_active_siu_villa(self):
+		self.room_types = [
+			{"name": "Test Hotel-DLX", "room_type_name": "Deluxe", "room_type_code": "DLX", "disabled": 0},
+			{"name": "Test Hotel-VLA", "room_type_name": "Garden Villa", "room_type_code": "VLA", "disabled": 0},
+		]
+		self.rooms = [{"room_type": "Test Hotel-DLX"}, {"room_type": "Test Hotel-DLX"}]
+		self.sellable_units = [
+			{"room_type": "Test Hotel-DLX", "is_active": 1},
+			{"room_type": "Test Hotel-DLX", "is_active": 1},
+			{"room_type": "Test Hotel-VLA", "is_active": 1},
+		]
+		self.script = directory()
+		result = self.endpoint("list_contract_tariffs")("Test Hotel")
+		by_name = {row["name"]: row for row in result["unpriced_room_types"]}
+		self.assertEqual(by_name["Test Hotel-VLA"]["room_count"], 1)
+		self.assertEqual(by_name["Test Hotel-DLX"]["room_count"], 2)

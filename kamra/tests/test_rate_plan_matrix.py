@@ -359,6 +359,46 @@ class FxLockPolicyTest(RateMatrixHarness):
 		self.assertEqual(self.res.agreed_rate, 474500)
 		self.assertFalse(self.res.flags.get("kamra_fx_checkin_relock"))
 
+	def test_derived_foreign_plan_check_in_relock_sets_resolver_flag_via_base_chain(self):
+		# Hydrogen R8 P0: a derived plan (custom_tariff_currency blank) resolves its foreign currency through its
+		# base plan (including linked tariff Price List currency) and sets both kamra_contract_relocked and
+		# kamra_fx_checkin_relock so either side deployed first passes legitimate check-in relocks.
+		self.records["Price List"] = [self.add("Price List", "Contract USD", currency="USD")]
+		self.plan("STD-USD", rate_plan_name="Standard USD", currency=None,
+		          custom_tariff_price_list="Contract USD", fx_lock_policy="Fixed at Check In", rounding_step=0)
+		self.plan("HALF-USD", rate_plan_name="Half Price USD (-50%)", currency=None, base_rate_plan="STD-USD",
+		          modifier_type="Percent", modifier_value=-50, fx_lock_policy="Fixed at Check In", rounding_step=0)
+		self.plan("QTR-USD", rate_plan_name="Quarter Price USD", currency=None, base_rate_plan="HALF-USD",
+		          modifier_type="Percent", modifier_value=-50, fx_lock_policy="Fixed at Check In", rounding_step=0)
+
+		for plan_name in ("HALF-USD", "QTR-USD"):
+			with self.subTest(plan=plan_name):
+				res = self.add("Reservation", f"RES-{plan_name}", property="Test Hotel", room="Test Hotel-101",
+				               room_type="Test Hotel-DLX", rate_plan=plan_name, check_in_date="2026-12-01",
+				               check_out_date="2026-12-03", adults=2, children=0, extra_beds=0,
+				               agreed_rate=273750, status="Confirmed", custom_tariff_currency=None,
+				               contract_tariff=json.dumps({"agreed_rate": 273750, "tariff": {
+				                   "currency": "USD", "nightly": 75, "fx_rate": 3650,
+				                   "fx_date": "2026-11-20", "property_currency": "UGX",
+				                   "derived_from": "STD-USD"}}))
+				self.assertTrue(self.pricing.relock_contract_fx_at_check_in(res))
+				# 75 x 3,712.5 = 278,437.5 -> 278,438 UGX (whole UGX, Nearest half up)
+				self.assertEqual(res.agreed_rate, 278438)
+				self.assertTrue(res.flags.get("kamra_contract_relocked"))
+				self.assertTrue(res.flags.get("kamra_fx_checkin_relock"))
+
+		# OTA channel booking on a derived plan must NOT set kamra_fx_checkin_relock (channel relock path stays separate).
+		ota = self.add("Reservation", "RES-OTA-HALF", property="Test Hotel", room="Test Hotel-101",
+		               room_type="Test Hotel-DLX", rate_plan="HALF-USD", check_in_date="2026-12-01",
+		               check_out_date="2026-12-03", adults=2, children=0, extra_beds=0,
+		               agreed_rate=273750, status="Confirmed", custom_tariff_currency=None,
+		               contract_tariff=json.dumps({"agreed_rate": 273750, "tariff": {
+		                   "currency": "USD", "nightly": 75, "fx_rate": 3650,
+		                   "fx_date": "2026-11-20", "property_currency": "UGX", "source": "channel"}}))
+		self.assertTrue(self.pricing.relock_contract_fx_at_check_in(ota))
+		self.assertTrue(ota.flags.get("kamra_contract_relocked"))
+		self.assertFalse(ota.flags.get("kamra_fx_checkin_relock"))
+
 	def post_night(self, date="2026-12-02"):
 		lines = []
 		patches = (

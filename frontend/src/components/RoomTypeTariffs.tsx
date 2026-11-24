@@ -26,6 +26,8 @@ interface TariffList {
     fx_lock_policy?: string
     rounding_step?: number
     rounding_mode?: string
+    derived_from?: string | null
+    derived_from_label?: string | null
   }[]
   all_active_plans_tariff?: boolean | number
   rate_plan_required?: boolean
@@ -100,6 +102,11 @@ export default function RoomTypeTariffs({ row }: { row: Row; reload?: () => void
           <th scope="col" className="whitespace-nowrap px-2 py-2" key={h}>{t(h)}</th>)}</tr></thead>
         <tbody>{data.tariffs.map((row, i) => <tr className="border-t border-zinc-200" key={i}>
           <th scope="row" className="px-2 py-2">{row.label || row.rate_plan}
+            {row.derived_from && (
+              <small className="block font-normal text-zinc-500">
+                {t("Derived from {base}", { base: row.derived_from_label || row.derived_from })}
+              </small>
+            )}
             <small className="block font-normal text-zinc-500">{t("Valid from")} {tariffDate(row.valid_from, locale)}</small>
             <Link to={{ pathname: "/rate-calendar", search: `?${new URLSearchParams({ rate_plan: row.rate_plan })}` }}
               className="text-xs font-normal text-brand-700 hover:underline">{t("Rate calendar")}</Link>

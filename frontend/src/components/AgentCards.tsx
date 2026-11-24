@@ -245,7 +245,7 @@ function QuoteCard({ card }: { card: Extract<AgentCard, { type: "quote" }> }) {
               shell.openBooking({
                 room_type: card.room_type,
                 date: card.check_in_date,
-                stays: card.nights,
+                nights: card.nights,
                 adults: card.adults,
                 children: card.children,
               })

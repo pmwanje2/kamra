@@ -292,6 +292,9 @@ function newStay(a: Answers, ai: boolean, walkIn: boolean): Outcome {
       room_type: a.room_type.value,
       guest_name: a.guest.value,
       phone: a.phone?.value || undefined,
+      // the party and the nights the guide asked for
+      ...(Number(a.adults?.value) > 0 ? { adults: Number(a.adults.value) } : {}),
+      ...(Number(a.nights?.value) > 0 ? { nights: Number(a.nights.value) } : {}),
       ...(/^\d{4}-\d{2}-\d{2}$/.test(date) ? { date } : {}),
     },
   }

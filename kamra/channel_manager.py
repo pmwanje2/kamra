@@ -594,13 +594,30 @@ def tax_hold(conn, e: dict, room_type: str) -> str | None:
 _ARRIVED = ("Checked In", "Checked Out")
 _LOCKED_MODIFY = ("Checked In", "Checked Out", "No Show", "Cancelled")
 
+# Separate reason codes for Reservation.channel_review_reason so the UI and
+# callers distinguish #46 unapplied holds from applied pre-arrival OTA updates
+# that removed or partially preserved a desk discount.
+CHANNEL_REVIEW_NOT_APPLIED = "update_not_applied"
+CHANNEL_REVIEW_DISCOUNT_REMOVED = "discount_removed"
+CHANNEL_REVIEW_DISCOUNT_PARTIAL = "discount_review"
+_REVIEW_NOTE_PREFIXES = ("Channel modify (",)
+
+
+def _review_note_lines(notes: str | None) -> list[str]:
+	"""Channel review lines in special_requests that subsequent OTA modifies
+	must preserve (never overwritten by new or empty guest notes)."""
+	lines = [line.strip() for line in (notes or "").splitlines() if line.strip()]
+	return [
+		line for line in lines
+		if any(line.startswith(p) for p in _REVIEW_NOTE_PREFIXES)
+		or ("— resolve" in line and not any(h in line for h in _TAX_HOLDS))
+	]
+
 
 def _non_tax_hold_lines(notes: str | None) -> list[str]:
 	"""Hold-reason lines in special_requests that are not tax holds
 	(e.g. "OTA overbooking — resolve" or a currency mismatch hold)."""
-	lines = [line.strip() for line in (notes or "").splitlines() if line.strip()]
-	return [line for line in lines
-	        if "— resolve" in line and not any(h in line for h in _TAX_HOLDS)]
+	return _review_note_lines(notes)
 
 
 def _kept_hold_notes(existing_notes: str | None, new_notes: str | None) -> str | None:
@@ -610,6 +627,20 @@ def _kept_hold_notes(existing_notes: str | None, new_notes: str | None) -> str |
 	if not kept and (existing_notes or "").strip():
 		kept = [line.strip() for line in (existing_notes or "").splitlines()
 		        if line.strip() and not any(h in line for h in _TAX_HOLDS)]
+	out = list(kept)
+	for line in (new_notes or "").splitlines():
+		s = line.strip()
+		if s and s not in out:
+			out.append(s)
+	return "\n".join(out) or None
+
+
+def _merge_review_notes(existing_notes: str | None, new_notes: str | None) -> str | None:
+	"""Preserve prior channel review notes across consecutive OTA modifies
+	while updating the guest's own note."""
+	kept = _review_note_lines(existing_notes)
+	if not kept:
+		return new_notes or None
 	out = list(kept)
 	for line in (new_notes or "").splitlines():
 		s = line.strip()
@@ -639,16 +670,255 @@ def _describe_requested_modify(conn, e: dict, room_type: str | None) -> str:
 	return f"OTA modify — resolve: {summary}"
 
 
+def _describe_superseded_discount(doc) -> str:
+	"""Plain, white-label description of the desk discount(s) on doc before a
+	channel modify supersedes them (stay-level and any Daily Details nights)."""
+	from frappe.utils import flt
+
+	from kamra.localization import money_text
+
+	def fmt_val(kind: str, val) -> str:
+		return f"{flt(val):g}% off" if kind == "Percent" else f"{money_text(doc.property, val)} off/night"
+
+	parts = []
+	if doc.get("discount_type") and flt(doc.get("discount_value")) > 0:
+		reason = doc.get("discount_reason") or "no reason"
+		parts.append(f"{fmt_val(doc.discount_type, doc.discount_value)} ({reason})")
+	for r in doc.get("night_rates") or []:
+		if r.get("discount_type") and flt(r.get("discount_value")) > 0:
+			reason = r.get("discount_reason") or doc.get("discount_reason") or "no reason"
+			parts.append(f"{str(r.stay_date)}: {fmt_val(r.discount_type, r.discount_value)} ({reason})")
+	if not parts:
+		reason = doc.get("discount_reason") or "no reason"
+		parts.append(f"desk discount ({reason})")
+	return "; ".join(parts)
+
+
+def _channel_discount_needs_approval(doc, rows, dates) -> bool:
+	"""True when applying the discount on `dates` would exceed standard desk
+	authority (above limit, 100% comp, under floor, supervisor reason, or
+	non-discountable plan without a held manager override). Evaluated without
+	manager privilege so an inbound OTA webhook never inherits Administrator
+	authority or escalates from Guest."""
+	if not dates:
+		return False
+	from frappe.utils import flt
+	from kamra.api import _repriced_nights, discount_governance
+
+	nights = _repriced_nights(doc, rows, dates)
+	if not nights:
+		return False
+	discounted = [n for n in nights if n.get("discount_type") and flt(n.get("discount_value")) > 0]
+	if not discounted:
+		return False
+	gov = discount_governance(
+		doc.property, doc.room_type, doc.rate_plan, nights,
+		reason_code=doc.get("discount_reason"),
+		fixed_held=doc.holds_manager_fixed_rate(),
+		check=False,
+	)
+	desk_needs = (
+		flt(gov["max_pct"]) > flt(gov["limit_pct"]) + 0.005
+		or bool(gov["floor_breach"])
+		or bool(gov["reason_requires_supervisor"])
+	)
+	fixed_held = doc.holds_manager_fixed_rate()
+	return bool(
+		desk_needs
+		or gov["comp"]
+		or (not gov["eligible"] and not fixed_held)
+		or (gov["fixed_rate"] and not fixed_held)
+		or not gov["reason_ok"]
+	)
+
+
+def _reconcile_ota_modify_discount(doc, old) -> dict | None:
+	"""When an auto-priced pre-arrival OTA modify changes a discounted stay,
+	keep the approved discount on new/changed nights only where the existing
+	approval covers them. Otherwise preserve the approved discount on surviving
+	originally-approved nights as Daily Details, price added or uncovered
+	nights without the unapproved discount, and return review metadata so the
+	desk is alerted without crashing or escalating Guest privilege."""
+	from frappe.utils import cint, flt, getdate
+
+	if not cint(doc.get("auto_price")) or not doc.has_discount():
+		return None
+	from kamra.api import _discount_snapshot
+
+	doc.flags.kamra_stored = old
+	try:
+		q = doc.requote()
+		rows = doc.quote_night_rows(q)
+		judged = doc.judged_nights(old, rows)
+		if not _channel_discount_needs_approval(doc, rows, judged):
+			return None
+
+		before = {**_discount_snapshot(old), "amount_after_tax": flt(old.amount_after_tax)}
+		before_desc = _describe_superseded_discount(old)
+
+		same_product = (
+			doc.room_type == old.room_type
+			and (doc.get("rate_plan") or None) == (old.get("rate_plan") or None)
+		)
+		old_stay_type = old.get("discount_type") or None
+		old_stay_val = flt(old.get("discount_value"))
+		old_stay_reason = old.get("discount_reason") or None
+		old_stay_fixed = cint(old.get("fixed_rate"))
+		old_by_date = {str(getdate(r.stay_date)): r for r in old.get("night_rates") or []}
+		new_stay_nights = doc.stay_nights()
+		new_stay_set = set(new_stay_nights)
+
+		def _approved_for(day: str):
+			if not same_product or day not in old_by_date:
+				return None
+			r = old_by_date[day]
+			if r.get("discount_type") and flt(r.get("discount_value")) > 0:
+				return (
+					r.discount_type,
+					flt(r.discount_value),
+					r.get("discount_reason") or old_stay_reason,
+					cint(r.get("fixed_rate")) or old_stay_fixed,
+				)
+			if old_stay_type and old_stay_val > 0:
+				return (old_stay_type, old_stay_val, old_stay_reason, old_stay_fixed)
+			return None
+
+		# Clear stay-level discount so added/uncovered nights never inherit it;
+		# pin each surviving originally-approved night's discount on its row.
+		doc.discount_type = None
+		doc.discount_value = 0
+		doc.discount_reason = None
+		doc.fixed_rate = 0
+		doc.flags.kamra_reservation_discount = True
+
+		kept_dates = []
+		for r in doc.get("night_rates") or []:
+			day = str(getdate(r.stay_date))
+			approved = _approved_for(day) if day in new_stay_set else None
+			if approved:
+				r.discount_type, r.discount_value, r.discount_reason, r.fixed_rate = approved
+				kept_dates.append(day)
+			else:
+				r.discount_type = None
+				r.discount_value = 0
+				r.discount_reason = None
+				r.fixed_rate = 0
+
+		# Re-check: if any surviving night itself moved price (e.g., party change
+		# or rate-card shift) and would require fresh supervisor sign-off, drop
+		# its unapproved discount too so Guest save never crashes or escalates.
+		if kept_dates:
+			q2 = doc.requote()
+			rows2 = doc.quote_night_rows(q2)
+			judged2 = doc.judged_nights(old, rows2)
+			if judged2 and _channel_discount_needs_approval(doc, rows2, judged2):
+				still_kept = []
+				for r in doc.get("night_rates") or []:
+					day = str(getdate(r.stay_date))
+					if day in kept_dates and day in judged2 and _channel_discount_needs_approval(doc, rows2, {day}):
+						r.discount_type = None
+						r.discount_value = 0
+						r.discount_reason = None
+						r.fixed_rate = 0
+					elif day in kept_dates:
+						still_kept.append(day)
+				kept_dates = still_kept
+
+		kept_set = set(kept_dates)
+		added_dates = [day for day in new_stay_nights if day not in kept_set]
+		if kept_dates:
+			return {
+				"kind": CHANNEL_REVIEW_DISCOUNT_PARTIAL,
+				"action_type": "channel.modify_discount_review",
+				"before": before,
+				"desc": before_desc,
+				"kept": sorted(kept_set),
+				"added": added_dates,
+			}
+		return {
+			"kind": CHANNEL_REVIEW_DISCOUNT_REMOVED,
+			"action_type": "channel.modify_discount_removed",
+			"before": before,
+			"desc": before_desc,
+			"kept": [],
+			"added": added_dates,
+		}
+	finally:
+		doc.flags.kamra_stored = None
+
+
+def _rate_plan_has_tariff(plan_name: str | None) -> bool:
+	"""True when `plan_name` or an ancestor in its `base_rate_plan` chain carries
+	a hospitality-tariffs `custom_tariff_price_list` (mirrors hospitality-tariffs@11
+	`tariff_source`, failing closed on cycles or >5-plan chains)."""
+	if not plan_name:
+		return False
+	meta = frappe.get_meta("Rate Plan")
+	if not meta.has_field("custom_tariff_price_list"):
+		return False
+	has_base = meta.has_field("base_rate_plan")
+	fields = ["custom_tariff_price_list"] + (["base_rate_plan"] if has_base else [])
+	current = plan_name
+	seen: set[str] = set()
+	while current:
+		if current in seen or len(seen) >= 5:
+			return True
+		seen.add(current)
+		row = frappe.db.get_value("Rate Plan", current, fields, as_dict=True)
+		if not row:
+			return False
+		if row.get("custom_tariff_price_list"):
+			return True
+		current = (row.get("base_rate_plan") or "").strip() if has_base else ""
+	return False
+
+
+def _has_contract_tariff_snapshot(doc) -> bool:
+	"""True when `doc.contract_tariff` holds a non-channel contract tariff snapshot
+	(mirrors hospitality-tariffs@11 `snapshot_contract`; fails closed on corrupt JSON)."""
+	raw = doc.get("contract_tariff")
+	if isinstance(raw, str):
+		if not raw.strip():
+			return False
+		try:
+			raw = frappe.parse_json(raw)
+		except Exception:
+			return True
+	if not isinstance(raw, dict):
+		return False
+	terms = raw.get("tariff")
+	if not isinstance(terms, dict) or terms.get("source") == "channel":
+		return False
+	return bool(terms.get("derived_from") or (terms.get("currency") and frappe.utils.flt(terms.get("nightly")) > 0))
+
+
+def _is_tariff_owned_stay(doc) -> bool:
+	"""True when `doc` is a contract-tariff stay guarded by hospitality-tariffs@11:
+	directly priced (`custom_tariff_currency`), backed by a non-channel
+	`contract_tariff` snapshot (including derived or repointed stays), or on a
+	Rate Plan whose `base_rate_plan` chain leads to a tariff price list."""
+	return bool(
+		doc.get("custom_tariff_currency")
+		or _has_contract_tariff_snapshot(doc)
+		or _rate_plan_has_tariff(doc.get("rate_plan"))
+	)
+
+
 def _flag_for_review(conn, doc, e: dict, reason: str, *,
                      action: str = "modify",
-                     action_type: str = "channel.modify_needs_review") -> dict:
-	"""An OTA modify or cancel on a stay that is in-house or closed, held for
-	front-desk review: the stay is left untouched (status, room, dates, nights,
-	amounts, folio), flagged via channel_review_needed, noted on the stay, and
+                     action_type: str = "channel.modify_needs_review",
+                     not_applied_why: str | None = None) -> dict:
+	"""An OTA modify or cancel on a stay that is in-house, closed, or contract-tariff
+	owned, held for front-desk review: the stay is left untouched (status, room, dates,
+	nights, amounts, folio), flagged via channel_review_needed, noted on the stay, and
 	logged in Agent Action Log - matching OPERA Cloud OXI (UPDATE INHOUSE RES
 	= N, WARNINGS AS TRACES = Y, and Message Status)."""
-	note = f"{reason} (not applied: the stay is {doc.status})"
-	updates = {"channel_review_needed": 1}
+	why = not_applied_why or f"the stay is {doc.status}"
+	note = f"{reason} (not applied: {why})"
+	updates = {
+		"channel_review_needed": 1,
+		"channel_review_reason": CHANNEL_REVIEW_NOT_APPLIED,
+	}
 	if note not in (doc.special_requests or ""):
 		updates["special_requests"] = "\n".join(s for s in (doc.special_requests, note) if s)
 	doc.db_set(updates)
@@ -663,16 +933,24 @@ def _flag_for_review(conn, doc, e: dict, reason: str, *,
 @frappe.whitelist(methods=["POST"])
 @require_roles("Front Desk", "Revenue Manager", "Hotel Admin", scope={"reservation": "Reservation"})
 def clear_channel_review(reservation: str):
-	"""Mark an unapplied OTA modify/cancel review flag as reviewed on a stay
+	"""Mark an OTA modify/cancel review flag as reviewed on a stay
 	(OPERA Cloud OXI Message Status -> Mark As Reviewed), without touching any
 	stay or financial fields."""
 	res = frappe.get_doc("Reservation", reservation)
-	frappe.db.set_value("Reservation", res.name, "channel_review_needed", 0)
+	frappe.db.set_value("Reservation", res.name, {
+		"channel_review_needed": 0,
+		"channel_review_reason": None,
+	})
 	from kamra.savings import log_action
 	log_action("channel.review_cleared", "Reservation", res.name, res.property,
 	           rationale=f"Channel review cleared by {frappe.session.user}",
 	           channel="Desk")
-	return {"ok": True, "reservation": res.name, "channel_review_needed": 0}
+	return {
+		"ok": True,
+		"reservation": res.name,
+		"channel_review_needed": 0,
+		"channel_review_reason": None,
+	}
 
 
 def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
@@ -774,6 +1052,20 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 		if doc.status in _LOCKED_MODIFY:
 			reason = requested_reason or _describe_requested_modify(conn, e, room_type)
 			return _flag_for_review(conn, doc, e, reason)
+		will_auto_price = 0 if requested_reason or e.get("total") else 1
+		if not will_auto_price and _is_tariff_owned_stay(doc) and frappe.utils.cint(doc.get("auto_price")):
+			# Confirmed contract-tariff stays owned by hospitality-tariffs (direct,
+			# derived-plan, or repointed contract_tariff snapshot) cannot switch
+			# auto_price off (HSP-TARIFF-008): hold the OTA modify for desk review
+			# rather than failing the channel event or dropping the tariff.
+			reason = requested_reason or _describe_requested_modify(conn, e, room_type)
+			if doc.has_discount():
+				reason = f"{reason}; active desk discount: {_describe_superseded_discount(doc)}"
+			return _flag_for_review(
+				conn, doc, e, reason,
+				not_applied_why="contract-tariff stay requires desk review",
+			)
+		old_doc = frappe.get_doc("Reservation", existing.name)
 		if requested_reason:
 			e = dict(e, notes="\n".join(s for s in (e.get("notes"), requested_reason) if s))
 		other_holds = _non_tax_hold_lines(doc.special_requests) if doc.status == "Requested" else []
@@ -789,13 +1081,38 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 		doc.children = e.get("children") or 0
 		doc.special_requests = (
 			_kept_hold_notes(doc.special_requests, e.get("notes"))
-			if keep_non_tax_hold else (e.get("notes") or None)
+			if keep_non_tax_hold else _merge_review_notes(doc.special_requests, e.get("notes"))
 		)
+		from frappe.utils import flt
+		old_amount = flt(doc.amount_after_tax)
+		discount_review = None
 		doc.auto_price = 0 if requested_reason or e.get("total") else 1
+		if not doc.auto_price and doc.has_discount():
+			from kamra.api import _discount_snapshot
+			discount_review = {
+				"kind": CHANNEL_REVIEW_DISCOUNT_REMOVED,
+				"action_type": "channel.modify_discount_removed",
+				"before": {**_discount_snapshot(doc), "amount_after_tax": old_amount},
+				"desc": _describe_superseded_discount(doc),
+				"kept": [],
+				"added": [],
+			}
 		if e.get("total") or requested_reason:
 			doc.amount_after_tax = e.get("total") or 0
 		if not doc.auto_price:
+			# the channel's own price: the channel manager is its writer
+			# (Reservation.guard_locked_nights), with or without a total yet;
+			# any pre-arrival desk discount is superseded and every dependent
+			# total/tax/night figure is recomputed cleanly through lock_channel_rates
+			doc.flags.kamra_night_rates_writer = True
+			doc.discount_type = None
+			doc.discount_value = 0
+			doc.discount_reason = None
+			doc.fixed_rate = 0
+			doc.flags.kamra_reservation_discount = True
 			lock_channel_rates(doc, e.get("total"), e.get("nightly"), e.get("nightly_net"))
+		else:
+			discount_review = _reconcile_ota_modify_discount(doc, old_doc)
 		old_transition = frappe.flags.kamra_status_transition
 		try:
 			if requested_reason:
@@ -808,6 +1125,64 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 			doc.save(ignore_permissions=True)
 		finally:
 			frappe.flags.kamra_status_transition = old_transition
+		if discount_review:
+			from kamra.api import _discount_snapshot
+			from kamra.localization import money_text
+			from kamra.pricing import night_rate_places
+			from kamra.savings import log_action
+
+			channel_label = e.get("channel") or "OTA"
+			ref_label = e.get("ota_ref") or doc.ota_ref or ""
+			new_total_text = money_text(doc.property, doc.amount_after_tax)
+			if discount_review["kind"] == CHANNEL_REVIEW_DISCOUNT_PARTIAL:
+				kept_str = ", ".join(discount_review["kept"])
+				added_str = ", ".join(discount_review["added"])
+				review_note = (
+					f"Channel modify ({channel_label} {ref_label}) applied — kept approved "
+					f"desk discount on {kept_str}; added night(s) {added_str} priced without "
+					f"unapproved discount; new total {new_total_text}."
+				)
+			elif requested_reason:
+				review_note = (
+					f"Channel modify ({channel_label} {ref_label}) applied (held as Requested) — "
+					f"removed desk discount: {discount_review['desc']}; new total {new_total_text}."
+				)
+			else:
+				review_note = (
+					f"Channel modify ({channel_label} {ref_label}) applied — removed desk "
+					f"discount: {discount_review['desc']}; new total {new_total_text}."
+				)
+			updates = {
+				"channel_review_needed": 1,
+				"channel_review_reason": discount_review["kind"],
+			}
+			if review_note not in (doc.special_requests or ""):
+				updates["special_requests"] = "\n".join(
+					s for s in (doc.special_requests, review_note) if s
+				)
+			doc.db_set(updates)
+			places = night_rate_places(doc.property)
+			after_discount_total = round(
+				sum(flt(r.get("discount_amount")) for r in doc.get("night_rates") or []),
+				places,
+			)
+			after_snap = {
+				**_discount_snapshot(doc),
+				"discount_total": after_discount_total,
+				"amount_after_tax": flt(doc.amount_after_tax),
+			}
+			log_action(
+				"reservation_discount", "Reservation", doc.name, conn.property,
+				rationale=review_note,
+				before_snapshot=discount_review["before"],
+				after_snapshot=after_snap,
+				channel="API",
+			)
+			log_action(
+				discount_review["action_type"], "Reservation", doc.name, conn.property,
+				rationale=review_note,
+				channel="API",
+			)
 		return {"ota_ref": e["ota_ref"], "result": "modified",
 		        "reservation": existing.name}
 
@@ -838,6 +1213,10 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 		# the OTA already sold at its price - keep their number, don't reprice
 		"auto_price": 0 if requested_reason or e.get("total") else 1,
 	})
+	if not doc.auto_price:
+		# the channel's own price: the channel manager is its writer
+		# (Reservation.guard_locked_nights), with or without a total yet
+		doc.flags.kamra_night_rates_writer = True
 	if e.get("total"):
 		doc.amount_after_tax = e["total"]
 		lock_channel_rates(doc, e["total"], e.get("nightly"), e.get("nightly_net"))
@@ -886,13 +1265,20 @@ def lock_channel_rates(doc, total_after_tax, nightly=None, nightly_net=False) ->
 	total = float(total_after_tax or 0)
 	if total <= 0:
 		doc.set("night_rates", [])
+		doc.amount_before_tax = 0
+		doc.tax_amount = 0
+		doc.amount_after_tax = 0
+		doc.discount_amount = 0
+		if hasattr(doc, "quote_snapshot"):
+			doc.quote_snapshot = None
 		doc.rate_lock_key = None
+		doc.flags.kamra_night_rates_writer = True
 		return
 	if not doc.room_type:
 		return
 	from frappe.utils import date_diff, getdate
 
-	from kamra.pricing import night_rate_places, room_gst_rate
+	from kamra.pricing import entry_rate, night_rate_places, rates_include_tax, room_gst_rate
 
 	nights = max(date_diff(doc.check_out_date, doc.check_in_date), 1)
 	dates = [str(add_days(doc.check_in_date, i)) for i in range(nights)]
@@ -906,6 +1292,7 @@ def lock_channel_rates(doc, total_after_tax, nightly=None, nightly_net=False) ->
 	if not sum(weights):
 		weights = [1.0] * nights
 	places = night_rate_places(doc.property)
+	inclusive = rates_include_tax(doc.property)
 	shares, running = [], 0.0
 	scale = total / sum(weights)
 	for i, (d, w) in enumerate(zip(dates, weights, strict=True)):
@@ -923,11 +1310,34 @@ def lock_channel_rates(doc, total_after_tax, nightly=None, nightly_net=False) ->
 	for i, (d, pre, gst) in enumerate(shares):
 		rate = round(room_total - running, places) if i == nights - 1 else round(float(pre), places)
 		running += rate
-		rows.append({"stay_date": d, "rate": rate,
-		             "gst_rate": float(gst), "meal_amount": 0,
-		             "demand_premium_pct": 0})
+		rows.append({
+			"stay_date": d,
+			"rate": rate,
+			"base_rate": rate,
+			"gst_rate": float(gst),
+			"meal_amount": 0,
+			"demand_premium_pct": 0,
+			"discount_amount": 0,
+			"discount_type": None,
+			"discount_value": 0,
+			"discount_reason": None,
+			"fixed_rate": 0,
+			"rate_code_amount": round(float(entry_rate(rate, gst, inclusive, places)), places),
+		})
+	before_tax = round(sum(r["rate"] for r in rows), places)
+	after_tax = round(total, places)
+	tax_amount = round(after_tax - before_tax, places)
 	doc.set("night_rates", rows)
+	doc.amount_before_tax = before_tax
+	doc.tax_amount = tax_amount
+	doc.amount_after_tax = after_tax
+	doc.discount_amount = 0
+	if hasattr(doc, "quote_snapshot"):
+		doc.quote_snapshot = None
 	doc.rate_lock_key = None
+	# the channel's own prices: the one writer of a locked night besides the
+	# booking's own pricing (Reservation.guard_locked_nights)
+	doc.flags.kamra_night_rates_writer = True
 
 
 def _reconcile_booking_rooms(conn, booking_id: str, keep: set) -> None:

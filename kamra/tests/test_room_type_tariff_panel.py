@@ -177,6 +177,52 @@ class RoomTypeTariffPanelTest(RateMatrixHarness):
 		self.assertEqual(panel2["card_rate_plans"], [])
 		self.assertIs(panel2["all_active_plans_tariff"], True)
 
+	def test_derived_plans_appear_with_calculated_prices_and_can_be_primary(self):
+		self.docs["Rate Plan", "CONTRACT"].update(rounding_step=0, rounding_mode="Nearest",
+		                                          fx_lock_policy="Fixed at Check In")
+		self.rows = [self.row("CONTRACT", label="Standard USD", room=150, single=120, extra=30,
+		                      fx_rate=4084.953333, fx_date="2026-11-24")]
+		self.rate_plan("HALF", rate_plan_name="Half Price USD (-50%)", base_rate_plan="CONTRACT",
+		               modifier_type="Percent", modifier_value=-50, adjust_extra_person=0,
+		               fx_lock_policy="Fixed at Check In", rounding_step=0, rounding_mode="Nearest")
+		self.rate_plan("HALF-EXTRA", rate_plan_name="Half Incl. Extra", base_rate_plan="CONTRACT",
+		               modifier_type="Percent", modifier_value=-50, adjust_extra_person=1,
+		               fx_lock_policy="Fixed at Check In", rounding_step=1000, rounding_mode="Nearest")
+		self.rate_plan("QTR", rate_plan_name="Quarter Price USD", base_rate_plan="HALF",
+		               modifier_type="Percent", modifier_value=-50, adjust_extra_person=0,
+		               fx_lock_policy="Fixed at Check In", rounding_step=0, rounding_mode="Nearest")
+		self.rate_plan("OFF-DER", rate_plan_name="Disabled Derived", base_rate_plan="CONTRACT",
+		               modifier_type="Percent", modifier_value=-20, disabled=1)
+
+		panel = self.panel()
+		by_plan = {r["rate_plan"]: r for r in panel["tariffs"]}
+		self.assertEqual(set(by_plan), {"CONTRACT", "HALF", "HALF-EXTRA", "QTR"})
+		# Base row untouched
+		self.assertEqual((by_plan["CONTRACT"]["room"], by_plan["CONTRACT"]["local_room"]), (150, 612743.0))
+		# Derived -50% (adjust_extra_person=0 -> extra keeps base 30.0)
+		half = by_plan["HALF"]
+		self.assertEqual((half["room"], half["single"], half["extra"]), (75.0, 60.0, 30.0))
+		self.assertEqual((half["local_room"], half["local_single"]), (306371.0, 245097.0))
+		self.assertEqual((half["derived_from"], half["derived_from_label"]), ("CONTRACT", "Standard USD"))
+		self.assertEqual(half["fx_lock_policy"], "Fixed at Check In")
+		# Derived -50% with adjust_extra_person=1 and 1,000 rounding step
+		half_x = by_plan["HALF-EXTRA"]
+		self.assertEqual((half_x["room"], half_x["single"], half_x["extra"]), (75.0, 60.0, 15.0))
+		self.assertEqual(half_x["local_room"], 306000.0)
+		# Multi-hop derived (QTR -> HALF -> CONTRACT): 75 * 0.5 = 37.5, single 30.0, extra 30.0
+		qtr = by_plan["QTR"]
+		self.assertEqual((qtr["room"], qtr["single"], qtr["extra"]), (37.5, 30.0, 30.0))
+		self.assertEqual((qtr["derived_from"], qtr["derived_from_label"]), ("HALF", "Half Price USD (-50%)"))
+
+		# When a derived plan is default, primary_rate_plan resolves to it.
+		self.docs["Rate Plan", "CONTRACT"].is_default = 0
+		self.docs["Rate Plan", "HALF"].is_default = 1
+		self.assertEqual(self.panel()["primary_rate_plan"], "HALF")
+
+		# When the base plan has no approved tariff row, derived plans are not fabricated.
+		self.rows = []
+		self.assertEqual(self.panel()["tariffs"], [])
+
 
 class RoomTypesSummaryTest(RateMatrixHarness):
 	modules = ("kamra.pricing", "kamra.authz", "kamra.rates")
@@ -286,4 +332,28 @@ class RoomTypesSummaryTest(RateMatrixHarness):
 		self.authz.restricted_properties = lambda user=None: {"Sister Hotel"}
 		with self.assertRaises(PermissionDenied):
 			self.rates.room_types_summary("Test Hotel")
+
+	def test_room_types_summary_counts_active_sius_without_double_counting_physical_rooms(self):
+		# Hydrogen R8 P1: a whole-property Villa with 0 Room records and 1 active Sellable Unit is live inventory
+		# (room_count == 1, never 0), physical rooms with synced individual SIUs are not double-counted, and
+		# inactive SIUs are ignored.
+		self.records["Room Type"].append(
+			self.add("Room Type", "Test Hotel-VLA", property="Test Hotel", disabled=0, room_type_code="VLA",
+			         room_type_name="Garden Villa", room_category="Villa", base_price=1200000,
+			         base_occupancy=2, adults_capacity=6, extra_adult_price=100000, child_price=20000),
+		)
+		self.records["Sellable Unit"] = [
+			self.add("Sellable Unit", "SIU-VLA-1", property="Test Hotel", room_type="Test Hotel-VLA",
+			         unit_kind="whole_property", is_active=1),
+			*[self.add("Sellable Unit", f"SIU-JNR-{i}", property="Test Hotel", room_type="Test Hotel-JNR",
+			           unit_kind="individual", is_active=1) for i in range(1, 6)],
+			self.add("Sellable Unit", "SIU-STD-OFF", property="Test Hotel", room_type="Test Hotel-STD",
+			         unit_kind="individual", is_active=0),
+		]
+		summary = self.rates.room_types_summary("Test Hotel")
+		by_rt = {row["room_type"]: row for row in summary["room_types"]}
+		self.assertEqual(by_rt["Test Hotel-VLA"]["room_count"], 1)
+		self.assertEqual(by_rt["Test Hotel-JNR"]["room_count"], 5)
+		self.assertEqual(by_rt["Test Hotel-EXE"]["room_count"], 2)
+		self.assertEqual(by_rt["Test Hotel-STD"]["room_count"], 0)
 

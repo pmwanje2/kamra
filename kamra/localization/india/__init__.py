@@ -171,10 +171,14 @@ def amount_in_words(prop_doc, amount) -> str:
 
 
 def locale(prop_doc) -> dict:
+	currency = prop_doc.get("currency") or "INR"
+	symbol = frappe.db.get_value("Currency", currency, "symbol")
+	if currency == "INR" and symbol in (None, "", "Rs", "Rs."):
+		symbol = "₹"
 	return {
-		"currency_symbol": "₹",
+		"currency_symbol": symbol or "₹",
 		"locale": "en-IN",
-		"currency": prop_doc.get("currency") or "INR",
+		"currency": currency,
 		"tax_label": "GST",
 		"tax_id_label": "GSTIN",
 		"tax_rates": tax_rate_options(prop_doc.name),

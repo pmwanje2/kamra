@@ -154,9 +154,29 @@ def fill_property_defaults(doc) -> None:
 			doc.set(key, value)
 
 
+def amount_text(property: str | None, amount) -> str:
+	"""An amount formatted to the property currency's minor-unit precision
+	(0 decimals for UGX/JPY, 2 for INR/USD, 3 for KWD) for folio line
+	descriptions and plain-number messages."""
+	from kamra.pricing import _minor_unit
+	currency = ""
+	try:
+		if property:
+			currency = frappe.get_cached_value("Property", property, "currency") or ""
+	except Exception:
+		currency = ""
+	digits = _minor_unit(currency)
+	try:
+		value = float(amount or 0)
+	except (TypeError, ValueError):
+		return str(amount)
+	return f"{value:,.{digits}f}"
+
+
 def money_text(property: str | None, amount) -> str:
 	"""An amount in the property's currency for server-written text (the
 	activity log, alerts) - never a hardcoded rupee sign."""
+	from kamra.pricing import _minor_unit
 	symbol, currency = "", ""
 	try:
 		if property:
@@ -169,7 +189,13 @@ def money_text(property: str | None, amount) -> str:
 		value = float(amount or 0)
 	except (TypeError, ValueError):
 		return f"{symbol}{amount}"
-	digits = f"{abs(value):,.0f}" if currency == "UGX" else group_digits(abs(value), currency == "INR")
+	minor = _minor_unit(currency)
+	if minor == 0:
+		digits = f"{abs(value):,.0f}"
+	elif minor > 2:
+		digits = f"{abs(value):,.{minor}f}"
+	else:
+		digits = group_digits(abs(value), currency == "INR")
 	return f"{'-' if value < 0 else ''}{symbol}{digits}"
 
 
@@ -626,10 +652,31 @@ def on_pos_bill_paid(pack, order_name: str, tax_rate: float):
 	return _hook(pack, "on_pos_bill_paid", order_name, tax_rate)
 
 
-def invoice_title(pack) -> str:
+def invoice_title(pack, *, tax_charged: bool = False) -> str:
 	"""What a settled bill is called. "Tax Invoice" only where the law asks
-	for those words (a pack sets INVOICE_TITLE); everywhere else "Invoice"."""
-	return getattr(pack, "INVOICE_TITLE", "Invoice")
+	for those words (a pack sets INVOICE_TITLE, or VAT_INVOICE_TITLE when
+	VAT/GST is actually charged on the settled invoice); everywhere else
+	"Invoice"."""
+	explicit = getattr(pack, "INVOICE_TITLE", None)
+	if explicit:
+		return explicit
+	if tax_charged:
+		vat_title = getattr(pack, "VAT_INVOICE_TITLE", None)
+		if vat_title:
+			return vat_title
+	return "Invoice"
+
+
+def neutral_invoice_title(pack) -> str:
+	"""Neutral title for a settled bill when tax could not be read: never
+	claims "Tax Invoice" without verified tax figures."""
+	explicit = getattr(pack, "NEUTRAL_INVOICE_TITLE", None)
+	if explicit:
+		return explicit
+	title = invoice_title(pack)
+	if "tax invoice" in title.lower():
+		return "Invoice"
+	return title
 
 
 def invoice_print_block(pack, source_doctype: str, source_name: str,

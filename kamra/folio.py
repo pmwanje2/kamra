@@ -36,7 +36,24 @@ def _fnb_gst(property):
 	return pack_for(property).fnb_tax_rate(property)
 
 
-def _recalculate(folio):
+def _is_closed_or_invoiced(folio) -> bool:
+	"""True once a folio is closed or linked to an issued invoice."""
+	return bool(
+		folio.get("status") == "Closed"
+		or folio.get("invoice_number")
+		or folio.get("sales_invoice")
+	)
+
+
+def _recalculate(folio, *, payments_only: bool = False):
+	paid = sum(Decimal(str(p.amount or 0)) for p in folio.payments)
+	if _is_closed_or_invoiced(folio) and folio.get("grand_total") is not None:
+		# Closed / invoiced folios have frozen charges, tax and grand_total;
+		# adding a payment or correction must never re-round them.
+		grand = Decimal(str(folio.grand_total or 0))
+		folio.payments_total = float(paid)
+		folio.balance = float(grand - paid)
+		return
 	charges = tax = Decimal(0)
 	for c in folio.charges:
 		amount = Decimal(str(c.amount or 0))
@@ -45,22 +62,36 @@ def _recalculate(folio):
 		c.total = float(amount + line_tax)
 		charges += amount
 		tax += line_tax
-	paid = sum(Decimal(str(p.amount or 0)) for p in folio.payments)
 	raw_grand = charges + tax
 	prop = folio.get("property")
-	if prop and folio.charges:
-		# Document-level currency minor-unit rounding (SAP TCURX style): round the
-		# folio total to the property currency's ISO decimals rather than per line.
+	rounded_grand = raw_grand
+	if prop and folio.charges and tax and not _is_closed_or_invoiced(folio):
+		# Document-level currency minor-unit rounding (SAP TCURX style) applies
+		# only to open, uninvoiced folios with calculated tax. With tax == 0
+		# (including ERPNext-bridged folios where KMR-TAX-001 keeps lines untaxed
+		# and native Sales Invoice owns tax/rounding), charges_total and
+		# grand_total stay equal to sum(c.amount) so KAM-SI-TOTAL-MISMATCH holds.
 		from kamra.pricing import property_currency, round_rate_amount
 		currency = property_currency(prop)
-		if tax:
-			grand = round_rate_amount(raw_grand, 0, "Nearest", currency)
-			tax = grand - charges
-		else:
-			grand = round_rate_amount(charges, 0, "Nearest", currency)
-			charges = grand
-	else:
-		grand = raw_grand
+		rounded_grand = round_rate_amount(raw_grand, 0, "Nearest", currency)
+	if payments_only and folio.get("grand_total") is not None:
+		# Settlement writers (payment, refund, city ledger, re-close after
+		# cancel_invoice) must not re-round an already-computed bill whose
+		# charge lines did not change — e.g. a legacy pre-R8 fractional invoice
+		# reopened by cancel_invoice and then paid (SAP VF11/VF01 & OPERA
+		# Void/Reissue preserve billed totals until a charge actually changes).
+		stored_charges = Decimal(str(folio.charges_total or 0))
+		stored_grand = Decimal(str(folio.grand_total or 0))
+		if abs(stored_charges - charges) < Decimal("0.000001") and (
+			abs(stored_grand - raw_grand) < Decimal("0.000001")
+			or abs(stored_grand - rounded_grand) < Decimal("0.000001")
+		):
+			folio.payments_total = float(paid)
+			folio.balance = float(stored_grand - paid)
+			return
+	grand = rounded_grand
+	if prop and folio.charges and tax and not _is_closed_or_invoiced(folio):
+		tax = grand - charges
 	folio.charges_total = float(charges)
 	folio.tax_total = float(tax)
 	folio.grand_total = float(grand)
@@ -93,15 +124,22 @@ def open_folio(reservation) -> str:
 		"status": "Open",
 		"opened_on": now_datetime(),
 	})
-	if reservation.discount_amount:
+	voucher = voucher_discount(reservation)
+	if voucher:
+		voucher_gst = _room_gst(reservation)
+		if not float(voucher_gst or 0):
+			from kamra.pricing import property_currency, round_rate_amount
+			voucher = float(round_rate_amount(
+				voucher, 0, "Nearest", property_currency(reservation.property)))
+	if voucher:
 		folio.append("charges", {
 			"posting_date": nowdate(),
 			"charge_type": "Discount",
 			"description": "Booking discount (voucher)",
 			"qty": 1,
-			"rate": -float(reservation.discount_amount),
-			"amount": -float(reservation.discount_amount),
-			"gst_rate": _room_gst(reservation),
+			"rate": -voucher,
+			"amount": -voucher,
+			"gst_rate": voucher_gst,
 			"auto_posted": 1,
 		})
 	_recalculate(folio)
@@ -115,6 +153,31 @@ def open_folio(reservation) -> str:
 	_post_cleaning_fee(reservation, folio.name)
 	_post_pet_charge(reservation, folio.name)
 	return folio.name
+
+
+def voucher_discount(reservation) -> float:
+	"""The part of the booking's discount the folio posts as its own line:
+	the voucher. The desk's reservation discount is already inside each
+	locked night's rate (Room Rate is the base less the discount), so
+	posting it again would discount the stay twice.
+
+	Read as the voucher the booking was priced with (its quote snapshot's
+	voucher_discount), never as what is left of discount_amount after the
+	nights: a billed night that kept a discount the stay later dropped
+	would hide a real voucher, and one that never got it would invent one.
+	A booking priced before the snapshot kept it falls back to that sum."""
+	snap = reservation.get("quote_snapshot")
+	if snap:
+		try:
+			data = json.loads(snap) if isinstance(snap, str) else snap
+			if isinstance(data, dict) and "voucher_discount" in data:
+				return round(max(float(data.get("voucher_discount") or 0), 0), 2)
+		except (TypeError, ValueError):
+			pass  # unreadable snapshot: the stored discount less the nights'
+	total = float(reservation.get("discount_amount") or 0)
+	in_nights = sum(float(r.get("discount_amount") or 0)
+	                for r in reservation.get("night_rates") or [])
+	return round(max(total - in_nights, 0), 2)
 
 
 def _post_cleaning_fee(reservation, folio_name: str):
@@ -166,6 +229,9 @@ def _post_stay_fee(reservation, folio_name: str, component: str,
 			pass  # snapshot unreadable; fall back to the property's current fee
 	if amount <= 0:
 		amount = fallback
+	if amount > 0 and not float(tax_rate or 0):
+		from kamra.pricing import property_currency, round_rate_amount
+		amount = float(round_rate_amount(amount, 0, "Nearest", property_currency(reservation.property)))
 	if amount <= 0:
 		return
 	if frappe.db.exists(
@@ -461,15 +527,17 @@ def _day_use_room_charge(reservation, date) -> tuple[float, float, str] | None:
 		overstay=overstay_rule(reservation.property),
 		planned_hours=planned,
 	)
+	rt = frappe.get_doc("Room Type", reservation.room_type)
+	inclusive = rates_include_tax(reservation.property)
 	if units["full_day"]:
 		# Overstay past planned ETD under "Full day": one card night.
 		amount = float(_plan_free_night_rate(reservation, date))
-		return amount, _nightly_gst(reservation, date), "day use · full day"
+		return _day_use_discount(reservation, date, rt, inclusive, amount,
+		                         _nightly_gst(reservation, date), "day use · full day")
 	gross = Decimal(str(units["amount"]))
-	rt = frappe.get_doc("Room Type", reservation.room_type)
 	gst = float(room_gst_rate(reservation.property, rt,
 	                          gross + _over_cap_night(reservation)))
-	if rates_include_tax(reservation.property):
+	if inclusive:
 		amount = float(gross / (Decimal(1) + Decimal(str(gst)) / Decimal(100)))
 	else:
 		amount = float(gross)
@@ -478,7 +546,42 @@ def _day_use_room_charge(reservation, date) -> tuple[float, float, str] | None:
 	else:
 		label = (f"day use · {units['units']:g} × "
 		         f"{plan['block_hours']:g}h")
-	return amount, gst, label
+	return _day_use_discount(reservation, date, rt, inclusive, amount, gst, label)
+
+
+def _day_use_discount(reservation, date, rt, inclusive: bool, amount: float, gst: float,
+                      label: str) -> tuple[float, float, str]:
+	"""The desk's discount on an hourly / block day-use charge: the hours are
+	only known at check-out, so the discount the booking locked (its night
+	row's own, else the stay's) comes off the booked base charge - up to the
+	hours actually used; hours past the booking bill at the plan's rate.
+	Without a discount the charge is as worked out."""
+	from kamra.pricing import _dec, entry_rate, night_rate_places, room_gst_rate
+	locked = locked_night(reservation, date)
+	if locked is None:
+		return amount, gst, label
+	kind = locked.get("discount_type")
+	value = float(locked.get("discount_value") or 0) if kind else 0.0
+	if not kind:
+		kind = reservation.get("discount_type")
+		value = float(reservation.get("discount_value") or 0)
+	if not kind or value <= 0:
+		return amount, gst, label
+	places = night_rate_places(reservation.property)
+	unit = Decimal(1).scaleb(-places)
+	used = entry_rate(amount, gst, inclusive, places)
+	booked = entry_rate(locked.rate, locked.gst_rate, inclusive, places) + _dec(locked.get("discount_amount"))
+	base = min(used, booked)
+	off = (base * _dec(value) / Decimal(100) if kind == "Percent" else min(_dec(value), base)).quantize(
+		unit, rounding=ROUND_HALF_UP)
+	if off <= 0:
+		return amount, gst, label
+	net = used - off
+	new_gst = room_gst_rate(reservation.property, rt, net + _over_cap_night(reservation))
+	charge = net / (Decimal(1) + new_gst / Decimal(100)) if inclusive else net
+	from kamra.localization import amount_text
+	return (float(charge.quantize(unit, rounding=ROUND_HALF_UP)), float(new_gst),
+	        f"{label} · {amount_text(reservation.property, used)} less discount {amount_text(reservation.property, off)}")
 
 
 def _planned_nights(reservation, plan) -> dict[str, Decimal]:
@@ -515,7 +618,9 @@ def _planned_nights(reservation, plan) -> dict[str, Decimal]:
 		extras += min(extra, rate)
 		dates.append(str(getdate(day)))
 		nights.append((rate, gst))
-	rates, _rounded = plan_stay_nights(plan, nights, extras, inclusive)
+	from kamra.pricing import property_currency
+	rates, _rounded = plan_stay_nights(plan, nights, extras, inclusive,
+	                                   currency=property_currency(reservation.property))
 	planned = dict(zip(dates, rates, strict=True))
 	if flags is not None:
 		flags["_kamra_planned_nights"] = (key, planned)
@@ -528,7 +633,7 @@ def _plan_free_night_rate(reservation, date) -> Decimal:
 
 
 def _plan_free_night(reservation, date) -> tuple[Decimal, Decimal]:
-	"""One night before the rate plan, taxable, and its GST % (0 when tax is not inclusive)."""
+	"""One night before the rate plan, taxable, and its GST %."""
 	from kamra.pricing import (
 		occupancy_rate,
 		rates_include_tax,
@@ -544,10 +649,9 @@ def _plan_free_night(reservation, date) -> tuple[Decimal, Decimal]:
 			rt, reservation.check_in_date, reservation.check_out_date))
 	rate = season_adjust(reservation.property, date, base,
 	                     reservation.room_type)
-	gst = Decimal(0)
+	gst = Decimal(str(room_gst_rate(reservation.property, rt,
+	                                rate + _over_cap_night(reservation))))
 	if rates_include_tax(reservation.property):
-		gst = Decimal(str(room_gst_rate(reservation.property, rt,
-		                                rate + _over_cap_night(reservation))))
 		rate = rate / (Decimal(1) + gst / Decimal(100))
 	return rate, gst
 
@@ -701,15 +805,45 @@ def current_date_contract_night(reservation, date) -> dict | None:
 		        "currency": currency, "fx_rate": float(fx), "fx_date": fx_date, "stale": True}
 	fx, fx_date = posting
 	rp = frappe.get_doc("Rate Plan", plan)
-	gross = contract_local_amount(rp, nightly, fx, home)
-	share = _negotiated_share(reservation, snapshot, locked_night(reservation, date), night)
-	if share != 1:
-		gross = round_rate_amount(gross * share, 0, currency=home)
+	base_gross = contract_local_amount(rp, nightly, fx, home)
+	locked = locked_night(reservation, date)
+	if locked is not None and locked.get("discount_type"):
+		disc_kind = locked.get("discount_type")
+		disc_val = Decimal(str(locked.get("discount_value") or 0))
+	else:
+		disc_kind = reservation.get("discount_type")
+		disc_val = Decimal(str(reservation.get("discount_value") or 0))
+	discount_off = Decimal(0)
+	if disc_kind and disc_val > 0:
+		if disc_kind == "Percent":
+			if Decimal(str(rp.get("rounding_step") or 0)) > 0:
+				gross = max(
+					round_rate_amount(
+						base_gross - base_gross * disc_val / Decimal(100),
+						0, currency=home,
+					),
+					Decimal(0),
+				)
+			else:
+				net_foreign = round_rate_amount(
+					nightly * (Decimal(1) - disc_val / Decimal(100)),
+					0, currency=currency,
+				)
+				gross = max(round_rate_amount(net_foreign * fx, 0, currency=home), Decimal(0))
+		else:
+			gross = max(round_rate_amount(base_gross - disc_val, 0, currency=home), Decimal(0))
+		discount_off = max(base_gross - gross, Decimal(0))
+	else:
+		gross = base_gross
+		share = _negotiated_share(reservation, snapshot, locked, night)
+		if share != 1:
+			gross = round_rate_amount(gross * share, 0, currency=home)
 	rt = frappe.get_doc("Room Type", reservation.room_type)
 	gst = room_gst_rate(reservation.property, rt, gross + _over_cap_night(reservation))
 	rate = gross / (Decimal(1) + Decimal(str(gst)) / Decimal(100)) if rates_include_tax(reservation.property) else gross
 	return {"rate": float(rate), "gst_rate": float(gst), "label": f"{currency} {contract:,} at {fx:,} ({fx_date})",
-	        "currency": currency, "fx_rate": float(fx), "fx_date": fx_date, "stale": False}
+	        "currency": currency, "fx_rate": float(fx), "fx_date": fx_date, "stale": False,
+	        "base_entry": float(base_gross), "discount_amount": float(discount_off)}
 
 
 def _posted_contract_fx(reservation, currency: str, projected=()) -> tuple[Decimal, str, int] | None:
@@ -864,6 +998,30 @@ def post_room_night(reservation, date, folios=None, *, room_posted: list | None 
 			desc = (f"Room {room_no} · {reservation.room_type.split('-')[-1]}"
 			        + (" · day use" if getattr(reservation, "is_day_use", 0) else "")
 			        + (f" · {current['label']}" if current else ""))
+			locked = locked_night(reservation, date)
+			if current and not current.get("stale") and float(current.get("discount_amount") or 0) > 0:
+				from kamra.localization import amount_text
+				desc += (f" · {amount_text(reservation.property, current['base_entry'])} "
+				         f"less discount {amount_text(reservation.property, current['discount_amount'])}")
+			elif locked is not None and float(locked.get("discount_amount") or 0) > 0:
+				# the net rate is what bills; the line says what it came from,
+				# base and discount on the basis the discount was given (gross
+				# where rates include tax)
+				from kamra.localization import amount_text
+				from kamra.pricing import entry_rate, night_rate_places, rates_include_tax
+				places = night_rate_places(reservation.property)
+				off = float(locked.discount_amount)
+				base = float(entry_rate(locked.rate, locked.gst_rate,
+				                        rates_include_tax(reservation.property), places)) + off
+				desc += (f" · {amount_text(reservation.property, base)} "
+				         f"less discount {amount_text(reservation.property, off)}")
+		if not float(gst_rate or 0):
+			# SAP TCURX / OPERA: 0%-tax nightly room charges stay at the
+			# currency's ISO 4217 minor unit at the line so charges_total ==
+			# sum(lines) with payable currency units.
+			from kamra.pricing import property_currency, round_rate_amount
+			night_rate = float(round_rate_amount(
+				night_rate, 0, "Nearest", property_currency(reservation.property)))
 		fx_posted = {}
 		if current:
 			# the rate this night posted at: ACTUAL reference currency and Night Audit read it
@@ -922,6 +1080,11 @@ def post_room_night(reservation, date, folios=None, *, room_posted: list | None 
 				(reservation.adults or 1) * float(mp.price_per_adult or 0)
 				+ (reservation.children or 0) * float(mp.price_per_child or 0)
 			)
+		meal_gst = _fnb_gst(reservation.property)
+		if meal_amount and not float(meal_gst or 0):
+			from kamra.pricing import property_currency, round_rate_amount
+			meal_amount = float(round_rate_amount(
+				meal_amount, 0, "Nearest", property_currency(reservation.property)))
 		if meal_amount:
 			_append_charge(folios, reservation, "Meal Plan", {
 				"posting_date": date,
@@ -931,7 +1094,7 @@ def post_room_night(reservation, date, folios=None, *, room_posted: list | None 
 				"qty": 1,
 				"rate": meal_amount,
 				"amount": meal_amount,
-				"gst_rate": _fnb_gst(reservation.property),
+				"gst_rate": meal_gst,
 				"auto_posted": 1,
 			})
 
@@ -950,7 +1113,15 @@ def _post_room_levy(folios, reservation, date, night_rate, gst_rate=None):
 	prop = frappe.get_cached_doc("Property", reservation.property)
 	pct = float(prop.get("room_levy_percent") or 0)
 	fixed = float(prop.get("room_levy_per_night") or 0)
+	levy_gst = (
+		(_nightly_gst(reservation, date) if gst_rate is None else gst_rate)
+		if int(prop.get("room_levy_taxable") if prop.get("room_levy_taxable") is not None else 1)
+		else 0
+	)
 	levy = round(float(night_rate or 0) * pct / 100, 2) + round(fixed, 2)
+	if levy > 0 and not float(levy_gst or 0):
+		from kamra.pricing import property_currency, round_rate_amount
+		levy = float(round_rate_amount(levy, 0, "Nearest", property_currency(reservation.property)))
 	if levy <= 0 or _charge_posted(
 			reservation.name, "Room Levy", date):
 		return
@@ -966,9 +1137,7 @@ def _post_room_levy(folios, reservation, date, night_rate, gst_rate=None):
 		"qty": 1,
 		"rate": levy,
 		"amount": levy,
-		"gst_rate": (_nightly_gst(reservation, date) if gst_rate is None else gst_rate)
-		            if int(prop.get("room_levy_taxable") if prop.get("room_levy_taxable") is not None else 1)
-		            else 0,
+		"gst_rate": levy_gst,
 		"auto_posted": 1,
 	})
 
@@ -1011,8 +1180,11 @@ def charged_nights(reservation_name: str) -> dict:
 		                         "levy_tax": 0.0, "folio": r.parent})
 		n["base"] += amount
 		n["tax"] += tax
+	from kamra.pricing import night_rate_places
+	prop = frappe.db.get_value("Reservation", reservation_name, "property")
+	places = night_rate_places(prop)
 	for n in out.values():
-		n["base"] = round(n["base"], 2)
+		n["base"] = round(n["base"], places)
 		n["gst_rate"] = round(n["tax"] / n["base"] * 100, 2) if n["base"] else 0.0
 	return out
 
@@ -1547,6 +1719,10 @@ def post_policy_fee(reservation, basis: str, label: str,
 	is the property's current business date - never the calendar, which
 	runs a day ahead between midnight and the audit."""
 	amount = policy_fee(reservation, basis, pct=pct)
+	gst = _room_gst(reservation)
+	if amount > 0 and not float(gst or 0):
+		from kamra.pricing import property_currency, round_rate_amount
+		amount = float(round_rate_amount(amount, 0, "Nearest", property_currency(reservation.property)))
 	if amount <= 0:
 		return 0.0
 	folio = frappe.get_doc("Folio", open_folio(reservation))
@@ -1566,7 +1742,7 @@ def post_policy_fee(reservation, basis: str, label: str,
 		"qty": 1,
 		"rate": amount,
 		"amount": amount,
-		"gst_rate": _room_gst(reservation),
+		"gst_rate": gst,
 		"auto_posted": 1,
 	})
 	_recalculate(folio)
@@ -1589,7 +1765,12 @@ def close_folio(folio_name: str) -> str:
 	folio = frappe.get_doc("Folio", folio_name)
 	if folio.status == "Closed":
 		return folio.invoice_number
-	_recalculate(folio)
+	prev_grand = folio.get("grand_total")
+	_recalculate(folio, payments_only=True)
+	if prev_grand is not None and abs(float(folio.grand_total or 0) - float(prev_grand)) > 1e-9:
+		from kamra import ledger as _ledger_mod
+		if hasattr(_ledger_mod, "sync_folio_rounding_ledger"):
+			_ledger_mod.sync_folio_rounding_ledger(folio)
 	balance = float(folio.balance or 0)
 	if abs(balance) > 0.01:
 		from kamra.localization import pack_for
@@ -1613,7 +1794,7 @@ def close_folio(folio_name: str) -> str:
 	# initials code keeps INV-KDP-26-00001 inside the limit
 	code = "".join(w[0] for w in folio.property.split())[:3].upper()
 	folio.invoice_number = make_autoname(f"INV-{code}-.YY.-.#####")
-	_recalculate(folio)
+	_recalculate(folio, payments_only=True)
 	folio.save(ignore_permissions=True)
 	# a company bill moved to the city ledger at checkout, before it had a
 	# number: the account's bill takes the invoice number now
@@ -1644,6 +1825,9 @@ def post_allowance(folio_name: str, amount: float, reason: str,
 		frappe.throw("This folio is settled - pass the allowance on the "
 		             "guest's open folio, or cancel the invoice first.")
 	amount = abs(float(amount))
+	if amount and not float(gst_rate or 0):
+		from kamra.pricing import property_currency, round_rate_amount
+		amount = float(round_rate_amount(amount, 0, "Nearest", property_currency(folio.property)))
 	if not amount:
 		frappe.throw("Allowance amount is required.")
 	if not (reason or "").strip():
@@ -1769,7 +1953,7 @@ def part_settle(folio_name: str) -> dict:
 	folio = frappe.get_doc("Folio", folio_name)
 	if folio.status == "Closed":
 		frappe.throw("This folio is already settled.")
-	_recalculate(folio)
+	_recalculate(folio, payments_only=True)
 	if round(folio.balance or 0, 2) != 0:
 		frappe.throw("Settle the balance first - an interim invoice needs "
 		             "the folio fully paid.")

@@ -141,10 +141,10 @@ export interface FieldSpec {
   readOnlyOnEdit?: boolean
   /** Disable a field dynamically (e.g. disabling a system master code). */
   disabledWhen?: (draft: Record<string, unknown>) => boolean
-  /** Initial value when creating a new record. */
-  default?: unknown
   /** Block dates before today unless the user may backdate (Finance / Hotel Admin). */
   notPast?: boolean
+  /** Initial value when creating a new record (e.g. the DocType's own default). */
+  default?: unknown
   /** Key of a `ScreenConfig.sections` entry: the field renders in that collapsible section. */
   section?: string
 }
@@ -193,6 +193,8 @@ export interface ScreenConfig {
   /** Row-level delete guard (e.g. hide Delete for system master rows). */
   canDelete?: (row: Record<string, unknown>) => boolean
   orderBy?: string
+  /** Optional minimum table width class (e.g. "min-w-[820px]") so wide fixed-layout tables scroll cleanly on mobile. */
+  tableMinWidth?: string
   /** Fields searched (LIKE) by the search box. Adds a search input when set. */
   searchFields?: string[]
   /** Dropdown filters shown in the toolbar (e.g. status). */
@@ -436,11 +438,88 @@ function tableRows(spec: FieldSpec, value: unknown): TableRow[] {
   }))
 }
 
+function LinkSelect(props: {
+  spec: FieldSpec
+  value: unknown
+  onChange: (v: unknown) => void
+  baseOpts: string[]
+  extraOpts: string[]
+  capped?: boolean
+  disabled?: boolean
+  t: (s: string) => string
+}) {
+  const { spec, value, onChange, baseOpts, extraOpts, capped, disabled, t } = props
+  const [query, setQuery] = useState("")
+  const [searched, setSearched] = useState<string[]>([])
+
+  useEffect(() => {
+    const trimmed = query.trim()
+    if (!capped || !spec.linkDoctype || !trimmed) {
+      setSearched([])
+      return
+    }
+    let active = true
+    const timer = setTimeout(() => {
+      const filters: (string | number)[][] = []
+      if (spec.linkPropertyScoped) filters.push(["property", "=", getCurrentProperty()])
+      if (spec.linkFilters?.length) filters.push(...spec.linkFilters)
+      filters.push(["name", "like", `%${trimmed}%`])
+      listResource(spec.linkDoctype!, {
+        fields: ["name"],
+        filters,
+        limit: 50,
+        orderBy: "name asc",
+      })
+        .then((r) => {
+          if (active) setSearched(r.map((x) => x.name))
+        })
+        .catch(() => {})
+    }, 120)
+    return () => {
+      active = false
+      clearTimeout(timer)
+    }
+  }, [capped, query, spec.linkDoctype, spec.linkPropertyScoped, spec.linkFilters])
+
+  const current = String(value ?? "")
+  const opts = Array.from(
+    new Set([...baseOpts, ...searched, ...extraOpts, ...(current ? [current] : [])].filter(Boolean)),
+  ).sort()
+
+  return (
+    <div className={capped && !disabled ? "space-y-1.5" : undefined}>
+      {capped && !disabled && (
+        <input
+          type="search"
+          className={inputCls}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={t("Search…")}
+        />
+      )}
+      <select
+        className={inputCls}
+        value={current}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        <option value="">-</option>
+        {opts.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
 function FieldInput(props: {
   spec: FieldSpec
   value: unknown
   onChange: (v: unknown) => void
   linkOptions: Record<string, string[]>
+  linkCapped?: Record<string, boolean>
   extraLinkOptions?: string[]
   masterOptions: Partial<Record<MenuMasterKey, string[]>>
   /** Translate display labels; API values stay English. */
@@ -484,29 +563,19 @@ function FieldInput(props: {
           ))}
         </select>
       )
-    case "link": {
-      const baseOpts = props.linkOptions[spec.field] ?? []
-      const current = String(value ?? "")
-      const extra = props.extraLinkOptions ?? []
-      const opts = Array.from(
-        new Set([...baseOpts, ...extra, ...(current ? [current] : [])].filter(Boolean)),
-      ).sort()
+    case "link":
       return (
-        <select
-          className={inputCls}
-          value={current}
+        <LinkSelect
+          spec={spec}
+          value={value}
+          onChange={onChange}
+          baseOpts={props.linkOptions[spec.field] ?? []}
+          extraOpts={props.extraLinkOptions ?? []}
+          capped={Boolean(props.linkCapped?.[spec.field])}
           disabled={disabled}
-          onChange={(e) => onChange(e.target.value)}
-        >
-          <option value="">-</option>
-          {opts.map((o) => (
-            <option key={o} value={o}>
-              {o}
-            </option>
-          ))}
-        </select>
+          t={t}
+        />
       )
-    }
     case "check":
       return (
         <input
@@ -649,6 +718,7 @@ export function ResourceScreen({
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [linkOptions, setLinkOptions] = useState<Record<string, string[]>>({})
+  const [linkCapped, setLinkCapped] = useState<Record<string, boolean>>({})
   const [linkReloadTick, setLinkReloadTick] = useState(0)
   const [masterOptions, setMasterOptions] = useState<
     Partial<Record<MenuMasterKey, string[]>>
@@ -810,17 +880,22 @@ export function ResourceScreen({
       const filters: (string | number)[][] = []
       if (f.linkPropertyScoped) filters.push(["property", "=", getCurrentProperty()])
       if (f.linkFilters?.length) filters.push(...f.linkFilters)
+      const limit = f.linkLimit ?? 100
       listResource(f.linkDoctype!, {
         fields: ["name"],
         filters: filters.length ? filters : undefined,
-        limit: f.linkLimit ?? 500,
+        limit,
         orderBy: "name asc",
-      }).then((r) =>
+      }).then((r) => {
         setLinkOptions((prev) => ({
           ...prev,
           [f.field]: r.map((x) => x.name),
-        })),
-      )
+        }))
+        setLinkCapped((prev) => ({
+          ...prev,
+          [f.field]: r.length >= limit,
+        }))
+      })
     })
     if (config.form.some((f) => f.optionsFrom)) {
       call<Record<MenuMasterKey, string[]>>("kamra.settings.menu_masters", {
@@ -839,8 +914,8 @@ export function ResourceScreen({
       // ponytail: transaction dates default to today when notPast is set
       const defaults: Record<string, unknown> = {}
       for (const spec of config.form) {
-        if (spec.default !== undefined) defaults[spec.field] = spec.default
         if (spec.type === "date" && spec.notPast) defaults[spec.field] = isoToday()
+        else if (spec.default !== undefined) defaults[spec.field] = spec.default
       }
       setDraft(defaults)
       return
@@ -1057,14 +1132,21 @@ export function ResourceScreen({
             </div>
           </div>
         <div className="overflow-x-auto">
-          <table className="w-full table-fixed text-sm">
+          <table className={`w-full text-sm ${visibleCols.length > 7 ? "table-auto" : "table-fixed"}${config.tableMinWidth ? ` ${config.tableMinWidth}` : ""}`}>
             <thead>
               <tr className="border-b border-zinc-200 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
                 {visibleCols.map((c, i) => (
                   <th
                     key={c.field}
                     className={
-                      "py-2 pr-4" + (c.width ? ` ${c.width}` : i === 0 ? " w-[22%]" : "")
+                      "py-2 pr-4" +
+                      (c.width
+                        ? ` ${c.width}`
+                        : visibleCols.length > 7
+                          ? " whitespace-nowrap"
+                          : i === 0
+                            ? " w-[22%]"
+                            : "")
                     }
                   >
                     {t(c.label)}
@@ -1083,7 +1165,11 @@ export function ResourceScreen({
                     <td
                       key={c.field}
                       className={
-                        (c.wrap ? "py-2.5 pr-4 align-top" : "truncate py-2.5 pr-4") +
+                        (c.wrap
+                          ? "py-2.5 pr-4 align-top"
+                          : visibleCols.length > 7
+                            ? "whitespace-nowrap py-2.5 pr-4" + (c.badge || c.statusCheck || c.booleanBadge ? "" : " max-w-[240px] truncate")
+                            : "truncate py-2.5 pr-4") +
                         (!c.render && typeof row[c.field] === "number"
                           ? " text-right tabular-nums"
                           : "")
@@ -1247,6 +1333,7 @@ export function ResourceScreen({
                             setDraft((d) => ({ ...d, [spec.field]: v }))
                           }
                           linkOptions={linkOptions}
+                          linkCapped={linkCapped}
                           extraLinkOptions={spec.ensureOptions?.(draft)}
                           masterOptions={masterOptions}
                           t={t}
