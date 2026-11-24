@@ -6811,5 +6811,9 @@
   "Channel update applied — desk discount removed": "تم تطبيق تحديث القناة — أُزيل خصم الاستقبال",
   "The channel update was applied and removed the desk discount (new total: {total}). Review what was removed below and re-apply a discount if needed.": "تم تطبيق تحديث القناة وإزالة خصم الاستقبال (الإجمالي الجديد: {total}). راجع ما أُزيل أدناه وأعد تطبيق الخصم عند الحاجة.",
   "Channel update applied — discount review required": "تم تطبيق تحديث القناة — مراجعة الخصم مطلوبة",
-  "The channel update was applied (new total: {total}). Approved discounted nights were kept; added nights were priced without the unapproved discount. Review below and adjust if needed.": "تم تطبيق تحديث القناة (الإجمالي الجديد: {total}). تم الإبقاء على الليالي المخفّضة المعتمدة، وسُعّرت الليالي المضافة دون الخصم غير المعتمد. راجع التفاصيل أدناه وعدّلها عند الحاجة."
+  "The channel update was applied (new total: {total}). Approved discounted nights were kept; added nights were priced without the unapproved discount. Review below and adjust if needed.": "تم تطبيق تحديث القناة (الإجمالي الجديد: {total}). تم الإبقاء على الليالي المخفّضة المعتمدة، وسُعّرت الليالي المضافة دون الخصم غير المعتمد. راجع التفاصيل أدناه وعدّلها عند الحاجة.",
+  "Tax as per the accounting invoice": "الضريبة وفقًا للفاتورة المحاسبية",
+  "Tax summary": "ملخص الضريبة",
+  "Total Tax": "إجمالي الضريبة",
+  "Credited": "رصيد دائن"
 }

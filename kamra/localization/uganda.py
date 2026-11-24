@@ -20,6 +20,7 @@ DEFAULT_TIMEZONE = "Africa/Kampala"
 DEFAULT_NATIONALITY = "Ugandan"
 HOME_COUNTRY_ISO3 = "UGA"
 ROOM_LEVY_LABEL = "Local Hotel Tax"
+VAT_INVOICE_TITLE = "Tax Invoice"
 PAYMENT_MODES = ["Cash", "Card", "Bank Transfer", "Mobile Money"]
 INSTANT_PAYMENT_MODES = ["Mobile Money"]
 FX_CURRENCIES = ["USD", "EUR", "GBP", "KES"]

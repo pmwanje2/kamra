@@ -7003,5 +7003,9 @@
   "Channel update applied — desk discount removed": "Atualização do canal aplicada — desconto da recepção removido",
   "The channel update was applied and removed the desk discount (new total: {total}). Review what was removed below and re-apply a discount if needed.": "A atualização do canal foi aplicada e removeu o desconto da recepção (novo total: {total}). Revise abaixo o que foi removido e reaplique um desconto se necessário.",
   "Channel update applied — discount review required": "Atualização do canal aplicada — revisão do desconto necessária",
-  "The channel update was applied (new total: {total}). Approved discounted nights were kept; added nights were priced without the unapproved discount. Review below and adjust if needed.": "A atualização do canal foi aplicada (novo total: {total}). As noites com desconto aprovado foram mantidas; as noites adicionadas foram tarifadas sem o desconto não aprovado. Revise abaixo e ajuste se necessário."
+  "The channel update was applied (new total: {total}). Approved discounted nights were kept; added nights were priced without the unapproved discount. Review below and adjust if needed.": "A atualização do canal foi aplicada (novo total: {total}). As noites com desconto aprovado foram mantidas; as noites adicionadas foram tarifadas sem o desconto não aprovado. Revise abaixo e ajuste se necessário.",
+  "Tax as per the accounting invoice": "Imposto conforme a fatura contábil",
+  "Tax summary": "Resumo de impostos",
+  "Total Tax": "Total de impostos",
+  "Credited": "Creditado"
 }

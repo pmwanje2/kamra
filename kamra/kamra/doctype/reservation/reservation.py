@@ -795,10 +795,11 @@ class Reservation(Document):
 		if cint(self.get("is_day_use")) or (
 				self.check_in_date and self.check_out_date
 				and getdate(self.check_in_date) == getdate(self.check_out_date)):
+			from kamra.day_use import format_hhmm
 			if self.get("planned_check_in_time"):
-				inputs["check_in_time"] = str(self.planned_check_in_time)[:5]
+				inputs["check_in_time"] = format_hhmm(self.planned_check_in_time)
 			if self.get("planned_check_out_time"):
-				inputs["check_out_time"] = str(self.planned_check_out_time)[:5]
+				inputs["check_out_time"] = format_hhmm(self.planned_check_out_time)
 		return inputs
 
 	def hand_set_prices(self) -> list[dict]:
