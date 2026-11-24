@@ -6,6 +6,9 @@
  *   accounting invoice" instead of 0% / VAT @ 0%.
  * - Translates new strings across all 7 shipped locales and contains no
  *   user-visible vendor names. */
+import fs from "node:fs"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { MemoryRouter, Route, Routes } from "react-router-dom"
@@ -269,7 +272,139 @@ describe("Bridged Tax Invoice VAT in FolioView", () => {
     ["id", id],
     ["pt", pt],
     ["zh-CN", zhCN],
-  ])("translates 'Tax as per the accounting invoice' in %s", (_lang, dict: Record<string, string>) => {
-    expect(dict["Tax as per the accounting invoice"]).toBeTruthy()
+  ])("translates invoice chrome and fallback note in %s", (_lang, dict: Record<string, string>) => {
+    for (const key of [
+      "Tax as per the accounting invoice",
+      "Tax Invoice",
+      "Invoice",
+      "Provisional Bill",
+      "Tax summary",
+      "Total Tax",
+      "Closed",
+      "Credited",
+      "Stay",
+    ]) {
+      expect(dict[key], `${_lang}: missing '${key}'`).toBeTruthy()
+    }
+  })
+
+  it("treats a bridged check-out folio (is_final true, no hotel invoice_number) as a final invoice", async () => {
+    data = bridgedPayload({
+      folio: {
+        ...bridgedPayload().folio,
+        invoice_number: null,
+        sales_invoice: "ACC-SINV-2026-00102",
+      },
+      document: {
+        title: "Invoice",
+        is_final: true,
+        number: "ACC-SINV-2026-00102",
+        date: "2026-11-24",
+        amount_in_words: "UGX Four Hundred Ninety Nine Thousand Five Hundred Only",
+        footer: "This is a computer-generated invoice.",
+        service_code_label: "SAC",
+      },
+    })
+    await act(async () => root.render(
+      <MemoryRouter initialEntries={["/billing/FOLIO-2026-001"]}>
+        <Routes><Route path="/billing/:name" element={<FolioView />} /></Routes>
+      </MemoryRouter>,
+    ))
+    await vi.waitFor(() => expect(host.textContent).toContain("ACC-SINV-2026-00102"), { interval: 5 })
+    const buttons = [...host.querySelectorAll("button")].map((b) => b.textContent?.trim())
+    expect(buttons).toContain("Print invoice")
+    expect(buttons).not.toContain("Print folio")
+    const page = host.textContent ?? ""
+    expect(page).toContain("Authorised signatory")
+    expect(page).toContain("This is a computer-generated invoice.")
+    expect(page).not.toContain("Not a tax invoice yet")
+  })
+
+  it("shows credited totals on the printed invoice when ERP returns exist", async () => {
+    data = bridgedPayload({ credited: 100000 })
+    await renderInvoice()
+    const page = host.textContent ?? ""
+    expect(page).toContain("Credited")
+    expect(page).toContain("100,000")
+  })
+
+  it("formats foreign-currency conversion with the foreign currency's decimals (USD 2dp)", async () => {
+    rpc.mockImplementation((method: string) => {
+      if (method === "kamra.api.folio_invoice") return Promise.resolve(data)
+      if (method === "kamra.api.reservation_folios") return Promise.resolve([])
+      if (method === "kamra.api.linked_records") return Promise.resolve(null)
+      if (method === "kamra.api.allowance_requests") return Promise.resolve({ requests: [], can_decide: false })
+      if (method === "kamra.api.correct_charged_nights") return Promise.resolve({ nights: [] })
+      if (method === "kamra.ledger.list_reason_codes") return Promise.resolve([])
+      if (method === "kamra.ledger.list_exchange_rates") {
+        return Promise.resolve({
+          business_date: "2026-11-24",
+          rates: [{ currency: "USD", rate_date: "2026-11-24", buy_rate: 3725, sell_rate: 3725 }],
+        })
+      }
+      if (method === "kamra.ledger.folio_in_currency") {
+        return Promise.resolve({
+          currency: "USD", rate: 3725, rate_date: "2026-11-24",
+          home_currency: "UGX", grand_total: 134.1, balance: 0,
+        })
+      }
+      if (method === "kamra.api.property_locale") {
+        return Promise.resolve({
+          currency: "UGX", currency_symbol: "UGX ", locale: "en-UG",
+          tax_label: "VAT", tax_id_label: "TIN", tax_rates: [0],
+          payment_modes: ["Cash"], instant_payment_modes: [], outlet_payment_modes: ["Cash"],
+          id_types: ["Passport"], id_type_hints: {}, default_nationality: "Ugandan",
+          adult_age: 18, minor_ids: "foreign",
+          integrations: { payment_gateways: [], tax_return: false, verify_tax_id: false, verify_guest_id: false },
+        })
+      }
+      return Promise.resolve({})
+    })
+    await renderInvoice()
+    const select = await vi.waitFor(() => {
+      const el = [...host.querySelectorAll("select")].find((s) => s.textContent?.includes("USD"))
+      expect(el).toBeDefined()
+      return el!
+    }, { interval: 5 })
+    await act(async () => {
+      select.value = "USD"
+      select.dispatchEvent(new Event("change", { bubbles: true }))
+    })
+    await vi.waitFor(() => {
+      expect(host.textContent).toContain("USD 134.10")
+      expect(host.textContent).toContain("balance USD 0.00")
+    }, { interval: 5 })
+  })
+
+  it("renders German fallback note once without double translation and translates Invoice/Closed", async () => {
+    setLang("de")
+    data = bridgedPayload({
+      tax_source: "accounting_unavailable",
+      tax_summary: [],
+      gst_summary: [],
+      document: {
+        title: "Invoice",
+        is_final: true,
+        number: "INV-THL-26-00003",
+        date: "2026-11-24",
+        amount_in_words: "",
+        footer: "This is a computer-generated invoice.",
+        service_code_label: "SAC",
+        // Simulate server already translating into another locale (e.g. Spanish)
+        accounting_tax_note: "Impuesto según la factura contable",
+      },
+    })
+    await renderInvoice()
+    const page = host.textContent ?? ""
+    expect(page).toContain((de as Record<string, string>)["Tax as per the accounting invoice"])
+    expect(page).not.toContain("Impuesto según la factura contable")
+    expect(page).toContain((de as Record<string, string>)["Invoice"])
+    expect(page).toContain((de as Record<string, string>)["Closed"])
+  })
+
+  it("includes narrow thermal print CSS rules so 80mm (302px) print does not clip", () => {
+    const cssPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../src/index.css")
+    const css = fs.readFileSync(cssPath, "utf8")
+    expect(css).toMatch(/@media\s+print\s+and\s+\(max-width:\s*\d+px\)/)
   })
 })
