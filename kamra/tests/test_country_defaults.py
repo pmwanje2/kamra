@@ -19,6 +19,7 @@ from kamra.tests.audit_fixtures import AuditTestCase, d, make_reservation, make_
 
 UG = "UT Country Uganda"
 IN = "UT Country India"
+BLANK = "UT Country Blank"
 
 MONEY_FIELDS = ("gst_slab_threshold", "gst_rate_low", "gst_rate_high", "security_deposit_amount")
 
@@ -38,7 +39,7 @@ def stored(name: str, *fields):
 
 
 class CountryDefaultsTestCase(AuditTestCase):
-	properties = (UG, IN)
+	properties = (UG, IN, BLANK)
 
 	def setUp(self):
 		super().setUp()
@@ -183,6 +184,8 @@ class CountryDefaultsTestCase(AuditTestCase):
 
 	def test_an_occupant_added_in_uganda_is_ugandan_by_default(self):
 		bare_property(UG, "Uganda")
+		settings.write_kv(UG, "rate_plan_required", 0)
+		settings.clear_cache(UG)
 		res = make_reservation(UG, make_room_type(UG), d(1), d(2))
 		res.append("occupants", {"full_name": "UT Second Guest"})
 		res.save(ignore_permissions=True)
@@ -190,6 +193,8 @@ class CountryDefaultsTestCase(AuditTestCase):
 
 	def test_an_occupant_added_in_india_is_still_indian_by_default(self):
 		bare_property(IN, "India")
+		settings.write_kv(IN, "rate_plan_required", 0)
+		settings.clear_cache(IN)
 		res = make_reservation(IN, make_room_type(IN), d(1), d(2))
 		res.append("occupants", {"full_name": "UT Second Guest"})
 		res.save(ignore_permissions=True)
@@ -197,6 +202,8 @@ class CountryDefaultsTestCase(AuditTestCase):
 
 	def test_an_occupant_nationality_typed_by_the_desk_is_kept(self):
 		bare_property(UG, "Uganda")
+		settings.write_kv(UG, "rate_plan_required", 0)
+		settings.clear_cache(UG)
 		res = make_reservation(UG, make_room_type(UG), d(1), d(2))
 		res.append("occupants", {"full_name": "UT Visitor", "nationality": "Kenyan"})
 		res.save(ignore_permissions=True)
@@ -207,3 +214,142 @@ class CountryDefaultsTestCase(AuditTestCase):
 		# India 5% in core is the hardcoding this replaces
 		import kamra.folio
 		self.assertFalse(hasattr(kamra.folio, "FNB_GST"))
+
+	# ── blank Property.country fallback (Company -> System -> neutral) ──
+
+	def test_property_country_field_has_no_india_default(self):
+		df = frappe.get_meta("Property").get_field("country")
+		self.assertIsNotNone(df)
+		self.assertFalse(df.default)
+
+	def test_blank_country_falls_back_to_company_then_system_then_neutral(self):
+		from decimal import Decimal
+		from kamra import localization, public_api
+
+		orig_sys_country = frappe.db.get_single_value("System Settings", "country")
+		has_company_tbl = frappe.db.table_exists("Company")
+		orig_def_company = (
+			frappe.db.get_single_value("Global Defaults", "default_company")
+			if frappe.db.exists("DocType", "Global Defaults") else None
+		)
+
+		def _restore():
+			frappe.db.set_single_value("System Settings", "country", orig_sys_country or "")
+			if frappe.db.exists("DocType", "Global Defaults"):
+				frappe.db.set_single_value("Global Defaults", "default_company", orig_def_company or "")
+			frappe.clear_cache()
+
+		self.addCleanup(_restore)
+		frappe.db.set_single_value("System Settings", "country", "")
+		if frappe.db.exists("DocType", "Global Defaults"):
+			frappe.db.set_single_value("Global Defaults", "default_company", "")
+		frappe.clear_cache()
+
+		# 1. No Property.country, no Company, no System Settings.country -> neutral (generic, 0% tax)
+		bare_property(BLANK, "")
+		row = stored(BLANK, "country", "currency", "gst_mode", *MONEY_FIELDS)
+		self.assertFalse(row.country)
+		self.assertNotEqual(row.currency, "INR")
+		self.assertNotEqual(row.gst_mode, "Slab")
+		self.assertEqual(flt(row.gst_rate_low), 0)
+		self.assertEqual(flt(row.gst_rate_high), 0)
+		self.assertEqual(flt(row.security_deposit_amount), 0)
+		pack = localization.pack_for(BLANK)
+		self.assertEqual(pack.__name__, "kamra.localization.generic")
+		self.assertEqual(pack.calculate_room_tax(BLANK, {}, Decimal("10000")), Decimal("0"))
+		self.assertEqual(pack.fnb_tax_rate(BLANK), 0.0)
+		self.assertEqual(api._booking_property_policy(BLANK)["country"], "")
+		self.assertEqual(public_api._property_payload(frappe.get_doc("Property", BLANK))["country"], "")
+
+		# 2. System Settings.country = "Uganda" -> Uganda pack applies when Property.country is blank
+		frappe.db.set_single_value("System Settings", "country", "Uganda")
+		frappe.clear_document_cache("Property", BLANK)
+		self.assertEqual(localization.pack_for(BLANK).__name__, "kamra.localization.uganda")
+		self.assertEqual(api._booking_property_policy(BLANK)["country"], "Uganda")
+		self.assertEqual(public_api._property_payload(frappe.get_doc("Property", BLANK))["country"], "Uganda")
+		self.assertEqual(localization.property_country_defaults("")["currency"], "UGX")
+
+		# 3. Company country wins over System Settings.country
+		frappe.db.set_single_value("System Settings", "country", "India")
+		real_table_exists = frappe.db.table_exists
+		real_get_single = frappe.db.get_single_value
+		real_get_value = frappe.db.get_value
+
+		def _fake_table_exists(dt, *a, **kw):
+			if dt == "Company":
+				return True
+			return real_table_exists(dt, *a, **kw)
+
+		def _fake_get_single(dt, field, *a, **kw):
+			if dt == "Global Defaults" and field == "default_company":
+				return "UT Germany Co"
+			return real_get_single(dt, field, *a, **kw)
+
+		def _fake_get_value(dt, name, field=None, *a, **kw):
+			if dt == "Company" and name == "UT Germany Co" and field == "country":
+				return "Germany"
+			return real_get_value(dt, name, field, *a, **kw)
+
+		with (
+			patch.object(frappe.db, "table_exists", side_effect=_fake_table_exists),
+			patch.object(frappe.db, "get_single_value", side_effect=_fake_get_single),
+			patch.object(frappe.db, "get_value", side_effect=_fake_get_value),
+		):
+			self.assertEqual(localization.resolve_country(BLANK), "Germany")
+			self.assertEqual(localization.pack_for(BLANK).__name__, "kamra.localization.germany")
+			self.assertEqual(api._booking_property_policy(BLANK)["country"], "Germany")
+			self.assertEqual(public_api._property_payload(frappe.get_doc("Property", BLANK))["country"], "Germany")
+
+		_ = has_company_tbl
+
+	def test_backfill_blank_property_country_patch_sets_india_only_when_company_is_india(self):
+		from kamra.patches.v48 import backfill_blank_property_country
+
+		bare_property(BLANK, "")
+		bare_property(UG, "Uganda")
+		frappe.db.set_value("Property", BLANK, "country", "", update_modified=False)
+		frappe.clear_document_cache("Property", BLANK)
+
+		real_table_exists = frappe.db.table_exists
+		real_get_single = frappe.db.get_single_value
+		real_get_value = frappe.db.get_value
+
+		def _with_company_country(country_val):
+			def _te(dt, *a, **kw):
+				return True if dt == "Company" else real_table_exists(dt, *a, **kw)
+
+			def _gs(dt, field, *a, **kw):
+				if dt == "Global Defaults" and field == "default_company":
+					return "UT Patch Co" if country_val else None
+				return real_get_single(dt, field, *a, **kw)
+
+			def _gv(dt, name, field=None, *a, **kw):
+				if dt == "Company" and name == "UT Patch Co" and field == "country":
+					return country_val
+				return real_get_value(dt, name, field, *a, **kw)
+
+			return (
+				patch.object(frappe.db, "table_exists", side_effect=_te),
+				patch.object(frappe.db, "get_single_value", side_effect=_gs),
+				patch.object(frappe.db, "get_value", side_effect=_gv),
+			)
+
+		# Uganda company -> blank stays blank
+		p1, p2, p3 = _with_company_country("Uganda")
+		with p1, p2, p3:
+			backfill_blank_property_country.execute()
+		self.assertFalse(stored(BLANK, "country").country)
+
+		# No company -> blank stays blank
+		p1, p2, p3 = _with_company_country(None)
+		with p1, p2, p3:
+			backfill_blank_property_country.execute()
+		self.assertFalse(stored(BLANK, "country").country)
+
+		# India company -> blank becomes "India" explicitly, idempotent, explicit Uganda untouched
+		p1, p2, p3 = _with_company_country("India")
+		with p1, p2, p3:
+			backfill_blank_property_country.execute()
+			backfill_blank_property_country.execute()
+		self.assertEqual(stored(BLANK, "country").country, "India")
+		self.assertEqual(stored(UG, "country").country, "Uganda")

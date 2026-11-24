@@ -42,6 +42,9 @@ class S:
 	min: float | None = None
 	max: float | None = None
 	unit: str = ""  # shown after a number input: min, %, days, x
+	# the roles that may change this one setting (admins always may), when
+	# it is narrower than its page's editors; None: the page's editors
+	editors: tuple | None = None
 
 
 @dataclass(frozen=True)
@@ -217,7 +220,8 @@ MODULES: tuple[Module, ...] = (
 				       "room type only, and the room is chosen at check-in. Walk-ins keep their room. "
 				       "Availability still counts the stay against the room type."),
 				S("rate_plan_required", "Require a rate plan for new bookings", "check", 0,
-				  hint="Require a rate plan for reservations and walk-ins instead of the standard rate."),
+				  hint="On: every new booking, walk-in, group pick-up, channel and online booking resolves "
+				       "a rate plan. Existing reservations are never repriced."),
 			)),
 			Section("holds", "Holds & selling", "", (
 				S("hold_minutes", "Hold unconfirmed bookings for", "number", 120, P, min=5, max=10080, unit="min"),
@@ -369,6 +373,10 @@ MODULES: tuple[Module, ...] = (
 			Section("external_pos", "External POS", "A third-party POS posting room charges through the POS interface.", (
 				S("pos_room_charge_limit", "Largest room charge from an external POS", "number", 0, min=0,
 				  hint="One ticket above this is refused - settle it at the outlet. 0 means no limit."),
+				S("pos_room_charge_credit_check", "Check cumulative folio credit limit on room charges", "check", 0,
+				  hint="On: block POS room charges when folio balance plus the new charge exceeds the cumulative allowance below."),
+				S("pos_room_charge_allowance", "Cumulative room charge allowance", "number", 0, min=0,
+				  hint="Maximum open folio balance including new POS room charges when cumulative credit checking is on. 0 means no cap."),
 			)),
 			Section("menu_masters", "Menu master lists",
 			        "Labels used when adding a dish. Edit here once; every New Menu form and the kitchen use them.", (
@@ -415,6 +423,24 @@ MODULES: tuple[Module, ...] = (
 			Section("inventory", "Overbooking", "", (
 				S("overbooking_pct", "Overbooking allowance", "number", 0, P, min=0, max=50, unit="%",
 				  hint="0 never oversells. A room type can override this."),
+			)),
+			# OPERA's rate code Complimentary and House Use flags; read by
+			# kamra.room_statistics (every report) and the booking's sign-off
+			Section("rate_categories", "Complimentary and house use",
+			        "Each rate plan has a category. A category can be left out of ADR, RevPAR or "
+			        "occupancy, and a booking on it can need a manager's sign-off.", (
+				# the configuration privilege's only, not the page's editors nor
+				# the approvers (kamra.room_statistics.can_configure)
+				S("rate_categories", "Rate categories", "textarea",
+				  "Standard\nComplimentary: sign-off, no ADR\nHouse Use: sign-off, no ADR", editors=(),
+				  hint="One category a line, then what it means: sign-off, no ADR, no RevPAR, no "
+				       "occupancy. A category left out of a figure adds neither rooms nor revenue to "
+				       "it. The first line is the category of a plan that names none. OPERA's "
+				       "defaults count comp and house-use rooms as occupied but not in ADR."),
+				S("rate_category_approvers", "Who signs them off", "textarea", "Hotel Admin\nFinance",
+				  editors=(),
+				  hint="One role a line. A user with one of these roles and a cashier PIN signs off a "
+				       "booking on a category that needs it, never their own. AI agents can't."),
 			)),
 		),
 	),
@@ -672,8 +698,8 @@ def _default(property: str | None, spec: S):
 		except Exception:
 			return spec.default
 	if property:
-		from kamra.localization import setting_default
 		try:
+			from kamra.localization import setting_default
 			value = setting_default(property, spec.key)
 		except Exception:
 			value = None
@@ -774,6 +800,14 @@ def can_edit(module: Module, roles: set | None = None) -> bool:
 	return bool(roles & (set(ADMIN) | set(module.editors)))
 
 
+def can_edit_setting(spec: S, roles: set | None = None) -> bool:
+	"""A setting narrower than its page (S.editors): admins and those roles."""
+	if spec.editors is None:
+		return True
+	roles = roles if roles is not None else _roles()
+	return bool(roles & (set(ADMIN) | set(spec.editors)))
+
+
 def _enabled_modules(property: str) -> list:
 	from kamra.api import ALL_MODULES
 	raw = frappe.db.get_value("Property", property, "enabled_modules")
@@ -783,9 +817,12 @@ def _enabled_modules(property: str) -> list:
 
 # --- endpoints ---------------------------------------------------------------
 
-def _spec_json(s: S, property: str | None = None) -> dict:
+def _spec_json(s: S, property: str | None = None, roles: set | None = None) -> dict:
 	d = {"key": s.key, "label": s.label, "type": s.type, "default": _default(property, s),
 	     "hint": s.hint, "store": s.store}
+	if s.editors is not None:
+		# shown read-only to the page's other editors (save_settings refuses it)
+		d["can_edit"] = can_edit_setting(s, roles)
 	for k in ("options", "options_source", "min", "max", "unit"):
 		v = getattr(s, k)
 		if v not in (None, "", ()):
@@ -794,17 +831,83 @@ def _spec_json(s: S, property: str | None = None) -> dict:
 
 
 @frappe.whitelist()
-@require_roles("Finance", "Front Desk", "Night Auditor", "F&B Manager", "Kamra Agent")
+@require_roles("Hotel Admin", "Front Desk", "Revenue Manager")
+def rate_plan_readiness(property: str) -> dict:
+	"""Readiness check for switching on `rate_plan_required`: reports the
+	property's default plan and lists active/future reservations without a
+	rate plan. Existing reservations are never repriced when toggled."""
+	assert_property_access(property)
+	from kamra.business_date import get_business_date
+
+	business_date = str(get_business_date(property))
+	active_plans = frappe.get_all(
+		"Rate Plan",
+		filters={"property": property, "disabled": 0},
+		fields=["name", "rate_plan_name", "code", "is_default"],
+		order_by="rate_plan_name asc, name asc",
+	)
+	default_row = next((p for p in active_plans if p.get("is_default")), None)
+	default_info = (
+		{"name": default_row["name"], "label": default_row.get("rate_plan_name") or default_row["name"],
+		 "code": default_row.get("code") or ""}
+		if default_row else None
+	)
+	rows = frappe.db.sql(
+		"""
+		SELECT r.name, r.guest_name, r.room_type,
+		       COALESCE(rt.room_type_name, r.room_type) AS room_type_name,
+		       r.check_in_date, r.check_out_date, r.status
+		FROM `tabReservation` r
+		LEFT JOIN `tabRoom Type` rt ON rt.name = r.room_type
+		WHERE r.property = %(property)s
+		  AND r.status IN ('Confirmed', 'Checked In', 'Held', 'Pending Payment', 'Requested')
+		  AND r.check_out_date >= %(business_date)s
+		  AND COALESCE(r.rate_plan, '') = ''
+		ORDER BY r.check_in_date ASC, r.name ASC
+		LIMIT 50
+		""",
+		{"property": property, "business_date": business_date},
+		as_dict=True,
+	)
+	total_without_plan = int(frappe.db.sql(
+		"""
+		SELECT COUNT(*) FROM `tabReservation`
+		WHERE property = %(property)s
+		  AND status IN ('Confirmed', 'Checked In', 'Held', 'Pending Payment', 'Requested')
+		  AND check_out_date >= %(business_date)s
+		  AND COALESCE(rate_plan, '') = ''
+		""",
+		{"property": property, "business_date": business_date},
+	)[0][0] or 0)
+	for row in rows:
+		row["check_in_date"] = str(row["check_in_date"])
+		row["check_out_date"] = str(row["check_out_date"])
+	return {
+		"property": property,
+		"rate_plan_required": bool(get_setting(property, "rate_plan_required")),
+		"default_plan": default_info,
+		"active_plan_count": len(active_plans),
+		"total_without_plan": total_without_plan,
+		"future_bookings_without_plan": rows,
+	}
+
+
+@frappe.whitelist()
+@require_roles("Finance", "Front Desk", "Night Auditor", "F&B Manager", "Revenue Manager",
+               "Kamra Agent")
 def menu_masters(property: str) -> dict:
 	"""Allergen tags, prep stations, courses and category suggestions for
 	the Menu form and kitchen display. Edited under Settings → F&B → Menu
-	master lists."""
+	master lists. Also the property's rate categories for the Rate Plans
+	form (Settings → Revenue → Complimentary and house use)."""
+	from kamra.room_statistics import category_rules
 	assert_property_access(property)
 	return {
 		"allergens": list_setting(property, "menu_allergen_tags"),
 		"prep_stations": list_setting(property, "menu_prep_stations"),
 		"courses": list_setting(property, "menu_courses"),
 		"categories": list_setting(property, "menu_categories"),
+		"rate_categories": list(category_rules(property).categories),
 	}
 
 
@@ -831,13 +934,13 @@ def settings_schema(property: str) -> dict:
 				if m.id == "finance" and sec.id == "tax" and not slab_mode:
 					if s.key in ("gst_mode", "gst_slab_threshold", "gst_rate_high"):
 						continue
-					spec = _spec_json(s, property)
+					spec = _spec_json(s, property, roles)
 					if s.key == "gst_rate_low":
 						spec["label"] = "Room tax rate"
 						spec["hint"] = "Flat rate applied to room nights when the property calculates tax locally."
 					items.append(spec)
 					continue
-				items.append(_spec_json(s, property))
+				items.append(_spec_json(s, property, roles))
 			sections_out.append({
 				"id": sec.id, "title": sec.title, "description": sec.description,
 				"settings": items,
@@ -906,11 +1009,16 @@ def save_settings(property: str, module: str, changes) -> dict:
 
 	before_all = _values(property, mod)
 	clean: dict = {}
+	roles = _roles()
 	for key, val in (changes or {}).items():
 		owner = SETTINGS.get(key)
 		if not owner or owner[0].id != module:
 			frappe.throw(_("{0} isn't a setting on this page.").format(key))
 		clean[key] = _validate(owner[1], val)
+		# a setting narrower than its page: refused when it would change
+		if clean[key] != before_all.get(key) and not can_edit_setting(owner[1], roles):
+			frappe.throw(_("Your role can't change {0}.").format(_(owner[1].label)),
+			             frappe.PermissionError)
 	if not clean:
 		return {"ok": True, "values": before_all}
 

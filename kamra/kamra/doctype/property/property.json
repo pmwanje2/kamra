@@ -195,7 +195,7 @@
    "label": "Column Break B"
   },
   {
-   "default": "India",
+   "description": "Blank: falls back to the company or site country, or neutral (no country tax) if none.",
    "fieldname": "country",
    "fieldtype": "Data",
    "label": "Country"

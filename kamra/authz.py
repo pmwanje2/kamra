@@ -448,18 +448,31 @@ def is_supervisor(user: str | None = None, roles=SUPERVISOR_ROLES) -> bool:
 		set(roles) & set(frappe.get_roles(user)))
 
 
+def _people(who) -> set[str]:
+	"""One user or several, case-folded."""
+	return {str(u).casefold() for u in ([who] if isinstance(who, str) else who or ()) if u}
+
+
+def approver_roles(roles) -> str:
+	"""The roles that approve, as a refusal names them: "Hotel Admin or
+	Finance" (the site's own System Manager and Administrator left out)."""
+	named = [r for r in roles if r not in ("System Manager", "Administrator")] or list(roles)
+	return " or ".join([", ".join(named[:-1]), named[-1]] if len(named) > 2 else named)
+
+
 def supervisors_for(property: str, roles=SUPERVISOR_ROLES,
-                    exclude: str | None = None) -> list[dict]:
+                    exclude=None) -> list[dict]:
 	"""Who can approve on a till at this property: enabled users holding
 	one of `roles`, with access to the property and a cashier PIN set.
-	`exclude` (the person asking) is left out: nobody approves their own
-	request. Names only."""
+	`exclude` (the person asking, or several people) is left out: nobody
+	approves their own request. Names only."""
 	users = set(frappe.get_all(
 		"Has Role", filters={"role": ["in", [r for r in roles if r != "Administrator"]],
 		                     "parenttype": "User"},
 		pluck="parent", distinct=True))
 	users &= set(frappe.get_all("Cashier PIN", pluck="name"))
-	users.discard(exclude)
+	excluded = _people(exclude)
+	users = {u for u in users if u.casefold() not in excluded}
 	out = []
 	for u in frappe.get_all("User", filters={"name": ["in", list(users) or [""]],
 	                                         "enabled": 1, "user_type": "System User"},
@@ -471,27 +484,28 @@ def supervisors_for(property: str, roles=SUPERVISOR_ROLES,
 
 
 def verify_supervisor(property: str, supervisor: str | None, pin,
-                      roles=SUPERVISOR_ROLES, requester: str | None = None) -> str:
+                      roles=SUPERVISOR_ROLES, requester=None) -> str:
 	"""A supervisor approves at someone else's till with their user id and
 	their own cashier PIN. The PIN is always required here, whatever the
 	property's PIN setting, because it is the only proof the supervisor was
 	there. Wrong PINs count against the supervisor's lock like any other
-	entry. With `requester` (who asked for the approval), the supervisor
-	must be someone else: SUPERVISOR_SELF_APPROVAL. Returns the approving
-	user."""
+	entry. With `requester` (who asked for the approval, or several people
+	who may not approve it), the supervisor must be someone else:
+	SUPERVISOR_SELF_APPROVAL. A refusal names the roles that approve.
+	Returns the approving user."""
 	supervisor = (supervisor or "").strip()
 	canonical = frappe.db.exists("User", supervisor) if supervisor else None
 	if not canonical:
 		frappe.throw("SUPERVISOR_REQUIRED: pick the supervisor who approves this.",
 		             frappe.PermissionError)
 	supervisor = str(canonical)
-	if requester and supervisor.casefold() == str(requester).casefold():
+	if supervisor.casefold() in _people(requester):
 		frappe.throw("SUPERVISOR_SELF_APPROVAL: you cannot approve your own "
 		             "request. Another supervisor signs it off.", frappe.PermissionError)
 	if not frappe.db.get_value("User", supervisor, "enabled") or \
 			not is_supervisor(supervisor, roles):
-		frappe.throw(f"{supervisor} cannot approve this. It needs a Hotel "
-		             "Admin or Finance user.", frappe.PermissionError)
+		frappe.throw(f"{supervisor} cannot approve this. It needs a {approver_roles(roles)} "
+		             "user.", frappe.PermissionError)
 	allowed = restricted_properties(supervisor)
 	if property and allowed is not None and property not in allowed:
 		frappe.throw(f"{supervisor} has no access to {property}.",
@@ -511,9 +525,11 @@ def verify_supervisor(property: str, supervisor: str | None, pin,
 		             f"try again in {lock_minutes} minutes.")
 	try:
 		_check_user_pin(supervisor, pin, property)
-	except frappe.ValidationError:
-		frappe.cache.set_value(fails_key, cint(frappe.cache.get_value(fails_key)) + 1,
-		                       expires_in_sec=lock_minutes * 60)
+	except frappe.ValidationError as exc:
+		msg = str(exc)
+		if not any(tag in msg for tag in ("PIN_MUST_RESET", "PIN_NOT_SET", "PIN_REQUIRED")):
+			frappe.cache.set_value(fails_key, cint(frappe.cache.get_value(fails_key)) + 1,
+			                       expires_in_sec=lock_minutes * 60)
 		raise
 	frappe.cache.delete_value(fails_key)
 	return supervisor
@@ -543,6 +559,167 @@ def verify_supervisor_approval(property: str, supervisor: str | None = None, pin
 	approver = verify_supervisor(property, supervisor, pin, roles=SUPERVISOR_ROLES,
 	                             requester=frappe.session.user)
 	return {"supervisor": approver}
+
+
+def resolve_property_for_pos_profile(pos_profile: str | None, user: str | None = None) -> str | None:
+	"""Resolve the Property bound to a POS Profile deterministically.
+
+	Resolution order (never guesses across multiple ambiguous properties):
+	1. `POS Profile.custom_property` (when field exists and is populated)
+	2. `Branch.custom_property` via `POS Profile.branch` (when field exists and is populated)
+	3. `Cost Center.custom_property` via `POS Profile.cost_center`, or unique enabled
+	   `Property` matching `Property.custom_cost_center`
+	4. Unique enabled `Property` whose `name` or `property_name` equals `POS Profile.branch`
+	5. Unique enabled `Property` linked to `POS Profile.company` (`company`, `custom_company`,
+	   `legal_name`, or `property_name`)
+	6. Caller's (`user` or `frappe.session.user`) `Property` User Permissions intersected with
+	   enabled properties, when that leaves exactly one permitted enabled Property
+	7. Single enabled `Property` on the site (when only one exists)
+	"""
+	if pos_profile and frappe.db.table_exists("POS Profile") and frappe.db.exists("POS Profile", pos_profile):
+		meta = frappe.get_meta("POS Profile")
+		if meta.has_field("custom_property"):
+			prop = frappe.db.get_value("POS Profile", pos_profile, "custom_property")
+			if prop:
+				return str(prop)
+		branch = frappe.db.get_value("POS Profile", pos_profile, "branch") if meta.has_field("branch") else None
+		if branch:
+			if frappe.db.table_exists("Branch") and frappe.get_meta("Branch").has_field("custom_property"):
+				prop = frappe.db.get_value("Branch", branch, "custom_property")
+				if prop:
+					return str(prop)
+		cost_center = frappe.db.get_value("POS Profile", pos_profile, "cost_center") if meta.has_field("cost_center") else None
+		if cost_center:
+			if frappe.db.table_exists("Cost Center") and frappe.get_meta("Cost Center").has_field("custom_property"):
+				prop = frappe.db.get_value("Cost Center", cost_center, "custom_property")
+				if prop:
+					return str(prop)
+			prop_meta = frappe.get_meta("Property")
+			if prop_meta.has_field("custom_cost_center"):
+				props = frappe.get_all(
+					"Property", filters={"custom_cost_center": cost_center, "disabled": 0}, pluck="name", limit=2
+				)
+				if len(props) == 1:
+					return str(props[0])
+		if branch:
+			props = frappe.get_all(
+				"Property",
+				filters={"disabled": 0},
+				or_filters={"name": branch, "property_name": branch},
+				pluck="name",
+				limit=2,
+			)
+			if len(props) == 1:
+				return str(props[0])
+		company = frappe.db.get_value("POS Profile", pos_profile, "company") if meta.has_field("company") else None
+		if company:
+			prop_meta = frappe.get_meta("Property")
+			for field in ("company", "custom_company", "legal_name", "property_name"):
+				if prop_meta.has_field(field):
+					props = frappe.get_all(
+						"Property", filters={field: company, "disabled": 0}, pluck="name", limit=2
+					)
+					if len(props) == 1:
+						return str(props[0])
+
+	effective_user = user or getattr(getattr(frappe, "session", None), "user", None)
+	if effective_user and effective_user not in ("Administrator", "Guest"):
+		allowed = restricted_properties(effective_user)
+		if allowed:
+			permitted_enabled = frappe.get_all(
+				"Property",
+				filters={"name": ["in", sorted(allowed)], "disabled": 0},
+				pluck="name",
+				limit=2,
+			)
+			if len(permitted_enabled) == 1:
+				return str(permitted_enabled[0])
+
+	props = frappe.get_all("Property", filters={"disabled": 0}, pluck="name", limit=2)
+	return str(props[0]) if len(props) == 1 else None
+
+
+def _scrub_pin_from_form_dict() -> None:
+	form = getattr(frappe.local, "form_dict", None)
+	if isinstance(form, dict):
+		for key in ("pin", "supervisor_pin", "override_pin"):
+			form.pop(key, None)
+
+
+def verify_pos_override_pin(
+	approver: str | None,
+	pin: str | None,
+	pos_profile: str | None = None,
+	*,
+	property: str | None = None,
+	requester: str | None = None,
+	privilege: str | None = None,
+) -> dict:
+	"""Frappe hook (`pos_override_pin_verifier`) called by POS override verification.
+
+	Reuses Kamra's existing Cashier PIN store through `verify_supervisor`:
+	same 5/15 lockout, self-approval refused, property scope enforced, AI agents
+	and Administrator/Guest refused, and `form_dict` PIN scrubbed.
+	Returns only yes/no + approver display name on success (and a neutral refusal
+	code on failure). Never introduces a second PIN store.
+	"""
+	try:
+		if (
+			getattr(frappe.flags, "kamra_agent_call", False)
+			or getattr(frappe.flags, "kamra_gate_bypass", False)
+			or "Kamra Agent" in frappe.get_roles()
+		):
+			return {"ok": False, "name": None, "code": "POS-AUTH-NOT-ELIGIBLE"}
+
+		req = (requester if requester is not None else getattr(frappe.session, "user", None)) or ""
+		if not req or req == "Guest":
+			return {"ok": False, "name": None, "code": "POS-AUTH-NOT-ELIGIBLE"}
+
+		approver_in = (approver or "").strip()
+		if not approver_in or approver_in.casefold() in ("administrator", "guest"):
+			return {"ok": False, "name": None, "code": "POS-AUTH-NOT-ELIGIBLE"}
+
+		canonical = frappe.db.exists("User", approver_in)
+		if not canonical:
+			return {"ok": False, "name": None, "code": "POS-AUTH-NOT-ELIGIBLE"}
+		approver_user = str(canonical)
+
+		if approver_user.casefold() == str(req).casefold():
+			return {"ok": False, "name": None, "code": "POS-AUTH-SELF"}
+
+		prop = property or resolve_property_for_pos_profile(pos_profile, user=req)
+		allowed_props = restricted_properties(approver_user)
+		if allowed_props is not None and (not prop or prop not in allowed_props):
+			return {"ok": False, "name": None, "code": "POS-AUTH-NOT-ELIGIBLE"}
+
+		try:
+			verified = verify_supervisor(
+				prop or "",
+				approver_user,
+				pin,
+				roles=POS_SUPERVISOR_ROLES,
+				requester=req,
+			)
+		except frappe.PermissionError as exc:
+			frappe.clear_messages()
+			msg = str(exc)
+			code = "POS-AUTH-SELF" if "SUPERVISOR_SELF_APPROVAL" in msg else "POS-AUTH-NOT-ELIGIBLE"
+			return {"ok": False, "name": None, "code": code}
+		except frappe.ValidationError as exc:
+			frappe.clear_messages()
+			msg = str(exc)
+			if "PIN_LOCKED" in msg:
+				code = "POS-AUTH-LOCKED"
+			elif "PIN_NOT_SET" in msg or "PIN_MUST_RESET" in msg:
+				code = "POS-AUTH-NO-PIN"
+			else:
+				code = "POS-AUTH-PIN"
+			return {"ok": False, "name": None, "code": code}
+
+		full_name = frappe.db.get_value("User", verified, "full_name") or verified
+		return {"ok": True, "name": str(full_name)}
+	finally:
+		_scrub_pin_from_form_dict()
 
 
 def _check_user_pin(user: str, pin, property: str | None):

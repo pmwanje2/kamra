@@ -9,6 +9,16 @@ import { t as translate, useUILanguage } from "../lib/i18n"
 const inr = (n: unknown) =>
   Number(n ?? 0).toLocaleString(moneyLocale(), { maximumFractionDigits: 0 })
 
+const fmtFx = (n: unknown) =>
+  Number(n ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+type ForeignDrawer = {
+  currency: string
+  expected_fx: number
+  counted_fx: number | null
+  variance_fx: number | null
+}
+
 type Row = {
   name: string
   cashier_id?: string
@@ -20,6 +30,7 @@ type Row = {
   expected_cash: number
   counted_cash: number
   variance: number
+  foreign_drawers?: ForeignDrawer[]
   opened_at: string
   closed_at?: string
 }
@@ -79,22 +90,23 @@ export default function CashierSessions() {
         <p className="text-sm text-rose-600">{translate(err)}</p>
       ) : null}
       <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white">
-        <table className="w-full table-fixed text-left text-sm">
+        <table className="min-w-[680px] w-full text-left text-sm">
           <thead className="border-b border-zinc-100 text-xs uppercase tracking-wide text-zinc-400">
             <tr>
-              <th className="w-[28%] px-3 py-2">{translate("Cashier")}</th>
-              <th className="w-[12%] px-3 py-2">{translate("Status")}</th>
+              <th className="px-3 py-2">{translate("Cashier")}</th>
+              <th className="px-3 py-2">{translate("Status")}</th>
               <th className="px-3 py-2">{translate("Float")}</th>
               <th className="px-3 py-2">{translate("Cash")}</th>
               <th className="px-3 py-2">{translate("Expected")}</th>
               <th className="px-3 py-2">{translate("Counted")}</th>
+              <th className="px-3 py-2">{translate("Foreign drawers")}</th>
               <th className="px-3 py-2">{translate("Variance")}</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.name} className="border-t border-zinc-50">
-                <td className="px-3 py-2">
+                <td className="whitespace-nowrap px-3 py-2">
                   <Link
                     to={`/cashier/shift-report?session=${r.name}`}
                     className="font-medium text-brand-700 hover:underline"
@@ -103,21 +115,26 @@ export default function CashierSessions() {
                   </Link>
                   <div className="text-xs text-zinc-400">{r.user}</div>
                 </td>
-                <td className="px-3 py-2">
+                <td className="whitespace-nowrap px-3 py-2">
                   <Badge tone={r.status === "Open" ? "green" : "zinc"}>
                     {translate(r.status)}
                   </Badge>
                 </td>
-                <td className="px-3 py-2 tabular-nums">{inr(r.opening_float)}</td>
-                <td className="px-3 py-2 tabular-nums">{inr(r.system_cash)}</td>
-                <td className="px-3 py-2 tabular-nums">{inr(r.expected_cash)}</td>
-                <td className="px-3 py-2 tabular-nums">{inr(r.counted_cash)}</td>
-                <td className="px-3 py-2 tabular-nums">{inr(r.variance)}</td>
+                <td className="whitespace-nowrap px-3 py-2 tabular-nums">{inr(r.opening_float)}</td>
+                <td className="whitespace-nowrap px-3 py-2 tabular-nums">{inr(r.system_cash)}</td>
+                <td className="whitespace-nowrap px-3 py-2 tabular-nums">{inr(r.expected_cash)}</td>
+                <td className="whitespace-nowrap px-3 py-2 tabular-nums">{inr(r.counted_cash)}</td>
+                <td className="whitespace-nowrap px-3 py-2 text-xs tabular-nums text-zinc-600">
+                  {r.foreign_drawers?.length
+                    ? r.foreign_drawers.map((fd) => `${fd.currency} ${fmtFx(fd.expected_fx)}`).join(" · ")
+                    : "-"}
+                </td>
+                <td className="whitespace-nowrap px-3 py-2 tabular-nums">{inr(r.variance)}</td>
               </tr>
             ))}
             {!rows.length ? (
               <tr>
-                <td colSpan={7} className="px-3 py-10 text-center text-zinc-400">{translate("No sessions for this date.")}{" "}
+                <td colSpan={8} className="px-3 py-10 text-center text-zinc-400">{translate("No sessions for this date.")}{" "}
                   <Link to="/cashier" className="text-brand-700 hover:underline">{translate("Open a till")}</Link>{" "}{translate("to start.")}</td>
               </tr>
             ) : null}

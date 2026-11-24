@@ -25,6 +25,7 @@ interface Locale {
   date_format?: string | null
   tax_label: string
   tax_basis?: TaxBasis | null
+  erp_tax_managed?: boolean
   tax_id_label: string
   tax_rates: number[]
   /** ID documents this country's desk records (pack ID_TYPES). */
@@ -33,6 +34,10 @@ interface Locale {
   id_type_hints: Record<string, string>
   /** Ways to pay the desk offers - always canonical Folio Payment modes. */
   payment_modes: string[]
+  /** Resolved Payment Method.tender_type keyed by mode code for this property. */
+  payment_tender_types?: Record<string, string>
+  /** Explicit Cashier.allowed_modes allowlist for the signed-in user, or null if unrestricted. */
+  cashier_allowed_modes?: string[] | null
   tender_modes?: TenderMode[] | null
   fx_currencies?: string[]
   /** The pack's own instant / wallet modes; the till keeps
@@ -58,9 +63,10 @@ interface Locale {
   services_tax_rate?: number
   /** Off for a dry property: alcohol fields and labels are hidden. */
   sells_alcohol?: boolean
-  /** The hotel's own Market codes, booker relations and Cancellation
+  /** The hotel's own Market codes, booking types, booker relations and Cancellation
    *  Reasons (Settings data, OPERA codes) - never a list typed in a screen. */
   market_codes?: Choice[]
+  booking_types?: Choice[]
   booker_relations?: Choice[]
   cancellation_reasons?: Choice[]
 }
@@ -129,7 +135,7 @@ export function loadLocale(): Promise<Locale> {
   })
     .then((l) => {
       if (property !== getCurrentProperty()) return cache
-      cache = { ...cache, tender_modes: null, fx_currencies: [], tax_basis: null, ...l }
+      cache = { ...cache, payment_tender_types: {}, cashier_allowed_modes: null, tender_modes: null, fx_currencies: [], tax_basis: null, erp_tax_managed: false, ...l }
       syncDateFormat(cache.date_format)
       remember()
       return cache

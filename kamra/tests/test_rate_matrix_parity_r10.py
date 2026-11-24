@@ -54,11 +54,13 @@ PRICING_RESERVATION_FUNCS = (
 )
 NON_INPUT_RESERVATION_ATTRS = frozenset({
 	# Methods, document bookkeeping, derived outputs and non-pricing metadata.
+	# amount_after_tax is a derived output written by relock_contract_fx_at_check_in for channel stays.
 	"is_new", "get_doc_before_save", "has_value_changed", "flags", "get", "name",
 	"rate_lock_key", "rate_lock_key_for", "quote_inputs", "hand_set_prices",
 	"reprice_contract_nights", "requote", "apply_quote", "_apply_commission",
 	"night_discount_inputs", "discount_changes_only", "apply_rediscount",
-	"rediscount_locked_nights", "custom_tariff_currency",
+	"rediscount_locked_nights", "custom_tariff_currency", "amount_after_tax",
+	"guard_lock_key", "guard_header_totals",
 })
 # kamra#32 is merged: every field in PRICE_DETERMINATION_FIELDS is now a real Reservation DocField.
 FORWARD_COMPAT_SIBLING_FIELDS = frozenset()

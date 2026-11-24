@@ -8,7 +8,6 @@ import { useNavigate } from "react-router-dom"
 import { ChevronDown, Loader2, Megaphone, Plus, ShieldAlert, Star, Trash2, X } from "lucide-react"
 import {
   call,
-  createBooking,
   getCurrentProperty,
   isTaxUndetermined,
   TAX_NOT_SET_UP_MSG,
@@ -22,6 +21,7 @@ import { Button } from "./ui/button"
 import { moneyDigits, useLocale } from "../lib/money"
 import { isPhoneComplete } from "../lib/phone"
 import { nightsBetween, parseDate, shiftDate } from "../lib/stay"
+import { onSettingsChanged, onTariffsChanged } from "../lib/tariffSync"
 import { typedNights, type NightPrice } from "../lib/nightPrices"
 import {
   discountArgs,
@@ -36,6 +36,7 @@ import {
   type DiscountState,
 } from "../lib/reservationDiscount"
 import DiscountPanel from "./DiscountPanel"
+import SupervisorSignOff from "./SupervisorSignOff"
 import PhoneInput from "./PhoneInput"
 import { clampGuests, sleeps } from "../lib/occupancy"
 import { useT, t as translate, useUILanguage } from "../lib/i18n"
@@ -128,6 +129,7 @@ export function BookingDialog(props: {
     room?: string
     room_number?: string
     date?: string
+    check_in_date?: string
     guest?: string
     guest_name?: string
     phone?: string
@@ -187,7 +189,9 @@ export function BookingDialog(props: {
     phone: props.initial.phone ?? "",
     room_type: props.initial.room_type ?? "",
     // a walk-in arrives today, whatever date the screen it came from showed
-    check_in_date: props.initial.walkIn ? todayLocal() : props.initial.date ?? todayLocal(),
+    check_in_date: props.initial.walkIn
+      ? todayLocal()
+      : props.initial.date ?? props.initial.check_in_date ?? todayLocal(),
     nights: props.initial.nights ?? 1,
     adults: props.initial.adults ?? 2,
     children: props.initial.children ?? 0,
@@ -201,6 +205,7 @@ export function BookingDialog(props: {
     pets: 0,
     company: "",
     travel_agent: "",
+    booking_type: "",
     market_segment: "",
     booked_by_name: "",
     booked_by_phone: "",
@@ -403,17 +408,48 @@ export function BookingDialog(props: {
   // When the desk did not pass a room type, keep auto-picking the cheapest
   // type that has rooms for the selected dates until they change it (#549).
   const autoRoomType = useRef(!props.initial.room_type)
+  const optionsLoaded = useRef(false)
+  const mealPlanTouched = useRef(false)
+  const ratePlanTouched = useRef(false)
+
+  const [syncRev, setSyncRev] = useState(0)
+  useEffect(() => {
+    const bump = () => setSyncRev((v) => v + 1)
+    const offTariffs = onTariffsChanged(bump)
+    const offSettings = onSettingsChanged(bump)
+    return () => { offTariffs(); offSettings() }
+  }, [])
 
   useEffect(() => {
+    let live = true
     call<BookingOptions>("kamra.api.booking_options", { property: getCurrentProperty() }).then((o) => {
+      if (!live) return
       setOptions(o)
-      setForm((f) => ({
-        ...f,
-        meal_plan: o.meal_plans.find((m) => m.is_default)?.name ?? "",
-        rate_plan: f.rate_plan || o.default_plan || "",
-      }))
+      const isInitial = !optionsLoaded.current
+      optionsLoaded.current = true
+      setForm((f) => {
+        const defaultMeal = o.meal_plans.find((m) => m.is_default)?.name ?? ""
+        const mealValid = !f.meal_plan || o.meal_plans.some((m) => m.name === f.meal_plan)
+        const nextMeal = isInitial && !mealPlanTouched.current
+          ? (f.meal_plan && mealValid ? f.meal_plan : defaultMeal)
+          : mealValid
+            ? (f.meal_plan || (mealPlanTouched.current ? "" : defaultMeal))
+            : defaultMeal
+
+        const defaultRate = o.default_plan || ""
+        const rateValid = !f.rate_plan || o.rate_plans.some((rp) => rp.name === f.rate_plan)
+        const canKeepBlankRate = !o.rate_plan_required || !!f.company
+        const nextRate = isInitial && !ratePlanTouched.current
+          ? (f.rate_plan && rateValid ? f.rate_plan : defaultRate)
+          : rateValid
+            ? (f.rate_plan || (ratePlanTouched.current && canKeepBlankRate ? "" : defaultRate))
+            : defaultRate
+
+        return { ...f, meal_plan: nextMeal, rate_plan: nextRate }
+      })
     })
-  }, [])
+    return () => { live = false }
+  }, [syncRev])
 
   useEffect(() => {
     document.body.style.overflow = "hidden"
@@ -470,6 +506,13 @@ export function BookingDialog(props: {
   const [discount, setDiscount] = useState<DiscountState>(emptyDiscount)
   const [discountSupervisor, setDiscountSupervisor] = useState("")
   const [discountPin, setDiscountPin] = useState("")
+  const [compSupervisor, setCompSupervisor] = useState("")
+  const [compPin, setCompPin] = useState("")
+  useEffect(() => {
+    // a PIN given for one plan (or company's negotiated plan) is never sent for another
+    setCompSupervisor("")
+    setCompPin("")
+  }, [form.rate_plan, form.company])
   const canDiscount = !!options?.can_discount && otaTotal <= 0 && moreRooms.length === 0
   const discountPlan = form.rate_plan || quote?.rate_plan || ""
   const discountOk = discountEligible(options?.rate_plans, discountPlan)
@@ -491,8 +534,19 @@ export function BookingDialog(props: {
   const discountParam = discountOk || !(discountEntered.discount_type || discountEntered.night_discounts)
     ? discountEntered : { ...discountEntered, fixed_rate: 1 as const }
   const discountGov: DiscountGovernance | null = quote?.discount_governance ?? null
+  // a Complimentary or House Use plan: a manager signs the booking off
+  // (kamra.api.comp_rate_governance). When the discount asks for a manager
+  // too, one whose roles cover both signs both off (OPERA's one authorizer
+  // for both prompts); otherwise the comp takes its own sign-off.
+  const compGov = quote?.comp_governance ?? null
+  const discountCoversComp = !!discountGov?.needs_supervisor && !!discountSupervisor &&
+    !!compGov?.supervisors.some((s) => s.user === discountSupervisor)
+  const compAsks = !!compGov?.needs_supervisor && !discountCoversComp
+  const compSignOff = compAsks && compSupervisor && compPin.trim()
+    ? { comp_supervisor_user: compSupervisor, comp_supervisor_pin: compPin.trim() } : {}
   const discountSignOff = {
     ...supervisorArgs(discountGov, discountSupervisor, discountPin),
+    ...compSignOff,
     // the desk's optional note goes with the booking, never with a quote
     ...discountNote(discount, discountEntered),
   }
@@ -621,6 +675,7 @@ export function BookingDialog(props: {
     JSON.stringify(nightPricesArg),
     // so does the desk's discount: the walk-in's amount collected follows it
     JSON.stringify(discountParam),
+    syncRev,
   ])
 
   // quotes for the additional rooms
@@ -650,7 +705,7 @@ export function BookingDialog(props: {
       ).then(setMoreQuotes)
     }, 300)
     return () => clearTimeout(t)
-  }, [moreRooms, form.check_in_date, checkOut, form.rate_plan, form.company, canSetPrice])
+  }, [moreRooms, form.check_in_date, checkOut, form.rate_plan, form.company, canSetPrice, syncRev])
 
   // walk-in: the actual rooms free tonight, clean ones first
   useEffect(() => {
@@ -718,30 +773,35 @@ export function BookingDialog(props: {
     setError(null)
     try {
       if (waitlist) {
-        const res = await createBooking({
-          over_capacity_reason: form.over_capacity_reason || undefined,
-          over_capacity_guests: form.over_capacity_guests || undefined,
-          over_capacity_charge: extraCharge || undefined,
-          guest_name: form.guest_name,
-          phone: form.phone || undefined,
-          guest: profile?.name,
-          room_type: form.room_type,
-          check_in_date: form.check_in_date,
-          check_out_date: checkOut,
-          adults: form.adults,
-          children: form.children,
-          meal_plan: form.meal_plan || undefined,
-          rate_plan: form.rate_plan || undefined,
-          voucher_code: form.voucher_code || undefined,
-          pets: form.pets || undefined,
-          company: form.company || undefined,
-          waitlist: 1,
-          ...nightPricesParam,
-          ...discountParam,
-          ...discountSignOff,
-          ...slotArgs,
-          blacklist_override_reason: blacklistOverride,
-        })
+        const res = await call<{ reservation: string; room: string | null; room_number: string | null }>(
+          "kamra.api.create_booking",
+          {
+            property: getCurrentProperty(),
+            over_capacity_reason: form.over_capacity_reason || undefined,
+            over_capacity_guests: form.over_capacity_guests || undefined,
+            over_capacity_charge: extraCharge || undefined,
+            guest_name: form.guest_name,
+            phone: form.phone || undefined,
+            guest: profile?.name,
+            room_type: form.room_type,
+            check_in_date: form.check_in_date,
+            check_out_date: checkOut,
+            adults: form.adults,
+            children: form.children,
+            meal_plan: form.meal_plan || undefined,
+            rate_plan: form.rate_plan || undefined,
+            voucher_code: form.voucher_code || undefined,
+            pets: form.pets || undefined,
+            company: form.company || undefined,
+            booking_type: form.booking_type || (form.company ? "Corporate" : undefined),
+            waitlist: 1,
+            ...nightPricesParam,
+            ...discountParam,
+            ...discountSignOff,
+            ...slotArgs,
+            blacklist_override_reason: blacklistOverride,
+          },
+        )
         setDone({ ref: res.reservation, room: null, waitlist: true })
         props.onBooked()
         return
@@ -783,8 +843,11 @@ export function BookingDialog(props: {
           guest_name: form.guest_name,
           phone: form.phone || undefined,
           company: form.company || undefined,
+          booking_type: form.booking_type || undefined,
           rate_plan: form.rate_plan || undefined,
           ...viaArgs,
+          // a comp or house-use plan: one sign-off for every room
+          ...compSignOff,
         })
         if (out.skipped.length > 0) {
           setError(
@@ -797,8 +860,11 @@ export function BookingDialog(props: {
         props.onBooked()
         return
       }
-      const res = await createBooking({
-        over_capacity_reason: form.over_capacity_reason || undefined,
+      const res = await call<{ reservation: string; room: string | null; room_number: string | null }>(
+        "kamra.api.create_booking",
+        {
+          property: getCurrentProperty(),
+          over_capacity_reason: form.over_capacity_reason || undefined,
           over_capacity_guests: form.over_capacity_guests || undefined,
           over_capacity_charge: extraCharge || undefined,
         guest_name: form.guest_name,
@@ -816,7 +882,7 @@ export function BookingDialog(props: {
         pets: form.pets || undefined,
         company: form.company || undefined,
         travel_agent: form.travel_agent || undefined,
-        booking_type: form.company ? "Corporate" : undefined,
+        booking_type: form.booking_type || (form.company ? "Corporate" : undefined),
         market_segment: form.market_segment || undefined,
         booked_by_name: onBehalf ? form.booked_by_name || undefined : undefined,
         booked_by_phone: onBehalf
@@ -995,6 +1061,8 @@ export function BookingDialog(props: {
           supervisor: discountSupervisor, pin: discountPin, fixedOverride: discountAllowed && !discountOk })
         ? "A manager signs this off with their PIN." : null)
   if (discountProblem) requireField(true, "discount", t(discountProblem))
+  const compProblem = compAsks && !(compSupervisor && compPin.trim())
+  requireField(compProblem, "comp", t("A manager signs this off with their PIN."))
   const messages = attempted ? [...problems, ...(submitError ? [{field: "server", message: submitError}] : [])] : []
   const target = (field: string) => ({id: `booking-${field}`, "aria-invalid": attempted && problems.some(p => p.field === field) || undefined})
   function jump(field: string) {
@@ -1071,6 +1139,7 @@ export function BookingDialog(props: {
     blacklistBlocked ||
     // the same discount checks as a booking, before any money or PIN
     !!discountProblem ||
+    compProblem ||
     busy ||
     !form.guest_name ||
     !quote ||
@@ -1078,6 +1147,7 @@ export function BookingDialog(props: {
     badPhone ||
     badSlot ||
     !walk.room ||
+    (planRequired && !form.rate_plan && !companyPlan) ||
     payAmount < 0 ||
     (payAmount > 0 && (!paymentReady || (foreign && !fx?.quote))) ||
     (!!walk.id_number.trim() && !walk.id_type)
@@ -1908,7 +1978,10 @@ export function BookingDialog(props: {
                     <select
                       className={inputCls}
                       value={form.meal_plan}
-                      onChange={(e) => set("meal_plan", e.target.value)}
+                      onChange={(e) => {
+                        mealPlanTouched.current = true
+                        set("meal_plan", e.target.value)
+                      }}
                     >
                       <option value="">{t("Room only")}</option>
                       {options?.meal_plans.map((mp) => (
@@ -1923,7 +1996,10 @@ export function BookingDialog(props: {
                         className={inputCls}
                         {...target("rate-plan")}
                         value={form.rate_plan}
-                        onChange={(e) => set("rate_plan", e.target.value)}
+                        onChange={(e) => {
+                          ratePlanTouched.current = true
+                          set("rate_plan", e.target.value)
+                        }}
                       >
                         <option value="" disabled={planRequired && !companyPlan} hidden={planRequired && !!form.rate_plan}>
                           {companyPlan
@@ -1950,6 +2026,16 @@ export function BookingDialog(props: {
                     />
                   </Field>
                 </div>
+
+                {compAsks && compGov && (
+                  <div id="booking-comp" tabIndex={-1}>
+                    <SupervisorSignOff
+                      reason={t("A {category} rate plan needs a manager's sign-off.",
+                        { category: t(compGov.rate_category) })}
+                      supervisors={compGov.supervisors} supervisor={compSupervisor} pin={compPin}
+                      onSupervisor={setCompSupervisor} onPin={setCompPin} />
+                  </div>
+                )}
 
                 {canDiscount && (
                   <div id="booking-discount" tabIndex={-1}>
@@ -1983,7 +2069,10 @@ export function BookingDialog(props: {
                     ratePlan={form.rate_plan}
                     company={form.company || undefined}
                     planRequired={planRequired}
-                    onPickPlan={(p) => set("rate_plan", p)}
+                    onPickPlan={(p) => {
+                      ratePlanTouched.current = true
+                      set("rate_plan", p)
+                    }}
                     nightPrices={nightPrices}
                     onNightPrices={setNightPrices}
                     canSetPrice={canSetPrice}
@@ -2332,6 +2421,18 @@ export function BookingDialog(props: {
                             <option value="">{form.company ? translate("Corporate") : "-"}</option>
                             {(loc.market_codes ?? []).map((m) => (
                               <option key={m.value} value={m.value}>{translate(m.label)}</option>
+                            ))}
+                          </select>
+                        </Field>
+                        <Field label={t("Booking type")}>
+                          <select
+                            className={inputCls}
+                            value={form.booking_type}
+                            onChange={(e) => set("booking_type", e.target.value)}
+                          >
+                            <option value="">{form.company ? t("Corporate") : "-"}</option>
+                            {(loc.booking_types ?? []).map((bt) => (
+                              <option key={bt.value} value={bt.value}>{translate(bt.label)}</option>
                             ))}
                           </select>
                         </Field>
@@ -2821,7 +2922,7 @@ export function BookingDialog(props: {
                 </div>}
                 <Button
                   className="w-full justify-center py-2.5 text-base"
-                  disabled={busy}
+                  disabled={busy || quoting}
                   onClick={() => submit()}
                 >
                   {busy ? t("Booking…") : t("Confirm booking")}

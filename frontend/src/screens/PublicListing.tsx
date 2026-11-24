@@ -411,7 +411,8 @@ export default function PublicListing() {
   const lat = siteMeta?.latitude ?? primary?.latitude ?? null
   const lng = siteMeta?.longitude ?? primary?.longitude ?? null
   const phone = siteMeta?.phone ?? p.phone
-  const fromRate = Math.min(...data.room_types.map((r) => r.base_price))
+  const pricedRates = data.room_types.map((r) => r.base_price).filter((n) => n > 0)
+  const fromRate = pricedRates.length ? Math.min(...pricedRates) : 0
   const photos = isSite
     ? [
         ...(siteMeta?.cover_image ? [{ url: siteMeta.cover_image, caption: null }] : []),
@@ -506,7 +507,8 @@ export default function PublicListing() {
               )}
               {isSite && (
                 <p className="mt-2 text-sm text-zinc-600">
-                  {t("From {amount} per night", { amount: `${cur()}${inr(fromRate)}` })} · {tn(data.room_types.length, "{n} listing", "{n} listings")}
+                  {fromRate > 0 ? `${t("From {amount} per night", { amount: `${cur()}${inr(fromRate)}` })} · ` : ""}
+                  {tn(data.room_types.length, "{n} listing", "{n} listings")}
                 </p>
               )}
             </div>
@@ -561,7 +563,8 @@ export default function PublicListing() {
                               {rt.room_type_name}
                             </h3>
                             <p className="mt-1 text-sm text-zinc-500">
-                              {t("Up to {n} guests", { n: rt.adults_capacity })} · {t("From {amount} per night", { amount: `${cur()}${inr(rt.base_price)}` })}
+                              {t("Up to {n} guests", { n: rt.adults_capacity })}
+                              {rt.base_price > 0 ? ` · ${t("From {amount} per night", { amount: `${cur()}${inr(rt.base_price)}` })}` : ""}
                             </p>
                             {rt.description && (
                               <p className="mt-2 line-clamp-2 text-sm text-zinc-600">
@@ -659,28 +662,30 @@ export default function PublicListing() {
 
           <aside className="lg:col-span-2">
             <div className="sticky top-20 space-y-4 rounded-2xl border border-zinc-200 bg-white p-5 shadow-md">
-              <div>
-                <p className="text-2xl font-semibold tabular-nums text-zinc-900">
-                  {cur()}
-                  {inr(
-                    !isSite && results[primary?.name ?? ""]?.quote
-                      ? results[primary!.name].quote!.amount_after_tax
-                      : fromRate,
-                  )}
-                </p>
-                <p className="text-sm text-zinc-500">
-                  {!isSite && results[primary?.name ?? ""]?.quote
-                    ? tn(results[primary!.name].quote!.nights, "{n} night · taxes included", "{n} nights · taxes included")
-                    : t("Price per night")}
-                </p>
-                {!isSite && (results[primary?.name ?? ""]?.quote?.pet_charge || 0) > 0 && (
-                  <p className="text-xs text-zinc-500">
-                    {tn(search.pets, "Includes {amount} for {n} pet", "Includes {amount} for {n} pets", {
-                      amount: `${cur()}${inr(results[primary!.name].quote!.pet_charge || 0)}`,
-                    })}
+              {(!isSite && results[primary?.name ?? ""]?.quote) || fromRate > 0 ? (
+                <div>
+                  <p className="text-2xl font-semibold tabular-nums text-zinc-900">
+                    {cur()}
+                    {inr(
+                      !isSite && results[primary?.name ?? ""]?.quote
+                        ? results[primary!.name].quote!.amount_after_tax
+                        : fromRate,
+                    )}
                   </p>
-                )}
-              </div>
+                  <p className="text-sm text-zinc-500">
+                    {!isSite && results[primary?.name ?? ""]?.quote
+                      ? tn(results[primary!.name].quote!.nights, "{n} night · taxes included", "{n} nights · taxes included")
+                      : t("Price per night")}
+                  </p>
+                  {!isSite && (results[primary?.name ?? ""]?.quote?.pet_charge || 0) > 0 && (
+                    <p className="text-xs text-zinc-500">
+                      {tn(search.pets, "Includes {amount} for {n} pet", "Includes {amount} for {n} pets", {
+                        amount: `${cur()}${inr(results[primary!.name].quote!.pet_charge || 0)}`,
+                      })}
+                    </p>
+                  )}
+                </div>
+              ) : null}
 
               <div className="grid grid-cols-2 gap-3">
                 <label className="block">

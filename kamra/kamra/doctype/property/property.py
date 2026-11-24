@@ -86,12 +86,19 @@ class Property(Document):
 			self.booking_language = assert_enabled_language(code)
 
 	def after_insert(self):
-		# A new property starts with allowances signed off by a Hotel Admin,
-		# every amount. Existing properties keep the registry default (Off),
-		# so an upgrade changes nothing.
+		# A new property starts with allowances signed off by a Hotel Admin
+		# (every amount) and rate-plan-required pricing on (OPERA Cloud Rate
+		# Code Mandatory). Existing properties keep the registry defaults
+		# (Off / 0), so an upgrade changes nothing, and seeding runs once on
+		# insert so later admin toggles are never overwritten.
 		from kamra.settings import clear_cache, write_kv
 		write_kv(self.name, "allowance_approval", "Hotel Admin")
 		write_kv(self.name, "allowance_approval_above", 0)
+		if not frappe.db.exists(
+			"Property Setting",
+			{"property": self.name, "setting_key": "rate_plan_required"},
+		):
+			write_kv(self.name, "rate_plan_required", 1)
 		clear_cache(self.name)
 
 	def on_update(self):

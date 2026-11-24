@@ -5,4 +5,7 @@ from frappe.model.document import Document
 
 
 class CashierTransaction(Document):
-	pass
+	def validate(self):
+		if self.mode:
+			from kamra.masters import assert_known_payment_method
+			assert_known_payment_method(self.property, self.mode)

@@ -270,9 +270,6 @@ def owner_briefing(property: str, date: str | None = None):
 	yesterday = add_days(date, -1)
 
 	rooms_total = frappe.db.count("Room", {"property": property})
-	occupied = frappe.db.count(
-		"Reservation", {"property": property, "status": "Checked In"}
-	)
 	arrivals = frappe.db.count(
 		"Reservation",
 		{"property": property, "status": "Confirmed", "check_in_date": date},
@@ -282,27 +279,25 @@ def owner_briefing(property: str, date: str | None = None):
 		{"property": property, "status": "Checked In", "check_out_date": date},
 	)
 
-	# yesterday's room revenue + rooms sold from posted folio charges
-	from kamra.folio import STANDS_ON_ITS_DATE
-	rev, rooms_sold = frappe.db.sql(
-		"""
-		SELECT COALESCE(SUM(fc.amount), 0),
-		       COUNT(DISTINCT CASE WHEN fc.charge_type = 'Room' AND """ + STANDS_ON_ITS_DATE + """
-		                           THEN COALESCE(fc.reservation, f.reservation) END)
-		FROM `tabFolio Charge` fc
-		JOIN `tabFolio` f ON fc.parent = f.name
-		WHERE f.property = %(property)s
-		  AND fc.posting_date = %(date)s
-		  AND fc.charge_type IN ('Room', 'Meal Plan', 'Rate Adjustment')
-		""",
-		{"property": property, "date": yesterday},
-	)[0]
-	room_revenue = float(rev or 0)
-	rooms_sold = int(rooms_sold or 0)
-
-	occupancy_pct = round(occupied / rooms_total * 100, 1) if rooms_total else 0
-	adr = round(room_revenue / rooms_sold, 0) if rooms_sold else 0
-	revpar = round(room_revenue / rooms_total, 0) if rooms_total else 0
+	# yesterday's room revenue + rooms sold from posted folio charges, as
+	# every report counts them (kamra.room_statistics); occupancy is the
+	# house now: the rooms in house, by the same rule
+	from kamra.room_statistics import (
+		category_rules,
+		counted_occupied,
+		in_house_by_category,
+		posted_rooms,
+		room_figures,
+	)
+	from kamra.room_statistics import occupancy_pct as pct_of
+	rules = category_rules(property)
+	house = in_house_by_category(rules, property)
+	occupied = counted_occupied(rules, sum(house.values()), house)
+	rooms = posted_rooms(property, yesterday, yesterday, rules)
+	room_revenue = rooms["room_revenue"]
+	figures = room_figures(rules, room_revenue=room_revenue, rooms_sold=rooms["rooms_sold"],
+	                       by_category=rooms["by_category"], occupancy_rooms=rooms_total)
+	occupancy_pct, adr, revpar = pct_of(occupied, rooms_total), figures["adr"], figures["revpar"]
 
 	open_tickets = frappe.get_all(
 		"Service Ticket",
@@ -343,6 +338,7 @@ def owner_briefing(property: str, date: str | None = None):
 		"departures_today": departures,
 		"yesterday": {
 			"room_revenue": room_revenue, "adr": adr, "revpar": revpar,
+			"rooms_by_category": figures["rooms_by_category"],
 			"night_audit": audit,
 			"agent_minutes_saved": float(minutes or 0),
 		},
@@ -1635,10 +1631,6 @@ def _post_folio_charge(folio: str, charge_type: str, description: str,
 
 
 
-# foreign money arrives as notes or a wire; a card terminal charges home currency
-FX_PAYMENT_MODES = ("Cash", "Bank Transfer")
-
-
 def _pin_guard(folio: str, pin=None):
 	from kamra.authz import require_cashier_pin
 	require_cashier_pin(frappe.db.get_value("Folio", folio, "property"), pin)
@@ -1674,23 +1666,25 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 			out["idempotent_replay"] = 1
 			return out
 	doc = frappe.get_doc("Folio", folio)
-	from kamra.localization import assert_payment_mode
+	from kamra.localization import FOREIGN_CURRENCY_TENDER_TYPES, assert_payment_mode
+	from kamra.masters import default_mode_for_tender, is_system_payment_method, payment_tender_type
 	assert_payment_mode(doc.property, mode, currency)
 	from kamra.business_date import get_business_date
-	from kamra.cashier import record_cashier_txn, require_open_session
+	from kamra.cashier import assert_cashier_mode_allowed, record_cashier_txn, require_open_session
 	from kamra.ledger import home_currency, payment_rate, round_cents
+	assert_cashier_mode_allowed(doc.property, mode)
 	bd = get_business_date(doc.property)
 	# Property currency — never leave Folio Payment on the INR schema default (#341)
 	currency_home = home_currency(doc.property)
 	fx = None
 	currency = (currency or "").strip().upper()
 	foreign = bool(currency and currency != currency_home)
-	if mode == "Foreign Cash":
+	tender = payment_tender_type(mode, doc.property)
+	if tender == "Foreign Cash":
 		if not foreign:
 			frappe.throw(_("Foreign Cash needs the currency of the notes received."))
-		mode = "Cash"
 	if foreign:
-		if mode not in FX_PAYMENT_MODES:
+		if tender not in FOREIGN_CURRENCY_TENDER_TYPES:
 			frappe.throw("Foreign currency is taken as Cash or Bank Transfer "
 			             "only. A card is charged in the hotel's currency.")
 		if kind == "Security Deposit":
@@ -1705,10 +1699,11 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 		if amount <= 0:
 			frappe.throw("Amount must be positive.")
 	currency = currency_home
-	if fx and mode == "Cash":
-		# foreign notes are not home cash: their own mode on the folio and
-		# the till, so reports agree and the drawer count stays home cash
-		mode = "Foreign Cash"
+	if fx and tender == "Cash" and is_system_payment_method(mode, doc.property):
+		# system Cash + foreign currency maps to the Foreign Cash tender code;
+		# custom Cash-type tenders keep their own mode and stay out of home cash
+		# via currency/fx_amount on Cashier Transaction.
+		mode = default_mode_for_tender(doc.property, "Foreign Cash")
 	sess = None
 	try:
 		sess = require_open_session(doc.property)
@@ -1735,7 +1730,8 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 	           if fx else None)
 	record_cashier_txn(
 		doc.property, "Payment", mode, float(amount),
-		folio=doc.name, reference=reference, notes=fx_note, session=sess, tender_validated=True)
+		folio=doc.name, reference=reference, notes=fx_note, session=sess,
+		tender_validated=True, currency=pay.currency, fx_amount=float(pay.fx_amount or 0))
 	try:
 		from kamra import ledger as _ledger_mod
 		_ledger_mod.record_payment_ledger(doc, pay.as_dict(), session=sess)
@@ -1902,15 +1898,18 @@ def refund_folio_payment(folio: str, amount: float | None = None,
                          reason_code: str | None = None,
                          supervisor_pin: str | None = None,
                          payment_row: str | None = None,
-                         idempotency_key: str | None = None):
+                         idempotency_key: str | None = None,
+                         currency: str | None = None):
 	"""Give money back on an open folio - a held security deposit at
 	checkout, or an over-collected advance. Stored as a negative ledger
 	row so every balance still sums exactly; a reason is mandatory.
 
 	payment_row refunds against one payment line: mode defaults to that
-	payment's mode (pass Cash to give cash back instead) and amount to what
-	is left of it. A retry with the same idempotency_key returns the first
-	refund instead of paying out twice."""
+	payment's mode (or the home Cash tender for home-currency refunds of a
+	Foreign Cash tender) and amount to what is left of it. Pass currency for
+	a foreign-currency refund so the foreign drawer and tender stay aligned.
+	A retry with the same idempotency_key returns the first refund instead of
+	paying out twice."""
 	key = (idempotency_key or "").strip() or None
 	if key:
 		# serialize refunds on this folio so a double submit sees the first
@@ -1918,8 +1917,18 @@ def refund_folio_payment(folio: str, amount: float | None = None,
 		if _paid_with_key(key, folio=folio):
 			return {"ok": True, "idempotent_replay": 1,
 			        "balance": frappe.db.get_value("Folio", folio, "balance")}
+	doc = frappe.get_doc("Folio", folio)
+	from babel.numbers import get_currency_precision
+	from kamra.ledger import fx_to_home, home_currency, payment_rate, round_cents
+	from kamra.localization import FOREIGN_CURRENCY_TENDER_TYPES, money_text
+	from kamra.masters import default_mode_for_tender, payment_tender_type
+
+	home = home_currency(doc.property)
+	req_ccy = (currency or "").strip().upper()
+	foreign = bool(req_ccy and req_ccy != home)
+	fx_meta: dict | None = None
+
 	if payment_row:
-		doc = frappe.get_doc("Folio", folio)
 		pay = next((p for p in doc.payments if p.name == payment_row), None)
 		if not pay or float(pay.amount or 0) <= 0:
 			frappe.throw(_("That payment is not on this folio."))
@@ -1931,19 +1940,80 @@ def refund_folio_payment(folio: str, amount: float | None = None,
 			if p.get("refund_of") == payment_row), 2)
 		if left <= 0:
 			frappe.throw(_("This payment is already refunded in full."))
-		if amount in (None, ""):
-			amount = left
-		if float(amount) > left + 0.005:
-			from kamra.localization import money_text
-			frappe.throw(_("Only {0} of this payment is left to refund.").format(
-				money_text(doc.property, left)))
-		mode = mode or ("Cash" if pay.mode == "Foreign Cash" else pay.mode)
+		pay_tender = payment_tender_type(pay.mode, doc.property)
+		if foreign:
+			mode = mode or (
+				pay.mode if pay_tender in FOREIGN_CURRENCY_TENDER_TYPES
+				else default_mode_for_tender(doc.property, "Foreign Cash")
+			)
+			if payment_tender_type(mode, doc.property) not in FOREIGN_CURRENCY_TENDER_TYPES:
+				frappe.throw(_("{0} cannot refund in foreign currency {1}.").format(mode, req_ccy))
+			if amount in (None, ""):
+				if pay.get("exchange_rate") and (pay.get("currency") or "").upper() == req_ccy:
+					fx_refund = round_cents(left / float(pay.exchange_rate))
+				else:
+					frappe.throw(_("Give the foreign currency amount to refund."))
+			else:
+				fx_refund = round_cents(amount)
+			if fx_refund <= 0:
+				frappe.throw(_("Refund amount must be positive."))
+			if pay.get("exchange_rate") and (pay.get("currency") or "").upper() == req_ccy:
+				rate = float(pay.exchange_rate)
+				rate_date = pay.get("exchange_rate_date")
+				home_amt = fx_to_home(fx_refund, rate, get_currency_precision(home))
+			else:
+				r = payment_rate(doc.property, req_ccy, fx_refund)
+				rate = r["rate"]
+				rate_date = r["rate_date"]
+				home_amt = r["home_amount"]
+			if home_amt > left + 0.005:
+				frappe.throw(_("Only {0} of this payment is left to refund.").format(
+					money_text(doc.property, left)))
+			fx_meta = {
+				"currency": req_ccy,
+				"fx_amount": -fx_refund,
+				"exchange_rate": rate,
+				"exchange_rate_date": rate_date,
+			}
+			amount = home_amt
+		else:
+			if amount in (None, ""):
+				amount = left
+			if float(amount) > left + 0.005:
+				frappe.throw(_("Only {0} of this payment is left to refund.").format(
+					money_text(doc.property, left)))
+			if not mode:
+				mode = (
+					default_mode_for_tender(doc.property, "Cash")
+					if pay_tender == "Foreign Cash"
+					else pay.mode
+				)
+	elif foreign:
+		if amount in (None, "") or not mode:
+			frappe.throw(_("Give the amount and the mode to refund."))
+		if payment_tender_type(mode, doc.property) not in FOREIGN_CURRENCY_TENDER_TYPES:
+			frappe.throw(_("{0} cannot refund in foreign currency {1}.").format(mode, req_ccy))
+		fx_refund = round_cents(amount)
+		if fx_refund <= 0:
+			frappe.throw(_("Refund amount must be positive."))
+		r = payment_rate(doc.property, req_ccy, fx_refund)
+		fx_meta = {
+			"currency": r["currency"],
+			"fx_amount": -fx_refund,
+			"exchange_rate": r["rate"],
+			"exchange_rate_date": r["rate_date"],
+		}
+		amount = r["home_amount"]
+
 	if amount in (None, "") or not mode:
 		frappe.throw(_("Give the amount and the mode to refund."))
+	if not foreign and payment_tender_type(mode, doc.property) == "Foreign Cash":
+		frappe.throw(_("Foreign Cash refund needs the foreign currency of the notes returned."))
 	return _refund_folio_payment(folio, amount, mode, reason, pin=pin,
 	                             reason_code=reason_code,
 	                             supervisor_pin=supervisor_pin,
-	                             refund_of=payment_row, idempotency_key=key)
+	                             refund_of=payment_row, idempotency_key=key,
+	                             fx=fx_meta)
 
 
 def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
@@ -1953,7 +2023,8 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
                           ledger: str | None = None,
                           refund_of: str | None = None,
                           idempotency_key: str | None = None, correction: dict | None = None,
-                          bookkeeping_action: str | None = None, session: str | None = None):
+                          bookkeeping_action: str | None = None, session: str | None = None,
+                          fx: dict | None = None):
 	"""The one refund writer (folio row, till, ledger). Not whitelisted:
 	ledger lets a security-deposit refund release the Deposit ledger -
 	callers that pass it have already checked the deposit's balance.
@@ -1969,6 +2040,12 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 	if doc.status == "Closed":
 		frappe.throw("This folio is closed - refunds need a credit note "
 		             "via allowance on a new folio.")
+	from kamra.cashier import assert_cashier_mode_allowed, record_cashier_txn, require_open_session
+	if bookkeeping_action is None:
+		assert_cashier_mode_allowed(doc.property, mode)
+		from kamra.masters import payment_tender_type
+		if payment_tender_type(mode, doc.property) == "Foreign Cash" and not fx and not (correction or {}).get("fx_amount"):
+			frappe.throw(_("Foreign Cash refund needs the foreign currency of the notes returned."))
 	from kamra.ledger import require_reason
 	reason_text = require_reason(
 		"Refund", reason_code, reason or "",
@@ -1997,7 +2074,6 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 		ledger = _prearrival_advance_refund_ledger(doc)
 		release_advance = ledger == "Deposit"
 	from kamra.business_date import get_business_date
-	from kamra.cashier import record_cashier_txn, require_open_session
 	bd = get_business_date(doc.property)
 	from kamra.localization import default_currency, pack_for
 	currency = (frappe.get_cached_value("Property", doc.property, "currency")
@@ -2019,6 +2095,7 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 		"currency": currency,
 		"refund_of": refund_of,
 		"idempotency_key": idempotency_key,
+		**(fx or {}),
 		**(correction or {}),
 	})
 	prev_grand = doc.get("grand_total")
@@ -2026,10 +2103,17 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 	_recalculate(doc, payments_only=True)
 	doc.save()
 	pay = doc.payments[-1]
+	fx_amt_val = float(pay.get("fx_amount") or 0)
+	fx_note = (
+		f"{pay.currency} {abs(fx_amt_val):,.2f} @ {pay.exchange_rate}"
+		if fx_amt_val and pay.get("exchange_rate") else None
+	)
 	if sess or correction is None:
 		record_cashier_txn(
 			doc.property, "Refund", mode, -float(amount),
-			folio=doc.name, reference=str(reason_text)[:140], session=sess)
+			folio=doc.name, reference=str(reason_text)[:140], notes=fx_note,
+			session=sess, tender_validated=bool(fx or correction),
+			currency=pay.get("currency"), fx_amount=fx_amt_val)
 	try:
 		from kamra import ledger as _ledger_mod
 		_ledger_mod.record_payment_ledger(doc, pay.as_dict(), session=sess, ledger=ledger)
@@ -5729,6 +5813,31 @@ def _checkin_backfill(res) -> list[dict]:
 	        for s in soft_pending(steps)]
 
 
+def _detail_rate_plans(res) -> list[dict]:
+	"""The plans Amend stay can move a stay to (OPERA Stay Details' Rate
+	Code list): the property's enabled non-tariff plans, and the stay's own
+	when it has since been disabled, so the picker can still show where it is.
+	Contract-tariff stays keep their locked tariff and cannot switch rate plans
+	in Amend stay, so they return no selectable list."""
+	from kamra.channel_manager import _is_tariff_owned_stay, _rate_plan_has_tariff
+	if _is_tariff_owned_stay(res):
+		return []
+	current = res.rate_plan
+	fields = ["name", "rate_plan_name", "code", "rate_category"]
+	plans = [
+		p for p in frappe.get_all(
+			"Rate Plan", filters={"property": res.property, "disabled": 0},
+			fields=fields, order_by="rate_plan_name asc, name asc",
+		)
+		if not _rate_plan_has_tariff(p["name"])
+	]
+	if current and all(p["name"] != current for p in plans):
+		own = frappe.db.get_value("Rate Plan", current, fields, as_dict=True)
+		if own:
+			plans.insert(0, own)
+	return plans
+
+
 @frappe.whitelist()
 @require_roles("Front Desk", "Kamra Agent", "Finance", "Revenue Manager")
 def reservation_detail(reservation: str):
@@ -5860,6 +5969,10 @@ def reservation_detail(reservation: str):
 			if res.meal_plan else None,
 		"meal_plan": res.meal_plan,
 		"rate_plan": res.rate_plan,
+		"rate_plan_name": (frappe.db.get_value("Rate Plan", res.rate_plan, "rate_plan_name")
+		                   or res.rate_plan) if res.rate_plan else None,
+		"rate_category": res.get("rate_category") or None,
+		"rate_plans": _detail_rate_plans(res),
 		"special_requests": res.special_requests,
 		"eta": res.eta,
 		"late_arrival": int(res.get("late_arrival") or 0),
@@ -6172,7 +6285,8 @@ def walk_in(property: str, room_type: str, room: str, check_out_date: str,
             discount_type: str | None = None, discount_value: float = 0,
             discount_reason: str | None = None, night_discounts=None,
             fixed_rate: int = 0, supervisor_pin: str | None = None,
-            supervisor_user: str | None = None, discount_note: str | None = None):
+            supervisor_user: str | None = None, discount_note: str | None = None,
+            comp_supervisor_user: str | None = None, comp_supervisor_pin: str | None = None):
 	"""Walk-in in one step: book, register the ID, check into the chosen
 	room and take the money - the counter flow that used to be four screens.
 
@@ -6246,7 +6360,8 @@ def walk_in(property: str, room_type: str, room: str, check_out_date: str,
 		discount_type=discount_type, discount_value=discount_value,
 		discount_reason=discount_reason, night_discounts=night_discounts,
 		fixed_rate=fixed_rate, supervisor_pin=supervisor_pin,
-		supervisor_user=supervisor_user, discount_note=discount_note)
+		supervisor_user=supervisor_user, discount_note=discount_note,
+		comp_supervisor_user=comp_supervisor_user, comp_supervisor_pin=comp_supervisor_pin)
 	reservation = booked["reservation"]
 	folio_filter = {"reservation": reservation, "folio_type": "Guest"}
 
@@ -7801,12 +7916,18 @@ def _check_night_prices(property: str, room_type: str, check_in_date: str,
 	whose price something else already decides: a voucher, a rate plan (its
 	own or the company's negotiated one), an OTA total or a group block rate."""
 	from kamra.pricing import negotiated_rate_plan, normalize_night_prices, refuse_with_night_prices
+	from kamra.settings import get_setting
 	typed = normalize_night_prices(night_prices, check_in_date, check_out_date)
 	if not typed:
 		return {}
 	if not _can_set_rate():
 		frappe.throw(_("Only a Revenue Manager or Hotel Admin can set nightly prices."),
 		             frappe.PermissionError)
+	if get_setting(property, "rate_plan_required"):
+		frappe.throw(
+			_("Hand-set nightly prices cannot be used while a rate plan is required for this property. "
+			  "Choose a rate plan or apply a discount instead.")
+		)
 	if voucher_code:
 		refuse_with_night_prices(_("a voucher"))
 	if rate_plan:
@@ -8336,6 +8457,61 @@ def discount_governance(property: str, room_type: str | None, rate_plan: str | N
 	out["approver"] = verify_supervisor(property, supervisor_user, supervisor_pin,
 	                                    requester=frappe.session.user)
 	return out
+
+
+def comp_rate_governance(property: str, rate_plan: str | None, *, check: bool = False,
+                         supervisor_user: str | None = None,
+                         supervisor_pin: str | None = None) -> dict:
+	"""A rate plan whose category needs a sign-off (Rate Plan.rate_category
+	and the property's rate_categories: OPERA's Complimentary and House Use
+	by default) is signed off by another supervisor with their PIN whoever
+	books it, as a full comp is (discount_governance): OPERA's comp
+	authorizer. The approvers are the roles in rate_category_approvers.
+	Nobody signs off their own (verify_supervisor), nor a booking on a plan
+	whose category they set (Rate Plan.rate_category_set_by: maker-checker
+	against the configuration change too), and an AI agent can't book one or
+	use a PIN.
+
+	check=False is the preview (get_quote, amend_stay_preview): nothing is
+	refused and no PIN is checked. check=True enforces it and returns the
+	approver (Reservation.govern_rate_category).
+	{rate_category, needs_supervisor, agent, supervisors, approver}"""
+	from kamra.authz import supervisors_for, verify_supervisor
+	from kamra.credit import _is_agent
+	from kamra.room_statistics import category_rules, rate_category
+	rules = category_rules(property)
+	category = rate_category(property, rate_plan)
+	needs = category in rules.sign_off
+	agent = _is_agent()
+	# the booker, and whoever set the plan's category
+	makers = [frappe.session.user,
+	          frappe.db.get_value("Rate Plan", rate_plan, "rate_category_set_by")
+	          if rate_plan and needs else None]
+	out = {"rate_category": category, "needs_supervisor": needs, "agent": agent,
+	       # who can sign it off here (names only); nobody signs their own
+	       "supervisors": supervisors_for(property, roles=rules.approvers, exclude=makers)
+	       if needs and not agent else [],
+	       "approver": None}
+	if not check or not needs:
+		return out
+	why = _("A {0} rate plan").format(_(category))
+	if agent:
+		_refuse_agent_rate(_("{0} needs a manager's sign-off.").format(why))
+	if not (supervisor_user or "").strip():
+		frappe.throw(_("{0} needs a manager's sign-off: a {1} user signs it off with their "
+		               "PIN.").format(why, _(" or ").join(_(r) for r in rules.approvers)),
+		             frappe.PermissionError)
+	out["approver"] = verify_supervisor(property, supervisor_user, supervisor_pin,
+	                                    roles=rules.approvers, requester=makers)
+	return out
+
+
+def _comp_sign_off(doc, comp_supervisor_user=None, comp_supervisor_pin=None) -> None:
+	"""A comp or house-use plan's own sign-off, when the discount's
+	(_discount_sign_off) is by a manager who can't approve the comp
+	(Reservation.govern_rate_category)."""
+	if (comp_supervisor_user or "").strip() or (comp_supervisor_pin or "").strip():
+		doc.flags.kamra_comp_supervisor = {"user": comp_supervisor_user, "pin": comp_supervisor_pin}
 
 
 def _night_rows_as_nights(rows, doc) -> list[dict]:
@@ -8981,7 +9157,8 @@ def movable_rooms(reservation: str, check_in_date: str | None = None,
 @frappe.whitelist()
 @require_roles("Front Desk", "Kamra Agent")
 def amend_stay_preview(reservation: str, check_in_date: str, check_out_date: str,
-                       adults: int | None = None, children: int | None = None):
+                       adults: int | None = None, children: int | None = None,
+                       rate_plan: str | None = None):
 	"""What new dates (or a new party: adults, children) would do to the
 	bill, before anything changes: the current and new totals and the new
 	nightly rates, priced by the engine from today's rules. amend_stay needs
@@ -8991,13 +9168,65 @@ def amend_stay_preview(reservation: str, check_in_date: str, check_out_date: str
 	is what the desk may give back as an allowance) or credited
 	(credit_total, posted by Kamra). A discounted stay also gets the
 	discount rules the amendment will run (discount_governance,
-	needs_supervisor and who can sign it off: supervisors)."""
+	needs_supervisor and who can sign it off: supervisors). A new rate_plan
+	gets comp_governance: a Complimentary or House Use plan's sign-off."""
 	doc = frappe.get_doc("Reservation", reservation)
 	from kamra.crs import assert_property_access
 	assert_property_access(doc.property)
+	plan = _plan_change(doc, rate_plan, check_in_date=check_in_date, check_out_date=check_out_date)
 	pv = _reprice_preview(doc, check_in_date=check_in_date,
-	                      check_out_date=check_out_date, **_party(adults, children))
-	return {**pv, **_repriced_governance(doc)}
+	                      check_out_date=check_out_date, **_party(adults, children), **plan)
+	return {**pv, **_repriced_governance(doc),
+	        "comp_governance": comp_rate_governance(doc.property, plan["rate_plan"])
+	        if plan else None}
+
+
+def _is_tariff_target_plan(doc, plan: str, check_in_date=None, check_out_date=None) -> bool:
+	"""True when `plan` is priced by a contract tariff (via its own or base
+	plan's custom_tariff_price_list, or via the hospitality_tariffs resolver)."""
+	from kamra.channel_manager import _rate_plan_has_tariff
+	if _rate_plan_has_tariff(plan):
+		return True
+	if not doc.room_type:
+		return False
+	from kamra.pricing import ContractRateRefused, billable_children, contract_rate
+	try:
+		return bool(contract_rate(
+			doc.property, doc.room_type, plan,
+			check_in_date or doc.check_in_date, check_out_date or doc.check_out_date,
+			doc.adults, billable_children(doc), doc.get("extra_beds"), company=doc.get("company"),
+		))
+	except ContractRateRefused:
+		return True
+
+
+def _plan_change(doc, rate_plan, check_in_date=None, check_out_date=None) -> dict:
+	"""amend_stay's rate plan change: the plan resolved at the stay's
+	property, when it is another plan than the stay's.
+
+	Contract-tariff stays keep their locked contract rate (hospitality-tariffs@11)
+	and cannot be switched onto or off a tariff plan in Amend stay: keeping the
+	tariff's agreed_rate on another plan would misclassify a paid stay as
+	Complimentary, and switching onto a tariff plan without resolving its
+	contract would fall back to the local card rate."""
+	if rate_plan in (None, ""):
+		return {}
+	from kamra.booking_refs import resolve_rate_plan
+	plan = resolve_rate_plan(doc.property, rate_plan)
+	if not plan or plan == doc.get("rate_plan"):
+		return {}
+	from kamra.channel_manager import _is_tariff_owned_stay
+	if _is_tariff_owned_stay(doc):
+		frappe.throw(
+			_("A contract-tariff stay's rate plan cannot be changed in Amend stay. "
+			  "Apply a reservation discount, set an agreed rate, or rebook on the new plan."),
+			title=_("Rate plan"))
+	if _is_tariff_target_plan(doc, plan, check_in_date=check_in_date, check_out_date=check_out_date):
+		frappe.throw(
+			_("A stay cannot be moved onto a contract-tariff rate plan in Amend stay. "
+			  "Rebook on the tariff plan so its contract rate and currency are resolved."),
+			title=_("Rate plan"))
+	return {"rate_plan": plan}
 
 
 def _party(adults=None, children=None) -> dict:
@@ -9020,7 +9249,8 @@ def _party(adults=None, children=None) -> dict:
 def amend_stay(reservation: str, check_in_date: str, check_out_date: str,
                confirm_price: int = 0, supervisor_user: str | None = None,
                supervisor_pin: str | None = None, adults: int | None = None,
-               children: int | None = None):
+               children: int | None = None, rate_plan: str | None = None,
+               comp_supervisor_user: str | None = None, comp_supervisor_pin: str | None = None):
 	"""Extend / shorten a stay; the overlap guard validates the new window.
 
 	An auto-priced stay is re-quoted for its new dates and its nightly
@@ -9038,38 +9268,59 @@ def amend_stay(reservation: str, check_in_date: str, check_out_date: str,
 	adults / children change the party the same way (the governed party
 	change): the room is re-priced for it - unless the stay holds a fixed
 	rate, which keeps its room rate (OPERA) - and the discount rules run
-	again, with the same sign-off."""
+	again, with the same sign-off.
+
+	rate_plan moves the stay to another plan (OPERA Stay Details), re-priced
+	the same way. A Complimentary or House Use plan is signed off with
+	supervisor_user + supervisor_pin when that manager can approve it, else
+	with comp_supervisor_user + comp_supervisor_pin (comp_rate_governance)."""
 	doc = frappe.get_doc("Reservation", reservation)
 	from kamra.crs import assert_property_access
 	assert_property_access(doc.property)
 	_discount_sign_off(doc, supervisor_user, supervisor_pin)
-	return _amend_dates(doc, check_in_date, check_out_date, confirm_price,
-	                    party=_party(adults, children))
+	_comp_sign_off(doc, comp_supervisor_user, comp_supervisor_pin)
+	return _amend_dates(
+		doc, check_in_date, check_out_date, confirm_price,
+		party=_party(adults, children),
+		plan=_plan_change(doc, rate_plan, check_in_date=check_in_date, check_out_date=check_out_date),
+	)
 
 
 def _amend_dates(doc, check_in_date: str, check_out_date: str,
-                 confirm_price: int = 0, note: str = "", party: dict | None = None) -> dict:
+                 confirm_price: int = 0, note: str = "", party: dict | None = None,
+                 plan: dict | None = None) -> dict:
 	"""amend_stay's writer, for callers that already checked access (the
 	early check-out shortens a stay through it)."""
 	if doc.status not in ("Confirmed", "Checked In"):
 		frappe.throw("Only active reservations can be amended.")
 	old = f"{doc.check_in_date}→{doc.check_out_date}"
 	old_party = f"{cint(doc.adults)}+{cint(doc.children)}"
+	old_plan = doc.get("rate_plan")
 	old_amount = float(doc.amount_after_tax or 0)
 	_require_price_confirmation(
 		_reprice_preview(doc, check_in_date=check_in_date,
-		                 check_out_date=check_out_date, **(party or {})), confirm_price)
+		                 check_out_date=check_out_date, **(party or {}), **(plan or {})),
+		confirm_price)
+	if plan:
+		doc.flags.kamra_rate_plan_change = True
 	doc.save()
 	from kamra.savings import log_action
-	approver = (doc.flags.get("kamra_discount_governance") or {}).get("approver")
+	discount_approver = (doc.flags.get("kamra_discount_governance") or {}).get("approver")
+	# a move to a comp or house-use plan: who signed it off
+	# (Reservation.log_comp_sign_off)
+	comp_approver = doc.flags.get("kamra_comp_approver")
+	approver = discount_approver or comp_approver
 	log_action("amend_stay", "Reservation", doc.name, doc.property,
 	           rationale=f"{old} → {check_in_date}→{check_out_date}; "
 	                     + (f"party {old_party} → {cint(doc.adults)}+{cint(doc.children)}; "
 	                        if party else "")
+	                     + (f"rate plan {old_plan or 'none'} → {doc.rate_plan}; " if plan else "")
 	                     + f"total {old_amount:,.2f} → "
 	                     f"{float(doc.amount_after_tax or 0):,.2f}"
 	                     + (" (new price confirmed)" if cint(confirm_price) else "")
-	                     + (f"; discount signed off by {approver}" if approver else "")
+	                     + (f"; discount signed off by {discount_approver}"
+	                        if discount_approver else "")
+	                     + (f"; rate category signed off by {comp_approver}" if comp_approver else "")
 	                     + (f"; {note}" if note else ""),
 	           **({"approver": approver} if approver else {}))
 	return {"ok": True, "nights": doc.nights,
@@ -9285,7 +9536,8 @@ def _booking_property_policy(property: str) -> dict:
 	prop["deposit_pct"] = float(prop.get("deposit_pct") or 0)
 	prop["sell_message"] = prop.get("sell_message") or ""
 	# drives the dial-code prefix on guest phone inputs
-	prop["country"] = prop.get("country") or "India"
+	from kamra.localization import resolve_country
+	prop["country"] = resolve_country(property, prop)
 	return prop
 
 
@@ -9321,7 +9573,7 @@ def get_quote(property: str, room_type: str, check_in_date: str,
 	checks a PIN: supervisor_user / supervisor_pin are accepted so a booking
 	screen can send one payload, and ignored."""
 	from kamra.booking_refs import resolve_meal_plan, resolve_rate_plan, resolve_room_type
-	from kamra.pricing import ContractRateRefused, quote_with_contract, tax_basis
+	from kamra.pricing import ContractRateRefused, quote_with_contract, resolve_booking_rate_plan, tax_basis
 
 	# agents name things the way staff do ("Deluxe", "breakfast"); resolve
 	# to IDs at this property or refuse with the valid options
@@ -9331,6 +9583,12 @@ def get_quote(property: str, room_type: str, check_in_date: str,
 	typed = _check_night_prices(
 		property, room_type, check_in_date, check_out_date, night_prices,
 		voucher_code=voucher_code, rate_plan=rate_plan, company=company)
+	if not typed:
+		rate_plan = resolve_booking_rate_plan(
+			property, room_type, check_in_date, check_out_date,
+			rate_plan=rate_plan, company=company,
+			adults=int(adults), children=int(children), extra_beds=extra_beds,
+		)
 	try:
 		q = quote_with_contract(property, room_type, check_in_date, check_out_date,
 		                        int(adults), int(children), meal_plan or None,
@@ -9348,6 +9606,8 @@ def get_quote(property: str, room_type: str, check_in_date: str,
 		q["discount_governance"] = discount_governance(
 			property, room_type, q.get("rate_plan"), q["nightly"],
 			reason_code=discount_reason, fixed_rate=fixed_rate)
+	# a Complimentary or House Use plan: who signs the booking off
+	q["comp_governance"] = comp_rate_governance(property, q.get("rate_plan") or rate_plan)
 	q["tax_basis"] = tax_basis(property)
 	q["cancellation"] = cancellation_outlook(property, room_type, check_in_date, check_out_date)
 	return q
@@ -9727,7 +9987,9 @@ def create_booking(property: str, room_type: str, check_in_date: str,
                    fixed_rate: int = 0,
                    supervisor_pin: str | None = None,
                    supervisor_user: str | None = None,
-                   discount_note: str | None = None):
+                   discount_note: str | None = None,
+                   comp_supervisor_user: str | None = None,
+                   comp_supervisor_pin: str | None = None):
 	"""One-call booking: attach to an existing guest profile when given,
 	else reuse a profile whose phone and full name both match (a
 	blacklisted phone always resolves to its profile) / create one.
@@ -9829,11 +10091,20 @@ def create_booking(property: str, room_type: str, check_in_date: str,
 			                    guest_name=guest_name, phone=phone)
 			return _booking_replay(existing)
 
-	from kamra.pricing import negotiated_rate_plan
+	from kamra.group_blocks import group_rate
+	from kamra.pricing import resolve_booking_rate_plan
 	from kamra.settings import get_setting
-	rate_plan = rate_plan or negotiated_rate_plan(property, company)
-	if get_setting(property, "rate_plan_required") and not rate_plan:
-		frappe.throw(_("A rate plan is required for this property.") + " (KMR-RATE-REQ-001)")
+	has_block_rate = bool(group_booking and float(group_rate(group_booking, room_type) or 0) > 0)
+	parsed_stay = (
+		frappe.parse_json(stay_details) if isinstance(stay_details, str) else stay_details
+	)
+	extra_beds_count = cint((parsed_stay or {}).get("extra_beds")) if isinstance(parsed_stay, dict) else 0
+	rate_plan = resolve_booking_rate_plan(
+		property, room_type, check_in_date, check_out_date,
+		rate_plan=rate_plan, company=company, group_booking=group_booking,
+		adults=int(adults), children=int(children), extra_beds=extra_beds_count,
+		check_availability=not has_block_rate,
+	)
 
 	# An agent that retries a tool call (timeout, lost response, a model
 	# that repeats itself) must not book the guest twice. Without a key,
@@ -9994,6 +10265,11 @@ def create_booking(property: str, room_type: str, check_in_date: str,
 	discount_request = dict(supervisor_user=supervisor_user, supervisor_pin=supervisor_pin)
 	if disc:
 		_set_discount_inputs(doc, disc, discount_reason, fixed_rate, **discount_request)
+	# a Complimentary or House Use plan is signed off on the insert too
+	# (Reservation.govern_rate_category): by the discount's approver when
+	# their roles cover it, else by comp_supervisor_user with their PIN
+	_discount_sign_off(doc, supervisor_user, supervisor_pin)
+	_comp_sign_off(doc, comp_supervisor_user, comp_supervisor_pin)
 
 	# extras chosen at booking - priced from the Experience, posted to the
 	# folio the moment it opens
@@ -10118,6 +10394,8 @@ def create_booking(property: str, room_type: str, check_in_date: str,
 				doc.flags.kamra_agreed_rate_override = True
 			if disc:
 				_set_discount_inputs(doc, disc, discount_reason, fixed_rate, **discount_request)
+			_discount_sign_off(doc, supervisor_user, supervisor_pin)
+			_comp_sign_off(doc, comp_supervisor_user, comp_supervisor_pin)
 	if via:
 		set_ota_commission(doc, ota_commission_pct)
 	if typed:
@@ -10218,8 +10496,11 @@ def create_group_booking(property: str, group_name: str, check_in_date: str,
                          ota_total: float = 0,
                          ota_commission_pct: float | None = None,
                          group_type: str | None = None,
+                         booking_type: str | None = None,
                          master_index: int | None = None,
-                         master_pays: str | None = None):
+                         master_pays: str | None = None,
+                         comp_supervisor_user: str | None = None,
+                         comp_supervisor_pin: str | None = None):
 	"""Create a Group Booking plus one reservation per requested room.
 	`rooms` = [{"room_type": <name>, "count": 2, "room": <optional>,
 	"guest_name": <optional>, "night_prices": <optional>}, ...] (JSON string
@@ -10235,7 +10516,10 @@ def create_group_booking(property: str, group_name: str, check_in_date: str,
 	Booked via an OTA (see create_booking): every room carries the site and
 	the one OTA reference, and the sold total (`ota_total`, tax included) is
 	split across the rooms in proportion to their rate-card prices, each
-	room locked to its share."""
+	room locked to its share.
+
+	A Complimentary or House Use plan is signed off once for every room:
+	comp_supervisor_user + comp_supervisor_pin (create_booking)."""
 	if isinstance(rooms, str):
 		rooms = json.loads(rooms)
 	lines = [spec for spec in rooms for _n in range(int(spec.get("count", 1)))]
@@ -10247,6 +10531,11 @@ def create_group_booking(property: str, group_name: str, check_in_date: str,
 
 	ota_ref = (ota_ref or "").strip() or None
 	_refuse_taken_ota_ref(property, ota_ref)  # before the group is made
+	from kamra.booking_refs import resolve_rate_plan
+	from kamra.pricing import resolve_group_rate_plan
+	rate_plan = resolve_rate_plan(property, rate_plan)
+	if not any(spec.get("night_prices") for spec in lines):
+		rate_plan = resolve_group_rate_plan(property, rate_plan=rate_plan, company=company)
 	shares = [0.0] * len(lines)
 	total = float(ota_total or 0) if booked_via else 0
 	if total > 0 and lines:
@@ -10284,6 +10573,7 @@ def create_group_booking(property: str, group_name: str, check_in_date: str,
 		"property": property,
 		"group_name": group_name,
 		"company": company or None,
+		"rate_plan": rate_plan or None,
 		"group_type": group_type or None,
 		"check_in_date": check_in_date,
 		"check_out_date": check_out_date,
@@ -10306,7 +10596,7 @@ def create_group_booking(property: str, group_name: str, check_in_date: str,
 				children=int(spec.get("children", 0)),
 				meal_plan=spec.get("meal_plan") or meal_plan,
 				rate_plan=rate_plan,
-				booking_type="Corporate" if company else "Group",
+				booking_type=booking_type or ("Corporate" if company else "Group"),
 				company=company,
 				group_booking=group.name,
 				booked_via=booked_via,
@@ -10314,6 +10604,8 @@ def create_group_booking(property: str, group_name: str, check_in_date: str,
 				ota_total=share,
 				ota_commission_pct=ota_commission_pct,
 				night_prices=spec.get("night_prices"),
+				comp_supervisor_user=comp_supervisor_user,
+				comp_supervisor_pin=comp_supervisor_pin,
 			)
 			created.append(res["reservation"])
 			if main is None and i >= int(master_index or 0):
@@ -10405,7 +10697,10 @@ def create_group_with_rooming_list(property: str, group_name: str,
                                    master_pays: str | None = None,
                                    attrition_pct: float = 0,
                                    deposit_due: float = 0,
-                                   quotation_only: int = 0):
+                                   quotation_only: int = 0,
+                                   rate_plan: str | None = None,
+                                   comp_supervisor_user: str | None = None,
+                                   comp_supervisor_pin: str | None = None):
 	"""The desk's group flow: group -> room blocks -> rooming list ->
 	reservations. A Confirmed group holds `blocks` ([{room_type,
 	rooms_blocked, block_rate, nightly_counts}]) off sale - nightly_counts
@@ -10497,12 +10792,31 @@ def create_group_with_rooming_list(property: str, group_name: str,
 	if with_master and not guests and not quote_only:
 		frappe.throw(_("Name the main room's guest in the rooming list."))
 
+	from kamra.booking_refs import resolve_rate_plan
+	from kamra.pricing import resolve_group_rate_plan
+	rate_plan = resolve_rate_plan(property, rate_plan)
+	rate_plan = resolve_group_rate_plan(property, rate_plan=rate_plan, company=company)
+
+	comp_approver = None
+	if not quote_only and guests:
+		comp_plan = rate_plan
+		if not comp_plan and company:
+			from kamra.pricing import negotiated_rate_plan
+			comp_plan = negotiated_rate_plan(property, company)
+		if comp_plan:
+			comp_approver = comp_rate_governance(
+				property, comp_plan, check=True,
+				supervisor_user=comp_supervisor_user,
+				supervisor_pin=comp_supervisor_pin,
+			).get("approver")
+
 	blocked = {rt: max(c.values()) for rt, c in counts.items()}
 	group = frappe.get_doc({
 		"doctype": "Group Booking",
 		"property": property,
 		"group_name": group_name,
 		"company": company or None,
+		"rate_plan": rate_plan or None,
 		"group_type": group_type or None,
 		"check_in_date": check_in_date,
 		"check_out_date": check_out_date,
@@ -10535,8 +10849,11 @@ def create_group_with_rooming_list(property: str, group_name: str,
 				# the guest and the others named with them, as far as the room sleeps
 				adults=cint(gst.get("adults")) or min(1 + len(others), capacity),
 				children=cint(gst.get("children")),
+				rate_plan=gst.get("rate_plan") or rate_plan or None,
 				booking_type="Corporate" if company else "Group",
-				company=company, group_booking=group.name, source="Manual")
+				company=company, group_booking=group.name, source="Manual",
+				comp_supervisor_user=comp_supervisor_user,
+				comp_supervisor_pin=comp_supervisor_pin)
 		except Exception as e:
 			frappe.db.rollback(save_point=sp)
 			frappe.clear_messages()
@@ -10568,7 +10885,8 @@ def create_group_with_rooming_list(property: str, group_name: str,
 	                      if quote_only else
 	                      f"{group_name}: {sum(blocked.values())} rooms blocked, "
 	                      f"{len(created)} named on the rooming list"),
-	           channel=agent_channel() or "Desk")
+	           channel=agent_channel() or "Desk",
+	           **({"approver": comp_approver} if comp_approver else {}))
 	return {"group_booking": group.name, "status": group.status,
 	        "created": created, "skipped": skipped, "warnings": warnings,
 	        "blocked": sum(blocked.values()),
@@ -10843,16 +11161,17 @@ def verify_cashier_pin(property: str, pin: str):
 # ---------------------------------------------------------------------------
 
 def _block_prices(property: str, check_in_date: str, check_out_date: str,
-                  blocks) -> dict:
+                  blocks, company: str | None = None) -> dict:
 	"""What a room block costs: per room type, its rooms per night × the
 	night's rate (the group rate when set, else the rate-card price for 2
-	adults, room only) plus room tax. The same numbers drive the booking
-	screen, the group's totals and the quotation."""
+	adults, room only, on the company's negotiated rate plan when it has
+	one: the plan its stays are booked on) plus room tax. The same numbers
+	drive the booking screen, the group's totals and the quotation."""
 	from decimal import Decimal
 
 	from kamra.booking_refs import resolve_room_type
 	from kamra.group_blocks import group_nights, parse_nightly
-	from kamra.pricing import quote, room_gst_rate
+	from kamra.pricing import apply_rate_plan, negotiated_rate_plan, quote, room_gst_rate
 	nights = group_nights(check_in_date, check_out_date)
 	rows, before, tax, levy = [], 0.0, 0.0, 0.0
 	for b in blocks or []:
@@ -10867,8 +11186,14 @@ def _block_prices(property: str, check_in_date: str, check_out_date: str,
 		levy_fixed = max(flt(frappe.db.get_value("Property", property, "room_levy_per_night")), 0.0)
 		try:
 			q = quote(property, rt, check_in_date, check_out_date,
-			          min(2, cint(rt_doc.adults_capacity) or 2), 0, agreed_rate=rate)
-			per = {str(getdate(n["date"])): float(n["rate"]) for n in q["nightly"]}
+			          min(2, cint(rt_doc.adults_capacity) or 2), 0, agreed_rate=rate,
+			          company=company)
+			# the quote's nights are the plan-free card; its room total is
+			# the plan's. Each night carries the plan's share, as the folio
+			# posts it (rate_plan_factor).
+			card = sum(float(n["rate"]) for n in q["nightly"])
+			factor = float(q["room_total"]) / card if card else 1.0
+			per = {str(getdate(n["date"])): float(n["rate"]) * factor for n in q["nightly"]}
 			room_total = sum(per.values())
 			billable_q = max(len(q["nightly"]), 1)
 			pct_levy = max(flt(q.get("room_levy")) - levy_fixed * billable_q, 0.0)
@@ -10877,8 +11202,12 @@ def _block_prices(property: str, check_in_date: str, check_out_date: str,
 			tax_share = (flt(q["amount_after_tax"]) - room_total - flt(q.get("room_levy"))) \
 				/ room_total if room_total else 0
 		except frappe.ValidationError:
-			# a closed or restricted date: show the card price, tax at its slab
+			# a closed or restricted date: show the card price (on the
+			# company's plan, as quote prices it), tax at its slab
 			base = rate or flt(rt_doc.base_price)
+			plan = negotiated_rate_plan(property, company) if company and not rate else None
+			if plan and nights:
+				base = float(apply_rate_plan(plan, Decimal(str(base * len(nights))), nights=len(nights))) / len(nights)
 			per = {d: base for d in nights}
 			levy_share = 0
 			tax_share = float(room_gst_rate(property, rt_doc, Decimal(str(base)))) / 100
@@ -10906,13 +11235,16 @@ def _block_prices(property: str, check_in_date: str, check_out_date: str,
 @frappe.whitelist()
 @require_roles("Front Desk", "Revenue Manager", "Kamra Agent")
 def group_price_preview(property: str, check_in_date: str, check_out_date: str,
-                        blocks):
+                        blocks, company: str | None = None):
 	"""The price of a block before it is booked (New group booking)."""
 	from kamra.crs import assert_property_access
+	from kamra.pricing import negotiated_rate_plan
 	assert_property_access(property)
 	blocks = frappe.parse_json(blocks) if isinstance(blocks, str) else blocks
-	return {**_block_prices(property, check_in_date, check_out_date, blocks),
-	        "can_set_rate": _can_set_rate()}
+	comp_plan = negotiated_rate_plan(property, company) if company else None
+	return {**_block_prices(property, check_in_date, check_out_date, blocks, company=company),
+	        "can_set_rate": _can_set_rate(),
+	        "comp_governance": comp_rate_governance(property, comp_plan)}
 
 
 @frappe.whitelist()
@@ -10931,7 +11263,7 @@ def group_quotation(group_booking: str):
 	prices = _block_prices(gb.property, str(gb.check_in_date), str(gb.check_out_date), [
 		{"room_type": b.room_type, "rooms_blocked": b.rooms_blocked,
 		 "block_rate": b.block_rate, "nightly_counts": b.get("nightly_counts")}
-		for b in gb.blocks])
+		for b in gb.blocks], company=gb.get("company"))
 	contact = None
 	if gb.get("master_reservation"):
 		contact = frappe.db.get_value("Reservation", gb.master_reservation, "guest_name")
@@ -11331,7 +11663,7 @@ def group_detail(group_booking: str):
 	prices = _block_prices(gb.property, str(gb.check_in_date), str(gb.check_out_date), [
 		{"room_type": b.room_type, "rooms_blocked": b.rooms_blocked,
 		 "block_rate": b.block_rate, "nightly_counts": b.get("nightly_counts")}
-		for b in gb.blocks])
+		for b in gb.blocks], company=gb.get("company"))
 	rooming = frappe.get_all(
 		"Reservation",
 		filters={"group_booking": gb.name},
@@ -11385,8 +11717,11 @@ def group_detail(group_booking: str):
 	rooms_total = sum(max(per_type.get(t, 0), live.get(t, 0))
 	                  for t in set(per_type) | set(live))
 	from kamra.business_date import get_business_date
+	from kamra.pricing import negotiated_rate_plan
+	comp_plan = negotiated_rate_plan(gb.property, gb.company) if gb.company else None
 	return {
 		"business_date": get_business_date(gb.property),
+		"comp_governance": comp_rate_governance(gb.property, comp_plan),
 		"group": {
 			"rooms_total": rooms_total,
 			"name": gb.name, "group_name": gb.group_name,
@@ -11733,11 +12068,15 @@ def save_group_blocks(group_booking: str, blocks, cutoff_date: str | None = None
 @require_roles("Front Desk", "Kamra Agent")
 def pickup_group_room(group_booking: str, room_type: str, guest_name: str,
                       phone: str | None = None, adults: int = 2,
-                      children: int = 0, idempotency_key: str | None = None):
+                      children: int = 0, idempotency_key: str | None = None,
+                      rate_plan: str | None = None,
+                      comp_supervisor_user: str | None = None,
+                      comp_supervisor_pin: str | None = None):
 	"""Name a guest into the block: creates a reservation on the group's
 	dates against its held inventory. Every call books a room (a block is
 	several identical rooms for one party); pass idempotency_key to make a
-	retry safe."""
+	retry safe. A company block whose negotiated plan needs a comp sign-off
+	takes comp_supervisor_user + comp_supervisor_pin."""
 	gb = frappe.get_doc("Group Booking", group_booking)
 	out = create_booking(
 		property=gb.property, room_type=room_type,
@@ -11745,15 +12084,24 @@ def pickup_group_room(group_booking: str, room_type: str, guest_name: str,
 		check_out_date=str(gb.check_out_date),
 		guest_name=guest_name, phone=phone,
 		adults=int(adults), children=int(children),
+		rate_plan=rate_plan or gb.get("rate_plan") or None,
 		booking_type="Group", company=gb.company,
 		group_booking=gb.name, source="Manual",
-		idempotency_key=idempotency_key)
+		idempotency_key=idempotency_key,
+		comp_supervisor_user=comp_supervisor_user,
+		comp_supervisor_pin=comp_supervisor_pin)
 	if not out.get("idempotent_replay"):
 		from kamra.savings import log_action
+		approver = frappe.db.get_value(
+			"Agent Action Log",
+			{"action_type": "comp_rate_sign_off", "reference_name": out["reservation"]},
+			"approver",
+		)
 		log_action("group_pickup", "Group Booking", gb.name, gb.property,
 		           rationale=f"{guest_name} picked up a {room_type.split('-')[-1]}"
 		                     f" from block {gb.group_name}",
-		           channel=agent_channel() or "Desk")
+		           channel=agent_channel() or "Desk",
+		           **({"approver": approver} if approver else {}))
 	return out
 
 
@@ -11768,7 +12116,8 @@ def create_group_block(property: str, group_name: str, check_in_date: str,
                        event_date: str | None = None,
                        attendees: int = 0,
                        customer_phone: str | None = None,
-                       notes: str | None = None):
+                       notes: str | None = None,
+                       rate_plan: str | None = None):
 	"""One call drafts the whole piece of MICE business: the group, its room
 	block, and (optionally) the banquet event - the agent wedge: an inquiry
 	agent turns "30 rooms + a 200-pax wedding on Dec 12" into a proposal."""
@@ -11777,18 +12126,22 @@ def create_group_block(property: str, group_name: str, check_in_date: str,
 	if any(flt(b.get("block_rate")) > 0 for b in blocks or []) and not _can_set_rate():
 		frappe.throw(_("Only a Revenue Manager or Hotel Admin can set a group rate."),
 		             frappe.PermissionError)
+	from kamra.booking_refs import resolve_rate_plan, resolve_room_type
+	from kamra.pricing import resolve_group_rate_plan
+	rate_plan = resolve_rate_plan(property, rate_plan)
+	rate_plan = resolve_group_rate_plan(property, rate_plan=rate_plan, company=company)
 	gb = frappe.get_doc({
 		"doctype": "Group Booking",
 		"property": property,
 		"group_name": group_name,
 		"company": company,
+		"rate_plan": rate_plan or None,
 		"check_in_date": check_in_date,
 		"check_out_date": check_out_date,
 		"cutoff_date": cutoff_date,
 		"status": "Open",
 		"notes": notes,
 	})
-	from kamra.booking_refs import resolve_room_type
 	for b in blocks or []:
 		gb.append("blocks", {
 			# agents name room types the way staff do ("Deluxe", "DLX")
@@ -11926,6 +12279,7 @@ def property_locale(property: str):
 	localization pack. Drives the frontend's money formatting and tax dropdowns
 	so no screen hardcodes ₹ or GST %. `integrations` says which country
 	integrations (gateways, tax return, ID checks) this property has."""
+	from kamra.erp_bridge import erp_determines_tax
 	from kamra.localization import front_desk_vocabulary, integrations, pack_for, services_tax_rate, tender_modes
 	from kamra.masters import desk_vocabulary
 	from kamra.pricing import tax_basis
@@ -11943,15 +12297,27 @@ def property_locale(property: str):
 			date_fmt = candidate if isinstance(candidate, str) else ""
 		except Exception:
 			date_fmt = ""
-	return {**loc, **front_desk_vocabulary(pack, property),
+	from kamra.cashier import cashier_allowed_modes
+	vocab = front_desk_vocabulary(pack, property)
+	t_modes = tender_modes(property)
+	allowed = cashier_allowed_modes(property)
+	if allowed is not None:
+		allowed_set = set(allowed)
+		vocab["payment_modes"] = [m for m in vocab["payment_modes"] if m in allowed_set]
+		vocab["outlet_payment_modes"] = [m for m in vocab["outlet_payment_modes"] if m in allowed_set]
+		if t_modes is not None:
+			t_modes = [row for row in t_modes if row["mode"] in allowed_set]
+	return {**loc, **vocab,
+	        "cashier_allowed_modes": allowed,
 	        "date_format": date_fmt,
 	        # the hotel's own Market codes, booker relations and Cancellation
 	        # Reasons, [{value, label}], for the booking and cancel screens
 	        **desk_vocabulary(),
 	        "integrations": integrations(pack),
-	        "tender_modes": tender_modes(property),
+	        "tender_modes": t_modes,
 	        "fx_currencies": list_setting(property, "fx_currencies"),
 	        "tax_basis": tax_basis(property),
+	        "erp_tax_managed": bool(erp_determines_tax()),
 	        # the rate the server puts on any food & beverage charge, whatever
 	        # rate the caller picked (_resolve_charge_gst) - so the folio's
 	        # charge form shows the rate that will apply instead of a choice

@@ -1643,6 +1643,7 @@ TOOLS: tuple[ToolSpec, ...] = (
 			"company": _p("string"),
 			"group_type": _p("string", enum=["Corporate", "Wedding", "Event",
 			                                 "Tour", "Other"]),
+			"booking_type": _p("string"),
 			"master_index": _p("integer"),
 			"master_pays": _p("string"),
 			"meal_plan": _p("string"),

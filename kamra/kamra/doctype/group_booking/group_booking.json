@@ -11,6 +11,7 @@
   "property",
   "group_name",
   "company",
+  "rate_plan",
   "group_type",
   "master_reservation",
   "master_pays",
@@ -48,6 +49,13 @@
    "fieldtype": "Link",
    "label": "Company",
    "options": "Corporate Account"
+  },
+  {
+   "description": "Rate plan applied to rooms picked up from this block",
+   "fieldname": "rate_plan",
+   "fieldtype": "Link",
+   "label": "Rate Plan",
+   "options": "Rate Plan"
   },
   {
    "fieldname": "group_type",

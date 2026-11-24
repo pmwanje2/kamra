@@ -18,6 +18,7 @@ def execute():
 			"property_name": P2,
 			"city": "Gokarna",
 			"state": "Karnataka",
+			"country": "India",
 			"phone": "+91 83 4000 2000",
 			"email": "beach@kamra.local",
 			"gstin": "29ABCDE1234F2Z4",

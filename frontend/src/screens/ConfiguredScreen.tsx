@@ -4,6 +4,7 @@ import { ManageTariffsLink } from "../components/ManageTariffsLink"
 import { call, getCurrentProperty } from "../lib/api"
 import { useLocale } from "../lib/money"
 import { listResource } from "../lib/resource"
+import { notifyTariffsChanged, onSettingsChanged, onTariffsChanged } from "../lib/tariffSync"
 import * as configs from "./configs"
 
 export type ConfigName =
@@ -21,10 +22,16 @@ export default function ConfiguredScreen({ config }: { config: ConfigName }) {
 }
 
 function RoomTypesScreen() {
-  const { currency, tax_basis } = useLocale()
+  const { currency, tax_basis, erp_tax_managed } = useLocale()
   const property = getCurrentProperty()
   const [summary, setSummary] = useState<configs.RoomTypesSummary | null>(null)
   const [rev, setRev] = useState(0)
+  useEffect(() => {
+    const bump = () => setRev((v) => v + 1)
+    const offTariffs = onTariffsChanged(bump)
+    const offSettings = onSettingsChanged(bump)
+    return () => { offTariffs(); offSettings() }
+  }, [])
   useEffect(() => {
     if (!property) {
       setSummary(null)
@@ -38,7 +45,7 @@ function RoomTypesScreen() {
   }, [property, rev])
   return (
     <ResourceScreen
-      config={configs.roomTypesConfig(currency, tax_basis, summary)}
+      config={configs.roomTypesConfig(currency, tax_basis, summary, erp_tax_managed)}
       onReload={() => setRev((v) => v + 1)}
     />
   )
@@ -152,7 +159,10 @@ function RatePlansScreen() {
     [propertyCurrency, tariffCurrencyFor, baseCurrencyFor],
   )
 
-  const handleSaved = useCallback(() => setReloadTick((n) => n + 1), [])
+  const handleSaved = useCallback(() => {
+    setReloadTick((n) => n + 1)
+    notifyTariffsChanged(property)
+  }, [property])
 
   return <ResourceScreen config={config} headerAction={<ManageTariffsLink />} onSaved={handleSaved} />
 }

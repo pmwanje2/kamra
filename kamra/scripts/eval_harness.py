@@ -67,9 +67,13 @@ def setup():
 	if not frappe.db.exists("Property", P):
 		frappe.get_doc({
 			"doctype": "Property", "property_name": P, "city": "Testville",
-			"gst_mode": "Slab", "gst_slab_threshold": 7500,
+			"country": "India", "gst_mode": "Slab", "gst_slab_threshold": 7500,
 			"gst_rate_low": 5, "gst_rate_high": 18,
 		}).insert(ignore_permissions=True)
+	# Legacy eval checks exercise card-rate pricing and hand-set nights without a rate plan
+	from kamra.settings import clear_cache, write_kv
+	write_kv(P, "rate_plan_required", 0)
+	clear_cache(P)
 	# a demo-seeded site pins these personas to its demo hotel; property
 	# scope is enforced now, so give them the eval property too (rolled
 	# back with everything else)
@@ -1483,6 +1487,9 @@ def t32():
 			"doctype": "Property", "property_name": P2, "city": "Testville",
 			"gst_mode": "Fixed", "gst_rate_low": 5, "gst_rate_high": 5,
 		}).insert(ignore_permissions=True)
+	from kamra.settings import clear_cache, write_kv
+	write_kv(P2, "rate_plan_required", 0)
+	clear_cache(P2)
 	rt = frappe.get_doc({
 		"doctype": "Room Type", "property": P2, "room_type_code": "YLD",
 		"room_type_name": "Yield Room", "base_price": 4000,
@@ -3166,6 +3173,7 @@ def t53():
 
 	# nosemgrep: frappe-monkey-patching-not-allowed -- offline eval harness stubs the outbound transport for tests; not a production code path
 	from kamra.channels import channex
+	from kamra.pricing import property_currency
 
 	conn = frappe.get_doc({
 		"doctype": "Channel Manager Connection", "property": P,
@@ -3173,10 +3181,12 @@ def t53():
 		"external_property_id": "chx-prop-1", "webhook_secret": "eval-hook",
 		"sync_days": 5,
 	}).insert(ignore_permissions=True)
+	# the Channex rate plan sells in the property's currency, as
+	# import_room_mappings records it: an unknown one is never sent
 	frappe.get_doc({
 		"doctype": "Channel Room Mapping", "connection": conn.name,
 		"room_type": RT, "external_room_id": "chx-room-1",
-		"external_rate_id": "chx-rate-1",
+		"external_rate_id": "chx-rate-1", "external_currency": property_currency(P),
 	}).insert(ignore_permissions=True)
 
 	snap = cm.ari_snapshot(P, conn.name, days=3)
@@ -4583,6 +4593,9 @@ def t94():
 		"gst_mode": "Slab", "gst_slab_threshold": 7500,
 		"gst_rate_low": 5, "gst_rate_high": 18,
 	}).insert(ignore_permissions=True)
+	from kamra.settings import clear_cache, write_kv
+	write_kv(VP, "rate_plan_required", 0)
+	clear_cache(VP)
 	villa = frappe.get_doc({
 		"doctype": "Room Type", "property": VP, "room_type_code": "EVV",
 		"room_type_name": "Eval Whole Villa", "base_price": 20000,
@@ -5044,6 +5057,9 @@ def _villa_property(name, code):
 		"gst_mode": "Slab", "gst_slab_threshold": 7500,
 		"gst_rate_low": 5, "gst_rate_high": 18,
 	}).insert(ignore_permissions=True)
+	from kamra.settings import clear_cache, write_kv
+	write_kv(name, "rate_plan_required", 0)
+	clear_cache(name)
 	villa = frappe.get_doc({
 		"doctype": "Room Type", "property": name, "room_type_code": code,
 		"room_type_name": f"Eval Villa {code}", "base_price": 20000,
@@ -5283,7 +5299,7 @@ def t142():
 	frappe.flags.in_import = True  # what the old demo reset left on
 	try:
 		prop = frappe.get_doc({"doctype": "Property", "property_name": "EVAL Blank Seed",
-		                       "city": "Testville"}).insert(ignore_permissions=True)
+		                       "city": "Testville", "country": "India"}).insert(ignore_permissions=True)
 		rt = frappe.get_doc({"doctype": "Room Type", "property": prop.name,
 		                     "room_type_code": "BLK", "room_type_name": "Blank",
 		                     "base_price": 3000}).insert(ignore_permissions=True)
@@ -5781,6 +5797,10 @@ def _inv_property(name, code, rooms=2, with_villa=True, mode=None):
 		"gst_rate_low": 5, "gst_rate_high": 18,
 		**({"booking_mode": mode} if mode else {}),
 	}).insert(ignore_permissions=True)
+	# Legacy inventory / request-to-book / group-block eval checks book without a rate plan
+	from kamra.settings import clear_cache, write_kv
+	write_kv(name, "rate_plan_required", 0)
+	clear_cache(name)
 	bed = frappe.get_doc({
 		"doctype": "Room Type", "property": name, "room_type_code": code,
 		"room_type_name": f"Eval Bed {code}", "base_price": 5000,
@@ -7959,6 +7979,9 @@ def _other_property(name):
 			"gst_mode": "Slab", "gst_slab_threshold": 7500,
 			"gst_rate_low": 5, "gst_rate_high": 18,
 		}).insert(ignore_permissions=True)
+	from kamra.settings import clear_cache, write_kv
+	write_kv(name, "rate_plan_required", 0)
+	clear_cache(name)
 	return name
 
 
@@ -8234,7 +8257,7 @@ def _golive_property():
 	if not frappe.db.exists("Property", GL):
 		frappe.get_doc({
 			"doctype": "Property", "property_name": GL, "city": "Testville",
-			"gst_mode": "Fixed", "gst_rate_low": 5, "gst_rate_high": 5,
+			"country": "India", "gst_mode": "Fixed", "gst_rate_low": 5, "gst_rate_high": 5,
 		}).insert(ignore_permissions=True)
 	frappe.db.set_value("Property", GL, {"cleaning_fee": 750,
 	                                     "business_date": nowdate()})
@@ -10771,6 +10794,9 @@ def t_concurrency_guards():
 			prop = frappe.get_doc({
 				"doctype": "Property", "property_name": "Eval Race Hotel",
 			}).insert(ignore_permissions=True).name
+			from kamra.settings import clear_cache, write_kv
+			write_kv(prop, "rate_plan_required", 0)
+			clear_cache(prop)
 			rt = frappe.get_doc({
 				"doctype": "Room Type", "property": prop, "room_type_code": "STD",
 				"room_type_name": "Standard", "base_price": 1000,

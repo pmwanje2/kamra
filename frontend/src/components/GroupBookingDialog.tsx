@@ -13,6 +13,7 @@ import { cur, moneyLocale } from "../lib/money"
 import { useT } from "../lib/i18n"
 import { Button } from "./ui/button"
 import PhoneInput from "./PhoneInput"
+import SupervisorSignOff from "./SupervisorSignOff"
 
 /** New group booking (corporate, wedding, event), in the order the desk
  *  works a group: the group, its room blocks, the rooming list, then
@@ -46,6 +47,12 @@ interface Prices {
   levy: number
   total: number
   can_set_rate: boolean
+  comp_governance?: {
+    rate_category: string
+    needs_supervisor: boolean
+    agent: boolean
+    supervisors: { user: string; full_name: string }[]
+  }
 }
 interface Result {
   group_booking: string
@@ -143,6 +150,8 @@ export default function GroupBookingDialog(props: {
   const fileRef = useRef<HTMLInputElement>(null)
   const [result, setResult] = useState<Result | null>(null)
   const [prices, setPrices] = useState<Prices | null>(null)
+  const [compSupervisor, setCompSupervisor] = useState("")
+  const [compPin, setCompPin] = useState("")
   const [ownDates, setOwnDates] = useState(false)
   const [contract, setContract] = useState({ deposit_due: "", attrition_pct: "", quotation_only: false })
   // the less common choices (group rate, rooms per night, deposit, shortfall) stay folded away
@@ -174,7 +183,13 @@ export default function GroupBookingDialog(props: {
       block_rate: Number(b.rate) || 0,
       nightly_counts: perNight(b) ? Object.fromEntries(nights.map((d) => [d, b.nightly?.[d] ?? 0])) : undefined,
     }))
-  const blockKey = JSON.stringify([blockPayload, g.check_in_date, g.check_out_date])
+  const byMain = g.payer === "main"
+  const blockKey = JSON.stringify([blockPayload, g.check_in_date, g.check_out_date, byMain ? "" : g.company])
+
+  useEffect(() => {
+    setCompSupervisor("")
+    setCompPin("")
+  }, [g.payer, g.company])
 
   // what the block costs, priced by the server as the quotation will be
   useEffect(() => {
@@ -185,6 +200,7 @@ export default function GroupBookingDialog(props: {
         check_in_date: g.check_in_date,
         check_out_date: g.check_out_date,
         blocks: blockPayload,
+        ...(byMain || !g.company ? {} : { company: g.company }),
       }).then(setPrices).catch(() => setPrices(null))
     }, 400)
     return () => clearTimeout(timer)
@@ -209,7 +225,6 @@ export default function GroupBookingDialog(props: {
 
   const typeName = (rt: string) =>
     options?.room_types.find((x) => x.name === rt)?.room_type_name ?? rt
-  const byMain = g.payer === "main"
 
   const blockedByType: Record<string, number> = {}
   for (const b of blocks) {
@@ -237,6 +252,9 @@ export default function GroupBookingDialog(props: {
   const slots = Object.entries(blockedByType).flatMap(([rt, n]) =>
     Array.from({ length: n }, (_, k) => ({ key: `${rt}#${k}`, room_type: rt, auto: autoDates(rt, k) })))
   const named = slots.filter((s) => rooming[s.key]?.guest_name.trim())
+  const compGov = !byMain && named.length > 0 ? prices?.comp_governance : undefined
+  const needsCompSignOff = !!compGov?.needs_supervisor
+  const compSignOffMissing = needsCompSignOff && (!compSupervisor || !compPin.trim())
   // a type whose rooms differ per night is checked night by night on save
   const shortTypes = Object.entries(blockedByType).filter(
     ([rt, n]) => free[rt] !== undefined && n > free[rt]
@@ -367,6 +385,9 @@ export default function GroupBookingDialog(props: {
         phone: g.phone || undefined,
         company: byMain ? undefined : g.company,
         ...(byMain ? { master_index: Math.max(0, masterIndex), master_pays: pays } : {}),
+        ...(!quotationOnly && needsCompSignOff
+          ? { comp_supervisor_user: compSupervisor, comp_supervisor_pin: compPin }
+          : {}),
       })
       setResult(out)
     } catch (e) {
@@ -775,6 +796,18 @@ export default function GroupBookingDialog(props: {
                   <div className="text-zinc-600">{t("Main room")}: {rooming[masterKey].guest_name}</div>
                 )}
               </div>
+              {needsCompSignOff && compGov && (
+                <SupervisorSignOff
+                  reason={t("A {category} rate plan needs a manager's sign-off.", {
+                    category: t(compGov.rate_category),
+                  })}
+                  supervisors={compGov.supervisors}
+                  supervisor={compSupervisor}
+                  pin={compPin}
+                  onSupervisor={setCompSupervisor}
+                  onPin={setCompPin}
+                />
+              )}
             </div>
           )}
         </div>
@@ -795,7 +828,7 @@ export default function GroupBookingDialog(props: {
               ) : (
                 <div className="flex gap-2">
                   <Button variant="outline" disabled={busy} onClick={() => create(true)}>{t("Save as quotation")}</Button>
-                  <Button disabled={busy} onClick={() => create(false)}>{t("Book group")}</Button>
+                  <Button disabled={busy || compSignOffMissing} onClick={() => create(false)}>{t("Book group")}</Button>
                 </div>
               )}
             </>

@@ -77,12 +77,29 @@ export function roomTypesConfig(
   currency: string,
   taxBasis?: TaxBasis | null,
   summary?: RoomTypesSummary | null,
+  erpTaxManaged?: boolean,
 ): ScreenConfig {
   const cardLabel = currency ? t("Card rate / night ({currency})", { currency }) : t("Card rate / night")
   const byRt = new Map((summary?.room_types ?? []).map((entry) => [entry.room_type, entry]))
-  const showCard = summary == null || summary.has_card_rate_plans
+  const ratePlanRequired = !!summary?.rate_plan_required
+  const showCard = !ratePlanRequired && (summary == null || summary.has_card_rate_plans)
+  const erpTax = Boolean(erpTaxManaged || summary?.erp_tax_managed || taxBasis)
   const home = summary?.property_currency || currency
   const planLabel = summary?.default_plan?.label || summary?.default_plan?.name || ""
+  const notes: string[] = []
+  if (ratePlanRequired) {
+    notes.push(t("Rate plans set the price for all bookings at this property."))
+  }
+  if (erpTax) {
+    notes.push(t("Tax comes from the accounting tax rules."))
+    if (taxBasis?.label && taxBasis.determined !== 0) {
+      notes.push(
+        taxBasis.inclusive
+          ? t("Tax is applied by the invoice ({tax} included).", { tax: taxBasis.label })
+          : t("Tax is applied by the invoice ({tax}).", { tax: taxBasis.label }),
+      )
+    }
+  }
   return {
   doctype: "Room Type",
   title: "Room Types",
@@ -117,27 +134,33 @@ export function roomTypesConfig(
     ...(showCard ? [{ field: "base_price", label: cardLabel }] : []),
     { field: "base_occupancy", label: "Base occ.", width: summary ? "w-[9%]" : undefined },
     ...(showCard ? [{ field: "extra_adult_price", label: `Extra adult ${cur()}` }] : []),
-    ...(taxBasis ? [] : [{ field: "tax_percent", label: "Tax %", width: summary ? "w-[8%]" : undefined }]),
+    ...(erpTax ? [] : [{ field: "tax_percent", label: "Tax %", width: summary ? "w-[8%]" : undefined }]),
   ],
   form: [
     { field: "room_type_name", label: "Name", type: "data", required: true },
     { field: "room_type_code", label: "Code (e.g. DLX)", type: "data", required: true },
     { field: "listing_slug", label: "Public listing URL slug (/stay/…)", type: "data" },
     { field: "room_category", label: "Unit kind", type: "select", options: ["Villa", "Private", "Shared"] },
-    { field: "base_price", label: cardLabel, type: "currency", required: true, section: "card" },
+    ...(ratePlanRequired ? [] : [{ field: "base_price", label: cardLabel, type: "currency" as const, required: true, section: "card" }]),
     { field: "base_occupancy", label: "Adults included in base price", type: "int" },
-    { field: "single_occupancy_price", label: "Single occupancy price", type: "currency", section: "card", dependsOn: (d) => d.room_category !== "Villa" },
-    { field: "extra_adult_price", label: "Extra adult / night", type: "currency", section: "card" },
-    { field: "child_price", label: "Extra child / night", type: "currency", section: "card", hint: "Additional charge per child per night (0 = free)" },
-    ...(taxBasis ? [] : [{ field: "tax_percent", label: "Tax %", type: "float" as const }]),
-    { field: "children_within_base_occupancy", label: "Children count towards base occupancy", type: "check", section: "card", hint: "Only guests beyond the base occupancy are charged, children included" },
+    ...(ratePlanRequired ? [] : [
+      { field: "single_occupancy_price", label: "Single occupancy price", type: "currency" as const, section: "card", dependsOn: (d: Record<string, unknown>) => d.room_category !== "Villa" },
+      { field: "extra_adult_price", label: "Extra adult / night", type: "currency" as const, section: "card" },
+      { field: "child_price", label: "Extra child / night", type: "currency" as const, section: "card", hint: "Additional charge per child per night (0 = free)" },
+    ]),
+    ...(erpTax ? [] : [{ field: "tax_percent", label: "Tax %", type: "float" as const }]),
+    ...(ratePlanRequired ? [] : [
+      { field: "children_within_base_occupancy", label: "Children count towards base occupancy", type: "check" as const, section: "card", hint: "Only guests beyond the base occupancy are charged, children included" },
+    ]),
     { field: "adults_capacity", label: "Max adults", type: "int" },
     { field: "children_capacity", label: "Max children", type: "int" },
     { field: "max_extra_beds", label: "Guests allowed above capacity", type: "int", hint: "Only for a single unit with no second room to split into. 0 = never over capacity; the price is agreed on each booking" },
-    { field: "small_group_max_adults", label: "Small-group threshold (adults)", type: "int", section: "card", hint: "Below this many adults, price per person instead of the house rate. Blank or 0 = off" },
-    { field: "small_group_price_per_adult", label: "Small-group price / adult", type: "currency", section: "card", dependsOn: (d) => Number(d.small_group_max_adults) > 0 },
-    { field: "small_group_days", label: "Small-group days (e.g. sun, mon, tue, wed, thu)", type: "data", section: "card", hint: "Blank = every day", dependsOn: (d) => Number(d.small_group_max_adults) > 0 },
-    { field: "small_group_whole_stay", label: "Small-group rate needs the whole stay", type: "check", section: "card", hint: "A stay touching a non-small-group day is charged at the house rate throughout", dependsOn: (d) => Number(d.small_group_max_adults) > 0 },
+    ...(ratePlanRequired ? [] : [
+      { field: "small_group_max_adults", label: "Small-group threshold (adults)", type: "int" as const, section: "card", hint: "Below this many adults, price per person instead of the house rate. Blank or 0 = off" },
+      { field: "small_group_price_per_adult", label: "Small-group price / adult", type: "currency" as const, section: "card", dependsOn: (d: Record<string, unknown>) => Number(d.small_group_max_adults) > 0 },
+      { field: "small_group_days", label: "Small-group days (e.g. sun, mon, tue, wed, thu)", type: "data" as const, section: "card", hint: "Blank = every day", dependsOn: (d: Record<string, unknown>) => Number(d.small_group_max_adults) > 0 },
+      { field: "small_group_whole_stay", label: "Small-group rate needs the whole stay", type: "check" as const, section: "card", hint: "A stay touching a non-small-group day is charged at the house rate throughout", dependsOn: (d: Record<string, unknown>) => Number(d.small_group_max_adults) > 0 },
+    ]),
     { field: "bed_type", label: "Bed type", type: "select", options: ["King", "Queen", "Twin", "Double", "Single"], dependsOn: (d) => d.room_category !== "Villa" },
     { field: "air_conditioning", label: "Air Conditioning", type: "select", options: ["AC", "Non AC"], dependsOn: (d) => d.room_category !== "Villa" },
     // { field: "bathroom", label: "Bathroom Type", type: "select", options: ["Attached", "Common"], dependsOn: (d) => d.room_category !== "Villa" },
@@ -150,10 +173,8 @@ export function roomTypesConfig(
     { field: "longitude", label: "Longitude", type: "float" },
     { field: "disabled", label: "Disabled", type: "check" },
   ],
-  formNote: taxBasis?.inclusive
-    ? t("Tax is applied by the invoice ({tax} included).", { tax: taxBasis.label })
-    : taxBasis ? t("Tax is applied by the invoice ({tax}).", { tax: taxBasis.label }) : undefined,
-  sections: [{ key: "card", label: "Card rate (BAR) and extra-person prices",
+  formNote: notes.length ? notes.join(" ") : undefined,
+  sections: ratePlanRequired ? [] : [{ key: "card", label: "Card rate (BAR) and extra-person prices",
     hint: "Prices stays booked without a rate plan, and rate plans with no contract tariff for this room type." }],
   lead: RoomTypeTariffs,
   extra: RoomTypeMedia,
@@ -174,6 +195,7 @@ export const ratePlansConfig: ScreenConfig = {
     { field: "billing_basis", label: "Day-use" },
     { field: "modifier_type", label: "Modifier" },
     { field: "modifier_value", label: "Value" },
+    { field: "rate_category", label: "Rate category" },
     { field: "currency", label: "Currency" },
     { field: "fx_lock_policy", label: "Exchange rate lock", badge: true },
     { field: "base_rate_plan", label: "Derived from" },
@@ -204,6 +226,9 @@ export const ratePlansConfig: ScreenConfig = {
     { field: "cancellation_policy", label: "Cancellation policy", type: "data" },
     { field: "is_default", label: "Default plan", type: "check" },
     { field: "discount_eligible", label: "Discount eligible", type: "check", default: 1, hint: "Untick for rates that never take a desk discount (non-refundable, packages)." },
+    // the property's own list (Settings → Revenue → Complimentary and house
+    // use); left blank, the server gives a new plan the list's first
+    { field: "rate_category", label: "Rate category", type: "select", optionsFrom: "rate_categories", hint: "Settings → Revenue says which categories a manager signs off, and which are left out of ADR, RevPAR or occupancy." },
     { field: "disabled", label: "Disabled (unpublished)", type: "check", hint: "Tick to unpublish; clear to activate at booking" },
   ],
 }
@@ -1237,6 +1262,7 @@ export const paymentMethodsConfig: ScreenConfig = {
   columns: [
     { field: "code", label: "Code" },
     { field: "description", label: "Description" },
+    { field: "property", label: "Property", emptyLabel: "Shared" },
     { field: "tender_type", label: "Tender type", badge: true },
     { field: "mode_of_payment", label: "Accounting Mode of Payment" },
     { field: "system", label: "Type", booleanBadge: { truthy: "System", falsy: "Custom" } },
@@ -1246,6 +1272,8 @@ export const paymentMethodsConfig: ScreenConfig = {
     { field: "code", label: "Code", type: "data", required: true, readOnlyOnEdit: true,
       hint: "Name shown in payment pickers (e.g. MTN MoMo, Airtel Money)." },
     { field: "description", label: "Description", type: "data" },
+    { field: "property", label: "Property", type: "readonly",
+      dependsOn: (draft) => Boolean(draft.property) },
     {
       field: "tender_type",
       label: "Tender type",

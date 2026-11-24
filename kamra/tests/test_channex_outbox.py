@@ -176,6 +176,24 @@ class ChannexAriAdapterTestCase(UnitTestCase):
 		self.assertEqual(rooms["rt2"]["rateplans"][0], {"rateplan_id": "rp2", "rateplan_name": "Plan 2",
 		                                                "sell_mode": "per_room", "currency": "USD"})
 
+	def test_a_booking_carries_its_rate_plan_and_who_collects_the_payment(self):
+		"""Channex booking revision: rooms[].rate_plan_id, payment_collect
+		("ota" or "property") and a virtual card under guarantee.is_virtual."""
+		payload = {"event": "booking", "payload": {
+			"status": "new", "ota_reservation_code": "BDC-1", "ota_name": "BookingCom", "currency": "USD",
+			"arrival_date": "2030-01-01", "departure_date": "2030-01-03", "payment_collect": "ota",
+			"guarantee": {"is_virtual": True}, "customer": {"name": "Ana"},
+			"rooms": [{"room_type_id": "rt1", "rate_plan_id": "rp1", "occupancy": {"adults": 2},
+			           "days": {"2030-01-01": "130.00", "2030-01-02": "120.00"}}]}}
+		event, = channex.parse_webhook(_conn(), payload)
+		self.assertEqual((event["rate_plan_external_id"], event["payment_collect"], event["virtual_card"]),
+		                 ("rp1", "ota", True))
+		self.assertEqual(event["nightly"], [{"date": "2030-01-01", "amount": 130.0},
+		                                    {"date": "2030-01-02", "amount": 120.0}])
+		payload["payload"].update(payment_collect="Property", guarantee=None)
+		event, = channex.parse_webhook(_conn(), payload)
+		self.assertEqual((event["payment_collect"], event["virtual_card"]), ("property", False))
+
 	def test_seam_push_ari_sends_ranges_in_two_calls(self):
 		fake = FakeChannex()
 		snapshot = [{"room_type": "T", "external_room_id": "rt1", "external_rate_id": "rp1", "days": [
@@ -193,7 +211,8 @@ class ChannexAriAdapterTestCase(UnitTestCase):
 class _AriFixture:
 	"""An Ecuador/USD property: Twin (8 rooms) and Double (4), the plans BAR
 	(no Rate Plan: the base price) and BB (Rate Plan Amount +20), a Channex
-	connection cx-test and its 4 mappings."""
+	connection cx-test and its 4 mappings, each Channex plan selling in USD
+	(an unknown channel currency fails closed)."""
 
 	def setUp(self):
 		frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- test fixture
@@ -215,7 +234,7 @@ class _AriFixture:
 			for plan, rate_plan in (("bar", None), ("bb", self.bb)):
 				frappe.get_doc({"doctype": "Channel Room Mapping", "connection": self.conn.name,
 					"room_type": rt, "external_room_id": f"rt-{ext}",
-					"external_rate_id": f"rp-{ext}-{plan}", "rate_plan": rate_plan,
+					"external_rate_id": f"rp-{ext}-{plan}", "rate_plan": rate_plan, "external_currency": "USD",
 				}).insert(ignore_permissions=True)
 		self.fake = FakeChannex()
 		self.clock = [1_900_000_000.0]
@@ -223,7 +242,8 @@ class _AriFixture:
 
 	def clear_cache(self):
 		# connection names come back after each test's rollback; their cache keys must not
-		for key in ("channex_ari_error::{c}", "channex_pause::{c}", "channex_feed_error::{c}"):
+		for key in ("channex_ari_error::{c}", "channex_pause::{c}", "channex_feed_error::{c}",
+		            "channex_ari_fx::{c}", "channex_ari_currency::{c}", "channex_ari_pricing::{c}"):
 			frappe.cache.delete_value(key.format(c=self.conn.name))
 		for kind in ("availability", "restrictions"):
 			frappe.cache.delete_value(f"channex_ari_pause::{self.conn.name}::{kind}")
@@ -293,10 +313,30 @@ class ChannexAriCellsTestCase(_AriFixture, IntegrationTestCase):
 		self.assertEqual(sorted(cells), ["rp-double-bar", "rp-double-bb", "rp-twin-bar", "rp-twin-bb"])
 
 	def test_a_day_without_a_price_stops_sale_and_sends_no_rate(self):
+		"""Only the engine's refusal of the night, or no price above zero."""
 		from kamra import channel_ari
-		with patch("kamra.pricing.quote", side_effect=frappe.ValidationError("closed")):
+		from kamra.pricing import ContractRateRefused
+		with patch("kamra.pricing.quote", side_effect=ContractRateRefused("HSP-TARIFF-002: No valid Item Price")):
 			cells = channel_ari.restriction_cells(self.conn, day(1), day(1))
 		self.assertEqual(cells["rp-twin-bar"][day(1)], {"stop_sell": True})
+		with patch("kamra.pricing.quote", return_value={"room_total": 0}):
+			cells = channel_ari.restriction_cells(self.conn, day(1), day(1))
+		self.assertEqual(cells["rp-twin-bar"][day(1)], {"stop_sell": True})
+
+	def test_an_error_while_pricing_sends_nothing_for_the_day(self):
+		"""Neon R1 P0-1: an error that is not a refusal never takes the plan off
+		sale - a permission refusal, a database timeout, or a ValidationError
+		the engine did not raise as a refusal (InReadOnlyMode is one)."""
+		from kamra import channel_ari
+		for error in (frappe.PermissionError("Tariff prices are for hotel staff."),
+		              frappe.QueryTimeoutError("Lock wait timeout"), frappe.ValidationError("closed")):
+			with self.subTest(error=type(error).__name__):
+				problems: dict = {}
+				with patch("kamra.pricing.quote", side_effect=error):
+					cells = channel_ari.restriction_cells(self.conn, day(1), day(1), problems)
+				self.assertNotIn("rp-twin-bar", cells)
+				self.assertEqual(problems["errored"]["rp-twin-bar"]["dates"], [day(1)])
+				self.assertIn(type(error).__name__, problems["errored"]["rp-twin-bar"]["reason"])
 
 	def test_availability_counts_a_booking_once_per_room_type(self):
 		from kamra import channel_ari
@@ -370,7 +410,7 @@ class _AriWorkerMixin(_AriFixture):
 	def rows(self, **filters) -> list:
 		return frappe.get_all("Channel ARI Outbox", filters=dict(connection=self.conn.name, **filters),
 		                      fields=["name", "status", "attempts", "next_attempt_at", "detail",
-		                              "date_from", "date_to", "kinds", "reason", "task_ids"],
+		                              "date_from", "date_to", "kinds", "reason", "task_ids", "full"],
 		                      order_by="creation asc")
 
 	def error_logs(self, title: str) -> int:
@@ -691,9 +731,10 @@ class ChannexAriTriggersTestCase(_AriWorkerMixin, IntegrationTestCase):
 	BASELINE_DAYS = 0
 
 	@staticmethod
-	def priced(property, room_type, rate_plan, d):
+	def priced(property, room_type, rate_plan, d, currency=None):
 		"""A deterministic price per day (the real quote, 2000 times, would be
-		slow): it varies by weekday and by plan like a real hotel's."""
+		slow): it varies by weekday and by plan like a real hotel's. The
+		fixture's plans are all in the property's currency."""
 		n = (getdate(d) - getdate(nowdate())).days
 		return Decimal(100 + 7 * (n % 7) + (20 if rate_plan else 0) + (30 if "DBL" in room_type else 0))
 
@@ -722,6 +763,70 @@ class ChannexAriTriggersTestCase(_AriWorkerMixin, IntegrationTestCase):
 		self.assertIn({"property_id": "cx-test", "room_type_id": "rt-twin", "date_from": day(3),
 		               "date_to": day(6), "availability": 7}, self.fake.posts("availability")[0])
 		self.assertTrue(frappe.db.get_value("Channel Manager Connection", self.conn.name, "last_full_sync"))
+
+	def held_on(self, room_type, rate_plan):
+		"""priced, except `room_type` on `rate_plan` while self.holding: its
+		exchange rate is missing (HSP-TARIFF-003)."""
+		def price(property, rt, plan, d, currency=None):
+			if rt == room_type and plan == rate_plan and self.holding:
+				raise self.ari.AriPriceHeld("HSP-TARIFF-003: No single Currency Exchange rate for the business date.")
+			return self.priced(property, rt, plan, d, currency)
+		return price
+
+	def test_a_held_full_sync_retries_only_the_held_nights(self):
+		"""Neon R1 P1-2 (Channex certification: one full sync a day): a full
+		sync with one plan waiting for an exchange rate sends everything once.
+		The retry is for the held nights only and diffs, so the healthy plans'
+		500 days never go again."""
+		from kamra.channel_ari import request_full_sync
+		self.holding = True
+		with patch("kamra.channel_ari._plan_night_rate", side_effect=self.held_on(self.double, self.bb)):
+			request_full_sync(self.conn.name)
+			self.flush()
+			first = self.fake.posts("restrictions")
+			self.assertEqual(len(first), 1)
+			self.assertEqual({v["rate_plan_id"] for v in first[0]}, {"rp-twin-bar", "rp-twin-bb", "rp-double-bar"})
+			retry, = self.rows(status="Pending")
+			self.assertEqual((retry.kinds, retry.full, str(retry.date_from), str(retry.date_to)),
+			                 ("restrictions", 0, day(0), day(499)))
+			self.tick(30)
+			self.flush()  # still held: nothing else goes again
+			self.assertEqual(len(self.fake.posts("restrictions")), 1)
+			self.holding = False
+			self.tick(60)
+			self.flush()
+		last = self.fake.posts("restrictions")[-1]
+		self.assertEqual({v["rate_plan_id"] for v in last}, {"rp-double-bb"})
+		self.assertEqual({r.status for r in self.rows()}, {"Sent"})
+
+	def test_held_rates_do_not_hold_back_the_availability_of_the_same_row(self):
+		"""Neon R1 P2-3: one row carries both kinds. Rates held for an exchange
+		rate wait for their own retry; the availability a short pause held
+		back goes when the pause ends."""
+		self.holding = True
+		with patch("kamra.channel_ari._plan_night_rate", side_effect=self.held_on(self.twin, self.bb)):
+			self.ari._pause(self.conn.name, "availability", 5, self.clock[0])
+			self.book(self.twin, 2)
+			out = self.flush()
+			self.assertIn("waiting", out["availability"])
+			self.assertIn("held", out["restrictions"])
+			self.assertEqual(self.fake.posts("availability"), [])
+			self.tick(5)
+			self.flush()
+		self.assertEqual(len(self.fake.posts("availability")), 1)
+
+	def test_a_new_channel_currency_forgets_what_the_mapping_sent(self):
+		"""Neon R1 P1-3: values sent in the old currency are not comparable, so
+		the next change sends the plan whole."""
+		self.baseline(3)
+		name = f"{self.conn.name}|restrictions|rp-double-bb"
+		self.assertTrue(frappe.db.exists("Channel ARI State", name))
+		mapping = frappe.get_doc("Channel Room Mapping", frappe.db.get_value(
+			"Channel Room Mapping", {"external_rate_id": "rp-double-bb", "connection": self.conn.name}))
+		mapping.external_currency = "EUR"
+		mapping.save(ignore_permissions=True)
+		self.assertFalse(frappe.db.exists("Channel ARI State", name))
+		self.assertTrue(frappe.db.exists("Channel ARI State", f"{self.conn.name}|availability|rt-double"))
 
 	def test_a_second_full_sync_within_24h_asks_first(self):
 		from kamra.channel_ari import request_full_sync
@@ -889,8 +994,386 @@ class ChannexAriImportTestCase(_AriFixture, IntegrationTestCase):
 		self.fake.rate_plans[2] = self._plan(2, "BAR", "rt-double")
 		self.assertEqual(self.run_import()["warnings"], [])
 
+	def currencies(self) -> dict:
+		return {m.external_rate_id: m.external_currency for m in frappe.get_all(
+			"Channel Room Mapping", filters={"connection": self.conn.name},
+			fields=["external_rate_id", "external_currency"])}
+
+	def plan_warnings(self, out) -> dict:
+		return {w["rate_id"]: w["message"] for w in out["warnings"] if w["code"] == "rate_plan_currency"}
+
+	def test_each_mapping_keeps_its_channex_rate_plan_currency(self):
+		"""E is the Channex rate plan's own currency, else the Channex
+		property's. A plan Kamra can send in neither its contract currency nor
+		the property's is warned about, plan by plan."""
+		self.fake.property["currency"] = "EUR"
+		self.fake.rate_plans[1]["attributes"]["currency"] = "EUR"  # rp-twin-bb: BB is a USD plan
+		self.fake.rate_plans[2]["attributes"].pop("currency")  # rp-double-bar: the Channex property's
+		out = self.run_import()
+		self.assertEqual(self.currencies(), {"rp-twin-bar": "USD", "rp-twin-bb": "EUR",
+		                                     "rp-double-bar": "EUR", "rp-double-bb": "USD"})
+		self.assertEqual(sorted(self.plan_warnings(out)), ["rp-double-bar", "rp-twin-bb"])
+		for message in self.plan_warnings(out).values():
+			self.assertIn("EUR", message)
+			self.assertIn("USD", message)
+		self.assertIn("currency", [w["code"] for w in out["warnings"]])
+		self.assertTrue(frappe.get_meta("Channel Room Mapping").get_field("external_currency").read_only)
+
+	def eur_tariff(self, api_method, **form):
+		"""BB's EUR contract night, as hospitality_tariffs.tariff_rate answers
+		it, and BB's approved EUR 90 in the tariff directory."""
+		if api_method == "hospitality_tariffs.list_tariffs" and form.get("property") == self.property:
+			return tariff_directory(self.bb, "EUR", 90, ("Twin", "Double"))
+		if api_method != "hospitality_tariffs.tariff_rate" or form.get("rate_plan") != self.bb:
+			return None
+		return {"tariff": {"is_tariff": 1, "currency": "EUR", "nightly": 90, "fx_rate": 1.1, "agreed_rate": 99,
+		                   "fx_date": nowdate()}}
+
+	def test_a_foreign_plan_sold_in_its_own_currency_is_not_a_mismatch(self):
+		frappe.db.set_value("Rate Plan", self.bb, "currency", "EUR")
+		for i in (1, 3):  # both BB plans: one in EUR, one in the property's USD
+			self.fake.rate_plans[i]["attributes"]["currency"] = "EUR" if i == 1 else "USD"
+		with patch("kamra.erp_bridge.bridge_call", side_effect=self.eur_tariff):
+			out = self.run_import()
+		self.assertEqual(self.plan_warnings(out), {})
+		self.assertEqual(self.currencies()["rp-twin-bb"], "EUR")
+
+	def test_a_plan_sold_in_its_contract_currency_is_probed_without_an_exchange_rate(self):
+		"""Paul's SAP decision on siteops#8559 (SG 105): the import's probe is
+		the push's own night, so a EUR plan sold in EUR reads the tariff
+		directory and never asks the quote, which needs an exchange rate.
+		With no published rate, it still sees the contract's own currency: a
+		contract listed in GBP cannot go in EUR, and is warned about."""
+		frappe.db.set_value("Rate Plan", self.bb, "currency", "EUR")
+		self.fake.rate_plans[1]["attributes"]["currency"] = "EUR"
+		quoted, listed = [], {"currency": "EUR"}
+
+		def bridge(api_method, **form):
+			if api_method == "hospitality_tariffs.list_tariffs" and form.get("property") == self.property:
+				return tariff_directory(self.bb, listed["currency"], 90, ("Twin", "Double"))
+			if api_method == "hospitality_tariffs.tariff_rate" and form.get("rate_plan") == self.bb:
+				quoted.append(form)
+				return {"tariff": dict(CORP_FX_REFUSAL)}
+			return None
+		with patch("kamra.erp_bridge.bridge_call", side_effect=bridge):
+			out = self.run_import()
+			self.assertEqual(self.plan_warnings(out), {})
+			self.assertEqual(self.currencies()["rp-twin-bb"], "EUR")
+			self.assertEqual(quoted, [])
+			listed["currency"] = "GBP"
+			out = self.run_import()
+		self.assertEqual(sorted(self.plan_warnings(out)), ["rp-twin-bb"])
+		self.assertEqual(quoted, [])
+
+	def test_a_foreign_plan_no_tariff_prices_is_warned_it_cannot_go_in_its_own_currency(self):
+		"""Neon R1 P2-2: a EUR plan with no contract tariff is priced from the
+		USD card, which goes only in USD. Mapped to a EUR Channex plan it would
+		fail every push, so the import says so (the same _plan_night_rate the
+		push uses)."""
+		frappe.db.set_value("Rate Plan", self.bb, "currency", "EUR")
+		self.fake.rate_plans[1]["attributes"]["currency"] = "EUR"
+		out = self.run_import()
+		self.assertEqual(sorted(self.plan_warnings(out)), ["rp-twin-bb"])
+		self.assertIn("EUR", self.plan_warnings(out)["rp-twin-bb"])
+
+	def test_a_plan_with_no_channel_currency_is_warned_about(self):
+		"""Neon R1 P0-2: an unknown channel currency fails closed for every
+		plan, a home plan's too, so the import names it."""
+		self.fake.property.pop("currency")
+		self.fake.rate_plans[0]["attributes"].pop("currency")
+		out = self.run_import()
+		self.assertFalse(self.currencies()["rp-twin-bar"])
+		self.assertIn("rp-twin-bar", self.plan_warnings(out))
+
+	def test_a_hand_mapped_plan_reads_its_channel_currency_again(self):
+		"""Neon R1 P0-2: two loose plans of a room are mapped by hand. Importing
+		again keeps the hand-picked room type and rate plan and reads the
+		Channex currency, so the plan can go out (and is warned about here: BB
+		sells in USD, the Channex plan in EUR)."""
+		self.fake.rate_plans.append(self._plan(7, "Non Refundable", "rt-twin"))
+		self.run_import()
+		frappe.get_doc({"doctype": "Channel Room Mapping", "connection": self.conn.name, "room_type": self.twin,
+			"external_room_id": "rt-twin", "external_rate_id": "rp-7", "rate_plan": self.bb}).insert(ignore_permissions=True)
+		self.fake.rate_plans[4]["attributes"]["currency"] = "EUR"
+		out = self.run_import()
+		self.assertEqual(self.currencies()["rp-7"], "EUR")
+		self.assertEqual(self.mapped()["rp-7"], (self.twin, "rt-twin", self.bb))
+		self.assertEqual(sorted(u["rateplan_id"] for u in out["unmatched"]), ["rp-twin-bar"])
+		self.assertIn("rp-7", self.plan_warnings(out))
+
 	def test_two_loose_plans_of_a_room_go_to_unmatched(self):
 		self.fake.rate_plans.append(self._plan(7, "Non Refundable", "rt-twin"))
 		out = self.run_import()
 		self.assertEqual(sorted(u["rateplan_id"] for u in out["unmatched"]), ["rp-7", "rp-twin-bar"])
 		self.assertNotIn("rp-twin-bar", self.mapped())
+
+
+# CORP's contract night, as hospitality_tariffs.tariff_rate answers it, and
+# the resolver's refusal when Finance has published no exchange rate
+CORP_PRICED = {"is_tariff": 1, "currency": "EUR", "nightly": 90, "fx_rate": 1.1, "agreed_rate": 99}
+CORP_FX_REFUSAL = {"is_tariff": 1, "refusal": "HSP-TARIFF-003: No single Currency Exchange rate for the business date."}
+
+
+def tariff_directory(plan: str, currency: str, nightly, room_types=("Twin",)) -> dict:
+	"""hospitality_tariffs.list_tariffs: `plan`'s price list in `currency`,
+	with no usable exchange rate, and its approved general Item Price of
+	`nightly` for each room type at two adults, in force since a month ago."""
+	price_list = f"Contract {currency} {plan}"
+	version = {"name": f"IP-{plan}", "rate": nightly, "valid_from": day(-30), "valid_upto": None,
+	           "workflow_state": "Approved", "local_equiv": None}
+	return {"supported": True, "property_currency": "USD", "business_date": day(0), "as_of_date": day(0),
+	        "price_lists": [{"name": price_list, "currency": currency, "fx_rate": None, "fx_date": None,
+	                         "fx_source": "Currency Exchange", "fx_stale_days": 1, "rate_plans": [plan],
+	                         "rate_plan_details": [{"name": plan, "disabled": 0}]}],
+	        "items": [{"price_list": price_list, "currency": currency, "customer": None,
+	                   "item_code": f"TAR-{name.upper()}-2A", "category": "Room", "room_type": name,
+	                   "occupancy": "Double", "occupancy_tier": 2, "active": dict(version), "pending": [],
+	                   "history": []} for name in room_types]}
+
+
+class ChannexAriCurrencyTestCase(_AriWorkerMixin, IntegrationTestCase):
+	"""A EUR contract plan on Twin at this USD property: CORP, EUR 90 a night,
+	1.1 dollars a euro on the business date, so USD 99. Each case maps
+	Channex's rp-twin-corp in one currency: E == C sends EUR 90, E == H sends
+	USD 99, anything else nothing. Channex never converts."""
+
+	BASELINE_DAYS = 8
+
+	def setUp(self):
+		super().setUp()
+		self.corp = frappe.get_doc({"doctype": "Rate Plan", "property": self.property,
+			"rate_plan_name": "Corporate EUR", "code": "CORP" + frappe.generate_hash(length=4).upper(),
+			"currency": "EUR", "modifier_type": "Percent", "modifier_value": 0}).insert(ignore_permissions=True).name
+		self.tariff = dict(CORP_PRICED, fx_date=nowdate())
+		self.dir_rate = 90
+		self.quoted: list[dict] = []
+		bridge = patch("kamra.erp_bridge.bridge_call", side_effect=self.bridge)
+		bridge.start()
+		self.addCleanup(bridge.stop)
+
+	def bridge(self, api_method, **form):
+		"""CORP's quote (self.tariff, each form kept in self.quoted) and its
+		approved EUR rate (default 90) in the tariff directory."""
+		if api_method == "hospitality_tariffs.list_tariffs" and form.get("property") == self.property:
+			return tariff_directory(self.corp, "EUR", self.dir_rate)
+		if api_method != "hospitality_tariffs.tariff_rate" or form.get("rate_plan") != self.corp:
+			return None
+		self.quoted.append(form)
+		return {"tariff": dict(self.tariff)}
+
+	def map_corp(self, currency):
+		"""Map rp-twin-corp in `currency`; the fixture's four plans are already
+		sent, so a change of day 5 sends only what CORP has there."""
+		frappe.get_doc({"doctype": "Channel Room Mapping", "connection": self.conn.name,
+			"room_type": self.twin, "external_room_id": "rt-twin", "external_rate_id": "rp-twin-corp",
+			"rate_plan": self.corp, "external_currency": currency}).insert(ignore_permissions=True)
+		frappe.db.delete("Channel ARI Outbox", {"connection": self.conn.name})
+		self.ari.enqueue_ari_change(self.property, day(5), day(5), kinds="restrictions", reason="test")
+
+	def corp_values(self) -> list:
+		return [v for call in self.fake.posts("restrictions") for v in call if v["rate_plan_id"] == "rp-twin-corp"]
+
+	def finance_alerts(self) -> int:
+		return frappe.db.count("Kamra Notification", {"property": self.property, "module": "finance",
+		                                              "reference_name": self.conn.name})
+
+	def exchange_rate(self, currency):
+		return frappe.get_doc({"doctype": "Exchange Rate", "property": self.property, "currency": currency,
+			"rate_date": nowdate(), "buy_rate": 1.1, "sell_rate": 1.2}).insert(ignore_permissions=True)
+
+	def test_a_contract_plan_sold_in_its_own_currency_goes_at_the_contract_nightly(self):
+		self.map_corp("EUR")
+		self.flush()
+		self.assertEqual(self.corp_values(), [{"property_id": "cx-test", "rate_plan_id": "rp-twin-corp",
+		                                       "date": day(5), "rate": "90.00", "stop_sell": False}])
+
+	def test_a_contract_plan_sold_in_its_own_currency_needs_no_exchange_rate(self):
+		"""Paul's SAP decision on siteops#8559 (SG 105): a tariff quote that
+		needs an exchange rate fails closed without one, and the contract
+		rate goes to the channel in its own currency from the tariff master
+		data (hospitality_tariffs.list_tariffs; SAP's condition-record
+		replicate), which converts nothing. With no published rate EUR 90
+		goes out, nothing is held and Finance is not told; once the rate is
+		published the figure is the same, so nothing more goes. The quote is
+		never asked."""
+		self.tariff = dict(CORP_FX_REFUSAL)
+		self.map_corp("EUR")
+		out = self.flush()
+		self.assertNotIn("held", out["restrictions"])
+		self.assertEqual(self.corp_values(), [{"property_id": "cx-test", "rate_plan_id": "rp-twin-corp",
+		                                       "date": day(5), "rate": "90.00", "stop_sell": False}])
+		self.assertEqual({r.status for r in self.rows()}, {"Sent"})
+		self.assertEqual(self.finance_alerts(), 0)
+		self.tariff = dict(CORP_PRICED, fx_date=nowdate())
+		self.ari.enqueue_ari_change(self.property, day(5), day(5), kinds="restrictions", reason="test")
+		self.flush()
+		self.assertEqual(len(self.corp_values()), 1)
+		self.assertEqual(self.sent("restrictions", "rp-twin-corp")[day(5)], {"rate": "90.00", "stop_sell": False})
+		self.assertEqual(self.quoted, [])
+
+	def test_a_contract_plan_sold_in_the_property_currency_goes_at_the_agreed_rate(self):
+		self.map_corp("USD")
+		self.flush()
+		self.assertEqual(self.corp_values(), [{"property_id": "cx-test", "rate_plan_id": "rp-twin-corp",
+		                                       "date": day(5), "rate": "99.00", "stop_sell": False}])
+
+	def test_a_plan_in_neither_currency_is_never_sent_and_fails_its_row(self):
+		self.map_corp("GBP")
+		self.season(self.twin, 5, value=150)  # Twin's other plans move on the same day
+		out = self.flush()
+		self.assertEqual(self.corp_values(), [])
+		self.assertEqual(sorted(v["rate_plan_id"] for v in self.fake.posts("restrictions")[0]),
+		                 ["rp-twin-bar", "rp-twin-bb"])
+		self.assertIn("failed", out["restrictions"])
+		rows = self.rows()
+		self.assertEqual({r.status for r in rows}, {"Failed"})
+		for row in rows:
+			for code in ("GBP", "EUR", "USD", "rp-twin-corp"):
+				self.assertIn(code, row.detail)
+		self.assertTrue(frappe.db.get_value("Channel Manager Connection", self.conn.name,
+		                                    "last_push_status").startswith("FAILED"))
+		self.assertEqual(self.error_logs(f"Channex ARI currency {self.conn.name}"), 1)
+		self.assertFalse(frappe.db.exists("Channel ARI State", f"{self.conn.name}|restrictions|rp-twin-corp"))
+
+	def test_a_missing_tariff_still_stops_sale(self):
+		self.tariff = {"is_tariff": 1, "refusal": "HSP-TARIFF-002: No valid Item Price for this date."}
+		self.map_corp("USD")
+		self.flush()
+		self.assertEqual(self.corp_values(), [{"property_id": "cx-test", "rate_plan_id": "rp-twin-corp",
+		                                       "date": day(5), "stop_sell": True}])
+		self.assertEqual({r.status for r in self.rows()}, {"Sent"})
+
+	def test_a_missing_exchange_rate_holds_the_last_rates_and_tells_finance(self):
+		"""HSP-TARIFF-003 is a pricing error that passes, not a reason to take
+		the plan off sale: nothing goes for those nights (the channel keeps
+		the last accepted rate), the row is retried and Finance is told."""
+		self.map_corp("USD")
+		self.flush()
+		self.assertEqual(self.sent("restrictions", "rp-twin-corp")[day(5)]["rate"], "99.00")
+		self.tariff = dict(CORP_FX_REFUSAL)
+		self.season(self.twin, 5, 6, value=150)
+		t0 = self.clock[0]
+		out = self.flush()
+		self.assertIn("held", out["restrictions"])
+		values = [v for call in self.fake.posts("restrictions")[1:] for v in call]
+		self.assertEqual(sorted({v["rate_plan_id"] for v in values}), ["rp-twin-bar", "rp-twin-bb"])
+		self.assertFalse(any(v.get("stop_sell") for v in values))
+		self.assertEqual(self.sent("restrictions", "rp-twin-corp")[day(5)], {"rate": "99.00", "stop_sell": False})
+		row, = self.rows(status="Pending")
+		self.assertEqual(row.attempts, 1)
+		self.assertEqual(frappe.utils.get_datetime(row.next_attempt_at), self.ari._dt(t0 + 30))
+		self.assertIn("HSP-TARIFF-003", row.detail)
+		self.assertEqual(self.finance_alerts(), 1)
+		# held again before the retry is due, and again on the retry: one alert an hour
+		self.tick(30)
+		self.flush()
+		self.assertEqual(self.finance_alerts(), 1)
+		# Finance publishes the rate: the retry sends the held night, nothing was stopped
+		self.tariff = dict(CORP_PRICED, fx_date=nowdate())
+		self.tick(60)
+		self.flush()
+		self.assertEqual({r.status for r in self.rows()}, {"Sent"})
+		self.assertEqual(self.sent("restrictions", "rp-twin-corp")[day(6)]["rate"], "99.00")
+		self.assertFalse(any(v.get("stop_sell") for v in self.corp_values()))
+
+	def currency_exchange(self, from_currency, to_currency="USD", selling=1):
+		self.ari.on_ari_source_change(frappe._dict(doctype="Currency Exchange", name=f"{from_currency}-{to_currency}",
+			from_currency=from_currency, to_currency=to_currency, for_selling=selling, flags=frappe._dict()),
+			"after_insert")
+
+	def test_a_selling_currency_exchange_requeues_only_a_foreign_plan_sold_in_the_property_currency(self):
+		"""Neon R1 P2-1: a contract converts only at ERPNext's selling Currency
+		Exchange (pricing.posting_fx_rate, hospitality_tariffs.tariff_rate).
+		Kamra's own Exchange Rate (the FX desk's) and a buying-only row move no
+		channel price, so they queue nothing."""
+		from kamra import hooks
+		for event in ("on_update", "after_insert", "on_trash"):
+			with self.subTest(event=event):
+				self.assertIn("kamra.channel_ari.on_ari_source_change", hooks.doc_events["Currency Exchange"][event])
+				self.assertNotIn("kamra.channel_ari.on_ari_source_change",
+				                 hooks.doc_events.get("Exchange Rate", {}).get(event) or [])
+		self.map_corp("EUR")  # sold in its own currency: no exchange rate moves its price
+		frappe.db.delete("Channel ARI Outbox", {"connection": self.conn.name})
+		self.currency_exchange("EUR")
+		self.assertEqual(self.rows(), [])
+		mapping = frappe.db.get_value("Channel Room Mapping", {"connection": self.conn.name,
+		                                                       "external_rate_id": "rp-twin-corp"})
+		frappe.db.set_value("Channel Room Mapping", mapping, "external_currency", "USD")
+		self.currency_exchange("GBP")  # no plan here is priced in GBP
+		self.currency_exchange("EUR", selling=0)  # a buying rate
+		self.exchange_rate("EUR")  # the FX desk's rate
+		self.assertEqual(self.rows(), [])
+		self.currency_exchange("EUR")
+		self.assertEqual([(r.kinds, str(r.date_from)) for r in self.rows()], [("restrictions", day(0))])
+		frappe.db.delete("Channel ARI Outbox", {"connection": self.conn.name})
+		self.currency_exchange("EUR", "UGX")
+		self.assertEqual(self.rows(), [])
+
+	def test_the_flush_prices_as_the_system_not_the_user_who_queued_it(self):
+		"""Neon R1 P0-1: frappe.enqueue runs a job as the user who queued it
+		(Guest on the booking webhook, an accounts user saving a Currency
+		Exchange). The outbox prices as the system, as Kamra's other jobs do,
+		and hands the caller back their own user."""
+		users, bridge = [], self.bridge
+
+		def as_who(api_method, **form):
+			users.append(frappe.session.user)
+			return bridge(api_method, **form)
+		self.map_corp("USD")
+		frappe.set_user("Guest")  # nosemgrep: frappe-setuser -- test: the webhook's user
+		try:
+			with patch("kamra.erp_bridge.bridge_call", side_effect=as_who):
+				self.flush()
+			self.assertEqual(frappe.session.user, "Guest")
+		finally:
+			frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- test fixture
+		self.assertTrue(users)
+		self.assertEqual(set(users), {"Administrator"})
+		self.assertEqual(self.corp_values()[0]["rate"], "99.00")
+
+	def test_an_error_while_pricing_holds_the_last_rates_and_retries(self):
+		"""Neon R1 P0-1: a permission refusal from the tariff resolver is an
+		error, not a missing tariff. Nothing goes for the nights (the channel
+		keeps the last accepted rate), they are retried, and the error is
+		logged and told to Revenue - never a stop-sell."""
+		self.map_corp("USD")
+		self.flush()
+		self.assertEqual(self.sent("restrictions", "rp-twin-corp")[day(5)]["rate"], "99.00")
+
+		def refuse(api_method, **form):
+			if form.get("rate_plan") == self.corp:
+				raise frappe.PermissionError("Tariff prices are for hotel staff.")
+			return None
+		with patch("kamra.erp_bridge.bridge_call", side_effect=refuse):
+			self.season(self.twin, 5, 6, value=150)
+			out = self.flush()
+		self.assertIn("held", out["restrictions"])
+		self.assertFalse(any(v.get("stop_sell") for v in self.corp_values()))
+		self.assertEqual(self.sent("restrictions", "rp-twin-corp")[day(5)], {"rate": "99.00", "stop_sell": False})
+		row, = self.rows(status="Pending")
+		self.assertEqual(row.kinds, "restrictions")
+		self.assertIn("PermissionError", row.detail)
+		self.assertEqual(self.error_logs(f"Channex ARI pricing error {self.conn.name}"), 1)
+		self.assertEqual(frappe.db.count("Kamra Notification", {"property": self.property, "module": "revenue",
+		                                                         "reference_name": self.conn.name}), 1)
+		self.assertEqual(self.finance_alerts(), 0)  # not an exchange rate
+		self.tick(30)
+		self.flush()
+		self.assertEqual({r.status for r in self.rows()}, {"Sent"})
+		self.assertEqual(self.sent("restrictions", "rp-twin-corp")[day(6)]["rate"], "99.00")
+
+	def test_a_ugx_property_pushing_a_foreign_contract_rate_keeps_its_minor_units(self):
+		"""Merge RED -> GREEN (#35 + #36): a UGX property (0 decimals) pushing a
+		USD/EUR contract rate with cents (130.50) must quantize in the channel
+		rate plan's currency (0.01), never in the property's currency (1)."""
+		frappe.db.set_value("Property", self.property, {"currency": "UGX", "country": "Uganda",
+		                                                "rates_include_tax": 1, "gst_rate_low": 18, "gst_rate_high": 18})
+		frappe.db.set_value("Channel Room Mapping", {"connection": self.conn.name, "external_rate_id": "rp-twin-bar"},
+		                    "external_currency", "UGX")
+		frappe.db.set_value("Channel Room Mapping", {"connection": self.conn.name, "external_rate_id": "rp-twin-bb"},
+		                    "external_currency", "UGX")
+		self.dir_rate = 130.5
+		self.map_corp("EUR")
+		self.flush()
+		self.assertEqual(self.corp_values(), [{"property_id": "cx-test", "rate_plan_id": "rp-twin-corp",
+		                                       "date": day(5), "rate": "130.50", "stop_sell": False}])

@@ -607,13 +607,21 @@ def _charge_posted(reservation_name: str, charge_type: str, date: str) -> bool:
 	own provenance first and fall back to the folio's reservation for
 	lines predating the provenance field. Only automated lines count: a
 	charge the desk posted by hand (an extra bed asked for at check-in) is
-	not the night's own posting and must not suppress it."""
+	not the night's own posting and must not suppress it.
+
+	"Posted" is the standing rule the statistics use (STANDS_ON_ITS_DATE),
+	not NOT_VOIDED: a night voided on a later business date still stands on
+	its closed date, so check-out and the audit never post a second line onto
+	it (OPERA posts room and tax only on the open business date and corrects
+	a past one by an adjustment on the current date). A night voided on its
+	own, still-open date has dropped out, so it can be posted again, at the
+	rate code in effect when it is."""
 	return bool(frappe.db.sql(
 		"""
 		SELECT 1 FROM `tabFolio Charge` fc
 		JOIN `tabFolio` f ON fc.parent = f.name
 		WHERE fc.charge_type = %(ct)s AND fc.posting_date = %(date)s
-		  AND fc.auto_posted = 1 AND """ + NOT_VOIDED + """
+		  AND fc.auto_posted = 1 AND """ + STANDS_ON_ITS_DATE + """
 		  AND (fc.reservation = %(res)s
 		       OR (IFNULL(fc.reservation, '') = '' AND f.reservation = %(res)s))
 		LIMIT 1
@@ -963,19 +971,22 @@ def current_date_contract_night(reservation, date) -> dict | None:
 	Night Audit and Finance. {rate, gst_rate, label, currency, fx_rate,
 	fx_date, stale}, or None - bill the locked night - for other policies,
 	a home-currency contract or a fixed rate (the manager's price, never
-	re-converted, as pricing.relock_contract_fx_at_check_in keeps it)."""
+	re-converted, as pricing.relock_contract_fx_at_check_in keeps it). An
+	OTA booking in the contract currency posts the OTA's own amount for that
+	night (its snapshot's `nights`); the policy is the stay's
+	(pricing.reservation_fx_policy)."""
 	from kamra.pricing import (
 		contract_local_amount,
 		posting_fx_rate,
-		rate_plan_fx_policy,
 		rates_include_tax,
+		reservation_fx_policy,
 		room_gst_rate,
 		round_rate_amount,
 		saved_contract_tariff,
 	)
 
 	plan = reservation.get("rate_plan")
-	if rate_plan_fx_policy(plan) != "Current Date" or cint(reservation.get("fixed_rate")):
+	if reservation_fx_policy(reservation) != "Current Date" or cint(reservation.get("fixed_rate")):
 		return None
 	snapshot = saved_contract_tariff(reservation)
 	tariff = snapshot.get("tariff") or {}
@@ -1119,7 +1130,7 @@ def reference_currency(reservation, grand_total=None, balance=None, *, charges=N
 	its locked rate on any plan, so ACTUAL converts it at that rate. None
 	for a home-currency stay, or when CURRENT has no published rate today."""
 	from kamra.business_date import get_business_date
-	from kamra.pricing import posting_fx_rate, rate_plan_fx_policy, round_rate_amount, saved_contract_tariff
+	from kamra.pricing import posting_fx_rate, reservation_fx_policy, round_rate_amount, saved_contract_tariff
 
 	tariff = saved_contract_tariff(reservation).get("tariff") or {}
 	currency, home = tariff.get("currency"), tariff.get("property_currency")
@@ -1135,8 +1146,7 @@ def reference_currency(reservation, grand_total=None, balance=None, *, charges=N
 		if not posting:
 			return None
 		fx, fx_date = posting
-	elif rate_plan_fx_policy(reservation.get("rate_plan")) == "Current Date" \
-			and not cint(reservation.get("fixed_rate")):
+	elif reservation_fx_policy(reservation) == "Current Date" and not cint(reservation.get("fixed_rate")):
 		# a fixed rate is never re-converted (current_date_contract_night): it stays at its locked rate
 		per_transaction = charges is not None
 		posted = _posted_contract_fx(reservation, currency, [row for row in charges or [] if row.get("projected")])
@@ -1220,11 +1230,14 @@ def post_room_night(reservation, date, folios=None, *, room_posted: list | None 
 			# the rate this night posted at: ACTUAL reference currency and Night Audit read it
 			fx_posted = {"contract_currency": current["currency"], "contract_fx_rate": current["fx_rate"],
 			             "contract_fx_date": current["fx_date"], "contract_fx_stale": int(current["stale"])}
+		from kamra.room_statistics import category_rules
 		_append_charge(folios, reservation, "Room", {
 			**fx_posted,
 			"posting_date": date,
 			"charge_type": "Room",
 			"reservation": reservation.name,
+			"rate_category": category_rules(reservation.property).of(
+				reservation.get("rate_category")),
 			"description": desc,
 			"qty": 1,
 			"rate": night_rate,
@@ -1345,24 +1358,31 @@ def charged_nights(reservation_name: str) -> dict:
 	"""What the folios hold for each night of the stay already charged: the
 	room line(s) posted for the night plus every rate adjustment made to it
 	since, and the night's levy. {night: {base, tax, gst_rate, levy_base,
-	levy_tax, folio}} - folio is where the night's room line went."""
+	levy_tax, folio}} - folio is where the night's room line went.
+
+	A night counts as charged under STANDS_ON_ITS_DATE, the same standing
+	rule _charge_posted uses: a same-date void drops out, while a closed
+	night voided on a later business date stays in the map (it will never
+	be posted again) at the net amount the folio still holds for it."""
 	rows = frappe.db.sql(
 		"""
 		SELECT IF(fc.charge_type = %(adj)s, fc.stay_date, fc.posting_date) AS night,
-		       fc.charge_type, fc.amount, fc.gst_rate, fc.parent
+		       fc.charge_type, fc.amount, fc.gst_rate, fc.parent,
+		       CASE WHEN """ + NOT_VOIDED + """ THEN 1 ELSE 0 END AS live
 		FROM `tabFolio Charge` fc
 		JOIN `tabFolio` f ON fc.parent = f.name
 		WHERE (fc.reservation = %(res)s
 		       OR (IFNULL(fc.reservation, '') = '' AND f.reservation = %(res)s))
-		  AND """ + NOT_VOIDED + """
-		  AND (fc.charge_type IN ('Room', 'Room Levy')
-		       OR (fc.charge_type = %(adj)s AND fc.stay_date IS NOT NULL))
-		ORDER BY fc.charge_type = 'Room' DESC, fc.amount DESC
+		  AND ((fc.charge_type = 'Room' AND """ + STANDS_ON_ITS_DATE + """)
+		       OR (fc.charge_type = 'Room Levy' AND """ + NOT_VOIDED + """)
+		       OR (fc.charge_type = %(adj)s AND fc.stay_date IS NOT NULL
+		           AND """ + NOT_VOIDED + """))
+		ORDER BY fc.charge_type = 'Room' DESC, live DESC, fc.amount DESC
 		""", {"res": reservation_name, "adj": RATE_ADJUSTMENT}, as_dict=True)
 	out: dict = {}
 	for r in rows:
 		key = str(r.night)
-		amount = float(r.amount or 0)
+		amount = float(r.amount or 0) if r.live else 0.0
 		tax = amount * float(r.gst_rate or 0) / 100
 		if r.charge_type == "Room Levy":
 			if key in out:
@@ -1388,6 +1408,7 @@ def post_rate_lines(reservation, lines: list) -> None:
 	the business date. Posted lines are never edited or deleted; a night
 	whose folio has since been invoiced takes its line on the open folio."""
 	from kamra.business_date import get_business_date
+	from kamra.room_statistics import posted_night_category
 	day = get_business_date(reservation.property)
 	folios: dict = {}
 	for line in lines:
@@ -1401,6 +1422,8 @@ def post_rate_lines(reservation, lines: list) -> None:
 			"stay_date": line["night"],
 			"charge_type": RATE_ADJUSTMENT,
 			"reservation": reservation.name,
+			"rate_category": posted_night_category(
+				reservation.property, reservation.name, line["night"]),
 			"description": line["description"],
 			"qty": 1,
 			"rate": line["amount"],
@@ -1558,6 +1581,7 @@ def move_charges(src, dst, charge_rows: list, reservation: str | None = None,
 			"stay_date": row.get("stay_date"),
 			"charge_type": row.charge_type,
 			"reservation": reservation or row.get("reservation"),
+			"rate_category": row.get("rate_category"),
 			"description": row.description,
 			"qty": row.qty,
 			"rate": row.rate,
@@ -1777,6 +1801,7 @@ def _post_split(src, row, sign: int, line: dict, cuts: list, kept_units: Decimal
 		"stay_date": row.get("stay_date"),
 		"charge_type": row.charge_type,
 		"reservation": row.get("reservation"),
+		"rate_category": row.get("rate_category"),
 		"description": row.description,
 		"allowance_serial": row.get("allowance_serial"),
 		"gst_rate": row.gst_rate,
@@ -2147,6 +2172,7 @@ def void_charge(folio_name: str, charge_row: str, reason: str = "", *, correctio
 		"transaction_code": row.get("transaction_code")
 		or code_for_charge_type(row.charge_type),
 		"reservation": row.get("reservation"),
+		"rate_category": row.get("rate_category"),
 		"description": f"VOID: {row.description or row.charge_type} - {reason.strip()}"[:140],
 		"allowance_serial": row.get("allowance_serial"),
 		"qty": row.qty,

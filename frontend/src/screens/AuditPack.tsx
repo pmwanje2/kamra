@@ -301,6 +301,22 @@ export const sessionCols = (): Col[] => [
   { key: "paid_outs", label: "Paid out", kind: "money" },
   { key: "expected_cash", label: "Expected", kind: "money" },
   { key: "counted_cash", label: "Counted", kind: "money" },
+  {
+    key: "foreign_drawers",
+    label: "Foreign drawers",
+    render: (r) => {
+      const fds = (r.foreign_drawers as { currency: string; expected_fx: number; variance_fx?: number | null }[] | undefined) || []
+      if (!fds.length) return "-"
+      return fds
+        .map((fd) => {
+          const base = `${fd.currency} ${Number(fd.expected_fx ?? 0).toFixed(2)}`
+          return fd.variance_fx && Math.abs(fd.variance_fx) > 0.004
+            ? `${base} (${Number(fd.variance_fx).toFixed(2)})`
+            : base
+        })
+        .join(" · ")
+    },
+  },
   { key: "variance", label: "Variance", kind: "money" },
 ]
 
@@ -641,7 +657,7 @@ function AuditReport({ p }: { p: Pack }) {
         cols={[
           { key: "label", label: "" },
           col("rooms_sold", "Room nights", "num"), col("occupancy_pct", "Occ %", "num"),
-          col("room_revenue", "Rooms (net of discounts)"), col("adr", "ADR"), col("revpar", "RevPAR"),
+          col("room_revenue", "Rooms"), col("adr", "ADR"), col("revpar", "RevPAR"),
           col("food", "Food"), col("beverage", "Beverage"), col("banquets", "Banquets"),
           col("meal_plan_minibar", "Meal plan & minibar"), col("other", "Other"),
           // a pack saved before this column existed has none: hide it there

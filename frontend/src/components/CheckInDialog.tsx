@@ -840,18 +840,21 @@ export default function CheckInDialog(props: {
               <div className="grid gap-2">
                 {flow.billing.options
                   .filter((p) =>
-                    p in (flow.billing.payer_labels ?? {}) ||
+                    !(p in PAYER_LABEL) ||
                     p === "Guest" ||
                     (p === "Company" && flow.billing.company) ||
                     (p === "Group" && flow.billing.group_booking) ||
                     (p.startsWith("OTA") && (flow.billing.source === "OTA" || flow.billing.ota_ref)),
                   )
-                  .map((p) => (
+                  .map((p) => {
+                    const custom = flow.billing.payer_labels?.[p]
+                    const label = custom && custom !== p ? custom : (PAYER_LABEL[p] ?? custom ?? p)
+                    return (
                     <Choice
                       key={p}
                       selected={payer === p}
                       onClick={() => setPayer(p)}
-                      title={t(PAYER_LABEL[p] ?? flow.billing.payer_labels?.[p] ?? p)}
+                      title={t(label)}
                       hint={
                         translateUI(p === "Company"
                           ? flow.billing.company_name ?? undefined
@@ -862,7 +865,8 @@ export default function CheckInDialog(props: {
                               : undefined)
                       }
                     />
-                  ))}
+                    )
+                  })}
               </div>
               <dl className="divide-y divide-zinc-100 rounded-xl border border-zinc-200 bg-white px-4">
                 <Row label={t("Stay total")} value={fmtMoney(flow.billing.stay_total)} />

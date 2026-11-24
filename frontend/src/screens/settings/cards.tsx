@@ -14,8 +14,9 @@ import { probeSocket } from "../../lib/realtime"
 import { Button } from "../../components/ui/button"
 import ImageField from "../../components/ImageField"
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card"
-import { cur, moneyLocale, useLocale } from "../../lib/money"
+import { cur, loadLocale, moneyLocale, useLocale } from "../../lib/money"
 import { toFullPath } from "../../lib/routing"
+import { onSettingsChanged, onTariffsChanged } from "../../lib/tariffSync"
 
 
 /** Self-contained cards the settings hub (./SettingsHub) places on its
@@ -1695,6 +1696,7 @@ export function CashierLimitsCard({ property }: { property: string }) {
         disabled: d.disabled,
       })
       setStatus((s) => ({ ...s, [row.name]: { ok: true, text: t("Saved") } }))
+      void loadLocale()
       load()
     } catch (e) {
       setStatus((s) => ({ ...s, [row.name]: { ok: false, text: serverError(e) } }))
@@ -1705,7 +1707,7 @@ export function CashierLimitsCard({ property }: { property: string }) {
 
   return (
     <Card>
-      <CardContent className="pt-5">
+      <CardContent className="pt-5 overflow-x-auto">
         <h3 className="text-base font-semibold text-zinc-900">{t("Cashier limits")}</h3>
         <p className="mt-0.5 mb-4 text-xs text-zinc-500">
           {t("Per-cashier cash refund cap and allowed payment modes. Leave 0 for no cash refund limit.")}
@@ -1732,16 +1734,16 @@ export function CashierLimitsCard({ property }: { property: string }) {
                 const cid = String(row.cashier_id || row.name)
                 return (
                   <tr key={row.name}>
-                    <td className="py-2.5 pr-3 font-medium text-zinc-800">{cid}</td>
-                    <td className="py-2.5 pr-3 text-zinc-600">{row.user || "-"}</td>
-                    <td className="py-2.5 pr-3">
-                      <span className="inline-flex items-center gap-1.5">
+                    <td className="py-2.5 pr-2 font-medium whitespace-nowrap text-zinc-800">{cid}</td>
+                    <td className="max-w-36 truncate py-2.5 pr-2 text-zinc-600" title={row.user || undefined}>{row.user || "-"}</td>
+                    <td className="py-2.5 pr-2">
+                      <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
                         <input
                           type="number"
                           min={0}
                           step="any"
                           aria-label={t("Max cash refund for {id}", { id: cid })}
-                          className={`${inputCls} max-w-32 tabular-nums`}
+                          className={`${inputCls} w-36 min-w-36 px-2.5 tabular-nums`}
                           value={d.max_cash_refund}
                           onChange={(e) =>
                             setDrafts((prev) => ({
@@ -1750,15 +1752,15 @@ export function CashierLimitsCard({ property }: { property: string }) {
                             }))
                           }
                         />
-                        {cur() && <span className="text-xs text-zinc-500">{cur()}</span>}
+                        {cur() && <span className="shrink-0 text-xs text-zinc-500">{cur()}</span>}
                       </span>
                     </td>
-                    <td className="py-2.5 pr-3">
+                    <td className="py-2.5 pr-2">
                       <input
                         type="text"
                         aria-label={t("Allowed modes for {id}", { id: cid })}
                         placeholder={t("All modes")}
-                        className={`${inputCls} max-w-44`}
+                        className={`${inputCls} w-32 min-w-28`}
                         value={d.allowed_modes}
                         onChange={(e) =>
                           setDrafts((prev) => ({
@@ -1768,7 +1770,7 @@ export function CashierLimitsCard({ property }: { property: string }) {
                         }
                       />
                     </td>
-                    <td className="py-2.5 pr-3">
+                    <td className="py-2.5 pr-2">
                       <input
                         type="checkbox"
                         aria-label={t("Disable {id}", { id: cid })}
@@ -1803,6 +1805,145 @@ export function CashierLimitsCard({ property }: { property: string }) {
               })}
             </tbody>
           </table>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+interface ReadinessBooking {
+  name: string
+  guest_name: string
+  room_type: string
+  room_type_name: string
+  check_in_date: string
+  check_out_date: string
+  status: string
+}
+
+interface RatePlanReadiness {
+  property: string
+  rate_plan_required: boolean
+  default_plan: { name: string; label: string; code: string } | null
+  active_plan_count: number
+  total_without_plan: number
+  future_bookings_without_plan: ReadinessBooking[]
+}
+
+/** Readiness note for switching on "Require a rate plan for new bookings":
+ *  lists active/future reservations without a rate plan and confirms existing
+ *  reservations are never repriced. */
+export function RatePlanReadinessCard({
+  property,
+  enabled,
+}: {
+  property: string
+  enabled: boolean
+}) {
+  const { t, tn } = useT()
+  const [info, setInfo] = useState<RatePlanReadiness | null>(null)
+  const [rev, setRev] = useState(0)
+
+  useEffect(() => {
+    const bump = () => setRev((v) => v + 1)
+    const offSettings = onSettingsChanged(bump)
+    const offTariffs = onTariffsChanged(bump)
+    return () => {
+      offSettings()
+      offTariffs()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!property) {
+      setInfo(null)
+      return
+    }
+    let live = true
+    call<RatePlanReadiness>("kamra.settings.rate_plan_readiness", { property })
+      .then((res) => {
+        if (live) setInfo(res)
+      })
+      .catch(() => {
+        if (live) setInfo(null)
+      })
+    return () => {
+      live = false
+    }
+  }, [property, enabled, rev])
+
+  if (!info) return null
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="min-w-0">
+          <CardTitle>{t("Rate plan readiness")}</CardTitle>
+          <p className="mt-0.5 text-xs text-zinc-500">
+            {t("Existing reservations are never repriced when this setting changes.")}
+          </p>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3 text-sm">
+        {!info.default_plan && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
+            <span>{t("No default rate plan is set yet.")}</span>
+            <Link
+              to="/rate-plans"
+              className="font-medium text-brand-700 underline-offset-2 hover:underline"
+            >
+              {t("Manage rate plans")}
+            </Link>
+          </div>
+        )}
+        {info.total_without_plan > 0 ? (
+          <div className="space-y-2">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
+              <p className="font-medium">
+                {tn(
+                  info.total_without_plan,
+                  "{n} future booking has no rate plan.",
+                  "{n} future bookings have no rate plan.",
+                )}
+              </p>
+              <p className="mt-0.5 text-xs text-amber-800">
+                {t("They keep their booked prices. Only new bookings will require a rate plan.")}
+              </p>
+            </div>
+            <ul className="divide-y divide-zinc-100 rounded-lg border border-zinc-200">
+              {info.future_bookings_without_plan.map((b) => (
+                <li
+                  key={b.name}
+                  className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 py-2 text-xs sm:text-sm"
+                >
+                  <div className="min-w-0">
+                    <Link
+                      to={`/reservations?open=${encodeURIComponent(b.name)}`}
+                      className="font-medium text-brand-700 hover:underline"
+                    >
+                      {b.name}
+                    </Link>
+                    <span className="ms-2 text-zinc-800">{b.guest_name}</span>
+                    <span className="block text-xs text-zinc-500 sm:inline sm:ms-2">
+                      {b.room_type_name}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500 tabular-nums">
+                    <span>
+                      {b.check_in_date} → {b.check_out_date}
+                    </span>
+                    <span className="rounded-full bg-zinc-100 px-2 py-0.5 font-medium text-zinc-700">
+                      {t(b.status)}
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-800">
+            {t("All future bookings already have a rate plan.")}
+          </p>
         )}
       </CardContent>
     </Card>

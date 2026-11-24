@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
   Suspense,
   type ComponentType,
@@ -46,6 +47,8 @@ export type MenuMasterKey =
   | "prep_stations"
   | "courses"
   | "categories"
+  /** the property's rate categories (Settings → Revenue) for Rate Plans */
+  | "rate_categories"
 
 /** Options loaded from a doctype: the value stored, the label shown. */
 export interface OptionSource {
@@ -171,6 +174,8 @@ export interface ScreenConfig {
     statusCheck?: boolean
     /** Map a Check field (0/1) to explicit badge labels (e.g. System / Custom). */
     booleanBadge?: { truthy: string; falsy?: string }
+    /** Text shown when the cell value is blank (e.g. "Shared" for unscoped rows). */
+    emptyLabel?: string
     /** Computed client-side column (omitted from Frappe listResource fields). */
     virtual?: boolean
     /** Custom cell renderer for display. */
@@ -712,9 +717,11 @@ export function ResourceScreen({
   const { t, lang } = useT()
   const { roles } = useAuth()
   const canBackdate = roles.some((r) => BACKDATE_ROLES.includes(r))
-  const [rows, setRows] = useState<Row[]>([])
+  const [allRows, setAllRows] = useState<Row[]>([])
   const [editing, setEditing] = useState<Row | "new" | null>(null)
   const [draft, setDraft] = useState<Record<string, unknown>>({})
+  const [canDeleteDoc, setCanDeleteDoc] = useState(false)
+  const deletePermReq = useRef(0)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [linkOptions, setLinkOptions] = useState<Record<string, string[]>>({})
@@ -811,16 +818,46 @@ export function ResourceScreen({
       filters: filters.length ? filters : undefined,
       orFilters,
       orderBy: config.orderBy,
-      limit: pageSize || 100,
-      start: pageSize ? page * pageSize : 0,
+      limit: config.propertyOrShared ? 2000 : (pageSize || 100),
+      start: config.propertyOrShared ? 0 : (pageSize ? page * pageSize : 0),
     })
       .then((r) => {
-        setRows(matchLocalSearch(r))
+        setAllRows(r)
         setError(null)
       })
       .catch((e) => setError(serverError(e)))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config.doctype, config.propertyOrShared, debounced, filterVals, page, dateFrom, dateTo, matchLocalSearch])
+  }, [config.doctype, config.propertyOrShared, debounced, filterVals, page, dateFrom, dateTo])
+
+  const filteredRows = matchLocalSearch(allRows)
+  const rows =
+    config.propertyOrShared && pageSize > 0
+      ? filteredRows.slice(page * pageSize, (page + 1) * pageSize)
+      : filteredRows
+  const hasMorePages =
+    config.propertyOrShared && pageSize > 0
+      ? (page + 1) * pageSize < filteredRows.length
+      : rows.length >= pageSize
+
+  const currentProperty = getCurrentProperty()
+  const isSharedEdit = Boolean(
+    config.propertyOrShared &&
+      editing &&
+      editing !== "new" &&
+      !editing.property &&
+      !draft.property,
+  )
+  const editingCode =
+    editing && editing !== "new"
+      ? String(draft.code ?? editing.code ?? editing.name ?? "")
+      : ""
+  const existingOverride = isSharedEdit
+    ? allRows.find(
+        (r) =>
+          String(r.property || "") === currentProperty &&
+          String(r.code ?? r.name ?? "") === editingCode,
+      )
+    : undefined
 
   useEffect(load, [load])
 
@@ -898,10 +935,12 @@ export function ResourceScreen({
       })
     })
     if (config.form.some((f) => f.optionsFrom)) {
-      call<Record<MenuMasterKey, string[]>>("kamra.settings.menu_masters", {
-        property: getCurrentProperty(),
-      })
-        .then(setMasterOptions)
+      // a failed lookup leaves the static options; it never breaks the screen
+      Promise.resolve()
+        .then(() => call<Record<MenuMasterKey, string[]>>("kamra.settings.menu_masters", {
+          property: getCurrentProperty(),
+        }))
+        .then((masters) => setMasterOptions(masters ?? {}))
         .catch(() => setMasterOptions({}))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -910,6 +949,8 @@ export function ResourceScreen({
   function openEdit(row: Row | "new") {
     setEditing(row)
     setError(null)
+    setCanDeleteDoc(false)
+    const permReq = ++deletePermReq.current
     if (row === "new") {
       // ponytail: transaction dates default to today when notPast is set
       const defaults: Record<string, unknown> = {}
@@ -919,6 +960,20 @@ export function ResourceScreen({
       }
       setDraft(defaults)
       return
+    }
+    if (config.allowDelete !== false) {
+      call<{ has_permission?: boolean }>("frappe.client.has_permission", {
+        doctype: config.doctype,
+        docname: row.name,
+        perm_type: "delete",
+      })
+        .then((res) => {
+          if (deletePermReq.current === permReq)
+            setCanDeleteDoc(Boolean(res?.has_permission))
+        })
+        .catch(() => {
+          if (deletePermReq.current === permReq) setCanDeleteDoc(false)
+        })
     }
     // List rows only carry column fields - fetch the full document so
     // form extras (location, slugs, etc.) aren't blank and can't wipe DB values.
@@ -953,12 +1008,36 @@ export function ResourceScreen({
         }
         if (f.field in draft) payload[f.field] = draft[f.field]
       }
-      if (config.propertyScoped || (config.propertyOrShared && editing === "new"))
-        payload.property = getCurrentProperty()
-      if (editing === "new") {
-        await createResource(config.doctype, payload)
-      } else if (editing) {
-        await updateResource(config.doctype, editing.name, payload)
+      if (isSharedEdit && editing && editing !== "new") {
+        if (existingOverride) {
+          setError(
+            t("This property already has its own override for {code}. Edit that property row instead.", {
+              code: editingCode,
+            }),
+          )
+          return
+        }
+        const overridePayload: Record<string, unknown> = {
+          ...payload,
+          code: editingCode,
+          property: currentProperty,
+          system: 0,
+        }
+        if (!("tender_type" in overridePayload) && (draft.tender_type ?? editing.tender_type)) {
+          overridePayload.tender_type = draft.tender_type ?? editing.tender_type
+        }
+        if (!("disabled" in overridePayload) && "disabled" in draft) {
+          overridePayload.disabled = draft.disabled
+        }
+        await createResource(config.doctype, overridePayload)
+      } else {
+        if (config.propertyScoped || (config.propertyOrShared && editing === "new"))
+          payload.property = currentProperty
+        if (editing === "new") {
+          await createResource(config.doctype, payload)
+        } else if (editing) {
+          await updateResource(config.doctype, editing.name, payload)
+        }
       }
       setEditing(null)
       load()
@@ -1056,23 +1135,27 @@ export function ResourceScreen({
               </select>
             ))}
             {config.dateFilter && (
-              <div className="flex items-center gap-1.5 text-sm text-zinc-500">
-                <span className="text-xs">{t(config.dateFilter.label)}</span>
-                <input
-                  type="date"
-                  aria-label={(`${t(config.dateFilter.label)} ${t("from")}`)}
-                  className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
-                  value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                />
-                <span className="text-xs">{t("to")}</span>
-                <input
-                  type="date"
-                  aria-label={(`${t(config.dateFilter.label)} ${t("to")}`)}
-                  className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
-                  value={dateTo}
-                  onChange={(e) => setDateTo(e.target.value)}
-                />
+              <div className="flex max-w-full min-w-0 flex-wrap items-center gap-1.5 text-sm text-zinc-500">
+                <div className="flex min-w-0 max-w-full items-center gap-1.5">
+                  <span className="text-xs">{t(config.dateFilter.label)}</span>
+                  <input
+                    type="date"
+                    aria-label={(`${t(config.dateFilter.label)} ${t("from")}`)}
+                    className="min-w-0 max-w-full rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                  />
+                </div>
+                <div className="flex min-w-0 max-w-full items-center gap-1.5">
+                  <span className="text-xs">{t("to")}</span>
+                  <input
+                    type="date"
+                    aria-label={(`${t(config.dateFilter.label)} ${t("to")}`)}
+                    className="min-w-0 max-w-full rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                  />
+                </div>
                 {(dateFrom || dateTo) && (
                   <button
                     className="text-xs text-zinc-400 hover:text-zinc-600"
@@ -1132,7 +1215,10 @@ export function ResourceScreen({
             </div>
           </div>
         <div className="overflow-x-auto">
-          <table className={`w-full text-sm ${visibleCols.length > 7 ? "table-auto" : "table-fixed"}${config.tableMinWidth ? ` ${config.tableMinWidth}` : ""}`}>
+          {(() => {
+            const useFixedLayout = Boolean(config.tableMinWidth) && visibleCols.length <= 7
+            return (
+          <table className={`w-full text-sm ${useFixedLayout ? "table-fixed" : "table-auto"}${config.tableMinWidth ? ` ${config.tableMinWidth}` : ""}`}>
             <thead>
               <tr className="border-b border-zinc-200 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
                 {visibleCols.map((c, i) => (
@@ -1142,7 +1228,7 @@ export function ResourceScreen({
                       "py-2 pr-4" +
                       (c.width
                         ? ` ${c.width}`
-                        : visibleCols.length > 7
+                        : !useFixedLayout
                           ? " whitespace-nowrap"
                           : i === 0
                             ? " w-[22%]"
@@ -1167,7 +1253,7 @@ export function ResourceScreen({
                       className={
                         (c.wrap
                           ? "py-2.5 pr-4 align-top"
-                          : visibleCols.length > 7
+                          : !useFixedLayout
                             ? "whitespace-nowrap py-2.5 pr-4" + (c.badge || c.statusCheck || c.booleanBadge ? "" : " max-w-[240px] truncate")
                             : "truncate py-2.5 pr-4") +
                         (!c.render && typeof row[c.field] === "number"
@@ -1195,6 +1281,8 @@ export function ResourceScreen({
                         >
                           {t(String(row[c.field]))}
                         </Badge>
+                      ) : c.emptyLabel && (row[c.field] == null || row[c.field] === "") ? (
+                        <span className="text-zinc-400">{t(c.emptyLabel)}</span>
                       ) : (
                         cellValue(c.field === "provider" && typeof row[c.field] === "string"
                           ? providerLabel(String(row[c.field])) : row[c.field], t)
@@ -1215,8 +1303,10 @@ export function ResourceScreen({
               )}
             </tbody>
           </table>
+            )
+          })()}
         </div>
-        {pageSize > 0 && (page > 0 || rows.length >= pageSize) && (
+        {pageSize > 0 && (page > 0 || hasMorePages) && (
           <div className="mt-3 flex items-center justify-between text-sm text-zinc-500">
             <span>{t("Page {n}", { n: page + 1 })}</span>
             <div className="flex gap-2">
@@ -1229,7 +1319,7 @@ export function ResourceScreen({
               </Button>
               <Button
                 variant="outline"
-                disabled={rows.length < pageSize}
+                disabled={!hasMorePages}
                 onClick={() => setPage((p) => p + 1)}
               >
                 {t("Next")}
@@ -1257,6 +1347,8 @@ export function ResourceScreen({
             useDetail ? undefined : (
             <div className="flex items-center justify-between">
               {editing !== "new" &&
+              !isSharedEdit &&
+              canDeleteDoc &&
               config.allowDelete !== false &&
               (!config.canDelete || config.canDelete(draft)) ? (
                 <Button
@@ -1275,7 +1367,7 @@ export function ResourceScreen({
                 <Button variant="outline" onClick={() => setEditing(null)}>
                   {t("Cancel")}
                 </Button>
-                <Button disabled={busy} onClick={save}>
+                <Button disabled={busy || Boolean(existingOverride)} onClick={save}>
                   {busy ? t("Saving…") : t("Save")}
                 </Button>
               </div>
@@ -1299,6 +1391,29 @@ export function ResourceScreen({
                 </Suspense>
               )}
               {config.formNote && <p className="rounded-lg bg-zinc-50 p-3 text-sm text-zinc-700">{config.formNote}</p>}
+              {isSharedEdit && (
+                existingOverride ? (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
+                    <span>
+                      {t("This property already has its own override for {code}. Edit that property row instead.", {
+                        code: editingCode,
+                      })}
+                    </span>
+                    <Button
+                      variant="outline"
+                      onClick={() => openEdit(existingOverride)}
+                    >
+                      {t("Edit property override")}
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
+                    {t("Saving creates a property override for {property}. The shared default stays unchanged for other properties.", {
+                      property: currentProperty,
+                    })}
+                  </p>
+                )
+              )}
               {(() => {
                 const shown = config.form.filter(spec => spec.dependsOn ? spec.dependsOn(draft) : true)
                 const sectioned = new Set((config.sections ?? []).map((section) => section.key))
