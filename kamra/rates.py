@@ -85,10 +85,11 @@ def list_contract_tariffs(property: str, price_list: str | None = None, customer
 		# Separation of duties keeps a maker from approving their own draft,
 		# not from withdrawing it: a Hotel Admin with tariff access and
 		# Item Price delete permission discards (matching discard_tariff).
+		can_delete_price = frappe.has_permission("Item Price", "delete")
 		result["can_discard"] = (
 			"Hotel Admin" in frappe.get_roles()
 			and bool(result.get("can_propose") or result.get("can_approve"))
-			and bool(frappe.has_permission("Item Price", "delete"))
+			and bool(can_delete_price)
 		)
 		return result
 	return {"supported": False, "property": property, "price_lists": [], "items": [],
