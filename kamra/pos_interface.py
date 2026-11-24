@@ -38,9 +38,70 @@ from kamra.pos import RoomChargesBlocked
 
 POS_INTEGRATOR = "POS Integrator"
 ROLES = (POS_INTEGRATOR, "Kamra Agent")
+# Outlet POS staff who may look up, verify, and post room charges for their
+# authorized property/outlet without holding the elevated POS Integrator role.
+POS_OUTLET_ROLES = (
+	POS_INTEGRATOR,
+	"Kamra Agent",
+	"F&B Manager",
+	"URY Cashier",
+	"URY Waiter",
+	"URY Captain",
+	"URY Manager",
+	"URY Admin",
+)
+_OUTLET_BYPASS_ROLES = frozenset({
+	POS_INTEGRATOR,
+	"Kamra Agent",
+	"F&B Manager",
+	"Hotel Admin",
+	"System Manager",
+	"Administrator",
+	"URY Manager",
+	"URY Admin",
+})
 CHARGE = "External POS Charge"
 # what an outlet sells; room nights, fees and allowances stay with the hotel
 CHARGE_TYPES = ("Food & Beverage", "Minibar", "Laundry", "Spa", "Misc")
+
+
+def _assert_pos_profile_access(pos_profile: str | None) -> None:
+	"""For outlet POS staff (cashiers/waiters without integration/admin roles),
+	enforce POS Profile active state, user assignment, and Branch User Permissions
+	when `pos_profile` exists on this site."""
+	if not pos_profile:
+		return
+	user = frappe.session.user
+	if not user or user == "Administrator":
+		return
+	if _OUTLET_BYPASS_ROLES & set(frappe.get_roles()):
+		return
+	if not frappe.db.table_exists("POS Profile") or not frappe.db.exists("POS Profile", pos_profile):
+		return
+	meta = frappe.get_meta("POS Profile")
+	fields = ["disabled"]
+	if meta.has_field("branch"):
+		fields.append("branch")
+	row = frappe.db.get_value("POS Profile", pos_profile, fields, as_dict=True) or {}
+	if cint(row.get("disabled")):
+		frappe.throw(_("This POS profile is disabled."), frappe.PermissionError)
+	if frappe.db.table_exists("POS Profile User"):
+		assigned = frappe.get_all(
+			"POS Profile User",
+			filters={"parent": pos_profile, "parenttype": "POS Profile"},
+			pluck="user",
+		)
+		if assigned and user not in assigned:
+			frappe.throw(_("You are not assigned to this POS profile."), frappe.PermissionError)
+	branch = row.get("branch")
+	if branch:
+		from frappe.core.doctype.user_permission.user_permission import get_user_permissions
+
+		branch_perms = get_user_permissions(user).get("Branch") or []
+		if branch_perms:
+			allowed_branches = {p.get("doc") for p in branch_perms}
+			if branch not in allowed_branches:
+				frappe.throw(_("You do not have access to this outlet branch."), frappe.PermissionError)
 
 
 def _room_number(room: str | None) -> str | None:
@@ -59,7 +120,7 @@ def _resolve_room(property: str, room: str) -> str | None:
 
 
 @frappe.whitelist()
-@require_roles(*ROLES)
+@require_roles(*POS_OUTLET_ROLES)
 def pos_room_lookup(property: str, room: str | None = None,
                     last_name: str | None = None) -> list:
 	"""In-house stays matching a room number and/or the guest's last name.
@@ -238,8 +299,21 @@ def _convert_to_home(property: str, amount: float | None, currency: str | None) 
 def _resolve_target_folio_readonly(
 	res: dict, charge_type: str = "Food & Beverage", is_alcohol: int = 0
 ) -> tuple[str | None, str, float, bool]:
-	"""Read-only mirror of `kamra.folio.target_folio` without opening new folios."""
+	"""Read-only mirror of `kamra.folio.target_folio` without opening new folios.
+
+	Also surfaces any House Account (`folio_type == 'Account'`) folio linked to
+	the reservation so both `verify_room_charge` and `pos_post_room_charge`
+	hard-refuse it instead of silently opening a fresh Guest folio.
+	"""
 	from kamra.folio import COMPANY_BILLING_DEFAULTS, _company_pays
+
+	open_acct = frappe.db.get_value(
+		"Folio",
+		{"reservation": res["name"], "folio_type": "Account", "status": "Open"},
+		"name",
+	)
+	if open_acct:
+		return open_acct, "Account", _current_folio_balance(open_acct), False
 
 	master_no_post = False
 	if not is_alcohol:
@@ -288,7 +362,18 @@ def _resolve_target_folio_readonly(
 		{"reservation": res["name"], "folio_type": "Guest"},
 		"name",
 	)
-	return gf, "Guest", _current_folio_balance(gf), False
+	if gf:
+		return gf, "Guest", _current_folio_balance(gf), False
+
+	any_acct = frappe.db.get_value(
+		"Folio",
+		{"reservation": res["name"], "folio_type": "Account"},
+		"name",
+	)
+	if any_acct:
+		return any_acct, "Account", _current_folio_balance(any_acct), False
+
+	return None, "Guest", 0.0, False
 
 
 def _evaluate_stay(
@@ -299,6 +384,7 @@ def _evaluate_stay(
 	charge_type: str = "Food & Beverage",
 	is_alcohol: int = 0,
 ) -> dict:
+	from kamra.ledger import home_currency
 	from kamra.settings import get_setting
 
 	room_no = _room_number(res.get("room"))
@@ -308,28 +394,28 @@ def _evaluate_stay(
 	folio_name, folio_type, balance, master_no_post = _resolve_target_folio_readonly(
 		res, charge_type=charge_type, is_alcohol=cint(is_alcohol)
 	)
-	if folio_name:
-		actual_type = frappe.db.get_value("Folio", folio_name, "folio_type")
-		if actual_type == "Account":
-			return {
-				"ok": False,
-				"reservation": res["name"],
-				"room": res.get("room"),
-				"room_number": room_no,
-				"guest_name": masked_name,
-				"departure": departure,
-				"folio": folio_name,
-				"folio_type": actual_type,
-				"posting_allowed": False,
-				"no_post": 1,
-				"limit": 0.0,
-				"balance": balance,
-				"available": 0.0,
-				"currency": "",
-				"override_required": False,
-				"reason_code": "POS-RC-HOUSE-ACCOUNT",
-				"reason": "House accounts cannot be billed as a room charge.",
-			}
+	actual_type = frappe.db.get_value("Folio", folio_name, "folio_type") if folio_name else folio_type
+	if folio_type == "Account" or actual_type == "Account":
+		return {
+			"ok": False,
+			"reservation": res["name"],
+			"room": res.get("room"),
+			"room_number": room_no,
+			"guest_name": masked_name,
+			"departure": departure,
+			"folio": folio_name,
+			"folio_type": "Account",
+			"posting_allowed": False,
+			"no_post": 1,
+			"limit": 0.0,
+			"balance": balance,
+			"available": 0.0,
+			"currency": home_currency(property),
+			"charge_amount": None,
+			"override_required": False,
+			"reason_code": "POS-RC-HOUSE-ACCOUNT",
+			"reason": "House accounts cannot be billed as a room charge.",
+		}
 
 	home_amount, home, fx_err = _convert_to_home(property, amount, currency)
 	prec = _currency_precision(home)
@@ -402,6 +488,7 @@ def _evaluate_stay(
 		"balance": balance,
 		"available": available_out,
 		"currency": home,
+		"charge_amount": round(flt(home_amount), prec) if home_amount is not None else None,
 		"override_required": override_required,
 		"reason_code": reason_code,
 		"reason": reason,
@@ -409,7 +496,7 @@ def _evaluate_stay(
 
 
 @frappe.whitelist()
-@require_roles(*ROLES)
+@require_roles(*POS_OUTLET_ROLES)
 def verify_room_charge(
 	property: str | None = None,
 	room: str | None = None,
@@ -425,9 +512,11 @@ def verify_room_charge(
 	"""Read-only room-charge eligibility lookup for POS tills.
 
 	Returns a neutral shape with guest match(es), posting_allowed, no_post,
-	limit, balance, available, currency, override_required, reason_code, and
-	reason. Supports room number, surname prefix (no wildcards), or explicit
-	reservation, and rejects house accounts and cross-property lookups."""
+	limit, balance, available, currency, charge_amount (in property currency),
+	override_required, reason_code, and reason. Supports room number, surname
+	prefix (no wildcards), or explicit reservation, and rejects house accounts
+	and cross-property lookups."""
+	_assert_pos_profile_access(pos_profile)
 	prop = (property or "").strip() or resolve_property_for_pos_profile(pos_profile)
 	if not prop:
 		frappe.throw(_("Property is required to verify a room charge."))
@@ -547,8 +636,10 @@ def _verify_room_charge_override(
 	reservation: str,
 	home_amount: float,
 	currency: str | None = None,
+	room_number: str | None = None,
 	override_approval=None,
 	override_token: str | None = None,
+	override_reason: str | None = None,
 	pos_profile: str | None = None,
 	reference_name: str | None = None,
 ) -> tuple[str | None, str | None]:
@@ -556,14 +647,17 @@ def _verify_room_charge_override(
 
 	Accepts either:
 	1. A POS override token consumed via `ury.ury_pos.override.consume` (fails closed
-	   if the hook is missing or raises),
+	   if the hook is missing or raises), using the canonical 5-key claim
+	   `{reservation, room, amount, currency, reason}` in property currency,
 	2. An in-process server flag `frappe.flags.kamra_room_charge_override` set after
-	   the POS already consumed the token in this transaction, or
+	   the POS already consumed the token in this transaction (matched in property
+	   currency), or
 	3. A direct `override_approval` dict (`{supervisor, pin, reason}`) verified
 	   through `kamra.authz.verify_supervisor`.
 	"""
 	prec = _currency_precision(currency)
 	tol = 0.5 * (10 ** -prec)
+	norm_currency = (currency or "").strip().upper()
 	if override_token:
 		try:
 			consumer = frappe.get_attr("ury.ury_pos.override.consume")
@@ -572,10 +666,16 @@ def _verify_room_charge_override(
 				_("Room charge override verification is unavailable. Ask a manager to resolve."),
 				frappe.ValidationError,
 			)
+		effective_reason = (override_reason or "").strip()
+		if not effective_reason and isinstance(override_approval, dict):
+			effective_reason = str(override_approval.get("reason") or "").strip()
 		try:
 			claim = {
 				"reservation": reservation,
+				"room": (room_number or "").strip(),
 				"amount": round(flt(home_amount), prec),
+				"currency": norm_currency,
+				"reason": effective_reason,
 			}
 			consumed = consumer(
 				override_token,
@@ -599,12 +699,15 @@ def _verify_room_charge_override(
 		)
 		if not approver:
 			frappe.throw(_("Invalid manager approval token."), frappe.PermissionError)
-		return str(approver), str(reason or "Manager approved room charge")
+		return str(approver), str(reason or effective_reason or "Manager approved room charge")
 
 	srv_flag = getattr(frappe.flags, "kamra_room_charge_override", None)
 	if isinstance(srv_flag, dict):
+		flag_currency = (srv_flag.get("currency") or "").strip().upper()
+		currency_ok = not flag_currency or not norm_currency or flag_currency == norm_currency
 		if (
-			srv_flag.get("reservation") == reservation
+			currency_ok
+			and srv_flag.get("reservation") == reservation
 			and abs(flt(srv_flag.get("amount")) - flt(home_amount)) < max(tol, 0.01 if prec <= 2 else tol)
 			and srv_flag.get("approver")
 			and (srv_flag.get("reason") or "").strip()
@@ -638,7 +741,7 @@ def _verify_room_charge_override(
 
 
 @frappe.whitelist(methods=["POST"])
-@require_roles(*ROLES)
+@require_roles(*POS_OUTLET_ROLES)
 def pos_post_room_charge(
 	property: str,
 	ticket_id: str,
@@ -653,6 +756,7 @@ def pos_post_room_charge(
 	currency: str | None = None,
 	override_approval=None,
 	override_token: str | None = None,
+	override_reason: str | None = None,
 	pos_profile: str | None = None,
 	reference_name: str | None = None,
 ) -> dict:
@@ -662,6 +766,11 @@ def pos_post_room_charge(
 	first posting with duplicate=true. Name the stay by room (number or id)
 	and/or reservation. Over-limit or No Post stays refuse unless accompanied
 	by a verified duty-manager approval, which is audited on both sides."""
+	_assert_pos_profile_access(pos_profile)
+	if not (property or "").strip() and pos_profile:
+		property = resolve_property_for_pos_profile(pos_profile) or ""
+		if property:
+			assert_property_access(property)
 	ticket_id = (ticket_id or "").strip()
 	if not ticket_id or len(ticket_id) > 140:
 		frappe.throw(_("ticket_id is required (the POS check number, up to 140 characters)."))
@@ -693,6 +802,8 @@ def pos_post_room_charge(
 			               "amount or stay. Use a new ticket number.").format(ticket_id))
 		return _result(rec, duplicate=True)
 
+	if room and frappe.db.exists("Folio", {"name": str(room).strip(), "folio_type": "Account"}):
+		frappe.throw(_("House accounts cannot be billed as a room charge."), frappe.ValidationError)
 	room_id = _resolve_room(property, room) if room else None
 	if room and not room_id:
 		frappe.throw(_("Room {0} is not a room of this property.").format(room))
@@ -733,8 +844,8 @@ def pos_post_room_charge(
 	folio_name, folio_type, current_balance, master_no_post = _resolve_target_folio_readonly(
 		res_row, charge_type=charge_type, is_alcohol=is_alcohol
 	)
-	if folio_name and frappe.db.get_value("Folio", folio_name, "folio_type") == "Account":
-		frappe.throw(_("House accounts cannot be billed as a room charge."))
+	if folio_type == "Account" or (folio_name and frappe.db.get_value("Folio", folio_name, "folio_type") == "Account"):
+		frappe.throw(_("House accounts cannot be billed as a room charge."), frappe.ValidationError)
 
 	no_post_blocked = (
 		(res_row.get("room_charges_allowed") is not None and not cint(res_row.get("room_charges_allowed")))
@@ -752,15 +863,18 @@ def pos_post_room_charge(
 	)
 
 	override_approver = None
-	override_reason = None
+	override_reason_recorded = None
 	if no_post_blocked or over_ticket_limit or over_cumulative_limit:
-		override_approver, override_reason = _verify_room_charge_override(
+		room_no = _room_number(room_id) or (str(room).strip() if room else "")
+		override_approver, override_reason_recorded = _verify_room_charge_override(
 			property=property,
 			reservation=reservation,
 			home_amount=amount,
 			currency=home,
+			room_number=room_no,
 			override_approval=override_approval,
 			override_token=override_token,
+			override_reason=override_reason,
 			pos_profile=pos_profile,
 			reference_name=reference_name or ticket_id,
 		)
@@ -783,7 +897,7 @@ def pos_post_room_charge(
 			frappe.throw(
 				_("POS-RC-OVER-LIMIT: Projected balance ({0}) exceeds this property's room "
 				  "charge credit limit ({1}). Settle it at the outlet or ask a duty manager.").format(
-					flt(current_balance + amount, 2), allowance
+					flt(current_balance + amount, prec), allowance
 				)
 			)
 
@@ -803,7 +917,7 @@ def pos_post_room_charge(
 		"amount": amount,
 		"is_alcohol": is_alcohol,
 		"override_approved_by": override_approver,
-		"override_reason": (override_reason or "")[:200] or None,
+		"override_reason": (override_reason_recorded or "")[:200] or None,
 	})
 	try:
 		rec.insert(ignore_permissions=True)  # role + property checked above
@@ -855,7 +969,7 @@ def pos_post_room_charge(
 			property,
 			rationale=(
 				f"Override ({', '.join(triggers)}) for {outlet_name or 'External POS'} "
-				f"ticket {ticket_id} ({amount} {home}): {override_reason}"
+				f"ticket {ticket_id} ({amount} {home}): {override_reason_recorded}"
 			),
 			approval_status="Approved",
 			approver=override_approver,
@@ -873,7 +987,7 @@ def pos_post_room_charge(
 				"amount": amount,
 				"balance": flt(out.get("balance")),
 				"override_approved_by": override_approver,
-				"override_reason": override_reason,
+				"override_reason": override_reason_recorded,
 			},
 			channel="API",
 		)

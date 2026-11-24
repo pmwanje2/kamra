@@ -547,25 +547,80 @@ def verify_supervisor_approval(property: str, supervisor: str | None = None, pin
 	return {"supervisor": approver}
 
 
-def resolve_property_for_pos_profile(pos_profile: str | None) -> str | None:
-	"""Resolve the Property bound to an ERPNext POS Profile, when available."""
-	if not pos_profile or not frappe.db.table_exists("POS Profile"):
-		return None
-	meta = frappe.get_meta("POS Profile")
-	if meta.has_field("custom_property"):
-		prop = frappe.db.get_value("POS Profile", pos_profile, "custom_property")
-		if prop:
-			return str(prop)
-	branch = frappe.db.get_value("POS Profile", pos_profile, "branch") if meta.has_field("branch") else None
-	if branch and frappe.db.table_exists("Branch") and frappe.get_meta("Branch").has_field("custom_property"):
-		prop = frappe.db.get_value("Branch", branch, "custom_property")
-		if prop:
-			return str(prop)
-	company = frappe.db.get_value("POS Profile", pos_profile, "company") if meta.has_field("company") else None
-	if company and frappe.get_meta("Property").has_field("company"):
-		props = frappe.get_all("Property", filters={"company": company, "disabled": 0}, pluck="name", limit=2)
-		if len(props) == 1:
-			return str(props[0])
+def resolve_property_for_pos_profile(pos_profile: str | None, user: str | None = None) -> str | None:
+	"""Resolve the Property bound to a POS Profile deterministically.
+
+	Resolution order (never guesses across multiple ambiguous properties):
+	1. `POS Profile.custom_property` (when field exists and is populated)
+	2. `Branch.custom_property` via `POS Profile.branch` (when field exists and is populated)
+	3. `Cost Center.custom_property` via `POS Profile.cost_center`, or unique enabled
+	   `Property` matching `Property.custom_cost_center`
+	4. Unique enabled `Property` whose `name` or `property_name` equals `POS Profile.branch`
+	5. Unique enabled `Property` linked to `POS Profile.company` (`company`, `custom_company`,
+	   `legal_name`, or `property_name`)
+	6. Caller's (`user` or `frappe.session.user`) `Property` User Permissions intersected with
+	   enabled properties, when that leaves exactly one permitted enabled Property
+	7. Single enabled `Property` on the site (when only one exists)
+	"""
+	if pos_profile and frappe.db.table_exists("POS Profile") and frappe.db.exists("POS Profile", pos_profile):
+		meta = frappe.get_meta("POS Profile")
+		if meta.has_field("custom_property"):
+			prop = frappe.db.get_value("POS Profile", pos_profile, "custom_property")
+			if prop:
+				return str(prop)
+		branch = frappe.db.get_value("POS Profile", pos_profile, "branch") if meta.has_field("branch") else None
+		if branch:
+			if frappe.db.table_exists("Branch") and frappe.get_meta("Branch").has_field("custom_property"):
+				prop = frappe.db.get_value("Branch", branch, "custom_property")
+				if prop:
+					return str(prop)
+		cost_center = frappe.db.get_value("POS Profile", pos_profile, "cost_center") if meta.has_field("cost_center") else None
+		if cost_center:
+			if frappe.db.table_exists("Cost Center") and frappe.get_meta("Cost Center").has_field("custom_property"):
+				prop = frappe.db.get_value("Cost Center", cost_center, "custom_property")
+				if prop:
+					return str(prop)
+			prop_meta = frappe.get_meta("Property")
+			if prop_meta.has_field("custom_cost_center"):
+				props = frappe.get_all(
+					"Property", filters={"custom_cost_center": cost_center, "disabled": 0}, pluck="name", limit=2
+				)
+				if len(props) == 1:
+					return str(props[0])
+		if branch:
+			props = frappe.get_all(
+				"Property",
+				filters={"disabled": 0},
+				or_filters={"name": branch, "property_name": branch},
+				pluck="name",
+				limit=2,
+			)
+			if len(props) == 1:
+				return str(props[0])
+		company = frappe.db.get_value("POS Profile", pos_profile, "company") if meta.has_field("company") else None
+		if company:
+			prop_meta = frappe.get_meta("Property")
+			for field in ("company", "custom_company", "legal_name", "property_name"):
+				if prop_meta.has_field(field):
+					props = frappe.get_all(
+						"Property", filters={field: company, "disabled": 0}, pluck="name", limit=2
+					)
+					if len(props) == 1:
+						return str(props[0])
+
+	effective_user = user or getattr(getattr(frappe, "session", None), "user", None)
+	if effective_user and effective_user not in ("Administrator", "Guest"):
+		allowed = restricted_properties(effective_user)
+		if allowed:
+			permitted_enabled = frappe.get_all(
+				"Property",
+				filters={"name": ["in", sorted(allowed)], "disabled": 0},
+				pluck="name",
+				limit=2,
+			)
+			if len(permitted_enabled) == 1:
+				return str(permitted_enabled[0])
+
 	props = frappe.get_all("Property", filters={"disabled": 0}, pluck="name", limit=2)
 	return str(props[0]) if len(props) == 1 else None
 
@@ -618,7 +673,7 @@ def verify_pos_override_pin(
 		if approver_user.casefold() == str(req).casefold():
 			return {"ok": False, "name": None, "code": "POS-AUTH-SELF"}
 
-		prop = property or resolve_property_for_pos_profile(pos_profile)
+		prop = property or resolve_property_for_pos_profile(pos_profile, user=req)
 		allowed_props = restricted_properties(approver_user)
 		if allowed_props is not None and (not prop or prop not in allowed_props):
 			return {"ok": False, "name": None, "code": "POS-AUTH-NOT-ELIGIBLE"}
