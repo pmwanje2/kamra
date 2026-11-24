@@ -961,15 +961,18 @@ class Reservation(Document):
 		"""An agreed rate (OPERA's rate override, a Fixed Rate) is set,
 		changed or cleared only by its writers: set_agreed_rate and a room
 		move (flags.kamra_agreed_rate_override, after the desk's limit and any
-		supervisor's sign-off), a group pickup (create_booking, the same flag)
-		and a contract tariff (capture_contract_tariff, check-in FX relock or
-		multi-rate contract reprice, just before this). The field is read-only
-		on the form, but read_only is not enforced on a REST PUT or POST, so
-		any other change is refused."""
+		supervisor's sign-off), a group pickup (create_booking, the same flag),
+		the channel manager's foreign-contract stamp/clear
+		(flags.kamra_channel_tariff) and a contract tariff
+		(capture_contract_tariff, check-in FX relock or multi-rate contract
+		reprice, just before this). The field is read-only on the form, but
+		read_only is not enforced on a REST PUT or POST, so any other change is
+		refused."""
 		if (self.flags.get("kamra_agreed_rate_override")
 				or self.flags.get("kamra_contract_relocked")
 				or self.flags.get("kamra_fx_checkin_relock")
-				or self.flags.get("kamra_contract_repriced")):
+				or self.flags.get("kamra_contract_repriced")
+				or self.flags.get("kamra_channel_tariff")):
 			return
 		if self.is_new():
 			changed = flt(self.get("agreed_rate")) > 0 and not self.get("contract_tariff")
