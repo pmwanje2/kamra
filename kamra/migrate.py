@@ -356,6 +356,9 @@ def _run_import(property: str, csv_text: str, preset: str = "auto"):
 			})
 			if row["amount_after_tax"]:
 				doc.amount_after_tax = row["amount_after_tax"]
+				# the import is the governed writer of its fixed amount
+				# (Reservation.guard_locked_nights)
+				doc.flags.kamra_night_rates_writer = True
 			if row["status"] in HISTORY:
 				# a past stay is a record, not a live booking: skip live
 				# validation (overbooking guard, blacklist) and stamp the

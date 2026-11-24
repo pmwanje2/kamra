@@ -79,6 +79,11 @@ def _as_dt(value, ref: datetime | None = None) -> datetime:
 		return value
 	text = str(value).strip()
 	if " " in text or "T" in text:
+		sep = "T" if "T" in text else " "
+		date_part, time_part = text.split(sep, 1)
+		t_parts = time_part.strip().split(":")
+		if len(t_parts) >= 2 and t_parts[0] == "24" and t_parts[1] == "00":
+			return get_datetime(f"{date_part} 00:00:00") + timedelta(days=1)
 		return get_datetime(text)
 	# HH:MM on the reference day (or today)
 	base = (ref or now_datetime()).replace(
@@ -156,13 +161,38 @@ def quote_day_use_amount(property: str, rate_plan: str | None,
 	return {**plan, **units, "description": label}
 
 
+def format_hhmm(value) -> str:
+	"""Format a Time value (timedelta from MariaDB, time, datetime, or '9:00:00')
+	as zero-padded 'HH:MM' so morning hours before 10:00 never slice to '9:00:'
+	and 24:00 (end of day) stays '24:00' instead of wrapping to '00:00'."""
+	if value is None or value == "":
+		return ""
+	if isinstance(value, timedelta):
+		if value == timedelta(hours=24):
+			return "24:00"
+		total_minutes = int(value.total_seconds() // 60) % (24 * 60)
+		hours, minutes = divmod(total_minutes, 60)
+		return f"{hours:02d}:{minutes:02d}"
+	if hasattr(value, "hour") and hasattr(value, "minute"):
+		return f"{value.hour:02d}:{value.minute:02d}"
+	text = str(value).strip()
+	parts = text.split(":")
+	if len(parts) >= 2 and parts[0].isdigit() and parts[1].isdigit():
+		return f"{int(parts[0]):02d}:{int(parts[1]):02d}"
+	return text[:5]
+
+
 def reservation_slot_hours(res) -> tuple[float, float]:
 	"""(elapsed_or_planned hours so far, planned hours)."""
 	date = getdate(res.check_in_date)
-	start = res.get("planned_check_in_time") or "10:00"
-	end = res.get("planned_check_out_time") or "18:00"
-	start_dt = _as_dt(f"{date} {str(start)[:5]}")
-	end_dt = _as_dt(f"{date} {str(end)[:5]}", ref=start_dt)
+	start = res.get("planned_check_in_time")
+	end = res.get("planned_check_out_time")
+	if start in (None, ""):
+		start = "10:00"
+	if end in (None, ""):
+		end = "18:00"
+	start_dt = _as_dt(f"{date} {format_hhmm(start)}")
+	end_dt = _as_dt(f"{date} {format_hhmm(end)}", ref=start_dt)
 	planned = hours_between(start_dt, end_dt)
 	# Actual elapsed: from planned start (or now if earlier) to now.
 	now = now_datetime()
@@ -193,9 +223,9 @@ def is_due_out(res, now=None) -> bool:
 	if not cint_day_use(res):
 		return True
 	etd = res.get("planned_check_out_time")
-	if not etd:
+	if etd in (None, ""):
 		return True
-	deadline = _as_dt(f"{co} {str(etd)[:5]}")
+	deadline = _as_dt(f"{co} {format_hhmm(etd)}")
 	return now >= deadline
 
 
@@ -229,7 +259,7 @@ def alert_overdue_day_use(property: str | None = None) -> list[str]:
 			continue
 		if _already_alerted(res.name):
 			continue
-		etd = str(res.planned_check_out_time)[:5]
+		etd = format_hhmm(res.planned_check_out_time)
 		subject = (f"Day-use past checkout ({etd}) - {res.guest_name}"
 		           + (f" · Room {room_no(res.room)}" if res.room else ""))
 		record(res.property, "front-desk", subject,
