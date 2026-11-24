@@ -1210,9 +1210,11 @@ def relock_contract_fx_at_check_in(reservation) -> bool:
 	snapshot go on the (unsaved) booking; its save re-locks the nights not
 	yet charged. A booking whose agreed rate no longer matches the contract
 	(a manager's override or a reservation discount) keeps it. The tariff
-	resolver's own re-lock (kamra_fx_checkin_relock) is asked for only on a
-	stay it priced (custom_tariff_currency); a derived plan's stay re-locks
-	under kamra_contract_relocked. No published rate refuses the check-in.
+	resolver's own re-lock (kamra_fx_checkin_relock) is asked for on stays
+	it priced (custom_tariff_currency) and on derived foreign-currency
+	contract stays whose currency resolves through their base plan chain;
+	OTA channel stays re-lock under kamra_contract_relocked only. No
+	published rate refuses the check-in.
 	A contract over a tariff change converts each booked night's own
 	amount. A fixed rate is the manager's price and is never relocked.
 	True when the booking was relocked."""
@@ -1247,7 +1249,12 @@ def relock_contract_fx_at_check_in(reservation) -> bool:
 	reservation.agreed_rate = agreed
 	reservation.contract_tariff = {**snapshot, "tariff": relocked, "agreed_rate": agreed}
 	reservation.flags.kamra_contract_relocked = True
-	if reservation.get("custom_tariff_currency"):
+	if reservation.get("custom_tariff_currency") or (
+		tariff.get("source") != "channel"
+		and not rp.get("custom_tariff_price_list")
+		and rp.get("base_rate_plan")
+		and rate_plan_currency(resolve_rate_plan_chain(rp)) != home
+	):
 		reservation.flags.kamra_fx_checkin_relock = True
 	return True
 

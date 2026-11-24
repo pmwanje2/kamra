@@ -277,3 +277,33 @@ class RateCalendarPlansTest(RateMatrixHarness):
 		self.assertIs(by_rt[STD]["sellable"], True)
 		self.assertEqual(by_rt[DLX]["room_count"], 0)
 		self.assertIs(by_rt[DLX]["sellable"], False)
+
+	def test_rate_calendar_counts_active_siu_villa_as_sellable(self):
+		vla = "Test Hotel-VLA"
+		self.records["Room Type"].extend([
+			self.add("Room Type", DLX, property="Test Hotel", disabled=0, room_type_code="DLX",
+			         room_type_name="Deluxe", base_price=150000, base_occupancy=2, adults_capacity=2),
+			self.add("Room Type", vla, property="Test Hotel", disabled=0, room_type_code="VLA",
+			         room_type_name="Garden Villa", room_category="Villa", base_price=500000,
+			         base_occupancy=2, adults_capacity=6),
+		])
+		self.records["Room"] = [
+			self.add("Room", "STD-101", property="Test Hotel", room_type=STD),
+			self.add("Room", "STD-102", property="Test Hotel", room_type=STD),
+		]
+		self.records["Sellable Unit"] = [
+			self.add("Sellable Unit", "SIU-VLA-1", property="Test Hotel", room_type=vla,
+			         unit_kind="whole_property", is_active=1),
+			self.add("Sellable Unit", "SIU-STD-1", property="Test Hotel", room_type=STD,
+			         unit_kind="individual", is_active=1),
+			self.add("Sellable Unit", "SIU-STD-2", property="Test Hotel", room_type=STD,
+			         unit_kind="individual", is_active=1),
+		]
+		result = self.calendar()
+		by_rt = {row["room_type"]: row for row in result["room_types"]}
+		self.assertEqual(by_rt[vla]["room_count"], 1)
+		self.assertIs(by_rt[vla]["sellable"], True)
+		self.assertEqual(by_rt[STD]["room_count"], 2)
+		self.assertIs(by_rt[STD]["sellable"], True)
+		self.assertEqual(by_rt[DLX]["room_count"], 0)
+		self.assertIs(by_rt[DLX]["sellable"], False)

@@ -193,6 +193,8 @@ export interface ScreenConfig {
   /** Row-level delete guard (e.g. hide Delete for system master rows). */
   canDelete?: (row: Record<string, unknown>) => boolean
   orderBy?: string
+  /** Optional minimum table width class (e.g. "min-w-[820px]") so wide fixed-layout tables scroll cleanly on mobile. */
+  tableMinWidth?: string
   /** Fields searched (LIKE) by the search box. Adds a search input when set. */
   searchFields?: string[]
   /** Dropdown filters shown in the toolbar (e.g. status). */
@@ -1057,7 +1059,7 @@ export function ResourceScreen({
             </div>
           </div>
         <div className="overflow-x-auto">
-          <table className="w-full table-fixed text-sm">
+          <table className={`w-full table-fixed text-sm${config.tableMinWidth ? ` ${config.tableMinWidth}` : ""}`}>
             <thead>
               <tr className="border-b border-zinc-200 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
                 {visibleCols.map((c, i) => (

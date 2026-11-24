@@ -323,6 +323,48 @@ def _public_locale(property: str) -> dict:
 	        **privacy_terms(pack)}
 
 
+def _public_default_rate_plan(property: str) -> dict | None:
+	"""The property's active default overnight rate plan for /book, or None."""
+	plans = frappe.get_all(
+		"Rate Plan",
+		filters={"property": property, "disabled": 0, "is_default": 1},
+		fields=["name", "rate_plan_name", "billing_basis"],
+		order_by="rate_plan_name asc, name asc",
+	)
+	for plan in plans:
+		if (plan.get("billing_basis") or "Nightly") == "Nightly":
+			return plan
+	return None
+
+
+def _quote_public_stay(prop, room_type: str, check_in_date: str, check_out_date: str,
+                       adults: int, children: int, meal_plan: str | None = None, *,
+                       rate_plan: str | None = None, voucher_code: str | None = None,
+                       pets: int = 0) -> dict:
+	"""Quote a stay for /book through the same contract-aware engine staff uses.
+
+	When a Guest session quotes a property's active default rate plan on an
+	online-booking-enabled property, run the read-only quote under the governed
+	GUEST_AGENT so the tariff bridge can resolve the public default tariff
+	without opening the bridge to arbitrary guest requests."""
+	from contextlib import nullcontext
+
+	from kamra.pricing import quote_with_contract
+
+	escalate = (
+		bool(rate_plan)
+		and bool(prop.get("booking_engine_enabled"))
+		and frappe.session.user == "Guest"
+		and frappe.db.exists("User", GUEST_AGENT)
+	)
+	with act_as(GUEST_AGENT) if escalate else nullcontext():
+		return quote_with_contract(
+			prop.name, room_type, check_in_date, check_out_date,
+			adults, children, meal_plan or None,
+			rate_plan=rate_plan, voucher_code=voucher_code, pets=int(pets or 0),
+		)
+
+
 @frappe.whitelist(allow_guest=True)
 def showcase(property: str, listing_slug: str | None = None,
              location_slug: str | None = None):
@@ -360,10 +402,15 @@ def showcase(property: str, listing_slug: str | None = None,
 		fields=["name", "code", "label", "price_per_adult"],
 		order_by="price_per_adult asc",
 	)
+	default_rp = _public_default_rate_plan(property)
 
 	return {
 		"ui_locale": _public_locale(property),
 		"property": _property_payload(prop),
+		"default_rate_plan": (
+			{"name": default_rp["name"], "label": default_rp.get("rate_plan_name") or default_rp["name"]}
+			if default_rp else None
+		),
 		"room_types": room_types,
 		"locations": locations,
 		"meal_plans": meal_plans,
@@ -398,7 +445,7 @@ def search_stay(property: str, check_in_date: str, check_out_date: str,
 	# MCP / Kamra Agent tool; guests need the same availability math without
 	# role gate, so this calls the same underlying helpers directly.
 	from kamra.api import _available_rooms_raw, _block_hold, _sellable_room_types
-	from kamra.pricing import capacity_overflow, quote
+	from kamra.pricing import ContractRateRefused, capacity_overflow
 	from kamra.siu.availability import has_active_sius, sellable_count
 
 	nights = date_diff(check_out_date, check_in_date)
@@ -410,6 +457,9 @@ def search_stay(property: str, check_in_date: str, check_out_date: str,
 	_party(None, adults, children, None)  # at least one adult, before any work
 
 	prop = frappe.get_cached_doc("Property", property)
+	default_rp = _public_default_rate_plan(property)
+	plan_name = default_rp["name"] if default_rp else None
+	plan_label = (default_rp.get("rate_plan_name") or default_rp["name"]) if default_rp else None
 	voucher = _usable_voucher(property, voucher_code, nights)
 	# the first plan is the room-only price: a free plan (EP) when the
 	# property has one, else no meal plan at all
@@ -444,7 +494,7 @@ def search_stay(property: str, check_in_date: str, check_out_date: str,
 		above, beds = capacity_overflow(rtd, a, c)
 		row = {"room_type": rt, "rooms_left": left, "quote": None,
 		       "available": bool(left), "adults": a, "children": c,
-		       "infants": infants}
+		       "infants": infants, "rate_plan": plan_name, "rate_plan_label": plan_label}
 		if above > beds:
 			row.update(available=False, reason=TOO_MANY_GUESTS)
 			results.append(row)
@@ -456,16 +506,19 @@ def search_stay(property: str, check_in_date: str, check_out_date: str,
 			try:
 				plans = []
 				for mp in meal_plans:
-					pq = quote(property, rt, check_in_date, check_out_date,
-					           a, c, mp or None, voucher_code=voucher,
-					           pets=int(pets or 0))
+					pq = _quote_public_stay(
+						prop, rt, check_in_date, check_out_date,
+						a, c, mp or None, rate_plan=plan_name,
+						voucher_code=voucher, pets=int(pets or 0),
+					)
 					plan = {"meal_plan": mp, "amount_after_tax": pq["amount_after_tax"],
 					        **_payment_split(prop, pq["amount_after_tax"],
 					                         pq.get("stay_rules"))}
 					if voucher:
-						plan["list_amount"] = quote(
-							property, rt, check_in_date, check_out_date, a, c,
-							mp or None, pets=int(pets or 0))["amount_after_tax"]
+						plan["list_amount"] = _quote_public_stay(
+							prop, rt, check_in_date, check_out_date, a, c,
+							mp or None, rate_plan=plan_name, pets=int(pets or 0),
+						)["amount_after_tax"]
 					if not plans:
 						q = pq
 					plans.append(plan)
@@ -479,6 +532,8 @@ def search_stay(property: str, check_in_date: str, check_out_date: str,
 					row.update(available=False, reason=(
 						f"These dates need a stay of at least {need} nights"
 						+ (f" ({rules['season']})." if rules.get("season") else ".")))
+			except ContractRateRefused:
+				row.update(available=False, quote=None, reason="No rate available for these dates.")
 			except Exception:
 				pass  # still list the room type even if this date range cannot be quoted
 		results.append(row)
@@ -980,18 +1035,19 @@ def book(property: str, room_type: str, check_in_date: str,
 	]
 
 	from kamra.api import create_booking
-	from kamra.pricing import quote as price_quote
 	from kamra.reservation_state import resolve_instant_status
 
 	mode = getattr(prop, "booking_mode", None) or "Instant"
 	hold_minutes = cint(getattr(prop, "hold_minutes", None) or 120)
 	key = (idempotency_key or "").strip() or None
+	default_rp = _public_default_rate_plan(property)
+	plan_name = default_rp["name"] if default_rp else None
 
 	# Peek at payment terms before insert so Instant can choose status.
-	q = price_quote(
-		property, room_type, check_in_date, check_out_date,
+	q = _quote_public_stay(
+		prop, room_type, check_in_date, check_out_date,
 		int(adults), int(children), meal_plan or None,
-		voucher_code=voucher_code or None, pets=int(pets or 0),
+		rate_plan=plan_name, voucher_code=voucher_code or None, pets=int(pets or 0),
 	)
 	stay_rules = q.get("stay_rules") or {}
 	advance_due, policy = _advance_terms(
@@ -1026,6 +1082,7 @@ def book(property: str, room_type: str, check_in_date: str,
 				"confirms the sleeping arrangement and price") if above else None,
 			pets=int(pets or 0),
 			meal_plan=meal_plan or None,
+			rate_plan=plan_name,
 			voucher_code=voucher_code or None,
 			source="Website",
 			addons=safe_addons or None,
