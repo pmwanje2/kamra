@@ -17,7 +17,9 @@ import App from "../src/App"
 import { BookingDialog } from "../src/components/BookingDialog"
 import ContractTariffs from "../src/screens/ContractTariffs"
 import ConfiguredScreen from "../src/screens/ConfiguredScreen"
+import PublicListing from "../src/screens/PublicListing"
 import RateCalendar from "../src/screens/RateCalendar"
+import { Route, Routes } from "react-router-dom"
 import { setLang } from "../src/lib/dir"
 import { ensureDictionary } from "../src/lib/locales"
 import ar from "../src/i18n/locales/ar.json"
@@ -44,10 +46,11 @@ const NEW_STRINGS = [
   "No active rate plans are configured. Set up a default rate plan in Rate Plans.",
 ]
 
-const FORBIDDEN = /(?<![a-z0-9])(?:Kamra|Frappe|ERPNext|URY)(?![a-z0-9])/i
+const FORBIDDEN = /(?<![a-z0-9])(?:KMR-[A-Z0-9-]+|Kamra|Frappe|ERPNext|URY|HUF|HeyKoala|Tridz|BuildSuite)(?![a-z0-9])/i
 
-const { rpc, fetches, create, update, state } = vi.hoisted(() => ({
+const { rpc, guestRpc, fetches, create, update, state } = vi.hoisted(() => ({
   rpc: vi.fn(),
+  guestRpc: vi.fn(),
   fetches: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
@@ -88,6 +91,7 @@ vi.mock("../src/lib/api", async (importOriginal) => {
       method === "kamra.api.property_locale"
         ? Promise.resolve(state.locale)
         : rpc(method, params),
+    callGuest: (method: string, params?: Record<string, unknown>) => guestRpc(method, params),
     getCurrentProperty: () => "Tank Hill Hotel",
     frappeFetch: (path: string, init?: RequestInit) => fetches(path, init),
   }
@@ -189,6 +193,7 @@ describe("Rate plan required frontend contracts", () => {
       data: path.includes("?") ? state.roomTypes : state.roomTypes[0],
     }))
     rpc.mockReset()
+    guestRpc.mockReset()
     host = document.createElement("div")
     document.body.append(host)
     root = createRoot(host)
@@ -704,6 +709,266 @@ describe("Rate plan required frontend contracts", () => {
       expect(text(surface("tariffs"))).toContain("No active tariff")
       expect(text(surface("room-types"))).toContain("No rate set")
     }, { interval: 20, timeout: 4000 })
+  })
+
+  // ── R1 Finding #4: syncRev preserves user-selected meal plan, discount & explicit choices ──
+
+  it("preserves user-selected meal plan, discount, and explicit empty selections across syncRev refresh", async () => {
+    let optionsCalls = 0
+    let policyRequired = true
+    rpc.mockImplementation((method: string) => {
+      if (method === "kamra.api.booking_options") {
+        optionsCalls += 1
+        return Promise.resolve({
+          room_types: state.roomTypes,
+          rate_plans: [
+            { name: "STD-USD", rate_plan_name: "Standard USD", code: "STD", is_default: 1, discount_eligible: 1 },
+            { name: "PROMO-USD", rate_plan_name: "Promo USD", code: "PROMO", is_default: 0, discount_eligible: 1 },
+          ],
+          meal_plans: [
+            { name: "MP-EP", code: "EP", label: "Room Only", price_per_adult: 0, is_default: 1 },
+            { name: "MP-BB", code: "BB", label: "Breakfast", price_per_adult: 25, is_default: 0 },
+          ],
+          companies: [],
+          travel_agents: [],
+          experiences: [],
+          property: { country: "Uganda", checkin_time: "14:00", checkout_time: "11:00" },
+          ota_channels: [],
+          can_set_rate: false,
+          can_discount: true,
+          discount_reasons: [{ name: "LOYAL", description: "Loyalty guest" }],
+          rate_plan_required: policyRequired,
+          default_plan: "STD-USD",
+        })
+      }
+      if (method === "kamra.api.available_rooms") return Promise.resolve([{ name: "R101", room_number: "101", housekeeping_status: "Clean" }])
+      if (method === "kamra.cashier.my_till") return Promise.resolve({ required: false, open: true, terminal_links: [] })
+      if (method === "kamra.ledger.list_exchange_rates") return Promise.resolve({ business_date: "2026-12-01", rates: [] })
+      if (method === "kamra.api.guest_alert") return Promise.resolve({})
+      if (method === "kamra.api.guest_search") return Promise.resolve([])
+      if (method === "kamra.rates.rate_options") {
+        return Promise.resolve({
+          nights: [], plans: [], voucher: null,
+          plain: { room_total: 160, amount_after_tax: 160, discount: 0 },
+          company_plan: null, default_plan: "STD-USD", rate_plan_required: policyRequired, tax_inclusive: true,
+          can_discount: true, discount_reasons: [{ name: "LOYAL", description: "Loyalty guest" }],
+        })
+      }
+      if (method === "kamra.api.get_quote") {
+        return Promise.resolve({
+          currency: "UGX", rate_plan: "STD-USD", nights: 1, room_total: 160, meal_total: 25,
+          discount: 16, amount_before_tax: 169, tax_percent: 0, tax_amount: 0, amount_after_tax: 169,
+          nightly: [{ date: "2026-12-01", rate: 160 }],
+        })
+      }
+      return Promise.resolve({})
+    })
+
+    const selectFor = (label: string) => {
+      const owner = Array.from(host.querySelectorAll("label")).find(
+        (node) => node.querySelector("span")?.textContent?.replace(/\s*\*$/, "").trim() === label,
+      )
+      return owner?.querySelector<HTMLSelectElement>("select") ?? null
+    }
+    const setReactValue = async (el: HTMLSelectElement | HTMLInputElement, value: string) => {
+      const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype
+      const setter = Object.getOwnPropertyDescriptor(proto, "value")!.set!
+      await act(async () => {
+        setter.call(el, value)
+        el.dispatchEvent(new Event("input", { bubbles: true }))
+        el.dispatchEvent(new Event("change", { bubbles: true }))
+      })
+    }
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <BookingDialog
+            initial={{ room_type: "STANDARD", check_in_date: "2026-12-01", nights: 1 }}
+            onClose={() => {}}
+            onBooked={() => {}}
+          />
+        </MemoryRouter>,
+      )
+    })
+
+    await vi.waitFor(async () => {
+      await settle()
+      expect(selectFor("Meal plan")?.value).toBe("MP-EP")
+      expect(selectFor("Rate plan")?.value).toBe("STD-USD")
+    }, { interval: 20, timeout: 4000 })
+
+    // Operator picks Breakfast (MP-BB), Promo USD (PROMO-USD), and enters a 10% discount
+    await setReactValue(selectFor("Meal plan")!, "MP-BB")
+    await setReactValue(selectFor("Rate plan")!, "PROMO-USD")
+    const discToggle = Array.from(host.querySelectorAll("button")).find((b) => /discount/i.test(b.textContent ?? ""))
+    if (discToggle) await act(async () => discToggle.click())
+    const discValueInput = Array.from(host.querySelectorAll<HTMLInputElement>("input")).find(
+      (i) => i.getAttribute("aria-label")?.toLowerCase().includes("discount") || i.placeholder?.includes("10") || i.type === "number",
+    )
+    if (discValueInput) await setReactValue(discValueInput, "10")
+
+    expect(selectFor("Meal plan")!.value).toBe("MP-BB")
+    expect(selectFor("Rate plan")!.value).toBe("PROMO-USD")
+
+    // Fire kamra:tariffs-changed -> triggers syncRev -> re-fetches booking_options
+    const callsBefore = optionsCalls
+    await act(async () => { window.dispatchEvent(new CustomEvent("kamra:tariffs-changed")) })
+    await vi.waitFor(async () => {
+      await settle()
+      expect(optionsCalls).toBeGreaterThan(callsBefore)
+    }, { interval: 20, timeout: 4000 })
+    await settle()
+
+    // BOTH meal plan (Breakfast) AND rate plan (PROMO-USD) AND discount MUST stay intact!
+    expect(selectFor("Meal plan")!.value).toBe("MP-BB")
+    expect(selectFor("Rate plan")!.value).toBe("PROMO-USD")
+    if (discValueInput) expect(discValueInput.value).toBe("10")
+
+    // Also verify explicit empty choices ("Room only" meal plan and standard rate when policy is off)
+    policyRequired = false
+    const callsBeforePolicyOff = optionsCalls
+    await act(async () => { window.dispatchEvent(new CustomEvent("kamra:settings-changed")) })
+    await vi.waitFor(async () => {
+      await settle()
+      expect(optionsCalls).toBeGreaterThan(callsBeforePolicyOff)
+    }, { interval: 20, timeout: 4000 })
+    await setReactValue(selectFor("Meal plan")!, "")
+    await setReactValue(selectFor("Rate plan")!, "")
+    expect(selectFor("Meal plan")!.value).toBe("")
+    expect(selectFor("Rate plan")!.value).toBe("")
+
+    const callsBeforeEmptySync = optionsCalls
+    await act(async () => { window.dispatchEvent(new CustomEvent("kamra:tariffs-changed")) })
+    await vi.waitFor(async () => {
+      await settle()
+      expect(optionsCalls).toBeGreaterThan(callsBeforeEmptySync)
+    }, { interval: 20, timeout: 4000 })
+    await settle()
+    expect(selectFor("Meal plan")!.value).toBe("")
+    expect(selectFor("Rate plan")!.value).toBe("")
+  })
+
+  // ── R1 Finding #3 & #5: Public /stay hides raw base_price & RateCalendar hides BAR when required ──
+
+  it("hides Price per night / $0 on PublicListing when rate_plan_required has no active rate plan", async () => {
+    guestRpc.mockImplementation((method: string) => {
+      if (method === "kamra.public_api.resolve_slug") {
+        return Promise.resolve({
+          kind: "listing",
+          property: "R1 Gamma NoDef",
+          listing_slug: "gamma-suite",
+          room_type: "R1 Gamma NoDef-GMS",
+          room_type_name: "Gamma Suite",
+        })
+      }
+      if (method === "kamra.public_api.showcase") {
+        return Promise.resolve({
+          ui_locale: { currency_symbol: "$", locale: "en-US", currency: "USD" },
+          rate_plan_required: true,
+          default_rate_plan: null,
+          property: {
+            name: "R1 Gamma NoDef",
+            property_name: "R1 Gamma NoDef",
+            description: null, logo_url: null, hero_image: null, brand_accent: "Emerald",
+            payment_mode: "Pay at hotel", cleaning_fee: 0, security_deposit_amount: 0,
+            minimum_nights: 1, booking_mode: "Instant", property_kind: "Hotel",
+            checkin_time: "14:00", checkout_time: "11:00",
+            house_rules: null, pets_policy: null, children_policy: null,
+            city: "Kampala", state: "", phone: null, gallery: [],
+          },
+          room_types: [{
+            name: "R1 Gamma NoDef-GMS",
+            room_type_name: "Gamma Suite",
+            listing_slug: "gamma-suite",
+            location_slug: null,
+            description: null,
+            base_price: 0,
+            adults_capacity: 2,
+            children_capacity: 0,
+            bed_type: null, room_view: null, amenities: [], media: [],
+            location_name: null, location_address: null, google_maps_url: null,
+            latitude: null, longitude: null,
+          }],
+          locations: [{ name: "R1 Gamma NoDef", slug: null, address: null, google_maps_url: null, latitude: null, longitude: null, room_types: ["R1 Gamma NoDef-GMS"], from_rate: 0 }],
+          meal_plans: [],
+        })
+      }
+      if (method === "kamra.public_api.search_stay") {
+        return Promise.resolve([{
+          room_type: "R1 Gamma NoDef-GMS",
+          rooms_left: 2,
+          available: false,
+          quote: null,
+          reason: "No rate is available for these dates. Please contact the property.",
+        }])
+      }
+      return Promise.resolve({})
+    })
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={["/stay/gamma-suite"]}>
+          <Routes>
+            <Route path="/stay/:slug/*" element={<PublicListing />} />
+          </Routes>
+        </MemoryRouter>,
+      )
+    })
+
+    await vi.waitFor(async () => {
+      await settle()
+      expect(text(host)).toContain("Gamma Suite")
+    }, { interval: 20, timeout: 4000 })
+    await settle()
+
+    expect(text(host)).not.toContain("Price per night")
+    expect(text(host)).not.toContain("$0")
+    expect(text(host)).not.toContain("$220")
+    expect(text(host)).not.toMatch(FORBIDDEN)
+  })
+
+  it("hides BAR column on RateCalendar when rate_plan_required is ON and no default plan is set", async () => {
+    rpc.mockImplementation((method: string) => {
+      if (method === "kamra.rates.rate_calendar") {
+        return Promise.resolve({
+          from: "2026-12-01",
+          days: 2,
+          tax_inclusive: true,
+          rate_plan_required: true,
+          property_currency: "UGX",
+          default_plan: null,
+          rate_plans: [],
+          rate_plan: null,
+          company: null,
+          room_types: [{
+            room_type: "STANDARD",
+            code: "STD",
+            name: "Standard Room",
+            base_price: 0,
+            room_count: 5,
+            sellable: true,
+            nights: [
+              { date: "2026-12-01", available: false, rate: null, contract: null, refusal: "Set a default rate plan in Rate Plans.", occupancy: 0 },
+              { date: "2026-12-02", available: false, rate: null, contract: null, refusal: "Set a default rate plan in Rate Plans.", occupancy: 0 },
+            ],
+          }],
+        })
+      }
+      return Promise.resolve([])
+    })
+
+    await act(async () => {
+      root.render(<MemoryRouter initialEntries={["/rate-calendar"]}><RateCalendar /></MemoryRouter>)
+    })
+    await vi.waitFor(async () => {
+      await settle()
+      expect(text(host)).toContain("Standard Room")
+    }, { interval: 20, timeout: 4000 })
+
+    const headers = Array.from(host.querySelectorAll("thead th"), (th) => th.textContent?.trim())
+    expect(headers).not.toContain("BAR")
+    expect(text(host)).not.toContain("Above BAR")
   })
 
   // ── Requirement 5: all 8 languages & zero Kamra/ERPNext/Frappe wording ────

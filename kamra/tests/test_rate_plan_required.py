@@ -3,18 +3,28 @@ and resolution across desk, walk-in, day-use, group pick-up, OTA and public
 bookings (OPERA Cloud Rate Code Mandatory parity)."""
 
 from unittest.mock import patch
+import re
 
 import frappe
 from frappe.utils import add_days, nowdate
 
-from kamra import api, channel_manager as cm, public_api, settings
+from kamra import api, channel_manager as cm, public_api, rates, settings
 from kamra.channels import channex
 from kamra.settings import clear_cache, get_setting, write_kv
 from kamra.tests.audit_fixtures import AuditTestCase
 
+FORBIDDEN_USER_TOKENS = re.compile(
+	r"(?<![a-z0-9])(?:KMR-[A-Z0-9-]+|Kamra|ERPNext|Frappe|URY|HUF|HeyKoala|Tridz|BuildSuite)(?![a-z0-9])",
+	re.I,
+)
+INTERNAL_ADMIN_SETUP = re.compile(
+	r"(?:Rate Plans|Contract Tariffs|default rate plan|HSP-TARIFF|KMR-)",
+	re.I,
+)
+
 
 class RatePlanRequiredTest(AuditTestCase):
-	properties = ("TEST K3 POLICY",)
+	properties = ("TEST K3 POLICY", "TEST K3 FOREIGN")
 
 	def setUp(self):
 		super().setUp()
@@ -138,15 +148,17 @@ class RatePlanRequiredTest(AuditTestCase):
 
 	def test_booking_requires_plan_before_creating_guest(self):
 		self.require_plan(1)
-		with self.assertRaisesRegex(frappe.ValidationError, "KMR-RATE-REQ-001") as ctx:
+		with self.assertRaisesRegex(frappe.ValidationError, "rate plan") as ctx:
 			self.book()
 		self.assertIn("Rate Plans", str(ctx.exception))
+		self.assertNotRegex(str(ctx.exception), FORBIDDEN_USER_TOKENS)
 		self.assertFalse(frappe.db.exists("Guest", {"full_name": "K3 Booking Guest"}))
 
 	def test_walk_in_requires_plan_before_creating_guest_and_uses_default_when_present(self):
 		self.require_plan(1)
-		with self.assertRaisesRegex(frappe.ValidationError, "KMR-RATE-REQ-001"):
+		with self.assertRaisesRegex(frappe.ValidationError, "rate plan") as ctx:
 			self.walk_in()
+		self.assertNotRegex(str(ctx.exception), FORBIDDEN_USER_TOKENS)
 		self.assertFalse(frappe.db.exists("Guest", {"full_name": "K3 Walk-in Guest"}))
 
 		default = self.make_plan("BAR", "Best Available", is_default=1)
@@ -182,7 +194,8 @@ class RatePlanRequiredTest(AuditTestCase):
 		self.assertEqual(frappe.db.get_value("Reservation", r3["reservation"], "rate_plan"), chosen)
 
 	def test_group_pickup_and_rooming_list_resolve_rate_plan_or_refuse(self):
-		self.require_plan(1)
+		# Pre-existing legacy group created before rate_plan_required was switched on
+		self.require_plan(0)
 		gb = frappe.get_doc({
 			"doctype": "Group Booking",
 			"property": self.property,
@@ -192,10 +205,12 @@ class RatePlanRequiredTest(AuditTestCase):
 			"status": "Confirmed",
 			"blocks": [{"room_type": self.room_type, "rooms_blocked": 2}],
 		}).insert()
+		self.require_plan(1)
 
-		# No rate plan configured -> pickup refuses cleanly
-		with self.assertRaisesRegex(frappe.ValidationError, "KMR-RATE-REQ-001"):
+		# No rate plan configured -> pickup refuses cleanly without internal/brand codes
+		with self.assertRaisesRegex(frappe.ValidationError, "rate plan") as ctx:
 			api.pickup_group_room(gb.name, self.room_type, "Group Guest One")
+		self.assertNotRegex(str(ctx.exception), FORBIDDEN_USER_TOKENS)
 
 		# With property default plan -> pickup resolves and stamps it
 		default = self.make_plan("BAR", "Best Available", is_default=1)
@@ -254,8 +269,9 @@ class RatePlanRequiredTest(AuditTestCase):
 		self.assertFalse(frappe.db.exists("Reservation", {"property": self.property, "ota_ref": "CHX-REF-1"}))
 
 		# Desk OTA booking also refuses without a plan
-		with self.assertRaisesRegex(frappe.ValidationError, "KMR-RATE-REQ-001"):
+		with self.assertRaisesRegex(frappe.ValidationError, "rate plan") as ctx:
 			self.book(booked_via="Booking.com", ota_ref="DESK-OTA-1", ota_total=1200)
+		self.assertNotRegex(str(ctx.exception), FORBIDDEN_USER_TOKENS)
 
 		# Map a rate plan on Channel Room Mapping -> OTA booking succeeds and stores it
 		ota_plan = self.make_plan("OTA", "OTA Standard")
@@ -269,22 +285,54 @@ class RatePlanRequiredTest(AuditTestCase):
 		self.require_plan(1)
 		ci, co = str(add_days(self.today, 5)), str(add_days(self.today, 7))
 
-		# No default rate plan -> search marks unavailable with plain reason; book refuses
+		# No default rate plan -> showcase hides raw base_price, search marks unavailable with
+		# clean guest-facing copy (zero admin instructions/codes/message_log), book refuses cleanly
+		sc = public_api.showcase(self.property)
+		self.assertIs(sc["rate_plan_required"], True)
+		self.assertEqual(sc["room_types"][0]["base_price"], 0.0)
+		self.assertEqual(sc["locations"][0]["from_rate"], 0.0)
+
+		frappe.clear_messages()
 		rows = public_api.search_stay(self.property, ci, co, 2, 0)
 		self.assertEqual(len(rows), 1)
 		self.assertIs(rows[0]["available"], False)
 		self.assertIsNone(rows[0]["quote"])
 		self.assertTrue(rows[0].get("reason"))
-		with self.assertRaisesRegex(frappe.ValidationError, "KMR-RATE-REQ-001"):
-			public_api.book(self.property, self.room_type, ci, co, "Web Guest", "+256700000101")
+		self.assertNotRegex(rows[0]["reason"], FORBIDDEN_USER_TOKENS)
+		self.assertNotRegex(rows[0]["reason"], INTERNAL_ADMIN_SETUP)
+		self.assertEqual(frappe.local.message_log, [])
 
-		# With default rate plan -> search quotes & book stamps default rate plan
-		default = self.make_plan("WEB", "Standard Web", is_default=1)
+		with self.assertRaises(frappe.ValidationError) as ctx:
+			public_api.book(self.property, self.room_type, ci, co, "Web Guest", "+256700000101")
+		self.assertNotRegex(str(ctx.exception), FORBIDDEN_USER_TOKENS)
+		self.assertNotRegex(str(ctx.exception), INTERNAL_ADMIN_SETUP)
+
+		# With default rate plan -> showcase uses rate-plan price (not raw base_price), search & book succeed
+		default = self.make_plan("WEB", "Standard Web", is_default=1, modifier_type="Absolute", modifier_value=250)
+		sc_priced = public_api.showcase(self.property)
+		self.assertNotEqual(sc_priced["room_types"][0]["base_price"], 1000.0)
+		self.assertGreater(sc_priced["room_types"][0]["base_price"], 0)
 		rows = public_api.search_stay(self.property, ci, co, 2, 0)
 		self.assertIs(rows[0]["available"], True)
 		self.assertGreater(rows[0]["quote"]["amount_after_tax"], 0)
 		booked = public_api.book(self.property, self.room_type, ci, co, "Web Guest", "+256700000101")
 		self.assertEqual(frappe.db.get_value("Reservation", booked["reservation"], "rate_plan"), default)
+
+		# Default plan with ContractRateRefused -> showcase hides raw base_price, guest sees clean copy
+		from kamra.pricing import ContractRateRefused
+		with patch("kamra.pricing.quote_with_contract", side_effect=ContractRateRefused("HSP-TARIFF-002: missing")):
+			sc_refused = public_api.showcase(self.property)
+			self.assertEqual(sc_refused["room_types"][0]["base_price"], 0.0)
+			frappe.clear_messages()
+			refused_rows = public_api.search_stay(self.property, ci, co, 2, 0)
+			self.assertIs(refused_rows[0]["available"], False)
+			self.assertNotRegex(refused_rows[0]["reason"], INTERNAL_ADMIN_SETUP)
+			self.assertNotRegex(refused_rows[0]["reason"], FORBIDDEN_USER_TOKENS)
+			self.assertEqual(frappe.local.message_log, [])
+			with self.assertRaises(frappe.ValidationError) as ctx:
+				public_api.book(self.property, self.room_type, ci, co, "Web Guest 2", "+256700000102")
+			self.assertNotRegex(str(ctx.exception), INTERNAL_ADMIN_SETUP)
+			self.assertNotRegex(str(ctx.exception), FORBIDDEN_USER_TOKENS)
 
 	def test_complimentary_house_use_and_pm_account_follow_opera(self):
 		self.require_plan(1)
@@ -345,3 +393,172 @@ class RatePlanRequiredTest(AuditTestCase):
 		     patch("kamra.pricing.tax_basis", return_value={"determined": 0, "label": "", "rate": 0, "inclusive": 0}):
 			loc = api.property_locale(self.property)
 			self.assertIs(loc["erp_tax_managed"], True)
+
+	# ── R1 Finding #2: Direct DocType / REST bypass & cross-property spoofing ──
+
+	def test_direct_doctype_reservation_enforces_rate_plan_and_blocks_spoofing_and_clearing(self):
+		self.require_plan(1)
+		guest = frappe.get_doc({
+			"doctype": "Guest", "first_name": "Direct", "last_name": "Rest",
+		}).insert(ignore_permissions=True).name
+		foreign_prop = frappe.get_doc({
+			"doctype": "Property",
+			"property_name": "TEST K3 FOREIGN",
+			"country": "Uganda",
+			"currency": "UGX",
+		}).insert(ignore_permissions=True).name
+		self.addCleanup(clear_cache, foreign_prop)
+		foreign_plan = frappe.get_doc({
+			"doctype": "Rate Plan",
+			"property": foreign_prop,
+			"rate_plan_name": "Foreign BAR",
+			"code": "FBAR",
+			"modifier_type": "Percent",
+			"modifier_value": 0,
+		}).insert(ignore_permissions=True).name
+		disabled_plan = self.make_plan("DIS", "Disabled Plan", disabled=1)
+
+		ci, co = self.tomorrow, self.day3
+		# (a) Direct insert with rate_plan="" and no default plan -> MUST refuse
+		with self.assertRaises(frappe.ValidationError) as ctx:
+			frappe.get_doc({
+				"doctype": "Reservation",
+				"property": self.property,
+				"guest": guest,
+				"room_type": self.room_type,
+				"check_in_date": ci,
+				"check_out_date": co,
+				"adults": 2,
+				"rate_plan": "",
+			}).insert()
+		self.assertNotRegex(str(ctx.exception), FORBIDDEN_USER_TOKENS)
+
+		# (b) Direct insert spoofing foreign-property rate_plan -> MUST refuse
+		with self.assertRaises(frappe.ValidationError) as ctx:
+			frappe.get_doc({
+				"doctype": "Reservation",
+				"property": self.property,
+				"guest": guest,
+				"room_type": self.room_type,
+				"check_in_date": ci,
+				"check_out_date": co,
+				"adults": 2,
+				"rate_plan": foreign_plan,
+			}).insert()
+		self.assertIn("another property", str(ctx.exception))
+		self.assertNotRegex(str(ctx.exception), FORBIDDEN_USER_TOKENS)
+
+		# (b2) Direct insert with disabled rate_plan -> MUST refuse
+		with self.assertRaises(frappe.ValidationError) as ctx:
+			frappe.get_doc({
+				"doctype": "Reservation",
+				"property": self.property,
+				"guest": guest,
+				"room_type": self.room_type,
+				"check_in_date": ci,
+				"check_out_date": co,
+				"adults": 2,
+				"rate_plan": disabled_plan,
+			}).insert()
+		self.assertIn("disabled", str(ctx.exception).lower())
+
+		# (c) Create valid reservation, then clear rate_plan="" via save (REST PUT path) -> MUST refuse
+		valid_plan = self.make_plan("STD", "Standard Rate", is_default=1)
+		res = frappe.get_doc({
+			"doctype": "Reservation",
+			"property": self.property,
+			"guest": guest,
+			"room_type": self.room_type,
+			"check_in_date": ci,
+			"check_out_date": co,
+			"adults": 2,
+			"rate_plan": valid_plan,
+		}).insert()
+		self.assertEqual(res.rate_plan, valid_plan)
+
+		res.reload()
+		res.rate_plan = ""
+		with self.assertRaises(frappe.ValidationError) as ctx:
+			res.save()
+		self.assertNotRegex(str(ctx.exception), FORBIDDEN_USER_TOKENS)
+
+		# (d) Switching existing reservation to foreign or disabled plan -> MUST refuse
+		res.reload()
+		res.rate_plan = foreign_plan
+		with self.assertRaises(frappe.ValidationError):
+			res.save()
+		res.reload()
+		res.rate_plan = disabled_plan
+		with self.assertRaises(frappe.ValidationError):
+			res.save()
+
+	# ── R1 Finding #5: OPERA / API parity (group bookings, rate_calendar, get_quote night_prices) ──
+
+	def test_group_booking_rate_calendar_and_get_quote_night_prices_enforce_rate_plan(self):
+		self.require_plan(1)
+		ci, co = str(add_days(self.today, 8)), str(add_days(self.today, 10))
+
+		# 1. create_group_booking refuses without rate_plan and leaves no orphan Group Booking
+		before_groups = frappe.db.count("Group Booking", {"property": self.property})
+		with self.assertRaises(frappe.ValidationError) as ctx:
+			api.create_group_booking(
+				self.property, "No Plan Group", ci, co,
+				[{"room_type": self.room_type, "count": 1}],
+				"Group Lead",
+			)
+		self.assertNotRegex(str(ctx.exception), FORBIDDEN_USER_TOKENS)
+		self.assertEqual(frappe.db.count("Group Booking", {"property": self.property}), before_groups)
+
+		# 2. create_group_block refuses without rate_plan and leaves no orphan Group Booking
+		with self.assertRaises(frappe.ValidationError) as ctx:
+			api.create_group_block(
+				self.property, "No Plan Block", ci, co,
+				[{"room_type": self.room_type, "rooms_blocked": 1}],
+			)
+		self.assertNotRegex(str(ctx.exception), FORBIDDEN_USER_TOKENS)
+		self.assertEqual(frappe.db.count("Group Booking", {"property": self.property}), before_groups)
+
+		# 3. create_group_with_rooming_list (even quotation_only=1) refuses without rate_plan
+		with self.assertRaises(frappe.ValidationError) as ctx:
+			api.create_group_with_rooming_list(
+				self.property, "No Plan Quote", ci, co,
+				[{"room_type": self.room_type, "rooms_blocked": 1}], [],
+				quotation_only=1,
+			)
+		self.assertNotRegex(str(ctx.exception), FORBIDDEN_USER_TOKENS)
+		self.assertEqual(frappe.db.count("Group Booking", {"property": self.property}), before_groups)
+
+		# 4. rate_calendar(rate_plan="") does NOT fall back to bar/base_price when no default exists
+		with self.assertRaises(frappe.ValidationError) as ctx:
+			rates.rate_calendar(self.property, from_date=ci, days=2, rate_plan="")
+		self.assertNotRegex(str(ctx.exception), FORBIDDEN_USER_TOKENS)
+
+		cal_default = rates.rate_calendar(self.property, from_date=ci, days=2)
+		self.assertIsNone(cal_default["rate_plan"])
+		for night in cal_default["room_types"][0]["nights"]:
+			self.assertIs(night.get("available"), False)
+			self.assertIsNone(night.get("rate"))
+			self.assertNotIn("bar", night)
+
+		# 5. get_quote(..., night_prices=...) refuses cleanly when rate_plan_required=1 (consistent with create_booking)
+		typed = [{"date": ci, "price": 500}]
+		with self.assertRaises(frappe.ValidationError) as ctx:
+			api.get_quote(self.property, self.room_type, ci, co, night_prices=typed)
+		self.assertNotRegex(str(ctx.exception), FORBIDDEN_USER_TOKENS)
+		with self.assertRaises(frappe.ValidationError):
+			api.create_booking(self.property, self.room_type, ci, co, "Night Guest", night_prices=typed)
+
+		# 6. Once a default rate plan exists, group bookings stamp it on the Group Booking header
+		default = self.make_plan("GRP-DEF", "Group Default", is_default=1)
+		gb = api.create_group_block(
+			self.property, "Planned Block", ci, co,
+			[{"room_type": self.room_type, "rooms_blocked": 1}],
+		)
+		self.assertEqual(frappe.db.get_value("Group Booking", gb["group_booking"], "rate_plan"), default)
+		grp = api.create_group_booking(
+			self.property, "Planned Group", str(add_days(self.today, 12)), str(add_days(self.today, 14)),
+			[{"room_type": self.room_type, "count": 1}],
+			"Group Lead Two",
+		)
+		self.assertEqual(frappe.db.get_value("Group Booking", grp["group_booking"], "rate_plan"), default)
+		self.assertEqual(frappe.db.get_value("Reservation", grp["created"][0], "rate_plan"), default)

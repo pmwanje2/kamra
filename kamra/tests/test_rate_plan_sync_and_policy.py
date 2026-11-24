@@ -5,10 +5,16 @@ tariff transitions."""
 
 from __future__ import annotations
 
+import re
 from types import ModuleType
 from unittest.mock import patch
 
 from kamra.tests.rate_matrix_harness import RateMatrixHarness, ValidationError
+
+FORBIDDEN_USER_TOKENS = re.compile(
+	r"(?<![a-z0-9])(?:KMR-[A-Z0-9-]+|Kamra|ERPNext|Frappe|URY|HUF|HeyKoala|Tridz|BuildSuite)(?![a-z0-9])",
+	re.I,
+)
 
 PROP = "Test Hotel"
 STD = "Test Hotel-STD"
@@ -339,24 +345,71 @@ class RatePlanSyncAndPolicyTest(RateMatrixHarness):
 		self.assertIn("Deluxe Suite", msg)
 		self.assertIn("Standard USD", msg)
 
-		# 6. Disabled plan is refused with plain setup guidance
+		# 6. Disabled plan is refused with plain setup guidance and zero internal/brand codes
 		with self.assertRaises(ValidationError) as ctx:
 			self.pricing.resolve_booking_rate_plan(PROP, STD, "2026-12-01", "2026-12-02", rate_plan="OLD")
 		self.assertIn("Rate Plans", str(ctx.exception))
+		self.assertNotRegex(str(ctx.exception), FORBIDDEN_USER_TOKENS)
 
-		# 7. No default plan + none chosen refuses with KMR-RATE-REQ-001 naming Rate Plans
+		# 6b. Foreign-property plan is refused with plain setup guidance and zero internal/brand codes
+		self.rate_plan("FOREIGN-PLAN", property="Other Hotel", rate_plan_name="Other Hotel BAR", code="OBAR")
+		with self.assertRaises(ValidationError) as ctx:
+			self.pricing.resolve_booking_rate_plan(PROP, STD, "2026-12-01", "2026-12-02", rate_plan="FOREIGN-PLAN")
+		self.assertIn("another property", str(ctx.exception))
+		self.assertNotRegex(str(ctx.exception), FORBIDDEN_USER_TOKENS)
+
+		# 7. No default plan + none chosen refuses with clean brand-free wording (zero KMR- codes)
 		self.docs["Rate Plan", "STD-USD"].is_default = 0
 		for row in self.records["Rate Plan"]:
 			if row.name == "STD-USD":
 				row.is_default = 0
 		with self.assertRaises(ValidationError) as ctx:
 			self.pricing.resolve_booking_rate_plan(PROP, STD, "2026-12-01", "2026-12-02")
-		self.assertIn("KMR-RATE-REQ-001", str(ctx.exception))
-		self.assertIn("Rate Plans", str(ctx.exception))
+		msg = str(ctx.exception)
+		self.assertIn("rate plan", msg.lower())
+		self.assertIn("Rate Plans", msg)
+		self.assertNotRegex(msg, FORBIDDEN_USER_TOKENS)
 
 		# 8. Legacy property (rate_plan_required = 0) allows booking without a rate plan
 		self.settings_store[(PROP, "rate_plan_required")] = 0
 		self.assertIsNone(self.pricing.resolve_booking_rate_plan(PROP, STD, "2026-12-01", "2026-12-02"))
+
+	def test_rate_calendar_refuses_card_fallback_when_rate_plan_required_and_no_default(self):
+		"""Finding #5: when rate_plan_required=1 and no default plan exists, rate_calendar
+		must never silently fall back to Room Type card rate (bar / base_price)."""
+		self.mutable_bridge.add_version(
+			room_type=STD, item_code="ROOM-STD", rate=100,
+			valid_from="2026-11-01", valid_upto="2026-12-31",
+		)
+		self.docs["Rate Plan", "STD-USD"].is_default = 0
+		for row in self.records["Rate Plan"]:
+			if row.name == "STD-USD":
+				row.is_default = 0
+
+		# Explicit empty string rate_plan="" asks for Card rate -> refused cleanly with zero KMR- codes
+		with self.assertRaises(ValidationError) as ctx:
+			self.rates.rate_calendar(PROP, from_date="2026-12-01", days=2, rate_plan="")
+		self.assertIn("rate plan", str(ctx.exception).lower())
+		self.assertNotRegex(str(ctx.exception), FORBIDDEN_USER_TOKENS)
+
+		# Initial screen load (rate_plan=None) returns unavailable cells (rate=None, available=False),
+		# NEVER falling back to explain_night / bar / base_price, while keeping rate_plans pickable.
+		cal = self.rates.rate_calendar(PROP, from_date="2026-12-01", days=2)
+		self.assertIsNone(cal["rate_plan"])
+		self.assertTrue(cal["rate_plans"])
+		std_row = next(r for r in cal["room_types"] if r["room_type"] == STD)
+		for night in std_row["nights"]:
+			self.assertIs(night.get("available"), False)
+			self.assertIsNone(night.get("rate"))
+			self.assertNotIn("bar", night)
+			self.assertTrue(night.get("refusal"))
+			self.assertNotRegex(night["refusal"], FORBIDDEN_USER_TOKENS)
+
+		# Choosing an explicit active plan still prices normally
+		cal_explicit = self.rates.rate_calendar(PROP, from_date="2026-12-01", days=2, rate_plan="STD-USD")
+		self.assertEqual(cal_explicit["rate_plan"]["name"], "STD-USD")
+		std_explicit = next(r for r in cal_explicit["room_types"] if r["room_type"] == STD)
+		self.assertEqual(std_explicit["nights"][0]["rate"], 365000.0)
 
 	# ── Requirement 3: Room Types summary/panel/calendar policy & ERP tax flags ──
 
