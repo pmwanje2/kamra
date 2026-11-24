@@ -186,6 +186,40 @@ class POSOverridePinHookTestCase(AuditTestCase):
 		self.assertTrue(res.get("ok"))
 		self.assertNotIn("pin", frappe.local.form_dict)
 
+	def test_must_reset_and_disabled_user_never_record_lockout_strikes_and_db_lockout_respected(self):
+		fn = frappe.get_attr(hooks.pos_override_pin_verifier)
+		frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- fixture
+		_set_pin(SUP_A, "4321", must_reset=1)
+		fails_key = f"kamra_supervisor_pin_fails:{SUP_A.casefold()}"
+		frappe.cache.delete_value(fails_key)
+
+		# Non-PIN must_reset state must NEVER record lockout strikes even after PIN_MAX_ATTEMPTS + 1 calls!
+		frappe.set_user(POS_USER)  # nosemgrep: frappe-setuser -- cashier persona
+		for _ in range(authz.PIN_MAX_ATTEMPTS + 1):
+			res = fn(SUP_A, "4321", property=PROP_A, requester=POS_USER)
+			self.assertFalse(res.get("ok"))
+			self.assertEqual(res.get("code"), "POS-AUTH-NO-PIN")
+		self.assertEqual(frappe.utils.cint(frappe.cache.get_value(fails_key)), 0)
+
+		# Disabled user returns POS-AUTH-NOT-ELIGIBLE with zero strikes
+		frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- fixture
+		_set_pin(SUP_A, "4321", must_reset=0)
+		frappe.db.set_value("User", SUP_A, "enabled", 0)
+		frappe.set_user(POS_USER)  # nosemgrep: frappe-setuser -- cashier persona
+		dis = fn(SUP_A, "4321", property=PROP_A, requester=POS_USER)
+		self.assertFalse(dis.get("ok"))
+		self.assertEqual(dis.get("code"), "POS-AUTH-NOT-ELIGIBLE")
+		self.assertEqual(frappe.utils.cint(frappe.cache.get_value(fails_key)), 0)
+
+		# DB-locked Cashier PIN (locked_until in future) returns POS-AUTH-LOCKED
+		frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- fixture
+		frappe.db.set_value("User", SUP_A, "enabled", 1)
+		frappe.db.set_value("Cashier PIN", SUP_A, "locked_until", frappe.utils.add_to_date(frappe.utils.now_datetime(), minutes=10))
+		frappe.set_user(POS_USER)  # nosemgrep: frappe-setuser -- cashier persona
+		locked = fn(SUP_A, "4321", property=PROP_A, requester=POS_USER)
+		self.assertFalse(locked.get("ok"))
+		self.assertEqual(locked.get("code"), "POS-AUTH-LOCKED")
+
 
 class RoomChargeVerifyAndOverrideTestCase(AuditTestCase):
 	"""`verify_room_charge` neutral read-only exposure + duty-manager override
@@ -483,6 +517,20 @@ class RoomChargeVerifyAndOverrideTestCase(AuditTestCase):
 		self.assertFalse(converted["posting_allowed"])
 		self.assertTrue(converted["override_required"])
 		self.assertEqual(converted["reason_code"], "POS-RC-OVER-LIMIT")
+
+	def test_three_decimal_kwd_property_enforces_fils_precision_on_room_charge_limit(self):
+		frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- fixture
+		frappe.db.set_value("Property", PROP_A, "currency", "KWD")
+		_set_prop_setting(PROP_A, "pos_room_charge_limit", 100)
+		self.as_pos()
+		# 100.004 KWD is 4 fils above 100.000 KWD — must NOT be rounded down to 100.00!
+		check = pi.verify_room_charge(property=PROP_A, room="101", amount=100.004, currency="KWD")
+		self.assertTrue(check["ok"])
+		self.assertFalse(check["posting_allowed"])
+		self.assertTrue(check["override_required"])
+		self.assertEqual(check["reason_code"], "POS-RC-OVER-LIMIT")
+		with self.assertRaisesRegex(frappe.ValidationError, "POS-RC-OVER-LIMIT|limit"):
+			pi.pos_post_room_charge(PROP_A, "T-KWD-1", 100.004, "KWD Dinner", room="101", currency="KWD")
 
 	def test_adversarial_override_token_hook_missing_or_raising_fails_closed(self):
 		self.as_pos()
