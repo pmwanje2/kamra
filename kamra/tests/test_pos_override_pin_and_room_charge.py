@@ -721,7 +721,7 @@ class RoomChargeConcurrencyTestCase(frappe.tests.IntegrationTestCase):
 		_set_prop_setting(prop_name, "pos_room_charge_limit", 0)
 		_set_prop_setting(prop_name, "pos_room_charge_credit_check", 1)
 		_set_prop_setting(prop_name, "pos_room_charge_allowance", 1000)
-		rt = make_room_type(prop_name, f"R{suffix}", base_price=0)
+		rt = make_room_type(prop_name, f"R{suffix}", base_price=1000)
 		room = make_room(prop_name, rt, f"3{suffix[:3]}")
 		res = make_reservation(
 			prop_name, rt, d(-1), d(2), room=room, status="Checked In",
