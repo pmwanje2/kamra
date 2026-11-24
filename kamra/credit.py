@@ -129,13 +129,15 @@ def in_house_exposure(company: str, property: str,
 	if for_update:
 		in_house_sql += " FOR UPDATE"
 	rows = frappe.db.sql(in_house_sql, {"p": property, "c": company}, as_dict=True)
+	from kamra.ledger import _currency_places, _round_currency
+	places = max(_currency_places(property), 2)
 	total = 0.0
 	for f in rows:
 		if f.name in skip or flt(f.balance) <= 0:
 			continue
 		if company_payer_of(f) == company:
 			total += flt(f.balance)
-	return round(total, 2)
+	return _round_currency(total, places)
 
 
 def check_company_credit(account_or_company: str, property: str,
@@ -147,10 +149,12 @@ def check_company_credit(account_or_company: str, property: str,
 	when the exposure (AR + in-house company folios + amount) is over a
 	non-zero credit limit, or bills are more than the grace period past
 	their due date. With credit control Off it is always ok."""
-	from kamra.ledger import _account_position, overdue_past_grace
+	from kamra.ledger import _account_position, _currency_places, _round_currency, overdue_past_grace
+	places = max(_currency_places(property), 2)
+	eps = 0.5 * (10 ** -places)
 	policy = credit_policy(property)
 	account, company = _resolve(account_or_company, property)
-	amount = round(flt(amount), 2)
+	amount = _round_currency(amount, places)
 	out = {
 		"ok": True, "policy": policy, "company": company, "account": account,
 		"amount": amount, "reasons": [], "over_limit_by": 0.0,
@@ -174,22 +178,22 @@ def check_company_credit(account_or_company: str, property: str,
 			ar = pos["ar_balance"]
 		else:
 			pos = _account_position(account)
-			ar = round(flt(frappe.db.sql(
+			ar = _round_currency(frappe.db.sql(
 				"""SELECT COALESCE(SUM(debit - credit), 0) FROM `tabCity Ledger Entry`
-				   WHERE account = %s""", account)[0][0]), 2)
+				   WHERE account = %s""", account)[0][0], places)
 		from kamra.ledger import aging_date
 		overdue, oldest = overdue_past_grace(
 			pos["open_items"], pos["unapplied_credit"], out["grace_days"],
-			aging_date(property))
+			aging_date(property), places=places)
 		out["overdue_amount"], out["oldest_due_date"] = overdue, oldest
 	in_house = in_house_exposure(company, property, exclude_folios,
 	                             for_update=lock)
-	exposure = round(ar + in_house + amount, 2)
+	exposure = _round_currency(ar + in_house + amount, places)
 	out.update(credit_limit=limit, ar_balance=ar, in_house=in_house,
 	           exposure=exposure)
 	sym = _symbol(property)
-	if limit > 0 and exposure > limit + 0.005:
-		out["over_limit_by"] = round(exposure - limit, 2)
+	if limit > 0 and exposure > limit + eps:
+		out["over_limit_by"] = _round_currency(exposure - limit, places)
 		out["reasons"].append(_(
 			"Over the credit limit by {0}{1:,.2f} (limit {0}{2:,.2f}, owed and "
 			"billed with this {0}{3:,.2f}).").format(
@@ -202,7 +206,7 @@ def check_company_credit(account_or_company: str, property: str,
 		out["reasons"].append(_("The account is restricted{0}.").format(
 			f" ({restricted.restricted_reason})"
 			if restricted.restricted_reason else ""))
-	if out["overdue_amount"] > 0.005:
+	if out["overdue_amount"] > eps:
 		if out["grace_days"]:
 			out["reasons"].append(_(
 				"{0}{1:,.2f} overdue by more than {2} days (oldest due {3}).").format(

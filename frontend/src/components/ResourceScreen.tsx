@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useState,
   Suspense,
   type ComponentType,
@@ -446,9 +447,11 @@ function LinkSelect(props: {
   extraOpts: string[]
   capped?: boolean
   disabled?: boolean
+  selectId?: string
+  fieldLabel?: string
   t: (s: string) => string
 }) {
-  const { spec, value, onChange, baseOpts, extraOpts, capped, disabled, t } = props
+  const { spec, value, onChange, baseOpts, extraOpts, capped, disabled, selectId, fieldLabel, t } = props
   const [query, setQuery] = useState("")
   const [searched, setSearched] = useState<string[]>([])
 
@@ -495,9 +498,11 @@ function LinkSelect(props: {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={t("Search…")}
+          aria-label={fieldLabel ? `${t("Search…")} ${fieldLabel}` : t("Search…")}
         />
       )}
       <select
+        id={selectId}
         className={inputCls}
         value={current}
         disabled={disabled}
@@ -526,6 +531,7 @@ function FieldInput(props: {
   t: (s: string) => string
   canBackdate?: boolean
   disabled?: boolean
+  selectId?: string
 }) {
   useUILanguage()
   const { spec, value, onChange, t, canBackdate, disabled } = props
@@ -573,6 +579,8 @@ function FieldInput(props: {
           extraOpts={props.extraLinkOptions ?? []}
           capped={Boolean(props.linkCapped?.[spec.field])}
           disabled={disabled}
+          selectId={props.selectId}
+          fieldLabel={t(spec.label)}
           t={t}
         />
       )
@@ -710,6 +718,7 @@ export function ResourceScreen({
   onSaved?: () => void
 }) {
   const { t, lang } = useT()
+  const formId = useId()
   const { roles } = useAuth()
   const canBackdate = roles.some((r) => BACKDATE_ROLES.includes(r))
   const [rows, setRows] = useState<Row[]>([])
@@ -1312,6 +1321,42 @@ export function ResourceScreen({
                         onChange={(v) => setDraft((d) => ({ ...d, [spec.field]: v }))}
                         t={t}
                       />
+                    ) : spec.type === "link" ? (
+                      <div key={spec.field} className="block">
+                        <label
+                          htmlFor={`${formId}-${spec.field}`}
+                          className="mb-1.5 block text-sm font-medium text-zinc-600"
+                        >
+                          {t(spec.label)}
+                          {spec.required && <span className="text-rose-500"> *</span>}
+                        </label>
+                        <FieldInput
+                          spec={spec}
+                          value={spec.displayValue ? spec.displayValue(draft) : draft[spec.field]}
+                          onChange={(v) =>
+                            setDraft((d) => ({ ...d, [spec.field]: v }))
+                          }
+                          linkOptions={linkOptions}
+                          linkCapped={linkCapped}
+                          extraLinkOptions={spec.ensureOptions?.(draft)}
+                          masterOptions={masterOptions}
+                          t={t}
+                          canBackdate={canBackdate}
+                          selectId={`${formId}-${spec.field}`}
+                          disabled={Boolean(
+                            (spec.readOnlyOnEdit && editing !== "new") ||
+                            spec.disabledWhen?.(draft),
+                          )}
+                        />
+                        {(() => {
+                          const shownHint = spec.hintWhen?.(draft) ?? spec.hint
+                          return shownHint ? (
+                            <span className="mt-1 block text-xs leading-relaxed text-zinc-400">
+                              {t(shownHint)}
+                            </span>
+                          ) : null
+                        })()}
+                      </div>
                     ) : (
                       <label
                         key={spec.field}

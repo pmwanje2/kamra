@@ -45,7 +45,7 @@ def _is_closed_or_invoiced(folio) -> bool:
 	)
 
 
-def _recalculate(folio):
+def _recalculate(folio, *, payments_only: bool = False):
 	paid = sum(Decimal(str(p.amount or 0)) for p in folio.payments)
 	if _is_closed_or_invoiced(folio) and folio.get("grand_total") is not None:
 		# Closed / invoiced folios have frozen charges, tax and grand_total;
@@ -64,6 +64,7 @@ def _recalculate(folio):
 		tax += line_tax
 	raw_grand = charges + tax
 	prop = folio.get("property")
+	rounded_grand = raw_grand
 	if prop and folio.charges and tax and not _is_closed_or_invoiced(folio):
 		# Document-level currency minor-unit rounding (SAP TCURX style) applies
 		# only to open, uninvoiced folios with calculated tax. With tax == 0
@@ -72,10 +73,25 @@ def _recalculate(folio):
 		# grand_total stay equal to sum(c.amount) so KAM-SI-TOTAL-MISMATCH holds.
 		from kamra.pricing import property_currency, round_rate_amount
 		currency = property_currency(prop)
-		grand = round_rate_amount(raw_grand, 0, "Nearest", currency)
+		rounded_grand = round_rate_amount(raw_grand, 0, "Nearest", currency)
+	if payments_only and folio.get("grand_total") is not None:
+		# Settlement writers (payment, refund, city ledger, re-close after
+		# cancel_invoice) must not re-round an already-computed bill whose
+		# charge lines did not change — e.g. a legacy pre-R8 fractional invoice
+		# reopened by cancel_invoice and then paid (SAP VF11/VF01 & OPERA
+		# Void/Reissue preserve billed totals until a charge actually changes).
+		stored_charges = Decimal(str(folio.charges_total or 0))
+		stored_grand = Decimal(str(folio.grand_total or 0))
+		if abs(stored_charges - charges) < Decimal("0.000001") and (
+			abs(stored_grand - raw_grand) < Decimal("0.000001")
+			or abs(stored_grand - rounded_grand) < Decimal("0.000001")
+		):
+			folio.payments_total = float(paid)
+			folio.balance = float(stored_grand - paid)
+			return
+	grand = rounded_grand
+	if prop and folio.charges and tax and not _is_closed_or_invoiced(folio):
 		tax = grand - charges
-	else:
-		grand = raw_grand
 	folio.charges_total = float(charges)
 	folio.tax_total = float(tax)
 	folio.grand_total = float(grand)
@@ -593,7 +609,9 @@ def _planned_nights(reservation, plan) -> dict[str, Decimal]:
 		extras += min(extra, rate)
 		dates.append(str(getdate(day)))
 		nights.append((rate, gst))
-	rates, _rounded = plan_stay_nights(plan, nights, extras, inclusive)
+	from kamra.pricing import property_currency
+	rates, _rounded = plan_stay_nights(plan, nights, extras, inclusive,
+	                                   currency=property_currency(reservation.property))
 	planned = dict(zip(dates, rates, strict=True))
 	if flags is not None:
 		flags["_kamra_planned_nights"] = (key, planned)
@@ -606,7 +624,7 @@ def _plan_free_night_rate(reservation, date) -> Decimal:
 
 
 def _plan_free_night(reservation, date) -> tuple[Decimal, Decimal]:
-	"""One night before the rate plan, taxable, and its GST % (0 when tax is not inclusive)."""
+	"""One night before the rate plan, taxable, and its GST %."""
 	from kamra.pricing import (
 		occupancy_rate,
 		rates_include_tax,
@@ -622,10 +640,9 @@ def _plan_free_night(reservation, date) -> tuple[Decimal, Decimal]:
 			rt, reservation.check_in_date, reservation.check_out_date))
 	rate = season_adjust(reservation.property, date, base,
 	                     reservation.room_type)
-	gst = Decimal(0)
+	gst = Decimal(str(room_gst_rate(reservation.property, rt,
+	                                rate + _over_cap_night(reservation))))
 	if rates_include_tax(reservation.property):
-		gst = Decimal(str(room_gst_rate(reservation.property, rt,
-		                                rate + _over_cap_night(reservation))))
 		rate = rate / (Decimal(1) + gst / Decimal(100))
 	return rate, gst
 
@@ -980,6 +997,13 @@ def post_room_night(reservation, date, folios=None, *, room_posted: list | None 
 				                        rates_include_tax(reservation.property), places)) + off
 				desc += (f" · {amount_text(reservation.property, base)} "
 				         f"less discount {amount_text(reservation.property, off)}")
+		if not float(gst_rate or 0):
+			# SAP TCURX / OPERA: 0%-tax nightly room charges stay at the
+			# currency's ISO 4217 minor unit at the line so charges_total ==
+			# sum(lines) with payable currency units.
+			from kamra.pricing import property_currency, round_rate_amount
+			night_rate = float(round_rate_amount(
+				night_rate, 0, "Nearest", property_currency(reservation.property)))
 		fx_posted = {}
 		if current:
 			# the rate this night posted at: ACTUAL reference currency and Night Audit read it
@@ -1708,7 +1732,12 @@ def close_folio(folio_name: str) -> str:
 	folio = frappe.get_doc("Folio", folio_name)
 	if folio.status == "Closed":
 		return folio.invoice_number
-	_recalculate(folio)
+	prev_grand = folio.get("grand_total")
+	_recalculate(folio, payments_only=True)
+	if prev_grand is not None and abs(float(folio.grand_total or 0) - float(prev_grand)) > 1e-9:
+		from kamra import ledger as _ledger_mod
+		if hasattr(_ledger_mod, "sync_folio_rounding_ledger"):
+			_ledger_mod.sync_folio_rounding_ledger(folio)
 	balance = float(folio.balance or 0)
 	if abs(balance) > 0.01:
 		from kamra.localization import pack_for
@@ -1732,7 +1761,7 @@ def close_folio(folio_name: str) -> str:
 	# initials code keeps INV-KDP-26-00001 inside the limit
 	code = "".join(w[0] for w in folio.property.split())[:3].upper()
 	folio.invoice_number = make_autoname(f"INV-{code}-.YY.-.#####")
-	_recalculate(folio)
+	_recalculate(folio, payments_only=True)
 	folio.save(ignore_permissions=True)
 	# a company bill moved to the city ledger at checkout, before it had a
 	# number: the account's bill takes the invoice number now

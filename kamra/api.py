@@ -1704,8 +1704,9 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 		**(fx or {}),  # an FX row keeps the foreign currency, amount and rate
 		"idempotency_key": key,
 	})
+	prev_grand = doc.get("grand_total")
 	from kamra.folio import _recalculate
-	_recalculate(doc)
+	_recalculate(doc, payments_only=True)
 	doc.save()
 	pay = doc.payments[-1]
 	fx_note = (f"{fx['currency']} {fx['fx_amount']:,.2f} @ {fx['exchange_rate']}"
@@ -1714,8 +1715,14 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 		doc.property, "Payment", mode, float(amount),
 		folio=doc.name, reference=reference, notes=fx_note, session=sess, tender_validated=True)
 	try:
-		from kamra.ledger import record_payment_ledger
-		record_payment_ledger(doc, pay.as_dict(), session=sess)
+		from kamra import ledger as _ledger_mod
+		_ledger_mod.record_payment_ledger(doc, pay.as_dict(), session=sess)
+		if (
+			prev_grand is not None
+			and abs(float(doc.grand_total or 0) - float(prev_grand)) > 1e-9
+			and hasattr(_ledger_mod, "sync_folio_rounding_ledger")
+		):
+			_ledger_mod.sync_folio_rounding_ledger(doc, session=sess)
 	except Exception:
 		frappe.log_error(title="ledger payment write failed")
 	if kind in ("Advance", "Security Deposit"):
@@ -1992,8 +1999,9 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 		"idempotency_key": idempotency_key,
 		**(correction or {}),
 	})
+	prev_grand = doc.get("grand_total")
 	from kamra.folio import _recalculate
-	_recalculate(doc)
+	_recalculate(doc, payments_only=True)
 	doc.save()
 	pay = doc.payments[-1]
 	if sess or correction is None:
@@ -2001,8 +2009,14 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 			doc.property, "Refund", mode, -float(amount),
 			folio=doc.name, reference=str(reason_text)[:140], session=sess)
 	try:
-		from kamra.ledger import record_payment_ledger
-		record_payment_ledger(doc, pay.as_dict(), session=sess, ledger=ledger)
+		from kamra import ledger as _ledger_mod
+		_ledger_mod.record_payment_ledger(doc, pay.as_dict(), session=sess, ledger=ledger)
+		if (
+			prev_grand is not None
+			and abs(float(doc.grand_total or 0) - float(prev_grand)) > 1e-9
+			and hasattr(_ledger_mod, "sync_folio_rounding_ledger")
+		):
+			_ledger_mod.sync_folio_rounding_ledger(doc, session=sess)
 	except Exception:
 		if correction:
 			raise
@@ -3678,6 +3692,13 @@ def folio_invoice(folio: str):
 		if taxable_rates:
 			_dominant_rate, dominant = max(taxable_rates, key=lambda item: (abs(item[1]["taxable"]), item[0]))
 			dominant["tax"] = float(Decimal(str(dominant["tax"])) + Decimal(str(tax_delta)))
+		taxed_heads = [h for h in by_head.values() if abs(h["tax"]) > 1e-9]
+		if taxed_heads:
+			dominant_head = max(taxed_heads, key=lambda h: (abs(h["tax"]), abs(h["amount"]), h["head"]))
+			dominant_head["tax"] = float(Decimal(str(dominant_head["tax"])) + Decimal(str(tax_delta)))
+			dominant_head["total"] = float(
+				Decimal(str(dominant_head["amount"])) + Decimal(str(dominant_head["tax"]))
+			)
 
 	settled = bool(doc.invoice_number)
 	# what the tax authority requires ON the bill (ZATCA: QR + Arabic title)
