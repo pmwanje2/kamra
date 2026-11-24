@@ -562,3 +562,19 @@ class RatePlanRequiredTest(AuditTestCase):
 		)
 		self.assertEqual(frappe.db.get_value("Group Booking", grp["group_booking"], "rate_plan"), default)
 		self.assertEqual(frappe.db.get_value("Reservation", grp["created"][0], "rate_plan"), default)
+
+	def test_migration_import_carries_forward_legacy_stays_when_rate_plan_required_is_on(self):
+		"""Vendor CSV migration (kamra.migrate.run_import) carries forward legacy stays
+		from an old PMS on a brand-new property (where rate_plan_required=1 is seeded),
+		while direct Reservation.insert() without the server-only import flag stays refused."""
+		from kamra import migrate
+
+		self.require_plan(1)
+		ci, co = str(add_days(self.today, 15)), str(add_days(self.today, 17))
+		csv_text = (
+			"Guest Name,Mobile No,Room Type,Arrival Date,Departure Date,Adult,Child,Total Amount,Reservation Status,Business Source\n"
+			f"Migrated Guest,+256700000888,Standard,{ci},{co},2,0,2000,Confirmed,Direct\n"
+		)
+		result = migrate.run_import(self.property, csv_text, "auto")
+		self.assertEqual(result["created"], 1, result)
+		self.assertEqual(result["errors"], [], result)
