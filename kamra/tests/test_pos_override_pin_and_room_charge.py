@@ -537,7 +537,7 @@ class RoomChargeConcurrencyTestCase(frappe.tests.IntegrationTestCase):
 		ensure_user(pos_user, ["POS Integrator"])
 		_restrict_property(pos_user, prop_name)
 		folio_name = guest_folio(res.name)
-		frappe.db.commit()
+		frappe.db.commit()  # nosemgrep: frappe-manual-commit -- expose fixture to worker threads
 
 		barrier = threading.Barrier(2)
 		outcomes: list[tuple[str, str]] = []
@@ -557,7 +557,7 @@ class RoomChargeConcurrencyTestCase(frappe.tests.IntegrationTestCase):
 						prop_name, ticket_id, 600, f"Race {ticket_id}",
 						room=room, reservation=res.name, charge_type="Misc",
 					)
-				frappe.db.commit()
+				frappe.db.commit()  # nosemgrep: frappe-manual-commit -- commit concurrent worker tx
 				with lock:
 					outcomes.append(("ok", out["ticket_id"]))
 			except Exception as exc:
@@ -581,7 +581,7 @@ class RoomChargeConcurrencyTestCase(frappe.tests.IntegrationTestCase):
 			self.assertEqual(len(oks), 1, f"Expected exactly 1 winner under 1000 limit, got {outcomes}")
 			self.assertEqual(len(errs), 1, f"Expected exactly 1 refusal under 1000 limit, got {outcomes}")
 			self.assertRegex(errs[0][1].lower(), r"limit|allowance|pos-rc-over-limit", f"Expected clean limit refusal, got {errs[0][1]}")
-			frappe.db.commit()
+			frappe.db.commit()  # nosemgrep: frappe-manual-commit -- refresh snapshot before asserting balance
 			final_balance = flt(frappe.db.get_value("Folio", folio_name, "balance"))
 			self.assertLessEqual(final_balance, 1000.0)
 			self.assertAlmostEqual(final_balance, 600.0, places=2)
@@ -593,4 +593,4 @@ class RoomChargeConcurrencyTestCase(frappe.tests.IntegrationTestCase):
 					frappe.delete_doc(dt, name, force=True, ignore_permissions=True)
 			if frappe.db.exists("Property", prop_name):
 				frappe.delete_doc("Property", prop_name, force=True, ignore_permissions=True)
-			frappe.db.commit()
+			frappe.db.commit()  # nosemgrep: frappe-manual-commit -- commit concurrent test cleanup
