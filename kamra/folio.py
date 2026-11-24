@@ -11,8 +11,6 @@ from decimal import ROUND_HALF_UP, Decimal
 import frappe
 from frappe.utils import add_days, cint, getdate, now_datetime, nowdate
 
-FNB_GST = 5.0  # F&B / meal-plan GST rate (India default; kept for imports)
-
 # SQL on `tabFolio Charge` fc: a line that is neither voided nor a void's
 # reversal. Both stay on the folio (void_charge) and net to zero, so sums
 # need nothing; counts of rooms sold and "already posted" checks do.
@@ -940,7 +938,8 @@ def _post_room_levy(folios, reservation, date, night_rate, gst_rate=None):
 	if levy <= 0 or _charge_posted(
 			reservation.name, "Room Levy", date):
 		return
-	label = prop.get("room_levy_label") or "Room levy"
+	from kamra.localization import pack_for
+	label = prop.get("room_levy_label") or getattr(pack_for(prop.name), "ROOM_LEVY_LABEL", None) or "Room levy"
 	parts = ([f"{pct:g}%"] if pct and night_rate else []) + (
 		[f"{fixed:,g} per night"] if fixed else [])
 	_append_charge(folios, reservation, "Room Levy", {

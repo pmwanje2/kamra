@@ -368,9 +368,11 @@ def _apply_country_defaults(p: dict):
 		frappe.throw(f"Unknown currency {p['currency']}.")
 	if not p.get("timezone") and getattr(pack, "DEFAULT_TIMEZONE", None):
 		p["timezone"] = pack.DEFAULT_TIMEZONE
-	# a flat-VAT pack's rate seeds the property rate, which otherwise
-	# defaults to India's 18 (packs that read gst_rate_low then see their own)
-	if p.get("gst_rate_low") in (None, "") and getattr(pack, "DEFAULT_VAT", None):
+	# a flat-VAT pack's rate seeds the property rate (the Property controller
+	# fills the same pack defaults for any other insert); on ERP bridge sites
+	# folio lines stay at 0% (KMR-TAX-001) because accounting owns tax
+	from kamra.erp_bridge import is_bridge_active
+	if p.get("gst_rate_low") in (None, "") and getattr(pack, "DEFAULT_VAT", None) and not is_bridge_active():
 		p["gst_rate_low"] = float(pack.DEFAULT_VAT)
 	# the levy's name follows the country; its % is the operator's to set
 	if not p.get("room_levy_label") and getattr(pack, "ROOM_LEVY_LABEL", None):
@@ -5357,18 +5359,16 @@ def cancellation_preview(reservation: str):
 	return _cancellation_terms(res)
 
 
-CANCEL_REASONS = ["Guest request", "Change of plans", "Duplicate booking",
-                  "Payment failed", "Weather / travel disruption",
-                  "Booked elsewhere", "Other"]
-
-
 def _do_cancel(res, reason: str = "Guest request", note: str | None = None,
                waive_fee: int = 0, issue_credit_note: int = 0) -> dict:
-	"""Shared cancel path for desk API and OTA channel manager."""
+	"""Shared cancel path for desk API and OTA channel manager. The reason
+	is one of the hotel's Cancellation Reason codes (kamra.masters); an
+	unknown or switched-off one is recorded as Other."""
 	from frappe.model.naming import make_autoname
 
-	if reason not in CANCEL_REASONS:
-		reason = "Other"
+	from kamra.masters import CANCELLATION, OTHER_REASON, enabled_codes
+	if reason not in enabled_codes(CANCELLATION):
+		reason = OTHER_REASON
 	terms = _cancellation_terms(res)
 
 	summary = (f"Cancel {res.name} · {reason}"
@@ -9781,11 +9781,27 @@ def property_locale(property: str):
 	so no screen hardcodes ₹ or GST %. `integrations` says which country
 	integrations (gateways, tax return, ID checks) this property has."""
 	from kamra.localization import front_desk_vocabulary, integrations, pack_for, services_tax_rate, tender_modes
+	from kamra.masters import desk_vocabulary
 	from kamra.pricing import tax_basis
 	from kamra.settings import get_setting, list_setting
 	prop = frappe.get_cached_doc("Property", property)
 	pack = pack_for(property)
-	return {**pack.locale(prop), **front_desk_vocabulary(pack),
+	loc = dict(pack.locale(prop))
+	if prop.get("locale"):
+		loc["locale"] = prop.get("locale")
+	date_fmt = get_setting(property, "date_format") or ""
+	if not isinstance(date_fmt, str) or not date_fmt:
+		try:
+			from frappe.utils.dateutils import get_user_date_format
+			candidate = get_user_date_format()
+			date_fmt = candidate if isinstance(candidate, str) else ""
+		except Exception:
+			date_fmt = ""
+	return {**loc, **front_desk_vocabulary(pack, property),
+	        "date_format": date_fmt,
+	        # the hotel's own Market codes, booker relations and Cancellation
+	        # Reasons, [{value, label}], for the booking and cancel screens
+	        **desk_vocabulary(),
 	        "integrations": integrations(pack),
 	        "tender_modes": tender_modes(property),
 	        "fx_currencies": list_setting(property, "fx_currencies"),

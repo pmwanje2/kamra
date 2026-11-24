@@ -18,6 +18,7 @@ def after_install():
 	ensure_staff_roles()
 	ensure_mcp_roles()
 	ensure_user_fields()
+	ensure_code_masters()
 
 
 def after_migrate():
@@ -29,6 +30,15 @@ def after_migrate():
 	ensure_staff_roles()
 	ensure_mcp_roles()
 	ensure_user_fields()
+	ensure_code_masters()
+
+
+def ensure_code_masters():
+	"""Seed the Market / Origin / Cancellation Reason / Payment Method /
+	Meal Plan Code / Payer Type / Check-in Request masters (missing rows
+	only; a hotel's edits are kept)."""
+	from kamra.masters import ensure_masters
+	ensure_masters()
 
 
 def ensure_user_fields():
