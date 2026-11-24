@@ -224,7 +224,15 @@ def _currency_places(property: str | None) -> int:
 
 def _round_currency(value, places: int) -> float:
 	"""Half-up round to `places` decimals using Decimal."""
-	return float(_money(value).quantize(Decimal(1).scaleb(-places), rounding=ROUND_HALF_UP))
+	places = max(int(places), 0)
+	val = float(_money(value).quantize(Decimal(1).scaleb(-places), rounding=ROUND_HALF_UP))
+	return 0.0 if val == 0 else val
+
+
+def _fmt_currency(value, places: int) -> str:
+	"""Format an amount with thousands grouping and exact currency decimals."""
+	places = max(int(places), 0)
+	return f"{_round_currency(value, places):,.{places}f}"
 
 
 def sync_folio_rounding_ledger(folio_doc, session: str | None = None) -> None:
@@ -689,10 +697,12 @@ def _sync_account_balance(account: str) -> float:
 	"""Set the account's stored balance from its entries, under the lock.
 	Adding to the stored figure loses an update when two posts overlap; the
 	entries are the record."""
+	prop = frappe.db.get_value("City Ledger Account", account, "property")
+	places = _currency_places(prop)
 	rows = frappe.db.sql(
 		"""SELECT debit, credit FROM `tabCity Ledger Entry`
 		   WHERE account = %s FOR UPDATE""", account, as_dict=True)
-	balance = round(sum(float(r.debit or 0) - float(r.credit or 0) for r in rows), 2)
+	balance = _round_currency(sum(float(r.debit or 0) - float(r.credit or 0) for r in rows), places)
 	frappe.db.set_value("City Ledger Account", account, "balance", balance)
 	return balance
 
@@ -1003,6 +1013,8 @@ def city_ledger_open_folios(account: str) -> list[dict]:
 		""",
 		account,
 	))
+	prop = frappe.db.get_value("City Ledger Account", account, "property")
+	places = _currency_places(prop)
 	out = []
 	days = None
 	for r in billed:
@@ -1021,9 +1033,9 @@ def city_ledger_open_folios(account: str) -> list[dict]:
 			"invoice_number": r.invoice_number,
 			"invoice_date": inv,
 			"due_date": str(due),
-			"billed": round(float(r.billed), 2),
-			"paid": round(p, 2),
-			"outstanding": round(float(r.billed) - p, 2),
+			"billed": _round_currency(float(r.billed), places),
+			"paid": _round_currency(p, places),
+			"outstanding": _round_currency(float(r.billed) - p, places),
 			"disputed": int(r.disputed or 0),
 			"dispute_note": r.dispute_note,
 		})
@@ -1038,6 +1050,8 @@ def locked_account_figures(account: str) -> dict:
 	wait can still be the snapshot from the start of the request, so two
 	transfers would each move the full amount. These reads are FOR UPDATE.
 	"""
+	prop = frappe.db.get_value("City Ledger Account", account, "property")
+	places = _currency_places(prop)
 	entries = frappe.db.sql(
 		"""SELECT folio, kind, debit, credit, posting_date, invoice_date,
 		          due_date, invoice_number, disputed, dispute_note
@@ -1052,7 +1066,7 @@ def locked_account_figures(account: str) -> dict:
 		   WHERE e.source_doctype = 'City Ledger Entry' AND c.account = %s
 		   FOR UPDATE""",
 		account, as_dict=True)
-	ar = round(sum(float(e.debit or 0) - float(e.credit or 0) for e in entries), 2)
+	ar = _round_currency(sum(float(e.debit or 0) - float(e.credit or 0) for e in entries), places)
 	paid: dict[str, float] = {}
 	for row in applied:
 		if not row.folio:
@@ -1091,8 +1105,8 @@ def locked_account_figures(account: str) -> dict:
 				days = effective_credit_days(account)
 			from frappe.utils import add_days
 			due = str(add_days(inv, days))
-		billed = round(g["billed"], 2)
-		settled = round(paid.get(folio) or 0, 2)
+		billed = _round_currency(g["billed"], places)
+		settled = _round_currency(paid.get(folio) or 0, places)
 		out.append({
 			"folio": folio,
 			"invoice_number": g["number"],
@@ -1100,13 +1114,13 @@ def locked_account_figures(account: str) -> dict:
 			"due_date": str(due),
 			"billed": billed,
 			"paid": settled,
-			"outstanding": round(billed - settled, 2),
+			"outstanding": _round_currency(billed - settled, places),
 			"disputed": g["disputed"],
 			"dispute_note": g["note"],
 		})
 	out.sort(key=lambda r: (r["invoice_date"], r["folio"]))
-	outstanding = round(sum(max(r["outstanding"], 0) for r in out), 2)
-	unapplied = round(max(outstanding - ar, 0.0), 2)
+	outstanding = _round_currency(sum(max(r["outstanding"], 0) for r in out), places)
+	unapplied = _round_currency(max(outstanding - ar, 0.0), places)
 	return {"open_items": out, "unapplied_credit": unapplied, "ar_balance": ar}
 
 
@@ -1831,9 +1845,11 @@ def city_ledger_account(account: str):
 	reversed_ = set(frappe.get_all(
 		"City Ledger Entry", pluck="reverses",
 		filters={"account": account, "reverses": ("is", "set")}))
+	places = _currency_places(acc.property)
+	eps = 0.5 * (10 ** -places)
 	for p in payments:
 		p["applied"] = paid_bills.get(p.name, [])
-		p["unapplied"] = round(float(p.credit) - sum(a["amount"] for a in p["applied"]), 2)
+		p["unapplied"] = _round_currency(float(p.credit) - sum(a["amount"] for a in p["applied"]), places)
 		p["reversed"] = p.name in reversed_
 	pending = frappe.get_all(
 		"Company Payment Request",
@@ -1843,8 +1859,8 @@ def city_ledger_account(account: str):
 		order_by="requested_on asc")
 	today = aging_date(acc.property)
 	for r in bills:
-		r["days_overdue"] = max(days_overdue(r, today), 0) if r["outstanding"] > 0.005 else 0
-	open_items = [r for r in bills if r["outstanding"] > 0.005]
+		r["days_overdue"] = max(days_overdue(r, today), 0) if r["outstanding"] > eps else 0
+	open_items = [r for r in bills if r["outstanding"] > eps]
 	# rolling credit: what is owed and what in-house stays will owe use the
 	# limit up, payments free it again (kamra.credit counts the same way)
 	from kamra.credit import in_house_exposure
@@ -1852,7 +1868,7 @@ def city_ledger_account(account: str):
 	limit = float(acc.credit_limit or 0)
 	return {
 		"in_house": in_house,
-		"available_credit": round(limit - float(acc.balance or 0) - in_house, 2)
+		"available_credit": _round_currency(limit - float(acc.balance or 0) - in_house, places)
 		                    if limit > 0 else None,
 		"account": acc.name,
 		"company": acc.company,
@@ -1930,7 +1946,7 @@ def force_advance_bill(reservation: str, nights: str = "entire",
 	# post_room_night saved every folio it posted to; the bill shown is the
 	# one the nights went to (the guest's, unless they route elsewhere)
 	new = [r for r in stay_lines() if r.name not in before]
-	amount = round(sum(float(r.total or 0) for r in new), 2)
+	amount = _round_currency(sum(float(r.total or 0) for r in new), _currency_places(res.property))
 	target = next((r.parent for r in new if r.charge_type == "Room"),
 	              new[0].parent if new else folio_name)
 	return {
@@ -2687,9 +2703,20 @@ def _money(value) -> Decimal:
 	return Decimal(str(value or 0))
 
 
-def round_cents(value) -> float:
-	"""Half up to the cent, in Decimal (float round(2.345, 2) gives 2.34)."""
-	return float(_money(value).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+def round_cents(value, places: int | None = None, *,
+                property: str | None = None, currency: str | None = None) -> float:
+	"""Half up to the currency's minor unit (default 2 decimals), in Decimal
+	(float round(2.345, 2) gives 2.34)."""
+	if places is None:
+		if currency:
+			from kamra.pricing import _minor_unit
+			places = _minor_unit(currency)
+		elif property:
+			places = _currency_places(property)
+		else:
+			places = 2
+	val = float(_money(value).quantize(Decimal(1).scaleb(-max(int(places), 0)), rounding=ROUND_HALF_UP))
+	return 0.0 if val == 0 else val
 
 
 def fx_to_home(fx_amount, rate, digits=2) -> float:

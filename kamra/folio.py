@@ -1956,7 +1956,8 @@ def part_settle(folio_name: str) -> dict:
 	if folio.status == "Closed":
 		frappe.throw("This folio is already settled.")
 	_recalculate(folio, payments_only=True)
-	if round(folio.balance or 0, 2) != 0:
+	from kamra.ledger import _currency_places, _round_currency
+	if _round_currency(folio.balance or 0, _currency_places(folio.property)) != 0:
 		frappe.throw("Settle the balance first - an interim invoice needs "
 		             "the folio fully paid.")
 	if not folio.charges:

@@ -6256,23 +6256,27 @@ def _assert_settled(doc, credit_override_reason: str | None = None) -> list[dict
 		return []
 	from kamra.checkout import settlement_position
 	from kamra.folio import post_remaining_nights
+	from kamra.ledger import _currency_places, _fmt_currency
 	from kamra.localization import pack_for
 
 	post_remaining_nights(doc)
 	symbol = pack_for(doc.property).locale(
 		frappe.get_cached_doc("Property", doc.property)).get("currency_symbol", "")
+	places = _currency_places(doc.property)
 	# the one judgement of what is owed either way, shared with the desk's
 	# check-out sheet (checkout_context)
 	position = settlement_position(doc.name)
 	owed, refund = position["owed"], position["refund_due"]
 	to_city_ledger = [(f, c) for f, c, _b in position["to_city_ledger"]]
 	if owed:
-		frappe.throw(_("Cannot check out: {0}{1:,.2f} is still owed. Collect payment "
-		               "or transfer it to the city ledger before departure.").format(symbol, owed),
+		frappe.throw(_("Cannot check out: {0}{1} is still owed. Collect payment "
+		               "or transfer it to the city ledger before departure.").format(
+			symbol, _fmt_currency(owed, places)),
 		             title=_("Settle before check-out"))
 	if refund:
-		frappe.throw(_("Cannot check out: the guest is owed {0}{1:,.2f}. Issue the "
-		               "refund before departure.").format(symbol, refund),
+		frappe.throw(_("Cannot check out: the guest is owed {0}{1}. Issue the "
+		               "refund before departure.").format(
+			symbol, _fmt_currency(refund, places)),
 		             title=_("Settle before check-out"))
 	# nothing moves until the guest's side is settled - and the company's
 	# credit is checked once for everything the stay bills to it

@@ -882,6 +882,20 @@ def night_audit_precheck(property: str):
 	}
 
 
+def _property_currency_meta(property: str) -> tuple[str | None, str]:
+	from kamra.ledger import home_currency
+	from kamra.localization import pack_for
+	try:
+		prop_doc = frappe.get_cached_doc("Property", property)
+		loc = pack_for(property).locale(prop_doc)
+		return (
+			prop_doc.get("currency") or loc.get("currency") or home_currency(property),
+			loc.get("currency_symbol", ""),
+		)
+	except Exception:
+		return frappe.db.get_value("Property", property, "currency"), ""
+
+
 @frappe.whitelist()
 @require_roles(*AUDIT_ROLES, scope={"audit": "Night Audit Run"})
 def night_audit_pack(audit: str):
@@ -912,6 +926,10 @@ def night_audit_pack(audit: str):
 		        "can_rebuild": run.status != "Draft",
 		        "message": _("No audit pack was saved for this run. Rebuild it "
 		                     "to print the night's reports.")}
+	if not pack.get("currency") or "currency_symbol" not in pack:
+		currency, currency_symbol = _property_currency_meta(run.property)
+		pack.setdefault("currency", currency)
+		pack.setdefault("currency_symbol", currency_symbol)
 	return {"audit": audit, "run": run, "has_pack": True, "pack": _strip_figures(pack),
 	        "can_rebuild": True}
 
@@ -1382,13 +1400,15 @@ def build_pack(property: str, bd: str, *, checks: list[dict],
 		row["acknowledgement"] = acked.get(c["key"])
 		row["exception"] = c["severity"] == "block" and bool(c["count"])
 		prechecks.append(row)
+	currency, currency_symbol = _property_currency_meta(property)
 	pack: dict = {
 		"version": 1,
 		"property": property,
 		"property_name": prop.get("property_name") or property,
 		"legal_name": prop.get("legal_name"),
 		"city": prop.get("city"),
-		"currency": prop.get("currency"),
+		"currency": prop.get("currency") or currency,
+		"currency_symbol": currency_symbol,
 		"business_date": bd,
 		"generated_at": str(now_datetime()),
 		"generated_by": frappe.session.user,
@@ -1628,10 +1648,12 @@ def _eod_state(property: str, audit: str | None = None) -> dict:
 	# roll did not stick. Surface it so the wizard never looks "fully closed"
 	# while the property is still on yesterday.
 	stuck = stuck_business_date(property)
+	currency, currency_symbol = _property_currency_meta(property)
 	base = {
 		"property": property,
 		"property_name": prop.get("property_name") or property,
-		"currency": prop.get("currency"),
+		"currency": prop.get("currency") or currency,
+		"currency_symbol": currency_symbol,
 		"server_date": str(getdate()),
 		"server_time": str(now_datetime())[:16],
 		"property_now": str(property_now(property))[:16],

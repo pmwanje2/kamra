@@ -107,7 +107,10 @@ def _options(doc, row, charge, entry, session):
 	residual = (
 		0
 		if charge
-		else round_cents(row.amount + sum(p.amount for p in doc.payments if p.get("refund_of") == name))
+		else round_cents(
+			row.amount + sum(p.amount for p in doc.payments if p.get("refund_of") == name),
+			property=doc.property,
+		)
 	)
 	if not charge and not blocked and residual <= 0:
 		blocked = "This payment is already reversed in full."
@@ -237,7 +240,7 @@ def correct(folio, name, action, code, note, key, pin, supervisor_user, supervis
 			currency=row.currency,
 			exchange_rate=row.exchange_rate,
 			exchange_rate_date=row.exchange_rate_date,
-			fx_amount=-round_cents(row.fx_amount * amount / row.amount),
+			fx_amount=-round_cents(row.fx_amount * amount / row.amount, currency=row.currency),
 		)
 	# A pre-arrival advance is still a liability; an in-house advance has moved to Guest.
 	advance = (
@@ -311,6 +314,7 @@ def correct(folio, name, action, code, note, key, pin, supervisor_user, supervis
 	elif advance:
 		paid = frappe.db.get_value("Reservation", doc.reservation, "advance_paid", for_update=True) or 0
 		frappe.db.set_value(
-			"Reservation", doc.reservation, "advance_paid", max(0, round_cents(paid - amount))
+			"Reservation", doc.reservation, "advance_paid",
+			max(0, round_cents(paid - amount, property=doc.property)),
 		)
 	return result

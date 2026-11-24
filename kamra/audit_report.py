@@ -74,6 +74,8 @@ def departments(property: str, start, end) -> list[dict]:
 	banquets, then each minor department (laundry, spa, taxi...) on its own
 	line. Same figures as the night audit report, which sums the minor ones
 	as "other"."""
+	from kamra.ledger import _currency_places, _round_currency
+	places = _currency_places(property)
 	p = _period(property, "", start, end, 0)
 	outlets = sum(o["total"] for o in p["outlets"])
 	rows = [("Rooms", p["room_revenue"])]
@@ -88,12 +90,14 @@ def departments(property: str, start, end) -> list[dict]:
 		GROUP BY fc.charge_type ORDER BY fc.charge_type""",
 		{"p": property, "s": start, "e": end, "skip": FOLIO_SKIP, "fnb": FNB_TYPES})
 	rows.append(("Discounts and allowances", p["allowances"]))
-	return [{"department": frappe._(name), "amount": round(flt(amt), 2)}
-	        for name, amt in rows if name == "Rooms" or round(flt(amt), 2)]
+	return [{"department": frappe._(name), "amount": _round_currency(flt(amt), places)}
+	        for name, amt in rows if name == "Rooms" or _round_currency(flt(amt), places)]
 
 
 def _outlets(property: str, start, end) -> list[dict]:
 	"""Each outlet's food and beverage sales (before tax, after discount)."""
+	from kamra.ledger import _currency_places, _round_currency
+	places = _currency_places(property)
 	rows = frappe.db.sql(
 		"""
 		SELECT o.outlet, o.name AS bill, o.subtotal, o.discount_amount, o.paid,
@@ -135,7 +139,7 @@ def _outlets(property: str, start, end) -> list[dict]:
 		o["name"] = names.get(o["outlet"]) or o["outlet"]
 		o["total"] = o["food"] + o["beverage"]
 		for k in ("food", "beverage", "to_rooms", "total"):
-			o[k] = round(o[k], 2)
+			o[k] = _round_currency(o[k], places)
 	return sorted(out.values(), key=lambda o: o["name"])
 
 
@@ -155,6 +159,8 @@ def _banquets(property: str, start, end) -> dict:
 
 
 def _period(property: str, label: str, start, end, total_rooms: int) -> dict:
+	from kamra.ledger import _currency_places, _round_currency
+	places = _currency_places(property)
 	f = _folio(property, start, end)
 	outlets = _outlets(property, start, end)
 	banq = _banquets(property, start, end)
@@ -174,10 +180,10 @@ def _period(property: str, label: str, start, end, total_rooms: int) -> dict:
 		"room_revenue": f["rooms"],
 		"adr": round(f["rooms"] / nights, 0) if nights else 0,
 		"revpar": round(f["rooms"] / available, 0) if available else 0,
-		"food": round(food, 2), "beverage": round(bev, 2),
+		"food": _round_currency(food, places), "beverage": _round_currency(bev, places),
 		"banquets": banq["total"], "meal_plan_minibar": f["meal_plan_minibar"],
 		"other": f["other"], "allowances": f["allowances"],
-		"total_revenue": round(total, 2),
+		"total_revenue": _round_currency(total, places),
 		"outlets": outlets, "banquet": banq,
 	}
 
@@ -219,10 +225,10 @@ def _balances(property: str, d) -> list[dict]:
 		else:
 			out.append({
 				"ledger": key, "label": label,
-				"brought_forward": round(before[key]["balance"], 2),
-				"debit": round(after[key]["debit"] - before[key]["debit"], 2),
-				"credit": round(after[key]["credit"] - before[key]["credit"], 2),
-				"carried_forward": round(after[key]["balance"], 2),
+				"brought_forward": _round_currency(before[key]["balance"], places),
+				"debit": _round_currency(after[key]["debit"] - before[key]["debit"], places),
+				"credit": _round_currency(after[key]["credit"] - before[key]["credit"], places),
+				"carried_forward": _round_currency(after[key]["balance"], places),
 			})
 	return out
 
@@ -259,7 +265,7 @@ def night_audit_report(property: str, date: str | None = None):
 	closed): rooms, food and beverage separately, each outlet, banquets,
 	meal plans and minibar, other income, for the day, month to date and
 	year to date, plus each ledger's balance brought and carried forward."""
-	from kamra.business_date import get_business_date
 	from kamra.authz import assert_property_access
+	from kamra.business_date import get_business_date
 	assert_property_access(property)
 	return build(property, date or add_days(get_business_date(property), -1))

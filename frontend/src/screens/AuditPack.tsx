@@ -12,7 +12,7 @@ import { serverError } from "../lib/resource"
 import { Button } from "../components/ui/button"
 import { Card } from "../components/ui/card"
 import { Badge } from "../components/ui/badge"
-import { cur, fmtAmount, instantLabel, moneyLocale, useLocale } from "../lib/money"
+import { fmtAmount, instantLabel, moneyDigits, moneyLocale, useLocale } from "../lib/money"
 import { useT, t as translate, useUILanguage, uiDateLocale } from "../lib/i18n"
 import { cn } from "../lib/utils"
 import { downloadCsv } from "../lib/csv"
@@ -20,7 +20,28 @@ import { downloadCsv } from "../lib/csv"
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-const money = (n: unknown) => fmtAmount(n)
+export interface PackMoneyContext {
+  currency?: string
+  symbol?: string
+}
+
+/** Currency and symbol for the report / wizard's own property, so viewing
+ *  another property's EOD or audit pack never formats with the header's locale. */
+export const PackMoney = createContext<PackMoneyContext>({})
+
+function usePackMoney() {
+  const loc = useLocale()
+  const ctx = useContext(PackMoney)
+  const currency = ctx.currency || undefined
+  const symbol =
+    ctx.symbol !== undefined
+      ? ctx.symbol
+      : !currency || currency === loc.currency
+        ? loc.currency_symbol
+        : `${currency} `
+  const money = (n: unknown) => fmtAmount(n, currency)
+  return { currency, symbol, money }
+}
 
 export const fmtDay = (d: unknown) =>
   d
@@ -59,6 +80,7 @@ export function DataTable({
   exportName?: string
 }) {
   const { t } = useT()
+  const { money } = usePackMoney()
   const packName = useContext(PackExport)
   exportName = exportName ?? packName ?? undefined
   const cell = (c: Col, r: any) => {
@@ -168,6 +190,7 @@ function Stat({ label, value }: { label: string; value: ReactNode }) {
 
 function ManagerFlash({ p }: { p: Pack }) {
   const { t } = useT()
+  const { money, symbol } = usePackMoney()
   const f = p.manager_flash || {}
   const today = f.today || p.statistics || {}
   const mtd = f.mtd || {}
@@ -177,9 +200,9 @@ function ManagerFlash({ p }: { p: Pack }) {
     <div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Stat label={translate("Occupancy")} value={`${today.occupancy_pct ?? 0}%`} />
-        <Stat label={translate("ADR")} value={`${cur()}${money(today.adr)}`} />
-        <Stat label={translate("RevPAR")} value={`${cur()}${money(today.revpar)}`} />
-        <Stat label={translate("Total revenue")} value={`${cur()}${money(today.total_revenue)}`} />
+        <Stat label={translate("ADR")} value={`${symbol}${money(today.adr)}`} />
+        <Stat label={translate("RevPAR")} value={`${symbol}${money(today.revpar)}`} />
+        <Stat label={translate("Total revenue")} value={`${symbol}${money(today.total_revenue)}`} />
       </div>
       <Sub>{t("Day and month to date")}</Sub>
       <DataTable
@@ -225,6 +248,7 @@ function ManagerFlash({ p }: { p: Pack }) {
 
 function Journal({ p }: { p: Pack }) {
   const { t } = useT()
+  const { money } = usePackMoney()
   const j = p.journal || { lines: [], subtotals: [] }
   const byCashier = useMemo(() => {
     const m = new Map<string, any[]>()
@@ -306,9 +330,11 @@ export const sessionCols = (): Col[] => [
       if (!fds.length) return "-"
       return fds
         .map((fd) => {
-          const base = `${fd.currency} ${Number(fd.expected_fx ?? 0).toFixed(2)}`
-          return fd.variance_fx && Math.abs(fd.variance_fx) > 0.004
-            ? `${base} (${Number(fd.variance_fx).toFixed(2)})`
+          const digits = moneyDigits(fd.currency)
+          const eps = 0.5 * 10 ** -digits
+          const base = `${fd.currency} ${fmtAmount(fd.expected_fx ?? 0, fd.currency)}`
+          return fd.variance_fx != null && Math.abs(Number(fd.variance_fx)) >= eps
+            ? `${base} (${fmtAmount(fd.variance_fx, fd.currency)})`
             : base
         })
         .join(" · ")
@@ -319,6 +345,7 @@ export const sessionCols = (): Col[] => [
 
 function CashierSummary({ p }: { p: Pack }) {
   useUILanguage()
+  const { money } = usePackMoney()
   const rows = p.cashier_sessions || []
   return (
     <DataTable
@@ -340,6 +367,7 @@ function CashierSummary({ p }: { p: Pack }) {
 
 function GuestLedger({ p }: { p: Pack }) {
   useUILanguage()
+  const { money } = usePackMoney()
   const rows = p.in_house || []
   return (
     <DataTable
@@ -362,6 +390,7 @@ function GuestLedger({ p }: { p: Pack }) {
 
 function CityLedger({ p }: { p: Pack }) {
   const { t } = useT()
+  const { money } = usePackMoney()
   const kept = keptInErp("/receivables")
   const loadError = p.errors?.city_ledger
   if (loadError || (!Array.isArray(p.city_ledger?.accounts) && kept)) {
@@ -420,6 +449,7 @@ function CityLedger({ p }: { p: Pack }) {
 
 function DepositLedger({ p }: { p: Pack }) {
   useUILanguage()
+  const { money } = usePackMoney()
   const d = p.deposit_ledger || { items: [] }
   return (
     <DataTable
@@ -440,6 +470,7 @@ function DepositLedger({ p }: { p: Pack }) {
 
 function TrialBalance({ p }: { p: Pack }) {
   const { t } = useT()
+  const { money } = usePackMoney()
   const tb = p.ledger_balances || { ledgers: [] }
   const codes = p.revenue_by_transaction_code?.rows || []
   return (
@@ -493,14 +524,15 @@ function TrialBalance({ p }: { p: Pack }) {
 
 function Occupancy({ p }: { p: Pack }) {
   const { t } = useT()
+  const { money, symbol } = usePackMoney()
   const s = p.statistics || {}
   return (
     <div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Stat label={translate("Occupancy")} value={`${s.occupancy_pct ?? 0}%`} />
         <Stat label={translate("Rooms sold")} value={`${s.rooms_sold ?? 0} / ${s.total_rooms ?? 0}`} />
-        <Stat label={translate("ADR")} value={`${cur()}${money(s.adr)}`} />
-        <Stat label={translate("RevPAR")} value={`${cur()}${money(s.revpar)}`} />
+        <Stat label={translate("ADR")} value={`${symbol}${money(s.adr)}`} />
+        <Stat label={translate("RevPAR")} value={`${symbol}${money(s.revpar)}`} />
       </div>
       <Sub>{t("Revenue")}</Sub>
       <DataTable
@@ -664,6 +696,7 @@ function Exceptions({ p }: { p: Pack }) {
 type Period = Record<string, any>
 function AuditReport({ p }: { p: Pack }) {
   const { t } = useT()
+  const { money } = usePackMoney()
   const r = p.audit_report
   if (!r) return <p className="text-sm text-zinc-500">{t("This audit was closed before the night audit report existed.")}</p>
   const periods: Period[] = r.periods || []
@@ -758,9 +791,11 @@ function ReportSheet({ p, report, first }: { p: Pack; report: (typeof REPORTS)[n
           <div>{t("Printed from the audit pack of {when}", { when: String(p.generated_at || "").slice(0, 16) })}</div>
         </div>
       </div>
-      <PackExport.Provider value={`${report.key}-${String(p.business_date || "").slice(0, 10)}`}>
-        <Body p={p} />
-      </PackExport.Provider>
+      <PackMoney.Provider value={{ currency: p.currency || undefined, symbol: p.currency_symbol }}>
+        <PackExport.Provider value={`${report.key}-${String(p.business_date || "").slice(0, 10)}`}>
+          <Body p={p} />
+        </PackExport.Provider>
+      </PackMoney.Provider>
     </section>
   )
 }

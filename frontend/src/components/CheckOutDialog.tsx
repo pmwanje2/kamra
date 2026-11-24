@@ -165,6 +165,7 @@ export interface CheckoutContext {
     check_in_date: string
     check_out_date: string
   }
+  currency?: string
   currency_symbol: string
   payment_modes: string[]
   pin_required: boolean
@@ -368,7 +369,7 @@ export default function CheckOutDialog(props: {
 
   const sym = ctx?.currency_symbol ?? ""
   const fmt = (n: number) =>
-    `${sym}${fmtAmount(n || 0)}`
+    `${sym}${fmtAmount(n || 0, ctx?.currency)}`
   const folioLink = (f: string) => toFullPath(`/billing/${encodeURIComponent(f)}`)
   const blockersFor = (step: StepKey) => (ctx?.blockers ?? []).filter((b) => b.step === step &&
     !["owed", "refund"].includes(b.code))

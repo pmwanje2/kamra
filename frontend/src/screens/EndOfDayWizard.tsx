@@ -8,7 +8,7 @@
     reopening keeps them. */
 
 import { whiteLabel } from "../lib/brand"
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
+import { useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
 import {
   ArrowLeft,
   CheckCircle2,
@@ -40,14 +40,14 @@ import AppLink from "../components/AppLink"
 import { Badge } from "../components/ui/badge"
 import { Button } from "../components/ui/button"
 import { Card } from "../components/ui/card"
-import { cur, fmtAmount, useLocale } from "../lib/money"
+import { fmtAmount, useLocale } from "../lib/money"
 import { useT, t as translate } from "../lib/i18n"
 import { cn } from "../lib/utils"
-import { AuditPackView, sessionCols, DataTable, fmtDay } from "./AuditPack"
+import { AuditPackView, PackMoney, sessionCols, DataTable, fmtDay } from "./AuditPack"
 
 
-const money = (n: unknown) =>
-  n === null || n === undefined || n === "" ? "-" : fmtAmount(n)
+const money = (n: unknown, currency?: string) =>
+  n === null || n === undefined || n === "" ? "-" : fmtAmount(n, currency)
 
 interface Column {
   key: string
@@ -70,6 +70,7 @@ function StepTable({
   empty?: string
 }) {
   const { t } = useT()
+  const { currency } = useContext(PackMoney)
   const [q, setQ] = useState("")
   const [sort, setSort] = useState<{ key: string; dir: 1 | -1 } | null>(null)
   const shown = useMemo(() => {
@@ -91,7 +92,7 @@ function StepTable({
     if (c.render) return c.render(r)
     const v = r[c.key]
     if (v === null || v === undefined || v === "") return "-"
-    if (c.kind === "money") return money(v)
+    if (c.kind === "money") return money(v, currency)
     if (c.kind === "date") return fmtDay(v)
     return String(v)
   }
@@ -191,7 +192,7 @@ const STAY_COLS: Column[] = [
 /* Arrivals carry two more columns (ETA, no-show policy) and two buttons,
    so the stay's detail folds into fewer columns - the full twelve overflowed
    the card at laptop widths and cut off the policy the step is about. */
-const ARRIVAL_COLS: Column[] = [
+const arrivalCols = (currency?: string): Column[] => [
   { key: "reservation", label: "Confirmation", render: resLink },
   {
     key: "guest_name",
@@ -226,7 +227,7 @@ const ARRIVAL_COLS: Column[] = [
     kind: "money",
     render: (r) => (
       <div>
-        <div>{r.rate === null || r.rate === undefined || r.rate === "" ? "-" : money(r.rate)}</div>
+        <div>{r.rate === null || r.rate === undefined || r.rate === "" ? "-" : money(r.rate, currency)}</div>
         {r.rate_plan ? <div className="text-xs text-zinc-500">{String(r.rate_plan)}</div> : null}
       </div>
     ),
@@ -405,7 +406,7 @@ const SEVERITY_ORDER: Record<string, number> = { block: 0, warn: 1, info: 2 }
 const cash = (v?: string) => (v && v.trim() ? Number(v.trim().replace(/\s/g, "").replace(",", ".")) : NaN)
 
 export default function EndOfDayWizard() {
-  useLocale()
+  const loc = useLocale()
   const { t } = useT()
   const navigate = useNavigate()
   const { property: rawProperty = "" } = useParams()
@@ -497,6 +498,14 @@ export default function EndOfDayWizard() {
   const fyi = state.checks.filter((c) => c.count > 0 && (c.severity === "info" || acked.has(c.key)))
   const ahead = state.business_date > state.server_date
   const canClose = !state.ran && !ahead && !state.stuck_date && blockers.length === 0
+  const wizardCurrency = state.currency || undefined
+  const wizardSymbol =
+    state.currency_symbol !== undefined
+      ? state.currency_symbol
+      : !wizardCurrency || wizardCurrency === loc.currency
+        ? loc.currency_symbol
+        : `${wizardCurrency} `
+  const wizardMoney = (n: unknown) => money(n, wizardCurrency)
 
   /* each check's list and its buttons, under the check's heading */
   const body = (c: Check): ReactNode => {
@@ -506,7 +515,7 @@ export default function EndOfDayWizard() {
         return (
           <StepTable
             cols={[
-              ...ARRIVAL_COLS,
+              ...arrivalCols(wizardCurrency),
               { key: "eta", label: "ETA" },
               {
                 key: "policy",
@@ -514,7 +523,7 @@ export default function EndOfDayWizard() {
                 render: (r) => (
                   <span className={r.outcome === "no_show" ? "text-rose-700" : "text-amber-700"}>
                     {t(String(r.policy))}
-                    {Number(r.fee_amount) > 0 ? ` · ${cur()}${money(r.fee_amount)}` : ""}
+                    {Number(r.fee_amount) > 0 ? ` · ${wizardSymbol}${wizardMoney(r.fee_amount)}` : ""}
                   </span>
                 ),
               },
@@ -582,7 +591,7 @@ export default function EndOfDayWizard() {
         return (
           <>
             {c.enabled && (
-              <p className="text-xs text-zinc-500">{t("Threshold {cur}{n}", { cur: cur(), n: money(c.threshold) })}</p>
+              <p className="text-xs text-zinc-500">{t("Threshold {cur}{n}", { cur: wizardSymbol, n: wizardMoney(c.threshold) })}</p>
             )}
             <StepTable cols={FOLIO_COLS} rows={items} empty={translate("No in-house folio is over the threshold.")} />
           </>
@@ -767,6 +776,7 @@ export default function EndOfDayWizard() {
   )
 
   return (
+    <PackMoney.Provider value={{ currency: wizardCurrency, symbol: wizardSymbol }}>
     <div className="mx-auto max-w-6xl space-y-4">
       {markingNoShow && (
         <NoShowDialog
@@ -871,7 +881,7 @@ export default function EndOfDayWizard() {
             {runOut
               ? t("Posted {n} room nights ({amount}), {ns} no-shows. The business date is now {next}.", {
                   n: Number(runOut.room_charges_posted ?? 0),
-                  amount: `${cur()}${money(runOut.amount_posted)}`,
+                  amount: `${wizardSymbol}${wizardMoney(runOut.amount_posted)}`,
                   ns: Number(runOut.no_shows_flagged ?? 0),
                   next: fmtDay(runOut.next_business_date),
                 })
@@ -972,5 +982,6 @@ export default function EndOfDayWizard() {
         </>
       )}
     </div>
+    </PackMoney.Provider>
   )
 }
