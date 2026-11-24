@@ -1,12 +1,14 @@
 # Copyright (c) 2026, HeyKoala and contributors
 # For license information, please see license.txt
 
-import frappe
+from decimal import Decimal, InvalidOperation
 
-from kamra.branding import product_name
+import frappe
 from frappe import _
 from frappe.model.document import Document
 from frappe.utils import add_days, cint, date_diff, flt, formatdate, getdate, now_datetime, today
+
+from kamra.branding import product_name
 
 
 class InventoryRefused(frappe.ValidationError):
@@ -45,11 +47,36 @@ NIGHT_PRICE_COLUMNS = ("rate", "base_rate", "discount_amount")
 CHARGED_NIGHT_HISTORY = ("base_rate", "quoted_base_rate", "discount_amount", "rate_code_amount")
 # the quote inputs that are the desk's discount, not what is being sold
 DISCOUNT_INPUT_KEYS = ("discount_type", "discount_value", "night_discounts")
+# an auto-priced stay's header totals: what its locked nights priced, written
+# only by its own pricing (Reservation.guard_header_totals)
+HEADER_TOTALS = ("amount_before_tax", "tax_amount", "amount_after_tax", "discount_amount")
 # every column a locked night row carries
 NIGHT_ROW_FIELDS = ("stay_date", "rate", "gst_rate", "meal_amount", "demand_premium_pct",
                     "hand_price", "rate_code_amount", "base_rate", "quoted_base_rate",
                     "discount_type", "discount_value", "discount_amount", "discount_reason",
                     "fixed_rate")
+
+
+def _amount_dec(value) -> Decimal:
+	"""Exact finite Decimal for a monetary or numeric field (avoids float64 boundary drift)."""
+	if isinstance(value, Decimal):
+		return value if value.is_finite() else Decimal(0)
+	if value in (None, ""):
+		return Decimal(0)
+	try:
+		dec = Decimal(str(value).strip())
+		if dec.is_finite():
+			return dec
+		return Decimal(0)
+	except (InvalidOperation, ValueError):
+		pass
+	dec = Decimal(str(flt(value)))
+	return dec if dec.is_finite() else Decimal(0)
+
+
+def _amount_diff(a, b) -> Decimal:
+	"""Exact absolute Decimal difference between two numeric field values."""
+	return abs(_amount_dec(a) - _amount_dec(b))
 
 
 def discount_inputs(doc) -> tuple[tuple, set]:
@@ -475,12 +502,35 @@ class Reservation(Document):
 		self.validate_type_capacity()
 		self.validate_cancellation_path()
 		self.apply_negotiated_rate_plan()
+		self.govern_rate_category()
 		self.capture_contract_tariff()
 		self.guard_agreed_rate()
 		self.keep_hand_set_nights()
 		self.apply_pricing()
 		self.govern_discount()
+		self.guard_rate_plan()
 		self.stamp_room_assignment()
+
+	def guard_rate_plan(self):
+		"""An existing stay's rate plan changes only through the governed path
+		(amend_stay, which previews and confirms the new price and checks any
+		comp or discount sign-off), the channel manager's foreign-contract
+		stamp/clear (flags.kamra_channel_tariff), or a channel-manager /
+		import writer (night_rates_writer). Frappe never fills doc.flags from
+		a REST payload, so a plain save or frappe.client.set_value on
+		rate_plan is refused. Runs after govern_discount so a plan refusing a
+		discount still raises its ValidationError."""
+		if (self.is_new()
+				or self.flags.get("kamra_rate_plan_change")
+				or self.flags.get("kamra_channel_tariff")
+				or self.night_rates_writer()):
+			return
+		old = self.get_doc_before_save()
+		if old and (old.get("rate_plan") or "") != (self.get("rate_plan") or ""):
+			frappe.throw(
+				_("A stay's rate plan changes only through Amend stay, which shows "
+				  "the new price and checks any required sign-off."),
+				frappe.PermissionError, title=_("Rate plan"))
 
 	def default_occupant_nationality(self):
 		"""An occupant added without a nationality takes the property
@@ -494,7 +544,6 @@ class Reservation(Document):
 		nationality = default_nationality(pack_for(self.property))
 		for o in new_rows:
 			o.nationality = nationality or None
-
 	def stamp_room_assignment(self):
 		"""Who put the guest in this room, and when. Every writer that
 		changes the room (booking, allocator, check-in, room move, upgrade)
@@ -516,6 +565,59 @@ class Reservation(Document):
 		plan = negotiated_rate_plan(self.property, self.company)
 		if plan:
 			self.rate_plan = plan
+
+	def govern_rate_category(self):
+		"""The stay's rate category is its plan's when the stay is put on the
+		plan (booked, or moved to it), and stays as it was booked: a plan's
+		category changed later re-classifies no stay (OPERA: a rate code
+		change reaches no reservation already booked; End of Day statistics
+		stay as the night closed). Only putting the stay on a plan writes it,
+		so a save that keeps the plan and writes the category (a REST PUT) is
+		refused.
+
+		A stay booked on a plan whose category needs a sign-off (OPERA's
+		Complimentary and House Use), or moved to one, is signed off by
+		another supervisor with their PIN (OPERA's comp authorizer;
+		kamra.api.comp_rate_governance). The governed writers (create_booking,
+		walk_in, amend_stay) hand it over in flags.kamra_comp_supervisor
+		({user, pin}), else the discount's flags.kamra_discount_supervisor:
+		one manager whose roles cover both signs both. Frappe never fills
+		doc.flags from a REST payload, so a plain save or PUT that puts a stay
+		on such a plan is refused. A save that keeps the stay's plan asks
+		nothing again. The approver is logged by on_update."""
+		from kamra.room_statistics import rate_category
+		old = None if self.is_new() else self.get_doc_before_save()
+		if old is not None and (old.get("rate_plan") or "") == (self.get("rate_plan") or ""):
+			if (self.get("rate_category") or "") != (old.get("rate_category") or ""):
+				frappe.throw(_("A stay's rate category is its rate plan's when it was booked. It "
+				               "changes only when the stay moves to another plan."),
+				             frappe.PermissionError, title=_("Rate category"))
+			return
+		self.rate_category = rate_category(self.property, self.get("rate_plan"))
+		if not self.get("rate_plan"):
+			return
+		from kamra.api import comp_rate_governance
+		sign = (self.flags.get("kamra_comp_supervisor")
+		        or self.flags.get("kamra_discount_supervisor") or {})
+		gov = comp_rate_governance(self.property, self.rate_plan, check=True,
+		                           supervisor_user=sign.get("user"),
+		                           supervisor_pin=sign.get("pin"))
+		if gov.get("approver"):
+			self.flags.kamra_comp_governance = gov
+
+	def log_comp_sign_off(self):
+		"""The audit row for a Complimentary or House Use plan's sign-off:
+		who booked it, the plan and who approved it. The approver stays in
+		flags.kamra_comp_approver for the action's own row (amend_stay)."""
+		gov = self.flags.pop("kamra_comp_governance", None)
+		if not gov:
+			return
+		self.flags.kamra_comp_approver = gov["approver"]
+		from kamra.savings import log_action
+		log_action("comp_rate_sign_off", "Reservation", self.name, self.property,
+		           rationale=f"{gov['rate_category']} rate plan {self.rate_plan}: "
+		                     f"signed off by {gov['approver']}",
+		           approver=gov["approver"])
 
 	def capture_contract_tariff(self):
 		"""Freeze the read resolver's reference at booking, not on later reads.
@@ -917,6 +1019,7 @@ class Reservation(Document):
 		def inside(day):
 			return bool(first) and first <= getdate(day) < last
 
+		night_tol = min(self._amount_tolerance(), Decimal("0.005"))
 		tampered = []
 		for day, rows in now.items():
 			before = was.get(day) or []
@@ -929,7 +1032,8 @@ class Reservation(Document):
 				        and not any(flt(rows[0].get(c)) for c in LOCKED_NIGHT_COLUMNS)):
 					tampered.append(day)
 				continue
-			if any(abs(flt(rows[0].get(c)) - flt(before[0].get(c))) >= (1e-6 if c == "quoted_base_rate" else 0.005)
+			if any(_amount_diff(rows[0].get(c), before[0].get(c)) >= (
+			           Decimal("1e-6") if c == "quoted_base_rate" else night_tol)
 			       for c in LOCKED_NIGHT_COLUMNS):
 				tampered.append(day)
 		tampered += [day for day in was if day not in now and inside(day)]
@@ -949,6 +1053,63 @@ class Reservation(Document):
 	def refuse_hand_price():
 		frappe.throw(_("A booking is priced by hand only from the booking screen (nightly "
 		               "prices or an OTA total), the channel manager or an import."),
+		             frappe.PermissionError, title=_("Locked night rate"))
+
+	def _amount_tolerance(self) -> Decimal:
+		"""Half the property currency's minor unit as an exact Decimal
+		(0.0005 for 3dp KWD, 0.005 for 2dp USD, 0.5 for 0dp UGX): absorbs
+		sub-unit float noise while catching any single minor-unit tamper.
+		Always resolves selling_currency from the property, never transient
+		client-supplied self.get('currency')."""
+		from kamra.pricing import _minor_unit, selling_currency
+		is_new = getattr(self, "is_new", None)
+		getter = getattr(self, "get_doc_before_save", None)
+		old = None if (callable(is_new) and is_new()) else (getter() if callable(getter) else None)
+		prop = (old.get("property") if old else None) or self.get("property")
+		currency = selling_currency(prop) if prop else None
+		places = _minor_unit(currency)
+		return Decimal("0.5") * (Decimal(10) ** -places)
+
+	def guard_header_totals(self):
+		"""An auto-priced stay's header totals (HEADER_TOTALS) are what its
+		locked nights priced, and only the booking's own pricing writes them:
+		apply_pricing when it re-prices. The fields are read-only on the form,
+		but read_only is not enforced on a REST PUT, so a save that keeps the
+		locked nights and writes a total is refused, as a locked night is
+		(guard_locked_nights). The channel manager and the imports keep their
+		writer flag (night_rates_writer)."""
+		if self.night_rates_writer():
+			return
+		old = self.get_doc_before_save()
+		if not old:
+			return
+		tol = self._amount_tolerance()
+		changed = [self.meta.get_label(f) for f in HEADER_TOTALS
+		           if _amount_diff(old.get(f), self.get(f)) >= tol]
+		if changed:
+			frappe.throw(_("{0} follows the stay's locked nights. It changes only through the "
+			               "booking's own pricing (amend the stay, move the room, an agreed rate "
+			               "or a discount).").format(", ".join(_(c) for c in changed)),
+			             frappe.PermissionError, title=_("Locked night rate"))
+
+	def guard_lock_key(self, key):
+		"""The rate-lock key is written by the booking's own pricing: a save
+		that rewrites it to anything but the key of what the stay holds now
+		(key) would re-quote the locked nights from today's rate card. read_only
+		is not enforced on a REST PUT, so that save is refused, as a locked
+		night is (guard_locked_nights). A rate correction
+		(flags.correct_charged_nights), the channel manager and the imports
+		(night_rates_writer) clear it to re-quote."""
+		if self.is_new() or self.night_rates_writer() or self.flags.get("correct_charged_nights"):
+			return
+		old = self.get_doc_before_save()
+		if not old:
+			return
+		now = self.get("rate_lock_key") or None
+		if now in ((old.get("rate_lock_key") or None), key):
+			return
+		frappe.throw(_("The stay's rate lock changes only through the booking's own pricing "
+		               "(amend the stay, move the room, an agreed rate or a discount)."),
 		             frappe.PermissionError, title=_("Locked night rate"))
 
 	@staticmethod
@@ -976,10 +1137,16 @@ class Reservation(Document):
 				or self.flags.get("kamra_channel_tariff")):
 			return
 		if self.is_new():
-			changed = flt(self.get("agreed_rate")) > 0 and not self.get("contract_tariff")
+			changed = _amount_dec(self.get("agreed_rate")) > 0 and not self.get("contract_tariff")
 		else:
 			old = self.get_doc_before_save()
-			changed = bool(old) and abs(flt(old.get("agreed_rate")) - flt(self.get("agreed_rate"))) >= 0.005
+			old_rate = _amount_dec(old.get("agreed_rate")) if old else Decimal(0)
+			new_rate = _amount_dec(self.get("agreed_rate"))
+			tol = self._amount_tolerance()
+			changed = bool(old) and (
+				(old_rate > 0) != (new_rate > 0)
+				or abs(old_rate - new_rate) >= tol
+			)
 		if changed:
 			frappe.throw(_("An agreed rate is set with Agreed rate on the reservation: a Rate Change "
 			               "reason, the desk's limit and a supervisor's sign-off when it needs one."),
@@ -989,20 +1156,21 @@ class Reservation(Document):
 		"""The stay's agreed rate overrides its rate code (set_agreed_rate, a
 		custom-rate room move). A contract tariff's or a group block's rate is
 		the stay's rate code itself, so it is not an override."""
-		rate = flt(self.get("agreed_rate"))
+		rate = _amount_dec(self.get("agreed_rate"))
 		if rate <= 0:
 			return False
+		tol = min(self._amount_tolerance(), Decimal("0.005"))
 		tariff = self.get("contract_tariff")
 		if isinstance(tariff, str):
 			try:
 				tariff = frappe.parse_json(tariff)
 			except Exception:
 				tariff = None
-		if isinstance(tariff, dict) and abs(flt(tariff.get("agreed_rate")) - rate) < 0.005:
+		if isinstance(tariff, dict) and abs(_amount_dec(tariff.get("agreed_rate")) - rate) < tol:
 			return False
 		if self.get("group_booking"):
 			from kamra.group_blocks import group_rate
-			if abs(flt(group_rate(self.group_booking, self.room_type)) - rate) < 0.005:
+			if abs(_amount_dec(group_rate(self.group_booking, self.room_type)) - rate) < tol:
 				return False
 		return True
 
@@ -1204,8 +1372,9 @@ class Reservation(Document):
 		was = {str(getdate(r.get("stay_date"))): r for r in old.get("night_rates") or []}
 		now = {str(getdate(r.get("stay_date"))): r for r in rows or []}
 		party = () if cint(self.get("fixed_rate")) else PARTY_FIGURES
+		tol = min(self._amount_tolerance(), Decimal("0.005"))
 		moved = any(str(old.get(f) or "") != str(self.get(f) or "") for f in SOLD_LINKS) or any(
-			abs(flt(old.get(f)) - flt(self.get(f))) >= 0.005 for f in (*SOLD_FIGURES, *party))
+			_amount_diff(old.get(f), self.get(f)) >= tol for f in (*SOLD_FIGURES, *party))
 		if moved:
 			return set(now)
 
@@ -1613,9 +1782,11 @@ class Reservation(Document):
 			return
 		inputs = self.quote_inputs()
 		key = self.rate_lock_key_for(inputs)
+		self.guard_lock_key(key)
 		if (not self.is_new() and self.get("night_rates")
 				and self.get("rate_lock_key") == key
 				and not self.has_value_changed("auto_price")):
+			self.guard_header_totals()
 			self._apply_commission()
 			return
 		if self.discount_changes_only(inputs):
@@ -2268,6 +2439,7 @@ class Reservation(Document):
 			               "bill is cleared first."), title=_("Check out"))
 
 	def on_update(self):
+		self.log_comp_sign_off()
 		lines = self.flags.pop("rate_change_lines", None)
 		if lines:
 			from kamra.folio import post_rate_lines

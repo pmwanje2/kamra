@@ -47,6 +47,8 @@ export type MenuMasterKey =
   | "prep_stations"
   | "courses"
   | "categories"
+  /** the property's rate categories (Settings → Revenue) for Rate Plans */
+  | "rate_categories"
 
 /** Options loaded from a doctype: the value stored, the label shown. */
 export interface OptionSource {
@@ -933,10 +935,12 @@ export function ResourceScreen({
       })
     })
     if (config.form.some((f) => f.optionsFrom)) {
-      call<Record<MenuMasterKey, string[]>>("kamra.settings.menu_masters", {
-        property: getCurrentProperty(),
-      })
-        .then(setMasterOptions)
+      // a failed lookup leaves the static options; it never breaks the screen
+      Promise.resolve()
+        .then(() => call<Record<MenuMasterKey, string[]>>("kamra.settings.menu_masters", {
+          property: getCurrentProperty(),
+        }))
+        .then((masters) => setMasterOptions(masters ?? {}))
         .catch(() => setMasterOptions({}))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
