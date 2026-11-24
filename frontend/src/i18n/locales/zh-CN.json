@@ -7067,5 +7067,6 @@
   "Room types without a tariff": "未设置合同价的房型",
   "These room types have no contract tariff on this price list yet.": "这些房型在此价目表中尚未设置合同价。",
   "{n} room": "{n} 间房",
-  "Open room type": "打开房型"
+  "Open room type": "打开房型",
+  "Tax as per the accounting invoice": "税额以财务发票为准"
 }

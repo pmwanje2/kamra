@@ -755,5 +755,6 @@
   "These room types have no contract tariff on this price list yet.": "Tipe kamar ini belum memiliki tarif kontrak pada daftar harga ini.",
   "{n} room": "{n} kamar",
   "{n} rooms": "{n} kamar",
-  "Open room type": "Buka tipe kamar"
+  "Open room type": "Buka tipe kamar",
+  "Tax as per the accounting invoice": "Pajak sesuai faktur akuntansi"
 }

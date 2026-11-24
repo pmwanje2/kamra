@@ -6807,5 +6807,6 @@
   "Room types without a tariff": "أنواع الغرف التي ليس لها تعرفة",
   "These room types have no contract tariff on this price list yet.": "لا تحتوي أنواع الغرف هذه على تعرفة تعاقدية في قائمة الأسعار هذه بعد.",
   "{n} room": "غرفة واحدة ({n})",
-  "Open room type": "فتح نوع الغرفة"
+  "Open room type": "فتح نوع الغرفة",
+  "Tax as per the accounting invoice": "الضريبة وفقًا للفاتورة المحاسبية"
 }

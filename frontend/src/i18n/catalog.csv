@@ -7212,3 +7212,4 @@ Room types without a tariff,Room types without a tariff,أنواع الغرف ا
 These room types have no contract tariff on this price list yet.,These room types have no contract tariff on this price list yet.,لا تحتوي أنواع الغرف هذه على تعرفة تعاقدية في قائمة الأسعار هذه بعد.,Estos tipos de habitación aún no tienen tarifa contractual en esta lista de precios.,Estes tipos de quarto ainda não têm tarifa contratual nesta tabela de preços.,这些房型在此价目表中尚未设置合同价。,screens/ContractTariffs.tsx,,translated
 {n} room,{n} room,غرفة واحدة ({n}),{n} habitación,{n} quarto,{n} 间房,screens/ContractTariffs.tsx,n,translated
 Open room type,Open room type,فتح نوع الغرفة,Abrir tipo de habitación,Abrir tipo de quarto,打开房型,screens/ContractTariffs.tsx,,translated
+Tax as per the accounting invoice,Tax as per the accounting invoice,الضريبة وفقًا للفاتورة المحاسبية,Impuesto según la factura contable,Imposto conforme a fatura contábil,税额以财务发票为准,screens/FolioView.tsx,,translated
