@@ -416,15 +416,24 @@ def _recompute_session_totals(session: str, persist: bool = True) -> dict[str, f
 	a screen that merely reads the till (current_session, on every load) must
 	not write, or two loads at once race on the same row (MariaDB 1020)."""
 	has_ccy = _txn_has_currency_cols()
-	cols = "kind, mode, amount, currency, fx_amount" if has_ccy else "kind, mode, amount"
-	rows = frappe.db.sql(
-		f"""
-		SELECT {cols}
-		FROM `tabCashier Transaction`
-		WHERE session = %s
-		""",
-		session, as_dict=True,
-	)
+	if has_ccy:
+		rows = frappe.db.sql(
+			"""
+			SELECT kind, mode, amount, currency, fx_amount
+			FROM `tabCashier Transaction`
+			WHERE session = %s
+			""",
+			session, as_dict=True,
+		)
+	else:
+		rows = frappe.db.sql(
+			"""
+			SELECT kind, mode, amount
+			FROM `tabCashier Transaction`
+			WHERE session = %s
+			""",
+			session, as_dict=True,
+		)
 	sess = frappe.get_doc("Cashier Session", session)
 	# the pack's instant modes keep their own bucket, stored
 	# in system_upi / "upi" - field kept by name so existing tills read on
