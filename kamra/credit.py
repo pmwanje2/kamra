@@ -56,6 +56,10 @@ def grace_days(property: str | None) -> int:
 	return max(int(get_setting(property, "credit_overdue_grace_days") or 0), 0)
 
 
+def _fmt_money(value: float, places: int) -> str:
+	return f"{flt(value):,.{places}f}"
+
+
 def _symbol(property: str | None) -> str:
 	if not property:
 		return ""
@@ -133,14 +137,15 @@ def in_house_exposure(company: str, property: str,
 	if for_update:
 		in_house_sql += " FOR UPDATE"
 	rows = frappe.db.sql(in_house_sql, {"p": property, "c": company}, as_dict=True)
+	from kamra.ledger import _currency_places, _round_currency
+	places = max(_currency_places(property), 2)
 	total = 0.0
 	for f in rows:
 		if f.name in skip or flt(f.balance) <= 0:
 			continue
 		if company_payer_of(f) == company:
 			total += flt(f.balance)
-	from kamra.ledger import round_money
-	return round_money(total, property, min_places=2)
+	return _round_currency(total, places)
 
 
 def check_company_credit(account_or_company: str, property: str,
@@ -152,10 +157,12 @@ def check_company_credit(account_or_company: str, property: str,
 	when the exposure (AR + in-house company folios + amount) is over a
 	non-zero credit limit, or bills are more than the grace period past
 	their due date. With credit control Off it is always ok."""
-	from kamra.ledger import _account_position, minor_unit, overdue_past_grace, round_money
+	from kamra.ledger import _account_position, _currency_places, _round_currency, overdue_past_grace
+	places = max(_currency_places(property), 2)
+	eps = 0.5 * (10 ** -places)
 	policy = credit_policy(property)
 	account, company = _resolve(account_or_company, property)
-	amount = round_money(flt(amount), property, min_places=2)
+	amount = _round_currency(amount, places)
 	out = {
 		"ok": True, "policy": policy, "company": company, "account": account,
 		"amount": amount, "reasons": [], "over_limit_by": 0.0,
@@ -179,27 +186,27 @@ def check_company_credit(account_or_company: str, property: str,
 			ar = pos["ar_balance"]
 		else:
 			pos = _account_position(account)
-			ar = round_money(flt(frappe.db.sql(
+			ar = _round_currency(frappe.db.sql(
 				"""SELECT COALESCE(SUM(debit - credit), 0) FROM `tabCity Ledger Entry`
-				   WHERE account = %s""", account)[0][0]), property, min_places=2)
+				   WHERE account = %s""", account)[0][0], places)
 		from kamra.ledger import aging_date
 		overdue, oldest = overdue_past_grace(
 			pos["open_items"], pos["unapplied_credit"], out["grace_days"],
-			aging_date(property), property=property)
+			aging_date(property), places=places)
 		out["overdue_amount"], out["oldest_due_date"] = overdue, oldest
 	in_house = in_house_exposure(company, property, exclude_folios,
 	                             for_update=lock)
-	exposure = round_money(ar + in_house + amount, property, min_places=2)
+	exposure = _round_currency(ar + in_house + amount, places)
 	out.update(credit_limit=limit, ar_balance=ar, in_house=in_house,
 	           exposure=exposure)
 	sym = _symbol(property)
-	tol = min(0.005, float(minor_unit(property)) / 2)
-	if limit > 0 and exposure > limit + tol:
-		out["over_limit_by"] = round_money(exposure - limit, property, min_places=2)
+	if limit > 0 and exposure > limit + eps:
+		out["over_limit_by"] = _round_currency(exposure - limit, places)
 		out["reasons"].append(_(
-			"Over the credit limit by {0}{1:,.2f} (limit {0}{2:,.2f}, owed and "
-			"billed with this {0}{3:,.2f}).").format(
-				sym, out["over_limit_by"], limit, exposure))
+			"Over the credit limit by {0}{1} (limit {0}{2}, owed and "
+			"billed with this {0}{3}).").format(
+				sym, _fmt_money(out["over_limit_by"], places),
+				_fmt_money(limit, places), _fmt_money(exposure, places)))
 	restricted = account and frappe.db.get_value(
 		"City Ledger Account", account, ["restricted", "restricted_reason"],
 		as_dict=True)
@@ -208,16 +215,17 @@ def check_company_credit(account_or_company: str, property: str,
 		out["reasons"].append(_("The account is restricted{0}.").format(
 			f" ({restricted.restricted_reason})"
 			if restricted.restricted_reason else ""))
-	if out["overdue_amount"] > tol:
+	if out["overdue_amount"] > eps:
 		if out["grace_days"]:
 			out["reasons"].append(_(
-				"{0}{1:,.2f} overdue by more than {2} days (oldest due {3}).").format(
-					sym, out["overdue_amount"], out["grace_days"],
-					out["oldest_due_date"]))
+				"{0}{1} overdue by more than {2} days (oldest due {3}).").format(
+					sym, _fmt_money(out["overdue_amount"], places),
+					out["grace_days"], out["oldest_due_date"]))
 		else:
 			out["reasons"].append(_(
-				"{0}{1:,.2f} overdue (oldest due {2}).").format(
-					sym, out["overdue_amount"], out["oldest_due_date"]))
+				"{0}{1} overdue (oldest due {2}).").format(
+					sym, _fmt_money(out["overdue_amount"], places),
+					out["oldest_due_date"]))
 	out["ok"] = not out["reasons"]
 	out["blocked"] = not out["ok"] and policy == "block"
 	return out
@@ -268,13 +276,15 @@ def enforce_company_credit(company: str, property: str, amount: float,
 	if not can_override():
 		frappe.throw(_("Only Finance or a Hotel Admin can override a credit "
 		               "block."), frappe.PermissionError)
+	from kamra.ledger import _currency_places, _round_currency
+	places = max(_currency_places(property), 2)
 	user = frappe.session.user
 	log_action("credit_override", reference_doctype, reference_name, property,
 	           rationale=f"{company}{what}: {summary} Overridden by {user} for "
-	                     f"{amount:,.2f}: {reason[:300]}",
+	                     f"{_fmt_money(amount, places)}: {reason[:300]}",
 	           approver=user, channel=channel,
 	           before_snapshot=_snapshot(res),
-	           after_snapshot={"amount": round(flt(amount), 2),
+	           after_snapshot={"amount": _round_currency(amount, places),
 	                           "reason": reason[:500], "by": user})
 	res["overridden"] = True
 	res["override_reason"] = reason[:500]
@@ -311,17 +321,18 @@ def company_credit_status(company: str, property: str, amount: float = 0):
 def _city_ledger_moves(reservation: str) -> list[tuple[str, str, float]]:
 	"""(folio, company, balance) for every folio of the stay the company
 	pays - what check-out would move to the city ledger."""
-	from kamra.ledger import balance_eps, company_payer_of, round_money
+	from kamra.ledger import _currency_places, _round_currency, company_payer_of
 	prop = frappe.db.get_value("Reservation", reservation, "property")
-	eps = balance_eps(prop)
 	out = []
 	for f in frappe.get_all("Folio", filters={"reservation": reservation},
 	                        fields=["name", "balance", "folio_type",
-	                                "group_booking", "reservation"]):
+	                                "group_booking", "reservation", "property"]):
+		places = max(_currency_places(f.get("property") or prop), 2)
+		eps = 0.5 * (10 ** -places)
 		if flt(f.balance) > eps:
 			payer = company_payer_of(f)
 			if payer:
-				out.append((f.name, payer, round_money(flt(f.balance), prop, min_places=2)))
+				out.append((f.name, payer, _round_currency(f.balance, places)))
 	return out
 
 
@@ -437,10 +448,12 @@ def set_company_credit_terms(company: str, property: str,
 	         "credit_days": int(acc.credit_days or 0),
 	         "use_default_credit_days": int(acc.use_default_credit_days or 0)}
 	if after != before:
+		from kamra.ledger import _currency_places
 		from kamra.savings import log_action
+		places = max(_currency_places(property), 2)
 		log_action("credit_terms_changed", "City Ledger Account", acc.name,
 		           property, rationale=f"{company}: credit limit "
-		                               f"{after['credit_limit']:,.2f}, "
+		                               f"{_fmt_money(after['credit_limit'], places)}, "
 		                               + ("property default payment terms"
 		                                  if after["use_default_credit_days"]
 		                                  else f"{after['credit_days']} credit days"),

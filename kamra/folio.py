@@ -166,18 +166,20 @@ def voucher_discount(reservation) -> float:
 	nights: a billed night that kept a discount the stay later dropped
 	would hide a real voucher, and one that never got it would invent one.
 	A booking priced before the snapshot kept it falls back to that sum."""
+	from kamra.ledger import _currency_places, _money, _round_currency
+	places = max(_currency_places(reservation.get("property")), 2)
 	snap = reservation.get("quote_snapshot")
 	if snap:
 		try:
 			data = json.loads(snap) if isinstance(snap, str) else snap
 			if isinstance(data, dict) and "voucher_discount" in data:
-				return round(max(float(data.get("voucher_discount") or 0), 0), 2)
+				return _round_currency(max(_money(data.get("voucher_discount")), Decimal(0)), places)
 		except (TypeError, ValueError):
 			pass  # unreadable snapshot: the stored discount less the nights'
-	total = float(reservation.get("discount_amount") or 0)
-	in_nights = sum(float(r.get("discount_amount") or 0)
-	                for r in reservation.get("night_rates") or [])
-	return round(max(total - in_nights, 0), 2)
+	total = _money(reservation.get("discount_amount"))
+	in_nights = sum((_money(r.get("discount_amount"))
+	                 for r in reservation.get("night_rates") or []), Decimal(0))
+	return _round_currency(max(total - in_nights, Decimal(0)), places)
 
 
 def _post_cleaning_fee(reservation, folio_name: str):
@@ -1324,7 +1326,13 @@ def _post_room_levy(folios, reservation, date, night_rate, gst_rate=None):
 		if int(prop.get("room_levy_taxable") if prop.get("room_levy_taxable") is not None else 1)
 		else 0
 	)
-	levy = round(float(night_rate or 0) * pct / 100, 2) + round(fixed, 2)
+	from kamra.ledger import _currency_places, _money, _round_currency
+	places = max(_currency_places(reservation.property), 2)
+	levy = _round_currency(
+		_money(_round_currency(_money(night_rate) * _money(pct) / 100, places))
+		+ _money(_round_currency(fixed, places)),
+		places,
+	)
 	if levy > 0 and not float(levy_gst or 0):
 		from kamra.pricing import property_currency, round_rate_amount
 		levy = float(round_rate_amount(levy, 0, "Nearest", property_currency(reservation.property)))
@@ -1964,8 +1972,12 @@ def percent_fee(reservation, pct: float) -> float:
 	neither one night nor the whole stay, so it cannot be said with a fee
 	basis. Pre-tax; GST rides on the folio line.
 	"""
-	return round(float(reservation.amount_before_tax or 0)
-	             * float(pct) / 100.0, 2)
+	from kamra.ledger import _currency_places, _round_currency
+	places = max(_currency_places(reservation.property), 2)
+	return _round_currency(
+		Decimal(str(reservation.amount_before_tax or 0)) * Decimal(str(pct)) / Decimal(100),
+		places,
+	)
 
 
 def policy_fee(reservation, basis: str, pct: float | None = None) -> float:
@@ -2049,21 +2061,19 @@ def close_folio(folio_name: str) -> str:
 		from kamra import ledger as _ledger_mod
 		if hasattr(_ledger_mod, "sync_folio_rounding_ledger"):
 			_ledger_mod.sync_folio_rounding_ledger(folio)
-	from kamra.ledger import balance_eps
+	from kamra.ledger import _currency_places, _format_currency_amount
+	places = max(_currency_places(folio.property), 2)
+	eps = 0.5 * (10 ** -places)
 	balance = float(folio.balance or 0)
-	if abs(balance) > balance_eps(folio.property):
-		from kamra.localization import pack_for
-		symbol = pack_for(folio.property).locale(
-			frappe.get_cached_doc("Property", folio.property)).get(
-			"currency_symbol", "")
+	if abs(balance) > eps:
 		if balance > 0:
 			frappe.throw(frappe._(
-				"Cannot close the folio: {0}{1:,.2f} is still owed. Collect "
+				"Cannot close the folio: {0} is still owed. Collect "
 				"payment, or move the company's share to the city ledger, "
-				"first.").format(symbol, balance))
+				"first.").format(_format_currency_amount(folio.property, balance)))
 		frappe.throw(frappe._(
-			"Cannot close the folio: {0}{1:,.2f} is owed back to the guest. "
-			"Issue the refund first.").format(symbol, -balance))
+			"Cannot close the folio: {0} is owed back to the guest. "
+			"Issue the refund first.").format(_format_currency_amount(folio.property, -balance)))
 	from frappe.model.naming import make_autoname
 
 	folio.status = "Closed"
@@ -2234,8 +2244,10 @@ def part_settle(folio_name: str) -> dict:
 	if folio.status == "Closed":
 		frappe.throw("This folio is already settled.")
 	_recalculate(folio, payments_only=True)
-	from kamra.ledger import balance_eps
-	if abs(float(folio.balance or 0)) > balance_eps(folio.property):
+	from kamra.ledger import _currency_places
+	places = max(_currency_places(folio.property), 2)
+	eps = 0.5 * (10 ** -places)
+	if abs(float(folio.balance or 0)) > eps:
 		frappe.throw("Settle the balance first - an interim invoice needs "
 		             "the folio fully paid.")
 	if not folio.charges:
@@ -2398,8 +2410,12 @@ def no_show_credit(reservation: str) -> float:
 	not exist."""
 	row = frappe.db.get_value(
 		"Folio", {"reservation": reservation, "folio_type": "Guest",
-		          "status": ("!=", "Closed")}, "balance")
-	return round(max(0.0, -float(row or 0)), 2)
+		          "status": ("!=", "Closed")}, ["balance", "property"], as_dict=True)
+	if not row:
+		return 0.0
+	from kamra.ledger import _currency_places, _round_currency
+	places = max(_currency_places(row.property), 2)
+	return _round_currency(max(0.0, -float(row.balance or 0)), places)
 
 
 def settle_no_show_credit(res, action: str, reason: str, mode: str | None = None,
@@ -2434,10 +2450,12 @@ def settle_no_show_credit(res, action: str, reason: str, mode: str | None = None
 	else:
 		from kamra.api import _pin_guard, _post_folio_charge
 		_pin_guard(folio, pin)
+		from kamra.ledger import _currency_places
+		places = max(_currency_places(res.property), 2)
 		gst = Decimal(str(_room_gst(res)))
 		# pre-tax so that amount + tax is the credit; what rounding leaves
-		# (under a cent) is inside close_folio's tolerance
-		pre = (Decimal(str(credit)) * 100 / (100 + gst)).quantize(Decimal("0.01"))
+		# (under a minor unit) is inside close_folio's tolerance
+		pre = (Decimal(str(credit)) * 100 / (100 + gst)).quantize(Decimal(1).scaleb(-places))
 		# the reason stays out of the description: words in it must not
 		# re-tax the line (_resolve_charge_gst reads the description)
 		_post_folio_charge(folio, "Misc", NO_SHOW_FORFEIT, float(pre),
@@ -2629,9 +2647,11 @@ def run_night_audit(property: str, business_date: str | None = None,
 			log_lines.append(
 				f"no-show fee waived for {row.name}: {decision.reason}")
 		if ns["fee_amount"]:
+			from kamra.ledger import _currency_places
+			fee_places = max(_currency_places(property), 2)
 			amount_posted += Decimal(str(ns["fee_amount"]))
 			log_lines.append(
-				f"posted no-show charge {ns['fee_amount']:,.2f} for {row.name}")
+				f"posted no-show charge {ns['fee_amount']:,.{fee_places}f} for {row.name}")
 
 	# purge stale waitlist entries - two days after their requested departure
 	from frappe.utils import add_days as _add_days

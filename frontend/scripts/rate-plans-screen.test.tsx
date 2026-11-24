@@ -193,7 +193,9 @@ describe("R8 Rate Plans screen currency picker and derived-plan inheritance", { 
 
   const fieldSelect = (labelRe: RegExp) => {
     const lbl = Array.from(document.querySelectorAll("label")).find((l) => labelRe.test(l.textContent || ""))
-    return lbl?.querySelector("select") as HTMLSelectElement | null
+    if (!lbl) return null
+    if (lbl.htmlFor) return document.getElementById(lbl.htmlFor) as HTMLSelectElement | null
+    return lbl.querySelector("select") as HTMLSelectElement | null
   }
 
   const fieldInput = (labelRe: RegExp) => {
@@ -339,8 +341,12 @@ describe("R8 Rate Plans screen currency picker and derived-plan inheritance", { 
     }, { interval: 10, timeout: 5000 })
 
     const curLbl = Array.from(document.querySelectorAll("label")).find((l) => /Currency/i.test(l.textContent || ""))!
-    const searchInput = curLbl.querySelector("input[type='search']") as HTMLInputElement | null
+    const curSel = fieldSelect(/Currency/i)!
+    // P3: Label must name the <select>, while the search <input> has its own accessible name
+    expect(curLbl.control).toBe(curSel)
+    const searchInput = document.querySelector("input[type='search'][aria-label*='Currency']") as HTMLInputElement | null
     expect(searchInput).not.toBeNull()
+    expect(Array.from(searchInput!.labels ?? [])).toEqual([])
 
     await setInput(searchInput!, "ZWL")
     await vi.waitFor(async () => {

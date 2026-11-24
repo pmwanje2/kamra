@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { call } from "../lib/api"
 import { useT } from "../lib/i18n"
-import { moneyDigits, type TenderMode } from "../lib/money"
+import { moneyDigits, moneyStep, roundMoney, type TenderMode } from "../lib/money"
 
 type Vocabulary = {
   payment_modes: string[]
@@ -102,14 +102,18 @@ export function tenderReady({ mode, currency }: Choice, home: string, rates: Set
 
 export function tenderAmount(balance: number, currency: string, home: string, rates: SettlementRates) {
   if (!(balance > 0) || !currency) return ""
-  if (currency === home) return String(Math.round(balance * 100) / 100)
+  if (currency === home) {
+    const rounded = roundMoney(balance, currency)
+    return rounded > 0 ? String(rounded) : ""
+  }
   const rate = rates[currency]
   if (!(rate > 0)) return ""
-  const cents = (balance / rate) * 100
-  const lower = Math.floor(cents) / 100
-  const scale = 10 ** moneyDigits(home)
-  if (Math.round(lower * rate * scale) >= Math.round(balance * scale)) return String(lower)
-  return String(Math.ceil(cents - Number.EPSILON * cents) / 100)
+  const tenderScale = 10 ** moneyDigits(currency)
+  const units = (balance / rate) * tenderScale
+  const lower = Math.floor(units) / tenderScale
+  const homeScale = 10 ** moneyDigits(home)
+  if (Math.round(lower * rate * homeScale) >= Math.round(balance * homeScale)) return String(lower)
+  return String(Math.ceil(units - Number.EPSILON * units) / tenderScale)
 }
 
 export function TenderInput({ currency, value, full, onChange }: {
@@ -119,7 +123,7 @@ export function TenderInput({ currency, value, full, onChange }: {
   return <div className="flex items-center gap-2">
     <label className="flex min-w-0 items-center gap-2 rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5">
       <span className="text-xs font-medium text-zinc-500">{currency}</span>
-      <input type="number" min="0" step="any" inputMode="decimal" aria-label={t("Amount collected")}
+      <input type="number" min="0" step={moneyStep(currency)} inputMode="decimal" aria-label={t("Amount collected")}
         className="w-24 min-w-0 text-right tabular-nums" value={value} onChange={e => onChange(e.target.value)} />
     </label>
     <button type="button" disabled={!full} className="rounded-full border px-2 py-1 text-xs disabled:opacity-50"

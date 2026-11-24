@@ -240,7 +240,11 @@ describe("KWD 3dp precision in GroupControl and FolioView", () => {
 
     const numInputs = Array.from(host.querySelectorAll<HTMLInputElement>('input[type="number"]'))
     for (const input of numInputs) {
-      expect(input.getAttribute("step")).toBe("any")
+      if (input.getAttribute("aria-label") === "Amount collected") {
+        expect(input.getAttribute("step")).toBe("0.001")
+      } else {
+        expect(input.getAttribute("step")).toBe("any")
+      }
     }
   })
 
