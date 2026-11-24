@@ -2104,6 +2104,40 @@ class R5HydrogenFollowupTest(QuotePatches, RateMatrixHarness):
 		ok_ugx = _closed_pair("Test Hotel", "INV-UGX-26-00001", 246713.0, 246713.0, extra_payment=True)
 		ok_ugx.guard_closed()
 
+	def test_r6_currency_places_handles_siteless_db_stub_when_cached_doc_lacks_currency(self):
+		"""Regression for test_reverse_check_in: siteless frappe.db without callable sql must not crash _currency_places."""
+		from kamra import ledger
+
+		old_get_cached_doc = self.frappe.get_cached_doc
+		old_get_cached_value = getattr(self.frappe, "get_cached_value", None)
+		old_db = self.frappe.db
+
+		class SitelessDb:
+			sql = None
+
+			def get_value(self, *a, **k):
+				return None
+
+		rt_doc = self.frappe._dict(adults_capacity=2, base_price=100, room_type_name="Deluxe")
+		self.frappe.db = SitelessDb()
+		self.frappe.get_cached_doc = lambda dt, name: rt_doc
+		self.frappe.get_cached_value = lambda *a, **k: self.frappe.db.sql("SELECT 1")
+		try:
+			self.assertEqual(ledger._currency_places("PROP-1"), 2)
+			# Still honours explicit currency on the cached Property doc even on a siteless DB stub
+			kwd_doc = self.frappe._dict(name="KWD Hotel", currency="KWD")
+			self.frappe.get_cached_doc = lambda dt, name: kwd_doc
+			self.assertEqual(ledger._currency_places("KWD Hotel"), 3)
+		finally:
+			self.frappe.get_cached_doc = old_get_cached_doc
+			self.frappe.db = old_db
+			if old_get_cached_value is None:
+				if hasattr(self.frappe, "get_cached_value"):
+					delattr(self.frappe, "get_cached_value")
+			else:
+				self.frappe.get_cached_value = old_get_cached_value
+
+
 
 
 
