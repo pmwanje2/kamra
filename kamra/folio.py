@@ -790,11 +790,20 @@ def current_date_contract_night(reservation, date) -> dict | None:
 	discount_off = Decimal(0)
 	if disc_kind and disc_val > 0:
 		if disc_kind == "Percent":
-			net_foreign = round_rate_amount(
-				nightly * (Decimal(1) - disc_val / Decimal(100)),
-				0, currency=currency,
-			)
-			gross = max(round_rate_amount(net_foreign * fx, 0, currency=home), Decimal(0))
+			if Decimal(str(rp.get("rounding_step") or 0)) > 0:
+				gross = max(
+					round_rate_amount(
+						base_gross - base_gross * disc_val / Decimal(100),
+						0, currency=home,
+					),
+					Decimal(0),
+				)
+			else:
+				net_foreign = round_rate_amount(
+					nightly * (Decimal(1) - disc_val / Decimal(100)),
+					0, currency=currency,
+				)
+				gross = max(round_rate_amount(net_foreign * fx, 0, currency=home), Decimal(0))
 		else:
 			gross = max(round_rate_amount(base_gross - disc_val, 0, currency=home), Decimal(0))
 		discount_off = max(base_gross - gross, Decimal(0))

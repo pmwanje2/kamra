@@ -1359,7 +1359,7 @@ class Reservation(Document):
 			net, new_gst, new_off = discount_night(
 				self.property, rt, base, base_gst, entry,
 				kind, value, inclusive, over_cap, day,
-				tariff_night=contract_night_tariff(tariff, day),
+				tariff_night=contract_night_tariff(tariff, day, rate_plan=self.rate_plan),
 			)
 			row.update(rate=float(net), gst_rate=float(new_gst), base_rate=float(base),
 			           discount_amount=float(new_off))
