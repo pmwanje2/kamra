@@ -3,7 +3,7 @@ import { call, newIdempotencyKey } from "../lib/api"
 import { serverError } from "../lib/resource"
 import { Button } from "../components/ui/button"
 import { Sheet } from "../components/ui/sheet"
-import { fmtMoney, locale, moneyStep } from "../lib/money"
+import { fmtMoney, locale, moneyEps, moneyStep, roundMoney, useLocale } from "../lib/money"
 import { t as translate, useUILanguage } from "../lib/i18n"
 
 // Record a company's payment against its city ledger (AR) balance. The
@@ -55,14 +55,16 @@ type Result = {
 // plus the country's instant modes (a wallet / instant transfer)
 const modes = () => ["Bank Transfer", "Cheque", "Card", ...locale().instant_payment_modes, "Cash", "Other"]
 
-const r2 = (n: number) => Math.round(n * 100) / 100
-
 export default function CityLedgerPayment(props: {
   account: string
   onClose: () => void
   onPosted: () => void
 }) {
   useUILanguage()
+  const loc = useLocale()
+  const cur = loc.currency
+  const eps = moneyEps(cur)
+  const inputStep = moneyStep(cur)
   const [acc, setAcc] = useState<Account | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [amount, setAmount] = useState("")
@@ -94,45 +96,47 @@ export default function CityLedgerPayment(props: {
     if (manual) {
       return items
         .filter((it) => picks[it.folio] !== undefined)
-        .map((it) => ({ folio: it.folio, amount: r2(Number(picks[it.folio]) || 0) }))
+        .map((it) => ({ folio: it.folio, amount: roundMoney(Number(picks[it.folio]) || 0, cur) }))
         .filter((p) => p.amount > 0)
     }
-    let left = r2(amt)
+    let left = roundMoney(amt, cur)
     const out: { folio: string; amount: number }[] = []
     for (const it of items) {
       if (left <= 0) break
-      const take = r2(Math.min(left, it.outstanding))
-      out.push({ folio: it.folio, amount: take })
-      left = r2(left - take)
+      const take = roundMoney(Math.min(left, it.outstanding), cur)
+      if (take > 0) {
+        out.push({ folio: it.folio, amount: take })
+        left = roundMoney(left - take, cur)
+      }
     }
     return out
-  }, [manual, items, picks, amt])
+  }, [manual, items, picks, amt, cur])
 
-  const applied = r2(plan.reduce((s, p) => s + p.amount, 0))
-  const unapplied = r2(amt - applied)
+  const applied = roundMoney(plan.reduce((s, p) => s + p.amount, 0), cur)
+  const unapplied = roundMoney(amt - applied, cur)
 
   const problem = (() => {
-    if (amt <= 0) return "Enter the amount received."
+    if (roundMoney(amt, cur) <= 0) return "Enter the amount received."
     if (manual) {
       for (const p of plan) {
         const it = items.find((i) => i.folio === p.folio)
-        if (it && p.amount > it.outstanding + 0.005)
+        if (it && p.amount > it.outstanding + eps)
           return `${it.invoice_number || it.folio} owes ${fmtMoney(it.outstanding)}.`
       }
-      if (applied > amt + 0.005)
+      if (applied > amt + eps)
         return "The folios add up to more than the payment."
     }
     return null
   })()
 
   const toggle = (it: OpenItem) =>
-    setPicks((cur) => {
-      const next = { ...cur }
+    setPicks((curPicks) => {
+      const next = { ...curPicks }
       if (next[it.folio] !== undefined) delete next[it.folio]
       else {
         const used = Object.values(next).reduce((s, v) => s + (Number(v) || 0), 0)
-        const room = amt > 0 ? Math.max(r2(amt - used), 0) : it.outstanding
-        next[it.folio] = String(r2(Math.min(it.outstanding, room)))
+        const room = amt > 0 ? Math.max(roundMoney(amt - used, cur), 0) : it.outstanding
+        next[it.folio] = String(roundMoney(Math.min(it.outstanding, room), cur))
       }
       return next
     })
@@ -245,7 +249,7 @@ export default function CityLedgerPayment(props: {
             <p className="text-amber-700">
               {fmtMoney(unapplied)}{translate(" is more than the bills it pays. It stays on the account as unapplied credit.")}</p>
           ) : null}
-          <p className="text-zinc-500">{translate("Balance after: ")}{fmtMoney(r2(acc.balance - amt))}
+          <p className="text-zinc-500">{translate("Balance after: ")}{fmtMoney(roundMoney(acc.balance - amt, cur))}
           </p>
           {acc.payment_pin_required ? (
             <label className="block max-w-xs">
@@ -289,7 +293,7 @@ export default function CityLedgerPayment(props: {
               <input
                 type="number"
                 min="0"
-                step={moneyStep()}
+                step={inputStep}
                 inputMode="decimal"
                 className="w-full rounded-lg border border-zinc-300 px-2 py-1.5"
                 value={amount}
@@ -375,11 +379,11 @@ export default function CityLedgerPayment(props: {
                           <input
                             type="number"
                             min="0"
-                            step={moneyStep()}
+                            step={inputStep}
                             className="w-28 rounded border border-zinc-300 px-1.5 py-1 text-right"
                             value={picks[it.folio]}
                             onChange={(e) =>
-                              setPicks((cur) => ({ ...cur, [it.folio]: e.target.value }))}
+                              setPicks((curPicks) => ({ ...curPicks, [it.folio]: e.target.value }))}
                           />
                         ) : p ? fmtMoney(p.amount) : "-"}
                       </td>
@@ -422,6 +426,7 @@ export default function CityLedgerPayment(props: {
 
 function Stat({ label, value }: { label: string; value: number }) {
   useUILanguage()
+  useLocale()
   return (
     <div className="rounded-lg border border-zinc-200 px-3 py-2">
       <div className="text-xs text-zinc-400">{translate(label)}</div>

@@ -225,7 +225,6 @@ export function moneyDigits(currency?: string, decimals?: number): number {
   }
   return 2
 }
-
 function resolveDigits(currencyOrDecimals?: string | number, decimals?: number): number {
   if (typeof currencyOrDecimals === "number") {
     return moneyDigits(undefined, currencyOrDecimals)

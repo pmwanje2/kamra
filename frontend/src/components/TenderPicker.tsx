@@ -102,15 +102,18 @@ export function tenderReady({ mode, currency }: Choice, home: string, rates: Set
 
 export function tenderAmount(balance: number, currency: string, home: string, rates: SettlementRates) {
   if (!(balance > 0) || !currency) return ""
-  const tenderScale = 10 ** moneyDigits(currency)
-  if (currency === home) return String(roundMoney(balance, currency))
+  if (currency === home) {
+    const rounded = roundMoney(balance, currency)
+    return rounded > 0 ? String(rounded) : ""
+  }
   const rate = rates[currency]
   if (!(rate > 0)) return ""
-  const minor = (balance / rate) * tenderScale
-  const lower = Math.floor(minor + Number.EPSILON * minor) / tenderScale
+  const tenderScale = 10 ** moneyDigits(currency)
+  const units = (balance / rate) * tenderScale
+  const lower = Math.floor(units + Number.EPSILON * units) / tenderScale
   const homeScale = 10 ** moneyDigits(home)
   if (Math.round(lower * rate * homeScale) >= Math.round(balance * homeScale)) return String(lower)
-  return String(Math.ceil(minor - Number.EPSILON * minor) / tenderScale)
+  return String(Math.ceil(units - Number.EPSILON * units) / tenderScale)
 }
 
 export function TenderInput({ currency, value, full, onChange }: {

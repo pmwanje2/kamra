@@ -1487,7 +1487,7 @@ export default function FolioView() {
                         <span className="text-zinc-400"> · {currencyText(p.currency!, Number(p.fx_amount), loc.locale)} @ {formatFxRate(Number(p.exchange_rate), loc.locale)}{p.exchange_rate_date && ` · ${formatDate(p.exchange_rate_date)}`}</span>
                       )}
                     </span>
-                    <span className={Number(p.amount) < 0 ? "font-medium text-rose-600" : ""}>{property.currency} {Number(p.amount).toLocaleString(undefined,{maximumFractionDigits:2})}</span>
+                    <span className={Number(p.amount) < 0 ? "font-medium text-rose-600" : ""}>{property.currency} {fmtAmount(p.amount, property.currency)}</span>
                     {canRequestCorrection && <RowCorrection folio={folio.name} row={p.name}
                       home={home} currency={Number(p.fx_amount) > 0 ? p.currency || home : home}
                       tenderTypes={loc.payment_tender_types}
