@@ -6606,5 +6606,8 @@
   "Your own lines at the foot of every invoice - e.g. company registration, bank name and account details.": "السطور الخاصة بك في أسفل كل فاتورة - مثل السجل التجاري واسم البنك وتفاصيل الحساب.",
   "OTA Prepaid": "مدفوع مسبقاً عبر وكالة حجز",
   "Company Credit": "ائتمان شركة",
-  "Tax as per the accounting invoice": "الضريبة وفقًا للفاتورة المحاسبية"
+  "Tax as per the accounting invoice": "الضريبة وفقًا للفاتورة المحاسبية",
+  "Tax summary": "ملخص الضريبة",
+  "Total Tax": "إجمالي الضريبة",
+  "Credited": "رصيد دائن"
 }

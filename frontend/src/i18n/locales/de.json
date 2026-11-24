@@ -530,5 +530,14 @@
   "Company Credit": "Firmenkredit",
   "Payment Link": "Zahlungslink",
   "Cheque": "Scheck",
-  "Tax as per the accounting invoice": "Steuer gemäß Buchhaltungsrechnung"
+  "Tax as per the accounting invoice": "Steuer gemäß Buchhaltungsrechnung",
+  "Tax Invoice": "Steuerrechnung",
+  "Invoice": "Rechnung",
+  "Provisional Bill": "Vorläufige Rechnung",
+  "Closed": "Abgeschlossen",
+  "Stay": "Aufenthalt",
+  "Tax summary": "Steuerübersicht",
+  "Total Tax": "Gesamtsteuer",
+  "Credited": "Gutgeschrieben",
+  "Total {cur}": "Gesamt {cur}"
 }

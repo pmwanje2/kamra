@@ -650,6 +650,7 @@ def _stay_money(res):
 @require_roles("Front Desk", "Kamra Agent")
 def registration_card(reservation: str):
 	"""Everything the printed GRC (guest registration card) needs."""
+	from kamra.day_use import format_hhmm as _format_hhmm
 	res = frappe.get_doc("Reservation", reservation)
 	guest = frappe.get_doc("Guest", res.guest)
 	prop = frappe.get_doc("Property", res.property)
@@ -691,10 +692,14 @@ def registration_card(reservation: str):
 			"check_out_date": str(res.check_out_date),
 			# the times agreed for this booking; the card falls back to the
 			# property's standard times when none were set
-			"planned_check_in_time": str(res.planned_check_in_time)[:5]
-			                         if res.get("planned_check_in_time") else None,
-			"planned_check_out_time": str(res.planned_check_out_time)[:5]
-			                          if res.get("planned_check_out_time") else None,
+			"planned_check_in_time": (
+				_format_hhmm(res.planned_check_in_time) or None
+				if res.get("planned_check_in_time") not in (None, "") else None
+			),
+			"planned_check_out_time": (
+				_format_hhmm(res.planned_check_out_time) or None
+				if res.get("planned_check_out_time") not in (None, "") else None
+			),
 			"nights": res.nights, "adults": res.adults,
 			"children": res.children, "is_day_use": res.get("is_day_use"),
 			"rate_total": float(res.amount_after_tax or 0),
@@ -3515,25 +3520,160 @@ def cancel_invoice(folio: str, reason: str, pin: str | None = None):
 	return out
 
 
-def _load_accounting_invoice(doc):
-	"""Read the linked accounting Sales Invoice when a bridged folio carries
-	one. Never imports accounting internals; returns None if missing, cancelled,
-	mismatched or unreadable."""
+def _si_matches_folio_scope(si, prop, prop_currency: str | None) -> bool:
+	"""Verify an accounting Sales Invoice belongs to the folio's own Company,
+	currency, and is a regular (non-return) invoice."""
+	if cint(si.get("is_return")):
+		return False
+	prop_company = prop.get("company") if prop else None
+	si_company = si.get("company")
+	si_meta = getattr(si, "meta", None)
+	if prop_company or si_company or (si_meta and si_meta.has_field("company")):
+		if not prop_company or si_company != prop_company:
+			return False
+	si_currency = si.get("currency")
+	if prop_currency:
+		if si_currency:
+			if si_currency != prop_currency:
+				return False
+		elif si_meta and si_meta.has_field("currency"):
+			return False
+	return True
+
+
+def _resolve_accounting_invoice(doc, prop=None, prop_currency: str | None = None):
+	"""Resolve the active submitted accounting Sales Invoice for a bridged folio.
+
+	Enforces native Sales Invoice read permission (role, doc-level, and User
+	Permissions), Company/currency isolation, explicit bridge folio linkage
+	(`kamra_ref == doc.name`), and follows `kamra_rebill_of` when a linked
+	invoice was cancelled or credited and replaced. Never imports accounting
+	internals. Returns `(current_si, source_si, state)` where `state` is one of
+	`"none"`, `"submitted"`, `"not_final"`, or `"unavailable"`.
+	"""
 	si_name = doc.get("sales_invoice")
 	if not si_name:
-		return None
+		return None, None, "none"
 	try:
 		if not frappe.db.exists("DocType", "Sales Invoice"):
-			return None
+			return None, None, "unavailable"
+		if not frappe.has_permission("Sales Invoice", ptype="read"):
+			return None, None, "unavailable"
 		si = frappe.get_doc("Sales Invoice", si_name)
 	except Exception:
-		return None
-	if int(si.get("docstatus") or 0) == 2:
-		return None
-	folio_ref = si.get("kamra_ref")
-	if folio_ref and folio_ref != doc.name:
-		return None
+		return None, None, "unavailable"
+	if not frappe.has_permission("Sales Invoice", ptype="read", doc=si):
+		return None, None, "unavailable"
+	if (si.get("kamra_ref") or "") != doc.name:
+		return None, None, "unavailable"
+	if not _si_matches_folio_scope(si, prop, prop_currency):
+		return None, None, "unavailable"
+
+	docstatus = int(si.get("docstatus") or 0)
+	if docstatus == 0:
+		return None, si, "not_final"
+
+	# Follow kamra_rebill_of chain when a linked invoice was cancelled or
+	# superseded by a submitted replacement invoice.
+	current = si
+	visited = {si.name}
+	try:
+		has_rebill_col = bool(frappe.db.has_column("Sales Invoice", "kamra_rebill_of"))
+	except Exception:
+		has_rebill_col = False
+
+	if has_rebill_col:
+		for _hop in range(10):
+			try:
+				candidates = frappe.get_all(
+					"Sales Invoice",
+					filters={
+						"kamra_rebill_of": current.name,
+						"is_return": 0,
+						"docstatus": ("in", [1, 2]),
+					},
+					pluck="name",
+					order_by="docstatus asc, creation desc",
+				)
+			except Exception:
+				candidates = []
+			advanced = False
+			for cand_name in candidates or []:
+				if not cand_name or cand_name in visited:
+					continue
+				try:
+					cand = frappe.get_doc("Sales Invoice", cand_name)
+				except Exception:
+					continue
+				if not frappe.has_permission("Sales Invoice", ptype="read", doc=cand):
+					# Fail closed without leaking replacement figures.
+					return None, si, ("not_final" if int(current.get("docstatus") or 0) != 1 else "unavailable")
+				if not _si_matches_folio_scope(cand, prop, prop_currency):
+					continue
+				if (cand.get("kamra_rebill_of") or "") != current.name:
+					continue
+				cand_ref = cand.get("kamra_ref")
+				if cand_ref and cand_ref != doc.name:
+					continue
+				cand_ds = int(cand.get("docstatus") or 0)
+				# Never step down from a submitted invoice to a cancelled one.
+				if int(current.get("docstatus") or 0) == 1 and cand_ds != 1:
+					continue
+				visited.add(cand_name)
+				current = cand
+				advanced = True
+				break
+			if not advanced:
+				break
+
+	if int(current.get("docstatus") or 0) != 1:
+		return None, si, "not_final"
+	return current, si, "submitted"
+
+
+def _load_accounting_invoice(doc, prop=None, prop_currency: str | None = None):
+	"""Read the active submitted accounting Sales Invoice for a bridged folio.
+	Returns None if missing, unpermitted, draft, cancelled (without a submitted
+	rebill), or outside the folio's Company/currency/link scope."""
+	si, _source_si, _state = _resolve_accounting_invoice(doc, prop=prop, prop_currency=prop_currency)
 	return si
+
+
+def _erp_credited_total(si, prop=None, prop_currency: str | None = None) -> float:
+	"""Sum submitted, readable ERP Credit Notes (Sales Invoice with is_return=1)
+	against the active accounting Sales Invoice."""
+	if si is None or not si.get("name"):
+		return 0.0
+	try:
+		if not frappe.has_permission("Sales Invoice", ptype="read"):
+			return 0.0
+		names = frappe.get_all(
+			"Sales Invoice",
+			filters={"return_against": si.name, "is_return": 1, "docstatus": 1},
+			pluck="name",
+		)
+	except Exception:
+		return 0.0
+	total = 0.0
+	si_company = si.get("company")
+	si_currency = si.get("currency")
+	for ret_name in names or []:
+		try:
+			ret = frappe.get_doc("Sales Invoice", ret_name)
+		except Exception:
+			continue
+		if not frappe.has_permission("Sales Invoice", ptype="read", doc=ret):
+			continue
+		if int(ret.get("docstatus") or 0) != 1 or not cint(ret.get("is_return")):
+			continue
+		if (ret.get("return_against") or "") != si.name:
+			continue
+		if si_company and ret.get("company") != si_company:
+			continue
+		if si_currency and ret.get("currency") != si_currency:
+			continue
+		total += abs(float(ret.get("grand_total") or 0))
+	return round(total, 2)
 
 
 def _clean_accounting_tax_label(tx, rate: float, fallback: str) -> str:
@@ -3566,18 +3706,22 @@ def _parse_item_wise_tax(raw) -> dict:
 		return {}
 
 
-def _apply_accounting_invoice_taxes(doc, folio_dict: dict, lines: list[dict],
-                                    pairs: set[str], split: list, default_tax_label: str) -> dict:
+def _apply_accounting_invoice_taxes(doc, prop, prop_currency: str | None, folio_dict: dict,
+                                    lines: list[dict], pairs: set[str], split: list,
+                                    default_tax_label: str) -> dict:
 	"""When a closed bridged folio carries a linked accounting Sales Invoice,
 	replace the 0% folio tax lines and summary with the accounting invoice's
 	own tax breakdown (single source of truth). If the accounting invoice
 	cannot be read, report tax_source='accounting_unavailable' and emit no
 	fake 0% summary rows."""
-	if not doc.get("sales_invoice"):
-		return {"tax_source": "folio", "tax_summary": None, "gst_summary": None,
-		        "accounting_tax_note": None, "by_head": None}
+	si, source_si, state = _resolve_accounting_invoice(doc, prop=prop, prop_currency=prop_currency)
+	if state == "none":
+		return {
+			"tax_source": "folio", "tax_summary": None, "gst_summary": None,
+			"accounting_tax_note": None, "by_head": None,
+			"si": None, "state": "none", "erp_credited": 0.0,
+		}
 
-	si = _load_accounting_invoice(doc)
 	if si is None:
 		return {
 			"tax_source": "accounting_unavailable",
@@ -3585,6 +3729,9 @@ def _apply_accounting_invoice_taxes(doc, folio_dict: dict, lines: list[dict],
 			"gst_summary": [],
 			"accounting_tax_note": _("Tax as per the accounting invoice"),
 			"by_head": None,
+			"si": None,
+			"state": state,
+			"erp_credited": 0.0,
 		}
 
 	items = list(si.get("items") or [])
@@ -3606,6 +3753,8 @@ def _apply_accounting_invoice_taxes(doc, folio_dict: dict, lines: list[dict],
 
 	item_rates = [0.0] * len(items)
 	item_taxes = [0.0] * len(items)
+	item_taxed = [False] * len(items)
+	item_inclusive = [False] * len(items)
 	tax_summary = []
 	gst_summary = []
 
@@ -3613,6 +3762,7 @@ def _apply_accounting_invoice_taxes(doc, folio_dict: dict, lines: list[dict],
 		raw_tax = tx.get("tax_amount_after_discount_amount")
 		tax_amt = float(raw_tax if raw_tax is not None else (tx.get("tax_amount") or 0))
 		tx_rate = float(tx.get("rate") or 0)
+		tx_incl = bool(cint(tx.get("included_in_print_rate")))
 		v16_rows = v16_by_tax.get(tx.get("name") or "", [])
 		detail = {} if v16_rows else _parse_item_wise_tax(tx.get("item_wise_tax_detail"))
 
@@ -3628,9 +3778,13 @@ def _apply_accounting_invoice_taxes(doc, folio_dict: dict, lines: list[dict],
 				e_taxable = float(det.get("taxable_amount") or 0)
 				if e_rate:
 					detail_rates.add(e_rate)
+				idx = item_idx_by_name.get(det.get("item_row"))
 				if e_rate or abs(e_tax) > 1e-6:
 					taxable_for_row += e_taxable
-				idx = item_idx_by_name.get(det.get("item_row"))
+					if idx is not None:
+						item_taxed[idx] = True
+						if tx_incl:
+							item_inclusive[idx] = True
 				if idx is not None:
 					if e_rate:
 						item_rates[idx] += e_rate
@@ -3655,6 +3809,10 @@ def _apply_accounting_invoice_taxes(doc, folio_dict: dict, lines: list[dict],
 					detail_rates.add(e_rate)
 				if e_rate or abs(e_tax) > 1e-6:
 					taxable_for_row += sum(float(items[i].get("net_amount") or 0) for i in idxs)
+					for idx in idxs:
+						item_taxed[idx] = True
+						if tx_incl:
+							item_inclusive[idx] = True
 				net_sum = sum(float(items[i].get("net_amount") or 0) for i in idxs)
 				allocated = 0.0
 				for pos, idx in enumerate(idxs):
@@ -3668,10 +3826,14 @@ def _apply_accounting_invoice_taxes(doc, folio_dict: dict, lines: list[dict],
 						share = round(e_tax / len(idxs), 2)
 					allocated += share
 					item_taxes[idx] = round(item_taxes[idx] + share, 2)
-		elif items and (abs(tax_amt) > 1e-6 or tx_rate):
+		elif items and abs(tax_amt) > 1e-6:
 			net_sum = sum(float(it.get("net_amount") or 0) for it in items)
 			allocated = 0.0
 			for pos, it in enumerate(items):
+				if abs(float(it.get("net_amount") or 0)) > 1e-6:
+					item_taxed[pos] = True
+					if tx_incl:
+						item_inclusive[pos] = True
 				if tx_rate:
 					item_rates[pos] += tx_rate
 				if pos == len(items) - 1:
@@ -3683,7 +3845,9 @@ def _apply_accounting_invoice_taxes(doc, folio_dict: dict, lines: list[dict],
 				allocated += share
 				item_taxes[pos] = round(item_taxes[pos] + share, 2)
 
-		if abs(tax_amt) < 1e-6 and tx_rate == 0:
+		# Do not emit a phantom header-template row (e.g. 18% with 0 taxable / 0 tax
+		# when all items are 0% exempt).
+		if abs(tax_amt) < 1e-6 and (not has_item_detail or abs(taxable_for_row) < 1e-6):
 			continue
 		if tx_rate == 0 and tx.get("charge_type") != "Actual" and len(detail_rates) == 1:
 			tx_rate = next(iter(detail_rates))
@@ -3695,23 +3859,54 @@ def _apply_accounting_invoice_taxes(doc, folio_dict: dict, lines: list[dict],
 			"total_tax": round(tax_amt, 2),
 			"parts": [{"label": label, "rate": tx_rate, "amount": round(tax_amt, 2)}],
 		})
+		cgst_amt = round(tax_amt * float(split[0][1]), 2) if split else round(tax_amt, 2)
+		sgst_amt = round(tax_amt * float(split[-1][1]), 2) if len(split) >= 2 else 0.0
 		gst_summary.append({
 			"rate": tx_rate,
 			"taxable": taxable,
-			"cgst": round(tax_amt * float(split[0][1]), 2),
-			"sgst": round(tax_amt * float(split[-1][1]), 2),
+			"cgst": cgst_amt,
+			"sgst": sgst_amt,
 			"total_tax": round(tax_amt, 2),
+		})
+
+	# Include 0% / exempt taxable base so mixed (e.g. 18% + 0% exempt) and pure-exempt
+	# invoices account for the full net total without phantom taxed buckets.
+	exempt_net = round(
+		sum(float(it.get("net_amount") or 0) for idx, it in enumerate(items) if not item_taxed[idx]),
+		2,
+	)
+	if abs(exempt_net) > 1e-6:
+		tax_summary.append({
+			"rate": 0.0,
+			"taxable": exempt_net,
+			"total_tax": 0.0,
+			"parts": [{"label": default_tax_label, "rate": 0.0, "amount": 0.0}],
+		})
+		gst_summary.append({
+			"rate": 0.0,
+			"taxable": exempt_net,
+			"cgst": 0.0,
+			"sgst": 0.0,
+			"total_tax": 0.0,
 		})
 
 	# Map accounting items back to folio lines (source_ref == charge.name) and
 	# restore netted allowance/discount lines from kamra_allowance_refs so line
 	# totals reconcile exactly to si.net_total, si.total_taxes_and_charges, si.grand_total.
+	# On a rebill (kamra_rebill_of), unique source_ref stays on the original SI, so
+	# fall back to the replaced source SI's positional item references.
 	line_by_row = {ln["row"]: ln for ln in lines}
+	source_items = list(source_si.get("items") or []) if source_si is not None and source_si is not si else []
+	has_explicit_incl = any(tx.get("included_in_print_rate") is not None for tx in taxes)
 	allowance_deltas: dict[str, list[float]] = {}  # row -> [net, tax, total, rate]
 	mapped_rows: set[str] = set()
 
 	for idx, it in enumerate(items):
 		ref = it.get("source_ref")
+		al_refs = it.get("kamra_allowance_refs")
+		if not ref and len(source_items) == len(items):
+			ref = source_items[idx].get("source_ref")
+			al_refs = al_refs or source_items[idx].get("kamra_allowance_refs")
 		ln = line_by_row.get(ref) if ref else None
 		if not ln:
 			continue
@@ -3721,12 +3916,12 @@ def _apply_accounting_invoice_taxes(doc, folio_dict: dict, lines: list[dict],
 		it_rate = round(item_rates[idx], 4)
 		it_gross = round(it_net + it_tax, 2)
 		it_amount = float(it.get("amount") or 0)
-		is_inclusive = abs(it_gross - it_amount) < 0.05 and it_gross > 0
+		is_inclusive = item_inclusive[idx] if has_explicit_incl else (abs(it_gross - it_amount) < 0.05 and it_gross > 0)
 
 		add_net = 0.0
 		add_tax = 0.0
 		add_gross = 0.0
-		for raw_line in (it.get("kamra_allowance_refs") or "").splitlines():
+		for raw_line in (al_refs or "").splitlines():
 			parts = raw_line.strip().split()
 			if len(parts) < 2:
 				continue
@@ -3807,6 +4002,9 @@ def _apply_accounting_invoice_taxes(doc, folio_dict: dict, lines: list[dict],
 		"gst_summary": gst_summary,
 		"accounting_tax_note": None,
 		"by_head": by_head,
+		"si": si,
+		"state": "submitted",
+		"erp_credited": _erp_credited_total(si, prop=prop, prop_currency=prop_currency),
 	}
 
 
@@ -3923,16 +4121,45 @@ def folio_invoice(folio: str):
 		# a voided line and its reversal net to nothing: not a line bought
 		head["lines"] += c.name not in pairs
 
-	settled = bool(doc.invoice_number)
+	prop_currency = prop.currency or loc.default_currency(pack)
 	folio_dict = doc.as_dict()
 	acct_tax = _apply_accounting_invoice_taxes(
-		doc, folio_dict, lines, pairs, split, _loc_ctx["tax_label"],
+		doc, prop, prop_currency, folio_dict, lines, pairs, split, _loc_ctx["tax_label"],
 	)
 	if acct_tax["by_head"] is not None:
 		by_head = acct_tax["by_head"]
+
+	# A bridged folio is final once its linked accounting Sales Invoice is
+	# submitted (real bridged check-outs set only sales_invoice, not
+	# invoice_number). A draft or cancelled Sales Invoice is never final.
+	acct_si = acct_tax["si"]
+	acct_state = acct_tax["state"]
+	if acct_state == "submitted" and acct_si is not None:
+		settled = True
+		doc_number = acct_si.name
+	elif acct_state == "not_final":
+		settled = False
+		doc_number = doc.invoice_number or doc.name
+	else:
+		settled = bool(doc.invoice_number)
+		doc_number = doc.invoice_number or doc.name
+
 	# what the tax authority requires ON the bill (ZATCA: QR + Arabic title)
-	statutory = loc.invoice_print_block(
-		pack, "Folio", doc.name, doc.invoice_number) if settled else None
+	statutory = (
+		loc.invoice_print_block(pack, "Folio", doc.name, doc.invoice_number or doc_number)
+		if settled and acct_tax["tax_source"] != "accounting_unavailable"
+		else None
+	)
+	if not settled:
+		doc_title = _("Provisional Bill")
+	elif acct_tax["tax_source"] == "accounting_unavailable":
+		doc_title = _(loc.neutral_invoice_title(pack))
+	else:
+		doc_title = (statutory or {}).get("title") or _(loc.invoice_title(pack))
+
+	doc_footer = _loc_ctx.get("footer")
+	if acct_tax["tax_source"] == "accounting_unavailable" and doc_footer and "tax invoice" in doc_footer.lower():
+		doc_footer = "This is a computer-generated invoice."
 	payments = [{
 		"row": p.name, "posting_date": str(p.posting_date),
 		"payment_kind": p.payment_kind, "mode": p.mode,
@@ -3970,21 +4197,20 @@ def folio_invoice(folio: str):
 		"allocations": _folio_allocations(doc.name),
 		# what the issued credit notes on this invoice add up to: the most a
 		# new one may credit is the invoice total less this
-		"credited": float(credited_total(doc.name)),
+		"credited": round(float(credited_total(doc.name)) + float(acct_tax.get("erp_credited") or 0.0), 2),
 		"bill_to": bill_to,
 		"statutory": statutory,
 		"tax_source": acct_tax["tax_source"],
 		"document": {
 			# a bill before settlement is provisional and must say so - the
 			# invoice number only exists once the folio closes
-			"title": (statutory or {}).get("title") or (
-				_(loc.invoice_title(pack)) if settled else _("Provisional Bill")),
+			"title": doc_title,
 			"title_local": (statutory or {}).get("title_ar"),
 			"is_final": settled,
-			"number": doc.invoice_number or doc.name,
+			"number": doc_number,
 			"date": str(doc.closed_on or "")[:10] or nowdate(),
 			"amount_in_words": loc.amount_in_words(pack, prop, folio_dict["grand_total"]),
-			"footer": _loc_ctx.get("footer"),
+			"footer": doc_footer,
 			# the hotel's own lines under the statutory one - CIN, bank
 			# details for a transfer
 			"invoice_footer": prop.get("invoice_footer"),
@@ -6239,12 +6465,12 @@ def room_board(property: str):
 		r["guest_name"] = stay.guest_name if stay else None
 		# Day-use is due only once its planned ETD has passed; overnight
 		# stays stay date-based (checkout date ≤ today).
-		from kamra.day_use import is_due_out as _is_due_out
+		from kamra.day_use import format_hhmm as _format_hhmm, is_due_out as _is_due_out
 		r["due_out"] = bool(stay and _is_due_out(stay))
 		# a day-use room turns the same day: housekeeping plans on its slot
 		r["day_use"] = bool(stay and stay.is_day_use)
-		r["etd"] = str(stay.planned_check_out_time)[:5] \
-			if stay and stay.planned_check_out_time else None
+		r["etd"] = _format_hhmm(stay.planned_check_out_time) or None \
+			if stay and stay.planned_check_out_time not in (None, "") else None
 		r["clean_tasks"] = clean_tasks.get(r.name, [])
 		t = tasks.get(r.name)
 		r["task"] = {
@@ -6410,22 +6636,25 @@ def tape_chart(property: str, start_date: str | None = None, days: int = 14):
 
 	# changeover conflicts: same room turns over today and the incoming
 	# guest lands before (or within the hk buffer of) the outgoing one
+	from kamra.day_use import format_hhmm as _format_hhmm
 	conflicts = []
 	for r in rooms:
 		by_date_out = {str(b.check_out_date): b for b in r["bookings"]
-		               if b.planned_check_out_time}
+		               if b.planned_check_out_time not in (None, "")}
 		for b in r["bookings"]:
 			out = by_date_out.get(str(b.check_in_date))
-			if not out or out.name == b.name or not b.planned_check_in_time:
+			if not out or out.name == b.name or b.planned_check_in_time in (None, ""):
 				continue
-			if str(b.planned_check_in_time) <= str(out.planned_check_out_time):
+			in_eta = _format_hhmm(b.planned_check_in_time)
+			out_etd = _format_hhmm(out.planned_check_out_time)
+			if in_eta and out_etd and in_eta <= out_etd:
 				conflicts.append({
 					"room": r.name, "room_number": r.room_number,
 					"date": str(b.check_in_date),
 					"out_res": out.name, "out_guest": out.guest_name,
-					"etd": str(out.planned_check_out_time)[:5],
+					"etd": out_etd,
 					"in_res": b.name, "in_guest": b.guest_name,
-					"eta": str(b.planned_check_in_time)[:5],
+					"eta": in_eta,
 				})
 
 	# the day-by-day house position: sold vs capacity vs the overbooking
@@ -6571,11 +6800,14 @@ def position_briefing(property: str, date: str | None = None):
 		fields=["name", "guest_name", "room",
 		        "planned_check_out_time"],
 		order_by="planned_check_out_time asc")
+	from kamra.day_use import format_hhmm as _format_hhmm
 	for a in arrivals:
-		a["eta"] = str(a.planned_check_in_time)[:5] if a.planned_check_in_time else None
+		a["eta"] = _format_hhmm(a.planned_check_in_time) or None \
+			if a.planned_check_in_time not in (None, "") else None
 		a["room_no"] = (a.room or "").split("-")[-1] or None
 	for dep in departures:
-		dep["etd"] = str(dep.planned_check_out_time)[:5] if dep.planned_check_out_time else None
+		dep["etd"] = _format_hhmm(dep.planned_check_out_time) or None \
+			if dep.planned_check_out_time not in (None, "") else None
 		dep["room_no"] = (dep.room or "").split("-")[-1]
 	# what check-out will ask for, unposted nights included
 	dep_money = _stay_balances([dep.name for dep in departures])
@@ -6736,13 +6968,15 @@ def tape_chart_hourly(property: str, date: str | None = None):
 		# overnight (multi-day) stay that includes today -> full band, no times
 		b["overnight"] = 0 if b.is_day_use else 1
 		if b.is_day_use:
-			def _hhmm(t, fallback):
-				if not t:
-					return fallback
-				parts = str(t).split(":")
-				return f"{int(parts[0]):02d}:{parts[1] if len(parts) > 1 else '00'}"
-			b["from_hour"] = _hhmm(b.planned_check_in_time, "10:00")
-			b["to_hour"] = _hhmm(b.planned_check_out_time, "18:00")
+			from kamra.day_use import format_hhmm as _format_hhmm
+			b["from_hour"] = (
+				_format_hhmm(b.planned_check_in_time) or "10:00"
+				if b.planned_check_in_time not in (None, "") else "10:00"
+			)
+			b["to_hour"] = (
+				_format_hhmm(b.planned_check_out_time) or "18:00"
+				if b.planned_check_out_time not in (None, "") else "18:00"
+			)
 		by_room.setdefault(b.room, []).append(b)
 	for r in rooms:
 		r["bookings"] = by_room.get(r.name, [])
@@ -7856,8 +8090,8 @@ def _recent_agent_duplicate(property: str, room_type: str, check_in_date: str,
 def _stay_slot(check_in_date, check_out_date, t_in=None, t_out=None):
 	"""Normalise a booking's planned times to HH:MM:SS (or None). A day-use
 	slot must end after it starts - the room is only the guest's for those
-	hours."""
-	def norm(v):
+	hours. End-of-day check-out '24:00' is valid."""
+	def norm(v, *, allow_end_of_day: bool = False):
 		if not v:
 			return None
 		parts = str(v).strip().split(":")
@@ -7865,10 +8099,11 @@ def _stay_slot(check_in_date, check_out_date, t_in=None, t_out=None):
 			h, m = int(parts[0]), int(parts[1] if len(parts) > 1 else 0)
 		except ValueError:
 			frappe.throw(_("Times are HH:MM, e.g. 10:00."))
-		if not (0 <= h <= 23 and 0 <= m <= 59):
+		valid = (0 <= h <= 23 and 0 <= m <= 59) or (allow_end_of_day and h == 24 and m == 0)
+		if not valid:
 			frappe.throw(_("Times are HH:MM, e.g. 10:00."))
 		return f"{h:02d}:{m:02d}:00"
-	t_in, t_out = norm(t_in), norm(t_out)
+	t_in, t_out = norm(t_in), norm(t_out, allow_end_of_day=True)
 	if str(check_in_date) == str(check_out_date) and t_in and t_out \
 			and t_out <= t_in:
 		frappe.throw(_("A day-use slot must end after it starts."))

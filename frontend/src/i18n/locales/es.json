@@ -6791,5 +6791,8 @@
   "Your own lines at the foot of every invoice - e.g. company registration, bank name and account details.": "Sus propias líneas al pie de cada factura: p. ej., registro de la empresa, nombre del banco y datos de la cuenta.",
   "OTA Prepaid": "Prepago OTA",
   "Company Credit": "Crédito de empresa",
-  "Tax as per the accounting invoice": "Impuesto según la factura contable"
+  "Tax as per the accounting invoice": "Impuesto según la factura contable",
+  "Tax summary": "Resumen de impuestos",
+  "Total Tax": "Impuesto total",
+  "Credited": "Acreditado"
 }

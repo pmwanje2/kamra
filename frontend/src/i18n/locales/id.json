@@ -530,5 +530,14 @@
   "Company Credit": "Kredit Perusahaan",
   "Payment Link": "Tautan Pembayaran",
   "Cheque": "Cek",
-  "Tax as per the accounting invoice": "Pajak sesuai faktur akuntansi"
+  "Tax as per the accounting invoice": "Pajak sesuai faktur akuntansi",
+  "Tax Invoice": "Faktur Pajak",
+  "Invoice": "Faktur",
+  "Provisional Bill": "Tagihan Sementara",
+  "Closed": "Ditutup",
+  "Stay": "Menginap",
+  "Tax summary": "Ringkasan pajak",
+  "Total Tax": "Total Pajak",
+  "Credited": "Dikreditkan",
+  "Total {cur}": "Total {cur}"
 }

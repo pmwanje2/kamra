@@ -1168,3 +1168,6 @@ Channel review status can only be cleared via the review action.,El estado de re
 Update In-House Reservations,Actualizar reservas en casa
 "Update In-House Reservations = Y is not yet enabled: OXI Y requires arrival-date, room-type, billed-night, and assigned-room safety bounds. Keep N so OTA changes to checked-in stays are rejected and flagged for review.","Actualizar reservas en casa = Y aún no está habilitado: OXI Y requiere límites de seguridad de fecha de llegada, tipo de habitación, noches facturadas y habitación asignada. Mantenga N para que los cambios de la OTA en estancias con check-in se rechacen y se marquen para revisión."
 OTA Tax Rules row {0}: a CJK rule needs at least two characters so it does not match unrelated taxes.,Fila {0} de Reglas de impuestos de OTA: una regla CJK necesita al menos dos caracteres para no coincidir con impuestos no relacionados.
+Tax as per the accounting invoice,Impuesto según la factura contable
+Tax Invoice,Factura fiscal
+Credited,Acreditado

@@ -632,6 +632,18 @@ def invoice_title(pack) -> str:
 	return getattr(pack, "INVOICE_TITLE", "Invoice")
 
 
+def neutral_invoice_title(pack) -> str:
+	"""Neutral title for a settled bill when tax could not be read: never
+	claims "Tax Invoice" without verified tax figures."""
+	explicit = getattr(pack, "NEUTRAL_INVOICE_TITLE", None)
+	if explicit:
+		return explicit
+	title = invoice_title(pack)
+	if "tax invoice" in title.lower():
+		return "Invoice"
+	return title
+
+
 def invoice_print_block(pack, source_doctype: str, source_name: str,
                         number: str | None = None):
 	"""Whatever the authority requires ON the printed bill (ZATCA's QR and

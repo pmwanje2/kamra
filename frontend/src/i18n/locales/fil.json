@@ -1250,5 +1250,12 @@
   "Company Credit": "Kredito ng Kumpanya",
   "Payment Link": "Link ng Pagbabayad",
   "Cheque": "Tseke",
-  "Tax as per the accounting invoice": "Buwis ayon sa accounting invoice"
+  "Tax as per the accounting invoice": "Buwis ayon sa accounting invoice",
+  "Tax Invoice": "Resibo ng Buwis",
+  "Invoice": "Faktura",
+  "Stay": "Pananatili",
+  "Tax summary": "Buod ng buwis",
+  "Total Tax": "Kabuuang Buwis",
+  "Credited": "Na-credit",
+  "taxable {cur}{amount}": "may buwis {cur}{amount}"
 }

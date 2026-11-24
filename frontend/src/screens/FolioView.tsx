@@ -248,7 +248,7 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
   useUILanguage()
   return (
     <div className="flex gap-2">
-      <dt className="w-24 shrink-0 text-zinc-500">{translate(label)}</dt>
+      <dt className="min-w-24 max-w-44 shrink-0 break-words text-zinc-500">{translate(label)}</dt>
       <dd className="min-w-0">{children}</dd>
     </div>
   )
@@ -496,6 +496,8 @@ export default function FolioView() {
   // invoiced here, or by the accounting system: its check-out close sets only
   // its own invoice (sales_invoice), and that bill is corrected all the same
   const invoiced = !!(folio.invoice_number || folio.sales_invoice)
+  const isFinal = doc ? doc.is_final : Boolean(folio.invoice_number)
+  const hasServiceCode = lines.some((l) => Boolean(l.service_code))
 
   return (
     <div>
@@ -662,11 +664,11 @@ export default function FolioView() {
           <Button variant="outline" onClick={() => {
             void call("kamra.ledger.record_folio_reprint", {
               folio: folio.name,
-              document: folio.invoice_number ? "Guest Folio" : "Proforma",
+              document: isFinal ? "Guest Folio" : "Proforma",
             }).finally(() => window.print())
           }}>
             <Printer className="size-4" aria-hidden />
-            {folio.invoice_number ? t("Print invoice") : t("Print folio")}
+            {isFinal ? t("Print invoice") : t("Print folio")}
           </Button>
           {open &&
             folio.balance === 0 &&
@@ -858,7 +860,7 @@ export default function FolioView() {
                   : "border border-dashed border-amber-400 bg-amber-50 text-amber-700")
               }
             >
-              {translate(doc?.title) ?? (folio.invoice_number ? t("Invoice") : t("Provisional Bill"))}
+              {translate(doc?.title) ?? (isFinal ? t("Invoice") : t("Provisional Bill"))}
               {doc?.title_local && (
                 <>
                   <span aria-hidden className="mx-2 opacity-50">·</span>
@@ -1178,9 +1180,11 @@ export default function FolioView() {
                       )}
                       <th className="py-2 pr-3">{t("Date")}</th>
                       <th className="py-2 pr-3">{t("Item")}</th>
-                      <th className="hidden py-2 pr-3 print:table-cell">
-                        {doc?.service_code_label ?? t("SAC")}
-                      </th>
+                      {hasServiceCode && (
+                        <th className="hidden py-2 pr-3 print:table-cell">
+                          {doc?.service_code_label ?? t("SAC")}
+                        </th>
+                      )}
                       <th className="py-2 pr-3 text-right">{t("Amount {cur}", { cur: cur() })}</th>
                       {showLineTax && <th className="py-2 pr-3 text-right">{docTaxLabel} %</th>}
                       {showLineTax && <th className="py-2 pr-3 text-right">{docTaxLabel} {cur()}</th>}
@@ -1241,9 +1245,11 @@ export default function FolioView() {
                               </Link>
                             )}
                           </Popin>
-                          <td className="hidden py-2 pr-3 font-mono text-xs text-zinc-400 print:table-cell">
-                            {lineByRow.get(c.name)?.service_code ?? ""}
-                          </td>
+                          {hasServiceCode && (
+                            <td className="hidden py-2 pr-3 font-mono text-xs text-zinc-400 print:table-cell">
+                              {lineByRow.get(c.name)?.service_code ?? ""}
+                            </td>
+                          )}
                           {(() => {
                             const ln = lineByRow.get(c.name)
                             const amt = ln ? ln.amount : c.amount
@@ -1327,7 +1333,7 @@ export default function FolioView() {
               </h3>
               {taxUnavailable ? (
                 <p className="text-sm text-zinc-600">
-                  {t(doc?.accounting_tax_note || "Tax as per the accounting invoice")}
+                  {t("Tax as per the accounting invoice")}
                 </p>
               ) : (
                 <table className="w-full text-sm">
@@ -1369,6 +1375,11 @@ export default function FolioView() {
               <p className="text-lg font-semibold">
                 {t("Grand total")}: {cur()}{inr(folio.grand_total)}
               </p>
+              {(data.credited ?? 0) > 0 && (
+                <p className="text-sm font-medium text-rose-600">
+                  {t("Credited")}: −{cur()}{inr(data.credited)}
+                </p>
+              )}
               {doc?.amount_in_words && (
                 <p className="text-xs italic text-zinc-500">
                   {doc.amount_in_words}
@@ -1387,7 +1398,9 @@ export default function FolioView() {
               {shown && (
                 <p className="text-xs text-zinc-600">
                   {t("Approx. {cur} {total} (balance {cur} {balance}) at {rate}, rate of {date}. Tax invoice amounts are in {home}.", {
-                    cur: shown.currency, total: inr(shown.grand_total), balance: inr(shown.balance),
+                    cur: shown.currency,
+                    total: fmtAmount(shown.grand_total, shown.currency),
+                    balance: fmtAmount(shown.balance, shown.currency),
                     rate: shown.rate, date: shown.rate_date, home: shown.home_currency,
                   })}
                 </p>
@@ -1458,8 +1471,8 @@ export default function FolioView() {
             </div>
           )}
 
-          {folio.invoice_number && (
-            <div className="mt-8 flex items-end justify-between border-t border-zinc-200 pt-4 text-xs text-zinc-500">
+          {isFinal && (
+            <div className="mt-8 flex flex-wrap items-end justify-between gap-4 border-t border-zinc-200 pt-4 text-xs text-zinc-500">
               <p className="max-w-md">
                 {/* the pack words the footer for its country (GST Act in
                     India, ZATCA simplified invoice in Saudi Arabia…) */}

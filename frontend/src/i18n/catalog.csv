@@ -6973,3 +6973,6 @@ Flat rate applied to room nights when the property calculates tax locally.,Flat 
 OTA Prepaid,OTA Prepaid,مدفوع مسبقاً عبر وكالة حجز,Prepago OTA,Pré-pago OTA,OTA 预付,screens/configs.ts,,translated
 Company Credit,Company Credit,ائتمان شركة,Crédito de empresa,Crédito corporativo,公司挂账,screens/configs.ts,,translated
 Tax as per the accounting invoice,Tax as per the accounting invoice,الضريبة وفقًا للفاتورة المحاسبية,Impuesto según la factura contable,Imposto conforme a fatura contábil,税额以财务发票为准,screens/FolioView.tsx,,translated
+Tax summary,Tax summary,ملخص الضريبة,Resumen de impuestos,Resumo de impostos,税费汇总,screens/FolioView.tsx,,translated
+Total Tax,Total Tax,إجمالي الضريبة,Impuesto total,Total de impostos,税费合计,screens/FolioView.tsx,,translated
+Credited,Credited,رصيد دائن,Acreditado,Creditado,已冲减,screens/FolioView.tsx,,translated

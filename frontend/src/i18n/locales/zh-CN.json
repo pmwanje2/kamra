@@ -6865,5 +6865,8 @@
   "Your own lines at the foot of every invoice - e.g. company registration, bank name and account details.": "显示在每张发票底部的自定义内容，例如公司注册号、银行名称和账号信息。",
   "OTA Prepaid": "OTA 预付",
   "Company Credit": "公司挂账",
-  "Tax as per the accounting invoice": "税额以财务发票为准"
+  "Tax as per the accounting invoice": "税额以财务发票为准",
+  "Tax summary": "税费汇总",
+  "Total Tax": "税费合计",
+  "Credited": "已冲减"
 }
