@@ -180,8 +180,8 @@ export function moneyDigits(currency = cache.currency) {
 }
 /** An amount with the currency's normal decimals, always the same count
  *  (2,27,255.40, never 2,27,255.4), so a column of figures lines up. */
-export const fmtAmount = (n: unknown, currency = cache.currency) => {
-  const d = moneyDigits(currency)
+export const fmtAmount = (n: unknown) => {
+  const d = moneyDigits()
   return Number(n ?? 0).toLocaleString(cache.locale, { minimumFractionDigits: d, maximumFractionDigits: d })
 }
 /** fmtAmount with the currency symbol in front. */

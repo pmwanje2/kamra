@@ -3551,301 +3551,6 @@ def cancel_invoice(folio: str, reason: str, pin: str | None = None):
 	return out
 
 
-def _load_accounting_invoice(doc):
-	"""Read the linked accounting Sales Invoice when a bridged folio carries
-	one. Never imports accounting internals; returns None if missing, cancelled,
-	mismatched or unreadable."""
-	si_name = doc.get("sales_invoice")
-	if not si_name:
-		return None
-	try:
-		if not frappe.db.exists("DocType", "Sales Invoice"):
-			return None
-		si = frappe.get_doc("Sales Invoice", si_name)
-	except Exception:
-		return None
-	if int(si.get("docstatus") or 0) == 2:
-		return None
-	folio_ref = si.get("kamra_ref")
-	if folio_ref and folio_ref != doc.name:
-		return None
-	return si
-
-
-def _clean_accounting_tax_label(tx, rate: float, fallback: str) -> str:
-	import re
-
-	raw = (tx.get("description") or "").strip()
-	if not raw:
-		raw = (tx.get("account_head") or "").strip()
-		if " - " in raw:
-			raw = raw.rsplit(" - ", 1)[0].strip()
-	label = raw
-	if rate:
-		for fmt_rate in (f"{rate:g}", f"{rate:.2f}"):
-			label = re.sub(
-				rf"\s*(?:@\s*)?\(?{re.escape(fmt_rate)}\s*%\)?$",
-				"", label,
-			).strip()
-	return label or fallback
-
-
-def _parse_item_wise_tax(raw) -> dict:
-	if isinstance(raw, dict):
-		return raw
-	if not raw or not isinstance(raw, str):
-		return {}
-	try:
-		parsed = json.loads(raw)
-		return parsed if isinstance(parsed, dict) else {}
-	except ValueError:
-		return {}
-
-
-def _apply_accounting_invoice_taxes(doc, folio_dict: dict, lines: list[dict],
-                                    pairs: set[str], split: list, default_tax_label: str) -> dict:
-	"""When a closed bridged folio carries a linked accounting Sales Invoice,
-	replace the 0% folio tax lines and summary with the accounting invoice's
-	own tax breakdown (single source of truth). If the accounting invoice
-	cannot be read, report tax_source='accounting_unavailable' and emit no
-	fake 0% summary rows."""
-	if not doc.get("sales_invoice"):
-		return {"tax_source": "folio", "tax_summary": None, "gst_summary": None,
-		        "accounting_tax_note": None, "by_head": None}
-
-	si = _load_accounting_invoice(doc)
-	if si is None:
-		return {
-			"tax_source": "accounting_unavailable",
-			"tax_summary": [],
-			"gst_summary": [],
-			"accounting_tax_note": _("Tax as per the accounting invoice"),
-			"by_head": None,
-		}
-
-	items = list(si.get("items") or [])
-	taxes = list(si.get("taxes") or [])
-	si_net_total = float(si.get("net_total") or 0)
-	si_tax_total = float(si.get("total_taxes_and_charges") or 0)
-	si_grand_total = float(si.get("grand_total") or 0)
-
-	# ERPNext v16 stores per-line tax breakdown in the `item_wise_tax_details`
-	# child table (item_row -> item.name, tax_row -> tax.name); ERPNext v15
-	# stores a JSON map on each tax row's `item_wise_tax_detail`. Support both,
-	# with a proportional net_amount fallback if neither is populated.
-	item_idx_by_name = {it.get("name"): idx for idx, it in enumerate(items) if it.get("name")}
-	v16_by_tax: dict[str, list] = {}
-	for det in si.get("item_wise_tax_details") or []:
-		trow = det.get("tax_row")
-		if trow:
-			v16_by_tax.setdefault(trow, []).append(det)
-
-	item_rates = [0.0] * len(items)
-	item_taxes = [0.0] * len(items)
-	tax_summary = []
-	gst_summary = []
-
-	for tx in taxes:
-		raw_tax = tx.get("tax_amount_after_discount_amount")
-		tax_amt = float(raw_tax if raw_tax is not None else (tx.get("tax_amount") or 0))
-		tx_rate = float(tx.get("rate") or 0)
-		v16_rows = v16_by_tax.get(tx.get("name") or "", [])
-		detail = {} if v16_rows else _parse_item_wise_tax(tx.get("item_wise_tax_detail"))
-
-		taxable_for_row = 0.0
-		detail_rates = set()
-		has_item_detail = False
-
-		if v16_rows:
-			has_item_detail = True
-			for det in v16_rows:
-				e_rate = float(det.get("rate") or 0)
-				e_tax = float(det.get("amount") or 0)
-				e_taxable = float(det.get("taxable_amount") or 0)
-				if e_rate:
-					detail_rates.add(e_rate)
-				if e_rate or abs(e_tax) > 1e-6:
-					taxable_for_row += e_taxable
-				idx = item_idx_by_name.get(det.get("item_row"))
-				if idx is not None:
-					if e_rate:
-						item_rates[idx] += e_rate
-					item_taxes[idx] = round(item_taxes[idx] + e_tax, 2)
-		elif detail:
-			# Match items referenced by v15 item_wise_tax_detail JSON
-			by_key: dict[str, list[int]] = {}
-			for idx, it in enumerate(items):
-				key = it.get("item_code") if it.get("item_code") in detail else (
-					it.get("item_name") if it.get("item_name") in detail else None
-				)
-				if key is not None:
-					by_key.setdefault(key, []).append(idx)
-			has_item_detail = bool(by_key)
-			for key, idxs in by_key.items():
-				entry = detail.get(key)
-				if not isinstance(entry, (list, tuple)) or len(entry) < 2:
-					continue
-				e_rate = float(entry[0] or 0)
-				e_tax = float(entry[1] or 0)
-				if e_rate:
-					detail_rates.add(e_rate)
-				if e_rate or abs(e_tax) > 1e-6:
-					taxable_for_row += sum(float(items[i].get("net_amount") or 0) for i in idxs)
-				net_sum = sum(float(items[i].get("net_amount") or 0) for i in idxs)
-				allocated = 0.0
-				for pos, idx in enumerate(idxs):
-					if e_rate:
-						item_rates[idx] += e_rate
-					if pos == len(idxs) - 1:
-						share = round(e_tax - allocated, 2)
-					elif abs(net_sum) > 1e-9:
-						share = round(e_tax * float(items[idx].get("net_amount") or 0) / net_sum, 2)
-					else:
-						share = round(e_tax / len(idxs), 2)
-					allocated += share
-					item_taxes[idx] = round(item_taxes[idx] + share, 2)
-		elif items and (abs(tax_amt) > 1e-6 or tx_rate):
-			net_sum = sum(float(it.get("net_amount") or 0) for it in items)
-			allocated = 0.0
-			for pos, it in enumerate(items):
-				if tx_rate:
-					item_rates[pos] += tx_rate
-				if pos == len(items) - 1:
-					share = round(tax_amt - allocated, 2)
-				elif abs(net_sum) > 1e-9:
-					share = round(tax_amt * float(it.get("net_amount") or 0) / net_sum, 2)
-				else:
-					share = round(tax_amt / len(items), 2)
-				allocated += share
-				item_taxes[pos] = round(item_taxes[pos] + share, 2)
-
-		if abs(tax_amt) < 1e-6 and tx_rate == 0:
-			continue
-		if tx_rate == 0 and tx.get("charge_type") != "Actual" and len(detail_rates) == 1:
-			tx_rate = next(iter(detail_rates))
-		taxable = round(taxable_for_row if has_item_detail else si_net_total, 2)
-		label = _clean_accounting_tax_label(tx, tx_rate, default_tax_label)
-		tax_summary.append({
-			"rate": tx_rate,
-			"taxable": taxable,
-			"total_tax": round(tax_amt, 2),
-			"parts": [{"label": label, "rate": tx_rate, "amount": round(tax_amt, 2)}],
-		})
-		gst_summary.append({
-			"rate": tx_rate,
-			"taxable": taxable,
-			"cgst": round(tax_amt * float(split[0][1]), 2),
-			"sgst": round(tax_amt * float(split[-1][1]), 2),
-			"total_tax": round(tax_amt, 2),
-		})
-
-	# Map accounting items back to folio lines (source_ref == charge.name) and
-	# restore netted allowance/discount lines from kamra_allowance_refs so line
-	# totals reconcile exactly to si.net_total, si.total_taxes_and_charges, si.grand_total.
-	line_by_row = {ln["row"]: ln for ln in lines}
-	allowance_deltas: dict[str, list[float]] = {}  # row -> [net, tax, total, rate]
-	mapped_rows: set[str] = set()
-
-	for idx, it in enumerate(items):
-		ref = it.get("source_ref")
-		ln = line_by_row.get(ref) if ref else None
-		if not ln:
-			continue
-		mapped_rows.add(ref)
-		it_net = round(float(it.get("net_amount") or 0), 2)
-		it_tax = round(item_taxes[idx], 2)
-		it_rate = round(item_rates[idx], 4)
-		it_gross = round(it_net + it_tax, 2)
-		it_amount = float(it.get("amount") or 0)
-		is_inclusive = abs(it_gross - it_amount) < 0.05 and it_gross > 0
-
-		add_net = 0.0
-		add_tax = 0.0
-		add_gross = 0.0
-		for raw_line in (it.get("kamra_allowance_refs") or "").splitlines():
-			parts = raw_line.strip().split()
-			if len(parts) < 2:
-				continue
-			al_row = parts[0]
-			try:
-				take = float(parts[1])
-			except ValueError:
-				continue
-			if take <= 0 or al_row not in line_by_row:
-				continue
-			if is_inclusive and it_gross > 0:
-				t_net = round(take * it_net / it_gross, 2)
-				t_tax = round(take - t_net, 2)
-				t_gross = round(take, 2)
-			else:
-				t_net = round(take, 2)
-				t_tax = round(take * it_rate / 100.0, 2)
-				t_gross = round(t_net + t_tax, 2)
-			add_net = round(add_net + t_net, 2)
-			add_tax = round(add_tax + t_tax, 2)
-			add_gross = round(add_gross + t_gross, 2)
-			slot = allowance_deltas.setdefault(al_row, [0.0, 0.0, 0.0, it_rate])
-			slot[0] = round(slot[0] - t_net, 2)
-			slot[1] = round(slot[1] - t_tax, 2)
-			slot[2] = round(slot[2] - t_gross, 2)
-			if it_rate:
-				slot[3] = it_rate
-
-		final_net = round(it_net + add_net, 2)
-		final_tax = round(it_tax + add_tax, 2)
-		final_gross = round(it_gross + add_gross, 2)
-		qty = float(ln.get("qty") or 1) or 1.0
-		ln["amount"] = final_net
-		ln["rate"] = round(final_net / qty, 2)
-		ln["gst_rate"] = it_rate
-		ln["gst_amount"] = final_tax
-		ln["total"] = final_gross
-
-	for al_row, (d_net, d_tax, d_gross, d_rate) in allowance_deltas.items():
-		ln = line_by_row[al_row]
-		mapped_rows.add(al_row)
-		ln["amount"] = d_net
-		ln["rate"] = d_net
-		ln["gst_rate"] = d_rate
-		ln["gst_amount"] = d_tax
-		ln["total"] = d_gross
-
-	# Non-voided outlet transfer charges (posted via Journal Entry, not Sales Invoice)
-	transfer_net = 0.0
-	transfer_tax = 0.0
-	transfer_gross = 0.0
-	for c in doc.charges:
-		if c.name not in mapped_rows and c.name not in pairs and c.get("source_ref"):
-			transfer_net += float(c.amount or 0)
-			transfer_tax += float(c.gst_amount or 0)
-			transfer_gross += float(c.total or 0)
-
-	folio_dict["charges_total"] = round(si_net_total + transfer_net, 2)
-	folio_dict["tax_total"] = round(si_tax_total + transfer_tax, 2)
-	folio_dict["grand_total"] = round(si_grand_total + transfer_gross, 2)
-
-	by_head = {}
-	for ln in lines:
-		head_name = "Discount" if ln["charge_type"] == "Allowance" else (ln["charge_type"] or "Other")
-		head = by_head.setdefault(
-			head_name,
-			{"head": head_name, "amount": 0.0, "tax": 0.0,
-			 "total": 0.0, "lines": 0, "service_code": ln.get("service_code")},
-		)
-		head["amount"] = round(head["amount"] + float(ln["amount"] or 0), 2)
-		head["tax"] = round(head["tax"] + float(ln["gst_amount"] or 0), 2)
-		head["total"] = round(head["total"] + float(ln["total"] or 0), 2)
-		head["lines"] += ln["row"] not in pairs
-
-	return {
-		"tax_source": "accounting",
-		"tax_summary": tax_summary,
-		"gst_summary": gst_summary,
-		"accounting_tax_note": None,
-		"by_head": by_head,
-	}
-
-
 @frappe.whitelist()
 @require_roles("Finance", "Front Desk", "Kamra Agent")
 def folio_invoice(folio: str):
@@ -3975,12 +3680,6 @@ def folio_invoice(folio: str):
 			dominant["tax"] = float(Decimal(str(dominant["tax"])) + Decimal(str(tax_delta)))
 
 	settled = bool(doc.invoice_number)
-	folio_dict = doc.as_dict()
-	acct_tax = _apply_accounting_invoice_taxes(
-		doc, folio_dict, lines, pairs, split, _loc_ctx["tax_label"],
-	)
-	if acct_tax["by_head"] is not None:
-		by_head = acct_tax["by_head"]
 	# what the tax authority requires ON the bill (ZATCA: QR + Arabic title)
 	statutory = loc.invoice_print_block(
 		pack, "Folio", doc.name, doc.invoice_number) if settled else None
@@ -3994,27 +3693,8 @@ def folio_invoice(folio: str):
 		"transaction_code": p.get("transaction_code"),
 		"gl_code": p.get("gl_code"), "refund_of": p.get("refund_of"),
 	} for p in doc.payments]
-	tax_summary = (
-		acct_tax["tax_summary"] if acct_tax["tax_summary"] is not None else [
-			{"rate": rate, "taxable": v["taxable"], "total_tax": v["tax"],
-			 "parts": [{"label": label.upper(),
-			            "rate": round(rate * float(share), 4),
-			            "amount": v["tax"] * float(share)}
-			           for label, share in split]}
-			for rate, v in sorted(by_rate.items())
-		]
-	)
-	gst_summary = (
-		acct_tax["gst_summary"] if acct_tax["gst_summary"] is not None else [
-			{"rate": rate, "taxable": v["taxable"],
-			 "cgst": v["tax"] * float(split[0][1]),
-			 "sgst": v["tax"] * float(split[-1][1]),
-			 "total_tax": v["tax"]}
-			for rate, v in sorted(by_rate.items())
-		]
-	)
 	return {
-		"folio": folio_dict,
+		"folio": doc.as_dict(),
 		"lines": lines,
 		"payments": payments,
 		"statement": _folio_statement(lines, payments),
@@ -4024,7 +3704,6 @@ def folio_invoice(folio: str):
 		"credited": float(credited_total(doc.name)),
 		"bill_to": bill_to,
 		"statutory": statutory,
-		"tax_source": acct_tax["tax_source"],
 		"document": {
 			# a bill before settlement is provisional and must say so - the
 			# invoice number only exists once the folio closes
@@ -4034,14 +3713,13 @@ def folio_invoice(folio: str):
 			"is_final": settled,
 			"number": doc.invoice_number or doc.name,
 			"date": str(doc.closed_on or "")[:10] or nowdate(),
-			"amount_in_words": loc.amount_in_words(pack, prop, folio_dict["grand_total"]),
+			"amount_in_words": loc.amount_in_words(pack, prop, doc.grand_total),
 			"footer": _loc_ctx.get("footer"),
 			# the hotel's own lines under the statutory one - CIN, bank
 			# details for a transfer
 			"invoice_footer": prop.get("invoice_footer"),
 			"service_code_label": (_loc_ctx.get("service_code") or {}).get(
 				"label", "SAC"),
-			"accounting_tax_note": acct_tax["accounting_tax_note"],
 		},
 		"property": {
 			"currency": prop.currency or loc.default_currency(pack),
@@ -4092,9 +3770,22 @@ def folio_invoice(folio: str):
 			"contact_preference": res.get("contact_preference"),
 		},
 		"summary_by_head": sorted(by_head.values(), key=lambda h: -h["total"]),
-		"tax_summary": tax_summary,
+		"tax_summary": [
+			{"rate": rate, "taxable": v["taxable"], "total_tax": v["tax"],
+			 "parts": [{"label": label.upper(),
+			            "rate": round(rate * float(share), 4),
+			            "amount": v["tax"] * float(share)}
+			           for label, share in split]}
+			for rate, v in sorted(by_rate.items())
+		],
 		# kept for callers written against the pre-v2 shape
-		"gst_summary": gst_summary,
+		"gst_summary": [
+			{"rate": rate, "taxable": v["taxable"],
+			 "cgst": v["tax"] * float(split[0][1]),
+			 "sgst": v["tax"] * float(split[-1][1]),
+			 "total_tax": v["tax"]}
+			for rate, v in sorted(by_rate.items())
+		],
 	}
 
 
