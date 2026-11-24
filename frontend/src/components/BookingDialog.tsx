@@ -407,6 +407,9 @@ export function BookingDialog(props: {
   // When the desk did not pass a room type, keep auto-picking the cheapest
   // type that has rooms for the selected dates until they change it (#549).
   const autoRoomType = useRef(!props.initial.room_type)
+  const optionsLoaded = useRef(false)
+  const mealPlanTouched = useRef(false)
+  const ratePlanTouched = useRef(false)
 
   const [syncRev, setSyncRev] = useState(0)
   useEffect(() => {
@@ -417,14 +420,34 @@ export function BookingDialog(props: {
   }, [])
 
   useEffect(() => {
+    let live = true
     call<BookingOptions>("kamra.api.booking_options", { property: getCurrentProperty() }).then((o) => {
+      if (!live) return
       setOptions(o)
-      setForm((f) => ({
-        ...f,
-        meal_plan: o.meal_plans.find((m) => m.is_default)?.name ?? "",
-        rate_plan: f.rate_plan || o.default_plan || "",
-      }))
+      const isInitial = !optionsLoaded.current
+      optionsLoaded.current = true
+      setForm((f) => {
+        const defaultMeal = o.meal_plans.find((m) => m.is_default)?.name ?? ""
+        const mealValid = !f.meal_plan || o.meal_plans.some((m) => m.name === f.meal_plan)
+        const nextMeal = isInitial && !mealPlanTouched.current
+          ? (f.meal_plan && mealValid ? f.meal_plan : defaultMeal)
+          : mealValid
+            ? (f.meal_plan || (mealPlanTouched.current ? "" : defaultMeal))
+            : defaultMeal
+
+        const defaultRate = o.default_plan || ""
+        const rateValid = !f.rate_plan || o.rate_plans.some((rp) => rp.name === f.rate_plan)
+        const canKeepBlankRate = !o.rate_plan_required || !!f.company
+        const nextRate = isInitial && !ratePlanTouched.current
+          ? (f.rate_plan && rateValid ? f.rate_plan : defaultRate)
+          : rateValid
+            ? (f.rate_plan || (ratePlanTouched.current && canKeepBlankRate ? "" : defaultRate))
+            : defaultRate
+
+        return { ...f, meal_plan: nextMeal, rate_plan: nextRate }
+      })
     })
+    return () => { live = false }
   }, [syncRev])
 
   useEffect(() => {
@@ -1931,7 +1954,10 @@ export function BookingDialog(props: {
                     <select
                       className={inputCls}
                       value={form.meal_plan}
-                      onChange={(e) => set("meal_plan", e.target.value)}
+                      onChange={(e) => {
+                        mealPlanTouched.current = true
+                        set("meal_plan", e.target.value)
+                      }}
                     >
                       <option value="">{t("Room only")}</option>
                       {options?.meal_plans.map((mp) => (
@@ -1946,7 +1972,10 @@ export function BookingDialog(props: {
                         className={inputCls}
                         {...target("rate-plan")}
                         value={form.rate_plan}
-                        onChange={(e) => set("rate_plan", e.target.value)}
+                        onChange={(e) => {
+                          ratePlanTouched.current = true
+                          set("rate_plan", e.target.value)
+                        }}
                       >
                         <option value="" disabled={planRequired && !companyPlan} hidden={planRequired && !!form.rate_plan}>
                           {companyPlan
@@ -2006,7 +2035,10 @@ export function BookingDialog(props: {
                     ratePlan={form.rate_plan}
                     company={form.company || undefined}
                     planRequired={planRequired}
-                    onPickPlan={(p) => set("rate_plan", p)}
+                    onPickPlan={(p) => {
+                      ratePlanTouched.current = true
+                      set("rate_plan", p)
+                    }}
                     nightPrices={nightPrices}
                     onNightPrices={setNightPrices}
                     canSetPrice={canSetPrice}

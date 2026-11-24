@@ -1465,7 +1465,7 @@ def resolve_booking_rate_plan(
 		if enforce:
 			frappe.throw(
 				_("A rate plan is required for this property. Set up a default rate plan in Rate Plans, "
-				  "or choose a rate plan for this booking.") + " (KMR-RATE-REQ-001)"
+				  "or choose a rate plan for this booking.")
 			)
 		return None
 
@@ -1474,12 +1474,12 @@ def resolve_booking_rate_plan(
 	if rp_doc.get("property") and rp_doc.get("property") != property:
 		frappe.throw(
 			_("Rate plan '{0}' belongs to another property. Choose an active rate plan in Rate Plans.")
-			.format(plan_label) + " (KMR-RATE-REQ-001)"
+			.format(plan_label)
 		)
 	if cint(rp_doc.get("disabled")):
 		frappe.throw(
 			_("Rate plan '{0}' is disabled. Enable it in Rate Plans or choose an active rate plan.")
-			.format(plan_label) + " (KMR-RATE-REQ-001)"
+			.format(plan_label)
 		)
 
 	if check_availability:
@@ -1495,6 +1495,47 @@ def resolve_booking_rate_plan(
 				  "Approve a tariff in Contract Tariffs or choose another rate plan. ({4})")
 				.format(plan_label, rt_label, str(getdate(check_in_date)), str(getdate(check_out_date)), str(exc))
 			)
+	return candidate
+
+
+def resolve_group_rate_plan(
+	property: str,
+	*,
+	rate_plan: str | None = None,
+	company: str | None = None,
+	required: bool | None = None,
+) -> str | None:
+	"""Resolve and validate the rate plan on a Group Booking header in OPERA
+	order: chosen plan -> company's negotiated plan -> property's default plan
+	(when `rate_plan_required` is on). Refuses with brand-free guidance when
+	required and none resolves, or when the chosen plan is foreign/disabled."""
+	from kamra.settings import get_setting
+
+	enforce = bool(get_setting(property, "rate_plan_required")) if required is None else bool(required)
+	candidate = rate_plan or negotiated_rate_plan(property, company)
+	if not candidate and enforce:
+		candidate = default_rate_plan(property)
+
+	if not candidate:
+		if enforce:
+			frappe.throw(
+				_("A rate plan is required for this property. Set up a default rate plan in Rate Plans, "
+				  "or choose a rate plan for this group.")
+			)
+		return None
+
+	rp_doc = frappe.get_doc("Rate Plan", candidate)
+	plan_label = rp_doc.get("rate_plan_name") or candidate
+	if rp_doc.get("property") and rp_doc.get("property") != property:
+		frappe.throw(
+			_("Rate plan '{0}' belongs to another property. Choose an active rate plan in Rate Plans.")
+			.format(plan_label)
+		)
+	if cint(rp_doc.get("disabled")):
+		frappe.throw(
+			_("Rate plan '{0}' is disabled. Enable it in Rate Plans or choose an active rate plan.")
+			.format(plan_label)
+		)
 	return candidate
 
 

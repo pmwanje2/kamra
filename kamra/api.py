@@ -7372,12 +7372,18 @@ def _check_night_prices(property: str, room_type: str, check_in_date: str,
 	whose price something else already decides: a voucher, a rate plan (its
 	own or the company's negotiated one), an OTA total or a group block rate."""
 	from kamra.pricing import negotiated_rate_plan, normalize_night_prices, refuse_with_night_prices
+	from kamra.settings import get_setting
 	typed = normalize_night_prices(night_prices, check_in_date, check_out_date)
 	if not typed:
 		return {}
 	if not _can_set_rate():
 		frappe.throw(_("Only a Revenue Manager or Hotel Admin can set nightly prices."),
 		             frappe.PermissionError)
+	if get_setting(property, "rate_plan_required"):
+		frappe.throw(
+			_("Hand-set nightly prices cannot be used while a rate plan is required for this property. "
+			  "Choose a rate plan or apply a discount instead.")
+		)
 	if voucher_code:
 		refuse_with_night_prices(_("a voucher"))
 	if rate_plan:
@@ -9835,6 +9841,11 @@ def create_group_booking(property: str, group_name: str, check_in_date: str,
 
 	ota_ref = (ota_ref or "").strip() or None
 	_refuse_taken_ota_ref(property, ota_ref)  # before the group is made
+	from kamra.booking_refs import resolve_rate_plan
+	from kamra.pricing import resolve_group_rate_plan
+	rate_plan = resolve_rate_plan(property, rate_plan)
+	if not any(spec.get("night_prices") for spec in lines):
+		rate_plan = resolve_group_rate_plan(property, rate_plan=rate_plan, company=company)
 	shares = [0.0] * len(lines)
 	total = float(ota_total or 0) if booked_via else 0
 	if total > 0 and lines:
@@ -10086,6 +10097,11 @@ def create_group_with_rooming_list(property: str, group_name: str,
 	with_master = not company and (master_index is not None or bool(master_pays))
 	if with_master and not guests and not quote_only:
 		frappe.throw(_("Name the main room's guest in the rooming list."))
+
+	from kamra.booking_refs import resolve_rate_plan
+	from kamra.pricing import resolve_group_rate_plan
+	rate_plan = resolve_rate_plan(property, rate_plan)
+	rate_plan = resolve_group_rate_plan(property, rate_plan=rate_plan, company=company)
 
 	blocked = {rt: max(c.values()) for rt, c in counts.items()}
 	group = frappe.get_doc({
@@ -11362,7 +11378,8 @@ def create_group_block(property: str, group_name: str, check_in_date: str,
                        event_date: str | None = None,
                        attendees: int = 0,
                        customer_phone: str | None = None,
-                       notes: str | None = None):
+                       notes: str | None = None,
+                       rate_plan: str | None = None):
 	"""One call drafts the whole piece of MICE business: the group, its room
 	block, and (optionally) the banquet event - the agent wedge: an inquiry
 	agent turns "30 rooms + a 200-pax wedding on Dec 12" into a proposal."""
@@ -11371,18 +11388,22 @@ def create_group_block(property: str, group_name: str, check_in_date: str,
 	if any(flt(b.get("block_rate")) > 0 for b in blocks or []) and not _can_set_rate():
 		frappe.throw(_("Only a Revenue Manager or Hotel Admin can set a group rate."),
 		             frappe.PermissionError)
+	from kamra.booking_refs import resolve_rate_plan, resolve_room_type
+	from kamra.pricing import resolve_group_rate_plan
+	rate_plan = resolve_rate_plan(property, rate_plan)
+	rate_plan = resolve_group_rate_plan(property, rate_plan=rate_plan, company=company)
 	gb = frappe.get_doc({
 		"doctype": "Group Booking",
 		"property": property,
 		"group_name": group_name,
 		"company": company,
+		"rate_plan": rate_plan or None,
 		"check_in_date": check_in_date,
 		"check_out_date": check_out_date,
 		"cutoff_date": cutoff_date,
 		"status": "Open",
 		"notes": notes,
 	})
-	from kamra.booking_refs import resolve_room_type
 	for b in blocks or []:
 		gb.append("blocks", {
 			# agents name room types the way staff do ("Deluxe", "DLX")

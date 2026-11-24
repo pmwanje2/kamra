@@ -939,6 +939,11 @@ def rate_calendar(property: str, from_date: str | None = None, days: int = 14,
 		frappe.has_permission("Corporate Account", "read", doc=company, throw=True)
 	if rate_plan == "":
 		plan = default_name if rate_plan_required else None
+		if rate_plan_required and not plan:
+			frappe.throw(
+				_("A rate plan is required for this property. Set up a default rate plan in Rate Plans, "
+				  "or choose a rate plan.")
+			)
 	elif rate_plan is not None:
 		plan = rate_plan
 	else:
@@ -948,6 +953,11 @@ def rate_calendar(property: str, from_date: str | None = None, days: int = 14,
 	policy = next((p for p in active if p.name == plan), None) if plan else None
 	if plan and not policy:
 		frappe.throw(_("{0} is not an active rate plan of this property.").format(plan))
+	no_plan_refusal = (
+		_("Set a default rate plan in Rate Plans.")
+		if active
+		else _("No active rate plans are configured. Set up a default rate plan in Rate Plans.")
+	)
 	inclusive = bool(rates_include_tax(property))
 	home = property_currency(property)
 	start = getdate(from_date) if from_date else getdate(frappe.utils.nowdate())
@@ -966,11 +976,18 @@ def rate_calendar(property: str, from_date: str | None = None, days: int = 14,
 				nights.append(_plan_night(property, doc, d, int(adults), int(children), plan, company or None,
 				                          occ[str(d)], small_ok, inclusive, home))
 				continue
+			if rate_plan_required:
+				nights.append({
+					"date": str(d), "available": False, "refusal": no_plan_refusal,
+					"rate": None, "contract": None, "occupancy": occ[str(d)],
+				})
+				continue
 			nights.append(explain_night(property, doc, d, int(adults), int(children),
 			                            occupancy=occ[str(d)], small_ok=small_ok))
 		count = counts.get(doc.name, 0)
 		rows.append({"room_type": doc.name, "code": doc.room_type_code,
-		             "name": doc.room_type_name, "base_price": float(doc.base_price or 0),
+		             "name": doc.room_type_name,
+		             "base_price": 0.0 if rate_plan_required else float(doc.base_price or 0),
 		             "room_count": count, "sellable": count > 0, "nights": nights})
 
 	def _plan_entry(p):

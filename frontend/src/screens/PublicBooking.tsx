@@ -613,17 +613,21 @@ export default function PublicBooking() {
   useEffect(() => {
     if (!data) return
     const p = data.property
-    const minPrice = Math.min(...data.room_types.map((r) => r.base_price))
-    document.title = p.meta_title || t("{property} in {city} · book direct from {price} per night", {
-      property: p.property_name, city: p.city, price: money(minPrice),
-    })
+    const priced = data.room_types.map((r) => r.base_price).filter((n) => n > 0)
+    const minPrice = priced.length ? Math.min(...priced) : 0
+    document.title = p.meta_title || (minPrice > 0
+      ? t("{property} in {city} · book direct from {price} per night", {
+          property: p.property_name, city: p.city, price: money(minPrice),
+        })
+      : `${p.property_name}${p.city ? ` · ${p.city}` : ""}`)
     setMetaTag(
       "description",
-      p.meta_description ||
-        t("{property} in {city}: {count} room types from {price} per night. Best-rate direct booking, pay at hotel. {description}", {
-          property: p.property_name, city: p.city, count: data.room_types.length,
-          price: money(minPrice), description: p.description ?? "",
-        }).slice(0, 158),
+      p.meta_description || (minPrice > 0
+        ? t("{property} in {city}: {count} room types from {price} per night. Best-rate direct booking, pay at hotel. {description}", {
+            property: p.property_name, city: p.city, count: data.room_types.length,
+            price: money(minPrice), description: p.description ?? "",
+          }).slice(0, 158)
+        : `${p.property_name}${p.city ? ` (${p.city})` : ""}${p.description ? ` — ${p.description}` : ""}`.slice(0, 158)),
     )
     if (p.og_image) {
       setMetaTag("og:image", p.og_image)
@@ -665,7 +669,7 @@ export default function PublicBooking() {
         "@type": "Offer",
         name: rt.room_type_name,
         priceCurrency: locale().currency || undefined,
-        price: rt.base_price,
+        ...(rt.base_price > 0 ? { price: rt.base_price } : {}),
         itemOffered: {
           "@type": offerType,
           name: rt.room_type_name,
@@ -1234,8 +1238,14 @@ export default function PublicBooking() {
                           )}
                           <div className="mt-4 flex items-end justify-between gap-2 border-t border-zinc-100 pt-4">
                             <p className="text-sm text-zinc-500">
-                              <span className="text-lg font-semibold text-zinc-900">{money(site.from_rate)}</span>
-                              {" "}/ {t("night")}
+                              {site.from_rate > 0 ? (
+                                <>
+                                  <span className="text-lg font-semibold text-zinc-900">{money(site.from_rate)}</span>
+                                  {" "}/ {t("night")}
+                                </>
+                              ) : (
+                                t("See rooms and prices")
+                              )}
                             </p>
                             <span className="inline-flex items-center gap-1 text-sm font-medium text-brand-700">
                               {tn(count, "{n} listing", "{n} listings")}
@@ -1391,7 +1401,9 @@ export default function PublicBooking() {
                               ))}
                             </div>
                           ) : !r ? (
-                            <p className="text-sm text-zinc-500">{t("From {amount} per night", { amount: money(rt.base_price) })}</p>
+                            rt.base_price > 0
+                              ? <p className="text-sm text-zinc-500">{t("From {amount} per night", { amount: money(rt.base_price) })}</p>
+                              : null
                           ) : !canReserve(r) ? (
                             <div className="flex h-full flex-col items-start justify-center gap-2 rounded-xl bg-zinc-50 p-5">
                               <p className="font-medium text-zinc-800">

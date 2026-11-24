@@ -474,6 +474,7 @@ class Reservation(Document):
 		self.validate_type_capacity()
 		self.validate_cancellation_path()
 		self.apply_negotiated_rate_plan()
+		self.validate_rate_plan()
 		self.capture_contract_tariff()
 		self.guard_agreed_rate()
 		self.keep_hand_set_nights()
@@ -515,6 +516,78 @@ class Reservation(Document):
 		plan = negotiated_rate_plan(self.property, self.company)
 		if plan:
 			self.rate_plan = plan
+
+	def validate_rate_plan(self):
+		"""Enforce property-level rate_plan_required and rate-plan ownership/status
+		on every write path (including direct DocType and REST POST/PUT).
+
+		Legacy reservations saved before rate_plan_required was enabled keep
+		their blank rate_plan when edited without changing it (never repriced);
+		new stays without a plan, clearing an existing stay's rate_plan, or
+		assigning a foreign-property or disabled rate_plan are refused."""
+		if not self.property:
+			return
+		from kamra.pricing import billable_children, resolve_booking_rate_plan
+		from kamra.settings import get_setting
+
+		enforce = bool(get_setting(self.property, "rate_plan_required"))
+		new_plan = (self.get("rate_plan") or "").strip() or None
+		if self.is_new():
+			if not new_plan and not enforce:
+				return
+			has_agreed = bool(self.group_booking and flt(self.agreed_rate) > 0)
+			check_avail = (
+				bool(cint(self.get("auto_price")))
+				and not has_agreed
+				and not self.flags.get("kamra_channel_tariff")
+			)
+			resolved = resolve_booking_rate_plan(
+				self.property,
+				self.room_type,
+				self.check_in_date,
+				self.check_out_date,
+				rate_plan=new_plan,
+				company=self.get("company"),
+				group_booking=self.get("group_booking"),
+				adults=int(self.adults or 2),
+				children=billable_children(self),
+				extra_beds=cint(self.get("extra_beds") or 0),
+				check_availability=check_avail,
+				required=enforce,
+			)
+			if resolved:
+				self.rate_plan = resolved
+			return
+
+		old = self.get_doc_before_save()
+		old_plan = ((old.get("rate_plan") or "").strip() or None) if old else None
+		if new_plan == old_plan:
+			return
+		if old_plan and not new_plan:
+			if enforce:
+				frappe.throw(
+					_("A rate plan is required for this property and cannot be cleared from an existing reservation.")
+				)
+			return
+		if new_plan:
+			check_avail = (
+				bool(cint(self.get("auto_price")))
+				and not self.flags.get("kamra_channel_tariff")
+			)
+			resolve_booking_rate_plan(
+				self.property,
+				self.room_type,
+				self.check_in_date,
+				self.check_out_date,
+				rate_plan=new_plan,
+				company=self.get("company"),
+				group_booking=self.get("group_booking"),
+				adults=int(self.adults or 2),
+				children=billable_children(self),
+				extra_beds=cint(self.get("extra_beds") or 0),
+				check_availability=check_avail,
+				required=enforce,
+			)
 
 	def capture_contract_tariff(self):
 		"""Freeze the read resolver's reference at booking, not on later reads.
