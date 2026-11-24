@@ -1117,6 +1117,8 @@ def hosting_enquiry(full_name: str, email: str, phone: str = "",
 	Leads are System Manager–only and purged after
 	``hosting_enquiry_retention_months`` (default 24) unless status is Won.
 	"""
+	if white_label():  # the lead would go to Kamra's own inbox
+		frappe.throw(frappe._("This site does not take hosting enquiries."))
 	if not (full_name or "").strip() or not (email or "").strip():
 		frappe.throw("Name and email are required.")
 	doc = frappe.get_doc({

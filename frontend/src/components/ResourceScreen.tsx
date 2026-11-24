@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from "react"
 import { useSearchParams } from "react-router-dom"
-import { Columns3, Download, Plus, Search, Trash2 } from "lucide-react"
+import { ArrowDown, ArrowUp, Columns3, Download, Plus, Search, Trash2 } from "lucide-react"
 import { Sheet } from "./ui/sheet"
 import { call, getCurrentProperty } from "../lib/api"
 import { providerLabel } from "../lib/brand"
@@ -109,7 +109,12 @@ export interface FieldSpec {
     | "password"
     | "image"
     | "tags"
+    | "table"
   options?: string[] // for select / tags (static fallback)
+  /** table: a child table's columns, in order */
+  columns?: TableColumn[]
+  /** table: rows are tried in order - they can be moved up and down */
+  orderable?: boolean
   /** Load options from Settings → F&B → Menu master lists */
   optionsFrom?: MenuMasterKey
   /** select options loaded from a doctype (e.g. the property's floors) */
@@ -126,6 +131,16 @@ export interface FieldSpec {
   notPast?: boolean
   /** a new record starts with this value (the DocType's own default) */
   default?: string | number
+}
+
+/** One column of a child table edited in the form (FieldSpec type "table"). */
+export interface TableColumn {
+  field: string
+  label: string
+  type: "data" | "select"
+  options?: string[]
+  /** a new row's value */
+  default?: string
 }
 
 export interface ScreenConfig {
@@ -286,6 +301,102 @@ function SourceSelect(props: {
   )
 }
 const NEW = "__new__"
+
+type TableRow = Record<string, unknown>
+
+/** A child table edited inside the form: a row per record, its columns as
+ *  inputs, rows added, removed and (when orderable) moved. The form's Save
+ *  sends the whole table back with the record. */
+function TableField(props: {
+  spec: FieldSpec
+  value: unknown
+  onChange: (v: TableRow[]) => void
+  t: (s: string) => string
+}) {
+  const { spec, onChange, t } = props
+  const rows = Array.isArray(props.value) ? (props.value as TableRow[]) : []
+  const columns = spec.columns ?? []
+  const cell = "w-full rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  const icon = "rounded-md p-1 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-30"
+  const update = (i: number, field: string, v: string) =>
+    onChange(rows.map((row, j) => (j === i ? { ...row, [field]: v } : row)))
+  const move = (i: number, by: number) => {
+    const next = [...rows]
+    const [row] = next.splice(i, 1)
+    next.splice(i + by, 0, row)
+    onChange(next)
+  }
+  return (
+    <fieldset className="space-y-2 sm:col-span-2">
+      <legend className="mb-1.5 text-sm font-medium text-zinc-600">{t(spec.label)}</legend>
+      {spec.hint && <p className="text-xs leading-relaxed text-zinc-400">{t(spec.hint)}</p>}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
+              {columns.map((c) => <th key={c.field} className="py-1 pr-2">{t(c.label)}</th>)}
+              <th className="py-1" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-zinc-100">
+            {rows.map((row, i) => (
+              <tr key={String(row.name ?? `new-${i}`)}>
+                {columns.map((c) => (
+                  <td key={c.field} className="py-1 pr-2">
+                    {c.type === "select" ? (
+                      <select className={cell} aria-label={t(c.label)} value={String(row[c.field] ?? "")}
+                        onChange={(e) => update(i, c.field, e.target.value)}>
+                        <option value="">-</option>
+                        {(c.options ?? []).map((o) => <option key={o} value={o}>{t(o)}</option>)}
+                      </select>
+                    ) : (
+                      <input className={cell} aria-label={t(c.label)} value={String(row[c.field] ?? "")}
+                        onChange={(e) => update(i, c.field, e.target.value)} />
+                    )}
+                  </td>
+                ))}
+                <td className="whitespace-nowrap py-1 text-right">
+                  {spec.orderable && (
+                    <>
+                      <button type="button" className={icon} aria-label={t("Move up")} title={t("Move up")}
+                        disabled={i === 0} onClick={() => move(i, -1)}>
+                        <ArrowUp className="size-4" aria-hidden />
+                      </button>
+                      <button type="button" className={icon} aria-label={t("Move down")} title={t("Move down")}
+                        disabled={i === rows.length - 1} onClick={() => move(i, 1)}>
+                        <ArrowDown className="size-4" aria-hidden />
+                      </button>
+                    </>
+                  )}
+                  <button type="button" className={icon} aria-label={t("Remove")} title={t("Remove")}
+                    onClick={() => onChange(rows.filter((_, j) => j !== i))}>
+                    <Trash2 className="size-4" aria-hidden />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {rows.length === 0 && <p className="text-xs text-zinc-400">{t("Nothing here yet.")}</p>}
+      <Button type="button" variant="outline"
+        onClick={() => onChange([...rows, Object.fromEntries(columns.map((c) => [c.field, c.default ?? ""]))])}>
+        <Plus className="size-4" aria-hidden />
+        {t("Add row")}
+      </Button>
+    </fieldset>
+  )
+}
+
+/** A child table as the record's save sends it: each row's columns, its
+ *  name when it is a stored row, and its place (idx) as shown. */
+function tableRows(spec: FieldSpec, value: unknown): TableRow[] {
+  return (Array.isArray(value) ? (value as TableRow[]) : []).map((row, i) => ({
+    ...(row.name ? { name: row.name } : {}),
+    idx: i + 1,
+    ...Object.fromEntries((spec.columns ?? []).map((c) => [c.field, row[c.field] ?? ""])),
+  }))
+}
 
 function FieldInput(props: {
   spec: FieldSpec
@@ -678,6 +789,10 @@ export function ResourceScreen({
         if (f.type === "readonly") continue
         // an empty secret keeps the stored one
         if (f.type === "password" && !draft[f.field]) continue
+        if (f.type === "table") {
+          if (f.field in draft) payload[f.field] = tableRows(f, draft[f.field])
+          continue
+        }
         if (f.field in draft) payload[f.field] = draft[f.field]
       }
       if (config.propertyScoped) payload.property = getCurrentProperty()
@@ -988,7 +1103,15 @@ export function ResourceScreen({
             <div className="space-y-4">
               {config.formNote && <p className="rounded-lg bg-zinc-50 p-3 text-sm text-zinc-700">{config.formNote}</p>}
               <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
-                {config.form.filter(spec => spec.dependsOn ? spec.dependsOn(draft) : true).map((spec) => (
+                {config.form.filter(spec => spec.dependsOn ? spec.dependsOn(draft) : true).map((spec) => spec.type === "table" ? (
+                  <TableField
+                    key={spec.field}
+                    spec={spec}
+                    value={draft[spec.field]}
+                    onChange={(v) => setDraft((d) => ({ ...d, [spec.field]: v }))}
+                    t={t}
+                  />
+                ) : (
                   <label
                     key={spec.field}
                     className={
