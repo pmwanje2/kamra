@@ -8650,7 +8650,7 @@ def amend_stay_preview(reservation: str, check_in_date: str, check_out_date: str
 	doc = frappe.get_doc("Reservation", reservation)
 	from kamra.crs import assert_property_access
 	assert_property_access(doc.property)
-	plan = _plan_change(doc, rate_plan)
+	plan = _plan_change(doc, rate_plan, check_in_date=check_in_date, check_out_date=check_out_date)
 	pv = _reprice_preview(doc, check_in_date=check_in_date,
 	                      check_out_date=check_out_date, **_party(adults, children), **plan)
 	return {**pv, **_repriced_governance(doc),
@@ -8658,7 +8658,7 @@ def amend_stay_preview(reservation: str, check_in_date: str, check_out_date: str
 	        if plan else None}
 
 
-def _is_tariff_target_plan(doc, plan: str) -> bool:
+def _is_tariff_target_plan(doc, plan: str, check_in_date=None, check_out_date=None) -> bool:
 	"""True when `plan` is priced by a contract tariff (via its own or base
 	plan's custom_tariff_price_list, or via the hospitality_tariffs resolver)."""
 	from kamra.channel_manager import _rate_plan_has_tariff
@@ -8669,14 +8669,15 @@ def _is_tariff_target_plan(doc, plan: str) -> bool:
 	from kamra.pricing import ContractRateRefused, billable_children, contract_rate
 	try:
 		return bool(contract_rate(
-			doc.property, doc.room_type, plan, doc.check_in_date, doc.check_out_date,
+			doc.property, doc.room_type, plan,
+			check_in_date or doc.check_in_date, check_out_date or doc.check_out_date,
 			doc.adults, billable_children(doc), doc.get("extra_beds"), company=doc.get("company"),
 		))
 	except ContractRateRefused:
 		return True
 
 
-def _plan_change(doc, rate_plan) -> dict:
+def _plan_change(doc, rate_plan, check_in_date=None, check_out_date=None) -> dict:
 	"""amend_stay's rate plan change: the plan resolved at the stay's
 	property, when it is another plan than the stay's.
 
@@ -8697,7 +8698,7 @@ def _plan_change(doc, rate_plan) -> dict:
 			_("A contract-tariff stay's rate plan cannot be changed in Amend stay. "
 			  "Apply a reservation discount, set an agreed rate, or rebook on the new plan."),
 			title=_("Rate plan"))
-	if _is_tariff_target_plan(doc, plan):
+	if _is_tariff_target_plan(doc, plan, check_in_date=check_in_date, check_out_date=check_out_date):
 		frappe.throw(
 			_("A stay cannot be moved onto a contract-tariff rate plan in Amend stay. "
 			  "Rebook on the tariff plan so its contract rate and currency are resolved."),
@@ -8755,8 +8756,11 @@ def amend_stay(reservation: str, check_in_date: str, check_out_date: str,
 	assert_property_access(doc.property)
 	_discount_sign_off(doc, supervisor_user, supervisor_pin)
 	_comp_sign_off(doc, comp_supervisor_user, comp_supervisor_pin)
-	return _amend_dates(doc, check_in_date, check_out_date, confirm_price,
-	                    party=_party(adults, children), plan=_plan_change(doc, rate_plan))
+	return _amend_dates(
+		doc, check_in_date, check_out_date, confirm_price,
+		party=_party(adults, children),
+		plan=_plan_change(doc, rate_plan, check_in_date=check_in_date, check_out_date=check_out_date),
+	)
 
 
 def _amend_dates(doc, check_in_date: str, check_out_date: str,

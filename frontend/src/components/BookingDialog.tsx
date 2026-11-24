@@ -474,10 +474,10 @@ export function BookingDialog(props: {
   const [compSupervisor, setCompSupervisor] = useState("")
   const [compPin, setCompPin] = useState("")
   useEffect(() => {
-    // a PIN given for one plan is never sent for another
+    // a PIN given for one plan (or company's negotiated plan) is never sent for another
     setCompSupervisor("")
     setCompPin("")
-  }, [form.rate_plan])
+  }, [form.rate_plan, form.company])
   const canDiscount = !!options?.can_discount && otaTotal <= 0 && moreRooms.length === 0
   const discountPlan = form.rate_plan || quote?.rate_plan || ""
   const discountOk = discountEligible(options?.rate_plans, discountPlan)

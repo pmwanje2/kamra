@@ -489,12 +489,16 @@ class Reservation(Document):
 	def guard_rate_plan(self):
 		"""An existing stay's rate plan changes only through the governed path
 		(amend_stay, which previews and confirms the new price and checks any
-		comp or discount sign-off) or a channel-manager / import writer
-		(night_rates_writer). Frappe never fills doc.flags from a REST payload,
-		so a plain save or frappe.client.set_value on rate_plan is refused.
-		Runs after govern_discount so a plan refusing a discount still raises
-		its ValidationError."""
-		if self.is_new() or self.flags.get("kamra_rate_plan_change") or self.night_rates_writer():
+		comp or discount sign-off), the channel manager's foreign-contract
+		stamp/clear (flags.kamra_channel_tariff), or a channel-manager /
+		import writer (night_rates_writer). Frappe never fills doc.flags from
+		a REST payload, so a plain save or frappe.client.set_value on
+		rate_plan is refused. Runs after govern_discount so a plan refusing a
+		discount still raises its ValidationError."""
+		if (self.is_new()
+				or self.flags.get("kamra_rate_plan_change")
+				or self.flags.get("kamra_channel_tariff")
+				or self.night_rates_writer()):
 			return
 		old = self.get_doc_before_save()
 		if old and (old.get("rate_plan") or "") != (self.get("rate_plan") or ""):
@@ -1024,6 +1028,15 @@ class Reservation(Document):
 		               "prices or an OTA total), the channel manager or an import."),
 		             frappe.PermissionError, title=_("Locked night rate"))
 
+	def _amount_tolerance(self) -> float:
+		"""Half the currency's minor unit (0.0005 for 3dp KWD, 0.005 for 2dp
+		USD, 0.5 for 0dp UGX): absorbs float noise while catching any single
+		minor-unit tamper in guard_header_totals and guard_agreed_rate."""
+		from kamra.pricing import _minor_unit, selling_currency
+		currency = self.get("currency") or (selling_currency(self.property) if self.property else None)
+		places = _minor_unit(currency)
+		return 0.5 * (10 ** -places)
+
 	def guard_header_totals(self):
 		"""An auto-priced stay's header totals (HEADER_TOTALS) are what its
 		locked nights priced, and only the booking's own pricing writes them:
@@ -1037,8 +1050,9 @@ class Reservation(Document):
 		old = self.get_doc_before_save()
 		if not old:
 			return
+		tol = self._amount_tolerance()
 		changed = [self.meta.get_label(f) for f in HEADER_TOTALS
-		           if abs(flt(old.get(f)) - flt(self.get(f))) >= 0.005]
+		           if abs(flt(old.get(f)) - flt(self.get(f))) >= tol]
 		if changed:
 			frappe.throw(_("{0} follows the stay's locked nights. It changes only through the "
 			               "booking's own pricing (amend the stay, move the room, an agreed rate "
@@ -1093,7 +1107,13 @@ class Reservation(Document):
 			changed = flt(self.get("agreed_rate")) > 0 and not self.get("contract_tariff")
 		else:
 			old = self.get_doc_before_save()
-			changed = bool(old) and abs(flt(old.get("agreed_rate")) - flt(self.get("agreed_rate"))) >= 0.005
+			old_rate = flt(old.get("agreed_rate")) if old else 0.0
+			new_rate = flt(self.get("agreed_rate"))
+			tol = self._amount_tolerance()
+			changed = bool(old) and (
+				(old_rate > 0) != (new_rate > 0)
+				or abs(old_rate - new_rate) >= tol
+			)
 		if changed:
 			frappe.throw(_("An agreed rate is set with Agreed rate on the reservation: a Rate Change "
 			               "reason, the desk's limit and a supervisor's sign-off when it needs one."),
