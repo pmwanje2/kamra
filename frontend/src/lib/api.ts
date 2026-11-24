@@ -465,17 +465,45 @@ export interface BookingOptions {
   }
 }
 
+/** One night of a contract stay over a season or tariff change (OPERA Rate Changes During Stay):
+ *  its own tariff amount and the home-currency rate it locks. */
+export interface ContractTariffNight {
+  date: string
+  nightly: number
+  agreed_rate: number
+  item_price?: string | null
+}
+
 export interface ContractTariff {
   currency: string
   nightly: number
   property_currency: string
   fx_rate: number
   fx_date: string
+  /** each night's own tariff, when the stay crosses a tariff change; the figures above are the check-in night's */
+  nights?: ContractTariffNight[]
+  /** a derived plan's base plan, whose contract it prices from */
+  derived_from?: string
 }
 
 export interface TariffReference {
   tariff?: ContractTariff | null
   agreed_rate?: number | null
+}
+
+/** A bill's contract currency beside its home amounts (kamra.folio.reference_currency): Property
+ *  reference_currency_calculation ACTUAL - the rate the stay was priced or its nights posted at - or
+ *  CURRENT - today's published rate - with the bill's total and balance in that currency. */
+export interface ReferenceCurrency {
+  currency: string
+  home_currency: string
+  calculation: "ACTUAL" | "CURRENT"
+  fx_rate: number
+  fx_date: string | null
+  /** an ACTUAL Current Date stay: how many posted nights the average rate is of */
+  posted_nights?: number
+  grand_total_reference?: number
+  balance_reference?: number
 }
 
 export interface TaxBasis {
