@@ -533,7 +533,7 @@ class Reservation(Document):
 		enforce = bool(get_setting(self.property, "rate_plan_required"))
 		new_plan = (self.get("rate_plan") or "").strip() or None
 		if self.is_new():
-			if not new_plan and not enforce:
+			if not new_plan and (not enforce or self.flags.get("kamra_migration_import")):
 				return
 			has_agreed = bool(self.group_booking and flt(self.agreed_rate) > 0)
 			check_avail = (
