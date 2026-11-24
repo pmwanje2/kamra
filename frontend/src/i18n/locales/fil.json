@@ -1296,5 +1296,9 @@
   "This rate plan does not allow discounts.": "Hindi pinapayagan ng rate plan na ito ang diskwento.",
   "This reason needs a manager's sign-off.": "Kailangan ng pahintulot ng manager ang dahilang ito.",
   "Untick for rates that never take a desk discount (non-refundable, packages).": "Alisin ang tsek para sa mga presyong hindi kailanman binibigyan ng diskwento ng front desk (non-refundable, package).",
-  "Change from current booking": "Pagbabago mula sa kasalukuyang booking"
+  "Change from current booking": "Pagbabago mula sa kasalukuyang booking",
+  "Channel update applied — desk discount removed": "Nailapat ang update ng channel — inalis ang diskwento sa desk",
+  "The channel update was applied and removed the desk discount (new total: {total}). Review what was removed below and re-apply a discount if needed.": "Nailapat ang update ng channel at inalis ang diskwento sa desk (bagong kabuuan: {total}). Suriin sa ibaba ang inalis at ilapat muli ang diskwento kung kinakailangan.",
+  "Channel update applied — discount review required": "Nailapat ang update ng channel — kailangan ng pagsusuri ng diskwento",
+  "The channel update was applied (new total: {total}). Approved discounted nights were kept; added nights were priced without the unapproved discount. Review below and adjust if needed.": "Nailapat ang update ng channel (bagong kabuuan: {total}). Pinanatili ang mga inaprubahang gabing may diskwento; ang mga idinagdag na gabi ay pinresyuhan nang walang hindi inaprubahang diskwento. Suriin sa ibaba at ayusin kung kinakailangan."
 }

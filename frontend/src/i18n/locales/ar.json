@@ -6643,5 +6643,9 @@
   "This rate plan does not allow discounts.": "خطة الأسعار هذه لا تسمح بالخصومات.",
   "This reason needs a manager's sign-off.": "هذا السبب يحتاج إلى موافقة المدير.",
   "Untick for rates that never take a desk discount (non-refundable, packages).": "ألغِ التحديد للأسعار التي لا تقبل خصم الاستقبال أبدًا (غير القابلة للاسترداد، الباقات).",
-  "Change from current booking": "التغيير مقارنةً بالحجز الحالي"
+  "Change from current booking": "التغيير مقارنةً بالحجز الحالي",
+  "Channel update applied — desk discount removed": "تم تطبيق تحديث القناة — أُزيل خصم الاستقبال",
+  "The channel update was applied and removed the desk discount (new total: {total}). Review what was removed below and re-apply a discount if needed.": "تم تطبيق تحديث القناة وإزالة خصم الاستقبال (الإجمالي الجديد: {total}). راجع ما أُزيل أدناه وأعد تطبيق الخصم عند الحاجة.",
+  "Channel update applied — discount review required": "تم تطبيق تحديث القناة — مراجعة الخصم مطلوبة",
+  "The channel update was applied (new total: {total}). Approved discounted nights were kept; added nights were priced without the unapproved discount. Review below and adjust if needed.": "تم تطبيق تحديث القناة (الإجمالي الجديد: {total}). تم الإبقاء على الليالي المخفّضة المعتمدة، وسُعّرت الليالي المضافة دون الخصم غير المعتمد. راجع التفاصيل أدناه وعدّلها عند الحاجة."
 }

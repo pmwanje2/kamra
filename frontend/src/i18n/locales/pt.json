@@ -6835,5 +6835,9 @@
   "This rate plan does not allow discounts.": "Este plano tarifário não permite descontos.",
   "This reason needs a manager's sign-off.": "Este motivo precisa da aprovação de um gerente.",
   "Untick for rates that never take a desk discount (non-refundable, packages).": "Desmarque para tarifas que nunca recebem desconto da recepção (não reembolsáveis, pacotes).",
-  "Change from current booking": "Alteração em relação à reserva atual"
+  "Change from current booking": "Alteração em relação à reserva atual",
+  "Channel update applied — desk discount removed": "Atualização do canal aplicada — desconto da recepção removido",
+  "The channel update was applied and removed the desk discount (new total: {total}). Review what was removed below and re-apply a discount if needed.": "A atualização do canal foi aplicada e removeu o desconto da recepção (novo total: {total}). Revise abaixo o que foi removido e reaplique um desconto se necessário.",
+  "Channel update applied — discount review required": "Atualização do canal aplicada — revisão do desconto necessária",
+  "The channel update was applied (new total: {total}). Approved discounted nights were kept; added nights were priced without the unapproved discount. Review below and adjust if needed.": "A atualização do canal foi aplicada (novo total: {total}). As noites com desconto aprovado foram mantidas; as noites adicionadas foram tarifadas sem o desconto não aprovado. Revise abaixo e ajuste se necessário."
 }

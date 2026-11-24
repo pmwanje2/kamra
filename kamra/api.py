@@ -4639,6 +4639,12 @@ def reservation_detail(reservation: str):
 				"group_booking": res.group_booking, "status": "Confirmed"}),
 		}
 
+	CHANNEL_REVIEW_REASONS = {
+		"channel.modify_needs_review": "update_not_applied",
+		"channel.cancel_needs_review": "update_not_applied",
+		"channel.modify_discount_removed": "discount_removed",
+		"channel.modify_discount_review": "discount_review",
+	}
 	channel_review_needed = int(res.get("channel_review_needed") or 0)
 	channel_reviews = []
 	if channel_review_needed:
@@ -4650,18 +4656,24 @@ def reservation_detail(reservation: str):
 		review_filters = {
 			"reference_doctype": "Reservation",
 			"reference_name": res.name,
-			"action_type": ("in", ["channel.modify_needs_review", "channel.cancel_needs_review"]),
+			"action_type": ("in", list(CHANNEL_REVIEW_REASONS)),
 		}
 		if last_cleared:
 			review_filters["creation"] = (">", last_cleared)
 		channel_reviews = [
 			{"name": row.name, "action_type": row.action_type,
+			 "reason": CHANNEL_REVIEW_REASONS.get(row.action_type, "update_not_applied"),
 			 "rationale": row.rationale, "executed_at": _dt(row.executed_at or row.creation)}
 			for row in frappe.get_all(
 				"Agent Action Log", filters=review_filters,
 				fields=["name", "action_type", "rationale", "executed_at", "creation"],
 				order_by="creation desc", limit_page_length=10)
 		]
+	channel_review_reason = (
+		(res.get("channel_review_reason")
+		 or (channel_reviews[0]["reason"] if channel_reviews else "update_not_applied"))
+		if channel_review_needed else None
+	)
 
 	return {
 		"name": res.name,
@@ -4671,6 +4683,7 @@ def reservation_detail(reservation: str):
 		"source": res.source,
 		"channel": res.channel,
 		"channel_review_needed": channel_review_needed,
+		"channel_review_reason": channel_review_reason,
 		"channel_reviews": channel_reviews,
 		"booking_type": res.booking_type,
 		"property": res.property,
@@ -7471,7 +7484,11 @@ CHANGE_LOG_FIELDS = (
 CHANGE_LOG_TITLES = {
 	"create_reservation": "Booked", "reservation_discount": "Discount",
 	"rate_override": "Agreed rate", "room_move": "Room move", "amend_stay": "Dates changed",
-	"correct_charged_nights": "Rate correction", "set_night_prices": "Nightly prices"}
+	"correct_charged_nights": "Rate correction", "set_night_prices": "Nightly prices",
+	"channel.modify_needs_review": "Channel update not applied",
+	"channel.cancel_needs_review": "Channel cancel not applied",
+	"channel.modify_discount_removed": "Channel update — discount removed",
+	"channel.modify_discount_review": "Channel update — discount review"}
 
 
 def _night_rate_changes(before: dict, after: dict) -> list[dict]:
@@ -9729,6 +9746,8 @@ def group_quotation(group_booking: str):
 
 def _quotation_header(prop, ctx: dict) -> dict:
 	"""The hotel block at the top of a quotation (group or single booking)."""
+	from kamra.localization import pack_for
+	loc = pack_for(prop.name).locale(prop) or {}
 	return {
 		"property_name": prop.property_name, "logo_url": prop.get("logo_url"),
 		"address": ", ".join(x for x in (prop.get("address_line"), prop.get("city"),
@@ -9737,7 +9756,9 @@ def _quotation_header(prop, ctx: dict) -> dict:
 		"website": prop.get("website"), "tax_id": prop.get("gstin"),
 		"tax_id_label": ctx.get("tax_id_label") or "Tax ID",
 		"tax_label": ctx.get("tax_label") or "Tax",
-		"currency": prop.get("currency"),
+		"currency": loc.get("currency") or prop.get("currency"),
+		"currency_symbol": loc.get("currency_symbol"),
+		"locale": loc.get("locale"),
 	}
 
 
@@ -9801,13 +9822,15 @@ def _quotation_lines(res, nights: list[dict], meal_label: str | None) -> list[di
 	is the nights listed above it. The lines plus tax are the booking's
 	total exactly: whatever the snapshot does not explain (a price set by
 	hand, nights already charged) is its own adjustment line."""
+	from kamra.pricing import night_rate_places
+	places = night_rate_places(res.property)
 	items = _quote_line_items(res)
-	target = flt(flt(res.amount_after_tax) - flt(res.tax_amount), 2)
+	target = flt(flt(res.amount_after_tax) - flt(res.tax_amount), places)
 	room = next((li for li in items if li.get("component") == "accommodation"), None)
 	if nights:
-		room_amount = flt(sum(n["rate"] for n in nights), 2)
+		room_amount = flt(sum(n["rate"] for n in nights), places)
 	elif room:
-		room_amount = flt(room.get("amount"), 2)
+		room_amount = flt(room.get("amount"), places)
 	else:
 		room_amount = target
 	lines = [{"component": "accommodation",
@@ -9815,12 +9838,12 @@ def _quotation_lines(res, nights: list[dict], meal_label: str | None) -> list[di
 	                           or ("Room nights" if nights or room else "Stay as booked")),
 	          "amount": room_amount}]
 	for li in items:
-		if li.get("component") == "accommodation" or not flt(li.get("amount"), 2):
+		if li.get("component") == "accommodation" or not flt(li.get("amount"), places):
 			continue
 		lines.append({"component": li.get("component"),
 		              "description": _quote_line_label(res, li, meal_label),
-		              "amount": flt(li.get("amount"), 2)})
-	rest = flt(target - sum(line["amount"] for line in lines), 2)
+		              "amount": flt(li.get("amount"), places)})
+	rest = flt(target - sum(line["amount"] for line in lines), places)
 	if rest:
 		lines.append({"component": "adjustment",
 		              "description": _("Adjustment to the booked price"), "amount": rest})
@@ -9895,10 +9918,23 @@ def _booking_quotation(res) -> dict:
 def _booking_quotation_html(q: dict) -> str:
 	"""The quotation as a printable page, for the PDF the email carries."""
 	from kamra.custom_reports import _page_html
+	from kamra.localization import pack_for
+	from kamra.pricing import _minor_unit
 	esc = frappe.utils.escape_html
 	p, b, t = q["property"], q["booking"], q["totals"]
-	sym = esc(frappe.db.get_value("Currency", p.get("currency"), "symbol") or "")
-	money = lambda n: f"{sym}{flt(n):,.2f}"  # noqa: E731
+	currency = p.get("currency") or ""
+	raw_sym = p.get("currency_symbol")
+	if raw_sym is None:
+		prop_name = frappe.db.get_value("Reservation", b.get("name"), "property") if b.get("name") else None
+		if prop_name:
+			loc = pack_for(prop_name).locale(frappe.get_cached_doc("Property", prop_name)) or {}
+			raw_sym = loc.get("currency_symbol")
+			currency = currency or loc.get("currency") or ""
+		if raw_sym is None:
+			raw_sym = frappe.db.get_value("Currency", currency, "symbol") or ""
+	sym = esc(raw_sym or "")
+	digits = _minor_unit(currency)
+	money = lambda n: f"{sym}{flt(n):,.{digits}f}"  # noqa: E731
 	right = "style='text-align:right'"
 	nights = "".join(
 		f"<tr><td>{esc(n['date'])}</td><td {right}>{money(n['rate'])}</td></tr>"
