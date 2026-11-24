@@ -31,8 +31,22 @@ import { useAuth } from "../lib/auth"
 import { visibleApps, type AppNavItem } from "../lib/apps"
 import { FEATURES } from "../lib/searchIndex"
 import { cn } from "../lib/utils"
-import { cur, moneyLocale } from "../lib/money"
+import { fmtMoney } from "../lib/money"
 import { useT, t as translate } from "../lib/i18n"
+import { OperaHotkeys } from "./OperaHotkeys"
+
+interface PaletteRoomMeta {
+  name: string
+  room_number: string
+  room_type: string
+  room_type_name: string
+  floor: string
+  wing: string
+  room_view: string
+  bed_type: string
+  housekeeping_status: string
+  occupancy_status: string
+}
 
 
 interface Result {
@@ -63,8 +77,8 @@ function rank(text: string, q: string): number | null {
 
 // Nav commands are derived from the same role-filtered app registry the
 // sidebar uses, so the palette reaches exactly the pages the user may open -
-// no second list to keep in sync, and item-level gates (Developers, Frappe
-// Desk) are honoured too.
+// no second list to keep in sync, and item-level gates (Developers, admin
+// desk) are honoured too.
 function navItemsForRoles(roles: string[]): {
   item: AppNavItem
   app: string
@@ -87,6 +101,8 @@ export function CommandPalette() {
   const { t } = useT()
   const { roles } = useAuth()
   const [open, setOpen] = useState(false)
+  const [roomSearchMode, setRoomSearchMode] = useState(false)
+  const [roomsIdx, setRoomsIdx] = useState<PaletteRoomMeta[]>([])
   const [q, setQ] = useState("")
   const [guests, setGuests] = useState<{ name: string; full_name: string; phone?: string }[]>([])
   const [reservations, setReservations] = useState<{ name: string; guest?: string; guest_name: string; check_in_date: string; status: string; room?: string | null }[]>([])
@@ -106,12 +122,17 @@ export function CommandPalette() {
       const meta = e.metaKey || e.ctrlKey
       if (meta && e.key.toLowerCase() === "k") {
         e.preventDefault()
+        setRoomSearchMode(false)
         setOpen((prev) => !prev)
       } else if (e.key === "Escape" && open) {
         setOpen(false)
       }
     }
-    const onOpen = () => setOpen(true)
+    const onOpen = (e: Event) => {
+      const detail = (e as CustomEvent<{ mode?: string }>).detail
+      setRoomSearchMode(detail?.mode === "room")
+      setOpen(true)
+    }
     window.addEventListener("keydown", onKey)
     window.addEventListener("kamra:open-palette", onOpen)
     return () => {
@@ -124,12 +145,35 @@ export function CommandPalette() {
     if (open) setTimeout(() => inputRef.current?.focus(), 20)
     else {
       setQ("")
+      setRoomSearchMode(false)
       setGuests([])
       setReservations([])
       setInvoices([])
       setCursor(0)
     }
   }, [open])
+
+  // Load room inventory metadata when opened in F4 Room Search mode.
+  useEffect(() => {
+    if (!open || !roomSearchMode) return
+    let live = true
+    call<{ rooms?: Record<string, PaletteRoomMeta> }>("kamra.tape_queue.room_metadata", {
+      property: getCurrentProperty(),
+    })
+      .then((res) => {
+        if (!live) return
+        const list = Object.values(res?.rooms ?? {}).sort((a, b) =>
+          String(a.room_number || "").localeCompare(String(b.room_number || ""), undefined, { numeric: true }),
+        )
+        setRoomsIdx(list)
+      })
+      .catch(() => {
+        if (live) setRoomsIdx([])
+      })
+    return () => {
+      live = false
+    }
+  }, [open, roomSearchMode])
 
   // The settings registry, once per open: every setting by name, so
   // "refund limit" or "pin" lands on the page that holds it.
@@ -381,7 +425,7 @@ export function CommandPalette() {
       invoices.map((f) => ({
         id: `inv:${f.name}`,
         label: `${f.invoice_number} · ${f.guest_name || ""}`.trim(),
-        hint: `${t("Invoice")} · ${cur()}${(f.grand_total || 0).toLocaleString(moneyLocale())} · ${t(f.status)}`,
+        hint: `${t("Invoice")} · ${fmtMoney(f.grand_total || 0)} · ${t(f.status)}`,
         icon: FileText,
         onSelect: () => {
           setOpen(false)
@@ -391,11 +435,40 @@ export function CommandPalette() {
     [invoices, navigate, t],
   )
 
+  const roomResults = useMemo<Result[]>(() => {
+    if (!roomSearchMode && !q.trim()) return []
+    return roomsIdx
+      .map((rm) => ({
+        rm,
+        score: rank(
+          `${rm.room_number} ${rm.room_type_name} ${rm.floor} ${rm.wing} ${rm.room_view} ${rm.bed_type} ${rm.housekeeping_status}`,
+          q,
+        ),
+      }))
+      .filter((r) => r.score !== null)
+      .sort((a, b) => (a.score ?? 0) - (b.score ?? 0))
+      .slice(0, 12)
+      .map(({ rm }) => ({
+        id: `room:${rm.name}`,
+        label: `${rm.room_number} · ${rm.room_type_name || rm.room_type}`,
+        hint: [rm.housekeeping_status, rm.floor, rm.wing, rm.room_view, rm.bed_type]
+          .filter(Boolean)
+          .join(" · "),
+        icon: Bed,
+        onSelect: () => {
+          setOpen(false)
+          navigate(`/tape?room=${encodeURIComponent(rm.room_number)}`)
+        },
+      }))
+  }, [roomsIdx, roomSearchMode, q, navigate])
+
   const groups: { title: string; items: Result[] }[] = [
+    ...(roomSearchMode ? [{ title: t("Rooms"), items: roomResults }] : []),
     { title: t("Check out"), items: checkoutResults },
     { title: t("Reservations"), items: reservationResults },
     { title: t("Invoices"), items: invoiceResults },
     { title: t("Guests"), items: guestResults },
+    ...(!roomSearchMode && roomResults.length ? [{ title: t("Rooms"), items: roomResults }] : []),
     { title: t("Screens"), items: navResults },
     { title: t("Features"), items: featureResults },
     { title: t("Settings"), items: settingResults },
@@ -418,109 +491,145 @@ export function CommandPalette() {
     }
   }
 
-  if (!open) return null
-
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={t("Concierge")}
-      className="fixed inset-0 z-50 flex items-start justify-center bg-zinc-900/40 px-4 pt-24 backdrop-blur-sm"
-      onClick={() => setOpen(false)}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-xl overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-xl"
-      >
-        <div className="flex items-center gap-3 border-b border-zinc-100 px-4 py-3">
-          <Search className="size-4 text-zinc-400" aria-hidden />
-          <input
-            ref={inputRef}
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            onKeyDown={onKeyDown}
-            placeholder={t("Search guests, bookings, invoices, screens, features, settings…")}
-            className="flex-1 bg-transparent text-sm outline-none placeholder:text-zinc-400"
-          />
-          {searching ? (
-            <Loader2 className="size-4 animate-spin text-zinc-400" aria-hidden />
-          ) : (
-            <kbd className="hidden rounded-md border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 text-[10px] font-medium text-zinc-500 md:inline">
-              esc
-            </kbd>
-          )}
-        </div>
-
-        <div ref={listRef} className="max-h-[60vh] overflow-y-auto p-2">
-          {totalCount === 0 && (
-            <div className="px-3 py-8 text-center text-sm text-zinc-500">
-              {q.trim().length >= 2 ? (
-                t("No matches.")
+    <>
+      <OperaHotkeys
+        onOpenRoomSearch={() => {
+          setRoomSearchMode(true)
+          setOpen(true)
+        }}
+      />
+      {open ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={roomSearchMode ? t("Room & Availability Search") : t("Concierge")}
+          data-palette-mode={roomSearchMode ? "room" : "all"}
+          className="fixed inset-0 z-50 flex items-start justify-center bg-zinc-900/40 px-4 pt-20 backdrop-blur-sm sm:pt-24"
+          onClick={() => setOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-xl overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-xl"
+          >
+            <div className="flex items-center gap-3 border-b border-zinc-100 px-4 py-3">
+              <Search className="size-4 shrink-0 text-zinc-400" aria-hidden />
+              {roomSearchMode && (
+                <span className="shrink-0 rounded-md bg-brand-50 px-2 py-0.5 text-xs font-semibold text-brand-700">
+                  {t("Rooms")}
+                </span>
+              )}
+              <input
+                ref={inputRef}
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                onKeyDown={onKeyDown}
+                placeholder={
+                  roomSearchMode
+                    ? t("Search rooms by number, floor, wing, view, or status…")
+                    : t("Search guests, bookings, invoices, screens, features, settings…")
+                }
+                className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-zinc-400"
+              />
+              {searching ? (
+                <Loader2 className="size-4 animate-spin text-zinc-400" aria-hidden />
               ) : (
-                <>
-                  {t("Search a guest, phone, booking or invoice.")}{" "}
-                  <span className="text-zinc-400">{t("Or a screen, a feature (cash drop, night audit, BAR rates) or a setting.")}</span>
-                </>
+                <kbd className="hidden rounded-md border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 text-[10px] font-medium text-zinc-500 md:inline">
+                  esc
+                </kbd>
               )}
             </div>
-          )}
 
-          {groups.map(
-            (grp) =>
-              grp.items.length > 0 && (
-                <div key={grp.title} className="mb-2">
-                  <div className="px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-widest text-zinc-400">
-                    {translate(grp.title)}
-                  </div>
-                  <ul>
-                    {grp.items.map((item) => {
-                      const idx = flat.findIndex((f) => f.id === item.id)
-                      const active = idx === cursor
-                      return (
-                        <li key={item.id}>
-                          <button
-                            onClick={item.onSelect}
-                            onMouseEnter={() => setCursor(idx)}
-                            ref={(el) => {
-                              if (active && el)
-                                el.scrollIntoView({ block: "nearest" })
-                            }}
-                            className={cn(
-                              "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm",
-                              active
-                                ? "bg-brand-50 text-brand-700"
-                                : "hover:bg-brand-50 hover:text-brand-700",
-                            )}
-                          >
-                            <item.icon className="size-4 shrink-0 text-zinc-400" aria-hidden />
-                            <div className="min-w-0 flex-1">
-                              <div className="truncate font-medium">{translate(item.label)}</div>
-                              <div className="truncate text-xs text-zinc-500">
-                                {translate(item.hint)}
-                              </div>
-                            </div>
-                            <ArrowRight className="size-3.5 shrink-0 text-zinc-300" aria-hidden />
-                          </button>
-                        </li>
-                      )
-                    })}
-                  </ul>
+            <div ref={listRef} className="max-h-[60vh] overflow-y-auto p-2">
+              {totalCount === 0 && (
+                <div className="px-3 py-8 text-center text-sm text-zinc-500">
+                  {q.trim().length >= 2 ? (
+                    t("No matches.")
+                  ) : (
+                    <>
+                      {t("Search a guest, phone, booking or invoice.")}{" "}
+                      <span className="text-zinc-400">{t("Or a screen, a feature (cash drop, night audit, BAR rates) or a setting.")}</span>
+                    </>
+                  )}
                 </div>
-              ),
-          )}
-        </div>
+              )}
 
-        <div className="flex items-center justify-between border-t border-zinc-100 bg-zinc-50 px-3 py-2 text-[11px] text-zinc-500">
-          <span className="inline-flex items-center gap-1.5">
-            <CmdIcon className="size-3" aria-hidden />
-            <kbd className="rounded bg-white px-1 font-mono">K</kbd>
-            {t("to open")} ·{" "}
-            <kbd className="rounded bg-white px-1 font-mono">esc</kbd>{" "}
-            {t("to close")}
-          </span>
-          <span>{t("Every action is recorded in the Activity Log.")}</span>
+              {groups.map(
+                (grp) =>
+                  grp.items.length > 0 && (
+                    <div key={grp.title} className="mb-2">
+                      <div className="px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-widest text-zinc-400">
+                        {translate(grp.title)}
+                      </div>
+                      <ul>
+                        {grp.items.map((item) => {
+                          const idx = flat.findIndex((f) => f.id === item.id)
+                          const active = idx === cursor
+                          return (
+                            <li key={item.id}>
+                              <button
+                                onClick={item.onSelect}
+                                onMouseEnter={() => setCursor(idx)}
+                                ref={(el) => {
+                                  if (active && el)
+                                    el.scrollIntoView?.({ block: "nearest" })
+                                }}
+                                className={cn(
+                                  "flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2 text-start text-sm sm:min-h-9",
+                                  active
+                                    ? "bg-brand-50 text-brand-700"
+                                    : "hover:bg-brand-50 hover:text-brand-700",
+                                )}
+                              >
+                                <item.icon className="size-4 shrink-0 text-zinc-400" aria-hidden />
+                                <div className="min-w-0 flex-1">
+                                  <div className="truncate font-medium">{translate(item.label)}</div>
+                                  <div className="truncate text-xs text-zinc-500">
+                                    {translate(item.hint)}
+                                  </div>
+                                </div>
+                                <ArrowRight className="size-3.5 shrink-0 text-zinc-300 rtl:rotate-180" aria-hidden />
+                              </button>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    </div>
+                  ),
+              )}
+            </div>
+
+            <div
+              data-testid="opera-hotkey-legend"
+              className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-100 bg-zinc-50 px-3 py-2 text-[11px] text-zinc-500"
+            >
+              <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="inline-flex items-center gap-1">
+                  <CmdIcon className="size-3" aria-hidden />
+                  <kbd className="rounded border border-zinc-200 bg-white px-1 font-mono">K</kbd>
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <kbd className="rounded border border-zinc-200 bg-white px-1 font-mono">Alt+N</kbd>
+                  {t("New booking")}
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <kbd className="rounded border border-zinc-200 bg-white px-1 font-mono">Alt+C</kbd>
+                  {t("Check in")}
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <kbd className="rounded border border-zinc-200 bg-white px-1 font-mono">F4</kbd>
+                  {t("Rooms")}
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <kbd className="rounded border border-zinc-200 bg-white px-1 font-mono">Esc</kbd>
+                  {t("Close")}
+                </span>
+              </span>
+              <span>{t("Every action is recorded in the Activity Log.")}</span>
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
+      ) : null}
+    </>
   )
 }

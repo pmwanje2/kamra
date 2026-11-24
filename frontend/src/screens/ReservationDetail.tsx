@@ -52,18 +52,11 @@ import SupervisorSignOff, { SignOffReasons } from "../components/SupervisorSignO
 import { supervisorArgs } from "../lib/reservationDiscount"
 import { useAuth } from "../lib/auth"
 import StayInstructions from "../components/StayInstructions"
-import { cur, moneyDigits, moneyLocale } from "../lib/money"
+import { fmtMoney } from "../lib/money"
+import { HOTKEY_EVENTS } from "../lib/hotkeys"
 import { t as translate, useUILanguage } from "../lib/i18n"
 
-const inr = (n: number) => {
-  const v = Number(n || 0)
-  const d = moneyDigits()
-  const hasFrac = d > 0 && Math.abs(v - Math.round(v)) >= 10 ** -(d + 1)
-  return `${cur()}${v.toLocaleString(moneyLocale(), {
-    minimumFractionDigits: hasFrac ? d : 0,
-    maximumFractionDigits: d,
-  })}`
-}
+const inr = (n: number) => fmtMoney(Number(n || 0))
 
 /** One amount, or the lowest to the highest when the nights differ. */
 const rangeOf = (values: number[]) =>
@@ -154,7 +147,7 @@ function IdentityCard({ d, reload }: { d: Detail; reload: () => void }) {
       title={translate("Identity")}
       action={
         d.warnings.id_unverified ? (
-          <Button variant="outline" disabled={busy} onClick={verify}>
+          <Button variant="outline" className="min-h-11 sm:min-h-9" disabled={busy} onClick={verify}>
             <ShieldCheck className="size-4" />{translate(" Verify identity")}</Button>
         ) : d.precheckin_verified_by ? (
           <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700">
@@ -348,6 +341,16 @@ export default function ReservationDetail({
   const [markingNoShow, setMarkingNoShow] = useState(false)
   const [groupNotice, setGroupNotice] = useState<string | null>(null)
 
+  useEffect(() => {
+    const onShortcutCheckIn = (e: Event) => {
+      if (!d?.actions.can_check_in || busy) return
+      e.preventDefault()
+      setCheckingIn(true)
+    }
+    window.addEventListener(HOTKEY_EVENTS.shortcutCheckIn, onShortcutCheckIn)
+    return () => window.removeEventListener(HOTKEY_EVENTS.shortcutCheckIn, onShortcutCheckIn)
+  }, [d?.actions.can_check_in, busy])
+
   function checkInGroup(group: NonNullable<Detail["group"]>) {
     if (!confirm(translate("Check in all {v0} waiting rooms of {v1}? Rooms with no room number get a free room of their type.", {
       v0: String(group.to_check_in), v1: group.group_name,
@@ -484,6 +487,7 @@ export default function ReservationDetail({
               {canClearChannelReview && (
                 <Button
                   variant="outline"
+                  className="min-h-11 sm:min-h-9"
                   disabled={busy}
                   onClick={() => act(() => clearChannelReview(name))}
                 >
@@ -498,7 +502,7 @@ export default function ReservationDetail({
                   <li key={item.name} className="rounded-md bg-white/70 px-2.5 py-1.5">
                     <span>{item.rationale}</span>
                     {item.executed_at && (
-                      <span className="ml-2 text-amber-700/80">{item.executed_at.slice(0, 16)}</span>
+                      <span className="ms-2 text-amber-700/80">{item.executed_at.slice(0, 16)}</span>
                     )}
                   </li>
                 ))}
@@ -523,7 +527,7 @@ export default function ReservationDetail({
             <Link
               to={`/billing/${encodeURIComponent(d.folio_name)}`}
               onClick={onClose}
-              className="text-xs font-medium text-brand-700 hover:underline"
+              className="inline-flex min-h-11 items-center text-xs font-medium text-brand-700 hover:underline sm:min-h-9"
             >{translate("Open folio →")}</Link>
           ) : undefined
         }
@@ -569,6 +573,8 @@ export default function ReservationDetail({
         </p>
       </Card>
 
+      {/* Pack 2 slot: <ReservationAlertsBanner /> / <ReservationTracesCard /> / <FixedChargesCard /> */}
+
       {d.deposit && (d.deposit.can_take || d.deposit.paid > 0) && (
         <DepositPanel
           reservation={d.name}
@@ -593,7 +599,7 @@ export default function ReservationDetail({
       <div className="grid gap-4 sm:grid-cols-2">
         {/* stay + dates (editable) */}
         <Card icon={<CalendarDays className="size-4" />} title={translate("Stay")}>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="block">
               <span className="text-xs text-zinc-400">{translate("Check-in")}</span>
               <input
@@ -608,7 +614,7 @@ export default function ReservationDetail({
                 }
                 disabled={!d.actions.can_amend}
                 onChange={(e) => setCi(e.target.value)}
-                className="mt-0.5 w-full rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm disabled:bg-zinc-50 disabled:text-zinc-400"
+                className="mt-0.5 min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm disabled:bg-zinc-50 disabled:text-zinc-400 sm:min-h-9"
               />
             </label>
             <label className="block">
@@ -618,7 +624,7 @@ export default function ReservationDetail({
                 value={co}
                 disabled={!d.actions.can_amend}
                 onChange={(e) => setCo(e.target.value)}
-                className="mt-0.5 w-full rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm disabled:bg-zinc-50 disabled:text-zinc-400"
+                className="mt-0.5 min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm disabled:bg-zinc-50 disabled:text-zinc-400 sm:min-h-9"
               />
             </label>
           </div>
@@ -630,7 +636,7 @@ export default function ReservationDetail({
                 value={plan}
                 disabled={busy}
                 onChange={(e) => setPlan(e.target.value)}
-                className="mt-0.5 w-full rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm disabled:bg-zinc-50 disabled:text-zinc-400"
+                className="mt-0.5 min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm disabled:bg-zinc-50 disabled:text-zinc-400 sm:min-h-9"
               >
                 {!savedPlan && <option value="">—</option>}
                 {(d.rate_plans ?? []).map((p) => (
@@ -684,6 +690,7 @@ export default function ReservationDetail({
                   onSupervisor={setCompSupervisor} onPin={setCompPin} />
               )}
               <Button
+                className="min-h-11 sm:min-h-9"
                 disabled={busy || !datesValid || !datePreview || !dateSigned || !compSigned}
                 onClick={() =>
                   datePreview &&
@@ -707,15 +714,16 @@ export default function ReservationDetail({
             </div>
           )}
           {d.status === "Confirmed" && (
-            <label className="mt-3 flex items-start gap-2 text-sm text-zinc-700">
-              <input
-                type="checkbox"
-                className="mt-0.5"
-                checked={Boolean(d.late_arrival)}
-                disabled={busy}
-                onChange={(e) => act(() => setLateArrival(name, e.target.checked))}
-              />
-              <span>{translate("Late arrival")}<span className="block text-xs text-zinc-400">{translate("The night audit holds this arrival as Due In instead of marking a no-show; the next audit decides.")}</span>
+            <label className="mt-3 flex min-h-11 items-start gap-2 text-sm text-zinc-700">
+              <span className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center sm:min-h-6 sm:min-w-6">
+                <input
+                  type="checkbox"
+                  checked={Boolean(d.late_arrival)}
+                  disabled={busy}
+                  onChange={(e) => act(() => setLateArrival(name, e.target.checked))}
+                />
+              </span>
+              <span className="pt-2 sm:pt-0">{translate("Late arrival")}<span className="block text-xs text-zinc-400">{translate("The night audit holds this arrival as Due In instead of marking a no-show; the next audit decides.")}</span>
               </span>
             </label>
           )}
@@ -789,7 +797,7 @@ export default function ReservationDetail({
               <button
                 type="button"
                 onClick={() => setChangingRoom(true)}
-                className="text-xs font-medium text-brand-700 hover:underline"
+                className="inline-flex min-h-11 items-center text-xs font-medium text-brand-700 hover:underline sm:min-h-9"
               >
                 {d.room ? translate("Change room") : translate("Assign room")}
               </button>
@@ -819,7 +827,7 @@ export default function ReservationDetail({
               <Link
                 to={`/guests/${encodeURIComponent(d.guest.name)}`}
                 onClick={onClose}
-                className="text-xs font-medium text-brand-700 hover:underline"
+                className="inline-flex min-h-11 items-center text-xs font-medium text-brand-700 hover:underline sm:min-h-9"
               >{translate("Guest journey →")}</Link>
             ) : undefined
           }
@@ -888,7 +896,7 @@ export default function ReservationDetail({
         {reqDirty && (
           <Button
             variant="outline"
-            className="mt-2"
+            className="mt-2 min-h-11 sm:min-h-9"
             disabled={busy}
             onClick={() =>
               act(() =>
@@ -934,15 +942,16 @@ export default function ReservationDetail({
           <p className="font-semibold">{translate("Booking request - waiting for your answer")}</p>
           <p className="mt-0.5 text-xs">{translate("A request holds no room. Accepting checks availability again and takes a room; declining cancels it with no fee and tells the guest.")}</p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <Button disabled={busy} onClick={() => act(() => acceptBookingRequest(name))}>{translate("Accept")}</Button>
+            <Button className="min-h-11 sm:min-h-9" disabled={busy} onClick={() => act(() => acceptBookingRequest(name))}>{translate("Accept")}</Button>
             <input
               value={declineReason}
               onChange={(e) => setDeclineReason(e.target.value)}
               placeholder={translate("Reason for declining")}
-              className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+              className="min-h-11 min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-brand-600 sm:min-h-9"
             />
             <Button
               variant="outline"
+              className="min-h-11 sm:min-h-9"
               disabled={busy || !declineReason.trim()}
               onClick={() =>
                 act(() => declineBookingRequest(name, declineReason.trim()))
@@ -952,10 +961,12 @@ export default function ReservationDetail({
         </div>
       )}
 
+      {/* Pack 2 slot: reservation actions extensions */}
       {/* primary actions */}
       <div className="flex flex-wrap items-center gap-2 border-t border-zinc-200 pt-4">
         {d.status === "Waitlist" && (
           <Button
+            className="min-h-11 sm:min-h-9"
             disabled={busy}
             onClick={() =>
               act(async () => {
@@ -973,11 +984,11 @@ export default function ReservationDetail({
             <TriangleAlert className="size-3.5" />{translate(" No ID document on file")}</span>
         )}
         {d.actions.can_check_in && (
-          <Button disabled={busy} onClick={() => setCheckingIn(true)}>
+          <Button className="min-h-11 sm:min-h-9" disabled={busy} onClick={() => setCheckingIn(true)}>
             <LogIn className="size-4" />{translate(" Check in")}</Button>
         )}
         {d.group && d.group.to_check_in > 1 && (
-          <Button variant="outline" disabled={busy} onClick={() => checkInGroup(d.group!)}>
+          <Button variant="outline" className="min-h-11 sm:min-h-9" disabled={busy} onClick={() => checkInGroup(d.group!)}>
             <LogIn className="size-4" />
             {translate("Check in whole group ({v0})", { v0: String(d.group.to_check_in) })}
           </Button>
@@ -988,13 +999,13 @@ export default function ReservationDetail({
           </span>
         )}
         {d.status === "Checked In" && (d.checkin_backfill?.length ?? 0) > 0 && (
-          <Button variant="outline" disabled={busy} onClick={() => setCheckingIn(true)}>
+          <Button variant="outline" className="min-h-11 sm:min-h-9" disabled={busy} onClick={() => setCheckingIn(true)}>
             <TriangleAlert className="size-4 text-amber-600" />
-            Finish check-in ({d.checkin_backfill.length})
+            {translate("Finish check-in ({n})", { n: d.checkin_backfill.length })}
           </Button>
         )}
         {d.actions.can_no_show && (
-          <Button variant="outline" className="text-rose-700" disabled={busy} onClick={() => setMarkingNoShow(true)}>
+          <Button variant="outline" className="min-h-11 text-rose-700 sm:min-h-9" disabled={busy} onClick={() => setMarkingNoShow(true)}>
             <UserX className="size-4" />{translate("Mark no-show")}</Button>
         )}
         {d.actions.can_check_out && d.security_deposit?.blocks_checkout && (
@@ -1002,7 +1013,7 @@ export default function ReservationDetail({
             <ShieldCheck className="size-3.5" />{translate(" Security deposit still held - withhold or refund it")}</span>
         )}
         {d.actions.can_check_out && (
-          <Button disabled={busy} onClick={() => setCheckingOut(true)}>
+          <Button className="min-h-11 sm:min-h-9" disabled={busy} onClick={() => setCheckingOut(true)}>
             <LogOut className="size-4" />{translate(" Check out")}</Button>
         )}
         {d.actions.can_reinstate && (
@@ -1024,14 +1035,14 @@ export default function ReservationDetail({
         <Link
           to={`/grc/${encodeURIComponent(name)}`}
           onClick={onClose}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm font-medium text-zinc-600 hover:border-brand-600 hover:text-brand-700"
+          className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm font-medium text-zinc-600 hover:border-brand-600 hover:text-brand-700 sm:min-h-9"
         >
           <FileText className="size-4" />{translate(" Registration card")}</Link>
         {d.actions.can_amend && canQuote && (
           <Link
             to={`/booking-quote/${encodeURIComponent(name)}`}
             onClick={onClose}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm font-medium text-zinc-600 hover:border-brand-600 hover:text-brand-700"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm font-medium text-zinc-600 hover:border-brand-600 hover:text-brand-700 sm:min-h-9"
           >
             <FileText className="size-4" />{translate("Quotation")}</Link>
         )}

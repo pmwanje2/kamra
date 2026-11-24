@@ -39,16 +39,16 @@ import { CHECK_FIXES } from "../lib/eodFixes"
 import { Badge } from "../components/ui/badge"
 import { Button } from "../components/ui/button"
 import { Card } from "../components/ui/card"
-import { cur, moneyLocale } from "../lib/money"
+import { cur, fmtAmount, fmtMoney, moneyDigits } from "../lib/money"
 import { useT, t as translate } from "../lib/i18n"
 import { cn } from "../lib/utils"
 import { AuditPackView, sessionCols, DataTable, fmtDay } from "./AuditPack"
 
 
 const money = (n: unknown) =>
-  n === null || n === undefined || n === ""
-    ? "-"
-    : Number(n).toLocaleString(moneyLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  n === null || n === undefined || n === "" ? "-" : fmtAmount(n)
+
+const zeroBalanceEps = () => 0.5 * 10 ** -moneyDigits()
 
 interface Column {
   key: string
@@ -99,19 +99,49 @@ function StepTable({
   const right = (c: Column) => (c.kind === "money" || c.kind === "num" ? "text-end tabular-nums" : "")
   return (
     <div className="rounded-lg border border-zinc-200">
-      <div className="flex items-center justify-between gap-2 border-b border-zinc-100 px-3 py-2">
-        <label className="relative">
-          <Search className="pointer-events-none absolute start-2 top-2 size-4 text-zinc-400" aria-hidden />
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-100 px-3 py-2">
+        <label className="relative min-w-0 flex-1 sm:flex-none">
+          <Search className="pointer-events-none absolute start-2.5 top-3.5 size-4 text-zinc-400 sm:top-2.5" aria-hidden />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder={t("Search")}
-            className="w-56 rounded-lg border border-zinc-300 bg-white py-1.5 ps-8 pe-2 text-sm"
+            className="min-h-11 w-full rounded-lg border border-zinc-300 bg-white py-1.5 ps-8 pe-2 text-sm sm:min-h-9 sm:w-56"
           />
         </label>
         <span className="text-xs text-zinc-400">{t("{n} of {m}", { n: shown.length, m: rows.length })}</span>
       </div>
-      <div className="overflow-x-auto">
+      <div data-testid="eod-mobile-cards" className="divide-y divide-zinc-100 md:hidden">
+        {shown.length === 0 ? (
+          <div className="px-3 py-5 text-center text-sm text-zinc-400">
+            {t(empty ?? "Nothing here.")}
+          </div>
+        ) : (
+          shown.map((r, i) => (
+            <div
+              key={`card-${String(r.order ?? r.session ?? r.folio ?? r.reservation ?? r.room_id ?? r.account ?? "")}-${i}`}
+              className="space-y-2.5 p-3"
+            >
+              <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                {cols.map((c) => (
+                  <div key={c.key} className="min-w-0">
+                    <dt className="text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+                      {t(c.label)}
+                    </dt>
+                    <dd className="mt-0.5 min-w-0 break-words text-zinc-800">{cell(c, r)}</dd>
+                  </div>
+                ))}
+              </dl>
+              {actions && (
+                <div className="border-t border-zinc-100 pt-2">
+                  {actions(r)}
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+      <div data-testid="eod-desktop-table" className="hidden overflow-x-auto md:block">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-zinc-200 text-[11px] font-medium uppercase tracking-wider text-zinc-500">
@@ -302,7 +332,7 @@ function FixHelp({ check, date }: { check: Check; date: string }) {
       {!whiteLabel() && <div className="mt-3 flex flex-wrap items-center gap-2">
         <Button
           variant="outline"
-          className="h-8 px-3 text-xs"
+          className="min-h-11 px-3 text-xs md:min-h-8"
           onClick={() => navigate("/assistant", { state: { prompt: translate(fix.ask(check.count, date)), property } })}
         >
           <Sparkles className="me-1.5 size-3.5" aria-hidden />
@@ -364,10 +394,11 @@ function CheckBlock({
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder={t("Reason")}
-              className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+              className="min-h-11 min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm md:min-h-9"
             />
             <Button
               variant="outline"
+              className="min-h-11 md:min-h-9"
               disabled={busy || reason.trim().length < 3}
               onClick={async () => {
                 setBusy(true)
@@ -513,7 +544,7 @@ export default function EndOfDayWizard() {
                 render: (r) => (
                   <span className={r.outcome === "no_show" ? "text-rose-700" : "text-amber-700"}>
                     {t(String(r.policy))}
-                    {Number(r.fee_amount) > 0 ? ` · ${cur()}${money(r.fee_amount)}` : ""}
+                    {Number(r.fee_amount) > 0 ? ` · ${fmtMoney(r.fee_amount)}` : ""}
                   </span>
                 ),
               },
@@ -522,12 +553,12 @@ export default function EndOfDayWizard() {
             empty={translate("Every arrival is checked in.")}
             actions={(r) =>
               state.ran ? null : (
-                <div className="flex flex-col items-stretch gap-1">
-                  <Button variant="outline" className="h-7 px-2 text-xs"
+                <div className="flex flex-col items-stretch gap-1.5 md:gap-1">
+                  <Button variant="outline" className="min-h-11 px-3 text-xs md:min-h-7 md:px-2"
                     onClick={() => setCheckingIn(String(r.reservation))}>
                     {t("Check in")}
                   </Button>
-                  <Button variant="ghost" className="h-7 px-2 text-xs text-rose-700" disabled={!!busy}
+                  <Button variant="ghost" className="min-h-11 px-3 text-xs text-rose-700 md:min-h-7 md:px-2" disabled={!!busy}
                     onClick={() => setMarkingNoShow(String(r.reservation))}>
                     {t("Mark no-show")}
                   </Button>
@@ -537,12 +568,12 @@ export default function EndOfDayWizard() {
           />
         )
       case "departures_due": {
-        const zero = items.filter((r) => Math.abs(Number(r.balance ?? 0)) < 0.01)
+        const zero = items.filter((r) => Math.abs(Number(r.balance ?? 0)) < zeroBalanceEps())
         return (
           <>
             {!state.ran && zero.length > 0 && (
               <div className="flex justify-end">
-                <Button variant="outline" disabled={!!busy}
+                <Button variant="outline" className="min-h-11 md:min-h-9" disabled={!!busy}
                   onClick={() =>
                     act("bulk", () =>
                       withPin(async (pin) => {
@@ -561,12 +592,12 @@ export default function EndOfDayWizard() {
               empty={translate("Every departure is checked out.")}
               actions={(r) =>
                 state.ran ? null : (
-                  <div className="flex justify-end gap-1">
-                    <Button variant="outline" className="h-7 px-2 text-xs" disabled={!!busy}
+                  <div className="flex flex-wrap justify-end gap-1.5 md:gap-1">
+                    <Button variant="outline" className="min-h-11 px-3 text-xs md:min-h-7 md:px-2" disabled={!!busy}
                       onClick={() => setCheckingOut(String(r.reservation))}>
                       {t("Check out")}
                     </Button>
-                    <Button variant="ghost" className="h-7 px-2 text-xs"
+                    <Button variant="ghost" className="min-h-11 px-3 text-xs md:min-h-7 md:px-2"
                       onClick={() => navigate(`/reservations?q=${encodeURIComponent(String(r.reservation))}`)}>
                       {t("Extend stay")}
                     </Button>
@@ -705,16 +736,16 @@ export default function EndOfDayWizard() {
             empty={translate("Every till is closed.")}
             actions={(r) =>
               state.ran ? null : (
-                <div className="flex items-center justify-end gap-1">
+                <div className="flex flex-wrap items-center justify-end gap-1.5 md:gap-1">
                   <input
                     inputMode="decimal"
                     aria-label={t("Counted cash")}
                     placeholder={t("Counted cash")}
                     value={counted[String(r.session)] ?? ""}
                     onChange={(e) => setCounted((m) => ({ ...m, [String(r.session)]: e.target.value }))}
-                    className="h-7 w-28 rounded-md border border-zinc-300 px-2 text-xs"
+                    className="min-h-11 w-full rounded-md border border-zinc-300 px-2 text-xs md:min-h-7 md:w-28"
                   />
-                  <Button variant="outline" className="h-7 px-2 text-xs"
+                  <Button variant="outline" className="min-h-11 px-3 text-xs md:min-h-7 md:px-2"
                     disabled={!!busy || !Number.isFinite(cash(counted[String(r.session)]))}
                     onClick={() =>
                       act("close", () =>
@@ -797,8 +828,8 @@ export default function EndOfDayWizard() {
 
       <div className="flex flex-wrap items-end justify-between gap-3 print:hidden">
         <div>
-          <Link to="/end-of-day" className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-800">
-            <ArrowLeft className="size-3.5" aria-hidden />
+          <Link to="/end-of-day" className="inline-flex min-h-11 items-center gap-1 text-xs text-zinc-500 hover:text-zinc-800 md:min-h-0">
+            <ArrowLeft className="size-3.5 rtl:rotate-180" aria-hidden />
             {t("Night Audit")}
           </Link>
           <h1 className="text-xl font-semibold text-zinc-900">
@@ -829,7 +860,7 @@ export default function EndOfDayWizard() {
             )}
           </Badge>
           {!state.ran && (
-            <Button disabled={!!busy || !canClose} onClick={runAudit}>
+            <Button className="min-h-11 md:min-h-9" disabled={!!busy || !canClose} onClick={runAudit}>
               {busy === "run" ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <MoonStar className="size-4" aria-hidden />}
               {busy === "run" ? t("Posting…") : t("Close {d}", { d: fmtDay(state.business_date) })}
             </Button>
@@ -846,6 +877,7 @@ export default function EndOfDayWizard() {
           </p>
           <Button
             variant="outline"
+            className="min-h-11 md:min-h-9"
             disabled={busy === "recover"}
             onClick={() =>
               act("recover", async () => {
@@ -866,7 +898,7 @@ export default function EndOfDayWizard() {
             {runOut
               ? t("Posted {n} room nights ({amount}), {ns} no-shows. The business date is now {next}.", {
                   n: Number(runOut.room_charges_posted ?? 0),
-                  amount: `${cur()}${money(runOut.amount_posted)}`,
+                  amount: fmtMoney(runOut.amount_posted),
                   ns: Number(runOut.no_shows_flagged ?? 0),
                   next: fmtDay(runOut.next_business_date),
                 })
