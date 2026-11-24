@@ -535,6 +535,12 @@ class RoomChargeVerifyAndOverrideTestCase(AuditTestCase):
 	def test_adversarial_override_token_hook_missing_or_raising_fails_closed(self):
 		self.as_pos()
 		orig_get_attr = frappe.get_attr
+		orig_get_hooks = frappe.get_hooks
+
+		def hook_present(hook=None, *args, **kwargs):
+			if hook == "pos_override_consumer":
+				return ["partner_pos.override.consume"]
+			return orig_get_hooks(hook, *args, **kwargs)
 
 		def missing_consumer(path):
 			if "override.consume" in str(path):
@@ -546,13 +552,19 @@ class RoomChargeVerifyAndOverrideTestCase(AuditTestCase):
 				return lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom"))
 			return orig_get_attr(path)
 
-		with patch("frappe.get_attr", side_effect=missing_consumer):
+		with (
+			patch("frappe.get_hooks", side_effect=hook_present),
+			patch("frappe.get_attr", side_effect=missing_consumer),
+		):
 			with self.assertRaises((frappe.ValidationError, frappe.PermissionError)):
 				pi.pos_post_room_charge(
 					PROP_A, "T-HOOK-MISS", 1500, "Dinner", room="101",
 					override_token="tok-missing", pos_profile="Till A",
 				)
-		with patch("frappe.get_attr", side_effect=raising_consumer):
+		with (
+			patch("frappe.get_hooks", side_effect=hook_present),
+			patch("frappe.get_attr", side_effect=raising_consumer),
+		):
 			with self.assertRaises((frappe.ValidationError, frappe.PermissionError)):
 				pi.pos_post_room_charge(
 					PROP_A, "T-HOOK-ERR", 1500, "Dinner", room="101",
@@ -638,12 +650,22 @@ class RoomChargeVerifyAndOverrideTestCase(AuditTestCase):
 				frappe.throw("The approved values changed after manager approval. [POS-AUTH-CHANGED]", frappe.ValidationError)
 			return {"approver": SUP_A, "claim": claim}
 
+		orig_get_hooks = frappe.get_hooks
+
+		def fake_hooks(hook=None, *args, **kwargs):
+			if hook == "pos_override_consumer":
+				return ["partner_pos.override.consume"]
+			return orig_get_hooks(hook, *args, **kwargs)
+
 		def fake_get_attr(path):
-			if "override.consume" in str(path):
+			if path == "partner_pos.override.consume":
 				return strict_consumer
 			return orig_get_attr(path)
 
-		with patch("frappe.get_attr", side_effect=fake_get_attr):
+		with (
+			patch("frappe.get_hooks", side_effect=fake_hooks),
+			patch("frappe.get_attr", side_effect=fake_get_attr),
+		):
 			out = pi.pos_post_room_charge(
 				PROP_A, "T-FX-PATH1", 20, "Dinner FX", room="101", currency="USD",
 				override_token="tok-fx-direct",
@@ -662,36 +684,53 @@ class RoomChargeVerifyAndOverrideTestCase(AuditTestCase):
 	def test_multi_property_resolution_and_cashier_role_pairing_without_pos_integrator(self):
 		"""Hydrogen R1 #3: with two enabled properties and no external custom_property field,
 		resolve_property_for_pos_profile resolves deterministically from caller's single allowed
-		Property User Permission (failing closed when ambiguous), and a standard URY Cashier
-		(without POS Integrator) can verify and post room charges within their property scope."""
+		Property User Permission (failing closed when ambiguous), and both native POS Cashier
+		and hook-registered outlet roles (without POS Integrator) can verify and post room charges."""
 		frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- fixture
-		if not frappe.db.exists("Role", "URY Cashier"):
-			frappe.get_doc({"doctype": "Role", "role_name": "URY Cashier"}).insert(ignore_permissions=True)
+		for role_name in ("POS Cashier", "URY Cashier"):
+			if not frappe.db.exists("Role", role_name):
+				frappe.get_doc({"doctype": "Role", "role_name": role_name}).insert(ignore_permissions=True)
+		native_cashier = ensure_user("ut.b5c.poscashier.a@test.local", ["POS Cashier"])
+		_restrict_property(native_cashier, PROP_A)
 		cashier_a = ensure_user("ut.b5c.urycashier.a@test.local", ["URY Cashier"])
 		_restrict_property(cashier_a, PROP_A)
 
 		# Both PROP_A and PROP_B are enabled; unrestricted Administrator gets None (fails closed).
 		self.assertIsNone(authz.resolve_property_for_pos_profile("Nonexistent External Till"))
 
-		# Restricted URY Cashier (without POS Integrator) resolves PROP_A deterministically!
+		# Native POS Cashier works without any external role hook
+		frappe.set_user(native_cashier)  # nosemgrep: frappe-setuser -- native cashier persona
+		native_check = pi.verify_room_charge(pos_profile="Some Hotel Bar Till", room="101", amount=400)
+		self.assertTrue(native_check["ok"])
+		self.assertTrue(native_check["posting_allowed"])
+
+		# External outlet role registered via pos_outlet_roles hook resolves PROP_A deterministically
+		orig_get_hooks = frappe.get_hooks
+
+		def outlet_role_hooks(hook=None, *args, **kwargs):
+			if hook == "pos_outlet_roles":
+				return ["URY Cashier"]
+			return orig_get_hooks(hook, *args, **kwargs)
+
 		frappe.set_user(cashier_a)  # nosemgrep: frappe-setuser -- cashier persona
 		self.assertEqual(authz.resolve_property_for_pos_profile("Some Hotel Bar Till"), PROP_A)
 
-		# Standard URY Cashier can verify_room_charge using only pos_profile (no explicit property, no POS Integrator)
-		check = pi.verify_room_charge(pos_profile="Some Hotel Bar Till", room="101", amount=400)
-		self.assertTrue(check["ok"])
-		self.assertTrue(check["posting_allowed"])
-		self.assertEqual(check["reservation"], self.res_a.name)
+		with patch("frappe.get_hooks", side_effect=outlet_role_hooks):
+			# Hook-registered cashier can verify_room_charge using only pos_profile
+			check = pi.verify_room_charge(pos_profile="Some Hotel Bar Till", room="101", amount=400)
+			self.assertTrue(check["ok"])
+			self.assertTrue(check["posting_allowed"])
+			self.assertEqual(check["reservation"], self.res_a.name)
 
-		# Standard URY Cashier can post a room charge within their permitted property
-		posted = pi.pos_post_room_charge(PROP_A, "T-CASHIER-OK", 400, "Lunch", room="101")
-		self.assertTrue(posted["ok"])
+			# Hook-registered cashier can post a room charge within their permitted property
+			posted = pi.pos_post_room_charge(PROP_A, "T-CASHIER-OK", 400, "Lunch", room="101")
+			self.assertTrue(posted["ok"])
 
-		# Wrong-property stay is STILL refused with PermissionError!
-		with self.assertRaises(frappe.PermissionError):
-			pi.verify_room_charge(property=PROP_B, room="201", amount=400)
-		with self.assertRaises(frappe.PermissionError):
-			pi.pos_post_room_charge(PROP_B, "T-CASHIER-B", 400, "Lunch", room="201")
+			# Wrong-property stay is STILL refused with PermissionError!
+			with self.assertRaises(frappe.PermissionError):
+				pi.verify_room_charge(property=PROP_B, room="201", amount=400)
+			with self.assertRaises(frappe.PermissionError):
+				pi.pos_post_room_charge(PROP_B, "T-CASHIER-B", 400, "Lunch", room="201")
 
 		# Wrong-property supervisor PIN against cashier_a's till is STILL refused!
 		pin_fn = frappe.get_attr(hooks.pos_override_pin_verifier)
