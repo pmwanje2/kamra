@@ -560,6 +560,152 @@ class RoomChargeVerifyAndOverrideTestCase(AuditTestCase):
 				)
 		self.assertEqual(frappe.db.count(pi.CHARGE, {"property": PROP_A}), 0)
 
+	def test_adversarial_account_only_reservation_hard_refused_in_verify_and_post(self):
+		"""Hydrogen R1 #1: a Checked In reservation whose only folio is folio_type='Account'
+		(House Account) MUST be hard-refused by both verify_room_charge and pos_post_room_charge,
+		even with a valid duty-manager approval, without opening a new Guest folio."""
+		room_h = make_room(PROP_A, self.rt_a, "H1875")
+		house_res = make_reservation(
+			PROP_A, self.rt_a, d(-1), d(2), room=room_h,
+			status="Checked In",
+			guest=make_guest("PureHouse", last_name="Account"),
+		)
+		# Remove any auto-created Guest folio and attach ONLY an Open Account folio (exact R1 repro)
+		frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- fixture
+		for fname in frappe.get_all("Folio", filters={"reservation": house_res.name}, pluck="name"):
+			frappe.delete_doc("Folio", fname, force=True, ignore_permissions=True)
+		acct_folio = frappe.get_doc({
+			"doctype": "Folio",
+			"property": PROP_A,
+			"reservation": house_res.name,
+			"folio_type": "Account",
+			"status": "Open",
+			"balance": 0,
+		}).insert(ignore_permissions=True)
+
+		self.as_pos()
+		check = pi.verify_room_charge(property=PROP_A, room="H1875", amount=100)
+		self.assertFalse(check["ok"])
+		self.assertFalse(check["posting_allowed"])
+		self.assertFalse(check["override_required"])
+		self.assertEqual(check["folio"], acct_folio.name)
+		self.assertEqual(check["folio_type"], "Account")
+		self.assertEqual(check["reason_code"], "POS-RC-HOUSE-ACCOUNT")
+
+		with self.assertRaisesRegex(frappe.ValidationError, "House accounts cannot be billed"):
+			pi.pos_post_room_charge(
+				PROP_A, "T-HOUSE-RES-1", 100, "Bar", room="H1875", reservation=house_res.name,
+				override_approval={"supervisor": SUP_A, "pin": "4321", "reason": "Try house override"},
+			)
+		self.assertEqual(frappe.db.count(pi.CHARGE, {"property": PROP_A, "ticket_id": "T-HOUSE-RES-1"}), 0)
+		guest_folios = frappe.get_all("Folio", filters={"reservation": house_res.name, "folio_type": "Guest"})
+		self.assertEqual(guest_folios, [])
+
+	def test_direct_override_token_path1_matches_canonical_claim_with_room_currency_reason_and_fx(self):
+		"""Hydrogen R1 #2 & FX: verify_room_charge exposes property-currency charge_amount,
+		and Path 1 override_token builds canonical {reservation, room, amount, currency, reason} claim."""
+		frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- fixture
+		frappe.get_doc({
+			"doctype": "Exchange Rate",
+			"property": PROP_A,
+			"currency": "USD",
+			"rate_date": TODAY,
+			"buy_rate": 100,
+			"sell_rate": 100,
+		}).insert(ignore_permissions=True)
+		self.as_pos()
+
+		fx_check = pi.verify_room_charge(property=PROP_A, room="101", amount=20, currency="USD")
+		self.assertTrue(fx_check["ok"])
+		self.assertFalse(fx_check["posting_allowed"])
+		self.assertTrue(fx_check["override_required"])
+		self.assertEqual(fx_check["currency"], "UGX")
+		self.assertEqual(flt(fx_check["charge_amount"]), 2000.0)
+
+		captured_claims = []
+		orig_get_attr = frappe.get_attr
+
+		def strict_consumer(token, privilege, pos_profile, ref_name, claim):
+			captured_claims.append(dict(claim))
+			expected = {
+				"reservation": self.res_a.name,
+				"room": "101",
+				"amount": 2000.0,
+				"currency": "UGX",
+				"reason": "VIP-REQ: Direct FX token override",
+			}
+			if claim != expected:
+				frappe.throw("The approved values changed after manager approval. [POS-AUTH-CHANGED]", frappe.ValidationError)
+			return {"approver": SUP_A, "claim": claim}
+
+		def fake_get_attr(path):
+			if "override.consume" in str(path):
+				return strict_consumer
+			return orig_get_attr(path)
+
+		with patch("frappe.get_attr", side_effect=fake_get_attr):
+			out = pi.pos_post_room_charge(
+				PROP_A, "T-FX-PATH1", 20, "Dinner FX", room="101", currency="USD",
+				override_token="tok-fx-direct",
+				override_reason="VIP-REQ: Direct FX token override",
+				pos_profile="Till A",
+				reference_name="INV-FX-1",
+			)
+		self.assertTrue(out["ok"])
+		self.assertEqual(out["override_approved_by"], SUP_A)
+		self.assertEqual(out["override_reason"], "VIP-REQ: Direct FX token override")
+		self.assertEqual(len(captured_claims), 1)
+		self.assertEqual(captured_claims[0]["room"], "101")
+		self.assertEqual(captured_claims[0]["currency"], "UGX")
+		self.assertEqual(captured_claims[0]["reason"], "VIP-REQ: Direct FX token override")
+
+	def test_multi_property_resolution_and_cashier_role_pairing_without_pos_integrator(self):
+		"""Hydrogen R1 #3: with two enabled properties and no external custom_property field,
+		resolve_property_for_pos_profile resolves deterministically from caller's single allowed
+		Property User Permission (failing closed when ambiguous), and a standard URY Cashier
+		(without POS Integrator) can verify and post room charges within their property scope."""
+		frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- fixture
+		if not frappe.db.exists("Role", "URY Cashier"):
+			frappe.get_doc({"doctype": "Role", "role_name": "URY Cashier"}).insert(ignore_permissions=True)
+		cashier_a = ensure_user("ut.b5c.urycashier.a@test.local", ["URY Cashier"])
+		_restrict_property(cashier_a, PROP_A)
+
+		# Both PROP_A and PROP_B are enabled; unrestricted Administrator gets None (fails closed).
+		self.assertIsNone(authz.resolve_property_for_pos_profile("Nonexistent External Till"))
+
+		# Restricted URY Cashier (without POS Integrator) resolves PROP_A deterministically!
+		frappe.set_user(cashier_a)  # nosemgrep: frappe-setuser -- cashier persona
+		self.assertEqual(authz.resolve_property_for_pos_profile("Some Hotel Bar Till"), PROP_A)
+
+		# Standard URY Cashier can verify_room_charge using only pos_profile (no explicit property, no POS Integrator)
+		check = pi.verify_room_charge(pos_profile="Some Hotel Bar Till", room="101", amount=400)
+		self.assertTrue(check["ok"])
+		self.assertTrue(check["posting_allowed"])
+		self.assertEqual(check["reservation"], self.res_a.name)
+
+		# Standard URY Cashier can post a room charge within their permitted property
+		posted = pi.pos_post_room_charge(PROP_A, "T-CASHIER-OK", 400, "Lunch", room="101")
+		self.assertTrue(posted["ok"])
+
+		# Wrong-property stay is STILL refused with PermissionError!
+		with self.assertRaises(frappe.PermissionError):
+			pi.verify_room_charge(property=PROP_B, room="201", amount=400)
+		with self.assertRaises(frappe.PermissionError):
+			pi.pos_post_room_charge(PROP_B, "T-CASHIER-B", 400, "Lunch", room="201")
+
+		# Wrong-property supervisor PIN against cashier_a's till is STILL refused!
+		pin_fn = frappe.get_attr(hooks.pos_override_pin_verifier)
+		wrong_sup = pin_fn(SUP_B, "5678", pos_profile="Some Hotel Bar Till", requester=cashier_a)
+		self.assertFalse(wrong_sup.get("ok"))
+		self.assertEqual(wrong_sup.get("code"), "POS-AUTH-NOT-ELIGIBLE")
+
+		# Unauthorized role (Housekeeping) STILL gets PermissionError with neutral white-label wording (no "URY"!)
+		hk_user = ensure_user("ut.b5c.hk2@test.local", ["Housekeeping"])
+		frappe.set_user(hk_user)  # nosemgrep: frappe-setuser -- unauthorized persona
+		with self.assertRaises(frappe.PermissionError) as caught:
+			pi.verify_room_charge(property=PROP_A, room="101", amount=100)
+		self.assertNotIn("ury", str(caught.exception).lower())
+
 
 class RoomChargeConcurrencyTestCase(frappe.tests.IntegrationTestCase):
 	"""Real two-transaction MariaDB 11.8 REPEATABLE READ race under one cumulative
