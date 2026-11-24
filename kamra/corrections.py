@@ -9,7 +9,7 @@ from decimal import Decimal, InvalidOperation
 import frappe
 
 from kamra.business_date import get_business_date
-from kamra.ledger import list_reason_codes, round_cents
+from kamra.ledger import _currency_places, _money, _round_currency, list_reason_codes
 
 LABELS = {
 	"void_charge": "Void charge",
@@ -104,17 +104,25 @@ def _options(doc, row, charge, entry, session):
 			"status": ["in", ["Completed", "Completed with Warnings"]],
 		},
 	)
+	places = max(_currency_places(doc.property), 2)
+	eps = 0.5 * (10 ** -places)
 	residual = (
 		0
 		if charge
-		else round_cents(row.amount + sum(p.amount for p in doc.payments if p.get("refund_of") == name))
+		else _round_currency(
+			_money(row.amount)
+			+ sum((_money(p.amount) for p in doc.payments if p.get("refund_of") == name), Decimal(0)),
+			places,
+		)
 	)
-	if not charge and not blocked and residual <= 0:
+	if not charge and not blocked and residual <= eps:
 		blocked = "This payment is already reversed in full."
 	actions, denied = [], []
 	for action in ["void_charge"] if charge else ["reverse_payment", "reclassify_tender", "partial_refund"]:
 		why = blocked or (
-			"There is no guest credit to return." if action == "partial_refund" and doc.balance >= 0 else ""
+			"There is no guest credit to return."
+			if action == "partial_refund" and float(doc.balance or 0) >= -eps
+			else ""
 		)
 		if (
 			not why
@@ -145,7 +153,7 @@ def _options(doc, row, charge, entry, session):
 		requires_supervisor=any(a["requires"] for a in actions),
 		blocked_reason=blocked or (denied[0]["reason"] if denied and not actions else ""),
 		residual=residual,
-		refund_cap=min(residual, max(0, -doc.balance)),
+		refund_cap=_round_currency(min(_money(residual), max(Decimal(0), -_money(doc.balance))), places),
 	)
 
 
@@ -156,22 +164,27 @@ def correct(folio, name, action, code, note, key, pin, supervisor_user, supervis
 	from kamra.folio import _recalculate, void_charge
 	from kamra.ledger import home_currency, record_payment_ledger
 	from kamra.localization import assert_payment_mode
+	from kamra.pricing import _minor_unit
 
 	if action not in LABELS or not key or len(key) > 100 or not code or not (note or "").strip():
 		frappe.throw("Choose a correction and reason, enter a note, and provide a retry key.")
-	if action == "partial_refund":
-		try:
-			value = Decimal(str(amount))
-			if not value.is_finite() or value <= 0 or value != value.quantize(Decimal(".01")):
-				raise InvalidOperation
-		except InvalidOperation:
-			frappe.throw("Enter a positive refund amount to the cent.")
-		amount = float(value)
-	elif amount is not None:
+	if action != "partial_refund" and amount is not None:
 		frappe.throw("Only a partial refund takes an amount.")
 	if destination and action != "reclassify_tender":
 		frappe.throw("Only a tender correction takes a destination mode.")
 	doc = frappe.get_doc("Folio", folio, for_update=True)
+	if action == "partial_refund":
+		raw_places = _currency_places(doc.property)
+		unit = Decimal(1).scaleb(-raw_places)
+		try:
+			value = Decimal(str(amount))
+			if not value.is_finite() or value <= 0 or value != value.quantize(unit):
+				raise InvalidOperation
+		except InvalidOperation:
+			if raw_places == 0:
+				frappe.throw("Enter a positive whole-unit refund amount.")
+			frappe.throw(f"Enter a positive refund amount with at most {raw_places} decimal places.")
+		amount = float(value)
 	require_cashier_pin(doc.property, pin)
 	row, charge = _row(doc, name)
 	signature = hashlib.sha256(
@@ -211,7 +224,7 @@ def correct(folio, name, action, code, note, key, pin, supervisor_user, supervis
 	why = f"{code}: {note.strip()}"
 	if charge:
 		return void_charge(folio, name, why, correction=metadata)
-	if action == "partial_refund" and amount > opts["refund_cap"]:
+	if action == "partial_refund" and _money(amount) > _money(opts["refund_cap"]):
 		frappe.throw("Amount exceeds the remaining refundable balance.")
 	amount = amount or opts["residual"]
 	repost = action == "reclassify_tender"
@@ -233,11 +246,12 @@ def correct(folio, name, action, code, note, key, pin, supervisor_user, supervis
 	mode = default_mode_for_tender(doc.property, "Cash") if is_refund and row_tender == "Foreign Cash" else row.mode
 	fx = {}
 	if row.fx_amount and not is_refund:
+		fx_places = _minor_unit(row.currency)
 		fx = dict(
 			currency=row.currency,
 			exchange_rate=row.exchange_rate,
 			exchange_rate_date=row.exchange_rate_date,
-			fx_amount=-round_cents(row.fx_amount * amount / row.amount),
+			fx_amount=-_round_currency(_money(row.fx_amount) * _money(amount) / _money(row.amount), fx_places),
 		)
 	# A pre-arrival advance is still a liability; an in-house advance has moved to Guest.
 	advance = (
@@ -290,8 +304,9 @@ def correct(folio, name, action, code, note, key, pin, supervisor_user, supervis
 			doc, pay.as_dict(), session=repost_session, ledger="Deposit" if advance else "Guest"
 		)
 		if repost_session:
+			fx_d = _minor_unit(pay.get("currency"))
 			fx_note = (
-				f"{pay.currency} {float(pay.fx_amount):,.2f} @ {pay.exchange_rate}"
+				f"{pay.currency} {float(pay.fx_amount):,.{fx_d}f} @ {pay.exchange_rate}"
 				if float(pay.get("fx_amount") or 0) else None
 			)
 			record_cashier_txn(
@@ -309,8 +324,12 @@ def correct(folio, name, action, code, note, key, pin, supervisor_user, supervis
 			)
 		result.update(repost=pay.name, balance=doc.balance)
 	elif advance:
+		places = max(_currency_places(doc.property), 2)
 		paid = frappe.db.get_value("Reservation", doc.reservation, "advance_paid", for_update=True) or 0
 		frappe.db.set_value(
-			"Reservation", doc.reservation, "advance_paid", max(0, round_cents(paid - amount))
+			"Reservation",
+			doc.reservation,
+			"advance_paid",
+			max(0.0, _round_currency(_money(paid) - _money(amount), places)),
 		)
 	return result
