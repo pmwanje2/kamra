@@ -14,6 +14,7 @@ from kamra import api, ledger, settings
 from kamra import folio as folio_mod
 from kamra.tests.audit_fixtures import (
 	PROP_A,
+	PROP_B,
 	TODAY,
 	AuditTestCase,
 	d,
@@ -58,7 +59,7 @@ def window(folio: str):
 
 
 class FolioWindowsTestCase(AuditTestCase):
-	properties = (PROP_A,)
+	properties = (PROP_A, PROP_B)
 
 	def setUp(self):
 		super().setUp()
@@ -354,3 +355,61 @@ class FolioWindowsTestCase(AuditTestCase):
 			(rows[w3]["window_no"], rows[w3]["payee_type"], rows[w3]["payee_agent"],
 			 rows[w3]["agent_name"]),
 			(3, "Travel Agent", agent, "UT Kigo Tours"))
+
+	# Hydrogen R4 P1-5 (#44 composition): Folio.payment_method uses per-property
+	# Payment Method master (no hardcoded Select) and core folio drops FNB_GST
+
+	def test_folio_payment_method_uses_per_property_master_not_hardcoded_select(self):
+		from kamra.masters import ensure_masters
+		ensure_masters()
+		make_property(PROP_B, business_date=TODAY)
+
+		# #44 contract: no module-level FNB_GST constant in kamra.folio
+		self.assertFalse(hasattr(folio_mod, "FNB_GST"))
+
+		# Schema: Folio.payment_method is not a hardcoded Select
+		df = frappe.get_meta("Folio").get_field("payment_method")
+		self.assertNotEqual(df.fieldtype, "Select")
+
+		# Custom per-property payment methods on PROP_A and PROP_B, plus a disabled one
+		pm_a = frappe.get_doc({
+			"doctype": "Payment Method", "code": "UT PropA Airtel",
+			"description": "Airtel Money (Prop A)", "property": PROP_A,
+			"tender_type": "Instant",
+		}).insert(ignore_permissions=True).code
+		pm_b = frappe.get_doc({
+			"doctype": "Payment Method", "code": "UT PropB MoMo",
+			"description": "MTN MoMo (Prop B)", "property": PROP_B,
+			"tender_type": "Instant",
+		}).insert(ignore_permissions=True).code
+		pm_off = frappe.get_doc({
+			"doctype": "Payment Method", "code": "UT PropA Retired",
+			"description": "Retired Method", "property": PROP_A,
+			"tender_type": "Other", "disabled": 1,
+		}).insert(ignore_permissions=True).code
+
+		# Custom property-A method and seeded Cheque (absent from old Select) both save
+		w2 = folio_mod.open_window(reservation=self.res.name, payee_type="Guest",
+		                           payment_method=pm_a)
+		self.assertEqual(window(w2).payment_method, pm_a)
+		w3 = folio_mod.open_window(reservation=self.res.name, payee_type="Guest",
+		                           payment_method="Cheque")
+		self.assertEqual(window(w3).payment_method, "Cheque")
+
+		# Another property's method, disabled method, and unknown code are refused
+		with self.assertRaises(frappe.ValidationError):
+			folio_mod.open_window(reservation=self.res.name, payee_type="Guest",
+			                      payment_method=pm_b)
+		with self.assertRaises(frappe.ValidationError):
+			folio_mod.open_window(reservation=self.res.name, payee_type="Guest",
+			                      payment_method=pm_off)
+		with self.assertRaises(frappe.ValidationError):
+			folio_mod.open_window(reservation=self.res.name, payee_type="Guest",
+			                      payment_method="UT No Such Method")
+
+		# An existing folio keeps its payment_method even if that method is later disabled
+		frappe.db.set_value("Payment Method", pm_a, "disabled", 1)
+		fdoc = frappe.get_doc("Folio", w2)
+		fdoc.bill_to_name = "UT Kept Disabled PM"
+		fdoc.save(ignore_permissions=True)
+		self.assertEqual(window(w2).payment_method, pm_a)
