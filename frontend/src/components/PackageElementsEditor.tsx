@@ -94,10 +94,11 @@ export default function PackageElementsEditor({
 
   const load = useCallback(() => {
     if (!pkgName) return
-    call<PackageElementsResponse>("kamra.packages.list_package_elements", {
+    call<PackageElementsResponse | null>("kamra.packages.list_package_elements", {
       holiday_package: pkgName,
     })
       .then((res) => {
+        if (!res) return
         setData(res)
         setElements(res.elements ?? [])
         setDisplayMode(res.folio_display_mode || "Inclusive")

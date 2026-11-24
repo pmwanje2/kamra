@@ -80,8 +80,9 @@ export default function FixedChargesPanel({
   const [supplement, setSupplement] = useState("")
 
   const load = useCallback(() => {
-    call<ListResponse>("kamra.fixed_charges.list_fixed_charges", { reservation })
+    call<ListResponse | null>("kamra.fixed_charges.list_fixed_charges", { reservation })
       .then((res) => {
+        if (!res) return
         setData(res)
         setRows(res.rows ?? [])
         setStartDate((prev) => prev || res.check_in_date || "")
