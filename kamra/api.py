@@ -10840,7 +10840,9 @@ def _block_prices(property: str, check_in_date: str, check_out_date: str,
 
 	from kamra.booking_refs import resolve_room_type
 	from kamra.group_blocks import group_nights, parse_nightly
+	from kamra.ledger import _currency_places, _round_currency
 	from kamra.pricing import apply_rate_plan, negotiated_rate_plan, quote, room_gst_rate
+	places = max(_currency_places(property), 2)
 	nights = group_nights(check_in_date, check_out_date)
 	rows, before, tax, levy = [], 0.0, 0.0, 0.0
 	for b in blocks or []:
@@ -10884,8 +10886,6 @@ def _block_prices(property: str, check_in_date: str, check_out_date: str,
 		room_nights = sum(counts.values())
 		row_tax = row_before * tax_share
 		row_levy = row_before * levy_share + room_nights * levy_fixed
-		from kamra.ledger import _currency_places, _round_currency
-		places = max(_currency_places(property), 2)
 		rows.append({
 			"room_type": rt, "room_type_name": rt_doc.room_type_name,
 			"rooms": max(counts.values()), "nightly": counts if nightly else {},
@@ -10898,8 +10898,6 @@ def _block_prices(property: str, check_in_date: str, check_out_date: str,
 		before += row_before
 		tax += row_tax
 		levy += row_levy
-	from kamra.ledger import _currency_places, _round_currency
-	places = max(_currency_places(property), 2)
 	return {"rows": rows, "nights": len(nights), "before_tax": _round_currency(before, places),
 	        "tax": _round_currency(tax, places), "levy": _round_currency(levy, places),
 	        "total": _round_currency(before + tax + levy, places)}

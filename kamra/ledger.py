@@ -218,6 +218,12 @@ def _currency_places(property: str | None) -> int:
 	if not property:
 		return 2
 	from kamra.pricing import _minor_unit, property_currency
+	if getattr(frappe, "db", None) is not None and not callable(getattr(frappe.db, "sql", None)):
+		prop = frappe.get_cached_doc("Property", property)
+		curr = getattr(prop, "currency", None)
+		if not curr:
+			return 2
+		return _minor_unit(curr)
 	return _minor_unit(property_currency(property))
 
 
