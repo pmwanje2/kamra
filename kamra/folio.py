@@ -1349,7 +1349,6 @@ def _post_split(src, row, sign: int, line: dict, cuts: list, kept_units: Decimal
 		"is_alcohol": row.get("is_alcohol"),
 		"transaction_code": row.get("transaction_code"),
 		"gl_code": row.get("gl_code"),
-		**_contract_fx_trail(row),
 		"split_of": row.name,
 	}
 	names = ", ".join(dict.fromkeys(f.name for f, _p, _u in cuts if f is not src))
@@ -1370,7 +1369,8 @@ def _post_split(src, row, sign: int, line: dict, cuts: list, kept_units: Decimal
 	kept_tax = line["tax"] - sum(p[1] for _f, p, _u in cuts)
 
 	def part_line(base, tax, units):
-		return {**same_line, "qty": float(units), "rate": float(base * sign / units),
+		return {**same_line, **_contract_fx_trail(row), "qty": float(units),
+		        "rate": float(base * sign / units),
 		        "amount": float(base * sign), "gst_amount": float(tax * sign),
 		        "tax_as_posted": 1}
 

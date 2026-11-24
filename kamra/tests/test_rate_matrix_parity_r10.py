@@ -180,6 +180,7 @@ class ChangeStayCompanyContractTest(QuotePatches, RateMatrixHarness):
 				_company_pays=lambda *args: False,
 				open_company_folio=lambda res: "FOL-COMP",
 				transfer_charges=lambda *args: None,
+				void_pairs=lambda *args: set(),
 			),
 			"kamra.credit": stub_module(
 				"kamra.credit",
