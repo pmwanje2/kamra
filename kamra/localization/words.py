@@ -87,15 +87,30 @@ def number_in_words(n: int, indian: bool = True) -> str:
 	return _grouped(n, INDIAN_GROUPS if indian else INTERNATIONAL_GROUPS).strip()
 
 
+def _currency_places(currency: str | None) -> int:
+	"""Decimal places for amounts in words: 3 for ISO 4217 3-decimal currencies
+	(KWD, BHD, OMR, JOD, TND, IQD, LYD), 2 otherwise."""
+	code = (currency or "").strip().upper()
+	if not code:
+		return 2
+	try:
+		from babel.numbers import get_currency_precision
+		return max(int(get_currency_precision(code)), 2)
+	except Exception:
+		return 3 if code in ("BHD", "IQD", "JOD", "KWD", "LYD", "OMR", "TND") else 2
+
+
 def amount_in_words(amount, currency: str = "INR", indian: bool = True) -> str:
 	"""The full invoice line: "Rupees Three Thousand Five Hundred Only", or
-	with paise when the amount isn't whole."""
-	value = Decimal(str(amount or 0)).quantize(Decimal("0.01"),
-	                                           rounding=ROUND_HALF_UP)
+	with paise / minor units when the amount isn't whole."""
+	places = _currency_places(currency)
+	unit = Decimal(1).scaleb(-places)
+	scale = 10 ** places
+	value = Decimal(str(amount or 0)).quantize(unit, rounding=ROUND_HALF_UP)
 	negative = value < 0
 	value = abs(value)
 	whole = int(value)
-	fraction = int((value - whole) * 100)
+	fraction = int((value - whole) * scale)
 
 	main, sub = CURRENCY_WORDS.get(
 		(currency or "").upper(), ((currency or "").upper(), None))
@@ -103,7 +118,7 @@ def amount_in_words(amount, currency: str = "INR", indian: bool = True) -> str:
 	if fraction and sub:
 		words += f" and {number_in_words(fraction, indian)} {sub}"
 	elif fraction:
-		words += f" point {fraction:02d}"
+		words += f" point {fraction:0{places}d}"
 	if negative:
 		words = "Minus " + words
 	return f"{words} Only"
