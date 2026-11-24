@@ -1758,8 +1758,7 @@ def quote(
 		total = round_rate_amount(total_base + tax, 0, "Nearest", currency)
 		tax = total - total_base
 	else:
-		total = round_rate_amount(total_base, 0, "Nearest", currency)
-		total_base = total
+		total = total_base
 
 	deposit_required = float(prop.get("security_deposit_amount") or 0)
 
