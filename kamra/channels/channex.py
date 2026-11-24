@@ -138,7 +138,15 @@ def push_ari_changes(conn, kind: str, changes: list[dict]) -> dict:
 	meta.warnings. ChannexRateLimited on a 429, ChannexError otherwise."""
 	from kamra.channel_ari import rate_quantum
 	id_field = _ARI_ID_FIELD[kind]
-	quantum = rate_quantum(conn.get("property"))
+	prop = conn.get("property")
+	default_quantum = rate_quantum(prop)
+	currencies = {}
+	if kind == "restrictions" and conn.get("name") and prop:
+		import frappe
+		if getattr(frappe, "db", None):
+			from kamra.channel_manager import _mappings
+			currencies = {str(m.external_rate_id): m.get("external_currency")
+			              for m in _mappings(conn.name) if m.external_rate_id and m.get("external_currency")}
 	values, by_key = [], {}
 	for change in changes:
 		obj = {"property_id": conn.external_property_id, id_field: change["external_id"]}
@@ -146,6 +154,8 @@ def push_ari_changes(conn, kind: str, changes: list[dict]) -> dict:
 			obj["date"] = change["date"]
 		else:
 			obj["date_from"], obj["date_to"] = change["date_from"], change["date_to"]
+		currency = currencies.get(str(change["external_id"]))
+		quantum = rate_quantum(prop, currency) if currency else default_quantum
 		for field, value in (change.get("values") or {}).items():
 			obj[field] = _ari_value(field, value, quantum)
 		values.append(obj)

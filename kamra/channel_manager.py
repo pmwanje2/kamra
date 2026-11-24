@@ -709,21 +709,25 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 	property_currency = frappe.db.get_value("Property", conn.property, "currency")
 	# a modify of a stay the OTA sold on a foreign contract: what it was stamped with
 	booked = _booked_channel_snapshot(existing.name) if e["event"] == "modify" and existing else None
-	contract = None
+	contract, currency_held = None, False
 	if e.get("currency") and property_currency and e["currency"] != property_currency:
 		contract, why = _channel_contract(conn, e, property_currency, booked)
-		if contract:
-			# the OTA's own nights, converted into the property's currency
-			e = dict(e, total=contract["total"], nightly=contract["nightly"])
-		else:
+		if not contract:
+			currency_held = True
 			requested_reason = why or (f"OTA currency mismatch — resolve: {e.get('total') or 0} "
 			                           f"{e['currency']}; property currency {property_currency}")
 			# Keep foreign money in the note, never in the property's ledger currency.
 			e = dict(e, total=0)
-	elif room_type and (untaxed := tax_hold(conn, e, room_type)):
-		requested_reason = "; ".join(r for r in (requested_reason, untaxed) if r)
-		# a price whose taxes cannot be read is not what the guest paid: never bill it
-		e = dict(e, total=0)
+	if not currency_held and room_type:
+		tax_event = dict(e, nightly=contract["nightly"]) if contract else e
+		if untaxed := tax_hold(conn, tax_event, room_type):
+			requested_reason = "; ".join(r for r in (requested_reason, untaxed) if r)
+			# a price whose taxes cannot be read is not what the guest paid: never bill it
+			e = dict(e, total=0)
+			contract = None
+	if contract and not locked_modify:
+		# the OTA's own nights (gross when exclusive tax was on top), converted into the property's currency
+		e = dict(e, total=contract["total"], nightly=contract["nightly"], nightly_net=False)
 
 	if e["event"] == "modify" and existing:
 		# A modify payload is the full new state for pre-arrival stays. Once
@@ -918,6 +922,16 @@ def _channel_contract(conn, e: dict, home: str, booked: dict | None = None) -> t
 		amounts = [share] * (len(dates) - 1) + [total - share * (len(dates) - 1)]
 		if not all(amount > 0 for amount in amounts):
 			return None, None
+	elif e.get("nightly_net"):
+		# day prices are before room tax; scale them to the gross total (days + room tax)
+		total = Decimal(str(e.get("total") or 0))
+		net_sum = sum(amounts)
+		if total > net_sum > 0:
+			scaled = [round_rate_amount(a * total / net_sum, 0, currency=currency) if a > 0 else Decimal(0)
+			          for a in amounts]
+			last = max(i for i, a in enumerate(amounts) if a > 0)
+			scaled[last] += total - sum(scaled)
+			amounts = scaled
 	rp = chain[-1]
 	local = [contract_local_amount(rp, amount, fx, home) for amount in amounts]
 	nights = [{"date": d, "nightly": float(amount), "agreed_rate": float(value)}

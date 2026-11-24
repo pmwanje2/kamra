@@ -122,12 +122,13 @@ class AriCurrencyRefused(Exception):
 	priced in: neither the contract's nor the property's, or not known."""
 
 
-def rate_quantum(property: str | None) -> Decimal:
+def rate_quantum(property: str | None, currency: str | None = None) -> Decimal:
 	"""The smallest step of a rate sent to a channel: the ISO 4217 minor unit
-	of the currency the property sells in, as pricing.quote prices it (1 for
-	UGX, 0.001 for KWD); 0.01 without a property."""
+	of `currency` when given (a foreign-currency channel rate plan), else the
+	currency the property sells in, as pricing.quote prices it (1 for UGX,
+	0.001 for KWD); 0.01 without either."""
 	from kamra.pricing import _minor_unit, selling_currency
-	return Decimal(1).scaleb(-_minor_unit(selling_currency(property)))
+	return Decimal(1).scaleb(-_minor_unit(currency or selling_currency(property)))
 
 
 def channel_rate(property: str, q: dict) -> Decimal:
