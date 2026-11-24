@@ -6642,5 +6642,6 @@
   "The discount is more than the night's rate.": "الخصم أكبر من سعر الليلة.",
   "This rate plan does not allow discounts.": "خطة الأسعار هذه لا تسمح بالخصومات.",
   "This reason needs a manager's sign-off.": "هذا السبب يحتاج إلى موافقة المدير.",
-  "Untick for rates that never take a desk discount (non-refundable, packages).": "ألغِ التحديد للأسعار التي لا تقبل خصم الاستقبال أبدًا (غير القابلة للاسترداد، الباقات)."
+  "Untick for rates that never take a desk discount (non-refundable, packages).": "ألغِ التحديد للأسعار التي لا تقبل خصم الاستقبال أبدًا (غير القابلة للاسترداد، الباقات).",
+  "Change from current booking": "التغيير مقارنةً بالحجز الحالي"
 }

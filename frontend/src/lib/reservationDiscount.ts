@@ -69,9 +69,11 @@ export interface DiscountArgs {
 export function entryBase(
   n: { rate: number; gst_rate?: number; base_rate?: number; discount_amount?: number },
   inclusive: boolean,
+  places = 2,
 ): number {
-  const net = inclusive ? Math.round(n.rate * (1 + (n.gst_rate ?? 0) / 100) * 100) / 100 : n.rate
-  return Math.round((net + (n.discount_amount ?? 0)) * 100) / 100
+  const factor = 10 ** Math.max(places, 2)
+  const net = inclusive ? Math.round(n.rate * (1 + (n.gst_rate ?? 0) / 100) * factor) / factor : n.rate
+  return Math.round((net + (n.discount_amount ?? 0)) * factor) / factor
 }
 
 export const emptyDiscount = (): DiscountState => ({ type: "Percent", value: "", reason: "", nights: {}, note: "" })

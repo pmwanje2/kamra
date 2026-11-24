@@ -76,6 +76,8 @@ def invoice_context(prop_doc) -> dict:
 def locale(prop_doc) -> dict:
 	currency = prop_doc.get("currency") or DEFAULT_CURRENCY
 	symbol = frappe.db.get_value("Currency", currency, "symbol")
+	if currency == "UGX" and symbol in (None, "", "Sh", "USh"):
+		symbol = "UGX "
 	return {
 		"currency_symbol": symbol or f"{currency} ",
 		"locale": prop_doc.get("locale") or "en-UG",

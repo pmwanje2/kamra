@@ -1333,6 +1333,7 @@ class Reservation(Document):
 		off_total = round(sum(flt(r["discount_amount"]) for r in rows), places)
 		snap.update(self._rediscounted_snapshot(
 			snap, rows, effective, voucher, off_total, round(base_total, places),
+			places=places,
 			room=float(d_room), room_tax=float(d_tax), over_cap=float(d_oc),
 			over_cap_tax=float(d_oc_tax), levy=float(d_levy), levy_tax=float(d_levy_tax),
 			before=before, tax=tax, after=after))
@@ -1343,13 +1344,14 @@ class Reservation(Document):
 	def booked_voucher_discount(self, snap: dict | None = None) -> float:
 		"""The voucher part of the booking's discount, as it was priced."""
 		from kamra.folio import voucher_discount
+		from kamra.pricing import night_rate_places
 		if snap and "voucher_discount" in snap:
-			return round(max(flt(snap.get("voucher_discount")), 0), 2)
+			return round(max(flt(snap.get("voucher_discount")), 0), night_rate_places(self.property))
 		return voucher_discount(self)
 
 	@staticmethod
 	def _rediscounted_snapshot(snap: dict, rows: list, effective: dict, voucher: float,
-	                           off_total: float, base_total: float, **d) -> dict:
+	                           off_total: float, base_total: float, places: int = 2, **d) -> dict:
 		"""The booking's quote snapshot after an in-place discount change: the
 		nights, the room line and the totals follow it; every other line
 		(meals, cleaning, pets) is the booked one."""
@@ -1366,27 +1368,27 @@ class Reservation(Document):
 		lines = [dict(li) for li in snap.get("line_items") or []]
 		for li in lines:
 			if li.get("component") == "accommodation":
-				li["amount"] = round(flt(li.get("amount")) + d["room"], 2)
-				li["tax_amount"] = round(flt(li.get("tax_amount")) + d["room_tax"], 2)
+				li["amount"] = round(flt(li.get("amount")) + d["room"], places)
+				li["tax_amount"] = round(flt(li.get("tax_amount")) + d["room_tax"], places)
 				li["base_amount"], li["reservation_discount"] = base_total, off_total
 			elif li.get("component") == "over_capacity":
-				li["amount"] = round(flt(li.get("amount")) + d["over_cap"], 2)
-				li["tax_amount"] = round(flt(li.get("tax_amount")) + d["over_cap_tax"], 2)
+				li["amount"] = round(flt(li.get("amount")) + d["over_cap"], places)
+				li["tax_amount"] = round(flt(li.get("tax_amount")) + d["over_cap_tax"], places)
 			elif li.get("component") == "room_levy":
-				li["amount"] = round(flt(li.get("amount")) + d["levy"], 2)
-				li["tax_amount"] = round(flt(li.get("tax_amount")) + d["levy_tax"], 2)
+				li["amount"] = round(flt(li.get("amount")) + d["levy"], places)
+				li["tax_amount"] = round(flt(li.get("tax_amount")) + d["levy_tax"], places)
 		totals = dict(snap.get("totals") or {})
 		totals.update(
 			subtotal=round(flt(totals.get("subtotal")) + d["room"] + d["over_cap"] + d["levy"]
-			               + off_total - old_off, 2),
-			discount=round(voucher + off_total, 2), tax=d["tax"], total=d["after"])
+			               + off_total - old_off, places),
+			discount=round(voucher + off_total, places), tax=d["tax"], total=d["after"])
 		return {
 			"nightly": out_nights, "line_items": lines, "totals": totals,
-			"room_total": round(flt(snap.get("room_total")) + d["room"], 2),
-			"over_capacity_total": round(flt(snap.get("over_capacity_total")) + d["over_cap"], 2),
-			"room_levy": round(flt(snap.get("room_levy")) + d["levy"], 2),
+			"room_total": round(flt(snap.get("room_total")) + d["room"], places),
+			"over_capacity_total": round(flt(snap.get("over_capacity_total")) + d["over_cap"], places),
+			"room_levy": round(flt(snap.get("room_levy")) + d["levy"], places),
 			"room_base_total": base_total, "reservation_discount_total": off_total,
-			"voucher_discount": voucher, "discount": round(voucher + off_total, 2),
+			"voucher_discount": voucher, "discount": round(voucher + off_total, places),
 			"amount_before_tax": d["before"], "tax_amount": d["tax"], "amount_after_tax": d["after"],
 			# when the discount was last changed on the booked nights
 			"rediscounted_at": str(now_datetime()),
@@ -1396,11 +1398,13 @@ class Reservation(Document):
 		"""Put an in-place discount change on the booking: its nights, its
 		totals and its snapshot (rediscount_locked_nights)."""
 		import json
+		from kamra.pricing import night_rate_places
+		places = night_rate_places(self.property)
 		self.set("night_rates", plan["rows"])
 		self.amount_before_tax = plan["amount_before_tax"]
 		self.tax_amount = plan["tax_amount"]
 		self.amount_after_tax = plan["amount_after_tax"]
-		self.discount_amount = round(plan["voucher_discount"] + plan["discount_total"], 2)
+		self.discount_amount = round(plan["voucher_discount"] + plan["discount_total"], places)
 		if hasattr(self, "quote_snapshot"):
 			snap = dict(plan["snapshot"])
 			snap["idempotency_key"] = getattr(self, "idempotency_key", None)
@@ -1412,6 +1416,8 @@ class Reservation(Document):
 	def apply_quote(self, q: dict, key: str | None):
 		"""Put a quote on the booking: its amounts, the immutable snapshot and
 		the locked nightly rates, under the lock key of the inputs it priced."""
+		from kamra.pricing import night_rate_places
+		places = night_rate_places(self.property)
 		self.amount_before_tax = q["amount_before_tax"]
 		self.tax_amount = q["tax_amount"]
 		self.amount_after_tax = q["amount_after_tax"]
@@ -1425,10 +1431,10 @@ class Reservation(Document):
 		# get their adjustment lines): the totals follow the same nights
 		d_base, d_tax = self.set_night_rates(q)
 		if d_base or d_tax:
-			self.amount_before_tax = round(flt(self.amount_before_tax) + d_base, 2)
-			self.tax_amount = round(flt(self.tax_amount) + d_tax, 2)
+			self.amount_before_tax = round(flt(self.amount_before_tax) + d_base, places)
+			self.tax_amount = round(flt(self.tax_amount) + d_tax, places)
 			self.amount_after_tax = round(
-				flt(self.amount_before_tax) + flt(self.tax_amount), 2)
+				flt(self.amount_before_tax) + flt(self.tax_amount), places)
 		# the booking's discount is its nights' (charged ones as the folio
 		# holds them) plus the voucher - never the quote's, which may count a
 		# discount a billed night never got
@@ -1436,7 +1442,7 @@ class Reservation(Document):
 		if voucher is None:
 			voucher = flt(q.get("discount")) - flt(q.get("reservation_discount_total"))
 		self.discount_amount = round(flt(voucher) + sum(
-			flt(r.get("discount_amount")) for r in self.get("night_rates") or []), 2)
+			flt(r.get("discount_amount")) for r in self.get("night_rates") or []), places)
 		self.rate_lock_key = key
 		self._apply_commission()
 

@@ -7302,15 +7302,16 @@ def _log_discount(doc, gov: dict | None, before: dict | None = None,
 	took off and who signed it off, each night's daily details before and
 	after (OPERA's Changes Log, SAP's pricing change document) and the
 	desk's optional note."""
+	from kamra.localization import money_text
 	from kamra.savings import log_action
 	if not gov:
 		return
 	what = (f"{doc.discount_value:g}% off" if doc.get("discount_type") == "Percent"
-	        else f"{flt(doc.discount_value):,.2f} off a night" if doc.get("discount_type")
+	        else f"{money_text(doc.property, doc.discount_value)} off a night" if doc.get("discount_type")
 	        else "Daily Details discount" if gov.get("discount_total") else "discount removed")
 	note = (f"{doc.get('discount_reason') or 'no reason'}: {what} · base "
-	        f"{gov['base_total']:,.2f} less {gov['discount_total']:,.2f} = "
-	        f"{gov['net_total']:,.2f} ({gov['effective_pct']:g}% effective)")
+	        f"{money_text(doc.property, gov['base_total'])} less {money_text(doc.property, gov['discount_total'])} = "
+	        f"{money_text(doc.property, gov['net_total'])} ({gov['effective_pct']:g}% effective)")
 	if doc.get("fixed_rate"):
 		note += " · fixed rate"
 	if (note_text or "").strip():
@@ -7521,6 +7522,29 @@ def _change_entry(kind: str, by: str | None, at, **values) -> dict:
 	        **values}
 
 
+def _format_change_value(meta, property: str, fieldname: str, value) -> str:
+	"""Format a Version changed-field value in the property's currency when it
+	is a Currency field (so historical or site-default Version rows never show
+	another currency symbol or wrong minor-unit decimals)."""
+	if value in (None, ""):
+		return ""
+	df = meta.get_field(fieldname)
+	if df and df.fieldtype == "Currency":
+		import re
+
+		from kamra.localization import money_text
+		if isinstance(value, (int, float)):
+			return money_text(property, value)
+		text = str(value).strip()
+		match = re.search(r"\d[\d,]*(?:\.\d+)?", text)
+		if match:
+			num = float(match.group(0).replace(",", ""))
+			if text.startswith("-") or re.search(r"-\s*[^\d\s]", text):
+				num = -num
+			return money_text(property, num)
+	return str(value)
+
+
 @frappe.whitelist()
 @require_roles("Front Desk", "Kamra Agent", "Finance", "Revenue Manager")
 def reservation_changes(reservation: str):
@@ -7542,8 +7566,8 @@ def reservation_changes(reservation: str):
 		if not isinstance(data, dict):
 			continue
 		fields = [{"field": f, "label": meta.get_label(f),
-		           "from": "" if old in (None, "") else str(old),
-		           "to": "" if new in (None, "") else str(new)}
+		           "from": _format_change_value(meta, res.property, f, old),
+		           "to": _format_change_value(meta, res.property, f, new)}
 		          for f, old, new in data.get("changed") or [] if f in CHANGE_LOG_FIELDS]
 		nights = _version_nights(data)
 		if fields or nights:

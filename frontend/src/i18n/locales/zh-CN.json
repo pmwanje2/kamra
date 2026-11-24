@@ -6902,5 +6902,6 @@
   "The discount is more than the night's rate.": "折扣超过了当晚房价。",
   "This rate plan does not allow discounts.": "此价格计划不允许折扣。",
   "This reason needs a manager's sign-off.": "此原因需要经理批准。",
-  "Untick for rates that never take a desk discount (non-refundable, packages).": "对从不接受前台折扣的房价（不可退款、套餐）取消勾选。"
+  "Untick for rates that never take a desk discount (non-refundable, packages).": "对从不接受前台折扣的房价（不可退款、套餐）取消勾选。",
+  "Change from current booking": "与当前预订的差额"
 }

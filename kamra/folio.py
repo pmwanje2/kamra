@@ -510,8 +510,9 @@ def _day_use_discount(reservation, date, rt, inclusive: bool, amount: float, gst
 	net = used - off
 	new_gst = room_gst_rate(reservation.property, rt, net + _over_cap_night(reservation))
 	charge = net / (Decimal(1) + new_gst / Decimal(100)) if inclusive else net
+	from kamra.localization import amount_text
 	return (float(charge.quantize(unit, rounding=ROUND_HALF_UP)), float(new_gst),
-	        f"{label} · {float(used):,.2f} less discount {float(off):,.2f}")
+	        f"{label} · {amount_text(reservation.property, used)} less discount {amount_text(reservation.property, off)}")
 
 
 def _rate_plan_factor(reservation, plan) -> Decimal:
@@ -656,12 +657,14 @@ def post_room_night(reservation, date, folios=None) -> bool:
 				# the net rate is what bills; the line says what it came from,
 				# base and discount on the basis the discount was given (gross
 				# where rates include tax)
+				from kamra.localization import amount_text
 				from kamra.pricing import entry_rate, night_rate_places, rates_include_tax
 				places = night_rate_places(reservation.property)
 				off = float(locked.discount_amount)
 				base = float(entry_rate(locked.rate, locked.gst_rate,
 				                        rates_include_tax(reservation.property), places)) + off
-				desc += f" · {base:,.2f} less discount {off:,.2f}"
+				desc += (f" · {amount_text(reservation.property, base)} "
+				         f"less discount {amount_text(reservation.property, off)}")
 		_append_charge(folios, reservation, "Room", {
 			"posting_date": date,
 			"charge_type": "Room",

@@ -640,7 +640,7 @@ export default function ReservationDetail({
                 label={translate("Confirmed rate / night")}
                 value={
                   <>
-                    {rangeOf(d.night_rates.map((n) => n.rate))}
+                    {rangeOf(d.night_rates.map((n) => n.entry_rate ?? n.rate))}
                     {d.discount?.fixed_rate ? <Badge className="ms-2">{translate("Fixed rate")}</Badge> : null}
                   </>
                 }

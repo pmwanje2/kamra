@@ -19,7 +19,7 @@ import {
 } from "../lib/api"
 import { pickDefaultRoomType } from "../lib/bookingDefaults"
 import { Button } from "./ui/button"
-import { useLocale } from "../lib/money"
+import { moneyDigits, useLocale } from "../lib/money"
 import { isPhoneComplete } from "../lib/phone"
 import { nightsBetween, parseDate, shiftDate } from "../lib/stay"
 import { typedNights, type NightPrice } from "../lib/nightPrices"
@@ -110,7 +110,8 @@ interface WalkInResult {
  * (the night's net plus the discount, so a lower tax slab never moves it). */
 function discountNights(q: Quote) {
   const inclusive = !!q.line_items?.[0]?.is_tax_inclusive
-  return q.nightly.map((n) => ({ date: n.date, base_rate: entryBase(n, inclusive) }))
+  const places = Math.max(moneyDigits(), 2)
+  return q.nightly.map((n) => ({ date: n.date, base_rate: entryBase(n, inclusive, places) }))
 }
 
 function todayLocal() {
@@ -2597,19 +2598,26 @@ export function BookingDialog(props: {
                         {homeText(quote.room_total)}
                       </span>}
                     </div>
-                    {/* label and amount never touch or wrap: the amount
-                        keeps its width, a long reason truncates */}
+                    {/* label wraps cleanly so the full reason is visible;
+                        the amount keeps its width */}
                     {(quote.reservation_discount_total ?? 0) > 0 && (<>
                       <div className="flex justify-between gap-3 text-zinc-600">
                         <span>{t("Base room rate")}</span>
                         <span className="shrink-0 whitespace-nowrap tabular-nums">{homeText(quote.room_base_total ?? quote.room_total)}</span>
                       </div>
-                      <div className="flex justify-between gap-3 font-medium text-emerald-700">
-                        <span className="min-w-0 truncate">
-                          {discountReasonText ? t("Discount ({reason})", { reason: discountReasonText }) : t("Discount")}
-                        </span>
-                        <span className="shrink-0 whitespace-nowrap tabular-nums">−{homeText(quote.reservation_discount_total ?? 0)}</span>
-                      </div>
+                      {(() => {
+                        const discountLabel = discountReasonText
+                          ? t("Discount ({reason})", { reason: discountReasonText })
+                          : t("Discount")
+                        return (
+                          <div className="flex items-start justify-between gap-3 font-medium text-emerald-700">
+                            <span className="min-w-0 break-words" title={discountLabel}>
+                              {discountLabel}
+                            </span>
+                            <span className="shrink-0 whitespace-nowrap tabular-nums">−{homeText(quote.reservation_discount_total ?? 0)}</span>
+                          </div>
+                        )
+                      })()}
                       <div className="flex justify-between gap-3 text-zinc-600">
                         <span>{t("Net room rate")}</span>
                         {/* base less discount, on the basis both are entered

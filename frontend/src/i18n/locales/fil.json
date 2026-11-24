@@ -1295,5 +1295,6 @@
   "Their PIN": "Kanilang PIN",
   "This rate plan does not allow discounts.": "Hindi pinapayagan ng rate plan na ito ang diskwento.",
   "This reason needs a manager's sign-off.": "Kailangan ng pahintulot ng manager ang dahilang ito.",
-  "Untick for rates that never take a desk discount (non-refundable, packages).": "Alisin ang tsek para sa mga presyong hindi kailanman binibigyan ng diskwento ng front desk (non-refundable, package)."
+  "Untick for rates that never take a desk discount (non-refundable, packages).": "Alisin ang tsek para sa mga presyong hindi kailanman binibigyan ng diskwento ng front desk (non-refundable, package).",
+  "Change from current booking": "Pagbabago mula sa kasalukuyang booking"
 }

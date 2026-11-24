@@ -6834,5 +6834,6 @@
   "The discount is more than the night's rate.": "O desconto é maior do que a tarifa da noite.",
   "This rate plan does not allow discounts.": "Este plano tarifário não permite descontos.",
   "This reason needs a manager's sign-off.": "Este motivo precisa da aprovação de um gerente.",
-  "Untick for rates that never take a desk discount (non-refundable, packages).": "Desmarque para tarifas que nunca recebem desconto da recepção (não reembolsáveis, pacotes)."
+  "Untick for rates that never take a desk discount (non-refundable, packages).": "Desmarque para tarifas que nunca recebem desconto da recepção (não reembolsáveis, pacotes).",
+  "Change from current booking": "Alteração em relação à reserva atual"
 }

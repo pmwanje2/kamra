@@ -613,6 +613,30 @@ def _describe_requested_modify(conn, e: dict, room_type: str | None) -> str:
 	return f"OTA modify — resolve: {summary}"
 
 
+def _describe_superseded_discount(doc) -> str:
+	"""Plain, white-label description of the desk discount(s) on doc before a
+	channel modify supersedes them (stay-level and any Daily Details nights)."""
+	from frappe.utils import flt
+
+	from kamra.localization import money_text
+
+	def fmt_val(kind: str, val) -> str:
+		return f"{flt(val):g}% off" if kind == "Percent" else f"{money_text(doc.property, val)} off/night"
+
+	parts = []
+	if doc.get("discount_type") and flt(doc.get("discount_value")) > 0:
+		reason = doc.get("discount_reason") or "no reason"
+		parts.append(f"{fmt_val(doc.discount_type, doc.discount_value)} ({reason})")
+	for r in doc.get("night_rates") or []:
+		if r.get("discount_type") and flt(r.get("discount_value")) > 0:
+			reason = r.get("discount_reason") or doc.get("discount_reason") or "no reason"
+			parts.append(f"{str(r.stay_date)}: {fmt_val(r.discount_type, r.discount_value)} ({reason})")
+	if not parts:
+		reason = doc.get("discount_reason") or "no reason"
+		parts.append(f"desk discount ({reason})")
+	return "; ".join(parts)
+
+
 def _flag_for_review(conn, doc, e: dict, reason: str, *,
                      action: str = "modify",
                      action_type: str = "channel.modify_needs_review") -> dict:
@@ -741,7 +765,16 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 			_kept_hold_notes(doc.special_requests, e.get("notes"))
 			if keep_non_tax_hold else (e.get("notes") or None)
 		)
+		from frappe.utils import flt
+		old_amount = flt(doc.amount_after_tax)
+		superseded = None
 		doc.auto_price = 0 if requested_reason or e.get("total") else 1
+		if not doc.auto_price and doc.has_discount():
+			from kamra.api import _discount_snapshot
+			superseded = {
+				"before": {**_discount_snapshot(doc), "amount_after_tax": old_amount},
+				"desc": _describe_superseded_discount(doc),
+			}
 		if e.get("total") or requested_reason:
 			doc.amount_after_tax = e.get("total") or 0
 		if not doc.auto_price:
@@ -767,6 +800,38 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 			doc.save(ignore_permissions=True)
 		finally:
 			frappe.flags.kamra_status_transition = old_transition
+		if superseded:
+			from kamra.api import _discount_snapshot
+			from kamra.savings import log_action
+			channel_label = e.get("channel") or "OTA"
+			ref_label = e.get("ota_ref") or doc.ota_ref or ""
+			review_note = (
+				f"Channel modify ({channel_label} {ref_label}) replaced the desk's "
+				f"discount — removed: {superseded['desc']}."
+			)
+			updates = {"channel_review_needed": 1}
+			if review_note not in (doc.special_requests or ""):
+				updates["special_requests"] = "\n".join(
+					s for s in (doc.special_requests, review_note) if s
+				)
+			doc.db_set(updates)
+			after_snap = {
+				**_discount_snapshot(doc),
+				"discount_total": 0.0,
+				"amount_after_tax": flt(doc.amount_after_tax),
+			}
+			log_action(
+				"reservation_discount", "Reservation", doc.name, conn.property,
+				rationale=review_note,
+				before_snapshot=superseded["before"],
+				after_snapshot=after_snap,
+				channel="API",
+			)
+			log_action(
+				"channel.modify_needs_review", "Reservation", doc.name, conn.property,
+				rationale=review_note,
+				channel="API",
+			)
 		return {"ota_ref": e["ota_ref"], "result": "modified",
 		        "reservation": existing.name}
 
