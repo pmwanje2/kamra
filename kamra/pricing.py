@@ -30,6 +30,42 @@ ROUNDING_MODES = {"Nearest": ROUND_HALF_UP, "Up": ROUND_CEILING, "Down": ROUND_F
 # The most rate plans one derivation chain may hold, its root base included.
 RATE_PLAN_CHAIN_LIMIT = 5
 
+# Authoritative Reservation price-determination inputs (SAP condition-record key model).
+# Kept in exact 1:1 parity with hospitality-tariffs@11 `Kamra Tariff Resolve` PRICE_KEYS
+# so Kamra's pricing engine and the HSP-TARIFF-007 guard cannot drift apart.
+# Note: `fixed_rate` is introduced by sibling kamra#32 (not yet merged); until it lands,
+# `reservation.get("fixed_rate")` degrades safely to 0 and guards automatically once present.
+PRICE_DETERMINATION_GUARDED_FIELDS: tuple[tuple[str, str], ...] = (
+	("property", "str"),
+	("room_type", "str"),
+	("rate_plan", "str"),
+	("company", "str"),
+	("group_booking", "str"),
+	("meal_plan", "str"),
+	("voucher", "str"),
+	("adults", "int"),
+	("children", "int"),
+	("infants", "int"),
+	("extra_beds", "int"),
+	("pets", "int"),
+	("is_day_use", "int"),
+	("fixed_rate", "int"),
+	("auto_price", "int"),
+	("agreed_rate", "flt"),
+	("over_capacity_charge", "flt"),
+	("planned_check_in_time", "day_use_time"),
+	("planned_check_out_time", "day_use_time"),
+	("occupants", "occupant_ages"),
+	("night_rates", "night_rates"),
+)
+PRICE_DETERMINATION_DATE_FIELDS: tuple[str, ...] = ("check_in_date", "check_out_date")
+PRICE_DETERMINATION_SNAPSHOT_FIELDS: tuple[str, ...] = ("contract_tariff",)
+PRICE_DETERMINATION_FIELDS: frozenset[str] = frozenset(
+	[name for name, _kind in PRICE_DETERMINATION_GUARDED_FIELDS]
+	+ list(PRICE_DETERMINATION_DATE_FIELDS)
+	+ list(PRICE_DETERMINATION_SNAPSHOT_FIELDS)
+)
+
 
 class RatePlanChainError(frappe.ValidationError):
 	"""A rate plan's base plans loop back to it or run too deep."""
@@ -1100,11 +1136,15 @@ def contract_tariff_for_new_dates(reservation, booked_check_in, booked_check_out
 			runs[-1].append(day)
 		else:
 			runs.append([day])
+	# OPERA Cloud Managing Reservation Linked Profiles: changing the billing company
+	# via change_stay_company must not re-price extensions; use the pricing company
+	# frozen at booking when present (falling back to reservation.company for legacy stays).
+	pricing_company = snapshot["company"] if "company" in snapshot else reservation.get("company")
 	for run in runs:
 		start, end = run[0], str(getdate(add_days(run[-1], 1)))
 		resolved = contract_rate(reservation.property, reservation.room_type, reservation.rate_plan, start, end,
 			reservation.adults, billable_children(reservation), reservation.get("extra_beds"),
-			company=reservation.get("company"), fx_date=tariff.get("fx_date"))
+			company=pricing_company, fx_date=tariff.get("fx_date"))
 		if not resolved:
 			frappe.throw(_("The contract has no valid rate for the added nights {0} to {1}. Ask a manager to check "
 			               "the tariff, or keep the stay's dates.").format(start, end), ContractRateRefused)
@@ -1185,7 +1225,7 @@ def relock_contract_fx_at_check_in(reservation) -> bool:
 			_dec(night["nightly"]) * fx, rp.get("rounding_step"), rp.get("rounding_mode") or "Nearest", home))}
 			for night in tariff["nights"]]
 	reservation.agreed_rate = agreed
-	reservation.contract_tariff = {"tariff": relocked, "agreed_rate": agreed}
+	reservation.contract_tariff = {**snapshot, "tariff": relocked, "agreed_rate": agreed}
 	reservation.flags.kamra_contract_relocked = True
 	if reservation.get("custom_tariff_currency"):
 		reservation.flags.kamra_fx_checkin_relock = True

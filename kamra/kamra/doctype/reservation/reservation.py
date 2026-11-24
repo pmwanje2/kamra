@@ -471,7 +471,14 @@ class Reservation(Document):
 		if flt(self.agreed_rate) and flt(self.agreed_rate) != agreed_rate:
 			frappe.throw(_("The contract rate changed. Refresh the quote before booking."))
 		self.agreed_rate = agreed_rate
-		self.contract_tariff = {"tariff": tariff, "agreed_rate": agreed_rate}
+		# Freeze the booked pricing company at the top level of contract_tariff
+		# (keeping contract_tariff["tariff"] unchanged) so change_stay_company
+		# keeps the booked rate across later date extensions (OPERA Linked Profiles).
+		self.contract_tariff = {
+			"tariff": tariff,
+			"agreed_rate": agreed_rate,
+			"company": self.get("company") or None,
+		}
 
 	def reprice_contract_nights(self, booked_check_in, booked_check_out, booked_agreed_rate=None):
 		"""The contract for the stay's new dates, from the ones it was priced

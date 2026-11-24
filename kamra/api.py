@@ -2352,19 +2352,25 @@ def add_occupant_names(reservation: str, names):
 
 
 @frappe.whitelist()
-@require_roles("Front Desk", "Kamra Agent")
-def update_occupants(reservation: str, occupants):
+@require_roles("Front Desk", "Revenue Manager", "Kamra Agent")
+def update_occupants(reservation: str, occupants, confirm_price: int = 0):
 	"""Replace the stay's occupant register.
 	occupants = [{full_name, age, gender, nationality, id_type, id_number, phone,
 	              arrived_at, left_at}]
 	Guests sharing a room can arrive and leave at different times: see
 	_occupant_times for how arrived_at / left_at are kept.
 	A child keeps name and age only: no phone, and ID details only where the
-	country's register needs them (see localization.minor_id_kept)."""
+	country's register needs them (see localization.minor_id_kept).
+	If occupant ages change billable_children (affecting room, meal-plan or
+	extension pricing), only Revenue Manager / Hotel Admin may save it, and
+	a change in the stay total requires confirm_price=1."""
 	if isinstance(occupants, str):
 		occupants = frappe.parse_json(occupants)
 	doc = frappe.get_doc("Reservation", reservation)
 	from kamra.localization import is_minor, minor_id_kept, pack_for, store_id_number, validate_id_type
+	from kamra.pricing import billable_children
+	old_billable = billable_children(doc)
+	previous_occupants = list(doc.get("occupants") or [])
 	pack = pack_for(doc.property)
 	default_nat = getattr(pack, "DEFAULT_NATIONALITY", "")
 	# scans survive edits even when the client sends stale rows: carry the
@@ -2437,7 +2443,19 @@ def update_occupants(reservation: str, occupants):
 		if row["id_type"] and row["id_type"] != existing_types.get(o.get("row")):
 			validate_id_type(doc.property, row["id_type"])
 		doc.append("occupants", row)
-	doc.save()
+	new_billable = billable_children(doc)
+	if new_billable != old_billable:
+		if not _can_set_rate():
+			doc.set("occupants", previous_occupants)
+			frappe.throw(
+				_("Changing occupant ages that affect the stay rate requires Revenue Manager or Hotel Admin."),
+				frappe.PermissionError,
+			)
+		preview = _reprice_preview(doc)
+		if preview["needs_confirmation"] and not cint(confirm_price):
+			doc.set("occupants", previous_occupants)
+			_require_price_confirmation(preview, confirm_price)
+	doc.save(ignore_permissions=_can_set_rate())
 	# a row taken off the register takes its ID scan and photo with it
 	kept = {o.get("id_file") for o in doc.occupants} | {o.get("photo") for o in doc.occupants}
 	stale_scans += [url for url in list(existing_scans.values()) + list(existing_photos.values())
@@ -2654,8 +2672,10 @@ def change_stay_company(reservation: str, reason: str,
 	each line where the new company's rules send it (company bill or the
 	guest's), `move="guest"` sends everything on the company bill back to
 	the guest. Refused once a bill was issued to the old company. Credit
-	control runs for the new company. The rate stays as booked; who and
-	why go on the record."""
+	control runs for the new company. The rate stays as booked (matching
+	OPERA Cloud Managing Reservation Linked Profiles,
+	https://docs.oracle.com/en/industries/hospitality/opera-cloud/25.1/ocsuh/t_managing_profiles_linking_reservations.htm,
+	across both booked and extended nights); who and why go on the record."""
 	from kamra.credit import credit_applies, enforce_company_credit
 	from kamra.folio import _company_pays, open_company_folio, transfer_charges
 	res = frappe.get_doc("Reservation", reservation)
@@ -2690,8 +2710,15 @@ def change_stay_company(reservation: str, reason: str,
 		booking_type = "Corporate"
 	elif not company and booking_type == "Corporate":
 		booking_type = "Individual"
-	# db_set, not save: a company change must not re-price the stay
-	res.db_set({"company": company, "booking_type": booking_type})
+	# db_set, not save: a company change must not re-price the stay.
+	# Backfill the original pricing company into legacy contract_tariff snapshots
+	# that predate freezing "company" at booking so extensions keep the booked rate.
+	from kamra.pricing import saved_contract_tariff
+	updates = {"company": company, "booking_type": booking_type}
+	snapshot = saved_contract_tariff(res)
+	if isinstance(snapshot, dict) and snapshot and "company" not in snapshot:
+		updates["contract_tariff"] = json.dumps({**snapshot, "company": old})
+	res.db_set(updates)
 
 	def company_pays(c) -> bool:
 		return bool(company) and not c.is_alcohol and _company_pays(
