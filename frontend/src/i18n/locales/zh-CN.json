@@ -7016,5 +7016,16 @@
   "Price each rate plan per room type and occupancy, in the contract currency.": "按房型和入住人数为每个房价计划定价，使用合同币种。",
   "Rate plan: {plan}": "房价计划：{plan}",
   "Negotiated rate plan for {customer}": "{customer} 的协议房价计划",
-  "Clear rate plan and customer": "清除房价计划和客户"
+  "Clear rate plan and customer": "清除房价计划和客户",
+  "Selling rate / night": "售价 / 晚",
+  "{plan} · 2 adults": "{plan} · 2 位成人",
+  "No rate set": "未设置价格",
+  "No rooms": "无房间",
+  "No rooms configured for this room type.": "此房型尚未配置任何房间。",
+  "No tariff set for: {plans}": "尚未设置合同价：{plans}",
+  "Set its tariff in Contract Tariffs": "在合同价目中设置其价格",
+  "Room types without a tariff": "未设置合同价的房型",
+  "These room types have no contract tariff on this price list yet.": "这些房型在此价目表中尚未设置合同价。",
+  "{n} room": "{n} 间房",
+  "Open room type": "打开房型"
 }

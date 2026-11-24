@@ -910,4 +910,48 @@ describe("Contract Tariffs", () => {
       price_list: usd.name, item_code: "DLX", price_list_rate: 118, valid_from: "2026-11-22", valid_upto: null,
       customer: "New Client" }])
   })
+
+  // ── Round 7 (Tank Hill: list room types without a tariff) ──────────────────
+  it("lists room types without a tariff on the Room matrix tab so none are missed", async () => {
+    const withUnpriced = {
+      ...data,
+      unpriced_room_types: [
+        { name: "Test Hotel-EXE", room_type_name: "Executive Suite", room_type_code: "EXE",
+          room_count: 2, price_lists: ["Corporate USD", "Local rates"] },
+        { name: "Test Hotel-STD", room_type_name: "Standard", room_type_code: "STD",
+          room_count: 0, price_lists: ["Corporate USD"] },
+      ],
+    }
+    rpc.mockImplementation(async (method: string) => method === listMethod ? withUnpriced : null)
+    await render()
+    const section = host.querySelector<HTMLElement>("section[aria-label='Room types without a tariff']")
+    expect(section, "Missing Room types without a tariff section").not.toBeNull()
+    expect(text(section!)).toContain("Room types without a tariff")
+    expect(text(section!)).toContain("Executive Suite")
+    expect(text(section!)).toContain("2 rooms")
+    expect(text(section!)).toContain("Standard")
+    expect(text(section!)).toContain("No rooms")
+    const link = section!.querySelector<HTMLAnchorElement>("a[href='/room-types?open=Test%20Hotel-EXE']")
+    expect(link, "Missing Room Types link for Executive Suite").not.toBeNull()
+    // Switching to Local rates hides Standard (only missing on Corporate USD) and keeps Executive Suite
+    await choose(field<HTMLSelectElement>(host, "price_list"), "Local rates")
+    const updated = host.querySelector<HTMLElement>("section[aria-label='Room types without a tariff']")!
+    expect(text(updated)).toContain("Executive Suite")
+    expect(text(updated)).not.toContain("Standard")
+  })
+
+  it.each(["ar", "de", "es", "fil", "id", "pt", "zh-CN"])("translates unpriced room types labels in %s", async (language) => {
+    const dictionary = await ensureDictionary(language)
+    for (const key of [
+      "Room types without a tariff",
+      "These room types have no contract tariff on this price list yet.",
+      "No rooms",
+      "{n} room",
+      "{n} rooms",
+      "Open room type",
+    ]) {
+      expect(dictionary[key]?.trim(), `${language}: missing ${key}`).toBeTruthy()
+      expect(dictionary[key], `${language}: untranslated ${key}`).not.toBe(key)
+    }
+  })
 })

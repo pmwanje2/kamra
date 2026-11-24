@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react"
 import { Check, ChevronDown, Download, Info, Layers, Plus, Search, Upload, X } from "lucide-react"
-import { useSearchParams } from "react-router-dom"
+import { Link, useSearchParams } from "react-router-dom"
 import { currencyText, formatFxRate, tariffDate, tariffDateTime } from "../components/ContractTariff"
 import {
   decisionTone, field, itemCurrency, TariffMassDialog, TariffModal, tariffReason, type DraftChoice, type MassAction,
@@ -16,6 +16,14 @@ import {
   type RatePlanPolicy, type RoundingMode, type TariffVersion,
 } from "../lib/tariffMatrix"
 
+interface UnpricedRoomType {
+  name: string
+  room_type_name: string
+  room_type_code: string
+  room_count: number
+  price_lists: string[]
+}
+
 interface ContractTariffsResponse {
   supported: true
   property: string
@@ -28,6 +36,7 @@ interface ContractTariffsResponse {
   price_lists: PriceList[]
   items: ContractTariffItem[]
   rate_plan_policies?: Record<string, RatePlanPolicy>
+  unpriced_room_types?: UnpricedRoomType[]
 }
 
 type TariffsPayload = ContractTariffsResponse | {
@@ -193,6 +202,10 @@ function TariffDirectory({ property }: { property: string }) {
     directory.items.filter((item) => item.category === "Supplement")) : []
   const flat = filter === "Room" ? [] : directory.items.filter((item) => matches(item)
     && (filter === "pending" ? drafts(item).length > 0 : item.category === filter))
+  const unpricedRooms = filter === "Room" ? (directory.unpriced_room_types ?? []).filter((rt) =>
+    (!selectedList || rt.price_lists.includes(selectedList.name))
+    && (!needle || [rt.room_type_name, rt.room_type_code, rt.name].some((value) => value?.toLowerCase().includes(needle))),
+  ) : []
   const visible = filter === "Room" ? matrix.flatMap((row) => [...row.tiers.values(), ...row.others]) : flat
   const chosen = visible.filter((item) => selected.has(itemKey(item)))
   const chosenDrafts: DraftChoice[] = chosen.flatMap((item) => drafts(item).map((draft) => ({ item, draft })))
@@ -376,6 +389,37 @@ function TariffDirectory({ property }: { property: string }) {
       : <p className="rounded-xl border border-zinc-200 bg-white p-5 text-sm text-zinc-600">
         {filter === "pending" && !needle ? t("No tariff versions are pending approval.") : t("No tariffs match these filters.")}
       </p>}
+    {filter === "Room" && unpricedRooms.length > 0 && (
+      <section aria-label={t("Room types without a tariff")} className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/40 p-4">
+        <div>
+          <h2 className="text-sm font-semibold text-zinc-900">{t("Room types without a tariff")}</h2>
+          <p className="text-xs text-zinc-600">{t("These room types have no contract tariff on this price list yet.")}</p>
+        </div>
+        <ul className="divide-y divide-amber-200/70 rounded-lg border border-amber-200/70 bg-white">
+          {unpricedRooms.map((rt) => (
+            <li key={rt.name} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 text-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-medium text-zinc-900">{rt.room_type_name}</span>
+                {rt.room_type_code && (
+                  <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs font-medium text-zinc-600">{rt.room_type_code}</span>
+                )}
+                {rt.room_count > 0 ? (
+                  <span className="text-xs tabular-nums text-zinc-500">{tn(rt.room_count, "{n} room", "{n} rooms")}</span>
+                ) : (
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">{t("No rooms")}</span>
+                )}
+              </div>
+              <Link
+                to={`/room-types?open=${encodeURIComponent(rt.name)}`}
+                className="text-xs font-medium text-brand-700 hover:underline"
+              >
+                {t("Open room type")}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </section>
+    )}
     {statusToast}
     {action && <ActionDialog action={action} data={directory} locale={locale} dateLocale={dateLocale}
       list={lists.get(action.item.price_list)} rounding={view.rounding(action.item.price_list)} customers={customerOptions}

@@ -18,6 +18,13 @@ const HkTaskMediaPanel = lazy(() =>
 )
 const ReservationDetail = lazy(() => import("./ReservationDetail"))
 import { cur, locale, sellsAlcohol, taxLabel } from "../lib/money"
+import {
+  formatSellingRateText,
+  renderRoomCount,
+  renderSellingRate,
+  type RoomTypesSummary,
+} from "../components/RoomTypeListCells"
+export type { RoomTypesSummary }
 
 export const floorsConfig: ScreenConfig = {
   doctype: "Floor",
@@ -66,8 +73,16 @@ export const roomsConfig: ScreenConfig = {
   ],
 }
 
-export function roomTypesConfig(currency: string, taxBasis?: TaxBasis | null): ScreenConfig {
+export function roomTypesConfig(
+  currency: string,
+  taxBasis?: TaxBasis | null,
+  summary?: RoomTypesSummary | null,
+): ScreenConfig {
   const cardLabel = currency ? t("Card rate / night ({currency})", { currency }) : t("Card rate / night")
+  const byRt = new Map((summary?.room_types ?? []).map((entry) => [entry.room_type, entry]))
+  const showCard = summary == null || summary.has_card_rate_plans
+  const home = summary?.property_currency || currency
+  const planLabel = summary?.default_plan?.label || summary?.default_plan?.name || ""
   return {
   doctype: "Room Type",
   title: "Room Types",
@@ -75,13 +90,33 @@ export function roomTypesConfig(currency: string, taxBasis?: TaxBasis | null): S
   propertyScoped: true,
   orderBy: "base_price asc",
   columns: [
-    { field: "room_type_name", label: "Name" },
-    { field: "room_type_code", label: "Code", badge: true },
-    { field: "room_category", label: "Unit kind" },
-    { field: "base_price", label: cardLabel },
-    { field: "base_occupancy", label: "Base occ." },
-    { field: "extra_adult_price", label: `Extra adult ${cur()}` },
-    ...(taxBasis ? [] : [{ field: "tax_percent", label: "Tax %" }]),
+    { field: "room_type_name", label: "Name", width: summary ? "w-[18%]" : undefined },
+    { field: "room_type_code", label: "Code", badge: true, width: summary ? "w-[9%]" : undefined },
+    { field: "room_category", label: "Unit kind", width: summary ? "w-[10%]" : undefined },
+    ...(summary ? [
+      {
+        field: "room_count",
+        label: "Rooms",
+        virtual: true,
+        width: "w-[11%]",
+        wrap: true,
+        render: (row: Record<string, unknown>) => renderRoomCount(byRt.get(String(row.name))),
+        csvValue: (row: Record<string, unknown>) => byRt.get(String(row.name))?.room_count ?? null,
+      },
+      {
+        field: "selling_rate",
+        label: "Selling rate / night",
+        virtual: true,
+        width: showCard ? "w-[22%]" : "w-[28%]",
+        wrap: true,
+        render: (row: Record<string, unknown>) => renderSellingRate(byRt.get(String(row.name)), home, planLabel),
+        csvValue: (row: Record<string, unknown>) => formatSellingRateText(byRt.get(String(row.name)), home) || t("No rate set"),
+      },
+    ] : []),
+    ...(showCard ? [{ field: "base_price", label: cardLabel }] : []),
+    { field: "base_occupancy", label: "Base occ.", width: summary ? "w-[9%]" : undefined },
+    ...(showCard ? [{ field: "extra_adult_price", label: `Extra adult ${cur()}` }] : []),
+    ...(taxBasis ? [] : [{ field: "tax_percent", label: "Tax %", width: summary ? "w-[8%]" : undefined }]),
   ],
   form: [
     { field: "room_type_name", label: "Name", type: "data", required: true },

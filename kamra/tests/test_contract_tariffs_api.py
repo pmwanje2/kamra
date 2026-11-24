@@ -32,6 +32,8 @@ class ContractTariffHarness(unittest.TestCase):
 		self.script = None
 		self.scripts = {}
 		self.rate_plans = []
+		self.room_types = []
+		self.rooms = []
 		self.lookups = []
 		self.calls = []
 		self.whitelisted = {}
@@ -94,6 +96,11 @@ class ContractTariffHarness(unittest.TestCase):
 		return SimpleNamespace(execute_method=execute)
 
 	def get_rate_plans(self, doctype, filters=None, fields=None, **kwargs):
+		if doctype == "Room Type":
+			rows = [rt for rt in self.room_types if not (filters or {}).get("disabled") == 0 or not rt.get("disabled")]
+			return [{field: row.get(field) for field in fields} for row in rows] if fields else rows
+		if doctype == "Room":
+			return [{field: row.get(field) for field in fields} for row in self.rooms] if fields else self.rooms
 		self.assertEqual(doctype, "Rate Plan")
 		self.assertEqual(filters, {"property": "Test Hotel"})
 		return [{field: plan.get(field) for field in fields} for plan in self.rate_plans]
@@ -551,3 +558,27 @@ class TestContractTariffRemediationAPI(ContractTariffHarness):
 		# IP-3 (from 2027-01-01) is no longer ahead of the date being viewed
 		self.assertNotIn(["Corporate USD", "USD", "", "DLX", "Deluxe", "Double", 150.0, "2027-01-01", "", "Scheduled"],
 		                 rows)
+
+	def test_list_includes_unpriced_room_types_with_room_counts(self):
+		self.room_types = [
+			{"name": "Test Hotel-DLX", "room_type_name": "Deluxe", "room_type_code": "DLX", "disabled": 0},
+			{"name": "Test Hotel-EXE", "room_type_name": "Executive Suite", "room_type_code": "EXE", "disabled": 0},
+			{"name": "Test Hotel-STD", "room_type_name": "Standard", "room_type_code": "STD", "disabled": 0},
+			{"name": "Test Hotel-OLD", "room_type_name": "Retired", "room_type_code": "OLD", "disabled": 1},
+		]
+		self.rooms = [
+			{"room_type": "Test Hotel-DLX"},
+			{"room_type": "Test Hotel-DLX"},
+			{"room_type": "Test Hotel-EXE"},
+			{"room_type": "Test Hotel-EXE"},
+		]
+		self.script = directory()
+		result = self.endpoint("list_contract_tariffs")("Test Hotel")
+		self.assertEqual(result["unpriced_room_types"], [
+			{"name": "Test Hotel-DLX", "room_type_name": "Deluxe", "room_type_code": "DLX",
+			 "room_count": 2, "price_lists": ["Local rates"]},
+			{"name": "Test Hotel-EXE", "room_type_name": "Executive Suite", "room_type_code": "EXE",
+			 "room_count": 2, "price_lists": ["Corporate USD", "Local rates"]},
+			{"name": "Test Hotel-STD", "room_type_name": "Standard", "room_type_code": "STD",
+			 "room_count": 0, "price_lists": ["Corporate USD", "Local rates"]},
+		])

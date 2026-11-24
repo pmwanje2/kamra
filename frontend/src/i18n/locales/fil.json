@@ -1412,5 +1412,17 @@
   "Rate calendar": "Kalendaryo ng rate",
   "Rate plan: {plan}": "Plano ng rate: {plan}",
   "Negotiated rate plan for {customer}": "Napagkasunduang plano ng rate ng {customer}",
-  "Clear rate plan and customer": "I-clear ang plano ng rate at kustomer"
+  "Clear rate plan and customer": "I-clear ang plano ng rate at kustomer",
+  "Selling rate / night": "Presyong benta / gabi",
+  "{plan} · 2 adults": "{plan} · 2 matanda",
+  "No rate set": "Walang nakatakdang presyo",
+  "No rooms": "Walang kuwarto",
+  "No rooms configured for this room type.": "Walang naka-configure na kuwarto para sa uri ng kuwartong ito.",
+  "No tariff set for: {plans}": "Walang itinakdang taripa para sa: {plans}",
+  "Set its tariff in Contract Tariffs": "Itakda ang taripa nito sa Mga Taripa ng Kontrata",
+  "Room types without a tariff": "Mga uri ng kuwarto na walang taripa",
+  "These room types have no contract tariff on this price list yet.": "Wala pang taripa ng kontrata sa listahan ng presyong ito ang mga uri ng kuwartong ito.",
+  "{n} room": "{n} kuwarto",
+  "{n} rooms": "{n} na kuwarto",
+  "Open room type": "Buksan ang uri ng kuwarto"
 }

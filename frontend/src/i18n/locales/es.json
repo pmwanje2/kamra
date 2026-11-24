@@ -6942,5 +6942,16 @@
   "Price each rate plan per room type and occupancy, in the contract currency.": "Pon precio a cada plan tarifario por tipo de habitación y ocupación, en la moneda del contrato.",
   "Rate plan: {plan}": "Plan tarifario: {plan}",
   "Negotiated rate plan for {customer}": "Plan tarifario negociado de {customer}",
-  "Clear rate plan and customer": "Borrar plan tarifario y cliente"
+  "Clear rate plan and customer": "Borrar plan tarifario y cliente",
+  "Selling rate / night": "Tarifa de venta / noche",
+  "{plan} · 2 adults": "{plan} · 2 adultos",
+  "No rate set": "Sin tarifa definida",
+  "No rooms": "Sin habitaciones",
+  "No rooms configured for this room type.": "No hay habitaciones configuradas para este tipo de habitación.",
+  "No tariff set for: {plans}": "Sin tarifa contractual para: {plans}",
+  "Set its tariff in Contract Tariffs": "Configúrela en Tarifas contractuales",
+  "Room types without a tariff": "Tipos de habitación sin tarifa",
+  "These room types have no contract tariff on this price list yet.": "Estos tipos de habitación aún no tienen tarifa contractual en esta lista de precios.",
+  "{n} room": "{n} habitación",
+  "Open room type": "Abrir tipo de habitación"
 }
