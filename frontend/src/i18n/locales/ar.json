@@ -6808,7 +6808,6 @@
   "These room types have no contract tariff on this price list yet.": "لا تحتوي أنواع الغرف هذه على تعرفة تعاقدية في قائمة الأسعار هذه بعد.",
   "{n} room": "غرفة واحدة ({n})",
   "Open room type": "فتح نوع الغرفة",
-  "Tax as per the accounting invoice": "الضريبة وفقًا للفاتورة المحاسبية",
   "Channel update applied — desk discount removed": "تم تطبيق تحديث القناة — أُزيل خصم الاستقبال",
   "The channel update was applied and removed the desk discount (new total: {total}). Review what was removed below and re-apply a discount if needed.": "تم تطبيق تحديث القناة وإزالة خصم الاستقبال (الإجمالي الجديد: {total}). راجع ما أُزيل أدناه وأعد تطبيق الخصم عند الحاجة.",
   "Channel update applied — discount review required": "تم تطبيق تحديث القناة — مراجعة الخصم مطلوبة",

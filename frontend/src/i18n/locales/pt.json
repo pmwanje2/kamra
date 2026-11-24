@@ -7000,7 +7000,6 @@
   "These room types have no contract tariff on this price list yet.": "Estes tipos de quarto ainda não têm tarifa contratual nesta tabela de preços.",
   "{n} room": "{n} quarto",
   "Open room type": "Abrir tipo de quarto",
-  "Tax as per the accounting invoice": "Imposto conforme a fatura contábil",
   "Channel update applied — desk discount removed": "Atualização do canal aplicada — desconto da recepção removido",
   "The channel update was applied and removed the desk discount (new total: {total}). Review what was removed below and re-apply a discount if needed.": "A atualização do canal foi aplicada e removeu o desconto da recepção (novo total: {total}). Revise abaixo o que foi removido e reaplique um desconto se necessário.",
   "Channel update applied — discount review required": "Atualização do canal aplicada — revisão do desconto necessária",

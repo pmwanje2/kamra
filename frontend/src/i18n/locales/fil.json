@@ -1473,7 +1473,6 @@
   "{n} room": "{n} kuwarto",
   "{n} rooms": "{n} na kuwarto",
   "Open room type": "Buksan ang uri ng kuwarto",
-  "Tax as per the accounting invoice": "Buwis ayon sa accounting invoice",
   "Channel update applied — desk discount removed": "Nailapat ang update ng channel — inalis ang diskwento sa desk",
   "The channel update was applied and removed the desk discount (new total: {total}). Review what was removed below and re-apply a discount if needed.": "Nailapat ang update ng channel at inalis ang diskwento sa desk (bagong kabuuan: {total}). Suriin sa ibaba ang inalis at ilapat muli ang diskwento kung kinakailangan.",
   "Channel update applied — discount review required": "Nailapat ang update ng channel — kailangan ng pagsusuri ng diskwento",

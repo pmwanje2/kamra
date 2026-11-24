@@ -8,7 +8,7 @@ Covers all 11 composed Release 2 scenarios end-to-end on a real Frappe + ERPNext
  4. contract_tariff / HSP-TARIFF-007 / HSP-TARIFF-008 guard vs governed discount vs hand-typed rate.
  5. Rate change (set_agreed_rate), extend, shorten (amend_stay), split (split_charge); charged nights kept.
  6. proforma == folio == invoice == ledger (through public posting, payment and close APIs).
- 7. Printed tax invoice with bridged ERP Sales Invoice VAT + discount line + reference currency.
+ 7. (Printed tax invoice: see #48, not part of this branch.)
  8. OTA modify alert (channel_review_needed, reservation_discount, channel.modify_needs_review) on tariff stay.
  9. Room Types / Rate Calendar selling rate unaffected by a stay's discount.
 10. Reservation currency options (Property:property:currency) with reference currency fields & zero INR leak.
@@ -21,9 +21,9 @@ import json
 from unittest.mock import patch
 
 import frappe
-from frappe.utils import add_days, flt, getdate
+from frappe.utils import flt
 
-from kamra import api, channel_manager, ledger, pricing, rates
+from kamra import api, channel_manager, ledger, rates
 from kamra import folio as folio_mod
 from kamra.patches.v48 import (
 	backfill_rate_plan_tariff_currency,
@@ -39,7 +39,6 @@ from kamra.tests.audit_fixtures import (
 	ensure_user,
 	guest_folio,
 	make_property,
-	make_reservation,
 	make_room,
 	make_room_type,
 )
@@ -187,30 +186,6 @@ def _set_fx(from_cur: str, to_cur: str, rate: float, on_date: str):
 		"for_selling": 1,
 		"for_buying": 0,
 	}).insert(ignore_permissions=True)
-
-
-def _fake_sales_invoice(
-	name: str,
-	*,
-	folio_name: str,
-	net_total: float,
-	total_taxes: float,
-	grand_total: float,
-	items: list[dict],
-	taxes: list[dict],
-	docstatus: int = 1,
-):
-	return frappe._dict(
-		doctype="Sales Invoice",
-		name=name,
-		kamra_ref=folio_name,
-		docstatus=docstatus,
-		net_total=net_total,
-		total_taxes_and_charges=total_taxes,
-		grand_total=grand_total,
-		items=[frappe._dict(it) for it in items],
-		taxes=[frappe._dict(tx) for tx in taxes],
-	)
 
 
 class Release2ComposedTests(AuditTestCase):
