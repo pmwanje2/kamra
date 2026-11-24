@@ -275,10 +275,10 @@ Cancelled At,取消时间
 Cancelled By,取消人
 Cancelled On,取消日期
 Cancelling {0} · arrival {1}.,正在取消 {0} · 到店 {1}。
-"Cannot check out: the guest is owed {0}{1}. Issue the refund before departure.","无法退房：宾客尚有 {0}{1} 待退。请于离店前办理退款。"
-"Cannot check out: {0}{1} is still owed. Collect payment or transfer it to the city ledger before departure.","无法退房：仍有 {0}{1} 未结。请于离店前收款，或转入城市挂账。"
-"Cannot close the folio: {0}{1} is owed back to the guest. Issue the refund first.","无法关闭客账：尚需退还宾客 {0}{1}。请先办理退款。"
-"Cannot close the folio: {0}{1} is still owed. Collect payment, or move the company's share to the city ledger, first.","无法关闭客账：仍有 {0}{1} 未结。请先收款，或将公司承担部分转入城市挂账。"
+"Cannot check out: the guest is owed {0}. Issue the refund before departure.","无法退房：宾客尚有 {0} 待退。请于离店前办理退款。"
+"Cannot check out: {0} is still owed. Collect payment or transfer it to the city ledger before departure.","无法退房：仍有 {0} 未结。请于离店前收款，或转入城市挂账。"
+"Cannot close the folio: {0} is owed back to the guest. Issue the refund first.","无法关闭客账：尚需退还宾客 {0}。请先办理退款。"
+"Cannot close the folio: {0} is still owed. Collect payment, or move the company's share to the city ledger, first.","无法关闭客账：仍有 {0} 未结。请先收款，或将公司承担部分转入城市挂账。"
 Cannot move reservation from {0} to {1}.,无法将预订从 {0} 移到 {1}。
 Cannot release access yet. Failed gates: {0},暂不能释放门禁。未通过的检查：{0}
 Capacity,容量

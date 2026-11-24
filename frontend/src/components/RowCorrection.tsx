@@ -2,7 +2,7 @@ import { useState } from "react"
 import { call, newIdempotencyKey } from "../lib/api"
 import { useT } from "../lib/i18n"
 import { serverError } from "../lib/resource"
-import { useLocale, type TenderMode } from "../lib/money"
+import { moneyDigits, moneyStep, useLocale, type TenderMode } from "../lib/money"
 import TenderPicker, { tenderTypeOf } from "./TenderPicker"
 
 type Action = {
@@ -67,6 +67,10 @@ export default function RowCorrection({
     return currencies.includes(targetCode) ? [{ mode: m, currencies: [targetCode] }] : []
   })
   const destinationCurrency = destinations.find((m) => m.mode === mode)?.currencies[0] ?? currency
+  // Partial refunds always pay out in the property's home currency.
+  const refundCurrency = home || loc.currency
+  const refundDigits = moneyDigits(refundCurrency)
+  const refundStep = moneyStep(refundCurrency)
   const choose = (a?: Action) => {
     setError("")
     setId(a?.id ?? "")
@@ -106,8 +110,23 @@ export default function RowCorrection({
     if (!code) problems.push(t("Choose a reason code."))
     if (!note.trim()) problems.push(t("Enter a reason note."))
     if (id === "reclassify_tender" && !destinations.some((m) => m.mode === mode)) problems.push(t("Choose the destination tender."))
-    if (id === "partial_refund" && !(Number(amount) > 0 && Number(amount) <= options.refund_cap && /^\d+(?:\.\d{1,2})?$/.test(amount)))
-      problems.push(t("Enter a positive refund amount up to {cap}, with at most two decimals.", {cap: options.refund_cap}))
+    if (id === "partial_refund") {
+      const trimmed = amount.trim()
+      const validDecimals =
+        refundDigits === 0
+          ? /^\d+$/.test(trimmed)
+          : new RegExp(`^\\d+(?:\\.\\d{1,${refundDigits}})?$`).test(trimmed)
+      if (!(Number(trimmed) > 0 && Number(trimmed) <= options.refund_cap && validDecimals)) {
+        problems.push(
+          refundDigits === 0
+            ? t("Enter a positive whole-unit refund amount up to {cap}.", { cap: options.refund_cap })
+            : t("Enter a positive refund amount up to {cap}, with at most {decimals} decimals.", {
+                cap: options.refund_cap,
+                decimals: refundDigits,
+              }),
+        )
+      }
+    }
     if (approvals && !user) problems.push(options.supervisors.length ? t("Choose an approving supervisor.") : t("No eligible supervisor is available for this property."))
     if (approvals && !pin.trim()) problems.push(t("Enter the supervisor PIN."))
     setError(problems.join(" "))
@@ -194,7 +213,9 @@ export default function RowCorrection({
                 <input
                   aria-label={t("Refund amount")}
                   type="number"
-                  step="0.01"
+                  min="0"
+                  step={refundStep}
+                  inputMode={refundDigits === 0 ? "numeric" : "decimal"}
                   max={options.refund_cap}
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}

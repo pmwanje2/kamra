@@ -96,7 +96,7 @@ _THREE_DECIMAL_CURRENCIES = frozenset({
 })
 
 
-def _minor_digits(currency: str) -> int:
+def _minor_digits(currency: str | None) -> int:
 	"""ISO 4217 minor-unit digits (0dp UGX/JPY, 2dp INR/USD, 3dp KWD/BHD/OMR)."""
 	code = (currency or "").strip().upper()
 	if not code:

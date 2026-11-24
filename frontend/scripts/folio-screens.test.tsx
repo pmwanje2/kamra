@@ -80,6 +80,17 @@ vi.mock("../src/lib/money", () => ({
   loadLocale: () => Promise.resolve(mockLoc),
   moneyLocale: () => mockLoc.locale,
   moneyDigits: (c?: string) => digitsFor(c ?? mockLoc.currency),
+  moneyStep: (c?: string) => {
+    const d = digitsFor(c ?? mockLoc.currency)
+    return d <= 0 ? "1" : `0.${"0".repeat(d - 1)}1`
+  },
+  moneyEps: (c?: string) => 0.5 * 10 ** -digitsFor(c ?? mockLoc.currency),
+  roundMoney: (n: number, c?: string) => {
+    if (!Number.isFinite(n) || n === 0) return 0
+    const factor = 10 ** digitsFor(c ?? mockLoc.currency)
+    const sign = n < 0 ? -1 : 1
+    return (sign * Math.round((Math.abs(n) + Number.EPSILON * Math.max(1, Math.abs(n))) * factor)) / factor
+  },
   fmtAmount: (n: unknown, c?: string, l?: string) => {
     const d = digitsFor(c ?? mockLoc.currency)
     return Number(n ?? 0).toLocaleString(l || mockLoc.locale, { minimumFractionDigits: d, maximumFractionDigits: d })

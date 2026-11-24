@@ -53,11 +53,12 @@ class Folio(Document):
 			frappe.throw(_("A closed folio cannot be reopened or renumbered."))
 
 		from kamra.ledger import _currency_places, _round_currency
-		places = _currency_places(self.property)
+
+		places = max(_currency_places(self.property), 2)
 
 		def sig(rows):
 			return [(r.charge_type, str(r.posting_date),
-			         _round_currency(float(r.amount or 0), places),
+			         _round_currency(r.amount or 0, places),
 			         float(r.gst_rate or 0)) for r in rows]
 		if sig(self.charges) != sig(old.charges):
 			frappe.throw(_(
