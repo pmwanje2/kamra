@@ -47,7 +47,7 @@ export async function withDesk(run, override = {}) {
         "kamra.ledger.list_exchange_rates": { rates: [], business_date: "2026-11-21" },
         "frappe.client.get_list": args.doctype === "Room Type" ? [roomType] : [],
         "frappe.client.get": roomType,
-        "kamra.rates.room_type_tariffs": { tariffs: [{ rate_plan: plan.name, label: plan.rate_plan_name, currency: "USD", room: 130, single: 100, extra: 20, approval_state: "Approved", valid_from: "2026-11-01", fx_rate: 3650, fx_date: "2026-11-21" }], all_active_plans_tariff: true },
+        "kamra.rates.room_type_tariffs": { tariffs: [{ rate_plan: plan.name, label: plan.rate_plan_name, currency: "USD", room: 130, single: 100, extra: 20, approval_state: "Approved", valid_from: "2026-11-01", fx_rate: 3650, fx_date: "2026-11-21", local_room: 475000, local_single: 365000, fx_lock_policy: "Fixed at Reservation", rounding_step: 5000, rounding_mode: "Nearest" }], all_active_plans_tariff: true, property_currency: "UGX", primary_rate_plan: plan.name, card_rate_plans: [] },
         "kamra.api.folio_invoice": {
           folio: { name: "FOLIO-K3", property, status: "Open", folio_type: "Guest", balance: 949000, grand_total: 949000, charges: [], payments: [] },
           property: { currency: "UGX", name: property }, guest: { name: "Contract Guest" },

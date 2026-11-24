@@ -28,6 +28,10 @@ interface PlanRow extends TariffReference {
   vs_plain: number
   available?: boolean
   refusal?: string
+  /** OPERA Exchange Type: when a foreign-currency contract converts to the home currency */
+  fx_lock_policy?: string
+  /** the base plan's name for a derived plan */
+  derived_from?: string | null
 }
 
 interface Options {
@@ -38,6 +42,8 @@ interface Options {
   /** the figures above (and a typed night price) include tax */
   tax_inclusive?: boolean
   rate_plan_required?: boolean
+  /** the booking company's negotiated plan: it prices the stay while no plan is picked */
+  company_plan?: string | null
 }
 
 /** The stay's rate, explained: each night's BAR and what moved it, the whole
@@ -59,6 +65,7 @@ export function RateOptions({
   canSetPrice,
   lockedNote,
   planRequired,
+  company,
 }: {
   roomType: string
   checkIn: string
@@ -78,6 +85,8 @@ export function RateOptions({
   /** why the prices cannot be typed, when it is not a missing right */
   lockedNote?: string
   planRequired?: boolean
+  /** the booking's company: each plan is priced at its own tariff (OPERA Rate Query with a Company) */
+  company?: string
 }) {
   const { t } = useT()
   const [data, setData] = useState<Options | null>(null)
@@ -101,6 +110,7 @@ export function RateOptions({
         rate_plan: ratePlan || undefined,
         meal_plan: mealPlan || undefined,
         voucher_code: voucher || undefined,
+        ...(company ? { company } : {}),
       })
         .then((d) => {
           if (live) {
@@ -114,11 +124,13 @@ export function RateOptions({
       live = false
       clearTimeout(h)
     }
-  }, [roomType, checkIn, checkOut, adults, children, extraBeds, mealPlan, voucher, ratePlan, t])
+  }, [roomType, checkIn, checkOut, adults, children, extraBeds, mealPlan, voucher, ratePlan, company, t])
 
   if (err) return <p className="text-xs text-zinc-400">{translate(err)}</p>
   if (!data || !Array.isArray(data.plans) || !Array.isArray(data.nights)) return null
-  const selected = data.plans.find((plan) => plan.name === ratePlan)
+  // no plan picked: the company's negotiated plan prices the stay, as the quote does
+  const picked = ratePlan || data.company_plan || ""
+  const selected = data.plans.find((plan) => plan.name === picked)
   const references = [...new Map(data.plans.flatMap(({ tariff }) => tariff ? [[
     JSON.stringify([tariff.currency, tariff.property_currency, tariff.fx_rate, tariff.fx_date]), tariff,
   ] as const] : [])).values()]
@@ -130,6 +142,11 @@ export function RateOptions({
   const hasTyped = data.nights.some((x) => isOverride(nightPrices[x.date], x.rate, digits))
   const roomTotal = data.nights.reduce((sum, x) => sum + priceOf(x), 0)
   const basis = data.tax_inclusive ? t("Prices include tax.") : t("Prices are before tax.")
+  /** How the plan fixes a foreign contract's exchange rate (OPERA Exchange Type) and what it derives from. */
+  const planNotes = (p: PlanRow) => [
+    p.tariff && p.tariff.currency !== p.tariff.property_currency && p.fx_lock_policy ? t(p.fx_lock_policy) : null,
+    p.derived_from ? t("Derived from {base}", { base: p.derived_from }) : null,
+  ].filter((note): note is string => !!note)
 
   /** Set one night; a price equal to what Kamra charges, or none, is not an override. */
   function setNight(x: NightRate, price: number | null) {
@@ -306,12 +323,12 @@ export function RateOptions({
         <div>
           <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">{t("Rate plans")}</p>
           <div className="space-y-1">
-            {!required && <button
+            {!required && !data.company_plan && <button
               type="button"
               onClick={() => onPickPlan("")}
               className={cn(
                 "flex w-full items-center justify-between gap-3 rounded-xl border px-3.5 py-2.5 transition-colors text-sm",
-                !ratePlan ? "border-brand-600 bg-brand-50" : "border-zinc-200 hover:bg-zinc-50",
+                !picked ? "border-brand-600 bg-brand-50" : "border-zinc-200 hover:bg-zinc-50",
               )}
             >
               <span>{t("Standard rate")}</span>
@@ -325,15 +342,18 @@ export function RateOptions({
                 type="button"
                 onClick={() => onPickPlan(p.name)}
                 disabled={hasTyped || p.available === false}
-                aria-pressed={ratePlan === p.name}
+                aria-pressed={picked === p.name}
                 className={cn(
                   "flex w-full items-center justify-between gap-3 text-start rounded-xl border px-3.5 py-2.5 transition-colors text-sm disabled:cursor-not-allowed disabled:opacity-50",
-                  ratePlan === p.name ? "border-brand-600 bg-brand-50" : "border-zinc-200 hover:bg-zinc-50",
+                  picked === p.name ? "border-brand-600 bg-brand-50" : "border-zinc-200 hover:bg-zinc-50",
                 )}
               >
                 <span className="font-semibold text-zinc-900">
                   {p.label}
                   {p.code ? <span className="ms-1 rounded bg-zinc-100 px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-zinc-600">{p.code}</span> : null}
+                  {planNotes(p).length > 0 && <span className="mt-0.5 block text-xs font-normal text-zinc-500">
+                    {planNotes(p).join(" · ")}
+                  </span>}
                 </span>
                 {p.available === false ? <span className="text-rose-700">{p.refusal}</span> : p.tariff ? (
                   <span className="text-right font-semibold tabular-nums">
