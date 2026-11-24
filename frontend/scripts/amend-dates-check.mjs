@@ -43,9 +43,14 @@ assert.equal(calls(detail, (name) => name === "amendStayPreview").length, 1,
 const saves = calls(detail, (name) => name === "amendStay")
 assert.equal(saves.length, 1, "ReservationDetail saves the dates with one amendStay call")
 const [save, source] = saves[0]
-assert.equal(save.arguments.length, 4, "amendStay gets reservation, check-in, check-out and confirm_price")
+assert.equal(save.arguments.length, 5,
+  "amendStay gets reservation, check-in, check-out, confirm_price and the discount's sign-off")
 assert.match(save.arguments[3].getText(source), /needs_confirmation/,
   "confirm_price comes from the preview the desk was shown")
+// round 4 (R4-7): a discounted stay's new dates may need a manager's
+// sign-off; the screen asks for it in place and sends it with the save
+assert.match(save.arguments[4].getText(source), /SignOff/,
+  "the save carries the manager's sign-off the preview asked for")
 
 const screen = read(detail)
 for (const key of [

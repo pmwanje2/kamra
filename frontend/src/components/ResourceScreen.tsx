@@ -131,10 +131,10 @@ export interface FieldSpec {
   readOnlyOnEdit?: boolean
   /** Disable a field dynamically (e.g. disabling a system master code). */
   disabledWhen?: (draft: Record<string, unknown>) => boolean
-  /** Initial value when creating a new record. */
-  default?: unknown
   /** Block dates before today unless the user may backdate (Finance / Hotel Admin). */
   notPast?: boolean
+  /** Initial value when creating a new record (e.g. the DocType's own default). */
+  default?: unknown
 }
 
 /** One column of a child table edited in the form (FieldSpec type "table"). */
@@ -796,8 +796,8 @@ export function ResourceScreen({
       // ponytail: transaction dates default to today when notPast is set
       const defaults: Record<string, unknown> = {}
       for (const spec of config.form) {
-        if (spec.default !== undefined) defaults[spec.field] = spec.default
         if (spec.type === "date" && spec.notPast) defaults[spec.field] = isoToday()
+        else if (spec.default !== undefined) defaults[spec.field] = spec.default
       }
       setDraft(defaults)
       return

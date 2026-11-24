@@ -24,6 +24,7 @@
   "ota_ref",
   "ota_live_key",
   "channel_review_needed",
+  "channel_review_reason",
   "idempotency_key",
   "hold_expires_on",
   "travel_agent",
@@ -77,6 +78,10 @@
   "is_pay_at_hotel",
   "voucher",
   "discount_amount",
+  "discount_type",
+  "discount_value",
+  "discount_reason",
+  "fixed_rate",
   "auto_price",
   "agreed_rate",
   "contract_tariff",
@@ -209,10 +214,18 @@
   },
   {
    "default": "0",
-   "description": "An OTA modify or cancel arrived after check-in or close and was not applied. Review the note and clear once handled.",
+   "description": "An OTA modify or cancel needs front-desk review (held in-house/closed update, removed desk discount, or added nights priced without an unapproved discount). Review the note and clear once handled.",
    "fieldname": "channel_review_needed",
    "fieldtype": "Check",
    "label": "Channel Review Needed",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "description": "Why this stay needs channel review (update_not_applied, discount_removed, or discount_review).",
+   "fieldname": "channel_review_reason",
+   "fieldtype": "Data",
+   "label": "Channel Review Reason",
    "no_copy": 1,
    "read_only": 1
   },
@@ -325,8 +338,8 @@
    "label": "Check-out Business Date",
    "read_only": 1,
    "description": "The business date the guest checked out on: a checkout can be undone only until it moves on"
-   },
-   {
+  },
+  {
    "fieldname": "booked_check_out_date",
    "fieldtype": "Date",
    "label": "Booked Check Out",
@@ -423,12 +436,14 @@
   {
    "fieldname": "amount_before_tax",
    "fieldtype": "Currency",
-   "label": "Amount Before Tax"
+   "label": "Amount Before Tax",
+   "options": "Property:property:currency"
   },
   {
    "fieldname": "tax_amount",
    "fieldtype": "Currency",
-   "label": "Tax Amount"
+   "label": "Tax Amount",
+   "options": "Property:property:currency"
   },
   {
    "fieldname": "column_break_e",
@@ -438,12 +453,14 @@
   {
    "fieldname": "amount_after_tax",
    "fieldtype": "Currency",
-   "label": "Amount After Tax"
+   "label": "Amount After Tax",
+   "options": "Property:property:currency"
   },
   {
    "fieldname": "advance_paid",
    "fieldtype": "Currency",
-   "label": "Advance Paid"
+   "label": "Advance Paid",
+   "options": "Property:property:currency"
   },
   {
    "default": "0",
@@ -526,6 +543,38 @@
    "fieldname": "discount_amount",
    "fieldtype": "Currency",
    "label": "Discount",
+   "read_only": 1,
+   "options": "Property:property:currency"
+  },
+  {
+   "description": "The stay's discount: a percentage OR a flat amount off each night's room rate. Set through the booking screen with a reason; meals, extras and tax keep their own price.",
+   "fieldname": "discount_type",
+   "fieldtype": "Select",
+   "label": "Discount Type",
+   "options": "\nPercent\nAmount",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "The percentage (0 to 100) or the amount off each night, in the property's currency.",
+   "fieldname": "discount_value",
+   "fieldtype": "Float",
+   "label": "Discount Value",
+   "read_only": 1
+  },
+  {
+   "fieldname": "discount_reason",
+   "fieldtype": "Link",
+   "label": "Discount Reason",
+   "options": "Reason Code",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "The stay is on a rate set by hand (an agreed rate, or a manager's fixed-rate override of a plan that is not discountable).",
+   "fieldname": "fixed_rate",
+   "fieldtype": "Check",
+   "label": "Fixed Rate",
    "read_only": 1
   },
   {
@@ -540,7 +589,8 @@
    "fieldname": "agreed_rate",
    "fieldtype": "Currency",
    "label": "Agreed Nightly Rate",
-   "read_only": 1
+   "read_only": 1,
+   "options": "Property:property:currency"
   },
   {
    "fieldname": "contract_tariff",
@@ -683,7 +733,8 @@
    "fieldname": "commission_amount",
    "fieldtype": "Currency",
    "label": "Agent Commission",
-   "read_only": 1
+   "read_only": 1,
+   "options": "Property:property:currency"
   },
   {
    "fieldname": "sb_booker",
@@ -762,7 +813,8 @@
    "fieldname": "cancellation_fee",
    "fieldtype": "Currency",
    "label": "Cancellation Fee",
-   "read_only": 1
+   "read_only": 1,
+   "options": "Property:property:currency"
   },
   {
    "fieldname": "cancelled_on",
@@ -775,7 +827,8 @@
    "fieldtype": "Currency",
    "label": "Advance Due",
    "read_only": 1,
-   "description": "Amount asked upfront at booking, snapshotted from the policy in force then."
+   "description": "Amount asked upfront at booking, snapshotted from the policy in force then.",
+   "options": "Property:property:currency"
   },
   {
    "fieldname": "payment_policy",
@@ -911,7 +964,8 @@
    "fieldname": "over_capacity_charge",
    "fieldtype": "Currency",
    "label": "Extra Guest Charge / Night",
-   "description": "The amount agreed for those guests, per night. Posts to the folio with the room charge."
+   "description": "The amount agreed for those guests, per night. Posts to the folio with the room charge.",
+   "options": "Property:property:currency"
   },
   {
    "fieldname": "over_capacity_reason",
@@ -965,7 +1019,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-11-23 18:00:00.000000",
+ "modified": "2026-11-24 06:55:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Reservation",

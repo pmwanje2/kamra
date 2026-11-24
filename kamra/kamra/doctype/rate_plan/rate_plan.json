@@ -16,6 +16,7 @@
   "modifier_value",
   "cancellation_policy",
   "is_default",
+  "discount_eligible",
   "disabled",
   "sb_day_use",
   "billing_basis",
@@ -75,6 +76,13 @@
    "label": "Is Default"
   },
   {
+   "default": "1",
+   "description": "The desk may give a reservation or walk-in discount on this plan (OPERA Rate Code \"Discount\"). Untick for rates that never take a desk discount.",
+   "fieldname": "discount_eligible",
+   "fieldtype": "Check",
+   "label": "Discount Eligible"
+  },
+  {
    "default": "0",
    "fieldname": "disabled",
    "fieldtype": "Check",
@@ -127,7 +135,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-04 13:57:41.944631",
+ "modified": "2026-11-23 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Rate Plan",

@@ -78,14 +78,15 @@ def open_folio(reservation) -> str:
 		"status": "Open",
 		"opened_on": now_datetime(),
 	})
-	if reservation.discount_amount:
+	voucher = voucher_discount(reservation)
+	if voucher:
 		folio.append("charges", {
 			"posting_date": nowdate(),
 			"charge_type": "Discount",
 			"description": "Booking discount (voucher)",
 			"qty": 1,
-			"rate": -float(reservation.discount_amount),
-			"amount": -float(reservation.discount_amount),
+			"rate": -voucher,
+			"amount": -voucher,
 			"gst_rate": _room_gst(reservation),
 			"auto_posted": 1,
 		})
@@ -100,6 +101,31 @@ def open_folio(reservation) -> str:
 	_post_cleaning_fee(reservation, folio.name)
 	_post_pet_charge(reservation, folio.name)
 	return folio.name
+
+
+def voucher_discount(reservation) -> float:
+	"""The part of the booking's discount the folio posts as its own line:
+	the voucher. The desk's reservation discount is already inside each
+	locked night's rate (Room Rate is the base less the discount), so
+	posting it again would discount the stay twice.
+
+	Read as the voucher the booking was priced with (its quote snapshot's
+	voucher_discount), never as what is left of discount_amount after the
+	nights: a billed night that kept a discount the stay later dropped
+	would hide a real voucher, and one that never got it would invent one.
+	A booking priced before the snapshot kept it falls back to that sum."""
+	snap = reservation.get("quote_snapshot")
+	if snap:
+		try:
+			data = json.loads(snap) if isinstance(snap, str) else snap
+			if isinstance(data, dict) and "voucher_discount" in data:
+				return round(max(float(data.get("voucher_discount") or 0), 0), 2)
+		except (TypeError, ValueError):
+			pass  # unreadable snapshot: the stored discount less the nights'
+	total = float(reservation.get("discount_amount") or 0)
+	in_nights = sum(float(r.get("discount_amount") or 0)
+	                for r in reservation.get("night_rates") or [])
+	return round(max(total - in_nights, 0), 2)
 
 
 def _post_cleaning_fee(reservation, folio_name: str):
@@ -432,15 +458,17 @@ def _day_use_room_charge(reservation, date) -> tuple[float, float, str] | None:
 		overstay=overstay_rule(reservation.property),
 		planned_hours=planned,
 	)
+	rt = frappe.get_doc("Room Type", reservation.room_type)
+	inclusive = rates_include_tax(reservation.property)
 	if units["full_day"]:
 		# Overstay past planned ETD under "Full day": one card night.
 		amount = float(_plan_free_night_rate(reservation, date))
-		return amount, _nightly_gst(reservation, date), "day use · full day"
+		return _day_use_discount(reservation, date, rt, inclusive, amount,
+		                         _nightly_gst(reservation, date), "day use · full day")
 	gross = Decimal(str(units["amount"]))
-	rt = frappe.get_doc("Room Type", reservation.room_type)
 	gst = float(room_gst_rate(reservation.property, rt,
 	                          gross + _over_cap_night(reservation)))
-	if rates_include_tax(reservation.property):
+	if inclusive:
 		amount = float(gross / (Decimal(1) + Decimal(str(gst)) / Decimal(100)))
 	else:
 		amount = float(gross)
@@ -449,7 +477,42 @@ def _day_use_room_charge(reservation, date) -> tuple[float, float, str] | None:
 	else:
 		label = (f"day use · {units['units']:g} × "
 		         f"{plan['block_hours']:g}h")
-	return amount, gst, label
+	return _day_use_discount(reservation, date, rt, inclusive, amount, gst, label)
+
+
+def _day_use_discount(reservation, date, rt, inclusive: bool, amount: float, gst: float,
+                      label: str) -> tuple[float, float, str]:
+	"""The desk's discount on an hourly / block day-use charge: the hours are
+	only known at check-out, so the discount the booking locked (its night
+	row's own, else the stay's) comes off the booked base charge - up to the
+	hours actually used; hours past the booking bill at the plan's rate.
+	Without a discount the charge is as worked out."""
+	from kamra.pricing import _dec, entry_rate, night_rate_places, room_gst_rate
+	locked = locked_night(reservation, date)
+	if locked is None:
+		return amount, gst, label
+	kind = locked.get("discount_type")
+	value = float(locked.get("discount_value") or 0) if kind else 0.0
+	if not kind:
+		kind = reservation.get("discount_type")
+		value = float(reservation.get("discount_value") or 0)
+	if not kind or value <= 0:
+		return amount, gst, label
+	places = night_rate_places(reservation.property)
+	unit = Decimal(1).scaleb(-places)
+	used = entry_rate(amount, gst, inclusive, places)
+	booked = entry_rate(locked.rate, locked.gst_rate, inclusive, places) + _dec(locked.get("discount_amount"))
+	base = min(used, booked)
+	off = (base * _dec(value) / Decimal(100) if kind == "Percent" else min(_dec(value), base)).quantize(
+		unit, rounding=ROUND_HALF_UP)
+	if off <= 0:
+		return amount, gst, label
+	net = used - off
+	new_gst = room_gst_rate(reservation.property, rt, net + _over_cap_night(reservation))
+	charge = net / (Decimal(1) + new_gst / Decimal(100)) if inclusive else net
+	from kamra.localization import amount_text
+	return (float(charge.quantize(unit, rounding=ROUND_HALF_UP)), float(new_gst),
+	        f"{label} · {amount_text(reservation.property, used)} less discount {amount_text(reservation.property, off)}")
 
 
 def _rate_plan_factor(reservation, plan) -> Decimal:
@@ -589,6 +652,19 @@ def post_room_night(reservation, date, folios=None) -> bool:
 			gst_rate = _nightly_gst(reservation, date)
 			desc = (f"Room {room_no} · {reservation.room_type.split('-')[-1]}"
 			        + (" · day use" if getattr(reservation, "is_day_use", 0) else ""))
+			locked = locked_night(reservation, date)
+			if locked is not None and float(locked.get("discount_amount") or 0) > 0:
+				# the net rate is what bills; the line says what it came from,
+				# base and discount on the basis the discount was given (gross
+				# where rates include tax)
+				from kamra.localization import amount_text
+				from kamra.pricing import entry_rate, night_rate_places, rates_include_tax
+				places = night_rate_places(reservation.property)
+				off = float(locked.discount_amount)
+				base = float(entry_rate(locked.rate, locked.gst_rate,
+				                        rates_include_tax(reservation.property), places)) + off
+				desc += (f" · {amount_text(reservation.property, base)} "
+				         f"less discount {amount_text(reservation.property, off)}")
 		_append_charge(folios, reservation, "Room", {
 			"posting_date": date,
 			"charge_type": "Room",
@@ -722,8 +798,11 @@ def charged_nights(reservation_name: str) -> dict:
 		                         "levy_tax": 0.0, "folio": r.parent})
 		n["base"] += amount
 		n["tax"] += tax
+	from kamra.pricing import night_rate_places
+	prop = frappe.db.get_value("Reservation", reservation_name, "property")
+	places = night_rate_places(prop)
 	for n in out.values():
-		n["base"] = round(n["base"], 2)
+		n["base"] = round(n["base"], places)
 		n["gst_rate"] = round(n["tax"] / n["base"] * 100, 2) if n["base"] else 0.0
 	return out
 

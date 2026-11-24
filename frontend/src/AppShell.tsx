@@ -72,6 +72,9 @@ export interface BookingInitial {
   guest?: string
   guest_name?: string
   phone?: string
+  /** nights to book (default one) */
+  nights?: number
+  /** the picked guest's past stays (their profile card), never nights */
   stays?: number
   adults?: number
   children?: number
