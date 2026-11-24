@@ -24,7 +24,7 @@ NON_VILLA_SQL = "(rt.room_category != 'Villa' OR rt.room_category IS NULL)"
 # rate-code amount (what an agreed rate's or a discount's cut is measured
 # from). Written only by the booking's own pricing (Reservation.validate),
 # the channel manager and create_booking's typed nights.
-LOCKED_NIGHT_COLUMNS = ("rate", "base_rate", "discount_amount", "gst_rate", "meal_amount",
+LOCKED_NIGHT_COLUMNS = ("rate", "base_rate", "quoted_base_rate", "discount_amount", "gst_rate", "meal_amount",
                         "hand_price", "rate_code_amount")
 # what a night is sold at: a change in any of them re-prices every night
 # still to come, and a discounted stay takes the discount rules again
@@ -42,13 +42,14 @@ PARTY_INPUTS = ("adults", "children")
 NIGHT_PRICE_COLUMNS = ("rate", "base_rate", "discount_amount")
 # what a night on the folio keeps from when it was charged, besides the rate
 # and tax rate the folio holds (Reservation.hold_charged_nights)
-CHARGED_NIGHT_HISTORY = ("base_rate", "discount_amount", "rate_code_amount")
+CHARGED_NIGHT_HISTORY = ("base_rate", "quoted_base_rate", "discount_amount", "rate_code_amount")
 # the quote inputs that are the desk's discount, not what is being sold
 DISCOUNT_INPUT_KEYS = ("discount_type", "discount_value", "night_discounts")
 # every column a locked night row carries
 NIGHT_ROW_FIELDS = ("stay_date", "rate", "gst_rate", "meal_amount", "demand_premium_pct",
-                    "hand_price", "rate_code_amount", "base_rate", "discount_type",
-                    "discount_value", "discount_amount", "discount_reason", "fixed_rate")
+                    "hand_price", "rate_code_amount", "base_rate", "quoted_base_rate",
+                    "discount_type", "discount_value", "discount_amount", "discount_reason",
+                    "fixed_rate")
 
 
 def discount_inputs(doc) -> tuple[tuple, set]:
@@ -928,7 +929,7 @@ class Reservation(Document):
 				        and not any(flt(rows[0].get(c)) for c in LOCKED_NIGHT_COLUMNS)):
 					tampered.append(day)
 				continue
-			if any(abs(flt(rows[0].get(c)) - flt(before[0].get(c))) >= 0.005
+			if any(abs(flt(rows[0].get(c)) - flt(before[0].get(c))) >= (1e-6 if c == "quoted_base_rate" else 0.005)
 			       for c in LOCKED_NIGHT_COLUMNS):
 				tampered.append(day)
 		tampered += [day for day in was if day not in now and inside(day)]
@@ -1182,12 +1183,12 @@ class Reservation(Document):
 		night when what is sold moved (rate plan, room type, agreed rate, or
 		the party on a stay without a fixed rate), else each night added or
 		whose locked price changed (ignoring exact tax-inclusive last-night
-		net-rounding remainder redistribution when basis, tax rate, demand tier
-		and discount terms are unchanged). The save and the previews use it alike."""
+		net-rounding remainder redistribution when the night's exact quoted
+		base rate, tax rate, demand tier and discount terms are unchanged).
+		The save and the previews use it alike."""
 		import json
-		from decimal import ROUND_HALF_UP, Decimal
+		from decimal import ROUND_HALF_EVEN, ROUND_HALF_UP, Decimal
 
-		from kamra.folio import charged_nights
 		from kamra.pricing import (
 			_dec,
 			contract_night_tariff,
@@ -1196,6 +1197,7 @@ class Reservation(Document):
 			night_rate_places,
 			quote,
 			rates_include_tax,
+			room_gst_rate,
 			saved_contract_tariff,
 		)
 
@@ -1212,6 +1214,7 @@ class Reservation(Document):
 		unit_dec = Decimal(1).scaleb(-places)
 		unit = float(unit_dec)
 		tol = 0.5 * unit
+		q_tol = Decimal("1e-6")
 		unrounded_tol = min(unit * 0.05, 1e-4)
 		old_last = max(was) if was else None
 		now_last = max(now) if now else None
@@ -1278,32 +1281,88 @@ class Reservation(Document):
 				)
 			return cache["tariff"]
 
-		def _get_old_orig_room_total() -> float | None:
-			if "orig_room_total" not in cache:
-				orig = None
+		def _get_old_snapshot() -> dict | None:
+			if "old_snap" not in cache:
 				raw_snap = old.get("quote_snapshot")
-				if raw_snap and old.get("amount_before_tax") is not None and not cint(old.get("fixed_rate")):
+				snap = None
+				if raw_snap:
 					try:
-						snap = json.loads(raw_snap) if isinstance(raw_snap, str) else raw_snap
+						parsed = json.loads(raw_snap) if isinstance(raw_snap, str) else raw_snap
+						if isinstance(parsed, dict):
+							snap = parsed
 					except (TypeError, ValueError):
 						snap = None
-					if (
-						isinstance(snap, dict)
-						and not snap.get("package")
-						and not flt(snap.get("meal_total"))
-						and not flt(snap.get("over_capacity_total"))
-						and not flt(snap.get("room_levy"))
-						and not flt(snap.get("voucher_discount"))
-						and not (old.get("name") and charged_nights(old.name))
-					):
-						non_room = flt(snap.get("cleaning_fee")) + flt(snap.get("pet_charge"))
-						delta_room = sum(
-							flt(row.get("rate")) - (flt(row.get("base_rate")) or flt(row.get("rate")))
-							for row in was.values()
+				cache["old_snap"] = snap
+			return cache["old_snap"]
+
+		def _get_old_orig_room_total() -> float | None:
+			"""Legacy fallback for reservations locked before quoted_base_rate
+			existed: reconstruct the pre-discount unrounded room total from
+			amount_before_tax and quote_snapshot (handling meal plan, fixed_rate,
+			room levy, over-capacity, voucher and charged nights)."""
+			if "orig_room_total" not in cache:
+				orig = None
+				snap = _get_old_snapshot()
+				if isinstance(snap, dict) and old.get("amount_before_tax") is not None and not snap.get("package"):
+					prop_doc = frappe.get_cached_doc("Property", self.property)
+					levy_pct = flt(prop_doc.get("room_levy_percent"))
+					voucher_disc = flt(snap.get("voucher_discount"))
+					delta_room = sum(
+						flt(row.get("rate")) - (flt(row.get("base_rate")) or flt(row.get("rate")))
+						for row in was.values()
+					)
+					if not levy_pct:
+						non_room = (
+							flt(snap.get("meal_total"))
+							+ flt(snap.get("cleaning_fee"))
+							+ flt(snap.get("pet_charge"))
+							+ flt(snap.get("over_capacity_total"))
+							+ flt(snap.get("room_levy"))
+							- voucher_disc
 						)
 						orig = flt(old.get("amount_before_tax")) - non_room - delta_room
+					elif not voucher_disc:
+						levy_fixed = flt(prop_doc.get("room_levy_per_night")) * max(len(was), 1)
+						fixed_non_room = (
+							flt(snap.get("meal_total"))
+							+ flt(snap.get("cleaning_fee"))
+							+ flt(snap.get("pet_charge"))
+							+ flt(snap.get("over_capacity_total"))
+							+ levy_fixed
+						)
+						orig = (flt(old.get("amount_before_tax")) - fixed_non_room) / (1.0 + levy_pct / 100.0) - delta_room
 				cache["orig_room_total"] = orig
 			return cache["orig_room_total"]
+
+		def _matches_quantized_remainder(raw_rem: Decimal, actual_base: float) -> bool:
+			expected = float(raw_rem.quantize(unit_dec, rounding=ROUND_HALF_UP))
+			if abs(actual_base - expected) < tol:
+				return True
+			# Guard against 1e-9 quantization dust flipping an exact half-unit tie
+			lo = float((raw_rem - q_tol).quantize(unit_dec, rounding=ROUND_HALF_UP))
+			hi = float((raw_rem + q_tol).quantize(unit_dec, rounding=ROUND_HALF_UP))
+			return abs(actual_base - lo) < tol or abs(actual_base - hi) < tol
+
+		def _matches_quoted_remainder(night_map: dict, boundary_base: float) -> bool:
+			dates = sorted(night_map)
+			if len(dates) < 2:
+				return False
+			q_total = Decimal(0)
+			prev_sum = Decimal(0)
+			for idx, d_key in enumerate(dates):
+				row_obj = night_map[d_key]
+				q_raw = flt(row_obj.get("quoted_base_rate"))
+				if q_raw <= 0:
+					return False
+				q_dec = _dec(q_raw)
+				q_total += q_dec
+				if idx < len(dates) - 1:
+					b_val = flt(row_obj.get("base_rate")) or flt(row_obj.get("rate"))
+					unadj = float(q_dec.quantize(unit_dec, rounding=ROUND_HALF_UP))
+					if abs(b_val - unadj) >= tol:
+						return False
+					prev_sum += _dec(b_val)
+			return _matches_quantized_remainder(q_total - prev_sum, boundary_base)
 
 		def _night_moved(day: str, r) -> bool:
 			if day not in was:
@@ -1313,10 +1372,10 @@ class Reservation(Document):
 				return False
 			# On tax-inclusive stays, quote_night_rows lets the last night absorb
 			# the stay-level net-rounding remainder while _discount_nights rounds
-			# each night independently. Reconstruct the exact pre-discount net
-			# rates from pricing.quote() and accept only an exact remainder shift
-			# with identical tax rate, demand tier, discount terms, and derived
-			# rate/discount figures (zero loose span tolerance).
+			# each night independently. Compare exact per-night quoted_base_rate
+			# directly (with exact Decimal ROUND_HALF_UP fallback for legacy rows)
+			# and accept only an exact remainder shift with identical tax rate,
+			# demand tier, discount terms, and derived rate/discount figures.
 			if not inclusive:
 				return True
 			gst = flt(r.get("gst_rate"))
@@ -1328,87 +1387,144 @@ class Reservation(Document):
 			new_disc = _eff_disc(self, r)
 			if old_disc[0] != new_disc[0] or abs(old_disc[1] - new_disc[1]) >= tol:
 				return True
-			old_boundary = day == old_last and len(was) >= 2
-			now_boundary = day == now_last and len(now) >= 2
-			if not (old_boundary or now_boundary):
-				return True
-
-			now_nets = _get_now_nets()
-			if not now_nets or day not in now_nets[0]:
-				return True
-			u_now, gst_now = now_nets
-			base_gst = gst_now[day]
-			if base_gst <= 0:
-				return True
 
 			old_base = flt(prev.get("base_rate")) or flt(prev.get("rate"))
 			new_base = flt(r.get("base_rate")) or flt(r.get("rate"))
-			u_day = u_now[day]
-			unadj_new_base = float(u_day.quantize(unit_dec, rounding=ROUND_HALF_UP))
-			unadj_old_base = round(float(u_day), places)
-
-			def _matches_old_remainder() -> bool:
-				if not old_boundary:
-					return False
-				was_dates = sorted(was)
-				u_was: dict[str, Decimal] = {}
-				for d_key in was_dates:
-					if d_key in u_now:
-						u_was[d_key] = u_now[d_key]
-					else:
-						old_nets = _get_old_nets()
-						if not old_nets or d_key not in old_nets[0]:
-							return False
-						u_was[d_key] = old_nets[0][d_key]
-				was_prev_sum = 0.0
-				for d_key in was_dates[:-1]:
-					prev_b = flt(was[d_key].get("base_rate")) or flt(was[d_key].get("rate"))
-					if abs(prev_b - round(float(u_was[d_key]), places)) >= tol:
-						return False
-					if d_key in now:
-						now_b = flt(now[d_key].get("base_rate")) or flt(now[d_key].get("rate"))
-						if abs(now_b - float(u_was[d_key].quantize(unit_dec, rounding=ROUND_HALF_UP))) >= tol:
-							return False
-					was_prev_sum += prev_b
-				was_room_total = float(sum(u_was.values(), Decimal(0)))
-				expected_old_last = round(was_room_total - was_prev_sum, places)
-				if abs(old_base - expected_old_last) >= tol:
-					return False
-				orig_room_total = _get_old_orig_room_total()
-				if orig_room_total is not None and abs(orig_room_total - was_room_total) >= unrounded_tol:
-					return False
-				return True
-
-			def _matches_now_remainder() -> bool:
-				if not now_boundary:
-					return False
-				now_dates = sorted(now)
-				if any(d_key not in u_now for d_key in now_dates):
-					return False
-				now_prev_sum = 0.0
-				for d_key in now_dates[:-1]:
-					now_b = flt(now[d_key].get("base_rate")) or flt(now[d_key].get("rate"))
-					if abs(now_b - round(float(u_now[d_key]), places)) >= tol:
-						return False
-					now_prev_sum += now_b
-				now_room_total = float(sum((u_now[d_key] for d_key in now_dates), Decimal(0)))
-				expected_now_last = round(now_room_total - now_prev_sum, places)
-				return abs(new_base - expected_now_last) < tol
-
-			old_is_unadj = abs(old_base - unadj_old_base) < tol or abs(old_base - unadj_new_base) < tol
-			new_is_unadj = abs(new_base - unadj_new_base) < tol or abs(new_base - unadj_old_base) < tol
-			base_ok = (
-				(new_is_unadj and _matches_old_remainder())
-				or (old_is_unadj and _matches_now_remainder())
-				or (_matches_old_remainder() and _matches_now_remainder())
-			)
-			if not base_ok:
-				return True
-
+			old_boundary = day == old_last and len(was) >= 2
+			now_boundary = day == now_last and len(now) >= 2
+			old_q_raw = flt(prev.get("quoted_base_rate"))
+			new_q_raw = flt(r.get("quoted_base_rate"))
 			kind, val = new_disc
+			rt_doc = _get_rt_doc()
+			over_cap = _dec(self.get("over_capacity_charge"))
+
+			if old_q_raw > 0 and new_q_raw > 0:
+				# Authoritative path: exact per-night pre-remainder taxable rate
+				old_q = _dec(old_q_raw)
+				new_q = _dec(new_q_raw)
+				if abs(old_q - new_q) >= q_tol:
+					return True
+				if not (old_boundary or now_boundary):
+					return True
+				unadj_base = float(new_q.quantize(unit_dec, rounding=ROUND_HALF_UP))
+				old_is_unadj = abs(old_base - unadj_base) < tol
+				new_is_unadj = abs(new_base - unadj_base) < tol
+				old_rem_ok = old_boundary and _matches_quoted_remainder(was, old_base)
+				now_rem_ok = now_boundary and _matches_quoted_remainder(now, new_base)
+				base_ok = (
+					(new_is_unadj and old_rem_ok)
+					or (old_is_unadj and now_rem_ok)
+					or (old_rem_ok and now_rem_ok)
+				)
+				if not base_ok:
+					return True
+				if kind and val > 0:
+					r_entry = entry_rate(r.get("rate"), r.get("gst_rate"), True, places) + _dec(r.get("discount_amount"))
+					base_gst = room_gst_rate(self.property, rt_doc, r_entry + over_cap)
+				else:
+					base_gst = _dec(r.get("gst_rate"))
+				if base_gst <= 0:
+					return True
+			else:
+				# Legacy path: rows saved before quoted_base_rate existed
+				now_nets = _get_now_nets()
+				if not now_nets or day not in now_nets[0]:
+					return True
+				u_now, gst_now = now_nets
+				base_gst = gst_now[day]
+				if base_gst <= 0:
+					return True
+				u_day = u_now[day]
+				unadj_up = float(u_day.quantize(unit_dec, rounding=ROUND_HALF_UP))
+				unadj_even = float(u_day.quantize(unit_dec, rounding=ROUND_HALF_EVEN))
+
+				def _legacy_u_was() -> dict[str, Decimal] | None:
+					out: dict[str, Decimal] = {}
+					for d_key in sorted(was):
+						if d_key in u_now:
+							out[d_key] = u_now[d_key]
+						else:
+							old_nets = _get_old_nets()
+							if not old_nets or d_key not in old_nets[0]:
+								return None
+							out[d_key] = old_nets[0][d_key]
+					return out
+
+				snap = _get_old_snapshot()
+				old_had_remainder = (
+					not old.has_discount()
+					or not isinstance(snap, dict)
+					or bool(snap.get("rediscounted_at"))
+				)
+
+				def _matches_old_remainder() -> bool:
+					if not old_boundary or not old_had_remainder:
+						return False
+					u_was = _legacy_u_was()
+					if not u_was:
+						return False
+					was_dates = sorted(was)
+					was_prev_sum = Decimal(0)
+					for d_key in was_dates[:-1]:
+						prev_b = flt(was[d_key].get("base_rate")) or flt(was[d_key].get("rate"))
+						exp_up = float(u_was[d_key].quantize(unit_dec, rounding=ROUND_HALF_UP))
+						exp_even = float(u_was[d_key].quantize(unit_dec, rounding=ROUND_HALF_EVEN))
+						if abs(prev_b - exp_up) >= tol and abs(prev_b - exp_even) >= tol:
+							return False
+						if d_key in now:
+							now_b = flt(now[d_key].get("base_rate")) or flt(now[d_key].get("rate"))
+							if abs(now_b - exp_up) >= tol:
+								return False
+						was_prev_sum += _dec(prev_b)
+					was_room_total_dec = sum(u_was.values(), Decimal(0))
+					rem_up = float((was_room_total_dec - was_prev_sum).quantize(unit_dec, rounding=ROUND_HALF_UP))
+					rem_even = float((was_room_total_dec - was_prev_sum).quantize(unit_dec, rounding=ROUND_HALF_EVEN))
+					if abs(old_base - rem_up) >= tol and abs(old_base - rem_even) >= tol:
+						return False
+					orig_room_total = _get_old_orig_room_total()
+					if orig_room_total is None or abs(orig_room_total - float(was_room_total_dec)) >= unrounded_tol:
+						return False
+					return True
+
+				def _matches_now_remainder() -> bool:
+					if not now_boundary:
+						return False
+					now_dates = sorted(now)
+					if any(d_key not in u_now for d_key in now_dates):
+						return False
+					now_prev_sum = Decimal(0)
+					for d_key in now_dates[:-1]:
+						now_b = flt(now[d_key].get("base_rate")) or flt(now[d_key].get("rate"))
+						if abs(now_b - float(u_now[d_key].quantize(unit_dec, rounding=ROUND_HALF_UP))) >= tol:
+							return False
+						now_prev_sum += _dec(now_b)
+					now_room_total_dec = sum((u_now[d_key] for d_key in now_dates), Decimal(0))
+					expected_now_last = float((now_room_total_dec - now_prev_sum).quantize(unit_dec, rounding=ROUND_HALF_UP))
+					return abs(new_base - expected_now_last) < tol
+
+				def _matches_legacy_half_tie() -> bool:
+					is_tie = abs(u_day - (u_day.quantize(unit_dec, rounding=ROUND_HALF_UP) - unit_dec / Decimal(2))) < Decimal("1e-9")
+					if not is_tie or abs(old_base - unadj_even) >= tol or abs(new_base - unadj_up) >= tol:
+						return False
+					u_was = _legacy_u_was()
+					if not u_was:
+						return False
+					was_room_total = float(sum(u_was.values(), Decimal(0)))
+					orig_room_total = _get_old_orig_room_total()
+					return orig_room_total is not None and abs(orig_room_total - was_room_total) < unrounded_tol
+
+				old_is_unadj = abs(old_base - unadj_up) < tol or abs(old_base - unadj_even) < tol
+				new_is_unadj = abs(new_base - unadj_up) < tol
+				base_ok = (
+					(new_is_unadj and _matches_old_remainder())
+					or (old_is_unadj and _matches_now_remainder())
+					or (_matches_old_remainder() and _matches_now_remainder())
+					or _matches_legacy_half_tie()
+				)
+				if not base_ok:
+					return True
+
 			if kind and val > 0:
-				rt_doc = _get_rt_doc()
-				over_cap = _dec(self.get("over_capacity_charge"))
 				tariff_night = contract_night_tariff(_get_tariff(), day, rate_plan=self.get("rate_plan"))
 				for row_obj, b_val in ((prev, old_base), (r, new_base)):
 					b_dec = _dec(b_val)
@@ -1681,6 +1797,7 @@ class Reservation(Document):
 			kind, value, source = effective[r["stay_date"]]
 			n = nightly.get(r["stay_date"], {"date": r["stay_date"]})
 			n.update(rate=flt(r["rate"]), gst_rate=flt(r["gst_rate"]), base_rate=flt(r["base_rate"]),
+			         quoted_base_rate=flt(r.get("quoted_base_rate")),
 			         discount_type=kind, discount_value=value, discount_source=source,
 			         discount_amount=flt(r["discount_amount"]))
 			out_nights.append(n)
@@ -1799,12 +1916,17 @@ class Reservation(Document):
 		and the last night absorbs rounding so the nights add up to the
 		quote's room total exactly - to the currency's decimals, never fewer
 		than two (pricing.night_rate_places)."""
-		from kamra.pricing import night_rate_places
+		from decimal import ROUND_HALF_UP, Decimal
+
+		from kamra.pricing import _dec, entry_rate, night_rate_places, rates_include_tax
+
 		places = night_rate_places(self.property)
+		unit = Decimal(1).scaleb(-places)
+		q9 = Decimal("0.000000001")
 		nightly = q.get("nightly") or []
-		plan_free = sum(float(n["rate"]) for n in nightly)
-		room_total = float(q.get("room_total") or 0)
-		factor = room_total / plan_free if plan_free else 1.0
+		plan_free = sum((_dec(n["rate"]) for n in nightly), Decimal(0))
+		room_total = _dec(q.get("room_total"))
+		factor = room_total / plan_free if plan_free else Decimal(1)
 		meal = 0.0
 		if self.meal_plan:
 			mp = frappe.db.get_value(
@@ -1812,25 +1934,35 @@ class Reservation(Document):
 				["price_per_adult", "price_per_child"], as_dict=True) or {}
 			meal = ((self.adults or 1) * float(mp.get("price_per_adult") or 0)
 			        + (self.children or 0) * float(mp.get("price_per_child") or 0))
-		from kamra.pricing import entry_rate, rates_include_tax
 		inclusive = rates_include_tax(self.property)
 		# what each night's cut is measured from: under an agreed rate that
 		# overrides the rate code, the rate code's amount; else the night's
 		# own base before the desk's discount
 		codes = self.rate_code_amounts() if flt(self.get("agreed_rate")) > 0 else {}
-		rows, running = [], 0.0
+		rows, running = [], Decimal(0)
 		for i, n in enumerate(nightly):
-			rate = round(float(n["planned_rate"]) if "planned_rate" in n else float(n["rate"]) * factor, places)
+			raw_rate = _dec(n["planned_rate"]) if "planned_rate" in n else _dec(n["rate"]) * factor
+			rate_dec = raw_rate.quantize(unit, rounding=ROUND_HALF_UP)
 			# a zero-priced room's spread nights carry planned_rate: they absorb too
 			if i == len(nightly) - 1 and (plan_free or "planned_rate" in n):
-				rate = round(room_total - running, places)
-			running += rate
+				rate_dec = (room_total - running).quantize(unit, rounding=ROUND_HALF_UP)
+			running += rate_dec
+			rate = float(rate_dec)
 			# gross, discount and net side by side (the discounted quote's
 			# nights are already at night_rate_places, so the discount is exact)
-			off = round(float(n.get("discount_amount") or 0), places)
+			off = float(_dec(n.get("discount_amount")).quantize(unit, rounding=ROUND_HALF_UP))
 			own = n.get("night_discount") or {}
 			code = codes.get(str(n["date"])) or flt(n.get("rate_code_amount")) or (
-				float(entry_rate(rate, n.get("gst_rate"), inclusive, places)) + off)
+				float(entry_rate(rate_dec, n.get("gst_rate"), inclusive, places)) + off)
+			base_dec = (
+				_dec(n.get("base_rate") or rate_dec).quantize(unit, rounding=ROUND_HALF_UP)
+				if off else rate_dec
+			)
+			quoted_base = (
+				float(_dec(n["quoted_base_rate"]).quantize(q9, rounding=ROUND_HALF_UP))
+				if n.get("quoted_base_rate") is not None
+				else float(raw_rate.quantize(q9, rounding=ROUND_HALF_UP))
+			)
 			rows.append({
 				"stay_date": n["date"],
 				"rate": rate,
@@ -1839,10 +1971,11 @@ class Reservation(Document):
 				"demand_premium_pct": float(n.get("demand_premium_pct") or 0),
 				# what the desk typed for the night (0: Kamra priced it)
 				"hand_price": float(n.get("typed_price") or 0),
-				"rate_code_amount": round(float(code), places),
+				"rate_code_amount": float(_dec(code).quantize(unit, rounding=ROUND_HALF_UP)),
 				# the night's base before tax (on a tax-inclusive slab the
 				# discount is on the gross, so the base is the quote's own)
-				"base_rate": round(float(n.get("base_rate") or rate), places) if off else rate,
+				"base_rate": float(base_dec),
+				"quoted_base_rate": quoted_base,
 				"discount_amount": off,
 				# the night's own Daily Details discount; blank follows the stay
 				"discount_type": own.get("discount_type"),
