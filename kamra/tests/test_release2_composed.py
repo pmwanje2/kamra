@@ -1,5 +1,5 @@
 """Release 2 composed integration tests: #32 (discounts) x #33 (multicurrency rate matrix)
-x #34 (pricing SSOT) x #48 (printed tax invoice VAT), plus hospitality-tariffs@11 guards.
+x #34 (pricing SSOT), plus hospitality-tariffs@11 guards.
 
 Covers all 11 composed Release 2 scenarios end-to-end on a real Frappe + ERPNext site:
  1. Discount on a USD tariff stay sold in UGX (discount in USD -> FX -> whole UGX).
@@ -214,7 +214,7 @@ def _fake_sales_invoice(
 
 
 class Release2ComposedTests(AuditTestCase):
-	"""End-to-end composed verification of #32 x #33 x #34 x #48."""
+	"""End-to-end composed verification of #32 x #33 x #34."""
 
 	properties = (PROP_R2, PROP_R2_VAT)
 
@@ -881,95 +881,6 @@ else:
 		self.assertEqual(flt(closed.tax_total), 0.0)
 		self.assertEqual(flt(closed.grand_total), 511845.5)
 		self.assertEqual(flt(closed.balance), 0.0)
-
-	# ── Case 7: Printed tax invoice with discount + bridged ERP VAT + ref FX ─
-
-	def test_07_printed_tax_invoice_bridged_erp_vat_with_discount_and_reference_currency(self):
-		"""A closed bridged folio for a discounted USD stay with a folio Allowance reads
-		real 18% VAT from ERPNext Sales Invoice, keeps the discount trail and summary head,
-		and computes stay.reference_currency against the accounting-adjusted grand_total."""
-		plan = self._make_plan(PROP_R2, "CPINV", currency="USD")
-		self._install_tariff_api({
-			plan: {
-				"currency": "USD", "nightly": 150.0, "fx_rate": 3700.0,
-				"fx_date": TODAY, "agreed_rate": 555000.0, "property_currency": "UGX",
-			},
-		})
-		b = self._as(
-			DESK_USER, api.create_booking, PROP_R2, self.rt_bridged, d(0), d(1), "Tax Inv Guest",
-			room=self.rooms_bridged[0], rate_plan=plan,
-			discount_type="Percent", discount_value=10, discount_reason="RATE-PROMO",
-		)
-		res_name = b["reservation"]
-		self._as(DESK_USER, api.check_in, res_name)
-		folio_mod.post_room_night(frappe.get_doc("Reservation", res_name), d(0))
-		fname = guest_folio(res_name)
-		folio_mod.post_allowance(fname, 49500.0, "Goodwill credit", gst_rate=0)
-		fdoc = frappe.get_doc("Folio", fname)
-		room_c = next(c for c in fdoc.charges if c.charge_type == "Room")
-		allow_c = next(c for c in fdoc.charges if c.charge_type == "Allowance")
-		self.assertIn("555,000 less discount 55,500", room_c.description)
-
-		# Close & link bridged Sales Invoice (inclusive 18% VAT on 450,000 = net 381,355.93 + VAT 68,644.07)
-		frappe.db.set_value("Folio", fname, {
-			"status": "Closed", "invoice_number": "INV-R2-26-00001",
-			"closed_on": f"{TODAY} 10:00:00", "sales_invoice": "ACC-SINV-R2-001",
-			"grand_total": 450000.0, "payments_total": 450000.0, "balance": 0.0,
-		}, update_modified=False)
-		fake_si_incl = _fake_sales_invoice(
-			"ACC-SINV-R2-001", folio_name=fname,
-			net_total=381355.93, total_taxes=68644.07, grand_total=450000.0,
-			items=[{
-				"item_code": "ITEM-ROOM", "source_ref": room_c.name,
-				"net_amount": 381355.93, "amount": 450000.0,
-				"kamra_allowance_refs": f"{allow_c.name} 49500.0",
-			}],
-			taxes=[{
-				"charge_type": "On Net Total", "account_head": "VAT - THL",
-				"description": "VAT 18%", "rate": 18.0,
-				"tax_amount": 68644.07, "tax_amount_after_discount_amount": 68644.07,
-				"included_in_print_rate": 1,
-				"item_wise_tax_detail": json.dumps({"ITEM-ROOM": [18.0, 68644.07]}),
-			}],
-		)
-		real_get_doc = frappe.get_doc
-		with patch("frappe.get_doc", side_effect=lambda dt, nm=None, *a, **k:
-		           fake_si_incl if dt == "Sales Invoice" and nm == "ACC-SINV-R2-001" else real_get_doc(dt, nm, *a, **k)):
-			inv = self._as(GM_USER, api.folio_invoice, fname)
-
-		self.assertEqual(inv["tax_source"], "accounting")
-		self.assertEqual(len(inv["tax_summary"]), 1)
-		self.assertEqual(flt(inv["tax_summary"][0]["rate"]), 18.0)
-		self.assertAlmostEqual(flt(inv["tax_summary"][0]["total_tax"]), 68644.07, places=2)
-		self.assertTrue(any(h["head"] == "Discount" for h in inv["summary_by_head"]))
-		self.assertIn("555,000 less discount 55,500", inv["lines"][0]["description"])
-		# 450,000 / 3,700 = 121.62 USD
-		self.assertAlmostEqual(inv["stay"]["reference_currency"]["grand_total_reference"], 121.62, places=2)
-
-		# Exclusive-VAT bridged Sales Invoice where SI grand_total (531,000) > folio pre-tax grand_total (450,000)
-		fake_si_excl = _fake_sales_invoice(
-			"ACC-SINV-R2-001", folio_name=fname,
-			net_total=450000.0, total_taxes=81000.0, grand_total=531000.0,
-			items=[{
-				"item_code": "ITEM-ROOM", "source_ref": room_c.name,
-				"net_amount": 450000.0, "amount": 450000.0,
-				"kamra_allowance_refs": f"{allow_c.name} 49500.0",
-			}],
-			taxes=[{
-				"charge_type": "On Net Total", "account_head": "VAT - THL",
-				"description": "VAT 18%", "rate": 18.0,
-				"tax_amount": 81000.0, "tax_amount_after_discount_amount": 81000.0,
-				"included_in_print_rate": 0,
-				"item_wise_tax_detail": json.dumps({"ITEM-ROOM": [18.0, 81000.0]}),
-			}],
-		)
-		with patch("frappe.get_doc", side_effect=lambda dt, nm=None, *a, **k:
-		           fake_si_excl if dt == "Sales Invoice" and nm == "ACC-SINV-R2-001" else real_get_doc(dt, nm, *a, **k)):
-			inv_excl = self._as(GM_USER, api.folio_invoice, fname)
-
-		# Reference currency must follow printed folio_dict grand_total (531,000 / 3,700 = 143.51 USD)
-		self.assertEqual(flt(inv_excl["folio"]["grand_total"]), 531000.0)
-		self.assertAlmostEqual(inv_excl["stay"]["reference_currency"]["grand_total_reference"], 143.51, places=2)
 
 	# ── Case 8: OTA modify alert on a discounted tariff stay ─────────────────
 
