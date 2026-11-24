@@ -184,14 +184,40 @@ export function moneyDigits(currency = cache.currency) {
   }
   return 2
 }
+export interface MoneyContext {
+  currency?: string | null
+  currency_symbol?: string | null
+  locale?: string | null
+}
+
 /** An amount with the currency's normal decimals, always the same count
  *  (2,27,255.40, never 2,27,255.4), so a column of figures lines up. */
-export const fmtAmount = (n: unknown, currency = cache.currency) => {
+export const fmtAmount = (
+  n: unknown,
+  currency = cache.currency,
+  numberLocale?: string | null,
+) => {
   const d = moneyDigits(currency)
-  return Number(n ?? 0).toLocaleString(cache.locale, { minimumFractionDigits: d, maximumFractionDigits: d })
+  const locStr =
+    numberLocale || (currency && currency !== cache.currency ? "en-US" : cache.locale)
+  return Number(n ?? 0).toLocaleString(locStr || "en-US", {
+    minimumFractionDigits: d,
+    maximumFractionDigits: d,
+  })
 }
-/** fmtAmount with the currency symbol in front. */
-export const fmtMoney = (n: unknown) => cache.currency_symbol + fmtAmount(n)
+/** fmtAmount with the currency symbol in front (document-scoped when ctx is passed). */
+export const fmtMoney = (n: unknown, ctx?: MoneyContext | null) => {
+  const currency = ctx?.currency || cache.currency
+  const symbol =
+    ctx && ctx.currency_symbol != null
+      ? ctx.currency_symbol
+      : ctx?.currency && ctx.currency !== cache.currency
+        ? `${ctx.currency} `
+        : cache.currency_symbol
+  const numLocale =
+    ctx?.locale || (ctx?.currency && ctx.currency !== cache.currency ? "en-US" : cache.locale)
+  return symbol + fmtAmount(n, currency, numLocale)
+}
 export const taxRates = () => cache.tax_rates
 export const taxLabel = () => cache.tax_label
 /** False where the hotel charges no tax: its only rate is 0% (a country

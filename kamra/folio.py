@@ -42,6 +42,11 @@ def _payment_entry_is_security_deposit(key: str | None) -> bool:
 	return frappe.db.get_value("Payment Entry", key, "kamra_payment_kind") == "Security Deposit"
 
 
+def _currency_places_of(folio) -> int:
+	from kamra.ledger import _currency_places
+	return _currency_places(folio.get("property") if hasattr(folio, "get") else getattr(folio, "property", None))
+
+
 def _security_deposit_row_ids(folio) -> set[int]:
 	"""Indices in `folio.payments` belonging to the Security Deposit liability chain.
 
@@ -98,7 +103,7 @@ def _security_deposit_row_ids(folio) -> set[int]:
 		):
 			sec_idx.add(idx)
 			sec_held += amt
-		elif non_dep_received <= 0.009 and sec_held > Decimal(0) and abs(amt) <= sec_held + Decimal("0.009"):
+		elif non_dep_received <= Decimal("0.5") * Decimal(1).scaleb(-_currency_places_of(folio)) and sec_held > Decimal(0) and abs(amt) <= sec_held + Decimal("0.5") * Decimal(1).scaleb(-_currency_places_of(folio)):
 			sec_idx.add(idx)
 			sec_held += amt
 	return sec_idx
@@ -1892,20 +1897,23 @@ def close_folio(folio_name: str) -> str:
 		from kamra import ledger as _ledger_mod
 		if hasattr(_ledger_mod, "sync_folio_rounding_ledger"):
 			_ledger_mod.sync_folio_rounding_ledger(folio)
-	balance = float(folio.balance or 0)
-	if abs(balance) > 0.01:
-		from kamra.localization import pack_for
+	from kamra.ledger import _currency_places, _round_currency
+	from kamra.localization import amount_text, pack_for
+	places = _currency_places(folio.property)
+	eps = 0.5 * (10 ** (-places))
+	balance = _round_currency(folio.balance or 0, places)
+	if abs(balance) > eps:
 		symbol = pack_for(folio.property).locale(
 			frappe.get_cached_doc("Property", folio.property)).get(
 			"currency_symbol", "")
 		if balance > 0:
 			frappe.throw(frappe._(
-				"Cannot close the folio: {0}{1:,.2f} is still owed. Collect "
+				"Cannot close the folio: {0}{1} is still owed. Collect "
 				"payment, or move the company's share to the city ledger, "
-				"first.").format(symbol, balance))
+				"first.").format(symbol, amount_text(folio.property, balance)))
 		frappe.throw(frappe._(
-			"Cannot close the folio: {0}{1:,.2f} is owed back to the guest. "
-			"Issue the refund first.").format(symbol, -balance))
+			"Cannot close the folio: {0}{1} is owed back to the guest. "
+			"Issue the refund first.").format(symbol, amount_text(folio.property, -balance)))
 	from frappe.model.naming import make_autoname
 
 	folio.status = "Closed"
@@ -2076,7 +2084,9 @@ def part_settle(folio_name: str) -> dict:
 	if folio.status == "Closed":
 		frappe.throw("This folio is already settled.")
 	_recalculate(folio, payments_only=True)
-	if round(folio.balance or 0, 2) != 0:
+	from kamra.ledger import _currency_places, _round_currency
+	places = _currency_places(folio.property)
+	if abs(_round_currency(folio.balance or 0, places)) > 0.5 * (10 ** (-places)):
 		frappe.throw("Settle the balance first - an interim invoice needs "
 		             "the folio fully paid.")
 	if not folio.charges:

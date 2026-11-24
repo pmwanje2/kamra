@@ -4,13 +4,15 @@
 
 import type { ReactNode } from "react"
 import type { FunctionStatus } from "../../lib/api"
-import { fmtMoney, locale } from "../../lib/money"
+import { fmtMoney, locale, type MoneyContext } from "../../lib/money"
 import { t as translate, useUILanguage, uiDateLocale } from "../../lib/i18n"
 
-export const inr = (n: unknown) => fmtMoney(n ?? 0)
+export type BanquetMoneyCtx = MoneyContext
+
+export const inr = (n: unknown, ctx?: BanquetMoneyCtx | null) => fmtMoney(n ?? 0, ctx)
 
 /** Money with currency minor units - totals on paper, where rounding would be noticed. */
-export const inrExact = (n: unknown) => fmtMoney(n ?? 0)
+export const inrExact = (n: unknown, ctx?: BanquetMoneyCtx | null) => fmtMoney(n ?? 0, ctx)
 
 export const STATUSES: FunctionStatus[] = [
   "Enquiry",

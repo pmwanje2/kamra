@@ -1916,11 +1916,21 @@ def refund_folio_payment(folio: str, amount: float | None = None,
 			        "balance": frappe.db.get_value("Folio", folio, "balance")}
 	doc = frappe.get_doc("Folio", folio)
 	from babel.numbers import get_currency_precision
-	from kamra.ledger import fx_to_home, home_currency, payment_rate, round_cents
+
+	from kamra.ledger import (
+		_currency_places,
+		_round_currency,
+		fx_to_home,
+		home_currency,
+		payment_rate,
+		round_cents,
+	)
 	from kamra.localization import FOREIGN_CURRENCY_TENDER_TYPES, money_text
 	from kamra.masters import default_mode_for_tender, payment_tender_type
 
 	home = home_currency(doc.property)
+	home_places = _currency_places(doc.property)
+	home_eps = 0.5 * (10 ** (-home_places))
 	req_ccy = (currency or "").strip().upper()
 	foreign = bool(req_ccy and req_ccy != home)
 	fx_meta: dict | None = None
@@ -1932,9 +1942,9 @@ def refund_folio_payment(folio: str, amount: float | None = None,
 		if pay.payment_kind == "Security Deposit":
 			frappe.throw(_("A security deposit is refunded from the stay's "
 			               "deposit (refund_deposit), not from the bill."))
-		left = round(float(pay.amount) + sum(
+		left = _round_currency(float(pay.amount) + sum(
 			float(p.amount or 0) for p in doc.payments
-			if p.get("refund_of") == payment_row), 2)
+			if p.get("refund_of") == payment_row), home_places)
 		if left <= 0:
 			frappe.throw(_("This payment is already refunded in full."))
 		pay_tender = payment_tender_type(pay.mode, doc.property)
@@ -1963,7 +1973,7 @@ def refund_folio_payment(folio: str, amount: float | None = None,
 				rate = r["rate"]
 				rate_date = r["rate_date"]
 				home_amt = r["home_amount"]
-			if home_amt > left + 0.005:
+			if home_amt > left + home_eps:
 				frappe.throw(_("Only {0} of this payment is left to refund.").format(
 					money_text(doc.property, left)))
 			fx_meta = {
@@ -1976,7 +1986,7 @@ def refund_folio_payment(folio: str, amount: float | None = None,
 		else:
 			if amount in (None, ""):
 				amount = left
-			if float(amount) > left + 0.005:
+			if float(amount) > left + home_eps:
 				frappe.throw(_("Only {0} of this payment is left to refund.").format(
 					money_text(doc.property, left)))
 			if not mode:
@@ -2062,7 +2072,9 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 	# money goes back only when the guest is in credit; a guest who still
 	# owes settles first. A security deposit release (ledger set) has its
 	# own balance check in kamra.deposit.
-	if not ledger and float(amount) > -float(doc.balance or 0) + 0.005:
+	from kamra.ledger import _currency_places
+	_refund_eps = 0.5 * (10 ** (-_currency_places(doc.property)))
+	if not ledger and float(amount) > -float(doc.balance or 0) + _refund_eps:
 		from kamra.localization import money_text
 		if float(doc.balance or 0) >= 0:
 			frappe.throw(_("The guest owes {0} - nothing is due back to refund.").format(
@@ -4429,16 +4441,18 @@ def folio_invoice(folio: str):
 			for rate, v in sorted(by_rate.items())
 		]
 	)
-	from kamra.ledger import _currency_places
+	from kamra.ledger import _currency_places, _round_currency
+	places = _currency_places(doc.property)
+	_prop_locale = pack.locale(prop)
 	return {
 		"folio": folio_dict,
 		"lines": lines,
 		"payments": payments,
-		"statement": _folio_statement(lines, payments, places=_currency_places(doc.property)),
+		"statement": _folio_statement(lines, payments, places=places),
 		"allocations": _folio_allocations(doc.name),
 		# what the issued credit notes on this invoice add up to: the most a
 		# new one may credit is the invoice total less this
-		"credited": round(float(credited_total(doc.name)) + float(acct_tax.get("erp_credited") or 0.0), 2),
+		"credited": _round_currency(float(credited_total(doc.name)) + float(acct_tax.get("erp_credited") or 0.0), places),
 		"bill_to": bill_to,
 		"statutory": statutory,
 		"fiscal": fiscal,
@@ -4465,7 +4479,9 @@ def folio_invoice(folio: str):
 			"accounting_tax_note": acct_tax["accounting_tax_note"],
 		},
 		"property": {
-			"currency": prop.currency or loc.default_currency(pack),
+			"currency": _prop_locale.get("currency") or prop.currency or loc.default_currency(pack),
+			"currency_symbol": _prop_locale.get("currency_symbol", ""),
+			"locale": _prop_locale.get("locale") or "en-US",
 			"name": prop.property_name, "legal_name": prop.legal_name,
 			"logo_url": prop.get("logo_url"),
 			"address_line": prop.address_line, "city": prop.city,
@@ -6374,7 +6390,7 @@ def _assert_settled(doc, credit_override_reason: str | None = None) -> list[dict
 		return []
 	from kamra.checkout import settlement_position
 	from kamra.folio import post_remaining_nights
-	from kamra.localization import pack_for
+	from kamra.localization import amount_text, pack_for
 
 	post_remaining_nights(doc)
 	symbol = pack_for(doc.property).locale(
@@ -6385,12 +6401,14 @@ def _assert_settled(doc, credit_override_reason: str | None = None) -> list[dict
 	owed, refund = position["owed"], position["refund_due"]
 	to_city_ledger = [(f, c) for f, c, _b in position["to_city_ledger"]]
 	if owed:
-		frappe.throw(_("Cannot check out: {0}{1:,.2f} is still owed. Collect payment "
-		               "or transfer it to the city ledger before departure.").format(symbol, owed),
+		frappe.throw(_("Cannot check out: {0}{1} is still owed. Collect payment "
+		               "or transfer it to the city ledger before departure.").format(
+			symbol, amount_text(doc.property, owed)),
 		             title=_("Settle before check-out"))
 	if refund:
-		frappe.throw(_("Cannot check out: the guest is owed {0}{1:,.2f}. Issue the "
-		               "refund before departure.").format(symbol, refund),
+		frappe.throw(_("Cannot check out: the guest is owed {0}{1}. Issue the "
+		               "refund before departure.").format(
+			symbol, amount_text(doc.property, refund)),
 		             title=_("Settle before check-out"))
 	# nothing moves until the guest's side is settled - and the company's
 	# credit is checked once for everything the stay bills to it
@@ -11791,9 +11809,24 @@ def linked_records(doctype: str, name: str):
 	       "group_name": None, "event": None, "event_type": None}
 
 	def folios_for(filters):
-		return frappe.get_all("Folio", filters=filters,
-			fields=["name", "folio_type", "status", "balance",
+		from kamra import localization as loc
+		rows = frappe.get_all("Folio", filters=filters,
+			fields=["name", "property", "folio_type", "status", "balance",
 			        "invoice_number"], order_by="creation asc")
+		cache: dict[str, dict] = {}
+		for row in rows:
+			p = row.get("property")
+			if p and p not in cache:
+				prop_doc = frappe.get_cached_doc("Property", p)
+				pl = loc.pack_for(p).locale(prop_doc)
+				cache[p] = {
+					"currency": pl.get("currency") or prop_doc.get("currency") or "",
+					"currency_symbol": pl.get("currency_symbol", ""),
+					"locale": pl.get("locale") or "en-US",
+				}
+			if p in cache:
+				row.update(cache[p])
+		return rows
 
 	if doctype == "Reservation":
 		r = frappe.db.get_value("Reservation", name,

@@ -596,7 +596,8 @@ export const getDefaultProperty = () =>
 
 // Active property - set by the header switcher, read at call time.
 let currentProperty =
-  localStorage.getItem("kamra_property") || (whiteLabel() ? "" : DEMO_PROPERTY)
+  (typeof localStorage !== "undefined" ? localStorage.getItem("kamra_property") : null) ||
+  (whiteLabel() ? "" : DEMO_PROPERTY)
 
 export function getCurrentProperty() {
   return currentProperty
@@ -604,7 +605,7 @@ export function getCurrentProperty() {
 
 export function setCurrentProperty(p: string) {
   currentProperty = p
-  localStorage.setItem("kamra_property", p)
+  if (typeof localStorage !== "undefined") localStorage.setItem("kamra_property", p)
 }
 
 export interface PropertyRow {
@@ -901,6 +902,10 @@ export interface FunctionAlert {
 export interface FunctionSheet {
   name: string
   property: string
+  currency?: string
+  currency_symbol?: string
+  locale?: string
+  tax_label?: string
   venue: string
   event_type: string
   event_name: string | null

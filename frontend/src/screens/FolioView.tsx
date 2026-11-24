@@ -82,6 +82,8 @@ interface InvoiceData {
   }
   property: {
     currency: string
+    currency_symbol?: string
+    locale?: string
     name: string
     legal_name: string | null
     logo_url: string | null
@@ -268,7 +270,7 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
 /** Kamra Verify: check the bill-to tax ID before the invoice goes out.
  *  Offered where the country pack has it (India: GSTIN); paid per check
  *  from the Kamra Connect wallet. */
-function VerifyTaxId({ taxId, name }: { taxId: string; name: string }) {
+function VerifyTaxId({ taxId, name, symbol }: { taxId: string; name: string; symbol?: string }) {
   const { t } = useT()
   const [busy, setBusy] = useState(false)
   const [res, setRes] = useState<{ ok: boolean; text: string } | null>(null)
@@ -286,7 +288,7 @@ function VerifyTaxId({ taxId, name }: { taxId: string; name: string }) {
               { property: getCurrentProperty(), tax_id: taxId, business_name: name })
             setRes({
               ok: r.valid && (r.status || "").toLowerCase() === "active",
-              text: `${r.valid ? r.legal_name || t("Valid") : t("Not a valid tax ID")}${r.status ? ` · ${r.status}` : ""} · ${cur()}${r.charged}`,
+              text: `${r.valid ? r.legal_name || t("Valid") : t("Not a valid tax ID")}${r.status ? ` · ${r.status}` : ""} · ${symbol ?? cur()}${r.charged}`,
             })
           } catch (e) {
             setRes({ ok: false, text: serverError(e) })
@@ -527,7 +529,16 @@ export default function FolioView() {
 
   const { folio, property, stay, gst_summary } = data
   const doc = data.document
-  const inr = (n: unknown) => fmtAmount(n ?? 0, home)
+  const docCurrency = property.currency || loc.currency
+  const docSymbol =
+    property.currency_symbol != null
+      ? property.currency_symbol
+      : property.currency && property.currency !== loc.currency
+        ? `${property.currency} `
+        : cur()
+  const docLocale =
+    property.locale || (property.currency && property.currency !== loc.currency ? "en-US" : loc.locale)
+  const inr = (n: unknown) => fmtAmount(n ?? 0, docCurrency, docLocale)
   const docTaxLabel = property.tax_label || taxLabel()
   // the server sends charges enriched with their service code (and on a
   // bridged site, the accounting invoice's own tax lines); fall back to the
@@ -590,7 +601,7 @@ export default function FolioView() {
                           (s.balance > 0 ? "text-amber-600" : "text-zinc-400")
                         }
                       >
-                        {s.balance < 0 ? `${t("Advance")} ` : ""}{cur()}{inr(Math.abs(s.balance))}
+                        {s.balance < 0 ? `${t("Advance")} ` : ""}{docSymbol}{inr(Math.abs(s.balance))}
                       </span>
                     </Link>
                     {canDelete && (
@@ -782,6 +793,7 @@ export default function FolioView() {
 
       {showCredit && !open && invoiced && (
         <InvoiceCorrectionDialog folio={folio} credited={data.credited ?? 0}
+          currency={docCurrency} currencySymbol={docSymbol} numberLocale={docLocale}
           onClose={() => setShowCredit(false)}
           onDone={() => { setShowCredit(false); load() }} />
       )}
@@ -824,7 +836,8 @@ export default function FolioView() {
 
       {stay.reservation && (
         <div className="mb-4 print:hidden">
-          <LinkedRecords doctype="Reservation" name={stay.reservation} />
+          <LinkedRecords doctype="Reservation" name={stay.reservation}
+            currency={docCurrency} currencySymbol={docSymbol} numberLocale={docLocale} />
         </div>
       )}
 
@@ -1007,7 +1020,7 @@ export default function FolioView() {
                 <span className="text-zinc-500">{" · "}{translate(property.tax_id_label ?? "Tax ID")}{" "}{data.bill_to.gstin}</span>
               )}
               {data.bill_to.gstin && loc.integrations.verify_tax_id && (
-                <VerifyTaxId taxId={data.bill_to.gstin} name={data.bill_to.name} />
+                <VerifyTaxId taxId={data.bill_to.gstin} name={data.bill_to.name} symbol={docSymbol} />
               )}
             </div>
           )}
@@ -1163,7 +1176,7 @@ export default function FolioView() {
                           {t("{n} line{s} · {cur}{amount} selected", {
                             n: sel.length,
                             s: sel.length > 1 ? "s" : "",
-                            cur: cur(),
+                            cur: docSymbol,
                             amount: inr(selTotal),
                           })}
                         </span>
@@ -1172,13 +1185,13 @@ export default function FolioView() {
                             <span>· {t("move only")}</span>
                             <input
                               className="w-24 rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs"
-                              aria-label={t("Part to move (percent, or {cur} before {tax})", { cur: cur(), tax: taxLabel() })}
+                              aria-label={t("Part to move (percent, or {cur} before {tax})", { cur: docSymbol, tax: docTaxLabel })}
                               placeholder={t("30% or 1500")}
                               value={partVal}
                               onChange={(e) => setPartVal(e.target.value)}
                             />
                             <span className="text-zinc-400">
-                              ({cur()} = {t("before {tax}", { tax: taxLabel() })})
+                              ({docSymbol} = {t("before {tax}", { tax: docTaxLabel })})
                             </span>
                           </span>
                         ) : one ? (
@@ -1199,15 +1212,15 @@ export default function FolioView() {
                       {partBad && (
                         <p className="mt-1.5 text-xs text-rose-600">
                           {t("Enter 1-99%, or a {cur} amount under the line's {cur}{amount} (before {tax}).", {
-                            cur: cur(),
+                            cur: docSymbol,
                             amount: inr(one!.amount),
-                            tax: taxLabel(),
+                            tax: docTaxLabel,
                           })}
                         </p>
                       )}
                       <div className="mt-2 flex flex-wrap items-center gap-1.5">
                         <span className="text-xs text-zinc-500">
-                          {t("Send {cur}{amount} to", { cur: cur(), amount: inr(movedTotal) })}
+                          {t("Send {cur}{amount} to", { cur: docSymbol, amount: inr(movedTotal) })}
                         </span>
                         {targets.map((s) => (
                           <button
@@ -1226,7 +1239,7 @@ export default function FolioView() {
                                   : "ml-1.5 text-zinc-400"
                               }
                             >
-                              {t("owes {cur}{amount}", { cur: cur(), amount: inr(s.balance) })}
+                              {t("owes {cur}{amount}", { cur: docSymbol, amount: inr(s.balance) })}
                             </span>
                           </button>
                         ))}
@@ -1261,10 +1274,10 @@ export default function FolioView() {
                           {doc?.service_code_label ?? t("SAC")}
                         </th>
                       )}
-                      <th className="py-2 pr-3 text-right">{t("Amount {cur}", { cur: cur() })}</th>
+                      <th className="py-2 pr-3 text-right">{t("Amount {cur}", { cur: docSymbol })}</th>
                       {showLineTax && <th className="py-2 pr-3 text-right">{docTaxLabel} %</th>}
-                      {showLineTax && <th className="py-2 pr-3 text-right">{docTaxLabel} {cur()}</th>}
-                      <th className="py-2 text-right">{t("Total {cur}", { cur: cur() })}</th>
+                      {showLineTax && <th className="py-2 pr-3 text-right">{docTaxLabel} {docSymbol}</th>}
+                      <th className="py-2 text-right">{t("Total {cur}", { cur: docSymbol })}</th>
                       {editable && (
                         <th className="py-2 pl-3 print:hidden" aria-label={t("Actions")} />
                       )}
@@ -1376,15 +1389,15 @@ export default function FolioView() {
                         </span>
                       </td>
                       <td className="py-1 text-right text-zinc-500">
-                        {cur()}{inr(h.amount)}
+                        {docSymbol}{inr(h.amount)}
                       </td>
                       {showLineTax && (
                         <td className="py-1 text-right text-zinc-400">
-                          + {cur()}{inr(h.tax)} {docTaxLabel.toLowerCase()}
+                          + {docSymbol}{inr(h.tax)} {docTaxLabel.toLowerCase()}
                         </td>
                       )}
                       <td className="py-1 text-right font-medium">
-                        {cur()}{inr(h.total)}
+                        {docSymbol}{inr(h.total)}
                       </td>
                     </tr>
                   ))}
@@ -1415,13 +1428,13 @@ export default function FolioView() {
                       <tr key={`${r.rate}-${idx}`}>
                         <td className="py-1.5 pr-3">{r.rate === 0 && Number(r.total_tax) !== 0 ? "—" : `${r.rate}%`}</td>
                         <td className="py-1.5 pr-3 text-right text-zinc-500">
-                          {t("taxable {cur}{amount}", { cur: cur(), amount: inr(r.taxable) })}
+                          {t("taxable {cur}{amount}", { cur: docSymbol, amount: inr(r.taxable) })}
                         </td>
                         <td className="py-1.5 text-right">
                           {r.parts
                             .map((x) => x.rate === 0
-                              ? `${x.label} ${cur()}${inr(x.amount)}`
-                              : `${x.label} @ ${x.rate}% ${cur()}${inr(x.amount)}`)
+                              ? `${x.label} ${docSymbol}${inr(x.amount)}`
+                              : `${x.label} @ ${x.rate}% ${docSymbol}${inr(x.amount)}`)
                             .join(" · ")}
                         </td>
                       </tr>
@@ -1432,19 +1445,19 @@ export default function FolioView() {
             </div> : <div />}
             <div className="space-y-1.5 text-sm sm:text-right">
               <p className="text-zinc-500">
-                {t("Charges")}: <span className="text-zinc-900">{cur()}{inr(folio.charges_total)}</span>
+                {t("Charges")}: <span className="text-zinc-900">{docSymbol}{inr(folio.charges_total)}</span>
               </p>
               {showLineTax && (
                 <p className="text-zinc-500">
-                  {docTaxLabel}: <span className="text-zinc-900">{cur()}{inr(folio.tax_total)}</span>
+                  {docTaxLabel}: <span className="text-zinc-900">{docSymbol}{inr(folio.tax_total)}</span>
                 </p>
               )}
               <p className="text-lg font-semibold">
-                {t("Grand total")}: {cur()}{inr(folio.grand_total)}
+                {t("Grand total")}: {docSymbol}{inr(folio.grand_total)}
               </p>
               {(data.credited ?? 0) > 0 && (
                 <p className="text-sm font-medium text-rose-600">
-                  {t("Credited")}: −{cur()}{inr(data.credited)}
+                  {t("Credited")}: −{docSymbol}{inr(data.credited)}
                 </p>
               )}
               {doc?.amount_in_words && (
@@ -1486,7 +1499,7 @@ export default function FolioView() {
                 </div>
               )}
               <p className="text-zinc-500">
-                {t("Paid")}: {cur()}{inr(folio.payments_total)} ·{" "}
+                {t("Paid")}: {docSymbol}{inr(folio.payments_total)} ·{" "}
                 {/* paid more than charged so far: that money is the guest's advance */}
                 {folio.balance < 0 ? t("Advance") : t("Balance")}:{" "}
                 <span
@@ -1496,7 +1509,7 @@ export default function FolioView() {
                       : "font-medium text-emerald-600"
                   }
                 >
-                  {cur()}{inr(Math.abs(folio.balance))}
+                  {docSymbol}{inr(Math.abs(folio.balance))}
                 </span>
               </p>
             </div>
@@ -1597,7 +1610,7 @@ export default function FolioView() {
               <input
                 className={`${inputCls} w-24`}
                 type="number"
-                placeholder={translate(`${cur()}`)}
+                placeholder={translate(`${docSymbol}`)}
                 value={charge.amount}
                 onChange={(e) => setCharge({ ...charge, amount: e.target.value })}
               />
@@ -1609,13 +1622,13 @@ export default function FolioView() {
                   className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-sm text-zinc-600"
                   title={t("Food & beverage is taxed at the property's F&B rate.")}
                 >
-                  {t("{tax} {rate}%", { tax: taxLabel(), rate: fixedRate })}
+                  {t("{tax} {rate}%", { tax: docTaxLabel, rate: fixedRate })}
                   <span className="ml-1 text-xs text-zinc-400">{t("(F&B rate)")}</span>
                 </span>
               ) : (
                 <select
                   className={inputCls}
-                  aria-label={t("{tax} rate", { tax: taxLabel() })}
+                  aria-label={t("{tax} rate", { tax: docTaxLabel })}
                   value={charge.gst_rate}
                   onChange={(e) => {
                     taxPicked.current = true
@@ -1624,7 +1637,7 @@ export default function FolioView() {
                 >
                   {rates.map((n) => String(n)).map((r) => (
                     <option key={r} value={r}>
-                      {t("{tax} {rate}%", { tax: taxLabel(), rate: r })}
+                      {t("{tax} {rate}%", { tax: docTaxLabel, rate: r })}
                     </option>
                   ))}
                 </select>
@@ -1660,6 +1673,7 @@ export default function FolioView() {
                 {t("Post")}
               </Button>
               <FolioDiscount folio={folio.name} adjustCodes={adjustCodes} act={act}
+                currency={docCurrency} currencySymbol={docSymbol} numberLocale={docLocale}
                 onAdvanceBill={stay?.reservation ? advanceBill : undefined}
                 refreshKey={data}
                 onPosted={(pending) => {
@@ -1679,7 +1693,7 @@ export default function FolioView() {
                   <input
                     className={`${inputCls} w-24`}
                     type="number"
-                    placeholder={translate(`${cur()}`)}
+                    placeholder={translate(`${docSymbol}`)}
                     value={allowance.amount}
                     onChange={(e) =>
                       setAllowance({ ...allowance, amount: e.target.value })
@@ -1695,7 +1709,7 @@ export default function FolioView() {
                   >
                     {rates.map((n) => String(n)).map((r) => (
                       <option key={r} value={r}>
-                        {t("{tax} {rate}%", { tax: taxLabel(), rate: r })}
+                        {t("{tax} {rate}%", { tax: docTaxLabel, rate: r })}
                       </option>
                     ))}
                   </select>
@@ -1770,6 +1784,7 @@ export default function FolioView() {
                 {allowanceNote && <p className="mt-2 text-xs text-amber-700">{allowanceNote}</p>}
                 <div className="mt-2">
                   <AllowanceRequests property={folio.property ?? getCurrentProperty()} folio={folio.name}
+                    currency={docCurrency} currencySymbol={docSymbol} numberLocale={docLocale}
                     refreshKey={allowanceKey} onChanged={load} />
                 </div>
               </div>

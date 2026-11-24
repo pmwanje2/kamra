@@ -474,6 +474,13 @@ def function_sheet(function: str):
 			"Group Booking", doc.group_booking,
 			["name", "group_name", "check_in_date", "check_out_date",
 			 "status"], as_dict=True)
+	from kamra import localization as loc
+	prop_doc = frappe.get_cached_doc("Property", doc.property)
+	prop_loc = loc.pack_for(doc.property).locale(prop_doc)
+	out["currency"] = prop_loc.get("currency") or prop_doc.get("currency") or ""
+	out["currency_symbol"] = prop_loc.get("currency_symbol", "")
+	out["locale"] = prop_loc.get("locale") or "en-US"
+	out["tax_label"] = prop_loc.get("tax_label") or "Tax"
 	out["next_actions"] = _function_alerts(doc)
 	out["fiscal_bridge"] = 1 if _fiscal_bridge() else 0
 	out["event_folio"] = doc.folio if doc.folio and frappe.db.get_value(
@@ -523,9 +530,35 @@ def update_function(function: str, fields):
 	        "balance_due": doc.balance_due}
 
 
+def _settled_folio_of(doc) -> str | None:
+	"""Return the linked Folio name if it is already closed or invoiced, else None."""
+	fields = ["name", "status", "invoice_number"]
+	if frappe.db.has_column("Folio", "sales_invoice"):
+		fields.append("sales_invoice")
+	candidates = []
+	if doc.get("folio"):
+		row = frappe.db.get_value("Folio", doc.folio, fields, as_dict=True)
+		if row:
+			candidates.append(row)
+	if not candidates and doc.get("name"):
+		candidates.extend(
+			frappe.get_all("Folio", filters={"venue_booking": doc.name}, fields=fields)
+		)
+	for f in candidates:
+		if f.get("status") == "Closed" or f.get("invoice_number") or f.get("sales_invoice"):
+			return f["name"]
+	return None
+
+
 def _guard_closed(doc):
 	if doc.status == "Completed":
 		frappe.throw(_("This function is closed. Reopen it before editing."))
+	settled_folio = _settled_folio_of(doc)
+	if settled_folio:
+		frappe.throw(
+			_("Event folio {0} is already closed. Changes to a settled function are not allowed.")
+			.format(settled_folio)
+		)
 
 
 # ══ the group it rides with ══════════════════════════════════════════════
@@ -626,6 +659,12 @@ def set_status(function: str, status: str, reason: str | None = None,
 	if doc.status == "Completed":
 		frappe.throw(_("This function is closed. Reopen it (with a reason) "
 		              "before moving it."))
+	settled_folio = _settled_folio_of(doc)
+	if settled_folio:
+		frappe.throw(
+			_("Event folio {0} is already closed. Status changes on a settled function are not allowed.")
+			.format(settled_folio)
+		)
 	allowed = TRANSITIONS.get(doc.status, ())
 	if status not in allowed:
 		frappe.throw(_("A {0} function can't go straight to {1}. From here: "
@@ -885,6 +924,12 @@ def set_payment_terms(function: str, terms, note: str | None = None):
 	follows the quote as it moves; one stated as an amount is a number both
 	sides agreed and stays put."""
 	doc = _fn(function)
+	settled_folio = _settled_folio_of(doc)
+	if settled_folio:
+		frappe.throw(
+			_("Event folio {0} is already closed. Changes to a settled function are not allowed.")
+			.format(settled_folio)
+		)
 	doc.set("payment_terms", [])
 	for t in _rows(terms):
 		if not (t.get("milestone") or "").strip():
@@ -953,6 +998,12 @@ def record_receipt(function: str, amount: float, mode: str = "Bank Transfer",
 	if kind not in ("Advance", "Payment", "Security Deposit", "Refund"):
 		frappe.throw(_("Unknown receipt kind: {0}").format(kind))
 	doc = _fn(function)
+	settled_folio = _settled_folio_of(doc)
+	if settled_folio:
+		frappe.throw(
+			_("Event folio {0} is already closed. Record adjustments on a new folio instead.")
+			.format(settled_folio)
+		)
 	if _fiscal_bridge():
 		return _receipt_on_folio(doc, float(amount), mode, kind, reference,
 		                         settle_term, pin)
@@ -1429,8 +1480,12 @@ def banquet_document(function: str, kind: str = "quote"):
 	from kamra import localization as loc
 
 	pack = loc.pack_for(doc.property)
-	ctx = pack.invoice_context(frappe.get_cached_doc("Property", doc.property))
 	prop_doc = frappe.get_cached_doc("Property", doc.property)
+	ctx = pack.invoice_context(prop_doc)
+	prop_loc = pack.locale(prop_doc)
+	prop["currency"] = prop_loc.get("currency") or prop_doc.get("currency") or ""
+	prop["currency_symbol"] = prop_loc.get("currency_symbol", "")
+	prop["locale"] = prop_loc.get("locale") or "en-US"
 
 	# the number a customer quotes back at you - each document has its own
 	number = {
@@ -1667,6 +1722,12 @@ def generate_quote(function: str, valid_days: int = 15,
 	"""Stamp a quotation. Bumps the version, dates it, and snapshots what
 	it was worth - so 'the price we sent on the 3rd' is answerable."""
 	doc = _fn(function)
+	settled_folio = _settled_folio_of(doc)
+	if settled_folio:
+		frappe.throw(
+			_("Event folio {0} is already closed. Quotes cannot be re-issued for a settled function.")
+			.format(settled_folio)
+		)
 	if not doc.items:
 		frappe.throw(_("There's nothing to quote yet - put some lines on it."))
 	doc.quote_version = int(doc.quote_version or 0) + 1
@@ -1850,14 +1911,17 @@ def post_to_folio(function: str, folio: str | None = None):
 	sc_amount = 0.0
 	sc_gst = 0.0
 	if float(doc.service_charge or 0) > 0:
+		from kamra.ledger import _currency_places, _round_currency
+		sc_places = _currency_places(doc.property)
+		sc_eps = 0.5 * (10 ** (-sc_places))
 		sc_all = sum(float(r.net_amount or 0) for r in lines if r.item_type in SERVICE_CHARGE_TYPES)
 		sc_post = [r for r in postable if r.item_type in SERVICE_CHARGE_TYPES]
 		sc_post_base = sum(float(r.net_amount or 0) for r in sc_post)
 		if sc_all > 0 and sc_post_base > 0:
 			sc_amount = (
 				float(doc.service_charge)
-				if abs(sc_post_base - sc_all) < 0.005
-				else round(float(doc.service_charge) * sc_post_base / sc_all, 2)
+				if abs(sc_post_base - sc_all) < sc_eps
+				else _round_currency(float(doc.service_charge) * sc_post_base / sc_all, sc_places)
 			)
 			sc_gst = max((float(r.gst_rate or 0) for r in sc_post), default=0.0)
 
@@ -1994,15 +2058,13 @@ def close_out(function: str, damage_amount: float = 0,
 	damage = float(damage_amount or 0)
 	if damage < 0:
 		frappe.throw(_("Damages can't be negative."))
-	folio_closed = bool(
-		doc.get("folio")
-		and frappe.db.get_value("Folio", doc.folio, "status") == "Closed"
-	)
+	settled_folio = _settled_folio_of(doc)
+	folio_closed = bool(settled_folio)
 	if folio_closed and damage > 0:
 		frappe.throw(_(
 			"Event folio {0} is already closed. Post post-close damages on a "
 			"supplemental charge or folio instead of modifying a settled function."
-		).format(doc.folio))
+		).format(settled_folio))
 	if damage and not (damage_note or "").strip():
 		frappe.throw(_("Say what was damaged - a deduction the customer "
 		              "can't see the reason for is a dispute waiting."))
@@ -2022,7 +2084,7 @@ def close_out(function: str, damage_amount: float = 0,
 		frappe.throw(_(
 			"Event folio {0} is already closed. Refund the remaining deposit on "
 			"the folio instead of adding a close-out refund receipt."
-		).format(doc.folio))
+		).format(settled_folio))
 	prev_grand = float(doc.grand_total or 0)
 	if pax_actual is not None:
 		doc.pax_actual = int(pax_actual)
@@ -2058,7 +2120,7 @@ def close_out(function: str, damage_amount: float = 0,
 			frappe.throw(_(
 				"Event folio {0} is already closed, so close-out cannot change the "
 				"settled function total."
-			).format(doc.folio))
+			).format(settled_folio))
 	doc.status = "Completed"
 	doc.save()
 	from kamra.savings import log_action
@@ -2120,10 +2182,10 @@ def reopen_function(function: str, reason: str):
 		              "this one is {0}.").format(doc.status))
 	if not (reason or "").strip():
 		frappe.throw(_("Say why - reopening a closed function needs a reason."))
-	if doc.posted_to_folio:
+	if doc.posted_to_folio or _settled_folio_of(doc):
 		frappe.throw(_("This function is already billed to {0}. Correct the "
 		              "bill there (void / reverse) rather than reopening.")
-		             .format(doc.folio))
+		             .format(doc.folio or _settled_folio_of(doc)))
 	reason = reason.strip()[:500]
 	doc.status = "Confirmed"
 	note = _("Reopened by {0}: {1}").format(frappe.session.user, reason)
@@ -2157,6 +2219,10 @@ def receipt_document(function: str, receipt: str):
 
 	pack = loc.pack_for(doc.property)
 	prop_doc = frappe.get_cached_doc("Property", doc.property)
+	prop_loc = pack.locale(prop_doc)
+	prop["currency"] = prop_loc.get("currency") or prop_doc.get("currency") or ""
+	prop["currency_symbol"] = prop_loc.get("currency_symbol", "")
+	prop["locale"] = prop_loc.get("locale") or "en-US"
 	return {
 		"header": {
 			"kind": "receipt", "title": _("Receipt"),
@@ -2894,7 +2960,13 @@ def function_economics(function: str):
 	"""The P&L of one function: what it sold, what it cost, what the input
 	credit is worth, and what's left - plus where the quote and the night
 	disagreed."""
+	from kamra import localization as loc
+	from kamra.ledger import _currency_places, _round_currency
+
 	doc = _fn(function)
+	places = _currency_places(doc.property)
+	prop_doc = frappe.get_cached_doc("Property", doc.property)
+	prop_loc = loc.pack_for(doc.property).locale(prop_doc)
 	lines = []
 	for r in doc.items:
 		quoted = float(r.qty or 0)
@@ -2907,13 +2979,16 @@ def function_economics(function: str):
 			"rate": r.rate, "amount": r.amount, "net_amount": r.net_amount,
 			"cost_rate": r.cost_rate, "cost_amount": r.cost_amount,
 			"input_tax": r.input_tax,
-			"margin": round(float(r.net_amount or 0) - float(r.cost_amount or 0), 2),
+			"margin": _round_currency(float(r.net_amount or 0) - float(r.cost_amount or 0), places),
 			"chargeable": bool(r.chargeable),
 			"is_supplementary": bool(r.is_supplementary),
 		})
 	supplementary = [x for x in lines if x["is_supplementary"]]
 	return {
 		"function": doc.name, "customer_name": doc.customer_name,
+		"currency": prop_loc.get("currency") or prop_doc.get("currency") or "",
+		"currency_symbol": prop_loc.get("currency_symbol", ""),
+		"locale": prop_loc.get("locale") or "en-US",
 		"pax": doc.billable_pax,
 		"revenue": {
 			"subtotal": doc.subtotal, "discount": doc.discount_amount,
@@ -2921,8 +2996,8 @@ def function_economics(function: str):
 			"taxable": doc.taxable_amount, "tax": doc.tax_amount,
 			"grand_total": doc.grand_total,
 			"complimentary": doc.non_chargeable_value,
-			"supplementary": round(sum(x["net_amount"] or 0
-			                           for x in supplementary), 2),
+			"supplementary": _round_currency(sum(x["net_amount"] or 0
+			                                     for x in supplementary), places),
 		},
 		"cost": {
 			"food": doc.food_cost, "service": doc.service_cost,
@@ -2931,7 +3006,7 @@ def function_economics(function: str):
 		},
 		"margin": {
 			"gross": doc.gross_margin, "percent": doc.margin_percent,
-			"per_pax": round(float(doc.gross_margin or 0) / doc.billable_pax, 2)
+			"per_pax": _round_currency(float(doc.gross_margin or 0) / doc.billable_pax, places)
 			if doc.billable_pax else 0,
 		},
 		"lines": lines,
@@ -2951,6 +3026,7 @@ def link_customer(function: str, guest: str | None = None):
 	'they complained about the AC last time'. With it, the banquet office
 	sees the same person the front desk does."""
 	doc = _fn(function)
+	_guard_closed(doc)
 	if guest:
 		if not frappe.db.exists("Guest", guest):
 			frappe.throw(_("No such guest."))

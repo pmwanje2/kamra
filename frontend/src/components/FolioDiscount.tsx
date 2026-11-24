@@ -17,7 +17,7 @@ const inputCls =
 
 interface Preview { total: number; label: string; lines: { nights: number; base: number }[] }
 
-export default function FolioDiscount({ folio, adjustCodes: given, act, onPosted, onAdvanceBill, refreshKey }: {
+export default function FolioDiscount({ folio, adjustCodes: given, act, onPosted, onAdvanceBill, refreshKey, currency, currencySymbol, numberLocale }: {
   folio: string
   /** The Adjust reason codes; fetched here when the caller has none. */
   adjustCodes?: { name: string; description: string }[]
@@ -28,8 +28,13 @@ export default function FolioDiscount({ folio, adjustCodes: given, act, onPosted
   onAdvanceBill?: () => void
   /** Changes when the folio reloads (after Advance bill posts nights), so the preview re-runs. */
   refreshKey?: unknown
+  currency?: string | null
+  currencySymbol?: string | null
+  numberLocale?: string | null
 }) {
   const { t } = useT()
+  const sym = currencySymbol ?? cur()
+  const fmt = (n: unknown) => fmtAmount(n, currency || undefined, numberLocale || undefined)
   const blank = { kind: "Percent", value: "", basis: "Stay", code: "", reason: "", reason_code: "" }
   const [d, setD] = useState(blank)
   const [preview, setPreview] = useState<Preview | null>(null)
@@ -82,10 +87,10 @@ export default function FolioDiscount({ folio, adjustCodes: given, act, onPosted
         <select className={inputCls} aria-label={t("Discount type")} value={d.kind} disabled={!!promo}
           onChange={(e) => setD({ ...d, kind: e.target.value })}>
           <option value="Percent">{t("Percent (%)")}</option>
-          <option value="Amount">{t("Amount ({cur})", { cur: cur().trim() })}</option>
+          <option value="Amount">{t("Amount ({cur})", { cur: sym.trim() })}</option>
         </select>
         <input className={`${inputCls} w-24`} type="number" min="0" disabled={!!promo}
-          placeholder={d.kind === "Percent" ? "%" : cur()} aria-label={t("Discount")}
+          placeholder={d.kind === "Percent" ? "%" : sym} aria-label={t("Discount")}
           value={d.value} onChange={(e) => setD({ ...d, value: e.target.value })} />
         {d.kind === "Amount" && !promo && (
           <select className={inputCls} aria-label={t("Applies to")} value={d.basis}
@@ -140,9 +145,9 @@ export default function FolioDiscount({ folio, adjustCodes: given, act, onPosted
         <p className="mt-2 text-xs text-zinc-600">
           {t("{label}: {amount} off {n} room nights ({base}), before tax", {
             label: preview.label,
-            amount: `${cur()}${fmtAmount(preview.total)}`,
+            amount: `${sym}${fmt(preview.total)}`,
             n: nights,
-            base: `${cur()}${fmtAmount(preview.lines.reduce((s, l) => s + l.base, 0))}`,
+            base: `${sym}${fmt(preview.lines.reduce((s, l) => s + l.base, 0))}`,
           })}
         </p>
       )}
