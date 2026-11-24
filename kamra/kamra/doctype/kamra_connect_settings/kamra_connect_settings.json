@@ -20,13 +20,13 @@
    "fieldtype": "Data",
    "label": "Hub URL",
    "default": "https://hub.kamrapms.com",
-   "description": "Where Kamra Verify checks run. Leave as is unless you run your own hub."
+   "description": "Where ID and tax verification checks run. Leave as is unless you run your own hub."
   },
   {
    "fieldname": "connect_key",
    "fieldtype": "Password",
    "label": "Connect key",
-   "description": "Issued by Kamra or a partner. Kamra Verify checks are charged to this install's Connect wallet."
+   "description": "Issued by the verification provider or a partner. Verification checks are charged to this install's Connect wallet."
   },
   {
    "fieldname": "linked",

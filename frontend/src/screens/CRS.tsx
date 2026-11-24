@@ -486,9 +486,6 @@ export default function CRS() {
 }
 
 
-const REASONS = ["Guest request", "Change of plans", "Duplicate booking",
-  "Payment failed", "Weather / travel disruption", "Booked elsewhere", "Other"]
-
 /** One trip: legs in date order with their status and money, the
  * confirmation to print, and cancelling the whole trip. A single stay is
  * changed, paid or cancelled from its own reservation. */
@@ -496,10 +493,13 @@ function TripSheet({ name, onClose, onChanged }: { name: string; onClose: () => 
   const { t } = useT()
   const [d, setD] = useState<Itinerary | null>(null)
   const [preview, setPreview] = useState<CancelPreview | null>(null)
-  const [reason, setReason] = useState(REASONS[0])
+  const [picked, setReason] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const loc = useLocale()
+  // the hotel's Cancellation Reason codes; the first is the default
+  const reasons = loc.cancellation_reasons ?? []
+  const reason = picked || reasons[0]?.value || ""
   const { ensureUnlocked } = useCashierAuth()
   const [adv, setAdv] = useState<{ amount: string; mode: string; plan: AdvancePlan | null; key: string } | null>(null)
 
@@ -672,7 +672,7 @@ function TripSheet({ name, onClose, onChanged }: { name: string; onClose: () => 
                 </p>
               )}
               <select className={inputCls} value={reason} onChange={(e) => setReason(e.target.value)}>
-                {REASONS.map((r) => <option key={r} value={r}>{t(r)}</option>)}
+                {reasons.map((r) => <option key={r.value} value={r.value}>{t(r.label)}</option>)}
               </select>
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setPreview(null)}>{t("Keep trip")}</Button>

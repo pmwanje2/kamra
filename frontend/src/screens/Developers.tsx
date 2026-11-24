@@ -9,6 +9,7 @@ import {
 } from "../lib/api"
 import { serverError } from "../lib/resource"
 import { upstreamDocs, upstreamRepo } from "../lib/brand"
+import { toFullPath } from "../lib/routing"
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Button } from "../components/ui/button"
 import { t as translate, useUILanguage } from "../lib/i18n"
@@ -254,7 +255,7 @@ export default function Developers() {
         <CardHeader>
           <CardTitle>{translate("Connect an AI agent (MCP)")}</CardTitle>
           <p className="mt-0.5 text-xs text-zinc-400">{translate("Point Claude at this property over MCP. Staff should use")}{" "}
-            <a href="/kamra/assistant" className="font-medium text-brand-700 hover:underline">{translate("{assistant} → AI Provider")}</a>{translate(". The key above is for unattended / service integrations.")}</p>
+            <a href={toFullPath("/assistant")} className="font-medium text-brand-700 hover:underline">{translate("{assistant} → AI Provider")}</a>{translate(". The key above is for unattended / service integrations.")}</p>
         </CardHeader>
         <CardContent>
           <pre className="overflow-x-auto rounded-lg bg-zinc-100 p-3 text-xs leading-relaxed text-zinc-700">

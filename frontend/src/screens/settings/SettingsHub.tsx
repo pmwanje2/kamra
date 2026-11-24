@@ -8,6 +8,7 @@ import {
   CalendarRange,
   ClipboardCheck,
   Code2,
+  Compass,
   CreditCard,
   ExternalLink,
   FileCheck2,
@@ -20,31 +21,37 @@ import {
   ScrollText,
   Search,
   ShieldCheck,
+  Tag,
   ToggleRight,
   Users,
   UtensilsCrossed,
+  Wallet,
   Webhook,
+  XCircle,
   type LucideIcon,
 } from "lucide-react"
 
 import { Badge } from "../../components/ui/badge"
-import { call, getCurrentProperty } from "../../lib/api"
+import { call, getCurrentProperty, isTaxUndetermined, TAX_NOT_SET_UP_MSG } from "../../lib/api"
 import { roleLabel, upstreamOnly, whiteLabel } from "../../lib/brand"
-import { useT, t as translate } from "../../lib/i18n"
-import { useLocale } from "../../lib/money"
+import { useOfferedLanguages, useT, t as translate } from "../../lib/i18n"
+import { loadLocale, useLocale } from "../../lib/money"
 import { serverError } from "../../lib/resource"
 import { cn } from "../../lib/utils"
+import ConfiguredScreen, { type ConfigName } from "../ConfiguredScreen"
 import { ModulesPage, StaffPage } from "./AccessPages"
 import { settingsSchema, setModuleEnabled, type SettingsSchema, type SettingsModule } from "./api"
 import {
   AgentAccessCard,
   AiSection,
   AppearanceCard,
+  CashierLimitsCard,
   CheckInStepsCard,
   NightAuditScheduleCard,
   HurdleRatesCard,
   KamraVerifyCard,
   LaundryRatesCard,
+  LOCALES,
   PaymentsSection,
   SpeedCheckCard,
   KitchenPrintersCard,
@@ -79,15 +86,54 @@ interface CustomPage {
   id: string
   title: string
   description: string
-  group: "organisation" | "access" | "integrations" | "personal"
+  group: "organisation" | "configuration" | "access" | "integrations" | "personal"
   icon: LucideIcon
   keywords: string
+}
+
+const MASTER_CONFIG_BY_PAGE: Record<string, ConfigName> = {
+  "market-codes": "marketCodesConfig",
+  "origin-codes": "originCodesConfig",
+  "booking-types": "bookingTypesConfig",
+  "booker-relations": "bookerRelationsConfig",
+  "cancellation-reasons": "cancellationReasonsConfig",
+  "payment-methods": "paymentMethodsConfig",
+  "meal-plan-codes": "mealPlanCodesConfig",
+  "payer-types": "payerTypesConfig",
+  "check-in-requests": "checkInRequestsConfig",
 }
 
 const CUSTOM_PAGES: CustomPage[] = [
   { id: "languages", title: "Languages", group: "organisation", icon: Languages,
     description: "Which languages sign-in, the staff app and guest pages offer.",
     keywords: "language idioma español arabic portuguese rtl enable disable locale translation" },
+  { id: "market-codes", title: "Market Codes", group: "configuration", icon: Tag,
+    description: "Market segments used on reservations and revenue reports.",
+    keywords: "market code segment corporate leisure wholesale mice group" },
+  { id: "origin-codes", title: "Origin Codes", group: "configuration", icon: Compass,
+    description: "Booking origins recorded on reservations (Direct, Walk-in, OTA, Travel Agent).",
+    keywords: "origin code booking source channel walk-in direct ota" },
+  { id: "booking-types", title: "Booking Types", group: "configuration", icon: BedDouble,
+    description: "Stay categories such as Overnight or Day Use.",
+    keywords: "booking type overnight day use stay category" },
+  { id: "booker-relations", title: "Booker Relations", group: "configuration", icon: Users,
+    description: "Relationship of the person making a booking on a guest's behalf.",
+    keywords: "booker relation assistant travel desk family agent" },
+  { id: "cancellation-reasons", title: "Cancellation Reasons", group: "configuration", icon: XCircle,
+    description: "Reasons recorded when a reservation is cancelled.",
+    keywords: "cancellation reason cancel code duplicate plans weather" },
+  { id: "payment-methods", title: "Payment Methods", group: "configuration", icon: Wallet,
+    description: "Tender types and property payment methods offered at the desk and on folios.",
+    keywords: "payment method tender mode cash card mobile money bank transfer voucher" },
+  { id: "meal-plan-codes", title: "Meal Plan Codes", group: "configuration", icon: UtensilsCrossed,
+    description: "Board codes linked from property meal plans (EP, CP, MAP, AP).",
+    keywords: "meal plan code board ep cp map ap breakfast half full" },
+  { id: "payer-types", title: "Payer Types", group: "configuration", icon: ScrollText,
+    description: "Billing responsibility options confirmed during check-in.",
+    keywords: "payer type billing guest company split embassy" },
+  { id: "check-in-requests", title: "Check-in Requests", group: "configuration", icon: ClipboardCheck,
+    description: "Quick guest request presets offered during check-in.",
+    keywords: "check-in request preset ticket housekeeping concierge extra bed transfer" },
   { id: "staff", title: "Staff & access", group: "access", icon: Users,
     description: "Who can sign in, what each person can do and which properties they reach.",
     keywords: "users people invite roles permissions deactivate cashier pin reset team employees matrix rights" },
@@ -119,6 +165,7 @@ const CUSTOM_PAGES: CustomPage[] = [
 
 const GROUPS: { id: string; label: string }[] = [
   { id: "organisation", label: "Property" },
+  { id: "configuration", label: "Configuration" },
   { id: "modules", label: "Modules" },
   { id: "access", label: "Access" },
   { id: "integrations", label: "Integrations" },
@@ -148,6 +195,7 @@ export default function SettingsHub() {
   const [search] = useSearchParams()
   const navigate = useNavigate()
   const loc = useLocale()
+  const offeredLanguages = useOfferedLanguages()
   const property = getCurrentProperty()
 
   const [schema, setSchema] = useState<SettingsSchema | null>(null)
@@ -199,9 +247,18 @@ export default function SettingsHub() {
       id: m.id, title: m.title, description: m.description, group: m.group,
       icon: MODULE_ICON[m.id] ?? LayoutGrid, off: m.toggle && !m.enabled,
     }))
+    const canEditFinance = schema.modules.some((m) => m.id === "finance" && m.can_edit)
+    const canEditRevenue = schema.modules.some((m) => m.id === "revenue" && m.can_edit)
     const custom = CUSTOM_PAGES.filter((p) => {
       if (upstreamOnly(`/settings/${p.id}`)) return false
       if (p.group === "personal") return true
+      if (p.group === "configuration") {
+        if (schema.is_admin) return true
+        if (p.id === "payment-methods" && canEditFinance) return true
+        if ((p.id === "market-codes" || p.id === "origin-codes" || p.id === "meal-plan-codes") && canEditRevenue)
+          return true
+        return false
+      }
       if (!schema.is_admin) return false
       if (p.id === "zatca") return country === "Saudi Arabia"
       if (p.id === "verify") return verifyOn
@@ -211,8 +268,13 @@ export default function SettingsHub() {
   }, [schema, country, verifyOn])
 
   const sources: OptionSources = useMemo(
-    () => ({ countries, timezones: TIMEZONES }),
-    [countries],
+    () => ({
+      countries,
+      timezones: TIMEZONES,
+      locales: LOCALES,
+      languages: offeredLanguages.map((l) => l.code),
+    }),
+    [countries, offeredLanguages],
   )
 
   const hits: SearchHit[] = useMemo(() => {
@@ -416,20 +478,30 @@ export default function SettingsHub() {
           }}
         />
         {mod ? (
+          <>
+          {mod.id === "finance" && isTaxUndetermined(loc.tax_basis) && (
+            <p
+              role="status"
+              className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+            >
+              {t(TAX_NOT_SET_UP_MSG)}
+            </p>
+          )}
           <ModulePage
             module={{ ...mod, sections: visibleSections(mod), related: internalFnbOff(mod) ? [] : mod.related }}
             sources={sources}
             focusKey={focus}
             taxIdLabel={loc.tax_id_label}
             onDirtyChange={setDirty}
-            onSaved={(values) =>
+            onSaved={(values) => {
               setSchema((s) =>
                 s && {
                   ...s,
                   modules: s.modules.map((m) => (m.id === mod.id ? { ...m, values } : m)),
                 },
               )
-            }
+              void loadLocale()
+            }}
           >
             {mod.id === "front-desk" && <CheckInStepsCard property={property} />}
             {mod.id === "front-desk" && (
@@ -439,11 +511,13 @@ export default function SettingsHub() {
                 property={property}
               />
             )}
+            {mod.id === "finance" && <CashierLimitsCard property={property} />}
             {mod.id === "housekeeping" && <LaundryRatesCard property={property} />}
             {mod.id === "revenue" && <HurdleRatesCard property={property} />}
             {mod.id === "fnb" && mod.enabled && <KitchenPrintersCard property={property} />}
             {mod.id === "fnb" && mod.enabled && <SpeedCheckCard property={property} />}
           </ModulePage>
+          </>
         ) : (
           <CustomPageBody
             id={section}
@@ -521,6 +595,10 @@ function CustomPageBody({
   property: string
   onModulesChanged: () => void
 }) {
+  const masterConfig = MASTER_CONFIG_BY_PAGE[id]
+  if (masterConfig) {
+    return <ConfiguredScreen key={id} config={masterConfig} />
+  }
   switch (id) {
     case "staff":
       return <StaffPage />

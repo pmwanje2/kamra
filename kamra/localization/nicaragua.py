@@ -26,6 +26,8 @@ from decimal import Decimal
 
 import frappe
 
+from kamra.branding import product_name
+
 DEFAULT_VAT = Decimal("15")
 DEFAULT_CURRENCY = "NIO"
 # foreign money guests bring most; Settings, Finance, Exchange rates can change it
@@ -73,7 +75,7 @@ def invoice_context(prop_doc) -> dict:
 		"sac": None,
 		"place_of_supply": prop_doc.get("city") or prop_doc.get("state"),
 		"split": [("iva", Decimal("1"))],
-		"footer": "Documento generado por Kamra. Los tributos y cargos "
+		"footer": f"Documento generado por {product_name()}. Los tributos y cargos "
 		          "adicionales se detallan por separado.",
 	}
 

@@ -501,6 +501,17 @@ export interface TaxBasis {
   label: string
   rate: number
   inclusive: boolean | 0 | 1
+  determined?: boolean | 0 | 1
+  template?: string | null
+}
+
+export const TAX_NOT_SET_UP_MSG =
+  "Sales tax isn't set up for this hotel's company. Finance sets it in Accounting."
+
+/** PR-11: true only when the tax bridge explicitly returned determined === 0.
+ *  Older bridges omit `determined`, which stays quiet. */
+export function isTaxUndetermined(basis?: TaxBasis | null): boolean {
+  return basis != null && basis.determined !== undefined && !Number(basis.determined)
 }
 
 export interface Quote extends TariffReference {
@@ -1896,13 +1907,29 @@ export interface ReservationDetail extends TariffReference {
   warnings: {
     id_document_missing: boolean
     id_unverified: boolean
+    channel_review_needed?: boolean
   }
+  /** Set when an OTA modify or cancel arrived after check-in or close and was
+   *  held for front-desk review instead of mutating the stay. */
+  channel_review_needed?: number
+  channel_reviews?: {
+    name: string
+    action_type: string
+    rationale: string
+    executed_at: string | null
+  }[]
   /** Soft-required check-in steps still open (finish after the guest is in). */
   checkin_backfill: { step: string; title: string; tip: string }[]
 }
 
 export const reservationDetail = (name: string) =>
   call<ReservationDetail>("kamra.api.reservation_detail", { reservation: name })
+
+export const clearChannelReview = (reservation: string) =>
+  call<{ ok: boolean; reservation: string; channel_review_needed: number }>(
+    "kamra.channel_manager.clear_channel_review",
+    { reservation },
+  )
 
 /** The ID scan as a data URL. Served through a role-gated endpoint rather than
  *  its /private/files/ URL: Frappe would authorise that via the Reservation's

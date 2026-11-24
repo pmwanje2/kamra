@@ -77,6 +77,7 @@ import { useEffect, useState } from "react"
 
 import { call } from "./api"
 import { deskLabel, upstreamOnly, whiteLabel } from "./brand"
+import { toFullPath } from "./routing"
 
 /** "Night audit" is what most hotels call End of Day; EOD is what they type. */
 const EOD_KEYWORDS = ["End of day", "EOD", "Close the day", "Roll the date"]
@@ -174,7 +175,7 @@ export const APPS: AppDef[] = [
       { to: "/laundry", label: "Laundry", icon: Shirt },
       { to: "/lost-found", label: "Lost & Found", icon: PackageSearch },
       { to: "/reports", label: "Reports", icon: ChartLine },
-      { href: "/kamra/hk", label: "Phone App", icon: Smartphone },
+      { href: toFullPath("/hk"), label: "Phone App", icon: Smartphone },
       { to: "/settings/housekeeping", label: "Settings", icon: SettingsIcon,
         roles: ["Housekeeping Supervisor", "Hotel Admin", "System Manager", "Administrator"] },
     ],
@@ -337,7 +338,7 @@ export const APPS: AppDef[] = [
     extraPrefixes: [
       "/billing/", "/cashier/", "/ledgers", "/receivables", "/folio-history",
       "/end-of-day", "/night-audit", "/reason-codes", "/transaction-codes",
-      "/voids-allowances", "/balance-sheet", "/allowances",
+      "/payment-methods", "/voids-allowances", "/balance-sheet", "/allowances",
     ],
   },
   {
@@ -368,7 +369,11 @@ export const APPS: AppDef[] = [
     description: "Settings, staff and access, rooms and audit.",
     roles: ["Hotel Admin", "System Manager", "Administrator"],
     // every other settings page belongs here unless a module app claims it
-    extraPrefixes: ["/settings"],
+    extraPrefixes: [
+      "/settings", "/market-codes", "/origin-codes", "/booking-types",
+      "/booker-relations", "/cancellation-reasons", "/payment-methods",
+      "/meal-plan-codes", "/payer-types", "/check-in-requests",
+    ],
     items: [
       { to: "/settings/general", label: "Settings", icon: SettingsIcon },
       { to: "/health", label: "System Health", icon: HeartPulse },

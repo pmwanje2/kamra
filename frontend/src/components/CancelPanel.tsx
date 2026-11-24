@@ -4,23 +4,13 @@ import { call } from "../lib/api"
 import { serverError } from "../lib/resource"
 import type { Row } from "../lib/resource"
 import { Button } from "./ui/button"
-import { cur, moneyLocale } from "../lib/money"
+import { cur, moneyLocale, useLocale } from "../lib/money"
 import { useT, t as translate } from "../lib/i18n"
 
 
 /** Cancel a stay the right way: see what it costs, say why, get a
  * cancellation number the guest can keep. Lives in the reservation
  * drawer - the status field itself refuses direct flips to Cancelled. */
-
-const REASONS = [
-  "Guest request",
-  "Change of plans",
-  "Duplicate booking",
-  "Payment failed",
-  "Weather / travel disruption",
-  "Booked elsewhere",
-  "Other",
-]
 
 interface Preview {
   days_before_arrival: number
@@ -37,7 +27,10 @@ export default function CancelPanel({ row, reload }: { row: Row; reload: () => v
   const { t } = useT()
   const [open, setOpen] = useState(false)
   const [preview, setPreview] = useState<Preview | null>(null)
-  const [reason, setReason] = useState(REASONS[0])
+  // the hotel's Cancellation Reason codes; the first is the default
+  const reasons = useLocale().cancellation_reasons ?? []
+  const [picked, setReason] = useState("")
+  const reason = picked || reasons[0]?.value || ""
   const [note, setNote] = useState("")
   const [waive, setWaive] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -114,8 +107,8 @@ export default function CancelPanel({ row, reload }: { row: Row; reload: () => v
               value={reason}
               onChange={(e) => setReason(e.target.value)}
             >
-              {REASONS.map((r) => (
-                <option key={r} value={r}>{t(r)}</option>
+              {reasons.map((r) => (
+                <option key={r.value} value={r.value}>{t(r.label)}</option>
               ))}
             </select>
           </label>

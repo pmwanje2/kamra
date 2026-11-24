@@ -50,7 +50,7 @@
    "fieldname": "clean_duration_minutes",
    "fieldtype": "Int",
    "label": "Clean Duration (minutes)",
-   "description": "Recorded on the profile; not used by Kamra yet."
+   "description": "Recorded on the profile; not used yet."
   },
   {
    "default": "30",
@@ -60,7 +60,7 @@
   },
   {
    "default": "0",
-   "description": "Recorded on the profile; not used by Kamra yet.",
+   "description": "Recorded on the profile; not used yet.",
    "fieldname": "buffer_after_ready_minutes",
    "fieldtype": "Int",
    "label": "Buffer After Ready (minutes)"
@@ -75,7 +75,7 @@
    "fieldname": "same_day_turn_allowed",
    "fieldtype": "Check",
    "label": "Same-day Turn Allowed",
-   "description": "Recorded on the profile; not used by Kamra yet."
+   "description": "Recorded on the profile; not used yet."
   },
   {
    "default": "0",

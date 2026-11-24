@@ -33,6 +33,12 @@ def default_short_code(name: str, exclude: str | None = None) -> str:
 
 
 class Property(Document):
+	def before_insert(self):
+		# currency, clock, tax slab and money amounts come from the country
+		# pack, never an Indian default; what the operator typed wins
+		from kamra.localization import fill_property_defaults
+		fill_property_defaults(self)
+
 	def validate(self):
 		self._validate_short_code()
 		self._validate_booking_language()

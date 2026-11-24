@@ -127,7 +127,7 @@ export function RateOptions({
   }, [roomType, checkIn, checkOut, adults, children, extraBeds, mealPlan, voucher, ratePlan, company, t])
 
   if (err) return <p className="text-xs text-zinc-400">{translate(err)}</p>
-  if (!data) return null
+  if (!data || !Array.isArray(data.plans) || !Array.isArray(data.nights)) return null
   // no plan picked: the company's negotiated plan prices the stay, as the quote does
   const picked = ratePlan || data.company_plan || ""
   const selected = data.plans.find((plan) => plan.name === picked)

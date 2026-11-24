@@ -206,7 +206,7 @@
    "label": "Pincode"
   },
   {
-   "default": "Asia/Kolkata",
+   "description": "Blank: the country pack's default when the property is created.",
    "fieldname": "timezone",
    "fieldtype": "Data",
    "label": "Timezone"
@@ -217,7 +217,7 @@
    "label": "Operations"
   },
   {
-   "default": "INR",
+   "description": "Blank: the country pack's default when the property is created.",
    "fieldname": "currency",
    "fieldtype": "Link",
    "label": "Currency",
@@ -282,7 +282,7 @@
    "label": "Hold Window (minutes)"
   },
   {
-   "default": "5000",
+   "description": "In the property's currency. Blank or 0: no security deposit.",
    "fieldname": "security_deposit_amount",
    "fieldtype": "Currency",
    "label": "Security Deposit Amount"
@@ -374,7 +374,7 @@
    "label": "GSTIN"
   },
   {
-   "description": "Printed at the foot of every invoice, under the tax note - e.g. CIN and bank details for transfers.",
+   "description": "Printed at the foot of every invoice, under the tax note - e.g. company registration and bank details for transfers.",
    "fieldname": "invoice_footer",
    "fieldtype": "Small Text",
    "label": "Invoice Footer"
@@ -389,7 +389,7 @@
    "fieldname": "locale",
    "fieldtype": "Data",
    "label": "Locale",
-   "default": "en-IN"
+   "description": "Number and date format, e.g. en-UG. Blank: the country pack's."
   },
   {
    "fieldname": "sb_gst",
@@ -397,27 +397,26 @@
    "label": "GST Rules"
   },
   {
-   "default": "Slab",
-   "description": "Slab: rate decides GST (India). Fixed: use the room type's tax_percent.",
+   "depends_on": "eval:doc.country=='India'",
+   "description": "Slab: rate decides GST (India). Fixed: use the room type's tax_percent. Blank: the country pack's.",
    "fieldname": "gst_mode",
    "fieldtype": "Select",
    "label": "Room GST Mode",
-   "options": "Slab\nFixed"
+   "options": "\nSlab\nFixed"
   },
   {
-   "default": "7500",
+   "depends_on": "eval:doc.country=='India'",
    "fieldname": "gst_slab_threshold",
    "fieldtype": "Currency",
-   "label": "Slab Threshold (\u20b9/night)"
+   "label": "Slab Threshold (per night)"
   },
   {
-   "default": "5",
    "fieldname": "gst_rate_low",
    "fieldtype": "Percent",
    "label": "GST at/below threshold"
   },
   {
-   "default": "18",
+   "depends_on": "eval:doc.country=='India'",
    "fieldname": "gst_rate_high",
    "fieldtype": "Percent",
    "label": "GST above threshold"
@@ -443,7 +442,7 @@
    "fieldname": "enabled_modules",
    "fieldtype": "Small Text",
    "label": "Modules In Use",
-   "description": "Which parts of Kamra this property actually runs, comma separated. Empty = everything. A serviced-apartment operator has no restaurant and no banquet hall, and shouldn't be shown three empty menus on their first morning."
+   "description": "Which parts of the system this property actually runs, comma separated. Empty = everything. A serviced-apartment operator has no restaurant and no banquet hall, and shouldn't be shown three empty menus on their first morning."
   },
   {
    "default": "1",
@@ -763,7 +762,7 @@
   },
   {
    "default": "1",
-   "description": "Let staff with MCP Read or MCP Manage connect Claude or another MCP client to this property. The site setting kamra_mcp_disabled still turns MCP off everywhere.",
+   "description": "Let staff with MCP Read or MCP Manage connect Claude or another MCP client to this property. When IT turns MCP off for the whole site, that still wins.",
    "fieldname": "mcp_enabled",
    "fieldtype": "Check",
    "label": "AI access over MCP"
@@ -785,7 +784,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-11-23 12:00:00.000000",
+ "modified": "2026-11-23 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Property",

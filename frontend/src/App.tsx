@@ -183,6 +183,11 @@ function WhiteLabelRoutes() {
     : <Outlet context={shell} />
 }
 
+function BookIndex() {
+  const { search } = useLocation()
+  return <Navigate to={`/book${search}`} replace />
+}
+
 export default function App() {
   useUILanguage()
   // guest pages and the desk keep separate languages; re-apply on crossing
@@ -205,13 +210,18 @@ export default function App() {
           path="book/:checkin/:checkout?/:adults?/:children?"
           element={<PublicBooking />}
         />
+        <Route path="book/*" element={<BookIndex />} />
+        <Route path="stay" element={<BookIndex />} />
         <Route path="stay/:slug" element={<PublicListing />} />
         <Route
           path="stay/:slug/:checkin/:checkout?/:adults?/:children?"
           element={<PublicListing />}
         />
+        <Route path="stay/*" element={<BookIndex />} />
         {/* pre-arrival self check-in, tokenized per reservation */}
+        <Route path="checkin" element={<PublicCheckin />} />
         <Route path="checkin/:token" element={<PublicCheckin />} />
+        <Route path="checkin/*" element={<PublicCheckin />} />
         {/* housekeeping phone app - share the /hk URL with the HK team */}
         <Route path="hk" element={<HkApp />} />
         {/* dedicated login route so signing out changes the URL */}
@@ -403,6 +413,42 @@ export default function App() {
           <Route
             path="transaction-codes"
             element={<ConfiguredScreen config="transactionCodesConfig" />}
+          />
+          <Route
+            path="market-codes"
+            element={<ConfiguredScreen config="marketCodesConfig" />}
+          />
+          <Route
+            path="origin-codes"
+            element={<ConfiguredScreen config="originCodesConfig" />}
+          />
+          <Route
+            path="booking-types"
+            element={<ConfiguredScreen config="bookingTypesConfig" />}
+          />
+          <Route
+            path="booker-relations"
+            element={<ConfiguredScreen config="bookerRelationsConfig" />}
+          />
+          <Route
+            path="cancellation-reasons"
+            element={<ConfiguredScreen config="cancellationReasonsConfig" />}
+          />
+          <Route
+            path="payment-methods"
+            element={<ConfiguredScreen config="paymentMethodsConfig" />}
+          />
+          <Route
+            path="meal-plan-codes"
+            element={<ConfiguredScreen config="mealPlanCodesConfig" />}
+          />
+          <Route
+            path="payer-types"
+            element={<ConfiguredScreen config="payerTypesConfig" />}
+          />
+          <Route
+            path="check-in-requests"
+            element={<ConfiguredScreen config="checkInRequestsConfig" />}
           />
           <Route path="tickets" element={<Tickets />} />
           <Route path="laundry" element={<Laundry />} />
