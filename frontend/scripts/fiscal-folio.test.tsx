@@ -106,20 +106,20 @@ describe("banquet tender modes and item types", () => {
     expect(ITEM_TYPES).toContain("Service Charge")
   })
 
-  it("derives banquet payModes from configured home-currency tender_modes without hardcoded Cheque/Other", () => {
+  it("derives banquet payModes from configured home-currency tender_modes without Foreign Cash or hardcoded Cheque/Other", () => {
     mockLocale.currency = "UGX"
     mockLocale.tender_modes = [
       { mode: "Cash", currencies: ["UGX", "USD"] },
       { mode: "Mobile Money", currencies: ["UGX"] },
-      { mode: "Foreign Cash", currencies: ["USD"] },
+      { mode: "Foreign Cash", currencies: ["UGX", "USD"] },
     ]
     expect(payModes()).toEqual(["Cash", "Mobile Money"])
   })
 
-  it("falls back to locale payment_modes without appending Cheque or Other when tender_modes is unset", () => {
+  it("falls back to locale payment_modes without Foreign Cash or appending Cheque/Other when tender_modes is unset", () => {
     mockLocale.currency = "UGX"
     mockLocale.tender_modes = null
-    mockLocale.payment_modes = ["Cash", "Card", "Bank Transfer", "Mobile Money"]
+    mockLocale.payment_modes = ["Cash", "Card", "Bank Transfer", "Mobile Money", "Foreign Cash"]
     expect(payModes()).toEqual(["Cash", "Card", "Bank Transfer", "Mobile Money"])
   })
 })
@@ -138,6 +138,7 @@ describe("PR #45 i18n catalog and 7-locale coverage", () => {
     "Fiscal QR code",
     "Internal folio no. {number}",
     "Reprint fiscal invoice",
+    "Reprint invoice",
     "Copy - reprint {n}",
     "Posts to this function's own folio. Its deposits are taken there, and its tax invoice is issued when that folio is settled.",
     "Open the function's folio",

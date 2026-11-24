@@ -364,6 +364,152 @@ class TestEventFolio(BanquetFiscalCase):
 		self.assertEqual(out["fiscal_bridge"], 1)
 		self.assertEqual(out["event_folio"], sheet(fn).folio)
 
+	def test_event_security_deposit_full_chains_and_native_refund_summary(self):
+		"""OPERA/SAP: event Security Deposit never counts in payments_total/balance; native refunds mirror in function_sheet."""
+		from kamra import ledger
+		from kamra.folio import _recalculate, close_folio
+		from kamra.ledger import write_ledger_entry
+
+		ug_prop = _upsert("Property", {"property_name": "UT Uganda Event Deposit Chain"}, {
+			"property_name": "UT Uganda Event Deposit Chain", "country": "Uganda", "currency": "UGX",
+			"gst_rate_low": 0, "gst_rate_high": 0, "business_date": nowdate(),
+		})
+		ug_hall = _upsert("Venue", {"property": ug_prop, "venue_name": "UT Chain Hall"}, {
+			"property": ug_prop, "venue_name": "UT Chain Hall", "venue_type": "Banquet Hall",
+			"capacity": 100, "base_price": 500000, "gst_rate": 0,
+		})
+		hall_code = revenue_code("UT-BQ-CHAIN-HALL")
+		if not frappe.db.exists("Banquet Revenue Mapping", {"property": ug_prop, "revenue_type": "Venue Rental"}):
+			frappe.get_doc({"doctype": "Banquet Revenue Mapping", "property": ug_prop,
+			                "revenue_type": "Venue Rental", "transaction_code": hall_code}).insert()
+
+		# Chain A: collect deposit + advance -> post charges -> close while held -> refund later (partial + full)
+		fn_held = bq.create_enquiry(
+			ug_prop, ug_hall, add_days(nowdate(), 30), "Chain Held Client",
+			event_type="Conference", attendees=50, with_venue_line=1,
+		)["function"]
+		bq.set_status(fn_held, "Confirmed")
+		with accounting_bridge():
+			bq.record_receipt(fn_held, 100000, mode="Cash", kind="Security Deposit")
+			bq.record_receipt(fn_held, 200000, mode="Cash", kind="Advance")
+			out = bq.post_to_folio(fn_held)
+			folio = frappe.get_doc("Folio", out["folio"])
+			# Security Deposit MUST NOT count in payments_total or reduce balance.
+			self.assertAlmostEqual(float(folio.payments_total), 200000.0, 2)
+			self.assertAlmostEqual(float(folio.balance), 300000.0, 2)
+			self.assertTrue(ledger.folio_reconciliation(ug_prop)["in_balance"])
+			# Settle remaining 300,000 and close while 100,000 Security Deposit is still held.
+			bq.record_receipt(fn_held, 300000, mode="Cash", kind="Payment")
+			folio = frappe.get_doc("Folio", out["folio"])
+			self.assertAlmostEqual(float(folio.payments_total), 500000.0, 2)
+			self.assertAlmostEqual(float(folio.balance), 0.0, 2)
+			close_folio(folio.name)
+			fs0 = bq.function_sheet(fn_held)
+			self.assertEqual((fs0["deposit_held"], fs0["deposit_refunded"]), (100000.0, 0.0))
+
+			# Partial native refund (40,000) then final native refund (60,000) on the closed event folio.
+			folio = frappe.get_doc("Folio", out["folio"])
+			folio.append("payments", {
+				"posting_date": nowdate(), "payment_kind": "Refund", "mode": "Cash",
+				"amount": -40000.0, "currency": "UGX", "reference": "PE-REF-PARTIAL",
+			})
+			_recalculate(folio)
+			folio.save(ignore_permissions=True)
+			write_ledger_entry(
+				property=ug_prop, folio=folio.name, ledger="Deposit", transaction_code="9004",
+				debit=40000.0, credit=0.0, description="Refund Cash",
+				source_doctype="Folio Payment", source_name=folio.payments[-1].name,
+			)
+			self.assertAlmostEqual(float(folio.payments_total), 500000.0, 2)
+			self.assertAlmostEqual(float(folio.balance), 0.0, 2)
+			fs1 = bq.function_sheet(fn_held)
+			self.assertEqual((fs1["deposit_held"], fs1["deposit_refunded"]), (60000.0, 40000.0))
+			native_refunds = [r for r in fs1["receipts"] if r.get("kind") == "Refund" and r.get("native")]
+			self.assertEqual([(r["amount"], r["reference"]) for r in native_refunds], [(40000.0, "PE-REF-PARTIAL")])
+
+			folio = frappe.get_doc("Folio", out["folio"])
+			folio.append("payments", {
+				"posting_date": nowdate(), "payment_kind": "Refund", "mode": "Cash",
+				"amount": -60000.0, "currency": "UGX", "reference": "PE-REF-FINAL",
+			})
+			_recalculate(folio)
+			folio.save(ignore_permissions=True)
+			write_ledger_entry(
+				property=ug_prop, folio=folio.name, ledger="Deposit", transaction_code="9004",
+				debit=60000.0, credit=0.0, description="Refund Cash",
+				source_doctype="Folio Payment", source_name=folio.payments[-1].name,
+			)
+			self.assertAlmostEqual(float(folio.payments_total), 500000.0, 2)
+			self.assertAlmostEqual(float(folio.balance), 0.0, 2)
+			fs2 = bq.function_sheet(fn_held)
+			self.assertEqual((fs2["deposit_held"], fs2["deposit_refunded"]), (0.0, 100000.0))
+			native_refunds2 = [r for r in fs2["receipts"] if r.get("kind") == "Refund" and r.get("native")]
+			self.assertEqual(len(native_refunds2), 2)
+			self.assertTrue(ledger.folio_reconciliation(ug_prop)["in_balance"])
+
+		# Chain B: collect -> cancel Receive PE (reversal of 9003) -> deposit_refunded MUST stay 0.
+		fn_cancel = bq.create_enquiry(
+			ug_prop, ug_hall, add_days(nowdate(), 31), "Chain Cancel Client",
+			event_type="Conference", attendees=40, with_venue_line=1,
+		)["function"]
+		bq.set_status(fn_cancel, "Confirmed")
+		with accounting_bridge():
+			bq.record_receipt(fn_cancel, 100000, mode="Cash", kind="Security Deposit")
+			folio_c = frappe.get_doc("Folio", sheet(fn_cancel).folio)
+			orig_entry = frappe.db.get_value(
+				"Folio Ledger Entry",
+				{"folio": folio_c.name, "ledger": "Deposit", "transaction_code": "9003"},
+				"name",
+			)
+			folio_c.append("payments", {
+				"posting_date": nowdate(), "payment_kind": "Refund", "mode": "Cash",
+				"amount": -100000.0, "currency": "UGX", "reference": "PE-DEP-CANCEL",
+			})
+			_recalculate(folio_c)
+			folio_c.save(ignore_permissions=True)
+			write_ledger_entry(
+				property=ug_prop, folio=folio_c.name, ledger="Deposit", transaction_code="9004",
+				debit=100000.0, credit=0.0, description="Refund Cash",
+				reversal_of=orig_entry,
+				source_doctype="Folio Payment", source_name=folio_c.payments[-1].name,
+			)
+			fsc = bq.function_sheet(fn_cancel)
+			self.assertEqual((fsc["deposit_held"], fsc["deposit_refunded"]), (0.0, 0.0))
+			self.assertAlmostEqual(float(folio_c.payments_total), 0.0, 2)
+
+	def test_folio_history_includes_and_searches_sales_invoice_when_column_exists(self):
+		"""Hydrogen P2: FolioHistory surfaces ERP sales_invoice instead of internal INV-... on bridge sites."""
+		from kamra import ledger
+		from kamra.folio import close_folio
+
+		fn = confirmed(self.f)
+		mapping("Venue Rental", revenue_code("UT-BQ-HALL"))
+		mapping("Menu", revenue_code("UT-BQ-FOOD", charge_type="Food & Beverage"))
+		with accounting_bridge():
+			out = bq.post_to_folio(fn)
+			folio_doc = frappe.get_doc("Folio", out["folio"])
+			bq.record_receipt(fn, float(folio_doc.balance), mode="Cash", kind="Payment")
+			close_folio(out["folio"])
+		real_get_all = frappe.get_all
+
+		def fake_get_all(doctype, *args, **kwargs):
+			if doctype == "Folio":
+				fields = list(kwargs.get("fields") or [])
+				has_si = "sales_invoice" in fields
+				kwargs["fields"] = [f for f in fields if f != "sales_invoice"]
+				rows = real_get_all(doctype, *args, **kwargs)
+				if has_si:
+					for row in rows:
+						row["sales_invoice"] = "ACC-SINV-2026-0099" if row.name == out["folio"] else None
+				return rows
+			return real_get_all(doctype, *args, **kwargs)
+
+		with patch.object(frappe.db, "has_column", side_effect=lambda dt, col: True if (dt, col) == ("Folio", "sales_invoice") else False), \
+				patch.object(frappe, "get_all", side_effect=fake_get_all):
+			hist = ledger.folio_history(PROPERTY, query="ACC-SINV-2026-0099")["folios"]
+		self.assertEqual([r.name for r in hist], [out["folio"]])
+		self.assertEqual(hist[0].get("sales_invoice"), "ACC-SINV-2026-0099")
+
 	# --- without the bridge nothing changes ---------------------------------------------------------------
 
 	def test_standalone_kamra_keeps_receipts_on_the_function_and_its_own_invoice(self):

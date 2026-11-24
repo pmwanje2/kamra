@@ -282,3 +282,94 @@ class FiscalFolioTests(AuditTestCase):
 				api.reprint_fiscal_folio(self.folio)
 		finally:
 			frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- restore the test user
+
+	def test_folio_invoice_reports_bridge_credit_and_rebill_availability(self):
+		"""Hydrogen P2: UI hides bridge Credit note / Cancel invoice when credit_and_rebill script is absent."""
+		self.settle()
+		with fiscal_reader(FISCALISED):
+			without = api.folio_invoice(self.folio)
+		self.assertIs(without.get("bridge_credit_and_rebill"), False)
+
+		real = erp_bridge.get_bridge_script
+		sentinel = object()
+		with fiscal_reader(FISCALISED), patch.object(
+			erp_bridge, "get_bridge_script",
+			side_effect=lambda m: sentinel if m == "hospitality_kamra.credit_and_rebill" else real(m),
+		):
+			with_script = api.folio_invoice(self.folio)
+		self.assertIs(with_script.get("bridge_credit_and_rebill"), True)
+
+	def test_stay_security_deposit_full_chains_never_reduce_balance_or_auto_apply(self):
+		"""OPERA/SAP on stay (non-event) Guest folios: collect->close while held->refund later; collect->refund->close; explicit withhold."""
+		from kamra import ledger
+
+		# Chain 1: collect -> post charges -> pay bill -> close while deposit still held -> refund later (partial + full)
+		from kamra.folio import post_remaining_nights
+		post_remaining_nights(self.res)
+		api.collect_security_deposit(self.res.name, 100000, "Cash")
+		room_amt = float(frappe.db.get_value("Folio", self.folio, "grand_total") or 0)
+		api._post_folio_charge(self.folio, "Misc", "Room package", 500000 - room_amt)
+		fd = frappe.get_doc("Folio", self.folio)
+		self.assertAlmostEqual(float(fd.payments_total), 0.0, 2)
+		self.assertAlmostEqual(float(fd.balance), 500000.0, 2)
+		self.assertTrue(ledger.folio_reconciliation(PROP_A)["in_balance"])
+		# check_out refuses while bill is unpaid AND while deposit is held.
+		with self.assertRaises(frappe.ValidationError):
+			api.check_out(self.res.name)
+		api.add_folio_payment(self.folio, "Cash", 500000)
+		fd = frappe.get_doc("Folio", self.folio)
+		self.assertAlmostEqual(float(fd.payments_total), 500000.0, 2)
+		self.assertAlmostEqual(float(fd.balance), 0.0, 2)
+		# Folio can close while Security Deposit is still held as a separate liability.
+		close_folio(self.folio)
+		self.assertEqual(frappe.db.get_value("Folio", self.folio, "status"), "Closed")
+		# check_out still refuses while held deposit is unrefunded (never silently applied!).
+		with self.assertRaises(frappe.ValidationError):
+			api.check_out(self.res.name)
+		# Refund partial (40k) then remainder (60k) AFTER folio close.
+		st1 = api.refund_security_deposit(self.res.name, 40000, "Cash", "Partial return")
+		self.assertEqual((st1["held"], st1["refunded"]), (60000.0, 40000.0))
+		fd = frappe.get_doc("Folio", self.folio)
+		self.assertAlmostEqual(float(fd.payments_total), 500000.0, 2)
+		self.assertAlmostEqual(float(fd.balance), 0.0, 2)
+		st2 = api.refund_security_deposit(self.res.name, 60000, "Cash", "Final return")
+		self.assertEqual((st2["held"], st2["refunded"], st2["status"]), (0.0, 100000.0, "Refunded"))
+		self.assertTrue(ledger.folio_reconciliation(PROP_A)["in_balance"])
+		api.check_out(self.res.name)
+		self.assertEqual(frappe.db.get_value("Reservation", self.res.name, "status"), "Checked Out")
+
+		# Chain 2: collect -> refund -> post charges -> pay -> close
+		rt = frappe.db.get_value("Reservation", self.res.name, "room_type")
+		res2 = make_reservation(PROP_A, rt, TODAY, d(1), status="Checked In", room=make_room(PROP_A, rt, "102"))
+		f2 = guest_folio(res2.name)
+		api.collect_security_deposit(res2.name, 50000, "Cash")
+		api.refund_security_deposit(res2.name, 50000, "Cash", "Returned early")
+		api._post_folio_charge(f2, "Misc", "Spa", 200000)
+		fd2 = frappe.get_doc("Folio", f2)
+		self.assertAlmostEqual(float(fd2.payments_total), 0.0, 2)
+		self.assertAlmostEqual(float(fd2.balance), 200000.0, 2)
+		api.add_folio_payment(f2, "Cash", 200000)
+		close_folio(f2)
+		self.assertTrue(ledger.folio_reconciliation(PROP_A)["in_balance"])
+
+		# Chain 3: explicit signed-off withhold_security_deposit applies ONLY withheld_amount to cover damage charge
+		res3 = make_reservation(PROP_A, rt, TODAY, d(1), status="Checked In", room=make_room(PROP_A, rt, "103"))
+		f3 = guest_folio(res3.name)
+		post_remaining_nights(res3)
+		api.collect_security_deposit(res3.name, 100000, "Cash")
+		room_amt3 = float(frappe.db.get_value("Folio", f3, "grand_total") or 0)
+		api._post_folio_charge(f3, "Misc", "Room package", 500000 - room_amt3)
+		api.add_folio_payment(f3, "Cash", 500000)
+		api.withhold_security_deposit(res3.name, 30000, "Broken lamp")
+		fd3 = frappe.get_doc("Folio", f3)
+		self.assertAlmostEqual(float(fd3.charges_total), 530000.0, 2)
+		self.assertAlmostEqual(float(fd3.payments_total), 530000.0, 2)
+		self.assertAlmostEqual(float(fd3.balance), 0.0, 2)
+		self.assertTrue(ledger.folio_reconciliation(PROP_A)["in_balance"])
+		api.refund_security_deposit(res3.name, 70000, "Cash", "Balance returned")
+		fd3 = frappe.get_doc("Folio", f3)
+		self.assertAlmostEqual(float(fd3.payments_total), 530000.0, 2)
+		self.assertAlmostEqual(float(fd3.balance), 0.0, 2)
+		self.assertTrue(ledger.folio_reconciliation(PROP_A)["in_balance"])
+		api.check_out(res3.name)
+		self.assertEqual(frappe.db.get_value("Reservation", res3.name, "status"), "Checked Out")
