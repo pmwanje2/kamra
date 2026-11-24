@@ -47,6 +47,8 @@ def assistant_name() -> str:
 def role_label(role: str) -> str:
 	if role == "Kamra Agent" and (white_label() or assistant_name() != role):
 		return f"{assistant_name()} (service)"
+	if role.startswith("URY "):
+		return f"POS {role[4:]}"
 	return role
 
 

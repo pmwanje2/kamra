@@ -451,6 +451,9 @@ override_whitelisted_methods = {
 # kamra_door_lock_adapters = {"acme": "acme_kamra.locks.AcmeAdapter"}
 kamra_door_lock_adapters = {"manual": "kamra.door_lock.ManualAdapter"}
 
+# POS manager-override PIN verifier hook (reuses existing Cashier PIN store).
+pos_override_pin_verifier = "kamra.authz.verify_pos_override_pin"
+
 # Remote MCP + OAuth live at /mcp and /mcp/oauth/* (not the SPA).
 page_renderer = ["kamra.mcp_http.MCPPageRenderer"]
 
