@@ -89,6 +89,7 @@ export function roomTypesConfig(
   description: "What each unit is and how many it sleeps. Rate plans and contract tariffs set the selling price.",
   propertyScoped: true,
   orderBy: "base_price asc",
+  tableMinWidth: showCard ? "min-w-[980px]" : "min-w-[820px]",
   columns: [
     { field: "room_type_name", label: "Name", width: summary ? "w-[18%]" : undefined },
     { field: "room_type_code", label: "Code", badge: true, width: summary ? "w-[9%]" : undefined },
