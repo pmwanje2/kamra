@@ -23,6 +23,7 @@ discount trail) meets the v2.8.0 PRs merged forward (#35, #37, #39, #40, #42, #4
 
 from __future__ import annotations
 
+import json
 from decimal import ROUND_HALF_UP, Decimal
 from unittest.mock import patch
 
@@ -179,6 +180,30 @@ class KwdDiscountMinorUnitTests(RoundFourTestCase):
 		self.assertEqual(Decimal(str(doc.night_rates[0].rate)), Decimal("12.345"))
 		self.assertEqual(Decimal(str(doc.night_rates[1].rate)), Decimal("11.115"))
 
+	def test_kwd_discount_amount_and_rediscount_snapshot_preserve_three_decimals(self):
+		rt, rooms = self._kwd_setup(price=10.000, tax=0.0, inclusive=0)
+		out = self.as_user(
+			DESK, api.create_booking, PROP_KWD, rt, d(5), d(7), "KWD Disc Header",
+			room=rooms[0], discount_type="Amount", discount_value="1.234",
+			discount_reason="RATE-PROMO",
+		)
+		doc = self.doc(out["reservation"])
+		self.assertEqual(Decimal(str(doc.discount_amount)), Decimal("2.468"))
+		snap = json.loads(doc.quote_snapshot)
+		self.assertEqual(Decimal(str(snap["discount"])), Decimal("2.468"))
+
+		# In-place rediscount must also keep all 3 decimals on discount_amount and snapshot totals
+		self.as_user(
+			DESK, api.set_reservation_discount, out["reservation"],
+			discount_type="Amount", discount_value="1.456", reason_code="RATE-PROMO",
+		)
+		doc2 = self.doc(out["reservation"])
+		self.assertEqual(Decimal(str(doc2.discount_amount)), Decimal("2.912"))
+		snap2 = json.loads(doc2.quote_snapshot)
+		self.assertEqual(Decimal(str(snap2["discount"])), Decimal("2.912"))
+		self.assertEqual(Decimal(str(snap2["totals"]["discount"])), Decimal("2.912"))
+		self.assertEqual(Decimal(str(snap2["room_total"])), Decimal("17.088"))
+
 
 class ChannelModifyDiscountTests(RoundFourTestCase):
 	"""#46 / #39 pre-arrival OTA modify with a channel price or tax hold
@@ -268,6 +293,166 @@ class ChannelModifyDiscountTests(RoundFourTestCase):
 		self.assertFalse(doc.get("discount_type"))
 		self.assertIn("OTA tax not recognised", doc.special_requests or "")
 
+	def test_pre_arrival_ota_modify_superseding_discount_records_trail_logs_action_and_flags_review(self):
+		conn = self._ota_conn()
+		ref = "OTA-R7-" + frappe.generate_hash(length=6)
+		res = self._pre_arrival_ota(ref)
+		self.discount(
+			res.name, discount_type="Percent", discount_value=5, **PROMO,
+			night_discounts=[{
+				"date": d(5), "discount_type": "Percent", "discount_value": 10,
+				"discount_reason": "ADJ-RATE",
+			}],
+		)
+
+		out = cm._apply_event(conn, {
+			"event": "modify", "ota_ref": ref, "booking_id": ref,
+			"channel": "Booking.com", "room_type_external_id": "std",
+			"check_in": d(5), "check_out": d(7), "adults": 2, "children": 0,
+			"total": 2400, "currency": "INR",
+			"nightly": [{"date": d(5), "amount": 1200}, {"date": d(6), "amount": 1200}],
+			"notes": "OTA revised rate",
+		})
+		self.assertEqual(out["result"], "modified")
+		doc = self.doc(res.name)
+		self.assertEqual(int(doc.channel_review_needed), 1)
+		self.assertIn("5%", doc.special_requests or "")
+		self.assertIn("RATE-PROMO", doc.special_requests or "")
+		self.assertIn("10%", doc.special_requests or "")
+		self.assertIn("ADJ-RATE", doc.special_requests or "")
+		self.assertNotRegex(doc.special_requests or "", r"(?i)kamra|frappe|erpnext|ury")
+
+		# Discount trail (reservation_discount) records old discount, reason and before/after nights
+		disc_logs = frappe.get_all(
+			"Agent Action Log",
+			filters={
+				"reference_doctype": "Reservation", "reference_name": res.name,
+				"action_type": "reservation_discount", "action_channel": "API",
+			},
+			fields=["name", "rationale", "before_snapshot", "after_snapshot"],
+			order_by="creation desc",
+		)
+		self.assertTrue(disc_logs, "Expected an API reservation_discount trail entry")
+		trail = disc_logs[0]
+		for token in ("5%", "RATE-PROMO", "10%", "ADJ-RATE"):
+			self.assertIn(token, trail.rationale or "")
+		self.assertNotRegex(trail.rationale or "", r"(?i)kamra|frappe|erpnext|ury")
+		before_snap = json.loads(trail.before_snapshot)
+		after_snap = json.loads(trail.after_snapshot)
+		self.assertEqual(before_snap["discount_type"], "Percent")
+		self.assertEqual(flt(before_snap["discount_value"]), 5.0)
+		self.assertEqual(before_snap["discount_reason"], "RATE-PROMO")
+		self.assertEqual(len(before_snap["nights"]), 2)
+		self.assertIsNone(after_snap["discount_type"])
+		self.assertEqual(flt(after_snap["discount_total"]), 0.0)
+		self.assertEqual(flt(after_snap["amount_after_tax"]), 2400.0)
+
+		# Channel review Agent Action Log (#46 mechanism) surfaces in reservation_detail
+		review_logs = frappe.get_all(
+			"Agent Action Log",
+			filters={
+				"reference_doctype": "Reservation", "reference_name": res.name,
+				"action_type": "channel.modify_needs_review",
+			},
+			fields=["name", "rationale"],
+			order_by="creation desc",
+		)
+		self.assertTrue(review_logs, "Expected a channel.modify_needs_review Agent Action Log entry")
+		for token in ("5%", "RATE-PROMO", "10%", "ADJ-RATE"):
+			self.assertIn(token, review_logs[0].rationale or "")
+		self.assertNotRegex(review_logs[0].rationale or "", r"(?i)kamra|frappe|erpnext|ury")
+
+		detail = self.as_user(DESK, api.reservation_detail, res.name)
+		self.assertEqual(detail["channel_review_needed"], 1)
+		self.assertTrue(detail["warnings"]["channel_review_needed"])
+		self.assertTrue(any(
+			"RATE-PROMO" in (r.get("rationale") or "") and "5%" in (r.get("rationale") or "")
+			for r in detail["channel_reviews"]
+		))
+
+		changes = self.as_user(DESK, api.reservation_changes, res.name)["entries"]
+		api_disc = next(
+			(e for e in changes if e.get("action_type") == "reservation_discount"
+			 and "Booking.com" in (e.get("rationale") or "")),
+			None,
+		)
+		self.assertIsNotNone(api_disc)
+		self.assertTrue(api_disc["nights"])
+
+		# Existing #46 clear_channel_review clears the flag cleanly
+		self.as_user(DESK, cm.clear_channel_review, res.name)
+		self.assertEqual(int(self.doc(res.name).channel_review_needed), 0)
+
+	def test_pre_arrival_ota_modify_tax_hold_superseding_daily_details_flags_review_and_logs_trail(self):
+		conn = self._ota_conn()
+		ref = "OTA-R7H-" + frappe.generate_hash(length=6)
+		res = self._pre_arrival_ota(ref)
+		self.discount(
+			res.name, **PROMO,
+			night_discounts=[{"date": d(5), "discount_type": "Percent", "discount_value": 10}],
+		)
+
+		out = cm._apply_event(conn, {
+			"event": "modify", "ota_ref": ref, "booking_id": ref,
+			"channel": "Booking.com", "room_type_external_id": "std",
+			"check_in": d(5), "check_out": d(7), "adults": 2, "children": 0,
+			"total": 2400, "currency": "INR",
+			"unread_taxes": ["Mystery Levy"],
+		})
+		self.assertEqual(out["result"], "modified")
+		doc = self.doc(res.name)
+		self.assertEqual(doc.status, "Requested")
+		self.assertEqual(int(doc.channel_review_needed), 1)
+		self.assertIn("10%", doc.special_requests or "")
+		self.assertIn("RATE-PROMO", doc.special_requests or "")
+		self.assertTrue(frappe.db.exists("Agent Action Log", {
+			"reference_doctype": "Reservation", "reference_name": res.name,
+			"action_type": "reservation_discount", "action_channel": "API",
+		}))
+		self.assertTrue(frappe.db.exists("Agent Action Log", {
+			"reference_doctype": "Reservation", "reference_name": res.name,
+			"action_type": "channel.modify_needs_review",
+		}))
+
+	def test_pre_arrival_ota_modify_without_desk_discount_does_not_flag_review(self):
+		conn = self._ota_conn()
+		ref = "OTA-R7N-" + frappe.generate_hash(length=6)
+		res = self._pre_arrival_ota(ref)
+
+		out = cm._apply_event(conn, {
+			"event": "modify", "ota_ref": ref, "booking_id": ref,
+			"channel": "Booking.com", "room_type_external_id": "std",
+			"check_in": d(5), "check_out": d(7), "adults": 2, "children": 0,
+			"total": 2400, "currency": "INR",
+			"nightly": [{"date": d(5), "amount": 1200}, {"date": d(6), "amount": 1200}],
+		})
+		self.assertEqual(out["result"], "modified")
+		self.assertEqual(int(self.doc(res.name).channel_review_needed), 0)
+		self.assertFalse(frappe.db.exists("Agent Action Log", {
+			"reference_doctype": "Reservation", "reference_name": res.name,
+			"action_type": "reservation_discount",
+		}))
+		self.assertFalse(frappe.db.exists("Agent Action Log", {
+			"reference_doctype": "Reservation", "reference_name": res.name,
+			"action_type": "channel.modify_needs_review",
+		}))
+
+	def test_lock_channel_rates_zero_total_sets_writer_flag_for_direct_callers(self):
+		"""Direct caller pin (kills mutant M2 on channel_manager.lock_channel_rates):
+		clearing locked nights with total <= 0 sets kamra_night_rates_writer before
+		returning so guard_locked_nights admits the save."""
+		ref = "OTA-M2-" + frappe.generate_hash(length=6)
+		res = self._pre_arrival_ota(ref)
+		doc = self.doc(res.name)
+		self.assertTrue(doc.night_rates)
+		self.assertFalse(doc.flags.get("kamra_night_rates_writer"))
+		doc.auto_price = 0
+		doc.amount_after_tax = 0
+		cm.lock_channel_rates(doc, 0)
+		self.assertTrue(doc.flags.get("kamra_night_rates_writer"))
+		doc.save(ignore_permissions=True)
+		self.assertEqual(len(self.doc(res.name).night_rates), 0)
+
 
 class SplitDiscountedNightTests(RoundFourTestCase):
 	"""Pin (#37 x #32): splitting a posted discounted tax-inclusive room night
@@ -313,7 +498,7 @@ class SplitDiscountedNightTests(RoundFourTestCase):
 		extra = folio_mod.split_folio(res.name, "Extra")
 		folio_mod.post_room_night(self.doc(res.name), d(-1))
 		orig_line = next(c for c in frappe.get_doc("Folio", main).charges if c.charge_type == "Room")
-		self.assertIn("100,000.00 less discount 10,000.00", orig_line.description)
+		self.assertIn("100,000 less discount 10,000", orig_line.description)
 
 		# Append-only 50/50 split onto Extra folio
 		split_out = folio_mod.split_charge(main, orig_line.name, extra, percent=50)
@@ -579,3 +764,114 @@ class InHouseChannelGuardDiscountTests(RoundFourTestCase):
 		self.assertEqual(doc.discount_type, "Percent")
 		self.assertEqual(flt(doc.discount_value), 15.0)
 		self.assertEqual(self.rows(res.name), [(1000, 100, 900), (1000, 150, 850), (1000, 150, 850)])
+
+
+PROP_UGX = "UT Disc UGX"
+
+
+class PropertyCurrencyFormattingTests(RoundFourTestCase):
+	"""P2-4: Changes Log (Version rows + discount audit) and folio discount
+	descriptions use the property's currency and currency decimals (never INR
+	or .00 on a whole-shilling UGX stay)."""
+
+	properties = (PROP_A, PROP_UGX)
+
+	def _ensure_ugx(self):
+		if not frappe.db.exists("Currency", "UGX"):
+			frappe.get_doc({
+				"doctype": "Currency", "currency_name": "UGX",
+				"symbol": "UGX ", "fraction": "", "fraction_units": 1,
+				"number_format": "#,###.##", "enabled": 1,
+			}).insert(ignore_permissions=True)
+		else:
+			frappe.db.set_value("Currency", "UGX", "enabled", 1)
+
+	def test_ugx_changes_log_and_folio_descriptions_use_property_currency_and_whole_shillings(self):
+		self._ensure_ugx()
+		meta = frappe.get_meta("Reservation")
+		for fieldname in ("amount_before_tax", "tax_amount", "amount_after_tax",
+		                  "discount_amount", "agreed_rate"):
+			self.assertEqual(
+				meta.get_field(fieldname).options, "Property:property:currency", fieldname
+			)
+
+		make_property(
+			PROP_UGX, business_date=TODAY, country="Uganda", currency="UGX",
+			gst_mode="Fixed", gst_rate_low=0, gst_rate_high=0, rates_include_tax=1,
+		)
+		frappe.db.delete("Property Setting", {"property": PROP_UGX})
+		set_setting(PROP_UGX, "rate_override_limit_pct", 25)
+		rt = make_room_type(PROP_UGX, "UDLX", base_price=555000, tax_percent=0)
+		frappe.db.set_value("Room Type", rt, {"base_price": 555000, "tax_percent": 0})
+		room = make_room(PROP_UGX, rt, "U101")
+		room_du = make_room(PROP_UGX, rt, "U102")
+
+		out = self.as_user(
+			DESK, api.create_booking, PROP_UGX, rt, d(5), d(6), "UGX Guest",
+			room=room, discount_type="Percent", discount_value=10,
+			discount_reason="RATE-PROMO",
+		)
+		res_name = out["reservation"]
+		with patch.object(frappe, "in_test", False):
+			self.as_user(
+				DESK, api.set_reservation_discount, res_name,
+				discount_type="Percent", discount_value=20, reason_code="RATE-PROMO",
+			)
+
+		entries = self.as_user(DESK, api.reservation_changes, res_name)["entries"]
+		disc = next(e for e in entries if e.get("action_type") == "reservation_discount")
+		self.assertIn("UGX", disc["rationale"])
+		self.assertIn("555,000", disc["rationale"])
+		self.assertIn("111,000", disc["rationale"])
+		self.assertIn("444,000", disc["rationale"])
+		self.assertNotIn(".00", disc["rationale"])
+		self.assertNotIn("₹", disc["rationale"])
+
+		amt_field = next(
+			f for e in entries if e["kind"] == "change"
+			for f in e["fields"] if f["field"] == "amount_after_tax"
+		)
+		for side in (amt_field["from"], amt_field["to"]):
+			self.assertNotIn("₹", side)
+			self.assertNotIn(".00", side)
+			self.assertIn("UGX", side)
+		self.assertIn("499,500", amt_field["from"])
+		self.assertIn("444,000", amt_field["to"])
+
+		# Folio Room line description uses whole shillings ("555,000 less discount 111,000")
+		frappe.db.set_value("Reservation", res_name, "status", "Checked In")
+		folio_mod.post_room_night(self.doc(res_name), d(5))
+		room_line = next(
+			c for c in frappe.get_doc("Folio", guest_folio(res_name)).charges
+			if c.charge_type == "Room"
+		)
+		self.assertIn("555,000 less discount 111,000", room_line.description)
+		self.assertNotIn("555,000.00", room_line.description)
+		self.assertNotIn("111,000.00", room_line.description)
+
+		# Day-use folio line description also uses whole shillings
+		frappe.db.delete("Rate Plan", {"property": PROP_UGX, "code": "DUH"})
+		du_plan = frappe.get_doc({
+			"doctype": "Rate Plan", "property": PROP_UGX,
+			"rate_plan_name": "UGX Hourly", "code": "DUH",
+			"modifier_type": "Percent", "modifier_value": 0,
+			"billing_basis": "Hourly", "hourly_rate": 50000, "min_hours": 2,
+			"discount_eligible": 1,
+		}).insert(ignore_permissions=True)
+		du = make_reservation(
+			PROP_UGX, rt, TODAY, TODAY, status="Checked In", room=room_du,
+			rate_plan=du_plan.name, is_day_use=1, auto_price=1,
+			planned_check_in_time="10:00:00", planned_check_out_time="12:00:00",
+		)
+		self.as_user(
+			DESK, api.set_reservation_discount, du.name,
+			discount_type="Percent", discount_value=10, reason_code="RATE-PROMO",
+		)
+		folio_mod.post_room_night(self.doc(du.name), TODAY)
+		du_line = next(
+			c for c in frappe.get_doc("Folio", guest_folio(du.name)).charges
+			if c.charge_type == "Room"
+		)
+		self.assertIn("100,000 less discount 10,000", du_line.description)
+		self.assertNotIn("100,000.00", du_line.description)
+		self.assertNotIn("10,000.00", du_line.description)
