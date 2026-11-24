@@ -368,8 +368,9 @@ def _run_import(property: str, csv_text: str, preset: str = "auto"):
 				doc.db_set("status", row["status"], update_modified=False)
 				history += 1
 			else:
-				# an in-house guest arrived before go-live
+				# an in-house guest arrived before go-live (or carried-forward stay from old PMS)
 				doc.flags.allow_past_check_in = True
+				doc.flags.kamra_migration_import = True
 				doc.insert()
 				if row["status"] == "Checked In":
 					doc.status = "Checked In"

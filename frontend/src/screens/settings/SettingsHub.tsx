@@ -37,6 +37,7 @@ import { roleLabel, upstreamOnly, whiteLabel } from "../../lib/brand"
 import { useOfferedLanguages, useT, t as translate } from "../../lib/i18n"
 import { loadLocale, useLocale } from "../../lib/money"
 import { serverError } from "../../lib/resource"
+import { notifySettingsChanged } from "../../lib/tariffSync"
 import { cn } from "../../lib/utils"
 import ConfiguredScreen, { type ConfigName } from "../ConfiguredScreen"
 import { ModulesPage, StaffPage } from "./AccessPages"
@@ -53,6 +54,7 @@ import {
   LaundryRatesCard,
   LOCALES,
   PaymentsSection,
+  RatePlanReadinessCard,
   SpeedCheckCard,
   KitchenPrintersCard,
   TIMEZONES,
@@ -500,9 +502,16 @@ export default function SettingsHub() {
                   modules: s.modules.map((m) => (m.id === mod.id ? { ...m, values } : m)),
                 },
               )
+              notifySettingsChanged(property, mod.id)
               void loadLocale()
             }}
           >
+            {mod.id === "front-desk" && (
+              <RatePlanReadinessCard
+                property={property}
+                enabled={Boolean(mod.values.rate_plan_required)}
+              />
+            )}
             {mod.id === "front-desk" && <CheckInStepsCard property={property} />}
             {mod.id === "front-desk" && (
               <NightAuditScheduleCard

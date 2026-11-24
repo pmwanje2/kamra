@@ -90,6 +90,9 @@ def make_property(name: str, **fields) -> str:
 		                         if k == "property_name"
 		                         or frappe.get_meta("Property").has_field(k)}})
 		doc.insert(ignore_permissions=True)
+		from kamra.settings import clear_cache, write_kv
+		write_kv(doc.name, "rate_plan_required", 0)
+		clear_cache(doc.name)
 	frappe.clear_document_cache("Property", name)
 	return doc.name
 

@@ -156,12 +156,13 @@
    "label": "Occupancy-based Pricing"
   },
   {
+   "default": "0",
    "description": "Nightly rate including base_occupancy adults",
    "fieldname": "base_price",
    "fieldtype": "Currency",
    "in_list_view": 1,
    "label": "Base Price (BAR)",
-   "reqd": 1
+   "reqd": 0
   },
   {
    "default": "2",

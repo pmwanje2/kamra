@@ -795,5 +795,18 @@
   "View report": "Bericht anzeigen",
   "Edit property override": "Haus-Überschreibung bearbeiten",
   "This property already has its own override for {code}. Edit that property row instead.": "Dieses Haus hat bereits eine eigene Überschreibung für {code}. Bearbeiten Sie stattdessen die Hauszeile.",
-  "Saving creates a property override for {property}. The shared default stays unchanged for other properties.": "Beim Speichern wird eine Überschreibung für {property} angelegt. Der gemeinsame Standard bleibt für andere Häuser unverändert."
+  "Saving creates a property override for {property}. The shared default stays unchanged for other properties.": "Beim Speichern wird eine Überschreibung für {property} angelegt. Der gemeinsame Standard bleibt für andere Häuser unverändert.",
+  "Rate plans set the price for all bookings at this property.": "Ratenpläne legen den Preis für alle Buchungen in dieser Unterkunft fest.",
+  "Tax comes from the accounting tax rules.": "Die Steuer ergibt sich aus den buchhalterischen Steuerregeln.",
+  "Rate plan readiness": "Bereitschaft für Ratenpläne",
+  "Existing reservations are never repriced when this setting changes.": "Bestehende Reservierungen werden bei einer Änderung dieser Einstellung niemals neu bepreist.",
+  "No default rate plan is set yet.": "Es ist noch kein Standard-Ratenplan festgelegt.",
+  "Manage rate plans": "Ratenpläne verwalten",
+  "All future bookings already have a rate plan.": "Alle künftigen Buchungen haben bereits einen Ratenplan.",
+  "{n} future booking has no rate plan.": "{n} künftige Buchung hat keinen Ratenplan.",
+  "{n} future bookings have no rate plan.": "{n} künftige Buchungen haben keinen Ratenplan.",
+  "They keep their booked prices. Only new bookings will require a rate plan.": "Sie behalten ihre gebuchten Preise. Nur neue Buchungen erfordern einen Ratenplan.",
+  "On: every new booking, walk-in, group pick-up, channel and online booking resolves a rate plan. Existing reservations are never repriced.": "Aktiv: Jede neue Buchung, jeder Walk-in, jeder Gruppenabruf sowie jede Kanal- und Online-Buchung verwendet einen Ratenplan. Bestehende Reservierungen werden niemals neu bepreist.",
+  "Set a default rate plan in Rate Plans.": "Legen Sie einen Standard-Ratenplan unter Ratenpläne fest.",
+  "No active rate plans are configured. Set up a default rate plan in Rate Plans.": "Es sind keine aktiven Ratenpläne eingerichtet. Richten Sie unter Ratenpläne einen Standard-Ratenplan ein."
 }

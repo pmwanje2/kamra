@@ -21,7 +21,9 @@
   "cb_b",
   "amount",
   "is_alcohol",
-  "balance_after"
+  "balance_after",
+  "override_approved_by",
+  "override_reason"
  ],
  "fields": [
   {
@@ -122,6 +124,20 @@
    "fieldname": "balance_after",
    "fieldtype": "Currency",
    "label": "Folio balance after",
+   "read_only": 1
+  },
+  {
+   "fieldname": "override_approved_by",
+   "fieldtype": "Link",
+   "label": "Override approved by",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "override_reason",
+   "fieldtype": "Data",
+   "label": "Override reason",
+   "length": 200,
    "read_only": 1
   }
  ],

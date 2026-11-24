@@ -24,3 +24,28 @@ class GroupBooking(Document):
 				import frappe
 				frappe.throw(frappe._("Only a Revenue Manager or Hotel Admin can change a group rate."),
 				             frappe.PermissionError)
+		if self.property:
+			import frappe
+			from kamra.pricing import resolve_group_rate_plan
+			from kamra.settings import get_setting
+
+			enforce = bool(get_setting(self.property, "rate_plan_required"))
+			new_plan = (self.get("rate_plan") or "").strip() or None
+			if self.is_new():
+				if new_plan or enforce:
+					resolved = resolve_group_rate_plan(
+						self.property, rate_plan=new_plan, company=self.get("company"), required=enforce,
+					)
+					if resolved:
+						self.rate_plan = resolved
+			else:
+				old_plan = ((before.get("rate_plan") or "").strip() or None) if before else None
+				if new_plan != old_plan:
+					if old_plan and not new_plan and enforce:
+						frappe.throw(frappe._(
+							"A rate plan is required for this property and cannot be cleared from an existing group booking."
+						))
+					elif new_plan:
+						resolve_group_rate_plan(
+							self.property, rate_plan=new_plan, company=self.get("company"), required=enforce,
+						)

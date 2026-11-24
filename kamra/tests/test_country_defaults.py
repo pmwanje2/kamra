@@ -184,6 +184,8 @@ class CountryDefaultsTestCase(AuditTestCase):
 
 	def test_an_occupant_added_in_uganda_is_ugandan_by_default(self):
 		bare_property(UG, "Uganda")
+		settings.write_kv(UG, "rate_plan_required", 0)
+		settings.clear_cache(UG)
 		res = make_reservation(UG, make_room_type(UG), d(1), d(2))
 		res.append("occupants", {"full_name": "UT Second Guest"})
 		res.save(ignore_permissions=True)
@@ -191,6 +193,8 @@ class CountryDefaultsTestCase(AuditTestCase):
 
 	def test_an_occupant_added_in_india_is_still_indian_by_default(self):
 		bare_property(IN, "India")
+		settings.write_kv(IN, "rate_plan_required", 0)
+		settings.clear_cache(IN)
 		res = make_reservation(IN, make_room_type(IN), d(1), d(2))
 		res.append("occupants", {"full_name": "UT Second Guest"})
 		res.save(ignore_permissions=True)
@@ -198,6 +202,8 @@ class CountryDefaultsTestCase(AuditTestCase):
 
 	def test_an_occupant_nationality_typed_by_the_desk_is_kept(self):
 		bare_property(UG, "Uganda")
+		settings.write_kv(UG, "rate_plan_required", 0)
+		settings.clear_cache(UG)
 		res = make_reservation(UG, make_room_type(UG), d(1), d(2))
 		res.append("occupants", {"full_name": "UT Visitor", "nationality": "Kenyan"})
 		res.save(ignore_permissions=True)
