@@ -1567,7 +1567,7 @@ def post_to_folio(function: str, folio: str | None = None):
 		if not target and doc.group_booking:
 			target = frappe.db.get_value(
 				"Folio", {"group_booking": doc.group_booking, "folio_type": "Group",
-				          "status": "Open"}, "name")
+				          "window_no": ("in", [0, 1]), "status": "Open"}, "name")
 			if not target:
 				from kamra.folio import open_group_folio
 				target = open_group_folio(doc.group_booking)

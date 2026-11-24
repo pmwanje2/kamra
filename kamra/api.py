@@ -3536,15 +3536,65 @@ def group_master_folio(group_booking: str):
 	return {"folio": open_group_folio(group_booking)}
 
 
+def _select_group_folio(group_booking: str, *, open_only: bool = False,
+                        window_no: int | None = None,
+                        property: str | None = None):
+	"""Deterministically select a Group Master folio window.
+
+	When `window_no` is given, match that exact window (1..window_cap) only
+	(accepting legacy window_no=0 for window 1). When omitted, prefer Open
+	Window 1, then the lowest Open window (2..8), then newest Window 1, then
+	newest Group folio."""
+	filters: dict = {"group_booking": group_booking, "folio_type": "Group"}
+	if open_only:
+		filters["status"] = "Open"
+	if window_no is not None:
+		from kamra.folio import window_cap
+		prop = property or frappe.db.get_value("Group Booking", group_booking, "property")
+		cap = window_cap(prop)
+		win = int(window_no)
+		if not 1 <= win <= cap:
+			frappe.throw(_("Window must be from 1 to {0}.").format(cap))
+		filters["window_no"] = ("in", [0, 1]) if win == 1 else win
+		rows = frappe.get_all(
+			"Folio",
+			filters=filters,
+			fields=["name", "status", "balance", "window_no"],
+			order_by="creation desc",
+			limit=1,
+		)
+		return rows[0] if rows else None
+	rows = frappe.get_all(
+		"Folio",
+		filters=filters,
+		fields=["name", "status", "balance", "window_no"],
+		order_by="creation desc",
+	)
+	if not rows:
+		return None
+	open_rows = [r for r in rows if r.status == "Open"]
+	if open_rows:
+		w1_open = [r for r in open_rows if int(r.get("window_no") or 1) == 1]
+		if w1_open:
+			return w1_open[0]
+		return min(open_rows, key=lambda r: int(r.get("window_no") or 1))
+	w1_all = [r for r in rows if int(r.get("window_no") or 1) == 1]
+	return w1_all[0] if w1_all else rows[0]
+
+
 @frappe.whitelist()
 @require_roles("Finance", "Front Desk", "Kamra Agent")
 def group_folios(group_booking: str):
 	"""The whole group's billing picture: the master folio plus every
 	member reservation's folios, with balances."""
-	master = frappe.get_all(
+	masters = frappe.get_all(
 		"Folio", filters={"group_booking": group_booking,
 		                  "folio_type": "Group"},
-		fields=_FOLIO_LIST_FIELDS)
+		fields=_FOLIO_LIST_FIELDS,
+		order_by="window_no asc, creation desc")
+	selected = _select_group_folio(group_booking)
+	master = next((m for m in masters if selected and m.name == selected.name), None) \
+		or (masters[0] if masters else None)
 	members = frappe.get_all(
 		"Reservation",
 		filters={"group_booking": group_booking},
@@ -3554,7 +3604,7 @@ def group_folios(group_booking: str):
 		m["folios"] = [f for f in frappe.get_all(
 			"Folio", filters={"reservation": m.name},
 			fields=_FOLIO_LIST_FIELDS) if f.folio_type != "Group"]
-	return {"master": master[0] if master else None, "members": members}
+	return {"master": master, "members": members}
 
 
 @frappe.whitelist(methods=["POST"])
@@ -3610,18 +3660,20 @@ def set_pays_own_charges(reservation: str, value: int = 1):
 def settle_group_bill(group_booking: str, mode: str | None = None,
                       amount: float | None = None, to_city_ledger: int = 0,
                       reference: str | None = None, pin: str | None = None,
-                      credit_override_reason: str | None = None):
+                      credit_override_reason: str | None = None,
+                      window_no: int | None = None):
 	"""Settle the group's master bill: take a payment on it (`mode`, and
 	`amount`, default the whole balance) or, for a group whose company has
-	credit, move the balance to the city ledger. The bill closes (and is
-	invoiced) once nothing is left on it. Allowed while rooms are still in
-	house: the reply warns, and their later charges open a new group bill."""
+	credit, move the balance to the city ledger. Pass `window_no` (1-8) to
+	target a specific group window; when omitted, prefers open Window 1 then
+	the lowest open window. The bill closes (and is invoiced) once nothing is
+	left on it. Allowed while rooms are still in house: the reply warns, and
+	their later charges open a new group bill."""
 	gb = frappe.get_doc("Group Booking", group_booking)
 	from kamra.authz import assert_property_access
 	assert_property_access(gb.property)
-	folio = frappe.db.get_value(
-		"Folio", {"group_booking": gb.name, "folio_type": "Group",
-		          "status": "Open"})
+	selected = _select_group_folio(gb.name, open_only=True, window_no=window_no)
+	folio = selected.name if selected else None
 	if not folio:
 		frappe.throw(_("This group has no open group bill."))
 	from kamra.ledger import _currency_places, _round_currency
@@ -3629,10 +3681,11 @@ def settle_group_bill(group_booking: str, mode: str | None = None,
 	eps = 0.5 * (10 ** -places)
 	balance = _round_currency(frappe.db.get_value("Folio", folio, "balance"), places)
 	if int(to_city_ledger or 0):
-		if not gb.company:
+		company = frappe.db.get_value("Folio", folio, "payee_company") or gb.company
+		if not company:
 			frappe.throw(_("Only a company group can go to the city ledger."))
 		from kamra.ledger import city_ledger_transfer
-		city_ledger_transfer(folio, gb.company, pin=pin,
+		city_ledger_transfer(folio, company, pin=pin,
 		                     credit_override_reason=credit_override_reason)
 	elif balance > eps:
 		if not mode:
@@ -3640,7 +3693,12 @@ def settle_group_bill(group_booking: str, mode: str | None = None,
 		add_folio_payment(folio, mode, flt(amount) or balance,
 		                  reference=reference, pin=pin)
 	balance = _round_currency(frappe.db.get_value("Folio", folio, "balance"), places)
-	out = {"folio": folio, "balance": balance, "closed": False}
+	out = {
+		"folio": folio,
+		"window_no": int(selected.get("window_no") or 1),
+		"balance": balance,
+		"closed": False,
+	}
 	if abs(balance) <= eps:
 		out["invoice_number"] = close_folio(folio, pin=pin)["invoice_number"]
 		out["closed"] = True
@@ -11895,10 +11953,7 @@ def group_detail(group_booking: str):
 			"Venue Booking", gb.event,
 			["name", "venue", "event_type", "event_date", "status",
 			 "attendees", "quoted_amount"], as_dict=True)
-	bill = frappe.get_all(
-		"Folio", filters={"group_booking": gb.name, "folio_type": "Group"},
-		fields=["name", "status", "balance"], order_by="creation desc", limit=1)
-	bill = bill[0] if bill else None
+	bill = _select_group_folio(gb.name)
 	master = bill.name if bill else None
 	# the rooms the group has: per type, the block or the live bookings,
 	# whichever is more (a group booked straight off create_group_booking

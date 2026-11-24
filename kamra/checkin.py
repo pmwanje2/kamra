@@ -200,7 +200,7 @@ def _billing(res) -> dict:
 		                                 "group_name") or res.group_booking
 		master = frappe.db.get_value(
 			"Folio", {"group_booking": res.group_booking, "folio_type": "Group"},
-			"name")
+			"name", order_by="window_no asc, creation desc")
 	is_ota = res.source == "OTA" or bool(res.get("ota_ref"))
 	if master:
 		payer = "Group"

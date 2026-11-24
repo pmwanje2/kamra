@@ -458,11 +458,18 @@ def _resolve_target_folio_readonly(
 							"status": "Open",
 						},
 						"name",
-					) or frappe.db.get_value(
-						"Folio",
-						{"group_booking": group, "folio_type": "Group", "status": "Open"},
-						"name",
 					)
+					if not gf and window == 1:
+						gf = frappe.db.get_value(
+							"Folio",
+							{
+								"group_booking": group,
+								"folio_type": "Group",
+								"window_no": 0,
+								"status": "Open",
+							},
+							"name",
+						)
 					return gf, "Group", _current_folio_balance(gf), master_no_post
 				return _window_1_readonly()
 
@@ -493,7 +500,21 @@ def _resolve_target_folio_readonly(
 					master_no_post = True
 			gf = frappe.db.get_value(
 				"Folio",
-				{"group_booking": group, "folio_type": "Group", "status": "Open"},
+				{
+					"group_booking": group,
+					"folio_type": "Group",
+					"window_no": 1,
+					"status": "Open",
+				},
+				"name",
+			) or frappe.db.get_value(
+				"Folio",
+				{
+					"group_booking": group,
+					"folio_type": "Group",
+					"window_no": 0,
+					"status": "Open",
+				},
 				"name",
 			)
 			return gf, "Group", _current_folio_balance(gf), master_no_post

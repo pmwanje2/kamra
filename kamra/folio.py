@@ -1792,10 +1792,11 @@ def split_figure(line: dict, part_figure) -> tuple[tuple[Decimal, Decimal], tupl
 
 
 def _split_whole(line: dict) -> tuple[Decimal, Decimal]:
-	"""Whole (base, tax) to conserve across split parts: quantized to the
-	currency's minor unit via cut_figure, except when a tax-inclusive room
-	night carries a sub-unit net locked by pricing.night_rate_places."""
-	if line["priced_with_tax"] and line["base"] != line["base"].quantize(line["unit"]):
+	"""Whole (base, tax) to conserve across split parts: for a tax-inclusive
+	room night, conserve its exact posted (base, tax) so unrounded net or tax
+	(e.g. 5000 / 1.12 = 4464.29 + 535.7148) is never dropped; otherwise
+	quantize to the currency's minor unit via cut_figure."""
+	if line["priced_with_tax"]:
 		return line["base"], line["tax"]
 	return cut_figure(line, line["figure"])
 
