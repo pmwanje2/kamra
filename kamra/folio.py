@@ -36,7 +36,24 @@ def _fnb_gst(property):
 	return pack_for(property).fnb_tax_rate(property)
 
 
+def _is_closed_or_invoiced(folio) -> bool:
+	"""True once a folio is closed or linked to an issued invoice."""
+	return bool(
+		folio.get("status") == "Closed"
+		or folio.get("invoice_number")
+		or folio.get("sales_invoice")
+	)
+
+
 def _recalculate(folio):
+	paid = sum(Decimal(str(p.amount or 0)) for p in folio.payments)
+	if _is_closed_or_invoiced(folio) and folio.get("grand_total") is not None:
+		# Closed / invoiced folios have frozen charges, tax and grand_total;
+		# adding a payment or correction must never re-round them.
+		grand = Decimal(str(folio.grand_total or 0))
+		folio.payments_total = float(paid)
+		folio.balance = float(grand - paid)
+		return
 	charges = tax = Decimal(0)
 	for c in folio.charges:
 		amount = Decimal(str(c.amount or 0))
@@ -45,20 +62,18 @@ def _recalculate(folio):
 		c.total = float(amount + line_tax)
 		charges += amount
 		tax += line_tax
-	paid = sum(Decimal(str(p.amount or 0)) for p in folio.payments)
 	raw_grand = charges + tax
 	prop = folio.get("property")
-	if prop and folio.charges:
-		# Document-level currency minor-unit rounding (SAP TCURX style): round the
-		# folio total to the property currency's ISO decimals rather than per line.
+	if prop and folio.charges and tax and not _is_closed_or_invoiced(folio):
+		# Document-level currency minor-unit rounding (SAP TCURX style) applies
+		# only to open, uninvoiced folios with calculated tax. With tax == 0
+		# (including ERPNext-bridged folios where KMR-TAX-001 keeps lines untaxed
+		# and native Sales Invoice owns tax/rounding), charges_total and
+		# grand_total stay equal to sum(c.amount) so KAM-SI-TOTAL-MISMATCH holds.
 		from kamra.pricing import property_currency, round_rate_amount
 		currency = property_currency(prop)
-		if tax:
-			grand = round_rate_amount(raw_grand, 0, "Nearest", currency)
-			tax = grand - charges
-		else:
-			grand = round_rate_amount(charges, 0, "Nearest", currency)
-			charges = grand
+		grand = round_rate_amount(raw_grand, 0, "Nearest", currency)
+		tax = grand - charges
 	else:
 		grand = raw_grand
 	folio.charges_total = float(charges)
