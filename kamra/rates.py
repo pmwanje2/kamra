@@ -121,7 +121,8 @@ def _price_tariff_panel(property: str, panel: dict) -> None:
 		primary = default if default in priced else None
 	else:
 		primary = next(iter(priced)) if len(priced) == 1 else None
-	sort_key = lambda plan: (plan.get("label") or "", plan.get("name") or "")
+	def sort_key(plan):
+		return (plan.get("label") or "", plan.get("name") or "")
 	if isinstance(panel.get("card_rate_plans"), list):
 		tariff_plans = sorted(panel.get("tariff_plans") or [], key=sort_key)
 		card = sorted(panel.get("card_rate_plans") or [], key=sort_key)
