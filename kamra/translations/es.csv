@@ -1123,7 +1123,7 @@ Use Check out to check a guest out: it makes sure every bill is cleared first.,U
 Check out,Check-out
 Discounts and allowances,Descuentos y bonificaciones
 {0} is not a {product} language.,{0} no es un idioma de {product}.
-"{0} is switched off. Turn it on from Languages in Settings.","{0} está desactivado. Actívelo en Idiomas, dentro de Configuración."
+{0} is switched off. Turn it on from Languages in Settings.,"{0} está desactivado. Actívelo en Idiomas, dentro de Configuración."
 No room mappings yet - map your room types to the provider's room and rate ids first.,Todavía no hay asociaciones de habitaciones: primero asocie sus tipos de habitación a los ids de habitación y de tarifa del proveedor.
 No room type matches it.,No coincide con ningún tipo de habitación.
 Provider rate plan {0} is already mapped on this connection.,El plan de tarifa {0} del proveedor ya está asociado en esta conexión.
@@ -1163,9 +1163,11 @@ OTA Tax Basis rows {0} and {1} are the same OTA ({2}): keep one.,Las filas {0} y
 OTA Tax Rules,Reglas de impuestos de OTA
 OTA Tax Basis,Base impositiva de OTA
 OTA Tax Basis row {0}: the OTA name needs a letter or a digit.,Fila {0} de base fiscal OTA: el nombre de la OTA necesita una letra o un dígito.
-
 Channel review status can only be cleared via the review action.,El estado de revisión del canal solo puede borrarse mediante la acción de revisión.
 Update In-House Reservations,Actualizar reservas en casa
 "Update In-House Reservations = Y is not yet enabled: OXI Y requires arrival-date, room-type, billed-night, and assigned-room safety bounds. Keep N so OTA changes to checked-in stays are rejected and flagged for review.","Actualizar reservas en casa = Y aún no está habilitado: OXI Y requiere límites de seguridad de fecha de llegada, tipo de habitación, noches facturadas y habitación asignada. Mantenga N para que los cambios de la OTA en estancias con check-in se rechacen y se marquen para revisión."
 OTA Tax Rules row {0}: a CJK rule needs at least two characters so it does not match unrelated taxes.,Fila {0} de Reglas de impuestos de OTA: una regla CJK necesita al menos dos caracteres para no coincidir con impuestos no relacionados.
+Tax as per the accounting invoice,Impuesto según la factura contable
+Tax Invoice,Factura fiscal
+Credited,Acreditado
 {0} bill(s) for this stay are still open at the outlet: {1}. Settle them at the outlet before check-out.,{0} cuenta(s) de esta estancia siguen abiertas en el punto de venta: {1}. Liquídalas allí antes del check-out.

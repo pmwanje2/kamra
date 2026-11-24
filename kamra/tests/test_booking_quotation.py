@@ -47,7 +47,7 @@ def _blank_pdf() -> bytes:
 
 
 class BookingQuotationTestCase(AuditTestCase):
-	properties = (PROP_A,)
+	properties = (PROP_A, "UT Quote UGX", "UT Quote KWD", "UT Quote USD")
 
 	def setUp(self):
 		super().setUp()
@@ -289,3 +289,67 @@ class BookingQuotationTestCase(AuditTestCase):
 		with self.assertRaises(frappe.PermissionError):
 			self.send(user=NIGHT)
 		self.assertFalse(self.comms())
+
+	def test_quotation_html_uses_property_locale_symbol_and_currency_decimals(self):
+		"""R8 P2 #6: _booking_quotation_html uses the property's locale symbol and
+		currency minor-unit decimals (UGX whole shillings replacing 'Sh', KWD 3 dec, USD 2 dec)."""
+		def _ensure_currency(name, sym, frac_units, fmt):
+			if not frappe.db.exists("Currency", name):
+				frappe.get_doc({
+					"doctype": "Currency", "currency_name": name, "enabled": 1,
+					"symbol": sym, "fraction": "Sub", "fraction_units": frac_units,
+					"number_format": fmt,
+				}).insert(ignore_permissions=True)
+			else:
+				frappe.db.set_value("Currency", name, {
+					"enabled": 1, "symbol": sym, "fraction_units": frac_units, "number_format": fmt,
+				})
+
+		_ensure_currency("UGX", "Sh", 1, "#,###")
+		_ensure_currency("KWD", "KWD ", 1000, "#,###.###")
+		_ensure_currency("USD", "$", 100, "#,###.##")
+
+		# Uganda property with Currency.UGX.symbol == "Sh": must render "UGX 270,000" (0 decimals, no "Sh")
+		ug_prop = "UT Quote UGX"
+		make_property(ug_prop, business_date=TODAY, country="Uganda", currency="UGX",
+		              gst_mode="Fixed", gst_rate_low=0, gst_rate_high=0, rates_include_tax=1)
+		ug_rt = make_room_type(ug_prop, "USTD", base_price=135000, tax_percent=0)
+		frappe.db.set_value("Room Type", ug_rt, {"base_price": 135000, "tax_percent": 0})
+		ug_room = make_room(ug_prop, ug_rt, "U101")
+		ug_res = make_reservation(ug_prop, ug_rt, d(5), d(7), room=ug_room,
+		                          guest=make_guest("UG Guest", email="ug@guest.test"))
+		ug_q = self.as_user(DESK, api.booking_quotation, ug_res.name)
+		ug_html = api._booking_quotation_html(ug_q)
+		self.assertIn("UGX 135,000", ug_html)
+		self.assertIn("UGX 270,000", ug_html)
+		self.assertNotIn("Sh135,000", ug_html)
+		self.assertNotIn("Sh270,000", ug_html)
+		self.assertNotIn("270,000.00", ug_html)
+
+		# Kuwait property (KWD): 3 decimals preserved
+		kw_prop = "UT Quote KWD"
+		make_property(kw_prop, business_date=TODAY, country="Kuwait", currency="KWD",
+		              gst_mode="Fixed", gst_rate_low=0, gst_rate_high=0, rates_include_tax=0)
+		kw_rt = make_room_type(kw_prop, "KSTD", base_price=12.345, tax_percent=0)
+		frappe.db.set_value("Room Type", kw_rt, {"base_price": 12.345, "tax_percent": 0})
+		kw_room = make_room(kw_prop, kw_rt, "K101")
+		kw_res = make_reservation(kw_prop, kw_rt, d(5), d(7), room=kw_room,
+		                          guest=make_guest("KW Guest", email="kw@guest.test"))
+		kw_q = self.as_user(DESK, api.booking_quotation, kw_res.name)
+		kw_html = api._booking_quotation_html(kw_q)
+		self.assertIn("KWD 12.345", kw_html)
+		self.assertIn("KWD 24.690", kw_html)
+
+		# US property (USD): 2 decimals preserved
+		us_prop = "UT Quote USD"
+		make_property(us_prop, business_date=TODAY, country="United States", currency="USD",
+		              gst_mode="Fixed", gst_rate_low=0, gst_rate_high=0, rates_include_tax=0)
+		us_rt = make_room_type(us_prop, "USSTD", base_price=150.5, tax_percent=0)
+		frappe.db.set_value("Room Type", us_rt, {"base_price": 150.5, "tax_percent": 0})
+		us_room = make_room(us_prop, us_rt, "S101")
+		us_res = make_reservation(us_prop, us_rt, d(5), d(7), room=us_room,
+		                          guest=make_guest("US Guest", email="us@guest.test"))
+		us_q = self.as_user(DESK, api.booking_quotation, us_res.name)
+		us_html = api._booking_quotation_html(us_q)
+		self.assertIn("$150.50", us_html)
+		self.assertIn("$301.00", us_html)

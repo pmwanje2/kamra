@@ -28,6 +28,7 @@ export default function RowCorrection({
   home = "",
   currency = home,
   act,
+  onOpenChange,
 }: {
   folio: string
   row: string
@@ -35,6 +36,8 @@ export default function RowCorrection({
   home?: string
   currency?: string
   act: (fn: () => Promise<unknown>, onError: (message: string) => void) => Promise<void>
+  /** told when the inline form opens and closes, so a row can make room for it */
+  onOpenChange?: (open: boolean) => void
 }) {
   const { t } = useT()
   const [options, setOptions] = useState<Options>(),
@@ -67,6 +70,7 @@ export default function RowCorrection({
   }
   const close = () => {
     setOptions(undefined)
+    onOpenChange?.(false)
     setUser("")
     setPin("")
     setNote("")
@@ -83,6 +87,7 @@ export default function RowCorrection({
         payment_row: row,
       })
       setOptions(opts)
+      onOpenChange?.(true)
       choose(opts.actions[0])
     } catch (e) {
       setError(serverError(e))
@@ -129,7 +134,7 @@ export default function RowCorrection({
       {!options && (
         <button
           disabled={loading}
-          className="text-brand-700 underline"
+          className="inline-flex items-center rounded-md border border-zinc-200 px-2 py-1 text-xs text-brand-700 hover:border-brand-400 disabled:opacity-50"
           onClick={open}
         >
           {t("Correct…")}

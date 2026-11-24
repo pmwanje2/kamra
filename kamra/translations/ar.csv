@@ -270,7 +270,7 @@ Use Check out to check a guest out: it makes sure every bill is cleared first.,�
 Check out,تسجيل المغادرة
 Discounts and allowances,الخصومات والتسويات
 {0} is not a {product} language.,{0} ليست لغة في {product}.
-"{0} is switched off. Turn it on from Languages in Settings.","{0} متوقفة. فعّلها من اللغات في الإعدادات."
+{0} is switched off. Turn it on from Languages in Settings.,{0} متوقفة. فعّلها من اللغات في الإعدادات.
 Quotation {0} from {1},عرض السعر {0} من {1}
 "Dear {0}, please find your quotation for {1} to {2} attached. Reference {3}.",عزيزنا {0}، مرفق عرض السعر لإقامتكم من {1} إلى {2}. المرجع {3}.
 Quotation,عرض السعر
@@ -301,9 +301,12 @@ OTA Tax Basis rows {0} and {1} are the same OTA ({2}): keep one.,صفا أساس
 OTA Tax Rules,قواعد ضرائب OTA
 OTA Tax Basis,أساس ضرائب OTA
 OTA Tax Basis row {0}: the OTA name needs a letter or a digit.,صف أساس ضريبة OTA رقم {0}: يجب أن يحتوي اسم OTA على حرف أو رقم.
-
 Channel review status can only be cleared via the review action.,لا يمكن مسح حالة مراجعة القناة إلا عبر إجراء المراجعة.
 Update In-House Reservations,تحديث الحجوزات المقيمة حاليًا
 "Update In-House Reservations = Y is not yet enabled: OXI Y requires arrival-date, room-type, billed-night, and assigned-room safety bounds. Keep N so OTA changes to checked-in stays are rejected and flagged for review.",تحديث الحجوزات المقيمة حاليًا = Y غير مفعَّل بعد: يتطلب OXI Y ضوابط تاريخ الوصول ونوع الغرفة والليالي المفوترة والغرفة المخصَّصة. أبقِ القيمة N لرفض تعديلات OTA على الإقامات المسجَّلة دخولًا وتعليمها للمراجعة.
 OTA Tax Rules row {0}: a CJK rule needs at least two characters so it does not match unrelated taxes.,الصف {0} من قواعد ضرائب OTA: تحتاج قاعدة CJK إلى حرفين على الأقل حتى لا تطابق ضرائب غير ذات صلة.
+Tax as per the accounting invoice,الضريبة وفقًا للفاتورة المحاسبية
+Tax Invoice,فاتورة ضريبية
+Provisional Bill,فاتورة مؤقتة
+Credited,رصيد دائن
 {0} bill(s) for this stay are still open at the outlet: {1}. Settle them at the outlet before check-out.,{0} فاتورة لهذه الإقامة ما زالت مفتوحة في نقطة البيع: {1}. سدّدها هناك قبل المغادرة.

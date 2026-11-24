@@ -2236,4 +2236,8 @@ Channel review status can only be cleared via the review action.,渠道审核状
 Update In-House Reservations,更新在住预订
 "Update In-House Reservations = Y is not yet enabled: OXI Y requires arrival-date, room-type, billed-night, and assigned-room safety bounds. Keep N so OTA changes to checked-in stays are rejected and flagged for review.",更新在住预订 = Y 尚未启用：OXI Y 需要到店日期、房型、已入账房晚和已分配房间的安全边界。请保持 N，以便拒绝 OTA 对已入住预订的修改并标记待审核。
 OTA Tax Rules row {0}: a CJK rule needs at least two characters so it does not match unrelated taxes.,OTA 税费规则第 {0} 行：CJK 规则至少需要两个字符，以免误匹配无关税费。
+Tax as per the accounting invoice,税额以财务发票为准
+Tax Invoice,税务发票
+Invoice,发票
+Credited,已冲减
 {0} bill(s) for this stay are still open at the outlet: {1}. Settle them at the outlet before check-out.,本次住宿还有 {0} 张账单在营业点仍未结清：{1}。请在退房前在营业点结清。

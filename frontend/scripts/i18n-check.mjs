@@ -27,6 +27,59 @@ for (const filename of fs.readdirSync(localeDirectory).filter((name) => name.end
   }
 }
 
+// catalog.csv is the source `i18n:import` writes locale files from, so each of
+// its cells must already satisfy the rules above. A row pasted inside another
+// row's multi-line quoted cell parses as part of that cell: the cell then gains
+// a line, and usually the pasted row's placeholders, that its key does not have.
+function parseCsv(text) {
+  const rows = []
+  let row = []
+  let field = ""
+  let quoted = false
+  for (let i = text.charCodeAt(0) === 0xfeff ? 1 : 0; i < text.length; i++) {
+    const c = text[i]
+    if (quoted) {
+      if (c === '"' && text[i + 1] === '"') {
+        field += '"'
+        i++
+      } else if (c === '"') quoted = false
+      else field += c
+    } else if (c === '"') quoted = true
+    else if (c === ",") {
+      row.push(field)
+      field = ""
+    } else if (c === "\n" || c === "\r") {
+      if (c === "\r" && text[i + 1] === "\n") i++
+      row.push(field)
+      if (row.some((cell) => cell.length)) rows.push(row)
+      row = []
+      field = ""
+    } else field += c
+  }
+  assert.ok(!quoted, "catalog.csv: unterminated quoted cell")
+  row.push(field)
+  if (row.some((cell) => cell.length)) rows.push(row)
+  return rows
+}
+const [header, ...records] = parseCsv(fs.readFileSync(path.join(root, "src/i18n/catalog.csv"), "utf8"))
+const keyColumn = header.indexOf("key")
+const textColumns = header.filter((name) => !["key", "sources", "placeholders", "status"].includes(name))
+assert.ok(keyColumn >= 0, "catalog.csv: missing key column")
+for (const record of records) {
+  const key = record[keyColumn]
+  assert.equal(record.length, header.length, `catalog.csv: ${JSON.stringify(key)} has ${record.length} cells, not ${header.length}`)
+  for (const name of textColumns) {
+    const value = record[header.indexOf(name)]
+    if (!value.trim()) continue
+    assert.deepEqual(parameters(value), parameters(key), `catalog.csv: ${name} placeholder mismatch for ${JSON.stringify(key)}`)
+    assert.equal(
+      value.split("\n").length,
+      key.split("\n").length,
+      `catalog.csv: ${name} for ${JSON.stringify(key)} has a different number of lines than its key (a row pasted inside a multi-line cell?)`,
+    )
+  }
+}
+
 const translatorNames = new Set(["t", "tn", "translate", "translateUI"])
 function isTranslation(node) {
   return ts.isCallExpression(node) && ts.isIdentifier(node.expression) && translatorNames.has(node.expression.text)
