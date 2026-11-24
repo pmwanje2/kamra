@@ -316,6 +316,64 @@ def unsaved_charges(folio_doc) -> list:
 	return [c for c in folio_doc.charges if not c.name]
 
 
+def _currency_places(property: str | None) -> int:
+	"""ISO 4217 decimal places of the property's currency (0 UGX, 2 USD, 3 KWD)."""
+	if not property:
+		return 2
+	from kamra.pricing import _minor_unit, property_currency
+	return _minor_unit(property_currency(property))
+
+
+def _round_currency(value, places: int) -> float:
+	"""Half-up round to `places` decimals using Decimal."""
+	return float(_money(value).quantize(Decimal(1).scaleb(-places), rounding=ROUND_HALF_UP))
+
+
+def sync_folio_rounding_ledger(folio_doc, session: str | None = None) -> None:
+	"""Keep the Guest ledger equal to the folio's document-rounded total.
+
+	Each Folio Charge posts its exact unrounded total to the Guest ledger, while
+	`_recalculate` rounds an open, taxed folio's document total to the currency's
+	ISO 4217 minor unit (e.g. whole UGX on tax-exclusive stays). When the two
+	differ, post the delta under `Folio Rounding` so `folio_reconciliation`
+	stays in balance. No-op on closed/invoiced folios or when totals match."""
+	if not getattr(folio_doc, "name", None) or not getattr(folio_doc, "property", None):
+		return
+	if (
+		folio_doc.get("status") == "Closed"
+		or folio_doc.get("invoice_number")
+		or folio_doc.get("sales_invoice")
+	):
+		return
+	if not hasattr(frappe.db, "sql"):
+		return
+	raw_total = sum(Decimal(str(c.total or 0)) for c in (folio_doc.charges or []))
+	target = Decimal(str(folio_doc.grand_total or 0)) - raw_total
+	current_rows = frappe.db.sql(
+		"""SELECT COALESCE(SUM(debit - credit), 0) FROM `tabFolio Ledger Entry`
+		   WHERE folio = %s AND ledger = 'Guest' AND source_doctype = 'Folio Rounding'""",
+		folio_doc.name,
+	)
+	current = Decimal(str((current_rows[0][0] if current_rows else 0) or 0))
+	delta = (target - current).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
+	if abs(delta) < Decimal("0.000001"):
+		return
+	try:
+		write_ledger_entry(
+			property=folio_doc.property,
+			folio=folio_doc.name,
+			ledger="Guest",
+			debit=float(delta) if delta > 0 else 0,
+			credit=float(-delta) if delta < 0 else 0,
+			description="Currency rounding adjustment",
+			session=session,
+			source_doctype="Folio Rounding",
+			source_name=folio_doc.name,
+		)
+	except Exception:
+		frappe.log_error(title="ledger rounding write failed")
+
+
 def ledger_charges(folio_doc, rows, session: str | None = None) -> None:
 	"""Post saved charge rows to the Guest ledger through
 	record_charge_ledger - the path for automatic postings (room nights,
@@ -323,6 +381,8 @@ def ledger_charges(folio_doc, rows, session: str | None = None) -> None:
 	already on the ledger is skipped, so a caller can never double post.
 	Like a manual charge, a ledger failure is logged, not raised: the
 	folio line stands and the backfill patch can pick it up."""
+	posted_any = False
+	failed_any = False
 	for row in rows:
 		if not row.name:
 			continue
@@ -332,8 +392,12 @@ def ledger_charges(folio_doc, rows, session: str | None = None) -> None:
 			continue
 		try:
 			record_charge_ledger(folio_doc, row.as_dict(), session=session)
+			posted_any = True
 		except Exception:
+			failed_any = True
 			frappe.log_error(title="ledger charge write failed")
+	if posted_any and not failed_any:
+		sync_folio_rounding_ledger(folio_doc, session=session)
 
 
 def save_folio(folio_doc, session: str | None = None) -> None:
@@ -492,8 +556,10 @@ def reverse_ledger_for_charge(property: str, folio: str, charge_row_name: str,
 	if amount is not None:
 		# a part of a debit line (or of a credit line, sign kept)
 		net = abs(float(amount)) if net >= 0 else -abs(float(amount))
-	net = round(net, 2)
-	if abs(net) < 0.005:
+	places = max(_currency_places(property), 2)
+	eps = 0.5 * (10 ** -places)
+	net = _round_currency(net, max(places, 6))
+	if abs(net) < eps:
 		return None  # already fully reversed
 	return write_ledger_entry(
 		property=property,
@@ -571,6 +637,8 @@ def ledger_detail(property: str, ledger: str, business_date: str | None = None,
 	assert_property_access(property)
 	date = business_date or get_business_date(property)
 	limit = max(1, min(int(limit or 2000), 2000))
+	places = max(_currency_places(property), 2)
+	min_bal = 10 ** -places
 	rows = frappe.db.sql(
 		"""
 		SELECT e.folio, SUM(e.debit) AS debit, SUM(e.credit) AS credit,
@@ -582,15 +650,15 @@ def ledger_detail(property: str, ledger: str, business_date: str | None = None,
 		LEFT JOIN `tabReservation` r ON r.name = f.reservation
 		WHERE e.property = %(p)s AND e.ledger = %(l)s AND e.business_date <= %(d)s
 		GROUP BY e.folio
-		HAVING ABS(SUM(e.debit - e.credit)) >= 0.01
+		HAVING ABS(SUM(e.debit - e.credit)) >= %(min_bal)s
 		ORDER BY ABS(SUM(e.debit - e.credit)) DESC
 		LIMIT %(n)s
-		""", {"p": property, "l": ledger, "d": date, "n": limit + 1}, as_dict=True)
+		""", {"p": property, "l": ledger, "d": date, "n": limit + 1, "min_bal": min_bal}, as_dict=True)
 	truncated = len(rows) > limit
 	rows = rows[:limit]
 	return {"ledger": ledger, "business_date": str(date), "truncated": truncated, "rows": [{
-		**r, "debit": round(float(r.debit), 2), "credit": round(float(r.credit), 2),
-		"balance": round(float(r.balance), 2), "last_date": str(r.last_date)}
+		**r, "debit": _round_currency(r.debit, places), "credit": _round_currency(r.credit, places),
+		"balance": _round_currency(r.balance, places), "last_date": str(r.last_date)}
 		for r in rows]}
 
 
@@ -599,6 +667,8 @@ def folio_reconciliation(property: str, limit: int = 20) -> dict:
 	balance (charges less payments). A folio whose ledger nets to something
 	else - a posting that never reached the ledger, or one the folio lost -
 	is a genuine break; the rest is money guests owe, not an imbalance."""
+	places = max(_currency_places(property), 2)
+	tol = 2 * (10 ** -places)
 	rows = frappe.db.sql(
 		"""
 		SELECT f.name AS folio, f.folio_type, f.status,
@@ -612,9 +682,9 @@ def folio_reconciliation(property: str, limit: int = 20) -> dict:
 			GROUP BY folio
 		) e ON e.folio = f.name
 		WHERE f.property = %(p)s
-		  AND ABS(COALESCE(f.balance, 0) - COALESCE(e.net, 0)) >= 0.02
+		  AND ABS(COALESCE(f.balance, 0) - COALESCE(e.net, 0)) >= %(tol)s
 		ORDER BY f.creation DESC
-		""", {"p": property}, as_dict=True)
+		""", {"p": property, "tol": tol}, as_dict=True)
 	ledger_net = float(frappe.db.sql(
 		"""SELECT COALESCE(SUM(debit - credit), 0) FROM `tabFolio Ledger Entry`
 		   WHERE property = %s AND ledger IN ('Guest', 'Deposit')""",
@@ -624,15 +694,17 @@ def folio_reconciliation(property: str, limit: int = 20) -> dict:
 		   WHERE property = %s""", property)[0][0] or 0)
 	return {
 		"in_balance": not rows,
-		"ledger_net": round(ledger_net, 2),
-		"folios_net": round(folios_net, 2),
-		"difference": round(sum(float(r.balance) - float(r.ledger)
-		                        for r in rows), 2),
+		"ledger_net": _round_currency(ledger_net, places),
+		"folios_net": _round_currency(folios_net, places),
+		"difference": _round_currency(
+			sum((_money(r.balance) - _money(r.ledger) for r in rows), Decimal(0)),
+			places,
+		),
 		"folios_out": len(rows),
 		"folios": [{"folio": r.folio, "folio_type": r.folio_type,
-		            "status": r.status, "balance": round(float(r.balance), 2),
-		            "ledger": round(float(r.ledger), 2),
-		            "difference": round(float(r.balance) - float(r.ledger), 2)}
+		            "status": r.status, "balance": _round_currency(r.balance, places),
+		            "ledger": _round_currency(r.ledger, places),
+		            "difference": _round_currency(_money(r.balance) - _money(r.ledger), places)}
 		           for r in rows[:limit]],
 	}
 
@@ -861,7 +933,7 @@ def transfer_to_city_ledger(folio: str, company: str | None = None,
 		"reference": f"city-ledger:{account}",
 	})
 	from kamra.folio import _recalculate
-	_recalculate(doc)
+	_recalculate(doc, payments_only=True)
 	doc.save(ignore_permissions=True)
 
 	# Two legs, like any transfer: the Company Credit payment credits the
@@ -951,7 +1023,7 @@ def reverse_city_ledger_transfer(folio: str, reason: str) -> float:
 		"amount": -net, "reference": f"city-ledger-back:{account}",
 	})
 	from kamra.folio import _recalculate
-	_recalculate(doc)
+	_recalculate(doc, payments_only=True)
 	doc.save(ignore_permissions=True)
 	record_payment_ledger(doc, row.as_dict())
 	company = frappe.db.get_value("City Ledger Account", account, "company")
@@ -1956,11 +2028,42 @@ def generate_proforma(folio: str, notes: str | None = None,
 	f = inv["folio"]
 	if cint(include_projected):
 		inv["projected_lines"] = _projected_lines(f)
-		posted = flt(f.get("grand_total"))
-		ahead = round(sum(flt(l["total"]) for l in inv["projected_lines"]), 2)
-		inv["estimate"] = {"posted_total": round(posted, 2), "projected_total": ahead,
-		                   "grand_total": round(posted + ahead, 2),
-		                   "balance": round(flt(f.get("balance")) + ahead, 2)}
+		places = max(_currency_places(f.get("property")), 2)
+		posted_dec = _money(f.get("grand_total"))
+		ahead_dec = sum((_money(l["total"]) for l in inv["projected_lines"]), Decimal(0))
+		est_grand_dec = posted_dec + ahead_dec
+		if inv["projected_lines"] and f.get("property") and (f.get("charges") or not posted_dec):
+			# Document-level rounding across posted + projected lines so the proforma
+			# estimate agrees with the quote and the final check-out folio.
+			from kamra.pricing import property_currency, round_rate_amount
+			all_lines = [*(f.get("charges") or []), *inv["projected_lines"]]
+			raw_base = sum((_money(l.get("amount")) for l in all_lines), Decimal(0))
+			raw_tax = sum((_money(l.get("gst_amount")) for l in all_lines), Decimal(0))
+			currency = property_currency(f.get("property"))
+			est_grand_dec = (
+				round_rate_amount(raw_base + raw_tax, 0, "Nearest", currency)
+				if raw_tax
+				else raw_base
+			)
+			ahead_dec = est_grand_dec - posted_dec
+		if "payments_total" in f:
+			est_balance_dec = est_grand_dec - _money(f.get("payments_total"))
+		else:
+			est_balance_dec = _money(f.get("balance")) + ahead_dec
+		inv["estimate"] = {
+			"posted_total": _round_currency(posted_dec, places),
+			"projected_total": _round_currency(ahead_dec, places),
+			"grand_total": _round_currency(est_grand_dec, places),
+			"balance": _round_currency(est_balance_dec, places),
+		}
+		stay = inv.get("stay") or {}
+		if stay.get("reservation") and stay.get("reference_currency"):
+			# the estimate in the contract currency, the projected nights at the rate they would post at
+			from kamra.folio import reference_currency
+			stay["reference_currency"] = reference_currency(
+				frappe.get_doc("Reservation", stay["reservation"]), grand_total=inv["estimate"]["grand_total"],
+				balance=inv["estimate"]["balance"], charges=[*(f.get("charges") or []), *inv["projected_lines"]],
+				payments=f.get("payments") or [])
 	doc = frappe.get_doc({
 		"doctype": "Proforma Folio",
 		"property": f.get("property"),
@@ -2001,6 +2104,9 @@ def _projected_lines(f) -> list[dict]:
 				"description": c.description, "qty": c.qty, "rate": c.rate,
 				"amount": c.amount, "gst_rate": c.gst_rate,
 				"gst_amount": c.gst_amount, "total": c.total, "projected": True,
+				# the rate a Current Date night would post at (ACTUAL reference currency reads it)
+				"contract_currency": c.get("contract_currency"), "contract_fx_rate": c.get("contract_fx_rate"),
+				"contract_fx_date": str(c.contract_fx_date) if c.get("contract_fx_date") else None,
 			})
 	return sorted(lines, key=lambda l: (l["posting_date"], l["charge_type"]))
 
@@ -2231,6 +2337,7 @@ def batch_post_charge(folios: str | list, charge_type: str, amount: float,
 		except Exception:
 			sess = None
 		record_charge_ledger(doc, charge.as_dict(), session=sess)
+		sync_folio_rounding_ledger(doc, session=sess)
 		posted.append(fn)
 	return {"posted": posted, "count": len(posted)}
 

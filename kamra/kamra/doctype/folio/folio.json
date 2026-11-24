@@ -142,12 +142,14 @@
    "fieldname": "charges_total",
    "fieldtype": "Currency",
    "label": "Charges Total",
+   "options": "Property:property:currency",
    "read_only": 1
   },
   {
    "fieldname": "tax_total",
    "fieldtype": "Currency",
    "label": "Tax Total",
+   "options": "Property:property:currency",
    "read_only": 1
   },
   {
@@ -159,12 +161,14 @@
    "fieldname": "grand_total",
    "fieldtype": "Currency",
    "label": "Grand Total",
+   "options": "Property:property:currency",
    "read_only": 1
   },
   {
    "fieldname": "payments_total",
    "fieldtype": "Currency",
    "label": "Payments Total",
+   "options": "Property:property:currency",
    "read_only": 1
   },
   {
@@ -172,6 +176,7 @@
    "fieldtype": "Currency",
    "in_list_view": 1,
    "label": "Balance",
+   "options": "Property:property:currency",
    "read_only": 1
   },
   {
@@ -197,6 +202,7 @@
    "fieldname": "payment_link_amount",
    "fieldtype": "Currency",
    "label": "Payment link amount",
+   "options": "Property:property:currency",
    "read_only": 1
   },
   {
@@ -245,7 +251,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-11-24 10:00:00.000000",
+ "modified": "2026-11-24 10:55:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Folio",

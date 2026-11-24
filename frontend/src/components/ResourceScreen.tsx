@@ -124,17 +124,29 @@ export interface FieldSpec {
   linkDoctype?: string // for link
   /** link options only from the current property (the target has a `property` field) */
   linkPropertyScoped?: boolean
+  /** extra Frappe filters for a link field's option query (e.g. enabled currencies only) */
+  linkFilters?: (string | number)[][]
+  /** max options loaded for a link field (default 500) */
+  linkLimit?: number
+  /** extra values that must always stay selectable in a link dropdown */
+  ensureOptions?: (draft: Record<string, unknown>) => string[]
+  /** override the value rendered in the input (e.g. inherited currency on derived plans) */
+  displayValue?: (draft: Record<string, unknown>) => unknown
   required?: boolean
   hint?: string // for image: recommended size/format
+  /** dynamic hint text (overrides static `hint` when returned) */
+  hintWhen?: (draft: Record<string, unknown>) => string | undefined
   dependsOn?: (draft: Record<string, unknown>) => boolean
   /** Lock the field on existing records (e.g. code primary keys). */
   readOnlyOnEdit?: boolean
   /** Disable a field dynamically (e.g. disabling a system master code). */
   disabledWhen?: (draft: Record<string, unknown>) => boolean
-  /** Initial value when creating a new record. */
-  default?: unknown
   /** Block dates before today unless the user may backdate (Finance / Hotel Admin). */
   notPast?: boolean
+  /** Initial value when creating a new record (e.g. the DocType's own default). */
+  default?: unknown
+  /** Key of a `ScreenConfig.sections` entry: the field renders in that collapsible section. */
+  section?: string
 }
 
 /** One column of a child table edited in the form (FieldSpec type "table"). */
@@ -159,6 +171,16 @@ export interface ScreenConfig {
     statusCheck?: boolean
     /** Map a Check field (0/1) to explicit badge labels (e.g. System / Custom). */
     booleanBadge?: { truthy: string; falsy?: string }
+    /** Computed client-side column (omitted from Frappe listResource fields). */
+    virtual?: boolean
+    /** Custom cell renderer for display. */
+    render?: (row: Row) => ReactNode
+    /** Explicit CSV export value for computed columns. */
+    csvValue?: (row: Row) => string | number | null
+    /** Optional table width class (e.g. "w-[24%]"). */
+    width?: string
+    /** Allow wrapping instead of truncating in table cells. */
+    wrap?: boolean
   }[]
   form: FieldSpec[]
   formNote?: string
@@ -171,6 +193,8 @@ export interface ScreenConfig {
   /** Row-level delete guard (e.g. hide Delete for system master rows). */
   canDelete?: (row: Record<string, unknown>) => boolean
   orderBy?: string
+  /** Optional minimum table width class (e.g. "min-w-[820px]") so wide fixed-layout tables scroll cleanly on mobile. */
+  tableMinWidth?: string
   /** Fields searched (LIKE) by the search box. Adds a search input when set. */
   searchFields?: string[]
   /** Dropdown filters shown in the toolbar (e.g. status). */
@@ -181,6 +205,11 @@ export interface ScreenConfig {
   dateFilter?: { field: string; label: string }
   /** Custom section rendered in the drawer below the form (existing rows only). */
   extra?: ComponentType<{ row: Row; reload: () => void }>
+  /** Custom section rendered in the drawer above the form (existing rows only). */
+  lead?: ComponentType<{ row: Row; reload: () => void }>
+  /** Collapsible groups of form fields (see FieldSpec.section), after the other
+   *  fields: closed for an existing row, open for a new one. */
+  sections?: { key: string; label: string; hint?: string }[]
   /** Replace the generic edit form with a bespoke detail panel (existing rows).
    *  When set, the drawer opens wide and the panel owns its own actions. */
   detailPanel?: ComponentType<{
@@ -409,11 +438,89 @@ function tableRows(spec: FieldSpec, value: unknown): TableRow[] {
   }))
 }
 
+function LinkSelect(props: {
+  spec: FieldSpec
+  value: unknown
+  onChange: (v: unknown) => void
+  baseOpts: string[]
+  extraOpts: string[]
+  capped?: boolean
+  disabled?: boolean
+  t: (s: string) => string
+}) {
+  const { spec, value, onChange, baseOpts, extraOpts, capped, disabled, t } = props
+  const [query, setQuery] = useState("")
+  const [searched, setSearched] = useState<string[]>([])
+
+  useEffect(() => {
+    const trimmed = query.trim()
+    if (!capped || !spec.linkDoctype || !trimmed) {
+      setSearched([])
+      return
+    }
+    let active = true
+    const timer = setTimeout(() => {
+      const filters: (string | number)[][] = []
+      if (spec.linkPropertyScoped) filters.push(["property", "=", getCurrentProperty()])
+      if (spec.linkFilters?.length) filters.push(...spec.linkFilters)
+      filters.push(["name", "like", `%${trimmed}%`])
+      listResource(spec.linkDoctype!, {
+        fields: ["name"],
+        filters,
+        limit: 50,
+        orderBy: "name asc",
+      })
+        .then((r) => {
+          if (active) setSearched(r.map((x) => x.name))
+        })
+        .catch(() => {})
+    }, 120)
+    return () => {
+      active = false
+      clearTimeout(timer)
+    }
+  }, [capped, query, spec.linkDoctype, spec.linkPropertyScoped, spec.linkFilters])
+
+  const current = String(value ?? "")
+  const opts = Array.from(
+    new Set([...baseOpts, ...searched, ...extraOpts, ...(current ? [current] : [])].filter(Boolean)),
+  ).sort()
+
+  return (
+    <div className={capped && !disabled ? "space-y-1.5" : undefined}>
+      {capped && !disabled && (
+        <input
+          type="search"
+          className={inputCls}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={t("Search…")}
+        />
+      )}
+      <select
+        className={inputCls}
+        value={current}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        <option value="">-</option>
+        {opts.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
 function FieldInput(props: {
   spec: FieldSpec
   value: unknown
   onChange: (v: unknown) => void
   linkOptions: Record<string, string[]>
+  linkCapped?: Record<string, boolean>
+  extraLinkOptions?: string[]
   masterOptions: Partial<Record<MenuMasterKey, string[]>>
   /** Translate display labels; API values stay English. */
   t: (s: string) => string
@@ -458,19 +565,16 @@ function FieldInput(props: {
       )
     case "link":
       return (
-        <select
-          className={inputCls}
-          value={String(value ?? "")}
+        <LinkSelect
+          spec={spec}
+          value={value}
+          onChange={onChange}
+          baseOpts={props.linkOptions[spec.field] ?? []}
+          extraOpts={props.extraLinkOptions ?? []}
+          capped={Boolean(props.linkCapped?.[spec.field])}
           disabled={disabled}
-          onChange={(e) => onChange(e.target.value)}
-        >
-          <option value="">-</option>
-          {(props.linkOptions[spec.linkDoctype ?? ""] ?? []).map((o) => (
-            <option key={o} value={o}>
-              {o}
-            </option>
-          ))}
-        </select>
+          t={t}
+        />
       )
     case "check":
       return (
@@ -594,10 +698,16 @@ const cellValue = (v: unknown, t: (s: string) => string = translate) =>
 export function ResourceScreen({
   config,
   headerAction,
+  onReload,
+  onSaved,
 }: {
   config: ScreenConfig
   /** Extra control rendered in the header next to New (e.g. a bulk import). */
   headerAction?: ReactNode
+  /** Optional hook fired whenever rows reload after create/update/delete. */
+  onReload?: () => void
+  /** Called after a record is created, updated, or deleted. */
+  onSaved?: () => void
 }) {
   const { t, lang } = useT()
   const { roles } = useAuth()
@@ -608,6 +718,8 @@ export function ResourceScreen({
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [linkOptions, setLinkOptions] = useState<Record<string, string[]>>({})
+  const [linkCapped, setLinkCapped] = useState<Record<string, boolean>>({})
+  const [linkReloadTick, setLinkReloadTick] = useState(0)
   const [masterOptions, setMasterOptions] = useState<
     Partial<Record<MenuMasterKey, string[]>>
   >({})
@@ -653,7 +765,7 @@ export function ResourceScreen({
   const pageSize = config.pageSize ?? 0
 
   const fields = Array.from(
-    new Set(["name", ...config.columns.map((c) => c.field)]),
+    new Set(["name", ...config.columns.filter((c) => !c.virtual).map((c) => c.field)]),
   )
 
   // debounce the search box
@@ -757,7 +869,7 @@ export function ResourceScreen({
     downloadCsv(
       `${config.doctype.toLowerCase().replace(/ /g, "-")}-${new Date().toISOString().slice(0, 10)}`,
       cols.map((c) => c.label),
-      all.map((r) => cols.map((c) => r[c.field] as string | number | null)),
+      all.map((r) => cols.map((c) => (c.csvValue ? c.csvValue(r) : r[c.field] as string | number | null))),
     )
   }
 
@@ -765,19 +877,25 @@ export function ResourceScreen({
   useEffect(() => {
     const links = config.form.filter((f) => f.type === "link" && f.linkDoctype)
     links.forEach((f) => {
+      const filters: (string | number)[][] = []
+      if (f.linkPropertyScoped) filters.push(["property", "=", getCurrentProperty()])
+      if (f.linkFilters?.length) filters.push(...f.linkFilters)
+      const limit = f.linkLimit ?? 100
       listResource(f.linkDoctype!, {
         fields: ["name"],
-        filters: f.linkPropertyScoped
-          ? [["property", "=", getCurrentProperty()]]
-          : undefined,
-        limit: 100,
+        filters: filters.length ? filters : undefined,
+        limit,
         orderBy: "name asc",
-      }).then((r) =>
+      }).then((r) => {
         setLinkOptions((prev) => ({
           ...prev,
-          [f.linkDoctype!]: r.map((x) => x.name),
-        })),
-      )
+          [f.field]: r.map((x) => x.name),
+        }))
+        setLinkCapped((prev) => ({
+          ...prev,
+          [f.field]: r.length >= limit,
+        }))
+      })
     })
     if (config.form.some((f) => f.optionsFrom)) {
       call<Record<MenuMasterKey, string[]>>("kamra.settings.menu_masters", {
@@ -787,7 +905,7 @@ export function ResourceScreen({
         .catch(() => setMasterOptions({}))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config.doctype])
+  }, [config.doctype, linkReloadTick])
 
   function openEdit(row: Row | "new") {
     setEditing(row)
@@ -796,8 +914,8 @@ export function ResourceScreen({
       // ponytail: transaction dates default to today when notPast is set
       const defaults: Record<string, unknown> = {}
       for (const spec of config.form) {
-        if (spec.default !== undefined) defaults[spec.field] = spec.default
         if (spec.type === "date" && spec.notPast) defaults[spec.field] = isoToday()
+        else if (spec.default !== undefined) defaults[spec.field] = spec.default
       }
       setDraft(defaults)
       return
@@ -844,6 +962,11 @@ export function ResourceScreen({
       }
       setEditing(null)
       load()
+      if (config.form.some((f) => f.type === "link" && f.linkDoctype === config.doctype)) {
+        setLinkReloadTick((n) => n + 1)
+      }
+      onReload?.()
+      onSaved?.()
     } catch (e) {
       setError(serverError(e))
     } finally {
@@ -858,6 +981,11 @@ export function ResourceScreen({
       await deleteResource(config.doctype, editing.name)
       setEditing(null)
       load()
+      if (config.form.some((f) => f.type === "link" && f.linkDoctype === config.doctype)) {
+        setLinkReloadTick((n) => n + 1)
+      }
+      onReload?.()
+      onSaved?.()
     } catch (e) {
       setError(serverError(e))
     } finally {
@@ -1004,14 +1132,21 @@ export function ResourceScreen({
             </div>
           </div>
         <div className="overflow-x-auto">
-          <table className="w-full table-fixed text-sm">
+          <table className={`w-full text-sm ${visibleCols.length > 7 ? "table-auto" : "table-fixed"}${config.tableMinWidth ? ` ${config.tableMinWidth}` : ""}`}>
             <thead>
               <tr className="border-b border-zinc-200 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
                 {visibleCols.map((c, i) => (
                   <th
                     key={c.field}
                     className={
-                      "py-2 pr-4" + (i === 0 ? " w-[22%]" : "")
+                      "py-2 pr-4" +
+                      (c.width
+                        ? ` ${c.width}`
+                        : visibleCols.length > 7
+                          ? " whitespace-nowrap"
+                          : i === 0
+                            ? " w-[22%]"
+                            : "")
                     }
                   >
                     {t(c.label)}
@@ -1030,13 +1165,19 @@ export function ResourceScreen({
                     <td
                       key={c.field}
                       className={
-                        "truncate py-2.5 pr-4" +
-                        (typeof row[c.field] === "number"
+                        (c.wrap
+                          ? "py-2.5 pr-4 align-top"
+                          : visibleCols.length > 7
+                            ? "whitespace-nowrap py-2.5 pr-4" + (c.badge || c.statusCheck || c.booleanBadge ? "" : " max-w-[240px] truncate")
+                            : "truncate py-2.5 pr-4") +
+                        (!c.render && typeof row[c.field] === "number"
                           ? " text-right tabular-nums"
                           : "")
                       }
                     >
-                      {c.statusCheck ? (
+                      {c.render ? (
+                        c.render(row)
+                      ) : c.statusCheck ? (
                         <Badge tone={row[c.field] ? "zinc" : "green"}>
                           {t(row[c.field] ? "Disabled" : "Active")}
                         </Badge>
@@ -1152,53 +1293,80 @@ export function ResourceScreen({
             </Suspense>
           ) : (
             <div className="space-y-4">
+              {editing !== "new" && config.lead && (
+                <Suspense fallback={null}>
+                  <config.lead row={editing} reload={load} />
+                </Suspense>
+              )}
               {config.formNote && <p className="rounded-lg bg-zinc-50 p-3 text-sm text-zinc-700">{config.formNote}</p>}
-              <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
-                {config.form.filter(spec => spec.dependsOn ? spec.dependsOn(draft) : true).map((spec) => spec.type === "table" ? (
-                  <TableField
-                    key={spec.field}
-                    spec={spec}
-                    value={draft[spec.field]}
-                    onChange={(v) => setDraft((d) => ({ ...d, [spec.field]: v }))}
-                    t={t}
-                  />
-                ) : (
-                  <label
-                    key={spec.field}
-                    className={
-                      "block" +
-                      (spec.type === "check" || spec.type === "tags"
-                        ? " sm:col-span-2"
-                        : "")
-                    }
-                  >
-                    <span className="mb-1.5 block text-sm font-medium text-zinc-600">
-                      {t(spec.label)}
-                      {spec.required && <span className="text-rose-500"> *</span>}
-                    </span>
-                    <FieldInput
-                      spec={spec}
-                      value={draft[spec.field]}
-                      onChange={(v) =>
-                        setDraft((d) => ({ ...d, [spec.field]: v }))
-                      }
-                      linkOptions={linkOptions}
-                      masterOptions={masterOptions}
-                      t={t}
-                      canBackdate={canBackdate}
-                      disabled={Boolean(
-                        (spec.readOnlyOnEdit && editing !== "new") ||
-                        spec.disabledWhen?.(draft),
-                      )}
-                    />
-                    {spec.hint && spec.type !== "image" && (
-                      <span className="mt-1 block text-xs leading-relaxed text-zinc-400">
-                        {t(spec.hint)}
-                      </span>
-                    )}
-                  </label>
-                ))}
-              </div>
+              {(() => {
+                const shown = config.form.filter(spec => spec.dependsOn ? spec.dependsOn(draft) : true)
+                const sectioned = new Set((config.sections ?? []).map((section) => section.key))
+                const grid = (specs: FieldSpec[]) => (
+                  <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
+                    {specs.map((spec) => spec.type === "table" ? (
+                      <TableField
+                        key={spec.field}
+                        spec={spec}
+                        value={draft[spec.field]}
+                        onChange={(v) => setDraft((d) => ({ ...d, [spec.field]: v }))}
+                        t={t}
+                      />
+                    ) : (
+                      <label
+                        key={spec.field}
+                        className={
+                          "block" +
+                          (spec.type === "check" || spec.type === "tags"
+                            ? " sm:col-span-2"
+                            : "")
+                        }
+                      >
+                        <span className="mb-1.5 block text-sm font-medium text-zinc-600">
+                          {t(spec.label)}
+                          {spec.required && <span className="text-rose-500"> *</span>}
+                        </span>
+                        <FieldInput
+                          spec={spec}
+                          value={spec.displayValue ? spec.displayValue(draft) : draft[spec.field]}
+                          onChange={(v) =>
+                            setDraft((d) => ({ ...d, [spec.field]: v }))
+                          }
+                          linkOptions={linkOptions}
+                          linkCapped={linkCapped}
+                          extraLinkOptions={spec.ensureOptions?.(draft)}
+                          masterOptions={masterOptions}
+                          t={t}
+                          canBackdate={canBackdate}
+                          disabled={Boolean(
+                            (spec.readOnlyOnEdit && editing !== "new") ||
+                            spec.disabledWhen?.(draft),
+                          )}
+                        />
+                        {(() => {
+                          const shownHint = spec.hintWhen?.(draft) ?? spec.hint
+                          return shownHint && spec.type !== "image" ? (
+                            <span className="mt-1 block text-xs leading-relaxed text-zinc-400">
+                              {t(shownHint)}
+                            </span>
+                          ) : null
+                        })()}
+                      </label>
+                    ))}
+                  </div>
+                )
+                return <>
+                  {grid(shown.filter((spec) => !spec.section || !sectioned.has(spec.section)))}
+                  {(config.sections ?? []).map((section) => (
+                    <details key={section.key} open={editing === "new"}
+                      className="rounded-xl border border-zinc-200 px-4 py-3 [&[open]>summary]:mb-3">
+                      <summary className="cursor-pointer text-sm font-semibold text-zinc-700">{t(section.label)}</summary>
+                      {section.hint && <p className="mb-3 text-xs leading-relaxed text-zinc-500">{t(section.hint)}</p>}
+                      {grid(shown.filter((spec) => spec.section === section.key))}
+                    </details>
+                  ))}
+                </>
+              })()}
               {editing !== "new" && config.extra && (
                 <Suspense fallback={null}>
                   <config.extra row={editing} reload={load} />

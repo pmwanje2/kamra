@@ -64,7 +64,7 @@ Use Check out to check a guest out: it makes sure every bill is cleared first.,U
 Check out,Check-out
 Discounts and allowances,Descontos e abatimentos
 {0} is not a {product} language.,{0} não é um idioma do {product}.
-"{0} is switched off. Turn it on from Languages in Settings.","{0} está desligado. Ative-o em Idiomas nas Definições."
+{0} is switched off. Turn it on from Languages in Settings.,{0} está desligado. Ative-o em Idiomas nas Definições.
 No room mappings yet - map your room types to the provider's room and rate ids first.,Ainda não há mapeamentos de quartos: primeiro mapeie seus tipos de quarto para os ids de quarto e de tarifa do provedor.
 No room type matches it.,Não corresponde a nenhum tipo de quarto.
 Provider rate plan {0} is already mapped on this connection.,O plano tarifário {0} do provedor já está mapeado nesta conexão.
@@ -108,11 +108,14 @@ OTA Tax Basis rows {0} and {1} are the same OTA ({2}): keep one.,As linhas {0} e
 OTA Tax Rules,Regras de impostos OTA
 OTA Tax Basis,Base de impostos OTA
 OTA Tax Basis row {0}: the OTA name needs a letter or a digit.,Linha {0} da Base de impostos OTA: o nome da OTA precisa de uma letra ou dígito.
-
 Channel review status can only be cleared via the review action.,O estado de revisão do canal só pode ser limpo através da ação de revisão.
 Update In-House Reservations,Atualizar reservas hospedadas
 "Update In-House Reservations = Y is not yet enabled: OXI Y requires arrival-date, room-type, billed-night, and assigned-room safety bounds. Keep N so OTA changes to checked-in stays are rejected and flagged for review.","Atualizar reservas hospedadas = Y ainda não está ativado: o OXI Y requer limites de segurança de data de chegada, tipo de quarto, noites faturadas e quarto atribuído. Mantenha N para que as alterações da OTA em estadias com check-in sejam rejeitadas e marcadas para revisão."
 OTA Tax Rules row {0}: a CJK rule needs at least two characters so it does not match unrelated taxes.,Linha {0} de Regras de impostos OTA: uma regra CJK precisa de pelo menos dois caracteres para não corresponder a impostos não relacionados.
+Tax as per the accounting invoice,Imposto conforme a fatura contábil
+Tax Invoice,Nota Fiscal
+Provisional Bill,Fatura Provisória
+Credited,Creditado
 Transaction code {0} is not an enabled charge code.,O código de transação {0} não é um código de lançamento ativado.
 Transaction code {0} has no charge type. Set one under Transaction codes.,O código de transação {0} não tem tipo de lançamento. Defina um em Códigos de transação.
 Unexpected parameter(s) for route_outlet_charge: {0}. Pass a transaction_code instead (is_alcohol was removed).,Parâmetro(s) inesperado(s) para route_outlet_charge: {0}. Passe transaction_code em vez disso (is_alcohol foi removido).

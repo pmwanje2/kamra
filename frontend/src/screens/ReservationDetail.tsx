@@ -47,13 +47,27 @@ import RoomChangeDialog from "../components/RoomChangeDialog"
 import CheckOutDialog from "../components/CheckOutDialog"
 import CheckInDialog from "../components/CheckInDialog"
 import AgreedRatePanel from "../components/AgreedRatePanel"
+import ChangesLog from "../components/ChangesLog"
+import SupervisorSignOff, { SignOffReasons } from "../components/SupervisorSignOff"
+import { supervisorArgs } from "../lib/reservationDiscount"
 import { useAuth } from "../lib/auth"
 import StayInstructions from "../components/StayInstructions"
-import { cur, moneyLocale } from "../lib/money"
+import { cur, moneyDigits, moneyLocale } from "../lib/money"
 import { t as translate, useUILanguage } from "../lib/i18n"
 
-const inr = (n: number) =>
-  `${cur()}` + Number(n || 0).toLocaleString(moneyLocale(), { maximumFractionDigits: 0 })
+const inr = (n: number) => {
+  const v = Number(n || 0)
+  const d = moneyDigits()
+  const hasFrac = d > 0 && Math.abs(v - Math.round(v)) >= 10 ** -(d + 1)
+  return `${cur()}${v.toLocaleString(moneyLocale(), {
+    minimumFractionDigits: hasFrac ? d : 0,
+    maximumFractionDigits: d,
+  })}`
+}
+
+/** One amount, or the lowest to the highest when the nights differ. */
+const rangeOf = (values: number[]) =>
+  new Set(values).size === 1 ? inr(values[0]) : `${inr(Math.min(...values))}-${inr(Math.max(...values))}`
 
 /** Whole nights from `a` to `b` (YYYY-MM-DD). */
 const nightsBetween = (a: string, b: string) =>
@@ -91,10 +105,12 @@ function Card(props: {
 
 function Field(props: { label: string; value: React.ReactNode }) {
   useUILanguage()
+  // min-w-0 and the wrap let a long value (a guest's email) break inside its
+  // own grid column instead of running into the next one
   return (
-    <div>
+    <div className="min-w-0">
       <dt className="text-xs text-zinc-400">{translate(props.label)}</dt>
-      <dd className="mt-0.5 text-sm text-zinc-800">{props.value || "-"}</dd>
+      <dd className="mt-0.5 break-words text-sm text-zinc-800 [overflow-wrap:anywhere]">{props.value || "-"}</dd>
     </div>
   )
 }
@@ -214,6 +230,9 @@ export default function ReservationDetail({
   const { roles } = useAuth()
   const canAgreeRate = ["Front Desk", "Revenue Manager", "Hotel Admin", "System Manager"]
     .some((r) => roles.includes(r))
+  // who may fix a rate over a plan that takes no discount: the server's
+  // answer (actions.can_set_rate, kamra.api._can_set_rate), not a role list
+  const canOverrideFixed = !!d?.actions.can_set_rate
   // booking_quotation / email_booking_quotation: Front Desk and above
   const canQuote = ["Front Desk", "Revenue Manager", "Hotel Admin", "System Manager"]
     .some((r) => roles.includes(r))
@@ -266,14 +285,25 @@ export default function ReservationDetail({
   // and the save sends confirm_price from it. A window.confirm() gate here
   // dropped the save silently whenever the browser suppressed the dialog.
   const [datePreview, setDatePreview] = useState<RepricePreview | null>(null)
+  // a discounted stay's new dates may need a manager's sign-off, given here
+  const [dateSupervisor, setDateSupervisor] = useState("")
+  const [datePin, setDatePin] = useState("")
+  const dateGov = datePreview?.discount_governance ?? null
+  const dateSignOff = supervisorArgs(dateGov, dateSupervisor, datePin)
+  const dateSigned = !dateGov?.needs_supervisor || !!dateSignOff.supervisor_user
   const datesDiffer = !!savedCi && (ci !== savedCi || co !== savedCo)
   const datesValid = !!ci && !!co && ci < co
   useEffect(() => {
     setDatePreview(null)
+    setDatePin("")
     if (!datesDiffer || !datesValid) return
     let live = true
     amendStayPreview(name, ci, co)
-      .then((p) => live && setDatePreview(p))
+      .then((p) => {
+        if (!live) return
+        setDatePreview(p)
+        if (p.supervisors?.length === 1) setDateSupervisor(p.supervisors[0].user)
+      })
       .catch((e) => live && setError(serverError(e)))
     return () => {
       live = false
@@ -340,6 +370,22 @@ export default function ReservationDetail({
 
   const datesChanged = ci !== d.check_in_date || co !== d.check_out_date
   const money = d.money
+  // the desk's discount at a glance (OPERA Stay Details): what it takes off
+  // and its reason, without opening the editor
+  const disc = d.discount
+  const offText = (type: "Percent" | "Amount", value: number, reason?: string | null) =>
+    [type === "Percent"
+      ? translate("{pct}% off", { pct: value })
+      : translate("{amount} off a night", { amount: inr(value) }),
+    reason].filter(Boolean).join(" · ")
+  // a discount given only in Daily Details: each night's own, and its reason
+  const ownNights = (d.night_rates ?? []).filter((n) => n.discount_type && Number(n.discount_value) > 0)
+  const stayDiscount = disc?.discount_type
+    ? offText(disc.discount_type, disc.discount_value, disc.discount_reason)
+    : ownNights.length
+      ? [...new Set(ownNights.map((n) => offText(n.discount_type!, Number(n.discount_value), n.discount_reason)))]
+          .join(", ")
+      : null
 
   return (
     <div className="space-y-4">
@@ -373,40 +419,72 @@ export default function ReservationDetail({
         )}
       </div>
 
-      {d.channel_review_needed === 1 && (
-        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div className="flex items-center gap-1.5 font-semibold">
-              <TriangleAlert className="size-4 shrink-0 text-amber-700" />
-              {translate("Channel update not applied — review required")}
+      {d.channel_review_needed === 1 && (() => {
+        const reviewReason =
+          d.channel_review_reason ??
+          d.channel_reviews?.[0]?.reason ??
+          (d.channel_reviews?.some(
+            (r) => r.action_type === "channel.modify_needs_review" || r.action_type === "channel.cancel_needs_review",
+          )
+            ? "update_not_applied"
+            : d.channel_reviews?.some((r) => r.action_type === "channel.modify_discount_removed")
+              ? "discount_removed"
+              : d.channel_reviews?.some((r) => r.action_type === "channel.modify_discount_review")
+                ? "discount_review"
+                : "update_not_applied")
+        const reviewTitle =
+          reviewReason === "discount_removed"
+            ? translate("Channel update applied — desk discount removed")
+            : reviewReason === "discount_review"
+              ? translate("Channel update applied — discount review required")
+              : translate("Channel update not applied — review required")
+        const reviewBody =
+          reviewReason === "discount_removed"
+            ? translate(
+                "The channel update was applied and removed the desk discount (new total: {total}). Review what was removed below and re-apply a discount if needed.",
+                { total: inr(money.total) },
+              )
+            : reviewReason === "discount_review"
+              ? translate(
+                  "The channel update was applied (new total: {total}). Approved discounted nights were kept; added nights were priced without the unapproved discount. Review below and adjust if needed.",
+                  { total: inr(money.total) },
+                )
+              : translate(
+                  "The stay's dates, room, and charges were left unchanged. Review what the channel sent below and update the stay manually if needed.",
+                )
+        return (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="flex items-center gap-1.5 font-semibold">
+                <TriangleAlert className="size-4 shrink-0 text-amber-700" />
+                {reviewTitle}
+              </div>
+              {canClearChannelReview && (
+                <Button
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => act(() => clearChannelReview(name))}
+                >
+                  {translate("Mark as reviewed")}
+                </Button>
+              )}
             </div>
-            {canClearChannelReview && (
-              <Button
-                variant="outline"
-                disabled={busy}
-                onClick={() => act(() => clearChannelReview(name))}
-              >
-                {translate("Mark as reviewed")}
-              </Button>
+            <p className="mt-1 text-xs text-amber-800">{reviewBody}</p>
+            {(d.channel_reviews ?? []).length > 0 && (
+              <ul className="mt-2 space-y-1 text-xs text-amber-900">
+                {(d.channel_reviews ?? []).map((item) => (
+                  <li key={item.name} className="rounded-md bg-white/70 px-2.5 py-1.5">
+                    <span>{item.rationale}</span>
+                    {item.executed_at && (
+                      <span className="ml-2 text-amber-700/80">{item.executed_at.slice(0, 16)}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
-          <p className="mt-1 text-xs text-amber-800">
-            {translate("The stay's dates, room, and charges were left unchanged. Review what the channel sent below and update the stay manually if needed.")}
-          </p>
-          {(d.channel_reviews ?? []).length > 0 && (
-            <ul className="mt-2 space-y-1 text-xs text-amber-900">
-              {(d.channel_reviews ?? []).map((item) => (
-                <li key={item.name} className="rounded-md bg-white/70 px-2.5 py-1.5">
-                  <span>{item.rationale}</span>
-                  {item.executed_at && (
-                    <span className="ml-2 text-amber-700/80">{item.executed_at.slice(0, 16)}</span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
+        )
+      })()}
 
       {error && (
         <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
@@ -428,24 +506,24 @@ export default function ReservationDetail({
           ) : undefined
         }
       >
-        <div className="grid grid-cols-3 gap-3">
-          <div>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
+          <div className="flex min-w-0 items-baseline justify-between gap-2 sm:block">
             <div className="text-xs text-zinc-400">{translate("Total")}</div>
-            <div className="text-lg font-semibold text-zinc-900">
+            <div className="break-words text-base font-semibold tabular-nums text-zinc-900 sm:text-lg">
               {inr(money.total)}
             </div>
           </div>
-          <div>
+          <div className="flex min-w-0 items-baseline justify-between gap-2 sm:block">
             <div className="text-xs text-zinc-400">{translate("Paid")}</div>
-            <div className="text-lg font-semibold text-emerald-700">
+            <div className="break-words text-base font-semibold tabular-nums text-emerald-700 sm:text-lg">
               {inr(money.paid)}
             </div>
           </div>
-          <div>
+          <div className="flex min-w-0 items-baseline justify-between gap-2 sm:block">
             <div className="text-xs text-zinc-400">{translate("Balance due")}</div>
             <div
               className={
-                "text-lg font-semibold " +
+                "break-words text-base font-semibold tabular-nums sm:text-lg " +
                 (money.due > 0 ? "text-rose-600" : "text-zinc-400")
               }
             >
@@ -549,11 +627,16 @@ export default function ReservationDetail({
                       })}
                 </p>
               )}
+              {dateGov?.needs_supervisor && (
+                <SupervisorSignOff reason={<SignOffReasons gov={dateGov} />}
+                  supervisors={datePreview?.supervisors ?? dateGov.supervisors}
+                  supervisor={dateSupervisor} pin={datePin} onSupervisor={setDateSupervisor} onPin={setDatePin} />
+              )}
               <Button
-                disabled={busy || !datesValid || !datePreview}
+                disabled={busy || !datesValid || !datePreview || !dateSigned}
                 onClick={() =>
                   datePreview &&
-                  act(() => amendStay(name, ci, co, datePreview.needs_confirmation ? 1 : 0))
+                  act(() => amendStay(name, ci, co, datePreview.needs_confirmation ? 1 : 0, dateSignOff))
                 }
               >
                 {busy
@@ -586,15 +669,19 @@ export default function ReservationDetail({
               }`}
             />
             {d.eta && <Field label={translate("ETA")} value={d.eta} />}
+            {stayDiscount && <Field label={translate("Discount")} value={stayDiscount} />}
+            {stayDiscount && d.night_rates && d.night_rates.length > 0 && (
+              <Field label={translate("Base rate / night")} value={rangeOf(d.night_rates.map(
+                (n) => n.entry_base_rate ?? n.base_rate ?? n.rate))} />
+            )}
             {d.night_rates && d.night_rates.length > 0 && (
               <Field
                 label={translate("Confirmed rate / night")}
                 value={
-                  new Set(d.night_rates.map((n) => n.rate)).size === 1
-                    ? inr(d.night_rates[0].rate)
-                    : `${inr(Math.min(...d.night_rates.map((n) => n.rate)))}-${inr(
-                        Math.max(...d.night_rates.map((n) => n.rate)),
-                      )}`
+                  <>
+                    {rangeOf(d.night_rates.map((n) => n.entry_rate ?? n.rate))}
+                    {d.discount?.fixed_rate ? <Badge className="ms-2">{translate("Fixed rate")}</Badge> : null}
+                  </>
                 }
               />
             )}
@@ -603,8 +690,11 @@ export default function ReservationDetail({
             )}
           </dl>
           {d.actions.can_amend && (d.night_rates?.length ?? 0) > 0 && canAgreeRate && (
-            <AgreedRatePanel reservation={name} nightRates={d.night_rates ?? []} onSaved={() => { refresh(); reload() }} />
+            <AgreedRatePanel reservation={name} nightRates={d.night_rates ?? []} current={d.discount}
+              canOverrideFixed={canOverrideFixed} reasonCategories={d.reason_categories}
+              onSaved={() => { refresh(); reload() }} />
           )}
+          <ChangesLog reservation={name} money={inr} />
           {d.booked_check_out_date && (
             <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
               {translate("Left early: booked to {date}.", { date: d.booked_check_out_date })}

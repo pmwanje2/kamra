@@ -1,3 +1,8 @@
+Tax as per the accounting invoice,Steuer gemäß Buchhaltungsrechnung
+Tax Invoice,Steuerrechnung
+Invoice,Rechnung
+Provisional Bill,Vorläufige Rechnung
+Credited,Gutgeschrieben
 Transaction code {0} is not an enabled charge code.,Der Transaktionscode {0} ist kein aktivierter Gebührencode.
 Transaction code {0} has no charge type. Set one under Transaction codes.,Der Transaktionscode {0} hat keine Gebührenart. Legen Sie eine unter Transaktionscodes fest.
 Unexpected parameter(s) for route_outlet_charge: {0}. Pass a transaction_code instead (is_alcohol was removed).,Unerwartete(r) Parameter für route_outlet_charge: {0}. Übergeben Sie stattdessen transaction_code (is_alcohol wurde entfernt).

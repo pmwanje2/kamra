@@ -1,3 +1,8 @@
+Tax as per the accounting invoice,Pajak sesuai faktur akuntansi
+Tax Invoice,Faktur Pajak
+Invoice,Faktur
+Provisional Bill,Tagihan Sementara
+Credited,Dikreditkan
 Transaction code {0} is not an enabled charge code.,Kode transaksi {0} bukan kode biaya yang aktif.
 Transaction code {0} has no charge type. Set one under Transaction codes.,Kode transaksi {0} tidak memiliki jenis biaya. Atur di Kode transaksi.
 Unexpected parameter(s) for route_outlet_charge: {0}. Pass a transaction_code instead (is_alcohol was removed).,Parameter tidak terduga untuk route_outlet_charge: {0}. Gunakan transaction_code sebagai gantinya (is_alcohol telah dihapus).

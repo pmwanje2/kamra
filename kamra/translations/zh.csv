@@ -2236,6 +2236,10 @@ Channel review status can only be cleared via the review action.,渠道审核状
 Update In-House Reservations,更新在住预订
 "Update In-House Reservations = Y is not yet enabled: OXI Y requires arrival-date, room-type, billed-night, and assigned-room safety bounds. Keep N so OTA changes to checked-in stays are rejected and flagged for review.",更新在住预订 = Y 尚未启用：OXI Y 需要到店日期、房型、已入账房晚和已分配房间的安全边界。请保持 N，以便拒绝 OTA 对已入住预订的修改并标记待审核。
 OTA Tax Rules row {0}: a CJK rule needs at least two characters so it does not match unrelated taxes.,OTA 税费规则第 {0} 行：CJK 规则至少需要两个字符，以免误匹配无关税费。
+Tax as per the accounting invoice,税额以财务发票为准
+Tax Invoice,税务发票
+Invoice,发票
+Credited,已冲减
 Transaction code {0} is not an enabled charge code.,交易代码 {0} 不是已启用的入账代码。
 Transaction code {0} has no charge type. Set one under Transaction codes.,交易代码 {0} 未设置费用类型。请在交易代码中设置。
 Unexpected parameter(s) for route_outlet_charge: {0}. Pass a transaction_code instead (is_alcohol was removed).,route_outlet_charge 收到意外参数：{0}。请改传 transaction_code（is_alcohol 已移除）。
