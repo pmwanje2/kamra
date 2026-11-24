@@ -820,6 +820,68 @@ else:
 		self.assertEqual(flt(inv["tax_summary"][0]["total_tax"]), 90214.0)
 		self.assertTrue(ledger.folio_reconciliation(PROP_R2_VAT)["in_balance"])
 
+	def test_06b_closed_folio_totals_frozen_and_zero_tax_bridged_stay_skips_document_rounding(self):
+		"""#33 R9 composed with #32: (a) when tax == 0 (ERPNext-bridged UGX stay where the
+		accounting invoice owns tax and rounding), quote, booking, rediscount_locked_nights,
+		proforma and open folio skip document rounding so charges_total == grand_total == sum(lines);
+		(b) once a folio is closed/invoiced, its charges_total, tax_total and grand_total stay frozen."""
+		plan = self._make_plan(PROP_R2, "CPBR0", currency="USD")
+		self._install_tariff_api({
+			plan: {
+				"currency": "USD", "nightly": 150.0, "fx_rate": 3700.0,
+				"fx_date": TODAY, "agreed_rate": 555000.0, "property_currency": "UGX",
+			},
+		})
+		# 0%-tax bridged UGX stay with a fractional extra-guest charge (12,345.50/night)
+		b = self._as(
+			DESK_USER, api.create_booking, PROP_R2, self.rt_bridged, d(0), d(1), "ZeroTax Bridge Guest",
+			room=self.rooms_bridged[0], rate_plan=plan,
+			over_capacity_charge=12345.50,
+		)
+		res_name = b["reservation"]
+		res = frappe.get_doc("Reservation", res_name)
+		self.assertEqual(flt(res.tax_amount), 0.0)
+		self.assertEqual(flt(res.amount_before_tax), 567345.5)
+		self.assertEqual(flt(res.amount_after_tax), 567345.5)
+
+		# Apply 10% discount via rediscount_locked_nights: $150 less 10% = 499,500 + 12,345.50 = 511,845.50
+		# Must NOT document-round to 511,846 when tax == 0!
+		self._as(
+			DESK_USER, api.set_reservation_discount, res_name,
+			discount_type="Percent", discount_value=10, reason_code="RATE-PROMO",
+		)
+		res.reload()
+		self.assertEqual(flt(res.tax_amount), 0.0)
+		self.assertEqual(flt(res.amount_before_tax), 511845.5)
+		self.assertEqual(flt(res.amount_after_tax), 511845.5)
+
+		# Check in & post room + extra-guest charge on 0%-tax folio: exact sum preserved (no doc rounding)
+		self._as(DESK_USER, api.check_in, res_name)
+		folio_mod.post_room_night(frappe.get_doc("Reservation", res_name), d(0))
+		fname = guest_folio(res_name)
+		fdoc = frappe.get_doc("Folio", fname)
+		self.assertEqual(flt(fdoc.tax_total), 0.0)
+		self.assertEqual(flt(fdoc.charges_total), 511845.5)
+		self.assertEqual(flt(fdoc.grand_total), 511845.5)
+
+		# Settle & close -> closed/invoiced folio totals remain frozen even on later recalculation
+		set_setting(PROP_R2, "use_cashier_tills", 0)
+		self._as(GM_USER, api.add_folio_payment, fname, "Cash", 511845.5, pin=GM_PIN)
+		folio_mod.close_folio(fname)
+		closed = frappe.get_doc("Folio", fname)
+		self.assertEqual(closed.status, "Closed")
+		self.assertEqual(flt(closed.charges_total), 511845.5)
+		self.assertEqual(flt(closed.grand_total), 511845.5)
+		self.assertEqual(flt(closed.balance), 0.0)
+		# Even if a charge row carries non-zero historical tax metadata or a later recalc runs,
+		# the closed folio's charges_total / tax_total / grand_total never shift.
+		closed.charges[0].gst_rate = 18.0
+		folio_mod._recalculate(closed)
+		self.assertEqual(flt(closed.charges_total), 511845.5)
+		self.assertEqual(flt(closed.tax_total), 0.0)
+		self.assertEqual(flt(closed.grand_total), 511845.5)
+		self.assertEqual(flt(closed.balance), 0.0)
+
 	# ── Case 7: Printed tax invoice with discount + bridged ERP VAT + ref FX ─
 
 	def test_07_printed_tax_invoice_bridged_erp_vat_with_discount_and_reference_currency(self):
