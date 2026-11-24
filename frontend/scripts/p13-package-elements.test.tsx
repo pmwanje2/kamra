@@ -124,4 +124,27 @@ describe("PackageElementsEditor (P13)", () => {
       }),
     )
   })
+
+  it("handles null/empty list_package_elements responses without throwing TypeError", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+    rpc.mockReset().mockResolvedValue(null)
+    try {
+      await act(async () => {
+        root.render(
+          <PackageElementsEditor
+            row={{ name: "PKG-00002", package_name: "Empty Pkg", package_nights: 1, price_2_pax: 100 }}
+            reload={vi.fn()}
+          />,
+        )
+      })
+      await act(async () => {
+        await Promise.resolve()
+      })
+      expect(host.textContent).toContain("Package elements")
+      expect(host.querySelector(".text-rose-700")).toBeNull()
+      expect(errSpy).not.toHaveBeenCalled()
+    } finally {
+      errSpy.mockRestore()
+    }
+  })
 })

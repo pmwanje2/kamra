@@ -210,4 +210,22 @@ describe("FixedChargesPanel & EndOfDayWizard Step 9 Summary (P29 + P41)", () => 
       expect(host.textContent).not.toContain("450,000.00")
     })
   })
+
+  it("handles null/empty list_fixed_charges responses without throwing TypeError", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+    rpc.mockReset().mockResolvedValue(null)
+    try {
+      await act(async () => {
+        root.render(<FixedChargesPanel reservation="RES-NULL-001" status="Confirmed" />)
+      })
+      await act(async () => {
+        await Promise.resolve()
+      })
+      expect(host.textContent).toContain("Fixed charges")
+      expect(host.querySelector(".text-rose-700")).toBeNull()
+      expect(errSpy).not.toHaveBeenCalled()
+    } finally {
+      errSpy.mockRestore()
+    }
+  })
 })
