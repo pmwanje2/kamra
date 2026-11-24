@@ -22,6 +22,7 @@ team does by hand:
 
 from __future__ import annotations
 
+from decimal import Decimal
 import json
 
 import frappe
@@ -30,6 +31,16 @@ from frappe.utils import now_datetime
 
 from kamra.authz import assert_property_access, require_roles
 from kamra.business_date import get_business_date
+
+
+def _places(property: str | None) -> int:
+	from kamra.ledger import _currency_places
+	return max(_currency_places(property), 2)
+
+
+def _r(value, places: int) -> float:
+	from kamra.ledger import _round_currency
+	return _round_currency(value, places)
 
 
 def _account(account: str):
@@ -101,15 +112,16 @@ def ar_accounts(property: str):
 		          COALESCE(SUM(credit), 0) AS total_credit
 		   FROM `tabCity Ledger Entry` WHERE property = %s GROUP BY account""",
 		property, as_dict=True)}
+	places = _places(property)
 	for r in rows:
 		# to bill: what the company's stays in house run up, not yet invoiced
 		r["unbilled"] = in_house_exposure(r["company"], property)
 		lp = last.get(r["name"])
 		r["last_payment_date"] = str(lp.posting_date) if lp else None
-		r["last_payment"] = float(lp.credit) if lp else None
+		r["last_payment"] = _r(lp.credit, places) if lp else None
 		t = totals.get(r["name"])
-		r["total_debit"] = round(float(t.total_debit), 2) if t else 0.0
-		r["total_credit"] = round(float(t.total_credit), 2) if t else 0.0
+		r["total_debit"] = _r(t.total_debit, places) if t else 0.0
+		r["total_credit"] = _r(t.total_credit, places) if t else 0.0
 	rows.sort(key=lambda r: (-float(r.get("balance") or 0), r["company_name"]))
 	return {"accounts": rows, "summary": _summary(property, rows)}
 
@@ -119,6 +131,8 @@ def _summary(property: str, rows: list[dict]) -> dict:
 	pending (and overdue), what came in this month, what guests who left
 	still owe, and the advances held for guests not yet in."""
 	from frappe.utils import get_first_day
+	from kamra.ledger import _money
+	places = _places(property)
 	bd = get_business_date(property)
 	received = frappe.db.sql(
 		"""SELECT COALESCE(SUM(credit - debit), 0) FROM `tabCity Ledger Entry`
@@ -128,11 +142,11 @@ def _summary(property: str, rows: list[dict]) -> dict:
 		"""SELECT COALESCE(SUM(credit - debit), 0) FROM `tabFolio Ledger Entry`
 		   WHERE property = %s AND ledger = 'Deposit'""", property)[0][0]
 	return {
-		"to_bill": round(sum(r["unbilled"] for r in rows), 2),
-		"billed_pending": round(sum(max(float(r.get("balance") or 0), 0) for r in rows), 2),
-		"overdue": round(sum(float(r.get("overdue") or 0) for r in rows), 2),
-		"received_this_month": round(float(received or 0), 2),
-		"deposits_held": round(float(held or 0), 2),
+		"to_bill": _r(sum((_money(r["unbilled"]) for r in rows), Decimal(0)), places),
+		"billed_pending": _r(sum((max(_money(r.get("balance")), Decimal(0)) for r in rows), Decimal(0)), places),
+		"overdue": _r(sum((_money(r.get("overdue")) for r in rows), Decimal(0)), places),
+		"received_this_month": _r(received or 0, places),
+		"deposits_held": _r(held or 0, places),
 		"guests_owing": guests_owing(property),
 	}
 
@@ -142,14 +156,16 @@ def _summary(property: str, rows: list[dict]) -> dict:
 def guests_owing(property: str) -> list[dict]:
 	"""Guest bills still owed after the stay ended: departed, no-show or
 	cancelled with a balance (a no-show fee, a bill left open)."""
+	places = _places(property)
+	eps = 0.5 * (10 ** -places)
 	rows = frappe.db.sql(
 		"""SELECT f.name AS folio, f.guest_name, f.balance, r.name AS reservation,
 		          r.status, r.check_in_date, r.check_out_date
 		   FROM `tabFolio` f JOIN `tabReservation` r ON r.name = f.reservation
-		   WHERE f.property = %s AND f.folio_type = 'Guest' AND f.balance > 0.005
+		   WHERE f.property = %s AND f.folio_type = 'Guest' AND f.balance > %s
 		     AND r.status IN ('Checked Out', 'No Show', 'Cancelled')
-		   ORDER BY r.check_in_date""", property, as_dict=True)
-	return [{**r, "balance": round(float(r.balance), 2),
+		   ORDER BY r.check_in_date""", (property, eps), as_dict=True)
+	return [{**r, "balance": _r(r.balance, places),
 	         "check_in_date": str(r.check_in_date),
 	         "check_out_date": str(r.check_out_date)} for r in rows]
 
@@ -241,8 +257,9 @@ def save_ar_account(property: str, company: str | None = None,
 	if not frappe.db.get_value("Corporate Account", company, "credit_allowed"):
 		frappe.db.set_value("Corporate Account", company, "credit_allowed", 1)
 	from kamra.savings import log_action
+	places = _places(property)
 	log_action("save_ar_account", "City Ledger Account", doc.name, property,
-	           rationale=f"{company} · {number} · limit {doc.credit_limit:,.2f}"
+	           rationale=f"{company} · {number} · limit {doc.credit_limit:,.{places}f}"
 	                     + (f" · restricted: {doc.restricted_reason}"
 	                        if doc.restricted else ""))
 	return {"account": doc.name, "account_number": doc.account_number}
@@ -281,11 +298,12 @@ def create_ar_invoice(account: str, lines, reference: str | None = None,
 	balance."""
 	from kamra.api import _check_charge_amount_and_tax, _refuse_opening_balance, _resolve_charge_gst
 	from kamra.folio import _recalculate, close_folio
-	from kamra.ledger import CHARGE_TYPE_TO_CODE, code_for_charge_type, save_folio, transfer_to_city_ledger
+	from kamra.ledger import CHARGE_TYPE_TO_CODE, _money, code_for_charge_type, save_folio, transfer_to_city_ledger
 
 	acc = _account(account)
 	assert_billable(account)
 	rows = _lines(lines)
+	places = _places(acc.property)
 	bd = get_business_date(acc.property)
 	company_name = frappe.db.get_value(
 		"Corporate Account", acc.company, "company_name") or acc.company
@@ -314,7 +332,7 @@ def create_ar_invoice(account: str, lines, reference: str | None = None,
 			"description": r["description"][:140],
 			"qty": r["qty"],
 			"rate": rate,
-			"amount": round(rate * r["qty"], 2),
+			"amount": _r(_money(rate) * _money(r["qty"]), places),
 			"gst_rate": _resolve_charge_gst(acc.property, r["charge_type"],
 			                                r["description"], 0, r["gst_rate"]),
 		})
@@ -331,7 +349,7 @@ def create_ar_invoice(account: str, lines, reference: str | None = None,
 	from kamra.savings import log_action
 	log_action("create_ar_invoice", "Folio", folio.name, acc.property,
 	           rationale=f"{acc.company}: invoice {invoice} for "
-	                     f"{folio.grand_total:,.2f}" + (f" · {ref}" if ref else ""))
+	                     f"{folio.grand_total:,.{places}f}" + (f" · {ref}" if ref else ""))
 	return {"account": account, "folio": folio.name, "invoice_number": invoice,
 	        "total": folio.grand_total, "tax": folio.tax_total,
 	        "balance": out["balance"], "credit": out.get("credit")}
@@ -373,7 +391,7 @@ def transfer_ar_invoice(account: str, folio: str, to_account: str,
 	the bill keeps its invoice number and invoice date, so it ages from when
 	it was really raised. Credit control on the receiving company is not
 	re-run - finance is choosing who pays."""
-	from kamra.ledger import due_date_for, locked_account_figures
+	from kamra.ledger import _money, due_date_for, locked_account_figures
 	if account == to_account:
 		frappe.throw(_("Pick a different account to transfer to."))
 	# lock both accounts (fixed order) so two transfers of one bill can't
@@ -386,10 +404,12 @@ def transfer_ar_invoice(account: str, folio: str, to_account: str,
 	if src.property != dst.property:
 		frappe.throw(_("Both accounts must be at the same property."))
 	assert_billable(to_account)
+	places = _places(src.property)
+	eps = 0.5 * (10 ** -places)
 	item = next((r for r in locked_account_figures(account)["open_items"]
 	             if r["folio"] == folio), None)
-	amount = round(float(item["outstanding"]) if item else 0, 2)
-	if amount <= 0.005:
+	amount = _r(item["outstanding"] if item else 0, places)
+	if amount <= eps:
 		frappe.throw(_("Nothing is owed on that bill on this account."))
 	note = (reason or "").strip()[:140]
 	bd = get_business_date(src.property)
@@ -408,15 +428,15 @@ def transfer_ar_invoice(account: str, folio: str, to_account: str,
 	                "debit": amount, "credit": 0,
 	                "reference": f"Transferred from {src.company}"[:140],
 	                "notes": note or None}).insert(ignore_permissions=True)
-	src.balance = float(src.balance or 0) - amount
+	src.balance = _r(_money(src.balance) - _money(amount), places)
 	src.save(ignore_permissions=True)
-	dst.balance = float(dst.balance or 0) + amount
+	dst.balance = _r(_money(dst.balance) + _money(amount), places)
 	dst.save(ignore_permissions=True)
 	from kamra.ledger import apply_unapplied_credit
 	apply_unapplied_credit(to_account, only_folio=folio)
 	from kamra.savings import log_action
 	log_action("transfer_ar_invoice", "Folio", folio, src.property,
-	           rationale=f"{amount:,.2f} of {item['invoice_number'] or folio} "
+	           rationale=f"{amount:,.{places}f} of {item['invoice_number'] or folio} "
 	                     f"from {src.company} to {dst.company}"
 	                     + (f" · {note}" if note else ""))
 	return {"folio": folio, "amount": amount,
