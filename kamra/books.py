@@ -39,18 +39,25 @@ BANQUET_HELD = "(status = 'Completed' OR (status = 'Confirmed' AND event_date <=
 BILL_COUNTS = "status IN ('Approved', 'Part Paid', 'Paid')"
 
 
-def _r(x) -> float:
-	return round(flt(x), 2)
+def _places(property: str | None) -> int:
+	from kamra.ledger import _currency_places
+	return max(_currency_places(property), 2)
+
+
+def _r(x, places: int = 2) -> float:
+	from kamra.ledger import _round_currency
+	return _round_currency(x, places)
 
 
 def till_cash(property: str) -> float:
 	"""Cash in the property's open tills right now (opening float + cash
 	taken - paid outs, drops and petty cash)."""
 	from kamra.cashier import _recompute_session_totals
+	places = _places(property)
 	names = frappe.get_all("Cashier Session",
 	                       filters={"property": property, "status": "Open"}, pluck="name")
 	return _r(sum(_recompute_session_totals(n, persist=False)["expected_cash"]
-	              for n in names))
+	              for n in names), places)
 
 
 # ── next days of cash ───────────────────────────────────────────────────────
@@ -77,6 +84,8 @@ def cash_forecast(property: str, days: int = 5, opening: float | None = None):
 	from kamra.api import _DEPOSIT_STATUSES, _deposit_state, _stay_balances
 	from kamra.ledger import _account_position, _netted
 
+	places = _places(property)
+	eps = 0.5 * (10 ** -places)
 	days = int(days or 5)
 	if days not in (5, 15, 30):
 		frappe.throw(_("Choose 5, 15 or 30 days."))
@@ -85,9 +94,9 @@ def cash_forecast(property: str, days: int = 5, opening: float | None = None):
 	items: list[dict] = []
 
 	def add(kind, when, label, amount, ref=None, draft=False):
-		if flt(amount) > 0.005:
+		if flt(amount) > eps:
 			items.append({"kind": kind, "date": str(max(getdate(when), today)),
-			              "label": label, "amount": _r(amount), "reference": ref,
+			              "label": label, "amount": _r(amount, places), "reference": ref,
 			              "overdue": getdate(when) < today, "draft": draft})
 
 	# company bills, money paid ahead netted off the oldest
@@ -95,7 +104,7 @@ def cash_forecast(property: str, days: int = 5, opening: float | None = None):
 	                          filters={"property": property, "disabled": 0},
 	                          fields=["name", "company"]):
 		pos = _account_position(acc.name)
-		for it, amt in _netted(pos["open_items"], pos["unapplied_credit"]):
+		for it, amt in _netted(pos["open_items"], pos["unapplied_credit"], places=places):
 			if getdate(it["due_date"]) <= getdate(end):
 				add("company_bills", it["due_date"],
 				    f"{acc.company} {it.get('invoice_number') or it['folio']}",
@@ -154,41 +163,41 @@ def cash_forecast(property: str, days: int = 5, opening: float | None = None):
 		    draft=b.status == "Awaiting Approval")
 
 	source = "tills" if opening in (None, "") else "entered"
-	position = till_cash(property) if source == "tills" else _r(opening)
+	position = till_cash(property) if source == "tills" else _r(opening, places)
 	start = position
 	IN = ("company_bills", "departures", "deposits")
 	out_days = []
 	for i in range(days):
 		d = str(add_days(today, i))
 		todays = sorted((x for x in items if x["date"] == d), key=lambda x: -x["amount"])
-		sums = {k: _r(sum(x["amount"] for x in todays if x["kind"] == k))
+		sums = {k: _r(sum(x["amount"] for x in todays if x["kind"] == k), places)
 		        for k in IN + ("vendor_bills",)}
-		money_in = _r(sum(sums[k] for k in IN))
+		money_in = _r(sum(sums[k] for k in IN), places)
 		money_out = sums["vendor_bills"]
-		position = _r(position + money_in - money_out)
+		position = _r(position + money_in - money_out, places)
 		out_days.append({"date": d, **sums, "money_in": money_in,
-		                 "money_out": money_out, "net": _r(money_in - money_out),
+		                 "money_out": money_out, "net": _r(money_in - money_out, places),
 		                 "closing": position, "items": todays})
 	weeks = []
 	for i in range(0, days, 7):
 		wk = out_days[i:i + 7]
-		money_in = _r(sum(d["money_in"] for d in wk))
-		money_out = _r(sum(d["money_out"] for d in wk))
+		money_in = _r(sum(d["money_in"] for d in wk), places)
+		money_out = _r(sum(d["money_out"] for d in wk), places)
 		weeks.append({"from_date": wk[0]["date"], "to_date": wk[-1]["date"],
 		              "money_in": money_in, "money_out": money_out,
-		              "net": _r(money_in - money_out), "closing": wk[-1]["closing"]})
+		              "net": _r(money_in - money_out, places), "closing": wk[-1]["closing"]})
 	return {
 		"from_date": str(today), "to_date": str(end),
 		"opening": start, "opening_source": source,
 		"days": out_days, "weeks": weeks,
-		"money_in": _r(sum(d["money_in"] for d in out_days)),
-		"money_out": _r(sum(d["money_out"] for d in out_days)),
+		"money_in": _r(sum(d["money_in"] for d in out_days), places),
+		"money_out": _r(sum(d["money_out"] for d in out_days), places),
 		"closing": position,
 		"overdue_in": _r(sum(x["amount"] for x in items
-		                     if x["overdue"] and x["kind"] in IN)),
+		                     if x["overdue"] and x["kind"] in IN), places),
 		"overdue_out": _r(sum(x["amount"] for x in items
-		                      if x["overdue"] and x["kind"] == "vendor_bills")),
-		"draft_out": _r(sum(x["amount"] for x in items if x["draft"])),
+		                      if x["overdue"] and x["kind"] == "vendor_bills"), places),
+		"draft_out": _r(sum(x["amount"] for x in items if x["draft"]), places),
 	}
 
 
@@ -229,7 +238,8 @@ def _revenue(property: str, start, end) -> dict:
 		"""SELECT COALESCE(SUM(cn.amount - IFNULL(cn.tax_amount, 0)), 0)
 		   FROM `tabCredit Note` cn""" + CLOSED_BILL_CREDIT_NOTES,
 		{"p": property, "s": start, "e": end})[0][0])
-	return {k: _r(v) for k, v in rev.items()}
+	places = _places(property)
+	return {k: _r(v, places) for k, v in rev.items()}
 
 
 # SQL from `tabCredit Note` cn: the period's issued credit notes on closed
@@ -261,7 +271,7 @@ def tax_collected(property: str, start, end) -> float:
 		"""SELECT COALESCE(SUM(IFNULL(cn.tax_amount, 0)), 0)
 		   FROM `tabCredit Note` cn""" + CLOSED_BILL_CREDIT_NOTES,
 		{"p": property, "s": start, "e": end})[0][0]
-	return _r(flt(folio) + flt(banquet) - flt(credited))
+	return _r(flt(folio) + flt(banquet) - flt(credited), _places(property))
 
 
 def _bills_in(property: str, start, end):
@@ -310,23 +320,24 @@ def profit_and_loss(property: str, from_date: str, to_date: str):
 		   WHERE property = %(p)s AND kind = 'Paid Out' AND IFNULL(folio, '') = ''
 		     AND business_date BETWEEN %(s)s AND %(e)s""",
 		{"p": property, "s": start, "e": end})[0]
+	places = _places(property)
 	revenue = [{"key": k, "amount": rev[k]}
 	           for k in ("rooms", "fnb", "banquets", "other", "allowances")]
-	revenue_total = _r(sum(rev.values()))
+	revenue_total = _r(sum(rev.values()), places)
 	expense_total = _r(sum(flt(b.amount) for b in bills) + sum(flt(p.amount) for p in petty)
-	                   + flt(paid_out[0]))
+	                   + flt(paid_out[0]), places)
 	return {
 		"from_date": str(start), "to_date": str(end),
 		"revenue": revenue, "revenue_total": revenue_total,
-		"supplier_bills": [{"category": b.category, "amount": _r(b.amount),
+		"supplier_bills": [{"category": b.category, "amount": _r(b.amount, places),
 		                    "count": int(b.bills)} for b in bills],
-		"petty_cash": [{"category": p.category, "amount": _r(p.amount),
+		"petty_cash": [{"category": p.category, "amount": _r(p.amount, places),
 		                "count": int(p.vouchers)} for p in petty],
-		"paid_outs": {"amount": _r(paid_out[0]), "count": int(paid_out[1])},
+		"paid_outs": {"amount": _r(paid_out[0], places), "count": int(paid_out[1])},
 		"expense_total": expense_total,
-		"net": _r(revenue_total - expense_total),
+		"net": _r(revenue_total - expense_total, places),
 		"tax_collected": tax_collected(property, start, end),
-		"tax_on_bills": _r(sum(flt(b.tax) for b in bills)),
+		"tax_on_bills": _r(sum(flt(b.tax) for b in bills), places),
 	}
 
 
@@ -336,7 +347,7 @@ def _ledger(property: str, ledger: str, as_of) -> float:
 	return _r(frappe.db.sql(
 		"""SELECT COALESCE(SUM(debit - credit), 0) FROM `tabFolio Ledger Entry`
 		   WHERE property = %s AND ledger = %s AND business_date <= %s""",
-		(property, ledger, as_of))[0][0])
+		(property, ledger, as_of))[0][0], _places(property))
 
 
 def payables_at(property: str, as_of) -> float:
@@ -352,7 +363,7 @@ def payables_at(property: str, as_of) -> float:
 		   WHERE b.property = %s AND b.{BILL_COUNTS}
 		     AND b.bill_date <= %s AND p.payment_date <= %s""",
 		(property, as_of, as_of))[0][0]
-	return _r(flt(billed) - flt(paid))
+	return _r(flt(billed) - flt(paid), _places(property))
 
 
 @frappe.whitelist()
@@ -365,6 +376,7 @@ def balance_sheet(property: str, as_of: str | None = None):
 	collected this month is shown for reference, not in the totals: Kamra
 	does not record tax paid to the government. Not a full balance sheet:
 	the bank, fixed assets, loans and equity are not in Kamra."""
+	places = _places(property)
 	today = getdate(nowdate())
 	d = getdate(as_of) if as_of else today
 	if d > today:
@@ -372,25 +384,25 @@ def balance_sheet(property: str, as_of: str | None = None):
 	cash = till_cash(property) if d == today else None
 	city = _r(frappe.db.sql(
 		"""SELECT COALESCE(SUM(debit - credit), 0) FROM `tabCity Ledger Entry`
-		   WHERE property = %s AND posting_date <= %s""", (property, d))[0][0])
+		   WHERE property = %s AND posting_date <= %s""", (property, d))[0][0], places)
 	assets = [
 		{"key": "cash_in_tills", "amount": cash},
 		{"key": "guest_ledger", "amount": _ledger(property, "Guest", d)},
 		{"key": "city_ledger", "amount": city},
 	]
 	liabilities = [
-		{"key": "advance_deposits", "amount": _r(-_ledger(property, "Deposit", d))},
+		{"key": "advance_deposits", "amount": _r(-_ledger(property, "Deposit", d), places)},
 		{"key": "payables", "amount": payables_at(property, d)},
 	]
 	month = get_first_day(d)
-	assets_total = _r(sum(flt(a["amount"]) for a in assets))
-	liabilities_total = _r(sum(flt(x["amount"]) for x in liabilities))
+	assets_total = _r(sum(flt(a["amount"]) for a in assets), places)
+	liabilities_total = _r(sum(flt(x["amount"]) for x in liabilities), places)
 	return {
 		"as_of": str(d),
 		"assets": assets, "assets_total": assets_total,
 		"liabilities": liabilities, "liabilities_total": liabilities_total,
-		"net": _r(assets_total - liabilities_total),
+		"net": _r(assets_total - liabilities_total, places),
 		"tax_month_from": str(month),
 		"tax_collected_month": tax_collected(property, month, d),
-		"tax_on_bills_month": _r(sum(flt(b.tax) for b in _bills_in(property, month, d))),
+		"tax_on_bills_month": _r(sum(flt(b.tax) for b in _bills_in(property, month, d)), places),
 	}

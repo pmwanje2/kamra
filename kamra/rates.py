@@ -107,6 +107,9 @@ def room_type_tariffs(room_type: str):
 	result = bridge_call("hospitality_tariffs.room_type_tariffs", room_type=room_type)
 	if isinstance(result, dict) and isinstance(result.get("tariffs"), list):
 		_price_tariff_panel(rt.property, result)
+	if isinstance(result, dict):
+		from kamra.settings import get_setting
+		result["rate_plan_required"] = bool(get_setting(rt.property, "rate_plan_required"))
 	return result
 
 
@@ -263,6 +266,7 @@ def room_types_summary(property: str):
 	"""Effective selling rate (default plan, 2 adults), room inventory count, and
 	whether any active plan actually prices from the card rate."""
 	assert_property_access(property)
+	from kamra import erp_bridge
 	from kamra.business_date import get_business_date
 	from kamra.pricing import (
 		ContractRateRefused,
@@ -271,7 +275,11 @@ def room_types_summary(property: str):
 		rates_include_tax,
 		round_rate_amount,
 	)
+	from kamra.settings import get_setting
 
+	rate_plan_required = bool(get_setting(property, "rate_plan_required"))
+	erp_tax_fn = getattr(erp_bridge, "erp_determines_tax", None)
+	erp_tax_managed = bool(erp_tax_fn()) if callable(erp_tax_fn) else False
 	home = property_currency(property)
 	inclusive = bool(rates_include_tax(property))
 	business_date = getdate(get_business_date(property))
@@ -298,6 +306,13 @@ def room_types_summary(property: str):
 		pluck="name", order_by="base_price asc",
 	):
 		room_count = counts.get(rt_name, 0)
+		if rate_plan_required and not default_name:
+			rows.append({
+				"room_type": rt_name, "room_count": room_count, "priced": False,
+				"source": None, "currency": None, "amount": None, "local_amount": None,
+				"refusal": _("Set a default rate plan in Rate Plans."),
+			})
+			continue
 		try:
 			q = quote_with_contract(
 				property, rt_name, business_date, next_day, 2, 0,
@@ -332,6 +347,8 @@ def room_types_summary(property: str):
 	return {
 		"property_currency": home,
 		"has_card_rate_plans": has_card_rate_plans,
+		"rate_plan_required": rate_plan_required,
+		"erp_tax_managed": erp_tax_managed,
 		"default_plan": default_info,
 		"room_types": rows,
 	}
@@ -905,6 +922,9 @@ def rate_calendar(property: str, from_date: str | None = None, days: int = 14,
 		rates_include_tax,
 		small_group_allows_stay,
 	)
+	from kamra.settings import get_setting
+
+	rate_plan_required = bool(get_setting(property, "rate_plan_required"))
 	all_plans = frappe.get_all(
 		"Rate Plan", filters={"property": property},
 		fields=_rate_plan_fields(("is_default", "disabled")),
@@ -918,14 +938,26 @@ def rate_calendar(property: str, from_date: str | None = None, days: int = 14,
 	if company:
 		frappe.has_permission("Corporate Account", "read", doc=company, throw=True)
 	if rate_plan == "":
-		plan = None
+		plan = default_name if rate_plan_required else None
+		if rate_plan_required and not plan:
+			frappe.throw(
+				_("A rate plan is required for this property. Set up a default rate plan in Rate Plans, "
+				  "or choose a rate plan.")
+			)
 	elif rate_plan is not None:
 		plan = rate_plan
 	else:
-		plan = negotiated_rate_plan(property, company) or (default_name if default_is_tariff else None)
+		plan = negotiated_rate_plan(property, company) or (
+			default_name if (default_is_tariff or rate_plan_required) else None
+		)
 	policy = next((p for p in active if p.name == plan), None) if plan else None
 	if plan and not policy:
 		frappe.throw(_("{0} is not an active rate plan of this property.").format(plan))
+	no_plan_refusal = (
+		_("Set a default rate plan in Rate Plans.")
+		if active
+		else _("No active rate plans are configured. Set up a default rate plan in Rate Plans.")
+	)
 	inclusive = bool(rates_include_tax(property))
 	home = property_currency(property)
 	start = getdate(from_date) if from_date else getdate(frappe.utils.nowdate())
@@ -944,11 +976,18 @@ def rate_calendar(property: str, from_date: str | None = None, days: int = 14,
 				nights.append(_plan_night(property, doc, d, int(adults), int(children), plan, company or None,
 				                          occ[str(d)], small_ok, inclusive, home))
 				continue
+			if rate_plan_required:
+				nights.append({
+					"date": str(d), "available": False, "refusal": no_plan_refusal,
+					"rate": None, "contract": None, "occupancy": occ[str(d)],
+				})
+				continue
 			nights.append(explain_night(property, doc, d, int(adults), int(children),
 			                            occupancy=occ[str(d)], small_ok=small_ok))
 		count = counts.get(doc.name, 0)
 		rows.append({"room_type": doc.name, "code": doc.room_type_code,
-		             "name": doc.room_type_name, "base_price": float(doc.base_price or 0),
+		             "name": doc.room_type_name,
+		             "base_price": 0.0 if rate_plan_required else float(doc.base_price or 0),
 		             "room_count": count, "sellable": count > 0, "nights": nights})
 
 	def _plan_entry(p):
@@ -960,6 +999,7 @@ def rate_calendar(property: str, from_date: str | None = None, days: int = 14,
 	return {"from": str(start), "days": days, "tax_inclusive": inclusive,
 	        "adults": int(adults), "room_types": rows,
 	        "rate_plans": [_plan_entry(p) for p in active], "default_plan": default_name,
+	        "rate_plan_required": rate_plan_required,
 	        "property_currency": home, "rate_plan": _plan_entry(policy) if policy else None,
 	        "company": company or None}
 

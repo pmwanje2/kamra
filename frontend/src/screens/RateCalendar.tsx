@@ -12,6 +12,7 @@ import { InfoTip } from "../components/InfoTip"
 import { cur, moneyDigits, moneyLocale } from "../lib/money"
 import { useT, t as translate, uiDateLocale } from "../lib/i18n"
 import { cn } from "../lib/utils"
+import { onSettingsChanged, onTariffsChanged } from "../lib/tariffSync"
 import type { NightRate } from "../components/RateOptions"
 import { currencyText, fxLockNote, roundingRule, TariffNight } from "../components/ContractTariff"
 
@@ -52,6 +53,7 @@ interface Calendar {
   }[]
   rate_plans?: RatePlanPolicy[]
   default_plan?: string | null
+  rate_plan_required?: boolean
   property_currency?: string
   rate_plan?: RatePlanPolicy | null
   company?: string | null
@@ -70,6 +72,13 @@ export default function RateCalendar() {
   const [data, setData] = useState<Calendar | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [pick, setPick] = useState<{ rt: string; i: number } | null>(null)
+  const [syncRev, setSyncRev] = useState(0)
+  useEffect(() => {
+    const bump = () => setSyncRev((v) => v + 1)
+    const offTariffs = onTariffsChanged(bump)
+    const offSettings = onSettingsChanged(bump)
+    return () => { offTariffs(); offSettings() }
+  }, [])
   const [params, setParams] = useSearchParams()
   // ?rate_plan absent: the customer's negotiated plan, else the card rate; ?rate_plan= (empty): the card
   // rate, chosen; else that plan. The card is every customer's price, so it is asked for with no customer.
@@ -103,7 +112,7 @@ export default function RateCalendar() {
       })
       .catch((e) => { if (live) setErr(serverError(e)) })
     return () => { live = false }
-  }, [from, days, ratePlan, company, cardChosen])
+  }, [from, days, ratePlan, company, cardChosen, syncRev])
   const defaultIsTariff = !!plans.find((p) => p.name === data?.default_plan)?.is_tariff
     || (rateParam === null && !company && !!data?.rate_plan)
   const choose = (key: "rate_plan" | "company", value: string) => {
@@ -180,7 +189,10 @@ export default function RateCalendar() {
             onChange={(e) => choose("rate_plan", e.target.value)}
             aria-label={t("Rate plan")}
           >
-            <option value="">{t("Card rate (no rate plan)")}</option>
+            {!data?.rate_plan_required && <option value="">{t("Card rate (no rate plan)")}</option>}
+            {data?.rate_plan_required && !plans.length && (
+              <option value="">{t("Set a default rate plan in Rate Plans.")}</option>
+            )}
             {plans.map((p) => <option key={p.name} value={p.name}>{p.label || p.name}</option>)}
             {/* a linked plan that is not (or not yet) one of the active plans: named as asked, never as the card */}
             {ratePlan && !plans.some((p) => p.name === ratePlan) && <option value={ratePlan}>{ratePlan}</option>}
@@ -236,7 +248,7 @@ export default function RateCalendar() {
               <thead>
                 <tr className="border-b border-zinc-200 text-xs text-zinc-500">
                   <th className="sticky start-0 bg-white px-3 py-2 text-start font-medium">{t("Room type")}</th>
-                  {!plan && <th className="px-2 py-2 text-end font-medium">{t("BAR")}</th>}
+                  {!plan && !data.rate_plan_required && <th className="px-2 py-2 text-end font-medium">{t("BAR")}</th>}
                   {data.room_types[0]?.nights.map((x) => {
                     const d = new Date(`${x.date}T00:00:00`)
                     const wk = d.getDay() === 5 || d.getDay() === 6
@@ -262,7 +274,7 @@ export default function RateCalendar() {
                         </span>
                       )}
                     </td>
-                    {!plan && (
+                    {!plan && !data.rate_plan_required && (
                       <td className="px-2 py-2 text-end tabular-nums text-zinc-500">
                         {noRooms ? "—" : `${cur()}${amount(r.base_price)}`}
                       </td>
@@ -340,7 +352,7 @@ export default function RateCalendar() {
         </Card>
       )}
 
-      {!plan && (
+      {!plan && !data?.rate_plan_required && (
         <div className="flex flex-wrap gap-4 text-xs text-zinc-500">
           <span className="inline-flex items-center gap-1.5"><span className="size-3 rounded bg-amber-50 ring-1 ring-amber-200" aria-hidden />{t("Above BAR")}</span>
           <span className="inline-flex items-center gap-1.5"><span className="size-3 rounded bg-sky-50 ring-1 ring-sky-200" aria-hidden />{t("Below BAR")}</span>

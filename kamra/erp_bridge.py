@@ -38,6 +38,11 @@ def call_bridge_script(script, form: dict, response_types=(dict, NoneType)) -> d
 	return result
 
 
+def erp_determines_tax() -> bool:
+	"""True when the ERP tax-basis bridge script is installed and enabled."""
+	return get_bridge_script("hospitality_kamra.tax_basis") is not None
+
+
 def is_bridge_active() -> bool:
 	"""True when an ERP hospitality bridge script is installed and enabled."""
 	for method in ("hospitality_kamra.tax_basis", "hospitality_kamra.tender_modes"):
@@ -49,6 +54,6 @@ def is_bridge_active() -> bool:
 def bridge_call(api_method: str, *, response_types=(dict, NoneType), **form) -> dict | list | None:
 	"""Return an optional bridge's result; never substitute the outer response."""
 	script = get_bridge_script(api_method)
-	if script is None:
+	if script is None or not callable(getattr(script, "execute_method", None)):
 		return None
 	return call_bridge_script(script, form, response_types)

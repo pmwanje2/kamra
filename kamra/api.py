@@ -804,16 +804,18 @@ def _deposit_state(res) -> dict:
 	"""What the booking should have secured it with (its advance %, the
 	figure the quote promised), what has come in before arrival, and any
 	link already out with the guest."""
+	from kamra.ledger import _currency_places, _money, _round_currency
+	places = max(_currency_places(res.property), 2)
 	total = float(res.amount_after_tax or 0)
 	pct = booking_advance_percent(res)
-	expected = round(total * pct / 100, 2)
+	expected = _round_currency(_money(total) * _money(pct) / 100, places)
 	paid = float(res.advance_paid or 0)
 	link = frappe.db.get_value(
 		"Folio", {"reservation": res.name, "folio_type": "Guest"},
 		["payment_link_url", "payment_link_amount"], as_dict=True) or {}
 	return {
 		"pct": pct, "expected": expected, "paid": paid,
-		"due": max(0.0, round(expected - paid, 2)),
+		"due": max(0.0, _round_currency(_money(expected) - _money(paid), places)),
 		"link_url": link.get("payment_link_url"),
 		"link_amount": float(link.get("payment_link_amount") or 0) or None,
 		"can_take": res.status in _DEPOSIT_STATUSES,
@@ -898,12 +900,14 @@ def record_advance(reservation: str, amount: float, mode: str = "Cash",
 	                  reference=reference or f"deposit:{res.name}", pin=pin,
 	                  kind="Advance", idempotency_key=key, currency=currency, quote_id=quote_id)
 	amount = posted["payments"][-1]["amount"]
+	from kamra.ledger import _currency_places, _money, _round_currency
+	places = max(_currency_places(res.property), 2)
 	frappe.db.set_value("Reservation", res.name, "advance_paid",
-	                    float(res.advance_paid or 0) + amount)
+	                    _round_currency(_money(res.advance_paid) + _money(amount), places))
 	res.reload()
 	from kamra.savings import log_action
 	log_action("record_advance", "Folio", folio, res.property,
-	           rationale=f"{mode} deposit {amount:,.0f} on {res.name}")
+	           rationale=f"{mode} deposit {amount:,.{places}f} on {res.name}")
 	return {"folio": folio, "status": res.status, "paid": amount,
 	        "deposit": _deposit_state(res)}
 
@@ -919,15 +923,17 @@ def deposit_payment_link(reservation: str, amount: float | None = None):
 	if amount <= 0:
 		frappe.throw(_("No deposit is due - enter the amount to request."))
 	from kamra.folio import open_folio
+	from kamra.ledger import _currency_places
 	from kamra.payments import create_payment_link
 	link = create_payment_link(open_folio(res), amount=amount,
 	                           purpose="Booking deposit")
 	prop = frappe.get_cached_value("Property", res.property, "property_name")
+	digits = _currency_places(res.property)
 	link["message"] = _(
 		"Hello {guest}, please pay the deposit of {cur} {amount} to secure "
 		"your booking {ref} at {property} ({checkin} → {checkout}): {url}"
 	).format(guest=res.guest_name, cur=link["currency"],
-	         amount=f"{amount:,.2f}", ref=res.name, property=prop,
+	         amount=f"{amount:,.{digits}f}", ref=res.name, property=prop,
 	         checkin=res.check_in_date, checkout=res.check_out_date,
 	         url=link["url"])
 	link["deposit"] = _deposit_state(res)
@@ -1660,7 +1666,8 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 	assert_payment_mode(doc.property, mode, currency)
 	from kamra.business_date import get_business_date
 	from kamra.cashier import assert_cashier_mode_allowed, record_cashier_txn, require_open_session
-	from kamra.ledger import home_currency, payment_rate, round_cents
+	from kamra.ledger import _round_currency, home_currency, payment_rate
+	from kamra.pricing import _minor_unit
 	assert_cashier_mode_allowed(doc.property, mode)
 	bd = get_business_date(doc.property)
 	# Property currency — never leave Folio Payment on the INR schema default (#341)
@@ -1682,7 +1689,8 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 		r = payment_rate(doc.property, currency, amount)
 		if quote_id and quote_id != r["quote_id"]:
 			frappe.throw("HSP-CASHIER-FX-RATE: The published rate changed. Refresh the preview and confirm again.")
-		fx = {"currency": r["currency"], "fx_amount": round_cents(amount),
+		fx_places = _minor_unit(r["currency"])
+		fx = {"currency": r["currency"], "fx_amount": _round_currency(amount, fx_places),
 		      "exchange_rate": r["rate"], "exchange_rate_date": r["rate_date"]}
 		amount = r["home_amount"]
 		if amount <= 0:
@@ -1715,7 +1723,7 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 	_recalculate(doc, payments_only=True)
 	doc.save()
 	pay = doc.payments[-1]
-	fx_note = (f"{fx['currency']} {fx['fx_amount']:,.2f} @ {fx['exchange_rate']}"
+	fx_note = (f"{fx['currency']} {fx['fx_amount']:,.{_minor_unit(fx['currency'])}f} @ {fx['exchange_rate']}"
 	           if fx else None)
 	record_cashier_txn(
 		doc.property, "Payment", mode, float(amount),
@@ -1907,12 +1915,24 @@ def refund_folio_payment(folio: str, amount: float | None = None,
 			return {"ok": True, "idempotent_replay": 1,
 			        "balance": frappe.db.get_value("Folio", folio, "balance")}
 	doc = frappe.get_doc("Folio", folio)
+	from decimal import ROUND_HALF_UP, Decimal
 	from babel.numbers import get_currency_precision
-	from kamra.ledger import fx_to_home, home_currency, payment_rate, round_cents
+	from kamra.ledger import (
+		_currency_places,
+		_money,
+		_parse_currency_amount,
+		_round_currency,
+		fx_to_home,
+		home_currency,
+		payment_rate,
+	)
 	from kamra.localization import FOREIGN_CURRENCY_TENDER_TYPES, money_text
 	from kamra.masters import default_mode_for_tender, payment_tender_type
+	from kamra.pricing import _minor_unit
 
 	home = home_currency(doc.property)
+	raw_places = _currency_places(doc.property)
+	places = max(raw_places, 2)
 	req_ccy = (currency or "").strip().upper()
 	foreign = bool(req_ccy and req_ccy != home)
 	fx_meta: dict | None = None
@@ -1924,13 +1944,18 @@ def refund_folio_payment(folio: str, amount: float | None = None,
 		if pay.payment_kind == "Security Deposit":
 			frappe.throw(_("A security deposit is refunded from the stay's "
 			               "deposit (refund_deposit), not from the bill."))
-		left = round(float(pay.amount) + sum(
-			float(p.amount or 0) for p in doc.payments
-			if p.get("refund_of") == payment_row), 2)
-		if left <= 0:
+		left_dec = (
+			_money(pay.amount) + sum(
+				(_money(p.amount) for p in doc.payments
+				 if p.get("refund_of") == payment_row),
+				Decimal(0),
+			)
+		).quantize(Decimal(1).scaleb(-places), rounding=ROUND_HALF_UP)
+		if left_dec <= 0:
 			frappe.throw(_("This payment is already refunded in full."))
 		pay_tender = payment_tender_type(pay.mode, doc.property)
 		if foreign:
+			fx_places = _minor_unit(req_ccy)
 			mode = mode or (
 				pay.mode if pay_tender in FOREIGN_CURRENCY_TENDER_TYPES
 				else default_mode_for_tender(doc.property, "Foreign Cash")
@@ -1939,13 +1964,13 @@ def refund_folio_payment(folio: str, amount: float | None = None,
 				frappe.throw(_("{0} cannot refund in foreign currency {1}.").format(mode, req_ccy))
 			if amount in (None, ""):
 				if pay.get("exchange_rate") and (pay.get("currency") or "").upper() == req_ccy:
-					fx_refund = round_cents(left / float(pay.exchange_rate))
+					fx_refund = _round_currency(left_dec / _money(pay.exchange_rate), fx_places)
+					if fx_refund <= 0:
+						frappe.throw(_("Refund amount must be positive."))
 				else:
 					frappe.throw(_("Give the foreign currency amount to refund."))
 			else:
-				fx_refund = round_cents(amount)
-			if fx_refund <= 0:
-				frappe.throw(_("Refund amount must be positive."))
+				fx_refund = float(_parse_currency_amount(amount, fx_places))
 			if pay.get("exchange_rate") and (pay.get("currency") or "").upper() == req_ccy:
 				rate = float(pay.exchange_rate)
 				rate_date = pay.get("exchange_rate_date")
@@ -1955,9 +1980,9 @@ def refund_folio_payment(folio: str, amount: float | None = None,
 				rate = r["rate"]
 				rate_date = r["rate_date"]
 				home_amt = r["home_amount"]
-			if home_amt > left + 0.005:
+			if _money(home_amt) > left_dec:
 				frappe.throw(_("Only {0} of this payment is left to refund.").format(
-					money_text(doc.property, left)))
+					money_text(doc.property, float(left_dec))))
 			fx_meta = {
 				"currency": req_ccy,
 				"fx_amount": -fx_refund,
@@ -1967,10 +1992,13 @@ def refund_folio_payment(folio: str, amount: float | None = None,
 			amount = home_amt
 		else:
 			if amount in (None, ""):
-				amount = left
-			if float(amount) > left + 0.005:
+				amount_dec = left_dec
+			else:
+				amount_dec = _parse_currency_amount(amount, raw_places)
+			if amount_dec > left_dec:
 				frappe.throw(_("Only {0} of this payment is left to refund.").format(
-					money_text(doc.property, left)))
+					money_text(doc.property, float(left_dec))))
+			amount = float(amount_dec)
 			if not mode:
 				mode = (
 					default_mode_for_tender(doc.property, "Cash")
@@ -1982,9 +2010,8 @@ def refund_folio_payment(folio: str, amount: float | None = None,
 			frappe.throw(_("Give the amount and the mode to refund."))
 		if payment_tender_type(mode, doc.property) not in FOREIGN_CURRENCY_TENDER_TYPES:
 			frappe.throw(_("{0} cannot refund in foreign currency {1}.").format(mode, req_ccy))
-		fx_refund = round_cents(amount)
-		if fx_refund <= 0:
-			frappe.throw(_("Refund amount must be positive."))
+		fx_places = _minor_unit(req_ccy)
+		fx_refund = float(_parse_currency_amount(amount, fx_places))
 		r = payment_rate(doc.property, req_ccy, fx_refund)
 		fx_meta = {
 			"currency": r["currency"],
@@ -2035,28 +2062,44 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 		from kamra.masters import payment_tender_type
 		if payment_tender_type(mode, doc.property) == "Foreign Cash" and not fx and not (correction or {}).get("fx_amount"):
 			frappe.throw(_("Foreign Cash refund needs the foreign currency of the notes returned."))
-	from kamra.ledger import require_reason
+	from decimal import ROUND_HALF_UP, Decimal
+	from kamra.ledger import (
+		_currency_places,
+		_money,
+		_parse_currency_amount,
+		_round_currency,
+		require_reason,
+	)
+	from kamra.pricing import _minor_unit
+	raw_places = _currency_places(doc.property)
+	places = max(raw_places, 2)
+	if bookkeeping_action is None:
+		amount_dec = _parse_currency_amount(amount, raw_places)
+		amount = float(amount_dec)
+	else:
+		amount_dec = _money(amount)
 	reason_text = require_reason(
 		"Refund", reason_code, reason or "",
 		supervisor_pin=supervisor_pin, property=doc.property)
-	received = sum(float(p.amount or 0) for p in doc.payments
-	               if float(p.amount or 0) > 0)
-	refunded = -sum(float(p.amount or 0) for p in doc.payments
-	                if float(p.amount or 0) < 0)
-	if float(amount) > received - refunded:
+	unit_calc = Decimal(1).scaleb(-places)
+	received = sum((_money(p.amount) for p in doc.payments if _money(p.amount) > 0), Decimal(0))
+	refunded = -sum((_money(p.amount) for p in doc.payments if _money(p.amount) < 0), Decimal(0))
+	collected_left = (received - refunded).quantize(unit_calc, rounding=ROUND_HALF_UP)
+	if amount_dec > collected_left:
 		from kamra.localization import money_text
-		frappe.throw(f"Only {money_text(doc.property, received - refunded)} was collected on "
+		frappe.throw(f"Only {money_text(doc.property, float(collected_left))} was collected on "
 		             "this folio - can't refund more than that.")
 	# money goes back only when the guest is in credit; a guest who still
 	# owes settles first. A security deposit release (ledger set) has its
 	# own balance check in kamra.deposit.
-	if not ledger and float(amount) > -float(doc.balance or 0) + 0.005:
+	balance_dec = _money(doc.balance).quantize(unit_calc, rounding=ROUND_HALF_UP)
+	if not ledger and (balance_dec >= 0 or amount_dec > -balance_dec):
 		from kamra.localization import money_text
-		if float(doc.balance or 0) >= 0:
+		if balance_dec >= 0:
 			frappe.throw(_("The guest owes {0} - nothing is due back to refund.").format(
-				money_text(doc.property, doc.balance)))
+				money_text(doc.property, max(0.0, float(balance_dec)))))
 		frappe.throw(_("Only {0} is due back to the guest - can't refund more than that.").format(
-			money_text(doc.property, -float(doc.balance))))
+			money_text(doc.property, float(-balance_dec))))
 	# Pre-arrival advance: release Deposit liability, not Guest (#343)
 	release_advance = False
 	if not ledger:
@@ -2093,8 +2136,9 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 	doc.save()
 	pay = doc.payments[-1]
 	fx_amt_val = float(pay.get("fx_amount") or 0)
+	fx_d = _minor_unit(pay.get("currency"))
 	fx_note = (
-		f"{pay.currency} {abs(fx_amt_val):,.2f} @ {pay.exchange_rate}"
+		f"{pay.currency} {abs(fx_amt_val):,.{fx_d}f} @ {pay.exchange_rate}"
 		if fx_amt_val and pay.get("exchange_rate") else None
 	)
 	if sess or correction is None:
@@ -2126,11 +2170,11 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 	if ledger == "Deposit":  # a security deposit, or an advance still held
 		emit_payment("deposit.refunded", doc, pay)
 	if release_advance and doc.reservation:
-		paid = float(frappe.db.get_value(
-			"Reservation", doc.reservation, "advance_paid") or 0)
+		paid = frappe.db.get_value(
+			"Reservation", doc.reservation, "advance_paid") or 0
 		frappe.db.set_value(
 			"Reservation", doc.reservation, "advance_paid",
-			max(0.0, round(paid - float(amount), 2)))
+			max(0.0, _round_currency(_money(paid) - amount_dec, places)))
 	if ledger != "Deposit":  # a deposit refund logs itself (kamra.deposit)
 		from kamra.localization import money_text
 		from kamra.savings import log_action
@@ -2330,8 +2374,10 @@ def correct_folio_charge(folio: str, charge_row: str, reason: str = "",
 		if new_amount <= 0:
 			frappe.throw("Charge amount must be more than zero. To reduce a "
 			             "bill, post an allowance or void the charge.")
-	if (new_type, new_desc, round(new_amount, 2), new_rate) == (
-			orig.charge_type, orig.description, round(float(orig.amount), 2),
+	from kamra.ledger import _currency_places, _round_currency
+	places = max(_currency_places(doc.property), 2)
+	if (new_type, new_desc, _round_currency(new_amount, places), new_rate) == (
+			orig.charge_type, orig.description, _round_currency(orig.amount, places),
 			float(orig.gst_rate or 0)):
 		frappe.throw(_("Nothing to correct: the line already has these values."))
 	from kamra.business_date import get_business_date
@@ -2900,9 +2946,11 @@ def change_stay_company(reservation: str, reason: str,
 			moved += len(back)
 		if out_total > 0:
 			from kamra.folio import split_charge
+			from kamra.ledger import _currency_places, _round_currency
+			places = max(_currency_places(doc.property), 2)
 			share = out_total / (out_total + kept_total)
 			for a in allowances:
-				part = round(abs(flt(a.amount)) * share, 2)
+				part = _round_currency(abs(flt(a.amount)) * share, places)
 				if 0 < part < abs(flt(a.amount)):
 					split_charge(doc.name, a.name, guest, amount=part, credit=True)
 					moved += 1
@@ -3068,21 +3116,24 @@ def settle_group_bill(group_booking: str, mode: str | None = None,
 		          "status": "Open"})
 	if not folio:
 		frappe.throw(_("This group has no open group bill."))
-	balance = round(flt(frappe.db.get_value("Folio", folio, "balance")), 2)
+	from kamra.ledger import _currency_places, _round_currency
+	places = max(_currency_places(gb.property), 2)
+	eps = 0.5 * (10 ** -places)
+	balance = _round_currency(frappe.db.get_value("Folio", folio, "balance"), places)
 	if int(to_city_ledger or 0):
 		if not gb.company:
 			frappe.throw(_("Only a company group can go to the city ledger."))
 		from kamra.ledger import city_ledger_transfer
 		city_ledger_transfer(folio, gb.company, pin=pin,
 		                     credit_override_reason=credit_override_reason)
-	elif balance > 0:
+	elif balance > eps:
 		if not mode:
 			frappe.throw(_("Choose how the group bill is paid."))
 		add_folio_payment(folio, mode, flt(amount) or balance,
 		                  reference=reference, pin=pin)
-	balance = round(flt(frappe.db.get_value("Folio", folio, "balance")), 2)
+	balance = _round_currency(frappe.db.get_value("Folio", folio, "balance"), places)
 	out = {"folio": folio, "balance": balance, "closed": False}
-	if abs(balance) <= 0.009:
+	if abs(balance) <= eps:
 		out["invoice_number"] = close_folio(folio, pin=pin)["invoice_number"]
 		out["closed"] = True
 	in_house = frappe.db.count("Reservation", {"group_booking": gb.name,
@@ -3239,20 +3290,25 @@ def _discount_lines(doc, kind: str, value: float, basis: str) -> list[dict]:
 		want = {r: value * g["nights"] for r, g in groups.items()}
 	else:
 		want = {r: value * g["base"] / base for r, g in groups.items()}
-	lines = [{"gst_rate": r, "amount": round(a, 2), "nights": groups[r]["nights"],
-	          "base": round(groups[r]["base"], 2)} for r, a in want.items() if round(a, 2) > 0]
-	if sum(ln["amount"] for ln in lines) > base + 0.005:
+	from kamra.ledger import _currency_places, _round_currency
+	places = max(_currency_places(doc.property), 2)
+	eps = 0.5 * (10 ** -places)
+	lines = [{"gst_rate": r, "amount": _round_currency(a, places), "nights": groups[r]["nights"],
+	          "base": _round_currency(groups[r]["base"], places)}
+	         for r, a in want.items() if _round_currency(a, places) > 0]
+	if sum(ln["amount"] for ln in lines) > base + eps:
 		from kamra.localization import money_text
 		frappe.throw(_("The discount is more than the room nights on the bill ({0}).")
 		             .format(money_text(doc.property, base)))
 	return lines
 
 
-def _discount_tax_inclusive(lines: list[dict]) -> float:
+def _discount_tax_inclusive(lines: list[dict], places: int = 2) -> float:
 	"""How much an allowance set of lines takes off the folio balance
 	(base + the tax those lines reverse)."""
-	return round(sum(flt(ln["amount"]) * (1 + flt(ln["gst_rate"]) / 100)
-	                 for ln in lines), 2)
+	from kamra.ledger import _round_currency
+	return _round_currency(sum(flt(ln["amount"]) * (1 + flt(ln["gst_rate"]) / 100)
+	                           for ln in lines), places)
 
 
 def _cap_discount_to_open_balance(doc, lines: list[dict]) -> list[dict]:
@@ -3260,27 +3316,32 @@ def _cap_discount_to_open_balance(doc, lines: list[dict]) -> list[dict]:
 	the balance below zero. The room-night base cap in `_discount_lines`
 	still applies first; this is a second guard against the open balance
 	(tax-inclusive), so a fully paid folio cannot take a discount."""
+	from decimal import Decimal
+	from kamra.ledger import _currency_places, _money, _round_currency
+	places = max(_currency_places(doc.property), 2)
+	eps = 0.5 * (10 ** -places)
+	step = Decimal(1).scaleb(-places)
 	balance = flt(doc.balance)
-	if balance <= 0:
+	if balance <= eps:
 		frappe.throw(_("This folio has no open balance. Use a refund or "
 		               "credit note instead."))
-	impact = _discount_tax_inclusive(lines)
-	if impact <= balance + 0.005:
+	impact = _discount_tax_inclusive(lines, places)
+	if impact <= balance + eps:
 		return lines
 	# Scale each line's pre-tax amount so the tax-inclusive total fits.
 	# Lines share one scale so the mix of GST rates stays proportional.
 	scale = balance / impact if impact else 0
 	capped = []
 	for ln in lines:
-		amount = round(flt(ln["amount"]) * scale, 2)
+		amount = _round_currency(flt(ln["amount"]) * scale, places)
 		if amount > 0:
 			capped.append({**ln, "amount": amount})
-	if not capped or _discount_tax_inclusive(capped) <= 0:
+	if not capped or _discount_tax_inclusive(capped, places) <= 0:
 		frappe.throw(_("This folio has no open balance. Use a refund or "
 		               "credit note instead."))
 	# Fix residual rounding so we never exceed the open balance.
-	while capped and _discount_tax_inclusive(capped) > balance + 0.005:
-		capped[-1]["amount"] = round(flt(capped[-1]["amount"]) - 0.01, 2)
+	while capped and _discount_tax_inclusive(capped, places) > balance + eps:
+		capped[-1]["amount"] = _round_currency(_money(capped[-1]["amount"]) - step, places)
 		if capped[-1]["amount"] <= 0:
 			capped.pop()
 	if not capped:
@@ -3326,14 +3387,16 @@ def post_discount(folio: str, value: float = 0, kind: str = "Percent",
 		kind = "Percent" if v.discount_type == "Percent" else "Amount"
 		value, basis = flt(v.value), "Stay"
 		label = _("Promo code {0}").format(v.voucher_code)
+	from kamra.ledger import _currency_places, _round_currency
+	places = max(_currency_places(doc.property), 2)
 	lines = _cap_discount_to_open_balance(doc, _discount_lines(doc, kind, value, basis))
-	total = sum(ln["amount"] for ln in lines)
+	total = _round_currency(sum(ln["amount"] for ln in lines), places)
 	if not label:
 		label = (_("Discount {0}%").format(f"{flt(value):g}") if kind == "Percent"
 		         else _("Discount {0} per night").format(money_text(doc.property, value))
 		         if basis == "Night" else _("Discount"))
 	if cint(preview):
-		return {"lines": lines, "total": round(total, 2), "label": label}
+		return {"lines": lines, "total": total, "label": label}
 	note = (reason or "").strip()
 	if not (note or reason_code or (voucher_code or "").strip()):
 		frappe.throw(_("A discount needs a reason - it goes on the record."))
@@ -3346,7 +3409,7 @@ def post_discount(folio: str, value: float = 0, kind: str = "Percent",
 	if (voucher_code or "").strip():
 		from kamra.pricing import consume_voucher_use
 		consume_voucher_use(v.name)
-	return {"ok": True, "folio": folio, "total": round(total, 2),
+	return {"ok": True, "folio": folio, "total": total,
 	        "pending": any(r.get("pending") for r in results), "results": results}
 
 
@@ -3805,9 +3868,15 @@ def _erp_credited_total(si, prop=None, prop_currency: str | None = None) -> floa
 		)
 	except Exception:
 		return 0.0
-	total = 0.0
+	from decimal import Decimal
+
+	from kamra.ledger import _round_currency
+	from kamra.pricing import _minor_unit
+
+	total = Decimal(0)
 	si_company = si.get("company")
 	si_currency = si.get("currency")
+	places = max(_minor_unit(si_currency or prop_currency), 2)
 	for ret_name in names or []:
 		try:
 			ret = frappe.get_doc("Sales Invoice", ret_name)
@@ -3823,8 +3892,8 @@ def _erp_credited_total(si, prop=None, prop_currency: str | None = None) -> floa
 			continue
 		if si_currency and ret.get("currency") != si_currency:
 			continue
-		total += abs(float(ret.get("grand_total") or 0))
-	return round(total, 2)
+		total += abs(Decimal(str(ret.get("grand_total") or 0)))
+	return _round_currency(total, places)
 
 
 def _clean_accounting_tax_label(tx, rate: float, fallback: str) -> str:
@@ -3885,6 +3954,10 @@ def _apply_accounting_invoice_taxes(doc, prop, prop_currency: str | None, folio_
 			"erp_credited": 0.0,
 		}
 
+	from kamra.ledger import _round_currency
+	from kamra.pricing import _minor_unit
+
+	places = max(_minor_unit(si.get("currency") or prop_currency), 2)
 	items = list(si.get("items") or [])
 	taxes = list(si.get("taxes") or [])
 	si_net_total = float(si.get("net_total") or 0)
@@ -3939,7 +4012,7 @@ def _apply_accounting_invoice_taxes(doc, prop, prop_currency: str | None, folio_
 				if idx is not None:
 					if e_rate:
 						item_rates[idx] += e_rate
-					item_taxes[idx] = round(item_taxes[idx] + e_tax, 2)
+					item_taxes[idx] = _round_currency(item_taxes[idx] + e_tax, places)
 		elif detail:
 			# Match items referenced by v15 item_wise_tax_detail JSON
 			by_key: dict[str, list[int]] = {}
@@ -3970,13 +4043,13 @@ def _apply_accounting_invoice_taxes(doc, prop, prop_currency: str | None, folio_
 					if e_rate:
 						item_rates[idx] += e_rate
 					if pos == len(idxs) - 1:
-						share = round(e_tax - allocated, 2)
+						share = _round_currency(e_tax - allocated, places)
 					elif abs(net_sum) > 1e-9:
-						share = round(e_tax * float(items[idx].get("net_amount") or 0) / net_sum, 2)
+						share = _round_currency(e_tax * float(items[idx].get("net_amount") or 0) / net_sum, places)
 					else:
-						share = round(e_tax / len(idxs), 2)
+						share = _round_currency(e_tax / len(idxs), places)
 					allocated += share
-					item_taxes[idx] = round(item_taxes[idx] + share, 2)
+					item_taxes[idx] = _round_currency(item_taxes[idx] + share, places)
 		elif items and abs(tax_amt) > 1e-6:
 			net_sum = sum(float(it.get("net_amount") or 0) for it in items)
 			allocated = 0.0
@@ -3988,13 +4061,13 @@ def _apply_accounting_invoice_taxes(doc, prop, prop_currency: str | None, folio_
 				if tx_rate:
 					item_rates[pos] += tx_rate
 				if pos == len(items) - 1:
-					share = round(tax_amt - allocated, 2)
+					share = _round_currency(tax_amt - allocated, places)
 				elif abs(net_sum) > 1e-9:
-					share = round(tax_amt * float(it.get("net_amount") or 0) / net_sum, 2)
+					share = _round_currency(tax_amt * float(it.get("net_amount") or 0) / net_sum, places)
 				else:
-					share = round(tax_amt / len(items), 2)
+					share = _round_currency(tax_amt / len(items), places)
 				allocated += share
-				item_taxes[pos] = round(item_taxes[pos] + share, 2)
+				item_taxes[pos] = _round_currency(item_taxes[pos] + share, places)
 
 		# Do not emit a phantom header-template row (e.g. 18% with 0 taxable / 0 tax
 		# when all items are 0% exempt).
@@ -4002,29 +4075,30 @@ def _apply_accounting_invoice_taxes(doc, prop, prop_currency: str | None, folio_
 			continue
 		if tx_rate == 0 and tx.get("charge_type") != "Actual" and len(detail_rates) == 1:
 			tx_rate = next(iter(detail_rates))
-		taxable = round(taxable_for_row if has_item_detail else si_net_total, 2)
+		taxable = _round_currency(taxable_for_row if has_item_detail else si_net_total, places)
+		tax_rounded = _round_currency(tax_amt, places)
 		label = _clean_accounting_tax_label(tx, tx_rate, default_tax_label)
 		tax_summary.append({
 			"rate": tx_rate,
 			"taxable": taxable,
-			"total_tax": round(tax_amt, 2),
-			"parts": [{"label": label, "rate": tx_rate, "amount": round(tax_amt, 2)}],
+			"total_tax": tax_rounded,
+			"parts": [{"label": label, "rate": tx_rate, "amount": tax_rounded}],
 		})
-		cgst_amt = round(tax_amt * float(split[0][1]), 2) if split else round(tax_amt, 2)
-		sgst_amt = round(tax_amt * float(split[-1][1]), 2) if len(split) >= 2 else 0.0
+		cgst_amt = _round_currency(tax_amt * float(split[0][1]), places) if split else tax_rounded
+		sgst_amt = _round_currency(tax_amt * float(split[-1][1]), places) if len(split) >= 2 else 0.0
 		gst_summary.append({
 			"rate": tx_rate,
 			"taxable": taxable,
 			"cgst": cgst_amt,
 			"sgst": sgst_amt,
-			"total_tax": round(tax_amt, 2),
+			"total_tax": tax_rounded,
 		})
 
 	# Include 0% / exempt taxable base so mixed (e.g. 18% + 0% exempt) and pure-exempt
 	# invoices account for the full net total without phantom taxed buckets.
-	exempt_net = round(
+	exempt_net = _round_currency(
 		sum(float(it.get("net_amount") or 0) for idx, it in enumerate(items) if not item_taxed[idx]),
-		2,
+		places,
 	)
 	if abs(exempt_net) > 1e-6:
 		tax_summary.append({
@@ -4062,10 +4136,10 @@ def _apply_accounting_invoice_taxes(doc, prop, prop_currency: str | None, folio_
 		if not ln:
 			continue
 		mapped_rows.add(ref)
-		it_net = round(float(it.get("net_amount") or 0), 2)
-		it_tax = round(item_taxes[idx], 2)
+		it_net = _round_currency(float(it.get("net_amount") or 0), places)
+		it_tax = _round_currency(item_taxes[idx], places)
 		it_rate = round(item_rates[idx], 4)
-		it_gross = round(it_net + it_tax, 2)
+		it_gross = _round_currency(it_net + it_tax, places)
 		it_amount = float(it.get("amount") or 0)
 		is_inclusive = item_inclusive[idx] if has_explicit_incl else (abs(it_gross - it_amount) < 0.05 and it_gross > 0)
 
@@ -4084,29 +4158,29 @@ def _apply_accounting_invoice_taxes(doc, prop, prop_currency: str | None, folio_
 			if take <= 0 or al_row not in line_by_row:
 				continue
 			if is_inclusive and it_gross > 0:
-				t_net = round(take * it_net / it_gross, 2)
-				t_tax = round(take - t_net, 2)
-				t_gross = round(take, 2)
+				t_net = _round_currency(take * it_net / it_gross, places)
+				t_tax = _round_currency(take - t_net, places)
+				t_gross = _round_currency(take, places)
 			else:
-				t_net = round(take, 2)
-				t_tax = round(take * it_rate / 100.0, 2)
-				t_gross = round(t_net + t_tax, 2)
-			add_net = round(add_net + t_net, 2)
-			add_tax = round(add_tax + t_tax, 2)
-			add_gross = round(add_gross + t_gross, 2)
+				t_net = _round_currency(take, places)
+				t_tax = _round_currency(take * it_rate / 100.0, places)
+				t_gross = _round_currency(t_net + t_tax, places)
+			add_net = _round_currency(add_net + t_net, places)
+			add_tax = _round_currency(add_tax + t_tax, places)
+			add_gross = _round_currency(add_gross + t_gross, places)
 			slot = allowance_deltas.setdefault(al_row, [0.0, 0.0, 0.0, it_rate])
-			slot[0] = round(slot[0] - t_net, 2)
-			slot[1] = round(slot[1] - t_tax, 2)
-			slot[2] = round(slot[2] - t_gross, 2)
+			slot[0] = _round_currency(slot[0] - t_net, places)
+			slot[1] = _round_currency(slot[1] - t_tax, places)
+			slot[2] = _round_currency(slot[2] - t_gross, places)
 			if it_rate:
 				slot[3] = it_rate
 
-		final_net = round(it_net + add_net, 2)
-		final_tax = round(it_tax + add_tax, 2)
-		final_gross = round(it_gross + add_gross, 2)
+		final_net = _round_currency(it_net + add_net, places)
+		final_tax = _round_currency(it_tax + add_tax, places)
+		final_gross = _round_currency(it_gross + add_gross, places)
 		qty = float(ln.get("qty") or 1) or 1.0
 		ln["amount"] = final_net
-		ln["rate"] = round(final_net / qty, 2)
+		ln["rate"] = _round_currency(final_net / qty, places)
 		ln["gst_rate"] = it_rate
 		ln["gst_amount"] = final_tax
 		ln["total"] = final_gross
@@ -4130,9 +4204,9 @@ def _apply_accounting_invoice_taxes(doc, prop, prop_currency: str | None, folio_
 			transfer_tax += float(c.gst_amount or 0)
 			transfer_gross += float(c.total or 0)
 
-	folio_dict["charges_total"] = round(si_net_total + transfer_net, 2)
-	folio_dict["tax_total"] = round(si_tax_total + transfer_tax, 2)
-	folio_dict["grand_total"] = round(si_grand_total + transfer_gross, 2)
+	folio_dict["charges_total"] = _round_currency(si_net_total + transfer_net, places)
+	folio_dict["tax_total"] = _round_currency(si_tax_total + transfer_tax, places)
+	folio_dict["grand_total"] = _round_currency(si_grand_total + transfer_gross, places)
 
 	by_head = {}
 	for ln in lines:
@@ -4142,9 +4216,9 @@ def _apply_accounting_invoice_taxes(doc, prop, prop_currency: str | None, folio_
 			{"head": head_name, "amount": 0.0, "tax": 0.0,
 			 "total": 0.0, "lines": 0, "service_code": ln.get("service_code")},
 		)
-		head["amount"] = round(head["amount"] + float(ln["amount"] or 0), 2)
-		head["tax"] = round(head["tax"] + float(ln["gst_amount"] or 0), 2)
-		head["total"] = round(head["total"] + float(ln["total"] or 0), 2)
+		head["amount"] = _round_currency(head["amount"] + float(ln["amount"] or 0), places)
+		head["tax"] = _round_currency(head["tax"] + float(ln["gst_amount"] or 0), places)
+		head["total"] = _round_currency(head["total"] + float(ln["total"] or 0), places)
 		head["lines"] += ln["row"] not in pairs
 
 	return {
@@ -4217,9 +4291,11 @@ def folio_invoice(folio: str):
 	- `credited`: what the issued credit notes on this invoice add up to
 	- `folio`, `bill_to`, `guest`, `stay`, `property`, `document`
 	"""
+	from decimal import ROUND_HALF_UP, Decimal
+
 	from kamra import localization as loc
 	from kamra.folio import reference_currency
-	from kamra.ledger import credited_total
+	from kamra.ledger import _currency_places, _round_currency, credited_total
 	from kamra.pricing import saved_contract_tariff
 
 	doc = frappe.get_doc("Folio", folio)
@@ -4280,43 +4356,102 @@ def folio_invoice(folio: str):
 			"reservation": c.get("reservation"),
 			"stay_date": str(c.stay_date) if c.get("stay_date") else None,
 		})
+		c_amount = Decimal(str(c.amount or 0))
+		c_tax = Decimal(str(c.gst_amount or 0))
+		c_total = Decimal(str(c.total or 0))
 		key = float(c.gst_rate or 0)
-		slot = by_rate.setdefault(key, {"taxable": 0.0, "tax": 0.0})
-		slot["taxable"] += float(c.amount or 0)
-		slot["tax"] += float(c.gst_amount or 0)
+		slot = by_rate.setdefault(key, {"taxable": Decimal(0), "tax": Decimal(0)})
+		slot["taxable"] += c_amount
+		slot["tax"] += c_tax
 		# the guest's bill calls an allowance what it is to them: a discount
 		head_name = "Discount" if c.charge_type == "Allowance" else (c.charge_type or "Other")
 		head = by_head.setdefault(
 			head_name,
-			{"head": head_name, "amount": 0.0, "tax": 0.0,
-			 "total": 0.0, "lines": 0, "service_code": (code or {}).get("value")})
-		head["amount"] += float(c.amount or 0)
-		head["tax"] += float(c.gst_amount or 0)
-		head["total"] += float(c.total or 0)
+			{"head": head_name, "amount": Decimal(0), "tax": Decimal(0),
+			 "total": Decimal(0), "lines": 0, "service_code": (code or {}).get("value")})
+		head["amount"] += c_amount
+		head["tax"] += c_tax
+		head["total"] += c_total
 		# a voided line and its reversal net to nothing: not a line bought
 		head["lines"] += c.name not in pairs
-
-	# Document-level currency rounding adjusts doc.tax_total to the currency's
-	# minor unit; fold that sub-unit delta onto the dominant taxable slab so
-	# tax_summary and gst_summary reconcile with doc.tax_total.
-	from decimal import Decimal
-	tax_delta = float(
-		Decimal(str(doc.tax_total or 0))
-		- sum((Decimal(str(v["tax"])) for v in by_rate.values()), Decimal(0))
-	)
-	if abs(tax_delta) > 1e-9:
-		taxable_rates = [(rate, v) for rate, v in by_rate.items() if rate > 0]
-		if taxable_rates:
-			_dominant_rate, dominant = max(taxable_rates, key=lambda item: (abs(item[1]["taxable"]), item[0]))
-			dominant["tax"] = float(Decimal(str(dominant["tax"])) + Decimal(str(tax_delta)))
 
 	prop_currency = prop.currency or loc.default_currency(pack)
 	folio_dict = doc.as_dict()
 	acct_tax = _apply_accounting_invoice_taxes(
 		doc, prop, prop_currency, folio_dict, lines, pairs, split, _loc_ctx["tax_label"],
 	)
+	raw_places = _currency_places(doc.property)
+	unit = Decimal(1).scaleb(-raw_places)
+	currency_rounded = False
 	if acct_tax["by_head"] is not None:
 		by_head = acct_tax["by_head"]
+	else:
+		doc_charges = Decimal(str(doc.charges_total or 0))
+		doc_tax = Decimal(str(doc.tax_total or 0))
+		doc_grand = Decimal(str(doc.grand_total or 0))
+		taxed_heads = [h for h in by_head.values() if abs(h["tax"]) > Decimal("1e-9")]
+		taxable_rates = [(rate, v) for rate, v in by_rate.items() if rate > 0]
+		grand_on_unit = abs(doc_grand - doc_grand.quantize(unit, rounding=ROUND_HALF_UP)) < Decimal("1e-9")
+		if taxed_heads and grand_on_unit:
+			# Round every head and rate bucket cleanly to the currency's ISO 4217 minor unit
+			# (0 for UGX, 2 for USD, 3 for KWD), then fold any exact minor-unit residual onto
+			# the dominant taxed head/rate bucket so every row sits on minor units while sums
+			# reconcile exactly to document subtotal, tax_total, and grand_total.
+			currency_rounded = True
+			target_grand = doc_grand.quantize(unit, rounding=ROUND_HALF_UP)
+			target_charges = doc_charges.quantize(unit, rounding=ROUND_HALF_UP)
+			target_tax = target_grand - target_charges
+
+			for h in by_head.values():
+				h["amount"] = h["amount"].quantize(unit, rounding=ROUND_HALF_UP)
+				h["tax"] = (
+					Decimal(0) if abs(h["tax"]) <= Decimal("1e-9")
+					else h["tax"].quantize(unit, rounding=ROUND_HALF_UP)
+				)
+			amt_residual = target_charges - sum((h["amount"] for h in by_head.values()), Decimal(0))
+			if amt_residual:
+				amt_pool = taxed_heads or list(by_head.values())
+				dominant_amt = max(amt_pool, key=lambda h: (abs(h["amount"]), abs(h["tax"]), h["head"]))
+				dominant_amt["amount"] += amt_residual
+			tax_residual = target_tax - sum((h["tax"] for h in by_head.values()), Decimal(0))
+			if tax_residual:
+				dominant_head = max(taxed_heads, key=lambda h: (abs(h["tax"]), abs(h["amount"]), h["head"]))
+				dominant_head["tax"] += tax_residual
+			for h in by_head.values():
+				h["total"] = h["amount"] + h["tax"]
+
+			for rate, v in by_rate.items():
+				v["taxable"] = v["taxable"].quantize(unit, rounding=ROUND_HALF_UP)
+				v["tax"] = Decimal(0) if rate == 0 else v["tax"].quantize(unit, rounding=ROUND_HALF_UP)
+			rate_taxable_residual = target_charges - sum((v["taxable"] for v in by_rate.values()), Decimal(0))
+			if rate_taxable_residual and by_rate:
+				rate_pool = taxable_rates or list(by_rate.items())
+				_dom_r, dom_slot = max(rate_pool, key=lambda item: (abs(item[1]["taxable"]), item[0]))
+				dom_slot["taxable"] += rate_taxable_residual
+			rate_tax_residual = target_tax - sum((v["tax"] for v in by_rate.values()), Decimal(0))
+			if rate_tax_residual and taxable_rates:
+				_dom_r, dom_slot = max(taxable_rates, key=lambda item: (abs(item[1]["taxable"]), item[0]))
+				dom_slot["tax"] += rate_tax_residual
+
+			folio_dict["charges_total"] = float(target_charges)
+			folio_dict["tax_total"] = float(target_tax)
+		else:
+			tax_delta = doc_tax - sum((v["tax"] for v in by_rate.values()), Decimal(0))
+			if abs(tax_delta) > Decimal("1e-9"):
+				if taxable_rates:
+					_dominant_rate, dominant = max(
+						taxable_rates, key=lambda item: (abs(item[1]["taxable"]), item[0]),
+					)
+					dominant["tax"] += tax_delta
+				if taxed_heads:
+					dominant_head = max(taxed_heads, key=lambda h: (abs(h["tax"]), abs(h["amount"]), h["head"]))
+					dominant_head["tax"] += tax_delta
+					dominant_head["total"] = dominant_head["amount"] + dominant_head["tax"]
+
+		for h in by_head.values():
+			h["amount"] = float(h["amount"])
+			h["tax"] = float(h["tax"])
+			h["total"] = float(h["total"])
 
 	# A bridged folio is final once its linked accounting Sales Invoice is
 	# submitted (real bridged check-outs set only sales_invoice, not
@@ -4338,13 +4473,27 @@ def folio_invoice(folio: str):
 		if settled and acct_tax["tax_source"] != "accounting_unavailable"
 		else None
 	)
+	def _split_parts(tax_dec: Decimal) -> list[Decimal]:
+		if not split:
+			return []
+		if len(split) == 1:
+			return [tax_dec]
+		if currency_rounded:
+			amts = [
+				(tax_dec * Decimal(str(share))).quantize(unit, rounding=ROUND_HALF_UP)
+				for _lbl, share in split[:-1]
+			]
+			amts.append(tax_dec - sum(amts, Decimal(0)))
+			return amts
+		return [tax_dec * Decimal(str(share)) for _lbl, share in split]
+
 	tax_summary = (
 		acct_tax["tax_summary"] if acct_tax["tax_summary"] is not None else [
-			{"rate": rate, "taxable": v["taxable"], "total_tax": v["tax"],
+			{"rate": rate, "taxable": float(v["taxable"]), "total_tax": float(v["tax"]),
 			 "parts": [{"label": label.upper(),
 			            "rate": round(rate * float(share), 4),
-			            "amount": v["tax"] * float(share)}
-			           for label, share in split]}
+			            "amount": float(part_amt)}
+			           for (label, share), part_amt in zip(split, _split_parts(v["tax"]), strict=True)]}
 			for rate, v in sorted(by_rate.items())
 		]
 	)
@@ -4371,22 +4520,26 @@ def folio_invoice(folio: str):
 	} for p in doc.payments]
 	gst_summary = (
 		acct_tax["gst_summary"] if acct_tax["gst_summary"] is not None else [
-			{"rate": rate, "taxable": v["taxable"],
-			 "cgst": v["tax"] * float(split[0][1]),
-			 "sgst": v["tax"] * float(split[-1][1]),
-			 "total_tax": v["tax"]}
+			{"rate": rate, "taxable": float(v["taxable"]),
+			 "cgst": float(_split_parts(v["tax"])[0]) if split else float(v["tax"]),
+			 "sgst": float(_split_parts(v["tax"])[-1]) if split else 0.0,
+			 "total_tax": float(v["tax"])}
 			for rate, v in sorted(by_rate.items())
 		]
 	)
+	places = max(raw_places, 2)
 	return {
 		"folio": folio_dict,
 		"lines": lines,
 		"payments": payments,
-		"statement": _folio_statement(lines, payments),
-		"allocations": _folio_allocations(doc.name),
+		"statement": _folio_statement(lines, payments, places=places),
+		"allocations": _folio_allocations(doc.name, property=doc.property),
 		# what the issued credit notes on this invoice add up to: the most a
 		# new one may credit is the invoice total less this
-		"credited": round(float(credited_total(doc.name)) + float(acct_tax.get("erp_credited") or 0.0), 2),
+		"credited": _round_currency(
+			Decimal(str(credited_total(doc.name))) + Decimal(str(acct_tax.get("erp_credited") or 0.0)),
+			places,
+		),
 		"bill_to": bill_to,
 		"statutory": statutory,
 		"tax_source": acct_tax["tax_source"],
@@ -4454,44 +4607,55 @@ def folio_invoice(folio: str):
 	}
 
 
-def _folio_statement(lines: list, payments: list) -> list[dict]:
+def _folio_statement(lines: list, payments: list, places: int = 2) -> list[dict]:
 	"""Charges and payments in date order with a running balance: charges
 	(with tax) and refunds in `charges`, payments, allowances and reversals
 	in `credits`."""
+	from decimal import Decimal
+
+	from kamra.ledger import _round_currency
+
 	rows = []
 	for ln in lines:
-		total = round(float(ln["total"] or 0), 2)
+		total = _round_currency(ln["total"] or 0, places)
 		rows.append((ln["posting_date"], 0, {
 			"date": ln["posting_date"], "row": ln["row"], "kind": "Charge",
 			"charge_type": ln["charge_type"], "description": ln["description"],
 			"reference": ln.get("corrects_row"), "method": None,
 			"transaction_code": ln["transaction_code"], "gl_code": ln["gl_code"],
 			"charges": max(total, 0), "credits": max(-total, 0),
-			"tax": round(float(ln["gst_amount"] or 0), 2)}))
+			"tax": _round_currency(ln["gst_amount"] or 0, places)}))
 	for p in payments:
-		amt = round(float(p["amount"] or 0), 2)
+		amt = _round_currency(p["amount"] or 0, places)
 		rows.append((p["posting_date"], 1, {
 			"date": p["posting_date"], "row": p["row"], "kind": p["payment_kind"],
 			"charge_type": None, "description": f"{p['payment_kind']} {p['mode'] or ''}".strip(),
 			"reference": p["reference"], "method": p["mode"],
 			"transaction_code": p["transaction_code"], "gl_code": p["gl_code"],
 			"charges": max(-amt, 0), "credits": max(amt, 0), "tax": 0.0}))
-	balance, out = 0.0, []
+	balance, out = Decimal(0), []
 	for _d, _o, r in sorted(rows, key=lambda x: (x[0], x[1])):
-		balance = round(balance + r["charges"] - r["credits"], 2)
-		out.append({**r, "balance": balance})
+		balance += Decimal(str(r["charges"])) - Decimal(str(r["credits"]))
+		out.append({**r, "balance": _round_currency(balance, places)})
 	return out
 
 
-def _folio_allocations(folio: str) -> list[dict]:
+def _folio_allocations(folio: str, property: str | None = None) -> list[dict]:
 	"""Company payments (city ledger) that cleared this bill, and how much
 	of each."""
-	by_payment: dict[str, float] = {}
+	from decimal import Decimal
+
+	from kamra.ledger import _currency_places, _round_currency
+
+	prop = property or frappe.db.get_value("Folio", folio, "property")
+	places = max(_currency_places(prop), 2)
+	eps = Decimal("0.5").scaleb(-places)
+	by_payment: dict[str, Decimal] = {}
 	for e in frappe.get_all("Folio Ledger Entry", filters={
 			"folio": folio, "source_doctype": "City Ledger Entry"},
 			fields=["source_name", "credit", "debit"]):
-		by_payment[e.source_name] = by_payment.get(e.source_name, 0.0) + \
-			float(e.credit or 0) - float(e.debit or 0)
+		by_payment[e.source_name] = by_payment.get(e.source_name, Decimal(0)) + \
+			Decimal(str(e.credit or 0)) - Decimal(str(e.debit or 0))
 	if not by_payment:
 		return []
 	cle = {c.name: c for c in frappe.get_all(
@@ -4499,8 +4663,8 @@ def _folio_allocations(folio: str) -> list[dict]:
 		fields=["name", "account", "posting_date", "reference"])}
 	return [{"payment": n, "account": cle[n].account,
 	         "posting_date": str(cle[n].posting_date),
-	         "reference": cle[n].reference, "amount": round(a, 2)}
-	        for n, a in by_payment.items() if n in cle and abs(a) > 0.005]
+	         "reference": cle[n].reference, "amount": _round_currency(a, places)}
+	        for n, a in by_payment.items() if n in cle and abs(a) > eps]
 
 
 def _invoice_guest(res) -> dict:
@@ -4938,7 +5102,7 @@ def _stay_balances(names: list) -> dict:
 		return {}
 	resv = {r.name: r for r in frappe.get_all(
 		"Reservation", filters={"name": ("in", names)},
-		fields=["name", "status", "amount_after_tax", "advance_paid",
+		fields=["name", "property", "status", "amount_after_tax", "advance_paid",
 		        "check_out_date"])}
 	folios = _guest_folio_sums(names)
 	# A guest due out has nights the night audit has not posted yet;
@@ -4952,9 +5116,11 @@ def _stay_balances(names: list) -> dict:
 	if due_out:
 		projected, unavailable = _checkout_projection(due_out)
 		folios.update(projected)
+	from kamra.ledger import _currency_places, _money, _round_currency
 	out = {}
 	for name, res in resv.items():
 		folio = folios.get(name)
+		places = max(_currency_places(res.get("property")), 2)
 		total_booked = float(res.amount_after_tax or 0)
 		adv = float(res.advance_paid or 0)
 		ended = res.status in ("No Show", "Cancelled")
@@ -4969,11 +5135,11 @@ def _stay_balances(names: list) -> dict:
 		elif folio:
 			paid = float(folio.paid)
 			m = {"total": total_booked, "paid": paid,
-			     "due": max(0.0, round(total_booked - paid, 2)),
+			     "due": max(0.0, _round_currency(_money(total_booked) - _money(paid), places)),
 			     "has_folio": True, "source": "booking"}
 		else:
 			m = {"total": total_booked, "paid": adv,
-			     "due": max(0.0, round(total_booked - adv, 2)),
+			     "due": max(0.0, _round_currency(_money(total_booked) - _money(adv), places)),
 			     "has_folio": False, "source": "booking"}
 		# the posted figures stand in: check-out's own sheet says why
 		m["projection_unavailable"] = name in unavailable
@@ -6283,27 +6449,23 @@ def _assert_settled(doc, credit_override_reason: str | None = None) -> list[dict
 		return []
 	from kamra.checkout import settlement_position
 	from kamra.folio import post_remaining_nights
-	from kamra.ledger import _currency_places, _fmt_currency
-	from kamra.localization import pack_for
+	from kamra.ledger import _format_currency_amount
 
 	post_remaining_nights(doc)
-	symbol = pack_for(doc.property).locale(
-		frappe.get_cached_doc("Property", doc.property)).get("currency_symbol", "")
-	places = _currency_places(doc.property)
 	# the one judgement of what is owed either way, shared with the desk's
 	# check-out sheet (checkout_context)
 	position = settlement_position(doc.name)
 	owed, refund = position["owed"], position["refund_due"]
 	to_city_ledger = [(f, c) for f, c, _b in position["to_city_ledger"]]
 	if owed:
-		frappe.throw(_("Cannot check out: {0}{1} is still owed. Collect payment "
+		frappe.throw(_("Cannot check out: {0} is still owed. Collect payment "
 		               "or transfer it to the city ledger before departure.").format(
-			symbol, _fmt_currency(owed, places)),
+			_format_currency_amount(doc.property, owed)),
 		             title=_("Settle before check-out"))
 	if refund:
-		frappe.throw(_("Cannot check out: the guest is owed {0}{1}. Issue the "
+		frappe.throw(_("Cannot check out: the guest is owed {0}. Issue the "
 		               "refund before departure.").format(
-			symbol, _fmt_currency(refund, places)),
+			_format_currency_amount(doc.property, refund)),
 		             title=_("Settle before check-out"))
 	# nothing moves until the guest's side is settled - and the company's
 	# credit is checked once for everything the stay bills to it
@@ -6576,8 +6738,10 @@ def reinstate_checkout(reservation: str, reason: str, pin: str | None = None):
 	if frappe.db.get_value("Property", doc.property, "id_retention") == "Verify & Discard":
 		warnings.append(_("The guest's ID was discarded at checkout. Capture it again "
 		                  "in the check-in steps."))
+	from kamra.ledger import _currency_places, _round_currency
+	places = max(_currency_places(doc.property), 2)
 	return {"ok": True, "reservation": doc.name, "status": doc.status,
-	        "cancelled_invoices": cancelled, "from_city_ledger": round(brought_back, 2),
+	        "cancelled_invoices": cancelled, "from_city_ledger": _round_currency(brought_back, places),
 	        "warnings": warnings}
 
 
@@ -7343,7 +7507,10 @@ def move_reservation(reservation: str, new_room: str,
 	_require_price_confirmation(
 		_move_price(doc, new_type, rate_mode, agreed_rate), confirm_price)
 	doc.room = new_room
-	if rate_mode == "custom" or abs(flt(doc.get("agreed_rate")) - before_rate) >= 0.005:
+	from kamra.ledger import _currency_places, _round_currency
+	places = max(_currency_places(doc.property), 2)
+	eps = 0.5 * (10 ** -places)
+	if rate_mode == "custom" or abs(flt(doc.get("agreed_rate")) - before_rate) >= eps:
 		# the room move is a governed writer of the agreed rate
 		# (Reservation.guard_agreed_rate): a custom rate is a manager's, even
 		# at the rate the stay already holds; the new room's own rate clears it
@@ -7363,9 +7530,9 @@ def move_reservation(reservation: str, new_room: str,
 	note = f"{old_room} → {new_room}"
 	if new_type and new_type != old_type:
 		note += f" · {old_type} → {new_type}"
-	if abs(float(doc.amount_after_tax or 0) - old_amount) >= 0.01:
-		note += (f" · re-priced {old_amount:,.2f} → "
-		         f"{float(doc.amount_after_tax or 0):,.2f} (confirmed)")
+	if abs(float(doc.amount_after_tax or 0) - old_amount) > eps:
+		note += (f" · re-priced {old_amount:,.{places}f} → "
+		         f"{float(doc.amount_after_tax or 0):,.{places}f} (confirmed)")
 	if rate_mode != "destination":
 		note += f" · rate: {rate_mode}"
 	if rate_mode == "custom":
@@ -7374,8 +7541,8 @@ def move_reservation(reservation: str, new_room: str,
 			"scope": "stay", "reservation": doc.name, "room_type": doc.room_type,
 			"room": doc.room, "rate": float(agreed_rate or 0),
 			"start_date": str(doc.check_in_date), "end_date": str(doc.check_out_date),
-			"previous_amount": round(old_amount, 2),
-			"amount_after_tax": round(float(doc.amount_after_tax or 0), 2),
+			"previous_amount": _round_currency(old_amount, places),
+			"amount_after_tax": _round_currency(doc.amount_after_tax, places),
 			"reason": (reason or "").strip() or None})
 	# who signed off the discount the move re-priced (as amend_stay logs it)
 	approver = (doc.flags.get("kamra_discount_governance") or {}).get("approver")
@@ -7406,12 +7573,18 @@ def _check_night_prices(property: str, room_type: str, check_in_date: str,
 	whose price something else already decides: a voucher, a rate plan (its
 	own or the company's negotiated one), an OTA total or a group block rate."""
 	from kamra.pricing import negotiated_rate_plan, normalize_night_prices, refuse_with_night_prices
+	from kamra.settings import get_setting
 	typed = normalize_night_prices(night_prices, check_in_date, check_out_date)
 	if not typed:
 		return {}
 	if not _can_set_rate():
 		frappe.throw(_("Only a Revenue Manager or Hotel Admin can set nightly prices."),
 		             frappe.PermissionError)
+	if get_setting(property, "rate_plan_required"):
+		frappe.throw(
+			_("Hand-set nightly prices cannot be used while a rate plan is required for this property. "
+			  "Choose a rate plan or apply a discount instead.")
+		)
 	if voucher_code:
 		refuse_with_night_prices(_("a voucher"))
 	if rate_plan:
@@ -7442,12 +7615,13 @@ def _record_night_prices(doc, typed: dict) -> None:
 		           + ", ".join(f"{d} {money_text(doc.property, float(p))}"
 		                       for d, p in sorted(typed.items()))
 		           + f"; total {money_text(doc.property, doc.amount_after_tax)}"))
+	from kamra.ledger import _currency_places, _round_currency
 	emit_rate_overridden(doc.property, {
 		"scope": "night", "reservation": doc.name, "room_type": doc.room_type,
 		"room": doc.room, "start_date": str(doc.check_in_date),
 		"end_date": str(doc.check_out_date),
 		"nights": [{"date": d, "price": float(p)} for d, p in sorted(typed.items())],
-		"amount_after_tax": round(float(doc.amount_after_tax or 0), 2),
+		"amount_after_tax": _round_currency(doc.amount_after_tax, max(_currency_places(doc.property), 2)),
 		"reason": None})
 
 
@@ -7458,13 +7632,14 @@ def _current_nightly(res) -> float:
 	property's prices include tax (rates_include_tax) an agreed rate is a
 	gross price, so each locked night is put back to gross with its own tax
 	rate before the two are compared."""
+	from kamra.ledger import _currency_places, _round_currency
 	from kamra.pricing import rates_include_tax
 	rows = res.get("night_rates") or []
 	if rows:
 		gross = rates_include_tax(res.property)
 		rates = [flt(r.rate) * (1 + flt(r.gst_rate) / 100 if gross else 1)
 		         for r in rows]
-		return round(sum(rates) / len(rates), 2)
+		return _round_currency(sum(rates) / len(rates), max(_currency_places(res.property), 2))
 	return flt(res.get("agreed_rate"))
 
 
@@ -7512,6 +7687,7 @@ def _rate_override_plan(res, agreed_rate) -> dict:
 	charged = set(charged_nights(res.name))
 	inclusive = rates_include_tax(res.property)
 	places = night_rate_places(res.property)
+	money_eps = 0.5 * (10 ** -max(places, 2))
 	rails = frappe.get_all(
 		"Rate Guardrail", filters={"property": res.property, "disabled": 0,
 		                           "room_type": ("in", [res.room_type, "", None])},
@@ -7527,13 +7703,13 @@ def _rate_override_plan(res, agreed_rate) -> dict:
 			cut = max(cut, 100 * (code - net) / code)
 		rail = rail_for_day(rails, res.room_type, getdate(day).strftime("%a").lower())
 		# the floor is on the price basis the rate card uses
-		if rail and flt(rail.floor_price) and net < flt(rail.floor_price) - 0.005:
+		if rail and flt(rail.floor_price) and net < flt(rail.floor_price) - money_eps:
 			floor.append(day)
 	cut = round(max(cut, 0.0), 2)
 	pv.update(current_nightly=current, agreed_rate=agreed_rate,
 	          reduction_pct=cut, limit_pct=limit, can_set_rate=manager,
 	          agent=agent, floor_breach=floor, replaces_discount=bool(cleared),
-	          raises=agreed_rate > current + 0.005,
+	          raises=agreed_rate > current + money_eps,
 	          needs_supervisor=not manager and (cut > limit + 0.005 or bool(floor)))
 	# who can sign a desk cut off here: the people verify_supervisor accepts
 	# (names only); a manager or an agent never picks one
@@ -7872,7 +8048,7 @@ def discount_governance(property: str, room_type: str | None, rate_plan: str | N
 		for n in discounted:
 			rail = rail_for_day(rails, room_type, getdate(n["date"]).strftime("%a").lower())
 			# the floor is on the price basis the rate card uses
-			if rail and flt(rail.floor_price) and entry(n) < flt(rail.floor_price) - 0.005:
+			if rail and flt(rail.floor_price) and entry(n) < flt(rail.floor_price) - 0.5 * (10 ** -max(places, 2)):
 				floor_breach.append(str(n["date"]))
 	limit = desk_limit_pct(property)
 	agent = _is_agent()
@@ -8224,9 +8400,13 @@ def _discount_plan(doc, discount_type=None, discount_value=0, reason_code=None,
 	plan = discount_governance(doc.property, doc.room_type, doc.rate_plan,
 	                           [n for n in nights if n["date"] not in charged],
 	                           reason_code=doc.discount_reason, fixed_rate=fixed_rate)
+	from kamra.ledger import _currency_places, _money, _round_currency
+	places = max(_currency_places(doc.property), 2)
+	eps = 0.5 * (10 ** -places)
 	plan.update(
-		current_amount=current, new_amount=new, difference=round(new - current, 2),
-		needs_confirmation=abs(new - current) >= 0.01,
+		current_amount=current, new_amount=new,
+		difference=_round_currency(_money(new) - _money(current), places),
+		needs_confirmation=abs(new - current) > eps,
 		nights=[{"date": n["date"], "base_rate": flt(r.get("base_rate")) or flt(r.get("rate")),
 		         "discount_type": n["discount_type"],
 		         "discount_value": n["discount_value"] if n["discount_type"] else 0,
@@ -8514,45 +8694,51 @@ def _reprice_preview(res, **changes) -> dict:
 			float(q["amount_after_tax"]) + hold["base"] + hold["tax"], 0, "Nearest",
 			property_currency(res.property),
 		))
+		from kamra.ledger import _currency_places, _money, _round_currency
+		places = max(_currency_places(res.property), 2)
+		eps = 0.5 * (10 ** -places)
 		out.update({
 			"new_amount": new,
-			"difference": round(new - current, 2),
+			"difference": _round_currency(_money(new) - _money(current), places),
 			"reprices": True,
-			"needs_confirmation": abs(new - current) >= 0.01,
+			"needs_confirmation": abs(new - current) > eps,
+			"places": places,
 			"nights": [{"date": str(r["stay_date"]), "rate": r["rate"],
 			            "demand_premium_pct": r["demand_premium_pct"]}
 			           for r in rows],
 		})
 		if hold["nights"]:
-			out["charged_nights"] = _charged_nights_summary(hold)
+			out["charged_nights"] = _charged_nights_summary(hold, places=places)
 		return out
 	finally:
 		if "agreed_rate" not in changes:
 			res.agreed_rate = original_agreed
 
 
-def _charged_nights_summary(hold: dict) -> dict:
+def _charged_nights_summary(hold: dict, places: int = 2) -> dict:
 	"""What a rate change does to the nights already on the folio, for a
 	preview: the policy, each night touched, what stays above the new price
 	(kept nights - the desk may give it back as an allowance) and the
 	credit lines Kamra posts (tax included)."""
+	from kamra.ledger import _round_currency
 	lines = hold["lines"]
 	return {
 		"policy": hold["policy"],
 		"nights": hold["nights"],
-		"kept_difference": round(hold["base"] + hold["tax"], 2),
-		"credit_total": round(sum(
-			l["amount"] * (1 + l["gst_rate"] / 100) for l in lines), 2),
+		"kept_difference": _round_currency(hold["base"] + hold["tax"], places),
+		"credit_total": _round_currency(sum(
+			l["amount"] * (1 + l["gst_rate"] / 100) for l in lines), places),
 	}
 
 
 def _require_price_confirmation(preview: dict, confirm_price) -> None:
 	if preview["needs_confirmation"] and not cint(confirm_price):
+		places = int(preview.get("places") or 2)
 		frappe.throw(
 			_("This change re-prices the stay from {0} to {1}. Show the guest "
 			  "the new price, then confirm it (confirm_price=1).").format(
-				f"{preview['current_amount']:,.2f}",
-				f"{preview['new_amount']:,.2f}"),
+				f"{preview['current_amount']:,.{places}f}",
+				f"{preview['new_amount']:,.{places}f}"),
 			exc=PriceConfirmationRequired, title=_("Confirm the new price"))
 
 
@@ -9057,7 +9243,7 @@ def get_quote(property: str, room_type: str, check_in_date: str,
 	checks a PIN: supervisor_user / supervisor_pin are accepted so a booking
 	screen can send one payload, and ignored."""
 	from kamra.booking_refs import resolve_meal_plan, resolve_rate_plan, resolve_room_type
-	from kamra.pricing import ContractRateRefused, quote_with_contract, tax_basis
+	from kamra.pricing import ContractRateRefused, quote_with_contract, resolve_booking_rate_plan, tax_basis
 
 	# agents name things the way staff do ("Deluxe", "breakfast"); resolve
 	# to IDs at this property or refuse with the valid options
@@ -9067,6 +9253,12 @@ def get_quote(property: str, room_type: str, check_in_date: str,
 	typed = _check_night_prices(
 		property, room_type, check_in_date, check_out_date, night_prices,
 		voucher_code=voucher_code, rate_plan=rate_plan, company=company)
+	if not typed:
+		rate_plan = resolve_booking_rate_plan(
+			property, room_type, check_in_date, check_out_date,
+			rate_plan=rate_plan, company=company,
+			adults=int(adults), children=int(children), extra_beds=extra_beds,
+		)
 	try:
 		q = quote_with_contract(property, room_type, check_in_date, check_out_date,
 		                        int(adults), int(children), meal_plan or None,
@@ -9569,11 +9761,20 @@ def create_booking(property: str, room_type: str, check_in_date: str,
 			                    guest_name=guest_name, phone=phone)
 			return _booking_replay(existing)
 
-	from kamra.pricing import negotiated_rate_plan
+	from kamra.group_blocks import group_rate
+	from kamra.pricing import resolve_booking_rate_plan
 	from kamra.settings import get_setting
-	rate_plan = rate_plan or negotiated_rate_plan(property, company)
-	if get_setting(property, "rate_plan_required") and not rate_plan:
-		frappe.throw(_("A rate plan is required for this property.") + " (KMR-RATE-REQ-001)")
+	has_block_rate = bool(group_booking and float(group_rate(group_booking, room_type) or 0) > 0)
+	parsed_stay = (
+		frappe.parse_json(stay_details) if isinstance(stay_details, str) else stay_details
+	)
+	extra_beds_count = cint((parsed_stay or {}).get("extra_beds")) if isinstance(parsed_stay, dict) else 0
+	rate_plan = resolve_booking_rate_plan(
+		property, room_type, check_in_date, check_out_date,
+		rate_plan=rate_plan, company=company, group_booking=group_booking,
+		adults=int(adults), children=int(children), extra_beds=extra_beds_count,
+		check_availability=not has_block_rate,
+	)
 
 	# An agent that retries a tool call (timeout, lost response, a model
 	# that repeats itself) must not book the guest twice. Without a key,
@@ -10000,6 +10201,11 @@ def create_group_booking(property: str, group_name: str, check_in_date: str,
 
 	ota_ref = (ota_ref or "").strip() or None
 	_refuse_taken_ota_ref(property, ota_ref)  # before the group is made
+	from kamra.booking_refs import resolve_rate_plan
+	from kamra.pricing import resolve_group_rate_plan
+	rate_plan = resolve_rate_plan(property, rate_plan)
+	if not any(spec.get("night_prices") for spec in lines):
+		rate_plan = resolve_group_rate_plan(property, rate_plan=rate_plan, company=company)
 	shares = [0.0] * len(lines)
 	total = float(ota_total or 0) if booked_via else 0
 	if total > 0 and lines:
@@ -10011,9 +10217,11 @@ def create_group_booking(property: str, group_name: str, check_in_date: str,
 			company=company).get("amount_after_tax") or 0) for spec in lines]
 		if not sum(weights):
 			weights = [1.0] * len(lines)
+		from kamra.ledger import _currency_places, _round_currency
+		places = max(_currency_places(property), 2)
 		for i, w in enumerate(weights):
-			shares[i] = round(total * w / sum(weights), 2)
-		shares[-1] = round(total - sum(shares[:-1]), 2)  # rounding
+			shares[i] = _round_currency(total * w / sum(weights), places)
+		shares[-1] = _round_currency(total - sum(shares[:-1]), places)  # rounding
 
 	# Nights a room was priced by hand are checked for every room before the
 	# group is made: a refusal must stop the booking, not show up later as a
@@ -10037,6 +10245,7 @@ def create_group_booking(property: str, group_name: str, check_in_date: str,
 		"property": property,
 		"group_name": group_name,
 		"company": company or None,
+		"rate_plan": rate_plan or None,
 		"group_type": group_type or None,
 		"check_in_date": check_in_date,
 		"check_out_date": check_out_date,
@@ -10161,6 +10370,7 @@ def create_group_with_rooming_list(property: str, group_name: str,
                                    attrition_pct: float = 0,
                                    deposit_due: float = 0,
                                    quotation_only: int = 0,
+                                   rate_plan: str | None = None,
                                    comp_supervisor_user: str | None = None,
                                    comp_supervisor_pin: str | None = None):
 	"""The desk's group flow: group -> room blocks -> rooming list ->
@@ -10254,10 +10464,17 @@ def create_group_with_rooming_list(property: str, group_name: str,
 	if with_master and not guests and not quote_only:
 		frappe.throw(_("Name the main room's guest in the rooming list."))
 
+	from kamra.booking_refs import resolve_rate_plan
+	from kamra.pricing import resolve_group_rate_plan
+	rate_plan = resolve_rate_plan(property, rate_plan)
+	rate_plan = resolve_group_rate_plan(property, rate_plan=rate_plan, company=company)
+
 	comp_approver = None
-	if not quote_only and guests and company:
-		from kamra.pricing import negotiated_rate_plan
-		comp_plan = negotiated_rate_plan(property, company)
+	if not quote_only and guests:
+		comp_plan = rate_plan
+		if not comp_plan and company:
+			from kamra.pricing import negotiated_rate_plan
+			comp_plan = negotiated_rate_plan(property, company)
 		if comp_plan:
 			comp_approver = comp_rate_governance(
 				property, comp_plan, check=True,
@@ -10271,6 +10488,7 @@ def create_group_with_rooming_list(property: str, group_name: str,
 		"property": property,
 		"group_name": group_name,
 		"company": company or None,
+		"rate_plan": rate_plan or None,
 		"group_type": group_type or None,
 		"check_in_date": check_in_date,
 		"check_out_date": check_out_date,
@@ -10303,6 +10521,7 @@ def create_group_with_rooming_list(property: str, group_name: str,
 				# the guest and the others named with them, as far as the room sleeps
 				adults=cint(gst.get("adults")) or min(1 + len(others), capacity),
 				children=cint(gst.get("children")),
+				rate_plan=gst.get("rate_plan") or rate_plan or None,
 				booking_type="Corporate" if company else "Group",
 				company=company, group_booking=group.name, source="Manual",
 				comp_supervisor_user=comp_supervisor_user,
@@ -10624,7 +10843,9 @@ def _block_prices(property: str, check_in_date: str, check_out_date: str,
 
 	from kamra.booking_refs import resolve_room_type
 	from kamra.group_blocks import group_nights, parse_nightly
+	from kamra.ledger import _currency_places, _round_currency
 	from kamra.pricing import apply_rate_plan, negotiated_rate_plan, quote, room_gst_rate
+	places = max(_currency_places(property), 2)
 	nights = group_nights(check_in_date, check_out_date)
 	rows, before, tax, levy = [], 0.0, 0.0, 0.0
 	for b in blocks or []:
@@ -10672,17 +10893,17 @@ def _block_prices(property: str, check_in_date: str, check_out_date: str,
 			"room_type": rt, "room_type_name": rt_doc.room_type_name,
 			"rooms": max(counts.values()), "nightly": counts if nightly else {},
 			"room_nights": room_nights, "group_rate": rate > 0,
-			"rate": round(row_before / room_nights, 2) if room_nights else 0,
-			"before_tax": round(row_before, 2), "tax": round(row_tax, 2),
-			"levy": round(row_levy, 2),
-			"total": round(row_before + row_tax + row_levy, 2),
+			"rate": _round_currency(row_before / room_nights, places) if room_nights else 0,
+			"before_tax": _round_currency(row_before, places), "tax": _round_currency(row_tax, places),
+			"levy": _round_currency(row_levy, places),
+			"total": _round_currency(row_before + row_tax + row_levy, places),
 		})
 		before += row_before
 		tax += row_tax
 		levy += row_levy
-	return {"rows": rows, "nights": len(nights), "before_tax": round(before, 2),
-	        "tax": round(tax, 2), "levy": round(levy, 2),
-	        "total": round(before + tax + levy, 2)}
+	return {"rows": rows, "nights": len(nights), "before_tax": _round_currency(before, places),
+	        "tax": _round_currency(tax, places), "levy": _round_currency(levy, places),
+	        "total": _round_currency(before + tax + levy, places)}
 
 
 @frappe.whitelist()
@@ -11059,17 +11280,21 @@ def _group_money(gb, prices: dict, rooming: list) -> dict:
 		"""SELECT COALESCE(SUM(amount), 0) FROM `tabFolio Payment`
 		   WHERE parent IN %(f)s AND payment_kind = 'Advance'""",
 		{"f": [f.name for f in group_folios] or [""]})[0][0])
+	from kamra.ledger import _currency_places, _round_currency
+	places = max(_currency_places(gb.property), 2)
 	paid = sum(flt(f.payments_total) for f in group_folios + member_folios)
-	return {"block_value": prices["total"], "booked": round(booked, 2),
-	        "deposits": round(deposits, 2), "paid": round(paid, 2),
+	return {"block_value": prices["total"], "booked": _round_currency(booked, places),
+	        "deposits": _round_currency(deposits, places), "paid": _round_currency(paid, places),
 	        "deposit_due": flt(gb.get("deposit_due")),
-	        "due": round(max(0.0, open_balances + max(0.0, booked - posted)), 2)}
+	        "due": _round_currency(max(0.0, open_balances + max(0.0, booked - posted)), places)}
 
 
 def _group_attrition(gb, prices: dict) -> dict:
 	"""How much of the block the group has picked up, in room-nights, and
 	the fee its allowed shortfall (attrition %) permits for the rest."""
 	from kamra.group_blocks import effective_cutoff, unpicked_by_night
+	from kamra.ledger import _currency_places, _round_currency
+	places = max(_currency_places(gb.property), 2)
 	blocked = sum(r["room_nights"] for r in prices["rows"])
 	held = sum(sum(unpicked_by_night(gb.name, r["room_type"]).values())
 	           for r in prices["rows"])
@@ -11082,7 +11307,7 @@ def _group_attrition(gb, prices: dict) -> dict:
 	return {"blocked_room_nights": blocked, "picked_room_nights": picked,
 	        "pickup_pct": pct, "allowed_pct": allowed,
 	        "shortfall_room_nights": round(short, 1),
-	        "fee_estimate": round(short * per_rn, 2),
+	        "fee_estimate": _round_currency(short * per_rn, places),
 	        "days_to_cutoff": days,
 	        # a warning matters until the group arrives, not after it has stayed
 	        "warn": bool(blocked) and gb.status == "Confirmed"
@@ -11141,12 +11366,14 @@ def group_detail(group_booking: str):
 		fields=["name", "room_type_name"], as_list=True))
 	for p in pickup:
 		p["room_type_name"] = type_names.get(p["room_type"], p["room_type"])
+	from kamra.ledger import _currency_places, _round_currency
+	places = max(_currency_places(gb.property), 2)
 	for r in rooming:
 		r["room_number"] = numbers.get(r.room)
 		r["is_master"] = r.name == gb.get("master_reservation")
 		r["phone"] = phones.get(r.guest)
 		r["room_type_name"] = type_names.get(r.room_type, r.room_type)
-		r["own_balance"] = round(own.get(r.name, 0), 2)
+		r["own_balance"] = _round_currency(own.get(r.name, 0), places)
 		r["amount"] = flt(r.amount_after_tax)
 	event = None
 	if gb.get("event"):
@@ -11203,7 +11430,7 @@ def group_detail(group_booking: str):
 		"event": event,
 		"master_folio": master,
 		"master_folio_status": bill.status if bill else None,
-		"master_folio_balance": round(flt(bill.balance), 2) if bill else 0,
+		"master_folio_balance": _round_currency(bill.balance, places) if bill else 0,
 	}
 
 
@@ -11522,6 +11749,7 @@ def save_group_blocks(group_booking: str, blocks, cutoff_date: str | None = None
 def pickup_group_room(group_booking: str, room_type: str, guest_name: str,
                       phone: str | None = None, adults: int = 2,
                       children: int = 0, idempotency_key: str | None = None,
+                      rate_plan: str | None = None,
                       comp_supervisor_user: str | None = None,
                       comp_supervisor_pin: str | None = None):
 	"""Name a guest into the block: creates a reservation on the group's
@@ -11536,6 +11764,7 @@ def pickup_group_room(group_booking: str, room_type: str, guest_name: str,
 		check_out_date=str(gb.check_out_date),
 		guest_name=guest_name, phone=phone,
 		adults=int(adults), children=int(children),
+		rate_plan=rate_plan or gb.get("rate_plan") or None,
 		booking_type="Group", company=gb.company,
 		group_booking=gb.name, source="Manual",
 		idempotency_key=idempotency_key,
@@ -11567,7 +11796,8 @@ def create_group_block(property: str, group_name: str, check_in_date: str,
                        event_date: str | None = None,
                        attendees: int = 0,
                        customer_phone: str | None = None,
-                       notes: str | None = None):
+                       notes: str | None = None,
+                       rate_plan: str | None = None):
 	"""One call drafts the whole piece of MICE business: the group, its room
 	block, and (optionally) the banquet event - the agent wedge: an inquiry
 	agent turns "30 rooms + a 200-pax wedding on Dec 12" into a proposal."""
@@ -11576,18 +11806,22 @@ def create_group_block(property: str, group_name: str, check_in_date: str,
 	if any(flt(b.get("block_rate")) > 0 for b in blocks or []) and not _can_set_rate():
 		frappe.throw(_("Only a Revenue Manager or Hotel Admin can set a group rate."),
 		             frappe.PermissionError)
+	from kamra.booking_refs import resolve_rate_plan, resolve_room_type
+	from kamra.pricing import resolve_group_rate_plan
+	rate_plan = resolve_rate_plan(property, rate_plan)
+	rate_plan = resolve_group_rate_plan(property, rate_plan=rate_plan, company=company)
 	gb = frappe.get_doc({
 		"doctype": "Group Booking",
 		"property": property,
 		"group_name": group_name,
 		"company": company,
+		"rate_plan": rate_plan or None,
 		"check_in_date": check_in_date,
 		"check_out_date": check_out_date,
 		"cutoff_date": cutoff_date,
 		"status": "Open",
 		"notes": notes,
 	})
-	from kamra.booking_refs import resolve_room_type
 	for b in blocks or []:
 		gb.append("blocks", {
 			# agents name room types the way staff do ("Deluxe", "DLX")
@@ -11725,6 +11959,7 @@ def property_locale(property: str):
 	localization pack. Drives the frontend's money formatting and tax dropdowns
 	so no screen hardcodes ₹ or GST %. `integrations` says which country
 	integrations (gateways, tax return, ID checks) this property has."""
+	from kamra.erp_bridge import erp_determines_tax
 	from kamra.localization import front_desk_vocabulary, integrations, pack_for, services_tax_rate, tender_modes
 	from kamra.masters import desk_vocabulary
 	from kamra.pricing import tax_basis
@@ -11762,6 +11997,7 @@ def property_locale(property: str):
 	        "tender_modes": t_modes,
 	        "fx_currencies": list_setting(property, "fx_currencies"),
 	        "tax_basis": tax_basis(property),
+	        "erp_tax_managed": bool(erp_determines_tax()),
 	        # the rate the server puts on any food & beverage charge, whatever
 	        # rate the caller picked (_resolve_charge_gst) - so the folio's
 	        # charge form shows the rate that will apply instead of a choice

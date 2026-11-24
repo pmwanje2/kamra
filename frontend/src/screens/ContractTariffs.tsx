@@ -11,6 +11,7 @@ import { downloadCsv } from "../lib/csv"
 import { uiDateLocale, useT } from "../lib/i18n"
 import { useLocale } from "../lib/money"
 import { addDays, todayPlus } from "../lib/stay"
+import { notifyTariffsChanged, onTariffsChanged } from "../lib/tariffSync"
 import {
   priceListRounding, roomMatrix, roundRate, type ContractTariffItem, type MatrixRow, type PriceList,
   type RatePlanPolicy, type RoundingMode, type TariffVersion,
@@ -149,6 +150,7 @@ function TariffDirectory({ property }: { property: string }) {
     return () => { current = false }
   }, [property, canPropose])
   const reload = () => setRevision((value) => value + 1)
+  useEffect(() => onTariffsChanged(reload), [])
   const open = (next: TariffAction) => {
     setNotice(null)
     setAction(next)
@@ -158,7 +160,7 @@ function TariffDirectory({ property }: { property: string }) {
     setAction(null)
     setMass(null)
     setSelected(new Set())
-    reload()
+    notifyTariffsChanged(property)
   }
   const heading = <header className="space-y-1 border-b border-zinc-200 pb-4">
     <p className="text-sm font-medium text-brand-700">{data?.property || property}</p>

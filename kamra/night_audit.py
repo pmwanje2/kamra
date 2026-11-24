@@ -138,9 +138,20 @@ def _iso(v) -> str | None:
 	return str(v) if v not in (None, "") else None
 
 
+def _places(property: str | None) -> int:
+	from kamra.ledger import _currency_places
+	return max(_currency_places(property), 2)
+
+
+def _r(value, places: int = 2) -> float:
+	from kamra.ledger import _round_currency
+	return _round_currency(value, places)
+
+
 def _stay_cols(res, bd: str | None = None) -> dict:
 	"""The columns Opera's arrival / departure lists show for a stay."""
 	from kamra.folio import locked_night
+	places = _places(res.property)
 	rate = None
 	night = locked_night(res, bd or res.check_in_date)
 	if night is not None:
@@ -156,7 +167,7 @@ def _stay_cols(res, bd: str | None = None) -> dict:
 		"rate_plan": (res.get("rate_plan") or "").split("-")[-1] or None,
 		"rate": rate,
 		"room": _room_no(res.room),
-		"folio": f.get("name"), "balance": flt(f.get("balance"), 2),
+		"folio": f.get("name"), "balance": _r(f.get("balance"), places),
 		"adults": cint(res.adults), "children": cint(res.children),
 		"source": res.get("channel") or res.get("source"),
 		"company": res.get("company"),
@@ -280,14 +291,13 @@ def check_open_pos_bills(property: str, bd: str) -> dict:
 			"state": "served, not settled" if c["billed"] else "open",
 			"opened_at": c["opened_at"],
 		})
-	from kamra.ledger import _currency_places, _round_currency
-	places = _currency_places(property)
+	places = _places(property)
 	return _check(
 		"open_pos_bills", "Open restaurant bills",
 		_severity(property, "open_pos_bills"), items,
 		"Settle each bill at its outlet: take payment, charge it to an "
 		"in-house room, mark it NC or cancel it.", "/pos",
-		amount=_round_currency(sum(i["amount"] for i in items), places))
+		amount=_r(sum(i["amount"] for i in items), places))
 
 
 def check_departures_due(property: str, bd: str) -> dict:
@@ -356,6 +366,7 @@ def check_arrivals_pending(property: str, bd: str, run_at=None) -> dict:
 		         "check_in_date": ("<=", bd)},
 		order_by="check_in_date asc, name asc", pluck="name",
 		limit_page_length=0)
+	places = _places(property)
 	items = []
 	counts = {"no_show": 0, "hold": 0, "defer": 0}
 	for name in names:
@@ -365,7 +376,7 @@ def check_arrivals_pending(property: str, bd: str, run_at=None) -> dict:
 		fee = 0.0
 		if o.outcome == "no_show":
 			if o.fee == "charge":
-				fee = flt(policy_fee(res, pol.charge), 2)
+				fee = _r(policy_fee(res, pol.charge), places)
 				label = f"No show - {pol.charge.lower()} fee"
 			elif o.fee == "waived":
 				label = f"No show - fee waived ({o.reason})"
@@ -414,6 +425,7 @@ def check_rate_variance(property: str, bd: str) -> dict:
 		  AND """ + STANDS_ON_ITS_DATE + """
 		GROUP BY COALESCE(NULLIF(fc.reservation, ''), f.reservation)
 		""", {"p": property, "d": bd}, as_dict=True)
+	places = _places(property)
 	items = []
 	for r in rows:
 		if not r.reservation or not frappe.db.exists("Reservation", r.reservation):
@@ -422,14 +434,14 @@ def check_rate_variance(property: str, bd: str) -> dict:
 		expected, basis = _expected_night(res, bd)
 		if expected is None:
 			continue
-		posted = flt(r.posted, 2)
-		diff = round(posted - expected, 2)
+		posted = _r(r.posted, places)
+		diff = _r(posted - expected, places)
 		if abs(diff) <= tol:
 			continue
 		items.append({
 			"reservation": res.name, "guest_name": res.guest_name,
 			"room": _room_no(res.room), "folio": r.folio,
-			"posted": posted, "expected": round(expected, 2),
+			"posted": posted, "expected": _r(expected, places),
 			"difference": diff, "basis": basis, "lines": cint(r.n_lines),
 			"manual": not cint(r.all_auto),
 		})
@@ -484,16 +496,18 @@ def check_pos_room_postings(property: str, bd: str) -> dict:
 			"folio": r.folio, "amount": flt(r.amount), "total": flt(r.total),
 			"room_mismatch": wrong,
 		})
+	places = _places(property)
 	return _check(
 		"pos_room_postings", "Outlet bills charged to rooms",
 		"warn" if mismatches else "info", items,
 		"Eyeball each bill against the room and guest. A bill on the wrong "
 		"room is moved with a folio transfer, not re-posted.", "/pos-dashboard",
 		mismatches=mismatches,
-		amount=round(sum(i["total"] for i in items), 2))
+		amount=_r(sum(i["total"] for i in items), places))
 
 
 def check_high_balance(property: str) -> dict:
+	places = _places(property)
 	threshold = flt(_setting(property, "na_high_balance_threshold"))
 	items = []
 	if threshold > 0:
@@ -511,7 +525,7 @@ def check_high_balance(property: str) -> dict:
 			"folio": r.name, "folio_type": r.folio_type,
 			"reservation": r.reservation, "guest_name": r.guest_name,
 			"room": _room_no(r.room), "check_out_date": _iso(r.check_out_date),
-			"balance": flt(r.balance, 2),
+			"balance": _r(r.balance, places),
 		} for r in rows]
 	return _check(
 		"high_balance", "High balances in house", "warn", items,
@@ -522,10 +536,10 @@ def check_high_balance(property: str) -> dict:
 
 def check_credit_limit(property: str) -> dict:
 	from kamra.erp_books import RECEIVABLES_UNAVAILABLE_REASON, receivables_source
-	from kamra.ledger import _currency_places, _round_currency, company_payer_of
+	from kamra.ledger import company_payer_of
 	# the ERP's Customer receivables when it keeps them (its Payment Entry
 	# receipts never reach this app's City Ledger), else the City Ledger
-	places = _currency_places(property)
+	places = _places(property)
 	src = receivables_source(property, strict=False)
 	if src.unavailable:
 		return _check(
@@ -560,17 +574,17 @@ def check_credit_limit(property: str) -> dict:
 		for a in accounts:
 			if src.in_erp:
 				name, company, number = a["account"], a["company"], a["account_number"]
-				limit = _round_currency(a["credit_limit"], places)
-				ar = _round_currency(a["balance"], places)
+				limit = _r(a["credit_limit"], places)
+				ar = _r(a["balance"], places)
 			else:
 				name, company, number = a.name, a.company, a.account_number
-				limit = _round_currency(a.credit_limit, places)
-				ar = _round_currency(frappe.db.sql(
+				limit = _r(a.credit_limit, places)
+				ar = _r(frappe.db.sql(
 					"""SELECT COALESCE(SUM(debit - credit), 0)
 					   FROM `tabCity Ledger Entry` WHERE account = %s""", a.name)[0][0], places)
 			mine = by_company.get(company) or []
-			in_house = _round_currency(sum(max(flt(f.balance), 0) for f in mine), places)
-			exposure = _round_currency(ar + in_house, places)
+			in_house = _r(sum(max(flt(f.balance), 0) for f in mine), places)
+			exposure = _r(ar + in_house, places)
 			if exposure <= limit:
 				continue
 			items.append({
@@ -578,10 +592,10 @@ def check_credit_limit(property: str) -> dict:
 				"account_number": number,
 				"credit_limit": limit, "ar_balance": ar,
 				"in_house": in_house, "exposure": exposure,
-				"over_by": _round_currency(exposure - limit, places),
+				"over_by": _r(exposure - limit, places),
 				"folios": [{"folio": f.name, "reservation": f.reservation,
 				            "guest_name": f.guest_name, "room": _room_no(f.room),
-				            "balance": _round_currency(f.balance, places)} for f in mine],
+				            "balance": _r(f.balance, places)} for f in mine],
 			})
 	return _check(
 		"credit_limit", "Companies over their credit limit", "warn", items,
@@ -596,13 +610,11 @@ def check_overdue_ar(property: str) -> dict:
 	from kamra.ledger import (
 		_account_position,
 		_age_buckets,
-		_currency_places,
-		_round_currency,
 		aging_date,
 		effective_credit_days,
 	)
 	items = []
-	places = _currency_places(property)
+	places = _places(property)
 	eps = 0.5 * (10 ** -places)
 	src = receivables_source(property, strict=False)
 	if src.unavailable:
@@ -625,7 +637,7 @@ def check_overdue_ar(property: str) -> dict:
 				"d31_60": pos["d31_60"], "d61_90": pos["d61_90"],
 				"d90p": pos["d90p"],
 				"oldest_due_date": pos["oldest_overdue_due_date"],
-				"balance": _round_currency(a["balance"], places),
+				"balance": _r(a["balance"], places),
 			})
 	else:
 		for a in frappe.get_all(
@@ -644,14 +656,14 @@ def check_overdue_ar(property: str) -> dict:
 				"d31_60": pos["d31_60"], "d61_90": pos["d61_90"],
 				"d90p": pos["d90p"],
 				"oldest_due_date": pos["oldest_overdue_due_date"],
-				"balance": _round_currency(pos["open_balance"] - pos["unapplied_credit"], places),
+				"balance": _r(pos["open_balance"] - pos["unapplied_credit"], places),
 			})
 	items.sort(key=lambda r: -r["overdue"])
 	return _check(
 		"overdue_ar", "Companies with overdue bills", "warn", items,
 		"Chase the company for payment. Credit control (Settings, Finance) can "
 		"warn or block more billing to a company with overdue bills.", "/receivables",
-		total=_round_currency(sum(r["overdue"] for r in items), places), unverified=False)
+		total=_r(sum(r["overdue"] for r in items), places), unverified=False)
 
 
 def check_room_status(property: str) -> dict:
@@ -695,6 +707,8 @@ def check_room_status(property: str) -> dict:
 
 
 def check_departed_balances(property: str) -> dict:
+	places = _places(property)
+	min_bal = 0.9 * (10 ** -places)
 	rows = frappe.db.sql(
 		"""
 		SELECT f.name, f.folio_type, f.balance, f.reservation,
@@ -702,14 +716,14 @@ def check_departed_balances(property: str) -> dict:
 		FROM `tabFolio` f
 		JOIN `tabReservation` r ON r.name = f.reservation
 		WHERE f.property = %(p)s AND f.status = 'Open'
-		  AND r.status = 'Checked Out' AND ABS(f.balance) > 0.009
+		  AND r.status = 'Checked Out' AND ABS(f.balance) > %(min_bal)s
 		ORDER BY r.check_out_date DESC
-		""", {"p": property}, as_dict=True)
+		""", {"p": property, "min_bal": min_bal}, as_dict=True)
 	items = [{
 		"folio": r.name, "folio_type": r.folio_type,
 		"reservation": r.reservation, "guest_name": r.guest_name,
 		"room": _room_no(r.room), "check_out_date": _iso(r.check_out_date),
-		"balance": flt(r.balance, 2),
+		"balance": _r(r.balance, places),
 	} for r in rows]
 	return _check(
 		"departed_balances", "Balances on departed stays", "warn", items,
@@ -726,11 +740,13 @@ def _in_house_names(property: str, bd: str) -> list[str]:
 
 
 def check_zero_rate(property: str, bd: str) -> dict:
+	places = _places(property)
+	min_rate = 0.5 * (10 ** -places)
 	items = []
 	for name in _in_house_names(property, bd):
 		res = frappe.get_doc("Reservation", name)
 		expected, basis = _expected_night(res, bd)
-		if expected is None or expected > 0.009:
+		if expected is None or expected > min_rate:
 			continue
 		items.append({**_stay_cols(res, bd), "rate": 0.0, "basis": basis})
 	return _check(
@@ -1308,6 +1324,7 @@ def _in_house(property: str, bd: str) -> list[dict]:
 		filters={"property": property, "status": "Checked In",
 		         "check_in_date": ("<=", bd), "check_out_date": (">", bd)},
 		fields=["name"], order_by="room asc", limit_page_length=0)
+	places = _places(property)
 	out = []
 	for r in rows[:MAX_ITEMS]:
 		res = frappe.get_doc("Reservation", r.name)
@@ -1322,7 +1339,7 @@ def _in_house(property: str, bd: str) -> list[dict]:
 			"adults": cint(res.adults), "children": cint(res.children),
 			"rate": flt(locked.rate) if locked is not None else None,
 			"company": res.company, "folio": f.get("name"),
-			"balance": flt(f.get("balance"), 2),
+			"balance": _r(f.get("balance"), places),
 		})
 	return out
 
@@ -1475,6 +1492,7 @@ def journal_by_cashier(property: str, bd: str) -> dict:
 	auditor's key report: time, room, guest, transaction code,
 	description, debit, credit and the cashier who posted it, grouped by
 	cashier and transaction code with subtotals."""
+	places = _places(property)
 	rows = frappe.db.sql(
 		"""
 		SELECT fle.name, fle.business_date, fle.posted_at, fle.folio,
@@ -1503,7 +1521,7 @@ def journal_by_cashier(property: str, bd: str) -> dict:
 			"transaction_code": r.transaction_code,
 			"code_description": r.code_description,
 			"description": r.description,
-			"debit": flt(r.debit, 2), "credit": flt(r.credit, 2),
+			"debit": _r(r.debit, places), "credit": _r(r.credit, places),
 			"cashier": cashier,
 		}
 		lines.append(line)
@@ -1512,17 +1530,19 @@ def journal_by_cashier(property: str, bd: str) -> dict:
 			"description": r.code_description or "", "entries": 0,
 			"debit": 0.0, "credit": 0.0})
 		g["entries"] += 1
-		g["debit"] = round(g["debit"] + line["debit"], 2)
-		g["credit"] = round(g["credit"] + line["credit"], 2)
+		g["debit"] = _r(g["debit"] + line["debit"], places)
+		g["credit"] = _r(g["credit"] + line["credit"], places)
 	return {
 		"business_date": bd, "lines": lines,
 		"subtotals": list(groups.values()),
-		"total_debit": round(sum(x["debit"] for x in lines), 2),
-		"total_credit": round(sum(x["credit"] for x in lines), 2),
+		"total_debit": _r(sum(x["debit"] for x in lines), places),
+		"total_credit": _r(sum(x["credit"] for x in lines), places),
 	}
 
 
 def _deposit_ledger(property: str, bd: str) -> dict:
+	places = _places(property)
+	min_bal = 0.9 * (10 ** -places)
 	rows = frappe.db.sql(
 		"""
 		SELECT fle.folio, SUM(fle.debit) AS debit, SUM(fle.credit) AS credit,
@@ -1533,16 +1553,16 @@ def _deposit_ledger(property: str, bd: str) -> dict:
 		WHERE fle.property = %(p)s AND fle.ledger = 'Deposit'
 		  AND fle.business_date <= %(d)s
 		GROUP BY fle.folio
-		HAVING ABS(SUM(fle.debit) - SUM(fle.credit)) > 0.009
-		""", {"p": property, "d": bd}, as_dict=True)
+		HAVING ABS(SUM(fle.debit) - SUM(fle.credit)) > %(min_bal)s
+		""", {"p": property, "d": bd, "min_bal": min_bal}, as_dict=True)
 	items = [{
 		"folio": r.folio, "reservation": r.reservation,
 		"guest_name": r.guest_name, "room": _room_no(r.room),
 		"status": r.status, "check_in_date": _iso(r.check_in_date),
-		"balance": round(flt(r.debit) - flt(r.credit), 2),
+		"balance": _r(flt(r.debit) - flt(r.credit), places),
 	} for r in rows]
 	return {"items": items,
-	        "total": round(sum(i["balance"] for i in items), 2)}
+	        "total": _r(sum(i["balance"] for i in items), places)}
 
 
 def _cancellations(property: str, bd: str) -> list[dict]:
@@ -1834,28 +1854,35 @@ def no_show_preview(reservation: str):
 	and with tax, the same numbers apply_no_show posts) or why there is none,
 	what is already paid, and the credit left for the guest afterwards with
 	the property's default for it (refund or keep)."""
+	from decimal import Decimal
+
 	from kamra import no_show
 	from kamra.folio import _room_gst, policy_fee
 	res, _bd = _no_show_target(reservation)
+	places = _places(res.property)
 	pol = no_show.policy(res.property)
 	d = no_show.fee_decision(res, pol)
-	fee = flt(policy_fee(res, pol.charge), 2) if d.fee == "charge" else 0.0
-	fee_total = flt(fee * (1 + flt(_room_gst(res)) / 100), 2) if fee else 0.0
+	fee = _r(policy_fee(res, pol.charge), places) if d.fee == "charge" else 0.0
+	fee_total = (
+		_r(Decimal(str(fee)) * (Decimal(1) + Decimal(str(_room_gst(res) or 0)) / Decimal(100)), places)
+		if fee else 0.0
+	)
 	balance = flt(frappe.db.get_value(
 		"Folio", {"reservation": res.name, "folio_type": "Guest",
 		          "status": ("!=", "Closed")}, "balance") or 0)
-	paid = flt(frappe.db.sql(
+	paid = _r(frappe.db.sql(
 		"""SELECT COALESCE(SUM(fp.amount), 0) FROM `tabFolio Payment` fp
 		   JOIN `tabFolio` f ON fp.parent = f.name
 		   WHERE f.reservation = %s AND f.folio_type = 'Guest'""",
-		res.name)[0][0] or 0, 2)
+		res.name)[0][0] or 0, places)
+	credit_after = _r(max(Decimal(0), -(Decimal(str(balance)) + Decimal(str(fee_total)))), places)
 	return {
 		"reservation": res.name, "guest_name": res.guest_name,
 		"check_in_date": str(res.check_in_date),
 		"fee": d.fee, "fee_reason": d.reason, "fee_basis": pol.charge,
 		"fee_amount": fee, "fee_total": fee_total,
 		"paid": paid,
-		"credit_after": flt(max(0.0, -(balance + fee_total)), 2),
+		"credit_after": credit_after,
 		"credit_default": _credit_default(res.property),
 	}
 
@@ -1900,17 +1927,19 @@ def settle_no_show_credit(reservation: str, action: str, reason: str,
 def no_show_credits(property: str) -> list[dict]:
 	"""No Shows whose guest folio still holds money for the guest - a refund
 	or a forfeit decision for the morning (audit pack)."""
+	places = _places(property)
+	min_credit = 0.5 * (10 ** -places)
 	rows = frappe.db.sql(
 		"""SELECT r.name, r.guest_name, r.check_in_date, -f.balance AS credit
 		   FROM `tabReservation` r
 		   JOIN `tabFolio` f ON f.reservation = r.name AND f.folio_type = 'Guest'
 		   WHERE r.property = %s AND r.status = 'No Show'
-		     AND f.status != 'Closed' AND f.balance < -0.01
+		     AND f.status != 'Closed' AND f.balance < %s
 		   ORDER BY r.check_in_date, r.name LIMIT %s""",
-		(property, MAX_ITEMS), as_dict=True)
+		(property, -min_credit, MAX_ITEMS), as_dict=True)
 	default = _credit_default(property)
 	return [{"reservation": r.name, "guest_name": r.guest_name,
-	         "check_in_date": str(r.check_in_date), "credit": flt(r.credit, 2),
+	         "check_in_date": str(r.check_in_date), "credit": _r(r.credit, places),
 	         "default": default} for r in rows]
 
 

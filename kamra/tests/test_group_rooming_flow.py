@@ -16,6 +16,9 @@ class GroupRoomingFlowTestCase(IntegrationTestCase):
 		self.property = frappe.get_doc({"doctype": "Property",
 			"property_name": "TEST GRF " + frappe.generate_hash(length=8),
 			"country": "Uganda", "currency": "UGX"}).insert(ignore_permissions=True).name
+		from kamra.settings import clear_cache, write_kv
+		write_kv(self.property, "rate_plan_required", 0)
+		clear_cache(self.property)
 		self.room_type = frappe.get_doc({"doctype": "Room Type", "property": self.property,
 			"room_type_code": "STD", "room_type_name": "Standard", "base_price": 1000,
 			"adults_capacity": 2}).insert(ignore_permissions=True).name
