@@ -187,6 +187,12 @@ def rate_plan_fx_policy(rate_plan: str | None) -> str:
 	return frappe.db.get_value("Rate Plan", rate_plan, "fx_lock_policy") or DEFAULT_FX_LOCK
 
 
+def contract_local_amount(rate_plan, nightly, fx_rate, home_currency) -> Decimal:
+	"""A contract amount in the posting currency: converted at `fx_rate` and rounded as the plan rounds."""
+	return round_rate_amount(_dec(nightly) * _dec(fx_rate), rate_plan.get("rounding_step"),
+	                         rate_plan.get("rounding_mode") or "Nearest", home_currency)
+
+
 def pet_charge_amount(prop, pets: int, nights: int) -> Decimal:
 	"""What the property charges for this many pets over the stay, before
 	tax. Per stay by default - most homestays charge once per pet, not per
@@ -1005,7 +1011,7 @@ def contract_rate(property, room_type, rate_plan, check_in, check_out, adults, c
 				raise ContractRateRefused(_("The derived rate plan prices this stay at zero or less. "
 				                            "Ask a manager to check the rate plan."))
 			nightly = round_rate_amount(nightly, 0, currency=currency)
-			agreed = round_rate_amount(nightly * fx, step, mode, prop_currency)
+			agreed = contract_local_amount(plan, nightly, fx, prop_currency)
 		elif _dec(step) > 0:
 			agreed = round_rate_amount(agreed, step, mode, prop_currency)
 		return nightly, agreed
@@ -1231,12 +1237,11 @@ def relock_contract_fx_at_check_in(reservation) -> bool:
 			"contract stay checks in.").format(currency, business))
 	fx, fx_date = posting
 	rp = frappe.get_doc("Rate Plan", reservation.rate_plan)
-	agreed = float(round_rate_amount(nightly * fx, rp.get("rounding_step"), rp.get("rounding_mode") or "Nearest", home))
+	agreed = float(contract_local_amount(rp, nightly, fx, home))
 	relocked = {**tariff, "nightly": float(nightly), "fx_rate": float(fx), "fx_date": fx_date}
 	if tariff.get("nights"):
-		relocked["nights"] = [{**night, "agreed_rate": float(round_rate_amount(
-			_dec(night["nightly"]) * fx, rp.get("rounding_step"), rp.get("rounding_mode") or "Nearest", home))}
-			for night in tariff["nights"]]
+		relocked["nights"] = [{**night, "agreed_rate": float(contract_local_amount(rp, night["nightly"], fx, home))}
+		                      for night in tariff["nights"]]
 	reservation.agreed_rate = agreed
 	reservation.contract_tariff = {**snapshot, "tariff": relocked, "agreed_rate": agreed}
 	reservation.flags.kamra_contract_relocked = True

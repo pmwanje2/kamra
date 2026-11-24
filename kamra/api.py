@@ -6097,6 +6097,8 @@ def availability_calendar(property: str, start_date: str | None = None, days: in
 				"Room",
 				{"property": property, "room_type": rt.name},
 			)
+			if not total:
+				continue
 			bookings = frappe.get_all(
 				"Reservation",
 				filters={
@@ -8026,6 +8028,19 @@ def set_late_arrival(reservation: str, late_arrival: int = 1,
 	return {"ok": True, **values}
 
 
+def _sellable_room_types(property: str, room_type_names: list[str]) -> set[str]:
+	"""Room types that have at least one physical room or active sellable unit."""
+	if not room_type_names:
+		return set()
+	from kamra.siu.availability import has_active_sius
+	with_rooms = set(frappe.get_all(
+		"Room",
+		filters={"property": property, "room_type": ("in", list(room_type_names))},
+		pluck="room_type",
+	))
+	return {rt for rt in room_type_names if rt in with_rooms or has_active_sius(property, rt)}
+
+
 @frappe.whitelist()
 @require_roles("Front Desk", "Kamra Agent")
 def booking_options(property: str):
@@ -8037,15 +8052,17 @@ def booking_options(property: str):
 		"Rate Plan", filters={"property": property, "disabled": 0},
 		fields=["name", "rate_plan_name", "code", "is_default", "discount_eligible"],
 		order_by="rate_plan_name asc, name asc")
+	all_room_types = frappe.get_all(
+		"Room Type", filters={"property": property, "disabled": 0},
+		fields=["name", "room_type_code", "room_type_name", "base_price",
+		        "adults_capacity", "children_capacity", "room_category",
+		        "max_extra_beds"],
+		# cheapest first; name breaks ties so the dialog default is stable (#549)
+		order_by="base_price asc, room_type_name asc",
+	)
+	sellable = _sellable_room_types(property, [rt["name"] for rt in all_room_types])
 	return {
-		"room_types": frappe.get_all(
-			"Room Type", filters={"property": property, "disabled": 0},
-			fields=["name", "room_type_code", "room_type_name", "base_price",
-			        "adults_capacity", "children_capacity", "room_category",
-			        "max_extra_beds"],
-			# cheapest first; name breaks ties so the dialog default is stable (#549)
-			order_by="base_price asc, room_type_name asc",
-		),
+		"room_types": [rt for rt in all_room_types if rt["name"] in sellable],
 		"meal_plans": frappe.get_all(
 			"Meal Plan", filters={"property": property, "disabled": 0},
 			fields=["name", "code", "label", "price_per_adult", "is_default"],
@@ -8626,6 +8643,10 @@ def create_booking(property: str, room_type: str, check_in_date: str,
 	room_type = resolve_room_type(property, room_type)
 	meal_plan = resolve_meal_plan(property, meal_plan)
 	rate_plan = resolve_rate_plan(property, rate_plan)
+	if not int(waitlist or 0) and not room and room_type not in _sellable_room_types(property, [room_type]):
+		if frappe.db.exists("Room", {"property": property}):
+			from kamra.kamra.doctype.reservation.reservation import InventoryRefused
+			frappe.throw(_("{0} has no rooms configured.").format(room_type), exc=InventoryRefused)
 	# refused here, before the guest or any inventory is touched
 	typed = _check_night_prices(
 		property, room_type, check_in_date, check_out_date, night_prices,

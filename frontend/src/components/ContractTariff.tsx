@@ -1,5 +1,5 @@
 import type { ContractTariff, ReferenceCurrency, TariffReference } from "../lib/api"
-import { useT } from "../lib/i18n"
+import { t, useT } from "../lib/i18n"
 import { moneyDigits, moneyLocale } from "../lib/money"
 
 export function currencyText(currency: string, amount: number, locale: string) {
@@ -16,6 +16,22 @@ export function tariffDate(value: string, locale: string) {
   if (!Number.isFinite(date.getTime())) return value
   return new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })
     .format(date)
+}
+
+/** A rate plan's rounding rule (pricing.round_rate_amount): its step, else the currency's smallest unit. */
+export function roundingRule(step: number | null | undefined, mode: string | null | undefined, locale: string) {
+  const how = t(mode || "Nearest")
+  return step ? t("Rounded to {step}, {mode}", { step: step.toLocaleString(locale), mode: how })
+    : t("Rounded to the currency's smallest unit, {mode}", { mode: how })
+}
+
+/** What a rate plan's exchange rate lock (OPERA Exchange Type) means for the local price. */
+export function fxLockNote(policy: string | null | undefined) {
+  switch (policy) {
+    case "Fixed at Check In": return t("Fixed at Check In: converted again at the check-in date's rate.")
+    case "Current Date": return t("Current Date: each night converts at its posting date's rate.")
+    default: return t("Fixed at Reservation: the local price is fixed when the stay is booked.")
+  }
 }
 
 /** A server timestamp ("YYYY-MM-DD HH:MM:SS", the site's own clock) as the site shows it. */

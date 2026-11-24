@@ -95,3 +95,14 @@ class PublicBookingTestCase(IntegrationTestCase):
 		self.assertIsNone(brand(""))
 		self.assertEqual(brand("Example Hotels"), "Example Hotels")
 		self.assertEqual(site_info()["app"], "kamra")
+
+	def test_room_type_without_rooms_is_never_offered_in_public_showcase_or_search(self):
+		empty = frappe.get_doc({"doctype": "Room Type", "property": self.property,
+			"room_type_code": "EMP", "room_type_name": "Unbuilt Room", "base_price": 100,
+			"adults_capacity": 2}).insert(ignore_permissions=True).name
+		shown = [rt["name"] for rt in showcase(self.property)["room_types"]]
+		self.assertIn(self.room_type, shown)
+		self.assertNotIn(empty, shown)
+		searched = [r["room_type"] for r in search_stay(self.property, self.ci, self.co, 2, 0)]
+		self.assertIn(self.room_type, searched)
+		self.assertNotIn(empty, searched)

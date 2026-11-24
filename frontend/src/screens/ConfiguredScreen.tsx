@@ -22,7 +22,26 @@ export default function ConfiguredScreen({ config }: { config: ConfigName }) {
 
 function RoomTypesScreen() {
   const { currency, tax_basis } = useLocale()
-  return <ResourceScreen config={configs.roomTypesConfig(currency, tax_basis)} />
+  const property = getCurrentProperty()
+  const [summary, setSummary] = useState<configs.RoomTypesSummary | null>(null)
+  const [rev, setRev] = useState(0)
+  useEffect(() => {
+    if (!property) {
+      setSummary(null)
+      return
+    }
+    let live = true
+    call<configs.RoomTypesSummary>("kamra.rates.room_types_summary", { property })
+      .then((res) => { if (live) setSummary(res) })
+      .catch(() => { if (live) setSummary(null) })
+    return () => { live = false }
+  }, [property, rev])
+  return (
+    <ResourceScreen
+      config={configs.roomTypesConfig(currency, tax_basis, summary)}
+      onReload={() => setRev((v) => v + 1)}
+    />
+  )
 }
 
 type PlanMeta = {

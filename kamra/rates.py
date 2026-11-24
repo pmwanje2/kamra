@@ -48,6 +48,38 @@ def default_plan(plans):
 	return next((p.name for p in plans if p.is_default), None)
 
 
+def _rate_plan_fields(extra: tuple[str, ...] = ()) -> list[str]:
+	fields = [*RATE_PLAN_POLICY_FIELDS, *extra]
+	if frappe.get_meta("Rate Plan").has_field("custom_tariff_price_list"):
+		fields.append("custom_tariff_price_list")
+	return fields
+
+
+def _room_counts(property: str) -> dict[str, int]:
+	"""Count physical rooms per room type at `property`."""
+	counts: dict[str, int] = {}
+	for row in frappe.get_all("Room", filters={"property": property}, fields=["room_type"]):
+		rt = row.get("room_type")
+		if rt:
+			counts[rt] = counts.get(rt, 0) + 1
+	return counts
+
+
+def _plan_uses_tariff(plan_name: str | None, plans_by_name: dict[str, dict]) -> bool:
+	"""True when `plan_name` (or an ancestor via base_rate_plan) carries a tariff Price List."""
+	from kamra.pricing import RATE_PLAN_CHAIN_LIMIT
+
+	seen: set[str] = set()
+	current = plan_name
+	while current and current in plans_by_name and current not in seen and len(seen) < RATE_PLAN_CHAIN_LIMIT:
+		seen.add(current)
+		row = plans_by_name[current]
+		if row.get("custom_tariff_price_list"):
+			return True
+		current = row.get("base_rate_plan")
+	return False
+
+
 @frappe.whitelist()
 @require_roles(*RATE_ROLES, scope={"room_type": "Room Type"})
 def room_type_tariffs(room_type: str):
@@ -56,7 +88,151 @@ def room_type_tariffs(room_type: str):
 	rt = frappe.get_doc("Room Type", room_type)
 	rt.check_permission("read")
 	assert_property_access(rt.property)
-	return bridge_call("hospitality_tariffs.room_type_tariffs", room_type=room_type)
+	result = bridge_call("hospitality_tariffs.room_type_tariffs", room_type=room_type)
+	if isinstance(result, dict) and isinstance(result.get("tariffs"), list):
+		_price_tariff_panel(rt.property, result)
+	return result
+
+
+def _price_tariff_panel(property: str, panel: dict) -> None:
+	"""Add the engine's local equivalent and each row's plan lock and rounding,
+	the primary (default) plan's tariff, and explicit tariff / card / unpriced
+	active plan lists (never classifying an unpriced tariff plan as card-priced)."""
+	from kamra.pricing import DEFAULT_FX_LOCK, RATE_PLAN_CHAIN_LIMIT, contract_local_amount, property_currency
+
+	home = property_currency(property)
+	plans = {plan["name"]: plan for plan in frappe.get_all(
+		"Rate Plan", filters={"property": property}, fields=_rate_plan_fields(("is_default", "disabled")))}
+	for row in panel["tariffs"]:
+		plan = plans.get(row.get("rate_plan")) or {}
+		fx = _rate(row.get("fx_rate"))
+		foreign = bool(row.get("currency")) and row.get("currency") != home and bool(fx and fx > 0)
+		for amount, local in (("room", "local_room"), ("single", "local_single")):
+			value = _rate(row.get(amount))
+			row[local] = (float(contract_local_amount(plan, value, fx, home))
+			              if foreign and value is not None else None)
+		row.update(fx_lock_policy=plan.get("fx_lock_policy") or DEFAULT_FX_LOCK,
+		           rounding_step=float(plan.get("rounding_step") or 0),
+		           rounding_mode=plan.get("rounding_mode") or "Nearest")
+	priced = {row.get("rate_plan") for row in panel["tariffs"]}
+	active = [plan for plan in plans.values() if not int(plan.get("disabled") or 0)]
+	default = default_plan(active)
+	if default:
+		primary = default if default in priced else None
+	else:
+		primary = next(iter(priced)) if len(priced) == 1 else None
+	def sort_key(plan):
+		return (plan.get("label") or "", plan.get("name") or "")
+	if isinstance(panel.get("card_rate_plans"), list):
+		tariff_plans = sorted(panel.get("tariff_plans") or [], key=sort_key)
+		card = sorted(panel.get("card_rate_plans") or [], key=sort_key)
+		unpriced = sorted(panel.get("unpriced_plans") or [], key=sort_key)
+		all_tariff = bool(panel.get("all_active_plans_tariff"))
+		panel.update(property_currency=home, primary_rate_plan=primary,
+		             all_active_plans_tariff=all_tariff,
+		             tariff_plans=tariff_plans, card_rate_plans=card, unpriced_plans=unpriced)
+	else:
+		card, unpriced = [], []
+		for plan in active:
+			chain, name = [], plan["name"]
+			while name in plans and name not in chain and len(chain) < RATE_PLAN_CHAIN_LIMIT:
+				chain.append(name)
+				name = plans[name].get("base_rate_plan")
+			entry = {"name": plan["name"], "label": plan.get("rate_plan_name")}
+			if priced.intersection(chain):
+				continue
+			if _plan_uses_tariff(plan["name"], plans):
+				unpriced.append(entry)
+			else:
+				card.append(entry)
+		card.sort(key=sort_key)
+		unpriced.sort(key=sort_key)
+		has_tariff_meta = any(plan.get("custom_tariff_price_list") for plan in active)
+		all_tariff = (bool(active) and not card) if has_tariff_meta else bool(panel.get("all_active_plans_tariff"))
+		panel.update(property_currency=home, primary_rate_plan=primary,
+		             all_active_plans_tariff=all_tariff, card_rate_plans=card)
+		if unpriced:
+			panel["unpriced_plans"] = unpriced
+
+
+@frappe.whitelist()
+@require_roles(*RATE_ROLES)
+def room_types_summary(property: str):
+	"""Effective selling rate (default plan, 2 adults), room inventory count, and
+	whether any active plan actually prices from the card rate."""
+	assert_property_access(property)
+	from kamra.business_date import get_business_date
+	from kamra.pricing import (
+		ContractRateRefused,
+		property_currency,
+		quote_with_contract,
+		rates_include_tax,
+		round_rate_amount,
+	)
+
+	home = property_currency(property)
+	inclusive = bool(rates_include_tax(property))
+	business_date = getdate(get_business_date(property))
+	next_day = add_days(business_date, 1)
+	all_plans = frappe.get_all(
+		"Rate Plan", filters={"property": property},
+		fields=_rate_plan_fields(("is_default", "disabled")),
+		order_by="rate_plan_name asc, name asc",
+	)
+	plans_by_name = {plan["name"]: plan for plan in all_plans}
+	active = [plan for plan in all_plans if not int(plan.get("disabled") or 0)]
+	card_plans = [plan for plan in active if not _plan_uses_tariff(plan["name"], plans_by_name)]
+	has_card_rate_plans = bool(card_plans) if active else True
+	default_name = default_plan(active)
+	default_doc = plans_by_name.get(default_name) if default_name else None
+	default_info = (
+		{**_plan_policy(default_doc), "is_tariff": _plan_uses_tariff(default_name, plans_by_name)}
+		if default_doc else None
+	)
+	counts = _room_counts(property)
+	rows = []
+	for rt_name in frappe.get_all(
+		"Room Type", filters={"property": property, "disabled": 0},
+		pluck="name", order_by="base_price asc",
+	):
+		room_count = counts.get(rt_name, 0)
+		try:
+			q = quote_with_contract(
+				property, rt_name, business_date, next_day, 2, 0,
+				rate_plan=default_name, check_voucher_limits=False,
+			)
+		except ContractRateRefused as exc:
+			rows.append({
+				"room_type": rt_name, "room_count": room_count, "priced": False,
+				"source": None, "currency": None, "amount": None, "local_amount": None,
+				"refusal": str(exc),
+			})
+			continue
+		if q.get("tariff"):
+			tariff = q["tariff"]
+			t_currency = tariff.get("currency") or home
+			t_amount = float(tariff.get("nightly") or 0)
+			local_amount = float(q["agreed_rate"])
+			rows.append({
+				"room_type": rt_name, "room_count": room_count, "priced": True,
+				"source": "contract", "currency": t_currency, "amount": t_amount,
+				"local_amount": local_amount, "refusal": None,
+			})
+		else:
+			acc = q["line_items"][0]
+			gross = acc["amount"] + (acc["tax_amount"] if inclusive else 0)
+			amt = float(round_rate_amount(gross, 0, currency=home))
+			rows.append({
+				"room_type": rt_name, "room_count": room_count, "priced": True,
+				"source": "card", "currency": home, "amount": amt,
+				"local_amount": amt, "refusal": None,
+			})
+	return {
+		"property_currency": home,
+		"has_card_rate_plans": has_card_rate_plans,
+		"default_plan": default_info,
+		"room_types": rows,
+	}
 
 
 def _tariff_directory(property: str, **filters):
@@ -91,9 +267,50 @@ def list_contract_tariffs(property: str, price_list: str | None = None, customer
 			and bool(result.get("can_propose") or result.get("can_approve"))
 			and bool(can_delete_price)
 		)
+		result["unpriced_room_types"] = _unpriced_room_types(property, result)
 		return result
 	return {"supported": False, "property": property, "price_lists": [], "items": [],
 	        "can_propose": False, "can_approve": False, "can_discard": False}
+
+
+def _unpriced_room_types(property: str, directory: dict) -> list[dict]:
+	"""Active room types missing a room contract tariff on one or more price lists."""
+	list_names = [pl.get("name") for pl in directory.get("price_lists") or [] if pl.get("name")]
+	if not list_names:
+		return []
+	priced_by_list: dict[str, set[str]] = {name: set() for name in list_names}
+	for item in directory.get("items") or []:
+		if item.get("category") != "Room":
+			continue
+		pl = item.get("price_list")
+		rt_label = item.get("room_type")
+		if pl in priced_by_list and rt_label and (item.get("active") or item.get("pending")):
+			priced_by_list[pl].add(rt_label)
+	room_types = frappe.get_all(
+		"Room Type", filters={"property": property, "disabled": 0},
+		fields=["name", "room_type_name", "room_type_code"],
+		order_by="room_type_name asc, name asc",
+	)
+	if not room_types:
+		return []
+	counts = _room_counts(property)
+	missing = []
+	for rt in room_types:
+		name = rt.get("name")
+		label = rt.get("room_type_name") or name
+		missing_lists = [
+			pl for pl in list_names
+			if label not in priced_by_list[pl] and name not in priced_by_list[pl]
+		]
+		if missing_lists:
+			missing.append({
+				"name": name,
+				"room_type_name": label,
+				"room_type_code": rt.get("room_type_code") or "",
+				"room_count": counts.get(name, 0),
+				"price_lists": missing_lists,
+			})
+	return missing
 
 
 def _rate_plan_policies(property: str, directory: dict) -> dict:
@@ -530,19 +747,90 @@ def explain_night(property: str, rt, date, adults: int = 2, children: int = 0,
 	}
 
 
+def _plan_policy(plan) -> dict:
+	"""A rate plan's name, currency, exchange-rate lock, rounding and base plan, for a screen."""
+	from kamra.pricing import DEFAULT_FX_LOCK
+
+	return {"name": plan.get("name"), "label": plan.get("rate_plan_name"), "code": plan.get("code"),
+	        "currency": plan.get("currency") or None,
+	        "fx_lock_policy": plan.get("fx_lock_policy") or DEFAULT_FX_LOCK,
+	        "rounding_step": float(plan.get("rounding_step") or 0),
+	        "rounding_mode": plan.get("rounding_mode") or "Nearest",
+	        "base_rate_plan": plan.get("base_rate_plan") or None}
+
+
+def _plan_night(property: str, rt, day, adults: int, children: int, rate_plan: str, company: str | None,
+                occupancy: float, small_ok: bool, inclusive: bool, home: str) -> dict:
+	"""One cell under a rate plan: the quote a one-night booking gets. A
+	contract cell is the agreed rate the booking locks; a room type the plan
+	has no tariff for is priced from the card, on the basis the house quotes."""
+	from kamra.pricing import ContractRateRefused, quote_with_contract, round_rate_amount
+
+	try:
+		q = quote_with_contract(property, rt.name, day, add_days(day, 1), adults, children, rate_plan=rate_plan,
+		                        company=company, check_voucher_limits=False)
+	except ContractRateRefused as exc:
+		return {"date": str(day), "available": False, "refusal": str(exc), "rate": None, "contract": None,
+		        "occupancy": occupancy}
+	if q.get("tariff"):
+		agreed = q["agreed_rate"]
+		return {"date": str(day), "available": True, "rate": agreed, "bar": agreed, "after_season": agreed,
+		        "season": None, "demand": None, "package": None, "occupancy": occupancy,
+		        "contract": q["tariff"], "source": "contract"}
+	night = explain_night(property, rt, day, adults, children, occupancy=occupancy, small_ok=small_ok)
+	acc = q["line_items"][0]
+	gross = acc["amount"] + (acc["tax_amount"] if inclusive else 0)
+	return {**night, "card_rate": night["rate"], "rate": float(round_rate_amount(gross, 0, currency=home)),
+	        "contract": None, "source": "card", "available": True}
+
+
 @frappe.whitelist()
 @require_roles(*RATE_ROLES)
 def rate_calendar(property: str, from_date: str | None = None, days: int = 14,
-                  adults: int = 2, children: int = 0):
+                  adults: int = 2, children: int = 0, rate_plan: str | None = None,
+                  company: str | None = None):
 	"""Every room type's rate for each of the next `days` dates, with what
 	moved it. A room type's own days are read with the same functions the
-	quote uses; nothing here sets a price."""
+	quote uses; nothing here sets a price.
+
+	With a rate plan, or a customer's negotiated plan (OPERA Rate Query, SAP
+	pricing analysis), each cell is that plan's real quote for the night."""
 	assert_property_access(property)
-	from kamra.pricing import forecast_occupancy, rates_include_tax, small_group_allows_stay
+	from kamra.pricing import (
+		forecast_occupancy,
+		negotiated_rate_plan,
+		property_currency,
+		rates_include_tax,
+		small_group_allows_stay,
+	)
+	all_plans = frappe.get_all(
+		"Rate Plan", filters={"property": property},
+		fields=_rate_plan_fields(("is_default", "disabled")),
+		order_by="rate_plan_name asc, name asc",
+	)
+	plans_by_name = {p["name"]: p for p in all_plans}
+	active = [p for p in all_plans if not int(p.get("disabled") or 0)]
+	has_tariff_plans = any(p.get("custom_tariff_price_list") for p in active)
+	default_name = default_plan(active)
+	default_is_tariff = bool(default_name and _plan_uses_tariff(default_name, plans_by_name))
+	if company:
+		frappe.has_permission("Corporate Account", "read", doc=company, throw=True)
+	if rate_plan == "":
+		plan = None
+	elif rate_plan is not None:
+		plan = rate_plan
+	else:
+		plan = negotiated_rate_plan(property, company) or (default_name if default_is_tariff else None)
+	policy = next((p for p in active if p.name == plan), None) if plan else None
+	if plan and not policy:
+		frappe.throw(_("{0} is not an active rate plan of this property.").format(plan))
+	inclusive = bool(rates_include_tax(property))
+	home = property_currency(property)
 	start = getdate(from_date) if from_date else getdate(frappe.utils.nowdate())
 	days = max(1, min(int(days or 14), 31))
 	dates = [add_days(start, i) for i in range(days)]
 	occ = {str(d): forecast_occupancy(property, d) for d in dates}
+	counts = _room_counts(property)
 	rows = []
 	for rt in frappe.get_all("Room Type", filters={"property": property, "disabled": 0},
 	                         pluck="name", order_by="base_price asc"):
@@ -550,13 +838,28 @@ def rate_calendar(property: str, from_date: str | None = None, days: int = 14,
 		nights = []
 		for d in dates:
 			small_ok = small_group_allows_stay(doc, d, add_days(d, 1))
+			if policy:
+				nights.append(_plan_night(property, doc, d, int(adults), int(children), plan, company or None,
+				                          occ[str(d)], small_ok, inclusive, home))
+				continue
 			nights.append(explain_night(property, doc, d, int(adults), int(children),
 			                            occupancy=occ[str(d)], small_ok=small_ok))
+		count = counts.get(doc.name, 0)
 		rows.append({"room_type": doc.name, "code": doc.room_type_code,
 		             "name": doc.room_type_name, "base_price": float(doc.base_price or 0),
-		             "nights": nights})
-	return {"from": str(start), "days": days, "tax_inclusive": bool(rates_include_tax(property)),
-	        "adults": int(adults), "room_types": rows}
+		             "room_count": count, "sellable": count > 0, "nights": nights})
+
+	def _plan_entry(p):
+		entry = _plan_policy(p)
+		if has_tariff_plans:
+			entry["is_tariff"] = _plan_uses_tariff(p["name"], plans_by_name)
+		return entry
+
+	return {"from": str(start), "days": days, "tax_inclusive": inclusive,
+	        "adults": int(adults), "room_types": rows,
+	        "rate_plans": [_plan_entry(p) for p in active], "default_plan": default_name,
+	        "property_currency": home, "rate_plan": _plan_entry(policy) if policy else None,
+	        "company": company or None}
 
 
 @frappe.whitelist()
