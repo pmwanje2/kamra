@@ -6821,5 +6821,20 @@
   "Settings → Revenue says which categories a manager signs off, and which are left out of ADR, RevPAR or occupancy.": "تحدد الإعدادات ← الإيرادات الفئات التي يوافق عليها المدير، وتلك المستبعدة من متوسط السعر اليومي (ADR) أو الإيراد لكل غرفة متاحة (RevPAR) أو الإشغال.",
   "Applies from the current business date for remaining nights; posted nights keep their rate.": "يسري من تاريخ العمل الحالي على الليالي المتبقية؛ وتحتفظ الليالي المرحّلة بسعرها.",
   "Confirm rate plan": "تأكيد خطة السعر",
-  "Confirm rate plan and price": "تأكيد خطة السعر والسعر الجديد"
+  "Confirm rate plan and price": "تأكيد خطة السعر والسعر الجديد",
+  "Booking type": "نوع الحجز",
+  "Foreign currency drawers": "أدراج العملات الأجنبية",
+  "Foreign drawers": "أدراج أجنبية",
+  "Receipts (FX)": "المقبوضات (أجنبية)",
+  "Refunds (FX)": "المبالغ المستردة (أجنبية)",
+  "Expected (FX)": "المتوقع (أجنبية)",
+  "Counted (FX)": "المعدود (أجنبية)",
+  "Home equivalent": "المعادل بالعملة المحلية",
+  "Counted {currency}": "المبلغ المعدود بعملة {currency}",
+  "Per-currency foreign note totals kept separate from home cash.": "إجماليات الأوراق النقدية الأجنبية لكل عملة محفوظة بشكل منفصل عن النقد المحلي.",
+  "By payment method": "حسب طريقة الدفع",
+  "View report": "عرض التقرير",
+  "Edit property override": "تعديل تخصيص الفندق",
+  "This property already has its own override for {code}. Edit that property row instead.": "يملك هذا الفندق تخصيصاً خاصاً لـ {code} بالفعل. عدّل صف الفندق بدلاً من ذلك.",
+  "Saving creates a property override for {property}. The shared default stays unchanged for other properties.": "سيؤدي الحفظ إلى إنشاء تخصيص لـ {property}. يبقى الإعداد المشترك دون تغيير للفنادق الأخرى."
 }

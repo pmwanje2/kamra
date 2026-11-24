@@ -778,19 +778,22 @@ def current_date_contract_night(reservation, date) -> dict | None:
 	Night Audit and Finance. {rate, gst_rate, label, currency, fx_rate,
 	fx_date, stale}, or None - bill the locked night - for other policies,
 	a home-currency contract or a fixed rate (the manager's price, never
-	re-converted, as pricing.relock_contract_fx_at_check_in keeps it)."""
+	re-converted, as pricing.relock_contract_fx_at_check_in keeps it). An
+	OTA booking in the contract currency posts the OTA's own amount for that
+	night (its snapshot's `nights`); the policy is the stay's
+	(pricing.reservation_fx_policy)."""
 	from kamra.pricing import (
 		contract_local_amount,
 		posting_fx_rate,
-		rate_plan_fx_policy,
 		rates_include_tax,
+		reservation_fx_policy,
 		room_gst_rate,
 		round_rate_amount,
 		saved_contract_tariff,
 	)
 
 	plan = reservation.get("rate_plan")
-	if rate_plan_fx_policy(plan) != "Current Date" or cint(reservation.get("fixed_rate")):
+	if reservation_fx_policy(reservation) != "Current Date" or cint(reservation.get("fixed_rate")):
 		return None
 	snapshot = saved_contract_tariff(reservation)
 	tariff = snapshot.get("tariff") or {}
@@ -934,7 +937,7 @@ def reference_currency(reservation, grand_total=None, balance=None, *, charges=N
 	its locked rate on any plan, so ACTUAL converts it at that rate. None
 	for a home-currency stay, or when CURRENT has no published rate today."""
 	from kamra.business_date import get_business_date
-	from kamra.pricing import posting_fx_rate, rate_plan_fx_policy, round_rate_amount, saved_contract_tariff
+	from kamra.pricing import posting_fx_rate, reservation_fx_policy, round_rate_amount, saved_contract_tariff
 
 	tariff = saved_contract_tariff(reservation).get("tariff") or {}
 	currency, home = tariff.get("currency"), tariff.get("property_currency")
@@ -950,8 +953,7 @@ def reference_currency(reservation, grand_total=None, balance=None, *, charges=N
 		if not posting:
 			return None
 		fx, fx_date = posting
-	elif rate_plan_fx_policy(reservation.get("rate_plan")) == "Current Date" \
-			and not cint(reservation.get("fixed_rate")):
+	elif reservation_fx_policy(reservation) == "Current Date" and not cint(reservation.get("fixed_rate")):
 		# a fixed rate is never re-converted (current_date_contract_night): it stays at its locked rate
 		per_transaction = charges is not None
 		posted = _posted_contract_fx(reservation, currency, [row for row in charges or [] if row.get("projected")])

@@ -8,7 +8,6 @@ import { useNavigate } from "react-router-dom"
 import { ChevronDown, Loader2, Megaphone, Plus, ShieldAlert, Star, Trash2, X } from "lucide-react"
 import {
   call,
-  createBooking,
   getCurrentProperty,
   isTaxUndetermined,
   TAX_NOT_SET_UP_MSG,
@@ -202,6 +201,7 @@ export function BookingDialog(props: {
     pets: 0,
     company: "",
     travel_agent: "",
+    booking_type: "",
     market_segment: "",
     booked_by_name: "",
     booked_by_phone: "",
@@ -737,30 +737,35 @@ export function BookingDialog(props: {
     setError(null)
     try {
       if (waitlist) {
-        const res = await createBooking({
-          over_capacity_reason: form.over_capacity_reason || undefined,
-          over_capacity_guests: form.over_capacity_guests || undefined,
-          over_capacity_charge: extraCharge || undefined,
-          guest_name: form.guest_name,
-          phone: form.phone || undefined,
-          guest: profile?.name,
-          room_type: form.room_type,
-          check_in_date: form.check_in_date,
-          check_out_date: checkOut,
-          adults: form.adults,
-          children: form.children,
-          meal_plan: form.meal_plan || undefined,
-          rate_plan: form.rate_plan || undefined,
-          voucher_code: form.voucher_code || undefined,
-          pets: form.pets || undefined,
-          company: form.company || undefined,
-          waitlist: 1,
-          ...nightPricesParam,
-          ...discountParam,
-          ...discountSignOff,
-          ...slotArgs,
-          blacklist_override_reason: blacklistOverride,
-        })
+        const res = await call<{ reservation: string; room: string | null; room_number: string | null }>(
+          "kamra.api.create_booking",
+          {
+            property: getCurrentProperty(),
+            over_capacity_reason: form.over_capacity_reason || undefined,
+            over_capacity_guests: form.over_capacity_guests || undefined,
+            over_capacity_charge: extraCharge || undefined,
+            guest_name: form.guest_name,
+            phone: form.phone || undefined,
+            guest: profile?.name,
+            room_type: form.room_type,
+            check_in_date: form.check_in_date,
+            check_out_date: checkOut,
+            adults: form.adults,
+            children: form.children,
+            meal_plan: form.meal_plan || undefined,
+            rate_plan: form.rate_plan || undefined,
+            voucher_code: form.voucher_code || undefined,
+            pets: form.pets || undefined,
+            company: form.company || undefined,
+            booking_type: form.booking_type || (form.company ? "Corporate" : undefined),
+            waitlist: 1,
+            ...nightPricesParam,
+            ...discountParam,
+            ...discountSignOff,
+            ...slotArgs,
+            blacklist_override_reason: blacklistOverride,
+          },
+        )
         setDone({ ref: res.reservation, room: null, waitlist: true })
         props.onBooked()
         return
@@ -802,6 +807,7 @@ export function BookingDialog(props: {
           guest_name: form.guest_name,
           phone: form.phone || undefined,
           company: form.company || undefined,
+          booking_type: form.booking_type || undefined,
           rate_plan: form.rate_plan || undefined,
           ...viaArgs,
           // a comp or house-use plan: one sign-off for every room
@@ -818,8 +824,11 @@ export function BookingDialog(props: {
         props.onBooked()
         return
       }
-      const res = await createBooking({
-        over_capacity_reason: form.over_capacity_reason || undefined,
+      const res = await call<{ reservation: string; room: string | null; room_number: string | null }>(
+        "kamra.api.create_booking",
+        {
+          property: getCurrentProperty(),
+          over_capacity_reason: form.over_capacity_reason || undefined,
           over_capacity_guests: form.over_capacity_guests || undefined,
           over_capacity_charge: extraCharge || undefined,
         guest_name: form.guest_name,
@@ -837,7 +846,7 @@ export function BookingDialog(props: {
         pets: form.pets || undefined,
         company: form.company || undefined,
         travel_agent: form.travel_agent || undefined,
-        booking_type: form.company ? "Corporate" : undefined,
+        booking_type: form.booking_type || (form.company ? "Corporate" : undefined),
         market_segment: form.market_segment || undefined,
         booked_by_name: onBehalf ? form.booked_by_name || undefined : undefined,
         booked_by_phone: onBehalf
@@ -2369,6 +2378,18 @@ export function BookingDialog(props: {
                             ))}
                           </select>
                         </Field>
+                        <Field label={t("Booking type")}>
+                          <select
+                            className={inputCls}
+                            value={form.booking_type}
+                            onChange={(e) => set("booking_type", e.target.value)}
+                          >
+                            <option value="">{form.company ? t("Corporate") : "-"}</option>
+                            {(loc.booking_types ?? []).map((bt) => (
+                              <option key={bt.value} value={bt.value}>{translate(bt.label)}</option>
+                            ))}
+                          </select>
+                        </Field>
                       </div>
 
                       {moreRooms.length === 0 &&
@@ -2855,7 +2876,7 @@ export function BookingDialog(props: {
                 </div>}
                 <Button
                   className="w-full justify-center py-2.5 text-base"
-                  disabled={busy}
+                  disabled={busy || quoting}
                   onClick={() => submit()}
                 >
                   {busy ? t("Booking…") : t("Confirm booking")}

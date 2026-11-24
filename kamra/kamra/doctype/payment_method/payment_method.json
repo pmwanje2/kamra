@@ -1,6 +1,5 @@
 {
  "actions": [],
- "autoname": "field:code",
  "creation": "2026-11-23 00:00:00",
  "description": "OPERA Payment Method: what the desk takes money in, how the till counts it and the ERP Mode of Payment it posts to.",
  "doctype": "DocType",
@@ -21,7 +20,6 @@
    "fieldtype": "Data",
    "label": "Code",
    "reqd": 1,
-   "unique": 1,
    "in_list_view": 1,
    "set_only_once": 1,
    "description": "The value stored on records. It can't change once saved; reword the description instead."
@@ -39,7 +37,8 @@
    "label": "Property",
    "options": "Property",
    "in_list_view": 1,
-   "description": "The property that offers this payment method. Blank for shared system codes."
+   "set_only_once": 1,
+   "description": "The property that offers this payment method. Blank for shared rows; a property row overrides the shared row of the same code for that property."
   },
   {
    "fieldname": "tender_type",
@@ -81,11 +80,11 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-11-23 18:00:00.000000",
+ "modified": "2026-11-24 05:00:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Payment Method",
- "naming_rule": "By fieldname",
+ "naming_rule": "By script",
  "owner": "Administrator",
  "permissions": [
   {
