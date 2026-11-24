@@ -5,7 +5,7 @@ import { describe, it, expect, vi } from "vitest"
 import { renderToStaticMarkup } from "react-dom/server"
 import { FiscalDocument, type Fiscal } from "../src/components/FiscalDocument"
 import { eventBilling } from "../src/lib/eventBilling"
-import { ITEM_TYPES, payModes } from "../src/screens/banquet/shared"
+import { ITEM_TYPES, inr, payModes } from "../src/screens/banquet/shared"
 
 const mockLocale: {
   currency: string
@@ -23,10 +23,37 @@ const mockLocale: {
   tender_modes: null,
 }
 
+function mockDigitsFor(currency = mockLocale.currency) {
+  try {
+    if (currency)
+      return new Intl.NumberFormat("en", { style: "currency", currency }).resolvedOptions()
+        .maximumFractionDigits ?? 2
+  } catch {
+    /* ignore */
+  }
+  return 2
+}
+
 vi.mock("../src/lib/money", () => ({
   cur: () => mockLocale.currency_symbol,
   locale: () => mockLocale,
   moneyLocale: () => mockLocale.locale,
+  fmtAmount: (n: unknown, c?: string, l?: string) => {
+    const d = mockDigitsFor(c ?? mockLocale.currency)
+    return Number(n ?? 0).toLocaleString(l || mockLocale.locale, { minimumFractionDigits: d, maximumFractionDigits: d })
+  },
+  fmtMoney: (n: unknown, ctx?: { currency?: string | null; currency_symbol?: string | null; locale?: string | null } | null) => {
+    const currency = ctx?.currency || mockLocale.currency
+    const symbol =
+      ctx && ctx.currency_symbol != null
+        ? ctx.currency_symbol
+        : ctx?.currency && ctx.currency !== mockLocale.currency
+          ? `${ctx.currency} `
+          : mockLocale.currency_symbol
+    const numLocale = ctx?.locale || (ctx?.currency && ctx.currency !== mockLocale.currency ? "en-US" : mockLocale.locale)
+    const d = mockDigitsFor(currency)
+    return symbol + Number(n ?? 0).toLocaleString(numLocale, { minimumFractionDigits: d, maximumFractionDigits: d })
+  },
 }))
 vi.mock("../src/lib/i18n", () => ({
   t: (s: string, vars?: Record<string, unknown>) =>
@@ -162,5 +189,38 @@ describe("PR #45 i18n catalog and 7-locale coverage", () => {
         expect(placeholders(dict[key]), `${lang}.json placeholder mismatch for ${key}`).toEqual(placeholders(key))
       }
     }
+  })
+})
+
+describe("Hydrogen R2 #4 — document-scoped currency formatting and country-neutral banquet icon", () => {
+  it("formats banquet inr() with document currency/symbol/decimals instead of global UGX cache", () => {
+    mockLocale.currency = "UGX"
+    mockLocale.currency_symbol = "UGX "
+    mockLocale.locale = "en-UG"
+    const kwdCtx = { currency: "KWD", currency_symbol: "KD", locale: "en-US" }
+    expect((inr as (n: unknown, ctx?: unknown) => string)(37.475, kwdCtx)).toBe("KD37.475")
+    expect((inr as (n: unknown, ctx?: unknown) => string)(10.125, kwdCtx)).toBe("KD10.125")
+    expect((inr as (n: unknown, ctx?: unknown) => string)(27.35, kwdCtx)).toBe("KD27.350")
+  })
+
+  it("supports explicit currency, symbol, and number locale in real lib/money fmtMoney and fmtAmount", async () => {
+    const realMoney = await vi.importActual<typeof import("../src/lib/money")>("../src/lib/money")
+    realMoney.adoptUiLocale({ currency: "UGX", currency_symbol: "UGX ", locale: "en-UG" })
+    expect(
+      (realMoney.fmtMoney as (n: unknown, ctx?: unknown) => string)(37.475, {
+        currency: "KWD",
+        currency_symbol: "KD",
+        locale: "en-US",
+      }),
+    ).toBe("KD37.475")
+    expect(
+      (realMoney.fmtAmount as (n: unknown, c?: string, l?: string) => string)(123456.375, "KWD", "en-US"),
+    ).toBe("123,456.375")
+  })
+
+  it("removes hardcoded BadgeIndianRupee from BanquetFunction.tsx", () => {
+    const frontendRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
+    const src = fs.readFileSync(path.join(frontendRoot, "src/screens/BanquetFunction.tsx"), "utf8")
+    expect(src).not.toContain("BadgeIndianRupee")
   })
 })

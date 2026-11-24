@@ -608,6 +608,91 @@ class TestEventFolio(BanquetFiscalCase):
 			self.assertEqual(summary2["deposit_refunded"], 10.125)
 			self.assertEqual(summary2["native_receipts"][0]["amount"], 10.125)
 
+	# --- Hydrogen R2 merge-gate regression tests (Findings 2 & 4) --------------------------------------
+
+	def test_settled_event_folio_blocks_post_settlement_banquet_mutations(self):
+		"""Hydrogen R2 #2 (D2b): once settle_event_folio closes the Event Folio, post-settlement mutations refuse even while status is Confirmed."""
+		fn = confirmed(self.f)
+		mapping("Venue Rental", revenue_code("UT-BQ-HALL"))
+		mapping("Menu", revenue_code("UT-BQ-FOOD", charge_type="Food & Beverage"))
+		with accounting_bridge():
+			out = bq.post_to_folio(fn)
+			folio_doc = frappe.get_doc("Folio", out["folio"])
+			bq.record_receipt(fn, float(folio_doc.balance), mode="Cash", kind="Payment")
+			settled = bq.settle_event_folio(fn)
+			self.assertTrue(settled["ok"])
+
+			before = sheet(fn)
+			self.assertEqual(before.status, "Confirmed")
+			self.assertEqual(frappe.db.get_value("Folio", out["folio"], "status"), "Closed")
+			before_total = float(before.grand_total)
+			before_items = len(before.items)
+			before_notes = before.internal_notes
+			first_row = before.items[0].name
+
+			for label, call_fn in (
+				("add_supplementary", lambda: bq.add_supplementary(fn, "Late bar round", qty=2, rate=15000)),
+				("update_function", lambda: bq.update_function(fn, {"discount_amount": 5000, "internal_notes": "tamper"})),
+				("record_consumption", lambda: bq.record_consumption(fn, {first_row: 999}, pax_actual=999)),
+				("add_service", lambda: bq.add_service(fn, self.f["led"])),
+				("negotiate", lambda: bq.negotiate(fn, discount_amount=10000)),
+				("save_items", lambda: bq.save_items(fn, [])),
+				("remove_item", lambda: bq.remove_item(fn, first_row)),
+				("set_status_cancelled", lambda: bq.set_status(fn, "Cancelled", reason="post-settlement cancel")),
+				("set_status_tentative", lambda: bq.set_status(fn, "Tentative")),
+			):
+				with self.subTest(endpoint=label):
+					with self.assertRaisesRegex(frappe.ValidationError, r"(?i)closed|settled"):
+						call_fn()
+
+			after = sheet(fn)
+			self.assertAlmostEqual(float(after.grand_total), before_total, 2)
+			self.assertEqual(len(after.items), before_items)
+			self.assertEqual(after.status, "Confirmed")
+			self.assertEqual(after.internal_notes, before_notes)
+
+	def test_function_sheet_exposes_document_property_currency_and_symbol(self):
+		"""Hydrogen R2 #4: function_sheet, banquet_document and function_economics carry the function's own property currency metadata."""
+		from kamra.localization import pack_for
+
+		if not frappe.db.exists("Currency", "KWD"):
+			frappe.get_doc({
+				"doctype": "Currency", "currency_name": "KWD", "symbol": "KD",
+				"fraction": "Fils", "fraction_units": 1000,
+				"smallest_currency_fraction_value": 0.001,
+				"number_format": "#,###.###", "enabled": 1,
+			}).insert(ignore_permissions=True)
+		else:
+			frappe.db.set_value("Currency", "KWD", "enabled", 1)
+
+		kw_prop = _upsert("Property", {"property_name": "UT Kuwait Banquet Meta"}, {
+			"property_name": "UT Kuwait Banquet Meta", "country": "Kuwait", "currency": "KWD",
+			"gst_rate_low": 0, "gst_rate_high": 0, "business_date": nowdate(),
+		})
+		kw_hall = _upsert("Venue", {"property": kw_prop, "venue_name": "UT Kuwait Meta Hall"}, {
+			"property": kw_prop, "venue_name": "UT Kuwait Meta Hall", "venue_type": "Banquet Hall",
+			"capacity": 80, "base_price": 37.475, "gst_rate": 0,
+		})
+		fn = bq.create_enquiry(
+			kw_prop, kw_hall, add_days(nowdate(), 36), "Kuwait Meta Client",
+			event_type="Conference", attendees=20, with_venue_line=1,
+		)["function"]
+		bq.set_status(fn, "Confirmed")
+
+		expected_loc = pack_for(kw_prop).locale(frappe.get_cached_doc("Property", kw_prop))
+		fs = bq.function_sheet(fn)
+		self.assertEqual(fs.get("currency"), "KWD")
+		self.assertEqual(fs.get("currency_symbol"), expected_loc["currency_symbol"])
+		self.assertTrue(fs.get("locale"))
+
+		qdoc = bq.banquet_document(fn, "quote")
+		self.assertEqual(qdoc["property"].get("currency"), "KWD")
+		self.assertEqual(qdoc["property"].get("currency_symbol"), expected_loc["currency_symbol"])
+
+		econ = bq.function_economics(fn)
+		self.assertEqual(econ.get("currency"), "KWD")
+		self.assertEqual(econ.get("currency_symbol"), expected_loc["currency_symbol"])
+
 
 def revenue_code(code, charge_type="Misc", **extra):
 	if not frappe.db.exists("Transaction Code", code):

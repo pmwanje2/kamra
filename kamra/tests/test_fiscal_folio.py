@@ -18,6 +18,7 @@ from kamra import api, erp_bridge
 from kamra.folio import close_folio
 from kamra.tests.audit_fixtures import (
 	PROP_A,
+	PROP_B,
 	TODAY,
 	AuditTestCase,
 	d,
@@ -593,3 +594,112 @@ class FiscalFolioTests(AuditTestCase):
 		inv = api.folio_invoice(self.folio)
 		self.assertEqual(inv["document"]["amount_in_words"], "KWD Twelve point 375 Only")
 		self.assertEqual(api._stay_money(self.res)["deposit_held"], 25.375)
+
+	# --- Hydrogen R2 merge-gate regression tests (Findings 3 & 4) --------------------------------------
+
+	def test_kwd_3dp_checkout_and_close_folio_precision_and_error_formatting(self):
+		"""Hydrogen R2 #3 (C1-C4) & #4: currency-aware settlement precision (0/2/3dp), error formatting, and folio_invoice property locale."""
+		from kamra import checkout
+		from kamra.folio import post_remaining_nights
+		from kamra.localization import pack_for
+
+		if not frappe.db.exists("Currency", "KWD"):
+			frappe.get_doc({
+				"doctype": "Currency", "currency_name": "KWD", "symbol": "KD",
+				"fraction": "Fils", "fraction_units": 1000,
+				"smallest_currency_fraction_value": 0.001,
+				"number_format": "#,###.###", "enabled": 1,
+			}).insert(ignore_permissions=True)
+		else:
+			frappe.db.set_value("Currency", "KWD", "enabled", 1)
+
+		frappe.db.set_value("Property", PROP_A, {
+			"country": "Kuwait", "currency": "KWD", "gst_rate_low": 0, "gst_rate_high": 0,
+		})
+		frappe.clear_document_cache("Property", PROP_A)
+		symbol = pack_for(PROP_A).locale(frappe.get_cached_doc("Property", PROP_A))["currency_symbol"]
+
+		rt_kw = make_room_type(PROP_A, "KW3", base_price=12.375)
+		res_kw = make_reservation(
+			PROP_A, rt_kw, TODAY, d(1), status="Checked In", room=make_room(PROP_A, rt_kw, "109"),
+		)
+		f_kw = guest_folio(res_kw.name)
+		post_remaining_nights(res_kw)
+
+		# C3: 0.015 KWD unpaid must report exact 3dp (e.g. KD0.015), NEVER 2dp (KD0.01 or KD0.02).
+		api.add_folio_payment(f_kw, "Cash", 12.360)
+		pos_15 = checkout.settlement_position(res_kw.name)
+		self.assertEqual(pos_15["owed"], 0.015)
+		ctx_15 = checkout.checkout_context(res_kw.name)
+		self.assertFalse(ctx_15["settled"])
+		self.assertEqual(ctx_15["totals"]["owed"], 0.015)
+		owed_blocker = next(b for b in ctx_15["blockers"] if b["code"] == "owed")
+		self.assertIn(f"{symbol}0.015", owed_blocker["message"])
+		with self.assertRaises(frappe.ValidationError) as err_co_15:
+			api.check_out(res_kw.name)
+		self.assertIn(f"{symbol}0.015", str(err_co_15.exception))
+		with self.assertRaises(frappe.ValidationError) as err_cf_15:
+			close_folio(f_kw)
+		self.assertIn(f"{symbol}0.015", str(err_cf_15.exception))
+
+		# C1/C2: 0.004 KWD (4 fils) unpaid must NOT round to 0.00 under round(..., 2) or slip past EPS=0.009.
+		api.add_folio_payment(f_kw, "Cash", 0.011)
+		pos_04 = checkout.settlement_position(res_kw.name)
+		self.assertEqual(pos_04["owed"], 0.004)
+		ctx_04 = checkout.checkout_context(res_kw.name)
+		self.assertFalse(ctx_04["settled"])
+		self.assertIn(f"{symbol}0.004", next(b["message"] for b in ctx_04["blockers"] if b["code"] == "owed"))
+		with self.assertRaises(frappe.ValidationError) as err_co_04:
+			api.check_out(res_kw.name)
+		self.assertIn(f"{symbol}0.004", str(err_co_04.exception))
+		with self.assertRaises(frappe.ValidationError) as err_cf_04:
+			close_folio(f_kw)
+		self.assertIn(f"{symbol}0.004", str(err_cf_04.exception))
+
+		# C2: 0.005 KWD (5 fils) overpaid must report refund_due=0.005 with exact 3dp message.
+		api.add_folio_payment(f_kw, "Cash", 0.009)
+		pos_ref = checkout.settlement_position(res_kw.name)
+		self.assertEqual(pos_ref["refund_due"], 0.005)
+		ctx_ref = checkout.checkout_context(res_kw.name)
+		self.assertFalse(ctx_ref["settled"])
+		self.assertEqual(ctx_ref["totals"]["refund_due"], 0.005)
+		self.assertIn(f"{symbol}0.005", next(b["message"] for b in ctx_ref["blockers"] if b["code"] == "refund"))
+		with self.assertRaises(frappe.ValidationError) as err_co_ref:
+			api.check_out(res_kw.name)
+		self.assertIn(f"{symbol}0.005", str(err_co_ref.exception))
+		with self.assertRaises(frappe.ValidationError) as err_cf_ref:
+			close_folio(f_kw)
+		self.assertIn(f"{symbol}0.005", str(err_cf_ref.exception))
+
+		# Exact 0.005 KWD refund settles to 0.000 and allows both close_folio and check_out.
+		api.refund_folio_payment(f_kw, 0.005, "Cash", "Exact 5 fils return")
+		pos_ok = checkout.settlement_position(res_kw.name)
+		self.assertEqual((pos_ok["owed"], pos_ok["refund_due"]), (0.0, 0.0))
+		close_folio(f_kw)
+		api.check_out(res_kw.name)
+		self.assertEqual(frappe.db.get_value("Reservation", res_kw.name, "status"), "Checked Out")
+
+		# Finding #4 backend contract: folio_invoice carries property currency_symbol and locale.
+		inv = api.folio_invoice(f_kw)
+		self.assertEqual(inv["property"]["currency"], "KWD")
+		self.assertEqual(inv["property"].get("currency_symbol"), symbol)
+		self.assertTrue(inv["property"].get("locale"))
+
+		# UGX (0dp): 1 UGX unpaid blocks checkout/close_folio formatted with 0 decimals (no .00).
+		make_property(PROP_B, country="Uganda", currency="UGX", gst_rate_low=0, gst_rate_high=0, business_date=TODAY)
+		ugx_symbol = pack_for(PROP_B).locale(frappe.get_cached_doc("Property", PROP_B))["currency_symbol"]
+		rt_ug = make_room_type(PROP_B, "UG0", base_price=50000)
+		res_ug = make_reservation(
+			PROP_B, rt_ug, TODAY, d(1), status="Checked In", room=make_room(PROP_B, rt_ug, "209"),
+		)
+		f_ug = guest_folio(res_ug.name)
+		post_remaining_nights(res_ug)
+		api.add_folio_payment(f_ug, "Cash", 49999)
+		with self.assertRaises(frappe.ValidationError) as err_ug_co:
+			api.check_out(res_ug.name)
+		self.assertIn(f"{ugx_symbol}1 ", str(err_ug_co.exception))
+		self.assertNotIn("1.00", str(err_ug_co.exception))
+		with self.assertRaises(frappe.ValidationError) as err_ug_cf:
+			close_folio(f_ug)
+		self.assertIn(f"{ugx_symbol}1 ", str(err_ug_cf.exception))
+		self.assertNotIn("1.00", str(err_ug_cf.exception))

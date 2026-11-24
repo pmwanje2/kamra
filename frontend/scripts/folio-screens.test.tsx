@@ -80,13 +80,21 @@ vi.mock("../src/lib/money", () => ({
   loadLocale: () => Promise.resolve(mockLoc),
   moneyLocale: () => mockLoc.locale,
   moneyDigits: (c?: string) => digitsFor(c ?? mockLoc.currency),
-  fmtAmount: (n: unknown, c?: string) => {
+  fmtAmount: (n: unknown, c?: string, l?: string) => {
     const d = digitsFor(c ?? mockLoc.currency)
-    return Number(n ?? 0).toLocaleString(mockLoc.locale, { minimumFractionDigits: d, maximumFractionDigits: d })
+    return Number(n ?? 0).toLocaleString(l || mockLoc.locale, { minimumFractionDigits: d, maximumFractionDigits: d })
   },
-  fmtMoney: (n: unknown) => {
-    const d = digitsFor(mockLoc.currency)
-    return mockLoc.currency_symbol + Number(n ?? 0).toLocaleString(mockLoc.locale, { minimumFractionDigits: d, maximumFractionDigits: d })
+  fmtMoney: (n: unknown, ctx?: { currency?: string | null; currency_symbol?: string | null; locale?: string | null } | null) => {
+    const currency = ctx?.currency || mockLoc.currency
+    const symbol =
+      ctx && ctx.currency_symbol != null
+        ? ctx.currency_symbol
+        : ctx?.currency && ctx.currency !== mockLoc.currency
+          ? `${ctx.currency} `
+          : mockLoc.currency_symbol
+    const numLocale = ctx?.locale || (ctx?.currency && ctx.currency !== mockLoc.currency ? "en-US" : mockLoc.locale)
+    const d = digitsFor(currency)
+    return symbol + Number(n ?? 0).toLocaleString(numLocale, { minimumFractionDigits: d, maximumFractionDigits: d })
   },
   chargesTax: () => !(mockLoc.tax_rates.length === 1 && Number(mockLoc.tax_rates[0]) === 0),
   sellsAlcohol: () => true,
@@ -98,9 +106,12 @@ vi.mock("../src/lib/i18n", () => {
     typeof s === "string"
       ? s.replace(/\{(\w+)\}/g, (_m, k: string) => String(vars?.[k] ?? `{${k}}`))
       : s
+  const tn = (n: number, one: string, many?: string, vars?: Record<string, unknown>) =>
+    t(n === 1 ? one : (many ?? one), { n, ...vars })
   return {
     t,
-    useT: () => ({ lang: "en", t, tn: (_n: number, one: string) => one }),
+    tn,
+    useT: () => ({ lang: "en", t, tn }),
     useUILanguage: () => "en",
     uiDateLocale: () => "en-US",
   }
@@ -522,6 +533,295 @@ describe("Hydrogen R1 #6 & #7 — KWD 3dp currency precision and Banquet mobile 
     expect(refEl).toBeTruthy()
     expect(refEl?.closest("table")).toBeNull()
     expect(refEl?.className).toContain("break-all")
+    await act(async () => root.unmount())
+  })
+})
+
+describe("Hydrogen R2 #4 — cross-property multi-currency display and zero-decimal isolation", () => {
+  it("renders KWD (3dp, KD) on FolioView when global switcher is UGX (0dp) without leaking UGX", async () => {
+    mockLoc = {
+      ...defaultMockLocale(),
+      currency: "UGX",
+      currency_symbol: "UGX ",
+      locale: "en-UG",
+      tender_modes: [{ mode: "Cash", currencies: ["UGX"] }],
+    }
+    const payload = {
+      folio: {
+        name: "FOLIO-KW-CROSS", property: "Sunset Kuwait", status: "Open", folio_type: "Guest",
+        invoice_number: null, sales_invoice: null, guest_name: "Tariq Al-Sabah",
+        charges: [
+          {
+            name: "c1", posting_date: "2026-11-24", charge_type: "Room",
+            description: "Suite Night", amount: 10.0, gst_rate: 0, gst_amount: 0, total: 10.0,
+          },
+          {
+            name: "c2", posting_date: "2026-11-24", charge_type: "Food & Beverage",
+            description: "Evening Mezzeh", amount: 2.375, gst_rate: 0, gst_amount: 0, total: 2.375,
+          },
+        ],
+        payments: [{
+          name: "p1", posting_date: "2026-11-24", payment_kind: "Payment",
+          mode: "Cash", amount: 12.36, reference: "ACC-PAY-KW-2", currency: "KWD",
+        }],
+        charges_total: 12.375, tax_total: 0, grand_total: 12.375, payments_total: 12.36, balance: 0.015,
+      },
+      property: {
+        currency: "KWD", currency_symbol: "KD", locale: "en-US",
+        name: "Sunset Kuwait", legal_name: null, logo_url: null, address: "Kuwait City",
+        state: null, gstin: null, phone: null, email: null, sac: null, place_of_supply: null,
+        tax_label: "Tax",
+      },
+      stay: {
+        reservation: "RES-KW-2", check_in: "2026-11-23", check_out: "2026-11-24", arrival: null,
+        departure: null, nights: 1, adults: 1, children: 0, pax: 1, meal_plan: null, room_type: "STE",
+        room: "402", company: null, group_booking: null, booked_by_name: null, booked_by_phone: null,
+        contact_preference: null,
+      },
+      gst_summary: [], bill_to: null, statutory: null, fiscal: null,
+      document: {
+        title: "Provisional Bill", is_final: false, number: "FOLIO-KW-CROSS",
+        date: "2026-11-24", amount_in_words: "KWD Twelve point 375 Only", footer: null,
+        service_code_label: "SAC",
+      },
+      lines: [
+        {
+          row: "c1", posting_date: "2026-11-24", charge_type: "Room",
+          description: "Suite Night", qty: 1, rate: 10.0, amount: 10.0,
+          gst_rate: 0, gst_amount: 0, total: 10.0, service_code: null,
+        },
+        {
+          row: "c2", posting_date: "2026-11-24", charge_type: "Food & Beverage",
+          description: "Evening Mezzeh", qty: 1, rate: 2.375, amount: 2.375,
+          gst_rate: 0, gst_amount: 0, total: 2.375, service_code: null,
+        },
+      ],
+      guest: { name: "Tariq Al-Sabah", phone: null, email: null, nationality: null, address: "", id_type: null },
+      summary_by_head: [
+        { head: "Room", amount: 10.0, tax: 0, total: 10.0, lines: 1, service_code: null },
+        { head: "Food & Beverage", amount: 2.375, tax: 0, total: 2.375, lines: 1, service_code: null },
+      ],
+      tax_summary: [],
+    }
+    callMock.mockImplementation((method: string) => {
+      if (method === "kamra.api.folio_invoice") return Promise.resolve(payload)
+      if (method === "kamra.api.reservation_folios") {
+        return Promise.resolve([
+          { name: "FOLIO-KW-CROSS", folio_type: "Guest", status: "Open", balance: 0.015, grand_total: 12.375, payments_total: 12.36 },
+          { name: "FOLIO-KW-EXT", folio_type: "Extra", status: "Open", balance: 0, grand_total: 0, payments_total: 0 },
+        ])
+      }
+      if (method === "kamra.api.linked_records") {
+        return Promise.resolve({
+          guest: "G-KW-2", guest_name: "Tariq Al-Sabah", reservations: [],
+          folios: [{ name: "FOLIO-KW-CROSS", folio_type: "Guest", status: "Open", balance: 0.015, invoice_number: null }],
+          company: null, group_booking: null, group_name: null, event: null, event_type: null,
+        })
+      }
+      return Promise.resolve([])
+    })
+    const host = document.createElement("div")
+    document.body.appendChild(host)
+    const root = createRoot(host)
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={["/billing/FOLIO-KW-CROSS"]}>
+          <Routes><Route path="/billing/:name" element={<FolioView />} /></Routes>
+        </MemoryRouter>,
+      )
+    })
+    await flush()
+    const text = host.textContent || ""
+    expect(text).toContain("Amount KD")
+    expect(text).toContain("Total KD")
+    expect(text).toContain("Grand total: KD12.375")
+    expect(text).toContain("Paid: KD12.360")
+    expect(text).toContain("Balance: KD0.015")
+    expect(text).toContain("KD10.000")
+    expect(text).toContain("KD2.375")
+    const linkedChip = [...host.querySelectorAll("button")].find((b) => b.textContent?.includes("Guest folio"))
+    expect(linkedChip?.textContent).toContain("KD0.015")
+    expect(text).not.toContain("UGX")
+    await act(async () => root.unmount())
+  })
+
+  it("renders USD (2dp, $) on FolioView when global switcher is UGX (0dp) without leaking UGX", async () => {
+    mockLoc = {
+      ...defaultMockLocale(),
+      currency: "UGX",
+      currency_symbol: "UGX ",
+      locale: "en-UG",
+      tender_modes: [{ mode: "Cash", currencies: ["UGX"] }],
+    }
+    const payload = {
+      folio: {
+        name: "FOLIO-USD-CROSS", property: "Sunset Resort", status: "Closed", folio_type: "Guest",
+        invoice_number: "INV-SR-26-0001", sales_invoice: "ACC-SINV-USD-1", guest_name: "Jane USD",
+        charges: [{
+          name: "c1", posting_date: "2026-11-24", charge_type: "Room",
+          description: "Ocean View", amount: 200.0, gst_rate: 12.375, gst_amount: 24.75, total: 224.75,
+        }],
+        payments: [{
+          name: "p1", posting_date: "2026-11-24", payment_kind: "Payment",
+          mode: "Cash", amount: 224.75, reference: "ACC-PAY-USD-1", currency: "USD",
+        }],
+        charges_total: 200.0, tax_total: 24.75, grand_total: 224.75, payments_total: 224.75, balance: 0,
+      },
+      property: {
+        currency: "USD", currency_symbol: "$", locale: "en-US",
+        name: "Sunset Resort", legal_name: null, logo_url: null, address: "Miami",
+        state: null, gstin: null, phone: null, email: null, sac: null, place_of_supply: null,
+        tax_label: "VAT",
+      },
+      stay: {
+        reservation: "RES-USD-1", check_in: "2026-11-23", check_out: "2026-11-24", arrival: null,
+        departure: null, nights: 1, adults: 2, children: 0, pax: 2, meal_plan: null, room_type: "DLX",
+        room: "201", company: null, group_booking: null, booked_by_name: null, booked_by_phone: null,
+        contact_preference: null,
+      },
+      gst_summary: [], bill_to: null, statutory: null, fiscal: null,
+      document: {
+        title: "Invoice", is_final: true, number: "ACC-SINV-USD-1",
+        date: "2026-11-24", amount_in_words: "Dollars Two Hundred Twenty Four and Seventy Five Cents Only",
+        footer: null, service_code_label: "SAC",
+      },
+      lines: [{
+        row: "c1", posting_date: "2026-11-24", charge_type: "Room",
+        description: "Ocean View", qty: 1, rate: 200.0, amount: 200.0,
+        gst_rate: 12.375, gst_amount: 24.75, total: 224.75, service_code: null,
+      }],
+      guest: { name: "Jane USD", phone: null, email: null, nationality: null, address: "", id_type: null },
+      summary_by_head: [],
+      tax_summary: [{
+        rate: 12.375, taxable: 200.0, total_tax: 24.75,
+        parts: [{ label: "VAT", rate: 12.375, amount: 24.75 }],
+      }],
+    }
+    callMock.mockImplementation((method: string) => {
+      if (method === "kamra.api.folio_invoice") return Promise.resolve(payload)
+      if (method === "kamra.api.linked_records") {
+        return Promise.resolve({
+          guest: "G-USD-1", guest_name: "Jane USD", reservations: [],
+          folios: [{ name: "FOLIO-USD-CROSS", folio_type: "Guest", status: "Closed", balance: 0, invoice_number: "INV-SR-26-0001" }],
+          company: null, group_booking: null, group_name: null, event: null, event_type: null,
+        })
+      }
+      return Promise.resolve([])
+    })
+    const host = document.createElement("div")
+    document.body.appendChild(host)
+    const root = createRoot(host)
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={["/billing/FOLIO-USD-CROSS"]}>
+          <Routes><Route path="/billing/:name" element={<FolioView />} /></Routes>
+        </MemoryRouter>,
+      )
+    })
+    await flush()
+    const text = host.textContent || ""
+    expect(text).toContain("Amount $")
+    expect(text).toContain("VAT $")
+    expect(text).toContain("Total $")
+    expect(text).toContain("Grand total: $224.75")
+    expect(text).toContain("Paid: $224.75")
+    expect(text).not.toContain("UGX")
+    await act(async () => root.unmount())
+  })
+
+  it("renders KWD (3dp, KD) on BanquetFunction when global switcher is UGX (0dp) without truncating to integers", async () => {
+    mockLoc = {
+      ...defaultMockLocale(),
+      currency: "UGX",
+      currency_symbol: "UGX ",
+      locale: "en-UG",
+      tender_modes: [{ mode: "Cash", currencies: ["UGX"] }],
+    }
+    banquetCatalogueMock.mockResolvedValue({ menus: [], services: [] })
+    banquetSheetMock.mockResolvedValue({
+      name: "EVT-2026-0609",
+      property: "Sunset Kuwait",
+      currency: "KWD",
+      currency_symbol: "KD",
+      locale: "en-US",
+      tax_label: "Tax",
+      status: "Confirmed",
+      customer_name: "Kuwait Gulf Summit",
+      event_name: "Gulf Board Dinner",
+      event_type: "Conference",
+      venue: "Sunset Kuwait-Pearl Hall",
+      event_date: "2026-12-10",
+      start_time: "18:00",
+      end_time: "22:00",
+      session: "Evening",
+      attendees: 10,
+      pax_guaranteed: 10,
+      pax_actual: 0,
+      billable_pax: 10,
+      grand_total: 37.475,
+      subtotal: 37.475,
+      taxable_amount: 37.475,
+      tax_amount: 0,
+      discount_amount: 0,
+      service_charge_percent: 0,
+      service_charge: 0,
+      advance_received: 10.125,
+      balance_due: 27.35,
+      deposit_held: 0,
+      deposit_refunded: 0,
+      damage_amount: 0,
+      quote_version: 1,
+      posted_to_folio: 0,
+      folio: "FOLIO-KW-EVT",
+      fiscal_bridge: 1,
+      event_folio: "FOLIO-KW-EVT",
+      items: [{
+        name: "i1", item_type: "Menu", item_name: "Mezzeh Platter", qty: 10, uom: "Pax",
+        rate: 3.7475, list_rate: 3.7475, amount: 37.475, net_amount: 37.475,
+        chargeable: 1, gst_rate: 0, gst_amount: 0, total: 37.475,
+      }],
+      payment_terms: [],
+      receipts: [{
+        name: "r1", receipt_date: "2026-11-24", kind: "Advance", mode: "Cash",
+        amount: 10.125, reference: "ACC-PAY-2026-00081",
+      }],
+      revisions: [],
+      selections: [],
+      venue_detail: {},
+      group_detail: null,
+      scheduled_total: 0,
+      open_item_impact: 0,
+      next_actions: [],
+      checklist: [],
+      open_items: [],
+    })
+    const host = document.createElement("div")
+    document.body.appendChild(host)
+    const root = createRoot(host)
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={["/banquet/EVT-2026-0609"]}>
+          <Routes><Route path="/banquet/:name" element={<BanquetFunction />} /></Routes>
+        </MemoryRouter>,
+      )
+    })
+    await flush()
+    const initialText = host.textContent || ""
+    expect(initialText).toContain("KD37.475")
+    expect(initialText).toContain("KD10.125")
+    expect(initialText).toContain("KD27.350")
+    expect(initialText).not.toContain("UGX")
+
+    const moneyBtn = [...host.querySelectorAll("button")].find((b) => b.textContent?.includes("Money"))
+    expect(moneyBtn).toBeTruthy()
+    await act(async () => {
+      moneyBtn!.click()
+    })
+    await flush()
+    const moneyText = host.textContent || ""
+    expect(moneyText).toContain("KD10.125")
+    expect(moneyText).toContain("KD27.350")
+    expect(moneyText).not.toContain("UGX")
     await act(async () => root.unmount())
   })
 })
