@@ -1881,3 +1881,322 @@ class HydrogenR1GuardsAnd3dpToleranceTests(AuditTestCase):
 		ugx_doc.amount_after_tax = 500000.1
 		ugx_doc.special_requests = "UT UGX float noise ok"
 		self._as_user(DESK, ugx_doc.save)
+
+
+PROP_KWD_R3 = "UT Comp KWD R3"
+PROP_USD_R3 = "UT Comp USD R3"
+
+
+class HydrogenR2CurrencySpoofAndDecimalToleranceTests(AuditTestCase):
+	"""Hydrogen R2 findings on #38:
+	1. [P1] Client-spoofable self.get('currency') (e.g. REST PUT sending
+	   {"currency": "UGX"}) must not inflate _amount_tolerance() on KWD or USD stays.
+	2. [P1] guard_locked_nights, agreed_rate_overrides, and judged_nights must
+	   honor 3dp KWD currency precision (0.0005 tolerance) rather than hardcoded 0.005.
+	3. [P2] Exact Decimal subtraction must reject exact USD ±0.005 boundary tampering
+	   (200.00 -> 199.995, 100.00 -> 99.995) without IEEE-754 float64 drift."""
+
+	properties = (PROP_KWD_R3, PROP_USD_R3)
+
+	def setUp(self):
+		super().setUp()
+		self.at(TODAY, "kamra.folio", "kamra.business_date", "kamra.ledger", "kamra.api")
+		for code, sym, frac_name, frac_units in (
+			("KWD", "KWD ", "Fils", 1000),
+			("USD", "$", "Cent", 100),
+			("UGX", "UGX ", "", 1),
+		):
+			if not frappe.db.exists("Currency", code):
+				frappe.get_doc({
+					"doctype": "Currency", "currency_name": code, "symbol": sym,
+					"fraction": frac_name, "fraction_units": frac_units,
+					"number_format": "#,###.###" if frac_units == 1000 else "#,###.##", "enabled": 1,
+				}).insert(ignore_permissions=True)
+			else:
+				frappe.db.set_value("Currency", code, "enabled", 1)
+
+		make_property(
+			PROP_KWD_R3, business_date=TODAY, country="Kuwait", currency="KWD",
+			gst_mode="Fixed", gst_rate_low=0, gst_rate_high=0, rates_include_tax=0,
+		)
+		self.rt_kwd = make_room_type(PROP_KWD_R3, "KWD R3 DLX", base_price=45.125, tax_percent=0)
+		frappe.db.set_value("Room Type", self.rt_kwd, {"base_price": 45.125, "tax_percent": 0})
+		frappe.clear_document_cache("Room Type", self.rt_kwd)
+		self.room_kwd = make_room(PROP_KWD_R3, self.rt_kwd, "K201")
+
+		make_property(
+			PROP_USD_R3, business_date=TODAY, country="United States", currency="USD",
+			gst_mode="Fixed", gst_rate_low=0, gst_rate_high=0, rates_include_tax=0,
+		)
+		self.rt_usd = make_room_type(PROP_USD_R3, "USD R3 DLX", base_price=100.00, tax_percent=0)
+		frappe.db.set_value("Room Type", self.rt_usd, {"base_price": 100.00, "tax_percent": 0})
+		frappe.clear_document_cache("Room Type", self.rt_usd)
+		self.room_usd = make_room(PROP_USD_R3, self.rt_usd, "US201")
+
+		ensure_user(DESK, ["Front Desk"])
+		ensure_user(GM, ["Hotel Admin", "Front Desk", "Finance"])
+
+		def mk_plan(prop, code, currency):
+			name = f"{prop}-{code}"
+			if frappe.db.exists("Rate Plan", name):
+				frappe.delete_doc("Rate Plan", name, force=True, ignore_permissions=True)
+			return frappe.get_doc({
+				"doctype": "Rate Plan", "property": prop,
+				"rate_plan_name": code, "code": code,
+				"modifier_type": "Percent", "modifier_value": 0, "currency": currency,
+			}).insert(ignore_permissions=True).name
+
+		self.bar_kwd = mk_plan(PROP_KWD_R3, "BAR", "KWD")
+		self.bar_usd = mk_plan(PROP_USD_R3, "BAR", "USD")
+
+	def _as_user(self, user, fn, *args, **kwargs):
+		prev = frappe.session.user
+		frappe.set_user(user)  # nosemgrep: frappe-setuser -- acting as the persona
+		try:
+			return fn(*args, **kwargs)
+		finally:
+			frappe.set_user(prev)  # nosemgrep: frappe-setuser -- restore
+
+	def test_spoofed_currency_payload_cannot_inflate_kwd_or_usd_tolerance(self):
+		# KWD stay (45.125/night * 2 = 90.250 KWD): spoofed {"currency": "UGX"}
+		# must not inflate _amount_tolerance() from 0.0005 to 0.5.
+		kwd_booked = self._as_user(
+			DESK, api.create_booking, PROP_KWD_R3, self.rt_kwd, d(1), d(3),
+			"KWD Spoof Guest", "+96550002001", rate_plan=self.bar_kwd, room=self.room_kwd,
+		)
+		kwd_res = kwd_booked["reservation"]
+		self.assertAlmostEqual(
+			flt(frappe.db.get_value("Reservation", kwd_res, "amount_after_tax")), 90.250, places=3,
+		)
+
+		doc = frappe.get_doc("Reservation", kwd_res)
+		doc.update({"currency": "UGX", "amount_after_tax": 89.760})
+		with self.assertRaises(frappe.PermissionError):
+			self._as_user(DESK, doc.save)
+		self.assertAlmostEqual(
+			flt(frappe.db.get_value("Reservation", kwd_res, "amount_after_tax")), 90.250, places=3,
+		)
+
+		gov_kwd = frappe.get_doc("Reservation", kwd_res)
+		gov_kwd.agreed_rate = 45.125
+		gov_kwd.flags.kamra_agreed_rate_override = True
+		gov_kwd.save(ignore_permissions=True)
+
+		doc = frappe.get_doc("Reservation", kwd_res)
+		doc.update({"currency": "UGX", "agreed_rate": 44.630})
+		with self.assertRaises(frappe.PermissionError):
+			self._as_user(DESK, doc.save)
+		self.assertAlmostEqual(
+			flt(frappe.db.get_value("Reservation", kwd_res, "agreed_rate")), 45.125, places=3,
+		)
+		self.assertAlmostEqual(
+			flt(frappe.db.get_value("Reservation", kwd_res, "amount_after_tax")), 90.250, places=3,
+		)
+
+		# Sub-fils KWD noise (< 0.0005) still succeeds cleanly.
+		ok_kwd = frappe.get_doc("Reservation", kwd_res)
+		ok_kwd.amount_after_tax = 90.2504
+		ok_kwd.special_requests = "R3 KWD sub-fils noise ok"
+		self._as_user(DESK, ok_kwd.save)
+
+		# USD stay (100.00/night * 2 = 200.00 USD): spoofed {"currency": "UGX"}
+		# must not inflate _amount_tolerance() from 0.005 to 0.5.
+		usd_booked = self._as_user(
+			DESK, api.create_booking, PROP_USD_R3, self.rt_usd, d(1), d(3),
+			"USD Spoof Guest", "+12025550101", rate_plan=self.bar_usd, room=self.room_usd,
+		)
+		usd_res = usd_booked["reservation"]
+		self.assertAlmostEqual(
+			flt(frappe.db.get_value("Reservation", usd_res, "amount_after_tax")), 200.00, places=2,
+		)
+
+		doc = frappe.get_doc("Reservation", usd_res)
+		doc.update({"currency": "UGX", "amount_after_tax": 199.51})
+		with self.assertRaises(frappe.PermissionError):
+			self._as_user(DESK, doc.save)
+		self.assertAlmostEqual(
+			flt(frappe.db.get_value("Reservation", usd_res, "amount_after_tax")), 200.00, places=2,
+		)
+
+		gov_usd = frappe.get_doc("Reservation", usd_res)
+		gov_usd.agreed_rate = 100.00
+		gov_usd.flags.kamra_agreed_rate_override = True
+		gov_usd.save(ignore_permissions=True)
+
+		doc = frappe.get_doc("Reservation", usd_res)
+		doc.update({"currency": "UGX", "agreed_rate": 99.51})
+		with self.assertRaises(frappe.PermissionError):
+			self._as_user(DESK, doc.save)
+		self.assertAlmostEqual(
+			flt(frappe.db.get_value("Reservation", usd_res, "agreed_rate")), 100.00, places=2,
+		)
+
+	def test_kwd_3dp_guard_locked_nights_agreed_rate_overrides_and_judged_nights_block_4fils_delta(self):
+		kwd_booked = self._as_user(
+			DESK, api.create_booking, PROP_KWD_R3, self.rt_kwd, d(4), d(6),
+			"KWD Locked Night Guest", "+96550002002", rate_plan=self.bar_kwd, room=self.room_kwd,
+		)
+		res_name = kwd_booked["reservation"]
+
+		# 1. guard_locked_nights: tampering night_rates[0].rate and base_rate by 0.004 KWD
+		#    (45.125 -> 45.121) while leaving header totals untouched must raise PermissionError.
+		doc = frappe.get_doc("Reservation", res_name)
+		doc.night_rates[0].rate = 45.121
+		doc.night_rates[0].base_rate = 45.121
+		with self.assertRaises(frappe.PermissionError):
+			self._as_user(DESK, doc.save)
+
+		# Spoofing currency="UGX" alongside the locked-night tamper must also raise PermissionError.
+		doc = frappe.get_doc("Reservation", res_name)
+		doc.update({"currency": "UGX"})
+		doc.night_rates[0].rate = 45.121
+		doc.night_rates[0].base_rate = 45.121
+		with self.assertRaises(frappe.PermissionError):
+			self._as_user(DESK, doc.save)
+
+		reloaded = frappe.get_doc("Reservation", res_name)
+		self.assertAlmostEqual(flt(reloaded.night_rates[0].rate), 45.125, places=3)
+		self.assertAlmostEqual(flt(reloaded.night_rates[0].base_rate), 45.125, places=3)
+
+		# 2. agreed_rate_overrides (reservation.py:1135 contract_tariff, :1139 group_booking):
+		#    a 0.004 KWD delta must count as an override while 0.0004 sub-fils noise does not.
+		probe = frappe.get_doc("Reservation", res_name)
+		probe.contract_tariff = frappe.as_json({"agreed_rate": 45.125})
+		probe.agreed_rate = 45.125
+		self.assertFalse(probe.agreed_rate_overrides())
+		probe.agreed_rate = 45.1254
+		self.assertFalse(probe.agreed_rate_overrides())
+		probe.agreed_rate = 45.121
+		self.assertTrue(probe.agreed_rate_overrides())
+		probe.currency = "UGX"
+		self.assertTrue(probe.agreed_rate_overrides())
+
+		gb = frappe.get_doc({
+			"doctype": "Group Booking",
+			"property": PROP_KWD_R3,
+			"group_name": "UT KWD R3 Group Block",
+			"check_in_date": d(4),
+			"check_out_date": d(6),
+			"blocks": [{"room_type": self.rt_kwd, "rooms_blocked": 1, "block_rate": 45.125}],
+		}).insert(ignore_permissions=True)
+		probe = frappe.get_doc("Reservation", res_name)
+		probe.contract_tariff = None
+		probe.group_booking = gb.name
+		probe.agreed_rate = 45.125
+		self.assertFalse(probe.agreed_rate_overrides())
+		probe.agreed_rate = 45.1254
+		self.assertFalse(probe.agreed_rate_overrides())
+		probe.agreed_rate = 45.121
+		self.assertTrue(probe.agreed_rate_overrides())
+
+		# 3. judged_nights (reservation.py:1324 agreed_rate, :1328 night_rates):
+		#    a 0.004 KWD delta on a night or on agreed_rate must mark nights as judged,
+		#    while 0.0004 sub-fils noise is ignored.
+		old = frappe.get_doc("Reservation", res_name)
+		cand = frappe.get_doc("Reservation", res_name)
+		all_dates = {str(r.stay_date) for r in old.night_rates}
+		night0 = str(old.night_rates[0].stay_date)
+		night1 = str(old.night_rates[1].stay_date)
+
+		def clone_rows():
+			return [
+				frappe._dict(
+					stay_date=r.stay_date,
+					rate=r.rate,
+					base_rate=r.base_rate,
+					discount_amount=r.discount_amount,
+				)
+				for r in old.night_rates
+			]
+
+		rows = clone_rows()
+		self.assertEqual(cand.judged_nights(old, rows), set())
+		rows[0].rate = 45.1254
+		self.assertEqual(cand.judged_nights(old, rows), set())
+		rows[0].rate = 45.121
+		self.assertEqual(cand.judged_nights(old, rows), {night0})
+
+		rows = clone_rows()
+		rows[1].base_rate = 45.121
+		self.assertEqual(cand.judged_nights(old, rows), {night1})
+
+		rows = clone_rows()
+		old.agreed_rate = 45.125
+		cand.agreed_rate = 45.1254
+		self.assertEqual(cand.judged_nights(old, rows), set())
+		cand.agreed_rate = 45.121
+		self.assertEqual(cand.judged_nights(old, rows), all_dates)
+
+		# 4. Sub-fils noise (< 0.0005 KWD) on a locked night row still passes cleanly.
+		ok_night = frappe.get_doc("Reservation", res_name)
+		ok_night.night_rates[0].rate = 45.1254
+		ok_night.special_requests = "R3 KWD locked night noise ok"
+		self._as_user(DESK, ok_night.save)
+
+	def test_usd_exact_half_cent_boundary_refuses_tamper_without_float64_drift(self):
+		usd_booked = self._as_user(
+			DESK, api.create_booking, PROP_USD_R3, self.rt_usd, d(4), d(6),
+			"USD Boundary Guest", "+12025550102", rate_plan=self.bar_usd, room=self.room_usd,
+		)
+		res_name = usd_booked["reservation"]
+		self.assertAlmostEqual(
+			flt(frappe.db.get_value("Reservation", res_name, "amount_after_tax")), 200.00, places=2,
+		)
+
+		# Exact USD -0.005 on amount_after_tax (200.00 -> 199.995) must raise PermissionError
+		# despite float64 abs(200.0 - 199.995) == 0.0049999999999954525 < 0.005.
+		doc = frappe.get_doc("Reservation", res_name)
+		doc.amount_after_tax = 199.995
+		with self.assertRaises(frappe.PermissionError):
+			self._as_user(DESK, doc.save)
+		self.assertAlmostEqual(
+			flt(frappe.db.get_value("Reservation", res_name, "amount_after_tax")), 200.00, places=2,
+		)
+
+		# Exact USD -0.005 on locked night rate (100.00 -> 99.995) must raise PermissionError.
+		doc = frappe.get_doc("Reservation", res_name)
+		doc.night_rates[0].rate = 99.995
+		with self.assertRaises(frappe.PermissionError):
+			self._as_user(DESK, doc.save)
+		reloaded = frappe.get_doc("Reservation", res_name)
+		self.assertAlmostEqual(flt(reloaded.night_rates[0].rate), 100.00, places=2)
+
+		# Exact USD -0.005 on agreed_rate (100.00 -> 99.995) must raise PermissionError.
+		gov_usd = frappe.get_doc("Reservation", res_name)
+		gov_usd.agreed_rate = 100.00
+		gov_usd.flags.kamra_agreed_rate_override = True
+		gov_usd.save(ignore_permissions=True)
+
+		doc = frappe.get_doc("Reservation", res_name)
+		doc.agreed_rate = 99.995
+		with self.assertRaises(frappe.PermissionError):
+			self._as_user(DESK, doc.save)
+		self.assertAlmostEqual(
+			flt(frappe.db.get_value("Reservation", res_name, "agreed_rate")), 100.00, places=2,
+		)
+
+		# Exact USD -0.005 boundary also holds in agreed_rate_overrides and judged_nights.
+		probe = frappe.get_doc("Reservation", res_name)
+		probe.contract_tariff = frappe.as_json({"agreed_rate": 100.00})
+		probe.agreed_rate = 99.995
+		self.assertTrue(probe.agreed_rate_overrides())
+
+		old = frappe.get_doc("Reservation", res_name)
+		cand = frappe.get_doc("Reservation", res_name)
+		cand.agreed_rate = 99.995
+		rows = [
+			frappe._dict(
+				stay_date=r.stay_date,
+				rate=r.rate,
+				base_rate=r.base_rate,
+				discount_amount=r.discount_amount,
+			)
+			for r in old.night_rates
+		]
+		self.assertEqual(cand.judged_nights(old, rows), {str(r.stay_date) for r in old.night_rates})
+
+		# Sub-half-cent USD noise (0.004 < 0.005) still succeeds cleanly.
+		ok_usd = frappe.get_doc("Reservation", res_name)
+		ok_usd.amount_after_tax = 200.004
+		ok_usd.special_requests = "R3 USD sub-half-cent noise ok"
+		self._as_user(DESK, ok_usd.save)
