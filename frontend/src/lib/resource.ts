@@ -25,7 +25,7 @@ export async function listResource(
   if (opts.orFilters?.length)
     params.set("or_filters", JSON.stringify(opts.orFilters))
   const res = await frappeFetch<{ data: Row[] }>(
-    `/api/resource/${encodeURIComponent(doctype)}?${params}`,
+    `/api/resource/${encodeURIComponent(doctype)}?${params.toString().replaceAll("+", "%20")}`,
   )
   return res.data
 }

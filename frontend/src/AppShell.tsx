@@ -44,7 +44,7 @@ import { subscribeRealtime } from "./lib/realtime"
 import { getTheme, setTheme } from "./lib/theme"
 import { setLang } from "./lib/dir"
 import { useOfferedLanguages, useT } from "./lib/i18n"
-import { loadLocale } from "./lib/money"
+import { loadLocale, useLocale } from "./lib/money"
 import { cn, formatDate } from "./lib/utils"
 import { useKiosk } from "./lib/kiosk"
 import { getSiteInfo, versionLabel } from "./lib/siteInfo"
@@ -105,11 +105,11 @@ function SearchShortcut() {
       onClick={() => window.dispatchEvent(new Event("kamra:open-palette"))}
       title={t("Search: find a guest or booking, or jump anywhere - press {combo}", { combo: isMac ? "⌘ Command" : "Ctrl" + " + K" })}
       aria-label={t("Open search")}
-      className="flex w-full items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50/70 px-3 py-2 text-sm text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600"
+      className="flex w-full min-w-0 items-center gap-2 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50/70 px-3 py-2 text-sm text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600"
     >
       <Search className="size-4 shrink-0" aria-hidden />
-      <span className="truncate whitespace-nowrap">{t("Search guests, bookings, screens, settings…")}</span>
-      <kbd className="ml-auto hidden rounded border border-zinc-200 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-zinc-500 md:inline">
+      <span className="min-w-0 truncate whitespace-nowrap">{t("Search guests, bookings, screens, settings…")}</span>
+      <kbd className="ml-auto hidden shrink-0 rounded border border-zinc-200 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-zinc-500 md:inline">
         {combo}
       </kbd>
     </button>
@@ -459,6 +459,8 @@ export default function AppShell() {
 
   useEffect(() => subscribeRealtime(() => setRefreshKey((k) => k + 1)), [])
 
+  // subscribe to locale/date_format updates so header Business date re-formats live
+  useLocale()
   // currency symbol + number locale follow the property's country pack
   useEffect(() => {
     loadLocale().then(() => setRefreshKey((k) => k + 1))
@@ -757,7 +759,7 @@ export default function AppShell() {
             {activeProperty.business_date !== activeProperty.calendar_date && <span className="rounded bg-amber-50 px-2 py-1 text-amber-800">{t("Calendar {date} · End of Day pending", {date: formatDate(activeProperty.calendar_date)})}</span>}
           </div>}
           <div className="flex min-w-0 flex-1 justify-center sm:px-2">
-            <div className="hidden w-full max-w-md lg:block">
+            <div className="hidden w-full max-w-md 2xl:block">
               <SearchShortcut />
             </div>
             <button
@@ -765,7 +767,7 @@ export default function AppShell() {
               onClick={() => window.dispatchEvent(new Event("kamra:open-palette"))}
               aria-label={t("Open search")}
               title={t("Open search")}
-              className="ms-auto grid size-9 place-items-center rounded-lg text-zinc-500 hover:bg-zinc-100 lg:hidden"
+              className="ms-auto grid size-9 place-items-center rounded-lg text-zinc-500 hover:bg-zinc-100 2xl:hidden"
             >
               <Search className="size-4" aria-hidden />
             </button>

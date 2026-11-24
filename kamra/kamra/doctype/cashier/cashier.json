@@ -59,7 +59,7 @@
    "fieldname": "max_cash_refund",
    "fieldtype": "Currency",
    "label": "Max Cash Refund",
-   "default": "5000"
+   "description": "In the property's currency. Blank: none set (Settings, Finance, Cash refund limit for new cashiers)."
   },
   {
    "fieldname": "sb_modes",
@@ -75,7 +75,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-30 18:00:00.000000",
+ "modified": "2026-11-23 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Cashier",

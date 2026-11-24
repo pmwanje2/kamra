@@ -142,7 +142,8 @@ company's contract doesn't re-price it.
 ## Add meal plans
 
 1. Open **Revenue → Meal Plans → New**.
-2. Pick a **Code**: EP, CP, MAP or AP.
+2. Pick a **Code**: a Meal Plan Code such as EP, CP, MAP or AP, or one the
+   hotel added itself (BB, HB, FB, AI...).
 3. Give it a **Label** guests understand, such as "Bed & breakfast".
 4. Enter **Price per adult / night** and **Price per child / night**.
 5. Tick **Default** for the plan the desk booking form should start with.
