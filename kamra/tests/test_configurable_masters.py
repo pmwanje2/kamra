@@ -547,3 +547,474 @@ class ConfigurableMastersTestCase(AuditTestCase):
 		doc = frappe.get_doc("Reservation", res.name)
 		doc.save(ignore_permissions=True)
 		self.assertEqual(doc.market_segment, "UT Legacy Segment")
+
+	# ── PR #47 R2: OPERA/SAP cashier, FX drawers, permissions, POS, groups ─
+
+	def test_custom_cash_fx_posts_to_foreign_drawer_not_expected_cash(self):
+		from kamra import cashier, ledger
+		from kamra.folio import open_folio
+
+		make_property(PROP_A, country="Uganda", currency="UGX", business_date=TODAY)
+		self.at(TODAY, "kamra.folio", "kamra.business_date", "kamra.ledger")
+		add_code("Payment Method", "UT Front Desk Till", property=PROP_A,
+		         tender_type="Cash", mode_of_payment="Front Desk UGX Till")
+		add_code("Payment Method", "UT USD Box", property=PROP_A,
+		         tender_type="Foreign Cash", mode_of_payment="Front Desk USD Box")
+		ledger.upsert_exchange_rate(PROP_A, "USD", 3700, 3700)
+		ledger.upsert_exchange_rate(PROP_A, "EUR", 4000, 4000)
+
+		res = self.booking()
+		folio_name = open_folio(res)
+		sess = cashier.open_session(PROP_A, opening_float=100_000)["name"]
+
+		with patch.object(localization, "tender_modes", return_value=None):
+			api.add_folio_payment(folio_name, "UT Front Desk Till", 50_000)
+			api.add_folio_payment(folio_name, "UT Front Desk Till", 10, currency="USD")
+			api.add_folio_payment(folio_name, "UT USD Box", 5, currency="USD")
+			api.add_folio_payment(folio_name, "UT Front Desk Till", 20, currency="EUR")
+
+		totals = cashier._recompute_session_totals(sess, persist=False)
+		# Only home UGX cash (50,000) + opening float (100,000) belongs in expected_cash
+		self.assertEqual(totals["cash"], 50_000.0)
+		self.assertEqual(totals["expected_cash"], 150_000.0)
+		# All foreign cash (10 USD + 5 USD = 55,500; 20 EUR = 80,000) stays out of expected_cash
+		self.assertEqual(totals["foreign_cash"], 135_500.0)
+
+		# Cashier Transaction stores currency and fx_amount on each FX row
+		txns = frappe.get_all(
+			"Cashier Transaction",
+			filters={"session": sess, "folio": folio_name},
+			fields=["mode", "currency", "fx_amount", "amount"],
+			order_by="creation asc",
+		)
+		self.assertEqual(
+			[(t.mode, t.currency, float(t.fx_amount or 0), float(t.amount)) for t in txns],
+			[
+				("UT Front Desk Till", "UGX", 0.0, 50_000.0),
+				("UT Front Desk Till", "USD", 10.0, 37_000.0),
+				("UT USD Box", "USD", 5.0, 18_500.0),
+				("UT Front Desk Till", "EUR", 20.0, 80_000.0),
+			],
+		)
+
+		# Session report exposes per-currency foreign drawers (OPERA Cashier Closure parity)
+		rep = cashier.session_report(sess)
+		by_ccy = {d["currency"]: d for d in rep.get("foreign_drawers") or []}
+		self.assertEqual(set(by_ccy.keys()), {"EUR", "USD"})
+		self.assertEqual(by_ccy["USD"]["expected_fx"], 15.0)
+		self.assertEqual(by_ccy["USD"]["home_equivalent"], 55_500.0)
+		self.assertEqual(by_ccy["EUR"]["expected_fx"], 20.0)
+		self.assertEqual(by_ccy["EUR"]["home_equivalent"], 80_000.0)
+
+		# Closing with per-currency foreign drawer counts computes per-currency variance
+		from kamra import settings as kamra_settings
+		kamra_settings.write_kv(PROP_A, "till_variance_tolerance", 100)
+		kamra_settings.clear_cache(PROP_A)
+		closed = cashier.close_session(
+			sess, counted_cash=150_000, foreign_counts={"USD": 14.0, "EUR": 20.0},
+		)
+		closed_by_ccy = {d["currency"]: d for d in closed.get("foreign_drawers") or []}
+		self.assertEqual(closed_by_ccy["USD"]["counted_fx"], 14.0)
+		self.assertEqual(closed_by_ccy["USD"]["variance_fx"], -1.0)
+		self.assertEqual(closed_by_ccy["EUR"]["counted_fx"], 20.0)
+		self.assertEqual(closed_by_ccy["EUR"]["variance_fx"], 0.0)
+		# Foreign drawer shortage flags session for supervisor variance review
+		self.assertEqual(closed["variance_status"], "Needs Review")
+		board = cashier.tills_board(PROP_A)
+		rev = next((r for r in board["variance_review"] if r["name"] == sess), None)
+		self.assertIsNotNone(rev)
+		rev_by_ccy = {d["currency"]: d for d in rev.get("foreign_drawers") or []}
+		self.assertEqual(rev_by_ccy["USD"]["variance_fx"], -1.0)
+
+	def test_refund_of_foreign_cash_type_keeps_right_tender_and_currency(self):
+		from kamra import cashier, ledger
+		from kamra.folio import open_folio
+
+		make_property(PROP_A, country="Uganda", currency="UGX", business_date=TODAY)
+		self.at(TODAY, "kamra.folio", "kamra.business_date", "kamra.ledger")
+		add_code("Payment Method", "UT USD Box", property=PROP_A,
+		         tender_type="Foreign Cash", mode_of_payment="Front Desk USD Box")
+		ledger.upsert_exchange_rate(PROP_A, "USD", 3700, 3700)
+
+		res = self.booking()
+		folio_name = open_folio(res)
+		sess = cashier.open_session(PROP_A, opening_float=100_000)["name"]
+
+		with patch.object(localization, "tender_modes", return_value=None):
+			api.add_folio_payment(folio_name, "UT USD Box", 10, currency="USD")
+			pay = frappe.get_doc("Folio", folio_name).payments[-1]
+
+			# 1. Explicitly refunding a Foreign Cash tender in home currency is refused
+			with self.assertRaises(frappe.ValidationError):
+				api.refund_folio_payment(
+					folio_name, amount=18_500, mode="UT USD Box",
+					reason="Invalid home refund on FX box", payment_row=pay.name,
+				)
+
+			# 2. Home-currency refund with mode=None defaults to home Cash (never "UT USD Box" in UGX)
+			api.refund_folio_payment(
+				folio_name, amount=18_500, mode=None,
+				reason="Partial refund in home cash", payment_row=pay.name,
+			)
+			home_ref = frappe.get_doc("Folio", folio_name).payments[-1]
+			self.assertEqual(home_ref.mode, "Cash")
+			self.assertEqual(home_ref.currency, "UGX")
+			self.assertEqual(float(home_ref.fx_amount or 0), 0.0)
+			self.assertEqual(float(home_ref.amount), -18_500.0)
+			totals_after_home = cashier._recompute_session_totals(sess, persist=False)
+			self.assertEqual(totals_after_home["expected_cash"], 81_500.0)
+			self.assertEqual(totals_after_home["foreign_cash"], 37_000.0)
+
+			# 3. Foreign-currency refund with currency="USD" and mode=None keeps "UT USD Box" and USD
+			api.refund_folio_payment(
+				folio_name, amount=5, currency="USD", mode=None,
+				reason="Return USD notes", payment_row=pay.name,
+			)
+			fx_ref = frappe.get_doc("Folio", folio_name).payments[-1]
+			self.assertEqual(fx_ref.mode, "UT USD Box")
+			self.assertEqual(fx_ref.currency, "USD")
+			self.assertEqual(float(fx_ref.fx_amount), -5.0)
+			self.assertEqual(float(fx_ref.amount), -18_500.0)
+
+		totals_after_fx = cashier._recompute_session_totals(sess, persist=False)
+		self.assertEqual(totals_after_fx["expected_cash"], 81_500.0)
+		self.assertEqual(totals_after_fx["foreign_cash"], 18_500.0)
+		rep = cashier.session_report(sess)
+		usd = next(d for d in rep["foreign_drawers"] if d["currency"] == "USD")
+		self.assertEqual(usd["expected_fx"], 5.0)
+
+	def test_reclassify_custom_cash_fx_to_foreign_cash_keeps_drawers_balanced(self):
+		from kamra import cashier, ledger
+		from kamra.folio import open_folio
+		from kamra.tests.audit_fixtures import ensure_user
+
+		make_property(PROP_A, country="Uganda", currency="UGX", business_date=TODAY, require_cashier_pin=0)
+		self.at(TODAY, "kamra.folio", "kamra.business_date", "kamra.ledger")
+		add_code("Payment Method", "UT Front Desk Till", property=PROP_A,
+		         tender_type="Cash", mode_of_payment="Front Desk UGX Till")
+		add_code("Payment Method", "UT USD Box", property=PROP_A,
+		         tender_type="Foreign Cash", mode_of_payment="Front Desk USD Box")
+		ledger.upsert_exchange_rate(PROP_A, "USD", 3700, 3700)
+
+		sup = ensure_user("ut.r2.sup@test.local", ["Finance"])
+		if not frappe.db.exists("Cashier PIN", sup):
+			frappe.get_doc({"doctype": "Cashier PIN", "user": sup, "pin": "8394"}).insert(ignore_permissions=True)
+
+		res = self.booking()
+		folio_name = open_folio(res)
+		sess = cashier.open_session(PROP_A, opening_float=0)["name"]
+		with patch.object(localization, "tender_modes", return_value=None):
+			api.add_folio_payment(folio_name, "UT Front Desk Till", 10, currency="USD")
+			row_name = frappe.get_doc("Folio", folio_name).payments[-1].name
+			api.correct_folio_payment(
+				folio_name, row_name,
+				action_type="reclassify_tender",
+				reason_code="REV-ACCOUNT",
+				reason_note="Move to USD Box",
+				idempotency_key="r2-reclass-fx-1",
+				destination_mode="UT USD Box",
+				supervisor_user=sup,
+				supervisor_pin="8394",
+			)
+		repost = frappe.get_doc("Folio", folio_name).payments[-1]
+		self.assertEqual((repost.mode, repost.currency, float(repost.fx_amount), float(repost.amount)),
+		                 ("UT USD Box", "USD", 10.0, 37_000.0))
+		totals = cashier._recompute_session_totals(sess, persist=False)
+		self.assertEqual(totals["expected_cash"], 0.0)
+		self.assertEqual(totals["foreign_cash"], 37_000.0)
+		rep = cashier.session_report(sess)
+		usd = next(d for d in rep["foreign_drawers"] if d["currency"] == "USD")
+		self.assertEqual(usd["expected_fx"], 10.0)
+
+	def test_outlet_payment_modes_is_property_scoped_and_pos_accepts_custom_instant(self):
+		from kamra import cashier, checkout, pos
+
+		make_property(PROP_A, country="Uganda", currency="UGX", business_date=TODAY, require_cashier_pin=0)
+		make_property(PROP_B, country="Uganda", currency="UGX", business_date=TODAY, require_cashier_pin=0)
+		self.at(TODAY)
+		add_code("Payment Method", "UT Airtel POS", property=PROP_A,
+		         tender_type="Instant", mode_of_payment="Airtel Money KLA")
+		add_code("Payment Method", "Mobile Money", property=PROP_B,
+		         tender_type="Instant", disabled=1)
+
+		pack_a, pack_b = localization.pack_for(PROP_A), localization.pack_for(PROP_B)
+		self.assertIn("UT Airtel POS", localization.outlet_payment_modes(pack_a, PROP_A))
+		self.assertIn("Mobile Money", localization.outlet_payment_modes(pack_a, PROP_A))
+		self.assertNotIn("UT Airtel POS", localization.outlet_payment_modes(pack_b, PROP_B))
+		self.assertNotIn("Mobile Money", localization.outlet_payment_modes(pack_b, PROP_B))
+		self.assertIn("UT Airtel POS", api.property_locale(PROP_A)["outlet_payment_modes"])
+		self.assertNotIn("Mobile Money", api.property_locale(PROP_B)["outlet_payment_modes"])
+		self.assertIn("UT Airtel POS", checkout._outlet_modes(PROP_A))
+		self.assertNotIn("Mobile Money", checkout._outlet_modes(PROP_B))
+
+		outlet_a = frappe.get_doc({
+			"doctype": "POS Outlet", "property": PROP_A,
+			"outlet_name": "UT R2 Bistro A", "outlet_type": "Restaurant", "gst_rate": 0,
+		}).insert(ignore_permissions=True).name
+		outlet_b = frappe.get_doc({
+			"doctype": "POS Outlet", "property": PROP_B,
+			"outlet_name": "UT R2 Bistro B", "outlet_type": "Restaurant", "gst_rate": 0,
+		}).insert(ignore_permissions=True).name
+		item_a = frappe.get_doc({
+			"doctype": "Menu Item", "property": PROP_A, "outlet": outlet_a,
+			"item_name": "UT R2 Coffee", "category": "Beverage", "price": 15_000,
+			"is_veg": 1, "available": 1, "prep_station": "Bar",
+		}).insert(ignore_permissions=True).name
+		item_b = frappe.get_doc({
+			"doctype": "Menu Item", "property": PROP_B, "outlet": outlet_b,
+			"item_name": "UT R2 Tea", "category": "Beverage", "price": 10_000,
+			"is_veg": 1, "available": 1, "prep_station": "Bar",
+		}).insert(ignore_permissions=True).name
+		order_a = pos.create_order(
+			outlet_a, [{"menu_item": item_a, "qty": 1}], order_type="Takeaway",
+		)["order"]
+		order_b = pos.create_order(
+			outlet_b, [{"menu_item": item_b, "qty": 1}], order_type="Takeaway",
+		)["order"]
+
+		sess_a = cashier.open_session(PROP_A, opening_float=0)["name"]
+		pos.pay_order(order_a, "UT Airtel POS")
+		self.assertEqual(frappe.db.get_value("POS Order", order_a, "payment_mode"), "UT Airtel POS")
+		self.assertEqual(cashier._recompute_session_totals(sess_a, persist=False)["upi"], 15_000.0)
+
+		with self.assertRaises(frappe.ValidationError):
+			pos.pay_order(order_b, "Mobile Money")
+
+	def test_night_audit_check_open_tills_uses_tender_type_and_separates_fx(self):
+		from kamra import cashier, ledger, night_audit
+		from kamra.folio import open_folio
+
+		make_property(PROP_A, country="Uganda", currency="UGX", business_date=TODAY)
+		self.at(TODAY, "kamra.folio", "kamra.business_date", "kamra.ledger")
+		add_code("Payment Method", "UT Front Desk Till", property=PROP_A,
+		         tender_type="Cash", mode_of_payment="Front Desk UGX Till")
+		ledger.upsert_exchange_rate(PROP_A, "USD", 3700, 3700)
+
+		res = self.booking()
+		folio_name = open_folio(res)
+		sess = cashier.open_session(PROP_A, opening_float=0)["name"]
+		with patch.object(localization, "tender_modes", return_value=None):
+			api.add_folio_payment(folio_name, "UT Front Desk Till", 40_000)
+			api.add_folio_payment(folio_name, "UT Front Desk Till", 10, currency="USD")
+
+		chk = night_audit.check_open_tills(PROP_A, TODAY)
+		item = next(i for i in chk["items"] if i["session"] == sess)
+		self.assertEqual(item["cash_taken"], 40_000.0)
+		usd = next((d for d in item.get("foreign_drawers") or [] if d["currency"] == "USD"), None)
+		self.assertIsNotNone(usd)
+		self.assertEqual(usd["expected_fx"], 10.0)
+
+	def test_cashier_allowed_modes_enforced_on_server_and_reflected_in_locale(self):
+		from kamra import cashier, checkout, pos
+		from kamra.folio import open_folio
+		from kamra.tests.audit_fixtures import ensure_user
+
+		make_property(PROP_A, country="Uganda", currency="UGX", business_date=TODAY, require_cashier_pin=0)
+		self.at(TODAY, "kamra.folio", "kamra.business_date", "kamra.ledger")
+		add_code("Payment Method", "UT Airtel Money", property=PROP_A,
+		         tender_type="Instant", mode_of_payment="Airtel Money")
+		desk_user = ensure_user("ut.r2.cashier@test.local", ["Front Desk"])
+		res = self.booking()
+		folio_name = open_folio(res)
+		outlet = frappe.get_doc({
+			"doctype": "POS Outlet", "property": PROP_A,
+			"outlet_name": "UT R2 Cafe", "outlet_type": "Restaurant", "gst_rate": 0,
+		}).insert(ignore_permissions=True).name
+		item = frappe.get_doc({
+			"doctype": "Menu Item", "property": PROP_A, "outlet": outlet,
+			"item_name": "UT R2 Juice", "category": "Beverage", "price": 12_000,
+			"is_veg": 1, "available": 1, "prep_station": "Bar",
+		}).insert(ignore_permissions=True).name
+		order = pos.create_order(
+			outlet, [{"menu_item": item, "qty": 1}], order_type="Takeaway",
+		)["order"]
+
+		with self.set_user(desk_user):
+			cashier.open_session(PROP_A, opening_float=0)
+		csh_name = cashier._cashier_for_user(PROP_A, desk_user)
+		csh_doc = frappe.get_doc("Cashier", csh_name)
+		# Invalid mode in allowed_modes is refused on validate
+		csh_doc.allowed_modes = "Card, UT No Such Mode"
+		with self.assertRaises(frappe.ValidationError):
+			csh_doc.save(ignore_permissions=True)
+		csh_doc.reload()
+		csh_doc.allowed_modes = "Card, UT Airtel Money"
+		csh_doc.save(ignore_permissions=True)
+
+		with self.set_user(desk_user), patch.object(localization, "tender_modes", return_value=None):
+			loc = api.property_locale(PROP_A)
+			self.assertEqual(loc["cashier_allowed_modes"], ["Card", "UT Airtel Money"])
+			self.assertEqual(loc["payment_modes"], ["Card", "UT Airtel Money"])
+			self.assertEqual(loc["outlet_payment_modes"], ["Card", "UT Airtel Money"])
+			self.assertEqual(checkout._modes(PROP_A), ["Card", "UT Airtel Money"])
+			self.assertEqual(checkout._outlet_modes(PROP_A), ["Card", "UT Airtel Money"])
+
+			with self.assertRaises(frappe.PermissionError):
+				api.add_folio_payment(folio_name, "Cash", 10_000)
+			with self.assertRaises(frappe.PermissionError):
+				pos.pay_order(order, "Cash")
+
+			api.add_folio_payment(folio_name, "Card", 10_000)
+			pos.pay_order(order, "UT Airtel Money")
+
+		# Blank allowed_modes restores unrestricted modes
+		csh_doc.reload()
+		csh_doc.allowed_modes = ""
+		csh_doc.save(ignore_permissions=True)
+		with self.set_user(desk_user), patch.object(localization, "tender_modes", return_value=None):
+			loc = api.property_locale(PROP_A)
+			self.assertIsNone(loc["cashier_allowed_modes"])
+			self.assertIn("Cash", loc["payment_modes"])
+			api.add_folio_payment(folio_name, "Cash", 5_000)
+
+	def test_create_group_booking_honors_booking_type(self):
+		add_code("Booking Type", "UT Retreat", description="Wellness Retreat")
+		out = api.create_group_booking(
+			property=PROP_A,
+			group_name="R2 Retreat Group",
+			check_in_date=d(5),
+			check_out_date=d(7),
+			rooms=[{"room_type": self.rt, "count": 2}],
+			guest_name="Retreat Lead",
+			booking_type="UT Retreat",
+		)
+		self.assertEqual(len(out["created"]), 2)
+		for res_name in out["created"]:
+			self.assertEqual(
+				frappe.db.get_value("Reservation", res_name, "booking_type"),
+				"UT Retreat",
+			)
+
+	def test_property_scoped_user_cannot_mutate_shared_payment_method(self):
+		from kamra.tests.audit_fixtures import ensure_user
+
+		fin_user = ensure_user("ut.r2.fin@test.local", ["Finance"])
+		up = frappe.get_doc({
+			"doctype": "User Permission", "user": fin_user,
+			"allow": "Property", "for_value": PROP_A, "apply_to_all_doctypes": 1,
+		}).insert(ignore_permissions=True).name
+		frappe.clear_cache(user=fin_user)
+		try:
+			with self.set_user(fin_user):
+				shared = frappe.get_doc("Payment Method", "Mobile Money")
+				shared.description = "Attempted global edit"
+				with self.assertRaises(frappe.PermissionError):
+					shared.save()
+
+				# Creating a property override for PROP_A succeeds without touching the shared row
+				override = frappe.get_doc({
+					"doctype": "Payment Method",
+					"code": "Mobile Money",
+					"description": "Kampala Mobile Money",
+					"property": PROP_A,
+					"tender_type": "Instant",
+					"mode_of_payment": "MTN MoMo KLA",
+				}).insert()
+				self.assertEqual(override.name, f"{PROP_A}::Mobile Money")
+			self.assertEqual(
+				frappe.db.get_value("Payment Method", "Mobile Money", "description"),
+				"Mobile Money",
+			)
+		finally:
+			frappe.db.set_value("Payment Method", "Mobile Money", "description", "Mobile Money", update_modified=False)
+			frappe.delete_doc("User Permission", up, ignore_permissions=True, force=True)
+			frappe.clear_cache(user=fin_user)
+
+	def test_historical_cashier_txns_and_backfill_patch_leave_closed_shifts_untouched(self):
+		from kamra import cashier, ledger
+		from kamra.folio import open_folio
+		from kamra.patches.v48 import backfill_open_cashier_txn_currency
+
+		make_property(PROP_A, country="Uganda", currency="UGX", business_date=TODAY)
+		self.at(TODAY, "kamra.folio", "kamra.business_date", "kamra.ledger")
+		add_code("Payment Method", "UT Front Desk Till", property=PROP_A,
+		         tender_type="Cash", mode_of_payment="Front Desk UGX Till")
+		ledger.upsert_exchange_rate(PROP_A, "USD", 3700, 3700)
+
+		res = self.booking()
+		folio_name = open_folio(res)
+		with patch.object(localization, "tender_modes", return_value=None):
+			# Closed shift with a legacy pre-R2 transaction (no currency/fx_amount)
+			closed_sess = cashier.open_session(PROP_A, opening_float=0)["name"]
+			api.add_folio_payment(folio_name, "UT Front Desk Till", 10, currency="USD")
+			closed_txn = frappe.db.get_value(
+				"Cashier Transaction", {"session": closed_sess}, "name",
+			)
+			# Simulate pre-R2 legacy DB state on the closed shift
+			frappe.db.sql(
+				"UPDATE `tabCashier Transaction` SET currency = NULL, fx_amount = 0 WHERE name = %s",
+				(closed_txn,),
+			)
+			frappe.db.sql(
+				"""UPDATE `tabCashier Session`
+				   SET status = 'Closed', system_cash = 37000, expected_cash = 37000,
+				       counted_cash = 37000, variance = 0
+				   WHERE name = %s""",
+				(closed_sess,),
+			)
+
+			# Open shift with a pre-R2 legacy FX transaction missing currency/fx_amount
+			open_sess = cashier.open_session(PROP_A, opening_float=0)["name"]
+			api.add_folio_payment(folio_name, "UT Front Desk Till", 10, currency="USD")
+			open_txn = frappe.db.get_value(
+				"Cashier Transaction", {"session": open_sess}, "name",
+			)
+			frappe.db.sql(
+				"UPDATE `tabCashier Transaction` SET currency = NULL, fx_amount = 0 WHERE name = %s",
+				(open_txn,),
+			)
+			frappe.db.sql(
+				"UPDATE `tabCashier Session` SET system_cash = 37000, expected_cash = 37000 WHERE name = %s",
+				(open_sess,),
+			)
+
+		# Run migration patch twice (must be idempotent)
+		backfill_open_cashier_txn_currency.execute()
+		backfill_open_cashier_txn_currency.execute()
+
+		# Closed shift and its transaction MUST remain completely untouched
+		closed_row = frappe.db.get_value(
+			"Cashier Session", closed_sess,
+			["status", "system_cash", "expected_cash", "counted_cash", "variance"], as_dict=True,
+		)
+		self.assertEqual(
+			(closed_row.status, float(closed_row.system_cash), float(closed_row.expected_cash),
+			 float(closed_row.counted_cash), float(closed_row.variance)),
+			("Closed", 37000.0, 37000.0, 37000.0, 0.0),
+		)
+		closed_txn_row = frappe.db.get_value(
+			"Cashier Transaction", closed_txn, ["currency", "fx_amount"], as_dict=True,
+		)
+		self.assertFalse(closed_txn_row.currency)
+		self.assertEqual(float(closed_txn_row.fx_amount or 0), 0.0)
+
+		# Open shift transaction IS backfilled and recomputed into the USD foreign drawer
+		open_txn_row = frappe.db.get_value(
+			"Cashier Transaction", open_txn, ["currency", "fx_amount"], as_dict=True,
+		)
+		self.assertEqual(open_txn_row.currency, "USD")
+		self.assertEqual(float(open_txn_row.fx_amount), 10.0)
+		open_totals = cashier._recompute_session_totals(open_sess, persist=False)
+		self.assertEqual(open_totals["expected_cash"], 0.0)
+		self.assertEqual(open_totals["foreign_cash"], 37_000.0)
+		# Legacy Foreign Cash row without currency column still resolves via notes
+		legacy_fc_txn = frappe.get_doc({
+			"doctype": "Cashier Transaction",
+			"session": open_sess,
+			"property": PROP_A,
+			"kind": "Payment",
+			"mode": "Foreign Cash",
+			"amount": 92_500.0,
+			"business_date": TODAY,
+			"notes": "USD 25.00 @ 3700",
+			"posted_by": "Administrator",
+			"posted_at": frappe.utils.now_datetime(),
+		}).insert(ignore_permissions=True)
+		frappe.db.sql(
+			"UPDATE `tabCashier Transaction` SET currency = NULL, fx_amount = 0 WHERE name = %s",
+			(legacy_fc_txn.name,),
+		)
+		rep = cashier.session_report(open_sess)
+		usd = next(d for d in rep["foreign_drawers"] if d["currency"] == "USD")
+		self.assertEqual(usd["expected_fx"], 35.0)
+		self.assertEqual(rep["totals"]["expected_cash"], 0.0)
