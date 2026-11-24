@@ -1393,8 +1393,8 @@ class Reservation(Document):
 			tax_dec = after_dec - raw_before
 			before_dec = raw_before
 		else:
-			after_dec = round_rate_amount(raw_before, 0, "Nearest", currency)
-			before_dec = after_dec
+			before_dec = raw_before
+			after_dec = raw_before
 			tax_dec = Decimal(0)
 		before, tax, after = float(before_dec), float(tax_dec), float(after_dec)
 		base_total = sum(float(entry_rate(r["rate"], r["gst_rate"], inclusive, places))
