@@ -24,6 +24,7 @@ interface RatePlanPolicy {
   rounding_step: number
   rounding_mode: string
   base_rate_plan: string | null
+  is_tariff?: boolean
 }
 
 /** A night under a rate plan: a contract night (the agreed rate a booking locks), a card-priced one, or refused. */
@@ -40,7 +41,15 @@ interface Calendar {
   from: string
   days: number
   tax_inclusive: boolean
-  room_types: { room_type: string; code: string; name: string; base_price: number; nights: CalendarNight[] }[]
+  room_types: {
+    room_type: string
+    code: string
+    name: string
+    base_price: number
+    room_count?: number
+    sellable?: boolean
+    nights: CalendarNight[]
+  }[]
   rate_plans?: RatePlanPolicy[]
   default_plan?: string | null
   property_currency?: string
@@ -85,7 +94,8 @@ export default function RateCalendar() {
     setData(null)
     setErr(null)
     call<Calendar>("kamra.rates.rate_calendar", { property: getCurrentProperty(), from_date: from, days,
-      ...(ratePlan ? { rate_plan: ratePlan } : {}), ...(company && !cardChosen ? { company } : {}) })
+      ...(ratePlan ? { rate_plan: ratePlan } : cardChosen ? { rate_plan: "" } : {}),
+      ...(company && !cardChosen ? { company } : {}) })
       .then((d) => {
         if (!live) return
         setData(d)
@@ -94,14 +104,16 @@ export default function RateCalendar() {
       .catch((e) => { if (live) setErr(serverError(e)) })
     return () => { live = false }
   }, [from, days, ratePlan, company, cardChosen])
+  const defaultIsTariff = !!plans.find((p) => p.name === data?.default_plan)?.is_tariff
+    || (rateParam === null && !company && !!data?.rate_plan)
   const choose = (key: "rate_plan" | "company", value: string) => {
     setPick(null)
     setParams((p) => {
       // Customer controls Rate plan (SAP Fiori IN/OUT parameter): a plan chosen holds only for the customer it
-      // was chosen with, so a new or cleared customer derives it again (its negotiated plan, else the card rate)
+      // was chosen with, so a new or cleared customer derives it again (its negotiated plan, else the default/card rate)
       if (key === "company") p.delete("rate_plan")
-      // with a customer, the card rate stays chosen as ?rate_plan= so the negotiated plan does not replace it
-      if (value || (key === "rate_plan" && p.get("company"))) p.set(key, value)
+      // with a customer or a tariff default plan, the card rate stays chosen as ?rate_plan= so the default does not replace it
+      if (value || (key === "rate_plan" && (p.get("company") || defaultIsTariff))) p.set(key, value)
       else p.delete(key)
       return p
     }, { replace: true })
@@ -164,7 +176,7 @@ export default function RateCalendar() {
         <div className="flex flex-wrap items-center gap-2">
           <select
             className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
-            value={negotiated ? plan!.name : ratePlan}
+            value={plan ? plan.name : ratePlan}
             onChange={(e) => choose("rate_plan", e.target.value)}
             aria-label={t("Rate plan")}
           >
@@ -238,16 +250,40 @@ export default function RateCalendar() {
                 </tr>
               </thead>
               <tbody>
-                {data.room_types.map((r) => (
+                {data.room_types.map((r) => {
+                  const noRooms = r.room_count === 0
+                  return (
                   <tr key={r.room_type} className="border-b border-zinc-100">
-                    <td className="sticky start-0 bg-white px-3 py-2 font-medium">{r.name}</td>
+                    <td className="sticky start-0 bg-white px-3 py-2 font-medium">
+                      <span>{r.name}</span>
+                      {noRooms && (
+                        <span className="ms-2 inline-block rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
+                          {t("No rooms")}
+                        </span>
+                      )}
+                    </td>
                     {!plan && (
                       <td className="px-2 py-2 text-end tabular-nums text-zinc-500">
-                        {cur()}{amount(r.base_price)}
+                        {noRooms ? "—" : `${cur()}${amount(r.base_price)}`}
                       </td>
                     )}
                     {r.nights.map((x, i) => {
                       const on = pick?.rt === r.room_type && pick.i === i
+                      if (noRooms) {
+                        return (
+                          <td key={x.date} className="p-0.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => setPick(on ? null : { rt: r.room_type, i })}
+                              aria-pressed={on}
+                              aria-label={t("No rooms")}
+                              title={t("No rooms configured for this room type.")}
+                              className={cn("w-full min-w-16 rounded-md px-2 py-1.5 text-zinc-400 hover:bg-zinc-50",
+                                on && "ring-2 ring-brand-600")}
+                            >—</button>
+                          </td>
+                        )
+                      }
                       if (x.available === false || x.rate == null) {
                         return (
                           <td key={x.date} className="p-0.5 text-center">
@@ -296,7 +332,8 @@ export default function RateCalendar() {
                       )
                     })}
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </CardContent>
@@ -311,7 +348,20 @@ export default function RateCalendar() {
         </div>
       )}
 
-      {picked && pickedType && (picked.available === false || picked.rate == null || picked.contract) && (
+      {picked && pickedType && pickedType.room_count === 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">
+              {pickedType.name} · {picked.date}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1.5 text-sm">
+            <p className="text-amber-800">{t("No rooms configured for this room type.")}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {picked && pickedType && pickedType.room_count !== 0 && (picked.available === false || picked.rate == null || picked.contract) && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
@@ -328,7 +378,7 @@ export default function RateCalendar() {
         </Card>
       )}
 
-      {picked && pickedType && picked.rate != null && !picked.contract && picked.available !== false && (
+      {picked && pickedType && pickedType.room_count !== 0 && picked.rate != null && !picked.contract && picked.available !== false && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">

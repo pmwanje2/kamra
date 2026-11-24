@@ -161,6 +161,16 @@ export interface ScreenConfig {
     statusCheck?: boolean
     /** Map a Check field (0/1) to explicit badge labels (e.g. System / Custom). */
     booleanBadge?: { truthy: string; falsy?: string }
+    /** Computed client-side column (omitted from Frappe listResource fields). */
+    virtual?: boolean
+    /** Custom cell renderer for display. */
+    render?: (row: Row) => ReactNode
+    /** Explicit CSV export value for computed columns. */
+    csvValue?: (row: Row) => string | number | null
+    /** Optional table width class (e.g. "w-[24%]"). */
+    width?: string
+    /** Allow wrapping instead of truncating in table cells. */
+    wrap?: boolean
   }[]
   form: FieldSpec[]
   formNote?: string
@@ -601,10 +611,13 @@ const cellValue = (v: unknown, t: (s: string) => string = translate) =>
 export function ResourceScreen({
   config,
   headerAction,
+  onReload,
 }: {
   config: ScreenConfig
   /** Extra control rendered in the header next to New (e.g. a bulk import). */
   headerAction?: ReactNode
+  /** Optional hook fired whenever rows reload after create/update/delete. */
+  onReload?: () => void
 }) {
   const { t, lang } = useT()
   const { roles } = useAuth()
@@ -660,7 +673,7 @@ export function ResourceScreen({
   const pageSize = config.pageSize ?? 0
 
   const fields = Array.from(
-    new Set(["name", ...config.columns.map((c) => c.field)]),
+    new Set(["name", ...config.columns.filter((c) => !c.virtual).map((c) => c.field)]),
   )
 
   // debounce the search box
@@ -764,7 +777,7 @@ export function ResourceScreen({
     downloadCsv(
       `${config.doctype.toLowerCase().replace(/ /g, "-")}-${new Date().toISOString().slice(0, 10)}`,
       cols.map((c) => c.label),
-      all.map((r) => cols.map((c) => r[c.field] as string | number | null)),
+      all.map((r) => cols.map((c) => (c.csvValue ? c.csvValue(r) : r[c.field] as string | number | null))),
     )
   }
 
@@ -851,6 +864,7 @@ export function ResourceScreen({
       }
       setEditing(null)
       load()
+      onReload?.()
     } catch (e) {
       setError(serverError(e))
     } finally {
@@ -865,6 +879,7 @@ export function ResourceScreen({
       await deleteResource(config.doctype, editing.name)
       setEditing(null)
       load()
+      onReload?.()
     } catch (e) {
       setError(serverError(e))
     } finally {
@@ -1018,7 +1033,7 @@ export function ResourceScreen({
                   <th
                     key={c.field}
                     className={
-                      "py-2 pr-4" + (i === 0 ? " w-[22%]" : "")
+                      "py-2 pr-4" + (c.width ? ` ${c.width}` : i === 0 ? " w-[22%]" : "")
                     }
                   >
                     {t(c.label)}
@@ -1037,13 +1052,15 @@ export function ResourceScreen({
                     <td
                       key={c.field}
                       className={
-                        "truncate py-2.5 pr-4" +
-                        (typeof row[c.field] === "number"
+                        (c.wrap ? "py-2.5 pr-4 align-top" : "truncate py-2.5 pr-4") +
+                        (!c.render && typeof row[c.field] === "number"
                           ? " text-right tabular-nums"
                           : "")
                       }
                     >
-                      {c.statusCheck ? (
+                      {c.render ? (
+                        c.render(row)
+                      ) : c.statusCheck ? (
                         <Badge tone={row[c.field] ? "zinc" : "green"}>
                           {t(row[c.field] ? "Disabled" : "Active")}
                         </Badge>

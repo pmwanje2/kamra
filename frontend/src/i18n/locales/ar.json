@@ -6757,5 +6757,16 @@
   "Price each rate plan per room type and occupancy, in the contract currency.": "سعِّر كل خطة سعر لكل نوع غرفة وإشغال، بعملة العقد.",
   "Rate plan: {plan}": "خطة السعر: {plan}",
   "Negotiated rate plan for {customer}": "خطة سعر متفاوض عليها لـ {customer}",
-  "Clear rate plan and customer": "مسح خطة السعر والعميل"
+  "Clear rate plan and customer": "مسح خطة السعر والعميل",
+  "Selling rate / night": "سعر البيع / ليلة",
+  "{plan} · 2 adults": "{plan} · بالغان",
+  "No rate set": "لا يوجد سعر محدد",
+  "No rooms": "لا توجد غرف",
+  "No rooms configured for this room type.": "لم يتم إعداد أي غرف لهذا النوع من الغرف.",
+  "No tariff set for: {plans}": "لم يتم تعيين تعرفة لـ: {plans}",
+  "Set its tariff in Contract Tariffs": "قم بتعيين تعرفتها في التعرفات التعاقدية",
+  "Room types without a tariff": "أنواع الغرف التي ليس لها تعرفة",
+  "These room types have no contract tariff on this price list yet.": "لا تحتوي أنواع الغرف هذه على تعرفة تعاقدية في قائمة الأسعار هذه بعد.",
+  "{n} room": "غرفة واحدة ({n})",
+  "Open room type": "فتح نوع الغرفة"
 }

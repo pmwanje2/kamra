@@ -693,5 +693,17 @@
   "Rate calendar": "Kalender tarif",
   "Rate plan: {plan}": "Paket tarif: {plan}",
   "Negotiated rate plan for {customer}": "Paket tarif negosiasi untuk {customer}",
-  "Clear rate plan and customer": "Hapus paket tarif dan pelanggan"
+  "Clear rate plan and customer": "Hapus paket tarif dan pelanggan",
+  "Selling rate / night": "Tarif jual / malam",
+  "{plan} · 2 adults": "{plan} · 2 dewasa",
+  "No rate set": "Tarif belum diatur",
+  "No rooms": "Tidak ada kamar",
+  "No rooms configured for this room type.": "Belum ada kamar yang dikonfigurasi untuk tipe kamar ini.",
+  "No tariff set for: {plans}": "Belum ada tarif untuk: {plans}",
+  "Set its tariff in Contract Tariffs": "Atur tarifnya di Tarif Kontrak",
+  "Room types without a tariff": "Tipe kamar tanpa tarif",
+  "These room types have no contract tariff on this price list yet.": "Tipe kamar ini belum memiliki tarif kontrak pada daftar harga ini.",
+  "{n} room": "{n} kamar",
+  "{n} rooms": "{n} kamar",
+  "Open room type": "Buka tipe kamar"
 }

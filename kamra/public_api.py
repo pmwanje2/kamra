@@ -202,13 +202,18 @@ def catalog_index(property_slug: str | None = None):
 		return {"mode": "properties", "properties": properties,
 		        "ui_locale": _public_locale(properties[0].name)}
 
+	from kamra.api import _sellable_room_types
 	property_name = properties[0].name if properties else default_property()
 	prop = frappe.get_doc("Property", property_name)
-	room_types = []
-	for rt_name in frappe.get_all(
+	rt_names = frappe.get_all(
 		"Room Type", filters={"property": property_name, "disabled": 0},
 		pluck="name", order_by="base_price asc",
-	):
+	)
+	sellable = _sellable_room_types(property_name, rt_names)
+	room_types = []
+	for rt_name in rt_names:
+		if rt_name not in sellable:
+			continue
 		room_types.append(_room_type_payload(frappe.get_doc("Room Type", rt_name)))
 	locations = _build_locations(prop, room_types)
 	sites = [loc for loc in locations if loc.get("slug")]
@@ -326,12 +331,17 @@ def showcase(property: str, listing_slug: str | None = None,
 	if not prop.get("booking_engine_enabled"):
 		frappe.throw("Online booking is not enabled for this property.")
 
-	room_types = []
-	for rt_name in frappe.get_all(
+	from kamra.api import _sellable_room_types
+	rt_names = frappe.get_all(
 		"Room Type",
 		filters=_room_type_filters(property, listing_slug, location_slug),
 		pluck="name", order_by="base_price asc",
-	):
+	)
+	sellable = _sellable_room_types(property, rt_names)
+	room_types = []
+	for rt_name in rt_names:
+		if rt_name not in sellable:
+			continue
 		room_types.append(_room_type_payload(frappe.get_doc("Room Type", rt_name)))
 
 	locations = _build_locations(prop, room_types)
@@ -387,7 +397,7 @@ def search_stay(property: str, check_in_date: str, check_out_date: str,
 	# available_rooms is staff-only (@require_roles) since it's also an
 	# MCP / Kamra Agent tool; guests need the same availability math without
 	# role gate, so this calls the same underlying helpers directly.
-	from kamra.api import _available_rooms_raw, _block_hold
+	from kamra.api import _available_rooms_raw, _block_hold, _sellable_room_types
 	from kamra.pricing import capacity_overflow, quote
 	from kamra.siu.availability import has_active_sius, sellable_count
 
@@ -410,11 +420,15 @@ def search_stay(property: str, check_in_date: str, check_out_date: str,
 	free = [m.name for m in mps if not (m.price_per_adult or m.price_per_child)]
 	meal_plans = [free[0] if free else ""] + [m.name for m in mps if m.name not in free]
 	results = []
-	for rt in frappe.get_all(
+	rt_names = frappe.get_all(
 		"Room Type",
 		filters=_room_type_filters(property, listing_slug, location_slug),
 		pluck="name", order_by="base_price asc",
-	):
+	)
+	sellable = _sellable_room_types(property, rt_names)
+	for rt in rt_names:
+		if rt not in sellable:
+			continue
 		hold = _block_hold(property, rt, check_in_date, check_out_date)
 		if has_active_sius(property, rt):
 			left = max(0, sellable_count(

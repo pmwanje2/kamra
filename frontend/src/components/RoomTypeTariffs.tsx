@@ -26,12 +26,16 @@ interface TariffList {
     rounding_step?: number
     rounding_mode?: string
   }[]
-  all_active_plans_tariff?: boolean
+  all_active_plans_tariff?: boolean | number
   property_currency?: string
   /** the default active plan's tariff, else the only plan's */
   primary_rate_plan?: string | null
+  /** active plans priced by a tariff (base or derived) */
+  tariff_plans?: { name: string; label?: string | null }[]
   /** active plans no tariff prices, on themselves or a base plan */
   card_rate_plans?: { name: string; label?: string | null }[]
+  /** active tariff-backed plans that have no approved tariff for this room type */
+  unpriced_plans?: { name: string; label?: string | null }[]
 }
 
 /** A room type's contract tariffs: the price its rate plans sell at (OPERA Rate Details, SAP PR00). */
@@ -70,7 +74,7 @@ export default function RoomTypeTariffs({ row }: { row: Row; reload?: () => void
         {" · "}{roundingRule(primary.rounding_step, primary.rounding_mode, locale)}
       </p>
     </div>}
-    {data?.all_active_plans_tariff && <p className="text-sm text-amber-800">
+    {!!data?.all_active_plans_tariff && <p className="text-sm text-amber-800">
       {t("The card rate is not used by any active rate plan.")}
     </p>}
     {data && !data.tariffs.length && <p className="text-sm text-zinc-600">{t("No approved contract tariffs.")}</p>}
@@ -100,6 +104,14 @@ export default function RoomTypeTariffs({ row }: { row: Row; reload?: () => void
         </tr>)}</tbody>
       </table>
     </div>}
+    {!!data?.unpriced_plans?.length && <p className="text-sm text-amber-800">
+      {t("No tariff set for: {plans}", { plans: data.unpriced_plans.map(plan => plan.label || plan.name).join(", ") })}
+    </p>}
+    {data && (!data.tariffs.length || !!data.unpriced_plans?.length) && <p className="text-sm">
+      <Link to="/tariffs" className="font-medium text-brand-700 hover:underline">
+        {t("Set its tariff in Contract Tariffs")}
+      </Link>
+    </p>}
     {!!data?.card_rate_plans?.length && <p className="text-sm text-zinc-600">
       {t("Priced from the card rate: {plans}", { plans: data.card_rate_plans.map(plan => plan.label || plan.name).join(", ") })}
     </p>}

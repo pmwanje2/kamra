@@ -693,5 +693,17 @@
   "Rate calendar": "Ratenkalender",
   "Rate plan: {plan}": "Ratenplan: {plan}",
   "Negotiated rate plan for {customer}": "Verhandelter Ratenplan für {customer}",
-  "Clear rate plan and customer": "Ratenplan und Kunde zurücksetzen"
+  "Clear rate plan and customer": "Ratenplan und Kunde zurücksetzen",
+  "Selling rate / night": "Verkaufspreis / Nacht",
+  "{plan} · 2 adults": "{plan} · 2 Erwachsene",
+  "No rate set": "Kein Preis festgelegt",
+  "No rooms": "Keine Zimmer",
+  "No rooms configured for this room type.": "Für diese Zimmerkategorie sind keine Zimmer eingerichtet.",
+  "No tariff set for: {plans}": "Kein Tarif festgelegt für: {plans}",
+  "Set its tariff in Contract Tariffs": "Tarif unter Vertragstarife festlegen",
+  "Room types without a tariff": "Zimmerkategorien ohne Tarif",
+  "These room types have no contract tariff on this price list yet.": "Für diese Zimmerkategorien gibt es auf dieser Preisliste noch keinen Vertragstarif.",
+  "{n} room": "{n} Zimmer",
+  "{n} rooms": "{n} Zimmer",
+  "Open room type": "Zimmerkategorie öffnen"
 }
