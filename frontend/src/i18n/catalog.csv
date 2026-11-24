@@ -7173,3 +7173,4 @@ Room types without a tariff,Room types without a tariff,أنواع الغرف ا
 These room types have no contract tariff on this price list yet.,These room types have no contract tariff on this price list yet.,لا تحتوي أنواع الغرف هذه على تعرفة تعاقدية في قائمة الأسعار هذه بعد.,Estos tipos de habitación aún no tienen tarifa contractual en esta lista de precios.,Estes tipos de quarto ainda não têm tarifa contratual nesta tabela de preços.,这些房型在此价目表中尚未设置合同价。,screens/ContractTariffs.tsx,,translated
 {n} room,{n} room,غرفة واحدة ({n}),{n} habitación,{n} quarto,{n} 间房,screens/ContractTariffs.tsx,n,translated
 Open room type,Open room type,فتح نوع الغرفة,Abrir tipo de habitación,Abrir tipo de quarto,打开房型,screens/ContractTariffs.tsx,,translated
+Inherited from the base rate plan.,Inherited from the base rate plan.,موروثة من خطة الأسعار الأساسية.,Heredada del plan tarifario base.,Herdada do plano tarifário base.,继承自基础房价方案。,screens/configs.ts,,translated

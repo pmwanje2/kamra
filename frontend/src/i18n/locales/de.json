@@ -705,5 +705,6 @@
   "These room types have no contract tariff on this price list yet.": "Für diese Zimmerkategorien gibt es auf dieser Preisliste noch keinen Vertragstarif.",
   "{n} room": "{n} Zimmer",
   "{n} rooms": "{n} Zimmer",
-  "Open room type": "Zimmerkategorie öffnen"
+  "Open room type": "Zimmerkategorie öffnen",
+  "Inherited from the base rate plan.": "Von der Basispreisrate übernommen."
 }

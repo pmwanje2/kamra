@@ -6768,5 +6768,6 @@
   "Room types without a tariff": "أنواع الغرف التي ليس لها تعرفة",
   "These room types have no contract tariff on this price list yet.": "لا تحتوي أنواع الغرف هذه على تعرفة تعاقدية في قائمة الأسعار هذه بعد.",
   "{n} room": "غرفة واحدة ({n})",
-  "Open room type": "فتح نوع الغرفة"
+  "Open room type": "فتح نوع الغرفة",
+  "Inherited from the base rate plan.": "موروثة من خطة الأسعار الأساسية."
 }

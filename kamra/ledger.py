@@ -213,6 +213,45 @@ def unsaved_charges(folio_doc) -> list:
 	return [c for c in folio_doc.charges if not c.name]
 
 
+def sync_folio_rounding_ledger(folio_doc, session: str | None = None) -> None:
+	"""Keep the Guest ledger equal to the folio's document-rounded total.
+
+	Each Folio Charge posts its exact unrounded total to the Guest ledger, while
+	`_recalculate` rounds the folio's document total to the currency's ISO 4217
+	minor unit (e.g. whole UGX on tax-exclusive stays). When the two differ, post
+	the delta under `Folio Rounding` so `folio_reconciliation` stays in balance.
+	No-op when the document total already matches the raw line sum."""
+	if not getattr(folio_doc, "name", None) or not getattr(folio_doc, "property", None):
+		return
+	if not hasattr(frappe.db, "sql"):
+		return
+	raw_total = sum(Decimal(str(c.total or 0)) for c in (folio_doc.charges or []))
+	target = Decimal(str(folio_doc.grand_total or 0)) - raw_total
+	current_rows = frappe.db.sql(
+		"""SELECT COALESCE(SUM(debit - credit), 0) FROM `tabFolio Ledger Entry`
+		   WHERE folio = %s AND ledger = 'Guest' AND source_doctype = 'Folio Rounding'""",
+		folio_doc.name,
+	)
+	current = Decimal(str((current_rows[0][0] if current_rows else 0) or 0))
+	delta = (target - current).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+	if abs(delta) < Decimal("0.0001"):
+		return
+	try:
+		write_ledger_entry(
+			property=folio_doc.property,
+			folio=folio_doc.name,
+			ledger="Guest",
+			debit=float(delta) if delta > 0 else 0,
+			credit=float(-delta) if delta < 0 else 0,
+			description="Currency rounding adjustment",
+			session=session,
+			source_doctype="Folio Rounding",
+			source_name=folio_doc.name,
+		)
+	except Exception:
+		frappe.log_error(title="ledger rounding write failed")
+
+
 def ledger_charges(folio_doc, rows, session: str | None = None) -> None:
 	"""Post saved charge rows to the Guest ledger through
 	record_charge_ledger - the path for automatic postings (room nights,
@@ -220,6 +259,8 @@ def ledger_charges(folio_doc, rows, session: str | None = None) -> None:
 	already on the ledger is skipped, so a caller can never double post.
 	Like a manual charge, a ledger failure is logged, not raised: the
 	folio line stands and the backfill patch can pick it up."""
+	posted_any = False
+	failed_any = False
 	for row in rows:
 		if not row.name:
 			continue
@@ -229,8 +270,12 @@ def ledger_charges(folio_doc, rows, session: str | None = None) -> None:
 			continue
 		try:
 			record_charge_ledger(folio_doc, row.as_dict(), session=session)
+			posted_any = True
 		except Exception:
+			failed_any = True
 			frappe.log_error(title="ledger charge write failed")
+	if posted_any and not failed_any:
+		sync_folio_rounding_ledger(folio_doc, session=session)
 
 
 def save_folio(folio_doc, session: str | None = None) -> None:
@@ -1834,9 +1879,30 @@ def generate_proforma(folio: str, notes: str | None = None,
 		inv["projected_lines"] = _projected_lines(f)
 		posted = flt(f.get("grand_total"))
 		ahead = round(sum(flt(l["total"]) for l in inv["projected_lines"]), 2)
+		est_grand = round(posted + ahead, 2)
+		if inv["projected_lines"] and f.get("property") and (f.get("charges") or not posted):
+			# Document-level rounding across posted + projected lines so the proforma
+			# estimate agrees with the quote and the final check-out folio.
+			from kamra.pricing import property_currency, round_rate_amount
+			all_lines = [*(f.get("charges") or []), *inv["projected_lines"]]
+			raw_base = sum(Decimal(str(l.get("amount") or 0)) for l in all_lines)
+			raw_tax = sum(Decimal(str(l.get("gst_amount") or 0)) for l in all_lines)
+			currency = property_currency(f.get("property"))
+			est_grand_dec = (
+				round_rate_amount(raw_base + raw_tax, 0, "Nearest", currency)
+				if raw_tax
+				else round_rate_amount(raw_base, 0, "Nearest", currency)
+			)
+			est_grand = float(est_grand_dec)
+			ahead = round(est_grand - posted, 2)
+		est_balance = (
+			round(est_grand - flt(f.get("payments_total")), 2)
+			if "payments_total" in f
+			else round(flt(f.get("balance")) + ahead, 2)
+		)
 		inv["estimate"] = {"posted_total": round(posted, 2), "projected_total": ahead,
-		                   "grand_total": round(posted + ahead, 2),
-		                   "balance": round(flt(f.get("balance")) + ahead, 2)}
+		                   "grand_total": est_grand,
+		                   "balance": est_balance}
 		stay = inv.get("stay") or {}
 		if stay.get("reservation") and stay.get("reference_currency"):
 			# the estimate in the contract currency, the projected nights at the rate they would post at
@@ -2118,6 +2184,7 @@ def batch_post_charge(folios: str | list, charge_type: str, amount: float,
 		except Exception:
 			sess = None
 		record_charge_ledger(doc, charge.as_dict(), session=sess)
+		sync_folio_rounding_ledger(doc, session=sess)
 		posted.append(fn)
 	return {"posted": posted, "count": len(posted)}
 

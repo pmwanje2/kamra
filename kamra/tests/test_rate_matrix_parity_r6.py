@@ -567,8 +567,10 @@ class RatePlanPriceListCurrencyTest(RateMatrixHarness):
 		return doc
 
 	def test_a_plan_in_another_currency_than_its_price_list_is_refused(self):
+		# Blank currency on a tariff price list takes the price list's currency (P1-2), never the property's UGX.
+		self.assertEqual(self.validate().currency, "USD")
 		with self.assertRaisesRegex(ValidationError, "Contract USD"):
-			self.validate()  # blank: the property's UGX
+			self.validate(currency="UGX")
 		with self.assertRaisesRegex(ValidationError, "USD"):
 			self.validate(currency="EUR")
 		self.validate(currency="USD")

@@ -832,10 +832,21 @@ class Reservation(Document):
 		# get their adjustment lines): the totals follow the same nights
 		d_base, d_tax = self.set_night_rates(q)
 		if d_base or d_tax:
-			self.amount_before_tax = round(flt(self.amount_before_tax) + d_base, 2)
-			self.tax_amount = round(flt(self.tax_amount) + d_tax, 2)
-			self.amount_after_tax = round(
-				flt(self.amount_before_tax) + flt(self.tax_amount), 2)
+			from decimal import Decimal
+
+			from kamra.pricing import property_currency, round_rate_amount
+			base_dec = Decimal(str(self.amount_before_tax or 0)) + Decimal(str(d_base))
+			tax_dec = Decimal(str(self.tax_amount or 0)) + Decimal(str(d_tax))
+			currency = property_currency(self.property)
+			if tax_dec:
+				total_dec = round_rate_amount(base_dec + tax_dec, 0, "Nearest", currency)
+				tax_dec = total_dec - base_dec
+			else:
+				total_dec = round_rate_amount(base_dec, 0, "Nearest", currency)
+				base_dec = total_dec
+			self.amount_before_tax = float(base_dec)
+			self.tax_amount = float(tax_dec)
+			self.amount_after_tax = float(total_dec)
 		self.rate_lock_key = key
 		self._apply_commission()
 
