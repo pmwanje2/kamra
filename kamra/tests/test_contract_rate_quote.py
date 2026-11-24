@@ -100,7 +100,18 @@ class ContractRateQuoteTest(AuditTestCase):
 		self.assertEqual(float(res.amount_after_tax), quote["amount_after_tax"])
 		self.script.db_set("disabled", 1)
 		self.assertEqual(api.reservation_detail(res.name)["tariff"], self.tariff)
-		self.assertEqual(api.folio_invoice(open_folio(res))["stay"]["tariff"], self.tariff)
+		folio = open_folio(res)
+		stay = api.folio_invoice(folio)["stay"]
+		self.assertEqual(stay["tariff"], self.tariff)
+		# a bill shows the contract currency at the rate the stay was priced at (Property ACTUAL),
+		# with the bill's total and balance in it
+		reference = stay["reference_currency"]
+		self.assertEqual({key: reference[key] for key in ("currency", "home_currency", "calculation", "fx_rate",
+			"fx_date")}, {"currency": "USD", "home_currency": "UGX", "calculation": "ACTUAL", "fx_rate": 3650.0,
+			"fx_date": "2026-11-21"})
+		bill = frappe.get_doc("Folio", folio)
+		self.assertAlmostEqual(reference["grand_total_reference"], float(bill.grand_total or 0) / 3650, delta=0.006)
+		self.assertAlmostEqual(reference["balance_reference"], float(bill.balance or 0) / 3650, delta=0.006)
 
 	def test_room_tariffs_are_a_property_scoped_read(self):
 		payload = {"tariffs": [{"rate_plan": self.plan, "currency": "USD", "room": 130,
@@ -108,4 +119,9 @@ class ContractRateQuoteTest(AuditTestCase):
 			"fx_rate": 3650, "fx_date": "2026-11-21"}], "all_active_plans_tariff": True}
 		self.add_script("hospitality_tariffs.room_type_tariffs", payload, checks={"room_type": self.room_type})
 		self.assertTrue(hasattr(rates, "room_type_tariffs"), "no room tariff read is exposed")
-		self.assertEqual(rates.room_type_tariffs(self.room_type), payload)
+		# the bridge payload, plus the plan's lock and rounding and the server's local equivalent
+		row, = payload["tariffs"]
+		self.assertEqual(rates.room_type_tariffs(self.room_type), {
+			**payload, "property_currency": "UGX", "primary_rate_plan": self.plan, "card_rate_plans": [],
+			"tariffs": [{**row, "local_room": 474500, "local_single": 365000,
+				"fx_lock_policy": "Fixed at Reservation", "rounding_step": 0, "rounding_mode": "Nearest"}]})

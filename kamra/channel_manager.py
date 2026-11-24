@@ -858,15 +858,74 @@ def _reconcile_ota_modify_discount(doc, old) -> dict | None:
 		doc.flags.kamra_stored = None
 
 
+def _rate_plan_has_tariff(plan_name: str | None) -> bool:
+	"""True when `plan_name` or an ancestor in its `base_rate_plan` chain carries
+	a hospitality-tariffs `custom_tariff_price_list` (mirrors hospitality-tariffs@11
+	`tariff_source`, failing closed on cycles or >5-plan chains)."""
+	if not plan_name:
+		return False
+	meta = frappe.get_meta("Rate Plan")
+	if not meta.has_field("custom_tariff_price_list"):
+		return False
+	has_base = meta.has_field("base_rate_plan")
+	fields = ["custom_tariff_price_list"] + (["base_rate_plan"] if has_base else [])
+	current = plan_name
+	seen: set[str] = set()
+	while current:
+		if current in seen or len(seen) >= 5:
+			return True
+		seen.add(current)
+		row = frappe.db.get_value("Rate Plan", current, fields, as_dict=True)
+		if not row:
+			return False
+		if row.get("custom_tariff_price_list"):
+			return True
+		current = (row.get("base_rate_plan") or "").strip() if has_base else ""
+	return False
+
+
+def _has_contract_tariff_snapshot(doc) -> bool:
+	"""True when `doc.contract_tariff` holds a non-channel contract tariff snapshot
+	(mirrors hospitality-tariffs@11 `snapshot_contract`; fails closed on corrupt JSON)."""
+	raw = doc.get("contract_tariff")
+	if isinstance(raw, str):
+		if not raw.strip():
+			return False
+		try:
+			raw = frappe.parse_json(raw)
+		except Exception:
+			return True
+	if not isinstance(raw, dict):
+		return False
+	terms = raw.get("tariff")
+	if not isinstance(terms, dict) or terms.get("source") == "channel":
+		return False
+	return bool(terms.get("derived_from") or (terms.get("currency") and frappe.utils.flt(terms.get("nightly")) > 0))
+
+
+def _is_tariff_owned_stay(doc) -> bool:
+	"""True when `doc` is a contract-tariff stay guarded by hospitality-tariffs@11:
+	directly priced (`custom_tariff_currency`), backed by a non-channel
+	`contract_tariff` snapshot (including derived or repointed stays), or on a
+	Rate Plan whose `base_rate_plan` chain leads to a tariff price list."""
+	return bool(
+		doc.get("custom_tariff_currency")
+		or _has_contract_tariff_snapshot(doc)
+		or _rate_plan_has_tariff(doc.get("rate_plan"))
+	)
+
+
 def _flag_for_review(conn, doc, e: dict, reason: str, *,
                      action: str = "modify",
-                     action_type: str = "channel.modify_needs_review") -> dict:
-	"""An OTA modify or cancel on a stay that is in-house or closed, held for
-	front-desk review: the stay is left untouched (status, room, dates, nights,
-	amounts, folio), flagged via channel_review_needed, noted on the stay, and
+                     action_type: str = "channel.modify_needs_review",
+                     not_applied_why: str | None = None) -> dict:
+	"""An OTA modify or cancel on a stay that is in-house, closed, or contract-tariff
+	owned, held for front-desk review: the stay is left untouched (status, room, dates,
+	nights, amounts, folio), flagged via channel_review_needed, noted on the stay, and
 	logged in Agent Action Log - matching OPERA Cloud OXI (UPDATE INHOUSE RES
 	= N, WARNINGS AS TRACES = Y, and Message Status)."""
-	note = f"{reason} (not applied: the stay is {doc.status})"
+	why = not_applied_why or f"the stay is {doc.status}"
+	note = f"{reason} (not applied: {why})"
 	updates = {
 		"channel_review_needed": 1,
 		"channel_review_reason": CHANNEL_REVIEW_NOT_APPLIED,
@@ -982,6 +1041,19 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 		if doc.status in _LOCKED_MODIFY:
 			reason = requested_reason or _describe_requested_modify(conn, e, room_type)
 			return _flag_for_review(conn, doc, e, reason)
+		will_auto_price = 0 if requested_reason or e.get("total") else 1
+		if not will_auto_price and _is_tariff_owned_stay(doc) and frappe.utils.cint(doc.get("auto_price")):
+			# Confirmed contract-tariff stays owned by hospitality-tariffs (direct,
+			# derived-plan, or repointed contract_tariff snapshot) cannot switch
+			# auto_price off (HSP-TARIFF-008): hold the OTA modify for desk review
+			# rather than failing the channel event or dropping the tariff.
+			reason = requested_reason or _describe_requested_modify(conn, e, room_type)
+			if doc.has_discount():
+				reason = f"{reason}; active desk discount: {_describe_superseded_discount(doc)}"
+			return _flag_for_review(
+				conn, doc, e, reason,
+				not_applied_why="contract-tariff stay requires desk review",
+			)
 		old_doc = frappe.get_doc("Reservation", existing.name)
 		if requested_reason:
 			e = dict(e, notes="\n".join(s for s in (e.get("notes"), requested_reason) if s))
