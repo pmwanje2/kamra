@@ -204,9 +204,12 @@ TOOLS: tuple[ToolSpec, ...] = (
 			"rate_plan": RATE_PLAN_PARAM,
 			"voucher_code": _p("string"),
 			"company": COMPANY_PARAM,
-			"market_segment": _p("string", enum=[
-				"Corporate", "Leisure", "Group", "MICE", "Government", "Wedding",
-				"Long Stay", "Airline Crew", "Complimentary", "House Use"]),
+			"market_segment": _p(
+				"string",
+				description="Optional market code: one of the hotel's Market Codes "
+				"(by default Corporate, Leisure, Group, MICE, Government, Wedding, "
+				"Long Stay, Airline Crew, Complimentary, House Use). An unknown "
+				"code is refused. A company booking is Corporate unless given."),
 			"check_in_time": _p("string"),
 			"check_out_time": _p("string"),
 			"idempotency_key": IDEMPOTENCY_KEY_PARAM,
@@ -269,10 +272,11 @@ TOOLS: tuple[ToolSpec, ...] = (
 		"""Cancel a confirmed booking. The property's cancellation policy
 		applies automatically - free outside the window, else the configured
 		fee posts to the folio. Returns a cancellation number - always give
-		it to the guest. Reasons: Guest request, Change of plans, Duplicate
+		it to the guest. The reason is one of the hotel's cancellation
+		reason codes (by default Guest request, Change of plans, Duplicate
 		booking, Payment failed, Weather / travel disruption, Booked
-		elsewhere, Other. Only waive the fee when a manager authorizes it;
-		the waiver is logged.""",
+		elsewhere, Other); an unknown one is recorded as Other. Only waive
+		the fee when a manager authorizes it; the waiver is logged.""",
 		{
 			"reservation": _p("string"),
 			"reason": _p("string"),

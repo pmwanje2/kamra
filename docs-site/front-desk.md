@@ -149,12 +149,20 @@ AI agent.
 
 - **Expected arrivals over several days:** on **In House**, the Arrivals tab
   has an **Until** date: pick up to two weeks ahead to see everyone due.
-- **Market segment:** a booking can carry its segment (Corporate, Leisure,
-  Group, MICE, Government, Wedding, Long Stay, Airline Crew, Complimentary,
-  House Use). A company booking is Corporate unless you pick another.
+- **Market segment:** a booking can carry its segment, one of the hotel's
+  own **Market Codes** (to start with: Corporate, Leisure, Group, MICE,
+  Government, Wedding, Long Stay, Airline Crew, Complimentary, House Use).
+  A company booking is Corporate unless you pick another. Cancellation
+  reasons, booker relations, booking origins, payment methods, meal plan
+  codes, who-pays options and check-in requests are lists the hotel keeps
+  the same way: add its own codes, reword or switch off the rest. Codes the
+  system relies on (such as Cash, OTA or Other) can be reworded but not
+  deleted or switched off.
 - **Requests with a price:** at check-in, an extra bed, an airport drop or
   a special occasion can take a price; it goes on the guest's bill (an
   airport drop as **Taxi**). A wake-up call or dietary note is never charged.
+  Each request (its team, priority and what it is charged as) is a
+  **Check-in Request** the hotel can change or add to.
 - **Room change** shows the room type the guest is in now and the one they
   move to.
 - **Folio:** when the guest has paid more than has been charged so far, the

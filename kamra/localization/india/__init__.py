@@ -13,6 +13,7 @@ import frappe
 
 FNB_GST = 5.0  # F&B / meal-plan GST rate
 SERVICES_GST = 18.0  # laundry and other guest services
+USES_TAX_SLAB = True
 
 INVOICE_TITLE = "Tax Invoice"  # the words the tax law requires on the bill
 DEFAULT_CURRENCY = "INR"
@@ -20,6 +21,17 @@ DEFAULT_CURRENCY = "INR"
 FX_CURRENCIES = ["USD", "EUR", "GBP", "AED", "SAR", "SGD", "AUD", "JPY"]
 DEFAULT_TIMEZONE = "Asia/Kolkata"
 DEFAULT_NATIONALITY = "Indian"
+# what a new Indian property starts with (kamra.localization.setting_default):
+# the GST slab, and amounts in rupees core no longer assumes for everyone
+SETTING_DEFAULTS = {
+	"gst_mode": "Slab",
+	"gst_slab_threshold": 7500,
+	"gst_rate_low": 5,
+	"gst_rate_high": 18,
+	"security_deposit_amount": 5000,
+	"na_high_balance_threshold": 50000,
+	"max_cash_refund": 5000,
+}
 # the financial year runs April to March: year-to-date reports start here
 FINANCIAL_YEAR_START = (4, 1)
 # a passport or ID card MRZ names the country by this code

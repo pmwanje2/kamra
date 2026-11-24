@@ -338,7 +338,7 @@ export const APPS: AppDef[] = [
     extraPrefixes: [
       "/billing/", "/cashier/", "/ledgers", "/receivables", "/folio-history",
       "/end-of-day", "/night-audit", "/reason-codes", "/transaction-codes",
-      "/voids-allowances", "/balance-sheet", "/allowances",
+      "/payment-methods", "/voids-allowances", "/balance-sheet", "/allowances",
     ],
   },
   {
@@ -369,7 +369,11 @@ export const APPS: AppDef[] = [
     description: "Settings, staff and access, rooms and audit.",
     roles: ["Hotel Admin", "System Manager", "Administrator"],
     // every other settings page belongs here unless a module app claims it
-    extraPrefixes: ["/settings"],
+    extraPrefixes: [
+      "/settings", "/market-codes", "/origin-codes", "/booking-types",
+      "/booker-relations", "/cancellation-reasons", "/payment-methods",
+      "/meal-plan-codes", "/payer-types", "/check-in-requests",
+    ],
     items: [
       { to: "/settings/general", label: "Settings", icon: SettingsIcon },
       { to: "/health", label: "System Health", icon: HeartPulse },

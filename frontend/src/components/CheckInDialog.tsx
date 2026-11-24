@@ -126,6 +126,8 @@ interface Flow {
     advance_paid: number
     balance_due: number
     options: string[]
+    /** The hotel's own payer types (Payer Type master), as it describes them. */
+    payer_labels?: Record<string, string>
   }
   room: {
     room: string | null
@@ -838,6 +840,7 @@ export default function CheckInDialog(props: {
               <div className="grid gap-2">
                 {flow.billing.options
                   .filter((p) =>
+                    p in (flow.billing.payer_labels ?? {}) ||
                     p === "Guest" ||
                     (p === "Company" && flow.billing.company) ||
                     (p === "Group" && flow.billing.group_booking) ||
@@ -848,7 +851,7 @@ export default function CheckInDialog(props: {
                       key={p}
                       selected={payer === p}
                       onClick={() => setPayer(p)}
-                      title={t(PAYER_LABEL[p] ?? p)}
+                      title={t(PAYER_LABEL[p] ?? flow.billing.payer_labels?.[p] ?? p)}
                       hint={
                         translateUI(p === "Company"
                           ? flow.billing.company_name ?? undefined

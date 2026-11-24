@@ -433,9 +433,11 @@ class HoldExpiryTestCase(AuditTestCase):
 			"Reservation", lapsed, ["cancellation_reason", "cancellation_note"])
 		self.assertEqual(reason, "Other")
 		self.assertEqual(note, "Hold / payment window expired")
-		options = frappe.get_meta("Reservation").get_field(
-			"cancellation_reason").options.split("\n")
-		self.assertIn(reason, options)
+		df = frappe.get_meta("Reservation").get_field("cancellation_reason")
+		self.assertEqual(df.fieldtype, "Link")
+		self.assertEqual(df.options, "Cancellation Reason")
+		self.assertTrue(frappe.db.exists(df.options, {"name": reason, "disabled": 0}))
+		self.assertTrue(frappe.db.get_value(df.options, reason, "system"))
 
 	def test_confirmed_stay_is_never_expired(self):
 		from kamra.reservation_state import expire_holds

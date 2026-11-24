@@ -120,7 +120,8 @@ export default function Setup() {
     minimum_nights: "1",
     booking_payment_mode: "Advance percent",
     advance_percent: "100",
-    security_deposit_amount: "5000",
+    // in the property's own currency: nothing is suggested
+    security_deposit_amount: "",
   })
   // The country picks the tax & invoicing pack - and with it the currency,
   // clock, ID documents and ways to pay. Asked first so nothing defaults
@@ -151,8 +152,9 @@ export default function Setup() {
   const [roomTypes, setRoomTypes] = useState<RoomTypeRow[]>([{ ...HOTEL_ROOM_DEFAULT }])
   const [mealPlans, setMealPlans] = useState([
     { code: "EP", label: "Room Only", price_per_adult: "0", on: true },
-    { code: "CP", label: "Breakfast Included", price_per_adult: "300", on: true },
-    { code: "MAP", label: "Breakfast + Dinner", price_per_adult: "700", on: false },
+    // prices are in the property's own currency: the operator types them
+    { code: "CP", label: "Breakfast Included", price_per_adult: "", on: false },
+    { code: "MAP", label: "Breakfast + Dinner", price_per_adult: "", on: false },
   ])
 
   const isStr = kind === "Short Term Rental"
@@ -593,7 +595,7 @@ export default function Setup() {
                   ["minimum_nights", t("Minimum Nights"), "number", "1"],
                   ["booking_payment_mode", t("Booking Payment Mode"), "select", ""],
                   ["advance_percent", t("Advance Percent"), "number", "100"],
-                  ["security_deposit_amount", t("Security Deposit Amount"), "number", "5000"],
+                  ["security_deposit_amount", t("Security Deposit Amount"), "number", "0"],
                 ] as const
               ).map(([k, label, type, ph]) => (
                 <label key={k} className="block">

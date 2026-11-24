@@ -86,6 +86,13 @@ MODULES: tuple[Module, ...] = (
 				S("currency", "Currency", store=P, hint="ISO code, e.g. SAR, AED, USD."),
 				S("timezone", "Time zone", "select", store=P, options_source="timezones",
 				  hint="Hotel local clock for the night audit and timestamps."),
+				S("booking_language", "Default language", "select", "", P, options_source="languages",
+				  hint="Guest page default language. Leave blank to follow the browser."),
+				S("locale", "Number format (locale)", "select", "", P, options_source="locales",
+				  hint="Number formatting locale, e.g. en-UG, en-GB, en-US. Leave blank to follow the country pack."),
+				S("date_format", "Date format", "select", "",
+				  options=("dd-mm-yyyy", "dd/mm/yyyy", "yyyy-mm-dd", "mm-dd-yyyy", "mm/dd/yyyy"),
+				  hint="How dates appear on front-desk screens. Leave blank for the site default."),
 				S("address_line", "Address", store=P),
 				S("city", "City", store=P),
 				S("state", "State / region", store=P),
@@ -97,7 +104,7 @@ MODULES: tuple[Module, ...] = (
 				S("website", "Website", store=P),
 				S("gstin", "Tax registration number", store=P, hint="GSTIN, VAT or TRN - printed on invoices."),
 				S("invoice_footer", "Invoice footer", "textarea", store=P,
-				  hint="Your own lines at the foot of every invoice - e.g. CIN, bank name, account number and IFSC."),
+				  hint="Your own lines at the foot of every invoice - e.g. company registration, bank name and account details."),
 			)),
 		),
 	),
@@ -274,7 +281,7 @@ MODULES: tuple[Module, ...] = (
 				  hint="On: a guest still Checked In past their departure date is extended by one "
 				       "night when the audit runs, and that night is posted like any other. A stay "
 				       "that can't be extended (the room is booked) stays on the checklist."),
-				S("na_high_balance_threshold", "Flag in-house folios owing more than", "number", 50000,
+				S("na_high_balance_threshold", "Flag in-house folios owing more than", "number", None,
 				  min=0, hint="0 turns the high-balance check off."),
 				S("na_rate_variance_tolerance", "Rate variance tolerance", "number", 1.0,
 				  min=0, max=100000,
@@ -417,11 +424,11 @@ MODULES: tuple[Module, ...] = (
 		         ("Transaction codes", "/transaction-codes"), ("Reason codes", "/reason-codes")),
 		sections=(
 			Section("tax", "Room tax", "Tax on the room rate. Outlet and service rates come from the country pack.", (
-				S("gst_mode", "Tax mode", "select", "Slab", P, options=("Slab", "Fixed"),
+				S("gst_mode", "Tax mode", "select", None, P, options=("Slab", "Fixed"),
 				  hint="Slab: the rate switches at the threshold per night."),
-				S("gst_slab_threshold", "Slab threshold per night", "number", 7500, P, min=0),
-				S("gst_rate_low", "Rate below threshold", "number", 5, P, min=0, max=100, unit="%"),
-				S("gst_rate_high", "Rate above threshold", "number", 18, P, min=0, max=100, unit="%"),
+				S("gst_slab_threshold", "Slab threshold per night", "number", None, P, min=0),
+				S("gst_rate_low", "Rate below threshold", "number", None, P, min=0, max=100, unit="%"),
+				S("gst_rate_high", "Rate above threshold", "number", None, P, min=0, max=100, unit="%"),
 				S("rates_include_tax", "Displayed rates include tax", "check", 0, P),
 			)),
 			Section("fees", "Fees & levies", "", (
@@ -492,7 +499,7 @@ MODULES: tuple[Module, ...] = (
 				  hint="Payments, invoices, allowances and settlements re-confirm who is acting. Agents are exempt."),
 				S("pin_max_attempts", "Lock a PIN after", "number", 5, min=3, max=10, unit="wrong tries"),
 				S("pin_lock_minutes", "Lock for / stay unlocked for", "number", 15, min=1, max=240, unit="min"),
-				S("max_cash_refund", "Cash refund limit for new cashiers", "number", 5000, min=0),
+				S("max_cash_refund", "Cash refund limit for new cashiers", "number", None, min=0),
 				S("till_variance_tolerance", "Till variance that needs a manager", "number", 0, min=0,
 				  hint="A till closed over or short by more than this is flagged for a manager to review. 0 turns the check off."),
 				S("allowance_approval", "Allowances need a manager's approval", "select", "Off",
@@ -632,12 +639,25 @@ PROPERTY_DEFAULTS = {"fx_currencies": fx_currencies_default}
 
 
 def _default(property: str | None, spec: S):
+	"""A setting's value when nothing is saved: a property-derived default,
+	else the country pack's (amounts in its currency, its tax slab - see
+	kamra.localization.setting_default), else the registry's. Money
+	thresholds have no registry default: a country that names none leaves
+	them unset, and nothing acts on them until the hotel sets one."""
 	fn = PROPERTY_DEFAULTS.get(spec.key)
 	if fn and property:
 		try:
 			return fn(property)
 		except Exception:
 			return spec.default
+	if property:
+		from kamra.localization import setting_default
+		try:
+			value = setting_default(property, spec.key)
+		except Exception:
+			value = None
+		if value is not None:
+			return value
 	return spec.default
 
 
@@ -774,6 +794,8 @@ def settings_schema(property: str) -> dict:
 	"""Every settings page this user may see for the property, with current
 	values. Pages they can't change come back read-only (can_edit=False)."""
 	assert_property_access(property)
+	from kamra.localization import pack_for, uses_tax_slab
+	slab_mode = uses_tax_slab(pack_for(property))
 	roles = _roles()
 	enabled = _enabled_modules(property)
 	modules = []
@@ -781,14 +803,31 @@ def settings_schema(property: str) -> dict:
 		editable = can_edit(m, roles)
 		if not editable:
 			continue
+		sections_out = []
+		for sec in m.sections:
+			items = []
+			for s in sec.settings:
+				if m.id == "finance" and sec.id == "tax" and not slab_mode:
+					if s.key in ("gst_mode", "gst_slab_threshold", "gst_rate_high"):
+						continue
+					spec = _spec_json(s, property)
+					if s.key == "gst_rate_low":
+						spec["label"] = "Room tax rate"
+						spec["hint"] = "Flat rate applied to room nights when the property calculates tax locally."
+					items.append(spec)
+					continue
+				items.append(_spec_json(s, property))
+			sections_out.append({
+				"id": sec.id, "title": sec.title, "description": sec.description,
+				"settings": items,
+			})
 		modules.append({
 			"id": m.id, "title": m.title, "description": m.description,
 			"group": m.group, "toggle": m.toggle,
 			"enabled": (m.id in enabled) if m.toggle else True,
 			"editors": list(m.editors), "can_edit": editable,
 			"related": [{"label": a, "to": b} for a, b in m.related],
-			"sections": [{"id": sec.id, "title": sec.title, "description": sec.description,
-			              "settings": [_spec_json(s, property) for s in sec.settings]} for sec in m.sections],
+			"sections": sections_out,
 			"values": _values(property, m),
 		})
 	return {
@@ -882,7 +921,7 @@ def save_settings(property: str, module: str, changes) -> dict:
 		           rationale=f"{mod.title} settings: {labels}",
 		           before_snapshot={k: before_all.get(k) for k in changed},
 		           after_snapshot=changed)
-	if "country" in changed or "currency" in changed:
+	if any(k in changed for k in ("country", "currency", "locale", "date_format", "booking_language")):
 		frappe.clear_cache()
 	return {"ok": True, "values": after_all, "changed": list(changed)}
 

@@ -20,11 +20,15 @@ export const inputCls =
 const MONEY_KEYS = new Set([
   "security_deposit_amount", "gst_slab_threshold", "cleaning_fee",
   "registration_fee", "max_cash_refund", "pet_charge",
+  "room_levy_per_night", "na_high_balance_threshold", "na_rate_variance_tolerance",
+  "till_variance_tolerance", "allowance_approval_above", "pos_room_charge_limit",
 ])
 
 export interface OptionSources {
   countries: string[]
   timezones: string[]
+  locales: string[]
+  languages: string[]
 }
 
 const same = (a: unknown, b: unknown) =>
@@ -91,7 +95,7 @@ function Control({
     return <ImageField hint="" value={String(value ?? "")} onChange={(v) => onChange(v)} />
   if (spec.type === "select") {
     let options = spec.options ?? []
-    if (spec.options_source) options = sources[spec.options_source]
+    if (spec.options_source) options = sources[spec.options_source] ?? []
     const v = String(value ?? "")
     if (v && !options.includes(v)) options = [v, ...options]
     return (
@@ -102,7 +106,7 @@ function Control({
         disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
       >
-        {!v && <option value="">-</option>}
+        {(!v || spec.default === "") && <option value="">-</option>}
         {options.map((o) => (
           <option key={o} value={o}>
             {o ? t(o) : "-"}
