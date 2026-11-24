@@ -347,10 +347,12 @@ class ZeroTaxChargesTotalAndBridgeAgreementTest(QuotePatches, RateMatrixHarness)
 		self.assertEqual(inv["tax_summary"][0]["taxable"], folio.charges_total)
 
 	def test_zero_tax_quote_and_proforma_do_not_mutate_unrounded_base(self):
+		# P2-3: 0% stay quote rounds nightly room rate at the line to currency minor unit (UGX 1,000),
+		# while folio/proforma still keep explicit charge lines unmutated (charges_total == sum(lines)).
 		q = self.pricing.quote("Test Hotel", "Test Hotel-DLX", "2026-12-01", "2026-12-02", 2, 0)
-		self.assertEqual(q["amount_before_tax"], 1000.4)
+		self.assertEqual(q["amount_before_tax"], 1000.0)
 		self.assertEqual(q["tax_amount"], 0.0)
-		self.assertEqual(q["amount_after_tax"], 1000.4)
+		self.assertEqual(q["amount_after_tax"], 1000.0)
 
 		charge = Doc(
 			name="FC-0",
