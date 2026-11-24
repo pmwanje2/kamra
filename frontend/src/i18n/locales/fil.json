@@ -1253,5 +1253,10 @@
   "Still open at the outlet. Settle it there before check-out: charge it to the room, take payment or void it.": "Bukas pa sa outlet. Ayusin ito roon bago mag-check-out: i-charge sa kuwarto, tumanggap ng bayad o i-void ito.",
   "This is kept in the accounting system.": "Ito ay nasa sistema ng accounting.",
   "Check-out waits for these. Settle them at the outlet.": "Hinihintay ng check-out ang mga ito. I-settle sa outlet.",
-  "Not verified": "Hindi naberipika"
+  "Not verified": "Hindi naberipika",
+  "Kept in the accounting system": "Nasa sistema ng accounting",
+  "Company receivables could not be verified in the accounting system.": "Hindi maberipika ang mga bayarin ng kumpanya sa sistema ng accounting.",
+  "Company credit could not be verified.": "Hindi maberipika ang kredito ng kumpanya.",
+  "Guest and deposit folios match their ledgers. Company receivables (AR) could not be verified in the accounting system.": "Tugma ang mga folio ng bisita at deposito sa kanilang mga ledger. Hindi maberipika ang mga bayarin ng kumpanya (AR) sa sistema ng accounting.",
+  "Guest and deposit folios match their ledgers. Company receivables (AR) are kept in the accounting system.": "Tugma ang mga folio ng bisita at deposito sa kanilang mga ledger. Nasa sistema ng accounting ang mga bayarin ng kumpanya (AR)."
 }

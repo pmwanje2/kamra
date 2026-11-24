@@ -7,6 +7,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { ArrowLeft, Download, Printer } from "lucide-react"
 import { Link, useParams } from "react-router-dom"
 import { auditPack, rebuildAuditPack, type Pack, type PackResponse } from "../lib/eod"
+import { keptInErp } from "../lib/erpBooks"
 import { serverError } from "../lib/resource"
 import { Button } from "../components/ui/button"
 import { Card } from "../components/ui/card"
@@ -348,7 +349,25 @@ function GuestLedger({ p }: { p: Pack }) {
 }
 
 function CityLedger({ p }: { p: Pack }) {
-  useUILanguage()
+  const { t } = useT()
+  const kept = keptInErp("/receivables")
+  const loadError = p.errors?.city_ledger
+  if (loadError || (!Array.isArray(p.city_ledger?.accounts) && kept)) {
+    return (
+      <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <p className="font-medium">
+          {t("Not verified")} — {t("Company receivables could not be verified in the accounting system.")}
+        </p>
+        {kept && (
+          <p>
+            <a className="font-medium text-brand-700 underline" href={kept.url}>
+              {t("Open {v0}", { v0: kept.label })}
+            </a>
+          </p>
+        )}
+      </div>
+    )
+  }
   const rows = p.city_ledger?.accounts || []
   // packs saved before due-date aging only carry the invoice-age buckets
   const byDue = rows.length === 0 || "not_due" in rows[0]
@@ -416,9 +435,14 @@ function TrialBalance({ p }: { p: Pack }) {
       <DataTable
         cols={[
           { key: "ledger", label: "Ledger" },
-          { key: "debit", label: "Debit", kind: "money" },
-          { key: "credit", label: "Credit", kind: "money" },
-          { key: "balance", label: "Balance", kind: "money" },
+          { key: "debit", label: "Debit", kind: "money", render: (r) => (r.debit == null ? "—" : money(r.debit)) },
+          { key: "credit", label: "Credit", kind: "money", render: (r) => (r.credit == null ? "—" : money(r.credit)) },
+          {
+            key: "balance",
+            label: "Balance",
+            kind: "money",
+            render: (r) => (r.unverified ? t("Not verified") : r.balance == null ? "—" : money(r.balance)),
+          },
         ]}
         rows={tb.ledgers || []}
         total={{
@@ -430,7 +454,11 @@ function TrialBalance({ p }: { p: Pack }) {
           // never match while guests owe money - show the net instead
           balance: tb.reconciliation
             ? tb.in_balance
-              ? t("Agrees with folios")
+              ? tb.ar_unverified
+                ? t("Not verified")
+                : tb.ar_kept_in_erp
+                  ? t("Kept in the accounting system")
+                  : t("Agrees with folios")
               : t("Differs from folios by {amount}", { amount: money(tb.reconciliation.difference) })
             : money(Number(tb.total_debit ?? 0) - Number(tb.total_credit ?? 0)),
         }}

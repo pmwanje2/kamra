@@ -17,7 +17,7 @@ from frappe.utils import cint, flt, getdate, now_datetime, nowdate
 
 from kamra.authz import INVOICE_CORRECTION_ROLES, require_roles
 from kamra.business_date import get_business_date
-from kamra.erp_books import kept_in_erp, receivables_source
+from kamra.erp_books import erp_screens, kept_in_erp, receivables_source, refuse_kept_in_erp
 
 CHARGE_TYPE_TO_CODE = {
 	"Room": ("1000", "Room Charge", "Rooms", "Room"),
@@ -433,8 +433,20 @@ def ledger_balances(property: str, business_date: str | None = None):
 		ledgers.setdefault(name, {
 			"ledger": name, "debit": 0.0, "credit": 0.0, "balance": 0.0,
 		})
-	total_debit = sum(v["debit"] for v in ledgers.values())
-	total_credit = sum(v["credit"] for v in ledgers.values())
+	src = receivables_source(property, strict=False)
+	if src.in_erp:
+		# While the ERP keeps receivables, Folio Ledger Entry never sees ERP
+		# receipts and cannot reconcile AR. Never report 0.00 or stale figures.
+		ledgers["AR"] = {
+			"ledger": "AR",
+			"debit": None,
+			"credit": None,
+			"balance": None,
+			"kept_in_erp": True,
+			"unverified": src.unavailable,
+		}
+	total_debit = sum(v["debit"] for v in ledgers.values() if v["debit"] is not None)
+	total_credit = sum(v["credit"] for v in ledgers.values() if v["credit"] is not None)
 	# These four are subsidiary (control) ledgers, not a full double-entry
 	# book: a charge debits Guest and its revenue side lives in the GL the
 	# accounting export feeds, a payment credits Guest and the cash side is
@@ -453,6 +465,8 @@ def ledger_balances(property: str, business_date: str | None = None):
 		# today's folio balances cannot be compared with the old ledger
 		"in_balance": recon["in_balance"] if recon else None,
 		"reconciliation": recon,
+		"ar_kept_in_erp": src.in_erp,
+		"ar_unverified": src.unavailable,
 	}
 
 
@@ -467,6 +481,10 @@ def ledger_detail(property: str, ledger: str, business_date: str | None = None,
 		frappe.throw(frappe._("Unknown ledger {0}.").format(ledger))
 	from kamra.authz import assert_property_access
 	assert_property_access(property)
+	if ledger == "AR":
+		target = erp_screens().get("receivables")
+		if target:
+			refuse_kept_in_erp(target)
 	date = business_date or get_business_date(property)
 	limit = max(1, min(int(limit or 2000), 2000))
 	rows = frappe.db.sql(

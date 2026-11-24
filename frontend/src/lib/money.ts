@@ -105,7 +105,8 @@ function syncDateFormat(fmt?: string | null) {
 
 try {
   const saved = JSON.parse(localStorage.getItem("kamra_locale") || "")
-  if (saved && saved.currency) {
+  const currentProp = getCurrentProperty()
+  if (saved && saved.currency && (!saved._property || !currentProp || saved._property === currentProp)) {
     cache = { ...cache, ...saved }
     syncDateFormat(cache.date_format)
   }
@@ -113,10 +114,10 @@ try {
   /* first run - neutral defaults until the pack resolves */
 }
 
-function remember() {
+function remember(property?: string) {
   listeners.forEach((fn) => fn())
   try {
-    localStorage.setItem("kamra_locale", JSON.stringify(cache))
+    localStorage.setItem("kamra_locale", JSON.stringify(property ? { ...cache, _property: property } : cache))
   } catch {
     /* private mode */
   }
@@ -129,9 +130,15 @@ export function loadLocale(): Promise<Locale> {
   })
     .then((l) => {
       if (property !== getCurrentProperty()) return cache
-      cache = { ...cache, tender_modes: null, fx_currencies: [], tax_basis: null, ...l }
+      const nextSymbol =
+        l.currency_symbol !== undefined
+          ? l.currency_symbol
+          : l.currency && l.currency !== cache.currency
+            ? ""
+            : cache.currency_symbol
+      cache = { ...cache, tender_modes: null, fx_currencies: [], tax_basis: null, ...l, currency_symbol: nextSymbol }
       syncDateFormat(cache.date_format)
-      remember()
+      remember(property)
       return cache
     })
     .catch(() => cache)

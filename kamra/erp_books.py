@@ -132,8 +132,18 @@ def erp_receivables(property: str, *, company: str | None = None) -> list[dict] 
 	form = {"property": property}
 	if company is not None:
 		form["company"] = company
-	result = erp_bridge.bridge_call(
-		ERP_RECEIVABLES, response_types=(dict, list, NoneType), **form)
+	before_log = len(getattr(frappe.local, "message_log", None) or ())
+	try:
+		result = erp_bridge.bridge_call(
+			ERP_RECEIVABLES, response_types=(dict, list, NoneType), **form)
+	except frappe.PermissionError:
+		# A role or property refusal from Hotel ERP Receivables is the same
+		# fail-closed "unavailable" state for every caller — never crash or
+		# leave a raw bridge refusal in message_log.
+		log = getattr(frappe.local, "message_log", None)
+		if isinstance(log, list) and len(log) > before_log:
+			del log[before_log:]
+		return None
 	if result is None:
 		return None
 	rows = result.get("accounts") if isinstance(result, dict) else None

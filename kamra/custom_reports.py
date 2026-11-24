@@ -1149,9 +1149,19 @@ def _fetch_dso(property: str, from_date: str, to_date: str, **kw) -> list[dict]:
 	is invoices less credit notes and adjustments; a company billed nothing
 	has no DSO. While the ERP keeps receivables, period DSO lives in the
 	accounting system (never read unposted City Ledger Entry rows)."""
-	from kamra.erp_books import receivables_source, refuse_kept_in_erp
+	from kamra.erp_books import (
+		RECEIVABLES_UNAVAILABLE_REASON,
+		receivables_source,
+		refuse_kept_in_erp,
+	)
 
-	src = receivables_source(property)
+	src = receivables_source(property, strict=False)
+	if src.unavailable:
+		frappe.throw(
+			_("Not verified: {0}").format(_(RECEIVABLES_UNAVAILABLE_REASON)),
+			frappe.PermissionError,
+			title=_("Not verified"),
+		)
 	if src.in_erp:
 		refuse_kept_in_erp(src.target)
 	rows = frappe.db.sql(
