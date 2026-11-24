@@ -6606,5 +6606,19 @@
   "Your own lines at the foot of every invoice - e.g. company registration, bank name and account details.": "السطور الخاصة بك في أسفل كل فاتورة - مثل السجل التجاري واسم البنك وتفاصيل الحساب.",
   "OTA Prepaid": "مدفوع مسبقاً عبر وكالة حجز",
   "Company Credit": "ائتمان شركة",
-  "Booking type": "نوع الحجز"
+  "Booking type": "نوع الحجز",
+  "Foreign currency drawers": "أدراج العملات الأجنبية",
+  "Foreign drawers": "أدراج أجنبية",
+  "Receipts (FX)": "المقبوضات (أجنبية)",
+  "Refunds (FX)": "المبالغ المستردة (أجنبية)",
+  "Expected (FX)": "المتوقع (أجنبية)",
+  "Counted (FX)": "المعدود (أجنبية)",
+  "Home equivalent": "المعادل بالعملة المحلية",
+  "Counted {currency}": "المبلغ المعدود بعملة {currency}",
+  "Per-currency foreign note totals kept separate from home cash.": "إجماليات الأوراق النقدية الأجنبية لكل عملة محفوظة بشكل منفصل عن النقد المحلي.",
+  "By payment method": "حسب طريقة الدفع",
+  "View report": "عرض التقرير",
+  "Edit property override": "تعديل تخصيص الفندق",
+  "This property already has its own override for {code}. Edit that property row instead.": "يملك هذا الفندق تخصيصاً خاصاً لـ {code} بالفعل. عدّل صف الفندق بدلاً من ذلك.",
+  "Saving creates a property override for {property}. The shared default stays unchanged for other properties.": "سيؤدي الحفظ إلى إنشاء تخصيص لـ {property}. يبقى الإعداد المشترك دون تغيير للفنادق الأخرى."
 }

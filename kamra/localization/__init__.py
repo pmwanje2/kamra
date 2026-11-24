@@ -330,12 +330,25 @@ def cash_denominations(pack) -> list[float]:
 	return [float(v) for v in getattr(pack, "CASH_DENOMINATIONS", None) or ()]
 
 
-def outlet_payment_modes(pack) -> list[str]:
-	"""What a bill is settled with at an outlet (POS): cash, card and the
-	pack's instant modes. Outlet bills keep their own fixed modes (POS
-	Order), so a hotel's own payment methods are taken at the desk only."""
+OUTLET_TENDER_TYPES = ("Cash", "Card", "Instant")
+
+
+def outlet_payment_modes(pack, property: str | None = None) -> list[str]:
+	"""What a bill is settled with at an outlet (POS): enabled Cash, Card,
+	and Instant methods for this property (or the country pack when no
+	property is passed)."""
+	from kamra.masters import SYSTEM_TENDER_TYPES, payment_tender_type
+
+	if property:
+		return [
+			m for m in payment_modes(pack, property)
+			if payment_tender_type(m, property) in OUTLET_TENDER_TYPES
+		]
 	instant = _pack_instant_modes(pack)
-	return [m for m in _pack_payment_modes(pack) if m in ("Cash", "Card") or m in instant]
+	return [
+		m for m in _pack_payment_modes(pack)
+		if SYSTEM_TENDER_TYPES.get(m) in OUTLET_TENDER_TYPES or m in instant
+	]
 
 
 def assert_pack_payment_mode(property: str, mode: str | None) -> None:
@@ -372,7 +385,12 @@ def assert_payment_mode(property: str, mode: str | None, currency: str | None = 
 	"""Validate a new folio tender against the property mapping, when installed."""
 	if not mode and not pack_only:
 		return
-	from kamra.masters import disabled_payment_methods, payment_tender_type
+	from kamra.masters import (
+		default_mode_for_tender,
+		disabled_payment_methods,
+		is_system_payment_method,
+		payment_tender_type,
+	)
 
 	tender = payment_tender_type(mode, property)
 	mapped = tender_modes(property)
@@ -404,9 +422,11 @@ def assert_payment_mode(property: str, mode: str | None, currency: str | None = 
 	target = mode
 	if code == home and tender == "Foreign Cash":
 		frappe.throw(frappe._("Foreign Cash needs the currency of the notes received."))
-	if code != home and mode in ("Cash", "Foreign Cash"):
+	if code != home and tender in ("Cash", "Foreign Cash") and is_system_payment_method(mode, property):
 		# Some bridges report the posted mode; others group all notes under Cash.
-		target = "Foreign Cash" if "Foreign Cash" in mode_names else "Cash"
+		fx_cash = default_mode_for_tender(property, "Foreign Cash")
+		home_cash = default_mode_for_tender(property, "Cash")
+		target = fx_cash if fx_cash in mode_names else home_cash
 	foreign_not_supported = code != home and tender not in FOREIGN_CURRENCY_TENDER_TYPES
 	if foreign_not_supported or not any(row["mode"] == target and code in row["currencies"] for row in mapped):
 		frappe.throw(frappe._("{0} is not available for payments in {1}.").format(mode, code))
@@ -426,7 +446,7 @@ def front_desk_vocabulary(pack, property: str | None = None) -> dict:
 		"payment_modes": payment_modes(pack, property),
 		"payment_tender_types": payment_tender_types(property),
 		"instant_payment_modes": instant_payment_modes(pack, property),
-		"outlet_payment_modes": outlet_payment_modes(pack),
+		"outlet_payment_modes": outlet_payment_modes(pack, property),
 		"default_nationality": getattr(pack, "DEFAULT_NATIONALITY", "") or "",
 		"adult_age": adult_age(pack),
 		"minor_ids": minor_ids(pack),

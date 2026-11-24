@@ -6,6 +6,7 @@ import { moneyDigits, type TenderMode } from "../lib/money"
 type Vocabulary = {
   payment_modes: string[]
   payment_tender_types?: Record<string, string>
+  cashier_allowed_modes?: string[] | null
   tender_modes?: TenderMode[] | null
   fx_currencies?: string[]
 }
@@ -22,7 +23,7 @@ const DEFAULT_TENDER_TYPES: Readonly<Record<string, string>> = {
   "Payment Link": "Payment Link",
 }
 
-function tenderTypeOf(loc: Vocabulary, mode: string): string {
+export function tenderTypeOf(loc: Pick<Vocabulary, "payment_tender_types">, mode: string): string {
   return loc.payment_tender_types?.[mode] ?? DEFAULT_TENDER_TYPES[mode] ?? "Other"
 }
 
@@ -78,7 +79,10 @@ export function tenderModes(loc: Vocabulary, home: string, paymentLink = false):
     byMode.set(mode, [...(byMode.get(mode) ?? []), ...allowed])
   }
   if (!gotForeignCash && cashCodes.length) byMode.set("Foreign Cash", cashCodes)
-  return [...byMode].map(([mode, allowed]) => ({ mode, currencies: codes.filter((c) => allowed.includes(c)) }))
+  const allowedSet = Array.isArray(loc.cashier_allowed_modes) ? new Set(loc.cashier_allowed_modes) : null
+  return [...byMode]
+    .filter(([mode]) => !allowedSet || allowedSet.has(mode))
+    .map(([mode, allowed]) => ({ mode, currencies: codes.filter((c) => allowed.includes(c)) }))
     .filter(({ currencies }) => currencies.length > 0)
 }
 

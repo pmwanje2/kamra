@@ -605,7 +605,7 @@ export function ResourceScreen({
   const { t, lang } = useT()
   const { roles } = useAuth()
   const canBackdate = roles.some((r) => BACKDATE_ROLES.includes(r))
-  const [rows, setRows] = useState<Row[]>([])
+  const [allRows, setAllRows] = useState<Row[]>([])
   const [editing, setEditing] = useState<Row | "new" | null>(null)
   const [draft, setDraft] = useState<Record<string, unknown>>({})
   const [canDeleteDoc, setCanDeleteDoc] = useState(false)
@@ -704,16 +704,46 @@ export function ResourceScreen({
       filters: filters.length ? filters : undefined,
       orFilters,
       orderBy: config.orderBy,
-      limit: pageSize || 100,
-      start: pageSize ? page * pageSize : 0,
+      limit: config.propertyOrShared ? 2000 : (pageSize || 100),
+      start: config.propertyOrShared ? 0 : (pageSize ? page * pageSize : 0),
     })
       .then((r) => {
-        setRows(matchLocalSearch(r))
+        setAllRows(r)
         setError(null)
       })
       .catch((e) => setError(serverError(e)))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config.doctype, config.propertyOrShared, debounced, filterVals, page, dateFrom, dateTo, matchLocalSearch])
+  }, [config.doctype, config.propertyOrShared, debounced, filterVals, page, dateFrom, dateTo])
+
+  const filteredRows = matchLocalSearch(allRows)
+  const rows =
+    config.propertyOrShared && pageSize > 0
+      ? filteredRows.slice(page * pageSize, (page + 1) * pageSize)
+      : filteredRows
+  const hasMorePages =
+    config.propertyOrShared && pageSize > 0
+      ? (page + 1) * pageSize < filteredRows.length
+      : rows.length >= pageSize
+
+  const currentProperty = getCurrentProperty()
+  const isSharedEdit = Boolean(
+    config.propertyOrShared &&
+      editing &&
+      editing !== "new" &&
+      !editing.property &&
+      !draft.property,
+  )
+  const editingCode =
+    editing && editing !== "new"
+      ? String(draft.code ?? editing.code ?? editing.name ?? "")
+      : ""
+  const existingOverride = isSharedEdit
+    ? allRows.find(
+        (r) =>
+          String(r.property || "") === currentProperty &&
+          String(r.code ?? r.name ?? "") === editingCode,
+      )
+    : undefined
 
   useEffect(load, [load])
 
@@ -856,12 +886,36 @@ export function ResourceScreen({
         }
         if (f.field in draft) payload[f.field] = draft[f.field]
       }
-      if (config.propertyScoped || (config.propertyOrShared && editing === "new"))
-        payload.property = getCurrentProperty()
-      if (editing === "new") {
-        await createResource(config.doctype, payload)
-      } else if (editing) {
-        await updateResource(config.doctype, editing.name, payload)
+      if (isSharedEdit && editing && editing !== "new") {
+        if (existingOverride) {
+          setError(
+            t("This property already has its own override for {code}. Edit that property row instead.", {
+              code: editingCode,
+            }),
+          )
+          return
+        }
+        const overridePayload: Record<string, unknown> = {
+          ...payload,
+          code: editingCode,
+          property: currentProperty,
+          system: 0,
+        }
+        if (!("tender_type" in overridePayload) && (draft.tender_type ?? editing.tender_type)) {
+          overridePayload.tender_type = draft.tender_type ?? editing.tender_type
+        }
+        if (!("disabled" in overridePayload) && "disabled" in draft) {
+          overridePayload.disabled = draft.disabled
+        }
+        await createResource(config.doctype, overridePayload)
+      } else {
+        if (config.propertyScoped || (config.propertyOrShared && editing === "new"))
+          payload.property = currentProperty
+        if (editing === "new") {
+          await createResource(config.doctype, payload)
+        } else if (editing) {
+          await updateResource(config.doctype, editing.name, payload)
+        }
       }
       setEditing(null)
       load()
@@ -1096,7 +1150,7 @@ export function ResourceScreen({
             </tbody>
           </table>
         </div>
-        {pageSize > 0 && (page > 0 || rows.length >= pageSize) && (
+        {pageSize > 0 && (page > 0 || hasMorePages) && (
           <div className="mt-3 flex items-center justify-between text-sm text-zinc-500">
             <span>{t("Page {n}", { n: page + 1 })}</span>
             <div className="flex gap-2">
@@ -1109,7 +1163,7 @@ export function ResourceScreen({
               </Button>
               <Button
                 variant="outline"
-                disabled={rows.length < pageSize}
+                disabled={!hasMorePages}
                 onClick={() => setPage((p) => p + 1)}
               >
                 {t("Next")}
@@ -1137,6 +1191,7 @@ export function ResourceScreen({
             useDetail ? undefined : (
             <div className="flex items-center justify-between">
               {editing !== "new" &&
+              !isSharedEdit &&
               canDeleteDoc &&
               config.allowDelete !== false &&
               (!config.canDelete || config.canDelete(draft)) ? (
@@ -1156,7 +1211,7 @@ export function ResourceScreen({
                 <Button variant="outline" onClick={() => setEditing(null)}>
                   {t("Cancel")}
                 </Button>
-                <Button disabled={busy} onClick={save}>
+                <Button disabled={busy || Boolean(existingOverride)} onClick={save}>
                   {busy ? t("Saving…") : t("Save")}
                 </Button>
               </div>
@@ -1175,6 +1230,29 @@ export function ResourceScreen({
           ) : (
             <div className="space-y-4">
               {config.formNote && <p className="rounded-lg bg-zinc-50 p-3 text-sm text-zinc-700">{config.formNote}</p>}
+              {isSharedEdit && (
+                existingOverride ? (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
+                    <span>
+                      {t("This property already has its own override for {code}. Edit that property row instead.", {
+                        code: editingCode,
+                      })}
+                    </span>
+                    <Button
+                      variant="outline"
+                      onClick={() => openEdit(existingOverride)}
+                    >
+                      {t("Edit property override")}
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
+                    {t("Saving creates a property override for {property}. The shared default stays unchanged for other properties.", {
+                      property: currentProperty,
+                    })}
+                  </p>
+                )
+              )}
               <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
                 {config.form.filter(spec => spec.dependsOn ? spec.dependsOn(draft) : true).map((spec) => spec.type === "table" ? (
                   <TableField

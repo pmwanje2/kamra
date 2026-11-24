@@ -26,6 +26,13 @@ def payment_method_name(code: str, property: str | None = None) -> str:
 	return f"{prop[:prefix_len]}::{code}::{digest}"[:140]
 
 
+def _is_property_scoped_user() -> bool:
+	user = getattr(frappe.session, "user", None)
+	if not user or user in ("Administrator", "Guest"):
+		return False
+	return bool(frappe.db.exists("User Permission", {"user": user, "allow": "Property"}))
+
+
 class PaymentMethod(MasterCode):
 	def autoname(self):
 		self.code = (self.code or "").strip()
@@ -38,7 +45,21 @@ class PaymentMethod(MasterCode):
 		self.property = (self.property or "").strip() or None
 		self.name = payment_method_name(self.code, self.property)
 
+	def _guard_shared_mutation(self):
+		if self.flags.get("kamra_seeding"):
+			return
+		prop = (self.property or "").strip() or None
+		before = None if self.is_new() else self.get_doc_before_save()
+		before_prop = ((before.property or "").strip() or None) if before else prop
+		if (not prop or (before is not None and not before_prop)) and _is_property_scoped_user():
+			frappe.throw(
+				_("Shared payment methods cannot be changed by a property-scoped user. "
+				  "Create a property override instead."),
+				frappe.PermissionError,
+			)
+
 	def validate(self):
+		self._guard_shared_mutation()
 		super().validate()
 		if self.system:
 			self.property = None
@@ -56,3 +77,11 @@ class PaymentMethod(MasterCode):
 				_("Payment Method {0} already exists for {1}.").format(self.code, scope),
 				frappe.DuplicateEntryError,
 			)
+
+	def on_trash(self):
+		if not (self.property or "").strip() and _is_property_scoped_user():
+			frappe.throw(
+				_("Shared payment methods cannot be deleted by a property-scoped user."),
+				frappe.PermissionError,
+			)
+		super().on_trash()

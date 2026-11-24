@@ -215,7 +215,7 @@ def correct(folio, name, action, code, note, key, pin, supervisor_user, supervis
 		frappe.throw("Amount exceeds the remaining refundable balance.")
 	amount = amount or opts["residual"]
 	repost = action == "reclassify_tender"
-	from kamra.masters import payment_tender_type
+	from kamra.masters import default_mode_for_tender, payment_tender_type
 	dest_tender = payment_tender_type(destination, doc.property) if repost else None
 	row_tender = payment_tender_type(row.mode, doc.property)
 	if repost:
@@ -230,7 +230,7 @@ def correct(folio, name, action, code, note, key, pin, supervisor_user, supervis
 			frappe.throw("Repost retry key already used.")
 	# Partial refunds pay out home money. Bookkeeping reversals negate the original tender.
 	is_refund = action == "partial_refund"
-	mode = "Cash" if is_refund and row_tender == "Foreign Cash" else row.mode
+	mode = default_mode_for_tender(doc.property, "Cash") if is_refund and row_tender == "Foreign Cash" else row.mode
 	fx = {}
 	if row.fx_amount and not is_refund:
 		fx = dict(
@@ -266,7 +266,7 @@ def correct(folio, name, action, code, note, key, pin, supervisor_user, supervis
 	if repost:
 		doc.reload()
 		if dest_tender not in ("Foreign Cash", "Bank Transfer"):
-			fx = {}
+			fx = {"currency": home_currency(doc.property)}
 		elif fx:
 			fx["fx_amount"] *= -1
 		doc.append(
@@ -290,6 +290,10 @@ def correct(folio, name, action, code, note, key, pin, supervisor_user, supervis
 			doc, pay.as_dict(), session=repost_session, ledger="Deposit" if advance else "Guest"
 		)
 		if repost_session:
+			fx_note = (
+				f"{pay.currency} {float(pay.fx_amount):,.2f} @ {pay.exchange_rate}"
+				if float(pay.get("fx_amount") or 0) else None
+			)
 			record_cashier_txn(
 				doc.property,
 				"Payment",
@@ -297,8 +301,11 @@ def correct(folio, name, action, code, note, key, pin, supervisor_user, supervis
 				amount,
 				folio=folio,
 				reference=why,
+				notes=fx_note,
 				session=repost_session,
 				tender_validated=True,
+				currency=pay.get("currency"),
+				fx_amount=float(pay.get("fx_amount") or 0),
 			)
 		result.update(repost=pay.name, balance=doc.balance)
 	elif advance:

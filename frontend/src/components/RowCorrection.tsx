@@ -2,8 +2,8 @@ import { useState } from "react"
 import { call, newIdempotencyKey } from "../lib/api"
 import { useT } from "../lib/i18n"
 import { serverError } from "../lib/resource"
-import type { TenderMode } from "../lib/money"
-import TenderPicker from "./TenderPicker"
+import { useLocale, type TenderMode } from "../lib/money"
+import TenderPicker, { tenderTypeOf } from "./TenderPicker"
 
 type Action = {
   id: string
@@ -25,6 +25,7 @@ export default function RowCorrection({
   folio,
   row,
   modes,
+  tenderTypes,
   home = "",
   currency = home,
   act,
@@ -32,11 +33,13 @@ export default function RowCorrection({
   folio: string
   row: string
   modes: TenderMode[]
+  tenderTypes?: Record<string, string>
   home?: string
   currency?: string
   act: (fn: () => Promise<unknown>, onError: (message: string) => void) => Promise<void>
 }) {
   const { t } = useT()
+  const loc = useLocale()
   const [options, setOptions] = useState<Options>(),
     [error, setError] = useState(""),
     [loading, setLoading] = useState(false)
@@ -52,11 +55,13 @@ export default function RowCorrection({
     approvals =
       action?.requires.includes("supervisor_user") ||
       action?.reason_codes.find((c) => c.name === code)?.requires_supervisor
-  // Reposting to an FX tender retains the original rate. Other tenders
-  // repost the original home value, so their account must map that currency.
-  const destinations = modes.flatMap(({ mode, currencies }) => {
-    const code = mode === "Foreign Cash" || mode === "Bank Transfer" ? currency : home
-    return currencies.includes(code) ? [{ mode, currencies: [code] }] : []
+  // Reposting to an FX tender (Foreign Cash or Bank Transfer tender_type) retains
+  // the original rate. Other tenders repost the original home value.
+  const resolvedTypes = tenderTypes ?? loc.payment_tender_types
+  const destinations = modes.flatMap(({ mode: m, currencies }) => {
+    const tt = tenderTypeOf({ payment_tender_types: resolvedTypes }, m)
+    const targetCode = tt === "Foreign Cash" || tt === "Bank Transfer" ? currency : home
+    return currencies.includes(targetCode) ? [{ mode: m, currencies: [targetCode] }] : []
   })
   const destinationCurrency = destinations.find((m) => m.mode === mode)?.currencies[0] ?? currency
   const choose = (a?: Action) => {

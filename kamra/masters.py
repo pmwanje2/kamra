@@ -97,6 +97,7 @@ LINKED_FIELDS: tuple[tuple[str, str, str], ...] = (
 	("Folio Payment", "mode", PAYMENT),
 	("Cashier Transaction", "mode", PAYMENT),
 	("Banquet Receipt", "mode", PAYMENT),
+	("POS Order", "payment_mode", PAYMENT),
 	("Meal Plan", "code", MEAL_PLAN_CODE),
 )
 
@@ -134,12 +135,13 @@ def _payment_mode_properties() -> dict[str, set[str]]:
 	"""Map each stored payment mode string to the set of properties that used it."""
 	props_by_mode: dict[str, set[str]] = {}
 	sources = (
-		("Folio Payment", "Folio", "SELECT DISTINCT c.mode, p.property FROM `tabFolio Payment` c LEFT JOIN `tabFolio` p ON p.name = c.parent WHERE c.mode IS NOT NULL AND c.mode != ''"),
-		("Cashier Transaction", None, "SELECT DISTINCT mode, property FROM `tabCashier Transaction` WHERE mode IS NOT NULL AND mode != ''"),
-		("Banquet Receipt", "Venue Booking", "SELECT DISTINCT c.mode, p.property FROM `tabBanquet Receipt` c LEFT JOIN `tabVenue Booking` p ON p.name = c.parent WHERE c.mode IS NOT NULL AND c.mode != ''"),
+		("Folio Payment", "mode", "Folio", "SELECT DISTINCT c.mode, p.property FROM `tabFolio Payment` c LEFT JOIN `tabFolio` p ON p.name = c.parent WHERE c.mode IS NOT NULL AND c.mode != ''"),
+		("Cashier Transaction", "mode", None, "SELECT DISTINCT mode, property FROM `tabCashier Transaction` WHERE mode IS NOT NULL AND mode != ''"),
+		("Banquet Receipt", "mode", "Venue Booking", "SELECT DISTINCT c.mode, p.property FROM `tabBanquet Receipt` c LEFT JOIN `tabVenue Booking` p ON p.name = c.parent WHERE c.mode IS NOT NULL AND c.mode != ''"),
+		("POS Order", "payment_mode", None, "SELECT DISTINCT payment_mode, property FROM `tabPOS Order` WHERE payment_mode IS NOT NULL AND payment_mode != ''"),
 	)
-	for doctype, parent_dt, sql in sources:
-		if not (frappe.db.table_exists(doctype) and frappe.db.has_column(doctype, "mode")):
+	for doctype, col, parent_dt, sql in sources:
+		if not (frappe.db.table_exists(doctype) and frappe.db.has_column(doctype, col)):
 			continue
 		if parent_dt and not frappe.db.table_exists(parent_dt):
 			continue
@@ -411,6 +413,35 @@ def payment_tender_type(mode: str | None, property: str | None = None) -> str | 
 	if row and isinstance(row.get("tender_type"), str) and row["tender_type"]:
 		return row["tender_type"]
 	return SYSTEM_TENDER_TYPES.get(mode)
+
+
+def default_mode_for_tender(property: str | None, tender_type: str) -> str:
+	"""Canonical payment method code for a tender_type at `property`.
+	Prefers the enabled system code of that tender_type when active, then
+	the first enabled property/shared code of that tender_type, else the
+	seeded system code for that tender_type."""
+	rows = effective_payment_methods(
+		property, enabled_only=True, include_system=True, tender_type=tender_type,
+	)
+	for row in rows:
+		if int(row.get("system") or 0):
+			return row.get("code") or row.get("name")
+	if rows:
+		return rows[0].get("code") or rows[0].get("name")
+	for code, tt in SYSTEM_TENDER_TYPES.items():
+		if tt == tender_type:
+			return code
+	return tender_type
+
+
+def is_system_payment_method(mode: str | None, property: str | None = None) -> bool:
+	"""True when `mode` resolves to a seeded system Payment Method."""
+	if not mode:
+		return False
+	row = resolve_payment_method(mode, property)
+	if row is not None:
+		return bool(int(row.get("system") or 0))
+	return mode in SYSTEM_TENDER_TYPES
 
 
 def assert_known_payment_method(property: str | None, mode: str | None) -> None:

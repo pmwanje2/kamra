@@ -44,3 +44,4 @@ kamra.patches.v48.configurable_masters
 kamra.patches.v48.replace_untouched_india_defaults
 kamra.patches.v48.payment_method_per_property_key
 kamra.patches.v48.backfill_blank_property_country
+kamra.patches.v48.backfill_open_cashier_txn_currency

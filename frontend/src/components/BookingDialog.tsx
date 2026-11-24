@@ -712,6 +712,7 @@ export function BookingDialog(props: {
           guest_name: form.guest_name,
           phone: form.phone || undefined,
           company: form.company || undefined,
+          booking_type: form.booking_type || undefined,
           rate_plan: form.rate_plan || undefined,
           ...viaArgs,
         })

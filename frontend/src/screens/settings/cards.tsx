@@ -14,7 +14,7 @@ import { probeSocket } from "../../lib/realtime"
 import { Button } from "../../components/ui/button"
 import ImageField from "../../components/ImageField"
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card"
-import { cur, moneyLocale, useLocale } from "../../lib/money"
+import { cur, loadLocale, moneyLocale, useLocale } from "../../lib/money"
 import { toFullPath } from "../../lib/routing"
 
 
@@ -1695,6 +1695,7 @@ export function CashierLimitsCard({ property }: { property: string }) {
         disabled: d.disabled,
       })
       setStatus((s) => ({ ...s, [row.name]: { ok: true, text: t("Saved") } }))
+      void loadLocale()
       load()
     } catch (e) {
       setStatus((s) => ({ ...s, [row.name]: { ok: false, text: serverError(e) } }))

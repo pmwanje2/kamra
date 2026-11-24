@@ -35,6 +35,8 @@ interface Locale {
   payment_modes: string[]
   /** Resolved Payment Method.tender_type keyed by mode code for this property. */
   payment_tender_types?: Record<string, string>
+  /** Explicit Cashier.allowed_modes allowlist for the signed-in user, or null if unrestricted. */
+  cashier_allowed_modes?: string[] | null
   tender_modes?: TenderMode[] | null
   fx_currencies?: string[]
   /** The pack's own instant / wallet modes; the till keeps
@@ -132,7 +134,7 @@ export function loadLocale(): Promise<Locale> {
   })
     .then((l) => {
       if (property !== getCurrentProperty()) return cache
-      cache = { ...cache, payment_tender_types: {}, tender_modes: null, fx_currencies: [], tax_basis: null, ...l }
+      cache = { ...cache, payment_tender_types: {}, cashier_allowed_modes: null, tender_modes: null, fx_currencies: [], tax_basis: null, ...l }
       syncDateFormat(cache.date_format)
       remember()
       return cache
