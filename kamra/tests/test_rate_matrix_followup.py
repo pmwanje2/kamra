@@ -1074,3 +1074,498 @@ class KwdThreeDecimalLiveGapsTest(QuotePatches, RateMatrixHarness):
 		self.assertEqual(acct["by_head"]["Room"]["total"], 23.888)
 		self.assertEqual(acct["erp_credited"], 5.944)
 
+
+class KwdRefundCorrectionCheckoutReceivablesTest(QuotePatches, RateMatrixHarness):
+	"""R2 review findings: KWD 3-dp, USD 2-dp, and UGX 0-dp precision across
+	refunds, payment corrections, folio close/part_settle/checkout, and receivables."""
+
+	modules = (
+		"kamra.pricing",
+		"kamra.folio",
+		"kamra.authz",
+		"kamra.ledger",
+		"kamra.checkout",
+		"kamra.corrections",
+		"kamra.receivables",
+		"kamra.api",
+	)
+
+	def extra_modules(self):
+		return {
+			"kamra.localization": _tax_invoice_localization(Decimal("5")),
+			"kamra.cashier": stub_module(
+				"kamra.cashier",
+				require_open_session=lambda prop: "SESS-1",
+				assert_cashier_mode_allowed=lambda prop, mode: None,
+				record_cashier_txn=lambda *a, **kw: None,
+			),
+			"kamra.masters": stub_module(
+				"kamra.masters",
+				default_mode_for_tender=lambda prop, tender="Cash": tender,
+				is_system_payment_method=lambda mode, prop=None: True,
+				payment_tender_type=lambda mode, prop=None: mode,
+			),
+			"kamra.savings": stub_module("kamra.savings", log_action=lambda *a, **kw: self.audit_logs.append((a, kw))),
+			"kamra.webhooks": stub_module("kamra.webhooks", emit_payment=lambda *a, **kw: None),
+			"kamra.deposit": stub_module("kamra.deposit", record_collected=lambda *a, **kw: None),
+		}
+
+	def setUp(self):
+		super().setUp()
+		self.roles = ["Finance", "Hotel Admin", "Front Desk"]
+		self.authz.restricted_properties = lambda user=None: None
+		self.audit_logs = []
+		self.utils.get_first_day = lambda d: str(d)[:8] + "01"
+		self.add(
+			"Property", "KWD Hotel", currency="KWD", property_name="KWD Hotel",
+			business_date="2026-11-24", rates_include_tax=0,
+			gst_mode="Fixed", gst_rate_low=5, gst_rate_high=5,
+		)
+		self.add(
+			"Property", "USD Hotel", currency="USD", property_name="USD Hotel",
+			business_date="2026-11-24", rates_include_tax=0,
+			gst_mode="Fixed", gst_rate_low=5, gst_rate_high=5,
+		)
+		self.docs["Property", "Test Hotel"].update(
+			currency="UGX", property_name="Test Hotel",
+			business_date="2026-11-24", rates_include_tax=0,
+			gst_mode="Fixed", gst_rate_low=0, gst_rate_high=0,
+		)
+		loc = sys.modules["kamra.localization"]
+		loc.FOREIGN_CURRENCY_TENDER_TYPES = ("Cash", "Foreign Cash", "Bank Transfer")
+		loc.on_invoice_issued = lambda *a, **kw: None
+		loc.assert_payment_mode = lambda *a, **kw: None
+
+		def _money_text(prop, amt):
+			cur = self.docs.get(("Property", prop), Doc()).get("currency") or "USD"
+			digits = {"KWD": 3, "UGX": 0}.get(cur, 2)
+			return f"{cur} {float(amt or 0):,.{digits}f}"
+
+		loc.money_text = _money_text
+		self.frappe.model = stub_module("frappe.model")
+		self.frappe.model.naming = stub_module(
+			"frappe.model.naming", make_autoname=lambda pat: "INV-KWD-26-00001",
+		)
+		self.sys_modules_patch = patch.dict(
+			"sys.modules",
+			{"frappe.model": self.frappe.model, "frappe.model.naming": self.frappe.model.naming},
+		)
+		self.sys_modules_patch.start()
+		self.addCleanup(self.sys_modules_patch.stop)
+
+		base_get_doc = self.get_doc
+		self.inserted_docs = []
+
+		def _get_doc(doctype, name=None, **kw):
+			if isinstance(doctype, dict):
+				d = Doc(doctype, name=f"NEW-{len(self.inserted_docs) + 1}")
+				d.insert = lambda **ikw: (self.inserted_docs.append(d), d)[1]
+				d.save = lambda **skw: d
+				self._wire_folio(d)
+				return d
+			return base_get_doc(doctype, name)
+
+		self.frappe.get_doc = _get_doc
+		self.frappe.get_cached_doc = _get_doc
+		self.frappe.get_cached_value = self.get_value
+
+		def _set_value(dt, name, field, val=None, **kw):
+			doc = self.docs.get((dt, name)) if isinstance(name, str) else None
+			if doc is not None:
+				if isinstance(field, dict):
+					doc.update(field)
+				else:
+					doc[field] = val
+
+		self.frappe.db.set_value = _set_value
+
+	@staticmethod
+	def _wire_folio(doc):
+		doc.save = lambda **kw: doc
+		doc.reload = lambda: doc
+		doc.as_dict = lambda: {k: v for k, v in doc.items() if not callable(v)}
+		doc.setdefault("charges", [])
+		doc.setdefault("payments", [])
+
+		def _append(field, row):
+			d = Doc(row, name=f"{field[:2].upper()}-{len(doc[field]) + 1}")
+			d.as_dict = lambda: {k: v for k, v in d.items() if not callable(v)}
+			doc[field].append(d)
+			return d
+
+		doc.append = _append
+		return doc
+
+	def _make_folio(self, name, prop, **fields):
+		doc = self.add("Folio", name, property=prop, folio_type="Guest", status="Open", **fields)
+		return self._wire_folio(doc)
+
+	def test_p1a_refund_payment_row_residual_full_none_over_refund_and_advance_paid(self):
+		# 1. KWD: 11.944 Cash Advance -> refund 11.943 -> remaining 0.001 via payment_row succeeds cleanly
+		res1 = self.add("Reservation", "RES-KWD-R1", property="KWD Hotel", status="Confirmed", advance_paid=11.944)
+		p1 = Doc(name="FP-ADV-1", posting_date="2026-11-24", payment_kind="Advance", mode="Cash",
+		         amount=11.944, currency="KWD")
+		f1 = self._make_folio("FOL-KWD-R1", "KWD Hotel", reservation="RES-KWD-R1",
+		                      charges=[], payments=[p1], grand_total=0.0, payments_total=11.944, balance=-11.944)
+		deposit_held = {"FOL-KWD-R1": 11.944, "FOL-KWD-R2": 11.944, "FOL-USD-R1": 10.0, "FOL-UGX-R1": 50000.0}
+
+		def _refund_sql(query, params=None, as_dict=False):
+			if "ledger = 'Deposit'" in query:
+				fname = params[0] if isinstance(params, (list, tuple)) else params
+				return [(deposit_held.get(fname, 0.0),)]
+			return [(0.0,)]
+
+		self.frappe.db.sql = _refund_sql
+
+		def _record_ledger(doc, pay, **kw):
+			if kw.get("ledger") == "Deposit":
+				deposit_held[doc.name] = round(deposit_held.get(doc.name, 0.0) + float(pay["amount"]), 6)
+
+		with patch.object(self.api, "_pin_guard", lambda *a, **kw: None), \
+				patch.object(self.ledger, "require_reason", lambda cat, rc, reason, **kw: reason or rc), \
+				patch.object(self.ledger, "record_payment_ledger", side_effect=_record_ledger):
+			r_part = self.api.refund_folio_payment(
+				"FOL-KWD-R1", amount=11.943, mode="Cash", reason="Partial KWD refund", payment_row="FP-ADV-1",
+			)
+			self.assertEqual(r_part["balance"], -0.001)
+			self.assertEqual(res1.advance_paid, 0.001)
+
+			# Remaining 0.001 KWD via payment_row & amount=None MUST succeed (not "already refunded in full")
+			r_rest = self.api.refund_folio_payment(
+				"FOL-KWD-R1", amount=None, mode="Cash", reason="Final 1 fil", payment_row="FP-ADV-1",
+			)
+			self.assertEqual(r_rest["balance"], 0.0)
+			self.assertEqual(f1.balance, 0.0)
+			self.assertEqual(deposit_held["FOL-KWD-R1"], 0.0)
+			self.assertEqual(res1.advance_paid, 0.0)
+
+			# 2. KWD: amount=None on full 11.944 KWD Advance refunds full 11.944 (not 11.94, zero -0.004 stranded)
+			res2 = self.add("Reservation", "RES-KWD-R2", property="KWD Hotel", status="Confirmed", advance_paid=11.944)
+			p2 = Doc(name="FP-ADV-2", posting_date="2026-11-24", payment_kind="Advance", mode="Cash",
+			         amount=11.944, currency="KWD")
+			f2 = self._make_folio("FOL-KWD-R2", "KWD Hotel", reservation="RES-KWD-R2",
+			                      charges=[], payments=[p2], grand_total=0.0, payments_total=11.944, balance=-11.944)
+			r_full = self.api.refund_folio_payment(
+				"FOL-KWD-R2", amount=None, mode="Cash", reason="Full KWD advance cancel", payment_row="FP-ADV-2",
+			)
+			self.assertEqual(r_full["balance"], 0.0)
+			self.assertEqual(f2.payments[-1].amount, -11.944)
+			self.assertEqual(deposit_held["FOL-KWD-R2"], 0.0)
+			self.assertEqual(res2.advance_paid, 0.0)
+
+			# 3. KWD: partial 0.001 advance refund preserves 3-dp Reservation.advance_paid (11.943, not 11.94)
+			res3 = self.add("Reservation", "RES-KWD-R3", property="KWD Hotel", status="Confirmed", advance_paid=11.944)
+			p3 = Doc(name="FP-ADV-3", posting_date="2026-11-24", payment_kind="Advance", mode="Cash",
+			         amount=11.944, currency="KWD")
+			deposit_held["FOL-KWD-R3"] = 11.944
+			self._make_folio("FOL-KWD-R3", "KWD Hotel", reservation="RES-KWD-R3",
+			                 charges=[], payments=[p3], grand_total=0.0, payments_total=11.944, balance=-11.944)
+			self.api.refund_folio_payment(
+				"FOL-KWD-R3", amount=0.001, mode="Cash", reason="1 fil adjustment", payment_row="FP-ADV-3",
+			)
+			self.assertEqual(res3.advance_paid, 11.943)
+
+			# 4. KWD: over-refunding 0.004 KWD on a settled 0.000 balance folio MUST be refused
+			c_settled = Doc(name="FC-S1", posting_date="2026-11-24", charge_type="Room",
+			                qty=1, rate=11.375, amount=11.375, gst_rate=5.0, gst_amount=0.569, total=11.944)
+			p_settled = Doc(name="FP-S1", posting_date="2026-11-24", payment_kind="Payment", mode="Cash",
+			                amount=11.944, currency="KWD")
+			self._make_folio("FOL-KWD-ZERO", "KWD Hotel", charges=[c_settled], payments=[p_settled],
+			                 charges_total=11.375, tax_total=0.569, grand_total=11.944,
+			                 payments_total=11.944, balance=0.0)
+			with self.assertRaises(self.frappe.ValidationError):
+				self.api.refund_folio_payment("FOL-KWD-ZERO", amount=0.004, mode="Cash", reason="Zero-bal over-refund")
+
+			# 5. USD 2-dp & UGX 0-dp parity
+			res_usd = self.add("Reservation", "RES-USD-R1", property="USD Hotel", status="Confirmed", advance_paid=10.0)
+			p_usd = Doc(name="FP-USD-1", posting_date="2026-11-24", payment_kind="Advance", mode="Cash",
+			            amount=10.0, currency="USD")
+			self._make_folio("FOL-USD-R1", "USD Hotel", reservation="RES-USD-R1",
+			                 charges=[], payments=[p_usd], grand_total=0.0, payments_total=10.0, balance=-10.0)
+			self.api.refund_folio_payment("FOL-USD-R1", amount=9.99, mode="Cash", reason="Part USD", payment_row="FP-USD-1")
+			r_usd = self.api.refund_folio_payment("FOL-USD-R1", amount=None, mode="Cash", reason="Rest USD", payment_row="FP-USD-1")
+			self.assertEqual(r_usd["balance"], 0.0)
+			self.assertEqual(res_usd.advance_paid, 0.0)
+
+			res_ugx = self.add("Reservation", "RES-UGX-R1", property="Test Hotel", status="Confirmed", advance_paid=50000.0)
+			p_ugx = Doc(name="FP-UGX-1", posting_date="2026-11-24", payment_kind="Advance", mode="Cash",
+			            amount=50000.0, currency="UGX")
+			self._make_folio("FOL-UGX-R1", "Test Hotel", reservation="RES-UGX-R1",
+			                 charges=[], payments=[p_ugx], grand_total=0.0, payments_total=50000.0, balance=-50000.0)
+			self.api.refund_folio_payment("FOL-UGX-R1", amount=49999.0, mode="Cash", reason="Part UGX", payment_row="FP-UGX-1")
+			r_ugx = self.api.refund_folio_payment("FOL-UGX-R1", amount=None, mode="Cash", reason="Rest UGX", payment_row="FP-UGX-1")
+			self.assertEqual(r_ugx["balance"], 0.0)
+			self.assertEqual(res_ugx.advance_paid, 0.0)
+
+	def test_p1b_payment_correction_options_and_partial_refund_respect_currency_minor_unit(self):
+		res_kwd = self.add("Reservation", "RES-CORR-KWD", property="KWD Hotel", status="Confirmed", advance_paid=11.944)
+		pay_kwd = Doc(name="FP-CK-1", posting_date="2026-11-24", payment_kind="Advance", mode="Cash",
+		              amount=11.944, currency="KWD")
+		f_kwd = self._make_folio("FOL-CORR-KWD", "KWD Hotel", reservation="RES-CORR-KWD",
+		                         charges=[], payments=[pay_kwd], grand_total=0.0,
+		                         payments_total=11.944, balance=-11.944)
+
+		res_usd = self.add("Reservation", "RES-CORR-USD", property="USD Hotel", status="Confirmed", advance_paid=10.0)
+		pay_usd = Doc(name="FP-CU-1", posting_date="2026-11-24", payment_kind="Advance", mode="Cash",
+		              amount=10.0, currency="USD")
+		self._make_folio("FOL-CORR-USD", "USD Hotel", reservation="RES-CORR-USD",
+		                 charges=[], payments=[pay_usd], grand_total=0.0,
+		                 payments_total=10.0, balance=-10.0)
+
+		res_ugx = self.add("Reservation", "RES-CORR-UGX", property="Test Hotel", status="Confirmed", advance_paid=50000.0)
+		pay_ugx = Doc(name="FP-CG-1", posting_date="2026-11-24", payment_kind="Advance", mode="Cash",
+		              amount=50000.0, currency="UGX")
+		self._make_folio("FOL-CORR-UGX", "Test Hotel", reservation="RES-CORR-UGX",
+		                 charges=[], payments=[pay_ugx], grand_total=0.0,
+		                 payments_total=50000.0, balance=-50000.0)
+
+		base_get_value = self.get_value
+
+		def _corr_get_value(dt, name, fieldname="name", as_dict=False, **kw):
+			if dt == "Folio Ledger Entry":
+				return Doc(name="FLE-ORIG-1", session="SESS-1")
+			if dt == "Cashier Session":
+				return "Open"
+			return base_get_value(dt, name, fieldname, as_dict=as_dict, **kw)
+
+		self.frappe.db.get_value = _corr_get_value
+		self.frappe.db.exists = lambda dt, flt=None: False if dt == "Night Audit Run" else self.exists(dt, flt)
+		reason_row = Doc(name="REF-OVER", requires_supervisor=1)
+
+		with patch.object(self.corrections, "list_reason_codes", lambda cat: [reason_row]), \
+				patch.object(self.authz, "supervisors_for", lambda *a, **kw: []), \
+				patch.object(self.authz, "require_cashier_pin", lambda *a, **kw: None), \
+				patch.object(self.authz, "verify_supervisor", lambda *a, **kw: "sup@example.test"), \
+				patch.object(self.api, "_pin_guard", lambda *a, **kw: None), \
+				patch.object(self.ledger, "require_reason", lambda cat, rc, reason, **kw: reason or rc), \
+				patch.object(self.ledger, "record_payment_ledger", lambda *a, **kw: None):
+			# 1. KWD options preserve full 11.944 residual and refund_cap (not 11.94)
+			opts = self.corrections.options(f_kwd, "FP-CK-1")
+			self.assertEqual(opts["residual"], 11.944)
+			self.assertEqual(opts["refund_cap"], 11.944)
+
+			# 2. KWD 0.001 partial_refund succeeds and preserves 3-dp balance & Reservation.advance_paid
+			out = self.corrections.correct(
+				"FOL-CORR-KWD", "FP-CK-1", "partial_refund", "REF-OVER", "1 fil back",
+				"kwd-corr-1", None, "sup@example.test", "8394", 0.001, None,
+			)
+			self.assertEqual(out["balance"], -11.943)
+			self.assertEqual(res_kwd.advance_paid, 11.943)
+			opts_after = self.corrections.options(f_kwd, "FP-CK-1")
+			self.assertEqual(opts_after["residual"], 11.943)
+			self.assertEqual(opts_after["refund_cap"], 11.943)
+
+			# 3. KWD sub-fil 0.0001 is rejected with currency-neutral wording (no "to the cent")
+			with self.assertRaises(self.frappe.ValidationError) as cm_kwd:
+				self.corrections.correct(
+					"FOL-CORR-KWD", "FP-CK-1", "partial_refund", "REF-OVER", "sub-fil",
+					"kwd-corr-bad", None, "sup@example.test", "8394", 0.0001, None,
+				)
+			self.assertNotIn("cent", str(cm_kwd.exception).lower())
+
+			# 4. USD 0.01 succeeds; 0.001 is rejected
+			out_usd = self.corrections.correct(
+				"FOL-CORR-USD", "FP-CU-1", "partial_refund", "REF-OVER", "1 cent back",
+				"usd-corr-1", None, "sup@example.test", "8394", 0.01, None,
+			)
+			self.assertEqual(out_usd["balance"], -9.99)
+			self.assertEqual(res_usd.advance_paid, 9.99)
+			with self.assertRaises(self.frappe.ValidationError):
+				self.corrections.correct(
+					"FOL-CORR-USD", "FP-CU-1", "partial_refund", "REF-OVER", "sub-cent",
+					"usd-corr-bad", None, "sup@example.test", "8394", 0.001, None,
+				)
+
+			# 5. UGX 1 succeeds; fractional 0.5 is rejected with currency-neutral wording
+			out_ugx = self.corrections.correct(
+				"FOL-CORR-UGX", "FP-CG-1", "partial_refund", "REF-OVER", "1 UGX back",
+				"ugx-corr-1", None, "sup@example.test", "8394", 1, None,
+			)
+			self.assertEqual(out_ugx["balance"], -49999.0)
+			self.assertEqual(res_ugx.advance_paid, 49999.0)
+			with self.assertRaises(self.frappe.ValidationError) as cm_ugx:
+				self.corrections.correct(
+					"FOL-CORR-UGX", "FP-CG-1", "partial_refund", "REF-OVER", "half shilling",
+					"ugx-corr-bad", None, "sup@example.test", "8394", 0.5, None,
+				)
+			self.assertNotIn("cent", str(cm_ugx.exception).lower())
+
+	def test_p1c_folio_close_part_settle_and_checkout_settlement_position_enforce_currency_eps(self):
+		# 1. KWD folio with 0.004 KWD unpaid (11.944 charged, 11.940 paid)
+		self.add("Reservation", "RES-CHK-KWD", property="KWD Hotel", status="Checked In")
+		c_kwd = Doc(name="FC-CK1", posting_date="2026-11-24", charge_type="Room",
+		            qty=1, rate=11.375, amount=11.375, gst_rate=5.0)
+		p_kwd = Doc(name="FP-CK1", posting_date="2026-11-24", payment_kind="Payment", mode="Cash",
+		            amount=11.940, currency="KWD")
+		f_kwd = self._make_folio("FOL-CHK-KWD", "KWD Hotel", reservation="RES-CHK-KWD",
+		                         charges=[c_kwd], payments=[p_kwd])
+		self.folio._recalculate(f_kwd)
+		self.assertEqual(f_kwd.balance, 0.004)
+		self.records["Folio"] = [f_kwd]
+
+		with patch.object(self.ledger, "company_payer_of", lambda f: None):
+			pos = self.checkout.settlement_position("RES-CHK-KWD")
+		self.assertEqual(pos["owed"], 0.004)
+		self.assertEqual(pos["refund_due"], 0.0)
+		self.assertEqual(pos["folios"][0]["balance"], 0.004)
+
+		with self.assertRaisesRegex(self.frappe.ValidationError, "still owed") as cm_close:
+			self.folio.close_folio("FOL-CHK-KWD")
+		self.assertIn("0.004", str(cm_close.exception))
+		self.assertEqual(f_kwd.status, "Open")
+
+		with self.assertRaises(self.frappe.ValidationError):
+			self.folio.part_settle("FOL-CHK-KWD")
+
+		# 2. KWD folio with 0.004 KWD overpaid -> refund_due == 0.004 and close_folio refuses
+		f_kwd.payments.append(Doc(name="FP-CK2", posting_date="2026-11-24", payment_kind="Payment",
+		                          mode="Cash", amount=0.008, currency="KWD"))
+		self.folio._recalculate(f_kwd, payments_only=True)
+		self.assertEqual(f_kwd.balance, -0.004)
+		with patch.object(self.ledger, "company_payer_of", lambda f: None):
+			pos_over = self.checkout.settlement_position("RES-CHK-KWD")
+		self.assertEqual(pos_over["owed"], 0.0)
+		self.assertEqual(pos_over["refund_due"], 0.004)
+		with self.assertRaisesRegex(self.frappe.ValidationError, "owed back") as cm_over:
+			self.folio.close_folio("FOL-CHK-KWD")
+		self.assertIn("0.004", str(cm_over.exception))
+
+		# 3. Exact KWD settlement (balance == 0.000) closes cleanly
+		f_kwd.payments.append(Doc(name="FP-CK3", posting_date="2026-11-24", payment_kind="Refund",
+		                          mode="Cash", amount=-0.004, currency="KWD"))
+		self.folio._recalculate(f_kwd, payments_only=True)
+		self.assertEqual(f_kwd.balance, 0.0)
+		with patch.object(self.ledger, "company_payer_of", lambda f: None):
+			pos_zero = self.checkout.settlement_position("RES-CHK-KWD")
+		self.assertEqual((pos_zero["owed"], pos_zero["refund_due"]), (0.0, 0.0))
+		inv = self.folio.close_folio("FOL-CHK-KWD")
+		self.assertEqual(inv, "INV-KWD-26-00001")
+		self.assertEqual(f_kwd.status, "Closed")
+
+		# 4. USD 0.01 unpaid is refused at close_folio and reported by settlement_position
+		self.add("Reservation", "RES-CHK-USD", property="USD Hotel", status="Checked In")
+		f_usd = self._make_folio("FOL-CHK-USD", "USD Hotel", reservation="RES-CHK-USD",
+		                         charges=[Doc(name="FC-U1", amount=10.0, gst_rate=0.0)],
+		                         payments=[Doc(name="FP-U1", amount=9.99, mode="Cash", payment_kind="Payment")])
+		self.folio._recalculate(f_usd)
+		self.assertEqual(f_usd.balance, 0.01)
+		self.records["Folio"] = [f_usd]
+		with patch.object(self.ledger, "company_payer_of", lambda f: None):
+			self.assertEqual(self.checkout.settlement_position("RES-CHK-USD")["owed"], 0.01)
+		with self.assertRaisesRegex(self.frappe.ValidationError, "still owed"):
+			self.folio.close_folio("FOL-CHK-USD")
+
+		# 5. UGX 1.0 unpaid is refused at close_folio and reported by settlement_position
+		self.add("Reservation", "RES-CHK-UGX", property="Test Hotel", status="Checked In")
+		f_ugx = self._make_folio("FOL-CHK-UGX", "Test Hotel", reservation="RES-CHK-UGX",
+		                         charges=[Doc(name="FC-G1", amount=1000.0, gst_rate=0.0)],
+		                         payments=[Doc(name="FP-G1", amount=999.0, mode="Cash", payment_kind="Payment")])
+		self.folio._recalculate(f_ugx)
+		self.assertEqual(f_ugx.balance, 1.0)
+		self.records["Folio"] = [f_ugx]
+		with patch.object(self.ledger, "company_payer_of", lambda f: None):
+			self.assertEqual(self.checkout.settlement_position("RES-CHK-UGX")["owed"], 1.0)
+		with self.assertRaisesRegex(self.frappe.ValidationError, "still owed"):
+			self.folio.close_folio("FOL-CHK-UGX")
+
+	def test_p2_receivables_summary_guests_owing_create_and_transfer_preserve_kwd_3dp(self):
+		self.add("Corporate Account", "Kuwait Corp", company_name="Kuwait Corp")
+		self.add("Corporate Account", "Kuwait Parent", company_name="Kuwait Parent")
+		src_acc = self.add(
+			"City Ledger Account", "CLA-SRC", property="KWD Hotel", company="Kuwait Corp",
+			account_number="AR-KWD-SRC", balance=17.944, credit_limit=100.0, disabled=0, restricted=0,
+		)
+		dst_acc = self.add(
+			"City Ledger Account", "CLA-DST", property="KWD Hotel", company="Kuwait Parent",
+			account_number="AR-KWD-DST", balance=0.0, credit_limit=100.0, disabled=0, restricted=0,
+		)
+		src_acc.save = lambda **kw: src_acc
+		dst_acc.save = lambda **kw: dst_acc
+
+		# 1. ar_accounts + _summary + guests_owing preserve 3-dp KWD (5.944 / 11.949 / 0.004)
+		guests_sql_calls = []
+
+		def _ar_sql(query, params=None, as_dict=False):
+			if "MAX(CONCAT(posting_date, creation))" in query:
+				return [Doc(account="CLA-SRC", posting_date="2026-11-24", credit=5.944)]
+			if "AS total_debit" in query:
+				return [Doc(account="CLA-SRC", total_debit=23.888, total_credit=5.944)]
+			if "kind = 'Payment' AND posting_date >=" in query:
+				return [(5.944,)]
+			if "ledger = 'Deposit'" in query:
+				return [(11.949,)]
+			if "FROM `tabFolio` f JOIN `tabReservation`" in query:
+				guests_sql_calls.append((query, params))
+				return [Doc(folio="FOL-OW-1", guest_name="Departed KWD", balance=0.004,
+				            reservation="RES-OW-1", status="Checked Out",
+				            check_in_date="2026-11-20", check_out_date="2026-11-24")]
+			return [(0.0,)]
+
+		self.frappe.db.sql = _ar_sql
+		self.records["City Ledger Account"] = [src_acc]
+		self.records["Corporate Account"] = [self.docs["Corporate Account", "Kuwait Corp"]]
+
+		fake_credit = stub_module("kamra.credit", in_house_exposure=lambda comp, prop: 11.944)
+		with patch.dict(sys.modules, {"kamra.credit": fake_credit}), \
+				patch.object(self.ledger, "city_ledger_aging", lambda prop: {
+					"accounts": [{
+						"name": "CLA-SRC", "company": "Kuwait Corp", "balance": 17.944,
+						"overdue": 5.944, "not_due": 12.0,
+					}],
+				}):
+			out = self.receivables.ar_accounts("KWD Hotel")
+
+		acc_row = out["accounts"][0]
+		self.assertEqual(acc_row["total_debit"], 23.888)
+		self.assertEqual(acc_row["total_credit"], 5.944)
+		self.assertEqual(acc_row["last_payment"], 5.944)
+		summary = out["summary"]
+		self.assertEqual(summary["to_bill"], 11.944)
+		self.assertEqual(summary["billed_pending"], 17.944)
+		self.assertEqual(summary["overdue"], 5.944)
+		self.assertEqual(summary["received_this_month"], 5.944)
+		self.assertEqual(summary["deposits_held"], 11.949)
+		self.assertEqual(summary["guests_owing"][0]["balance"], 0.004)
+		self.assertNotIn("0.005", guests_sql_calls[0][0])
+		self.assertIsInstance(guests_sql_calls[0][1], (list, tuple))
+		self.assertLessEqual(guests_sql_calls[0][1][1], 0.0005)
+
+		# 2. create_ar_invoice preserves 3-dp KWD line amount (11.375 -> grand_total 11.944, not 11.38)
+		created_folios = []
+
+		def _fake_save_folio(f):
+			self.docs[("Folio", f.name)] = f
+			created_folios.append(f)
+			return f
+
+		with patch.object(self.api, "_check_charge_amount_and_tax", lambda *a, **kw: None), \
+				patch.object(self.api, "_refuse_opening_balance", lambda *a, **kw: None), \
+				patch.object(self.api, "_resolve_charge_gst", lambda prop, ct, desc, alc, rate: rate), \
+				patch.object(self.ledger, "code_for_charge_type", lambda ct: "8000"), \
+				patch.object(self.ledger, "save_folio", side_effect=_fake_save_folio), \
+				patch.object(self.ledger, "transfer_to_city_ledger", lambda fn, comp, **kw: {"balance": 11.944}), \
+				patch.object(self.folio, "close_folio", lambda fn: "INV-AR-KWD-1"):
+			inv = self.receivables.create_ar_invoice(
+				"CLA-SRC",
+				[{"charge_type": "Misc", "description": "KWD Hall", "amount": 11.375, "qty": 1, "gst_rate": 5}],
+				reference="PO-KWD-1",
+			)
+		self.assertEqual(created_folios[0].charges[0].amount, 11.375)
+		self.assertEqual(inv["total"], 11.944)
+		self.assertEqual(inv["tax"], 0.569)
+
+		# 3. transfer_ar_invoice preserves 0.004 KWD outstanding (not rejected by <= 0.005 or rounded to 0.0)
+		with patch.object(self.ledger, "locked_account_figures", lambda acc: {
+			"open_items": [{
+				"folio": "FOL-AR-1", "invoice_number": "INV-AR-KWD-1",
+				"invoice_date": "2026-11-20", "outstanding": 0.004,
+			}],
+		}), \
+				patch.object(self.ledger, "due_date_for", lambda acc, dt: "2026-12-20"), \
+				patch.object(self.ledger, "apply_unapplied_credit", lambda *a, **kw: None):
+			tr = self.receivables.transfer_ar_invoice("CLA-SRC", "FOL-AR-1", "CLA-DST", reason="Parent pays 4 fils")
+		self.assertEqual(tr["amount"], 0.004)
+		self.assertEqual(tr["from_balance"], 17.94)
+		self.assertEqual(tr["to_balance"], 0.004)
+
+
