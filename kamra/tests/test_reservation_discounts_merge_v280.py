@@ -36,7 +36,6 @@ from kamra.checkout import settlement_position
 from kamra.tests.audit_fixtures import (
 	PROP_A,
 	TODAY,
-	charges,
 	d,
 	guest_folio,
 	make_property,
@@ -152,7 +151,8 @@ class KwdDiscountMinorUnitTests(RoundFourTestCase):
 		doc2 = self.doc(res.name)
 		self.assertEqual(Decimal(str(doc2.night_rates[0].rate)), Decimal("8.182"))
 		folio_mod.post_room_night(doc2, d(-1))
-		line = charges(res.name, "Room")[0]
+		line = next(c for c in frappe.get_doc("Folio", guest_folio(res.name)).charges
+		            if c.charge_type == "Room")
 		self.assertEqual(Decimal(str(line.amount)), Decimal("8.182"))
 		billed_gross = Decimal(str(line.total)).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
 		self.assertEqual(billed_gross, Decimal("9.000"))
