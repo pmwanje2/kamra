@@ -511,9 +511,11 @@ def verify_supervisor(property: str, supervisor: str | None, pin,
 		             f"try again in {lock_minutes} minutes.")
 	try:
 		_check_user_pin(supervisor, pin, property)
-	except frappe.ValidationError:
-		frappe.cache.set_value(fails_key, cint(frappe.cache.get_value(fails_key)) + 1,
-		                       expires_in_sec=lock_minutes * 60)
+	except frappe.ValidationError as exc:
+		msg = str(exc)
+		if not any(tag in msg for tag in ("PIN_MUST_RESET", "PIN_NOT_SET", "PIN_REQUIRED")):
+			frappe.cache.set_value(fails_key, cint(frappe.cache.get_value(fails_key)) + 1,
+			                       expires_in_sec=lock_minutes * 60)
 		raise
 	frappe.cache.delete_value(fails_key)
 	return supervisor

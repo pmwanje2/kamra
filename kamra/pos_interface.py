@@ -189,6 +189,17 @@ def _masked_guest_name(full_name: str | None) -> str:
 	return f"{parts[0]} {parts[-1][0]}."
 
 
+def _currency_precision(currency: str | None) -> int:
+	code = (currency or "").strip().upper()
+	if not code:
+		return 2
+	try:
+		from babel.numbers import get_currency_precision
+		return int(get_currency_precision(code))
+	except Exception:
+		return 2
+
+
 def _convert_to_home(property: str, amount: float | None, currency: str | None) -> tuple[float | None, str, str | None]:
 	from babel.numbers import get_currency_precision
 	from frappe.utils import add_days
@@ -321,6 +332,7 @@ def _evaluate_stay(
 			}
 
 	home_amount, home, fx_err = _convert_to_home(property, amount, currency)
+	prec = _currency_precision(home)
 	no_post = 1 if (
 		(res.get("room_charges_allowed") is not None and not cint(res.get("room_charges_allowed")))
 		or master_no_post
@@ -332,7 +344,7 @@ def _evaluate_stay(
 
 	if credit_check and allowance > 0:
 		limit_out = allowance
-		available_out = max(0.0, flt(allowance - balance, 2))
+		available_out = max(0.0, flt(allowance - balance, prec))
 		if per_ticket_limit > 0:
 			available_out = min(available_out, per_ticket_limit)
 	elif per_ticket_limit > 0:
@@ -358,7 +370,7 @@ def _evaluate_stay(
 		reason_code = "POS-RC-NO-POST"
 		reason = "Room charges are blocked on this stay. Manager approval is required."
 	elif home_amount is not None:
-		if per_ticket_limit > 0 and flt(home_amount, 2) > flt(per_ticket_limit, 2):
+		if per_ticket_limit > 0 and flt(home_amount, prec) > flt(per_ticket_limit, prec):
 			posting_allowed = False
 			override_required = True
 			reason_code = "POS-RC-OVER-LIMIT"
@@ -366,12 +378,12 @@ def _evaluate_stay(
 				f"Charge ({home_amount:g} {home}) exceeds the room charge limit "
 				f"({per_ticket_limit:g} {home}). Manager approval is required."
 			)
-		elif credit_check and allowance > 0 and flt(balance + home_amount, 2) > flt(allowance, 2):
+		elif credit_check and allowance > 0 and flt(balance + home_amount, prec) > flt(allowance, prec):
 			posting_allowed = False
 			override_required = True
 			reason_code = "POS-RC-OVER-LIMIT"
 			reason = (
-				f"Projected balance ({flt(balance + home_amount, 2):g} {home}) exceeds the "
+				f"Projected balance ({flt(balance + home_amount, prec):g} {home}) exceeds the "
 				f"room charge credit limit ({allowance:g} {home}). Manager approval is required."
 			)
 
@@ -534,6 +546,7 @@ def _verify_room_charge_override(
 	property: str,
 	reservation: str,
 	home_amount: float,
+	currency: str | None = None,
 	override_approval=None,
 	override_token: str | None = None,
 	pos_profile: str | None = None,
@@ -549,6 +562,8 @@ def _verify_room_charge_override(
 	3. A direct `override_approval` dict (`{supervisor, pin, reason}`) verified
 	   through `kamra.authz.verify_supervisor`.
 	"""
+	prec = _currency_precision(currency)
+	tol = 0.5 * (10 ** -prec)
 	if override_token:
 		try:
 			consumer = frappe.get_attr("ury.ury_pos.override.consume")
@@ -560,7 +575,7 @@ def _verify_room_charge_override(
 		try:
 			claim = {
 				"reservation": reservation,
-				"amount": round(flt(home_amount), 2),
+				"amount": round(flt(home_amount), prec),
 			}
 			consumed = consumer(
 				override_token,
@@ -590,7 +605,7 @@ def _verify_room_charge_override(
 	if isinstance(srv_flag, dict):
 		if (
 			srv_flag.get("reservation") == reservation
-			and abs(flt(srv_flag.get("amount")) - flt(home_amount)) < 0.01
+			and abs(flt(srv_flag.get("amount")) - flt(home_amount)) < max(tol, 0.01 if prec <= 2 else tol)
 			and srv_flag.get("approver")
 			and (srv_flag.get("reason") or "").strip()
 		):
@@ -663,12 +678,14 @@ def pos_post_room_charge(
 	if fx_err or home_amount is None:
 		frappe.throw(fx_err or _("POS-RC-CURRENCY: Currency conversion failed."), frappe.ValidationError)
 	amount = flt(home_amount)
+	prec = _currency_precision(home)
+	amount_tol = 0.5 * (10 ** -prec)
 
 	key = _charge_name(property, ticket_id)
 	if frappe.db.exists(CHARGE, key):
 		rec = frappe.get_doc(CHARGE, key)
 		same = (
-			abs(flt(rec.amount) - amount) < 0.005
+			abs(flt(rec.amount) - amount) < amount_tol
 			and (not reservation or reservation == rec.reservation)
 		)
 		if not same:
@@ -729,9 +746,9 @@ def pos_post_room_charge(
 	credit_check = cint(get_setting(property, "pos_room_charge_credit_check") or 0)
 	allowance = flt(get_setting(property, "pos_room_charge_allowance") or 0)
 
-	over_ticket_limit = bool(per_ticket_limit and flt(amount, 2) > flt(per_ticket_limit, 2))
+	over_ticket_limit = bool(per_ticket_limit and flt(amount, prec) > flt(per_ticket_limit, prec))
 	over_cumulative_limit = bool(
-		credit_check and allowance > 0 and flt(current_balance + amount, 2) > flt(allowance, 2)
+		credit_check and allowance > 0 and flt(current_balance + amount, prec) > flt(allowance, prec)
 	)
 
 	override_approver = None
@@ -741,6 +758,7 @@ def pos_post_room_charge(
 			property=property,
 			reservation=reservation,
 			home_amount=amount,
+			currency=home,
 			override_approval=override_approval,
 			override_token=override_token,
 			pos_profile=pos_profile,
