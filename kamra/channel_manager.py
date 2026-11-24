@@ -426,6 +426,32 @@ def _room_type_for(connection: str, external_id: str) -> str | None:
 		"room_type")
 
 
+def _mapping_for(connection: str, external_room_id: str | None,
+                 external_rate_id: str | None = None) -> tuple[str | None, str | None]:
+	"""Resolve (room_type, mapped_rate_plan) for an inbound channel room+rate."""
+	if not external_room_id:
+		return None, None
+	if external_rate_id:
+		exact = frappe.db.get_value(
+			"Channel Room Mapping",
+			{"connection": connection, "external_room_id": external_room_id,
+			 "external_rate_id": external_rate_id},
+			["room_type", "rate_plan"],
+			as_dict=True,
+		)
+		if exact and exact.get("room_type"):
+			return exact["room_type"], exact.get("rate_plan") or None
+	row = frappe.db.get_value(
+		"Channel Room Mapping",
+		{"connection": connection, "external_room_id": external_room_id},
+		["room_type", "rate_plan"],
+		as_dict=True,
+	)
+	if row and row.get("room_type"):
+		return row["room_type"], row.get("rate_plan") or None
+	return None, None
+
+
 def _find_or_create_guest(name: str, phone: str, email: str,
                           property: str | None = None) -> str:
 	"""The OTA guest's profile. The phone is read with the property's
@@ -1028,11 +1054,36 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 
 	existing = _locked_live_ota(conn.property, e.get("ota_ref"))
 
-	room_type = _room_type_for(conn.name, e.get("room_type_external_id"))
+	room_type, mapped_rate_plan = _mapping_for(
+		conn.name,
+		e.get("room_type_external_id"),
+		e.get("rate_plan_external_id") or e.get("external_rate_id"),
+	)
 	locked_modify = e["event"] == "modify" and existing and existing.status in _LOCKED_MODIFY
 	if not room_type and not locked_modify:
 		return {"ota_ref": e.get("ota_ref"), "result": "unmapped_room",
 		        "external_room_id": e.get("room_type_external_id")}
+	resolved_rate_plan = mapped_rate_plan
+	if room_type and not locked_modify:
+		from kamra.pricing import resolve_booking_rate_plan
+		try:
+			resolved_rate_plan = resolve_booking_rate_plan(
+				conn.property, room_type, e["check_in"], e["check_out"],
+				rate_plan=mapped_rate_plan,
+				adults=e.get("adults") or 2, children=e.get("children") or 0,
+				check_availability=not bool(e.get("total")),
+			)
+		except frappe.ValidationError as exc:
+			from kamra.savings import log_action
+			log_action(
+				"channel.rate_plan_refused", "Channel Manager Connection", conn.name,
+				conn.property,
+				rationale=f"{e.get('channel') or 'OTA'} booking {e.get('ota_ref')} via "
+				          f"{conn.provider} refused: {exc}",
+				channel="API",
+			)
+			return {"ota_ref": e.get("ota_ref"), "result": "rate_plan_refused",
+			        "reason": str(exc)}
 	property_currency = frappe.db.get_value("Property", conn.property, "currency")
 	# a modify of a stay the OTA sold on a foreign contract: what it was stamped with
 	booked = _booked_channel_snapshot(existing.name) if e["event"] == "modify" and existing else None
@@ -1086,6 +1137,8 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 		            and any(h in (doc.special_requests or "") for h in _TAX_HOLDS))
 		keep_non_tax_hold = doc.status == "Requested" and not tax_held
 		doc.room_type = room_type
+		if resolved_rate_plan:
+			doc.rate_plan = resolved_rate_plan
 		doc.check_in_date = e["check_in"]
 		doc.check_out_date = e["check_out"]
 		doc.adults = e.get("adults") or 2
@@ -1128,7 +1181,10 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 			_stamp_channel_contract(doc, contract)
 		elif booked:
 			# the OTA no longer sells the stay on its foreign contract: none of it stays
-			doc.rate_plan, doc.agreed_rate, doc.contract_tariff = None, 0, None
+			from kamra.settings import get_setting
+			if not get_setting(conn.property, "rate_plan_required"):
+				doc.rate_plan = None
+			doc.agreed_rate, doc.contract_tariff = 0, None
 			doc.flags.kamra_channel_tariff = True
 		if requested_reason and not e.get("total"):
 			doc.set("night_rates", [])  # no price until staff resolve it
@@ -1227,6 +1283,7 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 		"property": conn.property,
 		"guest": guest,
 		"room_type": room_type,
+		"rate_plan": resolved_rate_plan or None,
 		"check_in_date": e["check_in"],
 		"check_out_date": e["check_out"],
 		"adults": e.get("adults") or 2,

@@ -7021,5 +7021,18 @@
   "View report": "Ver informe",
   "Edit property override": "Editar ajuste del hotel",
   "This property already has its own override for {code}. Edit that property row instead.": "Este hotel ya tiene su propia configuración para {code}. Edite esa fila del hotel en su lugar.",
-  "Saving creates a property override for {property}. The shared default stays unchanged for other properties.": "Guardar crea un ajuste propio para {property}. El valor compartido permanece sin cambios para otros hoteles."
+  "Saving creates a property override for {property}. The shared default stays unchanged for other properties.": "Guardar crea un ajuste propio para {property}. El valor compartido permanece sin cambios para otros hoteles.",
+  "Rate plans set the price for all bookings at this property.": "Los planes tarifarios fijan el precio de todas las reservas en esta propiedad.",
+  "Tax comes from the accounting tax rules.": "Los impuestos se aplican según las reglas fiscales contables.",
+  "Rate plan readiness": "Preparación de planes tarifarios",
+  "Existing reservations are never repriced when this setting changes.": "Las reservas existentes nunca se recalculan al cambiar esta configuración.",
+  "No default rate plan is set yet.": "Todavía no se ha establecido un plan tarifario predeterminado.",
+  "Manage rate plans": "Gestionar planes tarifarios",
+  "All future bookings already have a rate plan.": "Todas las reservas futuras ya tienen un plan tarifario.",
+  "{n} future booking has no rate plan.": "{n} reserva futura no tiene plan tarifario.",
+  "{n} future bookings have no rate plan.": "{n} reservas futuras no tienen plan tarifario.",
+  "They keep their booked prices. Only new bookings will require a rate plan.": "Mantienen sus precios reservados. Solo las nuevas reservas requerirán un plan tarifario.",
+  "On: every new booking, walk-in, group pick-up, channel and online booking resolves a rate plan. Existing reservations are never repriced.": "Activado: cada nueva reserva, walk-in, asignación de grupo, canal y reserva en línea aplica un plan tarifario. Las reservas existentes nunca se recalculan.",
+  "Set a default rate plan in Rate Plans.": "Configura un plan tarifario predeterminado en Planes tarifarios.",
+  "No active rate plans are configured. Set up a default rate plan in Rate Plans.": "No hay planes tarifarios activos configurados. Configura un plan tarifario predeterminado en Planes tarifarios."
 }

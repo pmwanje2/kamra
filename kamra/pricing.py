@@ -1009,7 +1009,9 @@ def contract_rate(property, room_type, rate_plan, check_in, check_out, adults, c
 		return None
 	try:
 		agreed, nightly, fx = (_dec(result.get(k)) for k in ("agreed_rate", "nightly", "fx_rate"))
-		if not all(value.is_finite() and value > 0 for value in (agreed, nightly, fx)):
+		allow_zero = plan.get("rate_category") in ("Complimentary", "House Use")
+		amounts_ok = (agreed >= 0 and nightly >= 0) if allow_zero else (agreed > 0 and nightly > 0)
+		if not (all(value.is_finite() for value in (agreed, nightly, fx)) and amounts_ok and fx > 0):
 			raise ValueError
 		price_date = str(getdate(result["fx_date"])) if result.get("fx_date") else None
 		currency = result["currency"]
@@ -1393,6 +1395,148 @@ def saved_contract_tariff(reservation):
 	"""Return the original contract, never re-resolve it at today's rate."""
 	snapshot = reservation.get("contract_tariff")
 	return frappe.parse_json(snapshot) if snapshot else {}
+
+
+def default_rate_plan(property: str) -> str | None:
+	"""The property's active default Rate Plan, or None when none is set."""
+	if not property:
+		return None
+	rows = frappe.get_all(
+		"Rate Plan",
+		filters={"property": property, "disabled": 0, "is_default": 1},
+		fields=["name"],
+		order_by="rate_plan_name asc, name asc",
+		limit=1,
+	)
+	return rows[0]["name"] if rows else None
+
+
+def _group_rate_plan(property: str, group_booking: str | None) -> str | None:
+	"""Rate plan attached to a Group Booking (or its company's negotiated plan)."""
+	if not group_booking:
+		return None
+	row = frappe.db.get_value(
+		"Group Booking", group_booking, ["property", "rate_plan", "company"], as_dict=True,
+	)
+	if not row or (row.get("property") and row.get("property") != property):
+		return None
+	if row.get("rate_plan"):
+		return row["rate_plan"]
+	if row.get("company"):
+		return negotiated_rate_plan(property, row["company"])
+	return None
+
+
+def resolve_booking_rate_plan(
+	property: str,
+	room_type: str,
+	check_in_date,
+	check_out_date,
+	*,
+	rate_plan: str | None = None,
+	company: str | None = None,
+	group_booking: str | None = None,
+	adults: int = 2,
+	children: int = 0,
+	extra_beds: int = 0,
+	check_availability: bool = True,
+	required: bool | None = None,
+) -> str | None:
+	"""Resolve the rate plan for a booking or quote in OPERA Cloud order:
+	chosen plan -> group's plan -> company's negotiated plan -> property's
+	default plan (when `rate_plan_required` is on).
+
+	When required, refuses with a plain actionable message naming what to set
+	up (Rate Plans or Contract Tariffs) if no active plan resolves or the
+	resolved plan has no approved tariff for the room type and stay dates.
+	Complimentary / House Use / 0-rate plans are valid rate plans and pass."""
+	from kamra.settings import get_setting
+
+	enforce = bool(get_setting(property, "rate_plan_required")) if required is None else bool(required)
+	candidate = (
+		rate_plan
+		or _group_rate_plan(property, group_booking)
+		or negotiated_rate_plan(property, company)
+	)
+	if not candidate and enforce:
+		candidate = default_rate_plan(property)
+
+	if not candidate:
+		if enforce:
+			frappe.throw(
+				_("A rate plan is required for this property. Set up a default rate plan in Rate Plans, "
+				  "or choose a rate plan for this booking.")
+			)
+		return None
+
+	rp_doc = frappe.get_doc("Rate Plan", candidate)
+	plan_label = rp_doc.get("rate_plan_name") or candidate
+	if rp_doc.get("property") and rp_doc.get("property") != property:
+		frappe.throw(
+			_("Rate plan '{0}' belongs to another property. Choose an active rate plan in Rate Plans.")
+			.format(plan_label)
+		)
+	if cint(rp_doc.get("disabled")):
+		frappe.throw(
+			_("Rate plan '{0}' is disabled. Enable it in Rate Plans or choose an active rate plan.")
+			.format(plan_label)
+		)
+
+	if check_availability:
+		try:
+			contract_rate(
+				property, room_type, candidate, check_in_date, check_out_date,
+				adults, children, extra_beds, company=company,
+			)
+		except ContractRateRefused as exc:
+			rt_label = frappe.db.get_value("Room Type", room_type, "room_type_name") or room_type
+			frappe.throw(
+				_("Rate plan '{0}' has no approved tariff for {1} ({2} to {3}). "
+				  "Approve a tariff in Contract Tariffs or choose another rate plan. ({4})")
+				.format(plan_label, rt_label, str(getdate(check_in_date)), str(getdate(check_out_date)), str(exc))
+			)
+	return candidate
+
+
+def resolve_group_rate_plan(
+	property: str,
+	*,
+	rate_plan: str | None = None,
+	company: str | None = None,
+	required: bool | None = None,
+) -> str | None:
+	"""Resolve and validate the rate plan on a Group Booking header in OPERA
+	order: chosen plan -> company's negotiated plan -> property's default plan
+	(when `rate_plan_required` is on). Refuses with brand-free guidance when
+	required and none resolves, or when the chosen plan is foreign/disabled."""
+	from kamra.settings import get_setting
+
+	enforce = bool(get_setting(property, "rate_plan_required")) if required is None else bool(required)
+	candidate = rate_plan or negotiated_rate_plan(property, company)
+	if not candidate and enforce:
+		candidate = default_rate_plan(property)
+
+	if not candidate:
+		if enforce:
+			frappe.throw(
+				_("A rate plan is required for this property. Set up a default rate plan in Rate Plans, "
+				  "or choose a rate plan for this group.")
+			)
+		return None
+
+	rp_doc = frappe.get_doc("Rate Plan", candidate)
+	plan_label = rp_doc.get("rate_plan_name") or candidate
+	if rp_doc.get("property") and rp_doc.get("property") != property:
+		frappe.throw(
+			_("Rate plan '{0}' belongs to another property. Choose an active rate plan in Rate Plans.")
+			.format(plan_label)
+		)
+	if cint(rp_doc.get("disabled")):
+		frappe.throw(
+			_("Rate plan '{0}' is disabled. Enable it in Rate Plans or choose an active rate plan.")
+			.format(plan_label)
+		)
+	return candidate
 
 
 def quote_with_contract(property, room_type, check_in_date, check_out_date, adults=2, children=0,
