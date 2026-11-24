@@ -20,6 +20,9 @@ class POSOrder(Document):
 		# NC (no charge): the items stand for the kitchen and the audit,
 		# but the bill is zero
 		self.order_total = 0.0 if self.nc else subtotal - discount
+		if self.payment_mode:
+			from kamra.masters import assert_known_payment_method
+			assert_known_payment_method(self.property, self.payment_mode)
 		self.guard_room_posting()
 		self.guard_bill_close()
 		self.stamp_cashier()
