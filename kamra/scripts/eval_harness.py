@@ -67,7 +67,7 @@ def setup():
 	if not frappe.db.exists("Property", P):
 		frappe.get_doc({
 			"doctype": "Property", "property_name": P, "city": "Testville",
-			"gst_mode": "Slab", "gst_slab_threshold": 7500,
+			"country": "India", "gst_mode": "Slab", "gst_slab_threshold": 7500,
 			"gst_rate_low": 5, "gst_rate_high": 18,
 		}).insert(ignore_permissions=True)
 	# a demo-seeded site pins these personas to its demo hotel; property
@@ -3172,6 +3172,7 @@ def t53():
 
 	# nosemgrep: frappe-monkey-patching-not-allowed -- offline eval harness stubs the outbound transport for tests; not a production code path
 	from kamra.channels import channex
+	from kamra.pricing import property_currency
 
 	conn = frappe.get_doc({
 		"doctype": "Channel Manager Connection", "property": P,
@@ -3179,10 +3180,12 @@ def t53():
 		"external_property_id": "chx-prop-1", "webhook_secret": "eval-hook",
 		"sync_days": 5,
 	}).insert(ignore_permissions=True)
+	# the Channex rate plan sells in the property's currency, as
+	# import_room_mappings records it: an unknown one is never sent
 	frappe.get_doc({
 		"doctype": "Channel Room Mapping", "connection": conn.name,
 		"room_type": RT, "external_room_id": "chx-room-1",
-		"external_rate_id": "chx-rate-1",
+		"external_rate_id": "chx-rate-1", "external_currency": property_currency(P),
 	}).insert(ignore_permissions=True)
 
 	snap = cm.ari_snapshot(P, conn.name, days=3)
@@ -5289,7 +5292,7 @@ def t142():
 	frappe.flags.in_import = True  # what the old demo reset left on
 	try:
 		prop = frappe.get_doc({"doctype": "Property", "property_name": "EVAL Blank Seed",
-		                       "city": "Testville"}).insert(ignore_permissions=True)
+		                       "city": "Testville", "country": "India"}).insert(ignore_permissions=True)
 		rt = frappe.get_doc({"doctype": "Room Type", "property": prop.name,
 		                     "room_type_code": "BLK", "room_type_name": "Blank",
 		                     "base_price": 3000}).insert(ignore_permissions=True)
@@ -8236,7 +8239,7 @@ def _golive_property():
 	if not frappe.db.exists("Property", GL):
 		frappe.get_doc({
 			"doctype": "Property", "property_name": GL, "city": "Testville",
-			"gst_mode": "Fixed", "gst_rate_low": 5, "gst_rate_high": 5,
+			"country": "India", "gst_mode": "Fixed", "gst_rate_low": 5, "gst_rate_high": 5,
 		}).insert(ignore_permissions=True)
 	frappe.db.set_value("Property", GL, {"cleaning_fee": 750,
 	                                     "business_date": nowdate()})

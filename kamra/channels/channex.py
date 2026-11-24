@@ -138,7 +138,15 @@ def push_ari_changes(conn, kind: str, changes: list[dict]) -> dict:
 	meta.warnings. ChannexRateLimited on a 429, ChannexError otherwise."""
 	from kamra.channel_ari import rate_quantum
 	id_field = _ARI_ID_FIELD[kind]
-	quantum = rate_quantum(conn.get("property"))
+	prop = conn.get("property")
+	default_quantum = rate_quantum(prop)
+	currencies = {}
+	if kind == "restrictions" and conn.get("name") and prop:
+		import frappe
+		if getattr(frappe, "db", None):
+			from kamra.channel_manager import _mappings
+			currencies = {str(m.external_rate_id): m.get("external_currency")
+			              for m in _mappings(conn.name) if m.external_rate_id and m.get("external_currency")}
 	values, by_key = [], {}
 	for change in changes:
 		obj = {"property_id": conn.external_property_id, id_field: change["external_id"]}
@@ -146,6 +154,8 @@ def push_ari_changes(conn, kind: str, changes: list[dict]) -> dict:
 			obj["date"] = change["date"]
 		else:
 			obj["date_from"], obj["date_to"] = change["date_from"], change["date_to"]
+		currency = currencies.get(str(change["external_id"]))
+		quantum = rate_quantum(prop, currency) if currency else default_quantum
 		for field, value in (change.get("values") or {}).items():
 			obj[field] = _ari_value(field, value, quantum)
 		values.append(obj)
@@ -373,7 +383,10 @@ def parse_webhook(conn, payload) -> list[dict]:
 	"""Channex booking webhook -> normalized events.
 
 	Payload: {event: "booking", payload: {status, ota_reservation_code,
-	ota_name, arrival_date, departure_date, customer{...}, rooms[...]}}
+	ota_name, arrival_date, departure_date, currency, payment_collect,
+	guarantee{is_virtual}, customer{...}, rooms[{room_type_id, rate_plan_id,
+	days{date: amount}, ...}]}}. payment_collect is "ota" (the OTA takes the
+	money: prepaid, or a virtual card) or "property".
 
 	A room's total is what the guest paid for it: its day prices, plus the
 	room tax when the channel lists it on top of them (then the day prices
@@ -389,6 +402,8 @@ def parse_webhook(conn, payload) -> list[dict]:
 	event = {"new": "book", "modified": "modify",
 	         "cancelled": "cancel"}.get(status, "book")
 	customer = body.get("customer") or {}
+	collect = str(body.get("payment_collect") or "").strip().lower()
+	virtual = bool((body.get("guarantee") or {}).get("is_virtual"))
 	out = []
 	for room in body.get("rooms") or [{}]:
 		days = room.get("days") or {}
@@ -402,6 +417,9 @@ def parse_webhook(conn, payload) -> list[dict]:
 			           or body.get("unique_id") or "",
 			"channel": body.get("ota_name") or "OTA",
 			"room_type_external_id": room.get("room_type_id") or "",
+			"rate_plan_external_id": str(room.get("rate_plan_id") or ""),
+			"payment_collect": collect,
+			"virtual_card": virtual,
 			"check_in": room.get("checkin_date") or body.get("arrival_date"),
 			"check_out": room.get("checkout_date") or body.get("departure_date"),
 			"adults": int(occ.get("adults") or 2),

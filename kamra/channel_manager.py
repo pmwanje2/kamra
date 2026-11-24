@@ -20,7 +20,7 @@ from decimal import Decimal
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, nowdate
+from frappe.utils import add_days, date_diff, getdate, nowdate
 
 from kamra.branding import product_name
 from kamra.authz import require_roles
@@ -79,7 +79,7 @@ def _connections(property: str | None = None, only_active=True):
 def _mappings(connection: str) -> list[dict]:
 	return frappe.get_all(
 		"Channel Room Mapping", filters={"connection": connection},
-		fields=["room_type", "external_room_id", "external_rate_id", "rate_plan"])
+		fields=["room_type", "external_room_id", "external_rate_id", "rate_plan", "external_currency"])
 
 
 def _sellable(property: str, room_type: str, check_in, check_out) -> int:
@@ -1034,15 +1034,27 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 		return {"ota_ref": e.get("ota_ref"), "result": "unmapped_room",
 		        "external_room_id": e.get("room_type_external_id")}
 	property_currency = frappe.db.get_value("Property", conn.property, "currency")
+	# a modify of a stay the OTA sold on a foreign contract: what it was stamped with
+	booked = _booked_channel_snapshot(existing.name) if e["event"] == "modify" and existing else None
+	contract, currency_held = None, False
 	if e.get("currency") and property_currency and e["currency"] != property_currency:
-		requested_reason = (f"OTA currency mismatch — resolve: {e.get('total') or 0} "
-		                    f"{e['currency']}; property currency {property_currency}")
-		# Keep foreign money in the note, never in the property's ledger currency.
-		e = dict(e, total=0)
-	elif room_type and (untaxed := tax_hold(conn, e, room_type)):
-		requested_reason = "; ".join(r for r in (requested_reason, untaxed) if r)
-		# a price whose taxes cannot be read is not what the guest paid: never bill it
-		e = dict(e, total=0)
+		contract, why = _channel_contract(conn, e, property_currency, booked)
+		if not contract:
+			currency_held = True
+			requested_reason = why or (f"OTA currency mismatch — resolve: {e.get('total') or 0} "
+			                           f"{e['currency']}; property currency {property_currency}")
+			# Keep foreign money in the note, never in the property's ledger currency.
+			e = dict(e, total=0)
+	if not currency_held and room_type:
+		tax_event = dict(e, nightly=contract["nightly"]) if contract else e
+		if untaxed := tax_hold(conn, tax_event, room_type):
+			requested_reason = "; ".join(r for r in (requested_reason, untaxed) if r)
+			# a price whose taxes cannot be read is not what the guest paid: never bill it
+			e = dict(e, total=0)
+			contract = None
+	if contract and not locked_modify:
+		# the OTA's own nights (gross when exclusive tax was on top), converted into the property's currency
+		e = dict(e, total=contract["total"], nightly=contract["nightly"], nightly_net=False)
 
 	if e["event"] == "modify" and existing:
 		# A modify payload is the full new state for pre-arrival stays. Once
@@ -1112,6 +1124,14 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 			lock_channel_rates(doc, e.get("total"), e.get("nightly"), e.get("nightly_net"))
 		else:
 			discount_review = _reconcile_ota_modify_discount(doc, old_doc)
+		if contract:
+			_stamp_channel_contract(doc, contract)
+		elif booked:
+			# the OTA no longer sells the stay on its foreign contract: none of it stays
+			doc.rate_plan, doc.agreed_rate, doc.contract_tariff = None, 0, None
+			doc.flags.kamra_channel_tariff = True
+		if requested_reason and not e.get("total"):
+			doc.set("night_rates", [])  # no price until staff resolve it
 		old_transition = frappe.flags.kamra_status_transition
 		try:
 			if requested_reason:
@@ -1226,6 +1246,8 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 	if e.get("total"):
 		doc.amount_after_tax = e["total"]
 		lock_channel_rates(doc, e["total"], e.get("nightly"), e.get("nightly_net"))
+	if contract:
+		_stamp_channel_contract(doc, contract)
 	try:
 		doc.insert(ignore_permissions=True)
 	except frappe.DuplicateEntryError:
@@ -1251,6 +1273,122 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 	# on_reservation_change doc_event this insert fires - no ad-hoc enqueue.
 	return {"ota_ref": e.get("ota_ref"), "result": "booked",
 	        "reservation": doc.name}
+
+
+def _booked_channel_snapshot(reservation: str) -> dict | None:
+	"""The contract snapshot an OTA booking was stamped with in its rate
+	plan's currency (_channel_contract), or None."""
+	raw = frappe.db.get_value("Reservation", reservation, "contract_tariff")
+	snapshot = frappe.parse_json(raw) if raw else None
+	if isinstance(snapshot, dict) and (snapshot.get("tariff") or {}).get("source") == "channel":
+		return snapshot
+	return None
+
+
+def _channel_contract(conn, e: dict, home: str, booked: dict | None = None) -> tuple[dict | None, str | None]:
+	"""An OTA booking in its mapped rate plan's currency (C), in the
+	property's (H).
+
+	OPERA Cloud posts a foreign rate code in the property currency at the
+	property's rate; SAP converts at the governed rate of the pricing date.
+	So the OTA's own nights (its discounts kept) convert at the governed
+	selling rate of the business date (pricing.posting_fx_rate), rounded as
+	the plan rounds (pricing.contract_local_amount), and the booking keeps a
+	contract snapshot of them in the contract's per-night shape (each night's
+	own amounts, the scalar figures the check-in night's, as
+	pricing.contract_rate keeps a stay over a tariff change); a night the
+	OTA sold at 0.00 (a free night) stays free. A booking the OTA explicitly
+	collects (payment_collect "ota") or pays by virtual card is fixed at
+	reservation; any other - Channex documents a missing payment_collect as
+	the property collecting - follows its rate plan's lock, as a desk
+	booking does and as OPERA OXI keeps the rate code's exchange type
+	(pricing.reservation_fx_policy).
+
+	A modification of a stay already on its contract in C (`booked`) keeps
+	the booking's exchange basis - its rate, its date and its lock - and
+	reads only the OTA's amounts again, as OPERA keeps a reservation's
+	exchange basis on a modification.
+
+	({rate_plan, total, nightly, agreed_rate, snapshot}, None); (None, why)
+	when no rate is published for C; (None, None) when the booking is not in
+	its mapped plan's currency, or not in the currency the mapping sells in."""
+	from kamra.business_date import get_business_date
+	from kamra.pricing import (
+		DEFAULT_FX_LOCK,
+		contract_local_amount,
+		posting_fx_rate,
+		rate_plan_currency,
+		resolve_rate_plan_chain,
+		round_rate_amount,
+	)
+
+	rate_id = e.get("rate_plan_external_id")
+	mapping = rate_id and frappe.db.get_value(
+		"Channel Room Mapping", {"connection": conn.name, "external_rate_id": rate_id},
+		["rate_plan", "external_currency"], as_dict=True)
+	plan = mapping and mapping.rate_plan
+	if not plan:
+		return None, None
+	if mapping.external_currency and mapping.external_currency != e.get("currency"):
+		return None, None  # Kamra sells this plan there in another currency: not money it can read
+	chain = resolve_rate_plan_chain(plan)
+	currency = rate_plan_currency(chain)
+	if currency != e.get("currency") or currency == home:
+		return None, None
+	tariff = (booked or {}).get("tariff") or {}
+	if tariff.get("currency") == currency and Decimal(str(tariff.get("fx_rate") or 0)) > 0:
+		fx, fx_date, lock = Decimal(str(tariff["fx_rate"])), tariff.get("fx_date"), booked.get("fx_lock_policy")
+	else:
+		business = get_business_date(conn.property)
+		posting = posting_fx_rate(conn.property, currency, business)
+		if not posting:
+			return None, (f"No published {currency} exchange rate for {business} — resolve: "
+			              f"{e.get('total') or 0} {currency}; property currency {home}")
+		fx, fx_date = posting
+		lock = DEFAULT_FX_LOCK if e.get("payment_collect") == "ota" or e.get("virtual_card") else None
+	dates = [str(add_days(e["check_in"], i))
+	         for i in range(max(date_diff(e["check_out"], e["check_in"]), 1))]
+	given = {str(getdate(n["date"])): Decimal(str(n.get("amount") or 0))
+	         for n in e.get("nightly") or [] if n.get("date")}
+	amounts = [given.get(d) for d in dates]
+	if any(amount is None or amount < 0 for amount in amounts) or sum(amounts) <= 0:
+		# no price for every night: the total, evenly
+		total = Decimal(str(e.get("total") or 0))
+		share = round_rate_amount(total / len(dates), 0, currency=currency)
+		amounts = [share] * (len(dates) - 1) + [total - share * (len(dates) - 1)]
+		if not all(amount > 0 for amount in amounts):
+			return None, None
+	elif e.get("nightly_net"):
+		# day prices are before room tax; scale them to the gross total (days + room tax)
+		total = Decimal(str(e.get("total") or 0))
+		net_sum = sum(amounts)
+		if total > net_sum > 0:
+			scaled = [round_rate_amount(a * total / net_sum, 0, currency=currency) if a > 0 else Decimal(0)
+			          for a in amounts]
+			last = max(i for i, a in enumerate(amounts) if a > 0)
+			scaled[last] += total - sum(scaled)
+			amounts = scaled
+	rp = chain[-1]
+	local = [contract_local_amount(rp, amount, fx, home) for amount in amounts]
+	nights = [{"date": d, "nightly": float(amount), "agreed_rate": float(value)}
+	          for d, amount, value in zip(dates, amounts, local, strict=True)]
+	agreed = nights[0]["agreed_rate"]
+	snapshot = {"tariff": {"currency": currency, "nightly": nights[0]["nightly"], "fx_rate": float(fx),
+	                       "fx_date": fx_date, "property_currency": home, "source": "channel", "nights": nights},
+	            "agreed_rate": agreed}
+	if lock:
+		snapshot["fx_lock_policy"] = lock
+	return {"rate_plan": plan, "total": float(sum(local)), "agreed_rate": agreed, "snapshot": snapshot,
+	        "nightly": [{"date": d, "amount": float(v)} for d, v in zip(dates, local, strict=True)]}, None
+
+
+def _stamp_channel_contract(doc, contract: dict) -> None:
+	"""The booking's rate plan, its agreed rate and the snapshot of what the
+	OTA sold (capture_contract_tariff keeps it under kamra_channel_tariff)."""
+	doc.rate_plan = contract["rate_plan"]
+	doc.agreed_rate = contract["agreed_rate"]
+	doc.contract_tariff = contract["snapshot"]
+	doc.flags.kamra_channel_tariff = True
 
 
 def lock_channel_rates(doc, total_after_tax, nightly=None, nightly_net=False) -> None:
@@ -1529,6 +1667,25 @@ def import_room_mappings(connection: str, dry_run: int = 0):
 	        "warnings": []}
 
 
+def _sends_in(property: str, room_type: str, rate_plan: str | None, currency: str) -> bool:
+	"""Whether a night of `rate_plan` can go in `currency`, asked of the
+	push's own channel_ari._plan_night_rate for the business date (a plan
+	sold in its contract currency reads the tariff directory, so no exchange
+	rate is needed): False only when it cannot (no listed contract prices a
+	foreign plan, so its card price goes only in the property's currency, or
+	the contract is listed in another currency). An error is the push's to
+	report, not a currency mismatch."""
+	from kamra.business_date import get_business_date
+	from kamra.channel_ari import AriCurrencyRefused, AriPriceHeld, AriPricingFailed, _plan_night_rate
+	try:
+		_plan_night_rate(property, room_type, rate_plan, getdate(get_business_date(property)), currency)
+	except AriCurrencyRefused:
+		return False
+	except (AriPriceHeld, AriPricingFailed):
+		return True
+	return True
+
+
 def _import_rate_plan_mappings(conn, details: dict, index: dict, dry_run: int) -> dict:
 	"""import_room_mappings for a provider that prices each rate plan: one
 	Channel Room Mapping per provider rate plan, found again by
@@ -1540,13 +1697,35 @@ def _import_rate_plan_mappings(conn, details: dict, index: dict, dry_run: int) -
 		for key in (p.code, p.rate_plan_name):
 			if key:
 				plans.setdefault(_norm(key), p)
+	from kamra.pricing import property_currency, rate_plan_currency, resolve_rate_plan_chain
 	prop = frappe.db.get_value("Property", conn.property, ["currency", "timezone"], as_dict=True) or {}
+	home = property_currency(conn.property)
 	warnings, warned = [], set()
 
-	def warn(code: str, key, message: str) -> None:
+	def warn(code: str, key, message: str, **extra) -> None:
 		if (code, key) not in warned:
 			warned.add((code, key))
-			warnings.append({"code": code, "message": message})
+			warnings.append({"code": code, "message": message, **extra})
+
+	def sold_in(rp, rate_plan, room_type) -> str | None:
+		"""E: what the provider rate plan sells in, else the provider
+		property's currency. A plan that cannot go in it - an unknown E
+		included, and a foreign plan no tariff prices, whose card price goes
+		only in the property's currency - is warned about, plan by plan."""
+		rate_id = str(rp.get("rateplan_id") or "")
+		external_currency = rp.get("currency") or details.get("currency") or None
+		priced_in = rate_plan_currency(resolve_rate_plan_chain(rate_plan)) if rate_plan else home
+		allowed = {priced_in, home}
+		if external_currency == priced_in != home and not _sends_in(conn.property, room_type, rate_plan,
+		                                                            external_currency):
+			allowed = {home}
+		if external_currency not in allowed:
+			warn("rate_plan_currency", rate_id, _(
+				"Rate plan {0} sells in {1} on the channel manager; {product} sends it only in {2}, so "
+				"its rates will not go out. Change that rate plan's currency there, then import again.").format(
+				rp.get("rateplan_name") or rate_id, external_currency or _("no currency"),
+				" or ".join(sorted(allowed)), product=product_name()), rate_id=rate_id)
+		return external_currency
 
 	if details.get("currency") and prop.get("currency") and details["currency"] != prop["currency"]:
 		warn("currency", None, _("The channel manager sells in {0}; this property is in {1}.").format(
@@ -1578,6 +1757,21 @@ def _import_rate_plan_mappings(conn, details: dict, index: dict, dry_run: int) -
 			paired.append((loose[0][0], None))
 			loose = []
 		for rp, _plan in loose:
+			rate_id = str(rp.get("rateplan_id") or "")
+			hand = rate_id and frappe.db.get_value("Channel Room Mapping", {
+				"connection": conn.name, "external_rate_id": rate_id},
+				["name", "room_type", "external_room_id", "rate_plan"], as_dict=True)
+			if hand:
+				# mapped by hand: its room type and rate plan stay, its currency is read again
+				row = {"room_type": hand.room_type, "external_room_id": hand.external_room_id,
+				       "external_rate_id": rate_id, "rate_plan": hand.rate_plan,
+				       "external_currency": sold_in(rp, hand.rate_plan, hand.room_type)}
+				if not dry_run:
+					doc = frappe.get_doc("Channel Room Mapping", hand.name)
+					doc.external_currency = row["external_currency"]
+					doc.save(ignore_permissions=True)
+				updated.append({**row, "name": hand.name})
+				continue
 			unmatched.append({"room_id": room_id, "room_name": r.get("room_name"),
 			                  "rateplan_id": str(rp.get("rateplan_id") or ""), "rateplan_name": rp.get("rateplan_name"),
 			                  "reason": _("Several rate plans of this room match no {product} rate plan: map them by hand.").format(product=product_name())})
@@ -1589,8 +1783,9 @@ def _import_rate_plan_mappings(conn, details: dict, index: dict, dry_run: int) -
 			if plan and plan.modifier_type in ("Amount", "Absolute"):
 				warn("fixed_amount", plan.name, _("Rate plan {0} adds a fixed amount: on the channels it applies every "
 				                                  "night, on direct bookings once per stay.").format(plan.rate_plan_name))
+			external_currency = sold_in(rp, plan.name if plan else None, match)
 			row = {"room_type": match, "external_room_id": room_id, "external_rate_id": rate_id,
-			       "rate_plan": plan.name if plan else None}
+			       "rate_plan": plan.name if plan else None, "external_currency": external_currency}
 			existing = frappe.db.get_value("Channel Room Mapping",
 			                               {"connection": conn.name, "external_rate_id": rate_id}, "name")
 			if dry_run:

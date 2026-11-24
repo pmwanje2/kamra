@@ -769,5 +769,22 @@
   "Tax summary": "Ringkasan pajak",
   "Total Tax": "Total Pajak",
   "Credited": "Dikreditkan",
-  "Total {cur}": "Total {cur}"
+  "Total {cur}": "Total {cur}",
+  "Property": "Properti",
+  "Shared": "Bersama",
+  "Booking type": "Jenis pemesanan",
+  "Foreign currency drawers": "Laci mata uang asing",
+  "Foreign drawers": "Laci asing",
+  "Receipts (FX)": "Penerimaan (FX)",
+  "Refunds (FX)": "Pengembalian (FX)",
+  "Expected (FX)": "Perkiraan (FX)",
+  "Counted (FX)": "Dihitung (FX)",
+  "Home equivalent": "Setara mata uang lokal",
+  "Counted {currency}": "Dihitung ({currency})",
+  "Per-currency foreign note totals kept separate from home cash.": "Total uang kertas asing per mata uang dipisahkan dari kas lokal.",
+  "By payment method": "Menurut metode pembayaran",
+  "View report": "Lihat laporan",
+  "Edit property override": "Ubah penyesuaian properti",
+  "This property already has its own override for {code}. Edit that property row instead.": "Properti ini sudah memiliki penyesuaian sendiri untuk {code}. Ubah baris properti tersebut.",
+  "Saving creates a property override for {property}. The shared default stays unchanged for other properties.": "Menyimpan akan membuat penyesuaian untuk {property}. Pengaturan bersama tetap tidak berubah bagi properti lain."
 }
