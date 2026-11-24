@@ -7,10 +7,12 @@ import { createRoot, type Root } from "react-dom/client"
 import { MemoryRouter, Outlet } from "react-router-dom"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import App from "../src/App"
+import { BookingDialog } from "../src/components/BookingDialog"
 import CheckOutDialog from "../src/components/CheckOutDialog"
 import CreditTermsEditor from "../src/components/CreditTermsEditor"
 import { APPS, visibleApps } from "../src/lib/apps"
 import { keptInErp } from "../src/lib/erpBooks"
+import { loadLocale } from "../src/lib/money"
 import { AuditPackView } from "../src/screens/AuditPack"
 import CashierTill from "../src/screens/CashierTill"
 import Ledgers from "../src/screens/Ledgers"
@@ -18,20 +20,49 @@ import Owner from "../src/screens/Owner"
 import PosDashboard from "../src/screens/PosDashboard"
 import Reports from "../src/screens/Reports"
 
-const { rpc } = vi.hoisted(() => ({ rpc: vi.fn() }))
-vi.mock("../src/lib/api", () => ({
-  call: (method: string, params: unknown) => method === "kamra.api.property_locale"
-    ? Promise.resolve({ locale: "en", currency: "UGX" }) : rpc(method, params),
-  getCurrentProperty: () => "Test Hotel",
-  myProperties: () => Promise.resolve([]),
-  setCurrentProperty: () => undefined,
-  newIdempotencyKey: () => "idem-1",
-  frappeFetch: async (path: string) => ({ data: path.includes("?") ? [] : {} }),
-  serverError: (error: Error) => error.message,
+const { rpc, localeRef } = vi.hoisted(() => ({
+  rpc: vi.fn(),
+  localeRef: {
+    value: {
+      locale: "en-UG",
+      currency: "UGX",
+      currency_symbol: "UGX ",
+      tax_label: "VAT",
+      tax_id_label: "TIN",
+      tax_rates: [0],
+      id_types: ["Passport"],
+      id_type_hints: {},
+      payment_modes: ["Cash"],
+      instant_payment_modes: [],
+      outlet_payment_modes: ["Cash"],
+      default_nationality: "Ugandan",
+      adult_age: 18,
+      minor_ids: "foreign",
+      integrations: { payment_gateways: [], tax_return: false, verify_tax_id: false, verify_guest_id: false },
+    } as Record<string, unknown>,
+  },
 }))
+vi.mock("../src/lib/api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/lib/api")>()
+  return {
+    ...actual,
+    call: (method: string, params?: Record<string, unknown>) => method === "kamra.api.property_locale"
+      ? Promise.resolve(localeRef.value) : rpc(method, params),
+    getCurrentProperty: () => "Test Hotel",
+    myProperties: () => Promise.resolve([]),
+    setCurrentProperty: () => undefined,
+    newIdempotencyKey: () => "idem-1",
+    frappeFetch: async (path: string) => ({ data: path.includes("?") ? [] : {} }),
+    serverError: (error: Error) => error.message,
+  }
+})
 vi.mock("../src/lib/auth", () => ({ useAuth: () => ({ status: "authed", roles: ["Finance", "Front Desk", "Night Auditor"] }) }))
 vi.mock("../src/lib/cashierAuth", () => ({
-  useCashierAuth: () => ({ ensureUnlocked: async () => undefined, withPin: async (_p: string, fn: () => Promise<unknown>) => fn() }),
+  useCashierAuth: () => ({
+    status: { required: false, unlocked: true },
+    ensureUnlocked: async () => undefined,
+    withPin: async (_p: string, fn: () => Promise<unknown>) => fn(),
+  }),
 }))
 vi.mock("../src/lib/realtime", () => ({
   useRealtime: () => undefined,
@@ -459,5 +490,267 @@ describe("ERP-kept books", () => {
     const row = Array.from(host.querySelectorAll("a, div")).find((e) => e.textContent?.startsWith("Company accounts (city ledger)"))
     expect(row?.textContent).toContain("—")
     expect(row?.textContent).not.toMatch(/0\s*$/)
+  })
+
+  it("AuditPack: City ledger / AR summary honours pack.errors.city_ledger and keptInErp, never 'No city ledger accounts.' when unread", async () => {
+    // 1. Pack built while ERP AR was unavailable -> pack.errors.city_ledger set, pack.city_ledger omitted.
+    boot({ receivables: RECEIVABLES })
+    rpc.mockImplementation(async (method: string) => method === "kamra.night_audit.night_audit_pack" ? {
+      audit: "NA-ERR-1", run: { name: "NA-ERR-1", status: "Completed", business_date: "2026-11-23" },
+      has_pack: true, can_rebuild: true,
+      pack: {
+        property_name: "Test Hotel", business_date: "2026-11-23", generated_at: "2026-11-24 02:00",
+        reports: [{ key: "city_ledger", title: "City ledger / AR summary" }],
+        errors: {
+          city_ledger: "This is kept in the accounting system. Open Accounts Receivable: /app/query-report/Accounts%20Receivable",
+        },
+      },
+    } : null)
+    await act(async () => {
+      root.render(
+        <MemoryRouter basename="/kamra" initialEntries={["/kamra"]}>
+          <AuditPackView key="pack-err-bridged" audit="NA-ERR-1" embedded />
+        </MemoryRouter>,
+      )
+    })
+    await vi.waitFor(() => { expect(host.textContent).toContain("City ledger / AR summary") })
+    expect(host.textContent).toContain("Not verified")
+    expect(host.textContent).not.toContain("No city ledger accounts.")
+    expect(hrefsOf()).toContain(RECEIVABLES.url)
+    expect(host.textContent).not.toMatch(/\b(?:Kamra|ERPNext|Frappe|URY)\b/i)
+
+    // 2. Archived pack with pack.errors.city_ledger even without window.kamra_erp_screens.
+    boot()
+    await act(async () => {
+      root.render(
+        <MemoryRouter basename="/kamra" initialEntries={["/kamra"]}>
+          <AuditPackView key="pack-err-unbooted" audit="NA-ERR-1" embedded />
+        </MemoryRouter>,
+      )
+    })
+    await vi.waitFor(() => { expect(host.textContent).toContain("City ledger / AR summary") })
+    expect(host.textContent).toContain("Not verified")
+    expect(host.textContent).not.toContain("No city ledger accounts.")
+
+    // 3. Kept in ERP and pack omitted city_ledger without an explicit errors entry.
+    boot({ receivables: RECEIVABLES })
+    rpc.mockImplementation(async (method: string) => method === "kamra.night_audit.night_audit_pack" ? {
+      audit: "NA-OMIT-1", run: { name: "NA-OMIT-1", status: "Completed", business_date: "2026-11-23" },
+      has_pack: true, can_rebuild: true,
+      pack: {
+        property_name: "Test Hotel", business_date: "2026-11-23", generated_at: "2026-11-24 02:00",
+        reports: [{ key: "city_ledger", title: "City ledger / AR summary" }],
+      },
+    } : null)
+    await act(async () => {
+      root.render(
+        <MemoryRouter basename="/kamra" initialEntries={["/kamra"]}>
+          <AuditPackView key="pack-omit-kept" audit="NA-OMIT-1" embedded />
+        </MemoryRouter>,
+      )
+    })
+    await vi.waitFor(() => { expect(host.textContent).toContain("City ledger / AR summary") })
+    expect(host.textContent).toContain("Not verified")
+    expect(host.textContent).not.toContain("No city ledger accounts.")
+    expect(hrefsOf()).toContain(RECEIVABLES.url)
+
+    // 4. Off-bridge genuinely read with zero accounts still says "No city ledger accounts."
+    boot()
+    rpc.mockImplementation(async (method: string) => method === "kamra.night_audit.night_audit_pack" ? {
+      audit: "NA-EMPTY-1", run: { name: "NA-EMPTY-1", status: "Completed", business_date: "2026-11-23" },
+      has_pack: true, can_rebuild: true,
+      pack: {
+        property_name: "Test Hotel", business_date: "2026-11-23", generated_at: "2026-11-24 02:00",
+        reports: [{ key: "city_ledger", title: "City ledger / AR summary" }],
+        city_ledger: { accounts: [], totals: {} },
+      },
+    } : null)
+    await act(async () => {
+      root.render(
+        <MemoryRouter basename="/kamra" initialEntries={["/kamra"]}>
+          <AuditPackView key="pack-empty-local" audit="NA-EMPTY-1" embedded />
+        </MemoryRouter>,
+      )
+    })
+    await vi.waitFor(() => { expect(host.textContent).toContain("No city ledger accounts.") })
+  })
+
+  it("BookingDialog: shows Not verified instead of hiding credit status when credit lookup fails or is unverified", async () => {
+    const bookingOptions = {
+      room_types: [{ name: "STD", room_type_name: "Standard", base_price: 250000, adults_capacity: 2, children_capacity: 1 }],
+      meal_plans: [{ name: "RO", code: "RO", label: "Room only", price_per_adult: 0, is_default: 1 }],
+      rate_plans: [],
+      companies: [{ name: "Acme Corp", company_name: "Acme Corp" }],
+      travel_agents: [],
+      experiences: [],
+      property: {
+        sell_message: null, free_cancel_days: 0, cancellation_fee: "None", no_show_charge: "None",
+        deposit_pct: 0, country: "Uganda", pets_allowed: 0, pet_charge: 0,
+        pet_charge_basis: "Per stay", checkin_time: "14:00", checkout_time: "11:00",
+      },
+    }
+    const quote = {
+      nights: 1, room_total: 250000, meal_total: 0, extra_bed_total: 0, addon_total: 0,
+      discount: 0, amount_before_tax: 250000, tax_amount: 0, gst_rate: 0,
+      amount_after_tax: 250000, advance_due: 0, night_rates: [],
+    }
+
+    // Case 1: company_credit_status rejects (e.g. PermissionError / network failure) -> shows Not verified banner.
+    rpc.mockImplementation(async (method: string) => {
+      if (method === "kamra.api.booking_options") return bookingOptions
+      if (method === "kamra.api.get_quote") return quote
+      if (method === "kamra.api.available_rooms") return []
+      if (method === "kamra.credit.company_credit_status") throw new Error("Permission denied")
+      return null
+    })
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <BookingDialog
+            key="dlg-reject"
+            initial={{ room_type: "STD", guest_name: "Grace Nambi", phone: "+256772111222" }}
+            onClose={() => undefined}
+            onBooked={() => undefined}
+          />
+        </MemoryRouter>,
+      )
+    })
+    await vi.waitFor(() => { expect(host.textContent).toContain("Company, add-ons & arrival details") })
+    const moreBtn = Array.from(host.querySelectorAll("button")).find(
+      (b) => b.textContent?.includes("Company, add-ons & arrival details"),
+    ) as HTMLButtonElement
+    await act(async () => { moreBtn.click() })
+    const companySelect = Array.from(host.querySelectorAll("label")).find(
+      (l) => l.textContent?.includes("Company (bill corporate)"),
+    )?.querySelector("select") as HTMLSelectElement
+    expect(companySelect).toBeTruthy()
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!
+      setter.call(companySelect, "Acme Corp")
+      companySelect.dispatchEvent(new Event("change", { bubbles: true }))
+    })
+    await vi.waitFor(() => {
+      const alert = host.querySelector('[role="alert"]')
+      expect(alert?.textContent).toContain("Not verified")
+    }, { timeout: 3000 })
+    expect(host.textContent).not.toMatch(/\b(?:Kamra|ERPNext|Frappe|URY)\b/i)
+
+    // Case 2: server returns fail-closed unverified credit block -> shows Not verified alongside block reason.
+    rpc.mockImplementation(async (method: string) => {
+      if (method === "kamra.api.booking_options") return bookingOptions
+      if (method === "kamra.api.get_quote") return quote
+      if (method === "kamra.api.available_rooms") return []
+      if (method === "kamra.credit.company_credit_status") {
+        return {
+          applies: true, ok: false, blocked: true, unverified: true, policy: "block",
+          company: "Acme Corp", can_override: false,
+          reasons: ["Company receivables could not be verified in the accounting system."],
+        }
+      }
+      return null
+    })
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <BookingDialog
+            key="dlg-unverified"
+            initial={{ room_type: "STD", guest_name: "Grace Nambi", phone: "+256772111222" }}
+            onClose={() => undefined}
+            onBooked={() => undefined}
+          />
+        </MemoryRouter>,
+      )
+    })
+    await vi.waitFor(() => { expect(host.textContent).toContain("Company, add-ons & arrival details") })
+    const moreBtn2 = Array.from(host.querySelectorAll("button")).find(
+      (b) => b.textContent?.includes("Company, add-ons & arrival details"),
+    ) as HTMLButtonElement
+    await act(async () => { moreBtn2.click() })
+    const companySelect2 = Array.from(host.querySelectorAll("label")).find(
+      (l) => l.textContent?.includes("Company (bill corporate)"),
+    )?.querySelector("select") as HTMLSelectElement
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!
+      setter.call(companySelect2, "Acme Corp")
+      companySelect2.dispatchEvent(new Event("change", { bubbles: true }))
+    })
+    await vi.waitFor(() => {
+      const alert = host.querySelector('[role="alert"]')
+      expect(alert?.textContent).toContain("Not verified")
+      expect(alert?.textContent).toContain("Company receivables could not be verified in the accounting system.")
+    }, { timeout: 3000 })
+  })
+
+  it("Ledgers: hides green agree banner and AR 0.00 when AR is kept in the ERP or unreadable, and uses property currency/decimals (UGX, never ₹)", async () => {
+    // Seed INR into cache first to verify UGX hotel never shows ₹ or .00 decimals.
+    localeRef.value = { ...localeRef.value, locale: "en-IN", currency: "INR", currency_symbol: "₹" }
+    await loadLocale()
+    localeRef.value = { ...localeRef.value, locale: "en-UG", currency: "UGX", currency_symbol: "UGX " }
+
+    // 1. AR kept in ERP and unreadable (unverified).
+    boot({ receivables: RECEIVABLES })
+    rpc.mockImplementation(async (method: string) => {
+      if (method === "kamra.ledger.ledger_balances") {
+        return {
+          business_date: "2026-11-23", in_balance: true,
+          reconciliation: { in_balance: true, ledger_net: 0, folios_net: 0, difference: 0, folios_out: 0, folios: [] },
+          ar_kept_in_erp: true, ar_unverified: true,
+          ledgers: [
+            { ledger: "Guest", debit: 150000, credit: 150000, balance: 0 },
+            { ledger: "Deposit", debit: 0, credit: 0, balance: 0 },
+            { ledger: "AR", debit: null, credit: null, balance: null, kept_in_erp: true, unverified: true },
+            { ledger: "Package", debit: 0, credit: 0, balance: 0 },
+          ],
+        }
+      }
+      if (method === "kamra.ledger.journal_by_transaction_code") {
+        return { rows: [{ transaction_code: "1000", description: "Room Charge", debit: 150000, credit: 0, entries: 1 }] }
+      }
+      return null
+    })
+    await act(async () => {
+      root.render(<MemoryRouter basename="/kamra" initialEntries={["/kamra/ledgers"]}><Ledgers key="ledgers-unverified" /></MemoryRouter>)
+    })
+    await vi.waitFor(() => { expect(host.textContent).toContain("UGX 150,000") })
+    expect(host.textContent).not.toContain("Folios and ledgers agree.")
+    expect(host.querySelector(".bg-emerald-50")).toBeNull()
+    expect(host.textContent).toContain("Not verified")
+    expect(host.textContent).not.toContain("₹")
+    expect(host.textContent).not.toContain("150,000.00")
+    expect(host.textContent).not.toContain("0.00")
+    const arCard = Array.from(host.querySelectorAll("div")).find(
+      (el) => el.querySelector("h3")?.textContent?.includes("AR ledger") && el.textContent?.includes("Open Accounts Receivable"),
+    )
+    expect(arCard).toBeTruthy()
+    expect(arCard?.textContent).toContain("Not verified")
+    expect(arCard?.textContent).not.toContain("Who makes it up")
+    expect(hrefsOf()).toContain(RECEIVABLES.url)
+
+    // 2. AR kept in ERP (reachable) -> still no green "Folios and ledgers agree." and no "AR ledger 0.00".
+    rpc.mockImplementation(async (method: string) => {
+      if (method === "kamra.ledger.ledger_balances") {
+        return {
+          business_date: "2026-11-23", in_balance: true,
+          reconciliation: { in_balance: true, ledger_net: 0, folios_net: 0, difference: 0, folios_out: 0, folios: [] },
+          ar_kept_in_erp: true, ar_unverified: false,
+          ledgers: [
+            { ledger: "Guest", debit: 150000, credit: 150000, balance: 0 },
+            { ledger: "Deposit", debit: 0, credit: 0, balance: 0 },
+            { ledger: "AR", debit: null, credit: null, balance: null, kept_in_erp: true, unverified: false },
+            { ledger: "Package", debit: 0, credit: 0, balance: 0 },
+          ],
+        }
+      }
+      if (method === "kamra.ledger.journal_by_transaction_code") return { rows: [] }
+      return null
+    })
+    await act(async () => {
+      root.render(<MemoryRouter basename="/kamra" initialEntries={["/kamra/ledgers"]}><Ledgers key="ledgers-kept" /></MemoryRouter>)
+    })
+    await vi.waitFor(() => { expect(host.textContent).toContain("Kept in the accounting system") })
+    expect(host.textContent).not.toContain("Folios and ledgers agree.")
+    expect(host.querySelector(".bg-emerald-50")).toBeNull()
+    expect(host.textContent).not.toContain("₹")
+    expect(host.textContent).not.toContain("0.00")
   })
 })

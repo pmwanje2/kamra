@@ -22,9 +22,11 @@ unposted set of books beside the real ones is what ADR-0040 §1 refuses
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 import tempfile
+from collections import Counter
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -38,6 +40,177 @@ ERP_RECEIVABLES = "hospitality_kamra.erp_receivables"
 PAYABLES = {"label": "Purchase Invoice", "url": "/app/purchase-invoice"}
 PNL = {"label": "Profit and Loss Statement", "url": "/app/query-report/Profit%20and%20Loss%20Statement"}
 RECEIVABLES = {"label": "Accounts Receivable", "url": "/app/query-report/Accounts%20Receivable"}
+
+EXPECTED_RAW_CLE_COUNTS: dict[tuple[str, str], int] = {
+	("kamra/audit_report.py", "_city_ledger"): 1,
+	("kamra/books.py", "balance_sheet"): 1,
+	("kamra/credit.py", "check_company_credit"): 1,
+	("kamra/custom_reports.py", "_fetch_dso"): 1,
+	("kamra/golive.py", "_kamra_ar"): 2,
+	("kamra/golive.py", "reconcile"): 1,
+	("kamra/ledger.py", "_account_position"): 1,
+	("kamra/ledger.py", "_settled_with_key"): 1,
+	("kamra/ledger.py", "_sync_account_balance"): 1,
+	("kamra/ledger.py", "_unapplied_payments"): 3,
+	("kamra/ledger.py", "city_ledger_history"): 1,
+	("kamra/ledger.py", "city_ledger_open_folios"): 2,
+	("kamra/ledger.py", "locked_account_figures"): 2,
+	("kamra/ledger.py", "payment_bills"): 1,
+	("kamra/ledger.py", "reverse_city_ledger_payment"): 1,
+	("kamra/ledger.py", "reverse_city_ledger_transfer"): 1,
+	("kamra/night_audit.py", "check_credit_limit"): 1,
+	("kamra/receivables.py", "_summary"): 1,
+	("kamra/receivables.py", "ar_accounts"): 3,
+	("kamra/statements.py", "monthly_bill"): 2,
+}
+
+
+def _scan_receivables_module(rel: str, text: str) -> dict:
+	"""AST-scan one production Python module for receivables_source / erp_receivables
+	calls (including import aliases and local rebindings) and function-scoped raw
+	`tabCity Ledger Entry` references."""
+	tree = ast.parse(text, filename=rel)
+	found_strict: set[tuple[str, str]] = set()
+	found_nonstrict: set[tuple[str, str]] = set()
+	direct_erp_receivables: list[str] = []
+	dynamic_strict: list[str] = []
+	star_imports: list[str] = []
+	raw_cle: Counter[tuple[str, str]] = Counter()
+
+	def _is_erp_books_module(node: ast.ImportFrom) -> bool:
+		return node.module in ("kamra.erp_books", "erp_books")
+
+	def _walk_body(
+		stmts: list[ast.stmt],
+		fn_name: str,
+		rs_names: set[str],
+		er_names: set[str],
+		eb_modules: set[str],
+	) -> None:
+		# Track aliases per lexical scope so module-level and function-local
+		# `from kamra.erp_books import receivables_source as rs` or `f = rs` are caught.
+		rs_local = set(rs_names)
+		er_local = set(er_names)
+		eb_local = set(eb_modules)
+
+		def _expr_ref(expr: ast.AST | None) -> str | None:
+			if isinstance(expr, ast.Name):
+				if expr.id in rs_local:
+					return "rs"
+				if expr.id in er_local:
+					return "er"
+				if expr.id in eb_local:
+					return "eb"
+			elif isinstance(expr, ast.Attribute):
+				if expr.attr == "receivables_source":
+					return "rs"
+				if expr.attr == "erp_receivables":
+					return "er"
+				if expr.attr == "erp_books":
+					return "eb"
+			return None
+
+		def _record_assign(target: ast.AST, value: ast.AST | None) -> None:
+			if not isinstance(target, ast.Name):
+				return
+			kind = _expr_ref(value)
+			if kind == "rs":
+				rs_local.add(target.id)
+			elif kind == "er":
+				er_local.add(target.id)
+			elif kind == "eb":
+				eb_local.add(target.id)
+
+		def _scan_expr(node: ast.AST) -> None:
+			if isinstance(node, ast.Constant) and isinstance(node.value, str) and "tabCity Ledger Entry" in node.value:
+				raw_cle[(rel, fn_name)] += node.value.count("tabCity Ledger Entry")
+			if isinstance(node, ast.Call):
+				ref = _expr_ref(node.func)
+				if ref == "er" and rel != "kamra/erp_books.py":
+					direct_erp_receivables.append(f"{rel}:{fn_name}")
+				elif ref == "rs" and rel != "kamra/erp_books.py":
+					strict_kws = [kw for kw in node.keywords if kw.arg == "strict"]
+					if any(not (isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, bool))
+					       for kw in strict_kws):
+						dynamic_strict.append(f"{rel}:{fn_name}")
+					strict_false = any(
+						isinstance(kw.value, ast.Constant) and kw.value.value is False
+						for kw in strict_kws
+					)
+					(found_nonstrict if strict_false else found_strict).add((rel, fn_name))
+			for child in ast.iter_child_nodes(node):
+				if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+					continue
+				_scan_expr(child)
+
+		for stmt in stmts:
+			if isinstance(stmt, ast.ImportFrom):
+				if _is_erp_books_module(stmt):
+					for alias in stmt.names:
+						if alias.name == "*":
+							star_imports.append(f"{rel}:{fn_name}")
+						elif alias.name == "receivables_source":
+							rs_local.add(alias.asname or alias.name)
+						elif alias.name == "erp_receivables":
+							er_local.add(alias.asname or alias.name)
+				elif stmt.module == "kamra" or (stmt.level and stmt.module is None):
+					for alias in stmt.names:
+						if alias.name == "erp_books":
+							eb_local.add(alias.asname or alias.name)
+			elif isinstance(stmt, ast.Import):
+				for alias in stmt.names:
+					if alias.name == "kamra.erp_books":
+						eb_local.add(alias.asname or alias.name)
+			elif isinstance(stmt, ast.Assign):
+				_scan_expr(stmt.value)
+				for target in stmt.targets:
+					_record_assign(target, stmt.value)
+			elif isinstance(stmt, ast.AnnAssign):
+				if stmt.value is not None:
+					_scan_expr(stmt.value)
+					_record_assign(stmt.target, stmt.value)
+			elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
+				for dec in stmt.decorator_list:
+					_scan_expr(dec)
+				for default in (*stmt.args.defaults, *stmt.args.kw_defaults):
+					if default is not None:
+						_scan_expr(default)
+				_walk_body(stmt.body, stmt.name, rs_local, er_local, eb_local)
+			elif isinstance(stmt, ast.ClassDef):
+				for dec in stmt.decorator_list:
+					_scan_expr(dec)
+				_walk_body(stmt.body, fn_name, rs_local, er_local, eb_local)
+			else:
+				for field, value in ast.iter_fields(stmt):
+					if field in ("body", "orelse", "finalbody", "handlers", "cases"):
+						continue
+					if isinstance(value, ast.AST):
+						_scan_expr(value)
+					elif isinstance(value, list):
+						for item in value:
+							if isinstance(item, ast.AST):
+								_scan_expr(item)
+				for attr in ("body", "orelse", "finalbody"):
+					sub = getattr(stmt, attr, None)
+					if isinstance(sub, list):
+						_walk_body(sub, fn_name, rs_local, er_local, eb_local)
+				for handler in getattr(stmt, "handlers", None) or ():
+					_walk_body(handler.body, fn_name, rs_local, er_local, eb_local)
+				for case in getattr(stmt, "cases", None) or ():
+					if case.guard is not None:
+						_scan_expr(case.guard)
+					_walk_body(case.body, fn_name, rs_local, er_local, eb_local)
+
+	_walk_body(tree.body, "<module>", {"receivables_source"}, {"erp_receivables"}, {"erp_books"})
+	return {
+		"strict": found_strict,
+		"nonstrict": found_nonstrict,
+		"direct_erp_receivables": direct_erp_receivables,
+		"dynamic_strict": dynamic_strict,
+		"star_imports": star_imports,
+		"raw_cle": raw_cle,
+		"text_cle_count": text.count("tabCity Ledger Entry"),
+	}
 
 # (screen, endpoint, arguments): every whitelisted method of a fenced screen.
 ENDPOINTS = (
@@ -550,7 +723,9 @@ class ERPBooksFenceTestCase(AuditTestCase):
 		with self.installed():
 			with self.assertRaises(frappe.PermissionError) as caught:
 				custom_reports._fetch_dso(PROP_A, from_date=from_d, to_date=TODAY)
+			self.assertIn("kept in the accounting system", str(caught.exception).lower())
 			self.assertIn("Accounts Receivable", str(caught.exception))
+			self.assertNotIn("not verified", str(caught.exception).lower())
 			ar_today = next(b for b in audit_report.build(PROP_A, TODAY)["balances"] if b["ledger"] == "AR")
 			ar_past = next(
 				b for b in audit_report.build(PROP_A, str(add_days(TODAY, -1)))["balances"] if b["ledger"] == "AR"
@@ -564,23 +739,171 @@ class ERPBooksFenceTestCase(AuditTestCase):
 		self.assertTrue(ar_past.get("kept_in_erp"))
 		self.assertIsNone(ar_past["carried_forward"])
 
-		# Bridged with unavailable ERP lookup: DSO refuses, audit_report marks AR unverified with all None.
+		# Bridged with unavailable ERP lookup: DSO refuses with "Not verified" (never "kept in the accounting
+		# system", which is reserved for the by-design reachable case), and audit_report marks AR unverified.
+		vendor_re = re.compile(r"\b(?:Kamra|ERPNext|Frappe|URY)\b", re.IGNORECASE)
 		self.ar_answer = None
 		with self.installed():
-			with self.assertRaises(frappe.PermissionError):
+			with self.assertRaises(frappe.PermissionError) as caught_down:
 				custom_reports._fetch_dso(PROP_A, from_date=from_d, to_date=TODAY)
 			ar_unavail = next(b for b in audit_report.build(PROP_A, TODAY)["balances"] if b["ledger"] == "AR")
+		self.assertIn("Not verified", str(caught_down.exception))
+		self.assertNotIn("kept in the accounting system", str(caught_down.exception).lower())
+		self.assertNotRegex(str(caught_down.exception), vendor_re)
 		self.assertTrue(ar_unavail.get("kept_in_erp"))
 		self.assertTrue(ar_unavail.get("unverified"))
 		for col in ("brought_forward", "debit", "credit", "carried_forward"):
 			self.assertIsNone(ar_unavail[col])
 
+	def test_permission_error_from_erp_receivables_fails_closed_everywhere(self):
+		"""PermissionError from Hotel ERP Receivables must produce the same fail-closed
+		unavailable result for every caller (credit check, terms/status, night audit checks,
+		audit report, ledger balances, owner snapshot, DSO) — never crash or pop raw errors."""
+		from kamra import audit_report, credit, custom_reports, dashboards, ledger, night_audit
+		from kamra.erp_books import receivables_source
+		from kamra.settings import write_kv
+
+		vendor_re = re.compile(r"\b(?:Kamra|ERPNext|Frappe|URY)\b", re.IGNORECASE)
+		make_property(PROP_A, business_date=TODAY)
+		company, _account, _folio = self._seed_stale_city_ledger(credit_limit=2000.0, amount=5000.0, days_ago=60)
+		write_kv(PROP_A, "credit_control", "block")
+		self.keeps(receivables=RECEIVABLES)
+
+		def deny_ar(api_method, *, response_types=None, **form):
+			self.calls.append(api_method)
+			if api_method == ERP_BOOKS:
+				return self.answer
+			if api_method == ERP_RECEIVABLES:
+				frappe.throw("Hotel settings are not available for that property.", frappe.PermissionError)
+			return None
+
+		before_log = list(frappe.local.message_log)
+		with patch("kamra.erp_bridge.bridge_call", side_effect=deny_ar):
+			src = receivables_source(PROP_A, strict=False)
+			chk = credit.check_company_credit(company, PROP_A, 500.0)
+			status = credit.company_credit_status(company, PROP_A, 500.0)
+			terms = credit.company_credit_terms(company, PROP_A)
+			cl = night_audit.check_credit_limit(PROP_A)
+			ov = night_audit.check_overdue_ar(PROP_A)
+			checks = night_audit.run_checks(PROP_A)
+			ar_bal = next(b for b in audit_report.build(PROP_A, TODAY)["balances"] if b["ledger"] == "AR")
+			lb = ledger.ledger_balances(PROP_A)
+			snap = dashboards.owner_snapshot(PROP_A)
+
+		self.assertTrue(src.in_erp)
+		self.assertIsNone(src.rows)
+		self.assertTrue(src.unavailable)
+		self.assertEqual(src.target, RECEIVABLES)
+
+		self.assertFalse(chk["ok"])
+		self.assertTrue(chk["blocked"])
+		self.assertTrue(chk.get("unverified"))
+		self.assertIsNone(chk["ar_balance"])
+		self.assertIsNone(chk["overdue_amount"])
+		self.assertIsNone(chk["exposure"])
+		self.assertIsNone(chk["over_limit_by"])
+		self.assertTrue(chk["reasons"])
+		self.assertNotRegex(" ".join(chk["reasons"]), vendor_re)
+
+		self.assertTrue(status["applies"])
+		self.assertFalse(status["ok"])
+		self.assertTrue(status["blocked"])
+		self.assertTrue(status.get("unverified"))
+
+		self.assertIsNone(terms["balance"])
+
+		self.assertTrue(cl.get("unverified"))
+		self.assertEqual(cl["items"], [])
+		self.assertTrue(ov.get("unverified"))
+		self.assertEqual(ov["items"], [])
+		self.assertIsNone(ov["total"])
+		by_key = {c["key"]: c for c in checks}
+		self.assertTrue(by_key["credit_limit"].get("unverified"))
+		self.assertTrue(by_key["overdue_ar"].get("unverified"))
+
+		self.assertTrue(ar_bal.get("unverified"))
+		self.assertIsNone(ar_bal["carried_forward"])
+
+		ar_ledger = next(r for r in lb["ledgers"] if r["ledger"] == "AR")
+		self.assertTrue(lb.get("ar_kept_in_erp"))
+		self.assertTrue(lb.get("ar_unverified"))
+		self.assertTrue(ar_ledger.get("kept_in_erp"))
+		self.assertTrue(ar_ledger.get("unverified"))
+		self.assertIsNone(ar_ledger["balance"])
+
+		self.assertIsNone(snap["city_ledger"])
+		self.assertIsNone(snap["city_ledger_overdue"])
+		# Caught PermissionError must never leak raw error pop-ups into message_log.
+		self.assertEqual(list(frappe.local.message_log), before_log)
+
+		# strict=True and DSO still refuse cleanly.
+		with patch("kamra.erp_bridge.bridge_call", side_effect=deny_ar):
+			with self.assertRaises(frappe.PermissionError) as strict_exc:
+				receivables_source(PROP_A, strict=True)
+			self.assertIn("Accounts Receivable", str(strict_exc.exception))
+			with self.assertRaises(frappe.PermissionError) as dso_exc:
+				custom_reports._fetch_dso(PROP_A, from_date=TODAY, to_date=TODAY)
+			self.assertIn("Not verified", str(dso_exc.exception))
+			self.assertNotIn("kept in the accounting system", str(dso_exc.exception).lower())
+
+	def test_ledger_balances_marks_ar_kept_in_erp_or_unverified_and_refuses_ar_detail(self):
+		from kamra import ledger
+
+		make_property(PROP_A, business_date=TODAY)
+		company, account, _folio = self._seed_stale_city_ledger(credit_limit=2000.0, amount=5000.0, days_ago=60)
+
+		# Off-bridge: unchanged numeric AR row, ledger_detail("AR") allowed.
+		self.answer = None
+		with self.installed():
+			local = ledger.ledger_balances(PROP_A)
+			local_detail = ledger.ledger_detail(PROP_A, "AR")
+		local_ar = next(r for r in local["ledgers"] if r["ledger"] == "AR")
+		self.assertIsInstance(local_ar["balance"], float)
+		self.assertFalse(local.get("ar_kept_in_erp"))
+		self.assertFalse(local.get("ar_unverified"))
+		self.assertEqual(local_detail["ledger"], "AR")
+
+		# Bridged & ERP reachable: AR row is kept_in_erp (never 0.00 / stale balance),
+		# and drilling into AR detail refuses naming Accounts Receivable while Guest still works.
+		self.keeps(receivables=RECEIVABLES)
+		self.ar_answer = {"accounts": [{
+			"account": account, "company": company, "customer": company, "account_number": "CL-UT-1",
+			"credit_limit": 2000.0, "balance": 400.0, "open_balance": 400.0, "unapplied_credit": 0.0,
+			"open_items": [],
+		}]}
+		with self.installed():
+			bridged = ledger.ledger_balances(PROP_A)
+			guest_detail = ledger.ledger_detail(PROP_A, "Guest")
+			with self.assertRaises(frappe.PermissionError) as detail_exc:
+				ledger.ledger_detail(PROP_A, "AR")
+		bridged_ar = next(r for r in bridged["ledgers"] if r["ledger"] == "AR")
+		self.assertTrue(bridged.get("ar_kept_in_erp"))
+		self.assertFalse(bridged.get("ar_unverified"))
+		self.assertTrue(bridged_ar.get("kept_in_erp"))
+		self.assertFalse(bridged_ar.get("unverified"))
+		self.assertIsNone(bridged_ar["balance"])
+		self.assertIsNone(bridged_ar["debit"])
+		self.assertIsNone(bridged_ar["credit"])
+		self.assertEqual(guest_detail["ledger"], "Guest")
+		self.assertIn("Accounts Receivable", str(detail_exc.exception))
+
+		# Bridged & ERP unreachable: AR row marked unverified with all None.
+		self.ar_answer = None
+		with self.installed():
+			down = ledger.ledger_balances(PROP_A)
+		down_ar = next(r for r in down["ledgers"] if r["ledger"] == "AR")
+		self.assertTrue(down.get("ar_kept_in_erp"))
+		self.assertTrue(down.get("ar_unverified"))
+		self.assertTrue(down_ar.get("kept_in_erp"))
+		self.assertTrue(down_ar.get("unverified"))
+		self.assertIsNone(down_ar["balance"])
+		self.assertIsNone(down_ar["debit"])
+		self.assertIsNone(down_ar["credit"])
+
 	def test_every_receivables_caller_is_verified_to_fail_closed_on_none(self):
 		"""Contract guard: every production caller must use the one helper receivables_source (never
-		erp_receivables directly), and every strict=False caller must be registered and proven to fail
-		closed when rows is None (never treating None as [] or zero debt)."""
-		import ast
-
+		erp_receivables directly), alias imports and function-scoped raw tabCity Ledger Entry queries
+		are enforced, and every strict=False caller is proven to fail closed when rows is None."""
 		from kamra import audit_report, credit, custom_reports, ledger, night_audit
 		from kamra.erp_books import ReceivablesSource
 		from kamra.settings import write_kv
@@ -589,58 +912,38 @@ class ERPBooksFenceTestCase(AuditTestCase):
 		found_strict: set[tuple[str, str]] = set()
 		found_nonstrict: set[tuple[str, str]] = set()
 		direct_erp_receivables: list[str] = []
-		raw_cle_modules: set[str] = set()
+		dynamic_strict: list[str] = []
+		star_imports: list[str] = []
+		raw_cle_counts: Counter[tuple[str, str]] = Counter()
 
 		for path in sorted(app_root.rglob("*.py")):
 			rel = path.relative_to(app_root.parent).as_posix()
 			if any(part in ("tests", "scripts", "patches") for part in path.parts):
 				continue
 			text = path.read_text(encoding="utf-8")
-			if "tabCity Ledger Entry" in text:
-				raw_cle_modules.add(rel)
-			tree = ast.parse(text, filename=rel)
-
-			def _walk(node, fn_name="<module>"):
-				if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-					fn_name = node.name
-				if isinstance(node, ast.Call):
-					callee = (
-						node.func.id if isinstance(node.func, ast.Name)
-						else node.func.attr if isinstance(node.func, ast.Attribute)
-						else None
-					)
-					if callee == "erp_receivables" and rel != "kamra/erp_books.py":
-						direct_erp_receivables.append(f"{rel}:{fn_name}")
-					if callee == "receivables_source" and rel != "kamra/erp_books.py":
-						strict_false = any(
-							kw.arg == "strict" and isinstance(kw.value, ast.Constant) and kw.value.value is False
-							for kw in node.keywords
-						)
-						(found_nonstrict if strict_false else found_strict).add((rel, fn_name))
-				for child in ast.iter_child_nodes(node):
-					_walk(child, fn_name)
-
-			_walk(tree)
+			scan = _scan_receivables_module(rel, text)
+			found_strict |= scan["strict"]
+			found_nonstrict |= scan["nonstrict"]
+			direct_erp_receivables.extend(scan["direct_erp_receivables"])
+			dynamic_strict.extend(scan["dynamic_strict"])
+			star_imports.extend(scan["star_imports"])
+			raw_cle_counts.update(scan["raw_cle"])
+			self.assertEqual(
+				sum(scan["raw_cle"].values()),
+				scan["text_cle_count"],
+				f"{rel}: raw tabCity Ledger Entry count must match AST string literals",
+			)
 
 		self.assertEqual(direct_erp_receivables, [], "Call receivables_source(), never erp_receivables() directly")
+		self.assertEqual(star_imports, [], "Do not star-import kamra.erp_books")
+		self.assertEqual(dynamic_strict, [], "Pass a literal bool for strict= on receivables_source()")
 		self.assertEqual(
-			raw_cle_modules,
-			{
-				"kamra/audit_report.py",
-				"kamra/books.py",
-				"kamra/credit.py",
-				"kamra/custom_reports.py",
-				"kamra/golive.py",
-				"kamra/ledger.py",
-				"kamra/night_audit.py",
-				"kamra/receivables.py",
-				"kamra/statements.py",
-			},
-			"Unexpected raw tabCity Ledger Entry reader — route through receivables_source()",
+			dict(raw_cle_counts),
+			EXPECTED_RAW_CLE_COUNTS,
+			"Unexpected raw tabCity Ledger Entry reader (function-level) — route through receivables_source()",
 		)
 		expected_strict = {
 			("kamra/ledger.py", "city_ledger_aging"),
-			("kamra/custom_reports.py", "_fetch_dso"),
 		}
 		expected_nonstrict = {
 			("kamra/credit.py", "check_company_credit"),
@@ -648,6 +951,8 @@ class ERPBooksFenceTestCase(AuditTestCase):
 			("kamra/night_audit.py", "check_credit_limit"),
 			("kamra/night_audit.py", "check_overdue_ar"),
 			("kamra/audit_report.py", "_balances"),
+			("kamra/custom_reports.py", "_fetch_dso"),
+			("kamra/ledger.py", "ledger_balances"),
 		}
 		self.assertEqual(
 			found_strict, expected_strict,
@@ -669,10 +974,7 @@ class ERPBooksFenceTestCase(AuditTestCase):
 		with self.installed():
 			for _mod, fn in sorted(expected_strict):
 				with self.subTest(strict_caller=fn), self.assertRaises(frappe.PermissionError):
-					if fn == "city_ledger_aging":
-						ledger.city_ledger_aging(PROP_A)
-					else:
-						custom_reports._fetch_dso(PROP_A, from_date=TODAY, to_date=TODAY)
+					ledger.city_ledger_aging(PROP_A)
 
 		with patch("kamra.erp_books.receivables_source", return_value=unavail), \
 				patch("kamra.ledger.receivables_source", return_value=unavail):
@@ -688,6 +990,72 @@ class ERPBooksFenceTestCase(AuditTestCase):
 			ar = next(b for b in audit_report._balances(PROP_A, TODAY) if b["ledger"] == "AR")
 			self.assertTrue(ar.get("unverified"))
 			self.assertIsNone(ar["carried_forward"])
+			lb = ledger.ledger_balances(PROP_A)
+			lb_ar = next(r for r in lb["ledgers"] if r["ledger"] == "AR")
+			self.assertTrue(lb_ar.get("unverified"))
+			self.assertIsNone(lb_ar["balance"])
+			with self.assertRaises(frappe.PermissionError) as dso_exc:
+				custom_reports._fetch_dso(PROP_A, from_date=TODAY, to_date=TODAY)
+			self.assertIn("Not verified", str(dso_exc.exception))
+			self.assertNotIn("kept in the accounting system", str(dso_exc.exception).lower())
+
+	def test_ast_caller_guard_kills_alias_import_and_allowlisted_module_raw_cle_mutants(self):
+		"""Regression guard for the two R3 surviving mutants: alias imports
+		(`from kamra.erp_books import receivables_source as rs`) and raw
+		`tabCity Ledger Entry` SQL inside already-allowlisted `kamra/ledger.py`."""
+		alias_mod = _scan_receivables_module(
+			"kamra/day_use.py",
+			"from kamra.erp_books import receivables_source as rs\n"
+			"def sneak(prop):\n"
+			"    return rs(prop, strict=False)\n",
+		)
+		self.assertIn(("kamra/day_use.py", "sneak"), alias_mod["nonstrict"])
+
+		local_alias = _scan_receivables_module(
+			"kamra/day_use.py",
+			"def sneak(prop):\n"
+			"    from kamra.erp_books import erp_receivables as er\n"
+			"    return er(prop)\n",
+		)
+		self.assertEqual(local_alias["direct_erp_receivables"], ["kamra/day_use.py:sneak"])
+
+		rebound_alias = _scan_receivables_module(
+			"kamra/day_use.py",
+			"from kamra import erp_books as eb\n"
+			"def sneak(prop):\n"
+			"    f = eb.receivables_source\n"
+			"    return f(prop, strict=False)\n",
+		)
+		self.assertIn(("kamra/day_use.py", "sneak"), rebound_alias["nonstrict"])
+
+		dynamic_mod = _scan_receivables_module(
+			"kamra/day_use.py",
+			"from kamra.erp_books import receivables_source as rs\n"
+			"def sneak(prop, flag):\n"
+			"    return rs(prop, strict=flag)\n",
+		)
+		self.assertEqual(dynamic_mod["dynamic_strict"], ["kamra/day_use.py:sneak"])
+
+		rogue_ledger_fn = _scan_receivables_module(
+			"kamra/ledger.py",
+			"def rogue_ar_query():\n"
+			"    return frappe.db.sql('SELECT * FROM `tabCity Ledger Entry`')\n",
+		)
+		self.assertIn(("kamra/ledger.py", "rogue_ar_query"), rogue_ledger_fn["raw_cle"])
+		self.assertNotIn(("kamra/ledger.py", "rogue_ar_query"), EXPECTED_RAW_CLE_COUNTS)
+
+		extra_in_allowlisted = _scan_receivables_module(
+			"kamra/ledger.py",
+			"def _account_position(account):\n"
+			"    a = 'SELECT * FROM `tabCity Ledger Entry`'\n"
+			"    b = 'SELECT * FROM `tabCity Ledger Entry`'\n"
+			"    return a, b\n",
+		)
+		self.assertEqual(extra_in_allowlisted["raw_cle"][("kamra/ledger.py", "_account_position")], 2)
+		self.assertGreater(
+			extra_in_allowlisted["raw_cle"][("kamra/ledger.py", "_account_position")],
+			EXPECTED_RAW_CLE_COUNTS[("kamra/ledger.py", "_account_position")],
+		)
 
 	def test_make_property_succeeds_when_country_and_currency_are_mandatory_without_defaults(self):
 		"""Under enterprise-hospitality@1, Property.country and Property.currency carry reqd=1 with blank
