@@ -779,6 +779,84 @@ class RoomChargeVerifyAndOverrideTestCase(AuditTestCase):
 		self.assertFalse(v_alc["posting_allowed"])
 		self.assertEqual(v_alc["reason_code"], "POS-RC-OVER-LIMIT")
 
+	def test_r7_routing_to_unopened_group_master_window2_does_not_fallback_to_window1_balance(self):
+		"""When a Routing Instruction targets an unopened Group Master Window 2 (balance=0.0),
+		verify_room_charge and pos_post_room_charge must NOT fall back to Group Master Window 1
+		(balance=95.0) and falsely refuse 20.0 KWD under a 100.0 limit with POS-RC-OVER-LIMIT."""
+		from kamra import api
+		from kamra import folio as folio_mod
+		from kamra import ledger as ledger_mod
+		from kamra import settings
+
+		frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- fixture
+		ledger_mod.ensure_default_transaction_codes()
+		make_property(PROP_A, business_date=TODAY, country="Kuwait", currency="KWD",
+		              gst_rate_low=0, gst_rate_high=0)
+		settings.clear_cache(PROP_A)
+		_set_prop_setting(PROP_A, "pos_room_charge_limit", 0)
+		_set_prop_setting(PROP_A, "pos_room_charge_credit_check", 1)
+		_set_prop_setting(PROP_A, "pos_room_charge_allowance", 100.0)
+
+		gb = frappe.get_doc({
+			"doctype": "Group Booking",
+			"property": PROP_A,
+			"group_name": "UT R7 Group Master W2",
+			"check_in_date": d(-1),
+			"check_out_date": d(2),
+			"status": "Confirmed",
+		}).insert(ignore_permissions=True).name
+		w1 = folio_mod.open_group_folio(gb)
+		api.add_folio_charge(w1, "Room", "UT W1 Room Charge", 95.0, gst_rate=0)
+
+		room_105 = make_room(PROP_A, self.rt_a, "105")
+		grp_stay = make_reservation(
+			PROP_A, self.rt_a, d(-1), d(2), room=room_105,
+			status="Checked In", guest=make_guest("R7", last_name="GroupW2"),
+			group_booking=gb,
+		)
+		frappe.get_doc({
+			"doctype": "Routing Instruction",
+			"property": PROP_A,
+			"reservation": grp_stay.name,
+			"target_type": "Group Master",
+			"target_window": 2,
+			"codes": [{"transaction_code": "2000"}],
+			"from_date": d(-2),
+			"to_date": d(5),
+		}).insert(ignore_permissions=True)
+
+		self.as_pos()
+		v = pi.verify_room_charge(
+			property=PROP_A, room="105", amount=20.0,
+			charge_type="Food & Beverage", transaction_code="2000",
+		)
+		self.assertTrue(v["ok"])
+		self.assertIsNone(v["folio"])
+		self.assertEqual(v["folio_type"], "Group")
+		self.assertAlmostEqual(flt(v["balance"]), 0.0, places=3)
+		self.assertTrue(v["posting_allowed"], f"Expected posting allowed on unopened W2, got {v}")
+
+		with patch("kamra.webhooks._enqueue"):
+			posted = pi.pos_post_room_charge(
+				PROP_A, "T-R7-GM-W2", 20.0, "Routed Dinner W2",
+				room="105", charge_type="Food & Beverage", transaction_code="2000",
+			)
+		self.assertNotEqual(posted["folio"], w1)
+		self.assertEqual(frappe.db.get_value("Folio", posted["folio"], "window_no"), 2)
+		self.assertAlmostEqual(flt(frappe.db.get_value("Folio", posted["folio"], "balance")), 20.0, places=3)
+		self.assertAlmostEqual(flt(frappe.db.get_value("Folio", w1, "balance")), 95.0, places=3)
+
+		# Now Window 2 holds 20.0 KWD: an 85.0 KWD check (20 + 85 > 100) must refuse against W2
+		v2 = pi.verify_room_charge(
+			property=PROP_A, room="105", amount=85.0,
+			charge_type="Food & Beverage", transaction_code="2000",
+		)
+		self.assertTrue(v2["ok"])
+		self.assertEqual(v2["folio"], posted["folio"])
+		self.assertAlmostEqual(flt(v2["balance"]), 20.0, places=3)
+		self.assertFalse(v2["posting_allowed"])
+		self.assertEqual(v2["reason_code"], "POS-RC-OVER-LIMIT")
+
 
 class RoomChargeConcurrencyTestCase(frappe.tests.IntegrationTestCase):
 	"""Real two-transaction MariaDB 11.8 REPEATABLE READ race under one cumulative

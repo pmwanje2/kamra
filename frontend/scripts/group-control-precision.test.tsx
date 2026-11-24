@@ -286,4 +286,75 @@ describe("KWD 3dp precision in GroupControl and FolioView", () => {
     expect(host.textContent).toContain("KD 125.750")
     expect(host.textContent).not.toContain("KD 126")
   })
+
+  it("renders FolioView payment row as KWD 50.125 and fills 100.125 on Full amount click", async () => {
+    const kwdInvoiceWithPayment = {
+      folio: {
+        name: "FOL-KWD-PAY", property: "Kuwait Grand Hotel", status: "Open", folio_type: "Guest",
+        guest_name: "Nadia Al-Sabah",
+        charges: [
+          {
+            name: "FC-1", posting_date: "2031-03-12", charge_type: "Room",
+            description: "Deluxe Night", qty: 1, rate: 150.25, amount: 150.25,
+            gst_rate: 0, gst_amount: 0, total: 150.25,
+          },
+        ],
+        payments: [
+          {
+            name: "FP-1", payment_date: "2031-03-12", mode: "Cash",
+            payment_kind: "Payment", amount: 50.125, reference: "REF-1",
+          },
+        ],
+        charges_total: 150.25, tax_total: 0, grand_total: 150.25,
+        payments_total: 50.125, balance: 100.125,
+      },
+      property: {
+        currency: "KWD", name: "Kuwait Grand Hotel", legal_name: null, logo_url: null,
+        address: "", state: null, gstin: null, phone: null, email: null, sac: null, place_of_supply: null,
+      },
+      guest: { name: "Nadia Al-Sabah" },
+      stay: {
+        reservation: "RES-KWD-1", check_in: "2031-03-12", check_out: "2031-03-14",
+        arrival: null, departure: null, nights: 2, adults: 1, children: 0, pax: 1,
+        meal_plan: null, room_type: "KWD-DLX", room: null, company: null, tariff: null,
+        agreed_rate: 150.25, reference_currency: null,
+      },
+      lines: [], summary_by_head: [], tax_summary: [], gst_summary: [], bill_to: null,
+    }
+    rpc.mockReset().mockImplementation(async (method: string) => {
+      if (method === "kamra.api.folio_invoice") return kwdInvoiceWithPayment
+      if (method === "kamra.api.property_locale") return KWD_LOCALE
+      if (method === "kamra.ledger.list_exchange_rates") return { rates: [], business_date: "2031-03-12" }
+      if (method === "kamra.cashier.my_till") return { open: true, property: "Kuwait Grand Hotel", terminal_links: [] }
+      if (method === "kamra.api.linked_records") return { folios: [], reservations: [] }
+      if (method === "kamra.api.correct_charged_nights") return { nights: [] }
+      if (method === "kamra.api.payment_correction_options") return { actions: [], blocked: [], supervisors: [], refund_cap: 0 }
+      return []
+    })
+
+    await act(async () =>
+      root.render(
+        <MemoryRouter initialEntries={["/billing/FOL-KWD-PAY"]}>
+          <App />
+        </MemoryRouter>,
+      ),
+    )
+
+    await vi.waitFor(() => {
+      expect(host.textContent).toContain("KWD 50.125")
+    })
+    expect(host.textContent).not.toContain("KWD 50.13")
+
+    const fullBtn = Array.from(host.querySelectorAll("button")).find((b) =>
+      b.textContent?.trim() === "Full amount",
+    )
+    expect(fullBtn).toBeDefined()
+    await act(async () => fullBtn!.click())
+
+    const amtInput = host.querySelector<HTMLInputElement>('input[aria-label="Amount collected"]')
+    expect(amtInput).not.toBeNull()
+    expect(amtInput?.value).toBe("100.125")
+    expect(amtInput?.value).not.toBe("100.13")
+    expect(amtInput?.getAttribute("step")).toBe("0.001")
+  })
 })

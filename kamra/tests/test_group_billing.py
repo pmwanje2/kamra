@@ -238,6 +238,90 @@ class GroupBillingTestCase(AuditTestCase):
 		                         ["master_pays", "group_type"], as_dict=True)
 		self.assertEqual((gb.master_pays, gb.group_type), ("Room only", "Wedding"))
 
+	def test_r7_multi_window_group_master_detail_and_settle_target_windows_accurately(self):
+		"""Multi-window Group Master (Windows 2-8): group_detail deterministically selects
+		primary Window 1 when Window 2 is Closed or Window 3 is Open, and settle_group_bill
+		honours explicit window_no without picking Window 2/3 by accident."""
+		from kamra import settings
+
+		make_property(PROP_A, business_date=TODAY, country="Kuwait", currency="KWD",
+		              gst_rate_low=0, gst_rate_high=0)
+		settings.clear_cache(PROP_A)
+		rt_kwd = make_room_type(PROP_A, "KWDG", base_price=50.125)
+		gb = frappe.get_doc({
+			"doctype": "Group Booking", "property": PROP_A,
+			"group_name": "UT Multi-Window KWD Group",
+			"check_in_date": d(-1), "check_out_date": d(2),
+			"status": "Confirmed",
+		}).insert(ignore_permissions=True)
+		make_reservation(PROP_A, rt_kwd, d(-1), d(2), status="Checked In",
+		                 room=make_room(PROP_A, rt_kwd, "409"), group_booking=gb.name)
+
+		# Window 1 Open with 100.125 KWD
+		w1 = folio_mod.open_group_folio(gb.name)
+		api.add_folio_charge(w1, "Room", "UT W1 Room", 100.125, gst_rate=0)
+
+		# Window 2 opened later and Closed with 0.0
+		w2 = folio_mod.open_window(group_booking=gb.name, window_no=2)
+		api.add_folio_charge(w2, "Food & Beverage", "UT W2 Coffee", 10.0, gst_rate=0)
+		api.add_folio_payment(w2, "Cash", 10.0)
+		folio_mod.close_folio(w2)
+
+		detail_w2_closed = api.group_detail(gb.name)
+		self.assertEqual(detail_w2_closed["master_folio"], w1)
+		self.assertEqual(detail_w2_closed["master_folio_status"], "Open")
+		self.assertEqual(detail_w2_closed["master_folio_balance"], 100.125)
+
+		# Window 3 opened later and left Open with 1.000 KWD
+		w3 = folio_mod.open_window(group_booking=gb.name, window_no=3)
+		api.add_folio_charge(w3, "Misc", "UT W3 Fee", 1.0, gst_rate=0)
+
+		detail_w3_open = api.group_detail(gb.name)
+		self.assertEqual(detail_w3_open["master_folio"], w1)
+		self.assertEqual(detail_w3_open["master_folio_status"], "Open")
+		self.assertEqual(detail_w3_open["master_folio_balance"], 100.125)
+
+		# Settling closed Window 2 explicitly refuses and leaves W1 & W3 untouched
+		with self.assertRaises(frappe.ValidationError):
+			api.settle_group_bill(gb.name, mode="Cash", window_no=2)
+		self.assertEqual(frappe.db.get_value("Folio", w1, "status"), "Open")
+		self.assertEqual(frappe.db.get_value("Folio", w3, "status"), "Open")
+
+		# Settling Window 3 explicitly closes ONLY Window 3; Window 1 stays Open at 100.125 KWD
+		out_w3 = api.settle_group_bill(gb.name, mode="Cash", window_no=3)
+		self.assertEqual(out_w3["folio"], w3)
+		self.assertTrue(out_w3["closed"])
+		self.assertEqual(out_w3["balance"], 0.0)
+		self.assertEqual(frappe.db.get_value("Folio", w1, "status"), "Open")
+		self.assertAlmostEqual(float(frappe.db.get_value("Folio", w1, "balance")), 100.125, places=3)
+
+		# Open Window 4 with 5.125 KWD; default settle_group_bill (no window_no) settles Window 1 first
+		w4 = folio_mod.open_window(group_booking=gb.name, window_no=4)
+		api.add_folio_charge(w4, "Misc", "UT W4 Fee", 5.125, gst_rate=0)
+		out_w1 = api.settle_group_bill(gb.name, mode="Cash")
+		self.assertEqual(out_w1["folio"], w1)
+		self.assertTrue(out_w1["closed"])
+		self.assertEqual(out_w1["balance"], 0.0)
+		self.assertEqual(frappe.db.get_value("Folio", w4, "status"), "Open")
+
+		# After W1 closes, group_detail surfaces remaining open Window 4 (5.125 KWD)
+		detail_w4_only = api.group_detail(gb.name)
+		self.assertEqual(detail_w4_only["master_folio"], w4)
+		self.assertEqual(detail_w4_only["master_folio_status"], "Open")
+		self.assertEqual(detail_w4_only["master_folio_balance"], 5.125)
+
+		# Explicit window_no=1 now refuses; window_no=4 closes Window 4
+		with self.assertRaises(frappe.ValidationError):
+			api.settle_group_bill(gb.name, mode="Cash", window_no=1)
+		out_w4 = api.settle_group_bill(gb.name, mode="Cash", window_no=4)
+		self.assertEqual(out_w4["folio"], w4)
+		self.assertTrue(out_w4["closed"])
+		self.assertEqual(out_w4["balance"], 0.0)
+
+		detail_all_closed = api.group_detail(gb.name)
+		self.assertEqual(detail_all_closed["master_folio_status"], "Closed")
+		self.assertEqual(detail_all_closed["master_folio_balance"], 0.0)
+
 
 def _check_in(res):
 	doc = frappe.get_doc("Reservation", res.name)

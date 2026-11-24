@@ -2681,6 +2681,57 @@ class RoutingTestCase(AuditTestCase):
 		self.assertEqual(len(guest_allowances), 1)
 		self.assertEqual(Decimal(str(guest_allowances[0].amount)), Decimal("-0.125"))
 
+	def test_r7_kwd_3dp_refund_folio_payment_and_post_discount(self):
+		"""KWD (3dp fils) exact precision in refund_folio_payment and post_discount:
+		full refund of 10.124 leaves 0.000, full refund of 10.115 succeeds, explicit 10.130
+		refuses over-refund on a 10.126 row even with a second payment, and post_discount
+		preview preserves exact 3dp base and discount (100.125 / 10.125)."""
+		make_property(PROP_A, business_date=TODAY, country="Kuwait", currency="KWD",
+		              gst_rate_low=0, gst_rate_high=0)
+		settings.clear_cache(PROP_A)
+		rt_kwd = make_room_type(PROP_A, "KWD7", base_price=100.125)
+		stay = make_reservation(
+			PROP_A, rt_kwd, TODAY, d(2), status="Checked In",
+			room=make_room(PROP_A, rt_kwd, "407"),
+		)
+		gf = guest_folio(stay.name)
+
+		# 1. Full refund of 10.124 KWD leaves exact 0.000 (not -0.004)
+		api.add_folio_payment(gf, "Cash", 10.124)
+		p1 = frappe.get_doc("Folio", gf).payments[-1].name
+		api.refund_folio_payment(gf, payment_row=p1, reason="UT full KWD 10.124")
+		self.assertEqual(Decimal(str(frappe.db.get_value("Folio", gf, "balance"))), Decimal("0"))
+		ref1 = frappe.get_doc("Folio", gf).payments[-1]
+		self.assertEqual(Decimal(str(ref1.amount)), Decimal("-10.124"))
+
+		# 2. Full refund of 10.115 KWD succeeds without 10.12 > 10.115 failure
+		api.add_folio_payment(gf, "Cash", 10.115)
+		p2 = frappe.get_doc("Folio", gf).payments[-1].name
+		api.refund_folio_payment(gf, payment_row=p2, reason="UT full KWD 10.115")
+		self.assertEqual(Decimal(str(frappe.db.get_value("Folio", gf, "balance"))), Decimal("0"))
+		ref2 = frappe.get_doc("Folio", gf).payments[-1]
+		self.assertEqual(Decimal(str(ref2.amount)), Decimal("-10.115"))
+
+		# 3. Two payments of 10.126 KWD: explicit 10.130 refuses over-refund on p3
+		api.add_folio_payment(gf, "Cash", 10.126)
+		p3 = frappe.get_doc("Folio", gf).payments[-1].name
+		api.add_folio_payment(gf, "Cash", 10.126)
+		with self.assertRaises(frappe.ValidationError):
+			api.refund_folio_payment(gf, amount=10.130, payment_row=p3, reason="UT over-refund p3")
+
+		# 4. post_discount(..., value=10.125, kind="Amount", preview=1) preserves 3dp base & discount
+		stay2 = make_reservation(
+			PROP_A, rt_kwd, TODAY, d(2), status="Checked In",
+			room=make_room(PROP_A, rt_kwd, "408"),
+		)
+		gf2 = guest_folio(stay2.name)
+		api.add_folio_charge(gf2, "Room", "UT KWD Room 100.125", 100.125, gst_rate=0)
+		prev = api.post_discount(gf2, value=10.125, kind="Amount", preview=1)
+		self.assertEqual(prev["total"], 10.125)
+		self.assertEqual(len(prev["lines"]), 1)
+		self.assertEqual(prev["lines"][0]["base"], 100.125)
+		self.assertEqual(prev["lines"][0]["amount"], 10.125)
+
 	# Hydrogen R4/R5: new backend _() strings translated in all 7 locale CSVs
 
 	def test_r5_backend_messages_translated_in_all_seven_locales(self):
