@@ -31,6 +31,7 @@ vi.mock("../src/AppShell", () => ({ default: () => <Outlet /> }))
 
 import App from "../src/App"
 import GroupControl from "../src/components/GroupControl"
+import LinkedRecords from "../src/components/LinkedRecords"
 
 const KWD_LOCALE = {
   currency: "KWD",
@@ -241,5 +242,44 @@ describe("KWD 3dp precision in GroupControl and FolioView", () => {
     for (const input of numInputs) {
       expect(input.getAttribute("step")).toBe("any")
     }
+  })
+
+  it("formats LinkedRecords folio balance chips to 3dp KWD (never truncating 0.255 to 0 or 125.750 to 126)", async () => {
+    rpc.mockReset().mockImplementation(async (method: string) => {
+      if (method === "kamra.api.property_locale") return KWD_LOCALE
+      if (method === "kamra.api.linked_records") {
+        return {
+          guest: "G-1",
+          guest_name: "Nadia Al-Sabah",
+          reservations: [],
+          folios: [
+            { name: "FOL-1", folio_type: "Guest", status: "Open", balance: 0.255, invoice_number: null },
+            { name: "FOL-2", folio_type: "Company", status: "Open", balance: 125.75, invoice_number: null },
+          ],
+          company: "Al-Sabah Energy Holdings",
+          group_booking: null,
+          group_name: null,
+          event: null,
+          event_type: null,
+        }
+      }
+      return null
+    })
+    localStorage.setItem("kamra_locale", JSON.stringify(KWD_LOCALE))
+
+    await act(async () =>
+      root.render(
+        <MemoryRouter>
+          <LinkedRecords doctype="Reservation" name="RES-KWD-1" />
+        </MemoryRouter>,
+      ),
+    )
+
+    await vi.waitFor(() => {
+      expect(host.textContent).toContain("Nadia Al-Sabah")
+    })
+    expect(host.textContent).toContain("KD 0.255")
+    expect(host.textContent).toContain("KD 125.750")
+    expect(host.textContent).not.toContain("KD 126")
   })
 })
