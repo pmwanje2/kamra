@@ -1,12 +1,14 @@
 # Copyright (c) 2026, HeyKoala and contributors
 # For license information, please see license.txt
 
-import frappe
+from decimal import Decimal, InvalidOperation
 
-from kamra.branding import product_name
+import frappe
 from frappe import _
 from frappe.model.document import Document
 from frappe.utils import add_days, cint, date_diff, flt, formatdate, getdate, now_datetime, today
+
+from kamra.branding import product_name
 
 
 class InventoryRefused(frappe.ValidationError):
@@ -52,6 +54,28 @@ HEADER_TOTALS = ("amount_before_tax", "tax_amount", "amount_after_tax", "discoun
 NIGHT_ROW_FIELDS = ("stay_date", "rate", "gst_rate", "meal_amount", "demand_premium_pct",
                     "hand_price", "rate_code_amount", "base_rate", "discount_type",
                     "discount_value", "discount_amount", "discount_reason", "fixed_rate")
+
+
+def _amount_dec(value) -> Decimal:
+	"""Exact finite Decimal for a monetary or numeric field (avoids float64 boundary drift)."""
+	if isinstance(value, Decimal):
+		return value if value.is_finite() else Decimal(0)
+	if value in (None, ""):
+		return Decimal(0)
+	try:
+		dec = Decimal(str(value).strip())
+		if dec.is_finite():
+			return dec
+		return Decimal(0)
+	except (InvalidOperation, ValueError):
+		pass
+	dec = Decimal(str(flt(value)))
+	return dec if dec.is_finite() else Decimal(0)
+
+
+def _amount_diff(a, b) -> Decimal:
+	"""Exact absolute Decimal difference between two numeric field values."""
+	return abs(_amount_dec(a) - _amount_dec(b))
 
 
 def discount_inputs(doc) -> tuple[tuple, set]:
@@ -994,6 +1018,7 @@ class Reservation(Document):
 		def inside(day):
 			return bool(first) and first <= getdate(day) < last
 
+		night_tol = min(self._amount_tolerance(), Decimal("0.005"))
 		tampered = []
 		for day, rows in now.items():
 			before = was.get(day) or []
@@ -1006,7 +1031,7 @@ class Reservation(Document):
 				        and not any(flt(rows[0].get(c)) for c in LOCKED_NIGHT_COLUMNS)):
 					tampered.append(day)
 				continue
-			if any(abs(flt(rows[0].get(c)) - flt(before[0].get(c))) >= 0.005
+			if any(_amount_diff(rows[0].get(c), before[0].get(c)) >= night_tol
 			       for c in LOCKED_NIGHT_COLUMNS):
 				tampered.append(day)
 		tampered += [day for day in was if day not in now and inside(day)]
@@ -1028,14 +1053,20 @@ class Reservation(Document):
 		               "prices or an OTA total), the channel manager or an import."),
 		             frappe.PermissionError, title=_("Locked night rate"))
 
-	def _amount_tolerance(self) -> float:
-		"""Half the currency's minor unit (0.0005 for 3dp KWD, 0.005 for 2dp
-		USD, 0.5 for 0dp UGX): absorbs float noise while catching any single
-		minor-unit tamper in guard_header_totals and guard_agreed_rate."""
+	def _amount_tolerance(self) -> Decimal:
+		"""Half the property currency's minor unit as an exact Decimal
+		(0.0005 for 3dp KWD, 0.005 for 2dp USD, 0.5 for 0dp UGX): absorbs
+		sub-unit float noise while catching any single minor-unit tamper.
+		Always resolves selling_currency from the property, never transient
+		client-supplied self.get('currency')."""
 		from kamra.pricing import _minor_unit, selling_currency
-		currency = self.get("currency") or (selling_currency(self.property) if self.property else None)
+		is_new = getattr(self, "is_new", None)
+		getter = getattr(self, "get_doc_before_save", None)
+		old = None if (callable(is_new) and is_new()) else (getter() if callable(getter) else None)
+		prop = (old.get("property") if old else None) or self.get("property")
+		currency = selling_currency(prop) if prop else None
 		places = _minor_unit(currency)
-		return 0.5 * (10 ** -places)
+		return Decimal("0.5") * (Decimal(10) ** -places)
 
 	def guard_header_totals(self):
 		"""An auto-priced stay's header totals (HEADER_TOTALS) are what its
@@ -1052,7 +1083,7 @@ class Reservation(Document):
 			return
 		tol = self._amount_tolerance()
 		changed = [self.meta.get_label(f) for f in HEADER_TOTALS
-		           if abs(flt(old.get(f)) - flt(self.get(f))) >= tol]
+		           if _amount_diff(old.get(f), self.get(f)) >= tol]
 		if changed:
 			frappe.throw(_("{0} follows the stay's locked nights. It changes only through the "
 			               "booking's own pricing (amend the stay, move the room, an agreed rate "
@@ -1104,11 +1135,11 @@ class Reservation(Document):
 				or self.flags.get("kamra_channel_tariff")):
 			return
 		if self.is_new():
-			changed = flt(self.get("agreed_rate")) > 0 and not self.get("contract_tariff")
+			changed = _amount_dec(self.get("agreed_rate")) > 0 and not self.get("contract_tariff")
 		else:
 			old = self.get_doc_before_save()
-			old_rate = flt(old.get("agreed_rate")) if old else 0.0
-			new_rate = flt(self.get("agreed_rate"))
+			old_rate = _amount_dec(old.get("agreed_rate")) if old else Decimal(0)
+			new_rate = _amount_dec(self.get("agreed_rate"))
 			tol = self._amount_tolerance()
 			changed = bool(old) and (
 				(old_rate > 0) != (new_rate > 0)
@@ -1123,20 +1154,21 @@ class Reservation(Document):
 		"""The stay's agreed rate overrides its rate code (set_agreed_rate, a
 		custom-rate room move). A contract tariff's or a group block's rate is
 		the stay's rate code itself, so it is not an override."""
-		rate = flt(self.get("agreed_rate"))
+		rate = _amount_dec(self.get("agreed_rate"))
 		if rate <= 0:
 			return False
+		tol = min(self._amount_tolerance(), Decimal("0.005"))
 		tariff = self.get("contract_tariff")
 		if isinstance(tariff, str):
 			try:
 				tariff = frappe.parse_json(tariff)
 			except Exception:
 				tariff = None
-		if isinstance(tariff, dict) and abs(flt(tariff.get("agreed_rate")) - rate) < 0.005:
+		if isinstance(tariff, dict) and abs(_amount_dec(tariff.get("agreed_rate")) - rate) < tol:
 			return False
 		if self.get("group_booking"):
 			from kamra.group_blocks import group_rate
-			if abs(flt(group_rate(self.group_booking, self.room_type)) - rate) < 0.005:
+			if abs(_amount_dec(group_rate(self.group_booking, self.room_type)) - rate) < tol:
 				return False
 		return True
 
@@ -1320,12 +1352,13 @@ class Reservation(Document):
 		was = {str(getdate(r.get("stay_date"))): r for r in old.get("night_rates") or []}
 		now = {str(getdate(r.get("stay_date"))): r for r in rows or []}
 		party = () if cint(self.get("fixed_rate")) else PARTY_FIGURES
+		tol = min(self._amount_tolerance(), Decimal("0.005"))
 		moved = any(str(old.get(f) or "") != str(self.get(f) or "") for f in SOLD_LINKS) or any(
-			abs(flt(old.get(f)) - flt(self.get(f))) >= 0.005 for f in (*SOLD_FIGURES, *party))
+			_amount_diff(old.get(f), self.get(f)) >= tol for f in (*SOLD_FIGURES, *party))
 		if moved:
 			return set(now)
 		return {day for day, r in now.items()
-		        if day not in was or any(abs(flt(r.get(c)) - flt(was[day].get(c))) >= 0.005
+		        if day not in was or any(_amount_diff(r.get(c), was[day].get(c)) >= tol
 		                                 for c in NIGHT_PRICE_COLUMNS)}
 
 	def keep_hand_set_nights(self):
