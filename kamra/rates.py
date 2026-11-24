@@ -56,12 +56,28 @@ def _rate_plan_fields(extra: tuple[str, ...] = ()) -> list[str]:
 
 
 def _room_counts(property: str) -> dict[str, int]:
-	"""Count physical rooms per room type at `property`."""
+	"""Count sellable inventory units per room type at `property`: active
+	Sellable Units when configured for a room type (matching `has_active_sius`
+	so whole-property Villas count as live inventory without double-counting
+	physical rooms that also have synced individual SIUs), else physical Rooms."""
 	counts: dict[str, int] = {}
 	for row in frappe.get_all("Room", filters={"property": property}, fields=["room_type"]):
 		rt = row.get("room_type")
 		if rt:
 			counts[rt] = counts.get(rt, 0) + 1
+	exists = getattr(frappe.db, "exists", None)
+	if callable(exists) and exists("DocType", "Sellable Unit"):
+		siu_counts: dict[str, int] = {}
+		for row in frappe.get_all(
+			"Sellable Unit",
+			filters={"property": property, "is_active": 1},
+			fields=["room_type"],
+		):
+			rt = row.get("room_type")
+			if rt:
+				siu_counts[rt] = siu_counts.get(rt, 0) + 1
+		for rt, count in siu_counts.items():
+			counts[rt] = count
 	return counts
 
 
@@ -96,13 +112,26 @@ def room_type_tariffs(room_type: str):
 
 def _price_tariff_panel(property: str, panel: dict) -> None:
 	"""Add the engine's local equivalent and each row's plan lock and rounding,
-	the primary (default) plan's tariff, and explicit tariff / card / unpriced
-	active plan lists (never classifying an unpriced tariff plan as card-priced)."""
-	from kamra.pricing import DEFAULT_FX_LOCK, RATE_PLAN_CHAIN_LIMIT, contract_local_amount, property_currency
+	calculated rows for active derived plans (using the same modifier math as
+	`contract_rate`), the primary (default) plan's tariff, and explicit tariff /
+	card / unpriced active plan lists."""
+	from decimal import Decimal
+
+	from kamra.pricing import (
+		DEFAULT_FX_LOCK,
+		RATE_PLAN_CHAIN_LIMIT,
+		_apply_modifier,
+		_dec,
+		_price_through,
+		contract_local_amount,
+		property_currency,
+		round_rate_amount,
+	)
 
 	home = property_currency(property)
 	plans = {plan["name"]: plan for plan in frappe.get_all(
-		"Rate Plan", filters={"property": property}, fields=_rate_plan_fields(("is_default", "disabled")))}
+		"Rate Plan", filters={"property": property},
+		fields=_rate_plan_fields(("is_default", "disabled", "modifier_type", "modifier_value")))}
 	for row in panel["tariffs"]:
 		plan = plans.get(row.get("rate_plan")) or {}
 		fx = _rate(row.get("fx_rate"))
@@ -114,8 +143,81 @@ def _price_tariff_panel(property: str, panel: dict) -> None:
 		row.update(fx_lock_policy=plan.get("fx_lock_policy") or DEFAULT_FX_LOCK,
 		           rounding_step=float(plan.get("rounding_step") or 0),
 		           rounding_mode=plan.get("rounding_mode") or "Nearest")
-	priced = {row.get("rate_plan") for row in panel["tariffs"]}
+	base_rows = {row.get("rate_plan"): row for row in panel["tariffs"] if row.get("rate_plan")}
 	active = [plan for plan in plans.values() if not int(plan.get("disabled") or 0)]
+	active.sort(key=lambda p: (p.get("rate_plan_name") or "", p.get("name") or ""))
+	for plan in active:
+		plan_name = plan["name"]
+		if plan_name in base_rows or not plan.get("base_rate_plan"):
+			continue
+		# Walk up base_rate_plan (cycle- & depth-guarded) to find the nearest priced ancestor row.
+		chain = [plan]
+		seen = {plan_name}
+		cur = plan.get("base_rate_plan")
+		base_row = None
+		while cur and cur in plans and cur not in seen and len(chain) < RATE_PLAN_CHAIN_LIMIT:
+			if cur in base_rows:
+				base_row = base_rows[cur]
+				break
+			seen.add(cur)
+			parent = plans[cur]
+			chain.insert(0, parent)
+			cur = parent.get("base_rate_plan")
+		if base_row is None:
+			continue
+		base_room = _rate(base_row.get("room"))
+		if base_room is None or base_room <= 0:
+			continue
+		currency = base_row.get("currency")
+		d_room_raw = _price_through(chain, _dec(base_room), Decimal(0), root=False)
+		if d_room_raw <= 0:
+			continue
+		d_room = round_rate_amount(d_room_raw, 0, currency=currency)
+		base_single = _rate(base_row.get("single"))
+		d_single = None
+		if base_single is not None and base_single > 0:
+			d_single_raw = _price_through(chain, _dec(base_single), Decimal(0), root=False)
+			if d_single_raw > 0:
+				d_single = round_rate_amount(d_single_raw, 0, currency=currency)
+		base_extra = _rate(base_row.get("extra"))
+		d_extra = None
+		if base_extra is not None:
+			d_extra_val = _dec(base_extra)
+			for step_plan in chain:
+				if int(step_plan.get("adjust_extra_person") or 0) and step_plan.get("modifier_type") == "Percent":
+					d_extra_val = _apply_modifier(step_plan, d_extra_val, 1)
+			d_extra = round_rate_amount(max(d_extra_val, Decimal(0)), 0, currency=currency)
+		fx = _rate(base_row.get("fx_rate"))
+		foreign = bool(currency) and currency != home and bool(fx and fx > 0)
+		parent_name = plan.get("base_rate_plan")
+		parent_row = base_rows.get(parent_name)
+		parent_plan = plans.get(parent_name) or {}
+		parent_label = (
+			(parent_row.get("label") if parent_row else None)
+			or parent_plan.get("rate_plan_name")
+			or parent_name
+		)
+		panel["tariffs"].append({
+			"rate_plan": plan_name,
+			"label": plan.get("rate_plan_name") or plan_name,
+			"currency": currency,
+			"room": float(d_room),
+			"single": float(d_single) if d_single is not None else None,
+			"extra": float(d_extra) if d_extra is not None else None,
+			"approval_state": base_row.get("approval_state"),
+			"valid_from": base_row.get("valid_from") or "",
+			"fx_rate": base_row.get("fx_rate"),
+			"fx_date": base_row.get("fx_date"),
+			"local_room": float(contract_local_amount(plan, d_room, fx, home)) if foreign else None,
+			"local_single": (float(contract_local_amount(plan, d_single, fx, home))
+			                 if foreign and d_single is not None else None),
+			"fx_lock_policy": plan.get("fx_lock_policy") or DEFAULT_FX_LOCK,
+			"rounding_step": float(plan.get("rounding_step") or 0),
+			"rounding_mode": plan.get("rounding_mode") or "Nearest",
+			"derived_from": parent_name,
+			"derived_from_label": parent_label,
+		})
+	priced = {row.get("rate_plan") for row in panel["tariffs"]}
 	default = default_plan(active)
 	if default:
 		primary = default if default in priced else None
