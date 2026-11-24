@@ -93,10 +93,11 @@ Endpoint: `kamra.api.cancellation_preview`.
 Cancel a confirmed booking. The property's cancellation policy
 applies automatically - free outside the window, else the configured
 fee posts to the folio. Returns a cancellation number - always give
-it to the guest. Reasons: Guest request, Change of plans, Duplicate
+it to the guest. The reason is one of the hotel's cancellation
+reason codes (by default Guest request, Change of plans, Duplicate
 booking, Payment failed, Weather / travel disruption, Booked
-elsewhere, Other. Only waive the fee when a manager authorizes it;
-the waiver is logged.
+elsewhere, Other); an unknown one is recorded as Other. Only waive
+the fee when a manager authorizes it; the waiver is logged.
 
 Endpoint: `kamra.api.cancel_reservation`.
 Mutating - logged to the activity ledger.

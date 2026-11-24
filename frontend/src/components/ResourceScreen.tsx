@@ -127,10 +127,14 @@ export interface FieldSpec {
   required?: boolean
   hint?: string // for image: recommended size/format
   dependsOn?: (draft: Record<string, unknown>) => boolean
+  /** Lock the field on existing records (e.g. code primary keys). */
+  readOnlyOnEdit?: boolean
+  /** Disable a field dynamically (e.g. disabling a system master code). */
+  disabledWhen?: (draft: Record<string, unknown>) => boolean
   /** Block dates before today unless the user may backdate (Finance / Hotel Admin). */
   notPast?: boolean
-  /** a new record starts with this value (the DocType's own default) */
-  default?: string | number
+  /** Initial value when creating a new record (e.g. the DocType's own default). */
+  default?: unknown
 }
 
 /** One column of a child table edited in the form (FieldSpec type "table"). */
@@ -153,12 +157,19 @@ export interface ScreenConfig {
     badge?: boolean
     /** Map a Check field (0/1) to Active / Disabled badges. */
     statusCheck?: boolean
+    /** Map a Check field (0/1) to explicit badge labels (e.g. System / Custom). */
+    booleanBadge?: { truthy: string; falsy?: string }
   }[]
   form: FieldSpec[]
   formNote?: string
   propertyScoped?: boolean
+  /** Show records belonging to the current property plus shared (blank property) records;
+   *  newly created records are scoped to the current property. */
+  propertyOrShared?: boolean
   allowCreate?: boolean
   allowDelete?: boolean
+  /** Row-level delete guard (e.g. hide Delete for system master rows). */
+  canDelete?: (row: Record<string, unknown>) => boolean
   orderBy?: string
   /** Fields searched (LIKE) by the search box. Adds a search input when set. */
   searchFields?: string[]
@@ -407,9 +418,10 @@ function FieldInput(props: {
   /** Translate display labels; API values stay English. */
   t: (s: string) => string
   canBackdate?: boolean
+  disabled?: boolean
 }) {
   useUILanguage()
-  const { spec, value, onChange, t, canBackdate } = props
+  const { spec, value, onChange, t, canBackdate, disabled } = props
   const masterOpts =
     (spec.optionsFrom && props.masterOptions[spec.optionsFrom]) ||
     spec.options ||
@@ -433,6 +445,7 @@ function FieldInput(props: {
         <select
           className={inputCls}
           value={String(value ?? "")}
+          disabled={disabled}
           onChange={(e) => onChange(e.target.value)}
         >
           <option value="">-</option>
@@ -448,6 +461,7 @@ function FieldInput(props: {
         <select
           className={inputCls}
           value={String(value ?? "")}
+          disabled={disabled}
           onChange={(e) => onChange(e.target.value)}
         >
           <option value="">-</option>
@@ -462,8 +476,9 @@ function FieldInput(props: {
       return (
         <input
           type="checkbox"
-          className="size-4 accent-brand-600"
+          className="size-4 accent-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
           checked={Boolean(Number(value ?? 0))}
+          disabled={disabled}
           onChange={(e) => onChange(e.target.checked ? 1 : 0)}
         />
       )
@@ -473,6 +488,7 @@ function FieldInput(props: {
           type="date"
           className={inputCls}
           value={String(value ?? "")}
+          disabled={disabled}
           min={spec.notPast && !canBackdate ? isoToday() : undefined}
           onChange={(e) => onChange(e.target.value)}
         />
@@ -485,6 +501,7 @@ function FieldInput(props: {
           type="number"
           className={inputCls}
           value={value === null || value === undefined ? "" : Number(value)}
+          disabled={disabled}
           onChange={(e) =>
             onChange(e.target.value === "" ? null : Number(e.target.value))
           }
@@ -502,6 +519,7 @@ function FieldInput(props: {
           autoComplete="new-password"
           className={inputCls}
           value={String(value ?? "")}
+          disabled={disabled}
           onChange={(e) => onChange(e.target.value)}
         />
       )
@@ -534,6 +552,7 @@ function FieldInput(props: {
             className={inputCls}
             list={spec.optionsFrom ? `masters-${spec.field}` : undefined}
             value={selected?.label ?? rawValue}
+            disabled={disabled}
             onChange={(e) => {
               const entered = e.target.value
               const suggestion = suggestions.find((option) => option.label === entered)
@@ -646,6 +665,17 @@ export function ResourceScreen({
   // any search/filter change resets to the first page
   useEffect(() => setPage(0), [debounced, filterVals, dateFrom, dateTo])
 
+  const matchLocalSearch = useCallback(
+    (items: Row[]) => {
+      if (!config.propertyOrShared || !debounced || !config.searchFields?.length) return items
+      const needle = debounced.toLowerCase()
+      return items.filter((row) =>
+        config.searchFields!.some((f) => String(row[f] ?? "").toLowerCase().includes(needle)),
+      )
+    },
+    [config.propertyOrShared, config.searchFields, debounced],
+  )
+
   const load = useCallback(() => {
     const filters: (string | number)[][] = []
     if (config.propertyScoped)
@@ -656,8 +686,12 @@ export function ResourceScreen({
       if (dateFrom) filters.push([config.dateFilter.field, ">=", dateFrom])
       if (dateTo) filters.push([config.dateFilter.field, "<=", dateTo])
     }
-    const orFilters =
-      debounced && config.searchFields?.length
+    const orFilters = config.propertyOrShared
+      ? [
+          ["property", "=", getCurrentProperty()],
+          ["property", "is", "not set"],
+        ]
+      : debounced && config.searchFields?.length
         ? config.searchFields.map((f) => [f, "like", `%${debounced}%`])
         : undefined
     listResource(config.doctype, {
@@ -669,12 +703,12 @@ export function ResourceScreen({
       start: pageSize ? page * pageSize : 0,
     })
       .then((r) => {
-        setRows(r)
+        setRows(matchLocalSearch(r))
         setError(null)
       })
       .catch((e) => setError(serverError(e)))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config.doctype, debounced, filterVals, page, dateFrom, dateTo])
+  }, [config.doctype, config.propertyOrShared, debounced, filterVals, page, dateFrom, dateTo, matchLocalSearch])
 
   useEffect(load, [load])
 
@@ -704,17 +738,21 @@ export function ResourceScreen({
       if (dateFrom) filters.push([config.dateFilter.field, ">=", dateFrom])
       if (dateTo) filters.push([config.dateFilter.field, "<=", dateTo])
     }
-    const orFilters =
-      debounced && config.searchFields?.length
+    const orFilters = config.propertyOrShared
+      ? [
+          ["property", "=", getCurrentProperty()],
+          ["property", "is", "not set"],
+        ]
+      : debounced && config.searchFields?.length
         ? config.searchFields.map((f) => [f, "like", `%${debounced}%`])
         : undefined
-    const all = await listResource(config.doctype, {
+    const all = matchLocalSearch(await listResource(config.doctype, {
       fields,
       filters: filters.length ? filters : undefined,
       orFilters,
       orderBy: config.orderBy,
       limit: 2000,
-    })
+    }))
     const cols = visibleCols
     downloadCsv(
       `${config.doctype.toLowerCase().replace(/ /g, "-")}-${new Date().toISOString().slice(0, 10)}`,
@@ -787,6 +825,8 @@ export function ResourceScreen({
       const payload: Record<string, unknown> = {}
       for (const f of config.form) {
         if (f.type === "readonly") continue
+        if (f.readOnlyOnEdit && editing !== "new") continue
+        if (f.disabledWhen?.(draft)) continue
         // an empty secret keeps the stored one
         if (f.type === "password" && !draft[f.field]) continue
         if (f.type === "table") {
@@ -795,7 +835,8 @@ export function ResourceScreen({
         }
         if (f.field in draft) payload[f.field] = draft[f.field]
       }
-      if (config.propertyScoped) payload.property = getCurrentProperty()
+      if (config.propertyScoped || (config.propertyOrShared && editing === "new"))
+        payload.property = getCurrentProperty()
       if (editing === "new") {
         await createResource(config.doctype, payload)
       } else if (editing) {
@@ -999,6 +1040,14 @@ export function ResourceScreen({
                         <Badge tone={row[c.field] ? "zinc" : "green"}>
                           {t(row[c.field] ? "Disabled" : "Active")}
                         </Badge>
+                      ) : c.booleanBadge ? (
+                        Number(row[c.field]) ? (
+                          <Badge tone="sky">{t(c.booleanBadge.truthy)}</Badge>
+                        ) : c.booleanBadge.falsy ? (
+                          <Badge tone="zinc">{t(c.booleanBadge.falsy)}</Badge>
+                        ) : (
+                          "-"
+                        )
                       ) : c.badge && row[c.field] ? (
                         <Badge
                           tone={BADGE_TONES[String(row[c.field])] ?? "zinc"}
@@ -1066,7 +1115,9 @@ export function ResourceScreen({
           footer={
             useDetail ? undefined : (
             <div className="flex items-center justify-between">
-              {editing !== "new" && config.allowDelete !== false ? (
+              {editing !== "new" &&
+              config.allowDelete !== false &&
+              (!config.canDelete || config.canDelete(draft)) ? (
                 <Button
                   variant="ghost"
                   disabled={busy}
@@ -1135,6 +1186,10 @@ export function ResourceScreen({
                       masterOptions={masterOptions}
                       t={t}
                       canBackdate={canBackdate}
+                      disabled={Boolean(
+                        (spec.readOnlyOnEdit && editing !== "new") ||
+                        spec.disabledWhen?.(draft),
+                      )}
                     />
                     {spec.hint && spec.type !== "image" && (
                       <span className="mt-1 block text-xs leading-relaxed text-zinc-400">

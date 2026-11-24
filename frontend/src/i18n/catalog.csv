@@ -213,7 +213,6 @@ Y,Y,Y (نعم),Y (Sí),Y (Sim),Y（是）,screens/configs.ts,,translated
 {amount} due now,{amount} due now,{amount} مستحق الآن,{amount} a pagar ahora,{amount} previsto para agora,立即应收 {amount},screens/PublicBooking.tsx,amount,translated
 {amount} is billed to the company.,{amount} is billed to the company.,{amount} على حساب الشركة.,{amount} se factura a la empresa.,{amount} é cobrado da empresa.,{amount} 由公司支付。,components/CheckOutDialog.tsx,amount,translated
 {amount} moves to the company's account.,{amount} moves to the company's account.,ينتقل {amount} إلى حساب الشركة.,{amount} pasa a la cuenta por cobrar de la empresa.,{amount} muda para a conta da empresa.,{amount} 转入公司账户。,components/CheckOutDialog.tsx,amount,translated
-{amount} off a night,{amount} off a night,خصم {amount} لكل ليلة,{amount} de descuento por noche,{amount} de desconto por noite,每晚减 {amount},screens/ReservationDetail.tsx,amount,translated
 {amount} paid beyond the no-show fee is still on the folio.,{amount} paid beyond the no-show fee is still on the folio.,لا يزال {amount} مدفوعًا زيادةً على رسوم عدم الحضور في الفاتورة.,{amount} pagado por encima del cargo por no presentación sigue en el folio.,{amount} pago além da taxa de não comparecimento continua no extrato.,超出未到店费的 {amount} 仍在客账上。,components/NoShowDialog.tsx,amount,translated
 {amount} payable at the hotel,{amount} payable at the hotel,{amount} يُدفع في الفندق,{amount} a pagar en el hotel,{amount} a pagar no hotel,到店支付 {amount},,amount,translated
 {amount} per night,{amount} per night,{amount} لكل ليلة,{amount} por noche,{amount} por noite,每晚 {amount},screens/PublicBooking.tsx,amount,translated
@@ -379,7 +378,6 @@ Y,Y,Y (نعم),Y (Sí),Y (Sim),Y（是）,screens/configs.ts,,translated
 {pax} pax,{pax} pax,{pax} ضيف,{pax} personas,{pax} pax,{pax} 人,screens/Banquet.tsx,pax,translated
 {pct}% occupancy,{pct}% occupancy,إشغال {pct}%,{pct}% de ocupación,{pct}% de ocupação,{pct}% 入住率,components/RoomInsights.tsx,pct,translated
 {pct}% occupied · {occupied} of {total},{pct}% occupied · {occupied} of {total},{pct}% إشغال · {occupied} من {total},{pct}% ocupado · {occupied} de {total},{pct}% ocupado · {occupied} de {total},入住率 {pct}% · {total} 间中 {occupied} 间,screens/Today.tsx,pct occupied total,translated
-{pct}% off,{pct}% off,خصم {pct}%,{pct}% de descuento,{pct}% de desconto,减 {pct}%,screens/ReservationDetail.tsx,pct,translated
 {property} in {city} · book direct from {price} per night,{property} in {city} · book direct from {price} per night,{property} في {city} · احجز مباشرة من {price} لليلة,{property} en {city} · reserva directa desde {price} por noche,{property} em {city} · reserve diretamente de {price} por noite,{city} 的 {property} · 直订每晚 {price} 起,screens/PublicBooking.tsx,property city price,translated
 "{property} in {city}: {count} room types from {price} per night. Best-rate direct booking, pay at hotel. {description}","{property} in {city}: {count} room types from {price} per night. Best-rate direct booking, pay at hotel. {description}",{property} في {city}: {count} أنواع غرف من {price} لليلة. أفضل سعر عند الحجز المباشر، والدفع في الفندق. {description},{property} en {city}: {count} tipos de habitación desde {price} por noche. Reserva directamente al mejor precio y paga en el hotel. {description},"{property} em {city}: {count} tipos de quarto a partir de {price} por noite. Reserva direta com melhor tarifa, pagamento no hotel. {description}",{city} 的 {property}：{count} 种房型，每晚 {price} 起。直订最优价，到店支付。{description},screens/PublicBooking.tsx,property city count price description,translated
 {property} logo,{property} logo,شعار {property},Logotipo de {property},{property} logotipo,{property} 标志,screens/PublicBooking.tsx,property,translated
@@ -1156,7 +1154,6 @@ base price,base price,السعر الأساسي,precio base,preço base,基础�
 Base price,Base price,,Precio base,Preço base,,components/ChannelConnectionActions.tsx,,needs_translation
 Base price / night,Base price / night,السعر الأساسي / ليلة,Precio base / noche,Preço base / noite,基础价 / 晚,,,translated
 base rate,base rate,السعر الأساسي,tarifa base,taxa básica,基础房价,,,translated
-Base rate / night,Base rate / night,السعر الأساسي / الليلة,Tarifa base / noche,Tarifa base / noite,基础房价 / 晚,screens/ReservationDetail.tsx,,translated
 Base URL,Base URL,URL الأساسي,URL base,URL base,基础 URL,screens/settings/cards.tsx,,translated
 Base URL ,Base URL ,URL الأساسي ,URL base ,URL base ,基础 URL ,screens/Developers.tsx,,translated
 Batch print (,Batch print (,طباعة دفعة واحدة (,Impresión por lote (,Impressão em lote (,批量打印（,screens/FolioHistory.tsx,,translated
@@ -1501,7 +1498,6 @@ Change USD room tariff,Change USD room tariff,تغيير تعرفة الغرفة
 Changed by,Changed by,غيّره,Cambiado por,Alterado por,修改人,screens/settings/SettingsHub.tsx,,translated
 CHANGEOVER CONFLICT,CHANGEOVER CONFLICT,تعارض تبديل الغرفة,CONFLICTO ENTRE SALIDA Y ENTRADA,CONFLITO DE MUDANÇA,客房衔接冲突,screens/TapeChart.tsx,,translated
 changes data,changes data,يغيّر البيانات,modifica datos,altera dados,变更数据,screens/settings/McpAccessPage.tsx,,translated
-Changes log,Changes log,سجل التغييرات,Registro de cambios,Registro de alterações,变更日志,components/ChangesLog.tsx,,translated
 Changes Requested,Changes Requested,مطلوب تعديلات,Cambios solicitados,Alterações solicitadas,已请求修改,,,translated
 Changes waiting,Changes waiting,,Cambios en espera,Mudanças na fila,,components/ChannelConnectionActions.tsx,,needs_translation
 channel,channel,القناة,canal,canal,渠道,,,translated
@@ -2032,7 +2028,6 @@ Date ranges that lift or set nightly rates. Highest priority wins. Toggle Disabl
 Date stuck,Date stuck,التاريخ متوقف,Fecha sin actualizar,Data travada,营业日未推进,screens/EndOfDay.tsx; screens/EndOfDayWizard.tsx,,translated
 Dated,Dated,بتاريخ,Fecha,Datado,日期,screens/BanquetDocument.tsx,,translated
 Dates,Dates,التواريخ,Fechas,Datas,日期,screens/PublicBooking.tsx,,translated
-Dates changed,Dates changed,تغيير التواريخ,Fechas cambiadas,Datas alteradas,日期已更改,components/ChangesLog.tsx,,translated
 dates read as {format},dates read as {format},تُقرأ التواريخ كـ {format},fechas leídas como {format},datas lidas como {format},日期按 {format} 读取,screens/GoLiveImport.tsx,format,translated
 Day,Day,اليوم,Día,Dia,日,screens/AuditPack.tsx; screens/CashForecast.tsx,,translated
 Day and month to date,Day and month to date,اليوم ومنذ بداية الشهر,Día y acumulado del mes,Dia e mês acumulados,当日与本月至今,screens/AuditPack.tsx,,translated
@@ -2187,7 +2182,6 @@ Discount %,Discount %,خصم %,Descuento (%),% de desconto,折扣 %,,,translated
 Discount % off the room rate,Discount % off the room rate,نسبة الخصم % من سعر الغرفة,Descuento % sobre la tarifa de la habitación,Desconto % sobre a tarifa do quarto,房费折扣 %,,,translated
 Discount codes guests or agents can apply at booking. Toggle Disabled to activate or deactivate a code.,Discount codes guests or agents can apply at booking. Toggle Disabled to activate or deactivate a code.,رموز خصم يمكن للضيوف أو الوكلاء تطبيقها عند الحجز. استخدم معطّل لتفعيل الرمز أو إيقافه.,Cupones de descuento que los huéspedes o agentes pueden aplicar al reservar. Use Desactivado para activar o desactivar un código.,Os códigos de desconto que hóspedes ou agentes podem aplicar no momento da reserva. Alterne Desativado para ativar ou desativar um código.,宾客或代理可在预订时使用的折扣码。切换「已停用」以启用或停用。,,,translated
 "Discount codes with dates, minimum nights and use limits.","Discount codes with dates, minimum nights and use limits.",رموز خصم بتواريخ وحد أدنى لعدد الليالي وحدود للاستخدام.,"Cupones con fechas de vigencia, mínimo de noches y límites de uso.","Códigos de desconto com datas, noites mínimas e limites de utilização.",带有效期、最少间夜与使用次数限制的折扣码。,,,translated
-Discount note,Discount note,ملاحظة الخصم,Nota del descuento,Nota do desconto,折扣备注,components/DiscountPanel.tsx,,translated
 Discount on the whole quote,Discount on the whole quote,خصم على كامل عرض السعر,Descuento sobre toda la cotización,Desconto em todo o orçamento,整单折扣,screens/BanquetFunction.tsx,,translated
 Discount reason,Discount reason,سبب الخصم,Motivo del descuento,Motivo do desconto,折扣原因,components/FolioDiscount.tsx,,translated
 Discount type,Discount type,نوع الخصم,Tipo de descuento,Tipo de desconto,折扣类型,components/FolioDiscount.tsx,,translated
@@ -2304,10 +2298,8 @@ Manage tariffs,Manage tariffs,إدارة التعرفة,Gestionar tarifas,Gerenc
 New rate,New rate,السعر الجديد,Nueva tarifa,Nova tarifa,新价格,screens/ContractTariffs.tsx,,translated
 New tariff version,New tariff version,نسخة تعرفة جديدة,Nueva versión de tarifa,Nova versão da tarifa,新建价格版本,screens/ContractTariffs.tsx,,translated
 New version,New version,نسخة جديدة,Nueva versión,Nova versão,新建版本,screens/ContractTariffs.tsx,,translated
-Nightly prices,Nightly prices,الأسعار الليلية,Precios por noche,Preços por noite,每晚价格,components/ChangesLog.tsx,,translated
 No active tariff,No active tariff,لا توجد تعرفة سارية,Sin tarifa vigente,Sem tarifa vigente,无当前有效价格,screens/ContractTariffs.tsx,,translated
 No approved contract tariffs.,No approved contract tariffs.,,,,,components/RoomTypeTariffs.tsx,,needs_translation
-No changes recorded yet.,No changes recorded yet.,لم تُسجَّل أي تغييرات بعد.,Aún no hay cambios registrados.,Ainda não há alterações registradas.,尚无变更记录。,components/ChangesLog.tsx,,translated
 No published book rate is available for this price list.,No published book rate is available for this price list.,لا يتوفر سعر صرف محاسبي منشور لقائمة الأسعار هذه.,No hay un tipo de cambio contable publicado para esta lista de precios.,Não há câmbio contábil publicado para esta lista de preços.,此价格表没有已发布的记账汇率。,screens/ContractTariffs.tsx,,translated
 No tariff versions are pending approval.,No tariff versions are pending approval.,لا توجد نسخ تعرفة بانتظار الموافقة.,No hay versiones de tarifa pendientes de aprobación.,Nenhuma versão de tarifa aguarda aprovação.,没有待审批的价格版本。,screens/ContractTariffs.tsx,,translated
 No tariffs match these filters.,No tariffs match these filters.,لا توجد تعرفة مطابقة لعوامل التصفية هذه.,Ninguna tarifa coincide con estos filtros.,Nenhuma tarifa corresponde a estes filtros.,没有符合这些筛选条件的价格。,screens/ContractTariffs.tsx,,translated
@@ -2316,7 +2308,6 @@ Pending: {rate} from {date},Pending: {rate} from {date},بانتظار المو�
 Price list,Price list,قائمة الأسعار,Lista de precios,Lista de preços,价格表,screens/ContractTariffs.tsx,,translated
 Published book rate: 1 {foreign} = {rate} {home} · {date},Published book rate: 1 {foreign} = {rate} {home} · {date},سعر الصرف المحاسبي المنشور: ١ {foreign} = {rate} {home} · {date},Tipo de cambio contable publicado: 1 {foreign} = {rate} {home} · {date},Câmbio contábil publicado: 1 {foreign} = {rate} {home} · {date},已发布的记账汇率：1 {foreign} = {rate} {home} · {date},screens/ContractTariffs.tsx,foreign rate home date,translated
 Published selling rate: 1 {foreign} = {rate} {home} · {date},Published selling rate: 1 {foreign} = {rate} {home} · {date},,,,,components/RoomTypeTariffs.tsx,foreign rate home date,needs_translation
-Rate correction,Rate correction,تصحيح السعر,Corrección de tarifa,Correção de tarifa,房价修正,components/ChangesLog.tsx,,translated
 Recompute the signature over the raw body and reject old timestamps.,Recompute the signature over the raw body and reject old timestamps.,يحمل كل طلب X-شريك التحقق من الهوية-Event وX-شريك التحقق من الهوية-Event-Id وX-شريك التحقق من الهوية-Timestamp وX-شريك التحقق من الهوية-Signature. أعد حساب التوقيع على النص الخام وارفض الطوابع الزمنية القديمة:,"Cada solicitud lleva X-el servicio de verificación de identidad-Event, X-el servicio de verificación de identidad-Event-Id, X-el servicio de verificación de identidad-Timestamp y X-el servicio de verificación de identidad-Signature. Vuelva a calcular la firma sobre el cuerpo sin procesar y rechace las marcas de tiempo antiguas:","Cada solicitação carrega X-o serviço de verificação de identidade-Event, X-o serviço de verificação de identidade-Event-Id, X-o serviço de verificação de identidade-Timestamp e X-o serviço de verificação de identidade-Signature. Recalcule a assinatura sobre o corpo bruto e rejeite os carimbos de data/hora antigos:",每个请求携带 X-证件核验合作方-Event、X-证件核验合作方-Event-Id、X-证件核验合作方-Timestamp 与 X-证件核验合作方-Signature。请对原始报文重算签名并拒绝过期时间戳：,screens/settings/WebhooksPage.tsx,,translated
 "Each sign-in from Claude, ChatGPT or another MCP client. Disconnect one and it has to sign in again.","Each sign-in from Claude, ChatGPT or another MCP client. Disconnect one and it has to sign in again.",كل تسجيل دخول من Claude أو ChatGPT أو أي عميل MCP آخر. افصل أحدها وسيحتاج إلى تسجيل الدخول مجددا.,"Cada inicio de sesión desde Claude, ChatGPT u otro cliente MCP. Si desconecta uno, tendrá que iniciar sesión de nuevo.","Cada login de Claude, ChatGPT ou outro cliente MCP. Desconecte um e ele deverá fazer login novamente.",来自 Claude、ChatGPT 或其他 MCP 客户端的每次登录。断开会话后需重新登录。,screens/settings/McpAccessPage.tsx,,translated
 "Each stay becomes a normal booking at its own property, with its own bill. Take advances on each stay.","Each stay becomes a normal booking at its own property, with its own bill. Take advances on each stay.",تصبح كل إقامة حجزًا عاديًا في منشأتها، بفاتورتها الخاصة. استلم الدفعات المقدمة على كل إقامة.,"Cada estancia se convierte en una reserva normal en su propiedad, con su propia cuenta. Cobra los anticipos en cada estancia.","Cada estadia se torna uma reserva normal no seu respectivo hotel, com sua própria fatura. Receba adiantamentos em cada estadia.",每段住宿在各酒店成为普通预订，各有独立账单。可分别收取预付款。,,,translated
@@ -2700,11 +2691,8 @@ Refreshing contract tariffs…,Refreshing contract tariffs…,جارٍ تحدي�
 Released tariffs are never overwritten — new versions take effect from their effective date once approved.,Released tariffs are never overwritten — new versions take effect from their effective date once approved.,لا تُستبدل التعرفة المنشورة؛ بعد الموافقة تسري النسخ الجديدة اعتبارًا من تاريخ سريانها.,"Las tarifas publicadas no se sobrescriben. Una vez aprobadas, las nuevas versiones se aplican desde su fecha de vigencia.","Tarifas liberadas não são sobrescritas. Após aprovação, as novas versões valem a partir da data de vigência.",已发布的价格不会被覆盖。新版本获批后，自生效日期起适用。,screens/ContractTariffs.tsx,,translated
 Retry,Retry,إعادة المحاولة,Reintentar,Tentar novamente,重试,screens/ContractTariffs.tsx,,translated
 Revenue · Contract Tariffs,Revenue · Contract Tariffs,الإيرادات · التعرفة التعاقدية,Ingresos · Tarifas contractuales,Receita · Tarifas contratuais,收益 · 合同价格,,,translated
-Room move,Room move,نقل الغرفة,Cambio de habitación,Troca de quarto,换房,components/ChangesLog.tsx,,translated
-Same reason as the stay,Same reason as the stay,نفس سبب الإقامة,El mismo motivo que la estancia,O mesmo motivo da estadia,与住宿相同的原因,components/DiscountPanel.tsx,,translated
 Search tariffs,Search tariffs,البحث في التعرفة,Buscar tarifas,Buscar tarifas,搜索价格,screens/ContractTariffs.tsx,,translated
 Select a price list to see its published book rate.,Select a price list to see its published book rate.,اختر قائمة أسعار لعرض سعر الصرف المحاسبي المنشور لها.,Selecciona una lista de precios para ver su tipo de cambio contable publicado.,Selecione uma lista de preços para ver seu câmbio contábil publicado.,请选择价格表以查看其已发布的记账汇率。,screens/ContractTariffs.tsx,,translated
-Signed off by {name},Signed off by {name},وافق عليه {name},Aprobado por {name},Aprovado por {name},由 {name} 批准,components/ChangesLog.tsx,name,translated
 Submit for approval,Submit for approval,إرسال للموافقة,Enviar para aprobación,Enviar para aprovação,提交审批,screens/ContractTariffs.tsx,,translated
 Supplement,Supplement,إضافة,Suplemento,Suplemento,附加服务,,,translated
 Supplements,Supplements,الإضافات,Suplementos,Suplementos,附加服务,screens/ContractTariffs.tsx,,translated
@@ -3325,19 +3313,7 @@ Keys {range} · {all} all,Keys {range} · {all} all,المفاتيح {range} · 
 Keys: between 1 and 10.,Keys: between 1 and 10.,المفاتيح: بين 1 و10.,Llaves: entre 1 y 10.,Chaves: entre 1 e 10.,房卡：1 至 10 张。,,,translated
 Kind,Kind,النوع,Tipo,Tipo,类型,screens/BanquetRegisters.tsx; screens/CashierBoard.tsx; screens/CashierShiftReport.tsx; screens/CashierTill.tsx; screens/banquet/Economics.tsx,,translated
 King,King,كينغ,King,Rei,大床,,,translated
-"King bed
-Lake view
-Free Wi-Fi","King bed
-Lake view
-Free Wi-Fi","سرير كينج
-إطلالة على البحيرة
-واي فاي مجاني","Cama king
-Vista al lago
-Wifi gratuito","Cama king size
-Vista para o lago
-Wi-Fi grátis","大床
-湖景
-免费 Wi-Fi",components/RoomTypeMedia.tsx,,translated
+King bedLake viewFree Wi-Fi,King bedLake viewFree Wi-Fi,سرير كينجإطلالة على البحيرةواي فاي مجاني,Cama kingVista al lagoWifi gratuito,Cama king sizeVista para o lagoWi-Fi grátis,大床湖景免费 Wi-Fi,components/RoomTypeMedia.tsx,,translated
 Kitchen,Kitchen,مطبخ,Cocina,Cozinha,厨房,../../kamra/settings.py; components/RoomDrawer.tsx,,translated
 kitchen average,kitchen average,متوسط المطبخ,promedio de cocina,média da cozinha,厨房平均用时,screens/PosDashboard.tsx,,translated
 Kitchen Display,Kitchen Display,شاشة المطبخ,Pantalla de cocina,Expositor de cozinha,厨房显示屏,screens/KitchenPrinters.tsx,,translated
@@ -5933,31 +5909,7 @@ Supplier bills the hotel pays later. Cash paid from the till stays in Petty Cash
 Supplier's bill number,Supplier's bill number,رقم فاتورة المورد,Número de factura del proveedor,Número da fatura do fornecedor,供应商账单号,,,translated
 Supplies,Supplies,المستلزمات,Suministros,Suprimentos,用品,,,translated
 swap room,swap room,تبديل الغرفة,cambiar habitación,trocar quarto,换房,,,translated
-"Swimming Pool
-Free Parking
-Complimentary Wi-Fi
-Fine-dining Restaurant
-Spa & Wellness","Swimming Pool
-Free Parking
-Complimentary Wi-Fi
-Fine-dining Restaurant
-Spa & Wellness","مسبح
-موقف سيارات مجاني
-واي فاي مجاني
-مطعم راقٍ
-سبا وعافية","Piscina
-Estacionamiento gratuito
-Wifi de cortesía
-Restaurante de alta cocina
-Spa y bienestar","Piscina
-Estacionamento Gratuito
-Wi-Fi gratuito
-Restaurante requintado
-Spa e Bem-Estar","游泳池
-免费停车
-免费 Wi-Fi
-精致餐厅
-水疗与康体",screens/BookingEngine.tsx,,translated
+Swimming PoolFree ParkingComplimentary Wi-FiFine-dining RestaurantSpa & Wellness,Swimming PoolFree ParkingComplimentary Wi-FiFine-dining RestaurantSpa & Wellness,مسبحموقف سيارات مجانيواي فاي مجانيمطعم راقٍسبا وعافية,PiscinaEstacionamiento gratuitoWifi de cortesíaRestaurante de alta cocinaSpa y bienestar,PiscinaEstacionamento GratuitoWi-Fi gratuitoRestaurante requintadoSpa e Bem-Estar,游泳池免费停车免费 Wi-Fi精致餐厅水疗与康体,screens/BookingEngine.tsx,,translated
 Switch app,Switch app,تبديل التطبيق,Cambiar aplicación,Trocar de aplicativo,切换应用,AppShell.tsx,,translated
 Switch between the front and back camera,Switch between the front and back camera,التبديل بين الكاميرا الأمامية والخلفية,Cambiar entre la cámara frontal y trasera,Alternar entre a câmera frontal e traseira,切换前后摄像头,components/CameraCapture.tsx,,translated
 Switch camera,Switch camera,تبديل الكاميرا,Cambiar cámara,Trocar câmera,切换摄像头,components/CameraCapture.tsx,,translated
@@ -6098,7 +6050,6 @@ The ,The ,مبلغ ,El importe de ,O ,该 ,screens/BanquetFunction.tsx,,translat
 "The 03:00 audit held the date. Clear the blockers and run End of Day, then print the pack.","The 03:00 audit held the date. Clear the blockers and run End of Day, then print the pack.",تدقيق الساعة 03:00 أوقف التاريخ. أزل العوائق وشغّل إقفال اليوم ثم اطبع الحزمة.,"La auditoría de las 03:00 dejó la fecha en espera. Resuelva los bloqueos, ejecute el cierre del día e imprima el paquete.","A auditoria das 03:00 manteve a data. Limpe os bloqueadores e execute o Fim do Dia, depois imprima o pacote.",03:00 夜审已暂缓推进营业日。请处理阻断项后运行日结，并打印夜审报表包。,,,translated
 The accounting system issued invoice {document} for this bill. It is corrected there with a credit note and a new invoice; this bill is not reopened or credited here.,The accounting system issued invoice {document} for this bill. It is corrected there with a credit note and a new invoice; this bill is not reopened or credited here.,أصدر النظام المحاسبي الفاتورة {document} لهذا الحساب. تُصحَّح هناك بإشعار دائن وفاتورة جديدة؛ ولا يُعاد فتح هذا الحساب أو قيده دائنًا هنا.,El sistema contable emitió la factura {document} para esta cuenta. Se corrige allí con una nota de crédito y una nueva factura; esta cuenta no se reabre ni se acredita aquí.,O sistema contábil emitiu a fatura {document} para esta conta. Ela é corrigida lá com uma nota de crédito e uma nova fatura; esta conta não é reaberta nem creditada aqui.,会计系统已为此账单开具发票 {document}。须在会计系统中以贷项通知单和新发票更正；此账单不会在此重新打开或冲减。,components/InvoiceCorrectionDialog.tsx,document,translated
 The agent couldn't finish - check the AI key in Settings.,The agent couldn't finish - check the AI key in Settings.,تعذّر على الوكيل الإكمال. تحقق من مفتاح الذكاء الاصطناعي في الإعدادات.,El agente no pudo completar la solicitud. Revise la clave de IA en Configuración.,O agente não conseguiu terminar. Verifique a chave AI em Configurações.,助手未能完成 - 请检查设置中的 AI 密钥。,screens/Assistant.tsx,,translated
-The agreed rate replaces this stay's discount.,The agreed rate replaces this stay's discount.,السعر المتفق عليه يحل محل خصم هذه الإقامة.,La tarifa acordada sustituye el descuento de esta estancia.,A tarifa acordada substitui o desconto desta estadia.,协议价将取代此住宿的折扣。,components/AgreedRatePanel.tsx,,translated
 The audit continues and the no-show policy applies to whoever is still listed.,The audit continues and the no-show policy applies to whoever is still listed.,يستمر التدقيق وتُطبق سياسة عدم الحضور على من لا يزال مدرجًا.,La auditoría continúa y la política de no presentación se aplica a las llegadas que sigan pendientes.,A auditoria continua e a política de não comparecimento se aplica a quem ainda estiver listado.,夜审仍将继续，未到店政策适用于名单中所有宾客。,,,translated
 The audit posts as it stands.,The audit posts as it stands.,يرحّل التدقيق البيانات كما هي.,La auditoría registra los datos actuales.,Os postos de auditoria tal como estão.,夜审将按当前状态入账。,,,translated
 The balance stays on the departed folio.,The balance stays on the departed folio.,يبقى الرصيد على فاتورة الضيف المغادر.,El saldo permanece en el folio del huésped que ya salió.,O saldo permanece na folha que partiu.,余额保留在已离店客账中。,,,translated
@@ -6955,6 +6906,85 @@ Select a room type and wait for a valid quote.,Select a room type and wait for a
 Voice partner,Voice partner,شريك الخدمات الصوتية,Proveedor de voz,Parceiro de voz,语音合作方,lib/brand.ts,,translated
 {assistant} (service),{assistant} (service),{assistant} (خدمة),{assistant} (servicio),{assistant} (serviço),{assistant}（服务）,lib/brand.ts,assistant,translated
 Not available here,Not available here,غير متاح هنا,No disponible aquí,Indisponível aqui,此处不可用,App.tsx,,translated
+Configuration,Configuration,الإعدادات المرجعية,Configuración,Configuração,配置,screens/settings/SettingsHub.tsx,,translated
+Market Codes,Market Codes,رموز السوق,Códigos de mercado,Códigos de mercado,市场代码,screens/configs.ts;screens/settings/SettingsHub.tsx,,translated
+Origin Codes,Origin Codes,رموز المصدر,Códigos de origen,Códigos de origem,来源代码,screens/configs.ts;screens/settings/SettingsHub.tsx,,translated
+Booking Types,Booking Types,أنواع الحجز,Tipos de reserva,Tipos de reserva,预订类型,screens/configs.ts;screens/settings/SettingsHub.tsx,,translated
+Booker Relations,Booker Relations,صلات الحاجز,Relaciones del solicitante,Relações do solicitante,预订人关系,screens/configs.ts;screens/settings/SettingsHub.tsx,,translated
+Cancellation Reasons,Cancellation Reasons,أسباب الإلغاء,Motivos de cancelación,Motivos de cancelamento,取消原因,screens/configs.ts;screens/settings/SettingsHub.tsx,,translated
+Payment Methods,Payment Methods,طرق الدفع,Métodos de pago,Métodos de pagamento,支付方式,screens/configs.ts;screens/settings/SettingsHub.tsx,,translated
+Meal Plan Codes,Meal Plan Codes,رموز خطط الوجبات,Códigos de régimen,Códigos de regime alimentar,餐饮计划代码,screens/configs.ts;screens/settings/SettingsHub.tsx,,translated
+Payer Types,Payer Types,أنواع الدافع,Tipos de pagador,Tipos de pagador,付款方类型,screens/configs.ts;screens/settings/SettingsHub.tsx,,translated
+Check-in Requests,Check-in Requests,طلبات تسجيل الوصول,Solicitudes de check-in,Pedidos de check-in,入住请求,screens/configs.ts;screens/settings/SettingsHub.tsx,,translated
+Cashier limits,Cashier limits,حدود أمين الصندوق,Límites de cajero,Limites de caixa,收银员限额,screens/settings/cards.tsx,,translated
+Sales tax isn't set up for this hotel's company. Finance sets it in Accounting.,Sales tax isn't set up for this hotel's company. Finance sets it in Accounting.,لم يتم إعداد ضريبة المبيعات لشركة هذا الفندق. يقوم قسم المالية بإعدادها في المحاسبة.,El impuesto sobre ventas no está configurado para la empresa de este hotel. Finanzas lo configura en Contabilidad.,O imposto sobre vendas não está configurado para a empresa deste hotel. O setor Financeiro configura isso na Contabilidade.,此酒店所属公司尚未设置销售税。请由财务人员在会计模块中配置。,lib/api.ts;components/BookingDialog.tsx;screens/settings/SettingsHub.tsx,,translated
+Max cash refund for {id},Max cash refund for {id},الحد الأقصى للاسترداد النقدي لـ {id},Reembolso máximo en efectivo para {id},Reembolso máximo em dinheiro para {id},{id} 的最高现金退款额,screens/settings/cards.tsx,id,translated
+Allowed modes for {id},Allowed modes for {id},طرق الدفع المسموح بها لـ {id},Modos permitidos para {id},Modos permitidos para {id},{id} 允许的支付方式,screens/settings/cards.tsx,id,translated
+Disable {id},Disable {id},تعطيل {id},Desactivar {id},Desativar {id},禁用 {id},screens/settings/cards.tsx,id,translated
+Cash refund limit,Cash refund limit,حد الاسترداد النقدي,Límite de reembolso en efectivo,Limite de reembolso em dinheiro,现金退款限额,screens/settings/cards.tsx,,translated
+Allowed modes,Allowed modes,الطرق المسموح بها,Modos permitidos,Modos permitidos,允许的方式,screens/settings/cards.tsx,,translated
+All modes,All modes,جميع الطرق,Todos los modos,Todos os modos,所有方式,screens/settings/cards.tsx,,translated
+Per-cashier cash refund cap and allowed payment modes. Leave 0 for no cash refund limit.,Per-cashier cash refund cap and allowed payment modes. Leave 0 for no cash refund limit.,الحد الأقصى للاسترداد النقدي وطرق الدفع المسموح بها لكل أمين صندوق. اترك القيمة 0 لإلغاء الحد.,Tope de reembolso en efectivo y modos de pago permitidos por cajero. Deje 0 para no aplicar límite.,Limite de reembolso em dinheiro e modos de pagamento por caixa. Deixe 0 para sem limite.,每位收银员的现金退款上限和允许的支付方式。设为 0 表示不设限。,screens/settings/cards.tsx,,translated
+No cashiers registered for this property yet.,No cashiers registered for this property yet.,لا يوجد أمناء صندوق مسجلون لهذا الفندق بعد.,Aún no hay cajeros registrados para esta propiedad.,Ainda não há caixas registrados para esta propriedade.,此酒店尚未登记任何收银员。,screens/settings/cards.tsx,,translated
+Sort order,Sort order,ترتيب الفرز,Orden de clasificación,Ordem de exibição,排序序号,screens/configs.ts,,translated
+Lower numbers appear first in pickers.,Lower numbers appear first in pickers.,تظهر الأرقام الأصغر أولاً في القوائم.,Los números más bajos aparecen primero en los selectores.,Números menores aparecem primeiro nos seletores.,数值越小，在下拉选项中越靠前。,screens/configs.ts,,translated
+Tender type,Tender type,نوع وسيلة الدفع,Tipo de cobro,Tipo de recebimento,结算类别,screens/configs.ts,,translated
+Accounting Mode of Payment,Accounting Mode of Payment,طريقة الدفع المحاسبية,Modo de pago contable,Modo de pagamento contábil,会计支付方式,screens/configs.ts,,translated
+Matching Mode of Payment in Accounting when connected to an ERP bridge.,Matching Mode of Payment in Accounting when connected to an ERP bridge.,طريقة الدفع المطابقة في المحاسبة عند الاتصال بجسر النظام المالي.,Modo de pago correspondiente en Contabilidad cuando se conecta mediante puente ERP.,Modo de pagamento correspondente na Contabilidade quando conectado à ponte ERP.,连接 ERP 桥接时在会计模块中对应的支付方式。,screens/configs.ts,,translated
+Controls till bucket and foreign-currency eligibility.,Controls till bucket and foreign-currency eligibility.,يتحكم في تصنيف الصندوق وإمكانية قبول العملات الأجنبية.,Controla el grupo de caja y la elegibilidad de moneda extranjera.,Controla a categoria no caixa e a elegibilidade para moeda estrangeira.,控制收银分类以及是否支持外币收款。,screens/configs.ts,,translated
+Market segments used on reservations and revenue reports.,Market segments used on reservations and revenue reports.,شرائح السوق المستخدمة في الحجوزات وتقارير الإيرادات.,Segmentos de mercado usados en reservas e informes de ingresos.,Segmentos de mercado usados em reservas e relatórios de receita.,用于预订和收入报表的市场细分。,screens/settings/SettingsHub.tsx,,translated
+"Market segments used on reservations, rate reporting and revenue analysis.","Market segments used on reservations, rate reporting and revenue analysis.",شرائح السوق المستخدمة في الحجوزات وتقارير الأسعار وتحليل الإيرادات.,"Segmentos de mercado usados en reservas, informes de tarifas y análisis de ingresos.","Segmentos de mercado usados em reservas, relatórios de tarifas e análise de receita.",用于预订、房价报表和收益分析的市场细分。,screens/configs.ts,,translated
+"Booking origins recorded on reservations (Direct, Walk-in, OTA, Travel Agent).","Booking origins recorded on reservations (Direct, Walk-in, OTA, Travel Agent).",مصادر الحجز المسجلة على الحجوزات (مباشر، بدون حجز مسبق، وكالة إلكترونية، وكيل سفر).,"Orígenes de reserva registrados en las reservas (Directo, Walk-in, OTA, Agencia de viajes).","Origens de reserva registradas nas reservas (Direto, Walk-in, OTA, Agência de viagens).",记录在预订上的来源渠道（直销、散客、OTA、旅行社）。,screens/settings/SettingsHub.tsx,,translated
+"Booking sources recorded on reservations (e.g. Direct, Walk-in, OTA, Travel Agent).","Booking sources recorded on reservations (e.g. Direct, Walk-in, OTA, Travel Agent).",مصادر الحجز المسجلة على الحجوزات (مثل مباشر، بدون حجز مسبق، وكالة إلكترونية، وكيل سفر).,"Fuentes de reserva registradas en las reservas (p. ej., Directo, Walk-in, OTA, Agencia de viajes).","Fontes de reserva registradas nas reservas (ex.: Direto, Walk-in, OTA, Agência de viagens).",记录在预订上的预订来源（如直销、散客、OTA、旅行社）。,screens/configs.ts,,translated
+Stay categories such as Overnight or Day Use.,Stay categories such as Overnight or Day Use.,فئات الإقامة مثل المبيت أو الاستخدام النهاري.,Categorías de estancia como Pernocta o Uso diario.,Categorias de estadia como Pernoite ou Uso diurno.,住宿类别，例如过夜或钟点房。,screens/configs.ts;screens/settings/SettingsHub.tsx,,translated
+Relationship of the person making a booking on a guest's behalf.,Relationship of the person making a booking on a guest's behalf.,صلة الشخص الذي يُجري الحجز نيابةً عن النزيل.,Relación de la persona que realiza una reserva en nombre de un huésped.,Relação da pessoa que faz uma reserva em nome do hóspede.,代客人办理预订的人员与客人的关系。,screens/configs.ts;screens/settings/SettingsHub.tsx,,translated
+Reasons recorded when a reservation is cancelled.,Reasons recorded when a reservation is cancelled.,الأسباب المسجلة عند إلغاء الحجز.,Motivos registrados cuando se cancela una reserva.,Motivos registrados quando uma reserva é cancelada.,取消预订时记录的原因。,screens/configs.ts;screens/settings/SettingsHub.tsx,,translated
+Tender types and property payment methods offered at the desk and on folios.,Tender types and property payment methods offered at the desk and on folios.,أنواع وسائل الدفع وطرق الدفع الخاصة بالفندق المتاحة في الاستقبال والفواتير.,Tipos de cobro y métodos de pago de la propiedad ofrecidos en recepción y folios.,Tipos de recebimento e métodos de pagamento da propriedade oferecidos na recepção e nos fólios.,前台与账单可用的结算类别和酒店支付方式。,screens/settings/SettingsHub.tsx,,translated
+Payment methods offered at the desk and on folios. Custom methods belong to this property only.,Payment methods offered at the desk and on folios. Custom methods belong to this property only.,طرق الدفع المتاحة في الاستقبال والفواتير. الطرق المخصصة تخص هذا الفندق فقط.,Métodos de pago ofrecidos en recepción y folios. Los métodos personalizados pertenecen solo a esta propiedad.,Métodos de pagamento oferecidos na recepção e nos fólios. Métodos personalizados pertencem apenas a esta propriedade.,前台和账单可用的支付方式。自定义方式仅属于当前酒店。,screens/configs.ts,,translated
+"Board codes linked from property meal plans (EP, CP, MAP, AP).","Board codes linked from property meal plans (EP, CP, MAP, AP).",رموز الوجبات المرتبطة بخطط الوجبات في الفندق (EP، CP، MAP، AP).,"Códigos de pensión vinculados desde los planes de comidas (EP, CP, MAP, AP).","Códigos de pensão vinculados aos planos de refeição da propriedade (EP, CP, MAP, AP).",酒店餐饮计划关联的餐标代码（EP、CP、MAP、AP）。,screens/settings/SettingsHub.tsx,,translated
+"Standard board codes linked from property meal plans (e.g. EP, CP, MAP, AP).","Standard board codes linked from property meal plans (e.g. EP, CP, MAP, AP).",رموز الوجبات القياسية المرتبطة بخطط الوجبات في الفندق (مثل EP، CP، MAP، AP).,"Códigos de pensión estándar vinculados desde los planes de comidas (p. ej., EP, CP, MAP, AP).","Códigos de pensão padrão vinculados aos planos de refeição (ex.: EP, CP, MAP, AP).",酒店餐饮计划关联的标准餐标代码（如 EP、CP、MAP、AP）。,screens/configs.ts,,translated
+Billing responsibility options confirmed during check-in.,Billing responsibility options confirmed during check-in.,خيارات مسؤولية الفوترة التي يتم تأكيدها أثناء تسجيل الوصول.,Opciones de responsabilidad de facturación confirmadas durante el check-in.,Opções de responsabilidade de faturamento confirmadas no check-in.,入住登记时确认的付款责任选项。,screens/settings/SettingsHub.tsx,,translated
+"Billing responsibility choices confirmed at check-in (e.g. Guest, Company, Split).","Billing responsibility choices confirmed at check-in (e.g. Guest, Company, Split).",خيارات مسؤولية الفوترة المؤكدة عند تسجيل الوصول (مثل النزيل، الشركة، مشترك).,"Opciones de responsabilidad de facturación confirmadas en el check-in (p. ej., Huésped, Empresa, Dividido).","Opções de responsabilidade de cobrança confirmadas no check-in (ex.: Hóspede, Empresa, Dividido).",入住时确认的付款责任选项（如客人、公司、分摊）。,screens/configs.ts,,translated
+Quick guest request presets offered during check-in.,Quick guest request presets offered during check-in.,طلبات النزلاء الجاهزة المتاحة أثناء تسجيل الوصول.,Solicitudes rápidas predefinidas ofrecidas durante el check-in.,Predefinições rápidas de pedidos do hóspede oferecidas no check-in.,入住时提供的快捷客人请求预设。,screens/settings/SettingsHub.tsx,,translated
+Quick guest request presets offered at check-in; picking one raises a service ticket.,Quick guest request presets offered at check-in; picking one raises a service ticket.,طلبات النزلاء الجاهزة عند تسجيل الوصول؛ اختيار أحدها ينشئ تذكرة خدمة.,Solicitudes rápidas predefinidas en el check-in; seleccionar una crea un ticket de servicio.,Predefinições rápidas de pedidos no check-in; escolher uma abre um chamado de serviço.,入住时提供的快捷客人请求预设；选择后会自动创建服务工单。,screens/configs.ts,,translated
+Switch off instead of deleting once used on bookings. System codes stay active.,Switch off instead of deleting once used on bookings. System codes stay active.,قم بالتعطيل بدلاً من الحذف بعد الاستخدام في الحجوزات. رموز النظام تبقى نشطة.,Desactive en lugar de eliminar una vez usado en reservas. Los códigos del sistema permanecen activos.,Desative em vez de excluir após usar em reservas. Códigos do sistema permanecem ativos.,已在预订中使用后请禁用而非删除。系统代码保持启用状态。,screens/configs.ts,,translated
+Switch off instead of deleting once used on folios. System codes stay active.,Switch off instead of deleting once used on folios. System codes stay active.,قم بالتعطيل بدلاً من الحذف بعد الاستخدام في الفواتير. رموز النظام تبقى نشطة.,Desactive en lugar de eliminar una vez usado en folios. Los códigos del sistema permanecen activos.,Desative em vez de excluir após usar em fólios. Códigos do sistema permanecem ativos.,已在账单中使用后请禁用而非删除。系统代码保持启用状态。,screens/configs.ts,,translated
+Switch off instead of deleting. System presets stay active.,Switch off instead of deleting. System presets stay active.,قم بالتعطيل بدلاً من الحذف. الإعدادات المسبقة للنظام تبقى نشطة.,Desactive en lugar de eliminar. Los preajustes del sistema permanecen activos.,Desative em vez de excluir. Predefinições do sistema permanecem ativas.,请禁用而非删除。系统预设保持启用状态。,screens/configs.ts,,translated
+"Short code stored on reservations (e.g. Corporate, Safari Operator).","Short code stored on reservations (e.g. Corporate, Safari Operator).",رمز قصير يُحفظ على الحجوزات (مثل Corporate، Safari Operator).,"Código corto guardado en las reservas (p. ej., Corporate, Safari Operator).","Código curto armazenado nas reservas (ex.: Corporate, Safari Operator).",保存在预订上的简短代码（如 Corporate、Safari Operator）。,screens/configs.ts,,translated
+Booking origin code stored on reservations.,Booking origin code stored on reservations.,رمز مصدر الحجز المحفوظ على الحجوزات.,Código de origen de reserva guardado en las reservas.,Código de origem armazenado nas reservas.,保存在预订上的来源代码。,screens/configs.ts,,translated
+Booking type code stored on reservations.,Booking type code stored on reservations.,رمز نوع الحجز المحفوظ على الحجوزات.,Código de tipo de reserva guardado en las reservas.,Código de tipo de reserva armazenado nas reservas.,保存在预订上的预订类型代码。,screens/configs.ts,,translated
+"Booker relation code (e.g. Assistant, Company Travel Desk).","Booker relation code (e.g. Assistant, Company Travel Desk).",رمز صلة الحاجز (مثل Assistant، Company Travel Desk).,"Código de relación del solicitante (p. ej., Assistant, Company Travel Desk).","Código de relação do solicitante (ex.: Assistant, Company Travel Desk).",预订人关系代码（如 Assistant、Company Travel Desk）。,screens/configs.ts,,translated
+Cancellation reason code stored on cancelled reservations.,Cancellation reason code stored on cancelled reservations.,رمز سبب الإلغاء المحفوظ على الحجوزات الملغاة.,Código de motivo de cancelación guardado en reservas canceladas.,Código de motivo de cancelamento armazenado em reservas canceladas.,保存在已取消预订上的取消原因代码。,screens/configs.ts,,translated
+"Name shown in payment pickers (e.g. MTN MoMo, Airtel Money).","Name shown in payment pickers (e.g. MTN MoMo, Airtel Money).",الاسم الظاهر في قوائم الدفع (مثل MTN MoMo، Airtel Money).,"Nombre mostrado en los selectores de pago (p. ej., MTN MoMo, Airtel Money).","Nome exibido nos seletores de pagamento (ex.: MTN MoMo, Airtel Money).",显示在支付选择器中的名称（如 MTN MoMo、Airtel Money）。,screens/configs.ts,,translated
+"Short board code (e.g. EP, BB, HB, FB).","Short board code (e.g. EP, BB, HB, FB).",رمز الوجبات المختصر (مثل EP، BB، HB، FB).,"Código corto de pensión (p. ej., EP, BB, HB, FB).","Código curto de pensão (ex.: EP, BB, HB, FB).",简短餐标代码（如 EP、BB、HB、FB）。,screens/configs.ts,,translated
+Payer type code offered at check-in.,Payer type code offered at check-in.,رمز نوع الدافع المتاح عند تسجيل الوصول.,Código de tipo de pagador ofrecido en el check-in.,Código de tipo de pagador oferecido no check-in.,入住时提供的付款方类型代码。,screens/configs.ts,,translated
+"Short machine key (e.g. extra_bed, airport_pickup).","Short machine key (e.g. extra_bed, airport_pickup).",مفتاح تقني قصير (مثل extra_bed، airport_pickup).,"Clave corta técnica (p. ej., extra_bed, airport_pickup).","Chave técnica curta (ex.: extra_bed, airport_pickup).",简短技术键值（如 extra_bed、airport_pickup）。,screens/configs.ts,,translated
+Charge type,Charge type,نوع الرسم,Tipo de cargo,Tipo de lançamento,费用类型,screens/configs.ts,,translated
+Optional folio charge type when the request carries a fee.,Optional folio charge type when the request carries a fee.,نوع رسم الفاتورة الاختياري عندما يتضمن الطلب رسوماً.,Tipo de cargo de folio opcional cuando la solicitud conlleva una tarifa.,Tipo de lançamento no fólio opcional quando o pedido tem taxa.,当请求需要收费时可选填的账单费用类型。,screens/configs.ts,,translated
+Default language,Default language,اللغة الافتراضية,Idioma predeterminado,Idioma padrão,默认语言,kamra/settings.py,,translated
+Guest page default language. Leave blank to follow the browser.,Guest page default language. Leave blank to follow the browser.,اللغة الافتراضية لصفحة النزيل. اتركه فارغاً لاتباع لغة المتصفح.,Idioma predeterminado de la página de huéspedes. Déjelo en blanco para seguir al navegador.,Idioma padrão da página do hóspede. Deixe em branco para seguir o navegador.,客人页面默认语言。留空则跟随浏览器设置。,kamra/settings.py,,translated
+Number format (locale),Number format (locale),تنسيق الأرقام (الإعداد المحلي),Formato numérico (configuración regional),Formato de número (localidade),数字格式（区域设置）,kamra/settings.py,,translated
+"Number formatting locale, e.g. en-UG, en-GB, en-US. Leave blank to follow the country pack.","Number formatting locale, e.g. en-UG, en-GB, en-US. Leave blank to follow the country pack.",إعداد تنسيق الأرقام المحلي، مثل en-UG أو en-GB أو en-US. اتركه فارغاً لاتباع حزمة البلد.,"Configuración regional para números, p. ej., en-UG, en-GB, en-US. Déjelo en blanco para seguir el paquete del país.","Localidade para formatação numérica, ex.: en-UG, en-GB, en-US. Deixe em branco para seguir o pacote do país.",数字格式区域代码，例如 en-UG、en-GB、en-US。留空则遵循国家包设置。,kamra/settings.py,,translated
+Date format,Date format,تنسيق التاريخ,Formato de fecha,Formato de data,日期格式,kamra/settings.py,,translated
+How dates appear on front-desk screens. Leave blank for the site default.,How dates appear on front-desk screens. Leave blank for the site default.,كيفية ظهور التواريخ على شاشات الاستقبال. اتركه فارغاً لاستخدام الإعداد الافتراضي للموقع.,Cómo se muestran las fechas en las pantallas de recepción. Déjelo en blanco para el valor predeterminado del sitio.,Como as datas aparecem nas telas da recepção. Deixe em branco para o padrão do site.,前台界面上日期的显示方式。留空则使用站点默认设置。,kamra/settings.py,,translated
+Room tax rate,Room tax rate,نسبة ضريبة الغرفة,Tasa de impuesto de habitación,Alíquota de imposto da diária,房费税率,kamra/settings.py,,translated
+Flat rate applied to room nights when the property calculates tax locally.,Flat rate applied to room nights when the property calculates tax locally.,نسبة ثابتة تُطبق على ليالي الغرف عندما يحسب الفندق الضريبة محلياً.,Tasa fija aplicada a las noches de habitación cuando la propiedad calcula impuestos localmente.,Alíquota fixa aplicada às diárias quando a propriedade calcula o imposto localmente.,当酒店在本地计税时应用于房晚的固定税率。,kamra/settings.py,,translated
+"Your own lines at the foot of every invoice - e.g. company registration, bank name and account details.","Your own lines at the foot of every invoice - e.g. company registration, bank name and account details.",السطور الخاصة بك في أسفل كل فاتورة - مثل السجل التجاري واسم البنك وتفاصيل الحساب.,"Sus propias líneas al pie de cada factura: p. ej., registro de la empresa, nombre del banco y datos de la cuenta.","Suas próprias linhas no rodapé de cada fatura - ex.: registro da empresa, banco e dados bancários.",显示在每张发票底部的自定义内容，例如公司注册号、银行名称和账号信息。,kamra/settings.py,,translated
+OTA Prepaid,OTA Prepaid,مدفوع مسبقاً عبر وكالة حجز,Prepago OTA,Pré-pago OTA,OTA 预付,screens/configs.ts,,translated
+Company Credit,Company Credit,ائتمان شركة,Crédito de empresa,Crédito corporativo,公司挂账,screens/configs.ts,,translated
+{amount} off a night,{amount} off a night,خصم {amount} لكل ليلة,{amount} de descuento por noche,{amount} de desconto por noite,每晚减 {amount},screens/ReservationDetail.tsx,amount,translated
+{pct}% off,{pct}% off,خصم {pct}%,{pct}% de descuento,{pct}% de desconto,减 {pct}%,screens/ReservationDetail.tsx,pct,translated
+Base rate / night,Base rate / night,السعر الأساسي / الليلة,Tarifa base / noche,Tarifa base / noite,基础房价 / 晚,screens/ReservationDetail.tsx,,translated
+Changes log,Changes log,سجل التغييرات,Registro de cambios,Registro de alterações,变更日志,components/ChangesLog.tsx,,translated
+Dates changed,Dates changed,تغيير التواريخ,Fechas cambiadas,Datas alteradas,日期已更改,components/ChangesLog.tsx,,translated
+Discount note,Discount note,ملاحظة الخصم,Nota del descuento,Nota do desconto,折扣备注,components/DiscountPanel.tsx,,translated
+Nightly prices,Nightly prices,الأسعار الليلية,Precios por noche,Preços por noite,每晚价格,components/ChangesLog.tsx,,translated
+No changes recorded yet.,No changes recorded yet.,لم تُسجَّل أي تغييرات بعد.,Aún no hay cambios registrados.,Ainda não há alterações registradas.,尚无变更记录。,components/ChangesLog.tsx,,translated
+Rate correction,Rate correction,تصحيح السعر,Corrección de tarifa,Correção de tarifa,房价修正,components/ChangesLog.tsx,,translated
+Room move,Room move,نقل الغرفة,Cambio de habitación,Troca de quarto,换房,components/ChangesLog.tsx,,translated
+Same reason as the stay,Same reason as the stay,نفس سبب الإقامة,El mismo motivo que la estancia,O mesmo motivo da estadia,与住宿相同的原因,components/DiscountPanel.tsx,,translated
+Signed off by {name},Signed off by {name},وافق عليه {name},Aprobado por {name},Aprovado por {name},由 {name} 批准,components/ChangesLog.tsx,name,translated
+The agreed rate replaces this stay's discount.,The agreed rate replaces this stay's discount.,السعر المتفق عليه يحل محل خصم هذه الإقامة.,La tarifa acordada sustituye el descuento de esta estancia.,A tarifa acordada substitui o desconto desta estadia.,协议价将取代此住宿的折扣。,components/AgreedRatePanel.tsx,,translated
 % off,% off,% خصم,% de descuento,% de desconto,% 折扣,components/DiscountPanel.tsx,,translated
 A 100% discount (comp) needs a manager's sign-off.,A 100% discount (comp) needs a manager's sign-off.,خصم 100% (مجاني) يحتاج إلى موافقة المدير.,Un descuento del 100 % (cortesía) necesita la aprobación de un gerente.,Um desconto de 100% (cortesia) precisa da aprovação de um gerente.,100% 折扣（免费）需要经理批准。,components/DiscountPanel.tsx,,translated
 A percentage is between 0 and 100.,A percentage is between 0 and 100.,النسبة المئوية بين 0 و100.,Un porcentaje está entre 0 y 100.,Uma porcentagem fica entre 0 e 100.,百分比须在 0 到 100 之间。,,,translated

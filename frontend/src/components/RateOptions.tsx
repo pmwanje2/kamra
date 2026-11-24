@@ -117,7 +117,7 @@ export function RateOptions({
   }, [roomType, checkIn, checkOut, adults, children, extraBeds, mealPlan, voucher, ratePlan, t])
 
   if (err) return <p className="text-xs text-zinc-400">{translate(err)}</p>
-  if (!data) return null
+  if (!data || !Array.isArray(data.plans) || !Array.isArray(data.nights)) return null
   const selected = data.plans.find((plan) => plan.name === ratePlan)
   const references = [...new Map(data.plans.flatMap(({ tariff }) => tariff ? [[
     JSON.stringify([tariff.currency, tariff.property_currency, tariff.fx_rate, tariff.fx_date]), tariff,

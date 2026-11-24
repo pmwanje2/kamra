@@ -311,7 +311,7 @@ def _public_locale(property: str) -> dict:
 	loc = pack.locale(prop)
 	# "" is a valid symbol (generic pack shows bare numbers)
 	return {"currency_symbol": loc.get("currency_symbol") or "",
-	        "locale": loc.get("locale") or "en",
+	        "locale": prop.get("locale") or loc.get("locale") or "en",
 	        "currency": loc.get("currency") or "",
 	        "default_language": public_booking_language(prop.get("booking_language")),
 	        "enabled_languages": enabled_codes(),
@@ -501,7 +501,7 @@ def precheckin_info(token: str):
 	prop = frappe.get_doc("Property", res.property)
 	guest = frappe.get_doc("Guest", res.guest)
 	from kamra.localization import front_desk_vocabulary, pack_for
-	vocab = front_desk_vocabulary(pack_for(res.property))
+	vocab = front_desk_vocabulary(pack_for(res.property), res.property)
 	return {
 		"ui_locale": _public_locale(res.property),
 		# which IDs this country accepts, and the likely nationality

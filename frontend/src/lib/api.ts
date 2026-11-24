@@ -482,6 +482,17 @@ export interface TaxBasis {
   label: string
   rate: number
   inclusive: boolean | 0 | 1
+  determined?: boolean | 0 | 1
+  template?: string | null
+}
+
+export const TAX_NOT_SET_UP_MSG =
+  "Sales tax isn't set up for this hotel's company. Finance sets it in Accounting."
+
+/** PR-11: true only when the tax bridge explicitly returned determined === 0.
+ *  Older bridges omit `determined`, which stays quiet. */
+export function isTaxUndetermined(basis?: TaxBasis | null): boolean {
+  return basis != null && basis.determined !== undefined && !Number(basis.determined)
 }
 
 export interface Quote extends TariffReference {
