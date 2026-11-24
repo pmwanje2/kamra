@@ -215,11 +215,14 @@ def correct(folio, name, action, code, note, key, pin, supervisor_user, supervis
 		frappe.throw("Amount exceeds the remaining refundable balance.")
 	amount = amount or opts["residual"]
 	repost = action == "reclassify_tender"
+	from kamra.masters import default_mode_for_tender, payment_tender_type
+	dest_tender = payment_tender_type(destination, doc.property) if repost else None
+	row_tender = payment_tender_type(row.mode, doc.property)
 	if repost:
-		if not destination or destination == row.mode or (not row.fx_amount and destination == "Foreign Cash"):
+		if not destination or destination == row.mode or (not row.fx_amount and dest_tender == "Foreign Cash"):
 			frappe.throw("Choose a different valid destination tender.")
-		# Only these modes retain the original FX snapshot when reposted.
-		currency = (row.currency if row.fx_amount and destination in ("Foreign Cash", "Bank Transfer")
+		# Only Foreign Cash / Bank Transfer retain the original FX snapshot when reposted.
+		currency = (row.currency if row.fx_amount and dest_tender in ("Foreign Cash", "Bank Transfer")
 		            else home_currency(doc.property))
 		assert_payment_mode(doc.property, destination,
 		                    currency, pack_only=True)
@@ -227,7 +230,7 @@ def correct(folio, name, action, code, note, key, pin, supervisor_user, supervis
 			frappe.throw("Repost retry key already used.")
 	# Partial refunds pay out home money. Bookkeeping reversals negate the original tender.
 	is_refund = action == "partial_refund"
-	mode = "Cash" if is_refund and row.mode == "Foreign Cash" else row.mode
+	mode = default_mode_for_tender(doc.property, "Cash") if is_refund and row_tender == "Foreign Cash" else row.mode
 	fx = {}
 	if row.fx_amount and not is_refund:
 		fx = dict(
@@ -245,9 +248,9 @@ def correct(folio, name, action, code, note, key, pin, supervisor_user, supervis
 	)
 	# Drawerless bank entries stay drawerless. A cash payout or cash repost
 	# needs a live drawer even when the original shift has closed.
-	cash_modes = ("Cash", "Foreign Cash")
-	refund_session = session or (require_open_session(doc.property) if mode in cash_modes else None)
-	repost_session = session or (require_open_session(doc.property) if destination in cash_modes else None)
+	cash_tenders = ("Cash", "Foreign Cash")
+	refund_session = session or (require_open_session(doc.property) if payment_tender_type(mode, doc.property) in cash_tenders else None)
+	repost_session = session or (require_open_session(doc.property) if dest_tender in cash_tenders else None)
 	result = _refund_folio_payment(
 		folio,
 		amount,
@@ -262,8 +265,8 @@ def correct(folio, name, action, code, note, key, pin, supervisor_user, supervis
 	)
 	if repost:
 		doc.reload()
-		if destination not in ("Foreign Cash", "Bank Transfer"):
-			fx = {}
+		if dest_tender not in ("Foreign Cash", "Bank Transfer"):
+			fx = {"currency": home_currency(doc.property)}
 		elif fx:
 			fx["fx_amount"] *= -1
 		doc.append(
@@ -287,6 +290,10 @@ def correct(folio, name, action, code, note, key, pin, supervisor_user, supervis
 			doc, pay.as_dict(), session=repost_session, ledger="Deposit" if advance else "Guest"
 		)
 		if repost_session:
+			fx_note = (
+				f"{pay.currency} {float(pay.fx_amount):,.2f} @ {pay.exchange_rate}"
+				if float(pay.get("fx_amount") or 0) else None
+			)
 			record_cashier_txn(
 				doc.property,
 				"Payment",
@@ -294,8 +301,11 @@ def correct(folio, name, action, code, note, key, pin, supervisor_user, supervis
 				amount,
 				folio=folio,
 				reference=why,
+				notes=fx_note,
 				session=repost_session,
 				tender_validated=True,
+				currency=pay.get("currency"),
+				fx_amount=float(pay.get("fx_amount") or 0),
 			)
 		result.update(repost=pay.name, balance=doc.balance)
 	elif advance:

@@ -7017,5 +7017,20 @@
   "Open the function's folio": "Abrir el folio del evento",
   "The tax invoice is issued from the function's folio.": "La factura fiscal se emite desde el folio del evento.",
   "Service Charge": "Cargo por servicio",
-  "Reprint invoice": "Reimprimir factura"
+  "Reprint invoice": "Reimprimir factura",
+  "Booking type": "Tipo de reserva",
+  "Foreign currency drawers": "Cajas de moneda extranjera",
+  "Foreign drawers": "Cajas extranjeras",
+  "Receipts (FX)": "Cobros (FX)",
+  "Refunds (FX)": "Reembolsos (FX)",
+  "Expected (FX)": "Esperado (FX)",
+  "Counted (FX)": "Contado (FX)",
+  "Home equivalent": "Equivalente en moneda local",
+  "Counted {currency}": "Contado en {currency}",
+  "Per-currency foreign note totals kept separate from home cash.": "Totales de efectivo extranjero por moneda separados del efectivo local.",
+  "By payment method": "Por método de pago",
+  "View report": "Ver informe",
+  "Edit property override": "Editar ajuste del hotel",
+  "This property already has its own override for {code}. Edit that property row instead.": "Este hotel ya tiene su propia configuración para {code}. Edite esa fila del hotel en su lugar.",
+  "Saving creates a property override for {property}. The shared default stays unchanged for other properties.": "Guardar crea un ajuste propio para {property}. El valor compartido permanece sin cambios para otros hoteles."
 }

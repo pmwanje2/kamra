@@ -89,6 +89,10 @@ class VenueBooking(Document):
 		self._cost_and_margin()
 		self._payment_terms()
 		self._guards()
+		from kamra.masters import assert_known_payment_method
+		for r in self.get("receipts") or ():
+			if r.get("mode"):
+				assert_known_payment_method(self.property, r.get("mode"))
 
 	def _session(self):
 		"""Pick the clock up from the session unless the function states its

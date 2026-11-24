@@ -135,14 +135,16 @@ class SnapshotLost(Exception):
 
 
 def _modes(property: str) -> list[str]:
+	from kamra.cashier import filter_allowed_modes
 	from kamra.localization import pack_for, payment_modes
-	return payment_modes(pack_for(property), property)
+	return filter_allowed_modes(property, payment_modes(pack_for(property), property))
 
 
 def _outlet_modes(property: str) -> list[str]:
 	"""What pos.pay_order accepts here."""
+	from kamra.cashier import filter_allowed_modes
 	from kamra.localization import outlet_payment_modes, pack_for
-	return outlet_payment_modes(pack_for(property))
+	return filter_allowed_modes(property, outlet_payment_modes(pack_for(property), property))
 
 
 def _main_mode(payments, modes: list[str]) -> str | None:

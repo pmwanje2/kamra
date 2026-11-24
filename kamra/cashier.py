@@ -6,6 +6,7 @@ caller's open session. Agents bypass the session gate (same rule as PIN)."""
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import frappe
@@ -16,8 +17,264 @@ from kamra.business_date import ensure_business_date, get_business_date
 from kamra.business_date import report_range_end as _range_end
 from kamra.settings import get_setting
 
-CASH_MODES = ("Cash",)
-CARD_MODES = ("Card",)
+_FX_NOTE_RE = re.compile(r"\b([A-Z]{3})\s+([0-9][0-9,]*(?:\.[0-9]+)?)\s*@")
+
+
+def _txn_has_currency_cols() -> bool:
+	try:
+		return bool(
+			frappe.db.table_exists("Cashier Transaction")
+			and frappe.db.has_column("Cashier Transaction", "currency")
+			and frappe.db.has_column("Cashier Transaction", "fx_amount")
+		)
+	except Exception:
+		return False
+
+
+def _session_has_foreign_count_col() -> bool:
+	try:
+		return bool(
+			frappe.db.table_exists("Cashier Session")
+			and frappe.db.has_column("Cashier Session", "foreign_cash_count")
+		)
+	except Exception:
+		return False
+
+
+def parse_allowed_modes(raw) -> list[str] | None:
+	"""Parse Cashier.allowed_modes (comma, newline, or semicolon separated).
+	Empty/blank returns None (unrestricted)."""
+	if raw is None:
+		return None
+	if isinstance(raw, (list, tuple)):
+		parts = [str(x).strip() for x in raw]
+	else:
+		parts = [p.strip() for p in re.split(r"[,;\n]+", str(raw))]
+	cleaned = list(dict.fromkeys(p for p in parts if p))
+	return cleaned or None
+
+
+def cashier_allowed_modes(property: str, user: str | None = None) -> list[str] | None:
+	"""Explicit mode allowlist on the user's active Cashier record for `property`,
+	or None when unrestricted (blank allowed_modes, no Cashier row, or admin/agent)."""
+	if not getattr(frappe.local, "db", None):
+		return None
+	if user is None:
+		session = getattr(frappe.local, "session", None)
+		if not session or not getattr(session, "user", None):
+			return None
+		if _agent_bypass():
+			return None
+		user = session.user
+	if not property or not user or user in ("Administrator", "Guest"):
+		return None
+	raw = frappe.db.get_value(
+		"Cashier",
+		{"property": property, "user": user, "disabled": 0},
+		"allowed_modes",
+	)
+	return parse_allowed_modes(raw)
+
+
+def filter_allowed_modes(property: str, modes: list[str], user: str | None = None) -> list[str]:
+	allowed = cashier_allowed_modes(property, user)
+	if allowed is None:
+		return list(modes)
+	allowed_set = set(allowed)
+	return [m for m in modes if m in allowed_set]
+
+
+def assert_cashier_mode_allowed(property: str, mode: str | None, user: str | None = None) -> None:
+	if not mode:
+		return
+	if user is None and _agent_bypass():
+		return
+	allowed = cashier_allowed_modes(property, user)
+	if allowed is not None and mode not in allowed:
+		frappe.throw(
+			frappe._("Your cashier profile is not permitted to take {0}. Allowed modes: {1}.").format(
+				mode, ", ".join(allowed),
+			),
+			frappe.PermissionError,
+		)
+
+
+def _parse_foreign_counts(raw) -> dict[str, float]:
+	"""Normalize foreign_counts ({USD: 14} or [{currency: 'USD', counted_fx: 14}])."""
+	if raw in (None, "", [], {}):
+		return {}
+	if isinstance(raw, str):
+		raw = frappe.parse_json(raw)
+	if not raw:
+		return {}
+	pairs = raw.items() if isinstance(raw, dict) else (
+		(r.get("currency"), r.get("counted_fx", r.get("counted", r.get("amount")))) for r in raw
+	)
+	out: dict[str, float] = {}
+	for ccy, val in pairs:
+		code = str(ccy or "").strip().upper()
+		if len(code) != 3 or not code.isascii() or not code.isalpha():
+			frappe.throw(frappe._("Each foreign currency count needs a 3-letter ISO currency code."))
+		if val in (None, ""):
+			continue
+		try:
+			num = float(val)
+		except (TypeError, ValueError):
+			frappe.throw(frappe._("Foreign cash count for {0} must be a number.").format(code))
+		if num < 0:
+			frappe.throw(frappe._("Foreign cash count for {0} cannot be negative.").format(code))
+		out[code] = round(num, 2)
+	return out
+
+
+def _session_foreign_drawers(
+	session_names: list[str],
+	property: str,
+	*,
+	count_overrides: dict[str, dict[str, float]] | None = None,
+) -> dict[str, list[dict[str, Any]]]:
+	"""OPERA Cashier Closure / SAP FBCJ per-currency foreign cash drawers for one
+	or more sessions. Combines FX cash Cashier Transactions (any Cash or Foreign Cash
+	tender) and Exchange Transactions (Buy adds FX notes, Sell removes FX notes)."""
+	names = [n for n in session_names if n]
+	if not names:
+		return {}
+	from kamra.ledger import home_currency
+	from kamra.masters import client_tender_types, payment_tender_type
+
+	home = home_currency(property)
+	tender_map = client_tender_types(property)
+	has_ccy = _txn_has_currency_cols()
+	has_fc_col = _session_has_foreign_count_col()
+
+	fields = ["session", "kind", "mode", "amount", "notes"]
+	if has_ccy:
+		fields.extend(["currency", "fx_amount"])
+	txns = frappe.get_all(
+		"Cashier Transaction",
+		filters={"session": ("in", names), "kind": ("in", ["Payment", "Refund"])},
+		fields=fields,
+		limit_page_length=0,
+	)
+
+	buckets: dict[str, dict[str, dict[str, Any]]] = {n: {} for n in names}
+
+	def _slot(sess_name: str, code: str) -> dict[str, Any]:
+		return buckets.setdefault(sess_name, {}).setdefault(
+			code,
+			{
+				"currency": code,
+				"receipts_fx": 0.0,
+				"refunds_fx": 0.0,
+				"expected_fx": 0.0,
+				"home_equivalent": 0.0,
+				"txns": 0,
+			},
+		)
+
+	for r in txns:
+		mode = r.mode or "Other"
+		tt = tender_map.get(mode) or payment_tender_type(mode, property)
+		if tt not in ("Cash", "Foreign Cash"):
+			continue
+		ccy = (r.get("currency") or "").strip().upper() if has_ccy else ""
+		fx_amt = float(r.get("fx_amount") or 0) if has_ccy else 0.0
+		if (not ccy or ccy == home or not fx_amt) and tt == "Foreign Cash":
+			m = _FX_NOTE_RE.search(r.notes or "")
+			if m:
+				ccy = m.group(1).upper()
+				raw_fx = float(m.group(2).replace(",", ""))
+				fx_amt = -raw_fx if float(r.amount or 0) < 0 else raw_fx
+		if not ccy or ccy == home or not fx_amt:
+			continue
+		slot = _slot(r.session, ccy)
+		if fx_amt >= 0:
+			slot["receipts_fx"] += fx_amt
+		else:
+			slot["refunds_fx"] += abs(fx_amt)
+		slot["expected_fx"] += fx_amt
+		slot["home_equivalent"] += float(r.amount or 0)
+		slot["txns"] += 1
+
+	if frappe.db.table_exists("Exchange Transaction"):
+		ex_rows = frappe.get_all(
+			"Exchange Transaction",
+			filters={"session": ("in", names)},
+			fields=["session", "direction", "currency", "fx_amount", "local_amount"],
+			limit_page_length=0,
+		)
+		for ex in ex_rows:
+			ccy = (ex.currency or "").strip().upper()
+			fx_val = float(ex.fx_amount or 0)
+			if not ccy or ccy == home or not fx_val:
+				continue
+			slot = _slot(ex.session, ccy)
+			if ex.direction == "Buy":
+				slot["receipts_fx"] += fx_val
+				slot["expected_fx"] += fx_val
+				slot["home_equivalent"] += float(ex.local_amount or 0)
+			else:
+				slot["refunds_fx"] += fx_val
+				slot["expected_fx"] -= fx_val
+				slot["home_equivalent"] -= float(ex.local_amount or 0)
+			slot["txns"] += 1
+
+	stored_counts: dict[str, dict[str, float]] = {}
+	if has_fc_col:
+		for s in frappe.get_all(
+			"Cashier Session",
+			filters={"name": ("in", names)},
+			fields=["name", "foreign_cash_count"],
+			limit_page_length=0,
+		):
+			if s.foreign_cash_count:
+				try:
+					stored_counts[s.name] = _parse_foreign_counts(s.foreign_cash_count)
+				except Exception:
+					stored_counts[s.name] = {}
+
+	out: dict[str, list[dict[str, Any]]] = {}
+	for n in names:
+		counts = (count_overrides or {}).get(n)
+		if counts is None:
+			counts = stored_counts.get(n) or {}
+		sess_map = buckets.get(n) or {}
+		for ccy in counts:
+			if ccy != home and ccy not in sess_map:
+				_slot(n, ccy)
+		drawers: list[dict[str, Any]] = []
+		for ccy in sorted(sess_map):
+			s = sess_map[ccy]
+			exp_fx = round(s["expected_fx"], 2)
+			counted_fx = counts.get(ccy)
+			drawers.append({
+				"currency": ccy,
+				"receipts_fx": round(s["receipts_fx"], 2),
+				"refunds_fx": round(s["refunds_fx"], 2),
+				"expected_fx": exp_fx,
+				"home_equivalent": round(s["home_equivalent"], 2),
+				"counted_fx": counted_fx,
+				"variance_fx": round(counted_fx - exp_fx, 2) if counted_fx is not None else None,
+				"txns": s["txns"],
+			})
+		out[n] = drawers
+	return out
+
+
+def _fx_variance_home(drawer: dict[str, Any], property: str) -> float:
+	var_fx = drawer.get("variance_fx")
+	if var_fx is None or abs(float(var_fx)) <= 0.004:
+		return 0.0
+	exp_fx = float(drawer.get("expected_fx") or 0)
+	home_eq = float(drawer.get("home_equivalent") or 0)
+	if abs(exp_fx) > 0.004 and abs(home_eq) > 0.004:
+		rate = abs(home_eq / exp_fx)
+		return float(var_fx) * rate
+	try:
+		from kamra.ledger import payment_rate
+		return float(var_fx) * float(payment_rate(property, drawer["currency"])["rate"])
+	except Exception:
+		return float(var_fx)
 
 
 def _agent_bypass() -> bool:
@@ -155,30 +412,43 @@ _TOTAL_FIELDS = ("system_cash", "system_card", "system_upi", "system_other",
 
 def _recompute_session_totals(session: str, persist: bool = True) -> dict[str, float]:
 	"""Re-add the session's transactions into its stored totals. The row is
-	written only when a total actually moved: a screen that merely reads the
-	till (current_session, on every load) must not write, or two loads at
-	once race on the same row (MariaDB 1020 "Record has changed")."""
-	rows = frappe.db.sql(
-		"""
-		SELECT kind, mode, COALESCE(SUM(amount), 0) AS total
-		FROM `tabCashier Transaction`
-		WHERE session = %s
-		GROUP BY kind, mode
-		""",
-		session, as_dict=True,
-	)
+	written only when a total actually moved (and never on Closed sessions):
+	a screen that merely reads the till (current_session, on every load) must
+	not write, or two loads at once race on the same row (MariaDB 1020)."""
+	has_ccy = _txn_has_currency_cols()
+	if has_ccy:
+		rows = frappe.db.sql(
+			"""
+			SELECT kind, mode, amount, currency, fx_amount
+			FROM `tabCashier Transaction`
+			WHERE session = %s
+			""",
+			session, as_dict=True,
+		)
+	else:
+		rows = frappe.db.sql(
+			"""
+			SELECT kind, mode, amount
+			FROM `tabCashier Transaction`
+			WHERE session = %s
+			""",
+			session, as_dict=True,
+		)
 	sess = frappe.get_doc("Cashier Session", session)
 	# the pack's instant modes keep their own bucket, stored
 	# in system_upi / "upi" - field kept by name so existing tills read on
+	from kamra.ledger import home_currency
 	from kamra.localization import instant_payment_modes, pack_for
-	from kamra.masters import client_tender_types
+	from kamra.masters import client_tender_types, payment_tender_type
+
+	home = home_currency(sess.property)
 	instant_modes = instant_payment_modes(pack_for(sess.property), sess.property)
 	# a hotel's own payment method counts as its tender type (switched-off
 	# ones too, so a till that took one still adds up)
 	tender = client_tender_types(sess.property)
 	cash = card = upi = other = foreign = paid_outs = drops = petty = 0.0
 	for r in rows:
-		amt = float(r.total or 0)
+		amt = float(r.amount or 0)
 		kind = r.kind
 		mode = r.mode or "Other"
 		if kind == "Paid Out":
@@ -188,13 +458,16 @@ def _recompute_session_totals(session: str, persist: bool = True) -> dict[str, f
 		elif kind == "Petty Cash":
 			petty += abs(amt)
 		elif kind in ("Payment", "Exchange", "Refund"):
-			if mode == "Foreign Cash" or tender.get(mode) == "Foreign Cash":
-				foreign += amt  # home value of foreign notes; not in expected cash
-			elif mode in CASH_MODES or tender.get(mode) == "Cash":
+			tt = tender.get(mode) or payment_tender_type(mode, sess.property)
+			row_ccy = (r.get("currency") or "").strip().upper() if has_ccy else ""
+			is_fx = bool(has_ccy and ((row_ccy and row_ccy != home) or float(r.get("fx_amount") or 0)))
+			if tt == "Foreign Cash" or (tt == "Cash" and is_fx and kind != "Exchange"):
+				foreign += amt  # home value of foreign notes; never in home expected cash
+			elif tt == "Cash":
 				cash += amt
-			elif mode in CARD_MODES or tender.get(mode) == "Card":
+			elif tt == "Card":
 				card += amt
-			elif mode in instant_modes or tender.get(mode) == "Instant":
+			elif tt == "Instant" or mode in instant_modes:
 				upi += amt
 			else:
 				other += amt
@@ -203,8 +476,9 @@ def _recompute_session_totals(session: str, persist: bool = True) -> dict[str, f
 	expected = opening + cash - paid_outs - drops - petty
 	fresh = dict(zip(_TOTAL_FIELDS, (cash, card, upi, other, paid_outs, drops,
 	                                 petty, expected)))
-	if persist and any(abs(float(sess.get(k) or 0) - v) > 0.004
-	                   for k, v in fresh.items()):
+	if persist and sess.status != "Closed" and any(
+		abs(float(sess.get(k) or 0) - v) > 0.004 for k, v in fresh.items()
+	):
 		sess.update(fresh)
 		sess.save(ignore_permissions=True)
 	return {
@@ -227,6 +501,8 @@ def record_cashier_txn(
 	session: str | None = None,
 	outlet: str | None = None,
 	tender_validated: bool = False,
+	currency: str | None = None,
+	fx_amount: float | None = None,
 ) -> str | None:
 	"""Append a Cashier Transaction. Returns session name (or None)."""
 	if not tender_validated:
@@ -246,7 +522,7 @@ def record_cashier_txn(
 	if not sess:
 		return None
 	bd = get_business_date(property)
-	frappe.get_doc({
+	payload: dict[str, Any] = {
 		"doctype": "Cashier Transaction",
 		"session": sess,
 		"property": property,
@@ -261,7 +537,14 @@ def record_cashier_txn(
 		"notes": notes,
 		"posted_by": frappe.session.user,
 		"posted_at": now_datetime(),
-	}).insert(ignore_permissions=True)
+	}
+	if _txn_has_currency_cols():
+		from kamra.ledger import home_currency
+		home = home_currency(property)
+		txn_ccy = (currency or "").strip().upper() or home
+		payload["currency"] = txn_ccy
+		payload["fx_amount"] = float(fx_amount or 0) if txn_ccy != home else 0.0
+	frappe.get_doc(payload).insert(ignore_permissions=True)
 	_recompute_session_totals(sess)
 	return sess
 
@@ -269,17 +552,21 @@ def record_cashier_txn(
 def session_as_dict(name: str, persist: bool = True) -> dict[str, Any]:
 	totals = _recompute_session_totals(name, persist=persist)
 	doc = frappe.get_doc("Cashier Session", name)
+	txn_fields = ["name", "kind", "mode", "amount", "folio", "pos_order",
+	              "reference", "posted_by", "posted_at", "notes"]
+	if _txn_has_currency_cols():
+		txn_fields.extend(["currency", "fx_amount"])
 	txns = frappe.get_all(
 		"Cashier Transaction",
 		filters={"session": name},
-		fields=["name", "kind", "mode", "amount", "folio", "pos_order",
-		        "reference", "posted_by", "posted_at", "notes"],
+		fields=txn_fields,
 		order_by="posted_at desc",
 		limit_page_length=200,
 	)
 	d = doc.as_dict()
 	d["totals"] = totals
 	d["transactions"] = txns
+	d["foreign_drawers"] = _session_foreign_drawers([name], doc.property).get(name, [])
 	d["cashier_id"] = frappe.db.get_value("Cashier", doc.cashier, "cashier_id")
 	from kamra.localization import cash_denominations, pack_for
 	d["denominations"] = cash_denominations(pack_for(doc.property))
@@ -420,10 +707,12 @@ def my_till(property: str):
 @require_roles("Front Desk", "Finance", "Night Auditor", "Kamra Agent")
 def close_session(session: str, counted_cash: float | None = None,
                   notes: str | None = None, pin: str | None = None,
-                  cash_count=None):
+                  cash_count=None, foreign_counts=None):
 	"""Count the drawer and close the till. cash_count is the optional
 	count by note and coin, {value: count} or [{value, count}]; it must add
-	up to counted_cash, and fills it when counted_cash is left out."""
+	up to counted_cash, and fills it when counted_cash is left out.
+	foreign_counts is the optional per-currency foreign drawer shift drop,
+	{currency: counted_fx} or [{currency, counted_fx}]."""
 	doc = frappe.get_doc("Cashier Session", session)
 	if doc.status != "Open":
 		frappe.throw("This session is already closed.")
@@ -435,6 +724,7 @@ def close_session(session: str, counted_cash: float | None = None,
 	from kamra.authz import require_cashier_pin
 	require_cashier_pin(doc.property, pin)
 	count = cash_count_rows(doc.property, cash_count)
+	fx_counts = _parse_foreign_counts(foreign_counts)
 	if count:
 		total = round(sum(r["amount"] for r in count), 2)
 		if counted_cash in (None, ""):
@@ -448,6 +738,8 @@ def close_session(session: str, counted_cash: float | None = None,
 	totals = _recompute_session_totals(session)
 	doc.reload()
 	doc.cash_count = frappe.as_json(count) if count else None
+	if _session_has_foreign_count_col():
+		doc.foreign_cash_count = frappe.as_json(fx_counts) if fx_counts else None
 	doc.counted_cash = float(counted_cash)
 	doc.variance = float(counted_cash) - float(totals["expected_cash"])
 	doc.status = "Closed"
@@ -455,7 +747,11 @@ def close_session(session: str, counted_cash: float | None = None,
 	doc.closed_by = frappe.session.user
 	doc.close_notes = (notes or "").strip()[:500] or None
 	tol = float(get_setting(doc.property, "till_variance_tolerance") or 0)
-	if tol > 0 and abs(doc.variance) > tol:
+	fx_drawers = _session_foreign_drawers(
+		[session], doc.property, count_overrides={session: fx_counts},
+	).get(session, [])
+	fx_over_tol = tol > 0 and any(abs(_fx_variance_home(fd, doc.property)) > tol for fd in fx_drawers)
+	if (tol > 0 and abs(doc.variance) > tol) or fx_over_tol:
 		# never block a cash count; flag it for a manager instead
 		doc.variance_status = "Needs Review"
 	doc.save(ignore_permissions=True)
@@ -728,8 +1024,10 @@ def list_sessions(property: str, business_date: str | None = None,
 		order_by="opened_at desc",
 		limit_page_length=max(1, min(int(limit or 100), 500)),
 	)
+	drawers_by_sess = _session_foreign_drawers([r.name for r in rows], property)
 	for r in rows:
 		r["cashier_id"] = frappe.db.get_value("Cashier", r.cashier, "cashier_id")
+		r["foreign_drawers"] = drawers_by_sess.get(r.name, [])
 	return {"sessions": rows, "business_date": get_business_date(property)}
 
 
@@ -764,11 +1062,14 @@ def session_report(session: str):
 	- `cashier_id`, and `cashier_user`, `closed_by_user`, `supervisor` as
 	  {user, full_name} or null (supervisor: who approved a variance)"""
 	d = _session_view(session)
+	txn_fields = ["name", "kind", "mode", "amount", "business_date", "folio",
+	              "pos_order", "outlet", "reference", "notes", "posted_by",
+	              "posted_at"]
+	if _txn_has_currency_cols():
+		txn_fields.extend(["currency", "fx_amount"])
 	txns = frappe.get_all(
 		"Cashier Transaction", filters={"session": session},
-		fields=["name", "kind", "mode", "amount", "business_date", "folio",
-		        "pos_order", "outlet", "reference", "notes", "posted_by",
-		        "posted_at"],
+		fields=txn_fields,
 		order_by="posted_at asc, creation asc")
 	folios = {t.folio for t in txns if t.folio}
 	guests = {f.name: f for f in frappe.get_all(
@@ -787,8 +1088,10 @@ def session_report(session: str):
 		m["receipts" if amt >= 0 else "refunds"] += abs(amt)
 		m["net"] += amt
 	closed = d.get("status") == "Closed"
-	cash = methods.setdefault("Cash", {"mode": "Cash", "receipts": 0.0,
-	                                   "refunds": 0.0, "net": 0.0})
+	from kamra.masters import default_mode_for_tender
+	cash_mode = default_mode_for_tender(d.get("property"), "Cash")
+	cash = methods.setdefault(cash_mode, {"mode": cash_mode, "receipts": 0.0,
+	                                      "refunds": 0.0, "net": 0.0})
 	for m in methods.values():
 		for k in ("receipts", "refunds", "net"):
 			m[k] = round(m[k], 2)
@@ -805,7 +1108,7 @@ def session_report(session: str):
 			"User", user, "full_name") or user} if user else None
 
 	d.update({
-		"by_method": sorted(methods.values(), key=lambda m: m["mode"] != "Cash"),
+		"by_method": sorted(methods.values(), key=lambda m: m["mode"] != cash_mode),
 		"cash_count": frappe.parse_json(d.get("cash_count")) if d.get("cash_count") else [],
 		"receipts": receipts,
 		"paid_outs": [t for t in txns if t.kind in ("Paid Out", "Drop", "Petty Cash")],
@@ -887,8 +1190,10 @@ def shift_report(property: str, business_date: str | None = None,
 		        "counted_cash", "variance", "opened_at", "closed_at"],
 		order_by="opened_at asc",
 	)
+	drawers_by_sess = _session_foreign_drawers([s.name for s in sessions], property)
 	for s in sessions:
 		s["cashier_id"] = frappe.db.get_value("Cashier", s.cashier, "cashier_id")
+		s["foreign_drawers"] = drawers_by_sess.get(s.name, [])
 	journal = frappe.db.sql(
 		"""
 		SELECT ct.kind, ct.mode, COUNT(*) AS txns,
@@ -1132,6 +1437,13 @@ def tills_board(property: str):
 		filters={"property": property, "variance_status": "Needs Review"},
 		fields=["name", "user", "cashier_terminal", "business_date", "variance", "closed_at"],
 		order_by="closed_at desc", limit_page_length=20)
+	drawers_by_sess = _session_foreign_drawers(
+		[r.name for r in open_rows] + [r.name for r in review], property,
+	)
+	for r in open_rows:
+		r["foreign_drawers"] = drawers_by_sess.get(r.name, [])
+	for r in review:
+		r["foreign_drawers"] = drawers_by_sess.get(r.name, [])
 	return {"business_date": str(bd), "tills": board, "pending_transfers": pending,
 	        "variance_review": review}
 

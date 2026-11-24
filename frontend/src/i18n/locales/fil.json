@@ -1501,5 +1501,22 @@
   "Open the function's folio": "Buksan ang folio ng event",
   "The tax invoice is issued from the function's folio.": "Ang tax invoice ay ibinibigay mula sa folio ng event.",
   "Service Charge": "Bayad sa serbisyo",
-  "Reprint invoice": "I-print muli ang invoice"
+  "Reprint invoice": "I-print muli ang invoice",
+  "Property": "Ari-arian",
+  "Shared": "Ibinahagi",
+  "Booking type": "Uri ng booking",
+  "Foreign currency drawers": "Mga drawer ng dayuhang pera",
+  "Foreign drawers": "Dayuhang drawer",
+  "Receipts (FX)": "Mga natanggap (FX)",
+  "Refunds (FX)": "Mga refund (FX)",
+  "Expected (FX)": "Inaasahan (FX)",
+  "Counted (FX)": "Nabilang (FX)",
+  "Home equivalent": "Katumbas sa lokal na pera",
+  "Counted {currency}": "Nabilang na {currency}",
+  "Per-currency foreign note totals kept separate from home cash.": "Mga kabuuan ng dayuhang salapi bawat pera na hiwalay sa lokal na cash.",
+  "By payment method": "Ayon sa paraan ng bayad",
+  "View report": "Tingnan ang ulat",
+  "Edit property override": "I-edit ang override ng property",
+  "This property already has its own override for {code}. Edit that property row instead.": "May sariling override na ang property na ito para sa {code}. I-edit na lang ang row ng property na iyon.",
+  "Saving creates a property override for {property}. The shared default stays unchanged for other properties.": "Ang pag-save ay gagawa ng override para sa {property}. Mananatiling hindi nababago ang shared default para sa ibang property."
 }
