@@ -557,3 +557,40 @@ class ChannexForeignContractBookingTestCase(IntegrationTestCase):
 		self.assertEqual(self.gross_nights(doc), orig_nights)
 		self.assertIn("270.0 USD", doc.special_requests)
 		self.assertNotIn("986000", doc.special_requests)
+
+	def test_direct_foreign_contract_modify_passes_agreed_rate_guard_while_raw_save_refuses(self):
+		"""Merge RED -> GREEN (#32 + #36): Reservation.guard_agreed_rate must
+		allow the channel manager's governed kamra_channel_tariff writer to
+		update or clear agreed_rate on OTA modifies, while still refusing an
+		ungoverned direct save to agreed_rate."""
+		from kamra.channels import channex
+
+		self.deliver(self.payload(amounts=("130.00", "120.00")))
+		doc = self.received()
+		self.assertEqual(float(doc.agreed_rate), 475000)
+
+		# Direct ungoverned write to agreed_rate must still be refused by #32's guard.
+		doc.agreed_rate = 300000
+		with self.assertRaises(frappe.PermissionError):
+			doc.save(ignore_permissions=True)
+		doc.reload()
+
+		# Governed OTA modify in foreign currency updates agreed_rate & night_rates cleanly.
+		mod_events = channex.parse_webhook(
+			self.conn, self.payload(status="modified", amounts=("140.00", "140.00")),
+		)
+		res = cm._apply_event(self.conn, mod_events[0])
+		self.assertEqual(res["result"], "modified")
+		doc.reload()
+		self.assertEqual(float(doc.agreed_rate), 511000)
+		self.assertEqual(self.gross_nights(doc), [511000, 511000])
+
+		# Governed OTA modify back into property currency clears agreed_rate cleanly.
+		home_events = channex.parse_webhook(
+			self.conn, self.payload(currency="UGX", status="modified", amounts=("480000.00", "440000.00")),
+		)
+		res_home = cm._apply_event(self.conn, home_events[0])
+		self.assertEqual(res_home["result"], "modified")
+		doc.reload()
+		self.assertEqual(float(doc.agreed_rate or 0), 0)
+		self.assertEqual(self.gross_nights(doc), [480000, 440000])
