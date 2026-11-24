@@ -73,6 +73,7 @@
    "fieldtype": "Currency",
    "label": "Debit",
    "default": "0",
+   "precision": "6",
    "in_list_view": 1
   },
   {
@@ -80,6 +81,7 @@
    "fieldtype": "Currency",
    "label": "Credit",
    "default": "0",
+   "precision": "6",
    "in_list_view": 1
   },
   {
@@ -124,7 +126,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-30 10:00:00.000000",
+ "modified": "2026-11-24 08:30:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Folio Ledger Entry",

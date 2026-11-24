@@ -157,6 +157,8 @@ interface Plan {
 interface StayResult extends StayFit {
   room_type: string
   rooms_left: number
+  rate_plan?: string | null
+  rate_plan_label?: string | null
   quote: {
     nights: number
     amount_after_tax: number
@@ -1423,6 +1425,9 @@ export default function PublicBooking() {
                                       <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
                                         <div className="min-w-0 flex-1 basis-52 space-y-1">
                                           <p className="font-medium text-zinc-900">{mealLabel(pl.meal_plan)}</p>
+                                          {r.rate_plan_label && (
+                                            <p className="text-xs font-medium text-brand-700">{r.rate_plan_label}</p>
+                                          )}
                                           {terms && (
                                             <p className={"flex items-center gap-1.5 text-sm " + (terms.free ? "text-brand-700" : "text-zinc-500")}>
                                               <ShieldCheck className="size-3.5 shrink-0" aria-hidden />
