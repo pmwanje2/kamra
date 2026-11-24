@@ -235,8 +235,8 @@ def _billing(res) -> dict:
 	return {
 		"payer": payer,
 		"payer_label": labels[payer],
-		# a hotel's own payer types, as the description it gave them
-		"payer_labels": {r.name: r.description or r.name for r in _payer_rows() if not r.system},
+		# every enabled payer type (system + hotel's own), as the description the hotel gave it
+		"payer_labels": {r.name: r.description or r.name for r in _payer_rows()},
 		"source": res.source, "channel": res.get("channel"),
 		"ota_ref": res.get("ota_ref"),
 		"pay_at_hotel": 1 if res.get("is_pay_at_hotel") else 0,

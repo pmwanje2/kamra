@@ -120,9 +120,10 @@ def record_collected(reservation: str, amount: float, mode: str) -> None:
 	name = ensure_deposit_for_reservation(res, amount)
 	if not name:
 		return
+	from kamra.masters import payment_tender_type
 	dep = frappe.get_doc("Security Deposit", name)
 	dep.collected_amount = flt(dep.collected_amount) + flt(amount)
-	dep.method = "cash" if mode == "Cash" else "payment"
+	dep.method = "cash" if payment_tender_type(mode, res.property) == "Cash" else "payment"
 	dep.status = _held_status(res)
 	dep.save(ignore_permissions=True)
 

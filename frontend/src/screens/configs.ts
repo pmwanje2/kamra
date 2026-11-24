@@ -1256,6 +1256,7 @@ export const paymentMethodsConfig: ScreenConfig = {
   columns: [
     { field: "code", label: "Code" },
     { field: "description", label: "Description" },
+    { field: "property", label: "Property", emptyLabel: "Shared" },
     { field: "tender_type", label: "Tender type", badge: true },
     { field: "mode_of_payment", label: "Accounting Mode of Payment" },
     { field: "system", label: "Type", booleanBadge: { truthy: "System", falsy: "Custom" } },
@@ -1265,6 +1266,8 @@ export const paymentMethodsConfig: ScreenConfig = {
     { field: "code", label: "Code", type: "data", required: true, readOnlyOnEdit: true,
       hint: "Name shown in payment pickers (e.g. MTN MoMo, Airtel Money)." },
     { field: "description", label: "Description", type: "data" },
+    { field: "property", label: "Property", type: "readonly",
+      dependsOn: (draft) => Boolean(draft.property) },
     {
       field: "tender_type",
       label: "Tender type",

@@ -245,7 +245,7 @@ class RatePlanRequiredTest(AuditTestCase):
 			},
 		}
 		events = channex.parse_webhook(conn, channex_payload)
-		self.assertEqual(events[0]["external_rate_id"], "rp-ota")
+		self.assertEqual(events[0]["rate_plan_external_id"], "rp-ota")
 
 		# Neither mapped rate plan nor default plan -> refused plainly, no Confirmed stay
 		refused = cm._apply_event(conn, dict(events[0]))

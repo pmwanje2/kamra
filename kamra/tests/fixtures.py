@@ -64,7 +64,7 @@ def build() -> dict:
 	f = {"property": PROPERTY}
 
 	_upsert("Property", {"property_name": PROPERTY}, {
-		"property_name": PROPERTY, "city": "Testville", "state": "Karnataka",
+		"property_name": PROPERTY, "city": "Testville", "state": "Karnataka", "country": "India",
 		"gst_mode": "Slab", "gst_slab_threshold": 7500,
 		"gst_rate_low": 5, "gst_rate_high": 18, "gstin": "29AABCU9603R1ZM",
 	})
