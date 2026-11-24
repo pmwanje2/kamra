@@ -10,15 +10,8 @@ import { useAuth } from "../lib/auth"
 import { useCashierAuth } from "../lib/cashierAuth"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
-import { moneyLocale } from "../lib/money"
+import { fmtAmount, moneyDigits } from "../lib/money"
 import { useT, t as translate } from "../lib/i18n"
-
-
-const inr = (n: unknown) =>
-  Number(n ?? 0).toLocaleString(moneyLocale(), { maximumFractionDigits: 0 })
-
-const fmtFx = (n: unknown) =>
-  Number(n ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 type ForeignDrawer = {
   currency: string
@@ -236,8 +229,8 @@ export default function CashierBoard() {
                   <div className="flex items-baseline justify-between gap-2">
                     <span className="truncate text-zinc-700">{s.cashier_id || s.user}</span>
                     <span className="tabular-nums text-zinc-900">
-                      {inr(s.expected_cash)}
-                      <span className="ml-1 text-xs text-zinc-400">
+                      {fmtAmount(s.expected_cash)}
+                      <span className="ms-1 text-xs text-zinc-400">
                         {String(s.opened_at).replace(" ", "T").slice(11, 16)}
                       </span>
                     </span>
@@ -249,7 +242,7 @@ export default function CashierBoard() {
                           key={fd.currency}
                           className="rounded bg-zinc-100 px-1.5 py-0.5 tabular-nums"
                         >
-                          {fd.currency} {fmtFx(fd.expected_fx)}
+                          {fd.currency} {fmtAmount(fd.expected_fx, fd.currency)}
                         </span>
                       ))}
                     </div>
@@ -265,12 +258,12 @@ export default function CashierBoard() {
                 <div className="space-y-2 border-t border-zinc-100 pt-2">
                   <div className="flex justify-between">
                     <span className="text-zinc-500">{t("In the safe")}</span>
-                    <span className="font-semibold tabular-nums">{inr(tl.safe.balance)}</span>
+                    <span className="font-semibold tabular-nums">{fmtAmount(tl.safe.balance)}</span>
                   </div>
                   {tl.safe.in_transit ? (
                     <div className="flex justify-between text-xs text-amber-700">
                       <span>{t("On its way")}</span>
-                      <span className="tabular-nums">{inr(tl.safe.in_transit)}</span>
+                      <span className="tabular-nums">{fmtAmount(tl.safe.in_transit)}</span>
                     </div>
                   ) : null}
                   {canEdit && tl.name ? (
@@ -310,7 +303,7 @@ export default function CashierBoard() {
                   {termName(x.from_terminal)} → {termName(x.to_terminal)} · {x.requested_by}
                 </span>
                 <span className="flex items-center gap-3">
-                  <span className="font-semibold tabular-nums">{inr(x.amount)}</span>
+                  <span className="font-semibold tabular-nums">{fmtAmount(x.amount)}</span>
                   <Button variant="outline" disabled={busy} onClick={() => receive(x.name)}>
                     {t("Received")}
                   </Button>
@@ -332,7 +325,10 @@ export default function CashierBoard() {
           <CardContent className="space-y-2 pt-0">
             {board.variance_review.map((v) => {
               const fxWithVar = (v.foreign_drawers || []).filter(
-                (fd) => fd.variance_fx !== null && fd.variance_fx !== undefined && Math.abs(fd.variance_fx) > 0.004,
+                (fd) =>
+                  fd.variance_fx !== null &&
+                  fd.variance_fx !== undefined &&
+                  Math.abs(fd.variance_fx) >= 0.5 * 10 ** -moneyDigits(fd.currency),
               )
               return (
                 <div key={v.name} className="flex flex-wrap items-center justify-between gap-3 text-sm">
@@ -347,14 +343,14 @@ export default function CashierBoard() {
                             key={fd.currency}
                             className="rounded bg-rose-50 px-1.5 py-0.5 font-medium tabular-nums text-rose-700"
                           >
-                            {fd.currency} {fmtFx(fd.variance_fx)}
+                            {fd.currency} {fmtAmount(fd.variance_fx, fd.currency)}
                           </span>
                         ))}
                       </div>
                     ) : null}
                   </div>
                   <span className="flex flex-wrap items-center gap-3">
-                    <span className="font-semibold tabular-nums text-rose-700">{inr(v.variance)}</span>
+                    <span className="font-semibold tabular-nums text-rose-700">{fmtAmount(v.variance)}</span>
                     <Link
                       to={`/cashier/shift-report?session=${v.name}`}
                       className="text-xs text-brand-700 hover:underline"
@@ -384,40 +380,40 @@ export default function CashierBoard() {
           </div>
           {canEdit ? (
             <Button onClick={() => setForm(blank())}>
-              <Plus className="mr-1.5 size-4" />
+              <Plus className="me-1.5 size-4" />
               {t("Add terminal")}
             </Button>
           ) : null}
         </CardHeader>
         <CardContent className="overflow-x-auto pt-0">
           {terminals.length ? (
-            <table className="min-w-[520px] w-full text-left text-sm">
+            <table className="min-w-[520px] w-full text-start text-sm">
               <thead className="text-xs uppercase tracking-wide text-zinc-400">
                 <tr>
-                  <th className="py-2 pr-3">{t("Name")}</th>
-                  <th className="py-2 pr-3">{t("Kind")}</th>
-                  <th className="py-2 pr-3">{t("Outlet")}</th>
-                  <th className="py-2 pr-3">{t("Bill printer")}</th>
+                  <th className="py-2 pe-3">{t("Name")}</th>
+                  <th className="py-2 pe-3">{t("Kind")}</th>
+                  <th className="py-2 pe-3">{t("Outlet")}</th>
+                  <th className="py-2 pe-3">{t("Bill printer")}</th>
                   <th className="py-2" />
                 </tr>
               </thead>
               <tbody>
                 {terminals.map((x) => (
                   <tr key={x.name} className="border-t border-zinc-100">
-                    <td className="py-2 pr-3">
+                    <td className="py-2 pe-3">
                       {x.terminal_name}
                       {x.disabled ? (
-                        <span className="ml-2 text-xs text-zinc-400">{t("Disabled")}</span>
+                        <span className="ms-2 text-xs text-zinc-400">{t("Disabled")}</span>
                       ) : null}
                     </td>
-                    <td className="py-2 pr-3">{translate(x.kind)}</td>
-                    <td className="py-2 pr-3 text-zinc-500">
+                    <td className="py-2 pe-3">{translate(x.kind)}</td>
+                    <td className="py-2 pe-3 text-zinc-500">
                       {outlets.find((o) => o.name === x.outlet)?.outlet_name ?? "-"}
                     </td>
-                    <td className="py-2 pr-3 text-zinc-500">
+                    <td className="py-2 pe-3 text-zinc-500">
                       {printers.find((p) => p.name === x.bill_printer)?.printer_name ?? t("This device")}
                     </td>
-                    <td className="py-2 text-right">
+                    <td className="py-2 text-end">
                       {canEdit ? (
                         <Button variant="ghost" onClick={() => setForm({ ...x })}>
                           {t("Edit")}

@@ -3,14 +3,8 @@ import { Link } from "react-router-dom"
 import { call, getCurrentProperty } from "../lib/api"
 import { serverError } from "../lib/resource"
 import { Badge } from "../components/ui/badge"
-import { moneyLocale } from "../lib/money"
+import { fmtAmount } from "../lib/money"
 import { t as translate, useUILanguage } from "../lib/i18n"
-
-const inr = (n: unknown) =>
-  Number(n ?? 0).toLocaleString(moneyLocale(), { maximumFractionDigits: 0 })
-
-const fmtFx = (n: unknown) =>
-  Number(n ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 type ForeignDrawer = {
   currency: string
@@ -76,7 +70,7 @@ export default function CashierSessions() {
             className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
           >{translate("Open / close till")}</Link>
           <label className="text-sm">
-            <span className="mr-2 text-zinc-500">{translate("Business date")}</span>
+            <span className="me-2 text-zinc-500">{translate("Business date")}</span>
             <input
               type="date"
               className="rounded-lg border border-zinc-300 px-2 py-1.5"
@@ -90,7 +84,7 @@ export default function CashierSessions() {
         <p className="text-sm text-rose-600">{translate(err)}</p>
       ) : null}
       <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white">
-        <table className="min-w-[680px] w-full text-left text-sm">
+        <table className="min-w-[680px] w-full text-start text-sm">
           <thead className="border-b border-zinc-100 text-xs uppercase tracking-wide text-zinc-400">
             <tr>
               <th className="px-3 py-2">{translate("Cashier")}</th>
@@ -120,16 +114,16 @@ export default function CashierSessions() {
                     {translate(r.status)}
                   </Badge>
                 </td>
-                <td className="whitespace-nowrap px-3 py-2 tabular-nums">{inr(r.opening_float)}</td>
-                <td className="whitespace-nowrap px-3 py-2 tabular-nums">{inr(r.system_cash)}</td>
-                <td className="whitespace-nowrap px-3 py-2 tabular-nums">{inr(r.expected_cash)}</td>
-                <td className="whitespace-nowrap px-3 py-2 tabular-nums">{inr(r.counted_cash)}</td>
+                <td className="whitespace-nowrap px-3 py-2 tabular-nums">{fmtAmount(r.opening_float)}</td>
+                <td className="whitespace-nowrap px-3 py-2 tabular-nums">{fmtAmount(r.system_cash)}</td>
+                <td className="whitespace-nowrap px-3 py-2 tabular-nums">{fmtAmount(r.expected_cash)}</td>
+                <td className="whitespace-nowrap px-3 py-2 tabular-nums">{fmtAmount(r.counted_cash)}</td>
                 <td className="whitespace-nowrap px-3 py-2 text-xs tabular-nums text-zinc-600">
                   {r.foreign_drawers?.length
-                    ? r.foreign_drawers.map((fd) => `${fd.currency} ${fmtFx(fd.expected_fx)}`).join(" · ")
+                    ? r.foreign_drawers.map((fd) => `${fd.currency} ${fmtAmount(fd.expected_fx, fd.currency)}`).join(" · ")
                     : "-"}
                 </td>
-                <td className="whitespace-nowrap px-3 py-2 tabular-nums">{inr(r.variance)}</td>
+                <td className="whitespace-nowrap px-3 py-2 tabular-nums">{fmtAmount(r.variance)}</td>
               </tr>
             ))}
             {!rows.length ? (
