@@ -111,7 +111,8 @@ export default function RateCalendar() {
   const [mode, setMode] = useState<"view" | "edit">("view")
   const [selection, setSelection] = useState<GridSelection | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const dragRef = useRef<{ roomType: string; roomTypeName: string; anchorDate: string } | null>(null)
+  const dragRef = useRef<{ roomType: string; roomTypeName: string; anchorDate: string; moved: boolean } | null>(null)
+  const suppressClickRef = useRef(false)
 
   useEffect(() => {
     const bump = () => setSyncRev((v) => v + 1)
@@ -123,6 +124,10 @@ export default function RateCalendar() {
   useEffect(() => {
     const onPointerUp = () => {
       if (dragRef.current) {
+        if (dragRef.current.moved) {
+          suppressClickRef.current = true
+          setTimeout(() => { suppressClickRef.current = false }, 0)
+        }
         dragRef.current = null
         setDrawerOpen(true)
       }
@@ -219,7 +224,7 @@ export default function RateCalendar() {
 
   const startCellDrag = (r: CalendarRoomType, date: string) => {
     if (mode !== "edit" || !canEdit) return
-    dragRef.current = { roomType: r.room_type, roomTypeName: r.name, anchorDate: date }
+    dragRef.current = { roomType: r.room_type, roomTypeName: r.name, anchorDate: date, moved: false }
     setSelection({
       roomType: r.room_type,
       roomTypeName: r.name,
@@ -232,6 +237,7 @@ export default function RateCalendar() {
   const extendCellDrag = (r: CalendarRoomType, date: string) => {
     const drag = dragRef.current
     if (!drag || drag.roomType !== r.room_type) return
+    if (date !== drag.anchorDate) drag.moved = true
     const dates = normalizeDateRange(drag.anchorDate, date, orderedDates)
     setSelection({
       roomType: drag.roomType,
@@ -243,7 +249,7 @@ export default function RateCalendar() {
   }
 
   const handleEditTap = (r: CalendarRoomType, date: string, shiftKey = false) => {
-    if (mode !== "edit" || !canEdit) return
+    if (mode !== "edit" || !canEdit || suppressClickRef.current) return
     if ((shiftKey || isMobile) && selection && selection.roomType === r.room_type && !drawerOpen) {
       const dates = normalizeDateRange(selection.startDate, date, orderedDates)
       setSelection({
@@ -451,7 +457,7 @@ export default function RateCalendar() {
       </div>
 
       {mode === "edit" && canEdit && (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-xs text-brand-900">
+        <div className="flex min-h-14 flex-wrap items-center justify-between gap-2 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-xs text-brand-900">
           <span>
             {selection
               ? t("{room}: {start} to {end} ({n} night(s) selected)", {
