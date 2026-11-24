@@ -756,9 +756,18 @@
   "{n} room": "{n} kamar",
   "{n} rooms": "{n} kamar",
   "Open room type": "Buka tipe kamar",
-  "Tax as per the accounting invoice": "Pajak sesuai faktur akuntansi",
   "Channel update applied — desk discount removed": "Pembaruan kanal diterapkan — diskon resepsionis dihapus",
   "The channel update was applied and removed the desk discount (new total: {total}). Review what was removed below and re-apply a discount if needed.": "Pembaruan kanal telah diterapkan dan menghapus diskon resepsionis (total baru: {total}). Tinjau yang dihapus di bawah ini dan terapkan kembali diskon jika diperlukan.",
   "Channel update applied — discount review required": "Pembaruan kanal diterapkan — perlu peninjauan diskon",
-  "The channel update was applied (new total: {total}). Approved discounted nights were kept; added nights were priced without the unapproved discount. Review below and adjust if needed.": "Pembaruan kanal telah diterapkan (total baru: {total}). Malam dengan diskon yang disetujui tetap dipertahankan; malam tambahan diberi tarif tanpa diskon yang belum disetujui. Tinjau di bawah ini dan sesuaikan jika perlu."
+  "The channel update was applied (new total: {total}). Approved discounted nights were kept; added nights were priced without the unapproved discount. Review below and adjust if needed.": "Pembaruan kanal telah diterapkan (total baru: {total}). Malam dengan diskon yang disetujui tetap dipertahankan; malam tambahan diberi tarif tanpa diskon yang belum disetujui. Tinjau di bawah ini dan sesuaikan jika perlu.",
+  "Tax as per the accounting invoice": "Pajak sesuai faktur akuntansi",
+  "Tax Invoice": "Faktur Pajak",
+  "Invoice": "Faktur",
+  "Provisional Bill": "Tagihan Sementara",
+  "Closed": "Ditutup",
+  "Stay": "Menginap",
+  "Tax summary": "Ringkasan pajak",
+  "Total Tax": "Total Pajak",
+  "Credited": "Dikreditkan",
+  "Total {cur}": "Total {cur}"
 }

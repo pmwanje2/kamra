@@ -36,9 +36,19 @@ def export_invoices(property: str, from_date: str, to_date: str):
 		inv = folio_invoice(fn)
 		f = inv["folio"]
 		bt = inv.get("bill_to")
-		taxable = round(sum(float(s["taxable"]) for s in inv["gst_summary"]), 2)
-		total_tax = round(sum(float(s["total_tax"]) for s in inv["gst_summary"]), 2)
 		lines = _lines_by_code(inv, components, ratios)
+		if inv.get("tax_source") == "accounting":
+			# Multi-tax accounting invoices (e.g. VAT + Tourism Levy on the
+			# same net) share one taxable base across rows; never sum taxable
+			# across rows and double-count the net base.
+			taxable = round(float(f.get("charges_total") or 0), 2)
+			total_tax = round(sum(float(s["total_tax"]) for s in inv["tax_summary"]), 2)
+		elif inv.get("tax_source") == "accounting_unavailable":
+			taxable = round(float(f.get("charges_total") or 0), 2)
+			total_tax = 0.0
+		else:
+			taxable = round(sum(float(s["taxable"]) for s in inv["gst_summary"]), 2)
+			total_tax = round(sum(float(s["total_tax"]) for s in inv["gst_summary"]), 2)
 		codes = [ln["service_code"] for ln in lines if ln["service_code"]]
 		gl_codes = list(dict.fromkeys(ln["gl_code"] for ln in lines if ln["gl_code"]))
 		row = {

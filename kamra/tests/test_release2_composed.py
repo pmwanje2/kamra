@@ -8,7 +8,7 @@ Covers all 11 composed Release 2 scenarios end-to-end on a real Frappe + ERPNext
  4. contract_tariff / HSP-TARIFF-007 / HSP-TARIFF-008 guard vs governed discount vs hand-typed rate.
  5. Rate change (set_agreed_rate), extend, shorten (amend_stay), split (split_charge); charged nights kept.
  6. proforma == folio == invoice == ledger (through public posting, payment and close APIs).
- 7. Printed tax invoice with bridged ERP Sales Invoice VAT + discount line + reference currency.
+ 7. (Printed tax invoice: see #48, not part of this branch.)
  8. OTA modify alert (channel_review_needed, reservation_discount, channel.modify_needs_review) on tariff stay.
  9. Room Types / Rate Calendar selling rate unaffected by a stay's discount.
 10. Reservation currency options (Property:property:currency) with reference currency fields & zero INR leak.
@@ -21,9 +21,9 @@ import json
 from unittest.mock import patch
 
 import frappe
-from frappe.utils import add_days, flt, getdate
+from frappe.utils import flt
 
-from kamra import api, channel_manager, ledger, pricing, rates
+from kamra import api, channel_manager, ledger, rates
 from kamra import folio as folio_mod
 from kamra.patches.v48 import (
 	backfill_rate_plan_tariff_currency,
@@ -39,7 +39,6 @@ from kamra.tests.audit_fixtures import (
 	ensure_user,
 	guest_folio,
 	make_property,
-	make_reservation,
 	make_room,
 	make_room_type,
 )
@@ -52,15 +51,18 @@ from kamra.tests.bridge_fields import ensure_bridge_field
 
 PROP_R2 = "UT Rel2 UGX"
 PROP_R2_VAT = "UT Rel2 UGX VAT"
+PROP_R2_VAT_INC = "UT Rel2 UGX VAT Inc"
+PROP_R2_USD = "UT Rel2 USD"
+PROP_R2_KWD = "UT Rel2 KWD"
 DESK_USER = "rel2-desk@example.com"
 RM_USER = "rel2-rm@example.com"
 GM_USER = "rel2-gm@example.com"
 GM_PIN = "4829"
 
 
-# Faithful subset of hospitality-tariffs@11 `Kamra Tariff Resolve` (HSP-TARIFF-006/007/008)
-# so CI exercises the exact contract between Kamra and hospitality-tariffs@11 without
-# depending on an external repository path.
+# Faithful subset of hospitality-tariffs@11 `Kamra Tariff Resolve` (56199e91: HSP-TARIFF-006/007/008)
+# covering direct, derived-plan (`base_rate_plan` chain), and repointed (`contract_tariff` snapshot)
+# tariff stays so CI exercises the exact contract without depending on an external repo path.
 TARIFF_GUARD_SCRIPT = """
 utils = frappe.utils
 user = frappe.session.user
@@ -70,6 +72,7 @@ revenue = user == "Administrator" or bool([r for r in held if r in ("System Mana
 old = None if doc.is_new() else doc.get_doc_before_save()
 discount = doc.flags.get("kamra_reservation_discount")
 relock = doc.flags.get("kamra_fx_checkin_relock")
+contract_relock = doc.flags.get("kamra_contract_relocked")
 
 def reasoned(d):
     cstr = frappe.utils.cstr
@@ -82,10 +85,56 @@ def reasoned(d):
     disc = [n for n in nights if n.get("discount_type") and flt(n.get("discount_value")) > 0]
     return bool(disc) and not [n for n in disc if not cstr(n.get("discount_reason")).strip()]
 
+def tariff_source(plan_name):
+    if not plan_name:
+        return None
+    meta = frappe.get_meta("Rate Plan")
+    has_base = meta.has_field("base_rate_plan")
+    fields = ["name", "custom_tariff_price_list"]
+    if has_base:
+        fields.append("base_rate_plan")
+    current = plan_name
+    seen = []
+    while current:
+        if current in seen:
+            frappe.throw("HSP-TARIFF-007: Rate Plan " + frappe.utils.cstr(plan_name)
+                         + " has a cyclic base_rate_plan chain.")
+        if len(seen) >= 5:
+            frappe.throw("HSP-TARIFF-007: Rate Plan " + frappe.utils.cstr(plan_name)
+                         + " derives through more than 5 plans.")
+        seen.append(current)
+        row = frappe.db.get_value("Rate Plan", current, fields, as_dict=True)
+        if not row:
+            return None
+        if row.get("custom_tariff_price_list"):
+            return row
+        current = frappe.utils.cstr(row.get("base_rate_plan")).strip() if has_base else ""
+    return None
+
+def snapshot_contract(record):
+    if not record:
+        return None
+    raw = record.get("contract_tariff")
+    if isinstance(raw, str):
+        if not raw.strip():
+            return None
+        try:
+            raw = json.loads(raw)
+        except Exception:
+            frappe.throw("HSP-TARIFF-007: The stay's contract_tariff snapshot cannot be read.")
+    if not isinstance(raw, dict):
+        return None
+    terms = raw.get("tariff")
+    if not isinstance(terms, dict) or terms.get("source") == "channel":
+        return None
+    if terms.get("derived_from") or (terms.get("currency") and frappe.utils.flt(terms.get("nightly")) > 0):
+        return raw
+    return None
+
+redirect = "HSP-TARIFF-008: A confirmed tariff stay is re-priced only by Move Room with a custom rate."
 if old and old.get("custom_tariff_currency"):
     before = utils.flt(old.get("agreed_rate"))
     after = utils.flt(doc.agreed_rate)
-    redirect = "HSP-TARIFF-008: A confirmed tariff stay is re-priced only by Move Room with a custom rate."
     if utils.cint(doc.auto_price) != utils.cint(old.get("auto_price")):
         frappe.throw(redirect)
     if relock:
@@ -106,30 +155,76 @@ if old and old.get("custom_tariff_currency"):
         moved = utils.cstr(doc.get("room")) != utils.cstr(old.get("room"))
         if not moved or after <= 0 or not revenue:
             frappe.throw(redirect)
+elif relock and old:
+    # Derived-plan check-in FX relock (v11 lines 303-323 / 587-596)
+    tariff_source(old.get("rate_plan"))
+    tariff_source(doc.get("rate_plan"))
+    booked_plan = frappe.db.get_value(
+        "Rate Plan", old.get("rate_plan"), ["custom_tariff_price_list", "fx_lock_policy"], as_dict=True
+    ) or {}
+    if (booked_plan.get("custom_tariff_price_list")
+            or utils.cstr(booked_plan.get("fx_lock_policy")) != "Fixed at Check In"
+            or utils.cint(old.get("fixed_rate")) or utils.cint(doc.get("fixed_rate"))
+            or utils.cint(doc.auto_price) != utils.cint(old.get("auto_price"))
+            or utils.flt(doc.agreed_rate) <= 0):
+        frappe.throw(redirect)
 else:
     plan = doc.rate_plan
-    if plan and doc.room_type and frappe.db.get_value("Rate Plan", plan, "custom_tariff_price_list"):
+    plan_tariff = tariff_source(plan) if plan else None
+    old_tariff = tariff_source(old.get("rate_plan")) if (old and old.get("rate_plan")) else None
+    old_contract = snapshot_contract(old) if old else None
+    old_guarded = bool(old_tariff or old_contract)
+    repointed_stay = bool(
+        not plan_tariff and old_contract and old
+        and utils.cstr(old.get("rate_plan")) == utils.cstr(doc.get("rate_plan"))
+        and (utils.flt(old.get("agreed_rate")) > 0 or utils.flt(old_contract.get("agreed_rate")) > 0)
+    )
+    if (plan_tariff and doc.room_type) or repointed_stay:
+        is_derived = (not plan_tariff) or (plan_tariff.get("name") != plan)
+        plan_moved = not old or utils.cstr(old.get("rate_plan")) != utils.cstr(doc.rate_plan)
         manual = utils.flt(doc.agreed_rate) > 0 or not utils.cint(doc.auto_price)
-        if discount and doc.is_new():
+        if is_derived and old and old_guarded and (
+                utils.flt(old.get("agreed_rate")) > 0
+                or (not plan_moved and old_contract and utils.flt(old_contract.get("agreed_rate")) > 0)):
+            # Mirrors hospitality-tariffs@11 lines 629-726: existing derived/repointed tariff stay
+            before = utils.flt(old.get("agreed_rate"))
+            after = utils.flt(doc.agreed_rate)
+            channel = bool(doc.flags.get("kamra_channel_tariff"))
+            if not channel and utils.cint(doc.auto_price) != utils.cint(old.get("auto_price")):
+                frappe.throw(redirect)
+            if channel or contract_relock:
+                pass
+            elif after != before and doc.flags.get("kamra_agreed_rate_override"):
+                desk = "Front Desk" in held
+                if after <= 0 or not (revenue or (desk and after <= before)):
+                    frappe.throw(redirect)
+            elif discount and after == before:
+                pass
+            elif after != before:
+                moved = utils.cstr(doc.get("room")) != utils.cstr(old.get("room"))
+                if not moved or after <= 0 or not revenue:
+                    frappe.throw(redirect)
+        elif discount and doc.is_new():
             if not reasoned(doc):
                 frappe.throw("HSP-TARIFF-007: A reservation discount needs a discount_reason.")
             if [n for n in (doc.get("night_rates") or []) if utils.flt(n.get("rate")) > 0 or utils.flt(n.get("hand_price")) > 0]:
                 frappe.throw("HSP-TARIFF-007: Locked nights cannot take a tariff rate_plan.")
-            res = frappe.call("hospitality_tariffs.tariff_rate", property=doc.property, room_type=doc.room_type,
-                              rate_plan=plan, check_in_date=utils.cstr(doc.check_in_date),
-                              check_out_date=utils.cstr(doc.check_out_date), adults=utils.cint(doc.adults),
-                              children=utils.cint(doc.children), extra_beds=utils.cint(doc.get("extra_beds")))
-            tariff = (res or {}).get("tariff") or {}
-            if tariff.get("refusal"):
-                frappe.throw(tariff["refusal"])
-            doc.agreed_rate = tariff.get("agreed_rate")
-            doc.custom_tariff_currency = tariff.get("currency")
-            doc.custom_tariff_nightly = tariff.get("nightly")
-            doc.custom_fx_rate = tariff.get("fx_rate")
-            doc.custom_fx_date = tariff.get("fx_date")
-        elif manual and not revenue:
+            if not is_derived:
+                res = frappe.call("hospitality_tariffs.tariff_rate", property=doc.property, room_type=doc.room_type,
+                                  rate_plan=plan, check_in_date=utils.cstr(doc.check_in_date),
+                                  check_out_date=utils.cstr(doc.check_out_date), adults=utils.cint(doc.adults),
+                                  children=utils.cint(doc.children), extra_beds=utils.cint(doc.get("extra_beds")))
+                tariff = (res or {}).get("tariff") or {}
+                if tariff.get("refusal"):
+                    frappe.throw(tariff["refusal"])
+                doc.agreed_rate = tariff.get("agreed_rate")
+                doc.custom_tariff_currency = tariff.get("currency")
+                doc.custom_tariff_nightly = tariff.get("nightly")
+                doc.custom_fx_rate = tariff.get("fx_rate")
+                doc.custom_fx_date = tariff.get("fx_date")
+        elif manual and not revenue and not doc.flags.get("kamra_channel_tariff"):
             frappe.throw("HSP-TARIFF-007: Changing the price on a tariff-plan booking needs Revenue Manager or Hotel Admin.")
-        elif not manual and doc.is_new():
+        elif not manual and doc.is_new() and not is_derived:
             res = frappe.call("hospitality_tariffs.tariff_rate", property=doc.property, room_type=doc.room_type,
                               rate_plan=plan, check_in_date=utils.cstr(doc.check_in_date),
                               check_out_date=utils.cstr(doc.check_out_date), adults=utils.cint(doc.adults),
@@ -189,34 +284,10 @@ def _set_fx(from_cur: str, to_cur: str, rate: float, on_date: str):
 	}).insert(ignore_permissions=True)
 
 
-def _fake_sales_invoice(
-	name: str,
-	*,
-	folio_name: str,
-	net_total: float,
-	total_taxes: float,
-	grand_total: float,
-	items: list[dict],
-	taxes: list[dict],
-	docstatus: int = 1,
-):
-	return frappe._dict(
-		doctype="Sales Invoice",
-		name=name,
-		kamra_ref=folio_name,
-		docstatus=docstatus,
-		net_total=net_total,
-		total_taxes_and_charges=total_taxes,
-		grand_total=grand_total,
-		items=[frappe._dict(it) for it in items],
-		taxes=[frappe._dict(tx) for tx in taxes],
-	)
-
-
 class Release2ComposedTests(AuditTestCase):
 	"""End-to-end composed verification of #32 x #33 x #34."""
 
-	properties = (PROP_R2, PROP_R2_VAT)
+	properties = (PROP_R2, PROP_R2_VAT, PROP_R2_VAT_INC, PROP_R2_USD, PROP_R2_KWD)
 
 	@classmethod
 	def setUpClass(cls):
@@ -224,6 +295,7 @@ class Release2ComposedTests(AuditTestCase):
 		ensure_bridge_field("Folio", "sales_invoice")
 		_ensure_currency("UGX", "UGX ", 1, "#,###")
 		_ensure_currency("USD", "$", 100, "#,###.##")
+		_ensure_currency("KWD", "KWD ", 1000, "#,###.###")
 		_ensure_custom_field("Rate Plan", "custom_tariff_price_list", "Link", "Price List")
 		_ensure_custom_field("Reservation", "custom_tariff_currency", "Link", "Currency")
 		_ensure_custom_field("Reservation", "custom_tariff_nightly", "Currency", "custom_tariff_currency")
@@ -282,10 +354,10 @@ class Release2ComposedTests(AuditTestCase):
 			}).insert(ignore_permissions=True)
 
 		ledger.ensure_default_reason_codes()
-		frappe.set_user("Administrator")
+		frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- test fixture
 
 	def tearDown(self):
-		frappe.set_user("Administrator")
+		frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- test fixture
 		frappe.db.delete("Server Script", {"name": ("like", "UT Rel2%")})
 		frappe.db.delete("Server Script", {"api_method": "hospitality_tariffs.tariff_rate"})
 		frappe.client_cache.delete_value("server_script_map")
@@ -295,6 +367,7 @@ class Release2ComposedTests(AuditTestCase):
 	               fx_lock_policy: str = "Fixed at Reservation", base_rate_plan: str | None = None,
 	               modifier_type: str = "Percent", modifier_value: float = 0,
 	               discount_eligible: int = 1, is_default: int = 0,
+	               rounding_step: float = 0, rounding_mode: str = "Nearest",
 	               custom_tariff_price_list: str | None = None) -> str:
 		frappe.db.delete("Rate Plan", {"property": prop, "code": code})
 		doc = frappe.get_doc({
@@ -309,19 +382,19 @@ class Release2ComposedTests(AuditTestCase):
 			"modifier_value": modifier_value,
 			"discount_eligible": discount_eligible,
 			"is_default": is_default,
-			"rounding_step": 0,
-			"rounding_mode": "Nearest",
+			"rounding_step": rounding_step,
+			"rounding_mode": rounding_mode,
 			"custom_tariff_price_list": custom_tariff_price_list,
 		}).insert(ignore_permissions=True)
 		return doc.name
 
 	def _as(self, user: str, fn, *args, **kwargs):
 		prev = frappe.session.user
-		frappe.set_user(user)
+		frappe.set_user(user)  # nosemgrep: frappe-setuser -- test fixture
 		try:
 			return fn(*args, **kwargs)
 		finally:
-			frappe.set_user(prev)
+			frappe.set_user(prev)  # nosemgrep: frappe-setuser -- test fixture
 
 	def _install_tariff_api(self, plan_tariffs: dict[str, dict]):
 		"""Install a Server Script for hospitality_tariffs.tariff_rate mapping rate_plan -> tariff dict."""
@@ -885,10 +958,11 @@ else:
 	# ── Case 8: OTA modify alert on a discounted tariff stay ─────────────────
 
 	def test_08_ota_modify_alert_on_discounted_tariff_stay(self):
-		"""An OTA modify with a total on a discounted tariff stay alerts the desk
-		(channel_review_needed=1, channel.modify_needs_review), both on a derived
-		contract_tariff stay (superseding discount + reservation_discount trail) and
-		on a hospitality-tariffs@11 guarded stay (held for review instead of crashing)."""
+		"""An OTA modify with a total on any tariff-owned stay (direct, derived-plan,
+		or repointed contract_tariff snapshot) is held for desk review under
+		hospitality-tariffs@11 instead of throwing HSP-TARIFF-008, with an accurate
+		hold reason and the desk discount preserved; a non-tariff discounted stay
+		still applies cleanly and flags discount_removed."""
 		plan = self._make_plan(
 			PROP_R2, "CPOTA", currency="USD", custom_tariff_price_list="UT Rel2 USD PL",
 		)
@@ -896,6 +970,17 @@ else:
 			PROP_R2, "CPOTAH", currency="USD", base_rate_plan=plan,
 			modifier_type="Percent", modifier_value=-50,
 		)
+		repointed = self._make_plan(
+			PROP_R2, "CPOTAR", currency="USD", base_rate_plan=plan,
+			modifier_type="Percent", modifier_value=-50,
+		)
+		local_plan = self._make_plan(
+			PROP_R2, "LOCOTA", currency="UGX",
+			modifier_type="Percent", modifier_value=0,
+		)
+		rt_local = make_room_type(PROP_R2, "LOC", base_price=300000, tax_percent=0)
+		frappe.db.set_value("Room Type", rt_local, {"base_price": 300000, "tax_percent": 0})
+		room_local = make_room(PROP_R2, rt_local, "L101")
 		self._install_tariff_api({
 			plan: {
 				"currency": "USD", "nightly": 150.0, "fx_rate": 3655.0,
@@ -904,7 +989,7 @@ else:
 		})
 		self._install_tariff_guard()
 
-		frappe.db.delete("Channel Room Mapping", {"external_room_id": "EXT-DLX"})
+		frappe.db.delete("Channel Room Mapping", {"external_room_id": ("in", ["EXT-DLX", "EXT-LOC"])})
 		frappe.db.delete("Channel Manager Connection", {"property": PROP_R2})
 		conn = frappe.get_doc({
 			"doctype": "Channel Manager Connection",
@@ -917,6 +1002,12 @@ else:
 			"connection": conn.name,
 			"room_type": self.rt_bridged,
 			"external_room_id": "EXT-DLX",
+		}).insert(ignore_permissions=True)
+		frappe.get_doc({
+			"doctype": "Channel Room Mapping",
+			"connection": conn.name,
+			"room_type": rt_local,
+			"external_room_id": "EXT-LOC",
 		}).insert(ignore_permissions=True)
 
 		# Subcase A: derived tariff stay (no custom_tariff_currency) with OTA ref + 10% desk discount
@@ -931,20 +1022,23 @@ else:
 			"room_type_external_id": "EXT-DLX", "check_in": d(5), "check_out": d(7),
 			"adults": 2, "children": 0, "currency": "UGX", "total": 520000,
 		})
-		self.assertEqual(out_drv["result"], "modified")
+		self.assertEqual(out_drv["result"], "held_for_review")
 		res_drv = frappe.get_doc("Reservation", b_drv["reservation"])
 		self.assertEqual(int(res_drv.channel_review_needed), 1)
-		self.assertEqual(res_drv.channel_review_reason, "discount_removed")
-		self.assertIsNone(res_drv.discount_type)
+		self.assertEqual(res_drv.channel_review_reason, "update_not_applied")
+		self.assertEqual(res_drv.discount_type, "Percent")
+		self.assertEqual(flt(res_drv.discount_value), 10.0)
+		self.assertIn("contract-tariff", res_drv.special_requests or "")
+		self.assertNotIn("the stay is Confirmed", res_drv.special_requests or "")
 		actions_drv = set(frappe.get_all(
 			"Agent Action Log",
 			filters={"reference_doctype": "Reservation", "reference_name": res_drv.name},
 			pluck="action_type",
 		))
 		self.assertIn("reservation_discount", actions_drv)
-		self.assertIn("channel.modify_discount_removed", actions_drv)
+		self.assertIn("channel.modify_needs_review", actions_drv)
 
-		# Subcase B: hospitality-tariffs@11 guarded stay (custom_tariff_currency='USD') + 10% desk discount
+		# Subcase B: direct tariff stay (custom_tariff_currency='USD') + 10% desk discount
 		b_grd = self._as(
 			DESK_USER, api.create_booking, PROP_R2, self.rt_bridged, d(8), d(10), "OTA Guarded Guest",
 			room=self.rooms_bridged[1], rate_plan=plan,
@@ -960,12 +1054,58 @@ else:
 		res_grd = frappe.get_doc("Reservation", b_grd["reservation"])
 		self.assertEqual(int(res_grd.channel_review_needed), 1)
 		self.assertEqual(res_grd.channel_review_reason, "update_not_applied")
+		self.assertIn("contract-tariff", res_grd.special_requests or "")
+		self.assertNotIn("the stay is Confirmed", res_grd.special_requests or "")
 		actions_grd = set(frappe.get_all(
 			"Agent Action Log",
 			filters={"reference_doctype": "Reservation", "reference_name": res_grd.name},
 			pluck="action_type",
 		))
 		self.assertIn("channel.modify_needs_review", actions_grd)
+
+		# Subcase C: repointed derived tariff stay (base_rate_plan cleared after booking;
+		# only saved contract_tariff snapshot marks it tariff-owned, mirroring v11 repointed_stay)
+		b_rep = self._as(
+			DESK_USER, api.create_booking, PROP_R2, self.rt_bridged, d(11), d(13), "OTA Repointed Guest",
+			room=self.rooms_bridged[2], rate_plan=repointed,
+			booked_via="Booking.com", ota_ref="OTA-R2-REP-1",
+			discount_type="Percent", discount_value=10, discount_reason="RATE-PROMO",
+		)
+		frappe.db.set_value("Rate Plan", repointed, "base_rate_plan", None, update_modified=False)
+		out_rep = channel_manager._apply_event(conn, {
+			"event": "modify", "ota_ref": "OTA-R2-REP-1", "channel": "Booking.com",
+			"room_type_external_id": "EXT-DLX", "check_in": d(11), "check_out": d(13),
+			"adults": 2, "children": 0, "currency": "UGX", "total": 510000,
+		})
+		self.assertEqual(out_rep["result"], "held_for_review")
+		res_rep = frappe.get_doc("Reservation", b_rep["reservation"])
+		self.assertEqual(int(res_rep.channel_review_needed), 1)
+		self.assertEqual(res_rep.channel_review_reason, "update_not_applied")
+		self.assertEqual(res_rep.discount_type, "Percent")
+
+		# Subcase D: non-tariff discounted stay still applies OTA modify and flags discount_removed
+		b_loc = self._as(
+			DESK_USER, api.create_booking, PROP_R2, rt_local, d(14), d(16), "OTA Local Guest",
+			room=room_local, rate_plan=local_plan,
+			booked_via="Booking.com", ota_ref="OTA-R2-LOC-1",
+			discount_type="Percent", discount_value=10, discount_reason="RATE-PROMO",
+		)
+		out_loc = channel_manager._apply_event(conn, {
+			"event": "modify", "ota_ref": "OTA-R2-LOC-1", "channel": "Booking.com",
+			"room_type_external_id": "EXT-LOC", "check_in": d(14), "check_out": d(16),
+			"adults": 2, "children": 0, "currency": "UGX", "total": 580000,
+		})
+		self.assertEqual(out_loc["result"], "modified")
+		res_loc = frappe.get_doc("Reservation", b_loc["reservation"])
+		self.assertEqual(int(res_loc.channel_review_needed), 1)
+		self.assertEqual(res_loc.channel_review_reason, "discount_removed")
+		self.assertIsNone(res_loc.discount_type)
+		actions_loc = set(frappe.get_all(
+			"Agent Action Log",
+			filters={"reference_doctype": "Reservation", "reference_name": res_loc.name},
+			pluck="action_type",
+		))
+		self.assertIn("channel.modify_discount_removed", actions_loc)
 
 	# ── Case 9: Room Types & Rate Calendar selling rate unaffected ───────────
 
@@ -1116,3 +1256,431 @@ else:
 		configurable_masters.execute()
 		replace_untouched_india_defaults.execute()
 		self.assertEqual(backfill_rate_plan_tariff_currency.execute(), 0)
+
+	# ── Case 12: Percent discount on foreign tariff with plan rounding_step ──
+
+	def test_12_percent_discount_on_foreign_tariff_with_rounding_step_and_desk_cap(self):
+		"""F1 (SAP/OPERA parity): when a foreign-currency rate plan has a commercial
+		rounding_step (e.g. USD 150 @ 3,655.5 = 548,325 -> Up 1,000 = 549,000), a 10%
+		Percent discount takes 10.00% off the rounded gross (494,100; cut 54,900),
+		agrees with Flat 54,900, admits a Front Desk user at their 10% limit without
+		spurious supervisor PIN refusal, and agrees across quote, booking, post-booking
+		rediscount, check-in FX relock, and Current Date folio posting."""
+		plan_chk = self._make_plan(
+			PROP_R2, "CPRND", currency="USD", fx_lock_policy="Fixed at Check In",
+			rounding_step=1000, rounding_mode="Up",
+			custom_tariff_price_list="UT Rel2 USD PL",
+		)
+		plan_cur = self._make_plan(
+			PROP_R2, "CPRNDCUR", currency="USD", fx_lock_policy="Current Date",
+			rounding_step=1000, rounding_mode="Up",
+			custom_tariff_price_list="UT Rel2 USD PL",
+		)
+		plan_down = self._make_plan(
+			PROP_R2, "CPRNDDN", currency="USD", fx_lock_policy="Fixed at Reservation",
+			rounding_step=1000, rounding_mode="Down",
+		)
+		self._install_tariff_api({
+			# USD 150 * 3,655.5 = 548,325 -> Up 1,000 = 549,000; Down 1,000 = 548,000
+			plan_chk: {
+				"currency": "USD", "nightly": 150.0, "fx_rate": 3655.5,
+				"fx_date": TODAY, "agreed_rate": 549000.0, "property_currency": "UGX",
+			},
+			plan_cur: {
+				"currency": "USD", "nightly": 150.0, "fx_rate": 3655.5,
+				"fx_date": TODAY, "agreed_rate": 549000.0, "property_currency": "UGX",
+			},
+			plan_down: {
+				"currency": "USD", "nightly": 150.0, "fx_rate": 3655.5,
+				"fx_date": TODAY, "agreed_rate": 548000.0, "property_currency": "UGX",
+			},
+		})
+		self._install_tariff_guard()
+		_set_fx("USD", "UGX", 3655.5, TODAY)
+
+		# 1. Plain quote = 549,000; Flat 54,900 = 494,100 (10.00%); Percent 10% = 494,100 (10.00%)
+		q_plain = self._as(
+			DESK_USER, api.get_quote, PROP_R2, self.rt_bridged, d(0), d(2), rate_plan=plan_chk,
+		)
+		self.assertEqual(q_plain["agreed_rate"], 549000.0)
+		self.assertEqual(q_plain["nightly"][0]["rate"], 549000.0)
+
+		q_flat = self._as(
+			DESK_USER, api.get_quote, PROP_R2, self.rt_bridged, d(0), d(2),
+			rate_plan=plan_chk, discount_type="Amount", discount_value=54900,
+			discount_reason="RATE-PROMO",
+		)
+		q_pct = self._as(
+			DESK_USER, api.get_quote, PROP_R2, self.rt_bridged, d(0), d(2),
+			rate_plan=plan_chk, discount_type="Percent", discount_value=10,
+			discount_reason="RATE-PROMO",
+		)
+		self.assertEqual(q_flat["nightly"][0]["rate"], 494100.0)
+		self.assertEqual(q_pct["nightly"][0]["rate"], 494100.0)
+		self.assertEqual(q_pct["nightly"][0]["discount_amount"], 54900.0)
+		self.assertEqual(q_pct["amount_after_tax"], q_flat["amount_after_tax"])
+		self.assertEqual(q_pct["discount_governance"]["effective_pct"], 10.0)
+		self.assertFalse(q_pct["discount_governance"]["needs_supervisor"])
+
+		# 2. Front Desk (10% limit) books 10% Percent with NO supervisor PIN -> admitted
+		b_pct = self._as(
+			DESK_USER, api.create_booking, PROP_R2, self.rt_bridged, d(0), d(2), "Step Up Pct Guest",
+			room=self.rooms_bridged[0], rate_plan=plan_chk,
+			discount_type="Percent", discount_value=10, discount_reason="RATE-PROMO",
+		)
+		res_pct = frappe.get_doc("Reservation", b_pct["reservation"])
+		self.assertEqual(flt(res_pct.agreed_rate), 549000.0)
+		self.assertEqual([flt(r.rate) for r in res_pct.night_rates], [494100.0, 494100.0])
+		self.assertEqual([flt(r.discount_amount) for r in res_pct.night_rates], [54900.0, 54900.0])
+		self.assertEqual(flt(res_pct.amount_after_tax), 988200.0)
+
+		# Above-cap discount (10.5%) is still refused without supervisor PIN
+		with self.assertRaises(frappe.PermissionError):
+			self._as(
+				DESK_USER, api.create_booking, PROP_R2, self.rt_bridged, d(5), d(6), "Over Cap Guest",
+				room=self.rooms_bridged[1], rate_plan=plan_chk,
+				discount_type="Percent", discount_value=10.5, discount_reason="RATE-PROMO",
+			)
+
+		# 3. Post-booking set_reservation_discount agrees shilling-for-shilling (even if plan step changes later)
+		b_post = self._as(
+			DESK_USER, api.create_booking, PROP_R2, self.rt_bridged, d(5), d(7), "Step Up Post Guest",
+			room=self.rooms_bridged[1], rate_plan=plan_chk,
+		)
+		self._as(
+			DESK_USER, api.set_reservation_discount, b_post["reservation"],
+			discount_type="Percent", discount_value=10, reason_code="RATE-PROMO",
+		)
+		res_post = frappe.get_doc("Reservation", b_post["reservation"])
+		self.assertEqual([flt(r.rate) for r in res_post.night_rates], [494100.0, 494100.0])
+		self.assertEqual([flt(r.discount_amount) for r in res_post.night_rates], [54900.0, 54900.0])
+		# Even if the rate plan's rounding_step is edited to 0 after booking, rediscounting
+		# keeps the booked rounded gross basis (494,100, exact 10.00%, no drift to 493,493)
+		frappe.db.set_value("Rate Plan", plan_chk, "rounding_step", 0, update_modified=False)
+		try:
+			self._as(
+				DESK_USER, api.set_reservation_discount, b_post["reservation"],
+				discount_type="Percent", discount_value=5, reason_code="RATE-PROMO",
+			)
+			self._as(
+				DESK_USER, api.set_reservation_discount, b_post["reservation"],
+				discount_type="Percent", discount_value=10, reason_code="RATE-PROMO",
+			)
+			res_post.reload()
+			self.assertEqual([flt(r.rate) for r in res_post.night_rates], [494100.0, 494100.0])
+			self.assertEqual([flt(r.discount_amount) for r in res_post.night_rates], [54900.0, 54900.0])
+		finally:
+			frappe.db.set_value("Rate Plan", plan_chk, "rounding_step", 1000, update_modified=False)
+
+		# 4. Book Current Date stay at FX 3,655.5 before FX moves, then check in & post at new FX 3,705.5
+		b_cur = self._as(
+			DESK_USER, api.create_booking, PROP_R2, self.rt_bridged, d(0), d(2), "Step Up Cur Guest",
+			room=self.rooms_bridged[2], rate_plan=plan_cur,
+			discount_type="Percent", discount_value=10, discount_reason="RATE-PROMO",
+		)
+		self._as(DESK_USER, api.check_in, b_cur["reservation"])
+
+		# FX moves to 3,705.5: USD 150 * 3,705.5 = 555,825 -> Up 1,000 = 556,000; 10% off = 500,400 (cut 55,600)
+		_set_fx("USD", "UGX", 3705.5, TODAY)
+
+		# 4a. Check-in FX relock on Fixed at Check In stay
+		self._as(DESK_USER, api.check_in, b_pct["reservation"])
+		res_pct.reload()
+		self.assertEqual(res_pct.status, "Checked In")
+		self.assertEqual(flt(res_pct.agreed_rate), 556000.0)
+		self.assertEqual([flt(r.rate) for r in res_pct.night_rates], [500400.0, 500400.0])
+		self.assertEqual([flt(r.discount_amount) for r in res_pct.night_rates], [55600.0, 55600.0])
+		self.assertEqual(flt(res_pct.amount_after_tax), 1000800.0)
+
+		# 4b. Current Date folio posting agrees identically (500,400 = 556,000 less discount 55,600)
+		folio_mod.post_room_night(frappe.get_doc("Reservation", b_cur["reservation"]), d(0))
+		line_cur = next(
+			c for c in frappe.get_doc("Folio", guest_folio(b_cur["reservation"])).charges
+			if c.charge_type == "Room"
+		)
+		self.assertEqual(flt(line_cur.amount), 500400.0)
+		self.assertEqual(flt(line_cur.contract_fx_rate), 3705.5)
+		self.assertIn("556,000 less discount 55,600", line_cur.description)
+
+		# 5. Down rounding_mode (548,000 plain -> 10% = 493,200, cut 54,800) also passes 10% desk cap
+		b_dn = self._as(
+			DESK_USER, api.create_booking, PROP_R2, self.rt_bridged, d(5), d(6), "Step Down Pct Guest",
+			room=self.rooms_bridged[3], rate_plan=plan_down,
+			discount_type="Percent", discount_value=10, discount_reason="RATE-PROMO",
+		)
+		res_dn = frappe.get_doc("Reservation", b_dn["reservation"])
+		self.assertEqual(flt(res_dn.agreed_rate), 548000.0)
+		self.assertEqual([flt(r.rate) for r in res_dn.night_rates], [493200.0])
+		self.assertEqual([flt(r.discount_amount) for r in res_dn.night_rates], [54800.0])
+
+	# ── Case 13: Zero-tax / bridged minor-unit line rounding & Folio currency precision ──
+
+	def test_13_zero_tax_bridged_minor_unit_rounding_and_folio_currency_precision(self):
+		"""Production UGX #,### (prec=0) bridge P1 regression guard:
+		1. 1,000.40 1-night & 2-night UGX 0%-tax stays (via base_price and agreed_rate)
+		   round to whole UGX 1,000 / 2,000 across quote, locked night_rates, and folio.
+		2. Derived Rate Plan (-15% on base_price=1,001.0, rounding_step=0) rounds 850.85 -> 851
+		   (and a +150% plan on 1,000.40 -> 2,501 is never clobbered).
+		3. Direct 0%-tax folio charges, corrections, and allowances round to whole UGX so
+		   folio.charges_total == folio.grand_total == sum(lines) in whole UGX shillings.
+		4. Folio Currency fields use Property:property:currency so Folio.precision('grand_total')
+		   matches Sales Invoice.precision('grand_total') (0 UGX, 2 USD, 3 KWD) under
+		   currency-minor-units@1.
+		5. USD (2dp, 100.45), KWD (3dp, 10.125), non-bridged VAT-inclusive 18% UGX
+		   (150,000 gross -> 127,118.64 net), and reopened legacy closed folios stay exact."""
+		# ── 1. UGX 0%-tax bridged: base_price = 1,000.40 (1n & 2n) ──
+		rt_frac = make_room_type(PROP_R2, "FRAC", base_price=1000.40, tax_percent=0)
+		frappe.db.set_value("Room Type", rt_frac, {"base_price": 1000.40, "tax_percent": 0})
+		rooms_frac = [make_room(PROP_R2, rt_frac, f"F10{i}") for i in range(1, 5)]
+
+		q1 = self._as(DESK_USER, api.get_quote, PROP_R2, rt_frac, d(0), d(1))
+		q2 = self._as(DESK_USER, api.get_quote, PROP_R2, rt_frac, d(0), d(2))
+		self.assertEqual([n["rate"] for n in q1["nightly"]], [1000.0])
+		self.assertEqual(q1["amount_after_tax"], 1000.0)
+		self.assertEqual([n["rate"] for n in q2["nightly"]], [1000.0, 1000.0])
+		self.assertEqual(q2["room_total"], 2000.0)
+		self.assertEqual(q2["amount_after_tax"], 2000.0)
+
+		b1 = self._as(
+			DESK_USER, api.create_booking, PROP_R2, rt_frac, d(0), d(1), "Frac 1N Guest",
+			room=rooms_frac[0],
+		)
+		res1 = frappe.get_doc("Reservation", b1["reservation"])
+		self.assertEqual([flt(r.rate) for r in res1.night_rates], [1000.0])
+		self.assertEqual(flt(res1.amount_after_tax), 1000.0)
+		self._as(DESK_USER, api.check_in, res1.name)
+		folio_mod.post_remaining_nights(frappe.get_doc("Reservation", res1.name))
+		f1 = frappe.get_doc("Folio", guest_folio(res1.name))
+		self.assertEqual([flt(c.amount) for c in f1.charges], [1000.0])
+		self.assertEqual(flt(f1.charges_total), 1000.0)
+		self.assertEqual(flt(f1.grand_total), 1000.0)
+
+		b2 = self._as(
+			DESK_USER, api.create_booking, PROP_R2, rt_frac, d(0), d(2), "Frac 2N Guest",
+			room=rooms_frac[1],
+		)
+		res2 = frappe.get_doc("Reservation", b2["reservation"])
+		self.assertEqual([flt(r.rate) for r in res2.night_rates], [1000.0, 1000.0])
+		self.assertEqual(flt(res2.amount_after_tax), 2000.0)
+		self._as(DESK_USER, api.check_in, res2.name)
+		folio_mod.post_remaining_nights(frappe.get_doc("Reservation", res2.name))
+		f2 = frappe.get_doc("Folio", guest_folio(res2.name))
+		self.assertEqual([flt(c.amount) for c in f2.charges], [1000.0, 1000.0])
+		self.assertEqual(flt(f2.charges_total), 2000.0)
+		self.assertEqual(flt(f2.grand_total), 2000.0)
+
+		# ── 2. UGX 0%-tax bridged: agreed_rate = 1,000.40 (1n & 2n via set_agreed_rate) ──
+		rt_int = make_room_type(PROP_R2, "INTG", base_price=2000.0, tax_percent=0)
+		frappe.db.set_value("Room Type", rt_int, {"base_price": 2000.0, "tax_percent": 0})
+		rooms_int = [make_room(PROP_R2, rt_int, f"I10{i}") for i in range(1, 3)]
+
+		ba = self._as(
+			RM_USER, api.create_booking, PROP_R2, rt_int, d(0), d(2), "Agreed Frac Guest",
+			room=rooms_int[0],
+		)
+		self._as(
+			RM_USER, api.set_agreed_rate, ba["reservation"], 1000.40, "RATE-PROMO", confirm_price=1,
+		)
+		resa = frappe.get_doc("Reservation", ba["reservation"])
+		self.assertEqual([flt(r.rate) for r in resa.night_rates], [1000.0, 1000.0])
+		self.assertEqual(flt(resa.amount_after_tax), 2000.0)
+		self._as(DESK_USER, api.check_in, resa.name)
+		folio_mod.post_remaining_nights(frappe.get_doc("Reservation", resa.name))
+		fa = frappe.get_doc("Folio", guest_folio(resa.name))
+		self.assertEqual([flt(c.amount) for c in fa.charges], [1000.0, 1000.0])
+		self.assertEqual(flt(fa.charges_total), 2000.0)
+		self.assertEqual(flt(fa.grand_total), 2000.0)
+
+		# ── 3. Derived Rate Plan (-15% on base_price=1,001.0, rounding_step=0) -> 851 ──
+		rt_1001 = make_room_type(PROP_R2, "R1001", base_price=1001.0, tax_percent=0)
+		frappe.db.set_value("Room Type", rt_1001, {"base_price": 1001.0, "tax_percent": 0})
+		room_1001 = make_room(PROP_R2, rt_1001, "D101")
+		base_plan = self._make_plan(
+			PROP_R2, "BAR0", currency="UGX", modifier_type="Percent", modifier_value=0, rounding_step=0,
+		)
+		drv_plan = self._make_plan(
+			PROP_R2, "DRV15", currency="UGX", base_rate_plan=base_plan,
+			modifier_type="Percent", modifier_value=-15, rounding_step=0,
+		)
+		plus_plan = self._make_plan(
+			PROP_R2, "PLS150", currency="UGX",
+			modifier_type="Percent", modifier_value=150, rounding_step=0,
+		)
+
+		qd = self._as(DESK_USER, api.get_quote, PROP_R2, rt_1001, d(0), d(2), rate_plan=drv_plan)
+		self.assertEqual(qd["room_total"], 1702.0)
+		self.assertEqual(qd["amount_after_tax"], 1702.0)
+		bd = self._as(
+			DESK_USER, api.create_booking, PROP_R2, rt_1001, d(0), d(2), "Derived 15 Guest",
+			room=room_1001, rate_plan=drv_plan,
+		)
+		resd = frappe.get_doc("Reservation", bd["reservation"])
+		self.assertEqual([flt(r.rate) for r in resd.night_rates], [851.0, 851.0])
+		self.assertEqual(flt(resd.amount_after_tax), 1702.0)
+		self._as(DESK_USER, api.check_in, resd.name)
+		folio_mod.post_remaining_nights(frappe.get_doc("Reservation", resd.name))
+		fd = frappe.get_doc("Folio", guest_folio(resd.name))
+		self.assertEqual([flt(c.amount) for c in fd.charges], [851.0, 851.0])
+		self.assertEqual(flt(fd.charges_total), 1702.0)
+		self.assertEqual(flt(fd.grand_total), 1702.0)
+
+		# +150% on 1,000.40 = 2,501.00 exact integer -> must not be clobbered to 1,000
+		qp = self._as(DESK_USER, api.get_quote, PROP_R2, rt_frac, d(5), d(6), rate_plan=plus_plan)
+		self.assertEqual(qp["room_total"], 2501.0)
+		self.assertEqual(qp["amount_after_tax"], 2501.0)
+
+		# ── 4. Direct 0%-tax folio charge, correction & allowance round to whole UGX ──
+		set_setting(PROP_R2, "use_cashier_tills", 0)
+		self._as(GM_USER, api.add_folio_charge, f1.name, "Laundry", "Pressing", 1000.40, gst_rate=0)
+		f1.reload()
+		laundry_row = next(c for c in f1.charges if c.charge_type == "Laundry")
+		self.assertEqual(flt(laundry_row.amount), 1000.0)
+		self.assertEqual(flt(f1.charges_total), 2000.0)
+		self.assertEqual(flt(f1.grand_total), 2000.0)
+
+		self._as(
+			GM_USER, api.correct_folio_charge, f1.name, laundry_row.name,
+			reason="Fix amount", amount=1001.60, gst_rate=0, pin=GM_PIN, reason_code="VOID-ERR",
+		)
+		f1.reload()
+		reposted = next(c for c in f1.charges if c.charge_type == "Laundry" and flt(c.amount) > 0 and c.corrects_row)
+		self.assertEqual(flt(reposted.amount), 1002.0)
+		self.assertEqual(flt(f1.charges_total), 2002.0)
+		self.assertEqual(flt(f1.grand_total), 2002.0)
+
+		self._as(
+			GM_USER, api.post_allowance, f1.name, 100.40, reason="Goodwill",
+			gst_rate=0, pin=GM_PIN, reason_code="ADJ-RATE",
+		)
+		f1.reload()
+		alw_row = next(c for c in f1.charges if c.charge_type == "Allowance")
+		self.assertEqual(flt(alw_row.amount), -100.0)
+		self.assertEqual(flt(f1.charges_total), 1902.0)
+		self.assertEqual(flt(f1.grand_total), 1902.0)
+		self.assertEqual(flt(f1.grand_total), sum(flt(c.amount) for c in f1.charges))
+
+		# ── 5. Folio DocType currency options + USD (2dp) & KWD (3dp) stays ──
+		folio_meta = frappe.get_meta("Folio")
+		for fieldname in ("charges_total", "tax_total", "grand_total",
+		                  "payments_total", "balance", "payment_link_amount"):
+			self.assertEqual(folio_meta.get_field(fieldname).options, "Property:property:currency")
+
+		make_property(
+			PROP_R2_USD, business_date=TODAY, country="United States", currency="USD",
+			gst_mode="Fixed", gst_rate_low=0, gst_rate_high=0, rates_include_tax=0,
+		)
+		make_property(
+			PROP_R2_KWD, business_date=TODAY, country="Kuwait", currency="KWD",
+			gst_mode="Fixed", gst_rate_low=0, gst_rate_high=0, rates_include_tax=0,
+		)
+		make_property(
+			PROP_R2_VAT_INC, business_date=TODAY, country="Uganda", currency="UGX",
+			gst_mode="Fixed", gst_rate_low=18, gst_rate_high=18, rates_include_tax=1,
+		)
+
+		# ── 6. USD (2dp: 100.45) & KWD (3dp: 10.125) keep exact ISO 4217 minor units ──
+		rt_usd = make_room_type(PROP_R2_USD, "USDSTD", base_price=100.45, tax_percent=0)
+		frappe.db.set_value("Room Type", rt_usd, {"base_price": 100.45, "tax_percent": 0})
+		room_usd = make_room(PROP_R2_USD, rt_usd, "U101")
+		b_usd = self._as(
+			DESK_USER, api.create_booking, PROP_R2_USD, rt_usd, d(0), d(2), "USD Guest", room=room_usd,
+		)
+		res_usd = frappe.get_doc("Reservation", b_usd["reservation"])
+		self.assertEqual([flt(r.rate) for r in res_usd.night_rates], [100.45, 100.45])
+		self.assertEqual(flt(res_usd.amount_after_tax), 200.9)
+		self._as(DESK_USER, api.check_in, res_usd.name)
+		folio_mod.post_remaining_nights(frappe.get_doc("Reservation", res_usd.name))
+		f_usd = guest_folio(res_usd.name)
+		self._as(GM_USER, api.add_folio_charge, f_usd, "Laundry", "Pressing USD", 10.45, gst_rate=0)
+		fdoc_usd = frappe.get_doc("Folio", f_usd)
+		self.assertEqual([flt(c.amount) for c in fdoc_usd.charges], [100.45, 100.45, 10.45])
+		self.assertEqual(flt(fdoc_usd.grand_total), 211.35)
+
+		rt_kwd = make_room_type(PROP_R2_KWD, "KWDSTD", base_price=10.125, tax_percent=0)
+		frappe.db.set_value("Room Type", rt_kwd, {"base_price": 10.125, "tax_percent": 0})
+		room_kwd = make_room(PROP_R2_KWD, rt_kwd, "K101")
+		b_kwd = self._as(
+			DESK_USER, api.create_booking, PROP_R2_KWD, rt_kwd, d(0), d(2), "KWD Guest", room=room_kwd,
+		)
+		res_kwd = frappe.get_doc("Reservation", b_kwd["reservation"])
+		self.assertEqual([flt(r.rate) for r in res_kwd.night_rates], [10.125, 10.125])
+		self.assertEqual(flt(res_kwd.amount_after_tax), 20.25)
+		self._as(DESK_USER, api.check_in, res_kwd.name)
+		folio_mod.post_remaining_nights(frappe.get_doc("Reservation", res_kwd.name))
+		f_kwd = guest_folio(res_kwd.name)
+		self._as(GM_USER, api.add_folio_charge, f_kwd, "Laundry", "Pressing KWD", 1.125, gst_rate=0)
+		fdoc_kwd = frappe.get_doc("Folio", f_kwd)
+		self.assertEqual([flt(c.amount) for c in fdoc_kwd.charges], [10.125, 10.125, 1.125])
+		self.assertEqual(flt(fdoc_kwd.grand_total), 21.375)
+
+		# Verify Folio.precision('grand_total') matches Sales Invoice under currency-minor-units@1
+		prev_use_fmt = frappe.db.get_single_value("System Settings", "use_number_format_from_currency")
+		prev_cur_prec = frappe.db.get_single_value("System Settings", "currency_precision")
+		try:
+			frappe.db.set_single_value("System Settings", "use_number_format_from_currency", 1)
+			frappe.db.set_single_value("System Settings", "currency_precision", "")
+			frappe.db.set_value("Currency", "UGX", "number_format", "#,###", update_modified=False)
+			frappe.db.set_value("Currency", "USD", "number_format", "#,###.##", update_modified=False)
+			frappe.db.set_value("Currency", "KWD", "number_format", "#,###.###", update_modified=False)
+			frappe.clear_cache()
+
+			self.assertEqual(frappe.get_doc("Folio", f1.name).precision("grand_total"), 0)
+			self.assertEqual(frappe.get_doc("Folio", f_usd).precision("grand_total"), 2)
+			self.assertEqual(frappe.get_doc("Folio", f_kwd).precision("grand_total"), 3)
+		finally:
+			frappe.db.set_single_value("System Settings", "use_number_format_from_currency", prev_use_fmt or 0)
+			frappe.db.set_single_value("System Settings", "currency_precision", prev_cur_prec or "")
+			frappe.clear_cache()
+
+		# ── 7. Non-bridged VAT-inclusive 18% UGX (150,000 gross -> 127,118.64 net) stays exact ──
+		rt_vinc = make_room_type(PROP_R2_VAT_INC, "VINC", base_price=150000.0, tax_percent=18)
+		frappe.db.set_value("Room Type", rt_vinc, {"base_price": 150000.0, "tax_percent": 18})
+		room_vinc = make_room(PROP_R2_VAT_INC, rt_vinc, "VI101")
+		b_vinc = self._as(
+			DESK_USER, api.create_booking, PROP_R2_VAT_INC, rt_vinc, d(0), d(1), "VAT Inc Guest",
+			room=room_vinc,
+		)
+		res_vinc = frappe.get_doc("Reservation", b_vinc["reservation"])
+		self.assertEqual([flt(r.rate) for r in res_vinc.night_rates], [127118.64])
+		self.assertEqual(flt(res_vinc.amount_after_tax), 150000.0)
+		self._as(DESK_USER, api.check_in, res_vinc.name)
+		folio_mod.post_remaining_nights(frappe.get_doc("Reservation", res_vinc.name))
+		f_vinc = frappe.get_doc("Folio", guest_folio(res_vinc.name))
+		self.assertEqual([flt(c.amount) for c in f_vinc.charges], [127118.64])
+		self.assertEqual(flt(f_vinc.tax_total), 22881.36)
+		self.assertEqual(flt(f_vinc.grand_total), 150000.0)
+
+		# ── 8. Legacy closed fractional folio reopened via cancel_invoice & paid keeps stored totals ──
+		set_setting(PROP_R2_VAT, "use_cashier_tills", 0)
+		legacy = frappe.get_doc({
+			"doctype": "Folio",
+			"property": PROP_R2_VAT,
+			"folio_type": "Guest",
+			"status": "Closed",
+			"invoice_number": "INV-LEG-26-00001",
+			"charges": [{
+				"posting_date": TODAY, "charge_type": "Room", "description": "Legacy night 1",
+				"qty": 1, "rate": 246713.0, "amount": 246713.0, "gst_rate": 18.0,
+				"gst_amount": 44408.34, "total": 291121.34,
+			}, {
+				"posting_date": TODAY, "charge_type": "Room", "description": "Legacy night 2",
+				"qty": 1, "rate": 246713.0, "amount": 246713.0, "gst_rate": 18.0,
+				"gst_amount": 44408.34, "total": 291121.34,
+			}],
+			"payments": [{
+				"posting_date": TODAY, "payment_kind": "Payment", "mode": "Cash",
+				"amount": 500000.0, "currency": "UGX",
+			}],
+			"charges_total": 493426.0,
+			"tax_total": 88816.68,
+			"grand_total": 582242.68,
+			"payments_total": 500000.0,
+			"balance": 82242.68,
+		}).insert(ignore_permissions=True)
+		self._as(GM_USER, api.cancel_invoice, legacy.name, "Legacy reissue test", pin=GM_PIN)
+		self._as(GM_USER, api.add_folio_payment, legacy.name, "Cash", 82242.68, pin=GM_PIN)
+		folio_mod.close_folio(legacy.name)
+		legacy.reload()
+		self.assertEqual(legacy.status, "Closed")
+		self.assertEqual(flt(legacy.grand_total), 582242.68)
+		self.assertEqual(flt(legacy.balance), 0.0)

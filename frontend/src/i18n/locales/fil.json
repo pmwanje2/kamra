@@ -1473,9 +1473,16 @@
   "{n} room": "{n} kuwarto",
   "{n} rooms": "{n} na kuwarto",
   "Open room type": "Buksan ang uri ng kuwarto",
-  "Tax as per the accounting invoice": "Buwis ayon sa accounting invoice",
   "Channel update applied — desk discount removed": "Nailapat ang update ng channel — inalis ang diskwento sa desk",
   "The channel update was applied and removed the desk discount (new total: {total}). Review what was removed below and re-apply a discount if needed.": "Nailapat ang update ng channel at inalis ang diskwento sa desk (bagong kabuuan: {total}). Suriin sa ibaba ang inalis at ilapat muli ang diskwento kung kinakailangan.",
   "Channel update applied — discount review required": "Nailapat ang update ng channel — kailangan ng pagsusuri ng diskwento",
-  "The channel update was applied (new total: {total}). Approved discounted nights were kept; added nights were priced without the unapproved discount. Review below and adjust if needed.": "Nailapat ang update ng channel (bagong kabuuan: {total}). Pinanatili ang mga inaprubahang gabing may diskwento; ang mga idinagdag na gabi ay pinresyuhan nang walang hindi inaprubahang diskwento. Suriin sa ibaba at ayusin kung kinakailangan."
+  "The channel update was applied (new total: {total}). Approved discounted nights were kept; added nights were priced without the unapproved discount. Review below and adjust if needed.": "Nailapat ang update ng channel (bagong kabuuan: {total}). Pinanatili ang mga inaprubahang gabing may diskwento; ang mga idinagdag na gabi ay pinresyuhan nang walang hindi inaprubahang diskwento. Suriin sa ibaba at ayusin kung kinakailangan.",
+  "Tax as per the accounting invoice": "Buwis ayon sa accounting invoice",
+  "Tax Invoice": "Resibo ng Buwis",
+  "Invoice": "Faktura",
+  "Stay": "Pananatili",
+  "Tax summary": "Buod ng buwis",
+  "Total Tax": "Kabuuang Buwis",
+  "Credited": "Na-credit",
+  "taxable {cur}{amount}": "may buwis {cur}{amount}"
 }

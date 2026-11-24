@@ -7068,9 +7068,12 @@
   "These room types have no contract tariff on this price list yet.": "这些房型在此价目表中尚未设置合同价。",
   "{n} room": "{n} 间房",
   "Open room type": "打开房型",
-  "Tax as per the accounting invoice": "税额以财务发票为准",
   "Channel update applied — desk discount removed": "渠道更新已应用 — 已移除前台折扣",
   "The channel update was applied and removed the desk discount (new total: {total}). Review what was removed below and re-apply a discount if needed.": "已应用渠道更新并移除了前台折扣（新总额：{total}）。请在下方查看已移除的内容，并在需要时重新应用折扣。",
   "Channel update applied — discount review required": "渠道更新已应用 — 需要复核折扣",
-  "The channel update was applied (new total: {total}). Approved discounted nights were kept; added nights were priced without the unapproved discount. Review below and adjust if needed.": "已应用渠道更新（新总额：{total}）。已保留经批准的折扣晚数；新增晚数按不含未批准折扣的价格计费。请在下方复核并在需要时调整。"
+  "The channel update was applied (new total: {total}). Approved discounted nights were kept; added nights were priced without the unapproved discount. Review below and adjust if needed.": "已应用渠道更新（新总额：{total}）。已保留经批准的折扣晚数；新增晚数按不含未批准折扣的价格计费。请在下方复核并在需要时调整。",
+  "Tax as per the accounting invoice": "税额以财务发票为准",
+  "Tax summary": "税费汇总",
+  "Total Tax": "税费合计",
+  "Credited": "已冲减"
 }

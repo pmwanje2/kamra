@@ -126,6 +126,12 @@ def open_folio(reservation) -> str:
 	})
 	voucher = voucher_discount(reservation)
 	if voucher:
+		voucher_gst = _room_gst(reservation)
+		if not float(voucher_gst or 0):
+			from kamra.pricing import property_currency, round_rate_amount
+			voucher = float(round_rate_amount(
+				voucher, 0, "Nearest", property_currency(reservation.property)))
+	if voucher:
 		folio.append("charges", {
 			"posting_date": nowdate(),
 			"charge_type": "Discount",
@@ -133,7 +139,7 @@ def open_folio(reservation) -> str:
 			"qty": 1,
 			"rate": -voucher,
 			"amount": -voucher,
-			"gst_rate": _room_gst(reservation),
+			"gst_rate": voucher_gst,
 			"auto_posted": 1,
 		})
 	_recalculate(folio)
@@ -223,6 +229,9 @@ def _post_stay_fee(reservation, folio_name: str, component: str,
 			pass  # snapshot unreadable; fall back to the property's current fee
 	if amount <= 0:
 		amount = fallback
+	if amount > 0 and not float(tax_rate or 0):
+		from kamra.pricing import property_currency, round_rate_amount
+		amount = float(round_rate_amount(amount, 0, "Nearest", property_currency(reservation.property)))
 	if amount <= 0:
 		return
 	if frappe.db.exists(
@@ -807,11 +816,20 @@ def current_date_contract_night(reservation, date) -> dict | None:
 	discount_off = Decimal(0)
 	if disc_kind and disc_val > 0:
 		if disc_kind == "Percent":
-			net_foreign = round_rate_amount(
-				nightly * (Decimal(1) - disc_val / Decimal(100)),
-				0, currency=currency,
-			)
-			gross = max(round_rate_amount(net_foreign * fx, 0, currency=home), Decimal(0))
+			if Decimal(str(rp.get("rounding_step") or 0)) > 0:
+				gross = max(
+					round_rate_amount(
+						base_gross - base_gross * disc_val / Decimal(100),
+						0, currency=home,
+					),
+					Decimal(0),
+				)
+			else:
+				net_foreign = round_rate_amount(
+					nightly * (Decimal(1) - disc_val / Decimal(100)),
+					0, currency=currency,
+				)
+				gross = max(round_rate_amount(net_foreign * fx, 0, currency=home), Decimal(0))
 		else:
 			gross = max(round_rate_amount(base_gross - disc_val, 0, currency=home), Decimal(0))
 		discount_off = max(base_gross - gross, Decimal(0))
@@ -1062,6 +1080,11 @@ def post_room_night(reservation, date, folios=None, *, room_posted: list | None 
 				(reservation.adults or 1) * float(mp.price_per_adult or 0)
 				+ (reservation.children or 0) * float(mp.price_per_child or 0)
 			)
+		meal_gst = _fnb_gst(reservation.property)
+		if meal_amount and not float(meal_gst or 0):
+			from kamra.pricing import property_currency, round_rate_amount
+			meal_amount = float(round_rate_amount(
+				meal_amount, 0, "Nearest", property_currency(reservation.property)))
 		if meal_amount:
 			_append_charge(folios, reservation, "Meal Plan", {
 				"posting_date": date,
@@ -1071,7 +1094,7 @@ def post_room_night(reservation, date, folios=None, *, room_posted: list | None 
 				"qty": 1,
 				"rate": meal_amount,
 				"amount": meal_amount,
-				"gst_rate": _fnb_gst(reservation.property),
+				"gst_rate": meal_gst,
 				"auto_posted": 1,
 			})
 
@@ -1090,7 +1113,15 @@ def _post_room_levy(folios, reservation, date, night_rate, gst_rate=None):
 	prop = frappe.get_cached_doc("Property", reservation.property)
 	pct = float(prop.get("room_levy_percent") or 0)
 	fixed = float(prop.get("room_levy_per_night") or 0)
+	levy_gst = (
+		(_nightly_gst(reservation, date) if gst_rate is None else gst_rate)
+		if int(prop.get("room_levy_taxable") if prop.get("room_levy_taxable") is not None else 1)
+		else 0
+	)
 	levy = round(float(night_rate or 0) * pct / 100, 2) + round(fixed, 2)
+	if levy > 0 and not float(levy_gst or 0):
+		from kamra.pricing import property_currency, round_rate_amount
+		levy = float(round_rate_amount(levy, 0, "Nearest", property_currency(reservation.property)))
 	if levy <= 0 or _charge_posted(
 			reservation.name, "Room Levy", date):
 		return
@@ -1106,9 +1137,7 @@ def _post_room_levy(folios, reservation, date, night_rate, gst_rate=None):
 		"qty": 1,
 		"rate": levy,
 		"amount": levy,
-		"gst_rate": (_nightly_gst(reservation, date) if gst_rate is None else gst_rate)
-		            if int(prop.get("room_levy_taxable") if prop.get("room_levy_taxable") is not None else 1)
-		            else 0,
+		"gst_rate": levy_gst,
 		"auto_posted": 1,
 	})
 
@@ -1690,6 +1719,10 @@ def post_policy_fee(reservation, basis: str, label: str,
 	is the property's current business date - never the calendar, which
 	runs a day ahead between midnight and the audit."""
 	amount = policy_fee(reservation, basis, pct=pct)
+	gst = _room_gst(reservation)
+	if amount > 0 and not float(gst or 0):
+		from kamra.pricing import property_currency, round_rate_amount
+		amount = float(round_rate_amount(amount, 0, "Nearest", property_currency(reservation.property)))
 	if amount <= 0:
 		return 0.0
 	folio = frappe.get_doc("Folio", open_folio(reservation))
@@ -1709,7 +1742,7 @@ def post_policy_fee(reservation, basis: str, label: str,
 		"qty": 1,
 		"rate": amount,
 		"amount": amount,
-		"gst_rate": _room_gst(reservation),
+		"gst_rate": gst,
 		"auto_posted": 1,
 	})
 	_recalculate(folio)
@@ -1792,6 +1825,9 @@ def post_allowance(folio_name: str, amount: float, reason: str,
 		frappe.throw("This folio is settled - pass the allowance on the "
 		             "guest's open folio, or cancel the invoice first.")
 	amount = abs(float(amount))
+	if amount and not float(gst_rate or 0):
+		from kamra.pricing import property_currency, round_rate_amount
+		amount = float(round_rate_amount(amount, 0, "Nearest", property_currency(folio.property)))
 	if not amount:
 		frappe.throw("Allowance amount is required.")
 	if not (reason or "").strip():
@@ -1917,7 +1953,7 @@ def part_settle(folio_name: str) -> dict:
 	folio = frappe.get_doc("Folio", folio_name)
 	if folio.status == "Closed":
 		frappe.throw("This folio is already settled.")
-	_recalculate(folio)
+	_recalculate(folio, payments_only=True)
 	if round(folio.balance or 0, 2) != 0:
 		frappe.throw("Settle the balance first - an interim invoice needs "
 		             "the folio fully paid.")

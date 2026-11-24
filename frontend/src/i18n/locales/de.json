@@ -756,9 +756,18 @@
   "{n} room": "{n} Zimmer",
   "{n} rooms": "{n} Zimmer",
   "Open room type": "Zimmerkategorie öffnen",
-  "Tax as per the accounting invoice": "Steuer gemäß Buchhaltungsrechnung",
   "Channel update applied — desk discount removed": "Kanalaktualisierung angewendet — Rezeptionsrabatt entfernt",
   "The channel update was applied and removed the desk discount (new total: {total}). Review what was removed below and re-apply a discount if needed.": "Die Kanalaktualisierung wurde angewendet und hat den Rezeptionsrabatt entfernt (neuer Gesamtbetrag: {total}). Prüfen Sie unten, was entfernt wurde, und wenden Sie bei Bedarf erneut einen Rabatt an.",
   "Channel update applied — discount review required": "Kanalaktualisierung angewendet — Rabattprüfung erforderlich",
-  "The channel update was applied (new total: {total}). Approved discounted nights were kept; added nights were priced without the unapproved discount. Review below and adjust if needed.": "Die Kanalaktualisierung wurde angewendet (neuer Gesamtbetrag: {total}). Genehmigte rabattierte Nächte wurden beibehalten; hinzugefügte Nächte wurden ohne den nicht genehmigten Rabatt berechnet. Prüfen Sie die Angaben unten und passen Sie sie bei Bedarf an."
+  "The channel update was applied (new total: {total}). Approved discounted nights were kept; added nights were priced without the unapproved discount. Review below and adjust if needed.": "Die Kanalaktualisierung wurde angewendet (neuer Gesamtbetrag: {total}). Genehmigte rabattierte Nächte wurden beibehalten; hinzugefügte Nächte wurden ohne den nicht genehmigten Rabatt berechnet. Prüfen Sie die Angaben unten und passen Sie sie bei Bedarf an.",
+  "Tax as per the accounting invoice": "Steuer gemäß Buchhaltungsrechnung",
+  "Tax Invoice": "Steuerrechnung",
+  "Invoice": "Rechnung",
+  "Provisional Bill": "Vorläufige Rechnung",
+  "Closed": "Abgeschlossen",
+  "Stay": "Aufenthalt",
+  "Tax summary": "Steuerübersicht",
+  "Total Tax": "Gesamtsteuer",
+  "Credited": "Gutgeschrieben",
+  "Total {cur}": "Gesamt {cur}"
 }

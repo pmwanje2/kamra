@@ -91,7 +91,7 @@ def settle_payment_link(folio_name: str, link_id: str, amount: float) -> bool:
 		"reference": link_id,
 	})
 	from kamra.folio import _recalculate
-	_recalculate(folio)
+	_recalculate(folio, payments_only=True)
 	folio.save(ignore_permissions=True)
 	try:
 		from kamra.ledger import record_payment_ledger

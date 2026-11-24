@@ -795,10 +795,11 @@ class Reservation(Document):
 		if cint(self.get("is_day_use")) or (
 				self.check_in_date and self.check_out_date
 				and getdate(self.check_in_date) == getdate(self.check_out_date)):
+			from kamra.day_use import format_hhmm
 			if self.get("planned_check_in_time"):
-				inputs["check_in_time"] = str(self.planned_check_in_time)[:5]
+				inputs["check_in_time"] = format_hhmm(self.planned_check_in_time)
 			if self.get("planned_check_out_time"):
-				inputs["check_out_time"] = str(self.planned_check_out_time)[:5]
+				inputs["check_out_time"] = format_hhmm(self.planned_check_out_time)
 		return inputs
 
 	def hand_set_prices(self) -> list[dict]:
@@ -1067,8 +1068,9 @@ class Reservation(Document):
 		factor = float(q.get("room_total") or 0) / plan_free if plan_free else 1.0
 		inclusive = rates_include_tax(self.property)
 		places = night_rate_places(self.property)
-		return {str(n["date"]): round(float(entry_rate(float(n["rate"]) * factor, n.get("gst_rate"),
-		                                               inclusive, places)), places)
+		return {str(n["date"]): round(float(entry_rate(
+			float(n["planned_rate"]) if "planned_rate" in n else float(n["rate"]) * factor,
+			n.get("gst_rate"), inclusive, places)), places)
 		        for n in nightly}
 
 	def pinned_room_nights(self, inputs: dict) -> dict | None:
@@ -1359,7 +1361,7 @@ class Reservation(Document):
 			net, new_gst, new_off = discount_night(
 				self.property, rt, base, base_gst, entry,
 				kind, value, inclusive, over_cap, day,
-				tariff_night=contract_night_tariff(tariff, day),
+				tariff_night=contract_night_tariff(tariff, day, rate_plan=self.rate_plan),
 			)
 			row.update(rate=float(net), gst_rate=float(new_gst), base_rate=float(base),
 			           discount_amount=float(new_off))
