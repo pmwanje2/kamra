@@ -330,6 +330,7 @@ def check_arrivals_pending(property: str, bd: str, run_at=None) -> dict:
 		         "check_in_date": ("<=", bd)},
 		order_by="check_in_date asc, name asc", pluck="name",
 		limit_page_length=0)
+	places = _places(property)
 	items = []
 	counts = {"no_show": 0, "hold": 0, "defer": 0}
 	for name in names:
@@ -339,7 +340,7 @@ def check_arrivals_pending(property: str, bd: str, run_at=None) -> dict:
 		fee = 0.0
 		if o.outcome == "no_show":
 			if o.fee == "charge":
-				fee = flt(policy_fee(res, pol.charge), 2)
+				fee = _r(policy_fee(res, pol.charge), places)
 				label = f"No show - {pol.charge.lower()} fee"
 			elif o.fee == "waived":
 				label = f"No show - fee waived ({o.reason})"
@@ -653,11 +654,13 @@ def _in_house_names(property: str, bd: str) -> list[str]:
 
 
 def check_zero_rate(property: str, bd: str) -> dict:
+	places = _places(property)
+	min_rate = 0.5 * (10 ** -places)
 	items = []
 	for name in _in_house_names(property, bd):
 		res = frappe.get_doc("Reservation", name)
 		expected, basis = _expected_night(res, bd)
-		if expected is None or expected > 0.009:
+		if expected is None or expected > min_rate:
 			continue
 		items.append({**_stay_cols(res, bd), "rate": 0.0, "basis": basis})
 	return _check(
@@ -1740,28 +1743,35 @@ def no_show_preview(reservation: str):
 	and with tax, the same numbers apply_no_show posts) or why there is none,
 	what is already paid, and the credit left for the guest afterwards with
 	the property's default for it (refund or keep)."""
+	from decimal import Decimal
+
 	from kamra import no_show
 	from kamra.folio import _room_gst, policy_fee
 	res, _bd = _no_show_target(reservation)
+	places = _places(res.property)
 	pol = no_show.policy(res.property)
 	d = no_show.fee_decision(res, pol)
-	fee = flt(policy_fee(res, pol.charge), 2) if d.fee == "charge" else 0.0
-	fee_total = flt(fee * (1 + flt(_room_gst(res)) / 100), 2) if fee else 0.0
+	fee = _r(policy_fee(res, pol.charge), places) if d.fee == "charge" else 0.0
+	fee_total = (
+		_r(Decimal(str(fee)) * (Decimal(1) + Decimal(str(_room_gst(res) or 0)) / Decimal(100)), places)
+		if fee else 0.0
+	)
 	balance = flt(frappe.db.get_value(
 		"Folio", {"reservation": res.name, "folio_type": "Guest",
 		          "status": ("!=", "Closed")}, "balance") or 0)
-	paid = flt(frappe.db.sql(
+	paid = _r(frappe.db.sql(
 		"""SELECT COALESCE(SUM(fp.amount), 0) FROM `tabFolio Payment` fp
 		   JOIN `tabFolio` f ON fp.parent = f.name
 		   WHERE f.reservation = %s AND f.folio_type = 'Guest'""",
-		res.name)[0][0] or 0, 2)
+		res.name)[0][0] or 0, places)
+	credit_after = _r(max(Decimal(0), -(Decimal(str(balance)) + Decimal(str(fee_total)))), places)
 	return {
 		"reservation": res.name, "guest_name": res.guest_name,
 		"check_in_date": str(res.check_in_date),
 		"fee": d.fee, "fee_reason": d.reason, "fee_basis": pol.charge,
 		"fee_amount": fee, "fee_total": fee_total,
 		"paid": paid,
-		"credit_after": flt(max(0.0, -(balance + fee_total)), 2),
+		"credit_after": credit_after,
 		"credit_default": _credit_default(res.property),
 	}
 
@@ -1806,17 +1816,19 @@ def settle_no_show_credit(reservation: str, action: str, reason: str,
 def no_show_credits(property: str) -> list[dict]:
 	"""No Shows whose guest folio still holds money for the guest - a refund
 	or a forfeit decision for the morning (audit pack)."""
+	places = _places(property)
+	min_credit = 0.5 * (10 ** -places)
 	rows = frappe.db.sql(
 		"""SELECT r.name, r.guest_name, r.check_in_date, -f.balance AS credit
 		   FROM `tabReservation` r
 		   JOIN `tabFolio` f ON f.reservation = r.name AND f.folio_type = 'Guest'
 		   WHERE r.property = %s AND r.status = 'No Show'
-		     AND f.status != 'Closed' AND f.balance < -0.01
+		     AND f.status != 'Closed' AND f.balance < %s
 		   ORDER BY r.check_in_date, r.name LIMIT %s""",
-		(property, MAX_ITEMS), as_dict=True)
+		(property, -min_credit, MAX_ITEMS), as_dict=True)
 	default = _credit_default(property)
 	return [{"reservation": r.name, "guest_name": r.guest_name,
-	         "check_in_date": str(r.check_in_date), "credit": flt(r.credit, 2),
+	         "check_in_date": str(r.check_in_date), "credit": _r(r.credit, places),
 	         "default": default} for r in rows]
 
 

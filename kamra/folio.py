@@ -1688,8 +1688,12 @@ def percent_fee(reservation, pct: float) -> float:
 	neither one night nor the whole stay, so it cannot be said with a fee
 	basis. Pre-tax; GST rides on the folio line.
 	"""
-	return round(float(reservation.amount_before_tax or 0)
-	             * float(pct) / 100.0, 2)
+	from kamra.ledger import _currency_places, _round_currency
+	places = max(_currency_places(reservation.property), 2)
+	return _round_currency(
+		Decimal(str(reservation.amount_before_tax or 0)) * Decimal(str(pct)) / Decimal(100),
+		places,
+	)
 
 
 def policy_fee(reservation, basis: str, pct: float | None = None) -> float:
@@ -2115,8 +2119,12 @@ def no_show_credit(reservation: str) -> float:
 	not exist."""
 	row = frappe.db.get_value(
 		"Folio", {"reservation": reservation, "folio_type": "Guest",
-		          "status": ("!=", "Closed")}, "balance")
-	return round(max(0.0, -float(row or 0)), 2)
+		          "status": ("!=", "Closed")}, ["balance", "property"], as_dict=True)
+	if not row:
+		return 0.0
+	from kamra.ledger import _currency_places, _round_currency
+	places = max(_currency_places(row.property), 2)
+	return _round_currency(max(0.0, -float(row.balance or 0)), places)
 
 
 def settle_no_show_credit(res, action: str, reason: str, mode: str | None = None,
@@ -2151,10 +2159,12 @@ def settle_no_show_credit(res, action: str, reason: str, mode: str | None = None
 	else:
 		from kamra.api import _pin_guard, _post_folio_charge
 		_pin_guard(folio, pin)
+		from kamra.ledger import _currency_places
+		places = max(_currency_places(res.property), 2)
 		gst = Decimal(str(_room_gst(res)))
 		# pre-tax so that amount + tax is the credit; what rounding leaves
-		# (under a cent) is inside close_folio's tolerance
-		pre = (Decimal(str(credit)) * 100 / (100 + gst)).quantize(Decimal("0.01"))
+		# (under a minor unit) is inside close_folio's tolerance
+		pre = (Decimal(str(credit)) * 100 / (100 + gst)).quantize(Decimal(1).scaleb(-places))
 		# the reason stays out of the description: words in it must not
 		# re-tax the line (_resolve_charge_gst reads the description)
 		_post_folio_charge(folio, "Misc", NO_SHOW_FORFEIT, float(pre),

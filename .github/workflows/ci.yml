@@ -263,6 +263,10 @@ jobs:
             if grep -qE "^FAILED" "$m.out"; then exit 1; fi
           done
 
+      - name: Run rate matrix follow-up unit tests (no site)
+        working-directory: apps/kamra
+        run: python3 -m unittest kamra.tests.test_rate_matrix_followup
+
       - name: Run front-desk persona journey
         run: |
           cd frappe-bench

@@ -3721,9 +3721,15 @@ def _erp_credited_total(si, prop=None, prop_currency: str | None = None) -> floa
 		)
 	except Exception:
 		return 0.0
-	total = 0.0
+	from decimal import Decimal
+
+	from kamra.ledger import _round_currency
+	from kamra.pricing import _minor_unit
+
+	total = Decimal(0)
 	si_company = si.get("company")
 	si_currency = si.get("currency")
+	places = max(_minor_unit(si_currency or prop_currency), 2)
 	for ret_name in names or []:
 		try:
 			ret = frappe.get_doc("Sales Invoice", ret_name)
@@ -3739,8 +3745,8 @@ def _erp_credited_total(si, prop=None, prop_currency: str | None = None) -> floa
 			continue
 		if si_currency and ret.get("currency") != si_currency:
 			continue
-		total += abs(float(ret.get("grand_total") or 0))
-	return round(total, 2)
+		total += abs(Decimal(str(ret.get("grand_total") or 0)))
+	return _round_currency(total, places)
 
 
 def _clean_accounting_tax_label(tx, rate: float, fallback: str) -> str:
@@ -3801,6 +3807,10 @@ def _apply_accounting_invoice_taxes(doc, prop, prop_currency: str | None, folio_
 			"erp_credited": 0.0,
 		}
 
+	from kamra.ledger import _round_currency
+	from kamra.pricing import _minor_unit
+
+	places = max(_minor_unit(si.get("currency") or prop_currency), 2)
 	items = list(si.get("items") or [])
 	taxes = list(si.get("taxes") or [])
 	si_net_total = float(si.get("net_total") or 0)
@@ -3855,7 +3865,7 @@ def _apply_accounting_invoice_taxes(doc, prop, prop_currency: str | None, folio_
 				if idx is not None:
 					if e_rate:
 						item_rates[idx] += e_rate
-					item_taxes[idx] = round(item_taxes[idx] + e_tax, 2)
+					item_taxes[idx] = _round_currency(item_taxes[idx] + e_tax, places)
 		elif detail:
 			# Match items referenced by v15 item_wise_tax_detail JSON
 			by_key: dict[str, list[int]] = {}
@@ -3886,13 +3896,13 @@ def _apply_accounting_invoice_taxes(doc, prop, prop_currency: str | None, folio_
 					if e_rate:
 						item_rates[idx] += e_rate
 					if pos == len(idxs) - 1:
-						share = round(e_tax - allocated, 2)
+						share = _round_currency(e_tax - allocated, places)
 					elif abs(net_sum) > 1e-9:
-						share = round(e_tax * float(items[idx].get("net_amount") or 0) / net_sum, 2)
+						share = _round_currency(e_tax * float(items[idx].get("net_amount") or 0) / net_sum, places)
 					else:
-						share = round(e_tax / len(idxs), 2)
+						share = _round_currency(e_tax / len(idxs), places)
 					allocated += share
-					item_taxes[idx] = round(item_taxes[idx] + share, 2)
+					item_taxes[idx] = _round_currency(item_taxes[idx] + share, places)
 		elif items and abs(tax_amt) > 1e-6:
 			net_sum = sum(float(it.get("net_amount") or 0) for it in items)
 			allocated = 0.0
@@ -3904,13 +3914,13 @@ def _apply_accounting_invoice_taxes(doc, prop, prop_currency: str | None, folio_
 				if tx_rate:
 					item_rates[pos] += tx_rate
 				if pos == len(items) - 1:
-					share = round(tax_amt - allocated, 2)
+					share = _round_currency(tax_amt - allocated, places)
 				elif abs(net_sum) > 1e-9:
-					share = round(tax_amt * float(it.get("net_amount") or 0) / net_sum, 2)
+					share = _round_currency(tax_amt * float(it.get("net_amount") or 0) / net_sum, places)
 				else:
-					share = round(tax_amt / len(items), 2)
+					share = _round_currency(tax_amt / len(items), places)
 				allocated += share
-				item_taxes[pos] = round(item_taxes[pos] + share, 2)
+				item_taxes[pos] = _round_currency(item_taxes[pos] + share, places)
 
 		# Do not emit a phantom header-template row (e.g. 18% with 0 taxable / 0 tax
 		# when all items are 0% exempt).
@@ -3918,29 +3928,30 @@ def _apply_accounting_invoice_taxes(doc, prop, prop_currency: str | None, folio_
 			continue
 		if tx_rate == 0 and tx.get("charge_type") != "Actual" and len(detail_rates) == 1:
 			tx_rate = next(iter(detail_rates))
-		taxable = round(taxable_for_row if has_item_detail else si_net_total, 2)
+		taxable = _round_currency(taxable_for_row if has_item_detail else si_net_total, places)
+		tax_rounded = _round_currency(tax_amt, places)
 		label = _clean_accounting_tax_label(tx, tx_rate, default_tax_label)
 		tax_summary.append({
 			"rate": tx_rate,
 			"taxable": taxable,
-			"total_tax": round(tax_amt, 2),
-			"parts": [{"label": label, "rate": tx_rate, "amount": round(tax_amt, 2)}],
+			"total_tax": tax_rounded,
+			"parts": [{"label": label, "rate": tx_rate, "amount": tax_rounded}],
 		})
-		cgst_amt = round(tax_amt * float(split[0][1]), 2) if split else round(tax_amt, 2)
-		sgst_amt = round(tax_amt * float(split[-1][1]), 2) if len(split) >= 2 else 0.0
+		cgst_amt = _round_currency(tax_amt * float(split[0][1]), places) if split else tax_rounded
+		sgst_amt = _round_currency(tax_amt * float(split[-1][1]), places) if len(split) >= 2 else 0.0
 		gst_summary.append({
 			"rate": tx_rate,
 			"taxable": taxable,
 			"cgst": cgst_amt,
 			"sgst": sgst_amt,
-			"total_tax": round(tax_amt, 2),
+			"total_tax": tax_rounded,
 		})
 
 	# Include 0% / exempt taxable base so mixed (e.g. 18% + 0% exempt) and pure-exempt
 	# invoices account for the full net total without phantom taxed buckets.
-	exempt_net = round(
+	exempt_net = _round_currency(
 		sum(float(it.get("net_amount") or 0) for idx, it in enumerate(items) if not item_taxed[idx]),
-		2,
+		places,
 	)
 	if abs(exempt_net) > 1e-6:
 		tax_summary.append({
@@ -3978,10 +3989,10 @@ def _apply_accounting_invoice_taxes(doc, prop, prop_currency: str | None, folio_
 		if not ln:
 			continue
 		mapped_rows.add(ref)
-		it_net = round(float(it.get("net_amount") or 0), 2)
-		it_tax = round(item_taxes[idx], 2)
+		it_net = _round_currency(float(it.get("net_amount") or 0), places)
+		it_tax = _round_currency(item_taxes[idx], places)
 		it_rate = round(item_rates[idx], 4)
-		it_gross = round(it_net + it_tax, 2)
+		it_gross = _round_currency(it_net + it_tax, places)
 		it_amount = float(it.get("amount") or 0)
 		is_inclusive = item_inclusive[idx] if has_explicit_incl else (abs(it_gross - it_amount) < 0.05 and it_gross > 0)
 
@@ -4000,29 +4011,29 @@ def _apply_accounting_invoice_taxes(doc, prop, prop_currency: str | None, folio_
 			if take <= 0 or al_row not in line_by_row:
 				continue
 			if is_inclusive and it_gross > 0:
-				t_net = round(take * it_net / it_gross, 2)
-				t_tax = round(take - t_net, 2)
-				t_gross = round(take, 2)
+				t_net = _round_currency(take * it_net / it_gross, places)
+				t_tax = _round_currency(take - t_net, places)
+				t_gross = _round_currency(take, places)
 			else:
-				t_net = round(take, 2)
-				t_tax = round(take * it_rate / 100.0, 2)
-				t_gross = round(t_net + t_tax, 2)
-			add_net = round(add_net + t_net, 2)
-			add_tax = round(add_tax + t_tax, 2)
-			add_gross = round(add_gross + t_gross, 2)
+				t_net = _round_currency(take, places)
+				t_tax = _round_currency(take * it_rate / 100.0, places)
+				t_gross = _round_currency(t_net + t_tax, places)
+			add_net = _round_currency(add_net + t_net, places)
+			add_tax = _round_currency(add_tax + t_tax, places)
+			add_gross = _round_currency(add_gross + t_gross, places)
 			slot = allowance_deltas.setdefault(al_row, [0.0, 0.0, 0.0, it_rate])
-			slot[0] = round(slot[0] - t_net, 2)
-			slot[1] = round(slot[1] - t_tax, 2)
-			slot[2] = round(slot[2] - t_gross, 2)
+			slot[0] = _round_currency(slot[0] - t_net, places)
+			slot[1] = _round_currency(slot[1] - t_tax, places)
+			slot[2] = _round_currency(slot[2] - t_gross, places)
 			if it_rate:
 				slot[3] = it_rate
 
-		final_net = round(it_net + add_net, 2)
-		final_tax = round(it_tax + add_tax, 2)
-		final_gross = round(it_gross + add_gross, 2)
+		final_net = _round_currency(it_net + add_net, places)
+		final_tax = _round_currency(it_tax + add_tax, places)
+		final_gross = _round_currency(it_gross + add_gross, places)
 		qty = float(ln.get("qty") or 1) or 1.0
 		ln["amount"] = final_net
-		ln["rate"] = round(final_net / qty, 2)
+		ln["rate"] = _round_currency(final_net / qty, places)
 		ln["gst_rate"] = it_rate
 		ln["gst_amount"] = final_tax
 		ln["total"] = final_gross
@@ -4046,9 +4057,9 @@ def _apply_accounting_invoice_taxes(doc, prop, prop_currency: str | None, folio_
 			transfer_tax += float(c.gst_amount or 0)
 			transfer_gross += float(c.total or 0)
 
-	folio_dict["charges_total"] = round(si_net_total + transfer_net, 2)
-	folio_dict["tax_total"] = round(si_tax_total + transfer_tax, 2)
-	folio_dict["grand_total"] = round(si_grand_total + transfer_gross, 2)
+	folio_dict["charges_total"] = _round_currency(si_net_total + transfer_net, places)
+	folio_dict["tax_total"] = _round_currency(si_tax_total + transfer_tax, places)
+	folio_dict["grand_total"] = _round_currency(si_grand_total + transfer_gross, places)
 
 	by_head = {}
 	for ln in lines:
@@ -4058,9 +4069,9 @@ def _apply_accounting_invoice_taxes(doc, prop, prop_currency: str | None, folio_
 			{"head": head_name, "amount": 0.0, "tax": 0.0,
 			 "total": 0.0, "lines": 0, "service_code": ln.get("service_code")},
 		)
-		head["amount"] = round(head["amount"] + float(ln["amount"] or 0), 2)
-		head["tax"] = round(head["tax"] + float(ln["gst_amount"] or 0), 2)
-		head["total"] = round(head["total"] + float(ln["total"] or 0), 2)
+		head["amount"] = _round_currency(head["amount"] + float(ln["amount"] or 0), places)
+		head["tax"] = _round_currency(head["tax"] + float(ln["gst_amount"] or 0), places)
+		head["total"] = _round_currency(head["total"] + float(ln["total"] or 0), places)
 		head["lines"] += ln["row"] not in pairs
 
 	return {
@@ -4133,9 +4144,11 @@ def folio_invoice(folio: str):
 	- `credited`: what the issued credit notes on this invoice add up to
 	- `folio`, `bill_to`, `guest`, `stay`, `property`, `document`
 	"""
+	from decimal import ROUND_HALF_UP, Decimal
+
 	from kamra import localization as loc
 	from kamra.folio import reference_currency
-	from kamra.ledger import credited_total
+	from kamra.ledger import _currency_places, _round_currency, credited_total
 	from kamra.pricing import saved_contract_tariff
 
 	doc = frappe.get_doc("Folio", folio)
@@ -4196,50 +4209,102 @@ def folio_invoice(folio: str):
 			"reservation": c.get("reservation"),
 			"stay_date": str(c.stay_date) if c.get("stay_date") else None,
 		})
+		c_amount = Decimal(str(c.amount or 0))
+		c_tax = Decimal(str(c.gst_amount or 0))
+		c_total = Decimal(str(c.total or 0))
 		key = float(c.gst_rate or 0)
-		slot = by_rate.setdefault(key, {"taxable": 0.0, "tax": 0.0})
-		slot["taxable"] += float(c.amount or 0)
-		slot["tax"] += float(c.gst_amount or 0)
+		slot = by_rate.setdefault(key, {"taxable": Decimal(0), "tax": Decimal(0)})
+		slot["taxable"] += c_amount
+		slot["tax"] += c_tax
 		# the guest's bill calls an allowance what it is to them: a discount
 		head_name = "Discount" if c.charge_type == "Allowance" else (c.charge_type or "Other")
 		head = by_head.setdefault(
 			head_name,
-			{"head": head_name, "amount": 0.0, "tax": 0.0,
-			 "total": 0.0, "lines": 0, "service_code": (code or {}).get("value")})
-		head["amount"] += float(c.amount or 0)
-		head["tax"] += float(c.gst_amount or 0)
-		head["total"] += float(c.total or 0)
+			{"head": head_name, "amount": Decimal(0), "tax": Decimal(0),
+			 "total": Decimal(0), "lines": 0, "service_code": (code or {}).get("value")})
+		head["amount"] += c_amount
+		head["tax"] += c_tax
+		head["total"] += c_total
 		# a voided line and its reversal net to nothing: not a line bought
 		head["lines"] += c.name not in pairs
-
-	# Document-level currency rounding adjusts doc.tax_total to the currency's
-	# minor unit; fold that sub-unit delta onto the dominant taxable slab so
-	# tax_summary and gst_summary reconcile with doc.tax_total.
-	from decimal import Decimal
-	tax_delta = float(
-		Decimal(str(doc.tax_total or 0))
-		- sum((Decimal(str(v["tax"])) for v in by_rate.values()), Decimal(0))
-	)
-	if abs(tax_delta) > 1e-9:
-		taxable_rates = [(rate, v) for rate, v in by_rate.items() if rate > 0]
-		if taxable_rates:
-			_dominant_rate, dominant = max(taxable_rates, key=lambda item: (abs(item[1]["taxable"]), item[0]))
-			dominant["tax"] = float(Decimal(str(dominant["tax"])) + Decimal(str(tax_delta)))
-		taxed_heads = [h for h in by_head.values() if abs(h["tax"]) > 1e-9]
-		if taxed_heads:
-			dominant_head = max(taxed_heads, key=lambda h: (abs(h["tax"]), abs(h["amount"]), h["head"]))
-			dominant_head["tax"] = float(Decimal(str(dominant_head["tax"])) + Decimal(str(tax_delta)))
-			dominant_head["total"] = float(
-				Decimal(str(dominant_head["amount"])) + Decimal(str(dominant_head["tax"]))
-			)
 
 	prop_currency = prop.currency or loc.default_currency(pack)
 	folio_dict = doc.as_dict()
 	acct_tax = _apply_accounting_invoice_taxes(
 		doc, prop, prop_currency, folio_dict, lines, pairs, split, _loc_ctx["tax_label"],
 	)
+	raw_places = _currency_places(doc.property)
+	unit = Decimal(1).scaleb(-raw_places)
+	currency_rounded = False
 	if acct_tax["by_head"] is not None:
 		by_head = acct_tax["by_head"]
+	else:
+		doc_charges = Decimal(str(doc.charges_total or 0))
+		doc_tax = Decimal(str(doc.tax_total or 0))
+		doc_grand = Decimal(str(doc.grand_total or 0))
+		taxed_heads = [h for h in by_head.values() if abs(h["tax"]) > Decimal("1e-9")]
+		taxable_rates = [(rate, v) for rate, v in by_rate.items() if rate > 0]
+		grand_on_unit = abs(doc_grand - doc_grand.quantize(unit, rounding=ROUND_HALF_UP)) < Decimal("1e-9")
+		if taxed_heads and grand_on_unit:
+			# Round every head and rate bucket cleanly to the currency's ISO 4217 minor unit
+			# (0 for UGX, 2 for USD, 3 for KWD), then fold any exact minor-unit residual onto
+			# the dominant taxed head/rate bucket so every row sits on minor units while sums
+			# reconcile exactly to document subtotal, tax_total, and grand_total.
+			currency_rounded = True
+			target_grand = doc_grand.quantize(unit, rounding=ROUND_HALF_UP)
+			target_charges = doc_charges.quantize(unit, rounding=ROUND_HALF_UP)
+			target_tax = target_grand - target_charges
+
+			for h in by_head.values():
+				h["amount"] = h["amount"].quantize(unit, rounding=ROUND_HALF_UP)
+				h["tax"] = (
+					Decimal(0) if abs(h["tax"]) <= Decimal("1e-9")
+					else h["tax"].quantize(unit, rounding=ROUND_HALF_UP)
+				)
+			amt_residual = target_charges - sum((h["amount"] for h in by_head.values()), Decimal(0))
+			if amt_residual:
+				amt_pool = taxed_heads or list(by_head.values())
+				dominant_amt = max(amt_pool, key=lambda h: (abs(h["amount"]), abs(h["tax"]), h["head"]))
+				dominant_amt["amount"] += amt_residual
+			tax_residual = target_tax - sum((h["tax"] for h in by_head.values()), Decimal(0))
+			if tax_residual:
+				dominant_head = max(taxed_heads, key=lambda h: (abs(h["tax"]), abs(h["amount"]), h["head"]))
+				dominant_head["tax"] += tax_residual
+			for h in by_head.values():
+				h["total"] = h["amount"] + h["tax"]
+
+			for rate, v in by_rate.items():
+				v["taxable"] = v["taxable"].quantize(unit, rounding=ROUND_HALF_UP)
+				v["tax"] = Decimal(0) if rate == 0 else v["tax"].quantize(unit, rounding=ROUND_HALF_UP)
+			rate_taxable_residual = target_charges - sum((v["taxable"] for v in by_rate.values()), Decimal(0))
+			if rate_taxable_residual and by_rate:
+				rate_pool = taxable_rates or list(by_rate.items())
+				_dom_r, dom_slot = max(rate_pool, key=lambda item: (abs(item[1]["taxable"]), item[0]))
+				dom_slot["taxable"] += rate_taxable_residual
+			rate_tax_residual = target_tax - sum((v["tax"] for v in by_rate.values()), Decimal(0))
+			if rate_tax_residual and taxable_rates:
+				_dom_r, dom_slot = max(taxable_rates, key=lambda item: (abs(item[1]["taxable"]), item[0]))
+				dom_slot["tax"] += rate_tax_residual
+
+			folio_dict["charges_total"] = float(target_charges)
+			folio_dict["tax_total"] = float(target_tax)
+		else:
+			tax_delta = doc_tax - sum((v["tax"] for v in by_rate.values()), Decimal(0))
+			if abs(tax_delta) > Decimal("1e-9"):
+				if taxable_rates:
+					_dominant_rate, dominant = max(
+						taxable_rates, key=lambda item: (abs(item[1]["taxable"]), item[0]),
+					)
+					dominant["tax"] += tax_delta
+				if taxed_heads:
+					dominant_head = max(taxed_heads, key=lambda h: (abs(h["tax"]), abs(h["amount"]), h["head"]))
+					dominant_head["tax"] += tax_delta
+					dominant_head["total"] = dominant_head["amount"] + dominant_head["tax"]
+
+		for h in by_head.values():
+			h["amount"] = float(h["amount"])
+			h["tax"] = float(h["tax"])
+			h["total"] = float(h["total"])
 
 	# A bridged folio is final once its linked accounting Sales Invoice is
 	# submitted (real bridged check-outs set only sales_invoice, not
@@ -4261,13 +4326,27 @@ def folio_invoice(folio: str):
 		if settled and acct_tax["tax_source"] != "accounting_unavailable"
 		else None
 	)
+	def _split_parts(tax_dec: Decimal) -> list[Decimal]:
+		if not split:
+			return []
+		if len(split) == 1:
+			return [tax_dec]
+		if currency_rounded:
+			amts = [
+				(tax_dec * Decimal(str(share))).quantize(unit, rounding=ROUND_HALF_UP)
+				for _lbl, share in split[:-1]
+			]
+			amts.append(tax_dec - sum(amts, Decimal(0)))
+			return amts
+		return [tax_dec * Decimal(str(share)) for _lbl, share in split]
+
 	tax_summary = (
 		acct_tax["tax_summary"] if acct_tax["tax_summary"] is not None else [
-			{"rate": rate, "taxable": v["taxable"], "total_tax": v["tax"],
+			{"rate": rate, "taxable": float(v["taxable"]), "total_tax": float(v["tax"]),
 			 "parts": [{"label": label.upper(),
 			            "rate": round(rate * float(share), 4),
-			            "amount": v["tax"] * float(share)}
-			           for label, share in split]}
+			            "amount": float(part_amt)}
+			           for (label, share), part_amt in zip(split, _split_parts(v["tax"]), strict=True)]}
 			for rate, v in sorted(by_rate.items())
 		]
 	)
@@ -4294,22 +4373,26 @@ def folio_invoice(folio: str):
 	} for p in doc.payments]
 	gst_summary = (
 		acct_tax["gst_summary"] if acct_tax["gst_summary"] is not None else [
-			{"rate": rate, "taxable": v["taxable"],
-			 "cgst": v["tax"] * float(split[0][1]),
-			 "sgst": v["tax"] * float(split[-1][1]),
-			 "total_tax": v["tax"]}
+			{"rate": rate, "taxable": float(v["taxable"]),
+			 "cgst": float(_split_parts(v["tax"])[0]) if split else float(v["tax"]),
+			 "sgst": float(_split_parts(v["tax"])[-1]) if split else 0.0,
+			 "total_tax": float(v["tax"])}
 			for rate, v in sorted(by_rate.items())
 		]
 	)
+	places = max(raw_places, 2)
 	return {
 		"folio": folio_dict,
 		"lines": lines,
 		"payments": payments,
-		"statement": _folio_statement(lines, payments),
-		"allocations": _folio_allocations(doc.name),
+		"statement": _folio_statement(lines, payments, places=places),
+		"allocations": _folio_allocations(doc.name, property=doc.property),
 		# what the issued credit notes on this invoice add up to: the most a
 		# new one may credit is the invoice total less this
-		"credited": round(float(credited_total(doc.name)) + float(acct_tax.get("erp_credited") or 0.0), 2),
+		"credited": _round_currency(
+			Decimal(str(credited_total(doc.name))) + Decimal(str(acct_tax.get("erp_credited") or 0.0)),
+			places,
+		),
 		"bill_to": bill_to,
 		"statutory": statutory,
 		"tax_source": acct_tax["tax_source"],
@@ -4377,44 +4460,55 @@ def folio_invoice(folio: str):
 	}
 
 
-def _folio_statement(lines: list, payments: list) -> list[dict]:
+def _folio_statement(lines: list, payments: list, places: int = 2) -> list[dict]:
 	"""Charges and payments in date order with a running balance: charges
 	(with tax) and refunds in `charges`, payments, allowances and reversals
 	in `credits`."""
+	from decimal import Decimal
+
+	from kamra.ledger import _round_currency
+
 	rows = []
 	for ln in lines:
-		total = round(float(ln["total"] or 0), 2)
+		total = _round_currency(ln["total"] or 0, places)
 		rows.append((ln["posting_date"], 0, {
 			"date": ln["posting_date"], "row": ln["row"], "kind": "Charge",
 			"charge_type": ln["charge_type"], "description": ln["description"],
 			"reference": ln.get("corrects_row"), "method": None,
 			"transaction_code": ln["transaction_code"], "gl_code": ln["gl_code"],
 			"charges": max(total, 0), "credits": max(-total, 0),
-			"tax": round(float(ln["gst_amount"] or 0), 2)}))
+			"tax": _round_currency(ln["gst_amount"] or 0, places)}))
 	for p in payments:
-		amt = round(float(p["amount"] or 0), 2)
+		amt = _round_currency(p["amount"] or 0, places)
 		rows.append((p["posting_date"], 1, {
 			"date": p["posting_date"], "row": p["row"], "kind": p["payment_kind"],
 			"charge_type": None, "description": f"{p['payment_kind']} {p['mode'] or ''}".strip(),
 			"reference": p["reference"], "method": p["mode"],
 			"transaction_code": p["transaction_code"], "gl_code": p["gl_code"],
 			"charges": max(-amt, 0), "credits": max(amt, 0), "tax": 0.0}))
-	balance, out = 0.0, []
+	balance, out = Decimal(0), []
 	for _d, _o, r in sorted(rows, key=lambda x: (x[0], x[1])):
-		balance = round(balance + r["charges"] - r["credits"], 2)
-		out.append({**r, "balance": balance})
+		balance += Decimal(str(r["charges"])) - Decimal(str(r["credits"]))
+		out.append({**r, "balance": _round_currency(balance, places)})
 	return out
 
 
-def _folio_allocations(folio: str) -> list[dict]:
+def _folio_allocations(folio: str, property: str | None = None) -> list[dict]:
 	"""Company payments (city ledger) that cleared this bill, and how much
 	of each."""
-	by_payment: dict[str, float] = {}
+	from decimal import Decimal
+
+	from kamra.ledger import _currency_places, _round_currency
+
+	prop = property or frappe.db.get_value("Folio", folio, "property")
+	places = max(_currency_places(prop), 2)
+	eps = Decimal("0.5").scaleb(-places)
+	by_payment: dict[str, Decimal] = {}
 	for e in frappe.get_all("Folio Ledger Entry", filters={
 			"folio": folio, "source_doctype": "City Ledger Entry"},
 			fields=["source_name", "credit", "debit"]):
-		by_payment[e.source_name] = by_payment.get(e.source_name, 0.0) + \
-			float(e.credit or 0) - float(e.debit or 0)
+		by_payment[e.source_name] = by_payment.get(e.source_name, Decimal(0)) + \
+			Decimal(str(e.credit or 0)) - Decimal(str(e.debit or 0))
 	if not by_payment:
 		return []
 	cle = {c.name: c for c in frappe.get_all(
@@ -4422,8 +4516,8 @@ def _folio_allocations(folio: str) -> list[dict]:
 		fields=["name", "account", "posting_date", "reference"])}
 	return [{"payment": n, "account": cle[n].account,
 	         "posting_date": str(cle[n].posting_date),
-	         "reference": cle[n].reference, "amount": round(a, 2)}
-	        for n, a in by_payment.items() if n in cle and abs(a) > 0.005]
+	         "reference": cle[n].reference, "amount": _round_currency(a, places)}
+	        for n, a in by_payment.items() if n in cle and abs(a) > eps]
 
 
 def _invoice_guest(res) -> dict:
