@@ -1,46 +1,20 @@
 import { Fragment, useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react"
-import { ArrowRight, Check, ChevronDown, Clock3, Info, Plus, Search, X } from "lucide-react"
+import { Check, ChevronDown, Download, Info, Layers, Plus, Search, Upload, X } from "lucide-react"
 import { useSearchParams } from "react-router-dom"
-import { currencyText, formatFxRate, tariffDate } from "../components/ContractTariff"
+import { currencyText, formatFxRate, tariffDate, tariffDateTime } from "../components/ContractTariff"
+import {
+  decisionTone, field, itemCurrency, TariffMassDialog, TariffModal, tariffReason, type DraftChoice, type MassAction,
+} from "../components/TariffMassActions"
 import { Button } from "../components/ui/button"
-import { call, getCurrentProperty, serverError } from "../lib/api"
+import { call, frappeFetch, getCurrentProperty } from "../lib/api"
+import { downloadCsv } from "../lib/csv"
 import { uiDateLocale, useT } from "../lib/i18n"
 import { useLocale } from "../lib/money"
 import { addDays, todayPlus } from "../lib/stay"
-
-interface TariffVersion {
-  name: string
-  rate: number
-  local_equiv?: number | null
-  valid_from: string
-  valid_upto?: string | null
-  workflow_state: string
-  owner?: string | null
-  can_approve?: boolean
-}
-
-interface PriceList {
-  name: string
-  currency: string
-  fx_rate?: number | null
-  fx_date?: string | null
-  rate_plans: string[]
-}
-
-interface ContractTariffItem {
-  item_code: string
-  item_name: string
-  category: "Room" | "Supplement" | "Venue" | "Other"
-  room_type?: string | null
-  occupancy?: string | null
-  price_list: string
-  currency: string
-  fx_rate?: number | null
-  fx_date?: string | null
-  active?: TariffVersion | null
-  pending: TariffVersion[]
-  history: TariffVersion[]
-}
+import {
+  priceListRounding, roomMatrix, roundRate, type ContractTariffItem, type MatrixRow, type PriceList,
+  type RatePlanPolicy, type RoundingMode, type TariffVersion,
+} from "../lib/tariffMatrix"
 
 interface ContractTariffsResponse {
   supported: true
@@ -49,8 +23,11 @@ interface ContractTariffsResponse {
   business_date: string
   can_propose: boolean
   can_approve: boolean
+  /** a Hotel Admin with tariff access may discard any draft, their own included (kamra.rates) */
+  can_discard?: boolean
   price_lists: PriceList[]
   items: ContractTariffItem[]
+  rate_plan_policies?: Record<string, RatePlanPolicy>
 }
 
 type TariffsPayload = ContractTariffsResponse | {
@@ -58,30 +35,58 @@ type TariffsPayload = ContractTariffsResponse | {
   property: string
   can_propose: false
   can_approve: false
+  can_discard?: false
   price_lists: []
   items: []
 }
 type Category = ContractTariffItem["category"]
-type Filter = "all" | "pending" | Category
+type Filter = Category | "pending"
 type Decision = "approve" | "discard"
 type TariffAction = { kind: "propose"; item: ContractTariffItem }
   | { kind: Decision; item: ContractTariffItem; draft: TariffVersion }
+type Rounding = { step: number; mode: RoundingMode } | null
+interface CsvExport { supported: boolean; business_date?: string | null; columns: string[]; rows: (string | number)[][] }
 
-const categories: Category[] = ["Room", "Supplement", "Venue", "Other"]
-const field = "min-h-10 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 focus:border-brand-600 focus:outline-2 focus:outline-brand-600"
-const cell = "flex items-baseline justify-between gap-2 px-3 py-1.5 xl:table-cell xl:py-3"
+const PUBLIC = "__public__"
+const cell = "flex items-baseline justify-between gap-2 px-3 py-1.5 xl:table-cell xl:py-3 xl:align-top"
 const pill = "inline-block rounded-full px-2.5 py-1 text-xs font-medium"
-const decisionTone = {
-  approve: "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100",
-  discard: "border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100",
-}
 const editMethods = {
   propose: "kamra.rates.propose_contract_tariff",
   approve: "kamra.rates.approve_contract_tariff",
   discard: "kamra.rates.discard_contract_tariff",
 }
 const drafts = (item: ContractTariffItem) => item.pending.filter((version) => version.workflow_state === "Draft")
+const itemKey = (item: ContractTariffItem) => [item.price_list, item.item_code, item.customer ?? ""].join("|")
 const fxRate = (item: ContractTariffItem, list?: PriceList) => item.fx_rate ?? list?.fx_rate
+const scheduled = (item: ContractTariffItem, today: string) =>
+  item.history.filter((version) => version.workflow_state === "Approved" && version.valid_from > today)
+
+/** What the rows of the screen share: the directory, formatting and the selection. */
+interface TariffView {
+  data: ContractTariffsResponse
+  lists: Map<string, PriceList>
+  locale: string
+  dateLocale: string
+  loading: boolean
+  /** the effective date the directory is read at: a version starting after it is Scheduled */
+  asOf: string
+  selectable: boolean
+  selected: Set<string>
+  toggle: (keys: string[], on: boolean) => void
+  open: (action: TariffAction) => void
+  rounding: (priceList: string) => Rounding
+  validity: (version: TariffVersion) => string
+}
+
+/** The home-currency figure a version books at: the published equivalent, rounded as the price list's plans round it. */
+function localAmount(view: TariffView, item: ContractTariffItem, version?: TariffVersion | null) {
+  const list = view.lists.get(item.price_list)
+  if (!version || itemCurrency(item, list) === view.data.property_currency) return null
+  const rate = fxRate(item, list)
+  const raw = version.local_equiv ?? (rate && rate > 0 ? version.rate * rate : null)
+  const rule = view.rounding(item.price_list)
+  return raw == null ? null : rule ? roundRate(raw, rule.step, rule.mode, view.data.property_currency) : raw
+}
 
 export default function ContractTariffs() {
   const property = getCurrentProperty()
@@ -93,28 +98,58 @@ function TariffDirectory({ property }: { property: string }) {
   const { locale } = useLocale()
   const [params, setParams] = useSearchParams()
   const query = params.get("q") ?? ""
-  const [filter, setFilter] = useState<Filter>("all")
+  const [filter, setFilter] = useState<Filter>("Room")
   const [listName, setListName] = useState<string | null>(() => query ? "" : null)
+  const [customer, setCustomer] = useState("")
+  const [asOf, setAsOf] = useState("")
   const [revision, setRevision] = useState(0)
-  const [result, setResult] = useState<{ revision: number; data?: TariffsPayload }>()
+  const [result, setResult] = useState<{ key: string; data?: TariffsPayload }>()
   const [action, setAction] = useState<TariffAction | null>(null)
-  const [notice, setNotice] = useState<TariffAction["kind"] | null>(null)
+  const [mass, setMass] = useState<MassAction | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [selected, setSelected] = useState<Set<string>>(() => new Set())
+  const [exporting, setExporting] = useState(false)
+  const [exportFailed, setExportFailed] = useState(false)
+  const requestKey = `${revision}|${asOf}`
 
   useEffect(() => {
     if (!property) return
     let current = true
-    call<TariffsPayload>("kamra.rates.list_contract_tariffs", { property })
-      .then((data) => { if (current) setResult({ revision, data }) })
-      .catch(() => { if (current) setResult({ revision }) })
+    const key = `${revision}|${asOf}`
+    call<TariffsPayload>("kamra.rates.list_contract_tariffs", asOf ? { property, as_of_date: asOf } : { property })
+      .then((data) => { if (current) setResult({ key, data }) })
+      .catch(() => { if (current) setResult({ key }) })
     return () => { current = false }
-  }, [property, revision])
+  }, [property, revision, asOf])
 
   const data = result?.data
-  const loading = !!property && result?.revision !== revision
+  const loading = !!property && result?.key !== requestKey
+  // the ERPNext Customers a new customer-specific tariff may be for (SAP A305), as native DocPerm lets the user read them
+  const [customerNames, setCustomerNames] = useState<string[]>([])
+  const canPropose = !!data?.supported && data.can_propose
+  useEffect(() => {
+    if (!canPropose) return
+    let current = true
+    const query = new URLSearchParams({ fields: JSON.stringify(["name"]), filters: JSON.stringify([["disabled", "=", 0]]),
+      limit_page_length: "500", order_by: "name asc" })
+    frappeFetch<{ data?: { name?: string }[] }>(`/api/resource/Customer?${query}`)
+      .then((out) => {
+        if (current) setCustomerNames((out?.data ?? []).map((row) => row.name ?? "").filter(Boolean))
+      })
+      .catch(() => { /* no read access: the customers the directory already names are offered */ })
+    return () => { current = false }
+  }, [property, canPropose])
   const reload = () => setRevision((value) => value + 1)
   const open = (next: TariffAction) => {
     setNotice(null)
     setAction(next)
+  }
+  const finish = (message: string) => {
+    setNotice(message)
+    setAction(null)
+    setMass(null)
+    setSelected(new Set())
+    reload()
   }
   const heading = <header className="space-y-1 border-b border-zinc-200 pb-4">
     <p className="text-sm font-medium text-brand-700">{data?.property || property}</p>
@@ -123,8 +158,7 @@ function TariffDirectory({ property }: { property: string }) {
   </header>
   const statusToast = notice && <div role="status" className="fixed inset-x-4 bottom-4 z-40 flex items-center gap-3 rounded-xl border border-emerald-200 bg-white p-3 text-sm font-medium text-emerald-900 shadow-lg sm:start-auto sm:end-6 sm:bottom-6">
     <Check className="size-5 shrink-0" aria-hidden />
-    {notice === "propose" ? t("Tariff version submitted for approval")
-      : notice === "approve" ? t("Tariff version approved") : t("Tariff draft discarded")}
+    {notice}
     <Button type="button" variant="ghost" onClick={() => setNotice(null)} aria-label={t("Dismiss")}><X className="size-4" /></Button>
   </div>
   if (!data?.supported) return <div className="space-y-5">
@@ -139,49 +173,144 @@ function TariffDirectory({ property }: { property: string }) {
     {statusToast}
   </div>
 
+  const directory = data
   const uiLocale = uiDateLocale(locale)
   const dateLocale = typeof uiLocale === "string" ? uiLocale : locale
-  const lists = new Map(data.price_lists.map((list) => [list.name, list]))
-  const selectedName = data.price_lists.length === 1 ? data.price_lists[0].name : listName ?? data.price_lists[0]?.name ?? ""
-  const selected = lists.get(selectedName)
-  const pendingCount = data.items.reduce((total, item) => total + drafts(item).length, 0)
+  const lists = new Map(directory.price_lists.map((list) => [list.name, list]))
+  const policies = directory.rate_plan_policies ?? {}
+  const selectedName = directory.price_lists.length === 1 ? directory.price_lists[0].name
+    : listName ?? directory.price_lists[0]?.name ?? ""
+  const selectedList = lists.get(selectedName)
+  const pendingCount = directory.items.reduce((total, item) => total + drafts(item).length, 0)
+  const customers = [...new Set(directory.items.map((item) => item.customer).filter((name): name is string => !!name))].sort()
+  const customerOptions = [...new Set([...customers, ...customerNames])].sort()
   const needle = query.trim().toLowerCase()
-  const groups = categories.map((category) => ({
-    category,
-    items: data.items.filter((item) => item.category === category
-      && (filter === "pending" || !selected || item.price_list === selected.name)
-      && (filter === "all" || (filter === "pending" ? drafts(item).length > 0 : item.category === filter))
-      && [item.item_name, item.item_code, item.room_type, item.occupancy, item.price_list, item.currency]
-        .some((value) => value?.toLowerCase().includes(needle))),
-  })).filter((group) => group.items.length > 0)
-  const labels = {
-    Item: t("Item"), Category: t("Category"), Rate: t("Current rate"), Local: t("Local equiv."),
+  const matches = (item: ContractTariffItem) => (filter === "pending" || !selectedList || item.price_list === selectedList.name)
+    && (!customer || (customer === PUBLIC ? !item.customer : item.customer === customer))
+    && [item.item_name, item.item_code, item.room_type, item.occupancy, item.price_list, item.customer,
+      itemCurrency(item, lists.get(item.price_list))].some((value) => value?.toLowerCase().includes(needle))
+  const matrix = filter === "Room" ? roomMatrix(directory.items.filter((item) => item.category === "Room" && matches(item)),
+    directory.items.filter((item) => item.category === "Supplement")) : []
+  const flat = filter === "Room" ? [] : directory.items.filter((item) => matches(item)
+    && (filter === "pending" ? drafts(item).length > 0 : item.category === filter))
+  const visible = filter === "Room" ? matrix.flatMap((row) => [...row.tiers.values(), ...row.others]) : flat
+  const chosen = visible.filter((item) => selected.has(itemKey(item)))
+  const chosenDrafts: DraftChoice[] = chosen.flatMap((item) => drafts(item).map((draft) => ({ item, draft })))
+  const allChosen = visible.length > 0 && chosen.length === visible.length
+  const view: TariffView = {
+    data: directory, lists, locale, dateLocale, loading, open, asOf: asOf || directory.business_date,
+    selectable: directory.can_propose || directory.can_approve || !!directory.can_discard,
+    selected,
+    toggle: (keys, on) => setSelected((current) => {
+      const next = new Set(current)
+      for (const key of keys) {
+        if (on) next.add(key)
+        else next.delete(key)
+      }
+      return next
+    }),
+    rounding: (name) => priceListRounding(lists.get(name), policies),
+    validity: (version) => version.valid_upto
+      ? t("{from} – {until}", { from: tariffDate(version.valid_from, dateLocale), until: tariffDate(version.valid_upto, dateLocale) })
+      : tariffDate(version.valid_from, dateLocale),
+  }
+  // a bulk version edits the selection's one tariff currency; a plan's rounding step rounds the posting
+  // currency, so the plans' shared rule prefills only tariffs priced in it (never a foreign tariff)
+  const bulkVersion = (items: ContractTariffItem[]): MassAction => {
+    const currencies = new Set(items.map((item) => itemCurrency(item, lists.get(item.price_list))))
+    const currency = currencies.size === 1 ? [...currencies][0] : null
+    const rules = [...new Set(items.map((item) => item.price_list))].map((name) => view.rounding(name))
+    const [rule] = rules
+    const prefill = currency === directory.property_currency && !!rule && rule.step > 0
+      && rules.every((other) => other?.step === rule.step && other.mode === rule.mode)
+    return { kind: "version", items, currency, rounding: prefill ? rule : null }
+  }
+  const roundingText = (rule: Rounding) => {
+    if (!rule) return ""
+    if (!rule.step) return t("standard currency rounding")
+    const step = rule.step.toLocaleString(locale)
+    return rule.mode === "Up" ? t("rounded up to {step}", { step })
+      : rule.mode === "Down" ? t("rounded down to {step}", { step }) : t("rounded to nearest {step}", { step })
+  }
+  // a plan's currency is its own, else its nearest base plan's, else the property's
+  const planCurrency = (start: string) => {
+    const seen = new Set<string>()
+    for (let name = start; name && !seen.has(name);) {
+      const plan = policies[name]
+      if (!plan) break
+      if (plan.currency) return plan.currency
+      seen.add(name)
+      name = plan.base_rate_plan ?? ""
+    }
+    return directory.property_currency
+  }
+  const planBadges = (selectedList?.rate_plans ?? []).filter((name) => policies[name]).map((name) => {
+    const plan = policies[name]
+    const base = plan.base_rate_plan ? policies[plan.base_rate_plan]?.label ?? plan.base_rate_plan : null
+    return { name, text: [plan.label, planCurrency(name), t(plan.fx_lock_policy),
+      base && t("Derived from {base}", { base })].filter(Boolean).join(" · ") }
+  })
+  const listRule = selectedList ? view.rounding(selectedList.name) : null
+  const fxText = selectedList?.fx_rate && selectedList.fx_date ? [
+    t("Governed posting FX: 1 {foreign} = {rate} {home} · {date}", {
+      foreign: selectedList.currency, rate: formatFxRate(selectedList.fx_rate, locale), home: directory.property_currency,
+      date: tariffDate(selectedList.fx_date, dateLocale),
+    }),
+    listRule ? roundingText(listRule) : planBadges.length > 1 ? t("rounding set per rate plan") : "",
+  ].filter(Boolean).join(" · ") : null
+  const labels: Labels = {
+    Select: t("Select"), Item: t("Item"), Category: t("Category"), Rate: t("Current rate"), Local: t("Local equiv."),
     Dates: t("Effective from"), Status: t("Status"), Actions: t("Actions"),
   }
-  const groupNames: Record<Category, string> = {
-    Room: t("Rooms"), Supplement: t("Supplements"), Venue: t("Venues / Conference"), Other: t("Other"),
-  }
-  const filterNames = { all: t("All"), ...groupNames, pending: t("Pending approval") }
-  const showPending = () => {
-    setFilter("pending")
-    if (query) setParams((current) => { current.delete("q"); return current }, { replace: true })
+  const tabs: [Filter, string][] = [["Room", t("Room matrix")], ["Supplement", t("Supplements")], ["Venue", t("Venues")],
+    ["Other", t("Other")], ["pending", t("Pending approval ({n})", { n: pendingCount })]]
+
+  async function exportCsv() {
+    setExporting(true)
+    setExportFailed(false)
+    try {
+      // the file holds what the screen shows: its price list, customer and effective date
+      const out = await call<CsvExport | null>("kamra.rates.export_contract_tariffs_csv", {
+        property, ...(selectedList && filter !== "pending" ? { price_list: selectedList.name } : {}),
+        ...(customer ? { customer } : {}), ...(asOf ? { as_of_date: asOf } : {}),
+      })
+      if (out?.supported) downloadCsv(`contract-tariffs-${out.business_date ?? directory.business_date}`, out.columns, out.rows)
+      else setExportFailed(true)
+    } catch {
+      setExportFailed(true)
+    } finally {
+      setExporting(false)
+    }
   }
 
   return <div className="space-y-5">
     {heading}
     <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
-      <div className="flex flex-wrap items-end justify-between gap-4 p-4">
-        <label className="flex min-w-0 flex-1 basis-52 flex-col gap-1.5 text-sm font-medium">
+      <div className="flex flex-wrap items-end gap-4 p-4">
+        <label className="flex min-w-0 flex-1 basis-48 flex-col gap-1.5 text-sm font-medium">
           {t("Price list")}
-          {data.price_lists.length > 1 ? <select className={field} value={filter === "pending" ? "" : selected?.name ?? ""}
+          {directory.price_lists.length > 1 ? <select name="price_list" className={field} value={filter === "pending" ? "" : selectedList?.name ?? ""}
             disabled={filter === "pending"} onChange={(event) => setListName(event.target.value)}>
             <option value="">{t("All price lists")}</option>
-            {data.price_lists.map((list) => <option key={list.name} value={list.name}>
+            {directory.price_lists.map((list) => <option key={list.name} value={list.name}>
               {t("{list} · {currency}", { list: list.name, currency: list.currency })}
             </option>)}
-          </select> : <span className="text-zinc-700">{selected?.name ?? "—"}</span>}
+          </select> : <span className="text-zinc-700">{selectedList?.name ?? "—"}</span>}
         </label>
-        <label className="flex min-w-0 flex-1 basis-52 flex-col gap-1.5 text-sm font-medium">
+        <label className="flex min-w-0 flex-1 basis-40 flex-col gap-1.5 text-sm font-medium">
+          {t("Customer")}
+          <select name="customer" className={field} value={customer} onChange={(event) => setCustomer(event.target.value)}>
+            <option value="">{t("All customers")}</option>
+            <option value={PUBLIC}>{t("Public (standard)")}</option>
+            {customers.map((name) => <option key={name} value={name}>{name}</option>)}
+          </select>
+        </label>
+        <label className="flex min-w-0 flex-1 basis-36 flex-col gap-1.5 text-sm font-medium">
+          {t("Effective date")}
+          <input name="as_of_date" type="date" className={field} value={asOf || directory.business_date}
+            onChange={(event) => setAsOf(event.target.value === directory.business_date ? "" : event.target.value)} />
+        </label>
+        <label className="flex min-w-0 flex-1 basis-48 flex-col gap-1.5 text-sm font-medium">
           {t("Search tariffs")}
           <span className="relative">
             <Search className="pointer-events-none absolute start-3 top-3 size-4 text-zinc-500" aria-hidden />
@@ -193,18 +322,16 @@ function TariffDirectory({ property }: { property: string }) {
           </span>
         </label>
       </div>
-      <div className="space-y-1.5 border-t border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
-        {filter !== "pending" && selected && selected.currency !== data.property_currency
+      <div className="space-y-2 border-t border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
+        {filter !== "pending" && selectedList && selectedList.currency !== directory.property_currency
           && <p className="font-medium text-brand-800 tabular-nums">
-            {selected.fx_rate && selected.fx_date
-              ? t("Published book rate: 1 {foreign} = {rate} {home} · {date}", {
-                foreign: selected.currency, rate: formatFxRate(selected.fx_rate, locale), home: data.property_currency,
-                date: tariffDate(selected.fx_date, dateLocale),
-              })
-              : t("No published book rate is available for this price list.")}
+            {fxText ?? t("No governed posting rate is available for this price list.")}
           </p>}
-        {filter !== "pending" && !selected && data.price_lists.length > 1 &&
-          <p>{t("Select a price list to see its published book rate.")}</p>}
+        {filter !== "pending" && planBadges.length > 0 && <ul className="flex flex-wrap gap-1.5" aria-label={t("Rate plans")}>
+          {planBadges.map((badge) => <li key={badge.name} className={pill + " border border-brand-200 bg-white text-brand-800"}>{badge.text}</li>)}
+        </ul>}
+        {filter !== "pending" && !selectedList && directory.price_lists.length > 1 &&
+          <p>{t("Select a price list to see its governed posting rate.")}</p>}
         <p className="flex items-start gap-2">
           <Info aria-hidden className="mt-0.5 size-4 shrink-0 text-brand-600" />
           {t("Released tariffs are never overwritten — new versions take effect from their effective date once approved.")}
@@ -212,103 +339,289 @@ function TariffDirectory({ property }: { property: string }) {
       </div>
     </div>
 
-    {pendingCount > 0 && <button type="button" onClick={showPending}
-      className="flex w-full flex-wrap items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-start text-sm font-semibold text-amber-900 hover:bg-amber-100 focus-visible:outline-2 focus-visible:outline-offset-2"
-      aria-pressed={filter === "pending"}>
-      <Clock3 aria-hidden className="size-4" />
-      {tn(pendingCount, "{n} pending approval", "{n} pending approvals")}
-      <ArrowRight aria-hidden className="ms-auto size-4 rtl:rotate-180" />
-    </button>}
-
     <div className="flex flex-wrap gap-2" role="group" aria-label={t("Filter tariffs")}>
-      {(["all", "Room", "Supplement", "Venue", "pending"] as const).map((value) =>
+      {tabs.map(([value, label]) =>
         <Button type="button" key={value} variant={filter === value ? "primary" : "outline"}
-          aria-pressed={filter === value} onClick={() => setFilter(value)}>{filterNames[value]}</Button>)}
+          aria-pressed={filter === value} onClick={() => setFilter(value)}>{label}</Button>)}
     </div>
+
+    <div role="toolbar" aria-label={t("Tariff actions")} className="flex flex-wrap items-center gap-2">
+      {view.selectable && visible.length > 0 && <label className="flex items-center gap-2 text-sm font-medium">
+        <input type="checkbox" className="size-4" aria-label={t("Select all")} checked={allChosen}
+          onChange={(event) => view.toggle(visible.map(itemKey), event.target.checked)} />
+        {chosen.length ? tn(chosen.length, "{n} tariff selected", "{n} tariffs selected") : t("Select all")}
+      </label>}
+      {directory.can_propose && chosen.length > 0 && <Button type="button" variant="outline" disabled={loading}
+        onClick={() => setMass(bulkVersion(chosen))}><Layers aria-hidden className="size-4" />{t("Create new version in bulk")}</Button>}
+      {directory.can_approve && chosenDrafts.some(({ draft }) => draft.can_approve !== false) &&
+        <Button type="button" variant="outline" className={decisionTone.approve} disabled={loading}
+          onClick={() => setMass({ kind: "approve", drafts: chosenDrafts })}>{t("Approve selected")}</Button>}
+      {directory.can_discard && chosenDrafts.length > 0 &&
+        <Button type="button" variant="outline" className={decisionTone.discard} disabled={loading}
+          onClick={() => setMass({ kind: "discard", drafts: chosenDrafts })}>{t("Discard selected")}</Button>}
+      <span className="ms-auto flex flex-wrap gap-2">
+        <Button type="button" variant="outline" onClick={exportCsv} disabled={exporting}>
+          <Download aria-hidden className="size-4" />{t("Export CSV")}
+        </Button>
+        {directory.can_propose && <Button type="button" variant="outline" onClick={() => { setNotice(null); setMass({ kind: "import" }) }}>
+          <Upload aria-hidden className="size-4" />{t("Import CSV")}
+        </Button>}
+      </span>
+    </div>
+    {exportFailed && <p role="alert" className="text-sm text-rose-800">{t("The contract tariffs could not be exported.")}</p>}
     {loading && <p role="status" className="text-sm text-zinc-600">{t("Refreshing contract tariffs…")}</p>}
-    {groups.length ? <div aria-busy={loading} className="xl:overflow-x-auto xl:rounded-xl xl:border xl:border-zinc-200 xl:bg-white">
-      <table role="table" aria-label={t("Contract tariffs")} className="block w-full text-start text-sm xl:table">
-        <thead className="hidden bg-zinc-50 xl:table-header-group">
-          <tr>{Object.values(labels).map((label) => <th key={label} scope="col" className="px-3 py-3 text-start font-semibold">{label}</th>)}</tr>
-        </thead>
-        {groups.map(({ category, items }) => <tbody role="rowgroup" key={category} className="mb-4 block space-y-2 xl:table-row-group">
-          <tr role="row" className="block xl:table-row">
-            <th role="rowheader" scope="rowgroup" colSpan={7} className="block border-b border-zinc-200 bg-zinc-50 px-3 py-2 text-start text-sm font-semibold text-zinc-800 xl:table-cell">
-              {groupNames[category]}
-            </th>
-          </tr>
-          {items.map((item) => <TariffRow key={JSON.stringify([item.price_list, item.item_code])}
-            {...{ item, data, labels, locale, dateLocale, loading, open }} list={lists.get(item.price_list)} />)}
-        </tbody>)}
-      </table>
-    </div> : <p className="rounded-xl border border-zinc-200 bg-white p-5 text-sm text-zinc-600">
-      {filter === "pending" && !needle ? t("No tariff versions are pending approval.") : t("No tariffs match these filters.")}
-    </p>}
+
+    {filter === "Room" && matrix.length > 0 ? <RoomMatrix rows={matrix} view={view} />
+      : filter !== "Room" && flat.length > 0 ? <TariffList items={flat} view={view} labels={labels} />
+      : <p className="rounded-xl border border-zinc-200 bg-white p-5 text-sm text-zinc-600">
+        {filter === "pending" && !needle ? t("No tariff versions are pending approval.") : t("No tariffs match these filters.")}
+      </p>}
     {statusToast}
-    {action && <ActionDialog action={action} data={data} locale={locale} dateLocale={dateLocale}
-      list={lists.get(action.item.price_list)} onClose={() => setAction(null)} onSuccess={() => {
-        setNotice(action.kind)
-        setAction(null)
-        reload()
-      }} />}
+    {action && <ActionDialog action={action} data={directory} locale={locale} dateLocale={dateLocale}
+      list={lists.get(action.item.price_list)} rounding={view.rounding(action.item.price_list)} customers={customerOptions}
+      onClose={() => setAction(null)} onSuccess={() => finish(action.kind === "propose" ? t("Tariff version submitted for approval")
+        : action.kind === "approve" ? t("Tariff version approved") : t("Tariff draft discarded"))} />}
+    {mass && <TariffMassDialog action={mass} property={directory.property} propertyCurrency={directory.property_currency}
+      businessDate={directory.business_date} customers={customerOptions}
+      lists={lists} locale={locale} dateLocale={dateLocale} onClose={() => setMass(null)} onDone={finish} />}
   </div>
 }
 
-type Labels = Record<"Item" | "Category" | "Rate" | "Local" | "Dates" | "Status" | "Actions", string>
+type Labels = Record<"Select" | "Item" | "Category" | "Rate" | "Local" | "Dates" | "Status" | "Actions", string>
 
-function TariffRow({ item, data, labels, locale, dateLocale, list, loading, open }: {
-  item: ContractTariffItem; data: ContractTariffsResponse; labels: Labels; locale: string; dateLocale: string
-  list?: PriceList; loading: boolean; open: (action: TariffAction) => void
+function RoomMatrix({ rows, view }: { rows: MatrixRow<ContractTariffItem>[]; view: TariffView }) {
+  const { t, tn } = useT()
+  const tiers = [...new Set(rows.flatMap((row) => [...row.tiers.keys()]))].sort((a, b) => a - b)
+  const others = rows.some((row) => row.others.length > 0)
+  const columns = 3 + tiers.length + (others ? 1 : 0) + (view.selectable ? 1 : 0)
+  return <div aria-busy={view.loading} className="xl:overflow-x-auto xl:rounded-xl xl:border xl:border-zinc-200 xl:bg-white">
+    <table role="table" aria-label={t("Room pricing matrix")} className="block w-full text-start text-sm xl:table">
+      <thead className="hidden bg-zinc-50 xl:table-header-group">
+        <tr>
+          {view.selectable && <th scope="col" className="w-10 px-3 py-3"><span className="sr-only">{t("Select")}</span></th>}
+          <th scope="col" className="px-3 py-3 text-start font-semibold">{t("Room type")}</th>
+          {tiers.map((n) => <th key={n} scope="col" className="px-3 py-3 text-start font-semibold">{tn(n, "{n} Adult", "{n} Adults")}</th>)}
+          {others && <th scope="col" className="px-3 py-3 text-start font-semibold">{t("Other occupancy")}</th>}
+          <th scope="col" className="px-3 py-3 text-start font-semibold">{t("Extras")}</th>
+          <th scope="col" className="px-3 py-3 text-start font-semibold">{t("Actions")}</th>
+        </tr>
+      </thead>
+      <tbody className="block space-y-2 xl:table-row-group">
+        {rows.map((row) => <MatrixRowView key={row.key} row={row} tiers={tiers} others={others} columns={columns} view={view} />)}
+      </tbody>
+    </table>
+  </div>
+}
+
+function MatrixRowView({ row, tiers, others, columns, view }: {
+  row: MatrixRow<ContractTariffItem>; tiers: number[]; others: boolean; columns: number; view: TariffView
 }) {
+  const { t, tn } = useT()
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const historyId = useId()
+  const items = [...row.tiers.values(), ...row.others]
+  const keys = items.map(itemKey)
+  const name = [row.roomType, row.priceList, row.customer].filter(Boolean).join(" · ")
+  const withHistory = items.filter((item) => item.history.length > 0)
+  // a customer's negotiated price (SAP customer-specific condition) reads apart from the public one
+  const scope = row.customer
+    ? "border-s-2 border-s-indigo-500 bg-indigo-50/25 xl:border-s-2"
+    : "bg-white"
+  return <Fragment>
+    <tr role="row" data-room={row.key} data-scope={row.customer ? "corporate" : "public"}
+      className={"block rounded-xl border border-zinc-200 py-1 xl:table-row xl:rounded-none xl:border-0 xl:border-t " + scope}>
+      {view.selectable && <td role="cell" className="block px-3 pt-2 xl:table-cell xl:py-3 xl:align-top">
+        <input type="checkbox" className="size-4" aria-label={t("Select {name}", { name })}
+          checked={keys.every((key) => view.selected.has(key))} onChange={(event) => view.toggle(keys, event.target.checked)} />
+      </td>}
+      <th role="rowheader" scope="row" className="block px-3 py-2 text-start xl:table-cell xl:py-3 xl:align-top">
+        <span className="block font-semibold text-zinc-950">{row.roomType}</span>
+        <span className="block break-words text-xs font-normal text-zinc-600">{row.priceList}</span>
+        {row.customer
+          ? <span data-scope-badge className={pill + " mt-1 inline-flex max-w-full items-center gap-1 border border-indigo-200 bg-indigo-50 text-indigo-800"}>
+            <span className="font-semibold">{t("Corporate")}</span>
+            <span aria-hidden>·</span>
+            <span className="break-words">{row.customer}</span>
+          </span>
+          : <span data-scope-badge className={pill + " mt-1 bg-zinc-100 text-zinc-600"}>{t("Public")}</span>}
+      </th>
+      {tiers.map((n) => {
+        const item = row.tiers.get(n)
+        return <Cell key={n} label={tn(n, "{n} Adult", "{n} Adults")}>{item ? <TierCell item={item} view={view} /> : "—"}</Cell>
+      })}
+      {others && <Cell label={t("Other occupancy")}>{row.others.length ? <div className="space-y-3">
+        {row.others.map((item) => <div key={item.item_code}>
+          <span className="block text-xs font-medium text-zinc-600">{item.occupancy || item.item_name}</span>
+          <TierCell item={item} view={view} />
+        </div>)}
+      </div> : "—"}</Cell>}
+      <Cell label={t("Extras")}><Extras row={row} view={view} /></Cell>
+      <td role="cell" className="block px-3 py-2 xl:table-cell xl:py-3 xl:align-top">
+        {withHistory.length > 0 && <Button type="button" variant="ghost" aria-expanded={historyOpen}
+          aria-controls={historyOpen ? historyId : undefined} onClick={() => setHistoryOpen(!historyOpen)}>
+          <ChevronDown aria-hidden className={historyOpen ? "size-4 rotate-180" : "size-4"} />{t("History")}
+        </Button>}
+      </td>
+    </tr>
+    {historyOpen && <tr role="row" id={historyId} className="block rounded-lg bg-zinc-50 xl:table-row">
+      <td role="cell" colSpan={columns} className="block space-y-2 px-4 py-3 xl:table-cell">
+        <p className="font-semibold">{t("Version history")}</p>
+        {withHistory.map((item) => <div key={item.item_code}>
+          <p className="text-xs font-medium text-zinc-600">{item.item_name}</p>
+          <History item={item} view={view} />
+        </div>)}
+      </td>
+    </tr>}
+  </Fragment>
+}
+
+function TierCell({ item, view }: { item: ContractTariffItem; view: TariffView }) {
+  const { t } = useT()
+  const active = item.active
+  const local = localAmount(view, item, active)
+  return <div data-item={item.item_code} className="flex flex-col items-end gap-1 xl:items-start">
+    <span className="whitespace-nowrap font-semibold text-zinc-950 tabular-nums">
+      {active ? currencyText(itemCurrency(item, view.lists.get(item.price_list)), active.rate, view.locale) : "—"}
+    </span>
+    {local != null && <span className="whitespace-nowrap text-xs text-zinc-600 tabular-nums">
+      {t("≈ {amount}", { amount: currencyText(view.data.property_currency, local, view.locale) })}
+    </span>}
+    {active && <span className="text-xs text-zinc-600">{view.validity(active)}</span>}
+    <Versions item={item} view={view} />
+    {view.data.can_propose && <Button type="button" variant="outline" className="whitespace-nowrap text-brand-700"
+      disabled={view.loading} onClick={() => view.open({ kind: "propose", item })}>
+      <Plus aria-hidden className="size-4" />{t("New version")}
+    </Button>}
+  </div>
+}
+
+/** Approved, scheduled and in-review versions of one tariff, with its draft decisions. */
+function Versions({ item, view }: { item: ContractTariffItem; view: TariffView }) {
+  const { t } = useT()
+  const currency = itemCurrency(item, view.lists.get(item.price_list))
+  const upcoming = scheduled(item, view.asOf)
+  const pending = drafts(item)
+  return <div className="flex flex-col items-end gap-1.5 xl:items-start">
+    {item.active ? <span className={pill + " bg-emerald-50 text-emerald-800"}>{t("Approved")}</span>
+      : !upcoming.length && !pending.length && <span className={pill + " bg-zinc-100 text-zinc-700"}>{t("No active tariff")}</span>}
+    {upcoming.map((version) => <span key={version.name} className={pill + " bg-sky-50 text-sky-900 tabular-nums"}>
+      {t("Scheduled: {rate} from {date}", { rate: currencyText(currency, version.rate, view.locale), date: view.validity(version) })}
+    </span>)}
+    {pending.map((draft) => <div key={draft.name} className="space-y-1.5">
+      <span className={pill + " bg-amber-50 text-amber-900 tabular-nums"}>
+        {t("In review: {rate} from {date}", { rate: currencyText(currency, draft.rate, view.locale), date: view.validity(draft) })}
+      </span>
+      <VersionAudit version={draft} view={view} />
+      {/* a maker never approves their own draft (can_approve false), but may discard it */}
+      {((view.data.can_approve && draft.can_approve !== false) || view.data.can_discard) &&
+        <div className="flex flex-wrap justify-end gap-1.5 xl:justify-start">
+          {view.data.can_approve && draft.can_approve !== false &&
+            <Button type="button" variant="outline" className={decisionTone.approve} disabled={view.loading}
+              onClick={() => view.open({ kind: "approve", item, draft })}>{t("Approve")}</Button>}
+          {view.data.can_discard &&
+            <Button type="button" variant="outline" className={decisionTone.discard} disabled={view.loading}
+              onClick={() => view.open({ kind: "discard", item, draft })}>{t("Discard")}</Button>}
+        </div>}
+    </div>)}
+  </div>
+}
+
+function Extras({ row, view }: { row: MatrixRow<ContractTariffItem>; view: TariffView }) {
+  const { t } = useT()
+  const lines = (["adult", "child", "bed"] as const).flatMap((kind) => {
+    const item = row.extras[kind]
+    if (!item?.active) return []
+    const rate = currencyText(itemCurrency(item, view.lists.get(item.price_list)), item.active.rate, view.locale)
+    return [kind === "adult" ? t("Extra adult {rate}", { rate }) : kind === "child" ? t("Extra child {rate}", { rate })
+      : t("Extra bed {rate}", { rate })]
+  })
+  return lines.length ? <ul className="space-y-0.5 text-xs text-zinc-700 tabular-nums">
+    {lines.map((line) => <li key={line} className="whitespace-nowrap">{line}</li>)}
+  </ul> : <span>—</span>
+}
+
+function History({ item, view }: { item: ContractTariffItem; view: TariffView }) {
+  const { t } = useT()
+  const currency = itemCurrency(item, view.lists.get(item.price_list))
+  return <ul className="divide-y divide-zinc-200">
+    {item.history.map((version) => <li key={version.name} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 py-1.5 text-zinc-700">
+      <span className="font-medium tabular-nums">{currencyText(currency, version.rate, view.locale)}</span>
+      <span>{view.validity(version)}</span>
+      <span>{t(version.workflow_state)}</span>
+      <VersionAudit version={version} view={view} />
+    </li>)}
+  </ul>
+}
+
+/** Who proposed a version and who released or rejected it, and when (SAP condition change log, OPERA rate
+ *  history). An integration that answers none of it shows nothing. */
+function VersionAudit({ version, view }: { version: TariffVersion; view: TariffView }) {
+  const { t } = useT()
+  const when = (value?: string | null) => value ? <> · {tariffDateTime(value, view.dateLocale)}</> : null
+  // an older integration has no approver: the last editor decided, unless that is the proposer
+  const decider = version.approver || (version.modified_by && version.modified_by !== version.owner ? version.modified_by : null)
+  const lines: ReactNode[] = []
+  if (version.owner) lines.push(<span key="proposed">{t("Proposed by {user}", { user: version.owner })}{when(version.creation)}</span>)
+  if (decider && version.workflow_state === "Approved")
+    lines.push(<span key="approved">{t("Approved by {user}", { user: decider })}{when(version.modified)}</span>)
+  if (decider && version.workflow_state === "Rejected")
+    lines.push(<span key="rejected">{t("Rejected by {user}", { user: decider })}{when(version.modified)}</span>)
+  if (version.rejection_reason)
+    lines.push(<span key="reason">{t("Reason: {reason}", { reason: version.rejection_reason })}</span>)
+  return lines.length ? <span className="flex basis-full flex-col text-xs text-zinc-600">{lines}</span> : null
+}
+
+function TariffList({ items, view, labels }: { items: ContractTariffItem[]; view: TariffView; labels: Labels }) {
+  const { t } = useT()
+  const headers = view.selectable ? Object.values(labels) : Object.values(labels).slice(1)
+  return <div aria-busy={view.loading} className="xl:overflow-x-auto xl:rounded-xl xl:border xl:border-zinc-200 xl:bg-white">
+    <table role="table" aria-label={t("Contract tariffs")} className="block w-full text-start text-sm xl:table">
+      <thead className="hidden bg-zinc-50 xl:table-header-group">
+        <tr>{headers.map((label, index) => <th key={label} scope="col" className="px-3 py-3 text-start font-semibold">
+          {view.selectable && index === 0 ? <span className="sr-only">{label}</span> : label}
+        </th>)}</tr>
+      </thead>
+      <tbody className="block space-y-2 xl:table-row-group">
+        {items.map((item) => <TariffRow key={itemKey(item)} item={item} view={view} labels={labels} columns={headers.length} />)}
+      </tbody>
+    </table>
+  </div>
+}
+
+function TariffRow({ item, view, labels, columns }: { item: ContractTariffItem; view: TariffView; labels: Labels; columns: number }) {
   const { t } = useT()
   const [historyOpen, setHistoryOpen] = useState(false)
   const historyId = useId()
   const active = item.active
-  const rate = fxRate(item, list)
-  const local = active?.local_equiv ?? (active && rate && rate > 0 ? active.rate * rate : null)
+  const local = localAmount(view, item, active)
   const subtitles = [item.item_code, item.room_type, item.occupancy].filter(Boolean)
-  const validity = (version: TariffVersion) => version.valid_upto
-    ? t("{from} – {until}", { from: tariffDate(version.valid_from, dateLocale), until: tariffDate(version.valid_upto, dateLocale) })
-    : tariffDate(version.valid_from, dateLocale)
-
+  const key = itemKey(item)
   return <Fragment>
     <tr role="row" data-item={item.item_code} className="block rounded-xl border border-zinc-200 bg-white py-1 xl:table-row xl:rounded-none xl:border-0 xl:border-t xl:align-top">
+      {view.selectable && <td role="cell" className="block px-3 pt-2 xl:table-cell xl:py-3">
+        <input type="checkbox" className="size-4" checked={view.selected.has(key)}
+          aria-label={t("Select {name}", { name: [item.item_name, item.price_list, item.customer].filter(Boolean).join(" · ") })}
+          onChange={(event) => view.toggle([key], event.target.checked)} />
+      </td>}
       <th role="rowheader" scope="row" className="block px-3 py-2 text-start xl:table-cell xl:py-3">
         <span className="block font-semibold text-zinc-950">{item.item_name}</span>
         <span className="block break-words text-xs font-normal text-zinc-600">{subtitles.join(" · ")}</span>
         <span className="mt-1 block break-words text-xs font-normal text-zinc-600">{item.price_list}</span>
+        {item.customer && <span className={pill + " mt-1 bg-brand-50 text-brand-800"}>{item.customer}</span>}
       </th>
       <Cell label={labels.Category}><span className={pill + " bg-zinc-100 text-zinc-700"}>{t(item.category)}</span></Cell>
       <Cell label={labels.Rate}><span className="whitespace-nowrap font-semibold text-zinc-950 tabular-nums">
-        {active ? currencyText(item.currency, active.rate, locale) : "—"}
+        {active ? currencyText(itemCurrency(item, view.lists.get(item.price_list)), active.rate, view.locale) : "—"}
       </span></Cell>
       <Cell label={labels.Local}><span className="whitespace-nowrap tabular-nums">
-        {local == null || item.currency === data.property_currency ? "—" : t("≈ {amount}", { amount: currencyText(data.property_currency, local, locale) })}
+        {local == null ? "—" : t("≈ {amount}", { amount: currencyText(view.data.property_currency, local, view.locale) })}
       </span></Cell>
-      <Cell label={labels.Dates}>{active ? validity(active) : "—"}</Cell>
-      <Cell label={labels.Status}>
-        <div className="flex flex-col items-end gap-2 xl:items-start">
-          {active ? <span className={pill + " bg-emerald-50 text-emerald-800"}>{t("Approved")}</span>
-            : <span className={pill + " bg-zinc-100 text-zinc-700"}>{t("No active tariff")}</span>}
-          {drafts(item).map((draft) => <div key={draft.name} className="space-y-1.5">
-            <span className={pill + " bg-amber-50 text-amber-900 tabular-nums"}>
-              {t("Pending: {rate} from {date}", {
-                rate: currencyText(item.currency, draft.rate, locale), date: validity(draft),
-              })}
-            </span>
-            {data.can_approve && draft.can_approve !== false && <div className="flex flex-wrap justify-end gap-1.5 xl:justify-start">
-              <Button type="button" variant="outline" className={decisionTone.approve} disabled={loading}
-                onClick={() => open({ kind: "approve", item, draft })}>{t("Approve")}</Button>
-              <Button type="button" variant="outline" className={decisionTone.discard} disabled={loading}
-                onClick={() => open({ kind: "discard", item, draft })}>{t("Discard")}</Button>
-            </div>}
-          </div>)}
-        </div>
-      </Cell>
+      <Cell label={labels.Dates}>{active ? view.validity(active) : "—"}</Cell>
+      <Cell label={labels.Status}><Versions item={item} view={view} /></Cell>
       <td role="cell" className="block px-3 py-2 xl:table-cell xl:py-3">
         <div className="flex flex-wrap gap-1.5">
-          {data.can_propose && <Button type="button" variant="outline" className="whitespace-nowrap text-brand-700" disabled={loading}
-            onClick={() => open({ kind: "propose", item })}><Plus aria-hidden className="size-4" />{t("New version")}</Button>}
+          {view.data.can_propose && <Button type="button" variant="outline" className="whitespace-nowrap text-brand-700" disabled={view.loading}
+            onClick={() => view.open({ kind: "propose", item })}><Plus aria-hidden className="size-4" />{t("New version")}</Button>}
           {item.history.length > 0 && <Button type="button" variant="ghost" aria-expanded={historyOpen}
             aria-controls={historyOpen ? historyId : undefined} onClick={() => setHistoryOpen(!historyOpen)}>
             <ChevronDown aria-hidden className={historyOpen ? "size-4 rotate-180" : "size-4"} />{t("History")}
@@ -317,15 +630,9 @@ function TariffRow({ item, data, labels, locale, dateLocale, list, loading, open
       </td>
     </tr>
     {historyOpen && <tr role="row" id={historyId} className="block rounded-lg bg-zinc-50 xl:table-row">
-      <td role="cell" colSpan={7} className="block px-4 py-3 xl:table-cell">
+      <td role="cell" colSpan={columns} className="block px-4 py-3 xl:table-cell">
         <p className="mb-1 font-semibold">{t("Version history")}</p>
-        <ul className="divide-y divide-zinc-200">
-          {item.history.map((version) => <li key={version.name} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 py-1.5 text-zinc-700">
-            <span className="font-medium tabular-nums">{currencyText(item.currency, version.rate, locale)}</span>
-            <span>{validity(version)}</span>
-            <span>{t(version.workflow_state)}</span>
-          </li>)}
-        </ul>
+        <History item={item} view={view} />
       </td>
     </tr>}
   </Fragment>
@@ -338,16 +645,24 @@ function Cell({ label, children }: { label: string; children: ReactNode }) {
   </td>
 }
 
-function ActionDialog({ action, data, locale, dateLocale, list, onClose, onSuccess }: {
+function ActionDialog({ action, data, locale, dateLocale, list, rounding, customers, onClose, onSuccess }: {
   action: TariffAction; data: ContractTariffsResponse; locale: string; dateLocale: string
-  list?: PriceList; onClose: () => void; onSuccess: () => void
+  list?: PriceList; rounding: Rounding; customers: string[]; onClose: () => void; onSuccess: () => void
 }) {
   const { t } = useT()
-  const dialog = useRef<HTMLDialogElement>(null)
   const submitting = useRef(false)
-  const titleId = useId()
+  const customerList = useId()
   const { item, kind } = action
-  const minDate = item.active?.valid_from === data.business_date ? addDays(data.business_date, 1) : data.business_date
+  const currency = itemCurrency(item, list)
+  // a supplement, venue or other line may be complimentary (OPERA 0.00); a room rate never is
+  const free = item.category !== "Room"
+  const [customer, setCustomer] = useState("")
+  // a customer row's version is that customer's own price; a public row's may be a new customer's first (SAP A305)
+  const target = item.customer || customer.trim()
+  // a customer's first price follows no version of its own (as the bulk dialog has it)
+  const fresh = !item.customer && target !== ""
+  const minDate = !fresh && item.active?.valid_from === data.business_date ? addDays(data.business_date, 1)
+    : data.business_date
   const [amount, setAmount] = useState("")
   const [validFrom, setValidFrom] = useState(() => minDate > todayPlus(1) || item.active?.valid_from === data.business_date ? minDate : todayPlus(1))
   const [validUntil, setValidUntil] = useState("")
@@ -355,22 +670,12 @@ function ActionDialog({ action, data, locale, dateLocale, list, onClose, onSucce
   const [failure, setFailure] = useState<"absent" | "failed" | null>(null)
   const [reason, setReason] = useState("")
 
-  useEffect(() => {
-    const node = dialog.current
-    const opener = document.activeElement
-    node?.showModal()
-    return () => {
-      if (node?.open) node.close()
-      if (opener instanceof HTMLElement && opener.isConnected) opener.focus()
-    }
-  }, [])
-
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (submitting.current) return
     const value = Number(amount)
-    if (action.kind === "propose" && (!Number.isFinite(value) || value <= 0 || !validFrom ||
-      validFrom < minDate || (validUntil && validUntil < validFrom))) return
+    if (action.kind === "propose" && (amount.trim() === "" || !Number.isFinite(value) || (free ? value < 0 : value <= 0)
+      || !validFrom || validFrom < minDate || (validUntil && validUntil < validFrom))) return
     submitting.current = true
     setBusy(true)
     setFailure(null)
@@ -379,12 +684,13 @@ function ActionDialog({ action, data, locale, dateLocale, list, onClose, onSucce
       const result = await call(editMethods[action.kind], action.kind === "propose" ? {
         property: data.property, price_list: item.price_list, item_code: item.item_code,
         price_list_rate: value, valid_from: validFrom, valid_upto: validUntil || null,
+        // a customer's version is that customer's own price, never the public rate
+        ...(target ? { customer: target } : {}),
       } : { item_price: action.draft.name })
       if (result == null) setFailure("absent")
       else onSuccess()
     } catch (error) {
-      const message = serverError(error)
-      if (!/\b(?:ERPNext|Frappe|Kamra)\b/i.test(message)) setReason(message)
+      setReason(tariffReason(error))
       setFailure("failed")
     } finally {
       submitting.current = false
@@ -396,73 +702,77 @@ function ActionDialog({ action, data, locale, dateLocale, list, onClose, onSucce
   const title = kind === "propose" ? t("New tariff version")
     : kind === "approve" ? t("Approve tariff version?") : t("Discard tariff draft?")
   const rate = fxRate(item, list)
-  const showPreview = item.currency !== data.property_currency && rate != null && rate > 0
+  const showPreview = currency !== data.property_currency && rate != null && rate > 0
     && Number.isFinite(Number(amount)) && Number(amount) > 0
-  return <dialog ref={dialog} aria-labelledby={titleId}
-    onCancel={(event) => { event.preventDefault(); if (!submitting.current) onClose() }}
-    className="m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-2xl border border-zinc-200 bg-white p-0 text-zinc-900 shadow-xl backdrop:bg-zinc-950/40">
-    <form onSubmit={submit}>
-      <header className="space-y-1 border-b border-zinc-200 px-5 py-4">
-        <h2 id={titleId} className="text-lg font-semibold">{title}</h2>
-        <p className="text-sm text-zinc-700">{item.item_name} · {item.price_list}</p>
-      </header>
-      <div className="space-y-4 px-5 py-4">
-        {action.kind === "propose" ? <>
-          <p className="text-sm text-zinc-600">{item.active
-            ? t("Current rate: {rate}", { rate: currencyText(item.currency, item.active.rate, locale) })
-            : t("No active tariff")}</p>
-          <label className="block space-y-1.5 text-sm font-medium">
-            <span>{t("New rate")}</span>
-            <span className="flex items-center gap-2">
-              <span className="rounded-lg bg-zinc-100 px-2 py-2 text-zinc-700">{item.currency}</span>
-              <input type="number" inputMode="decimal" className={field + " min-w-0 flex-1 tabular-nums"} min="0.01" step="0.01"
-                value={amount} onChange={(event) => setAmount(event.target.value)} required disabled={busy} autoFocus />
-            </span>
-          </label>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="flex min-w-0 flex-col gap-1.5 text-sm font-medium">
-              {t("Effective from")}
-              <input name="valid_from" type="date" className={field} min={minDate} value={validFrom}
-                onChange={(event) => setValidFrom(event.target.value)} required disabled={busy} />
-            </label>
-            <label className="flex min-w-0 flex-col gap-1.5 text-sm font-medium">
-              {t("Valid until (optional)")}
-              <input name="valid_upto" type="date" className={field} min={validFrom} value={validUntil}
-                onChange={(event) => setValidUntil(event.target.value)} disabled={busy} />
-            </label>
-          </div>
-          {showPreview && <div className="rounded-lg border border-brand-200 bg-brand-50 p-3 text-sm" aria-live="polite">
-            <p className="font-medium">{t("Local equivalent preview")}</p>
-            <p className="tabular-nums">{t("{foreign_amount} ≈ {local_amount} at 1 {foreign} = {rate} {home}", {
-              foreign_amount: currencyText(item.currency, Number(amount), locale),
-              local_amount: currencyText(data.property_currency, Number(amount) * rate, locale),
-              foreign: item.currency, rate: formatFxRate(rate, locale), home: data.property_currency,
-            })}</p>
-          </div>}
-        </> : <>
-          <p className="font-semibold tabular-nums">{t("{rate} from {date}", {
-            rate: currencyText(item.currency, action.draft.rate, locale),
-            date: tariffDate(action.draft.valid_from, dateLocale),
-          })}</p>
-          {action.draft.valid_upto && <p className="text-sm text-zinc-600">
-            {t("Valid until {date}", { date: tariffDate(action.draft.valid_upto, dateLocale) })}
-          </p>}
-          <p className="text-sm text-zinc-700">{kind === "approve"
-            ? t("This version will take effect on its effective date once approved.")
-            : t("Discarding this draft cannot be undone. The released tariff will not change.")}</p>
-        </>}
-        {failure && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-800">
-          {failure === "absent" ? t("Tariff editing is not available for this property.")
-            : reason || t("The tariff change could not be saved. Check the latest versions before retrying.")}
-        </p>}
+  const local = showPreview ? Number(amount) * rate : 0
+  const subtitle = <>
+    {item.item_name} · {item.price_list}
+    {target && <> · <strong className="font-semibold text-brand-800">
+      {t("Customer rate: {customer}", { customer: target })}</strong></>}
+  </>
+  return <TariffModal title={title} subtitle={subtitle} busy={busy} onClose={onClose} onSubmit={submit}
+    footer={<>
+      <Button type="button" variant="outline" onClick={onClose} disabled={busy}>{t("Cancel")}</Button>
+      <Button type="submit" variant={kind === "propose" ? "primary" : "outline"}
+        className={kind === "propose" ? undefined : decisionTone[kind]} disabled={busy}>
+        {busy ? t("Saving…") : label}
+      </Button>
+    </>}>
+    {action.kind === "propose" ? <>
+      <p className="text-sm text-zinc-600">{item.active
+        ? t("Current rate: {rate}", { rate: currencyText(currency, item.active.rate, locale) })
+        : t("No active tariff")}</p>
+      {!item.customer && <label className="block space-y-1.5 text-sm font-medium">
+        <span>{t("Customer (optional)")}</span>
+        <input name="customer" list={customerList} autoComplete="off" className={field + " w-full"} value={customer}
+          onChange={(event) => setCustomer(event.target.value)} disabled={busy} />
+        <datalist id={customerList}>{customers.map((name) => <option key={name} value={name} />)}</datalist>
+        <span className="block text-xs font-normal text-zinc-600">{t("Leave empty for the public rate.")}</span>
+      </label>}
+      <label className="block space-y-1.5 text-sm font-medium">
+        <span>{t("New rate")}</span>
+        <span className="flex items-center gap-2">
+          <span className="rounded-lg bg-zinc-100 px-2 py-2 text-zinc-700">{currency}</span>
+          <input type="number" inputMode="decimal" className={field + " min-w-0 flex-1 tabular-nums"} min={free ? "0" : "0.01"} step="0.01"
+            value={amount} onChange={(event) => setAmount(event.target.value)} required disabled={busy} autoFocus />
+        </span>
+      </label>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="flex min-w-0 flex-col gap-1.5 text-sm font-medium">
+          {t("Effective from")}
+          <input name="valid_from" type="date" className={field} min={minDate} value={validFrom}
+            onChange={(event) => setValidFrom(event.target.value)} required disabled={busy} />
+        </label>
+        <label className="flex min-w-0 flex-col gap-1.5 text-sm font-medium">
+          {t("Valid until (optional)")}
+          <input name="valid_upto" type="date" className={field} min={validFrom} value={validUntil}
+            onChange={(event) => setValidUntil(event.target.value)} disabled={busy} />
+        </label>
       </div>
-      <footer className="flex flex-wrap justify-end gap-2 border-t border-zinc-200 bg-zinc-50 px-5 py-3">
-        <Button type="button" variant="outline" onClick={onClose} disabled={busy}>{t("Cancel")}</Button>
-        <Button type="submit" variant={kind === "propose" ? "primary" : "outline"}
-          className={kind === "propose" ? undefined : decisionTone[kind]} disabled={busy}>
-          {busy ? t("Saving…") : label}
-        </Button>
-      </footer>
-    </form>
-  </dialog>
+      {showPreview && rate != null && <div className="rounded-lg border border-brand-200 bg-brand-50 p-3 text-sm" aria-live="polite">
+        <p className="font-medium">{t("Local equivalent preview")}</p>
+        <p className="tabular-nums">{t("{foreign_amount} ≈ {local_amount} at 1 {foreign} = {rate} {home}", {
+          foreign_amount: currencyText(currency, Number(amount), locale),
+          local_amount: currencyText(data.property_currency,
+            rounding ? roundRate(local, rounding.step, rounding.mode, data.property_currency) : local, locale),
+          foreign: currency, rate: formatFxRate(rate, locale), home: data.property_currency,
+        })}</p>
+      </div>}
+    </> : <>
+      <p className="font-semibold tabular-nums">{t("{rate} from {date}", {
+        rate: currencyText(currency, action.draft.rate, locale),
+        date: tariffDate(action.draft.valid_from, dateLocale),
+      })}</p>
+      {action.draft.valid_upto && <p className="text-sm text-zinc-600">
+        {t("Valid until {date}", { date: tariffDate(action.draft.valid_upto, dateLocale) })}
+      </p>}
+      <p className="text-sm text-zinc-700">{kind === "approve"
+        ? t("This version will take effect on its effective date once approved.")
+        : t("Discarding this draft cannot be undone. The released tariff will not change.")}</p>
+    </>}
+    {failure && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-800">
+      {failure === "absent" ? t("Tariff editing is not available for this property.")
+        : reason || t("The tariff change could not be saved. Check the latest versions before retrying.")}
+    </p>}
+  </TariffModal>
 }

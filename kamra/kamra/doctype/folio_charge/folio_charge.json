@@ -23,6 +23,10 @@
   "gst_amount",
   "tax_as_posted",
   "total",
+  "contract_currency",
+  "contract_fx_rate",
+  "contract_fx_date",
+  "contract_fx_stale",
   "auto_posted",
   "is_alcohol",
   "reservation",
@@ -144,6 +148,36 @@
    "fieldtype": "Currency",
    "in_list_view": 1,
    "label": "Total",
+   "read_only": 1
+  },
+  {
+   "description": "The contract currency a Current Date room night was converted from.",
+   "fieldname": "contract_currency",
+   "fieldtype": "Link",
+   "label": "Contract Currency",
+   "options": "Currency",
+   "read_only": 1
+  },
+  {
+   "description": "The published rate this room night posted at (home units per contract unit).",
+   "fieldname": "contract_fx_rate",
+   "fieldtype": "Float",
+   "label": "Contract FX Rate",
+   "precision": "9",
+   "read_only": 1
+  },
+  {
+   "fieldname": "contract_fx_date",
+   "fieldtype": "Date",
+   "label": "Contract FX Date",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "No published rate for the night: it posted at the booking's rate.",
+   "fieldname": "contract_fx_stale",
+   "fieldtype": "Check",
+   "label": "Stale Contract FX",
    "read_only": 1
   },
   {

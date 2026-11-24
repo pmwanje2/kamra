@@ -450,6 +450,13 @@ MODULES: tuple[Module, ...] = (
 				S("pet_charge_basis", "Pet charge applies", "select", "Per stay", P,
 				  options=("Per stay", "Per night")),
 			)),
+			Section("reference_currency", "Foreign-currency contracts",
+			        "How a bill shows a stay priced in a foreign-currency contract beside the home amounts.", (
+				S("reference_currency_calculation", "Reference currency on bills", "select", "ACTUAL", P,
+				  options=("ACTUAL", "CURRENT"),
+				  hint="ACTUAL: each charge and payment at the exchange rate of the day it was priced or "
+				       "posted. CURRENT: the whole bill at today's published rate."),
+			)),
 			Section("corporate", "Corporate billing",
 			        "Who pays what on a credit company's stay when that company has no billing rules of its own. "
 			        "A company's own rules always win, and liquor never bills to a company.", (

@@ -9,7 +9,7 @@ import json
 from decimal import ROUND_HALF_UP, Decimal
 
 import frappe
-from frappe.utils import add_days, getdate, now_datetime, nowdate
+from frappe.utils import add_days, cint, getdate, now_datetime, nowdate
 
 # SQL on `tabFolio Charge` fc: a line that is neither voided nor a void's
 # reversal. Both stay on the folio (void_charge) and net to zero, so sums
@@ -46,11 +46,26 @@ def _recalculate(folio):
 		charges += amount
 		tax += line_tax
 	paid = sum(Decimal(str(p.amount or 0)) for p in folio.payments)
+	raw_grand = charges + tax
+	prop = folio.get("property")
+	if prop and folio.charges:
+		# Document-level currency minor-unit rounding (SAP TCURX style): round the
+		# folio total to the property currency's ISO decimals rather than per line.
+		from kamra.pricing import property_currency, round_rate_amount
+		currency = property_currency(prop)
+		if tax:
+			grand = round_rate_amount(raw_grand, 0, "Nearest", currency)
+			tax = grand - charges
+		else:
+			grand = round_rate_amount(charges, 0, "Nearest", currency)
+			charges = grand
+	else:
+		grand = raw_grand
 	folio.charges_total = float(charges)
 	folio.tax_total = float(tax)
-	folio.grand_total = float(charges + tax)
+	folio.grand_total = float(grand)
 	folio.payments_total = float(paid)
-	folio.balance = float(charges + tax - paid)
+	folio.balance = float(grand - paid)
 
 
 def _line_tax(c, amount: Decimal) -> Decimal:
@@ -389,6 +404,19 @@ def _charge_posted(reservation_name: str, charge_type: str, date: str) -> bool:
 	))
 
 
+def _posted_room_gst(reservation_name: str, date) -> float | None:
+	"""The GST rate the night's own room line posted at (a Current Date
+	night's own slab), voided lines and their reversals left out; None
+	when no automated room line of the stay holds the night."""
+	rows = frappe.get_all("Folio Charge", filters={
+		"parenttype": "Folio", "reservation": reservation_name, "charge_type": "Room", "auto_posted": 1},
+		fields=["name", "posting_date", "gst_rate", "reversal_of"])
+	voided = {row.reversal_of for row in rows if row.get("reversal_of")}
+	key = str(getdate(date))
+	return next((float(row.gst_rate or 0) for row in rows if not row.get("reversal_of") and row.name not in voided
+	             and row.get("posting_date") and str(getdate(row.posting_date)) == key), None)
+
+
 def _room_gst(reservation) -> float:
 	"""Effective GST for this reservation's first night (used for the
 	discount line). Slab-aware."""
@@ -426,11 +454,12 @@ def _nightly_room_rate(reservation, date) -> float:
 	locked = locked_night(reservation, date)
 	if locked is not None:
 		return float(locked.rate or 0)
-	rate = _plan_free_night_rate(reservation, date)
 	plan = reservation.get("rate_plan")
 	if plan:
-		rate *= _rate_plan_factor(reservation, plan)
-	return float(rate)
+		planned = _planned_nights(reservation, plan).get(str(getdate(date)))
+		if planned is not None:
+			return float(planned)
+	return float(_plan_free_night_rate(reservation, date))
 
 
 def _day_use_room_charge(reservation, date) -> tuple[float, float, str] | None:
@@ -515,31 +544,54 @@ def _day_use_discount(reservation, date, rt, inclusive: bool, amount: float, gst
 	        f"{label} · {amount_text(reservation.property, used)} less discount {amount_text(reservation.property, off)}")
 
 
-def _rate_plan_factor(reservation, plan) -> Decimal:
-	"""The stay's rate-plan factor, worked out once per loaded reservation:
-	a plan that adds or fixes an amount works on the whole stay's total, so
-	every night of the stay has to be priced to find one night's share."""
-	from kamra.pricing import rate_plan_factor
+def _planned_nights(reservation, plan) -> dict[str, Decimal]:
+	"""The stay's nights under its rate plan, priced the way pricing.quote
+	prices them (pricing.plan_stay_nights): the plan on the whole stay, a
+	derived plan leaving extra guests as its base priced them, then each
+	night rounded to the plan's step. Worked out once per loaded booking."""
+	from kamra.pricing import (
+		extra_person_charge,
+		plan_stay_nights,
+		rates_include_tax,
+		small_group_allows_stay,
+	)
 
 	key = (plan, str(reservation.check_in_date), str(reservation.check_out_date),
 	       reservation.adults, reservation.children, reservation.room_type,
 	       reservation.get("over_capacity_charge"))
 	flags = getattr(reservation, "flags", None)
-	cache = flags.get("_kamra_plan_factor") if flags is not None else None
+	cache = flags.get("_kamra_planned_nights") if flags is not None else None
 	if cache and cache[0] == key:
 		return cache[1]
 	start = getdate(reservation.check_in_date)
-	nights = max((getdate(reservation.check_out_date) - start).days, 1)
-	total = sum((_plan_free_night_rate(reservation, add_days(start, i))
-	             for i in range(nights)), Decimal(0))
-	factor = rate_plan_factor(plan, total)
+	count = max((getdate(reservation.check_out_date) - start).days, 1)
+	rt = frappe.get_doc("Room Type", reservation.room_type)
+	small_ok = small_group_allows_stay(rt, reservation.check_in_date, reservation.check_out_date)
+	inclusive = rates_include_tax(reservation.property)
+	dates, nights, extras = [], [], Decimal(0)
+	for i in range(count):
+		day = add_days(start, i)
+		rate, gst = _plan_free_night(reservation, day)
+		extra = extra_person_charge(rt, reservation.adults, reservation.children, day, allow_small_group=small_ok)
+		if inclusive:
+			extra = extra / (Decimal(1) + gst / Decimal(100))
+		extras += min(extra, rate)
+		dates.append(str(getdate(day)))
+		nights.append((rate, gst))
+	rates, _rounded = plan_stay_nights(plan, nights, extras, inclusive)
+	planned = dict(zip(dates, rates, strict=True))
 	if flags is not None:
-		flags["_kamra_plan_factor"] = (key, factor)
-	return factor
+		flags["_kamra_planned_nights"] = (key, planned)
+	return planned
 
 
 def _plan_free_night_rate(reservation, date) -> Decimal:
 	"""One night before the rate plan - the per-night step of pricing.quote."""
+	return _plan_free_night(reservation, date)[0]
+
+
+def _plan_free_night(reservation, date) -> tuple[Decimal, Decimal]:
+	"""One night before the rate plan, taxable, and its GST % (0 when tax is not inclusive)."""
 	from kamra.pricing import (
 		occupancy_rate,
 		rates_include_tax,
@@ -555,11 +607,12 @@ def _plan_free_night_rate(reservation, date) -> Decimal:
 			rt, reservation.check_in_date, reservation.check_out_date))
 	rate = season_adjust(reservation.property, date, base,
 	                     reservation.room_type)
+	gst = Decimal(0)
 	if rates_include_tax(reservation.property):
-		gst = room_gst_rate(reservation.property, rt,
-		                    rate + _over_cap_night(reservation))
+		gst = Decimal(str(room_gst_rate(reservation.property, rt,
+		                                rate + _over_cap_night(reservation))))
 		rate = rate / (Decimal(1) + gst / Decimal(100))
-	return rate
+	return rate, gst
 
 
 def _over_cap_night(reservation) -> Decimal:
@@ -629,29 +682,250 @@ def _append_charge(folios, reservation, charge_type, line, is_alcohol=0):
 	folios[name].append("charges", line)
 
 
-def post_room_night(reservation, date, folios=None) -> bool:
+STALE_FX_MARK = "[stale booking FX]"
+
+
+def _tariff_night(tariff: dict, date) -> dict | None:
+	"""A contract night's own tariff (a stay over a tariff change), or None."""
+	key = str(getdate(date))
+	return next((night for night in tariff.get("nights") or [] if str(night.get("date")) == key), None)
+
+
+def _negotiated_share(reservation, snapshot: dict, locked, night: dict | None = None) -> Decimal:
+	"""What the stay's night is of its booked contract price - the night's
+	own (`night`, a stay over a tariff change), else the stay's: below 1
+	for a reservation discount, anything else for a manager's override. 1
+	when the night is the contract as booked."""
+	from kamra.pricing import rates_include_tax
+
+	booked = Decimal(str((night or snapshot).get("agreed_rate") or 0))
+	if booked <= 0:
+		return Decimal(1)
+	if locked is not None:
+		shown = Decimal(str(locked.rate or 0))
+		if rates_include_tax(reservation.property):
+			shown *= Decimal(1) + Decimal(str(locked.gst_rate or 0)) / Decimal(100)
+	else:
+		stay = Decimal(str(snapshot.get("agreed_rate") or 0)) or booked
+		shown = booked * (Decimal(str(reservation.get("agreed_rate") or 0)) or stay) / stay
+	# the locked nights carry cents and the last night's rounding: that is not a discount
+	tolerance = max(Decimal("0.05"), booked * Decimal("0.00001"))
+	return Decimal(1) if abs(shown - booked) <= tolerance else shown / booked
+
+
+def current_date_contract_night(reservation, date) -> dict | None:
+	"""OPERA Exchange Type "Current Date": a foreign contract night is
+	charged at the published rate of the date it is posted for (a catch-up
+	or back-dated night at its own date, never later than the business
+	date), not the booking's locked rate. A stay over a tariff change
+	converts the night's own contract amount.
+
+	Only the rate is looked up (pricing.posting_fx_rate, the governed
+	Currency Exchange): the contract amount stays as booked, the rate
+	plan's rounding applies, a reservation discount or override keeps its
+	share of the night, and a tax-inclusive house backs the tax out as the
+	quote does. With no published rate the locked night (the booking's
+	rate) is billed, marked STALE_FX_MARK on the charge and logged for
+	Night Audit and Finance. {rate, gst_rate, label, currency, fx_rate,
+	fx_date, stale}, or None - bill the locked night - for other policies,
+	a home-currency contract or a fixed rate (the manager's price, never
+	re-converted, as pricing.relock_contract_fx_at_check_in keeps it)."""
+	from kamra.pricing import (
+		posting_fx_rate,
+		rate_plan_fx_policy,
+		rates_include_tax,
+		room_gst_rate,
+		round_rate_amount,
+		saved_contract_tariff,
+	)
+
+	plan = reservation.get("rate_plan")
+	if rate_plan_fx_policy(plan) != "Current Date" or cint(reservation.get("fixed_rate")):
+		return None
+	snapshot = saved_contract_tariff(reservation)
+	tariff = snapshot.get("tariff") or {}
+	currency, home = tariff.get("currency"), tariff.get("property_currency")
+	night = _tariff_night(tariff, date)
+	nightly = Decimal(str((night or tariff).get("nightly") or 0))
+	if not currency or currency == home or nightly <= 0:
+		return None
+	contract = round_rate_amount(nightly, 0, currency=currency)
+	posting = posting_fx_rate(reservation.property, currency, date)
+	if not posting:
+		fx, fx_date = Decimal(str(tariff.get("fx_rate") or 0)), tariff.get("fx_date")
+		frappe.log_error(
+			title=f"Current Date FX missing: {reservation.name}",
+			message=(f"No single published {currency} rate for {date}: room night of {reservation.name} "
+			         f"posted at the booking rate {fx} ({fx_date}). Finance publishes the rate; Night Audit "
+			         "reviews the night."))
+		return {"rate": _nightly_room_rate(reservation, date), "gst_rate": _nightly_gst(reservation, date),
+		        "label": f"{currency} {contract:,} at {fx:,} ({fx_date}) {STALE_FX_MARK}",
+		        "currency": currency, "fx_rate": float(fx), "fx_date": fx_date, "stale": True}
+	fx, fx_date = posting
+	rp = frappe.get_doc("Rate Plan", plan)
+	gross = round_rate_amount(nightly * fx, rp.get("rounding_step"), rp.get("rounding_mode") or "Nearest", home)
+	share = _negotiated_share(reservation, snapshot, locked_night(reservation, date), night)
+	if share != 1:
+		gross = round_rate_amount(gross * share, 0, currency=home)
+	rt = frappe.get_doc("Room Type", reservation.room_type)
+	gst = room_gst_rate(reservation.property, rt, gross + _over_cap_night(reservation))
+	rate = gross / (Decimal(1) + Decimal(str(gst)) / Decimal(100)) if rates_include_tax(reservation.property) else gross
+	return {"rate": float(rate), "gst_rate": float(gst), "label": f"{currency} {contract:,} at {fx:,} ({fx_date})",
+	        "currency": currency, "fx_rate": float(fx), "fx_date": fx_date, "stale": False}
+
+
+def _posted_contract_fx(reservation, currency: str, projected=()) -> tuple[Decimal, str, int] | None:
+	"""The rates a Current Date stay's room nights actually posted at, from
+	the charges themselves (voided nights and their reversals left out):
+	their average - each night is the same contract amount - the latest
+	rate date, and how many nights. A void_charge reversal carries no
+	contract currency, so every Room line of the stay is read to find
+	them. A night split over two folios is one night. A pro forma's
+	`projected` room nights count at the rate they would post at."""
+	rows = frappe.get_all("Folio Charge", filters={
+		"parenttype": "Folio", "reservation": reservation.name, "charge_type": "Room"},
+		fields=["name", "posting_date", "contract_currency", "contract_fx_rate", "contract_fx_date", "reversal_of"])
+	rows += [frappe._dict(row) for row in projected if row.get("charge_type") == "Room"]
+	reversed_rows = {row.reversal_of for row in rows if row.get("reversal_of")}
+	posted = [row for row in rows if not row.get("reversal_of") and row.name not in reversed_rows
+	          and row.get("contract_currency") == currency and Decimal(str(row.contract_fx_rate or 0)) > 0]
+	if not posted:
+		return None
+	nights: dict[str, list[Decimal]] = {}
+	for row in posted:
+		night = str(getdate(row.posting_date)) if row.get("posting_date") else row.name
+		nights.setdefault(night, []).append(Decimal(str(row.contract_fx_rate)))
+	average = sum((sum(rates, Decimal(0)) / len(rates) for rates in nights.values()), Decimal(0)) / len(nights)
+	latest = max(str(getdate(row.contract_fx_date)) for row in posted if row.contract_fx_date) \
+		if any(row.contract_fx_date for row in posted) else None
+	return average.quantize(Decimal("0.000000001")), latest, len(nights)
+
+
+def _actual_reference_amounts(property: str, currency: str, booked_fx: Decimal, charges, payments) \
+		-> tuple[Decimal, Decimal]:
+	"""OPERA REFERENCE_CURRENCY_CALCULATION ACTUAL on a Current Date stay:
+	each transaction in the reference currency at the rate of its own
+	posting date - a room night at the rate it posted at (contract_fx_rate),
+	any other line or payment at the governed rate of its posting date
+	(pricing.posting_fx_rate), else the booked rate - and a payment
+	tendered in that currency at what was tendered. A voided line and its
+	reversal net to nothing and are left out. (charges, payments)."""
+	from kamra.pricing import posting_fx_rate
+
+	rates: dict = {}
+
+	def rate_on(day) -> Decimal:
+		key = str(getdate(day)) if day else None
+		if key not in rates:
+			posting = posting_fx_rate(property, currency, key) if key else None
+			rates[key] = posting[0] if posting else booked_fx
+		return rates[key]
+
+	voided = {row.get("reversal_of") for row in charges if row.get("reversal_of")}
+	total = Decimal(0)
+	for row in charges:
+		if row.get("reversal_of") or row.get("name") in voided:
+			continue
+		amount = Decimal(str(row.get("amount") or 0))
+		gross = amount + amount * Decimal(str(row.get("gst_rate") or 0)) / Decimal(100)
+		posted = Decimal(str(row.get("contract_fx_rate") or 0)) if row.get("contract_currency") == currency else 0
+		total += gross / (posted if posted > 0 else rate_on(row.get("posting_date")))
+	paid = Decimal(0)
+	for row in payments:
+		amount = Decimal(str(row.get("amount") or 0))
+		tendered = abs(Decimal(str(row.get("fx_amount") or 0)))
+		if row.get("currency") == currency and tendered:
+			paid += tendered if amount >= 0 else -tendered
+		else:
+			paid += amount / rate_on(row.get("posting_date"))
+	return total, paid
+
+
+def reference_currency(reservation, grand_total=None, balance=None, *, charges=None, payments=None) -> dict | None:
+	"""The stay's contract currency beside the bill's home amounts, as the
+	Property's reference_currency_calculation says (OPERA Cloud): ACTUAL is
+	the rate the stay was priced or posted at - its locked contract rate,
+	or for a Current Date stay the average of the rates its nights posted
+	at - and CURRENT is today's published rate (pricing.posting_fx_rate).
+	With the bill's grand_total and balance, their equivalents in the
+	contract currency at that rate; for ACTUAL on a Current Date stay with
+	the bill's `charges` and `payments`, the sum of each transaction at its
+	own posting rate instead. A fixed rate (OPERA Fixed Rate) is billed at
+	its locked rate on any plan, so ACTUAL converts it at that rate. None
+	for a home-currency stay, or when CURRENT has no published rate today."""
+	from kamra.business_date import get_business_date
+	from kamra.pricing import posting_fx_rate, rate_plan_fx_policy, round_rate_amount, saved_contract_tariff
+
+	tariff = saved_contract_tariff(reservation).get("tariff") or {}
+	currency, home = tariff.get("currency"), tariff.get("property_currency")
+	if not currency or currency == home or not tariff.get("fx_rate"):
+		return None
+	calculation = frappe.db.get_value(
+		"Property", reservation.property, "reference_currency_calculation") or "ACTUAL"
+	fx, fx_date, nights = Decimal(str(tariff["fx_rate"])), tariff.get("fx_date"), None
+	booked_fx = fx
+	per_transaction = False
+	if calculation == "CURRENT":
+		posting = posting_fx_rate(reservation.property, currency, get_business_date(reservation.property))
+		if not posting:
+			return None
+		fx, fx_date = posting
+	elif rate_plan_fx_policy(reservation.get("rate_plan")) == "Current Date" \
+			and not cint(reservation.get("fixed_rate")):
+		# a fixed rate is never re-converted (current_date_contract_night): it stays at its locked rate
+		per_transaction = charges is not None
+		posted = _posted_contract_fx(reservation, currency, [row for row in charges or [] if row.get("projected")])
+		if posted:
+			fx, fx_date, nights = posted[0], posted[1] or fx_date, posted[2]
+	out = {"currency": currency, "home_currency": home, "calculation": calculation,
+	       "fx_rate": float(fx), "fx_date": fx_date}
+	if nights:
+		out["posted_nights"] = nights
+	if per_transaction:
+		total, paid = _actual_reference_amounts(reservation.property, currency, booked_fx, charges, payments or [])
+		out["grand_total_reference"] = float(round_rate_amount(total, 0, currency=currency))
+		out["balance_reference"] = float(round_rate_amount(total - paid, 0, currency=currency))
+		return out
+	for key, amount in (("grand_total_reference", grand_total), ("balance_reference", balance)):
+		if amount is not None:
+			out[key] = float(round_rate_amount(Decimal(str(amount or 0)) / fx, 0, currency=currency))
+	return out
+
+
+def post_room_night(reservation, date, folios=None, *, room_posted: list | None = None) -> bool:
 	"""Post one night's room (and meal plan) charge, routed by the
 	company's billing rules. Skips dates already posted - safe to call
 	from both audit and checkout. Pass `folios` (a dict) to batch saves
-	across nights; when omitted the touched folios save immediately."""
+	across nights; when omitted the touched folios save immediately.
+	`room_posted` (a list) takes the amount of the room line this call
+	posted - a Current Date night at its posting rate - for Night Audit's
+	total."""
 	date = str(date)
 	own_batch = folios is None
 	if own_batch:
 		folios = {}
 	posted = False
+	# the GST rate this call's room line posts at: its levy and extra guests follow it
+	room_gst = None
 
 	if not _charge_posted(reservation.name, "Room", date):
 		room_no = (reservation.room or "").split("-")[-1]
 		day_use = _day_use_room_charge(reservation, date)
+		current = None
 		if day_use:
 			night_rate, gst_rate, du_label = day_use
 			desc = (f"Room {room_no} · {reservation.room_type.split('-')[-1]}"
 			        f" · {du_label}")
 		else:
-			night_rate = _nightly_room_rate(reservation, date)
-			gst_rate = _nightly_gst(reservation, date)
+			current = current_date_contract_night(reservation, date)
+			if current:
+				night_rate, gst_rate = current["rate"], current["gst_rate"]
+			else:
+				night_rate = _nightly_room_rate(reservation, date)
+				gst_rate = _nightly_gst(reservation, date)
 			desc = (f"Room {room_no} · {reservation.room_type.split('-')[-1]}"
-			        + (" · day use" if getattr(reservation, "is_day_use", 0) else ""))
+			        + (" · day use" if getattr(reservation, "is_day_use", 0) else "")
+			        + (f" · {current['label']}" if current else ""))
 			locked = locked_night(reservation, date)
 			if locked is not None and float(locked.get("discount_amount") or 0) > 0:
 				# the net rate is what bills; the line says what it came from,
@@ -665,7 +939,13 @@ def post_room_night(reservation, date, folios=None) -> bool:
 				                        rates_include_tax(reservation.property), places)) + off
 				desc += (f" · {amount_text(reservation.property, base)} "
 				         f"less discount {amount_text(reservation.property, off)}")
+		fx_posted = {}
+		if current:
+			# the rate this night posted at: ACTUAL reference currency and Night Audit read it
+			fx_posted = {"contract_currency": current["currency"], "contract_fx_rate": current["fx_rate"],
+			             "contract_fx_date": current["fx_date"], "contract_fx_stale": int(current["stale"])}
 		_append_charge(folios, reservation, "Room", {
+			**fx_posted,
 			"posting_date": date,
 			"charge_type": "Room",
 			"reservation": reservation.name,
@@ -677,7 +957,10 @@ def post_room_night(reservation, date, folios=None) -> bool:
 			"auto_posted": 1,
 		})
 		posted = True
-		_post_room_levy(folios, reservation, date, night_rate)
+		room_gst = gst_rate
+		if room_posted is not None:
+			room_posted.append(night_rate)
+		_post_room_levy(folios, reservation, date, night_rate, gst_rate)
 
 	# Its own charge type, not the shared Misc bucket: dedupe is by type and
 	# date, so a sundry the desk had already typed as Misc that day would
@@ -686,6 +969,9 @@ def post_room_night(reservation, date, folios=None) -> bool:
 	if over_cap > 0 and not _charge_posted(
 			reservation.name, "Extra Guests", date):
 		guests = int(reservation.get("over_capacity_guests") or 0)
+		if room_gst is None:
+			# the room line posted in an earlier call: its rate, else the locked night's
+			room_gst = _posted_room_gst(reservation.name, date)
 		_append_charge(folios, reservation, "Extra Guests", {
 			"posting_date": date,
 			"charge_type": "Extra Guests",
@@ -695,7 +981,7 @@ def post_room_night(reservation, date, folios=None) -> bool:
 			"qty": 1,
 			"rate": over_cap,
 			"amount": over_cap,
-			"gst_rate": _nightly_gst(reservation, date),
+			"gst_rate": _nightly_gst(reservation, date) if room_gst is None else room_gst,
 			"auto_posted": 1,
 		})
 		posted = True
@@ -729,11 +1015,13 @@ def post_room_night(reservation, date, folios=None) -> bool:
 	return posted
 
 
-def _post_room_levy(folios, reservation, date, night_rate):
+def _post_room_levy(folios, reservation, date, night_rate, gst_rate=None):
 	"""The property's per-night levy on the room rate (municipality fee,
 	city / tourism tax): a % of the night's rate and/or a fixed amount per
 	occupied room-night (room_levy_per_night) - its own line so the invoice
-	shows it and the ledger books it apart from room revenue."""
+	shows it and the ledger books it apart from room revenue. A taxable
+	levy is taxed at `gst_rate`, the rate the night's room line posted at
+	(a Current Date night's own), else the night's locked rate."""
 	prop = frappe.get_cached_doc("Property", reservation.property)
 	pct = float(prop.get("room_levy_percent") or 0)
 	fixed = float(prop.get("room_levy_per_night") or 0)
@@ -753,7 +1041,7 @@ def _post_room_levy(folios, reservation, date, night_rate):
 		"qty": 1,
 		"rate": levy,
 		"amount": levy,
-		"gst_rate": _nightly_gst(reservation, date)
+		"gst_rate": (_nightly_gst(reservation, date) if gst_rate is None else gst_rate)
 		            if int(prop.get("room_levy_taxable") if prop.get("room_levy_taxable") is not None else 1)
 		            else 0,
 		"auto_posted": 1,
@@ -943,6 +1231,15 @@ def transfer_charges(from_folio: str, charge_rows: list, to_folio: str):
 	move_charges(src, dst, charge_rows)
 
 
+CONTRACT_FX_FIELDS = ("contract_currency", "contract_fx_rate", "contract_fx_date", "contract_fx_stale")
+
+
+def _contract_fx_trail(row) -> dict:
+	"""The rate a Current Date room night posted at, for a line that carries
+	it to another folio (ACTUAL reference currency reads it there)."""
+	return {field: row.get(field) for field in CONTRACT_FX_FIELDS}
+
+
 def move_charges(src, dst, charge_rows: list, reservation: str | None = None,
                  key: str | None = None):
 	"""Take charge lines off one open folio and put them on another, ledger
@@ -985,9 +1282,10 @@ def move_charges(src, dst, charge_rows: list, reservation: str | None = None,
 			"gst_rate": row.gst_rate,
 			"auto_posted": row.auto_posted,
 			"is_alcohol": row.get("is_alcohol"),
-			# the line keeps the codes it was posted with
+			# the line keeps the codes, and a Current Date night the rate, it was posted with
 			"transaction_code": row.get("transaction_code"),
 			"gl_code": row.get("gl_code"),
+			**_contract_fx_trail(row),
 			# and its outlet reference, so the hotel invoice never bills an
 			# outlet charge again (the source row is saved away first)
 			"source_ref": row.get("source_ref"),
@@ -1007,6 +1305,9 @@ def move_charges(src, dst, charge_rows: list, reservation: str | None = None,
 	src.save(ignore_permissions=True)
 	dst.save(ignore_permissions=True)
 	ledger_charges(dst, moved)
+	import kamra.ledger as _ledger_mod
+	if hasattr(_ledger_mod, "sync_folio_rounding_ledger"):
+		_ledger_mod.sync_folio_rounding_ledger(src)
 	return moved
 
 
@@ -1164,7 +1465,8 @@ def _post_split(src, row, sign: int, line: dict, cuts: list, kept_units: Decimal
 	kept_tax = line["tax"] - sum(p[1] for _f, p, _u in cuts)
 
 	def part_line(base, tax, units):
-		return {**same_line, "qty": float(units), "rate": float(base * sign / units),
+		return {**same_line, **_contract_fx_trail(row), "qty": float(units),
+		        "rate": float(base * sign / units),
 		        "amount": float(base * sign), "gst_amount": float(tax * sign),
 		        "tax_as_posted": 1}
 
@@ -1510,6 +1812,9 @@ def void_charge(folio_name: str, charge_row: str, reason: str = "", *, correctio
 	first = _original_charge_entry(folio.name, row.name)
 	if first:
 		record_charge_ledger(folio, folio.charges[-1].as_dict(), reversal_of=first.name)
+		import kamra.ledger as _ledger_mod
+		if hasattr(_ledger_mod, "sync_folio_rounding_ledger"):
+			_ledger_mod.sync_folio_rounding_ledger(folio)
 	from kamra.webhooks import emit_charge_voided
 	emit_charge_voided(folio, line, reason or "")
 	from kamra.localization import money_text
@@ -1882,9 +2187,11 @@ def run_night_audit(property: str, business_date: str | None = None,
 			folio_name = open_folio(res)
 			folios_opened += 1
 			log_lines.append(f"opened folio {folio_name} for {res.name}")
-		if post_room_night(res, business_date):
+		room_posted: list = []
+		if post_room_night(res, business_date, room_posted=room_posted):
 			charges_posted += 1
-			amount_posted += Decimal(str(_nightly_room_rate(res, business_date)))
+			# what the room line posted at (a Current Date night at today's rate), not the booked night
+			amount_posted += sum((Decimal(str(amount)) for amount in room_posted), Decimal(0))
 			log_lines.append(f"posted room night {business_date} for {res.name}")
 
 	# no-shows: closing day D ends D's arrivals too (Opera end of day), so

@@ -1594,6 +1594,9 @@ def _post_folio_charge(folio: str, charge_type: str, description: str,
 	charge = doc.charges[-1]
 	try:
 		record_charge_ledger(doc, charge.as_dict())
+		import kamra.ledger as _ledger_mod
+		if hasattr(_ledger_mod, "sync_folio_rounding_ledger"):
+			_ledger_mod.sync_folio_rounding_ledger(doc)
 	except Exception:
 		frappe.log_error(title="ledger charge write failed")
 	from kamra.localization import money_text
@@ -2243,6 +2246,9 @@ def correct_folio_charge(folio: str, charge_row: str, reason: str = "",
 	first = _original_charge_entry(doc.name, orig.name)
 	record_charge_ledger(doc, rev.as_dict(), reversal_of=first.name if first else None)
 	record_charge_ledger(doc, rep.as_dict())
+	import kamra.ledger as _ledger_mod
+	if hasattr(_ledger_mod, "sync_folio_rounding_ledger"):
+		_ledger_mod.sync_folio_rounding_ledger(doc)
 	from kamra.webhooks import emit_folio_posted
 	emit_folio_posted(doc, rev)
 	emit_folio_posted(doc, rep)
@@ -2369,19 +2375,25 @@ def add_occupant_names(reservation: str, names):
 
 
 @frappe.whitelist()
-@require_roles("Front Desk", "Kamra Agent")
-def update_occupants(reservation: str, occupants):
+@require_roles("Front Desk", "Revenue Manager", "Kamra Agent")
+def update_occupants(reservation: str, occupants, confirm_price: int = 0):
 	"""Replace the stay's occupant register.
 	occupants = [{full_name, age, gender, nationality, id_type, id_number, phone,
 	              arrived_at, left_at}]
 	Guests sharing a room can arrive and leave at different times: see
 	_occupant_times for how arrived_at / left_at are kept.
 	A child keeps name and age only: no phone, and ID details only where the
-	country's register needs them (see localization.minor_id_kept)."""
+	country's register needs them (see localization.minor_id_kept).
+	If occupant ages change billable_children (affecting room, meal-plan or
+	extension pricing), only Revenue Manager / Hotel Admin may save it, and
+	a change in the stay total requires confirm_price=1."""
 	if isinstance(occupants, str):
 		occupants = frappe.parse_json(occupants)
 	doc = frappe.get_doc("Reservation", reservation)
 	from kamra.localization import is_minor, minor_id_kept, pack_for, store_id_number, validate_id_type
+	from kamra.pricing import billable_children
+	old_billable = billable_children(doc)
+	previous_occupants = list(doc.get("occupants") or [])
 	pack = pack_for(doc.property)
 	default_nat = getattr(pack, "DEFAULT_NATIONALITY", "")
 	# scans survive edits even when the client sends stale rows: carry the
@@ -2454,7 +2466,19 @@ def update_occupants(reservation: str, occupants):
 		if row["id_type"] and row["id_type"] != existing_types.get(o.get("row")):
 			validate_id_type(doc.property, row["id_type"])
 		doc.append("occupants", row)
-	doc.save()
+	new_billable = billable_children(doc)
+	if new_billable != old_billable:
+		if not _can_set_rate():
+			doc.set("occupants", previous_occupants)
+			frappe.throw(
+				_("Changing occupant ages that affect the stay rate requires Revenue Manager or Hotel Admin."),
+				frappe.PermissionError,
+			)
+		preview = _reprice_preview(doc)
+		if preview["needs_confirmation"] and not cint(confirm_price):
+			doc.set("occupants", previous_occupants)
+			_require_price_confirmation(preview, confirm_price)
+	doc.save(ignore_permissions=_can_set_rate())
 	# a row taken off the register takes its ID scan and photo with it
 	kept = {o.get("id_file") for o in doc.occupants} | {o.get("photo") for o in doc.occupants}
 	stale_scans += [url for url in list(existing_scans.values()) + list(existing_photos.values())
@@ -2673,8 +2697,10 @@ def change_stay_company(reservation: str, reason: str,
 	each line where the new company's rules send it (company bill or the
 	guest's), `move="guest"` sends everything on the company bill back to
 	the guest. Refused once a bill was issued to the old company. Credit
-	control runs for the new company. The rate stays as booked; who and
-	why go on the record."""
+	control runs for the new company. The rate stays as booked (matching
+	OPERA Cloud Managing Reservation Linked Profiles,
+	https://docs.oracle.com/en/industries/hospitality/opera-cloud/25.1/ocsuh/t_managing_profiles_linking_reservations.htm,
+	across both booked and extended nights); who and why go on the record."""
 	from kamra.credit import credit_applies, enforce_company_credit
 	from kamra.folio import _company_pays, open_company_folio, transfer_charges
 	res = frappe.get_doc("Reservation", reservation)
@@ -2709,8 +2735,15 @@ def change_stay_company(reservation: str, reason: str,
 		booking_type = "Corporate"
 	elif not company and booking_type == "Corporate":
 		booking_type = "Individual"
-	# db_set, not save: a company change must not re-price the stay
-	res.db_set({"company": company, "booking_type": booking_type})
+	# db_set, not save: a company change must not re-price the stay.
+	# Backfill the original pricing company into legacy contract_tariff snapshots
+	# that predate freezing "company" at booking so extensions keep the booked rate.
+	from kamra.pricing import saved_contract_tariff
+	updates = {"company": company, "booking_type": booking_type}
+	snapshot = saved_contract_tariff(res)
+	if isinstance(snapshot, dict) and snapshot and "company" not in snapshot:
+		updates["contract_tariff"] = json.dumps({**snapshot, "company": old})
+	res.db_set(updates)
 
 	def company_pays(c) -> bool:
 		return bool(company) and not c.is_alcohol and _company_pays(
@@ -3554,6 +3587,7 @@ def folio_invoice(folio: str):
 	- `folio`, `bill_to`, `guest`, `stay`, `property`, `document`
 	"""
 	from kamra import localization as loc
+	from kamra.folio import reference_currency
 	from kamra.ledger import credited_total
 	from kamra.pricing import saved_contract_tariff
 
@@ -3631,6 +3665,20 @@ def folio_invoice(folio: str):
 		# a voided line and its reversal net to nothing: not a line bought
 		head["lines"] += c.name not in pairs
 
+	# Document-level currency rounding adjusts doc.tax_total to the currency's
+	# minor unit; fold that sub-unit delta onto the dominant taxable slab so
+	# tax_summary and gst_summary reconcile with doc.tax_total.
+	from decimal import Decimal
+	tax_delta = float(
+		Decimal(str(doc.tax_total or 0))
+		- sum((Decimal(str(v["tax"])) for v in by_rate.values()), Decimal(0))
+	)
+	if abs(tax_delta) > 1e-9:
+		taxable_rates = [(rate, v) for rate, v in by_rate.items() if rate > 0]
+		if taxable_rates:
+			_dominant_rate, dominant = max(taxable_rates, key=lambda item: (abs(item[1]["taxable"]), item[0]))
+			dominant["tax"] = float(Decimal(str(dominant["tax"])) + Decimal(str(tax_delta)))
+
 	settled = bool(doc.invoice_number)
 	# what the tax authority requires ON the bill (ZATCA: QR + Arabic title)
 	statutory = loc.invoice_print_block(
@@ -3694,6 +3742,9 @@ def folio_invoice(folio: str):
 		"stay": {"reservation": None, "company": bill_company} if not res else {
 			"reservation": res.name,
 			**saved_contract_tariff(res),
+			# the contract currency beside home amounts (Property reference currency calculation)
+			"reference_currency": reference_currency(res, grand_total=doc.grand_total, balance=doc.balance,
+			                                         charges=doc.charges, payments=doc.payments),
 			"check_in": str(res.check_in_date),
 			"check_out": str(res.check_out_date),
 			"arrival": str(res.get("actual_check_in") or "") or None,
@@ -4950,6 +5001,11 @@ def check_in(reservation: str, room: str | None = None):
 		assert_ready(doc, room=room)
 	if room:
 		doc.room = room
+	if doc.status != "Checked In":
+		# a contract whose plan fixes its exchange rate at check-in converts
+		# at today's posting rate; the save re-locks the uncharged nights
+		from kamra.pricing import relock_contract_fx_at_check_in
+		relock_contract_fx_at_check_in(doc)
 	doc.status = "Checked In"
 	doc.save()
 	from kamra.savings import log_action
@@ -7632,6 +7688,8 @@ def _reprice_preview(res, **changes) -> dict:
 	whose price inputs do not change keeps its locked nightly rates."""
 	current = float(res.amount_after_tax or 0)
 	old_key = res.get("rate_lock_key")
+	booked = (res.get("check_in_date"), res.get("check_out_date"))
+	original_agreed = res.get("agreed_rate")
 	for k, v in changes.items():
 		res.set(k, v)
 	out = {"current_amount": current, "new_amount": current,
@@ -7642,28 +7700,34 @@ def _reprice_preview(res, **changes) -> dict:
 	hand = any(flt(r.get("hand_price")) > 0 for r in res.get("night_rates") or [])
 	if (not res.get("auto_price") and not hand) or not res.room_type:
 		return out
-	inputs = res.quote_inputs()
-	if res.get("night_rates") and old_key == res.rate_lock_key_for(inputs):
-		return out  # same stay, same locked rates
-	q = res.requote()
-	# the same nights the save locks: charged nights held by the policy
-	rows = res.quote_night_rows(q)
-	hold = res.hold_charged_nights(rows)
-	# for a caller that judges them (_rate_override_plan); never saved
-	res.flags.kamra_repriced_rows = rows
-	new = round(float(q["amount_after_tax"]) + hold["base"] + hold["tax"], 2)
-	out.update({
-		"new_amount": new,
-		"difference": round(new - current, 2),
-		"reprices": True,
-		"needs_confirmation": abs(new - current) >= 0.01,
-		"nights": [{"date": str(r["stay_date"]), "rate": r["rate"],
-		            "demand_premium_pct": r["demand_premium_pct"]}
-		           for r in rows],
-	})
-	if hold["nights"]:
-		out["charged_nights"] = _charged_nights_summary(hold)
-	return out
+	# new dates: the contract prices the nights it never priced, as the save will
+	res.reprice_contract_nights(*booked)
+	try:
+		inputs = res.quote_inputs()
+		if res.get("night_rates") and old_key == res.rate_lock_key_for(inputs):
+			return out  # same stay, same locked rates
+		q = res.requote()
+		# the same nights the save locks: charged nights held by the policy
+		rows = res.quote_night_rows(q)
+		hold = res.hold_charged_nights(rows)
+		# for a caller that judges them (_rate_override_plan); never saved
+		res.flags.kamra_repriced_rows = rows
+		new = round(float(q["amount_after_tax"]) + hold["base"] + hold["tax"], 2)
+		out.update({
+			"new_amount": new,
+			"difference": round(new - current, 2),
+			"reprices": True,
+			"needs_confirmation": abs(new - current) >= 0.01,
+			"nights": [{"date": str(r["stay_date"]), "rate": r["rate"],
+			            "demand_premium_pct": r["demand_premium_pct"]}
+			           for r in rows],
+		})
+		if hold["nights"]:
+			out["charged_nights"] = _charged_nights_summary(hold)
+		return out
+	finally:
+		if "agreed_rate" not in changes:
+			res.agreed_rate = original_agreed
 
 
 def _charged_nights_summary(hold: dict) -> dict:

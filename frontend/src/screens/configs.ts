@@ -135,6 +135,9 @@ export const ratePlansConfig: ScreenConfig = {
     { field: "billing_basis", label: "Day-use" },
     { field: "modifier_type", label: "Modifier" },
     { field: "modifier_value", label: "Value" },
+    { field: "currency", label: "Currency" },
+    { field: "fx_lock_policy", label: "Exchange rate lock", badge: true },
+    { field: "base_rate_plan", label: "Derived from" },
     { field: "is_default", label: "Default" },
     { field: "disabled", label: "Status", statusCheck: true },
   ],
@@ -143,6 +146,17 @@ export const ratePlansConfig: ScreenConfig = {
     { field: "code", label: "Code", type: "data", required: true },
     { field: "modifier_type", label: "Modifier type", type: "select", options: ["Percent", "Amount", "Absolute"] },
     { field: "modifier_value", label: "Modifier value (-10 = 10% off)", type: "float" },
+    { field: "currency", label: "Currency (blank = property currency)", type: "link", linkDoctype: "Currency", linkFilters: [["enabled", "=", 1]], linkLimit: 500 },
+    { field: "fx_lock_policy", label: "Exchange rate lock", type: "select",
+      options: ["Fixed at Reservation", "Fixed at Check In", "Current Date"],
+      hint: "When a foreign-currency contract converts to the property's currency: at booking, at check-in, or on each night's posting date." },
+    { field: "base_rate_plan", label: "Base rate plan (derived rate)", type: "link", linkDoctype: "Rate Plan", linkPropertyScoped: true, linkLimit: 500,
+      hint: "Blank: priced from the room type's card or this plan's own tariff. Set: this plan's modifier applies to the base plan's price." },
+    { field: "adjust_extra_person", label: "Adjust extra person charges", type: "check",
+      hint: "Derived plans only. Off: extra adults and children keep the base plan's charge." },
+    { field: "rounding_step", label: "Rounding step", type: "float",
+      hint: "Round the local price to this multiple (for example 1000 for a currency with no cents). 0 = the currency's smallest unit." },
+    { field: "rounding_mode", label: "Rounding mode", type: "select", options: ["Nearest", "Up", "Down"] },
     { field: "billing_basis", label: "Day-use billing", type: "select", options: ["Nightly", "Hourly", "Block"], hint: "Hourly and Block price same-day stays from the planned times; Nightly keeps one full room night." },
     { field: "hourly_rate", label: "Hourly rate", type: "currency" },
     { field: "min_hours", label: "Minimum hours", type: "float" },
@@ -153,6 +167,37 @@ export const ratePlansConfig: ScreenConfig = {
     { field: "discount_eligible", label: "Discount eligible", type: "check", default: 1, hint: "Untick for rates that never take a desk discount (non-refundable, packages)." },
     { field: "disabled", label: "Disabled (unpublished)", type: "check", hint: "Tick to unpublish; clear to activate at booking" },
   ],
+}
+
+export function ratePlansScreenConfig(ctx: {
+  propertyCurrency?: string
+  tariffCurrencyFor: (draft: Record<string, unknown>) => string
+  baseCurrencyFor: (baseName: string) => string
+}): ScreenConfig {
+  return {
+    ...ratePlansConfig,
+    form: ratePlansConfig.form.map((f) => {
+      if (f.field !== "currency") return f
+      return {
+        ...f,
+        disabledWhen: (d) => Boolean(d.base_rate_plan),
+        displayValue: (d) =>
+          d.base_rate_plan ? ctx.baseCurrencyFor(String(d.base_rate_plan)) : d.currency,
+        ensureOptions: (d) => {
+          const out: string[] = []
+          if (ctx.propertyCurrency) out.push(ctx.propertyCurrency)
+          const tariffCur = ctx.tariffCurrencyFor(d)
+          if (tariffCur) out.push(tariffCur)
+          if (d.base_rate_plan) {
+            const baseCur = ctx.baseCurrencyFor(String(d.base_rate_plan))
+            if (baseCur) out.push(baseCur)
+          }
+          return out
+        },
+        hintWhen: (d) => (d.base_rate_plan ? "Inherited from the base rate plan." : undefined),
+      }
+    }),
+  }
 }
 
 export const seasonsConfig: ScreenConfig = {

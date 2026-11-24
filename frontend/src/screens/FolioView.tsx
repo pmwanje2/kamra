@@ -1,6 +1,6 @@
 import { SettlementPreview, useSettlementQuote } from "../components/SettlementPreview"
 import TenderPicker, { TenderInput, resolveTender, tenderAmount, tenderModes, tenderReady, useTenderRates } from "../components/TenderPicker"
-import { currencyText, formatFxRate, TariffNight } from "../components/ContractTariff"
+import { currencyText, formatFxRate, ReferenceCurrencyNote, TariffNight } from "../components/ContractTariff"
 import RowCorrection from "../components/RowCorrection"
 import InvoiceCorrectionDialog from "../components/InvoiceCorrectionDialog"
 import { ResponsiveList, Popin } from "../components/ui/responsive-list"
@@ -8,7 +8,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from "react"
 import { ArrowLeft, ArrowRightLeft, Printer, X } from "lucide-react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { formatDate, roomLabel } from "../lib/utils"
-import { call, getCurrentProperty, newIdempotencyKey, type TariffReference } from "../lib/api"
+import { call, getCurrentProperty, newIdempotencyKey, type ReferenceCurrency, type TariffReference } from "../lib/api"
 import EditableNationality from "../components/EditableNationality"
 import LinkedRecords from "../components/LinkedRecords"
 import AllowanceRequests from "../components/AllowanceRequests"
@@ -102,6 +102,8 @@ interface InvoiceData {
   /** an Account folio (raised on a company's AR account) has no stay:
    *  only reservation (null) and company come back */
   stay: TariffReference & {
+    /** the contract currency, its rate and the bill in it (Property reference currency calculation) */
+    reference_currency?: ReferenceCurrency | null
     reservation: string | null
     check_in: string
     check_out: string
@@ -286,6 +288,38 @@ function VerifyTaxId({ taxId, name }: { taxId: string; name: string }) {
       </button>
       {res && <span className={`ml-1 text-xs ${res.ok ? "text-emerald-700" : "text-red-700"}`}>{translate(res.text)}</span>}
     </span>
+  )
+}
+
+/** A charge line's actions on one compact line (OPERA folio billing); while the inline
+ *  correction form is open it has the cell to itself, and Move comes back when it closes. */
+function ChargeActions({ folio, row, correct, onMove, act }: {
+  folio: string
+  row: string
+  correct: boolean
+  onMove: (() => void) | null
+  act: (fn: () => Promise<unknown>, onError: (message: string) => void) => Promise<void>
+}) {
+  const { t } = useT()
+  const [open, setOpen] = useState(false)
+  // a line that stops being correctable (voided by the correction) never keeps Move hidden
+  const correcting = correct && open
+  if (!correct && !onMove) return null
+  return (
+    <div data-row-actions
+      className={correcting ? "grid min-w-56 gap-1.5 text-left" : "inline-flex items-center justify-end gap-1.5"}>
+      {correct && <RowCorrection folio={folio} row={row} modes={[]} act={act} onOpenChange={setOpen} />}
+      {onMove && !correcting && (
+        <button
+          aria-label={t("Move or split this charge")}
+          className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2 py-1 text-xs text-zinc-500 hover:border-brand-400 hover:text-zinc-800"
+          onClick={onMove}
+        >
+          <ArrowRightLeft className="size-3" aria-hidden />
+          {t("Move")}
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -933,6 +967,8 @@ export default function FolioView() {
           {stay.tariff && <p className="mb-3 text-sm text-zinc-600">
             {t("Booked contract tariff")}: <TariffNight {...stay} />
           </p>}
+          {/* on screen, on the pro-forma and on the printed invoice alike */}
+          <ReferenceCurrencyNote reference={stay.reference_currency} />
           <dl className="mb-6 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
             <Fact label={t("Guest")}>
               <span className="font-medium">
@@ -1242,19 +1278,10 @@ export default function FolioView() {
                           <Popin label={t("Total")} importance="medium" className="py-2 text-right font-medium">{inr(c.total)}</Popin>
                           {editable && (
                             <Popin label={t("Actions")} importance="medium" className="relative whitespace-nowrap py-2 pl-3 text-right print:hidden">
-                              {canRequestCorrection && c.charge_type !== "Allowance" && !voided && <RowCorrection folio={folio.name} row={c.name} modes={[]} act={act} />}
-                              {open && !voided && !selected.has(c.name) && (
-                                <button
-                                  aria-label={t("Move or split this charge")}
-                                  className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2 py-1 text-xs text-zinc-500 hover:border-brand-400 hover:text-zinc-800"
-                                  onClick={() =>
-                                    setSelected((prev) => new Set(prev).add(c.name))
-                                  }
-                                >
-                                  <ArrowRightLeft className="size-3" aria-hidden />
-                                  {t("Move")}
-                                </button>
-                              )}
+                              <ChargeActions folio={folio.name} row={c.name} act={act}
+                                correct={canRequestCorrection && c.charge_type !== "Allowance" && !voided}
+                                onMove={open && !voided && !selected.has(c.name)
+                                  ? () => setSelected((prev) => new Set(prev).add(c.name)) : null} />
                             </Popin>
                           )}
                         </tr>
