@@ -471,7 +471,7 @@ if _HAS_FRAPPE:
 
 		def setUp(self):
 			super().setUp()
-			self.at(TODAY, "kamra.folio", "kamra.business_date", "kamra.allocation", "kamra.api", "kamra.tape_queue")
+			self.at(TODAY, "frappe.utils", "kamra.folio", "kamra.business_date", "kamra.api", "kamra.tape_queue")
 			make_property(PROP_A, business_date=TODAY)
 			make_property(PROP_B, business_date=TODAY)
 

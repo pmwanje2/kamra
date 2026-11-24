@@ -7,15 +7,15 @@ import TapeChart from "../src/screens/TapeChart"
 import { loadLocale } from "../src/lib/money"
 import type { ShellContext } from "../src/AppShell"
 
-const { rpc, openBookingSpy } = vi.hoisted(() => {
+const { rpc, openBookingSpy, propState } = vi.hoisted(() => {
   Object.defineProperty(globalThis, "localStorage", { configurable: true, value: jsdom.window.localStorage })
-  return { rpc: vi.fn(), openBookingSpy: vi.fn() }
+  return { rpc: vi.fn(), openBookingSpy: vi.fn(), propState: { current: "PROP-A" } }
 })
 
 vi.mock("../src/lib/api", async (original) => ({
   ...await original<typeof import("../src/lib/api")>(),
   call: (method: string, params: unknown) => rpc(method, params),
-  getCurrentProperty: () => "PROP-A",
+  getCurrentProperty: () => propState.current,
   setHousekeepingStatus: (room: string, status: string, reason?: string) =>
     rpc("kamra.api.set_housekeeping_status", { room, status, reason }),
   amendStayPreview: (reservation: string, check_in_date: string, check_out_date: string) =>
@@ -200,6 +200,7 @@ describe("P22 TapeChart touch drag, unassigned dock, filters, HK toggle, 390px c
   beforeEach(async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true)
     vi.stubGlobal("localStorage", jsdom.window.localStorage)
+    propState.current = "PROP-A"
     openBookingSpy.mockReset()
     origElementFromPoint = document.elementFromPoint
     host = document.createElement("div")
@@ -505,5 +506,42 @@ describe("P22 TapeChart touch drag, unassigned dock, filters, HK toggle, 390px c
     expect(roomHeader?.className).toContain("start-0")
     expect(desktopGrid!.innerHTML).not.toMatch(/\bborder-l\b/)
     expect(desktopGrid!.innerHTML).toContain("border-s")
+  })
+
+  it("guards empty property on cold boot, elevates active HK popover stacking context, and avoids w-full on inline filter selects", async () => {
+    // 1. Cold boot with empty current property must not fire empty-property RPCs
+    propState.current = ""
+    rpc.mockClear()
+    const shellCtx: ShellContext = { refreshKey: 0, canBook: true, openBooking: openBookingSpy }
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={["/tape"]}>
+          <Routes>
+            <Route element={<Outlet context={shellCtx} />}>
+              <Route path="/tape" element={<TapeChart />} />
+            </Route>
+          </Routes>
+        </MemoryRouter>,
+      )
+    })
+    await act(() => new Promise((r) => setTimeout(r, 30)))
+    expect(rpc).not.toHaveBeenCalledWith("kamra.api.tape_chart", expect.anything())
+    expect(rpc).not.toHaveBeenCalledWith("kamra.tape_queue.unassigned_queue", expect.anything())
+    expect(rpc).not.toHaveBeenCalledWith("kamra.tape_queue.room_metadata", expect.anything())
+
+    // 2. Once property resolves, toolbar filter selects must be inline (w-auto without conflicting w-full)
+    propState.current = "PROP-A"
+    await mountTape()
+    const floorSel = host.querySelector<HTMLSelectElement>('select[aria-label="Filter by floor"]')!
+    expect(floorSel.className).toContain("w-auto")
+    expect(floorSel.className.split(/\s+/)).not.toContain("w-full")
+
+    // 3. Opening HK popover elevates its room row and sticky cell above sibling z-10 sticky cells
+    const row102 = host.querySelector<HTMLElement>('[data-room="PROP-A-102"]')!
+    const cell102 = host.querySelector<HTMLElement>('[data-testid="tape-room-cell-PROP-A-102"]')!
+    const toggle102 = host.querySelector<HTMLButtonElement>('[data-testid="hk-toggle-PROP-A-102"]')!
+    await act(async () => toggle102.click())
+    expect(row102.className.split(/\s+/)).toContain("z-30")
+    expect(cell102.className.split(/\s+/)).toContain("z-30")
   })
 })
