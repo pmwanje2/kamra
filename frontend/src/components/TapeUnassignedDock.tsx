@@ -186,7 +186,7 @@ export function TapeUnassignedDock({
                   if (target?.closest("select, button, input, a")) return
                   onStartDrag?.(e, item)
                 }}
-                className="cursor-grab rounded-lg border border-zinc-200 bg-zinc-50/60 p-2.5 transition hover:border-brand-300 hover:bg-white active:cursor-grabbing"
+                className="cursor-grab select-none rounded-lg border border-zinc-200 bg-zinc-50/60 p-2.5 transition hover:border-brand-300 hover:bg-white active:cursor-grabbing"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">

@@ -634,6 +634,7 @@ export default function TapeChart() {
   function beginQueueDrag(e: React.PointerEvent, item: UnassignedBooking) {
     const isTouch = e.pointerType === "touch"
     if (!isTouch && e.button !== 0) return
+    if (!isTouch) e.preventDefault()
     e.stopPropagation()
     clearQueueTouchTimer()
 
