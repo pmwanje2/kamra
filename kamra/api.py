@@ -1572,6 +1572,12 @@ def _post_folio_charge(folio: str, charge_type: str, description: str,
 	# F&B/minibar charge posted without a rate lands on the bill untaxed
 	gst_rate = _resolve_charge_gst(doc.property, charge_type, description,
 	                               int(is_alcohol or 0), float(gst_rate or 0))
+	if not float(gst_rate or 0):
+		from kamra.pricing import property_currency, round_rate_amount
+		amount = float(round_rate_amount(amount, 0, "Nearest", property_currency(doc.property)))
+		if amount <= 0:
+			frappe.throw("Charge amount must be more than zero. To reduce a "
+			             "bill, post an allowance or void the charge.")
 	from kamra.business_date import assert_transaction_date
 	from kamra.ledger import code_for_charge_type, record_charge_ledger
 	bd = assert_transaction_date(doc.property, posting_date, label="Posting date")
@@ -1704,8 +1710,9 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 		**(fx or {}),  # an FX row keeps the foreign currency, amount and rate
 		"idempotency_key": key,
 	})
+	prev_grand = doc.get("grand_total")
 	from kamra.folio import _recalculate
-	_recalculate(doc)
+	_recalculate(doc, payments_only=True)
 	doc.save()
 	pay = doc.payments[-1]
 	fx_note = (f"{fx['currency']} {fx['fx_amount']:,.2f} @ {fx['exchange_rate']}"
@@ -1714,8 +1721,14 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 		doc.property, "Payment", mode, float(amount),
 		folio=doc.name, reference=reference, notes=fx_note, session=sess, tender_validated=True)
 	try:
-		from kamra.ledger import record_payment_ledger
-		record_payment_ledger(doc, pay.as_dict(), session=sess)
+		from kamra import ledger as _ledger_mod
+		_ledger_mod.record_payment_ledger(doc, pay.as_dict(), session=sess)
+		if (
+			prev_grand is not None
+			and abs(float(doc.grand_total or 0) - float(prev_grand)) > 1e-9
+			and hasattr(_ledger_mod, "sync_folio_rounding_ledger")
+		):
+			_ledger_mod.sync_folio_rounding_ledger(doc, session=sess)
 	except Exception:
 		frappe.log_error(title="ledger payment write failed")
 	if kind in ("Advance", "Security Deposit"):
@@ -1992,8 +2005,9 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 		"idempotency_key": idempotency_key,
 		**(correction or {}),
 	})
+	prev_grand = doc.get("grand_total")
 	from kamra.folio import _recalculate
-	_recalculate(doc)
+	_recalculate(doc, payments_only=True)
 	doc.save()
 	pay = doc.payments[-1]
 	if sess or correction is None:
@@ -2001,8 +2015,14 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 			doc.property, "Refund", mode, -float(amount),
 			folio=doc.name, reference=str(reason_text)[:140], session=sess)
 	try:
-		from kamra.ledger import record_payment_ledger
-		record_payment_ledger(doc, pay.as_dict(), session=sess, ledger=ledger)
+		from kamra import ledger as _ledger_mod
+		_ledger_mod.record_payment_ledger(doc, pay.as_dict(), session=sess, ledger=ledger)
+		if (
+			prev_grand is not None
+			and abs(float(doc.grand_total or 0) - float(prev_grand)) > 1e-9
+			and hasattr(_ledger_mod, "sync_folio_rounding_ledger")
+		):
+			_ledger_mod.sync_folio_rounding_ledger(doc, session=sess)
 	except Exception:
 		if correction:
 			raise
@@ -2215,6 +2235,12 @@ def correct_folio_charge(folio: str, charge_row: str, reason: str = "",
 	_check_charge_amount_and_tax(doc.property, new_amount, rate_in)
 	new_rate = _resolve_charge_gst(doc.property, new_type, new_desc,
 	                               is_alcohol, rate_in)
+	if not float(new_rate or 0):
+		from kamra.pricing import property_currency, round_rate_amount
+		new_amount = float(round_rate_amount(new_amount, 0, "Nearest", property_currency(doc.property)))
+		if new_amount <= 0:
+			frappe.throw("Charge amount must be more than zero. To reduce a "
+			             "bill, post an allowance or void the charge.")
 	if (new_type, new_desc, round(new_amount, 2), new_rate) == (
 			orig.charge_type, orig.description, round(float(orig.amount), 2),
 			float(orig.gst_rate or 0)):
@@ -3040,7 +3066,12 @@ def post_allowance(folio: str, amount: float, reason: str = "",
 	if doc.status == "Closed":
 		frappe.throw(_("This folio is settled - pass the allowance on the "
 		               "guest's open folio, or cancel the invoice first."))
-	amount = round(abs(flt(amount)), 2)
+	if not flt(gst_rate):
+		from kamra.pricing import property_currency, round_rate_amount
+		amount = float(round_rate_amount(abs(flt(amount)), 0, "Nearest", property_currency(doc.property)))
+	else:
+		from kamra.pricing import night_rate_places
+		amount = round(abs(flt(amount)), night_rate_places(doc.property))
 	if not amount:
 		frappe.throw(_("Allowance amount is required."))
 	text = _allowance_reason(reason_code, reason)

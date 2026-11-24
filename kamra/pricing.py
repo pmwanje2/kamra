@@ -844,14 +844,17 @@ def _price_through(plans: list, total: Decimal, extras: Decimal, root: bool, nig
 
 
 def plan_stay_nights(rate_plan: str, nights: list[tuple[Decimal, Decimal]], extra_person_total: Decimal,
-                     inclusive: bool, floor: Decimal = Decimal(0)) -> tuple[list[Decimal], bool]:
+                     inclusive: bool, floor: Decimal = Decimal(0), *,
+                     currency: str | None = None) -> tuple[list[Decimal], bool]:
 	"""Each night's taxable room rate under the plan, for (taxable rate, GST
 	%) nights before it. The plan's modifier works on the stay (a derived
 	Amount or Absolute once per night), its result spread over the nights
 	in proportion and held at the long-stay floor; the plan's rounding step
 	then rounds each night's price as the guest sees it (OPERA per-night
 	commercial rounding) - gross in a tax-inclusive house, net otherwise -
-	unless that would take the stay below its floor. Nights with no price
+	unless that would take the stay below its floor. For 0%-tax nights when
+	step is 0, amounts round to the currency's ISO 4217 minor unit so zero-
+	tax / bridged stays never carry sub-unit fractions. Nights with no price
 	of their own (an Absolute or Amount plan on a zero-priced room) share
 	the plan's price evenly, the last night taking the remainder. The
 	quote and the folio's unlocked nights both price through here. (rates,
@@ -859,17 +862,24 @@ def plan_stay_nights(rate_plan: str, nights: list[tuple[Decimal, Decimal]], extr
 	total = sum((_dec(rate) for rate, _gst in nights), Decimal(0))
 	planned = max(apply_rate_plan(rate_plan, total, extra_person_total, nights=len(nights)), _dec(floor))
 	rp = frappe.get_doc("Rate Plan", rate_plan)
+	cur = currency or rp.get("currency")
 	spread = bool(nights) and not total and planned > 0
 	if spread:
-		share = round_rate_amount(planned / len(nights), 0, currency=rp.get("currency"))
+		share = round_rate_amount(planned / len(nights), 0, currency=cur)
 		rates = [share] * (len(nights) - 1) + [planned - share * (len(nights) - 1)]
 	else:
 		factor = planned / total if total else Decimal(1)
 		rates = [_dec(rate) * factor for rate, _gst in nights]
 	step = _dec(rp.get("rounding_step"))
-	if step <= 0:
-		return rates, spread
 	mode = rp.get("rounding_mode") or "Nearest"
+	if step <= 0:
+		rounded = [
+			round_rate_amount(rate, 0, mode, cur) if (rate > 0 and not _dec(gst)) else rate
+			for rate, (_rate, gst) in zip(rates, nights, strict=True)
+		]
+		if rounded != rates and sum(rounded, Decimal(0)) >= _dec(floor):
+			return rounded, True
+		return rates, spread
 	rounded = []
 	for rate, (_rate, gst) in zip(rates, nights, strict=True):
 		tax = Decimal(1) + _dec(gst) / Decimal(100) if inclusive else Decimal(1)
@@ -1578,7 +1588,11 @@ def _discount_nights(property, rt, nightly: list, room_total: Decimal, disc: dic
 	new_total = new_tax = base_total = off_total = oc_net = oc_tax = Decimal(0)
 	for n in nightly:
 		gst = _dec(n["gst_rate"])
-		base = (_dec(n["rate"]) * factor).quantize(unit, rounding=ROUND_HALF_UP)
+		base = (
+			_dec(n["planned_rate"]).quantize(unit, rounding=ROUND_HALF_UP)
+			if "planned_rate" in n
+			else (_dec(n["rate"]) * factor).quantize(unit, rounding=ROUND_HALF_UP)
+		)
 		own = disc["nights"].get(n["date"])
 		kind, value = (own["type"], own["value"]) if own else (disc["stay"] or (None, Decimal(0)))
 		entry = entry_rate(base, gst, inclusive, places)
@@ -1965,10 +1979,14 @@ def quote(
 	else:
 		rate_plan_applied = False
 
+	prop_currency = property_currency(property)
+	planned_by_plan = False
 	if rate_plan and not agreed_rate and not rate_plan_applied:
+		planned_by_plan = True
 		old_room_total = room_total
 		planned, rounded = plan_stay_nights(rate_plan, [(_dec(n["rate"]), _dec(n["gst_rate"])) for n in nightly],
-		                                    extra_person_total, inclusive, los_floor)
+		                                    extra_person_total, inclusive, los_floor,
+		                                    currency=prop_currency)
 		room_total = sum(planned, Decimal(0))
 		room_tax = sum((rate * _dec(n["gst_rate"]) / Decimal(100) for rate, n in zip(planned, nightly, strict=True)),
 		               Decimal(0))
@@ -1978,6 +1996,34 @@ def quote(
 			# each night's own rounded price: the booking locks exactly these
 			for night, rate in zip(nightly, planned, strict=True):
 				night["planned_rate"] = float(rate)
+
+	# SAP TCURX / OPERA: 0%-tax stays (including bridged properties where the
+	# native invoice owns tax) must not carry fractions of the currency's
+	# smallest unit. Round each 0%-tax night at the line so charges_total
+	# stays equal to the sum of lines while every line is payable.
+	if planned_by_plan:
+		adjusted = [
+			round_rate_amount(rate, 0, "Nearest", prop_currency) if not _dec(n["gst_rate"]) else rate
+			for rate, n in zip(planned, nightly, strict=True)
+		]
+		if adjusted != planned:
+			for night, rate in zip(nightly, adjusted, strict=True):
+				night["planned_rate"] = float(rate)
+			room_total = sum(adjusted, Decimal(0))
+			room_tax = sum((rate * _dec(n["gst_rate"]) / Decimal(100) for rate, n in zip(adjusted, nightly, strict=True)),
+			               Decimal(0))
+	else:
+		zero_tax_adjusted = False
+		for n in nightly:
+			if _dec(n["gst_rate"]):
+				continue
+			raw = _dec(n["rate"])
+			rnd = round_rate_amount(raw, 0, "Nearest", prop_currency)
+			if rnd != raw:
+				n["rate"] = float(rnd)
+				zero_tax_adjusted = True
+		if zero_tax_adjusted:
+			room_total = sum((_dec(n["rate"]) for n in nightly), Decimal(0))
 
 	# Gross, discount and net stay apart (the base rate is never overwritten):
 	# the discount comes off the accommodation only, after every rule that

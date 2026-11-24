@@ -1067,8 +1067,9 @@ class Reservation(Document):
 		factor = float(q.get("room_total") or 0) / plan_free if plan_free else 1.0
 		inclusive = rates_include_tax(self.property)
 		places = night_rate_places(self.property)
-		return {str(n["date"]): round(float(entry_rate(float(n["rate"]) * factor, n.get("gst_rate"),
-		                                               inclusive, places)), places)
+		return {str(n["date"]): round(float(entry_rate(
+			float(n["planned_rate"]) if "planned_rate" in n else float(n["rate"]) * factor,
+			n.get("gst_rate"), inclusive, places)), places)
 		        for n in nightly}
 
 	def pinned_room_nights(self, inputs: dict) -> dict | None:
