@@ -5791,6 +5791,10 @@ def _inv_property(name, code, rooms=2, with_villa=True, mode=None):
 		"gst_rate_low": 5, "gst_rate_high": 18,
 		**({"booking_mode": mode} if mode else {}),
 	}).insert(ignore_permissions=True)
+	# Legacy inventory / request-to-book / group-block eval checks book without a rate plan
+	from kamra.settings import clear_cache, write_kv
+	write_kv(name, "rate_plan_required", 0)
+	clear_cache(name)
 	bed = frappe.get_doc({
 		"doctype": "Room Type", "property": name, "room_type_code": code,
 		"room_type_name": f"Eval Bed {code}", "base_price": 5000,

@@ -144,6 +144,9 @@ class ChannelWebhookQueryArgsTestCase(IntegrationTestCase):
 			"property_name": f"TEST HOOK {label} {self.tag}", "country": "Uganda",
 			"currency": "UGX", "rates_include_tax": rates_include_tax, "gst_mode": "Fixed",
 			"gst_rate_low": 18, "gst_rate_high": 18}).insert(ignore_permissions=True).name
+		from kamra.settings import clear_cache, write_kv
+		write_kv(prop, "rate_plan_required", 0)
+		clear_cache(prop)
 		room_type = frappe.get_doc({"doctype": "Room Type", "property": prop,
 			"room_type_code": f"STD{label[:3].upper()}{self.tag}",
 			"room_type_name": "Standard Room", "base_price": 150000,
