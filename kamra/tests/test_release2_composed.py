@@ -961,6 +961,7 @@ else:
 		self.assertEqual(out_drv["result"], "modified")
 		res_drv = frappe.get_doc("Reservation", b_drv["reservation"])
 		self.assertEqual(int(res_drv.channel_review_needed), 1)
+		self.assertEqual(res_drv.channel_review_reason, "discount_removed")
 		self.assertIsNone(res_drv.discount_type)
 		actions_drv = set(frappe.get_all(
 			"Agent Action Log",
@@ -968,7 +969,7 @@ else:
 			pluck="action_type",
 		))
 		self.assertIn("reservation_discount", actions_drv)
-		self.assertIn("channel.modify_needs_review", actions_drv)
+		self.assertIn("channel.modify_discount_removed", actions_drv)
 
 		# Subcase B: hospitality-tariffs@11 guarded stay (custom_tariff_currency='USD') + 10% desk discount
 		b_grd = self._as(
@@ -985,6 +986,7 @@ else:
 		self.assertEqual(out_grd["result"], "held_for_review")
 		res_grd = frappe.get_doc("Reservation", b_grd["reservation"])
 		self.assertEqual(int(res_grd.channel_review_needed), 1)
+		self.assertEqual(res_grd.channel_review_reason, "update_not_applied")
 		actions_grd = set(frappe.get_all(
 			"Agent Action Log",
 			filters={"reference_doctype": "Reservation", "reference_name": res_grd.name},
