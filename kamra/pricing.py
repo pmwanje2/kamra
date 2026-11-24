@@ -1684,7 +1684,8 @@ def discount_night(property, rt, base, base_gst, entry, kind, value, inclusive: 
 def _discount_nights(property, rt, nightly: list, room_total: Decimal, disc: dict,
                      inclusive: bool, night_over_cap: Decimal, agreed_rate,
                      contract_tariff: dict | None = None,
-                     rate_plan: str | None = None) -> tuple:
+                     rate_plan: str | None = None,
+                     exact_nets: list[Decimal] | None = None) -> tuple:
 	"""Take the reservation discount off each night's accommodation.
 
 	Each night's base is its share of the planned room total (season,
@@ -1700,13 +1701,16 @@ def _discount_nights(property, rt, nightly: list, room_total: Decimal, disc: dic
 	plan_free = sum((_dec(n["rate"]) for n in nightly), Decimal(0))
 	factor = room_total / plan_free if plan_free else Decimal(1)
 	new_total = new_tax = base_total = off_total = oc_net = oc_tax = Decimal(0)
-	for n in nightly:
+	for idx, n in enumerate(nightly):
 		gst = _dec(n["gst_rate"])
-		base = (
-			_dec(n["planned_rate"]).quantize(unit, rounding=ROUND_HALF_UP)
-			if "planned_rate" in n
-			else (_dec(n["rate"]) * factor).quantize(unit, rounding=ROUND_HALF_UP)
-		)
+		if exact_nets is not None:
+			base = exact_nets[idx].quantize(unit, rounding=ROUND_HALF_UP)
+		else:
+			base = (
+				_dec(n["planned_rate"]).quantize(unit, rounding=ROUND_HALF_UP)
+				if "planned_rate" in n
+				else (_dec(n["rate"]) * factor).quantize(unit, rounding=ROUND_HALF_UP)
+			)
 		own = disc["nights"].get(n["date"])
 		kind, value = (own["type"], own["value"]) if own else (disc["stay"] or (None, Decimal(0)))
 		entry = entry_rate(base, gst, inclusive, places)
@@ -1768,6 +1772,7 @@ def _pin_nights(nightly: list, locked: dict, inclusive: bool, night_over_cap: De
 		if row:
 			n.update(rate=flt(row.get("rate")), gst_rate=flt(row.get("gst_rate")),
 			         base_rate=flt(row.get("base_rate")) or flt(row.get("rate")),
+			         quoted_base_rate=flt(row.get("quoted_base_rate")),
 			         discount_amount=flt(row.get("discount_amount")),
 			         demand_premium_pct=flt(row.get("demand_premium_pct")),
 			         rate_code_amount=flt(row.get("rate_code_amount")))
@@ -1834,6 +1839,7 @@ def quote(
 		small_ok = False
 
 	nightly = []
+	exact_nets: list[Decimal] = []
 	room_total = Decimal(0)
 	room_tax = Decimal(0)
 	# what extra adults and children add to the card nights (for a derived plan)
@@ -1918,6 +1924,7 @@ def quote(
 					"package": pkg.package_name,
 					"occupancy": 0
 				})
+				exact_nets.append(rate)
 				room_total += rate
 				room_tax += rate * gst / Decimal(100)
 		else:
@@ -1981,6 +1988,7 @@ def quote(
 					"package": label,
 					"occupancy": 0
 				})
+				exact_nets.append(rate)
 				room_total += rate
 				room_tax += rate * gst / Decimal(100)
 	else:
@@ -2052,6 +2060,7 @@ def quote(
 			                "occupancy": occ_cache[str(date)],
 			                **({"hand_set": True, "typed_price": float(hand)}
 			                   if hand is not None else {})})
+			exact_nets.append(rate)
 			room_total += rate
 			room_tax += rate * gst / Decimal(100)
 
@@ -2083,6 +2092,7 @@ def quote(
 					if day_use_meta["units"] else rate),
 				"hours": day_use_meta["hours"],
 			}
+			exact_nets = [rate]
 			room_total = rate
 			room_tax = rate * gst / Decimal(100)
 			# Hourly/block plans own the room total; nightly modifiers do not
@@ -2101,6 +2111,7 @@ def quote(
 		planned, rounded = plan_stay_nights(rate_plan, [(_dec(n["rate"]), _dec(n["gst_rate"])) for n in nightly],
 		                                    extra_person_total, inclusive, los_floor,
 		                                    currency=prop_currency)
+		exact_nets = list(planned)
 		room_total = sum(planned, Decimal(0))
 		room_tax = sum((rate * _dec(n["gst_rate"]) / Decimal(100) for rate, n in zip(planned, nightly, strict=True)),
 		               Decimal(0))
@@ -2121,6 +2132,7 @@ def quote(
 			for rate, n in zip(planned, nightly, strict=True)
 		]
 		if adjusted != planned:
+			exact_nets = list(adjusted)
 			for night, rate in zip(nightly, adjusted, strict=True):
 				night["planned_rate"] = float(rate)
 			room_total = sum(adjusted, Decimal(0))
@@ -2128,16 +2140,23 @@ def quote(
 			               Decimal(0))
 	else:
 		zero_tax_adjusted = False
-		for n in nightly:
+		for idx, n in enumerate(nightly):
 			if _dec(n["gst_rate"]):
 				continue
 			raw = _dec(n["rate"])
 			rnd = round_rate_amount(raw, 0, "Nearest", prop_currency)
 			if rnd != raw:
 				n["rate"] = float(rnd)
+				exact_nets[idx] = rnd
 				zero_tax_adjusted = True
 		if zero_tax_adjusted:
 			room_total = sum((_dec(n["rate"]) for n in nightly), Decimal(0))
+
+	# Preserve each night's exact pre-discount, pre-remainder taxable rate (9dp)
+	# before _discount_nights() or quote_night_rows() rounds or absorbs remainders.
+	_q9 = Decimal("0.000000001")
+	for n, exact_net in zip(nightly, exact_nets, strict=True):
+		n["quoted_base_rate"] = float(exact_net.quantize(_q9, rounding=ROUND_HALF_UP))
 
 	# Gross, discount and net stay apart (the base rate is never overwritten):
 	# the discount comes off the accommodation only, after every rule that
@@ -2150,7 +2169,7 @@ def quote(
 	if disc:
 		room_total, room_tax, oc_net, oc_tax, room_base_total, reservation_discount = _discount_nights(
 			property, rt, nightly, room_total, disc, inclusive, night_over_cap, agreed_rate,
-			contract_tariff=contract_tariff, rate_plan=rate_plan)
+			contract_tariff=contract_tariff, rate_plan=rate_plan, exact_nets=exact_nets)
 		over_cap += oc_net
 		over_cap_tax += oc_tax
 	for n in nightly:

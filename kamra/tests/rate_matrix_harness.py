@@ -40,6 +40,14 @@ class Doc(dict):
 	def set(self, key, value):
 		self[key] = value
 
+	def is_new(self):
+		fn = self.get("is_new")
+		return fn() if callable(fn) else (bool(self.get("__islocal")) or not self.get("name"))
+
+	def get_doc_before_save(self):
+		fn = self.get("get_doc_before_save")
+		return fn() if callable(fn) else self.get("_doc_before_save")
+
 
 def getdate(value=None):
 	if value in (None, ""):
@@ -113,6 +121,7 @@ class RateMatrixHarness(unittest.TestCase):
 		localization.default_currency = lambda pack: "USD"
 		localization.pack_for = lambda property: SimpleNamespace(
 			calculate_room_tax=lambda *args: self.room_tax)
+		localization.setting_default = lambda property, key: None
 		numbers = ModuleType("babel.numbers")
 		numbers.get_currency_precision = lambda currency: PRECISION.get(currency, 2)
 		babel = ModuleType("babel")
@@ -124,6 +133,8 @@ class RateMatrixHarness(unittest.TestCase):
 			"kamra.localization": localization, "babel": babel, "babel.numbers": numbers,
 		}
 		stubs.update(self.extra_modules())
+		if "kamra.localization" in stubs and not hasattr(stubs["kamra.localization"], "setting_default"):
+			stubs["kamra.localization"].setting_default = lambda property, key: None
 		modules = patch.dict(sys.modules, stubs)
 		modules.start()
 		self.addCleanup(modules.stop)

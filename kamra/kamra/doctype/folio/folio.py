@@ -13,6 +13,8 @@ class Folio(Document):
 		self.stamp_payment_currency()
 		from kamra.ledger import stamp_gl_codes
 		stamp_gl_codes(self)
+		from kamra.room_statistics import stamp_room_rate_category
+		stamp_room_rate_category(self)
 
 	def validate_payment_modes(self):
 		from kamra.masters import assert_known_payment_method

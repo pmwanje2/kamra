@@ -525,13 +525,21 @@ def _charge_posted(reservation_name: str, charge_type: str, date: str) -> bool:
 	own provenance first and fall back to the folio's reservation for
 	lines predating the provenance field. Only automated lines count: a
 	charge the desk posted by hand (an extra bed asked for at check-in) is
-	not the night's own posting and must not suppress it."""
+	not the night's own posting and must not suppress it.
+
+	"Posted" is the standing rule the statistics use (STANDS_ON_ITS_DATE),
+	not NOT_VOIDED: a night voided on a later business date still stands on
+	its closed date, so check-out and the audit never post a second line onto
+	it (OPERA posts room and tax only on the open business date and corrects
+	a past one by an adjustment on the current date). A night voided on its
+	own, still-open date has dropped out, so it can be posted again, at the
+	rate code in effect when it is."""
 	return bool(frappe.db.sql(
 		"""
 		SELECT 1 FROM `tabFolio Charge` fc
 		JOIN `tabFolio` f ON fc.parent = f.name
 		WHERE fc.charge_type = %(ct)s AND fc.posting_date = %(date)s
-		  AND fc.auto_posted = 1 AND """ + NOT_VOIDED + """
+		  AND fc.auto_posted = 1 AND """ + STANDS_ON_ITS_DATE + """
 		  AND (fc.reservation = %(res)s
 		       OR (IFNULL(fc.reservation, '') = '' AND f.reservation = %(res)s))
 		LIMIT 1
@@ -1125,11 +1133,14 @@ def post_room_night(reservation, date, folios=None, *, room_posted: list | None 
 			# the rate this night posted at: ACTUAL reference currency and Night Audit read it
 			fx_posted = {"contract_currency": current["currency"], "contract_fx_rate": current["fx_rate"],
 			             "contract_fx_date": current["fx_date"], "contract_fx_stale": int(current["stale"])}
+		from kamra.room_statistics import category_rules
 		_append_charge(folios, reservation, "Room", {
 			**fx_posted,
 			"posting_date": date,
 			"charge_type": "Room",
 			"reservation": reservation.name,
+			"rate_category": category_rules(reservation.property).of(
+				reservation.get("rate_category")),
 			"description": desc,
 			"qty": 1,
 			"rate": night_rate,
@@ -1250,24 +1261,31 @@ def charged_nights(reservation_name: str) -> dict:
 	"""What the folios hold for each night of the stay already charged: the
 	room line(s) posted for the night plus every rate adjustment made to it
 	since, and the night's levy. {night: {base, tax, gst_rate, levy_base,
-	levy_tax, folio}} - folio is where the night's room line went."""
+	levy_tax, folio}} - folio is where the night's room line went.
+
+	A night counts as charged under STANDS_ON_ITS_DATE, the same standing
+	rule _charge_posted uses: a same-date void drops out, while a closed
+	night voided on a later business date stays in the map (it will never
+	be posted again) at the net amount the folio still holds for it."""
 	rows = frappe.db.sql(
 		"""
 		SELECT IF(fc.charge_type = %(adj)s, fc.stay_date, fc.posting_date) AS night,
-		       fc.charge_type, fc.amount, fc.gst_rate, fc.parent
+		       fc.charge_type, fc.amount, fc.gst_rate, fc.parent,
+		       CASE WHEN """ + NOT_VOIDED + """ THEN 1 ELSE 0 END AS live
 		FROM `tabFolio Charge` fc
 		JOIN `tabFolio` f ON fc.parent = f.name
 		WHERE (fc.reservation = %(res)s
 		       OR (IFNULL(fc.reservation, '') = '' AND f.reservation = %(res)s))
-		  AND """ + NOT_VOIDED + """
-		  AND (fc.charge_type IN ('Room', 'Room Levy')
-		       OR (fc.charge_type = %(adj)s AND fc.stay_date IS NOT NULL))
-		ORDER BY fc.charge_type = 'Room' DESC, fc.amount DESC
+		  AND ((fc.charge_type = 'Room' AND """ + STANDS_ON_ITS_DATE + """)
+		       OR (fc.charge_type = 'Room Levy' AND """ + NOT_VOIDED + """)
+		       OR (fc.charge_type = %(adj)s AND fc.stay_date IS NOT NULL
+		           AND """ + NOT_VOIDED + """))
+		ORDER BY fc.charge_type = 'Room' DESC, live DESC, fc.amount DESC
 		""", {"res": reservation_name, "adj": RATE_ADJUSTMENT}, as_dict=True)
 	out: dict = {}
 	for r in rows:
 		key = str(r.night)
-		amount = float(r.amount or 0)
+		amount = float(r.amount or 0) if r.live else 0.0
 		tax = amount * float(r.gst_rate or 0) / 100
 		if r.charge_type == "Room Levy":
 			if key in out:
@@ -1293,6 +1311,7 @@ def post_rate_lines(reservation, lines: list) -> None:
 	the business date. Posted lines are never edited or deleted; a night
 	whose folio has since been invoiced takes its line on the open folio."""
 	from kamra.business_date import get_business_date
+	from kamra.room_statistics import posted_night_category
 	day = get_business_date(reservation.property)
 	folios: dict = {}
 	for line in lines:
@@ -1306,6 +1325,8 @@ def post_rate_lines(reservation, lines: list) -> None:
 			"stay_date": line["night"],
 			"charge_type": RATE_ADJUSTMENT,
 			"reservation": reservation.name,
+			"rate_category": posted_night_category(
+				reservation.property, reservation.name, line["night"]),
 			"description": line["description"],
 			"qty": 1,
 			"rate": line["amount"],
@@ -1467,6 +1488,7 @@ def move_charges(src, dst, charge_rows: list, reservation: str | None = None,
 			"stay_date": row.get("stay_date"),
 			"charge_type": row.charge_type,
 			"reservation": reservation or row.get("reservation"),
+			"rate_category": row.get("rate_category"),
 			"description": row.description,
 			"qty": row.qty,
 			"rate": row.rate,
@@ -1630,6 +1652,7 @@ def _post_split(src, row, sign: int, line: dict, cuts: list, kept_units: Decimal
 		"stay_date": row.get("stay_date"),
 		"charge_type": row.charge_type,
 		"reservation": row.get("reservation"),
+		"rate_category": row.get("rate_category"),
 		"description": row.description,
 		"allowance_serial": row.get("allowance_serial"),
 		"gst_rate": row.gst_rate,
@@ -1992,6 +2015,7 @@ def void_charge(folio_name: str, charge_row: str, reason: str = "", *, correctio
 		"transaction_code": row.get("transaction_code")
 		or code_for_charge_type(row.charge_type),
 		"reservation": row.get("reservation"),
+		"rate_category": row.get("rate_category"),
 		"description": f"VOID: {row.description or row.charge_type} - {reason.strip()}"[:140],
 		"allowance_serial": row.get("allowance_serial"),
 		"qty": row.qty,
