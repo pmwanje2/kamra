@@ -1174,7 +1174,11 @@ class Reservation(Document):
 		to `rows`, the nights it now locks) takes the discount rules on: every
 		night when what is sold moved (rate plan, room type, agreed rate, or
 		the party on a stay without a fixed rate), else each night added or
-		whose locked price changed. The save and the previews use it alike."""
+		whose locked price changed (ignoring tax-inclusive last-night rounding
+		remainder redistribution when basis, tax rate, demand tier and discount
+		terms are unchanged). The save and the previews use it alike."""
+		from kamra.pricing import entry_rate, night_rate_places, rates_include_tax
+
 		was = {str(getdate(r.get("stay_date"))): r for r in old.get("night_rates") or []}
 		now = {str(getdate(r.get("stay_date"))): r for r in rows or []}
 		party = () if cint(self.get("fixed_rate")) else PARTY_FIGURES
@@ -1182,9 +1186,69 @@ class Reservation(Document):
 			abs(flt(old.get(f)) - flt(self.get(f))) >= 0.005 for f in (*SOLD_FIGURES, *party))
 		if moved:
 			return set(now)
-		return {day for day, r in now.items()
-		        if day not in was or any(abs(flt(r.get(c)) - flt(was[day].get(c))) >= 0.005
-		                                 for c in NIGHT_PRICE_COLUMNS)}
+
+		inclusive = rates_include_tax(self.property)
+		places = night_rate_places(self.property)
+		unit = 10.0 ** -places
+		tol = 0.5 * unit
+		old_last = max(was) if was else None
+		now_last = max(now) if now else None
+
+		def _eff_disc(doc_obj, row):
+			if row.get("discount_type"):
+				val = flt(row.get("discount_value"))
+				return (row.get("discount_type"), val) if val > 0 else (None, 0.0)
+			if doc_obj.get("discount_type") and flt(doc_obj.get("discount_value")) > 0:
+				return doc_obj.get("discount_type"), flt(doc_obj.get("discount_value"))
+			return None, 0.0
+
+		def _night_moved(day: str, r) -> bool:
+			if day not in was:
+				return True
+			prev = was[day]
+			if not any(abs(flt(r.get(c)) - flt(prev.get(c))) >= tol for c in NIGHT_PRICE_COLUMNS):
+				return False
+			# On tax-inclusive stays (gst > 0), quote_night_rows lets the last
+			# night absorb the net-rounding remainder (at most (N // 2) * unit
+			# on base_rate). Extending or shortening a stay shifts which night
+			# is last without changing gross rate, tax rate, demand tier, or
+			# discount terms.
+			gst = flt(r.get("gst_rate"))
+			if not (inclusive and gst > 0):
+				return True
+			if abs(gst - flt(prev.get("gst_rate"))) >= 0.005:
+				return True
+			if abs(flt(r.get("demand_premium_pct")) - flt(prev.get("demand_premium_pct"))) >= 0.005:
+				return True
+			old_disc = _eff_disc(old, prev)
+			new_disc = _eff_disc(self, r)
+			if old_disc[0] != new_disc[0] or abs(old_disc[1] - new_disc[1]) >= tol:
+				return True
+			span = max(
+				len(was) if day == old_last else 0,
+				len(now) if day == now_last else 0,
+			)
+			if span < 2:
+				return True
+			old_base = flt(prev.get("base_rate")) or flt(prev.get("rate"))
+			new_base = flt(r.get("base_rate")) or flt(r.get("rate"))
+			d_base = abs(new_base - old_base)
+			max_base_rem = (span // 2) * unit
+			if d_base < tol or d_base > max_base_rem + tol * 0.1:
+				return True
+			old_entry = flt(entry_rate(old_base, gst, True, places))
+			new_entry = flt(entry_rate(new_base, gst, True, places))
+			d_entry = abs(new_entry - old_entry)
+			if d_entry > d_base * (1.0 + gst / 100.0) + unit + tol * 0.1:
+				return True
+			max_col_shift = d_entry + unit + tol * 0.1
+			if abs(flt(r.get("rate")) - flt(prev.get("rate"))) > max_col_shift:
+				return True
+			if abs(flt(r.get("discount_amount")) - flt(prev.get("discount_amount"))) > max_col_shift:
+				return True
+			return False
+
+		return {day for day, r in now.items() if _night_moved(day, r)}
 
 	def keep_hand_set_nights(self):
 		"""Prices the nights a desk typed (night_rates rows carrying a

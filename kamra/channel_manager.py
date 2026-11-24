@@ -719,6 +719,13 @@ def _reconcile_ota_modify_discount(doc, old) -> dict | None:
 
 	if not cint(doc.get("auto_price")) or not doc.has_discount():
 		return None
+	if (
+		old.get("night_rates")
+		and cint(old.get("auto_price"))
+		and doc.get("rate_lock_key")
+		and doc.get("rate_lock_key") == doc.rate_lock_key_for(doc.quote_inputs())
+	):
+		return None
 	from kamra.api import _discount_snapshot
 
 	doc.flags.kamra_stored = old
@@ -818,6 +825,7 @@ def _reconcile_ota_modify_discount(doc, old) -> dict | None:
 		# Re-check: if any surviving night itself moved price (e.g., party change
 		# or rate-card shift) and would require fresh supervisor sign-off, drop
 		# its unapproved discount too so Guest save never crashes or escalates.
+		dropped_dates = []
 		if kept_dates:
 			q2 = doc.requote()
 			rows2 = doc.quote_night_rows(q2)
@@ -831,12 +839,14 @@ def _reconcile_ota_modify_discount(doc, old) -> dict | None:
 						r.discount_value = 0
 						r.discount_reason = None
 						r.fixed_rate = 0
+						dropped_dates.append(day)
 					elif day in kept_dates:
 						still_kept.append(day)
 				kept_dates = still_kept
 
 		kept_set = set(kept_dates)
-		added_dates = [day for day in new_stay_nights if day not in kept_set]
+		dropped_sorted = sorted(set(dropped_dates))
+		added_dates = [day for day in new_stay_nights if day not in old_by_date and day not in kept_set]
 		if kept_dates:
 			return {
 				"kind": CHANNEL_REVIEW_DISCOUNT_PARTIAL,
@@ -845,6 +855,7 @@ def _reconcile_ota_modify_discount(doc, old) -> dict | None:
 				"desc": before_desc,
 				"kept": sorted(kept_set),
 				"added": added_dates,
+				"dropped": dropped_sorted,
 			}
 		return {
 			"kind": CHANNEL_REVIEW_DISCOUNT_REMOVED,
@@ -853,6 +864,7 @@ def _reconcile_ota_modify_discount(doc, old) -> dict | None:
 			"desc": before_desc,
 			"kept": [],
 			"added": added_dates,
+			"dropped": dropped_sorted,
 		}
 	finally:
 		doc.flags.kamra_stored = None
@@ -1123,10 +1135,17 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 			new_total_text = money_text(doc.property, doc.amount_after_tax)
 			if discount_review["kind"] == CHANNEL_REVIEW_DISCOUNT_PARTIAL:
 				kept_str = ", ".join(discount_review["kept"])
-				added_str = ", ".join(discount_review["added"])
+				dropped_list = discount_review.get("dropped") or []
+				added_list = discount_review.get("added") or []
+				uncovered_parts = []
+				if dropped_list:
+					uncovered_parts.append(f"repriced night(s) {', '.join(dropped_list)}")
+				if added_list:
+					uncovered_parts.append(f"added night(s) {', '.join(added_list)}")
+				uncovered_str = " and ".join(uncovered_parts) or "other night(s)"
 				review_note = (
 					f"Channel modify ({channel_label} {ref_label}) applied — kept approved "
-					f"desk discount on {kept_str}; added night(s) {added_str} priced without "
+					f"desk discount on {kept_str}; {uncovered_str} priced without "
 					f"unapproved discount."
 				)
 			elif requested_reason:
