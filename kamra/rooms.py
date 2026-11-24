@@ -65,7 +65,8 @@ def _room_or_404(room: str) -> dict:
 	r = frappe.db.get_value(
 		"Room", room,
 		["name", "property", "room_number", "room_type", "floor",
-		 "housekeeping_status", "occupancy_status", "notes"], as_dict=True)
+		 "housekeeping_status", "occupancy_status", "os_oo_reason",
+		 "os_oo_until", "os_oo_set_by", "notes"], as_dict=True)
 	if not r:
 		frappe.throw(_("Room {0} not found.").format(room), frappe.DoesNotExistError)
 	assert_property_access(r.property)
@@ -85,7 +86,8 @@ def rooms_board(property: str):
 	rooms = frappe.get_all(
 		"Room", filters={"property": property},
 		fields=["name", "room_number", "room_type", "floor",
-		        "housekeeping_status", "occupancy_status"],
+		        "housekeeping_status", "occupancy_status",
+		        "os_oo_reason", "os_oo_until"],
 		order_by="room_number asc")
 	rt_names = {rt.name: rt.room_type_name for rt in frappe.get_all(
 		"Room Type", filters={"property": property},

@@ -587,13 +587,19 @@ export default function TapeChart() {
                           <span className="text-sm font-semibold">{room.room_number}</span>
                           <span className={cn("ms-1.5 align-middle text-[9px] font-medium uppercase",
                             room.housekeeping_status === "Dirty" ? "text-amber-600"
-                              : room.housekeeping_status === "Out of Order" ? "text-rose-600"
-                                : "text-zinc-400")}>
+                              : room.housekeeping_status === "Pickup" ? "text-indigo-600 dark:text-indigo-400"
+                                : room.housekeeping_status === "Out of Service" ? "text-orange-600 dark:text-orange-400"
+                                  : room.housekeeping_status === "Out of Order" ? "text-rose-600"
+                                    : "text-zinc-400")}>
                             {t(room.housekeeping_status)}
                           </span>
                         </div>
                         {/* vacant cell: bars and blocks sit on top, so a click here is a free night */}
-                        {data.dates.map((d) => canBook && d >= todayIso() ? (
+                        {data.dates.map((d) =>
+                          canBook &&
+                          d >= todayIso() &&
+                          room.housekeeping_status !== "Out of Service" &&
+                          room.housekeeping_status !== "Out of Order" ? (
                           <button key={d} type="button" style={{ width: cellW }}
                             aria-label={t("New booking")}
                             onClick={() => newBooking({ room_type: room.room_type, room: room.name,
@@ -601,7 +607,11 @@ export default function TapeChart() {
                             className="shrink-0 border-l border-zinc-100 hover:bg-brand-50" />
                         ) : (
                           <div key={d} style={{ width: cellW }}
-                            className="shrink-0 border-l border-zinc-100" />
+                            className={cn(
+                              "shrink-0 border-s border-zinc-100 dark:border-zinc-800",
+                              room.housekeeping_status === "Out of Service" && "bg-orange-50/40 dark:bg-orange-950/20",
+                              room.housekeeping_status === "Out of Order" && "bg-rose-50/40 dark:bg-rose-950/20",
+                            )} />
                         ))}
                         {/* held-out-of-sale bands (house use, VIP, maintenance) */}
                         {(room.blocks ?? []).map((k) => {

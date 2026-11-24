@@ -510,6 +510,7 @@ class Reservation(Document):
 		self.apply_pricing()
 		self.govern_discount()
 		self.guard_rate_plan()
+		self.validate_room_serviceability()
 		self.stamp_room_assignment()
 
 	def guard_rate_plan(self):
@@ -545,6 +546,26 @@ class Reservation(Document):
 		nationality = default_nationality(pack_for(self.property))
 		for o in new_rows:
 			o.nationality = nationality or None
+	def validate_room_serviceability(self):
+		"""Block assigning or checking a guest into an Out of Service or Out of Order room.
+		An already Checked In stay whose room becomes OS/OO mid-stay stays editable and
+		check-out capable until departure."""
+		if not self.room or self.status not in ("Confirmed", "Checked In", "Held", "Pending Payment"):
+			return
+		before = None if self.is_new() else self.get_doc_before_save()
+		if before and before.status == "Checked In" and before.room == self.room:
+			return
+		hk, room_no = frappe.db.get_value(
+			"Room", self.room, ["housekeeping_status", "room_number"]
+		) or (None, None)
+		if hk in ("Out of Order", "Out of Service"):
+			frappe.throw(
+				_("Room {0} is currently {1} and cannot be assigned.").format(
+					room_no or self.room, _(hk)
+				),
+				title=_("Room unavailable"),
+			)
+
 	def stamp_room_assignment(self):
 		"""Who put the guest in this room, and when. Every writer that
 		changes the room (booking, allocator, check-in, room move, upgrade)
@@ -2604,9 +2625,9 @@ class Reservation(Document):
 		for room in self._occupied_rooms(checking_in=False):
 			hk, occ = frappe.db.get_value(
 				"Room", room, ["housekeeping_status", "occupancy_status"]) or (None, None)
-			if hk == "Out of Order":
-				# out of service: never flipped to Dirty, no checkout clean.
-				# Only one that went out of order mid-stay is freed.
+			if hk in ("Out of Order", "Out of Service"):
+				# out of order / out of service: never flipped to Dirty, no checkout clean.
+				# Only one that entered OS/OO mid-stay is freed back to Vacant.
 				if occ == "Occupied":
 					frappe.db.set_value("Room", room, "occupancy_status", "Vacant")
 				continue

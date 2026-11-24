@@ -4,7 +4,7 @@
     set_housekeeping_status, which checks role, property and DocPerm. */
 
 import { useCallback, useEffect, useState } from "react"
-import { BedDouble, LogOut, RefreshCw, User, UserPlus } from "lucide-react"
+import { BedDouble, Lock, LogOut, RefreshCw, User, UserPlus, Wrench } from "lucide-react"
 import { call, getCurrentProperty, setHousekeepingStatus } from "../lib/api"
 import { serverError } from "../lib/resource"
 import { Button } from "../components/ui/button"
@@ -15,7 +15,14 @@ import { useT, t as translate } from "../lib/i18n"
 
 
 // Ready: passed its inspection when the turnover profile requires one
-type HkStatus = "Clean" | "Dirty" | "Inspected" | "Ready" | "Out of Order"
+type HkStatus =
+  | "Clean"
+  | "Dirty"
+  | "Pickup"
+  | "Inspected"
+  | "Ready"
+  | "Out of Service"
+  | "Out of Order"
 
 interface BoardRoom {
   name: string
@@ -24,6 +31,9 @@ interface BoardRoom {
   floor: string | null
   housekeeping_status: HkStatus
   occupancy_status: "Vacant" | "Occupied"
+  os_oo_reason?: string | null
+  os_oo_until?: string | null
+  os_oo_set_by?: string | null
   guest_name: string | null
   due_out: boolean
   /** a same-day (hourly) stay - the room turns today, at etd */
@@ -39,23 +49,35 @@ interface BoardRoom {
   } | null
 }
 
-const STATUSES: HkStatus[] = ["Dirty", "Clean", "Inspected", "Ready", "Out of Order"]
-// an attendant marks rooms Clean / Dirty; passing or blocking a room is the
+const STATUSES: HkStatus[] = [
+  "Dirty",
+  "Pickup",
+  "Clean",
+  "Inspected",
+  "Ready",
+  "Out of Service",
+  "Out of Order",
+]
+// an attendant marks rooms Clean / Pickup / Dirty; passing or blocking a room is the
 // supervisor's call - the server enforces the same rule
-const ATTENDANT: HkStatus[] = ["Dirty", "Clean"]
+const ATTENDANT: HkStatus[] = ["Dirty", "Pickup", "Clean"]
 
 const tone: Record<HkStatus, string> = {
-  Clean: "border-emerald-300 bg-emerald-50 text-emerald-900",
-  Inspected: "border-sky-300 bg-sky-50 text-sky-900",
-  Ready: "border-teal-400 bg-teal-50 text-teal-900",
-  Dirty: "border-amber-300 bg-amber-50 text-amber-900",
-  "Out of Order": "border-rose-300 bg-rose-50 text-rose-900",
+  Clean: "border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-950/30 dark:text-emerald-100",
+  Pickup: "border-indigo-300 bg-indigo-50 text-indigo-900 dark:border-indigo-500/40 dark:bg-indigo-950/30 dark:text-indigo-100",
+  Inspected: "border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-500/40 dark:bg-sky-950/30 dark:text-sky-100",
+  Ready: "border-teal-400 bg-teal-50 text-teal-900 dark:border-teal-500/40 dark:bg-teal-950/30 dark:text-teal-100",
+  Dirty: "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/30 dark:text-amber-100",
+  "Out of Service": "border-orange-300 bg-orange-50 text-orange-900 dark:border-orange-500/40 dark:bg-orange-950/30 dark:text-orange-100",
+  "Out of Order": "border-rose-300 bg-rose-50 text-rose-900 dark:border-rose-500/40 dark:bg-rose-950/30 dark:text-rose-100",
 }
 const dot: Record<HkStatus, string> = {
   Clean: "bg-emerald-500",
+  Pickup: "bg-indigo-500",
   Inspected: "bg-sky-500",
   Ready: "bg-teal-500",
   Dirty: "bg-amber-500",
+  "Out of Service": "bg-orange-500",
   "Out of Order": "bg-rose-500",
 }
 
@@ -139,10 +161,14 @@ export default function HousekeepingBoard() {
     const inspection = status === "Inspected" || status === "Ready"
     const reason = inspection ? undefined : window.prompt(t("Reason for overriding room status"))?.trim()
     if (!inspection && !reason) return
+    const needsUntil = status === "Out of Service" || status === "Out of Order"
+    const untilDate = needsUntil
+      ? window.prompt(t("Return date YYYY-MM-DD (optional)"))?.trim() || undefined
+      : undefined
     setBusy(room)
     setOpen(null)
     try {
-      await setHousekeepingStatus(room, status, reason)
+      await setHousekeepingStatus(room, status, reason, untilDate)
       load()
     } catch (e) {
       setError(serverError(e))
@@ -182,11 +208,11 @@ export default function HousekeepingBoard() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-zinc-900">{t("Housekeeping Board")}</h1>
-          <p className="text-sm text-zinc-500">
+          <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">{t("Housekeeping Board")}</h1>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
             {canSupervise
               ? t("Every room at a glance. Tap a room to set its status.")
-              : t("Every room at a glance. You can mark rooms Clean or Dirty.")}
+              : t("Every room at a glance. You can mark rooms Clean, Pickup, or Dirty.")}
           </p>
         </div>
         <Button variant="outline" onClick={load}>
@@ -293,7 +319,7 @@ export default function HousekeepingBoard() {
                         aria-expanded={open === r.name}
                         onClick={() => setOpen(open === r.name ? null : r.name)}
                         className={cn(
-                          "w-full rounded-lg border px-3 py-2.5 text-left transition-colors",
+                          "min-h-11 w-full rounded-lg border px-3 py-2.5 text-start transition-colors",
                           "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600",
                           tone[r.housekeeping_status],
                           busy === r.name && "opacity-60",
@@ -302,6 +328,12 @@ export default function HousekeepingBoard() {
                         <div className="flex items-center justify-between gap-2">
                           <span className="min-w-0 break-words text-base font-semibold">{r.room_number}</span>
                           <span className="flex items-center gap-1">
+                            {r.housekeeping_status === "Out of Service" && (
+                              <Wrench className="size-3.5 text-orange-600" aria-label={t("Out of Service")} />
+                            )}
+                            {r.housekeeping_status === "Out of Order" && (
+                              <Lock className="size-3.5 text-rose-600" aria-label={t("Out of Order")} />
+                            )}
                             {r.due_out && (
                               <LogOut className="size-3.5 text-violet-600" aria-label={t("Due out")} />
                             )}
@@ -313,6 +345,13 @@ export default function HousekeepingBoard() {
                         <div className="mt-0.5 text-[11px] font-medium uppercase tracking-wide opacity-80">
                           {t(r.housekeeping_status)}
                         </div>
+                        {(r.housekeeping_status === "Out of Service" || r.housekeeping_status === "Out of Order") &&
+                          (r.os_oo_reason || r.os_oo_until) && (
+                            <div className="mt-1 truncate text-xs opacity-90">
+                              {r.os_oo_reason}
+                              {r.os_oo_until ? ` · ${r.os_oo_until}` : ""}
+                            </div>
+                          )}
                         {r.guest_name && (
                           <div className="mt-1 truncate text-xs opacity-80">{r.guest_name}</div>
                         )}
@@ -333,7 +372,7 @@ export default function HousekeepingBoard() {
                       {open === r.name && (
                         <div
                           aria-label={t("Room actions")} role="group"
-                          className="relative z-10 mt-1 min-w-0 rounded-lg border border-zinc-200 bg-white shadow-lg"
+                          className="relative z-10 mt-1 min-w-0 rounded-lg border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
                         >
                           {r.clean_tasks.length > 1 && <p className="p-2 text-xs">{t("Choose a cleaning task")}</p>}
                           {r.clean_tasks.map(task => <Button key={task.name} className="w-full whitespace-normal" disabled={busy === r.name} onClick={() => complete(r.name, task.name)}>
@@ -346,7 +385,7 @@ export default function HousekeepingBoard() {
                                 key={s}
                                 type="button"
                                 onClick={() => setStatus(r.name, s)}
-                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-zinc-50"
+                                className="flex min-h-11 w-full items-center gap-2 px-3 py-2 text-start text-sm hover:bg-zinc-50 sm:min-h-9 dark:hover:bg-zinc-800"
                               >
                                 <span className={cn("size-2 rounded-full", dot[s])} aria-hidden />
                                 {t("Mark {status}", { status: t(s) })}

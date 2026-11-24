@@ -18,6 +18,12 @@
     "dir": "ltr"
   },
   {
+    "code": "fr",
+    "nativeLabel": "Français",
+    "englishLabel": "French",
+    "dir": "ltr"
+  },
+  {
     "code": "pt",
     "nativeLabel": "Português",
     "englishLabel": "Portuguese",

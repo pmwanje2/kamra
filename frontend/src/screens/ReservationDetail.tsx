@@ -52,10 +52,11 @@ import SupervisorSignOff, { SignOffReasons } from "../components/SupervisorSignO
 import { supervisorArgs } from "../lib/reservationDiscount"
 import { useAuth } from "../lib/auth"
 import StayInstructions from "../components/StayInstructions"
+import AlertBanner from "../components/AlertBanner"
 import { cur, moneyDigits, moneyLocale } from "../lib/money"
 import { t as translate, useUILanguage } from "../lib/i18n"
 
-const inr = (n: number) => {
+const fmtReservationMoney = (n: number) => {
   const v = Number(n || 0)
   const d = moneyDigits()
   const hasFrac = d > 0 && Math.abs(v - Math.round(v)) >= 10 ** -(d + 1)
@@ -67,7 +68,9 @@ const inr = (n: number) => {
 
 /** One amount, or the lowest to the highest when the nights differ. */
 const rangeOf = (values: number[]) =>
-  new Set(values).size === 1 ? inr(values[0]) : `${inr(Math.min(...values))}-${inr(Math.max(...values))}`
+  new Set(values).size === 1
+    ? fmtReservationMoney(values[0])
+    : `${fmtReservationMoney(Math.min(...values))}-${fmtReservationMoney(Math.max(...values))}`
 
 /** Whole nights from `a` to `b` (YYYY-MM-DD). */
 const nightsBetween = (a: string, b: string) =>
@@ -398,7 +401,7 @@ export default function ReservationDetail({
   const offText = (type: "Percent" | "Amount", value: number, reason?: string | null) =>
     [type === "Percent"
       ? translate("{pct}% off", { pct: value })
-      : translate("{amount} off a night", { amount: inr(value) }),
+      : translate("{amount} off a night", { amount: fmtReservationMoney(value) }),
     reason].filter(Boolean).join(" · ")
   // a discount given only in Daily Details: each night's own, and its reason
   const ownNights = (d.night_rates ?? []).filter((n) => n.discount_type && Number(n.discount_value) > 0)
@@ -464,12 +467,12 @@ export default function ReservationDetail({
           reviewReason === "discount_removed"
             ? translate(
                 "The channel update was applied and removed the desk discount (new total: {total}). Review what was removed below and re-apply a discount if needed.",
-                { total: inr(money.total) },
+                { total: fmtReservationMoney(money.total) },
               )
             : reviewReason === "discount_review"
               ? translate(
                   "The channel update was applied (new total: {total}). Approved discounted nights were kept; added nights were priced without the unapproved discount. Review below and adjust if needed.",
-                  { total: inr(money.total) },
+                  { total: fmtReservationMoney(money.total) },
                 )
               : translate(
                   "The stay's dates, room, and charges were left unchanged. Review what the channel sent below and update the stay manually if needed.",
@@ -514,6 +517,16 @@ export default function ReservationDetail({
         </div>
       )}
 
+      <AlertBanner
+        trigger="Reservation"
+        property={d.property}
+        reservation={name}
+        guest={d.guest?.name ?? undefined}
+        initialAlerts={d.alerts?.items}
+        canCreate={!["Cancelled", "Checked Out", "No Show"].includes(d.status)}
+        onAlertsChanged={refresh}
+      />
+
       {/* money - the question everyone asks first */}
       <Card
         icon={<CreditCard className="size-4" />}
@@ -532,13 +545,13 @@ export default function ReservationDetail({
           <div className="flex min-w-0 items-baseline justify-between gap-2 sm:block">
             <div className="text-xs text-zinc-400">{translate("Total")}</div>
             <div className="break-words text-base font-semibold tabular-nums text-zinc-900 sm:text-lg">
-              {inr(money.total)}
+              {fmtReservationMoney(money.total)}
             </div>
           </div>
           <div className="flex min-w-0 items-baseline justify-between gap-2 sm:block">
             <div className="text-xs text-zinc-400">{translate("Paid")}</div>
             <div className="break-words text-base font-semibold tabular-nums text-emerald-700 sm:text-lg">
-              {inr(money.paid)}
+              {fmtReservationMoney(money.paid)}
             </div>
           </div>
           <div className="flex min-w-0 items-baseline justify-between gap-2 sm:block">
@@ -549,12 +562,12 @@ export default function ReservationDetail({
                 (money.due > 0 ? "text-rose-600" : "text-zinc-400")
               }
             >
-              {inr(money.due)}
+              {fmtReservationMoney(money.due)}
             </div>
           </div>
         </div>
         {Number(money.refund_due ?? 0) > 0 && (
-          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">{translate("Refund due: ")}<span className="font-semibold">{inr(money.refund_due ?? 0)}</span>{" "}{translate("- the advance taken at booking, with no folio or fee against it.")}</div>
+          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">{translate("Refund due: ")}<span className="font-semibold">{fmtReservationMoney(money.refund_due ?? 0)}</span>{" "}{translate("- the advance taken at booking, with no folio or fee against it.")}</div>
         )}
         <p className="mt-2 text-xs text-zinc-400">
           {money.source === "folio"
@@ -654,15 +667,15 @@ export default function ReservationDetail({
                   {datePreview.difference > 0
                     ? translate("{n} nights. Stay total {from} to {to} (+{amt}).", {
                         n: nightsBetween(ci, co),
-                        from: inr(datePreview.current_amount),
-                        to: inr(datePreview.new_amount),
-                        amt: inr(datePreview.difference),
+                        from: fmtReservationMoney(datePreview.current_amount),
+                        to: fmtReservationMoney(datePreview.new_amount),
+                        amt: fmtReservationMoney(datePreview.difference),
                       })
                     : translate("{n} nights. Stay total {from} to {to} (-{amt}).", {
                         n: nightsBetween(ci, co),
-                        from: inr(datePreview.current_amount),
-                        to: inr(datePreview.new_amount),
-                        amt: inr(Math.abs(datePreview.difference)),
+                        from: fmtReservationMoney(datePreview.current_amount),
+                        to: fmtReservationMoney(datePreview.new_amount),
+                        amt: fmtReservationMoney(Math.abs(datePreview.difference)),
                       })}
                 </p>
               )}
@@ -753,7 +766,7 @@ export default function ReservationDetail({
               canOverrideFixed={canOverrideFixed} reasonCategories={d.reason_categories}
               onSaved={() => { refresh(); reload() }} />
           )}
-          <ChangesLog reservation={name} money={inr} />
+          <ChangesLog reservation={name} money={fmtReservationMoney} />
           {d.booked_check_out_date && (
             <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
               {translate("Left early: booked to {date}.", { date: d.booked_check_out_date })}
@@ -904,6 +917,9 @@ export default function ReservationDetail({
       {/* per-department instructions (Stay Instruction rows) */}
       <StayInstructions
         reservation={name}
+        businessDate={d.business_date}
+        checkInDate={d.check_in_date}
+        initialTraces={Array.isArray(d.traces) ? d.traces : undefined}
         canAdd={!["Cancelled", "Checked Out", "No Show"].includes(d.status)}
       />
 
@@ -915,7 +931,7 @@ export default function ReservationDetail({
           <p className="mt-0.5">
             {d.cancellation.reason}
             {d.cancellation.fee > 0
-              ? translate(" · fee {v0}", { v0: String(inr(d.cancellation.fee)) })
+              ? translate(" · fee {v0}", { v0: String(fmtReservationMoney(d.cancellation.fee)) })
               : translate(" · no fee")}
             {d.cancellation.cancelled_on
               ? ` · ${d.cancellation.cancelled_on}`

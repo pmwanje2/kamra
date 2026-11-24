@@ -7,10 +7,17 @@
  "engine": "InnoDB",
  "field_order": [
   "department",
+  "trace_date",
+  "trace_time",
   "instruction",
   "status",
+  "trace_status",
+  "activated_on",
   "done_by",
-  "done_on"
+  "done_on",
+  "resolved_by",
+  "resolved_at",
+  "todo_ref"
  ],
  "fields": [
   {
@@ -23,7 +30,21 @@
    "reqd": 1
   },
   {
-   "columns": 6,
+   "columns": 2,
+   "default": "Today",
+   "fieldname": "trace_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Trace Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "trace_time",
+   "fieldtype": "Time",
+   "label": "Trace Time"
+  },
+  {
+   "columns": 4,
    "fieldname": "instruction",
    "fieldtype": "Small Text",
    "in_list_view": 1,
@@ -40,6 +61,21 @@
    "options": "Open\nDone"
   },
   {
+   "columns": 1,
+   "default": "Open",
+   "fieldname": "trace_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Trace Status",
+   "options": "Scheduled\nOpen\nOverdue\nDone"
+  },
+  {
+   "fieldname": "activated_on",
+   "fieldtype": "Date",
+   "label": "Activated On",
+   "read_only": 1
+  },
+  {
    "fieldname": "done_by",
    "fieldtype": "Link",
    "label": "Done By",
@@ -51,12 +87,32 @@
    "fieldtype": "Datetime",
    "label": "Done On",
    "read_only": 1
+  },
+  {
+   "fieldname": "resolved_by",
+   "fieldtype": "Link",
+   "label": "Resolved By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "resolved_at",
+   "fieldtype": "Datetime",
+   "label": "Resolved At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "todo_ref",
+   "fieldtype": "Link",
+   "label": "ToDo",
+   "options": "ToDo",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-07-27 00:00:00.000000",
+ "modified": "2026-11-24 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Stay Instruction",

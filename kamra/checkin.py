@@ -280,14 +280,16 @@ def _free_rooms(res) -> list[dict]:
 	if res.status != "Confirmed":
 		return []
 	from kamra.api import available_rooms
-	rank = {"Inspected": 0, "Clean": 1, "Dirty": 3}
+	rank = {"Inspected": 0, "Ready": 0, "Clean": 1, "Pickup": 2, "Dirty": 3}
 	rows = [{"name": r["name"], "room_number": r["room_number"],
 	         "housekeeping_status": r["housekeeping_status"]}
 	        for r in available_rooms(res.property, res.room_type,
 	                                 str(res.check_in_date), str(res.check_out_date),
-	                                 group_booking=res.group_booking, ready_now=1)
-	        if r["name"] != res.room]
-	rows.sort(key=lambda r: (rank.get(r["housekeeping_status"] or "", 2),
+	                                 group_booking=res.group_booking, ready_now=1,
+	                                 for_assignment=1)
+	        if r["name"] != res.room
+	        and r.get("housekeeping_status") not in ("Out of Order", "Out of Service")]
+	rows.sort(key=lambda r: (rank.get(r["housekeeping_status"] or "", 4),
 	                         len(str(r["room_number"])), str(r["room_number"])))
 	return rows
 
@@ -492,7 +494,10 @@ def _till(property: str) -> dict:
 
 def _flow_payload(res, steps, ctx, guest) -> dict:
 	from kamra.localization import front_desk_vocabulary, pack_for
+	from kamra.traces import check_point_alerts
+	alerts = check_point_alerts("Check-In", res.property, reservation=res.name, guest=res.guest)
 	return {
+		"alerts": alerts,
 		"reservation": {
 			"name": res.name, "status": res.status,
 			"guest": res.guest, "guest_name": res.guest_name,
