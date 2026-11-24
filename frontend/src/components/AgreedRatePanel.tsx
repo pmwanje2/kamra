@@ -30,7 +30,7 @@ import {
   type ReasonCategories,
   type AgreedRatePreview,
 } from "../lib/agreedRate"
-import { cur, moneyDigits, moneyLocale } from "../lib/money"
+import { cur, fmtMoney, moneyStep } from "../lib/money"
 import {
   discountArgs,
   discountNote,
@@ -52,16 +52,7 @@ const inputCls =
   "rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm " +
   "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
 
-// currency minor-unit precision (KWD 3, USD 2, UGX 0), keeping whole figures compact like money_text
-const money = (n: number) => {
-  const v = Number(n || 0)
-  const d = moneyDigits()
-  const hasFrac = d > 0 && Math.abs(v - Math.round(v)) >= 10 ** -(d + 1)
-  return `${cur()}${v.toLocaleString(moneyLocale(), {
-    minimumFractionDigits: hasFrac ? d : 0,
-    maximumFractionDigits: d,
-  })}`
-}
+const money = (n: number) => fmtMoney(n || 0)
 const signed = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${money(Math.abs(n))}`
 
 /** kamra.api.discount_preview: the rules plus what saving would do. */
@@ -104,8 +95,7 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
   onSaved: () => void
 }) {
   const { t } = useT()
-  const digits = moneyDigits()
-  const rateStep = digits === 0 ? "1" : (10 ** -digits).toString()
+  const rateStep = moneyStep()
   const [open, setOpen] = useState(false)
   const [mode, setMode] = useState<"discount" | "fixed">("discount")
   const [rate, setRate] = useState("")

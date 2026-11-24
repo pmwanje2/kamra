@@ -9,7 +9,7 @@ import { listResource, type Row } from "../lib/resource"
 import { auditHistory, type RunRow } from "../lib/eod"
 import { Badge } from "../components/ui/badge"
 import { Button } from "../components/ui/button"
-import { cur, fmtMoney, moneyLocale } from "../lib/money"
+import { cur, fmtAmount, fmtMoney } from "../lib/money"
 import { DataTable } from "../components/ui/data-table"
 import { useT } from "../lib/i18n"
 import {
@@ -19,8 +19,7 @@ import {
   CardTitle,
 } from "../components/ui/card"
 
-const inr = (n: unknown) =>
-  Number(n ?? 0).toLocaleString(moneyLocale(), { maximumFractionDigits: 0 })
+const inr = (n: unknown) => fmtAmount(n ?? 0)
 
 const fmtWhen = (d: unknown) => d ? `${formatDate(String(d).slice(0, 10))} ${String(d).slice(11, 16)}` : ""
 

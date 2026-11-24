@@ -337,14 +337,18 @@ def default_property():
 
 def _public_locale(property: str) -> dict:
 	from kamra.languages import enabled_codes, public_booking_language
-	from kamra.localization import pack_for, privacy_terms
+	from kamra.localization import _minor_unit_for_currency, currency_precision_map, pack_for, privacy_terms
 	prop = frappe.get_cached_doc("Property", property)
 	pack = pack_for(property)
 	loc = pack.locale(prop)
+	currency = (loc.get("currency") or "").upper()
+	decimals_map = currency_precision_map(property, home_currency=currency, pack=pack)
 	# "" is a valid symbol (generic pack shows bare numbers)
 	return {"currency_symbol": loc.get("currency_symbol") or "",
 	        "locale": prop.get("locale") or loc.get("locale") or "en",
-	        "currency": loc.get("currency") or "",
+	        "currency": currency,
+	        "decimals": decimals_map.get(currency, _minor_unit_for_currency(currency)),
+	        "currency_decimals": decimals_map,
 	        "default_language": public_booking_language(prop.get("booking_language")),
 	        "enabled_languages": enabled_codes(),
 	        **privacy_terms(pack)}

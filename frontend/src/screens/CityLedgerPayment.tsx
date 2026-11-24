@@ -3,7 +3,7 @@ import { call, newIdempotencyKey } from "../lib/api"
 import { serverError } from "../lib/resource"
 import { Button } from "../components/ui/button"
 import { Sheet } from "../components/ui/sheet"
-import { fmtMoney, locale } from "../lib/money"
+import { fmtMoney, locale, moneyStep } from "../lib/money"
 import { t as translate, useUILanguage } from "../lib/i18n"
 
 // Record a company's payment against its city ledger (AR) balance. The
@@ -289,7 +289,7 @@ export default function CityLedgerPayment(props: {
               <input
                 type="number"
                 min="0"
-                step="0.01"
+                step={moneyStep()}
                 inputMode="decimal"
                 className="w-full rounded-lg border border-zinc-300 px-2 py-1.5"
                 value={amount}
@@ -375,7 +375,7 @@ export default function CityLedgerPayment(props: {
                           <input
                             type="number"
                             min="0"
-                            step="0.01"
+                            step={moneyStep()}
                             className="w-28 rounded border border-zinc-300 px-1.5 py-1 text-right"
                             value={picks[it.folio]}
                             onChange={(e) =>

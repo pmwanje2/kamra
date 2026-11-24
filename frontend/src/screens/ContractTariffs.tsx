@@ -9,7 +9,7 @@ import { Button } from "../components/ui/button"
 import { call, frappeFetch, getCurrentProperty } from "../lib/api"
 import { downloadCsv } from "../lib/csv"
 import { uiDateLocale, useT } from "../lib/i18n"
-import { useLocale } from "../lib/money"
+import { moneyStep, useLocale } from "../lib/money"
 import { addDays, todayPlus } from "../lib/stay"
 import { notifyTariffsChanged, onTariffsChanged } from "../lib/tariffSync"
 import {
@@ -134,7 +134,7 @@ function TariffDirectory({ property }: { property: string }) {
 
   const data = result?.data
   const loading = !!property && result?.key !== requestKey
-  // the ERPNext Customers a new customer-specific tariff may be for (SAP A305), as native DocPerm lets the user read them
+  // corporate / customer accounts a new customer-specific tariff may be for (SAP A305), as native DocPerm lets the user read them
   const [customerNames, setCustomerNames] = useState<string[]>([])
   const canPropose = !!data?.supported && data.can_propose
   useEffect(() => {
@@ -779,7 +779,7 @@ function ActionDialog({ action, data, locale, dateLocale, list, rounding, custom
         <span>{t("New rate")}</span>
         <span className="flex items-center gap-2">
           <span className="rounded-lg bg-zinc-100 px-2 py-2 text-zinc-700">{currency}</span>
-          <input type="number" inputMode="decimal" className={field + " min-w-0 flex-1 tabular-nums"} min={free ? "0" : "0.01"} step="0.01"
+          <input type="number" inputMode="decimal" className={field + " min-w-0 flex-1 tabular-nums"} min={free ? "0" : moneyStep(currency)} step={moneyStep(currency)}
             value={amount} onChange={(event) => setAmount(event.target.value)} required disabled={busy} autoFocus />
         </span>
       </label>

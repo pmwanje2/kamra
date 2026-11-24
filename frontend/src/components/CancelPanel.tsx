@@ -4,7 +4,7 @@ import { call } from "../lib/api"
 import { serverError } from "../lib/resource"
 import type { Row } from "../lib/resource"
 import { Button } from "./ui/button"
-import { cur, moneyLocale, useLocale } from "../lib/money"
+import { cur, fmtAmount, useLocale } from "../lib/money"
 import { useT, t as translate } from "../lib/i18n"
 
 
@@ -20,8 +20,7 @@ interface Preview {
   estimated_fee: number
 }
 
-const inr = (n: number) =>
-  Number(n).toLocaleString(moneyLocale(), { maximumFractionDigits: 0 })
+const inr = (n: number) => fmtAmount(n)
 
 export default function CancelPanel({ row, reload }: { row: Row; reload: () => void }) {
   const { t } = useT()

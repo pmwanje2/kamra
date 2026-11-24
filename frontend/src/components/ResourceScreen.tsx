@@ -127,7 +127,7 @@ export interface FieldSpec {
   linkDoctype?: string // for link
   /** link options only from the current property (the target has a `property` field) */
   linkPropertyScoped?: boolean
-  /** extra Frappe filters for a link field's option query (e.g. enabled currencies only) */
+  /** extra server filters for a link field's option query (e.g. enabled currencies only) */
   linkFilters?: (string | number)[][]
   /** max options loaded for a link field (default 500) */
   linkLimit?: number
@@ -176,7 +176,7 @@ export interface ScreenConfig {
     booleanBadge?: { truthy: string; falsy?: string }
     /** Text shown when the cell value is blank (e.g. "Shared" for unscoped rows). */
     emptyLabel?: string
-    /** Computed client-side column (omitted from Frappe listResource fields). */
+    /** Computed client-side column (omitted from listResource fields). */
     virtual?: boolean
     /** Custom cell renderer for display. */
     render?: (row: Row) => ReactNode
@@ -731,7 +731,7 @@ export function ResourceScreen({
     Partial<Record<MenuMasterKey, string[]>>
   >({})
   const [search, setSearch] = useState("")
-  // Frappe-style list settings: choose which columns this table shows,
+  // Column chooser: choose which columns this table shows,
   // remembered per user per doctype.
   const colsKey = `kamra:cols:${config.doctype}`
   const [hiddenCols, setHiddenCols] = useState<Set<string>>(() => {

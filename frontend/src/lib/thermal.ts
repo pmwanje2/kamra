@@ -7,7 +7,7 @@ import { t as translate, uiDateLocale } from "./i18n"
  * the body is 72mm, the common printable width).
  */
 
-import { cur, moneyLocale } from "./money"
+import { cur, fmtAmount, moneyLocale } from "./money"
 
 const CSS = `
   @page { size: 80mm auto; margin: 0 }
@@ -33,8 +33,7 @@ const esc = (s: unknown) =>
   String(s ?? "").replace(/[&<>"]/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] as string))
 
-const inr = (n: unknown) =>
-  Number(n ?? 0).toLocaleString(moneyLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const inr = (n: unknown) => fmtAmount(n ?? 0)
 
 /** Print without a popup. Popups get blocked on a till; an iframe does not. */
 export function printThermal(title: string, body: string): boolean {

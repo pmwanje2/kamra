@@ -12,7 +12,6 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import {
   ArrowLeft,
-  BadgeIndianRupee,
   CalendarClock,
   CheckSquare,
   FileText,
@@ -1909,7 +1908,7 @@ function MoneyTab({
         <CardHeader>
           <CardTitle>
             <span className="inline-flex items-center gap-1.5">
-              <BadgeIndianRupee className="size-4" />{translate("Settlement")}</span>
+              <Receipt className="size-4" aria-hidden />{translate("Settlement")}</span>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
