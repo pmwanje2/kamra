@@ -327,9 +327,18 @@ def validate_instruction(ri) -> None:
 			frappe.throw(_("A group master instruction has no target room."))
 	else:
 		frappe.throw(_("Route to a window, a room or the group master."))
+	from kamra.ledger import assert_transaction_code_property
 	for row in ri.get("codes") or []:
 		if bool(row.charge_type) == bool(row.transaction_code):
 			frappe.throw(_("Each row names a charge type or a transaction code, not both."))
+		if row.transaction_code:
+			tc = frappe.db.get_value(
+				"Transaction Code", row.transaction_code,
+				["disabled", "txn_type", "property"], as_dict=True)
+			if not tc or tc.txn_type == "Payment" or (enforce_active_targets and tc.disabled):
+				frappe.throw(_("Transaction code {0} is not an enabled charge code.").format(
+					row.transaction_code))
+			assert_transaction_code_property(row.transaction_code, tc.property, ri.property)
 	if cint(ri.all_codes):
 		if ri.get("codes"):
 			frappe.throw(_("All Charges routes everything; remove the rows."))

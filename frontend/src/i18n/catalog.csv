@@ -587,6 +587,7 @@ Also being served,Also being served,يُقدَّم أيضًا,También se sirve,
 Always on,Always on,مفعّل دائمًا,Siempre activo,Sempre ligado,始终开启,screens/settings/AccessPages.tsx,,translated
 "Always on: it holds Settings, which can turn the other modules on again.","Always on: it holds Settings, which can turn the other modules on again.",مفعّل دائمًا: يحتوي على الإعدادات التي يمكنها إعادة تفعيل الوحدات الأخرى.,Siempre activo: contiene la Configuración que permite reactivar los demás módulos.,"Sempre ligado: contém Configurações, que podem reativar os outros módulos.",始终开启：它包含设置，可重新开启其他模块。,,,translated
 Always required,Always required,مطلوب دائما,Siempre obligatorio,Sempre obrigatório,始终必填,,,translated
+Always tax this code at 0% on standalone properties instead of the country or outlet rate.,Always tax this code at 0% on standalone properties instead of the country or outlet rate.,فرض ضريبة 0% دائمًا على هذا الرمز في المنشآت المستقلة بدلًا من معدل الدولة أو المنفذ.,Aplicar siempre 0 % de impuesto a este código en propiedades independientes en lugar de la tasa del país o del punto de venta.,Tributar sempre este código a 0% em propriedades independentes em vez da alíquota do país ou do ponto de venda.,在独立酒店中始终对此代码按 0% 征税，而不使用国家或营业点税率。,src/screens/configs.ts,,translated
 Amenities,Amenities,المرافق,Comodidades,Comodidades,设施,components/RoomDrawer.tsx; screens/PublicBooking.tsx,,translated
 Amenities (one per line),Amenities (one per line),المرافق (واحد في كل سطر),Servicios e instalaciones (uno por línea),Amenidades (uma por linha),设施（每行一项）,components/RoomTypeMedia.tsx,,translated
 American,American,أمريكي,Estadounidense,Americano,美式,,,translated
@@ -5486,6 +5487,7 @@ Tax ID and guest ID checks through the ID verification partner.,Tax ID and guest
 Tax Id,Tax Id,الرقم الضريبي,Identificación fiscal,Identificação Fiscal,税号,,,translated
 Tax Invoice,Tax Invoice,فاتورة ضريبية,Factura fiscal,Nota Fiscal,税务发票,,,translated
 Tax applies to the levy,Tax applies to the levy,تُطبّق الضريبة على الرسم,Aplicar impuesto a la tasa de alojamiento,O imposto aplica-se à taxa,该附加费需计税,,,translated
+Tax exempt (0%),Tax exempt (0%),معفى من الضريبة (0%),Exento de impuestos (0 %),Isento de imposto (0%),免税 (0%),src/screens/configs.ts,,translated
 Tax in this credit note: {amount},Tax in this credit note: {amount},الضريبة في إشعار الدائن هذا: {amount},Impuesto en esta nota de crédito: {amount},Imposto nesta nota de crédito: {amount},本贷项通知单含税额：{amount},components/InvoiceCorrectionDialog.tsx,amount,translated
 "Tax labels, ID types, payment methods and the guest phone code follow it.","Tax labels, ID types, payment methods and the guest phone code follow it.",تتبعها مسميات الضرائب وأنواع الهوية وطرق الدفع ورمز هاتف الضيف.,"Determina las etiquetas fiscales, documentos de identidad, medios de pago y prefijo telefónico de los huéspedes.","Seguem-se etiquetas fiscais, tipos de identificação, métodos de pagamento e o código de telefone do hóspede.",税率标签、证件类型、支付方式与宾客电话区号随之确定。,,,translated
 Tax mode,Tax mode,طريقة الضريبة,Modalidad de impuesto,Modo fiscal,计税方式,,,translated

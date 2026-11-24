@@ -94,6 +94,7 @@ LINKED_FIELDS: tuple[tuple[str, str, str], ...] = (
 	("Reservation", "booking_type", BOOKING_TYPE),
 	("Reservation", "booker_relation", RELATION),
 	("Reservation", "cancellation_reason", CANCELLATION),
+	("Folio", "payment_method", PAYMENT),
 	("Folio Payment", "mode", PAYMENT),
 	("Cashier Transaction", "mode", PAYMENT),
 	("Banquet Receipt", "mode", PAYMENT),
@@ -127,12 +128,14 @@ def _payment_mode_properties() -> dict[str, set[str]]:
 	"""Map each stored payment mode string to the set of properties that used it."""
 	props_by_mode: dict[str, set[str]] = {}
 	sources = (
+		("Folio", None, "SELECT DISTINCT payment_method, property FROM `tabFolio` WHERE payment_method IS NOT NULL AND payment_method != ''"),
 		("Folio Payment", "Folio", "SELECT DISTINCT c.mode, p.property FROM `tabFolio Payment` c LEFT JOIN `tabFolio` p ON p.name = c.parent WHERE c.mode IS NOT NULL AND c.mode != ''"),
 		("Cashier Transaction", None, "SELECT DISTINCT mode, property FROM `tabCashier Transaction` WHERE mode IS NOT NULL AND mode != ''"),
 		("Banquet Receipt", "Venue Booking", "SELECT DISTINCT c.mode, p.property FROM `tabBanquet Receipt` c LEFT JOIN `tabVenue Booking` p ON p.name = c.parent WHERE c.mode IS NOT NULL AND c.mode != ''"),
 	)
 	for doctype, parent_dt, sql in sources:
-		if not (frappe.db.table_exists(doctype) and frappe.db.has_column(doctype, "mode")):
+		col = "payment_method" if doctype == "Folio" else "mode"
+		if not (frappe.db.table_exists(doctype) and frappe.db.has_column(doctype, col)):
 			continue
 		if parent_dt and not frappe.db.table_exists(parent_dt):
 			continue
@@ -276,6 +279,32 @@ def client_tender_types(property: str | None = None) -> dict[str, str]:
 	if property and has_prop_col:
 		rows = [r for r in rows if not r.get("property") or r.get("property") == property]
 	return {r.name: r.tender_type for r in rows}
+
+
+def assert_folio_payment_method(property: str | None, code: str | None) -> None:
+	"""Validate a Folio window's payment_method code against the per-property
+	Payment Method master (compatible with both field:code and per-property
+	<property>::<code> keying). Shared system codes and this property's own
+	enabled codes are allowed; unknown, disabled, or foreign-property codes
+	are refused."""
+	code = (code or "").strip()
+	if not code or not _has_db() or not frappe.db.table_exists(PAYMENT):
+		return
+	has_prop_col = frappe.db.has_column(PAYMENT, "property")
+	fields = ["name", "code", "disabled", *(["property"] if has_prop_col else [])]
+	rows = frappe.get_all(PAYMENT, filters={"code": code}, fields=fields)
+	if not rows and code in SYSTEM_TENDER_TYPES:
+		ensure_masters()
+		rows = frappe.get_all(PAYMENT, filters={"code": code}, fields=fields)
+	match = None
+	if has_prop_col:
+		prop_rows = [r for r in rows if r.get("property") and property and r.get("property") == property]
+		shared_rows = [r for r in rows if not r.get("property")]
+		match = prop_rows[0] if prop_rows else (shared_rows[0] if shared_rows else None)
+	elif rows:
+		match = rows[0]
+	if not match or int(match.get("disabled") or 0):
+		frappe.throw(_("Payment method {0} is not available for this property.").format(code))
 
 
 def payment_tender_type(mode: str | None) -> str | None:

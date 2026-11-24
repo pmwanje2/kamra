@@ -38,3 +38,5 @@ To Date is before From Date.,Das Enddatum liegt vor dem Startdatum.
 Tick at least one day of the week.,Wählen Sie mindestens einen Wochentag aus.
 "Instruction {0} already routes some of these charges on some of these days. Only one instruction may cover a charge on a date: change its dates or charges, or disable it.",Die Anweisung {0} leitet einige dieser Gebühren an einigen dieser Tage bereits weiter. Pro Datum darf nur eine Anweisung eine Gebühr abdecken: Ändern Sie deren Daten oder Gebühren oder deaktivieren Sie sie.
 Bill-to for {0}: {1}.,Rechnungsempfänger für {0}: {1}.
+Transaction code {0} belongs to another property.,Der Transaktionscode {0} gehört zu einem anderen Hotel.
+Payment method {0} is not available for this property.,Die Zahlungsmethode {0} ist für dieses Hotel nicht verfügbar.

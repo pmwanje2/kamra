@@ -236,17 +236,16 @@
    "options": "Travel Agent"
   },
   {
-   "description": "How this window is settled. Company Credit is direct bill to the payee company's account.",
+   "description": "How this window is settled (code from the Payment Method master). Company Credit is direct bill to the payee company's account.",
    "fieldname": "payment_method",
-   "fieldtype": "Select",
-   "label": "Payment Method",
-   "options": "\nCash\nForeign Cash\nCard\nUPI\nBank Transfer\nMobile Money\nOTA Prepaid\nCompany Credit\nPayment Link"
+   "fieldtype": "Data",
+   "label": "Payment Method"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-11-23 20:00:00.000000",
+ "modified": "2026-11-24 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Folio",

@@ -1551,78 +1551,85 @@ def post_to_folio(function: str, folio: str | None = None):
 	"""Push the chargeable lines onto a bill. A function tied to a group
 	rides the group's master folio; otherwise pass one explicitly. Liquor
 	posts with the rest: the bill chosen is the one that pays the function."""
-	from kamra.api import _post_folio_charge
+	from kamra.api import _lock_folio_scope, _post_folio_charge, _with_snapshot_retry
+	from kamra.erp_bridge import is_bridge_active
 
-	doc = _fn(function)
-	if doc.posted_to_folio:
-		frappe.throw(_("This function has already been billed to {0}.")
-		             .format(doc.folio))
-	if doc.status not in ("Confirmed", "Completed"):
-		frappe.throw(_("Bill a confirmed function, not a {0} one.")
-		             .format(doc.status))
-	target = folio or doc.folio
-	if not target and doc.group_booking:
-		target = frappe.db.get_value(
-			"Folio", {"group_booking": doc.group_booking, "folio_type": "Group",
-			          "status": "Open"}, "name")
+	def _post_once():
+		frappe.db.get_value("Venue Booking", function, "name", for_update=True)
+		doc = _fn(function)
+		if doc.posted_to_folio:
+			frappe.throw(_("This function has already been billed to {0}.")
+			             .format(doc.folio))
+		if doc.status not in ("Confirmed", "Completed"):
+			frappe.throw(_("Bill a confirmed function, not a {0} one.")
+			             .format(doc.status))
+		target = folio or doc.folio
+		if not target and doc.group_booking:
+			target = frappe.db.get_value(
+				"Folio", {"group_booking": doc.group_booking, "folio_type": "Group",
+				          "status": "Open"}, "name")
+			if not target:
+				from kamra.folio import open_group_folio
+				target = open_group_folio(doc.group_booking)
 		if not target:
-			from kamra.folio import open_group_folio
-			target = open_group_folio(doc.group_booking)
-	if not target:
-		frappe.throw(_("There's no bill to post to. Tie the function to a "
-		              "group booking, or pass a folio."))
+			frappe.throw(_("There's no bill to post to. Tie the function to a "
+			              "group booking, or pass a folio."))
+		_lock_folio_scope(folios=[target])
 
-	from kamra.kamra.doctype.venue_booking.venue_booking import SERVICE_CHARGE_TYPES
-	from kamra.ledger import code_is_alcohol, resolve_transaction_code
-	posted = []
-	for r in doc.items:
-		if not r.chargeable or not float(r.net_amount or 0):
-			continue
-		ct = _FOLIO_CHARGE_TYPE.get(r.item_type, "Misc")
-		row_alc = 1 if (r.is_alcohol or r.item_type == "Alcohol") else 0
-		row_code = r.get("transaction_code") or (
-			frappe.db.get_value("Banquet Service Item", r.service_item, "transaction_code")
-			if r.get("service_item") else None
-		)
-		code = resolve_transaction_code(
-			ct, transaction_code=row_code, is_alcohol=row_alc, property=doc.property)
-		is_alc = 1 if (row_alc or code_is_alcohol(code)) else 0
-		_post_folio_charge(
-			target,
-			ct,
-			(f"{doc.name} · {r.item_name}"
-			 + (f" ({r.qty:g} {r.uom})" if r.qty else ""))[:140],
-			float(r.net_amount),
-			gst_rate=float(r.gst_rate or 0),
-			is_alcohol=is_alc,
-			transaction_code=code)
-		posted.append({"item_name": r.item_name, "amount": float(r.net_amount)})
+		from kamra.kamra.doctype.venue_booking.venue_booking import SERVICE_CHARGE_TYPES
+		from kamra.ledger import code_is_alcohol, resolve_transaction_code
+		bridged = is_bridge_active()
+		posted = []
+		for r in doc.items:
+			if not r.chargeable or not float(r.net_amount or 0):
+				continue
+			ct = _FOLIO_CHARGE_TYPE.get(r.item_type, "Misc")
+			row_alc = 1 if (r.is_alcohol or r.item_type == "Alcohol") else 0
+			row_code = r.get("transaction_code") or (
+				frappe.db.get_value("Banquet Service Item", r.service_item, "transaction_code")
+				if r.get("service_item") else None
+			)
+			code = resolve_transaction_code(
+				ct, transaction_code=row_code, is_alcohol=row_alc, property=doc.property)
+			is_alc = 1 if (row_alc or code_is_alcohol(code)) else 0
+			_post_folio_charge(
+				target,
+				ct,
+				(f"{doc.name} · {r.item_name}"
+				 + (f" ({r.qty:g} {r.uom})" if r.qty else ""))[:140],
+				float(r.net_amount),
+				gst_rate=0.0 if bridged else float(r.gst_rate or 0),
+				is_alcohol=is_alc,
+				transaction_code=code)
+			posted.append({"item_name": r.item_name, "amount": float(r.net_amount)})
 
-	sc = float(doc.service_charge or 0)
-	if sc > 0:
-		sc_rates = {float(r.gst_rate or 0) for r in doc.items
-		            if r.chargeable and r.item_type in SERVICE_CHARGE_TYPES}
-		sc_gst = max(sc_rates) if sc_rates else 0.0
-		_post_folio_charge(
-			target,
-			"Misc",
-			f"{doc.name} · Service charge ({float(doc.service_charge_percent or 0):g}%)"[:140],
-			sc,
-			gst_rate=sc_gst)
-		posted.append({"item_name": "Service charge", "amount": sc})
+		sc = float(doc.service_charge or 0)
+		if sc > 0:
+			sc_rates = {float(r.gst_rate or 0) for r in doc.items
+			            if r.chargeable and r.item_type in SERVICE_CHARGE_TYPES}
+			sc_gst = 0.0 if bridged else (max(sc_rates) if sc_rates else 0.0)
+			_post_folio_charge(
+				target,
+				"Misc",
+				f"{doc.name} · Service charge ({float(doc.service_charge_percent or 0):g}%)"[:140],
+				sc,
+				gst_rate=sc_gst)
+			posted.append({"item_name": "Service charge", "amount": sc})
 
-	doc.folio = target
-	# the flag is the double-post guard, so it goes up the moment anything
-	# reached the bill
-	doc.posted_to_folio = 1 if posted else 0
-	doc.save()
-	from kamra.savings import log_action
-	log_action("banquet_billed", "Venue Booking", doc.name, doc.property,
-	           minutes_saved=15,
-	           rationale=f"{len(posted)} line(s) of {doc.customer_name}'s "
-	                     f"function posted to {target}")
-	return {"ok": True, "folio": target, "posted": posted,
-	        "settle_separately": [], "note": None}
+		doc.folio = target
+		# the flag is the double-post guard, so it goes up the moment anything
+		# reached the bill
+		doc.posted_to_folio = 1 if posted else 0
+		doc.save()
+		from kamra.savings import log_action
+		log_action("banquet_billed", "Venue Booking", doc.name, doc.property,
+		           minutes_saved=15,
+		           rationale=f"{len(posted)} line(s) of {doc.customer_name}'s "
+		                     f"function posted to {target}")
+		return {"ok": True, "folio": target, "posted": posted,
+		        "settle_separately": [], "note": None}
+
+	return _with_snapshot_retry(_post_once)
 
 
 # ══ the close-out ════════════════════════════════════════════════════════

@@ -28,10 +28,14 @@ def _code_gst_rate(property: str, code: str | None, *, is_alcohol: bool,
                    outlet_gst: float) -> float:
 	"""OPERA Cloud taxes by transaction code (Generates):
 	https://docs.oracle.com/en/industries/hospitality/opera-cloud/25.5/ocsuh/t_admin_financial_transaction_management_configuring_generates.htm
-	1. Explicit Transaction Code.default_tax_rate wins when configured.
+	0. On ERP bridge sites (KMR-TAX-001), folio lines carry 0% tax.
+	1. Explicit Transaction Code.default_tax_rate (including 0%) wins when configured.
 	2. Otherwise an alcohol code uses the country pack's alcohol/services rate
 	   when the pack distinguishes it from food (e.g. India 18% vs 5% F&B).
 	3. Otherwise fall back to the outlet's configured gst_rate."""
+	from kamra.erp_bridge import is_bridge_active
+	if is_bridge_active():
+		return 0.0
 	from kamra.ledger import code_default_tax_rate
 	tc_rate = code_default_tax_rate(code)
 	if tc_rate is not None:
@@ -179,6 +183,8 @@ class POSOrder(Document):
 			save_folio,
 		)
 
+		from kamra.api import _lock_folio_scope
+		_lock_folio_scope(reservations=[self.reservation])
 		res = frappe.get_doc("Reservation", self.reservation)
 		bd = get_business_date(self.property)
 		# the outlet's own rate, 0 included (the field defaults new outlets to 5;

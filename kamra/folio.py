@@ -1056,6 +1056,8 @@ def _assert_same_stay(src, dst):
 def transfer_charges(from_folio: str, charge_rows: list, to_folio: str):
 	"""Move several charge lines at once - one save per folio, so a
 	corporate re-bill of a whole stay is a single operation."""
+	from kamra.api import _lock_folio_scope
+	_lock_folio_scope(folios=[from_folio, to_folio])
 	src = frappe.get_doc("Folio", from_folio)
 	dst = frappe.get_doc("Folio", to_folio)
 	_assert_same_stay(src, dst)
@@ -1157,6 +1159,8 @@ def split_charge(from_folio: str, charge_row: str, to_folio: str,
 	not above zero. credit=True splits an allowance line instead (both parts
 	stay negative); only the server does that, following the charges it
 	wrote down."""
+	from kamra.api import _lock_folio_scope
+	_lock_folio_scope(folios=[from_folio, to_folio])
 	src = frappe.get_doc("Folio", from_folio)
 	dst = _split_target(src, to_folio)
 	row, sign, line = _split_line(src, charge_row, credit)
@@ -1431,6 +1435,8 @@ def share_charges(from_folio: str, charge_rows: list, to_folios: list,
 		shares = [x / 100 for x in shares]
 	else:
 		shares = [Decimal(1) / (len(to_folios) + 1)] * len(to_folios)
+	from kamra.api import _lock_folio_scope
+	_lock_folio_scope(folios=[from_folio, *to_folios])
 	src = frappe.get_doc("Folio", from_folio)
 	present = {c.name: c for c in src.charges}
 	for row in charge_rows:

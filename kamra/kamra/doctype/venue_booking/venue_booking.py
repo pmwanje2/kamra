@@ -127,6 +127,9 @@ class VenueBooking(Document):
 	def _default_gst(self, row) -> float:
 		"""The rate a line actually carries, decided here rather than by
 		whoever posted it - the same discipline folio charges follow."""
+		from kamra.erp_bridge import is_bridge_active
+		if is_bridge_active():
+			return 0.0
 		if row.tax_exempt:
 			return 0.0
 		if row.gst_rate:
@@ -151,7 +154,8 @@ class VenueBooking(Document):
 		if row.item_type in _FNB_TYPES and not row.is_alcohol and not code_is_alcohol(row_code):
 			from kamra.folio import _fnb_gst
 			return float(_fnb_gst(self.property))
-		return _SERVICE_GST
+		from kamra.localization import pack_for, services_tax_rate
+		return float(services_tax_rate(pack_for(self.property), self.property))
 
 	def _fill_quantities(self):
 		"""Quantities that follow the function - pax, hours - are filled
@@ -203,7 +207,8 @@ class VenueBooking(Document):
 		if row.item_type in _FOOD_TYPES:
 			from kamra.folio import _fnb_gst
 			return Decimal(str(_fnb_gst(self.property)))
-		return Decimal(str(_SERVICE_GST))
+		from kamra.localization import pack_for, services_tax_rate
+		return Decimal(str(services_tax_rate(pack_for(self.property), self.property)))
 
 	def _cost_and_margin(self):
 		"""What the function costs the hotel, and what's left.

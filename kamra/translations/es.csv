@@ -1207,3 +1207,5 @@ To Date is before From Date.,La fecha de fin es anterior a la fecha de inicio.
 Tick at least one day of the week.,Marque al menos un día de la semana.
 "Instruction {0} already routes some of these charges on some of these days. Only one instruction may cover a charge on a date: change its dates or charges, or disable it.","La instrucción {0} ya enruta algunos de estos cargos en algunos de estos días. Solo una instrucción puede cubrir un cargo en una fecha: cambie sus fechas o cargos, o desactívela."
 Bill-to for {0}: {1}.,Facturar a {0}: {1}.
+Transaction code {0} belongs to another property.,El código de transacción {0} pertenece a otra propiedad.
+Payment method {0} is not available for this property.,El método de pago {0} no está disponible para esta propiedad.

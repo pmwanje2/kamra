@@ -67,3 +67,35 @@ export function folioLabel(
   if (open.length <= 1) return type
   return `${type} ${open.findIndex((x) => x.name === s.name) + 1}`
 }
+
+/** Build RPC arguments for `kamra.api.share_folio_charges`. When all target
+ *  bills stay at the displayed even split (e.g. "33.33" for a 3-way split),
+ *  omit `shares` so the server cuts exact 1/(N+1) parts in whole minor units
+ *  with the rounding remainder on the source window (OPERA). Explicit custom
+ *  percentages are forwarded as entered. */
+export function shareFolioArgs(
+  fromFolio: string,
+  chargeRows: string[],
+  toFolios: string[],
+  shares: Record<string, string>,
+): { from_folio: string; charge_rows: string[]; to_folios: string[]; shares?: number[] } {
+  const even = (100 / (toFolios.length + 1)).toFixed(2)
+  const isEven = toFolios.every((f) => {
+    const raw = shares[f]
+    return raw === undefined || raw === "" || raw === even
+  })
+  const payload: {
+    from_folio: string
+    charge_rows: string[]
+    to_folios: string[]
+    shares?: number[]
+  } = {
+    from_folio: fromFolio,
+    charge_rows: chargeRows,
+    to_folios: toFolios,
+  }
+  if (!isEven) {
+    payload.shares = toFolios.map((f) => Number(shares[f] ?? even))
+  }
+  return payload
+}

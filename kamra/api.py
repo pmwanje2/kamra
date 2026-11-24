@@ -1535,9 +1535,11 @@ def add_folio_charge(folio: str, charge_type: str, description: str,
 	# check what the caller sent, before the hotel's own rules pick a rate
 	_check_charge_amount_and_tax(
 		frappe.db.get_value("Folio", folio, "property"), amount, gst_rate)
-	return _post_folio_charge(folio, charge_type, description, amount,
-	                          gst_rate, posting_date, is_alcohol, reservation,
-	                          transaction_code=transaction_code)
+	return _with_snapshot_retry(
+		lambda: _post_folio_charge(folio, charge_type, description, amount,
+		                           gst_rate, posting_date, is_alcohol, reservation,
+		                           transaction_code=transaction_code)
+	)
 
 
 def _refuse_opening_balance(charge_type: str):
@@ -1564,6 +1566,7 @@ def _post_folio_charge(folio: str, charge_type: str, description: str,
 	calls this directly. `tax` is a routed part's own tax, worked out to the
 	currency's minor unit when routing split the charge: kept as posted."""
 	_refuse_opening_balance(charge_type)
+	_lock_folio_scope(reservations=[reservation] if reservation else (), folios=[folio])
 	doc = frappe.get_doc("Folio", folio)
 	if doc.status == "Closed":
 		frappe.throw("Folio is closed.")
@@ -2110,29 +2113,30 @@ def _resolve_charge_gst(property: str, charge_type: str, description: str,
                         is_alcohol: int, provided: float,
                         transaction_code: str | None = None) -> float:
 	"""The tax rate a charge actually carries, decided server-side so a caller
-	(human or agent) cannot mis-tax it. A Transaction Code's own default tax %
-	(OPERA Generates) applies first; alcohol carries its own rate (explicit
-	provided rate, transaction code default, or the pack's alcohol/services
-	rate); food & beverage uses the F&B rate from the localization pack; a taxi
-	with no rate the services rate; otherwise the given rate."""
+	(human or agent) cannot mis-tax it. On ERP bridge sites (KMR-TAX-001),
+	folio lines carry 0% tax because ERPNext Tax Rule decides tax on the
+	invoice. On standalone sites, a Transaction Code's own default tax %
+	(OPERA Generates, including an explicit 0%) applies first; alcohol carries
+	its own rate (explicit provided rate or the pack's alcohol/services rate);
+	food & beverage uses the F&B rate from the localization pack; a taxi with
+	no rate the services rate; otherwise the given rate."""
+	from kamra.erp_bridge import is_bridge_active
+	if is_bridge_active():
+		return 0.0
 	from kamra.ledger import code_default_tax_rate, code_is_alcohol
 	alc = bool(int(is_alcohol or 0)) or (bool(transaction_code) and code_is_alcohol(transaction_code))
 	tc_rate = code_default_tax_rate(transaction_code)
+	if tc_rate is not None:
+		return tc_rate
 	if alc:
 		if provided:
 			return float(provided)
-		if tc_rate is not None:
-			return tc_rate
 		from kamra.localization import pack_for, services_tax_rate
 		pack = pack_for(property)
 		alc_fn = getattr(pack, "alcohol_tax_rate", None)
 		if alc_fn is not None:
 			return float(alc_fn(property))
-		if hasattr(pack, "services_tax_rate"):
-			return float(services_tax_rate(pack, property))
-		return 18.0
-	if tc_rate is not None:
-		return tc_rate
+		return float(services_tax_rate(pack, property))
 	text = f"{charge_type} {description}".lower()
 	if any(w in text for w in _FNB_WORDS):
 		from kamra.folio import _fnb_gst
@@ -2187,15 +2191,120 @@ def _is_snapshot_conflict(exc: Exception) -> bool:
 	return "Record has changed since last read" in str(exc)
 
 
+def _lock_folio_scope(reservations=(), folios=()) -> None:
+	"""Lock Reservations and every Folio a posting/correction/split/move may
+	touch in one canonical order (Reservation ascending, then Folio ascending)
+	before any write, so concurrent writers serialize cleanly without AB/BA
+	deadlocks or mid-transaction MariaDB 11.8 snapshot conflicts (1020)."""
+	res_ids = {r for r in (reservations or ()) if r}
+	folio_ids = {f for f in (folios or ()) if f}
+	group_ids: set[str] = set()
+	if folio_ids:
+		for row in frappe.get_all(
+			"Folio",
+			filters={"name": ("in", sorted(folio_ids))},
+			fields=["name", "reservation", "group_booking"],
+		):
+			if row.reservation:
+				res_ids.add(row.reservation)
+			if row.group_booking:
+				group_ids.add(row.group_booking)
+	if res_ids:
+		for row in frappe.get_all(
+			"Reservation",
+			filters={"name": ("in", sorted(res_ids))},
+			fields=["name", "group_booking"],
+		):
+			if row.group_booking:
+				group_ids.add(row.group_booking)
+		for target_res in frappe.get_all(
+			"Routing Instruction",
+			filters={
+				"reservation": ("in", sorted(res_ids)),
+				"disabled": 0,
+				"target_type": "Room",
+				"target_reservation": ("is", "set"),
+			},
+			pluck="target_reservation",
+		):
+			if target_res:
+				res_ids.add(target_res)
+	if res_ids:
+		frappe.db.sql(
+			"SELECT name FROM `tabReservation` WHERE name IN %s ORDER BY name FOR UPDATE",
+			(tuple(sorted(res_ids)),),
+		)
+		for fname in frappe.get_all(
+			"Folio",
+			filters={"reservation": ("in", sorted(res_ids)), "status": "Open"},
+			pluck="name",
+		):
+			folio_ids.add(fname)
+	if group_ids:
+		for fname in frappe.get_all(
+			"Folio",
+			filters={
+				"group_booking": ("in", sorted(group_ids)),
+				"folio_type": "Group",
+				"status": "Open",
+			},
+			pluck="name",
+		):
+			folio_ids.add(fname)
+	if folio_ids:
+		frappe.db.sql(
+			"SELECT name FROM `tabFolio` WHERE name IN %s ORDER BY name FOR UPDATE",
+			(tuple(sorted(folio_ids)),),
+		)
+
+
 def _with_snapshot_retry(fn):
-	for attempt in range(1, _FOLIO_CONFLICT_RETRIES + 1):
-		try:
-			return fn()
-		except Exception as exc:
-			if not _is_snapshot_conflict(exc) or attempt >= _FOLIO_CONFLICT_RETRIES:
-				raise
-			frappe.db.rollback()
-			frappe.clear_messages()
+	"""Retry transient MariaDB snapshot/lock conflicts at the outermost request
+	boundary only. When a caller already has uncommitted writes in the current
+	transaction, use a savepoint so earlier writes are never discarded; nested
+	calls delegate retries to the enclosing outermost handler."""
+	depth = int(getattr(frappe.local, "_kamra_snapshot_retry_depth", 0) or 0)
+	if depth > 0:
+		return fn()
+	has_prior_writes = bool(getattr(frappe.db, "transaction_writes", 0))
+	frappe.local._kamra_snapshot_retry_depth = depth + 1
+	try:
+		for attempt in range(1, _FOLIO_CONFLICT_RETRIES + 1):
+			ac_fns = getattr(getattr(frappe.db, "after_commit", None), "_functions", None)
+			ac_len = len(ac_fns) if isinstance(ac_fns, list) else None
+			rt_log = getattr(frappe.local, "_realtime_log", None)
+			rt_len = len(rt_log) if isinstance(rt_log, list) else None
+			sp = f"kamra_snap_retry_{attempt}" if has_prior_writes else None
+			if sp:
+				frappe.db.savepoint(sp)
+			try:
+				return fn()
+			except Exception as exc:
+				if not _is_snapshot_conflict(exc) or attempt >= _FOLIO_CONFLICT_RETRIES:
+					if sp:
+						try:
+							frappe.db.rollback(save_point=sp)
+						except Exception:
+							pass
+						if ac_len is not None and len(ac_fns) > ac_len:
+							del ac_fns[ac_len:]
+						if rt_len is not None and len(rt_log) > rt_len:
+							del rt_log[rt_len:]
+					raise
+				if sp:
+					try:
+						frappe.db.rollback(save_point=sp)
+					except Exception:
+						raise exc from None
+				else:
+					frappe.db.rollback()
+				if ac_len is not None and len(ac_fns) > ac_len:
+					del ac_fns[ac_len:]
+				if rt_len is not None and len(rt_log) > rt_len:
+					del rt_log[rt_len:]
+				frappe.clear_messages()
+	finally:
+		frappe.local._kamra_snapshot_retry_depth = depth
 
 
 def _still_covers(instruction: str, charge_type: str, transaction_code: str | None) -> bool:
@@ -2241,15 +2350,15 @@ def _correct_folio_charge_once(folio: str, charge_row: str, reason: str = "",
                                supervisor_pin: str | None = None,
                                idempotency_key: str | None = None):
 	key = (idempotency_key or "").strip() or None
-	# Lock Reservation before Folio (same order as post_stay_charge) so concurrent
-	# posts and corrections serialize cleanly without AB/BA deadlocks.
-	lock_res = (
-		frappe.db.get_value("Folio", folio, "reservation")
-		or frappe.db.get_value("Folio Charge", charge_row, "reservation")
-	)
-	if lock_res:
-		frappe.db.get_value("Reservation", lock_res, "name", for_update=True)
-	frappe.db.get_value("Folio", folio, "name", for_update=True)
+	# Lock Reservation -> every open/target Folio (incl. Window 1 overflow extra_docs)
+	# in canonical order before any read or write.
+	lock_res = [
+		r for r in (
+			frappe.db.get_value("Folio", folio, "reservation"),
+			frappe.db.get_value("Folio Charge", charge_row, "reservation"),
+		) if r
+	]
+	_lock_folio_scope(reservations=lock_res, folios=[folio])
 	doc = frappe.get_doc("Folio", folio)
 	if key:
 		done = [c for c in doc.charges if c.get("idempotency_key") == key]
@@ -2514,31 +2623,30 @@ def post_stay_charge(reservation: str, charge_type: str, description: str,
 def _post_stay_charge_once(reservation: str, charge_type: str, description: str,
                            amount: float, gst_rate: float = 0, is_alcohol: int = 0,
                            transaction_code: str | None = None):
-	# Serialize concurrent posts and corrections for this stay under MariaDB 11.8
-	# snapshot isolation so routing-limit checks see committed usage cleanly.
-	frappe.db.get_value("Reservation", reservation, "name", for_update=True)
+	# Lock Reservation -> every open/target Folio (incl. Group Master & Room targets)
+	# before any read or write so concurrent posts/corrections serialize cleanly.
+	_lock_folio_scope(reservations=[reservation])
 	res = frappe.get_doc("Reservation", reservation)
 	if res.status not in ("Confirmed", "Checked In", "Checked Out"):
 		frappe.throw("Reservation is not active.")
 	from kamra.business_date import get_business_date
 	from kamra.folio import line_parts
-	from kamra.ledger import code_is_alcohol, resolve_transaction_code
+	from kamra.ledger import resolve_transaction_code
 	raw_alcohol = 1 if int(is_alcohol or 0) else 0
 	# check what the caller sent, not the rate the hotel picks below
 	_check_charge_amount_and_tax(res.property, amount, gst_rate)
 	code = resolve_transaction_code(
 		charge_type, transaction_code=transaction_code,
 		is_alcohol=raw_alcohol, property=res.property)
-	effective_alcohol = 1 if (raw_alcohol or code_is_alcohol(code)) else 0
 	# GST is decided by the hotel's tax rules, not by the caller's guess:
 	# food & beverage carries the F&B rate (5% in India), not 12/18.
 	gst_rate = _resolve_charge_gst(res.property, charge_type, description,
-	                               effective_alcohol, gst_rate,
+	                               raw_alcohol, gst_rate,
 	                               transaction_code=code)
 	parts = line_parts(res, charge_type, float(amount), get_business_date(res.property),
 	                   transaction_code=code, gst_rate=gst_rate)
 	outs = [_post_folio_charge(p["folio"], charge_type, description, p["amount"],
-	                           gst_rate, is_alcohol=effective_alcohol, reservation=res.name,
+	                           gst_rate, is_alcohol=raw_alcohol, reservation=res.name,
 	                           routing_instruction=p["routing_instruction"],
 	                           tax=p.get("gst_amount"), transaction_code=code)
 	        for p in parts]
@@ -2602,10 +2710,12 @@ def route_outlet_charge(reservation: str, transaction_code: str, amount: float,
 	frappe.has_permission("Folio", "write", throw=True)
 	res = frappe.get_doc("Reservation", reservation)
 	code = frappe.db.get_value("Transaction Code", transaction_code,
-	                           ["charge_type", "disabled", "txn_type"], as_dict=True)
+	                           ["charge_type", "disabled", "txn_type", "property"], as_dict=True)
 	if not code or code.disabled or code.txn_type == "Payment":
 		frappe.throw(_("Transaction code {0} is not an enabled charge code.").format(
 			transaction_code))
+	from kamra.ledger import assert_transaction_code_property
+	assert_transaction_code_property(transaction_code, code.property, res.property)
 	if not code.charge_type:
 		frappe.throw(_("Transaction code {0} has no charge type. Set one under Transaction "
 		               "codes.").format(transaction_code))
@@ -2901,57 +3011,64 @@ def transfer_folio_charges(from_folio: str, charge_rows, to_folio: str | None = 
 	charge_rows = list(dict.fromkeys(charge_rows or []))
 	if not charge_rows:
 		frappe.throw(_("Pick the charges to move."))
-	key = (idempotency_key or "").strip() or None
-	frappe.db.get_value("Folio", from_folio, "name", for_update=True)
-	if key:
-		done = frappe.get_all("Folio Charge", pluck="parent", filters={
-			"parenttype": "Folio", "idempotency_key": key})
-		if done:
-			return {"ok": True, "idempotent_replay": 1, "moved": len(done),
-			        "to_folio": done[0]}
 	if sum((bool(to_folio), bool(cint(to_company)), bool(to_reservation))) != 1:
 		frappe.throw(_("Give one target: to_folio, to_company or to_reservation."))
-	from kamra.folio import _assert_same_stay, move_charges, open_company_folio
-	src = frappe.get_doc("Folio", from_folio)
-	new_res = None
-	if to_folio:
-		dst = frappe.get_doc("Folio", to_folio)
-		_assert_same_stay(src, dst)
-	elif cint(to_company):
-		res = src.reservation and frappe.get_doc("Reservation", src.reservation)
-		if not res or not res.company:
-			frappe.throw(_("This stay bills to no company. Set one with "
-			               "change_stay_company first."))
-		dst = frappe.get_doc("Folio", open_company_folio(res))
-	else:
-		if not (set(frappe.get_roles()) & {"Finance", "Hotel Admin", "System Manager"}) \
-				and frappe.session.user != "Administrator":
-			frappe.throw(_("Moving charges to another stay needs Finance or "
-			               "Hotel Admin."), frappe.PermissionError)
-		if not (reason or "").strip():
-			frappe.throw(_("Give a reason to move charges to another stay."))
-		res = frappe.db.get_value("Reservation", to_reservation,
-		                          ["name", "property", "status"], as_dict=True)
-		if not res or res.property != src.property:
-			frappe.throw(_("That stay is not at this property."))
-		if res.status != "Checked In":
-			frappe.throw(_("Charges move only to a stay that is checked in."))
-		if res.name == src.reservation:
-			frappe.throw(_("That is the same stay. Use to_folio."))
-		target = frappe.db.get_value("Folio", {
-			"reservation": res.name, "folio_type": "Guest", "status": "Open"})
-		if not target:
-			frappe.throw(_("That stay has no open guest folio."))
-		dst = frappe.get_doc("Folio", target)
-		new_res = res.name
-	if dst.name == src.name:
-		frappe.throw(_("Pick a different folio to move the charges to."))
-	moved = move_charges(src, dst, charge_rows, reservation=new_res, key=key)
-	from kamra.savings import log_action
-	log_action("transfer_charges", "Folio", dst.name, src.property,
-	           rationale=f"Moved {len(moved)} charges {src.name} → {dst.name}"
-	                     + (f": {reason.strip()}" if (reason or "").strip() else ""))
-	return {"ok": True, "moved": len(moved), "to_folio": dst.name}
+	key = (idempotency_key or "").strip() or None
+
+	def _transfer_once():
+		_lock_folio_scope(
+			reservations=[to_reservation] if to_reservation else (),
+			folios=[f for f in (from_folio, to_folio) if f],
+		)
+		if key:
+			done = frappe.get_all("Folio Charge", pluck="parent", filters={
+				"parenttype": "Folio", "idempotency_key": key})
+			if done:
+				return {"ok": True, "idempotent_replay": 1, "moved": len(done),
+				        "to_folio": done[0]}
+		from kamra.folio import _assert_same_stay, move_charges, open_company_folio
+		src = frappe.get_doc("Folio", from_folio)
+		new_res = None
+		if to_folio:
+			dst = frappe.get_doc("Folio", to_folio)
+			_assert_same_stay(src, dst)
+		elif cint(to_company):
+			res = src.reservation and frappe.get_doc("Reservation", src.reservation)
+			if not res or not res.company:
+				frappe.throw(_("This stay bills to no company. Set one with "
+				               "change_stay_company first."))
+			dst = frappe.get_doc("Folio", open_company_folio(res))
+		else:
+			if not (set(frappe.get_roles()) & {"Finance", "Hotel Admin", "System Manager"}) \
+					and frappe.session.user != "Administrator":
+				frappe.throw(_("Moving charges to another stay needs Finance or "
+				               "Hotel Admin."), frappe.PermissionError)
+			if not (reason or "").strip():
+				frappe.throw(_("Give a reason to move charges to another stay."))
+			res = frappe.db.get_value("Reservation", to_reservation,
+			                          ["name", "property", "status"], as_dict=True)
+			if not res or res.property != src.property:
+				frappe.throw(_("That stay is not at this property."))
+			if res.status != "Checked In":
+				frappe.throw(_("Charges move only to a stay that is checked in."))
+			if res.name == src.reservation:
+				frappe.throw(_("That is the same stay. Use to_folio."))
+			target = frappe.db.get_value("Folio", {
+				"reservation": res.name, "folio_type": "Guest", "status": "Open"})
+			if not target:
+				frappe.throw(_("That stay has no open guest folio."))
+			dst = frappe.get_doc("Folio", target)
+			new_res = res.name
+		if dst.name == src.name:
+			frappe.throw(_("Pick a different folio to move the charges to."))
+		moved = move_charges(src, dst, charge_rows, reservation=new_res, key=key)
+		from kamra.savings import log_action
+		log_action("transfer_charges", "Folio", dst.name, src.property,
+		           rationale=f"Moved {len(moved)} charges {src.name} → {dst.name}"
+		                     + (f": {reason.strip()}" if (reason or "").strip() else ""))
+		return {"ok": True, "moved": len(moved), "to_folio": dst.name}
+
+	return _with_snapshot_retry(_transfer_once)
 
 
 @frappe.whitelist()
@@ -2962,16 +3079,20 @@ def split_folio_charge(from_folio: str, charge_row: str, to_folio: str,
 	"""Split one charge line in two - by percent, amount or quantity - on
 	its own folio or onto another of the stay or group."""
 	from kamra.folio import split_charge
-	out = split_charge(from_folio, charge_row, to_folio,
-	                   percent=float(percent) if percent else None,
-	                   amount=float(amount) if amount else None,
-	                   qty=float(qty) if qty else None)
-	from kamra.savings import log_action
-	from kamra.localization import money_text
-	log_action("split_charge", "Folio", to_folio,
-	           rationale=f"Split {money_text(frappe.db.get_value('Folio', to_folio, 'property'), out['moved'])} of {charge_row} "
-	                     f"{from_folio} → {to_folio}")
-	return {"kept": out["kept"], "moved": out["moved"]}
+
+	def _split_once():
+		out = split_charge(from_folio, charge_row, to_folio,
+		                   percent=float(percent) if percent else None,
+		                   amount=float(amount) if amount else None,
+		                   qty=float(qty) if qty else None)
+		from kamra.savings import log_action
+		from kamra.localization import money_text
+		log_action("split_charge", "Folio", to_folio,
+		           rationale=f"Split {money_text(frappe.db.get_value('Folio', to_folio, 'property'), out['moved'])} of {charge_row} "
+		                     f"{from_folio} → {to_folio}")
+		return {"kept": out["kept"], "moved": out["moved"]}
+
+	return _with_snapshot_retry(_split_once)
 
 
 @frappe.whitelist(methods=["POST"])
@@ -3002,13 +3123,17 @@ def share_folio_charges(from_folio: str, charge_rows, to_folios,
 		frappe.parse_json(v) if isinstance(v, str) else v
 		for v in (charge_rows, to_folios, shares))
 	from kamra.folio import share_charges
-	out = share_charges(from_folio, charge_rows or [], to_folios or [],
-	                    shares or None)
-	from kamra.savings import log_action
-	log_action("split_charge", "Folio", from_folio,
-	           rationale=f"Shared {out['lines']} charges from {from_folio} "
-	                     f"with {', '.join(to_folios)}")
-	return out
+
+	def _share_once():
+		out = share_charges(from_folio, charge_rows or [], to_folios or [],
+		                    shares or None)
+		from kamra.savings import log_action
+		log_action("split_charge", "Folio", from_folio,
+		           rationale=f"Shared {out['lines']} charges from {from_folio} "
+		                     f"with {', '.join(to_folios)}")
+		return out
+
+	return _with_snapshot_retry(_share_once)
 
 
 @frappe.whitelist(methods=["POST"])

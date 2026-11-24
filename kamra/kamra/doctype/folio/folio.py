@@ -88,6 +88,9 @@ class Folio(Document):
 				"name": ("!=", self.name or "")}):
 			frappe.throw(_("Window {0} already has an open bill.").format(self.window_no))
 		self.validate_payee()
+		if self.payment_method and (self.is_new() or self.has_value_changed("payment_method")):
+			from kamra.masters import assert_folio_payment_method
+			assert_folio_payment_method(self.property, self.payment_method)
 
 	def set_default_payee(self):
 		"""A folio a legacy writer opened: its payee from its kind."""

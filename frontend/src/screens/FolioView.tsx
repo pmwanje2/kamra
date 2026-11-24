@@ -17,7 +17,7 @@ import { ADVANCE_BILL_ACTION } from "../lib/discountHint"
 import ChangeCompany from "../components/ChangeCompany"
 import { loadLocale, sellsAlcohol, taxRates, fmtAmount } from "../lib/money"
 import { defaultChargeTaxRate } from "../lib/chargeTax"
-import { folioLabel, type SiblingFolio } from "../lib/folioLabel"
+import { folioLabel, shareFolioArgs, type SiblingFolio } from "../lib/folioLabel"
 import { serverError } from "../lib/resource"
 import { useCashierAuth } from "../lib/cashierAuth"
 import { useAuth } from "../lib/auth"
@@ -784,19 +784,23 @@ export default function FolioView() {
                   <Button variant="outline" disabled={busy || !rows.length || total >= 100}
                     onClick={() =>
                       act(async () => {
-                        await call("kamra.api.share_folio_charges", {
-                          from_folio: folio.name,
-                          charge_rows: rows.map((c) => c.name),
-                          to_folios: bills.map((b) => b.name),
-                          shares: bills.map((b) => Number(pct(b.name))),
-                        })
+                        await call(
+                          "kamra.api.share_folio_charges",
+                          shareFolioArgs(
+                            folio.name,
+                            rows.map((c) => c.name),
+                            bills.map((b) => b.name),
+                            shares,
+                          ),
+                        )
                         setSelected(new Set())
+                        setShares({})
                         setPanel(null)
                       })
                     }>
                     {t("Share these charges")}
                   </Button>
-                  <Button variant="ghost" onClick={() => setPanel(null)}>{t("Cancel")}</Button>
+                  <Button variant="ghost" onClick={() => { setShares({}); setPanel(null) }}>{t("Cancel")}</Button>
                 </div>
               </>
             )}

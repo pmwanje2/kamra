@@ -130,11 +130,14 @@ def pos_post_room_charge(property: str, ticket_id: str, amount: float,
 	# never claims its ticket number
 	from kamra.api import (
 		_check_charge_amount_and_tax,
+		_lock_folio_scope,
 		_post_stay_charge_once,
 		_with_snapshot_retry,
 	)
+	from kamra.erp_bridge import is_bridge_active
 	from kamra.ledger import code_is_alcohol, resolve_transaction_code
-	_check_charge_amount_and_tax(property, amount, tax_rate)
+	effective_tax = 0.0 if is_bridge_active() else flt(tax_rate)
+	_check_charge_amount_and_tax(property, amount, effective_tax)
 	resolved_code = resolve_transaction_code(
 		charge_type, transaction_code=transaction_code,
 		is_alcohol=is_alcohol, property=property)
@@ -173,6 +176,7 @@ def pos_post_room_charge(property: str, ticket_id: str, amount: float,
 	posted_by = frappe.session.user
 
 	def _post_once():
+		_lock_folio_scope(reservations=[reservation])
 		if frappe.db.exists(CHARGE, key):
 			return _result(frappe.get_doc(CHARGE, key), duplicate=True)
 		rec = frappe.get_doc({
@@ -194,7 +198,7 @@ def pos_post_room_charge(property: str, ticket_id: str, amount: float,
 		# to room-chargeable types, the same pattern as housekeeping's minibar
 		with act_as(AGENT_EMAIL):
 			out = _post_stay_charge_once(reservation, charge_type, text, amount,
-			                             gst_rate=flt(tax_rate), is_alcohol=is_alcohol,
+			                             gst_rate=effective_tax, is_alcohol=is_alcohol,
 			                             transaction_code=resolved_code)
 		rec.db_set({"folio": out.get("folio"), "balance_after": flt(out.get("balance"))},
 		           update_modified=False)
