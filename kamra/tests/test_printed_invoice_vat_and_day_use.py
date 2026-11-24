@@ -477,7 +477,7 @@ class BridgedFolioInvoiceVatTests(AuditTestCase):
 		self.assertEqual(inv_submitted["tax_source"], "accounting")
 		self.assertTrue(inv_submitted["document"]["is_final"])
 		self.assertEqual(inv_submitted["document"]["number"], "ACC-SINV-CHK-001")
-		self.assertEqual(inv_submitted["document"]["title"], "Invoice")
+		self.assertEqual(inv_submitted["document"]["title"], "Tax Invoice")
 
 		inv_draft = _run(0)
 		self.assertEqual(inv_draft["tax_source"], "accounting_unavailable")
@@ -494,6 +494,69 @@ class BridgedFolioInvoiceVatTests(AuditTestCase):
 		inv_draft_with_num = _run(0)
 		self.assertFalse(inv_draft_with_num["document"]["is_final"])
 		self.assertEqual(inv_draft_with_num["document"]["title"], "Provisional Bill")
+
+	def test_uganda_invoice_title_follows_vat_determination(self):
+		"""Uganda authoritative VAT-charged invoices print 'Tax Invoice';
+		zero-VAT, exempt, and non-VAT levy-only invoices stay 'Invoice'."""
+		fdoc = self._closed_bridged_folio(
+			[{"charge_type": "Room", "description": "Room 101", "rate": 499500, "amount": 499500, "total": 499500}],
+			sales_invoice="ACC-SINV-UG-TITLE",
+			tax_total=0,
+			grand_total=499500.0,
+			invoice_number=None,
+		)
+		real_get_doc = frappe.get_doc
+		real_exists = frappe.db.exists
+
+		def _run_case(taxes: list[dict], net: float, tax_tot: float, grand: float):
+			si = _fake_sales_invoice(
+				"ACC-SINV-UG-TITLE",
+				folio_name=fdoc.name,
+				net_total=net,
+				total_taxes=tax_tot,
+				grand_total=grand,
+				docstatus=1,
+				items=[{
+					"item_code": "ITEM-ROOM", "source_ref": fdoc.charges[0].name,
+					"net_amount": net, "amount": grand,
+				}],
+				taxes=taxes,
+			)
+			with patch("frappe.get_doc", side_effect=lambda dt, nm=None, *a, **k:
+			           si if dt == "Sales Invoice" and nm == "ACC-SINV-UG-TITLE" else real_get_doc(dt, nm, *a, **k)), \
+					patch("frappe.db.exists", side_effect=lambda dt, nm=None, *a, **k:
+					      True if dt == "DocType" and nm == "Sales Invoice" else real_exists(dt, nm, *a, **k)):
+				return api.folio_invoice(fdoc.name)
+
+		# 1. 18% VAT charged -> Tax Invoice
+		inv_vat = _run_case(
+			[{
+				"charge_type": "On Net Total", "account_head": "VAT - THR",
+				"description": "VAT 18%", "rate": 18.0,
+				"tax_amount": 76194.92, "tax_amount_after_discount_amount": 76194.92,
+				"included_in_print_rate": 1,
+				"item_wise_tax_detail": json.dumps({"ITEM-ROOM": [18.0, 76194.92]}),
+			}],
+			423305.08, 76194.92, 499500.0,
+		)
+		self.assertEqual(inv_vat["document"]["title"], "Tax Invoice")
+
+		# 2. 0% / exempt (no VAT) -> Invoice
+		inv_exempt = _run_case([], 499500.0, 0.0, 499500.0)
+		self.assertEqual(inv_exempt["document"]["title"], "Invoice")
+
+		# 3. Non-VAT levy only (Local Hotel Tax / Tourism Levy, zero VAT) -> Invoice
+		inv_levy = _run_case(
+			[{
+				"charge_type": "On Net Total", "account_head": "Local Hotel Tax - THR",
+				"description": "Local Hotel Tax 2%", "rate": 2.0,
+				"tax_amount": 9990.0, "tax_amount_after_discount_amount": 9990.0,
+				"included_in_print_rate": 0,
+				"item_wise_tax_detail": json.dumps({"ITEM-ROOM": [2.0, 9990.0]}),
+			}],
+			499500.0, 9990.0, 509490.0,
+		)
+		self.assertEqual(inv_levy["document"]["title"], "Invoice")
 
 	def test_unreadable_tax_never_titles_document_tax_invoice_across_country_packs(self):
 		"""P1: UAE, India, Thailand, Uganda never title a document 'Tax Invoice' when

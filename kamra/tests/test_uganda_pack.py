@@ -33,6 +33,9 @@ class TestUgandaPack(unittest.TestCase):
 		# PR-11: no static Uganda INVOICE_TITLE — title follows VAT determination
 		self.assertFalse(hasattr(uganda, "INVOICE_TITLE"))
 		self.assertEqual(localization.invoice_title(uganda), "Invoice")
+		self.assertEqual(localization.invoice_title(uganda, tax_charged=False), "Invoice")
+		self.assertEqual(localization.invoice_title(uganda, tax_charged=True), "Tax Invoice")
+		self.assertEqual(localization.neutral_invoice_title(uganda), "Invoice")
 		self.assertFalse(localization.uses_tax_slab(uganda))
 		self.assertTrue(localization.uses_tax_slab(india))
 
