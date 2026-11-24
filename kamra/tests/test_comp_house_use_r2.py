@@ -1350,3 +1350,321 @@ class ReservationDetailRatePlanAmendTests(CompCase):
 		self.assertGreater(rates_by_date[YESTERDAY], 0)  # closed night kept its billed rate
 		self.assertEqual(rates_by_date[TODAY], 0.0)      # open business date onward takes COMP
 		self.assertEqual(rates_by_date[d(1)], 0.0)
+
+
+PROP_UGX_COMP = "UT Comp R2 UGX"
+
+
+class CompRelease2AndInvoiceCompositionTests(AuditTestCase):
+	"""#38 (Complimentary & House Use) merged onto #51 (rate matrix, derived
+	plans, UGX prec=0, hospitality-tariffs@11) and #48 (bridged Tax Invoice VAT
+	and morning day-use):
+
+	- Amend stay refuses switching a contract-tariff stay to another plan (e.g.
+	  Complimentary) so it never misclassifies a paid tariff stay while keeping
+	  the tariff's agreed_rate, and refuses moving a non-tariff stay onto a
+	  tariff plan so it never silently falls back to the local card rate.
+	- Group block fallback pricing passes nights=len(nights) to apply_rate_plan
+	  so derived per-night Amount/Absolute plans scale by stay length.
+	- Complimentary, House Use and derived Half-Price USD tariff plans compose
+	  cleanly on UGX prec=0 with OPERA statistics, bridged TAX INVOICE vs 0-VAT
+	  INVOICE titles, and morning 09:00 day-use.
+	"""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		from frappe.custom.doctype.custom_field.custom_field import create_custom_field
+
+		from kamra.tests.bridge_fields import ensure_bridge_field
+
+		ensure_bridge_field("Folio", "sales_invoice")
+		has_price_list = bool(frappe.db.exists("DocType", "Price List"))
+		for dt, fn, ft, opt in (
+			("Rate Plan", "custom_tariff_price_list", "Link" if has_price_list else "Data",
+			 "Price List" if has_price_list else None),
+			("Reservation", "custom_tariff_currency", "Data", None),
+		):
+			if not frappe.db.exists("Custom Field", {"dt": dt, "fieldname": fn}):
+				create_custom_field(dt, {
+					"fieldname": fn,
+					"label": fn.replace("_", " ").title(),
+					"fieldtype": ft,
+					**({"options": opt} if opt else {}),
+				})
+		frappe.clear_cache()
+
+	def setUp(self):
+		super().setUp()
+		self.at(TODAY, "kamra.folio", "kamra.business_date", "kamra.ledger", "kamra.api")
+		for code, sym, frac in (("UGX", "UGX ", 1), ("USD", "$", 100)):
+			if not frappe.db.exists("Currency", code):
+				frappe.get_doc({
+					"doctype": "Currency", "currency_name": code, "symbol": sym,
+					"fraction": "" if frac == 1 else "Cent", "fraction_units": frac,
+					"number_format": "#,###.##", "enabled": 1,
+				}).insert(ignore_permissions=True)
+			else:
+				frappe.db.set_value("Currency", code, "enabled", 1)
+		if frappe.db.exists("DocType", "Price List") and not frappe.db.exists("Price List", "UT Comp USD PL"):
+			frappe.get_doc({
+				"doctype": "Price List", "price_list_name": "UT Comp USD PL",
+				"currency": "USD", "selling": 1, "enabled": 1,
+			}).insert(ignore_permissions=True)
+
+		make_property(
+			PROP_UGX_COMP, business_date=TODAY, country="Uganda", currency="UGX",
+			gst_mode="Fixed", gst_rate_low=0, gst_rate_high=0, rates_include_tax=0,
+		)
+		self.rt = make_room_type(PROP_UGX_COMP, "UGX DLX", base_price=250000, tax_percent=0)
+		frappe.db.set_value("Room Type", self.rt, {"base_price": 250000, "tax_percent": 0})
+		self.rooms = [make_room(PROP_UGX_COMP, self.rt, f"U{i}") for i in range(1, 6)]
+		ensure_user(DESK, ["Front Desk"])
+		ensure_user(GM, ["Hotel Admin", "Front Desk", "Finance"])
+		frappe.db.delete("Cashier PIN", {"name": GM})
+		frappe.get_doc({"doctype": "Cashier PIN", "user": GM, "pin": "4321"}).insert(ignore_permissions=True)
+
+		def mk_plan(code, **kw):
+			name = f"{PROP_UGX_COMP}-{code}"
+			if frappe.db.exists("Rate Plan", name):
+				frappe.delete_doc("Rate Plan", name, force=True, ignore_permissions=True)
+			return frappe.get_doc({
+				"doctype": "Rate Plan", "property": PROP_UGX_COMP,
+				"rate_plan_name": code, "code": code, **kw,
+			}).insert(ignore_permissions=True).name
+
+		self.bar_ugx = mk_plan("BARUGX", modifier_type="Percent", modifier_value=0, currency="UGX")
+		self.bar_usd = mk_plan(
+			"BARUSD", modifier_type="Percent", modifier_value=0, currency="USD",
+			custom_tariff_price_list="UT Comp USD PL", fx_lock_policy="Fixed at Reservation",
+		)
+		self.half_usd = mk_plan(
+			"HALFUSD", base_rate_plan=self.bar_usd, modifier_type="Percent", modifier_value=-50,
+			currency="USD", fx_lock_policy="Fixed at Reservation", rounding_step=0, rounding_mode="Nearest",
+		)
+		self.no_field_tariff = mk_plan("TBRIDGE", modifier_type="Percent", modifier_value=0, currency="USD")
+		self.comp = mk_plan(
+			"COMP", modifier_type="Absolute", modifier_value=0, currency="UGX",
+			rate_category="Complimentary",
+		)
+		self.house = mk_plan(
+			"HOUSE", modifier_type="Absolute", modifier_value=0, currency="UGX",
+			rate_category="House Use",
+		)
+		self.tariff_map = {
+			self.bar_usd: {
+				"is_tariff": 1, "currency": "USD", "nightly": 150.0, "fx_rate": 3655.5,
+				"fx_date": TODAY, "agreed_rate": 548325.0, "property_currency": "UGX",
+			},
+			self.no_field_tariff: {
+				"is_tariff": 1, "currency": "USD", "nightly": 150.0, "fx_rate": 3655.5,
+				"fx_date": TODAY, "agreed_rate": 548325.0, "property_currency": "UGX",
+			},
+		}
+
+	def _as_user(self, user, fn, *args, **kwargs):
+		prev = frappe.session.user
+		frappe.set_user(user)  # nosemgrep: frappe-setuser -- acting as the persona
+		try:
+			return fn(*args, **kwargs)
+		finally:
+			frappe.set_user(prev)  # nosemgrep: frappe-setuser -- restore
+
+	def _bridge(self, api_method, *, response_types=None, **form):
+		if api_method == "hospitality_tariffs.tariff_rate":
+			entry = self.tariff_map.get(form.get("rate_plan"))
+			return {"tariff": dict(entry)} if entry else {"tariff": {"is_tariff": 0}}
+		return None
+
+	def test_amend_stay_refuses_moving_tariff_stay_to_comp_and_omits_plan_picker(self):
+		from unittest.mock import patch
+
+		with patch("kamra.erp_bridge.bridge_call", side_effect=self._bridge):
+			booked = self._as_user(
+				DESK, api.create_booking, PROP_UGX_COMP, self.rt, d(1), d(3),
+				"Tariff Guest", "+256700001001", rate_plan=self.bar_usd, room=self.rooms[0],
+			)
+			res_name = booked["reservation"]
+			frappe.db.set_value("Reservation", res_name, "custom_tariff_currency", "USD", update_modified=False)
+
+			detail = self._as_user(DESK, api.reservation_detail, res_name)
+			self.assertEqual(detail["rate_plans"], [])
+
+			with self.assertRaises(frappe.ValidationError):
+				self._as_user(DESK, api.amend_stay_preview, res_name, d(1), d(3), rate_plan=self.comp)
+			with self.assertRaises(frappe.ValidationError):
+				self._as_user(
+					DESK, api.amend_stay, res_name, d(1), d(3), confirm_price=1,
+					rate_plan=self.comp, comp_supervisor_user=GM, comp_supervisor_pin="4321",
+				)
+
+			after = frappe.db.get_value(
+				"Reservation", res_name, ["rate_plan", "rate_category", "agreed_rate", "amount_after_tax"],
+				as_dict=True,
+			)
+			self.assertEqual(after.rate_plan, self.bar_usd)
+			self.assertEqual(after.rate_category, "Standard")
+			self.assertEqual(flt(after.agreed_rate), 548325.0)
+			self.assertEqual(flt(after.amount_after_tax), 1096650.0)
+
+	def test_amend_stay_refuses_moving_comp_stay_onto_tariff_plan_and_omits_tariff_from_picker(self):
+		from unittest.mock import patch
+
+		with patch("kamra.erp_bridge.bridge_call", side_effect=self._bridge):
+			booked = self._as_user(
+				DESK, api.create_booking, PROP_UGX_COMP, self.rt, d(1), d(3),
+				"Comp Guest", "+256700001002", rate_plan=self.comp, room=self.rooms[1],
+				comp_supervisor_user=GM, comp_supervisor_pin="4321",
+			)
+			res_name = booked["reservation"]
+
+			detail = self._as_user(DESK, api.reservation_detail, res_name)
+			plan_names = {p["name"] for p in detail["rate_plans"]}
+			self.assertIn(self.comp, plan_names)
+			self.assertIn(self.bar_ugx, plan_names)
+			self.assertNotIn(self.bar_usd, plan_names)
+			self.assertNotIn(self.half_usd, plan_names)
+
+			for target in (self.bar_usd, self.half_usd, self.no_field_tariff):
+				with self.assertRaises(frappe.ValidationError):
+					self._as_user(DESK, api.amend_stay_preview, res_name, d(1), d(3), rate_plan=target)
+				with self.assertRaises(frappe.ValidationError):
+					self._as_user(DESK, api.amend_stay, res_name, d(1), d(3), confirm_price=1, rate_plan=target)
+
+			after = frappe.db.get_value(
+				"Reservation", res_name, ["rate_plan", "rate_category", "amount_after_tax"], as_dict=True,
+			)
+			self.assertEqual(after.rate_plan, self.comp)
+			self.assertEqual(after.rate_category, "Complimentary")
+			self.assertEqual(flt(after.amount_after_tax), 0.0)
+
+	def test_block_prices_fallback_scales_derived_per_night_amount_modifier_by_nights(self):
+		from unittest.mock import patch
+
+		der_name = f"{PROP_UGX_COMP}-DERAMT"
+		if frappe.db.exists("Rate Plan", der_name):
+			frappe.delete_doc("Rate Plan", der_name, force=True, ignore_permissions=True)
+		der_plan = frappe.get_doc({
+			"doctype": "Rate Plan", "property": PROP_UGX_COMP,
+			"rate_plan_name": "DERAMT", "code": "DERAMT",
+			"base_rate_plan": self.bar_ugx, "currency": "UGX",
+			"modifier_type": "Amount", "modifier_value": -50000,
+		}).insert(ignore_permissions=True).name
+
+		corp_name = "UT Comp Derived Amt Corp"
+		if frappe.db.exists("Corporate Account", corp_name):
+			frappe.delete_doc("Corporate Account", corp_name, force=True, ignore_permissions=True)
+		corp = frappe.get_doc({
+			"doctype": "Corporate Account", "company_name": corp_name,
+			"negotiated_rate_plan": der_plan,
+		}).insert(ignore_permissions=True).name
+
+		with patch("kamra.pricing.quote", side_effect=frappe.ValidationError("Closed")):
+			out = api._block_prices(
+				PROP_UGX_COMP, d(2), d(5),
+				[{"room_type": self.rt, "rooms_blocked": 1}],
+				company=corp,
+			)
+		# 3 nights * (250,000 - 50,000) = 600,000 (200,000/night)
+		self.assertEqual(out["nights"], 3)
+		self.assertEqual(out["rows"][0]["rate"], 200000.0)
+		self.assertEqual(out["before_tax"], 600000.0)
+
+	def test_comp_house_use_and_half_price_compose_with_ugx_prec0_and_printed_tax_invoice(self):
+		import json
+		from unittest.mock import patch
+
+		from kamra import folio as folio_mod
+		from kamra import reports
+		from kamra.tests.test_printed_invoice_vat_and_day_use import _fake_sales_invoice
+
+		with patch("kamra.erp_bridge.bridge_call", side_effect=self._bridge):
+			# Derived Half-Price USD tariff rounds to whole UGX (75 * 3655.5 = 274,162.5 -> 274,163 * 2 = 548,326)
+			q_half = self._as_user(DESK, api.get_quote, PROP_UGX_COMP, self.rt, TODAY, d(2), 2, 0, rate_plan=self.half_usd)
+			self.assertEqual(flt(q_half["amount_after_tax"]), 548326.0)
+			self.assertFalse(q_half["comp_governance"]["needs_supervisor"])
+
+			b_half = self._as_user(
+				DESK, api.create_booking, PROP_UGX_COMP, self.rt, TODAY, d(2),
+				"Half Price Guest", "+256700001003", rate_plan=self.half_usd, room=self.rooms[0],
+			)
+			b_comp = self._as_user(
+				DESK, api.create_booking, PROP_UGX_COMP, self.rt, TODAY, d(2),
+				"Comp Guest", "+256700001004", rate_plan=self.comp, room=self.rooms[1],
+				comp_supervisor_user=GM, comp_supervisor_pin="4321",
+			)
+			b_house = self._as_user(
+				DESK, api.create_booking, PROP_UGX_COMP, self.rt, TODAY, d(2),
+				"House Use Guest", "+256700001005", rate_plan=self.house, room=self.rooms[2],
+				comp_supervisor_user=GM, comp_supervisor_pin="4321",
+			)
+			# Morning Day-Use (09:00-15:00) on Complimentary plan (#48 x #38)
+			b_day_use = self._as_user(
+				DESK, api.create_booking, PROP_UGX_COMP, self.rt, d(8), d(8),
+				"Morning Comp DayUse", "+256700001006", rate_plan=self.comp, room=self.rooms[3],
+				check_in_time="09:00", check_out_time="15:00",
+				comp_supervisor_user=GM, comp_supervisor_pin="4321",
+			)
+			du_row = frappe.db.get_value(
+				"Reservation", b_day_use["reservation"],
+				["is_day_use", "rate_category", "amount_after_tax"], as_dict=True,
+			)
+			self.assertEqual(du_row.is_day_use, 1)
+			self.assertEqual(du_row.rate_category, "Complimentary")
+			self.assertEqual(flt(du_row.amount_after_tax), 0.0)
+
+			for b in (b_half, b_comp, b_house):
+				self._as_user(DESK, api.check_in, b["reservation"])
+				folio_mod.post_room_night(frappe.get_doc("Reservation", b["reservation"]), TODAY)
+
+		# OPERA stats: 3 rooms occupied (60% of 5), ADR excludes COMP & HOUSE -> whole UGX 274,163
+		day = reports._day_stats(PROP_UGX_COMP, TODAY, 5)
+		self.assertEqual(day["rooms_sold"], 3)
+		self.assertEqual(day["occupancy_pct"], 60.0)
+		self.assertEqual(day["adr"], 274163.0)
+		self.assertEqual(day["room_revenue"], 274163.0)
+		self.assertEqual(day["rooms_by_category"], {"Complimentary": 1, "House Use": 1})
+
+		# #48 printed invoice titles: 0-VAT closed COMP folio -> "Invoice" (not "Tax Invoice")
+		f_comp = guest_folio(b_comp["reservation"])
+		folio_mod.close_folio(f_comp)
+		inv_comp = self._as_user(GM, api.folio_invoice, f_comp)
+		self.assertEqual(inv_comp["document"]["title"], "Invoice")
+		self.assertEqual(flt(inv_comp["folio"]["grand_total"]), 0.0)
+		self.assertEqual(inv_comp["tax_source"], "folio")
+
+		# Bridged Uganda VAT-charged HALF-USD folio -> "Tax Invoice" with 18% VAT from ERP SI
+		f_half = guest_folio(b_half["reservation"])
+		fdoc = frappe.get_doc("Folio", f_half)
+		charge_row = fdoc.charges[0]
+		frappe.db.set_value(
+			"Folio", f_half,
+			{"status": "Closed", "closed_on": f"{TODAY} 11:00:00", "sales_invoice": "ACC-SINV-HALF-18",
+			 "grand_total": 274163.0, "balance": 0},
+			update_modified=False,
+		)
+		fake_si = _fake_sales_invoice(
+			"ACC-SINV-HALF-18", folio_name=f_half,
+			net_total=232341.53, total_taxes=41821.47, grand_total=274163.0, currency="UGX",
+			items=[{
+				"item_code": "ITEM-ROOM", "source_ref": charge_row.name,
+				"net_amount": 232341.53, "amount": 274163.0, "kamra_allowance_refs": "",
+			}],
+			taxes=[{
+				"charge_type": "On Net Total", "account_head": "VAT - UG", "description": "VAT 18%",
+				"rate": 18.0, "tax_amount": 41821.47, "tax_amount_after_discount_amount": 41821.47,
+				"included_in_print_rate": 1,
+				"item_wise_tax_detail": json.dumps({"ITEM-ROOM": [18.0, 41821.47]}),
+			}],
+		)
+		real_get_doc = frappe.get_doc
+		real_exists = frappe.db.exists
+		with patch("frappe.get_doc", side_effect=lambda dt, nm=None, *a, **k:
+				fake_si if dt == "Sales Invoice" and nm == "ACC-SINV-HALF-18" else real_get_doc(dt, nm, *a, **k)), \
+				patch("frappe.db.exists", side_effect=lambda dt, nm=None, *a, **k:
+				True if dt == "DocType" and nm == "Sales Invoice" else real_exists(dt, nm, *a, **k)):
+			inv_half = api.folio_invoice(f_half)
+		self.assertEqual(inv_half["tax_source"], "accounting")
+		self.assertEqual(inv_half["document"]["title"], "Tax Invoice")
+		self.assertEqual(flt(inv_half["tax_summary"][0]["rate"]), 18.0)
+		self.assertEqual(flt(inv_half["folio"]["grand_total"]), 274163.0)
