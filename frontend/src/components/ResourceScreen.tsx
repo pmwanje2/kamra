@@ -928,23 +928,27 @@ export function ResourceScreen({
               </select>
             ))}
             {config.dateFilter && (
-              <div className="flex items-center gap-1.5 text-sm text-zinc-500">
-                <span className="text-xs">{t(config.dateFilter.label)}</span>
-                <input
-                  type="date"
-                  aria-label={(`${t(config.dateFilter.label)} ${t("from")}`)}
-                  className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
-                  value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                />
-                <span className="text-xs">{t("to")}</span>
-                <input
-                  type="date"
-                  aria-label={(`${t(config.dateFilter.label)} ${t("to")}`)}
-                  className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
-                  value={dateTo}
-                  onChange={(e) => setDateTo(e.target.value)}
-                />
+              <div className="flex max-w-full min-w-0 flex-wrap items-center gap-1.5 text-sm text-zinc-500">
+                <div className="flex min-w-0 max-w-full items-center gap-1.5">
+                  <span className="text-xs">{t(config.dateFilter.label)}</span>
+                  <input
+                    type="date"
+                    aria-label={(`${t(config.dateFilter.label)} ${t("from")}`)}
+                    className="min-w-0 max-w-full rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                  />
+                </div>
+                <div className="flex min-w-0 max-w-full items-center gap-1.5">
+                  <span className="text-xs">{t("to")}</span>
+                  <input
+                    type="date"
+                    aria-label={(`${t(config.dateFilter.label)} ${t("to")}`)}
+                    className="min-w-0 max-w-full rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                  />
+                </div>
                 {(dateFrom || dateTo) && (
                   <button
                     className="text-xs text-zinc-400 hover:text-zinc-600"
