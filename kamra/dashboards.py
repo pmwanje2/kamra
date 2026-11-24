@@ -73,41 +73,80 @@ def _sellable(property: str) -> int:
 
 
 def occupancy_now(property: str, hk: dict) -> dict:
-	"""Rooms occupied right now over sellable rooms."""
+	"""Rooms occupied right now over sellable rooms, the rooms in house on a
+	category left out of occupancy not counted (kamra.room_statistics)."""
+	from kamra.room_statistics import (
+		category_rules,
+		counted_occupied,
+		in_house_by_category,
+		occupancy_pct,
+	)
 	sellable = _sellable(property)
 	occupied = hk["occupied"]
-	return {"occupied": occupied, "sellable": sellable,
-	        "occupancy_pct": round(100 * occupied / sellable, 1) if sellable else 0}
+	rules = category_rules(property)
+	counted = counted_occupied(rules, occupied, in_house_by_category(rules, property))
+	return {"occupied": counted, "sellable": sellable,
+	        "occupancy_pct": occupancy_pct(counted, sellable)}
+
+
+def forecast_summary(forecast: list[dict], sellable: int) -> dict:
+	"""30/60/90-day and weekly occupancy roll-ups of `occupancy_forecast`,
+	using the shared room_statistics rule (rooms_occupied over sellable
+	room-nights, rooms only, no money) so no frontend recomputes occupancy."""
+	from kamra.room_statistics import occupancy_pct
+	spans = []
+	for n in (30, 60, 90):
+		chunk = forecast[:n]
+		spans.append({
+			"days": n,
+			"occupancy_pct": occupancy_pct(sum(x["rooms_occupied"] for x in chunk),
+			                               sellable * len(chunk)),
+		})
+	weeks = []
+	for i in range(0, len(forecast), 7):
+		chunk = forecast[i:i + 7]
+		weeks.append({
+			"week_of": chunk[0]["date"],
+			"booked": sum(x["booked"] for x in chunk),
+			"rooms_occupied": sum(x["rooms_occupied"] for x in chunk),
+			"held": sum(x["held"] for x in chunk),
+			"occupancy_pct": occupancy_pct(sum(x["rooms_occupied"] for x in chunk),
+			                               sellable * len(chunk)),
+		})
+	return {"spans": spans, "weeks": weeks}
 
 
 def occupancy_forecast(property: str, date: str, days: int = FORECAST_DAYS) -> list[dict]:
 	"""On the books for each night from date: live reservations covering the
 	night (every live status, as group_blocks counts a pick up) over sellable rooms,
-	plus group block rooms held but not yet picked up. Rooms only, no money."""
+	plus group block rooms held but not yet picked up. Rooms only, no money.
+	Every room booked is off sale; occupancy leaves out the rooms on a
+	category left out of it (kamra.room_statistics), which rooms_occupied
+	counts."""
 	sellable = _sellable(property)
 	start = getdate(date)
 	end = getdate(add_days(start, days))
 	from kamra.reservation_state import LIVE_STATUSES
-	stays = frappe.db.sql(
-		"""SELECT check_in_date AS ci,
-		          GREATEST(check_out_date, DATE_ADD(check_in_date, INTERVAL 1 DAY)) AS co
-		   FROM `tabReservation`
-		   WHERE property = %(p)s AND status IN %(live)s
-		     AND check_in_date < %(e)s
-		     AND GREATEST(check_out_date, DATE_ADD(check_in_date, INTERVAL 1 DAY)) > %(s)s""",
-		{"p": property, "s": str(start), "e": str(end), "live": tuple(LIVE_STATUSES)},
-		as_dict=True)
+	from kamra.room_statistics import (
+		booked_by_night,
+		category_rules,
+		counted_occupied,
+		occupancy_pct,
+	)
+	rules = category_rules(property)
+	nights = booked_by_night(rules, property, start, end, LIVE_STATUSES, day_use=True)
 	held_by_night = _held_by_night(property, start, end)
-	pct = lambda n: round(100 * n / sellable, 1) if sellable else 0  # noqa: E731
+	pct = lambda n: occupancy_pct(n, sellable)  # noqa: E731
 	out = []
 	for i in range(days):
 		d = getdate(add_days(start, i))
-		# ponytail: days x stays scan; group by date in SQL if a house books thousands ahead
-		booked = sum(1 for r in stays if getdate(r.ci) <= d < getdate(r.co))
+		by = nights.get(str(d)) or {}
+		booked = sum(by.values())
+		counted = counted_occupied(rules, booked, by)
 		held = min(held_by_night.get(str(d), 0), max(0, sellable - booked))
-		out.append({"date": str(d), "booked": booked, "held": held,
+		out.append({"date": str(d), "booked": booked, "rooms_occupied": counted, "held": held,
 		            "available": max(0, sellable - booked - held),
-		            "occupancy_pct": pct(booked), "occupancy_with_holds_pct": pct(booked + held)})
+		            "occupancy_pct": pct(counted), "occupancy_with_holds_pct": pct(counted + held)})
 	return out
 
 
@@ -144,6 +183,7 @@ def comparison(property: str, date: str, total_rooms: int, forecast: list[dict])
 	forecast's nights from tonight, over sellable rooms like the forecast."""
 	from kamra.localization import financial_year_start, pack_for
 	from kamra.reports import range_stats
+	from kamra.room_statistics import occupancy_pct
 	d = getdate(date)
 	ly = lambda x: getdate(add_years(x, -1))  # noqa: E731 - 29 Feb -> 28 Feb
 	fy = financial_year_start(pack_for(property), d)
@@ -161,7 +201,9 @@ def comparison(property: str, date: str, total_rooms: int, forecast: list[dict])
 		sellable = _sellable(property)
 		sold = sum(x["booked"] for x in forecast)
 		n = sellable * len(forecast)
-		this = {"rooms_sold": sold, "occupancy_pct": round(100 * sold / n, 1) if n else 0}
+		# occupancy by the same rule as last year's (range_stats)
+		this = {"rooms_sold": sold,
+		        "occupancy_pct": occupancy_pct(sum(x["rooms_occupied"] for x in forecast), n)}
 		last = range_stats(property, ly(start), ly(end), sellable)
 		periods.append({"id": "on_the_books", "rooms_basis": "sellable",
 		                "from_date": str(start), "to_date": str(end),
@@ -197,6 +239,7 @@ def property_dashboard(property: str, date: str | None = None, with_comparison: 
 	date = dates["report_date"]
 	hk = _housekeeping_slice(property)
 	forecast = occupancy_forecast(property, date)
+	summary = forecast_summary(forecast, _sellable(property))
 	if not sees_figures():
 		from kamra.reports import movement_counts
 		move = movement_counts(property, date, date)
@@ -210,6 +253,7 @@ def property_dashboard(property: str, date: str | None = None, with_comparison: 
 			"housekeeping": hk,
 			"occupancy_now": occupancy_now(property, hk),
 			"forecast": forecast,
+			"forecast_summary": summary,
 		}
 	from kamra.reports import manager_flash
 	flash = manager_flash(property, date)
@@ -256,6 +300,7 @@ def property_dashboard(property: str, date: str | None = None, with_comparison: 
 		"outlook": flash.get("outlook", []),
 		"occupancy_now": occupancy_now(property, hk),
 		"forecast": forecast,
+		"forecast_summary": summary,
 		**({"comparison": comparison(property, date, flash.get("total_rooms", 0), forecast)}
 		   if int(with_comparison or 0) else {}),
 	}
@@ -283,6 +328,10 @@ def _property_summary(property: str, date: str):
 		"total_rooms": total_rooms,
 		"occupancy_pct": s.get("occupancy_pct", 0),
 		"rooms_sold": s.get("rooms_sold", 0),
+		# the rooms the occupancy counts, over the rooms not out of order
+		# (reports._day_stats): what the portfolio totals add up
+		"rooms_occupied": s.get("rooms_occupied", 0),
+		"available_rooms": s.get("available_rooms", 0),
 		"arrivals": frappe.db.count("Reservation", {
 			"property": property, "check_in_date": date,
 			"status": ("in", ["Confirmed", "Checked In"])}),
@@ -308,12 +357,15 @@ def portfolio_dashboard(date: str | None = None):
 	days = {row["report_date"] for row in rows}
 	date = date or (days.pop() if len(days) == 1 else None)
 
+	from kamra.room_statistics import occupancy_pct
 	rooms = sum(r["total_rooms"] for r in rows)
-	sold = sum(r["rooms_sold"] for r in rows)
 	totals = {
 		"properties": len(rows),
 		"total_rooms": rooms,
-		"occupancy_pct": round(100 * sold / rooms, 1) if rooms else 0,
+		# the rows' own occupancy, added up: rooms occupied over rooms
+		# available, each by its property's rate categories
+		"occupancy_pct": occupancy_pct(sum(r["rooms_occupied"] for r in rows),
+		                               sum(r["available_rooms"] for r in rows)),
 		"arrivals": sum(r["arrivals"] for r in rows),
 		"departures": sum(r["departures"] for r in rows),
 		"in_house": sum(r["in_house"] for r in rows),
