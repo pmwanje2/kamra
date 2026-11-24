@@ -222,6 +222,8 @@ def event_folio_deposit_summary(doc) -> dict | None:
 		for e in sec_entries
 		if e.get("transaction_code") != "9003" and not _reverses_receive_deposit(e)
 	)
+	from kamra.ledger import _currency_places, _round_currency
+	places = _currency_places(doc.property)
 	mirrored = {r.get("folio_payment") for r in (doc.get("receipts") or []) if r.get("folio_payment")}
 	native_receipts = []
 	for fp in folio_doc.payments or []:
@@ -232,14 +234,14 @@ def event_folio_deposit_summary(doc) -> dict | None:
 			"receipt_date": str(fp.posting_date or ""),
 			"kind": fp.payment_kind or "Payment",
 			"mode": fp.mode or "",
-			"amount": round(abs(float(fp.amount or 0)), 2),
+			"amount": _round_currency(abs(float(fp.amount or 0)), places),
 			"reference": fp.reference or fp.get("payment_entry") or fp.get("reversal_of") or "",
 			"folio_payment": fp.name,
 			"native": 1,
 		})
 	return {
-		"deposit_held": round(max(0.0, net - float(doc.get("damage_amount") or 0)), 2),
-		"deposit_refunded": round(max(0.0, refunded), 2),
+		"deposit_held": _round_currency(max(0.0, net - float(doc.get("damage_amount") or 0)), places),
+		"deposit_refunded": _round_currency(max(0.0, refunded), places),
 		"native_receipts": native_receipts,
 	}
 
@@ -1992,6 +1994,15 @@ def close_out(function: str, damage_amount: float = 0,
 	damage = float(damage_amount or 0)
 	if damage < 0:
 		frappe.throw(_("Damages can't be negative."))
+	folio_closed = bool(
+		doc.get("folio")
+		and frappe.db.get_value("Folio", doc.folio, "status") == "Closed"
+	)
+	if folio_closed and damage > 0:
+		frappe.throw(_(
+			"Event folio {0} is already closed. Post post-close damages on a "
+			"supplemental charge or folio instead of modifying a settled function."
+		).format(doc.folio))
 	if damage and not (damage_note or "").strip():
 		frappe.throw(_("Say what was damaged - a deduction the customer "
 		              "can't see the reason for is a dispute waiting."))
@@ -2007,12 +2018,19 @@ def close_out(function: str, damage_amount: float = 0,
 		              "accounting bridge Finance returns it with a native refund Payment "
 		              "Entry: close out without refunding here.")
 		             .format(money_text(doc.property, held)))
+	if folio_closed and int(refund_deposit or 0) and held > 0:
+		frappe.throw(_(
+			"Event folio {0} is already closed. Refund the remaining deposit on "
+			"the folio instead of adding a close-out refund receipt."
+		).format(doc.folio))
+	prev_grand = float(doc.grand_total or 0)
 	if pax_actual is not None:
 		doc.pax_actual = int(pax_actual)
 
+	from kamra.ledger import _currency_places, _round_currency
 	refund = 0.0
 	if int(refund_deposit or 0) and held:
-		refund = round(held - damage, 2)
+		refund = _round_currency(held - damage, _currency_places(doc.property))
 		if refund > 0:
 			doc.append("receipts", {
 				"receipt_date": nowdate(), "kind": "Refund",
@@ -2034,6 +2052,13 @@ def close_out(function: str, damage_amount: float = 0,
 			"rate": damage, "list_rate": damage, "chargeable": 1,
 			"notes": "damage-recovery",
 		})
+	if folio_closed:
+		doc.validate()
+		if abs(float(doc.grand_total or 0) - prev_grand) > 1e-6:
+			frappe.throw(_(
+				"Event folio {0} is already closed, so close-out cannot change the "
+				"settled function total."
+			).format(doc.folio))
 	doc.status = "Completed"
 	doc.save()
 	from kamra.savings import log_action

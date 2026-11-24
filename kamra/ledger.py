@@ -2154,8 +2154,14 @@ def credited_total(folio: str, for_update: bool = False) -> Decimal:
 @require_roles("Front Desk", "Finance", "Kamra Agent")
 def record_folio_reprint(folio: str, document: str = "Guest Folio",
                          reason: str | None = None):
-	prop, inv = frappe.db.get_value(
-		"Folio", folio, ["property", "invoice_number"])
+	fdoc = frappe.get_doc("Folio", folio)
+	prop, inv = fdoc.property, fdoc.invoice_number
+	if fdoc.status == "Closed" and document != "Proforma":
+		from kamra.fiscal import assert_reprintable, fiscal_status
+		fiscal = fiscal_status(fdoc)
+		if fiscal is not None:
+			assert_reprintable(fiscal)
+			inv = fiscal["sales_invoice"] or inv
 	prev = frappe.db.count("Folio Reprint", {"folio": folio}) + 1
 	doc = frappe.get_doc({
 		"doctype": "Folio Reprint",
@@ -2277,6 +2283,11 @@ def batch_print_folios(folios: str | list):
 	import json as _json
 	if isinstance(folios, str):
 		folios = _json.loads(folios)
+	from kamra.fiscal import assert_reprintable, fiscal_status
+	for fn in folios:
+		fdoc = frappe.get_doc("Folio", fn)
+		if fdoc.status == "Closed":
+			assert_reprintable(fiscal_status(fdoc))
 	out = []
 	for fn in folios:
 		out.append(record_folio_reprint(fn, "Guest Folio", "batch print"))

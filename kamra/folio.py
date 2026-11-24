@@ -54,11 +54,13 @@ def _security_deposit_row_ids(folio) -> set[int]:
 	sec_names: set[str] = set()
 	sec_idx: set[int] = set()
 	non_dep_received = 0.0
+	sec_held = Decimal(0)
 	for idx, p in enumerate(payments):
 		kind = p.get("payment_kind") or "Payment"
 		pe_key = p.get("payment_entry") or p.get("reversal_of")
 		if kind == "Security Deposit" or _payment_entry_is_security_deposit(pe_key):
 			sec_idx.add(idx)
+			sec_held += Decimal(str(p.get("amount") or 0))
 			if p.get("name"):
 				sec_names.add(p.name)
 		elif float(p.get("amount") or 0) > 0:
@@ -67,6 +69,10 @@ def _security_deposit_row_ids(folio) -> set[int]:
 		return set()
 	from kamra.deposit import REFUND_REASON
 	has_pe = bool(frappe.db.exists("DocType", "Payment Entry"))
+	has_advance = any(
+		(p.get("payment_kind") or "") == "Advance"
+		for idx, p in enumerate(payments) if idx not in sec_idx
+	)
 	for idx, p in enumerate(payments):
 		if idx in sec_idx or (p.get("payment_kind") or "") != "Refund":
 			continue
@@ -74,17 +80,27 @@ def _security_deposit_row_ids(folio) -> set[int]:
 		if pe_key and has_pe:
 			# Bridge-backed refund: Payment Entry.kamra_payment_kind is authoritative.
 			continue
+		refund_of = p.get("refund_of")
+		if refund_of:
+			if refund_of in sec_names:
+				sec_idx.add(idx)
+				sec_held += Decimal(str(p.get("amount") or 0))
+			continue
 		ref = (p.get("reference") or "").strip()
-		if ref.startswith(REFUND_REASON) or (p.get("refund_of") and p.get("refund_of") in sec_names):
+		amt = Decimal(str(p.get("amount") or 0))
+		if ref.startswith(REFUND_REASON):
 			sec_idx.add(idx)
-		elif p.get("name") and frappe.db.exists(
+			sec_held += amt
+		elif p.get("name") and (not has_advance or folio.get("folio_type") == "Account") and frappe.db.exists(
 			"Folio Ledger Entry",
 			{"folio": folio.name, "ledger": "Deposit",
 			 "source_doctype": "Folio Payment", "source_name": p.name},
 		):
 			sec_idx.add(idx)
-		elif folio.get("status") == "Closed" or non_dep_received <= 0.009:
+			sec_held += amt
+		elif non_dep_received <= 0.009 and sec_held > Decimal(0) and abs(amt) <= sec_held + Decimal("0.009"):
 			sec_idx.add(idx)
+			sec_held += amt
 	return sec_idx
 
 

@@ -638,13 +638,17 @@ def _stay_money(res):
 		return sum(float(r.amount or 0) for r in rows
 		           if (r.payment_kind or "Payment") == kind)
 	from kamra.folio import security_deposit_held_on_folio
+	from kamra.ledger import _currency_places, _round_currency
 	return {
 		"folio": folio.name,
 		"grand_total": float(folio.grand_total or 0),
 		"paid_total": float(folio.payments_total or 0),
 		"balance": float(folio.balance or 0),
 		"advance": ksum("Advance"),
-		"deposit_held": round(max(0.0, security_deposit_held_on_folio(fdoc)), 2),
+		"deposit_held": _round_currency(
+			max(0.0, security_deposit_held_on_folio(fdoc)),
+			_currency_places(res.property),
+		),
 		"refunded": -ksum("Refund"),
 	}
 
@@ -4392,7 +4396,22 @@ def folio_invoice(folio: str):
 	number, final, internal_number = doc_number, settled, None
 	if fiscal:
 		number, final, internal_number = fiscal["sales_invoice"] or doc.name, fiscal_final(fiscal), doc.invoice_number
-		doc_title = _(fiscal_title(fiscal))
+		if acct_tax["tax_source"] == "accounting_unavailable":
+			# Restricted viewer (lacks Sales Invoice read) or unreadable accounting invoice:
+			# never leak accounting tax metadata or elevate the neutral title (#48).
+			fiscal = {**fiscal, "charges_tax": None, "tax_template": None}
+			doc_title = _(fiscal_title(fiscal)) if not final else _(loc.neutral_invoice_title(pack))
+		elif not final:
+			doc_title = _(fiscal_title(fiscal))
+		elif acct_tax["tax_source"] == "accounting":
+			# Authoritative accounting taxes were read (#48): preserve its
+			# _tax_summary_has_vat + pack invoice_title for final non-EFRIS
+			# invoices (so a 2% Tourism Levy with 0% VAT stays neutral "Invoice");
+			# fiscalised invoices keep their statutory "Tax Invoice" title.
+			if fiscal.get("state") == "fiscalised":
+				doc_title = _(fiscal_title(fiscal))
+		else:
+			doc_title = _(fiscal_title(fiscal))
 	payments = [{
 		"row": p.name, "posting_date": str(p.posting_date),
 		"payment_kind": p.payment_kind, "mode": p.mode,
@@ -4414,11 +4433,12 @@ def folio_invoice(folio: str):
 			for rate, v in sorted(by_rate.items())
 		]
 	)
+	from kamra.ledger import _currency_places
 	return {
 		"folio": folio_dict,
 		"lines": lines,
 		"payments": payments,
-		"statement": _folio_statement(lines, payments),
+		"statement": _folio_statement(lines, payments, places=_currency_places(doc.property)),
 		"allocations": _folio_allocations(doc.name),
 		# what the issued credit notes on this invoice add up to: the most a
 		# new one may credit is the invoice total less this
@@ -4510,11 +4530,8 @@ def reprint_fiscal_folio(folio: str, reason: str | None = None):
 		frappe.throw(_("Only a settled folio has an invoice to reprint."))
 	fiscal, document = data["fiscal"], data["document"]
 	if fiscal and not document["is_final"]:
-		if fiscal["state"] == "unverified":
-			frappe.throw(_("The fiscal status is unavailable, so this can't be reprinted as a tax invoice. Try again, or ask Finance."))
-		if fiscal["sandbox"]:
-			frappe.throw(_("This fiscal number comes from a test fiscal service and is not a valid tax invoice."))
-		frappe.throw(_("The fiscal document is still pending, so there is nothing final to reprint yet."))
+		from kamra.fiscal import assert_reprintable
+		assert_reprintable(fiscal)
 	revision = frappe.db.count("Folio Reprint", {"folio": folio}) + 1
 	reprint = frappe.get_doc({
 		"doctype": "Folio Reprint",
@@ -4531,22 +4548,23 @@ def reprint_fiscal_folio(folio: str, reason: str | None = None):
 	return {**data, "reprint": reprint.name, "revision": revision}
 
 
-def _folio_statement(lines: list, payments: list) -> list[dict]:
+def _folio_statement(lines: list, payments: list, *, places: int = 2) -> list[dict]:
 	"""Charges and payments in date order with a running balance: charges
 	(with tax) and refunds in `charges`, payments, allowances and reversals
 	in `credits`."""
+	from kamra.ledger import _round_currency
 	rows = []
 	for ln in lines:
-		total = round(float(ln["total"] or 0), 2)
+		total = _round_currency(float(ln["total"] or 0), places)
 		rows.append((ln["posting_date"], 0, {
 			"date": ln["posting_date"], "row": ln["row"], "kind": "Charge",
 			"charge_type": ln["charge_type"], "description": ln["description"],
 			"reference": ln.get("corrects_row"), "method": None,
 			"transaction_code": ln["transaction_code"], "gl_code": ln["gl_code"],
 			"charges": max(total, 0), "credits": max(-total, 0),
-			"tax": round(float(ln["gst_amount"] or 0), 2)}))
+			"tax": _round_currency(float(ln["gst_amount"] or 0), places)}))
 	for p in payments:
-		amt = round(float(p["amount"] or 0), 2)
+		amt = _round_currency(float(p["amount"] or 0), places)
 		rows.append((p["posting_date"], 1, {
 			"date": p["posting_date"], "row": p["row"], "kind": p["payment_kind"],
 			"charge_type": None, "description": f"{p['payment_kind']} {p['mode'] or ''}".strip(),
@@ -4555,7 +4573,7 @@ def _folio_statement(lines: list, payments: list) -> list[dict]:
 			"charges": max(-amt, 0), "credits": max(amt, 0), "tax": 0.0}))
 	balance, out = 0.0, []
 	for _d, _o, r in sorted(rows, key=lambda x: (x[0], x[1])):
-		balance = round(balance + r["charges"] - r["credits"], 2)
+		balance = _round_currency(balance + r["charges"] - r["credits"], places)
 		out.append({**r, "balance": balance})
 	return out
 

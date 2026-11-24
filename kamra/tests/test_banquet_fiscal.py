@@ -409,9 +409,11 @@ class TestEventFolio(BanquetFiscalCase):
 
 			# Partial native refund (40,000) then final native refund (60,000) on the closed event folio.
 			folio = frappe.get_doc("Folio", out["folio"])
+			sec_pay = next(p.name for p in folio.payments if p.payment_kind == "Security Deposit")
 			folio.append("payments", {
 				"posting_date": nowdate(), "payment_kind": "Refund", "mode": "Cash",
 				"amount": -40000.0, "currency": "UGX", "reference": "PE-REF-PARTIAL",
+				"refund_of": sec_pay,
 			})
 			_recalculate(folio)
 			folio.save(ignore_permissions=True)
@@ -431,6 +433,7 @@ class TestEventFolio(BanquetFiscalCase):
 			folio.append("payments", {
 				"posting_date": nowdate(), "payment_kind": "Refund", "mode": "Cash",
 				"amount": -60000.0, "currency": "UGX", "reference": "PE-REF-FINAL",
+				"refund_of": sec_pay,
 			})
 			_recalculate(folio)
 			folio.save(ignore_permissions=True)

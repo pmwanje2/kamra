@@ -6,11 +6,10 @@ import { call, getCurrentProperty } from "../lib/api"
 import { serverError } from "../lib/resource"
 import { Button } from "../components/ui/button"
 import { Badge } from "../components/ui/badge"
-import { moneyLocale } from "../lib/money"
+import { fmtAmount, moneyLocale, useLocale } from "../lib/money"
 import { t as translate, useUILanguage } from "../lib/i18n"
 
-const inr = (n: unknown) =>
-  Number(n ?? 0).toLocaleString(moneyLocale(), { maximumFractionDigits: 0 })
+const inr = (n: unknown) => fmtAmount(n ?? 0)
 
 type FolioRow = {
   name: string
@@ -29,6 +28,7 @@ type FolioRow = {
 
 export default function FolioHistory() {
   useUILanguage()
+  useLocale()
   const [q, setQ] = useState("")
   const [status, setStatus] = useState("")
   const [fromDate, setFromDate] = useState("") // closed on, "" = any day

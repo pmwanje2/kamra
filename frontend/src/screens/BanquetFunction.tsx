@@ -1832,7 +1832,7 @@ function MoneyTab({
       </Card>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex-wrap gap-2">
           <CardTitle>
             <span className="inline-flex items-center gap-1.5">
               <Receipt className="size-4" />{translate("Receipts")}</span>
@@ -1855,50 +1855,55 @@ function MoneyTab({
           {fn.receipts.length === 0 ? (
             <Empty>{translate("Nothing received yet.")}</Empty>
           ) : (
-            <table className="w-full text-sm">
-              <tbody>
-                {fn.receipts.map((r) => (
-                  <tr key={r.name} className="group border-b border-zinc-100">
-                    <td className="py-2 tabular-nums text-zinc-500">
+            <ul className="divide-y divide-zinc-100 text-sm">
+              {fn.receipts.map((r) => (
+                <li
+                  key={r.name}
+                  className="group flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2"
+                >
+                  <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <span className="shrink-0 tabular-nums text-zinc-500">
                       {r.receipt_date}
-                    </td>
-                    <td className="py-2">
+                    </span>
+                    <span className="font-medium text-zinc-800">
                       {translate(r.kind)}
                       {r.kind === "Security Deposit" && Number(fn.deposit_held || 0) > 0 && (
                         <span className="ml-1.5 rounded bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium text-violet-700">{translate("held")}</span>
                       )}
-                    </td>
-                    <td className="py-2 text-zinc-500">{translate(r.mode)}</td>
-                    <td className="py-2 text-zinc-400">{r.reference}</td>
-                    <td
+                    </span>
+                    <span className="text-zinc-500">{translate(r.mode)}</span>
+                    {r.reference && (
+                      <span className="min-w-0 break-all text-zinc-400">{r.reference}</span>
+                    )}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span
                       className={
-                        "py-2 text-right tabular-nums " +
+                        "whitespace-nowrap text-right tabular-nums " +
                         (r.kind === "Refund" ? "text-rose-700" : "")
                       }
                     >
                       {r.kind === "Refund" ? "-" : ""}
                       {inr(r.amount)}
-                    </td>
-                    <td className="w-8 py-2 text-right">
-                      {/* every advance a banquet office takes needs a piece
-                          of paper against it; native ERP refund lines print from Accounting */}
-                      {!r.native && (
-                        <button
-                          title={translate("Print this receipt")}
-                          aria-label={translate("Print this receipt")}
-                          className="text-zinc-300 opacity-0 transition-opacity hover:text-brand-700 group-hover:opacity-100"
-                          onClick={() => setReceiptDoc(r.name)}
-                        >
-                          <Printer className="size-4" />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </span>
+                    {/* every advance a banquet office takes needs a piece
+                        of paper against it; native ERP refund lines print from Accounting */}
+                    {!r.native && (
+                      <button
+                        title={translate("Print this receipt")}
+                        aria-label={translate("Print this receipt")}
+                        className="text-zinc-300 opacity-0 transition-opacity hover:text-brand-700 group-hover:opacity-100"
+                        onClick={() => setReceiptDoc(r.name)}
+                      >
+                        <Printer className="size-4" />
+                      </button>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
           )}
-          <div className="mt-3 flex justify-end gap-6 text-sm">
+          <div className="mt-3 flex flex-wrap justify-end gap-6 text-sm">
             <Row label={translate("Received")} value={inr(fn.advance_received)} />
             <Row
               label={translate("Balance")}

@@ -141,7 +141,7 @@ def is_final(fiscal: dict | None) -> bool:
 	return False
 
 
-def fiscal_title(fiscal: dict) -> str:
+def fiscal_title(fiscal: dict, *, tax_charged: bool | None = None) -> str:
 	"""Document title under the accounting bridge (PR-9 §2.8)."""
 	if fiscal.get("state") == "unverified":
 		return "Fiscal status unavailable"
@@ -151,4 +151,19 @@ def fiscal_title(fiscal: dict) -> str:
 		return "Fiscal document pending"
 	if fiscal.get("state") == "fiscalised":
 		return "Tax Invoice"
-	return "Tax Invoice" if fiscal.get("charges_tax") else "Invoice"
+	charged = fiscal.get("charges_tax") if tax_charged is None else bool(tax_charged)
+	return "Tax Invoice" if charged else "Invoice"
+
+
+def assert_reprintable(fiscal: dict | None) -> None:
+	"""Refuse reprinting a bridged fiscal document that is not final."""
+	if not fiscal or is_final(fiscal):
+		return
+	import frappe
+	from frappe import _
+
+	if fiscal.get("state") == "unverified":
+		frappe.throw(_("The fiscal status is unavailable, so this can't be reprinted as a tax invoice. Try again, or ask Finance."))
+	if fiscal.get("sandbox"):
+		frappe.throw(_("This fiscal number comes from a test fiscal service and is not a valid tax invoice."))
+	frappe.throw(_("The fiscal document is still pending, so there is nothing final to reprint yet."))
