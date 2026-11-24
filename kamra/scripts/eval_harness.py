@@ -5620,12 +5620,13 @@ def t172():
 def t173():
 	from kamra import api
 	res, folio = _dep_stay("E173", "+91 70000 00173")
+	pre_paid = float(frappe.db.get_value("Folio", folio, "payments_total") or 0)
 	api.collect_security_deposit(res.name, 5000, "Cash")
 	api.add_folio_charge(folio, "Misc", "Extra bed", 4000)
 	fd = frappe.get_doc("Folio", folio)
-	# Security deposit stays on Deposit liability; bill still owes 4,000
-	assert abs(float(fd.payments_total)) < 0.01 and abs(float(fd.balance) - 4000) < 0.01, (
-		fd.payments_total, fd.balance)
+	# Security deposit stays on Deposit liability; payments_total stays at pre_paid and bill still owes 4,000
+	assert abs(float(fd.payments_total) - pre_paid) < 0.01 and abs(float(fd.balance) - 4000) < 0.01, (
+		fd.payments_total, pre_paid, fd.balance)
 	# Ordinary folio refund cannot dip into the held security deposit
 	try:
 		api.refund_folio_payment(folio, 1000, "Cash", "cannot tap deposit")
