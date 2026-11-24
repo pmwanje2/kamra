@@ -21,6 +21,7 @@ P3-1: `folio_invoice.summary_by_head` folds the document-level tax rounding
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import sys
 from contextlib import contextmanager
@@ -656,3 +657,411 @@ class SummaryByHeadReconciliationTest(QuotePatches, RateMatrixHarness):
 		self.assertEqual(inv_bridge["summary_by_head"][0]["amount"], 493426.0)
 		self.assertEqual(inv_bridge["summary_by_head"][0]["tax"], 0.0)
 		self.assertEqual(inv_bridge["summary_by_head"][0]["total"], 493426.0)
+
+	def test_summary_by_head_multi_head_ugx_exclusive_inclusive_and_kwd_zero_float_drift(self):
+		# 1. Multi-head 18% VAT exclusive in 0-dp UGX (Room + Taxi + Laundry)
+		r1 = Doc(name="FC-MH1", posting_date="2026-12-01", charge_type="Room", description="Night 1",
+		         qty=1, rate=246713.0, amount=246713.0, gst_rate=18.0)
+		r2 = Doc(r1, name="FC-MH2", posting_date="2026-12-02", description="Night 2")
+		tx = Doc(name="FC-MH3", posting_date="2026-12-02", charge_type="Taxi", description="Airport transfer",
+		         qty=1, rate=45000.0, amount=45000.0, gst_rate=18.0)
+		ld = Doc(name="FC-MH4", posting_date="2026-12-02", charge_type="Laundry", description="Pressing",
+		         qty=1, rate=15001.0, amount=15001.0, gst_rate=18.0)
+		f_multi = self.add(
+			"Folio", "FOL-UGX-MULTI", property="Test Hotel", folio_type="Guest",
+			status="Open", guest_name="Multi UGX", charges=[r1, r2, tx, ld], payments=[],
+		)
+		f_multi.as_dict = lambda: {k: v for k, v in f_multi.items() if not callable(v)}
+		self.folio._recalculate(f_multi)
+		inv_multi = self.api.folio_invoice("FOL-UGX-MULTI")
+		by_head = {h["head"]: h for h in inv_multi["summary_by_head"]}
+		self.assertEqual(by_head["Room"]["amount"], 493426.0)
+		self.assertEqual(by_head["Room"]["tax"], 88817.0)
+		self.assertEqual(by_head["Room"]["total"], 582243.0)
+		self.assertEqual(by_head["Taxi"]["amount"], 45000.0)
+		self.assertEqual(by_head["Taxi"]["tax"], 8100.0)
+		self.assertEqual(by_head["Taxi"]["total"], 53100.0)
+		self.assertEqual(by_head["Laundry"]["amount"], 15001.0)
+		self.assertEqual(by_head["Laundry"]["tax"], 2700.0)
+		self.assertEqual(by_head["Laundry"]["total"], 17701.0)
+		for h in inv_multi["summary_by_head"]:
+			self.assertEqual(h["amount"], round(h["amount"], 0))
+			self.assertEqual(h["tax"], round(h["tax"], 0))
+			self.assertEqual(h["total"], round(h["total"], 0))
+			self.assertEqual(h["amount"] + h["tax"], h["total"])
+		self.assertEqual(sum(h["amount"] for h in inv_multi["summary_by_head"]), inv_multi["folio"]["charges_total"])
+		self.assertEqual(sum(h["tax"] for h in inv_multi["summary_by_head"]), inv_multi["folio"]["tax_total"])
+		self.assertEqual(sum(h["tax"] for h in inv_multi["summary_by_head"]), inv_multi["tax_summary"][0]["total_tax"])
+		self.assertEqual(sum(h["total"] for h in inv_multi["summary_by_head"]), inv_multi["folio"]["grand_total"])
+
+		# 2. Multi-head 18% VAT exclusive with minor-unit residual after per-head rounding
+		# Raw taxes: 44408.34 + 2700.36 + 1800.36 = 48909.06 -> doc tax 48909; rounded sum 48908 -> +1 to Room
+		res1 = Doc(name="FC-R1", posting_date="2026-12-01", charge_type="Room", description="Night 1",
+		           qty=1, rate=246713.0, amount=246713.0, gst_rate=18.0)
+		res2 = Doc(name="FC-R2", posting_date="2026-12-01", charge_type="Laundry", description="Laundry",
+		           qty=1, rate=15002.0, amount=15002.0, gst_rate=18.0)
+		res3 = Doc(name="FC-R3", posting_date="2026-12-01", charge_type="Spa", description="Massage",
+		           qty=1, rate=10002.0, amount=10002.0, gst_rate=18.0)
+		f_res = self.add(
+			"Folio", "FOL-UGX-RES", property="Test Hotel", folio_type="Guest",
+			status="Open", guest_name="Residual UGX", charges=[res1, res2, res3], payments=[],
+		)
+		f_res.as_dict = lambda: {k: v for k, v in f_res.items() if not callable(v)}
+		self.folio._recalculate(f_res)
+		inv_res = self.api.folio_invoice("FOL-UGX-RES")
+		by_res = {h["head"]: h for h in inv_res["summary_by_head"]}
+		self.assertEqual(by_res["Room"]["tax"], 44409.0)
+		self.assertEqual(by_res["Room"]["total"], 291122.0)
+		self.assertEqual(by_res["Laundry"]["tax"], 2700.0)
+		self.assertEqual(by_res["Spa"]["tax"], 1800.0)
+		self.assertEqual(sum(h["tax"] for h in inv_res["summary_by_head"]), inv_res["folio"]["tax_total"])
+		self.assertEqual(sum(h["total"] for h in inv_res["summary_by_head"]), inv_res["folio"]["grand_total"])
+
+		# 3. Multi-head 18% VAT-inclusive in 0-dp UGX (100,000 Room + 50,000 F&B)
+		vi1 = Doc(name="FC-VI1", posting_date="2026-12-01", charge_type="Room", description="Room VAT incl",
+		          qty=1, rate=84745.76, amount=84745.76, gst_rate=18.0)
+		vi2 = Doc(name="FC-VI2", posting_date="2026-12-01", charge_type="Food & Beverage", description="Dinner VAT incl",
+		          qty=1, rate=42372.88, amount=42372.88, gst_rate=18.0)
+		f_vi = self.add(
+			"Folio", "FOL-UGX-VI", property="Test Hotel", folio_type="Guest",
+			status="Open", guest_name="VAT Incl UGX", charges=[vi1, vi2], payments=[],
+		)
+		f_vi.as_dict = lambda: {k: v for k, v in f_vi.items() if not callable(v)}
+		self.folio._recalculate(f_vi)
+		inv_vi = self.api.folio_invoice("FOL-UGX-VI")
+		by_vi = {h["head"]: h for h in inv_vi["summary_by_head"]}
+		self.assertEqual(by_vi["Room"]["amount"], 84746.0)
+		self.assertEqual(by_vi["Room"]["tax"], 15254.0)
+		self.assertEqual(by_vi["Room"]["total"], 100000.0)
+		self.assertEqual(by_vi["Food & Beverage"]["amount"], 42373.0)
+		self.assertEqual(by_vi["Food & Beverage"]["tax"], 7627.0)
+		self.assertEqual(by_vi["Food & Beverage"]["total"], 50000.0)
+		self.assertEqual(inv_vi["tax_summary"][0]["taxable"], 127119.0)
+		self.assertEqual(inv_vi["tax_summary"][0]["total_tax"], 22881.0)
+		self.assertEqual(sum(h["amount"] for h in inv_vi["summary_by_head"]), inv_vi["folio"]["charges_total"])
+		self.assertEqual(sum(h["tax"] for h in inv_vi["summary_by_head"]), inv_vi["folio"]["tax_total"])
+		self.assertEqual(sum(h["total"] for h in inv_vi["summary_by_head"]), inv_vi["folio"]["grand_total"])
+
+		# 4. 0%-tax 10.100 + 20.200 KWD has zero IEEE-754 float drift (30.3, never 30.299999999999997)
+		z1 = Doc(name="FC-Z1", posting_date="2026-12-01", charge_type="Room", description="N1",
+		         qty=1, rate=10.1, amount=10.1, gst_rate=0.0)
+		z2 = Doc(name="FC-Z2", posting_date="2026-12-02", charge_type="Room", description="N2",
+		         qty=1, rate=20.2, amount=20.2, gst_rate=0.0)
+		f_z = self.add(
+			"Folio", "FOL-KWD-ZERO", property="KWD Hotel", folio_type="Guest",
+			status="Open", guest_name="Zero Float KWD", charges=[z1, z2], payments=[],
+		)
+		f_z.as_dict = lambda: {k: v for k, v in f_z.items() if not callable(v)}
+		self.folio._recalculate(f_z)
+		inv_z = self.api.folio_invoice("FOL-KWD-ZERO")
+		self.assertEqual(inv_z["summary_by_head"][0]["amount"], 30.3)
+		self.assertEqual(inv_z["summary_by_head"][0]["total"], 30.3)
+		self.assertEqual(inv_z["tax_summary"][0]["taxable"], 30.3)
+		self.assertEqual(repr(inv_z["summary_by_head"][0]["amount"]), "30.3")
+		self.assertEqual(repr(inv_z["tax_summary"][0]["taxable"]), "30.3")
+
+
+class KwdThreeDecimalLiveGapsTest(QuotePatches, RateMatrixHarness):
+	"""R2 live-review findings: KWD 3-dp advances, credit control, night audit no-show,
+	folio statement/allocations/credited/accounting-tax, and amount-in-words."""
+
+	modules = (
+		"kamra.pricing",
+		"kamra.folio",
+		"kamra.authz",
+		"kamra.ledger",
+		"kamra.credit",
+		"kamra.night_audit",
+		"kamra.api",
+	)
+
+	def extra_modules(self):
+		return {
+			"kamra.localization": _tax_invoice_localization(Decimal("5")),
+			"kamra.checkout": stub_module("kamra.checkout", _NoTrace=self._no_trace),
+			"kamra.savings": stub_module("kamra.savings", log_action=lambda *a, **kw: self.audit_logs.append((a, kw))),
+			"kamra.settings": stub_module(
+				"kamra.settings",
+				get_setting=lambda prop, key: self.settings_map.get(key),
+			),
+			"kamra.no_show": stub_module(
+				"kamra.no_show",
+				policy=lambda prop: self.ns_policy,
+				fee_decision=lambda res, pol: self.ns_decision,
+				audit_outcome=lambda res, pol, bd, run_at: self.ns_outcome,
+			),
+		}
+
+	@staticmethod
+	@contextmanager
+	def _no_trace(name):
+		yield
+
+	def setUp(self):
+		super().setUp()
+		self.roles = ["Finance", "Hotel Admin", "Front Desk", "Night Auditor"]
+		self.authz.restricted_properties = lambda user=None: None
+		self.audit_logs = []
+		self.settings_map = {"credit_control": "block", "credit_overdue_grace_days": 0}
+		self.ns_policy = Doc(charge="First Night")
+		self.ns_decision = Doc(fee="none", reason="")
+		self.ns_outcome = Doc(outcome="no_show", fee="charge", reason="")
+		self.add(
+			"Property", "KWD Hotel", currency="KWD", property_name="KWD Hotel",
+			business_date="2026-11-24", rates_include_tax=0,
+			gst_mode="Fixed", gst_rate_low=5, gst_rate_high=5,
+			no_show_credit_default="Refund",
+		)
+		self.add(
+			"City Ledger Account", "CLA-KWD-1", property="KWD Hotel",
+			company="Kuwait Oil Corp", account_number="AR-KWD-1",
+			balance=0.0, credit_limit=20.0, credit_days=30,
+			use_default_credit_days=0, disabled=0, restricted=0,
+		)
+
+	def test_advance_held_and_apply_advances_preserve_three_decimal_kwd_zero_stranded(self):
+		# P1-1: 11.944 KWD advance must move full 11.944 from Deposit to Guest (0.000 stranded),
+		# and a 0.004 KWD advance must not be skipped by hardcoded <= 0.005 threshold.
+		self.add("Folio", "FOL-ADV", property="KWD Hotel", folio_type="Guest", status="Open")
+		deposit_balances = {"FP-ADV-1": 11.944, "FP-ADV-2": 0.004}
+
+		def fake_sql(query, params=None, as_dict=False):
+			if "ledger = 'Deposit'" in query:
+				return [(deposit_balances.get(params[1], 0.0),)]
+			return [(0.0,)]
+
+		writes = []
+
+		def fake_write(**kw):
+			writes.append(kw)
+			if kw["ledger"] == "Deposit":
+				row = kw["source_name"]
+				deposit_balances[row] = round(deposit_balances[row] + float(kw["credit"] or 0) - float(kw["debit"] or 0), 6)
+			return f"FLE-{len(writes)}"
+
+		self.frappe.db.sql = fake_sql
+		self.frappe.get_all = lambda dt, **kw: ["FP-ADV-1", "FP-ADV-2"] if dt == "Folio Payment" else []
+
+		with patch.object(self.ledger, "write_ledger_entry", side_effect=fake_write), \
+				patch.object(self.ledger, "ensure_default_transaction_codes", lambda *a, **kw: None):
+			self.assertEqual(self.ledger._advance_held("FOL-ADV", "FP-ADV-1"), 11.944)
+			self.assertEqual(self.ledger._advance_held("FOL-ADV", "FP-ADV-2"), 0.004)
+			moved = self.ledger._apply_advances([Doc(name="FOL-ADV", property="KWD Hotel")])
+
+		self.assertEqual(moved, 11.948)
+		self.assertEqual(deposit_balances["FP-ADV-1"], 0.0)
+		self.assertEqual(deposit_balances["FP-ADV-2"], 0.0)
+		dep_debits = [w["debit"] for w in writes if w["ledger"] == "Deposit"]
+		guest_credits = [w["credit"] for w in writes if w["ledger"] == "Guest"]
+		self.assertEqual(dep_debits, [11.944, 0.004])
+		self.assertEqual(guest_credits, [11.944, 0.004])
+
+	def test_credit_city_ledger_moves_and_warnings_preserve_three_decimal_kwd(self):
+		# P1-2 (credit.py): 23.888 KWD folio returns exact 23.888 (not 23.89);
+		# 0.005 KWD folio is not skipped by hardcoded > 0.009; warnings & overrides keep 3-dp.
+		self.add("Reservation", "RES-KWD-1", property="KWD Hotel", company="Kuwait Oil Corp", status="Checked In")
+		folios = [
+			Doc(name="FOL-KWD-23", property="KWD Hotel", reservation="RES-KWD-1",
+			    folio_type="Company", group_booking=None, balance=23.888),
+			Doc(name="FOL-KWD-SMALL", property="KWD Hotel", reservation="RES-KWD-1",
+			    folio_type="Company", group_booking=None, balance=0.005),
+		]
+		self.frappe.get_all = lambda dt, **kw: folios if dt == "Folio" else []
+		self.frappe.db.get_value = (
+			lambda dt, name, fieldname="name", as_dict=False, **kw:
+			"CLA-KWD-1" if (dt == "City Ledger Account" and isinstance(name, dict))
+			else self.get_value(dt, name, fieldname, as_dict=as_dict, **kw)
+		)
+		with patch.object(self.ledger, "company_payer_of", lambda f: "Kuwait Oil Corp"):
+			moves = self.credit._city_ledger_moves("RES-KWD-1")
+		self.assertEqual(moves, [
+			("FOL-KWD-23", "Kuwait Oil Corp", 23.888),
+			("FOL-KWD-SMALL", "Kuwait Oil Corp", 0.005),
+		])
+
+		# Single 23.888 KWD folio checkout_credit_checks + over-limit / overdue message formatting
+		self.frappe.get_all = lambda dt, **kw: [folios[0]] if dt == "Folio" else []
+		with patch.object(self.ledger, "company_payer_of", lambda f: "Kuwait Oil Corp"), \
+				patch.object(self.ledger, "_account_position", lambda acc: {"open_items": [], "unapplied_credit": 0.0}), \
+				patch.object(self.ledger, "overdue_past_grace", lambda *a, **kw: (5.944, "2026-10-01")), \
+				patch.object(self.ledger, "aging_date", lambda prop: "2026-11-24"), \
+				patch.object(self.credit, "in_house_exposure", lambda *a, **kw: 0.0), \
+				patch.object(self.credit, "_symbol", lambda prop: "KWD "):
+			self.frappe.db.sql = lambda *a, **kw: [(0.0,)]
+			checks = self.credit.checkout_credit_checks("RES-KWD-1")
+			self.assertEqual(len(checks), 1)
+			self.assertEqual(checks[0]["amount"], 23.888)
+			self.assertEqual(checks[0]["exposure"], 23.888)
+			self.assertEqual(checks[0]["over_limit_by"], 3.888)
+			joined = " ".join(checks[0]["reasons"])
+			self.assertIn("3.888", joined)
+			self.assertIn("23.888", joined)
+			self.assertIn("5.944", joined)
+			self.assertNotIn("23.89", joined)
+			self.assertNotIn("5.94 ", joined)
+
+			# Override rationale & after_snapshot keep 23.888 (not 23.89)
+			with patch.object(self.ledger, "locked_account_figures", lambda acc: {
+				"open_items": [], "unapplied_credit": 0.0, "ar_balance": 0.0,
+			}):
+				self.credit.enforce_company_credit(
+					"Kuwait Oil Corp", "KWD Hotel", 23.888,
+					override_reason="Approved by GM", context="check-out",
+				)
+			_args, kw = self.audit_logs[-1]
+			self.assertIn("23.888", kw["rationale"])
+			self.assertEqual(kw["after_snapshot"]["amount"], 23.888)
+
+	def test_night_audit_no_show_preview_and_credits_preserve_three_decimal_kwd(self):
+		# P1-2 (night_audit.py): no_show_preview, no_show_credits, check_arrivals_pending,
+		# check_zero_rate, and folio.no_show_credit preserve 3-dp KWD.
+		self.add(
+			"Reservation", "RES-NS-1", property="KWD Hotel", guest_name="KWD NS Guest",
+			status="Confirmed", check_in_date="2026-11-24", check_out_date="2026-11-26",
+			room="KWD-101", room_type="KWD Hotel-DLX",
+		)
+		self.add("Room", "KWD-101", room_number="101")
+		self.add(
+			"Folio", "FOL-NS-1", property="KWD Hotel", reservation="RES-NS-1",
+			folio_type="Guest", status="Open", balance=-11.944,
+		)
+
+		def ns_get_value(dt, name, fieldname="name", as_dict=False, **kw):
+			if dt == "Folio" and isinstance(name, dict):
+				fdoc = self.docs["Folio", "FOL-NS-1"]
+				if isinstance(fieldname, (list, tuple)):
+					vals = Doc({k: fdoc.get(k) for k in fieldname})
+					return vals if as_dict else tuple(vals.values())
+				return fdoc.get(fieldname)
+			return self.get_value(dt, name, fieldname, as_dict=as_dict, **kw)
+
+		self.frappe.db.get_value = ns_get_value
+		self.frappe.db.sql = lambda query, params=None, as_dict=False: [(11.944,)]
+
+		# 1. no_show_preview with no fee -> paid=11.944, credit_after=11.944
+		self.ns_decision = Doc(fee="none", reason="")
+		prev = self.night_audit.no_show_preview("RES-NS-1")
+		self.assertEqual(prev["paid"], 11.944)
+		self.assertEqual(prev["credit_after"], 11.944)
+
+		# 2. no_show_preview with 11.375 + 5% VAT = 11.944 fee -> fee_amount=11.375, fee_total=11.944
+		self.ns_decision = Doc(fee="charge", reason="")
+		with patch.object(self.folio, "policy_fee", lambda r, basis: 11.375), \
+				patch.object(self.folio, "_room_gst", lambda r: 5.0):
+			prev_fee = self.night_audit.no_show_preview("RES-NS-1")
+		self.assertEqual(prev_fee["fee_amount"], 11.375)
+		self.assertEqual(prev_fee["fee_total"], 11.944)
+		self.assertEqual(prev_fee["credit_after"], 0.0)
+
+		# 3. folio.no_show_credit keeps 11.944 (not 11.94)
+		self.assertEqual(self.folio.no_show_credit("RES-NS-1"), 11.944)
+
+		# 4. no_show_credits keeps 11.944 and uses currency-aware threshold (not -0.01)
+		ns_sql_calls = []
+
+		def ns_credits_sql(query, params=None, as_dict=False):
+			ns_sql_calls.append((query, params))
+			return [Doc(name="RES-NS-1", guest_name="KWD NS Guest", check_in_date="2026-11-24", credit=11.944)]
+
+		self.frappe.db.sql = ns_credits_sql
+		credits = self.night_audit.no_show_credits("KWD Hotel")
+		self.assertEqual(credits[0]["credit"], 11.944)
+		self.assertNotIn("-0.01", ns_sql_calls[0][0])
+
+		# 5. check_arrivals_pending keeps 11.375 fee_amount (not 11.38)
+		self.frappe.get_all = lambda dt, **kw: ["RES-NS-1"] if dt == "Reservation" else []
+		with patch.object(self.folio, "policy_fee", lambda r, basis: 11.375), \
+				patch.object(self.folio, "audit_clock", lambda p: "2026-11-24 23:00:00"), \
+				patch.object(self.folio, "locked_night", lambda r, d: None):
+			arr = self.night_audit.check_arrivals_pending("KWD Hotel", "2026-11-24")
+		self.assertEqual(arr["items"][0]["fee_amount"], 11.375)
+
+		# 6. check_zero_rate does not flag a 0.005 KWD rate as zero-rate (threshold < 0.005)
+		with patch.object(self.night_audit, "_expected_night", lambda r, bd: (0.005, "locked nightly rate")):
+			zr = self.night_audit.check_zero_rate("KWD Hotel", "2026-11-24")
+		self.assertEqual(zr["items"], [])
+
+	def test_folio_invoice_statement_allocations_credited_accounting_and_words_preserve_kwd_3dp(self):
+		# P1-2 (api.py & localization/words.py): 23.888 / 11.944 / 5.944 / 3.456 KWD stay exact 3-dp.
+		words_spec = importlib.util.spec_from_file_location(
+			"kamra_words_under_test", ROOT / "kamra/localization/words.py",
+		)
+		words_mod = importlib.util.module_from_spec(words_spec)
+		words_spec.loader.exec_module(words_mod)
+		spell = words_mod.amount_in_words
+
+		self.assertEqual(spell(23.888, "KWD", indian=False), "KWD Twenty Three point 888 Only")
+		self.assertEqual(spell(23.005, "KWD", indian=False), "KWD Twenty Three point 005 Only")
+		self.assertEqual(spell(23.000, "KWD", indian=False), "KWD Twenty Three Only")
+
+		c1 = Doc(name="FC-K1", posting_date="2026-11-24", charge_type="Room", description="Night 1",
+		         qty=1, rate=11.375, amount=11.375, gst_rate=5.0)
+		c2 = Doc(c1, name="FC-K2", description="Night 2")
+		p1 = Doc(name="FP-K1", posting_date="2026-11-24", payment_kind="Payment", mode="Cash",
+		         amount=11.944, currency="KWD", reference="CASH-1")
+		folio = self.add(
+			"Folio", "FOL-KWD-STMT", property="KWD Hotel", folio_type="Guest",
+			status="Open", guest_name="KWD Statement Guest", charges=[c1, c2], payments=[p1],
+		)
+		folio.as_dict = lambda: {k: v for k, v in folio.items() if not callable(v)}
+		self.folio._recalculate(folio)
+
+		self.records["Folio Ledger Entry"] = [
+			Doc(folio="FOL-KWD-STMT", source_doctype="City Ledger Entry", source_name="CLE-P1", credit=5.944, debit=0.0),
+			Doc(folio="FOL-KWD-STMT", source_doctype="City Ledger Entry", source_name="CLE-P2", credit=0.004, debit=0.0),
+		]
+		self.records["City Ledger Entry"] = [
+			Doc(name="CLE-P1", account="CLA-KWD-1", kind="Payment", posting_date="2026-11-24", reference="KWD-PART-1"),
+			Doc(name="CLE-P2", account="CLA-KWD-1", kind="Payment", posting_date="2026-11-24", reference="KWD-TINY-1"),
+		]
+		loc = sys.modules["kamra.localization"]
+		loc.amount_in_words = lambda pack, prop_doc, amt: spell(amt, prop_doc.currency, indian=False)
+
+		with patch.object(self.ledger, "credited_total", lambda f: Decimal("3.456")):
+			inv = self.api.folio_invoice("FOL-KWD-STMT")
+
+		stmt = inv["statement"]
+		self.assertEqual(stmt[0]["charges"], 11.944)
+		self.assertEqual(stmt[0]["tax"], 0.569)
+		self.assertEqual(stmt[0]["balance"], 11.944)
+		self.assertEqual(stmt[1]["charges"], 11.944)
+		self.assertEqual(stmt[1]["tax"], 0.569)
+		self.assertEqual(stmt[1]["balance"], 23.888)
+		self.assertEqual(stmt[2]["credits"], 11.944)
+		self.assertEqual(stmt[2]["balance"], 11.944)
+
+		alloc_by_pay = {a["payment"]: a["amount"] for a in inv["allocations"]}
+		self.assertEqual(alloc_by_pay, {"CLE-P1": 5.944, "CLE-P2": 0.004})
+		self.assertEqual(inv["credited"], 3.456)
+		self.assertEqual(inv["document"]["amount_in_words"], "KWD Twenty Three point 888 Only")
+
+		# _apply_accounting_invoice_taxes & _erp_credited_total preserve 3-dp on a KWD Sales Invoice
+		si = Doc(
+			doctype="Sales Invoice", name="ACC-SINV-KWD-1", docstatus=1, currency="KWD",
+			company="Kuwait Bay", net_total=22.750, total_taxes_and_charges=1.138, grand_total=23.888,
+			items=[Doc(name="SII-1", item_code="ROOM", source_ref="FC-K1", net_amount=22.750, amount=22.750)],
+			taxes=[Doc(name="SIT-1", charge_type="On Net Total", description="VAT 5%", rate=5.0,
+			           tax_amount=1.138, tax_amount_after_discount_amount=1.138, included_in_print_rate=0)],
+			item_wise_tax_details=[Doc(item_row="SII-1", tax_row="SIT-1", rate=5.0, amount=1.138, taxable_amount=22.750)],
+		)
+		ret_si = Doc(
+			doctype="Sales Invoice", name="ACC-CN-KWD-1", docstatus=1, is_return=1,
+			return_against="ACC-SINV-KWD-1", company="Kuwait Bay", currency="KWD", grand_total=-5.944,
+		)
+		self.docs["Sales Invoice", "ACC-CN-KWD-1"] = ret_si
+		self.records["Sales Invoice"] = [ret_si]
+		self.frappe.has_permission = lambda *a, **kw: True
+		f_dict = folio.as_dict()
+		lines = [{"row": "FC-K1", "charge_type": "Room", "qty": 1, "rate": 22.750, "amount": 22.750,
+		          "gst_rate": 0.0, "gst_amount": 0.0, "total": 22.750, "service_code": None}]
+		with patch.object(self.api, "_resolve_accounting_invoice", lambda *a, **kw: (si, None, "submitted")):
+			acct = self.api._apply_accounting_invoice_taxes(
+				folio, self.docs["Property", "KWD Hotel"], "KWD", f_dict, lines, set(), [("VAT", Decimal(1))], "VAT",
+			)
+		self.assertEqual(f_dict["tax_total"], 1.138)
+		self.assertEqual(f_dict["grand_total"], 23.888)
+		self.assertEqual(acct["tax_summary"][0]["total_tax"], 1.138)
+		self.assertEqual(acct["by_head"]["Room"]["tax"], 1.138)
+		self.assertEqual(acct["by_head"]["Room"]["total"], 23.888)
+		self.assertEqual(acct["erp_credited"], 5.944)
+
