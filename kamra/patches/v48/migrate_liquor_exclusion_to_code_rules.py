@@ -32,7 +32,13 @@ from __future__ import annotations
 import frappe
 from frappe.utils import cint
 
-from kamra.folio import _ROOM_CHARGES, open_company_folio, open_group_folio
+from kamra.folio import (
+	COMPANY_BILLING_DEFAULTS,
+	DEFAULT_COMPANY_BILLING,
+	_ROOM_CHARGES,
+	open_company_folio,
+	open_group_folio,
+)
 from kamra.ledger import ensure_default_transaction_codes
 from kamra.routing import _overlap, copy_group_instructions
 
@@ -135,23 +141,37 @@ def _covered_for_presets(presets: list[str]) -> frozenset[str] | None:
 	return frozenset(union)
 
 
+def _preset_covers(superset: frozenset[str] | None, subset: frozenset[str] | None) -> bool:
+	if superset is None:
+		return True
+	if subset is None:
+		return False
+	return subset.issubset(superset)
+
+
 def _migrate_ruleless_credit_companies() -> None:
+	all_props = frappe.get_all(
+		"Property",
+		fields=["name", "default_company_billing"],
+	)
 	liquor_props = {
 		p.name: p.default_company_billing
-		for p in frappe.get_all(
-			"Property",
-			filters={"default_company_billing": ("in", list(LIQUOR_EXCLUDING_PRESETS))},
-			fields=["name", "default_company_billing"],
-		)
+		for p in all_props
+		if p.default_company_billing in LIQUOR_EXCLUDING_PRESETS
 	}
 	if not liquor_props:
 		return
 
-	all_props = set(
-		frappe.get_all("Property", filters={"disabled": 0}, pluck="name")
-		or frappe.get_all("Property", pluck="name")
-	)
-	all_props_liquor_excl = bool(all_props) and all_props.issubset(set(liquor_props))
+	other_prop_coverages = [
+		COMPANY_BILLING_DEFAULTS.get(
+			p.default_company_billing or DEFAULT_COMPANY_BILLING,
+			COMPANY_BILLING_DEFAULTS[DEFAULT_COMPANY_BILLING],
+		)
+		for p in all_props
+		if p.name not in liquor_props
+	]
+	orphan_covered = _covered_for_presets(list(liquor_props.values()))
+	orphan_safe = all(_preset_covers(cov, orphan_covered) for cov in other_prop_coverages)
 
 	credit_companies = frappe.get_all(
 		"Corporate Account",
@@ -167,9 +187,9 @@ def _migrate_ruleless_credit_companies() -> None:
 			frappe.get_all("Group Booking", filters={"company": name}, pluck="property")
 		)
 		if not linked_props:
-			if not all_props_liquor_excl:
-				# Multi-property site with mixed presets (e.g. "Room only" alongside
-				# liquor-excluding): do not attach global F&B rules to an orphan company.
+			if not orphan_safe:
+				# Multi-property site with a stricter preset (e.g. "Room only" or
+				# "Nothing"): do not attach global F&B rules to an orphan company.
 				continue
 			matched_presets = list(liquor_props.values())
 		elif linked_props.issubset(liquor_props):
