@@ -387,7 +387,7 @@ def _normalize_opening(property: str, csv_text: str):
 		[r.get(mapping.get(f, ""), "") for r in raw
 		 for f in ("check_in", "invoice_date")])
 	from kamra.localization import pack_for, payment_modes
-	modes = payment_modes(pack_for(property))
+	modes = payment_modes(pack_for(property), property)
 	rooms = {_norm(r.room_number): r.name for r in frappe.get_all(
 		"Room", filters={"property": property},
 		fields=["name", "room_number"])}

@@ -57,3 +57,17 @@ Bills still open,Mga bill na bukas pa
 Use Check out to check a guest out: it makes sure every bill is cleared first.,Gamitin ang Check out para i-check-out ang guest: tinitiyak nito na clear muna ang bawat bill.
 Check out,I-check-out
 Discounts and allowances,Mga discount at allowance
+OTA Tax Rules row {0}: the text needs a letter or a digit.,Hilera {0} ng Mga panuntunan sa buwis ng OTA: kailangan ng teksto ang isang titik o numero.
+OTA Tax Basis rows {0} and {1} are the same OTA ({2}): keep one.,Ang mga hilera {0} at {1} ng Batayan ng buwis ng OTA ay iisang OTA ({2}): panatilihin ang isa.
+OTA Tax Rules,Mga panuntunan sa buwis ng OTA
+OTA Tax Basis,Batayan ng buwis ng OTA
+OTA Tax Basis row {0}: the OTA name needs a letter or a digit.,Hilera {0} ng OTA Tax Basis: kailangan ng titik o numero ang pangalan ng OTA.
+Channel review status can only be cleared via the review action.,Maaari lamang i-clear ang katayuan ng pagsusuri ng channel sa pamamagitan ng aksyon sa pagsusuri.
+Update In-House Reservations,I-update ang mga naka-check-in na reserbasyon
+"Update In-House Reservations = Y is not yet enabled: OXI Y requires arrival-date, room-type, billed-night, and assigned-room safety bounds. Keep N so OTA changes to checked-in stays are rejected and flagged for review.","Hindi pa pinapagana ang I-update ang mga naka-check-in na reserbasyon = Y: ang OXI Y ay nangangailangan ng proteksyon sa petsa ng pagdating, uri ng kuwarto, nasingil na gabi, at nakatalagang kuwarto. Panatilihin ang N upang tanggihan at markahan para sa pagsusuri ang mga pagbabago ng OTA sa mga naka-check-in na pananatili."
+OTA Tax Rules row {0}: a CJK rule needs at least two characters so it does not match unrelated taxes.,Hilera {0} ng Mga Panuntunan sa Buwis ng OTA: kailangan ng panuntunang CJK ng hindi bababa sa dalawang karakter upang hindi ito tumugma sa mga hindi kaugnay na buwis.
+Tax as per the accounting invoice,Buwis ayon sa accounting invoice
+Tax Invoice,Resibo ng Buwis
+Invoice,Faktura
+Provisional Bill,Pansamantalang bill
+Credited,Na-credit

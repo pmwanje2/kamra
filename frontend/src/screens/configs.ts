@@ -9,7 +9,8 @@ import { voicePartner } from "../lib/brand"
 const CompanyExtras = lazy(() => import("../components/CompanyExtras"))
 const EventLinks = lazy(() => import("../components/EventLinks"))
 const GroupControl = lazy(() => import("../components/GroupControl"))
-const RoomTypeExtras = lazy(() => import("../components/RoomTypeTariffs"))
+const RoomTypeTariffs = lazy(() => import("../components/RoomTypeTariffs"))
+const RoomTypeMedia = lazy(() => import("../components/RoomTypeMedia"))
 const OutletWaiters = lazy(() => import("../components/OutletWaiters"))
 const ChannelConnectionActions = lazy(() => import("../components/ChannelConnectionActions"))
 const HkTaskMediaPanel = lazy(() =>
@@ -17,6 +18,13 @@ const HkTaskMediaPanel = lazy(() =>
 )
 const ReservationDetail = lazy(() => import("./ReservationDetail"))
 import { cur, locale, sellsAlcohol, taxLabel } from "../lib/money"
+import {
+  formatSellingRateText,
+  renderRoomCount,
+  renderSellingRate,
+  type RoomTypesSummary,
+} from "../components/RoomTypeListCells"
+export type { RoomTypesSummary }
 
 export const floorsConfig: ScreenConfig = {
   doctype: "Floor",
@@ -65,43 +73,71 @@ export const roomsConfig: ScreenConfig = {
   ],
 }
 
-export function roomTypesConfig(currency: string, taxBasis?: TaxBasis | null): ScreenConfig {
+export function roomTypesConfig(
+  currency: string,
+  taxBasis?: TaxBasis | null,
+  summary?: RoomTypesSummary | null,
+): ScreenConfig {
   const cardLabel = currency ? t("Card rate / night ({currency})", { currency }) : t("Card rate / night")
+  const byRt = new Map((summary?.room_types ?? []).map((entry) => [entry.room_type, entry]))
+  const showCard = summary == null || summary.has_card_rate_plans
+  const home = summary?.property_currency || currency
+  const planLabel = summary?.default_plan?.label || summary?.default_plan?.name || ""
   return {
   doctype: "Room Type",
   title: "Room Types",
-  description: "Room types with occupancy-based pricing.",
+  description: "What each unit is and how many it sleeps. Rate plans and contract tariffs set the selling price.",
   propertyScoped: true,
   orderBy: "base_price asc",
+  tableMinWidth: showCard ? "min-w-[980px]" : "min-w-[820px]",
   columns: [
-    { field: "room_type_name", label: "Name" },
-    { field: "room_type_code", label: "Code", badge: true },
-    { field: "room_category", label: "Unit kind" },
-    { field: "base_price", label: cardLabel },
-    { field: "base_occupancy", label: "Base occ." },
-    { field: "extra_adult_price", label: `Extra adult ${cur()}` },
-    ...(taxBasis ? [] : [{ field: "tax_percent", label: "Tax %" }]),
+    { field: "room_type_name", label: "Name", width: summary ? "w-[18%]" : undefined },
+    { field: "room_type_code", label: "Code", badge: true, width: summary ? "w-[9%]" : undefined },
+    { field: "room_category", label: "Unit kind", width: summary ? "w-[10%]" : undefined },
+    ...(summary ? [
+      {
+        field: "room_count",
+        label: "Rooms",
+        virtual: true,
+        width: "w-[11%]",
+        wrap: true,
+        render: (row: Record<string, unknown>) => renderRoomCount(byRt.get(String(row.name))),
+        csvValue: (row: Record<string, unknown>) => byRt.get(String(row.name))?.room_count ?? null,
+      },
+      {
+        field: "selling_rate",
+        label: "Selling rate / night",
+        virtual: true,
+        width: showCard ? "w-[22%]" : "w-[28%]",
+        wrap: true,
+        render: (row: Record<string, unknown>) => renderSellingRate(byRt.get(String(row.name)), home, planLabel),
+        csvValue: (row: Record<string, unknown>) => formatSellingRateText(byRt.get(String(row.name)), home) || t("No rate set"),
+      },
+    ] : []),
+    ...(showCard ? [{ field: "base_price", label: cardLabel }] : []),
+    { field: "base_occupancy", label: "Base occ.", width: summary ? "w-[9%]" : undefined },
+    ...(showCard ? [{ field: "extra_adult_price", label: `Extra adult ${cur()}` }] : []),
+    ...(taxBasis ? [] : [{ field: "tax_percent", label: "Tax %", width: summary ? "w-[8%]" : undefined }]),
   ],
   form: [
     { field: "room_type_name", label: "Name", type: "data", required: true },
     { field: "room_type_code", label: "Code (e.g. DLX)", type: "data", required: true },
     { field: "listing_slug", label: "Public listing URL slug (/stay/…)", type: "data" },
     { field: "room_category", label: "Unit kind", type: "select", options: ["Villa", "Private", "Shared"] },
-    { field: "base_price", label: cardLabel, type: "currency", required: true,
-      hint: "Used only by rate plans without a contract tariff" },
+    { field: "base_price", label: cardLabel, type: "currency", required: true, section: "card" },
     { field: "base_occupancy", label: "Adults included in base price", type: "int" },
-    { field: "single_occupancy_price", label: "Single occupancy price", type: "currency", dependsOn: (d) => d.room_category !== "Villa" },
-    { field: "extra_adult_price", label: "Extra adult / night", type: "currency" },
-    { field: "child_price", label: "Extra child / night", type: "currency", hint: "Additional charge per child per night (0 = free)" },
+    { field: "single_occupancy_price", label: "Single occupancy price", type: "currency", section: "card", dependsOn: (d) => d.room_category !== "Villa" },
+    { field: "extra_adult_price", label: "Extra adult / night", type: "currency", section: "card" },
+    { field: "child_price", label: "Extra child / night", type: "currency", section: "card", hint: "Additional charge per child per night (0 = free)" },
     ...(taxBasis ? [] : [{ field: "tax_percent", label: "Tax %", type: "float" as const }]),
-    { field: "children_within_base_occupancy", label: "Children count towards base occupancy", type: "check", hint: "Only guests beyond the base occupancy are charged, children included" },
+    { field: "children_within_base_occupancy", label: "Children count towards base occupancy", type: "check", section: "card", hint: "Only guests beyond the base occupancy are charged, children included" },
     { field: "adults_capacity", label: "Max adults", type: "int" },
     { field: "children_capacity", label: "Max children", type: "int" },
     { field: "max_extra_beds", label: "Guests allowed above capacity", type: "int", hint: "Only for a single unit with no second room to split into. 0 = never over capacity; the price is agreed on each booking" },
-    { field: "small_group_max_adults", label: "Small-group threshold (adults)", type: "int", hint: "Below this many adults, price per person instead of the house rate. Blank or 0 = off" },
-    { field: "small_group_price_per_adult", label: "Small-group price / adult", type: "currency", dependsOn: (d) => Number(d.small_group_max_adults) > 0 },
-    { field: "small_group_days", label: "Small-group days (e.g. sun, mon, tue, wed, thu)", type: "data", hint: "Blank = every day", dependsOn: (d) => Number(d.small_group_max_adults) > 0 },
-    { field: "small_group_whole_stay", label: "Small-group rate needs the whole stay", type: "check", hint: "A stay touching a non-small-group day is charged at the house rate throughout", dependsOn: (d) => Number(d.small_group_max_adults) > 0 },
+    { field: "small_group_max_adults", label: "Small-group threshold (adults)", type: "int", section: "card", hint: "Below this many adults, price per person instead of the house rate. Blank or 0 = off" },
+    { field: "small_group_price_per_adult", label: "Small-group price / adult", type: "currency", section: "card", dependsOn: (d) => Number(d.small_group_max_adults) > 0 },
+    { field: "small_group_days", label: "Small-group days (e.g. sun, mon, tue, wed, thu)", type: "data", section: "card", hint: "Blank = every day", dependsOn: (d) => Number(d.small_group_max_adults) > 0 },
+    { field: "small_group_whole_stay", label: "Small-group rate needs the whole stay", type: "check", section: "card", hint: "A stay touching a non-small-group day is charged at the house rate throughout", dependsOn: (d) => Number(d.small_group_max_adults) > 0 },
     { field: "bed_type", label: "Bed type", type: "select", options: ["King", "Queen", "Twin", "Double", "Single"], dependsOn: (d) => d.room_category !== "Villa" },
     { field: "air_conditioning", label: "Air Conditioning", type: "select", options: ["AC", "Non AC"], dependsOn: (d) => d.room_category !== "Villa" },
     // { field: "bathroom", label: "Bathroom Type", type: "select", options: ["Attached", "Common"], dependsOn: (d) => d.room_category !== "Villa" },
@@ -117,7 +153,10 @@ export function roomTypesConfig(currency: string, taxBasis?: TaxBasis | null): S
   formNote: taxBasis?.inclusive
     ? t("Tax is applied by the invoice ({tax} included).", { tax: taxBasis.label })
     : taxBasis ? t("Tax is applied by the invoice ({tax}).", { tax: taxBasis.label }) : undefined,
-  extra: RoomTypeExtras,
+  sections: [{ key: "card", label: "Card rate (BAR) and extra-person prices",
+    hint: "Prices stays booked without a rate plan, and rate plans with no contract tariff for this room type." }],
+  lead: RoomTypeTariffs,
+  extra: RoomTypeMedia,
   }
 }
 
@@ -136,6 +175,9 @@ export const ratePlansConfig: ScreenConfig = {
     { field: "modifier_type", label: "Modifier" },
     { field: "modifier_value", label: "Value" },
     { field: "rate_category", label: "Rate category" },
+    { field: "currency", label: "Currency" },
+    { field: "fx_lock_policy", label: "Exchange rate lock", badge: true },
+    { field: "base_rate_plan", label: "Derived from" },
     { field: "is_default", label: "Default" },
     { field: "disabled", label: "Status", statusCheck: true },
   ],
@@ -144,6 +186,17 @@ export const ratePlansConfig: ScreenConfig = {
     { field: "code", label: "Code", type: "data", required: true },
     { field: "modifier_type", label: "Modifier type", type: "select", options: ["Percent", "Amount", "Absolute"] },
     { field: "modifier_value", label: "Modifier value (-10 = 10% off)", type: "float" },
+    { field: "currency", label: "Currency (blank = property currency)", type: "link", linkDoctype: "Currency", linkFilters: [["enabled", "=", 1]], linkLimit: 500 },
+    { field: "fx_lock_policy", label: "Exchange rate lock", type: "select",
+      options: ["Fixed at Reservation", "Fixed at Check In", "Current Date"],
+      hint: "When a foreign-currency contract converts to the property's currency: at booking, at check-in, or on each night's posting date." },
+    { field: "base_rate_plan", label: "Base rate plan (derived rate)", type: "link", linkDoctype: "Rate Plan", linkPropertyScoped: true, linkLimit: 500,
+      hint: "Blank: priced from the room type's card or this plan's own tariff. Set: this plan's modifier applies to the base plan's price." },
+    { field: "adjust_extra_person", label: "Adjust extra person charges", type: "check",
+      hint: "Derived plans only. Off: extra adults and children keep the base plan's charge." },
+    { field: "rounding_step", label: "Rounding step", type: "float",
+      hint: "Round the local price to this multiple (for example 1000 for a currency with no cents). 0 = the currency's smallest unit." },
+    { field: "rounding_mode", label: "Rounding mode", type: "select", options: ["Nearest", "Up", "Down"] },
     { field: "billing_basis", label: "Day-use billing", type: "select", options: ["Nightly", "Hourly", "Block"], hint: "Hourly and Block price same-day stays from the planned times; Nightly keeps one full room night." },
     { field: "hourly_rate", label: "Hourly rate", type: "currency" },
     { field: "min_hours", label: "Minimum hours", type: "float" },
@@ -157,6 +210,37 @@ export const ratePlansConfig: ScreenConfig = {
     { field: "rate_category", label: "Rate category", type: "select", optionsFrom: "rate_categories", hint: "Settings → Revenue says which categories a manager signs off, and which are left out of ADR, RevPAR or occupancy." },
     { field: "disabled", label: "Disabled (unpublished)", type: "check", hint: "Tick to unpublish; clear to activate at booking" },
   ],
+}
+
+export function ratePlansScreenConfig(ctx: {
+  propertyCurrency?: string
+  tariffCurrencyFor: (draft: Record<string, unknown>) => string
+  baseCurrencyFor: (baseName: string) => string
+}): ScreenConfig {
+  return {
+    ...ratePlansConfig,
+    form: ratePlansConfig.form.map((f) => {
+      if (f.field !== "currency") return f
+      return {
+        ...f,
+        disabledWhen: (d) => Boolean(d.base_rate_plan),
+        displayValue: (d) =>
+          d.base_rate_plan ? ctx.baseCurrencyFor(String(d.base_rate_plan)) : d.currency,
+        ensureOptions: (d) => {
+          const out: string[] = []
+          if (ctx.propertyCurrency) out.push(ctx.propertyCurrency)
+          const tariffCur = ctx.tariffCurrencyFor(d)
+          if (tariffCur) out.push(tariffCur)
+          if (d.base_rate_plan) {
+            const baseCur = ctx.baseCurrencyFor(String(d.base_rate_plan))
+            if (baseCur) out.push(baseCur)
+          }
+          return out
+        },
+        hintWhen: (d) => (d.base_rate_plan ? "Inherited from the base rate plan." : undefined),
+      }
+    }),
+  }
 }
 
 export const seasonsConfig: ScreenConfig = {
@@ -308,7 +392,8 @@ export const mealPlansConfig: ScreenConfig = {
     { field: "is_default", label: "Default" },
   ],
   form: [
-    { field: "code", label: "Code", type: "select", options: ["EP", "CP", "MAP", "AP"], required: true },
+    { field: "code", label: "Code", type: "link", linkDoctype: "Meal Plan Code", required: true,
+      hint: "The board basis it is sold as: EP, CP, MAP, AP or your own (Meal Plan Codes)." },
     { field: "label", label: "Label", type: "data" },
     { field: "price_per_adult", label: "Price per adult / night", type: "currency" },
     { field: "price_per_child", label: "Price per child / night", type: "currency" },
@@ -919,7 +1004,34 @@ export const channelManagerConfig: ScreenConfig = {
     { field: "sync_days", label: "Days to push", type: "int" },
     { field: "ari_calls_per_minute", label: "ARI calls per minute", type: "int", hint: "Per endpoint (availability and restrictions count apart). Channex allows 10." },
     { field: "ari_batch_seconds", label: "Rate batch window (seconds)", type: "int", hint: "Rate changes made within this window go out together in one call." },
+    {
+      field: "update_inhouse_res",
+      label: "Update in-house reservations",
+      type: "select",
+      options: ["N", "Y"],
+      hint: "OXI UPDATE INHOUSE RES: N rejects OTA changes to checked-in stays and flags them for review. Y requires arrival-date, room-type, billed-night, and assigned-room bounds and is not yet enabled.",
+    },
     { field: "active", label: "Active", type: "check" },
+    {
+      field: "ota_tax_rules", label: "OTA Tax Rules", type: "table", orderable: true,
+      dependsOn: (d) => d.provider === "Channex",
+      hint: "Which of the taxes an OTA lists on a booking is the room tax, tried top to bottom: the first rule that matches decides. Put specific or Ignored rules (such as city or tourism taxes) above broader Room tax rules. A tax on top of the price that no rule reads holds the booking for review. A new Channex connection, or one switched to Channex, starts with the standard rules.",
+      columns: [
+        { field: "match_on", label: "Match on", type: "select", options: ["Type or Name", "Type", "Name"], default: "Type or Name" },
+        { field: "match_type", label: "Match", type: "select", options: ["Contains", "Is"], default: "Contains" },
+        { field: "match_text", label: "Text", type: "data" },
+        { field: "counts_as", label: "Counts as", type: "select", options: ["Room tax", "Ignored"] },
+      ],
+    },
+    {
+      field: "ota_tax_basis", label: "OTA Tax Basis", type: "table",
+      dependsOn: (d) => d.provider === "Channex",
+      hint: "Whether each OTA's booking amounts include tax, as set for it on the channel manager: a booking does not say. Excluding tax: a booking from that OTA that lists no room tax is held for review.",
+      columns: [
+        { field: "channel", label: "OTA", type: "data" },
+        { field: "amounts", label: "Booking amounts", type: "select", options: ["Including tax", "Excluding tax"], default: "Including tax" },
+      ],
+    },
   ],
   extra: ChannelConnectionActions,
 }
@@ -1030,5 +1142,197 @@ export const transactionCodesConfig: ScreenConfig = {
       hint: "Maps to Folio Charge.charge_type for display on older lines." },
     { field: "disabled", label: "Disabled", type: "check",
       hint: "Turn off instead of deleting when the journal already posted it." },
+  ],
+}
+
+const isSystemCode = (draft: Record<string, unknown>) => Boolean(Number(draft.system))
+const canDeleteMaster = (row: Record<string, unknown>) => !Number(row.system)
+
+function simpleMasterConfig(opts: {
+  doctype: string
+  title: string
+  description: string
+  codeHint: string
+}): ScreenConfig {
+  return {
+    doctype: opts.doctype,
+    title: opts.title,
+    description: opts.description,
+    searchFields: ["code", "description"],
+    filters: [{ field: "disabled", label: "Disabled", options: ["0", "1"] }],
+    pageSize: 50,
+    orderBy: "sort_order asc, code asc",
+    canDelete: canDeleteMaster,
+    columns: [
+      { field: "code", label: "Code" },
+      { field: "description", label: "Description" },
+      { field: "sort_order", label: "Sort order" },
+      { field: "system", label: "Type", booleanBadge: { truthy: "System", falsy: "Custom" } },
+      { field: "disabled", label: "Status", statusCheck: true },
+    ],
+    form: [
+      { field: "code", label: "Code", type: "data", required: true, readOnlyOnEdit: true, hint: opts.codeHint },
+      { field: "description", label: "Description", type: "data", required: true },
+      { field: "sort_order", label: "Sort order", type: "int", default: 0,
+        hint: "Lower numbers appear first in pickers." },
+      { field: "disabled", label: "Disabled", type: "check", disabledWhen: isSystemCode,
+        hint: "Switch off instead of deleting once used on bookings. System codes stay active." },
+    ],
+  }
+}
+
+export const marketCodesConfig: ScreenConfig = simpleMasterConfig({
+  doctype: "Market Code",
+  title: "Market Codes",
+  description: "Market segments used on reservations, rate reporting and revenue analysis.",
+  codeHint: "Short code stored on reservations (e.g. Corporate, Safari Operator).",
+})
+
+export const originCodesConfig: ScreenConfig = simpleMasterConfig({
+  doctype: "Origin Code",
+  title: "Origin Codes",
+  description: "Booking sources recorded on reservations (e.g. Direct, Walk-in, OTA, Travel Agent).",
+  codeHint: "Booking origin code stored on reservations.",
+})
+
+export const bookingTypesConfig: ScreenConfig = simpleMasterConfig({
+  doctype: "Booking Type",
+  title: "Booking Types",
+  description: "Stay categories such as Overnight or Day Use.",
+  codeHint: "Booking type code stored on reservations.",
+})
+
+export const bookerRelationsConfig: ScreenConfig = simpleMasterConfig({
+  doctype: "Booker Relation",
+  title: "Booker Relations",
+  description: "Relationship of the person making a booking on a guest's behalf.",
+  codeHint: "Booker relation code (e.g. Assistant, Company Travel Desk).",
+})
+
+export const cancellationReasonsConfig: ScreenConfig = simpleMasterConfig({
+  doctype: "Cancellation Reason",
+  title: "Cancellation Reasons",
+  description: "Reasons recorded when a reservation is cancelled.",
+  codeHint: "Cancellation reason code stored on cancelled reservations.",
+})
+
+export const paymentMethodsConfig: ScreenConfig = {
+  doctype: "Payment Method",
+  title: "Payment Methods",
+  description: "Payment methods offered at the desk and on folios. Custom methods belong to this property only.",
+  propertyOrShared: true,
+  searchFields: ["code", "description", "mode_of_payment"],
+  filters: [
+    {
+      field: "tender_type",
+      label: "Tender type",
+      options: [
+        "Cash", "Foreign Cash", "Card", "Instant", "Bank Transfer",
+        "OTA Prepaid", "Company Credit", "Payment Link", "Cheque", "Other",
+      ],
+    },
+    { field: "disabled", label: "Disabled", options: ["0", "1"] },
+  ],
+  pageSize: 50,
+  orderBy: "sort_order asc, code asc",
+  canDelete: canDeleteMaster,
+  columns: [
+    { field: "code", label: "Code" },
+    { field: "description", label: "Description" },
+    { field: "tender_type", label: "Tender type", badge: true },
+    { field: "mode_of_payment", label: "Accounting Mode of Payment" },
+    { field: "system", label: "Type", booleanBadge: { truthy: "System", falsy: "Custom" } },
+    { field: "disabled", label: "Status", statusCheck: true },
+  ],
+  form: [
+    { field: "code", label: "Code", type: "data", required: true, readOnlyOnEdit: true,
+      hint: "Name shown in payment pickers (e.g. MTN MoMo, Airtel Money)." },
+    { field: "description", label: "Description", type: "data" },
+    {
+      field: "tender_type",
+      label: "Tender type",
+      type: "select",
+      required: true,
+      default: "Other",
+      disabledWhen: isSystemCode,
+      options: [
+        "Cash", "Foreign Cash", "Card", "Instant", "Bank Transfer",
+        "OTA Prepaid", "Company Credit", "Payment Link", "Cheque", "Other",
+      ],
+      hint: "Controls till bucket and foreign-currency eligibility.",
+    },
+    { field: "mode_of_payment", label: "Accounting Mode of Payment", type: "data",
+      hint: "Matching Mode of Payment in Accounting when connected to an ERP bridge." },
+    { field: "sort_order", label: "Sort order", type: "int", default: 0,
+      hint: "Lower numbers appear first in pickers." },
+    { field: "disabled", label: "Disabled", type: "check", disabledWhen: isSystemCode,
+      hint: "Switch off instead of deleting once used on folios. System codes stay active." },
+  ],
+}
+
+export const mealPlanCodesConfig: ScreenConfig = simpleMasterConfig({
+  doctype: "Meal Plan Code",
+  title: "Meal Plan Codes",
+  description: "Standard board codes linked from property meal plans (e.g. EP, CP, MAP, AP).",
+  codeHint: "Short board code (e.g. EP, BB, HB, FB).",
+})
+
+export const payerTypesConfig: ScreenConfig = simpleMasterConfig({
+  doctype: "Payer Type",
+  title: "Payer Types",
+  description: "Billing responsibility choices confirmed at check-in (e.g. Guest, Company, Split).",
+  codeHint: "Payer type code offered at check-in.",
+})
+
+export const checkInRequestsConfig: ScreenConfig = {
+  doctype: "Check-in Request",
+  title: "Check-in Requests",
+  description: "Quick guest request presets offered at check-in; picking one raises a service ticket.",
+  searchFields: ["code", "description", "team"],
+  filters: [
+    {
+      field: "team",
+      label: "Team",
+      options: ["Housekeeping", "Room Service", "Maintenance", "Front Desk", "Concierge", "Complaint", "Other"],
+    },
+    { field: "disabled", label: "Disabled", options: ["0", "1"] },
+  ],
+  pageSize: 50,
+  orderBy: "sort_order asc, code asc",
+  canDelete: canDeleteMaster,
+  columns: [
+    { field: "code", label: "Code" },
+    { field: "description", label: "Description" },
+    { field: "team", label: "Team", badge: true },
+    { field: "priority", label: "Priority", badge: true },
+    { field: "system", label: "Type", booleanBadge: { truthy: "System", falsy: "Custom" } },
+    { field: "disabled", label: "Status", statusCheck: true },
+  ],
+  form: [
+    { field: "code", label: "Code", type: "data", required: true, readOnlyOnEdit: true,
+      hint: "Short machine key (e.g. extra_bed, airport_pickup)." },
+    { field: "description", label: "Description", type: "data", required: true },
+    {
+      field: "team",
+      label: "Team",
+      type: "select",
+      required: true,
+      default: "Front Desk",
+      options: ["Housekeeping", "Room Service", "Maintenance", "Front Desk", "Concierge", "Complaint", "Other"],
+    },
+    {
+      field: "priority",
+      label: "Priority",
+      type: "select",
+      required: true,
+      default: "Medium",
+      options: ["Low", "Medium", "High", "Urgent"],
+    },
+    { field: "charge_type", label: "Charge type", type: "data",
+      hint: "Optional folio charge type when the request carries a fee." },
+    { field: "sort_order", label: "Sort order", type: "int", default: 0,
+      hint: "Lower numbers appear first in pickers." },
+    { field: "disabled", label: "Disabled", type: "check", disabledWhen: isSystemCode,
+      hint: "Switch off instead of deleting. System presets stay active." },
   ],
 }

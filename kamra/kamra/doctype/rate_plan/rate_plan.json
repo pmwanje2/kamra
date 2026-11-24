@@ -20,6 +20,14 @@
   "rate_category",
   "rate_category_set_by",
   "disabled",
+  "sb_currency",
+  "currency",
+  "fx_lock_policy",
+  "column_break_fx",
+  "base_rate_plan",
+  "adjust_extra_person",
+  "rounding_step",
+  "rounding_mode",
   "sb_day_use",
   "billing_basis",
   "hourly_rate",
@@ -105,6 +113,62 @@
    "label": "Disabled"
   },
   {
+   "fieldname": "sb_currency",
+   "fieldtype": "Section Break",
+   "label": "Currency and derived rates",
+   "description": "The plan's currency and when a foreign contract's exchange rate is fixed; a derived plan prices from its base plan."
+  },
+  {
+   "description": "Blank: the property's currency. A derived plan uses its base plan's currency.",
+   "fieldname": "currency",
+   "fieldtype": "Link",
+   "label": "Currency",
+   "options": "Currency"
+  },
+  {
+   "default": "Fixed at Reservation",
+   "description": "When a foreign-currency contract converts to the property's currency: at booking, at check-in, or at each night's posting date.",
+   "fieldname": "fx_lock_policy",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Exchange Rate Lock",
+   "options": "Fixed at Reservation\nFixed at Check In\nCurrent Date"
+  },
+  {
+   "fieldname": "column_break_fx",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "A derived plan takes this plan's price (its card or contract tariff), then applies its own modifier.",
+   "fieldname": "base_rate_plan",
+   "fieldtype": "Link",
+   "label": "Base Rate Plan",
+   "options": "Rate Plan"
+  },
+  {
+   "default": "0",
+   "depends_on": "base_rate_plan",
+   "description": "Apply this plan's modifier to extra adult and child charges too. Off: they stay as the base plan prices them.",
+   "fieldname": "adjust_extra_person",
+   "fieldtype": "Check",
+   "label": "Adjust Extra Person Charges"
+  },
+  {
+   "default": "0",
+   "description": "Round the local price to this multiple (for example 1000 for a currency with no cents). 0: the currency's smallest unit.",
+   "fieldname": "rounding_step",
+   "fieldtype": "Float",
+   "label": "Rounding Step",
+   "non_negative": 1
+  },
+  {
+   "default": "Nearest",
+   "fieldname": "rounding_mode",
+   "fieldtype": "Select",
+   "label": "Rounding Mode",
+   "options": "Nearest\nUp\nDown"
+  },
+  {
    "fieldname": "sb_day_use",
    "fieldtype": "Section Break",
    "label": "Day-use billing",
@@ -151,7 +215,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-11-23 21:00:00.000000",
+ "modified": "2026-11-24 12:30:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Rate Plan",

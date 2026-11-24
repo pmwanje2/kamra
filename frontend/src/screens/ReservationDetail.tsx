@@ -22,6 +22,7 @@ import {
   amendStay,
   amendStayPreview,
   call,
+  clearChannelReview,
   declineBookingRequest,
   idDocumentImage,
   promoteWaitlist,
@@ -51,11 +52,18 @@ import SupervisorSignOff, { SignOffReasons } from "../components/SupervisorSignO
 import { supervisorArgs } from "../lib/reservationDiscount"
 import { useAuth } from "../lib/auth"
 import StayInstructions from "../components/StayInstructions"
-import { cur, moneyLocale } from "../lib/money"
+import { cur, moneyDigits, moneyLocale } from "../lib/money"
 import { t as translate, useUILanguage } from "../lib/i18n"
 
-const inr = (n: number) =>
-  `${cur()}` + Number(n || 0).toLocaleString(moneyLocale(), { maximumFractionDigits: 0 })
+const inr = (n: number) => {
+  const v = Number(n || 0)
+  const d = moneyDigits()
+  const hasFrac = d > 0 && Math.abs(v - Math.round(v)) >= 10 ** -(d + 1)
+  return `${cur()}${v.toLocaleString(moneyLocale(), {
+    minimumFractionDigits: hasFrac ? d : 0,
+    maximumFractionDigits: d,
+  })}`
+}
 
 /** One amount, or the lowest to the highest when the nights differ. */
 const rangeOf = (values: number[]) =>
@@ -227,6 +235,8 @@ export default function ReservationDetail({
   const canOverrideFixed = !!d?.actions.can_set_rate
   // booking_quotation / email_booking_quotation: Front Desk and above
   const canQuote = ["Front Desk", "Revenue Manager", "Hotel Admin", "System Manager"]
+    .some((r) => roles.includes(r))
+  const canClearChannelReview = ["Front Desk", "Revenue Manager", "Hotel Admin", "System Manager"]
     .some((r) => roles.includes(r))
 
   const refresh = useCallback(() => {
@@ -423,7 +433,80 @@ export default function ReservationDetail({
           </span>
         )}
         {d.guest?.blacklisted === 1 && <Badge tone="rose">{translate("Blacklisted")}</Badge>}
+        {d.channel_review_needed === 1 && (
+          <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
+            <TriangleAlert className="size-3" />
+            {translate("Channel review needed")}
+          </span>
+        )}
       </div>
+
+      {d.channel_review_needed === 1 && (() => {
+        const reviewReason =
+          d.channel_review_reason ??
+          d.channel_reviews?.[0]?.reason ??
+          (d.channel_reviews?.some(
+            (r) => r.action_type === "channel.modify_needs_review" || r.action_type === "channel.cancel_needs_review",
+          )
+            ? "update_not_applied"
+            : d.channel_reviews?.some((r) => r.action_type === "channel.modify_discount_removed")
+              ? "discount_removed"
+              : d.channel_reviews?.some((r) => r.action_type === "channel.modify_discount_review")
+                ? "discount_review"
+                : "update_not_applied")
+        const reviewTitle =
+          reviewReason === "discount_removed"
+            ? translate("Channel update applied — desk discount removed")
+            : reviewReason === "discount_review"
+              ? translate("Channel update applied — discount review required")
+              : translate("Channel update not applied — review required")
+        const reviewBody =
+          reviewReason === "discount_removed"
+            ? translate(
+                "The channel update was applied and removed the desk discount (new total: {total}). Review what was removed below and re-apply a discount if needed.",
+                { total: inr(money.total) },
+              )
+            : reviewReason === "discount_review"
+              ? translate(
+                  "The channel update was applied (new total: {total}). Approved discounted nights were kept; added nights were priced without the unapproved discount. Review below and adjust if needed.",
+                  { total: inr(money.total) },
+                )
+              : translate(
+                  "The stay's dates, room, and charges were left unchanged. Review what the channel sent below and update the stay manually if needed.",
+                )
+        return (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="flex items-center gap-1.5 font-semibold">
+                <TriangleAlert className="size-4 shrink-0 text-amber-700" />
+                {reviewTitle}
+              </div>
+              {canClearChannelReview && (
+                <Button
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => act(() => clearChannelReview(name))}
+                >
+                  {translate("Mark as reviewed")}
+                </Button>
+              )}
+            </div>
+            <p className="mt-1 text-xs text-amber-800">{reviewBody}</p>
+            {(d.channel_reviews ?? []).length > 0 && (
+              <ul className="mt-2 space-y-1 text-xs text-amber-900">
+                {(d.channel_reviews ?? []).map((item) => (
+                  <li key={item.name} className="rounded-md bg-white/70 px-2.5 py-1.5">
+                    <span>{item.rationale}</span>
+                    {item.executed_at && (
+                      <span className="ml-2 text-amber-700/80">{item.executed_at.slice(0, 16)}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )
+      })()}
 
       {error && (
         <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
@@ -445,24 +528,24 @@ export default function ReservationDetail({
           ) : undefined
         }
       >
-        <div className="grid grid-cols-3 gap-3">
-          <div>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
+          <div className="flex min-w-0 items-baseline justify-between gap-2 sm:block">
             <div className="text-xs text-zinc-400">{translate("Total")}</div>
-            <div className="text-lg font-semibold text-zinc-900">
+            <div className="break-words text-base font-semibold tabular-nums text-zinc-900 sm:text-lg">
               {inr(money.total)}
             </div>
           </div>
-          <div>
+          <div className="flex min-w-0 items-baseline justify-between gap-2 sm:block">
             <div className="text-xs text-zinc-400">{translate("Paid")}</div>
-            <div className="text-lg font-semibold text-emerald-700">
+            <div className="break-words text-base font-semibold tabular-nums text-emerald-700 sm:text-lg">
               {inr(money.paid)}
             </div>
           </div>
-          <div>
+          <div className="flex min-w-0 items-baseline justify-between gap-2 sm:block">
             <div className="text-xs text-zinc-400">{translate("Balance due")}</div>
             <div
               className={
-                "text-lg font-semibold " +
+                "break-words text-base font-semibold tabular-nums sm:text-lg " +
                 (money.due > 0 ? "text-rose-600" : "text-zinc-400")
               }
             >
@@ -655,7 +738,7 @@ export default function ReservationDetail({
                 label={translate("Confirmed rate / night")}
                 value={
                   <>
-                    {rangeOf(d.night_rates.map((n) => n.rate))}
+                    {rangeOf(d.night_rates.map((n) => n.entry_rate ?? n.rate))}
                     {d.discount?.fixed_rate ? <Badge className="ms-2">{translate("Fixed rate")}</Badge> : null}
                   </>
                 }

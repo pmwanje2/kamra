@@ -1,13 +1,14 @@
 import { SettlementPreview, useSettlementQuote } from "../components/SettlementPreview"
 import TenderPicker, { TenderInput, resolveTender, tenderAmount, tenderModes, tenderReady, useTenderRates } from "../components/TenderPicker"
-import { currencyText, formatFxRate, TariffNight } from "../components/ContractTariff"
+import { currencyText, formatFxRate, ReferenceCurrencyNote, TariffNight } from "../components/ContractTariff"
 import RowCorrection from "../components/RowCorrection"
+import InvoiceCorrectionDialog from "../components/InvoiceCorrectionDialog"
 import { ResponsiveList, Popin } from "../components/ui/responsive-list"
 import { Fragment, useCallback, useEffect, useRef, useState } from "react"
 import { ArrowLeft, ArrowRightLeft, Printer, X } from "lucide-react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { formatDate, roomLabel } from "../lib/utils"
-import { call, getCurrentProperty, newIdempotencyKey, type TariffReference } from "../lib/api"
+import { call, getCurrentProperty, newIdempotencyKey, type ReferenceCurrency, type TariffReference } from "../lib/api"
 import EditableNationality from "../components/EditableNationality"
 import LinkedRecords from "../components/LinkedRecords"
 import AllowanceRequests from "../components/AllowanceRequests"
@@ -30,10 +31,6 @@ import {
   CardTitle,
 } from "../components/ui/card"
 
-
-const inr = (n: unknown) =>
-  fmtAmount(n ?? 0)
-
 interface InvoiceData {
   folio: {
     name: string
@@ -41,6 +38,9 @@ interface InvoiceData {
     status: "Open" | "Closed"
     folio_type?: string
     invoice_number: string | null
+    /** the accounting system's invoice for this folio, where it issued one:
+     *  it is then corrected there (credit note and re-bill), never here */
+    sales_invoice?: string | null
     guest_name: string
     charges: {
       name: string
@@ -52,6 +52,10 @@ interface InvoiceData {
       reversal_of?: string | null
       void_reason?: string | null
       voided_by?: string | null
+      /** the line a split part, or a split's reversal, came from */
+      split_of?: string | null
+      /** outlet charge reference (e.g. POS order) — moves whole, never splits */
+      source_ref?: string | null
       amount: number
       gst_rate: number
       gst_amount: number
@@ -87,6 +91,7 @@ interface InvoiceData {
     email: string | null
     sac: string | null
     place_of_supply: string | null
+    tax_label?: string
     tax_id_label?: string
     /** the pack's line on how tax is shown (India: GST inclusive) */
     tax_note?: string
@@ -94,6 +99,8 @@ interface InvoiceData {
   /** an Account folio (raised on a company's AR account) has no stay:
    *  only reservation (null) and company come back */
   stay: TariffReference & {
+    /** the contract currency, its rate and the bill in it (Property reference currency calculation) */
+    reference_currency?: ReferenceCurrency | null
     reservation: string | null
     check_in: string
     check_out: string
@@ -142,7 +149,11 @@ interface InvoiceData {
     footer: string | null
     invoice_footer?: string | null
     service_code_label: string
+    accounting_tax_note?: string | null
   }
+  /** Where the printed tax breakdown came from: folio lines, the linked
+   *  accounting invoice, or accounting_unavailable when it could not be read. */
+  tax_source?: "folio" | "accounting" | "accounting_unavailable"
   /** Charges with the service code the tax authority expects per LINE -
    *  a room night, a restaurant cover and a laundry bag are three
    *  different supplies and can't share one code. */
@@ -168,6 +179,8 @@ interface InvoiceData {
     address: string
     id_type: string | null
   }
+  /** what the issued credit notes on this invoice add up to */
+  credited?: number
   summary_by_head: {
     head: string
     amount: number
@@ -237,7 +250,7 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
   useUILanguage()
   return (
     <div className="flex gap-2">
-      <dt className="w-24 shrink-0 text-zinc-500">{translate(label)}</dt>
+      <dt className="min-w-24 max-w-44 shrink-0 break-words text-zinc-500">{translate(label)}</dt>
       <dd className="min-w-0">{children}</dd>
     </div>
   )
@@ -276,6 +289,38 @@ function VerifyTaxId({ taxId, name }: { taxId: string; name: string }) {
       </button>
       {res && <span className={`ml-1 text-xs ${res.ok ? "text-emerald-700" : "text-red-700"}`}>{translate(res.text)}</span>}
     </span>
+  )
+}
+
+/** A charge line's actions on one compact line (OPERA folio billing); while the inline
+ *  correction form is open it has the cell to itself, and Move comes back when it closes. */
+function ChargeActions({ folio, row, correct, onMove, act }: {
+  folio: string
+  row: string
+  correct: boolean
+  onMove: (() => void) | null
+  act: (fn: () => Promise<unknown>, onError: (message: string) => void) => Promise<void>
+}) {
+  const { t } = useT()
+  const [open, setOpen] = useState(false)
+  // a line that stops being correctable (voided by the correction) never keeps Move hidden
+  const correcting = correct && open
+  if (!correct && !onMove) return null
+  return (
+    <div data-row-actions
+      className={correcting ? "grid min-w-56 gap-1.5 text-left" : "inline-flex items-center justify-end gap-1.5"}>
+      {correct && <RowCorrection folio={folio} row={row} modes={[]} act={act} onOpenChange={setOpen} />}
+      {onMove && !correcting && (
+        <button
+          aria-label={t("Move or split this charge")}
+          className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2 py-1 text-xs text-zinc-500 hover:border-brand-400 hover:text-zinc-800"
+          onClick={onMove}
+        >
+          <ArrowRightLeft className="size-3" aria-hidden />
+          {t("Move")}
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -325,6 +370,7 @@ export default function FolioView() {
   } | null>(null)
   const quote = useSettlementQuote(folioProperty, foreign && paymentReady ? tender.currency : "", Number(payment.amount))
   const [showCancel, setShowCancel] = useState(false)
+  const [showCredit, setShowCredit] = useState(false)
   const [cancelReason, setCancelReason] = useState("")
   const [allowance, setAllowance] = useState({ amount: "", reason: "", gst_rate: "0", reason_code: "" })
   const [adjustCodes, setAdjustCodes] = useState<{ name: string; description: string }[]>([])
@@ -340,6 +386,10 @@ export default function FolioView() {
   const { roles } = useAuth()
   const canRequestCorrection = roles.some(r => ["Front Desk","Finance","Hotel Admin","System Manager","Administrator"].includes(r))
   const canCorrect = roles.some((r) =>
+    ["Finance", "Hotel Admin", "System Manager", "Administrator"].includes(r))
+  // who may correct an issued invoice - a credit note, or the accounting
+  // system's credit and re-bill: the server's INVOICE_CORRECTION_ROLES
+  const canCreditInvoice = roles.some((r) =>
     ["Finance", "Hotel Admin", "System Manager", "Administrator"].includes(r))
   const [toCorrect, setToCorrect] = useState<
     { date: string; charged: number; new: number }[]>([])
@@ -462,14 +512,26 @@ export default function FolioView() {
 
   const { folio, property, stay, gst_summary } = data
   const doc = data.document
-  // the server sends charges enriched with their service code; fall back
-  // to the raw folio rows so a cached older payload still renders
+  const inr = (n: unknown) => fmtAmount(n ?? 0, home)
+  const docTaxLabel = property.tax_label || taxLabel()
+  // the server sends charges enriched with their service code (and on a
+  // bridged site, the accounting invoice's own tax lines); fall back to the
+  // raw folio rows so a cached older payload still renders
   const lines = data.lines ?? folio.charges.map((c) => ({ ...c, row: c.name, qty: 1, rate: c.amount, service_code: null }))
+  const lineByRow = new Map(lines.map((l) => [l.row, l]))
   const taxRows = data.tax_summary ?? []
+  const taxUnavailable = data.tax_source === "accounting_unavailable"
   // a bill with no tax on any line prints no tax columns or totals
-  const taxed = Number(folio.tax_total) !== 0 ||
-    folio.charges.some((c) => Number(c.gst_rate) !== 0 || Number(c.gst_amount) !== 0)
+  const taxed = taxUnavailable || Number(folio.tax_total) !== 0 ||
+    lines.some((l) => Number(l.gst_rate) !== 0 || Number(l.gst_amount) !== 0) ||
+    taxRows.length > 0
+  const showLineTax = taxed && !taxUnavailable
   const open = folio.status === "Open"
+  // invoiced here, or by the accounting system: its check-out close sets only
+  // its own invoice (sales_invoice), and that bill is corrected all the same
+  const invoiced = !!(folio.invoice_number || folio.sales_invoice)
+  const isFinal = doc ? doc.is_final : Boolean(folio.invoice_number)
+  const hasServiceCode = lines.some((l) => Boolean(l.service_code))
 
   return (
     <div>
@@ -628,25 +690,19 @@ export default function FolioView() {
               {t("Advance bill")}
             </Button>
           ) : null}
-          {!open && folio.invoice_number ? (
-            <Button variant="outline" disabled={busy} onClick={() => {
-              const amt = window.prompt(t("Credit note amount"))
-              const reason = window.prompt(t("Reason"))
-              if (!amt || !reason) return
-              act(() => call("kamra.ledger.issue_credit_note",
-                withPin({ folio: folio.name, amount: Number(amt), reason })))
-            }}>
+          {!open && invoiced && canCreditInvoice ? (
+            <Button variant="outline" disabled={busy} onClick={() => setShowCredit(true)}>
               {t("Credit note")}
             </Button>
           ) : null}
           <Button variant="outline" onClick={() => {
             void call("kamra.ledger.record_folio_reprint", {
               folio: folio.name,
-              document: folio.invoice_number ? "Guest Folio" : "Proforma",
+              document: isFinal ? "Guest Folio" : "Proforma",
             }).finally(() => window.print())
           }}>
             <Printer className="size-4" aria-hidden />
-            {folio.invoice_number ? t("Print invoice") : t("Print folio")}
+            {isFinal ? t("Print invoice") : t("Print folio")}
           </Button>
           {open &&
             folio.balance === 0 &&
@@ -668,7 +724,8 @@ export default function FolioView() {
                 {t("Settle & continue stay")}
               </Button>
             )}
-          {!open && folio.invoice_number && folio.folio_type !== "Account" && (
+          {!open && invoiced && folio.folio_type !== "Account"
+            && (!folio.sales_invoice || canCreditInvoice) && (
             <Button
               variant="outline"
               disabled={busy}
@@ -690,12 +747,22 @@ export default function FolioView() {
         </div>
       </div>
 
+      {showCredit && !open && invoiced && (
+        <InvoiceCorrectionDialog folio={folio} credited={data.credited ?? 0}
+          onClose={() => setShowCredit(false)}
+          onDone={() => { setShowCredit(false); load() }} />
+      )}
+
       {showCancel && !open && (
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm print:hidden">
           <span className="text-amber-800">
-            {t("Cancel {invoice}? The number goes on the cancelled register and the folio reopens for correction.", {
-              invoice: folio.invoice_number ?? "",
-            })}
+            {folio.sales_invoice
+              ? t("Cancel {invoice}? The accounting system credits it and issues a new invoice; this bill is not reopened here.", {
+                  invoice: folio.invoice_number || folio.sales_invoice,
+                })
+              : t("Cancel {invoice}? The number goes on the cancelled register and the folio reopens for correction.", {
+                  invoice: folio.invoice_number ?? "",
+                })}
           </span>
           <input
             className="min-w-56 flex-1 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-sm"
@@ -827,7 +894,7 @@ export default function FolioView() {
                   : "border border-dashed border-amber-400 bg-amber-50 text-amber-700")
               }
             >
-              {translate(doc?.title) ?? (folio.invoice_number ? t("Invoice") : t("Provisional Bill"))}
+              {translate(doc?.title) ?? (isFinal ? t("Invoice") : t("Provisional Bill"))}
               {doc?.title_local && (
                 <>
                   <span aria-hidden className="mx-2 opacity-50">·</span>
@@ -910,6 +977,8 @@ export default function FolioView() {
           {stay.tariff && <p className="mb-3 text-sm text-zinc-600">
             {t("Booked contract tariff")}: <TariffNight {...stay} />
           </p>}
+          {/* on screen, on the pro-forma and on the printed invoice alike */}
+          <ReferenceCurrencyNote reference={stay.reference_currency} />
           <dl className="mb-6 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
             <Fact label={t("Guest")}>
               <span className="font-medium">
@@ -989,18 +1058,20 @@ export default function FolioView() {
                   const sel = folio.charges.filter((c) => selected.has(c.name))
                   const selTotal = sel.reduce((s, c) => s + (c.total || 0), 0)
                   const one = sel.length === 1 ? sel[0] : null
+                  const canSplit =
+                    !!one && !one.source_ref && one.charge_type !== "Meal Plan" && (one.amount || 0) > 0
                   const v = partVal.trim()
                   const isPct = v.endsWith("%")
                   const num = Number(v.replace("%", ""))
                   const partOk =
-                    !!one && !!v && num > 0 &&
-                    (isPct ? num < 100 : num < (one.amount || 0))
-                  const partBad = !!one && !!v && !partOk
-                  const movedTotal = !one || !partOk
+                    canSplit && !!v && num > 0 &&
+                    (isPct ? num < 100 : num < (one!.amount || 0))
+                  const partBad = canSplit && !!v && !partOk
+                  const movedTotal = !partOk
                     ? selTotal
                     : isPct
-                      ? ((one.total || 0) * num) / 100
-                      : num * (1 + (one.gst_rate || 0) / 100)
+                      ? ((one!.total || 0) * num) / 100
+                      : num * (1 + (one!.gst_rate || 0) / 100)
                   const moveTo = (to: string) =>
                     act(async () => {
                       if (one && partOk) {
@@ -1056,7 +1127,7 @@ export default function FolioView() {
                             amount: inr(selTotal),
                           })}
                         </span>
-                        {one && (
+                        {canSplit ? (
                           <span className="inline-flex items-center gap-1.5 text-xs text-zinc-600">
                             <span>· {t("move only")}</span>
                             <input
@@ -1070,7 +1141,11 @@ export default function FolioView() {
                               ({cur()} = {t("before {tax}", { tax: taxLabel() })})
                             </span>
                           </span>
-                        )}
+                        ) : one ? (
+                          <span className="text-xs text-zinc-500">
+                            · {t("Moves whole (cannot be split)")}
+                          </span>
+                        ) : null}
                         <button
                           className="ml-auto text-xs text-zinc-400 hover:text-zinc-700"
                           onClick={() => {
@@ -1141,12 +1216,14 @@ export default function FolioView() {
                       )}
                       <th className="py-2 pr-3">{t("Date")}</th>
                       <th className="py-2 pr-3">{t("Item")}</th>
-                      <th className="hidden py-2 pr-3 print:table-cell">
-                        {doc?.service_code_label ?? t("SAC")}
-                      </th>
+                      {hasServiceCode && (
+                        <th className="hidden py-2 pr-3 print:table-cell">
+                          {doc?.service_code_label ?? t("SAC")}
+                        </th>
+                      )}
                       <th className="py-2 pr-3 text-right">{t("Amount {cur}", { cur: cur() })}</th>
-                      {taxed && <th className="py-2 pr-3 text-right">{taxLabel()} %</th>}
-                      {taxed && <th className="py-2 pr-3 text-right">{taxLabel()} {cur()}</th>}
+                      {showLineTax && <th className="py-2 pr-3 text-right">{docTaxLabel} %</th>}
+                      {showLineTax && <th className="py-2 pr-3 text-right">{docTaxLabel} {cur()}</th>}
                       <th className="py-2 text-right">{t("Total {cur}", { cur: cur() })}</th>
                       {editable && (
                         <th className="py-2 pl-3 print:hidden" aria-label={t("Actions")} />
@@ -1157,9 +1234,15 @@ export default function FolioView() {
                     {folio.charges.map((c, i) => {
                       // a voided line and its reversal stay on the bill; neither is voided or moved again
                       const voided = !!c.reversal_of || folio.charges.some((r) => r.reversal_of === c.name)
+                      // a split's line and its reversal: the trail of the split, shown as
+                      // such here and left off the printed bill, which shows the parts
+                      const split = voided && (c.reversal_of
+                        ? !!c.split_of
+                        : folio.charges.some((r) => r.reversal_of === c.name && !!r.split_of))
                       return (
                       <Fragment key={c.name ?? i}>
-                        <tr className={voided ? "text-zinc-400" : undefined}>
+                        <tr className={[voided && "text-zinc-400", split && "print:hidden"]
+                          .filter(Boolean).join(" ") || undefined}>
                           {open && (
                             <Popin label={t("Select")} importance="medium" className="py-2 pr-2 print:hidden">
                               {!voided && <input
@@ -1186,7 +1269,9 @@ export default function FolioView() {
                               <span className="text-zinc-500"> - {c.description}</span>
                             )}
                             {voided && (
-                              <span className="ml-1 rounded bg-zinc-100 px-1 text-xs text-zinc-500">{t("Voided")}</span>
+                              <span className="ml-1 rounded bg-zinc-100 px-1 text-xs text-zinc-500">
+                                {split ? t("status|Split") : t("Voided")}
+                              </span>
                             )}
                             {c.allowance_serial && (
                               <Link to={`/allowance-voucher/${encodeURIComponent(c.allowance_serial)}`}
@@ -1196,28 +1281,32 @@ export default function FolioView() {
                               </Link>
                             )}
                           </Popin>
-                          <td className="hidden py-2 pr-3 font-mono text-xs text-zinc-400 print:table-cell">
-                            {lines.find((l) => l.row === c.name)?.service_code ?? ""}
-                          </td>
-                          <Popin label={t("Amount")} importance="medium" className="py-2 pr-3 text-right">{inr(c.amount)}</Popin>
-                          {taxed && <Popin label={`${taxLabel()} %`} importance="medium" className="py-2 pr-3 text-right">{c.gst_rate}%</Popin>}
-                          {taxed && <Popin label={taxLabel()} importance="medium" className="py-2 pr-3 text-right">{inr(c.gst_amount)}</Popin>}
-                          <Popin label={t("Total")} importance="medium" className="py-2 text-right font-medium">{inr(c.total)}</Popin>
+                          {hasServiceCode && (
+                            <td className="hidden py-2 pr-3 font-mono text-xs text-zinc-400 print:table-cell">
+                              {lineByRow.get(c.name)?.service_code ?? ""}
+                            </td>
+                          )}
+                          {(() => {
+                            const ln = lineByRow.get(c.name)
+                            const amt = ln ? ln.amount : c.amount
+                            const rate = ln ? ln.gst_rate : c.gst_rate
+                            const tax = ln ? ln.gst_amount : c.gst_amount
+                            const tot = ln ? ln.total : c.total
+                            return (
+                              <>
+                                <Popin label={t("Amount")} importance="medium" className="py-2 pr-3 text-right">{inr(amt)}</Popin>
+                                {showLineTax && <Popin label={`${docTaxLabel} %`} importance="medium" className="py-2 pr-3 text-right">{rate}%</Popin>}
+                                {showLineTax && <Popin label={docTaxLabel} importance="medium" className="py-2 pr-3 text-right">{inr(tax)}</Popin>}
+                                <Popin label={t("Total")} importance="medium" className="py-2 text-right font-medium">{inr(tot)}</Popin>
+                              </>
+                            )
+                          })()}
                           {editable && (
                             <Popin label={t("Actions")} importance="medium" className="relative whitespace-nowrap py-2 pl-3 text-right print:hidden">
-                              {canRequestCorrection && c.charge_type !== "Allowance" && !voided && <RowCorrection folio={folio.name} row={c.name} modes={[]} act={act} />}
-                              {open && !voided && !selected.has(c.name) && (
-                                <button
-                                  aria-label={t("Move or split this charge")}
-                                  className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2 py-1 text-xs text-zinc-500 hover:border-brand-400 hover:text-zinc-800"
-                                  onClick={() =>
-                                    setSelected((prev) => new Set(prev).add(c.name))
-                                  }
-                                >
-                                  <ArrowRightLeft className="size-3" aria-hidden />
-                                  {t("Move")}
-                                </button>
-                              )}
+                              <ChargeActions folio={folio.name} row={c.name} act={act}
+                                correct={canRequestCorrection && c.charge_type !== "Allowance" && !voided}
+                                onMove={open && !voided && !selected.has(c.name)
+                                  ? () => setSelected((prev) => new Set(prev).add(c.name)) : null} />
                             </Popin>
                           )}
                         </tr>
@@ -1249,9 +1338,9 @@ export default function FolioView() {
                       <td className="py-1 text-right text-zinc-500">
                         {cur()}{inr(h.amount)}
                       </td>
-                      {taxed && (
+                      {showLineTax && (
                         <td className="py-1 text-right text-zinc-400">
-                          + {cur()}{inr(h.tax)} {taxLabel().toLowerCase()}
+                          + {cur()}{inr(h.tax)} {docTaxLabel.toLowerCase()}
                         </td>
                       )}
                       <td className="py-1 text-right font-medium">
@@ -1267,44 +1356,57 @@ export default function FolioView() {
           <div className="mb-6 grid gap-6 sm:grid-cols-2">
             {taxed ? <div>
               <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">
-                {t("{tax} summary", { tax: taxLabel() })}
+                {t("{tax} summary", { tax: docTaxLabel })}
               </h3>
-              <table className="w-full text-sm">
-                <tbody className="divide-y divide-zinc-100">
-                  {(taxRows.length ? taxRows : gst_summary.map((g) => ({
-                    rate: g.rate, taxable: g.taxable, total_tax: g.total_tax,
-                    parts: [
-                      { label: "CGST", rate: g.rate / 2, amount: g.cgst },
-                      { label: "SGST", rate: g.rate / 2, amount: g.sgst },
-                    ],
-                  }))).map((r) => (
-                    <tr key={r.rate}>
-                      <td className="py-1.5 pr-3">{r.rate}%</td>
-                      <td className="py-1.5 pr-3 text-right text-zinc-500">
-                        {t("taxable {cur}{amount}", { cur: cur(), amount: inr(r.taxable) })}
-                      </td>
-                      <td className="py-1.5 text-right">
-                        {r.parts
-                          .map((x) => `${x.label} @ ${x.rate}% ${cur()}${inr(x.amount)}`)
-                          .join(" · ")}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              {taxUnavailable ? (
+                <p className="text-sm text-zinc-600">
+                  {t("Tax as per the accounting invoice")}
+                </p>
+              ) : (
+                <table className="w-full text-sm">
+                  <tbody className="divide-y divide-zinc-100">
+                    {(taxRows.length ? taxRows : gst_summary.map((g) => ({
+                      rate: g.rate, taxable: g.taxable, total_tax: g.total_tax,
+                      parts: [
+                        { label: "CGST", rate: g.rate / 2, amount: g.cgst },
+                        { label: "SGST", rate: g.rate / 2, amount: g.sgst },
+                      ],
+                    }))).map((r, idx) => (
+                      <tr key={`${r.rate}-${idx}`}>
+                        <td className="py-1.5 pr-3">{r.rate === 0 && Number(r.total_tax) !== 0 ? "—" : `${r.rate}%`}</td>
+                        <td className="py-1.5 pr-3 text-right text-zinc-500">
+                          {t("taxable {cur}{amount}", { cur: cur(), amount: inr(r.taxable) })}
+                        </td>
+                        <td className="py-1.5 text-right">
+                          {r.parts
+                            .map((x) => x.rate === 0
+                              ? `${x.label} ${cur()}${inr(x.amount)}`
+                              : `${x.label} @ ${x.rate}% ${cur()}${inr(x.amount)}`)
+                            .join(" · ")}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div> : <div />}
             <div className="space-y-1.5 text-sm sm:text-right">
               <p className="text-zinc-500">
                 {t("Charges")}: <span className="text-zinc-900">{cur()}{inr(folio.charges_total)}</span>
               </p>
-              {taxed && (
+              {showLineTax && (
                 <p className="text-zinc-500">
-                  {taxLabel()}: <span className="text-zinc-900">{cur()}{inr(folio.tax_total)}</span>
+                  {docTaxLabel}: <span className="text-zinc-900">{cur()}{inr(folio.tax_total)}</span>
                 </p>
               )}
               <p className="text-lg font-semibold">
                 {t("Grand total")}: {cur()}{inr(folio.grand_total)}
               </p>
+              {(data.credited ?? 0) > 0 && (
+                <p className="text-sm font-medium text-rose-600">
+                  {t("Credited")}: −{cur()}{inr(data.credited)}
+                </p>
+              )}
               {doc?.amount_in_words && (
                 <p className="text-xs italic text-zinc-500">
                   {doc.amount_in_words}
@@ -1323,7 +1425,9 @@ export default function FolioView() {
               {shown && (
                 <p className="text-xs text-zinc-600">
                   {t("Approx. {cur} {total} (balance {cur} {balance}) at {rate}, rate of {date}. Tax invoice amounts are in {home}.", {
-                    cur: shown.currency, total: inr(shown.grand_total), balance: inr(shown.balance),
+                    cur: shown.currency,
+                    total: fmtAmount(shown.grand_total, shown.currency),
+                    balance: fmtAmount(shown.balance, shown.currency),
                     rate: shown.rate, date: shown.rate_date, home: shown.home_currency,
                   })}
                 </p>
@@ -1394,8 +1498,8 @@ export default function FolioView() {
             </div>
           )}
 
-          {folio.invoice_number && (
-            <div className="mt-8 flex items-end justify-between border-t border-zinc-200 pt-4 text-xs text-zinc-500">
+          {isFinal && (
+            <div className="mt-8 flex flex-wrap items-end justify-between gap-4 border-t border-zinc-200 pt-4 text-xs text-zinc-500">
               <p className="max-w-md">
                 {/* the pack words the footer for its country (GST Act in
                     India, ZATCA simplified invoice in Saudi Arabia…) */}

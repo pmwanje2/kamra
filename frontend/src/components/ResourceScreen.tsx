@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from "react"
 import { useSearchParams } from "react-router-dom"
-import { Columns3, Download, Plus, Search, Trash2 } from "lucide-react"
+import { ArrowDown, ArrowUp, Columns3, Download, Plus, Search, Trash2 } from "lucide-react"
 import { Sheet } from "./ui/sheet"
 import { call, getCurrentProperty } from "../lib/api"
 import { providerLabel } from "../lib/brand"
@@ -111,7 +111,12 @@ export interface FieldSpec {
     | "password"
     | "image"
     | "tags"
+    | "table"
   options?: string[] // for select / tags (static fallback)
+  /** table: a child table's columns, in order */
+  columns?: TableColumn[]
+  /** table: rows are tried in order - they can be moved up and down */
+  orderable?: boolean
   /** Load options from Settings → F&B → Menu master lists */
   optionsFrom?: MenuMasterKey
   /** select options loaded from a doctype (e.g. the property's floors) */
@@ -121,13 +126,39 @@ export interface FieldSpec {
   linkDoctype?: string // for link
   /** link options only from the current property (the target has a `property` field) */
   linkPropertyScoped?: boolean
+  /** extra Frappe filters for a link field's option query (e.g. enabled currencies only) */
+  linkFilters?: (string | number)[][]
+  /** max options loaded for a link field (default 500) */
+  linkLimit?: number
+  /** extra values that must always stay selectable in a link dropdown */
+  ensureOptions?: (draft: Record<string, unknown>) => string[]
+  /** override the value rendered in the input (e.g. inherited currency on derived plans) */
+  displayValue?: (draft: Record<string, unknown>) => unknown
   required?: boolean
   hint?: string // for image: recommended size/format
+  /** dynamic hint text (overrides static `hint` when returned) */
+  hintWhen?: (draft: Record<string, unknown>) => string | undefined
   dependsOn?: (draft: Record<string, unknown>) => boolean
+  /** Lock the field on existing records (e.g. code primary keys). */
+  readOnlyOnEdit?: boolean
+  /** Disable a field dynamically (e.g. disabling a system master code). */
+  disabledWhen?: (draft: Record<string, unknown>) => boolean
   /** Block dates before today unless the user may backdate (Finance / Hotel Admin). */
   notPast?: boolean
-  /** a new record starts with this value (the DocType's own default) */
-  default?: string | number
+  /** Initial value when creating a new record (e.g. the DocType's own default). */
+  default?: unknown
+  /** Key of a `ScreenConfig.sections` entry: the field renders in that collapsible section. */
+  section?: string
+}
+
+/** One column of a child table edited in the form (FieldSpec type "table"). */
+export interface TableColumn {
+  field: string
+  label: string
+  type: "data" | "select"
+  options?: string[]
+  /** a new row's value */
+  default?: string
 }
 
 export interface ScreenConfig {
@@ -140,13 +171,32 @@ export interface ScreenConfig {
     badge?: boolean
     /** Map a Check field (0/1) to Active / Disabled badges. */
     statusCheck?: boolean
+    /** Map a Check field (0/1) to explicit badge labels (e.g. System / Custom). */
+    booleanBadge?: { truthy: string; falsy?: string }
+    /** Computed client-side column (omitted from Frappe listResource fields). */
+    virtual?: boolean
+    /** Custom cell renderer for display. */
+    render?: (row: Row) => ReactNode
+    /** Explicit CSV export value for computed columns. */
+    csvValue?: (row: Row) => string | number | null
+    /** Optional table width class (e.g. "w-[24%]"). */
+    width?: string
+    /** Allow wrapping instead of truncating in table cells. */
+    wrap?: boolean
   }[]
   form: FieldSpec[]
   formNote?: string
   propertyScoped?: boolean
+  /** Show records belonging to the current property plus shared (blank property) records;
+   *  newly created records are scoped to the current property. */
+  propertyOrShared?: boolean
   allowCreate?: boolean
   allowDelete?: boolean
+  /** Row-level delete guard (e.g. hide Delete for system master rows). */
+  canDelete?: (row: Record<string, unknown>) => boolean
   orderBy?: string
+  /** Optional minimum table width class (e.g. "min-w-[820px]") so wide fixed-layout tables scroll cleanly on mobile. */
+  tableMinWidth?: string
   /** Fields searched (LIKE) by the search box. Adds a search input when set. */
   searchFields?: string[]
   /** Dropdown filters shown in the toolbar (e.g. status). */
@@ -157,6 +207,11 @@ export interface ScreenConfig {
   dateFilter?: { field: string; label: string }
   /** Custom section rendered in the drawer below the form (existing rows only). */
   extra?: ComponentType<{ row: Row; reload: () => void }>
+  /** Custom section rendered in the drawer above the form (existing rows only). */
+  lead?: ComponentType<{ row: Row; reload: () => void }>
+  /** Collapsible groups of form fields (see FieldSpec.section), after the other
+   *  fields: closed for an existing row, open for a new one. */
+  sections?: { key: string; label: string; hint?: string }[]
   /** Replace the generic edit form with a bespoke detail panel (existing rows).
    *  When set, the drawer opens wide and the panel owns its own actions. */
   detailPanel?: ComponentType<{
@@ -289,18 +344,193 @@ function SourceSelect(props: {
 }
 const NEW = "__new__"
 
+type TableRow = Record<string, unknown>
+
+/** A child table edited inside the form: a row per record, its columns as
+ *  inputs, rows added, removed and (when orderable) moved. The form's Save
+ *  sends the whole table back with the record. */
+function TableField(props: {
+  spec: FieldSpec
+  value: unknown
+  onChange: (v: TableRow[]) => void
+  t: (s: string) => string
+}) {
+  const { spec, onChange, t } = props
+  const rows = Array.isArray(props.value) ? (props.value as TableRow[]) : []
+  const columns = spec.columns ?? []
+  const cell = "w-full rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  const icon = "rounded-md p-1 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-30"
+  const update = (i: number, field: string, v: string) =>
+    onChange(rows.map((row, j) => (j === i ? { ...row, [field]: v } : row)))
+  const move = (i: number, by: number) => {
+    const next = [...rows]
+    const [row] = next.splice(i, 1)
+    next.splice(i + by, 0, row)
+    onChange(next)
+  }
+  return (
+    <fieldset className="space-y-2 sm:col-span-2">
+      <legend className="mb-1.5 text-sm font-medium text-zinc-600">{t(spec.label)}</legend>
+      {spec.hint && <p className="text-xs leading-relaxed text-zinc-400">{t(spec.hint)}</p>}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
+              {columns.map((c) => <th key={c.field} className="py-1 pr-2">{t(c.label)}</th>)}
+              <th className="py-1" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-zinc-100">
+            {rows.map((row, i) => (
+              <tr key={String(row.name ?? `new-${i}`)}>
+                {columns.map((c) => (
+                  <td key={c.field} className="py-1 pr-2">
+                    {c.type === "select" ? (
+                      <select className={cell} aria-label={t(c.label)} value={String(row[c.field] ?? "")}
+                        onChange={(e) => update(i, c.field, e.target.value)}>
+                        <option value="">-</option>
+                        {(c.options ?? []).map((o) => <option key={o} value={o}>{t(o)}</option>)}
+                      </select>
+                    ) : (
+                      <input className={cell} aria-label={t(c.label)} value={String(row[c.field] ?? "")}
+                        onChange={(e) => update(i, c.field, e.target.value)} />
+                    )}
+                  </td>
+                ))}
+                <td className="whitespace-nowrap py-1 text-right">
+                  {spec.orderable && (
+                    <>
+                      <button type="button" className={icon} aria-label={t("Move up")} title={t("Move up")}
+                        disabled={i === 0} onClick={() => move(i, -1)}>
+                        <ArrowUp className="size-4" aria-hidden />
+                      </button>
+                      <button type="button" className={icon} aria-label={t("Move down")} title={t("Move down")}
+                        disabled={i === rows.length - 1} onClick={() => move(i, 1)}>
+                        <ArrowDown className="size-4" aria-hidden />
+                      </button>
+                    </>
+                  )}
+                  <button type="button" className={icon} aria-label={t("Remove")} title={t("Remove")}
+                    onClick={() => onChange(rows.filter((_, j) => j !== i))}>
+                    <Trash2 className="size-4" aria-hidden />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {rows.length === 0 && <p className="text-xs text-zinc-400">{t("Nothing here yet.")}</p>}
+      <Button type="button" variant="outline"
+        onClick={() => onChange([...rows, Object.fromEntries(columns.map((c) => [c.field, c.default ?? ""]))])}>
+        <Plus className="size-4" aria-hidden />
+        {t("Add row")}
+      </Button>
+    </fieldset>
+  )
+}
+
+/** A child table as the record's save sends it: each row's columns, its
+ *  name when it is a stored row, and its place (idx) as shown. */
+function tableRows(spec: FieldSpec, value: unknown): TableRow[] {
+  return (Array.isArray(value) ? (value as TableRow[]) : []).map((row, i) => ({
+    ...(row.name ? { name: row.name } : {}),
+    idx: i + 1,
+    ...Object.fromEntries((spec.columns ?? []).map((c) => [c.field, row[c.field] ?? ""])),
+  }))
+}
+
+function LinkSelect(props: {
+  spec: FieldSpec
+  value: unknown
+  onChange: (v: unknown) => void
+  baseOpts: string[]
+  extraOpts: string[]
+  capped?: boolean
+  disabled?: boolean
+  t: (s: string) => string
+}) {
+  const { spec, value, onChange, baseOpts, extraOpts, capped, disabled, t } = props
+  const [query, setQuery] = useState("")
+  const [searched, setSearched] = useState<string[]>([])
+
+  useEffect(() => {
+    const trimmed = query.trim()
+    if (!capped || !spec.linkDoctype || !trimmed) {
+      setSearched([])
+      return
+    }
+    let active = true
+    const timer = setTimeout(() => {
+      const filters: (string | number)[][] = []
+      if (spec.linkPropertyScoped) filters.push(["property", "=", getCurrentProperty()])
+      if (spec.linkFilters?.length) filters.push(...spec.linkFilters)
+      filters.push(["name", "like", `%${trimmed}%`])
+      listResource(spec.linkDoctype!, {
+        fields: ["name"],
+        filters,
+        limit: 50,
+        orderBy: "name asc",
+      })
+        .then((r) => {
+          if (active) setSearched(r.map((x) => x.name))
+        })
+        .catch(() => {})
+    }, 120)
+    return () => {
+      active = false
+      clearTimeout(timer)
+    }
+  }, [capped, query, spec.linkDoctype, spec.linkPropertyScoped, spec.linkFilters])
+
+  const current = String(value ?? "")
+  const opts = Array.from(
+    new Set([...baseOpts, ...searched, ...extraOpts, ...(current ? [current] : [])].filter(Boolean)),
+  ).sort()
+
+  return (
+    <div className={capped && !disabled ? "space-y-1.5" : undefined}>
+      {capped && !disabled && (
+        <input
+          type="search"
+          className={inputCls}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={t("Search…")}
+        />
+      )}
+      <select
+        className={inputCls}
+        value={current}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        <option value="">-</option>
+        {opts.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
 function FieldInput(props: {
   spec: FieldSpec
   value: unknown
   onChange: (v: unknown) => void
   linkOptions: Record<string, string[]>
+  linkCapped?: Record<string, boolean>
+  extraLinkOptions?: string[]
   masterOptions: Partial<Record<MenuMasterKey, string[]>>
   /** Translate display labels; API values stay English. */
   t: (s: string) => string
   canBackdate?: boolean
+  disabled?: boolean
 }) {
   useUILanguage()
-  const { spec, value, onChange, t, canBackdate } = props
+  const { spec, value, onChange, t, canBackdate, disabled } = props
   const masterOpts =
     (spec.optionsFrom && props.masterOptions[spec.optionsFrom]) ||
     spec.options ||
@@ -324,6 +554,7 @@ function FieldInput(props: {
         <select
           className={inputCls}
           value={String(value ?? "")}
+          disabled={disabled}
           onChange={(e) => onChange(e.target.value)}
         >
           <option value="">-</option>
@@ -336,25 +567,24 @@ function FieldInput(props: {
       )
     case "link":
       return (
-        <select
-          className={inputCls}
-          value={String(value ?? "")}
-          onChange={(e) => onChange(e.target.value)}
-        >
-          <option value="">-</option>
-          {(props.linkOptions[spec.linkDoctype ?? ""] ?? []).map((o) => (
-            <option key={o} value={o}>
-              {o}
-            </option>
-          ))}
-        </select>
+        <LinkSelect
+          spec={spec}
+          value={value}
+          onChange={onChange}
+          baseOpts={props.linkOptions[spec.field] ?? []}
+          extraOpts={props.extraLinkOptions ?? []}
+          capped={Boolean(props.linkCapped?.[spec.field])}
+          disabled={disabled}
+          t={t}
+        />
       )
     case "check":
       return (
         <input
           type="checkbox"
-          className="size-4 accent-brand-600"
+          className="size-4 accent-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
           checked={Boolean(Number(value ?? 0))}
+          disabled={disabled}
           onChange={(e) => onChange(e.target.checked ? 1 : 0)}
         />
       )
@@ -364,6 +594,7 @@ function FieldInput(props: {
           type="date"
           className={inputCls}
           value={String(value ?? "")}
+          disabled={disabled}
           min={spec.notPast && !canBackdate ? isoToday() : undefined}
           onChange={(e) => onChange(e.target.value)}
         />
@@ -376,6 +607,7 @@ function FieldInput(props: {
           type="number"
           className={inputCls}
           value={value === null || value === undefined ? "" : Number(value)}
+          disabled={disabled}
           onChange={(e) =>
             onChange(e.target.value === "" ? null : Number(e.target.value))
           }
@@ -393,6 +625,7 @@ function FieldInput(props: {
           autoComplete="new-password"
           className={inputCls}
           value={String(value ?? "")}
+          disabled={disabled}
           onChange={(e) => onChange(e.target.value)}
         />
       )
@@ -425,6 +658,7 @@ function FieldInput(props: {
             className={inputCls}
             list={spec.optionsFrom ? `masters-${spec.field}` : undefined}
             value={selected?.label ?? rawValue}
+            disabled={disabled}
             onChange={(e) => {
               const entered = e.target.value
               const suggestion = suggestions.find((option) => option.label === entered)
@@ -466,10 +700,16 @@ const cellValue = (v: unknown, t: (s: string) => string = translate) =>
 export function ResourceScreen({
   config,
   headerAction,
+  onReload,
+  onSaved,
 }: {
   config: ScreenConfig
   /** Extra control rendered in the header next to New (e.g. a bulk import). */
   headerAction?: ReactNode
+  /** Optional hook fired whenever rows reload after create/update/delete. */
+  onReload?: () => void
+  /** Called after a record is created, updated, or deleted. */
+  onSaved?: () => void
 }) {
   const { t, lang } = useT()
   const { roles } = useAuth()
@@ -480,6 +720,8 @@ export function ResourceScreen({
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [linkOptions, setLinkOptions] = useState<Record<string, string[]>>({})
+  const [linkCapped, setLinkCapped] = useState<Record<string, boolean>>({})
+  const [linkReloadTick, setLinkReloadTick] = useState(0)
   const [masterOptions, setMasterOptions] = useState<
     Partial<Record<MenuMasterKey, string[]>>
   >({})
@@ -525,7 +767,7 @@ export function ResourceScreen({
   const pageSize = config.pageSize ?? 0
 
   const fields = Array.from(
-    new Set(["name", ...config.columns.map((c) => c.field)]),
+    new Set(["name", ...config.columns.filter((c) => !c.virtual).map((c) => c.field)]),
   )
 
   // debounce the search box
@@ -537,6 +779,17 @@ export function ResourceScreen({
   // any search/filter change resets to the first page
   useEffect(() => setPage(0), [debounced, filterVals, dateFrom, dateTo])
 
+  const matchLocalSearch = useCallback(
+    (items: Row[]) => {
+      if (!config.propertyOrShared || !debounced || !config.searchFields?.length) return items
+      const needle = debounced.toLowerCase()
+      return items.filter((row) =>
+        config.searchFields!.some((f) => String(row[f] ?? "").toLowerCase().includes(needle)),
+      )
+    },
+    [config.propertyOrShared, config.searchFields, debounced],
+  )
+
   const load = useCallback(() => {
     const filters: (string | number)[][] = []
     if (config.propertyScoped)
@@ -547,8 +800,12 @@ export function ResourceScreen({
       if (dateFrom) filters.push([config.dateFilter.field, ">=", dateFrom])
       if (dateTo) filters.push([config.dateFilter.field, "<=", dateTo])
     }
-    const orFilters =
-      debounced && config.searchFields?.length
+    const orFilters = config.propertyOrShared
+      ? [
+          ["property", "=", getCurrentProperty()],
+          ["property", "is", "not set"],
+        ]
+      : debounced && config.searchFields?.length
         ? config.searchFields.map((f) => [f, "like", `%${debounced}%`])
         : undefined
     listResource(config.doctype, {
@@ -560,12 +817,12 @@ export function ResourceScreen({
       start: pageSize ? page * pageSize : 0,
     })
       .then((r) => {
-        setRows(r)
+        setRows(matchLocalSearch(r))
         setError(null)
       })
       .catch((e) => setError(serverError(e)))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config.doctype, debounced, filterVals, page, dateFrom, dateTo])
+  }, [config.doctype, config.propertyOrShared, debounced, filterVals, page, dateFrom, dateTo, matchLocalSearch])
 
   useEffect(load, [load])
 
@@ -595,22 +852,26 @@ export function ResourceScreen({
       if (dateFrom) filters.push([config.dateFilter.field, ">=", dateFrom])
       if (dateTo) filters.push([config.dateFilter.field, "<=", dateTo])
     }
-    const orFilters =
-      debounced && config.searchFields?.length
+    const orFilters = config.propertyOrShared
+      ? [
+          ["property", "=", getCurrentProperty()],
+          ["property", "is", "not set"],
+        ]
+      : debounced && config.searchFields?.length
         ? config.searchFields.map((f) => [f, "like", `%${debounced}%`])
         : undefined
-    const all = await listResource(config.doctype, {
+    const all = matchLocalSearch(await listResource(config.doctype, {
       fields,
       filters: filters.length ? filters : undefined,
       orFilters,
       orderBy: config.orderBy,
       limit: 2000,
-    })
+    }))
     const cols = visibleCols
     downloadCsv(
       `${config.doctype.toLowerCase().replace(/ /g, "-")}-${new Date().toISOString().slice(0, 10)}`,
       cols.map((c) => c.label),
-      all.map((r) => cols.map((c) => r[c.field] as string | number | null)),
+      all.map((r) => cols.map((c) => (c.csvValue ? c.csvValue(r) : r[c.field] as string | number | null))),
     )
   }
 
@@ -618,19 +879,25 @@ export function ResourceScreen({
   useEffect(() => {
     const links = config.form.filter((f) => f.type === "link" && f.linkDoctype)
     links.forEach((f) => {
+      const filters: (string | number)[][] = []
+      if (f.linkPropertyScoped) filters.push(["property", "=", getCurrentProperty()])
+      if (f.linkFilters?.length) filters.push(...f.linkFilters)
+      const limit = f.linkLimit ?? 100
       listResource(f.linkDoctype!, {
         fields: ["name"],
-        filters: f.linkPropertyScoped
-          ? [["property", "=", getCurrentProperty()]]
-          : undefined,
-        limit: 100,
+        filters: filters.length ? filters : undefined,
+        limit,
         orderBy: "name asc",
-      }).then((r) =>
+      }).then((r) => {
         setLinkOptions((prev) => ({
           ...prev,
-          [f.linkDoctype!]: r.map((x) => x.name),
-        })),
-      )
+          [f.field]: r.map((x) => x.name),
+        }))
+        setLinkCapped((prev) => ({
+          ...prev,
+          [f.field]: r.length >= limit,
+        }))
+      })
     })
     if (config.form.some((f) => f.optionsFrom)) {
       // a failed lookup leaves the static options; it never breaks the screen
@@ -642,7 +909,7 @@ export function ResourceScreen({
         .catch(() => setMasterOptions({}))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config.doctype])
+  }, [config.doctype, linkReloadTick])
 
   function openEdit(row: Row | "new") {
     setEditing(row)
@@ -680,11 +947,18 @@ export function ResourceScreen({
       const payload: Record<string, unknown> = {}
       for (const f of config.form) {
         if (f.type === "readonly") continue
+        if (f.readOnlyOnEdit && editing !== "new") continue
+        if (f.disabledWhen?.(draft)) continue
         // an empty secret keeps the stored one
         if (f.type === "password" && !draft[f.field]) continue
+        if (f.type === "table") {
+          if (f.field in draft) payload[f.field] = tableRows(f, draft[f.field])
+          continue
+        }
         if (f.field in draft) payload[f.field] = draft[f.field]
       }
-      if (config.propertyScoped) payload.property = getCurrentProperty()
+      if (config.propertyScoped || (config.propertyOrShared && editing === "new"))
+        payload.property = getCurrentProperty()
       if (editing === "new") {
         await createResource(config.doctype, payload)
       } else if (editing) {
@@ -692,6 +966,11 @@ export function ResourceScreen({
       }
       setEditing(null)
       load()
+      if (config.form.some((f) => f.type === "link" && f.linkDoctype === config.doctype)) {
+        setLinkReloadTick((n) => n + 1)
+      }
+      onReload?.()
+      onSaved?.()
     } catch (e) {
       setError(serverError(e))
     } finally {
@@ -706,6 +985,11 @@ export function ResourceScreen({
       await deleteResource(config.doctype, editing.name)
       setEditing(null)
       load()
+      if (config.form.some((f) => f.type === "link" && f.linkDoctype === config.doctype)) {
+        setLinkReloadTick((n) => n + 1)
+      }
+      onReload?.()
+      onSaved?.()
     } catch (e) {
       setError(serverError(e))
     } finally {
@@ -852,14 +1136,21 @@ export function ResourceScreen({
             </div>
           </div>
         <div className="overflow-x-auto">
-          <table className="w-full table-fixed text-sm">
+          <table className={`w-full text-sm ${visibleCols.length > 7 ? "table-auto" : "table-fixed"}${config.tableMinWidth ? ` ${config.tableMinWidth}` : ""}`}>
             <thead>
               <tr className="border-b border-zinc-200 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
                 {visibleCols.map((c, i) => (
                   <th
                     key={c.field}
                     className={
-                      "py-2 pr-4" + (i === 0 ? " w-[22%]" : "")
+                      "py-2 pr-4" +
+                      (c.width
+                        ? ` ${c.width}`
+                        : visibleCols.length > 7
+                          ? " whitespace-nowrap"
+                          : i === 0
+                            ? " w-[22%]"
+                            : "")
                     }
                   >
                     {t(c.label)}
@@ -878,16 +1169,30 @@ export function ResourceScreen({
                     <td
                       key={c.field}
                       className={
-                        "truncate py-2.5 pr-4" +
-                        (typeof row[c.field] === "number"
+                        (c.wrap
+                          ? "py-2.5 pr-4 align-top"
+                          : visibleCols.length > 7
+                            ? "whitespace-nowrap py-2.5 pr-4" + (c.badge || c.statusCheck || c.booleanBadge ? "" : " max-w-[240px] truncate")
+                            : "truncate py-2.5 pr-4") +
+                        (!c.render && typeof row[c.field] === "number"
                           ? " text-right tabular-nums"
                           : "")
                       }
                     >
-                      {c.statusCheck ? (
+                      {c.render ? (
+                        c.render(row)
+                      ) : c.statusCheck ? (
                         <Badge tone={row[c.field] ? "zinc" : "green"}>
                           {t(row[c.field] ? "Disabled" : "Active")}
                         </Badge>
+                      ) : c.booleanBadge ? (
+                        Number(row[c.field]) ? (
+                          <Badge tone="sky">{t(c.booleanBadge.truthy)}</Badge>
+                        ) : c.booleanBadge.falsy ? (
+                          <Badge tone="zinc">{t(c.booleanBadge.falsy)}</Badge>
+                        ) : (
+                          "-"
+                        )
                       ) : c.badge && row[c.field] ? (
                         <Badge
                           tone={BADGE_TONES[String(row[c.field])] ?? "zinc"}
@@ -955,7 +1260,9 @@ export function ResourceScreen({
           footer={
             useDetail ? undefined : (
             <div className="flex items-center justify-between">
-              {editing !== "new" && config.allowDelete !== false ? (
+              {editing !== "new" &&
+              config.allowDelete !== false &&
+              (!config.canDelete || config.canDelete(draft)) ? (
                 <Button
                   variant="ghost"
                   disabled={busy}
@@ -990,41 +1297,80 @@ export function ResourceScreen({
             </Suspense>
           ) : (
             <div className="space-y-4">
+              {editing !== "new" && config.lead && (
+                <Suspense fallback={null}>
+                  <config.lead row={editing} reload={load} />
+                </Suspense>
+              )}
               {config.formNote && <p className="rounded-lg bg-zinc-50 p-3 text-sm text-zinc-700">{config.formNote}</p>}
-              <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
-                {config.form.filter(spec => spec.dependsOn ? spec.dependsOn(draft) : true).map((spec) => (
-                  <label
-                    key={spec.field}
-                    className={
-                      "block" +
-                      (spec.type === "check" || spec.type === "tags"
-                        ? " sm:col-span-2"
-                        : "")
-                    }
-                  >
-                    <span className="mb-1.5 block text-sm font-medium text-zinc-600">
-                      {t(spec.label)}
-                      {spec.required && <span className="text-rose-500"> *</span>}
-                    </span>
-                    <FieldInput
-                      spec={spec}
-                      value={draft[spec.field]}
-                      onChange={(v) =>
-                        setDraft((d) => ({ ...d, [spec.field]: v }))
-                      }
-                      linkOptions={linkOptions}
-                      masterOptions={masterOptions}
-                      t={t}
-                      canBackdate={canBackdate}
-                    />
-                    {spec.hint && spec.type !== "image" && (
-                      <span className="mt-1 block text-xs leading-relaxed text-zinc-400">
-                        {t(spec.hint)}
-                      </span>
-                    )}
-                  </label>
-                ))}
-              </div>
+              {(() => {
+                const shown = config.form.filter(spec => spec.dependsOn ? spec.dependsOn(draft) : true)
+                const sectioned = new Set((config.sections ?? []).map((section) => section.key))
+                const grid = (specs: FieldSpec[]) => (
+                  <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
+                    {specs.map((spec) => spec.type === "table" ? (
+                      <TableField
+                        key={spec.field}
+                        spec={spec}
+                        value={draft[spec.field]}
+                        onChange={(v) => setDraft((d) => ({ ...d, [spec.field]: v }))}
+                        t={t}
+                      />
+                    ) : (
+                      <label
+                        key={spec.field}
+                        className={
+                          "block" +
+                          (spec.type === "check" || spec.type === "tags"
+                            ? " sm:col-span-2"
+                            : "")
+                        }
+                      >
+                        <span className="mb-1.5 block text-sm font-medium text-zinc-600">
+                          {t(spec.label)}
+                          {spec.required && <span className="text-rose-500"> *</span>}
+                        </span>
+                        <FieldInput
+                          spec={spec}
+                          value={spec.displayValue ? spec.displayValue(draft) : draft[spec.field]}
+                          onChange={(v) =>
+                            setDraft((d) => ({ ...d, [spec.field]: v }))
+                          }
+                          linkOptions={linkOptions}
+                          linkCapped={linkCapped}
+                          extraLinkOptions={spec.ensureOptions?.(draft)}
+                          masterOptions={masterOptions}
+                          t={t}
+                          canBackdate={canBackdate}
+                          disabled={Boolean(
+                            (spec.readOnlyOnEdit && editing !== "new") ||
+                            spec.disabledWhen?.(draft),
+                          )}
+                        />
+                        {(() => {
+                          const shownHint = spec.hintWhen?.(draft) ?? spec.hint
+                          return shownHint && spec.type !== "image" ? (
+                            <span className="mt-1 block text-xs leading-relaxed text-zinc-400">
+                              {t(shownHint)}
+                            </span>
+                          ) : null
+                        })()}
+                      </label>
+                    ))}
+                  </div>
+                )
+                return <>
+                  {grid(shown.filter((spec) => !spec.section || !sectioned.has(spec.section)))}
+                  {(config.sections ?? []).map((section) => (
+                    <details key={section.key} open={editing === "new"}
+                      className="rounded-xl border border-zinc-200 px-4 py-3 [&[open]>summary]:mb-3">
+                      <summary className="cursor-pointer text-sm font-semibold text-zinc-700">{t(section.label)}</summary>
+                      {section.hint && <p className="mb-3 text-xs leading-relaxed text-zinc-500">{t(section.hint)}</p>}
+                      {grid(shown.filter((spec) => spec.section === section.key))}
+                    </details>
+                  ))}
+                </>
+              })()}
               {editing !== "new" && config.extra && (
                 <Suspense fallback={null}>
                   <config.extra row={editing} reload={load} />

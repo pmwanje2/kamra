@@ -19,6 +19,19 @@ ADMIN = ("System Manager", "Administrator", "Hotel Admin")
 # For user management, developer settings and API keys.
 IT_ADMIN = ("System Manager", "Administrator")
 
+# who may correct an issued invoice - a credit note here, or the accounting
+# system's credit and re-bill (OPERA's Credit Bill permission). The folio
+# screen offers both corrections to these roles only.
+INVOICE_CORRECTION_ROLES = ("Finance", "Hotel Admin", "Kamra Agent")
+
+
+def require_invoice_correction_role() -> None:
+	if not (set(INVOICE_CORRECTION_ROLES) | set(ADMIN)) & set(frappe.get_roles()):
+		frappe.throw(
+			f"Not permitted - needs one of: "
+			f"{', '.join(role_label(r) for r in sorted(INVOICE_CORRECTION_ROLES))}.",
+			frappe.PermissionError)
+
 # defaults - each property can change them in Settings -> Finance
 PIN_MAX_ATTEMPTS = 5
 PIN_LOCK_MINUTES = 15

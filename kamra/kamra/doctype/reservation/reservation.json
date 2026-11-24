@@ -23,6 +23,8 @@
   "channel",
   "ota_ref",
   "ota_live_key",
+  "channel_review_needed",
+  "channel_review_reason",
   "idempotency_key",
   "hold_expires_on",
   "travel_agent",
@@ -183,10 +185,11 @@
   },
   {
    "default": "Manual",
+   "description": "How the booking reached the hotel (OPERA origin code). Codes: Settings, Origin Code.",
    "fieldname": "source",
-   "fieldtype": "Select",
+   "fieldtype": "Link",
    "label": "Source",
-   "options": "Manual\nAI Agent\nPhone\nWalk-in\nOTA\nWebsite\nPMS"
+   "options": "Origin Code"
   },
   {
    "description": "OTA name for channel bookings, e.g. booking.com",
@@ -209,6 +212,23 @@
    "read_only": 1,
    "hidden": 1,
    "description": "property and OTA reference while this stay is not cancelled and not a group room that shares the reference. Empty otherwise, so a duplicate delivery cannot insert a second live stay."
+  },
+  {
+   "default": "0",
+   "description": "An OTA modify or cancel needs front-desk review (held in-house/closed update, removed desk discount, or added nights priced without an unapproved discount). Review the note and clear once handled.",
+   "fieldname": "channel_review_needed",
+   "fieldtype": "Check",
+   "label": "Channel Review Needed",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "description": "Why this stay needs channel review (update_not_applied, discount_removed, or discount_review).",
+   "fieldname": "channel_review_reason",
+   "fieldtype": "Data",
+   "label": "Channel Review Reason",
+   "no_copy": 1,
+   "read_only": 1
   },
   {
    "description": "Caller-supplied key so duplicate public/OTA book requests return the same reservation (ADR-007).",
@@ -319,8 +339,8 @@
    "label": "Check-out Business Date",
    "read_only": 1,
    "description": "The business date the guest checked out on: a checkout can be undone only until it moves on"
-   },
-   {
+  },
+  {
    "fieldname": "booked_check_out_date",
    "fieldtype": "Date",
    "label": "Booked Check Out",
@@ -417,12 +437,14 @@
   {
    "fieldname": "amount_before_tax",
    "fieldtype": "Currency",
-   "label": "Amount Before Tax"
+   "label": "Amount Before Tax",
+   "options": "Property:property:currency"
   },
   {
    "fieldname": "tax_amount",
    "fieldtype": "Currency",
-   "label": "Tax Amount"
+   "label": "Tax Amount",
+   "options": "Property:property:currency"
   },
   {
    "fieldname": "column_break_e",
@@ -432,12 +454,14 @@
   {
    "fieldname": "amount_after_tax",
    "fieldtype": "Currency",
-   "label": "Amount After Tax"
+   "label": "Amount After Tax",
+   "options": "Property:property:currency"
   },
   {
    "fieldname": "advance_paid",
    "fieldtype": "Currency",
-   "label": "Advance Paid"
+   "label": "Advance Paid",
+   "options": "Property:property:currency"
   },
   {
    "default": "0",
@@ -458,17 +482,17 @@
   {
    "default": "Individual",
    "fieldname": "booking_type",
-   "fieldtype": "Select",
+   "fieldtype": "Link",
    "label": "Booking Type",
-   "options": "Individual\nGroup\nCorporate"
+   "options": "Booking Type"
   },
   {
    "fieldname": "market_segment",
-   "fieldtype": "Select",
+   "fieldtype": "Link",
    "label": "Market Segment",
-   "options": "\nCorporate\nLeisure\nGroup\nMICE\nGovernment\nWedding\nLong Stay\nAirline Crew\nComplimentary\nHouse Use",
+   "options": "Market Code",
    "in_standard_filter": 1,
-   "description": "Who the business is (corporate, leisure, group…), for revenue reports by segment"
+   "description": "Who the business is (corporate, leisure, group…), for revenue reports by segment. Codes: Settings, Market Code."
   },
   {
    "fieldname": "company",
@@ -527,7 +551,8 @@
    "fieldname": "discount_amount",
    "fieldtype": "Currency",
    "label": "Discount",
-   "read_only": 1
+   "read_only": 1,
+   "options": "Property:property:currency"
   },
   {
    "description": "The stay's discount: a percentage OR a flat amount off each night's room rate. Set through the booking screen with a reason; meals, extras and tax keep their own price.",
@@ -572,7 +597,8 @@
    "fieldname": "agreed_rate",
    "fieldtype": "Currency",
    "label": "Agreed Nightly Rate",
-   "read_only": 1
+   "read_only": 1,
+   "options": "Property:property:currency"
   },
   {
    "fieldname": "contract_tariff",
@@ -715,7 +741,8 @@
    "fieldname": "commission_amount",
    "fieldtype": "Currency",
    "label": "Agent Commission",
-   "read_only": 1
+   "read_only": 1,
+   "options": "Property:property:currency"
   },
   {
    "fieldname": "sb_booker",
@@ -734,9 +761,9 @@
   },
   {
    "fieldname": "booker_relation",
-   "fieldtype": "Select",
+   "fieldtype": "Link",
    "label": "Relation",
-   "options": "\nAssistant\nFamily\nCompany Travel Desk\nTravel Agent\nOther"
+   "options": "Booker Relation"
   },
   {
    "default": "Guest",
@@ -773,9 +800,9 @@
   },
   {
    "fieldname": "cancellation_reason",
-   "fieldtype": "Select",
+   "fieldtype": "Link",
    "label": "Cancellation Reason",
-   "options": "\nGuest request\nChange of plans\nDuplicate booking\nPayment failed\nWeather / travel disruption\nBooked elsewhere\nOther",
+   "options": "Cancellation Reason",
    "read_only": 1
   },
   {
@@ -794,7 +821,8 @@
    "fieldname": "cancellation_fee",
    "fieldtype": "Currency",
    "label": "Cancellation Fee",
-   "read_only": 1
+   "read_only": 1,
+   "options": "Property:property:currency"
   },
   {
    "fieldname": "cancelled_on",
@@ -807,7 +835,8 @@
    "fieldtype": "Currency",
    "label": "Advance Due",
    "read_only": 1,
-   "description": "Amount asked upfront at booking, snapshotted from the policy in force then."
+   "description": "Amount asked upfront at booking, snapshotted from the policy in force then.",
+   "options": "Property:property:currency"
   },
   {
    "fieldname": "payment_policy",
@@ -943,7 +972,8 @@
    "fieldname": "over_capacity_charge",
    "fieldtype": "Currency",
    "label": "Extra Guest Charge / Night",
-   "description": "The amount agreed for those guests, per night. Posts to the folio with the room charge."
+   "description": "The amount agreed for those guests, per night. Posts to the folio with the room charge.",
+   "options": "Property:property:currency"
   },
   {
    "fieldname": "over_capacity_reason",
@@ -997,7 +1027,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-11-23 21:00:00.000000",
+ "modified": "2026-11-24 12:30:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Reservation",

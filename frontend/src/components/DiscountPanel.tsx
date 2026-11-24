@@ -17,6 +17,7 @@ import {
   type DiscountType,
 } from "../lib/reservationDiscount"
 import { useT } from "../lib/i18n"
+import { moneyDigits } from "../lib/money"
 import SupervisorSignOff, { SignOffReasons } from "./SupervisorSignOff"
 
 const inputCls =
@@ -59,6 +60,8 @@ export default function DiscountPanel(props: {
   const lowest = open.length ? Math.min(...open.map((n) => n.base_rate)) : undefined
   const error = discountError(d, open)
   const stayNights = open.map((n) => n.date)
+  const digits = moneyDigits()
+  const amountStep = digits > 2 ? (10 ** -digits).toFixed(digits) : "0.01"
 
   function setType(type: DiscountType) {
     onChange({ ...d, type })
@@ -88,7 +91,7 @@ export default function DiscountPanel(props: {
         </div>
       </div>
       <div className="flex flex-wrap items-end gap-2">
-        <input className={`${inputCls} w-28`} type="number" min="0" step="0.01" inputMode="decimal"
+        <input className={`${inputCls} w-28`} type="number" min="0" step={d.type === "Amount" ? amountStep : "0.01"} inputMode="decimal"
           aria-label={t("Discount value")} disabled={off} value={off ? "" : d.value}
           max={d.type === "Percent" ? 100 : lowest}
           onChange={(e) => onChange({ ...d, value: e.target.value })} />
@@ -142,7 +145,7 @@ export default function DiscountPanel(props: {
                               <option value="Percent">{t("% off")}</option>
                               <option value="Amount">{t("Amount / night")}</option>
                             </select>
-                            <input className={`${inputCls} w-24`} type="number" min="0" step="0.01" inputMode="decimal"
+                            <input className={`${inputCls} w-24`} type="number" min="0" step={own.type === "Amount" ? amountStep : "0.01"} inputMode="decimal"
                               disabled={n.charged} value={own.value} placeholder={d.value || "0"}
                               onChange={(e) => setNight(n.date, { ...own, value: e.target.value })} />
                             <select className={inputCls} aria-label={`${t("Discount reason")} ${n.date}`}

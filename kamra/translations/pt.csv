@@ -103,3 +103,17 @@ Extra guests by arrangement,Hóspedes adicionais conforme acordado
 Room levy,Taxa por quarto
 Room nights,Noites de quarto
 "No nights are posted yet. Use Advance bill to post the stay now, then give the discount, or use a rate plan or promo code at booking.","Ainda não há diárias lançadas. Use «Fatura antecipada» para lançar a estadia agora e depois dê o desconto, ou use um plano tarifário ou código promocional na reserva."
+OTA Tax Rules row {0}: the text needs a letter or a digit.,Linha {0} das Regras de impostos OTA: o texto precisa de uma letra ou um dígito.
+OTA Tax Basis rows {0} and {1} are the same OTA ({2}): keep one.,As linhas {0} e {1} da Base de impostos OTA são a mesma OTA ({2}): mantenha uma.
+OTA Tax Rules,Regras de impostos OTA
+OTA Tax Basis,Base de impostos OTA
+OTA Tax Basis row {0}: the OTA name needs a letter or a digit.,Linha {0} da Base de impostos OTA: o nome da OTA precisa de uma letra ou dígito.
+
+Channel review status can only be cleared via the review action.,O estado de revisão do canal só pode ser limpo através da ação de revisão.
+Update In-House Reservations,Atualizar reservas hospedadas
+"Update In-House Reservations = Y is not yet enabled: OXI Y requires arrival-date, room-type, billed-night, and assigned-room safety bounds. Keep N so OTA changes to checked-in stays are rejected and flagged for review.","Atualizar reservas hospedadas = Y ainda não está ativado: o OXI Y requer limites de segurança de data de chegada, tipo de quarto, noites faturadas e quarto atribuído. Mantenha N para que as alterações da OTA em estadias com check-in sejam rejeitadas e marcadas para revisão."
+OTA Tax Rules row {0}: a CJK rule needs at least two characters so it does not match unrelated taxes.,Linha {0} de Regras de impostos OTA: uma regra CJK precisa de pelo menos dois caracteres para não corresponder a impostos não relacionados.
+Tax as per the accounting invoice,Imposto conforme a fatura contábil
+Tax Invoice,Nota Fiscal
+Provisional Bill,Fatura Provisória
+Credited,Creditado

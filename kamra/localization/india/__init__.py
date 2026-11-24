@@ -13,6 +13,7 @@ import frappe
 
 FNB_GST = 5.0  # F&B / meal-plan GST rate
 SERVICES_GST = 18.0  # laundry and other guest services
+USES_TAX_SLAB = True
 
 INVOICE_TITLE = "Tax Invoice"  # the words the tax law requires on the bill
 DEFAULT_CURRENCY = "INR"
@@ -20,6 +21,17 @@ DEFAULT_CURRENCY = "INR"
 FX_CURRENCIES = ["USD", "EUR", "GBP", "AED", "SAR", "SGD", "AUD", "JPY"]
 DEFAULT_TIMEZONE = "Asia/Kolkata"
 DEFAULT_NATIONALITY = "Indian"
+# what a new Indian property starts with (kamra.localization.setting_default):
+# the GST slab, and amounts in rupees core no longer assumes for everyone
+SETTING_DEFAULTS = {
+	"gst_mode": "Slab",
+	"gst_slab_threshold": 7500,
+	"gst_rate_low": 5,
+	"gst_rate_high": 18,
+	"security_deposit_amount": 5000,
+	"na_high_balance_threshold": 50000,
+	"max_cash_refund": 5000,
+}
 # the financial year runs April to March: year-to-date reports start here
 FINANCIAL_YEAR_START = (4, 1)
 # a passport or ID card MRZ names the country by this code
@@ -159,10 +171,14 @@ def amount_in_words(prop_doc, amount) -> str:
 
 
 def locale(prop_doc) -> dict:
+	currency = prop_doc.get("currency") or "INR"
+	symbol = frappe.db.get_value("Currency", currency, "symbol")
+	if currency == "INR" and symbol in (None, "", "Rs", "Rs."):
+		symbol = "₹"
 	return {
-		"currency_symbol": "₹",
+		"currency_symbol": symbol or "₹",
 		"locale": "en-IN",
-		"currency": prop_doc.get("currency") or "INR",
+		"currency": currency,
 		"tax_label": "GST",
 		"tax_id_label": "GSTIN",
 		"tax_rates": tax_rate_options(prop_doc.name),

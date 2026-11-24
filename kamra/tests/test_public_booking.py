@@ -95,3 +95,50 @@ class PublicBookingTestCase(IntegrationTestCase):
 		self.assertIsNone(brand(""))
 		self.assertEqual(brand("Example Hotels"), "Example Hotels")
 		self.assertEqual(site_info()["app"], "kamra")
+
+	def test_room_type_without_rooms_is_never_offered_in_public_showcase_or_search(self):
+		empty = frappe.get_doc({"doctype": "Room Type", "property": self.property,
+			"room_type_code": "EMP", "room_type_name": "Unbuilt Room", "base_price": 100,
+			"adults_capacity": 2}).insert(ignore_permissions=True).name
+		shown = [rt["name"] for rt in showcase(self.property)["room_types"]]
+		self.assertIn(self.room_type, shown)
+		self.assertNotIn(empty, shown)
+		searched = [r["room_type"] for r in search_stay(self.property, self.ci, self.co, 2, 0)]
+		self.assertIn(self.room_type, searched)
+		self.assertNotIn(empty, searched)
+
+	def test_search_and_book_use_property_default_rate_plan_and_expose_label(self):
+		from unittest.mock import patch
+		from kamra.pricing import ContractRateRefused, quote_with_contract
+		from kamra.public_api import book
+
+		rp = frappe.get_doc({
+			"doctype": "Rate Plan", "property": self.property,
+			"rate_plan_name": "Direct Standard", "code": "DIR-STD",
+			"modifier_type": "Percent", "modifier_value": -20,
+			"billing_basis": "Nightly", "is_default": 1, "disabled": 0,
+		}).insert(ignore_permissions=True)
+
+		expected = quote_with_contract(
+			self.property, self.room_type, self.ci, self.co, 2, 0, rate_plan=rp.name,
+		)["amount_after_tax"]
+		row = self.row()
+		self.assertEqual(row["rate_plan"], rp.name)
+		self.assertEqual(row["rate_plan_label"], "Direct Standard")
+		self.assertAlmostEqual(row["quote"]["amount_after_tax"], expected, places=2)
+		self.assertAlmostEqual(row["plans"][0]["amount_after_tax"], expected, places=2)
+
+		booked = book(
+			property=self.property, room_type=self.room_type,
+			check_in_date=self.ci, check_out_date=self.co,
+			guest_name="Public Sync Guest", phone="+256700000999", adults=2,
+		)
+		res = frappe.get_doc("Reservation", booked["reservation"])
+		self.assertEqual(res.rate_plan, rp.name)
+		self.assertAlmostEqual(res.amount_after_tax, expected, places=2)
+
+		# An untariffed room refused by the default plan must be marked unavailable, never fall back to Card BAR.
+		with patch("kamra.pricing.quote_with_contract", side_effect=ContractRateRefused("HSP-TARIFF-001")):
+			refused = self.row()
+		self.assertIs(refused["available"], False)
+		self.assertIsNone(refused["quote"])

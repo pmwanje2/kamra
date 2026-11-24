@@ -12,10 +12,17 @@ export interface TenderMode {
   currencies: string[]
 }
 
+/** One code of a hotel master: the stored value and what the desk shows. */
+export interface Choice {
+  value: string
+  label: string
+}
+
 interface Locale {
   currency_symbol: string
   locale: string
   currency: string
+  date_format?: string | null
   tax_label: string
   tax_basis?: TaxBasis | null
   tax_id_label: string
@@ -51,6 +58,11 @@ interface Locale {
   services_tax_rate?: number
   /** Off for a dry property: alcohol fields and labels are hidden. */
   sells_alcohol?: boolean
+  /** The hotel's own Market codes, booker relations and Cancellation
+   *  Reasons (Settings data, OPERA codes) - never a list typed in a screen. */
+  market_codes?: Choice[]
+  booker_relations?: Choice[]
+  cancellation_reasons?: Choice[]
 }
 
 export interface Integrations {
@@ -85,9 +97,18 @@ let cache: Locale = {
 
 const listeners = new Set<() => void>()
 
+function syncDateFormat(fmt?: string | null) {
+  if (fmt && typeof window !== "undefined") {
+    ;(window as Window & { kamra_date_format?: string }).kamra_date_format = fmt
+  }
+}
+
 try {
   const saved = JSON.parse(localStorage.getItem("kamra_locale") || "")
-  if (saved && saved.currency) cache = { ...cache, ...saved }
+  if (saved && saved.currency) {
+    cache = { ...cache, ...saved }
+    syncDateFormat(cache.date_format)
+  }
 } catch {
   /* first run - neutral defaults until the pack resolves */
 }
@@ -109,6 +130,7 @@ export function loadLocale(): Promise<Locale> {
     .then((l) => {
       if (property !== getCurrentProperty()) return cache
       cache = { ...cache, tender_modes: null, fx_currencies: [], tax_basis: null, ...l }
+      syncDateFormat(cache.date_format)
       remember()
       return cache
     })
@@ -158,8 +180,8 @@ export function moneyDigits(currency = cache.currency) {
 }
 /** An amount with the currency's normal decimals, always the same count
  *  (2,27,255.40, never 2,27,255.4), so a column of figures lines up. */
-export const fmtAmount = (n: unknown) => {
-  const d = moneyDigits()
+export const fmtAmount = (n: unknown, currency = cache.currency) => {
+  const d = moneyDigits(currency)
   return Number(n ?? 0).toLocaleString(cache.locale, { minimumFractionDigits: d, maximumFractionDigits: d })
 }
 /** fmtAmount with the currency symbol in front. */

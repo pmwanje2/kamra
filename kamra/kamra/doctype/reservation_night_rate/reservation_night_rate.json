@@ -58,7 +58,7 @@
    "read_only": 1
   },
   {
-   "description": "The price the desk typed for this night, as the booking screen showed it (tax included when the property's rates include tax). Zero for a night Kamra priced.",
+   "description": "The price the desk typed for this night, as the booking screen showed it (tax included when the property's rates include tax). Zero for a night the system priced.",
    "fieldname": "hand_price",
    "fieldtype": "Currency",
    "label": "Typed Price",

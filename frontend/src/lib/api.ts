@@ -465,12 +465,25 @@ export interface BookingOptions {
   }
 }
 
+/** One night of a contract stay over a season or tariff change (OPERA Rate Changes During Stay):
+ *  its own tariff amount and the home-currency rate it locks. */
+export interface ContractTariffNight {
+  date: string
+  nightly: number
+  agreed_rate: number
+  item_price?: string | null
+}
+
 export interface ContractTariff {
   currency: string
   nightly: number
   property_currency: string
   fx_rate: number
   fx_date: string
+  /** each night's own tariff, when the stay crosses a tariff change; the figures above are the check-in night's */
+  nights?: ContractTariffNight[]
+  /** a derived plan's base plan, whose contract it prices from */
+  derived_from?: string
 }
 
 export interface TariffReference {
@@ -478,10 +491,36 @@ export interface TariffReference {
   agreed_rate?: number | null
 }
 
+/** A bill's contract currency beside its home amounts (kamra.folio.reference_currency): Property
+ *  reference_currency_calculation ACTUAL - the rate the stay was priced or its nights posted at - or
+ *  CURRENT - today's published rate - with the bill's total and balance in that currency. */
+export interface ReferenceCurrency {
+  currency: string
+  home_currency: string
+  calculation: "ACTUAL" | "CURRENT"
+  fx_rate: number
+  fx_date: string | null
+  /** an ACTUAL Current Date stay: how many posted nights the average rate is of */
+  posted_nights?: number
+  grand_total_reference?: number
+  balance_reference?: number
+}
+
 export interface TaxBasis {
   label: string
   rate: number
   inclusive: boolean | 0 | 1
+  determined?: boolean | 0 | 1
+  template?: string | null
+}
+
+export const TAX_NOT_SET_UP_MSG =
+  "Sales tax isn't set up for this hotel's company. Finance sets it in Accounting."
+
+/** PR-11: true only when the tax bridge explicitly returned determined === 0.
+ *  Older bridges omit `determined`, which stays quiet. */
+export function isTaxUndetermined(basis?: TaxBasis | null): boolean {
+  return basis != null && basis.determined !== undefined && !Number(basis.determined)
 }
 
 export interface Quote extends TariffReference {
@@ -1947,13 +1986,32 @@ export interface ReservationDetail extends TariffReference {
   warnings: {
     id_document_missing: boolean
     id_unverified: boolean
+    channel_review_needed?: boolean
   }
+  /** Set when an OTA modify or cancel needs front-desk review (held in-house/closed
+   *  update, applied modify that removed a desk discount, or added nights priced
+   *  without an unapproved discount). */
+  channel_review_needed?: number
+  channel_review_reason?: "update_not_applied" | "discount_removed" | "discount_review" | null
+  channel_reviews?: {
+    name: string
+    action_type: string
+    reason?: "update_not_applied" | "discount_removed" | "discount_review"
+    rationale: string
+    executed_at: string | null
+  }[]
   /** Soft-required check-in steps still open (finish after the guest is in). */
   checkin_backfill: { step: string; title: string; tip: string }[]
 }
 
 export const reservationDetail = (name: string) =>
   call<ReservationDetail>("kamra.api.reservation_detail", { reservation: name })
+
+export const clearChannelReview = (reservation: string) =>
+  call<{ ok: boolean; reservation: string; channel_review_needed: number }>(
+    "kamra.channel_manager.clear_channel_review",
+    { reservation },
+  )
 
 /** The ID scan as a data URL. Served through a role-gated endpoint rather than
  *  its /private/files/ URL: Frappe would authorise that via the Reservation's

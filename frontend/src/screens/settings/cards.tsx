@@ -15,6 +15,7 @@ import { Button } from "../../components/ui/button"
 import ImageField from "../../components/ImageField"
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card"
 import { cur, moneyLocale, useLocale } from "../../lib/money"
+import { toFullPath } from "../../lib/routing"
 
 
 /** Self-contained cards the settings hub (./SettingsHub) places on its
@@ -208,10 +209,30 @@ export const TIMEZONES = [
   "Europe/London",
   "Europe/Paris",
   "Africa/Cairo",
+  "Africa/Kampala",
   "Africa/Nairobi",
   "America/New_York",
   "America/Los_Angeles",
   "UTC",
+]
+
+export const LOCALES = [
+  "en-UG",
+  "en-GB",
+  "en-US",
+  "en-IN",
+  "en-AE",
+  "en-PH",
+  "en-SA",
+  "de-DE",
+  "es-NI",
+  "es-ES",
+  "pt-BR",
+  "id-ID",
+  "ms-MY",
+  "th-TH",
+  "ar-SA",
+  "zh-CN",
 ]
 
 const ZATCA_SPECS: Spec[] = [
@@ -750,7 +771,7 @@ function AiAssistantCard({
         )}
         <p className="text-xs text-zinc-400">
           {t("Want Claude the app?")}{" "}
-          <a href="/kamra/assistant" className="font-medium text-brand-700 hover:underline">
+          <a href={toFullPath("/assistant")} className="font-medium text-brand-700 hover:underline">
             {t("{assistant} → Connect your AI")}
           </a>
           . {t("Want Claude the model in this chat? Use the OpenRouter preset.")}
@@ -1569,8 +1590,8 @@ export function NightAuditScheduleCard({ property }: { property: string }) {
       </CardHeader>
       <CardContent>
         {err && <p className="text-sm text-rose-700">{translateUI(err)}</p>}
-        {data && !data.runs.length && <p className="text-sm text-zinc-500">{t("No runs yet.")}</p>}
-        {data && data.runs.length > 0 && (
+        {data && !(data.runs?.length) && <p className="text-sm text-zinc-500">{t("No runs yet.")}</p>}
+        {data && (data.runs?.length ?? 0) > 0 && (
           <div className="max-h-80 overflow-auto">
             <table className="w-full text-sm">
               <thead className="text-start text-xs text-zinc-500">
@@ -1582,7 +1603,7 @@ export function NightAuditScheduleCard({ property }: { property: string }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
-                {data.runs.map((r, i) => (
+                {(data.runs ?? []).map((r, i) => (
                   <tr key={i} className="align-top">
                     <td className="py-1.5 pe-3 whitespace-nowrap tabular-nums">{r.started_at?.slice(0, 16)}</td>
                     <td className="py-1.5 pe-3 whitespace-nowrap tabular-nums">{r.business_date}</td>
@@ -1598,6 +1619,190 @@ export function NightAuditScheduleCard({ property }: { property: string }) {
               </tbody>
             </table>
           </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+interface CashierRow {
+  name: string
+  cashier_id: string
+  user: string
+  max_cash_refund: number | null
+  allowed_modes: string | null
+  disabled: number
+}
+
+/** Per-cashier cash refund cap and allowed modes (Settings › Finance). */
+export function CashierLimitsCard({ property }: { property: string }) {
+  const { t } = useT()
+  useLocale()
+  const [rows, setRows] = useState<CashierRow[]>([])
+  const [drafts, setDrafts] = useState<
+    Record<string, { max_cash_refund: string; allowed_modes: string; disabled: number }>
+  >({})
+  const [saving, setSaving] = useState<string | null>(null)
+  const [status, setStatus] = useState<Record<string, { ok: boolean; text: string }>>({})
+  const [err, setErr] = useState<string | null>(null)
+
+  const load = useCallback(() => {
+    listResource("Cashier", {
+      fields: ["name", "cashier_id", "user", "max_cash_refund", "allowed_modes", "disabled"],
+      filters: [["property", "=", property]],
+      orderBy: "cashier_id asc",
+      limit: 200,
+    })
+      .then((res) => {
+        const list = res as unknown as CashierRow[]
+        setRows(list)
+        setDrafts(
+          Object.fromEntries(
+            list.map((r) => [
+              r.name,
+              {
+                max_cash_refund:
+                  r.max_cash_refund === null || r.max_cash_refund === undefined
+                    ? ""
+                    : String(r.max_cash_refund),
+                allowed_modes: String(r.allowed_modes ?? ""),
+                disabled: Number(r.disabled ?? 0),
+              },
+            ]),
+          ),
+        )
+        setErr(null)
+      })
+      .catch((e) => setErr(serverError(e)))
+  }, [property])
+
+  useEffect(load, [load])
+
+  async function saveRow(row: CashierRow) {
+    const d = drafts[row.name]
+    if (!d) return
+    setSaving(row.name)
+    setStatus((s) => {
+      const next = { ...s }
+      delete next[row.name]
+      return next
+    })
+    try {
+      const limitVal = d.max_cash_refund.trim() === "" ? 0 : Number(d.max_cash_refund)
+      await updateResource("Cashier", row.name, {
+        max_cash_refund: limitVal,
+        allowed_modes: d.allowed_modes.trim(),
+        disabled: d.disabled,
+      })
+      setStatus((s) => ({ ...s, [row.name]: { ok: true, text: t("Saved") } }))
+      load()
+    } catch (e) {
+      setStatus((s) => ({ ...s, [row.name]: { ok: false, text: serverError(e) } }))
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  return (
+    <Card>
+      <CardContent className="pt-5">
+        <h3 className="text-base font-semibold text-zinc-900">{t("Cashier limits")}</h3>
+        <p className="mt-0.5 mb-4 text-xs text-zinc-500">
+          {t("Per-cashier cash refund cap and allowed payment modes. Leave 0 for no cash refund limit.")}
+        </p>
+        {err && <p className="mb-3 text-sm text-rose-600">{translateUI(err)}</p>}
+        {rows.length === 0 ? (
+          <p className="text-sm text-zinc-400">{t("No cashiers registered for this property yet.")}</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-zinc-200 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
+                <th className="py-2 pr-3">{t("Cashier")}</th>
+                <th className="py-2 pr-3">{t("User")}</th>
+                <th className="py-2 pr-3">{t("Cash refund limit")}</th>
+                <th className="py-2 pr-3">{t("Allowed modes")}</th>
+                <th className="py-2 pr-3">{t("Disabled")}</th>
+                <th className="py-2" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-100">
+              {rows.map((row) => {
+                const d = drafts[row.name] ?? { max_cash_refund: "", allowed_modes: "", disabled: 0 }
+                const st = status[row.name]
+                const cid = String(row.cashier_id || row.name)
+                return (
+                  <tr key={row.name}>
+                    <td className="py-2.5 pr-3 font-medium text-zinc-800">{cid}</td>
+                    <td className="py-2.5 pr-3 text-zinc-600">{row.user || "-"}</td>
+                    <td className="py-2.5 pr-3">
+                      <span className="inline-flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          min={0}
+                          step="any"
+                          aria-label={t("Max cash refund for {id}", { id: cid })}
+                          className={`${inputCls} max-w-32 tabular-nums`}
+                          value={d.max_cash_refund}
+                          onChange={(e) =>
+                            setDrafts((prev) => ({
+                              ...prev,
+                              [row.name]: { ...d, max_cash_refund: e.target.value },
+                            }))
+                          }
+                        />
+                        {cur() && <span className="text-xs text-zinc-500">{cur()}</span>}
+                      </span>
+                    </td>
+                    <td className="py-2.5 pr-3">
+                      <input
+                        type="text"
+                        aria-label={t("Allowed modes for {id}", { id: cid })}
+                        placeholder={t("All modes")}
+                        className={`${inputCls} max-w-44`}
+                        value={d.allowed_modes}
+                        onChange={(e) =>
+                          setDrafts((prev) => ({
+                            ...prev,
+                            [row.name]: { ...d, allowed_modes: e.target.value },
+                          }))
+                        }
+                      />
+                    </td>
+                    <td className="py-2.5 pr-3">
+                      <input
+                        type="checkbox"
+                        aria-label={t("Disable {id}", { id: cid })}
+                        className="size-4 accent-brand-600"
+                        checked={Boolean(d.disabled)}
+                        onChange={(e) =>
+                          setDrafts((prev) => ({
+                            ...prev,
+                            [row.name]: { ...d, disabled: e.target.checked ? 1 : 0 },
+                          }))
+                        }
+                      />
+                    </td>
+                    <td className="py-2.5 text-right whitespace-nowrap">
+                      <Button
+                        variant="outline"
+                        disabled={saving === row.name}
+                        onClick={() => saveRow(row)}
+                      >
+                        {saving === row.name ? t("Saving…") : t("Save")}
+                      </Button>
+                      {st && (
+                        <span
+                          className={`ml-2 text-xs ${st.ok ? "text-emerald-600" : "text-rose-600"}`}
+                        >
+                          {translateUI(st.text)}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         )}
       </CardContent>
     </Card>

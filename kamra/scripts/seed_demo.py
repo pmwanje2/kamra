@@ -511,5 +511,17 @@ def heal_seed_defaults(properties=DEMO_PROPERTIES) -> int:
 					f"update `tab{dt}` set {col} = %s where `{key}` = %s and {blank}",
 					(val, prop))
 				healed += frappe.db._cursor.rowcount if getattr(frappe.db, "_cursor", None) else 0
+	# what the doctype no longer defaults (currency, clock, tax slab and
+	# amounts in the country's money) comes from each property's pack
+	from kamra.localization import property_country_defaults
+	prop_meta = frappe.get_meta("Property")
+	for prop in targets:
+		country = frappe.db.get_value("Property", prop, "country")
+		for field, value in property_country_defaults(country).items():
+			current = frappe.db.get_value("Property", prop, field)
+			numeric = prop_meta.get_field(field).fieldtype in _NUMERIC
+			if current in (None, "") or (numeric and not float(current or 0)):
+				frappe.db.set_value("Property", prop, field, value, update_modified=False)
+				healed += 1
 	frappe.clear_cache()
 	return healed

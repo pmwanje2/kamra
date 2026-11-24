@@ -30,7 +30,7 @@ import {
   type ReasonCategories,
   type AgreedRatePreview,
 } from "../lib/agreedRate"
-import { cur, moneyLocale } from "../lib/money"
+import { cur, moneyDigits, moneyLocale } from "../lib/money"
 import {
   discountArgs,
   discountNote,
@@ -52,9 +52,16 @@ const inputCls =
   "rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm " +
   "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
 
-// whole currency units, like the rest of the reservation drawer
-const money = (n: number) =>
-  `${cur()}${Number(n || 0).toLocaleString(moneyLocale(), { maximumFractionDigits: 0 })}`
+// currency minor-unit precision (KWD 3, USD 2, UGX 0), keeping whole figures compact like money_text
+const money = (n: number) => {
+  const v = Number(n || 0)
+  const d = moneyDigits()
+  const hasFrac = d > 0 && Math.abs(v - Math.round(v)) >= 10 ** -(d + 1)
+  return `${cur()}${v.toLocaleString(moneyLocale(), {
+    minimumFractionDigits: hasFrac ? d : 0,
+    maximumFractionDigits: d,
+  })}`
+}
 const signed = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${money(Math.abs(n))}`
 
 /** kamra.api.discount_preview: the rules plus what saving would do. */
@@ -97,6 +104,8 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
   onSaved: () => void
 }) {
   const { t } = useT()
+  const digits = moneyDigits()
+  const rateStep = digits === 0 ? "1" : (10 ** -digits).toString()
   const [open, setOpen] = useState(false)
   const [mode, setMode] = useState<"discount" | "fixed">("discount")
   const [rate, setRate] = useState("")
@@ -318,36 +327,51 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
             </label>
           )}
         </DiscountPanel>
-        {plan && (
-          <div className="w-0 min-w-full overflow-x-auto">
-            <table className="w-full whitespace-nowrap text-sm tabular-nums">
-              <thead>
-                <tr className="text-xs text-zinc-400">
-                  <th className="pe-2 text-start font-normal">{t("Night")}</th>
-                  <th className="px-2 text-end font-normal">{t("Base")}</th>
-                  <th className="px-2 text-end font-normal">{t("Discount")}</th>
-                  <th className="ps-2 text-end font-normal">{t("Net")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {plan.nights.map((n) => (
-                  <tr key={n.date} className={n.charged ? "text-zinc-400" : ""}>
-                    <td className="pe-2">{n.date}</td>
-                    <td className="px-2 text-end">{money(n.entry_base_rate ?? n.base_rate)}</td>
-                    <td className="px-2 text-end text-emerald-700">{n.discount_amount ? signed(-n.discount_amount) : "-"}</td>
-                    <td className="ps-2 text-end">{money(n.entry_rate ?? n.rate)}</td>
-                  </tr>
-                ))}
-                <tr className="border-t border-zinc-200 font-medium">
-                  <td className="pe-2">{t("Total")}</td>
-                  <td className="px-2 text-end">{money(plan.current_amount)}</td>
-                  <td className="px-2 text-end">{signed(plan.difference)}</td>
-                  <td className="ps-2 text-end">{money(plan.new_amount)}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        )}
+        {plan && (() => {
+          const totalBase = plan.nights.reduce((s, n) => s + (n.entry_base_rate ?? n.base_rate), 0)
+          const totalDiscount = plan.nights.reduce((s, n) => s + (n.discount_amount || 0), 0)
+          const totalNet = plan.nights.reduce((s, n) => s + (n.entry_rate ?? n.rate), 0)
+          return (
+            <div className="space-y-1.5">
+              <div className="w-0 min-w-full overflow-x-auto">
+                <table className="w-full whitespace-nowrap text-xs tabular-nums">
+                  <thead>
+                    <tr className="text-zinc-400">
+                      <th className="pe-2 text-start font-normal">{t("Night")}</th>
+                      <th className="px-1.5 text-end font-normal">{t("Base")}</th>
+                      <th className="px-1.5 text-end font-normal">{t("Discount")}</th>
+                      <th className="ps-1.5 text-end font-normal">{t("Net")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {plan.nights.map((n) => (
+                      <tr key={n.date} className={n.charged ? "text-zinc-400" : ""}>
+                        <td className="pe-2">{n.date}</td>
+                        <td className="px-1.5 text-end">{money(n.entry_base_rate ?? n.base_rate)}</td>
+                        <td className="px-1.5 text-end text-emerald-700">{n.discount_amount ? signed(-n.discount_amount) : "-"}</td>
+                        <td className="ps-1.5 text-end">{money(n.entry_rate ?? n.rate)}</td>
+                      </tr>
+                    ))}
+                    <tr className="border-t border-zinc-200 font-medium">
+                      <td className="pe-2">{t("Total")}</td>
+                      <td className="px-1.5 text-end">{money(totalBase)}</td>
+                      <td className="px-1.5 text-end text-emerald-700">{totalDiscount ? signed(-totalDiscount) : "-"}</td>
+                      <td className="ps-1.5 text-end">{money(totalNet)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              {Math.abs(plan.difference) >= 0.005 && (
+                <p className="flex flex-wrap items-baseline justify-between gap-2 text-xs tabular-nums text-zinc-600">
+                  <span>{t("Change from current booking")}</span>
+                  <span className="font-medium text-zinc-800">
+                    {money(plan.current_amount)} → {money(plan.new_amount)} ({signed(plan.difference)})
+                  </span>
+                </p>
+              )}
+            </div>
+          )
+        })()}
         {error && <p className="text-xs text-rose-600">{t(error)}</p>}
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={close}>{t("Cancel")}</Button>
@@ -366,7 +390,7 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
       )}
       <label className="block">
         <span className="text-xs text-zinc-400">{t("New rate / night")}</span>
-        <input className={`${inputCls} mt-0.5 w-full`} type="number" min="0" inputMode="decimal"
+        <input className={`${inputCls} mt-0.5 w-full`} type="number" min="0" step={rateStep} inputMode="decimal"
           placeholder={cur()} value={rate} onChange={(e) => setRate(e.target.value)} />
       </label>
 

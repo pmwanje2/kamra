@@ -9,11 +9,9 @@ import { ChevronDown, Loader2, Megaphone, Plus, ShieldAlert, Star, Trash2, X } f
 import {
   call,
   createBooking,
-  getBookingOptions,
   getCurrentProperty,
-  getQuote,
-  guestAlert,
-  guestSearch,
+  isTaxUndetermined,
+  TAX_NOT_SET_UP_MSG,
   type BookingOptions,
   type GuestAlert,
   type GuestHit,
@@ -21,7 +19,7 @@ import {
 } from "../lib/api"
 import { pickDefaultRoomType } from "../lib/bookingDefaults"
 import { Button } from "./ui/button"
-import { useLocale } from "../lib/money"
+import { moneyDigits, useLocale } from "../lib/money"
 import { isPhoneComplete } from "../lib/phone"
 import { nightsBetween, parseDate, shiftDate } from "../lib/stay"
 import { typedNights, type NightPrice } from "../lib/nightPrices"
@@ -48,9 +46,6 @@ import DepositPanel, { type DepositState } from "./DepositPanel"
 import CheckInDialog from "./CheckInDialog"
 import TillCard, { useTill } from "./TillCard"
 
-/** Reservation.market_segment options (same list as the doctype). */
-const MARKET_SEGMENTS = ["Corporate", "Leisure", "Group", "MICE", "Government", "Wedding",
-  "Long Stay", "Airline Crew", "Complimentary", "House Use"]
 
 
 interface CompanyCredit {
@@ -116,7 +111,8 @@ interface WalkInResult {
  * (the night's net plus the discount, so a lower tax slab never moves it). */
 function discountNights(q: Quote) {
   const inclusive = !!q.line_items?.[0]?.is_tax_inclusive
-  return q.nightly.map((n) => ({ date: n.date, base_rate: entryBase(n, inclusive) }))
+  const places = Math.max(moneyDigits(), 2)
+  return q.nightly.map((n) => ({ date: n.date, base_rate: entryBase(n, inclusive, places) }))
 }
 
 function todayLocal() {
@@ -368,7 +364,10 @@ export function BookingDialog(props: {
       return
     }
     const t = setTimeout(
-      () => guestSearch(form.guest_name).then(setHits).catch(() => setHits([])),
+      () =>
+        call<GuestHit[]>("kamra.api.guest_search", { q: form.guest_name })
+          .then((rows) => setHits(Array.isArray(rows) ? rows : []))
+          .catch(() => setHits([])),
       250,
     )
     return () => clearTimeout(t)
@@ -385,7 +384,7 @@ export function BookingDialog(props: {
     }
     let live = true
     const t = setTimeout(() => {
-      guestAlert({ guest: guest || undefined, phone: guest ? undefined : phone })
+      call<GuestAlert>("kamra.api.guest_alert", { guest: guest || undefined, phone: guest ? undefined : phone })
         .then((a) => {
           if (!live) return
           setAlert(a)
@@ -407,7 +406,7 @@ export function BookingDialog(props: {
   const autoRoomType = useRef(!props.initial.room_type)
 
   useEffect(() => {
-    getBookingOptions().then((o) => {
+    call<BookingOptions>("kamra.api.booking_options", { property: getCurrentProperty() }).then((o) => {
       setOptions(o)
       setForm((f) => ({
         ...f,
@@ -586,7 +585,8 @@ export function BookingDialog(props: {
     setQuote(null)
     setQuoting(true)
     const t = setTimeout(() => {
-      getQuote({
+      call<Quote>("kamra.api.get_quote", {
+        property: getCurrentProperty(),
         room_type: form.room_type,
         check_in_date: form.check_in_date,
         check_out_date: checkOut,
@@ -652,7 +652,8 @@ export function BookingDialog(props: {
       Promise.all(
         moreRooms.map((r) =>
           r.room_type
-            ? getQuote({
+            ? call<Quote>("kamra.api.get_quote", {
+                property: getCurrentProperty(),
                 room_type: r.room_type,
                 check_in_date: form.check_in_date,
                 check_out_date: checkOut,
@@ -2014,6 +2015,7 @@ export function BookingDialog(props: {
                     mealPlan={form.meal_plan || undefined}
                     voucher={form.voucher_code || undefined}
                     ratePlan={form.rate_plan}
+                    company={form.company || undefined}
                     planRequired={planRequired}
                     onPickPlan={(p) => set("rate_plan", p)}
                     nightPrices={nightPrices}
@@ -2362,8 +2364,8 @@ export function BookingDialog(props: {
                             onChange={(e) => set("market_segment", e.target.value)}
                           >
                             <option value="">{form.company ? translate("Corporate") : "-"}</option>
-                            {MARKET_SEGMENTS.map((m) => (
-                              <option key={m} value={m}>{translate(m)}</option>
+                            {(loc.market_codes ?? []).map((m) => (
+                              <option key={m.value} value={m.value}>{translate(m.label)}</option>
                             ))}
                           </select>
                         </Field>
@@ -2454,13 +2456,8 @@ export function BookingDialog(props: {
                                     }
                                   >
                                     <option value="">-</option>
-                                    {[
-                                      "Assistant",
-                                      "Family",
-                                      "Company Travel Desk",
-                                      "Travel Agent",
-                                    ].map((r) => (
-                                      <option key={r} value={r}>{translate(r)}</option>
+                                    {(loc.booker_relations ?? []).map((r) => (
+                                      <option key={r.value} value={r.value}>{translate(r.label)}</option>
                                     ))}
                                   </select>
                                 </Field>
@@ -2636,19 +2633,26 @@ export function BookingDialog(props: {
                         {homeText(quote.room_total)}
                       </span>}
                     </div>
-                    {/* label and amount never touch or wrap: the amount
-                        keeps its width, a long reason truncates */}
+                    {/* label wraps cleanly so the full reason is visible;
+                        the amount keeps its width */}
                     {(quote.reservation_discount_total ?? 0) > 0 && (<>
                       <div className="flex justify-between gap-3 text-zinc-600">
                         <span>{t("Base room rate")}</span>
                         <span className="shrink-0 whitespace-nowrap tabular-nums">{homeText(quote.room_base_total ?? quote.room_total)}</span>
                       </div>
-                      <div className="flex justify-between gap-3 font-medium text-emerald-700">
-                        <span className="min-w-0 truncate">
-                          {discountReasonText ? t("Discount ({reason})", { reason: discountReasonText }) : t("Discount")}
-                        </span>
-                        <span className="shrink-0 whitespace-nowrap tabular-nums">−{homeText(quote.reservation_discount_total ?? 0)}</span>
-                      </div>
+                      {(() => {
+                        const discountLabel = discountReasonText
+                          ? t("Discount ({reason})", { reason: discountReasonText })
+                          : t("Discount")
+                        return (
+                          <div className="flex items-start justify-between gap-3 font-medium text-emerald-700">
+                            <span className="min-w-0 break-words" title={discountLabel}>
+                              {discountLabel}
+                            </span>
+                            <span className="shrink-0 whitespace-nowrap tabular-nums">−{homeText(quote.reservation_discount_total ?? 0)}</span>
+                          </div>
+                        )
+                      })()}
                       <div className="flex justify-between gap-3 text-zinc-600">
                         <span>{t("Net room rate")}</span>
                         {/* base less discount, on the basis both are entered
@@ -2705,7 +2709,14 @@ export function BookingDialog(props: {
                         </span>
                       </div>
                     )}
-                    {quoteTaxBasis?.inclusive ? <p className="text-xs text-zinc-600">
+                    {isTaxUndetermined(quoteTaxBasis) ? (
+                      <p
+                        role="status"
+                        className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs text-amber-800"
+                      >
+                        {t(TAX_NOT_SET_UP_MSG)}
+                      </p>
+                    ) : quoteTaxBasis?.inclusive ? <p className="text-xs text-zinc-600">
                       {t("Includes {tax} (≈ {amount} on the room). The invoice shows the exact tax.", {
                         tax: quoteTaxBasis.label,
                         amount: currencyText(quoteTariff?.property_currency || loc.currency,
