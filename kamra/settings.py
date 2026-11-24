@@ -220,7 +220,8 @@ MODULES: tuple[Module, ...] = (
 				       "room type only, and the room is chosen at check-in. Walk-ins keep their room. "
 				       "Availability still counts the stay against the room type."),
 				S("rate_plan_required", "Require a rate plan for new bookings", "check", 0,
-				  hint="Require a rate plan for reservations and walk-ins instead of the standard rate."),
+				  hint="On: every new booking, walk-in, group pick-up, channel and online booking resolves "
+				       "a rate plan. Existing reservations are never repriced."),
 			)),
 			Section("holds", "Holds & selling", "", (
 				S("hold_minutes", "Hold unconfirmed bookings for", "number", 120, P, min=5, max=10080, unit="min"),
@@ -372,6 +373,10 @@ MODULES: tuple[Module, ...] = (
 			Section("external_pos", "External POS", "A third-party POS posting room charges through the POS interface.", (
 				S("pos_room_charge_limit", "Largest room charge from an external POS", "number", 0, min=0,
 				  hint="One ticket above this is refused - settle it at the outlet. 0 means no limit."),
+				S("pos_room_charge_credit_check", "Check cumulative folio credit limit on room charges", "check", 0,
+				  hint="On: block POS room charges when folio balance plus the new charge exceeds the cumulative allowance below."),
+				S("pos_room_charge_allowance", "Cumulative room charge allowance", "number", 0, min=0,
+				  hint="Maximum open folio balance including new POS room charges when cumulative credit checking is on. 0 means no cap."),
 			)),
 			Section("menu_masters", "Menu master lists",
 			        "Labels used when adding a dish. Edit here once; every New Menu form and the kitchen use them.", (
@@ -690,8 +695,8 @@ def _default(property: str | None, spec: S):
 		except Exception:
 			return spec.default
 	if property:
-		from kamra.localization import setting_default
 		try:
+			from kamra.localization import setting_default
 			value = setting_default(property, spec.key)
 		except Exception:
 			value = None
@@ -820,6 +825,68 @@ def _spec_json(s: S, property: str | None = None, roles: set | None = None) -> d
 		if v not in (None, "", ()):
 			d[k] = list(v) if isinstance(v, tuple) else v
 	return d
+
+
+@frappe.whitelist()
+@require_roles("Hotel Admin", "Front Desk", "Revenue Manager")
+def rate_plan_readiness(property: str) -> dict:
+	"""Readiness check for switching on `rate_plan_required`: reports the
+	property's default plan and lists active/future reservations without a
+	rate plan. Existing reservations are never repriced when toggled."""
+	assert_property_access(property)
+	from kamra.business_date import get_business_date
+
+	business_date = str(get_business_date(property))
+	active_plans = frappe.get_all(
+		"Rate Plan",
+		filters={"property": property, "disabled": 0},
+		fields=["name", "rate_plan_name", "code", "is_default"],
+		order_by="rate_plan_name asc, name asc",
+	)
+	default_row = next((p for p in active_plans if p.get("is_default")), None)
+	default_info = (
+		{"name": default_row["name"], "label": default_row.get("rate_plan_name") or default_row["name"],
+		 "code": default_row.get("code") or ""}
+		if default_row else None
+	)
+	rows = frappe.db.sql(
+		"""
+		SELECT r.name, r.guest_name, r.room_type,
+		       COALESCE(rt.room_type_name, r.room_type) AS room_type_name,
+		       r.check_in_date, r.check_out_date, r.status
+		FROM `tabReservation` r
+		LEFT JOIN `tabRoom Type` rt ON rt.name = r.room_type
+		WHERE r.property = %(property)s
+		  AND r.status IN ('Confirmed', 'Checked In', 'Held', 'Pending Payment', 'Requested')
+		  AND r.check_out_date >= %(business_date)s
+		  AND COALESCE(r.rate_plan, '') = ''
+		ORDER BY r.check_in_date ASC, r.name ASC
+		LIMIT 50
+		""",
+		{"property": property, "business_date": business_date},
+		as_dict=True,
+	)
+	total_without_plan = int(frappe.db.sql(
+		"""
+		SELECT COUNT(*) FROM `tabReservation`
+		WHERE property = %(property)s
+		  AND status IN ('Confirmed', 'Checked In', 'Held', 'Pending Payment', 'Requested')
+		  AND check_out_date >= %(business_date)s
+		  AND COALESCE(rate_plan, '') = ''
+		""",
+		{"property": property, "business_date": business_date},
+	)[0][0] or 0)
+	for row in rows:
+		row["check_in_date"] = str(row["check_in_date"])
+		row["check_out_date"] = str(row["check_out_date"])
+	return {
+		"property": property,
+		"rate_plan_required": bool(get_setting(property, "rate_plan_required")),
+		"default_plan": default_info,
+		"active_plan_count": len(active_plans),
+		"total_without_plan": total_without_plan,
+		"future_bookings_without_plan": rows,
+	}
 
 
 @frappe.whitelist()

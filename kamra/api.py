@@ -7486,12 +7486,18 @@ def _check_night_prices(property: str, room_type: str, check_in_date: str,
 	whose price something else already decides: a voucher, a rate plan (its
 	own or the company's negotiated one), an OTA total or a group block rate."""
 	from kamra.pricing import negotiated_rate_plan, normalize_night_prices, refuse_with_night_prices
+	from kamra.settings import get_setting
 	typed = normalize_night_prices(night_prices, check_in_date, check_out_date)
 	if not typed:
 		return {}
 	if not _can_set_rate():
 		frappe.throw(_("Only a Revenue Manager or Hotel Admin can set nightly prices."),
 		             frappe.PermissionError)
+	if get_setting(property, "rate_plan_required"):
+		frappe.throw(
+			_("Hand-set nightly prices cannot be used while a rate plan is required for this property. "
+			  "Choose a rate plan or apply a discount instead.")
+		)
 	if voucher_code:
 		refuse_with_night_prices(_("a voucher"))
 	if rate_plan:
@@ -9137,7 +9143,7 @@ def get_quote(property: str, room_type: str, check_in_date: str,
 	checks a PIN: supervisor_user / supervisor_pin are accepted so a booking
 	screen can send one payload, and ignored."""
 	from kamra.booking_refs import resolve_meal_plan, resolve_rate_plan, resolve_room_type
-	from kamra.pricing import ContractRateRefused, quote_with_contract, tax_basis
+	from kamra.pricing import ContractRateRefused, quote_with_contract, resolve_booking_rate_plan, tax_basis
 
 	# agents name things the way staff do ("Deluxe", "breakfast"); resolve
 	# to IDs at this property or refuse with the valid options
@@ -9147,6 +9153,12 @@ def get_quote(property: str, room_type: str, check_in_date: str,
 	typed = _check_night_prices(
 		property, room_type, check_in_date, check_out_date, night_prices,
 		voucher_code=voucher_code, rate_plan=rate_plan, company=company)
+	if not typed:
+		rate_plan = resolve_booking_rate_plan(
+			property, room_type, check_in_date, check_out_date,
+			rate_plan=rate_plan, company=company,
+			adults=int(adults), children=int(children), extra_beds=extra_beds,
+		)
 	try:
 		q = quote_with_contract(property, room_type, check_in_date, check_out_date,
 		                        int(adults), int(children), meal_plan or None,
@@ -9649,11 +9661,20 @@ def create_booking(property: str, room_type: str, check_in_date: str,
 			                    guest_name=guest_name, phone=phone)
 			return _booking_replay(existing)
 
-	from kamra.pricing import negotiated_rate_plan
+	from kamra.group_blocks import group_rate
+	from kamra.pricing import resolve_booking_rate_plan
 	from kamra.settings import get_setting
-	rate_plan = rate_plan or negotiated_rate_plan(property, company)
-	if get_setting(property, "rate_plan_required") and not rate_plan:
-		frappe.throw(_("A rate plan is required for this property.") + " (KMR-RATE-REQ-001)")
+	has_block_rate = bool(group_booking and float(group_rate(group_booking, room_type) or 0) > 0)
+	parsed_stay = (
+		frappe.parse_json(stay_details) if isinstance(stay_details, str) else stay_details
+	)
+	extra_beds_count = cint((parsed_stay or {}).get("extra_beds")) if isinstance(parsed_stay, dict) else 0
+	rate_plan = resolve_booking_rate_plan(
+		property, room_type, check_in_date, check_out_date,
+		rate_plan=rate_plan, company=company, group_booking=group_booking,
+		adults=int(adults), children=int(children), extra_beds=extra_beds_count,
+		check_availability=not has_block_rate,
+	)
 
 	# An agent that retries a tool call (timeout, lost response, a model
 	# that repeats itself) must not book the guest twice. Without a key,
@@ -10080,6 +10101,11 @@ def create_group_booking(property: str, group_name: str, check_in_date: str,
 
 	ota_ref = (ota_ref or "").strip() or None
 	_refuse_taken_ota_ref(property, ota_ref)  # before the group is made
+	from kamra.booking_refs import resolve_rate_plan
+	from kamra.pricing import resolve_group_rate_plan
+	rate_plan = resolve_rate_plan(property, rate_plan)
+	if not any(spec.get("night_prices") for spec in lines):
+		rate_plan = resolve_group_rate_plan(property, rate_plan=rate_plan, company=company)
 	shares = [0.0] * len(lines)
 	total = float(ota_total or 0) if booked_via else 0
 	if total > 0 and lines:
@@ -10117,6 +10143,7 @@ def create_group_booking(property: str, group_name: str, check_in_date: str,
 		"property": property,
 		"group_name": group_name,
 		"company": company or None,
+		"rate_plan": rate_plan or None,
 		"group_type": group_type or None,
 		"check_in_date": check_in_date,
 		"check_out_date": check_out_date,
@@ -10241,6 +10268,7 @@ def create_group_with_rooming_list(property: str, group_name: str,
                                    attrition_pct: float = 0,
                                    deposit_due: float = 0,
                                    quotation_only: int = 0,
+                                   rate_plan: str | None = None,
                                    comp_supervisor_user: str | None = None,
                                    comp_supervisor_pin: str | None = None):
 	"""The desk's group flow: group -> room blocks -> rooming list ->
@@ -10334,10 +10362,17 @@ def create_group_with_rooming_list(property: str, group_name: str,
 	if with_master and not guests and not quote_only:
 		frappe.throw(_("Name the main room's guest in the rooming list."))
 
+	from kamra.booking_refs import resolve_rate_plan
+	from kamra.pricing import resolve_group_rate_plan
+	rate_plan = resolve_rate_plan(property, rate_plan)
+	rate_plan = resolve_group_rate_plan(property, rate_plan=rate_plan, company=company)
+
 	comp_approver = None
-	if not quote_only and guests and company:
-		from kamra.pricing import negotiated_rate_plan
-		comp_plan = negotiated_rate_plan(property, company)
+	if not quote_only and guests:
+		comp_plan = rate_plan
+		if not comp_plan and company:
+			from kamra.pricing import negotiated_rate_plan
+			comp_plan = negotiated_rate_plan(property, company)
 		if comp_plan:
 			comp_approver = comp_rate_governance(
 				property, comp_plan, check=True,
@@ -10351,6 +10386,7 @@ def create_group_with_rooming_list(property: str, group_name: str,
 		"property": property,
 		"group_name": group_name,
 		"company": company or None,
+		"rate_plan": rate_plan or None,
 		"group_type": group_type or None,
 		"check_in_date": check_in_date,
 		"check_out_date": check_out_date,
@@ -10383,6 +10419,7 @@ def create_group_with_rooming_list(property: str, group_name: str,
 				# the guest and the others named with them, as far as the room sleeps
 				adults=cint(gst.get("adults")) or min(1 + len(others), capacity),
 				children=cint(gst.get("children")),
+				rate_plan=gst.get("rate_plan") or rate_plan or None,
 				booking_type="Corporate" if company else "Group",
 				company=company, group_booking=group.name, source="Manual",
 				comp_supervisor_user=comp_supervisor_user,
@@ -11602,6 +11639,7 @@ def save_group_blocks(group_booking: str, blocks, cutoff_date: str | None = None
 def pickup_group_room(group_booking: str, room_type: str, guest_name: str,
                       phone: str | None = None, adults: int = 2,
                       children: int = 0, idempotency_key: str | None = None,
+                      rate_plan: str | None = None,
                       comp_supervisor_user: str | None = None,
                       comp_supervisor_pin: str | None = None):
 	"""Name a guest into the block: creates a reservation on the group's
@@ -11616,6 +11654,7 @@ def pickup_group_room(group_booking: str, room_type: str, guest_name: str,
 		check_out_date=str(gb.check_out_date),
 		guest_name=guest_name, phone=phone,
 		adults=int(adults), children=int(children),
+		rate_plan=rate_plan or gb.get("rate_plan") or None,
 		booking_type="Group", company=gb.company,
 		group_booking=gb.name, source="Manual",
 		idempotency_key=idempotency_key,
@@ -11647,7 +11686,8 @@ def create_group_block(property: str, group_name: str, check_in_date: str,
                        event_date: str | None = None,
                        attendees: int = 0,
                        customer_phone: str | None = None,
-                       notes: str | None = None):
+                       notes: str | None = None,
+                       rate_plan: str | None = None):
 	"""One call drafts the whole piece of MICE business: the group, its room
 	block, and (optionally) the banquet event - the agent wedge: an inquiry
 	agent turns "30 rooms + a 200-pax wedding on Dec 12" into a proposal."""
@@ -11656,18 +11696,22 @@ def create_group_block(property: str, group_name: str, check_in_date: str,
 	if any(flt(b.get("block_rate")) > 0 for b in blocks or []) and not _can_set_rate():
 		frappe.throw(_("Only a Revenue Manager or Hotel Admin can set a group rate."),
 		             frappe.PermissionError)
+	from kamra.booking_refs import resolve_rate_plan, resolve_room_type
+	from kamra.pricing import resolve_group_rate_plan
+	rate_plan = resolve_rate_plan(property, rate_plan)
+	rate_plan = resolve_group_rate_plan(property, rate_plan=rate_plan, company=company)
 	gb = frappe.get_doc({
 		"doctype": "Group Booking",
 		"property": property,
 		"group_name": group_name,
 		"company": company,
+		"rate_plan": rate_plan or None,
 		"check_in_date": check_in_date,
 		"check_out_date": check_out_date,
 		"cutoff_date": cutoff_date,
 		"status": "Open",
 		"notes": notes,
 	})
-	from kamra.booking_refs import resolve_room_type
 	for b in blocks or []:
 		gb.append("blocks", {
 			# agents name room types the way staff do ("Deluxe", "DLX")
@@ -11805,6 +11849,7 @@ def property_locale(property: str):
 	localization pack. Drives the frontend's money formatting and tax dropdowns
 	so no screen hardcodes ₹ or GST %. `integrations` says which country
 	integrations (gateways, tax return, ID checks) this property has."""
+	from kamra.erp_bridge import erp_determines_tax
 	from kamra.localization import front_desk_vocabulary, integrations, pack_for, services_tax_rate, tender_modes
 	from kamra.masters import desk_vocabulary
 	from kamra.pricing import tax_basis
@@ -11842,6 +11887,7 @@ def property_locale(property: str):
 	        "tender_modes": t_modes,
 	        "fx_currencies": list_setting(property, "fx_currencies"),
 	        "tax_basis": tax_basis(property),
+	        "erp_tax_managed": bool(erp_determines_tax()),
 	        # the rate the server puts on any food & beverage charge, whatever
 	        # rate the caller picked (_resolve_charge_gst) - so the folio's
 	        # charge form shows the rate that will apply instead of a choice

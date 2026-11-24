@@ -21,6 +21,7 @@ import { Button } from "./ui/button"
 import { moneyDigits, useLocale } from "../lib/money"
 import { isPhoneComplete } from "../lib/phone"
 import { nightsBetween, parseDate, shiftDate } from "../lib/stay"
+import { onSettingsChanged, onTariffsChanged } from "../lib/tariffSync"
 import { typedNights, type NightPrice } from "../lib/nightPrices"
 import {
   discountArgs,
@@ -128,6 +129,7 @@ export function BookingDialog(props: {
     room?: string
     room_number?: string
     date?: string
+    check_in_date?: string
     guest?: string
     guest_name?: string
     phone?: string
@@ -187,7 +189,9 @@ export function BookingDialog(props: {
     phone: props.initial.phone ?? "",
     room_type: props.initial.room_type ?? "",
     // a walk-in arrives today, whatever date the screen it came from showed
-    check_in_date: props.initial.walkIn ? todayLocal() : props.initial.date ?? todayLocal(),
+    check_in_date: props.initial.walkIn
+      ? todayLocal()
+      : props.initial.date ?? props.initial.check_in_date ?? todayLocal(),
     nights: props.initial.nights ?? 1,
     adults: props.initial.adults ?? 2,
     children: props.initial.children ?? 0,
@@ -404,17 +408,48 @@ export function BookingDialog(props: {
   // When the desk did not pass a room type, keep auto-picking the cheapest
   // type that has rooms for the selected dates until they change it (#549).
   const autoRoomType = useRef(!props.initial.room_type)
+  const optionsLoaded = useRef(false)
+  const mealPlanTouched = useRef(false)
+  const ratePlanTouched = useRef(false)
+
+  const [syncRev, setSyncRev] = useState(0)
+  useEffect(() => {
+    const bump = () => setSyncRev((v) => v + 1)
+    const offTariffs = onTariffsChanged(bump)
+    const offSettings = onSettingsChanged(bump)
+    return () => { offTariffs(); offSettings() }
+  }, [])
 
   useEffect(() => {
+    let live = true
     call<BookingOptions>("kamra.api.booking_options", { property: getCurrentProperty() }).then((o) => {
+      if (!live) return
       setOptions(o)
-      setForm((f) => ({
-        ...f,
-        meal_plan: o.meal_plans.find((m) => m.is_default)?.name ?? "",
-        rate_plan: f.rate_plan || o.default_plan || "",
-      }))
+      const isInitial = !optionsLoaded.current
+      optionsLoaded.current = true
+      setForm((f) => {
+        const defaultMeal = o.meal_plans.find((m) => m.is_default)?.name ?? ""
+        const mealValid = !f.meal_plan || o.meal_plans.some((m) => m.name === f.meal_plan)
+        const nextMeal = isInitial && !mealPlanTouched.current
+          ? (f.meal_plan && mealValid ? f.meal_plan : defaultMeal)
+          : mealValid
+            ? (f.meal_plan || (mealPlanTouched.current ? "" : defaultMeal))
+            : defaultMeal
+
+        const defaultRate = o.default_plan || ""
+        const rateValid = !f.rate_plan || o.rate_plans.some((rp) => rp.name === f.rate_plan)
+        const canKeepBlankRate = !o.rate_plan_required || !!f.company
+        const nextRate = isInitial && !ratePlanTouched.current
+          ? (f.rate_plan && rateValid ? f.rate_plan : defaultRate)
+          : rateValid
+            ? (f.rate_plan || (ratePlanTouched.current && canKeepBlankRate ? "" : defaultRate))
+            : defaultRate
+
+        return { ...f, meal_plan: nextMeal, rate_plan: nextRate }
+      })
     })
-  }, [])
+    return () => { live = false }
+  }, [syncRev])
 
   useEffect(() => {
     document.body.style.overflow = "hidden"
@@ -640,6 +675,7 @@ export function BookingDialog(props: {
     JSON.stringify(nightPricesArg),
     // so does the desk's discount: the walk-in's amount collected follows it
     JSON.stringify(discountParam),
+    syncRev,
   ])
 
   // quotes for the additional rooms
@@ -669,7 +705,7 @@ export function BookingDialog(props: {
       ).then(setMoreQuotes)
     }, 300)
     return () => clearTimeout(t)
-  }, [moreRooms, form.check_in_date, checkOut, form.rate_plan, form.company, canSetPrice])
+  }, [moreRooms, form.check_in_date, checkOut, form.rate_plan, form.company, canSetPrice, syncRev])
 
   // walk-in: the actual rooms free tonight, clean ones first
   useEffect(() => {
@@ -1111,6 +1147,7 @@ export function BookingDialog(props: {
     badPhone ||
     badSlot ||
     !walk.room ||
+    (planRequired && !form.rate_plan && !companyPlan) ||
     payAmount < 0 ||
     (payAmount > 0 && (!paymentReady || (foreign && !fx?.quote))) ||
     (!!walk.id_number.trim() && !walk.id_type)
@@ -1941,7 +1978,10 @@ export function BookingDialog(props: {
                     <select
                       className={inputCls}
                       value={form.meal_plan}
-                      onChange={(e) => set("meal_plan", e.target.value)}
+                      onChange={(e) => {
+                        mealPlanTouched.current = true
+                        set("meal_plan", e.target.value)
+                      }}
                     >
                       <option value="">{t("Room only")}</option>
                       {options?.meal_plans.map((mp) => (
@@ -1956,7 +1996,10 @@ export function BookingDialog(props: {
                         className={inputCls}
                         {...target("rate-plan")}
                         value={form.rate_plan}
-                        onChange={(e) => set("rate_plan", e.target.value)}
+                        onChange={(e) => {
+                          ratePlanTouched.current = true
+                          set("rate_plan", e.target.value)
+                        }}
                       >
                         <option value="" disabled={planRequired && !companyPlan} hidden={planRequired && !!form.rate_plan}>
                           {companyPlan
@@ -2026,7 +2069,10 @@ export function BookingDialog(props: {
                     ratePlan={form.rate_plan}
                     company={form.company || undefined}
                     planRequired={planRequired}
-                    onPickPlan={(p) => set("rate_plan", p)}
+                    onPickPlan={(p) => {
+                      ratePlanTouched.current = true
+                      set("rate_plan", p)
+                    }}
                     nightPrices={nightPrices}
                     onNightPrices={setNightPrices}
                     canSetPrice={canSetPrice}

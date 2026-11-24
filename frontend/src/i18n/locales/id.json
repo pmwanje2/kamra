@@ -812,5 +812,18 @@
   "Open the function's folio": "Buka folio acara",
   "The tax invoice is issued from the function's folio.": "Faktur pajak diterbitkan dari folio acara.",
   "Service Charge": "Biaya layanan",
-  "Reprint invoice": "Cetak ulang faktur"
+  "Reprint invoice": "Cetak ulang faktur",
+  "Rate plans set the price for all bookings at this property.": "Paket tarif menentukan harga untuk semua pemesanan di properti ini.",
+  "Tax comes from the accounting tax rules.": "Pajak mengikuti aturan pajak akuntansi.",
+  "Rate plan readiness": "Kesiapan paket tarif",
+  "Existing reservations are never repriced when this setting changes.": "Reservasi yang sudah ada tidak pernah dihitung ulang harganya saat pengaturan ini diubah.",
+  "No default rate plan is set yet.": "Belum ada paket tarif default yang diatur.",
+  "Manage rate plans": "Kelola paket tarif",
+  "All future bookings already have a rate plan.": "Semua pemesanan mendatang sudah memiliki paket tarif.",
+  "{n} future booking has no rate plan.": "{n} pemesanan mendatang tidak memiliki paket tarif.",
+  "{n} future bookings have no rate plan.": "{n} pemesanan mendatang tidak memiliki paket tarif.",
+  "They keep their booked prices. Only new bookings will require a rate plan.": "Pemesanan tersebut tetap menggunakan harga saat dipesan. Hanya pemesanan baru yang wajib memakai paket tarif.",
+  "On: every new booking, walk-in, group pick-up, channel and online booking resolves a rate plan. Existing reservations are never repriced.": "Aktif: setiap pemesanan baru, walk-in, pengambilan grup, kanal, dan pemesanan online memakai paket tarif. Reservasi yang sudah ada tidak pernah dihitung ulang harganya.",
+  "Set a default rate plan in Rate Plans.": "Atur paket tarif default di Paket Tarif.",
+  "No active rate plans are configured. Set up a default rate plan in Rate Plans.": "Tidak ada paket tarif aktif yang dikonfigurasi. Siapkan paket tarif default di Paket Tarif."
 }

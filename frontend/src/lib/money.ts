@@ -25,6 +25,7 @@ interface Locale {
   date_format?: string | null
   tax_label: string
   tax_basis?: TaxBasis | null
+  erp_tax_managed?: boolean
   tax_id_label: string
   tax_rates: number[]
   /** ID documents this country's desk records (pack ID_TYPES). */
@@ -134,7 +135,7 @@ export function loadLocale(): Promise<Locale> {
   })
     .then((l) => {
       if (property !== getCurrentProperty()) return cache
-      cache = { ...cache, payment_tender_types: {}, cashier_allowed_modes: null, tender_modes: null, fx_currencies: [], tax_basis: null, ...l }
+      cache = { ...cache, payment_tender_types: {}, cashier_allowed_modes: null, tender_modes: null, fx_currencies: [], tax_basis: null, erp_tax_managed: false, ...l }
       syncDateFormat(cache.date_format)
       remember()
       return cache

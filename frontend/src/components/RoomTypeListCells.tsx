@@ -17,6 +17,8 @@ export interface RoomTypeSummaryRow {
 export interface RoomTypesSummary {
   property_currency: string
   has_card_rate_plans: boolean
+  rate_plan_required?: boolean
+  erp_tax_managed?: boolean
   default_plan?: {
     name: string
     label?: string | null

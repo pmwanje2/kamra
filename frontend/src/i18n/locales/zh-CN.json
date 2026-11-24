@@ -7113,5 +7113,18 @@
   "Open the function's folio": "打开活动账单",
   "The tax invoice is issued from the function's folio.": "税务发票由活动账单签发。",
   "Service Charge": "服务费",
-  "Reprint invoice": "重打发票"
+  "Reprint invoice": "重打发票",
+  "Rate plans set the price for all bookings at this property.": "房价方案决定本酒店所有预订的价格。",
+  "Tax comes from the accounting tax rules.": "税费由会计税务规则决定。",
+  "Rate plan readiness": "房价方案就绪检查",
+  "Existing reservations are never repriced when this setting changes.": "更改此设置时，现有预订绝不会重新计价。",
+  "No default rate plan is set yet.": "尚未设置默认房价方案。",
+  "Manage rate plans": "管理房价方案",
+  "All future bookings already have a rate plan.": "所有未来预订均已指定房价方案。",
+  "{n} future booking has no rate plan.": "{n} 笔未来预订未设置房价方案。",
+  "{n} future bookings have no rate plan.": "{n} 笔未来预订未设置房价方案。",
+  "They keep their booked prices. Only new bookings will require a rate plan.": "这些预订将保留原预订价格。仅新预订需要指定房价方案。",
+  "On: every new booking, walk-in, group pick-up, channel and online booking resolves a rate plan. Existing reservations are never repriced.": "开启：每笔新预订、散客直接入住、团队提房、渠道及线上预订均需匹配房价方案。现有预订绝不会重新计价。",
+  "Set a default rate plan in Rate Plans.": "请在房价方案中设置默认房价方案。",
+  "No active rate plans are configured. Set up a default rate plan in Rate Plans.": "未配置启用的房价方案。请在房价方案中设置默认房价方案。"
 }

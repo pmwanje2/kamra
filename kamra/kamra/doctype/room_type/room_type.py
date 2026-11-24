@@ -21,7 +21,16 @@ def clean_room_type_code(code: str) -> str:
 
 class RoomType(Document):
 	def validate(self):
+		from frappe.utils import flt
+
 		from kamra.booking_slugs import slugify, unique_listing_slug
+		from kamra.settings import get_setting
+
+		if get_setting(self.property, "rate_plan_required"):
+			if self.base_price in (None, ""):
+				self.base_price = 0
+		elif self.base_price in (None, "") or flt(self.base_price) <= 0:
+			frappe.throw(frappe._("Base Price (BAR) is required."))
 
 		cleaned = clean_room_type_code(self.room_type_code)
 		if not cleaned:
