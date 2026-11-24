@@ -175,9 +175,10 @@ const DAYS = 14
 const ROOM_COL_W = 152
 const TOUCH_LONG_PRESS_MS = 300
 const TOUCH_CANCEL_MOVE_PX = 8
-const inputCls =
-  "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm " +
+const fieldBaseCls =
+  "rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm " +
   "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+const inputCls = `w-full ${fieldBaseCls}`
 
 /** Today on this device's calendar (YYYY-MM-DD). */
 function todayIso() {
@@ -394,10 +395,13 @@ export default function TapeChart() {
   const load = useCallback(() => {
     if (!parseDate(start)) return // the date input is mid-edit
     const property = getCurrentProperty()
+    if (!property) return
     if (mode === "day") {
       call<TapeData>("kamra.api.tape_chart", {
         property, start_date: start, days: DAYS,
-      }).then(setData)
+      })
+        .then(setData)
+        .catch((e) => setError(serverError(e)))
       call<UnassignedQueueResponse>("kamra.tape_queue.unassigned_queue", {
         property, start_date: start, days: DAYS,
       })
@@ -412,7 +416,9 @@ export default function TapeChart() {
     } else {
       call<HourlyData>("kamra.api.tape_chart_hourly", {
         property, date: start,
-      }).then(setHourly)
+      })
+        .then(setHourly)
+        .catch((e) => setError(serverError(e)))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [start, refreshKey, mode])
@@ -798,7 +804,7 @@ export default function TapeChart() {
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <h1 className="text-lg font-semibold">{t("Tape chart")}</h1>
         <select
-          className={cn(inputCls, "min-h-11 w-auto py-1.5 md:min-h-9")}
+          className={cn(fieldBaseCls, "min-h-11 w-auto max-w-full py-1.5 md:min-h-9")}
           value={rtFilter}
           onChange={(e) => setRtFilter(e.target.value)}
           aria-label={t("Filter by room type")}
@@ -812,7 +818,7 @@ export default function TapeChart() {
         </select>
 
         <select
-          className={cn(inputCls, "min-h-11 w-auto py-1.5 md:min-h-9")}
+          className={cn(fieldBaseCls, "min-h-11 w-auto max-w-full py-1.5 md:min-h-9")}
           value={floorFilter}
           onChange={(e) => setFloorFilter(e.target.value)}
           aria-label={t("Filter by floor")}
@@ -826,7 +832,7 @@ export default function TapeChart() {
         </select>
 
         <select
-          className={cn(inputCls, "min-h-11 w-auto py-1.5 md:min-h-9")}
+          className={cn(fieldBaseCls, "min-h-11 w-auto max-w-full py-1.5 md:min-h-9")}
           value={hkFilter}
           onChange={(e) => setHkFilter(e.target.value)}
           aria-label={t("Filter by housekeeping status")}
@@ -956,7 +962,7 @@ export default function TapeChart() {
           <input
             type="date"
             aria-label={t("Start date")}
-            className={cn(inputCls, "min-h-11 w-36 sm:w-40 md:min-h-9")}
+            className={cn(fieldBaseCls, "min-h-11 w-36 sm:w-40 md:min-h-9")}
             value={start}
             onChange={(e) => setStart(e.target.value)}
           />
@@ -975,7 +981,7 @@ export default function TapeChart() {
       {filtersOpen && (
         <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50/70 p-2.5">
           <select
-            className={cn(inputCls, "min-h-11 w-auto py-1.5 md:min-h-9")}
+            className={cn(fieldBaseCls, "min-h-11 w-auto max-w-full py-1.5 md:min-h-9")}
             value={wingFilter}
             onChange={(e) => setWingFilter(e.target.value)}
             aria-label={t("Filter by wing")}
@@ -987,7 +993,7 @@ export default function TapeChart() {
           </select>
 
           <select
-            className={cn(inputCls, "min-h-11 w-auto py-1.5 md:min-h-9")}
+            className={cn(fieldBaseCls, "min-h-11 w-auto max-w-full py-1.5 md:min-h-9")}
             value={viewFilter}
             onChange={(e) => setViewFilter(e.target.value)}
             aria-label={t("Filter by view")}
@@ -999,7 +1005,7 @@ export default function TapeChart() {
           </select>
 
           <select
-            className={cn(inputCls, "min-h-11 w-auto py-1.5 md:min-h-9")}
+            className={cn(fieldBaseCls, "min-h-11 w-auto max-w-full py-1.5 md:min-h-9")}
             value={bedFilter}
             onChange={(e) => setBedFilter(e.target.value)}
             aria-label={t("Filter by bed type")}
@@ -1136,9 +1142,10 @@ export default function TapeChart() {
                 </div>
 
                 {data &&
-                  groups.map((g) => {
+                  groups.map((g, gIdx) => {
                     const isCollapsed = collapsed.has(g.label)
                     const booked = g.rooms.filter((r) => r.bookings.length > 0).length
+                    const isLastGroup = gIdx === groups.length - 1
                     return (
                       <div key={g.key}>
                         <button
@@ -1160,7 +1167,7 @@ export default function TapeChart() {
                           </span>
                         </button>
                         {!isCollapsed &&
-                          g.rooms.map((room) => {
+                          g.rooms.map((room, rIdx) => {
                             const meta = roomMeta[room.name]
                             const tone = hkTone(room.housekeeping_status)
                             const featureTag = [meta?.bed_type, meta?.room_view].filter(Boolean).join(" · ")
@@ -1169,12 +1176,14 @@ export default function TapeChart() {
                               (queueDrag?.active && queueDrag.room === room.name)
                             const isHighlighted = highlightedRoom !== "" && highlightedRoom === room.room_number
                             const menuOpen = hkMenuRoom === room.name
+                            const openUpward = isLastGroup && rIdx >= Math.max(1, g.rooms.length - 2)
                             return (
                               <div
                                 key={room.name}
                                 data-room={room.name}
                                 className={cn(
                                   "relative flex border-b border-zinc-100",
+                                  menuOpen && "z-30",
                                   isDropTarget && "bg-brand-50 outline-2 -outline-offset-2 outline-brand-600/40",
                                   isHighlighted && "bg-amber-50/60",
                                 )}
@@ -1182,7 +1191,10 @@ export default function TapeChart() {
                                 <div
                                   data-testid={`tape-room-cell-${room.name}`}
                                   style={{ width: ROOM_COL_W }}
-                                  className="sticky start-0 z-10 shrink-0 border-e border-zinc-200 bg-white px-2.5 py-1.5"
+                                  className={cn(
+                                    "sticky start-0 shrink-0 border-e border-zinc-200 bg-white px-2.5 py-1.5",
+                                    menuOpen ? "z-30" : "z-10",
+                                  )}
                                 >
                                   <div className="flex items-center justify-between gap-1">
                                     <span className="text-sm font-semibold text-zinc-900">
@@ -1216,7 +1228,10 @@ export default function TapeChart() {
                                   {menuOpen && (
                                     <div
                                       data-testid={`hk-popover-${room.name}`}
-                                      className="absolute start-2 top-full z-30 mt-1 w-48 space-y-1 rounded-lg border border-zinc-200 bg-white p-2 shadow-lg"
+                                      className={cn(
+                                        "absolute start-2 z-40 w-48 space-y-1 rounded-lg border border-zinc-200 bg-white p-2 shadow-lg",
+                                        openUpward ? "bottom-full mb-1" : "top-full mt-1",
+                                      )}
                                     >
                                       <div className="grid grid-cols-1 gap-1">
                                         {HK_TOGGLE_OPTIONS.filter((opt) => !opt.needsReason).map((opt) => (

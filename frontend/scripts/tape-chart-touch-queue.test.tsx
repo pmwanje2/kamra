@@ -296,9 +296,9 @@ describe("P22 TapeChart touch drag, unassigned dock, filters, HK toggle, 390px c
     vi.unstubAllGlobals()
   })
 
-  async function mountTape() {
+  async function mountTape(refreshKey = 0) {
     const shellCtx: ShellContext = {
-      refreshKey: 0,
+      refreshKey,
       canBook: true,
       openBooking: openBookingSpy,
     }
@@ -529,9 +529,9 @@ describe("P22 TapeChart touch drag, unassigned dock, filters, HK toggle, 390px c
     expect(rpc).not.toHaveBeenCalledWith("kamra.tape_queue.unassigned_queue", expect.anything())
     expect(rpc).not.toHaveBeenCalledWith("kamra.tape_queue.room_metadata", expect.anything())
 
-    // 2. Once property resolves, toolbar filter selects must be inline (w-auto without conflicting w-full)
+    // 2. Once property resolves (AppShell bumps refreshKey), toolbar filter selects must be inline (w-auto without conflicting w-full)
     propState.current = "PROP-A"
-    await mountTape()
+    await mountTape(1)
     const floorSel = host.querySelector<HTMLSelectElement>('select[aria-label="Filter by floor"]')!
     expect(floorSel.className).toContain("w-auto")
     expect(floorSel.className.split(/\s+/)).not.toContain("w-full")
