@@ -183,21 +183,21 @@ class CountryDefaultsTestCase(AuditTestCase):
 	# ── guests and tax constants ────────────────────────────────────────
 
 	def test_an_occupant_added_in_uganda_is_ugandan_by_default(self):
-		bare_property(UG, "Uganda")
+		bare_property(UG, "Uganda", rate_plan_required=0)
 		res = make_reservation(UG, make_room_type(UG), d(1), d(2))
 		res.append("occupants", {"full_name": "UT Second Guest"})
 		res.save(ignore_permissions=True)
 		self.assertEqual(res.occupants[-1].nationality, "Ugandan")
 
 	def test_an_occupant_added_in_india_is_still_indian_by_default(self):
-		bare_property(IN, "India")
+		bare_property(IN, "India", rate_plan_required=0)
 		res = make_reservation(IN, make_room_type(IN), d(1), d(2))
 		res.append("occupants", {"full_name": "UT Second Guest"})
 		res.save(ignore_permissions=True)
 		self.assertEqual(res.occupants[-1].nationality, "Indian")
 
 	def test_an_occupant_nationality_typed_by_the_desk_is_kept(self):
-		bare_property(UG, "Uganda")
+		bare_property(UG, "Uganda", rate_plan_required=0)
 		res = make_reservation(UG, make_room_type(UG), d(1), d(2))
 		res.append("occupants", {"full_name": "UT Visitor", "nationality": "Kenyan"})
 		res.save(ignore_permissions=True)
