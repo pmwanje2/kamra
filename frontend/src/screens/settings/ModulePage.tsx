@@ -289,7 +289,7 @@ export function ModulePage({
                 spec={s}
                 value={s.key in draft ? draft[s.key] : module.values[s.key]}
                 saved={module.values[s.key]}
-                disabled={readOnly || busy}
+                disabled={readOnly || busy || s.can_edit === false}
                 highlight={focusKey === s.key}
                 sources={sources}
                 taxIdLabel={taxIdLabel}

@@ -40,6 +40,7 @@
   "sellable_unit",
   "meal_plan",
   "rate_plan",
+  "rate_category",
   "column_break_b",
   "check_in_date",
   "check_out_date",
@@ -534,6 +535,13 @@
    "options": "Rate Plan"
   },
   {
+   "description": "The rate plan's category when the stay was put on it (Settings, Revenue, Complimentary and house use). A later change to the plan's category leaves the stay's as it is.",
+   "fieldname": "rate_category",
+   "fieldtype": "Data",
+   "label": "Rate Category",
+   "read_only": 1
+  },
+  {
    "fieldname": "voucher",
    "fieldtype": "Link",
    "label": "Voucher",
@@ -1019,7 +1027,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-11-24 06:55:00.000000",
+ "modified": "2026-11-24 12:30:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Reservation",

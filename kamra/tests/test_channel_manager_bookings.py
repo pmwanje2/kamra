@@ -600,3 +600,40 @@ class ChannexForeignContractBookingTestCase(IntegrationTestCase):
 		doc.reload()
 		self.assertEqual(float(doc.agreed_rate or 0), 0)
 		self.assertEqual(self.gross_nights(doc), [480000, 440000])
+
+	def test_zero_total_modify_dropping_foreign_contract_passes_rate_plan_guard_while_direct_clear_refuses(self):
+		"""Merge RED -> GREEN (#36 x #38): a zero-total OTA modify dropping a
+		foreign-currency contract back into property currency (auto_price=1,
+		doc.rate_plan=None, flags.kamra_channel_tariff=True without
+		kamra_night_rates_writer) must pass Reservation.guard_rate_plan, while
+		unsignalled direct writes clearing or changing rate_plan still refuse."""
+		from kamra.channels import channex
+
+		self.deliver(self.payload(amounts=("130.00", "120.00")))
+		doc = self.received()
+		self.assertEqual(doc.rate_plan, self.corp)
+		self.assertTrue(doc.contract_tariff)
+		self.assertEqual(int(doc.auto_price), 0)
+
+		# Direct ungoverned clear of rate_plan must still be refused by #38's guard_rate_plan.
+		doc.rate_plan = None
+		with self.assertRaises(frappe.PermissionError):
+			doc.save(ignore_permissions=True)
+		doc.reload()
+		self.assertEqual(doc.rate_plan, self.corp)
+
+		# Zero-total OTA modify back into UGX (auto_price=1, elif booked: clears rate_plan
+		# with flags.kamra_channel_tariff=True only) must succeed cleanly.
+		zero_home_events = channex.parse_webhook(
+			self.conn, self.payload(currency="UGX", status="modified", amounts=("0.00", "0.00")),
+		)
+		self.assertEqual(float(zero_home_events[0].get("total") or 0), 0.0)
+		res_zero = cm._apply_event(self.conn, zero_home_events[0])
+		self.assertEqual(res_zero["result"], "modified")
+		doc.reload()
+		self.assertEqual(doc.status, "Confirmed")
+		self.assertEqual(int(doc.auto_price), 1)
+		self.assertFalse(doc.rate_plan)
+		self.assertFalse(doc.contract_tariff)
+		self.assertEqual(float(doc.agreed_rate or 0), 0.0)
+		self.assertGreater(float(doc.amount_after_tax or 0), 0.0)

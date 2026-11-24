@@ -60,6 +60,7 @@ NON_INPUT_RESERVATION_ATTRS = frozenset({
 	"reprice_contract_nights", "requote", "apply_quote", "_apply_commission",
 	"night_discount_inputs", "discount_changes_only", "apply_rediscount",
 	"rediscount_locked_nights", "custom_tariff_currency", "amount_after_tax",
+	"guard_lock_key", "guard_header_totals",
 })
 # kamra#32 is merged: every field in PRICE_DETERMINATION_FIELDS is now a real Reservation DocField.
 FORWARD_COMPAT_SIBLING_FIELDS = frozenset()
