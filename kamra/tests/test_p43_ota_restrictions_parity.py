@@ -33,6 +33,7 @@ from kamra.restrictions import (
 	channel_health_snapshot,
 	retry_outbox_failures,
 )
+from kamra.settings import clear_cache, write_kv
 
 
 def day(offset: int) -> str:
@@ -120,6 +121,8 @@ class OtaRestrictionsParityTestCase(IntegrationTestCase):
 			"gst_rate_high": 0,
 			"business_date": nowdate(),
 		}).insert(ignore_permissions=True).name
+		write_kv(prop, "rate_plan_required", 0)
+		clear_cache(prop)
 
 		rt = frappe.get_doc({
 			"doctype": "Room Type",

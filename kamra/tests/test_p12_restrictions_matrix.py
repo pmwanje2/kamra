@@ -30,6 +30,7 @@ from kamra.restrictions import (
 	evaluate_stay_restrictions,
 	resolve_night_restrictions,
 )
+from kamra.settings import clear_cache, write_kv
 
 
 def day(offset: int) -> str:
@@ -62,6 +63,8 @@ class RestrictionsMatrixTestCase(IntegrationTestCase):
 			"booking_payment_mode": "Pay at hotel",
 			"business_date": nowdate(),
 		}).insert(ignore_permissions=True).name
+		write_kv(prop, "rate_plan_required", 0)
+		clear_cache(prop)
 
 		std = frappe.get_doc({
 			"doctype": "Room Type",
