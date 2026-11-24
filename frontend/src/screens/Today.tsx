@@ -80,6 +80,7 @@ const HELD_SHADE = "color-mix(in oklab, var(--color-brand-600) 35%, var(--color-
 interface ForecastDay {
   date: string
   booked: number
+  rooms_occupied?: number
   /** group block rooms not yet picked up (released blocks left out) */
   held: number
   available: number
@@ -87,21 +88,33 @@ interface ForecastDay {
   occupancy_with_holds_pct: number
 }
 
+/** Server roll-up of the forecast (kamra.dashboards.forecast_summary). */
+interface ForecastSummary {
+  spans: { days: number; occupancy_pct: number }[]
+  weeks: {
+    week_of: string
+    booked: number
+    rooms_occupied: number
+    held: number
+    occupancy_pct: number
+  }[]
+}
+
 /** The next 90 nights as a heat strip (one cell a night, darker = fuller),
- * with 30/60/90 day averages and a weekly table for screen readers. Rooms
- * only: the desk sees it, so no money. */
-function OccupancyForecast({ days }: { days: ForecastDay[] }) {
+ * with server-computed 30/60/90 day averages and a weekly table for screen
+ * readers. Rooms only: the desk sees it, so no money. */
+function OccupancyForecast({
+  days,
+  summary: forecastSummary,
+}: {
+  days: ForecastDay[]
+  summary?: ForecastSummary | null
+}) {
   const { t } = useT()
   const fmt = (d: string, o: Intl.DateTimeFormatOptions) =>
     new Date(d + "T00:00:00").toLocaleDateString(uiDateLocale(undefined), o)
-  const avg = (xs: ForecastDay[]) => {
-    const rooms = xs.reduce((a, x) => a + x.booked + x.held + x.available, 0)
-    return rooms ? Math.round((100 * xs.reduce((a, x) => a + x.booked, 0)) / rooms) : 0
-  }
-  const spans = [30, 60, 90].map((n) => ({ n, pct: avg(days.slice(0, n)) }))
-  const weeks = Array.from({ length: Math.ceil(days.length / 7) }, (_, i) =>
-    days.slice(i * 7, i * 7 + 7),
-  )
+  const spans = forecastSummary?.spans ?? []
+  const weeks = forecastSummary?.weeks ?? []
   // sequential, one hue: the brand ramp from its light end to its dark end
   // (both flip with the theme, so the fuller night always has more contrast)
   const fill = (pct: number) =>
@@ -113,7 +126,7 @@ function OccupancyForecast({ days }: { days: ForecastDay[] }) {
     return `linear-gradient(to top, ${fill(b)} ${b}%, ${HELD_SHADE} ${b}% ${h}%, var(--color-brand-50) ${h}%)`
   }
   const cols = { gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))` }
-  const summary = spans.map((s) => t("{n} days {pct}%", s)).join(", ")
+  const summary = spans.map((s) => t("{n} days {pct}%", { n: s.days, pct: s.occupancy_pct })).join(", ")
   return (
     <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2.5">
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -122,9 +135,9 @@ function OccupancyForecast({ days }: { days: ForecastDay[] }) {
         </div>
         <div className="flex gap-3 text-[11px] text-zinc-500">
           {spans.map((s) => (
-            <span key={s.n}>
-              {t("{n} days", { n: s.n })}{" "}
-              <span className="font-semibold tabular-nums text-zinc-900">{s.pct}%</span>
+            <span key={s.days}>
+              {t("{n} days", { n: s.days })}{" "}
+              <span className="font-semibold tabular-nums text-zinc-900">{s.occupancy_pct}%</span>
             </span>
           ))}
         </div>
@@ -147,8 +160,8 @@ function OccupancyForecast({ days }: { days: ForecastDay[] }) {
                 booked: d.booked,
                 held: d.held,
                 total: d.booked + d.held + d.available,
-                pct: Math.round(d.occupancy_pct),
-                pctHolds: Math.round(d.occupancy_with_holds_pct),
+                pct: d.occupancy_pct,
+                pctHolds: d.occupancy_with_holds_pct,
               },
             )}
           />
@@ -184,11 +197,11 @@ function OccupancyForecast({ days }: { days: ForecastDay[] }) {
           </thead>
           <tbody>
             {weeks.map((w) => (
-              <tr key={w[0].date} className="text-zinc-700">
-                <td className="py-0.5">{fmt(w[0].date, { day: "numeric", month: "short" })}</td>
-                <td className="py-0.5 text-end">{w.reduce((a, x) => a + x.booked, 0)}</td>
-                <td className="py-0.5 text-end">{w.reduce((a, x) => a + x.held, 0)}</td>
-                <td className="py-0.5 text-end">{avg(w)}%</td>
+              <tr key={w.week_of} className="text-zinc-700">
+                <td className="py-0.5">{fmt(w.week_of, { day: "numeric", month: "short" })}</td>
+                <td className="py-0.5 text-end">{w.booked}</td>
+                <td className="py-0.5 text-end">{w.held}</td>
+                <td className="py-0.5 text-end">{w.occupancy_pct}%</td>
               </tr>
             ))}
           </tbody>
@@ -593,14 +606,12 @@ export default function Today() {
     }
   }
 
-  // occupied over sellable rooms (out of order left out), from the server;
-  // the room snapshot until it answers
+  // occupied over sellable rooms (out of order and categories left out of
+  // occupancy excluded): read directly from the server's room_statistics rule
   const occNow = kpi?.occupancy_now
-  const occupied = occNow
-    ? Number(occNow.occupied)
-    : snap?.rooms.filter((r) => r.occupancy_status === "Occupied").length
-  const sellableN = occNow ? Number(occNow.sellable) : (snap?.rooms.length ?? 0)
-  const occupancyPct = sellableN ? Math.round(((occupied ?? 0) / sellableN) * 100) : 0
+  const occupied = occNow ? Number(occNow.occupied) : 0
+  const sellableN = occNow ? Number(occNow.sellable) : 0
+  const occupancyPct = occNow ? Number(occNow.occupancy_pct) : 0
   const arrivalsN = snap?.arrivals.length ?? 0
   const departuresN = snap?.departures_due.length ?? 0
   const inhouseN = snap?.in_house.length ?? 0
@@ -886,7 +897,9 @@ export default function Today() {
           ))}
         </div>
       )}
-      {kpi?.forecast?.length > 0 && <OccupancyForecast days={kpi.forecast} />}
+      {kpi?.forecast?.length > 0 && (
+        <OccupancyForecast days={kpi.forecast} summary={kpi.forecast_summary} />
+      )}
       </div>
     ),
     booking_requests: <BookingRequests refreshKey={refreshKey} onChanged={refresh} />,

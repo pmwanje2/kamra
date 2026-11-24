@@ -556,23 +556,52 @@ def _compute_insights(property: str, days: int, today, money: bool,
 		"room_type_name": rt_names.get(r.room_type, r.room_type),
 		"floor": r.floor, "nights": 0, "stays": 0, "revenue": 0.0,
 		"out_of_service_nights": 0, "cleans": 0, "clean_minutes": [],
+		"occupied_nights": 0,
 	} for r in rooms}
 
-	# nights actually stayed (in-house or departed), whatever was posted
-	for s in frappe.db.sql(
+	# nights actually stayed (in-house or departed): closed nights keep the
+	# rate category stamped when they posted (OPERA End of Day), unposted
+	# nights follow the stay's current category (kamra.room_statistics)
+	from kamra.folio import STANDS_ON_ITS_DATE
+	from kamra.room_statistics import POSTED_CATEGORY, STAY_CATEGORY, category_rules
+	rules = category_rules(property)
+	posted_cats = {
+		(r_name, str(p_date)): cat
+		for r_name, p_date, cat in frappe.db.sql(
 			"""
-			SELECT room, check_in_date, check_out_date FROM `tabReservation`
-			WHERE property = %(p)s AND room IS NOT NULL AND room != ''
-			  AND status IN ('Checked In', 'Checked Out')
-			  AND check_in_date < %(end)s AND check_out_date > %(start)s
+			SELECT COALESCE(fc.reservation, f.reservation), fc.posting_date, """ + POSTED_CATEGORY + """
+			FROM `tabFolio Charge` fc
+			JOIN `tabFolio` f ON fc.parent = f.name
+			LEFT JOIN `tabReservation` r ON r.name = COALESCE(fc.reservation, f.reservation)
+			WHERE f.property = %(p)s AND fc.charge_type = 'Room'
+			  AND """ + STANDS_ON_ITS_DATE + """
+			  AND fc.posting_date >= %(start)s AND fc.posting_date < %(end)s
+			""", {"p": property, "start": start, "end": end})
+	}
+	for s in frappe.db.sql(
+			"SELECT r.name, r.room, r.check_in_date, r.check_out_date, " + STAY_CATEGORY + """ AS category
+			FROM `tabReservation` r
+			WHERE r.property = %(p)s AND r.room IS NOT NULL AND r.room != ''
+			  AND r.status IN ('Checked In', 'Checked Out')
+			  AND r.check_in_date < %(end)s AND r.check_out_date > %(start)s
 			""", {"p": property, "start": start, "end": end}, as_dict=True):
 		row = stats.get(s.room)
 		if not row:
 			continue
-		n = _overlap(s.check_in_date, s.check_out_date, start, end)
-		if n:
-			row["nights"] += n
-			row["stays"] += 1
+		lo = max(getdate(s.check_in_date), start)
+		hi = min(getdate(s.check_out_date), end)
+		if lo >= hi:
+			continue
+		n = 0
+		day = lo
+		while day < hi:
+			n += 1
+			cat = posted_cats.get((s.name, str(day)), s.category)
+			if rules.counts("occupancy", cat):
+				row["occupied_nights"] += 1
+			day = getdate(add_days(day, 1))
+		row["nights"] += n
+		row["stays"] += 1
 
 	if money:
 		for x in frappe.db.sql(
@@ -625,10 +654,13 @@ def _compute_insights(property: str, days: int, today, money: bool,
 
 	all_minutes = []
 	out_rooms = []
+	occupied_nights = 0
 	for row in stats.values():
 		sellable = max(0, days - row["out_of_service_nights"])
 		row["sellable_nights"] = sellable
-		row["occupancy_pct"] = round(100 * row["nights"] / sellable, 1) if sellable else 0.0
+		occupied = row.pop("occupied_nights")
+		occupied_nights += occupied
+		row["occupancy_pct"] = round(100 * occupied / sellable, 1) if sellable else 0.0
 		mins = row.pop("clean_minutes")
 		all_minutes += mins
 		row["avg_clean_minutes"] = round(sum(mins) / len(mins), 1) if mins else None
@@ -649,7 +681,7 @@ def _compute_insights(property: str, days: int, today, money: bool,
 		"summary": {
 			"rooms": len(out_rooms),
 			"room_nights": total_nights,
-			"occupancy_pct": round(100 * total_nights / sellable, 1) if sellable else 0.0,
+			"occupancy_pct": round(100 * occupied_nights / sellable, 1) if sellable else 0.0,
 			"revenue": round(sum(r["revenue"] or 0 for r in out_rooms), 2) if money else None,
 			"out_of_service_nights": sum(r["out_of_service_nights"] for r in out_rooms),
 			"avg_clean_minutes": round(sum(all_minutes) / len(all_minutes), 1)

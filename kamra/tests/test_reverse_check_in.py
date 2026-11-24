@@ -443,6 +443,7 @@ class ReverseCheckInPosInvoiceUnitTest(unittest.TestCase):
 		rt_doc = frappe._dict(adults_capacity=2, base_price=100, room_type_name="Deluxe")
 		fake_q = {
 			"nightly": [{"date": "2026-11-20", "rate": 100.0}, {"date": "2026-11-21", "rate": 200.0}],
+			"room_total": 300.0,
 			"room_levy": 4000.0,  # 2,000 fixed per night * 2 nights, 0% percent levy
 			"amount_after_tax": 4300.0,
 		}

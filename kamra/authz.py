@@ -448,18 +448,31 @@ def is_supervisor(user: str | None = None, roles=SUPERVISOR_ROLES) -> bool:
 		set(roles) & set(frappe.get_roles(user)))
 
 
+def _people(who) -> set[str]:
+	"""One user or several, case-folded."""
+	return {str(u).casefold() for u in ([who] if isinstance(who, str) else who or ()) if u}
+
+
+def approver_roles(roles) -> str:
+	"""The roles that approve, as a refusal names them: "Hotel Admin or
+	Finance" (the site's own System Manager and Administrator left out)."""
+	named = [r for r in roles if r not in ("System Manager", "Administrator")] or list(roles)
+	return " or ".join([", ".join(named[:-1]), named[-1]] if len(named) > 2 else named)
+
+
 def supervisors_for(property: str, roles=SUPERVISOR_ROLES,
-                    exclude: str | None = None) -> list[dict]:
+                    exclude=None) -> list[dict]:
 	"""Who can approve on a till at this property: enabled users holding
 	one of `roles`, with access to the property and a cashier PIN set.
-	`exclude` (the person asking) is left out: nobody approves their own
-	request. Names only."""
+	`exclude` (the person asking, or several people) is left out: nobody
+	approves their own request. Names only."""
 	users = set(frappe.get_all(
 		"Has Role", filters={"role": ["in", [r for r in roles if r != "Administrator"]],
 		                     "parenttype": "User"},
 		pluck="parent", distinct=True))
 	users &= set(frappe.get_all("Cashier PIN", pluck="name"))
-	users.discard(exclude)
+	excluded = _people(exclude)
+	users = {u for u in users if u.casefold() not in excluded}
 	out = []
 	for u in frappe.get_all("User", filters={"name": ["in", list(users) or [""]],
 	                                         "enabled": 1, "user_type": "System User"},
@@ -471,27 +484,28 @@ def supervisors_for(property: str, roles=SUPERVISOR_ROLES,
 
 
 def verify_supervisor(property: str, supervisor: str | None, pin,
-                      roles=SUPERVISOR_ROLES, requester: str | None = None) -> str:
+                      roles=SUPERVISOR_ROLES, requester=None) -> str:
 	"""A supervisor approves at someone else's till with their user id and
 	their own cashier PIN. The PIN is always required here, whatever the
 	property's PIN setting, because it is the only proof the supervisor was
 	there. Wrong PINs count against the supervisor's lock like any other
-	entry. With `requester` (who asked for the approval), the supervisor
-	must be someone else: SUPERVISOR_SELF_APPROVAL. Returns the approving
-	user."""
+	entry. With `requester` (who asked for the approval, or several people
+	who may not approve it), the supervisor must be someone else:
+	SUPERVISOR_SELF_APPROVAL. A refusal names the roles that approve.
+	Returns the approving user."""
 	supervisor = (supervisor or "").strip()
 	canonical = frappe.db.exists("User", supervisor) if supervisor else None
 	if not canonical:
 		frappe.throw("SUPERVISOR_REQUIRED: pick the supervisor who approves this.",
 		             frappe.PermissionError)
 	supervisor = str(canonical)
-	if requester and supervisor.casefold() == str(requester).casefold():
+	if supervisor.casefold() in _people(requester):
 		frappe.throw("SUPERVISOR_SELF_APPROVAL: you cannot approve your own "
 		             "request. Another supervisor signs it off.", frappe.PermissionError)
 	if not frappe.db.get_value("User", supervisor, "enabled") or \
 			not is_supervisor(supervisor, roles):
-		frappe.throw(f"{supervisor} cannot approve this. It needs a Hotel "
-		             "Admin or Finance user.", frappe.PermissionError)
+		frappe.throw(f"{supervisor} cannot approve this. It needs a {approver_roles(roles)} "
+		             "user.", frappe.PermissionError)
 	allowed = restricted_properties(supervisor)
 	if property and allowed is not None and property not in allowed:
 		frappe.throw(f"{supervisor} has no access to {property}.",

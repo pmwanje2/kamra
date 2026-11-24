@@ -174,6 +174,7 @@ export const ratePlansConfig: ScreenConfig = {
     { field: "billing_basis", label: "Day-use" },
     { field: "modifier_type", label: "Modifier" },
     { field: "modifier_value", label: "Value" },
+    { field: "rate_category", label: "Rate category" },
     { field: "currency", label: "Currency" },
     { field: "fx_lock_policy", label: "Exchange rate lock", badge: true },
     { field: "base_rate_plan", label: "Derived from" },
@@ -204,6 +205,9 @@ export const ratePlansConfig: ScreenConfig = {
     { field: "cancellation_policy", label: "Cancellation policy", type: "data" },
     { field: "is_default", label: "Default plan", type: "check" },
     { field: "discount_eligible", label: "Discount eligible", type: "check", default: 1, hint: "Untick for rates that never take a desk discount (non-refundable, packages)." },
+    // the property's own list (Settings → Revenue → Complimentary and house
+    // use); left blank, the server gives a new plan the list's first
+    { field: "rate_category", label: "Rate category", type: "select", optionsFrom: "rate_categories", hint: "Settings → Revenue says which categories a manager signs off, and which are left out of ADR, RevPAR or occupancy." },
     { field: "disabled", label: "Disabled (unpublished)", type: "check", hint: "Tick to unpublish; clear to activate at booking" },
   ],
 }
