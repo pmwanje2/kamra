@@ -2553,8 +2553,9 @@ def _correct_folio_charge_once(folio: str, charge_row: str, reason: str = "",
 		if new_amount <= 0:
 			frappe.throw("Charge amount must be more than zero. To reduce a "
 			             "bill, post an allowance or void the charge.")
-	if (new_type, new_desc, round(new_amount, 2), new_rate) == (
-			orig.charge_type, orig.description, round(float(orig.amount), 2),
+	from kamra.ledger import round_money
+	if (new_type, new_desc, round_money(new_amount, doc.property, min_places=2), new_rate) == (
+			orig.charge_type, orig.description, round_money(orig.amount, doc.property, min_places=2),
 			float(orig.gst_rate or 0)):
 		frappe.throw(_("Nothing to correct: the line already has these values."))
 	from kamra.business_date import get_business_date
@@ -3393,9 +3394,10 @@ def change_stay_company(reservation: str, reason: str,
 			moved += len(back)
 		if out_total > 0:
 			from kamra.folio import split_charge
+			from kamra.ledger import round_money
 			share = out_total / (out_total + kept_total)
 			for a in allowances:
-				part = round(abs(flt(a.amount)) * share, 2)
+				part = round_money(abs(flt(a.amount)) * share, res.property)
 				if 0 < part < abs(flt(a.amount)):
 					split_charge(doc.name, a.name, guest, amount=part, credit=True)
 					moved += 1
@@ -3576,7 +3578,9 @@ def settle_group_bill(group_booking: str, mode: str | None = None,
 		          "status": "Open"})
 	if not folio:
 		frappe.throw(_("This group has no open group bill."))
-	balance = round(flt(frappe.db.get_value("Folio", folio, "balance")), 2)
+	from kamra.ledger import balance_eps, round_money
+	eps = balance_eps(gb.property)
+	balance = round_money(flt(frappe.db.get_value("Folio", folio, "balance")), gb.property, min_places=2)
 	if int(to_city_ledger or 0):
 		if not gb.company:
 			frappe.throw(_("Only a company group can go to the city ledger."))
@@ -3588,9 +3592,9 @@ def settle_group_bill(group_booking: str, mode: str | None = None,
 			frappe.throw(_("Choose how the group bill is paid."))
 		add_folio_payment(folio, mode, flt(amount) or balance,
 		                  reference=reference, pin=pin)
-	balance = round(flt(frappe.db.get_value("Folio", folio, "balance")), 2)
+	balance = round_money(flt(frappe.db.get_value("Folio", folio, "balance")), gb.property, min_places=2)
 	out = {"folio": folio, "balance": balance, "closed": False}
-	if abs(balance) <= 0.009:
+	if abs(balance) <= eps:
 		out["invoice_number"] = close_folio(folio, pin=pin)["invoice_number"]
 		out["closed"] = True
 	in_house = frappe.db.count("Reservation", {"group_booking": gb.name,
@@ -11606,11 +11610,13 @@ def _group_money(gb, prices: dict, rooming: list) -> dict:
 		"""SELECT COALESCE(SUM(amount), 0) FROM `tabFolio Payment`
 		   WHERE parent IN %(f)s AND payment_kind = 'Advance'""",
 		{"f": [f.name for f in group_folios] or [""]})[0][0])
+	from kamra.ledger import round_money
 	paid = sum(flt(f.payments_total) for f in group_folios + member_folios)
-	return {"block_value": prices["total"], "booked": round(booked, 2),
-	        "deposits": round(deposits, 2), "paid": round(paid, 2),
+	return {"block_value": prices["total"], "booked": round_money(booked, gb.property, min_places=2),
+	        "deposits": round_money(deposits, gb.property, min_places=2),
+	        "paid": round_money(paid, gb.property, min_places=2),
 	        "deposit_due": flt(gb.get("deposit_due")),
-	        "due": round(max(0.0, open_balances + max(0.0, booked - posted)), 2)}
+	        "due": round_money(max(0.0, open_balances + max(0.0, booked - posted)), gb.property, min_places=2)}
 
 
 def _group_attrition(gb, prices: dict) -> dict:
@@ -11626,10 +11632,11 @@ def _group_attrition(gb, prices: dict) -> dict:
 	per_rn = prices["total"] / blocked if blocked else 0
 	days = (effective_cutoff(gb.cutoff_date, gb.check_in_date) - getdate(nowdate())).days
 	pct = round(picked / blocked * 100, 1) if blocked else 100.0
+	from kamra.ledger import round_money
 	return {"blocked_room_nights": blocked, "picked_room_nights": picked,
 	        "pickup_pct": pct, "allowed_pct": allowed,
 	        "shortfall_room_nights": round(short, 1),
-	        "fee_estimate": round(short * per_rn, 2),
+	        "fee_estimate": round_money(short * per_rn, gb.property, min_places=2),
 	        "days_to_cutoff": days,
 	        # a warning matters until the group arrives, not after it has stayed
 	        "warn": bool(blocked) and gb.status == "Confirmed"
@@ -11688,12 +11695,13 @@ def group_detail(group_booking: str):
 		fields=["name", "room_type_name"], as_list=True))
 	for p in pickup:
 		p["room_type_name"] = type_names.get(p["room_type"], p["room_type"])
+	from kamra.ledger import round_money
 	for r in rooming:
 		r["room_number"] = numbers.get(r.room)
 		r["is_master"] = r.name == gb.get("master_reservation")
 		r["phone"] = phones.get(r.guest)
 		r["room_type_name"] = type_names.get(r.room_type, r.room_type)
-		r["own_balance"] = round(own.get(r.name, 0), 2)
+		r["own_balance"] = round_money(own.get(r.name, 0), gb.property, min_places=2)
 		r["amount"] = flt(r.amount_after_tax)
 	event = None
 	if gb.get("event"):
@@ -11750,7 +11758,7 @@ def group_detail(group_booking: str):
 		"event": event,
 		"master_folio": master,
 		"master_folio_status": bill.status if bill else None,
-		"master_folio_balance": round(flt(bill.balance), 2) if bill else 0,
+		"master_folio_balance": round_money(flt(bill.balance), gb.property, min_places=2) if bill else 0,
 	}
 
 

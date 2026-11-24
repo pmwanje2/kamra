@@ -194,7 +194,8 @@ export default function RowCorrection({
                 <input
                   aria-label={t("Refund amount")}
                   type="number"
-                  step="0.01"
+                  step="any"
+                  inputMode="decimal"
                   max={options.refund_cap}
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}

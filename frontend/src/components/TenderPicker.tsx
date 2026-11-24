@@ -119,7 +119,7 @@ export function TenderInput({ currency, value, full, onChange }: {
   return <div className="flex items-center gap-2">
     <label className="flex min-w-0 items-center gap-2 rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5">
       <span className="text-xs font-medium text-zinc-500">{currency}</span>
-      <input type="number" min="0" step="0.01" inputMode="decimal" aria-label={t("Amount collected")}
+      <input type="number" min="0" step="any" inputMode="decimal" aria-label={t("Amount collected")}
         className="w-24 min-w-0 text-right tabular-nums" value={value} onChange={e => onChange(e.target.value)} />
     </label>
     <button type="button" disabled={!full} className="rounded-full border px-2 py-1 text-xs disabled:opacity-50"

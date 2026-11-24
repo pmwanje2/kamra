@@ -899,7 +899,8 @@ def transfer_to_city_ledger(folio: str, company: str | None = None,
 	balance = float(doc.balance or 0)
 	if locked <= 0:
 		frappe.throw("No balance to transfer to city ledger.")
-	if abs(locked - balance) > 0.005:
+	change_tol = min(0.005, float(minor_unit(doc.property)) / 2)
+	if abs(locked - balance) > change_tol:
 		frappe.throw(frappe._("This bill changed while it was being moved to the "
 		                      "company's account. Try again."))
 	company = _transfer_company(doc, company)
@@ -973,7 +974,8 @@ def transfer_to_city_ledger(folio: str, company: str | None = None,
 		"folio_type": doc.get("folio_type"), "reservation": doc.get("reservation"),
 		"invoice_date": str(inv_date),
 		"due_date": str(due_date_for(account, inv_date, doc.property)),
-		"amount": round(balance, 2), "account_balance": round(float(account_balance), 2)})
+		"amount": round_money(balance, doc.property, min_places=2),
+		"account_balance": round_money(float(account_balance), doc.property, min_places=2)})
 	# money the company already paid ahead (an unapplied credit) settles
 	# this new bill straight away
 	applied = apply_unapplied_credit(account, only_folio=doc.name)
@@ -991,10 +993,11 @@ def reverse_city_ledger_transfer(folio: str, reason: str) -> float:
 	amount brought back (0 when the folio was never billed on)."""
 	frappe.db.get_value("Folio", folio, "name", for_update=True)
 	doc = frappe.get_doc("Folio", folio)
+	eps = balance_eps(doc.property)
 	out = [p for p in doc.payments if p.mode == "Company Credit"
 	       and (p.reference or "").startswith(("city-ledger:", "city-ledger-back:"))]
-	net = round(sum(float(p.amount or 0) for p in out), 2)
-	if net <= 0.009:
+	net = round_money(sum(float(p.amount or 0) for p in out), doc.property, min_places=2)
+	if net <= eps:
 		return 0
 	account = out[0].reference.split(":", 1)[1]
 	_lock_account(account)
@@ -1009,11 +1012,11 @@ def reverse_city_ledger_transfer(folio: str, reason: str) -> float:
 		"""SELECT debit, credit FROM `tabCity Ledger Entry`
 		   WHERE folio = %s AND account = %s AND kind != 'Payment' FOR UPDATE""",
 		(doc.name, account), as_dict=True))
-	if float(paid or 0) > 0.009:
+	if float(paid or 0) > eps:
 		frappe.throw(frappe._("The company has already paid part of this bill (or money it "
 		              "paid ahead was applied), so the checkout can't be undone. Finance "
 		              "can correct it on the account."))
-	if billed < net - 0.009:
+	if billed < net - eps:
 		frappe.throw(frappe._("A credit note or adjustment already changed this bill on the "
 		              "company's account, so the checkout can't be undone. Finance can "
 		              "correct it on the account."))
@@ -1157,7 +1160,8 @@ def locked_account_figures(account: str) -> dict:
 		   WHERE e.source_doctype = 'City Ledger Entry' AND c.account = %s
 		   FOR UPDATE""",
 		account, as_dict=True)
-	ar = round(sum(float(e.debit or 0) - float(e.credit or 0) for e in entries), 2)
+	prop = frappe.db.get_value("City Ledger Account", account, "property")
+	ar = round_money(sum(float(e.debit or 0) - float(e.credit or 0) for e in entries), prop, min_places=2)
 	paid: dict[str, float] = {}
 	for row in applied:
 		if not row.folio:
@@ -1196,8 +1200,8 @@ def locked_account_figures(account: str) -> dict:
 				days = effective_credit_days(account)
 			from frappe.utils import add_days
 			due = str(add_days(inv, days))
-		billed = round(g["billed"], 2)
-		settled = round(paid.get(folio) or 0, 2)
+		billed = round_money(g["billed"], prop, min_places=2)
+		settled = round_money(paid.get(folio) or 0, prop, min_places=2)
 		out.append({
 			"folio": folio,
 			"invoice_number": g["number"],
@@ -1759,7 +1763,8 @@ def _age_buckets(open_items: list[dict], unapplied: float, today=None) -> dict:
 
 
 def overdue_past_grace(open_items: list[dict], unapplied: float,
-                       grace_days: int = 0, today=None) -> tuple[float, str | None]:
+                       grace_days: int = 0, today=None, *,
+                       property: str | None = None) -> tuple[float, str | None]:
 	"""What the company owes on bills more than `grace_days` past their due
 	date (as of `today`, the business date), and the oldest such due date.
 	A disputed bill doesn't count."""
@@ -1772,7 +1777,7 @@ def overdue_past_grace(open_items: list[dict], unapplied: float,
 			total += amt
 			if oldest is None or r["due_date"] < oldest:
 				oldest = r["due_date"]
-	return round(total, 2), oldest
+	return round_money(total, property, min_places=2), oldest
 
 
 def _account_position(account: str) -> dict:
@@ -1785,14 +1790,14 @@ def _account_position(account: str) -> dict:
 		   FROM `tabCity Ledger Entry` WHERE account = %s""",
 		account, as_dict=True)[0]
 	balance = float(row.balance or 0)
-	outstanding = round(sum(max(r["outstanding"], 0) for r in open_items), 2)
-	unapplied = round(max(outstanding - balance, 0.0), 2)
+	outstanding = round_money(sum(max(r["outstanding"], 0) for r in open_items), property, min_places=2)
+	unapplied = round_money(max(outstanding - balance, 0.0), property, min_places=2)
 	return {
 		"open_items": open_items,
 		"open_balance": outstanding,
 		"unapplied_credit": unapplied,
-		"total_debit": round(float(row.total_debit or 0), 2),
-		"total_credit": round(float(row.total_credit or 0), 2),
+		"total_debit": round_money(float(row.total_debit or 0), property, min_places=2),
+		"total_credit": round_money(float(row.total_credit or 0), property, min_places=2),
 		"credit_days": effective_credit_days(account),
 		**_age_buckets(open_items, unapplied, aging_date(property)),
 	}
@@ -2748,9 +2753,32 @@ def home_currency(property: str) -> str:
 
 def minor_unit(property: str) -> Decimal:
 	"""The smallest amount a bill in the hotel's currency states: 0.01 for a
-	two-decimal currency, 1 for the Uganda shilling (ISO 4217, via babel)."""
+	two-decimal currency, 1 for the Uganda shilling, 0.001 for KWD (ISO 4217, via babel)."""
 	from babel.numbers import get_currency_precision
 	return Decimal(1).scaleb(-get_currency_precision(home_currency(property)))
+
+
+def currency_precision(property: str | None) -> int:
+	"""ISO 4217 decimal places for the property's home currency (0 UGX, 2 USD/INR, 3 KWD)."""
+	if not property:
+		return 2
+	from babel.numbers import get_currency_precision
+	return get_currency_precision(home_currency(property))
+
+
+def round_money(value, property: str | None = None, *, min_places: int = 0) -> float:
+	"""Half-up round in Decimal to at least `min_places` and the currency's ISO 4217 places."""
+	places = max(currency_precision(property), int(min_places or 0))
+	unit = Decimal(1).scaleb(-places)
+	return float(_money(value).quantize(unit, rounding=ROUND_HALF_UP))
+
+
+def balance_eps(property: str | None = None) -> float:
+	"""Sub-minor-unit settlement tolerance: 0.009 for <=2dp currencies, 0.0009 for 3dp (KWD)."""
+	places = currency_precision(property)
+	if places >= 3:
+		return float(Decimal("0.9") * Decimal(1).scaleb(-places))
+	return 0.009
 
 
 def _money(value) -> Decimal:

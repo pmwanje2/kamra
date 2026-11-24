@@ -139,7 +139,8 @@ def in_house_exposure(company: str, property: str,
 			continue
 		if company_payer_of(f) == company:
 			total += flt(f.balance)
-	return round(total, 2)
+	from kamra.ledger import round_money
+	return round_money(total, property, min_places=2)
 
 
 def check_company_credit(account_or_company: str, property: str,
@@ -151,10 +152,10 @@ def check_company_credit(account_or_company: str, property: str,
 	when the exposure (AR + in-house company folios + amount) is over a
 	non-zero credit limit, or bills are more than the grace period past
 	their due date. With credit control Off it is always ok."""
-	from kamra.ledger import _account_position, overdue_past_grace
+	from kamra.ledger import _account_position, minor_unit, overdue_past_grace, round_money
 	policy = credit_policy(property)
 	account, company = _resolve(account_or_company, property)
-	amount = round(flt(amount), 2)
+	amount = round_money(flt(amount), property, min_places=2)
 	out = {
 		"ok": True, "policy": policy, "company": company, "account": account,
 		"amount": amount, "reasons": [], "over_limit_by": 0.0,
@@ -178,22 +179,23 @@ def check_company_credit(account_or_company: str, property: str,
 			ar = pos["ar_balance"]
 		else:
 			pos = _account_position(account)
-			ar = round(flt(frappe.db.sql(
+			ar = round_money(flt(frappe.db.sql(
 				"""SELECT COALESCE(SUM(debit - credit), 0) FROM `tabCity Ledger Entry`
-				   WHERE account = %s""", account)[0][0]), 2)
+				   WHERE account = %s""", account)[0][0]), property, min_places=2)
 		from kamra.ledger import aging_date
 		overdue, oldest = overdue_past_grace(
 			pos["open_items"], pos["unapplied_credit"], out["grace_days"],
-			aging_date(property))
+			aging_date(property), property=property)
 		out["overdue_amount"], out["oldest_due_date"] = overdue, oldest
 	in_house = in_house_exposure(company, property, exclude_folios,
 	                             for_update=lock)
-	exposure = round(ar + in_house + amount, 2)
+	exposure = round_money(ar + in_house + amount, property, min_places=2)
 	out.update(credit_limit=limit, ar_balance=ar, in_house=in_house,
 	           exposure=exposure)
 	sym = _symbol(property)
-	if limit > 0 and exposure > limit + 0.005:
-		out["over_limit_by"] = round(exposure - limit, 2)
+	tol = min(0.005, float(minor_unit(property)) / 2)
+	if limit > 0 and exposure > limit + tol:
+		out["over_limit_by"] = round_money(exposure - limit, property, min_places=2)
 		out["reasons"].append(_(
 			"Over the credit limit by {0}{1:,.2f} (limit {0}{2:,.2f}, owed and "
 			"billed with this {0}{3:,.2f}).").format(
@@ -206,7 +208,7 @@ def check_company_credit(account_or_company: str, property: str,
 		out["reasons"].append(_("The account is restricted{0}.").format(
 			f" ({restricted.restricted_reason})"
 			if restricted.restricted_reason else ""))
-	if out["overdue_amount"] > 0.005:
+	if out["overdue_amount"] > tol:
 		if out["grace_days"]:
 			out["reasons"].append(_(
 				"{0}{1:,.2f} overdue by more than {2} days (oldest due {3}).").format(
@@ -309,15 +311,17 @@ def company_credit_status(company: str, property: str, amount: float = 0):
 def _city_ledger_moves(reservation: str) -> list[tuple[str, str, float]]:
 	"""(folio, company, balance) for every folio of the stay the company
 	pays - what check-out would move to the city ledger."""
-	from kamra.ledger import company_payer_of
+	from kamra.ledger import balance_eps, company_payer_of, round_money
+	prop = frappe.db.get_value("Reservation", reservation, "property")
+	eps = balance_eps(prop)
 	out = []
 	for f in frappe.get_all("Folio", filters={"reservation": reservation},
 	                        fields=["name", "balance", "folio_type",
 	                                "group_booking", "reservation"]):
-		if flt(f.balance) > 0.009:
+		if flt(f.balance) > eps:
 			payer = company_payer_of(f)
 			if payer:
-				out.append((f.name, payer, round(flt(f.balance), 2)))
+				out.append((f.name, payer, round_money(flt(f.balance), prop, min_places=2)))
 	return out
 
 

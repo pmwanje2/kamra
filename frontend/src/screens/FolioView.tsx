@@ -816,7 +816,7 @@ export default function FolioView() {
                 {bills.map((b) => (
                   <label key={b.name} className="flex items-center gap-2">
                     <span className="w-40 truncate">{b.bill_to_name}</span>
-                    <input className={`${inputCls} w-20`} type="number" min={0} max={100}
+                    <input className={`${inputCls} w-20`} type="number" min={0} max={100} step="any" inputMode="decimal"
                       value={pct(b.name)} onChange={(e) => setShares({ ...shares, [b.name]: e.target.value })} />
                     <span className="text-zinc-500">%</span>
                   </label>
@@ -1527,6 +1527,8 @@ export default function FolioView() {
               <input
                 className={`${inputCls} w-24`}
                 type="number"
+                step="any"
+                inputMode="decimal"
                 placeholder={translate(`${cur()}`)}
                 value={charge.amount}
                 onChange={(e) => setCharge({ ...charge, amount: e.target.value })}
@@ -1609,6 +1611,8 @@ export default function FolioView() {
                   <input
                     className={`${inputCls} w-24`}
                     type="number"
+                    step="any"
+                    inputMode="decimal"
                     placeholder={translate(`${cur()}`)}
                     value={allowance.amount}
                     onChange={(e) =>

@@ -46,8 +46,10 @@ def settlement_position(reservation: str) -> dict:
 	refund_due      what the guest is owed back
 	to_city_ledger  [(folio, company, balance)] check-out will move
 	"""
-	from kamra.ledger import company_payer_of
+	from kamra.ledger import balance_eps, company_payer_of, round_money
 
+	prop = frappe.db.get_value("Reservation", reservation, "property")
+	eps = balance_eps(prop)
 	owed = refund = 0.0
 	to_city_ledger: list[tuple[str, str, float]] = []
 	folios = []
@@ -61,16 +63,17 @@ def settlement_position(reservation: str) -> dict:
 			# the group's bill stays open past the departure of the room it is
 			# anchored to and is settled with the group, not this stay
 			continue
-		balance = round(flt(f.balance), 2)
-		payer = company_payer_of(f) if balance > EPS else None
+		balance = round_money(flt(f.balance), prop, min_places=2)
+		payer = company_payer_of(f) if balance > eps else None
 		if payer:
 			to_city_ledger.append((f.name, payer, balance))
-		elif balance > EPS:
+		elif balance > eps:
 			owed += balance
-		elif balance < -EPS:
+		elif balance < -eps:
 			refund -= balance
 		folios.append({**f, "balance": balance, "city_ledger_company": payer})
-	return {"owed": round(owed, 2), "refund_due": round(refund, 2),
+	return {"owed": round_money(owed, prop, min_places=2),
+	        "refund_due": round_money(refund, prop, min_places=2),
 	        "to_city_ledger": to_city_ledger, "folios": folios}
 
 
@@ -397,7 +400,9 @@ def _checkout_context(reservation: str) -> dict:
 		for n in frappe.get_all(
 				"Folio Charge", filters={"parent": f0.name}, pluck="name"):
 			posted_charge_names.add(n)
-	posted_charges = round(posted_charges, 2)
+	from kamra.ledger import balance_eps, round_money
+	eps = balance_eps(res.property)
+	posted_charges = round_money(posted_charges, res.property, min_places=2)
 	folio_rows: list[dict] = []
 	will_post_lines: list[dict] = []
 	early = early_departure_plan(res)
@@ -439,7 +444,7 @@ def _checkout_context(reservation: str) -> dict:
 					        "invoice_number", "grand_total", "payments_total",
 					        "reservation", "group_booking"]):
 				if m.name not in seen:
-					display.append({**m, "balance": round(flt(m.balance), 2),
+					display.append({**m, "balance": round_money(flt(m.balance), res.property, min_places=2),
 					                "city_ledger_company": None, "_group_only": True})
 		for f in display:
 			doc = frappe.get_doc("Folio", f["name"])
@@ -463,7 +468,7 @@ def _checkout_context(reservation: str) -> dict:
 				if not f.get("_group_only"):
 					g = groups.setdefault(grp, {"group": grp, "amount": 0.0,
 					                            "count": 0, "lines": []})
-					g["amount"] = round(g["amount"] + line["amount"] + line["gst_amount"], 2)
+					g["amount"] = round_money(g["amount"] + line["amount"] + line["gst_amount"], res.property, min_places=2)
 					g["count"] += 1
 					g["lines"].append(line)
 			company = f.get("city_ledger_company")
@@ -473,9 +478,9 @@ def _checkout_context(reservation: str) -> dict:
 				"status": doc.status or "Open",
 				"invoice_number": doc.invoice_number,
 				"balance": f["balance"],
-				"grand_total": round(flt(doc.grand_total), 2),
-				"paid_total": round(flt(doc.payments_total), 2),
-				"refundable": round(max(received - refunded, 0.0), 2),
+				"grand_total": round_money(flt(doc.grand_total), res.property, min_places=2),
+				"paid_total": round_money(flt(doc.payments_total), res.property, min_places=2),
+				"refundable": round_money(max(received - refunded, 0.0), res.property, min_places=2),
 				"city_ledger_company": company,
 				"city_ledger_company_name": (
 					frappe.db.get_value("Corporate Account", company, "company_name")
@@ -527,11 +532,11 @@ def _checkout_context(reservation: str) -> dict:
 	for f in own:
 		if f["side"] != "guest":
 			continue
-		if f["balance"] > EPS:
+		if f["balance"] > eps:
 			collect.append({"folio": f["folio"], "folio_type": f["folio_type"],
 			                "amount": f["balance"],
 			                "invoiced": f["status"] == "Closed"})
-		elif f["balance"] < -EPS:
+		elif f["balance"] < -eps:
 			due = -f["balance"]
 			if f["status"] == "Closed":
 				blockers.append({
@@ -543,25 +548,25 @@ def _checkout_context(reservation: str) -> dict:
 						symbol, due, f["folio"], f["invoice_number"] or "")})
 				continue
 			from_deposit = 0.0
-			if f["folio"] == dep_folio and held > EPS:
-				from_deposit = round(min(held, due), 2)
+			if f["folio"] == dep_folio and held > eps:
+				from_deposit = round_money(min(held, due), res.property, min_places=2)
 				refunds.append({
 					"kind": "deposit", "folio": f["folio"],
 					"folio_type": f["folio_type"], "amount": from_deposit,
 					"source": "security_deposit",
 					"mode": _deposit_mode(f["folio"], modes) or f["main_mode"]
 					or _fallback_mode(modes)})
-			rest = round(due - from_deposit, 2)
-			if rest > EPS:
-				avail = round(f["refundable"] - from_deposit, 2)
-				amount = round(min(rest, max(avail, 0.0)), 2)
-				if amount > EPS:
+			rest = round_money(due - from_deposit, res.property, min_places=2)
+			if rest > eps:
+				avail = round_money(f["refundable"] - from_deposit, res.property, min_places=2)
+				amount = round_money(min(rest, max(avail, 0.0)), res.property, min_places=2)
+				if amount > eps:
 					refunds.append({
 						"kind": "folio", "folio": f["folio"],
 						"folio_type": f["folio_type"], "amount": amount,
 						"source": "overpayment",
 						"mode": f["main_mode"] or _fallback_mode(modes)})
-				if rest - amount > EPS:
+				if rest - amount > eps:
 					blockers.append({
 						"code": "refund_exceeds_collected", "step": "settle",
 						"folio": f["folio"],
@@ -571,7 +576,7 @@ def _checkout_context(reservation: str) -> dict:
 						             "correct it (move a charge or a payment).").format(
 							f["folio"], symbol, rest, max(avail, 0.0))})
 
-	if held > EPS and in_house and not any(r["kind"] == "deposit" for r in refunds):
+	if held > eps and in_house and not any(r["kind"] == "deposit" for r in refunds):
 		notices.append({
 			"code": "deposit_applied",
 			"message": _("The security deposit of {0}{1:,.2f} still held counts "
@@ -617,10 +622,10 @@ def _checkout_context(reservation: str) -> dict:
 			"message": _open_bills_message(open_bills)})
 
 	owed, refund_due = pos["owed"], pos["refund_due"]
-	settled = owed <= EPS and refund_due <= EPS
+	settled = owed <= eps and refund_due <= eps
 	hard = [b for b in blockers if b["code"] != "credit_blocked"]
 	credit_stuck = bool(credit and credit["blocked"] and not credit["can_override"])
-	city_total = round(sum(b for _f, _c, b in pos["to_city_ledger"]), 2)
+	city_total = round_money(sum(b for _f, _c, b in pos["to_city_ledger"]), res.property, min_places=2)
 	company_name = frappe.db.get_value(
 		"Corporate Account", res.company, "company_name") if res.get("company") else None
 	from kamra.folio import billing_rule_rows
@@ -630,20 +635,20 @@ def _checkout_context(reservation: str) -> dict:
 		as_dict=True) if res.room else None
 	for b in blockers:
 		b.setdefault("amount", 0)
-	if owed > EPS:
+	if owed > eps:
 		blockers.append({"code": "owed", "step": "settle", "amount": owed,
 		                 "message": _("Collect {0}{1:,.2f} before departure.")
 		                 .format(symbol, owed)})
-	if refund_due > EPS:
+	if refund_due > eps:
 		blockers.append({"code": "refund", "step": "settle", "amount": refund_due,
 		                 "message": _("Refund {0}{1:,.2f} before departure.")
 		                 .format(symbol, refund_due)})
 
-	checkout_charges = round(sum(f["grand_total"] for f in own), 2)
-	will_post = round(sum(
-		flt(l["amount"]) + flt(l["gst_amount"]) for l in will_post_lines), 2)
-	pending_not_on_folio = round(sum(
-		flt(b["amount"]) for b in pending if b.get("billable")), 2)
+	checkout_charges = round_money(sum(f["grand_total"] for f in own), res.property, min_places=2)
+	will_post = round_money(sum(
+		flt(l["amount"]) + flt(l["gst_amount"]) for l in will_post_lines), res.property, min_places=2)
+	pending_not_on_folio = round_money(sum(
+		flt(b["amount"]) for b in pending if b.get("billable")), res.property, min_places=2)
 	# Plain split for the desk: Folio View shows on_folio_now; this sheet
 	# shows at_checkout (after remaining nights). Pending restaurant /
 	# laundry is separate until posted or settled at the outlet.
@@ -664,8 +669,8 @@ def _checkout_context(reservation: str) -> dict:
 		"company": res.company,
 		"company_name": company_name,
 		"rules": billing_rules,
-		"explained": will_post > EPS or pending_not_on_folio > EPS
-		             or bool(res.company) or city_total > EPS,
+		"explained": will_post > eps or pending_not_on_folio > eps
+		             or bool(res.company) or city_total > eps,
 	}
 
 	return {
@@ -694,8 +699,8 @@ def _checkout_context(reservation: str) -> dict:
 		"bill_split": bill_split,
 		"totals": {
 			"charges": checkout_charges,
-			"paid": round(sum(f["paid_total"] for f in own), 2),
-			"balance": round(sum(f["balance"] for f in own), 2),
+			"paid": round_money(sum(f["paid_total"] for f in own), res.property, min_places=2),
+			"balance": round_money(sum(f["balance"] for f in own), res.property, min_places=2),
 			"owed": owed, "refund_due": refund_due,
 			"city_ledger_eligible": city_total,
 			"to_city_ledger": city_total,

@@ -53,9 +53,11 @@ class Folio(Document):
 		if self.status != "Closed" or 				self.invoice_number != old.invoice_number:
 			frappe.throw(_("A closed folio cannot be reopened or renumbered."))
 
+		from kamra.ledger import round_money
+
 		def sig(rows):
 			return [(r.charge_type, str(r.posting_date),
-			         round(float(r.amount or 0), 2),
+			         round_money(r.amount or 0, self.property, min_places=2),
 			         float(r.gst_rate or 0)) for r in rows]
 		if sig(self.charges) != sig(old.charges):
 			frappe.throw(_(

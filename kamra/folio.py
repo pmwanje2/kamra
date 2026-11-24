@@ -2049,8 +2049,9 @@ def close_folio(folio_name: str) -> str:
 		from kamra import ledger as _ledger_mod
 		if hasattr(_ledger_mod, "sync_folio_rounding_ledger"):
 			_ledger_mod.sync_folio_rounding_ledger(folio)
+	from kamra.ledger import balance_eps
 	balance = float(folio.balance or 0)
-	if abs(balance) > 0.01:
+	if abs(balance) > balance_eps(folio.property):
 		from kamra.localization import pack_for
 		symbol = pack_for(folio.property).locale(
 			frappe.get_cached_doc("Property", folio.property)).get(
@@ -2233,7 +2234,8 @@ def part_settle(folio_name: str) -> dict:
 	if folio.status == "Closed":
 		frappe.throw("This folio is already settled.")
 	_recalculate(folio, payments_only=True)
-	if round(folio.balance or 0, 2) != 0:
+	from kamra.ledger import balance_eps
+	if abs(float(folio.balance or 0)) > balance_eps(folio.property):
 		frappe.throw("Settle the balance first - an interim invoice needs "
 		             "the folio fully paid.")
 	if not folio.charges:
