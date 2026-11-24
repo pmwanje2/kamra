@@ -375,3 +375,104 @@ class OutletChecksTestCase(AuditTestCase):
 		self.assertEqual(owed_ugx["amount"], 42000.0)
 		self.assertIn("42,000", owed_ugx["message"])
 		self.assertNotIn("42,000.00", owed_ugx["message"])
+
+	def test_checkout_sop_next_tip_and_deposit_preserve_kwd_3dp_and_ugx_0dp(self):
+		"""Checkout SOP next_tip must match checkout_context blockers for 3dp KWD
+		(12.345 and 0.005) and 0dp UGX (42,000) so CheckOutDialog deduplicates cleanly,
+		deposit.py must honour KWD 3dp precision & 0.005 EPS, and es.csv/zh.csv must
+		carry no remaining .2f format placeholders."""
+		from pathlib import Path
+
+		from kamra import api, deposit
+
+		prop_kwd = "UT SOP Deposit KWD"
+		prop_ugx = "UT SOP Deposit UGX"
+		for prop, country, currency in (
+			(prop_kwd, "Kuwait", "KWD"),
+			(prop_ugx, "Uganda", "UGX"),
+		):
+			make_property(
+				prop, country=country, currency=currency, business_date=TODAY,
+				gst_rate_low=0, gst_rate_high=0,
+			)
+			self.addCleanup(frappe.clear_document_cache, "Property", prop)
+
+		self.answer = {"checks": []}
+
+		# 1. KWD 12.345: SOP next_tip must equal owed blocker message (د.ك12.345, NOT د.ك12.35)
+		rt_kwd = make_room_type(prop_kwd, "KSTD-SOP", base_price=12.345)
+		room_kwd = make_room(prop_kwd, rt_kwd, "KS-1")
+		res_kwd = make_reservation(
+			prop_kwd, rt_kwd, d(-1), d(0), status="Checked In", room=room_kwd,
+		)
+		with self.installed():
+			ctx_kwd = api.checkout_context(res_kwd.name)
+		owed_kwd = next(b for b in ctx_kwd["blockers"] if b["code"] == "owed")
+		self.assertEqual(ctx_kwd["sop"]["next_tip"], owed_kwd["message"])
+		self.assertIn("12.345", ctx_kwd["sop"]["next_tip"])
+		self.assertNotIn("12.35", ctx_kwd["sop"]["next_tip"])
+
+		# 2. KWD 0.005 (below hardcoded 0.009): SOP must report owed and block collect_settle
+		rt_tiny = make_room_type(prop_kwd, "KSTD-TINY", base_price=0.005)
+		room_tiny = make_room(prop_kwd, rt_tiny, "KS-2")
+		res_tiny = make_reservation(
+			prop_kwd, rt_tiny, d(-1), d(0), status="Checked In", room=room_tiny,
+		)
+		with self.installed():
+			ctx_tiny = api.checkout_context(res_tiny.name)
+		owed_tiny = next(b for b in ctx_tiny["blockers"] if b["code"] == "owed")
+		self.assertEqual(ctx_tiny["sop"]["next_tip"], owed_tiny["message"])
+		self.assertIn("0.005", ctx_tiny["sop"]["next_tip"])
+		collect_step = next(s for s in ctx_tiny["sop"]["steps"] if s["step_key"] == "collect_settle")
+		self.assertEqual(collect_step["state"], "blocked")
+
+		# 3. UGX 42,000: SOP next_tip must equal owed blocker message (UGX 42,000, NOT 42,000.00)
+		rt_ugx = make_room_type(prop_ugx, "USTD-SOP", base_price=42000)
+		room_ugx = make_room(prop_ugx, rt_ugx, "US-1")
+		res_ugx = make_reservation(
+			prop_ugx, rt_ugx, d(-1), d(0), status="Checked In", room=room_ugx,
+		)
+		with self.installed():
+			ctx_ugx = api.checkout_context(res_ugx.name)
+		owed_ugx = next(b for b in ctx_ugx["blockers"] if b["code"] == "owed")
+		self.assertEqual(ctx_ugx["sop"]["next_tip"], owed_ugx["message"])
+		self.assertIn("42,000", ctx_ugx["sop"]["next_tip"])
+		self.assertNotIn("42,000.00", ctx_ugx["sop"]["next_tip"])
+
+		# 4. Security Deposit KWD 12.345 & 0.005 precision and EPS
+		room_dep = make_room(prop_kwd, rt_kwd, "KS-3")
+		res_dep = make_reservation(
+			prop_kwd, rt_kwd, TODAY, d(1), status="Checked In", room=room_dep,
+		)
+		deposit.collect_deposit(res_dep.name, 12.345, mode="Cash")
+		with self.assertRaises(frappe.ValidationError) as cm_w:
+			deposit.withhold_deposit(res_dep.name, 12.350, "damage")
+		self.assertIn("12.345", str(cm_w.exception))
+		self.assertNotIn("12.35", str(cm_w.exception))
+
+		with self.assertRaises(frappe.ValidationError) as cm_r:
+			deposit.refund_deposit(res_dep.name, 12.350, mode="Cash")
+		self.assertIn("12.345", str(cm_r.exception))
+		self.assertNotIn("12.35", str(cm_r.exception))
+
+		# Partial refund leaving 0.005 KWD: must remain Held, block checkout, and apply_held_to_bill must move 0.005
+		st_after = deposit.refund_deposit(res_dep.name, 12.340, mode="Cash")
+		self.assertAlmostEqual(st_after["held"], 0.005, places=3)
+		self.assertEqual(st_after["status"], "Held")
+		self.assertTrue(st_after["blocks_checkout"])
+
+		applied = deposit.apply_held_to_bill(frappe.get_doc("Reservation", res_dep.name))
+		self.assertAlmostEqual(applied, 0.005, places=3)
+
+		# 5. es.csv and zh.csv must have zero remaining .2f format placeholders and match updated {0} keys
+		trans_dir = Path(frappe.get_app_path("kamra")) / "translations"
+		for fname in ("es.csv", "zh.csv"):
+			body = (trans_dir / fname).read_text(encoding="utf-8")
+			self.assertNotIn(":,.2f}", body, f"{fname} still contains hardcoded .2f")
+			for expected_key in (
+				"Cannot check out: {0} is still owed.",
+				"Cannot close the folio: {0} is still owed.",
+				"Only {0} of the deposit is still held.",
+				"The guest folio only has {0} in credit.",
+			):
+				self.assertIn(expected_key, body, f"{fname} missing {expected_key}")

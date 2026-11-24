@@ -13,6 +13,7 @@ import CreditTermsEditor from "../src/components/CreditTermsEditor"
 import { APPS, visibleApps } from "../src/lib/apps"
 import { keptInErp } from "../src/lib/erpBooks"
 import { loadLocale } from "../src/lib/money"
+import { allocate, splitProblem, splitTotals } from "../src/lib/splitPayment"
 import { AuditPackView } from "../src/screens/AuditPack"
 import CashierTill from "../src/screens/CashierTill"
 import Ledgers from "../src/screens/Ledgers"
@@ -1254,6 +1255,138 @@ describe("ERP-kept books", () => {
       expect(host.textContent).toContain("USD 125.75 (0.25)")
       expect(host.textContent).toContain("KWD 12.345 (-0.002)")
       expect(host.textContent).not.toContain("KWD 12.35")
+    } finally {
+      localeRef.value = prevLocale
+      await loadLocale()
+    }
+  })
+
+  it("EndOfDayWizard: does not classify a 0.005 KWD departure as zero-balance for quick checkout", async () => {
+    const prevLocale = localeRef.value
+    try {
+      localeRef.value = { ...prevLocale, locale: "en-US", currency: "KWD", currency_symbol: "د.ك" }
+      await loadLocale()
+      rpc.mockImplementation(async (method: string) =>
+        method === "kamra.night_audit.eod_session"
+          ? {
+              property: "KH41-KWD", property_name: "KH41-KWD", currency: "KWD", currency_symbol: "د.ك",
+              business_date: "2026-11-24", server_date: "2026-11-24", server_time: "23:00", property_now: "2026-11-24 23:00",
+              require_cashier_pin: 0, blind_count: 0, high_balance_threshold: 0,
+              auto_audit_with_blockers: "warn", reports: [], audit: "NA-KWD-EPS", ran: false, status: "Draft",
+              current_step: 0, notes: "", acknowledgements: [], sessions: [],
+              steps: [{
+                index: 0, key: "review", title: "Review",
+                checks: ["departures_due"], status: "blocked", count: 1, blocking: ["departures_due"],
+              }],
+              checks: [{
+                key: "departures_due", title: "Departures still in house", severity: "block", count: 1,
+                action: "Check out or extend.",
+                items: [{
+                  reservation: "RES-KWD-0005", guest_name: "Five Fils Guest", room: "K-05",
+                  check_out_date: "2026-11-24", balance: 0.005, rate: 0.005,
+                }],
+              }],
+            }
+          : null,
+      )
+      await act(async () => {
+        root.render(
+          <MemoryRouter key="eod-kwd-eps" basename="/kamra" initialEntries={["/kamra/end-of-day/KH41-KWD"]}>
+            <App />
+          </MemoryRouter>,
+        )
+      })
+      await vi.waitFor(() => { expect(host.textContent).toContain("Five Fils Guest") }, { timeout: 5000 })
+      expect(host.textContent).toContain("0.005")
+      expect(host.textContent).not.toContain("Quick check out 1 zero-balance departures")
+    } finally {
+      localeRef.value = prevLocale
+      await loadLocale()
+    }
+  })
+
+  it("CheckOutDialog and splitPayment: enforce KWD 3dp EPS (0.005 KWD is unpaid) and preserve 12.345 / 0.005", async () => {
+    const prevLocale = localeRef.value
+    try {
+      localeRef.value = { ...prevLocale, locale: "en-US", currency: "KWD", currency_symbol: "د.ك" }
+      await loadLocale()
+
+      // 1. splitPayment helpers preserve KWD 3dp (12.345 & 0.005, never rounding to 12.35 or skipping 0.005)
+      const line12345 = [{ id: "1", mode: "Cash", amount: "12.345", reference: "", key: "k1" }]
+      expect(splitTotals(line12345, 12.345, "KWD")).toEqual({ entered: 12.345, left: 0 })
+      expect(splitProblem(line12345, 12.345, (s) => s, "KWD")).toBeNull()
+      expect(allocate(line12345, [{ folio: "FOL-1", amount: 12.345 }], "KWD")).toEqual([
+        { folio: "FOL-1", mode: "Cash", amount: 12.345, reference: undefined, kind: "Payment", idempotency_key: "k1:FOL-1" },
+      ])
+
+      const line0005 = [{ id: "2", mode: "Cash", amount: "0.005", reference: "", key: "k2" }]
+      expect(splitTotals(line0005, 0.005, "KWD")).toEqual({ entered: 0.005, left: 0 })
+      expect(splitProblem(line0005, 0.005, (s) => s, "KWD")).toBeNull()
+      expect(allocate(line0005, [{ folio: "FOL-2", amount: 0.005 }], "KWD")).toEqual([
+        { folio: "FOL-2", mode: "Cash", amount: 0.005, reference: undefined, kind: "Payment", idempotency_key: "k2:FOL-2" },
+      ])
+    } finally {
+      localeRef.value = prevLocale
+      await loadLocale()
+    }
+  })
+
+  it("CheckOutDialog: treats 0.005 KWD as unpaid using currency-aware EPS (shows Why this total)", async () => {
+    const prevLocale = localeRef.value
+    try {
+      localeRef.value = { ...prevLocale, locale: "en-US", currency: "KWD", currency_symbol: "د.ك" }
+      await loadLocale()
+      const blockerMsg = "Collect د.ك0.005 before departure."
+      rpc.mockImplementation(async (method: string) => {
+        if (method === "kamra.api.checkout_context") {
+          return {
+            reservation: {
+              name: "RES-KWD-5FILS", status: "Checked In", guest: "G-5", guest_name: "Five Fils Guest",
+              company: null, company_name: null, group_booking: null,
+              room: "KH41-KWD-K05", room_number: "K05", room_type_name: "KSTD",
+              check_in_date: "2026-11-23", check_out_date: "2026-11-24",
+            },
+            currency: "KWD", currency_symbol: "د.ك", payment_modes: ["Cash"], pin_required: false,
+            till_open: true, till: { open: true, required: false, can_open: false, who_can_open: [] },
+            folios: [{
+              folio: "FOL-KWD-5", name: "FOL-KWD-5", folio_type: "Guest", status: "Open",
+              invoice_number: null, balance: 0.005, grand_total: 0.005, paid_total: 0,
+              refundable: 0, city_ledger_company: null, city_ledger_company_name: null,
+              can_city_ledger: false, side: "guest", has_charges: true, lines: [],
+            }],
+            groups: {},
+            bill_split: {
+              company: null, on_folio_now: 0, will_post: 0.005, at_checkout: 0.005,
+              will_post_lines: [{ charge_type: "Room", description: "Room night", posting_date: "2026-11-23", amount: 0.005, gst_amount: 0, folio: "FOL-KWD-5" }],
+              pending_not_on_folio: 0.005,
+            },
+            totals: { charges: 0.005, paid: 0, balance: 0.005, owed: 0.005, refund_due: 0, to_city_ledger: 0 },
+            billing: { company: null, company_name: null, rules: [] },
+            city_ledger: [], credit: null, deposit: null,
+            collect: [{ folio: "FOL-KWD-5", folio_type: "Guest", amount: 0.005 }],
+            refunds: [], pending_bills: [],
+            late_checkout: null, early_departure: null, companions: [],
+            blockers: [{ code: "owed", step: "settle", amount: 0.005, message: blockerMsg }],
+            notices: [], settled: false,
+            actions: { can_checkout: false, can_withhold_deposit: false, can_check_out_role: true },
+            sop: { steps: [], next_tip: blockerMsg },
+          }
+        }
+        return null
+      })
+      await act(async () => {
+        root.render(
+          <MemoryRouter>
+            <CheckOutDialog reservation="RES-KWD-5FILS" onDone={() => undefined} onClose={() => undefined} />
+          </MemoryRouter>,
+        )
+      })
+      await vi.waitFor(() => {
+        expect(host.textContent).toContain("Five Fils Guest")
+      })
+      // Review step must show "Why this total" because 0.005 KWD > KWD EPS (0.0005), NOT hidden by EPS=0.009
+      expect(host.textContent).toContain("Why this total")
+      expect(host.textContent).toContain("د.ك0.005")
     } finally {
       localeRef.value = prevLocale
       await loadLocale()
