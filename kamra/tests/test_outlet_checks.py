@@ -297,3 +297,81 @@ class OutletChecksTestCase(AuditTestCase):
 		with self.installed():
 			usd_rows = open_outlet_checks(prop_usd, business_date=YESTERDAY)
 		self.assertEqual(usd_rows[0]["amount"], 125.75)
+
+	def test_checkout_context_preserves_currency_precision_in_totals_and_messages(self):
+		"""Check-out totals, pending_not_on_folio, and collect/refund blocker messages
+		must preserve property currency precision: 3dp KWD (12.345, NOT 12.35) and
+		0dp UGX (42,000, NOT 42,000.00)."""
+		from kamra import api
+		from kamra import folio as folio_mod
+		from kamra.tests.audit_fixtures import guest_folio
+
+		prop_kwd = "UT Checkout KWD"
+		prop_ugx = "UT Checkout UGX"
+		for prop, country, currency in (
+			(prop_kwd, "Kuwait", "KWD"),
+			(prop_ugx, "Uganda", "UGX"),
+		):
+			make_property(
+				prop, country=country, currency=currency, business_date=TODAY,
+				gst_rate_low=0, gst_rate_high=0,
+			)
+			self.addCleanup(frappe.clear_document_cache, "Property", prop)
+
+		# KWD (3dp): 12.345 room balance + 12.345 open outlet check
+		rt_kwd = make_room_type(prop_kwd, "KSTD-CO", base_price=12.345)
+		room_kwd = make_room(prop_kwd, rt_kwd, "K-20")
+		res_kwd = make_reservation(
+			prop_kwd, rt_kwd, d(-1), d(0), status="Checked In", room=room_kwd,
+		)
+		self.answer = {"checks": [
+			check(name="PSINV-KWD-CO-01", outlet="Pearl Tea Room", amount=12.345,
+			      billed=0, room="K-20", reservation=res_kwd.name),
+		]}
+		with self.installed():
+			ctx_kwd = checkout.checkout_context(res_kwd.name)
+		self.assertEqual(ctx_kwd["bill_split"]["pending_not_on_folio"], 12.345)
+		self.assertEqual(ctx_kwd["bill_split"]["at_checkout"], 12.345)
+		self.assertEqual(ctx_kwd["totals"]["owed"], 12.345)
+		self.assertEqual(ctx_kwd["totals"]["charges"], 12.345)
+		self.assertEqual(ctx_kwd["totals"]["balance"], 12.345)
+		self.assertEqual(ctx_kwd["folios"][0]["balance"], 12.345)
+		self.assertEqual(ctx_kwd["folios"][0]["grand_total"], 12.345)
+		owed_kwd = next(b for b in ctx_kwd["blockers"] if b["code"] == "owed")
+		self.assertEqual(owed_kwd["amount"], 12.345)
+		self.assertIn("12.345", owed_kwd["message"])
+		self.assertNotIn("12.35", owed_kwd["message"])
+
+		# KWD (3dp) refund blocker: overpaid by 2.345 KWD -> message shows 2.345, NOT 2.35
+		room_kwd_ref = make_room(prop_kwd, rt_kwd, "K-21")
+		res_kwd_ref = make_reservation(
+			prop_kwd, rt_kwd, d(-1), d(0), status="Checked In", room=room_kwd_ref,
+		)
+		folio_mod.post_remaining_nights(res_kwd_ref)
+		api.add_folio_payment(guest_folio(res_kwd_ref.name), "Cash", 14.69, kind="Payment")
+		self.answer = {"checks": []}
+		with self.installed():
+			ctx_kwd_ref = checkout.checkout_context(res_kwd_ref.name)
+		self.assertEqual(ctx_kwd_ref["totals"]["refund_due"], 2.345)
+		refund_kwd = next(b for b in ctx_kwd_ref["blockers"] if b["code"] == "refund")
+		self.assertEqual(refund_kwd["amount"], 2.345)
+		self.assertIn("2.345", refund_kwd["message"])
+		self.assertNotIn("2.35", refund_kwd["message"])
+
+		# UGX (0dp): 42,000 room balance + 42,000 open outlet check -> message shows 42,000, NOT 42,000.00
+		rt_ugx = make_room_type(prop_ugx, "USTD-CO", base_price=42000)
+		room_ugx = make_room(prop_ugx, rt_ugx, "U-30")
+		res_ugx = make_reservation(
+			prop_ugx, rt_ugx, d(-1), d(0), status="Checked In", room=room_ugx,
+		)
+		self.answer = {"checks": [
+			check(name="PSINV-UGX-CO-01", outlet="Rooftop Tapas Lounge", amount=42000,
+			      billed=0, room="U-30", reservation=res_ugx.name),
+		]}
+		with self.installed():
+			ctx_ugx = checkout.checkout_context(res_ugx.name)
+		self.assertEqual(ctx_ugx["bill_split"]["pending_not_on_folio"], 42000.0)
+		owed_ugx = next(b for b in ctx_ugx["blockers"] if b["code"] == "owed")
+		self.assertEqual(owed_ugx["amount"], 42000.0)
+		self.assertIn("42,000", owed_ugx["message"])
+		self.assertNotIn("42,000.00", owed_ugx["message"])

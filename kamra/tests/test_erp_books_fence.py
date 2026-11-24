@@ -1235,6 +1235,71 @@ class ERPBooksFenceTestCase(AuditTestCase):
 			usd_src = receivables_source(prop_usd, strict=False)
 		self.assertEqual(usd_src.rows[0]["balance"], 125.75)
 
+	def test_ledger_round_cents_and_folio_totals_preserve_kwd_3dp_precision(self):
+		"""round_cents and folio totals must preserve 3dp KWD (12.345, NOT 12.35)
+		and 0dp UGX while keeping default 2dp behaviour unchanged."""
+		from kamra import checkout, ledger
+		from kamra import folio as folio_mod
+		from kamra.tests.audit_fixtures import (
+			d,
+			guest_folio,
+			make_reservation,
+			make_room,
+			make_room_type,
+		)
+
+		prop_kwd = "UT Folio KWD"
+		prop_ugx = "UT Folio UGX"
+		for prop, country, currency in (
+			(prop_kwd, "Kuwait", "KWD"),
+			(prop_ugx, "Uganda", "UGX"),
+		):
+			make_property(
+				prop, country=country, currency=currency, business_date=TODAY,
+				gst_rate_low=0, gst_rate_high=0,
+			)
+			self.addCleanup(frappe.clear_document_cache, "Property", prop)
+
+		# Real KWD folio totals preserve 12.345 through posting, settlement_position,
+		# force_advance_bill, and folio_reconciliation (never rounded to 12.35).
+		rt_kwd = make_room_type(prop_kwd, "KSTD-FOL", base_price=12.345)
+		room_kwd = make_room(prop_kwd, rt_kwd, "K-31")
+		res_kwd = make_reservation(
+			prop_kwd, rt_kwd, d(-1), d(0), status="Checked In", room=room_kwd,
+		)
+		folio_mod.post_remaining_nights(res_kwd)
+		folio_doc = frappe.get_doc("Folio", guest_folio(res_kwd.name))
+		self.assertEqual(float(folio_doc.grand_total), 12.345)
+		self.assertEqual(float(folio_doc.balance), 12.345)
+
+		with self.subTest("settlement_position"):
+			pos = checkout.settlement_position(res_kwd.name)
+			self.assertEqual(pos["owed"], 12.345)
+			self.assertEqual(pos["folios"][0]["balance"], 12.345)
+
+		with self.subTest("folio_reconciliation"):
+			recon = ledger.folio_reconciliation(prop_kwd)
+			self.assertTrue(recon["in_balance"])
+			self.assertEqual(recon["folios_net"], 12.345)
+			self.assertEqual(recon["ledger_net"], 12.345)
+
+		with self.subTest("force_advance_bill"):
+			room_kwd_2 = make_room(prop_kwd, rt_kwd, "K-32")
+			res_kwd_2 = make_reservation(
+				prop_kwd, rt_kwd, d(0), d(1), status="Checked In", room=room_kwd_2,
+			)
+			adv = ledger.force_advance_bill(res_kwd_2.name, nights="entire")
+			self.assertEqual(adv["amount"], 12.345)
+			self.assertEqual(float(adv["balance"]), 12.345)
+
+		with self.subTest("round_cents"):
+			# round_cents supports explicit places / property / currency precision
+			self.assertEqual(ledger.round_cents(12.345, places=3), 12.345)
+			self.assertEqual(ledger.round_cents(12.345, property=prop_kwd), 12.345)
+			self.assertEqual(ledger.round_cents(12.345, currency="KWD"), 12.345)
+			self.assertEqual(ledger.round_cents(42000.4, property=prop_ugx), 42000.0)
+			self.assertEqual(ledger.round_cents(2.345), 2.35)
+
 	def boot_value(self, html):
 		match = re.search(r"window\.kamra_erp_screens\s*=\s*(\{.*?\});", html)
 		self.assertIsNotNone(match, "the boot script does not carry the ERP screens")

@@ -967,4 +967,296 @@ describe("ERP-kept books", () => {
       await loadLocale()
     }
   })
+
+  it("EndOfDayWizard: formats amounts with the wizard's own property currency even when header locale differs", async () => {
+    const prevLocale = localeRef.value
+    try {
+      // Header is on KH41-KWD (3dp) while user opens /end-of-day/KH41-UGX (0dp)
+      localeRef.value = { ...prevLocale, locale: "en-US", currency: "KWD", currency_symbol: "د.ك" }
+      await loadLocale()
+      rpc.mockImplementation(async (method: string) =>
+        method === "kamra.night_audit.eod_session"
+          ? {
+              property: "KH41-UGX", property_name: "KH41-UGX", currency: "UGX", currency_symbol: "UGX ",
+              business_date: "2026-11-24", server_date: "2026-11-24", server_time: "17:17", property_now: "2026-11-24 17:17",
+              require_cashier_pin: 0, blind_count: 0, high_balance_threshold: 100000,
+              auto_audit_with_blockers: "warn", reports: [], audit: "NA-UGX-MISMATCH", ran: false, status: "Draft",
+              current_step: 0, notes: "", acknowledgements: [], sessions: [],
+              steps: [{
+                index: 0, key: "review", title: "Review",
+                checks: ["open_pos_bills", "high_balance", "arrivals_pending", "credit_limit"],
+                status: "blocked", count: 4, blocking: ["open_pos_bills"],
+              }],
+              checks: [
+                {
+                  key: "open_pos_bills", title: "Open restaurant bills", severity: "block", count: 1,
+                  action: "Settle each bill at its outlet.", resolve: "/pos", amount: 42000,
+                  items: [{ order: "PSINV-UGX-01", bill_no: "PSINV-UGX-01", outlet: "Rooftop Tapas Lounge", table_no: "IRD-U27", room: "U-27", state: "open", amount: 42000 }],
+                },
+                {
+                  key: "high_balance", title: "High balances in house", severity: "warn", count: 1,
+                  enabled: true, threshold: 100000, action: "Take a payment.",
+                  items: [{ folio: "FOL-UGX-1", folio_type: "Guest", reservation: "RES-UGX-1", guest_name: "Grace Namukasa", room: "U-27", check_out_date: "2026-11-25", balance: 42000 }],
+                },
+                {
+                  key: "arrivals_pending", title: "Arrivals still pending", severity: "warn", count: 1,
+                  action: "Check in or mark no-show.",
+                  items: [{ reservation: "RES-UGX-2", guest_name: "Samuel Okello", check_in_date: "2026-11-24", nights: 1, rate: 250000, eta: "18:00", policy: "First night fee", outcome: "no_show", fee_amount: 42000 }],
+                },
+                {
+                  key: "credit_limit", title: "Companies over their credit limit", severity: "warn", count: 1,
+                  action: "Ask the company for a payment.", resolve: "/receivables",
+                  items: [{ company: "Kampala Corp", credit_limit: 500000, ar_balance: 0, in_house: 0, exposure: 0, over_by: 0 }],
+                },
+              ],
+            }
+          : null,
+      )
+      await act(async () => {
+        root.render(
+          <MemoryRouter key="eod-ugx-header-kwd" basename="/kamra" initialEntries={["/kamra/end-of-day/KH41-UGX"]}>
+            <App />
+          </MemoryRouter>,
+        )
+      })
+      await vi.waitFor(() => { expect(host.textContent).toContain("PSINV-UGX-01") }, { timeout: 5000 })
+      expect(host.textContent).toContain("42,000")
+      expect(host.textContent).toContain("100,000")
+      expect(host.textContent).toContain("250,000")
+      expect(host.textContent).toContain("500,000")
+      expect(host.textContent).not.toContain("42,000.000")
+      expect(host.textContent).not.toContain("42,000.00")
+      expect(host.textContent).not.toContain("0.000")
+      expect(host.textContent).not.toContain("د.ك")
+
+      // Header is on KH41-UGX (0dp) while user opens /end-of-day/KH41-KWD (3dp)
+      localeRef.value = { ...prevLocale, locale: "en-UG", currency: "UGX", currency_symbol: "UGX " }
+      await loadLocale()
+      rpc.mockImplementation(async (method: string) =>
+        method === "kamra.night_audit.eod_session"
+          ? {
+              property: "KH41-KWD", property_name: "KH41-KWD", currency: "KWD", currency_symbol: "د.ك",
+              business_date: "2026-11-24", server_date: "2026-11-24", server_time: "19:47", property_now: "2026-11-24 19:47",
+              require_cashier_pin: 0, blind_count: 0, high_balance_threshold: 50.125,
+              auto_audit_with_blockers: "warn", reports: [], audit: "NA-KWD-MISMATCH", ran: false, status: "Draft",
+              current_step: 0, notes: "", acknowledgements: [], sessions: [],
+              steps: [{
+                index: 0, key: "review", title: "Review",
+                checks: ["open_pos_bills", "credit_limit"],
+                status: "blocked", count: 3, blocking: ["open_pos_bills"],
+              }],
+              checks: [
+                {
+                  key: "open_pos_bills", title: "Open restaurant bills", severity: "block", count: 2,
+                  action: "Settle each bill at its outlet.", resolve: "/pos", amount: 10,
+                  items: [
+                    { order: "PSINV-KWD-01", bill_no: "PSINV-KWD-01", outlet: "Pearl Tea Room", table_no: "IRD-K10", room: "K-10", state: "open", amount: 12.345 },
+                    { order: "PSINV-KWD-RET", bill_no: "PSINV-KWD-RET", outlet: "Pearl Tea Room", table_no: "IRD-K11", room: "K-11", state: "open", amount: -2.345 },
+                  ],
+                },
+                {
+                  key: "credit_limit", title: "Companies over their credit limit", severity: "warn", count: 1,
+                  action: "Ask the company for a payment.", resolve: "/receivables",
+                  items: [{ company: "Gulf Corp", credit_limit: 100.125, ar_balance: 123.456, in_house: 0, exposure: 123.456, over_by: 23.331 }],
+                },
+              ],
+            }
+          : null,
+      )
+      await act(async () => {
+        root.render(
+          <MemoryRouter key="eod-kwd-header-ugx" basename="/kamra" initialEntries={["/kamra/end-of-day/KH41-KWD"]}>
+            <App />
+          </MemoryRouter>,
+        )
+      })
+      await vi.waitFor(() => { expect(host.textContent).toContain("PSINV-KWD-01") }, { timeout: 5000 })
+      expect(host.textContent).toContain("12.345")
+      expect(host.textContent).toContain("-2.345")
+      expect(host.textContent).toContain("123.456")
+      expect(host.textContent).toContain("100.125")
+      expect(host.textContent).toContain("23.331")
+      expect(host.textContent).not.toContain("UGX ")
+    } finally {
+      localeRef.value = prevLocale
+      await loadLocale()
+    }
+  })
+
+  it("AuditPack: formats amounts with the pack's own property currency even when header locale differs", async () => {
+    const prevLocale = localeRef.value
+    try {
+      // Header is KH41-KWD (3dp) while viewing KH41-UGX pack (0dp)
+      localeRef.value = { ...prevLocale, locale: "en-US", currency: "KWD", currency_symbol: "د.ك" }
+      await loadLocale()
+      rpc.mockImplementation(async (method: string) => method === "kamra.night_audit.night_audit_pack" ? {
+        audit: "AUDIT-2026-11-23-KH41-UGX",
+        run: { name: "AUDIT-2026-11-23-KH41-UGX", status: "Completed", business_date: "2026-11-23" },
+        has_pack: true, can_rebuild: true,
+        pack: {
+          property: "KH41-UGX", property_name: "KH41-UGX", currency: "UGX", currency_symbol: "UGX ",
+          business_date: "2026-11-23", generated_at: "2026-11-24 02:00",
+          reports: [
+            { key: "audit_report", title: "Night audit report" },
+            { key: "city_ledger", title: "City ledger / AR summary" },
+            { key: "manager_flash", title: "Manager's flash" },
+          ],
+          audit_report: {
+            periods: [],
+            balances: [
+              { ledger: "Guest", label: "Guest ledger", brought_forward: 0, debit: 84000, credit: 0, carried_forward: 84000 },
+              { ledger: "AR", label: "City ledger", brought_forward: null, debit: null, credit: null, carried_forward: 42000 },
+            ],
+          },
+          city_ledger: {
+            accounts: [{
+              company: "Kampala Corp", account_number: "AR-Kampala Corp", credit_limit: 500000,
+              credit_days: 15, not_due: 0, d1_30: 42000, d31_60: 0, d61_90: 0, d90p: 0,
+              open_balance: 42000,
+            }],
+            totals: {},
+          },
+          manager_flash: {
+            today: { occupancy_pct: 50, adr: 42000, revpar: 21000, total_revenue: 84000 },
+            mtd: {}, movement: {}, collections: { modes: [] },
+          },
+        },
+      } : null)
+      await act(async () => {
+        root.render(
+          <MemoryRouter basename="/kamra" initialEntries={["/kamra"]}>
+            <AuditPackView key="pack-ugx-header-kwd" audit="AUDIT-2026-11-23-KH41-UGX" embedded />
+          </MemoryRouter>,
+        )
+      })
+      await vi.waitFor(() => { expect(host.textContent).toContain("Guest ledger") })
+      expect(host.textContent).toContain("84,000")
+      expect(host.textContent).toContain("42,000")
+      expect(host.textContent).not.toContain("84,000.000")
+      expect(host.textContent).not.toContain("42,000.000")
+      expect(host.textContent).not.toContain("0.000")
+
+      const ugxClTab = Array.from(host.querySelectorAll("button")).find((b) => b.textContent?.includes("City ledger / AR summary"))
+      await act(async () => { ugxClTab!.click() })
+      await vi.waitFor(() => { expect(host.textContent).toContain("Kampala Corp") })
+      expect(host.textContent).toContain("500,000")
+      expect(host.textContent).toContain("42,000")
+      expect(host.textContent).not.toContain("42,000.000")
+      expect(host.textContent).not.toContain("0.000")
+
+      const ugxFlashTab = Array.from(host.querySelectorAll("button")).find((b) => b.textContent?.includes("Manager's flash"))
+      await act(async () => { ugxFlashTab!.click() })
+      await vi.waitFor(() => { expect(host.textContent).toContain("UGX 42,000") })
+      expect(host.textContent).not.toContain("د.ك")
+      expect(host.textContent).not.toContain("42,000.000")
+
+      // Header is KH41-UGX (0dp) while viewing KH41-KWD pack (3dp)
+      localeRef.value = { ...prevLocale, locale: "en-UG", currency: "UGX", currency_symbol: "UGX " }
+      await loadLocale()
+      rpc.mockImplementation(async (method: string) => method === "kamra.night_audit.night_audit_pack" ? {
+        audit: "AUDIT-2026-11-23-KH41-KWD",
+        run: { name: "AUDIT-2026-11-23-KH41-KWD", status: "Completed", business_date: "2026-11-23" },
+        has_pack: true, can_rebuild: true,
+        pack: {
+          property: "KH41-KWD", property_name: "KH41-KWD", currency: "KWD", currency_symbol: "د.ك",
+          business_date: "2026-11-23", generated_at: "2026-11-24 02:00",
+          reports: [
+            { key: "audit_report", title: "Night audit report" },
+            { key: "city_ledger", title: "City ledger / AR summary" },
+            { key: "manager_flash", title: "Manager's flash" },
+          ],
+          audit_report: {
+            periods: [],
+            balances: [
+              { ledger: "Guest", label: "Guest ledger", brought_forward: 0, debit: 12.345, credit: 2.345, carried_forward: 10 },
+              { ledger: "AR", label: "City ledger", brought_forward: null, debit: null, credit: null, carried_forward: 123.456 },
+            ],
+          },
+          city_ledger: {
+            accounts: [{
+              company: "Gulf Corp", account_number: "AR-Gulf Corp", credit_limit: 100.125,
+              credit_days: 15, not_due: 0, d1_30: 123.456, d31_60: 0, d61_90: 0, d90p: 0,
+              open_balance: 123.456,
+            }],
+            totals: {},
+          },
+          manager_flash: {
+            today: { occupancy_pct: 100, adr: 12.345, revpar: 12.345, total_revenue: 12.345 },
+            mtd: {}, movement: {}, collections: { modes: [] },
+          },
+        },
+      } : null)
+      await act(async () => {
+        root.render(
+          <MemoryRouter basename="/kamra" initialEntries={["/kamra"]}>
+            <AuditPackView key="pack-kwd-header-ugx" audit="AUDIT-2026-11-23-KH41-KWD" embedded />
+          </MemoryRouter>,
+        )
+      })
+      await vi.waitFor(() => { expect(host.textContent).toContain("Guest ledger") })
+      expect(host.textContent).toContain("12.345")
+      expect(host.textContent).toContain("2.345")
+      expect(host.textContent).toContain("10.000")
+      expect(host.textContent).toContain("123.456")
+
+      const kwdClTab = Array.from(host.querySelectorAll("button")).find((b) => b.textContent?.includes("City ledger / AR summary"))
+      await act(async () => { kwdClTab!.click() })
+      await vi.waitFor(() => { expect(host.textContent).toContain("Gulf Corp") })
+      expect(host.textContent).toContain("100.125")
+      expect(host.textContent).toContain("123.456")
+
+      const kwdFlashTab = Array.from(host.querySelectorAll("button")).find((b) => b.textContent?.includes("Manager's flash"))
+      await act(async () => { kwdFlashTab!.click() })
+      await vi.waitFor(() => { expect(host.textContent).toContain("د.ك12.345") })
+      expect(host.textContent).not.toContain("UGX ")
+    } finally {
+      localeRef.value = prevLocale
+      await loadLocale()
+    }
+  })
+
+  it("AuditPack: foreign_drawers formats each drawer using its own currency decimal places (0dp UGX, 2dp USD, 3dp KWD)", async () => {
+    const prevLocale = localeRef.value
+    try {
+      localeRef.value = { ...prevLocale, locale: "en-US", currency: "USD", currency_symbol: "$" }
+      await loadLocale()
+      rpc.mockImplementation(async (method: string) => method === "kamra.night_audit.night_audit_pack" ? {
+        audit: "NA-FX-DRAWERS",
+        run: { name: "NA-FX-DRAWERS", status: "Completed", business_date: "2026-11-23" },
+        has_pack: true, can_rebuild: true,
+        pack: {
+          property: "KH41-USD", property_name: "KH41-USD", currency: "USD", currency_symbol: "$",
+          business_date: "2026-11-23", generated_at: "2026-11-24 02:00",
+          reports: [{ key: "cashier_summary", title: "Cashier summary" }],
+          cashier_sessions: [{
+            session: "CS-FX-1", cashier_id: "C-01", status: "Closed",
+            opening_float: 100, cash: 200, card: 0, upi: 0, paid_outs: 0,
+            expected_cash: 300, counted_cash: 300, variance: 0,
+            foreign_drawers: [
+              { currency: "UGX", expected_fx: 42000, variance_fx: -500 },
+              { currency: "USD", expected_fx: 125.75, variance_fx: 0.25 },
+              { currency: "KWD", expected_fx: 12.345, variance_fx: -0.002 },
+            ],
+          }],
+        },
+      } : null)
+      await act(async () => {
+        root.render(
+          <MemoryRouter basename="/kamra" initialEntries={["/kamra"]}>
+            <AuditPackView key="pack-fx-drawers" audit="NA-FX-DRAWERS" embedded />
+          </MemoryRouter>,
+        )
+      })
+      await vi.waitFor(() => { expect(host.textContent).toContain("C-01") })
+      expect(host.textContent).toContain("UGX 42,000 (-500)")
+      expect(host.textContent).not.toContain("42000.00")
+      expect(host.textContent).not.toContain("42,000.00")
+      expect(host.textContent).toContain("USD 125.75 (0.25)")
+      expect(host.textContent).toContain("KWD 12.345 (-0.002)")
+      expect(host.textContent).not.toContain("KWD 12.35")
+    } finally {
+      localeRef.value = prevLocale
+      await loadLocale()
+    }
+  })
 })

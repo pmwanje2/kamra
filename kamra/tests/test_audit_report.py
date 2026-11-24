@@ -235,3 +235,53 @@ class AuditReportTestCase(AuditTestCase):
 		                 + day["meal_plan_minibar"] + day["other"] + day["allowances"])
 		depts = {r["department"]: r["amount"] for r in audit_report.departments(PROP_A, TODAY, TODAY)}
 		self.assertEqual(depts["Discounts and allowances"], -500)
+
+	def test_balances_preserve_property_currency_precision_for_guest_deposit_and_ar(self):
+		"""Guest, Deposit, and off-bridge AR ledger balances in audit_report must
+		preserve 3dp KWD precision (never round(..., 2))."""
+		from kamra import api, ledger
+		from kamra.tests.audit_fixtures import guest_folio
+
+		prop_kwd = "UT AuditReport KWD"
+		make_property(
+			prop_kwd, country="Kuwait", currency="KWD", business_date=TODAY,
+			gst_rate_low=0, gst_rate_high=0,
+		)
+		self.addCleanup(frappe.clear_document_cache, "Property", prop_kwd)
+
+		rt_kwd = make_room_type(prop_kwd, "KSTD-AR", base_price=12.345)
+		room_kwd = make_room(prop_kwd, rt_kwd, "K-40")
+		res = make_reservation(prop_kwd, rt_kwd, TODAY, d(2), status="Checked In", room=room_kwd)
+		folio = guest_folio(res.name)
+		api.add_folio_charge(folio, "Misc", "KWD spa", 12.345, gst_rate=0)
+		ledger.write_ledger_entry(
+			property=prop_kwd, folio=folio, ledger="Deposit",
+			credit=5.125, description="KWD advance deposit", business_date=TODAY,
+		)
+
+		acc = frappe.get_doc({
+			"doctype": "City Ledger Account", "property": prop_kwd, "company": "UT KWD Co",
+		}).insert(ignore_permissions=True, ignore_links=True)
+		for day, kind, debit, credit_amt in (
+			(d(-1), "Invoice", 123.456, 0),
+			(TODAY, "Payment", 0, 10.005),
+		):
+			frappe.get_doc({
+				"doctype": "City Ledger Entry", "account": acc.name,
+				"property": prop_kwd, "posting_date": day, "kind": kind,
+				"debit": debit, "credit": credit_amt,
+			}).insert(ignore_permissions=True)
+
+		by_ledger = {b["ledger"]: b for b in audit_report.build(prop_kwd, TODAY)["balances"]}
+		self.assertEqual(by_ledger["Guest"]["debit"], 12.345)
+		self.assertEqual(by_ledger["Guest"]["carried_forward"], 12.345)
+		self.assertEqual(by_ledger["Deposit"]["credit"], 5.125)
+		self.assertEqual(by_ledger["Deposit"]["carried_forward"], -5.125)
+		self.assertEqual(
+			(
+				by_ledger["AR"]["brought_forward"],
+				by_ledger["AR"]["credit"],
+				by_ledger["AR"]["carried_forward"],
+			),
+			(123.456, 10.005, 113.451),
+		)
