@@ -4011,6 +4011,29 @@ def _apply_accounting_invoice_taxes(doc, prop, prop_currency: str | None, folio_
 	}
 
 
+def _tax_summary_has_vat(tax_summary: list[dict] | None, tax_label: str) -> bool:
+	"""Return True only when a non-zero VAT/GST tax line is present (never
+	for 0%/exempt invoices or non-VAT levies/service charges)."""
+	non_vat_markers = ("levy", "service charge", "local hotel tax", "tourism", "municipal")
+	vat_markers = ("vat", "gst", "cgst", "sgst", "igst", "mwst", "tva", "iva")
+	norm_label = (tax_label or "").strip().lower()
+	for row in tax_summary or ():
+		if abs(float(row.get("total_tax") or 0)) <= 1e-6:
+			continue
+		parts = row.get("parts") or ()
+		if not parts:
+			return True
+		for part in parts:
+			if abs(float(part.get("amount") or 0)) <= 1e-6:
+				continue
+			lbl = (part.get("label") or "").strip().lower()
+			if any(m in lbl for m in non_vat_markers):
+				continue
+			if (norm_label and norm_label in lbl) or any(m in lbl for m in vat_markers):
+				return True
+	return False
+
+
 @frappe.whitelist()
 @require_roles("Finance", "Front Desk", "Kamra Agent")
 def folio_invoice(folio: str):
@@ -4153,12 +4176,23 @@ def folio_invoice(folio: str):
 		if settled and acct_tax["tax_source"] != "accounting_unavailable"
 		else None
 	)
+	tax_summary = (
+		acct_tax["tax_summary"] if acct_tax["tax_summary"] is not None else [
+			{"rate": rate, "taxable": v["taxable"], "total_tax": v["tax"],
+			 "parts": [{"label": label.upper(),
+			            "rate": round(rate * float(share), 4),
+			            "amount": v["tax"] * float(share)}
+			           for label, share in split]}
+			for rate, v in sorted(by_rate.items())
+		]
+	)
 	if not settled:
 		doc_title = _("Provisional Bill")
 	elif acct_tax["tax_source"] == "accounting_unavailable":
 		doc_title = _(loc.neutral_invoice_title(pack))
 	else:
-		doc_title = (statutory or {}).get("title") or _(loc.invoice_title(pack))
+		tax_charged = _tax_summary_has_vat(tax_summary, _loc_ctx.get("tax_label") or "")
+		doc_title = (statutory or {}).get("title") or _(loc.invoice_title(pack, tax_charged=tax_charged))
 
 	doc_footer = _loc_ctx.get("footer")
 	if acct_tax["tax_source"] == "accounting_unavailable" and doc_footer and "tax invoice" in doc_footer.lower():
@@ -4173,16 +4207,6 @@ def folio_invoice(folio: str):
 		"transaction_code": p.get("transaction_code"),
 		"gl_code": p.get("gl_code"), "refund_of": p.get("refund_of"),
 	} for p in doc.payments]
-	tax_summary = (
-		acct_tax["tax_summary"] if acct_tax["tax_summary"] is not None else [
-			{"rate": rate, "taxable": v["taxable"], "total_tax": v["tax"],
-			 "parts": [{"label": label.upper(),
-			            "rate": round(rate * float(share), 4),
-			            "amount": v["tax"] * float(share)}
-			           for label, share in split]}
-			for rate, v in sorted(by_rate.items())
-		]
-	)
 	gst_summary = (
 		acct_tax["gst_summary"] if acct_tax["gst_summary"] is not None else [
 			{"rate": rate, "taxable": v["taxable"],
