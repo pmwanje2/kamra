@@ -1386,3 +1386,594 @@ class PropertyCurrencyFormattingTests(RoundFourTestCase):
 		self.assertIn("100,000 less discount 10,000", du_line.description)
 		self.assertNotIn("100,000.00", du_line.description)
 		self.assertNotIn("10,000.00", du_line.description)
+
+
+PROP_UGX_VAT = "UT Disc UGX VAT18"
+PROP_USD_VAT = "UT Disc USD VAT18"
+PROP_KWD_VAT = "UT Disc KWD VAT18"
+
+
+class TaxInclusiveOtaExtendDiscountTests(RoundFourTestCase):
+	"""Regression tests for tax-inclusive OTA modify discount reconciliation:
+	- 18% VAT-inclusive UGX (prec=0), USD (prec=2), KWD (prec=3) stays preserve
+	  supervisor-approved >limit (25%) and 100% COMP discounts on surviving
+	  nights when an auto-priced OTA modify extends the stay (ignoring
+	  last-night inclusive-tax net-rounding remainder redistribution).
+	- Genuine rate changes (season/card price hike, room category change,
+	  party change, rate code change) still drop/review unapproved discounts
+	  with zero security weakening and cleanly separate repriced surviving
+	  nights from genuinely added nights in review text."""
+
+	properties = (PROP_A, PROP_UGX_VAT, PROP_USD_VAT, PROP_KWD_VAT)
+
+	def _ensure_currency(self, code: str, *, symbol: str, fraction_units: int, number_format: str):
+		if not frappe.db.exists("Currency", code):
+			frappe.get_doc({
+				"doctype": "Currency",
+				"currency_name": code,
+				"symbol": symbol,
+				"fraction": "",
+				"fraction_units": fraction_units,
+				"number_format": number_format,
+				"enabled": 1,
+			}).insert(ignore_permissions=True)
+		else:
+			frappe.db.set_value("Currency", code, {
+				"enabled": 1,
+				"symbol": symbol,
+				"fraction_units": fraction_units,
+				"number_format": number_format,
+			})
+
+	def _setup_vat_property(
+		self,
+		prop: str,
+		*,
+		country: str,
+		currency: str,
+		tax_pct: float,
+		base_price: float,
+		rt_code: str = "DLX",
+		extra_adult_price: float = 0.0,
+		secret: str = "vat-ota-secret",
+	):
+		make_property(
+			prop,
+			business_date=TODAY,
+			country=country,
+			currency=currency,
+			gst_mode="Fixed",
+			gst_rate_low=tax_pct,
+			gst_rate_high=tax_pct,
+			rates_include_tax=1,
+		)
+		frappe.db.delete("Property Setting", {"property": prop})
+		set_setting(prop, "rate_override_limit_pct", 15)
+		rt = make_room_type(prop, rt_code, base_price=base_price, tax_percent=tax_pct)
+		frappe.db.set_value("Room Type", rt, {
+			"base_price": base_price,
+			"tax_percent": tax_pct,
+			"adults_capacity": 3,
+			"base_occupancy": 2,
+			"extra_adult_price": extra_adult_price,
+		})
+		frappe.clear_document_cache("Room Type", rt)
+		rooms = [make_room(prop, rt, f"{rt_code}{i}") for i in (1, 2, 3, 4)]
+		conn = frappe.get_doc({
+			"doctype": "Channel Manager Connection",
+			"property": prop,
+			"provider": "AioSell",
+			"active": 1,
+			"external_property_id": f"ut-vat-{rt_code.lower()}",
+			"webhook_secret": secret,
+		}).insert(ignore_permissions=True)
+		frappe.get_doc({
+			"doctype": "Channel Room Mapping",
+			"connection": conn.name,
+			"room_type": rt,
+			"external_room_id": "dlx",
+		}).insert(ignore_permissions=True)
+		return rt, rooms, conn, secret
+
+	def _post_guest_webhook(self, conn_name: str, secret: str, payload: dict):
+		import frappe.handler
+		with guest_request({"connection": conn_name}, payload, secret=secret):
+			self.assertEqual(frappe.session.user, "Guest")
+			out = frappe.handler.execute_cmd("kamra.channel_manager.webhook")
+			self.assertEqual(frappe.session.user, "Guest")
+			return out
+
+	def _assert_no_vendor_leaks(self, text: str):
+		self.assertNotRegex(text or "", r"(?i)\b(?:kamra|frappe|erpnext|ury|huf|tridz)\b")
+
+	def test_ugx_18pct_vat_inclusive_25pct_extend_preserves_surviving_nights_and_only_flags_added_night(self):
+		"""Hydrogen R1 P0: 18% VAT-inclusive UGX 500,000/night stay with 25% off
+		extended 2n -> 3n (and 3n -> 4n) via Guest OTA webhook keeps 25% on Nights
+		1 & 2 (no +UGX 125,000 overcharge) and only flags genuinely added nights."""
+		self._ensure_currency("UGX", symbol="UGX ", fraction_units=1, number_format="#,###")
+		rt, rooms, conn, secret = self._setup_vat_property(
+			PROP_UGX_VAT, country="Uganda", currency="UGX", tax_pct=18, base_price=500000, rt_code="UG25",
+		)
+		ref = "OTA-UGX25-" + frappe.generate_hash(length=6)
+		res = make_reservation(
+			PROP_UGX_VAT, rt, d(5), d(7), status="Confirmed", room=rooms[0],
+			source="OTA", channel="Booking.com", ota_ref=ref, auto_price=1,
+		)
+		# Verify precondition: initial 2-night inclusive booking puts +0.01 remainder on Night 2
+		init_doc = self.doc(res.name)
+		self.assertAlmostEqual(flt(init_doc.night_rates[0].base_rate), 423728.81, places=2)
+		self.assertAlmostEqual(flt(init_doc.night_rates[1].base_rate), 423728.82, places=2)
+
+		self.discount(
+			res.name, discount_type="Percent", discount_value=25, **PROMO,
+			supervisor_user=GM, supervisor_pin="4321",
+		)
+
+		# Modify 1 (Guest, no total): extend 2n -> 3n (d5..d8, adding d7)
+		out1 = self._post_guest_webhook(conn.name, secret, {
+			"action": "modify", "hotelCode": "ut-vat-ug25", "channel": "Booking.com",
+			"bookingId": ref, "checkin": d(5), "checkout": d(8),
+			"amount": {"currency": "UGX"},
+			"specialRequests": "First VAT extension",
+			"rooms": [{"roomCode": "dlx", "occupancy": {"adults": 2, "children": 0}, "prices": []}],
+		})
+		self.assertTrue(out1["ok"])
+		self.assertEqual(out1["results"][0]["result"], "modified")
+
+		doc1 = self.doc(res.name)
+		self.assertEqual(len(doc1.night_rates), 3)
+		self.assertEqual(
+			[round(flt(r.discount_amount), 2) for r in doc1.night_rates],
+			[125000.0, 125000.0, 0.0],
+		)
+		self.assertEqual(
+			[round(flt(r.rate), 2) for r in doc1.night_rates],
+			[317796.61, 317796.61, 423728.81],
+		)
+		self.assertAlmostEqual(flt(doc1.amount_after_tax), 1250000.0, places=2)
+		self.assertAlmostEqual(flt(doc1.discount_amount), 250000.0, places=2)
+		self.assertEqual(int(doc1.channel_review_needed), 1)
+		self.assertEqual(doc1.get("channel_review_reason"), "discount_review")
+		sr1 = doc1.special_requests or ""
+		self.assertIn(f"kept approved desk discount on {d(5)}, {d(6)}", sr1)
+		self.assertIn(f"added night(s) {d(7)} priced without unapproved discount", sr1)
+		self.assertNotIn(f"added night(s) {d(6)}", sr1)
+		self.assertNotIn("new total", sr1.lower())
+		self._assert_no_vendor_leaks(sr1)
+
+		logs1 = frappe.get_all(
+			"Agent Action Log",
+			filters={
+				"reference_doctype": "Reservation", "reference_name": res.name,
+				"action_type": "channel.modify_discount_review", "action_channel": "API",
+			},
+			fields=["name", "rationale"],
+			order_by="creation desc",
+		)
+		self.assertEqual(len(logs1), 1)
+		self.assertIn(f"added night(s) {d(7)}", logs1[0].rationale or "")
+		self.assertNotIn(f"added night(s) {d(6)}", logs1[0].rationale or "")
+		self.assertIn("1,250,000", logs1[0].rationale or "")
+		self._assert_no_vendor_leaks(logs1[0].rationale or "")
+
+		# Clear review then Modify 2 (Guest, no total): extend 3n -> 4n (d5..d9, adding d8)
+		self.as_user(DESK, cm.clear_channel_review, res.name)
+		out2 = self._post_guest_webhook(conn.name, secret, {
+			"action": "modify", "hotelCode": "ut-vat-ug25", "channel": "Booking.com",
+			"bookingId": ref, "checkin": d(5), "checkout": d(9),
+			"amount": {"currency": "UGX"},
+			"specialRequests": "Second VAT extension",
+			"rooms": [{"roomCode": "dlx", "occupancy": {"adults": 2, "children": 0}, "prices": []}],
+		})
+		self.assertTrue(out2["ok"])
+		doc2 = self.doc(res.name)
+		self.assertEqual(
+			[round(flt(r.discount_amount), 2) for r in doc2.night_rates],
+			[125000.0, 125000.0, 0.0, 0.0],
+		)
+		self.assertAlmostEqual(flt(doc2.amount_after_tax), 1750000.0, places=2)
+		self.assertEqual(int(doc2.channel_review_needed), 1)
+		self.assertEqual(doc2.get("channel_review_reason"), "discount_review")
+		sr2 = doc2.special_requests or ""
+		self.assertIn(f"added night(s) {d(8)}", sr2)
+		self.assertNotIn("new total", sr2.lower())
+		self.assertNotIn("1,250,000", sr2)
+		self._assert_no_vendor_leaks(sr2)
+		self.assertEqual(
+			frappe.db.count("Agent Action Log", {
+				"reference_doctype": "Reservation", "reference_name": res.name,
+				"action_type": "channel.modify_discount_review", "action_channel": "API",
+			}),
+			2,
+		)
+
+	def test_ugx_18pct_vat_inclusive_100pct_comp_extend_preserves_surviving_comp_nights(self):
+		"""Hydrogen R1 P0: 18% VAT-inclusive UGX 500,000/night 100% COMP stay
+		extended 2n -> 3n via Guest OTA webhook keeps 0 charge on Nights 1 & 2 and
+		bills only added Night 3 (UGX 500,000, no +UGX 500,000 overcharge)."""
+		self._ensure_currency("UGX", symbol="UGX ", fraction_units=1, number_format="#,###")
+		rt, rooms, conn, secret = self._setup_vat_property(
+			PROP_UGX_VAT, country="Uganda", currency="UGX", tax_pct=18, base_price=500000, rt_code="UGCP",
+		)
+		ref = "OTA-UGXCP-" + frappe.generate_hash(length=6)
+		res = make_reservation(
+			PROP_UGX_VAT, rt, d(5), d(7), status="Confirmed", room=rooms[0],
+			source="OTA", channel="Booking.com", ota_ref=ref, auto_price=1,
+		)
+		self.discount(
+			res.name, discount_type="Percent", discount_value=100, **PROMO,
+			supervisor_user=GM, supervisor_pin="4321",
+		)
+
+		out = self._post_guest_webhook(conn.name, secret, {
+			"action": "modify", "hotelCode": "ut-vat-ugcp", "channel": "Booking.com",
+			"bookingId": ref, "checkin": d(5), "checkout": d(8),
+			"amount": {"currency": "UGX"},
+			"specialRequests": "COMP extension",
+			"rooms": [{"roomCode": "dlx", "occupancy": {"adults": 2, "children": 0}, "prices": []}],
+		})
+		self.assertTrue(out["ok"])
+		self.assertEqual(out["results"][0]["result"], "modified")
+
+		doc = self.doc(res.name)
+		self.assertEqual(len(doc.night_rates), 3)
+		self.assertEqual(
+			[round(flt(r.rate), 2) for r in doc.night_rates],
+			[0.0, 0.0, 423728.81],
+		)
+		self.assertEqual(
+			[round(flt(r.discount_amount), 2) for r in doc.night_rates],
+			[500000.0, 500000.0, 0.0],
+		)
+		self.assertAlmostEqual(flt(doc.amount_after_tax), 500000.0, places=2)
+		self.assertAlmostEqual(flt(doc.discount_amount), 1000000.0, places=2)
+		self.assertEqual(int(doc.channel_review_needed), 1)
+		self.assertEqual(doc.get("channel_review_reason"), "discount_review")
+		sr = doc.special_requests or ""
+		self.assertIn(f"kept approved desk discount on {d(5)}, {d(6)}", sr)
+		self.assertIn(f"added night(s) {d(7)} priced without unapproved discount", sr)
+		self.assertNotIn(f"added night(s) {d(6)}", sr)
+		self.assertNotIn("new total", sr.lower())
+		self._assert_no_vendor_leaks(sr)
+
+		logs = frappe.get_all(
+			"Agent Action Log",
+			filters={
+				"reference_doctype": "Reservation", "reference_name": res.name,
+				"action_type": "channel.modify_discount_review", "action_channel": "API",
+			},
+			fields=["rationale"],
+			order_by="creation desc",
+		)
+		self.assertEqual(len(logs), 1)
+		self.assertIn("500,000", logs[0].rationale or "")
+		self.assertIn(f"added night(s) {d(7)}", logs[0].rationale or "")
+		self.assertNotIn(f"added night(s) {d(6)}", logs[0].rationale or "")
+		self._assert_no_vendor_leaks(logs[0].rationale or "")
+
+	def test_genuine_rate_room_party_and_plan_changes_still_drop_discount_and_separate_repriced_from_added(self):
+		"""Zero security weakening: a genuine price hike, room category change,
+		party change, or rate plan change on a surviving night still drops the
+		unapproved discount and clearly separates repriced surviving nights from
+		genuinely added nights in review text."""
+		self._ensure_currency("UGX", symbol="UGX ", fraction_units=1, number_format="#,###")
+		rt, rooms, conn, secret = self._setup_vat_property(
+			PROP_UGX_VAT, country="Uganda", currency="UGX", tax_pct=18, base_price=500000,
+			rt_code="UGSEC", extra_adult_price=100000,
+		)
+		rt_suite = make_room_type(PROP_UGX_VAT, "UGSTE", base_price=650000, tax_percent=18)
+		frappe.db.set_value("Room Type", rt_suite, {"base_price": 650000, "tax_percent": 18})
+		make_room(PROP_UGX_VAT, rt_suite, "UGSTE1")
+		frappe.get_doc({
+			"doctype": "Channel Room Mapping",
+			"connection": conn.name,
+			"room_type": rt_suite,
+			"external_room_id": "ste",
+		}).insert(ignore_permissions=True)
+
+		# (a) Genuine price hike on surviving Night 2 (Season +100,000 on d6) + extend to d8 (adding d7)
+		ref_hike = "OTA-UGXHK-" + frappe.generate_hash(length=6)
+		res_hike = make_reservation(
+			PROP_UGX_VAT, rt, d(5), d(7), status="Confirmed", room=rooms[0],
+			source="OTA", channel="Booking.com", ota_ref=ref_hike, auto_price=1,
+		)
+		self.discount(
+			res_hike.name, discount_type="Percent", discount_value=25, **PROMO,
+			supervisor_user=GM, supervisor_pin="4321",
+		)
+		season = frappe.get_doc({
+			"doctype": "Season",
+			"property": PROP_UGX_VAT,
+			"season_name": "Peak Night 2",
+			"room_type": rt,
+			"start_date": d(6),
+			"end_date": d(6),
+			"adjustment_type": "Amount",
+			"adjustment_value": 100000,
+			"priority": 10,
+		}).insert(ignore_permissions=True)
+		try:
+			out_hike = self._post_guest_webhook(conn.name, secret, {
+				"action": "modify", "hotelCode": "ut-vat-ugsec", "channel": "Booking.com",
+				"bookingId": ref_hike, "checkin": d(5), "checkout": d(8),
+				"amount": {"currency": "UGX"},
+				"rooms": [{"roomCode": "dlx", "occupancy": {"adults": 2, "children": 0}, "prices": []}],
+			})
+			self.assertTrue(out_hike["ok"])
+			doc_hike = self.doc(res_hike.name)
+			# Night 1 keeps 25% (375,000); repriced Night 2 drops discount (600,000); added Night 3 at rack (500,000)
+			self.assertEqual(
+				[round(flt(r.discount_amount), 2) for r in doc_hike.night_rates],
+				[125000.0, 0.0, 0.0],
+			)
+			self.assertAlmostEqual(flt(doc_hike.amount_after_tax), 1475000.0, places=2)
+			self.assertEqual(int(doc_hike.channel_review_needed), 1)
+			self.assertEqual(doc_hike.get("channel_review_reason"), "discount_review")
+			sr_hike = doc_hike.special_requests or ""
+			self.assertIn(f"kept approved desk discount on {d(5)}", sr_hike)
+			self.assertIn(f"repriced night(s) {d(6)}", sr_hike)
+			self.assertIn(f"added night(s) {d(7)}", sr_hike)
+			self.assertNotIn(f"added night(s) {d(6)}", sr_hike)
+			self.assertNotIn("new total", sr_hike.lower())
+			self._assert_no_vendor_leaks(sr_hike)
+
+			# (a2) Surviving repriced night ONLY (shorten d5..d8 -> d5..d7 with Season on d6): no "added night(s)"
+			ref_short = "OTA-UGXSH-" + frappe.generate_hash(length=6)
+			frappe.db.set_value("Season", season.name, "disabled", 1)
+			res_short = make_reservation(
+				PROP_UGX_VAT, rt, d(5), d(8), status="Confirmed", room=rooms[1],
+				source="OTA", channel="Booking.com", ota_ref=ref_short, auto_price=1,
+			)
+			self.discount(
+				res_short.name, discount_type="Percent", discount_value=25, **PROMO,
+				supervisor_user=GM, supervisor_pin="4321",
+			)
+			frappe.db.set_value("Season", season.name, "disabled", 0)
+			out_short = self._post_guest_webhook(conn.name, secret, {
+				"action": "modify", "hotelCode": "ut-vat-ugsec", "channel": "Booking.com",
+				"bookingId": ref_short, "checkin": d(5), "checkout": d(7),
+				"amount": {"currency": "UGX"},
+				"rooms": [{"roomCode": "dlx", "occupancy": {"adults": 2, "children": 0}, "prices": []}],
+			})
+			self.assertTrue(out_short["ok"])
+			doc_short = self.doc(res_short.name)
+			self.assertEqual(
+				[round(flt(r.discount_amount), 2) for r in doc_short.night_rates],
+				[125000.0, 0.0],
+			)
+			self.assertAlmostEqual(flt(doc_short.amount_after_tax), 975000.0, places=2)
+			sr_short = doc_short.special_requests or ""
+			self.assertIn(f"kept approved desk discount on {d(5)}", sr_short)
+			self.assertIn(f"repriced night(s) {d(6)}", sr_short)
+			self.assertNotIn("added night(s)", sr_short)
+			self._assert_no_vendor_leaks(sr_short)
+		finally:
+			frappe.delete_doc("Season", season.name, force=True, ignore_permissions=True)
+
+		# (b) Room category change (DLX -> STE) drops discount across all nights
+		ref_rm = "OTA-UGXRM-" + frappe.generate_hash(length=6)
+		res_rm = make_reservation(
+			PROP_UGX_VAT, rt, d(5), d(7), status="Confirmed", room=None,
+			source="OTA", channel="Booking.com", ota_ref=ref_rm, auto_price=1,
+		)
+		self.discount(
+			res_rm.name, discount_type="Percent", discount_value=25, **PROMO,
+			supervisor_user=GM, supervisor_pin="4321",
+		)
+		out_rm = self._post_guest_webhook(conn.name, secret, {
+			"action": "modify", "hotelCode": "ut-vat-ugsec", "channel": "Booking.com",
+			"bookingId": ref_rm, "checkin": d(5), "checkout": d(7),
+			"amount": {"currency": "UGX"},
+			"rooms": [{"roomCode": "ste", "occupancy": {"adults": 2, "children": 0}, "prices": []}],
+		})
+		self.assertTrue(out_rm["ok"])
+		doc_rm = self.doc(res_rm.name)
+		self.assertEqual([round(flt(r.discount_amount), 2) for r in doc_rm.night_rates], [0.0, 0.0])
+		self.assertAlmostEqual(flt(doc_rm.amount_after_tax), 1300000.0, places=2)
+		self.assertEqual(doc_rm.get("channel_review_reason"), "discount_removed")
+		self._assert_no_vendor_leaks(doc_rm.special_requests or "")
+
+		# (c) Party change (adults 2 -> 3, fixed_rate=0) drops discount across all nights
+		ref_pty = "OTA-UGXPT-" + frappe.generate_hash(length=6)
+		res_pty = make_reservation(
+			PROP_UGX_VAT, rt, d(5), d(7), status="Confirmed", room=rooms[3],
+			source="OTA", channel="Booking.com", ota_ref=ref_pty, auto_price=1,
+		)
+		self.discount(
+			res_pty.name, discount_type="Percent", discount_value=25, **PROMO,
+			supervisor_user=GM, supervisor_pin="4321",
+		)
+		out_pty = self._post_guest_webhook(conn.name, secret, {
+			"action": "modify", "hotelCode": "ut-vat-ugsec", "channel": "Booking.com",
+			"bookingId": ref_pty, "checkin": d(5), "checkout": d(7),
+			"amount": {"currency": "UGX"},
+			"rooms": [{"roomCode": "dlx", "occupancy": {"adults": 3, "children": 0}, "prices": []}],
+		})
+		self.assertTrue(out_pty["ok"])
+		doc_pty = self.doc(res_pty.name)
+		self.assertEqual([round(flt(r.discount_amount), 2) for r in doc_pty.night_rates], [0.0, 0.0])
+		self.assertAlmostEqual(flt(doc_pty.amount_after_tax), 1200000.0, places=2)
+		self.assertEqual(doc_pty.get("channel_review_reason"), "discount_removed")
+		self._assert_no_vendor_leaks(doc_pty.special_requests or "")
+
+		# (d) Rate code (rate_plan) change judges all nights and drops unapproved discount
+		plan_bar = frappe.get_doc({
+			"doctype": "Rate Plan",
+			"property": PROP_UGX_VAT,
+			"rate_plan_name": "Standard BAR",
+			"code": "SBAR",
+			"modifier_type": "Percent",
+			"modifier_value": 0,
+			"discount_eligible": 1,
+		}).insert(ignore_permissions=True)
+		plan_corp = frappe.get_doc({
+			"doctype": "Rate Plan",
+			"property": PROP_UGX_VAT,
+			"rate_plan_name": "Alt Rate Code",
+			"code": "SARC",
+			"modifier_type": "Percent",
+			"modifier_value": 0,
+			"discount_eligible": 1,
+		}).insert(ignore_permissions=True)
+		res_rp = make_reservation(
+			PROP_UGX_VAT, rt, d(10), d(12), status="Confirmed", room=rooms[0],
+			rate_plan=plan_bar.name, source="OTA", channel="Booking.com",
+			ota_ref="OTA-UGXRP-" + frappe.generate_hash(length=6), auto_price=1,
+		)
+		self.discount(
+			res_rp.name, discount_type="Percent", discount_value=25, **PROMO,
+			supervisor_user=GM, supervisor_pin="4321",
+		)
+		old_rp = self.doc(res_rp.name)
+		cand_rp = self.doc(res_rp.name)
+		cand_rp.rate_plan = plan_corp.name
+		rev_rp = cm._reconcile_ota_modify_discount(cand_rp, old_rp)
+		self.assertIsNotNone(rev_rp)
+		self.assertEqual(rev_rp["kind"], cm.CHANNEL_REVIEW_DISCOUNT_REMOVED)
+		self.assertEqual(rev_rp["kept"], [])
+		self.assertEqual(cand_rp.judged_nights(old_rp, cand_rp.quote_night_rows(cand_rp.requote())), {d(10), d(11)})
+
+	def test_multicurrency_precision_usd_prec2_and_kwd_prec3_tax_inclusive_ota_extend(self):
+		"""Multi-currency precision: USD (prec=2, 18% VAT-inclusive $100/night where
+		net shifts 84.74 -> 84.75 and discounted net shifts 63.55 -> 63.57 by 0.02)
+		and KWD (prec=3, 18% VAT-inclusive 10.000/night) preserve 25% and 100% COMP
+		on surviving nights across OTA extensions while still catching genuine hikes."""
+		# --- USD prec=2 ---
+		self._ensure_currency("USD", symbol="$", fraction_units=100, number_format="#,###.##")
+		rt_usd, rooms_usd, conn_usd, sec_usd = self._setup_vat_property(
+			PROP_USD_VAT, country="United States", currency="USD", tax_pct=18, base_price=100,
+			rt_code="USDV", secret="usd-vat-sec",
+		)
+		for idx, disc_val in enumerate((25, 100)):
+			ref = f"OTA-USD{disc_val}-" + frappe.generate_hash(length=6)
+			res = make_reservation(
+				PROP_USD_VAT, rt_usd, d(5), d(7), status="Confirmed", room=rooms_usd[idx],
+				source="OTA", channel="Booking.com", ota_ref=ref, auto_price=1,
+			)
+			# Precondition: Night 2 absorbed -0.01 remainder (84.74 vs 84.75)
+			init_u = self.doc(res.name)
+			self.assertAlmostEqual(flt(init_u.night_rates[0].base_rate), 84.75, places=2)
+			self.assertAlmostEqual(flt(init_u.night_rates[1].base_rate), 84.74, places=2)
+
+			self.discount(
+				res.name, discount_type="Percent", discount_value=disc_val, **PROMO,
+				supervisor_user=GM, supervisor_pin="4321",
+			)
+			out = self._post_guest_webhook(conn_usd.name, sec_usd, {
+				"action": "modify", "hotelCode": "ut-vat-usdv", "channel": "Booking.com",
+				"bookingId": ref, "checkin": d(5), "checkout": d(8),
+				"amount": {"currency": "USD"},
+				"rooms": [{"roomCode": "dlx", "occupancy": {"adults": 2, "children": 0}, "prices": []}],
+			})
+			self.assertTrue(out["ok"], f"USD {disc_val}% extend failed: {out}")
+			doc = self.doc(res.name)
+			self.assertEqual(len(doc.night_rates), 3)
+			if disc_val == 25:
+				self.assertEqual([round(flt(r.discount_amount), 2) for r in doc.night_rates], [25.0, 25.0, 0.0])
+				self.assertEqual([round(flt(r.rate), 2) for r in doc.night_rates], [63.57, 63.57, 84.75])
+			else:
+				self.assertEqual([round(flt(r.rate), 2) for r in doc.night_rates], [0.0, 0.0, 84.75])
+				self.assertGreater(flt(doc.night_rates[0].discount_amount), 99.0)
+				self.assertGreater(flt(doc.night_rates[1].discount_amount), 99.0)
+				self.assertEqual(flt(doc.night_rates[2].discount_amount), 0.0)
+			self.assertEqual(int(doc.channel_review_needed), 1)
+			self.assertEqual(doc.get("channel_review_reason"), "discount_review")
+			sr = doc.special_requests or ""
+			self.assertIn(f"kept approved desk discount on {d(5)}, {d(6)}", sr)
+			self.assertIn(f"added night(s) {d(7)}", sr)
+			self.assertNotIn(f"added night(s) {d(6)}", sr)
+			self._assert_no_vendor_leaks(sr)
+
+		# --- KWD prec=3 ---
+		self._ensure_currency("KWD", symbol="KD ", fraction_units=1000, number_format="#,###.###")
+		rt_kwd, rooms_kwd, conn_kwd, sec_kwd = self._setup_vat_property(
+			PROP_KWD_VAT, country="Kuwait", currency="KWD", tax_pct=18, base_price=10,
+			rt_code="KWDV", secret="kwd-vat-sec",
+		)
+		for idx, disc_val in enumerate((25, 100)):
+			ref = f"OTA-KWD{disc_val}-" + frappe.generate_hash(length=6)
+			res = make_reservation(
+				PROP_KWD_VAT, rt_kwd, d(5), d(7), status="Confirmed", room=rooms_kwd[idx],
+				source="OTA", channel="Booking.com", ota_ref=ref, auto_price=1,
+			)
+			init_k = self.doc(res.name)
+			self.assertEqual(Decimal(str(init_k.night_rates[0].base_rate)), Decimal("8.475"))
+			self.assertEqual(Decimal(str(init_k.night_rates[1].base_rate)), Decimal("8.474"))
+
+			self.discount(
+				res.name, discount_type="Percent", discount_value=disc_val, **PROMO,
+				supervisor_user=GM, supervisor_pin="4321",
+			)
+			out = self._post_guest_webhook(conn_kwd.name, sec_kwd, {
+				"action": "modify", "hotelCode": "ut-vat-kwdv", "channel": "Booking.com",
+				"bookingId": ref, "checkin": d(5), "checkout": d(8),
+				"amount": {"currency": "KWD"},
+				"rooms": [{"roomCode": "dlx", "occupancy": {"adults": 2, "children": 0}, "prices": []}],
+			})
+			self.assertTrue(out["ok"], f"KWD {disc_val}% extend failed: {out}")
+			doc = self.doc(res.name)
+			self.assertEqual(len(doc.night_rates), 3)
+			if disc_val == 25:
+				self.assertEqual(
+					[Decimal(str(r.discount_amount)).quantize(Decimal("0.001")) for r in doc.night_rates],
+					[Decimal("2.500"), Decimal("2.500"), Decimal("0.000")],
+				)
+				self.assertEqual(
+					[Decimal(str(r.rate)).quantize(Decimal("0.001")) for r in doc.night_rates],
+					[Decimal("6.357"), Decimal("6.357"), Decimal("8.475")],
+				)
+			else:
+				self.assertEqual(
+					[Decimal(str(r.rate)).quantize(Decimal("0.001")) for r in doc.night_rates],
+					[Decimal("0.000"), Decimal("0.000"), Decimal("8.475")],
+				)
+				self.assertEqual(Decimal(str(doc.night_rates[2].discount_amount)), Decimal("0"))
+				self.assertGreater(flt(doc.night_rates[1].discount_amount), 9.9)
+			self.assertEqual(int(doc.channel_review_needed), 1)
+			self.assertEqual(doc.get("channel_review_reason"), "discount_review")
+			sr = doc.special_requests or ""
+			self.assertIn(f"kept approved desk discount on {d(5)}, {d(6)}", sr)
+			self.assertIn(f"added night(s) {d(7)}", sr)
+			self.assertNotIn(f"added night(s) {d(6)}", sr)
+			self._assert_no_vendor_leaks(sr)
+
+		# KWD negative check: genuine +0.010 KWD price hike on surviving Night 2 still drops its discount
+		ref_kh = "OTA-KWDHK-" + frappe.generate_hash(length=6)
+		res_kh = make_reservation(
+			PROP_KWD_VAT, rt_kwd, d(10), d(12), status="Confirmed", room=rooms_kwd[2],
+			source="OTA", channel="Booking.com", ota_ref=ref_kh, auto_price=1,
+		)
+		self.discount(
+			res_kh.name, discount_type="Percent", discount_value=25, **PROMO,
+			supervisor_user=GM, supervisor_pin="4321",
+		)
+		kwd_season = frappe.get_doc({
+			"doctype": "Season",
+			"property": PROP_KWD_VAT,
+			"season_name": "KWD Minor Hike",
+			"room_type": rt_kwd,
+			"start_date": d(11),
+			"end_date": d(11),
+			"adjustment_type": "Amount",
+			"adjustment_value": 0.010,
+			"priority": 10,
+		}).insert(ignore_permissions=True)
+		try:
+			out_kh = self._post_guest_webhook(conn_kwd.name, sec_kwd, {
+				"action": "modify", "hotelCode": "ut-vat-kwdv", "channel": "Booking.com",
+				"bookingId": ref_kh, "checkin": d(10), "checkout": d(13),
+				"amount": {"currency": "KWD"},
+				"rooms": [{"roomCode": "dlx", "occupancy": {"adults": 2, "children": 0}, "prices": []}],
+			})
+			self.assertTrue(out_kh["ok"])
+			doc_kh = self.doc(res_kh.name)
+			self.assertEqual(Decimal(str(doc_kh.night_rates[0].discount_amount)).quantize(Decimal("0.001")), Decimal("2.500"))
+			self.assertEqual(Decimal(str(doc_kh.night_rates[1].discount_amount)).quantize(Decimal("0.001")), Decimal("0.000"))
+			self.assertEqual(Decimal(str(doc_kh.night_rates[2].discount_amount)).quantize(Decimal("0.001")), Decimal("0.000"))
+			sr_kh = doc_kh.special_requests or ""
+			self.assertIn(f"repriced night(s) {d(11)}", sr_kh)
+			self.assertIn(f"added night(s) {d(12)}", sr_kh)
+			self.assertNotIn(f"added night(s) {d(11)}", sr_kh)
+		finally:
+			frappe.delete_doc("Season", kwd_season.name, force=True, ignore_permissions=True)
+
