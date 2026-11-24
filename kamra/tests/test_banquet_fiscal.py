@@ -521,6 +521,90 @@ class TestEventFolio(BanquetFiscalCase):
 		self.assertTrue(bq.generate_invoice(fn)["header"]["number"])
 		self.assertEqual(bq.function_sheet(fn)["fiscal_bridge"], 0)
 
+	# --- Hydrogen R1 merge-gate regression tests (Findings 4 & 6) --------------------------------------
+
+	def test_close_out_refuses_post_close_damage_on_settled_event_folio(self):
+		"""Hydrogen R1 #4: once the Event Folio is Closed, close_out refuses adding damage or mutating totals."""
+		from kamra.folio import close_folio
+
+		fn = confirmed(self.f)
+		mapping("Venue Rental", revenue_code("UT-BQ-HALL"))
+		mapping("Menu", revenue_code("UT-BQ-FOOD", charge_type="Food & Beverage"))
+		with accounting_bridge():
+			bq.record_receipt(fn, 200000, mode="Cash", kind="Security Deposit")
+			out = bq.post_to_folio(fn)
+			folio_doc = frappe.get_doc("Folio", out["folio"])
+			bq.record_receipt(fn, float(folio_doc.balance), mode="Cash", kind="Payment")
+			close_folio(out["folio"])
+			before = sheet(fn)
+			before_total = float(before.grand_total)
+			before_items = len(before.items)
+
+			with self.assertRaisesRegex(frappe.ValidationError, "closed"):
+				bq.close_out(fn, damage_amount=50000, damage_note="Broken projector", refund_deposit=0)
+
+			after_refusal = sheet(fn)
+			self.assertEqual(float(after_refusal.damage_amount or 0), 0.0)
+			self.assertAlmostEqual(float(after_refusal.grand_total), before_total, 2)
+			self.assertEqual(len(after_refusal.items), before_items)
+			self.assertNotEqual(after_refusal.status, "Completed")
+
+			# Completing without post-close damage or total changes remains allowed.
+			done = bq.close_out(fn, damage_amount=0, refund_deposit=0)
+			self.assertEqual(done["status"], "Completed")
+			self.assertAlmostEqual(float(done["grand_total"]), before_total, 2)
+
+	def test_kwd_three_decimal_event_deposit_summary_preserves_precision(self):
+		"""Hydrogen R1 #6: event_folio_deposit_summary uses property currency precision (3dp KWD, never round(..., 2))."""
+		from kamra.ledger import write_ledger_entry
+
+		if not frappe.db.exists("Currency", "KWD"):
+			frappe.get_doc({
+				"doctype": "Currency", "currency_name": "KWD", "symbol": "د.ك",
+				"fraction": "Fils", "fraction_units": 1000,
+				"smallest_currency_fraction_value": 0.001,
+				"number_format": "#,###.###", "enabled": 1,
+			}).insert(ignore_permissions=True)
+		else:
+			frappe.db.set_value("Currency", "KWD", "enabled", 1)
+
+		kw_prop = _upsert("Property", {"property_name": "UT Kuwait 3dp Hotel"}, {
+			"property_name": "UT Kuwait 3dp Hotel", "country": "Kuwait", "currency": "KWD",
+			"gst_rate_low": 0, "gst_rate_high": 0, "business_date": nowdate(),
+		})
+		kw_hall = _upsert("Venue", {"property": kw_prop, "venue_name": "UT Kuwait Hall"}, {
+			"property": kw_prop, "venue_name": "UT Kuwait Hall", "venue_type": "Banquet Hall",
+			"capacity": 80, "base_price": 150.0, "gst_rate": 0,
+		})
+		fn = bq.create_enquiry(
+			kw_prop, kw_hall, add_days(nowdate(), 35), "Kuwait Client",
+			event_type="Conference", attendees=30, with_venue_line=1,
+		)["function"]
+		bq.set_status(fn, "Confirmed")
+		with accounting_bridge():
+			bq.record_receipt(fn, 50.125, mode="Cash", kind="Security Deposit")
+			summary = bq.event_folio_deposit_summary(sheet(fn))
+			self.assertEqual(summary["deposit_held"], 50.125)
+
+			# Unmirrored native refund of 10.125 KWD must keep 3dp in deposit_refunded, deposit_held, and native_receipts.
+			folio = frappe.get_doc("Folio", sheet(fn).folio)
+			sec_row = folio.payments[0].name
+			folio.append("payments", {
+				"posting_date": nowdate(), "payment_kind": "Refund", "mode": "Cash",
+				"amount": -10.125, "currency": "KWD", "reference": "PE-KW-REF-1",
+				"refund_of": sec_row,
+			})
+			folio.save(ignore_permissions=True)
+			write_ledger_entry(
+				property=kw_prop, folio=folio.name, ledger="Deposit", transaction_code="9004",
+				debit=10.125, credit=0.0, description="Refund Cash",
+				source_doctype="Folio Payment", source_name=folio.payments[-1].name,
+			)
+			summary2 = bq.event_folio_deposit_summary(sheet(fn))
+			self.assertEqual(summary2["deposit_held"], 40.0)
+			self.assertEqual(summary2["deposit_refunded"], 10.125)
+			self.assertEqual(summary2["native_receipts"][0]["amount"], 10.125)
+
 
 def revenue_code(code, charge_type="Misc", **extra):
 	if not frappe.db.exists("Transaction Code", code):

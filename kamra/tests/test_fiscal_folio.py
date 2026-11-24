@@ -63,6 +63,13 @@ def fiscal_reader(result):
 
 
 class FiscalFolioTests(AuditTestCase):
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		from kamra.tests.bridge_fields import ensure_bridge_field
+		ensure_bridge_field("Folio", "sales_invoice")
+		ensure_bridge_field("Property", "company")
+
 	def setUp(self):
 		super().setUp()
 		make_property(PROP_A, business_date=TODAY)
@@ -381,3 +388,208 @@ class FiscalFolioTests(AuditTestCase):
 		self.assertTrue(ledger.folio_reconciliation(PROP_A)["in_balance"])
 		api.check_out(res3.name)
 		self.assertEqual(frappe.db.get_value("Reservation", res3.name, "status"), "Checked Out")
+
+	# --- Hydrogen R1 merge-gate regression tests (Findings 2, 3, 5, 6) ---------------------------------
+
+	def test_non_efris_tourism_levy_only_renders_neutral_invoice_not_tax_invoice(self):
+		"""Hydrogen R1 #2: Uganda Non-EFRIS invoice charging 2% Tourism Levy only (0% VAT) stays 'Invoice'."""
+		import json as _json
+
+		frappe.db.set_value("Property", PROP_A, {
+			"country": "Uganda", "currency": "UGX",
+			"gst_rate_low": 0, "gst_rate_high": 0, "company": None,
+		})
+		frappe.clear_document_cache("Property", PROP_A)
+		self.settle()
+		fdoc = frappe.get_doc("Folio", self.folio)
+		charge_row = fdoc.charges[0]
+		frappe.db.set_value("Folio", self.folio, {
+			"sales_invoice": INVOICE, "invoice_number": None,
+		}, update_modified=False)
+
+		def _run(taxes, net, tax_tot, grand, charges_tax, template):
+			fake_si = frappe._dict(
+				doctype="Sales Invoice", name=INVOICE, kamra_ref=self.folio,
+				docstatus=1, company=None, currency="UGX", is_return=0,
+				return_against=None, kamra_rebill_of=None,
+				net_total=net, total_taxes_and_charges=tax_tot, grand_total=grand,
+				items=[frappe._dict(
+					name="sii-1", item_code="ITEM-MISC", source_ref=charge_row.name,
+					net_amount=net, amount=grand, kamra_allowance_refs="",
+				)],
+				taxes=[frappe._dict(tx) for tx in taxes],
+				item_wise_tax_details=[],
+			)
+			real_get_doc = frappe.get_doc
+			real_exists = frappe.db.exists
+			reader_ans = {
+				"state": "not_efris", "sales_invoice": INVOICE,
+				"charges_tax": charges_tax, "efris_enrolled": 0,
+				"tax_template": template,
+			}
+			with fiscal_reader(reader_ans), \
+					patch("frappe.get_doc", side_effect=lambda dt, nm=None, *a, **k:
+					      fake_si if dt == "Sales Invoice" and nm == INVOICE else real_get_doc(dt, nm, *a, **k)), \
+					patch("frappe.db.exists", side_effect=lambda dt, nm=None, *a, **k:
+					      True if dt == "DocType" and nm == "Sales Invoice" else real_exists(dt, nm, *a, **k)):
+				return api.folio_invoice(self.folio)
+
+		# 2% Tourism Levy only (0% VAT): bridge reports charges_tax=1, yet title MUST stay neutral "Invoice".
+		levy_inv = _run(
+			[{
+				"name": "sit-1", "charge_type": "On Net Total", "account_head": "Tourism Levy - UT",
+				"description": "Tourism Levy 2%", "rate": 2.0,
+				"tax_amount": 20.0, "tax_amount_after_discount_amount": 20.0,
+				"included_in_print_rate": 0,
+				"item_wise_tax_detail": _json.dumps({"ITEM-MISC": [2.0, 20.0]}),
+			}],
+			1000.0, 20.0, 1020.0, charges_tax=1, template="Tourism Levy 2% - UT",
+		)
+		self.assertEqual(levy_inv["tax_source"], "accounting")
+		self.assertTrue(levy_inv["document"]["is_final"])
+		self.assertEqual(levy_inv["document"]["title"], "Invoice")
+
+		# 18% VAT on Non-EFRIS Uganda -> "Tax Invoice".
+		vat_inv = _run(
+			[{
+				"name": "sit-2", "charge_type": "On Net Total", "account_head": "VAT - UT",
+				"description": "VAT 18%", "rate": 18.0,
+				"tax_amount": 180.0, "tax_amount_after_discount_amount": 180.0,
+				"included_in_print_rate": 0,
+				"item_wise_tax_detail": _json.dumps({"ITEM-MISC": [18.0, 180.0]}),
+			}],
+			1000.0, 180.0, 1180.0, charges_tax=1, template="Hotel VAT 18% - UT",
+		)
+		self.assertEqual(vat_inv["tax_source"], "accounting")
+		self.assertTrue(vat_inv["document"]["is_final"])
+		self.assertEqual(vat_inv["document"]["title"], "Tax Invoice")
+
+	def test_restricted_viewer_without_sales_invoice_read_gets_neutral_title_and_no_fiscal_tax_leak(self):
+		"""Hydrogen R1 #2: restricted viewer (tax_source='accounting_unavailable') never sees charges_tax/tax_template or 'Tax Invoice'."""
+		frappe.db.set_value("Property", PROP_A, {
+			"country": "Uganda", "currency": "UGX", "gst_rate_low": 0, "gst_rate_high": 0,
+		})
+		frappe.clear_document_cache("Property", PROP_A)
+		self.settle()
+		frappe.db.set_value("Folio", self.folio, {
+			"sales_invoice": INVOICE, "invoice_number": None,
+		}, update_modified=False)
+
+		real_exists = frappe.db.exists
+		real_has_perm = frappe.has_permission
+
+		def deny_si(doctype, ptype="read", doc=None, *a, **k):
+			if doctype == "Sales Invoice":
+				return False
+			return real_has_perm(doctype, ptype=ptype, doc=doc, *a, **k)
+
+		with fiscal_reader(FISCALISED), \
+				patch("frappe.db.exists", side_effect=lambda dt, nm=None, *a, **k:
+				      True if dt == "DocType" and nm == "Sales Invoice" else real_exists(dt, nm, *a, **k)), \
+				patch("frappe.has_permission", side_effect=deny_si):
+			data = api.folio_invoice(self.folio)
+
+		self.assertEqual(data["tax_source"], "accounting_unavailable")
+		self.assertEqual(data["tax_summary"], [])
+		self.assertTrue(data["document"]["is_final"])
+		self.assertEqual(data["document"]["title"], "Invoice")
+		self.assertIsNone(data["fiscal"]["charges_tax"])
+		self.assertIsNone(data["fiscal"]["tax_template"])
+
+		# Pending EFRIS under restricted viewer stays "Fiscal document pending" and still redacts tax metadata.
+		pending = {
+			"state": "pending", "sales_invoice": INVOICE, "efris_status": "Queued",
+			"charges_tax": 1, "efris_enrolled": 1, "tax_template": "VAT 18% - UT",
+		}
+		with fiscal_reader(pending), \
+				patch("frappe.db.exists", side_effect=lambda dt, nm=None, *a, **k:
+				      True if dt == "DocType" and nm == "Sales Invoice" else real_exists(dt, nm, *a, **k)), \
+				patch("frappe.has_permission", side_effect=deny_si):
+			p_data = api.folio_invoice(self.folio)
+
+		self.assertFalse(p_data["document"]["is_final"])
+		self.assertEqual(p_data["document"]["title"], "Fiscal document pending")
+		self.assertIsNone(p_data["fiscal"]["charges_tax"])
+		self.assertIsNone(p_data["fiscal"]["tax_template"])
+
+	def test_closing_unbridged_folio_preserves_ordinary_refund_alongside_security_deposit(self):
+		"""Hydrogen R1 #3: closing an unbridged folio must NOT sweep ordinary Refund rows into Security Deposits."""
+		from kamra.folio import security_deposit_held_on_folio
+
+		frappe.db.set_value("Property", PROP_A, {"gst_rate_low": 0, "gst_rate_high": 0})
+		frappe.clear_document_cache("Property", PROP_A)
+		api._post_folio_charge(self.folio, "Misc", "Parking fee", 105.0, gst_rate=0)
+		api.collect_security_deposit(self.res.name, 50.0, "Cash")
+		api.add_folio_payment(self.folio, "Cash", 150.0)
+		api.refund_folio_payment(self.folio, 45.0, "Cash", "Overpayment returned")
+
+		open_doc = frappe.get_doc("Folio", self.folio)
+		self.assertEqual(open_doc.status, "Open")
+		self.assertAlmostEqual(float(open_doc.grand_total), 105.0, 2)
+		self.assertAlmostEqual(float(open_doc.payments_total), 105.0, 2)
+		self.assertAlmostEqual(float(open_doc.balance), 0.0, 2)
+		self.assertAlmostEqual(security_deposit_held_on_folio(open_doc), 50.0, 2)
+
+		close_folio(self.folio)
+		closed_doc = frappe.get_doc("Folio", self.folio)
+		self.assertEqual(closed_doc.status, "Closed")
+		self.assertAlmostEqual(float(closed_doc.grand_total), 105.0, 2)
+		self.assertAlmostEqual(float(closed_doc.payments_total), 105.0, 2)
+		self.assertAlmostEqual(float(closed_doc.balance), 0.0, 2)
+		self.assertAlmostEqual(security_deposit_held_on_folio(closed_doc), 50.0, 2)
+
+	def test_batch_print_folios_enforces_fiscal_finality_and_records_sales_invoice(self):
+		"""Hydrogen R1 #5: batch_print_folios refuses pending/sandbox/unverified EFRIS folios and logs sales_invoice."""
+		from kamra import ledger
+
+		self.settle()
+		for answer in (
+			{"state": "pending", "sales_invoice": INVOICE},
+			{**FISCALISED, "sandbox": 1},
+			{"state": "issued", "sales_invoice": INVOICE},
+			{"state": "not_efris", "sales_invoice": INVOICE, "charges_tax": 1, "efris_enrolled": 1},
+		):
+			with self.subTest(answer=answer), fiscal_reader(answer):
+				with self.assertRaisesRegex(frappe.ValidationError, "pending|not a valid|unavailable"):
+					ledger.batch_print_folios([self.folio])
+		self.assertFalse(frappe.db.exists("Folio Reprint", {"folio": self.folio}))
+
+		# When final (even if internal invoice_number is None on a bridged close), batch_print logs sales_invoice.
+		frappe.db.set_value("Folio", self.folio, "invoice_number", None, update_modified=False)
+		with fiscal_reader(FISCALISED):
+			res = ledger.batch_print_folios([self.folio])
+		self.assertEqual(len(res["reprints"]), 1)
+		logged_inv = frappe.db.get_value("Folio Reprint", res["reprints"][0]["reprint"], "invoice_number")
+		self.assertEqual(logged_inv, INVOICE)
+
+	def test_amount_in_words_and_stay_money_respect_currency_precision(self):
+		"""Hydrogen R1 #6: KWD 3dp precision preserved in amount_in_words and _stay_money."""
+		from kamra.localization.words import amount_in_words
+
+		self.assertEqual(amount_in_words(12.375, "KWD", indian=False), "KWD Twelve point 375 Only")
+		self.assertEqual(amount_in_words(12.05, "KWD", indian=False), "KWD Twelve point 050 Only")
+		self.assertEqual(amount_in_words(115.375, "KWD", indian=False), "KWD One Hundred Fifteen point 375 Only")
+		self.assertEqual(amount_in_words(330400, "UGX", indian=False), "UGX Three Hundred Thirty Thousand Four Hundred Only")
+		self.assertEqual(
+			amount_in_words(193.33, "USD", indian=False),
+			"Dollars One Hundred Ninety Three and Thirty Three Cents Only",
+		)
+
+		if not frappe.db.exists("Currency", "KWD"):
+			frappe.get_doc({
+				"doctype": "Currency", "currency_name": "KWD", "symbol": "د.ك",
+				"fraction": "Fils", "fraction_units": 1000,
+				"smallest_currency_fraction_value": 0.001,
+				"number_format": "#,###.###", "enabled": 1,
+			}).insert(ignore_permissions=True)
+		else:
+			frappe.db.set_value("Currency", "KWD", "enabled", 1)
+		frappe.db.set_value("Property", PROP_A, {
+			"country": "Kuwait", "currency": "KWD", "gst_rate_low": 0, "gst_rate_high": 0,
+		})
+		frappe.clear_document_cache("Property", PROP_A)
+		api._post_folio_charge(self.folio, "Food & Beverage", "Mezzeh 3dp", 12.375, gst_rate=0)
+		api.collect_security_deposit(self.res.name, 25.375, "Cash")
+		inv = api.folio_invoice(self.folio)
+		self.assertEqual(inv["document"]["amount_in_words"], "KWD Twelve point 375 Only")
+		self.assertEqual(api._stay_money(self.res)["deposit_held"], 25.375)
