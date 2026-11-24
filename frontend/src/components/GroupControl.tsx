@@ -13,6 +13,7 @@ import { t as translate, useUILanguage } from "../lib/i18n"
 import { useCashierAuth } from "../lib/cashierAuth"
 import CheckInDialog from "./CheckInDialog"
 import CheckOutDialog from "./CheckOutDialog"
+import SupervisorSignOff from "./SupervisorSignOff"
 
 /** One group, in the order the desk works it. A "What to do next" box
  *  follows the group's stage (quotation, before arrival, arrival day, in
@@ -95,6 +96,12 @@ interface Detail {
   master_folio: string | null
   master_folio_status: string | null
   master_folio_balance: number
+  comp_governance?: {
+    rate_category: string
+    needs_supervisor: boolean
+    agent: boolean
+    supervisors: { user: string; full_name: string }[]
+  } | null
 }
 
 interface BlockDraft {
@@ -168,6 +175,12 @@ export default function GroupControl({
   // one key per Take deposit press; reused on retry (#550)
   const [depositKey, setDepositKey] = useState(newIdempotencyKey)
   const [pick, setPick] = useState({ room_type: "", guest_name: "", phone: "" })
+  const [compSupervisor, setCompSupervisor] = useState("")
+  const [compPin, setCompPin] = useState("")
+  useEffect(() => {
+    setCompSupervisor("")
+    setCompPin("")
+  }, [name])
   const [settle, setSettle] = useState<{ mode: string; amount: string; cityLedger: boolean } | null>(null)
   const [checkingIn, setCheckingIn] = useState<string | null>(null)
   const [checkingOut, setCheckingOut] = useState<string | null>(null)
@@ -754,39 +767,61 @@ export default function GroupControl({
           )}
 
           {/* add a guest into a room still kept for the group */}
-          {g.status === "Confirmed" && stillFree > 0 && (
-            <div className="rounded-lg border border-dashed border-zinc-300 p-3">
-              <div className="mb-2 text-sm font-medium">
-                {translate("Add a guest - {v0} room(s) still kept free for the group", { v0: String(stillFree) })}
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <select className={inputSm} value={pick.room_type} onChange={(e) => setPick({ ...pick, room_type: e.target.value })}>
-                  {d.pickup.filter((p) => p.remaining > 0).map((p) => (
-                    <option key={p.room_type} value={p.room_type}>
-                      {translate("{v0} ({v1} free)", { v0: p.room_type_name, v1: String(p.remaining) })}
-                    </option>
-                  ))}
-                </select>
-                <input className={`${inputSm} min-w-40 flex-1`} placeholder={translate("Guest name")}
-                  value={pick.guest_name} onChange={(e) => setPick({ ...pick, guest_name: e.target.value })} />
-                <input className={`${inputSm} w-36`} placeholder={translate("Phone")}
-                  value={pick.phone} onChange={(e) => setPick({ ...pick, phone: e.target.value })} />
-                <Button
-                  disabled={busy || !pick.guest_name.trim() || !pick.room_type}
-                  onClick={() =>
-                    act(async () => {
-                      await call("kamra.api.pickup_group_room", {
-                        group_booking: name, room_type: pick.room_type,
-                        guest_name: pick.guest_name.trim(), phone: pick.phone || null,
+          {g.status === "Confirmed" && stillFree > 0 && (() => {
+            const compGov = d.comp_governance
+            const needsCompSignOff = !!compGov?.needs_supervisor
+            const compSignOffMissing = needsCompSignOff && (!compSupervisor || !compPin.trim())
+            return (
+              <div className="space-y-2 rounded-lg border border-dashed border-zinc-300 p-3">
+                <div className="text-sm font-medium">
+                  {translate("Add a guest - {v0} room(s) still kept free for the group", { v0: String(stillFree) })}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <select className={inputSm} value={pick.room_type} onChange={(e) => setPick({ ...pick, room_type: e.target.value })}>
+                    {d.pickup.filter((p) => p.remaining > 0).map((p) => (
+                      <option key={p.room_type} value={p.room_type}>
+                        {translate("{v0} ({v1} free)", { v0: p.room_type_name, v1: String(p.remaining) })}
+                      </option>
+                    ))}
+                  </select>
+                  <input className={`${inputSm} min-w-40 flex-1`} placeholder={translate("Guest name")}
+                    value={pick.guest_name} onChange={(e) => setPick({ ...pick, guest_name: e.target.value })} />
+                  <input className={`${inputSm} w-36`} placeholder={translate("Phone")}
+                    value={pick.phone} onChange={(e) => setPick({ ...pick, phone: e.target.value })} />
+                  <Button
+                    disabled={busy || !pick.guest_name.trim() || !pick.room_type || compSignOffMissing}
+                    onClick={() =>
+                      act(async () => {
+                        await call("kamra.api.pickup_group_room", {
+                          group_booking: name, room_type: pick.room_type,
+                          guest_name: pick.guest_name.trim(), phone: pick.phone || null,
+                          ...(needsCompSignOff
+                            ? { comp_supervisor_user: compSupervisor, comp_supervisor_pin: compPin }
+                            : {}),
+                        })
+                        setPick((pk) => ({ ...pk, guest_name: "", phone: "" }))
+                        setCompSupervisor("")
+                        setCompPin("")
+                        setNotice(translate("Guest added."))
                       })
-                      setPick((pk) => ({ ...pk, guest_name: "", phone: "" }))
-                      setNotice(translate("Guest added."))
-                    })
-                  }
-                ><Plus className="size-4" />{translate("Add guest")}</Button>
+                    }
+                  ><Plus className="size-4" />{translate("Add guest")}</Button>
+                </div>
+                {needsCompSignOff && compGov && (
+                  <SupervisorSignOff
+                    reason={translate("A {category} rate plan needs a manager's sign-off.", {
+                      category: translate(compGov.rate_category),
+                    })}
+                    supervisors={compGov.supervisors}
+                    supervisor={compSupervisor}
+                    pin={compPin}
+                    onSupervisor={setCompSupervisor}
+                    onPin={setCompPin}
+                  />
+                )}
               </div>
-            </div>
-          )}
+            )
+          })()}
         </div>
       )}
 
