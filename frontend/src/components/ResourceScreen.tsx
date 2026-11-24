@@ -124,8 +124,18 @@ export interface FieldSpec {
   linkDoctype?: string // for link
   /** link options only from the current property (the target has a `property` field) */
   linkPropertyScoped?: boolean
+  /** extra Frappe filters for a link field's option query (e.g. enabled currencies only) */
+  linkFilters?: (string | number)[][]
+  /** max options loaded for a link field (default 500) */
+  linkLimit?: number
+  /** extra values that must always stay selectable in a link dropdown */
+  ensureOptions?: (draft: Record<string, unknown>) => string[]
+  /** override the value rendered in the input (e.g. inherited currency on derived plans) */
+  displayValue?: (draft: Record<string, unknown>) => unknown
   required?: boolean
   hint?: string // for image: recommended size/format
+  /** dynamic hint text (overrides static `hint` when returned) */
+  hintWhen?: (draft: Record<string, unknown>) => string | undefined
   dependsOn?: (draft: Record<string, unknown>) => boolean
   /** Lock the field on existing records (e.g. code primary keys). */
   readOnlyOnEdit?: boolean
@@ -414,6 +424,7 @@ function FieldInput(props: {
   value: unknown
   onChange: (v: unknown) => void
   linkOptions: Record<string, string[]>
+  extraLinkOptions?: string[]
   masterOptions: Partial<Record<MenuMasterKey, string[]>>
   /** Translate display labels; API values stay English. */
   t: (s: string) => string
@@ -456,22 +467,29 @@ function FieldInput(props: {
           ))}
         </select>
       )
-    case "link":
+    case "link": {
+      const baseOpts = props.linkOptions[spec.field] ?? []
+      const current = String(value ?? "")
+      const extra = props.extraLinkOptions ?? []
+      const opts = Array.from(
+        new Set([...baseOpts, ...extra, ...(current ? [current] : [])].filter(Boolean)),
+      ).sort()
       return (
         <select
           className={inputCls}
-          value={String(value ?? "")}
+          value={current}
           disabled={disabled}
           onChange={(e) => onChange(e.target.value)}
         >
           <option value="">-</option>
-          {(props.linkOptions[spec.linkDoctype ?? ""] ?? []).map((o) => (
+          {opts.map((o) => (
             <option key={o} value={o}>
               {o}
             </option>
           ))}
         </select>
       )
+    }
     case "check":
       return (
         <input
@@ -594,10 +612,13 @@ const cellValue = (v: unknown, t: (s: string) => string = translate) =>
 export function ResourceScreen({
   config,
   headerAction,
+  onSaved,
 }: {
   config: ScreenConfig
   /** Extra control rendered in the header next to New (e.g. a bulk import). */
   headerAction?: ReactNode
+  /** Called after a record is created, updated, or deleted. */
+  onSaved?: () => void
 }) {
   const { t, lang } = useT()
   const { roles } = useAuth()
@@ -608,6 +629,7 @@ export function ResourceScreen({
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [linkOptions, setLinkOptions] = useState<Record<string, string[]>>({})
+  const [linkReloadTick, setLinkReloadTick] = useState(0)
   const [masterOptions, setMasterOptions] = useState<
     Partial<Record<MenuMasterKey, string[]>>
   >({})
@@ -765,17 +787,18 @@ export function ResourceScreen({
   useEffect(() => {
     const links = config.form.filter((f) => f.type === "link" && f.linkDoctype)
     links.forEach((f) => {
+      const filters: (string | number)[][] = []
+      if (f.linkPropertyScoped) filters.push(["property", "=", getCurrentProperty()])
+      if (f.linkFilters?.length) filters.push(...f.linkFilters)
       listResource(f.linkDoctype!, {
         fields: ["name"],
-        filters: f.linkPropertyScoped
-          ? [["property", "=", getCurrentProperty()]]
-          : undefined,
-        limit: 100,
+        filters: filters.length ? filters : undefined,
+        limit: f.linkLimit ?? 500,
         orderBy: "name asc",
       }).then((r) =>
         setLinkOptions((prev) => ({
           ...prev,
-          [f.linkDoctype!]: r.map((x) => x.name),
+          [f.field]: r.map((x) => x.name),
         })),
       )
     })
@@ -787,7 +810,7 @@ export function ResourceScreen({
         .catch(() => setMasterOptions({}))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config.doctype])
+  }, [config.doctype, linkReloadTick])
 
   function openEdit(row: Row | "new") {
     setEditing(row)
@@ -844,6 +867,10 @@ export function ResourceScreen({
       }
       setEditing(null)
       load()
+      if (config.form.some((f) => f.type === "link" && f.linkDoctype === config.doctype)) {
+        setLinkReloadTick((n) => n + 1)
+      }
+      onSaved?.()
     } catch (e) {
       setError(serverError(e))
     } finally {
@@ -858,6 +885,10 @@ export function ResourceScreen({
       await deleteResource(config.doctype, editing.name)
       setEditing(null)
       load()
+      if (config.form.some((f) => f.type === "link" && f.linkDoctype === config.doctype)) {
+        setLinkReloadTick((n) => n + 1)
+      }
+      onSaved?.()
     } catch (e) {
       setError(serverError(e))
     } finally {
@@ -1178,11 +1209,12 @@ export function ResourceScreen({
                     </span>
                     <FieldInput
                       spec={spec}
-                      value={draft[spec.field]}
+                      value={spec.displayValue ? spec.displayValue(draft) : draft[spec.field]}
                       onChange={(v) =>
                         setDraft((d) => ({ ...d, [spec.field]: v }))
                       }
                       linkOptions={linkOptions}
+                      extraLinkOptions={spec.ensureOptions?.(draft)}
                       masterOptions={masterOptions}
                       t={t}
                       canBackdate={canBackdate}
@@ -1191,11 +1223,14 @@ export function ResourceScreen({
                         spec.disabledWhen?.(draft),
                       )}
                     />
-                    {spec.hint && spec.type !== "image" && (
-                      <span className="mt-1 block text-xs leading-relaxed text-zinc-400">
-                        {t(spec.hint)}
-                      </span>
-                    )}
+                    {(() => {
+                      const shownHint = spec.hintWhen?.(draft) ?? spec.hint
+                      return shownHint && spec.type !== "image" ? (
+                        <span className="mt-1 block text-xs leading-relaxed text-zinc-400">
+                          {t(shownHint)}
+                        </span>
+                      ) : null
+                    })()}
                   </label>
                 ))}
               </div>

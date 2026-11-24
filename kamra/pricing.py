@@ -124,11 +124,23 @@ def property_currency(property: str) -> str:
 	return frappe.get_cached_doc("Property", property).currency or default_currency(pack_for(property))
 
 
+def _tariff_price_list_currency(plan) -> str | None:
+	"""The currency of a rate plan's linked tariff Price List, if any."""
+	price_list = plan.get("custom_tariff_price_list")
+	if not price_list or not frappe.db.exists("DocType", "Price List"):
+		return None
+	return frappe.db.get_value("Price List", price_list, "currency") or None
+
+
 def rate_plan_currency(chain: list) -> str:
-	"""A plan's currency: its own, else its nearest base plan's, else the property's."""
+	"""A plan's currency: its own, else its linked tariff price list's,
+	else its nearest base plan's, else the property's."""
 	for plan in reversed(chain):
 		if plan.get("currency"):
 			return plan.currency
+		list_currency = _tariff_price_list_currency(plan)
+		if list_currency:
+			return list_currency
 	return property_currency(chain[-1].property)
 
 
@@ -1726,8 +1738,16 @@ def quote(
 		tax += levy_tax
 		total_base += levy
 
-	total = total_base + tax
 	effective_pct = float(tax / total_base * 100) if total_base else 0
+	# Document-level currency minor-unit rounding (SAP TCURX style: e.g. whole
+	# UGX on tax-exclusive stays, never per-line rounding that loses a shilling).
+	currency = prop.get("currency") or property_currency(property)
+	if tax:
+		total = round_rate_amount(total_base + tax, 0, "Nearest", currency)
+		tax = total - total_base
+	else:
+		total = round_rate_amount(total_base, 0, "Nearest", currency)
+		total_base = total
 
 	deposit_required = float(prop.get("security_deposit_amount") or 0)
 

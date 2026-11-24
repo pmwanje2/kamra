@@ -83,9 +83,13 @@ def list_contract_tariffs(property: str, price_list: str | None = None, customer
 		if policies:
 			result["rate_plan_policies"] = policies
 		# Separation of duties keeps a maker from approving their own draft,
-		# not from withdrawing it: a Hotel Admin with tariff access discards.
-		result["can_discard"] = "Hotel Admin" in frappe.get_roles() and bool(
-			result.get("can_propose") or result.get("can_approve"))
+		# not from withdrawing it: a Hotel Admin with tariff access and
+		# Item Price delete permission discards (matching discard_tariff).
+		result["can_discard"] = (
+			"Hotel Admin" in frappe.get_roles()
+			and bool(result.get("can_propose") or result.get("can_approve"))
+			and bool(frappe.has_permission("Item Price", "delete"))
+		)
 		return result
 	return {"supported": False, "property": property, "price_lists": [], "items": [],
 	        "can_propose": False, "can_approve": False, "can_discard": False}
@@ -93,10 +97,16 @@ def list_contract_tariffs(property: str, price_list: str | None = None, customer
 
 def _rate_plan_policies(property: str, directory: dict) -> dict:
 	"""The policies of the plans the directory's price lists name, and of their base plans."""
-	named = [plan.get("name") if isinstance(plan, dict) else plan
-	         for price_list in directory.get("price_lists") or []
-	         for plan in price_list.get("rate_plans") or []]
-	named = [name for name in named if isinstance(name, str) and name]
+	named = []
+	list_currencies: dict[str, str] = {}
+	for price_list in directory.get("price_lists") or []:
+		pl_currency = price_list.get("currency") or ""
+		for plan in price_list.get("rate_plans") or []:
+			name = plan.get("name") if isinstance(plan, dict) else plan
+			if isinstance(name, str) and name:
+				named.append(name)
+				if pl_currency and name not in list_currencies:
+					list_currencies[name] = pl_currency
 	if not named:
 		return {}
 	plans = {plan["name"]: plan for plan in frappe.get_all(
@@ -108,7 +118,7 @@ def _rate_plan_policies(property: str, directory: dict) -> dict:
 			name = plans[name].get("base_rate_plan")
 	return {name: {
 		"label": plans[name].get("rate_plan_name"), "code": plans[name].get("code"),
-		"currency": plans[name].get("currency") or None,
+		"currency": plans[name].get("currency") or list_currencies.get(name) or None,
 		"fx_lock_policy": plans[name].get("fx_lock_policy") or "Fixed at Reservation",
 		"base_rate_plan": plans[name].get("base_rate_plan") or None,
 		"adjust_extra_person": bool(int(plans[name].get("adjust_extra_person") or 0)),

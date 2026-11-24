@@ -146,11 +146,11 @@ export const ratePlansConfig: ScreenConfig = {
     { field: "code", label: "Code", type: "data", required: true },
     { field: "modifier_type", label: "Modifier type", type: "select", options: ["Percent", "Amount", "Absolute"] },
     { field: "modifier_value", label: "Modifier value (-10 = 10% off)", type: "float" },
-    { field: "currency", label: "Currency (blank = property currency)", type: "link", linkDoctype: "Currency" },
+    { field: "currency", label: "Currency (blank = property currency)", type: "link", linkDoctype: "Currency", linkFilters: [["enabled", "=", 1]], linkLimit: 500 },
     { field: "fx_lock_policy", label: "Exchange rate lock", type: "select",
       options: ["Fixed at Reservation", "Fixed at Check In", "Current Date"],
       hint: "When a foreign-currency contract converts to the property's currency: at booking, at check-in, or on each night's posting date." },
-    { field: "base_rate_plan", label: "Base rate plan (derived rate)", type: "link", linkDoctype: "Rate Plan", linkPropertyScoped: true,
+    { field: "base_rate_plan", label: "Base rate plan (derived rate)", type: "link", linkDoctype: "Rate Plan", linkPropertyScoped: true, linkLimit: 500,
       hint: "Blank: priced from the room type's card or this plan's own tariff. Set: this plan's modifier applies to the base plan's price." },
     { field: "adjust_extra_person", label: "Adjust extra person charges", type: "check",
       hint: "Derived plans only. Off: extra adults and children keep the base plan's charge." },
@@ -166,6 +166,37 @@ export const ratePlansConfig: ScreenConfig = {
     { field: "is_default", label: "Default plan", type: "check" },
     { field: "disabled", label: "Disabled (unpublished)", type: "check", hint: "Tick to unpublish; clear to activate at booking" },
   ],
+}
+
+export function ratePlansScreenConfig(ctx: {
+  propertyCurrency?: string
+  tariffCurrencyFor: (draft: Record<string, unknown>) => string
+  baseCurrencyFor: (baseName: string) => string
+}): ScreenConfig {
+  return {
+    ...ratePlansConfig,
+    form: ratePlansConfig.form.map((f) => {
+      if (f.field !== "currency") return f
+      return {
+        ...f,
+        disabledWhen: (d) => Boolean(d.base_rate_plan),
+        displayValue: (d) =>
+          d.base_rate_plan ? ctx.baseCurrencyFor(String(d.base_rate_plan)) : d.currency,
+        ensureOptions: (d) => {
+          const out: string[] = []
+          if (ctx.propertyCurrency) out.push(ctx.propertyCurrency)
+          const tariffCur = ctx.tariffCurrencyFor(d)
+          if (tariffCur) out.push(tariffCur)
+          if (d.base_rate_plan) {
+            const baseCur = ctx.baseCurrencyFor(String(d.base_rate_plan))
+            if (baseCur) out.push(baseCur)
+          }
+          return out
+        },
+        hintWhen: (d) => (d.base_rate_plan ? "Inherited from the base rate plan." : undefined),
+      }
+    }),
+  }
 }
 
 export const seasonsConfig: ScreenConfig = {

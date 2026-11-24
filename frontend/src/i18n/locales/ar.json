@@ -6734,5 +6734,6 @@
   "Flat rate applied to room nights when the property calculates tax locally.": "نسبة ثابتة تُطبق على ليالي الغرف عندما يحسب الفندق الضريبة محلياً.",
   "Your own lines at the foot of every invoice - e.g. company registration, bank name and account details.": "السطور الخاصة بك في أسفل كل فاتورة - مثل السجل التجاري واسم البنك وتفاصيل الحساب.",
   "OTA Prepaid": "مدفوع مسبقاً عبر وكالة حجز",
-  "Company Credit": "ائتمان شركة"
+  "Company Credit": "ائتمان شركة",
+  "Inherited from the base rate plan.": "موروثة من خطة الأسعار الأساسية."
 }

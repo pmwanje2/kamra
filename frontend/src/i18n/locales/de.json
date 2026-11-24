@@ -668,5 +668,6 @@
   "OTA Prepaid": "OTA-Vorauszahlung",
   "Company Credit": "Firmenkredit",
   "Payment Link": "Zahlungslink",
-  "Cheque": "Scheck"
+  "Cheque": "Scheck",
+  "Inherited from the base rate plan.": "Von der Basispreisrate übernommen."
 }
