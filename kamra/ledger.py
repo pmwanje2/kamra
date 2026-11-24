@@ -1593,11 +1593,12 @@ DUE_BUCKETS = ("not_due", "d1_30", "d31_60", "d61_90", "d90p")
 INVOICE_AGE_BUCKETS = ("current", "b30", "b60", "b90", "b90p")
 
 
-def _netted(open_items: list[dict], unapplied: float) -> list[tuple[dict, float]]:
+def _netted(open_items: list[dict], unapplied: float, places: int = 2) -> list[tuple[dict, float]]:
 	"""(bill, what it still counts for) oldest first, with money the company
 	paid ahead (unapplied credit) netted off the oldest bills - so the
 	buckets add up to the account balance."""
 	credit = max(float(unapplied), 0.0)
+	eps = 0.5 * (10 ** -places)
 	out = []
 	for r in open_items:
 		amt = float(r["outstanding"])
@@ -1607,7 +1608,7 @@ def _netted(open_items: list[dict], unapplied: float) -> list[tuple[dict, float]
 			take = min(credit, amt)
 			amt -= take
 			credit -= take
-		if amt <= 0.005:
+		if amt <= eps:
 			continue
 		out.append((r, amt))
 	return out
@@ -1630,7 +1631,7 @@ def _due_bucket(overdue: int) -> str:
 	        "d31_60" if overdue <= 60 else "d61_90" if overdue <= 90 else "d90p")
 
 
-def _age_buckets(open_items: list[dict], unapplied: float, today=None) -> dict:
+def _age_buckets(open_items: list[dict], unapplied: float, today=None, places: int = 2) -> dict:
 	"""Aging as of `today`: pass the property's business date, so it
 	agrees with night audit around midnight. Disputed bills stay in their
 	bucket and are also summed under `disputed`."""
@@ -1639,7 +1640,7 @@ def _age_buckets(open_items: list[dict], unapplied: float, today=None) -> dict:
 	today = getdate(today or nowdate())
 	oldest_due = None
 	disputed = 0.0
-	for r, amt in _netted(open_items, unapplied):
+	for r, amt in _netted(open_items, unapplied, places=places):
 		if r.get("disputed"):
 			disputed += amt
 		late = days_overdue(r, today)
@@ -1650,33 +1651,34 @@ def _age_buckets(open_items: list[dict], unapplied: float, today=None) -> dict:
 		key = ("current" if age <= 30 else "b30" if age <= 60 else
 		       "b60" if age <= 90 else "b90" if age <= 120 else "b90p")
 		buckets[key] += amt
-	out = {k: round(v, 2) for k, v in buckets.items()}
-	out["overdue"] = round(sum(out[k] for k in DUE_BUCKETS[1:]), 2)
+	out = {k: _round_currency(v, places) for k, v in buckets.items()}
+	out["overdue"] = _round_currency(sum(out[k] for k in DUE_BUCKETS[1:]), places)
 	out["oldest_overdue_due_date"] = oldest_due
-	out["disputed"] = round(disputed, 2)
+	out["disputed"] = _round_currency(disputed, places)
 	return out
 
 
 def overdue_past_grace(open_items: list[dict], unapplied: float,
-                       grace_days: int = 0, today=None) -> tuple[float, str | None]:
+                       grace_days: int = 0, today=None, places: int = 2) -> tuple[float, str | None]:
 	"""What the company owes on bills more than `grace_days` past their due
 	date (as of `today`, the business date), and the oldest such due date.
 	A disputed bill doesn't count."""
 	total, oldest = 0.0, None
 	today = today or nowdate()
-	for r, amt in _netted(open_items, unapplied):
+	for r, amt in _netted(open_items, unapplied, places=places):
 		if r.get("disputed"):
 			continue
 		if days_overdue(r, today) > int(grace_days or 0):
 			total += amt
 			if oldest is None or r["due_date"] < oldest:
 				oldest = r["due_date"]
-	return round(total, 2), oldest
+	return _round_currency(total, places), oldest
 
 
 def _account_position(account: str) -> dict:
 	open_items = city_ledger_open_folios(account)
 	property = frappe.db.get_value("City Ledger Account", account, "property")
+	places = _currency_places(property)
 	row = frappe.db.sql(
 		"""SELECT COALESCE(SUM(debit), 0) AS total_debit,
 		          COALESCE(SUM(credit), 0) AS total_credit,
@@ -1684,16 +1686,16 @@ def _account_position(account: str) -> dict:
 		   FROM `tabCity Ledger Entry` WHERE account = %s""",
 		account, as_dict=True)[0]
 	balance = float(row.balance or 0)
-	outstanding = round(sum(max(r["outstanding"], 0) for r in open_items), 2)
-	unapplied = round(max(outstanding - balance, 0.0), 2)
+	outstanding = _round_currency(sum(max(r["outstanding"], 0) for r in open_items), places)
+	unapplied = _round_currency(max(outstanding - balance, 0.0), places)
 	return {
 		"open_items": open_items,
 		"open_balance": outstanding,
 		"unapplied_credit": unapplied,
-		"total_debit": round(float(row.total_debit or 0), 2),
-		"total_credit": round(float(row.total_credit or 0), 2),
+		"total_debit": _round_currency(float(row.total_debit or 0), places),
+		"total_credit": _round_currency(float(row.total_credit or 0), places),
 		"credit_days": effective_credit_days(account),
-		**_age_buckets(open_items, unapplied, aging_date(property)),
+		**_age_buckets(open_items, unapplied, aging_date(property), places=places),
 	}
 
 
@@ -1701,6 +1703,7 @@ def _erp_aging(property: str, rows: list[dict]) -> list[dict]:
 	"""The aging rows of the same shape as _account_position, from the ERP's
 	Customer receivables (open vouchers by Payment Ledger Entry)."""
 	today = aging_date(property)
+	places = _currency_places(property)
 	out = []
 	for r in rows:
 		out.append({
@@ -1710,7 +1713,7 @@ def _erp_aging(property: str, rows: list[dict]) -> list[dict]:
 			"open_balance": r["open_balance"],
 			"unapplied_credit": r["unapplied_credit"],
 			"credit_days": effective_credit_days(r["account"], property),
-			**_age_buckets(r["open_items"], r["unapplied_credit"], today),
+			**_age_buckets(r["open_items"], r["unapplied_credit"], today, places=places),
 		})
 	return out
 
@@ -1724,6 +1727,7 @@ def city_ledger_aging(property: str):
 
 	While the ERP keeps the receivables these are its Customer receivables
 	(a Payment Entry there is seen), never this app's City Ledger Entry rows."""
+	places = _currency_places(property)
 	src = receivables_source(property)
 	if src.in_erp:
 		out = _erp_aging(property, src.rows)
@@ -1738,7 +1742,7 @@ def city_ledger_aging(property: str):
 			pos = _account_position(a.name)
 			pos.pop("open_items")
 			out.append({**a, **pos})
-	totals = {k: round(sum(a[k] for a in out), 2)
+	totals = {k: _round_currency(sum(a[k] for a in out), places)
 	          for k in (*DUE_BUCKETS, "overdue", "disputed")}
 	return {"accounts": out, "totals": totals}
 

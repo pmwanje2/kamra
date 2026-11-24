@@ -40,16 +40,14 @@ import AppLink from "../components/AppLink"
 import { Badge } from "../components/ui/badge"
 import { Button } from "../components/ui/button"
 import { Card } from "../components/ui/card"
-import { cur, moneyLocale } from "../lib/money"
+import { cur, fmtAmount, useLocale } from "../lib/money"
 import { useT, t as translate } from "../lib/i18n"
 import { cn } from "../lib/utils"
 import { AuditPackView, sessionCols, DataTable, fmtDay } from "./AuditPack"
 
 
 const money = (n: unknown) =>
-  n === null || n === undefined || n === ""
-    ? "-"
-    : Number(n).toLocaleString(moneyLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  n === null || n === undefined || n === "" ? "-" : fmtAmount(n)
 
 interface Column {
   key: string
@@ -407,6 +405,7 @@ const SEVERITY_ORDER: Record<string, number> = { block: 0, warn: 1, info: 2 }
 const cash = (v?: string) => (v && v.trim() ? Number(v.trim().replace(/\s/g, "").replace(",", ".")) : NaN)
 
 export default function EndOfDayWizard() {
+  useLocale()
   const { t } = useT()
   const navigate = useNavigate()
   const { property: rawProperty = "" } = useParams()

@@ -280,12 +280,14 @@ def check_open_pos_bills(property: str, bd: str) -> dict:
 			"state": "served, not settled" if c["billed"] else "open",
 			"opened_at": c["opened_at"],
 		})
+	from kamra.ledger import _currency_places, _round_currency
+	places = _currency_places(property)
 	return _check(
 		"open_pos_bills", "Open restaurant bills",
 		_severity(property, "open_pos_bills"), items,
 		"Settle each bill at its outlet: take payment, charge it to an "
 		"in-house room, mark it NC or cancel it.", "/pos",
-		amount=round(sum(i["amount"] for i in items), 2))
+		amount=_round_currency(sum(i["amount"] for i in items), places))
 
 
 def check_departures_due(property: str, bd: str) -> dict:
@@ -520,9 +522,10 @@ def check_high_balance(property: str) -> dict:
 
 def check_credit_limit(property: str) -> dict:
 	from kamra.erp_books import RECEIVABLES_UNAVAILABLE_REASON, receivables_source
-	from kamra.ledger import company_payer_of
+	from kamra.ledger import _currency_places, _round_currency, company_payer_of
 	# the ERP's Customer receivables when it keeps them (its Payment Entry
 	# receipts never reach this app's City Ledger), else the City Ledger
+	places = _currency_places(property)
 	src = receivables_source(property, strict=False)
 	if src.unavailable:
 		return _check(
@@ -557,17 +560,17 @@ def check_credit_limit(property: str) -> dict:
 		for a in accounts:
 			if src.in_erp:
 				name, company, number = a["account"], a["company"], a["account_number"]
-				limit = flt(a["credit_limit"])
-				ar = flt(a["balance"], 2)
+				limit = _round_currency(a["credit_limit"], places)
+				ar = _round_currency(a["balance"], places)
 			else:
 				name, company, number = a.name, a.company, a.account_number
-				limit = flt(a.credit_limit)
-				ar = flt(frappe.db.sql(
+				limit = _round_currency(a.credit_limit, places)
+				ar = _round_currency(frappe.db.sql(
 					"""SELECT COALESCE(SUM(debit - credit), 0)
-					   FROM `tabCity Ledger Entry` WHERE account = %s""", a.name)[0][0], 2)
+					   FROM `tabCity Ledger Entry` WHERE account = %s""", a.name)[0][0], places)
 			mine = by_company.get(company) or []
-			in_house = round(sum(max(flt(f.balance), 0) for f in mine), 2)
-			exposure = round(ar + in_house, 2)
+			in_house = _round_currency(sum(max(flt(f.balance), 0) for f in mine), places)
+			exposure = _round_currency(ar + in_house, places)
 			if exposure <= limit:
 				continue
 			items.append({
@@ -575,10 +578,10 @@ def check_credit_limit(property: str) -> dict:
 				"account_number": number,
 				"credit_limit": limit, "ar_balance": ar,
 				"in_house": in_house, "exposure": exposure,
-				"over_by": round(exposure - limit, 2),
+				"over_by": _round_currency(exposure - limit, places),
 				"folios": [{"folio": f.name, "reservation": f.reservation,
 				            "guest_name": f.guest_name, "room": _room_no(f.room),
-				            "balance": flt(f.balance, 2)} for f in mine],
+				            "balance": _round_currency(f.balance, places)} for f in mine],
 			})
 	return _check(
 		"credit_limit", "Companies over their credit limit", "warn", items,
@@ -590,8 +593,17 @@ def check_overdue_ar(property: str) -> dict:
 	"""Companies with city ledger bills past their due date (invoice date +
 	credit days), by company - what to chase before billing them more."""
 	from kamra.erp_books import RECEIVABLES_UNAVAILABLE_REASON, receivables_source
-	from kamra.ledger import _account_position, _age_buckets, aging_date, effective_credit_days
+	from kamra.ledger import (
+		_account_position,
+		_age_buckets,
+		_currency_places,
+		_round_currency,
+		aging_date,
+		effective_credit_days,
+	)
 	items = []
+	places = _currency_places(property)
+	eps = 0.5 * (10 ** -places)
 	src = receivables_source(property, strict=False)
 	if src.unavailable:
 		return _check(
@@ -602,8 +614,8 @@ def check_overdue_ar(property: str) -> dict:
 	if src.in_erp:
 		today = aging_date(property)
 		for a in src.rows:
-			pos = _age_buckets(a["open_items"], a["unapplied_credit"], today)
-			if pos["overdue"] <= 0.005:
+			pos = _age_buckets(a["open_items"], a["unapplied_credit"], today, places=places)
+			if pos["overdue"] <= eps:
 				continue
 			items.append({
 				"account": a["account"], "company": a["company"],
@@ -613,7 +625,7 @@ def check_overdue_ar(property: str) -> dict:
 				"d31_60": pos["d31_60"], "d61_90": pos["d61_90"],
 				"d90p": pos["d90p"],
 				"oldest_due_date": pos["oldest_overdue_due_date"],
-				"balance": round(flt(a["balance"]), 2),
+				"balance": _round_currency(a["balance"], places),
 			})
 	else:
 		for a in frappe.get_all(
@@ -622,7 +634,7 @@ def check_overdue_ar(property: str) -> dict:
 				fields=["name", "company", "account_number", "credit_limit"],
 				limit_page_length=0):
 			pos = _account_position(a.name)
-			if pos["overdue"] <= 0.005:
+			if pos["overdue"] <= eps:
 				continue
 			items.append({
 				"account": a.name, "company": a.company,
@@ -632,14 +644,14 @@ def check_overdue_ar(property: str) -> dict:
 				"d31_60": pos["d31_60"], "d61_90": pos["d61_90"],
 				"d90p": pos["d90p"],
 				"oldest_due_date": pos["oldest_overdue_due_date"],
-				"balance": round(pos["open_balance"] - pos["unapplied_credit"], 2),
+				"balance": _round_currency(pos["open_balance"] - pos["unapplied_credit"], places),
 			})
 	items.sort(key=lambda r: -r["overdue"])
 	return _check(
 		"overdue_ar", "Companies with overdue bills", "warn", items,
 		"Chase the company for payment. Credit control (Settings, Finance) can "
 		"warn or block more billing to a company with overdue bills.", "/receivables",
-		total=round(sum(r["overdue"] for r in items), 2), unverified=False)
+		total=_round_currency(sum(r["overdue"] for r in items), places), unverified=False)
 
 
 def check_room_status(property: str) -> dict:

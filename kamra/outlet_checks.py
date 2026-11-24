@@ -19,10 +19,23 @@ A site with no such script gets None, and every caller behaves as before.
 
 from __future__ import annotations
 
+import math
 from types import NoneType
 
 OPEN_CHECKS = "hospitality_kamra.open_outlet_checks"
 _TEXT = ("outlet", "table", "room", "reservation", "opened_at")
+
+
+def _places(property: str | None) -> int:
+	if not property:
+		return 2
+	import frappe
+
+	from kamra.ledger import _currency_places
+	try:
+		return _currency_places(property)
+	except frappe.DoesNotExistError:
+		return 2
 
 
 def open_outlet_checks(property: str, *, reservation: str | None = None,
@@ -40,21 +53,23 @@ def open_outlet_checks(property: str, *, reservation: str | None = None,
 	rows = result.get("checks") if isinstance(result, dict) else None
 	if not isinstance(rows, list):
 		raise ValueError("Invalid outlet check response.")
-	return [_check(row) for row in rows]
+	places = _places(property)
+	return [_check(row, places=places) for row in rows]
 
 
-def _check(row) -> dict:
+def _check(row, *, places: int = 2) -> dict:
 	if not isinstance(row, dict) or not isinstance(row.get("name"), str) or not row["name"].strip():
 		raise ValueError("Invalid outlet check response.")
 	amount = row.get("amount")
-	if isinstance(amount, bool) or not isinstance(amount, (int, float)):
+	if isinstance(amount, bool) or not isinstance(amount, (int, float)) or not math.isfinite(float(amount)):
 		raise ValueError("Invalid outlet check response.")
+	from kamra.ledger import _round_currency
 	out = {"name": row["name"]}
 	for key in _TEXT:
 		value = row.get(key)
 		if value is not None and not isinstance(value, str):
 			raise ValueError("Invalid outlet check response.")
 		out[key] = value or None
-	out["amount"] = round(float(amount), 2)
+	out["amount"] = _round_currency(amount, places)
 	out["billed"] = bool(row.get("billed"))
 	return out

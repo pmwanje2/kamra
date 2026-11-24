@@ -361,13 +361,15 @@ def owner_snapshot(property: str, date: str | None = None, from_date: str | None
 		frappe.clear_last_message()
 		ar = None
 	sees_audits = (set(AUDIT_ROLES) | set(ADMIN)) & set(frappe.get_roles())
+	from kamra.ledger import _currency_places, _round_currency
+	places = _currency_places(property)
 	return {
 		**flash,
 		"property": property,
 		"property_name": frappe.db.get_value("Property", property, "property_name"),
 		"guest_balances": outstanding,
 		"open_folios": open_folios,
-		"city_ledger": round(sum(ar[k] for k in DUE_BUCKETS), 2) if ar else None,
+		"city_ledger": _round_currency(sum(ar[k] for k in DUE_BUCKETS), places) if ar else None,
 		"city_ledger_overdue": ar["overdue"] if ar else None,
 		"audits": unwrap(night_audit_history)(property, 5) if sees_audits else None,
 	}

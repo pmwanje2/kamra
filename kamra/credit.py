@@ -147,10 +147,12 @@ def check_company_credit(account_or_company: str, property: str,
 	when the exposure (AR + in-house company folios + amount) is over a
 	non-zero credit limit, or bills are more than the grace period past
 	their due date. With credit control Off it is always ok."""
-	from kamra.ledger import _account_position, overdue_past_grace
+	from kamra.ledger import _account_position, _currency_places, _round_currency, overdue_past_grace
 	policy = credit_policy(property)
+	places = _currency_places(property)
+	eps = 0.5 * (10 ** -places)
 	account, company = _resolve(account_or_company, property)
-	amount = round(flt(amount), 2)
+	amount = _round_currency(amount, places)
 	out = {
 		"ok": True, "policy": policy, "company": company, "account": account,
 		"amount": amount, "reasons": [], "over_limit_by": 0.0,
@@ -198,10 +200,10 @@ def check_company_credit(account_or_company: str, property: str,
 		if row:
 			if limit <= 0:
 				limit = flt(row.get("credit_limit"))
-			ar = round(flt(row.get("balance")), 2)
+			ar = _round_currency(row.get("balance"), places)
 			out["overdue_amount"], out["oldest_due_date"] = overdue_past_grace(
 				row["open_items"], row["unapplied_credit"], out["grace_days"],
-				aging_date(property))
+				aging_date(property), places=places)
 	elif account:
 		if lock:
 			from kamra.ledger import locked_account_figures
@@ -209,21 +211,21 @@ def check_company_credit(account_or_company: str, property: str,
 			ar = pos["ar_balance"]
 		else:
 			pos = _account_position(account)
-			ar = round(flt(frappe.db.sql(
+			ar = _round_currency(frappe.db.sql(
 				"""SELECT COALESCE(SUM(debit - credit), 0) FROM `tabCity Ledger Entry`
-				   WHERE account = %s""", account)[0][0]), 2)
+				   WHERE account = %s""", account)[0][0], places)
 		overdue, oldest = overdue_past_grace(
 			pos["open_items"], pos["unapplied_credit"], out["grace_days"],
-			aging_date(property))
+			aging_date(property), places=places)
 		out["overdue_amount"], out["oldest_due_date"] = overdue, oldest
 	in_house = in_house_exposure(company, property, exclude_folios,
 	                             for_update=lock)
-	exposure = round(ar + in_house + amount, 2)
+	exposure = _round_currency(ar + in_house + amount, places)
 	out.update(credit_limit=limit, ar_balance=ar, in_house=in_house,
 	           exposure=exposure)
 	sym = _symbol(property)
-	if limit > 0 and exposure > limit + 0.005:
-		out["over_limit_by"] = round(exposure - limit, 2)
+	if limit > 0 and exposure > limit + eps:
+		out["over_limit_by"] = _round_currency(exposure - limit, places)
 		out["reasons"].append(_(
 			"Over the credit limit by {0}{1:,.2f} (limit {0}{2:,.2f}, owed and "
 			"billed with this {0}{3:,.2f}).").format(
@@ -236,7 +238,7 @@ def check_company_credit(account_or_company: str, property: str,
 		out["reasons"].append(_("The account is restricted{0}.").format(
 			f" ({restricted.restricted_reason})"
 			if restricted.restricted_reason else ""))
-	if out["overdue_amount"] > 0.005:
+	if out["overdue_amount"] > eps:
 		if out["grace_days"]:
 			out["reasons"].append(_(
 				"{0}{1:,.2f} overdue by more than {2} days (oldest due {3}).").format(
@@ -409,6 +411,7 @@ def company_credit_terms(company: str, property: str):
 		["name", "credit_limit", "credit_days", "use_default_credit_days",
 		 "balance"], as_dict=True)
 	from kamra.erp_books import receivables_source
+	from kamra.ledger import _currency_places, _round_currency
 	src = receivables_source(property, company=company, strict=False)
 	if src.unavailable:
 		balance = None
@@ -416,7 +419,7 @@ def company_credit_terms(company: str, property: str):
 		row = next((a for a in src.rows
 		            if a.get("company") == company
 		            or (account and a.get("account") == account.name)), None)
-		balance = round(flt(row.get("balance")), 2) if row else 0.0
+		balance = _round_currency(row.get("balance"), _currency_places(property)) if row else 0.0
 	else:
 		balance = flt(account.balance) if account else 0.0
 	return {

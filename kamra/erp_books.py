@@ -28,6 +28,7 @@ refuses, naming the ERP report, and the others read nothing.
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass
 from functools import wraps
@@ -118,10 +119,21 @@ def desk_config() -> dict:
 	return {"screens": screens, "pos_url": pos_url}
 
 
-def _money(value, label: str) -> float:
-	if isinstance(value, bool) or not isinstance(value, (int, float)):
+def _places(property: str | None) -> int:
+	if not property:
+		return 2
+	from kamra.ledger import _currency_places
+	try:
+		return _currency_places(property)
+	except frappe.DoesNotExistError:
+		return 2
+
+
+def _money(value, label: str, places: int = 2) -> float:
+	if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
 		raise ValueError(f"Invalid {label} response.")
-	return round(float(value), 2)
+	from kamra.ledger import _round_currency
+	return _round_currency(value, places)
 
 
 def erp_receivables(property: str, *, company: str | None = None) -> list[dict] | None:
@@ -149,6 +161,7 @@ def erp_receivables(property: str, *, company: str | None = None) -> list[dict] 
 	rows = result.get("accounts") if isinstance(result, dict) else None
 	if not isinstance(rows, list):
 		raise ValueError("Invalid receivables response.")
+	places = _places(property)
 	out: list[dict] = []
 	for row in rows:
 		if not isinstance(row, dict):
@@ -171,7 +184,7 @@ def erp_receivables(property: str, *, company: str | None = None) -> list[dict] 
 				"voucher_no": item.get("voucher_no") or None,
 				"invoice_date": inv_date,
 				"due_date": due,
-				"outstanding": _money(item.get("outstanding", 0.0), "receivables"),
+				"outstanding": _money(item.get("outstanding", 0.0), "receivables", places),
 				"disputed": int(bool(item.get("disputed"))),
 			})
 		out.append({
@@ -179,10 +192,10 @@ def erp_receivables(property: str, *, company: str | None = None) -> list[dict] 
 			"company": row.get("company") or row.get("customer") or None,
 			"customer": row.get("customer") or row.get("company") or None,
 			"account_number": row.get("account_number") or "",
-			"credit_limit": _money(row.get("credit_limit", 0.0), "receivables"),
-			"balance": _money(row.get("balance", 0.0), "receivables"),
-			"open_balance": _money(row.get("open_balance", 0.0), "receivables"),
-			"unapplied_credit": _money(row.get("unapplied_credit", 0.0), "receivables"),
+			"credit_limit": _money(row.get("credit_limit", 0.0), "receivables", places),
+			"balance": _money(row.get("balance", 0.0), "receivables", places),
+			"open_balance": _money(row.get("open_balance", 0.0), "receivables", places),
+			"unapplied_credit": _money(row.get("unapplied_credit", 0.0), "receivables", places),
 			"open_items": open_items,
 		})
 	return out

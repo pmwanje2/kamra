@@ -185,10 +185,12 @@ def _period(property: str, label: str, start, end, total_rooms: int) -> dict:
 def _balances(property: str, d) -> list[dict]:
 	from kamra.business_date import get_business_date
 	from kamra.erp_books import receivables_source
+	from kamra.ledger import _currency_places, _round_currency
 	from kamra.ledger import ledger_balances as guarded
 	from kamra.night_audit import _raw
 	# the report's own role check has run; the ledger endpoint's is narrower
 	ledger_balances = _raw(guarded)
+	places = _currency_places(property)
 	before = {r["ledger"]: r for r in ledger_balances(property, str(add_days(d, -1)))["ledgers"]}
 	after = {r["ledger"]: r for r in ledger_balances(property, str(d))["ledgers"]}
 	src = receivables_source(property, strict=False)
@@ -205,7 +207,7 @@ def _balances(property: str, d) -> list[dict]:
 			if src.unavailable:
 				carried = None
 			elif str(getdate(d)) == str(getdate(get_business_date(property))):
-				carried = round(sum(flt(r["balance"]) for r in src.rows), 2)
+				carried = _round_currency(sum(flt(r["balance"]) for r in src.rows), places)
 			else:
 				carried = None
 			out.append({
