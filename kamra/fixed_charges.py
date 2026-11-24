@@ -234,6 +234,9 @@ def save_fixed_charge(reservation: str, row_data) -> dict:
 def delete_fixed_charge(reservation: str, row_name: str) -> dict:
 	"""Delete an unposted fixed charge; soft-deactivate if it has already posted to a folio."""
 	res = _reservation_meta(reservation)
+	if res.status in CLOSED_STATUSES:
+		frappe.throw(_("Cannot remove fixed charges on a {0} stay.").format(res.status))
+	frappe.db.sql("SELECT name FROM `tabReservation` WHERE name = %s FOR UPDATE", res.name)
 	row = frappe.db.get_value(
 		"Reservation Fixed Charge",
 		{"name": row_name, "parent": res.name, "parenttype": "Reservation"},
@@ -291,7 +294,14 @@ def _matches_trigger(row, res, bd_date, trigger: str) -> bool:
 	return False
 
 
-def _resolve_window_folio(res, window_no: int, charge_type: str, is_alcohol: int = 0) -> str:
+def _resolve_window_folio(
+	res,
+	window_no: int,
+	charge_type: str,
+	is_alcohol: int = 0,
+	*,
+	primary_folio: str | None = None,
+) -> str:
 	"""Resolve target open Folio for window_no (1..8).
 
 	Supports both v2.8.0 Guest/Extra/Company folios and PR #43 Folio.window_no / routing.py.
@@ -325,6 +335,13 @@ def _resolve_window_folio(res, window_no: int, charge_type: str, is_alcohol: int
 			return folio_doc.name
 
 	if win == 1:
+		if (
+			primary_folio
+			and not res.get("group_booking")
+			and not res.get("company")
+			and frappe.db.get_value("Folio", primary_folio, "status") != "Closed"
+		):
+			return primary_folio
 		return open_line_target(res, charge_type, is_alcohol)
 	if win == 3 and res.get("company") and not is_alcohol:
 		return open_company_folio(res)
@@ -359,6 +376,7 @@ def post_fixed_charges_for_date(
 	folios: dict | None = None,
 	*,
 	trigger: str = "night_audit",
+	primary_folio: str | None = None,
 ) -> dict:
 	"""Idempotently post all matching active fixed charges for a reservation and trigger."""
 	from kamra.folio import _recalculate
@@ -420,7 +438,13 @@ def post_fixed_charges_for_date(
 		if row.get("supplement"):
 			desc = f"{desc} · {row.supplement.strip()}"
 
-		folio_name = _resolve_window_folio(res, cint(row.window_no or 1), charge_type, is_alcohol)
+		folio_name = _resolve_window_folio(
+			res,
+			cint(row.window_no or 1),
+			charge_type,
+			is_alcohol,
+			primary_folio=primary_folio,
+		)
 		if folio_name not in folios:
 			folios[folio_name] = frappe.get_doc("Folio", folio_name)
 		folios[folio_name].append("charges", {
@@ -463,10 +487,27 @@ def post_fixed_charges_for_date(
 	}
 
 
-def post_arrival_fixed_charges(res, folios: dict | None = None) -> dict:
+def post_arrival_fixed_charges(
+	res,
+	folios: dict | None = None,
+	*,
+	primary_folio: str | None = None,
+) -> dict:
 	"""Post 'On Arrival' fixed charges idempotently when a stay checks in."""
-	bd = get_business_date(res.property) or res.check_in_date
-	return post_fixed_charges_for_date(res, bd, folios=folios, trigger="arrival")
+	in_progress = getattr(frappe.flags, "_kamra_arrival_fc_res", None)
+	if in_progress is None:
+		in_progress = set()
+		frappe.flags._kamra_arrival_fc_res = in_progress
+	if res.name in in_progress:
+		return {"count": 0, "amount": 0.0, "keys": []}
+	in_progress.add(res.name)
+	try:
+		bd = get_business_date(res.property) or res.check_in_date
+		return post_fixed_charges_for_date(
+			res, bd, folios=folios, trigger="arrival", primary_folio=primary_folio,
+		)
+	finally:
+		in_progress.discard(res.name)
 
 
 def post_departure_fixed_charges(res, folios: dict | None = None) -> dict:

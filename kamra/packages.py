@@ -52,21 +52,39 @@ def _quantize(value, unit: Decimal) -> Decimal:
 	return _dec(value).quantize(unit, rounding=ROUND_HALF_UP)
 
 
-def _charge_key_standing(idempotency_key: str) -> bool:
-	"""True when a standing (not same-day voided) Folio Charge already holds this idempotency_key."""
+def _standing_charge_folio(idempotency_key: str) -> str | None:
+	"""Return parent Folio name of a standing Folio Charge matching idempotency_key, or None."""
 	from kamra.folio import STANDS_ON_ITS_DATE
 
-	return bool(
-		frappe.db.sql(
-			"""
-			SELECT 1 FROM `tabFolio Charge` fc
-			WHERE fc.idempotency_key = %(key)s
-			  AND """ + STANDS_ON_ITS_DATE + """
-			LIMIT 1
-			""",
-			{"key": idempotency_key},
-		)
+	rows = frappe.db.sql(
+		"""
+		SELECT fc.parent FROM `tabFolio Charge` fc
+		WHERE fc.idempotency_key = %(key)s
+		  AND """ + STANDS_ON_ITS_DATE + """
+		LIMIT 1
+		""",
+		{"key": idempotency_key},
 	)
+	return rows[0][0] if rows else None
+
+
+def _charge_key_standing(idempotency_key: str) -> bool:
+	"""True when a standing (not same-day voided) Folio Charge already holds this idempotency_key."""
+	return bool(_standing_charge_folio(idempotency_key))
+
+
+def _parse_consumed_refs(raw) -> list[str]:
+	if not raw:
+		return []
+	if isinstance(raw, list):
+		return [str(x) for x in raw if x]
+	try:
+		parsed = json.loads(raw)
+		if isinstance(parsed, list):
+			return [str(x) for x in parsed if x]
+	except (TypeError, ValueError):
+		pass
+	return []
 
 
 def active_package_for_reservation(res):
@@ -160,9 +178,14 @@ def split_package_night(res, package_doc, night_total, business_date, *, gst_rat
 		amt = _quantize(_dec(el.get("unit_allowance")) * Decimal(mult), unit)
 		if amt <= 0:
 			continue
+		included = 1 if cint(el.get("included_in_rate")) else 0
 		el_gst = flt(el.get("gst_rate"))
 		if not el_gst and el.get("transaction_code"):
 			el_gst = flt(frappe.db.get_value("Transaction Code", el.transaction_code, "default_tax_rate") or 0)
+		if included and not el_gst and flt(gst_rate or 0) > 0:
+			el_gst = flt(gst_rate)
+		if cint(el.get("tax_inclusive")) and el_gst > 0:
+			amt = _quantize(amt / (Decimal(1) + _dec(el_gst) / Decimal(100)), unit)
 		item = {
 			"element_row": el.name,
 			"element_name": el.element_name,
@@ -171,7 +194,7 @@ def split_package_night(res, package_doc, night_total, business_date, *, gst_rat
 			"charge_type": _resolve_element_charge_type(el),
 			"amount": amt,
 			"gst_rate": el_gst,
-			"included_in_rate": 1 if cint(el.get("included_in_rate")) else 0,
+			"included_in_rate": included,
 			"folio_display_mode": el.get("folio_display_mode") or pkg_mode,
 			"idempotency_key": f"pkg:{res.name}:{el.name}:{bd_str}",
 		}
@@ -232,6 +255,7 @@ def _ensure_allowance_record(res, package_doc, el_item: dict, bd_str: str) -> st
 		"transaction_code": el_item["transaction_code"],
 		"charge_type": el_item["charge_type"],
 		"business_date": bd_str,
+		"included_in_rate": 1 if cint(el_item.get("included_in_rate")) else 0,
 		"idempotency_key": el_item["idempotency_key"],
 		"allocated_amount": float(el_item["amount"]),
 		"consumed_amount": 0,
@@ -350,22 +374,57 @@ def consume_package_allowance(
 		frappe.throw(_("Provide a Transaction Code or Element Type for allowance consumption."))
 
 	bd = str(getdate(business_date or get_business_date(res.property)))
-	filters: dict = {"reservation": res.name, "property": res.property, "status": "Open"}
-	if transaction_code:
-		filters["transaction_code"] = transaction_code
-	if element_type:
-		filters["element_type"] = element_type
+	src_ref = (source_ref or "").strip()
+	overage_key = f"pkgover:{res.name}:{src_ref}" if src_ref else None
 
-	rows = frappe.get_all(
-		"Reservation Package Allowance",
-		filters=filters,
-		fields=[
-			"name", "business_date", "element_name", "element_type",
-			"transaction_code", "charge_type", "allocated_amount",
-			"consumed_amount", "overage_amount",
-		],
-		order_by="business_date asc, creation asc",
+	# Lock reservation and all its allowance rows FOR UPDATE before idempotency check or mutation.
+	frappe.db.sql("SELECT name FROM `tabReservation` WHERE name = %s FOR UPDATE", res.name)
+	all_rows = frappe.db.sql(
+		"""
+		SELECT name, business_date, element_name, element_type,
+		       transaction_code, charge_type, allocated_amount,
+		       consumed_amount, overage_amount, status, consumed_refs
+		FROM `tabReservation Package Allowance`
+		WHERE reservation = %(res)s AND property = %(prop)s
+		ORDER BY business_date ASC, creation ASC
+		FOR UPDATE
+		""",
+		{"res": res.name, "prop": res.property},
+		as_dict=True,
 	)
+
+	def _matches_scope(row) -> bool:
+		if transaction_code and row.transaction_code != transaction_code:
+			return False
+		if element_type and row.element_type != element_type:
+			return False
+		return True
+
+	def _remaining_open(rows_list) -> Decimal:
+		return sum(
+			(
+				max(Decimal(0), _quantize(x.allocated_amount, unit) - _quantize(x.consumed_amount, unit))
+				for x in rows_list
+				if x.status == "Open" and _matches_scope(x)
+			),
+			Decimal(0),
+		)
+
+	if src_ref:
+		existing_folio = _standing_charge_folio(overage_key) if overage_key else None
+		ref_already_recorded = any(src_ref in _parse_consumed_refs(r.get("consumed_refs")) for r in all_rows)
+		if existing_folio or ref_already_recorded:
+			return {
+				"reservation": res.name,
+				"absorbed": 0.0,
+				"guest_overage": 0.0,
+				"remaining_allowance": float(_remaining_open(all_rows)),
+				"overage_folio": existing_folio,
+				"allowance_rows": [],
+				"already_consumed": True,
+			}
+
+	rows = [r for r in all_rows if r.status == "Open" and _matches_scope(r)]
 	# Prefer exact business_date allowance bucket before earlier/other open stay buckets.
 	rows.sort(key=lambda r: (0 if str(getdate(r.business_date)) == bd else 1, str(r.business_date)))
 
@@ -386,12 +445,21 @@ def consume_package_allowance(
 		take = min(remaining_to_cover, avail)
 		new_cons = _quantize(cons + take, unit)
 		new_status = "Consumed" if new_cons >= alloc else "Open"
+		updates: dict = {"consumed_amount": float(new_cons), "status": new_status}
+		if src_ref:
+			refs = _parse_consumed_refs(r.get("consumed_refs"))
+			if src_ref not in refs:
+				refs.append(src_ref)
+			updates["consumed_refs"] = json.dumps(refs)
+			r.consumed_refs = updates["consumed_refs"]
 		frappe.db.set_value(
 			"Reservation Package Allowance",
 			r.name,
-			{"consumed_amount": float(new_cons), "status": new_status},
+			updates,
 			update_modified=True,
 		)
+		r.consumed_amount = float(new_cons)
+		r.status = new_status
 		absorbed_total += take
 		remaining_to_cover -= take
 		last_row_name = r.name
@@ -443,23 +511,14 @@ def consume_package_allowance(
 			"gst_rate": gst_rate,
 			"auto_posted": 0,
 		}
-		if source_ref:
-			charge_row["idempotency_key"] = f"pkgover:{res.name}:{source_ref}"
+		if overage_key:
+			charge_row["idempotency_key"] = overage_key
 		fdoc.append("charges", charge_row)
 		_recalculate(fdoc)
 		save_folio(fdoc)
 		overage_folio = fdoc.name
 
-	# Compute remaining allowance across matching open rows after deduction
-	rem_rows = frappe.get_all(
-		"Reservation Package Allowance",
-		filters=filters,
-		fields=["allocated_amount", "consumed_amount"],
-	)
-	remaining_allowance = sum(
-		(max(Decimal(0), _quantize(x.allocated_amount, unit) - _quantize(x.consumed_amount, unit)) for x in rem_rows),
-		Decimal(0),
-	)
+	remaining_allowance = _remaining_open(all_rows)
 
 	return {
 		"reservation": res.name,
@@ -479,15 +538,18 @@ def settle_package_breakage(reservation: str, business_date: str | None = None) 
 	unit = minor_unit(res.property)
 	bd = str(getdate(business_date or get_business_date(res.property)))
 
-	filters: dict = {"reservation": res.name, "property": res.property, "status": "Open"}
+	frappe.db.sql("SELECT name FROM `tabReservation` WHERE name = %s FOR UPDATE", res.name)
+	sql = """
+		SELECT name, allocated_amount, consumed_amount
+		FROM `tabReservation Package Allowance`
+		WHERE reservation = %(res)s AND property = %(prop)s AND status = 'Open'
+	"""
+	params = {"res": res.name, "prop": res.property}
 	if business_date:
-		filters["business_date"] = ("<=", bd)
-
-	rows = frappe.get_all(
-		"Reservation Package Allowance",
-		filters=filters,
-		fields=["name", "allocated_amount", "consumed_amount"],
-	)
+		sql += " AND business_date <= %(bd)s"
+		params["bd"] = bd
+	sql += " FOR UPDATE"
+	rows = frappe.db.sql(sql, params, as_dict=True)
 	settled_count = 0
 	breakage_total = Decimal(0)
 	for r in rows:
@@ -519,15 +581,17 @@ def expire_daily_allowances(res, business_date) -> dict:
 	"""Night Audit Step 9 helper: settle prior-day unconsumed allowances as package breakage."""
 	bd = str(getdate(business_date))
 	unit = minor_unit(res.property)
-	rows = frappe.get_all(
-		"Reservation Package Allowance",
-		filters={
-			"reservation": res.name,
-			"property": res.property,
-			"status": "Open",
-			"business_date": ("<", bd),
-		},
-		fields=["name", "allocated_amount", "consumed_amount"],
+	frappe.db.sql("SELECT name FROM `tabReservation` WHERE name = %s FOR UPDATE", res.name)
+	rows = frappe.db.sql(
+		"""
+		SELECT name, allocated_amount, consumed_amount
+		FROM `tabReservation Package Allowance`
+		WHERE reservation = %(res)s AND property = %(prop)s
+		  AND status = 'Open' AND business_date < %(bd)s
+		FOR UPDATE
+		""",
+		{"res": res.name, "prop": res.property, "bd": bd},
+		as_dict=True,
 	)
 	count = 0
 	breakage = Decimal(0)
@@ -618,6 +682,15 @@ def package_folio_view(folio: str, display_mode: str | None = None) -> dict:
 	if pkg_doc:
 		for el in pkg_doc.get("elements") or []:
 			element_included[el.name] = 1 if cint(el.get("included_in_rate")) else 0
+	allowance_included: dict[str, int] = {}
+	if res:
+		for rpa in frappe.get_all(
+			"Reservation Package Allowance",
+			filters={"reservation": res.name, "property": fdoc.property},
+			fields=["idempotency_key", "included_in_rate"],
+		):
+			if rpa.get("idempotency_key"):
+				allowance_included[rpa.idempotency_key] = 1 if cint(rpa.get("included_in_rate")) else 0
 
 	voided = {c.reversal_of for c in fdoc.charges if c.get("reversal_of")}
 	live_charges = [
@@ -659,7 +732,10 @@ def package_folio_view(folio: str, display_mode: str | None = None) -> dict:
 		parts = key.split(":")
 		is_pkg = len(parts) == 4 and parts[0] == "pkg"
 		part_id = parts[2] if is_pkg else ""
-		include_in_bundle = is_pkg and (part_id == "room" or element_included.get(part_id, 1) == 1)
+		include_in_bundle = is_pkg and (
+			part_id == "room"
+			or allowance_included.get(key, element_included.get(part_id, 1)) == 1
+		)
 		if include_in_bundle:
 			bkey = (parts[1], parts[3])
 			if bkey not in bundles:

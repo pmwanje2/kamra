@@ -6904,5 +6904,12 @@
   "Package breakage settled": "تسوية فائض الباقة",
   "{n} settled": "تمت تسوية {n}",
   "Total posted": "إجمالي المرحل",
-  "Posted {n} room nights, {pkg} package splits, {fc} fixed charges ({amount}), {ns} no-shows. The business date is now {next}.": "تم ترحيل {n} ليالي غرف، {pkg} تقسيمات باقة، {fc} رسوم ثابتة ({amount})، و{ns} حالات عدم حضور. تاريخ العمل الآن هو {next}."
+  "Posted {n} room nights, {pkg} package splits, {fc} fixed charges ({amount}), {ns} no-shows. The business date is now {next}.": "تم ترحيل {n} ليالي غرف، {pkg} تقسيمات باقة، {fc} رسوم ثابتة ({amount})، و{ns} حالات عدم حضور. تاريخ العمل الآن هو {next}.",
+  "Monday": "الاثنين",
+  "Tuesday": "الثلاثاء",
+  "Wednesday": "الأربعاء",
+  "Thursday": "الخميس",
+  "Friday": "الجمعة",
+  "Saturday": "السبت",
+  "Sunday": "الأحد"
 }

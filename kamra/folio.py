@@ -109,15 +109,18 @@ def _line_tax(c, amount: Decimal) -> Decimal:
 
 def open_folio(reservation) -> str:
 	"""Open (or return) the folio for a reservation. Called at check-in."""
+	in_arrival_fc = reservation.name in (getattr(frappe.flags, "_kamra_arrival_fc_res", None) or ())
 	existing = frappe.db.get_value(
 		"Folio", {"reservation": reservation.name, "folio_type": "Guest"}
 	)
 	if existing:
+		if in_arrival_fc:
+			return existing
 		_post_addons(reservation, existing)
 		_post_pet_charge(reservation, existing)
 		if not reservation.flags.get("carried_forward"):
 			from kamra.fixed_charges import post_arrival_fixed_charges
-			post_arrival_fixed_charges(reservation)
+			post_arrival_fixed_charges(reservation, primary_folio=existing)
 		return existing
 	folio = frappe.get_doc({
 		"doctype": "Folio",
@@ -155,8 +158,9 @@ def open_folio(reservation) -> str:
 	_post_addons(reservation, folio.name)
 	_post_cleaning_fee(reservation, folio.name)
 	_post_pet_charge(reservation, folio.name)
-	from kamra.fixed_charges import post_arrival_fixed_charges
-	post_arrival_fixed_charges(reservation)
+	if not in_arrival_fc:
+		from kamra.fixed_charges import post_arrival_fixed_charges
+		post_arrival_fixed_charges(reservation, primary_folio=folio.name)
 	return folio.name
 
 
@@ -1051,11 +1055,12 @@ def post_room_night(reservation, date, folios=None, *, room_posted: list | None 
 		from kamra.room_statistics import category_rules
 		rate_cat = category_rules(reservation.property).of(reservation.get("rate_category"))
 		if pkg_doc is not None:
+			pkg_room_gst = _quoted_room_gst(reservation, date, gst_rate)
 			pkg_res = post_package_night_split(
 				reservation,
 				pkg_doc,
 				night_rate,
-				gst_rate,
+				pkg_room_gst,
 				date,
 				folios=folios,
 				room_desc=desc,
@@ -1209,11 +1214,28 @@ def _post_room_levy(folios, reservation, date, night_rate, gst_rate=None):
 RATE_ADJUSTMENT = "Rate Adjustment"
 
 
+def _quoted_room_gst(reservation, date, fallback: float) -> float:
+	"""The room-component tax rate stored in quote_snapshot for a package night, or fallback."""
+	snap = reservation.get("quote_snapshot")
+	if not snap:
+		return float(fallback or 0)
+	try:
+		parsed = json.loads(snap) if isinstance(snap, str) else snap
+		key = str(getdate(date))
+		for n in (parsed.get("nightly") or []) if isinstance(parsed, dict) else ():
+			if str(n.get("date")) == key and n.get("room_gst_rate") is not None:
+				return float(n["room_gst_rate"])
+	except (TypeError, ValueError):
+		pass
+	return float(fallback or 0)
+
+
 def charged_nights(reservation_name: str) -> dict:
 	"""What the folios hold for each night of the stay already charged: the
-	room line(s) posted for the night plus every rate adjustment made to it
-	since, and the night's levy. {night: {base, tax, gst_rate, levy_base,
-	levy_tax, folio}} - folio is where the night's room line went.
+	room line(s) posted for the night (plus included package-element splits
+	belonging to that night) plus every rate adjustment made to it since,
+	and the night's levy. {night: {base, tax, gst_rate, levy_base, levy_tax,
+	folio}} - folio is where the night's room line went.
 
 	A night counts as charged under STANDS_ON_ITS_DATE, the same standing
 	rule _charge_posted uses: a same-date void drops out, while a closed
@@ -1222,7 +1244,8 @@ def charged_nights(reservation_name: str) -> dict:
 	rows = frappe.db.sql(
 		"""
 		SELECT IF(fc.charge_type = %(adj)s, fc.stay_date, fc.posting_date) AS night,
-		       fc.charge_type, fc.amount, fc.gst_rate, fc.parent,
+		       fc.charge_type, fc.amount, fc.gst_rate, fc.gst_amount, fc.tax_as_posted,
+		       fc.idempotency_key, fc.parent,
 		       CASE WHEN """ + NOT_VOIDED + """ THEN 1 ELSE 0 END AS live
 		FROM `tabFolio Charge` fc
 		JOIN `tabFolio` f ON fc.parent = f.name
@@ -1235,19 +1258,60 @@ def charged_nights(reservation_name: str) -> dict:
 		ORDER BY fc.charge_type = 'Room' DESC, live DESC, fc.amount DESC
 		""", {"res": reservation_name, "adj": RATE_ADJUSTMENT}, as_dict=True)
 	out: dict = {}
+	pkg_nights: set[str] = set()
 	for r in rows:
 		key = str(r.night)
 		amount = float(r.amount or 0) if r.live else 0.0
-		tax = amount * float(r.gst_rate or 0) / 100
+		tax = (
+			float(r.gst_amount or 0) if (r.live and r.get("tax_as_posted"))
+			else amount * float(r.gst_rate or 0) / 100
+		)
 		if r.charge_type == "Room Levy":
 			if key in out:
 				out[key]["levy_base"] += amount
 				out[key]["levy_tax"] += tax
 			continue  # a levy with no room line is not a charged night
+		if r.charge_type == "Room" and (r.get("idempotency_key") or "").startswith("pkg:"):
+			pkg_nights.add(key)
 		n = out.setdefault(key, {"base": 0.0, "tax": 0.0, "levy_base": 0.0,
 		                         "levy_tax": 0.0, "folio": r.parent})
 		n["base"] += amount
 		n["tax"] += tax
+	if pkg_nights:
+		pkg_rows = frappe.db.sql(
+			"""
+			SELECT fc.posting_date AS night, fc.amount, fc.gst_rate, fc.gst_amount, fc.tax_as_posted,
+			       CASE WHEN """ + NOT_VOIDED + """ THEN 1 ELSE 0 END AS live
+			FROM `tabFolio Charge` fc
+			JOIN `tabFolio` f ON fc.parent = f.name
+			LEFT JOIN `tabReservation Package Allowance` rpa
+			  ON rpa.idempotency_key = fc.idempotency_key
+			LEFT JOIN `tabPackage Element` pe
+			  ON pe.name = COALESCE(
+			      NULLIF(rpa.package_element, ''),
+			      SUBSTRING_INDEX(SUBSTRING_INDEX(fc.idempotency_key, ':', 3), ':', -1)
+			  )
+			WHERE (fc.reservation = %(res)s
+			       OR (IFNULL(fc.reservation, '') = '' AND f.reservation = %(res)s))
+			  AND fc.charge_type != 'Room'
+			  AND fc.idempotency_key LIKE 'pkg:%%'
+			  AND fc.idempotency_key NOT LIKE 'pkg:%%:room:%%'
+			  AND COALESCE(rpa.included_in_rate, pe.included_in_rate, 0) = 1
+			  AND """ + STANDS_ON_ITS_DATE,
+			{"res": reservation_name},
+			as_dict=True,
+		)
+		for pr in pkg_rows:
+			key = str(pr.night)
+			if key not in pkg_nights or key not in out:
+				continue
+			amount = float(pr.amount or 0) if pr.live else 0.0
+			tax = (
+				float(pr.gst_amount or 0) if (pr.live and pr.get("tax_as_posted"))
+				else amount * float(pr.gst_rate or 0) / 100
+			)
+			out[key]["base"] += amount
+			out[key]["tax"] += tax
 	from kamra.pricing import night_rate_places
 	prop = frappe.db.get_value("Reservation", reservation_name, "property")
 	places = night_rate_places(prop)

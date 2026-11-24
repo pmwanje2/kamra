@@ -7089,5 +7089,12 @@
   "Package breakage settled": "Sobrante de paquete liquidado",
   "{n} settled": "{n} liquidados",
   "Total posted": "Total contabilizado",
-  "Posted {n} room nights, {pkg} package splits, {fc} fixed charges ({amount}), {ns} no-shows. The business date is now {next}.": "Se contabilizaron {n} noches de habitación, {pkg} divisiones de paquete, {fc} cargos fijos ({amount}) y {ns} no-shows. La fecha operativa es ahora {next}."
+  "Posted {n} room nights, {pkg} package splits, {fc} fixed charges ({amount}), {ns} no-shows. The business date is now {next}.": "Se contabilizaron {n} noches de habitación, {pkg} divisiones de paquete, {fc} cargos fijos ({amount}) y {ns} no-shows. La fecha operativa es ahora {next}.",
+  "Monday": "Lunes",
+  "Tuesday": "Martes",
+  "Wednesday": "Miércoles",
+  "Thursday": "Jueves",
+  "Friday": "Viernes",
+  "Saturday": "Sábado",
+  "Sunday": "Domingo"
 }

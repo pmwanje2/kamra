@@ -19,7 +19,9 @@
   "charge_type",
   "status",
   "settled_on",
+  "included_in_rate",
   "idempotency_key",
+  "consumed_refs",
   "sb_amounts",
   "allocated_amount",
   "consumed_amount",
@@ -113,6 +115,13 @@
    "read_only": 1
   },
   {
+   "default": "1",
+   "fieldname": "included_in_rate",
+   "fieldtype": "Check",
+   "label": "Included in Rate",
+   "read_only": 1
+  },
+  {
    "fieldname": "idempotency_key",
    "fieldtype": "Data",
    "hidden": 1,
@@ -121,6 +130,14 @@
    "read_only": 1,
    "search_index": 1,
    "unique": 1
+  },
+  {
+   "fieldname": "consumed_refs",
+   "fieldtype": "Long Text",
+   "hidden": 1,
+   "label": "Consumed Source References",
+   "no_copy": 1,
+   "read_only": 1
   },
   {
    "fieldname": "sb_amounts",

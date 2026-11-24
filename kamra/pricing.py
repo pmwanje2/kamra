@@ -2050,6 +2050,31 @@ def quote(
 		# The package base covers up to pkg_nights
 		pkg_base_rate = pkg_doc.package_price_for(adults, children, nights=pkg_nights)
 		stay_dates = [add_days(check_in_date, i) for i in range(billable_nights)]
+		has_pkg_elements = bool(pkg_doc.get("elements") or [])
+		pseudo_res = frappe._dict({
+			"name": "",
+			"property": property,
+			"check_in_date": check_in_date,
+			"check_out_date": check_out_date,
+			"adults": adults,
+			"children": children,
+		}) if has_pkg_elements else None
+
+		def _package_night_tax(night_rate: Decimal, room_gst: Decimal, night_date) -> tuple[Decimal, Decimal, dict]:
+			"""Compute night tax matching post_package_night_split for inclusive elements."""
+			if not has_pkg_elements:
+				return night_rate * room_gst / Decimal(100), room_gst, {}
+			from kamra.packages import split_package_night
+			split = split_package_night(pseudo_res, pkg_doc, night_rate, night_date, gst_rate=float(room_gst))
+			inc_items = [item for item in split["elements"] if item["included_in_rate"]]
+			if not inc_items or all(_dec(item["gst_rate"]) == room_gst for item in inc_items):
+				return night_rate * room_gst / Decimal(100), room_gst, {"room_gst_rate": float(room_gst)}
+			tax_val = split["room_net"] * room_gst / Decimal(100) + sum(
+				(item["amount"] * _dec(item["gst_rate"]) / Decimal(100) for item in inc_items),
+				Decimal(0),
+			)
+			eff = (tax_val * Decimal(100) / night_rate).quantize(Decimal("0.01")) if night_rate else room_gst
+			return tax_val, eff, {"room_gst_rate": float(room_gst)}
 
 		if billable_nights <= pkg_nights:
 			base_per_night = (pkg_base_rate / Decimal(billable_nights)).quantize(pkg_quantum)
@@ -2067,17 +2092,19 @@ def quote(
 					over_cap += net
 					over_cap_tax += net * gst / Decimal(100)
 
+				night_tax, eff_gst, extra_meta = _package_night_tax(rate, gst, d)
 				nightly.append({
 					"date": str(d),
 					"rate": float(rate),
-					"gst_rate": float(gst),
+					"gst_rate": float(eff_gst),
 					"demand_premium_pct": 0,
 					"package": pkg.package_name,
-					"occupancy": 0
+					"occupancy": 0,
+					**extra_meta,
 				})
 				exact_nets.append(rate)
 				room_total += rate
-				room_tax += rate * gst / Decimal(100)
+				room_tax += night_tax
 		else:
 			# Identify which dates are package dates (prefer inside [start_date, end_date])
 			inside_pkg = [d for d in stay_dates if getdate(pkg.start_date) <= getdate(d) <= getdate(pkg.end_date)]
@@ -2131,17 +2158,19 @@ def quote(
 					over_cap += net
 					over_cap_tax += net * gst / Decimal(100)
 
+				night_tax, eff_gst, extra_meta = _package_night_tax(rate, gst, d)
 				nightly.append({
 					"date": str(d),
 					"rate": float(rate),
-					"gst_rate": float(gst),
+					"gst_rate": float(eff_gst),
 					"demand_premium_pct": 0,
 					"package": label,
-					"occupancy": 0
+					"occupancy": 0,
+					**extra_meta,
 				})
 				exact_nets.append(rate)
 				room_total += rate
-				room_tax += rate * gst / Decimal(100)
+				room_tax += night_tax
 	else:
 		# a day-use stay bills one "night" on the check-in date
 		for i in range(max(nights, 1)):

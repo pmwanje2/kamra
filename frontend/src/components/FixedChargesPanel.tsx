@@ -17,6 +17,19 @@ const FREQUENCIES = ["Daily", "Weekly", "Stay Day N", "On Arrival", "On Departur
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const
 const WINDOWS = [1, 2, 3, 4, 5, 6, 7, 8] as const
 
+function weekdayLabel(day: string): string {
+  const labels: Record<string, string> = {
+    Monday: translate("Monday"),
+    Tuesday: translate("Tuesday"),
+    Wednesday: translate("Wednesday"),
+    Thursday: translate("Thursday"),
+    Friday: translate("Friday"),
+    Saturday: translate("Saturday"),
+    Sunday: translate("Sunday"),
+  }
+  return labels[day] ?? day
+}
+
 interface FixedChargeRow {
   name: string
   transaction_code: string
@@ -227,7 +240,7 @@ export default function FixedChargesPanel({
                     <Badge tone={isActive ? "green" : "zinc"}>
                       {translate(r.frequency)}
                       {r.frequency === "Stay Day N" && r.stay_day_n ? ` (${r.stay_day_n})` : ""}
-                      {r.frequency === "Weekly" && r.day_of_week ? ` · ${translate(r.day_of_week)}` : ""}
+                      {r.frequency === "Weekly" && r.day_of_week ? ` · ${weekdayLabel(r.day_of_week)}` : ""}
                     </Badge>
                     <Badge tone="sky">W{r.window_no || 1}</Badge>
                   </div>
@@ -356,7 +369,7 @@ export default function FixedChargesPanel({
                 >
                   <option value="">{translate("Every 7 days from start")}</option>
                   {WEEKDAYS.map((w) => (
-                    <option key={w} value={w}>{translate(w)}</option>
+                    <option key={w} value={w}>{weekdayLabel(w)}</option>
                   ))}
                 </select>
               </label>

@@ -7164,5 +7164,12 @@
   "Package breakage settled": "已结算套餐余量收益",
   "{n} settled": "已结算 {n} 项",
   "Total posted": "入账总额",
-  "Posted {n} room nights, {pkg} package splits, {fc} fixed charges ({amount}), {ns} no-shows. The business date is now {next}.": "已入账 {n} 间夜、{pkg} 项套餐拆分、{fc} 笔固定费用（{amount}），标记 {ns} 笔未到店。营业日现已切换至 {next}。"
+  "Posted {n} room nights, {pkg} package splits, {fc} fixed charges ({amount}), {ns} no-shows. The business date is now {next}.": "已入账 {n} 间夜、{pkg} 项套餐拆分、{fc} 笔固定费用（{amount}），标记 {ns} 笔未到店。营业日现已切换至 {next}。",
+  "Monday": "星期一",
+  "Tuesday": "星期二",
+  "Wednesday": "星期三",
+  "Thursday": "星期四",
+  "Friday": "星期五",
+  "Saturday": "星期六",
+  "Sunday": "星期日"
 }
