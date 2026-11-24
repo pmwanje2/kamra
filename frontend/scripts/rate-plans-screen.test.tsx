@@ -303,4 +303,50 @@ describe("R8 Rate Plans screen currency picker and derived-plan inheritance", { 
   ])("translates inherited currency hint in %s", (_lang, dict: Record<string, string>) => {
     expect(dict[INHERITED_HINT], INHERITED_HINT).toBeTruthy()
   })
+
+  it("renders the Rate Plans table without table-fixed column overlap and supports async search when a link list hits its page cap", async () => {
+    // Simulate Currency hitting its 500-row cap (not including ZWL)
+    state.currencies = Array.from({ length: 500 }, (_, i) => `C${String(i).padStart(3, "0")}`)
+    const baseImpl = fetches.getMockImplementation()!
+    fetches.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path.startsWith("/api/resource/Currency?")) {
+        const filters = JSON.parse(new URL(path, "http://localhost").searchParams.get("filters") || "[]")
+        const likeFilter = filters.find((f: unknown[]) => f[1] === "like")
+        if (likeFilter && String(likeFilter[2]).toUpperCase().includes("ZWL")) {
+          return { data: [{ name: "ZWL" }] }
+        }
+      }
+      return baseImpl(path, init)
+    })
+
+    await act(async () => root.render(<MemoryRouter initialEntries={["/rate-plans"]}><App /></MemoryRouter>))
+    await vi.waitFor(async () => {
+      await settle()
+      expect(host.textContent).toContain("Tank Hill CP")
+    }, { interval: 10, timeout: 5000 })
+
+    // Table must not use table-fixed on wide multi-column Rate Plans (prevents badge/column overlap)
+    const table = host.querySelector("table")
+    expect(table).not.toBeNull()
+    expect(table!.className).not.toContain("table-fixed")
+
+    // Open New drawer: because Currency hit its page cap (500 rows), an async search box appears
+    const newBtn = Array.from(host.querySelectorAll("button")).find((b) => b.textContent?.trim() === "New") as HTMLElement
+    await act(async () => newBtn.click())
+    await vi.waitFor(async () => {
+      await settle()
+      expect(fieldSelect(/Currency/i)).not.toBeNull()
+    }, { interval: 10, timeout: 5000 })
+
+    const curLbl = Array.from(document.querySelectorAll("label")).find((l) => /Currency/i.test(l.textContent || ""))!
+    const searchInput = curLbl.querySelector("input[type='search']") as HTMLInputElement | null
+    expect(searchInput).not.toBeNull()
+
+    await setInput(searchInput!, "ZWL")
+    await vi.waitFor(async () => {
+      await settle()
+      const opts = Array.from(fieldSelect(/Currency/i)!.options).map((o) => o.value)
+      expect(opts).toContain("ZWL")
+    }, { interval: 30, timeout: 5000 })
+  })
 })
