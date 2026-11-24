@@ -2,6 +2,8 @@
  *  and toggle transitions so Tape Chart, Queue Dock, and P35 (Pickup / OS)
  *  stay synchronized from one source. */
 
+import { SERVICE_ROLE } from "./brand"
+
 export type HkStatus =
   | "Inspected"
   | "Ready"
@@ -96,6 +98,24 @@ export const HK_TOGGLE_OPTIONS: readonly HkToggleOption[] = [
   { status: "Dirty", supervisorOnly: false },
   { status: "Out of Order", supervisorOnly: true, needsReason: true },
 ] as const
+
+export const HK_SUPERVISOR_ROLES: readonly string[] = [
+  "Housekeeping Supervisor",
+  "Front Desk",
+  "Hotel Admin",
+  "System Manager",
+  "Administrator",
+  SERVICE_ROLE,
+]
+
+export function isHkSupervisor(roles: readonly string[]): boolean {
+  return HK_SUPERVISOR_ROLES.some((role) => roles.includes(role))
+}
+
+export function visibleHkToggleOptions(roles: readonly string[]): readonly HkToggleOption[] {
+  const supervisor = isHkSupervisor(roles)
+  return HK_TOGGLE_OPTIONS.filter((opt) => !opt.supervisorOnly || supervisor)
+}
 
 export function hkTone(status?: string | null): HkToneStyle {
   return (status && HK_TONES[status]) || FALLBACK_TONE

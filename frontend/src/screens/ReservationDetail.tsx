@@ -52,7 +52,7 @@ import SupervisorSignOff, { SignOffReasons } from "../components/SupervisorSignO
 import { supervisorArgs } from "../lib/reservationDiscount"
 import { useAuth } from "../lib/auth"
 import StayInstructions from "../components/StayInstructions"
-import { fmtMoney } from "../lib/money"
+import { fmtMoney, useLocale } from "../lib/money"
 import { HOTKEY_EVENTS } from "../lib/hotkeys"
 import { t as translate, useUILanguage } from "../lib/i18n"
 
@@ -211,6 +211,7 @@ export default function ReservationDetail({
   onClose: () => void
 }) {
   useUILanguage()
+  useLocale()
   const name = String(row.name)
   const [d, setD] = useState<Detail | null>(null)
   const [error, setError] = useState<string | null>(null)

@@ -8,7 +8,7 @@
     reopening keeps them. */
 
 import { whiteLabel } from "../lib/brand"
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import {
   ArrowLeft,
   CheckCircle2,
@@ -19,7 +19,7 @@ import {
   TriangleAlert,
 } from "lucide-react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
-import { call } from "../lib/api"
+import { call, getCurrentProperty, setCurrentProperty } from "../lib/api"
 import CheckOutDialog from "../components/CheckOutDialog"
 import CheckInDialog from "../components/CheckInDialog"
 import NoShowDialog from "../components/NoShowDialog"
@@ -39,16 +39,16 @@ import { CHECK_FIXES } from "../lib/eodFixes"
 import { Badge } from "../components/ui/badge"
 import { Button } from "../components/ui/button"
 import { Card } from "../components/ui/card"
-import { cur, fmtAmount, fmtMoney, moneyDigits } from "../lib/money"
+import { cur, fmtAmount, fmtMoney, loadLocale, moneyEps, useLocale } from "../lib/money"
 import { useT, t as translate } from "../lib/i18n"
 import { cn } from "../lib/utils"
 import { AuditPackView, sessionCols, DataTable, fmtDay } from "./AuditPack"
 
 
-const money = (n: unknown) =>
-  n === null || n === undefined || n === "" ? "-" : fmtAmount(n)
+const money = (n: unknown, currency?: string) =>
+  n === null || n === undefined || n === "" ? "-" : fmtAmount(n, currency)
 
-const zeroBalanceEps = () => 0.5 * 10 ** -moneyDigits()
+const zeroBalanceEps = (currency?: string) => moneyEps(currency)
 
 interface Column {
   key: string
@@ -64,11 +64,13 @@ function StepTable({
   rows,
   actions,
   empty,
+  currency,
 }: {
   cols: Column[]
   rows: CheckItem[]
   actions?: (row: CheckItem) => ReactNode
   empty?: string
+  currency?: string
 }) {
   const { t } = useT()
   const [q, setQ] = useState("")
@@ -92,7 +94,7 @@ function StepTable({
     if (c.render) return c.render(r)
     const v = r[c.key]
     if (v === null || v === undefined || v === "") return "-"
-    if (c.kind === "money") return money(v)
+    if (c.kind === "money") return money(v, currency)
     if (c.kind === "date") return fmtDay(v)
     return String(v)
   }
@@ -222,7 +224,7 @@ const STAY_COLS: Column[] = [
 /* Arrivals carry two more columns (ETA, no-show policy) and two buttons,
    so the stay's detail folds into fewer columns - the full twelve overflowed
    the card at laptop widths and cut off the policy the step is about. */
-const ARRIVAL_COLS: Column[] = [
+const arrivalCols = (currency?: string): Column[] => [
   { key: "reservation", label: "Confirmation", render: resLink },
   {
     key: "guest_name",
@@ -257,7 +259,7 @@ const ARRIVAL_COLS: Column[] = [
     kind: "money",
     render: (r) => (
       <div>
-        <div>{r.rate === null || r.rate === undefined || r.rate === "" ? "-" : money(r.rate)}</div>
+        <div>{r.rate === null || r.rate === undefined || r.rate === "" ? "-" : money(r.rate, currency)}</div>
         {r.rate_plan ? <div className="text-xs text-zinc-500">{String(r.rate_plan)}</div> : null}
       </div>
     ),
@@ -440,6 +442,20 @@ export default function EndOfDayWizard() {
   const navigate = useNavigate()
   const { property: rawProperty = "" } = useParams()
   const property = decodeURIComponent(rawProperty)
+  const syncedPropRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!property) return
+    const changed = getCurrentProperty() !== property
+    if (changed) {
+      setCurrentProperty(property)
+      window.dispatchEvent(new CustomEvent("kamra:property", { detail: property }))
+    }
+    if (syncedPropRef.current !== null && changed) {
+      void loadLocale()
+    }
+    syncedPropRef.current = property
+  }, [property])
+  const loc = useLocale()
   const [params, setParams] = useSearchParams()
   const audit = params.get("audit")
   const { withPin } = useCashierAuth()
@@ -529,14 +545,16 @@ export default function EndOfDayWizard() {
   const canClose = !state.ran && !ahead && !state.stuck_date && blockers.length === 0
 
   /* each check's list and its buttons, under the check's heading */
+  const eodCurrency = state.currency || loc.currency || undefined
   const body = (c: Check): ReactNode => {
     const items = c.items ?? []
     switch (c.key) {
       case "arrivals_pending":
         return (
           <StepTable
+            currency={eodCurrency}
             cols={[
-              ...ARRIVAL_COLS,
+              ...arrivalCols(eodCurrency),
               { key: "eta", label: "ETA" },
               {
                 key: "policy",
@@ -568,7 +586,7 @@ export default function EndOfDayWizard() {
           />
         )
       case "departures_due": {
-        const zero = items.filter((r) => Math.abs(Number(r.balance ?? 0)) < zeroBalanceEps())
+        const zero = items.filter((r) => Math.abs(Number(r.balance ?? 0)) < zeroBalanceEps(eodCurrency))
         return (
           <>
             {!state.ran && zero.length > 0 && (
@@ -587,6 +605,7 @@ export default function EndOfDayWizard() {
               </div>
             )}
             <StepTable
+              currency={eodCurrency}
               cols={STAY_COLS}
               rows={items}
               empty={translate("Every departure is checked out.")}
@@ -612,16 +631,17 @@ export default function EndOfDayWizard() {
         return (
           <>
             {c.enabled && (
-              <p className="text-xs text-zinc-500">{t("Threshold {cur}{n}", { cur: cur(), n: money(c.threshold) })}</p>
+              <p className="text-xs text-zinc-500">{t("Threshold {cur}{n}", { cur: cur(), n: money(c.threshold, eodCurrency) })}</p>
             )}
-            <StepTable cols={FOLIO_COLS} rows={items} empty={translate("No in-house folio is over the threshold.")} />
+            <StepTable currency={eodCurrency} cols={FOLIO_COLS} rows={items} empty={translate("No in-house folio is over the threshold.")} />
           </>
         )
       case "departed_balances":
-        return <StepTable cols={FOLIO_COLS} rows={items} empty={translate("No balances on departed stays.")} />
+        return <StepTable currency={eodCurrency} cols={FOLIO_COLS} rows={items} empty={translate("No balances on departed stays.")} />
       case "credit_limit":
         return (
           <StepTable
+            currency={eodCurrency}
             cols={[
               { key: "company", label: "Company" },
               { key: "credit_limit", label: "Credit limit", kind: "money" },
@@ -637,6 +657,7 @@ export default function EndOfDayWizard() {
       case "overdue_ar":
         return (
           <StepTable
+            currency={eodCurrency}
             cols={[
               { key: "company", label: "Company" },
               { key: "credit_days", label: "Terms (days)" },
@@ -652,7 +673,7 @@ export default function EndOfDayWizard() {
           />
         )
       case "open_pos_bills":
-        return <StepTable cols={POS_COLS} rows={items} empty={translate("Every outlet bill is settled.")} />
+        return <StepTable currency={eodCurrency} cols={POS_COLS} rows={items} empty={translate("Every outlet bill is settled.")} />
       case "pos_room_postings":
         return (
           <>
@@ -660,6 +681,7 @@ export default function EndOfDayWizard() {
               <Message tone="warn">{t("{n} bill(s) were taken for a different room than the folio they posted to.", { n: c.mismatches! })}</Message>
             )}
             <StepTable
+              currency={eodCurrency}
               cols={[
                 ...POSTING_COLS,
                 {
@@ -676,6 +698,7 @@ export default function EndOfDayWizard() {
       case "rate_variance":
         return (
           <StepTable
+            currency={eodCurrency}
             cols={[
               { key: "room", label: "Room" },
               { key: "guest_name", label: "Guest" },
@@ -691,7 +714,7 @@ export default function EndOfDayWizard() {
           />
         )
       case "zero_rate":
-        return <StepTable cols={STAY_COLS} rows={items} empty={translate("No zero-rate rooms tonight.")} />
+        return <StepTable currency={eodCurrency} cols={STAY_COLS} rows={items} empty={translate("No zero-rate rooms tonight.")} />
       case "room_status":
         return (
           <StepTable
@@ -724,6 +747,7 @@ export default function EndOfDayWizard() {
         const blind = !!state.blind_count
         return (
           <StepTable
+            currency={eodCurrency}
             cols={[
               { key: "cashier_id", label: "Cashier", render: (r) => String(r.cashier_id || r.user_name || r.user) },
               { key: "business_date", label: "Business date", kind: "date" },

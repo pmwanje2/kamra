@@ -46,8 +46,7 @@ export function matchOperaHotkey(e: KeyboardEvent, pathname: string): OperaHotke
 
   if (e.key === "F4" && !e.altKey && !e.ctrlKey && !e.metaKey) {
     if (isPosRoute(pathname)) return null
-    const tag = ((e.target as Partial<HTMLElement> | null)?.tagName ?? "").toUpperCase()
-    if (tag === "SELECT") return null
+    if (isTextInputTarget(e.target)) return null
     return "room-search"
   }
 

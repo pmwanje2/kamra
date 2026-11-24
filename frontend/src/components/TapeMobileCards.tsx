@@ -2,8 +2,9 @@ import { useState } from "react"
 import { Lock, Plus, Star, Users } from "lucide-react"
 import { Badge } from "./ui/badge"
 import { Button } from "./ui/button"
+import { useAuth } from "../lib/auth"
 import { cn } from "../lib/utils"
-import { HK_TOGGLE_OPTIONS, hkTone } from "../lib/hkStatus"
+import { hkTone, visibleHkToggleOptions } from "../lib/hkStatus"
 import { useT, t as translate } from "../lib/i18n"
 
 export interface MobileTapeBooking {
@@ -82,6 +83,9 @@ export function TapeMobileCards({
   onChangeHk: (room: MobileTapeRoom, nextStatus: string, reason?: string) => Promise<void> | void
 }) {
   const { t } = useT()
+  const { roles } = useAuth()
+  const hkOptions = visibleHkToggleOptions(roles)
+  const hkOooOption = hkOptions.find((opt) => opt.needsReason)
   const [hkMenuRoom, setHkMenuRoom] = useState<string | null>(null)
   const [oooReason, setOooReason] = useState("")
 
@@ -175,10 +179,11 @@ export function TapeMobileCards({
                   {menuOpen && (
                     <div className="mt-2 space-y-2 rounded-lg border border-zinc-200 bg-zinc-50 p-2">
                       <div className="grid grid-cols-2 gap-1.5">
-                        {HK_TOGGLE_OPTIONS.filter((opt) => !opt.needsReason).map((opt) => (
+                        {hkOptions.filter((opt) => !opt.needsReason).map((opt) => (
                           <button
                             key={opt.status}
                             type="button"
+                            data-hk-option={opt.status}
                             onClick={async () => {
                               setHkMenuRoom(null)
                               await onChangeHk(room, opt.status)
@@ -189,28 +194,31 @@ export function TapeMobileCards({
                           </button>
                         ))}
                       </div>
-                      <div className="flex items-center gap-1.5">
-                        <input
-                          value={oooReason}
-                          onChange={(e) => setOooReason(e.target.value)}
-                          placeholder={t("Out of Order reason")}
-                          className="min-h-11 min-w-0 flex-1 rounded-md border border-zinc-300 bg-white px-2 text-xs"
-                        />
-                        <Button
-                          type="button"
-                          variant="outline"
-                          disabled={!oooReason.trim()}
-                          onClick={async () => {
-                            const reason = oooReason.trim()
-                            setHkMenuRoom(null)
-                            setOooReason("")
-                            await onChangeHk(room, "Out of Order", reason)
-                          }}
-                          className="min-h-11 shrink-0 px-2.5 text-xs text-rose-700"
-                        >
-                          {t("Out of Order")}
-                        </Button>
-                      </div>
+                      {hkOooOption && (
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            value={oooReason}
+                            onChange={(e) => setOooReason(e.target.value)}
+                            placeholder={t("Out of Order reason")}
+                            className="min-h-11 min-w-0 flex-1 rounded-md border border-zinc-300 bg-white px-2 text-xs"
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            data-hk-option={hkOooOption.status}
+                            disabled={!oooReason.trim()}
+                            onClick={async () => {
+                              const reason = oooReason.trim()
+                              setHkMenuRoom(null)
+                              setOooReason("")
+                              await onChangeHk(room, hkOooOption.status, reason)
+                            }}
+                            className="min-h-11 shrink-0 px-2.5 text-xs text-rose-700"
+                          >
+                            {t(hkOooOption.status)}
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   )}
 

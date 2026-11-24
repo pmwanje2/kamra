@@ -19,9 +19,10 @@ import { Button } from "../components/ui/button"
 import { Sheet } from "../components/ui/sheet"
 import { cn } from "../lib/utils"
 import { parseDate, shiftDate } from "../lib/stay"
-import { fmtMoney, moneyLocale } from "../lib/money"
+import { fmtMoney, moneyLocale, useLocale } from "../lib/money"
+import { useAuth } from "../lib/auth"
 import { sortFloors, type FloorOrder } from "../lib/floors"
-import { HK_READINESS_ORDER, HK_TOGGLE_OPTIONS, hkTone } from "../lib/hkStatus"
+import { HK_READINESS_ORDER, hkTone, visibleHkToggleOptions } from "../lib/hkStatus"
 import { useT, t as translate, uiDateLocale } from "../lib/i18n"
 import CheckOutDialog from "../components/CheckOutDialog"
 import CheckInDialog from "../components/CheckInDialog"
@@ -216,6 +217,10 @@ interface QueueDrag {
 
 export default function TapeChart() {
   const { t, tn } = useT()
+  useLocale()
+  const { roles } = useAuth()
+  const hkOptions = useMemo(() => visibleHkToggleOptions(roles), [roles])
+  const hkOooOption = hkOptions.find((opt) => opt.needsReason)
   const [searchParams] = useSearchParams()
   const highlightedRoom = searchParams.get("room") || ""
   const [start, setStart] = useState(todayIso())
@@ -391,6 +396,18 @@ export default function TapeChart() {
     }
     return out
   }, [data, roomMeta, rtFilter, floorFilter, hkFilter, wingFilter, viewFilter, bedFilter, smokingOnly])
+
+  const visibleRoomOrder = useMemo(() => {
+    const idx = new Map<string, number>()
+    let total = 0
+    for (const g of groups) {
+      if (collapsed.has(g.label)) continue
+      for (const r of g.rooms) {
+        idx.set(r.name, total++)
+      }
+    }
+    return { idx, total }
+  }, [groups, collapsed])
 
   const load = useCallback(() => {
     if (!parseDate(start)) return // the date input is mid-edit
@@ -1143,10 +1160,9 @@ export default function TapeChart() {
                 </div>
 
                 {data &&
-                  groups.map((g, gIdx) => {
+                  groups.map((g) => {
                     const isCollapsed = collapsed.has(g.label)
                     const booked = g.rooms.filter((r) => r.bookings.length > 0).length
-                    const isLastGroup = gIdx === groups.length - 1
                     return (
                       <div key={g.key}>
                         <button
@@ -1168,7 +1184,7 @@ export default function TapeChart() {
                           </span>
                         </button>
                         {!isCollapsed &&
-                          g.rooms.map((room, rIdx) => {
+                          g.rooms.map((room) => {
                             const meta = roomMeta[room.name]
                             const tone = hkTone(room.housekeeping_status)
                             const featureTag = [meta?.bed_type, meta?.room_view].filter(Boolean).join(" · ")
@@ -1177,7 +1193,10 @@ export default function TapeChart() {
                               (queueDrag?.active && queueDrag.room === room.name)
                             const isHighlighted = highlightedRoom !== "" && highlightedRoom === room.room_number
                             const menuOpen = hkMenuRoom === room.name
-                            const openUpward = isLastGroup && rIdx >= Math.max(1, g.rooms.length - 2)
+                            const flatIdx = visibleRoomOrder.idx.get(room.name) ?? 0
+                            const rowsAbove = flatIdx
+                            const rowsBelow = visibleRoomOrder.total - 1 - flatIdx
+                            const openUpward = rowsBelow < 4 && rowsAbove >= rowsBelow
                             return (
                               <div
                                 key={room.name}
@@ -1235,7 +1254,7 @@ export default function TapeChart() {
                                       )}
                                     >
                                       <div className="grid grid-cols-1 gap-1">
-                                        {HK_TOGGLE_OPTIONS.filter((opt) => !opt.needsReason).map((opt) => (
+                                        {hkOptions.filter((opt) => !opt.needsReason).map((opt) => (
                                           <button
                                             key={opt.status}
                                             type="button"
@@ -1248,23 +1267,25 @@ export default function TapeChart() {
                                           </button>
                                         ))}
                                       </div>
-                                      <div className="border-t border-zinc-100 pt-1.5">
-                                        <input
-                                          value={hkOooReason}
-                                          onChange={(e) => setHkOooReason(e.target.value)}
-                                          placeholder={t("Out of Order reason")}
-                                          className="mb-1 w-full rounded border border-zinc-300 px-2 py-1 text-xs"
-                                        />
-                                        <button
-                                          type="button"
-                                          data-hk-option="Out of Order"
-                                          disabled={!hkOooReason.trim()}
-                                          onClick={() => changeHk(room, "Out of Order", hkOooReason.trim())}
-                                          className="min-h-9 w-full rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-100 disabled:opacity-50"
-                                        >
-                                          {t("Out of Order")}
-                                        </button>
-                                      </div>
+                                      {hkOooOption && (
+                                        <div className="border-t border-zinc-100 pt-1.5">
+                                          <input
+                                            value={hkOooReason}
+                                            onChange={(e) => setHkOooReason(e.target.value)}
+                                            placeholder={t("Out of Order reason")}
+                                            className="mb-1 w-full rounded border border-zinc-300 px-2 py-1 text-xs"
+                                          />
+                                          <button
+                                            type="button"
+                                            data-hk-option={hkOooOption.status}
+                                            disabled={!hkOooReason.trim()}
+                                            onClick={() => changeHk(room, hkOooOption.status, hkOooReason.trim())}
+                                            className="min-h-9 w-full rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                                          >
+                                            {t(hkOooOption.status)}
+                                          </button>
+                                        </div>
+                                      )}
                                     </div>
                                   )}
                                 </div>

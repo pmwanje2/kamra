@@ -230,7 +230,7 @@ def room_metadata(property: str):
 
 
 @frappe.whitelist()
-@require_roles("Front Desk", "Revenue Manager", "Kamra Agent")
+@require_roles("Front Desk", "Kamra Agent")
 def suggest_queue_allocation(property: str, date: str | None = None, days: int = 1):
 	"""Propose rooms for unassigned arrivals ranked primarily by HK readiness
 	(Inspected > Ready > Clean > Pickup > Dirty), excluding OO and OS rooms."""
@@ -388,7 +388,7 @@ def suggest_queue_allocation(property: str, date: str | None = None, days: int =
 
 
 @frappe.whitelist()
-@require_roles("Front Desk", "Revenue Manager", "Kamra Agent")
+@require_roles("Front Desk", "Kamra Agent")
 def candidate_rooms(property: str, reservation: str):
 	"""Available assignable rooms for one unassigned reservation, ranked by HK readiness."""
 	if not property or not reservation:
@@ -437,7 +437,7 @@ def candidate_rooms(property: str, reservation: str):
 
 
 @frappe.whitelist(methods=["POST"])
-@require_roles("Front Desk", "Revenue Manager", "Kamra Agent")
+@require_roles("Front Desk", "Kamra Agent")
 def quick_assign_room(property: str, reservation: str, room: str, note: str = ""):
 	"""Assign one room from the Tape Chart queue dock via apply_allocation."""
 	if not property or not reservation or not room:
@@ -452,6 +452,7 @@ def quick_assign_room(property: str, reservation: str, room: str, note: str = ""
 	)
 	if not res_doc or res_doc.property != property:
 		frappe.throw(_("Not a booking at this property."), frappe.ValidationError)
+	frappe.has_permission("Reservation", "write", doc=reservation, throw=True)
 
 	room_doc = frappe.db.get_value(
 		"Room",
