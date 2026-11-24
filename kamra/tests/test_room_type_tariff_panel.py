@@ -125,3 +125,165 @@ class RoomTypeTariffPanelTest(RateMatrixHarness):
 			self.panel()
 		self.assertEqual(self.bridge_calls, [])
 
+	def test_bridge_explicit_plan_lists_are_preserved_and_unpriced_tariff_plans_never_enter_card_rate_plans(self):
+		self.rate_plan("HALF", rate_plan_name="Half Price USD (-50%)", base_rate_plan="CONTRACT",
+		               modifier_type="Percent", modifier_value=-50)
+		self.rows = []
+		orig_bridge = self.bridge_call
+
+		def explicit_bridge(api_method, *, response_types=None, **form):
+			if api_method == "hospitality_tariffs.room_type_tariffs":
+				self.bridge_calls.append((api_method, dict(form)))
+				return {
+					"tariffs": [],
+					"all_active_plans_tariff": 1,
+					"tariff_plans": [],
+					"card_rate_plans": [],
+					"unpriced_plans": [
+						{"name": "CONTRACT", "label": "Corporate tariff"},
+						{"name": "HALF", "label": "Half Price USD (-50%)"},
+					],
+				}
+			return orig_bridge(api_method, response_types=response_types, **form)
+
+		self.frappe.get_meta = lambda doctype: type("Meta", (), {"has_field": lambda _s, f: True})()
+		import sys
+		sys.modules["kamra.erp_bridge"].bridge_call = explicit_bridge
+		panel = self.panel()
+		self.assertIs(panel["all_active_plans_tariff"], True)
+		self.assertEqual(panel["tariff_plans"], [])
+		self.assertEqual(panel["card_rate_plans"], [])
+		self.assertEqual(panel["unpriced_plans"], [
+			{"name": "CONTRACT", "label": "Corporate tariff"},
+			{"name": "HALF", "label": "Half Price USD (-50%)"},
+		])
+
+	def test_legacy_bridge_without_explicit_lists_separates_unpriced_tariff_plans_from_card_plans(self):
+		self.docs["Rate Plan", "CONTRACT"].custom_tariff_price_list = "USD Contract"
+		self.rate_plan("HALF", rate_plan_name="Half Price USD (-50%)", base_rate_plan="CONTRACT",
+		               modifier_type="Percent", modifier_value=-50)
+		self.rate_plan("BAR", rate_plan_name="Best available")
+		self.rows = []
+		panel = self.panel()
+		self.assertEqual(panel["card_rate_plans"], [{"name": "BAR", "label": "Best available"}])
+		self.assertEqual(panel["unpriced_plans"], [
+			{"name": "CONTRACT", "label": "Corporate tariff"},
+			{"name": "HALF", "label": "Half Price USD (-50%)"},
+		])
+		self.assertIs(panel["all_active_plans_tariff"], False)
+		# Disable the only card plan: card_rate_plans empties and all_active_plans_tariff becomes True
+		self.docs["Rate Plan", "BAR"].disabled = 1
+		panel2 = self.panel()
+		self.assertEqual(panel2["card_rate_plans"], [])
+		self.assertIs(panel2["all_active_plans_tariff"], True)
+
+
+class RoomTypesSummaryTest(RateMatrixHarness):
+	modules = ("kamra.pricing", "kamra.authz", "kamra.rates")
+
+	def extra_modules(self):
+		from types import ModuleType
+		folio = ModuleType("kamra.folio")
+		folio._fnb_gst = lambda property: 5
+		return {"kamra.folio": folio}
+
+	def setUp(self):
+		super().setUp()
+		from unittest.mock import patch
+		self.authz.restricted_properties = lambda user=None: None
+		self.records["Room Type"] = [
+			self.add("Room Type", "Test Hotel-JNR", property="Test Hotel", disabled=0, room_type_code="JNR",
+			         room_type_name="Junior Suite", base_price=410619, base_occupancy=2, adults_capacity=3,
+			         extra_adult_price=50000, child_price=20000),
+			self.add("Room Type", "Test Hotel-EXE", property="Test Hotel", disabled=0, room_type_code="EXE",
+			         room_type_name="Executive Suite", base_price=550000, base_occupancy=2, adults_capacity=3,
+			         extra_adult_price=75000, child_price=20000),
+			self.add("Room Type", "Test Hotel-PRS", property="Test Hotel", disabled=0, room_type_code="PRS",
+			         room_type_name="Presidential Suite", base_price=900000, base_occupancy=2, adults_capacity=4,
+			         extra_adult_price=100000, child_price=20000),
+			self.add("Room Type", "Test Hotel-STD", property="Test Hotel", disabled=0, room_type_code="STD",
+			         room_type_name="Standard", base_price=350000, base_occupancy=2, adults_capacity=2,
+			         extra_adult_price=40000, child_price=20000),
+		]
+		self.records["Room"] = [
+			*[self.add("Room", f"JNR-{i}", property="Test Hotel", room_type="Test Hotel-JNR") for i in range(1, 6)],
+			*[self.add("Room", f"EXE-{i}", property="Test Hotel", room_type="Test Hotel-EXE") for i in range(1, 3)],
+		]
+		self.records["Rate Plan"] = []
+		self.rate_plan("STD-USD", rate_plan_name="Standard USD", code="STD-USD", currency="USD", is_default=1,
+		               custom_tariff_price_list="Tank Hill Contract USD", rounding_step=0, rounding_mode="Nearest")
+		self.rate_plan("HALF-USD", rate_plan_name="Half Price USD (-50%)", code="HALF-USD", currency="USD",
+		               base_rate_plan="STD-USD", modifier_type="Percent", modifier_value=-50,
+		               rounding_step=0, rounding_mode="Nearest")
+		# 150 USD x 4084.953333 = 612,743 UGX; 280 USD x 4084.953333 = 1,143,787 UGX
+		def tariff_reply(form):
+			if form["room_type"] == "Test Hotel-JNR":
+				return self.tariff(nightly=150, fx_rate=4084.953333, agreed_rate=612743)
+			if form["room_type"] == "Test Hotel-PRS":
+				return self.tariff(nightly=280, fx_rate=4084.953333, agreed_rate=1143787)
+			return {"is_tariff": 1, "refusal": "HSP-TARIFF-001: Set Room Type.custom_tariff_item."}
+
+		self.tariffs["STD-USD"] = tariff_reply
+		rules = {"no_small_group": False, "minimum_nights": 0, "season": None, "non_refundable": False,
+		         "full_payment": False, "is_holiday": False, "holiday": None, "advance_percent": 0,
+		         "advance_season": None}
+		for name, value in (
+			("small_group_allows_stay", lambda *args: True), ("stay_season_rules", lambda *args, **kw: rules),
+			("long_stay_rule", lambda *args: None), ("active_holiday_package", lambda *args: None),
+			("season_adjust", lambda property, date, base, room_type=None: base),
+			("forecast_occupancy", lambda *args, **kw: 0), ("demand_adjust", lambda *args, **kw: (args[3], None)),
+			("advance_percent", lambda *args: (0.0, None)), ("active_season", lambda *args, **kw: None),
+			("package_covering_date", lambda *args, **kw: None),
+		):
+			patcher = patch.object(self.pricing, name, value)
+			patcher.start()
+			self.addCleanup(patcher.stop)
+
+	def rate_plan(self, name, **fields):
+		doc = self.plan(name, **{"disabled": 0, "is_default": 0, **fields})
+		self.records["Rate Plan"].append(doc)
+		return doc
+
+	def test_room_types_summary_returns_default_plan_selling_rates_room_counts_and_card_flag(self):
+		summary = self.rates.room_types_summary("Test Hotel")
+		self.assertEqual(summary["property_currency"], "UGX")
+		self.assertIs(summary["has_card_rate_plans"], False)
+		self.assertEqual(summary["default_plan"]["name"], "STD-USD")
+		self.assertEqual(summary["default_plan"]["label"], "Standard USD")
+		by_rt = {row["room_type"]: row for row in summary["room_types"]}
+		self.assertEqual(by_rt["Test Hotel-JNR"]["room_count"], 5)
+		self.assertIs(by_rt["Test Hotel-JNR"]["priced"], True)
+		self.assertEqual(by_rt["Test Hotel-JNR"]["currency"], "USD")
+		self.assertEqual(by_rt["Test Hotel-JNR"]["amount"], 150.0)
+		self.assertEqual(by_rt["Test Hotel-JNR"]["local_amount"], 612743.0)
+		self.assertEqual(by_rt["Test Hotel-JNR"]["source"], "contract")
+		self.assertEqual(by_rt["Test Hotel-EXE"]["room_count"], 2)
+		self.assertIs(by_rt["Test Hotel-EXE"]["priced"], False)
+		self.assertIsNone(by_rt["Test Hotel-EXE"]["amount"])
+		self.assertIn("HSP-TARIFF-001", by_rt["Test Hotel-EXE"]["refusal"])
+		self.assertEqual(by_rt["Test Hotel-PRS"]["room_count"], 0)
+		self.assertIs(by_rt["Test Hotel-PRS"]["priced"], True)
+		self.assertEqual(by_rt["Test Hotel-STD"]["room_count"], 0)
+		self.assertIs(by_rt["Test Hotel-STD"]["priced"], False)
+		# Priced for 2 adults
+		self.assertEqual({f["adults"] for f in self.tariff_forms()}, {2})
+
+		# Adding a genuine card-priced active plan flips has_card_rate_plans to True
+		self.rate_plan("BAR", rate_plan_name="Best Available")
+		self.assertIs(self.rates.room_types_summary("Test Hotel")["has_card_rate_plans"], True)
+
+	def test_room_types_summary_supports_derived_default_plan_and_property_scope(self):
+		self.docs["Rate Plan", "STD-USD"].is_default = 0
+		self.docs["Rate Plan", "HALF-USD"].is_default = 1
+		summary = self.rates.room_types_summary("Test Hotel")
+		self.assertIs(summary["has_card_rate_plans"], False)
+		self.assertEqual(summary["default_plan"]["name"], "HALF-USD")
+		jnr = next(row for row in summary["room_types"] if row["room_type"] == "Test Hotel-JNR")
+		self.assertEqual(jnr["currency"], "USD")
+		self.assertEqual(jnr["amount"], 75.0)
+		self.assertEqual(jnr["local_amount"], 306371.0)
+
+		self.authz.restricted_properties = lambda user=None: {"Sister Hotel"}
+		with self.assertRaises(PermissionDenied):
+			self.rates.room_types_summary("Test Hotel")
+

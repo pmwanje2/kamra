@@ -479,4 +479,88 @@ describe("Rate Calendar by rate plan and customer", () => {
     await choose(select(translated("Rate plan"))!, "CORP")
     await vi.waitFor(() => expect(button(translated("Clear rate plan and customer"))).not.toBeNull())
   })
+
+  // ── Round 7 (Tank Hill live check fixes) ───────────────────────────────────
+  it("opens on the server's default tariff rate plan and allows switching explicitly to Card rate", async () => {
+    const tariffPlans = [
+      policy("CONTRACT", "Corporate tariff", { currency: "USD", fx_lock_policy: "Fixed at Check In",
+        rounding_step: 1000, is_tariff: true }),
+      policy("CORP", "Corporate card", { is_tariff: false }),
+    ]
+    rpc.mockImplementation((method: string, params: CalendarParams) => {
+      if (method !== "kamra.rates.rate_calendar") return Promise.reject(new Error(`Unexpected: ${method}`))
+      // Server opens on CONTRACT when rate_plan is omitted; explicit rate_plan="" returns Card rate
+      if (params.rate_plan === "") return Promise.resolve({ ...bar, rate_plans: tariffPlans, rate_plan: null })
+      const plan = tariffPlans.find((p) => p.name === (params.rate_plan || "CONTRACT"))!
+      return Promise.resolve({ ...priced, rate_plans: tariffPlans, rate_plan: plan, company: params.company ?? null })
+    })
+    await render("/rate-calendar")
+    expect(calendarCalls()[0]).not.toHaveProperty("rate_plan")
+    expect(select("Rate plan")!.value).toBe("CONTRACT")
+    expect(policyHeader()).not.toBeNull()
+    expect(text(policyHeader()!)).toContain("Rate plan: Corporate tariff")
+    expect(text(policyHeader()!)).not.toContain("Negotiated rate plan")
+    const headers = Array.from(host.querySelectorAll("thead th"), (node) => node.textContent?.trim())
+    expect(headers).not.toContain("BAR")
+    expect(text(row("Standard"))).toContain("USD 130.00")
+
+    // User explicitly chooses Card rate -> sends rate_plan: "" and renders BAR view
+    await choose(select("Rate plan")!, "")
+    await vi.waitFor(() => expect(Array.from(host.querySelectorAll("thead th"),
+      (node) => node.textContent?.trim())).toContain("BAR"))
+    expect(calendarCalls().at(-1)).toMatchObject({ rate_plan: "" })
+    expect(select("Rate plan")!.value).toBe("")
+    expect(policyHeader()).toBeNull()
+  })
+
+  it("shows room types with zero rooms as dashes with a No rooms badge, never as sellable rates", async () => {
+    const withEmpty = {
+      ...priced,
+      room_types: [
+        { ...priced.room_types[0], room_count: 5, sellable: true },
+        { room_type: "PRS", code: "PRS", name: "Presidential Suite", base_price: 900000, room_count: 0, sellable: false,
+          nights: [
+            { date: "2026-12-01", available: true, rate: 1021000, bar: 1021000, after_season: 1021000, season: null,
+              demand: null, package: null, occupancy: 0, contract: { ...contract, nightly: 280 }, source: "contract" },
+            { date: "2026-12-02", available: true, rate: 1021000, bar: 1021000, after_season: 1021000, season: null,
+              demand: null, package: null, occupancy: 0, contract: { ...contract, nightly: 280 }, source: "contract" },
+          ] },
+      ],
+    }
+    rpc.mockImplementation((method: string) =>
+      method === "kamra.rates.rate_calendar" ? Promise.resolve(withEmpty) : Promise.reject(new Error(method)))
+    await render("/rate-calendar?rate_plan=CONTRACT")
+    const prs = Array.from(host.querySelectorAll("tbody tr")).find((tr) =>
+      tr.textContent?.includes("Presidential Suite"))!
+    expect(text(prs)).toContain("No rooms")
+    expect(text(prs)).not.toContain("USD 280.00")
+    expect(text(prs)).not.toContain("1,021,000")
+    const noRoomBtns = prs.querySelectorAll("button[aria-label='No rooms']")
+    expect(noRoomBtns).toHaveLength(2)
+    expect(noRoomBtns[0].textContent?.trim()).toBe("—")
+    await act(async () => (noRoomBtns[0] as HTMLButtonElement).click())
+    await settle()
+    expect(text()).toContain("No rooms configured for this room type.")
+  })
+
+  it.each(languages)("translates No rooms on the rate calendar in %s", async (language, dict) => {
+    await ensureDictionary(language)
+    setLang(language)
+    const withEmpty = {
+      ...bar,
+      room_types: [
+        { ...bar.room_types[0], room_count: 0, sellable: false },
+      ],
+    }
+    rpc.mockImplementation((method: string) =>
+      method === "kamra.rates.rate_calendar" ? Promise.resolve(withEmpty) : Promise.reject(new Error(method)))
+    await render("/rate-calendar")
+    const translated = translator(language, dict)
+    expect(text()).toContain(translated("No rooms"))
+    const btn = host.querySelector<HTMLButtonElement>(`button[aria-label="${translated("No rooms")}"]`)
+    expect(btn).not.toBeNull()
+    await act(async () => btn!.click())
+    await settle()
+    expect(text()).toContain(translated("No rooms configured for this room type."))
+  })
 })

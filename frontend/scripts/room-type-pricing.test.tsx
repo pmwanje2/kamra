@@ -19,11 +19,12 @@ import id from "../src/i18n/locales/id.json"
 import pt from "../src/i18n/locales/pt.json"
 import zh from "../src/i18n/locales/zh-CN.json"
 
-const { rpc, update, create, localeState } = vi.hoisted(() => ({
+const { rpc, update, create, localeState, listState } = vi.hoisted(() => ({
   rpc: vi.fn(),
   update: vi.fn(),
   create: vi.fn(),
   localeState: { value: { locale: "en", currency: "UGX" } as Record<string, unknown> },
+  listState: { value: null as Record<string, unknown>[] | null },
 }))
 const roomType = { name: "STANDARD", room_type_name: "Standard Room", room_type_code: "STD", base_price: 410619,
   base_occupancy: 2, single_occupancy_price: 380000, extra_adult_price: 50000, child_price: 20000,
@@ -32,12 +33,12 @@ vi.mock("../src/lib/api", () => ({
   call: (method: string, params: unknown) => method === "kamra.api.property_locale"
     ? Promise.resolve(localeState.value) : rpc(method, params),
   getCurrentProperty: () => "Test Hotel",
-  frappeFetch: async (path: string) => ({ data: path.includes("?") ? [roomType] : roomType }),
+  frappeFetch: async (path: string) => ({ data: path.includes("?") ? (listState.value ?? [roomType]) : roomType }),
   serverError: (error: Error) => error.message,
 }))
 vi.mock("../src/lib/resource", async (original) => ({
   ...await original<typeof import("../src/lib/resource")>(),
-  listResource: async (doctype: string) => doctype === "Room Type" ? [roomType] : [],
+  listResource: async (doctype: string) => doctype === "Room Type" ? (listState.value ?? [roomType]) : [],
   updateResource: update,
   createResource: create,
 }))
@@ -64,6 +65,7 @@ describe("Room Types pricing", () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true)
     vi.stubGlobal("localStorage", jsdom.window.localStorage)
     localeState.value = { locale: "en", currency: "UGX" }
+    listState.value = null
     tariffs = structuredClone(panel)
     update.mockReset().mockResolvedValue({ data: roomType })
     create.mockReset().mockResolvedValue({ data: roomType })
@@ -299,5 +301,151 @@ describe("Room Types pricing", () => {
     expect(inputFor("Locked card rate", section!)?.disabled).toBe(true)
     expect(text(section!)).toContain("Tax Rules")
     expect(Array.from(section!.querySelectorAll("button")).some((b) => b.textContent?.includes("Add row"))).toBe(true)
+  })
+
+  // ── Round 7 (Tank Hill live check fixes) ───────────────────────────────────
+  const tankHillTypes = [
+    { name: "JNR", room_type_name: "Junior Suite", room_type_code: "JNR", room_category: "Private",
+      base_price: 410619, base_occupancy: 2, extra_adult_price: 50000, tax_percent: 0 },
+    { name: "EXE", room_type_name: "Executive Suite", room_type_code: "EXE", room_category: "Private",
+      base_price: 550000, base_occupancy: 2, extra_adult_price: 75000, tax_percent: 0 },
+    { name: "STD", room_type_name: "Standard", room_type_code: "STD", room_category: "Private",
+      base_price: 350000, base_occupancy: 2, extra_adult_price: 40000, tax_percent: 0 },
+  ]
+  const tankHillSummary = {
+    property_currency: "UGX",
+    has_card_rate_plans: false,
+    default_plan: { name: "STD-USD", label: "Standard USD", code: "STD-USD", currency: "USD", is_tariff: true },
+    room_types: [
+      { room_type: "JNR", room_count: 5, priced: true, source: "contract", currency: "USD", amount: 150,
+        local_amount: 612743, refusal: null },
+      { room_type: "EXE", room_count: 2, priced: false, source: null, currency: null, amount: null,
+        local_amount: null, refusal: "HSP-TARIFF-001: Set Room Type.custom_tariff_item." },
+      { room_type: "STD", room_count: 0, priced: false, source: null, currency: null, amount: null,
+        local_amount: null, refusal: "HSP-TARIFF-001: Set Room Type.custom_tariff_item." },
+    ],
+  }
+
+  it("shows default-plan selling rates, room counts, badges, and hides card columns when no active plan uses card rate", async () => {
+    listState.value = tankHillTypes
+    rpc.mockImplementation((method: string) => {
+      if (method === "kamra.rates.room_types_summary") return Promise.resolve(tankHillSummary)
+      if (method === "kamra.rates.room_type_tariffs") return Promise.resolve(tariffs)
+      return Promise.reject(new Error(`Unexpected method: ${method}`))
+    })
+    await render("/room-types")
+    await vi.waitFor(() => expect(text(host)).toContain("USD 150.00"))
+    const headers = Array.from(host.querySelectorAll("thead th"), (th) => th.textContent?.trim())
+    expect(headers).toContain("Selling rate / night")
+    expect(headers).toContain("Rooms")
+    expect(headers.some((h) => h?.includes("Card rate"))).toBe(false)
+    expect(headers.some((h) => h?.includes("Extra adult"))).toBe(false)
+    const rows = Array.from(host.querySelectorAll("tbody tr"))
+    const jnr = rows.find((tr) => tr.textContent?.includes("Junior Suite"))!
+    expect(text(jnr)).toContain("USD 150.00 · UGX 612,743")
+    expect(text(jnr)).toContain("Standard USD · 2 adults")
+    expect(text(jnr)).toContain("5")
+    expect(text(jnr)).not.toContain("410,619")
+    const exe = rows.find((tr) => tr.textContent?.includes("Executive Suite"))!
+    expect(text(exe)).toContain("No rate set")
+    expect(text(exe)).toContain("2")
+    const std = rows.find((tr) => tr.querySelector("td")?.textContent?.trim() === "Standard")!
+    expect(text(std)).toContain("No rate set")
+    expect(text(std)).toContain("No rooms")
+  })
+
+  it("shows card-rate columns when at least one active plan really sells from the card rate", async () => {
+    listState.value = tankHillTypes
+    rpc.mockImplementation((method: string) => {
+      if (method === "kamra.rates.room_types_summary")
+        return Promise.resolve({ ...tankHillSummary, has_card_rate_plans: true })
+      return Promise.resolve(tariffs)
+    })
+    await render("/room-types")
+    await vi.waitFor(() => expect(text(host)).toContain("USD 150.00"))
+    const headers = Array.from(host.querySelectorAll("thead th"), (th) => th.textContent?.trim())
+    expect(headers).toContain("Card rate / night (UGX)")
+    expect(headers.some((h) => h?.includes("Extra adult"))).toBe(true)
+    expect(headers).toContain("Selling rate / night")
+    expect(headers).toContain("Rooms")
+  })
+
+  it("renders no stray 0 when all_active_plans_tariff is numeric 0 and explains untariffed rooms truthfully", async () => {
+    // 1. Numeric 0 must never leak as a literal "0" text node
+    tariffs = { ...structuredClone(panel), all_active_plans_tariff: 0 as unknown as boolean }
+    await render()
+    const directTexts = Array.from(region().childNodes)
+      .filter((node) => node.nodeType === Node.TEXT_NODE)
+      .map((node) => node.textContent?.trim())
+      .filter(Boolean)
+    expect(directTexts, "Stray 0 text node leaked into Contract tariffs drawer").not.toContain("0")
+
+    // 2. Untariffed room type on an all-tariff property: never claims card rate, names unpriced plans, says what to do
+    await act(async () => root.unmount())
+    root = createRoot(host)
+    tariffs = {
+      tariffs: [],
+      all_active_plans_tariff: 1 as unknown as boolean,
+      property_currency: "UGX",
+      primary_rate_plan: null,
+      card_rate_plans: [],
+      unpriced_plans: [
+        { name: "STD-USD", label: "Standard USD" },
+        { name: "HALF-USD", label: "Half Price USD (-50%)" },
+      ],
+    } as unknown as typeof panel
+    await act(async () => root.render(<MemoryRouter initialEntries={["/room-types?open=STANDARD"]}><App /></MemoryRouter>))
+    await vi.waitFor(async () => {
+      await settle()
+      expect(host.querySelector("[role=dialog] section[aria-label='Contract tariffs']")).not.toBeNull()
+      expect(text(region())).toContain("No approved contract tariffs.")
+    }, { interval: 1, timeout: 3000 })
+    expect(text(region())).toContain("The card rate is not used by any active rate plan.")
+    expect(text(region())).not.toContain("Priced from the card rate")
+    expect(text(region())).toContain("No tariff set for: Standard USD, Half Price USD (-50%)")
+    const cta = Array.from(region().querySelectorAll("a")).find((a) =>
+      a.textContent?.includes("Set its tariff in Contract Tariffs"))
+    expect(cta, "Missing actionable Contract Tariffs link").toBeDefined()
+    expect(cta!.getAttribute("href")).toBe("/tariffs")
+  })
+
+  it.each([
+    ["ar", ar], ["de", de], ["es", es], ["fil", fil], ["id", id], ["pt", pt], ["zh-CN", zh],
+  ] as [string, Record<string, string>][])("translates the R7 Room Types list and untariffed drawer strings in %s", async (language, dict) => {
+    await ensureDictionary(language)
+    setLang(language)
+    listState.value = tankHillTypes
+    rpc.mockImplementation((method: string) => {
+      if (method === "kamra.rates.room_types_summary") return Promise.resolve(tankHillSummary)
+      if (method === "kamra.rates.room_type_tariffs") return Promise.resolve({
+        tariffs: [], all_active_plans_tariff: true, property_currency: "UGX", primary_rate_plan: null,
+        card_rate_plans: [], unpriced_plans: [{ name: "STD-USD", label: "Standard USD" }],
+      })
+      return Promise.reject(new Error(`Unexpected method: ${method}`))
+    })
+    await render("/room-types")
+    await vi.waitFor(() => expect(text(host)).toContain("USD 150.00"))
+    const translated = (key: string, vars: Record<string, string> = {}) => {
+      expect(dict[key], `${language}: missing translation for ${JSON.stringify(key)}`).toBeTruthy()
+      expect(dict[key], `${language}: ${JSON.stringify(key)} is not translated`).not.toBe(key)
+      return fill(dict[key], vars)
+    }
+    const pageBody = text(host)
+    for (const expected of [
+      translated("Selling rate / night"),
+      translated("{plan} · 2 adults", { plan: "Standard USD" }),
+      translated("No rate set"),
+      translated("No rooms"),
+      translated("Rooms"),
+    ]) expect(pageBody).toContain(expected)
+    // Open drawer for untariffed room
+    const exeRow = Array.from(host.querySelectorAll("tbody tr")).find((tr) => tr.textContent?.includes("Executive Suite"))!
+    await act(async () => (exeRow as HTMLElement).click())
+    await vi.waitFor(async () => {
+      await settle()
+      expect(dialog()).not.toBeNull()
+      expect(text(dialog())).toContain(translated("Set its tariff in Contract Tariffs"))
+    }, { interval: 1, timeout: 3000 })
+    expect(text(dialog())).toContain(translated("No tariff set for: {plans}", { plans: "Standard USD" }))
   })
 })

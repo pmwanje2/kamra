@@ -230,3 +230,50 @@ class RateCalendarPlansTest(RateMatrixHarness):
 		# DLX has USD contract tariff -> rounded via contract_local_amount to 474,000
 		self.assertEqual({n["rate"] for n in self.cells(result, DLX)}, {474000})
 		self.assertEqual({n["source"] for n in self.cells(result, DLX)}, {"contract"})
+
+	def test_opens_on_tariff_default_plan_unless_default_is_card_or_card_explicitly_chosen(self):
+		self.docs["Rate Plan", "CONTRACT"].custom_tariff_price_list = "Tank Hill Contract USD"
+		# No rate_plan argument -> opens on the default tariff plan (CONTRACT), not Card rate
+		opened = self.calendar()
+		self.assertEqual(opened["rate_plan"]["name"], "CONTRACT")
+		self.assertIs(opened["rate_plan"]["is_tariff"], True)
+		self.assertEqual({n["rate"] for n in self.cells(opened)}, {474000})
+		by_name = {p["name"]: p for p in opened["rate_plans"]}
+		self.assertIs(by_name["CONTRACT"]["is_tariff"], True)
+		self.assertIs(by_name["CORP"]["is_tariff"], False)
+
+		# Explicit empty string rate_plan="" -> Card rate (BAR) view
+		card = self.calendar(rate_plan="")
+		self.assertIsNone(card["rate_plan"])
+		self.assertEqual({n["rate"] for n in self.cells(card)}, {100000})
+
+		# Derived default plan (base CONTRACT, -50%) -> also tariff-priced, so calendar opens on it
+		self.rate_plan("HALF", rate_plan_name="Half Price USD (-50%)", base_rate_plan="CONTRACT",
+		               modifier_type="Percent", modifier_value=-50, rounding_step=1000, is_default=1)
+		self.docs["Rate Plan", "CONTRACT"].is_default = 0
+		derived = self.calendar()
+		self.assertEqual(derived["rate_plan"]["name"], "HALF")
+		self.assertIs(derived["rate_plan"]["is_tariff"], True)
+		# 65 USD x 3,648.2 = 237,133 -> rounded to 1,000 = 237,000
+		self.assertEqual({n["rate"] for n in self.cells(derived)}, {237000})
+
+		# Card-priced default plan (no tariff price list) -> opens on Card rate view
+		self.docs["Rate Plan", "HALF"].is_default = 0
+		self.docs["Rate Plan", "CORP"].is_default = 1
+		card_default = self.calendar()
+		self.assertIsNone(card_default["rate_plan"])
+
+	def test_room_types_carry_room_count_and_sellable_flag(self):
+		self.records["Room Type"].append(self.add(
+			"Room Type", DLX, property="Test Hotel", disabled=0, room_type_code="DLX", room_type_name="Deluxe",
+			base_price=150000, base_occupancy=2, adults_capacity=2))
+		self.records["Room"] = [
+			self.add("Room", "STD-101", property="Test Hotel", room_type=STD),
+			self.add("Room", "STD-102", property="Test Hotel", room_type=STD),
+		]
+		result = self.calendar()
+		by_rt = {row["room_type"]: row for row in result["room_types"]}
+		self.assertEqual(by_rt[STD]["room_count"], 2)
+		self.assertIs(by_rt[STD]["sellable"], True)
+		self.assertEqual(by_rt[DLX]["room_count"], 0)
+		self.assertIs(by_rt[DLX]["sellable"], False)
