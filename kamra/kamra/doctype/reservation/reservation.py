@@ -1005,7 +1005,8 @@ class Reservation(Document):
 	def stored(self):
 		"""The booking as it is saved: the document before this save, or for a
 		preview (nothing saved yet) the stored record. None for a new one."""
-		old = self.get_doc_before_save()
+		getter = getattr(self, "get_doc_before_save", None)
+		old = getter() if callable(getter) else None
 		if old is not None or self.is_new() or not self.get("name"):
 			return old
 		if self.flags.get("kamra_stored") is None:
@@ -1028,7 +1029,7 @@ class Reservation(Document):
 		if old and old.room_type == self.room_type and \
 				(old.get("rate_plan") or None) == (self.get("rate_plan") or None):
 			inclusive = rates_include_tax(self.property)
-			overrode = old.agreed_rate_overrides()
+			overrode = old.agreed_rate_overrides() if callable(getattr(old, "agreed_rate_overrides", None)) else False
 			for r in old.get("night_rates") or []:
 				amount = flt(r.get("rate_code_amount"))
 				if not amount and not overrode:
@@ -1084,6 +1085,7 @@ class Reservation(Document):
 			return None
 		old = self.stored()
 		if (not old or not cint(old.get("auto_price")) or not old.get("night_rates")
+				or not callable(getattr(old, "lock_is_current", None))
 				or not old.lock_is_current()
 				or (self.get("rate_lock_key") or None) != (old.get("rate_lock_key") or None)):
 			return None

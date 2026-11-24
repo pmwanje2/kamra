@@ -32,10 +32,8 @@ ROUNDING_MODES = {"Nearest": ROUND_HALF_UP, "Up": ROUND_CEILING, "Down": ROUND_F
 RATE_PLAN_CHAIN_LIMIT = 5
 
 # Authoritative Reservation price-determination inputs (SAP condition-record key model).
-# Kept in exact 1:1 parity with hospitality-tariffs@11 `Kamra Tariff Resolve` PRICE_KEYS
-# so Kamra's pricing engine and the HSP-TARIFF-007 guard cannot drift apart.
-# Note: `fixed_rate` is introduced by sibling kamra#32 (not yet merged); until it lands,
-# `reservation.get("fixed_rate")` degrades safely to 0 and guards automatically once present.
+# Kept in 1:1 parity with hospitality-tariffs@11 `Kamra Tariff Resolve` and kamra#32's
+# reservation-discount inputs so Kamra's pricing engine and tariff guards cannot drift apart.
 PRICE_DETERMINATION_GUARDED_FIELDS: tuple[tuple[str, str], ...] = (
 	("property", "str"),
 	("room_type", "str"),
@@ -54,6 +52,8 @@ PRICE_DETERMINATION_GUARDED_FIELDS: tuple[tuple[str, str], ...] = (
 	("auto_price", "int"),
 	("agreed_rate", "flt"),
 	("over_capacity_charge", "flt"),
+	("discount_type", "str"),
+	("discount_value", "flt"),
 	("planned_check_in_time", "day_use_time"),
 	("planned_check_out_time", "day_use_time"),
 	("occupants", "occupant_ages"),
@@ -627,7 +627,9 @@ def room_gst_rate(property: str, room_type_doc, nightly_rate: Decimal) -> Decima
 		property, room_type_doc, nightly_rate)
 
 
-def rates_include_tax(property: str) -> bool:
+def rates_include_tax(property: str | None) -> bool:
+	if not property:
+		return False
 	return bool(frappe.get_cached_doc("Property", property).get("rates_include_tax"))
 
 

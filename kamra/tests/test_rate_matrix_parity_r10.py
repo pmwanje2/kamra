@@ -57,10 +57,11 @@ NON_INPUT_RESERVATION_ATTRS = frozenset({
 	"is_new", "get_doc_before_save", "has_value_changed", "flags", "get", "name",
 	"rate_lock_key", "rate_lock_key_for", "quote_inputs", "hand_set_prices",
 	"reprice_contract_nights", "requote", "apply_quote", "_apply_commission",
-	"custom_tariff_currency",
+	"night_discount_inputs", "discount_changes_only", "apply_rediscount",
+	"rediscount_locked_nights", "custom_tariff_currency",
 })
-# Sibling kamra#32 adds Reservation.fixed_rate; #33 degrades safely when absent.
-FORWARD_COMPAT_SIBLING_FIELDS = frozenset({"fixed_rate"})
+# kamra#32 is merged: every field in PRICE_DETERMINATION_FIELDS is now a real Reservation DocField.
+FORWARD_COMPAT_SIBLING_FIELDS = frozenset()
 
 
 def extract_pricing_reservation_fields(reservation_src: str, pricing_src: str) -> set[str]:
@@ -116,6 +117,8 @@ class PriceDeterminationParityTest(RateMatrixHarness):
 			("auto_price", "int"),
 			("agreed_rate", "flt"),
 			("over_capacity_charge", "flt"),
+			("discount_type", "str"),
+			("discount_value", "flt"),
 			("planned_check_in_time", "day_use_time"),
 			("planned_check_out_time", "day_use_time"),
 			("occupants", "occupant_ages"),
@@ -146,6 +149,8 @@ class PriceDeterminationParityTest(RateMatrixHarness):
 			"check_in_time": "planned_check_in_time",
 			"check_out_time": "planned_check_out_time",
 			"night_prices": "night_rates",
+			"night_discounts": "night_rates",
+			"locked_nights": "night_rates",
 			"agreed_nights": "contract_tariff",
 		}
 		mapped_quote_fields = {param_to_field.get(p, p) for p in quote_params}

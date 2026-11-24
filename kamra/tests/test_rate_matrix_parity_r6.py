@@ -443,7 +443,8 @@ class RateOptionsCompanyTest(RateMatrixHarness):
 	modules = ("kamra.pricing", "kamra.authz", "kamra.rates")
 
 	def extra_modules(self):
-		return {"kamra.settings": stub_module("kamra.settings", get_setting=lambda property, key: 0)}
+		return {"kamra.settings": stub_module("kamra.settings", get_setting=lambda property, key: 0,
+		                                      list_setting=lambda property, key: [])}
 
 	def setUp(self):
 		super().setUp()
