@@ -513,7 +513,7 @@ export default function HkApp() {
             onClick={() => setStatusRoom(null)}
           >
             <div
-              className="w-full space-y-3 rounded-t-2xl bg-white p-4 dark:bg-zinc-900 dark:text-zinc-100"
+              className="w-full space-y-3 rounded-t-2xl bg-white p-4"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between">

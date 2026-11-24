@@ -208,8 +208,8 @@ export default function HousekeepingBoard() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">{t("Housekeeping Board")}</h1>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          <h1 className="text-xl font-semibold text-zinc-900">{t("Housekeeping Board")}</h1>
+          <p className="text-sm text-zinc-500">
             {canSupervise
               ? t("Every room at a glance. Tap a room to set its status.")
               : t("Every room at a glance. You can mark rooms Clean, Pickup, or Dirty.")}
@@ -372,7 +372,7 @@ export default function HousekeepingBoard() {
                       {open === r.name && (
                         <div
                           aria-label={t("Room actions")} role="group"
-                          className="relative z-10 mt-1 min-w-0 rounded-lg border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                          className="relative z-10 mt-1 min-w-0 rounded-lg border border-zinc-200 bg-white shadow-lg"
                         >
                           {r.clean_tasks.length > 1 && <p className="p-2 text-xs">{t("Choose a cleaning task")}</p>}
                           {r.clean_tasks.map(task => <Button key={task.name} className="w-full whitespace-normal" disabled={busy === r.name} onClick={() => complete(r.name, task.name)}>
@@ -385,7 +385,7 @@ export default function HousekeepingBoard() {
                                 key={s}
                                 type="button"
                                 onClick={() => setStatus(r.name, s)}
-                                className="flex min-h-11 w-full items-center gap-2 px-3 py-2 text-start text-sm hover:bg-zinc-50 sm:min-h-9 dark:hover:bg-zinc-800"
+                                className="flex min-h-11 w-full items-center gap-2 px-3 py-2 text-start text-sm hover:bg-zinc-50 sm:min-h-9"
                               >
                                 <span className={cn("size-2 rounded-full", dot[s])} aria-hidden />
                                 {t("Mark {status}", { status: t(s) })}

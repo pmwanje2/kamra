@@ -608,7 +608,7 @@ export default function TapeChart() {
                         ) : (
                           <div key={d} style={{ width: cellW }}
                             className={cn(
-                              "shrink-0 border-s border-zinc-100 dark:border-zinc-800",
+                              "shrink-0 border-s border-zinc-100",
                               room.housekeeping_status === "Out of Service" && "bg-orange-50/40 dark:bg-orange-950/20",
                               room.housekeeping_status === "Out of Order" && "bg-rose-50/40 dark:bg-rose-950/20",
                             )} />

@@ -284,7 +284,7 @@ export default function AlertBanner({
                     >
                       {t(a.severity)}
                     </span>
-                    <span className="rounded bg-black/5 px-1.5 py-0.5 text-[11px] font-medium dark:bg-white/10">
+                    <span className="rounded bg-zinc-100/70 px-1.5 py-0.5 text-[11px] font-medium">
                       {t(a.trigger_area)}
                     </span>
                     {a.alert_code && (
@@ -345,7 +345,7 @@ export default function AlertBanner({
                   onChange={(e) => setResolveNote(e.target.value)}
                   placeholder={t("Supervisor reason for clearing this blocking alert")}
                   aria-label={t("Resolution reason")}
-                  className="min-h-11 min-w-0 flex-1 rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-sm text-zinc-900 focus:outline-2 focus:outline-offset-1 focus:outline-rose-600 sm:min-h-9 dark:border-rose-500/50 dark:bg-zinc-900 dark:text-zinc-100"
+                  className="min-h-11 min-w-0 flex-1 rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-sm text-zinc-900 focus:outline-2 focus:outline-offset-1 focus:outline-rose-600 sm:min-h-9 dark:border-rose-500/50"
                 />
                 <div className="flex items-center gap-2">
                   <Button
@@ -375,10 +375,10 @@ export default function AlertBanner({
       })}
 
       {canCreate && (
-        <div className="rounded-xl border border-zinc-200 bg-zinc-50/70 px-3.5 py-2.5 dark:border-zinc-700 dark:bg-zinc-900/50">
+        <div className="rounded-xl border border-zinc-200 bg-zinc-50/70 px-3.5 py-2.5">
           {!creating ? (
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-xs font-medium text-zinc-600 dark:text-zinc-300">
+              <span className="text-xs font-medium text-zinc-600">
                 {visible.length === 0
                   ? t("No active alerts on this stay.")
                   : t("{n} active alert(s)", { n: visible.length })}
@@ -409,7 +409,7 @@ export default function AlertBanner({
                         trigger_area: e.target.value as AlertTrigger,
                       }))
                     }
-                    className="min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm sm:min-h-9 dark:border-zinc-700 dark:bg-zinc-900"
+                    className="min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm text-zinc-900 sm:min-h-9"
                   >
                     {TRIGGERS.map((tr) => (
                       <option key={tr} value={tr}>
@@ -431,7 +431,7 @@ export default function AlertBanner({
                         severity: e.target.value as AlertSeverity,
                       }))
                     }
-                    className="min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm sm:min-h-9 dark:border-zinc-700 dark:bg-zinc-900"
+                    className="min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm text-zinc-900 sm:min-h-9"
                   >
                     {SEVERITIES.map((s) => (
                       <option key={s} value={s}>
@@ -453,7 +453,7 @@ export default function AlertBanner({
                         display_mode: e.target.value as AlertDisplayMode,
                       }))
                     }
-                    className="min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm sm:min-h-9 dark:border-zinc-700 dark:bg-zinc-900"
+                    className="min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm text-zinc-900 sm:min-h-9"
                   >
                     {DISPLAY_MODES.map((m) => (
                       <option key={m} value={m}>
@@ -469,7 +469,7 @@ export default function AlertBanner({
                 onChange={(e) => setDraft((d) => ({ ...d, message: e.target.value }))}
                 placeholder={t("Alert message for staff (e.g. Passport check required)")}
                 aria-label={t("Alert message")}
-                className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-brand-600 dark:border-zinc-700 dark:bg-zinc-900"
+                className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
               />
               <div className="flex flex-wrap items-center gap-2">
                 <Button
