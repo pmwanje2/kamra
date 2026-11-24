@@ -302,6 +302,22 @@ export const sessionCols = (): Col[] => [
   { key: "paid_outs", label: "Paid out", kind: "money" },
   { key: "expected_cash", label: "Expected", kind: "money" },
   { key: "counted_cash", label: "Counted", kind: "money" },
+  {
+    key: "foreign_drawers",
+    label: "Foreign drawers",
+    render: (r) => {
+      const fds = (r.foreign_drawers as { currency: string; expected_fx: number; variance_fx?: number | null }[] | undefined) || []
+      if (!fds.length) return "-"
+      return fds
+        .map((fd) => {
+          const base = `${fd.currency} ${Number(fd.expected_fx ?? 0).toFixed(2)}`
+          return fd.variance_fx && Math.abs(fd.variance_fx) > 0.004
+            ? `${base} (${Number(fd.variance_fx).toFixed(2)})`
+            : base
+        })
+        .join(" · ")
+    },
+  },
   { key: "variance", label: "Variance", kind: "money" },
 ]
 

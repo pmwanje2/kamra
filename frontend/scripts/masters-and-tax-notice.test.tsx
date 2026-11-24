@@ -5,6 +5,7 @@ import { MemoryRouter, Outlet } from "react-router-dom"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import App from "../src/App"
 import { BookingDialog } from "../src/components/BookingDialog"
+import CheckInDialog from "../src/components/CheckInDialog"
 import { TIMEZONES } from "../src/screens/settings/cards"
 import ar from "../src/i18n/locales/ar.json"
 import de from "../src/i18n/locales/de.json"
@@ -46,6 +47,7 @@ const { calls, fetches, state } = vi.hoisted(() => ({
   state: {
     taxBasis: null as { label: string; rate: number; inclusive: number; determined?: number } | null,
     quoteTaxBasis: undefined as { label: string; rate: number; inclusive: number; determined?: number } | null | undefined,
+    canDeletePerm: true,
   },
 }))
 
@@ -166,8 +168,12 @@ describe("PR-44 R2 masters UI, Uganda defaults, cashier limits and PR-11 tax not
     localStorage.clear()
     state.taxBasis = null
     state.quoteTaxBasis = undefined
+    state.canDeletePerm = true
 
     calls.mockReset().mockImplementation(async (method: string) => {
+      if (method === "frappe.client.has_permission") {
+        return { has_permission: state.canDeletePerm }
+      }
       if (method === "kamra.api.property_locale") {
         return {
           currency: "UGX",
@@ -186,6 +192,12 @@ describe("PR-44 R2 masters UI, Uganda defaults, cashier limits and PR-11 tax not
           minor_ids: "foreign",
           integrations: { payment_gateways: [], tax_return: false, verify_tax_id: false, verify_guest_id: false },
           market_codes: [{ value: "Corporate", label: "Corporate" }],
+          booking_types: [
+            { value: "Individual", label: "Individual" },
+            { value: "Group", label: "Group" },
+            { value: "Corporate", label: "Corporate" },
+            { value: "Staycation", label: "Staycation" },
+          ],
           booker_relations: [{ value: "Assistant", label: "Assistant" }],
           cancellation_reasons: [{ value: "Other", label: "Other" }],
           tax_basis: state.taxBasis,
@@ -219,6 +231,58 @@ describe("PR-44 R2 masters UI, Uganda defaults, cashier limits and PR-11 tax not
           tax_basis: state.quoteTaxBasis,
         }
       }
+      if (method === "kamra.api.create_booking") {
+        return { reservation: "RES-2026-00099", room: "RM-101", room_number: "101" }
+      }
+      if (method === "kamra.api.reservation_detail") {
+        return { deposit: { pct: 0, expected: 0, paid: 0, due: 0, can_take: false } }
+      }
+      if (method === "kamra.checkin.checkin_flow") {
+        return {
+          reservation: {
+            name: "RES-2026-00099", status: "Confirmed", guest: "G-1", guest_name: "Grace Nambi",
+            room_type: "STD", check_in_date: "2026-11-24", check_out_date: "2026-11-25",
+            nights: 1, adults: 2, children: 0, vip: 0, source: "Manual", special_requests: "",
+          },
+          guest: {
+            name: "G-1", full_name: "Grace Nambi", phone: "+256772111222", email: null,
+            nationality: "Ugandan", id_type: null, id_number: null, id_on_file: false,
+            id_status: "none", id_expiry_date: null, id_used_count: 0, address: "", has_photo: false,
+          },
+          vocabulary: { id_types: ["National ID", "Passport"] },
+          steps: [{
+            step_key: "billing_check", step_type: "check", title: "Who pays",
+            instruction: "", prompt_to_guest: "", is_blocking: 0, relevant: 1, state: "todo",
+          }],
+          missing_required: [],
+          pending_backfill: [],
+          rooms: [],
+          request_presets: [],
+          ids: { ok: true, missing: [], online: false, precheckin_status: "None", precheckin_on: null, occupants: [] },
+          billing: {
+            payer: "Guest", source: "Manual", channel: null, ota_ref: null, pay_at_hotel: 0,
+            company: null, company_name: null, billing_rules: [], group_booking: null, group_name: null,
+            stay_total: 250000, advance_paid: 0, balance_due: 250000,
+            options: ["OTA prepaid", "OTA, guest pays here", "Guest", "Company", "Group", "Embassy"],
+            payer_labels: {
+              "OTA prepaid": "OTA prepaid",
+              "OTA, guest pays here": "OTA, guest pays here",
+              Guest: "Walk-in Guest",
+              Company: "Company",
+              Group: "Group",
+              Embassy: "Embassy pays",
+            },
+          },
+          room: { room: "RM-101", room_number: "101", housekeeping_status: "Clean", entire_place: null, room_type_name: "Standard", assigned_by: null, assigned_at: null },
+          deposit: { applies: false, satisfied: true, security: { required: 0, held: 0, status: "None" }, advance: { pct: 0, expected: 0, paid: 0, due: 0, can_take: false }, security_due: 0, advance_due: 0 },
+          grc: { signed: false },
+          keys: { count: 1, cards: "", issued_by: null, adapter: "manual", adapter_label: "Manual", manual: true },
+          stay_info: { guest_wifi_name: "", guest_wifi_password: "", breakfast_hours: "", emergency_number: "", guest_info_note: "", checkout_time: "11:00", configured: false },
+          room_charges: { allowed: true, recommend_block: false },
+          till: { required: false, open: true },
+          records: {},
+        }
+      }
       if (method === "kamra.api.rate_options") return { nights: [], plans: [], plain: null, voucher: null }
       if (method === "kamra.api.guest_alert") return {}
       if (method === "kamra.cashier.my_till") return { required: false, open: true }
@@ -226,20 +290,19 @@ describe("PR-44 R2 masters UI, Uganda defaults, cashier limits and PR-11 tax not
       return {}
     })
 
+    const PM_ROWS = [
+      { name: "Cash", code: "Cash", description: "Cash", tender_type: "Cash", mode_of_payment: "", property: "", system: 1, disabled: 0 },
+      { name: "Kampala Hotel::Airtel Money", code: "Airtel Money", description: "Airtel Money", tender_type: "Instant", mode_of_payment: "Airtel Money", property: "Kampala Hotel", system: 0, disabled: 0 },
+    ]
     fetches.mockReset().mockImplementation(async (path: string, init?: RequestInit) => {
       if (init?.method === "POST") return { data: { name: "Created", ...JSON.parse(String(init.body)) } }
       if (init?.method === "PUT") return { data: { ...JSON.parse(String(init.body)) } }
       if (path.startsWith("/api/resource/Market%20Code/Corporate")) return { data: MARKET_ROWS[0] }
       if (path.startsWith("/api/resource/Market%20Code/Safari%20Operator")) return { data: MARKET_ROWS[1] }
       if (path.startsWith("/api/resource/Market%20Code?")) return { data: MARKET_ROWS }
-      if (path.startsWith("/api/resource/Payment%20Method?")) {
-        return {
-          data: [
-            { name: "Cash", code: "Cash", description: "Cash", tender_type: "Cash", mode_of_payment: "", property: "", system: 1, disabled: 0 },
-            { name: "Airtel Money", code: "Airtel Money", description: "Airtel Money", tender_type: "Instant", mode_of_payment: "Airtel Money", property: "Kampala Hotel", system: 0, disabled: 0 },
-          ],
-        }
-      }
+      if (path.startsWith("/api/resource/Payment%20Method/Cash")) return { data: PM_ROWS[0] }
+      if (path.startsWith("/api/resource/Payment%20Method/Kampala")) return { data: PM_ROWS[1] }
+      if (path.startsWith("/api/resource/Payment%20Method?")) return { data: PM_ROWS }
       if (path.startsWith("/api/resource/Cashier?")) return { data: CASHIER_ROWS }
       return { data: path.includes("?") ? [] : {} }
     })
@@ -438,15 +501,129 @@ describe("PR-44 R2 masters UI, Uganda defaults, cashier limits and PR-11 tax not
 
   it.each([
     ["ar", ar], ["de", de], ["es", es], ["fil", fil], ["id", id], ["pt", pt], ["zh-CN", zhCN],
-  ])("translates Configuration, all 9 masters, Cashier limits and PR-11 notice in %s", (_lang, dict: Record<string, string>) => {
+  ])("translates Configuration, all 9 masters, Cashier limits, Property, Booking type and PR-11 notice in %s", (_lang, dict: Record<string, string>) => {
     const required = [
       "Configuration",
       "Cashier limits",
+      "Property",
+      "Booking type",
+      "Shared",
       TAX_NOTICE,
       ...MASTER_PAGES.map((p) => p.title),
     ]
     for (const key of required) {
       expect(dict[key], key).toBeTruthy()
     }
+  })
+
+  it("shows Property column in Payment Methods list (property name vs Shared)", async () => {
+    await act(async () => root.render(<MemoryRouter initialEntries={["/settings/payment-methods"]}><App /></MemoryRouter>))
+    await vi.waitFor(async () => {
+      await settle()
+      expect(host.textContent).toContain("Airtel Money")
+    }, { interval: 5, timeout: 5000 })
+
+    const headers = Array.from(host.querySelectorAll("thead th")).map((th) => th.textContent?.trim())
+    expect(headers).toContain("Property")
+    const rows = Array.from(host.querySelectorAll("tbody tr")).map((tr) => tr.textContent ?? "")
+    expect(rows.some((r) => r.includes("Airtel Money") && r.includes("Kampala Hotel"))).toBe(true)
+    expect(rows.some((r) => r.includes("Cash") && r.includes("Shared"))).toBe(true)
+  })
+
+  it("hides Delete button when server DocPerm reports delete=0 (never hardcoded roles)", async () => {
+    state.canDeletePerm = false
+    await act(async () => root.render(<MemoryRouter initialEntries={["/settings/payment-methods"]}><App /></MemoryRouter>))
+    await vi.waitFor(async () => {
+      await settle()
+      expect(host.textContent).toContain("Airtel Money")
+    }, { interval: 5, timeout: 5000 })
+
+    const customRow = Array.from(host.querySelectorAll("tbody tr")).find((tr) => tr.textContent?.includes("Airtel Money")) as HTMLElement
+    expect(customRow).toBeDefined()
+    await act(async () => customRow.click())
+    await vi.waitFor(async () => {
+      await settle()
+      expect(calls).toHaveBeenCalledWith(
+        "frappe.client.has_permission",
+        expect.objectContaining({ doctype: "Payment Method", docname: "Kampala Hotel::Airtel Money", perm_type: "delete" }),
+      )
+    }, { interval: 5, timeout: 5000 })
+    expect(document.querySelector('button[aria-label="Delete"]')).toBeNull()
+  })
+
+  it("offers Booking Type selector in BookingDialog from masters and submits selected type", async () => {
+    await act(async () => root.render(
+      <MemoryRouter>
+        <BookingDialog initial={{ room_type: "STD", guest_name: "Grace Nambi", phone: "+256772111222" }} onClose={() => {}} onBooked={() => {}} />
+      </MemoryRouter>,
+    ))
+    await vi.waitFor(async () => {
+      await settle()
+      expect(host.textContent).toContain("Company, add-ons & arrival details")
+    }, { interval: 5, timeout: 5000 })
+
+    const moreBtn = Array.from(host.querySelectorAll("button")).find((b) => b.textContent?.includes("Company, add-ons & arrival details")) as HTMLElement
+    await act(async () => moreBtn.click())
+    await settle()
+
+    const labels = Array.from(host.querySelectorAll("label"))
+    const btLabel = labels.find((l) => l.textContent?.includes("Booking type"))
+    expect(btLabel, "Booking type field missing in BookingDialog").toBeDefined()
+    const select = btLabel!.querySelector("select") as HTMLSelectElement
+    expect(select).not.toBeNull()
+    const optionValues = Array.from(select.options).map((o) => o.value)
+    expect(optionValues).toContain("Staycation")
+
+    await act(async () => {
+      select.value = "Staycation"
+      select.dispatchEvent(new Event("change", { bubbles: true }))
+    })
+    await settle()
+
+    const confirmBtn = Array.from(host.querySelectorAll("button")).find((b) => b.textContent?.includes("Confirm booking")) as HTMLButtonElement
+    await vi.waitFor(async () => {
+      await settle()
+      expect(confirmBtn.disabled).toBe(false)
+    }, { interval: 5, timeout: 5000 })
+    await act(async () => confirmBtn.click())
+    await vi.waitFor(async () => {
+      await settle()
+      expect(calls).toHaveBeenCalledWith(
+        "kamra.api.create_booking",
+        expect.objectContaining({ booking_type: "Staycation" }),
+      )
+    }, { interval: 5, timeout: 5000 })
+  })
+
+  it("gives Cashier limits refund input enough width without clipping and allows horizontal scroll", async () => {
+    await act(async () => root.render(<MemoryRouter initialEntries={["/settings/finance"]}><App /></MemoryRouter>))
+    await vi.waitFor(async () => {
+      await settle()
+      expect(host.textContent).toContain("Cashier limits")
+      expect(host.textContent).toContain("CSH-1")
+    }, { interval: 5, timeout: 5000 })
+
+    const limitInput = host.querySelector('input[aria-label*="CSH-1"]') as HTMLInputElement
+    expect(limitInput).not.toBeNull()
+    expect(limitInput.className).toContain("min-w-36")
+    expect(limitInput.className).not.toContain("max-w-32")
+    expect(limitInput.closest("div.overflow-x-auto")).not.toBeNull()
+  })
+
+  it("CheckInDialog displays reworded system payer label without leaking non-applicable system payers", async () => {
+    await act(async () => root.render(
+      <MemoryRouter>
+        <CheckInDialog reservation="RES-2026-00099" onDone={() => {}} onClose={() => {}} />
+      </MemoryRouter>,
+    ))
+    await vi.waitFor(async () => {
+      await settle()
+      expect(host.textContent).toContain("Embassy pays")
+    }, { interval: 5, timeout: 5000 })
+
+    expect(host.textContent).toContain("Walk-in Guest")
+    expect(host.textContent).not.toContain("Company pays")
+    expect(host.textContent).not.toContain("Group account pays")
+    expect(host.textContent).not.toContain("OTA has paid the room")
   })
 })

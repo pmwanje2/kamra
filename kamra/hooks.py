@@ -375,8 +375,11 @@ doc_events["Reservation"] = {
 # with an outbox (kamra.channel_ari: only changes, in ranges, under the
 # provider's rate limit). Reservations go through on_reservation_change; a
 # Property only when its selling basis changes (channel_ari._PROPERTY_BASIS).
+# A selling Currency Exchange (ERPNext's, where Kamra shares the site: the only
+# rate a contract converts at) re-prices only a foreign plan sold in the
+# property's currency.
 for _doctype in ("Season", "Rate Plan", "Room Type", "Hurdle Rate", "Rate Guardrail",
-                 "Room", "Room Block", "Channel Room Mapping", "Property"):
+                 "Room", "Room Block", "Channel Room Mapping", "Property", "Currency Exchange"):
 	_events = doc_events.setdefault(_doctype, {})
 	for _event in ("on_update", "after_insert", "on_trash"):
 		_current = _events.get(_event) or []

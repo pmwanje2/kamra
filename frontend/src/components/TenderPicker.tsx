@@ -3,11 +3,29 @@ import { call } from "../lib/api"
 import { useT } from "../lib/i18n"
 import { moneyDigits, type TenderMode } from "../lib/money"
 
-type Vocabulary = { payment_modes: string[]; tender_modes?: TenderMode[] | null; fx_currencies?: string[] }
+type Vocabulary = {
+  payment_modes: string[]
+  payment_tender_types?: Record<string, string>
+  cashier_allowed_modes?: string[] | null
+  tender_modes?: TenderMode[] | null
+  fx_currencies?: string[]
+}
 type Rate = { currency: string; rate_date: string; buy_rate: number; settlement_rate?: number; market_rate?: number }
 type Rates = { business_date: string; rates: Rate[]; tender_rates?: Rate[] }
 type Choice = { mode: string; currency: string }
 type SettlementRates = Readonly<Record<string, number>>
+
+const DEFAULT_TENDER_TYPES: Readonly<Record<string, string>> = {
+  Cash: "Cash",
+  "Foreign Cash": "Foreign Cash",
+  Card: "Card",
+  "Bank Transfer": "Bank Transfer",
+  "Payment Link": "Payment Link",
+}
+
+export function tenderTypeOf(loc: Pick<Vocabulary, "payment_tender_types">, mode: string): string {
+  return loc.payment_tender_types?.[mode] ?? DEFAULT_TENDER_TYPES[mode] ?? "Other"
+}
 
 export function useTenderRates(property: string, enabled = true) {
   const [state, setState] = useState<{ property: string; data: Rates }>()
@@ -34,7 +52,15 @@ export function tenderModes(loc: Vocabulary, home: string, paymentLink = false):
     .map((c) => c.trim().toUpperCase()).filter((c) => /^[A-Z]{3}$/.test(c) && c !== home))]
   const codes = [home, ...foreign]
   const mapped = loc.tender_modes ?? [
-    ...loc.payment_modes.map((mode) => ({ mode, currencies: ["Cash", "Bank Transfer"].includes(mode) ? codes : [home] })),
+    ...loc.payment_modes.map((mode) => {
+      const tt = tenderTypeOf(loc, mode)
+      const currencies = tt === "Foreign Cash"
+        ? foreign
+        : tt === "Cash" || tt === "Bank Transfer"
+          ? codes
+          : [home]
+      return { mode, currencies }
+    }),
     ...(paymentLink ? [{ mode: "Payment Link", currencies: [home] }] : []),
   ]
   const gotForeignCash = mapped.some(({ mode }) => mode === "Foreign Cash")
@@ -42,13 +68,21 @@ export function tenderModes(loc: Vocabulary, home: string, paymentLink = false):
     .flatMap(({ currencies }) => currencies.filter((c) => c !== home))
   const byMode = new Map<string, string[]>()
   for (const { mode, currencies } of mapped) {
-    const allowed = mode === "Cash"
+    const tt = tenderTypeOf(loc, mode)
+    const allowed = mode === "Cash" && tt === "Cash"
       ? [...currencies.filter((c) => c === home), ...cashCodes]
-      : currencies.filter((c) => mode === "Foreign Cash" ? c !== home : mode === "Bank Transfer" || c === home)
+      : tt === "Foreign Cash"
+        ? currencies.filter((c) => c !== home)
+        : tt === "Bank Transfer" || tt === "Cash"
+          ? currencies
+          : currencies.filter((c) => c === home)
     byMode.set(mode, [...(byMode.get(mode) ?? []), ...allowed])
   }
   if (!gotForeignCash && cashCodes.length) byMode.set("Foreign Cash", cashCodes)
-  return [...byMode].map(([mode, allowed]) => ({ mode, currencies: codes.filter((c) => allowed.includes(c)) }))
+  const allowedSet = Array.isArray(loc.cashier_allowed_modes) ? new Set(loc.cashier_allowed_modes) : null
+  return [...byMode]
+    .filter(([mode]) => !allowedSet || allowedSet.has(mode))
+    .map(([mode, allowed]) => ({ mode, currencies: codes.filter((c) => allowed.includes(c)) }))
     .filter(({ currencies }) => currencies.length > 0)
 }
 
@@ -143,7 +177,12 @@ export default function TenderPicker({
                   className={pill(code === chosen.currency)}
                   onClick={() => {
                     if (code !== chosen.currency)
-                      onChange({ currency: code, mode: chosen.mode === "Cash" && code !== home ? "Foreign Cash" : chosen.mode })
+                      onChange({
+                        currency: code,
+                        mode: chosen.mode === "Cash" && code !== home && modes.some((m) => m.mode === "Foreign Cash")
+                          ? "Foreign Cash"
+                          : chosen.mode,
+                      })
                   }}>
                   {code}
                 </button>

@@ -82,7 +82,7 @@ class _SellingBasisFixture:
 		for ext_rate, plan in mappings.items():
 			frappe.get_doc({"doctype": "Channel Room Mapping", "connection": conn.name,
 				"room_type": rt, "external_room_id": "rt-std", "external_rate_id": ext_rate,
-				"rate_plan": plan}).insert(ignore_permissions=True)
+				"external_currency": currency, "rate_plan": plan}).insert(ignore_permissions=True)
 		frappe.db.delete("Channel ARI Outbox", {"connection": conn.name})
 		for kind in channel_ari.KINDS:
 			frappe.cache.delete_value(f"channex_ari_pause::{conn.name}::{kind}")
@@ -1197,6 +1197,7 @@ class ChannelModifySafetyTestCase(_SellingBasisFixture, IntegrationTestCase):
 		frappe.get_doc({
 			"doctype": "Channel Room Mapping", "connection": h.conn.name,
 			"room_type": dlx, "external_room_id": "rt-dlx", "external_rate_id": "rp-dlx",
+			"external_currency": h.currency,
 		}).insert(ignore_permissions=True)
 		return dlx
 

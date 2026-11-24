@@ -55,6 +55,7 @@ def _room_type_payload(rt) -> dict:
 
 
 def _property_payload(prop) -> dict:
+	from kamra.localization import resolve_country
 	return {
 		"name": prop.name,
 		"property_name": prop.property_name,
@@ -67,7 +68,7 @@ def _property_payload(prop) -> dict:
 		"address_line": prop.address_line,
 		"city": prop.city, "state": prop.state,
 		"pincode": prop.pincode,
-		"country": prop.get("country") or "India",
+		"country": resolve_country(prop.name, prop),
 		"phone": prop.phone, "email": prop.email,
 		"website": prop.website,
 		"google_reviews_url": prop.get("google_reviews_url"),

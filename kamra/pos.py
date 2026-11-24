@@ -1207,10 +1207,12 @@ def deliver_order(order: str):
 
 
 def _assert_outlet_mode(property: str, mode: str) -> None:
+	from kamra.cashier import assert_cashier_mode_allowed
 	from kamra.localization import outlet_payment_modes, pack_for
-	modes = outlet_payment_modes(pack_for(property))
+	modes = outlet_payment_modes(pack_for(property), property)
 	if mode not in modes:
 		frappe.throw(_("Pick a payment mode: {0}.").format(", ".join(modes)))
+	assert_cashier_mode_allowed(property, mode)
 
 
 @frappe.whitelist(methods=["POST"])
