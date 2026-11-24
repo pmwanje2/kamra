@@ -6797,5 +6797,6 @@
   "Flat rate applied to room nights when the property calculates tax locally.": "Alíquota fixa aplicada às diárias quando a propriedade calcula o imposto localmente.",
   "Your own lines at the foot of every invoice - e.g. company registration, bank name and account details.": "Suas próprias linhas no rodapé de cada fatura - ex.: registro da empresa, banco e dados bancários.",
   "OTA Prepaid": "Pré-pago OTA",
-  "Company Credit": "Crédito corporativo"
+  "Company Credit": "Crédito corporativo",
+  "Tax as per the accounting invoice": "Imposto conforme a fatura contábil"
 }

@@ -529,5 +529,6 @@
   "OTA Prepaid": "OTA-Vorauszahlung",
   "Company Credit": "Firmenkredit",
   "Payment Link": "Zahlungslink",
-  "Cheque": "Scheck"
+  "Cheque": "Scheck",
+  "Tax as per the accounting invoice": "Steuer gemäß Buchhaltungsrechnung"
 }

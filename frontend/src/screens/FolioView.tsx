@@ -31,10 +31,6 @@ import {
   CardTitle,
 } from "../components/ui/card"
 
-
-const inr = (n: unknown) =>
-  fmtAmount(n ?? 0)
-
 interface InvoiceData {
   folio: {
     name: string
@@ -95,6 +91,7 @@ interface InvoiceData {
     email: string | null
     sac: string | null
     place_of_supply: string | null
+    tax_label?: string
     tax_id_label?: string
     /** the pack's line on how tax is shown (India: GST inclusive) */
     tax_note?: string
@@ -150,7 +147,11 @@ interface InvoiceData {
     footer: string | null
     invoice_footer?: string | null
     service_code_label: string
+    accounting_tax_note?: string | null
   }
+  /** Where the printed tax breakdown came from: folio lines, the linked
+   *  accounting invoice, or accounting_unavailable when it could not be read. */
+  tax_source?: "folio" | "accounting" | "accounting_unavailable"
   /** Charges with the service code the tax authority expects per LINE -
    *  a room night, a restaurant cover and a laundry bag are three
    *  different supplies and can't share one code. */
@@ -477,13 +478,20 @@ export default function FolioView() {
 
   const { folio, property, stay, gst_summary } = data
   const doc = data.document
-  // the server sends charges enriched with their service code; fall back
-  // to the raw folio rows so a cached older payload still renders
+  const inr = (n: unknown) => fmtAmount(n ?? 0, home)
+  const docTaxLabel = property.tax_label || taxLabel()
+  // the server sends charges enriched with their service code (and on a
+  // bridged site, the accounting invoice's own tax lines); fall back to the
+  // raw folio rows so a cached older payload still renders
   const lines = data.lines ?? folio.charges.map((c) => ({ ...c, row: c.name, qty: 1, rate: c.amount, service_code: null }))
+  const lineByRow = new Map(lines.map((l) => [l.row, l]))
   const taxRows = data.tax_summary ?? []
+  const taxUnavailable = data.tax_source === "accounting_unavailable"
   // a bill with no tax on any line prints no tax columns or totals
-  const taxed = Number(folio.tax_total) !== 0 ||
-    folio.charges.some((c) => Number(c.gst_rate) !== 0 || Number(c.gst_amount) !== 0)
+  const taxed = taxUnavailable || Number(folio.tax_total) !== 0 ||
+    lines.some((l) => Number(l.gst_rate) !== 0 || Number(l.gst_amount) !== 0) ||
+    taxRows.length > 0
+  const showLineTax = taxed && !taxUnavailable
   const open = folio.status === "Open"
   // invoiced here, or by the accounting system: its check-out close sets only
   // its own invoice (sales_invoice), and that bill is corrected all the same
@@ -1174,8 +1182,8 @@ export default function FolioView() {
                         {doc?.service_code_label ?? t("SAC")}
                       </th>
                       <th className="py-2 pr-3 text-right">{t("Amount {cur}", { cur: cur() })}</th>
-                      {taxed && <th className="py-2 pr-3 text-right">{taxLabel()} %</th>}
-                      {taxed && <th className="py-2 pr-3 text-right">{taxLabel()} {cur()}</th>}
+                      {showLineTax && <th className="py-2 pr-3 text-right">{docTaxLabel} %</th>}
+                      {showLineTax && <th className="py-2 pr-3 text-right">{docTaxLabel} {cur()}</th>}
                       <th className="py-2 text-right">{t("Total {cur}", { cur: cur() })}</th>
                       {editable && (
                         <th className="py-2 pl-3 print:hidden" aria-label={t("Actions")} />
@@ -1234,12 +1242,23 @@ export default function FolioView() {
                             )}
                           </Popin>
                           <td className="hidden py-2 pr-3 font-mono text-xs text-zinc-400 print:table-cell">
-                            {lines.find((l) => l.row === c.name)?.service_code ?? ""}
+                            {lineByRow.get(c.name)?.service_code ?? ""}
                           </td>
-                          <Popin label={t("Amount")} importance="medium" className="py-2 pr-3 text-right">{inr(c.amount)}</Popin>
-                          {taxed && <Popin label={`${taxLabel()} %`} importance="medium" className="py-2 pr-3 text-right">{c.gst_rate}%</Popin>}
-                          {taxed && <Popin label={taxLabel()} importance="medium" className="py-2 pr-3 text-right">{inr(c.gst_amount)}</Popin>}
-                          <Popin label={t("Total")} importance="medium" className="py-2 text-right font-medium">{inr(c.total)}</Popin>
+                          {(() => {
+                            const ln = lineByRow.get(c.name)
+                            const amt = ln ? ln.amount : c.amount
+                            const rate = ln ? ln.gst_rate : c.gst_rate
+                            const tax = ln ? ln.gst_amount : c.gst_amount
+                            const tot = ln ? ln.total : c.total
+                            return (
+                              <>
+                                <Popin label={t("Amount")} importance="medium" className="py-2 pr-3 text-right">{inr(amt)}</Popin>
+                                {showLineTax && <Popin label={`${docTaxLabel} %`} importance="medium" className="py-2 pr-3 text-right">{rate}%</Popin>}
+                                {showLineTax && <Popin label={docTaxLabel} importance="medium" className="py-2 pr-3 text-right">{inr(tax)}</Popin>}
+                                <Popin label={t("Total")} importance="medium" className="py-2 text-right font-medium">{inr(tot)}</Popin>
+                              </>
+                            )
+                          })()}
                           {editable && (
                             <Popin label={t("Actions")} importance="medium" className="relative whitespace-nowrap py-2 pl-3 text-right print:hidden">
                               {canRequestCorrection && c.charge_type !== "Allowance" && !voided && <RowCorrection folio={folio.name} row={c.name} modes={[]} act={act} />}
@@ -1286,9 +1305,9 @@ export default function FolioView() {
                       <td className="py-1 text-right text-zinc-500">
                         {cur()}{inr(h.amount)}
                       </td>
-                      {taxed && (
+                      {showLineTax && (
                         <td className="py-1 text-right text-zinc-400">
-                          + {cur()}{inr(h.tax)} {taxLabel().toLowerCase()}
+                          + {cur()}{inr(h.tax)} {docTaxLabel.toLowerCase()}
                         </td>
                       )}
                       <td className="py-1 text-right font-medium">
@@ -1304,39 +1323,47 @@ export default function FolioView() {
           <div className="mb-6 grid gap-6 sm:grid-cols-2">
             {taxed ? <div>
               <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">
-                {t("{tax} summary", { tax: taxLabel() })}
+                {t("{tax} summary", { tax: docTaxLabel })}
               </h3>
-              <table className="w-full text-sm">
-                <tbody className="divide-y divide-zinc-100">
-                  {(taxRows.length ? taxRows : gst_summary.map((g) => ({
-                    rate: g.rate, taxable: g.taxable, total_tax: g.total_tax,
-                    parts: [
-                      { label: "CGST", rate: g.rate / 2, amount: g.cgst },
-                      { label: "SGST", rate: g.rate / 2, amount: g.sgst },
-                    ],
-                  }))).map((r) => (
-                    <tr key={r.rate}>
-                      <td className="py-1.5 pr-3">{r.rate}%</td>
-                      <td className="py-1.5 pr-3 text-right text-zinc-500">
-                        {t("taxable {cur}{amount}", { cur: cur(), amount: inr(r.taxable) })}
-                      </td>
-                      <td className="py-1.5 text-right">
-                        {r.parts
-                          .map((x) => `${x.label} @ ${x.rate}% ${cur()}${inr(x.amount)}`)
-                          .join(" · ")}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              {taxUnavailable ? (
+                <p className="text-sm text-zinc-600">
+                  {t(doc?.accounting_tax_note || "Tax as per the accounting invoice")}
+                </p>
+              ) : (
+                <table className="w-full text-sm">
+                  <tbody className="divide-y divide-zinc-100">
+                    {(taxRows.length ? taxRows : gst_summary.map((g) => ({
+                      rate: g.rate, taxable: g.taxable, total_tax: g.total_tax,
+                      parts: [
+                        { label: "CGST", rate: g.rate / 2, amount: g.cgst },
+                        { label: "SGST", rate: g.rate / 2, amount: g.sgst },
+                      ],
+                    }))).map((r, idx) => (
+                      <tr key={`${r.rate}-${idx}`}>
+                        <td className="py-1.5 pr-3">{r.rate === 0 && Number(r.total_tax) !== 0 ? "—" : `${r.rate}%`}</td>
+                        <td className="py-1.5 pr-3 text-right text-zinc-500">
+                          {t("taxable {cur}{amount}", { cur: cur(), amount: inr(r.taxable) })}
+                        </td>
+                        <td className="py-1.5 text-right">
+                          {r.parts
+                            .map((x) => x.rate === 0
+                              ? `${x.label} ${cur()}${inr(x.amount)}`
+                              : `${x.label} @ ${x.rate}% ${cur()}${inr(x.amount)}`)
+                            .join(" · ")}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div> : <div />}
             <div className="space-y-1.5 text-sm sm:text-right">
               <p className="text-zinc-500">
                 {t("Charges")}: <span className="text-zinc-900">{cur()}{inr(folio.charges_total)}</span>
               </p>
-              {taxed && (
+              {showLineTax && (
                 <p className="text-zinc-500">
-                  {taxLabel()}: <span className="text-zinc-900">{cur()}{inr(folio.tax_total)}</span>
+                  {docTaxLabel}: <span className="text-zinc-900">{cur()}{inr(folio.tax_total)}</span>
                 </p>
               )}
               <p className="text-lg font-semibold">
