@@ -3840,6 +3840,8 @@ def post_allowance(folio: str, amount: float, reason: str = "",
 	if not amount:
 		frappe.throw(_("Allowance amount is required."))
 	text = _allowance_reason(reason_code, reason)
+	discount = _discount_allowance_fx.get()
+	fx_fields = discount[3] if discount and discount[1] == folio else {}
 
 	def _record_and_post(approver: str | None = None) -> str:
 		has_workflow = bool(
@@ -3856,6 +3858,7 @@ def post_allowance(folio: str, amount: float, reason: str = "",
 			"reason_code": reason_code or None, "reason": text,
 			"status": "Pending", "requested_by": frappe.session.user,
 			"requested_on": now, "channel": agent_channel() or "Desk",
+			**fx_fields,
 		})
 		req.insert(ignore_permissions=True)
 		serial = _post_allowance(doc.name, amount, text, gst_rate, approver,
@@ -3919,7 +3922,7 @@ def post_allowance(folio: str, amount: float, reason: str = "",
 			"reason_code": reason_code or None, "reason": text,
 			"status": "Pending", "requested_by": frappe.session.user,
 			"requested_on": now_datetime(),
-			"channel": agent_channel() or "Desk",
+			"channel": agent_channel() or "Desk", **fx_fields,
 		}).insert(ignore_permissions=True)
 		from kamra.webhooks import emit_approval
 		emit_approval("approval.requested", req)
@@ -4169,8 +4172,6 @@ def post_discount(folio: str, value: float = 0, kind: str = "Percent",
 		for ln in lines:
 			result = post_allowance(folio, ln["amount"], reason=text, gst_rate=ln["gst_rate"],
 			                        pin=pin, reason_code=reason_code)
-			if fx_fields and result.get("pending"):
-				frappe.db.set_value("Allowance Request", result["request"], fx_fields)
 			results.append(result)
 	finally:
 		_discount_allowance_fx.reset(token)

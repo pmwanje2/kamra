@@ -2677,6 +2677,7 @@ def quote(
 			tx_amount = _dec(v.value)
 			amount, fx = tx_amount, Decimal(1)
 			if v_currency != home:
+				tx_amount = round_rate_amount(tx_amount, 0, currency=v_currency)
 				tariff = contract_tariff or {}
 				tariff = tariff.get("tariff") or tariff
 				fx = _dec(tariff.get("fx_rate")) if tariff.get("currency") == v_currency else Decimal(0)
