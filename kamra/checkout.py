@@ -21,8 +21,8 @@ sheet is safe to repeat and leaves no trace.
 
 from __future__ import annotations
 
-from decimal import Decimal
 import re
+from decimal import Decimal
 
 import frappe
 from frappe import _
@@ -223,8 +223,9 @@ def _has_role(roles) -> bool:
 
 def _pending_bills(res, modes: list[str]) -> list[dict]:
 	"""Bills for this stay that are not on its folio yet: restaurant and
-	room-service orders still open, laundry not delivered. Each says what
-	the desk can do about it, through the bill's own endpoints:
+	room-service orders still open, laundry not delivered, and checks still
+	open at an outlet another point of sale runs (kamra.outlet_checks). Each
+	says what the desk can do about it, through the bill's own endpoints:
 
 	  POS order   post to the room (pos.deliver_order) or pay at the outlet
 	              (pos.pay_order)
@@ -304,14 +305,33 @@ def _pending_bills(res, modes: list[str]) -> list[dict]:
 				"pay_modes": [],
 				"hint": hint,
 				"act_roles": ["Front Desk", "Housekeeping"]})
+	from kamra.outlet_checks import open_outlet_checks
+	for c in open_outlet_checks(res.property, reservation=res.name, room=res.get("room")) or []:
+		# a check open at an outlet another point of sale runs: settled
+		# there (charged to the room, paid or voided), never from here
+		out.append({
+			"kind": "outlet", "name": c["name"],
+			"label": c["outlet"] or _("Restaurant"),
+			"status": "Billed" if c["billed"] else "Open",
+			"amount": c["amount"], "complimentary": False,
+			"can_act": True, "can_post_to_room": False, "can_mark_ready": False,
+			"billable": True, "pay_modes": [],
+			"hint": _("Still open at the outlet. Settle it there before check-out: "
+			          "charge it to the room, take payment or void it."),
+			"act_roles": []})
 	return out
 
 
 def _open_bills_message(bills: list[dict]) -> str:
+	items = ", ".join(f"{_(b['label'])} {b['name']} ({_(b['status'])})"
+	                  for b in bills)
+	if bills and all(b.get("kind") == "outlet" for b in bills):
+		return _("{0} bill(s) for this stay are still open at the outlet: {1}. "
+		         "Settle them at the outlet before check-out.").format(
+			len(bills), items)
 	return _("{0} bill(s) for this stay are not on the guest's bill yet: {1}. "
 	         "Post them to the room or settle them before check-out.").format(
-		len(bills), ", ".join(f"{_(b['label'])} {b['name']} ({_(b['status'])})"
-		                      for b in bills))
+		len(bills), items)
 
 
 def assert_no_open_bills(res) -> None:
@@ -394,7 +414,7 @@ def _checkout_context(reservation: str) -> dict:
 	their credit check, and every refusal check-out would give (`blockers`,
 	each tied to the step it belongs to)."""
 	from kamra.authz import assert_property_access
-	from kamra.ledger import _currency_places
+	from kamra.ledger import _currency_places, home_currency
 	from kamra.localization import pack_for
 	from kamra.sop import group_for_charge
 
@@ -405,6 +425,7 @@ def _checkout_context(reservation: str) -> dict:
 	display_places = _currency_places(res.property)
 	eps = _eps(places)
 	symbol = pack_for(res.property).locale(prop).get("currency_symbol", "")
+	currency = home_currency(res.property)
 	modes = _modes(res.property)
 	in_house = res.status == "Checked In"
 	blockers: list[dict] = []
@@ -723,6 +744,7 @@ def _checkout_context(reservation: str) -> dict:
 			"vip": frappe.db.get_value("Guest", res.guest, "vip") if res.guest else 0,
 		},
 		"room": room,
+		"currency": currency,
 		"currency_symbol": symbol,
 		"payment_modes": modes,
 		"pin_required": needs_pin,

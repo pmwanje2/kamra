@@ -823,5 +823,14 @@
   "Tax exempt (0%)": "Bebas pajak (0%)",
   "Transaction code used for alcoholic beverage postings from POS, banquets and the desk when an item or outlet has no code of its own.": "Kode transaksi untuk pencatatan minuman beralkohol dari POS, jamuan, dan resepsionis saat item atau gerai tidak memiliki kode sendiri.",
   "Travel Agent": "Agen Perjalanan",
-  "Who pays what on a credit company's stay when that company has no billing rules of its own. A company's own rules always win.": "Siapa membayar apa pada inap perusahaan kredit bila perusahaan itu tidak punya aturan tagihan sendiri. Aturan perusahaan sendiri selalu didahulukan."
+  "Who pays what on a credit company's stay when that company has no billing rules of its own. A company's own rules always win.": "Siapa membayar apa pada inap perusahaan kredit bila perusahaan itu tidak punya aturan tagihan sendiri. Aturan perusahaan sendiri selalu didahulukan.",
+  "Still open at the outlet. Settle it there before check-out: charge it to the room, take payment or void it.": "Masih terbuka di outlet. Selesaikan di sana sebelum check-out: bebankan ke kamar, terima pembayaran, atau batalkan.",
+  "This is kept in the accounting system.": "Ini dikelola di sistem akuntansi.",
+  "Check-out waits for these. Settle them at the outlet.": "Check-out menunggu tagihan ini. Selesaikan di outlet.",
+  "Not verified": "Belum diverifikasi",
+  "Kept in the accounting system": "Dikelola di sistem akuntansi",
+  "Company receivables could not be verified in the accounting system.": "Piutang perusahaan tidak dapat diverifikasi di sistem akuntansi.",
+  "Company credit could not be verified.": "Kredit perusahaan tidak dapat diverifikasi.",
+  "Guest and deposit folios match their ledgers. Company receivables (AR) could not be verified in the accounting system.": "Folio tamu dan deposit sesuai dengan buku besarnya. Piutang perusahaan (AR) tidak dapat diverifikasi di sistem akuntansi.",
+  "Guest and deposit folios match their ledgers. Company receivables (AR) are kept in the accounting system.": "Folio tamu dan deposit sesuai dengan buku besarnya. Piutang perusahaan (AR) dikelola di sistem akuntansi."
 }

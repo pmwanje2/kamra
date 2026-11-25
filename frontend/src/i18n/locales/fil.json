@@ -1535,5 +1535,14 @@
   "Tax exempt (0%)": "Exempt sa buwis (0%)",
   "Transaction code used for alcoholic beverage postings from POS, banquets and the desk when an item or outlet has no code of its own.": "Transaction code na ginagamit sa pag-post ng mga inuming may alkohol mula sa POS, banquet, at front desk kapag walang sariling code ang item o outlet.",
   "Travel Agent": "Ahente ng Paglalakbay",
-  "Who pays what on a credit company's stay when that company has no billing rules of its own. A company's own rules always win.": "Sino ang nagbabayad ng ano sa pananatili ng kumpanyang may credit kapag walang sariling patakaran sa pagsingil ang kumpanya. Laging nananaig ang sariling patakaran ng kumpanya."
+  "Who pays what on a credit company's stay when that company has no billing rules of its own. A company's own rules always win.": "Sino ang nagbabayad ng ano sa pananatili ng kumpanyang may credit kapag walang sariling patakaran sa pagsingil ang kumpanya. Laging nananaig ang sariling patakaran ng kumpanya.",
+  "Still open at the outlet. Settle it there before check-out: charge it to the room, take payment or void it.": "Bukas pa sa outlet. Ayusin ito roon bago mag-check-out: i-charge sa kuwarto, tumanggap ng bayad o i-void ito.",
+  "This is kept in the accounting system.": "Ito ay nasa sistema ng accounting.",
+  "Check-out waits for these. Settle them at the outlet.": "Hinihintay ng check-out ang mga ito. I-settle sa outlet.",
+  "Not verified": "Hindi naberipika",
+  "Kept in the accounting system": "Nasa sistema ng accounting",
+  "Company receivables could not be verified in the accounting system.": "Hindi maberipika ang mga bayarin ng kumpanya sa sistema ng accounting.",
+  "Company credit could not be verified.": "Hindi maberipika ang kredito ng kumpanya.",
+  "Guest and deposit folios match their ledgers. Company receivables (AR) could not be verified in the accounting system.": "Tugma ang mga folio ng bisita at deposito sa kanilang mga ledger. Hindi maberipika ang mga bayarin ng kumpanya (AR) sa sistema ng accounting.",
+  "Guest and deposit folios match their ledgers. Company receivables (AR) are kept in the accounting system.": "Tugma ang mga folio ng bisita at deposito sa kanilang mga ledger. Nasa sistema ng accounting ang mga bayarin ng kumpanya (AR)."
 }

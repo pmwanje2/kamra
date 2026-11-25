@@ -279,6 +279,18 @@ def check_open_pos_bills(property: str, bd: str) -> dict:
 			"state": state,
 			"opened_at": _iso(r.creation),
 		})
+	# checks still open at outlets another point of sale runs
+	# (kamra.outlet_checks); na_block_open_pos decides them the same way
+	from kamra.outlet_checks import open_outlet_checks
+	for c in open_outlet_checks(property, business_date=bd) or []:
+		items.append({
+			"order": c["name"], "bill_no": c["name"], "kot_no": None,
+			"outlet": c["outlet"], "outlet_id": None, "table_no": c["table"],
+			"room": c["room"], "reservation": c["reservation"], "guest_name": None,
+			"amount": c["amount"], "status": "Billed" if c["billed"] else "Open",
+			"state": "served, not settled" if c["billed"] else "open",
+			"opened_at": c["opened_at"],
+		})
 	places = _places(property)
 	return _check(
 		"open_pos_bills", "Open restaurant bills",
@@ -551,12 +563,25 @@ def check_high_balance(property: str) -> dict:
 
 
 def check_credit_limit(property: str) -> dict:
+	from kamra.erp_books import RECEIVABLES_UNAVAILABLE_REASON, receivables_source
 	from kamra.ledger import company_payer_of
+	# the ERP's Customer receivables when it keeps them (its Payment Entry
+	# receipts never reach this app's City Ledger), else the City Ledger
 	places = _places(property)
-	accounts = frappe.get_all(
-		"City Ledger Account",
-		filters={"property": property, "disabled": 0, "credit_limit": (">", 0)},
-		fields=["name", "company", "account_number", "credit_limit"])
+	src = receivables_source(property, strict=False)
+	if src.unavailable:
+		return _check(
+			"credit_limit", "Companies over their credit limit", "warn", [],
+			f"{RECEIVABLES_UNAVAILABLE_REASON} Check company credit limits in "
+			"the accounting system before billing more.", "/receivables",
+			unverified=True)
+	if src.in_erp:
+		accounts = [a for a in src.rows if flt(a["credit_limit"]) > 0]
+	else:
+		accounts = frappe.get_all(
+			"City Ledger Account",
+			filters={"property": property, "disabled": 0, "credit_limit": (">", 0)},
+			fields=["name", "company", "account_number", "credit_limit"])
 	items = []
 	if accounts:
 		folios = frappe.db.sql(
@@ -576,20 +601,27 @@ def check_credit_limit(property: str) -> dict:
 			if company:
 				by_company.setdefault(company, []).append(f)
 		for a in accounts:
-			ar = _r(frappe.db.sql(
-				"""SELECT COALESCE(SUM(debit - credit), 0)
-				   FROM `tabCity Ledger Entry` WHERE account = %s""", a.name)[0][0], places)
-			mine = by_company.get(a.company) or []
+			if src.in_erp:
+				name, company, number = a["account"], a["company"], a["account_number"]
+				limit = _r(a["credit_limit"], places)
+				ar = _r(a["balance"], places)
+			else:
+				name, company, number = a.name, a.company, a.account_number
+				limit = _r(a.credit_limit, places)
+				ar = _r(frappe.db.sql(
+					"""SELECT COALESCE(SUM(debit - credit), 0)
+					   FROM `tabCity Ledger Entry` WHERE account = %s""", a.name)[0][0], places)
+			mine = by_company.get(company) or []
 			in_house = _r(sum(max(flt(f.balance), 0) for f in mine), places)
 			exposure = _r(ar + in_house, places)
-			if exposure <= flt(a.credit_limit):
+			if exposure <= limit:
 				continue
 			items.append({
-				"account": a.name, "company": a.company,
-				"account_number": a.account_number,
-				"credit_limit": flt(a.credit_limit), "ar_balance": ar,
+				"account": name, "company": company,
+				"account_number": number,
+				"credit_limit": limit, "ar_balance": ar,
 				"in_house": in_house, "exposure": exposure,
-				"over_by": _r(exposure - flt(a.credit_limit), places),
+				"over_by": _r(exposure - limit, places),
 				"folios": [{"folio": f.name, "reservation": f.reservation,
 				            "guest_name": f.guest_name, "room": _room_no(f.room),
 				            "balance": _r(f.balance, places)} for f in mine],
@@ -597,40 +629,70 @@ def check_credit_limit(property: str) -> dict:
 	return _check(
 		"credit_limit", "Companies over their credit limit", "warn", items,
 		"Ask the company for a payment, or have Finance raise the limit "
-		"before more is billed to them.", "/ledgers")
+		"before more is billed to them.", "/receivables", unverified=False)
 
 
 def check_overdue_ar(property: str) -> dict:
 	"""Companies with city ledger bills past their due date (invoice date +
 	credit days), by company - what to chase before billing them more."""
-	from kamra.ledger import _account_position
+	from kamra.erp_books import RECEIVABLES_UNAVAILABLE_REASON, receivables_source
+	from kamra.ledger import (
+		_account_position,
+		_age_buckets,
+		aging_date,
+		effective_credit_days,
+	)
+	items = []
 	places = _places(property)
 	eps = 0.5 * (10 ** -places)
-	items = []
-	for a in frappe.get_all(
-			"City Ledger Account",
-			filters={"property": property, "disabled": 0},
-			fields=["name", "company", "account_number", "credit_limit"],
-			limit_page_length=0):
-		pos = _account_position(a.name)
-		if pos["overdue"] <= eps:
-			continue
-		items.append({
-			"account": a.name, "company": a.company,
-			"account_number": a.account_number,
-			"credit_days": pos["credit_days"],
-			"overdue": pos["overdue"], "d1_30": pos["d1_30"],
-			"d31_60": pos["d31_60"], "d61_90": pos["d61_90"],
-			"d90p": pos["d90p"],
-			"oldest_due_date": pos["oldest_overdue_due_date"],
-			"balance": _r(pos["open_balance"] - pos["unapplied_credit"], places),
-		})
+	src = receivables_source(property, strict=False)
+	if src.unavailable:
+		return _check(
+			"overdue_ar", "Companies with overdue bills", "warn", [],
+			f"{RECEIVABLES_UNAVAILABLE_REASON} Check overdue accounts in "
+			"the accounting system before billing more.", "/receivables",
+			total=None, unverified=True)
+	if src.in_erp:
+		today = aging_date(property)
+		for a in src.rows:
+			pos = _age_buckets(a["open_items"], a["unapplied_credit"], today, places=places)
+			if pos["overdue"] <= eps:
+				continue
+			items.append({
+				"account": a["account"], "company": a["company"],
+				"account_number": a["account_number"],
+				"credit_days": effective_credit_days(a["account"], property),
+				"overdue": pos["overdue"], "d1_30": pos["d1_30"],
+				"d31_60": pos["d31_60"], "d61_90": pos["d61_90"],
+				"d90p": pos["d90p"],
+				"oldest_due_date": pos["oldest_overdue_due_date"],
+				"balance": _r(a["balance"], places),
+			})
+	else:
+		for a in frappe.get_all(
+				"City Ledger Account",
+				filters={"property": property, "disabled": 0},
+				fields=["name", "company", "account_number", "credit_limit"],
+				limit_page_length=0):
+			pos = _account_position(a.name)
+			if pos["overdue"] <= eps:
+				continue
+			items.append({
+				"account": a.name, "company": a.company,
+				"account_number": a.account_number,
+				"credit_days": pos["credit_days"],
+				"overdue": pos["overdue"], "d1_30": pos["d1_30"],
+				"d31_60": pos["d31_60"], "d61_90": pos["d61_90"],
+				"d90p": pos["d90p"],
+				"oldest_due_date": pos["oldest_overdue_due_date"],
+				"balance": _r(pos["open_balance"] - pos["unapplied_credit"], places),
+			})
 	items.sort(key=lambda r: -r["overdue"])
 	return _check(
 		"overdue_ar", "Companies with overdue bills", "warn", items,
 		"Chase the company for payment. Credit control (Settings, Finance) can "
-		"warn or block more billing to a company with overdue bills.", "/ledgers",
-		total=_r(sum(r["overdue"] for r in items), places))
+		"warn or block more billing to a company with overdue bills.", "/receivables",
+		total=_r(sum(r["overdue"] for r in items), places), unverified=False)
 
 
 def check_room_status(property: str, business_date: str | None = None) -> dict:
@@ -875,6 +937,20 @@ def night_audit_precheck(property: str):
 	}
 
 
+def _property_currency_meta(property: str) -> tuple[str | None, str]:
+	from kamra.ledger import home_currency
+	from kamra.localization import pack_for
+	try:
+		prop_doc = frappe.get_cached_doc("Property", property)
+		loc = pack_for(property).locale(prop_doc)
+		return (
+			prop_doc.get("currency") or loc.get("currency") or home_currency(property),
+			loc.get("currency_symbol", ""),
+		)
+	except Exception:
+		return frappe.db.get_value("Property", property, "currency"), ""
+
+
 @frappe.whitelist()
 @require_roles(*AUDIT_ROLES, scope={"audit": "Night Audit Run"})
 def night_audit_pack(audit: str):
@@ -905,6 +981,10 @@ def night_audit_pack(audit: str):
 		        "can_rebuild": run.status != "Draft",
 		        "message": _("No audit pack was saved for this run. Rebuild it "
 		                     "to print the night's reports.")}
+	if not pack.get("currency") or "currency_symbol" not in pack:
+		currency, currency_symbol = _property_currency_meta(run.property)
+		pack.setdefault("currency", currency)
+		pack.setdefault("currency_symbol", currency_symbol)
 	return {"audit": audit, "run": run, "has_pack": True, "pack": _strip_figures(pack),
 	        "can_rebuild": True}
 
@@ -1376,13 +1456,15 @@ def build_pack(property: str, bd: str, *, checks: list[dict],
 		row["acknowledgement"] = acked.get(c["key"])
 		row["exception"] = c["severity"] == "block" and bool(c["count"])
 		prechecks.append(row)
+	currency, currency_symbol = _property_currency_meta(property)
 	pack: dict = {
 		"version": 1,
 		"property": property,
 		"property_name": prop.get("property_name") or property,
 		"legal_name": prop.get("legal_name"),
 		"city": prop.get("city"),
-		"currency": prop.get("currency"),
+		"currency": prop.get("currency") or currency,
+		"currency_symbol": currency_symbol,
 		"business_date": bd,
 		"generated_at": str(now_datetime()),
 		"generated_by": frappe.session.user,
@@ -1625,10 +1707,12 @@ def _eod_state(property: str, audit: str | None = None) -> dict:
 	# roll did not stick. Surface it so the wizard never looks "fully closed"
 	# while the property is still on yesterday.
 	stuck = stuck_business_date(property)
+	currency, currency_symbol = _property_currency_meta(property)
 	base = {
 		"property": property,
 		"property_name": prop.get("property_name") or property,
-		"currency": prop.get("currency"),
+		"currency": prop.get("currency") or currency,
+		"currency_symbol": currency_symbol,
 		"server_date": str(getdate()),
 		"server_time": str(now_datetime())[:16],
 		"property_now": str(property_now(property))[:16],

@@ -7,7 +7,7 @@ import {
   UtensilsCrossed, Receipt, Users, Gift, Ban, ChefHat, Clock,
   Wallet, TrendingUp,
 } from "lucide-react"
-import { Link } from "react-router-dom"
+import AppLink from "../components/AppLink"
 import { call, getCurrentProperty } from "../lib/api"
 import { subscribeRealtime } from "../lib/realtime"
 import { serverError } from "../lib/resource"
@@ -158,9 +158,9 @@ export default function PosDashboard() {
           <input type="date" aria-label={translate("To")} className={inputCls} value={toDate || date}
             min={date} max={today()}
             onChange={(e) => setToDate(e.target.value === date ? "" : e.target.value)} />
-          <Link to="/pos"
+          <AppLink to="/pos"
             className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm font-medium text-zinc-600 hover:bg-zinc-50">
-            <UtensilsCrossed className="size-4" />{translate("Open POS")}</Link>
+            <UtensilsCrossed className="size-4" />{translate("Open POS")}</AppLink>
         </div>
       </div>
 

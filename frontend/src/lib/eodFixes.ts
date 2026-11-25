@@ -99,7 +99,7 @@ export const CHECK_FIXES: Record<string, CheckFix> = {
   },
   overdue_ar: {
     why: "Companies with bills past their credit terms.",
-    steps: [{ text: "Send a reminder or log a payment promise.", to: "/ledgers", cta: "Open ledgers" }],
+    steps: [{ text: "Send a reminder or log a payment promise.", to: "/receivables", cta: "Open Receivables" }],
     override: "Nothing is blocked. It is only flagged.",
     ask: (n, d) => `${n} companies have overdue bills on ${d}. Summarise the overdue amount and age for each.`,
   },

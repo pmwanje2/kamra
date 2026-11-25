@@ -52,6 +52,7 @@ interface CompanyCredit {
   applies: boolean
   ok: boolean
   blocked?: boolean
+  unverified?: boolean
   policy: string
   company?: string
   reasons: string[]
@@ -295,7 +296,19 @@ export function BookingDialog(props: {
         amount: creditAmount,
       })
         .then((c) => live && setCredit(c))
-        .catch(() => live && setCredit(null))
+        .catch(
+          () =>
+            live &&
+            setCredit({
+              applies: true,
+              ok: false,
+              blocked: false,
+              unverified: true,
+              policy: "warn",
+              company: form.company,
+              reasons: ["Company credit could not be verified."],
+            }),
+        )
     }, 300)
     return () => {
       live = false
@@ -1554,6 +1567,11 @@ export function BookingDialog(props: {
                           {credit.blocked
                             ? t("{company}: company credit is blocked", { company: credit.company ?? "" })
                             : t("{company}: company credit warning", { company: credit.company ?? "" })}
+                          {credit.unverified && (
+                            <span className="ms-2 inline-flex items-center rounded-full bg-amber-200/80 px-2 py-0.5 text-xs font-medium text-amber-900">
+                              {t("Not verified")}
+                            </span>
+                          )}
                         </p>
                         <ul className="mt-1 list-disc space-y-0.5 pl-4">
                           {credit.reasons.map((r) => (
