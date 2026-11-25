@@ -144,7 +144,7 @@ function scanGeneratedDocs() {
     if (forbidden.test(prose)) findings.push(location + ": " + text)
   }
   for (const [i, line] of fs.readFileSync(path.join(docs, "api-reference.md"), "utf8").split("\n").entries()) {
-    check(line.replace(/(roles: .*)/, (roles) => roles.replaceAll("`Kamra Agent`", "")), "api-reference.md:" + (i + 1))
+    check(line, "api-reference.md:" + (i + 1))
   }
   const collection = JSON.parse(fs.readFileSync(path.join(docs, "public/kamra.postman_collection.json"), "utf8"))
   function visit(node, location) {
