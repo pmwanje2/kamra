@@ -3788,6 +3788,39 @@ def post_allowance(folio: str, amount: float, reason: str = "",
 	if not amount:
 		frappe.throw(_("Allowance amount is required."))
 	text = _allowance_reason(reason_code, reason)
+
+	def _record_and_post(approver: str | None = None) -> str:
+		has_workflow = bool(
+			frappe.db.exists("Workflow", {"document_type": "Allowance Request", "is_active": 1})
+		)
+		if not has_workflow:
+			return _post_allowance(doc.name, amount, text, gst_rate, approver,
+			                       reason_code=reason_code)
+		now = now_datetime()
+		req = frappe.get_doc({
+			"doctype": "Allowance Request", "property": doc.property,
+			"folio": doc.name, "reservation": doc.reservation,
+			"amount": amount, "gst_rate": flt(gst_rate),
+			"reason_code": reason_code or None, "reason": text,
+			"status": "Pending", "requested_by": frappe.session.user,
+			"requested_on": now, "channel": agent_channel() or "Desk",
+		})
+		req.insert(ignore_permissions=True)
+		serial = _post_allowance(doc.name, amount, text, gst_rate, approver,
+		                         req=req, reason_code=reason_code)
+		frappe.db.set_value(
+			"Allowance Request",
+			req.name,
+			{
+				"status": "Approved",
+				"decided_by": approver,
+				"decided_on": now if approver else None,
+				"serial": serial,
+			},
+			update_modified=False,
+		)
+		return serial
+
 	if _allowance_needs_approval(doc.property, amount, reason_code):
 		from kamra.credit import _is_agent
 		sup_user = (supervisor or "").strip()
@@ -3817,8 +3850,7 @@ def post_allowance(folio: str, amount: float, reason: str = "",
 				reference_name=doc.name,
 				reason=text,
 			)
-			serial = _post_allowance(doc.name, amount, text, gst_rate, approver,
-			                         reason_code=reason_code)
+			serial = _record_and_post(approver)
 			return {"ok": True, "folio": folio, "approved_by": approver,
 			        "serial": serial}
 		req = frappe.get_doc({
@@ -3840,8 +3872,7 @@ def post_allowance(folio: str, amount: float, reason: str = "",
 		           approval_status="Pending")
 		return {"ok": True, "pending": True, "request": req.name,
 		        "folio": folio}
-	serial = _post_allowance(doc.name, amount, text, gst_rate,
-	                         reason_code=reason_code)
+	serial = _record_and_post()
 	return {"ok": True, "folio": folio, "serial": serial}
 
 
