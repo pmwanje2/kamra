@@ -85,11 +85,34 @@ class FiscalFolioTests(AuditTestCase):
 		api.add_folio_payment(self.folio, "Cash", owed)
 		return close_folio(self.folio)
 
+	@contextmanager
+	def owned_fiscal_reader(self, answer):
+		"""Supply the accounting record as well as the bridge's fiscal answer."""
+		from kamra.tests import test_folio_credit_and_advance_r2 as r2
+
+		frappe.db.set_value("Property", PROP_A, {"country": "Uganda", "currency": "UGX", "company": r2.COMPANY})
+		frappe.clear_document_cache("Property", PROP_A)
+		frappe.db.set_value("Folio", self.folio, "sales_invoice", INVOICE)
+		erp = r2.FolioCreditAndAdvanceR2Test()
+		vat = 18 if answer.get("charges_tax") else 0
+		invoice = erp._invoice(INVOICE, self.folio, currency="UGX", net_total=100,
+		                       total_taxes_and_charges=vat, grand_total=100 + vat,
+		                       taxes=[{"description": "VAT", "rate": vat, "tax_amount": vat}])
+		get_doc = frappe.get_doc
+
+		def read(doctype, *args, **kwargs):
+			if doctype == "Sales Invoice" and args == (INVOICE,):
+				return invoice
+			return get_doc(doctype, *args, **kwargs)
+
+		with erp._erp([invoice]), patch.object(frappe, "get_doc", side_effect=read), fiscal_reader(answer) as calls:
+			yield calls
+
 	# --- the closed bill shows the statutory document ---------------------------------------------------
 
 	def test_a_fiscalised_folio_prints_the_sales_invoice_and_its_efris_identifiers(self):
 		internal = self.settle()
-		with fiscal_reader(FISCALISED) as calls:
+		with self.owned_fiscal_reader(FISCALISED) as calls:
 			data = api.folio_invoice(self.folio)
 		self.assertEqual(calls, [{"folio": self.folio}])
 		document = data["document"]
@@ -105,7 +128,7 @@ class FiscalFolioTests(AuditTestCase):
 	def test_efris_pending_is_never_presented_as_a_final_invoice(self):
 		internal = self.settle()
 		pending = {"state": "pending", "sales_invoice": INVOICE, "efris_status": "Failed"}
-		with fiscal_reader(pending):
+		with self.owned_fiscal_reader(pending):
 			data = api.folio_invoice(self.folio)
 		document = data["document"]
 		self.assertFalse(document["is_final"])
@@ -135,7 +158,7 @@ class FiscalFolioTests(AuditTestCase):
 		internal = self.settle()
 		for charges_tax, want_title in ((1, "Tax Invoice"), (0, "Invoice")):
 			with self.subTest(charges_tax=charges_tax):
-				with fiscal_reader({
+				with self.owned_fiscal_reader({
 					"state": "not_efris", "sales_invoice": INVOICE,
 					"charges_tax": charges_tax, "efris_enrolled": 0,
 				}):
@@ -256,7 +279,7 @@ class FiscalFolioTests(AuditTestCase):
 
 	def test_reprint_records_the_sales_invoice_and_counts_revisions(self):
 		self.settle()
-		with fiscal_reader(FISCALISED):
+		with self.owned_fiscal_reader(FISCALISED):
 			first = api.reprint_fiscal_folio(self.folio, reason="Guest copy")
 			second = api.reprint_fiscal_folio(self.folio)
 		self.assertEqual((first["revision"], second["revision"]), (1, 2))
