@@ -7005,5 +7005,8 @@
   "Company receivables could not be verified in the accounting system.": "تعذّر التحقق من ذمم الشركات في نظام المحاسبة.",
   "Company credit could not be verified.": "تعذّر التحقق من ائتمان الشركة.",
   "Guest and deposit folios match their ledgers. Company receivables (AR) could not be verified in the accounting system.": "فواتير النزلاء والودائع تطابق دفاترها. تعذّر التحقق من ذمم الشركات في نظام المحاسبة.",
-  "Guest and deposit folios match their ledgers. Company receivables (AR) are kept in the accounting system.": "فواتير النزلاء والودائع تطابق دفاترها. تُحفظ ذمم الشركات في نظام المحاسبة."
+  "Guest and deposit folios match their ledgers. Company receivables (AR) are kept in the accounting system.": "فواتير النزلاء والودائع تطابق دفاترها. تُحفظ ذمم الشركات في نظام المحاسبة.",
+  "Back-office allowance decisions are handled in Approvals Inbox under four-eyes approval controls. Floor overrides within the property limit require a second authorized manager's PIN.": "تُعالج قرارات التسويات الخلفية في صندوق الموافقات ضمن ضوابط الاعتماد المزدوج. تتطلب التجاوزات الميدانية ضمن حد المنشأة رمز PIN لمدير ثانٍ مخوّل.",
+  "Open in Approvals Inbox": "فتح في صندوق الموافقات",
+  "Pending workflow approval": "بانتظار اعتماد مسار الموافقة"
 }

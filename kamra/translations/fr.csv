@@ -2617,3 +2617,6 @@ Only {0} of the deposit is still held.,Il ne reste que {0} retenu sur l'acompte.
 The guest folio only has {0} in credit. Settle the bill or withhold against it before refunding the deposit.,Le folio client ne dispose que de {0} en crédit. Soldez la note ou imputez la retenue avant de rembourser la caution.
 This is kept in the accounting system. Open {0}: {1},Cet élément est tenu dans le système comptable. Ouvrir {0} : {1}
 {0} bill(s) for this stay are still open at the outlet: {1}. Settle them at the outlet before check-out.,{0} note(s) de ce séjour sont encore ouvertes au point de vente : {1}. Réglez-les au point de vente avant le départ.
+[HSP-DOA-ROLE] Allowance decisions require a named active user.,[HSP-DOA-ROLE] Les décisions de dégrèvement nécessitent un utilisateur actif nommé.
+[HSP-DOA-SELF] You cannot approve or reject your own allowance request.,[HSP-DOA-SELF] Vous ne pouvez pas approuver ni rejeter votre propre demande de dégrèvement.
+[SITEOPS-DOA-LIMIT] Amount exceeds the floor PIN limit; route this request through Approvals Inbox.,[SITEOPS-DOA-LIMIT] Le montant dépasse la limite de validation par code PIN sur place ; acheminez cette demande via la boîte des approbations.
