@@ -116,8 +116,37 @@ def _refund_amounts(folio, sec_idx: set[int]) -> tuple[Decimal, Decimal]:
 	return identified, min(unlinked, max(Decimal(0), _security_before_legacy(folio, sec_idx)))
 
 
-def _legacy_security_deposit_refunded(folio, sec_idx: set[int], *, reserve_ambiguous: bool = False) -> Decimal:
-	"""Security refunds recorded only in the stay's historical refund total."""
+def guest_security_windows(reservation, property_name, *, for_update=False):
+	return frappe.db.get_values(
+		"Folio", {"reservation": reservation, "property": property_name, "folio_type": "Guest"},
+		"name", pluck=True, for_update=for_update, order_by="window_no asc, creation asc, name asc",
+	)
+
+
+def allocate_historical_security_refunds(windows, recorded: Decimal) -> dict[str, Decimal]:
+	"""Allocate the stay total remaining after all identified refunds, in Guest window order."""
+	if recorded <= 0:
+		return {}
+	remaining = recorded
+	caps = []
+	for window, sec_idx in windows:
+		identified, cap = _refund_amounts(window, sec_idx)
+		remaining -= identified
+		if cap:
+			caps.append((window.name, cap))
+
+	allocations = {}
+	for name, cap in caps:
+		if remaining <= 0:
+			break
+		take = min(remaining, cap)
+		allocations[name] = take
+		remaining -= take
+	return allocations
+
+
+def _legacy_security_deposit_refunded(folio, sec_idx: set[int]) -> Decimal:
+	"""This Guest window's share of the stay's historical refund total."""
 	if not sec_idx or not folio.get("reservation") or (folio.get("folio_type") or "Guest") != "Guest":
 		return Decimal(0)
 	if not frappe.db.exists("DocType", "Security Deposit"):
@@ -128,22 +157,15 @@ def _legacy_security_deposit_refunded(folio, sec_idx: set[int], *, reserve_ambig
 	if recorded <= 0:
 		return Decimal(0)
 
-	identified, unlinked = _refund_amounts(folio, sec_idx)
-	remaining = recorded - identified
-	if unlinked and remaining > 0:
-		# The total belongs to the stay. Even an unlinked refund on another
-		# window could explain part of it, so only use the provable remainder.
-		for name in frappe.get_all("Folio", filters={
-			"reservation": folio.reservation, "name": ("!=", folio.name),
-		}, pluck="name"):
+	windows = []
+	for name in guest_security_windows(folio.reservation, folio.property):
+		if name == folio.name:
+			# Include pending payment rows when recalculating the current document.
+			windows.append((folio, sec_idx))
+		else:
 			other = frappe.get_doc("Folio", name)
-			known, possible = _refund_amounts(other, _security_deposit_row_ids(other))
-			remaining -= known
-			if not reserve_ambiguous:
-				remaining -= possible
-			if remaining <= 0:
-				break
-	return min(unlinked, max(remaining, Decimal(0)))
+			windows.append((other, _security_deposit_row_ids(other)))
+	return allocate_historical_security_refunds(windows, recorded).get(folio.name, Decimal(0))
 
 
 def _stay_withheld_deposit(folio, has_sec_dep: bool) -> Decimal:
@@ -181,11 +203,10 @@ def security_deposit_held_on_folio(folio) -> float:
 	return float(_security_before_legacy(folio, sec_idx) - _legacy_security_deposit_refunded(folio, sec_idx))
 
 
-def refundable_security_on_folio(folio) -> Decimal:
+def refundable_security_on_folio(folio, sec_idx: set[int], historical_refund: Decimal) -> Decimal:
 	"""Cash that this locked window can return, backed by its Deposit ledger."""
 	from kamra.ledger import SECURITY_DEPOSIT_REFUND_SOURCE, _money
 
-	sec_idx = _security_deposit_row_ids(folio)
 	if not sec_idx:
 		return Decimal(0)
 	rows = {folio.payments[i].name for i in sec_idx}
@@ -198,10 +219,8 @@ def refundable_security_on_folio(folio) -> Decimal:
 		total += _money(net)
 		if kind in ("Security Deposit", SECURITY_DEPOSIT_REFUND_SOURCE) or (kind == "Folio Payment" and name in rows):
 			security += _money(net)
-	# A cash payout must reserve every historical refund this window could
-	# already have paid, including one that another window could also explain.
-	legacy = _legacy_security_deposit_refunded(folio, sec_idx, reserve_ambiguous=True)
-	return max(Decimal(0), min(total, min(security, _security_before_legacy(folio, sec_idx)) - legacy))
+	held = min(security, _security_before_legacy(folio, sec_idx)) - historical_refund
+	return max(Decimal(0), min(total, held))
 
 
 def _is_closed_or_invoiced(folio) -> bool:

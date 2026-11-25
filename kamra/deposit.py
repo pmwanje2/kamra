@@ -1087,7 +1087,10 @@ def refund_deposit(reservation: str, amount: float | None = None,
                    pin: str | None = None, *, folio: str | None = None) -> dict:
 	"""Return held funds in window order, or solely from the named Guest folio."""
 	from kamra.api import _refund_folio_payment
-	from kamra.folio import refundable_security_on_folio
+	from kamra.folio import (
+		_security_deposit_row_ids, allocate_historical_security_refunds,
+		guest_security_windows, refundable_security_on_folio,
+	)
 	from kamra.ledger import _fmt_currency, _money, _parse_currency_amount, _round_currency
 	from kamra.localization import pack_for, payment_modes
 	from kamra.savings import log_action
@@ -1111,22 +1114,25 @@ def refund_deposit(reservation: str, amount: float | None = None,
 	request = getattr(frappe.local, "request", None)
 	if folio is None and (form.get("cmd") == rpc or (request and request.path.endswith("/method/" + rpc))):
 		folio = form.get("folio")
-	windows = frappe.db.get_values(
-		"Folio", {"reservation": res.name, "property": res.property, "folio_type": "Guest"},
-		"name", pluck=True, for_update=True, order_by="window_no asc, creation asc, name asc",
-	)
-	if folio is not None:
-		windows = [name for name in windows if name == folio]
-	if not windows:
+	names = guest_security_windows(res.name, res.property, for_update=True)
+	if not names or (folio is not None and folio not in names):
 		frappe.throw(_("No guest folio for this stay."))
+	windows = []
+	for name in names:
+		window = frappe.get_doc("Folio", name, for_update=True)
+		windows.append((window, _security_deposit_row_ids(window)))
+	historical = allocate_historical_security_refunds(windows, _money(dep.refunded_amount))
 	remaining = amt
 	allocations = []
-	for name in windows:
-		window = frappe.get_doc("Folio", name, for_update=True)
-		available = refundable_security_on_folio(window).quantize(unit, rounding=ROUND_DOWN)
+	for window, sec_idx in windows:
+		if folio is not None and window.name != folio:
+			continue
+		available = refundable_security_on_folio(
+			window, sec_idx, historical.get(window.name, Decimal(0)),
+		).quantize(unit, rounding=ROUND_DOWN)
 		part = min(available, remaining)
 		if part > 0:
-			allocations.append((name, part))
+			allocations.append((window.name, part))
 			remaining -= part
 		if not remaining:
 			break
