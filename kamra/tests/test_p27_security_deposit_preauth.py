@@ -758,6 +758,48 @@ class P27SecurityDepositPreauthTest(unittest.TestCase):
 		state = self._authorize_usd()
 		self.assertEqual(self.site.preauths[state["preauth_hold"]]["customer"], "CUS-AMINA")
 
+	def test_frappe_permission_calls_are_not_in_boolean_expressions(self):
+		tree = ast.parse((KAMRA / "deposit.py").read_text(encoding="utf-8"))
+		unchecked_lines = set()
+		for expr in ast.walk(tree):
+			if not isinstance(expr, ast.BoolOp):
+				continue
+			for node in ast.walk(expr):
+				if not isinstance(node, ast.Call):
+					continue
+				func = node.func
+				if (
+					isinstance(func, ast.Attribute)
+					and func.attr == "has_permission"
+					and isinstance(func.value, ast.Name)
+					and func.value.id == "frappe"
+					and not any(
+						kw.arg == "throw" and isinstance(kw.value, ast.Constant) and kw.value.value is True
+						for kw in node.keywords
+					)
+				):
+					unchecked_lines.add(node.lineno)
+
+		self.assertEqual(
+			sorted(unchecked_lines), [],
+			"Use an explicit guard for frappe.has_permission calls in deposit.py",
+		)
+
+	def test_has_permission_checks_frappe_with_optional_doc(self):
+		has_permission = getattr(self.deposit, "_has_permission", None)
+		self.assertTrue(callable(has_permission), "Expected a deposit._has_permission helper")
+		for doctype, ptype, kwargs in (
+			("Credit Preauthorization", "create", {}),
+			("Credit Preauthorization", "write", {"doc": "PREAUTH-1"}),
+			("Payment Entry", "create", {}),
+			("Payment Entry", "submit", {}),
+		):
+			for allowed in (True, False):
+				with self.subTest(doctype=doctype, ptype=ptype, allowed=allowed):
+					with patch.object(self.deposit.frappe, "has_permission", return_value=allowed) as check:
+						self.assertIs(has_permission(doctype, ptype, **kwargs), allowed)
+						check.assert_called_once_with(doctype, ptype, print_logs=False, **kwargs)
+
 	def test_card_actions_follow_document_permissions(self):
 		self.site.permissions["Credit Preauthorization", "create"] = False
 		self.assertFalse(self.deposit.deposit_state("RES-USD-1")["can_authorize"])
