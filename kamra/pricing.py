@@ -965,7 +965,7 @@ def _version_move_dates(value, first, last):
 	return candidates
 
 
-def nightly_billing_room_types(reservation) -> dict[str, str]:
+def nightly_billing_room_types(reservation, dates=None) -> dict[str, str]:
 	"""Frozen room types for nights before a paid move, keyed by business date."""
 	recorded = reservation.get("room_move_night_types")
 	recorded = frappe.parse_json(recorded) if recorded else {}
@@ -977,9 +977,13 @@ def nightly_billing_room_types(reservation) -> dict[str, str]:
 	cutoff = reservation.get("room_move_rate_cutoff")
 	if not cutoff or not reservation.get("name"):
 		return types
-	locked_dates = [str(row.stay_date) for row in reservation.get("night_rates") or [] if row.get("stay_date")]
-	elapsed = locked_dates or _stay_nights(reservation.check_in_date, cutoff)
-	days = {day for day in elapsed if day < str(cutoff)} - types.keys()
+	if dates is None:
+		if reservation.get("check_out_date"):
+			dates = _stay_nights(reservation.check_in_date, min(getdate(reservation.check_out_date), getdate(cutoff)))
+		else:
+			# Partial reservation projections can carry specific nights without a departure.
+			dates = [row.stay_date for row in reservation.get("night_rates") or [] if row.get("stay_date")]
+	days = {str(day) for day in dates if str(reservation.check_in_date) <= str(day) < str(cutoff)} - types.keys()
 	if not days:
 		return types
 	# A Version Date is display text on older sites. Only consider interpretations
@@ -1037,7 +1041,8 @@ def nightly_billing_room_types(reservation) -> dict[str, str]:
 def billing_room_type(reservation, date=None):
 	"""The nightly rate's room type, independent of where the guest sleeps."""
 	if date is not None:
-		recorded = nightly_billing_room_types(reservation).get(str(getdate(date)))
+		day = str(getdate(date))
+		recorded = nightly_billing_room_types(reservation, [day]).get(day)
 		if recorded:
 			return recorded
 	return reservation.get("room_type_to_charge") or reservation.room_type
@@ -2396,22 +2401,27 @@ def validate_package_discount(discount, package_dates):
 			frappe.throw(_("A holiday package is sold at its own price and can't take a desk discount."))
 
 
-def _package_night_tax(pseudo_res, pkg_doc, night_rate: Decimal, room_gst: Decimal, night_date) -> tuple[Decimal, Decimal, dict]:
+def _package_night_price(pseudo_res, pkg_doc, night_rate: Decimal, room_gst: Decimal, night_date, sold_gross):
 	"""Compute night tax matching post_package_night_split for inclusive elements."""
 	if not pkg_doc.get("elements"):
-		return night_rate * room_gst / Decimal(100), room_gst, {}
+		return night_rate, night_rate * room_gst / Decimal(100), room_gst, {}
 	from kamra.packages import split_package_night
 	split = split_package_night(pseudo_res, pkg_doc, night_rate, night_date, gst_rate=float(room_gst),
-	                            fulfilled=pseudo_res.get("fixed_postings"))
+	                            fulfilled=pseudo_res.get("fixed_postings"), sold_gross=sold_gross)
 	inc_items = [item for item in split["elements"] if item["included_in_rate"]]
+	if sold_gross is not None and inc_items:
+		net = split["night_total"]
+		tax = sold_gross - net
+		effective = (tax * 100 / net).quantize(Decimal("0.01")) if net else room_gst
+		return net, tax, effective, {"room_gst_rate": float(room_gst), "package_tax": str(tax)}
 	if not inc_items or all(_dec(item["gst_rate"]) == room_gst for item in inc_items):
-		return night_rate * room_gst / Decimal(100), room_gst, {"room_gst_rate": float(room_gst)}
+		return night_rate, night_rate * room_gst / Decimal(100), room_gst, {"room_gst_rate": float(room_gst)}
 	tax_val = split["room_net"] * room_gst / Decimal(100) + sum(
 		(item["amount"] * _dec(item["gst_rate"]) / Decimal(100) for item in inc_items),
 		Decimal(0),
 	)
 	eff = (tax_val * Decimal(100) / night_rate).quantize(Decimal("0.01")) if night_rate else room_gst
-	return tax_val, eff, {"room_gst_rate": float(room_gst), "package_tax": str(tax_val)}
+	return night_rate, tax_val, eff, {"room_gst_rate": float(room_gst), "package_tax": str(tax_val)}
 
 
 def _package_prices(pkg, doc, dates, adults, children, quantum, *, moved):
@@ -2602,10 +2612,11 @@ def quote(
 			rate, label, doc, party = package_prices[day]
 			gst = room_gst_rate(property, night_rt, rate + night_over_cap)
 			factor = Decimal(1) + gst / 100 if inclusive else Decimal(1)
+			sold_gross = rate if inclusive else None
 			rate /= factor
 			over_cap += night_over_cap / factor
 			over_cap_tax += night_over_cap / factor * gst / 100
-			night_tax, effective, meta = _package_night_tax(party, doc, rate, gst, day)
+			rate, night_tax, effective, meta = _package_night_price(party, doc, rate, gst, day, sold_gross)
 			nightly.append({"date": day, "rate": float(rate), "gst_rate": float(effective),
 			                "demand_premium_pct": 0, "package": label, "package_id": doc.name,
 			                "occupancy": 0, **meta})

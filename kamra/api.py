@@ -8680,6 +8680,7 @@ def _move_approval_required(property):
 
 def _swap_rooms(reservation, new_room, swap_reservation, reason):
 	from kamra.business_date import get_business_date
+	from kamra.folio import room_assignment_start
 	from kamra.housekeeping import clear_stay_room_state
 	from kamra.kamra.doctype.reservation.reservation import lock_property_for_inventory
 	from kamra.savings import log_action
@@ -8708,7 +8709,7 @@ def _swap_rooms(reservation, new_room, swap_reservation, reason):
 			clear_stay_room_state(property, doc.room)
 			frappe.db.set_value("Room", doc.room, "occupancy_status", "Occupied")
 			log_action("room_move", "Reservation", doc.name, property, rationale=reason or "",
-			           before_snapshot={"room": counterpart.room},
+			           before_snapshot={"room": counterpart.room, "assignment_since": room_assignment_start(doc, counterpart.room)},
 			           after_snapshot={"room": doc.room, "swapped_with": counterpart.name,
 			                           "effective_date": str(get_business_date(property))})
 	except Exception:
@@ -8799,7 +8800,9 @@ def _move_reservation(reservation, new_room, reason, confirm_price, rate_mode,
 				reference_doctype="Reservation", reference_name=doc.name, reason=reason)
 	else:
 		_discount_sign_off(doc, supervisor_user, supervisor_pin)
+	from kamra.folio import room_assignment_start
 	before = {"room": old_room, "room_type": old_type, "amount_after_tax": old_amount,
+	          "assignment_since": room_assignment_start(doc, old_room),
 	          "room_type_to_charge": doc.get("room_type_to_charge") or old_type,
 	          "upgrade_type": doc.get("upgrade_type")}
 	doc.flags.kamra_room_move_audit = True

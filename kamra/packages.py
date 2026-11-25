@@ -189,7 +189,7 @@ def fixed_package_postings(reservation, *, lock=False):
 	return {r.element: (str(r.posting_date), r.idempotency_key) for r in rows}
 
 
-def split_package_night(res, package_doc, night_total, business_date, *, gst_rate: float = 0.0, fulfilled=None) -> dict:
+def split_package_night(res, package_doc, night_total, business_date, *, gst_rate: float = 0.0, fulfilled=None, sold_gross=None) -> dict:
 	"""Split a package night deterministically into Room Net + due Package Elements.
 
 	Included elements (`included_in_rate == 1`) are deducted from `night_total` to derive
@@ -239,7 +239,8 @@ def split_package_night(res, package_doc, night_total, business_date, *, gst_rat
 			el_gst = flt(frappe.db.get_value("Transaction Code", el.transaction_code, "default_tax_rate") or 0)
 		if included and not el_gst and flt(gst_rate or 0) > 0:
 			el_gst = flt(gst_rate)
-		if cint(el.get("tax_inclusive")) and el_gst > 0:
+		allowance_gross = amt if cint(el.get("tax_inclusive")) else None
+		if allowance_gross is not None and el_gst > 0:
 			amt = _quantize(amt / (Decimal(1) + _dec(el_gst) / Decimal(100)), unit)
 		item = {
 			"element_row": el.name,
@@ -254,9 +255,31 @@ def split_package_night(res, package_doc, night_total, business_date, *, gst_rat
 			"idempotency_key": prior[1] if prior else f"pkg:{res.name}:{el.name}:" + ("stay" if fixed else bd_str),
 		}
 		if item["included_in_rate"]:
+			if sold_gross is not None:
+				item["gross"] = allowance_gross if allowance_gross is not None else amt + _quantize(amt * _dec(el_gst) / 100, unit)
 			included_items.append(item)
 		else:
 			addon_items.append(item)
+
+	if sold_gross is not None:
+		# Allocate the advertised gross to inclusions first; only the residual
+		# belongs to accommodation and attracts the room's tax rate.
+		gross = _quantize(sold_gross, unit)
+		allowances = sum((item["gross"] for item in included_items), Decimal(0))
+		allocated = weight = Decimal(0)
+		for item in included_items:
+			weight += item["gross"]
+			if allowances > gross:
+				# Rounded cumulative shares conserve the cap, including at 0dp.
+				share = _quantize(gross * weight / allowances, unit) - allocated
+				item["amount"] = _quantize(share / (1 + _dec(item["gst_rate"]) / 100), unit)
+			else:
+				share = item["gross"]
+			allocated += share
+			item["gst_amount"] = share - item["amount"]
+		room_gross = gross - allocated
+		room_net = _quantize(room_gross / (1 + _dec(gst_rate) / 100), unit)
+		total_dec = room_net + sum((item["amount"] for item in included_items), Decimal(0))
 
 	included_total = sum((i["amount"] for i in included_items), Decimal(0))
 	if included_total > total_dec and included_items:
@@ -348,18 +371,14 @@ def post_package_night_split(
 			key = (c.get("idempotency_key") or "").split(":")
 			if not c.creation and len(key) == 4 and key[:2] == ["pkg", res.name] and key[2] in fixed:
 				fulfilled[key[2]] = (str(c.posting_date), c.idempotency_key)
-	split = split_package_night(res, package_doc, night_total, bd_str, gst_rate=gst_rate, fulfilled=fulfilled)
+	split = split_package_night(res, package_doc, night_total, bd_str, gst_rate=gst_rate, fulfilled=fulfilled,
+	                            sold_gross=sold_gross)
 
 	tax_fields = {}
 	if sold_gross is not None:
 		# Net components are payable currency amounts. Allocate the remainder
 		# of the locked gross to room tax after the included elements' tax.
-		unit = minor_unit(res.property)
-		included_tax = Decimal(0)
-		for item in split["elements"]:
-			if item["included_in_rate"]:
-				item["gst_amount"] = _quantize(item["amount"] * _dec(item["gst_rate"]) / 100, unit)
-				included_tax += item["gst_amount"]
+		included_tax = sum((item["gst_amount"] for item in split["elements"] if item["included_in_rate"]), Decimal(0))
 		tax_fields = {"tax_as_posted": 1, "gst_amount": float(_dec(sold_gross) - split["night_total"] - included_tax)}
 
 	room_posted = False
@@ -388,6 +407,13 @@ def post_package_night_split(
 	addon_posted_amount = Decimal(0)
 
 	for el_item in split["elements"]:
+		allowance = None
+		if el_item["element_row"] in fixed:
+			allowance = frappe.db.get_value("Reservation Package Allowance", {
+				"reservation": res.name, "package_element": el_item["element_row"],
+			}, ["name", "idempotency_key"], as_dict=True, for_update=True)
+			if allowance and allowance.idempotency_key and el_item["element_row"] not in fulfilled:
+				el_item["idempotency_key"] = allowance.idempotency_key
 		el_key = el_item["idempotency_key"]
 		pending = any(c.get("idempotency_key") == el_key for f in folios.values() for c in f.charges if not c.creation)
 		if not pending and not _charge_key_standing(el_key):
@@ -409,7 +435,8 @@ def post_package_night_split(
 			elements_amount += el_item["amount"]
 			if not el_item["included_in_rate"]:
 				addon_posted_amount += el_item["amount"]
-		_ensure_allowance_record(res, package_doc, el_item, bd_str)
+		if not allowance:
+			_ensure_allowance_record(res, package_doc, el_item, bd_str)
 
 	return {
 		"posted": room_posted,

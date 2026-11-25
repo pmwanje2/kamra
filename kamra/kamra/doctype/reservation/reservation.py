@@ -2888,6 +2888,7 @@ class Reservation(Document):
 		self.log_action("check_out", minutes_saved=12)
 
 	def log_action(self, action_type, minutes_saved=0):
+		from kamra.business_date import get_business_date
 		from kamra.savings import log_action
 
 		log_action(
@@ -2896,5 +2897,7 @@ class Reservation(Document):
 			reference_name=self.name,
 			property=self.property,
 			minutes_saved=minutes_saved if self.source == "AI Agent" else 0,
+			after_snapshot={"room": self.room, "effective_date": str(get_business_date(self.property))}
+			if action_type == "check_in" else None,
 			rationale=f"Reservation {self.name} moved to {self.status}",
 		)

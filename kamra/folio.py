@@ -1326,6 +1326,41 @@ def reference_currency(reservation, grand_total=None, balance=None, *, charges=N
 	return out
 
 
+def room_assignment_start(reservation, room):
+	"""Latest dated assignment of the physical room, for the next move's audit."""
+	events = frappe.get_all("Agent Action Log", filters={
+		"action_type": ("in", ["check_in", "room_move"]), "property": reservation.property,
+		"reference_doctype": "Reservation", "reference_name": reservation.name,
+	}, fields=["action_type", "after_snapshot"], order_by="creation desc, name desc")
+	for event in events:
+		after = frappe.parse_json(event.after_snapshot or "{}") or {}
+		if event.action_type == "check_in" and not after:
+			continue  # the guided endpoint also logs a descriptive check-in note
+		return after.get("effective_date") if after.get("room") == room else None
+	return None
+
+
+def _legacy_source_assignment(reservation, source, target, effective, date):
+	"""Corroborate an older move's source interval from adjacent physical-room changes."""
+	from kamra.pricing import _version_move_dates
+
+	first, end = getdate(reservation.check_in_date), getdate(effective)
+	previous_room = previous_start = None
+	for version in frappe.get_all("Version", filters={
+		"ref_doctype": "Reservation", "docname": reservation.name,
+	}, pluck="data", order_by="creation asc, name asc"):
+		changes = {key: (old, new) for key, old, new in frappe.parse_json(version).get("changed", [])}
+		if "room" not in changes:
+			continue
+		old, new = changes["room"]
+		boundaries = _version_move_dates(changes.get("room_move_rate_cutoff", (None, None))[1], first, end)
+		start = boundaries.pop() if len(boundaries) == 1 else None
+		if (old, new, start) == (source, target, end) and previous_room == source and previous_start:
+			return previous_start <= getdate(date) < end
+		previous_room, previous_start = new, start
+	return False
+
+
 def _night_room_description(reservation, date):
 	"""Replay physical assignments backwards. Rates can belong to a different type."""
 	room, room_type = reservation.room, reservation.room_type
@@ -1345,6 +1380,13 @@ def _night_room_description(reservation, date):
 			break
 		room = before.get("room")
 		room_type = before.get("room_type") or room_type
+		if before.get("assignment_since") and before["assignment_since"] <= date:
+			break
+	else:
+		# Reaching the start of a partial log does not establish an arrival room.
+		if changes:
+			unknown = ("assignment_since" in before or not _legacy_source_assignment(
+				reservation, room, after.get("room"), effective, date))
 	if unknown:
 		room = None
 		# A billing type can differ from the physical assignment after a comp.

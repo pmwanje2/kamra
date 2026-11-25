@@ -3,9 +3,27 @@ import io
 import json
 
 from werkzeug.exceptions import BadRequest, RequestEntityTooLarge
+from werkzeug.formparser import MultiPartParser
+from werkzeug.http import parse_options_header
 from werkzeug.wrappers import Request, Response
 
 _APPROVAL_METHODS = {"kamra.api.check_in", "kamra.api.move_reservation", "kamra.api.move_room"}
+
+
+class _ApprovalMultipartParser(MultiPartParser):
+	"""Inspect each part while Werkzeug still has its original headers."""
+
+	def get_part_charset(self, headers):
+		media = headers.getlist("Content-Type")
+		disposition = headers.getlist("Content-Disposition")
+		if len(disposition) != 1 or parse_options_header(disposition[0])[0].lower() != "form-data":
+			raise BadRequest
+		if media and (len(media) != 1 or parse_options_header(media[0])[0].lower() != "text/plain"):
+			raise BadRequest
+		return super().get_part_charset(headers)
+
+	def start_file_streaming(self, event, total_content_length):
+		raise BadRequest
 
 
 def _stage_body(environ, method):
@@ -24,10 +42,16 @@ def _stage_body(environ, method):
 	request.max_content_length = 25 * 1024 * 1024
 	if request.is_json:
 		body = request.get_json()
-	elif request.mimetype in ("application/x-www-form-urlencoded", "multipart/form-data"):
-		body = {**request.args.to_dict(), **request.form.to_dict()}
-		if request.files:
+	elif request.mimetype == "multipart/form-data":
+		boundary = request.mimetype_params.get("boundary")
+		if not boundary:
 			raise BadRequest
+		parser = _ApprovalMultipartParser(max_form_memory_size=request.max_form_memory_size,
+		                                  max_form_parts=request.max_form_parts)
+		fields, _ = parser.parse(request.stream, boundary.encode("ascii"), request.content_length)
+		body = {**request.args.to_dict(), **fields.to_dict()}
+	elif request.mimetype == "application/x-www-form-urlencoded":
+		body = {**request.args.to_dict(), **request.form.to_dict()}
 	else:
 		if request.content_length or environ.get("wsgi.input_terminated"):
 			raise BadRequest
