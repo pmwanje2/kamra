@@ -67,17 +67,22 @@ def settlement_position(reservation: str) -> dict:
 	from kamra.ledger import _money, company_payer_of
 
 	res_prop = frappe.db.get_value("Reservation", reservation, "property")
+	folio_rows = frappe.get_all(
+		"Folio", filters={"reservation": reservation},
+		fields=["name", "balance", "folio_type", "group_booking",
+		        "reservation", "property", "status", "invoice_number",
+		        "grand_total", "payments_total"],
+		order_by="creation asc",
+	)
+	if not res_prop and folio_rows:
+		res_prop = folio_rows[0].get("property")
 	res_places = _places(res_prop)
+	res_eps = _eps(res_places)
 	owed = Decimal(0)
 	refund = Decimal(0)
 	to_city_ledger: list[tuple[str, str, float]] = []
 	folios = []
-	for f in frappe.get_all(
-			"Folio", filters={"reservation": reservation},
-			fields=["name", "balance", "folio_type", "group_booking",
-			        "reservation", "property", "status", "invoice_number",
-			        "grand_total", "payments_total"],
-			order_by="creation asc"):
+	for f in folio_rows:
 		if f.folio_type == "Group" and f.group_booking:
 			# the group's bill stays open past the departure of the room it is
 			# anchored to and is settled with the group, not this stay
@@ -93,6 +98,13 @@ def settlement_position(reservation: str) -> dict:
 		elif balance < -f_eps:
 			refund -= _money(balance)
 		folios.append({**f, "balance": balance, "city_ledger_company": payer})
+	if frappe.db.exists("DocType", "Security Deposit"):
+		dep_held = _r(
+			flt(frappe.db.get_value("Security Deposit", {"reservation": reservation}, "balance")),
+			res_places,
+		)
+		if dep_held > res_eps:
+			refund += _money(dep_held)
 	return {"owed": _r(owed, res_places), "refund_due": _r(refund, res_places),
 	        "to_city_ledger": to_city_ledger, "folios": folios}
 
@@ -492,10 +504,14 @@ def _checkout_context(reservation: str) -> dict:
 				if m.name not in seen:
 					display.append({**m, "balance": _r(m.balance, places),
 					                "city_ledger_company": None, "_group_only": True})
+		from kamra.folio import _security_deposit_row_ids
 		for f in display:
 			doc = frappe.get_doc("Folio", f["name"])
-			received = sum(flt(p.amount) for p in doc.payments if flt(p.amount) > 0)
-			refunded = -sum(flt(p.amount) for p in doc.payments if flt(p.amount) < 0)
+			sec_idx = _security_deposit_row_ids(doc)
+			received = sum(flt(p.amount) for idx, p in enumerate(doc.payments)
+			               if idx not in sec_idx and flt(p.amount) > 0)
+			refunded = -sum(flt(p.amount) for idx, p in enumerate(doc.payments)
+			                if idx not in sec_idx and flt(p.amount) < 0)
 			lines = []
 			for c in doc.charges or []:
 				grp = group_for_charge(c.charge_type, c.description or "")
@@ -573,8 +589,18 @@ def _checkout_context(reservation: str) -> dict:
 	# --- the money plan: guest side only, through the existing writers ------
 	collect: list[dict] = []
 	refunds: list[dict] = []
-	held = flt(deposit.get("held"))
+	held = _r(deposit.get("held"), places)
 	dep_folio = deposit.get("folio")
+	if held > eps and dep_folio:
+		dep_row = next((f for f in own if f["folio"] == dep_folio), None)
+		refunds.append({
+			"kind": "deposit", "folio": dep_folio,
+			"folio_type": dep_row["folio_type"] if dep_row else "Guest",
+			"amount": held,
+			"source": "security_deposit",
+			"mode": _deposit_mode(dep_folio, modes)
+			or (dep_row["main_mode"] if dep_row else None)
+			or _fallback_mode(modes)})
 	for f in own:
 		if f["side"] != "guest":
 			continue
@@ -583,7 +609,7 @@ def _checkout_context(reservation: str) -> dict:
 			                "amount": f["balance"],
 			                "invoiced": f["status"] == "Closed"})
 		elif f["balance"] < -eps:
-			due = -f["balance"]
+			due = _r(-f["balance"], places)
 			if f["status"] == "Closed":
 				blockers.append({
 					"code": "refund_on_invoiced_folio", "step": "settle",
@@ -593,42 +619,24 @@ def _checkout_context(reservation: str) -> dict:
 					             "cancelled first: open the folio.").format(
 						symbol, _fmt_money(due, display_places), f["folio"], f["invoice_number"] or "")})
 				continue
-			from_deposit = 0.0
-			if f["folio"] == dep_folio and held > eps:
-				from_deposit = _r(min(held, due), places)
+			avail = _r(f["refundable"], places)
+			amount = _r(min(due, max(avail, 0.0)), places)
+			if amount > eps:
 				refunds.append({
-					"kind": "deposit", "folio": f["folio"],
-					"folio_type": f["folio_type"], "amount": from_deposit,
-					"source": "security_deposit",
-					"mode": _deposit_mode(f["folio"], modes) or f["main_mode"]
-					or _fallback_mode(modes)})
-			rest = _r(due - from_deposit, places)
-			if rest > eps:
-				avail = _r(f["refundable"] - from_deposit, places)
-				amount = _r(min(rest, max(avail, 0.0)), places)
-				if amount > eps:
-					refunds.append({
-						"kind": "folio", "folio": f["folio"],
-						"folio_type": f["folio_type"], "amount": amount,
-						"source": "overpayment",
-						"mode": f["main_mode"] or _fallback_mode(modes)})
-				if rest - amount > eps:
-					blockers.append({
-						"code": "refund_exceeds_collected", "step": "settle",
-						"folio": f["folio"],
-						"message": _("Folio {0} shows {1}{2} in the guest's "
-						             "favour but only {1}{3} was collected on it, "
-						             "so it can't all be refunded. Open the folio and "
-						             "correct it (move a charge or a payment).").format(
-							f["folio"], symbol, _fmt_money(rest, display_places),
-							_fmt_money(max(avail, 0.0), display_places))})
-
-	if held > eps and in_house and not any(r["kind"] == "deposit" for r in refunds):
-		notices.append({
-			"code": "deposit_applied",
-			"message": _("The security deposit of {0}{1} still held counts "
-			             "toward the bill; check-out records it as applied.")
-			.format(symbol, _fmt_money(held, display_places))})
+					"kind": "folio", "folio": f["folio"],
+					"folio_type": f["folio_type"], "amount": amount,
+					"source": "overpayment",
+					"mode": f["main_mode"] or _fallback_mode(modes)})
+			if due - amount > eps:
+				blockers.append({
+					"code": "refund_exceeds_collected", "step": "settle",
+					"folio": f["folio"],
+					"message": _("Folio {0} shows {1}{2} in the guest's "
+					             "favour but only {1}{3} was collected on it, "
+					             "so it can't all be refunded. Open the folio and "
+					             "correct it (move a charge or a payment).").format(
+						f["folio"], symbol, _fmt_money(due, display_places),
+						_fmt_money(max(avail, 0.0), display_places))})
 	companions = _companions(res)
 	if res.get("group_booking"):
 		notices.append({

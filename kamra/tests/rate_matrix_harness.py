@@ -116,6 +116,7 @@ class RateMatrixHarness(unittest.TestCase):
 		model.document = document
 		bridge = ModuleType("kamra.erp_bridge")
 		bridge.bridge_call = self.bridge_call
+		bridge.get_bridge_script = lambda method: None
 		localization = ModuleType("kamra.localization")
 		localization.default_currency = lambda pack: "USD"
 		localization.pack_for = lambda property: SimpleNamespace(

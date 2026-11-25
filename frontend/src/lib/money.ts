@@ -220,11 +220,11 @@ export const moneyLocale = () => cache.locale || "en-GB"
 /** The currency's minor-unit digits (0 for UGX/JPY, 2 for USD/EUR/KES, 3 for KWD/BHD).
  *  Priority: explicit finite integer decimals -> server currency_decimals map ->
  *  home cache.decimals -> ISO 4217 via Intl.NumberFormat -> fallback 2. */
-export function moneyDigits(currency?: string, decimals?: number): number {
+export function moneyDigits(currency?: string | null, decimals?: number): number {
   if (typeof decimals === "number" && Number.isInteger(decimals) && decimals >= 0) {
     return decimals
   }
-  const code = (currency ?? cache.currency ?? "").trim().toUpperCase()
+  const code = (currency || cache.currency || "").trim().toUpperCase()
   const mapped = code ? cache.currency_decimals?.[code] : undefined
   if (typeof mapped === "number" && Number.isInteger(mapped) && mapped >= 0) {
     return mapped
@@ -242,22 +242,30 @@ export function moneyDigits(currency?: string, decimals?: number): number {
   }
   return 2
 }
-function resolveDigits(currencyOrDecimals?: string | number, decimals?: number): number {
+
+export interface MoneyContext {
+  currency?: string | null
+  currency_symbol?: string | null
+  locale?: string | null
+  decimals?: number | null
+}
+
+function resolveDigits(currencyOrDecimals?: string | number | null, decimals?: number): number {
   if (typeof currencyOrDecimals === "number") {
     return moneyDigits(undefined, currencyOrDecimals)
   }
-  return moneyDigits(currencyOrDecimals, decimals)
+  return moneyDigits(currencyOrDecimals ?? undefined, decimals)
 }
 
 /** HTML `<input type="number" step>` matching the currency's minor unit:
  *  0 -> "1", 2 -> "0.01", 3 -> "0.001". */
-export function moneyStep(currencyOrDecimals?: string | number, decimals?: number): string {
+export function moneyStep(currencyOrDecimals?: string | number | null, decimals?: number): string {
   const d = resolveDigits(currencyOrDecimals, decimals)
   return d <= 0 ? "1" : (10 ** -d).toFixed(d)
 }
 
 /** Half of one minor unit (0.5 for 0dp, 0.005 for 2dp, 0.0005 for 3dp). */
-export function moneyEps(currencyOrDecimals?: string | number, decimals?: number): number {
+export function moneyEps(currencyOrDecimals?: string | number | null, decimals?: number): number {
   const d = resolveDigits(currencyOrDecimals, decimals)
   return 0.5 * 10 ** -d
 }
@@ -265,7 +273,7 @@ export function moneyEps(currencyOrDecimals?: string | number, decimals?: number
 /** Half-away-from-zero rounding to the currency's minor unit. */
 export function roundMoney(
   amount: number,
-  currencyOrDecimals?: string | number,
+  currencyOrDecimals?: string | number | null,
   decimals?: number,
 ): number {
   const n = Number(amount ?? 0)
@@ -283,19 +291,47 @@ export function roundMoney(
 }
 
 /** An amount with the currency's exact minor-unit decimals (0/2/3dp), formatted
- *  with the active user/property locale so columns line up cleanly. */
-export function fmtAmount(amount: unknown, currency?: string, decimals?: number): string {
-  const d = moneyDigits(currency, decimals)
-  const val = roundMoney(Number(amount ?? 0), currency, d)
-  return val.toLocaleString(activeMoneyLocale(), {
+ *  with an explicit document locale or the active user/property locale so columns line up cleanly. */
+export function fmtAmount(
+  amount: unknown,
+  currency?: string | null,
+  decimalsOrLocale?: number | string | null,
+  numberLocale?: string | null,
+): string {
+  const decimals = typeof decimalsOrLocale === "number" ? decimalsOrLocale : undefined
+  const explicitLocale =
+    typeof decimalsOrLocale === "string"
+      ? decimalsOrLocale
+      : numberLocale ?? undefined
+  const code = currency || undefined
+  const d = moneyDigits(code, decimals)
+  const val = roundMoney(Number(amount ?? 0), code, d)
+  return val.toLocaleString(explicitLocale || activeMoneyLocale(), {
     minimumFractionDigits: d,
     maximumFractionDigits: d,
   })
 }
 
-/** fmtAmount with the property symbol (for home currency) or ISO code prefix (for foreign currency). */
-export function fmtMoney(amount: unknown, currency?: string, decimals?: number): string {
-  const code = currency?.trim().toUpperCase()
+/** fmtAmount with the property symbol (for home currency), ISO code prefix (for foreign currency),
+ *  or document-scoped currency/symbol/locale when a MoneyContext is passed. */
+export function fmtMoney(
+  amount: unknown,
+  currencyOrCtx?: string | MoneyContext | null,
+  decimals?: number,
+): string {
+  if (currencyOrCtx && typeof currencyOrCtx === "object") {
+    const code = currencyOrCtx.currency?.trim().toUpperCase() || undefined
+    const home = cache.currency?.trim().toUpperCase() || ""
+    const d = decimals ?? (typeof currencyOrCtx.decimals === "number" ? currencyOrCtx.decimals : undefined)
+    const symbol =
+      currencyOrCtx.currency_symbol != null
+        ? currencyOrCtx.currency_symbol
+        : code && (!home || code !== home)
+          ? `${code} `
+          : cache.currency_symbol
+    return `${symbol}${fmtAmount(amount, code || home || undefined, d, currencyOrCtx.locale)}`
+  }
+  const code = currencyOrCtx?.trim().toUpperCase()
   const home = cache.currency?.trim().toUpperCase()
   if (!code || (home && code === home)) {
     return `${cache.currency_symbol}${fmtAmount(amount, code || home, decimals)}`

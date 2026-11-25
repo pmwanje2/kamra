@@ -36,6 +36,102 @@ def _fnb_gst(property):
 	return pack_for(property).fnb_tax_rate(property)
 
 
+def _payment_entry_is_security_deposit(key: str | None) -> bool:
+	if not key or not frappe.db.exists("DocType", "Payment Entry"):
+		return False
+	return frappe.db.get_value("Payment Entry", key, "kamra_payment_kind") == "Security Deposit"
+
+
+def _currency_places_of(folio) -> int:
+	from kamra.ledger import _currency_places
+	return max(_currency_places(folio.get("property") if hasattr(folio, "get") else getattr(folio, "property", None)), 2)
+
+
+def _security_deposit_row_ids(folio) -> set[int]:
+	"""Indices in `folio.payments` belonging to the Security Deposit liability chain.
+
+	OPERA/SAP: a security deposit is a separate liability, never a payment toward
+	the bill balance. Refunds and cancellation reversals of security deposits
+	stay out of `payments_total` and `balance` too."""
+	payments = list(folio.get("payments") or [])
+	if not payments:
+		return set()
+	sec_names: set[str] = set()
+	sec_idx: set[int] = set()
+	non_dep_received = 0.0
+	sec_held = Decimal(0)
+	for idx, p in enumerate(payments):
+		kind = p.get("payment_kind") or "Payment"
+		pe_key = p.get("payment_entry") or p.get("reversal_of")
+		if kind == "Security Deposit" or _payment_entry_is_security_deposit(pe_key):
+			sec_idx.add(idx)
+			sec_held += Decimal(str(p.get("amount") or 0))
+			if p.get("name"):
+				sec_names.add(p.name)
+		elif float(p.get("amount") or 0) > 0:
+			non_dep_received += float(p.get("amount") or 0)
+	if not sec_idx:
+		return set()
+	from kamra.deposit import REFUND_REASON
+	has_pe = bool(frappe.db.exists("DocType", "Payment Entry"))
+	has_advance = any(
+		(p.get("payment_kind") or "") == "Advance"
+		for idx, p in enumerate(payments) if idx not in sec_idx
+	)
+	for idx, p in enumerate(payments):
+		if idx in sec_idx or (p.get("payment_kind") or "") != "Refund":
+			continue
+		pe_key = p.get("payment_entry") or p.get("reversal_of")
+		if pe_key and has_pe:
+			# Bridge-backed refund: Payment Entry.kamra_payment_kind is authoritative.
+			continue
+		refund_of = p.get("refund_of")
+		if refund_of:
+			if refund_of in sec_names:
+				sec_idx.add(idx)
+				sec_held += Decimal(str(p.get("amount") or 0))
+			continue
+		ref = (p.get("reference") or "").strip()
+		amt = Decimal(str(p.get("amount") or 0))
+		if ref.startswith(REFUND_REASON):
+			sec_idx.add(idx)
+			sec_held += amt
+		elif p.get("name") and (not has_advance or folio.get("folio_type") == "Account") and frappe.db.exists(
+			"Folio Ledger Entry",
+			{"folio": folio.name, "ledger": "Deposit",
+			 "source_doctype": "Folio Payment", "source_name": p.name},
+		):
+			sec_idx.add(idx)
+			sec_held += amt
+		elif non_dep_received <= Decimal("0.5") * Decimal(1).scaleb(-_currency_places_of(folio)) and sec_held > Decimal(0) and abs(amt) <= sec_held + Decimal("0.5") * Decimal(1).scaleb(-_currency_places_of(folio)):
+			sec_idx.add(idx)
+			sec_held += amt
+	return sec_idx
+
+
+def _stay_withheld_deposit(folio, has_sec_dep: bool) -> Decimal:
+	"""Explicitly withheld stay Security Deposit applied against its posted damage charge."""
+	if not has_sec_dep or not folio.get("reservation"):
+		return Decimal(0)
+	if (folio.get("folio_type") or "Guest") != "Guest":
+		return Decimal(0)
+	if not frappe.db.exists("DocType", "Security Deposit"):
+		return Decimal(0)
+	withheld = frappe.db.get_value(
+		"Security Deposit", {"reservation": folio.reservation}, "withheld_amount")
+	return Decimal(str(withheld or 0))
+
+
+def security_deposit_held_on_folio(folio) -> float:
+	"""Net held Security Deposit carried on this folio's Deposit ledger (excluded from folio.balance)."""
+	sec_idx = _security_deposit_row_ids(folio)
+	if not sec_idx:
+		return 0.0
+	payments = list(folio.get("payments") or [])
+	raw = sum((Decimal(str(payments[i].get("amount") or 0)) for i in sec_idx), Decimal(0))
+	return float(raw - _stay_withheld_deposit(folio, True))
+
+
 def _is_closed_or_invoiced(folio) -> bool:
 	"""True once a folio is closed or linked to an issued invoice."""
 	return bool(
@@ -46,7 +142,12 @@ def _is_closed_or_invoiced(folio) -> bool:
 
 
 def _recalculate(folio, *, payments_only: bool = False):
-	paid = sum(Decimal(str(p.amount or 0)) for p in folio.payments)
+	sec_idx = _security_deposit_row_ids(folio)
+	paid = sum(
+		(Decimal(str(p.amount or 0)) for idx, p in enumerate(folio.payments) if idx not in sec_idx),
+		Decimal(0),
+	)
+	paid += _stay_withheld_deposit(folio, bool(sec_idx))
 	if _is_closed_or_invoiced(folio) and folio.get("grand_total") is not None:
 		# Closed / invoiced folios have frozen charges, tax and grand_total;
 		# adding a payment or correction must never re-round them.

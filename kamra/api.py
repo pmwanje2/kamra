@@ -632,19 +632,23 @@ def _stay_money(res):
 		["name", "grand_total", "payments_total", "balance"], as_dict=True)
 	if not folio:
 		return None
-	rows = frappe.get_all(
-		"Folio Payment", filters={"parent": folio.name},
-		fields=["payment_kind", "amount"])
+	fdoc = frappe.get_doc("Folio", folio.name)
+	rows = fdoc.payments or []
 	def ksum(kind):
 		return sum(float(r.amount or 0) for r in rows
 		           if (r.payment_kind or "Payment") == kind)
+	from kamra.folio import security_deposit_held_on_folio
+	from kamra.ledger import _currency_places, _round_currency
 	return {
 		"folio": folio.name,
 		"grand_total": float(folio.grand_total or 0),
 		"paid_total": float(folio.payments_total or 0),
 		"balance": float(folio.balance or 0),
 		"advance": ksum("Advance"),
-		"deposit_held": ksum("Security Deposit") + ksum("Refund"),
+		"deposit_held": _round_currency(
+			max(0.0, security_deposit_held_on_folio(fdoc)),
+			_currency_places(res.property),
+		),
 		"refunded": -ksum("Refund"),
 	}
 
@@ -1684,6 +1688,8 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 			out["idempotent_replay"] = 1
 			return out
 	doc = frappe.get_doc("Folio", folio)
+	if doc.status == "Closed":
+		frappe.throw(_("This folio is closed. Record corrections through a credit note or reopen per policy."))
 	from kamra.traces import assert_no_blocking_alerts
 	assert_no_blocking_alerts(
 		"Cashier", doc.property, reservation=doc.reservation, guest=doc.guest
@@ -1943,7 +1949,9 @@ def refund_folio_payment(folio: str, amount: float | None = None,
 			        "balance": frappe.db.get_value("Folio", folio, "balance")}
 	doc = frappe.get_doc("Folio", folio)
 	from decimal import ROUND_HALF_UP, Decimal
+
 	from babel.numbers import get_currency_precision
+
 	from kamra.ledger import (
 		_currency_places,
 		_money,
@@ -2067,6 +2075,7 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
                           refund_of: str | None = None,
                           idempotency_key: str | None = None, correction: dict | None = None,
                           bookkeeping_action: str | None = None, session: str | None = None,
+                          allow_closed: bool = False,
                           fx: dict | None = None):
 	"""The one refund writer (folio row, till, ledger). Not whitelisted:
 	ledger lets a security-deposit refund release the Deposit ledger -
@@ -2080,7 +2089,7 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 		frappe.throw("A refund reason is required.")
 	_pin_guard(folio, pin)
 	doc = frappe.get_doc("Folio", folio)
-	if doc.status == "Closed":
+	if doc.status == "Closed" and not (allow_closed and ledger == "Deposit"):
 		frappe.throw("This folio is closed - refunds need a credit note "
 		             "via allowance on a new folio.")
 	from kamra.cashier import assert_cashier_mode_allowed, record_cashier_txn, require_open_session
@@ -2109,13 +2118,24 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 		"Refund", reason_code, reason or "",
 		supervisor_pin=supervisor_pin, property=doc.property)
 	unit_calc = Decimal(1).scaleb(-places)
-	received = sum((_money(p.amount) for p in doc.payments if _money(p.amount) > 0), Decimal(0))
-	refunded = -sum((_money(p.amount) for p in doc.payments if _money(p.amount) < 0), Decimal(0))
-	collected_left = (received - refunded).quantize(unit_calc, rounding=ROUND_HALF_UP)
-	if amount_dec > collected_left:
-		from kamra.localization import money_text
-		frappe.throw(f"Only {money_text(doc.property, float(collected_left))} was collected on "
-		             "this folio - can't refund more than that.")
+	if not ledger:
+		from kamra.folio import _security_deposit_row_ids
+		sec_idx = _security_deposit_row_ids(doc)
+		received = sum(
+			(_money(p.amount) for idx, p in enumerate(doc.payments)
+			 if idx not in sec_idx and _money(p.amount) > 0),
+			Decimal(0),
+		)
+		refunded = -sum(
+			(_money(p.amount) for idx, p in enumerate(doc.payments)
+			 if idx not in sec_idx and _money(p.amount) < 0),
+			Decimal(0),
+		)
+		collected_left = (received - refunded).quantize(unit_calc, rounding=ROUND_HALF_UP)
+		if amount_dec > collected_left:
+			from kamra.localization import money_text
+			frappe.throw(f"Only {money_text(doc.property, float(collected_left))} was collected on "
+			             "this folio - can't refund more than that.")
 	# money goes back only when the guest is in credit; a guest who still
 	# owes settles first. A security deposit release (ledger set) has its
 	# own balance check in kamra.deposit.
@@ -2296,7 +2316,8 @@ def _resolve_charge_gst(property: str, charge_type: str, description: str,
 	food & beverage uses the F&B rate from the localization pack; a taxi with
 	no rate the services rate; otherwise the given rate."""
 	from kamra.erp_bridge import is_bridge_active
-	if is_bridge_active():
+	from kamra.fiscal import fiscal_bridge
+	if is_bridge_active() or fiscal_bridge():
 		return 0.0
 	from kamra.ledger import code_default_tax_rate, code_is_alcohol
 	alc = bool(int(is_alcohol or 0)) or (bool(transaction_code) and code_is_alcohol(transaction_code))
@@ -4903,12 +4924,14 @@ def folio_invoice(folio: str):
 	elif doc.get("payee_type"):
 		bill_company = None
 	if doc.folio_type == "Account":
-		# billed to the account it was raised on (as zatca._folio_buyer)
+		# billed to the account it was raised on (as zatca._folio_buyer), or the event's company
 		account = frappe.db.get_value(
 			"City Ledger Entry", {"folio": doc.name, "kind": "Invoice"},
 			"account", order_by="creation asc")
 		bill_company = account and frappe.db.get_value(
 			"City Ledger Account", account, "company")
+		if not bill_company and doc.get("venue_booking"):
+			bill_company = frappe.db.get_value("Venue Booking", doc.venue_booking, "company")
 	if bill_company:
 		company = frappe.db.get_value(
 			"Corporate Account", bill_company, ["company_name", "gstin"], as_dict=True)
@@ -5099,6 +5122,32 @@ def folio_invoice(folio: str):
 	doc_footer = _loc_ctx.get("footer")
 	if acct_tax["tax_source"] == "accounting_unavailable" and doc_footer and "tax invoice" in doc_footer.lower():
 		doc_footer = "This is a computer-generated invoice."
+
+	# under the ERPNext accounting bridge the tax invoice is the ERP Sales
+	# Invoice and its fiscal identifiers (EFRIS FDN, verification code, QR);
+	# this folio's own number is then an internal reference only
+	from kamra.fiscal import fiscal_status, fiscal_title
+	from kamra.fiscal import is_final as fiscal_final
+	fiscal = fiscal_status(doc)
+	number, final, internal_number = doc_number, settled, None
+	if fiscal:
+		number, final, internal_number = fiscal["sales_invoice"] or doc.name, fiscal_final(fiscal), doc.invoice_number
+		if acct_tax["tax_source"] == "accounting_unavailable":
+			# Restricted viewer (lacks Sales Invoice read) or unreadable accounting invoice:
+			# never leak accounting tax metadata or elevate the neutral title (#48).
+			fiscal = {**fiscal, "charges_tax": None, "tax_template": None}
+			doc_title = _(fiscal_title(fiscal)) if not final else _(loc.neutral_invoice_title(pack))
+		elif not final:
+			doc_title = _(fiscal_title(fiscal))
+		elif acct_tax["tax_source"] == "accounting":
+			# Authoritative accounting taxes were read (#48): preserve its
+			# _tax_summary_has_vat + pack invoice_title for final non-EFRIS
+			# invoices (so a 2% Tourism Levy with 0% VAT stays neutral "Invoice");
+			# fiscalised invoices keep their statutory "Tax Invoice" title.
+			if fiscal.get("state") == "fiscalised":
+				doc_title = _(fiscal_title(fiscal))
+		else:
+			doc_title = _(fiscal_title(fiscal))
 	payments = [{
 		"row": p.name, "posting_date": str(p.posting_date),
 		"payment_kind": p.payment_kind, "mode": p.mode,
@@ -5109,6 +5158,8 @@ def folio_invoice(folio: str):
 		"transaction_code": p.get("transaction_code"),
 		"gl_code": p.get("gl_code"), "refund_of": p.get("refund_of"),
 	} for p in doc.payments]
+	from kamra.erp_bridge import get_bridge_script
+	from kamra.folio import CREDIT_AND_REBILL
 	gst_summary = (
 		acct_tax["gst_summary"] if acct_tax["gst_summary"] is not None else [
 			{"rate": rate, "taxable": float(v["taxable"]),
@@ -5119,6 +5170,7 @@ def folio_invoice(folio: str):
 		]
 	)
 	places = max(raw_places, 2)
+	_prop_locale = pack.locale(prop) if callable(getattr(pack, "locale", None)) else {}
 	return {
 		"folio": folio_dict,
 		"lines": lines,
@@ -5133,14 +5185,19 @@ def folio_invoice(folio: str):
 		),
 		"bill_to": bill_to,
 		"statutory": statutory,
+		"fiscal": fiscal,
+		"bridge_credit_and_rebill": bool(get_bridge_script(CREDIT_AND_REBILL)),
 		"tax_source": acct_tax["tax_source"],
 		"document": {
 			# a bill before settlement is provisional and must say so - the
-			# invoice number only exists once the folio closes
+			# invoice number only exists once the folio closes, and under the
+			# bridge only once the fiscal document is issued
 			"title": doc_title,
 			"title_local": (statutory or {}).get("title_ar"),
-			"is_final": settled,
-			"number": doc_number,
+			"is_final": final,
+			"number": number,
+			"internal_number": internal_number,
+			"reprint": None,
 			"date": str(doc.closed_on or "")[:10] or nowdate(),
 			"amount_in_words": loc.amount_in_words(pack, prop, folio_dict["grand_total"]),
 			"footer": doc_footer,
@@ -5152,7 +5209,9 @@ def folio_invoice(folio: str):
 			"accounting_tax_note": acct_tax["accounting_tax_note"],
 		},
 		"property": {
-			"currency": prop.currency or loc.default_currency(pack),
+			"currency": _prop_locale.get("currency") or prop.currency or loc.default_currency(pack),
+			"currency_symbol": _prop_locale.get("currency_symbol", ""),
+			"locale": _prop_locale.get("locale") or "en-US",
 			"name": prop.property_name, "legal_name": prop.legal_name,
 			"logo_url": prop.get("logo_url"),
 			"address_line": prop.address_line, "city": prop.city,
@@ -5196,6 +5255,39 @@ def folio_invoice(folio: str):
 		# kept for callers written against the pre-v2 shape
 		"gst_summary": gst_summary,
 	}
+
+
+@frappe.whitelist(methods=["POST"])
+@require_roles("Front Desk", "Finance", "Kamra Agent")
+def reprint_fiscal_folio(folio: str, reason: str | None = None):
+	"""Reprint a settled folio's tax invoice (OPERA Folio History, Reprint).
+
+	Under the ERPNext accounting bridge that is the fiscal document: the ERP
+	Sales Invoice number with its fiscal identifiers. A fiscal document that
+	is still pending, from a test fiscal service, or whose status can't be
+	read is not a tax invoice, so it is not reprinted as one. Each reprint is
+	logged with its revision."""
+	data = folio_invoice(folio)
+	if data["folio"]["status"] != "Closed":
+		frappe.throw(_("Only a settled folio has an invoice to reprint."))
+	fiscal, document = data["fiscal"], data["document"]
+	if fiscal and not document["is_final"]:
+		from kamra.fiscal import assert_reprintable
+		assert_reprintable(fiscal)
+	revision = frappe.db.count("Folio Reprint", {"folio": folio}) + 1
+	reprint = frappe.get_doc({
+		"doctype": "Folio Reprint",
+		"property": data["folio"]["property"],
+		"folio": folio,
+		"invoice_number": document["number"],
+		"reprint_of": "Guest Folio",
+		"printed_on": now_datetime(),
+		"printed_by": frappe.session.user,
+		"reason": reason,
+		"revision": revision,
+	}).insert(ignore_permissions=True)
+	document["reprint"] = revision
+	return {**data, "reprint": reprint.name, "revision": revision}
 
 
 def _folio_statement(lines: list, payments: list, places: int = 2) -> list[dict]:
@@ -7482,10 +7574,6 @@ def check_out(reservation: str, credit_override_reason: str | None = None,
 	from kamra.checkout import assert_no_open_bills
 	assert_no_open_bills(doc)
 	credit = _assert_settled(doc, credit_override_reason)
-	# a held security deposit that the settled bill used up is recorded as
-	# applied, so the Deposit ledger doesn't keep a departed guest's money
-	from kamra.deposit import apply_held_to_bill
-	apply_held_to_bill(doc)
 	doc.status = "Checked Out"
 	doc.flags.kamra_check_out = True  # passed the checks above (Reservation.validate)
 	doc.save()
@@ -12932,9 +13020,24 @@ def linked_records(doctype: str, name: str):
 	       "group_name": None, "event": None, "event_type": None}
 
 	def folios_for(filters):
-		return frappe.get_all("Folio", filters=filters,
-			fields=["name", "folio_type", "status", "balance",
+		from kamra import localization as loc
+		rows = frappe.get_all("Folio", filters=filters,
+			fields=["name", "property", "folio_type", "status", "balance",
 			        "invoice_number"], order_by="creation asc")
+		cache: dict[str, dict] = {}
+		for row in rows:
+			p = row.get("property")
+			if p and p not in cache:
+				prop_doc = frappe.get_cached_doc("Property", p)
+				pl = loc.pack_for(p).locale(prop_doc)
+				cache[p] = {
+					"currency": pl.get("currency") or prop_doc.get("currency") or "",
+					"currency_symbol": pl.get("currency_symbol", ""),
+					"locale": pl.get("locale") or "en-US",
+				}
+			if p in cache:
+				row.update(cache[p])
+		return rows
 
 	if doctype == "Reservation":
 		r = frappe.db.get_value("Reservation", name,
