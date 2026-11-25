@@ -1673,15 +1673,19 @@ export default function FolioView() {
               <p className="text-lg font-semibold">
                 {t("Grand total")}: {amount(folio.grand_total)}
               </p>
-              {data.credit_status ? (
+              {data.credit_status || data.credit_notes?.length ? (
                 <div className="space-y-1">
-                  <Badge tone={data.credit_status === "Credited" ? "green" : "amber"}>
-                    {data.credit_status === "Credited" ? t("Credited") : t("Partially credited")}
-                  </Badge>
+                  {data.credit_status && (
+                    <Badge tone={data.credit_status === "Credited" ? "green" : "amber"}>
+                      {data.credit_status === "Credited" ? t("Credited") : t("Partially credited")}
+                    </Badge>
+                  )}
                   <p>{t("Credited amount")}: {amount(data.credited_amount ?? 0)}</p>
-                  <p>{t("Credit notes")}: {data.credit_notes?.map((number, i) => (
-                    <span key={number}>{i > 0 && ", "}<bdi className="font-mono">{number}</bdi></span>
-                  ))}</p>
+                  {Boolean(data.credit_notes?.length) && (
+                    <p>{t("Credit notes")}: {data.credit_notes?.map((number, i) => (
+                      <span key={number}>{i > 0 && ", "}<bdi className="font-mono">{number}</bdi></span>
+                    ))}</p>
+                  )}
                 </div>
               ) : (data.credited ?? 0) > 0 && (
                 <p className="text-sm font-medium text-danger-text">

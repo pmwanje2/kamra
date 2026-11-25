@@ -171,16 +171,16 @@ def guests_owing(property: str) -> list[dict]:
 		      AND r.status IN ('Checked Out', 'No Show', 'Cancelled')
 		    ORDER BY r.check_in_date""", (property, eps), as_dict=True)
 	if rows and sales_invoice_field():
-		invoices = dict(frappe.get_all(
+		invoices = dict(frappe.get_list(
 			"Folio", filters={"property": property, "name": ("in", [r.folio for r in rows])},
-			fields=["name", "sales_invoice"], as_list=True,
+			fields=["name", "sales_invoice"], as_list=True, limit=0,
 		))
 		for row in rows:
 			row["sales_invoice"] = invoices.get(row.folio)
 	return [{"folio": row.folio, "guest_name": row.guest_name, "reservation": row.reservation,
 	         "status": row.status, "balance": credit["net_collectible_balance"],
 	         "check_in_date": str(row.check_in_date), "check_out_date": str(row.check_out_date)}
-	        for row, credit in zip(rows, credit_note_positions(rows, property), strict=True)
+	        for row, credit in zip(rows, credit_note_positions(rows, property, read_note_numbers=False), strict=True)
 	        if credit["net_collectible_balance"] > eps]
 
 

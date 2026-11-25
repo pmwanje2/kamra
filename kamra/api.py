@@ -1941,18 +1941,9 @@ def correct_folio_payment(folio: str, payment_row: str, action: str | None = Non
 			idempotency_key=(idempotency_key or "").strip()), approver)
 		if doc.reservation:
 			from kamra.folio import reconcile_reservation_advance
-			from kamra.ledger import _money
 
-			original = next(p for p in doc.payments if p.name == payment_row)
-			before = {p.name for p in doc.payments}
 			updated = frappe.get_doc("Folio", folio, for_update=True)
-			returned = 0
-			if original.payment_kind == "Advance" and action in ("reverse_payment", "partial_refund"):
-				returned = sum(
-					-_money(p.amount) for p in updated.payments if p.name not in before and p.amount < 0
-					and (p.get("refund_of") == payment_row or p.get("reversal_of") == original.payment_entry)
-				)
-			reconcile_reservation_advance(doc.reservation, doc.property, changed_folio=updated, returned=returned)
+			reconcile_reservation_advance(doc.reservation, doc.property, changed_folio=updated)
 		return result
 	return correct(folio, payment_row, action_type or action, reason_code, reason_note or reason,
 	               (idempotency_key or "").strip(), pin, supervisor_user, supervisor_pin, refund_amount, destination_mode)
@@ -2246,12 +2237,9 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 		frappe.log_error(title="ledger refund write failed")
 	if doc.reservation and reconcile_advance:
 		from kamra.folio import reconcile_reservation_advance
-		advance_refund = release_advance if not refund_of else any(
-			p.name == refund_of and p.payment_kind == "Advance" for p in doc.payments
-		)
 		reconcile_reservation_advance(
 			doc.reservation, doc.property, changed_folio=doc,
-			returned=amount_dec if advance_refund else 0,
+			returned=amount_dec if release_advance and not refund_of else 0,
 		)
 	if bookkeeping_action:
 		from kamra.savings import log_action
@@ -5555,7 +5543,7 @@ def folio_invoice(folio: str):
 	_prop_locale = pack.locale(prop) if callable(getattr(pack, "locale", None)) else {}
 	return {
 		"folio": folio_dict,
-		**reconcile_credit_note_status(doc),
+		**(reconcile_credit_note_status(doc) if frappe.has_permission("Folio", ptype="read", doc=doc) else {}),
 		"lines": lines,
 		"payments": payments,
 		"statement": _folio_statement(lines, payments, places=places),

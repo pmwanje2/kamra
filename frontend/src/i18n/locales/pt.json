@@ -7324,7 +7324,7 @@
   "PINs enrolled": "PINs cadastrados",
   "Available when allowance approval is on.": "Disponível quando a aprovação de abatimentos está ativa.",
   "Enable manager approval": "Ativar aprovação da gerência",
-  "Front desk rate discounts are restricted, but staff can post folio allowances without manager approval.": "Os descontos de tarifa na recepção são restritos, mas a equipe pode lançar abatimentos no fólio sem aprovação da gerência.",
+  "Front desk staff can post folio allowances without manager approval.": "A equipe da recepção pode lançar abatimentos no fólio sem aprovação da gerência.",
   "Till variance tolerance": "Tolerância de divergência do caixa",
   "Partially credited": "Creditado parcialmente",
   "Credit notes": "Notas de crédito",

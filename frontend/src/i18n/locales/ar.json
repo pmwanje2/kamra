@@ -7294,7 +7294,7 @@
   "PINs enrolled": "الرموز المسجلة",
   "Available when allowance approval is on.": "متاح عند تفعيل الموافقة على التخفيضات.",
   "Enable manager approval": "تفعيل موافقة المدير",
-  "Front desk rate discounts are restricted, but staff can post folio allowances without manager approval.": "تخضع خصومات أسعار مكتب الاستقبال لقيود، لكن يمكن للموظفين تسجيل تخفيضات على حساب النزيل دون موافقة المدير.",
+  "Front desk staff can post folio allowances without manager approval.": "يمكن لموظفي مكتب الاستقبال تسجيل تخفيضات على حساب النزيل دون موافقة المدير.",
   "Till variance tolerance": "حدّ التفاوت المسموح للصندوق",
   "Partially credited": "دائن جزئيًا",
   "Credit notes": "إشعارات دائنة",

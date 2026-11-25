@@ -7396,7 +7396,7 @@
   "PINs enrolled": "已登记 PIN",
   "Available when allowance approval is on.": "启用减免审批后可用。",
   "Enable manager approval": "启用经理审批",
-  "Front desk rate discounts are restricted, but staff can post folio allowances without manager approval.": "前台房价折扣受限，但员工仍可在未经经理审批的情况下为客账入账减免。",
+  "Front desk staff can post folio allowances without manager approval.": "前台员工可以在未经经理审批的情况下为客账入账减免。",
   "Till variance tolerance": "收银差异容差",
   "Partially credited": "已部分冲减",
   "Credit notes": "贷项通知单",

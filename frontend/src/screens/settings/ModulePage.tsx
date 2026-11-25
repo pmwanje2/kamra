@@ -246,11 +246,7 @@ export function ModulePage({
   const approval = value("allowance_approval")
   const approvalOff = finance && (!approval || approval === "Off")
   const approvalSpec = module.sections.flatMap((section) => section.settings).find((spec) => spec.key === "allowance_approval")
-  const deskLimit = value("rate_override_limit_pct")
-  const frontDeskTier = String(value("rate_override_limits_by_role") || "").split("\n")
-    .map((line) => line.split(":").map((part) => part.trim()))
-    .reverse().find(([role, limit]) => role === "Front Desk" && limit && Number.isFinite(Number(limit)))
-  const controlGap = approvalOff && approvalSpec && deskLimit != null && Number(frontDeskTier?.[1] ?? deskLimit) < 100
+  const controlGap = approvalOff && approvalSpec
   const readiness = module.cashier_readiness
   const tolerance = Number(module.values.till_variance_tolerance ?? 0)
 
@@ -325,7 +321,7 @@ export function ModulePage({
               <TriangleAlert className="size-5 shrink-0" aria-hidden />
               <div className="min-w-0 flex-1">
                 <p className="font-semibold">{t("Control gap")}</p>
-                <p>{t("Front desk rate discounts are restricted, but staff can post folio allowances without manager approval.")}</p>
+                <p>{t("Front desk staff can post folio allowances without manager approval.")}</p>
               </div>
               {!readOnly && approvalSpec.can_edit !== false && (
                 <button type="button" disabled={busy}

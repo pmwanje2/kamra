@@ -7758,7 +7758,7 @@
   "PINs enrolled": "Codes PIN enregistrés",
   "Available when allowance approval is on.": "Disponible lorsque l’approbation des réductions est activée.",
   "Enable manager approval": "Activer l’approbation du responsable",
-  "Front desk rate discounts are restricted, but staff can post folio allowances without manager approval.": "Les remises tarifaires à la réception sont limitées, mais le personnel peut comptabiliser des réductions sur le folio sans l’approbation d’un responsable.",
+  "Front desk staff can post folio allowances without manager approval.": "Le personnel de la réception peut comptabiliser des réductions sur le folio sans l’approbation d’un responsable.",
   "Till variance tolerance": "Tolérance d’écart de caisse",
   "Partially credited": "Partiellement crédité",
   "Credit notes": "Avoirs",

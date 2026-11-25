@@ -192,7 +192,17 @@ export default function Billing() {
                       </Badge>
                     </Popin>
                     <Popin label={t("Invoice")} importance="low" className="py-2.5 pe-4 text-muted-ink">
-                      <bdi>{String(f.sales_invoice || f.invoice_number || "-")}</bdi>
+                      <div className="space-y-1">
+                        <bdi>{String(f.sales_invoice || f.invoice_number || "-")}</bdi>
+                        {Array.isArray(f.credit_notes) && f.credit_notes.length > 0 && (
+                          <div className="text-xs">
+                            <span className="block">{t("Credit notes")}</span>
+                            {f.credit_notes.map((number: string) => (
+                              <bdi key={number} className="block break-all">{number}</bdi>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </Popin>
                     <Popin label={t("Total")} importance="medium" className="py-2.5 pe-4">{cur()}{inr(f.grand_total)}</Popin>
                     <Popin label={t("Paid")} importance="medium" className="py-2.5 pe-4">{cur()}{inr(f.payments_total)}</Popin>

@@ -9,7 +9,7 @@ def execute():
 		"""SELECT DISTINCT r.name, r.property
 		   FROM `tabReservation` r JOIN `tabFolio` f ON f.reservation = r.name
 		   JOIN `tabFolio Payment` p ON p.parent = f.name AND p.parenttype = 'Folio'
-		   WHERE r.advance_paid > 0 AND p.payment_kind = 'Refund' AND p.amount < 0
+		   WHERE r.advance_paid > 0 AND p.amount < 0
 		   ORDER BY r.name""",
 		as_dict=True,
 	):

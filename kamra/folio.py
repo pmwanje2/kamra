@@ -110,7 +110,7 @@ def _security_deposit_row_ids(folio) -> set[int]:
 
 
 def reconcile_reservation_advance(reservation: str, property: str, *, changed_folio=None, returned=0) -> None:
-	"""Cap recorded advance by the stay's net collected funds, excluding security deposits."""
+	"""Reconcile collected funds and their linked advance refunds without replaying a delta."""
 	from kamra.ledger import _currency_places, _money, _round_currency
 
 	paid = _money(frappe.db.get_value("Reservation", reservation, "advance_paid", for_update=True))
@@ -119,18 +119,33 @@ def reconcile_reservation_advance(reservation: str, property: str, *, changed_fo
 	names = set(frappe.get_all("Folio", filters={"reservation": reservation}, pluck="name"))
 	if changed_folio is not None:
 		names.add(changed_folio.name)
-	collected = Decimal(0)
+	payments = []
 	for name in sorted(names):
-		folio = changed_folio if changed_folio is not None and name == changed_folio.name else (
+		doc = changed_folio if changed_folio is not None and name == changed_folio.name else (
 			frappe.get_doc("Folio", name, for_update=True)
 		)
-		security_rows = _security_deposit_row_ids(folio)
-		collected += sum(
-			(_money(p.amount) for i, p in enumerate(folio.payments)
-			 if i not in security_rows and p.mode != "Company Credit"),
-			Decimal(0),
+		security_rows = _security_deposit_row_ids(doc)
+		payments.extend(
+			p for i, p in enumerate(doc.payments)
+			if i not in security_rows and p.get("mode") != "Company Credit"
 		)
-	net = _round_currency(max(Decimal(0), min(paid - _money(returned), collected)), _currency_places(property))
+
+	advances = [p for p in payments if p.get("payment_kind") == "Advance" and _money(p.amount) > 0]
+	advance_rows = {p.name for p in advances}
+	advance_entries = {p.get("payment_entry") for p in advances if p.get("payment_entry")}
+	linked_refunds = sum(
+		(_money(p.amount) for p in payments if _money(p.amount) < 0 and (
+			p.get("refund_of") in advance_rows or (
+				not p.get("refund_of") and p.get("reversal_of") in advance_entries
+			)
+		)),
+		Decimal(0),
+	)
+	collected = sum((_money(p.amount) for p in payments), Decimal(0))
+	remaining = min(paid - _money(returned), collected)
+	if linked_refunds:
+		remaining = min(remaining, sum((_money(p.amount) for p in advances), Decimal(0)) + linked_refunds)
+	net = _round_currency(max(Decimal(0), remaining), _currency_places(property))
 	if _money(net) != paid:
 		frappe.db.set_value("Reservation", reservation, "advance_paid", net)
 
@@ -2568,8 +2583,76 @@ def sales_invoice_field() -> list[str]:
 	return ["sales_invoice"] if get_meta and get_meta("Folio").has_field("sales_invoice") else []
 
 
-def credit_note_positions(folios, property: str) -> list[dict]:
-	"""Read submitted accounting returns for these property-scoped folios in one batch."""
+def _linked_sales_credit_notes(folios, property: str, currency: str, *, read_note_numbers: bool):
+	"""Read only returns against the property's verified folio-to-invoice links."""
+	links = {row.get("name") or row.get("folio"): bridge_invoice(row) for row in folios if bridge_invoice(row)}
+	if not links or not frappe.db.exists("DocType", "Sales Invoice"):
+		return {}, {}, set()
+
+	company = frappe.get_cached_doc("Property", property).get("company")
+	try:
+		has_backlink = frappe.db.has_column("Sales Invoice", "kamra_ref")
+		has_company = frappe.db.has_column("Sales Invoice", "company")
+	except frappe.db.TableMissingError:
+		has_backlink = has_company = False
+	if (has_company or has_backlink) and not (company and has_backlink):
+		# An ERP company and the bridge's reverse link are both required to
+		# distinguish properties operating in the same accounting company.
+		return {}, {}, set()
+
+	scope = {"docstatus": 1, "currency": currency, "company": company or ["is", "not set"]}
+	amount_fields = ["name", "grand_total", "rounded_total"]
+	originals = {}
+	invoice_names = set(links.values())
+	if has_backlink:
+		for invoice in frappe.get_all(
+			"Sales Invoice",
+			filters={**scope, "is_return": 0, "name": ("in", list(invoice_names)),
+			         "kamra_ref": ("in", list(links))},
+			fields=[*amount_fields, "kamra_ref"],
+		):
+			if links.get(invoice.kamra_ref) == invoice.name:
+				originals[invoice.kamra_ref] = invoice
+		invoice_names = {invoice.name for invoice in originals.values()}
+	if not invoice_names:
+		return {}, {}, set()
+
+	note_scope = {**scope, "is_return": 1, "return_against": ("in", list(invoice_names))}
+	try:
+		returns = frappe.get_all(
+			"Sales Invoice", filters=note_scope,
+			fields=[*amount_fields, "return_against", "update_outstanding_for_self"],
+			order_by="name asc",
+		)
+	except frappe.db.TableMissingError:
+		return {}, {}, set()
+	notes_by_invoice = {}
+	for note in returns:
+		notes_by_invoice.setdefault(note.return_against, []).append(note)
+	notes = {name: notes_by_invoice.get(invoice, []) for name, invoice in links.items()
+	         if not has_backlink or name in originals}
+
+	visible = set()
+	if returns and read_note_numbers and frappe.has_permission("Sales Invoice", ptype="read"):
+		if not has_backlink:
+			# A DocType without the ERP columns is constrained to the blank
+			# company scope above. Submitted ERP invoices require a company.
+			visible = {note.name for note in returns}
+		else:
+			try:
+				readable = set(frappe.get_list(
+					"Sales Invoice",
+					filters={"name": ("in", list(invoice_names | {note.name for note in returns}))},
+					pluck="name", limit=0,
+				))
+			except frappe.PermissionError:
+				readable = set()
+			visible = {note.name for note in returns if note.name in readable and note.return_against in readable}
+	return originals, notes, visible
+
+
+def credit_note_positions(folios, property: str, *, read_note_numbers: bool = True) -> list[dict]:
+	"""Project collectible balances at the property currency's precision."""
 	if not folios:
 		return []
 	from kamra.ledger import _money
@@ -2577,41 +2660,33 @@ def credit_note_positions(folios, property: str) -> list[dict]:
 
 	currency = property_currency(property)
 	unit = Decimal(1).scaleb(-_minor_unit(currency))
-	invoices = list({invoice for row in folios if (invoice := bridge_invoice(row))})
-	notes = {}
-	originals = {}
-	if invoices and frappe.db.exists("DocType", "Sales Invoice"):
-		scope = {"docstatus": 1, "currency": currency}
-		company = frappe.get_cached_doc("Property", property).get("company")
-		if company:
-			scope["company"] = company
-		amount_fields = ["name", "grand_total", "rounded_total"]
-		originals = {invoice.name: invoice for invoice in frappe.get_all(
-			"Sales Invoice", filters={**scope, "is_return": 0, "name": ("in", invoices)},
-			fields=amount_fields,
-		)}
-		for note in frappe.get_all(
-			"Sales Invoice", filters={**scope, "is_return": 1, "return_against": ("in", invoices)},
-			fields=[*amount_fields, "return_against"], order_by="name asc",
-		):
-			notes.setdefault(note.return_against, []).append(note)
+	originals, notes, visible = _linked_sales_credit_notes(
+		folios, property, currency, read_note_numbers=read_note_numbers,
+	)
 
 	def rounded(value):
 		return _money(value).quantize(unit, rounding=ROUND_HALF_UP)
 
 	positions = []
 	for row in folios:
-		returns = notes.get(bridge_invoice(row), [])
-		credited = rounded(sum((abs(_money(n.rounded_total or n.grand_total)) for n in returns), Decimal(0)))
+		name = row.get("name") or row.get("folio")
+		invoice = originals.get(name)
+		returns = notes.get(name, [])
+		# ERP posts these self-updating returns to their own receivable.
+		# Issuing one does not apply it to the original invoice.
+		credited = rounded(sum(
+			(max(Decimal(0), -_money(n.rounded_total or n.grand_total)) for n in returns
+			 if not cint(n.get("update_outstanding_for_self"))),
+			Decimal(0),
+		))
 		balance = max(Decimal(0), rounded(row.get("balance")) - credited)
 		status = None
-		if returns:
-			invoice = originals.get(bridge_invoice(row))
+		if credited:
 			invoice_total = invoice.rounded_total or invoice.grand_total if invoice else row.get("grand_total")
 			status = "Credited" if credited >= rounded(invoice_total) else "Partially credited"
 		positions.append({
 			"credited_amount": float(credited),
-			"credit_notes": [n.name for n in returns],
+			"credit_notes": [n.name for n in returns if n.name in visible],
 			"net_collectible_balance": float(balance),
 			"credit_status": status,
 		})

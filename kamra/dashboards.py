@@ -232,14 +232,14 @@ def _open_folio_totals(property: str) -> tuple[float, int]:
 
 	if not count or not sales_invoice_field():
 		return float(total or 0), int(count or 0)
-	linked = frappe.get_all(
+	linked = frappe.get_list(
 		"Folio", filters={"property": property, "status": "Open", "sales_invoice": ("is", "set"),
 		                  "balance": (">", 0)},
-		fields=["sales_invoice", "balance", "grand_total"],
+		fields=["name", "sales_invoice", "balance", "grand_total"], limit=0,
 	)
 	adjusted = _money(total)
-	for row, credit in zip(linked, credit_note_positions(linked, property), strict=True):
-		if credit["credit_notes"]:
+	for row, credit in zip(linked, credit_note_positions(linked, property, read_note_numbers=False), strict=True):
+		if credit["credited_amount"]:
 			adjusted += _money(credit["net_collectible_balance"]) - _money(row.balance)
 	return _round_currency(adjusted, _currency_places(property)), int(count or 0)
 
