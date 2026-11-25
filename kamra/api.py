@@ -1554,7 +1554,7 @@ def get_folio(reservation: str):
 		from kamra.folio import open_folio
 		name = open_folio(res)
 	folio = frappe.get_doc("Folio", name)
-	return folio.as_dict()
+	return _desk_folio_dict(folio)
 
 
 @frappe.whitelist()
@@ -1663,7 +1663,7 @@ def _post_folio_charge(folio: str, charge_type: str, description: str,
 	emit_folio_posted(doc, charge)
 	from kamra.whatsapp import queue_room_charge_alert
 	queue_room_charge_alert(doc, charge)
-	return doc.as_dict()
+	return _desk_folio_dict(doc)
 
 
 
@@ -1699,7 +1699,7 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 		# serialize posts on this folio so a double submit sees the first
 		frappe.db.get_value("Folio", folio, "name", for_update=True)
 		if _paid_with_key(key, folio=folio):
-			out = frappe.get_doc("Folio", folio).as_dict()
+			out = _desk_folio_dict(frappe.get_doc("Folio", folio))
 			out["idempotent_replay"] = 1
 			return out
 	doc = frappe.get_doc("Folio", folio)
@@ -1815,7 +1815,7 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 		           rationale=f"{kind} {money_text(doc.property, amount)} by {mode}"
 		                     + (f" ({fx_note})" if fx_note else "")
 		                     + (f" ({reference})" if reference else ""))
-	return doc.as_dict()
+	return _desk_folio_dict(doc)
 
 
 MAX_SPLIT_LINES = 20
@@ -3564,6 +3564,22 @@ def _folio_list_fields():
 	]
 
 
+def _filter_folio_invoice_refs(rows, property):
+	"""Replace internal bridge links with the same verified reference Billing displays."""
+	from kamra.folio import credit_note_positions
+
+	linked = [row for row in rows if row.get("sales_invoice")]
+	for row, position in zip(linked, credit_note_positions(linked, property), strict=True):
+		row["sales_invoice"] = position["sales_invoice"]
+
+
+def _desk_folio_dict(doc):
+	row = doc.as_dict()
+	if row.get("sales_invoice"):
+		_filter_folio_invoice_refs([row], doc.property)
+	return row
+
+
 @frappe.whitelist()
 @require_roles("Finance", "Front Desk", "Hotel Admin", "Night Auditor", "Kamra Agent")
 def billing_folios(property: str, limit: int = 100, start: int = 0) -> list[dict]:
@@ -3585,19 +3601,19 @@ def reservation_folios(reservation: str):
 	"""All folios of a stay (guest + splits) with balances - plus the
 	group master folio when the stay belongs to a group, so charges can
 	be moved between a guest's bill and the company's consolidated one."""
+	property, stay_company, group = frappe.db.get_value(
+		"Reservation", reservation, ["property", "company", "group_booking"]) or (None, None, None)
 	rows = frappe.get_all(
 		"Folio",
-		filters={"reservation": reservation},
+		filters={"reservation": reservation, "property": property},
 		fields=_folio_list_fields(),
 		order_by="creation asc",
 	)
-	stay_company, group = frappe.db.get_value(
-		"Reservation", reservation, ["company", "group_booking"]) or (None, None)
 	if group:
 		seen = {r.name for r in rows}
 		rows += [m for m in frappe.get_all(
 			"Folio",
-			filters={"group_booking": group, "folio_type": "Group"},
+			filters={"group_booking": group, "folio_type": "Group", "property": property},
 			fields=_folio_list_fields(),
 		) if m.name not in seen]
 	# name the company or travel agent each window bills to: a stay can carry
@@ -3615,6 +3631,7 @@ def reservation_folios(reservation: str):
 			r["company"] = r.payee_company or group_company or stay_company
 		if r.payee_type == "Travel Agent" and r.payee_agent:
 			r["agent_name"] = agent_names.get(r.payee_agent) or r.payee_agent
+	_filter_folio_invoice_refs(rows, property)
 	return rows
 
 
@@ -3677,8 +3694,9 @@ def _select_group_folio(group_booking: str, *, open_only: bool = False,
 def group_folios(group_booking: str):
 	"""The whole group's billing picture: the master folio plus every
 	member reservation's folios, with balances."""
+	property = frappe.db.get_value("Group Booking", group_booking, "property")
 	masters = frappe.get_all(
-		"Folio", filters={"group_booking": group_booking,
+		"Folio", filters={"group_booking": group_booking, "property": property,
 		                  "folio_type": "Group"},
 		fields=_folio_list_fields(),
 		order_by="window_no asc, creation desc")
@@ -3687,13 +3705,17 @@ def group_folios(group_booking: str):
 		or (masters[0] if masters else None)
 	members = frappe.get_all(
 		"Reservation",
-		filters={"group_booking": group_booking},
+		filters={"group_booking": group_booking, "property": property},
 		fields=["name", "guest_name", "room", "status"],
 		order_by="creation asc")
 	for m in members:
 		m["folios"] = [f for f in frappe.get_all(
-			"Folio", filters={"reservation": m.name},
+			"Folio", filters={"reservation": m.name, "property": property},
 			fields=_folio_list_fields()) if f.folio_type != "Group"]
+	rows = [f for member in members for f in member["folios"]]
+	if master:
+		rows.append(master)
+	_filter_folio_invoice_refs(rows, property)
 	return {"master": master, "members": members}
 
 
@@ -5541,9 +5563,12 @@ def folio_invoice(folio: str):
 	)
 	places = max(raw_places, 2)
 	_prop_locale = pack.locale(prop) if callable(getattr(pack, "locale", None)) else {}
+	credit = reconcile_credit_note_status(doc) if frappe.has_permission("Folio", ptype="read", doc=doc) else {}
+	if "sales_invoice" in folio_dict:
+		folio_dict["sales_invoice"] = credit.get("sales_invoice")
 	return {
 		"folio": folio_dict,
-		**(reconcile_credit_note_status(doc) if frappe.has_permission("Folio", ptype="read", doc=doc) else {}),
+		**credit,
 		"lines": lines,
 		"payments": payments,
 		"statement": _folio_statement(lines, payments, places=places),
