@@ -177,25 +177,25 @@ export default function CashierBoard() {
     <div className="w-full max-w-none space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-ink">
             {t("Cashier")}
           </p>
-          <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">{t("All tills")}</h1>
-          <p className="mt-1 text-sm text-zinc-500">
+          <h1 className="text-2xl font-semibold tracking-tight text-ink">{t("All tills")}</h1>
+          <p className="mt-1 text-sm text-muted-ink">
             {t("Business date")}{" "}
-            <span className="font-medium text-zinc-700">{board?.business_date ?? "-"}</span>
+            <span className="font-medium text-secondary-ink">{board?.business_date ?? "-"}</span>
           </p>
         </div>
         <Link
           to="/cashier"
-          className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50"
+          className="rounded-lg border border-line px-3 py-1.5 text-sm text-secondary-ink hover:bg-canvas"
         >
           {t("My till")}
         </Link>
       </div>
 
       {err ? (
-        <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700">
+        <div className="rounded-lg border border-danger-line bg-danger-subtle px-4 py-2 text-sm text-danger-ink">
           {translate(err)}
         </div>
       ) : null}
@@ -212,14 +212,14 @@ export default function CashierBoard() {
                 <span
                   className={
                     "inline-flex items-center gap-1 text-xs font-normal " +
-                    (tl.sessions.length ? "text-emerald-700" : "text-zinc-400")
+                    (tl.sessions.length ? "text-success-ink" : "text-muted-ink")
                   }
                 >
                   {tl.sessions.length ? <Unlock className="size-3" /> : <Lock className="size-3" />}
                   {tl.sessions.length ? t("Open") : t("Closed")}
                 </span>
               </CardTitle>
-              <p className="text-xs text-zinc-400">
+              <p className="text-xs text-muted-ink">
                 {translate(tl.kind)}
                 {tl.outlet ? ` · ${outlets.find((o) => o.name === tl.outlet)?.outlet_name ?? tl.outlet}` : ""}
               </p>
@@ -228,20 +228,20 @@ export default function CashierBoard() {
               {tl.sessions.map((s) => (
                 <div key={s.name} className="space-y-1">
                   <div className="flex items-baseline justify-between gap-2">
-                    <span className="truncate text-zinc-700">{s.cashier_id || s.user}</span>
-                    <span className="tabular-nums text-zinc-900">
+                    <span className="truncate text-secondary-ink">{s.cashier_id || s.user}</span>
+                    <span className="tabular-nums text-ink">
                       {fmtAmount(s.expected_cash)}
-                      <span className="ms-1 text-xs text-zinc-400">
+                      <span className="ms-1 text-xs text-muted-ink">
                         {String(s.opened_at).replace(" ", "T").slice(11, 16)}
                       </span>
                     </span>
                   </div>
                   {(s.foreign_drawers?.length ?? 0) > 0 ? (
-                    <div className="flex flex-wrap gap-1.5 text-xs text-zinc-500">
+                    <div className="flex flex-wrap gap-1.5 text-xs text-muted-ink">
                       {s.foreign_drawers!.map((fd) => (
                         <span
                           key={fd.currency}
-                          className="rounded bg-zinc-100 px-1.5 py-0.5 tabular-nums"
+                          className="rounded bg-subtle px-1.5 py-0.5 tabular-nums"
                         >
                           {fd.currency} {fmtAmount(fd.expected_fx, fd.currency)}
                         </span>
@@ -251,18 +251,18 @@ export default function CashierBoard() {
                 </div>
               ))}
               {tl.is_default && tl.sessions.length ? (
-                <p className="text-xs text-zinc-400">
+                <p className="text-xs text-muted-ink">
                   {t("Sessions opened without choosing a till.")}
                 </p>
               ) : null}
               {tl.safe ? (
-                <div className="space-y-2 border-t border-zinc-100 pt-2">
+                <div className="space-y-2 border-t border-line-subtle pt-2">
                   <div className="flex justify-between">
-                    <span className="text-zinc-500">{t("In the safe")}</span>
+                    <span className="text-muted-ink">{t("In the safe")}</span>
                     <span className="font-semibold tabular-nums">{fmtAmount(tl.safe.balance)}</span>
                   </div>
                   {tl.safe.in_transit ? (
-                    <div className="flex justify-between text-xs text-amber-700">
+                    <div className="flex justify-between text-xs text-warning-ink">
                       <span>{t("On its way")}</span>
                       <span className="tabular-nums">{fmtAmount(tl.safe.in_transit)}</span>
                     </div>
@@ -270,7 +270,7 @@ export default function CashierBoard() {
                   {canEdit && tl.name ? (
                     <div className="flex gap-2">
                       <input
-                        className="w-full rounded-lg border border-zinc-300 px-3 py-1.5 text-sm"
+                        className="w-full rounded-lg border border-control px-3 py-1.5 text-sm"
                         placeholder={t("Amount to bank")}
                         inputMode="decimal"
                         value={bankAmt[tl.name] ?? ""}
@@ -300,7 +300,7 @@ export default function CashierBoard() {
           <CardContent className="space-y-2 pt-0">
             {board.pending_transfers.map((x) => (
               <div key={x.name} className="flex items-center justify-between gap-3 text-sm">
-                <span className="text-zinc-600">
+                <span className="text-secondary-ink">
                   {termName(x.from_terminal)} → {termName(x.to_terminal)} · {x.requested_by}
                 </span>
                 <span className="flex items-center gap-3">
@@ -319,7 +319,7 @@ export default function CashierBoard() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base">{t("Tills to review")}</CardTitle>
-            <p className="text-sm font-normal text-zinc-500">
+            <p className="text-sm font-normal text-muted-ink">
               {t("Closed over or short by more than the allowed variance.")}
             </p>
           </CardHeader>
@@ -334,7 +334,7 @@ export default function CashierBoard() {
               return (
                 <div key={v.name} className="flex flex-wrap items-center justify-between gap-3 text-sm">
                   <div className="min-w-0">
-                    <span className="text-zinc-600">
+                    <span className="text-secondary-ink">
                       {v.user} · {v.business_date}
                     </span>
                     {fxWithVar.length ? (
@@ -342,7 +342,7 @@ export default function CashierBoard() {
                         {fxWithVar.map((fd) => (
                           <span
                             key={fd.currency}
-                            className="rounded bg-rose-50 px-1.5 py-0.5 font-medium tabular-nums text-rose-700"
+                            className="rounded bg-danger-subtle px-1.5 py-0.5 font-medium tabular-nums text-danger-ink"
                           >
                             {fd.currency} {fmtAmount(fd.variance_fx, fd.currency)}
                           </span>
@@ -351,10 +351,10 @@ export default function CashierBoard() {
                     ) : null}
                   </div>
                   <span className="flex flex-wrap items-center gap-3">
-                    <span className="font-semibold tabular-nums text-rose-700">{fmtAmount(v.variance)}</span>
+                    <span className="font-semibold tabular-nums text-danger-ink">{fmtAmount(v.variance)}</span>
                     <Link
                       to={`/cashier/shift-report?session=${v.name}`}
-                      className="text-xs text-brand-700 hover:underline"
+                      className="text-xs text-accent-ink hover:underline"
                     >
                       {t("View report")}
                     </Link>
@@ -375,7 +375,7 @@ export default function CashierBoard() {
         <CardHeader className="flex flex-row items-center justify-between gap-3 pb-2">
           <div>
             <CardTitle className="text-base">{t("Terminals")}</CardTitle>
-            <p className="text-sm font-normal text-zinc-500">
+            <p className="text-sm font-normal text-muted-ink">
               {t("Name each till, tie it to an outlet, and choose the printer that prints its bills. Without terminals everyone uses the Default till.")}
             </p>
           </div>
@@ -389,7 +389,7 @@ export default function CashierBoard() {
         <CardContent className="overflow-x-auto pt-0">
           {terminals.length ? (
             <table className="min-w-[520px] w-full text-start text-sm">
-              <thead className="text-xs uppercase tracking-wide text-zinc-400">
+              <thead className="text-xs uppercase tracking-wide text-muted-ink">
                 <tr>
                   <th className="py-2 pe-3">{t("Name")}</th>
                   <th className="py-2 pe-3">{t("Kind")}</th>
@@ -400,18 +400,18 @@ export default function CashierBoard() {
               </thead>
               <tbody>
                 {terminals.map((x) => (
-                  <tr key={x.name} className="border-t border-zinc-100">
+                  <tr key={x.name} className="border-t border-line-subtle">
                     <td className="py-2 pe-3">
                       {x.terminal_name}
                       {x.disabled ? (
-                        <span className="ms-2 text-xs text-zinc-400">{t("Disabled")}</span>
+                        <span className="ms-2 text-xs text-muted-ink">{t("Disabled")}</span>
                       ) : null}
                     </td>
                     <td className="py-2 pe-3">{translate(x.kind)}</td>
-                    <td className="py-2 pe-3 text-zinc-500">
+                    <td className="py-2 pe-3 text-muted-ink">
                       {outlets.find((o) => o.name === x.outlet)?.outlet_name ?? "-"}
                     </td>
-                    <td className="py-2 pe-3 text-zinc-500">
+                    <td className="py-2 pe-3 text-muted-ink">
                       {printers.find((p) => p.name === x.bill_printer)?.printer_name ?? t("This device")}
                     </td>
                     <td className="py-2 text-end">
@@ -426,26 +426,26 @@ export default function CashierBoard() {
               </tbody>
             </table>
           ) : (
-            <p className="rounded-lg border border-dashed border-zinc-200 px-4 py-6 text-center text-sm text-zinc-500">
+            <p className="rounded-lg border border-dashed border-line px-4 py-6 text-center text-sm text-muted-ink">
               {t("No terminals yet. Everyone works from the Default till, as before.")}
             </p>
           )}
 
           {form ? (
-            <div className="mt-4 space-y-3 rounded-xl border border-zinc-200 bg-zinc-50/60 p-4">
+            <div className="mt-4 space-y-3 rounded-xl border border-line bg-canvas/60 p-4">
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block text-sm">
-                  <span className="mb-1 block text-zinc-600">{t("Name")}</span>
+                  <span className="mb-1 block text-secondary-ink">{t("Name")}</span>
                   <input
-                    className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-control px-3 py-2 text-sm"
                     value={form.terminal_name}
                     onChange={(e) => setForm({ ...form, terminal_name: e.target.value })}
                   />
                 </label>
                 <label className="block text-sm">
-                  <span className="mb-1 block text-zinc-600">{t("Kind")}</span>
+                  <span className="mb-1 block text-secondary-ink">{t("Kind")}</span>
                   <select
-                    className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-control px-3 py-2 text-sm"
                     value={form.kind}
                     onChange={(e) => setForm({ ...form, kind: e.target.value })}
                   >
@@ -455,9 +455,9 @@ export default function CashierBoard() {
                   </select>
                 </label>
                 <label className="block text-sm">
-                  <span className="mb-1 block text-zinc-600">{t("Outlet")}</span>
+                  <span className="mb-1 block text-secondary-ink">{t("Outlet")}</span>
                   <select
-                    className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-control px-3 py-2 text-sm"
                     value={form.outlet || ""}
                     onChange={(e) => setForm({ ...form, outlet: e.target.value || null })}
                   >
@@ -470,9 +470,9 @@ export default function CashierBoard() {
                   </select>
                 </label>
                 <label className="block text-sm">
-                  <span className="mb-1 block text-zinc-600">{t("Bill printer")}</span>
+                  <span className="mb-1 block text-secondary-ink">{t("Bill printer")}</span>
                   <select
-                    className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-control px-3 py-2 text-sm"
                     value={form.bill_printer || ""}
                     onChange={(e) => setForm({ ...form, bill_printer: e.target.value || null })}
                   >
@@ -483,17 +483,17 @@ export default function CashierBoard() {
                       </option>
                     ))}
                   </select>
-                  <span className="mt-1 block text-xs text-zinc-400">
+                  <span className="mt-1 block text-xs text-muted-ink">
                     {t("Only printers set to print bills are listed. KOTs are set on each printer's routes, not here.")}{" "}
-                    <Link to="/printers" className="text-brand-700 hover:underline">
+                    <Link to="/printers" className="text-accent-ink hover:underline">
                       {t("Printers")}
                     </Link>
                   </span>
                 </label>
                 <label className="block text-sm">
-                  <span className="mb-1 block text-zinc-600">{t("Default opening float")}</span>
+                  <span className="mb-1 block text-secondary-ink">{t("Default opening float")}</span>
                   <input
-                    className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-control px-3 py-2 text-sm"
                     inputMode="decimal"
                     value={form.default_float}
                     onChange={(e) => setForm({ ...form, default_float: Number(e.target.value) })}

@@ -108,11 +108,11 @@ function SearchShortcut() {
       onClick={() => window.dispatchEvent(new Event("kamra:open-palette"))}
       title={t("Search: find a guest or booking, or jump anywhere - press {combo}", { combo: isMac ? "⌘ Command" : "Ctrl" + " + K" })}
       aria-label={t("Open search")}
-      className="flex w-full min-w-0 items-center gap-2 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50/70 px-3 py-2 text-sm text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600"
+      className="flex w-full min-w-0 items-center gap-2 overflow-hidden rounded-lg border border-line bg-canvas/70 px-3 py-2 text-sm text-muted-ink hover:bg-subtle hover:text-secondary-ink"
     >
       <Search className="size-4 shrink-0" aria-hidden />
       <span className="min-w-0 truncate whitespace-nowrap">{t("Search guests, bookings, screens, settings…")}</span>
-      <kbd className="ms-auto hidden shrink-0 rounded border border-zinc-200 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-zinc-500 md:inline">
+      <kbd className="ms-auto hidden shrink-0 rounded border border-line bg-surface px-1.5 py-0.5 text-[10px] font-semibold text-muted-ink md:inline">
         {combo}
       </kbd>
     </button>
@@ -160,7 +160,7 @@ function AccountMenu({
   }
 
   const itemCls =
-    "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
+    "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-secondary-ink hover:bg-canvas"
 
   return (
     <div className="relative" ref={ref}>
@@ -171,23 +171,23 @@ function AccountMenu({
         aria-expanded={open}
         aria-haspopup="menu"
         title={user}
-        className="inline-flex max-w-[11rem] items-center gap-1.5 rounded-lg px-1.5 py-1 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
+        className="inline-flex max-w-[11rem] items-center gap-1.5 rounded-lg px-1.5 py-1 text-secondary-ink hover:bg-subtle hover:text-ink"
       >
         <Avatar name={user} className="size-7 text-[10px]" />
         <span className="hidden min-w-0 truncate text-xs font-medium sm:inline">
           {user}
         </span>
-        <ChevronDown className="size-3.5 shrink-0 text-zinc-400" aria-hidden />
+        <ChevronDown className="size-3.5 shrink-0 text-muted-ink" aria-hidden />
       </button>
       {open && (
         <div
           role="menu"
-          className="absolute end-0 top-10 z-50 w-56 rounded-lg border border-zinc-200 bg-white p-1.5 shadow-lg ring-1 ring-black/5"
+          className="absolute end-0 top-10 z-50 w-56 rounded-lg border border-line bg-surface p-1.5 shadow-lg ring-1 ring-black/5"
         >
-          <p className="truncate px-2.5 py-1.5 text-xs font-medium text-zinc-500">
+          <p className="truncate px-2.5 py-1.5 text-xs font-medium text-muted-ink">
             {user}
           </p>
-          <div className="my-1 border-t border-zinc-100" />
+          <div className="my-1 border-t border-line-subtle" />
           <button
             type="button"
             role="menuitem"
@@ -198,15 +198,15 @@ function AccountMenu({
             }}
           >
             {dark ? (
-              <Sun className="size-4 shrink-0 text-zinc-500" aria-hidden />
+              <Sun className="size-4 shrink-0 text-muted-ink" aria-hidden />
             ) : (
-              <Moon className="size-4 shrink-0 text-zinc-500" aria-hidden />
+              <Moon className="size-4 shrink-0 text-muted-ink" aria-hidden />
             )}
             <span className="min-w-0 flex-1 text-start">
               {dark ? t("Switch to light mode") : t("Switch to dark mode")}
             </span>
             {getTheme() === "system" ? (
-              <span className="text-[10px] text-zinc-400">{t("System")}</span>
+              <span className="text-[10px] text-muted-ink">{t("System")}</span>
             ) : null}
           </button>
           <button
@@ -215,7 +215,7 @@ function AccountMenu({
             className={itemCls}
             onClick={() => go("/settings/appearance")}
           >
-            <UserRound className="size-4 shrink-0 text-zinc-500" aria-hidden />
+            <UserRound className="size-4 shrink-0 text-muted-ink" aria-hidden />
             {t("Profile")}
           </button>
           <button
@@ -224,7 +224,7 @@ function AccountMenu({
             className={itemCls}
             onClick={() => go("/settings/general")}
           >
-            <SettingsIcon className="size-4 shrink-0 text-zinc-500" aria-hidden />
+            <SettingsIcon className="size-4 shrink-0 text-muted-ink" aria-hidden />
             {t("Settings")}
           </button>
           <button
@@ -233,7 +233,7 @@ function AccountMenu({
             className={itemCls}
             onClick={() => go("/update-password")}
           >
-            <KeyRound className="size-4 shrink-0 text-zinc-500" aria-hidden />
+            <KeyRound className="size-4 shrink-0 text-muted-ink" aria-hidden />
             {t("Change password")}
           </button>
           {canManageApprovalPin && (
@@ -241,11 +241,11 @@ function AccountMenu({
               setOpen(false)
               setPinOpen(true)
             }}>
-              <KeyRound className="size-4 shrink-0 text-zinc-500" aria-hidden />
+              <KeyRound className="size-4 shrink-0 text-muted-ink" aria-hidden />
               {t("My Approval PIN")}
             </button>
           )}
-          <div className="my-1 border-t border-zinc-100" />
+          <div className="my-1 border-t border-line-subtle" />
           <button
             type="button"
             role="menuitem"
@@ -255,7 +255,7 @@ function AccountMenu({
               onSignOut()
             }}
           >
-            <LogOut className="size-4 shrink-0 text-zinc-500" aria-hidden />
+            <LogOut className="size-4 shrink-0 text-muted-ink" aria-hidden />
             {t("Sign out")}
           </button>
         </div>
@@ -272,7 +272,7 @@ function LanguageToggle() {
   return (
     <label
       title={t("Language")}
-      className="flex items-center gap-1 rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
+      className="flex items-center gap-1 rounded-lg p-1.5 text-muted-ink hover:bg-subtle hover:text-secondary-ink"
     >
       <Globe className="size-4 shrink-0" aria-hidden />
       <select
@@ -320,12 +320,12 @@ function AppSwitcher({ apps, current }: { apps: AppDef[]; current: AppDef }) {
         onClick={() => setOpen((o) => !o)}
         aria-label={t("Switch app")}
         title={t("Switch app")}
-        className="flex size-8 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800"
+        className="flex size-8 items-center justify-center rounded-md text-muted-ink hover:bg-subtle hover:text-ink"
       >
         <LayoutGrid className="size-4" strokeWidth={1.75} aria-hidden />
       </button>
       {open && (
-        <div className="absolute start-0 top-10 z-50 w-64 rounded-lg border border-zinc-200 bg-white p-1.5 shadow-lg ring-1 ring-black/5">
+        <div className="absolute start-0 top-10 z-50 w-64 rounded-lg border border-line bg-surface p-1.5 shadow-lg ring-1 ring-black/5">
           <div className="grid grid-cols-3 gap-0.5">
             {apps.map((app) => {
               const active = app.id === current.id
@@ -335,15 +335,15 @@ function AppSwitcher({ apps, current }: { apps: AppDef[]; current: AppDef }) {
                   onClick={() => go(app)}
                   className={cn(
                     "flex flex-col items-center gap-1.5 rounded-md px-1.5 py-2.5 text-center transition-colors",
-                    active ? "bg-zinc-100" : "hover:bg-zinc-50",
+                    active ? "bg-subtle" : "hover:bg-canvas",
                   )}
                 >
                   <span
                     className={cn(
                       "flex size-9 items-center justify-center rounded-md border",
                       active
-                        ? "border-brand-200 bg-brand-50 text-brand-700"
-                        : "border-zinc-200 bg-white text-zinc-600",
+                        ? "border-accent-line bg-accent-subtle text-accent-ink"
+                        : "border-line bg-surface text-secondary-ink",
                     )}
                   >
                     <app.icon className="size-4" strokeWidth={1.75} aria-hidden />
@@ -351,7 +351,7 @@ function AppSwitcher({ apps, current }: { apps: AppDef[]; current: AppDef }) {
                   <span
                     className={cn(
                       "text-[11px] font-medium leading-tight",
-                      active ? "text-zinc-900" : "text-zinc-600",
+                      active ? "text-ink" : "text-secondary-ink",
                     )}
                   >
                     {t(app.name)}
@@ -361,7 +361,7 @@ function AppSwitcher({ apps, current }: { apps: AppDef[]; current: AppDef }) {
             })}
           </div>
           {connected.length > 0 && (
-            <div className="mt-1 grid grid-cols-3 gap-0.5 border-t border-zinc-100 pt-1">
+            <div className="mt-1 grid grid-cols-3 gap-0.5 border-t border-line-subtle pt-1">
               {connected.map((app) => (
                 <a
                   key={app.app_id}
@@ -369,12 +369,12 @@ function AppSwitcher({ apps, current }: { apps: AppDef[]; current: AppDef }) {
                   target="_blank"
                   rel="noreferrer"
                   onClick={() => setOpen(false)}
-                  className="flex flex-col items-center gap-1.5 rounded-md px-1.5 py-2.5 text-center transition-colors hover:bg-zinc-50"
+                  className="flex flex-col items-center gap-1.5 rounded-md px-1.5 py-2.5 text-center transition-colors hover:bg-canvas"
                 >
-                  <span className="flex size-9 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-600">
+                  <span className="flex size-9 items-center justify-center rounded-md border border-line bg-surface text-secondary-ink">
                     <ConnectedAppIcon src={app.icon} />
                   </span>
-                  <span className="text-[11px] font-medium leading-tight text-zinc-600">
+                  <span className="text-[11px] font-medium leading-tight text-secondary-ink">
                     {app.name}
                   </span>
                 </a>
@@ -384,7 +384,7 @@ function AppSwitcher({ apps, current }: { apps: AppDef[]; current: AppDef }) {
           <NavLink
             to="/apps"
             onClick={() => setOpen(false)}
-            className="mt-1 block rounded-md px-3 py-2 text-center text-xs font-medium text-zinc-500 hover:bg-zinc-50 hover:text-zinc-800"
+            className="mt-1 block rounded-md px-3 py-2 text-center text-xs font-medium text-muted-ink hover:bg-canvas hover:text-ink"
           >
             {t("View all apps")}
           </NavLink>
@@ -562,7 +562,7 @@ export default function AppShell() {
         href={item.href}
         target="_blank"
         rel="noreferrer"
-        className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100"
+        className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-secondary-ink hover:bg-subtle"
       >
         <item.icon className="size-4 shrink-0" aria-hidden />
         <span className="truncate" title={t(item.label)}>{t(item.label)}</span>
@@ -575,8 +575,8 @@ export default function AppShell() {
           cn(
             "my-1 flex items-center gap-2.5 rounded-lg border px-2 py-1.5 text-sm font-semibold transition-colors",
             isActive
-              ? "border-brand-700 bg-brand-600 text-white shadow-sm"
-              : "border-brand-100 bg-gradient-to-r from-brand-50 to-white text-brand-800 hover:border-brand-200 hover:from-brand-100",
+              ? "border-accent-control bg-accent-fill text-on-solid shadow-sm"
+              : "border-accent-line bg-gradient-to-r from-accent-subtle to-surface text-accent-ink hover:border-accent-line hover:from-accent-muted",
           )
         }
       >
@@ -584,14 +584,14 @@ export default function AppShell() {
           <>
             <span className={cn(
               "flex size-6 shrink-0 items-center justify-center rounded-md",
-              isActive ? "bg-white/20 text-white" : "bg-brand-600 text-white",
+              isActive ? "bg-on-solid/20 text-on-solid" : "bg-accent-fill text-on-solid",
             )}>
               <item.icon className="size-3.5" aria-hidden />
             </span>
             <span className="truncate" title={t(item.label)}>{t(item.label)}</span>
             <span className={cn(
               "ms-auto rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-              isActive ? "bg-white/20 text-white" : "bg-brand-100 text-brand-700",
+              isActive ? "bg-on-solid/20 text-on-solid" : "bg-accent-muted text-accent-ink",
             )}>{t("AI")}</span>
           </>
         )}
@@ -605,8 +605,8 @@ export default function AppShell() {
           cn(
             "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium",
             isActive
-              ? "bg-brand-50 text-brand-700"
-              : "text-zinc-600 hover:bg-zinc-100",
+              ? "bg-accent-subtle text-accent-ink"
+              : "text-secondary-ink hover:bg-subtle",
           )
         }
       >
@@ -629,7 +629,7 @@ export default function AppShell() {
     return groups.map((g, gi) => (
       <div key={g.label ?? `ungrouped-${gi}`} className={gi > 0 ? "mt-3" : undefined}>
         {g.label ? (
-          <div className="mb-1 px-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+          <div className="mb-1 px-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-ink">
             {t(g.label)}
           </div>
         ) : null}
@@ -643,18 +643,18 @@ export default function AppShell() {
       to="/"
       end
       aria-label={t("Home")}
-      className="flex items-center gap-2 rounded-lg px-1 outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+      className="flex items-center gap-2 rounded-lg px-1 outline-none focus-visible:ring-2 focus-visible:ring-accent-control"
     >
       <BrandMark legacyLogo={whiteLabel() ? undefined : brand.logo} className="size-7" decorative />
       {!whiteLabel() && brand.name ? (
         <span className="min-w-0 leading-tight">
-          <span className="block truncate text-sm font-semibold text-zinc-900">{brand.name}</span>
-          <span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-brand-600">{brandTitle()}</span>
+          <span className="block truncate text-sm font-semibold text-ink">{brand.name}</span>
+          <span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-accent-text">{brandTitle()}</span>
         </span>
       ) : (
-        <span className="text-lg font-semibold tracking-tight text-zinc-900">
+        <span className="text-lg font-semibold tracking-tight text-ink">
           {product()}
-          {!whiteLabel() && <span className="ms-1 align-middle text-[10px] font-semibold tracking-[0.2em] text-brand-600">
+          {!whiteLabel() && <span className="ms-1 align-middle text-[10px] font-semibold tracking-[0.2em] text-accent-text">
             PMS
           </span>}
         </span>
@@ -672,7 +672,7 @@ export default function AppShell() {
       >
         <currentApp.icon className="size-3.5" aria-hidden />
       </span>
-      <span className="text-sm font-semibold text-zinc-800">
+      <span className="text-sm font-semibold text-ink">
         {t(currentApp.name)}
       </span>
     </div>
@@ -685,7 +685,7 @@ export default function AppShell() {
       </div>
       {!whiteLabel() && build ? (
         <p
-          className="px-2.5 pt-2 text-[11px] text-zinc-400"
+          className="px-2.5 pt-2 text-[11px] text-muted-ink"
           title={t("The {product} version this site is running")}
         >
           {product()} v{build}
@@ -700,12 +700,12 @@ export default function AppShell() {
     <div className={cn("flex min-h-screen flex-col", floor && "lg:h-screen")}>
       <NotificationHost />
       {!whiteLabel() && demoMode && !kiosk && (
-        <div className="bg-amber-500 px-4 py-1.5 text-center text-xs font-medium text-amber-950">
+        <div className="bg-warning-fill px-4 py-1.5 text-center text-xs font-medium text-on-solid">
           {t("Shared playground, not your hotel. Data is wiped every night.")}
           {" "}
           <a
             href={upstreamHome()}
-            className="underline underline-offset-2 hover:text-black"
+            className="underline underline-offset-2 hover:opacity-90"
           >
             {t("Get your own {product} →")}
           </a>
@@ -715,7 +715,7 @@ export default function AppShell() {
       {!whiteLabel() && !kiosk && !demoMode && <SetupNag />}
       <div className="flex min-h-0 flex-1">
       {!kiosk && (
-      <aside className="hidden print:hidden w-56 shrink-0 flex-col border-e border-zinc-200 bg-white px-3 py-5 sm:sticky sm:top-0 sm:flex sm:h-screen sm:overflow-y-auto sm:overscroll-contain">
+      <aside className="hidden print:hidden w-56 shrink-0 flex-col border-e border-line bg-surface px-3 py-5 sm:sticky sm:top-0 sm:flex sm:h-screen sm:overflow-y-auto sm:overscroll-contain">
         <div className="mb-5">{navBrand}</div>
         {navAppLabel}
         <nav className="space-y-0.5">{navGroups}</nav>
@@ -731,12 +731,12 @@ export default function AppShell() {
             onClick={() => setNavOpen(false)}
             aria-hidden
           />
-          <aside className="absolute inset-y-0 start-0 flex w-64 max-w-[85vw] flex-col border-e border-zinc-200 bg-white px-3 py-5 shadow-2xl animate-fade-in">
+          <aside className="absolute inset-y-0 start-0 flex w-64 max-w-[85vw] flex-col border-e border-line bg-surface px-3 py-5 shadow-2xl animate-fade-in">
             <div className="mb-5 flex items-center justify-between gap-2">
               <div className="min-w-0 flex-1">{navBrand}</div>
               <button
                 type="button"
-                className="grid size-9 shrink-0 place-items-center rounded-lg text-zinc-500 hover:bg-zinc-100"
+                className="grid size-9 shrink-0 place-items-center rounded-lg text-muted-ink hover:bg-subtle"
                 aria-label={t("Close")}
                 onClick={() => setNavOpen(false)}
               >
@@ -752,10 +752,10 @@ export default function AppShell() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         {!kiosk && (
-        <header className="sticky top-0 z-40 print:hidden flex min-w-0 items-center flex-wrap gap-1 border-b border-zinc-200 bg-white/90 px-2 sm:gap-2 sm:px-4 py-2.5 backdrop-blur">
+        <header className="sticky top-0 z-40 print:hidden flex min-w-0 items-center flex-wrap gap-1 border-b border-line bg-surface/90 px-2 sm:gap-2 sm:px-4 py-2.5 backdrop-blur">
           <button
             type="button"
-            className="grid size-8 shrink-0 place-items-center rounded-md text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 sm:hidden"
+            className="grid size-8 shrink-0 place-items-center rounded-md text-muted-ink hover:bg-subtle hover:text-ink sm:hidden"
             aria-label={t("Open menu")}
             title={t("Open menu")}
             aria-expanded={navOpen}
@@ -766,7 +766,7 @@ export default function AppShell() {
           <AppSwitcher apps={apps} current={currentApp ?? apps[0]} />
           {properties.length > 1 ? (
             <select
-              className="min-w-0 max-w-[40vw] truncate rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-sm font-medium focus:outline-2 focus:outline-brand-600 lg:max-w-xs"
+              className="min-w-0 max-w-[40vw] truncate rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm font-medium focus:outline-2 focus:outline-focus lg:max-w-xs"
               value={property}
               onChange={(e) => switchProperty(e.target.value)}
               aria-label={t("Property")}
@@ -779,13 +779,13 @@ export default function AppShell() {
               ))}
             </select>
           ) : (
-            <span className="min-w-0 truncate text-sm font-medium text-zinc-600">
+            <span className="min-w-0 truncate text-sm font-medium text-secondary-ink">
               {properties[0]?.property_name ?? ""}
             </span>
           )}
           {activeProperty && <div className="order-last flex w-full flex-wrap items-center gap-2 text-xs sm:order-none sm:w-auto" aria-live="polite">
-            <span className="rounded bg-zinc-100 px-2 py-1"><span className="sr-only sm:not-sr-only">{t("Business date")} · </span>{formatDate(activeProperty.business_date)}</span>
-            {activeProperty.business_date !== activeProperty.calendar_date && <span className="rounded bg-amber-50 px-2 py-1 text-amber-800">{t("Calendar {date} · End of Day pending", {date: formatDate(activeProperty.calendar_date)})}</span>}
+            <span className="rounded bg-subtle px-2 py-1"><span className="sr-only sm:not-sr-only">{t("Business date")} · </span>{formatDate(activeProperty.business_date)}</span>
+            {activeProperty.business_date !== activeProperty.calendar_date && <span className="rounded bg-warning-subtle px-2 py-1 text-warning-ink">{t("Calendar {date} · End of Day pending", {date: formatDate(activeProperty.calendar_date)})}</span>}
           </div>}
           <div className="flex min-w-0 flex-1 justify-center sm:px-2">
             <div className="hidden w-full max-w-md 2xl:block">
@@ -796,7 +796,7 @@ export default function AppShell() {
               onClick={() => window.dispatchEvent(new Event("kamra:open-palette"))}
               aria-label={t("Open search")}
               title={t("Open search")}
-              className="ms-auto grid size-9 place-items-center rounded-lg text-zinc-500 hover:bg-zinc-100 2xl:hidden"
+              className="ms-auto grid size-9 place-items-center rounded-lg text-muted-ink hover:bg-subtle 2xl:hidden"
             >
               <Search className="size-4" aria-hidden />
             </button>

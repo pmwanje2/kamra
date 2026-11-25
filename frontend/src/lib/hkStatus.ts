@@ -43,46 +43,46 @@ export interface HkToneStyle {
 
 export const HK_TONES: Record<string, HkToneStyle> = {
   Inspected: {
-    badge: "border-sky-300 bg-sky-50 text-sky-900",
+    badge: "border-info-line-strong bg-info-subtle text-info-ink",
     dot: "bg-sky-500",
-    text: "text-sky-700",
+    text: "text-info-ink",
   },
   Ready: {
-    badge: "border-teal-300 bg-teal-50 text-teal-900",
+    badge: "border-teal-line-strong bg-teal-subtle text-teal-ink",
     dot: "bg-teal-500",
-    text: "text-teal-700",
+    text: "text-teal-ink",
   },
   Clean: {
-    badge: "border-emerald-300 bg-emerald-50 text-emerald-900",
+    badge: "border-success-line-strong bg-success-subtle text-success-ink",
     dot: "bg-emerald-500",
-    text: "text-emerald-700",
+    text: "text-success-ink",
   },
   Pickup: {
-    badge: "border-indigo-300 bg-indigo-50 text-indigo-900",
+    badge: "border-indigo-line-strong bg-indigo-subtle text-indigo-ink",
     dot: "bg-indigo-500",
-    text: "text-indigo-700",
+    text: "text-indigo-ink",
   },
   Dirty: {
-    badge: "border-amber-300 bg-amber-50 text-amber-900",
+    badge: "border-warning-line-strong bg-warning-subtle text-warning-ink",
     dot: "bg-amber-500",
-    text: "text-amber-700",
+    text: "text-warning-ink",
   },
   "Out of Service": {
-    badge: "border-orange-300 bg-orange-50 text-orange-900",
+    badge: "border-notice-line-strong bg-notice-subtle text-notice-ink",
     dot: "bg-orange-500",
-    text: "text-orange-700",
+    text: "text-notice-ink",
   },
   "Out of Order": {
-    badge: "border-rose-300 bg-rose-50 text-rose-900",
+    badge: "border-danger-line-strong bg-danger-subtle text-danger-ink",
     dot: "bg-rose-500",
-    text: "text-rose-700",
+    text: "text-danger-ink",
   },
 }
 
 const FALLBACK_TONE: HkToneStyle = {
-  badge: "border-zinc-200 bg-zinc-50 text-zinc-700",
-  dot: "bg-zinc-400",
-  text: "text-zinc-500",
+  badge: "border-line bg-canvas text-secondary-ink",
+  dot: "bg-fill-prominent",
+  text: "text-muted-ink",
 }
 
 export interface HkToggleOption {

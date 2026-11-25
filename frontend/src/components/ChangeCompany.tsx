@@ -12,8 +12,8 @@ import { Button } from "./ui/button"
 interface Company { name: string; company_name: string }
 
 const inputCls =
-  "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "w-full rounded-lg border border-control bg-surface px-3 py-2 text-sm " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 export default function ChangeCompany({ reservation, current, onDone, onCancel }: {
   reservation: string
@@ -57,23 +57,23 @@ export default function ChangeCompany({ reservation, current, onDone, onCancel }
   }
 
   return (
-    <div className="space-y-2 rounded-lg border border-zinc-200 bg-white p-3 text-sm">
-      <p className="font-medium text-zinc-800">{t("Change the company")}</p>
+    <div className="space-y-2 rounded-lg border border-line bg-surface p-3 text-sm">
+      <p className="font-medium text-ink">{t("Change the company")}</p>
       <select className={inputCls} value={company} onChange={(e) => setCompany(e.target.value)}
         aria-label={t("New company")}>
         <option value="">{current ? t("No company: the guest pays") : t("Pick a company")}</option>
         {companies.map((c) => <option key={c.name} value={c.name}>{c.company_name}</option>)}
       </select>
       {company && (
-        <label className="flex items-start gap-2 text-zinc-700">
-          <input type="radio" className="mt-0.5 accent-brand-600" checked={move === "rules"}
+        <label className="flex items-start gap-2 text-secondary-ink">
+          <input type="radio" className="mt-0.5 accent-focus" checked={move === "rules"}
             onChange={() => setMove("rules")} />
           {t("Move charges already posted by the new company's billing rules")}
         </label>
       )}
       {current && (
-        <label className="flex items-start gap-2 text-zinc-700">
-          <input type="radio" className="mt-0.5 accent-brand-600"
+        <label className="flex items-start gap-2 text-secondary-ink">
+          <input type="radio" className="mt-0.5 accent-focus"
             checked={move === "guest" || !company} onChange={() => setMove("guest")} />
           {t("Move everything on the company bill back to the guest")}
         </label>
@@ -85,8 +85,8 @@ export default function ChangeCompany({ reservation, current, onDone, onCancel }
           onChange={(e) => setOverride(e.target.value)}
           placeholder={t("Reason for the override (logged with your name)")} />
       )}
-      {error && <p className="text-xs text-rose-700">{translate(error)}</p>}
-      <p className="text-xs text-zinc-500">
+      {error && <p className="text-xs text-danger-ink">{translate(error)}</p>}
+      <p className="text-xs text-muted-ink">
         {t("Charges posted from now on follow the new company's rules. The room rate stays as booked.")}
       </p>
       <div className="flex gap-2">

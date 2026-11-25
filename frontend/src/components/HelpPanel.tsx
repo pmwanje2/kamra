@@ -108,27 +108,27 @@ export default function HelpPanel() {
       <button
         aria-label={translate("Open help")}
         onClick={() => setOpen((o) => !o)}
-        className="fixed bottom-5 end-5 z-40 flex size-12 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-600 shadow-lg hover:text-brand-700 print:hidden"
+        className="fixed bottom-5 end-5 z-40 flex size-12 items-center justify-center rounded-full border border-line bg-surface text-secondary-ink shadow-lg hover:text-accent-ink print:hidden"
       >
         {open ? <X className="size-5" /> : <HelpCircle className="size-5" />}
       </button>
 
       {open && (
-        <div className="fixed bottom-20 end-5 z-40 flex h-[520px] w-[360px] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl print:hidden">
-          <div className="flex items-center gap-2 border-b border-zinc-100 px-4 py-3">
-            <HelpCircle className="size-4 text-brand-600" />
+        <div className="fixed bottom-20 end-5 z-40 flex h-[520px] w-[360px] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl print:hidden">
+          <div className="flex items-center gap-2 border-b border-line-subtle px-4 py-3">
+            <HelpCircle className="size-4 text-accent-text" />
             <span className="text-sm font-semibold">{translate("How-to help")}</span>
-            <span className="ms-auto text-[10px] uppercase tracking-wider text-zinc-400">{translate("explains, doesn't act")}</span>
+            <span className="ms-auto text-[10px] uppercase tracking-wider text-muted-ink">{translate("explains, doesn't act")}</span>
           </div>
 
           <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
             {msgs.length === 0 && (
               <div className="space-y-2">
-                <p className="text-sm text-zinc-600">{translate("Ask how to do anything in {product} - I'll walk you through it.")}</p>
+                <p className="text-sm text-secondary-ink">{translate("Ask how to do anything in {product} - I'll walk you through it.")}</p>
                 {SUGGESTIONS.map((s) => (
                   <button
                     key={s}
-                    className="block w-full rounded-lg border border-zinc-200 px-3 py-1.5 text-start text-sm text-zinc-600 hover:border-brand-600"
+                    className="block w-full rounded-lg border border-line px-3 py-1.5 text-start text-sm text-secondary-ink hover:border-accent-control"
                     onClick={() => send(translate(s))}
                   >
                     {translate(s)}
@@ -142,18 +142,18 @@ export default function HelpPanel() {
                 className={cn(
                   "max-w-[88%] rounded-2xl px-3.5 py-2 text-sm",
                   m.role === "user"
-                    ? "ms-auto whitespace-pre-wrap bg-brand-600 text-white"
-                    : "space-y-1.5 bg-zinc-100 text-zinc-800",
+                    ? "ms-auto whitespace-pre-wrap bg-accent-fill text-on-solid"
+                    : "space-y-1.5 bg-subtle text-ink",
                 )}
               >
                 {m.role === "assistant" ? <Markdown text={m.content} /> : m.content}
               </div>
             ))}
             {busy && (
-              <Loader2 className="size-4 animate-spin text-zinc-400" />
+              <Loader2 className="size-4 animate-spin text-muted-ink" />
             )}
             {error && (
-              <p className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-600">
+              <p className="rounded-lg bg-danger-subtle px-3 py-2 text-xs text-danger-text">
                 {translate(error)}
               </p>
             )}
@@ -161,14 +161,14 @@ export default function HelpPanel() {
           </div>
 
           <form
-            className="flex items-center gap-2 border-t border-zinc-100 px-3 py-2.5"
+            className="flex items-center gap-2 border-t border-line-subtle px-3 py-2.5"
             onSubmit={(e) => {
               e.preventDefault()
               send(input)
             }}
           >
             <input
-              className="flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+              className="flex-1 rounded-lg border border-control bg-surface px-3 py-1.5 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-focus"
               placeholder={translate("How do I…?")}
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -177,7 +177,7 @@ export default function HelpPanel() {
               type="submit"
               aria-label={translate("Send")}
               disabled={busy || !input.trim()}
-              className="rounded-lg bg-brand-600 p-2 text-white disabled:opacity-40"
+              className="rounded-lg bg-accent-fill p-2 text-on-solid disabled:opacity-40"
             >
               <Send className="size-4" />
             </button>

@@ -29,7 +29,7 @@ interface Preview {
 type CreditAction = "Refund" | "Keep as forfeited deposit"
 
 const inputCls =
-  "w-full rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "w-full rounded-lg border border-control bg-surface px-3 py-1.5 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 export default function NoShowDialog(props: {
   reservation: string
@@ -108,13 +108,13 @@ export default function NoShowDialog(props: {
   return (
     <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-label={t("Mark no-show")}>
       <div className="absolute inset-0 bg-black/40" onClick={close} aria-hidden />
-      <div className="relative w-full max-w-md rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
-        <header className="flex items-start justify-between gap-3 border-b border-zinc-200 px-5 py-4">
+      <div className="relative w-full max-w-md rounded-t-2xl bg-surface shadow-2xl sm:rounded-2xl">
+        <header className="flex items-start justify-between gap-3 border-b border-line px-5 py-4">
           <div>
-            <h2 className="text-lg font-semibold text-zinc-900">
+            <h2 className="text-lg font-semibold text-ink">
               {credit > 0 ? t("Guest is in credit") : t("Mark no-show")}
             </h2>
-            {pre && <p className="text-sm text-zinc-500">{pre.guest_name}</p>}
+            {pre && <p className="text-sm text-muted-ink">{pre.guest_name}</p>}
           </div>
           <Button variant="ghost" onClick={close} aria-label={t("Close")}>
             <X className="size-5" />
@@ -123,13 +123,13 @@ export default function NoShowDialog(props: {
         <div className="space-y-3 px-5 py-4 text-sm">
           {credit > 0 ? (
             <>
-              <p className="text-zinc-700">
+              <p className="text-secondary-ink">
                 {t("{amount} paid beyond the no-show fee is still on the folio.", { amount: fmtMoney(credit) })}
               </p>
               <div role="radiogroup" aria-label={t("What to do with it")} className="space-y-1.5">
                 {(["Refund", "Keep as forfeited deposit"] as const).map((a) => (
                   <label key={a} className="flex items-center gap-2">
-                    <input type="radio" className="size-4 accent-brand-600" checked={action === a}
+                    <input type="radio" className="size-4 accent-focus" checked={action === a}
                       onChange={() => setAction(a)} />
                     {a === "Refund" ? t("Refund it to the guest") : t("Keep it as a forfeited deposit")}
                   </label>
@@ -137,7 +137,7 @@ export default function NoShowDialog(props: {
               </div>
               {action === "Refund" && (
                 <label className="block">
-                  <span className="mb-1 block text-zinc-500">{t("Refund by")}</span>
+                  <span className="mb-1 block text-muted-ink">{t("Refund by")}</span>
                   <select className={inputCls} value={mode} onChange={(e) => setMode(e.target.value)}>
                     {(payment_modes.length ? payment_modes : ["Cash"]).map((m) => (
                       <option key={m} value={m}>{t(m)}</option>
@@ -146,14 +146,14 @@ export default function NoShowDialog(props: {
                 </label>
               )}
               <label className="block">
-                <span className="mb-1 block text-zinc-500">{t("Reason (required, goes on the record)")}</span>
+                <span className="mb-1 block text-muted-ink">{t("Reason (required, goes on the record)")}</span>
                 <input className={inputCls} value={creditReason} onChange={(e) => setCreditReason(e.target.value)} />
               </label>
             </>
           ) : pre ? (
             <>
-              <p className="text-zinc-700">{feeLine}</p>
-              <p className="text-zinc-700">
+              <p className="text-secondary-ink">{feeLine}</p>
+              <p className="text-secondary-ink">
                 {pre.paid > 0
                   ? pre.credit_after > 0
                     ? t("Paid {paid}. The fee comes out of it; {left} stays as credit, to refund or keep next.", {
@@ -162,16 +162,16 @@ export default function NoShowDialog(props: {
                     : t("Paid {paid}. It goes against the fee.", { paid: fmtMoney(pre.paid) })
                   : t("Nothing paid in advance.")}
               </p>
-              <p className="text-zinc-500">{t("The room goes back on sale now, here and on the channels.")}</p>
+              <p className="text-muted-ink">{t("The room goes back on sale now, here and on the channels.")}</p>
               <input className={inputCls} placeholder={t("Note (optional)")} value={reason}
                 onChange={(e) => setReason(e.target.value)} />
             </>
           ) : (
-            !error && <p className="text-zinc-500">{t("Loading…")}</p>
+            !error && <p className="text-muted-ink">{t("Loading…")}</p>
           )}
-          {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-rose-700">{error}</p>}
+          {error && <p className="rounded-lg bg-danger-subtle px-3 py-2 text-danger-ink">{error}</p>}
         </div>
-        <footer className="flex justify-end gap-2 border-t border-zinc-100 px-5 py-3">
+        <footer className="flex justify-end gap-2 border-t border-line-subtle px-5 py-3">
           {credit > 0 ? (
             <>
               <Button variant="outline" disabled={busy} onClick={props.onDone}>{t("Decide later")}</Button>
@@ -184,7 +184,7 @@ export default function NoShowDialog(props: {
           ) : (
             <>
               <Button variant="outline" disabled={busy} onClick={props.onClose}>{t("Back")}</Button>
-              <Button className="bg-rose-600 hover:bg-rose-700" disabled={busy || !pre} onClick={() => void mark()}>
+              <Button variant="danger" disabled={busy || !pre} onClick={() => void mark()}>
                 {t("Mark no-show")}
               </Button>
             </>

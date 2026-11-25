@@ -226,9 +226,9 @@ export interface ScreenConfig {
 }
 
 const inputCls =
-  "w-full rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600 " +
-  "disabled:bg-zinc-50 disabled:text-zinc-400"
+  "w-full rounded-lg border border-control bg-surface px-3 py-1.5 text-sm " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus " +
+  "disabled:bg-canvas disabled:text-muted-ink"
 
 function parseTags(value: unknown): string[] {
   if (Array.isArray(value))
@@ -259,17 +259,17 @@ function TagsInput(props: {
     <div className="space-y-2">
       <div className="flex flex-wrap gap-1.5">
         {selected.length === 0 && (
-          <span className="text-xs text-zinc-400">{props.t("None selected")}</span>
+          <span className="text-xs text-muted-ink">{props.t("None selected")}</span>
         )}
         {selected.map((tag) => (
           <button
             key={tag}
             type="button"
             onClick={() => toggle(tag)}
-            className="inline-flex items-center gap-1 rounded-full border border-brand-200 bg-brand-50 px-2.5 py-0.5 text-xs font-medium text-brand-800 hover:bg-brand-100"
+            className="inline-flex items-center gap-1 rounded-full border border-accent-line bg-accent-subtle px-2.5 py-0.5 text-xs font-medium text-accent-ink hover:bg-accent-muted"
           >
             {props.t(tag)}
-            <span aria-hidden className="text-brand-500">×</span>
+            <span aria-hidden className="text-accent-text">×</span>
           </button>
         ))}
       </div>
@@ -280,7 +280,7 @@ function TagsInput(props: {
               key={tag}
               type="button"
               onClick={() => toggle(tag)}
-              className="rounded-full border border-zinc-200 bg-white px-2.5 py-0.5 text-xs text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50"
+              className="rounded-full border border-line bg-surface px-2.5 py-0.5 text-xs text-secondary-ink hover:border-control hover:bg-canvas"
             >
               + {props.t(tag)}
             </button>
@@ -317,7 +317,7 @@ function SourceSelect(props: {
         />
         <button
           type="button"
-          className="text-xs text-zinc-500 hover:text-zinc-700"
+          className="text-xs text-muted-ink hover:text-secondary-ink"
           onClick={() => setAdding(false)}
         >
           {t("Choose from list")}
@@ -362,8 +362,8 @@ function TableField(props: {
   const { spec, onChange, t } = props
   const rows = Array.isArray(props.value) ? (props.value as TableRow[]) : []
   const columns = spec.columns ?? []
-  const cell = "w-full rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
-  const icon = "rounded-md p-1 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-30"
+  const cell = "w-full rounded-md border border-control bg-surface px-2 py-1 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-focus"
+  const icon = "rounded-md p-1 text-muted-ink hover:bg-subtle hover:text-secondary-ink disabled:opacity-30"
   const update = (i: number, field: string, v: string) =>
     onChange(rows.map((row, j) => (j === i ? { ...row, [field]: v } : row)))
   const move = (i: number, by: number) => {
@@ -374,17 +374,17 @@ function TableField(props: {
   }
   return (
     <fieldset className="space-y-2 sm:col-span-2">
-      <legend className="mb-1.5 text-sm font-medium text-zinc-600">{t(spec.label)}</legend>
-      {spec.hint && <p className="text-xs leading-relaxed text-zinc-400">{t(spec.hint)}</p>}
+      <legend className="mb-1.5 text-sm font-medium text-secondary-ink">{t(spec.label)}</legend>
+      {spec.hint && <p className="text-xs leading-relaxed text-muted-ink">{t(spec.hint)}</p>}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
+            <tr className="text-left text-xs font-medium uppercase tracking-wider text-muted-ink">
               {columns.map((c) => <th key={c.field} className="py-1 pr-2">{t(c.label)}</th>)}
               <th className="py-1" />
             </tr>
           </thead>
-          <tbody className="divide-y divide-zinc-100">
+          <tbody className="divide-y divide-line-subtle">
             {rows.map((row, i) => (
               <tr key={String(row.name ?? `new-${i}`)}>
                 {columns.map((c) => (
@@ -424,7 +424,7 @@ function TableField(props: {
           </tbody>
         </table>
       </div>
-      {rows.length === 0 && <p className="text-xs text-zinc-400">{t("Nothing here yet.")}</p>}
+      {rows.length === 0 && <p className="text-xs text-muted-ink">{t("Nothing here yet.")}</p>}
       <Button type="button" variant="outline"
         onClick={() => onChange([...rows, Object.fromEntries(columns.map((c) => [c.field, c.default ?? ""]))])}>
         <Plus className="size-4" aria-hidden />
@@ -593,7 +593,7 @@ function FieldInput(props: {
       return (
         <input
           type="checkbox"
-          className="size-4 accent-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
+          className="size-4 accent-focus disabled:cursor-not-allowed disabled:opacity-50"
           checked={Boolean(Number(value ?? 0))}
           disabled={disabled}
           onChange={(e) => onChange(e.target.checked ? 1 : 0)}
@@ -1088,7 +1088,7 @@ export function ResourceScreen({
         <div>
           <CardTitle>{t(config.title)}</CardTitle>
           {config.description && (
-            <p className="mt-0.5 text-xs text-zinc-400">
+            <p className="mt-0.5 text-xs text-muted-ink">
               {t(config.description)}
             </p>
           )}
@@ -1105,19 +1105,19 @@ export function ResourceScreen({
       </CardHeader>
       <CardContent>
         {error && !editing && (
-          <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          <div className="mb-3 rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">
             {translate(error)}
           </div>
         )}
         <div className="mb-4 flex flex-wrap items-center gap-2">
             {config.searchFields?.length ? (
               <div className="relative">
-                <Search className="pointer-events-none absolute left-2.5 top-2 size-4 text-zinc-400" />
+                <Search className="pointer-events-none absolute left-2.5 top-2 size-4 text-muted-ink" />
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder={t("Search…")}
-                  className="w-56 rounded-lg border border-zinc-300 bg-white py-1.5 pl-8 pr-3 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+                  className="w-56 rounded-lg border border-control bg-surface py-1.5 pl-8 pr-3 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-focus"
                 />
               </div>
             ) : null}
@@ -1128,7 +1128,7 @@ export function ResourceScreen({
                 onChange={(e) =>
                   setFilterVals((v) => ({ ...v, [f.field]: e.target.value }))
                 }
-                className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+                className="rounded-lg border border-control bg-surface px-3 py-1.5 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-focus"
               >
                 <option value="">{t("{label}: all", { label: t(f.label) })}</option>
                 {f.options
@@ -1145,13 +1145,13 @@ export function ResourceScreen({
               </select>
             ))}
             {config.dateFilter && (
-              <div className="flex max-w-full min-w-0 flex-wrap items-center gap-1.5 text-sm text-zinc-500">
+              <div className="flex max-w-full min-w-0 flex-wrap items-center gap-1.5 text-sm text-muted-ink">
                 <div className="flex min-w-0 max-w-full items-center gap-1.5">
                   <span className="text-xs">{t(config.dateFilter.label)}</span>
                   <input
                     type="date"
                     aria-label={(`${t(config.dateFilter.label)} ${t("from")}`)}
-                    className="min-w-0 max-w-full rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+                    className="min-w-0 max-w-full rounded-lg border border-control bg-surface px-2 py-1.5 text-sm"
                     value={dateFrom}
                     onChange={(e) => setDateFrom(e.target.value)}
                   />
@@ -1161,14 +1161,14 @@ export function ResourceScreen({
                   <input
                     type="date"
                     aria-label={(`${t(config.dateFilter.label)} ${t("to")}`)}
-                    className="min-w-0 max-w-full rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+                    className="min-w-0 max-w-full rounded-lg border border-control bg-surface px-2 py-1.5 text-sm"
                     value={dateTo}
                     onChange={(e) => setDateTo(e.target.value)}
                   />
                 </div>
                 {(dateFrom || dateTo) && (
                   <button
-                    className="text-xs text-zinc-400 hover:text-zinc-600"
+                    className="text-xs text-muted-ink hover:text-secondary-ink"
                     onClick={() => {
                       setDateFrom("")
                       setDateTo("")
@@ -1184,7 +1184,7 @@ export function ResourceScreen({
                 onClick={exportCsv}
                 title={t("Download the current view as CSV (Excel-ready)")}
                 aria-label={t("Export as CSV")}
-                className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-sm text-zinc-500 hover:bg-zinc-50 hover:text-zinc-700"
+                className="flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1.5 text-sm text-muted-ink hover:bg-canvas hover:text-secondary-ink"
               >
                 <Download className="size-4" aria-hidden />
                 {t("Export")}
@@ -1193,21 +1193,21 @@ export function ResourceScreen({
                 onClick={() => setColsOpen((o) => !o)}
                 title={t("Choose which columns this table shows")}
                 aria-label={t("Configure table columns")}
-                className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-sm text-zinc-500 hover:bg-zinc-50 hover:text-zinc-700"
+                className="flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1.5 text-sm text-muted-ink hover:bg-canvas hover:text-secondary-ink"
               >
                 <Columns3 className="size-4" aria-hidden />
                 {t("Columns")}
               </button>
               {colsOpen && (
-                <div className="absolute right-0 z-30 mt-1 w-56 rounded-xl border border-zinc-200 bg-white p-2 shadow-xl">
+                <div className="absolute right-0 z-30 mt-1 w-56 rounded-xl border border-line bg-surface p-2 shadow-xl">
                   {config.columns.map((c) => (
                     <label
                       key={c.field}
-                      className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-zinc-50"
+                      className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-canvas"
                     >
                       <input
                         type="checkbox"
-                        className="size-4 accent-brand-600"
+                        className="size-4 accent-focus"
                         checked={!hiddenCols.has(c.field)}
                         onChange={() => toggleCol(c.field)}
                       />
@@ -1215,7 +1215,7 @@ export function ResourceScreen({
                     </label>
                   ))}
                   <button
-                    className="mt-1 w-full rounded-lg px-2 py-1 text-left text-xs text-zinc-400 hover:text-zinc-600"
+                    className="mt-1 w-full rounded-lg px-2 py-1 text-left text-xs text-muted-ink hover:text-secondary-ink"
                     onClick={() => setColsOpen(false)}
                   >
                     {t("Done")}
@@ -1230,7 +1230,7 @@ export function ResourceScreen({
             return (
           <table className={`w-full text-sm ${useFixedLayout ? "table-fixed" : "table-auto"}${config.tableMinWidth ? ` ${config.tableMinWidth}` : ""}`}>
             <thead>
-              <tr className="border-b border-zinc-200 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
+              <tr className="border-b border-line text-left text-xs font-medium uppercase tracking-wider text-muted-ink">
                 {visibleCols.map((c, i) => (
                   <th
                     key={c.field}
@@ -1250,11 +1250,11 @@ export function ResourceScreen({
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-100">
+            <tbody className="divide-y divide-line-subtle">
               {rows.map((row) => (
                 <tr
                   key={row.name}
-                  className="cursor-pointer hover:bg-zinc-50"
+                  className="cursor-pointer hover:bg-canvas"
                   onClick={() => openEdit(row)}
                 >
                   {visibleCols.map((c) => (
@@ -1292,7 +1292,7 @@ export function ResourceScreen({
                           {t(String(row[c.field]))}
                         </Badge>
                       ) : c.emptyLabel && (row[c.field] == null || row[c.field] === "") ? (
-                        <span className="text-zinc-400">{t(c.emptyLabel)}</span>
+                        <span className="text-muted-ink">{t(c.emptyLabel)}</span>
                       ) : (
                         cellValue(c.field === "provider" && typeof row[c.field] === "string"
                           ? providerLabel(String(row[c.field])) : row[c.field], t)
@@ -1305,7 +1305,7 @@ export function ResourceScreen({
                 <tr>
                   <td
                     colSpan={config.columns.length}
-                    className="py-6 text-center text-sm text-zinc-400"
+                    className="py-6 text-center text-sm text-muted-ink"
                   >
                     {t("Nothing here yet.")}
                   </td>
@@ -1317,7 +1317,7 @@ export function ResourceScreen({
           })()}
         </div>
         {pageSize > 0 && (page > 0 || hasMorePages) && (
-          <div className="mt-3 flex items-center justify-between text-sm text-zinc-500">
+          <div className="mt-3 flex items-center justify-between text-sm text-muted-ink">
             <span>{t("Page {n}", { n: page + 1 })}</span>
             <div className="flex gap-2">
               <Button
@@ -1367,7 +1367,7 @@ export function ResourceScreen({
                   onClick={remove}
                   aria-label={t("Delete")}
                 >
-                  <Trash2 className="size-4 text-rose-500" aria-hidden />
+                  <Trash2 className="size-4 text-danger-text" aria-hidden />
                   {t("Delete")}
                 </Button>
               ) : (
@@ -1386,7 +1386,7 @@ export function ResourceScreen({
           }
         >
           {useDetail && config.detailPanel ? (
-            <Suspense fallback={<p className="text-sm text-zinc-400">{t("Loading…")}</p>}>
+            <Suspense fallback={<p className="text-sm text-muted-ink">{t("Loading…")}</p>}>
               <config.detailPanel
                 row={editing}
                 reload={load}
@@ -1400,10 +1400,10 @@ export function ResourceScreen({
                   <config.lead row={editing} reload={load} />
                 </Suspense>
               )}
-              {config.formNote && <p className="rounded-lg bg-zinc-50 p-3 text-sm text-zinc-700">{config.formNote}</p>}
+              {config.formNote && <p className="rounded-lg bg-canvas p-3 text-sm text-secondary-ink">{config.formNote}</p>}
               {isSharedEdit && (
                 existingOverride ? (
-                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-warning-line bg-warning-subtle px-3 py-2.5 text-sm text-warning-ink">
                     <span>
                       {t("This property already has its own override for {code}. Edit that property row instead.", {
                         code: editingCode,
@@ -1417,7 +1417,7 @@ export function ResourceScreen({
                     </Button>
                   </div>
                 ) : (
-                  <p className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
+                  <p className="rounded-lg border border-info-line bg-info-subtle px-3 py-2 text-sm text-info-ink">
                     {t("Saving creates a property override for {property}. The shared default stays unchanged for other properties.", {
                       property: currentProperty,
                     })}
@@ -1441,10 +1441,10 @@ export function ResourceScreen({
                       <div key={spec.field} className="block">
                         <label
                           htmlFor={`${formId}-${spec.field}`}
-                          className="mb-1.5 block text-sm font-medium text-zinc-600"
+                          className="mb-1.5 block text-sm font-medium text-secondary-ink"
                         >
                           {t(spec.label)}
-                          {spec.required && <span className="text-rose-500"> *</span>}
+                          {spec.required && <span className="text-danger-text"> *</span>}
                         </label>
                         <FieldInput
                           spec={spec}
@@ -1467,7 +1467,7 @@ export function ResourceScreen({
                         {(() => {
                           const shownHint = spec.hintWhen?.(draft) ?? spec.hint
                           return shownHint ? (
-                            <span className="mt-1 block text-xs leading-relaxed text-zinc-400">
+                            <span className="mt-1 block text-xs leading-relaxed text-muted-ink">
                               {t(shownHint)}
                             </span>
                           ) : null
@@ -1483,9 +1483,9 @@ export function ResourceScreen({
                             : "")
                         }
                       >
-                        <span className="mb-1.5 block text-sm font-medium text-zinc-600">
+                        <span className="mb-1.5 block text-sm font-medium text-secondary-ink">
                           {t(spec.label)}
-                          {spec.required && <span className="text-rose-500"> *</span>}
+                          {spec.required && <span className="text-danger-text"> *</span>}
                         </span>
                         <FieldInput
                           spec={spec}
@@ -1507,7 +1507,7 @@ export function ResourceScreen({
                         {(() => {
                           const shownHint = spec.hintWhen?.(draft) ?? spec.hint
                           return shownHint && spec.type !== "image" ? (
-                            <span className="mt-1 block text-xs leading-relaxed text-zinc-400">
+                            <span className="mt-1 block text-xs leading-relaxed text-muted-ink">
                               {t(shownHint)}
                             </span>
                           ) : null
@@ -1520,9 +1520,9 @@ export function ResourceScreen({
                   {grid(shown.filter((spec) => !spec.section || !sectioned.has(spec.section)))}
                   {(config.sections ?? []).map((section) => (
                     <details key={section.key} open={editing === "new"}
-                      className="rounded-xl border border-zinc-200 px-4 py-3 [&[open]>summary]:mb-3">
-                      <summary className="cursor-pointer text-sm font-semibold text-zinc-700">{t(section.label)}</summary>
-                      {section.hint && <p className="mb-3 text-xs leading-relaxed text-zinc-500">{t(section.hint)}</p>}
+                      className="rounded-xl border border-line px-4 py-3 [&[open]>summary]:mb-3">
+                      <summary className="cursor-pointer text-sm font-semibold text-secondary-ink">{t(section.label)}</summary>
+                      {section.hint && <p className="mb-3 text-xs leading-relaxed text-muted-ink">{t(section.hint)}</p>}
                       {grid(shown.filter((spec) => spec.section === section.key))}
                     </details>
                   ))}
@@ -1534,7 +1534,7 @@ export function ResourceScreen({
                 </Suspense>
               )}
               {error && (
-                <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                <div className="rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">
                   {translate(error)}
                 </div>
               )}

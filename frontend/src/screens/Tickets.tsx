@@ -109,8 +109,8 @@ const prioTone: Record<string, "zinc" | "sky" | "amber" | "rose"> = {
 }
 
 const inputCls =
-  "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "w-full rounded-lg border border-control bg-surface px-3 py-2 text-sm " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 /** One ticket in full: SLA, who has it, who solved it, the timeline. */
 function TicketSheet({
@@ -182,10 +182,10 @@ function TicketSheet({
       onClose={onClose}
     >
       {err && (
-        <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{translate(err)}</div>
+        <div className="mb-3 rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">{translate(err)}</div>
       )}
       {!d ? (
-        <p className="text-sm text-zinc-400">{t("Loading…")}</p>
+        <p className="text-sm text-muted-ink">{t("Loading…")}</p>
       ) : (
         <div className="space-y-5">
           <div className="flex flex-wrap items-center gap-2">
@@ -193,8 +193,8 @@ function TicketSheet({
             <Badge tone={isOpen ? "amber" : "green"}>{t(d.status)}</Badge>
             {d.source !== "Manual" && <Badge tone="brand">{t(d.source)}</Badge>}
             {d.reopened_count ? <Badge tone="rose">{t("Reopened {n}x", { n: d.reopened_count })}</Badge> : null}
-            {d.room && <span className="text-xs text-zinc-500">{t("Room {n}", { n: d.room.split("-").pop() ?? "" })}</span>}
-            {d.guest_name && <span className="text-xs text-zinc-500">{d.guest_name}</span>}
+            {d.room && <span className="text-xs text-muted-ink">{t("Room {n}", { n: d.room.split("-").pop() ?? "" })}</span>}
+            {d.guest_name && <span className="text-xs text-muted-ink">{d.guest_name}</span>}
           </div>
 
           <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
@@ -207,17 +207,17 @@ function TicketSheet({
               [t("First response"), d.response_minutes == null ? t("None yet") : human(d.response_minutes)],
               [t("SLA"), d.breached || d.overdue ? t("Breached") : t("Within")],
             ].map(([k, v]) => (
-              <div key={k} className="rounded-lg border border-zinc-200 px-3 py-2">
-                <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-400">{translate(k)}</p>
-                <p className={cn("mt-0.5 font-semibold tabular-nums", !!(d.overdue || d.breached) && k === t("SLA") && "text-rose-600")}>{v}</p>
+              <div key={k} className="rounded-lg border border-line px-3 py-2">
+                <p className="text-[10px] font-medium uppercase tracking-wide text-muted-ink">{translate(k)}</p>
+                <p className={cn("mt-0.5 font-semibold tabular-nums", !!(d.overdue || d.breached) && k === t("SLA") && "text-danger-text")}>{v}</p>
               </div>
             ))}
           </div>
 
-          {d.description && <p className="whitespace-pre-wrap text-sm text-zinc-700">{d.description}</p>}
+          {d.description && <p className="whitespace-pre-wrap text-sm text-secondary-ink">{d.description}</p>}
 
-          <div className="rounded-lg border border-zinc-200 p-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{t("Who has it")}</p>
+          <div className="rounded-lg border border-line p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-ink">{t("Who has it")}</p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <select
                 className={cn(inputCls, "max-w-xs")}
@@ -237,12 +237,12 @@ function TicketSheet({
               )}
             </div>
             {d.assigned_to_user && d.assigned_at && (
-              <p className="mt-1.5 text-xs text-zinc-500">
+              <p className="mt-1.5 text-xs text-muted-ink">
                 {t("Assigned by {who} on {when}", { who: d.assigned_by_name || "-", when: String(d.assigned_at).slice(0, 16) })}
               </p>
             )}
             {!isOpen && (
-              <p className="mt-2 text-sm text-zinc-700">
+              <p className="mt-2 text-sm text-secondary-ink">
                 {t("Solved by")}{" "}
                 <span className="font-medium">{d.resolved_by_name || t("not recorded (before tracking)")}</span>
                 {d.resolved_on ? ` · ${String(d.resolved_on).slice(0, 16)}` : ""}
@@ -252,8 +252,8 @@ function TicketSheet({
           </div>
 
           {isOpen ? (
-            <div className="rounded-lg border border-zinc-200 p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{t("Move it on")}</p>
+            <div className="rounded-lg border border-line p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-ink">{t("Move it on")}</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {d.status === "Open" && (
                   <Button variant="outline" disabled={busy} onClick={() => act("start_ticket", {})}>
@@ -272,8 +272,8 @@ function TicketSheet({
               </div>
             </div>
           ) : (
-            <div className="rounded-lg border border-zinc-200 p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{t("Came back?")}</p>
+            <div className="rounded-lg border border-line p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-ink">{t("Came back?")}</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 <input
                   className={cn(inputCls, "min-w-0 flex-1")}
@@ -289,14 +289,14 @@ function TicketSheet({
           )}
 
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{t("Timeline")}</p>
-            <ol className="mt-2 space-y-3 border-s border-zinc-200 ps-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-ink">{t("Timeline")}</p>
+            <ol className="mt-2 space-y-3 border-s border-line ps-4">
               {d.events.map((e, i) => (
                 <li key={i} className="relative text-sm">
-                  <span className="absolute -start-[21px] top-1.5 size-2 rounded-full bg-zinc-300" aria-hidden />
-                  <p className="text-zinc-800">{eventText(e)}</p>
-                  {e.note && e.kind !== "Created" && <p className="text-zinc-600">{e.note}</p>}
-                  <p className="text-xs text-zinc-400">{String(e.at).slice(0, 16)}</p>
+                  <span className="absolute -start-[21px] top-1.5 size-2 rounded-full bg-fill-strong" aria-hidden />
+                  <p className="text-ink">{eventText(e)}</p>
+                  {e.note && e.kind !== "Created" && <p className="text-secondary-ink">{e.note}</p>}
+                  <p className="text-xs text-muted-ink">{String(e.at).slice(0, 16)}</p>
                 </li>
               ))}
             </ol>
@@ -416,7 +416,7 @@ export default function Tickets() {
       <CardHeader className="items-start gap-4">
         <div className="min-w-0 flex-1">
           <CardTitle>{t("Service Tickets")}</CardTitle>
-          <p className="mt-0.5 text-xs text-zinc-500">
+          <p className="mt-0.5 text-xs text-muted-ink">
             {t("Guest requests with deadlines by priority - set them in Settings → Operations")}
           </p>
         </div>
@@ -427,7 +427,7 @@ export default function Tickets() {
       </CardHeader>
       <CardContent>
         {error && (
-          <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          <div className="mb-3 rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">
             {translate(error)}
           </div>
         )}
@@ -441,11 +441,11 @@ export default function Tickets() {
               onClick={() => setView(v.id)}
               className={cn(
                 "rounded-full border px-3 py-1 text-sm",
-                view === v.id ? "border-brand-600 bg-brand-50 text-brand-700" : "border-zinc-200 text-zinc-600 hover:bg-zinc-50",
+                view === v.id ? "border-accent-control bg-accent-subtle text-accent-ink" : "border-line text-secondary-ink hover:bg-canvas",
               )}
             >
               {t(v.label)}
-              {counts && <span className="ms-1.5 text-xs tabular-nums text-zinc-400">{counts[v.id]}</span>}
+              {counts && <span className="ms-1.5 text-xs tabular-nums text-muted-ink">{counts[v.id]}</span>}
             </button>
           ))}
         </div>
@@ -473,7 +473,7 @@ export default function Tickets() {
           </select>
         </div>
 
-        <ul className="divide-y divide-zinc-100">
+        <ul className="divide-y divide-line-subtle">
           {rows.map((row) => {
             const isOpen = row.status === "Open" || row.status === "In Progress"
             return (
@@ -489,17 +489,17 @@ export default function Tickets() {
                     <Badge tone="zinc">{t(row.category)}</Badge>
                     {row.source !== "Manual" && <Badge tone="brand">{t(row.source)}</Badge>}
                     {row.overdue && (
-                      <span className="inline-flex items-center gap-1 text-xs font-medium text-rose-600">
+                      <span className="inline-flex items-center gap-1 text-xs font-medium text-danger-text">
                         <AlertTriangle className="size-3.5" aria-hidden />
                         {t("overdue by {t}", { t: human(row.minutes_left) })}
                       </span>
                     )}
                     {!row.overdue && isOpen && row.minutes_left != null && (
-                      <span className="text-xs text-zinc-500">{t("{t} left", { t: human(row.minutes_left) })}</span>
+                      <span className="text-xs text-muted-ink">{t("{t} left", { t: human(row.minutes_left) })}</span>
                     )}
                     {Boolean(row.breached) && !isOpen && <span className="text-xs text-rose-400">{t("SLA breached")}</span>}
                   </div>
-                  <div className="mt-0.5 text-xs text-zinc-500">
+                  <div className="mt-0.5 text-xs text-muted-ink">
                     {row.name}
                     {row.room && ` · ${t("Room {n}", { n: row.room.split("-").pop() ?? "" })}`}
                     {row.guest_name && ` · ${row.guest_name}`}
@@ -526,7 +526,7 @@ export default function Tickets() {
             )
           })}
           {rows.length === 0 && (
-            <li className="py-10 text-center text-sm text-zinc-500">
+            <li className="py-10 text-center text-sm text-muted-ink">
               {view === "open" ? t("No open tickets - a quiet day at the desk.") : t("No tickets match.")}
             </li>
           )}
@@ -558,7 +558,7 @@ export default function Tickets() {
         >
           <div className="space-y-4">
             <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-zinc-600">
+              <span className="mb-1.5 block text-sm font-medium text-secondary-ink">
                 {t("Subject")}
               </span>
               <input
@@ -571,7 +571,7 @@ export default function Tickets() {
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
-                <span className="mb-1.5 block text-sm font-medium text-zinc-600">
+                <span className="mb-1.5 block text-sm font-medium text-secondary-ink">
                   {t("Category")}
                 </span>
                 <select
@@ -587,7 +587,7 @@ export default function Tickets() {
                 </select>
               </label>
               <label className="block">
-                <span className="mb-1.5 block text-sm font-medium text-zinc-600">
+                <span className="mb-1.5 block text-sm font-medium text-secondary-ink">
                   {t("Priority")}
                 </span>
                 <select
@@ -604,7 +604,7 @@ export default function Tickets() {
               </label>
             </div>
             <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-zinc-600">
+              <span className="mb-1.5 block text-sm font-medium text-secondary-ink">
                 {t("Room")}
               </span>
               <select
@@ -621,7 +621,7 @@ export default function Tickets() {
               </select>
             </label>
             <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-zinc-600">
+              <span className="mb-1.5 block text-sm font-medium text-secondary-ink">
                 {t("Details")}
               </span>
               <textarea

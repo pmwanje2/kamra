@@ -645,13 +645,14 @@ describe("Contract Tariffs", () => {
     expect(corporateRow.dataset.scope).toBe("corporate")
     const badge = (scope: HTMLElement) => scope.querySelector<HTMLElement>("th[role=rowheader] [data-scope-badge]")
     expect(text(badge(publicRow)!)).toBe("Public")
-    expect(badge(publicRow)!.className).toContain("bg-zinc-100")
+    expect(badge(publicRow)!.className).toContain("bg-subtle")
     expect(text(badge(corporateRow)!)).toContain("Corporate")
     expect(text(badge(corporateRow)!)).toContain("Client Co")
-    expect(badge(corporateRow)!.className).toContain("bg-indigo-50")
+    expect(badge(corporateRow)!.className).toContain("bg-indigo-subtle")
     // the negotiated row carries an accent edge and tint; the public row stays plain
     expect(corporateRow.className).toContain("border-s-indigo-500")
-    expect(corporateRow.className).not.toContain("bg-white")
+    expect(corporateRow.classList).toContain("bg-indigo-subtle/25")
+    expect(publicRow.classList).toContain("bg-surface")
     expect(publicRow.className).not.toContain("indigo")
     // the row's controls are unchanged
     expect(host.querySelector("input[aria-label='Select Deluxe · Corporate USD · Client Co']")).not.toBeNull()

@@ -135,12 +135,12 @@ function downloadText(filename: string, content: string, mime: string) {
 function Stat(props: { label: string; value: string; sub?: string }) {
   useT()
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3">
+    <div className="rounded-xl border border-line bg-surface px-4 py-3">
       <div className="text-xl font-semibold">{props.value}</div>
-      <div className="text-[10px] font-medium uppercase tracking-widest text-zinc-400">
+      <div className="text-[10px] font-medium uppercase tracking-widest text-muted-ink">
         {translate(props.label)}
       </div>
-      {props.sub && <div className="mt-0.5 text-xs text-zinc-500">{translate(props.sub)}</div>}
+      {props.sub && <div className="mt-0.5 text-xs text-muted-ink">{translate(props.sub)}</div>}
     </div>
   )
 }
@@ -498,40 +498,40 @@ export default function Reports({ initialTab = "saved" }: { initialTab?: Tab }) 
         <div className="flex flex-wrap items-center gap-2">
           <Link
             to="/revenue-reports"
-            className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50"
+            className="rounded-lg border border-line px-3 py-1.5 text-sm text-secondary-ink hover:bg-canvas"
           >
             {t("Revenue Reports")}
           </Link>
           <Link
             to="/cashier/shift-report"
-            className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50"
+            className="rounded-lg border border-line px-3 py-1.5 text-sm text-secondary-ink hover:bg-canvas"
           >
             {t("Cashier shift report")}
           </Link>
           <Link
             to="/ledgers"
-            className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50"
+            className="rounded-lg border border-line px-3 py-1.5 text-sm text-secondary-ink hover:bg-canvas"
           >
             {t("Ledgers")}
           </Link>
           {canSeeVoids && (
             <Link
               to="/voids-allowances"
-              className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50"
+              className="rounded-lg border border-line px-3 py-1.5 text-sm text-secondary-ink hover:bg-canvas"
             >
               {t("Voids & Allowances")}
             </Link>
           )}
           <AppLink
             to="/accounting-export"
-            className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50"
+            className="rounded-lg border border-line px-3 py-1.5 text-sm text-secondary-ink hover:bg-canvas"
           >
             {t("Accounting export")}
           </AppLink>
         </div>
       </div>
 
-      <div className="mb-4 flex gap-1 border-b border-zinc-200 print:hidden">
+      <div className="mb-4 flex gap-1 border-b border-line print:hidden">
         {tabs.map((x) => (
           <button
             key={x.id}
@@ -542,8 +542,8 @@ export default function Reports({ initialTab = "saved" }: { initialTab?: Tab }) 
             }}
             className={`px-3 py-2 text-sm font-medium ${
               tab === x.id
-                ? "border-b-2 border-brand-600 text-brand-700"
-                : "text-zinc-500 hover:text-zinc-800"
+                ? "border-b-2 border-accent-control text-accent-ink"
+                : "text-muted-ink hover:text-ink"
             }`}
           >
             {x.label}
@@ -552,7 +552,7 @@ export default function Reports({ initialTab = "saved" }: { initialTab?: Tab }) 
       </div>
 
       {error && (
-        <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p className="mb-3 rounded-lg border border-critical-line bg-critical-subtle px-3 py-2 text-sm text-critical-ink">
           {error}
         </p>
       )}
@@ -560,7 +560,7 @@ export default function Reports({ initialTab = "saved" }: { initialTab?: Tab }) 
       {tab === "saved" && (
         <div>
           <div className="mb-3 flex items-center justify-between">
-            <p className="text-sm text-zinc-500">
+            <p className="text-sm text-muted-ink">
               {t("Build a report, save it, run it again, or have {product} email it on a schedule.")}
             </p>
             <Button
@@ -573,18 +573,18 @@ export default function Reports({ initialTab = "saved" }: { initialTab?: Tab }) 
             </Button>
           </div>
           {loading ? (
-            <p className="py-10 text-center text-zinc-400">{t("Loading…")}</p>
+            <p className="py-10 text-center text-muted-ink">{t("Loading…")}</p>
           ) : saved.length === 0 ? (
             <Card>
-              <CardContent className="py-10 text-center text-sm text-zinc-500">
+              <CardContent className="py-10 text-center text-sm text-muted-ink">
                 {t("No saved reports yet. Create one from a dataset.")}
               </CardContent>
             </Card>
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white">
+            <div className="overflow-x-auto rounded-xl border border-line bg-surface">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wider text-zinc-500">
+                  <tr className="border-b border-line text-left text-xs uppercase tracking-wider text-muted-ink">
                     <th className="px-3 py-2">{t("Title")}</th>
                     <th className="px-3 py-2">{t("Dataset")}</th>
                     <th className="px-3 py-2">{t("Schedule")}</th>
@@ -592,12 +592,12 @@ export default function Reports({ initialTab = "saved" }: { initialTab?: Tab }) 
                     <th className="px-3 py-2 text-right">{t("Actions")}</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-100">
+                <tbody className="divide-y divide-line-subtle">
                   {saved.map((r) => (
                     <tr key={r.name}>
                       <td className="px-3 py-2 font-medium">{r.title}</td>
-                      <td className="px-3 py-2 text-zinc-600">{translate(r.dataset_label)}</td>
-                      <td className="px-3 py-2 text-zinc-600">
+                      <td className="px-3 py-2 text-secondary-ink">{translate(r.dataset_label)}</td>
+                      <td className="px-3 py-2 text-secondary-ink">
                         {r.schedule_frequency === "Off"
                           ? t("Off")
                           : r.schedule_frequency === "After night audit"
@@ -647,30 +647,30 @@ export default function Reports({ initialTab = "saved" }: { initialTab?: Tab }) 
       {tab === "packs" && (
         <div>
           <div className="mb-3 flex flex-wrap items-end gap-2">
-            <p className="mr-auto text-sm text-zinc-500">
+            <p className="mr-auto text-sm text-muted-ink">
               {t("One page per department. You see the parts your role can open.")}
             </p>
-            <label className="text-xs text-zinc-500">
+            <label className="text-xs text-muted-ink">
               {t("From")}
               <input
                 type="date"
-                className="ms-1 rounded-lg border border-zinc-300 px-2 py-1"
+                className="ms-1 rounded-lg border border-control px-2 py-1"
                 value={fromDate}
                 onChange={(e) => e.target.value && setFromDate(e.target.value)}
               />
             </label>
-            <label className="text-xs text-zinc-500">
+            <label className="text-xs text-muted-ink">
               {t("To")}
               <input
                 type="date"
-                className="ms-1 rounded-lg border border-zinc-300 px-2 py-1"
+                className="ms-1 rounded-lg border border-control px-2 py-1"
                 value={toDate}
                 onChange={(e) => e.target.value && setToDate(e.target.value)}
               />
             </label>
           </div>
           {!loading && packs.length === 0 && (
-            <p className="text-sm text-zinc-500">{t("Your role has no reports.")}</p>
+            <p className="text-sm text-muted-ink">{t("Your role has no reports.")}</p>
           )}
           <div className="grid gap-3 md:grid-cols-2">
             {packs.map((p) => (
@@ -679,8 +679,8 @@ export default function Reports({ initialTab = "saved" }: { initialTab?: Tab }) 
                   <CardTitle>{translate(p.label)}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3 text-sm">
-                  <p className="text-zinc-500">{translate(p.description)}</p>
-                  <ul className="list-disc ps-5 text-zinc-600">
+                  <p className="text-muted-ink">{translate(p.description)}</p>
+                  <ul className="list-disc ps-5 text-secondary-ink">
                     {p.sections.map((x) => (
                       <li key={x}>{translate(x)}</li>
                     ))}
@@ -713,17 +713,17 @@ export default function Reports({ initialTab = "saved" }: { initialTab?: Tab }) 
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <label className="block">
-                <span className="text-xs uppercase tracking-wider text-zinc-500">{t("Title")}</span>
+                <span className="text-xs uppercase tracking-wider text-muted-ink">{t("Title")}</span>
                 <input
-                  className="mt-1 w-full rounded-lg border border-zinc-300 px-2 py-1.5"
+                  className="mt-1 w-full rounded-lg border border-control px-2 py-1.5"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                 />
               </label>
               <label className="block">
-                <span className="text-xs uppercase tracking-wider text-zinc-500">{t("Dataset")}</span>
+                <span className="text-xs uppercase tracking-wider text-muted-ink">{t("Dataset")}</span>
                 <select
-                  className="mt-1 w-full rounded-lg border border-zinc-300 px-2 py-1.5"
+                  className="mt-1 w-full rounded-lg border border-control px-2 py-1.5"
                   value={datasetId}
                   onChange={(e) => onDatasetChange(e.target.value)}
                 >
@@ -734,24 +734,24 @@ export default function Reports({ initialTab = "saved" }: { initialTab?: Tab }) 
                   ))}
                 </select>
                 {activeDataset && (
-                  <p className="mt-1 text-xs text-zinc-500">{translate(activeDataset.description)}</p>
+                  <p className="mt-1 text-xs text-muted-ink">{translate(activeDataset.description)}</p>
                 )}
               </label>
               <div className="flex gap-2">
                 <label className="flex-1">
-                  <span className="text-xs uppercase tracking-wider text-zinc-500">{t("From")}</span>
+                  <span className="text-xs uppercase tracking-wider text-muted-ink">{t("From")}</span>
                   <input
                     type="date"
-                    className="mt-1 w-full rounded-lg border border-zinc-300 px-2 py-1.5"
+                    className="mt-1 w-full rounded-lg border border-control px-2 py-1.5"
                     value={fromDate}
                     onChange={(e) => e.target.value && setFromDate(e.target.value)}
                   />
                 </label>
                 <label className="flex-1">
-                  <span className="text-xs uppercase tracking-wider text-zinc-500">{t("To")}</span>
+                  <span className="text-xs uppercase tracking-wider text-muted-ink">{t("To")}</span>
                   <input
                     type="date"
-                    className="mt-1 w-full rounded-lg border border-zinc-300 px-2 py-1.5"
+                    className="mt-1 w-full rounded-lg border border-control px-2 py-1.5"
                     value={toDate}
                     onChange={(e) => e.target.value && setToDate(e.target.value)}
                   />
@@ -760,10 +760,10 @@ export default function Reports({ initialTab = "saved" }: { initialTab?: Tab }) 
 
               {activeDataset && (
                 <fieldset>
-                  <legend className="text-xs uppercase tracking-wider text-zinc-500">
+                  <legend className="text-xs uppercase tracking-wider text-muted-ink">
                     {t("Columns")}
                   </legend>
-                  <div className="mt-1 max-h-40 space-y-1 overflow-y-auto rounded-lg border border-zinc-200 p-2">
+                  <div className="mt-1 max-h-40 space-y-1 overflow-y-auto rounded-lg border border-line p-2">
                     {activeDataset.columns.map((c) => (
                       <label key={c.id} className="flex items-center gap-2">
                         <input
@@ -779,14 +779,14 @@ export default function Reports({ initialTab = "saved" }: { initialTab?: Tab }) 
               )}
 
               <fieldset>
-                <legend className="text-xs uppercase tracking-wider text-zinc-500">
+                <legend className="text-xs uppercase tracking-wider text-muted-ink">
                   {t("Filters")}
                 </legend>
                 <div className="mt-1 space-y-2">
                   {filters.map((f, i) => (
                     <div key={i} className="flex gap-1">
                       <select
-                        className="w-1/3 rounded border border-zinc-300 px-1 py-1"
+                        className="w-1/3 rounded border border-control px-1 py-1"
                         value={f.field}
                         onChange={(e) => {
                           const next = [...filters]
@@ -802,7 +802,7 @@ export default function Reports({ initialTab = "saved" }: { initialTab?: Tab }) 
                         ))}
                       </select>
                       <select
-                        className="w-1/4 rounded border border-zinc-300 px-1 py-1"
+                        className="w-1/4 rounded border border-control px-1 py-1"
                         value={f.op}
                         onChange={(e) => {
                           const next = [...filters]
@@ -817,7 +817,7 @@ export default function Reports({ initialTab = "saved" }: { initialTab?: Tab }) 
                         ))}
                       </select>
                       <input
-                        className="flex-1 rounded border border-zinc-300 px-1 py-1"
+                        className="flex-1 rounded border border-control px-1 py-1"
                         value={f.value}
                         onChange={(e) => {
                           const next = [...filters]
@@ -827,7 +827,7 @@ export default function Reports({ initialTab = "saved" }: { initialTab?: Tab }) 
                       />
                       <button
                         type="button"
-                        className="px-1 text-zinc-400 hover:text-red-600"
+                        className="px-1 text-muted-ink hover:text-critical-text"
                         onClick={() => setFilters(filters.filter((_, j) => j !== i))}
                       >
                         ×
@@ -848,11 +848,11 @@ export default function Reports({ initialTab = "saved" }: { initialTab?: Tab }) 
               </fieldset>
 
               <label className="block">
-                <span className="text-xs uppercase tracking-wider text-zinc-500">
+                <span className="text-xs uppercase tracking-wider text-muted-ink">
                   {t("Group by")}
                 </span>
                 <select
-                  className="mt-1 w-full rounded-lg border border-zinc-300 px-2 py-1.5"
+                  className="mt-1 w-full rounded-lg border border-control px-2 py-1.5"
                   value={groupBy}
                   onChange={(e) => setGroupBy(e.target.value)}
                 >
@@ -879,12 +879,12 @@ export default function Reports({ initialTab = "saved" }: { initialTab?: Tab }) 
               )}
 
               {canShare && (
-                <div className="space-y-2 rounded-lg border border-zinc-200 p-2">
-                  <p className="text-xs uppercase tracking-wider text-zinc-500">
+                <div className="space-y-2 rounded-lg border border-line p-2">
+                  <p className="text-xs uppercase tracking-wider text-muted-ink">
                     {t("Email schedule")}
                   </p>
                   <select
-                    className="w-full rounded border border-zinc-300 px-2 py-1.5"
+                    className="w-full rounded border border-control px-2 py-1.5"
                     value={scheduleFrequency}
                     onChange={(e) => setScheduleFrequency(e.target.value)}
                   >
@@ -898,13 +898,13 @@ export default function Reports({ initialTab = "saved" }: { initialTab?: Tab }) 
                     <>
                       {scheduleFrequency !== "After night audit" && <input
                         type="time"
-                        className="w-full rounded border border-zinc-300 px-2 py-1.5"
+                        className="w-full rounded border border-control px-2 py-1.5"
                         value={scheduleTime}
                         onChange={(e) => setScheduleTime(e.target.value)}
                       />}
                       {scheduleFrequency === "Weekly" && (
                         <select
-                          className="w-full rounded border border-zinc-300 px-2 py-1.5"
+                          className="w-full rounded border border-control px-2 py-1.5"
                           value={scheduleWeekday}
                           onChange={(e) => setScheduleWeekday(e.target.value)}
                         >
@@ -916,7 +916,7 @@ export default function Reports({ initialTab = "saved" }: { initialTab?: Tab }) 
                         </select>
                       )}
                       <input
-                        className="w-full rounded border border-zinc-300 px-2 py-1.5"
+                        className="w-full rounded border border-control px-2 py-1.5"
                         placeholder={t("Recipients (comma-separated emails)")}
                         value={recipients}
                         onChange={(e) => setRecipients(e.target.value)}
@@ -968,19 +968,19 @@ export default function Reports({ initialTab = "saved" }: { initialTab?: Tab }) 
                 </Button>
               )}
               {preview && groupBy && !summary && (
-                <p className="mb-2 text-xs text-zinc-500">
+                <p className="mb-2 text-xs text-muted-ink">
                   {t("Click a row to see the rows behind it.")}
                 </p>
               )}
               {!preview && (
-                <p className="py-8 text-center text-sm text-zinc-400">
+                <p className="py-8 text-center text-sm text-muted-ink">
                   {t("Choose columns and press Preview.")}
                 </p>
               )}
               {preview && (
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wider text-zinc-500">
+                    <tr className="border-b border-line text-left text-xs uppercase tracking-wider text-muted-ink">
                       {preview.columns.map((c) => (
                         <th key={c.id} className="px-2 py-1.5 whitespace-nowrap">
                           {translate(c.label)}
@@ -988,7 +988,7 @@ export default function Reports({ initialTab = "saved" }: { initialTab?: Tab }) 
                       ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-zinc-100">
+                  <tbody className="divide-y divide-line-subtle">
                     {preview.rows.slice(0, 200).map((row, i) => {
                       const key = groupBy && !summary ? row[groupBy] : null
                       // ponytail: null group keys aren't drillable; "=" can't match an empty value
@@ -998,7 +998,7 @@ export default function Reports({ initialTab = "saved" }: { initialTab?: Tab }) 
                       <tr
                         key={i}
                         onClick={drill}
-                        className={drill ? "cursor-pointer hover:bg-zinc-50" : undefined}
+                        className={drill ? "cursor-pointer hover:bg-canvas" : undefined}
                       >
                         {preview.columns.map((c) => (
                           <td key={c.id} className="px-2 py-1.5 whitespace-nowrap">
@@ -1012,7 +1012,7 @@ export default function Reports({ initialTab = "saved" }: { initialTab?: Tab }) 
                 </table>
               )}
               {preview?.truncated && (
-                <p className="mt-2 text-xs text-amber-700">
+                <p className="mt-2 text-xs text-warning-ink">
                   {t("Showing the first {n} rows.", { n: preview.row_count })}
                 </p>
               )}
@@ -1044,7 +1044,7 @@ function FlashPanel(props: {
   t: (k: string, vars?: Record<string, string | number>) => string
 }) {
   const { d, date, setDate, from, setFrom, t } = props
-  if (!d) return <p className="py-10 text-center text-zinc-400">{t("Loading…")}</p>
+  if (!d) return <p className="py-10 text-center text-muted-ink">{t("Loading…")}</p>
   const todayData = d.today
   const ranged = d.from_date !== d.date
 
@@ -1055,16 +1055,16 @@ function FlashPanel(props: {
         <input
           type="date"
           aria-label={t("From")}
-          className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm sm:flex-none"
+          className="min-w-0 flex-1 rounded-lg border border-control bg-surface px-2 py-1.5 text-sm sm:flex-none"
           value={from || date}
           max={date}
           onChange={(e) => setFrom(e.target.value === date ? "" : e.target.value)}
         />
-        <span className="self-center text-sm text-zinc-400">→</span>
+        <span className="self-center text-sm text-muted-ink">→</span>
         <input
           type="date"
           aria-label={t("Report date")}
-          className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm sm:flex-none"
+          className="min-w-0 flex-1 rounded-lg border border-control bg-surface px-2 py-1.5 text-sm sm:flex-none"
           value={date}
           onChange={(e) => e.target.value && setDate(e.target.value)}
         />
@@ -1121,7 +1121,7 @@ function FlashPanel(props: {
           <CardContent className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wider text-zinc-500">
+                <tr className="border-b border-line text-left text-xs uppercase tracking-wider text-muted-ink">
                   <th className="py-1.5 pr-3">{t("Date")}</th>
                   <th className="py-1.5 pr-3 text-right">{t("Occ %")}</th>
                   <th className="py-1.5 pr-3 text-right">{t("ADR {cur}", { cur: cur() })}</th>
@@ -1129,10 +1129,10 @@ function FlashPanel(props: {
                   <th className="py-1.5 text-right">{t("Revenue {cur}", { cur: cur() })}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-100">
+              <tbody className="divide-y divide-line-subtle">
                 {d.trend.map((r) => (
                   <tr key={r.date}>
-                    <td className="py-1.5 pr-3 text-zinc-500">{r.date}</td>
+                    <td className="py-1.5 pr-3 text-muted-ink">{r.date}</td>
                     <td className="py-1.5 pr-3 text-right">{r.occupancy_pct}</td>
                     <td className="py-1.5 pr-3 text-right">{inr(r.adr)}</td>
                     <td className="py-1.5 pr-3 text-right">{inr(r.revpar)}</td>
@@ -1175,7 +1175,7 @@ function FlashPanel(props: {
             </CardHeader>
             <CardContent className="text-sm">
               {d.collections.modes.length === 0 && (
-                <p className="text-zinc-400">{t("Nothing collected yet.")}</p>
+                <p className="text-muted-ink">{t("Nothing collected yet.")}</p>
               )}
               {d.collections.modes.map((m) => (
                 <div key={m.mode} className="flex justify-between py-0.5">
@@ -1188,7 +1188,7 @@ function FlashPanel(props: {
                   </span>
                 </div>
               ))}
-              <div className="mt-1 flex justify-between border-t border-zinc-200 pt-1 font-medium">
+              <div className="mt-1 flex justify-between border-t border-line pt-1 font-medium">
                 <span>{t("Total")}</span>
                 <span>
                   {cur()}

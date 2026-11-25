@@ -12,9 +12,9 @@ import { useT, t as translate } from "../lib/i18n"
 import { Button } from "../components/ui/button"
 
 const inputCls =
-  "w-full rounded border border-[#E2E8F0] bg-[#ffffff] px-3 py-2 text-sm " +
-  "text-[#191c1e] placeholder:text-[#6f7a71] " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-[#1E7B4F]"
+  "w-full rounded border border-control bg-surface px-3 py-2 text-sm " +
+  "text-ink placeholder:text-muted-ink " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 export default function UpdatePassword() {
   const { t } = useT()
@@ -41,12 +41,12 @@ export default function UpdatePassword() {
   if (!byKey && status === "anon") {
     return (
       <Shell>
-        <p className="text-sm text-[#3f4941]">
+        <p className="text-sm text-secondary-ink">
           {t("To reset your password, ask for a link from the sign-in screen.")}
         </p>
         <Link
           to="/login"
-          className="mt-4 inline-block text-sm font-medium text-[#1E7B4F] hover:underline"
+          className="mt-4 inline-block text-sm font-medium text-accent-ink hover:underline"
         >
           {t("Back to sign in")}
         </Link>
@@ -57,7 +57,7 @@ export default function UpdatePassword() {
   if (status === "loading" && !byKey) {
     return (
       <Shell>
-        <p className="text-sm text-[#6f7a71]">{t("Loading…")}</p>
+        <p className="text-sm text-muted-ink">{t("Loading…")}</p>
       </Shell>
     )
   }
@@ -88,14 +88,14 @@ export default function UpdatePassword() {
 
   return (
     <Shell>
-      <h1 className="mb-1 text-lg font-semibold text-[#1C3F38]">
+      <h1 className="mb-1 text-lg font-semibold text-ink">
         {expired
           ? t("Your password has expired")
           : byKey
             ? t("Choose a new password")
             : t("Change password")}
       </h1>
-      <p className="mb-4 text-sm text-[#6f7a71]">
+      <p className="mb-4 text-sm text-muted-ink">
         {byKey
           ? t("Pick a password you have not used on this hotel before.")
           : t("Enter your current password, then the new one twice.")}
@@ -110,7 +110,7 @@ export default function UpdatePassword() {
       >
         {!byKey && (
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-[#3f4941]">
+            <span className="mb-1 block text-xs font-medium text-secondary-ink">
               {t("Current password")}
             </span>
             <input
@@ -124,7 +124,7 @@ export default function UpdatePassword() {
           </label>
         )}
         <label className="block">
-          <span className="mb-1 block text-xs font-medium text-[#3f4941]">
+          <span className="mb-1 block text-xs font-medium text-secondary-ink">
             {t("New password")}
           </span>
           <input
@@ -137,7 +137,7 @@ export default function UpdatePassword() {
           />
         </label>
         <label className="block">
-          <span className="mb-1 block text-xs font-medium text-[#3f4941]">
+          <span className="mb-1 block text-xs font-medium text-secondary-ink">
             {t("Confirm new password")}
           </span>
           <input
@@ -151,19 +151,19 @@ export default function UpdatePassword() {
         </label>
 
         {mismatch && (
-          <p className="text-sm text-[#93000a]">{t("The new passwords do not match.")}</p>
+          <p className="text-sm text-danger-ink">{t("The new passwords do not match.")}</p>
         )}
         {error && (
-          <div className="rounded border border-[#ffdad6] bg-[#fff8f7] px-3 py-2 text-sm text-[#93000a]">
+          <div className="rounded border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">
             {translate(error)}
           </div>
         )}
         {done && (
-          <p className="text-sm text-[#1E7B4F]">{t("Password updated. Signing you in…")}</p>
+          <p className="text-sm text-accent-ink">{t("Password updated. Signing you in…")}</p>
         )}
 
         <Button
-          className="w-full justify-center rounded bg-[#1E7B4F] py-2 text-white hover:bg-[#00613a]"
+          className="w-full justify-center rounded bg-primary-button py-2 text-on-solid hover:bg-primary-button-hover"
           disabled={
             busy ||
             mismatch ||
@@ -180,7 +180,7 @@ export default function UpdatePassword() {
       {!byKey && (
         <Link
           to="/"
-          className="mt-4 inline-block text-sm text-[#6f7a71] hover:text-[#1E7B4F]"
+          className="mt-4 inline-block text-sm text-muted-ink hover:text-accent-ink"
         >
           {t("Cancel")}
         </Link>
@@ -192,24 +192,24 @@ export default function UpdatePassword() {
 function Shell(props: { children: ReactNode }) {
   return (
     <div
-      className="flex min-h-[100dvh] flex-col items-center justify-center bg-[#f7f9fb] px-4"
+      className="flex min-h-[100dvh] flex-col items-center justify-center bg-canvas px-4"
       style={{ colorScheme: "light" }}
     >
-      <div className="fixed inset-x-0 top-0 h-[5px] bg-[#1C3F38]" aria-hidden />
+      <div className="fixed inset-x-0 top-0 h-[5px] bg-accent-deep" aria-hidden />
       <div className="w-full max-w-sm">
         <div className="mb-6 flex flex-col items-center gap-2">
           <BrandMark className="size-16 text-xl" />
           <span
-            className="text-2xl font-semibold tracking-[0.02em] text-[#1C3F38]"
+            className="text-2xl font-semibold tracking-[0.02em] text-ink"
             style={{ fontFamily: "Montserrat, ui-sans-serif, system-ui, sans-serif" }}
           >
             {product()}
-            {!whiteLabel() && <span className="ml-1.5 align-middle text-[10px] font-semibold tracking-[0.4em] text-[#1E7B4F]">
+            {!whiteLabel() && <span className="ml-1.5 align-middle text-[10px] font-semibold tracking-[0.4em] text-accent-ink">
               PMS
             </span>}
           </span>
         </div>
-        <div className="rounded border border-[#E2E8F0] bg-white p-6">{props.children}</div>
+        <div className="rounded border border-control bg-surface p-6">{props.children}</div>
       </div>
     </div>
   )

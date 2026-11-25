@@ -49,10 +49,10 @@ const fmt = (k: string, n: number) =>
   isPct(k) ? `${n}%` : `${cur()}${inr(n)}`
 
 function attainTone(a: number | null) {
-  if (a === null) return "text-zinc-400"
-  if (a >= 100) return "text-emerald-600"
-  if (a >= 80) return "text-amber-600"
-  return "text-rose-600"
+  if (a === null) return "text-muted-ink"
+  if (a >= 100) return "text-success-text"
+  if (a >= 80) return "text-warning-text"
+  return "text-danger-text"
 }
 
 // ---------------------------------------------------------------------------
@@ -111,8 +111,8 @@ function BudgetVsActual() {
       <CardHeader>
         <div>
           <CardTitle className="flex items-center gap-2">
-            <Target className="size-4 text-brand-600" aria-hidden />{translate("Budget vs Actual")}</CardTitle>
-          <p className="mt-0.5 text-xs text-zinc-400">{translate("Month-to-date performance against your targets.")}</p>
+            <Target className="size-4 text-accent-text" aria-hidden />{translate("Budget vs Actual")}</CardTitle>
+          <p className="mt-0.5 text-xs text-muted-ink">{translate("Month-to-date performance against your targets.")}</p>
         </div>
         <div className="flex items-center gap-1.5">
           <Button variant="outline" onClick={() => setPeriod((p) => shiftMonth(p, -1))}>
@@ -129,14 +129,14 @@ function BudgetVsActual() {
       </CardHeader>
       <CardContent>
         {error && (
-          <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          <div className="mb-3 rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">
             {translate(error)}
           </div>
         )}
         {data && (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-zinc-200 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
+              <tr className="border-b border-line text-left text-xs font-medium uppercase tracking-wider text-muted-ink">
                 <th className="py-2 pr-3">{translate("Metric")}</th>
                 <th className="py-2 pr-3 text-right">{translate("Actual (MTD)")}</th>
                 <th className="py-2 pr-3 text-right">{translate("Target")}</th>
@@ -144,7 +144,7 @@ function BudgetVsActual() {
                 <th className="py-2 text-right">{translate("Attainment")}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-100">
+            <tbody className="divide-y divide-line-subtle">
               {data.rows.map((r) => (
                 <tr key={r.key}>
                   <td className="py-2.5 pr-3 font-medium">{translate(r.metric)}</td>
@@ -155,7 +155,7 @@ function BudgetVsActual() {
                     {edit ? (
                       <input
                         type="number"
-                        className="w-24 rounded-lg border border-zinc-300 px-2 py-1 text-right text-sm"
+                        className="w-24 rounded-lg border border-control px-2 py-1 text-right text-sm"
                         value={draft[r.key] ?? ""}
                         onChange={(e) =>
                           setDraft((d) => ({ ...d, [r.key]: e.target.value }))
@@ -164,13 +164,13 @@ function BudgetVsActual() {
                     ) : r.target ? (
                       fmt(r.key, r.target)
                     ) : (
-                      <span className="text-zinc-300">-</span>
+                      <span className="text-muted-ink">-</span>
                     )}
                   </td>
                   <td
                     className={
                       "py-2.5 pr-3 text-right tabular-nums " +
-                      (r.variance >= 0 ? "text-emerald-600" : "text-rose-600")
+                      (r.variance >= 0 ? "text-success-text" : "text-danger-text")
                     }
                   >
                     {r.target
@@ -188,7 +188,7 @@ function BudgetVsActual() {
                         {r.attainment}%
                       </span>
                     ) : (
-                      <span className="text-zinc-300">-</span>
+                      <span className="text-muted-ink">-</span>
                     )}
                   </td>
                 </tr>
@@ -197,7 +197,7 @@ function BudgetVsActual() {
           </table>
         )}
         {data && (
-          <div className="mt-3 space-y-1 text-xs text-zinc-500">
+          <div className="mt-3 space-y-1 text-xs text-muted-ink">
             <p>{translate("Actual counts room nights posted to folios - End of Day posts each night, so tonight counts after tonight's audit.")}{" "}
               {(getLang() !== "en") ? translate("Posted room nights: {n}. Through {date}. Occupancy and RevPAR use {elapsed} of {total} elapsed days.", {
                 n: String(data.posted_nights ?? 0), date: String(data.posted_through ?? "-"), elapsed: String(data.days_elapsed), total: String(data.total_days),
@@ -205,7 +205,7 @@ function BudgetVsActual() {
               {data.posted_nights ?? 0}{translate(" room night")}{(data.posted_nights ?? 0) === 1 ? "" : translate("s")}{translate(" posted")}{data.posted_through ? translate(" through {v0}", { v0: String(data.posted_through) }) : ""}{translate("; occupancy and RevPAR are over the ")}{data.days_elapsed}{translate(" of")}{" "}
               {data.total_days}{translate(" days elapsed.")}</>}</p>
             {(data.unposted_nights ?? 0) > 0 && (
-              <p className="text-amber-700">
+              <p className="text-warning-ink">
                 {(getLang() !== "en") ? translate("Unposted sold room nights: {pending} ({total} on the books this month). End of Day includes them once those dates close.", {
                   pending: String(data.unposted_nights), total: String(data.on_books_nights),
                 }) : <>{data.unposted_nights}{translate(" sold room night")}{data.unposted_nights === 1 ? translate(" isn't") : translate("s aren't")}{translate(" posted yet (")}{data.on_books_nights}{translate(" on the books this month so far). They count once End of Day runs for those dates.")}</>}</p>
@@ -220,7 +220,7 @@ function BudgetVsActual() {
           </div>
         )}
         {data && !data.has_budget && !edit && (
-          <p className="mt-3 text-xs text-zinc-400">{translate("No targets set for ")}{data.period}{translate(" yet - \"Set targets\" to track attainment.")}</p>
+          <p className="mt-3 text-xs text-muted-ink">{translate("No targets set for ")}{data.period}{translate(" yet - \"Set targets\" to track attainment.")}</p>
         )}
       </CardContent>
     </Card>
@@ -261,26 +261,26 @@ function Contribution() {
       <CardHeader>
         <div>
           <CardTitle>{translate("Contribution analysis")}</CardTitle>
-          <p className="mt-0.5 text-xs text-zinc-400">{translate("Who brings the business - revenue and share by channel.")}</p>
+          <p className="mt-0.5 text-xs text-muted-ink">{translate("Who brings the business - revenue and share by channel.")}</p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <input
             type="date"
-            className="rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
+            className="rounded-lg border border-control px-2 py-1.5 text-sm"
             value={from}
             onChange={(e) => setFrom(e.target.value)}
             aria-label={translate("From")}
           />
-          <span className="text-xs text-zinc-400">{translate("to")}</span>
+          <span className="text-xs text-muted-ink">{translate("to")}</span>
           <input
             type="date"
-            className="rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
+            className="rounded-lg border border-control px-2 py-1.5 text-sm"
             value={to}
             onChange={(e) => setTo(e.target.value)}
             aria-label={translate("To")}
           />
           <select
-            className="rounded-lg border border-zinc-300 px-2.5 py-1.5 text-sm"
+            className="rounded-lg border border-control px-2.5 py-1.5 text-sm"
             value={by}
             onChange={(e) => setBy(e.target.value)}
             aria-label={translate("Group by")}
@@ -295,12 +295,12 @@ function Contribution() {
       </CardHeader>
       <CardContent>
         {data && data.rows.length === 0 && (
-          <p className="py-6 text-center text-sm text-zinc-400">{translate("No bookings in this window.")}</p>
+          <p className="py-6 text-center text-sm text-muted-ink">{translate("No bookings in this window.")}</p>
         )}
         {data && data.rows.length > 0 && (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-zinc-200 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
+              <tr className="border-b border-line text-left text-xs font-medium uppercase tracking-wider text-muted-ink">
                 <th className="py-2 pr-3">{translate(BY_OPTIONS.find((o) => o.key === by)?.label.replace("By ", ""))}</th>
                 <th className="py-2 pr-3 text-right">{translate("Bookings")}</th>
                 <th className="py-2 pr-3 text-right">{translate("Room nights")}</th>
@@ -309,7 +309,7 @@ function Contribution() {
                 <th className="py-2 text-right">{translate("Share")}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-100">
+            <tbody className="divide-y divide-line-subtle">
               {data.rows.map((r) => (
                 <tr key={r.label}>
                   <td className="py-2.5 pr-3 font-medium">{by === "source" || r.label === "Direct" ? translate(r.label) : r.label}</td>
@@ -319,9 +319,9 @@ function Contribution() {
                   <td className="py-2.5 pr-3 text-right tabular-nums">{r.commission ? inr(r.commission) : "-"}</td>
                   <td className="py-2.5 text-right">
                     <div className="flex items-center justify-end gap-2">
-                      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-zinc-100">
+                      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-subtle">
                         <div
-                          className="h-full rounded-full bg-brand-500"
+                          className="h-full rounded-full bg-accent-fill"
                           style={{ width: `${r.share}%` }}
                         />
                       </div>
@@ -332,7 +332,7 @@ function Contribution() {
               ))}
             </tbody>
             <tfoot>
-              <tr className="border-t border-zinc-200 font-semibold">
+              <tr className="border-t border-line font-semibold">
                 <td className="py-2 pr-3">{translate("Total")}</td>
                 <td />
                 <td />
@@ -356,7 +356,7 @@ export default function RevenueReports() {
     <div className="space-y-6">
       <header>
         <h1 className="text-xl font-semibold tracking-tight">{translate("Revenue Reports")}</h1>
-        <p className="mt-0.5 text-sm text-zinc-500">{translate("Targets vs performance, and where the business comes from.")}</p>
+        <p className="mt-0.5 text-sm text-muted-ink">{translate("Targets vs performance, and where the business comes from.")}</p>
       </header>
       <BudgetVsActual />
       <Contribution />

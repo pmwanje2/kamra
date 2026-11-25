@@ -185,18 +185,18 @@ export function AddTariffDrawer({ target, lists, items, rooms, customers, proper
       <input name="customer" list={customerList} className={control} autoComplete="off" value={customer} disabled={busy}
         onChange={(event) => setCustomer(event.target.value)} />
       <datalist id={customerList}>{customers.map((name) => <option key={name} value={name} />)}</datalist>
-      <span className="block text-xs font-normal text-zinc-600">{t("Leave empty for the public rate.")}</span>
+      <span className="block text-xs font-normal text-secondary-ink">{t("Leave empty for the public rate.")}</span>
     </label>
     <label className={label}>
       <span>{t("Rate")}</span>
       <span className="flex items-center gap-2">
-        <span className="rounded-lg bg-zinc-100 px-2 py-2 text-zinc-700">{currency}</span>
+        <span className="rounded-lg bg-subtle px-2 py-2 text-secondary-ink">{currency}</span>
         <input name="price_list_rate" type="number" inputMode="decimal" className={field + " min-w-0 flex-1 tabular-nums"}
           min={free ? "0" : step} step={step} required value={amount} disabled={busy}
           onChange={(event) => setAmount(event.target.value)} />
       </span>
     </label>
-    {preview != null && fx && <div aria-live="polite" className="rounded-lg border border-brand-200 bg-brand-50 p-3 text-sm">
+    {preview != null && fx && <div aria-live="polite" className="rounded-lg border border-accent-line bg-accent-subtle p-3 text-sm">
       <p className="font-medium">{t("Local equivalent preview")}</p>
       <p className="tabular-nums">{t("{foreign_amount} ≈ {local_amount} at 1 {foreign} = {rate} {home}", {
         foreign_amount: currencyText(currency, value, locale),
@@ -216,6 +216,6 @@ export function AddTariffDrawer({ target, lists, items, rooms, customers, proper
           onChange={(event) => setValidUntil(event.target.value)} />
       </label>
     </div>
-    {error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-800">{error}</p>}
+    {error && <p role="alert" className="rounded-lg bg-danger-subtle p-3 text-sm text-danger-ink">{error}</p>}
   </TariffModal>
 }

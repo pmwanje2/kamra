@@ -157,8 +157,8 @@ export function Steps({
                 className={
                   "group flex h-full w-full flex-col gap-1 rounded-xl border px-3 py-2.5 text-left transition-all " +
                   (active
-                    ? "border-brand-600 bg-brand-50/70 ring-1 ring-brand-600/20"
-                    : "border-transparent hover:border-zinc-200 hover:bg-zinc-50")
+                    ? "border-accent-control bg-accent-subtle/70 ring-1 ring-accent-control/20"
+                    : "border-transparent hover:border-line hover:bg-canvas")
                 }
               >
                 <span className="flex items-center gap-2">
@@ -166,10 +166,10 @@ export function Steps({
                     className={
                       "flex size-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold " +
                       (s.done
-                        ? "bg-emerald-600 text-white"
+                        ? "bg-success-fill text-on-solid"
                         : active
-                          ? "bg-brand-600 text-white"
-                          : "bg-zinc-200 text-zinc-500 group-hover:bg-zinc-300")
+                          ? "bg-accent-fill text-on-solid"
+                          : "bg-muted text-muted-ink group-hover:bg-fill-strong")
                     }
                   >
                     {s.done ? <Check className="size-3" /> : s.n}
@@ -177,7 +177,7 @@ export function Steps({
                   <span
                     className={
                       "truncate text-sm font-medium " +
-                      (active ? "text-brand-800" : "text-zinc-700")
+                      (active ? "text-accent-ink" : "text-secondary-ink")
                     }
                   >
                     {translate(s.label)}
@@ -188,10 +188,10 @@ export function Steps({
                   className={
                     "line-clamp-2 pl-7 text-xs " +
                     (s.done
-                      ? "text-zinc-500"
+                      ? "text-muted-ink"
                       : s.blocker
-                        ? "text-amber-700"
-                        : "text-zinc-400")
+                        ? "text-warning-ink"
+                        : "text-muted-ink")
                   }
                 >
                   {translate(s.done ? s.state : s.blocker ?? s.state)}

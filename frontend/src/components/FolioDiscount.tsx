@@ -13,8 +13,8 @@ import { Button } from "./ui/button"
 import { currencyText, formatFxRate } from "./ContractTariff"
 
 const inputCls =
-  "rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+  "rounded-lg border border-control bg-surface px-3 py-1.5 text-sm " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 interface Preview {
   total: number
@@ -102,8 +102,8 @@ export default function FolioDiscount({ folio, adjustCodes: given, act, onPosted
   const canGive = !!preview && (promo || d.reason.trim() || d.reason_code) && pin !== "" && (!foreignEntry || !!discountCurrency)
 
   return (
-    <div className="mt-1 w-full border-t border-zinc-100 pt-3">
-      <div className="mb-2 text-xs font-medium uppercase tracking-wider text-zinc-400">
+    <div className="mt-1 w-full border-t border-line-subtle pt-3">
+      <div className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-ink">
         {t("Give a discount")}
         <span className="ms-1.5 normal-case tracking-normal">
           {t("- off the room nights on the bill, or with a promo code")}
@@ -132,13 +132,13 @@ export default function FolioDiscount({ folio, adjustCodes: given, act, onPosted
             <option value="Night">{t("Per night")}</option>
           </select>
         )}
-        <span className="self-center text-xs text-zinc-400">{t("or")}</span>
+        <span className="self-center text-xs text-muted-ink">{t("or")}</span>
         <input className={`${inputCls} w-32 uppercase`} placeholder={t("Promo code")}
           aria-label={t("Promo code")} value={d.code}
           onChange={(e) => setD({ ...d, code: e.target.value })} />
       </div>
       {d.kind === "Amount" && !promo && (contractCurrency || foreignEntry) && (
-        <label className="mt-2 flex min-h-8 items-center gap-2 text-sm dark:text-zinc-200">
+        <label className="mt-2 flex min-h-8 items-center gap-2 text-sm text-secondary-ink">
           <input type="checkbox" checked={foreignEntry} onChange={(e) => {
             setForeignSelection(e.target.checked && contractCurrency ? { folio, currency: contractCurrency } : null)
             setD({ ...d, value: "" })
@@ -149,7 +149,7 @@ export default function FolioDiscount({ folio, adjustCodes: given, act, onPosted
         </label>
       )}
       {preview?.conversion && (
-        <p className="mt-2 text-xs text-zinc-600 dark:text-zinc-300">
+        <p className="mt-2 text-xs text-secondary-ink">
           {t("≈ {amount} @ {rate}", {
             amount: currencyText(preview.conversion.home_currency, preview.conversion.home_amount, numberLocale || moneyLocale()),
             rate: formatFxRate(preview.conversion.fx_rate, numberLocale || moneyLocale()),
@@ -195,7 +195,7 @@ export default function FolioDiscount({ folio, adjustCodes: given, act, onPosted
         </Button>
       </div>
       {preview && (
-        <p className="mt-2 text-xs text-zinc-600">
+        <p className="mt-2 text-xs text-secondary-ink">
           {t("{label}: {amount} off {n} room nights ({base}), before tax", {
             label: preview.label,
             amount: `${sym}${fmt(preview.total)}`,
@@ -204,7 +204,7 @@ export default function FolioDiscount({ folio, adjustCodes: given, act, onPosted
           })}
         </p>
       )}
-      {hint && <p className="mt-2 text-xs text-amber-700">{hint}</p>}
+      {hint && <p className="mt-2 text-xs text-warning-ink">{hint}</p>}
       {noNights && onAdvanceBill && (
         <Button variant="outline" className="mt-2" onClick={onAdvanceBill}>
           {t("Advance bill")}

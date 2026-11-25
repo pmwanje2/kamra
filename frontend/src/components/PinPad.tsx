@@ -85,7 +85,7 @@ export function PinPad({
       ref={dialog}
       aria-labelledby={titleId}
       aria-describedby={subtitleId}
-      className="m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-sm overflow-y-auto rounded-2xl border border-zinc-200 bg-white p-5 text-zinc-900 shadow-xl backdrop:bg-zinc-950/65 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+      className="m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-sm overflow-y-auto rounded-2xl border border-line bg-surface p-5 text-ink shadow-xl backdrop:bg-scrim/65"
       onKeyDown={onKeyDown}
       onCancel={(event) => {
         event.preventDefault()
@@ -98,14 +98,14 @@ export function PinPad({
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <h2 ref={heading} tabIndex={-1} id={titleId} className="text-lg font-semibold">{title ?? t("Cashier PIN")}</h2>
-          <p id={subtitleId} className="mt-0.5 text-sm text-zinc-600 dark:text-zinc-300">{subtitle ?? t("Enter your PIN to continue")}</p>
+          <p id={subtitleId} className="mt-0.5 text-sm text-secondary-ink">{subtitle ?? t("Enter your PIN to continue")}</p>
         </div>
         {onClose && (
           <button type="button" disabled={busy} aria-label={t("Close")} onClick={() => {
             dialog.current?.close()
             onClose()
           }}
-            className="grid min-h-11 min-w-11 place-items-center rounded-lg text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800">
+            className="grid min-h-11 min-w-11 place-items-center rounded-lg text-secondary-ink hover:bg-subtle">
             <X className="size-4" aria-hidden />
           </button>
         )}
@@ -115,22 +115,22 @@ export function PinPad({
         dir="ltr"
         role="status"
         aria-label={t("{count} digits entered", { count: pin.length })}
-        className="mb-4 flex h-12 items-center justify-center gap-2 rounded-xl bg-zinc-100 dark:bg-zinc-800"
+        className="mb-4 flex h-12 items-center justify-center gap-2 rounded-xl bg-subtle"
       >
         {Array.from({ length: Math.max(4, pin.length) }, (_, i) => (
           <span key={i} aria-hidden className={cn("size-2.5 rounded-full",
-            i < pin.length ? "bg-zinc-900 dark:bg-zinc-100" : "bg-zinc-500 dark:bg-zinc-400",
+            i < pin.length ? "bg-accent-control" : "bg-fill-prominent",
           )} />
         ))}
       </div>
 
-      {error && <p role="alert" className="mb-3 text-center text-sm text-rose-700 dark:text-rose-300">{t(error)}</p>}
+      {error && <p role="alert" className="mb-3 text-center text-sm text-danger-ink dark:text-rose-300">{t(error)}</p>}
 
       <div dir="ltr" className="grid grid-cols-3 gap-2">
         {digits.map((digit) => digit === "" ? <div key={digit} /> : (
           <button key={digit} type="button" disabled={busy}
             aria-label={digit === "⌫" ? t("Delete last digit") : undefined}
-            className="flex h-14 items-center justify-center rounded-xl bg-zinc-100 text-xl font-semibold text-zinc-900 hover:bg-zinc-200 active:bg-zinc-300 disabled:opacity-50 dark:bg-zinc-800 dark:text-zinc-50 dark:hover:bg-zinc-700 dark:active:bg-zinc-600"
+            className="flex h-14 items-center justify-center rounded-xl bg-subtle text-xl font-semibold text-ink hover:bg-muted active:bg-fill-strong disabled:opacity-50"
             onClick={() => digit === "⌫" ? erase() : push(digit)}>
             {digit === "⌫" ? <Delete className="size-5" aria-hidden /> : t(digit)}
           </button>
@@ -141,12 +141,12 @@ export function PinPad({
         <label className="mt-4 block space-y-1 text-sm">
           <span>{t("Account password")}</span>
           <input type="password" autoComplete="current-password" required disabled={busy} value={password}
-            className="min-h-11 w-full rounded-lg border border-zinc-500 bg-white px-3 text-zinc-950 dark:border-[#71717a] dark:bg-zinc-900 dark:text-zinc-50"
+            className="min-h-11 w-full rounded-lg border border-control-strong bg-surface px-3 text-ink"
             onChange={(event) => setPassword(event.target.value)} />
         </label>
       )}
-      <Button type="button"
-        className="mt-4 min-h-11 w-full justify-center bg-zinc-900 hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-zinc-300"
+      <Button type="button" variant="inverse"
+        className="mt-4 min-h-11 w-full justify-center"
         disabled={busy || pin.length < 4 || (requirePassword && !password)} onClick={submit}>
         {busy ? t("Checking…") : submitLabel ?? (mode === "enroll" ? t("Set PIN")
           : mode === "confirm" ? t("Confirm") : t("Unlock"))}

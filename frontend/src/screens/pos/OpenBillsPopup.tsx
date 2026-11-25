@@ -106,18 +106,18 @@ export default function OpenBillsPopup({
       aria-labelledby="open-bills-title"
     >
       <div className="absolute inset-0 bg-black/45 animate-fade-in" onClick={onClose} aria-hidden />
-      <div className="relative z-10 flex h-[min(92vh,880px)] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl animate-sheet-in">
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-zinc-100 px-4 py-3 sm:px-5">
+      <div className="relative z-10 flex h-[min(92vh,880px)] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl animate-sheet-in">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line-subtle px-4 py-3 sm:px-5">
           <div>
-            <h2 id="open-bills-title" className="text-lg font-semibold text-zinc-900">
+            <h2 id="open-bills-title" className="text-lg font-semibold text-ink">
               {t("Open bills")}
-              <span className="ms-2 text-base font-normal text-zinc-400">· {open.length}</span>
+              <span className="ms-2 text-base font-normal text-muted-ink">· {open.length}</span>
             </h2>
-            <p className="text-sm text-zinc-500">{t("Pick a bill to see every line")}</p>
+            <p className="text-sm text-muted-ink">{t("Pick a bill to see every line")}</p>
           </div>
           <button
             type="button"
-            className="rounded-xl p-2.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
+            className="rounded-xl p-2.5 text-muted-ink hover:bg-subtle hover:text-secondary-ink"
             aria-label={t("Close")}
             onClick={onClose}
           >
@@ -127,16 +127,16 @@ export default function OpenBillsPopup({
 
         <div className="flex min-h-0 flex-1 flex-col md:flex-row">
           {/* all open bills */}
-          <div className="max-h-[38%] shrink-0 overflow-y-auto border-b border-zinc-100 p-3 md:max-h-none md:w-[17rem] md:border-b-0 md:border-e md:p-4 xl:w-[19rem]">
+          <div className="max-h-[38%] shrink-0 overflow-y-auto border-b border-line-subtle p-3 md:max-h-none md:w-[17rem] md:border-b-0 md:border-e md:p-4 xl:w-[19rem]">
             <ul className="grid grid-cols-2 gap-2 md:grid-cols-1">
               {open.map((o) => {
                 const tone = !o.kot_fired
                   ? o.stale
-                    ? "border-rose-400 bg-rose-50"
-                    : "border-amber-300 bg-amber-50"
+                    ? "border-rose-400 bg-danger-subtle"
+                    : "border-warning-line-strong bg-warning-subtle"
                   : o.pending > 0
-                    ? "border-sky-300 bg-sky-50"
-                    : "border-emerald-300 bg-emerald-50"
+                    ? "border-info-line-strong bg-info-subtle"
+                    : "border-success-line-strong bg-success-subtle"
                 const tag = !o.kot_fired
                   ? `${t("Not sent")} · ${ago(o.creation)}`
                   : o.pending > 0
@@ -150,15 +150,15 @@ export default function OpenBillsPopup({
                       className={cn(
                         "flex w-full flex-col rounded-xl border-2 px-3 py-2.5 text-left transition",
                         tone,
-                        selected === o.name && "ring-2 ring-brand-600 ring-offset-1",
+                        selected === o.name && "ring-2 ring-accent-control ring-offset-1",
                       )}
                     >
-                      <span className="truncate text-sm font-bold text-zinc-900">{translate(o.label)}</span>
-                      <span className="mt-1 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-zinc-600">
+                      <span className="truncate text-sm font-bold text-ink">{translate(o.label)}</span>
+                      <span className="mt-1 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-secondary-ink">
                         <Clock className="size-3.5" />
                         {tag}
                       </span>
-                      <span className="mt-1 text-sm font-semibold tabular-nums text-zinc-800">
+                      <span className="mt-1 text-sm font-semibold tabular-nums text-ink">
                         {cur()}
                         {inr(o.order_total)}
                         {o.kot_no ? translate(" · KOT {v0}", { v0: String(o.kot_no) }) : ""}
@@ -170,7 +170,7 @@ export default function OpenBillsPopup({
               })}
             </ul>
             {open.length === 0 && (
-              <p className="py-8 text-center text-sm text-zinc-400">{t("No open bills.")}</p>
+              <p className="py-8 text-center text-sm text-muted-ink">{t("No open bills.")}</p>
             )}
           </div>
 
@@ -178,27 +178,27 @@ export default function OpenBillsPopup({
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             {selected && selectedRow ? (
               <>
-                <div className="flex shrink-0 items-start justify-between gap-3 border-b border-zinc-100 px-4 py-3 sm:px-5">
+                <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line-subtle px-4 py-3 sm:px-5">
                   <div>
-                    <h3 className="text-xl font-semibold text-zinc-900">{translate(detailLabel)}</h3>
-                    <p className="mt-0.5 text-sm text-zinc-500">
+                    <h3 className="text-xl font-semibold text-ink">{translate(detailLabel)}</h3>
+                    <p className="mt-0.5 text-sm text-muted-ink">
                       {detailKot ? translate("KOT #{v0} · ", { v0: String(detailKot) }) : ""}
                       {translate(detailStatus)}
                       {detailNc ? ` · ${t("Complimentary")}` : ""}
                     </p>
                   </div>
                   <div className="text-right">
-                    <div className="text-2xl font-semibold tabular-nums text-zinc-900">
+                    <div className="text-2xl font-semibold tabular-nums text-ink">
                       {cur()}
                       {inr2(grand)}
                     </div>
                   </div>
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 sm:px-5">
-                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">
+                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-ink">
                     {t("Order items")} · {lines.filter((l) => !l.voided).length}
                   </h4>
-                  <ul className="divide-y divide-zinc-100 rounded-xl border border-zinc-200 bg-zinc-50/50">
+                  <ul className="divide-y divide-line-subtle rounded-xl border border-line bg-canvas/50">
                     {lines.map((it) => (
                       <li
                         key={it.row}
@@ -210,14 +210,14 @@ export default function OpenBillsPopup({
                         <div className="min-w-0">
                           <div
                             className={cn(
-                              "text-[15px] font-medium text-zinc-900",
+                              "text-[15px] font-medium text-ink",
                               !!it.voided && "line-through",
                             )}
                           >
                             {Math.round(it.qty)}× {it.item_name}
                           </div>
                           {!it.voided && (
-                            <div className="mt-0.5 text-xs text-zinc-500">
+                            <div className="mt-0.5 text-xs text-muted-ink">
                               {it.kot_status === "New"
                                 ? t("not sent")
                                 : it.kot_status === "Prepared"
@@ -228,7 +228,7 @@ export default function OpenBillsPopup({
                           )}
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
-                          <span className="text-base font-semibold tabular-nums text-zinc-800">
+                          <span className="text-base font-semibold tabular-nums text-ink">
                             {cur()}
                             {inr(it.amount)}
                           </span>
@@ -238,7 +238,7 @@ export default function OpenBillsPopup({
                               disabled={busy}
                               title={t("Remove (not sent to the kitchen)")}
                               onClick={() => onRemove(it.row)}
-                              className="grid size-9 place-items-center rounded-lg text-zinc-400 hover:bg-rose-50 hover:text-rose-500"
+                              className="grid size-9 place-items-center rounded-lg text-muted-ink hover:bg-danger-subtle hover:text-danger-text"
                             >
                               <XCircle className="size-4" />
                             </button>
@@ -248,7 +248,7 @@ export default function OpenBillsPopup({
                               type="button"
                               title={t("Void (the kitchen has it)")}
                               onClick={() => onVoid(it.row)}
-                              className="grid size-9 place-items-center rounded-lg text-zinc-300 hover:bg-rose-50 hover:text-rose-500"
+                              className="grid size-9 place-items-center rounded-lg text-muted-ink hover:bg-danger-subtle hover:text-danger-text"
                             >
                               <XCircle className="size-4" />
                             </button>
@@ -257,13 +257,13 @@ export default function OpenBillsPopup({
                       </li>
                     ))}
                     {lines.length === 0 && (
-                      <li className="px-3.5 py-8 text-center text-sm text-zinc-400">
+                      <li className="px-3.5 py-8 text-center text-sm text-muted-ink">
                         {t("No items on this bill yet.")}
                       </li>
                     )}
                   </ul>
                 </div>
-                <div className="flex shrink-0 gap-2 border-t border-zinc-100 bg-white px-4 py-3 sm:px-5">
+                <div className="flex shrink-0 gap-2 border-t border-line-subtle bg-surface px-4 py-3 sm:px-5">
                   <Button variant="outline" className="h-12 flex-1" onClick={onClose}>
                     {t("Back to till")}
                   </Button>
@@ -274,7 +274,7 @@ export default function OpenBillsPopup({
                 </div>
               </>
             ) : (
-              <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center text-zinc-400">
+              <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center text-muted-ink">
                 <Maximize2 className="size-8 opacity-40" />
                 <p className="text-sm">{t("Select a bill on the left to see every line.")}</p>
               </div>

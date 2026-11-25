@@ -98,7 +98,7 @@ export function StaffPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-48 flex-1">
-          <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-zinc-400" aria-hidden />
+          <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-ink" aria-hidden />
           <input
             className={cn(inputCls, "ps-9")}
             placeholder={t("Search name or email")}
@@ -108,7 +108,7 @@ export function StaffPage() {
           />
         </div>
         <select
-          className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+          className="rounded-lg border border-control bg-surface px-3 py-1.5 text-sm focus:border-accent-control focus:outline-none focus:ring-2 focus:ring-brand-100"
           value={roleFilter}
           onChange={(e) => setRoleFilter(e.target.value)}
           aria-label={t("Filter by role")}
@@ -125,17 +125,17 @@ export function StaffPage() {
       </div>
 
       {notice && (
-        <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{notice}</p>
+        <p className="rounded-lg border border-success-line bg-success-subtle px-3 py-2 text-sm text-success-ink">{notice}</p>
       )}
-      {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-600">{translate(error)}</p>}
+      {error && <p className="rounded-lg bg-danger-subtle px-3 py-2 text-sm text-danger-text">{translate(error)}</p>}
 
       <Card className="overflow-hidden">
         {rows === null ? (
-          <p className="py-10 text-center text-sm text-zinc-400">{t("Loading…")}</p>
+          <p className="py-10 text-center text-sm text-muted-ink">{t("Loading…")}</p>
         ) : shown.length === 0 ? (
-          <p className="py-10 text-center text-sm text-zinc-400">{t("No one matches.")}</p>
+          <p className="py-10 text-center text-sm text-muted-ink">{t("No one matches.")}</p>
         ) : (
-          <ul className="divide-y divide-zinc-100">
+          <ul className="divide-y divide-line-subtle">
             {shown.map((r) => {
               const seen = lastSeen(r.last_active || r.last_login)
               return (
@@ -147,16 +147,16 @@ export function StaffPage() {
                     !Number(r.enabled) && "opacity-60",
                   )}
                 >
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-50 text-xs font-semibold text-brand-700 ring-1 ring-brand-100">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent-subtle text-xs font-semibold text-accent-ink ring-1 ring-brand-100">
                     {initials(r.full_name || r.email)}
                   </span>
                   <div className="min-w-0">
-                    <p className="flex items-center gap-2 truncate text-sm font-medium text-zinc-900">
+                    <p className="flex items-center gap-2 truncate text-sm font-medium text-ink">
                       {r.full_name || r.email}
                       {r.is_self && <Badge tone="zinc">{t("You")}</Badge>}
                       {!Number(r.enabled) && <Badge tone="zinc">{t("Deactivated")}</Badge>}
                     </p>
-                    <p className="truncate text-xs text-zinc-500">
+                    <p className="truncate text-xs text-muted-ink">
                       {r.job_title ? `${translate(r.job_title)} · ${r.email}` : r.email}
                     </p>
                   </div>
@@ -168,10 +168,10 @@ export function StaffPage() {
                         </Badge>
                       ))
                     ) : (
-                      <span className="text-xs text-zinc-400">{t("No role")}</span>
+                      <span className="text-xs text-muted-ink">{t("No role")}</span>
                     )}
                   </div>
-                  <div className="hidden text-xs text-zinc-500 md:block">
+                  <div className="hidden text-xs text-muted-ink md:block">
                     <p>
                       {r.properties === null
                         ? t("All properties")
@@ -179,12 +179,12 @@ export function StaffPage() {
                           ? t("1 property")
                           : t("{n} properties", { n: r.properties.length })}
                     </p>
-                    <p className="text-zinc-400">{t(seen.key, { n: seen.n ?? 0, date: seen.date ?? "" })}</p>
+                    <p className="text-muted-ink">{t(seen.key, { n: seen.n ?? 0, date: seen.date ?? "" })}</p>
                   </div>
                   <div className="flex items-center justify-end gap-1">
                     {r.pin === "set" ? <Badge tone="green">{t("PIN set")}</Badge>
                       : r.pin === "reset" ? <Badge tone="amber">{t("PIN reset")}</Badge>
-                        : <Badge className="dark:bg-zinc-800 dark:text-zinc-200">{t("No PIN")}</Badge>}
+                        : <Badge>{t("No PIN")}</Badge>}
                     {r.is_self && canManageApprovalPin && (
                       <Button variant="outline" className="min-h-11" onClick={() => setPinOpen(true)}>
                         {t("My PIN")}
@@ -206,7 +206,7 @@ export function StaffPage() {
                             setError(serverError(e))
                           }
                         }}
-                        className="min-h-11 min-w-11 rounded-lg p-2 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-700"
+                        className="min-h-11 min-w-11 rounded-lg p-2 text-secondary-ink hover:bg-subtle hover:text-secondary-ink"
                       >
                         <KeyRound className="size-4" aria-hidden />
                       </button>
@@ -229,7 +229,7 @@ export function StaffPage() {
       {inactive > 0 && (
         <button
           type="button"
-          className="text-xs text-zinc-500 hover:text-zinc-800"
+          className="text-xs text-muted-ink hover:text-ink"
           onClick={() => setShowInactive((v) => !v)}
         >
           {showInactive ? t("Hide deactivated staff") : t("Show {n} deactivated", { n: inactive })}
@@ -309,7 +309,7 @@ function StaffSheet({
       onClose={onClose}
       footer={
         <div className="flex w-full items-center gap-2">
-          {err && <p className="flex-1 text-sm text-rose-600">{translate(err)}</p>}
+          {err && <p className="flex-1 text-sm text-danger-text">{translate(err)}</p>}
           <Button variant="ghost" className="ms-auto" onClick={onClose}>{t("Cancel")}</Button>
           <Button disabled={busy || invalid} onClick={submit}>
             {busy ? t("Saving…") : row ? t("Save") : t("Add staff")}
@@ -320,11 +320,11 @@ function StaffSheet({
       <div className="space-y-6">
         <div className="space-y-3">
           <label className="block">
-            <span className="mb-1 block text-sm font-medium text-zinc-700">{t("Full name")}</span>
+            <span className="mb-1 block text-sm font-medium text-secondary-ink">{t("Full name")}</span>
             <input className={inputCls} value={f.full_name} onChange={(e) => setF({ ...f, full_name: e.target.value })} />
           </label>
           <label className="block">
-            <span className="mb-1 block text-sm font-medium text-zinc-700">{t("Job title")}</span>
+            <span className="mb-1 block text-sm font-medium text-secondary-ink">{t("Job title")}</span>
             <input
               className={inputCls}
               list="kamra-job-titles"
@@ -336,10 +336,10 @@ function StaffSheet({
             <datalist id="kamra-job-titles">
               {JOB_TITLES.map((j) => <option key={j} value={j}>{t(j)}</option>)}
             </datalist>
-            <span className="mt-1 block text-xs text-zinc-500">{t("Printed on allowance vouchers they approve.")}</span>
+            <span className="mt-1 block text-xs text-muted-ink">{t("Printed on allowance vouchers they approve.")}</span>
           </label>
           <label className="block">
-            <span className="mb-1 block text-sm font-medium text-zinc-700">{t("Email")}</span>
+            <span className="mb-1 block text-sm font-medium text-secondary-ink">{t("Email")}</span>
             <input
               className={inputCls}
               type="email"
@@ -351,13 +351,13 @@ function StaffSheet({
         </div>
 
         {row?.is_self && (
-          <p className="rounded-lg bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
+          <p className="rounded-lg bg-canvas px-3 py-2 text-xs text-secondary-ink">
             {t("You can change your name. Ask another admin to change your job title or access.")}
           </p>
         )}
         <fieldset disabled={row?.is_self} className="space-y-6 disabled:opacity-60">
         <fieldset>
-          <legend className="mb-2 text-sm font-semibold text-zinc-900">{t("Roles")}</legend>
+          <legend className="mb-2 text-sm font-semibold text-ink">{t("Roles")}</legend>
           <div className="space-y-2">
             {roles.map((r) => {
               const on = f.roles.includes(r.role)
@@ -366,20 +366,20 @@ function StaffSheet({
                   key={r.role}
                   className={cn(
                     "flex gap-3 rounded-lg border px-3 py-2.5",
-                    on ? "border-brand-300 bg-brand-50/50" : "border-zinc-200",
+                    on ? "border-accent-line-strong bg-accent-subtle/50" : "border-line",
                     r.assignable ? "cursor-pointer" : "cursor-not-allowed opacity-60",
                   )}
                 >
                   <input
                     type="checkbox"
-                    className="mt-0.5 size-4 accent-brand-600"
+                    className="mt-0.5 size-4 accent-focus"
                     checked={on}
                     disabled={!r.assignable}
                     onChange={() => toggleRole(r.role)}
                   />
                   <span>
-                    <span className="block text-sm font-medium text-zinc-800">{t(displayRole(r.role, r.label))}</span>
-                    <span className="block text-xs text-zinc-500">{t(r.description)}</span>
+                    <span className="block text-sm font-medium text-ink">{t(displayRole(r.role, r.label))}</span>
+                    <span className="block text-xs text-muted-ink">{t(r.description)}</span>
                   </span>
                 </label>
               )
@@ -388,21 +388,21 @@ function StaffSheet({
         </fieldset>
 
         <fieldset>
-          <legend className="mb-2 text-sm font-semibold text-zinc-900">{t("Property access")}</legend>
+          <legend className="mb-2 text-sm font-semibold text-ink">{t("Property access")}</legend>
           <div className="space-y-2">
-            <label className="flex items-center gap-2 text-sm text-zinc-700">
+            <label className="flex items-center gap-2 text-sm text-secondary-ink">
               <input
                 type="radio"
-                className="accent-brand-600"
+                className="accent-focus"
                 checked={all}
                 onChange={() => setF({ ...f, properties: null })}
               />
               {t("All properties, including ones added later")}
             </label>
-            <label className="flex items-center gap-2 text-sm text-zinc-700">
+            <label className="flex items-center gap-2 text-sm text-secondary-ink">
               <input
                 type="radio"
-                className="accent-brand-600"
+                className="accent-focus"
                 checked={!all}
                 onChange={() =>
                   setF({ ...f, properties: row?.properties ?? properties.slice(0, 1).map((p) => p.name) })
@@ -413,15 +413,15 @@ function StaffSheet({
             {!all && (
               <div className="ms-6 space-y-1.5">
                 {properties.map((p) => (
-                  <label key={p.name} className="flex items-center gap-2 text-sm text-zinc-700">
+                  <label key={p.name} className="flex items-center gap-2 text-sm text-secondary-ink">
                     <input
                       type="checkbox"
-                      className="size-4 accent-brand-600"
+                      className="size-4 accent-focus"
                       checked={(f.properties ?? []).includes(p.name)}
                       onChange={() => toggleProp(p.name)}
                     />
                     {p.property_name}
-                    {p.city && <span className="text-xs text-zinc-400">· {p.city}</span>}
+                    {p.city && <span className="text-xs text-muted-ink">· {p.city}</span>}
                   </label>
                 ))}
               </div>
@@ -430,29 +430,29 @@ function StaffSheet({
         </fieldset>
 
         {row ? (
-          <label className="flex items-start gap-3 rounded-lg border border-zinc-200 px-3 py-2.5">
+          <label className="flex items-start gap-3 rounded-lg border border-line px-3 py-2.5">
             <input
               type="checkbox"
-              className="mt-0.5 size-4 accent-brand-600"
+              className="mt-0.5 size-4 accent-focus"
               checked={f.enabled}
               onChange={(e) => setF({ ...f, enabled: e.target.checked })}
             />
             <span>
-              <span className="block text-sm font-medium text-zinc-800">{t("Active")}</span>
-              <span className="block text-xs text-zinc-500">{t("Deactivated staff can't sign in. Their history stays.")}</span>
+              <span className="block text-sm font-medium text-ink">{t("Active")}</span>
+              <span className="block text-xs text-muted-ink">{t("Deactivated staff can't sign in. Their history stays.")}</span>
             </span>
           </label>
         ) : (
-          <label className="flex items-start gap-3 rounded-lg border border-zinc-200 px-3 py-2.5">
+          <label className="flex items-start gap-3 rounded-lg border border-line px-3 py-2.5">
             <input
               type="checkbox"
-              className="mt-0.5 size-4 accent-brand-600"
+              className="mt-0.5 size-4 accent-focus"
               checked={f.send_welcome}
               onChange={(e) => setF({ ...f, send_welcome: e.target.checked })}
             />
             <span>
-              <span className="block text-sm font-medium text-zinc-800">{t("Email them a link to set a password")}</span>
-              <span className="block text-xs text-zinc-500">{t("Leave off to share access yourself.")}</span>
+              <span className="block text-sm font-medium text-ink">{t("Email them a link to set a password")}</span>
+              <span className="block text-xs text-muted-ink">{t("Leave off to share access yourself.")}</span>
             </span>
           </label>
         )}
@@ -478,19 +478,19 @@ export function ModulesPage({
 
   return (
     <div className="space-y-4">
-      <p className="max-w-3xl text-sm text-zinc-600">
+      <p className="max-w-3xl text-sm text-secondary-ink">
         {t("Switch off what this property doesn't run. Its apps leave the launcher, search and the AI agent's tools for everyone. Data is kept and comes back when you switch it on.")}
       </p>
-      {err && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-600">{translate(err)}</p>}
-      <Card className="divide-y divide-zinc-100">
+      {err && <p className="rounded-lg bg-danger-subtle px-3 py-2 text-sm text-danger-text">{translate(err)}</p>}
+      <Card className="divide-y divide-line-subtle">
         {[
           { id: "front-desk", title: "Front Desk" },
           { id: "admin", title: "Admin" },
         ].map((m) => (
           <div key={m.id} className="flex items-center gap-4 px-5 py-4">
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-zinc-800">{t(m.title)}</p>
-              <p className="text-xs text-zinc-500">{t(blurb(m.id, ""))}</p>
+              <p className="text-sm font-medium text-ink">{t(m.title)}</p>
+              <p className="text-xs text-muted-ink">{t(blurb(m.id, ""))}</p>
             </div>
             <Badge tone="zinc">{t("Always on")}</Badge>
           </div>
@@ -498,8 +498,8 @@ export function ModulesPage({
         {modules.filter((m) => m.toggle).map((m) => (
           <div key={m.id} className="flex items-center gap-4 px-5 py-4">
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-zinc-800">{t(m.title)}</p>
-              <p className="text-xs text-zinc-500">{t(blurb(m.id, m.description))}</p>
+              <p className="text-sm font-medium text-ink">{t(m.title)}</p>
+              <p className="text-xs text-muted-ink">{t(blurb(m.id, m.description))}</p>
             </div>
             <Switch
               on={m.enabled}
@@ -523,7 +523,7 @@ export function ModulesPage({
           </div>
         ))}
       </Card>
-      {!canToggle && <p className="text-xs text-zinc-400">{t("Only Hotel Admin can switch modules.")}</p>}
+      {!canToggle && <p className="text-xs text-muted-ink">{t("Only Hotel Admin can switch modules.")}</p>}
     </div>
   )
 }

@@ -168,7 +168,7 @@ type Account = {
   payment_pin_required?: boolean
 }
 
-const field = "w-full rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
+const field = "w-full rounded-lg border border-control px-2 py-1.5 text-sm"
 
 export default function Receivables() {
   const { account } = useParams()
@@ -252,15 +252,15 @@ function AccountList() {
   }
 
   const money = (v?: number) => (v ? fmtMoney(v) : "-")
-  const late = (v?: number) => <span className={v ? "text-rose-700" : ""}>{money(v)}</span>
+  const late = (v?: number) => <span className={v ? "text-danger-ink" : ""}>{money(v)}</span>
 
   return (
     <div className="w-full space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">{translate("Books")}</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-ink">{translate("Books")}</p>
           <h1 className="text-2xl font-semibold">{translate("Receivables")}</h1>
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-muted-ink">
             {translate("Company accounts billed on credit")}
             {summary ? ` · ${translate("{v0} received this month", { v0: fmtMoney(summary.received_this_month) })}` : ""}
             {summary?.deposits_held ? ` · ${translate("{v0} advances held", { v0: fmtMoney(summary.deposits_held) })}` : ""}
@@ -272,8 +272,8 @@ function AccountList() {
           </Button>
         ) : null}
       </div>
-      {err ? <p className="text-sm text-rose-600">{translate(err)}</p> : null}
-      {notice ? <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-800">{notice}</p> : null}
+      {err ? <p className="text-sm text-danger-text">{translate(err)}</p> : null}
+      {notice ? <p className="rounded-lg border border-success-line bg-success-subtle px-4 py-2 text-sm text-success-ink">{notice}</p> : null}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5" role="group" aria-label={translate("Show")}>
         {(Object.keys(QUEUES) as Queue[]).map((k) => {
@@ -283,12 +283,12 @@ function AccountList() {
           return (
             <button key={k} type="button" aria-pressed={on} onClick={() => { setQueue(k); setPicked(new Set()) }}
               className={`rounded-xl border px-3 py-2 text-start transition ${on
-                ? alarm ? "border-rose-600 bg-rose-50 ring-1 ring-rose-600" : "border-brand-600 bg-brand-50 ring-1 ring-brand-600"
-                : "border-zinc-200 bg-white hover:border-zinc-300"}`}>
-              <div className={`text-xs ${alarm ? "font-medium text-rose-800" : "text-zinc-500"}`}>
+                ? alarm ? "border-rose-600 bg-danger-subtle ring-1 ring-rose-600" : "border-accent-control bg-accent-subtle ring-1 ring-accent-control"
+                : "border-line bg-surface hover:border-control"}`}>
+              <div className={`text-xs ${alarm ? "font-medium text-danger-ink" : "text-muted-ink"}`}>
                 {translate(QUEUES[k].label)} · {n}
               </div>
-              <div className={`text-lg font-semibold tabular-nums ${alarm ? "text-rose-700" : ""}`}>{fmtMoney(amount)}</div>
+              <div className={`text-lg font-semibold tabular-nums ${alarm ? "text-danger-ink" : ""}`}>{fmtMoney(amount)}</div>
             </button>
           )
         })}
@@ -297,7 +297,7 @@ function AccountList() {
       <Card>
         <CardHeader className="flex flex-row flex-wrap items-center gap-3">
           <input
-            className="w-full max-w-xs rounded-lg border border-zinc-300 px-3 py-1.5 text-sm"
+            className="w-full max-w-xs rounded-lg border border-control px-3 py-1.5 text-sm"
             aria-label={translate("Search company, account no. or contact")}
             placeholder={translate("Search company, account no. or contact")}
             value={q}
@@ -310,13 +310,13 @@ function AccountList() {
           ) : null}
         </CardHeader>
         {chosen.length ? (
-          <div className="mx-4 mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-zinc-200 bg-brand-50 px-3 py-2 text-sm">
-            <span className="font-medium text-brand-700">
+          <div className="mx-4 mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-line bg-accent-subtle px-3 py-2 text-sm">
+            <span className="font-medium text-accent-ink">
               {translate("{n} selected · {v0} owed", { n: chosen.length, v0: fmtMoney(chosen.reduce((a, r) => a + r.balance, 0)) })}
             </span>
             <span className="flex-1" />
             <Button variant="outline" disabled={busy} onClick={() => void sendBulk("statement")}>{translate("Email statements")}</Button>
-            <span className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 bg-white ps-2">
+            <span className="inline-flex items-center gap-1 rounded-lg border border-line bg-surface ps-2">
               <input type="month" value={month} onChange={(e) => setMonth(e.target.value)}
                 aria-label={translate("Month")} className="bg-transparent text-sm outline-none" />
               <Button variant="ghost" disabled={busy || !month} onClick={() => void sendBulk("monthly")}>{translate("Send month-end bills")}</Button>
@@ -330,7 +330,7 @@ function AccountList() {
           </div>
         ) : null}
         <CardContent>
-          {!rows ? <p className="py-8 text-center text-sm text-zinc-400">{translate("Loading…")}</p> : (
+          {!rows ? <p className="py-8 text-center text-sm text-muted-ink">{translate("Loading…")}</p> : (
           <DataTable<AccountRow>
             id="receivables.accounts.v2" exportName="receivables" rows={shown} rowKey={(r) => r.name}
             onRowClick={(r) => navigate(`/receivables/${encodeURIComponent(r.name)}`)}
@@ -342,13 +342,13 @@ function AccountList() {
               { key: "company_name", label: translate("Company"), render: (r) => (<div className="text-start">
                 <Link className="font-medium hover:underline" to={`/receivables/${encodeURIComponent(r.name)}`}
                   onClick={(e) => e.stopPropagation()}>{r.company_name}</Link>
-                {r.restricted ? <span className="ms-2 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">{translate("Restricted")}</span> : null}
-                {overLimit(r) ? <span className="ms-2 rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-medium text-rose-700">{translate("Over limit")}</span> : null}
-                <span className="block font-mono text-[11px] text-zinc-400">{[r.account_number, r.contact_name].filter(Boolean).join(" · ")}</span>
+                {r.restricted ? <span className="ms-2 rounded bg-warning-subtle px-1.5 py-0.5 text-[10px] font-medium text-warning-ink">{translate("Restricted")}</span> : null}
+                {overLimit(r) ? <span className="ms-2 rounded bg-danger-subtle px-1.5 py-0.5 text-[10px] font-medium text-danger-ink">{translate("Over limit")}</span> : null}
+                <span className="block font-mono text-[11px] text-muted-ink">{[r.account_number, r.contact_name].filter(Boolean).join(" · ")}</span>
               </div>) },
               { key: "account_number", label: translate("Account"), hidden: true },
               { key: "contact_email", label: translate("Contact email"), hidden: true },
-              { key: "credit_days", label: translate("Terms"), render: (r) => <span className="text-xs text-zinc-500">{translate("{n} days", { n: r.credit_days ?? 0 })}</span> },
+              { key: "credit_days", label: translate("Terms"), render: (r) => <span className="text-xs text-muted-ink">{translate("{n} days", { n: r.credit_days ?? 0 })}</span> },
               { key: "credit_limit", label: translate("Credit limit"), align: "right", hidden: true, render: (r) => money(r.credit_limit) },
               { key: "unbilled", label: translate("In house, not billed"), align: "right", hidden: true, render: (r) => money(r.unbilled) },
               { key: "not_due", label: translate("Not due"), align: "right", render: (r) => money(r.not_due) },
@@ -358,7 +358,7 @@ function AccountList() {
               { key: "d90p", label: "90+", align: "right", render: (r) => late(r.d90p) },
               { key: "balance", label: translate("Balance"), align: "right", render: (r) => <span className="font-medium">{fmtMoney(r.balance)}</span> },
               { key: "last_payment_date", label: translate("Last paid"), align: "right", render: (r) => r.last_payment_date ? (
-                <span className="text-xs text-zinc-500">{fmtMoney(r.last_payment ?? 0)}<span className="block">{r.last_payment_date}</span></span>) : "-" },
+                <span className="text-xs text-muted-ink">{fmtMoney(r.last_payment ?? 0)}<span className="block">{r.last_payment_date}</span></span>) : "-" },
             ]}
           />
           )}
@@ -448,7 +448,7 @@ function AccountPage({ account }: { account: string }) {
     return (
       <div className="space-y-3">
         <BackLink />
-        {err ? <p className="text-sm text-rose-600">{translate(err)}</p> : <p className="text-sm text-zinc-400">{translate("Loading account…")}</p>}
+        {err ? <p className="text-sm text-danger-text">{translate(err)}</p> : <p className="text-sm text-muted-ink">{translate("Loading account…")}</p>}
       </div>
     )
   }
@@ -458,16 +458,16 @@ function AccountPage({ account }: { account: string }) {
       <BackLink />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="font-mono text-xs text-zinc-400">{acc.account_number}</p>
+          <p className="font-mono text-xs text-muted-ink">{acc.account_number}</p>
           <h1 className="text-2xl font-semibold">{acc.company}</h1>
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-muted-ink">
             {translate("Due {n} days after the invoice date", { n: acc.credit_days ?? 0 })}
             {acc.credit_limit > 0
               ? translate(" · Credit limit {v0}", { v0: fmtMoney(acc.credit_limit) })
               : translate(" · No credit limit")}
           </p>
           {acc.billing_address ? (
-            <p className="mt-1 whitespace-pre-line text-xs text-zinc-500">{acc.billing_address}</p>
+            <p className="mt-1 whitespace-pre-line text-xs text-muted-ink">{acc.billing_address}</p>
           ) : null}
         </div>
         {isFinance ? (
@@ -477,17 +477,17 @@ function AccountPage({ account }: { account: string }) {
             </Button>
             <Button onClick={() => setSheet("payment")}>{translate("Record payment")}</Button>
             <details className="relative">
-              <summary className="inline-flex h-9 cursor-pointer list-none items-center gap-1 rounded-lg border border-zinc-300 bg-white px-3 text-sm font-medium hover:bg-zinc-50">
+              <summary className="inline-flex h-9 cursor-pointer list-none items-center gap-1 rounded-lg border border-control bg-surface px-3 text-sm font-medium hover:bg-canvas">
                 {translate("More")}<ChevronDown className="size-4" aria-hidden />
               </summary>
-              <div className="absolute end-0 z-20 mt-1 w-56 rounded-lg border border-zinc-200 bg-white p-1 shadow-lg">
+              <div className="absolute end-0 z-20 mt-1 w-56 rounded-lg border border-line bg-surface p-1 shadow-lg">
                 {([
                   [translate("Statement"), () => setPreview("statement")],
                   [translate("Month-end bill"), () => setPreview("monthly")],
                   [translate("Account setup"), () => setSheet("setup")],
                 ] as const).map(([label, fn]) => (
                   <button key={label} type="button"
-                    className="block w-full rounded-md px-3 py-2 text-start text-sm hover:bg-zinc-100"
+                    className="block w-full rounded-md px-3 py-2 text-start text-sm hover:bg-subtle"
                     onClick={(e) => { (e.currentTarget.closest("details") as HTMLDetailsElement).open = false; fn() }}>
                     {label}
                   </button>
@@ -497,10 +497,10 @@ function AccountPage({ account }: { account: string }) {
           </div>
         ) : null}
       </div>
-      {err ? <p className="text-sm text-rose-600">{translate(err)}</p> : null}
-      {notice ? <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-800">{notice}</p> : null}
+      {err ? <p className="text-sm text-danger-text">{translate(err)}</p> : null}
+      {notice ? <p className="rounded-lg border border-success-line bg-success-subtle px-4 py-2 text-sm text-success-ink">{notice}</p> : null}
       {acc.restricted ? (
-        <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+        <p className="rounded-lg border border-warning-line bg-warning-subtle px-4 py-2 text-sm text-warning-ink">
           {translate("Restricted: no new bills go on this account.")}
           {acc.restricted_reason ? ` ${acc.restricted_reason}` : ""}
         </p>
@@ -511,14 +511,14 @@ function AccountPage({ account }: { account: string }) {
         {/* billed: invoices on the account; unbilled: stays in house still running on the company's folio */}
         <Stat label={translate("Billed, unpaid")} value={fmtMoney(acc.open_balance)} />
         <Stat label={translate("In house, not billed")} value={fmtMoney(acc.in_house)} />
-        <Stat label={translate("Overdue")} value={fmtMoney(acc.overdue)} tone={acc.overdue > 0 ? "text-rose-700" : undefined} />
+        <Stat label={translate("Overdue")} value={fmtMoney(acc.overdue)} tone={acc.overdue > 0 ? "text-danger-ink" : undefined} />
         <Stat label={translate("Credit available")}
           value={acc.available_credit == null ? translate("No limit") : fmtMoney(acc.available_credit)}
-          tone={acc.available_credit != null && acc.available_credit < 0 ? "text-rose-700" : undefined}
+          tone={acc.available_credit != null && acc.available_credit < 0 ? "text-danger-ink" : undefined}
         />
       </div>
       {acc.unapplied_credit > 0 ? (
-        <p className="-mt-2 text-xs text-zinc-500">
+        <p className="-mt-2 text-xs text-muted-ink">
           {translate("{v0} paid ahead settles the next bill.", { v0: fmtMoney(acc.unapplied_credit) })}
         </p>
       ) : null}
@@ -526,7 +526,7 @@ function AccountPage({ account }: { account: string }) {
       <AgingBar acc={acc} />
 
       <div role="tablist" aria-label={translate("Account activity")}
-        className="inline-flex flex-wrap rounded-lg border border-zinc-200 bg-zinc-50 p-0.5 text-sm">
+        className="inline-flex flex-wrap rounded-lg border border-line bg-canvas p-0.5 text-sm">
         {([
           ["open", translate("Open bills · {n}", { n: acc.open_items.length })],
           ["bills", translate("All bills")],
@@ -534,7 +534,7 @@ function AccountPage({ account }: { account: string }) {
           ["history", translate("Account history")],
         ] as const).map(([k, label]) => (
           <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
-            className={`rounded-md px-3 py-1.5 ${tab === k ? "bg-white font-medium shadow-sm" : "text-zinc-600 hover:text-zinc-900"}`}>
+            className={`rounded-md px-3 py-1.5 ${tab === k ? "bg-surface font-medium shadow-sm" : "text-secondary-ink hover:text-ink"}`}>
             {label}
           </button>
         ))}
@@ -552,18 +552,18 @@ function AccountPage({ account }: { account: string }) {
               { key: "invoice_number", label: translate("Invoice"), value: (it) => it.invoice_number || it.folio,
                 render: (it) => <span className="font-mono text-xs">{it.invoice_number || it.folio}</span> },
               { key: "guest_name", label: translate("For"), render: (it) => it.folio_type === "Account"
-                ? <span className="text-zinc-500">{translate("Direct invoice")}</span>
-                : <>{it.guest_name || "-"}{it.reservation ? <span className="block font-mono text-[11px] text-zinc-400">{it.reservation}</span> : null}</> },
+                ? <span className="text-muted-ink">{translate("Direct invoice")}</span>
+                : <>{it.guest_name || "-"}{it.reservation ? <span className="block font-mono text-[11px] text-muted-ink">{it.reservation}</span> : null}</> },
               { key: "invoice_date", label: translate("Billed on") },
               { key: "due_date", label: translate("Due"), render: (it) => it.days_overdue ? (
-                <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${it.days_overdue > 30 ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-800"}`}>
+                <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${it.days_overdue > 30 ? "bg-danger-subtle text-danger-ink" : "bg-warning-subtle text-warning-ink"}`}>
                   {translate("{n} days late", { n: it.days_overdue })}</span>
               ) : <span>{it.due_date || "-"}</span> },
               { key: "billed", label: translate("Debit"), align: "right", render: (it) => fmtMoney(it.billed) },
               { key: "paid", label: translate("Credit"), align: "right", render: (it) => it.paid ? fmtMoney(it.paid) : "-" },
               { key: "outstanding", label: translate("Total Balance"), align: "right", render: (it) => it.outstanding > eps
                 ? <span className="font-medium">{fmtMoney(it.outstanding)}</span>
-                : <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-xs font-medium text-emerald-700">{translate("Paid")}</span> },
+                : <span className="rounded bg-success-subtle px-1.5 py-0.5 text-xs font-medium text-success-ink">{translate("Paid")}</span> },
               { key: "actions", label: "", noSort: true, align: "right", render: (it) => (
                 <div className="flex justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
                   <Button variant="outline" onClick={() => setSheet({ view: it.folio })}>{translate("View")}</Button>
@@ -590,14 +590,14 @@ function AccountPage({ account }: { account: string }) {
             <CardTitle className="text-base">{translate("Payments to confirm")}</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="mb-2 text-xs text-zinc-500">{translate("Recorded by an AI agent. They change nothing on the account until Finance confirms them with a PIN.")}</p>
-            <ul className="divide-y divide-zinc-100 text-sm">
+            <p className="mb-2 text-xs text-muted-ink">{translate("Recorded by an AI agent. They change nothing on the account until Finance confirms them with a PIN.")}</p>
+            <ul className="divide-y divide-line-subtle text-sm">
               {acc.pending_payments.map((r) => (
                 <li key={r.name} className="flex flex-wrap items-center justify-between gap-2 py-2">
                   <span>
                     <b className="tabular-nums">{fmtMoney(r.amount)}</b> · {translate(r.mode || "Bank Transfer")}
                     {r.reference ? ` · ${r.reference}` : ""}
-                    <span className="block text-xs text-zinc-500">
+                    <span className="block text-xs text-muted-ink">
                       {translate("Received {v0}, recorded by {v1}", { v0: r.received_on || "-", v1: r.requested_by })}
                       {r.channel ? ` (${r.channel})` : ""}
                     </span>
@@ -621,18 +621,18 @@ function AccountPage({ account }: { account: string }) {
             <CardTitle className="text-base">{translate("Recent payments")}</CardTitle>
           </CardHeader>
           <CardContent>
-            <ul className="divide-y divide-zinc-100 text-sm">
+            <ul className="divide-y divide-line-subtle text-sm">
               {acc.payments.map((p) => (
                 <li key={p.name} className="flex flex-wrap items-center justify-between gap-2 py-2">
                   <span>
                     {p.posting_date} · {p.reference || "-"}
                     {p.received_on && p.received_on !== p.posting_date
-                      ? <span className="ml-1 text-xs text-zinc-500">({translate("received {v0}", { v0: p.received_on })})</span>
+                      ? <span className="ml-1 text-xs text-muted-ink">({translate("received {v0}", { v0: p.received_on })})</span>
                       : null}
-                    {p.reversed ? <span className="ml-2 rounded bg-zinc-100 px-1.5 text-[11px] text-zinc-600">{translate("Reversed")}</span> : null}
+                    {p.reversed ? <span className="ml-2 rounded bg-subtle px-1.5 text-[11px] text-secondary-ink">{translate("Reversed")}</span> : null}
                   </span>
                   <span className="flex items-center gap-2">
-                    <span className={`tabular-nums ${p.reverses ? "text-rose-700" : ""}`}>
+                    <span className={`tabular-nums ${p.reverses ? "text-danger-ink" : ""}`}>
                       {fmtMoney(p.reverses ? -(p.debit ?? 0) : p.credit)}
                     </span>
                     {isFinance && !p.reverses && !p.reversed && p.credit > 0 ? (
@@ -641,7 +641,7 @@ function AccountPage({ account }: { account: string }) {
                   </span>
                 </li>
               ))}
-              {!acc.payments?.length ? <li className="py-6 text-center text-zinc-400">{translate("No payments yet.")}</li> : null}
+              {!acc.payments?.length ? <li className="py-6 text-center text-muted-ink">{translate("No payments yet.")}</li> : null}
             </ul>
           </CardContent>
         </Card>
@@ -670,7 +670,7 @@ function AccountPage({ account }: { account: string }) {
                     {/* a payment names the bills it cleared */}
                     {h.applied.map((a) => (
                       <button key={a.folio} type="button" onClick={() => setSheet({ view: a.folio })}
-                        className="block text-xs text-zinc-500 hover:underline">
+                        className="block text-xs text-muted-ink hover:underline">
                         {a.invoice_number || a.folio}{a.guest_name ? ` · ${a.guest_name}` : ""} · {fmtMoney(a.amount)}
                       </button>
                     ))}
@@ -798,15 +798,15 @@ function AccountAction(props: { acc: Account; action: Action; onClose: () => voi
       }
     >
       <div className="space-y-3 text-sm">
-        {err ? <p className="text-rose-600">{translate(err)}</p> : null}
+        {err ? <p className="text-danger-text">{translate(err)}</p> : null}
         {a.kind === "reverse" ? (
-          <p className="text-zinc-600">{translate("The bills this payment cleared are owed again, and any credit it left on the account is taken back.")}</p>
+          <p className="text-secondary-ink">{translate("The bills this payment cleared are owed again, and any credit it left on the account is taken back.")}</p>
         ) : null}
         {a.kind === "dispute" && !clearing ? (
-          <p className="text-zinc-600">{translate("A disputed bill stays on the account and in aging. It gets no payment reminders and does not count towards the overdue credit block.")}</p>
+          <p className="text-secondary-ink">{translate("A disputed bill stays on the account and in aging. It gets no payment reminders and does not count towards the overdue credit block.")}</p>
         ) : null}
         {plan.length ? (
-          <ul className="rounded-lg border border-zinc-200 px-3 py-2">
+          <ul className="rounded-lg border border-line px-3 py-2">
             {plan.map((row) => (
               <li key={row.folio} className="flex justify-between">
                 <span className="font-mono text-xs">{row.folio}</span>
@@ -817,7 +817,7 @@ function AccountAction(props: { acc: Account; action: Action; onClose: () => voi
         ) : null}
         {a.kind === "reverse" ? (
           <label className="block">
-            <span className="mb-1 block text-zinc-500">{translate("Reason")}</span>
+            <span className="mb-1 block text-muted-ink">{translate("Reason")}</span>
             <select className={field} value={code} onChange={(e) => setCode(e.target.value)}>
               {(codes.length ? codes : [{ name: "REV-BOUNCE", description: "Cheque bounced" }]).map((c) => (
                 <option key={c.name} value={c.name}>{translate(c.description)}</option>
@@ -827,13 +827,13 @@ function AccountAction(props: { acc: Account; action: Action; onClose: () => voi
         ) : null}
         {a.kind !== "confirm" && !clearing ? (
           <label className="block">
-            <span className="mb-1 block text-zinc-500">{needsNote ? translate("Note") : translate("Note (optional)")}</span>
+            <span className="mb-1 block text-muted-ink">{needsNote ? translate("Note") : translate("Note (optional)")}</span>
             <textarea className={field} rows={2} maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} />
           </label>
         ) : null}
         {askPin ? (
           <label className="block">
-            <span className="mb-1 block text-zinc-500">{translate("Your cashier PIN")}</span>
+            <span className="mb-1 block text-muted-ink">{translate("Your cashier PIN")}</span>
             <input type="password" inputMode="numeric" autoComplete="off" className={field}
               value={pin} onChange={(e) => setPin(e.target.value)} />
           </label>
@@ -857,16 +857,16 @@ function AgingBar({ acc }: { acc: Account }) {
   const total = parts.reduce((a, p) => a + Math.max(0, p.v), 0)
   if (total < moneyEps(loc.currency)) return null
   return (
-    <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2">
-      <div className="text-xs text-zinc-500">{translate("Age of what is owed")}</div>
-      <div className="mt-1.5 flex h-2.5 overflow-hidden rounded-full bg-zinc-100" aria-hidden>
+    <div className="rounded-lg border border-line bg-surface px-3 py-2">
+      <div className="text-xs text-muted-ink">{translate("Age of what is owed")}</div>
+      <div className="mt-1.5 flex h-2.5 overflow-hidden rounded-full bg-subtle" aria-hidden>
         {parts.map((p) => p.v > 0 ? <div key={p.k} className={p.cls} style={{ width: `${(p.v / total) * 100}%` }} /> : null)}
       </div>
-      <ul className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-600">
+      <ul className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-secondary-ink">
         {parts.map((p) => (
           <li key={p.k} className="inline-flex items-center gap-1.5">
             <span className={`size-2 rounded-full ${p.cls}`} aria-hidden />
-            <b className="tabular-nums text-zinc-800">{fmtMoney(p.v)}</b> {translate(p.k)}
+            <b className="tabular-nums text-ink">{fmtMoney(p.v)}</b> {translate(p.k)}
           </li>
         ))}
       </ul>
@@ -922,19 +922,19 @@ function DocumentPreview(props: {
     >
       <div className="space-y-3 text-sm">
         {props.kind === "monthly" ? (
-          <label className="flex items-center gap-2 text-zinc-600">
+          <label className="flex items-center gap-2 text-secondary-ink">
             {translate("Month")}
             <input type="month" value={props.month} onChange={(e) => props.onMonth(e.target.value)}
-              className="rounded-lg border border-zinc-300 px-2 py-1" />
+              className="rounded-lg border border-control px-2 py-1" />
           </label>
         ) : null}
-        {err ? <p className="text-rose-600">{translate(err)}</p> : null}
-        {!html && !err ? <p className="text-zinc-400">{translate("Loading…")}</p> : null}
+        {err ? <p className="text-danger-text">{translate(err)}</p> : null}
+        {!html && !err ? <p className="text-muted-ink">{translate("Loading…")}</p> : null}
         {html ? (
           // sandboxed: no scripts run. Never add allow-scripts while
           // allow-same-origin is set: together they let the page reach the desk
           <iframe ref={frame} title={translate("Preview")} srcDoc={html} sandbox="allow-modals allow-same-origin"
-            className="h-[65vh] w-full rounded-lg border border-zinc-200 bg-white" />
+            className="h-[65vh] w-full rounded-lg border border-line bg-surface" />
         ) : null}
       </div>
     </Sheet>
@@ -944,7 +944,7 @@ function DocumentPreview(props: {
 function BackLink() {
   useUILanguage()
   return (
-    <Link to="/receivables" className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-800">
+    <Link to="/receivables" className="inline-flex items-center gap-1 text-sm text-muted-ink hover:text-ink">
       <ArrowLeft className="size-4" />{translate("Receivables")}
     </Link>
   )
@@ -953,8 +953,8 @@ function BackLink() {
 function Stat({ label, value, tone }: { label: string; value: string; tone?: string }) {
   useUILanguage()
   return (
-    <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2">
-      <div className="text-xs text-zinc-400">{label}</div>
+    <div className="rounded-lg border border-line bg-surface px-3 py-2">
+      <div className="text-xs text-muted-ink">{label}</div>
       <div className={`text-lg font-semibold tabular-nums ${tone ?? ""}`}>{value}</div>
     </div>
   )
@@ -1028,26 +1028,26 @@ function AccountSetup(props: { acc?: Account; onClose: () => void; onSaved: (acc
       }
     >
       <div className="space-y-4 text-sm">
-        {err ? <p className="text-rose-600">{translate(err)}</p> : null}
+        {err ? <p className="text-danger-text">{translate(err)}</p> : null}
         {!a ? (
           <label className="block">
-            <span className="mb-1 block text-zinc-500">{translate("Company")}</span>
+            <span className="mb-1 block text-muted-ink">{translate("Company")}</span>
             <select className={field} value={company} onChange={(e) => setCompany(e.target.value)} autoFocus>
               <option value="">{translate("Pick a company…")}</option>
               {companies.map((c) => <option key={c.name} value={c.name}>{c.company_name || c.name}</option>)}
             </select>
-            <span className="mt-1 block text-xs text-zinc-400">
+            <span className="mt-1 block text-xs text-muted-ink">
               {translate("Not listed? Add it under Companies first. Opening an account puts the company on credit.")}
             </span>
           </label>
         ) : null}
         <label className="block">
-          <span className="mb-1 block text-zinc-500">{translate("Account number")}</span>
+          <span className="mb-1 block text-muted-ink">{translate("Account number")}</span>
           <input className={field} value={number} maxLength={40} placeholder={translate("Leave blank to number it for you")}
             onChange={(e) => setNumber(e.target.value)} />
         </label>
         <label className="block">
-          <span className="mb-1 block text-zinc-500">{translate("Credit limit")}</span>
+          <span className="mb-1 block text-muted-ink">{translate("Credit limit")}</span>
           <input className={field} type="number" min="0" step={step} inputMode="decimal" value={limit}
             placeholder={translate("0 = no limit")} onChange={(e) => setLimit(e.target.value)} />
         </label>
@@ -1058,16 +1058,16 @@ function AccountSetup(props: { acc?: Account; onClose: () => void; onSaved: (acc
           </label>
           {!useDefault ? (
             <label className="mt-2 block">
-              <span className="mb-1 block text-zinc-500">{translate("Days to pay after the invoice date")}</span>
+              <span className="mb-1 block text-muted-ink">{translate("Days to pay after the invoice date")}</span>
               <input className={field} type="number" min="0" step="1" value={days} onChange={(e) => setDays(e.target.value)} />
             </label>
           ) : null}
         </div>
         <label className="block">
-          <span className="mb-1 block text-zinc-500">{translate("Billing address")}</span>
+          <span className="mb-1 block text-muted-ink">{translate("Billing address")}</span>
           <textarea className={field} rows={3} value={address} onChange={(e) => setAddress(e.target.value)} />
         </label>
-        <div className="rounded-lg border border-zinc-200 p-3">
+        <div className="rounded-lg border border-line p-3">
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={restricted} onChange={(e) => setRestricted(e.target.checked)} />
             {translate("Restricted: take no new bills")}
@@ -1077,7 +1077,7 @@ function AccountSetup(props: { acc?: Account; onClose: () => void; onSaved: (acc
               placeholder={translate("Why (shown to whoever tries to bill it)")}
               onChange={(e) => setReason(e.target.value)} />
           ) : null}
-          <p className="mt-1 text-xs text-zinc-400">{translate("Payments and statements keep working while it is restricted.")}</p>
+          <p className="mt-1 text-xs text-muted-ink">{translate("Payments and statements keep working while it is restricted.")}</p>
         </div>
       </div>
     </Sheet>
@@ -1168,7 +1168,7 @@ function NewInvoice(props: { acc: Account; onClose: () => void; onCreated: (invo
       onClose={props.onClose}
       footer={
         <div className="flex items-center justify-between gap-2">
-          <p className={`text-sm ${problem ? "text-zinc-400" : "text-zinc-600"}`}>
+          <p className={`text-sm ${problem ? "text-muted-ink" : "text-secondary-ink"}`}>
             {problem ? translate(problem) : translate("Due {n} days after today's business date.", { n: props.acc.credit_days ?? 0 })}
           </p>
           <div className="flex gap-2">
@@ -1181,22 +1181,22 @@ function NewInvoice(props: { acc: Account; onClose: () => void; onCreated: (invo
       }
     >
       <div className="space-y-5 text-sm">
-        {err ? <p className="text-rose-600">{translate(err)}</p> : null}
+        {err ? <p className="text-danger-text">{translate(err)}</p> : null}
         {needsOverride ? (
-          <label className="block rounded-lg border border-amber-200 bg-amber-50 p-3">
-            <span className="mb-1 block text-amber-900">{translate("Override credit control - say why (it is logged)")}</span>
+          <label className="block rounded-lg border border-warning-line bg-warning-subtle p-3">
+            <span className="mb-1 block text-warning-ink">{translate("Override credit control - say why (it is logged)")}</span>
             <input className={field} value={override} maxLength={140} onChange={(e) => setOverride(e.target.value)} />
           </label>
         ) : null}
 
         <label className="block max-w-md">
-          <span className="mb-1 block text-zinc-500">{translate("Reference (PO number, event, contract)")}</span>
+          <span className="mb-1 block text-muted-ink">{translate("Reference (PO number, event, contract)")}</span>
           <input className={field} value={reference} maxLength={140} onChange={(e) => setReference(e.target.value)} />
         </label>
 
         <div className="overflow-x-auto">
           <table className="w-full text-left">
-            <thead className="text-xs uppercase text-zinc-400">
+            <thead className="text-xs uppercase text-muted-ink">
               <tr>
                 <th className="py-2 pr-2">{translate("Charge")}</th>
                 <th className="py-2 pr-2">{translate("Description")}</th>
@@ -1211,7 +1211,7 @@ function NewInvoice(props: { acc: Account; onClose: () => void; onCreated: (invo
               {lines.map((l, i) => {
                 const fnb = fnbRate(l)
                 return (
-                  <tr key={i} className="border-t border-zinc-100 align-top">
+                  <tr key={i} className="border-t border-line-subtle align-top">
                     <td className="py-2 pr-2">
                       <select className={field} value={l.charge_type} onChange={(e) => set(i, { charge_type: e.target.value })}>
                         {BILLABLE.map((c) => <option key={c} value={c}>{codes[c] ?? translate(c)}</option>)}
@@ -1256,9 +1256,9 @@ function NewInvoice(props: { acc: Account; onClose: () => void; onCreated: (invo
         </Button>
 
         <dl className="ml-auto max-w-xs space-y-1">
-          <div className="flex justify-between"><dt className="text-zinc-500">{translate("Subtotal")}</dt><dd className="tabular-nums">{fmtMoney(subtotal)}</dd></div>
-          <div className="flex justify-between"><dt className="text-zinc-500">{taxLabel()}</dt><dd className="tabular-nums">{fmtMoney(tax)}</dd></div>
-          <div className="flex justify-between border-t border-zinc-200 pt-1 font-semibold"><dt>{translate("Invoice total")}</dt><dd className="tabular-nums">{fmtMoney(subtotal + tax)}</dd></div>
+          <div className="flex justify-between"><dt className="text-muted-ink">{translate("Subtotal")}</dt><dd className="tabular-nums">{fmtMoney(subtotal)}</dd></div>
+          <div className="flex justify-between"><dt className="text-muted-ink">{taxLabel()}</dt><dd className="tabular-nums">{fmtMoney(tax)}</dd></div>
+          <div className="flex justify-between border-t border-line pt-1 font-semibold"><dt>{translate("Invoice total")}</dt><dd className="tabular-nums">{fmtMoney(subtotal + tax)}</dd></div>
         </dl>
       </div>
     </Sheet>
@@ -1313,16 +1313,16 @@ function InvoiceView(props: { folio: string; company: string; onClose: () => voi
         </div>
       }
     >
-      {err ? <p className="text-sm text-rose-600">{translate(err)}</p> : null}
-      {!inv ? <p className="text-sm text-zinc-400">{translate("Loading…")}</p> : (
+      {err ? <p className="text-sm text-danger-text">{translate(err)}</p> : null}
+      {!inv ? <p className="text-sm text-muted-ink">{translate("Loading…")}</p> : (
         <div className="space-y-4 text-sm">
-          <p className="text-zinc-500">
+          <p className="text-muted-ink">
             {inv.folio_type === "Account" ? translate("Raised on the account") : (inv.guest_name || "")}
             {inv.reservation ? ` · ${inv.reservation}` : ""}
             {inv.closed_on ? ` · ${inv.closed_on.slice(0, 10)}` : ""}
           </p>
           <table className="w-full text-left">
-            <thead className="text-xs uppercase text-zinc-400">
+            <thead className="text-xs uppercase text-muted-ink">
               <tr>
                 <th className="py-2 pr-3">{translate("Date")}</th>
                 <th className="py-2 pr-3">{translate("Description")}</th>
@@ -1334,10 +1334,10 @@ function InvoiceView(props: { folio: string; company: string; onClose: () => voi
             </thead>
             <tbody>
               {inv.lines.map((l, i) => (
-                <tr key={i} className="border-t border-zinc-100">
+                <tr key={i} className="border-t border-line-subtle">
                   <td className="py-2 pr-3">{l.posting_date}</td>
                   <td className="py-2 pr-3">
-                    {l.transaction_code ? <span className="mr-1.5 font-mono text-xs text-zinc-400">{l.transaction_code}</span> : null}
+                    {l.transaction_code ? <span className="mr-1.5 font-mono text-xs text-muted-ink">{l.transaction_code}</span> : null}
                     {l.description}
                   </td>
                   <td className="py-2 pr-3 text-right tabular-nums">{l.qty}</td>
@@ -1349,9 +1349,9 @@ function InvoiceView(props: { folio: string; company: string; onClose: () => voi
             </tbody>
           </table>
           <dl className="ml-auto max-w-xs space-y-1">
-            <div className="flex justify-between"><dt className="text-zinc-500">{translate("Subtotal")}</dt><dd className="tabular-nums">{fmtMoney(inv.charges_total)}</dd></div>
-            <div className="flex justify-between"><dt className="text-zinc-500">{taxLabel()}</dt><dd className="tabular-nums">{fmtMoney(inv.tax_total)}</dd></div>
-            <div className="flex justify-between border-t border-zinc-200 pt-1 font-semibold"><dt>{translate("Total")}</dt><dd className="tabular-nums">{fmtMoney(inv.grand_total)}</dd></div>
+            <div className="flex justify-between"><dt className="text-muted-ink">{translate("Subtotal")}</dt><dd className="tabular-nums">{fmtMoney(inv.charges_total)}</dd></div>
+            <div className="flex justify-between"><dt className="text-muted-ink">{taxLabel()}</dt><dd className="tabular-nums">{fmtMoney(inv.tax_total)}</dd></div>
+            <div className="flex justify-between border-t border-line pt-1 font-semibold"><dt>{translate("Total")}</dt><dd className="tabular-nums">{fmtMoney(inv.grand_total)}</dd></div>
           </dl>
         </div>
       )}
@@ -1408,12 +1408,12 @@ function TransferInvoice(props: { acc: Account; item: OpenItem; onClose: () => v
       }
     >
       <div className="space-y-4 text-sm">
-        {err ? <p className="text-rose-600">{translate(err)}</p> : null}
-        <p className="text-zinc-600">
+        {err ? <p className="text-danger-text">{translate(err)}</p> : null}
+        <p className="text-secondary-ink">
           {translate("What is still owed moves to the other company's account. What {v0} already paid stays here. The bill keeps its number and date, so it ages from when it was raised.", { v0: props.acc.company })}
         </p>
         <label className="block">
-          <span className="mb-1 block text-zinc-500">{translate("Bill to")}</span>
+          <span className="mb-1 block text-muted-ink">{translate("Bill to")}</span>
           <select className={field} value={to} onChange={(e) => setTo(e.target.value)} autoFocus>
             <option value="">{translate("Pick an account…")}</option>
             {accounts.map((a) => (
@@ -1422,7 +1422,7 @@ function TransferInvoice(props: { acc: Account; item: OpenItem; onClose: () => v
           </select>
         </label>
         <label className="block">
-          <span className="mb-1 block text-zinc-500">{translate("Note (optional)")}</span>
+          <span className="mb-1 block text-muted-ink">{translate("Note (optional)")}</span>
           <input className={field} value={reason} maxLength={140} onChange={(e) => setReason(e.target.value)} />
         </label>
       </div>

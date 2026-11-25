@@ -153,10 +153,10 @@ export default function Banquet() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-lg font-semibold">
-            <PartyPopper className="size-5 text-violet-600" />
+            <PartyPopper className="size-5 text-violet-text" />
             {t("Banquets")}
           </h1>
-          <p className="mt-0.5 text-sm text-zinc-400">
+          <p className="mt-0.5 text-sm text-muted-ink">
             {t("Function prospecting through to the event order - enquiry, quotation, contract, and the day itself.")}
           </p>
         </div>
@@ -185,13 +185,13 @@ export default function Banquet() {
             label={t("Still in play")}
             value={inr(pipeline.totals.pipeline_value)}
             sub={t("Enquiries and tentative holds")}
-            tone="text-amber-700"
+            tone="text-warning-ink"
           />
           <Stat
             label={t("Outstanding")}
             value={inr(pipeline.totals.outstanding)}
             sub={t("Confirmed but unpaid")}
-            tone={pipeline.totals.outstanding ? "text-rose-700" : ""}
+            tone={pipeline.totals.outstanding ? "text-danger-ink" : ""}
           />
           <Stat
             label={t("Conversion")}
@@ -205,7 +205,7 @@ export default function Banquet() {
         </div>
       )}
 
-      <div className="flex gap-1 border-b border-zinc-200">
+      <div className="flex gap-1 border-b border-line">
         {(
           [
             ["today", t("Needs chasing{urgent}", { urgent: urgent.length ? ` (${urgent.length})` : "" })],
@@ -219,8 +219,8 @@ export default function Banquet() {
             className={
               "-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors " +
               (tab === id
-                ? "border-brand-600 text-brand-700"
-                : "border-transparent text-zinc-500 hover:text-zinc-800")
+                ? "border-accent-control text-accent-ink"
+                : "border-transparent text-muted-ink hover:text-ink")
             }
           >
             {translate(label)}
@@ -241,15 +241,15 @@ export default function Banquet() {
             <input
               type="date"
               aria-label={t("From")}
-              className="rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
+              className="rounded-lg border border-control px-2 py-1.5 text-sm"
               value={fromDate}
               onChange={(e) => setFromDate(e.target.value)}
             />
-            <span className="text-sm text-zinc-400">→</span>
+            <span className="text-sm text-muted-ink">→</span>
             <input
               type="date"
               aria-label={t("To")}
-              className="rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
+              className="rounded-lg border border-control px-2 py-1.5 text-sm"
               value={toDate}
               min={fromDate || undefined}
               onChange={(e) => setToDate(e.target.value)}
@@ -265,7 +265,7 @@ export default function Banquet() {
             <CardTitle>{t("All functions")}</CardTitle>
             <div className="flex flex-wrap items-center gap-1.5">
               <div className="relative">
-                <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-zinc-400" />
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-ink" />
                 <input
                   className={inputCls + " !w-52 pl-8"}
                   placeholder={t("Customer, company, hall…")}
@@ -296,7 +296,7 @@ export default function Banquet() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wider text-zinc-400">
+                    <tr className="border-b border-line text-left text-xs uppercase tracking-wider text-muted-ink">
                       <th className="py-2 pr-3 font-medium">{t("Date")}</th>
                       <th className="py-2 pr-3 font-medium">{t("Customer")}</th>
                       <th className="py-2 pr-3 font-medium">{t("Hall")}</th>
@@ -314,24 +314,24 @@ export default function Banquet() {
                         onClick={() =>
                           navigate(`/banquet/${encodeURIComponent(r.name)}`)
                         }
-                        className="cursor-pointer border-b border-zinc-100 hover:bg-zinc-50"
+                        className="cursor-pointer border-b border-line-subtle hover:bg-canvas"
                       >
                         <td className="py-2 pr-3 whitespace-nowrap tabular-nums">
                           {r.event_date}
                           {r.end_date && r.end_date !== r.event_date && (
-                            <span className="text-zinc-400"> → {r.end_date}</span>
+                            <span className="text-muted-ink"> → {r.end_date}</span>
                           )}
                         </td>
                         <td className="py-2 pr-3">
                           <div className="font-medium">{r.customer_name}</div>
                           {r.company && (
-                            <div className="text-xs text-zinc-400">
+                            <div className="text-xs text-muted-ink">
                               {r.company}
                             </div>
                           )}
                         </td>
-                        <td className="py-2 pr-3 text-zinc-600">{r.venue}</td>
-                        <td className="py-2 pr-3 text-zinc-600">
+                        <td className="py-2 pr-3 text-secondary-ink">{r.venue}</td>
+                        <td className="py-2 pr-3 text-secondary-ink">
                           {translate(r.event_type)}
                         </td>
                         <td className="py-2 pr-3 text-right tabular-nums">
@@ -343,7 +343,7 @@ export default function Banquet() {
                         <td
                           className={
                             "py-2 pr-3 text-right tabular-nums " +
-                            (r.balance_due > 0 ? "text-rose-700" : "text-zinc-400")
+                            (r.balance_due > 0 ? "text-danger-ink" : "text-muted-ink")
                           }
                         >
                           {inr(r.balance_due)}
@@ -408,22 +408,22 @@ function RemindersBoard({
             key={f.function}
             onClick={() => onOpen(f.function)}
             className={
-              "flex w-full items-start gap-3 rounded-xl border bg-white px-4 py-3 text-left " +
-              "transition-colors hover:bg-zinc-50 " +
-              (high ? "border-amber-300" : "border-zinc-200")
+              "flex w-full items-start gap-3 rounded-xl border bg-surface px-4 py-3 text-left " +
+              "transition-colors hover:bg-canvas " +
+              (high ? "border-warning-line-strong" : "border-line")
             }
           >
             <AlertTriangle
               className={
                 "mt-0.5 size-4 shrink-0 " +
-                (high ? "text-amber-600" : "text-zinc-300")
+                (high ? "text-warning-text" : "text-muted-ink")
               }
             />
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-medium">{f.customer_name}</span>
                 <StatusPill status={f.status} />
-                <span className="text-xs text-zinc-400">
+                <span className="text-xs text-muted-ink">
                   {f.venue} · {f.event_date}
                 </span>
               </div>
@@ -433,7 +433,7 @@ function RemindersBoard({
                     key={i}
                     className={
                       "text-sm " +
-                      (a.urgency === "high" ? "text-amber-800" : "text-zinc-500")
+                      (a.urgency === "high" ? "text-warning-ink" : "text-muted-ink")
                     }
                   >
                     {translate(a.message)}
@@ -444,7 +444,7 @@ function RemindersBoard({
             <div className="shrink-0 text-right text-sm tabular-nums">
               <div>{inr(f.grand_total)}</div>
               {f.balance_due > 0 && (
-                <div className="text-xs text-rose-700">
+                <div className="text-xs text-danger-ink">
                   {inr(f.balance_due)} {t("due")}
                 </div>
               )}
@@ -475,7 +475,7 @@ function PipelineBoard({ data }: { data: BanquetPipeline | null }) {
               {t("Where the months are landing")}
             </span>
           </CardTitle>
-          <span className="text-xs text-zinc-400">
+          <span className="text-xs text-muted-ink">
             {data.from} → {data.to}, {t("by event date")}
           </span>
         </CardHeader>
@@ -488,21 +488,21 @@ function PipelineBoard({ data }: { data: BanquetPipeline | null }) {
                 <div key={m.month}>
                   <div className="flex items-baseline justify-between text-sm">
                     <span className="font-medium">{monthName(m.month)}</span>
-                    <span className="tabular-nums text-zinc-500">
+                    <span className="tabular-nums text-muted-ink">
                       {inr(m.confirmed_value)} {t("confirmed")}
                       {m.pipeline_value > 0 && (
-                        <span className="text-amber-700">
+                        <span className="text-warning-ink">
                           {" "}
                           + {inr(m.pipeline_value)} {t("in play")}
                         </span>
                       )}
-                      <span className="text-zinc-400">
+                      <span className="text-muted-ink">
                         {" "}
                         · {tn(m.count, "{n} function", "{n} functions")} · {t("{pax} pax", { pax: m.pax })}
                       </span>
                     </span>
                   </div>
-                  <div className="mt-1 flex h-2.5 overflow-hidden rounded-full bg-zinc-100">
+                  <div className="mt-1 flex h-2.5 overflow-hidden rounded-full bg-subtle">
                     <div
                       className="bg-emerald-500"
                       style={{
@@ -515,7 +515,7 @@ function PipelineBoard({ data }: { data: BanquetPipeline | null }) {
                     />
                   </div>
                   {m.outstanding > 0 && (
-                    <p className="mt-0.5 text-xs text-rose-700">
+                    <p className="mt-0.5 text-xs text-danger-ink">
                       {t("{amount} still to collect", { amount: inr(m.outstanding) })}
                     </p>
                   )}
@@ -541,8 +541,8 @@ function PipelineBoard({ data }: { data: BanquetPipeline | null }) {
             <ul className="space-y-1 text-sm">
               {data.lost_reasons.map((r) => (
                 <li key={r.reason} className="flex justify-between gap-3">
-                  <span className="text-zinc-600">{r.reason}</span>
-                  <span className="tabular-nums text-zinc-400">{r.count}</span>
+                  <span className="text-secondary-ink">{r.reason}</span>
+                  <span className="tabular-nums text-muted-ink">{r.count}</span>
                 </li>
               ))}
             </ul>
@@ -575,15 +575,15 @@ function BreakdownCard({
             {rows.map((r) => (
               <li key={r.key}>
                 <div className="flex justify-between text-sm">
-                  <span className="truncate text-zinc-600">{r.key}</span>
+                  <span className="truncate text-secondary-ink">{r.key}</span>
                   <span className="shrink-0 tabular-nums">
                     {inr(r.value)}{" "}
-                    <span className="text-zinc-400">({r.count})</span>
+                    <span className="text-muted-ink">({r.count})</span>
                   </span>
                 </div>
-                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-zinc-100">
+                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-subtle">
                   <div
-                    className="h-full bg-brand-500"
+                    className="h-full bg-accent-fill"
                     style={{ width: `${(r.value / peak) * 100}%` }}
                   />
                 </div>
@@ -844,13 +844,13 @@ function EnquirySheet({
         </div>
 
         <div>
-          <p className="mb-2 text-xs font-medium text-zinc-500">
+          <p className="mb-2 text-xs font-medium text-muted-ink">
             {t("Which hall - free for these dates and hours")}
           </p>
           {avail === null ? (
-            <p className="text-sm text-zinc-400">{t("Checking…")}</p>
+            <p className="text-sm text-muted-ink">{t("Checking…")}</p>
           ) : avail.length === 0 ? (
-            <p className="text-sm text-zinc-500">
+            <p className="text-sm text-muted-ink">
               {t("No halls set up for this property yet - add one under Halls & Venues.")}
             </p>
           ) : (
@@ -866,35 +866,35 @@ function EnquirySheet({
                     className={
                       "rounded-lg border px-3 py-2 text-left text-sm transition-colors " +
                       (form.venue === v.name
-                        ? "border-brand-600 bg-brand-50"
+                        ? "border-accent-control bg-accent-subtle"
                         : blocked
-                          ? "border-zinc-200 bg-zinc-50 opacity-60"
-                          : "border-zinc-200 hover:bg-zinc-50")
+                          ? "border-line bg-canvas opacity-60"
+                          : "border-line hover:bg-canvas")
                     }
                   >
                     <div className="flex items-center justify-between">
                       <span className="font-medium">{v.venue_name}</span>
-                      <span className="tabular-nums text-zinc-500">
+                      <span className="tabular-nums text-muted-ink">
                         {inr(v.base_price)}
                       </span>
                     </div>
-                    <div className="mt-0.5 text-xs text-zinc-400">
+                    <div className="mt-0.5 text-xs text-muted-ink">
                       {translate(v.venue_type)} · {t("seats {n}", { n: v.capacity })}
                       {v.hourly_rate ? translate(" · {v0}/hr", { v0: String(inr(v.hourly_rate)) }) : ""}
                     </div>
                     {blocked && (
-                      <div className="mt-1 text-xs text-rose-700">
+                      <div className="mt-1 text-xs text-danger-ink">
                         {t("Taken")}: {v.conflicts[0]?.customer_name}
                       </div>
                     )}
                     {!blocked && tooSmall && (
-                      <div className="mt-1 text-xs text-amber-700">
+                      <div className="mt-1 text-xs text-warning-ink">
                         {t("Smaller than the pax count")}
                       </div>
                     )}
                     {!blocked &&
                       v.conflicts.some((c) => c.kind === "tentative") && (
-                        <div className="mt-1 text-xs text-amber-700">
+                        <div className="mt-1 text-xs text-warning-ink">
                           {t("Soft hold you can sell over")}
                         </div>
                       )}
@@ -904,7 +904,7 @@ function EnquirySheet({
             </div>
           )}
           {chosen && chosen.under_minimum && (
-            <p className="mt-2 text-xs text-amber-700">
+            <p className="mt-2 text-xs text-warning-ink">
               {t("{name} usually takes {min}+ - check the minimum spend applies.", {
                 name: chosen.venue_name,
                 min: chosen.min_capacity,

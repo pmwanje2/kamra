@@ -9,11 +9,11 @@ export function LanguageSwitcher(props?: { className?: string }) {
   return (
     <label
       className={
-        "flex shrink-0 items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs text-zinc-700 " +
+        "flex shrink-0 items-center gap-1.5 rounded-lg border border-line bg-surface px-2 py-1 text-xs text-secondary-ink " +
         (props?.className ?? "")
       }
     >
-      <Globe className="size-3.5 text-zinc-500" aria-hidden />
+      <Globe className="size-3.5 text-muted-ink" aria-hidden />
       <select
         aria-label={t("Language")}
         value={lang}

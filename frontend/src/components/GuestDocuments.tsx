@@ -38,9 +38,9 @@ export interface GuestDocs {
   retention: "Store" | "Verify & Discard" | null
 }
 
-const label = "mb-1 block text-xs font-medium uppercase tracking-wider text-zinc-400"
+const label = "mb-1 block text-xs font-medium uppercase tracking-wider text-muted-ink"
 const input =
-  "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "w-full rounded-lg border border-control bg-surface px-3 py-2 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 export default function GuestDocuments({ guestId, docs, onSaved }: {
   guestId: string
@@ -139,7 +139,7 @@ export default function GuestDocuments({ guestId, docs, onSaved }: {
             </label>
             <label className="block text-sm">
               <span className={label}>{t("Date of expiry")}</span>
-              <input type="date" className={cn(input, id.status === "expired" && "border-rose-300")}
+              <input type="date" className={cn(input, id.status === "expired" && "border-danger-line-strong")}
                 value={expires} min={issued || undefined} onChange={(e) => setExpires(e.target.value)} />
             </label>
           </div>
@@ -152,13 +152,13 @@ export default function GuestDocuments({ guestId, docs, onSaved }: {
             onChanged={onSaved} />
           {!docs.id.file && id.scan_reservation ? (
             scan ? (
-              <img src={scan} alt={t("ID scan")} className="h-28 rounded-lg border border-zinc-200 object-cover" />
+              <img src={scan} alt={t("ID scan")} className="h-28 rounded-lg border border-line object-cover" />
             ) : (
               <button type="button" onClick={viewScan} disabled={scanBusy}
-                className="flex h-28 w-44 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-brand-400 bg-brand-50/40 text-xs font-medium text-brand-700 hover:bg-brand-50">
+                className="flex h-28 w-44 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-accent-control bg-accent-subtle/40 text-xs font-medium text-accent-ink hover:bg-accent-subtle">
                 <ShieldCheck className="size-6" aria-hidden />
                 {scanBusy ? t("Opening…") : t("View ID scan")}
-                {id.scan_on ? <span className="font-normal text-zinc-500">{id.scan_on.slice(0, 10)}</span> : null}
+                {id.scan_on ? <span className="font-normal text-muted-ink">{id.scan_on.slice(0, 10)}</span> : null}
               </button>
             )
           ) : (
@@ -172,11 +172,11 @@ export default function GuestDocuments({ guestId, docs, onSaved }: {
         </div>
 
         {docs.retention === "Verify & Discard" && (
-          <p className="rounded-lg bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
+          <p className="rounded-lg bg-canvas px-3 py-2 text-xs text-secondary-ink">
             {t("This property deletes ID scans at checkout and keeps only the last 4 digits. The profile keeps the type, dates and that the ID was verified. Ask for the ID again on a new stay.")}
           </p>
         )}
-        {err && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{translate(err)}</p>}
+        {err && <p className="rounded-lg bg-danger-subtle px-3 py-2 text-sm text-danger-ink">{translate(err)}</p>}
         <Button variant="outline" disabled={busy || !dirty} onClick={save}>
           {busy ? t("Saving…") : t("Save documents")}
         </Button>
@@ -239,30 +239,30 @@ function ImageTile({ guestId, kind, has, label, empty, facing, canStore = true, 
 
   return (
     <div className="w-44">
-      <div className="mb-1 text-xs font-medium uppercase tracking-wider text-zinc-400">{translate(label)}</div>
+      <div className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-ink">{translate(label)}</div>
       {src ? (
         <button type="button" onClick={() => setBig(true)} title={t("Open full size")} className="block">
-          <img src={src} alt={translate(label)} className="h-28 w-44 rounded-lg border border-zinc-200 object-cover" />
+          <img src={src} alt={translate(label)} className="h-28 w-44 rounded-lg border border-line object-cover" />
         </button>
       ) : (
         <div className={cn("flex h-28 w-44 flex-col items-center justify-center gap-1 rounded-lg border border-dashed text-xs",
-          has ? "border-emerald-300 bg-emerald-50/50 text-emerald-700" : "border-zinc-300 bg-zinc-50 text-zinc-400")}>
+          has ? "border-success-line-strong bg-success-subtle/50 text-success-ink" : "border-control bg-canvas text-muted-ink")}>
           {has ? <><ShieldCheck className="size-6" aria-hidden />{t("On file")}</> : translate(empty)}
         </div>
       )}
       {canStore && (
         <div className="mt-1.5 flex items-center gap-1">
           <button type="button" disabled={busy} onClick={() => setCamera(true)}
-            className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-40">
+            className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-accent-ink hover:bg-accent-subtle disabled:opacity-40">
             <Camera className="size-3.5" />{t("Take photo")}
           </button>
           <button type="button" disabled={busy} onClick={() => fileRef.current?.click()}
-            className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-100 disabled:opacity-40">
+            className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-secondary-ink hover:bg-subtle disabled:opacity-40">
             <Upload className="size-3.5" />{t("Upload")}
           </button>
           {has && (
             <button type="button" disabled={busy} onClick={remove} aria-label={t("Remove")} title={t("Remove")}
-              className="ms-auto rounded-md p-1 text-zinc-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-40">
+              className="ms-auto rounded-md p-1 text-muted-ink hover:bg-danger-subtle hover:text-danger-text disabled:opacity-40">
               <Trash2 className="size-3.5" />
             </button>
           )}
@@ -270,7 +270,7 @@ function ImageTile({ guestId, kind, has, label, empty, facing, canStore = true, 
             onChange={(e) => { pick(e.target.files?.[0]); e.target.value = "" }} />
         </div>
       )}
-      {err && <p className="mt-1 text-xs text-rose-700">{translate(err)}</p>}
+      {err && <p className="mt-1 text-xs text-danger-ink">{translate(err)}</p>}
       {big && src && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true"
           aria-label={translate(label)} onClick={() => setBig(false)}>
@@ -296,7 +296,7 @@ export function GuestAvatar({ guestId, has, initial }: { guestId: string; has: b
   return src ? (
     <img src={src} alt="" className="size-14 rounded-2xl object-cover" />
   ) : (
-    <div className="flex size-14 items-center justify-center rounded-2xl bg-brand-50 text-xl font-semibold text-brand-700">
+    <div className="flex size-14 items-center justify-center rounded-2xl bg-accent-subtle text-xl font-semibold text-accent-ink">
       {initial}
     </div>
   )

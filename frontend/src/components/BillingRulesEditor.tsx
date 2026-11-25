@@ -103,11 +103,11 @@ export default function BillingRulesEditor({ row }: { row: Row; reload: () => vo
   }
 
   return (
-    <div className="border-t border-zinc-200 pt-4">
-      <h3 className="text-sm font-medium text-zinc-600">{translate("Billing rules")}</h3>
-      <p className="mb-2 mt-0.5 text-xs text-zinc-400">{translate("Ticked charge types post to the Company folio on corporate stays. Everything else bills to the guest.")}</p>
+    <div className="border-t border-line pt-4">
+      <h3 className="text-sm font-medium text-secondary-ink">{translate("Billing rules")}</h3>
+      <p className="mb-2 mt-0.5 text-xs text-muted-ink">{translate("Ticked charge types post to the Company folio on corporate stays. Everything else bills to the guest.")}</p>
       {fallback?.applies && (
-        <p className="mb-2 rounded-md bg-brand-50 px-2 py-1.5 text-xs text-brand-700">{translate("No rules: using the property default - ")}{translate(shortLabel(fallback))}
+        <p className="mb-2 rounded-md bg-accent-subtle px-2 py-1.5 text-xs text-accent-ink">{translate("No rules: using the property default - ")}{translate(shortLabel(fallback))}
           {fallback.charge_types === null
             ? translate(" (every charge).")
             : fallback.charge_types.length
@@ -115,25 +115,25 @@ export default function BillingRulesEditor({ row }: { row: Row; reload: () => vo
               : translate(" (the company pays nothing).")}{" "}{translate("Change it in Settings, Finance. Saving rules here replaces the default for this company.")}</p>
       )}
       {fallback && !fallback.credit_allowed && !fallback.has_rules && (
-        <p className="mb-2 text-xs text-zinc-400">{translate("No rules and no credit: everything bills to the guest.")}</p>
+        <p className="mb-2 text-xs text-muted-ink">{translate("No rules and no credit: everything bills to the guest.")}</p>
       )}
       <div className="mb-2 flex gap-1.5">
         <button
-          className="rounded-md border border-zinc-200 px-2 py-1 text-xs text-zinc-600 hover:border-brand-600"
+          className="rounded-md border border-line px-2 py-1 text-xs text-secondary-ink hover:border-accent-control"
           onClick={() => {
             setSaved(false)
             setToCompany(new Set(["Room", "Meal Plan"]))
           }}
         >{translate("Stay only")}</button>
         <button
-          className="rounded-md border border-zinc-200 px-2 py-1 text-xs text-zinc-600 hover:border-brand-600"
+          className="rounded-md border border-line px-2 py-1 text-xs text-secondary-ink hover:border-accent-control"
           onClick={() => {
             setSaved(false)
             setToCompany(new Set(ROUTABLE))
           }}
         >{translate("Everything")}</button>
         <button
-          className="rounded-md border border-zinc-200 px-2 py-1 text-xs text-zinc-600 hover:border-brand-600"
+          className="rounded-md border border-line px-2 py-1 text-xs text-secondary-ink hover:border-accent-control"
           onClick={() => {
             setSaved(false)
             setToCompany(new Set())
@@ -145,7 +145,7 @@ export default function BillingRulesEditor({ row }: { row: Row; reload: () => vo
           <label key={t} className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
-              className="size-4 accent-brand-600"
+              className="size-4 accent-focus"
               checked={toCompany.has(t)}
               onChange={() => toggle(t)}
             />
@@ -157,7 +157,7 @@ export default function BillingRulesEditor({ row }: { row: Row; reload: () => vo
         <Button variant="outline" disabled={busy} onClick={save}>
           {busy ? translate("Saving…") : translate("Save rules")}
         </Button>
-        {saved && <span className="text-xs text-emerald-600">{translate("Saved")}</span>}
+        {saved && <span className="text-xs text-success-text">{translate("Saved")}</span>}
       </div>
     </div>
   )

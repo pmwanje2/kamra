@@ -64,14 +64,14 @@ export function InfoTip({
         aria-label={(label ? t(label) : t("More information"))}
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="rounded-full text-zinc-400 hover:text-brand-700 focus-visible:text-brand-700 focus-visible:outline-2 focus-visible:outline-brand-600"
+        className="rounded-full text-muted-ink hover:text-accent-ink focus-visible:text-accent-ink focus-visible:outline-2 focus-visible:outline-focus"
       >
         <Info className="size-4" aria-hidden />
       </button>
       {open && (
         <span
           role="note"
-          className="absolute start-0 top-6 z-30 w-72 rounded-lg border border-zinc-200 bg-white p-3 text-start text-xs font-normal normal-case leading-relaxed tracking-normal text-zinc-600 shadow-lg"
+          className="absolute start-0 top-6 z-30 w-72 rounded-lg border border-line bg-surface p-3 text-start text-xs font-normal normal-case leading-relaxed tracking-normal text-secondary-ink shadow-lg"
         >
           {children}
           {href && (
@@ -79,7 +79,7 @@ export function InfoTip({
               href={href}
               target="_blank"
               rel="noreferrer"
-              className="mt-2 block font-medium text-brand-700 hover:underline"
+              className="mt-2 block font-medium text-accent-ink hover:underline"
             >
               {t("Read the guide")} →
             </a>

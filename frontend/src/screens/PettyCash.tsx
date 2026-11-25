@@ -116,13 +116,13 @@ export default function PettyCash() {
     <div className="w-full max-w-none space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-ink">
             {t("Cashier")}
           </p>
           <h1 className="text-2xl font-semibold tracking-tight">{t("Petty Cash")}</h1>
-          <p className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-zinc-500">
+          <p className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-muted-ink">
             <Building2 className="size-3.5 shrink-0" aria-hidden />
-            <span className="font-medium text-zinc-800">
+            <span className="font-medium text-ink">
               {report?.property_name || property}
             </span>
             <span>· {t("This property only - switch hotel in the header to see another.")}</span>
@@ -130,13 +130,13 @@ export default function PettyCash() {
         </div>
         <Link
           to="/cashier"
-          className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50"
+          className="rounded-lg border border-line px-3 py-1.5 text-sm text-secondary-ink hover:bg-canvas"
         >
           {t("My Till")}
         </Link>
       </div>
 
-      {err ? <p className="text-sm text-rose-600">{translate(err)}</p> : null}
+      {err ? <p className="text-sm text-danger-text">{translate(err)}</p> : null}
 
       <div className="grid gap-2 grid-cols-2 lg:grid-cols-4">
         {(
@@ -149,25 +149,25 @@ export default function PettyCash() {
         ).map(([label, val, kind]) => (
           <div
             key={label}
-            className="rounded-xl border border-zinc-200 bg-white px-3 py-2.5"
+            className="rounded-xl border border-line bg-surface px-3 py-2.5"
           >
-            <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-400">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-ink">
               {translate(label)}
             </p>
-            <p className="mt-0.5 text-lg font-semibold tabular-nums text-zinc-900">
+            <p className="mt-0.5 text-lg font-semibold tabular-nums text-ink">
               {val == null ? "-" : kind === "count" ? String(val) : inr(val)}
             </p>
           </div>
         ))}
       </div>
 
-      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-zinc-200 bg-zinc-50/80 px-4 py-3">
+      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-line bg-canvas/80 px-4 py-3">
         <label className="block text-sm">
-          <span className="mb-1 block text-zinc-600">
+          <span className="mb-1 block text-secondary-ink">
             {t("Imprest for this property")}
           </span>
           <input
-            className="w-40 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm"
+            className="w-40 rounded-lg border border-control bg-surface px-3 py-2 text-sm"
             inputMode="decimal"
             value={imprestAmt}
             onChange={(e) => setImprestAmt(e.target.value)}
@@ -180,7 +180,7 @@ export default function PettyCash() {
         >
           {t("Save imprest")}
         </Button>
-        <p className="max-w-md text-xs text-zinc-500">
+        <p className="max-w-md text-xs text-muted-ink">
           {t(
             "Each hotel / branch keeps its own float and voucher list. Changing property in the header switches the box.",
           )}
@@ -192,7 +192,7 @@ export default function PettyCash() {
           <CardTitle className="flex items-center gap-2 text-base">
             <Wallet className="size-4" /> {t("New voucher")}
           </CardTitle>
-          <p className="text-sm font-normal text-zinc-500">
+          <p className="text-sm font-normal text-muted-ink">
             {t(
               "Posts against this property's open till. Open My Till first if the drawer is closed.",
             )}
@@ -200,19 +200,19 @@ export default function PettyCash() {
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2">
           <input
-            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+            className="rounded-lg border border-control px-3 py-2 text-sm"
             placeholder={t("Payee")}
             value={payee}
             onChange={(e) => setPayee(e.target.value)}
           />
           <input
-            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+            className="rounded-lg border border-control px-3 py-2 text-sm"
             placeholder={t("Amount")}
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
           />
           <select
-            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+            className="rounded-lg border border-control px-3 py-2 text-sm"
             value={category}
             onChange={(e) => setCategory(e.target.value)}
           >
@@ -221,7 +221,7 @@ export default function PettyCash() {
             ))}
           </select>
           <input
-            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm sm:col-span-2"
+            className="rounded-lg border border-control px-3 py-2 text-sm sm:col-span-2"
             placeholder={t("Reason")}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
@@ -235,17 +235,17 @@ export default function PettyCash() {
         </CardContent>
       </Card>
 
-      <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white">
-        <div className="flex items-center justify-between border-b border-zinc-100 px-3 py-2">
-          <h2 className="text-sm font-semibold text-zinc-800">
+      <div className="overflow-x-auto rounded-xl border border-line bg-surface">
+        <div className="flex items-center justify-between border-b border-line-subtle px-3 py-2">
+          <h2 className="text-sm font-semibold text-ink">
             {t("Vouchers")}
           </h2>
-          <p className="text-xs text-zinc-400">
+          <p className="text-xs text-muted-ink">
             {t("{n} posted", { n: report?.voucher_count ?? 0 })}
           </p>
         </div>
         <table className="w-full table-fixed text-left text-sm">
-          <thead className="text-xs uppercase tracking-wide text-zinc-400">
+          <thead className="text-xs uppercase tracking-wide text-muted-ink">
             <tr>
               <th className="w-[14%] px-3 py-2">{t("Date")}</th>
               <th className="w-[22%] px-3 py-2">{t("Payee")}</th>
@@ -256,19 +256,19 @@ export default function PettyCash() {
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.name} className="border-t border-zinc-50">
+              <tr key={r.name} className="border-t border-line-subtle">
                 <td className="px-3 py-2">{String(r.voucher_date ?? "")}</td>
                 <td className="px-3 py-2">{String(r.payee ?? "")}</td>
                 <td className="px-3 py-2">{String(r.category ?? "")}</td>
                 <td className="px-3 py-2 tabular-nums">{inr(r.amount)}</td>
-                <td className="truncate px-3 py-2 text-zinc-500">
+                <td className="truncate px-3 py-2 text-muted-ink">
                   {String(r.reason ?? "")}
                 </td>
               </tr>
             ))}
             {!rows.length ? (
               <tr>
-                <td colSpan={5} className="px-3 py-10 text-center text-zinc-400">
+                <td colSpan={5} className="px-3 py-10 text-center text-muted-ink">
                   {t(
                     "No petty cash vouchers for this property yet. Post one above - other hotels keep their own lists.",
                   )}

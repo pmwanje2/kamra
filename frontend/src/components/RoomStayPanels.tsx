@@ -18,8 +18,8 @@ import type { RoomDetail } from "../lib/rooms"
 
 
 const inputCls =
-  "block min-h-11 w-full min-w-0 rounded-lg border border-zinc-300 bg-white px-3 text-base " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "block min-h-11 w-full min-w-0 rounded-lg border border-control bg-surface px-3 text-base " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 const CATEGORIES = [
   "Housekeeping", "Room Service", "Maintenance", "Front Desk", "Concierge", "Complaint", "Other",
@@ -36,8 +36,8 @@ function Note({ tone, children }: { tone: "error" | "ok"; children: React.ReactN
       className={cn(
         "mb-3 rounded-lg border px-3 py-2 text-sm",
         tone === "error"
-          ? "border-rose-200 bg-rose-50 text-rose-700"
-          : "border-emerald-200 bg-emerald-50 text-emerald-800",
+          ? "border-danger-line bg-danger-subtle text-danger-ink"
+          : "border-success-line bg-success-subtle text-success-ink",
       )}
     >
       {children}
@@ -90,21 +90,21 @@ export function GuestRequests({ d, onChanged }: { d: RoomDetail; onChanged: () =
   return (
     <div>
       {error && <Note tone="error">{translate(error)}</Note>}
-      <h3 className="mb-2 text-sm font-semibold text-zinc-800">{t("Open requests")}</h3>
+      <h3 className="mb-2 text-sm font-semibold text-ink">{t("Open requests")}</h3>
       {rows === null ? (
-        <p className="text-sm text-zinc-400">{t("Loading…")}</p>
+        <p className="text-sm text-muted-ink">{t("Loading…")}</p>
       ) : rows.length === 0 ? (
-        <p className="text-sm text-zinc-400">{t("No open requests for this room.")}</p>
+        <p className="text-sm text-muted-ink">{t("No open requests for this room.")}</p>
       ) : (
         <ul className="space-y-2">
           {rows.map((x) => (
-            <li key={x.name} className="rounded-xl border border-zinc-200 p-3">
+            <li key={x.name} className="rounded-xl border border-line p-3">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="font-medium text-zinc-800">{x.subject}</span>
+                <span className="font-medium text-ink">{x.subject}</span>
                 <Badge tone={x.status === "In Progress" ? "sky" : "amber"}>{t(x.status)}</Badge>
                 {x.overdue && <Badge tone="rose">{t("Overdue")}</Badge>}
               </div>
-              <div className="mt-0.5 text-xs text-zinc-500">
+              <div className="mt-0.5 text-xs text-muted-ink">
                 {t(x.category)} · {t(x.priority)}
               </div>
               <div className="mt-2 flex flex-wrap gap-2">
@@ -145,9 +145,9 @@ export function GuestRequests({ d, onChanged }: { d: RoomDetail; onChanged: () =
         </ul>
       )}
 
-      <h3 className="mb-2 mt-6 text-sm font-semibold text-zinc-800">{t("New request")}</h3>
-      <div className="space-y-3 rounded-xl border border-zinc-200 p-3">
-        <label className="block text-sm text-zinc-600">
+      <h3 className="mb-2 mt-6 text-sm font-semibold text-ink">{t("New request")}</h3>
+      <div className="space-y-3 rounded-xl border border-line p-3">
+        <label className="block text-sm text-secondary-ink">
           {t("What does the guest need?")}
           <input
             value={form.subject}
@@ -157,7 +157,7 @@ export function GuestRequests({ d, onChanged }: { d: RoomDetail; onChanged: () =
           />
         </label>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <label className="block text-sm text-zinc-600">
+          <label className="block text-sm text-secondary-ink">
             {t("Team")}
             <select
               value={form.category}
@@ -171,7 +171,7 @@ export function GuestRequests({ d, onChanged }: { d: RoomDetail; onChanged: () =
               ))}
             </select>
           </label>
-          <label className="block text-sm text-zinc-600">
+          <label className="block text-sm text-secondary-ink">
             {t("Priority")}
             <select
               value={form.priority}
@@ -207,8 +207,8 @@ export function GuestRequests({ d, onChanged }: { d: RoomDetail; onChanged: () =
           {t("Add request")}
         </Button>
       </div>
-      <p className="mt-3 text-xs text-zinc-400">
-        <Link to="/tickets" className="text-brand-700 hover:underline">
+      <p className="mt-3 text-xs text-muted-ink">
+        <Link to="/tickets" className="text-accent-ink hover:underline">
           {t("All guest requests")}
         </Link>
       </p>
@@ -330,25 +330,25 @@ export function StayBilling({ d, onChanged }: { d: RoomDetail; onChanged: () => 
       )}
       {ok && <Note tone="ok">{ok}</Note>}
 
-      <h3 className="mb-2 text-sm font-semibold text-zinc-800">{t("Folios")}</h3>
+      <h3 className="mb-2 text-sm font-semibold text-ink">{t("Folios")}</h3>
       {folios === null ? (
-        <p className="text-sm text-zinc-400">{t("Loading…")}</p>
+        <p className="text-sm text-muted-ink">{t("Loading…")}</p>
       ) : folios.length === 0 ? (
-        <p className="text-sm text-zinc-400">{t("No folio yet.")}</p>
+        <p className="text-sm text-muted-ink">{t("No folio yet.")}</p>
       ) : (
         <ul className="space-y-2">
           {folios.map((f) => (
             <li
               key={f.name}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-zinc-200 px-3 py-2"
+              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line px-3 py-2"
             >
               <span className="min-w-0">
-                <span className="block font-medium text-zinc-800">
+                <span className="block font-medium text-ink">
                   {t("{type} folio", { type: t(f.folio_type) })}
                   {f.company && ` · ${f.company}`}
                   {f.status === "Closed" && ` · ${t("Closed")}`}
                 </span>
-                <span className="block text-xs text-zinc-500">
+                <span className="block text-xs text-muted-ink">
                   {t("Bill {total} · paid {paid}", {
                     total: fmtMoney(f.grand_total),
                     paid: fmtMoney(f.payments_total),
@@ -359,14 +359,14 @@ export function StayBilling({ d, onChanged }: { d: RoomDetail; onChanged: () => 
                 <span
                   className={cn(
                     "tabular-nums text-base font-semibold",
-                    f.balance > 0 ? "text-amber-700" : "text-zinc-700",
+                    f.balance > 0 ? "text-warning-ink" : "text-secondary-ink",
                   )}
                 >
                   {fmtMoney(f.balance)}
                 </span>
                 <Link
                   to={`/billing/${encodeURIComponent(f.name)}`}
-                  className="inline-flex min-h-11 items-center rounded-lg px-2 text-sm font-medium text-brand-700 hover:bg-brand-50"
+                  className="inline-flex min-h-11 items-center rounded-lg px-2 text-sm font-medium text-accent-ink hover:bg-accent-subtle"
                 >
                   {t("Open full folio")}
                 </Link>
@@ -378,15 +378,15 @@ export function StayBilling({ d, onChanged }: { d: RoomDetail; onChanged: () => 
 
       {lines.length > 0 && (
         <>
-          <h3 className="mb-2 mt-5 text-sm font-semibold text-zinc-800">{t("Recent lines")}</h3>
-          <ul className="divide-y divide-zinc-100 text-sm">
+          <h3 className="mb-2 mt-5 text-sm font-semibold text-ink">{t("Recent lines")}</h3>
+          <ul className="divide-y divide-line-subtle text-sm">
             {lines.map((l) => (
               <li key={l.key} className="flex items-center justify-between gap-3 py-1.5">
-                <span className="min-w-0 truncate text-zinc-700">
-                  <span className="me-2 text-xs tabular-nums text-zinc-400">{l.date}</span>
+                <span className="min-w-0 truncate text-secondary-ink">
+                  <span className="me-2 text-xs tabular-nums text-muted-ink">{l.date}</span>
                   {translate(l.label)}
                 </span>
-                <span className={cn("shrink-0 tabular-nums", l.pay ? "text-emerald-700" : "text-zinc-800")}>
+                <span className={cn("shrink-0 tabular-nums", l.pay ? "text-success-ink" : "text-ink")}>
                   {l.pay ? "-" : ""}
                   {fmtMoney(l.amount)}
                 </span>
@@ -396,10 +396,10 @@ export function StayBilling({ d, onChanged }: { d: RoomDetail; onChanged: () => 
         </>
       )}
 
-      <h3 className="mb-2 mt-6 text-sm font-semibold text-zinc-800">{t("Post a charge")}</h3>
-      <div className="space-y-3 rounded-xl border border-zinc-200 p-3">
+      <h3 className="mb-2 mt-6 text-sm font-semibold text-ink">{t("Post a charge")}</h3>
+      <div className="space-y-3 rounded-xl border border-line p-3">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <label className="block text-sm text-zinc-600">
+          <label className="block text-sm text-secondary-ink">
             {t("Type")}
             <select
               value={charge.charge_type}
@@ -413,7 +413,7 @@ export function StayBilling({ d, onChanged }: { d: RoomDetail; onChanged: () => 
               ))}
             </select>
           </label>
-          <label className="block text-sm text-zinc-600">
+          <label className="block text-sm text-secondary-ink">
             {t("Amount (before tax)")}
             <input
               inputMode="decimal"
@@ -422,7 +422,7 @@ export function StayBilling({ d, onChanged }: { d: RoomDetail; onChanged: () => 
               className={cn(inputCls, "mt-1")}
             />
           </label>
-          <label className="block text-sm text-zinc-600">
+          <label className="block text-sm text-secondary-ink">
             {t("What for")}
             <input
               value={charge.description}
@@ -433,7 +433,7 @@ export function StayBilling({ d, onChanged }: { d: RoomDetail; onChanged: () => 
           </label>
           {/* no picker where the hotel charges no tax (its only rate is 0%) */}
           {!(rates.length === 1 && Number(rates[0]) === 0) && (
-          <label className="block text-sm text-zinc-600">
+          <label className="block text-sm text-secondary-ink">
             {t("{tax} rate", { tax: loc.tax_label || t("Tax") })}
             <select
               value={charge.gst_rate}
@@ -450,16 +450,16 @@ export function StayBilling({ d, onChanged }: { d: RoomDetail; onChanged: () => 
           )}
         </div>
         {sellsAlcohol() && (
-        <label className="flex min-h-11 items-center gap-2 text-sm text-zinc-600">
+        <label className="flex min-h-11 items-center gap-2 text-sm text-secondary-ink">
           <input
             type="checkbox"
-            className="size-5 accent-brand-600"
+            className="size-5 accent-focus"
             checked={charge.is_alcohol}
             onChange={(e) => setCharge({ ...charge, is_alcohol: e.target.checked })}
           />
           {t("Alcohol")}
         </label>)}
-        <p className="text-xs text-zinc-400">
+        <p className="text-xs text-muted-ink">
           {t("The hotel's billing rules pick the folio, and food and drink take the hotel's food tax rate.")}
         </p>
         <Button
@@ -483,11 +483,11 @@ export function StayBilling({ d, onChanged }: { d: RoomDetail; onChanged: () => 
         </Button>
       </div>
 
-      <h3 className="mb-2 mt-6 text-sm font-semibold text-zinc-800">{t("Take a payment")}</h3>
-      <div className="space-y-3 rounded-xl border border-zinc-200 p-3">
+      <h3 className="mb-2 mt-6 text-sm font-semibold text-ink">{t("Take a payment")}</h3>
+      <div className="space-y-3 rounded-xl border border-line p-3">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {(folios?.length ?? 0) > 1 && (
-            <label className="block text-sm text-zinc-600 sm:col-span-2">
+            <label className="block text-sm text-secondary-ink sm:col-span-2">
               {t("Folio")}
               <select
                 value={pay.folio}
@@ -502,7 +502,7 @@ export function StayBilling({ d, onChanged }: { d: RoomDetail; onChanged: () => 
               </select>
             </label>
           )}
-          <label className="block text-sm text-zinc-600">
+          <label className="block text-sm text-secondary-ink">
             {t("How")}
             <select
               value={pay.mode}
@@ -516,7 +516,7 @@ export function StayBilling({ d, onChanged }: { d: RoomDetail; onChanged: () => 
               ))}
             </select>
           </label>
-          <label className="block text-sm text-zinc-600">
+          <label className="block text-sm text-secondary-ink">
             {t("Amount")}
             <input
               inputMode="decimal"
@@ -525,7 +525,7 @@ export function StayBilling({ d, onChanged }: { d: RoomDetail; onChanged: () => 
               className={cn(inputCls, "mt-1")}
             />
           </label>
-          <label className="block text-sm text-zinc-600 sm:col-span-2">
+          <label className="block text-sm text-secondary-ink sm:col-span-2">
             {t("Reference (optional)")}
             <input
               value={pay.reference}

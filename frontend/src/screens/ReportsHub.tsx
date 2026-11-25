@@ -103,28 +103,28 @@ export default function ReportsHub() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-zinc-900">{t("Reports")}</h1>
-        <p className="text-xs text-zinc-500">{t("Every report in one place.")}</p>
+        <h1 className="text-xl font-semibold text-ink">{t("Reports")}</h1>
+        <p className="text-xs text-muted-ink">{t("Every report in one place.")}</p>
       </div>
       {sections.length === 0 && (
-        <p className="text-sm text-zinc-500">{t("Your role has no reports.")}</p>
+        <p className="text-sm text-muted-ink">{t("Your role has no reports.")}</p>
       )}
       {sections.map((s) => (
         <section key={s.title}>
-          <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-400">{t(s.title)}</h2>
+          <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-ink">{t(s.title)}</h2>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {s.items.map((r) => (
               <Link
                 key={r.to}
                 to={r.to}
-                className="group flex gap-3 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm transition-colors hover:border-brand-300"
+                className="group flex gap-3 rounded-xl border border-line bg-surface p-4 shadow-sm transition-colors hover:border-accent-line-strong"
               >
-                <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-700">
+                <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-accent-subtle text-accent-ink">
                   <r.icon className="size-4" aria-hidden />
                 </span>
                 <span className="min-w-0">
-                  <span className="block text-sm font-semibold text-zinc-900 group-hover:text-brand-700">{t(r.label)}</span>
-                  <span className="mt-0.5 block text-xs text-zinc-500">{t(r.blurb)}</span>
+                  <span className="block text-sm font-semibold text-ink group-hover:text-accent-ink">{t(r.label)}</span>
+                  <span className="mt-0.5 block text-xs text-muted-ink">{t(r.blurb)}</span>
                 </span>
               </Link>
             ))}

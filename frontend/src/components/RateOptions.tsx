@@ -136,7 +136,7 @@ export function RateOptions({
     }
   }, [roomType, checkIn, checkOut, adults, children, extraBeds, mealPlan, voucher, ratePlan, company, t, syncRev])
 
-  if (err) return <p className="text-xs text-zinc-400">{translate(err)}</p>
+  if (err) return <p className="text-xs text-muted-ink">{translate(err)}</p>
   if (!data || !Array.isArray(data.plans) || !Array.isArray(data.nights)) return null
   // no plan picked: the company's negotiated plan prices the stay, as the quote does
   const picked = ratePlan || data.company_plan || ""
@@ -202,9 +202,9 @@ export function RateOptions({
     }
   }
   return (
-    <div className="space-y-3 rounded-xl border border-zinc-200 p-4">
+    <div className="space-y-3 rounded-xl border border-line p-4">
       <div className="flex items-center gap-1.5">
-        <h3 className="text-sm font-semibold text-zinc-800">{t("Rates for these dates")}</h3>
+        <h3 className="text-sm font-semibold text-ink">{t("Rates for these dates")}</h3>
         {!selected?.tariff && <InfoTip doc="revenue">
           {t("BAR is the best available rate: the room type's base price. A season or a busy-house (demand) rule can move it for a date. A rate plan then adjusts the whole stay, and a voucher comes off the total.")}
         </InfoTip>}
@@ -213,11 +213,11 @@ export function RateOptions({
       {selected?.tariff || selected?.available === false || (required && !ratePlan) ? null : <>
       {canSetPrice && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-          <label htmlFor="night-room-total" className="text-zinc-600">
+          <label htmlFor="night-room-total" className="text-secondary-ink">
             {t("Room total")}
           </label>
           <span className="inline-flex items-center gap-1">
-            <span className="text-zinc-500">{locale().currency}</span>
+            <span className="text-muted-ink">{locale().currency}</span>
             <input
               id="night-room-total"
               inputMode="decimal"
@@ -225,7 +225,7 @@ export function RateOptions({
                 "w-28 rounded-md border px-2 py-1 text-right tabular-nums",
                 drafts.total !== undefined && parsePrice(drafts.total, digits) === null
                   ? "border-rose-400"
-                  : "border-zinc-300",
+                  : "border-control",
               )}
               value={drafts.total ?? plain(roomTotal)}
               aria-invalid={drafts.total !== undefined && parsePrice(drafts.total, digits) === null}
@@ -233,12 +233,12 @@ export function RateOptions({
               onBlur={() => draft("total", null)}
             />
           </span>
-          <span className="text-xs text-zinc-400">{basis}</span>
+          <span className="text-xs text-muted-ink">{basis}</span>
         </div>
       )}
-      {!canSetPrice && lockedNote && <p className="text-xs text-zinc-400">{lockedNote}</p>}
+      {!canSetPrice && lockedNote && <p className="text-xs text-muted-ink">{lockedNote}</p>}
 
-      <ul className="divide-y divide-zinc-100 text-sm">
+      <ul className="divide-y divide-line-subtle text-sm">
         {data.nights.map((x, i) => {
           const typed = isOverride(nightPrices[x.date], x.rate, digits)
           const bad = drafts[x.date] !== undefined && drafts[x.date].trim() !== "" && parsePrice(drafts[x.date], digits) === null
@@ -247,13 +247,13 @@ export function RateOptions({
               key={x.date}
               className={cn(
                 "flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5",
-                typed && "-mx-2 rounded-md bg-brand-50 px-2",
+                typed && "-mx-2 rounded-md bg-accent-subtle px-2",
               )}
             >
-              <span className="w-24 text-zinc-500">{x.date.slice(5)}</span>
+              <span className="w-24 text-muted-ink">{x.date.slice(5)}</span>
               {canSetPrice ? (
                 <span className="inline-flex items-center gap-1">
-                  <span className="text-zinc-500">{locale().currency}</span>
+                  <span className="text-muted-ink">{locale().currency}</span>
                   <input
                     ref={(el) => {
                       inputs.current[x.date] = el
@@ -263,7 +263,7 @@ export function RateOptions({
                     aria-invalid={bad}
                     className={cn(
                       "w-28 rounded-md border px-2 py-1 text-right font-medium tabular-nums",
-                      bad ? "border-rose-400" : typed ? "border-brand-600" : "border-zinc-300",
+                      bad ? "border-rose-400" : typed ? "border-accent-control" : "border-control",
                     )}
                     value={drafts[x.date] ?? plain(priceOf(x))}
                     onChange={(e) => typeNight(x, e.target.value)}
@@ -278,12 +278,12 @@ export function RateOptions({
               )}
               {typed ? (
                 <>
-                  <span className="text-xs text-zinc-400 tabular-nums line-through">
+                  <span className="text-xs text-muted-ink tabular-nums line-through">
                     {t("BAR {r}", { r: homeText(x.rate) })}
                   </span>
                   <button
                     type="button"
-                    className="text-xs text-brand-700 underline"
+                    className="text-xs text-accent-ink underline"
                     onClick={() => {
                       draft(x.date, null)
                       setNight(x, null)
@@ -294,18 +294,18 @@ export function RateOptions({
                 </>
               ) : (
                 x.rate !== x.bar && (
-                  <span className="text-xs text-zinc-400 tabular-nums">
+                  <span className="text-xs text-muted-ink tabular-nums">
                     {t("BAR {r}", { r: homeText(x.bar) })}
                   </span>
                 )
               )}
               {x.season && (
-                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800">
+                <span className="rounded-full bg-warning-subtle px-2 py-0.5 text-xs text-warning-ink">
                   {x.season.label} {x.season.change}
                 </span>
               )}
               {x.demand && !typed && (
-                <span className="rounded-full bg-rose-50 px-2 py-0.5 text-xs text-rose-800">
+                <span className="rounded-full bg-danger-subtle px-2 py-0.5 text-xs text-danger-ink">
                   {t("Busy house {p}%", { p: Math.round(x.occupancy) })}
                   {x.demand.premium_pct ? ` +${x.demand.premium_pct}%` : ""}
                 </span>
@@ -315,30 +315,30 @@ export function RateOptions({
         })}
       </ul>
       {canSetPrice && (
-        <p className="text-xs text-zinc-400">
+        <p className="text-xs text-muted-ink">
           {t("Type a price to set a night by hand. Up and down arrows move between nights; Alt+Backspace returns a night to BAR.")}
         </p>
       )}
       {hasTyped && (
-        <p className="text-xs text-zinc-500">
+        <p className="text-xs text-muted-ink">
           {t("Prices set by hand cannot be combined with a rate plan or a voucher.")}
         </p>
       )}
       {!moved && (
-        <p className="text-xs text-zinc-400">{t("No season or demand rule applies: every night is at BAR.")}</p>
+        <p className="text-xs text-muted-ink">{t("No season or demand rule applies: every night is at BAR.")}</p>
       )}
       </>}
 
       {data.plans.length > 0 && (
         <div>
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">{t("Rate plans")}</p>
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-ink">{t("Rate plans")}</p>
           <div className="space-y-1">
             {!required && !data.company_plan && <button
               type="button"
               onClick={() => onPickPlan("")}
               className={cn(
                 "flex w-full items-center justify-between gap-3 rounded-xl border px-3.5 py-2.5 transition-colors text-sm",
-                !picked ? "border-brand-600 bg-brand-50" : "border-zinc-200 hover:bg-zinc-50",
+                !picked ? "border-accent-control bg-accent-subtle" : "border-line hover:bg-canvas",
               )}
             >
               <span>{t("Standard rate")}</span>
@@ -355,26 +355,26 @@ export function RateOptions({
                 aria-pressed={picked === p.name}
                 className={cn(
                   "flex w-full items-center justify-between gap-3 text-start rounded-xl border px-3.5 py-2.5 transition-colors text-sm disabled:cursor-not-allowed disabled:opacity-50",
-                  picked === p.name ? "border-brand-600 bg-brand-50" : "border-zinc-200 hover:bg-zinc-50",
+                  picked === p.name ? "border-accent-control bg-accent-subtle" : "border-line hover:bg-canvas",
                 )}
               >
-                <span className="font-semibold text-zinc-900">
+                <span className="font-semibold text-ink">
                   {p.label}
-                  {p.code ? <span className="ms-1 rounded bg-zinc-100 px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-zinc-600">{p.code}</span> : null}
-                  {planNotes(p).length > 0 && <span className="mt-0.5 block text-xs font-normal text-zinc-500">
+                  {p.code ? <span className="ms-1 rounded bg-subtle px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-secondary-ink">{p.code}</span> : null}
+                  {planNotes(p).length > 0 && <span className="mt-0.5 block text-xs font-normal text-muted-ink">
                     {planNotes(p).join(" · ")}
                   </span>}
                 </span>
-                {p.available === false ? <span className="text-rose-700">{p.refusal}</span> : p.tariff ? (
+                {p.available === false ? <span className="text-danger-ink">{p.refusal}</span> : p.tariff ? (
                   <span className="text-right font-semibold tabular-nums">
                     {currencyText(p.tariff.currency, p.tariff.nightly, moneyLocale())}{" "}
-                    <span className="text-xs font-normal text-zinc-500">/ {t("night")}</span>
-                    <span className="block text-xs font-normal text-zinc-500">≈ {currencyText(p.tariff.property_currency, p.agreed_rate ?? p.room_total / Math.max(1, data.nights.length), moneyLocale())}</span>
+                    <span className="text-xs font-normal text-muted-ink">/ {t("night")}</span>
+                    <span className="block text-xs font-normal text-muted-ink">≈ {currencyText(p.tariff.property_currency, p.agreed_rate ?? p.room_total / Math.max(1, data.nights.length), moneyLocale())}</span>
                   </span>
                 ) : <span className="tabular-nums">
                   {homeText(p.room_total)}
                   {p.vs_plain !== 0 && (
-                    <span className={cn("ms-2 text-xs", p.vs_plain < 0 ? "text-emerald-700" : "text-rose-700")}>
+                    <span className={cn("ms-2 text-xs", p.vs_plain < 0 ? "text-success-ink" : "text-danger-ink")}>
                       {p.vs_plain > 0 ? "+" : ""}
                       {homeText(p.vs_plain)}
                     </span>
@@ -383,7 +383,7 @@ export function RateOptions({
               </button>
             ))}
           </div>
-          {references.map(r => <p key={JSON.stringify(r)} className="mt-2 text-xs text-zinc-600 tabular-nums">
+          {references.map(r => <p key={JSON.stringify(r)} className="mt-2 text-xs text-secondary-ink tabular-nums">
             {t("Published rate: 1 {foreign} = {rate} {home} · Effective {date}", {
               foreign: r.currency, rate: formatFxRate(r.fx_rate, moneyLocale()), home: r.property_currency, date: tariffDate(r.fx_date, moneyLocale()),
             })}
@@ -392,7 +392,7 @@ export function RateOptions({
       )}
 
       {data.voucher && (
-        <p className={cn("text-sm", data.voucher.valid ? "text-emerald-700" : "text-rose-700")}>
+        <p className={cn("text-sm", data.voucher.valid ? "text-success-ink" : "text-danger-ink")}>
           {data.voucher.valid
             ? data.voucher.voucher_currency && data.voucher.voucher_currency !== locale().currency
               ? t("Voucher {code} takes {txAmount} ({homeAmount}) off.", {

@@ -85,7 +85,7 @@ const EOD_KEYWORDS = ["End of day", "EOD", "Close the day", "Roll the date"]
 
 /** Shared tile treatment for switcher and launcher. One quiet system, not a rainbow. */
 export const APP_TILE =
-  "border border-zinc-200 bg-zinc-50 text-zinc-700"
+  "border border-line bg-canvas text-secondary-ink"
 
 export interface AppNavItem {
   to?: string

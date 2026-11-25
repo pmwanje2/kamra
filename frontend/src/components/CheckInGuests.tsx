@@ -59,8 +59,8 @@ const draft = (o?: GuestOccupant): Draft => ({
 })
 
 const inputCls =
-  "w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-2 text-sm " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "w-full rounded-lg border border-control bg-surface px-2.5 py-2 text-sm " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 type Shot = { who: "main" } | { who: number; kind: "id" | "photo" }
 
@@ -172,18 +172,18 @@ export default function CheckInGuests({ reservation, guest, guestName, guestHasP
   return (
     <section className="space-y-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h4 className="text-sm font-semibold text-zinc-800">
+        <h4 className="text-sm font-semibold text-ink">
           {t("Everyone staying ({n})", { n: total })}
         </h4>
-        <span className="text-xs text-zinc-500">
+        <span className="text-xs text-muted-ink">
           {t("{adults} adults, {children} children on the booking", { adults: adults || 1, children: children || 0 })}
         </span>
       </div>
 
       {/* main guest: the details form above edits them; here the photo and scan */}
-      <div className="rounded-xl border border-zinc-200 bg-white p-3">
+      <div className="rounded-xl border border-line bg-surface p-3">
         <div className="flex flex-wrap items-center gap-2">
-          <UserRound className="size-4 text-zinc-400" aria-hidden />
+          <UserRound className="size-4 text-muted-ink" aria-hidden />
           <span className="min-w-0 flex-1 truncate text-sm font-semibold">{guestName}</span>
           <PhotoButton has={guestHasPhoto} disabled={busy || !guest} onClick={() => setShot({ who: "main" })} />
           <Button type="button" variant="outline" disabled={busy} onClick={() => setScanning("main")}>
@@ -194,7 +194,7 @@ export default function CheckInGuests({ reservation, guest, guestName, guestHasP
           <div className="mt-2"><IdScan onRead={onMainRead} onClose={() => setScanning(null)} /></div>
         )}
         {mainRead && (
-          <p className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+          <p className="mt-2 rounded-lg bg-success-subtle px-3 py-2 text-xs text-success-ink">
             {t("Read from the ID: {name}{dob}. Check it is the guest at the desk.", {
               name: mainRead.full_name || mainRead.id_number,
               dob: mainRead.date_of_birth ? ` · ${mainRead.date_of_birth}` : "",
@@ -204,9 +204,9 @@ export default function CheckInGuests({ reservation, guest, guestName, guestHasP
       </div>
 
       {rows.map((d, i) => (
-        <div key={i} className="rounded-xl border border-zinc-200 bg-white p-3">
+        <div key={i} className="rounded-xl border border-line bg-surface p-3">
           <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className="flex-1 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+            <span className="flex-1 text-xs font-semibold uppercase tracking-wider text-muted-ink">
               {t("Guest {n}", { n: i + 2 })}
             </span>
             {!noId(d) && (
@@ -216,7 +216,7 @@ export default function CheckInGuests({ reservation, guest, guestName, guestHasP
                 <Button type="button" variant="outline" disabled={busy || !d.full_name.trim()}
                   onClick={() => setShot({ who: i, kind: "id" })}
                   title={t("Take a picture of this guest's ID")}>
-                  {d.has_id ? <Check className="size-4 text-emerald-600" /> : <IdCard className="size-4" />}
+                  {d.has_id ? <Check className="size-4 text-success-text" /> : <IdCard className="size-4" />}
                   {t("ID picture")}
                 </Button>
                 <Button type="button" variant="outline" disabled={busy} onClick={() => setScanning(i)}>
@@ -239,7 +239,7 @@ export default function CheckInGuests({ reservation, guest, guestName, guestHasP
               {["Male", "Female", "Other"].map((g) => <option key={g} value={g}>{translate(g)}</option>)}
             </select>
             {noId(d) ? (
-              <p className="col-span-2 self-center text-xs text-zinc-500 sm:col-span-4">
+              <p className="col-span-2 self-center text-xs text-muted-ink sm:col-span-4">
                 {t("Child: name and age are enough, no ID needed.")}
               </p>
             ) : (
@@ -257,7 +257,7 @@ export default function CheckInGuests({ reservation, guest, guestName, guestHasP
             )}
           </div>
           {d.age === "" && d.stated != null && (
-            <p className="mt-1 text-xs text-amber-700">
+            <p className="mt-1 text-xs text-warning-ink">
               {t("guest says age {v0}, not confirmed", { v0: String(d.stated) })}
             </p>
           )}
@@ -274,9 +274,9 @@ export default function CheckInGuests({ reservation, guest, guestName, guestHasP
             {busy && <Loader2 className="size-4 animate-spin" />}{t("Save guests")}
           </Button>
         )}
-        {dirty && <span className="text-xs text-amber-700">{t("Not saved yet")}</span>}
+        {dirty && <span className="text-xs text-warning-ink">{t("Not saved yet")}</span>}
       </div>
-      {err && <p className="text-xs font-medium text-rose-700">{err}</p>}
+      {err && <p className="text-xs font-medium text-danger-ink">{err}</p>}
 
       {shot && (
         <CameraCapture
@@ -295,7 +295,7 @@ function PhotoButton({ has, disabled, onClick }: { has: boolean; disabled: boole
   return (
     <Button type="button" variant="outline" disabled={disabled} onClick={onClick}
       title={t("Take the guest's photo")}>
-      {has ? <Check className="size-4 text-emerald-600" /> : <Camera className="size-4" />}
+      {has ? <Check className="size-4 text-success-text" /> : <Camera className="size-4" />}
       {t("Photo")}
     </Button>
   )

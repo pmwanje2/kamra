@@ -64,8 +64,8 @@ interface Sla {
 const ticketLink = (name: string) => `/tickets?ticket=${encodeURIComponent(name)}`
 
 const inputCls =
-  "rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "rounded-lg border border-control bg-surface px-3 py-1.5 text-sm " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 function humanMins(m: number | null): string {
   if (m == null) return "-"
@@ -113,12 +113,12 @@ export default function OpsSLA() {
       </CardHeader>
       <CardContent>
         {rows.length === 0 ? (
-          <p className="py-6 text-center text-sm text-zinc-400">{translate("No tickets.")}</p>
+          <p className="py-6 text-center text-sm text-muted-ink">{translate("No tickets.")}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-200 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
+                <tr className="border-b border-line text-left text-xs font-medium uppercase tracking-wider text-muted-ink">
                   <th className="py-2 pr-3">{title.includes("category") ? translate("Category") : translate("Priority")}</th>
                   <th className="py-2 pr-3 text-right">{translate("Tickets")}</th>
                   <th className="py-2 pr-3 text-right">{translate("Resolved")}</th>
@@ -127,7 +127,7 @@ export default function OpsSLA() {
                   <th className="py-2 text-right">{translate("Avg resolve")}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-100">
+              <tbody className="divide-y divide-line-subtle">
                 {rows.map((r) => (
                   <tr key={r.label}>
                     <td className="py-2 pr-3 font-medium">{translate(r.label)}</td>
@@ -154,21 +154,21 @@ export default function OpsSLA() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="flex items-center gap-2 text-xl font-bold text-zinc-800">
-            <AlarmClock className="size-5 text-brand-600" />{translate("Operations SLA")}</h1>
-          <p className="text-xs text-zinc-500">{translate("Are guest requests being resolved inside their promised window?")}</p>
+          <h1 className="flex items-center gap-2 text-xl font-bold text-ink">
+            <AlarmClock className="size-5 text-accent-text" />{translate("Operations SLA")}</h1>
+          <p className="text-xs text-muted-ink">{translate("Are guest requests being resolved inside their promised window?")}</p>
         </div>
         <div className="flex items-center gap-2 text-sm">
           <input type="date" className={inputCls} value={from}
             onChange={(e) => setFrom(e.target.value)} />
-          <span className="text-zinc-400">→</span>
+          <span className="text-muted-ink">→</span>
           <input type="date" className={inputCls} value={to}
             onChange={(e) => setTo(e.target.value)} />
         </div>
       </div>
 
       {error && (
-        <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+        <div className="rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">
           {translate(error)}
         </div>
       )}
@@ -177,20 +177,20 @@ export default function OpsSLA() {
         <>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
             {[
-              ["Tickets", String(data.total), "text-zinc-800"],
-              ["Resolved", `${data.resolved} / ${data.total}`, "text-zinc-800"],
+              ["Tickets", String(data.total), "text-ink"],
+              ["Resolved", `${data.resolved} / ${data.total}`, "text-ink"],
               [
                 t("Breach rate"),
                 `${data.breach_pct}%`,
-                data.breach_pct >= 25 ? "text-rose-600" : data.breach_pct >= 10 ? "text-amber-600" : "text-brand-600",
+                data.breach_pct >= 25 ? "text-danger-text" : data.breach_pct >= 10 ? "text-warning-text" : "text-accent-text",
               ],
-              ["Avg resolve", humanMins(data.avg_resolve_mins), "text-zinc-800"],
-              ["Open now (all time)", String(data.open_total), "text-zinc-800"],
-              ["Unassigned", String(data.unassigned_open), data.unassigned_open ? "text-amber-600" : "text-zinc-800"],
+              ["Avg resolve", humanMins(data.avg_resolve_mins), "text-ink"],
+              ["Open now (all time)", String(data.open_total), "text-ink"],
+              ["Unassigned", String(data.unassigned_open), data.unassigned_open ? "text-warning-text" : "text-ink"],
             ].map(([label, val, tone]) => (
               <Card key={label}>
                 <CardContent className="p-4">
-                  <div className="text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+                  <div className="text-[11px] font-medium uppercase tracking-wider text-muted-ink">
                     {translate(label)}
                   </div>
                   <div className={`mt-1 text-2xl font-bold ${tone}`}>{val}</div>
@@ -207,19 +207,19 @@ export default function OpsSLA() {
           <Card>
             <CardHeader>
               <CardTitle>{translate("Overdue now")}{data.overdue.length > 0 && (
-                  <span className="ml-2 text-sm font-normal text-rose-600">
+                  <span className="ml-2 text-sm font-normal text-danger-text">
                     {data.overdue.length}{translate(" past due")}</span>
                 )}
               </CardTitle>
             </CardHeader>
             <CardContent>
               {data.overdue.length === 0 ? (
-                <p className="py-6 text-center text-sm text-zinc-400">{translate("Nothing overdue - every open request is inside its window.")}</p>
+                <p className="py-6 text-center text-sm text-muted-ink">{translate("Nothing overdue - every open request is inside its window.")}</p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-zinc-200 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
+                      <tr className="border-b border-line text-left text-xs font-medium uppercase tracking-wider text-muted-ink">
                         <th className="py-2 pr-3">{translate("Ticket")}</th>
                         <th className="py-2 pr-3">{translate("Subject")}</th>
                         <th className="py-2 pr-3">{translate("With")}</th>
@@ -228,17 +228,17 @@ export default function OpsSLA() {
                         <th className="py-2 text-right">{translate("Overdue by")}</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-zinc-100">
+                    <tbody className="divide-y divide-line-subtle">
                       {data.overdue.map((o) => (
                         <tr key={o.name}>
                           <td className="py-2 pr-3 font-mono text-xs">
-                            <Link to={ticketLink(o.name)} className="text-brand-700 hover:underline">{o.name}</Link>
+                            <Link to={ticketLink(o.name)} className="text-accent-ink hover:underline">{o.name}</Link>
                           </td>
                           <td className="py-2 pr-3">{o.subject ?? ""}</td>
-                          <td className="py-2 pr-3">{o.assigned_to_user ?? <span className="text-amber-600">{translate("Unassigned")}</span>}</td>
+                          <td className="py-2 pr-3">{o.assigned_to_user ?? <span className="text-warning-text">{translate("Unassigned")}</span>}</td>
                           <td className="py-2 pr-3">{translate(o.category)}</td>
                           <td className="py-2 pr-3">{o.priority}</td>
-                          <td className="py-2 text-right tabular-nums text-rose-600">
+                          <td className="py-2 text-right tabular-nums text-danger-text">
                             {o.overdue_hours}{translate(" h")}</td>
                         </tr>
                       ))}
@@ -255,18 +255,18 @@ export default function OpsSLA() {
               </CardHeader>
               <CardContent>
                 {data.by_resolver.length === 0 ? (
-                  <p className="py-6 text-center text-sm text-zinc-400">{translate("No tickets solved in this window.")}</p>
+                  <p className="py-6 text-center text-sm text-muted-ink">{translate("No tickets solved in this window.")}</p>
                 ) : (
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-zinc-200 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
+                      <tr className="border-b border-line text-left text-xs font-medium uppercase tracking-wider text-muted-ink">
                         <th className="py-2 pr-3">{translate("Person")}</th>
                         <th className="py-2 pr-3 text-right">{translate("Solved")}</th>
                         <th className="py-2 pr-3 text-right">{translate("Late")}</th>
                         <th className="py-2 text-right">{translate("Avg time")}</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-zinc-100">
+                    <tbody className="divide-y divide-line-subtle">
                       {data.by_resolver.map((r) => (
                         <tr key={r.user ?? "none"}>
                           <td className="py-2 pr-3 font-medium">{r.name}</td>
@@ -278,7 +278,7 @@ export default function OpsSLA() {
                     </tbody>
                   </table>
                 )}
-                <p className="mt-2 text-xs text-zinc-400">{translate("Tickets solved before tracking began show as \"Not recorded\".")}</p>
+                <p className="mt-2 text-xs text-muted-ink">{translate("Tickets solved before tracking began show as \"Not recorded\".")}</p>
               </CardContent>
             </Card>
 
@@ -289,15 +289,15 @@ export default function OpsSLA() {
               <CardContent>
                 <div className="grid grid-cols-4 gap-2">
                   {data.aging.map((a) => (
-                    <div key={a.label} className="rounded-lg border border-zinc-200 px-3 py-2 text-center">
-                      <div className={`text-xl font-bold tabular-nums ${a.label === "Over 7 days" && a.count ? "text-rose-600" : "text-zinc-800"}`}>
+                    <div key={a.label} className="rounded-lg border border-line px-3 py-2 text-center">
+                      <div className={`text-xl font-bold tabular-nums ${a.label === "Over 7 days" && a.count ? "text-danger-text" : "text-ink"}`}>
                         {a.count}
                       </div>
-                      <div className="text-[11px] text-zinc-500">{translate(a.label)}</div>
+                      <div className="text-[11px] text-muted-ink">{translate(a.label)}</div>
                     </div>
                   ))}
                 </div>
-                <p className="mt-2 text-xs text-zinc-400">{translate("Every ticket still open, whatever the date range above.")}</p>
+                <p className="mt-2 text-xs text-muted-ink">{translate("Every ticket still open, whatever the date range above.")}</p>
               </CardContent>
             </Card>
           </div>
@@ -308,12 +308,12 @@ export default function OpsSLA() {
             </CardHeader>
             <CardContent>
               {data.oldest_open.length === 0 ? (
-                <p className="py-6 text-center text-sm text-zinc-400">{translate("Nothing is waiting.")}</p>
+                <p className="py-6 text-center text-sm text-muted-ink">{translate("Nothing is waiting.")}</p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-zinc-200 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
+                      <tr className="border-b border-line text-left text-xs font-medium uppercase tracking-wider text-muted-ink">
                         <th className="py-2 pr-3">{translate("Ticket")}</th>
                         <th className="py-2 pr-3">{translate("Subject")}</th>
                         <th className="py-2 pr-3">{translate("Priority")}</th>
@@ -321,15 +321,15 @@ export default function OpsSLA() {
                         <th className="py-2 text-right">{translate("Open for")}</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-zinc-100">
+                    <tbody className="divide-y divide-line-subtle">
                       {data.oldest_open.map((o) => (
                         <tr key={o.name}>
                           <td className="py-2 pr-3 font-mono text-xs">
-                            <Link to={ticketLink(o.name)} className="text-brand-700 hover:underline">{o.name}</Link>
+                            <Link to={ticketLink(o.name)} className="text-accent-ink hover:underline">{o.name}</Link>
                           </td>
                           <td className="py-2 pr-3">{o.subject}</td>
                           <td className="py-2 pr-3">{o.priority}</td>
-                          <td className="py-2 pr-3">{o.assigned_to_name ?? o.assigned_to_user ?? <span className="text-amber-600">{translate("Unassigned")}</span>}</td>
+                          <td className="py-2 pr-3">{o.assigned_to_name ?? o.assigned_to_user ?? <span className="text-warning-text">{translate("Unassigned")}</span>}</td>
                           <td className="py-2 text-right tabular-nums">{o.age_days}{translate(" d")}</td>
                         </tr>
                       ))}

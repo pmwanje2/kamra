@@ -105,7 +105,7 @@ export default function Guests() {
       <CardHeader>
         <div>
           <CardTitle>{t("Guest History")}</CardTitle>
-          <p className="mt-0.5 text-xs text-zinc-400">
+          <p className="mt-0.5 text-xs text-muted-ink">
             {t("Every guest, their stays and lifetime value. Click for the full journey.")}
           </p>
         </div>
@@ -114,7 +114,7 @@ export default function Guests() {
           onClick={exportCsv}
           disabled={rows.length === 0}
           title={t("Download the current view as CSV (Excel-ready)")}
-          className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-sm text-zinc-500 hover:bg-zinc-50 hover:text-zinc-700 disabled:opacity-50"
+          className="flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1.5 text-sm text-muted-ink hover:bg-canvas hover:text-secondary-ink disabled:opacity-50"
         >
           <Download className="size-4" aria-hidden />
           {t("Export")}
@@ -124,21 +124,21 @@ export default function Guests() {
             onClick={() => setColsOpen((o) => !o)}
             title={t("Choose which columns this table shows")}
             aria-label={t("Configure table columns")}
-            className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-sm text-zinc-500 hover:bg-zinc-50 hover:text-zinc-700"
+            className="flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1.5 text-sm text-muted-ink hover:bg-canvas hover:text-secondary-ink"
           >
             <Columns3 className="size-4" aria-hidden />
             {t("Columns")}
           </button>
           {colsOpen && (
-            <div className="absolute right-0 z-30 mt-1 w-56 rounded-xl border border-zinc-200 bg-white p-2 shadow-xl">
+            <div className="absolute right-0 z-30 mt-1 w-56 rounded-xl border border-line bg-surface p-2 shadow-xl">
               {COLUMNS.map((c) => (
                 <label
                   key={c.id}
-                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-zinc-50"
+                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-canvas"
                 >
                   <input
                     type="checkbox"
-                    className="size-4 accent-brand-600"
+                    className="size-4 accent-focus"
                     checked={!hidden.has(c.id)}
                     onChange={() => toggleCol(c.id)}
                   />
@@ -146,7 +146,7 @@ export default function Guests() {
                 </label>
               ))}
               <button
-                className="mt-1 w-full rounded-lg px-2 py-1 text-left text-xs text-zinc-400 hover:text-zinc-600"
+                className="mt-1 w-full rounded-lg px-2 py-1 text-left text-xs text-muted-ink hover:text-secondary-ink"
                 onClick={() => setColsOpen(false)}
               >
                 {t("Done")}
@@ -156,11 +156,11 @@ export default function Guests() {
         </div>
         <div className="relative">
           <Search
-            className="pointer-events-none absolute left-2.5 top-2 size-4 text-zinc-400"
+            className="pointer-events-none absolute left-2.5 top-2 size-4 text-muted-ink"
             aria-hidden
           />
           <input
-            className="rounded-lg border border-zinc-300 py-1.5 pl-8 pr-3 text-sm focus:outline-2 focus:outline-brand-600"
+            className="rounded-lg border border-control py-1.5 pl-8 pr-3 text-sm focus:outline-2 focus:outline-focus"
             placeholder={t("Name or phone…")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -172,7 +172,7 @@ export default function Guests() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-zinc-200 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
+              <tr className="border-b border-line text-left text-xs font-medium uppercase tracking-wider text-muted-ink">
                 {shown.map((c) => (
                   <th key={c.id} className="py-2 pr-4">
                     {c.id === "lifetime_value" ? t("Lifetime {cur}", { cur: cur() }) : t(c.label)}
@@ -180,11 +180,11 @@ export default function Guests() {
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-100">
+            <tbody className="divide-y divide-line-subtle">
               {visible.map((g) => (
                 <tr
                   key={g.name}
-                  className="cursor-pointer hover:bg-zinc-50"
+                  className="cursor-pointer hover:bg-canvas"
                   onClick={() => navigate(`/guests/${encodeURIComponent(g.name)}`)}
                 >
                   {on("full_name") && <td className="py-2.5 pr-4">
@@ -196,17 +196,17 @@ export default function Guests() {
                       />
                     )}
                   </td>}
-                  {on("phone") && <td className="py-2.5 pr-4 text-zinc-500">
+                  {on("phone") && <td className="py-2.5 pr-4 text-muted-ink">
                     {g.phone ?? "-"}
                   </td>}
-                  {on("email") && <td className="py-2.5 pr-4 text-zinc-500">{g.email ?? "-"}</td>}
+                  {on("email") && <td className="py-2.5 pr-4 text-muted-ink">{g.email ?? "-"}</td>}
                   {on("bookings") && <td className="py-2.5 pr-4">{g.bookings}</td>}
                   {on("stays") && <td className="py-2.5 pr-4">{g.stays}</td>}
                   {on("nights") && <td className="py-2.5 pr-4">{g.nights}</td>}
                   {on("lifetime_value") && <td className="py-2.5 pr-4 font-medium">
                     {cur()}{inr(g.lifetime_value)}
                   </td>}
-                  {on("last_stay") && <td className="py-2.5 pr-4 text-zinc-500">
+                  {on("last_stay") && <td className="py-2.5 pr-4 text-muted-ink">
                     {g.last_stay ? (
                       g.last_stay
                     ) : (
@@ -219,7 +219,7 @@ export default function Guests() {
                 <tr>
                   <td
                     colSpan={shown.length}
-                    className="py-6 text-center text-sm text-zinc-400"
+                    className="py-6 text-center text-sm text-muted-ink"
                   >
                     {t("No guests found.")}
                   </td>

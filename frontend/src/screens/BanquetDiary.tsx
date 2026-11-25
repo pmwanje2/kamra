@@ -67,11 +67,11 @@ export default function BanquetDiary() {
       <CardHeader>
         <div>
           <CardTitle>{translate("Function diary")}</CardTitle>
-          <p className="mt-0.5 text-xs text-zinc-400">{translate("Every hall's fortnight. Click a day to check availability, or a function to open it.")}</p>
+          <p className="mt-0.5 text-xs text-muted-ink">{translate("Every hall's fortnight. Click a day to check availability, or a function to open it.")}</p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <div className="relative">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-zinc-400" />
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-ink" />
             <input
               className={inputCls + " !w-44 pl-8"}
               placeholder={translate("Customer…")}
@@ -118,15 +118,15 @@ export default function BanquetDiary() {
             <table className="border-separate border-spacing-0 text-sm">
               <thead>
                 <tr>
-                  <th className="sticky left-0 z-10 bg-white p-2 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">{translate("Hall")}</th>
+                  <th className="sticky left-0 z-10 bg-surface p-2 text-left text-xs font-medium uppercase tracking-wider text-muted-ink">{translate("Hall")}</th>
                   {data.dates.map((d) => (
                     <th
                       key={d}
                       className={
-                        "min-w-[104px] border-b border-zinc-200 p-1.5 text-center text-xs font-medium " +
+                        "min-w-[104px] border-b border-line p-1.5 text-center text-xs font-medium " +
                         (d === today()
-                          ? "bg-brand-50 text-brand-700"
-                          : "text-zinc-500")
+                          ? "bg-accent-subtle text-accent-ink"
+                          : "text-muted-ink")
                       }
                     >
                       <div>{dayName(d)}</div>
@@ -138,9 +138,9 @@ export default function BanquetDiary() {
               <tbody>
                 {data.venues.map((v) => (
                   <tr key={v.name}>
-                    <td className="sticky left-0 z-10 border-b border-zinc-100 bg-white p-2 align-top">
+                    <td className="sticky left-0 z-10 border-b border-line-subtle bg-surface p-2 align-top">
                       <div className="font-medium">{v.venue_name}</div>
-                      <div className="text-xs text-zinc-400">
+                      <div className="text-xs text-muted-ink">
                         {v.capacity ? translate("{v0} pax · ", { v0: String(v.capacity) }) : ""}
                         {inr(v.base_price)}
                       </div>
@@ -151,8 +151,8 @@ export default function BanquetDiary() {
                         <td
                           key={d}
                           className={
-                            "group border-b border-l border-zinc-100 p-1 align-top " +
-                            (d === today() ? "bg-brand-50/40" : "")
+                            "group border-b border-l border-line-subtle p-1 align-top " +
+                            (d === today() ? "bg-accent-subtle/40" : "")
                           }
                         >
                           {cells.length === 0 && (
@@ -164,7 +164,7 @@ export default function BanquetDiary() {
                                 )
                               }
                               aria-label={translate("Open - start an enquiry")}
-                              className="flex w-full items-center justify-center rounded py-2 text-zinc-300 opacity-0 transition-opacity hover:bg-brand-50 hover:text-brand-600 group-hover:opacity-100"
+                              className="flex w-full items-center justify-center rounded py-2 text-muted-ink opacity-0 transition-opacity hover:bg-accent-subtle hover:text-accent-text group-hover:opacity-100"
                             >
                               +
                             </button>
@@ -189,7 +189,7 @@ export default function BanquetDiary() {
             </table>
           </div>
         )}
-        <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-zinc-500">
+        <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-ink">
           {(
             ["Enquiry", "Tentative", "Confirmed", "Completed"] as FunctionStatus[]
           ).map((s) => (
@@ -217,7 +217,7 @@ function FunctionChip({ b }: { b: BanquetCalendarCell }) {
     <div
       className={
         "mb-1 rounded-md px-1.5 py-1 text-[11px] leading-tight ring-1 ring-inset " +
-        (STATUS_TONE[b.status] ?? "bg-zinc-100 text-zinc-600 ring-zinc-500/20") +
+        (STATUS_TONE[b.status] ?? "bg-subtle text-secondary-ink ring-control-strong/20") +
         (b.status === "Tentative" ? " border-dashed" : "")
       }
       title={translate("{v0} · {v1} · {v2} pax · {v3}{v4}", { v0: String(b.event_type), v1: String(b.customer_name), v2: String(b.pax), v3: String(inr(
@@ -338,26 +338,26 @@ function AvailabilitySheet({ onClose }: { onClose: () => void }) {
                 "rounded-lg border px-3 py-2 " +
                 (v.available
                   ? v.fits
-                    ? "border-emerald-200 bg-emerald-50/50"
-                    : "border-amber-200 bg-amber-50/50"
-                  : "border-rose-200 bg-rose-50/50")
+                    ? "border-success-line bg-success-subtle/50"
+                    : "border-warning-line bg-warning-subtle/50"
+                  : "border-danger-line bg-danger-subtle/50")
               }
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="font-medium">
                     {v.venue_name}
-                    <span className="ml-2 text-xs font-normal text-zinc-500">
+                    <span className="ml-2 text-xs font-normal text-muted-ink">
                       {translate(v.venue_type)}{translate(" · seats ")}{v.capacity}
                       {v.min_capacity ? translate(" (min {v0})", { v0: String(v.min_capacity) }) : ""}
                       {v.area_sqft ? translate(" · {v0} sq ft", { v0: String(v.area_sqft) }) : ""}
                     </span>
                   </p>
                   {v.setup_styles && (
-                    <p className="text-xs text-zinc-400">{v.setup_styles}</p>
+                    <p className="text-xs text-muted-ink">{v.setup_styles}</p>
                   )}
                   {!v.available && (
-                    <p className="mt-1 text-xs text-rose-700">
+                    <p className="mt-1 text-xs text-danger-ink">
                       {v.conflicts
                         .filter((c) => c.kind === "confirmed")
                         .map(
@@ -374,7 +374,7 @@ function AvailabilitySheet({ onClose }: { onClose: () => void }) {
                   )}
                   {v.available &&
                     v.conflicts.some((c) => c.kind === "tentative") && (
-                      <p className="mt-1 text-xs text-amber-700">{translate("Soft hold you can sell over:")}{" "}
+                      <p className="mt-1 text-xs text-warning-ink">{translate("Soft hold you can sell over:")}{" "}
                         {v.conflicts
                           .filter((c) => c.kind === "tentative")
                           .map((c) => c.customer_name)
@@ -382,16 +382,16 @@ function AvailabilitySheet({ onClose }: { onClose: () => void }) {
                       </p>
                     )}
                   {v.available && !v.fits && (
-                    <p className="mt-1 text-xs text-amber-700">{translate("Smaller than the pax count.")}</p>
+                    <p className="mt-1 text-xs text-warning-ink">{translate("Smaller than the pax count.")}</p>
                   )}
                   {v.available && v.under_minimum && (
-                    <p className="mt-1 text-xs text-amber-700">{translate("Below this hall's usual minimum - check the minimum spend.")}</p>
+                    <p className="mt-1 text-xs text-warning-ink">{translate("Below this hall's usual minimum - check the minimum spend.")}</p>
                   )}
                 </div>
                 <div className="shrink-0 text-right text-sm">
                   <p className="tabular-nums">{inr(v.base_price)}</p>
                   {v.hourly_rate > 0 && (
-                    <p className="text-xs text-zinc-400">
+                    <p className="text-xs text-muted-ink">
                       {inr(v.hourly_rate)}{translate("/hr")}{v.min_hours ? translate(", min {v0}h", { v0: String(v.min_hours) }) : ""}
                     </p>
                   )}

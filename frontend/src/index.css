@@ -1,23 +1,125 @@
 @import "tailwindcss";
 
-/* Theme toggle uses <html class="dark"> (see lib/theme.ts). Without this,
-   Tailwind v4's dark: variants follow prefers-color-scheme — or worse, paint
-   dark:bg-* as always-on — so the Agent composer goes black on a light theme. */
-@custom-variant dark (&:where(.dark, .dark *));
+/* The stored preference controls screen rendering. Printed documents always
+   use the light values, even when an explicit dark: variant is present. */
+@custom-variant dark {
+  @media screen {
+    &:where(.dark, .dark *) {
+      @slot;
+    }
+  }
+}
 
 @theme {
-  /* Kamra brand: deep hotel green, warm neutrals */
-  --color-brand-50: #ecf7f2;
-  --color-brand-100: #d2ece0;
-  --color-brand-600: #0f6b54;
-  --color-brand-700: #0b5442;
-  --color-brand-900: #073527;
+  /* Page, raised surface, subtle fills, and dividers. */
+  --color-canvas: light-dark(#f8f7f5, #151517);
+  --color-surface: light-dark(#ffffff, #1c1c1f);
+  --color-subtle: light-dark(#f1efec, #232326);
+  --color-muted: light-dark(#e6e3de, #2f2f34);
+  --color-fill-strong: light-dark(#d4d4d8, #43434a);
+  --color-fill-prominent: light-dark(#a1a1aa, #77777f);
+  --color-fill-emphasis: light-dark(#71717a, #a7a7b0);
+  --color-line-subtle: light-dark(#f1efec, #2a2a2d);
+  --color-line: light-dark(#e6e3de, #37373d);
 
-  /* Primary actions pair white text with accessible fills in both themes. */
+  /* Reading text and controls. Muted text is also used for small labels. */
+  --color-ink: light-dark(#18181b, #f6f6f7);
+  --color-secondary-ink: light-dark(#3f3f46, #dadade);
+  --color-muted-ink: light-dark(#5f5e66, #a7a7b0);
+  --color-control: light-dark(#838088, #77777f);
+  --color-control-strong: light-dark(#686871, #92929b);
+  --color-focus: light-dark(#0f6b54, #62d6b5);
+
+  /* Inverse controls, media, and dimmers keep their foreground pairing. */
+  --color-inverse: light-dark(#18181b, #3f3f46);
+  --color-inverse-muted: light-dark(#3f3f46, #52525b);
+  --color-on-inverse: #ffffff;
+  --color-media: #09090b;
+  --color-scrim: #09090b;
+  --color-on-solid: #ffffff;
+
+  /* Primary actions and the default accent. Custom guest accents override
+     these brand variables within their own subtree. */
   --color-on-primary: #ffffff;
   --color-primary-button: #0f6b54;
   --color-primary-button-hover: #0b5442;
   --color-primary-button-disabled: #48635b;
+  --color-brand-50: light-dark(#ecf7f2, #10312a);
+  --color-brand-100: light-dark(#d2ece0, #154438);
+  --color-brand-600: light-dark(#0f6b54, #62d6b5);
+  --color-brand-700: light-dark(#0b5442, #78dfc1);
+  --color-brand-fill: #0f6b54;
+  --color-brand-fill-hover: #0b5442;
+  --color-brand-deep: #073527;
+
+  --color-success-subtle: light-dark(var(--color-emerald-50), var(--color-emerald-950));
+  --color-success-muted: light-dark(var(--color-emerald-100), color-mix(in oklab, var(--color-emerald-950) 75%, var(--color-emerald-800)));
+  --color-success-line: light-dark(var(--color-emerald-200), var(--color-emerald-800));
+  --color-success-line-strong: light-dark(var(--color-emerald-300), var(--color-emerald-700));
+  --color-success-text: light-dark(var(--color-emerald-700), var(--color-emerald-300));
+  --color-success-ink: light-dark(var(--color-emerald-800), var(--color-emerald-200));
+  --color-success-fill: var(--color-emerald-700);
+
+  --color-warning-subtle: light-dark(var(--color-amber-50), var(--color-amber-950));
+  --color-warning-muted: light-dark(var(--color-amber-100), color-mix(in oklab, var(--color-amber-950) 75%, var(--color-amber-800)));
+  --color-warning-soft: light-dark(var(--color-amber-200), color-mix(in oklab, var(--color-amber-950) 55%, var(--color-amber-800)));
+  --color-warning-line: light-dark(var(--color-amber-200), var(--color-amber-800));
+  --color-warning-line-strong: light-dark(var(--color-amber-300), var(--color-amber-700));
+  --color-warning-text: light-dark(var(--color-amber-700), var(--color-amber-300));
+  --color-warning-ink: light-dark(var(--color-amber-800), var(--color-amber-200));
+  --color-warning-fill: var(--color-amber-700);
+  --color-warning-fill-hover: var(--color-amber-800);
+
+  --color-danger-subtle: light-dark(var(--color-rose-50), var(--color-rose-950));
+  --color-danger-muted: light-dark(var(--color-rose-100), color-mix(in oklab, var(--color-rose-950) 75%, var(--color-rose-800)));
+  --color-danger-line: light-dark(var(--color-rose-200), var(--color-rose-800));
+  --color-danger-line-strong: light-dark(var(--color-rose-300), var(--color-rose-700));
+  --color-danger-text: light-dark(var(--color-rose-700), var(--color-rose-300));
+  --color-danger-ink: light-dark(var(--color-rose-800), var(--color-rose-200));
+  --color-danger-fill: var(--color-rose-700);
+  --color-danger-fill-hover: var(--color-rose-800);
+
+  --color-info-subtle: light-dark(var(--color-sky-50), var(--color-sky-950));
+  --color-info-muted: light-dark(var(--color-sky-100), color-mix(in oklab, var(--color-sky-950) 75%, var(--color-sky-800)));
+  --color-info-soft: light-dark(var(--color-sky-200), color-mix(in oklab, var(--color-sky-950) 55%, var(--color-sky-800)));
+  --color-info-line: light-dark(var(--color-sky-200), var(--color-sky-800));
+  --color-info-line-strong: light-dark(var(--color-sky-300), var(--color-sky-700));
+  --color-info-ink: light-dark(var(--color-sky-800), var(--color-sky-200));
+  --color-info-fill: var(--color-sky-700);
+  --color-info-fill-hover: var(--color-sky-800);
+
+  --color-critical-subtle: light-dark(var(--color-red-50), var(--color-red-950));
+  --color-critical-line: light-dark(var(--color-red-200), var(--color-red-800));
+  --color-critical-text: light-dark(var(--color-red-700), var(--color-red-300));
+  --color-critical-ink: light-dark(var(--color-red-800), var(--color-red-200));
+
+  --color-notice-subtle: light-dark(var(--color-orange-50), var(--color-orange-950));
+  --color-notice-muted: light-dark(var(--color-orange-100), color-mix(in oklab, var(--color-orange-950) 75%, var(--color-orange-800)));
+  --color-notice-line: light-dark(var(--color-orange-200), var(--color-orange-800));
+  --color-notice-line-strong: light-dark(var(--color-orange-300), var(--color-orange-700));
+  --color-notice-text: light-dark(var(--color-orange-700), var(--color-orange-300));
+  --color-notice-ink: light-dark(var(--color-orange-800), var(--color-orange-200));
+
+  --color-indigo-subtle: light-dark(var(--color-indigo-50), var(--color-indigo-950));
+  --color-indigo-muted: light-dark(var(--color-indigo-100), color-mix(in oklab, var(--color-indigo-950) 75%, var(--color-indigo-800)));
+  --color-indigo-line: light-dark(var(--color-indigo-200), var(--color-indigo-800));
+  --color-indigo-line-strong: light-dark(var(--color-indigo-300), var(--color-indigo-700));
+  --color-indigo-text: light-dark(var(--color-indigo-700), var(--color-indigo-300));
+  --color-indigo-ink: light-dark(var(--color-indigo-800), var(--color-indigo-200));
+
+  --color-teal-subtle: light-dark(var(--color-teal-50), var(--color-teal-950));
+  --color-teal-line: light-dark(var(--color-teal-200), var(--color-teal-800));
+  --color-teal-line-strong: light-dark(var(--color-teal-300), var(--color-teal-700));
+  --color-teal-ink: light-dark(var(--color-teal-800), var(--color-teal-200));
+
+  --color-violet-subtle: light-dark(var(--color-violet-50), var(--color-violet-950));
+  --color-violet-muted: light-dark(var(--color-violet-100), color-mix(in oklab, var(--color-violet-950) 75%, var(--color-violet-800)));
+  --color-violet-line: light-dark(var(--color-violet-200), var(--color-violet-800));
+  --color-violet-line-strong: light-dark(var(--color-violet-300), var(--color-violet-700));
+  --color-violet-text: light-dark(var(--color-violet-700), var(--color-violet-300));
+  --color-violet-ink: light-dark(var(--color-violet-800), var(--color-violet-200));
+
+  --color-positive-ink: light-dark(var(--color-green-800), var(--color-green-200));
 
   /* CJK fallbacks. Tailwind's default sans stack stops at system-ui, which on
      some Linux/distro images resolves to a face without Han glyphs. Naming the
@@ -28,116 +130,37 @@
     "Helvetica Neue", Arial, "Noto Sans", "Noto Sans SC", "PingFang SC",
     "Microsoft YaHei", "Hiragino Sans GB", "Source Han Sans SC",
     "WenQuanYi Micro Hei", sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+}
 
-  /* Neutrals carry a faint warm bias so the greys read as chosen, not the
-     stock cool zinc. Dark mode + print remap these below. */
-  --color-zinc-50: #f8f7f5;
-  --color-zinc-100: #f1efec;
-  --color-zinc-200: #e6e3de;
+/* Inlining the aliases makes them resolve where the utility is used, so
+   the property accent also reaches nested cards and form controls. */
+@theme inline {
+  --color-accent-subtle: var(--color-brand-50);
+  --color-accent-muted: var(--color-brand-100);
+  --color-accent-text: var(--color-brand-600);
+  --color-accent-ink: var(--color-brand-700);
+  --color-accent-line: color-mix(in oklab, var(--color-brand-600) 20%, var(--color-surface));
+  --color-accent-line-strong: color-mix(in oklab, var(--color-brand-600) 40%, var(--color-surface));
+  --color-accent-control: var(--color-brand-600);
+  --color-accent-fill: var(--color-brand-fill);
+  --color-accent-fill-hover: var(--color-brand-fill-hover);
+  --color-accent-deep: var(--color-brand-deep);
 }
 
 html {
+  color-scheme: light;
+  --color-paper-ink: #18181b;
   font-feature-settings: "tnum" 1; /* tabular numbers for counts and money */
 }
 
-/* Dark mode: every utility reads its color from a CSS variable, so
-   remapping the palette on .dark themes the whole app. Scrims/overlays
-   use bg-black so they stay dark in both themes. */
-.dark {
-  color-scheme: dark;
-  --color-white: #1c1c1f;
-  --color-zinc-50: #151517;
-  --color-zinc-100: #232326;
-  --color-zinc-200: #2f2f34;
-  --color-zinc-300: #43434a;
-  --color-zinc-400: #8a8a93;
-  --color-zinc-500: #a7a7b0;
-  --color-zinc-600: #c6c6cd;
-  --color-zinc-700: #dadade;
-  --color-zinc-800: #ebebee;
-  --color-zinc-900: #f6f6f7;
-  --color-zinc-950: #ffffff;
-  --color-brand-50: #10312a;
-  --color-brand-100: #154438;
-  --color-brand-600: #189776;
-  --color-brand-700: #41c39e;
-  --color-brand-900: #cdeee0;
-  --color-rose-50: #391521;
-  --color-rose-200: #5c2537;
-  --color-rose-500: #fb7185;
-  --color-rose-600: #fb7185;
-  --color-rose-700: #fda4af;
-  --color-rose-800: #fecdd3;
-  --color-rose-900: #ffe4e6;
-  --color-amber-50: #3b2c0a;
-  --color-amber-200: #6b4e0e;
-  --color-amber-600: #fbbf24;
-  --color-amber-800: #fcd34d;
-  --color-amber-900: #fde68a;
-  --color-emerald-50: #0e3323;
-  --color-emerald-200: #17573a;
-  --color-emerald-600: #34d399;
-  --color-emerald-700: #6ee7b7;
-  --color-emerald-800: #a7f3d0;
-  --color-emerald-900: #d1fae5;
-  --color-sky-50: #0d2e40;
-  --color-sky-100: #123a50;
-  --color-sky-200: #1a567a;
-  --color-sky-700: #7dd3fc;
-  --color-sky-800: #a5deff;
-  --color-sky-900: #cfeeff;
-}
-
-/* Printables (GRC, invoices) always come out on paper-white. */
-@media print {
-  .dark {
-    color-scheme: light;
-    --color-white: #ffffff;
-    --color-zinc-50: #fafafa;
-    --color-zinc-100: #f4f4f5;
-    --color-zinc-200: #e4e4e7;
-    --color-zinc-300: #d4d4d8;
-    --color-zinc-400: #a1a1aa;
-    --color-zinc-500: #71717a;
-    --color-zinc-600: #52525b;
-    --color-zinc-700: #3f3f46;
-    --color-zinc-800: #27272a;
-    --color-zinc-900: #18181b;
-    --color-zinc-950: #09090b;
-    --color-brand-50: #ecf7f2;
-    --color-brand-100: #d2ece0;
-    --color-brand-600: #0f6b54;
-    --color-brand-700: #0b5442;
-    --color-brand-900: #073527;
-    --color-rose-50: #fff1f2;
-    --color-rose-200: #fecdd3;
-    --color-rose-500: #f43f5e;
-    --color-rose-600: #e11d48;
-    --color-rose-700: #be123c;
-    --color-rose-800: #9f1239;
-    --color-rose-900: #881337;
-    --color-amber-50: #fffbeb;
-    --color-amber-200: #fde68a;
-    --color-amber-600: #d97706;
-    --color-amber-800: #92400e;
-    --color-amber-900: #78350f;
-    --color-emerald-50: #ecfdf5;
-    --color-emerald-200: #a7f3d0;
-    --color-emerald-600: #059669;
-    --color-emerald-700: #047857;
-    --color-emerald-800: #065f46;
-    --color-emerald-900: #064e3b;
-    --color-sky-50: #f0f9ff;
-    --color-sky-100: #e0f2fe;
-    --color-sky-200: #bae6fd;
-    --color-sky-700: #0369a1;
-    --color-sky-800: #075985;
-    --color-sky-900: #0c4a6e;
+@media screen {
+  html.dark {
+    color-scheme: dark;
   }
 }
 
 body {
-  @apply bg-zinc-50 text-zinc-900 antialiased;
+  @apply bg-canvas text-ink antialiased;
 }
 
 /* Dropdowns: the browser's own arrow sits flush against the border. Draw
@@ -157,8 +180,10 @@ select:not([multiple]):not([size]) {
 [dir="rtl"] select:not([multiple]):not([size]) {
   background-position: left 0.7rem center;
 }
-.dark select:not([multiple]):not([size]) {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23a8a29e' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+@media screen {
+  .dark select:not([multiple]):not([size]) {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23a8a29e' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+  }
 }
 select:disabled {
   opacity: 0.6;
@@ -236,7 +261,7 @@ select:disabled {
   .responsive-list td[data-importance="high"] { order: -1; }
   .responsive-list td[data-importance="medium"], .responsive-list td[data-importance="low"] { flex-basis: 100%; }
   .responsive-list td.hidden:not([data-importance]) { display: none; }
-  .responsive-list .popin-label { display: inline; margin-inline-end: .5em; color: var(--color-zinc-500); font-size: .75rem; }
+  .responsive-list .popin-label { display: inline; margin-inline-end: .5em; color: var(--color-muted-ink); font-size: .75rem; }
 }
 /* 80mm thermal receipts (~302px printable width): stack charge rows cleanly without horizontal clipping,
    while leaving A4 print (wider than 480px) as a full invoice table. */
@@ -249,8 +274,8 @@ select:disabled {
   .responsive-list td[data-importance="high"] { order: -1; flex-basis: 100%; }
   .responsive-list td[data-importance="medium"], .responsive-list td[data-importance="low"] { flex-basis: 100%; }
   .responsive-list td.hidden:not([data-importance]) { display: none; }
-  .responsive-list .popin-label { display: inline; margin-inline-end: .4em; color: var(--color-zinc-500); font-size: .7rem; }
+  .responsive-list .popin-label { display: inline; margin-inline-end: .4em; color: var(--color-muted-ink); font-size: .7rem; }
   table { table-layout: fixed; width: 100%; }
   td, th { overflow-wrap: anywhere; word-break: break-word; }
 }
-.booking-dialog [aria-invalid="true"] { outline: 2px solid var(--color-rose-600); outline-offset: 1px; }
+.booking-dialog [aria-invalid="true"] { outline: 2px solid var(--color-danger-text); outline-offset: 1px; }

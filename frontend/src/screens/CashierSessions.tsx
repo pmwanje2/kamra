@@ -60,21 +60,21 @@ export default function CashierSessions() {
     <div className="w-full max-w-none space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">{translate("Cashier")}</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-ink">{translate("Cashier")}</p>
           <h1 className="text-2xl font-semibold">{translate("Sessions")}</h1>
-          <p className="mt-1 max-w-2xl text-sm text-zinc-500">{translate("Open and close tills on")}{" "}
-            <Link to="/cashier" className="font-medium text-brand-700 hover:underline">{translate("My Till")}</Link>{translate(". There is no separate “create till” form - opening a session starts the shift.")}</p>
+          <p className="mt-1 max-w-2xl text-sm text-muted-ink">{translate("Open and close tills on")}{" "}
+            <Link to="/cashier" className="font-medium text-accent-ink hover:underline">{translate("My Till")}</Link>{translate(". There is no separate “create till” form - opening a session starts the shift.")}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Link
             to="/cashier"
-            className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+            className="rounded-lg bg-accent-fill px-3 py-1.5 text-sm font-medium text-on-solid hover:bg-accent-fill-hover"
           >{translate("Open / close till")}</Link>
           <label className="text-sm">
-            <span className="me-2 text-zinc-500">{translate("Business date")}</span>
+            <span className="me-2 text-muted-ink">{translate("Business date")}</span>
             <input
               type="date"
-              className="rounded-lg border border-zinc-300 px-2 py-1.5"
+              className="rounded-lg border border-control px-2 py-1.5"
               value={date}
               onChange={(e) => setDate(e.target.value)}
             />
@@ -82,11 +82,11 @@ export default function CashierSessions() {
         </div>
       </div>
       {err ? (
-        <p className="text-sm text-rose-600">{translate(err)}</p>
+        <p className="text-sm text-danger-text">{translate(err)}</p>
       ) : null}
-      <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white">
+      <div className="overflow-x-auto rounded-xl border border-line bg-surface">
         <table className="min-w-[680px] w-full text-start text-sm">
-          <thead className="border-b border-zinc-100 text-xs uppercase tracking-wide text-zinc-400">
+          <thead className="border-b border-line-subtle text-xs uppercase tracking-wide text-muted-ink">
             <tr>
               <th className="px-3 py-2">{translate("Cashier")}</th>
               <th className="px-3 py-2">{translate("Status")}</th>
@@ -100,15 +100,15 @@ export default function CashierSessions() {
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.name} className="border-t border-zinc-50">
+              <tr key={r.name} className="border-t border-line-subtle">
                 <td className="whitespace-nowrap px-3 py-2">
                   <Link
                     to={`/cashier/shift-report?session=${r.name}`}
-                    className="font-medium text-brand-700 hover:underline"
+                    className="font-medium text-accent-ink hover:underline"
                   >
                     {r.cashier_id || r.user}
                   </Link>
-                  <div className="text-xs text-zinc-400">{r.user}</div>
+                  <div className="text-xs text-muted-ink">{r.user}</div>
                 </td>
                 <td className="whitespace-nowrap px-3 py-2">
                   <Badge tone={r.status === "Open" ? "green" : "zinc"}>
@@ -119,7 +119,7 @@ export default function CashierSessions() {
                 <td className="whitespace-nowrap px-3 py-2 tabular-nums">{fmtAmount(r.system_cash)}</td>
                 <td className="whitespace-nowrap px-3 py-2 tabular-nums">{fmtAmount(r.expected_cash)}</td>
                 <td className="whitespace-nowrap px-3 py-2 tabular-nums">{fmtAmount(r.counted_cash)}</td>
-                <td className="whitespace-nowrap px-3 py-2 text-xs tabular-nums text-zinc-600">
+                <td className="whitespace-nowrap px-3 py-2 text-xs tabular-nums text-secondary-ink">
                   {r.foreign_drawers?.length
                     ? r.foreign_drawers.map((fd) => `${fd.currency} ${fmtAmount(fd.expected_fx, fd.currency)}`).join(" · ")
                     : "-"}
@@ -129,8 +129,8 @@ export default function CashierSessions() {
             ))}
             {!rows.length ? (
               <tr>
-                <td colSpan={8} className="px-3 py-10 text-center text-zinc-400">{translate("No sessions for this date.")}{" "}
-                  <Link to="/cashier" className="text-brand-700 hover:underline">{translate("Open a till")}</Link>{" "}{translate("to start.")}</td>
+                <td colSpan={8} className="px-3 py-10 text-center text-muted-ink">{translate("No sessions for this date.")}{" "}
+                  <Link to="/cashier" className="text-accent-ink hover:underline">{translate("Open a till")}</Link>{" "}{translate("to start.")}</td>
               </tr>
             ) : null}
           </tbody>

@@ -170,12 +170,12 @@ function TariffDirectory({ property }: { property: string }) {
     setSelected(new Set())
     notifyTariffsChanged(property)
   }
-  const heading = <header className="space-y-1 border-b border-zinc-200 pb-4">
-    <p className="text-sm font-medium text-brand-700">{data?.property || property}</p>
-    <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">{t("Contract tariffs")}</h1>
-    <p className="text-sm text-zinc-600">{t("Manage effective-dated prices for rooms, supplements and venues.")}</p>
+  const heading = <header className="space-y-1 border-b border-line pb-4">
+    <p className="text-sm font-medium text-accent-ink">{data?.property || property}</p>
+    <h1 className="text-2xl font-semibold tracking-tight text-ink">{t("Contract tariffs")}</h1>
+    <p className="text-sm text-secondary-ink">{t("Manage effective-dated prices for rooms, supplements and venues.")}</p>
   </header>
-  const statusToast = notice && <div role="status" className="fixed inset-x-4 bottom-4 z-40 flex items-center gap-3 rounded-xl border border-emerald-200 bg-white p-3 text-sm font-medium text-emerald-900 shadow-lg sm:start-auto sm:end-6 sm:bottom-6">
+  const statusToast = notice && <div role="status" className="fixed inset-x-4 bottom-4 z-40 flex items-center gap-3 rounded-xl border border-success-line bg-surface p-3 text-sm font-medium text-success-ink shadow-lg sm:start-auto sm:end-6 sm:bottom-6">
     <Check className="size-5 shrink-0" aria-hidden />
     {notice}
     <Button type="button" variant="ghost" onClick={() => setNotice(null)} aria-label={t("Dismiss")}><X className="size-4" /></Button>
@@ -337,7 +337,7 @@ function TariffDirectory({ property }: { property: string }) {
 
   return <div className="space-y-5">
     {heading}
-    <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
+    <div className="overflow-hidden rounded-xl border border-line bg-surface">
       <div className="flex flex-wrap items-end gap-4 p-4">
         <label className="flex min-w-0 flex-1 basis-48 flex-col gap-1.5 text-sm font-medium">
           {t("Price list")}
@@ -347,7 +347,7 @@ function TariffDirectory({ property }: { property: string }) {
             {directory.price_lists.map((list) => <option key={list.name} value={list.name}>
               {t("{list} · {currency}", { list: list.name, currency: list.currency })}
             </option>)}
-          </select> : <span className="text-zinc-700">{selectedList?.name ?? "—"}</span>}
+          </select> : <span className="text-secondary-ink">{selectedList?.name ?? "—"}</span>}
         </label>
         <label className="flex min-w-0 flex-1 basis-40 flex-col gap-1.5 text-sm font-medium">
           {t("Customer")}
@@ -365,7 +365,7 @@ function TariffDirectory({ property }: { property: string }) {
         <label className="flex min-w-0 flex-1 basis-48 flex-col gap-1.5 text-sm font-medium">
           {t("Search tariffs")}
           <span className="relative">
-            <Search className="pointer-events-none absolute start-3 top-3 size-4 text-zinc-500" aria-hidden />
+            <Search className="pointer-events-none absolute start-3 top-3 size-4 text-muted-ink" aria-hidden />
             <input type="search" className={field + " w-full ps-9"} value={query}
               onChange={(event) => {
                 const value = event.target.value
@@ -380,18 +380,18 @@ function TariffDirectory({ property }: { property: string }) {
           </span>
         </label>
       </div>
-      <div className="space-y-2 border-t border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
+      <div className="space-y-2 border-t border-line bg-canvas px-4 py-3 text-sm text-secondary-ink">
         {filter !== "pending" && selectedList && selectedList.currency !== directory.property_currency
-          && <p className="font-medium text-brand-800 tabular-nums">
+          && <p className="font-medium text-accent-ink tabular-nums">
             {fxText ?? t("No governed posting rate is available for this price list.")}
           </p>}
         {filter !== "pending" && planBadges.length > 0 && <ul className="flex flex-wrap gap-1.5" aria-label={t("Rate plans")}>
-          {planBadges.map((badge) => <li key={badge.name} className={pill + " border border-brand-200 bg-white text-brand-800"}>{badge.text}</li>)}
+          {planBadges.map((badge) => <li key={badge.name} className={pill + " border border-accent-line bg-surface text-accent-ink"}>{badge.text}</li>)}
         </ul>}
         {filter !== "pending" && !selectedList && directory.price_lists.length > 1 &&
           <p>{t("Select a price list to see its governed posting rate.")}</p>}
         <p className="flex items-start gap-2">
-          <Info aria-hidden className="mt-0.5 size-4 shrink-0 text-brand-600" />
+          <Info aria-hidden className="mt-0.5 size-4 shrink-0 text-accent-text" />
           {t("Released tariffs are never overwritten — new versions take effect from their effective date once approved.")}
         </p>
       </div>
@@ -430,37 +430,37 @@ function TariffDirectory({ property }: { property: string }) {
         </Button>}
       </span>
     </div>
-    {exportFailed && <p role="alert" className="text-sm text-rose-800">{t("The contract tariffs could not be exported.")}</p>}
-    {loading && <p role="status" className="text-sm text-zinc-600">{t("Refreshing contract tariffs…")}</p>}
+    {exportFailed && <p role="alert" className="text-sm text-danger-ink">{t("The contract tariffs could not be exported.")}</p>}
+    {loading && <p role="status" className="text-sm text-secondary-ink">{t("Refreshing contract tariffs…")}</p>}
 
     {filter === "Room" && matrix.length > 0 ? <RoomMatrix rows={matrix} view={view} />
       : filter !== "Room" && flat.length > 0 ? <TariffList items={flat} view={view} labels={labels} />
-      : (filter !== "Room" || !unpricedRooms.length) && <p className="rounded-xl border border-zinc-200 bg-white p-5 text-sm text-zinc-600">
+      : (filter !== "Room" || !unpricedRooms.length) && <p className="rounded-xl border border-line bg-surface p-5 text-sm text-secondary-ink">
         {filter === "pending" && !needle.length ? t("No tariff versions are pending approval.") : t("No tariffs match these filters.")}
       </p>}
     {filter === "Room" && unpricedRooms.length > 0 && (
-      <section aria-label={t("Room types without a tariff")} className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/40 p-4">
+      <section aria-label={t("Room types without a tariff")} className="space-y-3 rounded-xl border border-warning-line bg-warning-subtle/40 p-4">
         <div>
-          <h2 className="text-sm font-semibold text-zinc-900">{t("Room types without a tariff")}</h2>
-          <p className="text-xs text-zinc-600">{t("These room types have no contract tariff on this price list yet.")}</p>
+          <h2 className="text-sm font-semibold text-ink">{t("Room types without a tariff")}</h2>
+          <p className="text-xs text-secondary-ink">{t("These room types have no contract tariff on this price list yet.")}</p>
         </div>
-        <ul className="divide-y divide-amber-200/70 rounded-lg border border-amber-200/70 bg-white">
+        <ul className="divide-y divide-warning-line/70 rounded-lg border border-warning-line/70 bg-surface">
           {unpricedRooms.map((rt) => (
             <li key={rt.name} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 text-sm">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="font-medium text-zinc-900">{rt.room_type_name}</span>
+                <span className="font-medium text-ink">{rt.room_type_name}</span>
                 {rt.room_type_code && (
-                  <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs font-medium text-zinc-600">{rt.room_type_code}</span>
+                  <span className="rounded bg-subtle px-1.5 py-0.5 text-xs font-medium text-secondary-ink">{rt.room_type_code}</span>
                 )}
                 {rt.room_count > 0 ? (
-                  <span className="text-xs tabular-nums text-zinc-500">{tn(rt.room_count, "{n} room", "{n} rooms")}</span>
+                  <span className="text-xs tabular-nums text-muted-ink">{tn(rt.room_count, "{n} room", "{n} rooms")}</span>
                 ) : (
-                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">{t("No rooms")}</span>
+                  <span className="rounded-full bg-warning-muted px-2 py-0.5 text-xs font-medium text-warning-ink">{t("No rooms")}</span>
                 )}
               </div>
               <div className="flex flex-wrap items-center gap-3">
                 <Link to={`/room-types?open=${encodeURIComponent(rt.name)}`}
-                  className="text-xs font-medium text-brand-700 hover:underline">{t("Open room type")}</Link>
+                  className="text-xs font-medium text-accent-ink hover:underline">{t("Open room type")}</Link>
                 {directory.can_propose && <Button type="button" variant="outline" disabled={loading}
                   onClick={() => add({ roomType: rt.name, priceList: selectedList?.name || rt.price_lists[0],
                     customer: customer === PUBLIC ? "" : customer })}>{t("Set up tariff")}</Button>}
@@ -499,9 +499,9 @@ function RoomMatrix({ rows, view }: { rows: MatrixRow<ContractTariffItem>[]; vie
   ])].sort((a, b) => a - b)
   const others = rows.some((row) => row.others.length > 0)
   const columns = 3 + tiers.length + (others ? 1 : 0) + (view.selectable ? 1 : 0)
-  return <div aria-busy={view.loading} className="xl:overflow-x-auto xl:rounded-xl xl:border xl:border-zinc-200 xl:bg-white">
+  return <div aria-busy={view.loading} className="xl:overflow-x-auto xl:rounded-xl xl:border xl:border-line xl:bg-surface">
     <table role="table" aria-label={t("Room pricing matrix")} className="block w-full text-start text-sm xl:table">
-      <thead className="hidden bg-zinc-50 xl:table-header-group">
+      <thead className="hidden bg-canvas xl:table-header-group">
         <tr>
           {view.selectable && <th scope="col" className="w-10 px-3 py-3"><span className="sr-only">{t("Select")}</span></th>}
           <th scope="col" className="px-3 py-3 text-start font-semibold">{t("Room type")}</th>
@@ -532,25 +532,25 @@ function MatrixRowView({ row, tiers, others, columns, view }: {
   const withHistory = items.filter((item) => item.history.length > 0)
   // a customer's negotiated price (SAP customer-specific condition) reads apart from the public one
   const scope = row.customer
-    ? "border-s-2 border-s-indigo-500 bg-indigo-50/25 xl:border-s-2"
-    : "bg-white"
+    ? "border-s-2 border-s-indigo-500 bg-indigo-subtle/25 xl:border-s-2"
+    : "bg-surface"
   return <Fragment>
     <tr role="row" data-room={row.key} data-scope={row.customer ? "corporate" : "public"}
-      className={"block rounded-xl border border-zinc-200 py-1 xl:table-row xl:rounded-none xl:border-0 xl:border-t " + scope}>
+      className={"block rounded-xl border border-line py-1 xl:table-row xl:rounded-none xl:border-0 xl:border-t " + scope}>
       {view.selectable && <td role="cell" className="block px-3 pt-2 xl:table-cell xl:py-3 xl:align-top">
         <input type="checkbox" className="size-4" aria-label={t("Select {name}", { name })}
           checked={keys.every((key) => view.selected.has(key))} onChange={(event) => view.toggle(keys, event.target.checked)} />
       </td>}
       <th role="rowheader" scope="row" className="block px-3 py-2 text-start xl:table-cell xl:py-3 xl:align-top">
-        <span className="block font-semibold text-zinc-950">{row.roomType}</span>
-        <span className="block break-words text-xs font-normal text-zinc-600">{row.priceList}</span>
+        <span className="block font-semibold text-ink">{row.roomType}</span>
+        <span className="block break-words text-xs font-normal text-secondary-ink">{row.priceList}</span>
         {row.customer
-          ? <span data-scope-badge className={pill + " mt-1 inline-flex max-w-full items-center gap-1 border border-indigo-200 bg-indigo-50 text-indigo-800"}>
+          ? <span data-scope-badge className={pill + " mt-1 inline-flex max-w-full items-center gap-1 border border-indigo-line bg-indigo-subtle text-indigo-ink"}>
             <span className="font-semibold">{t("Corporate")}</span>
             <span aria-hidden>·</span>
             <span className="break-words">{row.customer}</span>
           </span>
-          : <span data-scope-badge className={pill + " mt-1 bg-zinc-100 text-zinc-600"}>{t("Public")}</span>}
+          : <span data-scope-badge className={pill + " mt-1 bg-subtle text-secondary-ink"}>{t("Public")}</span>}
       </th>
       {tiers.map((n) => {
         const item = row.tiers.get(n)
@@ -565,7 +565,7 @@ function MatrixRowView({ row, tiers, others, columns, view }: {
       })}
       {others && <Cell label={t("Other occupancy")}>{row.others.length ? <div className="space-y-3">
         {row.others.map((item) => <div key={item.item_code}>
-          <span className="block text-xs font-medium text-zinc-600">{item.occupancy || item.item_name}</span>
+          <span className="block text-xs font-medium text-secondary-ink">{item.occupancy || item.item_name}</span>
           <TierCell item={item} view={view} />
         </div>)}
       </div> : "—"}</Cell>}
@@ -577,11 +577,11 @@ function MatrixRowView({ row, tiers, others, columns, view }: {
         </Button>}
       </td>
     </tr>
-    {historyOpen && <tr role="row" id={historyId} className="block rounded-lg bg-zinc-50 xl:table-row">
+    {historyOpen && <tr role="row" id={historyId} className="block rounded-lg bg-canvas xl:table-row">
       <td role="cell" colSpan={columns} className="block space-y-2 px-4 py-3 xl:table-cell">
         <p className="font-semibold">{t("Version history")}</p>
         {withHistory.map((item) => <div key={item.item_code}>
-          <p className="text-xs font-medium text-zinc-600">{item.item_name}</p>
+          <p className="text-xs font-medium text-secondary-ink">{item.item_name}</p>
           <History item={item} view={view} />
         </div>)}
       </td>
@@ -594,15 +594,15 @@ function TierCell({ item, view }: { item: ContractTariffItem; view: TariffView }
   const active = item.active
   const local = localAmount(view, item, active)
   return <div data-item={item.item_code} className="flex flex-col items-end gap-1 xl:items-start">
-    <span className="whitespace-nowrap font-semibold text-zinc-950 tabular-nums">
+    <span className="whitespace-nowrap font-semibold text-ink tabular-nums">
       {active ? currencyText(itemCurrency(item, view.lists.get(item.price_list)), active.rate, view.locale) : "—"}
     </span>
-    {local != null && <span className="whitespace-nowrap text-xs text-zinc-600 tabular-nums">
+    {local != null && <span className="whitespace-nowrap text-xs text-secondary-ink tabular-nums">
       {t("≈ {amount}", { amount: currencyText(view.data.property_currency, local, view.locale) })}
     </span>}
-    {active && <span className="text-xs text-zinc-600">{view.validity(active)}</span>}
+    {active && <span className="text-xs text-secondary-ink">{view.validity(active)}</span>}
     <Versions item={item} view={view} />
-    {view.data.can_propose && <Button type="button" variant="outline" className="whitespace-nowrap text-brand-700"
+    {view.data.can_propose && <Button type="button" variant="outline" className="whitespace-nowrap text-accent-ink"
       disabled={view.loading} onClick={() => active ? view.open({ kind: "propose", item })
         : view.add({ itemCode: item.item_code, priceList: item.price_list, customer: item.customer })}>
       <Plus aria-hidden className="size-4" />{active ? t("New version") : t("Set rate")}
@@ -617,13 +617,13 @@ function Versions({ item, view }: { item: ContractTariffItem; view: TariffView }
   const upcoming = scheduled(item, view.asOf)
   const pending = drafts(item)
   return <div className="flex flex-col items-end gap-1.5 xl:items-start">
-    {item.active ? <span className={pill + " bg-emerald-50 text-emerald-800"}>{t("Approved")}</span>
-      : !upcoming.length && !pending.length && <span className={pill + " bg-zinc-100 text-zinc-700"}>{t("No active tariff")}</span>}
-    {upcoming.map((version) => <span key={version.name} className={pill + " bg-sky-50 text-sky-900 tabular-nums"}>
+    {item.active ? <span className={pill + " bg-success-subtle text-success-ink"}>{t("Approved")}</span>
+      : !upcoming.length && !pending.length && <span className={pill + " bg-subtle text-secondary-ink"}>{t("No active tariff")}</span>}
+    {upcoming.map((version) => <span key={version.name} className={pill + " bg-info-subtle text-info-ink tabular-nums"}>
       {t("Scheduled: {rate} from {date}", { rate: currencyText(currency, version.rate, view.locale), date: view.validity(version) })}
     </span>)}
     {pending.map((draft) => <div key={draft.name} className="space-y-1.5">
-      <span className={pill + " bg-amber-50 text-amber-900 tabular-nums"}>
+      <span className={pill + " bg-warning-subtle text-warning-ink tabular-nums"}>
         {t("In review: {rate} from {date}", { rate: currencyText(currency, draft.rate, view.locale), date: view.validity(draft) })}
       </span>
       <VersionAudit version={draft} view={view} />
@@ -650,7 +650,7 @@ function Extras({ row, view }: { row: MatrixRow<ContractTariffItem>; view: Tarif
     return [kind === "adult" ? t("Extra adult {rate}", { rate }) : kind === "child" ? t("Extra child {rate}", { rate })
       : t("Extra bed {rate}", { rate })]
   })
-  return lines.length ? <ul className="space-y-0.5 text-xs text-zinc-700 tabular-nums">
+  return lines.length ? <ul className="space-y-0.5 text-xs text-secondary-ink tabular-nums">
     {lines.map((line) => <li key={line} className="whitespace-nowrap">{line}</li>)}
   </ul> : <span>—</span>
 }
@@ -658,8 +658,8 @@ function Extras({ row, view }: { row: MatrixRow<ContractTariffItem>; view: Tarif
 function History({ item, view }: { item: ContractTariffItem; view: TariffView }) {
   const { t } = useT()
   const currency = itemCurrency(item, view.lists.get(item.price_list))
-  return <ul className="divide-y divide-zinc-200">
-    {item.history.map((version) => <li key={version.name} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 py-1.5 text-zinc-700">
+  return <ul className="divide-y divide-line">
+    {item.history.map((version) => <li key={version.name} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 py-1.5 text-secondary-ink">
       <span className="font-medium tabular-nums">{currencyText(currency, version.rate, view.locale)}</span>
       <span>{view.validity(version)}</span>
       <span>{t(version.workflow_state)}</span>
@@ -683,15 +683,15 @@ function VersionAudit({ version, view }: { version: TariffVersion; view: TariffV
     lines.push(<span key="rejected">{t("Rejected by {user}", { user: decider })}{when(version.modified)}</span>)
   if (version.rejection_reason)
     lines.push(<span key="reason">{t("Reason: {reason}", { reason: version.rejection_reason })}</span>)
-  return lines.length ? <span className="flex basis-full flex-col text-xs text-zinc-600">{lines}</span> : null
+  return lines.length ? <span className="flex basis-full flex-col text-xs text-secondary-ink">{lines}</span> : null
 }
 
 function TariffList({ items, view, labels }: { items: ContractTariffItem[]; view: TariffView; labels: Labels }) {
   const { t } = useT()
   const headers = view.selectable ? Object.values(labels) : Object.values(labels).slice(1)
-  return <div aria-busy={view.loading} className="xl:overflow-x-auto xl:rounded-xl xl:border xl:border-zinc-200 xl:bg-white">
+  return <div aria-busy={view.loading} className="xl:overflow-x-auto xl:rounded-xl xl:border xl:border-line xl:bg-surface">
     <table role="table" aria-label={t("Contract tariffs")} className="block w-full text-start text-sm xl:table">
-      <thead className="hidden bg-zinc-50 xl:table-header-group">
+      <thead className="hidden bg-canvas xl:table-header-group">
         <tr>{headers.map((label, index) => <th key={label} scope="col" className="px-3 py-3 text-start font-semibold">
           {view.selectable && index === 0 ? <span className="sr-only">{label}</span> : label}
         </th>)}</tr>
@@ -712,20 +712,20 @@ function TariffRow({ item, view, labels, columns }: { item: ContractTariffItem; 
   const subtitles = [item.item_code, item.room_type, item.occupancy].filter(Boolean)
   const key = itemKey(item)
   return <Fragment>
-    <tr role="row" data-item={item.item_code} className="block rounded-xl border border-zinc-200 bg-white py-1 xl:table-row xl:rounded-none xl:border-0 xl:border-t xl:align-top">
+    <tr role="row" data-item={item.item_code} className="block rounded-xl border border-line bg-surface py-1 xl:table-row xl:rounded-none xl:border-0 xl:border-t xl:align-top">
       {view.selectable && <td role="cell" className="block px-3 pt-2 xl:table-cell xl:py-3">
         <input type="checkbox" className="size-4" checked={view.selected.has(key)}
           aria-label={t("Select {name}", { name: [item.item_name, item.price_list, item.customer].filter(Boolean).join(" · ") })}
           onChange={(event) => view.toggle([key], event.target.checked)} />
       </td>}
       <th role="rowheader" scope="row" className="block px-3 py-2 text-start xl:table-cell xl:py-3">
-        <span className="block font-semibold text-zinc-950">{item.item_name}</span>
-        <span className="block break-words text-xs font-normal text-zinc-600">{subtitles.join(" · ")}</span>
-        <span className="mt-1 block break-words text-xs font-normal text-zinc-600">{item.price_list}</span>
-        {item.customer && <span className={pill + " mt-1 bg-brand-50 text-brand-800"}>{item.customer}</span>}
+        <span className="block font-semibold text-ink">{item.item_name}</span>
+        <span className="block break-words text-xs font-normal text-secondary-ink">{subtitles.join(" · ")}</span>
+        <span className="mt-1 block break-words text-xs font-normal text-secondary-ink">{item.price_list}</span>
+        {item.customer && <span className={pill + " mt-1 bg-accent-subtle text-accent-ink"}>{item.customer}</span>}
       </th>
-      <Cell label={labels.Category}><span className={pill + " bg-zinc-100 text-zinc-700"}>{t(item.category)}</span></Cell>
-      <Cell label={labels.Rate}><span className="whitespace-nowrap font-semibold text-zinc-950 tabular-nums">
+      <Cell label={labels.Category}><span className={pill + " bg-subtle text-secondary-ink"}>{t(item.category)}</span></Cell>
+      <Cell label={labels.Rate}><span className="whitespace-nowrap font-semibold text-ink tabular-nums">
         {active ? currencyText(itemCurrency(item, view.lists.get(item.price_list)), active.rate, view.locale) : "—"}
       </span></Cell>
       <Cell label={labels.Local}><span className="whitespace-nowrap tabular-nums">
@@ -735,7 +735,7 @@ function TariffRow({ item, view, labels, columns }: { item: ContractTariffItem; 
       <Cell label={labels.Status}><Versions item={item} view={view} /></Cell>
       <td role="cell" className="block px-3 py-2 xl:table-cell xl:py-3">
         <div className="flex flex-wrap gap-1.5">
-          {view.data.can_propose && <Button type="button" variant="outline" className="whitespace-nowrap text-brand-700" disabled={view.loading}
+          {view.data.can_propose && <Button type="button" variant="outline" className="whitespace-nowrap text-accent-ink" disabled={view.loading}
             onClick={() => view.open({ kind: "propose", item })}><Plus aria-hidden className="size-4" />{t("New version")}</Button>}
           {item.history.length > 0 && <Button type="button" variant="ghost" aria-expanded={historyOpen}
             aria-controls={historyOpen ? historyId : undefined} onClick={() => setHistoryOpen(!historyOpen)}>
@@ -744,7 +744,7 @@ function TariffRow({ item, view, labels, columns }: { item: ContractTariffItem; 
         </div>
       </td>
     </tr>
-    {historyOpen && <tr role="row" id={historyId} className="block rounded-lg bg-zinc-50 xl:table-row">
+    {historyOpen && <tr role="row" id={historyId} className="block rounded-lg bg-canvas xl:table-row">
       <td role="cell" colSpan={columns} className="block px-4 py-3 xl:table-cell">
         <p className="mb-1 font-semibold">{t("Version history")}</p>
         <History item={item} view={view} />
@@ -755,7 +755,7 @@ function TariffRow({ item, view, labels, columns }: { item: ContractTariffItem; 
 
 function Cell({ label, children }: { label: string; children: ReactNode }) {
   return <td role="cell" className={cell}>
-    <span className="shrink-0 text-xs font-medium text-zinc-600 xl:hidden">{label}</span>
+    <span className="shrink-0 text-xs font-medium text-secondary-ink xl:hidden">{label}</span>
     <div className="min-w-0 text-end xl:text-start">{children}</div>
   </td>
 }
@@ -822,7 +822,7 @@ function ActionDialog({ action, data, locale, dateLocale, list, rounding, custom
   const local = showPreview ? Number(amount) * rate : 0
   const subtitle = <>
     {item.item_name} · {item.price_list}
-    {target && <> · <strong className="font-semibold text-brand-800">
+    {target && <> · <strong className="font-semibold text-accent-ink">
       {t("Customer rate: {customer}", { customer: target })}</strong></>}
   </>
   return <TariffModal title={title} subtitle={subtitle} busy={busy} onClose={onClose} onSubmit={submit}
@@ -834,7 +834,7 @@ function ActionDialog({ action, data, locale, dateLocale, list, rounding, custom
       </Button>
     </>}>
     {action.kind === "propose" ? <>
-      <p className="text-sm text-zinc-600">{item.active
+      <p className="text-sm text-secondary-ink">{item.active
         ? t("Current rate: {rate}", { rate: currencyText(currency, item.active.rate, locale) })
         : t("No active tariff")}</p>
       {!item.customer && <label className="block space-y-1.5 text-sm font-medium">
@@ -842,12 +842,12 @@ function ActionDialog({ action, data, locale, dateLocale, list, rounding, custom
         <input name="customer" list={customerList} autoComplete="off" className={field + " w-full"} value={customer}
           onChange={(event) => setCustomer(event.target.value)} disabled={busy} />
         <datalist id={customerList}>{customers.map((name) => <option key={name} value={name} />)}</datalist>
-        <span className="block text-xs font-normal text-zinc-600">{t("Leave empty for the public rate.")}</span>
+        <span className="block text-xs font-normal text-secondary-ink">{t("Leave empty for the public rate.")}</span>
       </label>}
       <label className="block space-y-1.5 text-sm font-medium">
         <span>{t("New rate")}</span>
         <span className="flex items-center gap-2">
-          <span className="rounded-lg bg-zinc-100 px-2 py-2 text-zinc-700">{currency}</span>
+          <span className="rounded-lg bg-subtle px-2 py-2 text-secondary-ink">{currency}</span>
           <input type="number" inputMode="decimal" className={field + " min-w-0 flex-1 tabular-nums"} min={free ? "0" : moneyStep(currency)} step={moneyStep(currency)}
             value={amount} onChange={(event) => setAmount(event.target.value)} required disabled={busy} autoFocus />
         </span>
@@ -864,7 +864,7 @@ function ActionDialog({ action, data, locale, dateLocale, list, rounding, custom
             onChange={(event) => setValidUntil(event.target.value)} disabled={busy} />
         </label>
       </div>
-      {showPreview && rate != null && <div className="rounded-lg border border-brand-200 bg-brand-50 p-3 text-sm" aria-live="polite">
+      {showPreview && rate != null && <div className="rounded-lg border border-accent-line bg-accent-subtle p-3 text-sm" aria-live="polite">
         <p className="font-medium">{t("Local equivalent preview")}</p>
         <p className="tabular-nums">{t("{foreign_amount} ≈ {local_amount} at 1 {foreign} = {rate} {home}", {
           foreign_amount: currencyText(currency, Number(amount), locale),
@@ -878,14 +878,14 @@ function ActionDialog({ action, data, locale, dateLocale, list, rounding, custom
         rate: currencyText(currency, action.draft.rate, locale),
         date: tariffDate(action.draft.valid_from, dateLocale),
       })}</p>
-      {action.draft.valid_upto && <p className="text-sm text-zinc-600">
+      {action.draft.valid_upto && <p className="text-sm text-secondary-ink">
         {t("Valid until {date}", { date: tariffDate(action.draft.valid_upto, dateLocale) })}
       </p>}
-      <p className="text-sm text-zinc-700">{kind === "approve"
+      <p className="text-sm text-secondary-ink">{kind === "approve"
         ? t("This version will take effect on its effective date once approved.")
         : t("Discarding this draft cannot be undone. The released tariff will not change.")}</p>
     </>}
-    {failure && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-800">
+    {failure && <p role="alert" className="rounded-lg bg-danger-subtle p-3 text-sm text-danger-ink">
       {failure === "absent" ? t("Tariff editing is not available for this property.")
         : reason || t("The tariff change could not be saved. Check the latest versions before retrying.")}
     </p>}

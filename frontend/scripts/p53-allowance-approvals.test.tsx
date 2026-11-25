@@ -254,16 +254,10 @@ describe("P53 AllowanceApprovals audit view & Approvals Inbox convergence", () =
     expect(withoutApiIds).not.toMatch(/(?<![a-z0-9])(?:SAP|ERPNext|Frappe|Kamra|URY|Tridz|BuildSuite)(?![a-z0-9])/i)
     // Uses fmtMoney for dynamic 0/2/3dp formatting
     expect(src).toContain("fmtMoney")
-    // Dark mode parity: Kamra's index.css remaps white/zinc/brand/amber/emerald/rose
-    // variables on .dark automatically; dark:* overrides double-invert cards/text
-    // (e.g. dark:bg-zinc-900 becomes #f6f6f7 white) and undefined brand shades fall
-    // back to currentColor. Verify zero dark:* overrides and only defined brand tokens.
-    expect(src).not.toMatch(/\bdark:/)
-    const brandShades = [...src.matchAll(/\b(?:bg|text|border(?:-[selrtb])?)-brand-(\d+)\b/g)].map((m) => m[1])
-    expect(brandShades.length).toBeGreaterThan(0)
-    for (const shade of brandShades) {
-      expect(["50", "100", "600", "700", "900"]).toContain(shade)
-    }
+    // Shared semantic colors resolve for both schemes.
+    expect(src).toMatch(/\bbg-surface\b/)
+    expect(src).toMatch(/\btext-(?:accent-ink|accent-text)\b/)
+    expect(src).not.toMatch(/\b(?:bg|text|border)-(?:white|zinc-\d+|brand-\d+)\b/)
     // Uses logical RTL utilities, never physical ml-/mr-/pl-/pr-/text-left/text-right
     expect(src).not.toMatch(/\b(?:ml|mr|pl|pr)-\d|\btext-(?:left|right)\b|\bborder-[lr]-/)
     expect(src).toMatch(/\b(?:ms|me|ps|pe|text-start|border-s)-/)

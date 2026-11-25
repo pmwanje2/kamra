@@ -108,20 +108,20 @@ function defaultExpiryLocal(): string {
 }
 
 const inputCls =
-  "min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 " +
-  "dark:border-zinc-300 focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "min-h-11 w-full rounded-lg border border-control bg-surface px-3 py-2 text-sm text-ink " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 const TONE: Record<string, string> = {
-  Authorized: "bg-sky-50 text-sky-700 dark:bg-sky-50 dark:text-sky-700",
-  Held: "bg-violet-50 text-violet-700 dark:bg-violet-950/60 dark:text-violet-200",
-  Collected: "bg-violet-50 text-violet-700 dark:bg-violet-950/60 dark:text-violet-200",
-  Required: "bg-amber-50 text-amber-700 dark:bg-amber-50 dark:text-amber-800",
-  Waived: "bg-zinc-100 text-zinc-600 dark:bg-zinc-100 dark:text-zinc-600",
-  Withheld: "bg-rose-50 text-rose-700 dark:bg-rose-50 dark:text-rose-700",
-  Refunded: "bg-emerald-50 text-emerald-700 dark:bg-emerald-50 dark:text-emerald-700",
-  Released: "bg-emerald-50 text-emerald-700 dark:bg-emerald-50 dark:text-emerald-700",
-  Expired: "bg-amber-50 text-amber-800 dark:bg-amber-50 dark:text-amber-800",
-  None: "bg-zinc-100 text-zinc-500 dark:bg-zinc-100 dark:text-zinc-500",
+  Authorized: "bg-info-subtle text-info-ink dark:bg-sky-50 dark:text-sky-700",
+  Held: "bg-violet-subtle text-violet-ink dark:bg-violet-950/60 dark:text-violet-200",
+  Collected: "bg-violet-subtle text-violet-ink dark:bg-violet-950/60 dark:text-violet-200",
+  Required: "bg-warning-subtle text-warning-ink dark:bg-amber-50 dark:text-amber-800",
+  Waived: "bg-subtle text-secondary-ink",
+  Withheld: "bg-danger-subtle text-danger-ink dark:bg-rose-50 dark:text-rose-700",
+  Refunded: "bg-success-subtle text-success-ink dark:bg-emerald-50 dark:text-emerald-700",
+  Released: "bg-success-subtle text-success-ink dark:bg-emerald-50 dark:text-emerald-700",
+  Expired: "bg-warning-subtle text-warning-ink dark:bg-amber-50 dark:text-amber-800",
+  None: "bg-subtle text-muted-ink",
 }
 
 export default function SecurityDepositPanel(props: {
@@ -315,15 +315,15 @@ export default function SecurityDepositPanel(props: {
   return (
     <div
       className={
-        "rounded-xl border bg-white p-4 text-start " +
+        "rounded-xl border bg-surface p-4 text-start " +
         (d.blocks_checkout
-          ? "border-amber-300 dark:border-amber-600/70"
-          : "border-zinc-200 dark:border-zinc-200")
+          ? "border-warning-line-strong dark:border-amber-600/70"
+          : "border-line")
       }
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="flex items-center gap-2 text-sm font-semibold text-zinc-800">
-          <ShieldCheck className="size-4 text-zinc-400" aria-hidden />
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
+          <ShieldCheck className="size-4 text-muted-ink" aria-hidden />
           {t("Security deposit")}
         </h3>
         <span className={"rounded-full px-2.5 py-0.5 text-xs font-medium " + (TONE[d.status] ?? TONE.None)}>
@@ -334,30 +334,30 @@ export default function SecurityDepositPanel(props: {
       {!nothingYet && (
         <dl className="mt-2 grid grid-cols-2 gap-2 text-sm sm:grid-cols-5">
           <div>
-            <dt className="text-xs text-zinc-400">{t("Required")}</dt>
-            <dd className="font-semibold tabular-nums text-zinc-900">
+            <dt className="text-xs text-muted-ink">{t("Required")}</dt>
+            <dd className="font-semibold tabular-nums text-ink">
               {d.required > 0 ? fmt(d.required) : "-"}
             </dd>
           </div>
           {hasPreauth && (
             <div>
-              <dt className="text-xs text-zinc-400">{t("Authorized hold")}</dt>
-              <dd className="font-semibold tabular-nums text-sky-700">{fmt(authorizedAmt)}</dd>
+              <dt className="text-xs text-muted-ink">{t("Authorized hold")}</dt>
+              <dd className="font-semibold tabular-nums text-info-ink">{fmt(authorizedAmt)}</dd>
             </div>
           )}
           <div>
-            <dt className="text-xs text-zinc-400">{t("Held")}</dt>
-            <dd className="font-semibold tabular-nums text-violet-700 dark:text-violet-300">{fmt(d.held)}</dd>
+            <dt className="text-xs text-muted-ink">{t("Held")}</dt>
+            <dd className="font-semibold tabular-nums text-violet-ink dark:text-violet-300">{fmt(d.held)}</dd>
           </div>
           <div>
-            <dt className="text-xs text-zinc-400">{t("Withheld")}</dt>
-            <dd className={"font-semibold tabular-nums " + (d.withheld > 0 ? "text-rose-600" : "text-zinc-400")}>
+            <dt className="text-xs text-muted-ink">{t("Withheld")}</dt>
+            <dd className={"font-semibold tabular-nums " + (d.withheld > 0 ? "text-danger-text" : "text-muted-ink")}>
               {fmt(d.withheld)}
             </dd>
           </div>
           <div>
-            <dt className="text-xs text-zinc-400">{t("Refunded")}</dt>
-            <dd className={"font-semibold tabular-nums " + (d.refunded > 0 ? "text-emerald-700" : "text-zinc-400")}>
+            <dt className="text-xs text-muted-ink">{t("Refunded")}</dt>
+            <dd className={"font-semibold tabular-nums " + (d.refunded > 0 ? "text-success-ink" : "text-muted-ink")}>
               {fmt(d.refunded)}
             </dd>
           </div>
@@ -365,7 +365,7 @@ export default function SecurityDepositPanel(props: {
       )}
 
       {hasPreauth && (
-        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900 dark:border-sky-200 dark:bg-sky-50 dark:text-sky-900">
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-info-line bg-info-subtle px-3 py-2 text-xs text-info-ink dark:border-sky-200 dark:bg-sky-50 dark:text-sky-900">
           <span className="inline-flex items-center gap-1.5 font-medium">
             <CreditCard className="size-3.5 shrink-0" aria-hidden />
             {maskedCard ?? t("Card pre-authorization")}
@@ -391,7 +391,7 @@ export default function SecurityDepositPanel(props: {
         </div>
       )}
 
-      <p className="mt-2 text-xs text-zinc-400">
+      <p className="mt-2 text-xs text-muted-ink">
         {nothingYet
           ? t("Refundable damage deposit - held for the guest, not revenue. Refunded or withheld at check-out.")
           : d.status === "Waived" && d.reason
@@ -406,7 +406,7 @@ export default function SecurityDepositPanel(props: {
       </p>
 
       {d.history.length > 0 && (
-        <ul className="mt-2 space-y-1 text-xs text-zinc-600">
+        <ul className="mt-2 space-y-1 text-xs text-secondary-ink">
           {d.history.map((h, i) => (
             <li key={i} className="flex justify-between gap-3">
               <span className="min-w-0 truncate">
@@ -421,13 +421,13 @@ export default function SecurityDepositPanel(props: {
       )}
 
       {pendingCapture && (
-        <p role="status" className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+        <p role="status" className="mt-2 rounded-lg bg-warning-subtle px-3 py-2 text-xs font-medium text-warning-ink">
           {t("Capture draft {pe} created — awaiting Finance submission", { pe: pendingCapture })}
         </p>
       )}
 
       {d.blocks_checkout && (
-        <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800 dark:bg-amber-50 dark:text-amber-800">
+        <p className="mt-2 rounded-lg bg-warning-subtle px-3 py-2 text-xs font-medium text-warning-ink dark:bg-amber-50 dark:text-amber-800">
           {d.status === "Authorized"
             ? t("Before check-out: capture any damage from the card hold or release the hold.")
             : t("Before check-out: withhold anything for damage, then refund the rest.")}
@@ -480,10 +480,10 @@ export default function SecurityDepositPanel(props: {
       )}
 
       {mode && (
-        <div className="mt-3 space-y-3 rounded-lg bg-zinc-50 p-3 dark:bg-zinc-50">
+        <div className="mt-3 space-y-3 rounded-lg bg-canvas p-3">
           {mode !== "waive" && mode !== "release" && (
             <label className="block">
-              <span className="mb-1 block text-xs font-medium text-zinc-600">
+              <span className="mb-1 block text-xs font-medium text-secondary-ink">
                 {mode === "withhold" || mode === "refund"
                   ? t("Amount (held {amt})", { amt: fmt(d.held) })
                   : mode === "capture"
@@ -508,7 +508,7 @@ export default function SecurityDepositPanel(props: {
           {(mode === "authorize" || mode === "increment") && (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-zinc-600">
+                <span className="mb-1 block text-xs font-medium text-secondary-ink">
                   {mode === "authorize"
                     ? t("Gateway authorization ref")
                     : t("Gateway reference (optional)")}
@@ -524,7 +524,7 @@ export default function SecurityDepositPanel(props: {
               </label>
 
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-zinc-600">
+                <span className="mb-1 block text-xs font-medium text-secondary-ink">
                   {mode === "authorize"
                     ? t("Hold expires on")
                     : t("New expiry (optional)")}
@@ -541,7 +541,7 @@ export default function SecurityDepositPanel(props: {
               {mode === "authorize" && (
                 <>
                   <label className="block">
-                    <span className="mb-1 block text-xs font-medium text-zinc-600">
+                    <span className="mb-1 block text-xs font-medium text-secondary-ink">
                       {t("Card brand")}
                     </span>
                     <input
@@ -556,7 +556,7 @@ export default function SecurityDepositPanel(props: {
                   </label>
 
                   <label className="block">
-                    <span className="mb-1 block text-xs font-medium text-zinc-600">
+                    <span className="mb-1 block text-xs font-medium text-secondary-ink">
                       {t("Card last 4 digits")}
                     </span>
                     <input
@@ -588,8 +588,8 @@ export default function SecurityDepositPanel(props: {
                   className={
                     "min-h-11 rounded-lg border px-3 py-1.5 text-sm font-medium " +
                     (payMode === m
-                      ? "border-brand-600 bg-brand-50 text-brand-900"
-                      : "border-zinc-200 bg-white text-zinc-600")
+                      ? "border-accent-control bg-accent-subtle text-accent-ink"
+                      : "border-line bg-surface text-secondary-ink")
                   }
                 >
                   {t(m)}
@@ -600,7 +600,7 @@ export default function SecurityDepositPanel(props: {
 
           {mode !== "authorize" && mode !== "increment" && (
             <label className="block">
-              <span className="mb-1 block text-xs font-medium text-zinc-600">
+              <span className="mb-1 block text-xs font-medium text-secondary-ink">
                 {mode === "collect"
                   ? t("Card slip / transfer ref (optional)")
                   : mode === "refund" || mode === "release"
@@ -623,7 +623,7 @@ export default function SecurityDepositPanel(props: {
 
           {mode === "capture" && (
             <label className="block">
-              <span className="mb-1 block text-xs font-medium text-zinc-600">
+              <span className="mb-1 block text-xs font-medium text-secondary-ink">
                 {t("Evidence reference (optional)")}
               </span>
               <input
@@ -639,38 +639,38 @@ export default function SecurityDepositPanel(props: {
           {pciBlocked && (
             <p
               role="alert"
-              className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700"
+              className="rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-xs font-medium text-danger-ink"
             >
               {t("Enter only the last 4 digits of the card. Never enter a full card number or security code.")}
             </p>
           )}
 
           {mode === "authorize" && !pciBlocked && (
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-muted-ink">
               {t("Reserves a hold on the card without posting to the general ledger until captured.")}
             </p>
           )}
 
           {mode === "capture" && (
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-muted-ink">
               {t("Posts a damage charge to the folio and captures the card hold into a posted receipt.")}
             </p>
           )}
 
           {mode === "release" && (
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-muted-ink">
               {t("Releases the uncaptured card hold with zero accounting entry posted.")}
             </p>
           )}
 
           {mode === "withhold" && (
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-muted-ink">
               {t("Posts a damage charge to the folio; the held deposit pays it.")}
             </p>
           )}
 
           {mode === "refund" && d.folio_credit < d.held && (
-            <p className="text-xs text-amber-700">
+            <p className="text-xs text-warning-ink">
               {t("The folio only has {amt} in credit - settle the bill first, or let the deposit cover it.", {
                 amt: fmt(d.folio_credit),
               })}
@@ -689,7 +689,7 @@ export default function SecurityDepositPanel(props: {
       )}
 
       {error && (
-        <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+        <div className="mt-3 rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">
           {translate(error)}
         </div>
       )}
