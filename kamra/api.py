@@ -10242,6 +10242,9 @@ def _move_price(res, new_type: str | None, rate_mode: str,
 				res.flags.kamra_contract_relocked = True
 			elif booked_tariff:
 				frappe.throw(_("The destination room type has no rate in this contract."))
+		if res.flags.get("kamra_move_cutoff"):
+			# Each earlier locked row carries the occupied room's rate and tax.
+			res.room_move_rate_cutoff = start
 		res.room_type_to_charge = None
 	return _reprice_preview(res, **changes)
 

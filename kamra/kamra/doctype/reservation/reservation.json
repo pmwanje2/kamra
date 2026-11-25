@@ -151,6 +151,7 @@
   "fixed_charges",
   "original_room_type",
   "room_type_to_charge",
+  "room_move_rate_cutoff",
   "upgrade_type",
   "upgrade_reason",
   "upgrade_approved_by",
@@ -1072,6 +1073,14 @@
    "label": "Room Type to Charge",
    "fieldtype": "Link",
    "options": "Room Type",
+   "read_only": 1
+  },
+  {
+   "fieldname": "room_move_rate_cutoff",
+   "fieldtype": "Date",
+   "label": "Room Move Rate Cutoff",
+   "hidden": 1,
+   "no_copy": 1,
    "read_only": 1
   },
   {

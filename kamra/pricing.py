@@ -2227,13 +2227,13 @@ def stay_room_tax_rate(room_tax: Decimal, room_total: Decimal, nightly: list) ->
 
 
 def _pin_nights(nightly: list, locked: dict, inclusive: bool, night_over_cap: Decimal,
-                places: int = 2) -> tuple:
+                places: int = 2, *, priced_nets: list[Decimal]) -> tuple:
 	"""Put each booked night's locked room price back on the quote's night
 	(quote locked_nights) and total the room from them: (room total, room
 	tax, base and discount on the desk's basis, extra guests and their tax,
 	each at the night's own tax rate)."""
 	room_total = room_tax = base_total = off_total = oc = oc_tax = Decimal(0)
-	for n in nightly:
+	for n, priced_net in zip(nightly, priced_nets, strict=True):
 		row = locked.get(str(n["date"]))
 		if row:
 			n.update(rate=flt(row.get("rate")), gst_rate=flt(row.get("gst_rate")),
@@ -2242,6 +2242,12 @@ def _pin_nights(nightly: list, locked: dict, inclusive: bool, night_over_cap: De
 			         discount_amount=flt(row.get("discount_amount")),
 			         demand_premium_pct=flt(row.get("demand_premium_pct")),
 			         rate_code_amount=flt(row.get("rate_code_amount")))
+		else:
+			# A partial lock keeps the destination's planned price on new nights.
+			n["rate"] = float(priced_net)
+		# quote_night_rows consumes planned_rate when present.
+		if "planned_rate" in n:
+			n["planned_rate"] = n["rate"]
 		rate, gst, off = _dec(n["rate"]), _dec(n["gst_rate"]), _dec(n.get("discount_amount"))
 		room_total += rate
 		room_tax += rate * gst / Decimal(100)
@@ -2701,7 +2707,8 @@ def quote(
 	if locked_nights and not pkg and not day_use:
 		room_total, room_tax, room_base_total, reservation_discount, over_cap, over_cap_tax = \
 			_pin_nights(nightly, locked_nights, inclusive, night_over_cap,
-			            places=night_rate_places(property))
+			            places=night_rate_places(property),
+			            priced_nets=[_dec(n["rate"]) for n in nightly] if disc else exact_nets)
 
 	from kamra.folio import _fnb_gst
 	fnb_rate = _fnb_gst(property)  # the country pack's F&B rate

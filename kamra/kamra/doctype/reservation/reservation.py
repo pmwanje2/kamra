@@ -545,7 +545,7 @@ class Reservation(Document):
 		if original or not self.flags.get("kamra_room_move_audit"):
 			self.original_room_type = original or (previous.room_type if previous else self.room_type)
 		if not self.flags.get("kamra_room_move_audit"):
-			for key in ("room_type_to_charge", "upgrade_type", "upgrade_reason",
+			for key in ("room_type_to_charge", "room_move_rate_cutoff", "upgrade_type", "upgrade_reason",
 			            "upgrade_approved_by", "early_checkin_waived_reason"):
 				self.set(key, (previous.get(key) if previous else None)
 				         or ("None" if key == "upgrade_type" else None))
@@ -1968,6 +1968,18 @@ class Reservation(Document):
 		pinned = self.pinned_room_nights(inputs)
 		# a re-quote that keeps the booked room nights re-prices no night
 		self.flags.kamra_room_pinned = bool(pinned)
+		if not pinned and not self.flags.get("correct_charged_nights"):
+			cutoff = self.get("room_move_rate_cutoff")
+			if not cutoff and self.get("upgrade_type") == "Paid" and not self.get("contract_tariff"):
+				# Older rack-rate moves have no recorded cutoff. Extending such
+				# a stay must keep the elapsed nights at their saved rates.
+				old = self.stored()
+				if old and self.stay_window() != old.stay_window():
+					from kamra.business_date import get_business_date
+					cutoff = get_business_date(self.property)
+			if cutoff:
+				pinned = {str(getdate(row.stay_date)): row for row in self.get("night_rates") or []
+				          if getdate(row.stay_date) < getdate(cutoff)}
 		tariff = None
 		if flt(self.get("agreed_rate")) > 0 and not self.agreed_rate_overrides():
 			tariff = saved_contract_tariff(self).get("tariff") or None
