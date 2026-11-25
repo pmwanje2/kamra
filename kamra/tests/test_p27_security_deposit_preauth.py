@@ -17,6 +17,7 @@ import re
 import sys
 import unittest
 from contextlib import nullcontext
+from copy import deepcopy
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
@@ -415,6 +416,12 @@ class _FakeSite:
 
 
 def _load_deposit_module(site: _FakeSite):
+	def _has_permission(
+		doctype=None, ptype="read", doc=None, user=None, throw=False, *,
+		parent_doctype=None, debug=False, ignore_share_permissions=False,
+	):
+		return site.permissions.get((doctype, ptype), True)
+
 	def _throw(msg, exc=None, title=None):
 		raise (exc or _ValidationError)(msg)
 
@@ -524,7 +531,7 @@ def _load_deposit_module(site: _FakeSite):
 		get_cached_value=site.get_value,
 		get_all=site.get_all,
 		get_list=_get_list,
-		has_permission=lambda dt, ptype, **kwargs: site.permissions.get((dt, ptype), True),
+		has_permission=_has_permission,
 		get_meta=lambda dt: SimpleNamespace(
 			has_field=lambda f: (dt == "Folio" and f == "customer")
 			or (dt == "Folio Payment" and f == "payment_entry")
@@ -723,6 +730,58 @@ class P27SecurityDepositPreauthTest(unittest.TestCase):
 		self.assertEqual(len(self.site.payment_entries), 1)
 		self.assertFalse(self.site.folio_charges)
 
+	def _make_capture_entry(self, docstatus):
+		self._authorize_usd()
+		self.site.permissions["Payment Entry", "submit"] = False
+		entry = self._capture_usd()["pending_payment_entry"]
+		if docstatus == 1:
+			self.site.payment_entries[0]["docstatus"] = 1
+			self.site.gl_entries.extend([
+				{"voucher_no": entry, "debit": 50.0, "credit": 0.0},
+				{"voucher_no": entry, "debit": 0.0, "credit": 50.0},
+			])
+		return entry
+
+	def test_submitted_capture_requires_read_and_submit_permissions(self):
+		self._make_capture_entry(1)
+		for can_read, can_create, can_submit in (
+			(True, True, False), (False, True, True), (True, False, True),
+		):
+			with self.subTest(read=can_read, create=can_create, submit=can_submit):
+				self.site.permissions["Payment Entry", "read"] = can_read
+				self.site.permissions["Payment Entry", "create"] = can_create
+				self.site.permissions["Payment Entry", "submit"] = can_submit
+				state = self.deposit.deposit_state("RES-USD-1")
+				self.assertIsNone(state["pending_capture_payment_entry"])
+				self.assertEqual(state["can_capture"], can_read and can_submit)
+
+	def test_capture_entry_disables_release_and_increment(self):
+		self._make_capture_entry(0)
+		for docstatus in (0, 1):
+			with self.subTest(docstatus=docstatus):
+				self.site.payment_entries[0]["docstatus"] = docstatus
+				state = self.deposit.deposit_state("RES-USD-1")
+				self.assertEqual((state["can_release"], state["can_increment"]), (False, False))
+
+	def _assert_capture_entry_blocks(self, docstatus, action, **kwargs):
+		entry = self._make_capture_entry(docstatus)
+		before = deepcopy(vars(self.site))
+		with self.assertRaisesRegex(_ValidationError, re.escape(entry)):
+			action("RES-USD-1", **kwargs)
+		self.assertEqual(vars(self.site), before)
+
+	def test_draft_capture_blocks_release(self):
+		self._assert_capture_entry_blocks(0, self.deposit.release_deposit_auth)
+
+	def test_draft_capture_blocks_increment(self):
+		self._assert_capture_entry_blocks(0, self.deposit.increment_deposit_auth, additional_amount=25)
+
+	def test_submitted_capture_blocks_release(self):
+		self._assert_capture_entry_blocks(1, self.deposit.release_deposit_auth)
+
+	def test_submitted_capture_blocks_increment(self):
+		self._assert_capture_entry_blocks(1, self.deposit.increment_deposit_auth, additional_amount=25)
+
 	def test_detects_preexisting_draft_by_bridge_reference(self):
 		hold = self._authorize_usd()
 		self.site.payment_entries.append({
@@ -798,7 +857,7 @@ class P27SecurityDepositPreauthTest(unittest.TestCase):
 				with self.subTest(doctype=doctype, ptype=ptype, allowed=allowed):
 					with patch.object(self.deposit.frappe, "has_permission", return_value=allowed) as check:
 						self.assertIs(has_permission(doctype, ptype, **kwargs), allowed)
-						check.assert_called_once_with(doctype, ptype, print_logs=False, **kwargs)
+						check.assert_called_once_with(doctype, ptype, **kwargs)
 
 	def test_card_actions_follow_document_permissions(self):
 		self.site.permissions["Credit Preauthorization", "create"] = False
@@ -816,7 +875,7 @@ class P27SecurityDepositPreauthTest(unittest.TestCase):
 				state = self.deposit.deposit_state("RES-USD-1")
 				self.assertEqual(state["can_increment"], can_write)
 				self.assertEqual(state["can_release"], can_write)
-				self.assertEqual(state["can_capture"], can_write and (can_create or can_submit))
+				self.assertEqual(state["can_capture"], can_write and can_create)
 
 	def test_all_deposit_currency_fields_use_property_currency(self):
 		fields = json.loads(SECURITY_DEPOSIT_JSON.read_text())["fields"]
