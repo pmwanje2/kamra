@@ -1168,9 +1168,9 @@ export default function FolioView() {
           </dl>
 
           {(() => {
-            const targets = siblings.filter(
-              (s) => s.status === "Open" && s.name !== folio.name,
-            )
+            const targets = siblings
+              .filter((s) => s.status === "Open" && s.name !== folio.name)
+              .map((s) => ({ ...s, balance: windowBalance(s) }))
             const editable = open
             return (
               <>
@@ -1421,14 +1421,14 @@ export default function FolioView() {
                             </span>
                             <span
                               className={
-                                windowBalance(s) > 0
+                                s.balance > 0
                                   ? "ms-1.5 text-warning-text"
                                   : "ms-1.5 text-muted-ink"
                               }
                             >
-                              {windowBalance(s) < 0
-                                ? t("credit {amount}", { amount: `\u2066${fmtMoney(Math.abs(windowBalance(s)), money)}\u2069` })
-                                : t("owes {cur}{amount}", { cur: "", amount: `\u2066${fmtMoney(windowBalance(s), money)}\u2069` })}
+                              {s.balance < 0
+                                ? t("credit {amount}", { amount: `\u2066${fmtMoney(Math.abs(s.balance), money)}\u2069` })
+                                : t("owes {cur}{amount}", { cur: "", amount: `\u2066${fmtMoney(s.balance, money)}\u2069` })}
                             </span>
                           </button>
                         ))}
