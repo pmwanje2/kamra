@@ -68,6 +68,7 @@ const TANKHILL_OPTIONS = {
   meal_plans: [], companies: [], travel_agents: [], experiences: [], ota_channels: [], ota_commission: {},
   rate_plans: [
     { name: "BB-USD", rate_plan_name: "Bed & Breakfast (CP)", code: "CP", discount_eligible: 1 },
+    { name: "BB-KWD", rate_plan_name: "Kuwait tariff", code: "KW", discount_eligible: 1 },
   ],
   default_plan: "BB-USD", rate_plan_required: true, can_set_rate: true,
   can_discount: true, rate_override_limit_pct: 40, discount_reasons: REASONS,
@@ -190,6 +191,9 @@ describe("DiscountPanel: multi-currency badge, toggle, precision step & Daily De
     await press("Per-night daily details")
     expect(text()).toContain("USD 150.00")
     expect(text()).toContain("UGX 612,875")
+    const night = host.querySelector('[data-night="2026-12-01"]')!
+    expect(night.querySelector('[aria-label="Discount reason 2026-12-01"]')?.classList.contains("w-full")).toBe(true)
+    expect(night.querySelector(".flex-wrap")).not.toBeNull()
   })
 
   it("uses step 0.001 for KWD (3dp) rate plans and accepts 12.125 KWD", async () => {
@@ -220,6 +224,8 @@ describe("DiscountPanel: multi-currency badge, toggle, precision step & Daily De
     const valInput = byLabel<HTMLInputElement>("Discount value")!
     expect(valInput.step).toBe("0.001")
     expect(host.querySelector('[role="alert"]')).toBeNull()
+    const quoteRailLocalDiscount = 1256250 - 1104688
+    expect(text()).toContain(`≈ ${fmtMoney(quoteRailLocalDiscount, "UGX")} off / night`)
   })
 })
 
@@ -234,10 +240,10 @@ describe("BookingDialog: Tankhill Walk-In USD 150 - USD 50 = USD 100 & Collect U
           tax_label: "VAT", tax_rates: [0],
           payment_modes: ["Cash", "Card"],
           tender_modes: [
-            { mode: "Cash", currencies: ["UGX", "USD"] },
-            { mode: "Card", currencies: ["UGX", "USD"] },
+            { mode: "Cash", currencies: ["UGX", "USD", "KWD"] },
+            { mode: "Card", currencies: ["UGX", "USD", "KWD"] },
           ],
-          fx_currencies: ["USD"],
+          fx_currencies: ["USD", "KWD"],
         })
       }
       if (method === "kamra.api.available_rooms") {
@@ -247,14 +253,19 @@ describe("BookingDialog: Tankhill Walk-In USD 150 - USD 50 = USD 100 & Collect U
       if (method === "kamra.ledger.list_exchange_rates") {
         return Promise.resolve({
           business_date: "2026-12-01",
-          rates: [{ currency: "USD", rate_date: "2026-12-01", buy_rate: FX_RATE, settlement_rate: FX_RATE }],
+          rates: [
+            { currency: "USD", rate_date: "2026-12-01", buy_rate: FX_RATE, settlement_rate: FX_RATE },
+            { currency: "KWD", rate_date: "2026-12-01", buy_rate: 12500, settlement_rate: 12500 },
+          ],
         })
       }
       if (method === "kamra.ledger.quote_fx") {
         const amt = Number(params.foreign_amount ?? 0)
+        const currency = String(params.currency ?? "USD")
+        const rate = currency === "KWD" ? 12500 : FX_RATE
         return Promise.resolve({
-          quote_id: "FXQ-1", foreign_amount: amt, currency: "USD",
-          rate: FX_RATE, home_amount: Math.round(amt * FX_RATE),
+          quote_id: "FXQ-1", foreign_amount: amt, currency,
+          rate, home_amount: Math.round(amt * rate),
         })
       }
       if (method === "kamra.rates.rate_options") {
@@ -269,6 +280,17 @@ describe("BookingDialog: Tankhill Walk-In USD 150 - USD 50 = USD 100 & Collect U
         const roomNetUsd = 150 - roomDiscUsd
         const roomNetUgx = isUsdAmt ? NET_UGX : GROSS_UGX
         const roomDiscUgx = isUsdAmt ? DISC_UGX : 0
+        if (params.rate_plan === "BB-KWD") return Promise.resolve({
+          nights: 1, property_currency: "UGX", rate_currency: "KWD", rate_plan: "BB-KWD",
+          tariff: { currency: "KWD", nightly: 88.375, property_currency: "UGX", fx_rate: 12500 },
+          contract_summary: {
+            currency: "KWD", fx_rate: 12500, room_base_total: 88.375, room_discount_total: 0,
+            room_net_total: 88.375, room_after_tax_total: 88.375, has_home_currency_extras: false,
+          },
+          nightly: [{ date: "2026-12-01", base_rate: 1104688, rate: 1104688, discount_amount: 0 }],
+          room_total: 1104688, amount_before_tax: 1104688, amount_after_tax: 1104688,
+          tax_amount: 0, meal_total: 0, discount: 0, advance: { amount: 0 },
+        })
         return Promise.resolve({
           nights: 1,
           property_currency: "UGX",
@@ -367,6 +389,37 @@ describe("BookingDialog: Tankhill Walk-In USD 150 - USD 50 = USD 100 & Collect U
       expect(body).not.toContain("USD 149.99")
     })
   })
+
+  it("keeps Full amount current and switches to tenderable KWD after selecting a KWD plan", async () => {
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <BookingDialog
+            initial={{ walkIn: true, room_type: "STD", room: "STD-101", guest_name: "Tankhill Guest", nights: 1 }}
+            onClose={() => {}}
+            onBooked={() => {}}
+          />
+        </MemoryRouter>,
+      )
+    })
+    await until(() => expect(byLabel("Discount value")).not.toBeNull())
+    await press("Amount / night")
+    await typeInto(byLabel<HTMLInputElement>("Discount value")!, "50")
+    await choose(byLabel<HTMLSelectElement>("Discount reason")!, "RATE-PROMO")
+    await until(() => expect(text()).toContain("Collect UGX 408,583 and continue to check-in"))
+    await press("Full amount")
+
+    const ratePlan = Array.from(host.querySelectorAll("select")).find(
+      (select) => Array.from(select.options).some((option) => option.value === "BB-KWD"),
+    )!
+    expect(ratePlan).toBeDefined()
+    await choose(ratePlan, "BB-KWD")
+    await until(() => {
+      expect(text()).toContain("KWD 88.375")
+      expect(text()).toContain("Collect KWD 88.375 and continue to check-in")
+      expect(text()).not.toContain("Collect UGX 408,583 and continue to check-in")
+    })
+  })
 })
 
 describe("AgreedRatePanel & ReservationDetail: multi-currency discount and USD fixed override", () => {
@@ -437,6 +490,12 @@ describe("AgreedRatePanel & ReservationDetail: multi-currency discount and USD f
       const ov = calls("kamra.api.rate_override_preview").at(-1)
       expect(ov?.agreed_rate).toBe(110)
       expect(ov?.override_currency).toBe("USD")
+      const table = Array.from(host.querySelectorAll("table")).find(
+        (candidate) => candidate.textContent?.includes("Difference"),
+      )
+      expect(table?.parentElement?.classList.contains("max-w-full")).toBe(true)
+      expect(table?.parentElement?.classList.contains("overflow-x-auto")).toBe(true)
+      expect(table?.classList.contains("tabular-nums")).toBe(true)
     })
   })
 

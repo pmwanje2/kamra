@@ -301,14 +301,14 @@ class MultiCurrencyDiscountsCoreTests(MultiCurrencyDiscountHarness):
 		self.assertEqual(night["discount_amount"], TANKHILL_DISC_UGX)
 		self.assertEqual(night["rate"], TANKHILL_NET_UGX)
 
-		# Omitting discount_currency on a new foreign-rate API quote defaults cleanly to rate_currency (USD)
-		q_default = self.pricing.quote_with_contract(
+		# Legacy callers pass a property-currency amount even when it fits in USD.
+		q_legacy = self.pricing.quote_with_contract(
 			"Tankhill", "Tankhill-STD", "2026-12-01", "2026-12-02",
 			rate_plan="BB-USD", discount_type="Amount", discount_value=50,
 		)
-		self.assertEqual(q_default["discount_currency"], "USD")
-		self.assertEqual(q_default["room_total"], TANKHILL_NET_UGX)
-		self.assertEqual(q_default["contract_summary"]["room_after_tax_total"], 100.0)
+		self.assertEqual(q_legacy["discount_currency"], "UGX")
+		self.assertEqual(q_legacy["reservation_discount_total"], 50.0)
+		self.assertEqual(q_legacy["room_total"], TANKHILL_GROSS_UGX - 50)
 
 		# Explicit home-currency (UGX) flat discount subtracts in UGX cleanly
 		q_ugx = self.pricing.quote_with_contract(
@@ -568,6 +568,66 @@ class MultiCurrencyDiscountsCoreTests(MultiCurrencyDiscountHarness):
 		rationale = self.action_logs[-1]["rationale"]
 		self.assertIn("USD 110.00", rationale)
 		self.assertIn("449,442", rationale)
+
+	def test_foreign_discount_replaces_fixed_foreign_override_on_contract_base(self):
+		self.roles = ["Revenue Manager"]
+		res = self.make_res("RES-FIXED-TO-DISCOUNT")
+		self.api.set_agreed_rate(res.name, 110, "RATE-PROMO", confirm_price=1, override_currency="USD")
+		self.assertEqual(res.amount_after_tax, 449442)
+		params = dict(discount_type="Amount", discount_value=10,
+		              discount_currency="USD", reason_code="RATE-PROMO")
+		preview = self.api.discount_preview(res.name, **params)
+		expected = (612875, 40858, 572017)
+		for key, value in zip(("base_rate", "discount_amount", "rate"), expected, strict=True):
+			self.assertEqual(preview["nights"][0][key], value, key)
+		self.assertEqual(preview["nights"][0]["contract_rate"], 140)
+		self.assertEqual(preview["new_amount"], 572017)
+		result = self.api.set_reservation_discount(res.name, **params)
+		self.assertEqual(result["amount_after_tax"], 572017)
+		self.assertEqual(res.night_rates[0].rate, 572017)
+		self.assertEqual(res.night_rates[0].discount_amount, 40858)
+
+	def test_quote_preview_and_detail_share_currency_rounding(self):
+		for currency, base, fx, discount_cur, value, local_base, local_off, local_net, contract_off, contract_net in (
+			("USD", 150, 4000, "UGX", 20, 600000, 20, 599980, 0, 150),
+			("KWD", 100.500, 12500, "KWD", 12.125, 1256250, 151562, 1104688, 12.125, 88.375),
+		):
+			with self.subTest(currency=currency):
+				plan = f"ROUND-{currency}"
+				self.plan(plan, property="Tankhill", currency=currency, discount_eligible=1)
+				tariff = dict(currency=currency, nightly=base, property_currency="UGX",
+				              fx_rate=fx, fx_date="2026-11-24")
+				self.tariffs[plan] = self.tariff(**tariff, agreed_rate=local_base)
+				res = self.make_res(
+					f"RES-{plan}", rate_plan=plan, room="STD-101", agreed_rate=local_base,
+					contract_tariff=json.dumps(dict(agreed_rate=local_base, tariff=tariff)),
+					amount_before_tax=local_base, amount_after_tax=local_base,
+					night_rates=[Doc(stay_date="2026-12-01", rate=local_base, base_rate=local_base,
+					                 rate_code_amount=local_base, gst_rate=0, discount_amount=0)],
+				)
+				params = dict(discount_type="Amount", discount_currency=discount_cur, discount_value=value)
+				with (patch.object(self.api, "comp_rate_governance", return_value=None),
+				      patch.object(self.pricing, "tax_basis", return_value=None)):
+					quote = self.api.get_quote("Tankhill", "Tankhill-STD", "2026-12-01", "2026-12-02",
+					                          rate_plan=plan, discount_reason="RATE-PROMO", **params)
+				preview = self.api.discount_preview(res.name, reason_code="RATE-PROMO", **params)
+				self.api.set_reservation_discount(res.name, reason_code="RATE-PROMO", **params)
+				with patch.multiple(self.api, _stay_balance=lambda *_: {}, _detail_rate_plans=lambda *_: [],
+				                    _deposit_state=lambda *_: {}, _security_deposit_state=lambda *_: {},
+				                    _checkin_backfill=lambda *_: [], _stay_instruction_rows=lambda *_: [],
+				                    _reservation_alert_summary=lambda *_: {}):
+					detail = self.api.reservation_detail(res.name)
+				for endpoint, night in (("get_quote", quote["nightly"][0]),
+				                        ("discount_preview", preview["nights"][0]),
+				                        ("reservation_detail", detail["night_rates"][0])):
+					with self.subTest(endpoint=endpoint):
+						self.assertEqual(night["base_rate"], local_base)
+						self.assertEqual(night["discount_amount"], local_off)
+						self.assertEqual(night["rate"], local_net)
+						self.assertEqual(night["base_rate"] - night["discount_amount"], night["rate"])
+						self.assertEqual(night["contract_base_rate"], base)
+						self.assertEqual(night["contract_discount_amount"], contract_off)
+						self.assertEqual(night["contract_rate"], contract_net)
 
 	def test_ota_modify_superseded_discount_formats_discount_currency_and_clears_on_currency_change(self):
 		old = self.make_res(
