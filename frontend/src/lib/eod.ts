@@ -10,6 +10,33 @@ export type StepStatus = "pending" | "running" | "done" | "blocked" | "skipped"
 
 export type CheckItem = Record<string, unknown>
 
+export interface ControlTieOutRow {
+  key: string
+  label: string
+  account?: string
+  subledger_balance: number
+  gl_balance: number
+  ple_balance?: number
+  variance: number
+  status: "Balanced" | "Variance" | "Unverified" | string
+}
+
+export interface ControlTieOutSummary {
+  ok: boolean
+  status: "Balanced" | "Variance" | "Unverified" | string
+  in_balance: boolean
+  property?: string
+  company?: string
+  currency?: string
+  precision?: number
+  tolerance?: number
+  business_date?: string
+  total_variance?: number
+  error_code?: string
+  reason?: string
+  controls: ControlTieOutRow[]
+}
+
 export interface Check {
   key: string
   title: string
@@ -28,6 +55,7 @@ export interface Check {
   exception?: boolean
   unverified?: boolean
   total?: number | null
+  summary?: ControlTieOutSummary | null
 }
 
 export interface Acknowledgement {

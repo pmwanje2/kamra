@@ -7,6 +7,7 @@ import { AuditPackView } from "../src/screens/AuditPack"
 import EndOfDayWizard from "../src/screens/EndOfDayWizard"
 import { adoptUiLocale } from "../src/lib/money"
 import { setLang } from "../src/lib/dir"
+import { ensureDictionary } from "../src/lib/locales"
 
 const { rpc } = vi.hoisted(() => {
   Object.defineProperty(globalThis, "localStorage", { configurable: true, value: jsdom.window.localStorage })
@@ -481,6 +482,7 @@ describe("P40 Subledger-to-GL Control Tie-Out UI (AuditPack & EndOfDayWizard)", 
     })
 
     // French (fr)
+    await ensureDictionary("fr")
     setLang("fr")
     await act(async () => {
       root.render(
@@ -499,6 +501,7 @@ describe("P40 Subledger-to-GL Control Tie-Out UI (AuditPack & EndOfDayWizard)", 
     expect(frCard.textContent).not.toMatch(FORBIDDEN_VENDOR_RE)
 
     // Arabic RTL (ar)
+    await ensureDictionary("ar")
     setLang("ar")
     await act(async () => {
       root.render(

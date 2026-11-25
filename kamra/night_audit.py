@@ -60,8 +60,11 @@ BLOCKABLE = {
 
 ORDER = ("open_tills", "open_pos_bills", "departures_due", "arrivals_pending",
          "rate_variance", "zero_rate", "pos_room_postings", "high_balance",
-         "departed_balances", "credit_limit", "overdue_ar", "room_status",
-         "vacant_rooms")
+         "departed_balances", "credit_limit", "overdue_ar", "gl_control_tieout",
+         "room_status", "vacant_rooms")
+
+GL_CONTROL_TIEOUT_METHOD = "hospitality_kamra.control_tieout"
+_TIEOUT_MONEY_KEYS = ("subledger_balance", "gl_balance", "ple_balance", "variance")
 
 # The End of Day wizard, in Opera's order: (key, title, the checks it shows)
 STEPS = (
@@ -69,7 +72,7 @@ STEPS = (
 	("arrivals", "Arrivals not checked in", ("arrivals_pending",)),
 	("departures", "Departures not checked out", ("departures_due",)),
 	("folios", "Open folios and high balances",
-	 ("high_balance", "departed_balances", "credit_limit", "overdue_ar")),
+	 ("high_balance", "departed_balances", "credit_limit", "overdue_ar", "gl_control_tieout")),
 	("outlets", "Outlets and room postings", ("open_pos_bills", "pos_room_postings")),
 	("rates", "Rate check", ("rate_variance", "zero_rate")),
 	("rooms", "Room status", ("room_status", "vacant_rooms")),
@@ -695,6 +698,115 @@ def check_overdue_ar(property: str) -> dict:
 		total=_r(sum(r["overdue"] for r in items), places), unverified=False)
 
 
+def _unverified_gl_tieout(property: str, bd: str, reason: str,
+                          error_code: str = "HSP-TIEOUT-UNVERIFIED") -> dict:
+	return {
+		"ok": False,
+		"status": "Unverified",
+		"in_balance": False,
+		"error_code": error_code,
+		"reason": reason,
+		"property": property,
+		"business_date": bd,
+		"total_variance": 0.0,
+		"controls": [],
+	}
+
+
+def _fetch_gl_control_tieout(property: str, bd: str) -> dict | None:
+	"""Call the optional hospitality-gl-tieout bridge script.
+
+	Returns None when the bridge script is absent or disabled (inert on non-ERP
+	sites). On any runtime or permission failure, fails closed as Unverified
+	without leaving raw bridge messages in frappe.local.message_log.
+	"""
+	from kamra import erp_bridge
+
+	before_log = len(getattr(frappe.local, "message_log", None) or ())
+	try:
+		result = erp_bridge.bridge_call(
+			GL_CONTROL_TIEOUT_METHOD, property=property, business_date=bd)
+	except Exception as exc:
+		log = getattr(frappe.local, "message_log", None)
+		if isinstance(log, list) and len(log) > before_log:
+			del log[before_log:]
+		if isinstance(exc, frappe.PermissionError):
+			return _unverified_gl_tieout(
+				property, bd,
+				"Accounting GL control tie-out requires Finance, Night Auditor, or Hotel Admin access to verify.",
+				error_code="HSP-TIEOUT-PERM-001",
+			)
+		return _unverified_gl_tieout(
+			property, bd,
+			"Accounting GL control tie-out could not be verified.",
+		)
+	if result is None:
+		return None
+	if not isinstance(result, dict):
+		return _unverified_gl_tieout(
+			property, bd,
+			"Accounting GL control tie-out returned an unexpected response.",
+		)
+	status = str(result.get("status") or "").strip()
+	if status not in ("Balanced", "Variance", "Unverified"):
+		return _unverified_gl_tieout(
+			property, bd,
+			str(result.get("reason") or "").strip()
+			or "Accounting GL control tie-out could not be verified.",
+		)
+	return result
+
+
+def check_gl_control_tieout(property: str, bd: str) -> dict:
+	"""Reconcile hotel control subledgers against live Accounting GL balances."""
+	result = _fetch_gl_control_tieout(property, bd)
+	if result is None:
+		return _check(
+			"gl_control_tieout", "Accounting GL control tie-out", "info", [],
+			"Accounting GL control tie-out is not enabled for this property.",
+			None, unverified=False, summary=None)
+	status = str(result.get("status") or "").strip()
+	controls = [dict(row) for row in (result.get("controls") or []) if isinstance(row, dict)]
+	if result.get("in_balance") is True and status == "Balanced":
+		return _check(
+			"gl_control_tieout", "Accounting GL control tie-out", "block", [],
+			"All five accounting GL control buckets agree within currency tolerance.",
+			"/end-of-day", unverified=False, summary=result)
+	variances = [row for row in controls if row.get("status") != "Balanced"]
+	if status == "Unverified" or not variances:
+		return _check(
+			"gl_control_tieout", "Accounting GL control tie-out", "block", [],
+			"Accounting GL control tie-out could not be verified. Configure "
+			"control accounts and verify balances before closing.",
+			"/end-of-day", unverified=True, summary=result)
+	return _check(
+		"gl_control_tieout", "Accounting GL control tie-out", "block", variances,
+		"Reconcile the control account variance in Accounting before closing "
+		"the business date.",
+		"/end-of-day", unverified=False, summary=result)
+
+
+def _redact_check_figures(checks: list[dict] | None) -> list[dict]:
+	"""Strip GL financial totals from prechecks when the user cannot see figures."""
+	if not checks:
+		return []
+	from kamra.dashboards import sees_figures
+	if sees_figures():
+		return checks
+	out = []
+	for check in checks:
+		row = dict(check)
+		if row.get("key") == "gl_control_tieout":
+			row["summary"] = None
+			row["items"] = [
+				{k: v for k, v in item.items() if k not in _TIEOUT_MONEY_KEYS}
+				if isinstance(item, dict) else item
+				for item in (row.get("items") or [])
+			]
+		out.append(row)
+	return out
+
+
 def check_room_status(property: str) -> dict:
 	rooms = frappe.get_all(
 		"Room", filters={"property": property},
@@ -823,13 +935,14 @@ def run_checks(property: str, business_date: str | None = None,
 		check_departed_balances(property),
 		check_credit_limit(property),
 		check_overdue_ar(property),
+		check_gl_control_tieout(property, bd),
 		check_room_status(property),
 		check_vacant_rooms(property),
 	]
 
 
 def open_blockers(checks: list[dict]) -> list[dict]:
-	return [c for c in checks if c["severity"] == "block" and c["count"]]
+	return [c for c in checks if c["severity"] == "block" and (c["count"] or c.get("unverified"))]
 
 
 def parse_keys(value) -> list[str]:
@@ -910,7 +1023,7 @@ def night_audit_precheck(property: str):
 	if not frappe.db.exists("Property", property):
 		frappe.throw(_("Unknown property."))
 	bd = get_business_date(property)
-	checks = run_checks(property, bd)
+	checks = _redact_check_figures(run_checks(property, bd))
 	blockers = [c["key"] for c in open_blockers(checks)]
 	return {
 		"property": property,
@@ -984,7 +1097,7 @@ def night_audit_pack(audit: str):
 # it keeps movement, prechecks, its cashier sessions and the journal
 PACK_FIGURE_SECTIONS = ("statistics", "manager_flash", "audit_report",
                         "revenue_by_transaction_code", "ledger_balances", "city_ledger",
-                        "overdue_ar", "deposit_ledger")
+                        "overdue_ar", "deposit_ledger", "gl_control_tieout")
 PACK_FIGURE_REPORTS = ("audit_report", "manager_flash", "city_ledger", "deposit_ledger",
                        "trial_balance", "occupancy")
 
@@ -1001,6 +1114,8 @@ def _strip_figures(pack: dict) -> dict:
 		return pack
 	for key in PACK_FIGURE_SECTIONS:
 		pack.pop(key, None)
+	if "prechecks" in pack:
+		pack["prechecks"] = _redact_check_figures(pack.get("prechecks"))
 	pack["reports"] = _visible_reports()
 	pack["figures_hidden"] = True
 	return pack
@@ -1444,7 +1559,7 @@ def build_pack(property: str, bd: str, *, checks: list[dict],
 	for c in checks:
 		row = dict(c)
 		row["acknowledgement"] = acked.get(c["key"])
-		row["exception"] = c["severity"] == "block" and bool(c["count"])
+		row["exception"] = c["severity"] == "block" and bool(c["count"] or c.get("unverified"))
 		prechecks.append(row)
 	currency, currency_symbol = _property_currency_meta(property)
 	pack: dict = {
@@ -1478,6 +1593,8 @@ def build_pack(property: str, bd: str, *, checks: list[dict],
 	         lambda: _raw(ledger.journal_by_transaction_code)(property, bd))
 	_section(pack, "ledger_balances",
 	         lambda: _raw(ledger.ledger_balances)(property, bd))
+	_section(pack, "gl_control_tieout",
+	         lambda: _fetch_gl_control_tieout(property, bd))
 	_section(pack, "in_house", lambda: _in_house(property, bd))
 	_section(pack, "departures", lambda: _movement(property, "check_out_date", bd))
 	_section(pack, "arrivals", lambda: _movement(property, "check_in_date", bd))
@@ -1669,7 +1786,7 @@ def _step_rows(checks: list[dict], state: dict, acks: list[dict],
 	out = []
 	for i, (key, title, keys) in enumerate(STEPS, start=1):
 		mine = [by_key[k] for k in keys if k in by_key]
-		blocking = [c for c in mine if c["severity"] == "block" and c["count"]
+		blocking = [c for c in mine if c["severity"] == "block" and (c["count"] or c.get("unverified"))
 		            and c["key"] not in acked]
 		if ran and i <= RUN_STEP:
 			status = "done"
@@ -1730,7 +1847,7 @@ def _eod_state(property: str, audit: str | None = None) -> dict:
 			pack = _loads(run.report_pack, {})
 			state = _loads(run.eod_state, {})
 			acks = _loads(run.acknowledgements, [])
-			checks = pack.get("prechecks") or []
+			checks = _redact_check_figures(pack.get("prechecks") or [])
 			return {**base, "business_date": _iso(run.business_date),
 			        "audit": run.name, "ran": True, "status": run.status,
 			        "current_step": max(cint(run.eod_step), RUN_STEP + 1),
@@ -1749,7 +1866,7 @@ def _eod_state(property: str, audit: str | None = None) -> dict:
 		"Night Audit Run", draft,
 		["eod_step", "eod_state", "auditor_notes", "acknowledgements"],
 		as_dict=True)
-	checks = run_checks(property, bd)
+	checks = _redact_check_figures(run_checks(property, bd))
 	state = _loads(run.eod_state, {})
 	acks = _loads(run.acknowledgements, [])
 	return {**base, "business_date": bd, "audit": draft, "ran": False,
@@ -1801,7 +1918,7 @@ def eod_progress(property: str, step: int | None = None,
 			bd = get_business_date(property)
 			live = {c["key"]: c for c in run_checks(property, bd)} if checks else {}
 			blocking = [live[k] for k in checks if k in live
-			            and live[k]["severity"] == "block" and live[k]["count"]
+			            and live[k]["severity"] == "block" and (live[k]["count"] or live[k].get("unverified"))
 			            and k not in acked]
 			if blocking:
 				frappe.throw(_("{0} still has open items - resolve them or "
@@ -1834,9 +1951,13 @@ def eod_acknowledge(property: str, key: str, reason: str):
 	check = next((c for c in run_checks(property, bd) if c["key"] == key), None)
 	if not check:
 		frappe.throw(_("Unknown check: {0}").format(key))
+	if key == "gl_control_tieout" and check.get("unverified"):
+		frappe.throw(_("Accounting GL control tie-out is unverified and cannot be overridden."))
 	if check["severity"] != "block" or not check["count"]:
 		frappe.throw(_("{0} is not blocking the audit - nothing to "
 		               "acknowledge.").format(check["title"]))
+	if key == "gl_control_tieout" and len(reason) < 10:
+		frappe.throw(_("Give a reason of at least 10 characters for overriding an accounting GL control tie-out variance."))
 	draft = _draft(property, bd, create=True)
 	doc = frappe.get_doc("Night Audit Run", draft)
 	acks = [a for a in _loads(doc.acknowledgements, []) if a["key"] != key]
@@ -1993,10 +2114,11 @@ def eod_overview():
 		tills = check_open_tills(p.name, bd)
 		pos = check_open_pos_bills(p.name, bd)
 		deps = check_departures_due(p.name, bd)
+		gl_tieout = check_gl_control_tieout(p.name, bd)
 		arrivals = frappe.db.count("Reservation", {
 			"property": p.name, "status": "Confirmed",
 			"check_in_date": ("<=", bd)})
-		blockers = open_blockers([tills, pos, deps])
+		blockers = open_blockers([tills, pos, deps, gl_tieout])
 		draft = frappe.db.get_value(
 			"Night Audit Run", {"property": p.name, "business_date": bd,
 			                    "status": "Draft"}, ["name", "eod_step"],

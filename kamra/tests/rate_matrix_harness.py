@@ -267,6 +267,7 @@ class RateMatrixHarness(unittest.TestCase):
 			"hospitality_kamra.erp_books",
 			"hospitality_kamra.erp_receivables",
 			"hospitality_kamra.open_outlet_checks",
+			"hospitality_kamra.control_tieout",
 		):
 			return None
 		if api_method != "hospitality_tariffs.tariff_rate":
