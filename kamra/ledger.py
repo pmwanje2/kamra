@@ -2207,12 +2207,9 @@ def force_advance_bill(reservation: str, nights: str = "entire",
 	from kamra.authz import require_cashier_pin
 	from kamra.folio import open_folio, post_room_night
 
-	res = frappe.get_doc("Reservation", reservation)
-	if res.get("share_group_id"):
-		# Take the same inventory lock as break_share before opening the folio.
-		from kamra.kamra.doctype.reservation.reservation import lock_property_for_inventory
-		lock_property_for_inventory(res.property)
-		res = frappe.get_doc("Reservation", reservation, for_update=True)
+	# Reservation.load_from_db takes the property inventory lock before the
+	# locking read, including when another transaction just added the first peer.
+	res = frappe.get_doc("Reservation", reservation, for_update=True)
 	require_cashier_pin(res.property, pin)
 	if res.status not in ("Confirmed", "Checked In", "Held", "Pending Payment"):
 		frappe.throw("Advance bill only for active reservations.")

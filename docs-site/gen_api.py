@@ -62,7 +62,7 @@ MODULES = [
     ("audit_report", "Night audit report (day, MTD, YTD)", "Read only. Food and beverage come from the restaurant bills; the year starts where the country pack says."),
     ("custom_reports", "Custom reports (builder, save, email)",
      "Whitelisted datasets only - no Desk Query Reports or free SQL. "
-     "Saved definitions live on Kamra Custom Report; staff use Finance → Reports."),
+     "Staff can save report definitions in Finance → Reports."),
     ("ledger", "Ledgers (trial balance, city ledger / AR, FX desk)", ""),
     ("credit", "Company credit (payment terms, credit limit, overdue check)",
      "Credit control is enforced inside check_out, create_booking and city_ledger_transfer; these endpoints explain and configure it."),
@@ -201,6 +201,23 @@ def pin_http_contract():
     return pin_fields, http_fields
 
 
+def display_text(text):
+    """Localize source docstrings for publication, retaining RPC and configuration keys."""
+    for source, display in (
+        ("kamrapms.com", "the product website"),
+        ("Kamra Agent", "the assistant"),
+        ("Kamra", "Maximus"),
+        ("Frappe", "the platform"),
+        ("ERPNext accounting bridge", "accounting bridge"),
+        ("ERPNext bridge", "accounting bridge"),
+        ("ERPNext", "the accounting system"),
+        ("(kamra.credit) for its amount", "for its amount"),
+        ("₹ or GST %", "a currency symbol or tax percentage"),
+    ):
+        text = text.replace(source, display)
+    return text
+
+
 def collect():
     pin_fields, pin_http_fields = pin_http_contract()
     modules = []
@@ -224,7 +241,7 @@ def collect():
             eps.append({
                 "module": mod, "name": node.name, "guest": guest,
                 "method": "POST" if methods == ["POST"] else "GET/POST",
-                "roles": roles, "doc": doc.strip(),
+                "roles": roles, "doc": display_text(doc.strip()),
                 "params": endpoint_params,
             })
         modules.append({"module": mod, "folder": folder, "note": note,
@@ -247,7 +264,7 @@ def write_markdown(modules):
 outline: 2
 ---
 
-# REST API reference
+# Maximus REST API reference
 
 Every endpoint below is a whitelisted function - the same governed layer
 the UI and the AI use. **{total} endpoints**, generated from the source
@@ -256,12 +273,12 @@ the UI and the AI use. **{total} endpoints**, generated from the source
 ## Calling convention
 
 ```
-POST https://<your-kamra>/api/method/kamra.<module>.<function>
+POST https://<your-hotel-site>/api/method/kamra.<module>.<function>
 Authorization: token <api_key>:<api_secret>
 Content-Type: application/json
 ```
 
-- Get keys from **Kamra Agent → Connect your AI** (Claude OAuth, role-scoped) or the
+- Get keys from **Connect your AI** (Claude OAuth, role-scoped) or the
   dedicated agent user for services.
 - Responses: `{{"message": <return value>}}`. Errors are HTTP 4xx with a
   readable reason.
@@ -281,7 +298,8 @@ Content-Type: application/json
             out.append(f"### `kamra.{e['module']}.{e['name']}`{badge}\n")
             meta = [f"**{e['method']}**"]
             if e["roles"]:
-                meta.append("roles: " + ", ".join(f"`{r}`" for r in e["roles"]))
+                labels = ("Assistant service role" if r == "Kamra Agent" else r for r in e["roles"])
+                meta.append("roles: " + ", ".join(f"`{label}`" for label in labels))
             out.append(" · ".join(meta) + "\n")
             if e["doc"]:
                 out.append(esc(e["doc"]) + "\n")
@@ -334,12 +352,12 @@ def write_postman(modules):
 
     collection = {
         "info": {
-            "name": "Kamra PMS API",
+            "name": "Maximus Hotel PMS API",
             "description":
-                "The full Kamra REST surface. Set base_url (e.g. "
+                "Set base_url to your Maximus site (e.g. "
                 "https://pms.yourhotel.com), api_key and api_secret in the "
-                "collection variables, then call away. Docs: "
-                "https://kamrapms.com/docs/api-reference",
+                "collection variables. Open `/docs/api-reference` on your Maximus "
+                "documentation site for endpoint details.",
             "schema": "https://schema.getpostman.com/json/collection/"
                       "v2.1.0/collection.json",
         },

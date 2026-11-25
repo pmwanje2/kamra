@@ -8,11 +8,21 @@ from frappe.utils import getdate
 
 
 class RoomBlock(Document):
+	def load_from_db(self):
+		# Break-share reads active blocks after locking inventory. Take locks in
+		# the same order when Frappe loads an existing block for an update.
+		if self.flags.for_update:
+			from kamra.kamra.doctype.reservation.reservation import lock_property_for_inventory
+			lock_property_for_inventory(frappe.db.get_value("Room Block", self.name, "property"))
+		return super().load_from_db()
+
 	def validate(self):
 		if getdate(self.to_date) <= getdate(self.from_date):
 			frappe.throw(_("The block's 'To' date must be after its 'From' date."))
 		self.validate_room_property()
 		if self.block_status == "Active":
+			from kamra.kamra.doctype.reservation.reservation import lock_property_for_inventory
+			lock_property_for_inventory(self.property)
 			self.validate_no_reservation_clash()
 
 	def validate_room_property(self):
@@ -32,7 +42,7 @@ class RoomBlock(Document):
 			  AND check_in_date < %(to)s
 			  AND GREATEST(check_out_date,
 			               DATE_ADD(check_in_date, INTERVAL 1 DAY)) > %(from)s
-			LIMIT 1
+			LIMIT 1 FOR UPDATE
 			""",
 			{"room": self.room, "from": self.from_date, "to": self.to_date},
 			as_dict=True,

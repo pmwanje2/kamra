@@ -1368,7 +1368,7 @@ def post_room_night(reservation, date, folios=None, *, room_posted: list | None 
 		share = None
 		if shared:
 			from kamra.shares import nightly_share
-			share = nightly_share(reservation, date, lock=True, advance_bill=advance_bill)
+			share = nightly_share(reservation, date, lock=True, advance_bill=advance_bill, folios=folios)
 			if share is None:
 				return False
 		if share:
