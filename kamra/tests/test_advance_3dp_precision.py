@@ -29,7 +29,7 @@ class TestAdvancePrecision(AuditTestCase):
 		row = api.add_folio_payment(folio, "Cash", paid, kind="Advance")["payments"][-1]["name"]
 		return res, folio, row
 
-	def assert_check_in_transfer(self, res, folio, amount):
+	def assert_check_in_transfer(self, res, folio, amount, remaining=0):
 		res.reload()
 		res.status = "Checked In"
 		res.save(ignore_permissions=True)
@@ -40,14 +40,14 @@ class TestAdvancePrecision(AuditTestCase):
 		)
 		self.assertEqual(
 			sorted((row.ledger, row.debit, row.credit) for row in rows),
-			[("Deposit", amount, 0), ("Guest", 0, amount)],
+			[("Deposit", amount, 0), ("Guest", 0, amount)] if amount else [],
 		)
 		deposit_rows = frappe.get_all(
 			"Folio Ledger Entry", filters={"folio": folio, "ledger": "Deposit"},
 			fields=["debit", "credit"],
 		)
 		self.assertEqual(sum(ledger._money(row.credit) - ledger._money(row.debit)
-		                     for row in deposit_rows), 0)
+		                     for row in deposit_rows), ledger._money(remaining))
 		self.assertEqual(ledger.transfer_advances_to_guest(res.name), 0)
 
 	def test_kwd_transfers_exact_balance_after_linked_refund(self):
@@ -68,12 +68,12 @@ class TestAdvancePrecision(AuditTestCase):
 		res, folio, _row = self.advance("USD", 0.01)
 		self.assert_check_in_transfer(res, folio, 0.01)
 
-	def test_explicit_frappe_precision_takes_precedence(self):
+	def test_folio_precision_takes_precedence_over_global_precision(self):
 		res, folio, row = self.advance("USD", 0.01)
-		# The ledger can carry balances posted under an explicit precision.
+		# A sub-cent ledger balance cannot be applied at the USD folio's precision.
 		frappe.db.set_single_value("System Settings", "currency_precision", "3")
 		ledger.write_ledger_entry(
 			property=res.property, folio=folio, ledger="Deposit", debit=0.006,
 			source_doctype="Folio Payment", source_name=row,
 		)
-		self.assert_check_in_transfer(res, folio, 0.004)
+		self.assert_check_in_transfer(res, folio, 0, remaining=0.004)
