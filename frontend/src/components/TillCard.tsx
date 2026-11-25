@@ -79,24 +79,24 @@ export default function TillCard(props: {
   return (
     <section
       data-testid="till-card"
-      className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 sm:p-4"
+      className="rounded-xl border border-warning-line-strong bg-warning-subtle p-3 text-sm text-warning-ink sm:p-4"
     >
       <h3 className="flex items-center gap-2 font-semibold">
-        <Wallet className="size-4 text-amber-700" aria-hidden />
+        <Wallet className="size-4 text-warning-ink" aria-hidden />
         {t("Your till is closed")}
       </h3>
       {till.can_open ? (
         <>
-          <p className="mt-1 text-amber-900">
+          <p className="mt-1 text-warning-ink">
             {props.purpose
               ? t("Open your till {purpose}. Count the cash in the drawer and enter it as the opening float (0 if it is empty).", { purpose: props.purpose })
               : t("Open your till to take or give back money. Count the cash in the drawer and enter it as the opening float (0 if it is empty).")}
           </p>
           <div className="mt-3 flex flex-wrap items-end gap-2">
             <label className="block text-xs">
-              <span className="mb-1 block text-amber-800">{t("Opening float")}</span>
+              <span className="mb-1 block text-warning-ink">{t("Opening float")}</span>
               <input
-                className="w-32 rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm"
+                className="w-32 rounded-lg border border-warning-line-strong bg-surface px-3 py-2 text-sm"
                 type="number"
                 min="0"
                 step={moneyStep()}
@@ -111,18 +111,18 @@ export default function TillCard(props: {
               {t("Open my till")}
             </Button>
           </div>
-          <p className="mt-2 text-xs text-amber-800">
+          <p className="mt-2 text-xs text-warning-ink">
             {t("You close it at the end of your shift with a cash count (Finance, Cashier).")}
           </p>
         </>
       ) : (
-        <p className="mt-1 text-amber-900">
+        <p className="mt-1 text-warning-ink">
           {t("Your role can't open a till. Ask {who} to take the money.", {
             who: till.who_can_open.map((r) => t(r)).join(", "),
           })}
         </p>
       )}
-      {error && <p role="alert" className="mt-2 text-rose-700">{translate(error)}</p>}
+      {error && <p role="alert" className="mt-2 text-danger-ink">{translate(error)}</p>}
     </section>
   )
 }

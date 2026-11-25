@@ -75,12 +75,12 @@ const nightsBetween = (a: string, b: string) =>
   Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86_400_000)
 
 const STATUS_TONE: Record<string, string> = {
-  Waitlist: "bg-amber-100 text-amber-800",
-  Confirmed: "bg-sky-100 text-sky-800",
-  "Checked In": "bg-emerald-100 text-emerald-800",
-  "Checked Out": "bg-zinc-200 text-zinc-700",
-  Cancelled: "bg-rose-100 text-rose-800",
-  "No Show": "bg-amber-100 text-amber-800",
+  Waitlist: "bg-warning-muted text-warning-ink",
+  Confirmed: "bg-info-muted text-info-ink",
+  "Checked In": "bg-success-muted text-success-ink",
+  "Checked Out": "bg-muted text-secondary-ink",
+  Cancelled: "bg-danger-muted text-danger-ink",
+  "No Show": "bg-warning-muted text-warning-ink",
 }
 
 function Card(props: {
@@ -91,10 +91,10 @@ function Card(props: {
 }) {
   useUILanguage()
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-4">
+    <div className="rounded-xl border border-line bg-surface p-4">
       <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm font-semibold text-zinc-700">
-          <span className="text-zinc-400">{props.icon}</span>
+        <div className="flex items-center gap-2 text-sm font-semibold text-secondary-ink">
+          <span className="text-muted-ink">{props.icon}</span>
           {translate(props.title)}
         </div>
         {props.action}
@@ -110,8 +110,8 @@ function Field(props: { label: string; value: React.ReactNode }) {
   // own grid column instead of running into the next one
   return (
     <div className="min-w-0">
-      <dt className="text-xs text-zinc-400">{translate(props.label)}</dt>
-      <dd className="mt-0.5 break-words text-sm text-zinc-800 [overflow-wrap:anywhere]">{props.value || "-"}</dd>
+      <dt className="text-xs text-muted-ink">{translate(props.label)}</dt>
+      <dd className="mt-0.5 break-words text-sm text-ink [overflow-wrap:anywhere]">{props.value || "-"}</dd>
     </div>
   )
 }
@@ -158,7 +158,7 @@ function IdentityCard({ d, reload }: { d: Detail; reload: () => void }) {
           <Button variant="outline" className="min-h-11 sm:min-h-9" disabled={busy} onClick={verify}>
             <ShieldCheck className="size-4" />{translate(" Verify identity")}</Button>
         ) : d.precheckin_verified_by ? (
-          <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700">
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-success-ink">
             <ShieldCheck className="size-3.5" />{translate("Verified by ")}{d.precheckin_verified_by.split("@")[0]}
           </span>
         ) : undefined
@@ -171,16 +171,16 @@ function IdentityCard({ d, reload }: { d: Detail; reload: () => void }) {
 
       {img ? (
         <img src={img} alt={translate("Guest ID document")}
-          className="max-h-56 w-auto rounded-lg border border-zinc-200" />
+          className="max-h-56 w-auto rounded-lg border border-line" />
       ) : d.id_document ? (
-        <p className="text-sm text-zinc-400">{translate("Loading the document…")}</p>
+        <p className="text-sm text-muted-ink">{translate("Loading the document…")}</p>
       ) : d.id_document_discarded ? (
-        <p className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-500">{translate("ID document discarded at checkout, per this property's retention policy.")}</p>
+        <p className="rounded-lg border border-line bg-canvas px-3 py-2 text-xs text-muted-ink">{translate("ID document discarded at checkout, per this property's retention policy.")}</p>
       ) : open ? (
         <div className="space-y-2">
           {/* A warning, never a gate. The guest is standing here with a
               physical card; check-in works with or without this. */}
-          <div className="flex items-start gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+          <div className="flex items-start gap-1.5 rounded-lg border border-warning-line-strong bg-warning-subtle px-3 py-2 text-xs font-medium text-warning-ink">
             <TriangleAlert className="mt-px size-3.5 shrink-0" />{translate("No ID document on file - capture it at the counter.")}</div>
           <IdDocumentField
             method="kamra.api.upload_id_document"
@@ -193,7 +193,7 @@ function IdentityCard({ d, reload }: { d: Detail; reload: () => void }) {
       ) : null}
 
       {err && (
-        <p className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+        <p className="mt-2 rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-xs text-danger-ink">
           {translate(err)}
         </p>
       )}
@@ -397,7 +397,7 @@ export default function ReservationDetail({
 
   if (!d)
     return (
-      <p className="py-10 text-center text-sm text-zinc-400">
+      <p className="py-10 text-center text-sm text-muted-ink">
         {translate(error) ?? translate("Loading…")}
       </p>
     )
@@ -442,7 +442,7 @@ export default function ReservationDetail({
         <span
           className={
             "rounded-full px-2.5 py-1 text-xs font-semibold " +
-            (STATUS_TONE[d.status] ?? "bg-zinc-100 text-zinc-700")
+            (STATUS_TONE[d.status] ?? "bg-subtle text-secondary-ink")
           }
         >
           {translate(d.status)}
@@ -453,13 +453,13 @@ export default function ReservationDetail({
         {d.source && <Badge>{translate(d.source)}</Badge>}
         {d.channel && <Badge>{translate(d.channel)}</Badge>}
         {d.guest?.vip === 1 && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+          <span className="inline-flex items-center gap-1 rounded-full bg-warning-muted px-2 py-0.5 text-xs font-semibold text-warning-ink">
             <Star className="size-3" /> VIP
           </span>
         )}
         {d.guest?.blacklisted === 1 && <Badge tone="rose">{translate("Blacklisted")}</Badge>}
         {d.channel_review_needed === 1 && (
-          <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
+          <span className="inline-flex items-center gap-1 rounded-full border border-warning-line-strong bg-warning-subtle px-2.5 py-0.5 text-xs font-semibold text-warning-ink">
             <TriangleAlert className="size-3" />
             {translate("Channel review needed")}
           </span>
@@ -508,10 +508,10 @@ export default function ReservationDetail({
                     "The stay's dates, room, and charges were left unchanged. Review what the channel sent below and update the stay manually if needed.",
                   )
         return (
-          <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <div className="rounded-xl border border-warning-line-strong bg-warning-subtle px-4 py-3 text-sm text-warning-ink">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="flex items-center gap-1.5 font-semibold">
-                <TriangleAlert className="size-4 shrink-0 text-amber-700" />
+                <TriangleAlert className="size-4 shrink-0 text-warning-ink" />
                 {reviewTitle}
               </div>
               {canClearChannelReview && (
@@ -525,14 +525,14 @@ export default function ReservationDetail({
                 </Button>
               )}
             </div>
-            <p className="mt-1 text-xs text-amber-800">{reviewBody}</p>
+            <p className="mt-1 text-xs text-warning-ink">{reviewBody}</p>
             {(d.channel_reviews ?? []).length > 0 && (
-              <ul className="mt-2 space-y-1 text-xs text-amber-900">
+              <ul className="mt-2 space-y-1 text-xs text-warning-ink">
                 {(d.channel_reviews ?? []).map((item) => (
-                  <li key={item.name} className="rounded-md bg-white/70 px-2.5 py-1.5">
+                  <li key={item.name} className="rounded-md bg-surface/70 px-2.5 py-1.5">
                     <span>{item.rationale}</span>
                     {item.executed_at && (
-                      <span className="ms-2 text-amber-700/80">{item.executed_at.slice(0, 16)}</span>
+                      <span className="ms-2 text-warning-ink/80">{item.executed_at.slice(0, 16)}</span>
                     )}
                   </li>
                 ))}
@@ -543,7 +543,7 @@ export default function ReservationDetail({
       })()}
 
       {error && (
-        <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+        <div className="rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">
           {translate(error)}
         </div>
       )}
@@ -567,30 +567,30 @@ export default function ReservationDetail({
             <Link
               to={`/billing/${encodeURIComponent(d.folio_name)}`}
               onClick={onClose}
-              className="inline-flex min-h-11 items-center text-xs font-medium text-brand-700 hover:underline sm:min-h-9"
+              className="inline-flex min-h-11 items-center text-xs font-medium text-accent-ink hover:underline sm:min-h-9"
             >{translate("Open folio →")}</Link>
           ) : undefined
         }
       >
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
           <div className="flex min-w-0 items-baseline justify-between gap-2 sm:block">
-            <div className="text-xs text-zinc-400">{translate("Total")}</div>
-            <div className="break-words text-base font-semibold tabular-nums text-zinc-900 sm:text-lg">
+            <div className="text-xs text-muted-ink">{translate("Total")}</div>
+            <div className="break-words text-base font-semibold tabular-nums text-ink sm:text-lg">
               {fmtReservationMoney(money.total)}
             </div>
           </div>
           <div className="flex min-w-0 items-baseline justify-between gap-2 sm:block">
-            <div className="text-xs text-zinc-400">{translate("Paid")}</div>
-            <div className="break-words text-base font-semibold tabular-nums text-emerald-700 sm:text-lg">
+            <div className="text-xs text-muted-ink">{translate("Paid")}</div>
+            <div className="break-words text-base font-semibold tabular-nums text-success-ink sm:text-lg">
               {fmtReservationMoney(money.paid)}
             </div>
           </div>
           <div className="flex min-w-0 items-baseline justify-between gap-2 sm:block">
-            <div className="text-xs text-zinc-400">{translate("Balance due")}</div>
+            <div className="text-xs text-muted-ink">{translate("Balance due")}</div>
             <div
               className={
                 "break-words text-base font-semibold tabular-nums sm:text-lg " +
-                (money.due > 0 ? "text-rose-600" : "text-zinc-400")
+                (money.due > 0 ? "text-danger-text" : "text-muted-ink")
               }
             >
               {fmtReservationMoney(money.due)}
@@ -598,9 +598,9 @@ export default function ReservationDetail({
           </div>
         </div>
         {Number(money.refund_due ?? 0) > 0 && (
-          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">{translate("Refund due: ")}<span className="font-semibold">{fmtReservationMoney(money.refund_due ?? 0)}</span>{" "}{translate("- the advance taken at booking, with no folio or fee against it.")}</div>
+          <div className="mt-3 rounded-lg border border-warning-line bg-warning-subtle px-3 py-2 text-sm text-warning-ink">{translate("Refund due: ")}<span className="font-semibold">{fmtReservationMoney(money.refund_due ?? 0)}</span>{" "}{translate("- the advance taken at booking, with no folio or fee against it.")}</div>
         )}
-        <p className="mt-2 text-xs text-zinc-400">
+        <p className="mt-2 text-xs text-muted-ink">
           {money.source === "folio"
             ? translate("Live from the guest folio.")
             : money.source === "none"
@@ -641,7 +641,7 @@ export default function ReservationDetail({
         <Card icon={<CalendarDays className="size-4" />} title={translate("Stay")}>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="block">
-              <span className="text-xs text-zinc-400">{translate("Check-in")}</span>
+              <span className="text-xs text-muted-ink">{translate("Check-in")}</span>
               <input
                 type="date"
                 value={ci}
@@ -654,29 +654,29 @@ export default function ReservationDetail({
                 }
                 disabled={!d.actions.can_amend}
                 onChange={(e) => setCi(e.target.value)}
-                className="mt-0.5 min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm disabled:bg-zinc-50 disabled:text-zinc-400 sm:min-h-9"
+                className="mt-0.5 min-h-11 w-full rounded-lg border border-control bg-surface px-2 py-1.5 text-sm disabled:bg-canvas disabled:text-muted-ink sm:min-h-9"
               />
             </label>
             <label className="block">
-              <span className="text-xs text-zinc-400">{translate("Check-out")}</span>
+              <span className="text-xs text-muted-ink">{translate("Check-out")}</span>
               <input
                 type="date"
                 value={co}
                 disabled={!d.actions.can_amend}
                 onChange={(e) => setCo(e.target.value)}
-                className="mt-0.5 min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm disabled:bg-zinc-50 disabled:text-zinc-400 sm:min-h-9"
+                className="mt-0.5 min-h-11 w-full rounded-lg border border-control bg-surface px-2 py-1.5 text-sm disabled:bg-canvas disabled:text-muted-ink sm:min-h-9"
               />
             </label>
           </div>
           {d.actions.can_amend && (d.rate_plans?.length ?? 0) > 0 && (
             <label className="mt-3 block">
-              <span className="text-xs text-zinc-400">{translate("Rate plan")}</span>
+              <span className="text-xs text-muted-ink">{translate("Rate plan")}</span>
               <select
                 aria-label={translate("Rate plan")}
                 value={plan}
                 disabled={busy}
                 onChange={(e) => setPlan(e.target.value)}
-                className="mt-0.5 min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm disabled:bg-zinc-50 disabled:text-zinc-400 sm:min-h-9"
+                className="mt-0.5 min-h-11 w-full rounded-lg border border-control bg-surface px-2 py-1.5 text-sm disabled:bg-canvas disabled:text-muted-ink sm:min-h-9"
               >
                 {!savedPlan && <option value="">—</option>}
                 {(d.rate_plans ?? []).map((p) => (
@@ -688,15 +688,15 @@ export default function ReservationDetail({
           {datesChanged && d.actions.can_amend && (
             <div className="mt-3 space-y-2">
               {!datesValid ? (
-                <p className="text-xs text-rose-600">{translate("Check-out must be after check-in.")}</p>
+                <p className="text-xs text-danger-text">{translate("Check-out must be after check-in.")}</p>
               ) : !datePreview ? (
-                !error && <p className="text-xs text-zinc-400">{translate("Checking price")}</p>
+                !error && <p className="text-xs text-muted-ink">{translate("Checking price")}</p>
               ) : datePreview.difference === 0 ? (
-                <p className="text-sm text-zinc-600">
+                <p className="text-sm text-secondary-ink">
                   {translate("{n} nights. No change to the price.", { n: nightsBetween(ci, co) })}
                 </p>
               ) : (
-                <p className={`text-sm ${datePreview.difference > 0 ? "text-amber-700" : "text-emerald-700"}`}>
+                <p className={`text-sm ${datePreview.difference > 0 ? "text-warning-ink" : "text-success-ink"}`}>
                   {datePreview.difference > 0
                     ? translate("{n} nights. Stay total {from} to {to} (+{amt}).", {
                         n: nightsBetween(ci, co),
@@ -713,7 +713,7 @@ export default function ReservationDetail({
                 </p>
               )}
               {planDiffers && (
-                <p className="text-xs text-zinc-500">
+                <p className="text-xs text-muted-ink">
                   {translate("Applies from the current business date for remaining nights; posted nights keep their rate.")}
                 </p>
               )}
@@ -754,7 +754,7 @@ export default function ReservationDetail({
             </div>
           )}
           {d.status === "Confirmed" && (
-            <label className="mt-3 flex min-h-11 items-start gap-2 text-sm text-zinc-700">
+            <label className="mt-3 flex min-h-11 items-start gap-2 text-sm text-secondary-ink">
               <span className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center sm:min-h-6 sm:min-w-6">
                 <input
                   type="checkbox"
@@ -763,7 +763,7 @@ export default function ReservationDetail({
                   onChange={(e) => act(() => setLateArrival(name, e.target.checked))}
                 />
               </span>
-              <span className="pt-2 sm:pt-0">{translate("Late arrival")}<span className="block text-xs text-zinc-400">{translate("The night audit holds this arrival as Due In instead of marking a no-show; the next audit decides.")}</span>
+              <span className="pt-2 sm:pt-0">{translate("Late arrival")}<span className="block text-xs text-muted-ink">{translate("The night audit holds this arrival as Due In instead of marking a no-show; the next audit decides.")}</span>
               </span>
             </label>
           )}
@@ -784,7 +784,7 @@ export default function ReservationDetail({
                   foreignBaseRates.length > 0 ? (
                     <>
                       <span>{rangeOf(foreignBaseRates, rateCurrency)}</span>
-                      <span className="ms-1 text-xs text-zinc-400">
+                      <span className="ms-1 text-xs text-muted-ink">
                         ({rangeOf(d.night_rates.map((n) => n.entry_base_rate ?? n.base_rate ?? n.rate))})
                       </span>
                     </>
@@ -800,7 +800,7 @@ export default function ReservationDetail({
                     {foreignNetRates.length > 0 ? (
                       <>
                         <span>{rangeOf(foreignNetRates, rateCurrency)}</span>
-                        <span className="ms-1 text-xs text-zinc-400">
+                        <span className="ms-1 text-xs text-muted-ink">
                           ({rangeOf(d.night_rates.map((n) => n.entry_rate ?? n.rate))})
                         </span>
                       </>
@@ -824,19 +824,19 @@ export default function ReservationDetail({
           )}
           <ChangesLog reservation={name} money={fmtReservationMoney} />
           {d.booked_check_out_date && (
-            <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <p className="mt-3 rounded-lg bg-warning-subtle px-3 py-2 text-xs text-warning-ink">
               {translate("Left early: booked to {date}.", { date: d.booked_check_out_date })}
               {d.early_departure_reason ? ` ${d.early_departure_reason}` : ""}
             </p>
           )}
           {(d.occupants ?? []).length > 0 && (
             <div className="mt-3">
-              <span className="text-xs text-zinc-400">{translate("In the room")}</span>
+              <span className="text-xs text-muted-ink">{translate("In the room")}</span>
               <ul className="mt-1 space-y-0.5 text-sm">
                 {(d.occupants ?? []).map((o, i) => (
                   <li key={i} className="flex flex-wrap justify-between gap-x-2">
-                    <span className={o.left_at ? "text-zinc-400 line-through" : ""}>{o.full_name}</span>
-                    <span className="text-xs tabular-nums text-zinc-500">
+                    <span className={o.left_at ? "text-muted-ink line-through" : ""}>{o.full_name}</span>
+                    <span className="text-xs tabular-nums text-muted-ink">
                       {o.arrived_at ? translate("Arrived {time}", { time: o.arrived_at.slice(0, 16) }) : ""}
                       {o.left_at ? ` · ${translate("Left {time}", { time: o.left_at.slice(0, 16) })}` : ""}
                     </span>
@@ -858,7 +858,7 @@ export default function ReservationDetail({
               <button
                 type="button"
                 onClick={() => setChangingRoom(true)}
-                className="inline-flex min-h-11 items-center text-xs font-medium text-brand-700 hover:underline sm:min-h-9"
+                className="inline-flex min-h-11 items-center text-xs font-medium text-accent-ink hover:underline sm:min-h-9"
               >
                 {d.room ? translate("Change room") : translate("Assign room")}
               </button>
@@ -871,11 +871,11 @@ export default function ReservationDetail({
             {d.meal_plan && <Field label={translate("Meal plan")} value={d.meal_plan_name || d.meal_plan} />}
             {d.rate_plan && <Field label={translate("Rate plan")} value={d.rate_plan} />}
           </dl>
-          {d.tariff && <p className="mt-2 text-sm text-zinc-600">
+          {d.tariff && <p className="mt-2 text-sm text-secondary-ink">
             {translate("Booked contract tariff")}: <TariffNight {...d} />
           </p>}
           {!d.room && d.status === "Confirmed" && (
-            <p className="mt-2 text-xs text-amber-600">{translate("No room assigned yet - use Assign room above before check-in.")}</p>
+            <p className="mt-2 text-xs text-warning-text">{translate("No room assigned yet - use Assign room above before check-in.")}</p>
           )}
         </Card>
 
@@ -888,7 +888,7 @@ export default function ReservationDetail({
               <Link
                 to={`/guests/${encodeURIComponent(d.guest.name)}`}
                 onClick={onClose}
-                className="inline-flex min-h-11 items-center text-xs font-medium text-brand-700 hover:underline sm:min-h-9"
+                className="inline-flex min-h-11 items-center text-xs font-medium text-accent-ink hover:underline sm:min-h-9"
               >{translate("Guest journey →")}</Link>
             ) : undefined
           }
@@ -910,7 +910,7 @@ export default function ReservationDetail({
               />
             </dl>
           ) : (
-            <p className="text-sm text-zinc-400">{translate("No linked guest profile.")}</p>
+            <p className="text-sm text-muted-ink">{translate("No linked guest profile.")}</p>
           )}
         </Card>
 
@@ -956,7 +956,7 @@ export default function ReservationDetail({
             setReqDirty(true)
           }}
           placeholder={translate("Late check-in, high floor, allergies…")}
-          className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+          className="w-full rounded-lg border border-control bg-surface px-3 py-2 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-focus"
           rows={2}
         />
         {reqDirty && (
@@ -991,7 +991,7 @@ export default function ReservationDetail({
 
       {/* cancellation record, if any */}
       {d.cancellation && (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+        <div className="rounded-xl border border-danger-line bg-danger-subtle px-4 py-3 text-sm text-danger-ink">
           <p className="font-semibold">{translate("Cancelled - ")}{d.cancellation.number}
           </p>
           <p className="mt-0.5">
@@ -1006,13 +1006,13 @@ export default function ReservationDetail({
           <Link
             to={`/cancelled/${encodeURIComponent(name)}`}
             onClick={onClose}
-            className="mt-1 inline-block font-medium text-rose-900 underline"
+            className="mt-1 inline-block font-medium text-danger-ink underline"
           >{translate("Cancellation letter")}</Link>
         </div>
       )}
 
       {d.status === "Requested" && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <div className="rounded-xl border border-warning-line bg-warning-subtle px-4 py-3 text-sm text-warning-ink">
           <p className="font-semibold">{translate("Booking request - waiting for your answer")}</p>
           <p className="mt-0.5 text-xs">{translate("A request holds no room. Accepting checks availability again and takes a room; declining cancels it with no fee and tells the guest.")}</p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -1021,7 +1021,7 @@ export default function ReservationDetail({
               value={declineReason}
               onChange={(e) => setDeclineReason(e.target.value)}
               placeholder={translate("Reason for declining")}
-              className="min-h-11 min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-brand-600 sm:min-h-9"
+              className="min-h-11 min-w-0 flex-1 rounded-lg border border-control bg-surface px-3 py-1.5 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-focus sm:min-h-9"
             />
             <Button
               variant="outline"
@@ -1037,7 +1037,7 @@ export default function ReservationDetail({
 
       {/* Pack 2 slot: reservation actions extensions */}
       {/* primary actions */}
-      <div className="flex flex-wrap items-center gap-2 border-t border-zinc-200 pt-4">
+      <div className="flex flex-wrap items-center gap-2 border-t border-line pt-4">
         {d.status === "Waitlist" && (
           <Button
             className="min-h-11 sm:min-h-9"
@@ -1054,7 +1054,7 @@ export default function ReservationDetail({
             `status === "Confirmed" && room`. A stale or missing upload must
             not turn a real guest away at the counter. */}
         {d.actions.can_check_in && d.warnings.id_document_missing && (
-          <span className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-800">
+          <span className="inline-flex items-center gap-1.5 rounded-lg border border-warning-line-strong bg-warning-subtle px-2.5 py-1.5 text-xs font-medium text-warning-ink">
             <TriangleAlert className="size-3.5" />{translate(" No ID document on file")}</span>
         )}
         {d.actions.can_check_in && (
@@ -1068,22 +1068,22 @@ export default function ReservationDetail({
           </Button>
         )}
         {groupNotice && (
-          <span className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-800">
+          <span className="rounded-lg border border-success-line bg-success-subtle px-2.5 py-1.5 text-xs font-medium text-success-ink">
             {d.group?.group_name}: {groupNotice}
           </span>
         )}
         {d.status === "Checked In" && (d.checkin_backfill?.length ?? 0) > 0 && (
           <Button variant="outline" className="min-h-11 sm:min-h-9" disabled={busy} onClick={() => setCheckingIn(true)}>
-            <TriangleAlert className="size-4 text-amber-600" />
+            <TriangleAlert className="size-4 text-warning-text" />
             {translate("Finish check-in ({n})", { n: d.checkin_backfill.length })}
           </Button>
         )}
         {d.actions.can_no_show && (
-          <Button variant="outline" className="min-h-11 text-rose-700 sm:min-h-9" disabled={busy} onClick={() => setMarkingNoShow(true)}>
+          <Button variant="outline" className="min-h-11 text-danger-ink sm:min-h-9" disabled={busy} onClick={() => setMarkingNoShow(true)}>
             <UserX className="size-4" />{translate("Mark no-show")}</Button>
         )}
         {d.actions.can_check_out && d.security_deposit?.blocks_checkout && (
-          <span className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-800">
+          <span className="inline-flex items-center gap-1.5 rounded-lg border border-warning-line-strong bg-warning-subtle px-2.5 py-1.5 text-xs font-medium text-warning-ink">
             <ShieldCheck className="size-3.5" />
             {d.security_deposit.blocks_checkout_card_hold
               ? translate("Before check-out: capture any damage from the card hold or release the hold.")
@@ -1101,26 +1101,26 @@ export default function ReservationDetail({
           <ReverseCheckInPanel reservation={name} onDone={(k) => { setReverseKeys(k); refresh(); reload() }} />
         )}
         {reverseKeys && (
-          <div className="w-full rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          <div className="w-full rounded-xl border border-warning-line bg-warning-subtle p-3 text-sm text-warning-ink">
             <p>{translate(reverseKeys)}</p>
           </div>
         )}
         {reinstated.length > 0 && (
-          <div className="w-full space-y-1 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          <div className="w-full space-y-1 rounded-xl border border-warning-line bg-warning-subtle p-3 text-sm text-warning-ink">
             {reinstated.map((w) => <p key={w}>{w}</p>)}
           </div>
         )}
         <Link
           to={`/grc/${encodeURIComponent(name)}`}
           onClick={onClose}
-          className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm font-medium text-zinc-600 hover:border-brand-600 hover:text-brand-700 sm:min-h-9"
+          className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-sm font-medium text-secondary-ink hover:border-accent-control hover:text-accent-ink sm:min-h-9"
         >
           <FileText className="size-4" />{translate(" Registration card")}</Link>
         {d.actions.can_amend && canQuote && (
           <Link
             to={`/booking-quote/${encodeURIComponent(name)}`}
             onClick={onClose}
-            className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm font-medium text-zinc-600 hover:border-brand-600 hover:text-brand-700 sm:min-h-9"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-sm font-medium text-secondary-ink hover:border-accent-control hover:text-accent-ink sm:min-h-9"
           >
             <FileText className="size-4" />{translate("Quotation")}</Link>
         )}

@@ -92,8 +92,8 @@ export function TapeMobileCards({
 
   return (
     <div data-testid="tape-mobile-cards" className="space-y-3 overflow-x-hidden md:hidden">
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2">
-        <span className="text-xs font-medium text-zinc-600 tabular-nums">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-canvas px-3 py-2">
+        <span className="text-xs font-medium text-secondary-ink tabular-nums">
           {selectedDate}
         </span>
         <Button
@@ -102,21 +102,21 @@ export function TapeMobileCards({
           onClick={onOpenQueue}
           className="min-h-11 px-3 text-xs"
         >
-          <Users className="size-4 text-brand-600" aria-hidden />
+          <Users className="size-4 text-accent-text" aria-hidden />
           {t("Queue ({n})", { n: unassignedCount })}
         </Button>
       </div>
 
       {groups.length === 0 ? (
-        <p className="rounded-xl border border-zinc-200 bg-white px-4 py-8 text-center text-sm text-zinc-400">
+        <p className="rounded-xl border border-line bg-surface px-4 py-8 text-center text-sm text-muted-ink">
           {t("No rooms match the selected filters.")}
         </p>
       ) : (
         groups.map((g) => (
           <section key={g.key} className="space-y-2">
-            <div className="flex items-center justify-between px-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+            <div className="flex items-center justify-between px-1 text-xs font-semibold uppercase tracking-wide text-muted-ink">
               <span>{translate(g.label)}</span>
-              <span className="font-normal normal-case text-zinc-400">{g.rooms.length}</span>
+              <span className="font-normal normal-case text-muted-ink">{g.rooms.length}</span>
             </div>
             {g.rooms.map((room) => {
               const segment = bookingOnDate(room, selectedDate)
@@ -134,15 +134,15 @@ export function TapeMobileCards({
                 <div
                   key={room.name}
                   data-mobile-room={room.name}
-                  className="rounded-xl border border-zinc-200 bg-white p-3 shadow-sm"
+                  className="rounded-xl border border-line bg-surface p-3 shadow-sm"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-base font-semibold text-zinc-900">
+                        <span className="text-base font-semibold text-ink">
                           {room.room_number}
                         </span>
-                        <span className="truncate text-xs text-zinc-500">
+                        <span className="truncate text-xs text-muted-ink">
                           {room.room_type_name || room.room_type}
                         </span>
                       </div>
@@ -151,7 +151,7 @@ export function TapeMobileCards({
                           {tags.map((tag) => (
                             <span
                               key={String(tag)}
-                              className="rounded bg-zinc-100 px-1.5 py-0.5 text-[11px] text-zinc-600"
+                              className="rounded bg-subtle px-1.5 py-0.5 text-[11px] text-secondary-ink"
                             >
                               {String(tag)}
                             </span>
@@ -180,7 +180,7 @@ export function TapeMobileCards({
                   </div>
 
                   {menuOpen && (
-                    <div className="mt-2 space-y-2 rounded-lg border border-zinc-200 bg-zinc-50 p-2">
+                    <div className="mt-2 space-y-2 rounded-lg border border-line bg-canvas p-2">
                       <div className="grid grid-cols-2 gap-1.5">
                         {hkOptions.filter((opt) => !opt.needsReason).map((opt) => (
                           <button
@@ -191,7 +191,7 @@ export function TapeMobileCards({
                               setHkMenuRoom(null)
                               await onChangeHk(room, opt.status)
                             }}
-                            className="min-h-11 rounded-md border border-zinc-200 bg-white px-2.5 text-xs font-medium text-zinc-800 hover:bg-zinc-100"
+                            className="min-h-11 rounded-md border border-line bg-surface px-2.5 text-xs font-medium text-ink hover:bg-subtle"
                           >
                             {t(opt.status)}
                           </button>
@@ -203,7 +203,7 @@ export function TapeMobileCards({
                             value={oooReason}
                             onChange={(e) => setOooReason(e.target.value)}
                             placeholder={t("Out of Order reason")}
-                            className="min-h-11 min-w-0 flex-1 rounded-md border border-zinc-300 bg-white px-2 text-xs"
+                            className="min-h-11 min-w-0 flex-1 rounded-md border border-control bg-surface px-2 text-xs"
                           />
                           <Button
                             type="button"
@@ -216,7 +216,7 @@ export function TapeMobileCards({
                               setOooReason("")
                               await onChangeHk(room, hkOooOption.status, reason)
                             }}
-                            className="min-h-11 shrink-0 px-2.5 text-xs text-rose-700"
+                            className="min-h-11 shrink-0 px-2.5 text-xs text-danger-ink"
                           >
                             {t(hkOooOption.status)}
                           </Button>
@@ -231,10 +231,10 @@ export function TapeMobileCards({
                         type="button"
                         onClick={() => onOpenBooking(stay)}
                         className={cn(
-                          "flex min-h-11 w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-start text-sm font-medium text-white",
+                          "flex min-h-11 w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-start text-sm font-medium text-on-solid",
                           stay.status === "Checked In"
-                            ? "bg-brand-600 hover:bg-brand-700"
-                            : "bg-sky-500 hover:bg-sky-600",
+                            ? "bg-accent-fill hover:bg-accent-fill-hover"
+                            : "bg-info-fill hover:bg-info-fill",
                         )}
                       >
                         <span className="flex min-w-0 items-center gap-1.5 truncate">
@@ -249,12 +249,12 @@ export function TapeMobileCards({
                           </span>}
                           <span className="truncate">{stay.guest_name}</span>
                         </span>
-                        <Badge tone={stay.status === "Checked In" ? "brand" : "sky"} className="shrink-0 bg-white/90">
+                        <Badge tone={stay.status === "Checked In" ? "brand" : "sky"} className="shrink-0 bg-surface/90">
                           {t(stay.status)}
                         </Badge>
                       </button>
                     ) : blk ? (
-                      <div className="flex min-h-11 items-center gap-2 rounded-lg border border-zinc-300 bg-zinc-100 px-3 text-xs font-medium text-zinc-600">
+                      <div className="flex min-h-11 items-center gap-2 rounded-lg border border-control bg-subtle px-3 text-xs font-medium text-secondary-ink">
                         <Lock className="size-3.5 shrink-0" aria-hidden />
                         <span className="truncate">{t(blk.reason)}</span>
                       </div>
@@ -271,7 +271,7 @@ export function TapeMobileCards({
                     ) : !isAssignableHkStatus(room.housekeeping_status) ? (
                       <p className={cn("py-2 text-xs font-medium", tone.text)}>{t(room.housekeeping_status)}</p>
                     ) : (
-                      <p className="py-2 text-xs text-zinc-400">{t("Vacant")}</p>
+                      <p className="py-2 text-xs text-muted-ink">{t("Vacant")}</p>
                     )}
                   </div>
                 </div>

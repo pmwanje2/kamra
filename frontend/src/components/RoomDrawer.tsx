@@ -50,13 +50,13 @@ export type RoomTab =
 type Tab = RoomTab
 
 export const HK_TONE: Record<HkStatus, string> = {
-  Clean: "border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-950/30 dark:text-emerald-100",
-  Pickup: "border-indigo-300 bg-indigo-50 text-indigo-900 dark:border-indigo-500/40 dark:bg-indigo-950/30 dark:text-indigo-100",
-  Inspected: "border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-500/40 dark:bg-sky-950/30",
-  Ready: "border-teal-400 bg-teal-50 text-teal-900 dark:border-teal-500/40 dark:bg-teal-950/30 dark:text-teal-100",
-  Dirty: "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/30 dark:text-amber-100",
-  "Out of Service": "border-orange-300 bg-orange-50 text-orange-900 dark:border-orange-500/40 dark:bg-orange-950/30 dark:text-orange-100",
-  "Out of Order": "border-rose-300 bg-rose-50 text-rose-900 dark:border-rose-500/40 dark:bg-rose-950/30 dark:text-rose-100",
+  Clean: "border-success-line-strong bg-success-subtle text-success-ink",
+  Pickup: "border-indigo-line-strong bg-indigo-subtle text-indigo-ink",
+  Inspected: "border-info-line-strong bg-info-subtle text-info-ink",
+  Ready: "border-teal-line-strong bg-teal-subtle text-teal-ink",
+  Dirty: "border-warning-line-strong bg-warning-subtle text-warning-ink",
+  "Out of Service": "border-notice-line-strong bg-notice-subtle text-notice-ink",
+  "Out of Order": "border-danger-line-strong bg-danger-subtle text-danger-ink",
 }
 
 const HK_SET: HkStatus[] = ["Dirty", "Pickup", "Clean", "Inspected", "Ready"]
@@ -176,12 +176,12 @@ export default function RoomDrawer(props: {
   return (
     <Sheet title={translate(title)} description={translate(description)} onClose={props.onClose} wide>
       {error && (
-        <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+        <div className="mb-3 rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">
           {translate(error)}
         </div>
       )}
       {!d ? (
-        <p className="text-sm text-zinc-400">{t("Loading…")}</p>
+        <p className="text-sm text-muted-ink">{t("Loading…")}</p>
       ) : (
         <>
           <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -204,7 +204,7 @@ export default function RoomDrawer(props: {
           </div>
           <div
             role="tablist"
-            className="mb-4 flex gap-1 overflow-x-auto border-b border-zinc-100"
+            className="mb-4 flex gap-1 overflow-x-auto border-b border-line-subtle"
           >
             {tabs.map((x) => (
               <button
@@ -214,13 +214,13 @@ export default function RoomDrawer(props: {
                 onClick={() => setTab(x.id)}
                 className={cn(
                   "relative inline-flex min-h-11 shrink-0 items-center gap-1.5 px-3 text-sm font-medium",
-                  tab === x.id ? "text-brand-700" : "text-zinc-500 hover:text-zinc-800",
+                  tab === x.id ? "text-accent-ink" : "text-muted-ink hover:text-ink",
                 )}
               >
                 {x.icon}
                 {translate(x.label)}
                 {tab === x.id && (
-                  <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-brand-600" />
+                  <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-accent-fill" />
                 )}
               </button>
             ))}
@@ -255,7 +255,7 @@ function Section(props: { title: string; children: React.ReactNode; aside?: Reac
   return (
     <section className="mb-6">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-zinc-800">{translate(props.title)}</h3>
+        <h3 className="text-sm font-semibold text-ink">{translate(props.title)}</h3>
         {props.aside}
       </div>
       {props.children}
@@ -264,7 +264,7 @@ function Section(props: { title: string; children: React.ReactNode; aside?: Reac
 }
 
 function Empty({ children }: { children: React.ReactNode }) {
-  return <p className="text-sm text-zinc-400">{children}</p>
+  return <p className="text-sm text-muted-ink">{children}</p>
 }
 
 // --- Status -------------------------------------------------------------------
@@ -338,8 +338,8 @@ function StatusTab({
                 className={cn(
                   "min-h-14 rounded-xl border-2 px-3 py-2 text-base font-semibold transition-colors",
                   s === status
-                    ? cn(HK_TONE[s], "ring-2 ring-brand-600 ring-offset-1")
-                    : "border-zinc-200 bg-white text-zinc-700 hover:border-zinc-400",
+                    ? cn(HK_TONE[s], "ring-2 ring-accent-control ring-offset-1")
+                    : "border-line bg-surface text-secondary-ink hover:border-control-strong",
                   "disabled:cursor-default",
                 )}
               >
@@ -358,11 +358,11 @@ function StatusTab({
             {d.tasks.map((x) => (
               <li
                 key={x.name}
-                className="flex flex-wrap items-center gap-2 rounded-lg border border-zinc-200 px-3 py-2 text-sm"
+                className="flex flex-wrap items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm"
               >
                 <span className="font-medium">{t(x.task_type)}</span>
                 <Badge tone={x.status === "In Progress" ? "sky" : "zinc"}>{t(x.status)}</Badge>
-                <span className="text-zinc-500">{x.assignee ?? t("Not assigned")}</span>
+                <span className="text-muted-ink">{x.assignee ?? t("Not assigned")}</span>
               </li>
             ))}
           </ul>
@@ -379,8 +379,8 @@ function StatusTab({
               className={cn(
                 "mb-3 rounded-lg border px-3 py-2 text-sm",
                 status === "Out of Service"
-                  ? "border-orange-200 bg-orange-50/70 text-orange-950 dark:border-orange-500/40 dark:bg-orange-950/40 dark:text-orange-100"
-                  : "border-rose-200 bg-rose-50/70 text-rose-900 dark:border-rose-500/40 dark:bg-rose-950/40 dark:text-rose-100",
+                  ? "border-notice-line bg-notice-subtle/70 text-notice-ink"
+                  : "border-danger-line bg-danger-subtle/70 text-danger-ink",
               )}
             >
               <div className="font-medium">{t(status)}</div>
@@ -397,16 +397,16 @@ function StatusTab({
             {d.blocks.map((b) => (
               <li
                 key={b.name}
-                className="rounded-lg border border-rose-200 bg-rose-50/60 px-3 py-2 text-sm"
+                className="rounded-lg border border-danger-line bg-danger-subtle/60 px-3 py-2 text-sm"
               >
-                <div className="font-medium text-rose-900">
+                <div className="font-medium text-danger-ink">
                   {t(REASON_LABEL[b.reason] ?? b.reason)}
                 </div>
-                <div className="text-rose-800/80">
+                <div className="text-danger-ink/80">
                   {t("{from} to {to}", { from: day(b.from_date), to: day(b.to_date) })}
                   {!b.current && ` · ${t("starts later")}`}
                 </div>
-                {b.note && <div className="mt-0.5 text-zinc-600">{b.note}</div>}
+                {b.note && <div className="mt-0.5 text-secondary-ink">{b.note}</div>}
               </li>
             ))}
           </ul>
@@ -431,8 +431,8 @@ function StatusTab({
           </Button>
         )}
         {d.can.block && formOpen && (
-          <div className="mt-3 rounded-xl border border-zinc-200 p-3">
-            <p className="mb-2 text-sm text-zinc-600">{t("Why?")}</p>
+          <div className="mt-3 rounded-xl border border-line p-3">
+            <p className="mb-2 text-sm text-secondary-ink">{t("Why?")}</p>
             <div className="mb-3 flex flex-wrap gap-2">
               {OUT_KINDS.map((k) => (
                 <button
@@ -441,8 +441,8 @@ function StatusTab({
                   className={cn(
                     "min-h-11 rounded-lg border px-3 text-sm font-medium",
                     kind === k.id
-                      ? "border-brand-600 bg-brand-50 text-brand-800"
-                      : "border-zinc-200 text-zinc-700 hover:border-zinc-400",
+                      ? "border-accent-control bg-accent-subtle text-accent-ink"
+                      : "border-line text-secondary-ink hover:border-control-strong",
                   )}
                 >
                   {t(k.label)}
@@ -450,34 +450,34 @@ function StatusTab({
               ))}
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <label className="text-sm text-zinc-600">
+              <label className="text-sm text-secondary-ink">
                 {t("From")}
                 <input
                   type="date"
                   value={from}
                   min={today}
                   onChange={(e) => setFrom(e.target.value)}
-                  className="mt-1 block min-h-11 w-full rounded-lg border border-zinc-300 px-3"
+                  className="mt-1 block min-h-11 w-full rounded-lg border border-control px-3"
                 />
               </label>
-              <label className="text-sm text-zinc-600">
+              <label className="text-sm text-secondary-ink">
                 {t("Back on (first night it can be sold)")}
                 <input
                   type="date"
                   value={to}
                   min={from}
                   onChange={(e) => setTo(e.target.value)}
-                  className="mt-1 block min-h-11 w-full rounded-lg border border-zinc-300 px-3"
+                  className="mt-1 block min-h-11 w-full rounded-lg border border-control px-3"
                 />
               </label>
             </div>
-            <label className="mt-3 block text-sm text-zinc-600">
+            <label className="mt-3 block text-sm text-secondary-ink">
               {t("Note (what is wrong, who is fixing it)")}
               <textarea
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 rows={2}
-                className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2"
+                className="mt-1 block w-full rounded-lg border border-control px-3 py-2"
               />
             </label>
             <div className="mt-3 flex flex-wrap gap-2">
@@ -495,9 +495,9 @@ function StatusTab({
           </div>
         )}
         {d.can.block && (
-          <p className="mt-3 text-xs text-zinc-400">
+          <p className="mt-3 text-xs text-muted-ink">
             {t("Holds also show on the Tape Chart and in")}{" "}
-            <Link to="/room-blocks" className="text-brand-700 hover:underline">
+            <Link to="/room-blocks" className="text-accent-ink hover:underline">
               {t("Room Blocks")}
             </Link>
           </p>
@@ -530,9 +530,9 @@ function NowTab({
     <div>
       <Section title={t("In the room now")}>
         {s ? (
-          <div className="rounded-xl border border-zinc-200 p-4">
-            <div className="text-lg font-semibold text-zinc-900">{s.guest_name}</div>
-            <div className="mt-0.5 text-sm text-zinc-500">
+          <div className="rounded-xl border border-line p-4">
+            <div className="text-lg font-semibold text-ink">{s.guest_name}</div>
+            <div className="mt-0.5 text-sm text-muted-ink">
               {t("{from} to {to}", { from: day(s.check_in_date), to: day(s.check_out_date) })}
               {" · "}
               {tn(s.nights, "{n} night", "{n} nights")}
@@ -563,7 +563,7 @@ function NowTab({
                 </Button>
                 <Link
                   to={`/grc/${encodeURIComponent(s.name)}`}
-                  className="inline-flex min-h-11 items-center rounded-lg px-3 text-sm font-medium text-brand-700 hover:bg-brand-50"
+                  className="inline-flex min-h-11 items-center rounded-lg px-3 text-sm font-medium text-accent-ink hover:bg-accent-subtle"
                 >
                   {t("Registration card")}
                 </Link>
@@ -576,9 +576,9 @@ function NowTab({
       </Section>
       <Section title={(a?.arriving_today ? t("Arriving today") : t("Next arrival"))}>
         {a ? (
-          <div className="rounded-xl border border-zinc-200 p-4">
-            <div className="text-lg font-semibold text-zinc-900">{a.guest_name}</div>
-            <div className="mt-0.5 text-sm text-zinc-500">
+          <div className="rounded-xl border border-line p-4">
+            <div className="text-lg font-semibold text-ink">{a.guest_name}</div>
+            <div className="mt-0.5 text-sm text-muted-ink">
               {t("{from} to {to}", { from: day(a.check_in_date), to: day(a.check_out_date) })}
               {" · "}
               {tn(a.nights, "{n} night", "{n} nights")}
@@ -597,7 +597,7 @@ function NowTab({
               </div>
             )}
             {a.arriving_today && s && (
-              <p className="mt-2 text-sm text-amber-700">
+              <p className="mt-2 text-sm text-warning-ink">
                 {t("The room is still occupied. Check the current guest out first.")}
               </p>
             )}
@@ -613,12 +613,12 @@ function NowTab({
 function Money(props: { label: string; value?: number; strong?: boolean }) {
   useUILanguage()
   return (
-    <div className="rounded-lg bg-zinc-50 px-3 py-2">
-      <div className="text-[11px] text-zinc-500">{translate(props.label)}</div>
+    <div className="rounded-lg bg-canvas px-3 py-2">
+      <div className="text-[11px] text-muted-ink">{translate(props.label)}</div>
       <div
         className={cn(
           "tabular-nums font-semibold",
-          props.strong ? "text-amber-700" : "text-zinc-800",
+          props.strong ? "text-warning-ink" : "text-ink",
         )}
       >
         {fmtMoney(props.value ?? 0)}
@@ -662,15 +662,15 @@ function AvailabilityTab({ room }: { room: string }) {
             className={cn(
               "min-h-10 rounded-lg border px-3 text-sm font-medium",
               days === n
-                ? "border-brand-600 bg-brand-50 text-brand-800"
-                : "border-zinc-200 text-zinc-600",
+                ? "border-accent-control bg-accent-subtle text-accent-ink"
+                : "border-line text-secondary-ink",
             )}
           >
             {t("Next {n} days", { n })}
           </button>
         ))}
         {a && (
-          <span className="text-sm text-zinc-500">
+          <span className="text-sm text-muted-ink">
             {t("{free} free · {booked} booked · {blocked} held", {
               free: a.summary.free,
               booked: a.summary.booked,
@@ -679,7 +679,7 @@ function AvailabilityTab({ room }: { room: string }) {
           </span>
         )}
       </div>
-      {error && <p className="text-sm text-rose-700">{translate(error)}</p>}
+      {error && <p className="text-sm text-danger-ink">{translate(error)}</p>}
       {!a ? (
         !error && <Empty>{t("Loading…")}</Empty>
       ) : (
@@ -699,9 +699,9 @@ function AvailabilityTab({ room }: { room: string }) {
                   }
                   className={cn(
                     "min-w-0 rounded-lg border px-1 py-1.5 text-center",
-                    c.state === "booked" && "border-brand-700 bg-brand-700 text-white",
-                    c.state === "blocked" && "border-rose-300 bg-rose-100 text-rose-900",
-                    c.state === "free" && "border-zinc-200 bg-white text-zinc-700",
+                    c.state === "booked" && "border-accent-control bg-accent-fill-hover text-on-solid",
+                    c.state === "blocked" && "border-danger-line-strong bg-danger-muted text-danger-ink",
+                    c.state === "free" && "border-line bg-surface text-secondary-ink",
                   )}
                 >
                   <div className="text-[10px] uppercase opacity-70">
@@ -721,26 +721,26 @@ function AvailabilityTab({ room }: { room: string }) {
               )
             })}
           </div>
-          <div className="mt-3 flex flex-wrap gap-3 text-xs text-zinc-500">
+          <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted-ink">
             <span className="inline-flex items-center gap-1">
-              <span className="size-3 rounded bg-brand-700" /> {t("Booked")}
+              <span className="size-3 rounded bg-accent-fill-hover" /> {t("Booked")}
             </span>
             <span className="inline-flex items-center gap-1">
-              <span className="size-3 rounded border border-rose-300 bg-rose-100" /> {t("Held / out of service")}
+              <span className="size-3 rounded border border-danger-line-strong bg-danger-muted" /> {t("Held / out of service")}
             </span>
             <span className="inline-flex items-center gap-1">
-              <span className="size-3 rounded border border-zinc-300 bg-white" /> {t("Free")}
+              <span className="size-3 rounded border border-control bg-surface" /> {t("Free")}
             </span>
           </div>
           {stays.length > 0 && (
             <Section title={t("Bookings in this period")}>
-              <ul className="divide-y divide-zinc-100">
+              <ul className="divide-y divide-line-subtle">
                 {stays.map((c) => {
                   const nights = a.cells.filter((x) => x.reservation === c.reservation).length
                   return (
                     <li key={c.reservation} className="flex items-center justify-between gap-2 py-2 text-sm">
                       <span className="min-w-0 truncate font-medium">{c.guest_name}</span>
-                      <span className="shrink-0 text-zinc-500">
+                      <span className="shrink-0 text-muted-ink">
                         {t("from {date}", { date: day(c.date) })} · {t(c.status ?? "")} ·{" "}
                         {t("{n} nights shown", { n: nights })}
                       </span>
@@ -768,7 +768,7 @@ function HistoryTab({ room }: { room: string }) {
       .then(setH)
       .catch((e) => setError(serverError(e)))
   }, [room])
-  if (error) return <p className="text-sm text-rose-700">{translate(error)}</p>
+  if (error) return <p className="text-sm text-danger-ink">{translate(error)}</p>
   if (!h) return <Empty>{t("Loading…")}</Empty>
   return (
     <div>
@@ -776,29 +776,29 @@ function HistoryTab({ room }: { room: string }) {
         {h.stays.length === 0 ? (
           <Empty>{t("No stays recorded in this room yet.")}</Empty>
         ) : (
-          <ul className="divide-y divide-zinc-100">
+          <ul className="divide-y divide-line-subtle">
             {h.stays.map((s) => (
               <li key={s.name} className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1 py-2.5">
                 <div className="min-w-0">
-                  <div className="truncate font-medium text-zinc-800">{s.guest_name}</div>
-                  <div className="text-xs text-zinc-500">
+                  <div className="truncate font-medium text-ink">{s.guest_name}</div>
+                  <div className="text-xs text-muted-ink">
                     {t("{from} to {to}", { from: day(s.check_in_date), to: day(s.check_out_date) })}
                     {" · "}
                     {tn(s.nights, "{n} night", "{n} nights")}
                     {s.status === "Checked In" && ` · ${t("in house")}`}
                   </div>
                   {s.room_assigned_by_name && (
-                    <div className="text-xs text-zinc-400">
+                    <div className="text-xs text-muted-ink">
                       {t("Room given by {who}", { who: s.room_assigned_by_name })}
                     </div>
                   )}
                 </div>
                 {s.revenue !== undefined && (
                   <div className="shrink-0 text-end">
-                    <div className="tabular-nums text-sm font-semibold text-zinc-800">
+                    <div className="tabular-nums text-sm font-semibold text-ink">
                       {fmtMoney(s.revenue)}
                     </div>
-                    <div className="text-[11px] text-zinc-400">
+                    <div className="text-[11px] text-muted-ink">
                       {s.revenue_source === "posted" ? t("room revenue") : t("booked, not posted yet")}
                     </div>
                   </div>
@@ -813,11 +813,11 @@ function HistoryTab({ room }: { room: string }) {
         {h.housekeeping.length === 0 ? (
           <Empty>{t("No housekeeping work recorded yet.")}</Empty>
         ) : (
-          <ul className="divide-y divide-zinc-100">
+          <ul className="divide-y divide-line-subtle">
             {h.housekeeping.map((x) => (
               <li key={x.task} className="py-2.5 text-sm">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium text-zinc-800">{t(x.type)}</span>
+                  <span className="font-medium text-ink">{t(x.type)}</span>
                   <Badge
                     tone={
                       x.status === "Verified" ? "sky" : x.status === "Done" ? "green" : "zinc"
@@ -826,12 +826,12 @@ function HistoryTab({ room }: { room: string }) {
                     {t(x.status)}
                   </Badge>
                   {x.minutes !== null && (
-                    <span className="text-xs text-zinc-500">
+                    <span className="text-xs text-muted-ink">
                       {t("{n} min", { n: Math.round(x.minutes) })}
                     </span>
                   )}
                 </div>
-                <div className="mt-0.5 text-xs text-zinc-500">
+                <div className="mt-0.5 text-xs text-muted-ink">
                   {x.cleaned_by
                     ? t("Cleaned by {who}, {when}", { who: x.cleaned_by, when: when(x.cleaned_at) })
                     : x.assigned_to
@@ -846,10 +846,10 @@ function HistoryTab({ room }: { room: string }) {
         )}
         {h.status_changes.length > 0 && (
           <details className="mt-2">
-            <summary className="cursor-pointer text-sm font-medium text-brand-700">
+            <summary className="cursor-pointer text-sm font-medium text-accent-ink">
               {t("Status changes ({n})", { n: h.status_changes.length })}
             </summary>
-            <ul className="mt-1 space-y-1 text-xs text-zinc-600">
+            <ul className="mt-1 space-y-1 text-xs text-secondary-ink">
               {h.status_changes.map((x, i) => (
                 <li key={i}>
                   <span dir="ltr">{x.change}</span> · {x.by} · {when(x.at)}
@@ -864,11 +864,11 @@ function HistoryTab({ room }: { room: string }) {
         {h.tickets.length === 0 ? (
           <Empty>{t("No tickets for this room.")}</Empty>
         ) : (
-          <ul className="divide-y divide-zinc-100">
+          <ul className="divide-y divide-line-subtle">
             {h.tickets.map((x) => (
               <li key={x.name} className="py-2.5 text-sm">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium text-zinc-800">{x.subject}</span>
+                  <span className="font-medium text-ink">{x.subject}</span>
                   <Badge
                     tone={
                       x.status === "Resolved" || x.status === "Closed"
@@ -881,7 +881,7 @@ function HistoryTab({ room }: { room: string }) {
                     {t(x.status)}
                   </Badge>
                 </div>
-                <div className="text-xs text-zinc-500">
+                <div className="text-xs text-muted-ink">
                   {t(x.category)} · {when(x.creation)}
                   {x.assigned_to && ` · ${x.assigned_to}`}
                   {x.resolved_on && ` · ${t("resolved {when}", { when: when(x.resolved_on) })}`}
@@ -896,10 +896,10 @@ function HistoryTab({ room }: { room: string }) {
         {h.moves.length === 0 ? (
           <Empty>{t("No guest was moved into or out of this room.")}</Empty>
         ) : (
-          <ul className="divide-y divide-zinc-100">
+          <ul className="divide-y divide-line-subtle">
             {h.moves.map((m, i) => (
               <li key={i} className="py-2.5 text-sm">
-                <div className="font-medium text-zinc-800">
+                <div className="font-medium text-ink">
                   {m.direction === "in"
                     ? t("{guest} moved in from room {room}", {
                         guest: m.guest_name ?? m.reservation,
@@ -910,7 +910,7 @@ function HistoryTab({ room }: { room: string }) {
                         room: m.other_room_number ?? "-",
                       })}
                 </div>
-                <div className="text-xs text-zinc-500">
+                <div className="text-xs text-muted-ink">
                   {t("by {who}, {when}", { who: m.by, when: when(m.at) })}
                   {m.note && ` · ${m.note}`}
                 </div>
@@ -967,13 +967,13 @@ function DetailsTab({ d }: { d: RoomDetail }) {
           {rows
             .filter(([, v]) => v !== null && v !== undefined && v !== "")
             .map(([k, v]) => (
-              <div key={k} className="flex justify-between gap-3 border-b border-zinc-100 pb-1.5">
-                <dt className="text-zinc-500">{translate(k)}</dt>
-                <dd className="text-end font-medium text-zinc-800">{v}</dd>
+              <div key={k} className="flex justify-between gap-3 border-b border-line-subtle pb-1.5">
+                <dt className="text-muted-ink">{translate(k)}</dt>
+                <dd className="text-end font-medium text-ink">{v}</dd>
               </div>
             ))}
         </dl>
-        {rt.description && <p className="mt-3 text-sm text-zinc-600">{rt.description}</p>}
+        {rt.description && <p className="mt-3 text-sm text-secondary-ink">{rt.description}</p>}
       </Section>
       {amenities.length > 0 && (
         <Section title={t("Amenities")}>
@@ -1011,7 +1011,7 @@ function DetailsTab({ d }: { d: RoomDetail }) {
       </Section>
       <Section title={t("Notes")}>
         {d.room.notes ? (
-          <p className="whitespace-pre-line text-sm text-zinc-700">{d.room.notes}</p>
+          <p className="whitespace-pre-line text-sm text-secondary-ink">{d.room.notes}</p>
         ) : (
           <Empty>{t("No notes on this room.")}</Empty>
         )}

@@ -10,8 +10,8 @@ import { useT } from "../lib/i18n"
 import { roomsConfig } from "./configs"
 
 const inputCls =
-  "w-full rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "w-full rounded-lg border border-control bg-surface px-3 py-1.5 text-sm " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 type Plan = { create: string[]; skipped: string[]; created: number }
 type Opt = { value: string; label: string }
@@ -70,15 +70,15 @@ export function AddRooms({ onClose, onDone }: { onClose: () => void; onDone: () 
       }
     >
       <div className="grid gap-3">
-        {err && <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{err}</div>}
+        {err && <div className="rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">{err}</div>}
         <label className="text-sm">
-          <span className="mb-1 block text-zinc-600">{t("Floor")}</span>
+          <span className="mb-1 block text-secondary-ink">{t("Floor")}</span>
           <input list="add-rooms-floors" className={inputCls} value={f.floor}
             onChange={(e) => set("floor", e.target.value)} />
           <datalist id="add-rooms-floors">{floors.map((x) => <option key={x} value={x} />)}</datalist>
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-zinc-600">{t("Room type")}</span>
+          <span className="mb-1 block text-secondary-ink">{t("Room type")}</span>
           <select className={inputCls} value={f.room_type} onChange={(e) => set("room_type", e.target.value)}>
             <option value="">-</option>
             {types.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -86,26 +86,26 @@ export function AddRooms({ onClose, onDone }: { onClose: () => void; onDone: () 
         </label>
         <div className="grid grid-cols-3 gap-3">
           <label className="text-sm">
-            <span className="mb-1 block text-zinc-600">{t("Prefix (optional)")}</span>
+            <span className="mb-1 block text-secondary-ink">{t("Prefix (optional)")}</span>
             <input className={inputCls} value={f.prefix} onChange={(e) => set("prefix", e.target.value)} />
           </label>
           <label className="text-sm">
-            <span className="mb-1 block text-zinc-600">{t("From number")}</span>
+            <span className="mb-1 block text-secondary-ink">{t("From number")}</span>
             <input type="number" className={inputCls} value={f.start} onChange={(e) => set("start", e.target.value)} />
           </label>
           <label className="text-sm">
-            <span className="mb-1 block text-zinc-600">{t("To number")}</span>
+            <span className="mb-1 block text-secondary-ink">{t("To number")}</span>
             <input type="number" className={inputCls} value={f.end} onChange={(e) => set("end", e.target.value)} />
           </label>
         </div>
         {plan && (
-          <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm">
+          <div className="rounded-lg border border-line bg-canvas p-3 text-sm">
             <p className="font-medium">{t("Will create {n}", { n: plan.create.length })}</p>
-            <p className="text-zinc-600">{plan.create.join(", ") || "-"}</p>
+            <p className="text-secondary-ink">{plan.create.join(", ") || "-"}</p>
             {plan.skipped.length > 0 && (
               <>
                 <p className="mt-2 font-medium">{t("Already exist, skipped: {n}", { n: plan.skipped.length })}</p>
-                <p className="text-zinc-600">{plan.skipped.join(", ")}</p>
+                <p className="text-secondary-ink">{plan.skipped.join(", ")}</p>
               </>
             )}
           </div>

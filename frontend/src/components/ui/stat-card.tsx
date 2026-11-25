@@ -47,10 +47,10 @@ export function StatCard({
   const inner = (
     <>
       <div className="flex items-center gap-2">
-        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-700">
+        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-accent-subtle text-accent-ink">
           {icon}
         </span>
-        <span className="truncate text-[13px] font-medium text-zinc-500">
+        <span className="truncate text-[13px] font-medium text-muted-ink">
           {translate(label)}
         </span>
       </div>
@@ -59,7 +59,7 @@ export function StatCard({
           <div
             className={cn(
               "text-2xl font-semibold tracking-tight tabular-nums",
-              accent ? "text-brand-700" : "text-zinc-900",
+              accent ? "text-accent-ink" : "text-ink",
             )}
           >
             {value}
@@ -73,18 +73,18 @@ export function StatCard({
       </div>
       {/* the chart drops under the number when the card is too narrow for both, never over it */}
       {/* full card width, so it never wraps into a thin column beside the chart */}
-      {sub ? <div className="mt-1 text-xs text-zinc-400">{translate(sub)}</div> : null}
+      {sub ? <div className="mt-1 text-xs text-muted-ink">{translate(sub)}</div> : null}
 
       {progress !== undefined ? (
         <div className="mt-3">
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-100">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-subtle">
             <div
-              className="h-full rounded-full bg-brand-600"
+              className="h-full rounded-full bg-accent-fill"
               style={{ width: `${Math.max(0, Math.min(100, progress))}%` }}
             />
           </div>
           {progressLabel ? (
-            <div className="mt-1 text-xs text-zinc-400">{progressLabel}</div>
+            <div className="mt-1 text-xs text-muted-ink">{progressLabel}</div>
           ) : null}
         </div>
       ) : null}
@@ -93,7 +93,7 @@ export function StatCard({
         <div
           className={cn(
             "mt-3 flex items-center gap-1 text-xs font-medium",
-            down ? "text-rose-600" : "text-emerald-600",
+            down ? "text-danger-text" : "text-success-text",
           )}
         >
           {down ? (
@@ -101,15 +101,15 @@ export function StatCard({
           ) : (
             <ArrowUpRight className="size-3.5" />
           )}
-          <span className="text-zinc-500">{delta.value}</span>
+          <span className="text-muted-ink">{delta.value}</span>
         </div>
       ) : null}
     </>
   )
 
   const shell = cn(
-    "flex min-w-0 flex-col rounded-xl border border-zinc-200 bg-white p-4",
-    to && "transition-colors hover:border-brand-300 hover:bg-brand-50/30",
+    "flex min-w-0 flex-col rounded-xl border border-line bg-surface p-4",
+    to && "transition-colors hover:border-accent-line-strong hover:bg-accent-subtle/30",
     className,
   )
 

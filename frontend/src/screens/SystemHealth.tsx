@@ -84,25 +84,25 @@ const STATUS_STYLE: Record<
   passed: {
     label: "Passed",
     dot: "bg-emerald-500",
-    text: "text-emerald-700",
+    text: "text-success-ink",
     Icon: CheckCircle2,
   },
   attention: {
     label: "Needs attention",
     dot: "bg-rose-500",
-    text: "text-rose-700",
+    text: "text-danger-ink",
     Icon: AlertTriangle,
   },
   failed: {
     label: "Failed",
     dot: "bg-rose-600",
-    text: "text-rose-800",
+    text: "text-danger-ink",
     Icon: XCircle,
   },
   info: {
     label: "Info",
     dot: "bg-sky-500",
-    text: "text-sky-700",
+    text: "text-info-ink",
     Icon: Info,
   },
 }
@@ -132,12 +132,12 @@ function PropertyCard({ property }: { property: PropertyHealth }) {
         <CardTitle>{property.property}</CardTitle>
         <StatusPill status={property.status} />
       </CardHeader>
-      <CardContent className="space-y-3 text-sm text-zinc-600">
+      <CardContent className="space-y-3 text-sm text-secondary-ink">
         <dl className="grid grid-cols-2 gap-3">
           <div><dt>{t("Business date")}</dt><dd>{formatDate(property.business_date)}</dd></div>
           <div><dt>{t("Calendar date")}</dt><dd>{formatDate(property.calendar_date)}</dd></div>
         </dl>
-        <p className="font-medium text-zinc-800">{t("Night audit")}: {audit.status ? t(audit.status) : t("Not run yet")}</p>
+        <p className="font-medium text-ink">{t("Night audit")}: {audit.status ? t(audit.status) : t("Not run yet")}</p>
         <dl className="grid gap-3 sm:grid-cols-3">
           <div><dt>{t("Last audited business date")}</dt><dd>{formatDate(audit.last_business_date)}</dd></div>
           <div><dt>{t("Completed at")}</dt><dd><PropertyTime value={audit.completed_at} /></dd></div>
@@ -186,11 +186,11 @@ export default function SystemHealth() {
     <div className="mx-auto max-w-3xl space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="flex items-center gap-2 text-lg font-semibold text-zinc-900">
-            <HeartPulse className="size-5 text-brand-700" aria-hidden />
+          <h1 className="flex items-center gap-2 text-lg font-semibold text-ink">
+            <HeartPulse className="size-5 text-accent-ink" aria-hidden />
             {t("System Health")}
           </h1>
-          <p className="mt-0.5 text-sm text-zinc-500">
+          <p className="mt-0.5 text-sm text-muted-ink">
             {legacy
               ? t("Check the status of this {product} site and whether a newer open-source release is available.", { product: product() })
               : t("Check the operational status of your properties.")}
@@ -208,13 +208,13 @@ export default function SystemHealth() {
       </div>
 
       {error && (
-        <p className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+        <p className="rounded-xl border border-danger-line bg-danger-subtle px-4 py-3 text-sm text-danger-ink">
           {t("Could not load system health.")}
         </p>
       )}
 
       {!data && !error && (
-        <p className="py-10 text-center text-sm text-zinc-400">{t("Loading…")}</p>
+        <p className="py-10 text-center text-sm text-muted-ink">{t("Loading…")}</p>
       )}
 
       {operational?.properties.map((property) => (
@@ -228,19 +228,19 @@ export default function SystemHealth() {
               <StatusPill status={legacy.overall === "info" ? "passed" : legacy.overall} />
             </CardHeader>
             <CardContent className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-2">
-                <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+              <div className="rounded-lg border border-line-subtle bg-canvas px-3 py-2">
+                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-ink">
                   {t("Installed")}
                 </p>
                 <p className="mt-0.5 font-mono text-sm font-semibold">
                   {product()} {legacy.installed.kamra}
                 </p>
-                <p className="text-xs text-zinc-500">
+                <p className="text-xs text-muted-ink">
                   {t("Platform")} {legacy.installed.frappe ?? "-"}
                 </p>
               </div>
-              <div className="rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-2">
-                <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+              <div className="rounded-lg border border-line-subtle bg-canvas px-3 py-2">
+                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-ink">
                   {t("Latest on GitHub")}
                 </p>
                 <p className="mt-0.5 font-mono text-sm font-semibold">
@@ -251,15 +251,15 @@ export default function SystemHealth() {
                     href={legacy.latest.url}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-1 text-xs font-medium text-brand-700 hover:underline"
+                    className="inline-flex items-center gap-1 text-xs font-medium text-accent-ink hover:underline"
                   >
                     {t("Release notes")}
                     <ExternalLink className="size-3" aria-hidden />
                   </a>
                 )}
               </div>
-              <div className="rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-2">
-                <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+              <div className="rounded-lg border border-line-subtle bg-canvas px-3 py-2">
+                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-ink">
                   {t("Site")}
                 </p>
                 <p className="mt-0.5 truncate font-mono text-sm font-semibold">
@@ -275,7 +275,7 @@ export default function SystemHealth() {
             <CardHeader>
               <CardTitle>{t("Checks")}</CardTitle>
             </CardHeader>
-            <CardContent className="divide-y divide-zinc-100">
+            <CardContent className="divide-y divide-line-subtle">
               {checks.map((c: HealthCheck) => {
                 const style = STATUS_STYLE[c.status]
                 return (
@@ -284,7 +284,7 @@ export default function SystemHealth() {
                     className="flex flex-wrap items-start justify-between gap-3 py-3 first:pt-0 last:pb-0"
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="flex items-center gap-1.5 text-sm font-medium text-zinc-800">
+                      <p className="flex items-center gap-1.5 text-sm font-medium text-ink">
                         <style.Icon className={`size-4 shrink-0 ${style.text}`} aria-hidden />
                         {t(c.title)}
                         {legacy && c.link && (
@@ -292,14 +292,14 @@ export default function SystemHealth() {
                             href={c.link}
                             target={c.link.startsWith("http") ? "_blank" : undefined}
                             rel="noreferrer"
-                            className="text-zinc-400 hover:text-brand-700"
+                            className="text-muted-ink hover:text-accent-ink"
                             aria-label={t("Open details")}
                           >
                             <ExternalLink className="size-3.5" />
                           </a>
                         )}
                       </p>
-                      <p className="mt-0.5 text-sm text-zinc-500">{c.detail}</p>
+                      <p className="mt-0.5 text-sm text-muted-ink">{c.detail}</p>
                     </div>
                     <StatusPill status={c.status} />
                   </div>
@@ -314,25 +314,25 @@ export default function SystemHealth() {
             <CardHeader>
               <CardTitle>{t("How to upgrade")}</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3 text-sm text-zinc-600">
+            <CardContent className="space-y-3 text-sm text-secondary-ink">
               <p>{t(legacy.upgrade.note)}</p>
-              <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">
-                <p className="text-xs font-medium uppercase tracking-wider text-zinc-400">
+              <div className="rounded-lg border border-line bg-canvas px-3 py-2">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-ink">
                   {t("Docker (self-host)")}
                 </p>
-                <code className="mt-1 block break-all font-mono text-xs text-zinc-800">
+                <code className="mt-1 block break-all font-mono text-xs text-ink">
                   docker pull {legacy.upgrade.docker_latest}
                 </code>
-                <p className="mt-1 text-xs text-zinc-500">
+                <p className="mt-1 text-xs text-muted-ink">
                   {t("Then recreate the stack / run migrate. Nightly channel")}:{" "}
                   <code className="font-mono">{legacy.upgrade.docker_nightly}</code>
                 </p>
               </div>
-              <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">
-                <p className="text-xs font-medium uppercase tracking-wider text-zinc-400">
+              <div className="rounded-lg border border-line bg-canvas px-3 py-2">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-ink">
                   {t("Bench")}
                 </p>
-                <code className="mt-1 block whitespace-pre-wrap break-all font-mono text-xs text-zinc-800">
+                <code className="mt-1 block whitespace-pre-wrap break-all font-mono text-xs text-ink">
                   {legacy.upgrade.bench}
                 </code>
               </div>
@@ -341,7 +341,7 @@ export default function SystemHealth() {
                   href={legacy.upgrade.releases}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center gap-1 text-sm font-medium text-brand-700 hover:underline"
+                  className="inline-flex items-center gap-1 text-sm font-medium text-accent-ink hover:underline"
                 >
                   {t("GitHub releases")}
                   <ExternalLink className="size-3.5" aria-hidden />
@@ -350,7 +350,7 @@ export default function SystemHealth() {
                   href={legacy.upgrade.docs}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center gap-1 text-sm font-medium text-brand-700 hover:underline"
+                  className="inline-flex items-center gap-1 text-sm font-medium text-accent-ink hover:underline"
                 >
                   {t("Self-hosting docs")}
                   <ExternalLink className="size-3.5" aria-hidden />
@@ -359,7 +359,7 @@ export default function SystemHealth() {
                   href={`${upstreamDocs()}/quickstart#going-back-downgrade`}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center gap-1 text-sm font-medium text-brand-700 hover:underline"
+                  className="inline-flex items-center gap-1 text-sm font-medium text-accent-ink hover:underline"
                 >
                   {t("Going back (downgrade)")}
                   <ExternalLink className="size-3.5" aria-hidden />

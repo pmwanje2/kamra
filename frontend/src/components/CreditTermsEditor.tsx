@@ -24,7 +24,7 @@ interface Terms {
   can_edit: boolean
 }
 
-const inputCls = "w-full rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
+const inputCls = "w-full rounded-lg border border-control px-2 py-1.5 text-sm"
 
 export default function CreditTermsEditor({ row }: { row: Row; reload: () => void }) {
   const { t } = useT()
@@ -73,21 +73,21 @@ export default function CreditTermsEditor({ row }: { row: Row; reload: () => voi
     }
   }
 
-  if (!terms) return err ? <p className="text-xs text-rose-600">{translate(err)}</p> : null
+  if (!terms) return err ? <p className="text-xs text-danger-text">{translate(err)}</p> : null
   if (!terms.credit_allowed)
     return (
-      <div className="border-t border-zinc-200 pt-4">
-        <h3 className="text-sm font-medium text-zinc-600">{t("Credit terms")}</h3>
-        <p className="mt-0.5 text-xs text-zinc-400">
+      <div className="border-t border-line pt-4">
+        <h3 className="text-sm font-medium text-secondary-ink">{t("Credit terms")}</h3>
+        <p className="mt-0.5 text-xs text-muted-ink">
           {t("Tick Credit allowed and save to bill this company on the city ledger.")}
         </p>
       </div>
     )
 
   return (
-    <div className="border-t border-zinc-200 pt-4">
-      <h3 className="text-sm font-medium text-zinc-600">{t("Credit terms at this property")}</h3>
-      <p className="mb-2 mt-0.5 text-xs text-zinc-400">
+    <div className="border-t border-line pt-4">
+      <h3 className="text-sm font-medium text-secondary-ink">{t("Credit terms at this property")}</h3>
+      <p className="mb-2 mt-0.5 text-xs text-muted-ink">
         {t(
           "Bills are due the credit days after the invoice date. Credit control ({policy}) checks the limit and overdue bills at booking and check-out.",
           { policy: terms.policy },
@@ -95,7 +95,7 @@ export default function CreditTermsEditor({ row }: { row: Row; reload: () => voi
       </p>
       <div className="grid grid-cols-2 gap-3">
         <label className="text-sm">
-          <span className="mb-1 block text-zinc-500">{t("Credit limit")}</span>
+          <span className="mb-1 block text-muted-ink">{t("Credit limit")}</span>
           <input
             type="number"
             min="0"
@@ -109,14 +109,14 @@ export default function CreditTermsEditor({ row }: { row: Row; reload: () => voi
               setLimit(e.target.value)
             }}
           />
-          <span className="mt-0.5 block text-xs text-zinc-400">{t("0 = no limit")}</span>
+          <span className="mt-0.5 block text-xs text-muted-ink">{t("0 = no limit")}</span>
         </label>
         <div className="text-sm">
-          <span className="mb-1 block text-zinc-500">{t("Payment terms")}</span>
+          <span className="mb-1 block text-muted-ink">{t("Payment terms")}</span>
           <label className="mb-1.5 flex items-center gap-2">
             <input
               type="checkbox"
-              className="size-4 accent-brand-600"
+              className="size-4 accent-focus"
               checked={useDefault}
               disabled={!terms.can_edit}
               onChange={(e) => {
@@ -143,29 +143,29 @@ export default function CreditTermsEditor({ row }: { row: Row; reload: () => voi
                   setDays(e.target.value)
                 }}
               />
-              <span className="mt-0.5 block text-xs text-zinc-400">
+              <span className="mt-0.5 block text-xs text-muted-ink">
                 {t("Credit days after the invoice date - 0 = due on the invoice date")}
               </span>
             </>
           )}
         </div>
       </div>
-      <p className="mt-2 text-xs text-zinc-500">
+      <p className="mt-2 text-xs text-muted-ink">
         {t("Owes {amount} · terms {n} days", {
           amount: terms.balance == null ? "—" : fmtMoney(terms.balance),
           n: terms.effective_credit_days,
         })}
       </p>
-      {err ? <p className="mt-2 text-xs text-rose-600">{translate(err)}</p> : null}
+      {err ? <p className="mt-2 text-xs text-danger-text">{translate(err)}</p> : null}
       {terms.can_edit ? (
         <div className="mt-3 flex items-center gap-2">
           <Button variant="outline" disabled={busy} onClick={save}>
             {busy ? t("Saving…") : t("Save terms")}
           </Button>
-          {saved && <span className="text-xs text-emerald-600">{t("Saved")}</span>}
+          {saved && <span className="text-xs text-success-text">{t("Saved")}</span>}
         </div>
       ) : (
-        <p className="mt-2 text-xs text-zinc-400">{t("Finance or a Hotel Admin can change these.")}</p>
+        <p className="mt-2 text-xs text-muted-ink">{t("Finance or a Hotel Admin can change these.")}</p>
       )}
     </div>
   )

@@ -73,7 +73,7 @@ export default function BanquetDocument() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2 print:hidden">
         <Link
           to={`/banquet/${encodeURIComponent(name)}`}
-          className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-800"
+          className="inline-flex items-center gap-1 text-sm text-muted-ink hover:text-ink"
         >
           <ArrowLeft className="size-4" />{translate("Back to the function")}</Link>
         <div className="flex flex-wrap items-center gap-1.5">
@@ -84,8 +84,8 @@ export default function BanquetDocument() {
               className={
                 "rounded-lg px-2.5 py-1.5 text-sm font-medium " +
                 (k === kind
-                  ? "bg-zinc-900 text-white"
-                  : "text-zinc-500 hover:bg-zinc-100")
+                  ? "bg-inverse text-on-inverse"
+                  : "text-muted-ink hover:bg-subtle")
               }
             >
               {translate(KIND_LABEL[k])}
@@ -98,8 +98,8 @@ export default function BanquetDocument() {
               className={
                 "rounded-lg px-2.5 py-1.5 text-sm font-medium " +
                 (k === kind
-                  ? "bg-zinc-900 text-white"
-                  : "text-zinc-500 hover:bg-zinc-100")
+                  ? "bg-inverse text-on-inverse"
+                  : "text-muted-ink hover:bg-subtle")
               }
             >{translate("Menu card")}</Link>
           ))}
@@ -108,7 +108,7 @@ export default function BanquetDocument() {
         </div>
       </div>
 
-      <article className="rounded-xl border border-zinc-200 bg-white p-8 text-sm print:border-0 print:p-0">
+      <article className="rounded-xl border border-line bg-surface p-8 text-sm print:border-0 print:p-0">
         <Letterhead doc={doc} />
 
         <Parties doc={doc} />
@@ -132,11 +132,11 @@ export default function BanquetDocument() {
             <table className="w-full">
               <tbody>
                 {doc.receipts.map((r, i) => (
-                  <tr key={i} className="border-b border-zinc-100">
-                    <td className="py-1.5 text-zinc-500">{r.date}</td>
+                  <tr key={i} className="border-b border-line-subtle">
+                    <td className="py-1.5 text-muted-ink">{r.date}</td>
                     <td className="py-1.5">{translate(r.kind)}</td>
-                    <td className="py-1.5 text-zinc-500">{translate(r.mode)}</td>
-                    <td className="py-1.5 text-zinc-400">{r.reference}</td>
+                    <td className="py-1.5 text-muted-ink">{translate(r.mode)}</td>
+                    <td className="py-1.5 text-muted-ink">{r.reference}</td>
                     <td className="py-1.5 text-right tabular-nums">
                       {inrExact(r.amount, doc.property)}
                     </td>
@@ -151,7 +151,7 @@ export default function BanquetDocument() {
           <Section title={translate("Payment schedule")}>
             <table className="w-full">
               <thead>
-                <tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wider text-zinc-400">
+                <tr className="border-b border-line text-left text-xs uppercase tracking-wider text-muted-ink">
                   <th className="py-1.5 font-medium">{translate("Milestone")}</th>
                   <th className="py-1.5 font-medium">{translate("Due")}</th>
                   <th className="py-1.5 text-right font-medium">{translate("Amount")}</th>
@@ -160,23 +160,23 @@ export default function BanquetDocument() {
               </thead>
               <tbody>
                 {doc.terms.map((t, i) => (
-                  <tr key={i} className="border-b border-zinc-100">
+                  <tr key={i} className="border-b border-line-subtle">
                     <td className="py-1.5">{t.milestone}</td>
-                    <td className="py-1.5 text-zinc-500">{t.due_date ?? "-"}</td>
+                    <td className="py-1.5 text-muted-ink">{t.due_date ?? "-"}</td>
                     <td className="py-1.5 text-right tabular-nums">
                       {inrExact(t.amount, doc.property)}
                       {t.percent ? (
-                        <span className="text-zinc-400"> ({t.percent}%)</span>
+                        <span className="text-muted-ink"> ({t.percent}%)</span>
                       ) : null}
                     </td>
                     <td
                       className={
                         "py-1.5 text-right " +
                         (t.status === "Received"
-                          ? "text-emerald-700"
+                          ? "text-success-ink"
                           : t.status === "Overdue"
-                            ? "text-rose-700"
-                            : "text-zinc-500")
+                            ? "text-danger-ink"
+                            : "text-muted-ink")
                       }
                     >
                       {translate(t.status)}
@@ -199,12 +199,12 @@ export default function BanquetDocument() {
                       <span>
                         {o.title}
                         {o.detail && (
-                          <span className="text-zinc-400"> - {o.detail}</span>
+                          <span className="text-muted-ink"> - {o.detail}</span>
                         )}
-                        <span className="text-zinc-400"> ({translate(o.owner_side)})</span>
+                        <span className="text-muted-ink"> ({translate(o.owner_side)})</span>
                       </span>
                       {o.price_impact ? (
-                        <span className="shrink-0 tabular-nums text-zinc-500">
+                        <span className="shrink-0 tabular-nums text-muted-ink">
                           {o.price_impact > 0 ? "+" : ""}
                           {inrExact(o.price_impact, doc.property)}
                         </span>
@@ -217,19 +217,19 @@ export default function BanquetDocument() {
 
         {doc.terms_note && kind !== "pack_list" && (
           <Section title={translate("Terms & conditions")}>
-            <p className="whitespace-pre-wrap text-zinc-600">{doc.terms_note}</p>
+            <p className="whitespace-pre-wrap text-secondary-ink">{doc.terms_note}</p>
           </Section>
         )}
 
         {doc.notes && (
           <Section title={translate("Instructions")}>
-            <p className="whitespace-pre-wrap text-zinc-600">{doc.notes}</p>
+            <p className="whitespace-pre-wrap text-secondary-ink">{doc.notes}</p>
           </Section>
         )}
 
         {doc.requirements && kind === "quote" && (
           <Section title={translate("What you asked for")}>
-            <p className="whitespace-pre-wrap text-zinc-600">
+            <p className="whitespace-pre-wrap text-secondary-ink">
               {doc.requirements}
             </p>
           </Section>
@@ -239,23 +239,23 @@ export default function BanquetDocument() {
           <div className="mt-12 grid grid-cols-2 gap-12">
             {doc.signatures.map((s, i) => (
               <div key={i}>
-                <div className="h-16 border-b border-zinc-400" />
+                <div className="h-16 border-b border-control-strong" />
                 <p className="mt-1 text-xs font-medium">{s.for}</p>
-                <p className="text-xs text-zinc-400">{translate(s.role)}</p>
+                <p className="text-xs text-muted-ink">{translate(s.role)}</p>
               </div>
             ))}
           </div>
         )}
         {doc.signed_on && (
-          <p className="mt-4 text-xs text-zinc-400">{translate("Signed on ")}{doc.signed_on}.
+          <p className="mt-4 text-xs text-muted-ink">{translate("Signed on ")}{doc.signed_on}.
           </p>
         )}
 
         {/* every priced document closes the same way: who it's from, and
             the note that says it needs no wet signature */}
         {showsMoney && !doc.signatures && (
-          <footer className="mt-10 flex items-end justify-between gap-6 border-t border-zinc-200 pt-4">
-            <p className="max-w-sm text-[11px] leading-relaxed text-zinc-400">
+          <footer className="mt-10 flex items-end justify-between gap-6 border-t border-line pt-4">
+            <p className="max-w-sm text-[11px] leading-relaxed text-muted-ink">
               {doc.header.footer}
               {doc.header.invoice_footer && (
                 <span className="mt-2 block whitespace-pre-line">
@@ -264,10 +264,10 @@ export default function BanquetDocument() {
               )}
             </p>
             <div className="shrink-0 text-center">
-              <div className="mb-1 h-10 w-44 border-b border-zinc-300" />
+              <div className="mb-1 h-10 w-44 border-b border-control" />
               <p className="text-xs">{translate("For ")}{doc.property.legal_name || doc.property.property_name}
               </p>
-              <p className="text-[11px] text-zinc-400">{translate("Authorised signatory")}</p>
+              <p className="text-[11px] text-muted-ink">{translate("Authorised signatory")}</p>
             </div>
           </footer>
         )}
@@ -288,7 +288,7 @@ function Section({
   useUILanguage()
   return (
     <section className="mt-6 break-inside-avoid">
-      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-ink">
         {translate(title)}
       </h3>
       {children}
@@ -301,7 +301,7 @@ function Letterhead({ doc }: { doc: Doc }) {
   const p = doc.property
   const h = doc.header
   return (
-    <header className="border-b-2 border-zinc-900 pb-4">
+    <header className="border-b-2 border-ink pb-4">
       <div className="flex items-start justify-between gap-6">
         <div className="flex items-start gap-3">
           {/* the hotel's own mark - a document without it doesn't look
@@ -321,9 +321,9 @@ function Letterhead({ doc }: { doc: Doc }) {
               {p.legal_name || p.property_name}
             </h1>
             {p.legal_name && p.legal_name !== p.property_name && (
-              <p className="text-sm text-zinc-500">{p.property_name}</p>
+              <p className="text-sm text-muted-ink">{p.property_name}</p>
             )}
-            <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+            <p className="mt-1 text-xs leading-relaxed text-muted-ink">
               {p.address}
               {(p.phone || p.email) && (
                 <>
@@ -340,7 +340,7 @@ function Letterhead({ doc }: { doc: Doc }) {
               {p.gstin && (
                 <>
                   <br />
-                  <span className="font-medium text-zinc-700">
+                  <span className="font-medium text-secondary-ink">
                     {translate(h.tax_id_label ?? "Tax ID")}: {p.gstin}
                   </span>
                 </>
@@ -373,7 +373,7 @@ function Letterhead({ doc }: { doc: Doc }) {
             </tbody>
           </table>
           {!h.is_final && h.kind !== "pack_list" && h.kind !== "beo" && (
-            <p className="mt-1.5 max-w-48 text-[11px] text-amber-700">{translate("Draft - no number issued yet.")}</p>
+            <p className="mt-1.5 max-w-48 text-[11px] text-warning-ink">{translate("Draft - no number issued yet.")}</p>
           )}
         </div>
       </div>
@@ -393,7 +393,7 @@ function Meta({
   useUILanguage()
   return (
     <tr>
-      <td className="pr-3 text-right align-top text-zinc-400">{translate(label)}</td>
+      <td className="pr-3 text-right align-top text-muted-ink">{translate(label)}</td>
       <td className={"text-left font-medium" + (mono ? " font-mono" : "")}>
         {value}
       </td>
@@ -408,30 +408,30 @@ function Parties({ doc }: { doc: Doc }) {
   return (
     <div className="mt-4 grid gap-6 sm:grid-cols-2">
       <div>
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">{translate("For")}</h3>
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-ink">{translate("For")}</h3>
         <p className="mt-1 font-medium">{c.name}</p>
-        {c.company && <p className="text-zinc-600">{c.company}</p>}
+        {c.company && <p className="text-secondary-ink">{c.company}</p>}
         {c.address && (
-          <p className="whitespace-pre-wrap text-xs text-zinc-500">
+          <p className="whitespace-pre-wrap text-xs text-muted-ink">
             {c.address}
           </p>
         )}
-        <p className="mt-1 text-xs text-zinc-500">
+        <p className="mt-1 text-xs text-muted-ink">
           {[c.contact, c.phone, c.email].filter(Boolean).join(" · ")}
         </p>
         {c.gstin && (
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-muted-ink">
             {doc.header.tax_label || taxLabel()}: {c.gstin}
             {c.place_of_supply ? translate(" · Place of supply: {v0}", { v0: String(c.place_of_supply) }) : ""}
           </p>
         )}
       </div>
       <div>
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">{translate("The function")}</h3>
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-ink">{translate("The function")}</h3>
         <p className="mt-1 font-medium">
           {String(e.event_name || translate(e.event_type))}
         </p>
-        <dl className="mt-1 space-y-0.5 text-xs text-zinc-600">
+        <dl className="mt-1 space-y-0.5 text-xs text-secondary-ink">
           <Line k="Venue" v={`${e.venue}${e.venue_type ? ` (${translate(e.venue_type)})` : ""}`} />
           <Line
             k="Date"
@@ -478,7 +478,7 @@ function Line({ k, v }: { k: string; v: string }) {
   useUILanguage()
   return (
     <div className="flex gap-2">
-      <dt className="w-20 shrink-0 text-zinc-400">{translate(k)}</dt>
+      <dt className="w-20 shrink-0 text-muted-ink">{translate(k)}</dt>
       <dd>{v}</dd>
     </div>
   )
@@ -497,8 +497,8 @@ function RunSheet({ doc }: { doc: Doc }) {
     <Section title={translate("Running order")}>
       <div className="grid gap-2 sm:grid-cols-4">
         {moments.map(([k, v]) => (
-          <div key={k} className="rounded-lg border border-zinc-200 px-3 py-2">
-            <p className="text-[11px] uppercase tracking-wider text-zinc-400">
+          <div key={k} className="rounded-lg border border-line px-3 py-2">
+            <p className="text-[11px] uppercase tracking-wider text-muted-ink">
               {translate(k)}
             </p>
             <p className="mt-0.5 font-medium tabular-nums">
@@ -508,7 +508,7 @@ function RunSheet({ doc }: { doc: Doc }) {
         ))}
       </div>
       {e.setup_notes ? (
-        <p className="mt-2 whitespace-pre-wrap text-zinc-600">
+        <p className="mt-2 whitespace-pre-wrap text-secondary-ink">
           {String(e.setup_notes)}
         </p>
       ) : null}
@@ -526,7 +526,7 @@ function Lines({ doc, showsMoney }: { doc: Doc; showsMoney: boolean }) {
     <Section title={(showsMoney ? translate("Charges") : translate("What's included"))}>
       <table className="w-full">
         <thead>
-          <tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wider text-zinc-400">
+          <tr className="border-b border-line text-left text-xs uppercase tracking-wider text-muted-ink">
             <th className="py-1.5 font-medium">{translate("Item")}</th>
             {showsMoney && (
               <th className="py-1.5 font-medium">
@@ -545,29 +545,29 @@ function Lines({ doc, showsMoney }: { doc: Doc; showsMoney: boolean }) {
         </thead>
         <tbody>
           {all.map((l) => (
-            <tr key={l.name} className="border-b border-zinc-100">
+            <tr key={l.name} className="border-b border-line-subtle">
               <td className="py-1.5">
-                <span className={l.chargeable ? "" : "text-zinc-500"}>
+                <span className={l.chargeable ? "" : "text-muted-ink"}>
                   {l.item_name}
                 </span>
                 {!l.chargeable && (
-                  <span className="ml-1.5 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">{translate("complimentary")}</span>
+                  <span className="ml-1.5 rounded bg-success-subtle px-1.5 py-0.5 text-[10px] font-medium text-success-ink">{translate("complimentary")}</span>
                 )}
                 {l.description && (
-                  <p className="text-xs text-zinc-400">{l.description}</p>
+                  <p className="text-xs text-muted-ink">{l.description}</p>
                 )}
                 {l.notes && l.notes !== "green-room" && (
-                  <p className="text-xs text-zinc-400">{l.notes}</p>
+                  <p className="text-xs text-muted-ink">{l.notes}</p>
                 )}
               </td>
               {showsMoney && (
-                <td className="py-1.5 font-mono text-[11px] text-zinc-400">
+                <td className="py-1.5 font-mono text-[11px] text-muted-ink">
                   {l.service_code ?? ""}
                 </td>
               )}
               <td className="py-1.5 text-right tabular-nums">
                 {l.qty % 1 === 0 ? l.qty : l.qty.toFixed(2)}{" "}
-                <span className="text-zinc-400">{translate(l.uom)}</span>
+                <span className="text-muted-ink">{translate(l.uom)}</span>
               </td>
               {showsMoney && (
                 <>
@@ -575,7 +575,7 @@ function Lines({ doc, showsMoney }: { doc: Doc; showsMoney: boolean }) {
                     {l.chargeable ? inrExact(l.rate, doc.property) : "-"}
                   </td>
                   {taxed && (
-                  <td className="py-1.5 text-right tabular-nums text-zinc-500">
+                  <td className="py-1.5 text-right tabular-nums text-muted-ink">
                     {l.chargeable ? `${l.gst_rate}%` : "-"}
                   </td>
                   )}
@@ -602,7 +602,7 @@ function Menus({ doc }: { doc: Doc }) {
           <div key={i} className="break-inside-avoid">
             <p className="font-medium">
               {m.menu_name}
-              <span className="ml-2 text-xs font-normal text-zinc-400">
+              <span className="ml-2 text-xs font-normal text-muted-ink">
                 {translate(m.meal_period)} · {translate(m.food_type)} · {translate(m.service_style)} · {m.pax}{translate(" pax")}{m.menu_code ? ` · ${m.menu_code}` : ""}
                 {m.chargeable ? "" : translate(" · complimentary")}
               </span>
@@ -610,26 +610,26 @@ function Menus({ doc }: { doc: Doc }) {
             <ul className="mt-1 space-y-0.5">
               {m.courses.map((c, j) => (
                 <li key={j} className="flex gap-2 text-xs">
-                  <span className="w-36 shrink-0 font-medium text-zinc-500">
+                  <span className="w-36 shrink-0 font-medium text-muted-ink">
                     {translate(c.course)}
                     {c.is_live_counter && (
-                      <span className="ml-1 text-amber-700">{translate("live")}</span>
+                      <span className="ml-1 text-warning-ink">{translate("live")}</span>
                     )}
                     {c.choice_of ? (
-                      <span className="ml-1 text-zinc-400">{translate("(pick ")}{c.choice_of})
+                      <span className="ml-1 text-muted-ink">{translate("(pick ")}{c.choice_of})
                       </span>
                     ) : null}
                   </span>
-                  <span className="text-zinc-600">{c.dishes}</span>
+                  <span className="text-secondary-ink">{c.dishes}</span>
                 </li>
               ))}
             </ul>
             {m.inclusions && (
-              <p className="mt-1 text-xs text-zinc-400">{translate("Includes: ")}{m.inclusions}
+              <p className="mt-1 text-xs text-muted-ink">{translate("Includes: ")}{m.inclusions}
               </p>
             )}
             {m.exclusions && (
-              <p className="text-xs text-zinc-400">{translate("Excludes: ")}{m.exclusions}</p>
+              <p className="text-xs text-muted-ink">{translate("Excludes: ")}{m.exclusions}</p>
             )}
           </div>
         ))}
@@ -645,7 +645,7 @@ function PackList({ doc }: { doc: Doc }) {
   return (
     <>
       <Section title={translate("Delivery")}>
-        <p className="text-zinc-600">{translate("To ")}<span className="font-medium">{p.venue}</span>{translate(" by")}{" "}
+        <p className="text-secondary-ink">{translate("To ")}<span className="font-medium">{p.venue}</span>{translate(" by")}{" "}
           <span className="font-medium tabular-nums">
             {p.deliver_by.replace("T", " ").slice(0, 16)}
           </span>
@@ -664,25 +664,25 @@ function PackList({ doc }: { doc: Doc }) {
           <table className="w-full">
             <tbody>
               {g.items.map((it, i) => (
-                <tr key={i} className="border-b border-zinc-100">
+                <tr key={i} className="border-b border-line-subtle">
                   <td className="w-8 py-1.5">
-                    <span className="inline-block size-4 rounded border border-zinc-300" />
+                    <span className="inline-block size-4 rounded border border-control" />
                   </td>
                   <td className="py-1.5">
                     {it.item_name}
                     {!it.chargeable && (
-                      <span className="ml-1.5 text-xs text-emerald-700">{translate("(complimentary)")}</span>
+                      <span className="ml-1.5 text-xs text-success-ink">{translate("(complimentary)")}</span>
                     )}
                     {it.description && (
-                      <p className="text-xs text-zinc-400">{it.description}</p>
+                      <p className="text-xs text-muted-ink">{it.description}</p>
                     )}
                     {it.notes && (
-                      <p className="text-xs text-zinc-400">{it.notes}</p>
+                      <p className="text-xs text-muted-ink">{it.notes}</p>
                     )}
                   </td>
                   <td className="py-1.5 text-right tabular-nums">
                     {it.qty % 1 === 0 ? it.qty : it.qty.toFixed(2)}{" "}
-                    <span className="text-zinc-400">{translate(it.uom)}</span>
+                    <span className="text-muted-ink">{translate(it.uom)}</span>
                   </td>
                 </tr>
               ))}
@@ -703,7 +703,7 @@ function TaxBreakup({ doc }: { doc: Doc }) {
     <Section title={translate("{v0} breakup", { v0: String(label) })}>
       <table className="w-full">
         <thead>
-          <tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wider text-zinc-400">
+          <tr className="border-b border-line text-left text-xs uppercase tracking-wider text-muted-ink">
             <th className="py-1.5 font-medium">{(lang !== "en") ? t("Tax rate") : translate("Rate")}</th>
             <th className="py-1.5 text-right font-medium">{translate("Taxable")}</th>
             {rows[0].parts.map((p) => (
@@ -716,14 +716,14 @@ function TaxBreakup({ doc }: { doc: Doc }) {
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.rate} className="border-b border-zinc-100">
+            <tr key={r.rate} className="border-b border-line-subtle">
               <td className="py-1.5">{r.rate}%</td>
               <td className="py-1.5 text-right tabular-nums">
                 {inrExact(r.taxable, doc.property)}
               </td>
               {r.parts.map((p) => (
                 <td key={p.label} className="py-1.5 text-right tabular-nums">
-                  <span className="text-zinc-400">{p.rate}% </span>
+                  <span className="text-muted-ink">{p.rate}% </span>
                   {inrExact(p.amount, doc.property)}
                 </td>
               ))}
@@ -758,24 +758,24 @@ function Totals({ doc }: { doc: Doc }) {
             muted
           />
         ))}
-        <div className="flex justify-between border-t border-zinc-300 pt-1 font-semibold">
+        <div className="flex justify-between border-t border-control pt-1 font-semibold">
           <span>{translate("Total")}</span>
           <span className="tabular-nums">{inrExact(t.grand_total, moneyCtx)}</span>
         </div>
         {t.received > 0 && (
           <>
             <Amt k="Received" v={-t.received} moneyCtx={moneyCtx} />
-            <div className="flex justify-between border-t border-zinc-200 pt-1 font-semibold">
+            <div className="flex justify-between border-t border-line pt-1 font-semibold">
               <span>{translate("Balance due")}</span>
               <span className="tabular-nums">{inrExact(t.balance_due, moneyCtx)}</span>
             </div>
           </>
         )}
         {t.complimentary_value > 0 && (
-          <p className="pt-2 text-xs text-zinc-400">{translate("Complimentary items worth ")}{inrExact(t.complimentary_value, moneyCtx)}{translate(" are included at no charge.")}</p>
+          <p className="pt-2 text-xs text-muted-ink">{translate("Complimentary items worth ")}{inrExact(t.complimentary_value, moneyCtx)}{translate(" are included at no charge.")}</p>
         )}
         {doc.header.amount_in_words && (
-          <p className="border-t border-zinc-200 pt-2 text-xs italic text-zinc-600">
+          <p className="border-t border-line pt-2 text-xs italic text-secondary-ink">
             {doc.header.amount_in_words}
           </p>
         )}
@@ -787,8 +787,8 @@ function Totals({ doc }: { doc: Doc }) {
 function Amt({ k, v, muted, moneyCtx }: { k: string; v: number; muted?: boolean; moneyCtx?: BanquetMoneyCtx | null }) {
   useUILanguage()
   return (
-    <div className={"flex justify-between " + (muted ? "text-zinc-500" : "")}>
-      <span className="text-zinc-500">{translate(k)}</span>
+    <div className={"flex justify-between " + (muted ? "text-muted-ink" : "")}>
+      <span className="text-muted-ink">{translate(k)}</span>
       <span className="tabular-nums">{inrExact(v, moneyCtx)}</span>
     </div>
   )
@@ -808,7 +808,7 @@ function MenuCardSheet({ name, card }: { name: string; card: MenuCard }) {
       <div className="mb-4 flex items-center justify-between gap-2 print:hidden">
         <Link
           to={`/banquet/${encodeURIComponent(name)}`}
-          className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-800"
+          className="inline-flex items-center gap-1 text-sm text-muted-ink hover:text-ink"
         >
           <ArrowLeft className="size-4" />{translate("Back to the function")}</Link>
         <div className="flex items-center gap-1.5">
@@ -816,29 +816,29 @@ function MenuCardSheet({ name, card }: { name: string; card: MenuCard }) {
             <Link
               key={k}
               to={`/banquet/${encodeURIComponent(name)}/${k}`}
-              className="rounded-lg px-2.5 py-1.5 text-sm font-medium text-zinc-500 hover:bg-zinc-100"
+              className="rounded-lg px-2.5 py-1.5 text-sm font-medium text-muted-ink hover:bg-subtle"
             >
               {translate(KIND_LABEL[k])}
             </Link>
           ))}
-          <span className="rounded-lg bg-zinc-900 px-2.5 py-1.5 text-sm font-medium text-white">{translate("Menu card")}</span>
+          <span className="rounded-lg bg-inverse px-2.5 py-1.5 text-sm font-medium text-on-inverse">{translate("Menu card")}</span>
           <Button onClick={() => window.print()}>
             <Printer className="size-4" />{translate("Print")}</Button>
         </div>
       </div>
 
-      <article className="rounded-xl border border-zinc-200 bg-white px-10 py-8 print:border-0 print:px-0">
-        <header className="border-b border-zinc-200 pb-4 text-center">
+      <article className="rounded-xl border border-line bg-surface px-10 py-8 print:border-0 print:px-0">
+        <header className="border-b border-line pb-4 text-center">
           <h1 className="text-lg font-semibold tracking-wide">
             {card.property.property_name ?? card.property.legal_name}
           </h1>
-          <p className="mt-0.5 text-xs text-zinc-500">
+          <p className="mt-0.5 text-xs text-muted-ink">
             {[card.property.address_line, card.property.city]
               .filter(Boolean)
               .join(", ")}
             {card.property.phone ? ` · ${card.property.phone}` : ""}
           </p>
-          <p className="mt-3 text-xs font-semibold uppercase tracking-[0.25em] text-zinc-400">
+          <p className="mt-3 text-xs font-semibold uppercase tracking-[0.25em] text-muted-ink">
             {translate(card.header.title)}
           </p>
         </header>
@@ -857,7 +857,7 @@ function MenuCardSheet({ name, card }: { name: string; card: MenuCard }) {
             .filter(([, v]) => v.trim() && v.trim() !== "·")
             .map(([k, v]) => (
               <div key={k} className="flex gap-2">
-                <dt className="w-24 shrink-0 text-zinc-400">{translate(k)}</dt>
+                <dt className="w-24 shrink-0 text-muted-ink">{translate(k)}</dt>
                 <dd className="font-medium">{v}</dd>
               </div>
             ))}
@@ -865,14 +865,14 @@ function MenuCardSheet({ name, card }: { name: string; card: MenuCard }) {
 
         <div className="mt-8 space-y-8">
           {card.menus.length === 0 && (
-            <p className="text-center text-sm text-zinc-400">{translate("No menu chosen yet.")}</p>
+            <p className="text-center text-sm text-muted-ink">{translate("No menu chosen yet.")}</p>
           )}
           {card.menus.map((m, i) => (
             <section key={i} className="break-inside-avoid text-center">
               <h2 className="text-sm font-semibold uppercase tracking-[0.2em]">
                 {m.menu_name}
               </h2>
-              <p className="mt-0.5 text-[11px] text-zinc-400">
+              <p className="mt-0.5 text-[11px] text-muted-ink">
                 {[translate(m.meal_period), translate(m.food_type), translate(m.service_style), m.cuisine]
                   .filter(Boolean)
                   .join(" · ")}
@@ -881,11 +881,11 @@ function MenuCardSheet({ name, card }: { name: string; card: MenuCard }) {
               <div className="mt-4 space-y-3">
                 {m.courses.map((c, j) => (
                   <div key={j}>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-zinc-500">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-ink">
                       {translate(c.course)}
                       {c.choice_of ? translate(" - choose {v0}", { v0: String(c.choice_of) }) : ""}
                       {c.is_live_counter && (
-                        <span className="ml-1 text-amber-600">{translate("live")}</span>
+                        <span className="ml-1 text-warning-text">{translate("live")}</span>
                       )}
                     </p>
                     <p className="mt-0.5 text-sm leading-relaxed">{c.dishes}</p>
@@ -893,7 +893,7 @@ function MenuCardSheet({ name, card }: { name: string; card: MenuCard }) {
                 ))}
               </div>
               {m.inclusions && (
-                <p className="mt-3 text-[11px] text-zinc-400">{translate("Includes ")}{m.inclusions}
+                <p className="mt-3 text-[11px] text-muted-ink">{translate("Includes ")}{m.inclusions}
                 </p>
               )}
             </section>
@@ -915,7 +915,7 @@ function MenuCardSheet({ name, card }: { name: string; card: MenuCard }) {
         </div>
 
         {card.notes && (
-          <p className="mt-8 whitespace-pre-wrap border-t border-zinc-200 pt-3 text-xs text-zinc-500">
+          <p className="mt-8 whitespace-pre-wrap border-t border-line pt-3 text-xs text-muted-ink">
             {card.notes}
           </p>
         )}
@@ -923,9 +923,9 @@ function MenuCardSheet({ name, card }: { name: string; card: MenuCard }) {
         <div className="mt-14 grid grid-cols-2 gap-16">
           {card.signatures.map((s, i) => (
             <div key={i} className="text-center">
-              <div className="h-12 border-b border-zinc-400" />
+              <div className="h-12 border-b border-control-strong" />
               <p className="mt-1 text-xs font-medium">{s.for}</p>
-              <p className="text-[11px] text-zinc-400">{translate(s.role)}</p>
+              <p className="text-[11px] text-muted-ink">{translate(s.role)}</p>
             </div>
           ))}
         </div>

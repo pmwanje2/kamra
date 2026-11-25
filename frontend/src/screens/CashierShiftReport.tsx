@@ -126,11 +126,11 @@ export default function CashierShiftReport() {
     <div className="w-full max-w-none space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-ink">
             {t("Cashier")}
           </p>
           <h1 className="text-2xl font-semibold tracking-tight">{t("Shift Report")}</h1>
-          <p className="mt-1 max-w-2xl text-sm text-zinc-500">
+          <p className="mt-1 max-w-2xl text-sm text-muted-ink">
             {t(
               "Day totals by cashier. Sessions open on My Till - guest money posts from Front Desk and POS. Click a row for that till's breakdown.",
             )}
@@ -139,33 +139,33 @@ export default function CashierShiftReport() {
         <div className="flex flex-wrap items-center gap-2">
           <Link
             to="/cashier"
-            className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50"
+            className="rounded-lg border border-line px-3 py-1.5 text-sm text-secondary-ink hover:bg-canvas"
           >
             {t("My Till")}
           </Link>
           <input
             type="date"
             aria-label={t("Business date")}
-            className="rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
+            className="rounded-lg border border-control px-2 py-1.5 text-sm"
             value={date}
             onChange={(e) => setDate(e.target.value)}
           />
-          <span className="text-sm text-zinc-400">→</span>
+          <span className="text-sm text-muted-ink">→</span>
           <input
             type="date"
             aria-label={t("To")}
-            className="rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
+            className="rounded-lg border border-control px-2 py-1.5 text-sm"
             value={toDate || date}
             min={date}
             onChange={(e) => setToDate(e.target.value === date ? "" : e.target.value)}
           />
         </div>
       </div>
-      {err ? <p className="text-sm text-rose-600">{translate(err)}</p> : null}
+      {err ? <p className="text-sm text-danger-text">{translate(err)}</p> : null}
 
-      <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white">
+      <div className="overflow-x-auto rounded-xl border border-line bg-surface">
         <table className="min-w-[600px] w-full text-start text-sm">
-          <thead className="border-b text-xs uppercase text-zinc-400">
+          <thead className="border-b text-xs uppercase text-muted-ink">
             <tr>
               <th className="px-3 py-2">{t("Cashier")}</th>
               <th className="px-3 py-2">{t("Status")}</th>
@@ -184,12 +184,12 @@ export default function CashierShiftReport() {
                 <tr
                   key={String(s.name)}
                   className={
-                    "cursor-pointer border-t hover:bg-zinc-50" +
-                    (active ? " bg-brand-50/50" : "")
+                    "cursor-pointer border-t hover:bg-canvas" +
+                    (active ? " bg-accent-subtle/50" : "")
                   }
                   onClick={() => pickSession(String(s.name))}
                 >
-                  <td className="whitespace-nowrap px-3 py-2.5 font-medium text-zinc-800">
+                  <td className="whitespace-nowrap px-3 py-2.5 font-medium text-ink">
                     {String(s.cashier_id || s.user)}
                   </td>
                   <td className="whitespace-nowrap px-3 py-2.5">
@@ -200,7 +200,7 @@ export default function CashierShiftReport() {
                   <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{fmtAmount(s.system_cash)}</td>
                   <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{fmtAmount(s.system_card)}</td>
                   {instant ? <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{fmtAmount(s.system_upi)}</td> : null}
-                  <td className="whitespace-nowrap px-3 py-2.5 text-xs tabular-nums text-zinc-600">
+                  <td className="whitespace-nowrap px-3 py-2.5 text-xs tabular-nums text-secondary-ink">
                     {fds.length
                       ? fds.map((fd) => `${fd.currency} ${fmtAmount(fd.expected_fx, fd.currency)}`).join(" · ")
                       : "-"}
@@ -211,7 +211,7 @@ export default function CashierShiftReport() {
             })}
             {!report?.sessions?.length ? (
               <tr>
-                <td colSpan={instant ? 7 : 6} className="px-3 py-10 text-center text-zinc-400">
+                <td colSpan={instant ? 7 : 6} className="px-3 py-10 text-center text-muted-ink">
                   {t("No sessions on this date. Open a till on My Till to start a shift.")}
                 </td>
               </tr>
@@ -223,9 +223,9 @@ export default function CashierShiftReport() {
       {sessionDetail && totals ? (
         <div className="space-y-4">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="text-sm font-semibold text-zinc-800">
+            <h2 className="text-sm font-semibold text-ink">
               {t("Till detail")} ·{" "}
-              <span className="font-medium text-zinc-600">
+              <span className="font-medium text-secondary-ink">
                 {sessionDetail.cashier_id || selected}
               </span>
             </h2>
@@ -251,9 +251,9 @@ export default function CashierShiftReport() {
             ).map(([label, val]) => (
               <div
                 key={label}
-                className="rounded-xl border border-zinc-200 bg-white px-3 py-2.5"
+                className="rounded-xl border border-line bg-surface px-3 py-2.5"
               >
-                <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-400">
+                <p className="text-[10px] font-medium uppercase tracking-wide text-muted-ink">
                   {translate(label)}
                 </p>
                 <p className="mt-0.5 text-base font-semibold tabular-nums">
@@ -265,12 +265,12 @@ export default function CashierShiftReport() {
 
           {(sessionDetail.foreign_drawers?.length ?? 0) > 0 ? (
             <div>
-              <h3 className="mb-2 text-sm font-semibold text-zinc-700">
+              <h3 className="mb-2 text-sm font-semibold text-secondary-ink">
                 {t("Foreign currency drawers")}
               </h3>
-              <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white">
+              <div className="overflow-x-auto rounded-xl border border-line bg-surface">
                 <table className="min-w-[560px] w-full text-start text-sm">
-                  <thead className="border-b text-xs uppercase text-zinc-400">
+                  <thead className="border-b text-xs uppercase text-muted-ink">
                     <tr>
                       <th className="px-3 py-2">{t("Currency")}</th>
                       <th className="px-3 py-2 text-end">{t("Receipts (FX)")}</th>
@@ -284,7 +284,7 @@ export default function CashierShiftReport() {
                   <tbody>
                     {sessionDetail.foreign_drawers!.map((fd) => (
                       <tr key={fd.currency} className="border-t">
-                        <td className="whitespace-nowrap px-3 py-2 font-medium text-zinc-800">{fd.currency}</td>
+                        <td className="whitespace-nowrap px-3 py-2 font-medium text-ink">{fd.currency}</td>
                         <td className="whitespace-nowrap px-3 py-2 text-end tabular-nums">{fmtAmount(fd.receipts_fx, fd.currency)}</td>
                         <td className="whitespace-nowrap px-3 py-2 text-end tabular-nums">{fmtAmount(fd.refunds_fx, fd.currency)}</td>
                         <td className="whitespace-nowrap px-3 py-2 text-end font-medium tabular-nums">{fmtAmount(fd.expected_fx, fd.currency)}</td>
@@ -294,12 +294,12 @@ export default function CashierShiftReport() {
                         <td
                           className={
                             "whitespace-nowrap px-3 py-2 text-end font-semibold tabular-nums " +
-                            (fd.variance_fx && Math.abs(fd.variance_fx) >= 0.5 * 10 ** -moneyDigits(fd.currency) ? "text-rose-700" : "")
+                            (fd.variance_fx && Math.abs(fd.variance_fx) >= 0.5 * 10 ** -moneyDigits(fd.currency) ? "text-danger-ink" : "")
                           }
                         >
                           {fd.variance_fx !== null && fd.variance_fx !== undefined ? fmtAmount(fd.variance_fx, fd.currency) : "-"}
                         </td>
-                        <td className="whitespace-nowrap px-3 py-2 text-end tabular-nums text-zinc-600">{fmtAmount(fd.home_equivalent)}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-end tabular-nums text-secondary-ink">{fmtAmount(fd.home_equivalent)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -310,12 +310,12 @@ export default function CashierShiftReport() {
 
           {(sessionDetail.by_method?.length ?? 0) > 0 ? (
             <div>
-              <h3 className="mb-2 text-sm font-semibold text-zinc-700">
+              <h3 className="mb-2 text-sm font-semibold text-secondary-ink">
                 {t("By payment method")}
               </h3>
-              <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white">
+              <div className="overflow-x-auto rounded-xl border border-line bg-surface">
                 <table className="min-w-[520px] w-full text-start text-sm">
-                  <thead className="border-b text-xs uppercase text-zinc-400">
+                  <thead className="border-b text-xs uppercase text-muted-ink">
                     <tr>
                       <th className="px-3 py-2">{t("Mode")}</th>
                       <th className="px-3 py-2 text-end">{t("Receipts")}</th>
@@ -328,7 +328,7 @@ export default function CashierShiftReport() {
                   <tbody>
                     {sessionDetail.by_method!.map((m) => (
                       <tr key={m.mode} className="border-t">
-                        <td className="whitespace-nowrap px-3 py-2 font-medium text-zinc-800">{translate(m.mode)}</td>
+                        <td className="whitespace-nowrap px-3 py-2 font-medium text-ink">{translate(m.mode)}</td>
                         <td className="whitespace-nowrap px-3 py-2 text-end tabular-nums">{fmtAmount(m.receipts)}</td>
                         <td className="whitespace-nowrap px-3 py-2 text-end tabular-nums">{fmtAmount(m.refunds)}</td>
                         <td className="whitespace-nowrap px-3 py-2 text-end tabular-nums">{fmtAmount(m.system)}</td>
@@ -349,12 +349,12 @@ export default function CashierShiftReport() {
       ) : null}
 
       <div>
-        <h2 className="mb-2 text-sm font-semibold text-zinc-700">
+        <h2 className="mb-2 text-sm font-semibold text-secondary-ink">
           {t("Journal by kind / mode")}
         </h2>
-        <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white">
+        <div className="overflow-x-auto rounded-xl border border-line bg-surface">
           <table className="min-w-[460px] w-full text-start text-sm">
-            <thead className="border-b text-xs uppercase text-zinc-400">
+            <thead className="border-b text-xs uppercase text-muted-ink">
               <tr>
                 <th className="px-3 py-2">{t("Kind")}</th>
                 <th className="px-3 py-2">{t("Mode")}</th>
@@ -373,7 +373,7 @@ export default function CashierShiftReport() {
               ))}
               {!report?.journal?.length ? (
                 <tr>
-                  <td colSpan={4} className="px-3 py-8 text-center text-zinc-400">
+                  <td colSpan={4} className="px-3 py-8 text-center text-muted-ink">
                     {t("No journal lines for this date.")}
                   </td>
                 </tr>

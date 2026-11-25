@@ -268,8 +268,8 @@ const FALLBACK_CODES: TransactionCodeChoice[] = [
 ]
 
 const inputCls =
-  "rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "rounded-lg border border-control bg-surface px-3 py-1.5 text-sm " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 /** One labelled fact on the printed bill - label and value stay on the
  *  same line so the header block reads as a form, not a paragraph. */
@@ -277,7 +277,7 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
   useUILanguage()
   return (
     <div className="flex gap-2">
-      <dt className="min-w-24 max-w-44 shrink-0 break-words text-zinc-500">{translate(label)}</dt>
+      <dt className="min-w-24 max-w-44 shrink-0 break-words text-muted-ink">{translate(label)}</dt>
       <dd className="min-w-0">{children}</dd>
     </div>
   )
@@ -294,7 +294,7 @@ function VerifyTaxId({ taxId, name, symbol }: { taxId: string; name: string; sym
     <span className="print:hidden">
       {" "}
       <button type="button" disabled={busy}
-        className="text-xs font-medium text-brand-700 hover:underline disabled:opacity-50"
+        className="text-xs font-medium text-accent-ink hover:underline disabled:opacity-50"
         title={t("ID verification partner checks this tax ID with the tax network. Charged per check to your verification wallet.")}
         onClick={async () => {
           setBusy(true); setRes(null)
@@ -314,7 +314,7 @@ function VerifyTaxId({ taxId, name, symbol }: { taxId: string; name: string; sym
         }}>
         {busy ? t("Checking…") : t("Verify")}
       </button>
-      {res && <span className={`ms-1 text-xs ${res.ok ? "text-emerald-700" : "text-red-700"}`}>{translate(res.text)}</span>}
+      {res && <span className={`ms-1 text-xs ${res.ok ? "text-success-ink" : "text-critical-ink"}`}>{translate(res.text)}</span>}
     </span>
   )
 }
@@ -339,7 +339,7 @@ function ChargeActions({ folio, row, correct, onMove, act }: {
       {onMove && !correcting && (
         <button
           aria-label={t("Move or split this charge")}
-          className="inline-flex min-h-11 items-center gap-1 rounded-md border border-zinc-200 px-2 py-1 text-xs text-zinc-500 hover:border-brand-400 hover:text-zinc-800"
+          className="inline-flex min-h-11 items-center gap-1 rounded-md border border-line px-2 py-1 text-xs text-muted-ink hover:border-accent-control hover:text-ink"
           onClick={onMove}
         >
           <ArrowRightLeft className="size-3" aria-hidden />
@@ -587,11 +587,11 @@ export default function FolioView() {
 
   if (!data)
     return error ? (
-      <div className="my-6 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+      <div className="my-6 rounded-lg border border-danger-line bg-danger-subtle px-4 py-3 text-sm text-danger-ink">
         {translate(error)}
       </div>
     ) : (
-      <p className="py-10 text-center text-sm text-zinc-400">{t("Loading…")}</p>
+      <p className="py-10 text-center text-sm text-muted-ink">{t("Loading…")}</p>
     )
 
   const { folio, property, stay, gst_summary } = data
@@ -673,7 +673,7 @@ export default function FolioView() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2 print:hidden">
         <Link
           to="/billing"
-          className="inline-flex min-h-11 items-center gap-1 text-sm text-zinc-500 hover:text-zinc-800 sm:min-h-0"
+          className="inline-flex min-h-11 items-center gap-1 text-sm text-muted-ink hover:text-ink sm:min-h-0"
         >
           <ArrowLeft className="size-4 rtl:rotate-180" aria-hidden />
           {t("Billing")}
@@ -906,8 +906,8 @@ export default function FolioView() {
       )}
 
       {pinStatus?.required ? (
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-2 text-sm print:hidden">
-          <span className="text-zinc-600">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-canvas px-4 py-2 text-sm print:hidden">
+          <span className="text-secondary-ink">
             {pinStatus.unlocked
               ? t("Cashier unlocked - money actions are open for {n} minutes.", { n: pinStatus.unlock_minutes ?? 15 })
               : pinStatus.must_reset || !pinStatus.has_pin
@@ -926,7 +926,7 @@ export default function FolioView() {
         </div>
       ) : null}
       {error && (
-        <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700 print:hidden">
+        <div className="mb-4 rounded-lg border border-danger-line bg-danger-subtle px-4 py-2 text-sm text-danger-ink print:hidden">
           {translate(error)}
         </div>
       )}
@@ -946,13 +946,13 @@ export default function FolioView() {
         const pct = (f: string) => shares[f] ?? even
         const total = bills.reduce((n, b) => n + Number(pct(b.name) || 0), 0)
         return (
-          <div className="mb-4 space-y-2 rounded-lg border border-zinc-200 bg-white p-3 text-sm print:hidden">
-            <p className="font-medium text-zinc-800">{t("Share charges with the other guests' bills")}</p>
+          <div className="mb-4 space-y-2 rounded-lg border border-line bg-surface p-3 text-sm print:hidden">
+            <p className="font-medium text-ink">{t("Share charges with the other guests' bills")}</p>
             {bills.length === 0 ? (
-              <p className="text-zinc-500">{t("Add the other guests' names to the stay, then press Bill each guest.")}</p>
+              <p className="text-muted-ink">{t("Add the other guests' names to the stay, then press Bill each guest.")}</p>
             ) : (
               <>
-                <p className="text-xs text-zinc-500">
+                <p className="text-xs text-muted-ink">
                   {selected.size
                     ? t("{n} ticked line(s) are shared.", { n: rows.length })
                     : t("{n} room line(s) are shared. Tick lines on the bill to share others.", { n: rows.length })}
@@ -962,10 +962,10 @@ export default function FolioView() {
                     <span className="w-40 truncate">{b.bill_to_name}</span>
                     <input className={`${inputCls} w-20`} type="number" min={0} max={100} step="any" inputMode="decimal"
                       value={pct(b.name)} onChange={(e) => setShares({ ...shares, [b.name]: e.target.value })} />
-                    <span className="text-zinc-500">%</span>
+                    <span className="text-muted-ink">%</span>
                   </label>
                 ))}
-                <p className="text-xs text-zinc-500">
+                <p className="text-xs text-muted-ink">
                   {t("This bill keeps {pct}%.", { pct: (100 - total).toFixed(2) })}
                 </p>
                 <div className="flex gap-2">
@@ -1004,8 +1004,8 @@ export default function FolioView() {
               className={
                 "rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] " +
                 (doc?.is_final
-                  ? "bg-zinc-900 text-white"
-                  : "border border-dashed border-amber-400 bg-amber-50 text-amber-700")
+                  ? "bg-inverse text-on-inverse"
+                  : "border border-dashed border-amber-400 bg-warning-subtle text-warning-ink")
               }
             >
               {translate(doc?.title) ?? (isFinal ? t("Invoice") : t("Provisional Bill"))}
@@ -1019,7 +1019,7 @@ export default function FolioView() {
               )}
             </span>
           </div>
-          <div className="mb-6 flex flex-wrap items-start justify-between gap-4 border-b border-zinc-200 pb-5">
+          <div className="mb-6 flex flex-wrap items-start justify-between gap-4 border-b border-line pb-5">
             <div className="flex items-start gap-3">
               {property.logo_url && (
                 <img
@@ -1037,10 +1037,10 @@ export default function FolioView() {
                 </h1>
                 {property.legal_name &&
                   property.legal_name !== property.name && (
-                    <p className="text-sm text-zinc-500">{property.name}</p>
+                    <p className="text-sm text-muted-ink">{property.name}</p>
                   )}
-                <p className="text-sm text-zinc-500">{property.address}</p>
-                <p className="text-sm text-zinc-500">
+                <p className="text-sm text-muted-ink">{property.address}</p>
+                <p className="text-sm text-muted-ink">
                   {property.gstin && (
                     <>
                       {translate(property.tax_id_label ?? "Tax ID")}:{" "}
@@ -1056,23 +1056,23 @@ export default function FolioView() {
               <p className="font-mono text-lg font-semibold">
                 {doc?.number ?? folio.invoice_number ?? folio.name}
               </p>
-              <p className="text-sm text-zinc-500">
+              <p className="text-sm text-muted-ink">
                 {doc?.date ?? ""}
               </p>
               {property.place_of_supply && (
-                <p className="mt-1 text-xs text-zinc-500">
+                <p className="mt-1 text-xs text-muted-ink">
                   {t("Place of supply")}: {property.place_of_supply}
                 </p>
               )}
               {doc?.reprint ? (
-                <p className="mt-1 text-xs font-semibold uppercase text-zinc-600">
+                <p className="mt-1 text-xs font-semibold uppercase text-secondary-ink">
                   {t("Copy - reprint {n}", { n: doc.reprint })}
                 </p>
               ) : null}
               {data.fiscal ? (
                 <FiscalDocument fiscal={data.fiscal} internalNumber={doc?.internal_number} />
               ) : !doc?.is_final && (
-                <p className="mt-1 max-w-52 text-xs text-amber-700">
+                <p className="mt-1 max-w-52 text-xs text-warning-ink">
                   {t("Not a tax invoice yet - the number is issued when the folio is settled.")}
                 </p>
               )}
@@ -1081,18 +1081,18 @@ export default function FolioView() {
           </div>
 
           {data.bill_to && (
-            <div className="mb-4 rounded-lg bg-zinc-50 px-4 py-2.5 text-sm">
-              <span className="text-zinc-500">{t("Bill to")}: </span>
+            <div className="mb-4 rounded-lg bg-canvas px-4 py-2.5 text-sm">
+              <span className="text-muted-ink">{t("Bill to")}: </span>
               <span className="font-medium">{data.bill_to.name}</span>
               {data.bill_to.gstin && (
-                <span className="text-zinc-500">{" · "}{translate(property.tax_id_label ?? "Tax ID")}{" "}{data.bill_to.gstin}</span>
+                <span className="text-muted-ink">{" · "}{translate(property.tax_id_label ?? "Tax ID")}{" "}{data.bill_to.gstin}</span>
               )}
               {data.bill_to.gstin && loc.integrations.verify_tax_id && (
                 <VerifyTaxId taxId={data.bill_to.gstin} name={data.bill_to.name} symbol={docSymbol} />
               )}
             </div>
           )}
-          {stay.tariff && <p className="mb-3 text-sm text-zinc-600">
+          {stay.tariff && <p className="mb-3 text-sm text-secondary-ink">
             {t("Booked contract tariff")}: <TariffNight {...stay} />
           </p>}
           <ReferenceCurrencyNote reference={stay.reference_currency} />
@@ -1102,14 +1102,14 @@ export default function FolioView() {
                 {data.guest?.name ?? folio.guest_name}
               </span>
               {stay.company && (
-                <span className="text-zinc-500"> · {stay.company}</span>
+                <span className="text-muted-ink"> · {stay.company}</span>
               )}
             </Fact>
             {stay.reservation && (<>
             <Fact label={t("Room")}>
               {roomLabel(stay)}
               {stay.room_type && (
-                <span className="text-zinc-500">
+                <span className="text-muted-ink">
                   {" "}
                   · {stay.room_type.split("-").pop()}
                 </span>
@@ -1122,7 +1122,7 @@ export default function FolioView() {
               {stay.pax || stay.adults || "-"}
               {stay.children ? ` (${stay.adults}+${stay.children})` : ""}
               {stay.meal_plan && (
-                <span className="text-zinc-500">
+                <span className="text-muted-ink">
                   {" "}
                   · {stay.meal_plan.split("-").pop()}
                 </span>
@@ -1286,7 +1286,7 @@ export default function FolioView() {
                     })
 
                   return (
-                    <div className="mb-3 rounded-xl border border-brand-200 bg-brand-50/40 p-3 text-sm print:hidden">
+                    <div className="mb-3 rounded-xl border border-accent-line bg-accent-subtle/40 p-3 text-sm print:hidden">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-medium">
                           {t("{n} line{s} · {cur}{amount} selected", {
@@ -1297,9 +1297,9 @@ export default function FolioView() {
                           })}
                         </span>
                         {canSplit ? (
-                          <span className="inline-flex flex-wrap items-center gap-1.5 text-xs text-zinc-600">
+                          <span className="inline-flex flex-wrap items-center gap-1.5 text-xs text-secondary-ink">
                             <span>· {t("move only")}</span>
-                            <span className="inline-flex overflow-hidden rounded-md border border-zinc-200 bg-white">
+                            <span className="inline-flex overflow-hidden rounded-md border border-line bg-surface">
                               <button
                                 type="button"
                                 data-testid="split-mode-auto"
@@ -1307,8 +1307,8 @@ export default function FolioView() {
                                 className={
                                   "px-2 py-1 text-xs " +
                                   (activeMode === "auto"
-                                    ? "bg-brand-600 font-medium text-white"
-                                    : "text-zinc-600 hover:bg-zinc-50")
+                                    ? "bg-accent-fill font-medium text-on-solid"
+                                    : "text-secondary-ink hover:bg-canvas")
                                 }
                               >
                                 {t("% / Amount")}
@@ -1321,8 +1321,8 @@ export default function FolioView() {
                                   className={
                                     "px-2 py-1 text-xs " +
                                     (activeMode === "qty"
-                                      ? "bg-brand-600 font-medium text-white"
-                                      : "text-zinc-600 hover:bg-zinc-50")
+                                      ? "bg-accent-fill font-medium text-on-solid"
+                                      : "text-secondary-ink hover:bg-canvas")
                                   }
                                 >
                                   {t("By Qty")}
@@ -1332,7 +1332,7 @@ export default function FolioView() {
                             {activeMode === "qty" ? (
                               <>
                                 <input
-                                  className="w-20 rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs"
+                                  className="w-20 rounded-md border border-control bg-surface px-2 py-1 text-xs"
                                   type="number"
                                   min={1}
                                   max={Math.max(1, Math.floor(rowQty) - 1)}
@@ -1342,39 +1342,39 @@ export default function FolioView() {
                                   value={qtyVal}
                                   onChange={(e) => setQtyVal(e.target.value)}
                                 />
-                                <span className="text-zinc-500">
+                                <span className="text-muted-ink">
                                   {t("of {total} units", { total: rowQty })}
                                 </span>
                               </>
                             ) : (
                               <>
                                 <input
-                                  className="w-24 rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs"
+                                  className="w-24 rounded-md border border-control bg-surface px-2 py-1 text-xs"
                                   aria-label={t("Part to move (percent, or {cur} before {tax})", { cur: docSymbol, tax: docTaxLabel })}
                                   placeholder={t("30% or 1500")}
                                   value={partVal}
                                   onChange={(e) => setPartVal(e.target.value)}
                                 />
-                                <span className="text-zinc-400">
+                                <span className="text-muted-ink">
                                   ({docSymbol} = {t("before {tax}", { tax: docTaxLabel })})
                                 </span>
                               </>
                             )}
                           </span>
                         ) : one ? (
-                          <span className="text-xs text-zinc-500">
+                          <span className="text-xs text-muted-ink">
                             · {t("Moves whole (cannot be split)")}
                           </span>
                         ) : null}
                         <button
-                          className="ms-auto text-xs text-zinc-400 hover:text-zinc-700"
+                          className="ms-auto text-xs text-muted-ink hover:text-secondary-ink"
                           onClick={resetSelection}
                         >
                           {t("Clear")}
                         </button>
                       </div>
                       {partOk && one && (
-                        <p className="mt-1.5 text-xs text-brand-700">
+                        <p className="mt-1.5 text-xs text-accent-ink">
                           {t("Preview: Kept {kept} · Moved {moved}", {
                             kept: `${docSymbol}${fmt(keptTotal)}`,
                             moved: `${docSymbol}${fmt(movedTotal)}`,
@@ -1382,7 +1382,7 @@ export default function FolioView() {
                         </p>
                       )}
                       {partBad && (
-                        <p className="mt-1.5 text-xs text-rose-600">
+                        <p className="mt-1.5 text-xs text-danger-text">
                           {activeMode === "qty"
                             ? t("Enter a whole quantity from 1 to {max}.", { max: Math.max(1, Math.floor(rowQty) - 1) })
                             : t("Enter 1-99%, or a {cur} amount under the line's {cur}{amount} (before {tax}).", {
@@ -1393,18 +1393,18 @@ export default function FolioView() {
                         </p>
                       )}
                       <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                        <span className="text-xs text-zinc-500">
+                        <span className="text-xs text-muted-ink">
                           {t("Send {cur}{amount} to", { cur: docSymbol, amount: fmt(movedTotal) })}
                         </span>
                         {targets.map((s) => (
                           <button
                             key={s.name}
-                            className="min-h-11 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs hover:border-brand-400 disabled:opacity-50"
+                            className="min-h-11 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs hover:border-accent-control disabled:opacity-50"
                             disabled={busy || partBad}
                             onClick={() => moveTo(s.name)}
                           >
                             {s.window_no ? (
-                              <span className="me-1 font-mono text-[11px] text-zinc-500">
+                              <span className="me-1 font-mono text-[11px] text-muted-ink">
                                 {windowBadge(s)}
                               </span>
                             ) : null}
@@ -1414,8 +1414,8 @@ export default function FolioView() {
                             <span
                               className={
                                 s.balance > 0
-                                  ? "ms-1.5 text-amber-600"
-                                  : "ms-1.5 text-zinc-400"
+                                  ? "ms-1.5 text-warning-text"
+                                  : "ms-1.5 text-muted-ink"
                               }
                             >
                               {s.balance < 0
@@ -1425,14 +1425,14 @@ export default function FolioView() {
                           </button>
                         ))}
                         <button
-                          className="min-h-11 rounded-lg border border-dashed border-zinc-300 bg-white px-2.5 py-1.5 text-xs text-zinc-600 hover:border-brand-400 disabled:opacity-50"
+                          className="min-h-11 rounded-lg border border-dashed border-control bg-surface px-2.5 py-1.5 text-xs text-secondary-ink hover:border-accent-control disabled:opacity-50"
                           disabled={busy || partBad}
                           onClick={() => moveToNew("Company")}
                         >
                           {t("+ New Company folio")}
                         </button>
                         <button
-                          className="min-h-11 rounded-lg border border-dashed border-zinc-300 bg-white px-2.5 py-1.5 text-xs text-zinc-600 hover:border-brand-400 disabled:opacity-50"
+                          className="min-h-11 rounded-lg border border-dashed border-control bg-surface px-2.5 py-1.5 text-xs text-secondary-ink hover:border-accent-control disabled:opacity-50"
                           disabled={busy || partBad}
                           onClick={() => moveToNew("Extra")}
                         >
@@ -1440,11 +1440,11 @@ export default function FolioView() {
                         </button>
                       </div>
                       {canCorrect && inHouseRooms.length > 0 && !partOk && (
-                        <div className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-brand-200/70 pt-2">
-                          <span className="text-xs text-zinc-500">{t("Or transfer to another room")}:</span>
+                        <div className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-accent-line/70 pt-2">
+                          <span className="text-xs text-muted-ink">{t("Or transfer to another room")}:</span>
                           <select
                             aria-label={t("Destination room")}
-                            className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs"
+                            className="rounded-md border border-control bg-surface px-2 py-1 text-xs"
                             value={moveRoomTarget}
                             onChange={(e) => setMoveRoomTarget(e.target.value)}
                           >
@@ -1459,14 +1459,14 @@ export default function FolioView() {
                           {moveRoomTarget && (
                             <>
                               <input
-                                className="min-w-40 flex-1 rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs"
+                                className="min-w-40 flex-1 rounded-md border border-control bg-surface px-2 py-1 text-xs"
                                 placeholder={t("Reason (required)")}
                                 value={moveRoomReason}
                                 onChange={(e) => setMoveRoomReason(e.target.value)}
                               />
                               <button
                                 type="button"
-                                className="rounded-lg border border-brand-600 bg-brand-600 px-2.5 py-1 text-xs font-medium text-white disabled:opacity-50"
+                                className="rounded-lg border border-accent-control bg-accent-fill px-2.5 py-1 text-xs font-medium text-on-solid disabled:opacity-50"
                                 disabled={busy || !moveRoomReason.trim()}
                                 onClick={moveToRoom}
                               >
@@ -1481,7 +1481,7 @@ export default function FolioView() {
                 })()}
                 <ResponsiveList className="mb-5 w-full text-sm">
                   <thead>
-                    <tr className="border-b border-zinc-200 text-start text-xs font-medium uppercase tracking-wider text-zinc-500">
+                    <tr className="border-b border-line text-start text-xs font-medium uppercase tracking-wider text-muted-ink">
                       {open && (
                         <th className="w-6 py-2 pe-2 print:hidden" aria-label={t("Select")} />
                       )}
@@ -1501,7 +1501,7 @@ export default function FolioView() {
                       )}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-zinc-100">
+                  <tbody className="divide-y divide-line-subtle">
                     {folio.charges.map((c, i) => {
                       const voided = !!c.reversal_of || folio.charges.some((r) => r.reversal_of === c.name)
                       const split = voided && (c.reversal_of
@@ -1509,13 +1509,13 @@ export default function FolioView() {
                         : folio.charges.some((r) => r.reversal_of === c.name && !!r.split_of))
                       return (
                       <Fragment key={c.name ?? i}>
-                        <tr className={[voided && "text-zinc-400", split && "print:hidden"]
+                        <tr className={[voided && "text-muted-ink", split && "print:hidden"]
                           .filter(Boolean).join(" ") || undefined}>
                           {open && (
                             <Popin label={t("Select")} importance="medium" className="py-2 pe-2 print:hidden">
                               {!voided && <input
                                 type="checkbox"
-                                className="size-3.5 accent-brand-600"
+                                className="size-3.5 accent-focus"
                                 aria-label={t("Select charge")}
                                 checked={selected.has(c.name)}
                                 onChange={(e) =>
@@ -1529,27 +1529,27 @@ export default function FolioView() {
                               />}
                             </Popin>
                           )}
-                          <Popin label={t("Date")} importance="medium" className="py-2 pe-3 text-zinc-500">{formatDate(c.posting_date)}</Popin>
+                          <Popin label={t("Date")} importance="medium" className="py-2 pe-3 text-muted-ink">{formatDate(c.posting_date)}</Popin>
                           <Popin label={t("Item")} importance="high" className="py-2 pe-3">
                             <span className="font-medium">{translate(c.charge_type === "Allowance" ? "Discount" : c.charge_type)}</span>
                             {c.description && (
-                              <span className="text-zinc-500"> - {c.description}</span>
+                              <span className="text-muted-ink"> - {c.description}</span>
                             )}
                             {voided && (
-                              <span className="ms-1 rounded bg-zinc-100 px-1 text-xs text-zinc-500">
+                              <span className="ms-1 rounded bg-subtle px-1 text-xs text-muted-ink">
                                 {split ? t("status|Split") : t("Voided")}
                               </span>
                             )}
                             {c.allowance_serial && (
                               <Link to={`/allowance-voucher/${encodeURIComponent(c.allowance_serial)}`}
-                                className="ms-1 font-mono text-xs text-brand-700 hover:underline print:text-zinc-500 print:no-underline"
+                                className="ms-1 font-mono text-xs text-accent-ink hover:underline print:text-muted-ink print:no-underline"
                                 title={t("Print voucher")}>
                                 {c.allowance_serial}
                               </Link>
                             )}
                           </Popin>
                           {hasServiceCode && (
-                            <td className="hidden py-2 pe-3 font-mono text-xs text-zinc-400 print:table-cell">
+                            <td className="hidden py-2 pe-3 font-mono text-xs text-muted-ink print:table-cell">
                               {lineByRow.get(c.name)?.service_code ?? ""}
                             </td>
                           )}
@@ -1587,8 +1587,8 @@ export default function FolioView() {
           })()}
 
           {(data.summary_by_head?.length ?? 0) > 1 && (
-            <div className="mb-6 break-inside-avoid rounded-xl bg-zinc-50 px-4 py-3">
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+            <div className="mb-6 break-inside-avoid rounded-xl bg-canvas px-4 py-3">
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-ink">
                 {t("Summary")}
               </h3>
               <table className="w-full text-sm">
@@ -1597,15 +1597,15 @@ export default function FolioView() {
                     <tr key={h.head}>
                       <td className="py-1">
                         {translate(h.head)}
-                        <span className="ms-1.5 text-xs text-zinc-400">
+                        <span className="ms-1.5 text-xs text-muted-ink">
                           {t("{n} line{s}", { n: h.lines, s: h.lines === 1 ? "" : "s" })}
                         </span>
                       </td>
-                      <td className="py-1 text-end text-zinc-500">
+                      <td className="py-1 text-end text-muted-ink">
                         {amount(h.amount)}
                       </td>
                       {showLineTax && (
-                        <td className="py-1 text-end text-zinc-400">
+                        <td className="py-1 text-end text-muted-ink">
                           + {amount(h.tax)} {docTaxLabel.toLowerCase()}
                         </td>
                       )}
@@ -1621,16 +1621,16 @@ export default function FolioView() {
 
           <div className="mb-6 grid gap-6 sm:grid-cols-2">
             {taxed ? <div>
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-ink">
                 {t("{tax} summary", { tax: docTaxLabel })}
               </h3>
               {taxUnavailable ? (
-                <p className="text-sm text-zinc-600">
+                <p className="text-sm text-secondary-ink">
                   {t("Tax as per the accounting invoice")}
                 </p>
               ) : (
                 <table className="w-full text-sm">
-                  <tbody className="divide-y divide-zinc-100">
+                  <tbody className="divide-y divide-line-subtle">
                     {(taxRows.length ? taxRows : gst_summary.map((g) => ({
                       rate: g.rate, taxable: g.taxable, total_tax: g.total_tax,
                       parts: [
@@ -1640,7 +1640,7 @@ export default function FolioView() {
                     }))).map((r, idx) => (
                       <tr key={`${r.rate}-${idx}`}>
                         <td className="py-1.5 pe-3">{r.rate === 0 && Number(r.total_tax) !== 0 ? "—" : `${r.rate}%`}</td>
-                        <td className="py-1.5 pe-3 text-end text-zinc-500">
+                        <td className="py-1.5 pe-3 text-end text-muted-ink">
                           {t("taxable {cur}{amount}", { cur: docSymbol, amount: fmt(r.taxable) })}
                         </td>
                         <td className="py-1.5 text-end">
@@ -1657,31 +1657,31 @@ export default function FolioView() {
               )}
             </div> : <div />}
             <div className="space-y-1.5 text-sm sm:text-end">
-              <p className="text-zinc-500">
-                {t("Charges")}: <span className="text-zinc-900">{amount(folio.charges_total)}</span>
+              <p className="text-muted-ink">
+                {t("Charges")}: <span className="text-ink">{amount(folio.charges_total)}</span>
               </p>
               {showLineTax && (
-                <p className="text-zinc-500">
-                  {docTaxLabel}: <span className="text-zinc-900">{amount(folio.tax_total)}</span>
+                <p className="text-muted-ink">
+                  {docTaxLabel}: <span className="text-ink">{amount(folio.tax_total)}</span>
                 </p>
               )}
               <p className="text-lg font-semibold">
                 {t("Grand total")}: {amount(folio.grand_total)}
               </p>
               {(data.credited ?? 0) > 0 && (
-                <p className="text-sm font-medium text-rose-600">
+                <p className="text-sm font-medium text-danger-text">
                   {t("Credited")}: −{amount(data.credited)}
                 </p>
               )}
               {doc?.amount_in_words && (
-                <p className="text-xs italic text-zinc-500">
+                <p className="text-xs italic text-muted-ink">
                   {doc.amount_in_words}
                 </p>
               )}
               {fxRates.length > 0 && (
-                <label className="flex items-center justify-end gap-2 text-xs text-zinc-500 print:hidden">
+                <label className="flex items-center justify-end gap-2 text-xs text-muted-ink print:hidden">
                   {t("Show in")}
-                  <select className="rounded border border-zinc-200 px-1.5 py-0.5"
+                  <select className="rounded border border-line px-1.5 py-0.5"
                     value={showIn} onChange={(e) => setShowIn(e.target.value)}>
                     <option value="">{t("Hotel currency only")}</option>
                     {fxRates.map((r) => <option key={r.currency}>{r.currency}</option>)}
@@ -1689,7 +1689,7 @@ export default function FolioView() {
                 </label>
               )}
               {shown && (
-                <p className="text-xs text-zinc-600">
+                <p className="text-xs text-secondary-ink">
                   {t("Approx. {cur} {total} (balance {cur} {balance}) at {rate}, rate of {date}. Tax invoice amounts are in {home}.", {
                     cur: shown.currency,
                     total: fmtAmount(shown.grand_total, shown.currency),
@@ -1700,7 +1700,7 @@ export default function FolioView() {
               )}
               {data.statutory && (
                 <div className="flex items-center justify-end gap-3 pt-2">
-                  <div className="text-end text-[10px] leading-tight text-zinc-400">
+                  <div className="text-end text-[10px] leading-tight text-muted-ink">
                     <p>{translate("ZATCA · ICV ")}{data.statutory.icv}</p>
                     <p className="font-mono">{data.statutory.uuid}</p>
                   </div>
@@ -1711,14 +1711,14 @@ export default function FolioView() {
                   />
                 </div>
               )}
-              <p className="text-zinc-500">
+              <p className="text-muted-ink">
                 {t("Paid")}: {amount(folio.payments_total)} ·{" "}
                 {folio.balance < 0 ? t("Advance") : t("Balance")}:{" "}
                 <span
                   className={
                     folio.balance > 0
-                      ? "font-medium text-amber-600"
-                      : "font-medium text-emerald-600"
+                      ? "font-medium text-warning-text"
+                      : "font-medium text-success-text"
                   }
                 >
                   {amount(Math.abs(folio.balance))}
@@ -1729,10 +1729,10 @@ export default function FolioView() {
 
           {folio.payments.length > 0 && (
             <div className="text-sm">
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-ink">
                 {t("Payments")}
               </h3>
-              <ul className="divide-y divide-zinc-100">
+              <ul className="divide-y divide-line-subtle">
                 {folio.payments.map((p) => {
                   const canTransferRow =
                     open &&
@@ -1752,38 +1752,38 @@ export default function FolioView() {
                         {formatDate(p.posting_date)} · {translate(p.mode)}
                         {p.payment_kind && p.payment_kind !== "Payment" && (
                           <span className={"ms-1.5 rounded px-1.5 py-0.5 text-[10px] font-semibold " +
-                            (p.payment_kind === "Refund" ? "bg-rose-50 text-rose-600"
-                              : p.payment_kind === "Security Deposit" ? "bg-violet-50 text-violet-700"
-                                : "bg-sky-50 text-sky-700")}>
+                            (p.payment_kind === "Refund" ? "bg-danger-subtle text-danger-text"
+                              : p.payment_kind === "Security Deposit" ? "bg-violet-subtle text-violet-ink"
+                                : "bg-info-subtle text-info-ink")}>
                             {t(p.payment_kind)}
                           </span>
                         )}
                         {p.transferred_to && (
-                          <span className="ms-1.5 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
+                          <span className="ms-1.5 rounded bg-warning-subtle px-1.5 py-0.5 text-[10px] font-semibold text-warning-ink">
                             {t("Transferred out")}
                           </span>
                         )}
                         {p.transferred_from && (
-                          <span className="ms-1.5 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
+                          <span className="ms-1.5 rounded bg-success-subtle px-1.5 py-0.5 text-[10px] font-semibold text-success-ink">
                             {t("Transferred in")}
                           </span>
                         )}
                         {p.reference && (
-                          <span className="text-zinc-400"> · {p.reference}</span>
+                          <span className="text-muted-ink"> · {p.reference}</span>
                         )}
                         {!!Number(p.fx_amount) && (
-                          <span className="text-zinc-400"> · {currencyText(p.currency!, Number(p.fx_amount), loc.locale)} @ {formatFxRate(Number(p.exchange_rate), loc.locale)}{p.exchange_rate_date && ` · ${formatDate(p.exchange_rate_date)}`}</span>
+                          <span className="text-muted-ink"> · {currencyText(p.currency!, Number(p.fx_amount), loc.locale)} @ {formatFxRate(Number(p.exchange_rate), loc.locale)}{p.exchange_rate_date && ` · ${formatDate(p.exchange_rate_date)}`}</span>
                         )}
                       </span>
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className={Number(p.amount) < 0 ? "font-medium text-rose-600" : ""}>
+                        <span className={Number(p.amount) < 0 ? "font-medium text-danger-text" : ""}>
                           <span dir="ltr" className="inline-block tabular-nums">{docCurrency} {fmt(p.amount)}</span>
                         </span>
                         {canTransferRow && (
                           <button
                             type="button"
                             data-testid={`transfer-payment-${p.name}`}
-                            className="inline-flex min-h-11 items-center gap-1 rounded-md border border-zinc-200 px-2 py-1 text-xs text-zinc-600 hover:border-brand-400 hover:text-zinc-900 print:hidden"
+                            className="inline-flex min-h-11 items-center gap-1 rounded-md border border-line px-2 py-1 text-xs text-secondary-ink hover:border-accent-control hover:text-ink print:hidden"
                             onClick={() => setTransferPayment(p)}
                           >
                             <ArrowRightLeft className="size-3" aria-hidden />
@@ -1803,7 +1803,7 @@ export default function FolioView() {
           )}
 
           {isFinal && (
-            <div className="mt-8 flex flex-wrap items-end justify-between gap-4 border-t border-zinc-200 pt-4 text-xs text-zinc-500">
+            <div className="mt-8 flex flex-wrap items-end justify-between gap-4 border-t border-line pt-4 text-xs text-muted-ink">
               <p className="max-w-md">
                 {doc?.footer
                   ? t(doc.footer)
@@ -1818,7 +1818,7 @@ export default function FolioView() {
                 )}
               </p>
               <div className="text-center">
-                <div className="mb-1 h-8 w-40 border-b border-zinc-300" />
+                <div className="mb-1 h-8 w-40 border-b border-control" />
                 {t("For {name}", { name: property.legal_name || property.name })}
                 <br />
                 {t("Authorised signatory")}
@@ -1889,11 +1889,11 @@ export default function FolioView() {
               />
               {noTax ? null : fixedRate !== null ? (
                 <span
-                  className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-sm text-zinc-600"
+                  className="rounded-lg border border-line bg-canvas px-3 py-1.5 text-sm text-secondary-ink"
                   title={t("Food & beverage is taxed at the property's F&B rate.")}
                 >
                   {t("{tax} {rate}%", { tax: docTaxLabel, rate: fixedRate })}
-                  <span className="ms-1 text-xs text-zinc-400">{t("(F&B rate)")}</span>
+                  <span className="ms-1 text-xs text-muted-ink">{t("(F&B rate)")}</span>
                 </span>
               ) : (
                 <select
@@ -1941,8 +1941,8 @@ export default function FolioView() {
                     : null)
                   setAllowanceKey((k) => k + 1)
                 }} />
-              <div className="mt-1 w-full border-t border-zinc-100 pt-3">
-                <div className="mb-2 text-xs font-medium uppercase tracking-wider text-zinc-400">
+              <div className="mt-1 w-full border-t border-line-subtle pt-3">
+                <div className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-ink">
                   {t("Pass an allowance")}
                   <span className="ms-1.5 normal-case tracking-normal">
                     {t("- write off part of the bill, with a reason")}
@@ -2039,9 +2039,9 @@ export default function FolioView() {
                   </Button>
                 </div>
                 {allowancePin !== null && (
-                  <p className="mt-2 text-xs text-zinc-600">{t("Your PIN signs this allowance, like the paper voucher.")}</p>
+                  <p className="mt-2 text-xs text-secondary-ink">{t("Your PIN signs this allowance, like the paper voucher.")}</p>
                 )}
-                {allowanceNote && <p className="mt-2 text-xs text-amber-700">{allowanceNote}</p>}
+                {allowanceNote && <p className="mt-2 text-xs text-warning-ink">{allowanceNote}</p>}
                 <div className="mt-2">
                   <AllowanceRequests property={folio.property ?? getCurrentProperty()} folio={folio.name}
                     currency={docCurrency} currencySymbol={docSymbol} numberLocale={docLocale}
@@ -2049,14 +2049,14 @@ export default function FolioView() {
                 </div>
               </div>
               {toCorrect.length > 0 && folio.status !== "Closed" && (
-                <div className="mt-1 w-full border-t border-zinc-100 pt-3">
-                  <div className="mb-1 text-xs font-medium uppercase tracking-wider text-zinc-400">
+                <div className="mt-1 w-full border-t border-line-subtle pt-3">
+                  <div className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-ink">
                     {t("Correct charged nights")}
                   </div>
-                  <p className="mb-2 text-xs text-zinc-500">
+                  <p className="mb-2 text-xs text-muted-ink">
                     {t("Each night is reversed and posted again at the current rate, dated today.")}
                   </p>
-                  <ul className="mb-2 space-y-0.5 text-xs text-zinc-600">
+                  <ul className="mb-2 space-y-0.5 text-xs text-secondary-ink">
                     {toCorrect.map((n) => (
                       <li key={n.date}>
                         {t("Night of {date}: {from} to {to}", {

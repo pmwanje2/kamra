@@ -83,7 +83,7 @@ interface TapeRoom {
 function segment(b: TapeBooking): { label: string; dot: string; vip: boolean } {
   if (b.vip) return { label: "VIP", dot: "bg-amber-300", vip: true }
   if (b.booking_type === "Group" || b.group_booking)
-    return { label: "Group", dot: "bg-sky-200", vip: false }
+    return { label: "Group", dot: "bg-info-soft", vip: false }
   if (b.booking_type === "Corporate" || b.company)
     return { label: "Corporate", dot: "bg-violet-300", vip: false }
   if (b.travel_agent)
@@ -91,8 +91,8 @@ function segment(b: TapeBooking): { label: string; dot: string; vip: boolean } {
   if (b.source === "OTA")
     return { label: "OTA", dot: "bg-orange-300", vip: false }
   if (b.source === "Walk-in")
-    return { label: "Walk-in", dot: "bg-zinc-300", vip: false }
-  return { label: b.source || "Direct", dot: "bg-white/70", vip: false }
+    return { label: "Walk-in", dot: "bg-fill-strong", vip: false }
+  return { label: b.source || "Direct", dot: "bg-on-solid/70", vip: false }
 }
 
 interface PositionCell {
@@ -180,8 +180,8 @@ const ROOM_COL_W = 152
 const TOUCH_LONG_PRESS_MS = 300
 const TOUCH_CANCEL_MOVE_PX = 8
 const fieldBaseCls =
-  "rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "rounded-lg border border-control bg-surface px-3 py-2 text-sm " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 const inputCls = `w-full ${fieldBaseCls}`
 
 /** Today on this device's calendar (YYYY-MM-DD). */
@@ -874,7 +874,7 @@ export default function TapeChart() {
           onClick={() => setFiltersOpen((o) => !o)}
           className={cn(
             "min-h-11 md:min-h-9",
-            (filtersOpen || activeFilterCount > 0) && "border-brand-600 bg-brand-50 text-brand-700",
+            (filtersOpen || activeFilterCount > 0) && "border-accent-control bg-accent-subtle text-accent-ink",
           )}
         >
           <Filter className="size-4" aria-hidden />
@@ -899,7 +899,7 @@ export default function TapeChart() {
           </Button>
         )}
 
-        <div className="inline-flex rounded-lg border border-zinc-200 p-0.5 text-sm">
+        <div className="inline-flex rounded-lg border border-line p-0.5 text-sm">
           {(["day", "hour"] as const).map((m) => (
             <button
               key={m}
@@ -908,8 +908,8 @@ export default function TapeChart() {
               className={cn(
                 "min-h-10 rounded-md px-2.5 py-1 font-medium transition md:min-h-8",
                 mode === m
-                  ? "bg-brand-50 text-brand-700"
-                  : "text-zinc-500 hover:text-zinc-700",
+                  ? "bg-accent-subtle text-accent-ink"
+                  : "text-muted-ink hover:text-secondary-ink",
               )}
             >
               {m === "day" ? t("Days") : t("Hourly")}
@@ -924,7 +924,7 @@ export default function TapeChart() {
           onClick={suggestAlloc}
           className="min-h-11 md:min-h-9"
         >
-          <Sparkles className="size-4 text-brand-600" aria-hidden />
+          <Sparkles className="size-4 text-accent-text" aria-hidden />
           {allocBusy ? t("Thinking...") : t("Auto-assign arrivals")}
         </Button>
 
@@ -941,18 +941,18 @@ export default function TapeChart() {
           }}
           className="min-h-11 md:min-h-9"
         >
-          <Users className="size-4 text-brand-600" aria-hidden />
+          <Users className="size-4 text-accent-text" aria-hidden />
           {t("Unassigned ({n})", { n: unassigned.length })}
         </Button>
 
         {mode === "day" && (
-          <div className="inline-flex rounded-lg border border-zinc-200 p-0.5 text-xs md:hidden">
+          <div className="inline-flex rounded-lg border border-line p-0.5 text-xs md:hidden">
             <button
               type="button"
               onClick={() => setMobileView("cards")}
               className={cn(
                 "min-h-10 rounded-md px-2.5 font-medium",
-                mobileView === "cards" ? "bg-brand-50 text-brand-700" : "text-zinc-500",
+                mobileView === "cards" ? "bg-accent-subtle text-accent-ink" : "text-muted-ink",
               )}
             >
               {t("Cards")}
@@ -962,7 +962,7 @@ export default function TapeChart() {
               onClick={() => setMobileView("grid")}
               className={cn(
                 "min-h-10 rounded-md px-2.5 font-medium",
-                mobileView === "grid" ? "bg-brand-50 text-brand-700" : "text-zinc-500",
+                mobileView === "grid" ? "bg-accent-subtle text-accent-ink" : "text-muted-ink",
               )}
             >
               {t("Grid")}
@@ -1000,7 +1000,7 @@ export default function TapeChart() {
       </div>
 
       {filtersOpen && (
-        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50/70 p-2.5">
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-line bg-canvas/70 p-2.5">
           <select
             className={cn(fieldBaseCls, "min-h-11 w-auto max-w-full py-1.5 md:min-h-9")}
             value={wingFilter}
@@ -1037,7 +1037,7 @@ export default function TapeChart() {
             ))}
           </select>
 
-          <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 text-sm text-zinc-700 md:min-h-9">
+          <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-line bg-surface px-3 text-sm text-secondary-ink md:min-h-9">
             <input
               type="checkbox"
               aria-label={t("Smoking allowed")}
@@ -1050,7 +1050,7 @@ export default function TapeChart() {
       )}
 
       {error && !sel && (
-        <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+        <div className="mb-3 rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">
           {translate(error)}
         </div>
       )}
@@ -1061,7 +1061,7 @@ export default function TapeChart() {
 
       {/* back-to-back conflicts: the incoming guest lands before the room frees */}
       {mode === "day" && (data?.conflicts?.length ?? 0) > 0 && (
-        <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+        <div className="mb-3 rounded-xl border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">
           <span className="font-semibold">
             {t("{n} changeover conflict{s}", {
               n: data!.conflicts.length,
@@ -1108,17 +1108,17 @@ export default function TapeChart() {
             <div
               data-testid="tape-desktop-grid"
               className={cn(
-                "overflow-x-auto rounded-xl border border-zinc-200 bg-white shadow-sm",
+                "overflow-x-auto rounded-xl border border-line bg-surface shadow-sm",
                 mobileView === "cards" && "hidden md:block",
               )}
             >
               <div style={{ minWidth: ROOM_COL_W + DAYS * cellW }}>
                 {/* header row */}
-                <div className="flex border-b border-zinc-200 bg-zinc-50 text-xs font-medium text-zinc-500">
+                <div className="flex border-b border-line bg-canvas text-xs font-medium text-muted-ink">
                   <div
                     data-testid="tape-room-header"
                     style={{ width: ROOM_COL_W }}
-                    className="sticky start-0 z-20 shrink-0 border-e border-zinc-200 bg-zinc-50 px-3 py-2"
+                    className="sticky start-0 z-20 shrink-0 border-e border-line bg-canvas px-3 py-2"
                   >
                     {t("Room")}
                   </div>
@@ -1127,8 +1127,8 @@ export default function TapeChart() {
                     const weekend = day.getDay() === 0 || day.getDay() === 6
                     return (
                       <div key={d} style={{ width: cellW }}
-                        className={cn("shrink-0 border-s border-zinc-100 px-1 py-2 text-center",
-                          weekend && "bg-brand-50 text-brand-700")}>
+                        className={cn("shrink-0 border-s border-line-subtle px-1 py-2 text-center",
+                          weekend && "bg-accent-subtle text-accent-ink")}>
                         {day.toLocaleDateString(uiDateLocale(moneyLocale()), { weekday: "short" })}{" "}
                         <span className="font-semibold">{day.getDate()}</span>
                       </div>
@@ -1136,10 +1136,10 @@ export default function TapeChart() {
                   })}
                 </div>
                 {/* house position: sold/capacity per day, demand premium, overbooking */}
-                <div className="flex border-b border-zinc-200 bg-white text-[10px]">
+                <div className="flex border-b border-line bg-surface text-[10px]">
                   <div
                     style={{ width: ROOM_COL_W }}
-                    className="sticky start-0 z-10 shrink-0 border-e border-zinc-200 bg-white px-3 py-1 font-medium uppercase tracking-wide text-zinc-400"
+                    className="sticky start-0 z-10 shrink-0 border-e border-line bg-surface px-3 py-1 font-medium uppercase tracking-wide text-muted-ink"
                   >
                     {t("Position")}
                   </div>
@@ -1151,12 +1151,12 @@ export default function TapeChart() {
                         p.premium_pct ? t("demand premium +{premium}%", { premium: p.premium_pct }) : null,
                         p.min_rate ? t("hurdle {amount}", { amount: fmtMoney(p.min_rate) }) : null,
                       ].filter(Boolean).join(" · ")}
-                      className={cn("shrink-0 border-s border-zinc-100 px-1 py-1 text-center tabular-nums",
-                        p.overbooked ? "bg-rose-50 font-bold text-rose-600"
-                          : p.occupancy >= 80 ? "bg-emerald-50 font-semibold text-emerald-700"
-                            : p.occupancy >= 50 ? "text-amber-600" : "text-zinc-400")}>
+                      className={cn("shrink-0 border-s border-line-subtle px-1 py-1 text-center tabular-nums",
+                        p.overbooked ? "bg-danger-subtle font-bold text-danger-text"
+                          : p.occupancy >= 80 ? "bg-success-subtle font-semibold text-success-ink"
+                            : p.occupancy >= 50 ? "text-warning-text" : "text-muted-ink")}>
                       {p.sold}/{p.capacity}
-                      {p.premium_pct > 0 && <span className="ms-0.5 text-emerald-600">▲</span>}
+                      {p.premium_pct > 0 && <span className="ms-0.5 text-success-text">▲</span>}
                       {p.overbooked && translate(" OB")}
                     </div>
                   ))}
@@ -1172,14 +1172,14 @@ export default function TapeChart() {
                           type="button"
                           onClick={() => toggleGroup(g.label)}
                           style={{ minWidth: ROOM_COL_W + DAYS * cellW }}
-                          className="flex w-full items-center gap-2 border-b border-zinc-200 bg-zinc-50/80 px-3 py-1.5 text-start text-xs font-semibold uppercase tracking-wide text-zinc-600 hover:bg-zinc-100"
+                          className="flex w-full items-center gap-2 border-b border-line bg-canvas/80 px-3 py-1.5 text-start text-xs font-semibold uppercase tracking-wide text-secondary-ink hover:bg-subtle"
                         >
                           <ChevronDown
                             className={cn("size-3.5 transition-transform", isCollapsed && "-rotate-90 rtl:rotate-90")}
                             aria-hidden
                           />
                           {translate(g.label)}
-                          <span className="font-normal normal-case tracking-normal text-zinc-400">
+                          <span className="font-normal normal-case tracking-normal text-muted-ink">
                             {t("{rooms} rooms · {booked} in use", {
                               rooms: g.rooms.length,
                               booked,
@@ -1205,22 +1205,22 @@ export default function TapeChart() {
                                 key={room.name}
                                 data-room={room.name}
                                 className={cn(
-                                  "relative flex border-b border-zinc-100",
+                                  "relative flex border-b border-line-subtle",
                                   menuOpen && "z-30",
-                                  isDropTarget && "bg-brand-50 outline-2 -outline-offset-2 outline-brand-600/40",
-                                  isHighlighted && "bg-amber-50/60",
+                                  isDropTarget && "bg-accent-subtle outline-2 -outline-offset-2 outline-focus/40",
+                                  isHighlighted && "bg-warning-subtle/60",
                                 )}
                               >
                                 <div
                                   data-testid={`tape-room-cell-${room.name}`}
                                   style={{ width: ROOM_COL_W }}
                                   className={cn(
-                                    "sticky start-0 shrink-0 border-e border-zinc-200 bg-white px-2.5 py-1.5",
+                                    "sticky start-0 shrink-0 border-e border-line bg-surface px-2.5 py-1.5",
                                     menuOpen ? "z-30" : "z-10",
                                   )}
                                 >
                                   <div className="flex items-center justify-between gap-1">
-                                    <span className="text-sm font-semibold text-zinc-900">
+                                    <span className="text-sm font-semibold text-ink">
                                       {room.room_number}
                                     </span>
                                     <button
@@ -1243,7 +1243,7 @@ export default function TapeChart() {
                                     </button>
                                   </div>
                                   {featureTag ? (
-                                    <div className="mt-0.5 truncate text-[10px] text-zinc-400">
+                                    <div className="mt-0.5 truncate text-[10px] text-muted-ink">
                                       {featureTag}
                                     </div>
                                   ) : null}
@@ -1252,7 +1252,7 @@ export default function TapeChart() {
                                     <div
                                       data-testid={`hk-popover-${room.name}`}
                                       className={cn(
-                                        "absolute start-2 z-40 w-48 space-y-1 rounded-lg border border-zinc-200 bg-white p-2 shadow-lg",
+                                        "absolute start-2 z-40 w-48 space-y-1 rounded-lg border border-line bg-surface p-2 shadow-lg",
                                         openUpward ? "bottom-full mb-1" : "top-full mt-1",
                                       )}
                                     >
@@ -1263,7 +1263,7 @@ export default function TapeChart() {
                                             type="button"
                                             data-hk-option={opt.status}
                                             onClick={() => changeHk(room, opt.status)}
-                                            className="flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-1 text-start text-xs font-medium text-zinc-700 hover:bg-zinc-100"
+                                            className="flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-1 text-start text-xs font-medium text-secondary-ink hover:bg-subtle"
                                           >
                                             <span className={cn("size-2 rounded-full", hkTone(opt.status).dot)} aria-hidden />
                                             <span>{t(opt.status)}</span>
@@ -1271,19 +1271,19 @@ export default function TapeChart() {
                                         ))}
                                       </div>
                                       {hkOooOption && (
-                                        <div className="border-t border-zinc-100 pt-1.5">
+                                        <div className="border-t border-line-subtle pt-1.5">
                                           <input
                                             value={hkOooReason}
                                             onChange={(e) => setHkOooReason(e.target.value)}
                                             placeholder={t("Out of Order reason")}
-                                            className="mb-1 w-full rounded border border-zinc-300 px-2 py-1 text-xs"
+                                            className="mb-1 w-full rounded border border-control px-2 py-1 text-xs"
                                           />
                                           <button
                                             type="button"
                                             data-hk-option={hkOooOption.status}
                                             disabled={!hkOooReason.trim()}
                                             onClick={() => changeHk(room, hkOooOption.status, hkOooReason.trim())}
-                                            className="min-h-9 w-full rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                                            className="min-h-9 w-full rounded-md border border-danger-line bg-danger-subtle px-2 py-1 text-xs font-medium text-danger-ink hover:bg-danger-muted disabled:opacity-50"
                                           >
                                             {t(hkOooOption.status)}
                                           </button>
@@ -1301,13 +1301,13 @@ export default function TapeChart() {
                                     aria-label={t("New booking")}
                                     onClick={() => newBooking({ room_type: room.room_type, room: room.name,
                                       room_number: room.room_number, date: d })}
-                                    className="shrink-0 border-s border-zinc-100 hover:bg-brand-50" />
+                                    className="shrink-0 border-s border-line-subtle hover:bg-accent-subtle" />
                                 ) : (
                                   <div key={d} style={{ width: cellW }}
                                     className={cn(
-                                      "shrink-0 border-s border-zinc-100",
-                                      room.housekeeping_status === "Out of Service" && "bg-orange-50/40 dark:bg-orange-950/20",
-                                      room.housekeeping_status === "Out of Order" && "bg-rose-50/40 dark:bg-rose-950/20",
+                                      "shrink-0 border-s border-line-subtle",
+                                      room.housekeeping_status === "Out of Service" && "bg-notice-subtle/40 dark:bg-orange-950/20",
+                                      room.housekeeping_status === "Out of Order" && "bg-danger-subtle/40 dark:bg-rose-950/20",
                                     )} />
                                 ))}
                                 {/* held-out-of-sale bands (house use, VIP, maintenance) */}
@@ -1323,9 +1323,9 @@ export default function TapeChart() {
                                         insetInlineStart: ROOM_COL_W + s * cellW + 2,
                                         width: (e - s) * cellW - 4,
                                         backgroundImage:
-                                          "repeating-linear-gradient(45deg, #d4d4d8 0 6px, #e4e4e7 6px 12px)",
+                                          "repeating-linear-gradient(45deg, var(--color-fill-strong) 0 6px, var(--color-muted) 6px 12px)",
                                       }}
-                                      className="absolute top-1.5 flex h-8 items-center gap-1 truncate rounded-md border border-zinc-300 px-1.5 text-start text-[11px] font-medium text-zinc-600"
+                                      className="absolute top-1.5 flex h-8 items-center gap-1 truncate rounded-md border border-control px-1.5 text-start text-[11px] font-medium text-secondary-ink"
                                       title={`${t(k.reason)}${k.note ? ` · ${k.note}` : ""} · ${k.from_date} → ${k.to_date}`}>
                                       <Lock className="size-3 shrink-0" aria-hidden />
                                       <span className="truncate">{k.reason}</span>
@@ -1367,11 +1367,11 @@ export default function TapeChart() {
                                         transform: roomDrop ? `translateY(${dd!.dy}px)` : undefined,
                                       }}
                                       className={cn(
-                                        "group absolute top-1.5 flex h-8 cursor-pointer select-none items-center gap-1 truncate rounded-md px-1.5 text-start text-xs font-medium text-white",
-                                        b.status === "Checked In" ? "bg-brand-600 hover:bg-brand-700"
-                                          : "bg-sky-500 hover:bg-sky-600",
+                                        "group absolute top-1.5 flex h-8 cursor-pointer select-none items-center gap-1 truncate rounded-md px-1.5 text-start text-xs font-medium text-on-solid",
+                                        b.status === "Checked In" ? "bg-accent-fill hover:bg-accent-fill-hover"
+                                          : "bg-info-fill hover:bg-info-fill",
                                         inConflict && "ring-2 ring-rose-500 ring-offset-1",
-                                        dd && "pointer-events-none z-20 scale-[1.02] cursor-grabbing touch-none opacity-95 shadow-xl ring-2 ring-brand-500",
+                                        dd && "pointer-events-none z-20 scale-[1.02] cursor-grabbing touch-none opacity-95 shadow-xl ring-2 ring-accent-control",
                                       )}
                                       title={(`${b.guest_name} · ${t(seg.label)} · ${b.check_in_date}${eta ? ` ${eta}` : ""} → ${b.check_out_date}${etd ? ` ${etd}` : ""}` +
                                         (inConflict ? ` · ${t("CHANGEOVER CONFLICT")}` : ""))}>
@@ -1379,12 +1379,12 @@ export default function TapeChart() {
                                       {resizable && b.status === "Confirmed" && s0 >= 0 && (
                                         <span aria-hidden data-handle="start"
                                           onPointerDown={(ev) => beginDrag(ev, b, "start")}
-                                          className="absolute inset-y-0 start-0 w-2 cursor-ew-resize rounded-s-md group-hover:bg-white/30 [@media(pointer:coarse)]:w-6" />
+                                          className="absolute inset-y-0 start-0 w-2 cursor-ew-resize rounded-s-md group-hover:bg-on-solid/30 [@media(pointer:coarse)]:w-6" />
                                       )}
                                       {resizable && e0 <= DAYS && (
                                         <span aria-hidden data-handle="end"
                                           onPointerDown={(ev) => beginDrag(ev, b, "end")}
-                                          className="absolute inset-y-0 end-0 w-2 cursor-ew-resize rounded-e-md group-hover:bg-white/30 [@media(pointer:coarse)]:w-6" />
+                                          className="absolute inset-y-0 end-0 w-2 cursor-ew-resize rounded-e-md group-hover:bg-on-solid/30 [@media(pointer:coarse)]:w-6" />
                                       )}
                                       {seg.vip ? (
                                         <Star className="size-3 shrink-0 fill-amber-300 text-amber-300" aria-hidden />
@@ -1453,7 +1453,7 @@ export default function TapeChart() {
         </Sheet>
       )}
 
-      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-zinc-400">
+      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-ink">
         <span className="flex items-center gap-1.5">
           <Badge tone="sky">{t("Confirmed")}</Badge>
           <Badge tone="brand">{t("Checked in")}</Badge>
@@ -1471,7 +1471,7 @@ export default function TapeChart() {
           <span className="size-2 rounded-full bg-orange-400" /> {t("OTA")}
         </span>
         <span className="flex items-center gap-1">
-          <Lock className="size-3 text-zinc-500" /> {t("Held (house use / VIP / maintenance)")}
+          <Lock className="size-3 text-muted-ink" /> {t("Held (house use / VIP / maintenance)")}
         </span>
         <span>
           {mode === "day"
@@ -1504,24 +1504,24 @@ export default function TapeChart() {
         >
           <div className="space-y-3">
             {alloc.proposals.length === 0 && alloc.unfittable.length === 0 && (
-              <p className="text-sm text-zinc-500">
+              <p className="text-sm text-muted-ink">
                 {t("Every arrival for this day already has a room.")}
               </p>
             )}
             {alloc.proposals.map((p) => (
               <div key={p.reservation}
-                className="flex items-start gap-3 rounded-xl border border-zinc-200 p-3">
+                className="flex items-start gap-3 rounded-xl border border-line p-3">
                 <div className="flex-1">
                   <div className="flex items-center gap-1.5 font-medium">
                     {p.vip === 1 && (
                       <Star className="size-3.5 fill-amber-400 text-amber-400" />
                     )}
                     {p.guest_name}
-                    <span className="text-xs font-normal text-zinc-400">
+                    <span className="text-xs font-normal text-muted-ink">
                       · {p.room_type_name}
                     </span>
                   </div>
-                  <p className="mt-0.5 text-xs text-zinc-500">{translate(p.why)}</p>
+                  <p className="mt-0.5 text-xs text-muted-ink">{translate(p.why)}</p>
                 </div>
                 <div className="text-end">
                   <div className="text-sm font-semibold">{t("Room {n}", { n: p.room_number })}</div>
@@ -1531,7 +1531,7 @@ export default function TapeChart() {
                     </span>
                   )}
                   {p.needs_review === 1 && (
-                    <span className="ms-1 text-[10px] font-medium uppercase tracking-wide text-amber-600">
+                    <span className="ms-1 text-[10px] font-medium uppercase tracking-wide text-warning-text">
                       {t("Review")}
                     </span>
                   )}
@@ -1540,11 +1540,11 @@ export default function TapeChart() {
             ))}
             {alloc.unfittable.map((u) => (
               <div key={u.reservation}
-                className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+                className="rounded-xl border border-danger-line bg-danger-subtle p-3 text-sm text-danger-ink">
                 {u.guest_name} - {u.reason}
               </div>
             ))}
-            <p className="text-xs text-zinc-400">
+            <p className="text-xs text-muted-ink">
               {t("Rooms are prioritized by housekeeping readiness (Inspected, Ready, Clean) and matched to guest preferences.")}
             </p>
           </div>
@@ -1592,7 +1592,7 @@ export default function TapeChart() {
           footer={
             <div className="flex flex-wrap items-center justify-between gap-2">
               <Link to={`/reservations?q=${encodeURIComponent(sel.name)}`}
-                className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-brand-700 hover:underline md:min-h-9">
+                className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-accent-ink hover:underline md:min-h-9">
                 <ExternalLink className="size-4" aria-hidden />
                 {t("Open reservation")}
               </Link>
@@ -1602,17 +1602,17 @@ export default function TapeChart() {
         >
           <div className="space-y-4">
             {/* the stay at a glance */}
-            <dl className="grid grid-cols-3 gap-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm">
+            <dl className="grid grid-cols-3 gap-3 rounded-lg border border-line bg-canvas p-3 text-sm">
               <div>
-                <dt className="text-xs text-zinc-500">{t("Room")}</dt>
+                <dt className="text-xs text-muted-ink">{t("Room")}</dt>
                 <dd className="font-semibold">{roomNumber(sel.room) ?? "-"}</dd>
               </div>
               <div>
-                <dt className="text-xs text-zinc-500">{t("Check-in")}</dt>
+                <dt className="text-xs text-muted-ink">{t("Check-in")}</dt>
                 <dd className="font-semibold tabular-nums">{sel.check_in_date}</dd>
               </div>
               <div>
-                <dt className="text-xs text-zinc-500">{t("Check-out")}</dt>
+                <dt className="text-xs text-muted-ink">{t("Check-out")}</dt>
                 <dd className="font-semibold tabular-nums">{sel.check_out_date}</dd>
               </div>
             </dl>
@@ -1625,7 +1625,7 @@ export default function TapeChart() {
                 {t("Move room")}
               </Button>
               <Button variant="outline" disabled={busy} aria-expanded={datesOpen}
-                className={cn("min-h-11 justify-start md:min-h-9", datesOpen && "border-brand-600 bg-brand-50 text-brand-700")}
+                className={cn("min-h-11 justify-start md:min-h-9", datesOpen && "border-accent-control bg-accent-subtle text-accent-ink")}
                 onClick={() => {
                   setDatesOpen(!datesOpen)
                   setError(null)
@@ -1654,39 +1654,39 @@ export default function TapeChart() {
               )}
             </div>
             {sel.status === "Confirmed" && !checkInDue && (
-              <p className="text-xs text-zinc-500">
+              <p className="text-xs text-muted-ink">
                 {t("Check-in opens on the arrival date ({date}).", { date: sel.check_in_date })}
               </p>
             )}
 
             {datesOpen && (
-              <div className="space-y-3 rounded-lg border border-brand-600/30 p-3">
+              <div className="space-y-3 rounded-lg border border-accent-control/30 p-3">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <label className="block">
-                    <span className="mb-1.5 block text-sm font-medium text-zinc-600">{t("Check-in")}</span>
+                    <span className="mb-1.5 block text-sm font-medium text-secondary-ink">{t("Check-in")}</span>
                     <input type="date" className={cn(inputCls, "min-h-11 sm:min-h-9")} value={draft.check_in}
                       disabled={sel.status === "Checked In"}
                       onChange={(e) => setDraft({ ...draft, check_in: e.target.value })} />
                   </label>
                   <label className="block">
-                    <span className="mb-1.5 block text-sm font-medium text-zinc-600">{t("Check-out")}</span>
+                    <span className="mb-1.5 block text-sm font-medium text-secondary-ink">{t("Check-out")}</span>
                     <input type="date" className={cn(inputCls, "min-h-11 sm:min-h-9")} value={draft.check_out}
                       min={draft.check_in}
                       onChange={(e) => setDraft({ ...draft, check_out: e.target.value })} />
                   </label>
                 </div>
                 {!datesChanged ? (
-                  <p className="text-xs text-zinc-500">{t("Pick the new dates.")}</p>
+                  <p className="text-xs text-muted-ink">{t("Pick the new dates.")}</p>
                 ) : !datesValid ? (
-                  <p className="text-xs text-rose-600">{t("Check-out must be after check-in.")}</p>
+                  <p className="text-xs text-danger-text">{t("Check-out must be after check-in.")}</p>
                 ) : !datePreview ? (
-                  !error && <p className="text-xs text-zinc-400">{t("Checking price")}</p>
+                  !error && <p className="text-xs text-muted-ink">{t("Checking price")}</p>
                 ) : datePreview.difference === 0 ? (
-                  <p className="text-sm text-zinc-600">
+                  <p className="text-sm text-secondary-ink">
                     {t("{n} nights. No change to the price.", { n: dayDiff(draft.check_in, draft.check_out) })}
                   </p>
                 ) : (
-                  <p className={cn("text-sm", datePreview.difference > 0 ? "text-amber-700" : "text-emerald-700")}>
+                  <p className={cn("text-sm", datePreview.difference > 0 ? "text-warning-ink" : "text-success-ink")}>
                     {datePreview.difference > 0
                       ? t("{n} nights. Stay total {from} to {to} (+{amt}).", {
                           n: dayDiff(draft.check_in, draft.check_out),
@@ -1703,7 +1703,7 @@ export default function TapeChart() {
                   </p>
                 )}
                 {datesChanged && datesValid && datePreview?.charged_nights && (
-                  <p className="text-xs text-zinc-500">
+                  <p className="text-xs text-muted-ink">
                     {datePreview.charged_nights.credit_total < 0
                       ? t("Nights already charged keep their line; {product} credits {amt} for the lower rate.", {
                           amt: money(-datePreview.charged_nights.credit_total),
@@ -1731,14 +1731,14 @@ export default function TapeChart() {
               </div>
             )}
 
-            <div className="rounded-lg border border-zinc-200 p-3">
-              <span className="mb-2 block text-sm font-medium text-zinc-600">
+            <div className="rounded-lg border border-line p-3">
+              <span className="mb-2 block text-sm font-medium text-secondary-ink">
                 {sel.is_day_use === 1 ? t("Day-use hours") : t("Arrival / departure times (ETA · ETD)")}
               </span>
               <div className="flex flex-wrap items-end gap-2">
                 <input type="time" className={cn(inputCls, "min-h-11 min-w-0 flex-1 sm:min-h-9")} value={draft.from_time}
                   onChange={(e) => setDraft({ ...draft, from_time: e.target.value })} />
-                <span className="pb-2 text-zinc-400">{t("to")}</span>
+                <span className="pb-2 text-muted-ink">{t("to")}</span>
                 <input type="time" className={cn(inputCls, "min-h-11 min-w-0 flex-1 sm:min-h-9")} value={draft.to_time}
                   onChange={(e) => setDraft({ ...draft, to_time: e.target.value })} />
                 <Button variant="outline" className="min-h-11 sm:min-h-9" disabled={busy}
@@ -1749,16 +1749,16 @@ export default function TapeChart() {
                 </Button>
               </div>
               {sel.is_day_use !== 1 && (
-                <p className="mt-1.5 text-xs text-zinc-400">
+                <p className="mt-1.5 text-xs text-muted-ink">
                   {t("Times drive the house position: back-to-back rooms flag a conflict when the arrival lands before the departure.")}
                 </p>
               )}
             </div>
-            <p className="text-xs text-zinc-400">
+            <p className="text-xs text-muted-ink">
               {t("Date changes re-price automatically (unless the booking holds a manual amount) and the double-booking guard re-checks the room.")}
             </p>
             {error && (
-              <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+              <div className="rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">
                 {translate(error)}
               </div>
             )}
@@ -1791,32 +1791,32 @@ function TapeHourly({
     Math.max(hourW * 0.6, ((hhmmToNum(to) - hhmmToNum(from)) / span) * gridW)
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white shadow-sm">
+    <div className="overflow-x-auto rounded-xl border border-line bg-surface shadow-sm">
       <div style={{ minWidth: ROOM_COL_W + gridW }}>
-        <div className="flex border-b border-zinc-200 bg-zinc-50 text-xs font-medium text-zinc-500">
-          <div style={{ width: ROOM_COL_W }} className="sticky start-0 z-20 shrink-0 border-e border-zinc-200 bg-zinc-50 px-3 py-2">
+        <div className="flex border-b border-line bg-canvas text-xs font-medium text-muted-ink">
+          <div style={{ width: ROOM_COL_W }} className="sticky start-0 z-20 shrink-0 border-e border-line bg-canvas px-3 py-2">
             {t("Room")}
           </div>
           {hours.map((h) => (
             <div
               key={h}
               style={{ width: hourW }}
-              className="shrink-0 border-s border-zinc-100 px-1 py-2 text-center"
+              className="shrink-0 border-s border-line-subtle px-1 py-2 text-center"
             >
               {String(h).padStart(2, "0")}:00
             </div>
           ))}
         </div>
         {data.rooms.map((room) => (
-          <div key={room.name} className="relative flex border-b border-zinc-100">
-            <div style={{ width: ROOM_COL_W }} className="sticky start-0 z-10 shrink-0 border-e border-zinc-200 bg-white px-3 py-3">
+          <div key={room.name} className="relative flex border-b border-line-subtle">
+            <div style={{ width: ROOM_COL_W }} className="sticky start-0 z-10 shrink-0 border-e border-line bg-surface px-3 py-3">
               <span className="text-sm font-semibold">{room.room_number}</span>
-              <span className="ms-1.5 text-[9px] uppercase text-zinc-400">
+              <span className="ms-1.5 text-[9px] uppercase text-muted-ink">
                 {room.room_type_name}
               </span>
             </div>
             {hours.map((h) => (
-              <div key={h} style={{ width: hourW }} className="shrink-0 border-s border-zinc-100" />
+              <div key={h} style={{ width: hourW }} className="shrink-0 border-s border-line-subtle" />
             ))}
             {room.bookings.map((b) => {
               const seg = segment(b)
@@ -1827,7 +1827,7 @@ function TapeHourly({
                     type="button"
                     onClick={() => onOpen(b)}
                     style={{ insetInlineStart: ROOM_COL_W, width: gridW }}
-                    className="absolute top-2 flex h-9 items-center gap-1 rounded-md bg-zinc-200/70 px-2 text-start text-xs font-medium text-zinc-600 hover:bg-zinc-300/70"
+                    className="absolute top-2 flex h-9 items-center gap-1 rounded-md bg-muted/70 px-2 text-start text-xs font-medium text-secondary-ink hover:bg-fill-strong/70"
                     title={(`${b.guest_name} · ${t("overnight stay")}`)}
                   >
                     {seg.vip && <Star className="size-3 fill-amber-400 text-amber-400" />}
@@ -1842,8 +1842,8 @@ function TapeHourly({
                   onClick={() => onOpen(b)}
                   style={{ insetInlineStart: ROOM_COL_W + startOffset(b.from_hour) + 2, width: width(b.from_hour, b.to_hour) - 4 }}
                   className={cn(
-                    "absolute top-2 flex h-9 items-center gap-1 truncate rounded-md px-1.5 text-start text-xs font-medium text-white",
-                    b.status === "Checked In" ? "bg-brand-600 hover:bg-brand-700" : "bg-sky-500 hover:bg-sky-600",
+                    "absolute top-2 flex h-9 items-center gap-1 truncate rounded-md px-1.5 text-start text-xs font-medium text-on-solid",
+                    b.status === "Checked In" ? "bg-accent-fill hover:bg-accent-fill-hover" : "bg-info-fill hover:bg-info-fill",
                   )}
                   title={translate("{v0} · {v1}-{v2} · day use", { v0: String(b.guest_name), v1: String(b.from_hour), v2: String(b.to_hour) })}
                 >

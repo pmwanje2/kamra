@@ -71,14 +71,14 @@ function Kpi({ icon: Icon, label, value, sub, tone }: {
 }) {
   useUILanguage()
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-3">
-      <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-zinc-400">
+    <div className="rounded-xl border border-line bg-surface p-3">
+      <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-ink">
         <Icon className={cn("size-3.5",
-          tone === "amber" ? "text-amber-500" : tone === "rose" ? "text-rose-500" : "text-brand-600")} />
+          tone === "amber" ? "text-warning-text" : tone === "rose" ? "text-danger-text" : "text-accent-text")} />
         {translate(label)}
       </div>
-      <div className="mt-1 text-2xl font-bold tabular-nums text-zinc-900">{value}</div>
-      {sub && <div className="text-xs text-zinc-400">{translate(sub)}</div>}
+      <div className="mt-1 text-2xl font-bold tabular-nums text-ink">{value}</div>
+      {sub && <div className="text-xs text-muted-ink">{translate(sub)}</div>}
     </div>
   )
 }
@@ -87,20 +87,20 @@ function BucketBars({ title, rows }: { title: string; rows: Bucket[] }) {
   useUILanguage()
   const max = Math.max(1, ...rows.map((r) => r.total))
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-3">
-      <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-zinc-500">{translate(title)}</h3>
-      {rows.length === 0 && <p className="py-2 text-xs text-zinc-400">{translate("Nothing settled yet.")}</p>}
+    <div className="rounded-xl border border-line bg-surface p-3">
+      <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-ink">{translate(title)}</h3>
+      {rows.length === 0 && <p className="py-2 text-xs text-muted-ink">{translate("Nothing settled yet.")}</p>}
       <ul className="space-y-2">
         {rows.map((r) => (
           <li key={r.label}>
             <div className="flex items-baseline justify-between text-sm">
-              <span className="font-medium text-zinc-700">{translate(r.label)}</span>
-              <span className="tabular-nums text-zinc-600">
-                {cur()}{inr(r.total)} <span className="text-xs text-zinc-400">· {r.bills}{translate(" bill")}{r.bills === 1 ? "" : translate("s")}</span>
+              <span className="font-medium text-secondary-ink">{translate(r.label)}</span>
+              <span className="tabular-nums text-secondary-ink">
+                {cur()}{inr(r.total)} <span className="text-xs text-muted-ink">· {r.bills}{translate(" bill")}{r.bills === 1 ? "" : translate("s")}</span>
               </span>
             </div>
-            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-zinc-100">
-              <div className="h-full rounded-full bg-brand-500" style={{ width: `${Math.round((r.total / max) * 100)}%` }} />
+            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-subtle">
+              <div className="h-full rounded-full bg-accent-fill" style={{ width: `${Math.round((r.total / max) * 100)}%` }} />
             </div>
           </li>
         ))}
@@ -140,31 +140,31 @@ export default function PosDashboard() {
   }, [load, date, toDate])
 
   const inputCls =
-    "rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm " +
-    "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+    "rounded-lg border border-control bg-surface px-2.5 py-1.5 text-sm " +
+    "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="flex items-center gap-2 text-xl font-bold text-zinc-800">
-          <TrendingUp className="size-5 text-brand-600" />{translate("F&B Dashboard")}<select className={inputCls + " font-normal"} value={outlet} onChange={(e) => setOutlet(e.target.value)}>
+        <h1 className="flex items-center gap-2 text-xl font-bold text-ink">
+          <TrendingUp className="size-5 text-accent-text" />{translate("F&B Dashboard")}<select className={inputCls + " font-normal"} value={outlet} onChange={(e) => setOutlet(e.target.value)}>
             {outlets.map((o) => <option key={o.name} value={o.name}>{o.outlet_name}</option>)}
           </select>
         </h1>
         <div className="flex flex-wrap items-center gap-2">
           <input type="date" aria-label={translate("From")} className={inputCls} value={date} max={today()}
             onChange={(e) => setDate(e.target.value || today())} />
-          <span className="text-sm text-zinc-400">→</span>
+          <span className="text-sm text-muted-ink">→</span>
           <input type="date" aria-label={translate("To")} className={inputCls} value={toDate || date}
             min={date} max={today()}
             onChange={(e) => setToDate(e.target.value === date ? "" : e.target.value)} />
           <AppLink to="/pos"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm font-medium text-zinc-600 hover:bg-zinc-50">
+            className="inline-flex items-center gap-1.5 rounded-lg border border-control bg-surface px-2.5 py-1.5 text-sm font-medium text-secondary-ink hover:bg-canvas">
             <UtensilsCrossed className="size-4" />{translate("Open POS")}</AppLink>
         </div>
       </div>
 
-      {error && <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{translate(error)}</div>}
+      {error && <div className="rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">{translate(error)}</div>}
 
       {data && (
         <>
@@ -190,18 +190,18 @@ export default function PosDashboard() {
 
           <div className="grid gap-3 lg:grid-cols-2">
             {/* open bills */}
-            <div className="rounded-xl border border-zinc-200 bg-white p-3">
-              <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-zinc-500">{translate("Open bills (")}{data.open_bills.length})
+            <div className="rounded-xl border border-line bg-surface p-3">
+              <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-ink">{translate("Open bills (")}{data.open_bills.length})
               </h3>
               {data.open_bills.length === 0 ? (
-                <p className="py-2 text-xs text-zinc-400">{translate("Every bill is settled. Clean floor.")}</p>
+                <p className="py-2 text-xs text-muted-ink">{translate("Every bill is settled. Clean floor.")}</p>
               ) : (
-                <ul className="divide-y divide-zinc-50">
+                <ul className="divide-y divide-line-subtle">
                   {data.open_bills.map((b) => (
                     <li key={b.name} className="flex items-center justify-between gap-2 py-1.5 text-sm">
                       <span className="min-w-0">
-                        <span className="font-medium text-zinc-700">{translate(b.label)}</span>
-                        <span className="ml-1.5 text-xs text-zinc-400">
+                        <span className="font-medium text-secondary-ink">{translate(b.label)}</span>
+                        <span className="ml-1.5 text-xs text-muted-ink">
                           {b.order_type}{b.kot_no ? translate(" · KOT {v0}", { v0: String(b.kot_no) }) : ""} · {translate(b.status)}
                         </span>
                       </span>
@@ -209,7 +209,7 @@ export default function PosDashboard() {
                         <span className="font-semibold">{cur()}{inr(b.order_total)}</span>
                         <span className={cn("rounded px-1 text-[10px] font-bold",
                           Date.now() - new Date(b.creation.replace(" ", "T")).getTime() > 90 * 60000
-                            ? "bg-rose-50 text-rose-600" : "bg-zinc-100 text-zinc-500")}>
+                            ? "bg-danger-subtle text-danger-text" : "bg-subtle text-muted-ink")}>
                           {ago(b.creation)}
                         </span>
                       </span>
@@ -220,20 +220,20 @@ export default function PosDashboard() {
             </div>
 
             {/* top items */}
-            <div className="rounded-xl border border-zinc-200 bg-white p-3">
-              <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-zinc-500">{translate("Top items")}</h3>
+            <div className="rounded-xl border border-line bg-surface p-3">
+              <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-ink">{translate("Top items")}</h3>
               {data.top_items.length === 0 ? (
-                <p className="py-2 text-xs text-zinc-400">{translate("Nothing sold yet.")}</p>
+                <p className="py-2 text-xs text-muted-ink">{translate("Nothing sold yet.")}</p>
               ) : (
-                <ul className="divide-y divide-zinc-50">
+                <ul className="divide-y divide-line-subtle">
                   {data.top_items.map((t, i) => (
                     <li key={t.item_name} className="flex items-center justify-between gap-2 py-1.5 text-sm">
                       <span className="min-w-0 truncate">
-                        <span className="mr-1.5 inline-block w-5 text-center text-xs font-bold text-zinc-300">{i + 1}</span>
-                        <span className="font-medium text-zinc-700">{t.item_name}</span>
+                        <span className="mr-1.5 inline-block w-5 text-center text-xs font-bold text-muted-ink">{i + 1}</span>
+                        <span className="font-medium text-secondary-ink">{t.item_name}</span>
                       </span>
-                      <span className="shrink-0 tabular-nums text-zinc-600">
-                        {Math.round(t.qty)}× <span className="text-xs text-zinc-400">· {cur()}{inr(t.amount)}</span>
+                      <span className="shrink-0 tabular-nums text-secondary-ink">
+                        {Math.round(t.qty)}× <span className="text-xs text-muted-ink">· {cur()}{inr(t.amount)}</span>
                       </span>
                     </li>
                   ))}
@@ -244,64 +244,64 @@ export default function PosDashboard() {
 
           {/* exceptions - what a manager signs off */}
           <div className="grid gap-3 lg:grid-cols-3">
-            <div className="rounded-xl border border-amber-200 bg-white p-3">
-              <h3 className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-amber-700">
+            <div className="rounded-xl border border-warning-line bg-surface p-3">
+              <h3 className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-warning-ink">
                 <Gift className="size-3.5" />{translate("Complimentary (")}{data.nc.count} · {cur()}{inr(data.nc.value)})
               </h3>
               {data.nc.bills.length === 0 ? (
-                <p className="py-2 text-xs text-zinc-400">{translate("No NC bills.")}</p>
+                <p className="py-2 text-xs text-muted-ink">{translate("No NC bills.")}</p>
               ) : (
                 <ul className="space-y-1.5 text-sm">
                   {data.nc.bills.map((b) => (
                     <li key={b.name} className="flex items-start justify-between gap-2">
                       <span className="min-w-0">
-                        <span className="font-medium text-zinc-700">{translate(b.label)}</span>
-                        <span className="block truncate text-xs text-zinc-400">{translate("auth: ")}{b.authorized_by}{b.note ? ` · ${b.note}` : ""}
+                        <span className="font-medium text-secondary-ink">{translate(b.label)}</span>
+                        <span className="block truncate text-xs text-muted-ink">{translate("auth: ")}{b.authorized_by}{b.note ? ` · ${b.note}` : ""}
                         </span>
                       </span>
-                      <span className="shrink-0 tabular-nums text-zinc-600">{cur()}{inr(b.subtotal)}</span>
+                      <span className="shrink-0 tabular-nums text-secondary-ink">{cur()}{inr(b.subtotal)}</span>
                     </li>
                   ))}
                 </ul>
               )}
             </div>
 
-            <div className="rounded-xl border border-rose-200 bg-white p-3">
-              <h3 className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-rose-700">
+            <div className="rounded-xl border border-danger-line bg-surface p-3">
+              <h3 className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-danger-ink">
                 <Ban className="size-3.5" />{translate("Voided lines (")}{data.voids.length})
               </h3>
               {data.voids.length === 0 ? (
-                <p className="py-2 text-xs text-zinc-400">{translate("No voids.")}</p>
+                <p className="py-2 text-xs text-muted-ink">{translate("No voids.")}</p>
               ) : (
                 <ul className="space-y-1.5 text-sm">
                   {data.voids.map((v, i) => (
                     <li key={`${v.order}-${i}`} className="flex items-start justify-between gap-2">
                       <span className="min-w-0">
-                        <span className="font-medium text-zinc-700">{Math.round(v.qty)}× {v.item_name}</span>
-                        <span className="block truncate text-xs text-zinc-400">{translate(v.label)} · {v.reason || translate("no reason")}</span>
+                        <span className="font-medium text-secondary-ink">{Math.round(v.qty)}× {v.item_name}</span>
+                        <span className="block truncate text-xs text-muted-ink">{translate(v.label)} · {v.reason || translate("no reason")}</span>
                       </span>
-                      <span className="shrink-0 tabular-nums text-zinc-600">{cur()}{inr(v.amount)}</span>
+                      <span className="shrink-0 tabular-nums text-secondary-ink">{cur()}{inr(v.amount)}</span>
                     </li>
                   ))}
                 </ul>
               )}
             </div>
 
-            <div className="rounded-xl border border-rose-200 bg-white p-3">
-              <h3 className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-rose-700">
+            <div className="rounded-xl border border-danger-line bg-surface p-3">
+              <h3 className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-danger-ink">
                 <Ban className="size-3.5" />{translate("Cancelled bills (")}{data.cancellations.length})
               </h3>
               {data.cancellations.length === 0 ? (
-                <p className="py-2 text-xs text-zinc-400">{translate("No cancellations.")}</p>
+                <p className="py-2 text-xs text-muted-ink">{translate("No cancellations.")}</p>
               ) : (
                 <ul className="space-y-1.5 text-sm">
                   {data.cancellations.map((c) => (
                     <li key={c.name} className="flex items-start justify-between gap-2">
                       <span className="min-w-0">
-                        <span className="font-medium text-zinc-700">{translate(c.label)}</span>
-                        <span className="block truncate text-xs text-zinc-400">{c.reason || translate("no reason recorded")}</span>
+                        <span className="font-medium text-secondary-ink">{translate(c.label)}</span>
+                        <span className="block truncate text-xs text-muted-ink">{c.reason || translate("no reason recorded")}</span>
                       </span>
-                      <span className="shrink-0 tabular-nums text-zinc-600">{cur()}{inr(c.order_total)}</span>
+                      <span className="shrink-0 tabular-nums text-secondary-ink">{cur()}{inr(c.order_total)}</span>
                     </li>
                   ))}
                 </ul>
@@ -312,7 +312,7 @@ export default function PosDashboard() {
       )}
 
       {!data && !error && (
-        <div className="rounded-xl border border-dashed border-zinc-300 p-10 text-center text-sm text-zinc-400">{translate("Loading the day…")}</div>
+        <div className="rounded-xl border border-dashed border-control p-10 text-center text-sm text-muted-ink">{translate("Loading the day…")}</div>
       )}
     </div>
   )

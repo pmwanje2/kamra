@@ -354,9 +354,9 @@ export default function RateCalendar() {
             data-badge={b.kind}
             className={cn(
               "inline-flex items-center rounded px-1 py-0 text-[10px] font-semibold leading-tight",
-              b.kind === "stop_sell" && "bg-rose-600 text-white",
-              (b.kind === "cta" || b.kind === "ctd") && "bg-amber-200 text-amber-900",
-              (b.kind === "min_los" || b.kind === "max_los") && "bg-sky-200 text-sky-900",
+              b.kind === "stop_sell" && "bg-danger-fill text-on-solid",
+              (b.kind === "cta" || b.kind === "ctd") && "bg-warning-soft text-warning-ink",
+              (b.kind === "min_los" || b.kind === "max_los") && "bg-info-soft text-info-ink",
             )}
           >
             {b.label}
@@ -370,28 +370,28 @@ export default function RateCalendar() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="flex items-center gap-2 text-lg font-semibold text-zinc-900">
+          <h1 className="flex items-center gap-2 text-lg font-semibold text-ink">
             {t("Rate calendar")}
             <InfoTip doc="revenue">
               {t("BAR (best available rate) is the base price of a room type. A season changes it for a date range, and a busy-house rule raises it when the house fills. This table shows the result per night. Rate plans and vouchers apply on top, per booking.")}
             </InfoTip>
           </h1>
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-muted-ink">
             {t("What each room costs per night, and what moved it.")}{" "}
             {data && (data.tax_inclusive ? t("Prices include tax.") : t("Prices are before tax."))}
           </p>
           {plan && (
-            <p data-rate-plan-policy className="mt-1 text-sm text-zinc-600">
-              <span className="block font-medium text-zinc-800">
+            <p data-rate-plan-policy className="mt-1 text-sm text-secondary-ink">
+              <span className="block font-medium text-ink">
                 {t("Rate plan: {plan}", { plan: plan.code && plan.code !== plan.label
                   ? `${plan.label || plan.name} (${plan.code})` : plan.label || plan.name })}
                 {negotiated && <>{" · "}{t("Negotiated rate plan for {customer}", { customer: customerLabel })}</>}
               </span>
               {t("Exchange rate lock: {policy}", { policy: t(plan.fx_lock_policy) })}
               {" · "}{roundingRule(plan.rounding_step, plan.rounding_mode, locale)}
-              <span className="block text-xs text-zinc-500">{fxLockNote(plan.fx_lock_policy)}</span>
+              <span className="block text-xs text-muted-ink">{fxLockNote(plan.fx_lock_policy)}</span>
               {contractCurrency && contractCurrency !== data?.property_currency && (
-                <span className="block text-xs text-zinc-500">
+                <span className="block text-xs text-muted-ink">
                   {t("{currency} contract tariff · local price at the published rate, rounded as the rate plan rounds", { currency: contractCurrency })}
                 </span>
               )}
@@ -400,7 +400,7 @@ export default function RateCalendar() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {canEdit && (
-            <div className="inline-flex rounded-lg border border-zinc-300 bg-zinc-50 p-0.5 text-xs">
+            <div className="inline-flex rounded-lg border border-control bg-canvas p-0.5 text-xs">
               <button
                 type="button"
                 aria-pressed={mode === "view"}
@@ -411,7 +411,7 @@ export default function RateCalendar() {
                 }}
                 className={cn(
                   "min-h-9 rounded-md px-2.5 font-medium transition-colors",
-                  mode === "view" ? "bg-white text-zinc-900 shadow-xs" : "text-zinc-600 hover:text-zinc-900",
+                  mode === "view" ? "bg-surface text-ink shadow-xs" : "text-secondary-ink hover:text-ink",
                 )}
               >
                 {t("View mode")}
@@ -425,7 +425,7 @@ export default function RateCalendar() {
                 }}
                 className={cn(
                   "inline-flex min-h-9 items-center gap-1 rounded-md px-2.5 font-medium transition-colors",
-                  mode === "edit" ? "bg-brand-600 text-white shadow-xs" : "text-zinc-600 hover:text-zinc-900",
+                  mode === "edit" ? "bg-accent-fill text-on-solid shadow-xs" : "text-secondary-ink hover:text-ink",
                 )}
               >
                 <SlidersHorizontal className="size-3.5" aria-hidden />
@@ -434,7 +434,7 @@ export default function RateCalendar() {
             </div>
           )}
           <select
-            className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+            className="rounded-lg border border-control bg-surface px-2 py-1.5 text-sm"
             value={plan ? plan.name : ratePlan}
             onChange={(e) => choose("rate_plan", e.target.value)}
             aria-label={t("Rate plan")}
@@ -449,7 +449,7 @@ export default function RateCalendar() {
           </select>
           {customers && (
             <select
-              className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+              className="rounded-lg border border-control bg-surface px-2 py-1.5 text-sm"
               value={company}
               onChange={(e) => choose("company", e.target.value)}
               aria-label={t("Customer")}
@@ -465,12 +465,12 @@ export default function RateCalendar() {
           <Button variant="outline" aria-label={t("Earlier")} onClick={() => setFrom(shift(data?.from ?? "", -days))} disabled={!data}>
             <ChevronLeft className="size-4" aria-hidden />
           </Button>
-          <span className="text-sm tabular-nums text-zinc-600">{data?.from}</span>
+          <span className="text-sm tabular-nums text-secondary-ink">{data?.from}</span>
           <Button variant="outline" aria-label={t("Later")} onClick={() => setFrom(shift(data?.from ?? "", days))} disabled={!data}>
             <ChevronRight className="size-4" aria-hidden />
           </Button>
           <select
-            className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+            className="rounded-lg border border-control bg-surface px-2 py-1.5 text-sm"
             value={days}
             onChange={(e) => setDays(Number(e.target.value))}
             aria-label={t("Days shown")}
@@ -483,7 +483,7 @@ export default function RateCalendar() {
       </div>
 
       {mode === "edit" && canEdit && (
-        <div className="flex min-h-14 flex-wrap items-center justify-between gap-2 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-xs text-brand-900">
+        <div className="flex min-h-14 flex-wrap items-center justify-between gap-2 rounded-lg border border-accent-line bg-accent-subtle px-3 py-2 text-xs text-accent-ink">
           <span>
             {selection
               ? t("{room}: {start} to {end} ({n} night(s) selected)", {
@@ -516,13 +516,13 @@ export default function RateCalendar() {
       )}
 
       {notice && (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+        <div className="rounded-lg border border-success-line bg-success-subtle px-3 py-2 text-sm text-success-ink">
           {notice}
         </div>
       )}
 
       {err && (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">
           <p>{translate(err)}</p>
           {(rateParam !== null || company) && (
             <Button variant="outline" onClick={reset}>{t("Clear rate plan and customer")}</Button>
@@ -536,14 +536,14 @@ export default function RateCalendar() {
           <CardContent className="overflow-x-auto p-0">
             <table className="w-full min-w-max select-none text-sm">
               <thead>
-                <tr className="border-b border-zinc-200 text-xs text-zinc-500">
-                  <th className="sticky start-0 bg-white px-3 py-2 text-start font-medium">{t("Room type")}</th>
+                <tr className="border-b border-line text-xs text-muted-ink">
+                  <th className="sticky start-0 bg-surface px-3 py-2 text-start font-medium">{t("Room type")}</th>
                   {!plan && !data.rate_plan_required && <th className="px-2 py-2 text-end font-medium">{t("BAR")}</th>}
                   {data.room_types[0]?.nights.map((x) => {
                     const d = new Date(`${x.date}T00:00:00`)
                     const wk = d.getDay() === 5 || d.getDay() === 6
                     return (
-                      <th key={x.date} className={cn("px-2 py-2 text-center font-medium", wk && "text-zinc-800")}>
+                      <th key={x.date} className={cn("px-2 py-2 text-center font-medium", wk && "text-ink")}>
                         <div>{d.toLocaleDateString(uiDateLocale(undefined), { weekday: "short" })}</div>
                         <div className="tabular-nums">{x.date.slice(5)}</div>
                       </th>
@@ -555,17 +555,17 @@ export default function RateCalendar() {
                 {data.room_types.map((r) => {
                   const noRooms = r.room_count === 0
                   return (
-                    <tr key={r.room_type} className="border-b border-zinc-100">
-                      <td className="sticky start-0 bg-white px-3 py-2 font-medium">
+                    <tr key={r.room_type} className="border-b border-line-subtle">
+                      <td className="sticky start-0 bg-surface px-3 py-2 font-medium">
                         <span>{r.name}</span>
                         {noRooms && (
-                          <span className="ms-2 inline-block rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
+                          <span className="ms-2 inline-block rounded-full bg-warning-subtle px-2 py-0.5 text-xs font-medium text-warning-ink">
                             {t("No rooms")}
                           </span>
                         )}
                       </td>
                       {!plan && !data.rate_plan_required && (
-                        <td className="px-2 py-2 text-end tabular-nums text-zinc-500">
+                        <td className="px-2 py-2 text-end tabular-nums text-muted-ink">
                           {noRooms ? "—" : `${cur()}${amount(r.base_price)}`}
                         </td>
                       )}
@@ -581,8 +581,8 @@ export default function RateCalendar() {
                                 aria-pressed={on}
                                 aria-label={t("No rooms")}
                                 title={t("No rooms configured for this room type.")}
-                                className={cn("w-full min-w-16 rounded-md px-2 py-1.5 text-zinc-400 hover:bg-zinc-50",
-                                  on && "ring-2 ring-brand-600")}
+                                className={cn("w-full min-w-16 rounded-md px-2 py-1.5 text-muted-ink hover:bg-canvas",
+                                  on && "ring-2 ring-accent-control")}
                               >—</button>
                             </td>
                           )
@@ -606,8 +606,8 @@ export default function RateCalendar() {
                                 aria-label={t("Not available: {reason}", { reason: x.refusal ?? "" })}
                                 title={x.refusal}
                                 className={cn(
-                                  "w-full min-w-16 rounded-md px-2 py-1.5 text-zinc-400 hover:bg-zinc-50",
-                                  (on || selected) && "ring-2 ring-brand-600",
+                                  "w-full min-w-16 rounded-md px-2 py-1.5 text-muted-ink hover:bg-canvas",
+                                  (on || selected) && "ring-2 ring-accent-control",
                                 )}
                               >
                                 —
@@ -635,18 +635,18 @@ export default function RateCalendar() {
                               aria-pressed={mode === "edit" ? selected : on}
                               className={cn(
                                 "w-full min-w-16 rounded-md px-2 py-1.5 tabular-nums transition-colors",
-                                x.stop_sell && "bg-rose-50 text-rose-900",
-                                !x.stop_sell && up && "bg-amber-50 text-amber-900",
-                                !x.stop_sell && down && "bg-sky-50 text-sky-900",
-                                !x.stop_sell && !up && !down && "text-zinc-700 hover:bg-zinc-50",
+                                x.stop_sell && "bg-danger-subtle text-danger-ink",
+                                !x.stop_sell && up && "bg-warning-subtle text-warning-ink",
+                                !x.stop_sell && down && "bg-info-subtle text-info-ink",
+                                !x.stop_sell && !up && !down && "text-secondary-ink hover:bg-canvas",
                                 x.cta && "border-s-2 border-amber-500",
                                 x.ctd && "border-e-2 border-amber-500",
-                                (on || selected) && "bg-brand-50 ring-2 ring-brand-600",
+                                (on || selected) && "bg-accent-subtle ring-2 ring-accent-control",
                               )}
                             >
                               {/* a home-currency contract's figure is the rate below: shown once */}
                               {x.contract && x.contract.currency !== data.property_currency && (
-                                <span className="block text-xs text-zinc-500">
+                                <span className="block text-xs text-muted-ink">
                                   {currencyText(x.contract.currency, x.contract.nightly, locale)}
                                 </span>
                               )}
@@ -656,7 +656,7 @@ export default function RateCalendar() {
                               )}
                               {x.source === "card" && (
                                 <span
-                                  className="block text-[10px] uppercase tracking-wide text-zinc-400"
+                                  className="block text-[10px] uppercase tracking-wide text-muted-ink"
                                   title={t("No contract tariff for this room type: priced from the card rate.")}
                                 >
                                   {t("Card rate")}
@@ -687,13 +687,13 @@ export default function RateCalendar() {
                   <div>
                     <CardTitle className="text-base">{r.name}</CardTitle>
                     {!plan && !data.rate_plan_required && !noRooms && (
-                      <p className="text-xs tabular-nums text-zinc-500">
+                      <p className="text-xs tabular-nums text-muted-ink">
                         {t("BAR")}: {cur()}{amount(r.base_price)}
                       </p>
                     )}
                   </div>
                   {noRooms && (
-                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
+                    <span className="rounded-full bg-warning-subtle px-2 py-0.5 text-xs font-medium text-warning-ink">
                       {t("No rooms")}
                     </span>
                   )}
@@ -714,12 +714,12 @@ export default function RateCalendar() {
                           else setPick(on ? null : { rt: r.room_type, i })
                         }}
                         className={cn(
-                          "flex min-h-14 flex-col items-start justify-between rounded-lg border border-zinc-200 p-2 text-start text-xs tabular-nums",
-                          x.stop_sell && "border-rose-200 bg-rose-50 text-rose-900",
-                          (on || selected) && "border-brand-600 bg-brand-50 ring-2 ring-brand-600",
+                          "flex min-h-14 flex-col items-start justify-between rounded-lg border border-line p-2 text-start text-xs tabular-nums",
+                          x.stop_sell && "border-danger-line bg-danger-subtle text-danger-ink",
+                          (on || selected) && "border-accent-control bg-accent-subtle ring-2 ring-accent-control",
                         )}
                       >
-                        <span className="text-[11px] text-zinc-500">{x.date.slice(5)}</span>
+                        <span className="text-[11px] text-muted-ink">{x.date.slice(5)}</span>
                         <span className="text-sm font-semibold">
                           {noRooms || x.available === false || x.rate == null ? "—" : amount(x.rate)}
                         </span>
@@ -735,11 +735,11 @@ export default function RateCalendar() {
       )}
 
       {!plan && !data?.rate_plan_required && (
-        <div className="flex flex-wrap gap-4 text-xs text-zinc-500">
-          <span className="inline-flex items-center gap-1.5"><span className="size-3 rounded bg-amber-50 ring-1 ring-amber-200" aria-hidden />{t("Above BAR")}</span>
-          <span className="inline-flex items-center gap-1.5"><span className="size-3 rounded bg-sky-50 ring-1 ring-sky-200" aria-hidden />{t("Below BAR")}</span>
-          <span className="inline-flex items-center gap-1.5"><span className="rounded bg-rose-600 px-1 text-[10px] font-semibold text-white">SS</span>{t("Stop-sell")}</span>
-          <span className="inline-flex items-center gap-1.5"><span className="rounded bg-amber-200 px-1 text-[10px] font-semibold text-amber-900">CTA/CTD</span>{t("Arrival / departure closed")}</span>
+        <div className="flex flex-wrap gap-4 text-xs text-muted-ink">
+          <span className="inline-flex items-center gap-1.5"><span className="size-3 rounded bg-warning-subtle ring-1 ring-amber-200" aria-hidden />{t("Above BAR")}</span>
+          <span className="inline-flex items-center gap-1.5"><span className="size-3 rounded bg-info-subtle ring-1 ring-sky-200" aria-hidden />{t("Below BAR")}</span>
+          <span className="inline-flex items-center gap-1.5"><span className="rounded bg-danger-fill px-1 text-[10px] font-semibold text-on-solid">SS</span>{t("Stop-sell")}</span>
+          <span className="inline-flex items-center gap-1.5"><span className="rounded bg-warning-soft px-1 text-[10px] font-semibold text-warning-ink">CTA/CTD</span>{t("Arrival / departure closed")}</span>
           <span>{t("A dot means a season or busy-house rule moved it. Select a night to see which.")}</span>
         </div>
       )}
@@ -752,7 +752,7 @@ export default function RateCalendar() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-1.5 text-sm">
-            <p className="text-amber-800">{t("No rooms configured for this room type.")}</p>
+            <p className="text-warning-ink">{t("No rooms configured for this room type.")}</p>
           </CardContent>
         </Card>
       )}
@@ -768,7 +768,7 @@ export default function RateCalendar() {
             {picked.contract && picked.rate != null ? (
               <p><TariffNight tariff={picked.contract} agreed_rate={picked.rate} /></p>
             ) : (
-              <p className="text-rose-700">{t("Not available: {reason}", { reason: picked.refusal ?? "" })}</p>
+              <p className="text-danger-ink">{t("Not available: {reason}", { reason: picked.refusal ?? "" })}</p>
             )}
           </CardContent>
         </Card>
@@ -789,7 +789,7 @@ export default function RateCalendar() {
                 <span className="tabular-nums">{cur()}{amount(picked.after_season)}</span>
               </p>
             ) : (
-              <p className="text-zinc-400">{t("No season covers this date.")}</p>
+              <p className="text-muted-ink">{t("No season covers this date.")}</p>
             )}
             {picked.demand ? (
               <p>
@@ -797,24 +797,24 @@ export default function RateCalendar() {
                 {picked.demand.min_rate ? `, ${t("never below")} ${cur()}${amount(picked.demand.min_rate)}` : ""}
               </p>
             ) : (
-              <p className="text-zinc-400">{t("No busy-house rule applies ({p}% full).", { p: Math.round(picked.occupancy) })}</p>
+              <p className="text-muted-ink">{t("No busy-house rule applies ({p}% full).", { p: Math.round(picked.occupancy) })}</p>
             )}
             {picked.source === "card" && (
-              <p className="text-zinc-500">{t("No contract tariff for this room type: priced from the card rate.")}</p>
+              <p className="text-muted-ink">{t("No contract tariff for this room type: priced from the card rate.")}</p>
             )}
             <p className="font-semibold">{t("Rate")}: <span className="tabular-nums">{cur()}{amount(picked.rate)}</span></p>
             {picked.is_restricted && (
-              <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900">
+              <div className="mt-2 rounded-lg border border-warning-line bg-warning-subtle p-2.5 text-xs text-warning-ink">
                 <div className="font-semibold">{t("Active stay restrictions")}</div>
                 <div className="mt-1 flex flex-wrap gap-2">
-                  {picked.stop_sell && <span className="font-medium text-rose-700">{t("Stop-sell")}</span>}
+                  {picked.stop_sell && <span className="font-medium text-danger-ink">{t("Stop-sell")}</span>}
                   {picked.min_los ? <span>{t("Min LOS")}: {picked.min_los}{picked.is_stay_through ? ` (${t("Stay-through")})` : ""}</span> : null}
                   {picked.max_los ? <span>{t("Max LOS")}: {picked.max_los}</span> : null}
                   {picked.cta && <span>{t("Closed to arrival")}</span>}
                   {picked.ctd && <span>{t("Closed to departure")}</span>}
                 </div>
                 {picked.restriction_reason && (
-                  <p className="mt-1 text-zinc-600">{picked.restriction_reason}</p>
+                  <p className="mt-1 text-secondary-ink">{picked.restriction_reason}</p>
                 )}
               </div>
             )}
@@ -859,9 +859,9 @@ export default function RateCalendar() {
             ["/long-stay", "Long-stay Discounts", "Take a percentage off stays of N nights or more."],
             ["/guardrails", "Guardrails", "Floors and ceilings no rate can cross."],
           ].map(([to, label, blurb]) => (
-            <Link key={to} to={to} className="rounded-lg border border-zinc-200 px-3 py-2 hover:border-brand-600">
-              <span className="font-medium text-brand-700">{t(label)} →</span>
-              <span className="block text-xs text-zinc-500">{t(blurb)}</span>
+            <Link key={to} to={to} className="rounded-lg border border-line px-3 py-2 hover:border-accent-control">
+              <span className="font-medium text-accent-ink">{t(label)} →</span>
+              <span className="block text-xs text-muted-ink">{t(blurb)}</span>
             </Link>
           ))}
         </CardContent>

@@ -189,12 +189,12 @@ export default function PackageElementsEditor({
   return (
     <section
       aria-label={translate("Package elements")}
-      className="rounded-xl border border-zinc-200 bg-white p-4 space-y-4"
+      className="rounded-xl border border-line bg-surface p-4 space-y-4"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <Layers className="size-4 text-zinc-500" aria-hidden />
-          <h3 className="text-sm font-semibold text-zinc-800">{translate("Package elements")}</h3>
+          <Layers className="size-4 text-muted-ink" aria-hidden />
+          <h3 className="text-sm font-semibold text-ink">{translate("Package elements")}</h3>
           <Badge tone="zinc">{elements.length}</Badge>
         </div>
         <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label={translate("Folio display")}>
@@ -209,8 +209,8 @@ export default function PackageElementsEditor({
               className={cn(
                 "min-h-11 sm:min-h-8 rounded-lg border px-3 py-1 text-xs font-medium transition-colors",
                 displayMode === mode
-                  ? "border-brand-600 bg-brand-50 text-brand-700"
-                  : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50",
+                  ? "border-accent-control bg-accent-subtle text-accent-ink"
+                  : "border-line bg-surface text-secondary-ink hover:bg-canvas",
               )}
             >
               {translate(mode)}
@@ -221,20 +221,20 @@ export default function PackageElementsEditor({
 
       {/* Live Net Room Revenue preview per occupancy tier */}
       {tiers.length > 0 && (
-        <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3">
-          <p className="mb-2 text-xs font-medium text-zinc-600">
+        <div className="rounded-lg border border-line bg-canvas p-3">
+          <p className="mb-2 text-xs font-medium text-secondary-ink">
             {translate("Net room revenue preview (per night)")}
           </p>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
             {tiers.map((tier) => (
-              <div key={tier.pax} className="rounded-md border border-zinc-200 bg-white px-2.5 py-2">
-                <div className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+              <div key={tier.pax} className="rounded-md border border-line bg-surface px-2.5 py-2">
+                <div className="text-[11px] font-medium uppercase tracking-wide text-muted-ink">
                   {translate("{n} pax", { n: tier.pax })}
                 </div>
-                <div className="mt-0.5 text-sm font-semibold tabular-nums text-zinc-900">
+                <div className="mt-0.5 text-sm font-semibold tabular-nums text-ink">
                   {sym}{fmtAmount(tier.roomNet, currency || undefined)}
                 </div>
-                <div className="text-[11px] tabular-nums text-zinc-500">
+                <div className="text-[11px] tabular-nums text-muted-ink">
                   {translate("Allowances")}: {sym}{fmtAmount(tier.deducted, currency || undefined)}
                 </div>
               </div>
@@ -245,7 +245,7 @@ export default function PackageElementsEditor({
 
       {/* Element rows */}
       {elements.length === 0 ? (
-        <p className="text-sm text-zinc-500">
+        <p className="text-sm text-muted-ink">
           {translate("No package elements yet. Add elements to split room revenue from meal, spa, or transport allowances.")}
         </p>
       ) : (
@@ -253,24 +253,24 @@ export default function PackageElementsEditor({
           {elements.map((el, idx) => (
             <div
               key={el.name ?? `new-${idx}`}
-              className="rounded-lg border border-zinc-200 bg-zinc-50/60 p-3 space-y-2.5"
+              className="rounded-lg border border-line bg-canvas/60 p-3 space-y-2.5"
             >
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-zinc-600">{translate("Element name")}</span>
+                  <span className="mb-1 block text-xs font-medium text-secondary-ink">{translate("Element name")}</span>
                   <input
                     value={el.element_name}
                     onChange={(e) => updateRow(idx, { element_name: e.target.value })}
                     placeholder={translate("e.g. Breakfast, Spa Credit")}
-                    className="w-full min-h-11 sm:min-h-9 rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm text-zinc-900"
+                    className="w-full min-h-11 sm:min-h-9 rounded-lg border border-control bg-surface px-2.5 py-1.5 text-sm text-ink"
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-zinc-600">{translate("Type")}</span>
+                  <span className="mb-1 block text-xs font-medium text-secondary-ink">{translate("Type")}</span>
                   <select
                     value={el.element_type}
                     onChange={(e) => updateRow(idx, { element_type: e.target.value })}
-                    className="w-full min-h-11 sm:min-h-9 rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm text-zinc-900"
+                    className="w-full min-h-11 sm:min-h-9 rounded-lg border border-control bg-surface px-2.5 py-1.5 text-sm text-ink"
                   >
                     {ELEMENT_TYPES.map((et) => (
                       <option key={et} value={et}>{translate(et)}</option>
@@ -278,7 +278,7 @@ export default function PackageElementsEditor({
                   </select>
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-zinc-600">{translate("Transaction code")}</span>
+                  <span className="mb-1 block text-xs font-medium text-secondary-ink">{translate("Transaction code")}</span>
                   <select
                     value={el.transaction_code}
                     onChange={(e) => {
@@ -286,7 +286,7 @@ export default function PackageElementsEditor({
                       const found = data?.transaction_codes?.find((c) => c.code === code)
                       updateRow(idx, { transaction_code: code, charge_type: found?.charge_type || el.charge_type })
                     }}
-                    className="w-full min-h-11 sm:min-h-9 rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm text-zinc-900"
+                    className="w-full min-h-11 sm:min-h-9 rounded-lg border border-control bg-surface px-2.5 py-1.5 text-sm text-ink"
                   >
                     {(data?.transaction_codes ?? []).map((tc) => (
                       <option key={tc.code} value={tc.code}>
@@ -303,11 +303,11 @@ export default function PackageElementsEditor({
 
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-zinc-600">{translate("Allowance basis")}</span>
+                  <span className="mb-1 block text-xs font-medium text-secondary-ink">{translate("Allowance basis")}</span>
                   <select
                     value={el.allowance_basis}
                     onChange={(e) => updateRow(idx, { allowance_basis: e.target.value })}
-                    className="w-full min-h-11 sm:min-h-9 rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm text-zinc-900"
+                    className="w-full min-h-11 sm:min-h-9 rounded-lg border border-control bg-surface px-2.5 py-1.5 text-sm text-ink"
                   >
                     {ALLOWANCE_BASES.map((b) => (
                       <option key={b} value={b}>{translate(b)}</option>
@@ -315,22 +315,22 @@ export default function PackageElementsEditor({
                   </select>
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-zinc-600">{translate("Unit allowance")}</span>
+                  <span className="mb-1 block text-xs font-medium text-secondary-ink">{translate("Unit allowance")}</span>
                   <input
                     type="number"
                     min={0}
                     step={step}
                     value={el.unit_allowance}
                     onChange={(e) => updateRow(idx, { unit_allowance: Number(e.target.value || 0) })}
-                    className="w-full min-h-11 sm:min-h-9 rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm tabular-nums text-zinc-900"
+                    className="w-full min-h-11 sm:min-h-9 rounded-lg border border-control bg-surface px-2.5 py-1.5 text-sm tabular-nums text-ink"
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-zinc-600">{translate("Posting rhythm")}</span>
+                  <span className="mb-1 block text-xs font-medium text-secondary-ink">{translate("Posting rhythm")}</span>
                   <select
                     value={el.posting_rhythm}
                     onChange={(e) => updateRow(idx, { posting_rhythm: e.target.value })}
-                    className="w-full min-h-11 sm:min-h-9 rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm text-zinc-900"
+                    className="w-full min-h-11 sm:min-h-9 rounded-lg border border-control bg-surface px-2.5 py-1.5 text-sm text-ink"
                   >
                     {POSTING_RHYTHMS.map((r) => (
                       <option key={r} value={r}>{translate(r)}</option>
@@ -340,19 +340,19 @@ export default function PackageElementsEditor({
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                <label className="inline-flex min-h-11 sm:min-h-8 items-center gap-2 text-xs text-zinc-700">
+                <label className="inline-flex min-h-11 sm:min-h-8 items-center gap-2 text-xs text-secondary-ink">
                   <input
                     type="checkbox"
                     checked={Boolean(el.included_in_rate)}
                     onChange={(e) => updateRow(idx, { included_in_rate: e.target.checked ? 1 : 0 })}
-                    className="size-4 rounded border-zinc-300"
+                    className="size-4 rounded border-control"
                   />
                   {translate("Included in package rate")}
                 </label>
                 <Button
                   type="button"
                   variant="ghost"
-                  className="min-h-11 sm:min-h-8 text-xs text-rose-600"
+                  className="min-h-11 sm:min-h-8 text-xs text-danger-text"
                   onClick={() => removeRow(idx)}
                 >
                   <Trash2 className="size-3.5 me-1" aria-hidden />
@@ -375,8 +375,8 @@ export default function PackageElementsEditor({
         </Button>
       </div>
 
-      {savedMsg && <p className="text-xs font-medium text-emerald-700">{savedMsg}</p>}
-      {error && <p className="text-xs text-rose-700">{translate(error)}</p>}
+      {savedMsg && <p className="text-xs font-medium text-success-ink">{savedMsg}</p>}
+      {error && <p className="text-xs text-danger-ink">{translate(error)}</p>}
     </section>
   )
 }

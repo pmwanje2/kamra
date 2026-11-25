@@ -47,13 +47,13 @@ export default function ReinstatePanel({ reservation, onDone }: {
     )
   }
   return (
-    <div className="w-full space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
-      <p className="text-amber-900">
+    <div className="w-full space-y-2 rounded-xl border border-warning-line bg-warning-subtle p-3 text-sm">
+      <p className="text-warning-ink">
         {t("Puts the guest back in house in the same room. The invoice is cancelled (it stays in the cancelled register) and a company bill comes off the company's account. Only before the night audit.")}
       </p>
-      <input className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2" value={reason}
+      <input className="w-full rounded-lg border border-control bg-surface px-3 py-2" value={reason}
         onChange={(e) => setReason(e.target.value)} placeholder={t("Why (e.g. checked out the wrong room)")} />
-      {err && <p className="text-xs font-medium text-rose-700">{err}</p>}
+      {err && <p className="text-xs font-medium text-danger-ink">{err}</p>}
       <div className="flex gap-2">
         <Button disabled={busy || !reason.trim()} onClick={() => void go()}>{t("Undo checkout")}</Button>
         <Button variant="outline" disabled={busy} onClick={() => setOpen(false)}>{t("Cancel")}</Button>

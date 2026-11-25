@@ -104,7 +104,7 @@ export default function CustomizeToday(props: {
 
   const column = (col: Col, title: string) => (
     <section className="mb-5">
-      <h3 className="mb-2 text-sm font-semibold text-zinc-800">{translate(title)}</h3>
+      <h3 className="mb-2 text-sm font-semibold text-ink">{translate(title)}</h3>
       <ul className="space-y-2">
         {draft[col].map((id, i) => {
           const off = hidden.has(id)
@@ -113,7 +113,7 @@ export default function CustomizeToday(props: {
               key={id}
               className={cn(
                 "flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2",
-                off ? "border-dashed border-zinc-300 bg-zinc-50" : "border-zinc-200 bg-white",
+                off ? "border-dashed border-control bg-canvas" : "border-line bg-surface",
               )}
             >
               <button
@@ -122,13 +122,13 @@ export default function CustomizeToday(props: {
                 aria-pressed={!off}
                 className={cn(
                   "inline-flex min-h-11 min-w-0 flex-1 items-center gap-2 text-start text-base font-medium",
-                  off ? "text-zinc-400" : "text-zinc-800",
+                  off ? "text-muted-ink" : "text-ink",
                 )}
               >
                 {off ? (
                   <EyeOff className="size-5 shrink-0" aria-hidden />
                 ) : (
-                  <Eye className="size-5 shrink-0 text-brand-700" aria-hidden />
+                  <Eye className="size-5 shrink-0 text-accent-ink" aria-hidden />
                 )}
                 <span className="truncate">{t(WIDGET_LABEL[id])}</span>
                 <span className="ms-auto hidden shrink-0 text-xs font-normal sm:inline">
@@ -163,7 +163,7 @@ export default function CustomizeToday(props: {
           )
         })}
         {draft[col].length === 0 && (
-          <li className="rounded-xl border border-dashed border-zinc-300 px-3 py-3 text-sm text-zinc-400">
+          <li className="rounded-xl border border-dashed border-control px-3 py-3 text-sm text-muted-ink">
             {t("Nothing in this column.")}
           </li>
         )}
@@ -199,14 +199,14 @@ export default function CustomizeToday(props: {
         </div>
       }
     >
-      <p className="mb-4 rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-600">{sourceText}</p>
+      <p className="mb-4 rounded-lg bg-canvas px-3 py-2 text-sm text-secondary-ink">{sourceText}</p>
       {error && (
-        <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+        <div className="mb-3 rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">
           {translate(error)}
         </div>
       )}
       {note && (
-        <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+        <div className="mb-3 rounded-lg border border-success-line bg-success-subtle px-3 py-2 text-sm text-success-ink">
           {note}
         </div>
       )}
@@ -214,9 +214,9 @@ export default function CustomizeToday(props: {
       {column("left", t("Narrow column"))}
       {column("right", t("Wide column"))}
       {props.info.can_set_default && (
-        <section className="rounded-xl border border-zinc-200 p-3">
-          <h3 className="text-sm font-semibold text-zinc-800">{t("Hotel default")}</h3>
-          <p className="mt-1 text-sm text-zinc-500">
+        <section className="rounded-xl border border-line p-3">
+          <h3 className="text-sm font-semibold text-ink">{t("Hotel default")}</h3>
+          <p className="mt-1 text-sm text-muted-ink">
             {t("What everyone at this hotel sees until they customise their own Today.")}
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
@@ -261,7 +261,7 @@ function IconBtn(props: {
       title={translate(props.label)}
       disabled={props.disabled}
       onClick={props.onClick}
-      className="inline-flex size-11 items-center justify-center rounded-lg border border-zinc-200 text-zinc-600 hover:bg-zinc-50 disabled:opacity-30"
+      className="inline-flex size-11 items-center justify-center rounded-lg border border-line text-secondary-ink hover:bg-canvas disabled:opacity-30"
     >
       {props.children}
     </button>

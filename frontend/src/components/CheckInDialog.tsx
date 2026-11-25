@@ -242,18 +242,18 @@ const REQUEST_LABEL: Record<string, string> = {
 }
 
 const hkTone: Record<string, string> = {
-  Clean: "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-950/30",
-  Pickup: "border-indigo-200 bg-indigo-50 text-indigo-800 dark:border-indigo-500/40 dark:bg-indigo-950/30 dark:text-indigo-200",
-  Inspected: "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-500/40 dark:bg-sky-950/30",
-  Ready: "border-teal-200 bg-teal-50 text-teal-800 dark:border-teal-500/40 dark:bg-teal-950/30 dark:text-teal-200",
-  Dirty: "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/40 dark:bg-amber-950/30",
-  "Out of Service": "border-orange-200 bg-orange-50 text-orange-800 dark:border-orange-500/40 dark:bg-orange-950/30 dark:text-orange-200",
-  "Out of Order": "border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-500/40 dark:bg-rose-950/30",
+  Clean: "border-success-line bg-success-subtle text-success-ink",
+  Pickup: "border-indigo-line bg-indigo-subtle text-indigo-ink",
+  Inspected: "border-info-line bg-info-subtle text-info-ink",
+  Ready: "border-teal-line bg-teal-subtle text-teal-ink",
+  Dirty: "border-warning-line bg-warning-subtle text-warning-ink",
+  "Out of Service": "border-notice-line bg-notice-subtle text-notice-ink",
+  "Out of Order": "border-danger-line bg-danger-subtle text-danger-ink",
 }
 
 const inputCls =
-  "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-base sm:text-sm " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "w-full rounded-lg border border-control bg-surface px-3 py-2.5 text-base sm:text-sm " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 const who = (u?: string | null) => (u ?? "").split("@")[0]
 const when = (d?: string | null) => (d ? d.replace("T", " ").slice(0, 16) : "")
@@ -276,22 +276,22 @@ function Choice(props: {
         "flex w-full items-start gap-3 rounded-xl border p-4 text-start transition",
         "disabled:cursor-not-allowed disabled:opacity-50",
         props.selected
-          ? "border-brand-500 bg-brand-50 ring-2 ring-brand-100"
-          : "border-zinc-200 bg-white hover:border-brand-300",
+          ? "border-accent-control bg-accent-subtle ring-2 ring-brand-100"
+          : "border-line bg-surface hover:border-accent-line-strong",
       )}
     >
       <span
         aria-hidden
         className={cn(
           "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border",
-          props.selected ? "border-brand-600 bg-brand-600 text-white" : "border-zinc-300",
+          props.selected ? "border-accent-control bg-accent-fill text-on-solid" : "border-control",
         )}
       >
         {props.selected && <Check className="size-3.5" />}
       </span>
       <span>
-        <span className="block text-base font-semibold text-zinc-900">{translateUI(props.title)}</span>
-        {props.hint && <span className="mt-0.5 block text-sm text-zinc-500">{translateUI(props.hint)}</span>}
+        <span className="block text-base font-semibold text-ink">{translateUI(props.title)}</span>
+        {props.hint && <span className="mt-0.5 block text-sm text-muted-ink">{translateUI(props.hint)}</span>}
       </span>
     </button>
   )
@@ -301,8 +301,8 @@ function Row(props: { label: string; value: React.ReactNode; strong?: boolean })
   useUILanguage()
   return (
     <div className="flex items-baseline justify-between gap-3 py-1.5">
-      <dt className="text-sm text-zinc-500">{translateUI(props.label)}</dt>
-      <dd className={cn("text-end text-sm tabular-nums", props.strong && "font-semibold text-zinc-900")}>
+      <dt className="text-sm text-muted-ink">{translateUI(props.label)}</dt>
+      <dd className={cn("text-end text-sm tabular-nums", props.strong && "font-semibold text-ink")}>
         {props.value}
       </dd>
     </div>
@@ -573,7 +573,7 @@ export default function CheckInDialog(props: {
               href={toFullPath(`/grc/${flow.reservation.name}`)}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-control bg-surface px-4 py-2.5 text-sm font-medium text-secondary-ink hover:bg-canvas"
             >
               <Printer className="size-4" aria-hidden /> {t("Print registration card")}
             </a>
@@ -584,8 +584,8 @@ export default function CheckInDialog(props: {
         }
       >
         <div className="space-y-4">
-          <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-emerald-900">
-            <CircleCheck className="mt-0.5 size-6 shrink-0 text-emerald-600" aria-hidden />
+          <div className="flex items-start gap-3 rounded-xl border border-success-line bg-success-subtle px-5 py-4 text-success-ink">
+            <CircleCheck className="mt-0.5 size-6 shrink-0 text-success-text" aria-hidden />
             <div>
               <p className="text-lg font-semibold">
                 {finished.room
@@ -600,8 +600,8 @@ export default function CheckInDialog(props: {
             </div>
           </div>
           {(finished.keys?.message || keyMessage) && (
-            <p className="flex items-start gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700">
-              <KeyRound className="mt-0.5 size-4 shrink-0 text-zinc-500" aria-hidden />
+            <p className="flex items-start gap-2 rounded-xl border border-line bg-surface px-4 py-3 text-sm text-secondary-ink">
+              <KeyRound className="mt-0.5 size-4 shrink-0 text-muted-ink" aria-hidden />
               {translateUI(finished.keys?.message || keyMessage)}
             </p>
           )}
@@ -673,7 +673,7 @@ export default function CheckInDialog(props: {
       }
     >
       {!flow && !error && (
-        <p className="flex items-center gap-2 text-sm text-zinc-500">
+        <p className="flex items-center gap-2 text-sm text-muted-ink">
           <Loader2 className="size-4 animate-spin" aria-hidden />
           {t("Loading…")}
         </p>
@@ -692,7 +692,7 @@ export default function CheckInDialog(props: {
           />
 
           {r.vip ? (
-            <p className="flex items-center gap-1.5 text-sm font-semibold text-amber-700">
+            <p className="flex items-center gap-1.5 text-sm font-semibold text-warning-ink">
               <Star className="size-4 fill-amber-400 text-amber-400" aria-hidden />
               {t("VIP guest")}
             </p>
@@ -700,24 +700,24 @@ export default function CheckInDialog(props: {
 
           {step && (
             <header className="space-y-1">
-              <h3 className="flex flex-wrap items-center gap-2 text-lg font-semibold text-zinc-900">
+              <h3 className="flex flex-wrap items-center gap-2 text-lg font-semibold text-ink">
                 {translateUI(flowSteps.find((s) => s.key === step.step_key)?.label)}
                 <span
                   className={cn(
                     "rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase",
                     hardStep
-                      ? "border-rose-200 bg-rose-50 text-rose-700"
+                      ? "border-danger-line bg-danger-subtle text-danger-ink"
                       : step.is_blocking
-                        ? "border-amber-200 bg-amber-50 text-amber-800"
-                        : "border-zinc-200 bg-zinc-50 text-zinc-500",
+                        ? "border-warning-line bg-warning-subtle text-warning-ink"
+                        : "border-line bg-canvas text-muted-ink",
                   )}
                 >
                   {hardStep ? t("Must do") : step.is_blocking ? t("Do now or later") : t("Optional")}
                 </span>
               </h3>
-              <p className="text-sm text-zinc-600">{instruction}</p>
+              <p className="text-sm text-secondary-ink">{instruction}</p>
               {step.state !== "todo" && step.done_by && (
-                <p className="text-xs text-zinc-400">
+                <p className="text-xs text-muted-ink">
                   {step.state === "skipped"
                     ? t("Skipped by {who} at {when}", { who: who(step.done_by), when: when(step.done_at) })
                     : t("Done by {who} at {when}", { who: who(step.done_by), when: when(step.done_at) })}
@@ -729,7 +729,7 @@ export default function CheckInDialog(props: {
           {nav.current === "guest_ids" && (
             <div className="space-y-4">
               {flow.ids.online && (
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                <div className="rounded-xl border border-success-line bg-success-subtle px-4 py-3 text-sm text-success-ink">
                   <p className="font-semibold">{t("Done online")}</p>
                   <p>
                     {t("The guest checked in online{when}. Check what they sent against the guest at the desk.", {
@@ -738,7 +738,7 @@ export default function CheckInDialog(props: {
                   </p>
                 </div>
               )}
-              <dl className="divide-y divide-zinc-100 rounded-xl border border-zinc-200 bg-white px-4">
+              <dl className="divide-y divide-line-subtle rounded-xl border border-line bg-surface px-4">
                 <Row label={t("Name")} value={flow.guest.full_name} strong />
                 <Row
                   label={t("ID")}
@@ -748,7 +748,7 @@ export default function CheckInDialog(props: {
                         ? `${flow.guest.id_type ? t(flow.guest.id_type) + " · " : ""}${flow.guest.id_number}`
                         : flow.guest.id_on_file
                           ? t("Photo on file")
-                          : <span className="text-rose-700">{t("Missing")}</span>}
+                          : <span className="text-danger-ink">{t("Missing")}</span>}
                       {flow.guest.id_status === "expired" && (
                         <Badge tone="rose">{t("Expired {date}", { date: flow.guest.id_expiry_date ?? "" })}</Badge>
                       )}
@@ -775,7 +775,7 @@ export default function CheckInDialog(props: {
                   ] as const
                 ).map(([k, label, type]) => (
                   <label key={k} className="block">
-                    <span className="mb-1 block text-xs font-medium text-zinc-500">{translateUI(label)}</span>
+                    <span className="mb-1 block text-xs font-medium text-muted-ink">{translateUI(label)}</span>
                     <input
                       className={inputCls}
                       type={type}
@@ -788,7 +788,7 @@ export default function CheckInDialog(props: {
                   </label>
                 ))}
                 <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-zinc-500">{t("ID type")}</span>
+                  <span className="mb-1 block text-xs font-medium text-muted-ink">{t("ID type")}</span>
                   <select
                     className={inputCls}
                     value={details.id_type}
@@ -804,7 +804,7 @@ export default function CheckInDialog(props: {
                   </select>
                 </label>
                 <label className="block sm:col-span-2">
-                  <span className="mb-1 block text-xs font-medium text-zinc-500">
+                  <span className="mb-1 block text-xs font-medium text-muted-ink">
                     {flow.guest.id_number ? t("New ID number (leave empty to keep)") : t("ID number")}
                   </span>
                   <input
@@ -848,7 +848,7 @@ export default function CheckInDialog(props: {
                 }}
               />
               {!flow.ids.ok && (
-                <p className="text-sm font-medium text-rose-700">
+                <p className="text-sm font-medium text-danger-ink">
                   {t("ID still needed for: {names}.", { names: flow.ids.missing.join(", ") })}
                 </p>
               )}
@@ -888,7 +888,7 @@ export default function CheckInDialog(props: {
                     )
                   })}
               </div>
-              <dl className="divide-y divide-zinc-100 rounded-xl border border-zinc-200 bg-white px-4">
+              <dl className="divide-y divide-line-subtle rounded-xl border border-line bg-surface px-4">
                 <Row label={t("Stay total")} value={fmtMoney(flow.billing.stay_total)} />
                 <Row label={t("Paid so far")} value={fmtMoney(flow.billing.advance_paid)} />
                 {flow.deposit.security.held > 0 && (
@@ -897,9 +897,9 @@ export default function CheckInDialog(props: {
                 <Row label={t("Left to pay")} value={fmtMoney(flow.billing.balance_due)} strong />
               </dl>
               {payer === "Company" && flow.billing.billing_rules.length > 0 && (
-                <div className="rounded-xl border border-zinc-200 bg-white p-4 text-sm">
-                  <p className="mb-1 font-semibold text-zinc-800">{t("What the company pays")}</p>
-                  <ul className="space-y-0.5 text-zinc-600">
+                <div className="rounded-xl border border-line bg-surface p-4 text-sm">
+                  <p className="mb-1 font-semibold text-ink">{t("What the company pays")}</p>
+                  <ul className="space-y-0.5 text-secondary-ink">
                     {flow.billing.billing_rules.map((b) => (
                       <li key={ruleKey(b)}>
                         {ruleLabel(b, t)}: {t(b.pay_by)}
@@ -909,7 +909,7 @@ export default function CheckInDialog(props: {
                 </div>
               )}
               {payer === "OTA prepaid" && (
-                <p className="text-sm text-zinc-600">
+                <p className="text-sm text-secondary-ink">
                   {t("Do not take money for the room. Extras are paid by the guest.")}
                 </p>
               )}
@@ -919,39 +919,39 @@ export default function CheckInDialog(props: {
           {nav.current === "assign_room" && (
             <div className="space-y-4">
               {flow.room.entire_place && !flow.room.room ? (
-                <p className="rounded-xl border border-zinc-200 bg-white px-4 py-3 text-base">
+                <p className="rounded-xl border border-line bg-surface px-4 py-3 text-base">
                   {t("Whole place: rooms {rooms}", { rooms: flow.room.entire_place.join(", ") })}
                 </p>
               ) : flow.room.room && !changeRoom ? (
                 <div className="space-y-3">
-                  <div className="flex flex-wrap items-center gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-4">
-                    <BedDouble className="size-6 text-brand-600" aria-hidden />
+                  <div className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-surface px-4 py-4">
+                    <BedDouble className="size-6 text-accent-text" aria-hidden />
                     <div>
                       <p className="text-xl font-semibold">{t("Room {n}", { n: flow.room.room_number ?? "" })}</p>
                       {flow.room.assigned_by && (
-                        <p className="text-xs text-zinc-400">
+                        <p className="text-xs text-muted-ink">
                           {t("Assigned by {who} at {when}", { who: who(flow.room.assigned_by), when: when(flow.room.assigned_at) })}
                         </p>
                       )}
                     </div>
                     {flow.room.housekeeping_status && (
-                      <span className={cn("ms-auto rounded-full border px-2.5 py-0.5 text-xs font-semibold", hkTone[flow.room.housekeeping_status] ?? "border-zinc-200 text-zinc-600")}>
+                      <span className={cn("ms-auto rounded-full border px-2.5 py-0.5 text-xs font-semibold", hkTone[flow.room.housekeeping_status] ?? "border-line text-secondary-ink")}>
                         {t(flow.room.housekeeping_status)}
                       </span>
                     )}
                   </div>
                   {flow.room.housekeeping_status === "Dirty" && (
-                    <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
+                    <p className="text-sm font-medium text-warning-ink">
                       {t("This room is not cleaned yet. Pick a clean room, or ask housekeeping first.")}
                     </p>
                   )}
                   {flow.room.housekeeping_status === "Pickup" && (
-                    <p className="text-sm font-medium text-indigo-700 dark:text-indigo-300">
+                    <p className="text-sm font-medium text-indigo-ink">
                       {t("This room is flagged for quick touch-up (Pickup). Confirm with housekeeping before handing over keys.")}
                     </p>
                   )}
                   {flow.room.housekeeping_status === "Out of Service" && (
-                    <p className="text-sm font-medium text-orange-700 dark:text-orange-300">
+                    <p className="text-sm font-medium text-notice-ink">
                       {t("This room is Out of Service and cannot be assigned. Pick another room first.")}
                     </p>
                   )}
@@ -966,7 +966,7 @@ export default function CheckInDialog(props: {
               ) : (
                 <div className="space-y-3">
                   {flow.rooms.length === 0 ? (
-                    <p className="text-sm text-rose-700">
+                    <p className="text-sm text-danger-ink">
                       {t("No free room of this type for these dates. Try an upgrade to another type.")}
                     </p>
                   ) : (
@@ -980,12 +980,12 @@ export default function CheckInDialog(props: {
                           className={cn(
                             "rounded-xl border p-3 text-start transition",
                             room === x.name
-                              ? "border-brand-500 bg-brand-50 ring-2 ring-brand-100"
-                              : "border-zinc-200 bg-white hover:border-brand-300",
+                              ? "border-accent-control bg-accent-subtle ring-2 ring-brand-100"
+                              : "border-line bg-surface hover:border-accent-line-strong",
                           )}
                         >
                           <span className="block text-lg font-semibold">{x.room_number}</span>
-                          <span className={cn("mt-1 inline-block rounded-full border px-2 py-0.5 text-[11px] font-semibold", hkTone[x.housekeeping_status] ?? "border-zinc-200 text-zinc-600")}>
+                          <span className={cn("mt-1 inline-block rounded-full border px-2 py-0.5 text-[11px] font-semibold", hkTone[x.housekeeping_status] ?? "border-line text-secondary-ink")}>
                             {t(x.housekeeping_status || "Unknown")}
                           </span>
                         </button>
@@ -1022,13 +1022,13 @@ export default function CheckInDialog(props: {
                 />
               )}
               {flow.deposit.satisfied ? (
-                <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                <p className="rounded-xl border border-success-line bg-success-subtle px-4 py-3 text-sm text-success-ink">
                   {flow.deposit.security.status === "Waived"
                     ? t("Security deposit waived. Continue.")
                     : t("Security deposit is taken. Continue.")}
                 </p>
               ) : (
-                <p className="text-sm font-medium text-rose-700">
+                <p className="text-sm font-medium text-danger-ink">
                   {t("Take the security deposit or waive it with a reason to continue.")}
                 </p>
               )}
@@ -1041,17 +1041,17 @@ export default function CheckInDialog(props: {
                 href={toFullPath(`/grc/${r.name}`)}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 py-3 text-base font-medium text-zinc-800 hover:bg-zinc-50"
+                className="inline-flex items-center gap-2 rounded-xl border border-control bg-surface px-4 py-3 text-base font-medium text-ink hover:bg-canvas"
               >
                 <Printer className="size-5" aria-hidden /> {t("Open the card to show or print")}
               </a>
               {flow.grc.signed && !signature && (
-                <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                <p className="rounded-xl border border-success-line bg-success-subtle px-4 py-3 text-sm text-success-ink">
                   {t("The guest already signed (online or earlier). Continue, or ask them to sign again below.")}
                 </p>
               )}
               <div>
-                <p className="mb-1 text-sm font-medium text-zinc-700">{t("Guest signs here")}</p>
+                <p className="mb-1 text-sm font-medium text-secondary-ink">{t("Guest signs here")}</p>
                 <SignaturePad onChange={setSignature} />
               </div>
               <label className="flex items-center gap-2 text-base">
@@ -1069,12 +1069,12 @@ export default function CheckInDialog(props: {
           {nav.current === "keys" && (
             <div className="space-y-4">
               {!flow.keys.manual && (
-                <p className="rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700">
+                <p className="rounded-xl border border-line bg-surface px-4 py-3 text-sm text-secondary-ink">
                   {t("{lock} makes the keys when you check the guest in.", { lock: flow.keys.adapter_label })}
                 </p>
               )}
               <div className="flex items-center gap-3">
-                <span className="text-sm font-medium text-zinc-700">{t("Keys")}</span>
+                <span className="text-sm font-medium text-secondary-ink">{t("Keys")}</span>
                 <Button variant="outline" className="size-11 text-xl" aria-label={t("Fewer keys")}
                   disabled={keyCount <= 1} onClick={() => setKeyCount((n) => Math.max(1, n - 1))}>
                   −
@@ -1087,14 +1087,14 @@ export default function CheckInDialog(props: {
               </div>
               {flow.keys.manual && (
                 <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-zinc-500">
+                  <span className="mb-1 block text-xs font-medium text-muted-ink">
                     {t("Key card numbers (optional)")}
                   </span>
                   <input className={inputCls} value={keyCards} onChange={(e) => setKeyCards(e.target.value)} />
                 </label>
               )}
               {keyMessage && (
-                <p className="flex items-start gap-2 text-sm text-zinc-600">
+                <p className="flex items-start gap-2 text-sm text-secondary-ink">
                   <KeyRound className="mt-0.5 size-4 shrink-0" aria-hidden /> {translateUI(keyMessage)}
                 </p>
               )}
@@ -1106,7 +1106,7 @@ export default function CheckInDialog(props: {
           {nav.current === "guest_requests" && (
             <div className="space-y-4">
               {r.special_requests && (
-                <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                <p className="rounded-xl border border-warning-line bg-warning-subtle px-4 py-3 text-sm text-warning-ink">
                   <span className="font-semibold">{t("Booking notes")}: </span>
                   {r.special_requests}
                 </p>
@@ -1122,7 +1122,7 @@ export default function CheckInDialog(props: {
                       onClick={() => setRequests((xs) => (on ? xs.filter((x) => x !== p.key) : [...xs, p.key]))}
                       className={cn(
                         "rounded-full border px-4 py-2 text-sm font-medium",
-                        on ? "border-brand-500 bg-brand-50 text-brand-800" : "border-zinc-300 bg-white text-zinc-700",
+                        on ? "border-accent-control bg-accent-subtle text-accent-ink" : "border-control bg-surface text-secondary-ink",
                       )}
                     >
                       {on && <Check className="me-1 inline size-3.5" aria-hidden />}
@@ -1133,17 +1133,17 @@ export default function CheckInDialog(props: {
               </div>
               {flow.request_presets.filter((p) => p.priced && requests.includes(p.key)).map((p) => (
                 <label key={p.key} className="flex items-center gap-2 text-sm">
-                  <span className="w-40 text-zinc-600">{t("Price for {what}", { what: t(REQUEST_LABEL[p.key] ?? p.label) })}</span>
+                  <span className="w-40 text-secondary-ink">{t("Price for {what}", { what: t(REQUEST_LABEL[p.key] ?? p.label) })}</span>
                   <input className={cn(inputCls, "w-36")} inputMode="decimal" placeholder={t("Free")}
                     value={prices[p.key] ?? ""}
                     onChange={(e) => setPrices((x) => ({ ...x, [p.key]: e.target.value.replace(/[^0-9.]/g, "") }))} />
                 </label>
               ))}
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-zinc-500">{t("Anything else (optional)")}</span>
+                <span className="mb-1 block text-xs font-medium text-muted-ink">{t("Anything else (optional)")}</span>
                 <textarea className={inputCls} rows={3} value={note} onChange={(e) => setNote(e.target.value)} />
               </label>
-              <p className="text-xs text-zinc-400">
+              <p className="text-xs text-muted-ink">
                 {t("Each request becomes a task for the right team. A price goes on the guest's bill.")}
               </p>
             </div>
@@ -1152,7 +1152,7 @@ export default function CheckInDialog(props: {
           {nav.current === "room_charges" && (
             <div className="space-y-3">
               {flow.room_charges.recommend_block && (
-                <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                <p className="rounded-xl border border-warning-line bg-warning-subtle px-4 py-3 text-sm text-warning-ink">
                   {t("The OTA paid the room and nothing is held for extras. Blocking charges to the room is safer.")}
                 </p>
               )}
@@ -1170,7 +1170,7 @@ export default function CheckInDialog(props: {
               />
               {allowCharges === false && (
                 <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-zinc-500">{t("Why (optional)")}</span>
+                  <span className="mb-1 block text-xs font-medium text-muted-ink">{t("Why (optional)")}</span>
                   <input className={inputCls} value={chargesReason} onChange={(e) => setChargesReason(e.target.value)} />
                 </label>
               )}
@@ -1178,15 +1178,15 @@ export default function CheckInDialog(props: {
           )}
 
           {step && !BUILT_IN[step.step_key] && step.prompt_to_guest && (
-            <p className="rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700">
+            <p className="rounded-xl border border-line bg-surface px-4 py-3 text-sm text-secondary-ink">
               {step.prompt_to_guest}
             </p>
           )}
 
           {isConfirm && (
             <div className="space-y-3">
-              <h3 className="text-lg font-semibold text-zinc-900">{t("Check-in summary")}</h3>
-              <ul className="divide-y divide-zinc-100 rounded-xl border border-zinc-200 bg-white">
+              <h3 className="text-lg font-semibold text-ink">{t("Check-in summary")}</h3>
+              <ul className="divide-y divide-line-subtle rounded-xl border border-line bg-surface">
                 {flow.steps
                   .filter((s) => s.relevant && (!EXPRESS_HIDE.has(s.step_key) || s.state === "done"))
                   .map((s) => {
@@ -1201,20 +1201,20 @@ export default function CheckInDialog(props: {
                         <span
                           aria-hidden
                           className={cn(
-                            "flex size-5 items-center justify-center rounded-full text-white",
+                            "flex size-5 items-center justify-center rounded-full text-on-solid",
                             ok
-                              ? "bg-emerald-500"
+                              ? "bg-success-fill"
                               : hardMissing
-                                ? "bg-rose-500"
+                                ? "bg-danger-fill"
                                 : soft
-                                  ? "bg-amber-500"
-                                  : "bg-zinc-300",
+                                  ? "bg-warning-fill"
+                                  : "bg-inverse-muted",
                           )}
                         >
                           {ok ? <Check className="size-3" /> : "!"}
                         </span>
                         <span className="font-medium">{label}</span>
-                        <span className="text-zinc-400">
+                        <span className="text-muted-ink">
                           {ok
                             ? (s.done_by || (s.step_key === "assign_room" && flow.room.assigned_by))
                               ? t("by {who}", { who: who(s.done_by || flow.room.assigned_by) })
@@ -1235,18 +1235,18 @@ export default function CheckInDialog(props: {
                   })}
               </ul>
               {flow.missing_required.length > 0 ? (
-                <p className="text-sm font-medium text-rose-700">
+                <p className="text-sm font-medium text-danger-ink">
                   {t("Assign a room before check-in.")}
                 </p>
               ) : softPending > 0 ? (
-                <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                <p className="rounded-xl border border-warning-line bg-warning-subtle px-4 py-3 text-sm text-warning-ink">
                   {t("{n} item{s} left for after check-in. The guest can go to the room now.", {
                     n: softPending,
                     s: softPending === 1 ? "" : "s",
                   })}
                 </p>
               ) : (
-                <p className="text-sm text-zinc-600">{t("Ready. Check the guest in.")}</p>
+                <p className="text-sm text-secondary-ink">{t("Ready. Check the guest in.")}</p>
               )}
             </div>
           )}
@@ -1301,14 +1301,14 @@ function StayInfoCard({ flow }: { flow: Flow }) {
 
   return (
     <div className="space-y-4">
-      <dl className="divide-y divide-zinc-100 rounded-xl border border-zinc-200 bg-white px-4">
+      <dl className="divide-y divide-line-subtle rounded-xl border border-line bg-surface px-4">
         {lines.map(([k, v]) => (
           <div key={k} className="flex items-baseline justify-between gap-3 py-2">
-            <dt className="flex items-center gap-1.5 text-sm text-zinc-500">
+            <dt className="flex items-center gap-1.5 text-sm text-muted-ink">
               {k === t("Wi-Fi") && <Wifi className="size-4" aria-hidden />}
               {translateUI(k)}
             </dt>
-            <dd className="whitespace-pre-line text-end text-base font-medium text-zinc-900">{v}</dd>
+            <dd className="whitespace-pre-line text-end text-base font-medium text-ink">{v}</dd>
           </div>
         ))}
       </dl>
@@ -1321,7 +1321,7 @@ function StayInfoCard({ flow }: { flow: Flow }) {
             href={`https://wa.me/${phone}?text=${encodeURIComponent(text)}`}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-control bg-surface px-4 py-2 text-sm font-medium text-secondary-ink hover:bg-canvas"
           >
             <MessageCircle className="size-4" aria-hidden /> {t("Send on WhatsApp")}
           </a>

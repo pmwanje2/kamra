@@ -3,12 +3,12 @@ import { cn } from "../../lib/utils"
 // Soft, legible tints - initials on a colour picked deterministically from
 // the name, so the same guest always reads the same.
 const PALETTE = [
-  "bg-brand-50 text-brand-700",
-  "bg-sky-50 text-sky-700",
-  "bg-amber-50 text-amber-700",
-  "bg-rose-50 text-rose-700",
-  "bg-indigo-50 text-indigo-700",
-  "bg-emerald-50 text-emerald-700",
+  "bg-accent-subtle text-accent-ink",
+  "bg-info-subtle text-info-ink",
+  "bg-warning-subtle text-warning-ink",
+  "bg-danger-subtle text-danger-ink",
+  "bg-indigo-subtle text-indigo-ink",
+  "bg-success-subtle text-success-ink",
 ]
 
 function initials(name: string) {

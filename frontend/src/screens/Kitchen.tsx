@@ -88,13 +88,13 @@ function firedAgeSecs(o: KotOrder, now: number): number | null {
 }
 
 function ageTone(secs: number | null) {
-  if (secs === null) return { border: "border-zinc-200", text: "text-zinc-400", bar: "bg-zinc-200" }
+  if (secs === null) return { border: "border-line", text: "text-muted-ink", bar: "bg-muted" }
   const m = secs / 60
   return m >= LATE_AT
-    ? { border: "border-rose-400", text: "text-rose-600", bar: "bg-rose-500" }
+    ? { border: "border-rose-400", text: "text-danger-text", bar: "bg-rose-500" }
     : m >= AMBER_AT
-      ? { border: "border-amber-400", text: "text-amber-600", bar: "bg-amber-500" }
-      : { border: "border-emerald-300", text: "text-emerald-600", bar: "bg-emerald-500" }
+      ? { border: "border-amber-400", text: "text-warning-text", bar: "bg-amber-500" }
+      : { border: "border-success-line-strong", text: "text-success-text", bar: "bg-emerald-500" }
 }
 
 // The word the line uses for a ticket's age, alongside the number.
@@ -195,7 +195,7 @@ function AllergyBadge({ hits }: { hits: string[] }) {
   const { t } = useT()
   if (!hits.length) return null
   return (
-    <span className="inline-flex items-center gap-1 rounded bg-rose-600 px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-white">
+    <span className="inline-flex items-center gap-1 rounded bg-danger-fill px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-on-solid">
       <TriangleAlert className="size-3" />{hits.join(" · ")} {t("allergy")}
     </span>
   )
@@ -206,9 +206,9 @@ function StationHead({ station, count }: { station: string; count: number }) {
   const Icon = STATION_ICON[station] ?? Utensils
   return (
     <div className="flex items-center gap-2 pt-3">
-      <Icon className="size-4 text-zinc-400" />
-      <span className="text-xs font-black uppercase tracking-wider text-zinc-500">{t(station)}</span>
-      <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-bold text-zinc-500">
+      <Icon className="size-4 text-muted-ink" />
+      <span className="text-xs font-black uppercase tracking-wider text-muted-ink">{t(station)}</span>
+      <span className="rounded bg-subtle px-1.5 py-0.5 text-[10px] font-bold text-muted-ink">
         {t("{n} item{s}", { n: count, s: count === 1 ? "" : "s" })}
       </span>
     </div>
@@ -224,13 +224,13 @@ function Timeline({ order, now }: { order: KotOrder; now: number }) {
     [Play, t("Started"), tl.started], [Check, t("Ready"), tl.ready],
   ]
   return (
-    <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b border-zinc-200 bg-zinc-50/70 px-5 py-2.5">
+    <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b border-line bg-canvas/70 px-5 py-2.5">
       <div className="flex items-center gap-5">
         {steps.map(([Icon, label, at]) => (
           <div key={label} className="flex items-center gap-1.5">
-            <Icon className={cn("size-4", at ? "text-brand-600" : "text-zinc-300")} />
-            <span className={cn("text-xs font-bold", at ? "text-zinc-700" : "text-zinc-400")}>{translate(label)}</span>
-            <span className={cn("text-xs tabular-nums", at ? "text-zinc-600" : "text-zinc-300")}>
+            <Icon className={cn("size-4", at ? "text-accent-text" : "text-muted-ink")} />
+            <span className={cn("text-xs font-bold", at ? "text-secondary-ink" : "text-muted-ink")}>{translate(label)}</span>
+            <span className={cn("text-xs tabular-nums", at ? "text-secondary-ink" : "text-muted-ink")}>
               {at ? clockOf(at) : "-"}
             </span>
           </div>
@@ -238,9 +238,9 @@ function Timeline({ order, now }: { order: KotOrder; now: number }) {
       </div>
       {p.total > 0 && (
         <div className="flex items-center gap-2">
-          <span className="text-xs font-bold tabular-nums text-zinc-600">{p.done} / {p.total} {t("ready")}</span>
-          <div className="h-1.5 w-28 overflow-hidden rounded-full bg-zinc-200">
-            <div className="h-full rounded-full bg-brand-600 transition-all"
+          <span className="text-xs font-bold tabular-nums text-secondary-ink">{p.done} / {p.total} {t("ready")}</span>
+          <div className="h-1.5 w-28 overflow-hidden rounded-full bg-muted">
+            <div className="h-full rounded-full bg-accent-fill transition-all"
               style={{ width: `${Math.round((p.done / p.total) * 100)}%` }} />
           </div>
         </div>
@@ -261,21 +261,21 @@ function Line({ it, order, busy, onAction, big }: {
     <li className={cn("flex items-center gap-3", big ? "py-3" : "py-2")}>
       <span className={cn("shrink-0 text-center font-black tabular-nums",
         big ? "w-10 text-2xl" : "w-7 text-lg",
-        done ? "rounded-lg bg-zinc-100 text-zinc-400" : "text-brand-700")}>
+        done ? "rounded-lg bg-subtle text-muted-ink" : "text-accent-ink")}>
         {Math.round(it.qty)}
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1.5">
           <VegDot veg={it.is_veg} />
           <span className={cn("truncate font-bold", big ? "text-lg" : "text-sm",
-            done ? "text-zinc-400 line-through" : "text-zinc-900")}>
+            done ? "text-muted-ink line-through" : "text-ink")}>
             {it.item_name}
           </span>
           {!done && <AllergyBadge hits={it.allergy_hits} />}
         </div>
         {it.instructions && (
           <div className={cn("mt-0.5 font-bold", big ? "text-base" : "text-xs",
-            done ? "text-zinc-400" : "text-rose-600")}>
+            done ? "text-muted-ink" : "text-danger-text")}>
             {done ? it.instructions : `! ${it.instructions}`}
           </div>
         )}
@@ -290,7 +290,7 @@ function Line({ it, order, busy, onAction, big }: {
       ) : order.accepted_at ? (
         <Button variant="outline" disabled={busy === order.name + it.name}
           onClick={() => onAction("mark_prepared", { item_row: it.name })}
-          className={cn("shrink-0 border-brand-600 text-brand-700",
+          className={cn("shrink-0 border-accent-control text-accent-ink",
             big ? "h-12 px-6 text-base" : "h-9 px-3 text-xs")}>
           {t("Mark ready")}
         </Button>
@@ -333,7 +333,7 @@ function TicketDetail({ order, onClose, onAction, busy, now, stations }: {
         kot: order.kot_no ?? "",
         dest: destination(order),
       })}
-      className="fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-zinc-200 bg-white shadow-2xl sm:w-1/2">
+      className="fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-line bg-surface shadow-2xl sm:w-1/2">
       <div className={cn("h-1.5 w-full shrink-0", tone.bar)} />
       <header className="flex shrink-0 items-start justify-between gap-4 px-5 py-4">
         <div className="min-w-0">
@@ -342,12 +342,12 @@ function TicketDetail({ order, onClose, onAction, busy, now, stations }: {
               {order.kot_no ? translate("KOT {v0}", { v0: String(order.kot_no) }) : translate("KOT - ")} · {destination(order)}
             </span>
             {order.order_type && (
-              <span className="rounded bg-brand-50 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-brand-700">
+              <span className="rounded bg-accent-subtle px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-accent-ink">
                 {translate(order.order_type)}
               </span>
             )}
           </div>
-          <div className="mt-1 text-sm text-zinc-500">
+          <div className="mt-1 text-sm text-muted-ink">
             {[order.served_by ? translate("Served by: {name}", { name: order.served_by }) : null,
               order.guests ? translate("{diners} guests", { diners: String(order.guests) }) : null,
               order.outlet_name,
@@ -360,10 +360,10 @@ function TicketDetail({ order, onClose, onAction, busy, now, stations }: {
             <div className={cn("text-3xl font-black tabular-nums leading-none", tone.text)}>
               {secs === null ? "-" : translate("{v0}m", { v0: String(Math.floor(secs / 60)) })}
             </div>
-            <div className="mt-1 text-[10px] font-bold uppercase tracking-widest text-zinc-400">{t("elapsed")}</div>
+            <div className="mt-1 text-[10px] font-bold uppercase tracking-widest text-muted-ink">{t("elapsed")}</div>
           </div>
           <button onClick={onClose} aria-label={t("Back to board")}
-            className="grid size-12 place-items-center rounded-xl border border-zinc-300 text-zinc-600 hover:bg-zinc-100">
+            className="grid size-12 place-items-center rounded-xl border border-control text-secondary-ink hover:bg-subtle">
             <X className="size-6" />
           </button>
         </div>
@@ -373,28 +373,28 @@ function TicketDetail({ order, onClose, onAction, busy, now, stations }: {
 
       <div className="flex-1 overflow-y-auto px-5 py-3">
         {order.allergy_note && (
-          <div className="mb-3 flex items-start gap-2 rounded-xl border-2 border-rose-500 bg-rose-50 px-4 py-3">
-            <TriangleAlert className="mt-0.5 size-5 shrink-0 text-rose-600" />
+          <div className="mb-3 flex items-start gap-2 rounded-xl border-2 border-rose-500 bg-danger-subtle px-4 py-3">
+            <TriangleAlert className="mt-0.5 size-5 shrink-0 text-danger-text" />
             <div>
-              <div className="text-xs font-black uppercase tracking-wide text-rose-700">{t("Guest allergy")}</div>
-              <p className="text-base font-bold text-rose-900">{order.allergy_note}</p>
+              <div className="text-xs font-black uppercase tracking-wide text-danger-ink">{t("Guest allergy")}</div>
+              <p className="text-base font-bold text-danger-ink">{order.allergy_note}</p>
             </div>
           </div>
         )}
 
         {cancelled.map((it) => (
-          <div key={it.name} className="mb-3 rounded-xl border-2 border-rose-500 bg-rose-50 px-4 py-3">
+          <div key={it.name} className="mb-3 rounded-xl border-2 border-rose-500 bg-danger-subtle px-4 py-3">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <div className="text-xs font-black tracking-wide text-rose-700">{t("CANCELLED - STOP COOKING")}</div>
-                <div className="mt-0.5 truncate text-lg font-bold text-rose-900 line-through">
+                <div className="text-xs font-black tracking-wide text-danger-ink">{t("CANCELLED - STOP COOKING")}</div>
+                <div className="mt-0.5 truncate text-lg font-bold text-danger-ink line-through">
                   {Math.round(it.qty)}× {it.item_name}
                 </div>
-                {it.void_reason && <div className="text-sm text-rose-700">{it.void_reason}</div>}
+                {it.void_reason && <div className="text-sm text-danger-ink">{it.void_reason}</div>}
               </div>
               <Button variant="outline" disabled={busy === order.name + it.name}
                 onClick={() => onAction("acknowledge_void", { item_row: it.name })}
-                className="h-12 shrink-0 border-rose-400 px-5 text-base text-rose-700">
+                className="h-12 shrink-0 border-rose-400 px-5 text-base text-danger-ink">
                 {t("Got it")}
               </Button>
             </div>
@@ -404,7 +404,7 @@ function TicketDetail({ order, onClose, onAction, busy, now, stations }: {
         {groupBy(live, (i) => i.prep_station ?? "Kitchen", stations).map(([station, items]) => (
           <div key={station}>
             <StationHead station={station} count={items.length} />
-            <ul className="divide-y divide-zinc-100">
+            <ul className="divide-y divide-line-subtle">
               {items.map((it) => (
                 <Line key={it.name} it={it} order={order} busy={busy} onAction={onAction} big />
               ))}
@@ -416,25 +416,25 @@ function TicketDetail({ order, onClose, onAction, busy, now, stations }: {
           const items = held.filter((i) => i.course === course)
           if (!items.length) return null
           return (
-            <div key={course} className="mt-4 rounded-xl border-2 border-dashed border-amber-300 bg-amber-50/40 p-3">
+            <div key={course} className="mt-4 rounded-xl border-2 border-dashed border-warning-line-strong bg-warning-subtle/40 p-3">
               <div className="mb-2 flex items-center justify-between gap-3">
-                <span className="inline-flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-amber-700">
+                <span className="inline-flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-warning-ink">
                   <Lock className="size-3.5" />{translate(course)} · {t("held")}
                 </span>
-                <Button disabled={busy === order.name + course}
+                <Button variant="warning" disabled={busy === order.name + course}
                   onClick={() => onAction("fire_kot", { course })}
-                  className="h-11 bg-amber-600 px-5 text-base hover:bg-amber-700">
+                  className="h-11 px-5 text-base">
                   <Flame className="size-4" />{t("Fire {course}", { course: translate(course).toLowerCase() })}
                 </Button>
               </div>
               <ul className="space-y-1.5">
                 {items.map((it) => (
                   <li key={it.name} className="flex items-center gap-2">
-                    <span className="w-6 shrink-0 text-center font-bold tabular-nums text-zinc-500">
+                    <span className="w-6 shrink-0 text-center font-bold tabular-nums text-muted-ink">
                       {Math.round(it.qty)}
                     </span>
                     <VegDot veg={it.is_veg} />
-                    <span className="truncate text-base text-zinc-600">{it.item_name}</span>
+                    <span className="truncate text-base text-secondary-ink">{it.item_name}</span>
                     <AllergyBadge hits={it.allergy_hits} />
                   </li>
                 ))}
@@ -444,16 +444,16 @@ function TicketDetail({ order, onClose, onAction, busy, now, stations }: {
         })}
 
         {order.notes && (
-          <div className="mt-4 flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3">
-            <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-600" />
-            <p className="text-sm font-semibold text-amber-900">
+          <div className="mt-4 flex items-start gap-2 rounded-xl border border-warning-line-strong bg-warning-subtle px-4 py-3">
+            <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning-text" />
+            <p className="text-sm font-semibold text-warning-ink">
               <span className="font-black">{t("Table note")}: </span>{order.notes}
             </p>
           </div>
         )}
       </div>
 
-      <footer className="flex shrink-0 items-center gap-3 border-t border-zinc-200 p-4">
+      <footer className="flex shrink-0 items-center gap-3 border-t border-line p-4">
         {anyDone && (
           <Button variant="outline" disabled={busy === order.name}
             onClick={() => onAction("recall_prepared", {})}
@@ -462,8 +462,8 @@ function TicketDetail({ order, onClose, onAction, busy, now, stations }: {
           </Button>
         )}
         {needsStart(order) ? (
-          <Button disabled={busy === order.name} onClick={() => onAction("accept_ticket", {})}
-            className="h-16 flex-1 justify-center bg-amber-600 text-lg font-bold hover:bg-amber-700">
+          <Button variant="warning" disabled={busy === order.name} onClick={() => onAction("accept_ticket", {})}
+            className="h-16 flex-1 justify-center text-lg font-bold">
             <Play className="size-6" />{t("Start")}
           </Button>
         ) : anyCooking ? (
@@ -588,19 +588,19 @@ export default function Kitchen() {
 
   return (
     <div ref={rootRef} className={cn(
-      "flex h-full min-h-0 flex-col bg-zinc-100",
+      "flex h-full min-h-0 flex-col bg-subtle",
       kioskOn && "p-0",
     )}>
     <div className={cn("flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-3 transition-[padding] duration-200",
       open && "sm:pr-[calc(50vw+1rem)]")}>
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
-        <h1 className="flex items-center gap-2 text-xl font-bold text-zinc-800">
-          <ChefHat className="size-5 text-brand-600" />{t("Kitchen pass")}
-          <span className="text-sm font-medium text-zinc-400">{t("{n} tickets", { n: orders.length })}</span>
+        <h1 className="flex items-center gap-2 text-xl font-bold text-ink">
+          <ChefHat className="size-5 text-accent-text" />{t("Kitchen pass")}
+          <span className="text-sm font-medium text-muted-ink">{t("{n} tickets", { n: orders.length })}</span>
         </h1>
         <div className="flex flex-wrap items-center gap-2">
           <select
-            className="rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm"
+            className="rounded-lg border border-control bg-surface px-2.5 py-1.5 text-sm"
             value={outlet} onChange={(e) => setOutlet(e.target.value)}>
             <option value="">{t("All outlets")}</option>
             {outlets.map((o) => <option key={o.name} value={o.name}>{o.outlet_name}</option>)}
@@ -616,9 +616,9 @@ export default function Kitchen() {
                   })
                   : t("Tickets for this printer print on this device's default printer."))}>
               <span className={cn("size-2 rounded-full",
-                !printStation.printer ? "bg-zinc-300" : printStation.error ? "bg-rose-500" : "bg-emerald-500")} />
+                !printStation.printer ? "bg-fill-strong" : printStation.error ? "bg-rose-500" : "bg-emerald-500")} />
               <select
-                className="rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm"
+                className="rounded-lg border border-control bg-surface px-2.5 py-1.5 text-sm"
                 value={printStation.printer} onChange={(e) => printStation.choose(e.target.value)}>
                 <option value="">{t("Don't print here")}</option>
                 {stationPrinters.map((p) => (
@@ -627,53 +627,53 @@ export default function Kitchen() {
               </select>
             </label>
           )}
-          <div className="flex flex-wrap rounded-lg border border-zinc-200 bg-white p-0.5 text-sm">
+          <div className="flex flex-wrap rounded-lg border border-line bg-surface p-0.5 text-sm">
             {["", ...stations].map((s) => (
               <button key={s} onClick={() => setStation(s)}
                 className={"rounded-md px-3 py-1.5 font-medium " +
-                  (station === s ? "bg-brand-600 text-white" : "text-zinc-600")}>
+                  (station === s ? "bg-accent-fill text-on-solid" : "text-secondary-ink")}>
                 {s ? t(s) : t("All")}
               </button>
             ))}
           </div>
           {kioskOn && (
             <button type="button" onClick={exitFloor}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm font-medium text-zinc-600 hover:bg-zinc-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-control bg-surface px-2.5 py-1.5 text-sm font-medium text-secondary-ink hover:bg-canvas"
               title={translate("Show the app menu (Esc)")}>
               <Menu className="size-4" />{translate("Menu")}</button>
           )}
           <button onClick={toggleSound}
             aria-pressed={sound}
             className={cn("inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-sm font-medium",
-              sound ? "border-amber-300 bg-amber-50 text-amber-700" : "border-zinc-300 bg-white text-zinc-400")}>
+              sound ? "border-warning-line-strong bg-warning-subtle text-warning-ink" : "border-control bg-surface text-muted-ink")}>
             {sound ? <Bell className="size-4" /> : <BellOff className="size-4" />}
             {t("Sound {state}", { state: sound ? t("on") : t("off") })}
           </button>
           <button onClick={toggleFocus}
             className={cn("rounded-lg border p-2",
               kioskOn
-                ? "border-brand-600 bg-brand-50 text-brand-800"
-                : "border-zinc-300 bg-white text-zinc-600 hover:bg-zinc-50")}
+                ? "border-accent-control bg-accent-subtle text-accent-ink"
+                : "border-control bg-surface text-secondary-ink hover:bg-canvas")}
             title={(kioskOn ? t("Show PMS menus (Esc)") : t("Focus mode - hide PMS menus"))}>
             <Focus className="size-4" />
           </button>
           <button onClick={toggleBrowserFs}
-            className="rounded-lg border border-zinc-300 bg-white p-2 text-zinc-600 hover:bg-zinc-50"
+            className="rounded-lg border border-control bg-surface p-2 text-secondary-ink hover:bg-canvas"
             title={(browserFs ? t("Exit full screen (Esc)") : t("Browser full screen"))}>
             {browserFs ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
           </button>
           <button onClick={() => { exitFloor(); navigate("/") }}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-2.5 py-2 text-xs font-semibold text-zinc-600 hover:bg-zinc-50"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-control bg-surface px-2.5 py-2 text-xs font-semibold text-secondary-ink hover:bg-canvas"
             title={t("Exit the kitchen pass - back to the PMS")}>
             <LogOut className="size-4" />
             <span className="hidden xl:inline">{t("Exit")}</span>
           </button>
-          <button onClick={load} aria-label={t("Refresh")}><RefreshCw className="size-5 text-zinc-400" /></button>
+          <button onClick={load} aria-label={t("Refresh")}><RefreshCw className="size-5 text-muted-ink" /></button>
         </div>
       </div>
 
       {orders.length === 0 ? (
-        <div className="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-zinc-300 p-12 text-center text-zinc-400">
+        <div className="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-control p-12 text-center text-muted-ink">
           {t("No open tickets. The kitchen is clear.")}
         </div>
       ) : (
@@ -693,17 +693,17 @@ export default function Kitchen() {
             const waiting = needsStart(o)
             return (
               <div key={o.name}
-                className={cn("flex flex-col overflow-hidden rounded-2xl border-2 bg-white",
+                className={cn("flex flex-col overflow-hidden rounded-2xl border-2 bg-surface",
                   cancelled.length ? "border-rose-500" : tone.border)}>
                 <div className={cn("h-1.5 w-full", tone.bar)} />
                 <button onClick={() => setOpenOrder(o.name)}
-                  className="w-full px-3 py-2 text-left hover:bg-zinc-50">
+                  className="w-full px-3 py-2 text-left hover:bg-canvas">
                   <div className="flex items-start justify-between gap-2">
-                    <span className="min-w-0 text-[10px] font-black uppercase tracking-wider text-zinc-400">
+                    <span className="min-w-0 text-[10px] font-black uppercase tracking-wider text-muted-ink">
                       {o.kot_no ? translate("KOT {v0} · ", { v0: String(o.kot_no) }) : ""}{o.order_type}
                     </span>
                     <span className={cn("shrink-0 text-[10px] font-black uppercase tracking-wider",
-                      waiting ? "text-amber-700" : tone.text)}>
+                      waiting ? "text-warning-ink" : tone.text)}>
                       {waiting
                         ? (statusWord(secs) === "LATE" ? t("LATE") : t("WAITING"))
                         : statusWord(secs) === "HELD" ? t("HELD")
@@ -713,19 +713,19 @@ export default function Kitchen() {
                     </span>
                   </div>
                   <div className="flex items-end justify-between gap-2">
-                    <span className="min-w-0 truncate text-lg font-bold text-zinc-900">{destination(o)}</span>
+                    <span className="min-w-0 truncate text-lg font-bold text-ink">{destination(o)}</span>
                     <span className={cn("inline-flex shrink-0 items-center gap-1 text-lg font-black tabular-nums", tone.text)}>
                       <Clock className="size-4" />{secs === null ? "-" : translate("{v0}m", { v0: String(Math.floor(secs / 60)) })}
                     </span>
                   </div>
-                  <div className="truncate text-xs text-zinc-400">
+                  <div className="truncate text-xs text-muted-ink">
                     {[o.guests ? translate("{diners} guests", { diners: String(o.guests) }) : null,
                       o.served_by].filter(Boolean).join(" · ")}
                   </div>
                   {(() => {
                     const tl = timeline(o)
                     return (
-                      <div className="truncate text-[11px] tabular-nums text-zinc-500">
+                      <div className="truncate text-[11px] tabular-nums text-muted-ink">
                         {[tl.fired ? translate("Fired {time}", { time: clockOf(tl.fired) }) : null,
                           tl.started ? translate("Started {time}", { time: clockOf(tl.started) }) : null]
                           .filter(Boolean).join(" · ")}
@@ -735,7 +735,7 @@ export default function Kitchen() {
                   {tags.length > 0 && (
                     <div className="mt-1.5 flex flex-wrap gap-1">
                       {tags.map((t) => (
-                        <span key={t} className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-500">
+                        <span key={t} className="rounded bg-subtle px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-ink">
                           {translate(t)}
                         </span>
                       ))}
@@ -744,7 +744,7 @@ export default function Kitchen() {
                 </button>
 
                 {o.allergy_note && (
-                  <div className="flex items-center gap-1.5 bg-rose-600 px-3 py-1 text-xs font-black uppercase tracking-wide text-white">
+                  <div className="flex items-center gap-1.5 bg-danger-fill px-3 py-1 text-xs font-black uppercase tracking-wide text-on-solid">
                     <TriangleAlert className="size-3.5 shrink-0" />
                     <span className="truncate">{o.allergy_note}</span>
                   </div>
@@ -752,19 +752,19 @@ export default function Kitchen() {
 
                 {cancelled.length > 0 && (
                   <button onClick={() => setOpenOrder(o.name)}
-                    className="flex items-center gap-1.5 bg-rose-50 px-3 py-1.5 text-left text-xs font-black text-rose-700">
+                    className="flex items-center gap-1.5 bg-danger-subtle px-3 py-1.5 text-left text-xs font-black text-danger-ink">
                     <TriangleAlert className="size-3.5 shrink-0" />
                     {cancelled.length} {t("CANCELLED - STOP")}
                   </button>
                 )}
 
-                <div className="flex-1 border-t border-zinc-100 px-3">
+                <div className="flex-1 border-t border-line-subtle px-3">
                   {groupBy(live, (i) => i.course, courses).map(([course, items]) => (
                     <div key={course}>
-                      <div className="pt-2 text-[10px] font-black uppercase tracking-wider text-zinc-400">
+                      <div className="pt-2 text-[10px] font-black uppercase tracking-wider text-muted-ink">
                         {t(course)}
                       </div>
-                      <ul className="divide-y divide-zinc-50">
+                      <ul className="divide-y divide-line-subtle">
                         {items.map((it) => (
                           <Line key={it.name} it={it} order={o} busy={busy}
                             onAction={(fn, params) => act(o.name, fn, params)} />
@@ -775,29 +775,29 @@ export default function Kitchen() {
                 </div>
 
                 {p.total > 0 && (
-                  <div className="px-3 py-1 text-right text-[11px] font-bold tabular-nums text-zinc-400">
+                  <div className="px-3 py-1 text-right text-[11px] font-bold tabular-nums text-muted-ink">
                     {p.done} {t("of")} {p.total} {t("ready")}
                   </div>
                 )}
 
                 {o.notes && (
-                  <div className="mx-3 mb-1 flex items-start gap-1 rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">
+                  <div className="mx-3 mb-1 flex items-start gap-1 rounded-md bg-warning-subtle px-2 py-1 text-xs font-semibold text-warning-ink">
                     <TriangleAlert className="mt-px size-3 shrink-0" />{o.notes}
                   </div>
                 )}
 
                 {o.held_courses.map((course) => (
-                  <div key={course} className="mx-2 mb-2 rounded-lg border border-dashed border-amber-300 bg-amber-50/50 p-1.5">
+                  <div key={course} className="mx-2 mb-2 rounded-lg border border-dashed border-warning-line-strong bg-warning-subtle/50 p-1.5">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="inline-flex items-center gap-1 truncate text-[10px] font-black uppercase tracking-wider text-amber-700">
+                      <span className="inline-flex items-center gap-1 truncate text-[10px] font-black uppercase tracking-wider text-warning-ink">
                         <Lock className="size-3" />{t("{course} held · {n}", {
                           course,
                           n: held.filter((i) => i.course === course).length,
                         })}
                       </span>
-                      <Button disabled={busy === o.name + course}
+                      <Button variant="warning" disabled={busy === o.name + course}
                         onClick={() => act(o.name, "fire_kot", { course })}
-                        className="h-9 shrink-0 bg-amber-600 px-3 text-xs hover:bg-amber-700">
+                        className="h-9 shrink-0 px-3 text-xs">
                         <Flame className="size-3.5" />{t("Fire")}
                       </Button>
                     </div>
@@ -809,7 +809,7 @@ export default function Kitchen() {
                     {waiting ? (
                       <Button variant="outline" disabled={busy === o.name}
                         onClick={() => act(o.name, "accept_ticket", {})}
-                        className="h-11 w-full justify-center border-amber-400 text-amber-700 hover:bg-amber-50">
+                        className="h-11 w-full justify-center border-amber-400 text-warning-ink hover:bg-warning-subtle">
                         <Play className="size-4" />{t("Start")}
                       </Button>
                     ) : (

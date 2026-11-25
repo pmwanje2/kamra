@@ -40,7 +40,7 @@ export default function ConnectionBanner() {
   return (
     <div
       role="status"
-      className="fixed inset-x-0 top-0 z-[100] flex items-center justify-center gap-2 bg-amber-500 px-4 py-1.5 text-sm font-medium text-white shadow"
+      className="fixed inset-x-0 top-0 z-[100] flex items-center justify-center gap-2 bg-warning-fill px-4 py-1.5 text-sm font-medium text-on-solid shadow"
     >
       <WifiOff className="size-4" aria-hidden />
       {t("Connection lost - reconnecting…")}

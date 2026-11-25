@@ -57,7 +57,7 @@ export function TariffNight({ tariff, agreed_rate }: TariffReference) {
     rate: formatFxRate(tariff.fx_rate, locale),
     date: tariffDate(tariff.fx_date, locale),
   })}
-    {changes.map((night) => <span key={night.date} className="block text-xs text-zinc-600">
+    {changes.map((night) => <span key={night.date} className="block text-xs text-secondary-ink">
       {t("{date}: {contract} · {home}", {
         date: tariffDate(night.date, locale),
         contract: currencyText(tariff.currency, night.nightly, locale),
@@ -75,7 +75,7 @@ export function ReferenceCurrencyNote({ reference }: { reference?: ReferenceCurr
   const current = reference.calculation === "CURRENT"
   const nights = reference.posted_nights ?? 0
   const hasTotals = reference.grand_total_reference != null && reference.balance_reference != null
-  return <p data-reference-currency className="mb-3 text-sm text-zinc-600 tabular-nums"
+  return <p data-reference-currency className="mb-3 text-sm text-secondary-ink tabular-nums"
     title={current ? t("Converted at today's published rate.") : t("Converted at the rate the stay was priced or posted at.")}>
     {t(current ? "Reference currency {currency} · Current: 1 {currency} = {rate} {home} ({date})"
       : "Reference currency {currency} · Actual: 1 {currency} = {rate} {home} ({date})", {
@@ -83,7 +83,7 @@ export function ReferenceCurrencyNote({ reference }: { reference?: ReferenceCurr
       date: reference.fx_date ? tariffDate(reference.fx_date, locale) : "—",
     })}
     {nights > 0 && <> · {tn(nights, "Rate {n} night posted at", "Average of the rates {n} nights posted at")}</>}
-    {hasTotals && <span className="block font-medium text-zinc-800">{t("Total {total} · Balance {balance}", {
+    {hasTotals && <span className="block font-medium text-ink">{t("Total {total} · Balance {balance}", {
       total: currencyText(reference.currency, reference.grand_total_reference!, locale),
       balance: currencyText(reference.currency, reference.balance_reference!, locale),
     })}</span>}
