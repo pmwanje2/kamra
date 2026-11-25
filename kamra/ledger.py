@@ -2277,7 +2277,9 @@ def generate_proforma(folio: str, notes: str | None = None,
 	from kamra.api import folio_invoice
 	inv = folio_invoice(folio)
 	f = inv["folio"]
-	adjustment = _money(inv.get("settlement_balance", f.get("balance"))) - _money(f.get("balance"))
+	settlement = _money(inv.get("settlement_balance", f.get("balance")))
+	ledger_balance = _money(f.get("balance"))
+	adjustment = settlement - ledger_balance
 	if cint(include_projected):
 		inv["projected_lines"] = _projected_lines(f)
 		places = max(_currency_places(f.get("property")), 2)
@@ -2292,17 +2294,17 @@ def generate_proforma(folio: str, notes: str | None = None,
 			raw_base = sum((_money(l.get("amount")) for l in all_lines), Decimal(0))
 			raw_tax = sum((_money(l.get("gst_amount")) for l in all_lines), Decimal(0))
 			currency = property_currency(f.get("property"))
-			est_grand_dec = (
+			rounded_ledger_estimate = (
 				round_rate_amount(raw_base + raw_tax, 0, "Nearest", currency)
 				if raw_tax
 				else raw_base
 			)
-			ahead_dec = est_grand_dec - posted_dec
-		if "payments_total" in f:
-			est_balance_dec = est_grand_dec - _money(f.get("payments_total"))
-		else:
-			est_balance_dec = _money(f.get("balance")) + ahead_dec
-		est_balance_dec += adjustment
+			# The printed total may already be the replacement invoice. Only the
+			# incremental, unposted charges belong on top of that invoice.
+			posted_ledger = ledger_balance + _money(f["payments_total"]) if "payments_total" in f else posted_dec
+			ahead_dec = rounded_ledger_estimate - posted_ledger
+			est_grand_dec = posted_dec + ahead_dec
+		est_balance_dec = settlement + ahead_dec
 		inv["estimate"] = {
 			"posted_total": _round_currency(posted_dec, places),
 			"projected_total": _round_currency(ahead_dec, places),
