@@ -11,6 +11,52 @@ from kamra.tests.audit_fixtures import (
 from kamra.tests.bridge_fields import ensure_bridge_field
 
 
+class ReservationWindowInvoiceTest(AuditTestCase):
+	@classmethod
+	def setUpClass(cls):
+		# The standalone test site has no ERPNext. Provision the invoice read
+		# model on its own connection so schema setup cannot commit another test.
+		outer = frappe.local.db
+		frappe.connect(set_admin_as_user=False)
+		cls.addClassCleanup(setattr, frappe.local, "db", outer)
+		cls.addClassCleanup(frappe.local.db.close)
+		super().setUpClass()
+		ensure_bridge_field("Folio", "sales_invoice")
+		ensure_bridge_field("Property", "company")
+		if not frappe.db.exists("DocType", "Sales Invoice"):
+			from frappe.core.doctype.doctype.test_doctype import new_doctype
+
+			fields = (("kamra_ref", "Data"), ("company", "Data"), ("currency", "Data"),
+			          ("grand_total", "Currency"), ("rounded_total", "Currency"),
+			          ("is_return", "Check"), ("return_against", "Data"),
+			          ("update_outstanding_for_self", "Check"))
+			# An unregistered invoice table may hold data from an earlier install.
+			if frappe.db.table_exists("Sales Invoice"):
+				raise RuntimeError("Cannot provision the Sales Invoice fixture over an existing table")
+			schema = new_doctype("Sales Invoice", fields=[
+				{"fieldname": key, "label": key.replace("_", " ").title(), "fieldtype": kind}
+				for key, kind in fields
+			], is_submittable=1).insert()
+			# Deleting DocType metadata leaves the SQL table behind.
+			cls.addClassCleanup(frappe.db.sql_ddl, "DROP TABLE `tabSales Invoice`")
+			cls.addClassCleanup(frappe.delete_doc, "DocType", schema.name, force=True)
+
+	def test_bridged_invoice_in_reservation_windows(self):
+		company = "Window Invoice Test Company"
+		make_property(PROP_A, business_date=TODAY)
+		frappe.db.set_value("Property", PROP_A, "company", company)
+		frappe.clear_document_cache("Property", PROP_A)
+		res = make_reservation(PROP_A, make_room_type(PROP_A), TODAY, d(2))
+		name = folio.open_folio(res)
+		invoice = frappe.get_doc({
+			"doctype": "Sales Invoice", "name": "SI-DESK", "docstatus": 1,
+			"kamra_ref": name, "company": company, "currency": "INR", "is_return": 0,
+		})
+		invoice.db_insert()
+		frappe.db.set_value("Folio", name, {"sales_invoice": invoice.name, "invoice_number": None})
+		self.assertEqual(api.reservation_folios(res.name)[0].get("sales_invoice"), "SI-DESK")
+
+
 class FolioCreditAndAdvanceTest(AuditTestCase):
 	@classmethod
 	def setUpClass(cls):
@@ -21,12 +67,6 @@ class FolioCreditAndAdvanceTest(AuditTestCase):
 		super().setUp()
 		make_property(PROP_A, business_date=TODAY)
 		self.room_type = make_room_type(PROP_A)
-
-	def test_bridged_invoice_in_reservation_windows(self):
-		res = make_reservation(PROP_A, self.room_type, TODAY, d(2))
-		name = folio.open_folio(res)
-		frappe.db.set_value("Folio", name, {"sales_invoice": "SI-DESK", "invoice_number": None})
-		self.assertEqual(api.reservation_folios(res.name)[0].get("sales_invoice"), "SI-DESK")
 
 	def test_credit_status_uses_submitted_returns_and_clears_when_cancelled(self):
 		source = frappe._dict(name="FO-TEST", property=PROP_A, sales_invoice="SI-DESK",
