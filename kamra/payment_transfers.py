@@ -127,6 +127,10 @@ def _record_transfer_ledger(src_doc, dst_doc, orig, src_row, dst_row, amt: Decim
 			business_date=business_date,
 		)
 
+	if deposit_leg:
+		from kamra.folio import sync_deposit_payment_totals
+		sync_deposit_payment_totals(src_doc, dst_doc)
+
 
 @frappe.whitelist(methods=["POST"])
 @require_roles("Front Desk", "Finance")
@@ -179,10 +183,10 @@ def transfer_folio_payment(
 
 	def _transfer_once():
 		# Deterministic sorted lock [min, max] prevents AB/BA deadlocks.
-		_lock_folio_scope(folios=sorted({from_folio, to_folio}))
+		_lock_folio_scope(folios=sorted({from_folio, to_folio}), include_guest_windows=True)
 
-		src = frappe.get_doc("Folio", from_folio)
-		dst = frappe.get_doc("Folio", to_folio)
+		src = frappe.get_doc("Folio", from_folio, for_update=True)
+		dst = frappe.get_doc("Folio", to_folio, for_update=True)
 		assert_property_access(src.property)
 		assert_property_access(dst.property)
 		if src.property != dst.property:

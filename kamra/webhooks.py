@@ -396,10 +396,10 @@ def _payment(folio, row) -> dict:
 		"payment": {"row": row.get("name"), "kind": row.get("payment_kind"),
 		            "mode": row.get("mode"),
 		            "posting_date": _s(row.get("posting_date")),
-		            "amount": _money(abs(float(row.get("amount") or 0))),
+		            "amount": abs(float(row.get("amount") or 0)),
 		            "reference": row.get("reference")},
 		"currency": _currency(folio.property),
-		"balance": _money(folio.get("balance")),
+		"balance": float(folio.get("balance") or 0),
 	}
 
 

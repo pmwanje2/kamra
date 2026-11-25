@@ -1694,15 +1694,18 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 	if float(amount) <= 0:
 		frappe.throw("Amount must be positive.")
 	_pin_guard(folio, pin)
+	if kind in ("Advance", "Security Deposit"):
+		from kamra.folio import lock_guest_deposit_windows
+		lock_guest_deposit_windows(frappe.db.get_value("Folio", folio, "reservation"))
 	key = (idempotency_key or "").strip() or None
-	if key:
-		# serialize posts on this folio so a double submit sees the first
-		frappe.db.get_value("Folio", folio, "name", for_update=True)
-		if _paid_with_key(key, folio=folio):
-			out = frappe.get_doc("Folio", folio).as_dict()
-			out["idempotent_replay"] = 1
-			return out
-	doc = frappe.get_doc("Folio", folio)
+	if key or kind in ("Advance", "Security Deposit"):
+		doc = frappe.get_doc("Folio", folio, for_update=True)
+	else:
+		doc = frappe.get_doc("Folio", folio)
+	if key and any(p.get("idempotency_key") == key for p in doc.payments):
+		out = doc.as_dict()
+		out["idempotent_replay"] = 1
+		return out
 	if doc.status == "Closed":
 		frappe.throw(_("This folio is closed. Record corrections through a credit note or reopen per policy."))
 	from kamra.traces import assert_no_blocking_alerts
@@ -1787,6 +1790,8 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 		):
 			_ledger_mod.sync_folio_rounding_ledger(doc, session=sess)
 	except Exception:
+		if kind in ("Advance", "Security Deposit"):
+			raise
 		frappe.log_error(title="ledger payment write failed")
 	if kind in ("Advance", "Security Deposit"):
 		from kamra.webhooks import emit_payment
@@ -1849,6 +1854,8 @@ def add_folio_payments(payments, pin: str | None = None):
 	# caller keeps the transaction open (a request would roll back anyway)
 	frappe.db.savepoint("split_payment")
 	try:
+		if any(row.get("kind") in ("Advance", "Security Deposit") for row in payments):
+			_lock_folio_scope(folios=[row["folio"] for row in payments], include_guest_windows=True)
 		for row in payments:
 			add_folio_payment(
 				row["folio"], row["mode"], float(row["amount"]),
@@ -1921,6 +1928,8 @@ def correct_folio_payment(folio: str, payment_row: str, action: str | None = Non
                           action_type: str | None = None, reason_note: str | None = None):
 	from kamra.authz import SUPERVISOR_ROLES, verify_supervisor
 	from kamra.corrections import correct
+	from kamra.folio import lock_guest_deposit_windows
+	lock_guest_deposit_windows(frappe.db.get_value("Folio", folio, "reservation"))
 	doc = frappe.get_doc("Folio", folio, for_update=True)
 	script = _booked_correction_script(doc, payment_row, "correct_folio_payment")
 	if script:
@@ -1957,14 +1966,12 @@ def refund_folio_payment(folio: str, amount: float | None = None,
 	a foreign-currency refund so the foreign drawer and tender stay aligned.
 	A retry with the same idempotency_key returns the first refund instead of
 	paying out twice."""
+	from kamra.folio import lock_guest_deposit_windows
+	lock_guest_deposit_windows(frappe.db.get_value("Folio", folio, "reservation"))
 	key = (idempotency_key or "").strip() or None
-	if key:
-		# serialize refunds on this folio so a double submit sees the first
-		frappe.db.get_value("Folio", folio, "name", for_update=True)
-		if _paid_with_key(key, folio=folio):
-			return {"ok": True, "idempotent_replay": 1,
-			        "balance": frappe.db.get_value("Folio", folio, "balance")}
-	doc = frappe.get_doc("Folio", folio)
+	doc = frappe.get_doc("Folio", folio, for_update=True)
+	if key and any(p.get("idempotency_key") == key for p in doc.payments):
+		return {"ok": True, "idempotent_replay": 1, "balance": doc.balance}
 	from decimal import ROUND_HALF_UP, Decimal
 
 	from babel.numbers import get_currency_precision
@@ -2081,7 +2088,7 @@ def refund_folio_payment(folio: str, amount: float | None = None,
 	                             reason_code=reason_code,
 	                             supervisor_pin=supervisor_pin,
 	                             refund_of=payment_row, idempotency_key=key,
-	                             fx=fx_meta)
+	                             fx=fx_meta, locked_doc=doc)
 
 
 def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
@@ -2093,7 +2100,7 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
                           idempotency_key: str | None = None, correction: dict | None = None,
                           bookkeeping_action: str | None = None, session: str | None = None,
                           allow_closed: bool = False,
-                          fx: dict | None = None, *, security_deposit_refund: bool = False):
+                          fx: dict | None = None, *, security_deposit_refund: bool = False, locked_doc=None):
 	"""The one refund writer (folio row, till, ledger). Not whitelisted:
 	ledger lets a security-deposit refund release the Deposit ledger -
 	callers that pass it have already checked the deposit's balance.
@@ -2105,7 +2112,10 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 	if not (reason or "").strip() and not reason_code:
 		frappe.throw("A refund reason is required.")
 	_pin_guard(folio, pin)
-	doc = frappe.get_doc("Folio", folio)
+	if locked_doc is None:
+		from kamra.folio import lock_guest_deposit_windows
+		lock_guest_deposit_windows(frappe.db.get_value("Folio", folio, "reservation"))
+	doc = locked_doc or frappe.get_doc("Folio", folio, for_update=True)
 	if doc.status == "Closed" and not (allow_closed and ledger == "Deposit"):
 		frappe.throw("This folio is closed - refunds need a credit note "
 		             "via allowance on a new folio.")
@@ -2136,7 +2146,8 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 		supervisor_pin=supervisor_pin, property=doc.property)
 	unit_calc = Decimal(1).scaleb(-places)
 	if not ledger:
-		from kamra.folio import _legacy_security_deposit_refunded, _security_deposit_row_ids
+		from kamra.folio import _legacy_security_deposit_refunded, _security_deposit_row_ids, sync_deposit_payment_totals
+		sync_deposit_payment_totals(doc)
 		sec_idx = _security_deposit_row_ids(doc)
 		received = sum(
 			(_money(p.amount) for idx, p in enumerate(doc.payments)
@@ -2227,7 +2238,7 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 		):
 			_ledger_mod.sync_folio_rounding_ledger(doc, session=sess)
 	except Exception:
-		if correction or security_deposit_refund:
+		if correction or ledger == "Deposit":
 			raise
 		frappe.log_error(title="ledger refund write failed")
 	if bookkeeping_action:
@@ -2241,7 +2252,7 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 		emit_payment("deposit.refunded", doc, pay)
 	if release_advance and doc.reservation:
 		paid = frappe.db.get_value(
-			"Reservation", doc.reservation, "advance_paid") or 0
+			"Reservation", doc.reservation, "advance_paid", for_update=True) or 0
 		frappe.db.set_value(
 			"Reservation", doc.reservation, "advance_paid",
 			max(0.0, _round_currency(_money(paid) - amount_dec, places)))
@@ -2265,13 +2276,13 @@ def _prearrival_advance_refund_ledger(doc) -> str | None:
 	(record_payment_ledger defaults Refund → Guest)."""
 	if not doc.reservation:
 		return None
-	status = frappe.db.get_value("Reservation", doc.reservation, "status")
+	status = frappe.db.get_value("Reservation", doc.reservation, "status", for_update=True)
 	if status not in ("Confirmed", "Held", "Pending Payment", "Waitlist"):
 		return None
 	held = float(frappe.db.sql(
 		"""SELECT COALESCE(SUM(credit - debit), 0)
 		   FROM `tabFolio Ledger Entry`
-		   WHERE folio = %s AND ledger = 'Deposit'""",
+		   WHERE folio = %s AND ledger = 'Deposit' FOR UPDATE""",
 		(doc.name,))[0][0] or 0)
 	return "Deposit" if held > 0 else None
 
@@ -2411,7 +2422,7 @@ def _is_snapshot_conflict(exc: Exception) -> bool:
 	return "Record has changed since last read" in str(exc)
 
 
-def _lock_folio_scope(reservations=(), folios=()) -> None:
+def _lock_folio_scope(reservations=(), folios=(), *, include_guest_windows=False) -> None:
 	"""Lock Reservations and every Folio a posting/correction/split/move may
 	touch in one canonical order (Reservation ascending, then Folio ascending)
 	before any write, so concurrent writers serialize cleanly without AB/BA
@@ -2471,7 +2482,12 @@ def _lock_folio_scope(reservations=(), folios=()) -> None:
 			pluck="name",
 		):
 			folio_ids.add(fname)
-	if folio_ids:
+	if include_guest_windows and res_ids and folio_ids:
+		frappe.db.sql(
+			"""SELECT name FROM `tabFolio` WHERE name IN %s OR (reservation IN %s AND folio_type = 'Guest')
+			   ORDER BY name FOR UPDATE""", (tuple(sorted(folio_ids)), tuple(sorted(res_ids))),
+		)
+	elif folio_ids:
 		frappe.db.sql(
 			"SELECT name FROM `tabFolio` WHERE name IN %s ORDER BY name FOR UPDATE",
 			(tuple(sorted(folio_ids)),),

@@ -989,8 +989,8 @@ def withhold_deposit(reservation: str, amount: float, reason: str,
 	"""Keep all or part of the held deposit against damage. The withheld
 	part becomes a charge on the folio (revenue, Guest ledger) and the same
 	amount moves out of the Deposit ledger to pay it."""
-	res = _reservation(reservation)
-	dep = _get(res.name)
+	res = _reservation(reservation, for_update=True)
+	dep = _get(res.name, for_update=True)
 	amt = flt(amount)
 	if amt <= 0:
 		frappe.throw(_("Enter the amount to withhold."))
@@ -1005,6 +1005,9 @@ def withhold_deposit(reservation: str, amount: float, reason: str,
 	if not folio or frappe.db.get_value("Folio", folio, "status") == "Closed":
 		frappe.throw(_("The guest folio is closed - withhold before closing it."))
 	from kamra.api import _pin_guard, _post_folio_charge
+	if dep.refunded_amount:
+		from kamra.folio import lock_guest_deposit_windows
+		lock_guest_deposit_windows(res.name)
 	_pin_guard(folio, pin)
 
 	reason = reason.strip()
@@ -1024,6 +1027,9 @@ def withhold_deposit(reservation: str, amount: float, reason: str,
 	fdoc = frappe.get_doc("Folio", folio)
 	_recalculate(fdoc)
 	fdoc.save(ignore_permissions=True)
+	if dep.refunded_amount:
+		from kamra.folio import sync_deposit_payment_totals
+		sync_deposit_payment_totals(fdoc)
 	from kamra.savings import log_action
 	log_action("withhold_security_deposit", "Reservation", res.name,
 	           res.property, rationale=f"Withheld {_fmt_currency(amt, display)}: {reason}")
@@ -1058,13 +1064,17 @@ def apply_held_to_bill(res) -> float:
 		return 0.0
 	from kamra.ledger import _fmt_currency
 	_rplaces, display, eps = _deposit_precision(res.property)
-	dep = frappe.get_doc("Security Deposit", name)
+	frappe.db.get_value("Reservation", res.name, "name", for_update=True)
+	dep = frappe.get_doc("Security Deposit", name, for_update=True)
 	amt = flt(dep.balance)
 	if amt <= eps:
 		return 0.0
 	folio = _guest_folio(res)
 	if not folio:
 		return 0.0
+	if dep.refunded_amount:
+		from kamra.folio import lock_guest_deposit_windows
+		lock_guest_deposit_windows(res.name)
 	_transfer_to_guest(res, folio, dep, amt, "Deposit applied to the bill")
 	dep.withheld_amount = flt(dep.withheld_amount) + amt
 	dep.reason = "\n".join(filter(None, [  # nosemgrep: frappe-no-functional-code -- drops an empty previous reason
@@ -1075,6 +1085,9 @@ def apply_held_to_bill(res) -> float:
 	fdoc = frappe.get_doc("Folio", folio)
 	_recalculate(fdoc)
 	fdoc.save(ignore_permissions=True)
+	if dep.refunded_amount:
+		from kamra.folio import sync_deposit_payment_totals
+		sync_deposit_payment_totals(fdoc)
 	from kamra.savings import log_action
 	log_action("apply_security_deposit", "Reservation", res.name,
 	           res.property,
@@ -1089,13 +1102,14 @@ def refund_deposit(reservation: str, amount: float | None = None,
 	from kamra.api import _refund_folio_payment
 	from kamra.folio import (
 		_security_deposit_row_ids, allocate_historical_security_refunds,
-		guest_security_windows, refundable_security_on_folio,
+		guest_security_windows, lock_guest_deposit_windows, refundable_security_on_folio,
 	)
 	from kamra.ledger import _fmt_currency, _money, _parse_currency_amount, _round_currency
 	from kamra.localization import pack_for, payment_modes
 	from kamra.savings import log_action
 
 	res = _reservation(reservation, for_update=True)
+	lock_guest_deposit_windows(res.name)
 	dep = _get(res.name, for_update=True)
 	rplaces, display, _eps = _deposit_precision(res.property)
 	unit = Decimal(1).scaleb(-display)
@@ -1151,16 +1165,16 @@ def refund_deposit(reservation: str, amount: float | None = None,
 			tender = mode or _last_mode(name) or "Cash"
 			if tender not in modes:
 				frappe.throw(_("Pick a payment mode: {0}.").format(", ".join(modes)))
-			_refund_folio_payment(name, float(part), tender, text[:140], pin=pin,
-			                      ledger="Deposit", allow_closed=True, security_deposit_refund=True)
-			# The next window reads the stay total to distinguish legacy refunds
-			# from recorded legs. Advance that total with each successful posting.
+			# The post-ledger allocation must see this leg in the stay total.
+			# The savepoint rolls both writes back if cash posting fails.
 			dep.refunded_amount = _round_currency(_money(dep.refunded_amount) + part, rplaces)
 			dep.refund_reference = text[:140]
 			dep.balance = _round_currency(
 				_money(dep.collected_amount) - _money(dep.withheld_amount) - _money(dep.refunded_amount), rplaces)
 			_settle_status(dep, res)
 			dep.save(ignore_permissions=True)
+			_refund_folio_payment(name, float(part), tender, text[:140], pin=pin,
+			                      ledger="Deposit", allow_closed=True, security_deposit_refund=True)
 			details.append(f"{tender} deposit refund {_fmt_currency(part, display)}")
 		log_action("refund_security_deposit", "Reservation", res.name, res.property,
 		           rationale=", ".join(details))

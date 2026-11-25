@@ -524,6 +524,9 @@ def record_payment_ledger(folio_doc, payment_row, session: str | None = None,
 		source_doctype=SECURITY_DEPOSIT_REFUND_SOURCE if security_deposit_refund else "Folio Payment",
 		source_name=payment_row.get("name"),
 	)
+	if ledger == "Deposit":
+		from kamra.folio import sync_deposit_payment_totals
+		sync_deposit_payment_totals(folio_doc)
 
 
 ADVANCE_APPLIED = "Advance applied to the stay"
@@ -602,6 +605,8 @@ def transfer_advances_to_guest(reservation: str,
 	A group's bill (its Group folio) is the group's, not the room it is
 	anchored to: its advances follow the group (transfer_group_advances), so
 	a first room that cancelled or never arrived does not strand them."""
+	from kamra.folio import lock_guest_deposit_windows
+	lock_guest_deposit_windows(reservation)
 	moved = _apply_advances(
 		[f for f in frappe.get_all("Folio", filters={"reservation": reservation},
 		                           fields=["name", "property", "folio_type"])
@@ -636,6 +641,7 @@ def _apply_advances(folios, business_date: str | None = None) -> float:
 		ensure_default_transaction_codes()
 	if not frappe.db.exists("Transaction Code", code):
 		code = None
+	posted = {}
 	moved = Decimal(0)
 	for name in sorted(f.name for f in folios):
 		folio = frappe.get_doc("Folio", name, for_update=True)
@@ -657,6 +663,10 @@ def _apply_advances(folios, business_date: str | None = None) -> float:
 					source_name=row, business_date=business_date)
 			available -= held
 			moved += held
+			posted[name] = folio
+	if posted:
+		from kamra.folio import sync_deposit_payment_totals
+		sync_deposit_payment_totals(*posted.values())
 	return float(moved)
 
 
