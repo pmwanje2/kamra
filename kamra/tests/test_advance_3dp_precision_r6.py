@@ -60,7 +60,33 @@ class TestAdvancePrecisionR6(AuditTestCase):
 				self.historical(*args)
 
 	def test_sibling_can_explain_at_most_its_own_security_funds(self):
-		self.historical("KWD", 25.375, 5.125, 20.250, sibling_security=2.001)
+		res, first, second = self.windows("KWD")
+		api.add_folio_payment(first, "Cash", 25.375, kind="Security Deposit")
+		api.add_folio_payment(second, "Cash", 2.001, kind="Security Deposit")
+		api.add_folio_payment(second, "Cash", 25.375, kind="Advance")
+		refund = api.refund_folio_payment(second, 5.125, "Cash", reason="Advance adjustment")
+		self.assertEqual(frappe.db.get_value("Folio Ledger Entry", {
+			"folio": second, "source_name": refund["refund"], "ledger": "Deposit",
+		}, "debit"), 5.125)
+		record = frappe.db.get_value("Security Deposit", {"reservation": res.name})
+		frappe.db.set_value("Security Deposit", record, {"refunded_amount": 5.125, "balance": 22.251})
+
+		# With no debit on the first window, the second can explain only its own 2.001.
+		first_doc = frappe.get_doc("Folio", first)
+		second_doc = frappe.get_doc("Folio", second)
+		self.assertEqual((security_deposit_held_on_folio(first_doc), security_deposit_held_on_folio(second_doc)),
+		                 (25.375, 0))
+
+		# The historical debit on window 1 explains the entire recorded return.
+		api._refund_folio_payment(first, 5.125, "Cash", "Historical return", ledger="Deposit")
+		first_doc.reload()
+		_recalculate(first_doc)
+		first_doc.save()
+		first_doc.reload()
+		second_doc.reload()
+		self.assertEqual((security_deposit_held_on_folio(first_doc), first_doc.payments_total), (20.250, 0))
+		self.assertEqual(security_deposit_held_on_folio(second_doc), 2.001)
+		self.assertEqual(deposit.deposit_state(res)["held"], 22.251)
 
 	def funded(self, currency, per_window):
 		res, first, second = self.windows(currency)
