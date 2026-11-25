@@ -22,15 +22,13 @@ import { printThermal, kotHtml, billHtml, PRINT_DIALOG_EVENT, type BillData, typ
 import { useFloorFullscreen } from "../lib/kiosk"
 import { Button } from "../components/ui/button"
 import { cn } from "../lib/utils"
-import { cur, moneyLocale, useLocale } from "../lib/money"
+import { cur, fmtAmount, useLocale } from "../lib/money"
 import { useT, t as translate } from "../lib/i18n"
 import { docsUrl } from "../components/InfoTip"
 
 
-const inr = (n: unknown) =>
-  Number(n ?? 0).toLocaleString(moneyLocale(), { maximumFractionDigits: 0 })
-const inr2 = (n: unknown) =>
-  Number(n ?? 0).toLocaleString(moneyLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const inr = (n: unknown) => fmtAmount(n ?? 0)
+const inr2 = (n: unknown) => fmtAmount(n ?? 0)
 
 interface MenuItem {
   name: string

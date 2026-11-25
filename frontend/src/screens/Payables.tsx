@@ -5,7 +5,7 @@ import { serverError } from "../lib/resource"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardHeader } from "../components/ui/card"
 import { Sheet } from "../components/ui/sheet"
-import { fmtMoney, taxLabel, taxRates, useLocale } from "../lib/money"
+import { fmtMoney, roundMoney, taxLabel, taxRates, useLocale } from "../lib/money"
 import { useAuth } from "../lib/auth"
 import { t as translate, useUILanguage } from "../lib/i18n"
 
@@ -374,7 +374,7 @@ function NewBill(props: { vendors: Vendor[]; categories: string[]; onClose: () =
   // a preview only; the server works out the bill
   const preview = useMemo(() => {
     const a = Number(amount) || 0
-    return a + Math.round(a * (Number(rate) || 0)) / 100
+    return roundMoney(a + (a * (Number(rate) || 0)) / 100)
   }, [amount, rate])
   const { busy, err, run } = useSave(async () => {
     const out = await call<{ name: string }>("kamra.payables.create_vendor_bill", {

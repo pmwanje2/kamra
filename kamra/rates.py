@@ -903,6 +903,10 @@ def _plan_night(property: str, rt, day, adults: int, children: int, rate_plan: s
 	        "contract": None, "source": "card", "available": True}
 
 
+def _can_edit_rate() -> bool:
+	return bool({"Revenue Manager", "Hotel Admin", "System Manager", "Administrator"} & set(frappe.get_roles()))
+
+
 @frappe.whitelist()
 @require_roles(*RATE_ROLES)
 def rate_calendar(property: str, from_date: str | None = None, days: int = 14,
@@ -965,25 +969,42 @@ def rate_calendar(property: str, from_date: str | None = None, days: int = 14,
 	dates = [add_days(start, i) for i in range(days)]
 	occ = {str(d): forecast_occupancy(property, d) for d in dates}
 	counts = _room_counts(property)
+	rt_list = frappe.get_all("Room Type", filters={"property": property, "disabled": 0},
+	                         pluck="name", order_by="base_price asc")
+	from kamra.restrictions import calendar_restrictions_map
+	restrictions_map = calendar_restrictions_map(property, start, days, rt_list, rate_plan=plan)
 	rows = []
-	for rt in frappe.get_all("Room Type", filters={"property": property, "disabled": 0},
-	                         pluck="name", order_by="base_price asc"):
+	for rt in rt_list:
 		doc = frappe.get_doc("Room Type", rt)
 		nights = []
 		for d in dates:
 			small_ok = small_group_allows_stay(doc, d, add_days(d, 1))
 			if policy:
-				nights.append(_plan_night(property, doc, d, int(adults), int(children), plan, company or None,
-				                          occ[str(d)], small_ok, inclusive, home))
-				continue
-			if rate_plan_required:
-				nights.append({
+				cell = _plan_night(property, doc, d, int(adults), int(children), plan, company or None,
+				                   occ[str(d)], small_ok, inclusive, home)
+			elif rate_plan_required:
+				cell = {
 					"date": str(d), "available": False, "refusal": no_plan_refusal,
 					"rate": None, "contract": None, "occupancy": occ[str(d)],
-				})
-				continue
-			nights.append(explain_night(property, doc, d, int(adults), int(children),
-			                            occupancy=occ[str(d)], small_ok=small_ok))
+				}
+			else:
+				cell = explain_night(property, doc, d, int(adults), int(children),
+				                     occupancy=occ[str(d)], small_ok=small_ok)
+			restr = restrictions_map.get((doc.name, str(d)))
+			if restr:
+				cell = {
+					**cell,
+					"is_restricted": True,
+					"stop_sell": restr["stop_sell"],
+					"min_los": restr["min_los"],
+					"max_los": restr["max_los"],
+					"is_stay_through": restr["is_stay_through"],
+					"cta": restr["cta"],
+					"ctd": restr["ctd"],
+					"restriction_scope": restr["source_scope"],
+					"restriction_reason": restr["reason"],
+				}
+			nights.append(cell)
 		count = counts.get(doc.name, 0)
 		rows.append({"room_type": doc.name, "code": doc.room_type_code,
 		             "name": doc.room_type_name,
@@ -997,7 +1018,7 @@ def rate_calendar(property: str, from_date: str | None = None, days: int = 14,
 		return entry
 
 	return {"from": str(start), "days": days, "tax_inclusive": inclusive,
-	        "adults": int(adults), "room_types": rows,
+	        "adults": int(adults), "can_edit": _can_edit_rate(), "room_types": rows,
 	        "rate_plans": [_plan_entry(p) for p in active], "default_plan": default_name,
 	        "rate_plan_required": rate_plan_required,
 	        "property_currency": home, "rate_plan": _plan_entry(policy) if policy else None,
@@ -1059,6 +1080,7 @@ def rate_options(property: str, room_type: str, check_in_date: str, check_out_da
 	                        order_by="rate_plan_name asc, name asc")
 	labels = {rp.name: rp.rate_plan_name for rp in active}
 	pricing_plan = rate_plan or company_plan
+	from kamra.restrictions import evaluate_stay_restrictions
 	for rp in active:
 		base = rp.get("base_rate_plan")
 		row = {
@@ -1072,6 +1094,12 @@ def rate_options(property: str, room_type: str, check_in_date: str, check_out_da
 			"derived_from": (labels.get(base) or frappe.db.get_value("Rate Plan", base, "rate_plan_name") or base)
 			if base else None,
 		}
+		if nights > 0:
+			ev = evaluate_stay_restrictions(property, room_type, check_in_date, check_out_date, rate_plan=rp.name)
+			if not ev["allowed"]:
+				row["restricted"] = True
+				row["restriction_reason"] = ev["summary"]
+				row["restrictions"] = ev["violations"]
 		try:
 			q = total(rp.name)
 		except ContractRateRefused as exc:

@@ -53,7 +53,7 @@ import { supervisorArgs } from "../lib/reservationDiscount"
 import { useAuth } from "../lib/auth"
 import StayInstructions from "../components/StayInstructions"
 import AlertBanner from "../components/AlertBanner"
-import { fmtMoney, useLocale } from "../lib/money"
+import { fmtMoney, moneyEps, useLocale } from "../lib/money"
 import { HOTKEY_EVENTS } from "../lib/hotkeys"
 import { t as translate, useUILanguage } from "../lib/i18n"
 
@@ -254,7 +254,7 @@ export default function ReservationDetail({
   // (the socket may be down, e.g. behind the dev proxy) and re-check when
   // the tab regains focus - the guest often pays while staff wait.
   const linkPending =
-    !!d?.deposit?.link_url && (d?.deposit?.due ?? 0) > 0.009
+    !!d?.deposit?.link_url && (d?.deposit?.due ?? 0) > moneyEps()
   useEffect(() => {
     if (!linkPending) return
     const timer = setInterval(() => {
@@ -458,31 +458,39 @@ export default function ReservationDetail({
             (r) => r.action_type === "channel.modify_needs_review" || r.action_type === "channel.cancel_needs_review",
           )
             ? "update_not_applied"
-            : d.channel_reviews?.some((r) => r.action_type === "channel.modify_discount_removed")
-              ? "discount_removed"
-              : d.channel_reviews?.some((r) => r.action_type === "channel.modify_discount_review")
-                ? "discount_review"
-                : "update_not_applied")
+            : d.channel_reviews?.some((r) => r.action_type === "channel.restriction_mismatch")
+              ? "restriction_mismatch"
+              : d.channel_reviews?.some((r) => r.action_type === "channel.modify_discount_removed")
+                ? "discount_removed"
+                : d.channel_reviews?.some((r) => r.action_type === "channel.modify_discount_review")
+                  ? "discount_review"
+                  : "update_not_applied")
         const reviewTitle =
-          reviewReason === "discount_removed"
-            ? translate("Channel update applied — desk discount removed")
-            : reviewReason === "discount_review"
-              ? translate("Channel update applied — discount review required")
-              : translate("Channel update not applied — review required")
+          reviewReason === "restriction_mismatch"
+            ? translate("OTA booking honored despite active stay restrictions — review required")
+            : reviewReason === "discount_removed"
+              ? translate("Channel update applied — desk discount removed")
+              : reviewReason === "discount_review"
+                ? translate("Channel update applied — discount review required")
+                : translate("Channel update not applied — review required")
         const reviewBody =
-          reviewReason === "discount_removed"
+          reviewReason === "restriction_mismatch"
             ? translate(
-                "The channel update was applied and removed the desk discount (new total: {total}). Review what was removed below and re-apply a discount if needed.",
-                { total: fmtReservationMoney(money.total) },
+                "The channel booking was accepted to avoid a walk even though active stay restrictions were in place. Review the restriction details below and adjust the stay or channel availability if needed.",
               )
-            : reviewReason === "discount_review"
+            : reviewReason === "discount_removed"
               ? translate(
-                  "The channel update was applied (new total: {total}). Approved discounted nights were kept; added nights were priced without the unapproved discount. Review below and adjust if needed.",
+                  "The channel update was applied and removed the desk discount (new total: {total}). Review what was removed below and re-apply a discount if needed.",
                   { total: fmtReservationMoney(money.total) },
                 )
-              : translate(
-                  "The stay's dates, room, and charges were left unchanged. Review what the channel sent below and update the stay manually if needed.",
-                )
+              : reviewReason === "discount_review"
+                ? translate(
+                    "The channel update was applied (new total: {total}). Approved discounted nights were kept; added nights were priced without the unapproved discount. Review below and adjust if needed.",
+                    { total: fmtReservationMoney(money.total) },
+                  )
+                : translate(
+                    "The stay's dates, room, and charges were left unchanged. Review what the channel sent below and update the stay manually if needed.",
+                  )
         return (
           <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             <div className="flex flex-wrap items-start justify-between gap-2">

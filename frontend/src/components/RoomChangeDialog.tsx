@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from "react"
 import { ArrowRight, BedDouble, Loader2, Search, X } from "lucide-react"
 import { call } from "../lib/api"
 import { serverError } from "../lib/resource"
-import { cur, fmtAmount } from "../lib/money"
+import { cur, fmtAmount, moneyStep } from "../lib/money"
 import { useT, t as translate } from "../lib/i18n"
 import { cn } from "../lib/utils"
 import { supervisorArgs, type DiscountGovernance } from "../lib/reservationDiscount"
@@ -349,6 +349,7 @@ export default function RoomChangeDialog(props: {
                     <input
                       type="number"
                       min={1}
+                      step={moneyStep()}
                       inputMode="decimal"
                       value={agreedRate}
                       onChange={(e) => setAgreedRate(e.target.value)}

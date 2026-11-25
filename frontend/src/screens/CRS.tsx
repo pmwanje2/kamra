@@ -8,14 +8,13 @@ import { serverError } from "../lib/resource"
 import { Card, CardContent } from "../components/ui/card"
 import { Button } from "../components/ui/button"
 import { Sheet } from "../components/ui/sheet"
-import { cur, moneyLocale, useLocale } from "../lib/money"
+import { cur, fmtAmount, moneyStep, useLocale } from "../lib/money"
 import { useT, t as translate } from "../lib/i18n"
 import { useCashierAuth } from "../lib/cashierAuth"
 import { shiftDate } from "../lib/stay"
 
 
-const inr = (n: unknown) =>
-  Number(n ?? 0).toLocaleString(moneyLocale(), { maximumFractionDigits: 0 })
+const inr = (n: unknown) => fmtAmount(n ?? 0)
 
 const inputCls =
   "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm " +
@@ -625,7 +624,7 @@ function TripSheet({ name, onClose, onChanged }: { name: string; onClose: () => 
             <div className="space-y-2 rounded-lg border border-brand-200 bg-brand-50/40 p-3 text-sm">
               <p className="font-medium">{t("One advance for the whole trip")}</p>
               <div className="grid gap-2 sm:grid-cols-3">
-                <input className={inputCls} type="number" min={0} aria-label={t("Amount")}
+                <input className={inputCls} type="number" min={0} step={moneyStep()} inputMode="decimal" aria-label={t("Amount")}
                   value={adv.amount} onChange={(e) => setAdv({ ...adv, amount: e.target.value })}
                   onBlur={() => adv.amount && planAdvance(adv.amount)} />
                 <select className={inputCls} aria-label={t("Payment mode")} value={adv.mode}

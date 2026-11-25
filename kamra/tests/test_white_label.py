@@ -19,7 +19,12 @@ from urllib.parse import quote, unquote
 KAMRA = Path(__file__).resolve().parents[1]
 # A letter or digit, not \b, bounds a name, as in frontend/scripts/brand-leak-check.mjs:
 # "_" and "-" join words in identifiers, so kamra_mcp_disabled in prose still leaks.
-FORBIDDEN = re.compile(r"(?<![a-z0-9])(?:Kamra|Frappe|ERPNext|URY)(?![a-z0-9])|kamrapms\.com|HeyKoala", re.I)
+FORBIDDEN = re.compile(
+	r"(?<![a-z0-9])(?:Kamra|Frappe|ERPNext|URY|Tridz|BuildSuite)(?![a-z0-9])"
+	r"|kamrapms\.com|github\.com/Kamra|HeyKoala"
+	r"|IndianRupee|BadgeIndianRupee|CurrencyRupee|\u20b9",
+	re.I,
+)
 CONFIG = {"kamra_white_label": "1", "kamra_product_name": "Maximus Hotel", "kamra_assistant_name": "Eve",
           "kamra_channel": "nightly", "kamra_build": "aa9"}
 
@@ -636,3 +641,327 @@ class WhiteLabelTest(unittest.TestCase):
 					self.assertIn(from_route.lstrip("/"), public_routes)
 		# /hotel/checkin and /kamra/checkin are served by the mount catch-alls.
 		self.assertIn("checkin", public_routes)
+
+	# -- P54/P55: guardrails, marketplace, channels, POS hooks, precision -----
+
+	def test_guardrails_format_property_currency_never_rupee(self):
+		"""_assert_within_guardrails formats floor/ceiling errors in the property's
+		own currency and minor-unit precision (0/2/3dp), never a hardcoded rupee."""
+		from datetime import date, timedelta
+
+		props = {
+			"Kampala Inn": Doc(name="Kampala Inn", country="Uganda", currency="UGX"),
+			"Harbor Hotel": Doc(name="Harbor Hotel", country="United States", currency="USD"),
+			"Gulf Palace": Doc(name="Gulf Palace", country="Kuwait", currency="KWD"),
+		}
+		pack_locales = {
+			"Kampala Inn": {"currency": "UGX", "currency_symbol": "UGX "},
+			"Harbor Hotel": {"currency": "USD", "currency_symbol": "$"},
+			"Gulf Palace": {"currency": "KWD", "currency_symbol": "KWD "},
+		}
+		precision = {"UGX": 0, "USD": 2, "KWD": 3}
+
+		def _getdate(val):
+			return val if isinstance(val, date) else date.fromisoformat(str(val))
+
+		self.utils.getdate = _getdate
+		self.utils.add_days = lambda d, n: _getdate(d) + timedelta(days=int(n))
+		self.utils.date_diff = lambda end, start: (_getdate(end) - _getdate(start)).days
+		self.frappe.get_cached_doc = lambda dt, name: props[name]
+		self.frappe.get_cached_value = lambda dt, name, field: props[name].get(field)
+		self.frappe.db = SimpleNamespace(
+			get_value=lambda *args, **kwargs: None,
+			table_exists=lambda *args, **kwargs: False,
+			has_column=lambda *args, **kwargs: False,
+		)
+
+		def _throw(msg, *args, **kwargs):
+			raise Refused(msg)
+
+		self.frappe.throw = _throw
+
+		def _rail_for_day(rails, rt, day_abbr):
+			return rails[0] if rails else None
+
+		babel_mod = module("babel")
+		babel_numbers = module("babel.numbers", get_currency_precision=lambda c: precision.get(c, 2))
+		pricing_mod = module("kamra.pricing", rail_for_day=_rail_for_day, _minor_unit=lambda c: precision.get(c, 2))
+		loc_spec = importlib.util.spec_from_file_location("loc_under_test", KAMRA / "localization/__init__.py")
+		loc_mod = importlib.util.module_from_spec(loc_spec)
+		with patch.dict(sys.modules, {
+			"babel": babel_mod,
+			"babel.numbers": babel_numbers,
+			"kamra.pricing": pricing_mod,
+		}):
+			loc_spec.loader.exec_module(loc_mod)
+			loc_mod.pack_for = lambda prop: SimpleNamespace(locale=lambda doc: pack_locales[doc.name])
+			with patch.dict(sys.modules, {"kamra.localization": loc_mod}):
+				api = load_parts("api.py", {"_assert_within_guardrails"}, self.frappe,
+				                 imports=(), getdate=_getdate)
+				fn = api["_assert_within_guardrails"]
+				cases = (
+					("Kampala Inn", 50000, 100000, 500000, "UGX 50,000", "UGX 100,000"),
+					("Harbor Hotel", 9.5, 12.75, 400.0, "$9.50", "$12.75"),
+					("Gulf Palace", 12.345, 15.5, 99.999, "KWD 12.345", "KWD 15.500"),
+					("Gulf Palace", 120.125, 15.5, 99.999, "KWD 120.125", "KWD 99.999"),
+				)
+				for prop, rate, floor, ceiling, expected_rate, expected_bound in cases:
+					with self.subTest(prop=prop, rate=rate):
+						rail = Row(name="RG-1", property=prop, room_type="STD",
+						           floor_price=floor, ceiling_price=ceiling, days_of_week="")
+						with self.assertRaises(Refused) as ctx:
+							fn([rail], "STD", rate, "2026-11-24", "2026-11-24")
+						msg = str(ctx.exception)
+						self.assertNotIn("\u20b9", msg)
+						self.assertNotRegex(msg, FORBIDDEN)
+						self.assertIn(expected_rate, msg)
+						self.assertIn(expected_bound, msg)
+				# Also works when caller passes property explicitly and rail lacks a property field.
+				rail_no_prop = Row(name="RG-2", room_type="STD",
+				                   floor_price=15.5, ceiling_price=99.999, days_of_week="")
+				with self.assertRaises(Refused) as ctx:
+					fn([rail_no_prop], "STD", 12.345, "2026-11-24", "2026-11-24", property="Gulf Palace")
+				self.assertIn("KWD 12.345", str(ctx.exception))
+				self.assertNotIn("\u20b9", str(ctx.exception))
+
+	def test_marketplace_registry_and_connect_clean_under_white_label(self):
+		"""marketplace.registry omits upstream/vendor cards when white-labelled and
+		connect_heykoala logs neutral provider_label while staying API-compatible."""
+		logged = []
+		saved_docs = []
+
+		def _new_doc(doctype):
+			doc = Doc(doctype=doctype, name="CPC-1")
+			doc.save = lambda **kw: saved_docs.append(doc)
+			return doc
+
+		self.frappe.session = SimpleNamespace(user="gm@example.test")
+		self.frappe.generate_hash = lambda length=32: "s" * length
+		self.frappe.new_doc = _new_doc
+		self.frappe.db = SimpleNamespace(
+			get_value=lambda *args, **kwargs: None,
+			set_value=lambda *args, **kwargs: None,
+			commit=lambda: None,
+		)
+		stubs = {
+			"kamra.authz": module("kamra.authz", require_roles=lambda *roles, **kw: lambda fn: fn),
+			"kamra.localization": module("kamra.localization",
+				pack_for=lambda prop: SimpleNamespace(), payment_gateways=lambda pack: []),
+			"kamra.savings": module("kamra.savings",
+				log_action=lambda *args, **kwargs: logged.append(kwargs.get("rationale", ""))),
+		}
+		with patch.dict(sys.modules, stubs):
+			spec = importlib.util.spec_from_file_location("marketplace_under_test", KAMRA / "marketplace.py")
+			mp = importlib.util.module_from_spec(spec)
+			spec.loader.exec_module(mp)
+
+			cats = mp.registry("North")
+			leaks = [text for text in strings(cats) if FORBIDDEN.search(text)]
+			self.assertEqual(leaks, [], f"Marketplace leaked vendor text under white_label=1: {leaks}")
+			cat_names = [c["category"] for c in cats]
+			self.assertNotIn("Kamra Enterprise", cat_names)
+			card_names = [card["name"] for c in cats for card in c["cards"]]
+			self.assertNotIn("ERPNext + India Compliance", card_names)
+
+			res = mp.connect_heykoala("North", "Voice", "+256700000001")
+			self.assertEqual(res["channel"], "Voice")
+			self.assertTrue(logged)
+			self.assertIn("Voice partner", logged[-1])
+			self.assertNotRegex(logged[-1], FORBIDDEN)
+
+			# Upstream (non-white-label) behavior preserved
+			self.frappe.conf.clear()
+			upstream_cats = [c["category"] for c in mp.registry("North")]
+			self.assertIn("Kamra Enterprise", upstream_cats)
+
+	def test_agents_channels_redacts_provider_label_under_white_label(self):
+		"""agents_channels redacts vendor provider names in logs/returns under white_label=1
+		while preserving the stored provider string in outbound routing payloads."""
+		logged = []
+		posted = []
+		conn = Doc(
+			name="CPC-HK-1",
+			property="North",
+			provider="HeyKoala",
+			channel="Voice",
+			phone_number="+256700000001",
+			handles_agent="",
+			outbound_send_url="https://partner.example.test/send",
+			get_password=lambda field, **kw: "secret-key",
+		)
+		self.frappe.db = SimpleNamespace(commit=lambda: None, get_value=lambda *args, **kwargs: None)
+		self.frappe.get_all = lambda *args, **kwargs: [conn]
+		self.frappe.get_doc = lambda dt, name: conn
+		self.frappe.get_request_header = lambda name: ""
+		stubs = {
+			"kamra.authz": module("kamra.authz", require_roles=lambda *roles, **kw: lambda fn: fn),
+			"kamra.savings": module("kamra.savings",
+				log_action=lambda *args, **kwargs: logged.append(kwargs) or "LOG-1"),
+			"requests": module("requests", post=lambda url, **kw: (
+				posted.append(kw["json"]), SimpleNamespace(status_code=200),
+			)[1]),
+		}
+		with patch.dict(sys.modules, stubs):
+			spec = importlib.util.spec_from_file_location("agents_channels_under_test", KAMRA / "agents_channels.py")
+			ac = importlib.util.module_from_spec(spec)
+			spec.loader.exec_module(ac)
+			ac._authenticate = lambda channel, body: conn
+			ac._resolve_caller = lambda guest_phone, prop: (None, None)
+
+			ac.voice_webhook({"event": "call_started", "phone_number": "+256700000001"})
+			ac.messaging_webhook({"text": "Hello", "phone_number": "+256700000001"})
+			out = ac.send_outbound("North", "Voice", "+256700000002", "Welcome")
+
+		self.assertEqual(len(logged), 3)
+		for entry in logged:
+			for text in strings(entry):
+				self.assertNotRegex(text, FORBIDDEN, f"Channel log leaked vendor text: {entry}")
+		self.assertIn("Voice partner", logged[0]["agent_name"])
+		self.assertIn("Voice partner", logged[1]["agent_name"])
+		self.assertIn("Voice partner", logged[2]["rationale"])
+		self.assertEqual(out["provider"], "Voice partner")
+		# Outbound routing payload preserves the stored provider identifier
+		self.assertEqual(posted[-1]["provider"], "HeyKoala")
+		# Module and function docstrings carry zero vendor prose
+		tree = ast.parse((KAMRA / "agents_channels.py").read_text(encoding="utf-8"))
+		docs = [ast.get_docstring(n) for n in ast.walk(tree)
+		        if isinstance(n, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))]
+		for doc in (d for d in docs if d):
+			self.assertNotRegex(doc, FORBIDDEN)
+
+	def test_pos_interface_has_no_ury_literals_and_uses_hooks(self):
+		"""kamra/pos_interface.py contains zero URY literals and resolves external POS
+		outlet/bypass roles and override consumer dynamically via Frappe hooks."""
+		source = (KAMRA / "pos_interface.py").read_text(encoding="utf-8")
+		self.assertIsNone(
+			re.search(r"(?<![a-z0-9])ury(?![a-z0-9])", source, re.I),
+			"kamra/pos_interface.py must contain zero literal URY references",
+		)
+
+		hooks_map = {}
+		self.frappe.get_hooks = lambda name: hooks_map.get(name, [])
+		self.frappe.ValidationError = type("ValidationError", (Exception,), {})
+		self.frappe.PermissionError = type("PermissionError", (Exception,), {})
+		self.frappe.throw = lambda msg, exc=None: (_ for _ in ()).throw((exc or self.frappe.ValidationError)(msg))
+		self.utils.cint = lambda v: int(v or 0)
+		self.utils.flt = lambda v: float(v or 0)
+		stubs = {
+			"kamra.authz": module(
+				"kamra.authz",
+				ADMIN=("System Manager", "Administrator", "Hotel Admin"),
+				POS_SUPERVISOR_ROLES=("Hotel Admin", "F&B Manager"),
+				act_as=lambda u: None,
+				assert_property_access=lambda p: None,
+				require_roles=lambda *roles, **kw: lambda fn: fn,
+				resolve_property_for_pos_profile=lambda p: None,
+				verify_supervisor=lambda *a, **kw: None,
+				_enforce_property_scope=lambda *a, **kw: None,
+			),
+			"kamra.install": module("kamra.install", AGENT_EMAIL="agent@example.test"),
+			"kamra.pos": module("kamra.pos", RoomChargesBlocked=type("RoomChargesBlocked", (Exception,), {})),
+			"babel": module("babel"),
+			"babel.numbers": module("babel.numbers", get_currency_precision=lambda c: {"UGX": 0, "KWD": 3}.get(c, 2)),
+		}
+		with patch.dict(sys.modules, stubs):
+			spec = importlib.util.spec_from_file_location("pos_interface_under_test", KAMRA / "pos_interface.py")
+			pi = importlib.util.module_from_spec(spec)
+			spec.loader.exec_module(pi)
+
+			self.assertTrue({"POS Integrator", "F&B Manager", "POS Cashier", "POS Manager"} <= set(pi.POS_OUTLET_ROLES))
+			self.assertFalse(any("ury" in r.lower() for r in pi.POS_OUTLET_ROLES))
+
+			hooks_map["pos_outlet_roles"] = ["Partner Outlet Cashier"]
+			hooks_map["pos_bypass_roles"] = ["Partner Outlet Admin"]
+			self.assertIn("Partner Outlet Cashier", pi._pos_outlet_roles())
+			self.assertIn("Partner Outlet Admin", pi._outlet_bypass_roles())
+
+			# Empty pos_override_consumer hook fails closed
+			hooks_map["pos_override_consumer"] = []
+			with self.assertRaises(self.frappe.ValidationError):
+				pi._verify_room_charge_override(
+					property="North", reservation="RES-1", home_amount=100,
+					currency="USD", room_number="101", override_token="tok-1",
+				)
+
+			# Registered pos_override_consumer hook is resolved via frappe.get_attr
+			calls = []
+			hooks_map["pos_override_consumer"] = ["partner_pos.override.consume"]
+			self.frappe.get_attr = lambda path: (
+				(lambda *a: (calls.append((path, a)), {"approver": "mgr@example.test", "claim": {"reason": "VIP"}})[1])
+				if path == "partner_pos.override.consume"
+				else (_ for _ in ()).throw(ImportError(path))
+			)
+			approver, reason = pi._verify_room_charge_override(
+				property="North", reservation="RES-1", home_amount=12.345,
+				currency="KWD", room_number="101", override_token="tok-2", override_reason="VIP",
+			)
+			self.assertEqual((approver, reason), ("mgr@example.test", "VIP"))
+			self.assertEqual(calls[0][0], "partner_pos.override.consume")
+
+	def test_localization_currency_decimals_and_front_desk_vocabulary(self):
+		"""front_desk_vocabulary attaches decimals + currency_decimals honoring Currency.number_format
+		with ISO 4217 fallback via babel.numbers.get_currency_precision."""
+		precision = {"UGX": 0, "USD": 2, "EUR": 2, "KWD": 3, "BHD": 3, "XTS": 2}
+		currencies = [
+			{"name": "UGX", "number_format": "#,###"},
+			{"name": "USD", "number_format": "#,###.##"},
+			{"name": "KWD", "number_format": "#,###.###"},
+			{"name": "BHD", "number_format": ""},
+			{"name": "XTS", "number_format": "#,###"},
+		]
+		prop_currencies = {"Kampala Inn": "UGX", "Harbor Hotel": "USD", "Gulf Palace": "KWD"}
+
+		self.frappe.db = SimpleNamespace(
+			table_exists=lambda dt: dt == "Currency",
+			get_value=lambda dt, name, field=None: next(
+				(c["number_format"] for c in currencies if c["name"] == name), None
+			) if dt == "Currency" else None,
+		)
+		self.frappe.get_all = lambda dt, **kw: currencies if dt == "Currency" else []
+		self.frappe.get_cached_value = lambda dt, name, field: prop_currencies.get(name) if dt == "Property" else None
+		stubs = {
+			"babel": module("babel"),
+			"babel.numbers": module("babel.numbers", get_currency_precision=lambda c: precision.get(c, 2)),
+			"kamra.pricing": module("kamra.pricing", _minor_unit=lambda c: precision.get(c, 2)),
+			"kamra.masters": module(
+				"kamra.masters",
+				payment_tender_types=lambda prop=None: {},
+				client_payment_methods=lambda *a, **kw: [],
+				disabled_payment_methods=lambda prop=None: set(),
+				SYSTEM_TENDER_TYPES={"Cash": "Cash", "Card": "Card", "Bank Transfer": "Bank Transfer"},
+				payment_tender_type=lambda m, prop=None: "Cash",
+			),
+			"kamra.settings": module("kamra.settings", list_setting=lambda prop, key: ["USD", "EUR", "KWD"]),
+		}
+		with patch.dict(sys.modules, stubs):
+			spec = importlib.util.spec_from_file_location("loc_prec_under_test", KAMRA / "localization/__init__.py")
+			loc = importlib.util.module_from_spec(spec)
+			spec.loader.exec_module(loc)
+
+			ug_pack = SimpleNamespace(DEFAULT_CURRENCY="UGX", FX_CURRENCIES=["USD", "KWD"])
+			ug_vocab = loc.front_desk_vocabulary(ug_pack, "Kampala Inn")
+			self.assertEqual(ug_vocab["decimals"], 0)
+			self.assertEqual(ug_vocab["currency_decimals"]["UGX"], 0)
+			self.assertEqual(ug_vocab["currency_decimals"]["USD"], 2)
+			self.assertEqual(ug_vocab["currency_decimals"]["KWD"], 3)
+			self.assertEqual(ug_vocab["currency_decimals"]["BHD"], 3)
+			# Custom currency with #,### number_format resolves to 0dp
+			self.assertEqual(ug_vocab["currency_decimals"]["XTS"], 0)
+
+			kw_pack = SimpleNamespace(DEFAULT_CURRENCY="KWD", FX_CURRENCIES=["USD"])
+			kw_vocab = loc.front_desk_vocabulary(kw_pack, "Gulf Palace")
+			self.assertEqual(kw_vocab["decimals"], 3)
+
+			us_pack = SimpleNamespace(DEFAULT_CURRENCY="USD", FX_CURRENCIES=["EUR"])
+			us_vocab = loc.front_desk_vocabulary(us_pack, "Harbor Hotel")
+			self.assertEqual(us_vocab["decimals"], 2)
+
+	def test_frontend_source_has_no_rupee_icons_or_upi_hardcode(self):
+		"""AppShell, BanquetFunction, and AgentGuide carry no IndianRupee/BadgeIndianRupee
+		icons or hardcoded India-only UPI prompts."""
+		fe = KAMRA.parent / "frontend/src"
+		self.assertNotIn("IndianRupee", (fe / "AppShell.tsx").read_text(encoding="utf-8"))
+		self.assertNotIn("BadgeIndianRupee", (fe / "screens/BanquetFunction.tsx").read_text(encoding="utf-8"))
+		guide = (fe / "components/AgentGuide.tsx").read_text(encoding="utf-8")
+		self.assertNotIn("Cash, UPI, card or bank", guide)
+		self.assertNotIn('"UPI"', guide)

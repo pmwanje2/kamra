@@ -20,19 +20,22 @@ first posting; reusing a ticket number for a different charge is refused.
 from __future__ import annotations
 
 import hashlib
+from functools import wraps
 
 import frappe
 from frappe import _
 from frappe.utils import cint, flt
 
 from kamra.authz import (
+	ADMIN,
 	POS_SUPERVISOR_ROLES,
+	_enforce_property_scope,
 	act_as,
 	assert_property_access,
-	require_roles,
 	resolve_property_for_pos_profile,
 	verify_supervisor,
 )
+from kamra.branding import role_label
 from kamra.install import AGENT_EMAIL
 from kamra.pos import RoomChargesBlocked
 
@@ -40,16 +43,19 @@ POS_INTEGRATOR = "POS Integrator"
 ROLES = (POS_INTEGRATOR, "Kamra Agent")
 # Outlet POS staff who may look up, verify, and post room charges for their
 # authorized property/outlet without holding the elevated POS Integrator role.
+# External POS apps extend this dynamically via the `pos_outlet_roles` hook.
 POS_OUTLET_ROLES = (
 	POS_INTEGRATOR,
 	"Kamra Agent",
 	"F&B Manager",
-	"URY Cashier",
-	"URY Waiter",
-	"URY Captain",
-	"URY Manager",
-	"URY Admin",
+	"POS Cashier",
+	"POS Waiter",
+	"POS Captain",
+	"POS Manager",
+	"POS Admin",
 )
+# Roles that bypass per-POS-Profile assignment checks; extended dynamically
+# via the `pos_bypass_roles` hook.
 _OUTLET_BYPASS_ROLES = frozenset({
 	POS_INTEGRATOR,
 	"Kamra Agent",
@@ -57,12 +63,51 @@ _OUTLET_BYPASS_ROLES = frozenset({
 	"Hotel Admin",
 	"System Manager",
 	"Administrator",
-	"URY Manager",
-	"URY Admin",
+	"POS Manager",
+	"POS Admin",
 })
 CHARGE = "External POS Charge"
 # what an outlet sells; room nights, fees and allowances stay with the hotel
 CHARGE_TYPES = ("Food & Beverage", "Minibar", "Laundry", "Spa", "Misc")
+
+
+def _hook_values(hook_name: str) -> tuple[str, ...]:
+	raw = frappe.get_hooks(hook_name) or ()
+	if isinstance(raw, str):
+		raw = (raw,)
+	out: list[str] = []
+	for item in raw:
+		if isinstance(item, str) and item.strip():
+			out.append(item.strip())
+		elif isinstance(item, (list, tuple, set)):
+			out.extend(v.strip() for v in item if isinstance(v, str) and v.strip())
+	return tuple(dict.fromkeys(out))
+
+
+def _pos_outlet_roles() -> tuple[str, ...]:
+	return tuple(dict.fromkeys((*POS_OUTLET_ROLES, *_hook_values("pos_outlet_roles"))))
+
+
+def _outlet_bypass_roles() -> frozenset[str]:
+	return _OUTLET_BYPASS_ROLES | frozenset(_hook_values("pos_bypass_roles"))
+
+
+def _require_pos_outlet_roles(fn):
+	"""Dynamic role guard for outlet POS endpoints: evaluates base neutral
+	POS_OUTLET_ROLES plus any roles registered via `pos_outlet_roles` hook."""
+	@wraps(fn)
+	def guarded(*args, **kwargs):
+		allowed = set(_pos_outlet_roles()) | set(ADMIN)
+		if not allowed & set(frappe.get_roles()):
+			frappe.throw(
+				f"Not permitted - needs one of: {', '.join(role_label(role) for role in sorted(POS_OUTLET_ROLES))}.",
+				frappe.PermissionError,
+			)
+		_enforce_property_scope(fn, args, kwargs, {})
+		return fn(*args, **kwargs)
+
+	guarded._kamra_roles = set(POS_OUTLET_ROLES) | set(ADMIN)
+	return guarded
 
 
 def _assert_pos_profile_access(pos_profile: str | None) -> None:
@@ -74,7 +119,7 @@ def _assert_pos_profile_access(pos_profile: str | None) -> None:
 	user = frappe.session.user
 	if not user or user == "Administrator":
 		return
-	if _OUTLET_BYPASS_ROLES & set(frappe.get_roles()):
+	if _outlet_bypass_roles() & set(frappe.get_roles()):
 		return
 	if not frappe.db.table_exists("POS Profile") or not frappe.db.exists("POS Profile", pos_profile):
 		return
@@ -120,7 +165,7 @@ def _resolve_room(property: str, room: str) -> str | None:
 
 
 @frappe.whitelist()
-@require_roles(*POS_OUTLET_ROLES)
+@_require_pos_outlet_roles
 def pos_room_lookup(property: str, room: str | None = None,
                     last_name: str | None = None) -> list:
 	"""In-house stays matching a room number and/or the guest's last name.
@@ -668,7 +713,7 @@ def _evaluate_stay(
 
 
 @frappe.whitelist()
-@require_roles(*POS_OUTLET_ROLES)
+@_require_pos_outlet_roles
 def verify_room_charge(
 	property: str | None = None,
 	room: str | None = None,
@@ -819,8 +864,9 @@ def _verify_room_charge_override(
 	"""Verify duty-manager approval for an over-limit or No Post room charge.
 
 	Accepts either:
-	1. A POS override token consumed via `ury.ury_pos.override.consume` (fails closed
-	   if the hook is missing or raises), using the canonical 5-key claim
+	1. A POS override token consumed via the callable registered on the
+	   `pos_override_consumer` hook (fails closed if the hook is missing or
+	   raises), using the canonical 5-key claim
 	   `{reservation, room, amount, currency, reason}` in property currency,
 	2. An in-process server flag `frappe.flags.kamra_room_charge_override` set after
 	   the POS already consumed the token in this transaction (matched in property
@@ -832,9 +878,14 @@ def _verify_room_charge_override(
 	tol = 0.5 * (10 ** -prec)
 	norm_currency = (currency or "").strip().upper()
 	if override_token:
-		try:
-			consumer = frappe.get_attr("ury.ury_pos.override.consume")
-		except Exception:
+		hook_paths = _hook_values("pos_override_consumer")
+		consumer = None
+		if hook_paths:
+			try:
+				consumer = frappe.get_attr(hook_paths[-1])
+			except Exception:
+				consumer = None
+		if not callable(consumer):
 			frappe.throw(
 				_("Room charge override verification is unavailable. Ask a manager to resolve."),
 				frappe.ValidationError,
@@ -914,7 +965,7 @@ def _verify_room_charge_override(
 
 
 @frappe.whitelist(methods=["POST"])
-@require_roles(*POS_OUTLET_ROLES)
+@_require_pos_outlet_roles
 def pos_post_room_charge(
 	property: str,
 	ticket_id: str,

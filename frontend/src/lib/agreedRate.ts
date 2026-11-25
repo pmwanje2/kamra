@@ -1,6 +1,7 @@
 /** Rules for the Agreed rate action on a booking (kamra.api.set_agreed_rate):
  * an agreed nightly rate for one stay, in place (OPERA rate override). */
 
+import { roundMoney } from "./money"
 import type { DiscountGovernance, DiscountReason } from "./reservationDiscount"
 
 /** The reason-code categories a discount and an agreed rate take: the
@@ -73,11 +74,12 @@ export interface AgreedRateRow {
 export function agreedRateRows(
   current: { date: string; rate: number }[],
   preview: Pick<AgreedRatePreview, "nights">,
+  currencyOrDecimals?: string | number,
 ): AgreedRateRow[] {
   const was = new Map(current.map((n) => [n.date, n.rate]))
   return preview.nights.map((n) => {
     const before = was.get(n.date) ?? 0
-    return { date: n.date, was: before, now: n.rate, diff: Math.round((n.rate - before) * 100) / 100 }
+    return { date: n.date, was: before, now: n.rate, diff: roundMoney(n.rate - before, currencyOrDecimals) }
   })
 }
 

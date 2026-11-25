@@ -424,8 +424,9 @@ def _checkout_context(reservation: str) -> dict:
 	places = _places(res.property)
 	display_places = _currency_places(res.property)
 	eps = _eps(places)
-	symbol = pack_for(res.property).locale(prop).get("currency_symbol", "")
-	currency = home_currency(res.property)
+	loc = pack_for(res.property).locale(prop)
+	symbol = loc.get("currency_symbol", "")
+	currency = home_currency(res.property) or loc.get("currency") or prop.get("currency") or ""
 	modes = _modes(res.property)
 	in_house = res.status == "Checked In"
 	blockers: list[dict] = []
@@ -746,6 +747,7 @@ def _checkout_context(reservation: str) -> dict:
 		"room": room,
 		"currency": currency,
 		"currency_symbol": symbol,
+		"currency_decimals": display_places,
 		"payment_modes": modes,
 		"pin_required": needs_pin,
 		"till_open": till_open,

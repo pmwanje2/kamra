@@ -18,7 +18,7 @@ import {
 } from "../lib/api"
 import { pickDefaultRoomType } from "../lib/bookingDefaults"
 import { Button } from "./ui/button"
-import { moneyDigits, useLocale } from "../lib/money"
+import { moneyDigits, moneyStep, roundMoney, useLocale } from "../lib/money"
 import { isPhoneComplete } from "../lib/phone"
 import { nightsBetween, parseDate, shiftDate } from "../lib/stay"
 import { onSettingsChanged, onTariffsChanged } from "../lib/tariffSync"
@@ -1133,7 +1133,7 @@ export function BookingDialog(props: {
 
   const fullAmount = (currency: string) => quoteTariff && quote && quoteTariff.currency === currency &&
     quote.agreed_rate != null && quote.agreed_rate * quote.nights === grandTotal
-    ? String(Number((quoteTariff.nightly * quote.nights).toFixed(2)))
+    ? String(roundMoney(quoteTariff.nightly * quote.nights, currency))
     : tenderAmount(grandTotal, currency, loc.currency, settlementRates)
   const suggestedAmount = paymentReady ? fullAmount(payCurrency) : ""
   useEffect(() => {
@@ -1968,6 +1968,8 @@ export function BookingDialog(props: {
                           <input
                             type="number"
                             min={0}
+                            step={moneyStep()}
+                            inputMode="decimal"
                             className={inputCls}
                             value={form.over_capacity_charge}
                             onChange={(e) =>

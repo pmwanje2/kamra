@@ -148,14 +148,51 @@ def ari_snapshot(property: str, connection: str, days: int = 90, start=None,
 	out = []
 	start = str(start or nowdate())
 	end = add_days(start, days)
+	from kamra.restrictions import _fetch_rows_for_window, resolve_night_restrictions
+	restr_rows = (
+		_fetch_rows_for_window(property, start, add_days(start, max(days - 1, 0)))
+		if with_rates else {}
+	)
 
 	def rate(room_type, d, d2):
 		return _one_night_rate(property, room_type, d, d2) if with_rates else None
 
+	def day_entry(m_row, d, avail, night_rate):
+		item = {"date": str(d), "available": avail, "rate": night_rate}
+		if with_rates:
+			r = (
+				resolve_night_restrictions(
+					property, d, room_type=m_row.room_type,
+					rate_plan=m_row.get("rate_plan") or None, _rows_by_date=restr_rows,
+				)
+				if (restr_rows and str(d) in restr_rows) else None
+			)
+			if r and r["has_rule"]:
+				item.update(
+					stop_sell=r["stop_sell"],
+					min_los=r["min_los"],
+					max_los=r["max_los"],
+					cta=r["cta"],
+					ctd=r["ctd"],
+				)
+				if r.get("is_stay_through"):
+					item["is_stay_through"] = True
+			else:
+				item.update(
+					stop_sell=False,
+					min_los=1,
+					max_los=0,
+					cta=False,
+					ctd=False,
+				)
+		return item
+
 	for m in mappings:
 		row = {"room_type": m.room_type,
 		       "external_room_id": m.external_room_id,
-		       "external_rate_id": m.external_rate_id, "days": []}
+		       "external_rate_id": m.external_rate_id,
+		       "external_currency": m.get("external_currency"),
+		       "days": []}
 		use_siu = has_active_sius(property, m.room_type)
 		siu_caps = (
 			capacity_by_night(property, m.room_type, start, end)
@@ -168,8 +205,7 @@ def ari_snapshot(property: str, connection: str, days: int = 90, start=None,
 			d = add_days(start, i)
 			d2 = add_days(d, 1)
 			if str(d) in locked:
-				row["days"].append({"date": str(d), "available": 0,
-				                    "rate": rate(m.room_type, d, d2)})
+				row["days"].append(day_entry(m, d, 0, rate(m.room_type, d, d2)))
 				continue
 			hold = _block_hold(property, m.room_type, d, d2)
 			if use_siu:
@@ -181,8 +217,7 @@ def ari_snapshot(property: str, connection: str, days: int = 90, start=None,
 			# Both paths must account for stays without a room number.
 			if meta[m.room_type]["total"]:
 				avail = min(avail, _sellable(property, m.room_type, d, d2))
-			row["days"].append({"date": str(d), "available": avail,
-			                    "rate": rate(m.room_type, d, d2)})
+			row["days"].append(day_entry(m, d, avail, rate(m.room_type, d, d2)))
 		out.append(row)
 	_apply_villa_lockout(out, meta)
 	return out
@@ -260,6 +295,19 @@ def push_ari(connection: str, days: int | None = None):
 		"last_push": frappe.utils.now_datetime(),
 		"last_push_status": ("OK: " if ok else "FAILED: ") + detail[:130],
 	}, update_modified=False)
+	if frappe.get_meta("Channel Room Mapping").has_field("last_synced_at"):
+		now_ts = frappe.utils.now_datetime()
+		for m in _mappings(connection):
+			if ok:
+				frappe.db.set_value(
+					"Channel Room Mapping", m.name,
+					{"last_synced_at": now_ts, "last_error": ""}, update_modified=False,
+				)
+			else:
+				frappe.db.set_value(
+					"Channel Room Mapping", m.name,
+					{"last_error": detail[:280]}, update_modified=False,
+				)
 	from kamra.savings import log_action
 	log_action("channel.ari_push", "Channel Manager Connection", connection,
 	           conn.property,
@@ -600,7 +648,24 @@ _LOCKED_MODIFY = ("Checked In", "Checked Out", "No Show", "Cancelled")
 CHANNEL_REVIEW_NOT_APPLIED = "update_not_applied"
 CHANNEL_REVIEW_DISCOUNT_REMOVED = "discount_removed"
 CHANNEL_REVIEW_DISCOUNT_PARTIAL = "discount_review"
+CHANNEL_REVIEW_RESTRICTION = "restriction_mismatch"
 _REVIEW_NOTE_PREFIXES = ("Channel modify (",)
+
+
+def _strict_ota_restrictions(property: str) -> bool:
+	"""True when `property` explicitly opts into rejecting inbound OTA bookings
+	that breach active stay restrictions (default False: honor guest + flag for review)."""
+	if not property:
+		return False
+	raw = frappe.db.get_value(
+		"Property Setting",
+		{"property": property, "setting_key": "strict_ota_restrictions"},
+		"value",
+	)
+	if raw is None or raw == "":
+		return False
+	text = str(raw).strip().lower()
+	return text in ("1", "true", "yes", "on")
 
 
 def _review_note_lines(notes: str | None) -> list[str]:
@@ -1084,6 +1149,29 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 			)
 			return {"ota_ref": e.get("ota_ref"), "result": "rate_plan_refused",
 			        "reason": str(exc)}
+	restriction_mismatch = None
+	if room_type and not locked_modify and e.get("check_in") and e.get("check_out"):
+		from kamra.restrictions import evaluate_stay_restrictions
+		restr_ev = evaluate_stay_restrictions(
+			conn.property, room_type, e["check_in"], e["check_out"], rate_plan=resolved_rate_plan,
+		)
+		if not restr_ev["allowed"]:
+			restriction_mismatch = restr_ev["summary"]
+			if _strict_ota_restrictions(conn.property):
+				from kamra.savings import log_action
+				log_action(
+					"channel.restriction_refused", "Channel Manager Connection", conn.name,
+					conn.property,
+					rationale=f"{e.get('channel') or 'OTA'} {e['event']} {e.get('ota_ref')} via "
+					          f"{conn.provider} rejected by strict stay restrictions: {restriction_mismatch}",
+					channel="API",
+				)
+				return {
+					"ota_ref": e.get("ota_ref"),
+					"result": "restriction_refused",
+					"reason": restriction_mismatch,
+					"violations": restr_ev["violations"],
+				}
 	property_currency = frappe.db.get_value("Property", conn.property, "currency")
 	# a modify of a stay the OTA sold on a foreign contract: what it was stamped with
 	booked = _booked_channel_snapshot(existing.name) if e["event"] == "modify" and existing else None
@@ -1188,6 +1276,8 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 			doc.flags.kamra_channel_tariff = True
 		if requested_reason and not e.get("total"):
 			doc.set("night_rates", [])  # no price until staff resolve it
+		if restriction_mismatch:
+			doc.flags.kamra_ota_restriction_override = True
 		old_transition = frappe.flags.kamra_status_transition
 		try:
 			if requested_reason:
@@ -1200,6 +1290,24 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 			doc.save(ignore_permissions=True)
 		finally:
 			frappe.flags.kamra_status_transition = old_transition
+		if restriction_mismatch:
+			mismatch_note = f"OTA restriction mismatch — resolve: {restriction_mismatch}"
+			m_updates = {
+				"channel_review_needed": 1,
+				"channel_review_reason": CHANNEL_REVIEW_RESTRICTION,
+			}
+			if mismatch_note not in (doc.special_requests or ""):
+				m_updates["special_requests"] = "\n".join(
+					s for s in (doc.special_requests, mismatch_note) if s
+				)
+			doc.db_set(m_updates)
+			from kamra.savings import log_action
+			log_action(
+				"channel.restriction_mismatch", "Reservation", doc.name, conn.property,
+				rationale=f"{e.get('channel') or 'OTA'} {e['event']} {e.get('ota_ref')} via "
+				          f"{conn.provider} accepted for review despite restriction: {restriction_mismatch}",
+				channel="API",
+			)
 		if discount_review:
 			from kamra.api import _discount_snapshot
 			from kamra.localization import money_text
@@ -1266,8 +1374,11 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 				rationale=audit_rationale,
 				channel="API",
 			)
-		return {"ota_ref": e["ota_ref"], "result": "modified",
-		        "reservation": existing.name}
+		out_mod = {"ota_ref": e["ota_ref"], "result": "modified",
+		           "reservation": existing.name}
+		if restriction_mismatch:
+			out_mod["restriction_mismatch"] = True
+		return out_mod
 
 	if requested_reason:
 		e = dict(e, notes="\n".join(s for s in (e.get("notes"), requested_reason) if s))
@@ -1305,6 +1416,8 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 		lock_channel_rates(doc, e["total"], e.get("nightly"), e.get("nightly_net"))
 	if contract:
 		_stamp_channel_contract(doc, contract)
+	if restriction_mismatch:
+		doc.flags.kamra_ota_restriction_override = True
 	try:
 		doc.insert(ignore_permissions=True)
 	except frappe.DuplicateEntryError:
@@ -1315,6 +1428,24 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 			return {"ota_ref": e.get("ota_ref"), "result": "duplicate_ignored",
 			        "reservation": winner.name}
 		raise
+	if restriction_mismatch:
+		mismatch_note = f"OTA restriction mismatch — resolve: {restriction_mismatch}"
+		m_updates = {
+			"channel_review_needed": 1,
+			"channel_review_reason": CHANNEL_REVIEW_RESTRICTION,
+		}
+		if mismatch_note not in (doc.special_requests or ""):
+			m_updates["special_requests"] = "\n".join(
+				s for s in (doc.special_requests, mismatch_note) if s
+			)
+		doc.db_set(m_updates)
+		from kamra.savings import log_action
+		log_action(
+			"channel.restriction_mismatch", "Reservation", doc.name, conn.property,
+			rationale=f"{e.get('channel') or 'OTA'} {e['event']} {e.get('ota_ref')} via "
+			          f"{conn.provider} accepted for review despite restriction: {restriction_mismatch}",
+			channel="API",
+		)
 	# the channel's own commission when it sends one, else the site's default
 	if e.get("commission"):
 		doc.db_set("commission_amount", float(e["commission"]))
@@ -1328,8 +1459,11 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 	           channel="API")
 	# the availability push back to the channel is triggered by the
 	# on_reservation_change doc_event this insert fires - no ad-hoc enqueue.
-	return {"ota_ref": e.get("ota_ref"), "result": "booked",
-	        "reservation": doc.name}
+	out_book = {"ota_ref": e.get("ota_ref"), "result": "booked",
+	            "reservation": doc.name}
+	if restriction_mismatch:
+		out_book["restriction_mismatch"] = True
+	return out_book
 
 
 def _booked_channel_snapshot(reservation: str) -> dict | None:
