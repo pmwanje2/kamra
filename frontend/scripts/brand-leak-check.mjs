@@ -138,7 +138,7 @@ export function scanTree(base = root) {
 function scanReference(markdown, wireMethods, findings) {
   let fence = ""
   for (const [index, line] of markdown.split("\n").entries()) {
-    const marker = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/)
+    const marker = line.match(fence ? /^ {0,3}(`{3,}|~{3,})([ \t]*)\r?$/ : /^ {0,3}(`{3,}(?=[^`]*$)|~{3,})(.*)\r?$/)
     if (fence) {
       if (marker && marker[1].startsWith(fence) && !marker[2].trim()) fence = ""
       continue
@@ -150,7 +150,7 @@ function scanReference(markdown, wireMethods, findings) {
     const prose = line
       .replace(/\]\((?:<[^>]*>|[^()\s]+)(?=[\s)])/g, "](")
       .replace(/(`+)([^`]+)\1/g, (_, ticks, code) =>
-        wireMethods.has(code) || /^X-Frappe-[\w-]+$/i.test(code) ? "" : code)
+        wireMethods.has(code) || /^X-Frappe-CSRF-Token$/i.test(code) ? "" : code)
     if (forbidden.test(prose)) findings.push(`api-reference.md:${index + 1}: ${line}`)
   }
 }
