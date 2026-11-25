@@ -2009,7 +2009,7 @@ class Reservation(Document):
 						package_id = (snapshot.get("package") or {}).get("name")
 					pinned[day] = {
 						**row.as_dict(), "package_id": package_id,
-						**{k: night[k] for k in ("package", "room_gst_rate", "package_tax") if k in night},
+						**{k: night[k] for k in ("package", "room_gst_rate", "package_tax", "sold_room_gross") if k in night},
 					}
 		tariff = None
 		if flt(self.get("agreed_rate")) > 0 and not self.agreed_rate_overrides():
@@ -2142,17 +2142,19 @@ class Reservation(Document):
 			rate_currency=rate_cur,
 			inherit_stay_currency=False,
 		)
+		try:
+			snap = json.loads(self.quote_snapshot) if self.get("quote_snapshot") else {}
+		except (TypeError, ValueError):
+			snap = {}
+		snap = snap if isinstance(snap, dict) else {}
+		quoted = {n["date"]: n for n in snap.get("nightly") or [] if n.get("date")}
 		charged = charged_nights(self.name)
 		if disc:
 			from kamra.packages import reservation_package_id
 			from kamra.pricing import validate_package_discount
 
-			try:
-				snapshot = frappe.parse_json(self.get("quote_snapshot") or "{}")
-			except ValueError:
-				snapshot = {}
 			validate_package_discount(disc, (day for day in self.stay_nights()
-			                          if day not in charged and reservation_package_id(self, day, snapshot=snapshot)))
+			                          if day not in charged and reservation_package_id(self, day, snapshot=snap)))
 		stay = (disc or {}).get("stay")
 		stay_cur = (disc or {}).get("stay_currency")
 		own = (disc or {}).get("nights") or {}
@@ -2211,7 +2213,16 @@ class Reservation(Document):
 			row.update(rate=float(net), gst_rate=float(new_gst), base_rate=float(base),
 			           discount_amount=float(new_off))
 			d_room += net - rate
-			d_tax += (net * new_gst - rate * gst) / Decimal(100)
+			night = quoted.get(day, {})
+			if night.get("sold_room_gross") is not None:
+				if (net, new_gst) != (rate, gst):
+					from kamra.ledger import minor_unit
+					from kamra.pricing import sold_night_gross
+					gross = sold_night_gross(net, new_gst, minor_unit(self.property))
+					d_tax += (gross - net) - (_dec(night["sold_room_gross"]) - rate)
+					night["sold_room_gross"] = float(gross)
+			else:
+				d_tax += (net * new_gst - rate * gst) / Decimal(100)
 			if over_cap and new_gst != gst:
 				d_oc += oc(new_gst) - oc(gst)
 				d_oc_tax += (oc(new_gst) * new_gst - oc(gst) * gst) / Decimal(100)
@@ -2220,11 +2231,6 @@ class Reservation(Document):
 				if levy_taxed:
 					d_levy_tax += (net * new_gst - rate * gst) * levy_pct / Decimal(100)
 
-		snap = {}
-		try:
-			snap = json.loads(self.quote_snapshot) if self.get("quote_snapshot") else {}
-		except (TypeError, ValueError):
-			snap = {}
 		voucher = self.booked_voucher_discount(snap)
 		currency = property_currency(self.property)
 		raw_before = _dec(self.amount_before_tax) + d_room + d_oc + d_levy

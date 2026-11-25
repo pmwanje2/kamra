@@ -235,6 +235,16 @@ def collect():
     return modules
 
 
+def display_text(text):
+    """Distribution wording for prose; dotted RPC names are public identifiers."""
+    text = text.replace("kamrapms.com", "the product site").replace("₹", "a currency symbol")
+    text = re.sub(r"the ERPNext (?:accounting )?bridge", "the accounting bridge", text)
+    names = {"Kamra Agent": "Maximus Assistant", "Kamra": "Maximus", "Frappe": "the framework",
+             "ERPNext": "the accounting system", "URY": "POS"}
+    return re.sub(r"\b(Kamra Agent|Kamra|Frappe|ERPNext|URY)\b(?!\.\w)",
+                  lambda match: names[match[0]], text)
+
+
 def esc(text):
     """VitePress compiles markdown as Vue templates: raw `<placeholder>` and
     `{{ }}` in prose break the compiler. Escape them; code spans stay valid
@@ -259,12 +269,12 @@ the UI and the AI use. **{total} endpoints**, generated from the source
 ## Calling convention
 
 ```
-POST https://<your-kamra>/api/method/kamra.<module>.<function>
+POST https://<your-site>/api/method/kamra.<module>.<function>
 Authorization: token <api_key>:<api_secret>
 Content-Type: application/json
 ```
 
-- Get keys from **Kamra Agent → Connect your AI** (Claude OAuth, role-scoped) or the
+- Get keys from **Maximus Assistant → Connect your AI** (Claude OAuth, role-scoped) or the
   dedicated agent user for services.
 - Responses: `{{"message": <return value>}}`. Errors are HTTP 4xx with a
   readable reason.
@@ -276,18 +286,18 @@ Content-Type: application/json
   [contract.json](/contract.json).
 """]
     for m in modules:
-        out.append(f"\n## {m['folder']}\n")
+        out.append(f"\n## {display_text(m['folder'])}\n")
         if m["note"]:
-            out.append(f"> {m['note']}\n")
+            out.append(f"> {display_text(m['note'])}\n")
         for e in m["endpoints"]:
             badge = " <Badge type='tip' text='public' />" if e["guest"] else ""
             out.append(f"### `kamra.{e['module']}.{e['name']}`{badge}\n")
             meta = [f"**{e['method']}**"]
             if e["roles"]:
-                meta.append("roles: " + ", ".join(f"`{r}`" for r in e["roles"]))
+                meta.append("roles: " + ", ".join(f"`{display_text(r)}`" for r in e["roles"]))
             out.append(" · ".join(meta) + "\n")
             if e["doc"]:
-                out.append(esc(e["doc"]) + "\n")
+                out.append(esc(display_text(e["doc"])) + "\n")
             if e["params"]:
                 out.append("| Param | Required | Default |")
                 out.append("| --- | --- | --- |")
@@ -303,12 +313,12 @@ Content-Type: application/json
 def write_postman(modules):
     items = []
     for m in modules:
-        folder = {"name": m["folder"], "item": []}
+        folder = {"name": display_text(m["folder"]), "item": []}
         for e in m["endpoints"]:
             body = {n: sample_value(n, d, req) for n, d, req in e["params"]}
             body = {k: v for k, v in body.items() if v is not None}
             req = {
-                "name": e["name"],
+                "name": display_text(e["name"]),
                 "request": {
                     "method": "POST",
                     "header": [
@@ -323,7 +333,7 @@ def write_postman(modules):
                         "path": ["api", "method",
                                  f"kamra.{e['module']}.{e['name']}"],
                     },
-                    "description": e["doc"],
+                    "description": display_text(e["doc"]),
                 },
             }
             if body:
@@ -337,12 +347,12 @@ def write_postman(modules):
 
     collection = {
         "info": {
-            "name": "Kamra PMS API",
+            "name": "Maximus PMS API",
             "description":
-                "The full Kamra REST surface. Set base_url (e.g. "
+                "The Maximus PMS REST API. Set base_url (e.g. "
                 "https://pms.yourhotel.com), api_key and api_secret in the "
                 "collection variables, then call away. Docs: "
-                "https://kamrapms.com/docs/api-reference",
+                "/docs/api-reference",
             "schema": "https://schema.getpostman.com/json/collection/"
                       "v2.1.0/collection.json",
         },

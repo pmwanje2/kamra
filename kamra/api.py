@@ -1087,7 +1087,7 @@ def hk_queue(property: str):
 	"""The housekeeper's phone view: prioritized task queue + room board.
 	Checkout cleans for rooms with an arrival today jump the queue."""
 	from kamra.business_date import get_business_date
-	from kamra.housekeeping import turndown_is_current
+	from kamra.housekeeping import _occupied_rooms, turndown_is_current
 
 	today = nowdate()
 	arriving_rooms = set(frappe.get_all(
@@ -1130,9 +1130,10 @@ def hk_queue(property: str):
 
 	rooms_by_name = {room.name: room for room in rooms}
 	business_day = get_business_date(property)
+	occupied = _occupied_rooms(property) if any(t.task_type == "Turndown" for t in tasks) else set()
 	tasks = [task for task in tasks if task.task_type != "Turndown" or (
 		task.room in rooms_by_name and turndown_is_current(
-			task.business_date, business_day, rooms_by_name[task.room].housekeeping_status))]
+			task.business_date, business_day, rooms_by_name[task.room].housekeeping_status, task.room in occupied))]
 	for task in tasks:
 		room = rooms_by_name.get(task.room)
 		task["room_number"] = room.room_number if room else None
@@ -8035,7 +8036,7 @@ def room_board(property: str):
 	inside the Housekeeping module (#99)."""
 	from kamra.crs import assert_property_access
 	assert_property_access(property)
-	from kamra.housekeeping import BOARD_FIELDS, board_status, turndown_is_current
+	from kamra.housekeeping import BOARD_FIELDS, _occupied_rooms, board_status, turndown_is_current
 	can_supervise = _is_room_supervisor()
 	can_manage_work = can_supervise and bool(set(frappe.get_roles()) & {
 		"Administrator", "System Manager", "Hotel Admin", "Front Desk", HK_SUPERVISOR})
@@ -8057,6 +8058,7 @@ def room_board(property: str):
 	business = get_business_date(property)
 	clean_tasks = {}
 	tasks = {}
+	occupied = _occupied_rooms(property)
 	room_status = {room.name: room.housekeeping_status for room in rooms}
 	for t in frappe.get_all(
 			"Housekeeping Task",
@@ -8066,7 +8068,7 @@ def room_board(property: str):
 			        "assigned_to_user", "due_by", "business_date", "reservation.check_out_business_date as departure_day"],
 			order_by="creation asc"):
 		if t.task_type == "Turndown" and not turndown_is_current(
-				t.business_date, business, room_status.get(t.room)):
+				t.business_date, business, room_status.get(t.room), t.room in occupied):
 			continue
 		tasks.setdefault(t.room, t)
 		day = t.departure_day if t.task_type == "Checkout Clean" and t.departure_day else t.due_by
@@ -8677,6 +8679,7 @@ def _move_approval_required(property):
 
 
 def _swap_rooms(reservation, new_room, swap_reservation, reason):
+	from kamra.business_date import get_business_date
 	from kamra.housekeeping import clear_stay_room_state
 	from kamra.kamra.doctype.reservation.reservation import lock_property_for_inventory
 	from kamra.savings import log_action
@@ -8706,7 +8709,8 @@ def _swap_rooms(reservation, new_room, swap_reservation, reason):
 			frappe.db.set_value("Room", doc.room, "occupancy_status", "Occupied")
 			log_action("room_move", "Reservation", doc.name, property, rationale=reason or "",
 			           before_snapshot={"room": counterpart.room},
-			           after_snapshot={"room": doc.room, "swapped_with": counterpart.name})
+			           after_snapshot={"room": doc.room, "swapped_with": counterpart.name,
+			                           "effective_date": str(get_business_date(property))})
 	except Exception:
 		frappe.db.rollback(save_point=savepoint)
 		raise
@@ -8859,13 +8863,16 @@ def _move_reservation(reservation, new_room, reason, confirm_price, rate_mode,
 		note += f" · discount signed off by {approver}"
 	if (reason or "").strip():
 		note += f" · {reason.strip()[:140]}"
+	from kamra.business_date import get_business_date
 	after = {"room": doc.room, "room_type": doc.room_type,
 	         "amount_after_tax": float(doc.amount_after_tax or 0),
 	         "room_type_to_charge": doc.get("room_type_to_charge") or doc.room_type,
 	         "upgrade_type": doc.get("upgrade_type")}
 	log_action("room_move", "Reservation", doc.name, doc.property, rationale=note,
 	           approver=upgrade_approver or approver, before_snapshot=before,
-	           after_snapshot={**after, "nights": preview["nights"], "reason": reason})
+	           after_snapshot={**after, "nights": preview["nights"], "reason": reason,
+	                           "effective_date": str(get_business_date(doc.property) if doc.status == "Checked In"
+	                                                 else doc.check_in_date)})
 	return {"ok": True, **after}
 
 

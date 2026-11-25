@@ -1062,6 +1062,11 @@ def _append_charge(folios, reservation, charge_type, line):
 	parts = line_parts(reservation, charge_type, line["amount"], line["posting_date"],
 	                   transaction_code=line.get("transaction_code"),
 	                   gst_rate=line.get("gst_rate"), pending=_pending_routed(folios))
+	if len(parts) > 1 and line.get("tax_as_posted"):
+		# Routing apportions the ordinary tax. The final split takes the
+		# difference to the tax actually sold on a gross-priced night.
+		parts[-1]["gst_amount"] = float(Decimal(str(line["gst_amount"])) - sum(
+			(Decimal(str(part["gst_amount"])) for part in parts[:-1]), Decimal(0)))
 	for part in parts:
 		name = part["folio"]
 		if name not in folios:
@@ -1321,6 +1326,33 @@ def reference_currency(reservation, grand_total=None, balance=None, *, charges=N
 	return out
 
 
+def _night_room_description(reservation, date):
+	"""Replay physical assignments backwards. Rates can belong to a different type."""
+	room, room_type = reservation.room, reservation.room_type
+	changes = frappe.get_all("Agent Action Log", filters={"action_type": "room_move",
+		"property": reservation.property, "reference_doctype": "Reservation", "reference_name": reservation.name},
+		fields=["before_snapshot", "after_snapshot"], order_by="creation desc, name desc")
+	cutoff = reservation.get("room_move_rate_cutoff")
+	unknown = not changes and cutoff and date < str(cutoff)
+	for change in changes:
+		after = frappe.parse_json(change.after_snapshot or "{}") or {}
+		before = frappe.parse_json(change.before_snapshot or "{}") or {}
+		effective = after.get("effective_date")
+		if not effective or after.get("room") != room:
+			unknown = True
+			break
+		if date >= effective:
+			break
+		room = before.get("room")
+		room_type = before.get("room_type") or room_type
+	if unknown:
+		room = None
+		# A billing type can differ from the physical assignment after a comp.
+		room_type = None
+	number = frappe.db.get_value("Room", {"name": room, "property": reservation.property}, "room_number") if room else None
+	return (f"Room {number}" if number else "Room") + (f" · {room_type.split('-')[-1]}" if room_type else "")
+
+
 def post_room_night(reservation, date, folios=None, *, room_posted: list | None = None,
                     package_stats: dict | None = None) -> bool:
 	"""Post one night's room (and meal plan / package elements) charge, routed by the
@@ -1342,13 +1374,12 @@ def post_room_night(reservation, date, folios=None, *, room_posted: list | None 
 	pkg_doc = active_package_for_reservation(reservation, date)
 
 	if pkg_doc is not None or not _charge_posted(reservation.name, "Room", date):
-		room_no = (reservation.room or "").split("-")[-1]
+		room_label = _night_room_description(reservation, date)
 		day_use = _day_use_room_charge(reservation, date)
 		current = None
 		if day_use:
 			night_rate, gst_rate, du_label = day_use
-			desc = (f"Room {room_no} · {reservation.room_type.split('-')[-1]}"
-			        f" · {du_label}")
+			desc = f"{room_label} · {du_label}"
 		else:
 			current = current_date_contract_night(reservation, date)
 			if current:
@@ -1356,7 +1387,7 @@ def post_room_night(reservation, date, folios=None, *, room_posted: list | None 
 			else:
 				night_rate = _nightly_room_rate(reservation, date)
 				gst_rate = _nightly_gst(reservation, date)
-			desc = (f"Room {room_no} · {reservation.room_type.split('-')[-1]}"
+			desc = (room_label
 			        + (" · day use" if getattr(reservation, "is_day_use", 0) else "")
 			        + (f" · {current['label']}" if current else ""))
 			locked = locked_night(reservation, date)
@@ -1390,8 +1421,10 @@ def post_room_night(reservation, date, folios=None, *, room_posted: list | None 
 			             "contract_fx_date": current["fx_date"], "contract_fx_stale": int(current["stale"])}
 		from kamra.room_statistics import category_rules
 		rate_cat = category_rules(reservation.property).of(reservation.get("rate_category"))
+		night_quote = _quoted_room_night(reservation, date)
+		sold_gross = night_quote.get("sold_room_gross") if not current and not day_use else None
 		if pkg_doc is not None:
-			pkg_room_gst = _quoted_room_gst(reservation, date, gst_rate)
+			pkg_room_gst = night_quote.get("room_gst_rate", gst_rate)
 			pkg_res = post_package_night_split(
 				reservation,
 				pkg_doc,
@@ -1400,6 +1433,7 @@ def post_room_night(reservation, date, folios=None, *, room_posted: list | None 
 				date,
 				folios=folios,
 				room_desc=desc,
+				sold_gross=sold_gross,
 				fx_posted=fx_posted,
 				rate_category=rate_cat,
 			)
@@ -1424,6 +1458,8 @@ def post_room_night(reservation, date, folios=None, *, room_posted: list | None 
 		else:
 			_append_charge(folios, reservation, "Room", {
 				**fx_posted,
+				**({"tax_as_posted": 1, "gst_amount": float(Decimal(str(sold_gross)) - Decimal(str(night_rate)))}
+				   if sold_gross is not None else {}),
 				"posting_date": date,
 				"charge_type": "Room",
 				"reservation": reservation.name,
@@ -1550,20 +1586,25 @@ def _post_room_levy(folios, reservation, date, night_rate, gst_rate=None):
 RATE_ADJUSTMENT = "Rate Adjustment"
 
 
-def _quoted_room_gst(reservation, date, fallback: float) -> float:
-	"""The room-component tax rate stored in quote_snapshot for a package night, or fallback."""
-	snap = reservation.get("quote_snapshot")
-	if not snap:
-		return float(fallback or 0)
+def _quoted_room_night(reservation, date):
 	try:
-		parsed = json.loads(snap) if isinstance(snap, str) else snap
-		key = str(getdate(date))
-		for n in (parsed.get("nightly") or []) if isinstance(parsed, dict) else ():
-			if str(n.get("date")) == key and n.get("room_gst_rate") is not None:
-				return float(n["room_gst_rate"])
+		snap = frappe.parse_json(reservation.get("quote_snapshot") or "{}")
 	except (TypeError, ValueError):
-		pass
-	return float(fallback or 0)
+		return {}
+	if not isinstance(snap, dict):
+		return {}
+	nights = snap.get("nightly") or []
+	night = next((n for n in nights if n.get("date") == date), {})
+	if night and "sold_room_gross" not in night and (snap.get("package") or any(n.get("package_id") for n in nights)):
+		# Older quote snapshots already hold the pre-rounding net and component tax.
+		from kamra.ledger import minor_unit
+		from kamra.pricing import rates_include_tax, sold_night_gross
+		if rates_include_tax(reservation.property):
+			net = night.get("rate") if night.get("discount_amount") else night.get("quoted_base_rate")
+			if net is not None:
+				night["sold_room_gross"] = sold_night_gross(net, night.get("gst_rate"), minor_unit(reservation.property),
+				                                         None if "planned_rate" in night else night.get("package_tax"))
+	return night
 
 
 def charged_nights(reservation_name: str) -> dict:

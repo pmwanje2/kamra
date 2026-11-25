@@ -143,7 +143,7 @@ def board_status(property, rooms, *, business_date=None):
 		)
 		row.pop("hk_resolved_occupancy", None)
 		if (str(row.turndown_business_date) != day or (
-				row.turndown_status == "Pending" and row.housekeeping_status in UNSERVICEABLE_ROOMS)):
+				row.turndown_status == "Pending" and (row.name not in occupied or row.housekeeping_status in UNSERVICEABLE_ROOMS))):
 			row.update(turndown_requested=0, turndown_status="Not Required")
 	return rooms
 
@@ -258,8 +258,8 @@ def retire_turndown_tasks(property, *, room=None, before=None):
 		                    {"turndown_requested": 0, "turndown_status": "Not Required"})
 
 
-def turndown_is_current(service_date, business_date, room_status):
-	return bool(room_status) and room_status not in UNSERVICEABLE_ROOMS and str(service_date) == str(business_date)
+def turndown_is_current(service_date, business_date, room_status, occupied):
+	return occupied and bool(room_status) and room_status not in UNSERVICEABLE_ROOMS and str(service_date) == str(business_date)
 
 
 def assert_turndown_actionable(task):
@@ -267,7 +267,7 @@ def assert_turndown_actionable(task):
 		return
 	status = frappe.db.get_value("Room", {"name": task.room, "property": task.property}, "housekeeping_status")
 	if task.status == "Cancelled" or not turndown_is_current(
-			task.business_date, get_business_date(task.property), status):
+			task.business_date, get_business_date(task.property), status, task.room in _occupied_rooms(task.property)):
 		frappe.throw(_("Turndown is unavailable for this room on the current business date."))
 
 
@@ -350,9 +350,10 @@ def auto_assign_housekeeping_tasks(property: str, business_date: str, attendants
 	loads = dict.fromkeys(users, Decimal(0))
 	sections = {user: set() for user in users}
 	pending = []
+	occupied = _occupied_rooms(property) if any(row.task_type == "Turndown" for row in rows) else set()
 	for row in rows:
 		if (row.task_type == "Turndown" and row.status in OPEN_HOUSEKEEPING_STATUSES
-				and not turndown_is_current(row.business_date, current_day, row.housekeeping_status)):
+				and not turndown_is_current(row.business_date, current_day, row.housekeeping_status, row.room in occupied)):
 			continue
 		row["credits"] = _credit_weight(row, room_types)
 		row["section"] = row.hk_section or row.floor or ""

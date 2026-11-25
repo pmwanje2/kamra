@@ -968,17 +968,18 @@ def _version_move_dates(value, first, last):
 def nightly_billing_room_types(reservation) -> dict[str, str]:
 	"""Frozen room types for nights before a paid move, keyed by business date."""
 	recorded = reservation.get("room_move_night_types")
-	if recorded or isinstance(recorded, dict):
-		return frappe.parse_json(recorded) or {}
+	recorded = frappe.parse_json(recorded) if recorded else {}
 	tariff = saved_contract_tariff(reservation).get("tariff") or {}
 	types = {str(n["date"]): n["room_type"] for n in tariff.get("nights") or [] if n.get("room_type")}
+	types.update({day: name for day, name in (recorded or {}).items() if name})
 	# Older moves recorded their effective date and the old room type together
 	# in the reservation Version. Recover only dates covered by a recorded move.
 	cutoff = reservation.get("room_move_rate_cutoff")
 	if not cutoff or not reservation.get("name"):
 		return types
-	days = {str(r.get("stay_date")) for r in reservation.get("night_rates") or []
-	        if r.get("stay_date") and str(r.get("stay_date")) < str(cutoff)} - types.keys()
+	locked_dates = [str(row.stay_date) for row in reservation.get("night_rates") or [] if row.get("stay_date")]
+	elapsed = locked_dates or _stay_nights(reservation.check_in_date, cutoff)
+	days = {day for day in elapsed if day < str(cutoff)} - types.keys()
 	if not days:
 		return types
 	# A Version Date is display text on older sites. Only consider interpretations
@@ -992,22 +993,21 @@ def nightly_billing_room_types(reservation) -> dict[str, str]:
 		if "room_move_rate_cutoff" in changes and "room_type" in changes:
 			source = changes.get("room_type_to_charge", (None, None))[0] or changes["room_type"][0]
 			old, new = changes["room_move_rate_cutoff"]
-			moves.append((old, new, source, getdate(version.creation)))
+			moves.append((old, new, source, changes["room_type"][1]))
 
 	first, last = getdate(reservation.check_in_date), getdate(cutoff)
 	options = []
-	for i, (_old, new, _source, created) in enumerate(moves):
+	for i, (_old, new, _source, target) in enumerate(moves):
 		dates = _version_move_dates(new, first, last)
 		# The next Version's old value records this same boundary, sometimes
 		# in a later, unambiguous format. The latest boundary is a SQL Date.
 		if i + 1 == len(moves):
-			dates = {last}
+			if last in dates or (not dates and target == reservation.room_type):
+				dates = {last}
 		else:
 			old_dates = _version_move_dates(moves[i + 1][0], first, last)
-			if old_dates:
+			if old_dates and target == moves[i + 1][2]:
 				dates = dates & old_dates if dates else old_dates
-			elif not dates and first <= created <= last:
-				dates = {created}
 		options.append(dates)
 
 	# Enforce chronological order in both directions, without guessing a
@@ -1018,16 +1018,19 @@ def nightly_billing_room_types(reservation) -> dict[str, str]:
 	for i in reversed(range(len(options) - 1)):
 		if options[i + 1]:
 			options[i] = {d for d in options[i] if d <= max(options[i + 1])}
-	for dates, move in zip(options, moves, strict=True):
-		source = move[2]
-		if not dates:
-			frappe.throw(_("The room move history is ambiguous. Verify the effective dates before repricing."))
-		earliest, latest = min(dates).isoformat(), max(dates).isoformat()
-		for day in days - types.keys():
-			if earliest <= day < latest:
-				frappe.throw(_("The room move history is ambiguous. Verify the effective dates before repricing."))
-			if day < earliest and source:
-				types[day] = source
+	# Each entry describes only the interval starting at its previous cutoff.
+	# A missing Version must never extend the following room back to arrival.
+	for i, (old, _new, source, _target) in enumerate(moves):
+		starts = _version_move_dates(old, first, last) if old else (set() if i else {first})
+		if i and moves[i - 1][3] == source and options[i - 1]:
+			starts = starts & options[i - 1] if starts and old else options[i - 1]
+		if starts and options[i] and source:
+			start, end = max(starts).isoformat(), min(options[i]).isoformat()
+			for day in days - types.keys():
+				if start <= day < end:
+					types[day] = source
+	if days - types.keys():
+		frappe.throw(_("The room move history is ambiguous. Verify the effective dates before repricing."))
 	return types
 
 
@@ -2315,8 +2318,15 @@ def stay_room_tax_rate(room_tax: Decimal, room_total: Decimal, nightly: list) ->
 	return sum(rates, Decimal(0)) / len(rates) if rates else Decimal(0)
 
 
+def sold_night_gross(net, gst, unit, package_tax=None):
+	"""Payable gross at the property's precision, including mixed-tax components."""
+	net = _dec(net)
+	tax = _dec(package_tax) if package_tax is not None else net * _dec(gst) / 100
+	return (net + tax).quantize(unit, rounding=ROUND_HALF_UP)
+
+
 def _pin_nights(nightly: list, locked: dict, inclusive: bool, night_over_cap: Decimal,
-                places: int = 2, *, priced_nets: list[Decimal]) -> tuple:
+                places: int = 2, *, priced_nets: list[Decimal], gross_unit=None) -> tuple:
 	"""Put each booked night's locked room price back on the quote's night
 	(quote locked_nights) and total the room from them: (room total, room
 	tax, base and discount on the desk's basis, extra guests and their tax,
@@ -2330,6 +2340,15 @@ def _pin_nights(nightly: list, locked: dict, inclusive: bool, night_over_cap: De
 					n.pop(key, None)
 				n.update({key: row[key] for key in ("package", "package_id", "room_gst_rate", "package_tax")
 				          if key in row})
+			if row.get("sold_room_gross") is not None:
+				n["sold_room_gross"] = row["sold_room_gross"]
+			elif "sold_room_gross" in n:
+				# Old source lock: use its own rate and tax, never today's rack.
+				old_net = _dec(row["rate"])
+				if not row.get("discount_amount") and row.get("quoted_base_rate"):
+					old_net = _dec(row["quoted_base_rate"])
+				n["sold_room_gross"] = float(sold_night_gross(old_net, row.get("gst_rate"), gross_unit,
+				                                            row.get("package_tax")))
 			n.update(rate=flt(row.get("rate")), gst_rate=flt(row.get("gst_rate")),
 			         base_rate=flt(row.get("base_rate")) or flt(row.get("rate")),
 			         quoted_base_rate=flt(row.get("quoted_base_rate")),
@@ -2344,8 +2363,11 @@ def _pin_nights(nightly: list, locked: dict, inclusive: bool, night_over_cap: De
 			n["planned_rate"] = n["rate"]
 		rate, gst, off = _dec(n["rate"]), _dec(n["gst_rate"]), _dec(n.get("discount_amount"))
 		room_total += rate
-		room_tax += (_dec(n["package_tax"]) if n.get("package_tax") is not None and "planned_rate" not in n
-		             else rate * gst / Decimal(100))
+		if n.get("sold_room_gross") is not None:
+			room_tax += _dec(n["sold_room_gross"]) - rate
+		else:
+			room_tax += (_dec(n["package_tax"]) if n.get("package_tax") is not None and "planned_rate" not in n
+			             else rate * gst / Decimal(100))
 		base_total += entry_rate(rate, gst, inclusive, places) + off
 		off_total += off
 		if night_over_cap:
@@ -2379,7 +2401,8 @@ def _package_night_tax(pseudo_res, pkg_doc, night_rate: Decimal, room_gst: Decim
 	if not pkg_doc.get("elements"):
 		return night_rate * room_gst / Decimal(100), room_gst, {}
 	from kamra.packages import split_package_night
-	split = split_package_night(pseudo_res, pkg_doc, night_rate, night_date, gst_rate=float(room_gst))
+	split = split_package_night(pseudo_res, pkg_doc, night_rate, night_date, gst_rate=float(room_gst),
+	                            fulfilled=pseudo_res.get("fixed_postings"))
 	inc_items = [item for item in split["elements"] if item["included_in_rate"]]
 	if not inc_items or all(_dec(item["gst_rate"]) == room_gst for item in inc_items):
 		return night_rate * room_gst / Decimal(100), room_gst, {"room_gst_rate": float(room_gst)}
@@ -2519,6 +2542,25 @@ def quote(
 			party = frappe._dict(name="", property=property, adults=adults, children=children,
 			                     check_in_date=dates[0], check_out_date=add_days(dates[-1], 1))
 			package_prices.update({day: (*price, pkg_doc, party) for day, price in prices.items()})
+
+	# Package entitlements span every segment that sold the same package.
+	# Include elapsed locks when preparing the first/last posting dates.
+	sold_packages = {day: values[2].name for day, values in package_prices.items()}
+	for day, row in (locked_nights or {}).items():
+		if day in types and "package_id" in row:
+			sold_packages[day] = row.get("package_id")
+	package_dates = {}
+	for day, sold in sorted(sold_packages.items()):
+		if sold:
+			package_dates.setdefault(sold, []).append(day)
+	fulfilled = {}
+	if exclude_reservation and any(el.allowance_basis == "Fixed Per Stay"
+	                               for _, _, doc, _ in package_prices.values() for el in doc.get("elements") or []):
+		from kamra.packages import fixed_package_postings
+		fulfilled = fixed_package_postings(exclude_reservation)
+	for _rate, _label, doc, party in package_prices.values():
+		party.package_dates = package_dates.get(doc.name, [])
+		party.fixed_postings = fulfilled
 
 	# Nights the desk priced by hand. Anything that would also move the room
 	# price is refused rather than quietly dropped or stacked on the typed
@@ -2768,6 +2810,18 @@ def quote(
 				n["contract_base_rate"] = gross_r
 				n["contract_discount_amount"] = 0.0
 				n["contract_rate"] = gross_r
+	# A tax-inclusive package is sold in gross currency units. Freeze that
+	# figure alongside the net, including ordinary rooms in a mixed stay.
+	# The booked net may be rounded again in the nightly child table.
+	gross_unit = None
+	if inclusive and any(sold_packages.values()):
+		from kamra.ledger import minor_unit
+		gross_unit = minor_unit(property)
+		for n, exact in zip(nightly, exact_nets, strict=True):
+			net = _dec(n["rate"]) if disc else exact
+			n["sold_room_gross"] = float(sold_night_gross(net, n["gst_rate"], gross_unit,
+			                                             None if planned_by_plan else n.get("package_tax")))
+		room_tax = sum((_dec(n["sold_room_gross"]) for n in nightly), Decimal(0)) - room_total
 	if package_prices and locked_nights:
 		# A package owns the destination price. Only elapsed move nights
 		# retain a previous room price when the stay otherwise qualifies.
@@ -2775,7 +2829,7 @@ def quote(
 	if locked_nights and not day_use:
 		room_total, room_tax, room_base_total, reservation_discount, over_cap, over_cap_tax = \
 			_pin_nights(nightly, locked_nights, inclusive, night_over_cap,
-			            places=night_rate_places(property),
+			            places=night_rate_places(property), gross_unit=gross_unit,
 			            priced_nets=[_dec(n["rate"]) for n in nightly] if disc else exact_nets)
 
 	from kamra.folio import _fnb_gst

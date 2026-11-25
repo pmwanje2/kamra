@@ -16,6 +16,8 @@ def _stage_body(environ, method):
 		_discard_request_query(request)
 		raise BadRequest
 	if request.method != "POST":
+		if request.content_length or request.is_json:
+			raise BadRequest
 		return
 	# These three RPCs take scalar arguments and never upload files. Bound
 	# parsing before a site has been opened, as Frappe does for form data.
@@ -27,12 +29,16 @@ def _stage_body(environ, method):
 		if request.files:
 			raise BadRequest
 	else:
+		if request.content_length or environ.get("wsgi.input_terminated"):
+			raise BadRequest
 		return
-	if isinstance(body, dict):
-		legacy = body.pop("supervisor_pin", None)
-		value = body.pop("pin_secret", legacy)
-		if value is not None:
-			environ["kamra.approval_credential"] = (method, _protect_pin(value))
+	if not isinstance(body, dict) or any(
+			not key.isidentifier() or isinstance(value, (dict, list)) for key, value in body.items()):
+		raise BadRequest
+	legacy = body.pop("supervisor_pin", None)
+	value = body.pop("pin_secret", legacy)
+	if value is not None:
+		environ["kamra.approval_credential"] = (method, _protect_pin(value))
 	# Rebuild even a canonical request: denied sessions, error snapshots,
 	# tracebacks and downstream request-body readers only see public fields.
 	payload = json.dumps(body, ensure_ascii=False).encode()
@@ -49,7 +55,7 @@ def approval_middleware(app):
 				_stage_body(environ, method)
 			except RequestEntityTooLarge:
 				return Response(status=413)(environ, start_response)
-			except (BadRequest, UnicodeError, ValueError):
+			except (BadRequest, UnicodeError, ValueError, RecursionError):
 				return Response(status=400)(environ, start_response)
 		return app(environ, start_response)
 	return wrapped

@@ -1,7 +1,7 @@
 {
  "info": {
-  "name": "Kamra PMS API",
-  "description": "The full Kamra REST surface. Set base_url (e.g. https://pms.yourhotel.com), api_key and api_secret in the collection variables, then call away. Docs: https://kamrapms.com/docs/api-reference",
+  "name": "Maximus PMS API",
+  "description": "The Maximus PMS REST API. Set base_url (e.g. https://pms.yourhotel.com), api_key and api_secret in the collection variables, then call away. Docs: /docs/api-reference",
   "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
  },
  "variable": [
@@ -47,7 +47,7 @@
         "kamra.api.enabled_modules"
        ]
       },
-      "description": "Which parts of Kamra this property runs. Empty setting = all of\nthem, so an existing property keeps working untouched.",
+      "description": "Which parts of Maximus this property runs. Empty setting = all of\nthem, so an existing property keeps working untouched.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"property\": \"Your Property\"\n}",
@@ -117,7 +117,7 @@
         "kamra.api.csrf_token"
        ]
       },
-      "description": "The session's current CSRF token. An open tab asks for it when its\npage-load token went stale because someone signed in or out in another\ntab (Frappe rotates the token on login). None for a guest. A GET, like\nthe boot page that already carries the token, and readable only by the\nsame origin."
+      "description": "The session's current CSRF token. An open tab asks for it when its\npage-load token went stale because someone signed in or out in another\ntab (the framework rotates the token on login). None for a guest. A GET, like\nthe boot page that already carries the token, and readable only by the\nsame origin."
      }
     },
     {
@@ -169,7 +169,7 @@
         "kamra.api.developer_info"
        ]
       },
-      "description": "REST base URL + whether the current user already has an API key.\n\nDrives the on-site Developers page. The secret itself is never returned\nhere - Frappe stores it hashed; it's only shown once, at generation time."
+      "description": "REST base URL + whether the current user already has an API key.\n\nDrives the on-site Developers page. The secret itself is never returned\nhere - the framework stores it hashed; it's only shown once, at generation time."
      }
     },
     {
@@ -3028,7 +3028,7 @@
         "kamra.api.cancel_invoice"
        ]
       },
-      "description": "Void an invoice into the register and reopen the folio for correction.\nAn invoice the ERPNext bridge issued goes to the bridge's credit and\nre-bill instead; the folio is not reopened here.",
+      "description": "Void an invoice into the register and reopen the folio for correction.\nAn invoice the accounting bridge issued goes to the bridge's credit and\nre-bill instead; the folio is not reopened here.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"folio\": \"FOLIO-2026-00001\",\n  \"reason\": \"<reason>\"\n}",
@@ -3102,7 +3102,7 @@
         "kamra.api.reprint_fiscal_folio"
        ]
       },
-      "description": "Reprint a settled folio's tax invoice (OPERA Folio History, Reprint).\n\nUnder the ERPNext accounting bridge that is the fiscal document: the ERP\nSales Invoice number with its fiscal identifiers. A fiscal document that\nis still pending, from a test fiscal service, or whose status can't be\nread is not a tax invoice, so it is not reprinted as one. Each reprint is\nlogged with its revision.",
+      "description": "Reprint a settled folio's tax invoice (OPERA Folio History, Reprint).\n\nUnder the accounting bridge that is the fiscal document: the ERP\nSales Invoice number with its fiscal identifiers. A fiscal document that\nis still pending, from a test fiscal service, or whose status can't be\nread is not a tax invoice, so it is not reprinted as one. Each reprint is\nlogged with its revision.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"folio\": \"FOLIO-2026-00001\"\n}",
@@ -3787,7 +3787,7 @@
         "kamra.api.id_document_image"
        ]
       },
-      "description": "The ID scan as a data URL, for the desk to eyeball.\n\nWhy not just point an <img> at the /private/files/ URL: Frappe would\nauthorise that through File.has_permission -> the Reservation's own\ndoctype permissions. On a site whose Custom DocPerm rows omit Front Desk\n(as ours do - any custom perm on a doctype REPLACES all its standard\nperms), that check says no, and the desk gets a broken image while a\nHotel Admin sees it. Kamra's authorization has always lived on the\nendpoint rather than the doctype (see authz.py), so the image is served\nthe same way as everything else here: one gate, one rule, works for\nevery role the app actually grants.",
+      "description": "The ID scan as a data URL, for the desk to eyeball.\n\nWhy not just point an <img> at the /private/files/ URL: the framework would\nauthorise that through File.has_permission -> the Reservation's own\ndoctype permissions. On a site whose Custom DocPerm rows omit Front Desk\n(as ours do - any custom perm on a doctype REPLACES all its standard\nperms), that check says no, and the desk gets a broken image while a\nHotel Admin sees it. Maximus's authorization has always lived on the\nendpoint rather than the doctype (see authz.py), so the image is served\nthe same way as everything else here: one gate, one rule, works for\nevery role the app actually grants.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"reservation\": \"RES-2026-00001\"\n}",
@@ -4601,7 +4601,7 @@
         "kamra.api.position_briefing"
        ]
       },
-      "description": "The GM / front-desk position briefing - what Kamra Agent reads out\nat the morning meeting: today's occupancy against the overbooking\nceiling, arrivals with ETAs, departures with ETDs and balances,\nback-to-back conflicts, the demand tier pricing is applying, and a\n7-day outlook.",
+      "description": "The GM / front-desk position briefing - what Maximus Assistant reads out\nat the morning meeting: today's occupancy against the overbooking\nceiling, arrivals with ETAs, departures with ETDs and balances,\nback-to-back conflicts, the demand tier pricing is applying, and a\n7-day outlook.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"property\": \"Your Property\",\n  \"date\": \"2026-08-01\"\n}",
@@ -5045,7 +5045,7 @@
         "kamra.api.reservation_changes"
        ]
       },
-      "description": "The reservation's Changes Log, newest first: every save Frappe\nrecorded on it (its Version rows: the fields in CHANGE_LOG_FIELDS and\neach night's rate, before and after) and every governed action (the\naudit rows: who, why, each night before and after, and who signed it\noff). Read only.",
+      "description": "The reservation's Changes Log, newest first: every save the framework\nrecorded on it (its Version rows: the fields in CHANGE_LOG_FIELDS and\neach night's rate, before and after) and every governed action (the\naudit rows: who, why, each night before and after, and who signed it\noff). Read only.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"reservation\": \"RES-2026-00001\"\n}",
@@ -5156,7 +5156,7 @@
         "kamra.api.amend_stay_preview"
        ]
       },
-      "description": "What new dates (or a new party: adults, children) would do to the\nbill, before anything changes: the current and new totals and the new\nnightly rates, priced by the engine from today's rules. amend_stay needs\nconfirm_price=1 when the total changes. For a stay in house,\n`charged_nights` says what the property's rate-change policy does to\nnights already on the folio: kept at their charged rate (kept_difference\nis what the desk may give back as an allowance) or credited\n(credit_total, posted by Kamra). A discounted stay also gets the\ndiscount rules the amendment will run (discount_governance,\nneeds_supervisor and who can sign it off: supervisors). A new rate_plan\ngets comp_governance: a Complimentary or House Use plan's sign-off.",
+      "description": "What new dates (or a new party: adults, children) would do to the\nbill, before anything changes: the current and new totals and the new\nnightly rates, priced by the engine from today's rules. amend_stay needs\nconfirm_price=1 when the total changes. For a stay in house,\n`charged_nights` says what the property's rate-change policy does to\nnights already on the folio: kept at their charged rate (kept_difference\nis what the desk may give back as an allowance) or credited\n(credit_total, posted by Maximus). A discounted stay also gets the\ndiscount rules the amendment will run (discount_governance,\nneeds_supervisor and who can sign it off: supervisors). A new rate_plan\ngets comp_governance: a Complimentary or House Use plan's sign-off.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"reservation\": \"RES-2026-00001\",\n  \"check_in_date\": \"2026-08-01\",\n  \"check_out_date\": \"2026-08-03\",\n  \"adults\": 2,\n  \"children\": 0\n}",
@@ -6109,7 +6109,7 @@
         "kamra.api.email_booking_quotation"
        ]
       },
-      "description": "Email the booking's quotation to the booker, as a PDF, through\nFrappe's own email: a Communication logged on the Reservation and sent\nby the site's outgoing account. It goes to the address on record only\n(the guest profile's email); no other recipient, cc or bcc can be given.\nThe mail is queued (status \"Queued\"); Frappe's Email Queue delivers it.\nRefuses with QUOTE_NO_EMAIL_ACCOUNT, QUOTE_NO_RECIPIENT_EMAIL,\nQUOTE_BOOKING_CLOSED, or QUOTE_RECENTLY_SENT when the same version of\nthe quotation went out less than a minute ago.",
+      "description": "Email the booking's quotation to the booker, as a PDF, through\nthe framework's own email: a Communication logged on the Reservation and sent\nby the site's outgoing account. It goes to the address on record only\n(the guest profile's email); no other recipient, cc or bcc can be given.\nThe mail is queued (status \"Queued\"); the framework's Email Queue delivers it.\nRefuses with QUOTE_NO_EMAIL_ACCOUNT, QUOTE_NO_RECIPIENT_EMAIL,\nQUOTE_BOOKING_CLOSED, or QUOTE_RECENTLY_SENT when the same version of\nthe quotation went out less than a minute ago.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"reservation\": \"RES-2026-00001\"\n}",
@@ -6479,7 +6479,7 @@
         "kamra.api.my_connector_credentials"
        ]
       },
-      "description": "Personal MCP credentials for connecting Claude (or any MCP client)\nAS YOURSELF. The key acts with exactly your roles - Frappe enforces the\nsame gates as the UI, so a front-desk connection can do front-desk\nthings and nothing more. Regenerating invalidates the old secret.\n\nPlatform-wide / service keys stay on the Developers page (IT admin).",
+      "description": "Personal MCP credentials for connecting Claude (or any MCP client)\nAS YOURSELF. The key acts with exactly your roles - the framework enforces the\nsame gates as the UI, so a front-desk connection can do front-desk\nthings and nothing more. Regenerating invalidates the old secret.\n\nPlatform-wide / service keys stay on the Developers page (IT admin).",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"property\": \"Your Property\"\n}",
@@ -6553,7 +6553,7 @@
         "kamra.api.property_locale"
        ]
       },
-      "description": "Currency, number locale and tax vocabulary for this property, from its\nlocalization pack. Drives the frontend's money formatting and tax dropdowns\nso no screen hardcodes \u20b9 or GST %. `integrations` says which country\nintegrations (gateways, tax return, ID checks) this property has.",
+      "description": "Currency, number locale and tax vocabulary for this property, from its\nlocalization pack. Drives the frontend's money formatting and tax dropdowns\nso no screen hardcodes a currency symbol or GST %. `integrations` says which country\nintegrations (gateways, tax return, ID checks) this property has.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"property\": \"Your Property\"\n}",
@@ -10780,7 +10780,7 @@
         "kamra.banquet.function_sheet"
        ]
       },
-      "description": "One function, everything about it - the sheet the banquet screen\nrenders and Kamra Agent reads.",
+      "description": "One function, everything about it - the sheet the banquet screen\nrenders and Maximus Assistant reads.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"function\": \"EVT-2026-0001\"\n}",
@@ -11631,7 +11631,7 @@
         "kamra.banquet.post_to_folio"
        ]
       },
-      "description": "Push the chargeable lines (and F&B service charge) onto a bill. A\nfunction tied to a group rides the group's master folio; otherwise a\nstandalone function posts to its event folio (under the bridge) or an\nexplicitly passed folio. Liquor posts with the rest: the bill chosen is\nthe one that pays the function.\n\nUnder the ERP accounting bridge, line tax is zero because ERPNext's tax\ntemplates calculate tax on the Sales Invoice (KMR-TAX-001).",
+      "description": "Push the chargeable lines (and F&B service charge) onto a bill. A\nfunction tied to a group rides the group's master folio; otherwise a\nstandalone function posts to its event folio (under the bridge) or an\nexplicitly passed folio. Liquor posts with the rest: the bill chosen is\nthe one that pays the function.\n\nUnder the ERP accounting bridge, line tax is zero because the accounting system's tax\ntemplates calculate tax on the Sales Invoice (KMR-TAX-001).",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"function\": \"EVT-2026-0001\",\n  \"folio\": \"FOLIO-2026-00001\"\n}",
@@ -11668,7 +11668,7 @@
         "kamra.banquet.settle_event_folio"
        ]
       },
-      "description": "Settle and close a standalone event folio (OPERA event direct-bill /\ncity ledger settlement or final cash/tender settlement).\n\nWhen `to_city_ledger=1`, routes the open balance to the function's\nCorporate Account City Ledger Account and closes the folio in the same\nrequest so ERPNext issues the Sales Invoice to the company's ERP Customer\nwith the unpaid balance in native AR.",
+      "description": "Settle and close a standalone event folio (OPERA event direct-bill /\ncity ledger settlement or final cash/tender settlement).\n\nWhen `to_city_ledger=1`, routes the open balance to the function's\nCorporate Account City Ledger Account and closes the folio in the same\nrequest so the accounting system issues the Sales Invoice to the company's ERP Customer\nwith the unpaid balance in native AR.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"function\": \"EVT-2026-0001\",\n  \"to_city_ledger\": 0,\n  \"amount\": 1000\n}",
@@ -12640,7 +12640,7 @@
         "kamra.golive.csv_template"
        ]
       },
-      "description": "The header row of one of Kamra's go-live CSV templates.",
+      "description": "The header row of one of Maximus's go-live CSV templates.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"kind\": \"<kind>\"\n}",
@@ -12788,7 +12788,7 @@
         "kamra.golive.run_opening"
        ]
       },
-      "description": "Post the opening balances. Each item is posted once: a re-run of the\nsame file finds it in Kamra and skips it (and says so). Company bills\ngo in before company credits, so a credit settles the oldest bill.",
+      "description": "Post the opening balances. Each item is posted once: a re-run of the\nsame file finds it in Maximus and skips it (and says so). Company bills\ngo in before company credits, so a credit settles the oldest bill.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"property\": \"Your Property\",\n  \"csv_text\": \"<csv_text>\"\n}",
@@ -12825,7 +12825,7 @@
         "kamra.golive.reconcile"
        ]
       },
-      "description": "Counts and totals in each go-live file against what is now in Kamra,\nper category. `ready` is true only when every category matches and no\nrow of any file was left out - the gate before the hotel goes live.",
+      "description": "Counts and totals in each go-live file against what is now in Maximus,\nper category. `ready` is true only when every category matches and no\nrow of any file was left out - the gate before the hotel goes live.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"property\": \"Your Property\"\n}",
@@ -16761,7 +16761,7 @@
         "kamra.books.profit_and_loss"
        ]
       },
-      "description": "A management P&L for the period, before tax: revenue by department\n(rooms, food and beverage, banquets, other, less allowances) and\nexpenses (approved supplier bills by category on their bill date, petty\ncash by category, cash paid out from the tills). Credit notes on\nclosed bills count under allowances. Not statutory accounts: payroll, depreciation and anything\npaid outside Kamra are not in it.",
+      "description": "A management P&L for the period, before tax: revenue by department\n(rooms, food and beverage, banquets, other, less allowances) and\nexpenses (approved supplier bills by category on their bill date, petty\ncash by category, cash paid out from the tills). Credit notes on\nclosed bills count under allowances. Not statutory accounts: payroll, depreciation and anything\npaid outside Maximus are not in it.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"property\": \"Your Property\",\n  \"from_date\": \"2026-08-01\",\n  \"to_date\": \"2026-08-31\"\n}",
@@ -16798,7 +16798,7 @@
         "kamra.books.balance_sheet"
        ]
       },
-      "description": "What is owed to the hotel and what it owes, as of a date (default\ntoday): guest ledger and city ledger against advance deposits and\nsupplier bills, plus cash in open tills when the date is today. Tax\ncollected this month is shown for reference, not in the totals: Kamra\ndoes not record tax paid to the government. Not a full balance sheet:\nthe bank, fixed assets, loans and equity are not in Kamra.",
+      "description": "What is owed to the hotel and what it owes, as of a date (default\ntoday): guest ledger and city ledger against advance deposits and\nsupplier bills, plus cash in open tills when the date is today. Tax\ncollected this month is shown for reference, not in the totals: Maximus\ndoes not record tax paid to the government. Not a full balance sheet:\nthe bank, fixed assets, loans and equity are not in Maximus.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"property\": \"Your Property\"\n}",
@@ -17391,7 +17391,7 @@
         "kamra.agents_api.staff_sign_ins"
        ]
       },
-      "description": "Who signed in to and out of Kamra, newest first: Frappe's own Login /\nLogout records (Activity Log), limited to this property's staff. Only\nwhat Frappe already stores is shown - who, when, in or out, and whether\nthe attempt worked. IP addresses are left out.",
+      "description": "Who signed in to and out of Maximus, newest first: the framework's own Login /\nLogout records (Activity Log), limited to this property's staff. Only\nwhat the framework already stores is shown - who, when, in or out, and whether\nthe attempt worked. IP addresses are left out.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"property\": \"Your Property\",\n  \"limit\": 50,\n  \"start\": 0\n}",
@@ -18959,7 +18959,7 @@
         "kamra.staff.list_staff"
        ]
       },
-      "description": "Everyone with a Kamra role who can reach this property.",
+      "description": "Everyone with a Maximus role who can reach this property.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"property\": \"Your Property\"\n}",
@@ -20067,7 +20067,7 @@
         "kamra.public_api.default_property"
        ]
       },
-      "description": "Which Property the public booking engine (``/book``) should show.\n\nEach Kamra deploy is single-tenant: one site = one hotel/villa. The\nfrontend used to hardcode the demo property name, which only worked\non the seeded demo site and broke the booking engine on every other\ntenant (``Property <name> not found`` / permission error for Guest).\n\nPicks the Property with booking_engine_enabled=1; if none are flagged\n(fresh install) or several are, falls back to the first Property so\nthe page still renders instead of hanging on a guest permission error."
+      "description": "Which Property the public booking engine (``/book``) should show.\n\nEach Maximus deploy is single-tenant: one site = one hotel/villa. The\nfrontend used to hardcode the demo property name, which only worked\non the seeded demo site and broke the booking engine on every other\ntenant (``Property <name> not found`` / permission error for Guest).\n\nPicks the Property with booking_engine_enabled=1; if none are flagged\n(fresh install) or several are, falls back to the first Property so\nthe page still renders instead of hanging on a guest permission error."
      }
     },
     {
@@ -20223,7 +20223,7 @@
         "kamra.public_api.precheckin_upload_id"
        ]
       },
-      "description": "The guest photographs their ID during pre-arrival check-in.\n\nDeliberately NOT Frappe's upload_file. That endpoint would need the\nsite-wide `allow_guests_to_upload_files` setting, which opens\nunauthenticated upload to the whole site; on its guest branch it sets\nignore_permissions and never sees a token, so it cannot tell whether this\nguest owns this booking; and it takes is_private from the client - i.e.\nit trusts the browser to protect an Aadhaar scan. Here the token is the\ngate, the rate limit is real, and privacy is not negotiable.\n\nOptional by design: nothing downstream requires a document. A guest with\na cracked camera or a bad lobby connection must still be able to\npre-register, so the submit gate never mentions this.",
+      "description": "The guest photographs their ID during pre-arrival check-in.\n\nDeliberately NOT the framework's upload_file. That endpoint would need the\nsite-wide `allow_guests_to_upload_files` setting, which opens\nunauthenticated upload to the whole site; on its guest branch it sets\nignore_permissions and never sees a token, so it cannot tell whether this\nguest owns this booking; and it takes is_private from the client - i.e.\nit trusts the browser to protect an Aadhaar scan. Here the token is the\ngate, the rate limit is real, and privacy is not negotiable.\n\nOptional by design: nothing downstream requires a document. A guest with\na cracked camera or a bad lobby connection must still be able to\npre-register, so the submit gate never mentions this.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"token\": \"<token>\",\n  \"data\": \"<data>\"\n}",
@@ -20421,7 +20421,7 @@
         "kamra.public_api.hosting_enquiry"
        ]
       },
-      "description": "Hosting / implementation enquiry from kamrapms.com. Stored first (a lead is\nnever lost even without SMTP), then a best-effort email to the team.\n\nLeads are System Manager\u2013only and purged after\n``hosting_enquiry_retention_months`` (default 24) unless status is Won.",
+      "description": "Hosting / implementation enquiry from the product site. Stored first (a lead is\nnever lost even without SMTP), then a best-effort email to the team.\n\nLeads are System Manager\u2013only and purged after\n``hosting_enquiry_retention_months`` (default 24) unless status is Won.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"full_name\": \"A. Guest\",\n  \"email\": \"guest@example.com\",\n  \"phone\": \"+91 90000 00000\",\n  \"property_name\": \"\",\n  \"rooms\": 0,\n  \"city\": \"\",\n  \"message\": \"\",\n  \"country\": \"\",\n  \"interest\": \"\"\n}",
