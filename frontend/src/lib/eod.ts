@@ -54,6 +54,7 @@ export interface Check {
   acknowledgement?: Acknowledgement | null
   exception?: boolean
   unverified?: boolean
+  can_override_gl_variance?: boolean
   total?: number | null
   summary?: ControlTieOutSummary | null
 }

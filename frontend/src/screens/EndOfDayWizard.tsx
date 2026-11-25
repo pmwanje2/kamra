@@ -32,7 +32,6 @@ import {
   runNightAudit,
   type Check,
   type CheckItem,
-  type ControlTieOutRow,
   type EodState,
 } from "../lib/eod"
 import { serverError } from "../lib/resource"
@@ -314,7 +313,7 @@ function Message({ tone, children }: { tone: "info" | "warn" | "block" | "ok"; c
 }
 
 /** What to do about a check: usual fixes, ask the agent, or override. */
-function FixHelp({ check, date }: { check: Check; date: string }) {
+function FixHelp({ check, date, canOverride }: { check: Check; date: string; canOverride: boolean }) {
   const property = decodeURIComponent(useParams().property ?? "")
   const { t } = useT()
   const navigate = useNavigate()
@@ -347,9 +346,9 @@ function FixHelp({ check, date }: { check: Check; date: string }) {
         </Button>
         <span className="text-xs text-zinc-400">{t("It opens the agent with this check described. You approve what it changes.")}</span>
       </div>}
-      <p className="mt-3 text-xs text-zinc-500">
+      {canOverride && <p className="mt-3 text-xs text-zinc-500">
         <span className="font-medium text-zinc-600">{t("If you override:")}</span> {t(fix.override)}
-      </p>
+      </p>}
     </div>
   )
 }
@@ -371,8 +370,9 @@ function CheckBlock({
   if (!check) return null
   const ack = state.acknowledgements.find((a) => a.key === check.key)
   const blocking = check.severity === "block" && (check.count > 0 || !!check.unverified)
-  const canOverride = !(check.key === "gl_control_tieout" && check.unverified)
-  const minReasonLen = check.key === "gl_control_tieout" ? 10 : 3
+  const glTieOut = check.key === "gl_control_tieout"
+  const canOverride = !glTieOut || (!check.unverified && check.can_override_gl_variance === true)
+  const minReasonLen = glTieOut ? 10 : 3
   const needsAttention = check.count > 0 || !!check.unverified
   return (
     <div className="space-y-2">
@@ -391,13 +391,15 @@ function CheckBlock({
       </div>
       {needsAttention && <p className="text-xs text-zinc-500">{t(check.action)}</p>}
       {needsAttention && !state.ran && check.severity !== "info" && (
-        <FixHelp check={check} date={state.business_date} />
+        <FixHelp check={check} date={state.business_date} canOverride={canOverride} />
       )}
       {children}
       {blocking && !ack && !state.ran && !canOverride && (
         <div className="rounded-lg border border-rose-200 bg-rose-50/60 p-3">
           <p className="text-xs text-rose-800">
-            {t("Accounting GL control tie-out is unverified and blocks closing until control accounts are configured and verified.")}
+            {check.unverified
+              ? t("Accounting GL control tie-out is unverified and blocks closing until control accounts are configured and verified.")
+              : t("Finance or Hotel Admin can override this variance only when property policy allows it.")}
           </p>
         </div>
       )}
@@ -706,25 +708,12 @@ export default function EndOfDayWizard() {
           />
         )
       case "gl_control_tieout":
-        return c.summary ? (
-          <ControlTieOutCard tieout={c.summary} currency={wizardCurrency} symbol={wizardSymbol} />
-        ) : c.unverified ? (
-          <Message tone="block">{t("Control Tie-Out: Not verified")} — {t(c.action)}</Message>
-        ) : items.length > 0 ? (
-          <ControlTieOutCard
-            tieout={{
-              ok: false,
-              status: "Variance",
-              in_balance: false,
-              currency: wizardCurrency,
-              business_date: state.business_date,
-              total_variance: items.reduce((acc, r) => acc + Math.abs(Number(r.variance ?? 0)), 0),
-              controls: items as unknown as ControlTieOutRow[],
-            }}
-            currency={wizardCurrency}
-            symbol={wizardSymbol}
-          />
-        ) : null
+        if (c.unverified && !c.summary) {
+          return <Message tone="block">{t("Control Tie-Out: Not verified")} — {t(c.action)}</Message>
+        }
+        return c.severity !== "info" && (
+          <ControlTieOutCard tieout={c.summary ?? null} currency={wizardCurrency} symbol={wizardSymbol} />
+        )
       case "open_pos_bills":
         return <StepTable currency={wizardCurrency} cols={POS_COLS} rows={items} empty={translate("Every outlet bill is settled.")} />
       case "pos_room_postings":

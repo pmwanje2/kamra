@@ -473,12 +473,24 @@ export function ControlTieOutCard({
   currency: overrideCurrency,
   symbol: overrideSymbol,
 }: {
-  tieout: ControlTieOutSummary
+  tieout: ControlTieOutSummary | null
   currency?: string
   symbol?: string
 }) {
   const { t } = useT()
   const packMoney = usePackMoney()
+  const controls = Array.isArray(tieout?.controls) ? tieout.controls : []
+  if (!tieout || (tieout.status !== "Unverified" && (
+    !Number.isFinite(tieout.total_variance) || controls.length === 0 ||
+    controls.some((row) =>
+      ![row.subledger_balance, row.gl_balance, row.variance].every(Number.isFinite))
+  ))) {
+    return (
+      <p className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
+        {t("Accounting GL control tie-out figures are restricted.")}
+      </p>
+    )
+  }
   const resolvedCurrency = tieout.currency || overrideCurrency || packMoney.currency || undefined
   const resolvedDigits =
     typeof tieout.precision === "number" && Number.isInteger(tieout.precision) && tieout.precision >= 0
@@ -492,10 +504,8 @@ export function ControlTieOutCard({
         : packMoney.symbol || (resolvedCurrency ? `${resolvedCurrency} ` : "")
   const fmt = (n: unknown) => fmtAmount(n, resolvedCurrency, resolvedDigits)
   const fmtWithCur = (n: unknown) => `${resolvedSymbol}${fmt(n)}`
-  const controls = Array.isArray(tieout.controls) ? tieout.controls : []
   const isBalanced = tieout.in_balance === true && tieout.status === "Balanced"
-  const isUnverified =
-    tieout.status === "Unverified" || (!isBalanced && controls.length === 0)
+  const isUnverified = tieout.status === "Unverified"
   const toneClass = isBalanced
     ? "border-emerald-200 bg-emerald-50/40"
     : isUnverified
@@ -523,8 +533,10 @@ export function ControlTieOutCard({
             {t("Accounting GL Control Tie-Out")}
           </h4>
           <p className="text-xs text-zinc-500">
-            {tieout.business_date ? `${fmtDay(tieout.business_date)} · ` : ""}
-            {t("Tolerance {amount}", { amount: fmtWithCur(tieout.tolerance ?? 0) })}
+            {tieout.business_date && fmtDay(tieout.business_date)}
+            {Number.isFinite(tieout.tolerance) && (
+              <>{tieout.business_date && " · "}{t("Tolerance {amount}", { amount: fmtWithCur(tieout.tolerance) })}</>
+            )}
           </p>
         </div>
         {isBalanced ? (
@@ -541,7 +553,7 @@ export function ControlTieOutCard({
           <Badge tone="rose">
             <TriangleAlert className="me-1 size-3.5 shrink-0" aria-hidden />
             {t("Control Tie-Out: Variance ({amount})", {
-              amount: fmtWithCur(tieout.total_variance ?? 0),
+              amount: fmtWithCur(tieout.total_variance),
             })}
           </Badge>
         )}

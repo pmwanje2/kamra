@@ -2685,3 +2685,5 @@ this bill,cette note
 {product} is temporarily unavailable. Contact your system administrator.,{product} est temporairement indisponible. Contactez votre administrateur système.
 Accounting GL control tie-out is unverified and cannot be overridden.,Le rapprochement de contrôle comptable GL n'est pas vérifié et ne peut pas être ignoré.
 Give a reason of at least 10 characters for overriding an accounting GL control tie-out variance.,Indiquez un motif d'au moins 10 caractères pour ignorer un écart de rapprochement de contrôle comptable GL.
+Accounting GL control tie-out must be cleared before closing.,Le rapprochement des comptes de contrôle du grand livre doit être validé avant la clôture.
+Overriding an accounting GL control tie-out variance requires Finance or Hotel Admin access and an enabled property policy.,Pour passer outre un écart de rapprochement des comptes de contrôle du grand livre il faut disposer du rôle Finance ou Administrateur hôtelier et y être autorisé par la politique de l'établissement.

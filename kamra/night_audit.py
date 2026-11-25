@@ -47,6 +47,7 @@ from frappe.utils import cint, flt, getdate, now_datetime
 from kamra.authz import require_roles
 
 AUDIT_ROLES = ("Front Desk", "Finance", "Night Auditor", "Hotel Admin", "Kamra Agent")
+GL_VARIANCE_OVERRIDE_ROLES = {"Finance", "Hotel Admin"}
 
 RUN_AND_REPORT = "Run and report exceptions"
 HOLD_AND_ALERT = "Hold and alert"
@@ -757,6 +758,24 @@ def _fetch_gl_control_tieout(property: str, bd: str) -> dict | None:
 	return result
 
 
+def can_override_gl_variance(property: str, user: str | None = None) -> bool:
+	return bool(GL_VARIANCE_OVERRIDE_ROLES.intersection(frappe.get_roles(user))) and (
+		_setting(property, "allow_na_gl_variance_override") == 1
+	)
+
+
+def validate_gl_variance_override(property: str, check: dict, reason: str) -> None:
+	if not can_override_gl_variance(property):
+		frappe.throw(
+			_("Overriding an accounting GL control tie-out variance requires Finance or Hotel Admin access and an enabled property policy."),
+			frappe.PermissionError,
+		)
+	if check.get("unverified"):
+		frappe.throw(_("Accounting GL control tie-out is unverified and cannot be overridden."))
+	if len(reason) < 10:
+		frappe.throw(_("Give a reason of at least 10 characters for overriding an accounting GL control tie-out variance."))
+
+
 def check_gl_control_tieout(property: str, bd: str) -> dict:
 	"""Reconcile hotel control subledgers against live Accounting GL balances."""
 	result = _fetch_gl_control_tieout(property, bd)
@@ -764,26 +783,27 @@ def check_gl_control_tieout(property: str, bd: str) -> dict:
 		return _check(
 			"gl_control_tieout", "Accounting GL control tie-out", "info", [],
 			"Accounting GL control tie-out is not enabled for this property.",
-			None, unverified=False, summary=None)
+			None, unverified=False, summary=None, can_override_gl_variance=False)
 	status = str(result.get("status") or "").strip()
 	controls = [dict(row) for row in (result.get("controls") or []) if isinstance(row, dict)]
 	if result.get("in_balance") is True and status == "Balanced":
 		return _check(
 			"gl_control_tieout", "Accounting GL control tie-out", "block", [],
 			"All five accounting GL control buckets agree within currency tolerance.",
-			"/end-of-day", unverified=False, summary=result)
+			"/end-of-day", unverified=False, summary=result, can_override_gl_variance=False)
 	variances = [row for row in controls if row.get("status") != "Balanced"]
 	if status == "Unverified" or not variances:
 		return _check(
 			"gl_control_tieout", "Accounting GL control tie-out", "block", [],
 			"Accounting GL control tie-out could not be verified. Configure "
 			"control accounts and verify balances before closing.",
-			"/end-of-day", unverified=True, summary=result)
+			"/end-of-day", unverified=True, summary=result, can_override_gl_variance=False)
 	return _check(
 		"gl_control_tieout", "Accounting GL control tie-out", "block", variances,
 		"Reconcile the control account variance in Accounting before closing "
 		"the business date.",
-		"/end-of-day", unverified=False, summary=result)
+		"/end-of-day", unverified=False, summary=result,
+		can_override_gl_variance=can_override_gl_variance(property))
 
 
 def _redact_check_figures(checks: list[dict] | None) -> list[dict]:
@@ -992,12 +1012,21 @@ def _loads(raw, default):
 		return default
 
 
-def draft_acknowledgements(draft: str | None) -> list[dict]:
-	"""Blocking checks acknowledged in the End of Day wizard for the draft."""
-	if not draft:
-		return []
-	return _loads(frappe.db.get_value("Night Audit Run", draft,
-	                                  "acknowledgements"), [])
+def draft_acknowledgements(property: str, checks: list[dict], raw) -> list[dict]:
+	"""Return draft acknowledgements that still apply to the live checks."""
+	verified_variance = any(
+		c["key"] == "gl_control_tieout" and c["severity"] == "block"
+		and c["count"] and not c.get("unverified") for c in checks
+	)
+	return [
+		row for row in _loads(raw, [])
+		if row["key"] != "gl_control_tieout" or (
+			verified_variance and row.get("gl_variance_override") is True
+			and not row.get("auto") and row.get("by")
+			and len((row.get("note") or "").strip()) >= 10
+			and can_override_gl_variance(property, row["by"])
+		)
+	]
 
 
 # --- endpoints -----------------------------------------------------------------
@@ -1878,7 +1907,7 @@ def _eod_state(property: str, audit: str | None = None) -> dict:
 		as_dict=True)
 	checks = _redact_check_figures(run_checks(property, bd))
 	state = _loads(run.eod_state, {})
-	acks = _loads(run.acknowledgements, [])
+	acks = draft_acknowledgements(property, checks, run.acknowledgements)
 	return {**base, "business_date": bd, "audit": draft, "ran": False,
 	        "status": "Draft", "current_step": cint(run.eod_step) or 1,
 	        "notes": run.auditor_notes, "acknowledgements": acks,
@@ -1924,9 +1953,10 @@ def eod_progress(property: str, step: int | None = None,
 			frappe.throw(_("Step status must be done, skipped or pending."))
 		if status in ("done", "skipped"):
 			checks = dict((k, c) for k, _t, c in STEPS)[key]
-			acked = {a["key"] for a in _loads(doc.acknowledgements, [])}
 			bd = get_business_date(property)
 			live = {c["key"]: c for c in run_checks(property, bd)} if checks else {}
+			acked = {a["key"] for a in draft_acknowledgements(
+				property, list(live.values()), doc.acknowledgements)}
 			blocking = [live[k] for k in checks if k in live
 			            and live[k]["severity"] == "block" and (live[k]["count"] or live[k].get("unverified"))
 			            and k not in acked]
@@ -1961,17 +1991,18 @@ def eod_acknowledge(property: str, key: str, reason: str):
 	check = next((c for c in run_checks(property, bd) if c["key"] == key), None)
 	if not check:
 		frappe.throw(_("Unknown check: {0}").format(key))
-	if key == "gl_control_tieout" and check.get("unverified"):
-		frappe.throw(_("Accounting GL control tie-out is unverified and cannot be overridden."))
+	if key == "gl_control_tieout":
+		validate_gl_variance_override(property, check, reason)
 	if check["severity"] != "block" or not check["count"]:
 		frappe.throw(_("{0} is not blocking the audit - nothing to "
 		               "acknowledge.").format(check["title"]))
-	if key == "gl_control_tieout" and len(reason) < 10:
-		frappe.throw(_("Give a reason of at least 10 characters for overriding an accounting GL control tie-out variance."))
 	draft = _draft(property, bd, create=True)
 	doc = frappe.get_doc("Night Audit Run", draft)
 	acks = [a for a in _loads(doc.acknowledgements, []) if a["key"] != key]
 	row = acknowledgement_rows([check], [key], reason)[0]
+	if key == "gl_control_tieout":
+		# Older draft rows cannot establish that the author was eligible at creation.
+		row["gl_variance_override"] = True
 	acks.append(row)
 	doc.acknowledgements = json.dumps(acks)
 	doc.save(ignore_permissions=True)
