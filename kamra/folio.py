@@ -121,7 +121,12 @@ def _refund_amounts(folio, sec_idx: set[int]) -> tuple[Decimal, Decimal, Decimal
 
 	security = max(Decimal(0), _security_before_legacy(folio, sec_idx))
 	cap = min(unlinked, security)
-	shortfall = max(Decimal(0), security - max(Decimal(0), balance))
+	# During folio.save(), the pending payout already reduces the document's
+	# security but its Deposit debit has yet to post. Compare posted amounts.
+	posted_security = security
+	if pending is not None:
+		posted_security -= _money(pending.get("amount"))
+	shortfall = max(Decimal(0), posted_security - max(Decimal(0), balance))
 	mandatory = min(cap, shortfall)
 	return identified, mandatory, cap - mandatory
 
