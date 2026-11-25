@@ -841,10 +841,11 @@ class Reservation(Document):
 		# Peak dates can ask for longer than the property's own floor - a
 		# two-night minimum over New Year, say - and the rule lives on the
 		# Season that already prices those nights.
-		from kamra.pricing import stay_season_rules
+		from kamra.pricing import billing_room_type, nightly_billing_room_types, stay_season_rules
 
 		rules = stay_season_rules(self.property, self.check_in_date,
-		                          self.check_out_date, self.room_type)
+		                          self.check_out_date, billing_room_type(self),
+		                          billing_types_by_date=nightly_billing_room_types(self) if self.get("room_move_rate_cutoff") else None)
 		if rules["minimum_nights"] > nights:
 			frappe.throw(
 				_("{0} needs a stay of at least {1} nights.").format(
@@ -2141,6 +2142,17 @@ class Reservation(Document):
 			rate_currency=rate_cur,
 			inherit_stay_currency=False,
 		)
+		charged = charged_nights(self.name)
+		if disc:
+			from kamra.packages import reservation_package_id
+			from kamra.pricing import validate_package_discount
+
+			try:
+				snapshot = frappe.parse_json(self.get("quote_snapshot") or "{}")
+			except ValueError:
+				snapshot = {}
+			validate_package_discount(disc, (day for day in self.stay_nights()
+			                          if day not in charged and reservation_package_id(self, day, snapshot=snapshot)))
 		stay = (disc or {}).get("stay")
 		stay_cur = (disc or {}).get("stay_currency")
 		own = (disc or {}).get("nights") or {}
@@ -2151,7 +2163,6 @@ class Reservation(Document):
 		room_types = nightly_billing_room_types(self)
 		default_room_type = billing_room_type(self)
 		over_cap = _dec(self.get("over_capacity_charge"))
-		charged = charged_nights(self.name)
 		prop = frappe.get_cached_doc("Property", self.property)
 		levy_pct = _dec(prop.get("room_levy_percent")) / Decimal(100)
 		levy_taxed = cint(prop.get("room_levy_taxable")

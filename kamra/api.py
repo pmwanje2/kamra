@@ -7377,10 +7377,11 @@ def _cancellation_terms(res):
 		["free_cancel_days", "cancellation_fee"], as_dict=True)
 	days_before = date_diff(res.check_in_date, nowdate())
 
-	from kamra.pricing import stay_season_rules
+	from kamra.pricing import billing_room_type, nightly_billing_room_types, stay_season_rules
 
 	rules = stay_season_rules(res.property, res.check_in_date,
-	                          res.check_out_date, res.room_type)
+	                          res.check_out_date, billing_room_type(res),
+	                          billing_types_by_date=nightly_billing_room_types(res) if res.get("room_move_rate_cutoff") else None)
 	if rules["non_refundable"]:
 		# Peak dates are sold on the understanding that they are not given
 		# back; no band of the policy applies.

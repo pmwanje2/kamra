@@ -309,8 +309,8 @@ def _credit_weight(task, room_types):
 
 @frappe.whitelist(methods=["POST"])
 @require_roles(*HOUSEKEEPING_SUPERVISORS)
-def auto_assign_housekeeping_tasks(property: str, business_date: str, attendants,
-                                   max_credits_per_attendant, preview: int = 0):
+def auto_assign_housekeeping_tasks(property: str, business_date: str, attendants: list[str] | tuple[str, ...] | str,
+                                   max_credits_per_attendant: float | int | str | Decimal, preview: int = 0):
 	"""Allocate each open task once, preferring a section's current attendant."""
 	from kamra.api import _hk_staff
 

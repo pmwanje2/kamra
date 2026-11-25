@@ -551,9 +551,11 @@ def prepare_pin_request() -> None:
 	if not isinstance(method, str) or not method.startswith("kamra."):
 		return
 	_reject_pin_query(request)
-	frappe.local.kamra_pin_arguments = (
-		method, {key: _protect_pin(form.pop(key)) for key in _PIN_FIELDS if key in form},
-	)
+	credentials = {key: _protect_pin(form.pop(key)) for key in _PIN_FIELDS if key in form}
+	staged = getattr(request, "environ", {}).pop("kamra.approval_credential", None)
+	if staged and staged[0] == method and isinstance(staged[1], _PinSecret):
+		credentials["pin_secret"] = staged[1]
+	frappe.local.kamra_pin_arguments = (method, credentials)
 
 
 def scrub_pin_arguments(fn):

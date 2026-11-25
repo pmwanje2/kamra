@@ -125,3 +125,7 @@ CI publishes `ghcr.io/kamra-pms/kamra:{vX.Y.Z,stable,latest}` on every
 release (`release.yml`; `stable`/`latest` move only for the newest
 release) and `:nightly` (`nightly.yml`). The package is private for now —
 pull mode needs a `docker login ghcr.io`; the default install builds.
+
+### Legacy approval clients
+
+The published images and local image builder enable the approval middleware before the web worker opens a site. On a self-managed Bench, use `kamra.wsgi:application` as the Gunicorn WSGI application, or add `from kamra.wsgi import post_worker_init` to the Gunicorn configuration and restart the web workers. Through the 2.10.0 migration, the middleware accepts the deprecated POST body field `supervisor_pin` for check-in and room moves. New clients use `pin_secret`. Both fields are removed from the request before session validation or logging. An unwrapped worker accepts only the canonical field for these approvals.

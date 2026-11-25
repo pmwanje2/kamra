@@ -19,7 +19,7 @@ from frappe.utils import add_days, cint, flt, getdate
 from kamra.authz import assert_property_access, require_roles
 from kamra.business_date import get_business_date
 from kamra.ledger import code_for_charge_type, home_currency, minor_unit, save_folio
-from kamra.pricing import active_holiday_package, billing_room_type, rate_quantum
+from kamra.pricing import active_holiday_package, billing_room_type, billing_segments, nightly_billing_room_types, rate_quantum
 
 ELEMENT_TYPES = ("Meal", "Spa", "Transport", "F&B Allowance", "Utility/Amenity")
 ALLOWANCE_BASES = (
@@ -87,50 +87,56 @@ def _parse_consumed_refs(raw) -> list[str]:
 	return []
 
 
-def active_package_for_reservation(res, date=None):
-	"""Return the active Holiday Package document with Package Elements for this stay, or None."""
-	pkg_name = None
-	snap = res.get("quote_snapshot")
-	room_type = billing_room_type(res, date)
-	if snap:
+def _package_window(res, date):
+	room_type = billing_room_type(res)
+	if date is not None and res.get("room_move_rate_cutoff"):
+		for name, dates in billing_segments(res.check_in_date, res.check_out_date, room_type,
+		                                  nightly_billing_room_types(res)):
+			if dates[0] <= str(getdate(date)) <= dates[-1]:
+				return name, dates[0], add_days(dates[-1], 1)
+	return room_type, res.check_in_date, res.check_out_date
+
+
+def reservation_package_id(res, date=None, *, snapshot=None):
+	"""The quoted nightly package, or the eligible billing segment on an old stay."""
+	if snapshot is None:
 		try:
-			parsed = json.loads(snap) if isinstance(snap, str) else snap
-			if isinstance(parsed, dict) and isinstance(parsed.get("package"), dict):
-				pkg_name = parsed["package"].get("name")
-			if date is not None and isinstance(parsed, dict):
-				day = str(getdate(date))
-				night = next((n for n in parsed.get("nightly") or [] if n.get("date") == day), {})
-				if "package_id" in night:
-					pkg_name = night["package_id"]
-					if not pkg_name:
-						return None
-		except (TypeError, ValueError):
-			pkg_name = None
-
-	if pkg_name:
-		# Older quotes recorded a single package for the whole stay.
-		scope = frappe.db.get_value("Holiday Package", pkg_name, ["property", "room_type"], as_dict=True)
-		if not scope or scope.property != res.property or (scope.room_type and scope.room_type != room_type):
-			pkg_name = None
-	if not pkg_name and not flt(res.get("agreed_rate")):
-		found = active_holiday_package(
-			res.property, res.check_in_date, res.check_out_date, room_type,
-		)
-		if found:
-			pkg_name = found.name
-
-	if not pkg_name or not frappe.db.exists("Holiday Package", pkg_name):
-		return None
-	pkg_doc = frappe.get_doc("Holiday Package", pkg_name)
-	if not (pkg_doc.get("elements") or []):
-		return None
-	return pkg_doc
+			snapshot = frappe.parse_json(res.get("quote_snapshot") or "{}")
+		except ValueError:
+			snapshot = {}
+	snapshot = snapshot if isinstance(snapshot, dict) else {}
+	if date is not None:
+		night = next((n for n in snapshot.get("nightly") or [] if n.get("date") == str(getdate(date))), {})
+		if "package_id" in night:
+			return night["package_id"]
+	room_type, start, end = _package_window(res, date)
+	name = (snapshot.get("package") or {}).get("name")
+	if name:
+		scope = frappe.db.get_value("Holiday Package", name, ["property", "room_type", "start_date", "end_date"],
+		                            as_dict=True)
+		if (scope and scope.property == res.property and scope.room_type in (None, "", room_type)
+		        and getdate(scope.start_date) <= max(getdate(start), getdate(add_days(end, -1)))
+		        and getdate(scope.end_date) >= getdate(start)):
+			return name
+	if not flt(res.get("agreed_rate")):
+		pkg = active_holiday_package(res.property, start, end, room_type)
+		return pkg.name if pkg else None
 
 
-def _element_due_on_date(el, res, business_date) -> bool:
+def active_package_for_reservation(res, date=None):
+	"""The sold package, if it has elements to split on the folio."""
+	name = reservation_package_id(res, date)
+	if name and frappe.db.exists("Holiday Package", name):
+		doc = frappe.get_doc("Holiday Package", name)
+		if doc.property == res.property and doc.get("elements"):
+			return doc
+	return None
+
+
+def _element_due_on_date(el, start, end, business_date) -> bool:
 	bd = getdate(business_date)
-	first_night = getdate(res.check_in_date)
-	last_night = getdate(add_days(res.check_out_date, -1))
+	first_night = getdate(start)
+	last_night = getdate(add_days(end, -1))
 	if last_night < first_night:
 		last_night = first_night
 
@@ -184,8 +190,11 @@ def split_package_night(res, package_doc, night_total, business_date, *, gst_rat
 	included_items: list[dict] = []
 	addon_items: list[dict] = []
 
+	start, end = res.check_in_date, res.check_out_date
+	if res.get("room_move_rate_cutoff"):
+		_, start, end = _package_window(res, bd_str)
 	for el in package_doc.get("elements") or []:
-		if not _element_due_on_date(el, res, bd_str):
+		if not _element_due_on_date(el, start, end, bd_str):
 			continue
 		mult = _element_multiplier(el.get("allowance_basis") or "Per Adult Night", adults, children)
 		amt = _quantize(_dec(el.get("unit_allowance")) * Decimal(mult), unit)

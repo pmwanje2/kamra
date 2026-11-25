@@ -2853,3 +2853,4 @@ Choose an enabled non-stock sales item for the room type.,Choisissez un article 
 {0} adult occupancy,Occupation pour {0} adulte(s)
 Room Move Rate Cutoff,Date d’effet du tarif de la nouvelle chambre
 Nightly Room Types to Charge,Types de chambre à facturer par nuit
+The room move history is ambiguous. Verify the effective dates before repricing.,L’historique des changements de chambre est ambigu. Vérifiez les dates de prise d’effet avant de recalculer le tarif.

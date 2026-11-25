@@ -586,7 +586,7 @@ All reports,All reports,كل التقارير,Todos los informes,Todos os relat�
 All roles,All roles,كل الأدوار,Todos los roles,Todas as funções,全部角色,Tous les rôles,screens/settings/AccessPages.tsx,,translated
 All room types,All room types,كل أنواع الغرف,Todos los tipos de habitaciones,Todos os tipos de quartos,全部房型,Toutes les catégories de chambre,screens/HousekeepingBoard.tsx; screens/Rooms.tsx; screens/TapeChart.tsx; screens/settings/cards.tsx,,translated
 All rooms,All rooms,كل الغرف,Todas las habitaciones,Todos os quartos,全部客房,Toutes les chambres,screens/Rooms.tsx,,translated
-All Rooms,All Rooms,,,,,Toutes les chambres,screens/HousekeepingBoard.tsx,,needs_translation
+All Rooms,All Rooms,جميع الغرف,Todas las habitaciones,,,Toutes les chambres,screens/HousekeepingBoard.tsx,,needs_translation
 All rooms - tick rooms below to act on some,All rooms - tick rooms below to act on some,,Todas las habitaciones; marque abajo las habitaciones sobre las que quiera actuar,Todos os quartos - selecione os quartos abaixo para ações em lote,全部客房 - 在下方勾选需要操作的客房,Toutes les chambres - cochez des chambres ci-dessous pour agir sur une sélection,components/GroupControl.tsx,,needs_translation
 All sessions,All sessions,كل الجلسات,Todas las sesiones,Todas as sessões,全部班次,Toutes les sessions,screens/CashierTill.tsx,,translated
 All stations,All stations,كل المحطات,Todas las estaciones,Todas as estações,全部出品档口,Tous les postes,screens/KitchenPrinters.tsx,,translated
@@ -818,7 +818,7 @@ At this outlet before,At this outlet before,زيارات سابقة لهذا ا�
 Attached,Attached,ملحق,Adjunto,Em anexo,已附上,Joint,,,translated
 Attainment,Attainment,نسبة التحقيق,Cumplimiento,Realização,达成率,Réalisation,screens/RevenueReports.tsx,,translated
 Attempts,Attempts,المحاولات,Intentos,Tentativas,尝试次数,Tentatives,screens/ChannelHealth.tsx,,translated
-Attendants,Attendants,,,,,Personnel d’étage,components/HousekeepingWork.tsx,,needs_translation
+Attendants,Attendants,موظفو تدبير الغرف,Personal de pisos,,,Personnel d’étage,components/HousekeepingWork.tsx,,needs_translation
 Audio Visual,Audio Visual,الصوتيات والمرئيات,Audiovisuales,Audiovisual,视听设备,Audiovisuel,,,translated
 Audit held,Audit held,تم إيقاف التدقيق,Auditoría retenida,Auditoria retida,夜审已暂缓,Audit suspendu,screens/EndOfDay.tsx,,translated
 Audit history,Audit history,سجل التدقيق,Historial de auditoría,Histórico de auditoria,夜审历史,Historique des audits,screens/EndOfDay.tsx,,translated
@@ -841,8 +841,8 @@ Auto-accept and print KOT,Auto-accept and print KOT,قبول أمر المطبخ
 Auto-accept and print: sending an order prints the KOT and shows it on the kitchen display as started. Kitchen presses Start: the pass accepts each ticket. Use F&B setting follows Settings > F&B.,Auto-accept and print: sending an order prints the KOT and shows it on the kitchen display as started. Kitchen presses Start: the pass accepts each ticket. Use F&B setting follows Settings > F&B.,قبول وطباعة تلقائياً: إرسال الطلب يطبع أمر المطبخ ويعرضه على شاشة المطبخ كقيد التنفيذ. المطبخ يضغط بدء: يقبل ممر التسليم كل تذكرة. استخدام إعداد المأكولات والمشروبات يتبع الإعدادات > المأكولات والمشروبات.,Aceptar e imprimir automáticamente: al enviar un pedido se imprime la comanda y aparece iniciada en cocina. Inicio manual en cocina: el responsable acepta cada comanda. Usar configuración de Alimentos y bebidas sigue Configuración > Alimentos y bebidas.,"Aceitar e imprimir automaticamente: ao enviar um pedido, a comanda (KOT) é impressa e aparece no display da cozinha como iniciada. A cozinha pressiona Iniciar: o passe aceita cada comanda. Segue Configurações > A&B.",自动接收并打印：下单即打印厨房单，并在厨房屏显示为已开始。厨房点击开始：由出菜口接收各单。使用餐饮设置：跟随设置 > 餐饮。,Accepter et imprimer automatiquement : l'envoi d'une commande imprime le KOT et l'affiche comme démarré en cuisine. La cuisine clique sur Démarrer : le passe accepte chaque bon. Utiliser le réglage F&B suit Paramètres > F&B.,,,translated
 Auto-Assign (Inspected/Ready),Auto-Assign (Inspected/Ready),,,,,Attribution auto (Inspectée/Prête),components/TapeUnassignedDock.tsx,,needs_translation
 Auto-assign arrivals,Auto-assign arrivals,تعيين الوصول تلقائياً,Asignar habitaciones automáticamente,Atribuir chegadas automaticamente,自动为预抵订单分房,Attribution auto. des arrivées,screens/TapeChart.tsx,,translated
-Auto-Assign Queue,Auto-Assign Queue,,,,,Attribution automatique,screens/HousekeepingBoard.tsx,,needs_translation
-Auto-assign tasks,Auto-assign tasks,,,,,Attribuer les tâches automatiquement,components/HousekeepingWork.tsx,,needs_translation
+Auto-Assign Queue,Auto-Assign Queue,قائمة انتظار التوزيع التلقائي,Cola de asignación automática,,,Attribution automatique,screens/HousekeepingBoard.tsx,,needs_translation
+Auto-assign tasks,Auto-assign tasks,توزيع المهام تلقائيًا,Asignar tareas automáticamente,,,Attribuer les tâches automatiquement,components/HousekeepingWork.tsx,,needs_translation
 Auto-detect format,Auto-detect format,اكتشاف التنسيق تلقائياً,Detectar formato automáticamente,Formato de detecção automática,自动识别格式,Détection automatique du format,screens/GoLiveImport.tsx,,translated
 Auto-print KOT,Auto-print KOT,طباعة أمر المطبخ تلقائياً,Imprimir comandas automáticamente,Impressão automática KOT,自动打印厨房单,Impression auto. du KOT,,,translated
 automatic audit off,automatic audit off,التدقيق التلقائي متوقف,auditoría automática desactivada,auditoria automática desligada,自动夜审已关闭,audit automatique désactivé,screens/EndOfDay.tsx,,translated
@@ -1041,7 +1041,7 @@ Booked elsewhere,Booked elsewhere,حجز في مكان آخر,Reservó en otro a
 Booked for these dates,Booked for these dates,محجوزة لهذه التواريخ,Reservado para estas fechas,Reservado para estas datas,已按此日期预订,Réservé sur ces dates,components/RoomChangeDialog.tsx,,translated
 Booked on someone's behalf,Booked on someone's behalf,حجز نيابة عن شخص آخر,Reserva realizada para otra persona,Reservado em nome de alguém,代他人预订,Réservé pour le compte d'un tiers,components/BookingDialog.tsx,,translated
 Booked rate,Booked rate,السعر المحجوز,Tarifa reservada,Tarifa reservada,预订房价,Tarif réservé,,,translated
-Booked room type: {type},Booked room type: {type},,,,,Type de chambre réservé : {type},components/RoomChangeDialog.tsx,type,needs_translation
+Booked room type: {type},Booked room type: {type},نوع الغرفة المحجوزة: {type},Tipo de habitación reservado: {type},,,Type de chambre réservé : {type},components/RoomChangeDialog.tsx,type,needs_translation
 "Booked to {booked}. Shortening ends the stay {date}: only the nights stayed are billed, and the room goes back on sale.","Booked to {booked}. Shortening ends the stay {date}: only the nights stayed are billed, and the room goes back on sale.",محجوز حتى {booked}. التقصير ينهي الإقامة في {date}: تُحتسب الليالي التي أقامها فقط، وتعود الغرفة للبيع.,"Reservado hasta {booked}. Al acortarla, la estancia termina el {date}: solo se cobran las noches alojadas y la habitación vuelve a la venta.",Reservado até {booked}. Encurtar encerra a estadia em {date}: só as noites hospedadas são cobradas e o quarto volta à venda.,原订至 {booked}。缩短后住宿于 {date} 结束：仅计已住间夜，客房恢复销售。,Réservé jusqu'au {booked}. Le raccourcissement termine le séjour le {date} : seules les nuits passées sont facturées et la chambre est remise en vente.,components/CheckOutDialog.tsx,booked date,translated
 Booked via,Booked via,حُجز عبر,Reservado vía,Reservado via,预订渠道,Réservé via,components/BookingDialog.tsx,,translated
 Booked {ref} at {property}.,Booked {ref} at {property}.,تم الحجز {ref} في {property}.,Reservado {ref} en {property}.,Reservado {ref} em {property}.,已在 {property} 预订 {ref}。,Réservé {ref} à {property}.,screens/CRS.tsx,ref property,translated
@@ -1091,7 +1091,7 @@ Books,Books,الدفاتر,Contabilidad,Livros,账册,Comptabilité,screens/Cash
 Books check,Books check,مطابقة الدفاتر,Cuadre contable,Conferência dos livros,账册核对,Contrôle comptable,screens/Ledgers.tsx,,translated
 Books for your accounting software.,Books for your accounting software.,الدفاتر لبرنامج المحاسبة لديك.,Libros para su software contable.,Livros para o seu software de contabilidade.,用于会计软件的账册。,Écritures pour votre logiciel comptable.,,,translated
 Both,Both,كلاهما,Ambos,Ambos,两者,Les deux,components/BookingDialog.tsx,,translated
-Both reservations keep their booked rates.,Both reservations keep their booked rates.,,,,,Les deux réservations conservent leurs tarifs.,components/RoomChangeDialog.tsx,,needs_translation
+Both reservations keep their booked rates.,Both reservations keep their booked rates.,يحتفظ كل حجز بسعره الأصلي.,Ambas reservas conservan sus tarifas originales.,,,Les deux réservations conservent leurs tarifs.,components/RoomChangeDialog.tsx,,needs_translation
 Boxed,Boxed,معبأ في علب,En caja individual,Em caixa,盒装,En coffret,,,translated
 Breach %,Breach %,نسبة الإخلال %,Incumplimiento (%),% de violação,超时率 %,% de dépassement,screens/OpsSLA.tsx,,translated
 Breach rate,Breach rate,معدل الإخلال,Porcentaje de incumplimiento,Taxa de violação,超时率,Taux de dépassement,screens/OpsSLA.tsx,,translated
@@ -1652,7 +1652,7 @@ Compares the files loaded in steps 1-3 with what is now in {product}: counts and
 Complaint,Complaint,شكوى,Queja,Reclamação,投诉,Réclamation,components/AgentGuide.tsx,,translated
 Complete Checkout Clean,Complete Checkout Clean,إتمام تنظيف الغرفة بعد المغادرة,Completar limpieza de salida,Concluir limpeza de saída,,Terminer le nettoyage départ,screens/HousekeepingBoard.tsx,,needs_translation
 Complete Stayover Clean,Complete Stayover Clean,إتمام تنظيف الغرفة أثناء الإقامة,Completar limpieza de estancia,Concluir limpeza durante a estadia,,Terminer la recouche,screens/HousekeepingBoard.tsx,,needs_translation
-Complete the fee waiver details.,Complete the fee waiver details.,,,,,Renseignez les détails de l’exonération.,components/CheckInDialog.tsx,,needs_translation
+Complete the fee waiver details.,Complete the fee waiver details.,أكمل بيانات الإعفاء من الرسوم.,Complete los datos de la exención del cargo.,,,Renseignez les détails de l’exonération.,components/CheckInDialog.tsx,,needs_translation
 Complete your booking,Complete your booking,أكمل حجزك,Completa tu reserva,Conclua a sua reserva,完成预订,Finaliser votre réservation,screens/PublicBooking.tsx; screens/PublicListing.tsx,,translated
 Completed,Completed,مكتمل,Completado,Concluído,已完成,Terminé,components/HousekeepingWork.tsx; screens/CRS.tsx,,translated
 Completed at,Completed at,,,,,Terminé à,screens/SystemHealth.tsx,,needs_translation
@@ -1861,7 +1861,7 @@ Credit control,Credit control,ضبط الائتمان,Control de crédito,Contro
 Credit days,Credit days,أيام الائتمان,Días de crédito,Dias de crédito,账期天数,Jours de crédit,components/CreditTermsEditor.tsx,,translated
 Credit days after the invoice date - 0 = due on the invoice date,Credit days after the invoice date - 0 = due on the invoice date,أيام الائتمان بعد تاريخ الفاتورة، 0 = مستحقة في تاريخ الفاتورة,Días de crédito después de la fecha de la factura - 0 = vence en la fecha de la factura,Dias de crédito após a data da fatura - 0 = vencimento na data da fatura,发票日期后的账期天数 - 0 = 发票当日到期,Jours de crédit après la date de facture — 0 = payable à réception,components/CreditTermsEditor.tsx,,translated
 Credit limit,Credit limit,حد الائتمان,Límite de crédito,Limite de crédito,信用额度,Plafond de crédit,components/CreditTermsEditor.tsx; screens/Receivables.tsx,,translated
-Credit limit per attendant,Credit limit per attendant,,,,,Limite de crédits par personne,components/HousekeepingWork.tsx,,needs_translation
+Credit limit per attendant,Credit limit per attendant,الحد الأقصى لنقاط العمل لكل موظف,Límite de créditos por empleado de pisos,,,Limite de crédits par personne,components/HousekeepingWork.tsx,,needs_translation
 Credit note,Credit note,إشعار دائن,Nota de crédito,Nota de crédito,贷项通知单,Avoir,components/InvoiceCorrectionDialog.tsx; screens/FolioView.tsx; components/CreditRebillDialog.tsx,,translated
 credit note,credit note,إشعار دائن,nota de crédito,nota de crédito,贷项通知单,avoir,,,translated
 Credit note amount,Credit note amount,مبلغ إشعار الدائن,Importe de la nota de crédito,Montante da nota de crédito,贷项通知单金额,Montant de l'avoir,,,translated
@@ -1973,7 +1973,7 @@ Decor,Decor,الديكور,Decoración,Decoração,装饰,Décoration,,,translat
 Decorator can start,Decorator can start,يمكن لمنسق الديكور البدء,Inicio permitido para decoración,O decorador pode começar,可开始布置,Accès décorateur à partir de,screens/BanquetFunction.tsx,,translated
 Deduct from the deposit,Deduct from the deposit,الخصم من التأمين,Descontar del depósito,Deduzir do depósito,从押金中扣除,Déduire de la caution,screens/BanquetFunction.tsx,,translated
 Deep Clean,Deep Clean,تنظيف عميق,Limpieza profunda,Limpeza Profunda,深度清洁,Grand nettoyage,,,translated
-Deep clean credits,Deep clean credits,,,,,Crédits de nettoyage approfondi,screens/configs.ts,,needs_translation
+Deep clean credits,Deep clean credits,نقاط التنظيف العميق,Créditos de limpieza a fondo,,,Crédits de nettoyage approfondi,screens/configs.ts,,needs_translation
 Default,Default,افتراضي,Predeterminado,Padrão,默认,Par défaut,screens/CashierBoard.tsx; screens/CashierTill.tsx; components/FolioWindowTabs.tsx,,translated
 Default beverage transaction code,Default beverage transaction code,رمز معاملة المشروبات الافتراضي,Código de transacción predeterminado para bebidas,Código de transação padrão para bebidas,默认饮品交易代码,Code de transaction boissons par défaut,,,translated
 Default code,Default code,الرمز الافتراضي,,,,Code par défaut,screens/FolioView.tsx,,needs_translation
@@ -2015,7 +2015,7 @@ Department checklist,Department checklist,قائمة مهام القسم,Lista d
 Department packs,Department packs,حزم الأقسام,Paquetes por departamento,Pacotes de departamento,部门报表包,Dossiers par service,screens/Reports.tsx,,translated
 Departure,Departure,المغادرة,Salida,Saída,离店,Départ,components/GroupBookingDialog.tsx,,translated
 departure,departure,,,saída,离店,départ,,,needs_translation
-Departure credits,Departure credits,,,,,Crédits de nettoyage après départ,screens/configs.ts,,needs_translation
+Departure credits,Departure credits,نقاط التنظيف بعد المغادرة,Créditos de limpieza de salida,,,Crédits de nettoyage après départ,screens/configs.ts,,needs_translation
 Departure for room {n},Departure for room {n},,Salida de la habitación {n},Saída para o quarto {n},客房 {n} 离店,Départ de la chambre {n},components/GroupBookingDialog.tsx,n,needs_translation
 Departure time,Departure time,,,,离店时间,Heure de départ,components/BookingDialog.tsx,,needs_translation
 Departure today,Departure today,مغادرة اليوم,Salida hoy,Saída hoje,今日离店,Départ aujourd'hui,screens/HkApp.tsx,,translated
@@ -2117,7 +2117,7 @@ Discount value,Discount value,قيمة الخصم,Valor del descuento,Valor do d
 Discount Voucher,Discount Voucher,قسيمة خصم,Cupón de descuento,Vale de desconto,折扣券,Bon de réduction,,,translated
 Discounts,Discounts,الخصومات,Descuentos,Descontos,折扣,Remises,,,translated
 Discounts & allowances,Discounts & allowances,الخصومات والتسويات,Descuentos y bonificaciones,Descontos e abatimentos,折扣与减免,Remises et dégrèvements,,,translated
-Discrepancies ({count}),Discrepancies ({count}),,,,,Écarts d’occupation ({count}),screens/HousekeepingBoard.tsx,count,needs_translation
+Discrepancies ({count}),Discrepancies ({count}),حالات تعارض الإشغال ({count}),Discrepancias ({count}),,,Écarts d’occupation ({count}),screens/HousekeepingBoard.tsx,count,needs_translation
 Dish / Item / Product,Dish / Item / Product,Dish / Item / Product,Dish / Item / Product,Prato / Item / Produto,菜品 / 项目 / 产品,Plat / Article / Produit,screens/MenuImport.tsx,,translated
 Dish name,Dish name,اسم الطبق,Nombre del plato,Nome do prato,菜品名称,Nom du plat,screens/BanquetCatalogue.tsx,,translated
 "Dishes and drinks across your outlets - photo, price, veg/non-veg. Allergens, stations and courses are edited under Settings → F&B → Menu master lists.","Dishes and drinks across your outlets - photo, price, veg/non-veg. Allergens, stations and courses are edited under Settings → F&B → Menu master lists.",الأطباق والمشروبات في منافذك: الصورة والسعر ونباتي/غير نباتي. تُعدّل مسببات الحساسية والمحطات والأطباق من الإعدادات ← المأكولات والمشروبات ← القوائم الرئيسية للقائمة.,"Platos y bebidas de sus puntos de venta: foto, precio y clasificación vegetariana. Edite alérgenos, estaciones y tiempos en Configuración → Alimentos y bebidas → Listas del menú.","Pratos e bebidas em seus pontos de venda - foto, preço, vegetais/não vegetais. Alérgenos, estações e cursos são editados em Configurações → A&B → Listas principais do menu.",各营业点的菜品与饮品 - 图片、价格、素/荤。过敏原、出品档口与菜序在设置 → 餐饮 → 菜单主列表中编辑。,"Plats et boissons de vos points de vente — photo, prix, végétarien/non végétarien. Les allergènes, postes et services se gèrent dans Paramètres → F&B → Listes de référence du menu.",,,translated
@@ -2131,7 +2131,7 @@ Dispute,Dispute,تسجيل نزاع,Marcar en disputa,Contestar,争议,Contester
 Dispute cleared.,Dispute cleared.,تم إلغاء النزاع.,Disputa retirada.,Contestação encerrada.,争议已清除。,Litige levé.,screens/Receivables.tsx,,translated
 Dispute this bill,Dispute this bill,تسجيل نزاع على هذه الفاتورة,Marcar esta factura en disputa,Contestar esta fatura,对此账单提出争议,Contester cette facture,screens/Receivables.tsx,,translated
 District,District,الحي,Distrito,Distrito,区县,Quartier / District,,,translated
-DND,DND,,,,,Ne pas déranger,components/HousekeepingWork.tsx,,needs_translation
+DND,DND,عدم الإزعاج,No molestar,,,Ne pas déranger,components/HousekeepingWork.tsx,,needs_translation
 Do it,Do it,نفّذ,Hazlo,Faça isso,执行,Exécuter,screens/FinishSetup.tsx,,translated
 Do not take money for the room. Extras are paid by the guest.,Do not take money for the room. Extras are paid by the guest.,لا تأخذ مالا مقابل الغرفة. الإضافات يدفعها الضيف.,No aceptes dinero por la habitación. Los extras los paga el huésped.,Não aceite dinheiro pelo quarto. Os extras são pagos pelo hóspede.,不收取房费。额外消费由宾客支付。,Ne rien encaisser pour la chambre. Les extras restent à la charge du client.,components/CheckInDialog.tsx,,translated
 Do now or later,Do now or later,الآن أو لاحقا,Completar ahora o después,Faça agora ou mais tarde,现在或稍后处理,Maintenant ou plus tard,components/CheckInDialog.tsx; screens/settings/cards.tsx,,translated
@@ -2238,11 +2238,11 @@ Each unit / room sells on its own (hotel-style inventory).,Each unit / room sell
 Earlier,Earlier,السابق,Anterior,Anteriormente,更早,Plus tôt,screens/BanquetDiary.tsx; screens/RateCalendar.tsx,,translated
 Early Check-in,Early Check-in,وصول مبكر,Entrada anticipada,Check-in antecipado,提前入住,Arrivée anticipée,,,translated
 Early check-in,Early check-in,وصول مبكر,Entrada anticipada,Check-in antecipado,提前入住,Arrivée anticipée,,,translated
-Early Check-In Fee,Early Check-In Fee,,,,,Frais d’arrivée anticipée,screens/FolioView.tsx,,needs_translation
-Early Check-In Fee Policy,Early Check-In Fee Policy,,,,,Politique de frais d’arrivée anticipée,,,needs_translation
-Early Check-In Fee Value,Early Check-In Fee Value,,,,,Valeur des frais d’arrivée anticipée,,,needs_translation
-Early check-in fee: {amount},Early check-in fee: {amount},,,,,Frais d’arrivée anticipée : {amount},components/CheckInDialog.tsx,amount,needs_translation
-Early Check-In Window Start,Early Check-In Window Start,,,,,Début de la période d’arrivée anticipée,,,needs_translation
+Early Check-In Fee,Early Check-In Fee,رسوم تسجيل الوصول المبكر,Cargo por entrada anticipada,,,Frais d’arrivée anticipée,screens/FolioView.tsx,,needs_translation
+Early Check-In Fee Policy,Early Check-In Fee Policy,سياسة رسوم تسجيل الوصول المبكر,Política de cargos por entrada anticipada,,,Politique de frais d’arrivée anticipée,,,needs_translation
+Early Check-In Fee Value,Early Check-In Fee Value,قيمة رسوم تسجيل الوصول المبكر,Valor del cargo por entrada anticipada,,,Valeur des frais d’arrivée anticipée,,,needs_translation
+Early check-in fee: {amount},Early check-in fee: {amount},رسوم تسجيل الوصول المبكر: {amount},Cargo por entrada anticipada: {amount},,,Frais d’arrivée anticipée : {amount},components/CheckInDialog.tsx,amount,needs_translation
+Early Check-In Window Start,Early Check-In Window Start,بداية فترة تسجيل الوصول المبكر,Inicio del período de entrada anticipada,,,Début de la période d’arrivée anticipée,,,needs_translation
 Early Departure,Early Departure,مغادرة مبكرة,Salida anticipada,Saída antecipada,提前离店,Départ anticipé,,,translated
 Early departure charge,Early departure charge,رسوم المغادرة المبكرة,Cargo por salida anticipada,Cobrança por saída antecipada,提前离店费,Frais de départ anticipé,,,translated
 Early departures,Early departures,مغادرات مبكرة,Salidas anticipadas,Saídas antecipadas,提前离店,Départs anticipés,,,translated
@@ -2729,7 +2729,7 @@ Front Desk · In House,Front Desk · In House,الاستقبال · المقيم
 Front Desk · Reservations,Front Desk · Reservations,الاستقبال · الحجوزات,Recepción · Reservas,Recepção · Reservas,前台 · 预订,Réception · Réservations,,,translated
 Front Desk · Room Blocks,Front Desk · Room Blocks,الاستقبال · حجب الغرف,Recepción · Bloqueos de habitaciones,Recepção · Bloqueio de Quartos,前台 · 封房,Réception · Chambres bloquées,,,translated
 Front Desk · Today,Front Desk · Today,الاستقبال · اليوم,Recepción · Hoy,Recepção · Hoje,前台 · 今日,Réception · Aujourd'hui,,,translated
-Front desk: {status},Front desk: {status},,,,,Réception : {status},components/HousekeepingWork.tsx,status,needs_translation
+Front desk: {status},Front desk: {status},الاستقبال: {status},Recepción: {status},,,Réception : {status},components/HousekeepingWork.tsx,status,needs_translation
 Front office,Front office,المكتب الأمامي,Recepción,Recepção,前厅,Réception,,,translated
 Front office and the room board agree.,Front office and the room board agree.,المكتب الأمامي ولوحة الغرف متطابقان.,Los datos de recepción coinciden con el panel de habitaciones.,A recepção e o mapa de quartos estão de acordo.,前厅与房态看板一致。,La réception et le tableau des chambres concordent.,screens/EndOfDayWizard.tsx,,translated
 Front Office Manager,Front Office Manager,مدير المكتب الأمامي,Gerente de recepción,Gerente de recepção,前厅经理,Chef de réception,,,translated
@@ -3048,7 +3048,7 @@ Housekeeping,Housekeeping,التدبير المنزلي,Limpieza,Governança,客
 Housekeeping Board,Housekeeping Board,لوحة التدبير المنزلي,Panel de limpieza,Quadro da governança,客房部看板,Tableau des étages,screens/HousekeepingBoard.tsx,,translated
 Housekeeping has your laundry pickup - they'll be by shortly.,Housekeeping has your laundry pickup - they'll be by shortly.,استلم التدبير المنزلي طلب الغسيل، وسيصلون قريبا.,Limpieza recibió su solicitud de lavandería y pasará a recogerla en breve.,O serviço de limpeza está coletando sua roupa suja - eles chegarão em breve.,客房部已收到洗衣取件任务 - 很快会来。,Le service des étages a bien reçu votre demande de collecte de linge — un membre de l'équipe arrive sous peu.,screens/laundry/GuestLaundryCard.tsx,,translated
 Housekeeping pack,Housekeeping pack,حزمة التدبير المنزلي,Paquete de Limpieza,Pacote de limpeza,客房部报表包,Dossier Étages,,,translated
-Housekeeping section,Housekeeping section,,,,,Secteur d’entretien,screens/configs.ts,,needs_translation
+Housekeeping section,Housekeeping section,قطاع تدبير الغرف,Sección de pisos,,,Secteur d’entretien,screens/configs.ts,,needs_translation
 Housekeeping status,Housekeeping status,حالة التدبير المنزلي,Estado de limpieza,Situação de limpeza,客房清洁状态,Statut étages,components/RoomDrawer.tsx; screens/Today.tsx,,translated
 Housekeeping status for room {room},Housekeeping status for room {room},,,,,État ménage de la chambre {room},screens/TapeChart.tsx,room,needs_translation
 Housekeeping Supervisor,Housekeeping Supervisor,مشرف التدبير المنزلي,Supervisor de limpieza,Supervisora ​​de Limpeza,客房部主管,Gouvernante générale,,,translated
@@ -3056,7 +3056,7 @@ Housekeeping Supplies,Housekeeping Supplies,مستلزمات التدبير ال
 Housekeeping Task,Housekeeping Task,مهمة التدبير المنزلي,Tarea de limpieza,Tarefa de limpeza,客房部任务,Tâche d'étages,,,translated
 Housekeeping Tasks,Housekeeping Tasks,مهام التدبير المنزلي,Tareas de limpieza,Tarefas domésticas,客房部任务,Tâches d'étages,,,translated
 Housekeeping tasks,Housekeeping tasks,مهام التدبير الفندقي,Tareas de limpieza,Tarefas domésticas,客房部任务,Tâches d'étages,,,translated
-Housekeeping views,Housekeeping views,,,,,Vues de l’entretien,screens/HousekeepingBoard.tsx,,needs_translation
+Housekeeping views,Housekeeping views,طرق عرض تدبير الغرف,Vistas del departamento de pisos,,,Vues de l’entretien,screens/HousekeepingBoard.tsx,,needs_translation
 Housekeeping: mark {to},Housekeeping: mark {to},التدبير الفندقي: وضع {to},Limpieza: marcar como {to},Limpeza: nota {to},客房清洁：标记为{to},Étages : marquer {to},,to,translated
 Housekeeping: {from} → {to} (click to advance),Housekeeping: {from} → {to} (click to advance),التدبير المنزلي: {from} ← {to} (انقر للتقديم),Limpieza: {from} → {to} (haga clic para avanzar),Limpeza: {from} → {to} (clique para avançar),客房清洁：{from} → {to}（点击推进）,Étages : {from} → {to} (cliquer pour avancer),,from to,translated
 Housekeeping: {status} · click to change,Housekeeping: {status} · click to change,التدبير المنزلي: {status} · انقر للتغيير,Limpieza: {status} · haga clic para cambiar,Governança: {status} · clique para mudar,客房清洁：{status} · 点击更改,Étages : {status} · cliquer pour modifier,screens/Today.tsx,status,translated
@@ -4210,7 +4210,7 @@ Not ready for go-live yet,Not ready for go-live yet,غير جاهز للتشغي
 Not ready to deliver yet,Not ready to deliver yet,غير جاهز للتسليم بعد,Aún no está listo para entregar,Ainda não está pronto para entrega,尚不可交付,Pas encore prêt à livrer,,,translated
 not recorded,not recorded,لم يُسجل,no registrado,não registrado,未记录,non consigné,screens/Tickets.tsx,,translated
 not recorded (before tracking),not recorded (before tracking),لم يُسجل (قبل بدء التتبع),no registrado (antes del seguimiento),não registrado (antes do rastreamento),未记录（早于追溯起点）,non consigné (avant suivi),screens/Tickets.tsx,,translated
-Not Required,Not Required,,,,,Non requis,components/HousekeepingWork.tsx,,needs_translation
+Not Required,Not Required,غير مطلوب,No se requiere,,,Non requis,components/HousekeepingWork.tsx,,needs_translation
 Not run yet,Not run yet,,,,,Pas encore exécuté,screens/SystemHealth.tsx,,needs_translation
 Not saved yet,Not saved yet,لم يُحفظ بعد,Aún sin guardar,Ainda não salvo,尚未保存,Pas encore enregistré,components/CheckInGuests.tsx,,translated
 Not scheduled,Not scheduled,,,,,Non planifié,screens/SystemHealth.tsx,,needs_translation
@@ -4994,7 +4994,7 @@ Preparing…,Preparing…,جارٍ التحضير…,Preparando...,Preparando…
 Press {key} to tick,Press {key} to tick,اضغط {key} للتأشير,Presione {key} para marcar,Pressione {key} para marcar,按 {key} 勾选,Appuyez sur {key} pour cocher,components/CheckOutDialog.tsx,key,translated
 Prev,Prev,السابق,Anterior,Anterior,上一页,Préc.,components/ResourceScreen.tsx; screens/Agents.tsx,,translated
 Preview,Preview,معاينة,Vista previa,Prévia,预览,Aperçu,screens/AdminRooms.tsx; screens/GoLiveImport.tsx; screens/Receivables.tsx; screens/Reports.tsx,,translated
-Preview assignments,Preview assignments,,,,,Aperçu des attributions,components/HousekeepingWork.tsx,,needs_translation
+Preview assignments,Preview assignments,معاينة توزيع المهام,Vista previa de las asignaciones,,,Aperçu des attributions,components/HousekeepingWork.tsx,,needs_translation
 Preview changes,Preview changes,معاينة التغييرات,Vista previa de los cambios,Visualizar alterações,预览更改,Aperçu des modifications,screens/MenuImport.tsx; screens/RoomsSetup.tsx,,translated
 Preview import,Preview import,معاينة الاستيراد,Vista previa de la importación,Pré-visualização da importação,预览导入,Aperçu de l'import,,,translated
 Preview Page,Preview Page,معاينة الصفحة,Vista previa de la página,Página de visualização,预览页面,Aperçu de la page,screens/BookingEngine.tsx,,translated
@@ -5408,7 +5408,7 @@ Reply to the guest…,Reply to the guest…,الرد على الضيف…,Respon
 Report,Report,التقرير,Informe,Relatório,报表,Rapport,,,translated
 Report date,Report date,تاريخ التقرير,Fecha del informe,Data do relatório,报表日期,Date du rapport,screens/Reports.tsx,,translated
 Report emailed.,Report emailed.,تم إرسال التقرير بالبريد.,Informe enviado por correo.,Relatório enviado por e-mail.,报表已邮件发送。,Rapport envoyé par e-mail.,screens/Reports.tsx,,translated
-Reported occupancy,Reported occupancy,,,,,Occupation signalée,components/HousekeepingWork.tsx,,needs_translation
+Reported occupancy,Reported occupancy,الإشغال المُبلّغ عنه,Ocupación comunicada,,,Occupation signalée,components/HousekeepingWork.tsx,,needs_translation
 Reports,Reports,التقارير,Informes,Relatórios,报表,Rapports,screens/Reports.tsx; screens/ReportsHub.tsx; screens/VoidAllowanceReport.tsx,,translated
 Reports and exports,Reports and exports,التقارير والتصدير,Informes y exportaciones,Relatórios e exportações,报表与导出,Rapports et exports,,,translated
 Reports · Daily,Reports · Daily,التقارير · يومي,Informes · Diario,Relatórios · Diariamente,报表 · 每日,Rapports · Quotidien,,,translated
@@ -5432,8 +5432,8 @@ Requested by,Requested by,طلبه,Solicitado por,Solicitado por,申请人,Deman
 Requests,Requests,الطلبات,Solicitudes,Solicitações,请求,Demandes,screens/RegistrationCard.tsx,,translated
 Requests don't hold a room. Accepting checks availability again.,Requests don't hold a room. Accepting checks availability again.,الطلبات لا تحجز غرفة. القبول يتحقق من التوفر مرة أخرى.,"Las solicitudes no bloquean habitaciones. Al aceptarlas, se vuelve a comprobar la disponibilidad.",Os pedidos não ocupam um quarto. Aceitando verifica novamente a disponibilidade.,申请不锁房。接受时会重新检查可售房。,Les demandes ne bloquent pas de chambre. L'acceptation vérifie de nouveau la disponibilité.,components/BookingRequests.tsx,,translated
 Require cashier PIN on money actions,Require cashier PIN on money actions,اشتراط PIN أمين الصندوق في الإجراءات المالية,Exigir PIN de caja para operaciones de dinero,Exigir PIN do caixa em ações monetárias,资金操作须验证收银 PIN,Exiger le code PIN caissier pour les opérations d'argent,,,translated
-Require Complimentary Upgrade Approval,Require Complimentary Upgrade Approval,,,,,Exiger l’approbation des surclassements offerts,,,needs_translation
-Require Early Check-In Waiver Approval,Require Early Check-In Waiver Approval,,,,,Exiger l’approbation d’une exonération des frais d’arrivée anticipée,,,needs_translation
+Require Complimentary Upgrade Approval,Require Complimentary Upgrade Approval,اشتراط الموافقة على الترقية المجانية,Exigir aprobación para mejoras gratuitas,,,Exiger l’approbation des surclassements offerts,,,needs_translation
+Require Early Check-In Waiver Approval,Require Early Check-In Waiver Approval,اشتراط الموافقة على الإعفاء من رسوم الوصول المبكر,Exigir aprobación para eximir del cargo por entrada anticipada,,,Exiger l’approbation d’une exonération des frais d’arrivée anticipée,,,needs_translation
 Require pre-check-in before access details,Require pre-check-in before access details,اشتراط تسجيل الوصول المسبق قبل إرسال تفاصيل الدخول,Exigir registro previo antes de dar instrucciones de acceso,Exigir pré-check-in antes dos detalhes de acesso,提供进入信息前需完成预登记,Exiger le pré-enregistrement avant les informations d'accès,,,translated
 Required,Required,مطلوب,Obligatorio,Obrigatório,必填,Obligatoire,components/SecurityDepositPanel.tsx; screens/BanquetFunction.tsx,,translated
 Required - a deduction the customer can't see the reason for is a dispute waiting,Required - a deduction the customer can't see the reason for is a dispute waiting,مطلوب: الخصم الذي لا يعرف العميل سببه نزاع محتمل,Obligatorio: el cliente debe conocer el motivo de la deducción para evitar controversias,Obrigatório - uma dedução cujo motivo o cliente não consegue ver é uma disputa aguardando,必填 - 客户看不到原因的扣款极易引发争议,Obligatoire — une retenue sans motif visible par le client génère un litige,screens/BanquetFunction.tsx,,translated
@@ -5457,12 +5457,12 @@ Reset to default ({value}),Reset to default ({value}),إعادة التعيين 
 Reset {name}'s cashier PIN? They set a new one on their next money action.,Reset {name}'s cashier PIN? They set a new one on their next money action.,إعادة تعيين PIN أمين الصندوق لـ {name}؟ سيضبط رمزاً جديداً في إجرائه المالي التالي.,¿Restablecer el PIN de cajero de {name}? Deberá crear uno nuevo en su próxima operación de cobro o caja.,Redefinir o PIN do caixa de {name}? Eles definiram um novo em sua próxima ação monetária.,重置 {name} 的收银 PIN？其下次资金操作时需设置新 PIN。,Réinitialiser le code PIN caissier de {name} ? Il en définira un nouveau lors de sa prochaine opération d'argent.,screens/settings/AccessPages.tsx,name,translated
 Residence Card,Residence Card,بطاقة الإقامة,Cédula de residencia,Carteira de residência,居留卡,Titre de séjour,,,translated
 Resolution minutes,Resolution minutes,دقائق الحل,Minutos de resolución,Tempo de resolução (min),处理用时（分钟）,Minutes de résolution,,,translated
-Resolution note,Resolution note,,,,,Note de résolution,components/HousekeepingWork.tsx,,needs_translation
+Resolution note,Resolution note,ملاحظة التسوية,Nota de resolución,,,Note de résolution,components/HousekeepingWork.tsx,,needs_translation
 Resolution reason,Resolution reason,سبب الحل,Motivo de resolución,Motivo da resolução,解决原因,Motif de résolution,components/AlertBanner.tsx,,translated
 Resolve,Resolve,حل,Resolver,Resolver,解决,Résoudre,components/AlertBanner.tsx; screens/EndOfDayWizard.tsx,,translated
 Resolve blocking alerts before check-in.,Resolve blocking alerts before check-in.,قم بحل التنبيهات الحاجزة قبل تسجيل الوصول.,Resuelve las alertas bloqueantes antes del check-in.,Resolva os alertas bloqueantes antes do check-in.,请先解除阻断警报再办理入住。,Résolvez les alertes bloquantes avant l'enregistrement.,components/CheckInDialog.tsx,,translated
 Resolve blocking alerts before check-out.,Resolve blocking alerts before check-out.,قم بحل التنبيهات الحاجزة قبل تسجيل المغادرة.,Resuelve las alertas bloqueantes antes del check-out.,Resolva os alertas bloqueantes antes do check-out.,请先解除阻断警报再办理退房。,Résolvez les alertes bloquantes avant le départ.,components/CheckOutDialog.tsx,,translated
-Resolve discrepancy,Resolve discrepancy,,,,,Résoudre l’écart,components/HousekeepingWork.tsx,,needs_translation
+Resolve discrepancy,Resolve discrepancy,تسوية تعارض الإشغال,Resolver discrepancia,,,Résoudre l’écart,components/HousekeepingWork.tsx,,needs_translation
 Resolve the company credit restriction.,Resolve the company credit restriction.,عالج قيد الائتمان الخاص بالشركة.,Resuelva la restricción de crédito de la empresa.,Resolva a restrição de crédito da empresa.,,Lever la restriction de crédit de la société.,components/BookingDialog.tsx,,needs_translation
 Resolve the guest blacklist restriction.,Resolve the guest blacklist restriction.,عالج قيد إدراج النزيل في قائمة الحظر.,Resuelva la restricción por bloqueo del huésped.,Resolva a restrição de bloqueio do hóspede.,,Lever la restriction de liste noire du client.,components/BookingDialog.tsx,,needs_translation
 Resolved,Resolved,محلول,Resuelto,Resolvido,已解决,Résolu,screens/OpsSLA.tsx,,translated
@@ -5633,7 +5633,7 @@ Room type & plan,Room type & plan,نوع الغرفة والخطة,Tipo de habit
 Room type (blank = all),Room type (blank = all),نوع الغرفة (فارغ = الكل),Tipo de habitación (en blanco = todos),Tipo de quarto (em branco = todos),房型（留空 = 全部）,Catégorie de chambre (vide = toutes),,,translated
 Room Type Code (e.g. STD),Room Type Code (e.g. STD),رمز نوع الغرفة (مثل STD),"Código de tipo de habitación (por ejemplo, STD)","Código do tipo de quarto (por exemplo, STD)",房型代码（例如 STD）,Code de catégorie de chambre (ex. STD),screens/Setup.tsx,,translated
 Room Type Name (e.g. Standard Room),Room Type Name (e.g. Standard Room),اسم نوع الغرفة (مثل غرفة قياسية),"Nombre del tipo de habitación (p. ej., habitación estándar)",Nome do tipo de quarto (ex. Quarto Standard),房型名称（例如标准房）,Nom de catégorie de chambre (ex. Chambre Standard),screens/Setup.tsx,,translated
-Room type to charge: {type},Room type to charge: {type},,,,,Type de chambre à facturer : {type},screens/ReservationDetail.tsx,type,needs_translation
+Room type to charge: {type},Room type to charge: {type},نوع الغرفة المعتمد للفوترة: {type},Tipo de habitación a facturar: {type},,,Type de chambre à facturer : {type},screens/ReservationDetail.tsx,type,needs_translation
 Room Types,Room Types,أنواع الغرف,Tipos de habitación,Tipos de quartos,房型,Catégories de chambres,,,translated
 Room types,Room types,أنواع الغرف,Tipos de habitaciones,Tipos de quartos,房型,Catégories de chambres,components/RoomChangeDialog.tsx,,translated
 Room types and rates,Room types and rates,أنواع الغرف والأسعار,Tipos de habitación y tarifas,Tipos de quartos e tarifas,房型与房价,Catégories de chambres et tarifs,../../kamra/onboarding.py,,translated
@@ -5881,7 +5881,7 @@ Select charge,Select charge,اختر الرسوم,Seleccionar cargo,Selecione a 
 Select company,Select company,اختر الشركة,,,,Sélectionner une société,components/FolioWindowTabs.tsx,,needs_translation
 Select in-house room,Select in-house room,اختر غرفة مقيمة,,,,Sélectionner une chambre en séjour,components/RoutingInstructionDrawer.tsx; screens/FolioView.tsx,,needs_translation
 Select items from the menu,Select items from the menu,اختر أصنافاً من القائمة,Seleccione artículos del menú,Selecione itens do menu,从菜单中选择项目,Sélectionnez des articles sur la carte,screens/POS.tsx,,translated
-Select status,Select status,,,,,Sélectionner un état,components/HousekeepingWork.tsx,,needs_translation
+Select status,Select status,اختر الحالة,Seleccione un estado,,,Sélectionner un état,components/HousekeepingWork.tsx,,needs_translation
 Select travel agent,Select travel agent,اختر وكالة السفر,,,,Sélectionner une agence de voyages,components/FolioWindowTabs.tsx,,needs_translation
 Select {name},Select {name},تحديد {name},Seleccionar {name},Selecionar {name},选择 {name},Sélectionner {name},screens/ContractTariffs.tsx; screens/FolioHistory.tsx,name,translated
 Select {v0},Select {v0},تحديد {v0},Seleccionar {v0},Selecionar {v0},,Sélectionner {v0},screens/Receivables.tsx,v0,needs_translation
@@ -6104,7 +6104,7 @@ Site address,Site address,عنوان الموقع,Dirección de la sede,Endereç
 Site name,Site name,اسم الموقع,Nombre del sitio,Nome do site,站点名称,Nom du site,components/BookingDialog.tsx,,translated
 Site URL slug (/stay/… for all listings here),Site URL slug (/stay/… for all listings here),معرّف URL للموقع (/stay/… لكل القوائم هنا),Identificador de la URL de la sede (/stay/… para sus alojamientos),Slug de URL do site (/stay/… para todas as listagens aqui),站点路径（此处所有房源使用 /stay/…）,Slug d'URL du site (/stay/… pour toutes les annonces ici),,,translated
 Skip,Skip,تخطي,Saltar,Pular,跳过,Passer,components/AgentGuide.tsx; components/StepFlow.tsx; screens/Assistant.tsx,,translated
-Skip (occupancy),Skip (occupancy),,,,,Départ non enregistré,components/HousekeepingWork.tsx,,needs_translation
+Skip (occupancy),Skip (occupancy),شاغرة حسب التدبير ومشغولة حسب الاستقبال,"Vacante según pisos, ocupada en recepción",,,Départ non enregistré,components/HousekeepingWork.tsx,,needs_translation
 Skip the paperwork at the desk - just show your ID on arrival and pick up the key. See you soon!,Skip the paperwork at the desk - just show your ID on arrival and pick up the key. See you soon!,لا حاجة للأوراق عند الاستقبال - فقط أظهر هويتك عند الوصول واستلم المفتاح. نراك قريبًا!,Evita el papeleo en recepción: solo muestra tu documento de identidad al llegar y recoge la llave. ¡Te esperamos!,Evite a papelada na recepção - basta mostrar sua identidade na chegada e pegar a chave. Vejo você em breve!,免去前台填表 - 到店出示证件即可取卡。期待与你相见！,Évitez les formalités à la réception — présentez simplement votre pièce d'identité à l'arrivée et récupérez votre clé. À bientôt !,screens/PublicCheckin.tsx,,translated
 Skip to check-in,Skip to check-in,الانتقال إلى تسجيل الوصول,Ir al registro de entrada,Pular para check-in,跳至入住,Passer à l'enregistrement,components/CheckInDialog.tsx,,translated
 Skipped,Skipped,تم التخطي,Omitido,Ignorado,已跳过,Ignoré,,,translated
@@ -6119,7 +6119,7 @@ Slab,Slab,شرائح,Por tramos,Laje,税档,Tranche,,,translated
 Slab threshold per night,Slab threshold per night,حد الشريحة لكل ليلة,Umbral por noche para el tramo fiscal,Limite de laje por noite,每晚税档阈值,Seuil de tranche par nuit,,,translated
 Slab: the rate switches at the threshold per night.,Slab: the rate switches at the threshold per night.,شرائح: تتغير النسبة عند الحد لكل ليلة.,Por tramos: la tasa cambia al superar el umbral por noche.,Laje: a tarifa muda no limite por noite.,税档：每晚房价跨越阈值时切换税率。,Tranche : le taux bascule au seuil par nuit.,,,translated
 Slate,Slate,أردوازي,Pizarra,Ardósia,石板灰,Ardoise,,,translated
-Sleep (occupancy),Sleep (occupancy),,,,,Occupation non enregistrée,components/HousekeepingWork.tsx,,needs_translation
+Sleep (occupancy),Sleep (occupancy),مشغولة حسب التدبير وشاغرة حسب الاستقبال,"Ocupada según pisos, vacante en recepción",,,Occupation non enregistrée,components/HousekeepingWork.tsx,,needs_translation
 Sleeps,Sleeps,السعة,Capacidad,Dorme,可住人数,Capacité,components/RoomDrawer.tsx,,translated
 Sleeps up to {guests},Sleeps up to {guests},السعة: حتى {guests},Huéspedes: hasta {guests},Acomoda até {guests},最多可住 {guests} 人,Jusqu'à {guests},components/BookingDialog.tsx,guests,translated
 Sleeps up to {n},Sleeps up to {n},السعة: حتى {n},Adultos: hasta {n},Acomoda até {n},最多可住 {n} 人,Jusqu'à {n} personnes,screens/PublicBooking.tsx; screens/PublicListing.tsx,n,translated
@@ -6247,7 +6247,7 @@ stayed,stayed,أقام,estancia finalizada,ficou,已住宿,séjourné,screens/Gu
 Staying on: use Extend stay so the stay covers tonight.,Staying on: use Extend stay so the stay covers tonight.,سيبقى الضيف: استخدم تمديد الإقامة لتشمل الإقامة الليلة.,"Si continúa alojado, utilice Extender estancia para incluir esta noche.",Permanecendo: use Prolongar estadia para que a estadia cubra esta noite.,续住：使用「延长住宿」使住宿覆盖今晚。,Prolongation : utilisez Prolonger le séjour afin que la réservation couvre ce soir.,,,translated
 staying over,staying over,مقيم,continúa alojado,ficando,续住,prolongation,screens/TapeChart.tsx,,translated
 Stayover Clean,Stayover Clean,تنظيف أثناء الإقامة,Limpieza durante la estancia,Permanência limpa,续住清洁,Recouche,,,translated
-Stayover credits,Stayover credits,,,,,Crédits de nettoyage en cours de séjour,screens/configs.ts,,needs_translation
+Stayover credits,Stayover credits,نقاط التنظيف أثناء الإقامة,Créditos de limpieza durante la estancia,,,Crédits de nettoyage en cours de séjour,screens/configs.ts,,needs_translation
 Stays,Stays,الإقامات,Estancias,Estadias,住宿,Séjours,screens/GuestJourney.tsx,,translated
 Stays booked without a rate plan still use the card rate.,Stays booked without a rate plan still use the card rate.,الإقامات المحجوزة دون خطة سعر لا تزال تستخدم سعر البطاقة.,Las estancias reservadas sin plan tarifario siguen usando la tarifa de lista.,As estadias reservadas sem plano tarifário continuam a usar a tarifa de balcão.,未选择房价计划的预订仍按门市价计价。,Les séjours réservés sans plan tarifaire utilisent toujours le tarif affiché.,components/RoomTypeTariffs.tsx,,translated
 Stays of at least (nights),Stays of at least (nights),إقامات لا تقل عن (ليالٍ),Estancias de al menos (noches),Estadias de pelo menos (noites),最短连住（晚）,Séjours d'au moins (nuits),,,translated
@@ -6313,8 +6313,8 @@ Supplier bills the hotel pays later. Cash paid from the till stays in Petty Cash
 Supplier's bill number,Supplier's bill number,رقم فاتورة المورد,Número de factura del proveedor,Número da fatura do fornecedor,供应商账单号,Numéro de facture du fournisseur,,,translated
 Supplies,Supplies,المستلزمات,Suministros,Suprimentos,用品,Fournitures,,,translated
 swap room,swap room,تبديل الغرفة,cambiar habitación,trocar quarto,换房,échanger la chambre,,,translated
-Swap with occupied room,Swap with occupied room,,,,,Échanger avec une chambre occupée,components/RoomChangeDialog.tsx,,needs_translation
-Swap with room {room},Swap with room {room},,,,,Échanger avec la chambre {room},components/RoomChangeDialog.tsx,room,needs_translation
+Swap with occupied room,Swap with occupied room,التبديل مع غرفة مشغولة,Intercambiar con una habitación ocupada,,,Échanger avec une chambre occupée,components/RoomChangeDialog.tsx,,needs_translation
+Swap with room {room},Swap with room {room},التبديل مع الغرفة {room},Intercambiar con la habitación {room},,,Échanger avec la chambre {room},components/RoomChangeDialog.tsx,room,needs_translation
 "Swimming Pool
 Free Parking
 Complimentary Wi-Fi
@@ -6873,8 +6873,8 @@ Turn off instead of deleting when the journal already posted it.,Turn off instea
 Turn the AI agent on,Turn the AI agent on,تفعيل وكيل الذكاء الاصطناعي,Activar el agente de IA,Ative o agente de IA,开启 AI 智能体,Activer l'agent IA,,,translated
 Turnaround,Turnaround,وقت الإنجاز,Tiempo de entrega,Prazo de entrega,周转时间,Délai de traitement,,,translated
 Turnaround hours,Turnaround hours,ساعات الإنجاز,Horas de entrega,Tempo de entrega,周转小时,Délai en heures,,,translated
-Turndown,Turndown,,,,,Service du soir,components/HousekeepingWork.tsx; screens/HousekeepingBoard.tsx,,needs_translation
-Turndown credits,Turndown credits,,,,,Crédits de service du soir,screens/configs.ts,,needs_translation
+Turndown,Turndown,خدمة تجهيز الغرفة للنوم,Servicio de descubierta,,,Service du soir,components/HousekeepingWork.tsx; screens/HousekeepingBoard.tsx,,needs_translation
+Turndown credits,Turndown credits,نقاط خدمة تجهيز الغرفة للنوم,Créditos del servicio de descubierta,,,Crédits de service du soir,screens/configs.ts,,needs_translation
 Twin,Twin,سريران منفصلان,Dos camas individuales,Duas camas de solteiro,双床,Lits jumeaux,,,translated
 Two chairs and a table lamp in the pre-function area,Two chairs and a table lamp in the pre-function area,كرسيان ومصباح طاولة في منطقة الاستقبال قبل القاعة,Dos sillas y una lámpara de mesa en el área previa al salón,Duas cadeiras e um candeeiro de mesa na área de apoio,前厅区两把椅子与一盏台灯,Deux chaises et une lampe de table dans l'espace pré-fonction,screens/BanquetFunction.tsx,,translated
 Two club sandwiches,Two club sandwiches,شطيرتا كلوب,Dos sándwiches club,Dois sanduíches,两份俱乐部三明治,Deux club-sandwichs,components/RoomStayPanels.tsx,,translated
@@ -7102,12 +7102,12 @@ Waitlist,Waitlist,قائمة الانتظار,Lista de espera,Lista de espera,�
 Waitlisted · {ref},Waitlisted · {ref},قائمة انتظار · {ref},En lista de espera · {ref},Lista de espera · {ref},候补 · {ref},Liste d'attente · {ref},components/BookingDialog.tsx,ref,translated
 Waive,Waive,إعفاء,Exonerar,Isenção,减免,Dispenser,components/AgentCards.tsx; components/SecurityDepositPanel.tsx,,translated
 Waive deposit,Waive deposit,إعفاء من التأمين,Exonerar depósito de garantía,Isenção de depósito,减免押金,Dispenser la caution,components/AgentCards.tsx; components/SecurityDepositPanel.tsx,,translated
-Waive early check-in fee,Waive early check-in fee,,,,,Exonérer les frais d’arrivée anticipée,components/CheckInDialog.tsx,,needs_translation
+Waive early check-in fee,Waive early check-in fee,الإعفاء من رسوم تسجيل الوصول المبكر,Eximir del cargo por entrada anticipada,,,Exonérer les frais d’arrivée anticipée,components/CheckInDialog.tsx,,needs_translation
 waive fee,waive fee,إعفاء من الرسوم,exonerar cargo,isenção de taxa,减免费用,dispenser les frais,,,translated
 Waive the fee (logged - manager's call),Waive the fee (logged - manager's call),إعفاء من الرسوم (مُسجَّل - قرار المدير),Exonerar el cargo (decisión del gerente que queda registrada),Isenção da taxa (registrada - chamada do gestor),减免费用（会留痕 - 由经理决定）,Dispenser les frais (journalisé — décision responsable),components/CancelPanel.tsx,,translated
 Waived,Waived,معفى,Exonerado,Isento,已减免,Dispensé,screens/BanquetFunction.tsx,,translated
 Waived: {reason},Waived: {reason},تم الإعفاء: {reason},Exonerado: {reason},Dispensado: {reason},已减免：{reason},Dispensé : {reason},components/SecurityDepositPanel.tsx,reason,translated
-Waiver reason,Waiver reason,,,,,Motif de l’exonération,components/CheckInDialog.tsx,,needs_translation
+Waiver reason,Waiver reason,سبب الإعفاء,Motivo de la exención,,,Motif de l’exonération,components/CheckInDialog.tsx,,needs_translation
 Wake-up call,Wake-up call,مكالمة إيقاظ,Llamada de despertador,Chamada de despertar,叫醒服务,Appel de réveil,components/CheckInDialog.tsx,,translated
 Walk In,Walk In,,,Walk-in (Sem reserva),上门散客,Client de passage,,,needs_translation
 Walk in,Walk in,,,Walk-in (Sem reserva),上门散客,Client de passage,,,needs_translation
@@ -7671,7 +7671,7 @@ Zero-rated on purpose,Zero-rated on purpose,خاضع لنسبة صفرية عم�
 {type}: stay total -{amt} (now {total}),{type}: stay total -{amt} (now {total}),{type}: إجمالي الإقامة -{amt} (الآن {total}),{type}: el total de la estancia baja {amt} (nuevo total: {total}),{type}: total da estadia -{amt} (agora {total}),{type}：住宿合计 -{amt}（现为 {total}）,{type} : total séjour -{amt} (désormais {total}),components/RoomChangeDialog.tsx,type amt total,translated
 "{type}: {n} rooms needed, only {f} free on these dates.","{type}: {n} rooms needed, only {f} free on these dates.",,{type}: se necesitan {n} habitaciones y solo hay {f} libres en estas fechas.,"{type}: {n} quartos necessários, apenas {f} disponíveis nestas datas.",{type}：需要 {n} 间，这些日期仅剩 {f} 间。,"{type} : {n} chambres nécessaires, seulement {f} libres à ces dates.",components/GroupBookingDialog.tsx,type n f,needs_translation
 {t} left,{t} left,متبقٍ {t},Quedan {t},{t} esquerda,剩 {t},{t} restant,screens/Tickets.tsx,t,translated
-{used} / {limit} credits,{used} / {limit} credits,,,,,{used} / {limit} crédits,components/HousekeepingWork.tsx,used limit,needs_translation
+{used} / {limit} credits,{used} / {limit} credits,{used} من أصل {limit} نقطة عمل,{used} de {limit} créditos,,,{used} / {limit} crédits,components/HousekeepingWork.tsx,used limit,needs_translation
 {v0} ({v1} free),{v0} ({v1} free),,{v0} ({v1} libres),{v0} ({v1} livres),{v0}（空房 {v1}）,{v0} ({v1} libres),components/GroupControl.tsx,v0 v1,needs_translation
 {v0} / adult / night,{v0} / adult / night,{v0} / بالغ / ليلة,{v0} / adulto / noche,{v0} / adulto / noturno,{v0} / 成人 / 晚,{v0} / adulte / nuit,,v0,translated
 {v0} / child / night,{v0} / child / night,{v0} / طفل / ليلة,{v0} / menor / noche,{v0} / criança / noite,{v0} / 儿童 / 晚,{v0} / enfant / nuit,,v0,translated
