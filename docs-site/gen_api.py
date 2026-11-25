@@ -200,6 +200,18 @@ def pin_http_contract():
     return pin_fields, http_fields
 
 
+def display_copy(text):
+    """Brand descriptive copy independently of API identifiers and role metadata."""
+    return (text.replace("kamrapms.com", "the product website")
+            .replace("Kamra Agent", "Maximus Assistant")
+            .replace("Kamra Custom Report", "the custom report record")
+            .replace("Kamra", "Maximus")
+            .replace("ERPNext accounting bridge", "accounting bridge")
+            .replace("ERPNext", "the accounting system")
+            .replace("Frappe", "the platform")
+            .replace("hardcodes ₹ or GST %", "hardcodes a currency symbol or tax rate"))
+
+
 def collect():
     pin_fields, pin_http_fields = pin_http_contract()
     modules = []
@@ -223,10 +235,10 @@ def collect():
             eps.append({
                 "module": mod, "name": node.name, "guest": guest,
                 "method": "POST" if methods == ["POST"] else "GET/POST",
-                "roles": roles, "doc": doc.strip(),
+                "roles": roles, "doc": display_copy(doc.strip()),
                 "params": endpoint_params,
             })
-        modules.append({"module": mod, "folder": folder, "note": note,
+        modules.append({"module": mod, "folder": display_copy(folder), "note": display_copy(note),
                         "endpoints": eps})
     return modules
 
@@ -246,7 +258,7 @@ def write_markdown(modules):
 outline: 2
 ---
 
-# REST API reference
+# Maximus REST API reference
 
 Every endpoint below is a whitelisted function - the same governed layer
 the UI and the AI use. **{total} endpoints**, generated from the source
@@ -255,12 +267,12 @@ the UI and the AI use. **{total} endpoints**, generated from the source
 ## Calling convention
 
 ```
-POST https://<your-kamra>/api/method/kamra.<module>.<function>
+POST https://<your-hotel>/api/method/kamra.<module>.<function>
 Authorization: token <api_key>:<api_secret>
 Content-Type: application/json
 ```
 
-- Get keys from **Kamra Agent → Connect your AI** (Claude OAuth, role-scoped) or the
+- Get keys from **Maximus Assistant → Connect your AI** (Claude OAuth, role-scoped) or the
   dedicated agent user for services.
 - Responses: `{{"message": <return value>}}`. Errors are HTTP 4xx with a
   readable reason.
@@ -333,12 +345,12 @@ def write_postman(modules):
 
     collection = {
         "info": {
-            "name": "Kamra PMS API",
+            "name": "Maximus PMS API",
             "description":
-                "The full Kamra REST surface. Set base_url (e.g. "
+                "Maximus REST API. Set base_url (for example, "
                 "https://pms.yourhotel.com), api_key and api_secret in the "
-                "collection variables, then call away. Docs: "
-                "https://kamrapms.com/docs/api-reference",
+                "collection variables before sending a request. Documentation: "
+                "{{base_url}}/docs/api-reference",
             "schema": "https://schema.getpostman.com/json/collection/"
                       "v2.1.0/collection.json",
         },

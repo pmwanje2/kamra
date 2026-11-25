@@ -1063,6 +1063,10 @@ def transfer_to_city_ledger(folio: str, company: str | None = None,
 	if abs(locked - balance) > eps:
 		frappe.throw(frappe._("This bill changed while it was being moved to the "
 		                      "company's account. Try again."))
+	from kamra.folio import settlement_balance
+	balance = float(settlement_balance(doc))
+	if balance <= eps:
+		frappe.throw("No balance to transfer to city ledger.")
 	company = _transfer_company(doc, company)
 	if not company:
 		frappe.throw("A company is required for city ledger transfer.")
@@ -2517,7 +2521,8 @@ def _insert_folio_reprint(folio, property, internal_number, verified_invoice, do
 @require_roles("Front Desk", "Finance", "Kamra Agent", scope={"reprint": "Folio Reprint"})
 def folio_reprint_details(reprint: str) -> dict:
 	"""Read a saved revision with the accounting reference visible to the current reader."""
-	from kamra.folio import reconcile_credit_note_status
+	from kamra.folio import _active_folio_invoices, _readable_invoice_names
+	from kamra.pricing import property_currency
 
 	record = frappe.get_doc("Folio Reprint", reprint)
 	record.check_permission("read")
@@ -2528,9 +2533,21 @@ def folio_reprint_details(reprint: str) -> dict:
 	if snapshot and snapshot != record.internal_number:
 		folio = frappe.get_doc("Folio", record.folio)
 		if folio.property == record.property and folio.has_permission("read"):
-			visible = reconcile_credit_note_status(folio)["sales_invoice"]
-			if visible == snapshot:
-				result["sales_invoice"] = visible
+			company = frappe.get_cached_doc("Property", folio.property).get("company")
+			if company and folio.get("sales_invoice") and frappe.db.exists("DocType", "Sales Invoice"):
+				paths = {}
+				try:
+					if frappe.db.has_column("Sales Invoice", "kamra_ref"):
+						_, paths = _active_folio_invoices(
+							{folio.name: folio.sales_invoice},
+							{"company": company, "currency": property_currency(folio.property)}, ["name"],
+						)
+				except (frappe.DoesNotExistError, frappe.db.TableMissingError):
+					pass
+				if snapshot in paths.get(folio.name, ()) and snapshot in _readable_invoice_names([snapshot]):
+					result["sales_invoice"] = snapshot
+		if not result["sales_invoice"]:
+			result["invoice_number"] = record.internal_number
 	return result
 
 

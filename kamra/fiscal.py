@@ -124,14 +124,17 @@ def fiscal_status(folio) -> dict | None:
 	return out
 
 
-def visible_fiscal_references(fiscal: dict, credit: dict) -> dict:
+def visible_fiscal_references(fiscal: dict, credit: dict, *, owned_invoice=None) -> dict:
 	"""Expose bridge references only when the folio's accounting projection verifies them."""
 	invoice = credit.get("sales_invoice")
 	if not invoice or invoice != fiscal["sales_invoice"]:
-		# Finality, sandbox status and the balance are folio-level print information.
-		# Start with an empty projection so new bridge identifiers stay private.
-		return {**_unverified(), "state": fiscal["state"], "sandbox": fiscal["sandbox"],
-		        "outstanding_amount": fiscal["outstanding_amount"]}
+		safe = _unverified()
+		safe["sandbox"] = fiscal["sandbox"]
+		if owned_invoice and owned_invoice == fiscal["sales_invoice"]:
+			safe.update(state=fiscal["state"], outstanding_amount=fiscal["outstanding_amount"])
+		elif fiscal["state"] == "pending":
+			safe["state"] = "pending"
+		return safe
 	allowed = set(credit.get("credit_notes", []))
 	notes = []
 	for note in fiscal["credit_notes"]:

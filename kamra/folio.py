@@ -2357,7 +2357,7 @@ def close_folio(folio_name: str) -> str:
 	from kamra.ledger import _currency_places, _format_currency_amount
 	places = max(_currency_places(folio.property), 2)
 	eps = 0.5 * (10 ** -places)
-	balance = float(folio.balance or 0)
+	balance = float(settlement_balance(folio))
 	if abs(balance) > eps:
 		if balance > 0:
 			frappe.throw(frappe._(
@@ -2591,7 +2591,7 @@ def sales_invoice_field() -> list[str]:
 _MAX_REBILL_HOPS = 16
 
 
-def _verified_invoice_anchors(links, invoice_scope, columns):
+def _verified_invoice_anchors(links, fetch):
 	"""Walk stored pointers backwards in batches. Only the root's backlink proves ownership."""
 	pending = dict(links)
 	trails = {folio: [] for folio in links}
@@ -2600,10 +2600,7 @@ def _verified_invoice_anchors(links, invoice_scope, columns):
 	for _depth in range(_MAX_REBILL_HOPS + 1):
 		if not pending:
 			break
-		rows = frappe.get_all(
-			"Sales Invoice", filters={**invoice_scope, "name": ("in", list(set(pending.values())))},
-			fields=columns,
-		)
+		rows = fetch("name", pending.values())
 		by_name = {row.name: row for row in rows}
 		parents = {}
 		for folio, name in pending.items():
@@ -2622,37 +2619,50 @@ def _verified_invoice_anchors(links, invoice_scope, columns):
 	return {folio: stored[folio] for folio in verified_paths}, verified_paths
 
 
-def _active_folio_invoices(links, scope, fields):
-	"""Resolve submitted invoices and their ordered ownership paths, from root to active invoice."""
-	invoice_scope = {**scope, "is_return": 0, "docstatus": ("in", [1, 2])}
-	has_rebill = frappe.db.has_column("Sales Invoice", "kamra_rebill_of")
-	columns = [*fields, "docstatus", "kamra_ref"]
-	if has_rebill:
-		columns.append("kamra_rebill_of")
-	current, paths = _verified_invoice_anchors(links, invoice_scope, columns)
-	parents = {invoice.name: folio for folio, invoice in current.items()} if has_rebill else {}
-	while parents:
-		children = frappe.get_all(
-			"Sales Invoice", filters={**invoice_scope, "kamra_rebill_of": ("in", list(parents))},
-			fields=columns, order_by="docstatus asc, creation desc, name asc",
-		)
-		next_parents = {}
+def _active_folio_invoices(links, scope, fields, *, fetch=None):
+	"""Choose submitted descendants only after verifying every edge from the owned root."""
+	try:
+		has_rebill = frappe.db.has_column("Sales Invoice", "kamra_rebill_of")
+	except (frappe.DoesNotExistError, frappe.db.TableMissingError):
+		has_rebill = False
+	if fetch is None:
+		columns = [*fields, "docstatus", "kamra_ref"]
+		if has_rebill:
+			columns.append("kamra_rebill_of")
+
+		def fetch(field, names):
+			return frappe.get_all(
+				"Sales Invoice", filters={**scope, "is_return": 0, "docstatus": ("in", [1, 2]),
+				                         field: ("in", list(set(names)))},
+				fields=columns, order_by="docstatus asc, creation desc, name asc",
+			)
+
+	anchors, paths = _verified_invoice_anchors(links, fetch)
+	active = {folio: si for folio, si in anchors.items() if si.docstatus == 1}
+	frontier = {si.name: (folio, paths[folio]) for folio, si in anchors.items()} if has_rebill else {}
+	invalid = set()
+	while frontier:
+		children = fetch("kamra_rebill_of", frontier)
+		next_level = {}
 		for child in children:
-			folio = parents.get(child.kamra_rebill_of)
-			if not folio or child.kamra_ref not in (None, "", folio):
+			if child.kamra_rebill_of not in frontier:
 				continue
-			if child.docstatus == 2 and current[folio].docstatus == 1:
+			folio, trail = frontier[child.kamra_rebill_of]
+			if folio in invalid or child.kamra_ref not in (None, "", folio):
 				continue
-			# The first eligible replacement wins (submitted, then newest).
-			del parents[child.kamra_rebill_of]
-			if child.name in paths[folio] or len(paths[folio]) > _MAX_REBILL_HOPS:
-				del current[folio]
+			if child.name in trail or len(trail) > _MAX_REBILL_HOPS:
+				invalid.add(folio)
 				continue
-			paths[folio].append(child.name)
-			current[folio] = child
-			next_parents[child.name] = folio
-		parents = next_parents
-	return {folio: si for folio, si in current.items() if si.docstatus == 1}, paths
+			path = [*trail, child.name]
+			next_level[child.name] = (folio, path)
+			if child.docstatus == 1 and (folio not in active or len(path) > len(paths[folio])):
+				active[folio] = child
+				paths[folio] = path
+		frontier = next_level
+	for folio in invalid:
+		active.pop(folio, None)
+		paths.pop(folio, None)
+	return active, paths
 
 
 def _readable_invoice_names(names, *, filter_list=True):
@@ -2670,7 +2680,7 @@ def _linked_sales_credit_notes(folios, property: str, currency: str, *, read_not
 	"""Read returns against verified links and check native access before displaying identifiers."""
 	links = {row.get("name") or row.get("folio"): bridge_invoice(row) for row in folios if bridge_invoice(row)}
 	if not links or not frappe.db.exists("DocType", "Sales Invoice"):
-		return {}, {}, set()
+		return {}, {}, set(), {}
 
 	company = frappe.get_cached_doc("Property", property).get("company")
 	try:
@@ -2679,7 +2689,7 @@ def _linked_sales_credit_notes(folios, property: str, currency: str, *, read_not
 	except (frappe.db.TableMissingError, frappe.DoesNotExistError):
 		has_backlink = has_company = False
 	if (has_company or has_backlink) and not (company and has_backlink):
-		return {}, {}, set()
+		return {}, {}, set(), {}
 
 	scope = {"currency": currency, "company": company or ["is", "not set"]}
 	amount_fields = ["name", "grand_total", "rounded_total"]
@@ -2689,7 +2699,7 @@ def _linked_sales_credit_notes(folios, property: str, currency: str, *, read_not
 			originals, paths = _active_folio_invoices(links, scope, amount_fields)
 			links = {folio: si.name for folio, si in originals.items()}
 		if not links:
-			return {}, {}, set()
+			return {}, {}, set(), {}
 		returns = frappe.get_all(
 			"Sales Invoice", filters={**scope, "docstatus": 1, "is_return": 1,
 			                         "return_against": ("in", list(links.values()))},
@@ -2698,7 +2708,7 @@ def _linked_sales_credit_notes(folios, property: str, currency: str, *, read_not
 			order_by="name asc",
 		)
 	except (frappe.db.TableMissingError, frappe.DoesNotExistError):
-		return {}, {}, set()
+		return {}, {}, set(), {}
 
 	notes_by_invoice = {}
 	for note in returns:
@@ -2720,10 +2730,10 @@ def _linked_sales_credit_notes(folios, property: str, currency: str, *, read_not
 			if has_backlink:
 				visible.add(invoice)
 			visible.update(note.name for note in notes[folio] if note.name in readable)
-	return originals, notes, visible
+	return originals, notes, visible, paths
 
 
-def credit_note_positions(folios, property: str, *, read_note_numbers: bool = True) -> list[dict]:
+def _credit_projections(folios, property, *, read_note_numbers=True):
 	"""Project collectible balances at the property currency's precision."""
 	if not folios:
 		return []
@@ -2732,7 +2742,7 @@ def credit_note_positions(folios, property: str, *, read_note_numbers: bool = Tr
 
 	currency = property_currency(property)
 	unit = Decimal(1).scaleb(-_minor_unit(currency))
-	originals, notes, visible = _linked_sales_credit_notes(
+	originals, notes, visible, paths = _linked_sales_credit_notes(
 		folios, property, currency, read_note_numbers=read_note_numbers,
 	)
 
@@ -2751,19 +2761,36 @@ def credit_note_positions(folios, property: str, *, read_note_numbers: bool = Tr
 			 if not cint(n.get("update_outstanding_for_self"))),
 			Decimal(0),
 		))
-		balance = max(Decimal(0), rounded(row.get("balance")) - credited)
+		posted = rounded(row.get("balance"))
+		if invoice and len(paths[name]) > 1:
+			# The original reversal retires the old bill. Carry its net collections
+			# onto the replacement once; only credits on the active bill reduce it.
+			collected = rounded(row.get("grand_total")) - posted
+			posted = rounded(invoice.rounded_total or invoice.grand_total) - collected
+		balance = max(Decimal(0), posted - credited)
 		status = None
 		if credited:
 			invoice_total = invoice.rounded_total or invoice.grand_total if invoice else row.get("grand_total")
 			status = "Credited" if credited >= rounded(invoice_total) else "Partially credited"
-		positions.append({
+		positions.append(({
 			"sales_invoice": invoice.name if invoice and invoice.name in visible else None,
 			"credited_amount": float(credited),
 			"credit_notes": [n.name for n in returns if n.name in visible],
 			"net_collectible_balance": float(balance),
 			"credit_status": status,
-		})
+		}, invoice.name if invoice else None))
 	return positions
+
+
+def credit_note_positions(folios, property: str, *, read_note_numbers: bool = True) -> list[dict]:
+	return [position for position, _ in _credit_projections(folios, property, read_note_numbers=read_note_numbers)]
+
+
+def settlement_balance(doc):
+	"""Keep a signed guest advance; project the amount to collect on a bridged debit."""
+	if not bridge_invoice(doc) or (doc.balance or 0) < 0:
+		return doc.balance or 0
+	return credit_note_positions([doc], doc.property, read_note_numbers=False)[0]["net_collectible_balance"]
 
 
 def reconcile_credit_note_status(folio) -> dict:

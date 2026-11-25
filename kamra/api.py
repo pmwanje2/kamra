@@ -3788,11 +3788,18 @@ def settle_group_bill(group_booking: str, mode: str | None = None,
 	if not folio:
 		frappe.throw(_("This group has no open group bill."))
 	from kamra.ledger import _currency_places, _round_currency
-	places = max(_currency_places(gb.property), 2)
+	from kamra.folio import settlement_balance
+	places = _currency_places(gb.property)
 	eps = 0.5 * (10 ** -places)
-	balance = _round_currency(frappe.db.get_value("Folio", folio, "balance"), places)
-	if int(to_city_ledger or 0):
-		company = frappe.db.get_value("Folio", folio, "payee_company") or gb.company
+	_lock_folio_scope(folios=[folio])
+	locked = frappe.get_doc("Folio", folio, for_update=True)
+	if locked.status != "Open" or locked.property != gb.property:
+		frappe.throw(_("This group has no open group bill."))
+	if locked.modified != frappe.db.get_value("Folio", folio, "modified"):
+		frappe.throw(_("This bill changed while it was being moved to the company's account. Try again."))
+	balance = _round_currency(settlement_balance(locked), places)
+	if int(to_city_ledger or 0) and balance > eps:
+		company = locked.payee_company or gb.company
 		if not company:
 			frappe.throw(_("Only a company group can go to the city ledger."))
 		from kamra.ledger import city_ledger_transfer
@@ -3803,7 +3810,7 @@ def settle_group_bill(group_booking: str, mode: str | None = None,
 			frappe.throw(_("Choose how the group bill is paid."))
 		add_folio_payment(folio, mode, flt(amount) or balance,
 		                  reference=reference, pin=pin)
-	balance = _round_currency(frappe.db.get_value("Folio", folio, "balance"), places)
+	balance = _round_currency(settlement_balance(frappe.get_doc("Folio", folio, for_update=True)), places)
 	out = {
 		"folio": folio,
 		"window_no": int(selected.get("window_no") or 1),
@@ -4770,92 +4777,50 @@ def _resolve_accounting_invoice(doc, prop=None, prop_currency: str | None = None
 		return None, None, "unavailable"
 	if not frappe.has_permission("Sales Invoice", ptype="read", doc=si):
 		return None, None, "unavailable"
-	if si.get("kamra_rebill_of"):
-		# The bridge moves the pointer to the replacement but keeps the unique
-		# folio backlink and original item references on the root invoice.
-		from kamra.folio import _active_folio_invoices, _readable_invoice_names
-
-		company = prop.get("company") if prop else None
-		if not company or not prop_currency:
-			return None, None, "unavailable"
-		try:
-			active, paths = _active_folio_invoices(
-				{doc.name: si.name}, {"company": company, "currency": prop_currency}, ["name"],
-			)
-			if doc.name not in active:
-				return None, None, "unavailable"
-			path = paths[doc.name]
-			if not _readable_invoice_names(path).issuperset(path):
-				return None, None, "unavailable"
-			return (frappe.get_doc("Sales Invoice", active[doc.name].name),
-			        frappe.get_doc("Sales Invoice", path[0]), "submitted")
-		except (frappe.DoesNotExistError, frappe.PermissionError, frappe.db.TableMissingError):
-			return None, None, "unavailable"
-	if (si.get("kamra_ref") or "") != doc.name:
-		return None, None, "unavailable"
 	if not _si_matches_folio_scope(si, prop, prop_currency):
 		return None, None, "unavailable"
+	if si.docstatus == 0:
+		return None, None, "not_final"
 
-	docstatus = int(si.get("docstatus") or 0)
-	if docstatus == 0:
-		return None, si, "not_final"
+	from kamra.folio import _active_folio_invoices, _readable_invoice_names
 
-	# Follow kamra_rebill_of chain when a linked invoice was cancelled or
-	# superseded by a submitted replacement invoice.
-	current = si
-	visited = {si.name}
+	# Document-backed readers may supply bridge fields without SQL metadata.
+	# Both readers use the same ownership, descendant selection and depth rules.
+	def fetch_documents(field, names):
+		rows = []
+		for name in names:
+			candidates = [name] if field == "name" else frappe.get_all(
+				"Sales Invoice", filters={field: name, "is_return": 0, "docstatus": ("in", [1, 2])},
+				pluck="name", order_by="docstatus asc, creation desc, name asc",
+			)
+			for candidate in candidates:
+				row = si if candidate == si.name else frappe.get_doc("Sales Invoice", candidate)
+				if (row.get(field) == name and row.docstatus in (1, 2) and not row.get("is_return")
+				        and _si_matches_folio_scope(row, prop, prop_currency)):
+					rows.append(row)
+		return rows
+
 	try:
-		has_rebill_col = bool(frappe.db.has_column("Sales Invoice", "kamra_rebill_of"))
-	except Exception:
-		has_rebill_col = False
-
-	if has_rebill_col:
-		for _hop in range(10):
-			try:
-				candidates = frappe.get_all(
-					"Sales Invoice",
-					filters={
-						"kamra_rebill_of": current.name,
-						"is_return": 0,
-						"docstatus": ("in", [1, 2]),
-					},
-					pluck="name",
-					order_by="docstatus asc, creation desc",
-				)
-			except Exception:
-				candidates = []
-			advanced = False
-			for cand_name in candidates or []:
-				if not cand_name or cand_name in visited:
-					continue
-				try:
-					cand = frappe.get_doc("Sales Invoice", cand_name)
-				except Exception:
-					continue
-				if not frappe.has_permission("Sales Invoice", ptype="read", doc=cand):
-					# Fail closed without leaking replacement figures.
-					return None, si, ("not_final" if int(current.get("docstatus") or 0) != 1 else "unavailable")
-				if not _si_matches_folio_scope(cand, prop, prop_currency):
-					continue
-				if (cand.get("kamra_rebill_of") or "") != current.name:
-					continue
-				cand_ref = cand.get("kamra_ref")
-				if cand_ref and cand_ref != doc.name:
-					continue
-				cand_ds = int(cand.get("docstatus") or 0)
-				# Never step down from a submitted invoice to a cancelled one.
-				if int(current.get("docstatus") or 0) == 1 and cand_ds != 1:
-					continue
-				visited.add(cand_name)
-				current = cand
-				advanced = True
-				break
-			if not advanced:
-				break
-
-	if int(current.get("docstatus") or 0) != 1:
-		return None, si, "not_final"
-	return current, si, "submitted"
+		try:
+			indexed = frappe.db.has_column("Sales Invoice", "kamra_ref")
+		except (frappe.DoesNotExistError, frappe.db.TableMissingError):
+			indexed = False
+		scope = {"company": prop.get("company") if prop else None, "currency": prop_currency}
+		if indexed and not all(scope.values()):
+			return None, None, "unavailable"
+		active, paths = _active_folio_invoices(
+			{doc.name: si.name}, scope, ["name"], fetch=None if indexed else fetch_documents,
+		)
+		if doc.name not in active:
+			return None, None, "not_final" if doc.name in paths else "unavailable"
+		path = paths[doc.name]
+		if not _readable_invoice_names(path, filter_list=indexed).issuperset(path):
+			return None, None, "unavailable"
+		current = active[doc.name].name
+		return (si if current == si.name else frappe.get_doc("Sales Invoice", current),
+		        si if path[0] == si.name else frappe.get_doc("Sales Invoice", path[0]), "submitted")
+	except (frappe.DoesNotExistError, frappe.PermissionError, frappe.db.TableMissingError):
+		return None, None, "unavailable"
 
 
 def _load_accounting_invoice(doc, prop=None, prop_currency: str | None = None):
@@ -5309,7 +5274,7 @@ def folio_invoice(folio: str):
 	from decimal import ROUND_HALF_UP, Decimal
 
 	from kamra import localization as loc
-	from kamra.folio import reconcile_credit_note_status, reference_currency
+	from kamra.folio import _credit_projections, reference_currency
 	from kamra.ledger import _currency_places, _round_currency, credited_total
 	from kamra.pricing import saved_contract_tariff
 
@@ -5540,11 +5505,16 @@ def folio_invoice(folio: str):
 	# this folio's own number is then an internal reference only
 	from kamra.fiscal import fiscal_status, fiscal_title, visible_fiscal_references
 	from kamra.fiscal import is_final as fiscal_final
-	credit = reconcile_credit_note_status(doc) if frappe.has_permission("Folio", ptype="read", doc=doc) else {}
+	credit, owned_invoice = ({}, None)
+	if frappe.has_permission("Folio", ptype="read", doc=doc):
+		credit, owned_invoice = _credit_projections([doc], doc.property)[0]
+		if acct_si is not None:
+			owned_invoice = acct_si.name
 	fiscal = fiscal_status(doc)
 	number, final, internal_number = doc_number, settled, None
 	if fiscal:
-		final, internal_number = fiscal_final(fiscal), doc.invoice_number
+		owns_fiscal = bool(owned_invoice and owned_invoice == fiscal["sales_invoice"])
+		final, internal_number = owns_fiscal and fiscal_final(fiscal), doc.invoice_number
 		if acct_tax["tax_source"] == "accounting_unavailable":
 			# Restricted viewer (lacks Sales Invoice read) or unreadable accounting invoice:
 			# never leak accounting tax metadata or elevate the neutral title (#48).
@@ -5562,8 +5532,10 @@ def folio_invoice(folio: str):
 		else:
 			doc_title = _(fiscal_title(fiscal))
 		matching_accounting_invoice = acct_si is not None and acct_si.name == fiscal["sales_invoice"]
-		fiscal = visible_fiscal_references(fiscal, credit)
-		if final and not fiscal["sales_invoice"] and not matching_accounting_invoice:
+		fiscal = visible_fiscal_references(fiscal, credit, owned_invoice=owned_invoice)
+		if fiscal["state"] == "unverified" and not owns_fiscal:
+			doc_title = _(fiscal_title(fiscal))
+		elif final and not fiscal["sales_invoice"] and not matching_accounting_invoice:
 			doc_title = _(loc.neutral_invoice_title(pack))
 		number = fiscal["sales_invoice"] or doc.name
 	payments = [{
@@ -12848,26 +12820,19 @@ def email_booking_quotation(reservation: str):
 	        "communication": comm["name"]}
 
 
-def _group_money(gb, prices: dict, rooming: list) -> dict:
+def _group_money(gb, prices, rooming, group_folios, member_folios) -> dict:
 	"""The group's room money: what the block is worth, what the named
 	rooms are booked at, the advance on the group bill, everything paid so
 	far on the group's bills, and what is still to pay - the open balances
 	on those bills, plus the booked room nights not charged yet."""
 	live = [r for r in rooming if r.status in ("Confirmed", "Checked In", "Checked Out")]
 	booked = sum(flt(r.amount_after_tax) for r in live)
-	group_folios = frappe.get_all(
-		"Folio", filters={"group_booking": gb.name, "folio_type": "Group"},
-		fields=["name", "payments_total", "balance"])
-	member_folios = frappe.get_all(
-		"Folio", filters={"reservation": ("in", [r.name for r in live] or [""]),
-		                  "folio_type": ("!=", "Group")},
-		fields=["name", "payments_total", "balance"])
 	folios = [f.name for f in group_folios + member_folios]
 	posted = flt(frappe.db.sql(
 		"""SELECT COALESCE(SUM(total), 0) FROM `tabFolio Charge`
 		   WHERE parent IN %(f)s AND charge_type IN ('Room', 'Meal Plan', 'Room Levy', 'Extra Guests')""",
 		{"f": folios or [""]})[0][0])
-	open_balances = sum(flt(f.balance) for f in group_folios + member_folios)
+	open_balances = sum(f.net_collectible_balance if f.balance >= 0 else f.balance for f in group_folios + member_folios)
 	# the advance alone: a settlement on the same bill is not a deposit
 	deposits = flt(frappe.db.sql(
 		"""SELECT COALESCE(SUM(amount), 0) FROM `tabFolio Payment`
@@ -12949,11 +12914,19 @@ def group_detail(group_booking: str):
 		fields=["name", "phone"], as_list=True))
 	# each room's own bill (extras, and the room when it pays its own):
 	# what that guest still owes at check-out
+	from kamra.folio import credit_note_positions, sales_invoice_field
+	fields = ["name", "reservation", "payments_total", "grand_total", "balance", *sales_invoice_field()]
+	group_folios = frappe.get_all("Folio", filters={
+		"property": gb.property, "group_booking": gb.name, "folio_type": "Group"}, fields=fields)
+	member_folios = frappe.get_all("Folio", filters={
+		"property": gb.property, "reservation": ("in", [r.name for r in rooming] or [""]),
+		"folio_type": ("!=", "Group")}, fields=fields)
+	all_folios = group_folios + member_folios
+	for f, pos in zip(all_folios, credit_note_positions(all_folios, gb.property, read_note_numbers=False), strict=True):
+		f.net_collectible_balance = pos["net_collectible_balance"]
 	own = {}
-	for f in frappe.get_all("Folio", filters={
-			"reservation": ("in", [r.name for r in rooming] or [""]),
-			"folio_type": ("!=", "Group")}, fields=["reservation", "balance"]):
-		own[f.reservation] = own.get(f.reservation, 0) + flt(f.balance)
+	for f in member_folios:
+		own[f.reservation] = own.get(f.reservation, 0) + (f.net_collectible_balance if f.balance >= 0 else f.balance)
 	type_names = dict(frappe.get_all(
 		"Room Type", filters={"property": gb.property},
 		fields=["name", "room_type_name"], as_list=True))
@@ -12989,6 +12962,9 @@ def group_detail(group_booking: str):
 	from kamra.business_date import get_business_date
 	from kamra.pricing import negotiated_rate_plan
 	comp_plan = negotiated_rate_plan(gb.property, gb.company) if gb.company else None
+	live_reservations = {r.name for r in rooming if r.status in ("Confirmed", "Checked In", "Checked Out")}
+	master_balance = next((f.net_collectible_balance if f.balance >= 0 else f.balance
+	                       for f in group_folios if f.name == master), 0)
 	return {
 		"business_date": get_business_date(gb.property),
 		"comp_governance": comp_rate_governance(gb.property, comp_plan),
@@ -13012,7 +12988,7 @@ def group_detail(group_booking: str):
 			"deposit_due": flt(gb.get("deposit_due")),
 		},
 		"pickup": pickup,
-		"money": _group_money(gb, prices, rooming),
+		"money": _group_money(gb, prices, rooming, group_folios, [f for f in member_folios if f.reservation in live_reservations]),
 		"attrition": _group_attrition(gb, prices),
 		"room_types": [{"name": k, "room_type_name": v} for k, v in type_names.items()],
 		"can_set_rate": _can_set_rate(),
@@ -13020,7 +12996,7 @@ def group_detail(group_booking: str):
 		"event": event,
 		"master_folio": master,
 		"master_folio_status": bill.status if bill else None,
-		"master_folio_balance": _round_currency(bill.balance, places) if bill else 0,
+		"master_folio_balance": _round_currency(master_balance, places),
 	}
 
 

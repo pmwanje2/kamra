@@ -4,6 +4,7 @@ export interface SiblingFolio {
   status: string
   invoice_number?: string | null
   balance: number
+  net_collectible_balance?: number
   grand_total: number
   payments_total: number
   /** a guest's own bill in a shared room, made out to them */
@@ -109,4 +110,10 @@ export function shareFolioArgs(
     payload.shares = toFolios.map((f) => Number(shares[f] ?? even))
   }
   return payload
+}
+
+
+/** Retain signed advances while presenting the collectible amount on debit windows. */
+export function windowBalance(w: Pick<SiblingFolio, "balance" | "net_collectible_balance">) {
+  return w.balance < 0 ? w.balance : w.net_collectible_balance ?? w.balance
 }

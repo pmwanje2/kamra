@@ -34,7 +34,7 @@ import {
   useLocale,
 } from "../lib/money"
 import { defaultChargeTaxRate } from "../lib/chargeTax"
-import { folioLabel, shareFolioArgs, windowBadge, type SiblingFolio } from "../lib/folioLabel"
+import { windowBalance, folioLabel, shareFolioArgs, windowBadge, type SiblingFolio } from "../lib/folioLabel"
 import { serverError } from "../lib/resource"
 import { useCashierAuth } from "../lib/cashierAuth"
 import { useAuth } from "../lib/auth"
@@ -440,7 +440,7 @@ export default function FolioView() {
         setData(d)
         setPayment((p) => ({
           ...p,
-          amount: p.currency && p.currency !== d.property.currency ? "" : String(d.folio.balance || ""),
+          amount: p.currency && p.currency !== d.property.currency ? "" : String(Math.max(0, d.net_collectible_balance ?? d.folio.balance) || ""),
         }))
         const [ov, sibs] = await Promise.all([
           call<{
@@ -621,7 +621,7 @@ export default function FolioView() {
     lines.some((l) => Number(l.gst_rate) !== 0 || Number(l.gst_amount) !== 0) ||
     taxRows.length > 0
   const showLineTax = taxed && !taxUnavailable
-  const displayedBalance = data.credit_status ? data.net_collectible_balance ?? folio.balance : folio.balance
+  const displayedBalance = windowBalance({ balance: folio.balance, net_collectible_balance: data.net_collectible_balance })
   const open = folio.status === "Open"
   const invoiced = !!(folio.invoice_number || folio.sales_invoice)
   const isFinal = doc ? doc.is_final : Boolean(folio.invoice_number)
@@ -646,6 +646,7 @@ export default function FolioView() {
             payment_method: folio.payment_method,
             bill_to_name: folio.bill_to_name,
             balance: folio.balance,
+            net_collectible_balance: data.net_collectible_balance,
             grand_total: folio.grand_total,
             payments_total: folio.payments_total,
           }]
@@ -1418,14 +1419,14 @@ export default function FolioView() {
                             </span>
                             <span
                               className={
-                                s.balance > 0
+                                windowBalance(s) > 0
                                   ? "ms-1.5 text-warning-text"
                                   : "ms-1.5 text-muted-ink"
                               }
                             >
                               {s.balance < 0
                                 ? t("credit {amount}", { amount: `\u2066${fmtMoney(Math.abs(s.balance), money)}\u2069` })
-                                : t("owes {cur}{amount}", { cur: "", amount: `\u2066${fmtMoney(s.balance, money)}\u2069` })}
+                                : t("owes {cur}{amount}", { cur: "", amount: `\u2066${fmtMoney(windowBalance(s), money)}\u2069` })}
                             </span>
                           </button>
                         ))}
@@ -2140,10 +2141,10 @@ export default function FolioView() {
               <TenderPicker home={home} chosen={tender} modes={paymentTenders} rates={settlementRates}
                 onChange={(choice) => setPayment({
                   ...payment, ...choice,
-                  amount: choice.currency === tender.currency ? payment.amount : tenderAmount(folio.balance, choice.currency, home, settlementRates),
+                  amount: choice.currency === tender.currency ? payment.amount : tenderAmount(displayedBalance, choice.currency, home, settlementRates),
                 })} />
               <TenderInput currency={tender.currency} value={payment.amount}
-                full={tenderAmount(folio.balance, tender.currency, home, settlementRates)}
+                full={tenderAmount(displayedBalance, tender.currency, home, settlementRates)}
                 onChange={amount => setPayment({ ...payment, amount })} />
               <input
                 className={`${inputCls} flex-1`}
@@ -2153,7 +2154,7 @@ export default function FolioView() {
                   setPayment({ ...payment, reference: e.target.value })
                 }
               />
-              {foreign && <SettlementPreview result={quote} amount={Number(payment.amount)} balance={folio.balance} />}
+              {foreign && <SettlementPreview result={quote} amount={Number(payment.amount)} balance={displayedBalance} />}
               <Button className="min-h-11 sm:min-h-0"
                 disabled={busy || !paymentReady || !(Number(payment.amount) > 0) || (foreign && !quote?.quote)}
                 onClick={() =>
