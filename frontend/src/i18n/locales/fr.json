@@ -7530,5 +7530,8 @@
   "≈ {amt} off / night": "≈ {amt} de remise / nuit",
   "1 {cur} = {rate} {home}": "1 {cur} = {rate} {home}",
   "Agreed rate currency": "Devise du tarif convenu",
-  "Discount currency": "Devise de la remise"
+  "Discount currency": "Devise de la remise",
+  "Back-office allowance decisions are handled in Approvals Inbox under four-eyes approval controls. Floor overrides within the property limit require a second authorized manager's PIN.": "Les décisions de dégrèvement hors réception sont traitées dans la boîte des approbations sous contrôle à quatre yeux. Les autorisations sur place dans la limite de l'établissement nécessitent le code PIN d'un second responsable habilité.",
+  "Open in Approvals Inbox": "Ouvrir dans la boîte des approbations",
+  "Pending workflow approval": "En attente de validation du circuit d'approbation"
 }

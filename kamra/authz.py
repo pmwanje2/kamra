@@ -5,6 +5,8 @@ for staff restricted to some properties, which properties it may touch."""
 
 import inspect
 import json
+import math
+import secrets
 from contextlib import contextmanager
 from functools import wraps
 
@@ -460,6 +462,229 @@ def approver_roles(roles) -> str:
 	return " or ".join([", ".join(named[:-1]), named[-1]] if len(named) > 2 else named)
 
 
+# Horizontal DoA Floor Authority API Server Script (delegation-of-authority@6)
+DOA_FLOOR_VERIFY_METHOD = "siteops_doa.verify_floor_authority"
+
+_PLATFORM_ROLES_LOWER = frozenset({
+	"administrator",
+	"system manager",
+	"script manager",
+	"all",
+	"guest",
+	"desk user",
+	"read-agent",
+	"maximus tenant admin",
+	"employee",
+	"employee self service",
+	"website manager",
+})
+
+_DOA_PERMISSION_TAGS = (
+	"[SITEOPS-DOA-SELF]",
+	"[SITEOPS-DOA-ELIGIBLE]",
+	"[SITEOPS-DOA-ROLE]",
+	"[SITEOPS-DOA-UNCONFIGURED]",
+)
+
+
+def _doa_floor_script():
+	from kamra import erp_bridge
+	return erp_bridge.get_bridge_script(DOA_FLOOR_VERIFY_METHOD)
+
+
+def doa_floor_bridge_active() -> bool:
+	"""True when the horizontal DoA floor authority script is installed and enabled."""
+	return _doa_floor_script() is not None
+
+
+def _doctype_has_field(doctype: str, fieldname: str) -> bool:
+	has_col = getattr(frappe.db, "has_column", None)
+	if callable(has_col):
+		try:
+			if has_col(doctype, fieldname):
+				return True
+		except Exception:
+			pass
+	get_meta = getattr(frappe, "get_meta", None)
+	if callable(get_meta):
+		try:
+			meta = get_meta(doctype)
+			if meta and meta.has_field(fieldname):
+				return True
+		except Exception:
+			pass
+	return False
+
+
+def _property_company(property: str | None) -> str:
+	"""Resolve the ERP Company linked to `property` without guessing across companies."""
+	if property:
+		if _doctype_has_field("Property", "company"):
+			val = frappe.db.get_value("Property", property, "company")
+			return str(val or "").strip()
+		if _doctype_has_field("Property", "custom_company"):
+			val = frappe.db.get_value("Property", property, "custom_company")
+			if val:
+				return str(val).strip()
+	get_default = getattr(frappe.db, "get_default", None)
+	if callable(get_default):
+		val = get_default("company")
+		if val:
+			return str(val).strip()
+	return ""
+
+
+def _platform_roles_denylist() -> set[str]:
+	denied = set(_PLATFORM_ROLES_LOWER)
+	denied.add("kamra agent")
+	get_hooks = getattr(frappe, "get_hooks", None)
+	if callable(get_hooks):
+		for role in (get_hooks("pos_bypass_roles") or ()):
+			if isinstance(role, str) and role.strip():
+				denied.add(role.strip().casefold())
+	return denied
+
+
+def _approval_limit_floor_roles(company: str) -> list[str] | None:
+	"""Return active non-platform roles from Approval Limit.custom_floor_override_approver_roles,
+	or None when the field/record is not configured for `company`."""
+	if not company:
+		return None
+	if not frappe.db.exists("DocType", "Approval Limit") or not frappe.db.exists("Approval Limit", company):
+		return None
+	if not _doctype_has_field("Approval Limit", "custom_floor_override_approver_roles"):
+		return None
+	raw = frappe.db.get_value("Approval Limit", company, "custom_floor_override_approver_roles")
+	if raw is None or not str(raw).strip():
+		return None
+	denied = _platform_roles_denylist()
+	roles: list[str] = []
+	for piece in str(raw).replace("\n", ",").split(","):
+		rname = piece.strip()
+		if not rname or rname.casefold() in denied:
+			continue
+		role_row = frappe.db.get_value("Role", rname, ["name", "disabled"], as_dict=True)
+		if not role_row or cint(role_row.get("disabled")) == 1:
+			continue
+		canon = str(role_row.get("name") or rname).strip()
+		if canon.casefold() in denied:
+			continue
+		if canon not in roles:
+			roles.append(canon)
+	return roles
+
+
+def floor_override_max_amount(property: str | None, company: str | None = None) -> float | None:
+	"""Return Approval Limit.custom_floor_override_max_amount for the property's company,
+	rounded to currency precision, or None if not configured."""
+	comp = (company or _property_company(property) or "").strip()
+	if not comp:
+		return None
+	if not frappe.db.exists("DocType", "Approval Limit") or not frappe.db.exists("Approval Limit", comp):
+		return None
+	if not _doctype_has_field("Approval Limit", "custom_floor_override_max_amount"):
+		return None
+	raw = frappe.db.get_value("Approval Limit", comp, "custom_floor_override_max_amount")
+	if raw is None or str(raw).strip() == "":
+		return None
+	try:
+		parsed = float(raw)
+	except (TypeError, ValueError):
+		return None
+	if not math.isfinite(parsed) or parsed < 0:
+		return None
+	places = 2
+	if property:
+		try:
+			from kamra.ledger import _currency_places
+			places = _currency_places(property)
+		except Exception:
+			places = 2
+	return round(parsed, places)
+
+
+def _company_scoped_role_holders(company: str, roles: list[str]) -> set[str]:
+	"""Active System Users holding any role in `roles` (direct Has Role, primary
+	Role Profile, or User Role Profile) and permitted for `company`."""
+	if not company or not roles:
+		return set()
+	role_set = set(roles)
+	enabled_users = {}
+	for u in frappe.get_all(
+		"User",
+		filters={"enabled": 1, "user_type": "System User"},
+		fields=["name", "role_profile_name"],
+		limit_page_length=0,
+	):
+		uname = str(u.get("name") or "").strip()
+		if not uname or uname in ("Administrator", "Guest"):
+			continue
+		enabled_users[uname] = str(u.get("role_profile_name") or "").strip()
+	if not enabled_users:
+		return set()
+
+	scoped_companies: dict[str, set[str]] = {}
+	for cp in frappe.get_all(
+		"User Permission",
+		filters={"allow": "Company"},
+		fields=["user", "for_value", "applicable_for", "apply_to_all_doctypes"],
+		limit_page_length=0,
+	):
+		uname = str(cp.get("user") or "").strip()
+		val = str(cp.get("for_value") or "").strip()
+		if not uname or not val:
+			continue
+		app_for = str(cp.get("applicable_for") or "").strip()
+		if cint(cp.get("apply_to_all_doctypes")) == 1 or not app_for:
+			scoped_companies.setdefault(uname, set()).add(val)
+
+	company_users = {
+		uname: rp
+		for uname, rp in enabled_users.items()
+		if uname not in scoped_companies or company in scoped_companies[uname]
+	}
+	if not company_users:
+		return set()
+
+	holders: set[str] = set()
+	for hr in frappe.get_all(
+		"Has Role",
+		filters={"parenttype": "User", "role": ["in", sorted(role_set)]},
+		fields=["parent"],
+		limit_page_length=0,
+	):
+		uname = str(hr.get("parent") or "").strip()
+		if uname in company_users:
+			holders.add(uname)
+
+	matching_profiles = {
+		str(pg.get("parent") or "").strip()
+		for pg in frappe.get_all(
+			"Has Role",
+			filters={"parenttype": "Role Profile", "role": ["in", sorted(role_set)]},
+			fields=["parent"],
+			limit_page_length=0,
+		)
+		if pg.get("parent")
+	}
+	if matching_profiles:
+		for uname, rp in company_users.items():
+			if rp and rp in matching_profiles:
+				holders.add(uname)
+		for urp in frappe.get_all(
+			"User Role Profile",
+			filters={"parenttype": "User", "parentfield": "role_profiles"},
+			fields=["parent", "role_profile"],
+			limit_page_length=0,
+		):
+			uname = str(urp.get("parent") or "").strip()
+			rp = str(urp.get("role_profile") or "").strip()
+			if uname in company_users and rp in matching_profiles:
+				holders.add(uname)
+
+	return holders
+
+
 def supervisors_for(property: str, roles=SUPERVISOR_ROLES,
                     exclude=None) -> list[dict]:
 	"""Who can approve on a till at this property: enabled users holding
@@ -484,55 +709,160 @@ def supervisors_for(property: str, roles=SUPERVISOR_ROLES,
 
 
 def verify_supervisor(property: str, supervisor: str | None, pin,
-                      roles=SUPERVISOR_ROLES, requester=None) -> str:
+                      roles=SUPERVISOR_ROLES, requester=None, *,
+                      company: str | None = None,
+                      document_owner: str | None = None,
+                      amount: float = 0.0,
+                      role_field: str = "custom_floor_override_approver_roles",
+                      max_amount_field: str | None = "custom_floor_override_max_amount",
+                      reference_doctype: str = "",
+                      reference_name: str = "",
+                      reason: str = "",
+                      nonce: str | None = None) -> str:
 	"""A supervisor approves at someone else's till with their user id and
 	their own cashier PIN. The PIN is always required here, whatever the
 	property's PIN setting, because it is the only proof the supervisor was
 	there. Wrong PINs count against the supervisor's lock like any other
-	entry. With `requester` (who asked for the approval, or several people
-	who may not approve it), the supervisor must be someone else:
-	SUPERVISOR_SELF_APPROVAL. A refusal names the roles that approve.
-	Returns the approving user."""
-	supervisor = (supervisor or "").strip()
-	canonical = frappe.db.exists("User", supervisor) if supervisor else None
-	if not canonical:
-		frappe.throw("SUPERVISOR_REQUIRED: pick the supervisor who approves this.",
-		             frappe.PermissionError)
-	supervisor = str(canonical)
-	if supervisor.casefold() in _people(requester):
-		frappe.throw("SUPERVISOR_SELF_APPROVAL: you cannot approve your own "
-		             "request. Another supervisor signs it off.", frappe.PermissionError)
-	if not frappe.db.get_value("User", supervisor, "enabled") or \
-			not is_supervisor(supervisor, roles):
-		frappe.throw(f"{supervisor} cannot approve this. It needs a {approver_roles(roles)} "
-		             "user.", frappe.PermissionError)
-	allowed = restricted_properties(supervisor)
-	if property and allowed is not None and property not in allowed:
-		frappe.throw(f"{supervisor} has no access to {property}.",
-		             frappe.PermissionError)
-	if not frappe.db.exists("Cashier PIN", supervisor):
-		frappe.throw(f"PIN_NOT_SET: {supervisor} has no cashier PIN yet. They "
-		             "set one the first time a money action asks for it.")
-	if not pin:
-		frappe.throw("SUPERVISOR_PIN_REQUIRED: the supervisor enters their PIN.")
-	# The PIN record's own attempt counter is rolled back with a refused
-	# request, so guesses at someone else's PIN are also counted in the
-	# cache, which a rollback does not touch.
-	max_attempts, lock_minutes = _pin_policy(property)
-	fails_key = f"kamra_supervisor_pin_fails:{supervisor.casefold()}"
-	if cint(frappe.cache.get_value(fails_key)) >= max_attempts:
-		frappe.throw("PIN_LOCKED: too many wrong supervisor PIN attempts - "
-		             f"try again in {lock_minutes} minutes.")
+	entry. When `siteops_doa.verify_floor_authority` is installed, delegates
+	floor PIN DoA + SoD verification with a unique single-use nonce, refusing
+	Administrator free-pass and self-approval. Always scrubs PIN fields from
+	`form_dict`. Returns the approving user."""
 	try:
-		_check_user_pin(supervisor, pin, property)
-	except frappe.ValidationError as exc:
-		msg = str(exc)
-		if not any(tag in msg for tag in ("PIN_MUST_RESET", "PIN_NOT_SET", "PIN_REQUIRED")):
-			frappe.cache.set_value(fails_key, cint(frappe.cache.get_value(fails_key)) + 1,
-			                       expires_in_sec=lock_minutes * 60)
-		raise
-	frappe.cache.delete_value(fails_key)
-	return supervisor
+		doa_script = _doa_floor_script()
+		supervisor_in = (supervisor or "").strip()
+		if doa_script is not None:
+			if not supervisor_in:
+				frappe.throw("SUPERVISOR_REQUIRED: pick the supervisor who approves this.",
+				             frappe.PermissionError)
+			if supervisor_in.casefold() in ("administrator", "guest"):
+				frappe.throw(
+					"[SITEOPS-DOA-ELIGIBLE] Floor approver must be a named active System User, "
+					"never Administrator or Guest.",
+					frappe.PermissionError,
+				)
+			canonical = frappe.db.exists("User", supervisor_in)
+			if not canonical:
+				frappe.throw("SUPERVISOR_REQUIRED: pick the supervisor who approves this.",
+				             frappe.PermissionError)
+			supervisor_user = str(canonical)
+			if supervisor_user in ("Administrator", "Guest"):
+				frappe.throw(
+					"[SITEOPS-DOA-ELIGIBLE] Floor approver must be a named active System User, "
+					"never Administrator or Guest.",
+					frappe.PermissionError,
+				)
+			session_user = str(getattr(getattr(frappe, "session", None), "user", "") or "").strip()
+			forbidden = _people(requester) | _people(document_owner) | _people(session_user)
+			if supervisor_user.casefold() in forbidden:
+				frappe.throw(
+					"[SITEOPS-DOA-SELF] SUPERVISOR_SELF_APPROVAL: Maker and floor approver "
+					"must be two different people.",
+					frappe.PermissionError,
+				)
+			supplied_pin = str(pin or "").strip()
+			if not supplied_pin:
+				frappe.throw("SUPERVISOR_PIN_REQUIRED: the supervisor enters their PIN.")
+
+			comp = (company or _property_company(property) or "").strip()
+			req_people = [
+				str(u).strip()
+				for u in ([requester] if isinstance(requester, str) else (requester or ()))
+				if u and str(u).strip()
+			]
+			if session_user and session_user != "Administrator":
+				doa_requester = session_user
+			else:
+				doa_requester = req_people[0] if req_people else session_user
+			doa_doc_owner = (document_owner or "").strip()
+			if not doa_doc_owner:
+				for person in req_people:
+					if person.casefold() != doa_requester.casefold():
+						doa_doc_owner = person
+						break
+
+			req_nonce = (nonce or "").strip() or f"kmr-{secrets.token_hex(16)}"
+			payload = {
+				"company": comp,
+				"property": property or "",
+				"requester": doa_requester,
+				"approver": supervisor_user,
+				"document_owner": doa_doc_owner,
+				"pin": supplied_pin,
+				"amount": 0 if amount is None else amount,
+				"role_field": role_field or "custom_floor_override_approver_roles",
+				"reference_doctype": reference_doctype or "",
+				"reference_name": reference_name or "",
+				"reason": reason or "",
+				"nonce": req_nonce,
+			}
+			if max_amount_field is not None:
+				payload["max_amount_field"] = max_amount_field
+
+			from kamra import erp_bridge
+			try:
+				result = erp_bridge.call_bridge_script(doa_script, payload)
+			except frappe.ValidationError as exc:
+				msg = str(exc)
+				if any(tag in msg for tag in _DOA_PERMISSION_TAGS):
+					frappe.throw(msg, frappe.PermissionError)
+				raise
+
+			if not isinstance(result, dict) or not cint(result.get("ok")):
+				frappe.throw(
+					"[SITEOPS-DOA-UNCONFIGURED] Floor authority verification did not return an approval.",
+					frappe.PermissionError,
+				)
+			verified_user = str(result.get("approver") or supervisor_user).strip()
+			if verified_user.casefold() != supervisor_user.casefold():
+				frappe.throw(
+					"[SITEOPS-DOA-ELIGIBLE] Floor authority approver mismatch.",
+					frappe.PermissionError,
+				)
+			frappe.cache.delete_value(f"kamra_supervisor_pin_fails:{supervisor_user.casefold()}")
+			return verified_user
+
+		supervisor = supervisor_in
+		canonical = frappe.db.exists("User", supervisor) if supervisor else None
+		if not canonical:
+			frappe.throw("SUPERVISOR_REQUIRED: pick the supervisor who approves this.",
+			             frappe.PermissionError)
+		supervisor = str(canonical)
+		if supervisor.casefold() in _people(requester) or supervisor.casefold() in _people(document_owner):
+			frappe.throw("SUPERVISOR_SELF_APPROVAL: you cannot approve your own "
+			             "request. Another supervisor signs it off.", frappe.PermissionError)
+		if not frappe.db.get_value("User", supervisor, "enabled") or \
+				not is_supervisor(supervisor, roles):
+			frappe.throw(f"{supervisor} cannot approve this. It needs a {approver_roles(roles)} "
+			             "user.", frappe.PermissionError)
+		allowed = restricted_properties(supervisor)
+		if property and allowed is not None and property not in allowed:
+			frappe.throw(f"{supervisor} has no access to {property}.",
+			             frappe.PermissionError)
+		if not frappe.db.exists("Cashier PIN", supervisor):
+			frappe.throw(f"PIN_NOT_SET: {supervisor} has no cashier PIN yet. They "
+			             "set one the first time a money action asks for it.")
+		if not pin:
+			frappe.throw("SUPERVISOR_PIN_REQUIRED: the supervisor enters their PIN.")
+		# The PIN record's own attempt counter is rolled back with a refused
+		# request, so guesses at someone else's PIN are also counted in the
+		# cache, which a rollback does not touch.
+		max_attempts, lock_minutes = _pin_policy(property)
+		fails_key = f"kamra_supervisor_pin_fails:{supervisor.casefold()}"
+		if cint(frappe.cache.get_value(fails_key)) >= max_attempts:
+			frappe.throw("PIN_LOCKED: too many wrong supervisor PIN attempts - "
+			             f"try again in {lock_minutes} minutes.")
+		try:
+			_check_user_pin(supervisor, pin, property)
+		except frappe.ValidationError as exc:
+			msg = str(exc)
+			if not any(tag in msg for tag in ("PIN_MUST_RESET", "PIN_NOT_SET", "PIN_REQUIRED")):
+				frappe.cache.set_value(fails_key, cint(frappe.cache.get_value(fails_key)) + 1,
+				                       expires_in_sec=lock_minutes * 60)
+			raise
+		frappe.cache.delete_value(fails_key)
+		return supervisor
+	finally:
+		_scrub_pin_from_form_dict()
 
 
 def _require_approval_property(property: str) -> str:
@@ -546,8 +876,29 @@ def _require_approval_property(property: str) -> str:
 @frappe.whitelist()
 @require_roles("Front Desk", "Finance")
 def list_supervisors(property: str) -> list[dict]:
-	"""List eligible independent approvers for this property's folio corrections."""
+	"""List eligible independent approvers for this property's floor overrides.
+	When Approval Limit.custom_floor_override_approver_roles is configured for
+	Property.company, intersects candidates with active company-scoped holders
+	of those roles and excludes the authenticated requester."""
 	property = _require_approval_property(property)
+	company = _property_company(property)
+	floor_roles = _approval_limit_floor_roles(company)
+	if floor_roles is not None:
+		holders = _company_scoped_role_holders(company, floor_roles)
+		holders &= set(frappe.get_all("Cashier PIN", pluck="name"))
+		excluded = _people(frappe.session.user) | {"administrator", "guest"}
+		holders = {u for u in holders if u.casefold() not in excluded}
+		out = []
+		for u in frappe.get_all(
+			"User",
+			filters={"name": ["in", sorted(holders) or [""]], "enabled": 1, "user_type": "System User"},
+			fields=["name", "full_name"],
+			order_by="full_name",
+		):
+			allowed = restricted_properties(u.name)
+			if allowed is None or property in allowed:
+				out.append({"user": u.name, "full_name": u.full_name or u.name})
+		return out
 	return supervisors_for(property, exclude=frappe.session.user)
 
 
@@ -699,19 +1050,29 @@ def verify_pos_override_pin(
 				pin,
 				roles=POS_SUPERVISOR_ROLES,
 				requester=req,
+				reference_doctype="POS Invoice",
+				reason=privilege or "pos_override",
 			)
 		except frappe.PermissionError as exc:
 			frappe.clear_messages()
 			msg = str(exc)
-			code = "POS-AUTH-SELF" if "SUPERVISOR_SELF_APPROVAL" in msg else "POS-AUTH-NOT-ELIGIBLE"
+			code = (
+				"POS-AUTH-SELF"
+				if ("SUPERVISOR_SELF_APPROVAL" in msg or "SITEOPS-DOA-SELF" in msg)
+				else "POS-AUTH-NOT-ELIGIBLE"
+			)
 			return {"ok": False, "name": None, "code": code}
 		except frappe.ValidationError as exc:
 			frappe.clear_messages()
 			msg = str(exc)
-			if "PIN_LOCKED" in msg:
+			if "PIN_LOCKED" in msg or "SITEOPS-DOA-LOCKED" in msg:
 				code = "POS-AUTH-LOCKED"
-			elif "PIN_NOT_SET" in msg or "PIN_MUST_RESET" in msg:
+			elif any(tag in msg for tag in ("PIN_NOT_SET", "PIN_MUST_RESET", "no Floor PIN enrolled", "must be reset")):
 				code = "POS-AUTH-NO-PIN"
+			elif "SITEOPS-DOA-SELF" in msg:
+				code = "POS-AUTH-SELF"
+			elif any(tag in msg for tag in ("SITEOPS-DOA-ELIGIBLE", "SITEOPS-DOA-ROLE", "SITEOPS-DOA-UNCONFIGURED")):
+				code = "POS-AUTH-NOT-ELIGIBLE"
 			else:
 				code = "POS-AUTH-PIN"
 			return {"ok": False, "name": None, "code": code}
