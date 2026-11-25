@@ -232,7 +232,8 @@ def _open_folio_totals(property: str) -> tuple[float, int]:
 
 	if not count or not sales_invoice_field():
 		return float(total or 0), int(count or 0)
-	linked = frappe.get_list(
+	# The dashboard role and property gates authorize aggregate figures here.
+	linked = frappe.get_all(
 		"Folio", filters={"property": property, "status": "Open", "sales_invoice": ("is", "set"),
 		                  "balance": (">", 0)},
 		fields=["name", "sales_invoice", "balance", "grand_total"], limit=0,

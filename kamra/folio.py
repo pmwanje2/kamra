@@ -144,7 +144,12 @@ def reconcile_reservation_advance(reservation: str, property: str, *, changed_fo
 	collected = sum((_money(p.amount) for p in payments), Decimal(0))
 	remaining = min(paid - _money(returned), collected)
 	if linked_refunds:
-		remaining = min(remaining, sum((_money(p.amount) for p in advances), Decimal(0)) + linked_refunds)
+		# A receiving window records another positive Advance. Its matching
+		# transfer-out carries the same kind and offsets it across the stay.
+		advance_funds = sum((_money(p.amount) for p in payments
+		                     if p.get("payment_kind") == "Advance"
+		                     and (_money(p.amount) > 0 or p.get("transferred_to"))), Decimal(0))
+		remaining = min(remaining, advance_funds + linked_refunds)
 	net = _round_currency(max(Decimal(0), remaining), _currency_places(property))
 	if _money(net) != paid:
 		frappe.db.set_value("Reservation", reservation, "advance_paid", net)
@@ -2583,8 +2588,42 @@ def sales_invoice_field() -> list[str]:
 	return ["sales_invoice"] if get_meta and get_meta("Folio").has_field("sales_invoice") else []
 
 
+def _active_folio_invoices(links, scope, fields):
+	"""Resolve submitted invoices in batches, keeping the verified path to each folio."""
+	invoice_scope = {**scope, "is_return": 0, "docstatus": ("in", [1, 2])}
+	columns = [*fields, "docstatus", "kamra_ref"]
+	current = {
+		row.kamra_ref: row for row in frappe.get_all(
+			"Sales Invoice", filters={**invoice_scope, "name": ("in", list(links.values())),
+			                         "kamra_ref": ("in", list(links))}, fields=columns,
+		) if links.get(row.kamra_ref) == row.name
+	}
+	paths = {folio: {invoice.name} for folio, invoice in current.items()}
+	parents = {invoice.name: folio for folio, invoice in current.items()}
+	if parents and frappe.db.has_column("Sales Invoice", "kamra_rebill_of"):
+		while parents:
+			children = frappe.get_all(
+				"Sales Invoice", filters={**invoice_scope, "kamra_rebill_of": ("in", list(parents))},
+				fields=[*columns, "kamra_rebill_of"], order_by="docstatus asc, creation desc, name asc",
+			)
+			next_parents = {}
+			for child in children:
+				folio = parents.get(child.kamra_rebill_of)
+				if not folio or child.name in paths[folio] or child.kamra_ref not in (None, "", folio):
+					continue
+				if child.docstatus == 2 and current[folio].docstatus == 1:
+					continue
+				# The first eligible replacement wins (submitted, then newest).
+				del parents[child.kamra_rebill_of]
+				paths[folio].add(child.name)
+				current[folio] = child
+				next_parents[child.name] = folio
+			parents = next_parents
+	return {folio: si for folio, si in current.items() if si.docstatus == 1}, paths
+
+
 def _linked_sales_credit_notes(folios, property: str, currency: str, *, read_note_numbers: bool):
-	"""Read only returns against the property's verified folio-to-invoice links."""
+	"""Read returns against verified links and check native access before displaying identifiers."""
 	links = {row.get("name") or row.get("folio"): bridge_invoice(row) for row in folios if bridge_invoice(row)}
 	if not links or not frappe.db.exists("DocType", "Sales Invoice"):
 		return {}, {}, set()
@@ -2593,61 +2632,52 @@ def _linked_sales_credit_notes(folios, property: str, currency: str, *, read_not
 	try:
 		has_backlink = frappe.db.has_column("Sales Invoice", "kamra_ref")
 		has_company = frappe.db.has_column("Sales Invoice", "company")
-	except frappe.db.TableMissingError:
+	except (frappe.db.TableMissingError, frappe.DoesNotExistError):
 		has_backlink = has_company = False
 	if (has_company or has_backlink) and not (company and has_backlink):
-		# An ERP company and the bridge's reverse link are both required to
-		# distinguish properties operating in the same accounting company.
 		return {}, {}, set()
 
-	scope = {"docstatus": 1, "currency": currency, "company": company or ["is", "not set"]}
+	scope = {"currency": currency, "company": company or ["is", "not set"]}
 	amount_fields = ["name", "grand_total", "rounded_total"]
-	originals = {}
-	invoice_names = set(links.values())
-	if has_backlink:
-		for invoice in frappe.get_all(
-			"Sales Invoice",
-			filters={**scope, "is_return": 0, "name": ("in", list(invoice_names)),
-			         "kamra_ref": ("in", list(links))},
-			fields=[*amount_fields, "kamra_ref"],
-		):
-			if links.get(invoice.kamra_ref) == invoice.name:
-				originals[invoice.kamra_ref] = invoice
-		invoice_names = {invoice.name for invoice in originals.values()}
-	if not invoice_names:
-		return {}, {}, set()
-
-	note_scope = {**scope, "is_return": 1, "return_against": ("in", list(invoice_names))}
+	originals, paths = {}, {}
 	try:
+		if has_backlink:
+			originals, paths = _active_folio_invoices(links, scope, amount_fields)
+			links = {folio: si.name for folio, si in originals.items()}
+		if not links:
+			return {}, {}, set()
 		returns = frappe.get_all(
-			"Sales Invoice", filters=note_scope,
+			"Sales Invoice", filters={**scope, "docstatus": 1, "is_return": 1,
+			                         "return_against": ("in", list(links.values()))},
 			fields=[*amount_fields, "return_against", "update_outstanding_for_self"],
 			order_by="name asc",
 		)
-	except frappe.db.TableMissingError:
+	except (frappe.db.TableMissingError, frappe.DoesNotExistError):
 		return {}, {}, set()
+
 	notes_by_invoice = {}
 	for note in returns:
 		notes_by_invoice.setdefault(note.return_against, []).append(note)
-	notes = {name: notes_by_invoice.get(invoice, []) for name, invoice in links.items()
-	         if not has_backlink or name in originals}
-
+	notes = {folio: notes_by_invoice.get(invoice, []) for folio, invoice in links.items()}
 	visible = set()
-	if returns and read_note_numbers and frappe.has_permission("Sales Invoice", ptype="read"):
-		if not has_backlink:
-			# A DocType without the ERP columns is constrained to the blank
-			# company scope above. Submitted ERP invoices require a company.
-			visible = {note.name for note in returns}
-		else:
-			try:
-				readable = set(frappe.get_list(
-					"Sales Invoice",
-					filters={"name": ("in", list(invoice_names | {note.name for note in returns}))},
-					pluck="name", limit=0,
-				))
-			except frappe.PermissionError:
-				readable = set()
-			visible = {note.name for note in returns if note.name in readable and note.return_against in readable}
+	if read_note_numbers and frappe.has_permission("Sales Invoice", ptype="read"):
+		names = set(links.values()) | {note.name for note in returns}
+		for path in paths.values():
+			names.update(path)
+		try:
+			if has_backlink and names:
+				names = frappe.get_list("Sales Invoice", filters={"name": ("in", list(names))},
+				                        pluck="name", limit=0)
+			# Frappe resolves each docname to a document for native permission hooks.
+			readable = {name for name in names if frappe.has_permission("Sales Invoice", ptype="read", doc=name)}
+		except (frappe.PermissionError, frappe.DoesNotExistError, frappe.db.TableMissingError):
+			readable = set()
+		for folio, invoice in links.items():
+			if invoice not in readable or (has_backlink and not paths[folio].issubset(readable)):
+				continue
+			if has_backlink:
+				visible.add(invoice)
+			visible.update(note.name for note in notes[folio] if note.name in readable)
 	return originals, notes, visible
 
 
@@ -2685,6 +2715,7 @@ def credit_note_positions(folios, property: str, *, read_note_numbers: bool = Tr
 			invoice_total = invoice.rounded_total or invoice.grand_total if invoice else row.get("grand_total")
 			status = "Credited" if credited >= rounded(invoice_total) else "Partially credited"
 		positions.append({
+			"sales_invoice": invoice.name if invoice and invoice.name in visible else None,
 			"credited_amount": float(credited),
 			"credit_notes": [n.name for n in returns if n.name in visible],
 			"net_collectible_balance": float(balance),
