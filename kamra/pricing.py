@@ -947,6 +947,27 @@ def negotiated_rate_plan(property: str, company: str | None) -> str | None:
 	return None
 
 
+def _version_move_date(value, first, last, created, *, latest):
+	"""Resolve a legacy Version cutoff without using today's display format."""
+	from datetime import datetime
+
+	candidates = set()
+	for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%m-%d-%Y", "%m/%d/%Y"):
+		try:
+			day = datetime.strptime(str(value), fmt).date()
+		except ValueError:
+			continue
+		if first <= day <= last:
+			candidates.add(day)
+	if len(candidates) == 1:
+		return next(iter(candidates)).isoformat()
+	if latest and (not candidates or last in candidates):
+		return last.isoformat()
+	if first <= created <= last and (not candidates or created in candidates):
+		return created.isoformat()
+	return None
+
+
 def nightly_billing_room_types(reservation) -> dict[str, str]:
 	"""Frozen room types for nights before a paid move, keyed by business date."""
 	recorded = reservation.get("room_move_night_types")
@@ -963,22 +984,24 @@ def nightly_billing_room_types(reservation) -> dict[str, str]:
 	        if r.get("stay_date") and str(r.get("stay_date")) < str(cutoff)} - types.keys()
 	if not days:
 		return types
-	from frappe.utils import formatdate
-
-	# Version stores Date changes in display format. Match against actual
-	# stay dates instead of comparing or guessing the order of date strings.
-	boundaries = [*_stay_nights(reservation.check_in_date, cutoff), str(cutoff)]
-	dates = {formatdate(day): day for day in boundaries}
-	dates.update({day: day for day in boundaries})
+	# A Version Date is display text on older sites. Only consider interpretations
+	# inside this stay. The final persisted cutoff and the Version timestamp
+	# identify boundaries when both month/day orders are possible.
+	moves = []
 	for version in frappe.get_all("Version", filters={
 		"ref_doctype": "Reservation", "docname": reservation.name,
-	}, pluck="data", order_by="creation asc"):
-		changes = {key: (old, new) for key, old, new in frappe.parse_json(version).get("changed", [])}
-		move_date = dates.get(changes.get("room_move_rate_cutoff", (None, None))[1])
-		if move_date and "room_type" in changes:
+	}, fields=["creation", "data"], order_by="creation asc, name asc"):
+		changes = {key: (old, new) for key, old, new in frappe.parse_json(version.data).get("changed", [])}
+		if "room_move_rate_cutoff" in changes and "room_type" in changes:
 			source = changes.get("room_type_to_charge", (None, None))[0] or changes["room_type"][0]
+			moves.append((changes["room_move_rate_cutoff"][1], source, getdate(version.creation)))
+
+	first, last = getdate(reservation.check_in_date), getdate(cutoff)
+	for i, (display_date, source, created) in enumerate(moves):
+		move_date = _version_move_date(display_date, first, last, created, latest=i == len(moves) - 1)
+		if move_date and source:
 			for day in days:
-				if day < move_date and source:
+				if day < move_date:
 					types.setdefault(day, source)
 	return types
 
@@ -2277,6 +2300,11 @@ def _pin_nights(nightly: list, locked: dict, inclusive: bool, night_over_cap: De
 	for n, priced_net in zip(nightly, priced_nets, strict=True):
 		row = locked.get(str(n["date"]))
 		if row:
+			if "package_id" in row:
+				for key in ("package", "package_id", "room_gst_rate", "package_tax"):
+					n.pop(key, None)
+				n.update({key: row[key] for key in ("package", "package_id", "room_gst_rate", "package_tax")
+				          if key in row})
 			n.update(rate=flt(row.get("rate")), gst_rate=flt(row.get("gst_rate")),
 			         base_rate=flt(row.get("base_rate")) or flt(row.get("rate")),
 			         quoted_base_rate=flt(row.get("quoted_base_rate")),
@@ -2291,7 +2319,8 @@ def _pin_nights(nightly: list, locked: dict, inclusive: bool, night_over_cap: De
 			n["planned_rate"] = n["rate"]
 		rate, gst, off = _dec(n["rate"]), _dec(n["gst_rate"]), _dec(n.get("discount_amount"))
 		room_total += rate
-		room_tax += rate * gst / Decimal(100)
+		room_tax += (_dec(n["package_tax"]) if n.get("package_tax") is not None and "planned_rate" not in n
+		             else rate * gst / Decimal(100))
 		base_total += entry_rate(rate, gst, inclusive, places) + off
 		off_total += off
 		if night_over_cap:
@@ -2450,7 +2479,7 @@ def quote(
 				Decimal(0),
 			)
 			eff = (tax_val * Decimal(100) / night_rate).quantize(Decimal("0.01")) if night_rate else room_gst
-			return tax_val, eff, {"room_gst_rate": float(room_gst)}
+			return tax_val, eff, {"room_gst_rate": float(room_gst), "package_tax": str(tax_val)}
 
 		if billable_nights <= pkg_nights:
 			base_per_night = (pkg_base_rate / Decimal(billable_nights)).quantize(pkg_quantum)
@@ -2749,7 +2778,11 @@ def quote(
 				n["contract_base_rate"] = gross_r
 				n["contract_discount_amount"] = 0.0
 				n["contract_rate"] = gross_r
-	if locked_nights and not pkg and not day_use:
+	if pkg and locked_nights:
+		# A package owns the destination price. Only elapsed move nights
+		# retain a previous room price when the stay otherwise qualifies.
+		locked_nights = {day: row for day, row in locked_nights.items() if day in types}
+	if locked_nights and not day_use:
 		room_total, room_tax, room_base_total, reservation_discount, over_cap, over_cap_tax = \
 			_pin_nights(nightly, locked_nights, inclusive, night_over_cap,
 			            places=night_rate_places(property),

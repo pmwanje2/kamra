@@ -1339,7 +1339,7 @@ def post_room_night(reservation, date, folios=None, *, room_posted: list | None 
 	room_gst = None
 
 	from kamra.packages import active_package_for_reservation, post_package_night_split
-	pkg_doc = active_package_for_reservation(reservation)
+	pkg_doc = active_package_for_reservation(reservation, date)
 
 	if pkg_doc is not None or not _charge_posted(reservation.name, "Room", date):
 		room_no = (reservation.room or "").split("-")[-1]

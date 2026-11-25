@@ -19,7 +19,7 @@ from frappe.utils import add_days, cint, flt, getdate
 from kamra.authz import assert_property_access, require_roles
 from kamra.business_date import get_business_date
 from kamra.ledger import code_for_charge_type, home_currency, minor_unit, save_folio
-from kamra.pricing import active_holiday_package, rate_quantum
+from kamra.pricing import active_holiday_package, billing_room_type, rate_quantum
 
 ELEMENT_TYPES = ("Meal", "Spa", "Transport", "F&B Allowance", "Utility/Amenity")
 ALLOWANCE_BASES = (
@@ -87,21 +87,34 @@ def _parse_consumed_refs(raw) -> list[str]:
 	return []
 
 
-def active_package_for_reservation(res):
+def active_package_for_reservation(res, date=None):
 	"""Return the active Holiday Package document with Package Elements for this stay, or None."""
 	pkg_name = None
 	snap = res.get("quote_snapshot")
+	room_type = billing_room_type(res, date)
 	if snap:
 		try:
 			parsed = json.loads(snap) if isinstance(snap, str) else snap
 			if isinstance(parsed, dict) and isinstance(parsed.get("package"), dict):
 				pkg_name = parsed["package"].get("name")
+			if date is not None and isinstance(parsed, dict):
+				day = str(getdate(date))
+				night = next((n for n in parsed.get("nightly") or [] if n.get("date") == day), {})
+				if "package_id" in night:
+					pkg_name = night["package_id"]
+					if not pkg_name:
+						return None
 		except (TypeError, ValueError):
 			pkg_name = None
 
+	if pkg_name:
+		# Older quotes recorded a single package for the whole stay.
+		scope = frappe.db.get_value("Holiday Package", pkg_name, ["property", "room_type"], as_dict=True)
+		if not scope or scope.property != res.property or (scope.room_type and scope.room_type != room_type):
+			pkg_name = None
 	if not pkg_name and not flt(res.get("agreed_rate")):
 		found = active_holiday_package(
-			res.property, res.check_in_date, res.check_out_date, res.room_type,
+			res.property, res.check_in_date, res.check_out_date, room_type,
 		)
 		if found:
 			pkg_name = found.name

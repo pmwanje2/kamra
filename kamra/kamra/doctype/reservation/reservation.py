@@ -248,6 +248,13 @@ def villa_locked_nights(property: str, room_type: str | None, start,
 
 
 class Reservation(Document):
+	def get_formatted(self, fieldname, *args, **kwargs):
+		# Frappe Version serializes Date changes through get_formatted. This
+		# hidden billing boundary must survive later site/user format changes.
+		if fieldname == "room_move_rate_cutoff" and self.get(fieldname):
+			return getdate(self.get(fieldname)).isoformat()
+		return super().get_formatted(fieldname, *args, **kwargs)
+
 	def autoname(self):
 		# RES-<year>-00001, the year being the property's financial year, so
 		# the count restarts in April in India and in January elsewhere
@@ -1971,7 +1978,7 @@ class Reservation(Document):
 		pinned = self.pinned_room_nights(inputs)
 		# a re-quote that keeps the booked room nights re-prices no night
 		self.flags.kamra_room_pinned = bool(pinned)
-		if not pinned and not self.flags.get("correct_charged_nights"):
+		if not self.flags.get("correct_charged_nights"):
 			cutoff = self.get("room_move_rate_cutoff")
 			if not cutoff and self.get("upgrade_type") == "Paid" and not self.get("contract_tariff"):
 				# Older rack-rate moves have no recorded cutoff. Extending such
@@ -1981,8 +1988,28 @@ class Reservation(Document):
 					from kamra.business_date import get_business_date
 					cutoff = get_business_date(self.property)
 			if cutoff:
-				pinned = {str(getdate(row.stay_date)): row for row in self.get("night_rates") or []
-				          if getdate(row.stay_date) < getdate(cutoff)}
+				# The child row holds the locked money. Its quote holds the
+				# package and component tax actually sold for this night.
+				try:
+					snapshot = frappe.parse_json(self.get("quote_snapshot") or "{}")
+				except ValueError:
+					snapshot = {}
+				snapshot = snapshot if isinstance(snapshot, dict) else {}
+				quoted = {n["date"]: n for n in snapshot.get("nightly") or [] if n.get("date")}
+				cutoff_date = getdate(cutoff).isoformat()
+				pinned = dict(pinned or {})
+				for row in self.get("night_rates") or []:
+					day = str(getdate(row.stay_date))
+					if day >= cutoff_date:
+						continue
+					night = quoted.get(day, {})
+					package_id = night.get("package_id")
+					if "package_id" not in night and night.get("package"):
+						package_id = (snapshot.get("package") or {}).get("name")
+					pinned[day] = {
+						**row.as_dict(), "package_id": package_id,
+						**{k: night[k] for k in ("package", "room_gst_rate", "package_tax") if k in night},
+					}
 		tariff = None
 		if flt(self.get("agreed_rate")) > 0 and not self.agreed_rate_overrides():
 			tariff = saved_contract_tariff(self).get("tariff") or None
