@@ -42,7 +42,7 @@ import { useAuth } from "../lib/auth"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Sheet } from "../components/ui/sheet"
-import { chargesTax, sellsAlcohol, taxLabel } from "../lib/money"
+import { chargesTax, moneyStep, sellsAlcohol, taxLabel } from "../lib/money"
 import {
   daysAway,
   Empty,
@@ -60,11 +60,13 @@ import {
   SOURCES,
   StatusPill,
   UOMS,
+  type BanquetMoneyCtx,
 } from "./banquet/shared"
 import { Steps, stepsFor, type StepId } from "./banquet/Steps"
 import Economics from "./banquet/Economics"
 import MenuComposer from "./banquet/MenuComposer"
 import { t as translate, useUILanguage } from "../lib/i18n"
+import { eventBilling } from "../lib/eventBilling"
 
 export default function BanquetFunction() {
   useUILanguage()
@@ -180,15 +182,17 @@ export default function BanquetFunction() {
       )}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Money label={translate("Quote")} value={fn.grand_total} sub={translate(`v${fn.quote_version || 0}`)} />
+        <Money label={translate("Quote")} value={fn.grand_total} moneyCtx={fn} sub={translate(`v${fn.quote_version || 0}`)} />
         <Money
           label={translate("Received")}
           value={fn.advance_received}
+          moneyCtx={fn}
           sub={translate("{v0} receipt{v1}", { v0: String(fn.receipts.length), v1: String(fn.receipts.length === 1 ? "" : "s") })}
         />
         <Money
           label={translate("Balance")}
           value={fn.balance_due}
+          moneyCtx={fn}
           tone={fn.balance_due > 0 ? "text-rose-700" : "text-emerald-700"}
         />
         {/* Claiming 100% because nothing has been costed is the most
@@ -196,9 +200,10 @@ export default function BanquetFunction() {
         <Money
           label={translate("Margin")}
           value={fn.total_cost ? fn.gross_margin : null}
+          moneyCtx={fn}
           sub={
             (fn.total_cost
-              ? translate("{v0}% after {v1} cost", { v0: String(fn.margin_percent), v1: String(inr(fn.net_cost)) })
+              ? translate("{v0}% after {v1} cost", { v0: String(fn.margin_percent), v1: String(inr(fn.net_cost, fn)) })
               : translate("nothing costed yet - see Cost & margin"))
           }
           tone={
@@ -236,6 +241,7 @@ function Money({
   value,
   sub,
   tone = "",
+  moneyCtx,
 }: {
   label: string
   /** null when the number isn't known yet - shown as a dash, never as a
@@ -243,6 +249,7 @@ function Money({
   value: number | null
   sub?: string
   tone?: string
+  moneyCtx?: BanquetMoneyCtx | null
 }) {
   useUILanguage()
   return (
@@ -251,7 +258,7 @@ function Money({
         {translate(label)}
       </p>
       <p className={"mt-1 text-xl font-semibold tabular-nums " + tone}>
-        {value === null ? "-" : inr(value)}
+        {value === null ? "-" : inr(value, moneyCtx)}
       </p>
       {sub && <p className="mt-0.5 text-xs text-zinc-400">{translate(sub)}</p>}
     </div>
@@ -810,7 +817,7 @@ function DetailTab({
 
         <Card>
           <CardHeader>
-            <CardTitle>{translate("Billing & ")}{taxLabel()}</CardTitle>
+            <CardTitle>{translate("Billing & ")}{fn.tax_label || taxLabel()}</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-2">
             <Field
@@ -823,7 +830,7 @@ function DetailTab({
                 onChange={(e) => set("billing_name", e.target.value)}
               />
             </Field>
-            <Field label={translate("{v0} number", { v0: String(taxLabel()) })}>
+            <Field label={translate("{v0} number", { v0: String(fn.tax_label || taxLabel()) })}>
               <input
                 className={inputCls}
                 placeholder="29AABCU9603R1ZM"
@@ -981,6 +988,7 @@ function GreenRoomCard({
             <Field label={translate("Rate")}>
               <input
                 type="number"
+                step={moneyStep(fn.currency)}
                 className={inputCls}
                 value={rate}
                 onChange={(e) => setRate(e.target.value)}
@@ -1117,7 +1125,7 @@ function ItemsTab({
                     <th className="w-16 py-2 pr-2 text-center font-medium">{translate("Charge")}</th>
                     {chargesTax() && (
                     <th className="w-20 py-2 pr-2 text-right font-medium">
-                      {taxLabel()} %
+                      {fn.tax_label || taxLabel()} %
                     </th>
                     )}
                     <th className="w-28 py-2 pr-2 text-right font-medium">{translate("Amount")}</th>
@@ -1190,11 +1198,12 @@ function ItemsTab({
                         </select>
                       </td>
                       <td className="py-1.5 pr-2 text-right text-xs tabular-nums text-zinc-400">
-                        {l.list_rate ? inr(l.list_rate) : "-"}
+                        {l.list_rate ? inr(l.list_rate, fn) : "-"}
                       </td>
                       <td className="py-1.5 pr-2">
                         <input
                           type="number"
+                          step={moneyStep(fn.currency)}
                           className={inputCls + " !py-1 text-right"}
                           value={l.rate}
                           onChange={(e) =>
@@ -1247,10 +1256,10 @@ function ItemsTab({
                       )}
                       <td className="py-1.5 pr-2 text-right tabular-nums">
                         {l.chargeable ? (
-                          inr(l.net_amount || l.amount)
+                          inr(l.net_amount || l.amount, fn)
                         ) : (
                           <span className="text-zinc-400">
-                            {inr(l.qty * l.rate)}{translate(" free")}</span>
+                            {inr(l.qty * l.rate, fn)}{translate(" free")}</span>
                         )}
                       </td>
                       <td className="py-1.5 text-right">
@@ -1276,6 +1285,7 @@ function ItemsTab({
               <Field label={translate("Discount on the whole quote")}>
                 <input
                   type="number"
+                  step={moneyStep(fn.currency)}
                   className={inputCls + " !w-40"}
                   value={discount}
                   onChange={(e) => setDiscount(e.target.value)}
@@ -1296,41 +1306,41 @@ function ItemsTab({
                   onChange={(e) => setServiceCharge(e.target.value)}
                 />
               </Field>
-              <p className="max-w-64 pb-2 text-xs text-zinc-400">{translate("The discount spreads pro-rata across the lines, so each keeps its own ")}{taxLabel()}{translate(" rate.")}</p>
+              <p className="max-w-64 pb-2 text-xs text-zinc-400">{translate("The discount spreads pro-rata across the lines, so each keeps its own ")}{fn.tax_label || taxLabel()}{translate(" rate.")}</p>
             </div>
             <div className="min-w-56 space-y-1 text-sm">
-              <Row label={translate("Subtotal")} value={inr(fn.subtotal)} />
+              <Row label={translate("Subtotal")} value={inr(fn.subtotal, fn)} />
               {fn.discount_amount > 0 && (
                 <Row
                   label={translate("Less discount")}
-                  value={"-" + inr(fn.discount_amount)}
+                  value={"-" + inr(fn.discount_amount, fn)}
                   tone="text-amber-700"
                 />
               )}
               {fn.service_charge > 0 && (
                 <Row
                   label={translate("Service charge {v0}%", { v0: String(fn.service_charge_percent) })}
-                  value={inr(fn.service_charge)}
+                  value={inr(fn.service_charge, fn)}
                 />
               )}
-              {Number(fn.tax_amount) !== 0 && <Row label={translate("Taxable")} value={inr(fn.taxable_amount)} />}
-              {Number(fn.tax_amount) !== 0 && <Row label={translate(taxLabel())} value={inr(fn.tax_amount)} />}
+              {Number(fn.tax_amount) !== 0 && <Row label={translate("Taxable")} value={inr(fn.taxable_amount, fn)} />}
+              {Number(fn.tax_amount) !== 0 && <Row label={translate(fn.tax_label || taxLabel())} value={inr(fn.tax_amount, fn)} />}
               <Row
                 label={translate("Grand total")}
-                value={inr(fn.grand_total)}
+                value={inr(fn.grand_total, fn)}
                 tone="font-semibold border-t border-zinc-200 pt-1"
               />
               {fn.non_chargeable_value > 0 && (
                 <Row
                   label={translate("Complimentary")}
-                  value={inr(fn.non_chargeable_value)}
+                  value={inr(fn.non_chargeable_value, fn)}
                   tone="text-zinc-400"
                 />
               )}
               {openImpact !== 0 && (
                 <Row
                   label={translate("If open items land")}
-                  value={inr(fn.grand_total + openImpact)}
+                  value={inr(fn.grand_total + openImpact, fn)}
                   tone="text-zinc-400"
                 />
               )}
@@ -1380,6 +1390,7 @@ function ItemsTab({
           fn={fn.name}
           menu={composing}
           pax={fn.billable_pax}
+          moneyCtx={fn}
           onClose={() => setComposing(null)}
           onSaved={() => act(async () => {})}
         />
@@ -1389,6 +1400,7 @@ function ItemsTab({
         <CataloguePicker
           kind={picker}
           cat={cat}
+          moneyCtx={fn}
           onClose={() => setPicker(null)}
           onPick={async (id, chargeable) => {
             await act(() =>
@@ -1425,11 +1437,13 @@ function Row({
 function CataloguePicker({
   kind,
   cat,
+  moneyCtx,
   onClose,
   onPick,
 }: {
   kind: "menu" | "service"
   cat: BanquetCatalogue
+  moneyCtx?: BanquetMoneyCtx | null
   onClose: () => void
   onPick: (id: string, chargeable: number) => void
 }) {
@@ -1496,7 +1510,7 @@ function CataloguePicker({
                     )}
                   </div>
                   <div className="shrink-0 text-right">
-                    <p className="tabular-nums">{inr(rate)}</p>
+                    <p className="tabular-nums">{inr(rate, moneyCtx)}</p>
                     <div className="mt-1 flex gap-1">
                       <Button
                         className="!px-2 !py-1 !text-xs"
@@ -1594,6 +1608,7 @@ function OpenItemsCard({
                 />
                 <input
                   type="number"
+                  step={moneyStep(fn.currency)}
                   className={inputCls + " sm:!w-28 text-right"}
                   placeholder={translate("Impact")}
                   value={r.price_impact ?? 0}
@@ -1660,7 +1675,7 @@ function RevisionsCard({ fn }: { fn: FunctionSheet }) {
                   {String(r.revised_on).slice(0, 16)} · {r.revised_by} ·{" "}
                   {r.pax}{translate(" pax")}</p>
               </div>
-              <span className="shrink-0 tabular-nums">{inr(r.grand_total)}</span>
+              <span className="shrink-0 tabular-nums">{inr(r.grand_total, fn)}</span>
             </li>
           ))}
         </ol>
@@ -1761,6 +1776,7 @@ function MoneyTab({
                   />
                   <input
                     type="number"
+                    step={moneyStep(fn.currency)}
                     className={inputCls + " sm:!w-32 text-right"}
                     placeholder={translate("Amount")}
                     value={t.amount ?? ""}
@@ -1784,11 +1800,11 @@ function MoneyTab({
                   </select>
                 </div>
               ))}
-              <p className="pt-1 text-xs text-zinc-400">{translate("Scheduled ")}{inr(scheduled)}{translate(" of ")}{inr(fn.grand_total)}
+              <p className="pt-1 text-xs text-zinc-400">{translate("Scheduled ")}{inr(scheduled, fn)}{translate(" of ")}{inr(fn.grand_total, fn)}
                 {Math.abs(scheduled - fn.grand_total) > 1 && (
                   <span className="text-amber-700">
                     {" "}
-                    · {inr(Math.abs(scheduled - fn.grand_total))}{" "}
+                    · {inr(Math.abs(scheduled - fn.grand_total), fn)}{" "}
                     {scheduled > fn.grand_total ? translate("over") : translate("unscheduled")}
                   </span>
                 )}
@@ -1834,21 +1850,22 @@ function MoneyTab({
       </Card>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex-wrap gap-2">
           <CardTitle>
             <span className="inline-flex items-center gap-1.5">
               <Receipt className="size-4" />{translate("Receipts")}</span>
           </CardTitle>
           <Button
-            onClick={() =>
+            onClick={() => {
+              const modes = payModes()
               setReceipt({
                 amount: "",
-                mode: "Bank Transfer",
+                mode: modes.includes("Bank Transfer") ? "Bank Transfer" : (modes[0] ?? "Cash"),
                 kind: "Advance",
                 reference: "",
                 settle_term: "",
               })
-            }
+            }}
           >
             <Plus className="size-4" />{translate("Record money in")}</Button>
         </CardHeader>
@@ -1856,33 +1873,40 @@ function MoneyTab({
           {fn.receipts.length === 0 ? (
             <Empty>{translate("Nothing received yet.")}</Empty>
           ) : (
-            <table className="w-full text-sm">
-              <tbody>
-                {fn.receipts.map((r) => (
-                  <tr key={r.name} className="group border-b border-zinc-100">
-                    <td className="py-2 tabular-nums text-zinc-500">
+            <ul className="divide-y divide-zinc-100 text-sm">
+              {fn.receipts.map((r) => (
+                <li
+                  key={r.name}
+                  className="group flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2"
+                >
+                  <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <span className="shrink-0 tabular-nums text-zinc-500">
                       {r.receipt_date}
-                    </td>
-                    <td className="py-2">
+                    </span>
+                    <span className="font-medium text-zinc-800">
                       {translate(r.kind)}
-                      {r.kind === "Security Deposit" && (
+                      {r.kind === "Security Deposit" && Number(fn.deposit_held || 0) > 0 && (
                         <span className="ml-1.5 rounded bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium text-violet-700">{translate("held")}</span>
                       )}
-                    </td>
-                    <td className="py-2 text-zinc-500">{translate(r.mode)}</td>
-                    <td className="py-2 text-zinc-400">{r.reference}</td>
-                    <td
+                    </span>
+                    <span className="text-zinc-500">{translate(r.mode)}</span>
+                    {r.reference && (
+                      <span className="min-w-0 break-all text-zinc-400">{r.reference}</span>
+                    )}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span
                       className={
-                        "py-2 text-right tabular-nums " +
+                        "whitespace-nowrap text-right tabular-nums " +
                         (r.kind === "Refund" ? "text-rose-700" : "")
                       }
                     >
                       {r.kind === "Refund" ? "-" : ""}
-                      {inr(r.amount)}
-                    </td>
-                    <td className="w-8 py-2 text-right">
-                      {/* every advance a banquet office takes needs a piece
-                          of paper against it */}
+                      {inr(r.amount, fn)}
+                    </span>
+                    {/* every advance a banquet office takes needs a piece
+                        of paper against it; native ERP refund lines print from Accounting */}
+                    {!r.native && (
                       <button
                         title={translate("Print this receipt")}
                         aria-label={translate("Print this receipt")}
@@ -1891,17 +1915,17 @@ function MoneyTab({
                       >
                         <Printer className="size-4" />
                       </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
           )}
-          <div className="mt-3 flex justify-end gap-6 text-sm">
-            <Row label={translate("Received")} value={inr(fn.advance_received)} />
+          <div className="mt-3 flex flex-wrap justify-end gap-6 text-sm">
+            <Row label={translate("Received")} value={inr(fn.advance_received, fn)} />
             <Row
               label={translate("Balance")}
-              value={inr(fn.balance_due)}
+              value={inr(fn.balance_due, fn)}
               tone={fn.balance_due > 0 ? "text-rose-700" : "text-emerald-700"}
             />
           </div>
@@ -1931,11 +1955,21 @@ function MoneyTab({
               <p className="text-sm text-zinc-500">
                 {fn.group_detail
                   ? translate("Posts to {v0}'s master folio - one bill for the rooms and the function.", { v0: String(fn.group_detail.group_name) })
-                  : translate("Tie this function to a group booking to bill it onto the group's master folio.")}
+                  : eventBilling(fn).invoiceOnFolio
+                    ? translate("Posts to this function's own folio. Its deposits are taken there, and its tax invoice is issued when that folio is settled.")
+                    : translate("Tie this function to a group booking to bill it onto the group's master folio.")}
               </p>
+              {eventBilling(fn).folio && (
+                <p className="text-sm">
+                  <Link className="font-medium hover:underline"
+                        to={`/billing/${encodeURIComponent(eventBilling(fn).folio ?? "")}`}>
+                    {translate("Open the function's folio")}
+                  </Link>
+                </p>
+              )}
               <GroupLinkField fn={fn} busy={busy} act={act} />
               <Button
-                disabled={busy || !fn.group_booking || fn.status === "Enquiry"}
+                disabled={busy || !eventBilling(fn).canPost}
                 onClick={() => act(() => banquet.postToFolio(fn.name))}
               >{translate("Post to the bill")}</Button>
             </>
@@ -1980,6 +2014,7 @@ function MoneyTab({
             <Field label={translate("Amount")}>
               <input
                 type="number"
+                step={moneyStep(fn.currency)}
                 className={inputCls}
                 value={receipt.amount}
                 onChange={(e) =>
@@ -2026,7 +2061,7 @@ function MoneyTab({
                     .filter((t) => t.status !== "Received")
                     .map((t) => (
                       <option key={t.name} value={t.name}>
-                        {t.milestone} · {inr(t.amount)}
+                        {t.milestone} · {inr(t.amount, fn)}
                       </option>
                     ))}
                 </select>
@@ -2063,7 +2098,10 @@ function CloseOutCard({
   const [damage, setDamage] = useState("")
   const [note, setNote] = useState("")
   const [refund, setRefund] = useState(true)
-  const [mode, setMode] = useState("Bank Transfer")
+  const [mode, setMode] = useState(() => {
+    const modes = payModes()
+    return modes.includes("Bank Transfer") ? "Bank Transfer" : (modes[0] ?? "Cash")
+  })
 
   const held = fn.deposit_held || 0
   // reopened after a close-out: the money settled then stands, closing
@@ -2167,6 +2205,7 @@ function CloseOutCard({
                 <Field label={translate("Deduct from the deposit")}>
                   <input
                     type="number"
+                    step={moneyStep(fn.currency)}
                     className={inputCls}
                     placeholder="0"
                     value={damage}
@@ -2208,21 +2247,21 @@ function CloseOutCard({
             </label>
 
             <div className="space-y-1 rounded-xl bg-zinc-50 px-4 py-3 text-sm">
-              <Row label={translate("Deposit held")} value={inr(held)} />
+              <Row label={translate("Deposit held")} value={inr(held, fn)} />
               {!!Number(damage) && (
                 <Row
                   label={translate("Less damages")}
-                  value={"-" + inr(Number(damage))}
+                  value={"-" + inr(Number(damage), fn)}
                   tone="text-rose-700"
                 />
               )}
               <Row
                 label={translate("Returning")}
-                value={inr(willRefund)}
+                value={inr(willRefund, fn)}
                 tone="font-semibold border-t border-zinc-200 pt-1"
               />
               {!!Number(damage) && (
-                <p className="pt-2 text-xs text-zinc-500">{translate("The ")}{inr(Number(damage))}{translate(" deducted goes on the bill as a damage-recovery line - it's the hotel's money now, not a deposit.")}</p>
+                <p className="pt-2 text-xs text-zinc-500">{translate("The ")}{inr(Number(damage), fn)}{translate(" deducted goes on the bill as a damage-recovery line - it's the hotel's money now, not a deposit.")}</p>
               )}
             </div>
               </>
@@ -2285,8 +2324,10 @@ function PaperTab({
       kind: "invoice",
       title: "Invoice",
       blurb: "The bill against what's already been received.",
-      ready: fn.status === "Confirmed" || fn.status === "Completed",
-      why: "Confirm the function first.",
+      ready: !eventBilling(fn).invoiceOnFolio && (fn.status === "Confirmed" || fn.status === "Completed"),
+      why: eventBilling(fn).invoiceOnFolio
+        ? "The tax invoice is issued from the function's folio."
+        : "Confirm the function first.",
     },
   ]
 
@@ -2609,7 +2650,7 @@ function ReceiptPrint({
                 )}
               </div>
               <p className="text-2xl font-semibold tabular-nums">
-                {inr(doc.receipt.amount)}
+                {inr(doc.receipt.amount, doc.property)}
               </p>
             </div>
             <p className="mt-2 text-xs italic text-zinc-500">
@@ -2618,17 +2659,19 @@ function ReceiptPrint({
           </div>
 
           <dl className="mt-4 space-y-1 text-xs">
-            <RunLine label={translate("Function total")} value={doc.running.grand_total} />
-            <RunLine label={translate("Received to date")} value={doc.running.received} />
+            <RunLine label={translate("Function total")} value={doc.running.grand_total} moneyCtx={doc.property} />
+            <RunLine label={translate("Received to date")} value={doc.running.received} moneyCtx={doc.property} />
             {doc.running.deposit_held > 0 && (
               <RunLine
                 label={translate("Refundable deposit held")}
                 value={doc.running.deposit_held}
+                moneyCtx={doc.property}
               />
             )}
             <RunLine
               label={translate("Balance due")}
               value={doc.running.balance_due}
+              moneyCtx={doc.property}
               bold
             />
           </dl>
@@ -2654,10 +2697,12 @@ function RunLine({
   label,
   value,
   bold,
+  moneyCtx,
 }: {
   label: string
   value: number
   bold?: boolean
+  moneyCtx?: BanquetMoneyCtx | null
 }) {
   useUILanguage()
   return (
@@ -2668,7 +2713,7 @@ function RunLine({
       }
     >
       <dt>{translate(label)}</dt>
-      <dd className="tabular-nums">{inr(value)}</dd>
+      <dd className="tabular-nums">{inr(value, moneyCtx)}</dd>
     </div>
   )
 }

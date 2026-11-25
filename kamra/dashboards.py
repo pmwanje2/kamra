@@ -20,7 +20,11 @@ def _housekeeping_slice(property: str):
 	rooms = frappe.get_all(
 		"Room", filters={"property": property},
 		fields=["housekeeping_status", "occupancy_status"])
-	status = {"Clean": 0, "Dirty": 0, "Inspected": 0, "Out of Order": 0}
+	status = {
+		"Clean": 0, "Dirty": 0, "Pickup": 0,
+		"Inspected": 0, "Ready": 0,
+		"Out of Service": 0, "Out of Order": 0,
+	}
 	occupied = 0
 	for r in rooms:
 		status[r.housekeeping_status] = status.get(r.housekeeping_status, 0) + 1

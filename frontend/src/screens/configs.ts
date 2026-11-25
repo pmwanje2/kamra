@@ -51,7 +51,7 @@ export const roomsConfig: ScreenConfig = {
   description: "Physical rooms - number, type, floor and live status.",
   searchFields: ["room_number", "name"],
   filters: [
-    { field: "housekeeping_status", label: "Status", options: ["Clean", "Dirty", "Inspected", "Ready", "Out of Order"] },
+    { field: "housekeeping_status", label: "Status", options: ["Clean", "Dirty", "Pickup", "Inspected", "Ready", "Out of Service", "Out of Order"] },
     { field: "room_type", label: "Room type", linkDoctype: "Room Type", labelField: "room_type_name", propertyScoped: true },
     { field: "floor", label: "Floor", optionsFrom: "Floor" },
   ],
@@ -69,7 +69,7 @@ export const roomsConfig: ScreenConfig = {
     { field: "room_number", label: "Room number", type: "data", required: true },
     { field: "room_type", label: "Room type", type: "link", linkDoctype: "Room Type", required: true },
     { field: "floor", label: "Floor", type: "select", source: floorSource, allowNew: "Add a floor", hint: "Floors are set up in Admin > Floors. Pick one or add a new floor here." },
-    { field: "housekeeping_status", label: "Housekeeping status", type: "select", options: ["Clean", "Dirty", "Inspected", "Ready", "Out of Order"] },
+    { field: "housekeeping_status", label: "Housekeeping status", type: "select", options: ["Clean", "Dirty", "Pickup", "Inspected", "Ready", "Out of Service", "Out of Order"] },
     { field: "notes", label: "Notes", type: "data" },
   ],
 }

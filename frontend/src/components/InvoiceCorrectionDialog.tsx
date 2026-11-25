@@ -32,12 +32,18 @@ export default function InvoiceCorrectionDialog(props: {
   folio: InvoicedFolio
   /** what the invoice's issued credit notes already add up to */
   credited?: number
+  currency?: string | null
+  currencySymbol?: string | null
+  numberLocale?: string | null
   onClose: () => void
   onDone: () => void
 }) {
   const { t } = useT()
   const { ensureUnlocked, status } = useCashierAuth()
   const { folio } = props
+  const moneyCtx = props.currency || props.currencySymbol != null || props.numberLocale
+    ? { currency: props.currency, currency_symbol: props.currencySymbol, locale: props.numberLocale }
+    : undefined
   const document = folio.sales_invoice || null
   const invoice = folio.invoice_number || document || ""
   const [amount, setAmount] = useState("")
@@ -45,7 +51,7 @@ export default function InvoiceCorrectionDialog(props: {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const value = Number(amount)
-  const unit = 10 ** moneyDigits()
+  const unit = 10 ** moneyDigits(props.currency || undefined)
   // credit notes never add up to more than the invoice
   const left = Math.max(0, Math.round((folio.grand_total - (props.credited ?? 0)) * unit) / unit)
   const over = value > left
@@ -98,10 +104,10 @@ export default function InvoiceCorrectionDialog(props: {
             placeholder={t("Reason (required - goes on the record)")}
             value={reason} onChange={(e) => setReason(e.target.value)} />
           {over && (
-            <p className="text-amber-700">{t("At most {amount} can still be credited on this invoice.", { amount: fmtMoney(left) })}</p>
+            <p className="text-amber-700">{t("At most {amount} can still be credited on this invoice.", { amount: fmtMoney(left, moneyCtx) })}</p>
           )}
           {!document && tax > 0 && (
-            <p className="text-zinc-500">{t("Tax in this credit note: {amount}", { amount: fmtMoney(tax) })}</p>
+            <p className="text-zinc-500">{t("Tax in this credit note: {amount}", { amount: fmtMoney(tax, moneyCtx) })}</p>
           )}
           {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-rose-700">{error}</p>}
         </div>

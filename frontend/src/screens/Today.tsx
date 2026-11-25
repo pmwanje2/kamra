@@ -57,17 +57,22 @@ import {
 
 // the menu's status buttons, in the board's colours and workflow order
 const HK_CHOICES: { status: RoomRow["housekeeping_status"]; label: string; tone: string }[] = [
-  { status: "Dirty", label: "Dirty", tone: "border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100" },
-  { status: "Clean", label: "Clean", tone: "border-emerald-300 bg-emerald-50 text-emerald-900 hover:bg-emerald-100" },
-  { status: "Inspected", label: "Inspected", tone: "border-sky-300 bg-sky-50 text-sky-900 hover:bg-sky-100" },
-  { status: "Out of Order", label: "Out of order", tone: "border-rose-300 bg-rose-50 text-rose-900 hover:bg-rose-100" },
+  { status: "Dirty", label: "Dirty", tone: "border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 dark:border-amber-500/40 dark:bg-amber-950/30 dark:text-amber-100" },
+  { status: "Pickup", label: "Pickup", tone: "border-indigo-300 bg-indigo-50 text-indigo-900 hover:bg-indigo-100 dark:border-indigo-500/40 dark:bg-indigo-950/30 dark:text-indigo-100" },
+  { status: "Clean", label: "Clean", tone: "border-emerald-300 bg-emerald-50 text-emerald-900 hover:bg-emerald-100 dark:border-emerald-500/40 dark:bg-emerald-950/30 dark:text-emerald-100" },
+  { status: "Inspected", label: "Inspected", tone: "border-sky-300 bg-sky-50 text-sky-900 hover:bg-sky-100 dark:border-sky-500/40 dark:bg-sky-950/30" },
+  { status: "Out of Service", label: "Out of Service", tone: "border-orange-300 bg-orange-50 text-orange-900 hover:bg-orange-100 dark:border-orange-500/40 dark:bg-orange-950/30 dark:text-orange-100" },
+  { status: "Out of Order", label: "Out of order", tone: "border-rose-300 bg-rose-50 text-rose-900 hover:bg-rose-100 dark:border-rose-500/40 dark:bg-rose-950/30 dark:text-rose-100" },
 ]
 
 const hkTone: Record<RoomRow["housekeeping_status"], string> = {
-  Clean: "border-emerald-300 bg-emerald-50 text-emerald-900",
-  Inspected: "border-sky-300 bg-sky-50 text-sky-900",
-  Dirty: "border-amber-300 bg-amber-50 text-amber-900",
-  "Out of Order": "border-rose-300 bg-rose-50 text-rose-900",
+  Clean: "border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-950/30 dark:text-emerald-100",
+  Pickup: "border-indigo-300 bg-indigo-50 text-indigo-900 dark:border-indigo-500/40 dark:bg-indigo-950/30 dark:text-indigo-100",
+  Inspected: "border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-500/40 dark:bg-sky-950/30",
+  Ready: "border-teal-400 bg-teal-50 text-teal-900 dark:border-teal-500/40 dark:bg-teal-950/30 dark:text-teal-100",
+  Dirty: "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/30 dark:text-amber-100",
+  "Out of Service": "border-orange-300 bg-orange-50 text-orange-900 dark:border-orange-500/40 dark:bg-orange-950/30 dark:text-orange-100",
+  "Out of Order": "border-rose-300 bg-rose-50 text-rose-900 dark:border-rose-500/40 dark:bg-rose-950/30 dark:text-rose-100",
 }
 
 const inr0 = (n: number) => fmtAmount(n)
@@ -798,8 +803,10 @@ export default function Today() {
   const hkRoom = kpi?.housekeeping?.room_status ?? {}
   const hkStats = [
     { label: t("Clean"), value: hkRoom.Clean ?? 0, dot: "bg-emerald-500" },
+    { label: t("Pickup"), value: hkRoom.Pickup ?? 0, dot: "bg-indigo-500" },
     { label: t("Dirty"), value: hkRoom.Dirty ?? 0, dot: "bg-amber-500" },
     { label: t("Inspected"), value: hkRoom.Inspected ?? 0, dot: "bg-sky-500" },
+    { label: t("Out of Service"), value: hkRoom["Out of Service"] ?? 0, dot: "bg-orange-500" },
     {
       label: t("Out of Order"),
       value: hkRoom["Out of Order"] ?? 0,
@@ -1011,8 +1018,10 @@ export default function Today() {
           </div>
           <div className="mt-3 flex flex-wrap gap-2 text-xs text-zinc-500">
             <Badge tone="green">{t("Clean")}</Badge>
+            <Badge tone="indigo">{t("Pickup")}</Badge>
             <Badge tone="sky">{t("Inspected")}</Badge>
             <Badge tone="amber">{t("Dirty")}</Badge>
+            <Badge tone="orange">{t("Out of Service")}</Badge>
             <Badge tone="rose">{t("Out of Order")}</Badge>
             <span className="inline-flex items-center gap-1">
               <BedDouble className="size-3.5" aria-hidden /> {t("occupied")}

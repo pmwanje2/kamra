@@ -362,7 +362,14 @@ export interface RoomRow {
   room_number: string
   room_type: string
   floor: string | null
-  housekeeping_status: "Clean" | "Dirty" | "Inspected" | "Out of Order"
+  housekeeping_status:
+    | "Clean"
+    | "Dirty"
+    | "Pickup"
+    | "Inspected"
+    | "Ready"
+    | "Out of Service"
+    | "Out of Order"
   occupancy_status: "Vacant" | "Occupied"
 }
 
@@ -596,7 +603,8 @@ export const getDefaultProperty = () =>
 
 // Active property - set by the header switcher, read at call time.
 let currentProperty =
-  localStorage.getItem("kamra_property") || (whiteLabel() ? "" : DEMO_PROPERTY)
+  (typeof localStorage !== "undefined" ? localStorage.getItem("kamra_property") : null) ||
+  (whiteLabel() ? "" : DEMO_PROPERTY)
 
 export function getCurrentProperty() {
   return currentProperty
@@ -604,7 +612,7 @@ export function getCurrentProperty() {
 
 export function setCurrentProperty(p: string) {
   currentProperty = p
-  localStorage.setItem("kamra_property", p)
+  if (typeof localStorage !== "undefined") localStorage.setItem("kamra_property", p)
 }
 
 export interface PropertyRow {
@@ -890,6 +898,8 @@ export interface BanquetReceipt {
   mode: string
   amount: number
   reference: string | null
+  folio_payment?: string | null
+  native?: 0 | 1
 }
 export interface FunctionAlert {
   kind: string
@@ -899,6 +909,10 @@ export interface FunctionAlert {
 export interface FunctionSheet {
   name: string
   property: string
+  currency?: string
+  currency_symbol?: string
+  locale?: string
+  tax_label?: string
   venue: string
   event_type: string
   event_name: string | null
@@ -984,6 +998,11 @@ export interface FunctionSheet {
   group_booking: string | null
   folio: string | null
   posted_to_folio: 0 | 1
+  /** 1 when the ERP accounting bridge issues the fiscal documents: money
+   *  and the tax invoice run through a folio */
+  fiscal_bridge?: 0 | 1
+  /** the standalone function's own (stay-less) folio, once opened */
+  event_folio?: string | null
   items: FunctionItem[]
   selections: {
     name: string
@@ -1848,8 +1867,12 @@ export const checkIn = (reservation: string) =>
 export const checkOut = (reservation: string) =>
   call("kamra.api.check_out", { reservation })
 
-export const setHousekeepingStatus = (room: string, status: string, reason?: string) =>
-  call("kamra.api.set_housekeeping_status", { room, status, reason })
+export const setHousekeepingStatus = (
+  room: string,
+  status: string,
+  reason?: string,
+  until_date?: string,
+) => call("kamra.api.set_housekeeping_status", { room, status, reason, until_date })
 
 export interface ReservationDetail extends TariffReference {
   name: string
@@ -2002,6 +2025,14 @@ export interface ReservationDetail extends TariffReference {
   }[]
   /** Soft-required check-in steps still open (finish after the guest is in). */
   checkin_backfill: { step: string; title: string; tip: string }[]
+  business_date?: string
+  traces?: import("../components/TracesPanel").StayTraceItem[]
+  alerts?: {
+    blocking_count: number
+    warning_count: number
+    info_count: number
+    items: import("../components/AlertBanner").GuestAlertItem[]
+  }
 }
 
 export const reservationDetail = (name: string) =>

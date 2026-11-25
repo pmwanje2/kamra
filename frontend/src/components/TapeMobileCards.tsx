@@ -4,7 +4,7 @@ import { Badge } from "./ui/badge"
 import { Button } from "./ui/button"
 import { useAuth } from "../lib/auth"
 import { cn } from "../lib/utils"
-import { hkTone, visibleHkToggleOptions } from "../lib/hkStatus"
+import { hkTone, isAssignableHkStatus, visibleHkToggleOptions } from "../lib/hkStatus"
 import { useT, t as translate } from "../lib/i18n"
 
 export interface MobileTapeBooking {
@@ -249,7 +249,7 @@ export function TapeMobileCards({
                         <Lock className="size-3.5 shrink-0" aria-hidden />
                         <span className="truncate">{t(blk.reason)}</span>
                       </div>
-                    ) : canBook && selectedDate >= today ? (
+                    ) : canBook && selectedDate >= today && isAssignableHkStatus(room.housekeeping_status) ? (
                       <Button
                         type="button"
                         variant="outline"
@@ -259,6 +259,8 @@ export function TapeMobileCards({
                         <Plus className="size-4" aria-hidden />
                         {t("Available — Book")}
                       </Button>
+                    ) : !isAssignableHkStatus(room.housekeeping_status) ? (
+                      <p className={cn("py-2 text-xs font-medium", tone.text)}>{t(room.housekeeping_status)}</p>
                     ) : (
                       <p className="py-2 text-xs text-zinc-400">{t("Vacant")}</p>
                     )}
