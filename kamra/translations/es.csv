@@ -1218,3 +1218,4 @@ Discount currency must be a valid currency code.,La moneda del descuento debe se
 Discount currency {0} is not valid for this stay. Use {1}.,La moneda del descuento {0} no es válida para esta estancia. Use {1}.
 No exchange rate available for {0} to {1}.,No hay un tipo de cambio disponible de {0} a {1}.
 [SITEOPS-DOA-LIMIT] Discount {0} exceeds supervisor approval limit {1}.,[SITEOPS-DOA-LIMIT] El descuento de {0} supera el límite de aprobación del supervisor ({1}).
+The shared room exceeds its occupancy limit on {0}.,La habitación compartida supera su límite de ocupación el {0}.

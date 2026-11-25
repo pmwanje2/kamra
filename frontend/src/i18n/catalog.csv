@@ -7773,23 +7773,23 @@ The stay currency exchange rate is unavailable.,The stay currency exchange rate 
 Total in rate currency,Total in rate currency,الإجمالي بعملة السعر,,,,Total en devise tarifaire,screens/BookingQuotation.tsx,,needs_translation
 Voucher {code} takes {txAmount} ({homeAmount}) off.,Voucher {code} takes {txAmount} ({homeAmount}) off.,,,,,Le bon {code} déduit {txAmount} ({homeAmount}).,components/RateOptions.tsx,code txAmount homeAmount,needs_translation
 Amounts marked ≈ are estimates.,Amounts marked ≈ are estimates.,المبالغ المميزة بالرمز ≈ تقديرية.,,,,Les montants précédés du signe ≈ sont des estimations.,screens/BookingQuotation.tsx,,needs_translation
-Add Sharer,Add Sharer,إضافة نزيل مشارك,,,,Ajouter un co-occupant,components/ShareReservations.tsx,,translated
-Combine Existing Reservation,Combine Existing Reservation,دمج حجز حالي,,,,Combiner une réservation existante,components/ShareReservations.tsx,,translated
-Break Share,Break Share,فصل الحجز المشترك,,,,Dissocier le partage,components/ShareReservations.tsx,,translated
-Split Equal,Split Equal,تقسيم بالتساوي,,,,Répartition égale,components/ShareReservations.tsx,,translated
-Primary Pays,Primary Pays,النزيل الرئيسي يدفع,,,,Le titulaire paie,components/ShareReservations.tsx,,translated
-Full Rate Each,Full Rate Each,السعر الكامل لكل نزيل,,,,Plein tarif pour chacun,components/ShareReservations.tsx,,translated
-Share Reservations,Share Reservations,حجوزات الغرفة المشتركة,,,,Réservations en chambre partagée,components/ShareReservations.tsx,,translated
-Primary Sharer,Primary Sharer,النزيل الرئيسي,,,,Titulaire du partage,components/ShareReservations.tsx,,translated
-Open Folio,Open Folio,فتح الحساب,,,,Ouvrir le folio,components/ShareReservations.tsx,,translated
-Search guests or enter a new name,Search guests or enter a new name,ابحث عن نزيل أو أدخل اسمًا جديدًا,,,,Rechercher un client ou saisir un nouveau nom,components/ShareReservations.tsx,,translated
-Search reservations,Search reservations,البحث عن الحجوزات,,,,Rechercher des réservations,components/ShareReservations.tsx,,translated
-Destination Room,Destination Room,الغرفة الجديدة,,,,Chambre de destination,components/ShareReservations.tsx,,translated
-Guest profile,Guest profile,ملف النزيل,,,,Profil client,components/ShareReservations.tsx,,translated
-Create new guest profile,Create new guest profile,إنشاء ملف نزيل جديد,,,,Créer un profil client,components/ShareReservations.tsx,,translated
-Check-in date,Check-in date,تاريخ الوصول,,,,Date d’arrivée,components/ShareReservations.tsx,,translated
-Check-out date,Check-out date,تاريخ المغادرة,,,,Date de départ,components/ShareReservations.tsx,,translated
-Custom Nightly Rate,Custom Nightly Rate,سعر الليلة المخصص,,,,Tarif personnalisé par nuit,components/ShareReservations.tsx,,translated
-Rate Split Mode,Rate Split Mode,طريقة تقسيم السعر,,,,Mode de répartition du tarif,components/ShareReservations.tsx,,translated
-Save Rate Split,Save Rate Split,حفظ تقسيم السعر,,,,Enregistrer la répartition,components/ShareReservations.tsx,,translated
-Shared room with {n} reservations,Shared room with {n} reservations,غرفة مشتركة بين {n} حجوزات,,,,Chambre partagée entre {n} réservations,"screens/TapeChart.tsx,components/TapeMobileCards.tsx",n,translated
+Add Sharer,Add Sharer,إضافة نزيل مشارك,Añadir huésped a la habitación,,,Ajouter un co-occupant,components/ShareReservations.tsx,,translated
+Combine Existing Reservation,Combine Existing Reservation,دمج حجز حالي,Combinar una reserva existente,,,Combiner une réservation existante,components/ShareReservations.tsx,,translated
+Break Share,Break Share,فصل الحجز المشترك,Separar las reservas,,,Dissocier le partage,components/ShareReservations.tsx,,translated
+Split Equal,Split Equal,تقسيم بالتساوي,Repartir por igual,,,Répartition égale,components/ShareReservations.tsx,,translated
+Primary Pays,Primary Pays,النزيل الرئيسي يدفع,Paga el huésped principal,,,Le titulaire paie,components/ShareReservations.tsx,,translated
+Full Rate Each,Full Rate Each,السعر الكامل لكل نزيل,Tarifa completa para cada huésped,,,Plein tarif pour chacun,components/ShareReservations.tsx,,translated
+Share Reservations,Share Reservations,حجوزات الغرفة المشتركة,Reservas de habitación compartida,,,Réservations en chambre partagée,components/ShareReservations.tsx,,translated
+Primary Sharer,Primary Sharer,النزيل الرئيسي,Huésped principal,,,Titulaire du partage,components/ShareReservations.tsx,,translated
+Open Folio,Open Folio,فتح الحساب,Abrir el folio,,,Ouvrir le folio,components/ShareReservations.tsx,,translated
+Search guests or enter a new name,Search guests or enter a new name,ابحث عن نزيل أو أدخل اسمًا جديدًا,Buscar huéspedes o introducir un nombre nuevo,,,Rechercher un client ou saisir un nouveau nom,components/ShareReservations.tsx,,translated
+Search reservations,Search reservations,البحث عن الحجوزات,Buscar reservas,,,Rechercher des réservations,components/ShareReservations.tsx,,translated
+Destination Room,Destination Room,الغرفة الجديدة,Habitación de destino,,,Chambre de destination,components/ShareReservations.tsx,,translated
+Guest profile,Guest profile,ملف النزيل,Perfil del huésped,,,Profil client,components/ShareReservations.tsx,,translated
+Create new guest profile,Create new guest profile,إنشاء ملف نزيل جديد,Crear un perfil de huésped,,,Créer un profil client,components/ShareReservations.tsx,,translated
+Check-in date,Check-in date,تاريخ الوصول,Fecha de entrada,,,Date d’arrivée,components/ShareReservations.tsx,,translated
+Check-out date,Check-out date,تاريخ المغادرة,Fecha de salida,,,Date de départ,components/ShareReservations.tsx,,translated
+Custom Nightly Rate,Custom Nightly Rate,سعر الليلة المخصص,Tarifa personalizada por noche,,,Tarif personnalisé par nuit,components/ShareReservations.tsx,,translated
+Rate Split Mode,Rate Split Mode,طريقة تقسيم السعر,Modo de reparto de la tarifa,,,Mode de répartition du tarif,components/ShareReservations.tsx,,translated
+Save Rate Split,Save Rate Split,حفظ تقسيم السعر,Guardar el reparto de la tarifa,,,Enregistrer la répartition,components/ShareReservations.tsx,,translated
+Shared room with {n} reservations,Shared room with {n} reservations,غرفة مشتركة بين {n} حجوزات,Habitación compartida por {n} reservas,,,Chambre partagée entre {n} réservations,"screens/TapeChart.tsx,components/TapeMobileCards.tsx",n,translated

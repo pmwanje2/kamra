@@ -368,3 +368,4 @@ Property accounting currency,عملة المحاسبة للمنشأة
 Total in rate currency,الإجمالي بعملة السعر
 1 {0} = {1} {2},1 {0} = {1} {2}
 Amounts marked ≈ are estimates.,المبالغ المميزة بالرمز ≈ تقديرية.
+The shared room exceeds its occupancy limit on {0}.,تتجاوز الغرفة المشتركة الحد الأقصى للإشغال في {0}.

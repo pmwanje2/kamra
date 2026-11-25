@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import json
 from contextlib import contextmanager
-from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal, InvalidOperation
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, getdate
+from frappe.utils import add_days, cint, getdate
 
 from kamra.authz import ADMIN, assert_guest_access, assert_property_access, require_roles
 from kamra.kamra.doctype.reservation.reservation import is_entire_place, lock_property_for_inventory
@@ -34,7 +34,7 @@ def _money(value, quantum: Decimal, *, custom: bool = False) -> Decimal:
 
 
 def allocate_rates(room_rate, currency, mode, members) -> dict[str, Decimal]:
-	"""Allocate integer minor units. The primary takes the full remainder."""
+	"""Allocate minor units, breaking equal remainders by primary then name."""
 	if mode not in MODES:
 		frappe.throw(_("Select a valid share rate mode."))
 	members = sorted(members, key=lambda row: (not row[1], row[0]))
@@ -47,9 +47,10 @@ def allocate_rates(room_rate, currency, mode, members) -> dict[str, Decimal]:
 	if mode == "Full Rate Each":
 		return {name: total for name, _primary, _rate in members}
 	if mode == "Primary Pays":
-		return {name: total if primary else Decimal(0) for name, primary, _rate in members}
+		return {name: total if index == 0 else Decimal(0)
+		        for index, (name, _primary, _rate) in enumerate(members)}
 	units, remainder = divmod(int(total / quantum), len(members))
-	return {name: (units + (remainder if index == 0 else 0)) * quantum
+	return {name: (units + int(index < remainder)) * quantum
 	        for index, (name, _primary, _rate) in enumerate(members)}
 
 
@@ -64,7 +65,8 @@ def _member_rows(res, *, lock=False, date=None, statuses=None):
 		return []
 	query = """
 		SELECT name, room, share_group_id, is_share_primary, share_rate_mode, share_custom_rate,
-		       guest, guest_name, status, check_in_date, check_out_date, rate_category
+		       guest, guest_name, status, check_in_date, check_out_date, rate_category,
+		       adults, children, infants, over_capacity_guests
 		FROM `tabReservation` WHERE property = %(property)s AND share_group_id = %(group)s
 	"""
 	args = {"property": res.property, "group": group}
@@ -99,7 +101,7 @@ def nightly_share(res, date, *, lock=False) -> dict | None:
 	frozen = frappe.db.sql(query, {"property": res.property, "date": str(date), "group": group})
 	if frozen:
 		data = json.loads(frozen[0][0])
-		return {**data, "rate": Decimal(data["rates"].get(res.name, "0"))}
+		return _share_line(data, res.name)
 	members = _member_rows(res, lock=lock, date=date, statuses=("Checked In", "Checked Out"))
 	if not members:
 		return None
@@ -109,16 +111,55 @@ def nightly_share(res, date, *, lock=False) -> dict | None:
 	current = current_date_contract_night(rate_source, date) if mode != "Custom" else None
 	rate = current["rate"] if current else (_nightly_room_rate(rate_source, date) if mode != "Custom" else 0)
 	gst = current["gst_rate"] if current else _nightly_gst(rate_source, date)
-	rates = allocate_rates(rate, property_currency(res.property), mode,
-	                       [(m.name, m.is_share_primary, m.share_custom_rate) for m in members])
+	rates, taxes = _night_amounts(
+		res.property, rate, gst, mode,
+		[(m.name, m.name == leader.name, m.share_custom_rate) for m in members],
+	)
 	fx = {}
 	if current:
 		fx = {"contract_currency": current["currency"], "contract_fx_rate": current["fx_rate"],
 		      "contract_fx_date": str(current["fx_date"]) if current["fx_date"] else None,
 		      "contract_fx_stale": int(current["stale"])}
-	return {"room": res.room, "gst": gst, "category": leader.rate_category or "",
-	        "lead": leader.name, "fx": fx, "rates": {name: str(value) for name, value in rates.items()},
-	        "rate": rates.get(res.name, Decimal(0))}
+	return _share_line({
+		"room": res.room, "gst": gst, "category": leader.rate_category or "",
+		"lead": leader.name, "fx": fx,
+		"rates": {name: str(value) for name, value in rates.items()},
+		"taxes": {name: str(value) for name, value in taxes.items()},
+	}, res.name)
+
+
+def _share_line(snapshot, reservation):
+	taxes = snapshot.get("taxes") or {}
+	return {**snapshot, "rate": Decimal(snapshot["rates"].get(reservation, "0")),
+	        "tax": Decimal(taxes.get(reservation, "0")) if taxes else None}
+
+
+def _night_amounts(property, rate, gst, mode, members):
+	from kamra.folio import cut_figure, line_figures, priced_with_tax
+
+	currency = property_currency(property)
+	if not gst or not priced_with_tax(property, "Room"):
+		return allocate_rates(rate, currency, mode, members), {}
+
+	whole = line_figures(property, "Room", rate, gst_rate=gst)
+	gross = allocate_rates(whole["figure"], currency, mode, members)
+	if mode in ("Full Rate Each", "Custom"):
+		net_tax = {name: cut_figure(whole, amount) for name, amount in gross.items()}
+		return ({name: values[0] for name, values in net_tax.items()},
+		        {name: values[1] for name, values in net_tax.items()})
+
+	# Reconcile both gross and tax to the rounded unsplit night. Give the
+	# remaining tax units to the highest fractional amounts, in payer order
+	# on ties, so routing and ledger splits start with exact whole units.
+	unit, rate = whole["unit"], whole["rate"]
+	raw_tax = {name: amount * rate / (1 + rate) for name, amount in gross.items()}
+	taxes = {name: tax.quantize(unit, rounding=ROUND_DOWN) for name, tax in raw_tax.items()}
+	whole_tax = cut_figure(whole, whole["figure"])[1]
+	remainder = int((whole_tax - sum(taxes.values())) / unit)
+	ranked = sorted(raw_tax, key=lambda name: raw_tax[name] - taxes[name], reverse=True)
+	for name in ranked[:remainder]:
+		taxes[name] += unit
+	return {name: amount - taxes[name] for name, amount in gross.items()}, taxes
 
 
 def nightly_share_rate(res, date) -> Decimal | None:
@@ -142,6 +183,48 @@ def validate_reservation(res):
 			frappe.throw(_("Break the share before changing its room or guest."))
 	if res.get("share_group_id"):
 		_check_eligible(res, require_active=False)
+		fields = ("share_group_id", "status", "check_in_date", "check_out_date",
+		          "adults", "children", "infants", "over_capacity_guests")
+		if res.status in ACTIVE and (not before or any(res.get(key) != before.get(key) for key in fields)):
+			_validate_capacity(res)
+
+
+def _validate_capacity(res):
+	"""Validate the aggregate party on each interval with constant occupancy."""
+	from kamra.pricing import capacity_overflow
+
+	cap = frappe.db.get_value("Room Type", res.room_type,
+	                         ["adults_capacity", "children_capacity", "max_total_occupants"],
+	                         as_dict=True)
+	if not cap:
+		return
+	start, end = getdate(res.check_in_date), getdate(res.check_out_date)
+	parties = [res, *(row for row in _member_rows(res, lock=True)
+	                  if row.name != res.name and row.room == res.room and row.status in ACTIVE
+	                  and getdate(row.check_in_date) < end and getdate(row.check_out_date) > start)]
+	max_adults, max_children = cint(cap.adults_capacity), cint(cap.children_capacity)
+	max_total = cint(cap.max_total_occupants) or (max_adults + max_children if max_adults and max_children else 0)
+	changes = {}
+	for party in parties:
+		adults = cint(party.adults)
+		children = max(0, cint(party.children) - cint(party.get("infants")))
+		overflow = capacity_overflow(cap, adults, children)[0]
+		extras = max(0, cint(party.get("over_capacity_guests")) - overflow)
+		total = adults + cint(party.children) + extras
+		for day, direction in ((max(start, getdate(party.check_in_date)), 1),
+		                       (min(end, getdate(party.check_out_date)), -1)):
+			change = changes.setdefault(day, [0, 0, 0])
+			change[0] += direction * adults
+			change[1] += direction * children
+			change[2] += direction * total
+	adults = children = total = 0
+	for day, (add_adults, add_children, add_total) in sorted(changes.items()):
+		adults += add_adults
+		children += add_children
+		total += add_total
+		if ((max_adults and adults > max_adults) or (max_children and children > max_children)
+		    or (max_total and total > max_total)):
+			frappe.throw(_("The shared room exceeds its occupancy limit on {0}.").format(day))
 
 
 def other_sharer_in_house(res, room: str) -> bool:

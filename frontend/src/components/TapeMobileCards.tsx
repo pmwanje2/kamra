@@ -3,6 +3,7 @@ import { Lock, Plus, Star, Users } from "lucide-react"
 import { Badge } from "./ui/badge"
 import { Button } from "./ui/button"
 import { useAuth } from "../lib/auth"
+import { shareRoomBars } from "../lib/shareRoomBars"
 import { cn } from "../lib/utils"
 import { hkTone, isAssignableHkStatus, visibleHkToggleOptions } from "../lib/hkStatus"
 import { useT, t as translate } from "../lib/i18n"
@@ -49,12 +50,10 @@ export interface RoomAttributeMeta {
   amenities?: string[]
 }
 
-function bookingOnDate(room: MobileTapeRoom, date: string): MobileTapeBooking | null {
-  for (const b of room.bookings) {
-    if (b.is_day_use === 1 && b.check_in_date === date) return b
-    if (b.check_in_date <= date && b.check_out_date > date) return b
-  }
-  return null
+function bookingOnDate(room: MobileTapeRoom, date: string) {
+  return shareRoomBars(room.bookings).find((booking) =>
+    booking.check_in_date <= date &&
+    (booking.is_day_use ? booking.check_in_date === date : date < booking.check_out_date))
 }
 
 function blockOnDate(room: MobileTapeRoom, date: string) {
@@ -120,10 +119,9 @@ export function TapeMobileCards({
               <span className="font-normal normal-case text-zinc-400">{g.rooms.length}</span>
             </div>
             {g.rooms.map((room) => {
-              const stay = bookingOnDate(room, selectedDate)
-              const shareCount = stay?.share_group_id ? room.bookings.filter((booking) =>
-                booking.share_group_id === stay.share_group_id
-                && booking.check_in_date <= selectedDate && selectedDate < booking.check_out_date).length : 0
+              const segment = bookingOnDate(room, selectedDate)
+              const stay = segment && (room.bookings.find((booking) => booking.name === segment.name) ?? segment)
+              const shareCount = segment?.share_count ?? 0
               const blk = blockOnDate(room, selectedDate)
               const meta = roomMeta[room.name]
               const tone = hkTone(room.housekeeping_status)

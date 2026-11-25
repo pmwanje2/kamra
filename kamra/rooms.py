@@ -92,11 +92,16 @@ def rooms_board(property: str):
 	rt_names = {rt.name: rt.room_type_name for rt in frappe.get_all(
 		"Room Type", filters={"property": property},
 		fields=["name", "room_type_name"])}
-	in_house = {r.room: r for r in frappe.get_all(
+	in_house = {}
+	for stay in frappe.get_all(
 		"Reservation",
 		filters={"property": property, "status": "Checked In", "room": ("is", "set")},
 		fields=["name", "room", "guest_name", "check_in_date", "check_out_date",
-		        "is_day_use"])}
+		        "is_day_use", "is_share_primary"]):
+		current = in_house.get(stay.room)
+		rank = (getdate(stay.check_out_date), cint(stay.is_share_primary), stay.name)
+		if not current or rank > (getdate(current.check_out_date), cint(current.is_share_primary), current.name):
+			in_house[stay.room] = stay
 	arrivals = {}
 	for r in frappe.get_all(
 			"Reservation",
@@ -567,55 +572,67 @@ def _compute_insights(property: str, days: int, today, money: bool,
 	from kamra.folio import STANDS_ON_ITS_DATE
 	from kamra.room_statistics import POSTED_CATEGORY, STAY_CATEGORY, category_rules
 	rules = category_rules(property)
-	posted_cats = {
-		(r_name, str(p_date)): cat
-		for r_name, p_date, cat in frappe.db.sql(
+	posted_rooms = {}
+	night_categories = {}
+	room_stays = {}
+	for name, date, stamped_room, category in frappe.db.sql(
 			"""
-			SELECT COALESCE(fc.reservation, f.reservation), fc.posting_date, """ + POSTED_CATEGORY + """
+			SELECT COALESCE(fc.reservation, f.reservation), fc.posting_date,
+			       fc.share_room, """ + POSTED_CATEGORY + """
 			FROM `tabFolio Charge` fc
 			JOIN `tabFolio` f ON fc.parent = f.name
 			LEFT JOIN `tabReservation` r ON r.name = COALESCE(fc.reservation, f.reservation)
 			WHERE f.property = %(p)s AND fc.charge_type = 'Room'
 			  AND """ + STANDS_ON_ITS_DATE + """
 			  AND fc.posting_date >= %(start)s AND fc.posting_date < %(end)s
-			""", {"p": property, "start": start, "end": end})
-	}
+			ORDER BY fc.creation, fc.name
+			""", {"p": property, "start": start, "end": end}):
+		key = (name, date)
+		if stamped_room or key not in posted_rooms:
+			posted_rooms[key] = (stamped_room, category)
+		if stamped_room in stats:
+			night_categories.setdefault((stamped_room, date), category)
+			room_stays.setdefault(stamped_room, set()).add(name)
+
 	for s in frappe.db.sql(
 			"SELECT r.name, r.room, r.check_in_date, r.check_out_date, " + STAY_CATEGORY + """ AS category
 			FROM `tabReservation` r
 			WHERE r.property = %(p)s AND r.room IS NOT NULL AND r.room != ''
 			  AND r.status IN ('Checked In', 'Checked Out')
 			  AND r.check_in_date < %(end)s AND r.check_out_date > %(start)s
+			ORDER BY r.is_share_primary DESC, r.check_in_date, r.name
 			""", {"p": property, "start": start, "end": end}, as_dict=True):
-		row = stats.get(s.room)
-		if not row:
-			continue
-		lo = max(getdate(s.check_in_date), start)
+		day = max(getdate(s.check_in_date), start)
 		hi = min(getdate(s.check_out_date), end)
-		if lo >= hi:
-			continue
-		n = 0
-		day = lo
 		while day < hi:
-			n += 1
-			cat = posted_cats.get((s.name, str(day)), s.category)
-			if rules.counts("occupancy", cat):
-				row["occupied_nights"] += 1
+			stamped, category = posted_rooms.get((s.name, day), (None, s.category))
+			room = stamped or s.room
+			if room in stats:
+				night_categories.setdefault((room, day), category)
+				room_stays.setdefault(room, set()).add(s.name)
 			day = getdate(add_days(day, 1))
-		row["nights"] += n
-		row["stays"] += 1
 
+	for (room, _date), category in night_categories.items():
+		stats[room]["nights"] += 1
+		stats[room]["occupied_nights"] += int(rules.counts("occupancy", category))
+	for room, stays in room_stays.items():
+		stats[room]["stays"] = len(stays)
+
+	revenue_places = 0
 	if money:
+		from kamra.ledger import _currency_places
+		revenue_places = _currency_places(property)
 		for x in frappe.db.sql(
 				"""
-				SELECT r.room AS room, COALESCE(SUM(fc.amount), 0) AS amount
+				SELECT COALESCE(NULLIF(fc.share_room, ''), r.room) AS room,
+				       COALESCE(SUM(fc.amount), 0) AS amount
 				FROM `tabFolio Charge` fc
 				JOIN `tabFolio` f ON fc.parent = f.name
-				JOIN `tabReservation` r ON r.name = COALESCE(fc.reservation, f.reservation)
+				LEFT JOIN `tabReservation` r ON r.name = COALESCE(fc.reservation, f.reservation)
 				WHERE f.property = %(p)s
 				  AND fc.charge_type IN ('Room', 'Rate Adjustment')
 				  AND fc.posting_date >= %(start)s AND fc.posting_date < %(end)s
-				GROUP BY r.room
+				GROUP BY COALESCE(NULLIF(fc.share_room, ''), r.room)
 				""", {"p": property, "start": start, "end": end}, as_dict=True):
 			if x.room in stats:
 				stats[x.room]["revenue"] = float(x.amount or 0)
@@ -666,7 +683,7 @@ def _compute_insights(property: str, days: int, today, money: bool,
 		mins = row.pop("clean_minutes")
 		all_minutes += mins
 		row["avg_clean_minutes"] = round(sum(mins) / len(mins), 1) if mins else None
-		row["revenue"] = round(row["revenue"], 2) if money else None
+		row["revenue"] = round(row["revenue"], revenue_places) if money else None
 		out_rooms.append(row)
 
 	total_nights = sum(r["nights"] for r in out_rooms)
@@ -684,7 +701,7 @@ def _compute_insights(property: str, days: int, today, money: bool,
 			"rooms": len(out_rooms),
 			"room_nights": total_nights,
 			"occupancy_pct": round(100 * occupied_nights / sellable, 1) if sellable else 0.0,
-			"revenue": round(sum(r["revenue"] or 0 for r in out_rooms), 2) if money else None,
+			"revenue": round(sum(r["revenue"] or 0 for r in out_rooms), revenue_places) if money else None,
 			"out_of_service_nights": sum(r["out_of_service_nights"] for r in out_rooms),
 			"avg_clean_minutes": round(sum(all_minutes) / len(all_minutes), 1)
 			if all_minutes else None,

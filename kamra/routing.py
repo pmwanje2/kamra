@@ -144,7 +144,7 @@ def _part(folio: str, amount, instruction: str | None, tax=None) -> dict:
 
 
 def route(reservation, charge_type: str, amount=None, posting_date=None, *,
-          transaction_code: str | None = None, gst_rate=0, whole: bool = False,
+          transaction_code: str | None = None, gst_rate=0, tax=None, whole: bool = False,
           pending=()) -> list[dict] | None:
 	"""Where an instruction sends this charge: [{folio, amount,
 	routing_instruction}], the routed part first, or None when no
@@ -180,8 +180,9 @@ def route(reservation, charge_type: str, amount=None, posting_date=None, *,
 		return [_part(dst, amount, ri.name)]
 	if amount is None:
 		return None
-	line = fm.line_figures(res.property, charge_type, amount, gst_rate=gst_rate)
-	if line["base"] <= 0:
+	line = fm.line_figures(res.property, charge_type, amount, tax=tax, gst_rate=gst_rate)
+	line["tax_as_posted"] = tax is not None
+	if line["figure"] <= 0:
 		return [_part(dst, amount, ri.name)]
 	if kind == "Percent":
 		if whole:

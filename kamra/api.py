@@ -894,7 +894,7 @@ def record_advance(reservation: str, amount: float, mode: str = "Cash",
 	same key returns the first result instead of posting again."""
 	# one advance at a time per booking: the lock serializes a double
 	# submit, so advance_paid and the key check below see the first post
-	frappe.db.get_value("Reservation", reservation, "name", for_update=True)
+	frappe.get_doc("Reservation", reservation, for_update=True)
 	key = (idempotency_key or "").strip() or None
 	if key:
 		res = frappe.get_doc("Reservation", reservation)
@@ -2444,6 +2444,11 @@ def _lock_folio_scope(reservations=(), folios=()) -> None:
 			if target_res:
 				res_ids.add(target_res)
 	if res_ids:
+		from kamra.kamra.doctype.reservation.reservation import lock_property_for_inventory
+		properties = frappe.get_all("Reservation", filters={"name": ("in", sorted(res_ids))},
+		                            pluck="property", distinct=True)
+		for property_name in sorted(p for p in properties if p):
+			lock_property_for_inventory(property_name)
 		frappe.db.sql(
 			"SELECT name FROM `tabReservation` WHERE name IN %s ORDER BY name FOR UPDATE",
 			(tuple(sorted(res_ids)),),

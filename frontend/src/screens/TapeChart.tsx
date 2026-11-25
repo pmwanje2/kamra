@@ -1352,7 +1352,7 @@ export default function TapeChart() {
                                   const roomDrop = dd?.mode === "move" && dd.room !== b.room
                                   const resizable = !b.is_day_use && !b.share_group_id
                                   return (
-                                    <button key={b.name}
+                                    <button key={`${b.name}:${b.check_in_date}`}
                                       type="button"
                                       data-stay={b.name}
                                       data-dragging={dd ? "true" : "false"}

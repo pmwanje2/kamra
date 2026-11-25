@@ -461,6 +461,22 @@ class Reservation(Document):
 		return (str(old.check_in_date), str(old.check_out_date), old.room_type) \
 			!= (str(self.check_in_date), str(self.check_out_date), self.room_type)
 
+	def load_from_db(self):
+		# A locking read may be followed by a save (including external callers).
+		# Take the inventory lock before Frappe locks this row or its children.
+		if self.flags.for_update:
+			lock_property_for_inventory(frappe.db.get_value("Reservation", self.name, "property"))
+		return super().load_from_db()
+
+	def load_doc_before_save(self, *, raise_exception=False):
+		# Frappe calls this from check_if_latest before validate(). Include the
+		# destination property if a draft reservation is being moved.
+		if not self.is_new():
+			previous = frappe.db.get_value("Reservation", self.name, "property")
+			for property_name in sorted({p for p in (previous, self.property) if p}):
+				lock_property_for_inventory(property_name)
+		return super().load_doc_before_save(raise_exception=raise_exception)
+
 	def validate(self):
 		# A ledger path that saves the booking sets flags.kamra_ledger_advance;
 		# Frappe never fills doc.flags from a client payload.

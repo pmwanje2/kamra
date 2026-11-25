@@ -215,13 +215,18 @@ def open_folio(reservation, *, prearrival: bool = False) -> str:
 		"Folio", {"reservation": reservation.name, "folio_type": "Guest"},
 		["name", "share_prearrival"], as_dict=True,
 		for_update=prearrival or bool(reservation.get("share_group_id")),
+		order_by="window_no asc, status desc, creation desc",
 	)
 	if existing and (in_arrival_fc or prearrival):
 		return existing.name
 	if existing:
-		folio = frappe.get_doc("Folio", existing.name) if existing.share_prearrival else None
-		if folio and reservation.status == "Confirmed":
+		if existing.share_prearrival and reservation.status == "Confirmed":
 			return existing.name
+		name = existing.name
+		folio = None
+		if existing.share_prearrival:
+			name = open_line_target(reservation, "Room", name)
+			folio = frappe.get_doc("Folio", name)
 	else:
 		folio = frappe.get_doc({
 			"doctype": "Folio", "property": reservation.property, "reservation": reservation.name,
@@ -237,7 +242,7 @@ def open_folio(reservation, *, prearrival: bool = False) -> str:
 		save_folio(folio)
 	if prearrival or (not existing and reservation.flags.get("carried_forward")):
 		return folio.name
-	name = existing.name if existing else folio.name
+	name = folio.name if folio else name
 	_post_addons(reservation, name)
 	if folio:
 		_post_cleaning_fee(reservation, name)
@@ -442,7 +447,7 @@ def open_window(reservation: str | None = None, group_booking: str | None = None
                 window_no: int | None = None, payee_type: str | None = None,
                 payee_company: str | None = None, payee_agent: str | None = None,
                 payment_method: str | None = None, bill_to_name: str | None = None,
-                folio_type: str | None = None) -> str:
+                folio_type: str | None = None, *, prearrival: bool = False) -> str:
 	"""Open a billing window on a stay or on a group's posting master and
 	return its folio. Without `window_no` it takes the next free number (2
 	on, for a stay: window 1 is the guest's). The payee defaults to the
@@ -495,6 +500,7 @@ def open_window(reservation: str | None = None, group_booking: str | None = None
 		"bill_to_name": (bill_to_name or "")[:140] or None,
 		"status": "Open",
 		"opened_on": now_datetime(),
+		"share_prearrival": int(prearrival),
 	})
 	if reservation and n > 1 and payee_type == "Guest" and folio.meta.has_field("customer"):
 		folio.customer = frappe.db.get_value(
@@ -513,18 +519,30 @@ def window_folio(reservation: str | None = None, group_booking: str | None = Non
 	fees)."""
 	key = _window_key(reservation, group_booking)
 	n = int(window_no or 1)
-	current = frappe.db.get_value("Folio", {**key, "window_no": n, "status": "Open"},
-	                              "name", order_by="creation desc")
+	open_filters = {**key, "window_no": n, "status": "Open", "invoice_number": ("is", "not set")}
+	if frappe.get_meta("Folio").has_field("sales_invoice"):
+		open_filters["sales_invoice"] = ("is", "not set")
+	current = frappe.db.get_value("Folio", open_filters, "name", order_by="creation desc")
 	if current:
 		return current
 	last = frappe.db.get_value("Folio", {**key, "window_no": n},
-	                           ["folio_type", "bill_to_name", *WINDOW_FIELDS],
+	                           ["folio_type", "bill_to_name", "share_prearrival", *WINDOW_FIELDS],
 	                           as_dict=True, order_by="creation desc")
 	if last:
 		return open_window(reservation, group_booking, window_no=n,
 		                   folio_type=last.folio_type, bill_to_name=last.bill_to_name,
-		                   **{f: last.get(f) for f in WINDOW_FIELDS})
+		                   prearrival=bool(last.share_prearrival), **{f: last.get(f) for f in WINDOW_FIELDS})
 	if reservation and n == 1:
+		legacy_fields = ["status", "invoice_number", "bill_to_name", "share_prearrival", *WINDOW_FIELDS]
+		if "sales_invoice" in open_filters:
+			legacy_fields.append("sales_invoice")
+		legacy = frappe.db.get_value("Folio", {
+			"reservation": reservation, "folio_type": "Guest", "window_no": ("is", "not set"),
+		}, legacy_fields, as_dict=True)
+		if legacy and _is_closed_or_invoiced(legacy):
+			return open_window(reservation, window_no=n, folio_type="Guest",
+			                   bill_to_name=legacy.bill_to_name,
+			                   prearrival=bool(legacy.share_prearrival), **{f: legacy.get(f) for f in WINDOW_FIELDS})
 		return open_folio(frappe.get_doc("Reservation", reservation))
 	return open_window(reservation, group_booking, window_no=n)
 
@@ -656,7 +674,7 @@ def routed_target(reservation, charge_type: str, *, amount=None, posting_date=No
 
 
 def line_parts(reservation, charge_type: str, amount, posting_date=None, *,
-               transaction_code: str | None = None, gst_rate=0,
+               transaction_code: str | None = None, gst_rate=0, tax=None,
                pending=()) -> list[dict]:
 	"""Where a hotel line goes: [{folio, amount, routing_instruction}], never
 	an invoiced folio. A routing limit splits it into the routed part and
@@ -664,7 +682,7 @@ def line_parts(reservation, charge_type: str, amount, posting_date=None, *,
 	(gst_amount, tax_as_posted); `pending` are routed lines not saved yet."""
 	from kamra.routing import route
 	parts = route(reservation, charge_type, amount, posting_date,
-	              transaction_code=transaction_code, gst_rate=gst_rate, pending=pending)
+	              transaction_code=transaction_code, gst_rate=gst_rate, tax=tax, pending=pending)
 	if parts:
 		return parts
 	# no instruction covers it: the legacy presets, on an open folio
@@ -1019,9 +1037,11 @@ def open_line_target(reservation, charge_type: str, name: str | None = None) -> 
 	and one opens when there is none, with the same payee (the part_settle
 	shape, without repeating the one-time fees the first folio carried)."""
 	name = name or target_folio(reservation, charge_type)
-	row = frappe.db.get_value("Folio", name, ["status", "folio_type", "group_booking",
-	                                         "window_no"], as_dict=True)
-	if not row or row.status != "Closed":
+	fields = ["status", "folio_type", "group_booking", "window_no", "invoice_number"]
+	if frappe.get_meta("Folio").has_field("sales_invoice"):
+		fields.append("sales_invoice")
+	row = frappe.db.get_value("Folio", name, fields, as_dict=True)
+	if not row or not _is_closed_or_invoiced(row):
 		return name
 	if row.folio_type == "Group" and row.group_booking:
 		return window_folio(group_booking=row.group_booking, window_no=row.window_no or 1)
@@ -1054,7 +1074,9 @@ def _append_charge(folios, reservation, charge_type, line):
 	tax to the minor unit."""
 	parts = line_parts(reservation, charge_type, line["amount"], line["posting_date"],
 	                   transaction_code=line.get("transaction_code"),
-	                   gst_rate=line.get("gst_rate"), pending=_pending_routed(folios))
+	                   gst_rate=line.get("gst_rate"),
+	                   tax=line.get("gst_amount") if line.get("tax_as_posted") else None,
+	                   pending=_pending_routed(folios))
 	for part in parts:
 		name = part["folio"]
 		if name not in folios:
@@ -1445,13 +1467,10 @@ def post_room_night(reservation, date, folios=None, *, room_posted: list | None 
 			}
 			if share:
 				line.update(share["fx"], share_room=share["room"], share_group=reservation.share_group_id,
-				            share_snapshot=json.dumps({k: v for k, v in share.items() if k != "rate"}))
-				name = open_folio(reservation)
-				if name not in folios:
-					folios[name] = frappe.get_doc("Folio", name, for_update=True)
-				folios[name].append("charges", line)
-			else:
-				_append_charge(folios, reservation, "Room", line)
+				            share_snapshot=json.dumps({k: v for k, v in share.items() if k not in ("rate", "tax")}))
+				if share["tax"] is not None:
+					line.update(gst_amount=float(share["tax"]), tax_as_posted=1)
+			_append_charge(folios, reservation, "Room", line)
 			posted = True
 			room_gst = gst_rate
 			if room_posted is not None:
@@ -2056,8 +2075,12 @@ def split_figure(line: dict, part_figure) -> tuple[tuple[Decimal, Decimal], tupl
 	"""Split `line` into (part, remainder), both quantized to the currency's
 	minor unit so gross, tax and net of the two parts sum exactly to the
 	quantized whole line (no sub-shilling / sub-minor-unit remainders)."""
-	whole = cut_figure(line, line["figure"])
+	whole = (line["base"], line["tax"]) if line.get("tax_as_posted") else cut_figure(line, line["figure"])
 	part = cut_figure(line, part_figure)
+	if line.get("tax_as_posted") and line["priced_with_tax"]:
+		gross = part[0] + part[1]
+		tax = max(gross - whole[0], min(part[1], whole[1]))
+		part = (gross - tax, tax)
 	if _figure(line, part) >= line["figure"]:
 		return whole, (Decimal(0), Decimal(0))
 	if _figure(line, part) <= 0:
@@ -2478,6 +2501,7 @@ def void_charge(folio_name: str, charge_row: str, reason: str = "", *, correctio
 		"reversal_of": row.name,
 		"void_reason": reason.strip(),
 		"voided_by": frappe.session.user,
+		**{field: row.get(field) for field in SHARE_CHARGE_FIELDS},
 		**(correction or {}),
 	})
 	_recalculate(folio)
@@ -2541,6 +2565,7 @@ def part_settle(folio_name: str) -> dict:
 		"folio_type": folio.folio_type,
 		"status": "Open",
 		"opened_on": now_datetime(),
+		"share_prearrival": folio.get("share_prearrival"),
 		"group_booking": folio.get("group_booking"),
 		# the same window and payee go on billing
 		"window_no": folio.get("window_no"),
@@ -2883,7 +2908,7 @@ def run_night_audit(property: str, business_date: str | None = None,
 			"check_in_date": ("<=", business_date),
 			"check_out_date": (">", business_date),
 		},
-		fields=["name"], for_update=True, ignore_permissions=True,
+		fields=["name"], order_by="name asc", for_update=True, ignore_permissions=True,
 	).run(as_dict=True)
 	for row in in_house:
 		res = frappe.get_doc("Reservation", row.name)
