@@ -181,6 +181,11 @@ if frappe is not None:
 				rates_include_tax=0,
 				require_cashier_pin=0,
 			)
+			tenders = patch("kamra.localization.tender_modes", side_effect=lambda prop: [
+				{"mode": "Cash", "currencies": [frappe.db.get_value("Property", prop, "currency")]},
+			])
+			tenders.start()
+			self.addCleanup(tenders.stop)
 			settings.clear_cache(prop_name)
 			rt = make_room_type(prop_name, "DLX", base_price=200, adults_capacity=4)
 			room = make_room(prop_name, rt, room_no)
@@ -361,14 +366,14 @@ if frappe is not None:
 			_grant_property(clerk_other, PROP_OTHER)
 			prev_user = frappe.session.user
 			try:
-				frappe.set_user(clerk_other)
+				frappe.set_user(clerk_other)  # nosemgrep: frappe-setuser
 				with self.assertRaises(frappe.PermissionError):
 					payment_transfers.transfer_folio_payment(
 						from_folio=w1_ug, payment_row=pay_ug, to_folio=w2_ug,
 						reason="Cross property attempt", amount=5000,
 					)
 			finally:
-				frappe.set_user(prev_user)
+				frappe.set_user(prev_user)  # nosemgrep: frappe-setuser
 
 			# Cashier PIN enforcement when property requires PIN
 			clerk_ug = ensure_user("p18_ug_clerk@example.test", ["Front Desk"])
@@ -377,7 +382,7 @@ if frappe is not None:
 			frappe.db.set_value("Property", PROP_UGX, "require_cashier_pin", 1)
 			frappe.clear_document_cache("Property", PROP_UGX)
 			try:
-				frappe.set_user(clerk_ug)
+				frappe.set_user(clerk_ug)  # nosemgrep: frappe-setuser
 				with self.assertRaises(frappe.ValidationError):
 					payment_transfers.transfer_folio_payment(
 						from_folio=w1_ug, payment_row=pay_ug, to_folio=w2_ug,
@@ -389,7 +394,7 @@ if frappe is not None:
 				)
 				self.assertTrue(pin_ok.get("ok"))
 			finally:
-				frappe.set_user(prev_user)
+				frappe.set_user(prev_user)  # nosemgrep: frappe-setuser
 
 		def test_folio_windows_overview_and_update_window_metadata(self):
 			from kamra import payment_transfers
@@ -453,17 +458,17 @@ if frappe is not None:
 			_grant_property(fd, PROP_USD)
 			prev_user = frappe.session.user
 			try:
-				frappe.set_user(fd)
+				frappe.set_user(fd)  # nosemgrep: frappe-setuser
 				with self.assertRaises(frappe.PermissionError):
 					payment_transfers.credit_and_rebill(folio=w1, reason="Not allowed", mode="partial", amount=20.00)
 			finally:
-				frappe.set_user(prev_user)
+				frappe.set_user(prev_user)  # nosemgrep: frappe-setuser
 
 			# Finance user executes partial credit note
 			fin = ensure_user("p18_fin_credit@example.test", ["Finance"])
 			_grant_property(fin, PROP_USD)
 			try:
-				frappe.set_user(fin)
+				frappe.set_user(fin)  # nosemgrep: frappe-setuser
 				partial = payment_transfers.credit_and_rebill(
 					folio=w1, reason="Partial service adjustment", mode="partial", amount=25.50,
 				)
@@ -477,4 +482,4 @@ if frappe is not None:
 				self.assertEqual(full["mode"], "full")
 				self.assertTrue(full.get("cancelled"))
 			finally:
-				frappe.set_user(prev_user)
+				frappe.set_user(prev_user)  # nosemgrep: frappe-setuser

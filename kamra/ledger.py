@@ -2550,8 +2550,19 @@ def folio_history(property: str, query: str | None = None,
 		for pay in frappe.get_all("Folio Payment", filters={"parenttype": "Folio", "parent": ["in", [r.name for r in rows]],
 			"fx_amount": ["!=", 0]}, fields=["parent", "currency", "fx_amount", "exchange_rate", "exchange_rate_date"], order_by="idx"):
 			by_folio.setdefault(pay.parent, []).append(pay)
-	# Attach reprint counts
+	if rows:
+		from kamra.localization import pack_for
+
+		prop = frappe.get_cached_doc("Property", property)
+		loc = pack_for(property).locale(prop)
+		money = {
+			"currency": loc.get("currency") or home_currency(property),
+			"currency_symbol": loc.get("currency_symbol"),
+			"locale": loc.get("locale"),
+			"decimals": _currency_places(property),
+		}
 	for r in rows:
+		r["money"] = money
 		r["fx_payments"] = by_folio.get(r.name, [])
 		r["reprints"] = frappe.db.count("Folio Reprint", {"folio": r.name})
 	return {"folios": rows}

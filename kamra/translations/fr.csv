@@ -1019,7 +1019,6 @@ Input Tax,Taxe déductible
 Input Tax Credit,Crédit de taxe sur intrants
 Inspect Duration (minutes),Durée d'inspection (minutes)
 Instruction,Instruction
-Instruction must be for one of: {0}.,L'instruction doit concerner l'un des éléments suivants : {0}.
 "Instruction {0} already routes some of these charges on some of these days. Only one instruction may cover a charge on a date: change its dates or charges, or disable it.","L'instruction {0} route déjà certains de ces frais sur certains de ces jours. Une seule instruction peut couvrir un frais à une date donnée : modifiez ses dates ou ses frais, ou désactivez-la."
 Instructions,Instructions
 Interested in,Intéressé par
@@ -2087,7 +2086,6 @@ That file didn't upload correctly. Please try again.,Le téléversement du fichi
 That file is no longer stored.,Ce fichier n'est plus stocké.
 That guest is not staying in this room.,Ce client ne séjourne pas dans cette chambre.
 That guest profile was not found.,Cette fiche client est introuvable.
-That instruction is not on this stay.,Cette instruction ne figure pas sur ce séjour.
 That is not a valid URL.,Cette URL n'est pas valide.
 That is the last item on the bill. Cancel the bill instead.,C'est le dernier article de la note. Annulez plutôt la note.
 That is the same stay. Use to_folio.,Il s'agit du même séjour. Utilisez to_folio.
@@ -2187,7 +2185,6 @@ The group's bill must be at the same property.,La note du groupe doit appartenir
 "The guest checked in online. Review what they sent, then confirm.",Le client s'est pré-enregistré en ligne. Vérifiez les informations transmises puis confirmez.
 The guest folio is already closed.,Le folio client est déjà clôturé.
 The guest folio is closed - withhold before closing it.,Le folio client est clôturé — effectuez la retenue avant de le clôturer.
-The guest folio only has {0} in credit. Settle the bill or withhold against it before refunding the deposit.,Le folio client ne dispose que de {0} en crédit. Soldez la note ou imputez la retenue avant de rembourser la caution.
 The guest has no open folio to take these charges.,Le client n'a aucun folio ouvert pour recevoir ces frais.
 The guest is already in house. Use Room move to change rooms.,Le client est déjà enregistré. Utilisez Changement de chambre pour déplacer la chambre.
 "The guest is still in house, so their bill stays open for tonight's charges. To invoice what is paid so far, use Settle & continue stay.","Le client est encore en séjour, sa note reste donc ouverte pour les frais de ce soir. Pour facturer ce qui a déjà été payé, utilisez Régler et poursuivre le séjour."
@@ -2230,7 +2227,6 @@ The remaining nights could not be posted.,Les nuits restantes n'ont pas pu être
 The rooms kept for this group are not free on those dates. {0},Les chambres réservées pour ce groupe ne sont pas libres à ces dates. {0}
 The rounding step cannot be negative.,Le pas d'arrondi ne peut pas être négatif.
 "The same item, customer and date appear twice.","Le même article, client et date apparaissent deux fois."
-The security deposit of {0}{1} still held counts toward the bill; check-out records it as applied.,La caution de {0}{1} encore détenue vient en déduction de la note ; le départ l'enregistre comme imputée.
 The security deposit was applied to the bill at checkout and stays applied. Take a new deposit if the guest needs one.,La caution a été imputée sur la note au départ et reste imputée. Encaissez une nouvelle caution si le client en a besoin.
 The service needs a name.,Le service doit avoir un nom.
 The start date is after the end date.,La date de début est postérieure à la date de fin.
@@ -2339,7 +2335,6 @@ This stay bills to no company. Set one with change_stay_company first.,Ce séjou
 This stay is not leaving before its booked date.,Ce séjour ne part pas avant sa date réservée.
 "This stay is not part of a group, so it has no group master.",Ce séjour ne fait pas partie d'un groupe et ne dispose donc pas de folio principal.
 This stay is priced by hand; its rates are not re-quoted.,Ce séjour est tarifé manuellement ; ses tarifs ne sont pas rechiffrés.
-This stay is {0} - no new instructions.,Ce séjour est {0} — aucune nouvelle instruction.
 This stay is {0} - no new traces.,Ce séjour est {0} — aucune nouvelle trace.
 "This stay is {0}, so there is nothing to check out.","Ce séjour est {0}, il n'y a donc aucun départ à enregistrer."
 This stay is {0}; its company can't change now.,Ce séjour est {0} ; sa société ne peut plus changer.
@@ -2527,7 +2522,6 @@ Wish farewell and return the remaining deposit of {0}.,Saluez le client et resti
 Withheld Amount,Montant retenu
 Withholding a deposit needs a reason.,Retenir une caution nécessite un motif.
 "Workable, though under the {0}% a banquet normally holds.","Réalisable, bien qu'inférieur aux {0}% habituellement attendus sur un banquet."
-Write the instruction.,Saisissez l'instruction.
 Write the note first.,Saisissez d'abord la note.
 Write the trace instruction.,Saisissez la consigne de trace.
 Wrong payment mode pressed,Mauvais mode de paiement saisi

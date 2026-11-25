@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { Trash2, Pencil } from "lucide-react"
 import { call } from "../lib/api"
 import { useT, t as translate } from "../lib/i18n"
-import { cur, fmtAmount, moneyDigits, moneyStep } from "../lib/money"
+import { fmtMoney, type MoneyContext, moneyDigits, moneyStep } from "../lib/money"
 import { serverError } from "../lib/resource"
 import { Badge } from "./ui/badge"
 import { Button } from "./ui/button"
@@ -56,19 +56,19 @@ interface InHouseOption {
 }
 
 const WEEKDAYS = [
-  { key: "monday", short: "M", label: "Monday" },
-  { key: "tuesday", short: "T", label: "Tuesday" },
-  { key: "wednesday", short: "W", label: "Wednesday" },
-  { key: "thursday", short: "T", label: "Thursday" },
-  { key: "friday", short: "F", label: "Friday" },
-  { key: "saturday", short: "S", label: "Saturday" },
-  { key: "sunday", short: "S", label: "Sunday" },
+  { key: "monday", label: "Monday" },
+  { key: "tuesday", label: "Tuesday" },
+  { key: "wednesday", label: "Wednesday" },
+  { key: "thursday", label: "Thursday" },
+  { key: "friday", label: "Friday" },
+  { key: "saturday", label: "Saturday" },
+  { key: "sunday", label: "Sunday" },
 ] as const
 
 type WeekdayKey = (typeof WEEKDAYS)[number]["key"]
 
 const inputCls =
-  "w-full rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm " +
+  "min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm " +
   "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
 
 const DEFAULT_DAYS: Record<WeekdayKey, boolean> = {
@@ -86,6 +86,7 @@ export default function RoutingInstructionDrawer({
   onClose,
   property,
   currency,
+  money,
   reservation,
   groupBooking,
   onChanged,
@@ -94,11 +95,14 @@ export default function RoutingInstructionDrawer({
   onClose: () => void
   property: string
   currency: string
+  money?: MoneyContext
   reservation: string | null
   groupBooking: string | null
   onChanged: () => void
 }) {
-  const { t } = useT()
+  const { t, lang } = useT()
+  const moneyContext = money ?? { currency }
+  const weekday = new Intl.DateTimeFormat(lang, { weekday: "narrow", timeZone: "UTC" })
   const [rules, setRules] = useState<RoutingInstructionRow[]>([])
   const [codes, setCodes] = useState<TransactionCodeOption[]>([])
   const [rooms, setRooms] = useState<InHouseOption[]>([])
@@ -112,6 +116,7 @@ export default function RoutingInstructionDrawer({
   const [targetWindow, setTargetWindow] = useState(2)
   const [targetReservation, setTargetReservation] = useState("")
   const [allCodes, setAllCodes] = useState(false)
+  const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set())
   const [selectedCodes, setSelectedCodes] = useState<Set<string>>(new Set())
   const [codeQuery, setCodeQuery] = useState("")
   const [fromDate, setFromDate] = useState("")
@@ -128,6 +133,7 @@ export default function RoutingInstructionDrawer({
     setTargetReservation("")
     setAllCodes(false)
     setSelectedCodes(new Set())
+    setSelectedTypes(new Set())
     setCodeQuery("")
     setFromDate("")
     setToDate("")
@@ -197,6 +203,7 @@ export default function RoutingInstructionDrawer({
           .filter(Boolean),
       ),
     )
+    setSelectedTypes(new Set((r.codes || []).flatMap((c) => !c.transaction_code && c.charge_type ? [c.charge_type] : [])))
     setFromDate(r.from_date || "")
     setToDate(r.to_date || "")
     setDays({
@@ -225,7 +232,10 @@ export default function RoutingInstructionDrawer({
         target_window: targetWindow,
         target_reservation: targetType === "Room" ? targetReservation || undefined : undefined,
         all_codes: allCodes ? 1 : 0,
-        codes: allCodes ? [] : [...selectedCodes].map((code) => ({ transaction_code: code })),
+        codes: allCodes ? [] : [
+          ...[...selectedCodes].map((transaction_code) => ({ transaction_code })),
+          ...[...selectedTypes].map((charge_type) => ({ charge_type })),
+        ],
         from_date: fromDate || null,
         to_date: toDate || null,
         monday: days.monday ? 1 : 0,
@@ -266,7 +276,7 @@ export default function RoutingInstructionDrawer({
   }
 
   const canSave =
-    (allCodes || selectedCodes.size > 0) &&
+    (allCodes || selectedCodes.size > 0 || selectedTypes.size > 0) &&
     Object.values(days).some(Boolean) &&
     (targetType !== "Room" || Boolean(targetReservation)) &&
     (allCodes || limitType === "None" || Number(limitValue) > 0)
@@ -338,14 +348,14 @@ export default function RoutingInstructionDrawer({
                                 className="rounded bg-white px-2 py-0.5 text-zinc-700 ring-1 ring-zinc-200"
                               >
                                 {c.transaction_code
-                                  ? `${c.transaction_code}${c.description ? ` · ${c.description}` : ""}`
+                                  ? `${c.transaction_code}${c.description ? ` · ${translate(c.description)}` : ""}`
                                   : translate(c.charge_type || "")}
                               </span>
                             ))
                           )}
                         </div>
                         <div className="flex flex-wrap items-center gap-1 pt-0.5">
-                          {WEEKDAYS.map((d) => (
+                          {WEEKDAYS.map((d, index) => (
                             <span
                               key={d.key}
                               className={
@@ -355,7 +365,7 @@ export default function RoutingInstructionDrawer({
                                   : "bg-zinc-100 text-zinc-400")
                               }
                             >
-                              {d.short}
+                              {weekday.format(Date.UTC(2024, 0, 1 + index))}
                             </span>
                           ))}
                         </div>
@@ -364,7 +374,7 @@ export default function RoutingInstructionDrawer({
                         <Button
                           type="button"
                           variant="ghost"
-                          className="px-2 py-1"
+                          className="min-h-11 min-w-11 px-2 py-1"
                           disabled={busy}
                           aria-label={t("Edit routing rule")}
                           onClick={() => startEdit(r)}
@@ -374,7 +384,7 @@ export default function RoutingInstructionDrawer({
                         <Button
                           type="button"
                           variant="ghost"
-                          className="px-2 py-1"
+                          className="min-h-11 min-w-11 px-2 py-1"
                           disabled={busy}
                           data-testid={`delete-routing-${r.name}`}
                           aria-label={t("Remove routing rule")}
@@ -385,6 +395,12 @@ export default function RoutingInstructionDrawer({
                       </div>
                     </div>
 
+                    {r.limit_type !== "Amount" && (usedVal > 0 || r.limit_type === "None") && (
+                      <div className="mt-2.5 text-xs text-zinc-600">
+                        {t("Used")} <span dir="ltr" className="inline-block tabular-nums">{fmtMoney(usedVal, moneyContext)}</span>
+                        {r.limit_type === "None" && <> · {t("No limit")}</>}
+                      </div>
+                    )}
                     {r.limit_type !== "None" && limitVal > 0 && (
                       <div className="mt-2.5 space-y-1">
                         <div className="flex items-center justify-between text-xs text-zinc-600">
@@ -392,8 +408,8 @@ export default function RoutingInstructionDrawer({
                             {r.limit_type === "Percent"
                               ? t("Limit: {pct}%", { pct: limitVal })
                               : t("Used {used} / {limit}", {
-                                  used: `${cur()}${fmtAmount(usedVal, currency)}`,
-                                  limit: `${cur()}${fmtAmount(limitVal, currency)}`,
+                                  used: fmtMoney(usedVal, moneyContext),
+                                  limit: fmtMoney(limitVal, moneyContext),
                                 })}
                             {r.per_day ? ` · ${t("Per Day")}` : ""}
                           </span>
@@ -427,7 +443,7 @@ export default function RoutingInstructionDrawer({
               {editingName ? t("Edit routing rule") : t("New routing instruction")}
             </h3>
             {editingName && (
-              <Button type="button" variant="ghost" onClick={resetForm}>
+              <Button className="min-h-11 sm:min-h-0" type="button" variant="ghost" onClick={resetForm}>
                 {t("New rule")}
               </Button>
             )}
@@ -512,12 +528,27 @@ export default function RoutingInstructionDrawer({
                   onChange={(e) => setCodeQuery(e.target.value)}
                 />
                 <div className="max-h-44 space-y-1 overflow-y-auto pe-1">
+                  {[...new Set([...selectedTypes, ...codes.flatMap((code) => code.charge_type ? [code.charge_type] : [])])].sort().map((chargeType) => (
+                    <label key={chargeType} className="flex min-h-11 cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-zinc-50">
+                      <input
+                        type="checkbox"
+                        checked={selectedTypes.has(chargeType)}
+                        onChange={(event) => {
+                          const next = new Set(selectedTypes)
+                          if (event.target.checked) next.add(chargeType)
+                          else next.delete(chargeType)
+                          setSelectedTypes(next)
+                        }}
+                      />
+                      {translate(chargeType)}
+                    </label>
+                  ))}
                   {filteredCodes.map((tc) => {
                     const checked = selectedCodes.has(tc.code)
                     return (
                       <label
                         key={tc.code}
-                        className="flex min-h-9 cursor-pointer items-center justify-between gap-2 rounded-md px-2 py-1 text-xs hover:bg-zinc-50"
+                        className="flex min-h-11 cursor-pointer items-center justify-between gap-2 rounded-md px-2 py-1 text-xs hover:bg-zinc-50"
                       >
                         <span className="flex items-center gap-2">
                           <input
@@ -575,7 +606,7 @@ export default function RoutingInstructionDrawer({
           <div className="space-y-1.5">
             <span className="text-xs text-zinc-600">{t("Active weekdays")}</span>
             <div className="flex flex-wrap gap-1.5">
-              {WEEKDAYS.map((d) => {
+              {WEEKDAYS.map((d, index) => {
                 const on = days[d.key]
                 return (
                   <button
@@ -591,7 +622,7 @@ export default function RoutingInstructionDrawer({
                         : "border-zinc-200 bg-white text-zinc-500 hover:border-zinc-300")
                     }
                   >
-                    {d.short}
+                    {weekday.format(Date.UTC(2024, 0, 1 + index))}
                   </button>
                 )
               })}
@@ -621,8 +652,8 @@ export default function RoutingInstructionDrawer({
                     type="number"
                     min="0"
                     max={limitType === "Percent" ? 100 : undefined}
-                    step={limitType === "Percent" ? "0.01" : moneyStep(currency)}
-                    inputMode={limitType === "Amount" && moneyDigits(currency) === 0 ? "numeric" : "decimal"}
+                    step={limitType === "Percent" ? "0.01" : moneyStep(currency, money?.decimals ?? undefined)}
+                    inputMode={limitType === "Amount" && moneyDigits(currency, money?.decimals ?? undefined) === 0 ? "numeric" : "decimal"}
                     aria-label={t("Limit value")}
                     className={inputCls}
                     value={limitValue}
@@ -646,10 +677,10 @@ export default function RoutingInstructionDrawer({
           )}
 
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={onClose}>
+            <Button className="min-h-11 sm:min-h-0" type="button" variant="outline" onClick={onClose}>
               {t("Close")}
             </Button>
-            <Button
+            <Button className="min-h-11 sm:min-h-0"
               type="button"
               data-testid="save-routing-btn"
               disabled={busy || !canSave}

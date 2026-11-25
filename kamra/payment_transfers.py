@@ -641,10 +641,9 @@ def credit_and_rebill(
 ) -> dict:
 	"""Unified Credit & Rebill entry point for closed/invoiced folios (K3).
 
-	- mode="full": delegates to kamra.api.cancel_invoice (on bridged sites this
-	  drafts full CN 102 + replacement rebill Sales Invoice in bridge@30).
-	- mode="partial": delegates to kamra.ledger.issue_credit_note (on bridged
-	  sites this drafts partial CN 104 in bridge@30).
+	Compatibility wrapper for unbridged callers. Bridge HTTP clients must
+	call kamra.api.cancel_invoice for full corrections or
+	kamra.ledger.issue_credit_note for partial credits directly.
 	"""
 	assert_record_access("Folio", folio)
 	prop = frappe.db.get_value("Folio", folio, "property")
@@ -661,8 +660,6 @@ def credit_and_rebill(
 		frappe.throw(_("A reason is required."))
 	if len(reason_text) > 500:
 		frappe.throw(_("Reason must be at most 500 characters."))
-
-	require_cashier_pin(prop, pin)
 
 	if mode_clean == "full":
 		from kamra.api import cancel_invoice

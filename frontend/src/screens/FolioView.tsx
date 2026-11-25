@@ -3,7 +3,6 @@ import TenderPicker, { TenderInput, resolveTender, tenderAmount, tenderModes, te
 import { currencyText, formatFxRate, ReferenceCurrencyNote, TariffNight } from "../components/ContractTariff"
 import RowCorrection from "../components/RowCorrection"
 import { FiscalDocument, type Fiscal } from "../components/FiscalDocument"
-import InvoiceCorrectionDialog from "../components/InvoiceCorrectionDialog"
 import FolioWindowTabs, { type FolioWindowTabItem } from "../components/FolioWindowTabs"
 import RoutingInstructionDrawer from "../components/RoutingInstructionDrawer"
 import ReceiptTransferDialog from "../components/ReceiptTransferDialog"
@@ -23,6 +22,8 @@ import ChangeCompany from "../components/ChangeCompany"
 import {
   cur,
   fmtAmount,
+  fmtMoney,
+  type MoneyContext,
   loadLocale,
   locale,
   moneyDigits,
@@ -114,6 +115,7 @@ interface InvoiceData {
   property: {
     currency: string
     currency_symbol?: string
+    decimals?: number
     locale?: string
     name: string
     legal_name: string | null
@@ -337,7 +339,7 @@ function ChargeActions({ folio, row, correct, onMove, act }: {
       {onMove && !correcting && (
         <button
           aria-label={t("Move or split this charge")}
-          className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2 py-1 text-xs text-zinc-500 hover:border-brand-400 hover:text-zinc-800"
+          className="inline-flex min-h-11 items-center gap-1 rounded-md border border-zinc-200 px-2 py-1 text-xs text-zinc-500 hover:border-brand-400 hover:text-zinc-800"
           onClick={onMove}
         >
           <ArrowRightLeft className="size-3" aria-hidden />
@@ -406,12 +408,9 @@ export default function FolioView() {
     grand_total: number; balance: number
   } | null>(null)
   const quote = useSettlementQuote(folioProperty, foreign && paymentReady ? tender.currency : "", Number(payment.amount))
-  const [showCancel, setShowCancel] = useState(false)
-  const [showCredit, setShowCredit] = useState(false)
   const [showCreditRebill, setShowCreditRebill] = useState(false)
   const [showRouting, setShowRouting] = useState(false)
   const [transferPayment, setTransferPayment] = useState<InvoiceData["folio"]["payments"][number] | null>(null)
-  const [cancelReason, setCancelReason] = useState("")
   const [allowance, setAllowance] = useState({ amount: "", reason: "", gst_rate: "0", reason_code: "" })
   const [adjustCodes, setAdjustCodes] = useState<{ name: string; description: string }[]>([])
   const [allowanceNote, setAllowanceNote] = useState<string | null>(null)
@@ -597,7 +596,6 @@ export default function FolioView() {
 
   const { folio, property, stay, gst_summary } = data
   const doc = data.document
-  const fmt = (n: unknown) => fmtAmount(n ?? 0, home)
   const docCurrency = property.currency || loc.currency
   const docSymbol =
     property.currency_symbol != null
@@ -606,7 +604,11 @@ export default function FolioView() {
         ? `${property.currency} `
         : cur()
   const docLocale = property.locale || loc.locale
-  const docTaxLabel = property.tax_label || taxLabel()
+  const money: MoneyContext = { currency: docCurrency, currency_symbol: docSymbol, locale: docLocale, decimals: property.decimals }
+  const fmt = (n: unknown) => fmtAmount(n ?? 0, docCurrency, money.decimals, docLocale)
+  const amount = (n: unknown) => <span dir="ltr" className="inline-block tabular-nums">{fmtMoney(n, money)}</span>
+  const taxName = property.tax_label || taxLabel()
+  const docTaxLabel = t(taxName.toUpperCase() === "TAX" ? "Tax" : taxName)
   const lines = data.lines ?? folio.charges.map((c) => ({ ...c, row: c.name, qty: c.qty ?? 1, rate: c.rate ?? c.amount, service_code: null }))
   const lineByRow = new Map(lines.map((l) => [l.row, l]))
   const taxRows = data.tax_summary ?? []
@@ -671,14 +673,14 @@ export default function FolioView() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2 print:hidden">
         <Link
           to="/billing"
-          className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-800"
+          className="inline-flex min-h-11 items-center gap-1 text-sm text-zinc-500 hover:text-zinc-800 sm:min-h-0"
         >
           <ArrowLeft className="size-4 rtl:rotate-180" aria-hidden />
           {t("Billing")}
         </Link>
         <div className="flex max-w-full flex-wrap gap-2">
           {open && folio.balance > 0 && loc.integrations.payment_gateways.length > 0 && (
-            <Button
+            <Button className="min-h-11 sm:min-h-0"
               variant="outline"
               disabled={busy}
               onClick={() =>
@@ -702,7 +704,7 @@ export default function FolioView() {
             </Button>
           )}
           {open && siblings.find((s) => s.folio_type === "Guest" && s.status === "Open")?.name === folio.name && (
-            <Button
+            <Button className="min-h-11 sm:min-h-0"
               variant="outline"
               disabled={busy}
               title={t("A separate bill for each guest sharing the room, in their own name")}
@@ -717,7 +719,7 @@ export default function FolioView() {
             </Button>
           )}
           {open && data.stay.reservation && (
-            <Button variant="outline" disabled={busy}
+            <Button className="min-h-11 sm:min-h-0" variant="outline" disabled={busy}
               onClick={() => setPanel(panel === "company" ? null : "company")}>
               {t("Change company")}
             </Button>
@@ -725,7 +727,7 @@ export default function FolioView() {
           {open &&
             data.stay.group_booking &&
             !siblings.some((s) => s.folio_type === "Group") && (
-              <Button
+              <Button className="min-h-11 sm:min-h-0"
                 variant="outline"
                 disabled={busy}
                 title={t("One consolidated company bill across every room of the group")}
@@ -740,7 +742,7 @@ export default function FolioView() {
                 {t("Group folio")}
               </Button>
             )}
-          <Button variant="outline" disabled={busy} onClick={() =>
+          <Button className="min-h-11 sm:min-h-0" variant="outline" disabled={busy} onClick={() =>
               act(async () => {
                 await call("kamra.ledger.generate_proforma", { folio: folio.name })
                 window.print()
@@ -749,20 +751,16 @@ export default function FolioView() {
             {t("Proforma")}
           </Button>
           {open && stay?.reservation ? (
-            <Button variant="outline" disabled={busy} id={ADVANCE_BILL_ACTION}
+            <Button className="min-h-11 sm:min-h-0" variant="outline" disabled={busy} id={ADVANCE_BILL_ACTION}
               title={t("Post future room & tax ahead of night audit")}
               onClick={advanceBill}>
               {t("Advance bill")}
             </Button>
           ) : null}
-          {!open && invoiced && canCreditInvoice
-            && (!folio.sales_invoice || data.bridge_credit_and_rebill !== false) ? (
-            <Button variant="outline" disabled={busy} onClick={() => setShowCredit(true)}>
-              {t("Credit note")}
-            </Button>
-          ) : null}
-          {!open && invoiced && canCreditInvoice && folio.folio_type !== "Account" ? (
-            <Button
+          {!open && invoiced && (folio.sales_invoice
+            ? canCreditInvoice && data.bridge_credit_and_rebill !== false
+            : canCreditInvoice || (folio.folio_type !== "Account" && roles.includes("Front Desk"))) ? (
+            <Button className="min-h-11 sm:min-h-0"
               variant="outline"
               disabled={busy}
               data-testid="open-credit-rebill-btn"
@@ -771,19 +769,36 @@ export default function FolioView() {
               {t("Credit & Rebill")}
             </Button>
           ) : null}
-          <Button variant="outline" onClick={() => {
-            void call("kamra.ledger.record_folio_reprint", {
-              folio: folio.name,
-              document: isFinal ? "Guest Folio" : "Proforma",
-            }).finally(() => window.print())
-          }}>
-            <Printer className="size-4" aria-hidden />
-            {isFinal ? t("Print invoice") : t("Print folio")}
-          </Button>
+          {data.fiscal ? (
+            // the tax invoice is the ERP fiscal document: reprint it (logged
+            // with its number) only once it is final
+            <Button className="min-h-11 sm:min-h-0" variant="outline" disabled={busy} onClick={() => {
+              if (!isFinal) return window.print()
+              void call<InvoiceData>("kamra.api.reprint_fiscal_folio", { folio: folio.name })
+                .then((d) => setData(d))
+                .then(() => window.setTimeout(() => window.print(), 0))
+                .catch((e) => setError(serverError(e)))
+            }}>
+              <Printer className="size-4" aria-hidden />
+              {isFinal
+                ? (data.fiscal.state === "fiscalised" ? t("Reprint fiscal invoice") : t("Reprint invoice"))
+                : t("Print folio")}
+            </Button>
+          ) : (
+            <Button className="min-h-11 sm:min-h-0" variant="outline" onClick={() => {
+              void call("kamra.ledger.record_folio_reprint", {
+                folio: folio.name,
+                document: isFinal ? "Guest Folio" : "Proforma",
+              }).finally(() => window.print())
+            }}>
+              <Printer className="size-4" aria-hidden />
+              {isFinal ? t("Print invoice") : t("Print folio")}
+            </Button>
+          )}
           {open &&
             folio.balance === 0 &&
             folio.charges.length > 0 && (
-              <Button
+              <Button className="min-h-11 sm:min-h-0"
                 variant="outline"
                 disabled={busy}
                 title={translate("Interim invoice: freeze this paid folio and keep the stay running on a fresh one - for long stays settled every few days")}
@@ -800,18 +815,8 @@ export default function FolioView() {
                 {t("Settle & continue stay")}
               </Button>
             )}
-          {!open && invoiced && folio.folio_type !== "Account"
-            && (!folio.sales_invoice || (canCreditInvoice && data.bridge_credit_and_rebill !== false)) && (
-            <Button
-              variant="outline"
-              disabled={busy}
-              onClick={() => setShowCancel((s) => !s)}
-            >
-              {t("Cancel invoice")}
-            </Button>
-          )}
           {open && (
-            <Button
+            <Button className="min-h-11 sm:min-h-0"
               disabled={busy}
               onClick={() =>
                 act(() => call("kamra.api.close_folio", withPin({ folio: folio.name })))
@@ -826,8 +831,10 @@ export default function FolioView() {
       {windowTabs.length > 0 && (
         <FolioWindowTabs
           currentFolio={folio.name}
+          property={folioProperty}
           windows={windowTabs}
           currency={home}
+          money={money}
           reservation={stay.reservation}
           groupBooking={groupBookingId}
           windowCap={windowOverview?.window_cap ?? 8}
@@ -851,6 +858,7 @@ export default function FolioView() {
         onClose={() => setShowRouting(false)}
         property={folioProperty}
         currency={home}
+        money={money}
         reservation={stay.reservation}
         groupBooking={groupBookingId}
         onChanged={load}
@@ -860,6 +868,7 @@ export default function FolioView() {
         <ReceiptTransferDialog
           folio={folio.name}
           currency={home}
+          money={money}
           payment={transferPayment}
           maxAmount={remainingTransferable(transferPayment)}
           siblings={windowTabs}
@@ -872,17 +881,14 @@ export default function FolioView() {
         />
       )}
 
-      {showCredit && !open && invoiced && (
-        <InvoiceCorrectionDialog folio={folio} credited={data.credited ?? 0}
-          currency={docCurrency} currencySymbol={docSymbol} numberLocale={docLocale}
-          onClose={() => setShowCredit(false)}
-          onDone={() => { setShowCredit(false); load() }} />
-      )}
-
       {showCreditRebill && !open && invoiced && (
         <CreditRebillDialog
           folio={folio}
           currency={home}
+          money={money}
+          fiscalScheme={data.fiscal?.scheme || (data.fiscal?.efris_enrolled || data.fiscal?.state === "fiscalised" ? "efris" : null)}
+          allowFull={folio.folio_type !== "Account"}
+          allowPartial={canCreditInvoice}
           credited={data.credited ?? 0}
           onClose={() => setShowCreditRebill(false)}
           onDone={() => {
@@ -890,42 +896,6 @@ export default function FolioView() {
             load()
           }}
         />
-      )}
-
-      {showCancel && !open && (
-        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm print:hidden">
-          <span className="text-amber-800">
-            {folio.sales_invoice
-              ? t("Cancel {invoice}? The accounting system credits it and issues a new invoice; this bill is not reopened here.", {
-                  invoice: folio.invoice_number || folio.sales_invoice,
-                })
-              : t("Cancel {invoice}? The number goes on the cancelled register and the folio reopens for correction.", {
-                  invoice: folio.invoice_number ?? "",
-                })}
-          </span>
-          <input
-            className="min-w-56 flex-1 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-sm"
-            placeholder={t("Reason (required - goes on the record)")}
-            value={cancelReason}
-            onChange={(e) => setCancelReason(e.target.value)}
-          />
-          <Button
-            variant="outline"
-            disabled={busy || !cancelReason.trim()}
-            onClick={() =>
-              act(async () => {
-                await call("kamra.api.cancel_invoice", withPin({
-                  folio: folio.name,
-                  reason: cancelReason.trim(),
-                }))
-                setShowCancel(false)
-                setCancelReason("")
-              })
-            }
-          >
-            {t("Confirm cancel")}
-          </Button>
-        </div>
       )}
 
       {stay.reservation && (
@@ -945,7 +915,7 @@ export default function FolioView() {
                 : t("Cashier PIN required for money actions.")}
           </span>
           {!pinStatus.unlocked ? (
-            <Button
+            <Button className="min-h-11 sm:min-h-0"
               variant="outline"
               disabled={busy}
               onClick={() => void ensureUnlocked().catch((e) => setError(serverError(e)))}
@@ -999,7 +969,7 @@ export default function FolioView() {
                   {t("This bill keeps {pct}%.", { pct: (100 - total).toFixed(2) })}
                 </p>
                 <div className="flex gap-2">
-                  <Button variant="outline" disabled={busy || !rows.length || total >= 100}
+                  <Button className="min-h-11 sm:min-h-0" variant="outline" disabled={busy || !rows.length || total >= 100}
                     onClick={() =>
                       act(async () => {
                         await call(
@@ -1018,7 +988,7 @@ export default function FolioView() {
                     }>
                     {t("Share these charges")}
                   </Button>
-                  <Button variant="ghost" onClick={() => { setShares({}); setPanel(null) }}>{t("Cancel")}</Button>
+                  <Button className="min-h-11 sm:min-h-0" variant="ghost" onClick={() => { setShares({}); setPanel(null) }}>{t("Cancel")}</Button>
                 </div>
               </>
             )}
@@ -1146,10 +1116,7 @@ export default function FolioView() {
               )}
             </Fact>
             <Fact label={t("Stay")}>
-              {stay.check_in} → {stay.check_out} · {t("{n} night{s}", {
-                n: stay.nights,
-                s: stay.nights === 1 ? "" : "s",
-              })}
+              {stay.check_in} → {stay.check_out} · {stay.nights === 1 ? t("{n} night", { n: stay.nights }) : t("{n} nights", { n: stay.nights })}
             </Fact>
             <Fact label={t("Pax / plan")}>
               {stay.pax || stay.adults || "-"}
@@ -1325,7 +1292,7 @@ export default function FolioView() {
                           {t("{n} line{s} · {cur}{amount} selected", {
                             n: sel.length,
                             s: sel.length > 1 ? "s" : "",
-                            cur: cur(),
+                            cur: docSymbol,
                             amount: fmt(selTotal),
                           })}
                         </span>
@@ -1383,13 +1350,13 @@ export default function FolioView() {
                               <>
                                 <input
                                   className="w-24 rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs"
-                                  aria-label={t("Part to move (percent, or {cur} before {tax})", { cur: cur(), tax: taxLabel() })}
+                                  aria-label={t("Part to move (percent, or {cur} before {tax})", { cur: docSymbol, tax: docTaxLabel })}
                                   placeholder={t("30% or 1500")}
                                   value={partVal}
                                   onChange={(e) => setPartVal(e.target.value)}
                                 />
                                 <span className="text-zinc-400">
-                                  ({cur()} = {t("before {tax}", { tax: taxLabel() })})
+                                  ({docSymbol} = {t("before {tax}", { tax: docTaxLabel })})
                                 </span>
                               </>
                             )}
@@ -1409,8 +1376,8 @@ export default function FolioView() {
                       {partOk && one && (
                         <p className="mt-1.5 text-xs text-brand-700">
                           {t("Preview: Kept {kept} · Moved {moved}", {
-                            kept: `${cur()}${fmt(keptTotal)}`,
-                            moved: `${cur()}${fmt(movedTotal)}`,
+                            kept: `${docSymbol}${fmt(keptTotal)}`,
+                            moved: `${docSymbol}${fmt(movedTotal)}`,
                           })}
                         </p>
                       )}
@@ -1419,20 +1386,20 @@ export default function FolioView() {
                           {activeMode === "qty"
                             ? t("Enter a whole quantity from 1 to {max}.", { max: Math.max(1, Math.floor(rowQty) - 1) })
                             : t("Enter 1-99%, or a {cur} amount under the line's {cur}{amount} (before {tax}).", {
-                                cur: cur(),
+                                cur: docSymbol,
                                 amount: fmt(one!.amount),
-                                tax: taxLabel(),
+                                tax: docTaxLabel,
                               })}
                         </p>
                       )}
                       <div className="mt-2 flex flex-wrap items-center gap-1.5">
                         <span className="text-xs text-zinc-500">
-                          {t("Send {cur}{amount} to", { cur: cur(), amount: fmt(movedTotal) })}
+                          {t("Send {cur}{amount} to", { cur: docSymbol, amount: fmt(movedTotal) })}
                         </span>
                         {targets.map((s) => (
                           <button
                             key={s.name}
-                            className="rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs hover:border-brand-400 disabled:opacity-50"
+                            className="min-h-11 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs hover:border-brand-400 disabled:opacity-50"
                             disabled={busy || partBad}
                             onClick={() => moveTo(s.name)}
                           >
@@ -1451,19 +1418,21 @@ export default function FolioView() {
                                   : "ms-1.5 text-zinc-400"
                               }
                             >
-                              {t("owes {cur}{amount}", { cur: cur(), amount: fmt(s.balance) })}
+                              {s.balance < 0
+                                ? t("credit {amount}", { amount: `\u2066${fmtMoney(Math.abs(s.balance), money)}\u2069` })
+                                : t("owes {cur}{amount}", { cur: "", amount: `\u2066${fmtMoney(s.balance, money)}\u2069` })}
                             </span>
                           </button>
                         ))}
                         <button
-                          className="rounded-lg border border-dashed border-zinc-300 bg-white px-2.5 py-1.5 text-xs text-zinc-600 hover:border-brand-400 disabled:opacity-50"
+                          className="min-h-11 rounded-lg border border-dashed border-zinc-300 bg-white px-2.5 py-1.5 text-xs text-zinc-600 hover:border-brand-400 disabled:opacity-50"
                           disabled={busy || partBad}
                           onClick={() => moveToNew("Company")}
                         >
                           {t("+ New Company folio")}
                         </button>
                         <button
-                          className="rounded-lg border border-dashed border-zinc-300 bg-white px-2.5 py-1.5 text-xs text-zinc-600 hover:border-brand-400 disabled:opacity-50"
+                          className="min-h-11 rounded-lg border border-dashed border-zinc-300 bg-white px-2.5 py-1.5 text-xs text-zinc-600 hover:border-brand-400 disabled:opacity-50"
                           disabled={busy || partBad}
                           onClick={() => moveToNew("Extra")}
                         >
@@ -1523,10 +1492,10 @@ export default function FolioView() {
                           {doc?.service_code_label ?? t("SAC")}
                         </th>
                       )}
-                      <th className="py-2 pe-3 text-end">{t("Amount {cur}", { cur: cur() })}</th>
+                      <th className="py-2 pe-3 text-end">{t("Amount {cur}", { cur: docSymbol })}</th>
                       {showLineTax && <th className="py-2 pe-3 text-end">{docTaxLabel} %</th>}
-                      {showLineTax && <th className="py-2 pe-3 text-end">{docTaxLabel} {cur()}</th>}
-                      <th className="py-2 text-end">{t("Total {cur}", { cur: cur() })}</th>
+                      {showLineTax && <th className="py-2 pe-3 text-end">{docTaxLabel} {docSymbol}</th>}
+                      <th className="py-2 text-end">{t("Total {cur}", { cur: docSymbol })}</th>
                       {editable && (
                         <th className="py-2 ps-3 print:hidden" aria-label={t("Actions")} />
                       )}
@@ -1633,15 +1602,15 @@ export default function FolioView() {
                         </span>
                       </td>
                       <td className="py-1 text-end text-zinc-500">
-                        {cur()}{fmt(h.amount)}
+                        {amount(h.amount)}
                       </td>
                       {showLineTax && (
                         <td className="py-1 text-end text-zinc-400">
-                          + {cur()}{fmt(h.tax)} {docTaxLabel.toLowerCase()}
+                          + {amount(h.tax)} {docTaxLabel.toLowerCase()}
                         </td>
                       )}
                       <td className="py-1 text-end font-medium">
-                        {cur()}{fmt(h.total)}
+                        {amount(h.total)}
                       </td>
                     </tr>
                   ))}
@@ -1672,13 +1641,13 @@ export default function FolioView() {
                       <tr key={`${r.rate}-${idx}`}>
                         <td className="py-1.5 pe-3">{r.rate === 0 && Number(r.total_tax) !== 0 ? "—" : `${r.rate}%`}</td>
                         <td className="py-1.5 pe-3 text-end text-zinc-500">
-                          {t("taxable {cur}{amount}", { cur: cur(), amount: fmt(r.taxable) })}
+                          {t("taxable {cur}{amount}", { cur: docSymbol, amount: fmt(r.taxable) })}
                         </td>
                         <td className="py-1.5 text-end">
                           {r.parts
                             .map((x) => x.rate === 0
-                              ? `${x.label} ${cur()}${fmt(x.amount)}`
-                              : `${x.label} @ ${x.rate}% ${cur()}${fmt(x.amount)}`)
+                              ? `${x.label} ${docSymbol}${fmt(x.amount)}`
+                              : `${x.label} @ ${x.rate}% ${docSymbol}${fmt(x.amount)}`)
                             .join(" · ")}
                         </td>
                       </tr>
@@ -1689,19 +1658,19 @@ export default function FolioView() {
             </div> : <div />}
             <div className="space-y-1.5 text-sm sm:text-end">
               <p className="text-zinc-500">
-                {t("Charges")}: <span className="text-zinc-900">{cur()}{fmt(folio.charges_total)}</span>
+                {t("Charges")}: <span className="text-zinc-900">{amount(folio.charges_total)}</span>
               </p>
               {showLineTax && (
                 <p className="text-zinc-500">
-                  {docTaxLabel}: <span className="text-zinc-900">{cur()}{fmt(folio.tax_total)}</span>
+                  {docTaxLabel}: <span className="text-zinc-900">{amount(folio.tax_total)}</span>
                 </p>
               )}
               <p className="text-lg font-semibold">
-                {t("Grand total")}: {cur()}{fmt(folio.grand_total)}
+                {t("Grand total")}: {amount(folio.grand_total)}
               </p>
               {(data.credited ?? 0) > 0 && (
                 <p className="text-sm font-medium text-rose-600">
-                  {t("Credited")}: −{cur()}{fmt(data.credited)}
+                  {t("Credited")}: −{amount(data.credited)}
                 </p>
               )}
               {doc?.amount_in_words && (
@@ -1743,7 +1712,7 @@ export default function FolioView() {
                 </div>
               )}
               <p className="text-zinc-500">
-                {t("Paid")}: {cur()}{fmt(folio.payments_total)} ·{" "}
+                {t("Paid")}: {amount(folio.payments_total)} ·{" "}
                 {folio.balance < 0 ? t("Advance") : t("Balance")}:{" "}
                 <span
                   className={
@@ -1752,7 +1721,7 @@ export default function FolioView() {
                       : "font-medium text-emerald-600"
                   }
                 >
-                  {cur()}{fmt(Math.abs(folio.balance))}
+                  {amount(Math.abs(folio.balance))}
                 </span>
               </p>
             </div>
@@ -1808,13 +1777,13 @@ export default function FolioView() {
                       </span>
                       <div className="flex flex-wrap items-center gap-2">
                         <span className={Number(p.amount) < 0 ? "font-medium text-rose-600" : ""}>
-                          {property.currency} {fmtAmount(p.amount, property.currency)}
+                          <span dir="ltr" className="inline-block tabular-nums">{docCurrency} {fmt(p.amount)}</span>
                         </span>
                         {canTransferRow && (
                           <button
                             type="button"
                             data-testid={`transfer-payment-${p.name}`}
-                            className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2 py-1 text-xs text-zinc-600 hover:border-brand-400 hover:text-zinc-900 print:hidden"
+                            className="inline-flex min-h-11 items-center gap-1 rounded-md border border-zinc-200 px-2 py-1 text-xs text-zinc-600 hover:border-brand-400 hover:text-zinc-900 print:hidden"
                             onClick={() => setTransferPayment(p)}
                           >
                             <ArrowRightLeft className="size-3" aria-hidden />
@@ -1913,8 +1882,8 @@ export default function FolioView() {
                 className={`${inputCls} w-28`}
                 type="number"
                 step="any"
-                inputMode={moneyDigits(home) === 0 ? "numeric" : "decimal"}
-                placeholder={translate(`${cur()}`)}
+                inputMode={moneyDigits(docCurrency, money.decimals ?? undefined) === 0 ? "numeric" : "decimal"}
+                placeholder={translate(`${docSymbol}`)}
                 value={charge.amount}
                 onChange={(e) => setCharge({ ...charge, amount: e.target.value })}
               />
@@ -1923,7 +1892,7 @@ export default function FolioView() {
                   className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-sm text-zinc-600"
                   title={t("Food & beverage is taxed at the property's F&B rate.")}
                 >
-                  {t("{tax} {rate}%", { tax: taxLabel(), rate: fixedRate })}
+                  {t("{tax} {rate}%", { tax: docTaxLabel, rate: fixedRate })}
                   <span className="ms-1 text-xs text-zinc-400">{t("(F&B rate)")}</span>
                 </span>
               ) : (
@@ -1943,7 +1912,7 @@ export default function FolioView() {
                   ))}
                 </select>
               )}
-              <Button
+              <Button className="min-h-11 sm:min-h-0"
                 disabled={busy || !charge.amount}
                 onClick={() =>
                   act(() =>
@@ -1984,8 +1953,8 @@ export default function FolioView() {
                     className={`${inputCls} w-28`}
                     type="number"
                     step="any"
-                    inputMode={moneyDigits(home) === 0 ? "numeric" : "decimal"}
-                    placeholder={translate(`${cur()}`)}
+                    inputMode={moneyDigits(docCurrency, money.decimals ?? undefined) === 0 ? "numeric" : "decimal"}
+                    placeholder={translate(`${docSymbol}`)}
                     value={allowance.amount}
                     onChange={(e) =>
                       setAllowance({ ...allowance, amount: e.target.value })
@@ -2036,7 +2005,7 @@ export default function FolioView() {
                       placeholder={t("Your PIN")} aria-label={t("Your PIN")}
                     />
                   )}
-                  <Button
+                  <Button className="min-h-11 sm:min-h-0"
                     variant="outline"
                     disabled={busy || !allowance.amount || !(allowance.reason.trim() || allowance.reason_code)
                       || allowancePin === ""}
@@ -2112,7 +2081,7 @@ export default function FolioView() {
                       value={correction.pin}
                       onChange={(e) => setCorrection({ ...correction, pin: e.target.value })}
                     />
-                    <Button
+                    <Button className="min-h-11 sm:min-h-0"
                       variant="outline"
                       disabled={busy || !correction.reason.trim() || !correction.pin.trim()}
                       onClick={() =>
@@ -2166,7 +2135,7 @@ export default function FolioView() {
                 }
               />
               {foreign && <SettlementPreview result={quote} amount={Number(payment.amount)} balance={folio.balance} />}
-              <Button
+              <Button className="min-h-11 sm:min-h-0"
                 disabled={busy || !paymentReady || !(Number(payment.amount) > 0) || (foreign && !quote?.quote)}
                 onClick={() =>
                   act(async () => {

@@ -1,29 +1,25 @@
 import { useState } from "react"
-import { call } from "../lib/api"
+import { call, type InvoiceCorrectionResult } from "../lib/api"
 import { useCashierAuth } from "../lib/cashierAuth"
 import { useT } from "../lib/i18n"
-import { cur, fmtAmount, moneyDigits, moneyStep, roundMoney, useLocale } from "../lib/money"
+import { fmtMoney, moneyDigits, moneyStep, roundMoney, type MoneyContext } from "../lib/money"
 import { serverError } from "../lib/resource"
 import { Badge } from "./ui/badge"
 import { Button } from "./ui/button"
 
-interface CreditRebillResult {
-  mode?: "full" | "partial"
-  credit_note?: string | null
-  number?: string | null
-  rebill?: string | null
-  cancelled?: string | null
-  status?: string | null
-  message?: string | null
-}
+type CreditRebillResult = InvoiceCorrectionResult & { mode: "full" | "partial" }
 
 const inputCls =
-  "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm " +
+  "min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm " +
   "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
 
 export default function CreditRebillDialog({
   folio,
   currency,
+  money,
+  fiscalScheme,
+  allowFull = true,
+  allowPartial = true,
   credited = 0,
   onClose,
   onDone,
@@ -36,19 +32,23 @@ export default function CreditRebillDialog({
     tax_total: number
   }
   currency: string
+  money?: MoneyContext
+  fiscalScheme?: string | null
+  allowFull?: boolean
+  allowPartial?: boolean
   credited?: number
   onClose: () => void
   onDone: () => void
 }) {
   const { t } = useT()
-  const loc = useLocale()
+  const moneyContext = money ?? { currency }
   const { ensureUnlocked, status: pinStatus } = useCashierAuth()
-  const digits = moneyDigits(currency)
-  const step = moneyStep(currency)
-  const hasTaxReturn = Boolean(loc.integrations?.tax_return)
-  const left = Math.max(0, roundMoney(folio.grand_total - credited, currency))
+  const digits = moneyDigits(currency, money?.decimals ?? undefined)
+  const step = moneyStep(digits)
+  const hasTaxReturn = fiscalScheme === "efris"
+  const left = Math.max(0, roundMoney(folio.grand_total - credited, digits))
 
-  const [mode, setMode] = useState<"full" | "partial">("full")
+  const [mode, setMode] = useState<"full" | "partial">(allowFull ? "full" : "partial")
   const [amount, setAmount] = useState("")
   const [reason, setReason] = useState("")
   const [pin, setPin] = useState("")
@@ -64,7 +64,7 @@ export default function CreditRebillDialog({
   const partialValid = mode === "full" || (Number.isFinite(val) && val > 0 && val <= left && validDecimals)
   const propTax =
     mode === "partial" && val > 0 && folio.grand_total > 0
-      ? roundMoney((val * folio.tax_total) / folio.grand_total, currency)
+      ? roundMoney((val * folio.tax_total) / folio.grand_total, digits)
       : 0
   const needsPinInput = Boolean(pinStatus?.required && !pinStatus?.unlocked)
   const ready = partialValid && Boolean(reason.trim()) && (!needsPinInput || Boolean(pin.trim()))
@@ -79,14 +79,21 @@ export default function CreditRebillDialog({
       if (pinStatus?.required && !pinStatus?.unlocked && !pin.trim()) {
         await ensureUnlocked()
       }
-      const res = await call<CreditRebillResult>("kamra.payment_transfers.credit_and_rebill", {
+      const args = {
         folio: folio.name,
         reason: reason.trim(),
-        mode,
-        ...(mode === "partial" ? { amount: val } : {}),
         ...(pin.trim() ? { pin: pin.trim() } : {}),
+      }
+      const res = mode === "full"
+        ? await call<InvoiceCorrectionResult>("kamra.api.cancel_invoice", args)
+        : await call<InvoiceCorrectionResult>("kamra.ledger.issue_credit_note", { ...args, amount: val })
+      setResult({
+        ...res,
+        mode,
+        credit_note: res?.credit_note ?? (mode === "partial" ? res?.sales_invoice : undefined),
+        rebill: res?.rebill ?? (mode === "full" ? res?.sales_invoice : undefined),
+        status: res?.status ?? (res?.draft ? "Draft" : undefined),
       })
-      setResult(res ?? { mode })
     } catch (e) {
       setError(serverError(e))
     } finally {
@@ -102,12 +109,11 @@ export default function CreditRebillDialog({
       aria-label={t("Credit & Rebill")}
     >
       <div className="absolute inset-0 bg-black/40" onClick={result ? onDone : onClose} aria-hidden />
-      <div className="relative w-full max-w-lg rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
+      <div className="relative max-h-dvh w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
         <header className="border-b border-zinc-200 px-5 py-4">
           <h2 className="text-lg font-semibold text-zinc-900">{t("Credit & Rebill")}</h2>
           <p className="text-xs text-zinc-500">
-            {invoiceLabel} · {cur()}
-            {fmtAmount(folio.grand_total, currency)}
+            {invoiceLabel} · <span dir="ltr" className="inline-block tabular-nums">{fmtMoney(folio.grand_total, moneyContext)}</span>
           </p>
         </header>
 
@@ -132,7 +138,7 @@ export default function CreditRebillDialog({
                   {t("Credit note number")}: {result.number}
                 </p>
               )}
-              {result.rebill && (
+              {result.mode === "full" && result.rebill && (
                 <p className="font-mono text-xs text-zinc-800">
                   {t("Replacement invoice")}: {result.rebill}
                 </p>
@@ -145,10 +151,12 @@ export default function CreditRebillDialog({
               {result.message && <p className="text-xs text-zinc-600">{result.message}</p>}
             </div>
             <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              {t("Second manager/Finance approval required to finalize credit note & release replacement invoice.")}
+              {result.mode === "partial"
+                ? t("Second manager/Finance approval required to finalize the partial credit note.")
+                : folio.sales_invoice ? t("Second manager/Finance approval required to finalize credit note & release replacement invoice.") : null}
             </p>
             <div className="flex justify-end pt-1">
-              <Button type="button" onClick={onDone}>
+              <Button className="min-h-11" type="button" onClick={onDone}>
                 {t("Done")}
               </Button>
             </div>
@@ -156,9 +164,18 @@ export default function CreditRebillDialog({
         ) : (
           <>
             <div className="space-y-4 px-5 py-4 text-sm">
+              {folio.sales_invoice && (
+                <p className="text-zinc-600">
+                  {folio.invoice_number
+                    ? t("Invoice {invoice} was issued by the accounting system as {document}.", {
+                        invoice: folio.invoice_number, document: folio.sales_invoice,
+                      })
+                    : t("The accounting system issued invoice {document} for this bill.", { document: folio.sales_invoice })}
+                </p>
+              )}
               <fieldset className="space-y-2">
                 <legend className="sr-only">{t("Correction mode")}</legend>
-                <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-zinc-200 p-3 hover:border-brand-600/40">
+                {allowFull && <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-zinc-200 p-3 hover:border-brand-600/40">
                   <input
                     type="radio"
                     name="credit-rebill-mode"
@@ -169,18 +186,20 @@ export default function CreditRebillDialog({
                   />
                   <span className="space-y-0.5">
                     <span className="block font-medium text-zinc-900">{t("Full Credit & Rebill")}</span>
-                    <span className="block text-xs text-zinc-500">
-                      {t("Credits the full invoice and drafts a replacement invoice for correction.")}
-                    </span>
+                    {mode === "full" && <span className="block text-xs text-zinc-500">
+                      {folio.sales_invoice
+                        ? t("Credits the full invoice and drafts a replacement invoice for correction.")
+                        : t("Cancel {invoice}? The number goes on the cancelled register and the folio reopens for correction.", { invoice: invoiceLabel })}
+                    </span>}
                     {hasTaxReturn && (
                       <span className="block font-mono text-[11px] text-brand-700">
                         {t("Tax return reason code: 102 (Cancellation of goods/services)")}
                       </span>
                     )}
                   </span>
-                </label>
+                </label>}
 
-                <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-zinc-200 p-3 hover:border-brand-600/40">
+                {allowPartial && <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-zinc-200 p-3 hover:border-brand-600/40">
                   <input
                     type="radio"
                     name="credit-rebill-mode"
@@ -193,7 +212,7 @@ export default function CreditRebillDialog({
                     <span className="block font-medium text-zinc-900">{t("Partial Credit Note")}</span>
                     <span className="block text-xs text-zinc-500">
                       {t("Credits a specific amount (up to {left}) without reissuing the full invoice.", {
-                        left: `${cur()}${fmtAmount(left, currency)}`,
+                        left: fmtMoney(left, moneyContext),
                       })}
                     </span>
                     {hasTaxReturn && (
@@ -202,7 +221,7 @@ export default function CreditRebillDialog({
                       </span>
                     )}
                   </span>
-                </label>
+                </label>}
               </fieldset>
 
               {mode === "partial" && (
@@ -225,14 +244,14 @@ export default function CreditRebillDialog({
                   {val > left && (
                     <p className="text-xs text-amber-700">
                       {t("At most {amount} can still be credited on this invoice.", {
-                        amount: `${cur()}${fmtAmount(left, currency)}`,
+                        amount: fmtMoney(left, moneyContext),
                       })}
                     </p>
                   )}
                   {propTax > 0 && val <= left && (
                     <p className="text-xs text-zinc-500">
                       {t("Tax in this credit note: {amount}", {
-                        amount: `${cur()}${fmtAmount(propTax, currency)}`,
+                        amount: fmtMoney(propTax, moneyContext),
                       })}
                     </p>
                   )}
@@ -242,6 +261,7 @@ export default function CreditRebillDialog({
               <label className="block space-y-1 text-xs text-zinc-600">
                 <span>{t("Reason")}</span>
                 <input
+                  data-testid="credit-rebill-reason"
                   aria-label={t("Credit & Rebill reason")}
                   className={inputCls}
                   maxLength={500}
@@ -268,7 +288,9 @@ export default function CreditRebillDialog({
               )}
 
               <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                {t("Second manager/Finance approval required to finalize credit note & release replacement invoice.")}
+                {mode === "partial"
+                ? t("Second manager/Finance approval required to finalize the partial credit note.")
+                : folio.sales_invoice ? t("Second manager/Finance approval required to finalize credit note & release replacement invoice.") : null}
               </p>
 
               {error && (
@@ -279,11 +301,12 @@ export default function CreditRebillDialog({
             </div>
 
             <footer className="flex justify-end gap-2 border-t border-zinc-100 px-5 py-3">
-              <Button type="button" variant="outline" disabled={busy} onClick={onClose}>
+              <Button className="min-h-11" type="button" variant="outline" disabled={busy} onClick={onClose}>
                 {t("Close")}
               </Button>
               <Button
                 type="button"
+                className="min-h-11"
                 data-testid="submit-credit-rebill"
                 disabled={busy || !ready}
                 onClick={() => void submit()}
@@ -291,7 +314,7 @@ export default function CreditRebillDialog({
                 {busy
                   ? t("Submitting…")
                   : mode === "full"
-                    ? t("Draft Credit & Rebill")
+                    ? (folio.sales_invoice ? t("Draft Credit & Rebill") : t("Confirm cancel"))
                     : t("Draft Partial Credit Note")}
               </Button>
             </footer>

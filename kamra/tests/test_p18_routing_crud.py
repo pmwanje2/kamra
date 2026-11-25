@@ -185,7 +185,7 @@ if frappe is not None:
 
 			prev_user = frappe.session.user
 			try:
-				frappe.set_user(clerk_a)
+				frappe.set_user(clerk_a)  # nosemgrep: frappe-setuser
 				created = routing.save_routing_instruction({
 					"reservation": self.res_a.name,
 					"target_type": "Window",
@@ -213,7 +213,7 @@ if frappe is not None:
 					})
 
 				# Clerk B restricted to PROP_B gets PermissionError on list/save/delete for PROP_A
-				frappe.set_user(clerk_b)
+				frappe.set_user(clerk_b)  # nosemgrep: frappe-setuser
 				with self.assertRaises(frappe.PermissionError):
 					routing.list_routing_instructions(reservation=self.res_a.name)
 				with self.assertRaises(frappe.PermissionError):
@@ -226,4 +226,4 @@ if frappe is not None:
 				with self.assertRaises(frappe.PermissionError):
 					routing.delete_routing_instruction(created["name"])
 			finally:
-				frappe.set_user(prev_user)
+				frappe.set_user(prev_user)  # nosemgrep: frappe-setuser

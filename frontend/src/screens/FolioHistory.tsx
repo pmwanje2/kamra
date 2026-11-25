@@ -6,12 +6,13 @@ import { call, getCurrentProperty } from "../lib/api"
 import { serverError } from "../lib/resource"
 import { Button } from "../components/ui/button"
 import { Badge } from "../components/ui/badge"
-import { cur, fmtAmount, moneyLocale, useLocale } from "../lib/money"
+import { fmtAmount, fmtMoney, moneyLocale, useLocale, type MoneyContext } from "../lib/money"
 import { windowBadge } from "../lib/folioLabel"
 import { t as translate, useT, useUILanguage } from "../lib/i18n"
 
 type FolioRow = {
   name: string
+  money?: MoneyContext
   guest_name: string
   reservation: string
   venue_booking?: string | null
@@ -37,6 +38,7 @@ type FolioRow = {
 }
 
 function payeeSummary(r: FolioRow, tr: (s: string) => string): string | null {
+  if (r.payee_type === "Agent" || r.payee_type === "Travel Agent") return r.payee_agent || tr("Travel Agent")
   if (r.bill_to_name) return r.bill_to_name
   if (r.payee_company) return r.payee_company
   if (r.payee_type && r.payee_type !== "Guest") return tr(r.payee_type)
@@ -57,7 +59,9 @@ export default function FolioHistory() {
   const [busy, setBusy] = useState(false)
 
   const showFiscalBadge = Boolean(loc.integrations?.tax_return)
-  const fmt = (n: unknown) => fmtAmount(n ?? 0, loc.currency)
+  const amount = (n: unknown, r: FolioRow, withSymbol = true) => (
+    <span dir="ltr" className="inline-block tabular-nums">{withSymbol ? fmtMoney(n, r.money ?? loc) : fmtAmount(n, r.money?.currency ?? loc.currency, r.money?.locale ?? loc.locale)}</span>
+  )
 
   const load = useCallback(async () => {
     try {
@@ -171,17 +175,19 @@ export default function FolioHistory() {
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex min-w-0 items-start gap-2.5">
-                  <input
-                    type="checkbox"
-                    aria-label={t("Select {name}", { name: r.guest_name || r.name })}
-                    className="mt-1 size-4 accent-brand-600"
-                    checked={selected.includes(r.name)}
-                    onChange={() => toggle(r.name)}
-                  />
+                  <label className="grid min-h-11 min-w-11 place-items-center">
+                    <input
+                      type="checkbox"
+                      aria-label={t("Select {name}", { name: r.guest_name || r.name })}
+                      className="size-4 accent-brand-600"
+                      checked={selected.includes(r.name)}
+                      onChange={() => toggle(r.name)}
+                    />
+                  </label>
                   <div className="min-w-0">
                     <Link
                       to={`/billing/${encodeURIComponent(r.name)}`}
-                      className="block truncate font-medium text-brand-700 hover:underline"
+                      className="flex min-h-11 items-center truncate font-medium text-brand-700 hover:underline"
                     >
                       {r.guest_name || r.name}
                     </Link>
@@ -190,7 +196,7 @@ export default function FolioHistory() {
                         {windowBadge({ window_no: r.window_no, folio_type: r.folio_type || "Guest" })}
                       </span>
                       {payee && <span className="truncate">{payee}</span>}
-                      {r.reservation && <span>· {r.reservation}</span>}
+                      {(r.reservation || r.venue_booking) && <span>{payee && "· "}{r.reservation || r.venue_booking}</span>}
                     </div>
                   </div>
                 </div>
@@ -206,16 +212,17 @@ export default function FolioHistory() {
               <div className="mt-3 grid grid-cols-2 gap-2 border-t border-zinc-100 pt-2.5 text-xs">
                 <div>
                   <span className="block text-zinc-400">{translate("Invoice")}</span>
-                  <span className="font-mono text-zinc-700">{r.invoice_number || r.sales_invoice || "-"}</span>
+                  <span className="font-mono text-zinc-700">{r.sales_invoice || r.invoice_number || "-"}</span>
                 </div>
-                <div className="text-end">
-                  <span className="block text-zinc-400">{translate("Total")} / {translate("Balance")}</span>
-                  <span className="tabular-nums font-medium text-zinc-900">
-                    {cur()}{fmt(r.grand_total)}
-                  </span>
-                  <span className="ms-1.5 tabular-nums text-zinc-500">
-                    ({cur()}{fmt(r.balance)})
-                  </span>
+                <div className="flex flex-wrap justify-end gap-x-3 gap-y-1 text-end">
+                  <div className="font-medium text-zinc-900">
+                    <span className="block text-zinc-400">{t("Total")}</span>
+                    {amount(r.grand_total, r)}
+                  </div>
+                  <div className="text-zinc-500">
+                    <span className="block text-zinc-400">{t("Balance")}</span>
+                    {amount(r.balance, r)}
+                  </div>
                 </div>
               </div>
             </div>
@@ -268,13 +275,13 @@ export default function FolioHistory() {
                   </td>
                   <td className="px-3 py-2 font-mono text-xs">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <span>{r.invoice_number || r.sales_invoice || "-"}</span>
+                      <span>{r.sales_invoice || r.invoice_number || "-"}</span>
                       {fiscalized && <Badge tone="brand">{t("Tax return")}</Badge>}
                     </div>
                     {r.fx_payments?.map((p, i) => (
                       <div className="tabular-nums" key={i}>
-                        {currencyText(p.currency, p.fx_amount, moneyLocale())} @{" "}
-                        {formatFxRate(p.exchange_rate, moneyLocale())}
+                        {currencyText(p.currency, p.fx_amount, (r.money?.locale || moneyLocale()))} @{" "}
+                        {formatFxRate(p.exchange_rate, (r.money?.locale || moneyLocale()))}
                         {p.exchange_rate_date && ` · ${formatDate(p.exchange_rate_date)}`}
                       </div>
                     ))}
@@ -284,8 +291,8 @@ export default function FolioHistory() {
                       {translate(r.status)}
                     </Badge>
                   </td>
-                  <td className="px-3 py-2 text-end tabular-nums">{fmt(r.grand_total)}</td>
-                  <td className="px-3 py-2 text-end tabular-nums">{fmt(r.balance)}</td>
+                  <td className="px-3 py-2 text-end tabular-nums">{amount(r.grand_total, r, false)}</td>
+                  <td className="px-3 py-2 text-end tabular-nums">{amount(r.balance, r, false)}</td>
                   <td className="px-3 py-2 text-end tabular-nums">{r.reprints}</td>
                 </tr>
               )

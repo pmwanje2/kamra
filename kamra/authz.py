@@ -425,7 +425,7 @@ def require_cashier_pin(property: str, pin=None):
 
 	# Sliding unlock window (set after a successful PinPad entry)
 	cache_key = f"kamra_cashier_unlock:{user}"
-	if frappe.cache.get_value(cache_key):
+	if pin in (None, "") and frappe.cache.get_value(cache_key):
 		# refresh sliding window
 		frappe.cache.set_value(cache_key, 1, expires_in_sec=lock_minutes * 60)
 		return

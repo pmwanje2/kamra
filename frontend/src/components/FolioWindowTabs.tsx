@@ -4,7 +4,7 @@ import { Lock, Pencil, Plus, Route as RouteIcon, X } from "lucide-react"
 import { call, getCurrentProperty } from "../lib/api"
 import { folioLabel, windowBadge, type SiblingFolio } from "../lib/folioLabel"
 import { useT } from "../lib/i18n"
-import { cur, fmtAmount, useLocale } from "../lib/money"
+import { fmtMoney, type MoneyContext, useLocale } from "../lib/money"
 import { Button } from "./ui/button"
 
 export interface FolioWindowTabItem extends SiblingFolio {
@@ -29,8 +29,10 @@ const isEmptyWindow = (w: SiblingFolio) => !w.grand_total && !w.payments_total
 
 export default function FolioWindowTabs({
   currentFolio,
+  property,
   windows,
   currency,
+  money,
   reservation,
   groupBooking,
   windowCap,
@@ -42,8 +44,10 @@ export default function FolioWindowTabs({
   act,
 }: {
   currentFolio: string
+  property?: string
   windows: FolioWindowTabItem[]
   currency: string
+  money?: MoneyContext
   reservation: string | null
   groupBooking: string | null
   windowCap: number
@@ -55,6 +59,7 @@ export default function FolioWindowTabs({
   act: (fn: () => Promise<unknown>, onError?: (msg: string) => void) => Promise<void>
 }) {
   const { t } = useT()
+  const moneyContext = money ?? { currency }
   const loc = useLocale()
   const [popover, setPopover] = useState<"add" | "edit" | null>(null)
   const [companies, setCompanies] = useState<CompanyOption[]>([])
@@ -77,7 +82,7 @@ export default function FolioWindowTabs({
   useEffect(() => {
     if (!popover || optionsLoaded) return
     call<{ companies?: CompanyOption[]; travel_agents?: AgentOption[] }>("kamra.api.booking_options", {
-      property: getCurrentProperty(),
+      property: property || getCurrentProperty(),
     })
       .then((res) => {
         setCompanies(res?.companies ?? [])
@@ -168,16 +173,15 @@ export default function FolioWindowTabs({
                   <span className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-zinc-700">
                     {windowBadge(w)}
                   </span>
-                  <span className="max-w-32 truncate">{label}</span>
+                  <span className="min-w-0 max-w-32 truncate" title={label}>{label}</span>
                   <span
                     className={
-                      "tabular-nums " +
+                      "shrink-0 tabular-nums " +
                       (w.balance > 0 ? "text-amber-600" : w.balance < 0 ? "text-sky-700" : "text-zinc-400")
                     }
                   >
                     {w.balance < 0 ? `${t("Advance")} ` : ""}
-                    {cur()}
-                    {fmtAmount(Math.abs(w.balance), currency)}
+                    <span dir="ltr" className="inline-block tabular-nums">{fmtMoney(Math.abs(w.balance), moneyContext)}</span>
                   </span>
                   {locked && (
                     <Lock
@@ -201,7 +205,7 @@ export default function FolioWindowTabs({
                     title={t("Delete this empty folio")}
                     disabled={busy}
                     onClick={() => onDeleteEmpty(w)}
-                    className="min-h-11 px-2 text-zinc-400 hover:text-rose-600"
+                    className="min-h-11 min-w-11 justify-center px-2 text-zinc-400 hover:text-rose-600"
                   >
                     <X className="size-3.5" aria-hidden />
                   </button>
@@ -281,7 +285,7 @@ export default function FolioWindowTabs({
               type="button"
               aria-label={t("Close")}
               onClick={() => setPopover(null)}
-              className="rounded p-1 text-zinc-400 hover:text-zinc-700"
+              className="grid min-h-11 min-w-11 place-items-center rounded p-1 text-zinc-400 hover:text-zinc-700"
             >
               <X className="size-4" aria-hidden />
             </button>
@@ -377,11 +381,11 @@ export default function FolioWindowTabs({
           </div>
 
           <div className="mt-3 flex flex-wrap justify-end gap-2">
-            <Button type="button" variant="ghost" onClick={() => setPopover(null)}>
+            <Button className="min-h-11 sm:min-h-0" type="button" variant="ghost" onClick={() => setPopover(null)}>
               {t("Cancel")}
             </Button>
             {popover === "add" ? (
-              <Button
+              <Button className="min-h-11 sm:min-h-0"
                 type="button"
                 data-testid="confirm-open-window"
                 disabled={busy || payeeInvalid}
@@ -407,7 +411,7 @@ export default function FolioWindowTabs({
                 {t("Open window")}
               </Button>
             ) : (
-              <Button
+              <Button className="min-h-11 sm:min-h-0"
                 type="button"
                 data-testid="save-window-payee-btn"
                 disabled={busy || payeeInvalid || !activeWindow}

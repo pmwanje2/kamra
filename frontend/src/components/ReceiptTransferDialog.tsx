@@ -3,17 +3,18 @@ import { call, newIdempotencyKey } from "../lib/api"
 import { useCashierAuth } from "../lib/cashierAuth"
 import { folioLabel, windowBadge, type SiblingFolio } from "../lib/folioLabel"
 import { useT } from "../lib/i18n"
-import { cur, fmtAmount, moneyDigits, moneyStep, roundMoney } from "../lib/money"
+import { fmtMoney, type MoneyContext, moneyDigits, moneyStep, roundMoney } from "../lib/money"
 import { serverError } from "../lib/resource"
 import { Button } from "./ui/button"
 
 const inputCls =
-  "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm " +
+  "min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm " +
   "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
 
 export default function ReceiptTransferDialog({
   folio,
   currency,
+  money,
   payment,
   maxAmount,
   siblings,
@@ -23,6 +24,7 @@ export default function ReceiptTransferDialog({
 }: {
   folio: string
   currency: string
+  money?: MoneyContext
   payment: {
     name: string
     mode: string
@@ -37,10 +39,11 @@ export default function ReceiptTransferDialog({
   onDone: () => void
 }) {
   const { t } = useT()
+  const moneyContext = money ?? { currency }
   const { ensureUnlocked, status: pinStatus } = useCashierAuth()
-  const digits = moneyDigits(currency)
-  const step = moneyStep(currency)
-  const cap = roundMoney(maxAmount, currency)
+  const digits = moneyDigits(currency, money?.decimals ?? undefined)
+  const step = moneyStep(currency, money?.decimals ?? undefined)
+  const cap = roundMoney(maxAmount, digits)
 
   const [target, setTarget] = useState(targets[0]?.name ?? "")
   const [amount, setAmount] = useState(cap.toFixed(digits))
@@ -92,12 +95,11 @@ export default function ReceiptTransferDialog({
       aria-label={t("Transfer receipt")}
     >
       <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden />
-      <div className="relative w-full max-w-md rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
+      <div className="relative max-h-dvh w-full max-w-md overflow-y-auto rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
         <header className="border-b border-zinc-200 px-5 py-4">
           <h2 className="text-lg font-semibold text-zinc-900">{t("Transfer receipt")}</h2>
           <p className="text-xs text-zinc-500">
-            {t(payment.mode)} · {cur()}
-            {fmtAmount(cap, currency)} {t("available to transfer")}
+            {t(payment.mode)} · <span dir="ltr" className="inline-block tabular-nums">{fmtMoney(cap, moneyContext)}</span> {t("available to transfer")}
           </p>
         </header>
 
@@ -112,8 +114,7 @@ export default function ReceiptTransferDialog({
             >
               {targets.map((s) => (
                 <option key={s.name} value={s.name}>
-                  {windowBadge(s)} · {folioLabel(siblings, s, t)} ({cur()}
-                  {fmtAmount(s.balance, currency)})
+                  {windowBadge(s)} · {folioLabel(siblings, s, t)} ({fmtMoney(s.balance, moneyContext)})
                 </option>
               ))}
             </select>
@@ -137,9 +138,9 @@ export default function ReceiptTransferDialog({
           {!amountValid && amount.trim() !== "" && (
             <p className="text-xs text-amber-700">
               {digits === 0
-                ? t("Enter a whole-unit amount up to {max}.", { max: `${cur()}${fmtAmount(cap, currency)}` })
+                ? t("Enter a whole-unit amount up to {max}.", { max: fmtMoney(cap, moneyContext) })
                 : t("Enter an amount up to {max} with at most {decimals} decimals.", {
-                    max: `${cur()}${fmtAmount(cap, currency)}`,
+                    max: fmtMoney(cap, moneyContext),
                     decimals: digits,
                   })}
             </p>
@@ -181,10 +182,10 @@ export default function ReceiptTransferDialog({
         </div>
 
         <footer className="flex justify-end gap-2 border-t border-zinc-100 px-5 py-3">
-          <Button type="button" variant="outline" disabled={busy} onClick={onClose}>
+          <Button className="min-h-11" type="button" variant="outline" disabled={busy} onClick={onClose}>
             {t("Close")}
           </Button>
-          <Button
+          <Button className="min-h-11 sm:min-h-0"
             type="button"
             data-testid="confirm-receipt-transfer"
             disabled={busy || !ready}
