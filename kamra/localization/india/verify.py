@@ -33,7 +33,7 @@ def verify_gstin(property: str, gstin: str, business_name: str = "") -> dict:
 def _id_image(url: str) -> tuple[bytes, str]:
 	name = frappe.db.get_value("File", {"file_url": url})
 	if not name:
-		frappe.throw("The ID image is not on file. Capture it first.")
+		frappe.throw(frappe._("The ID image is not on file. Capture it first."))
 	f = frappe.get_doc("File", name)
 	return f.get_content(), f.file_name or "id.jpg"
 
@@ -54,16 +54,16 @@ def scan_guest_id(property: str, guest: str, id_type: str, consent: int = 0, *, 
 	and number, date of birth, gender; nationality, name and address only
 	where the profile has none."""
 	if not cint(consent):
-		frappe.throw("Tell the guest their ID will be read by the ID verification partner, "
-		             "then tick the confirmation.")
+		frappe.throw(frappe._("Tell the guest their ID will be read by the ID verification partner, "
+		             "then tick the confirmation."))
 	if id_type not in SCANNABLE_IDS:
-		frappe.throw(f"Reading supports: {', '.join(SCANNABLE_IDS)}.")
+		frappe.throw(frappe._("Reading supports: {0}.").format(", ".join(SCANNABLE_IDS)))
 	if not frappe.db.exists("Guest", guest):
-		frappe.throw("Guest not found.")
+		frappe.throw(frappe._("Guest not found."))
 	g = frappe.get_doc("Guest", guest)
 	url = stay_image or g.id_file
 	if not url:
-		frappe.throw("Capture the ID document first, then read it.")
+		frappe.throw(frappe._("Capture the ID document first, then read it."))
 	image, filename = _id_image(url)
 
 	from kamra.connect.client import call

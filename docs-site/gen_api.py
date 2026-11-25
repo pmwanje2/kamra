@@ -333,12 +333,11 @@ def write_postman(modules):
 
     collection = {
         "info": {
-            "name": "Kamra PMS API",
-            "description":
-                "The full Kamra REST surface. Set base_url (e.g. "
-                "https://pms.yourhotel.com), api_key and api_secret in the "
-                "collection variables, then call away. Docs: "
-                "https://kamrapms.com/docs/api-reference",
+            "name": "Maximus PMS API",
+            "description": (
+                "Property management REST API. Set base_url to your property’s server "
+                "and configure api_key and api_secret in the collection variables."
+            ),
             "schema": "https://schema.getpostman.com/json/collection/"
                       "v2.1.0/collection.json",
         },

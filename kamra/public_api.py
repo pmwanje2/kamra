@@ -179,7 +179,7 @@ def catalog_index(property_slug: str | None = None):
 	if property_slug:
 		chosen = property_for_slug(property_slug)
 		if not chosen:
-			frappe.throw("Property not found.", frappe.DoesNotExistError)
+			frappe.throw(frappe._("Property not found."), frappe.DoesNotExistError)
 		properties = [frappe._dict(name=chosen)]
 	else:
 		properties = frappe.get_all(
@@ -336,7 +336,7 @@ def default_property():
 	any_property = frappe.get_all("Property", pluck="name", limit=1)
 	if any_property:
 		return any_property[0]
-	frappe.throw("No property configured for this site.")
+	frappe.throw(frappe._("No property configured for this site."))
 	raise  # frappe.throw always raises; CodeQL does not treat it as noreturn
 
 
@@ -430,7 +430,7 @@ def showcase(property: str, listing_slug: str | None = None,
 	"""Everything the public booking page needs to render."""
 	prop = frappe.get_doc("Property", property)
 	if not prop.get("booking_engine_enabled"):
-		frappe.throw("Online booking is not enabled for this property.")
+		frappe.throw(frappe._("Online booking is not enabled for this property."))
 
 	from kamra.api import _sellable_room_types
 	from kamra.settings import get_setting
@@ -521,9 +521,9 @@ def search_stay(property: str, check_in_date: str, check_out_date: str,
 
 	nights = date_diff(check_out_date, check_in_date)
 	if nights < 1:
-		frappe.throw("Check-out must be after check-in.")
+		frappe.throw(frappe._("Check-out must be after check-in."))
 	if nights > 30:
-		frappe.throw("Stays longer than 30 nights: please contact the hotel.")
+		frappe.throw(frappe._("Stays longer than 30 nights: please contact the hotel."))
 	ages = _child_ages(child_ages)
 	_party(None, adults, children, None)  # at least one adult, before any work
 
@@ -567,7 +567,7 @@ def search_stay(property: str, check_in_date: str, check_out_date: str,
 		       "available": bool(left), "adults": a, "children": c,
 		       "infants": infants, "rate_plan": plan_name, "rate_plan_label": plan_label}
 		if above > beds:
-			row.update(available=False, reason=TOO_MANY_GUESTS)
+			row.update(available=False, reason=frappe._(TOO_MANY_GUESTS))
 			results.append(row)
 			continue
 		if above:
@@ -585,7 +585,7 @@ def search_stay(property: str, check_in_date: str, check_out_date: str,
 				)
 			except (frappe.ValidationError, ContractRateRefused):
 				frappe.clear_messages()
-				row.update(available=False, reason=NO_RATE_AVAILABLE, quote=None)
+				row.update(available=False, reason=frappe._(NO_RATE_AVAILABLE), quote=None)
 				results.append(row)
 				continue
 			try:
@@ -630,11 +630,11 @@ def search_stay(property: str, check_in_date: str, check_out_date: str,
 						)
 			except ContractRateRefused:
 				frappe.clear_messages()
-				row.update(available=False, quote=None, reason=NO_RATE_AVAILABLE)
+				row.update(available=False, quote=None, reason=frappe._(NO_RATE_AVAILABLE))
 			except frappe.ValidationError:
 				frappe.clear_messages()
 				if require_plan:
-					row.update(available=False, reason=NO_RATE_AVAILABLE, quote=None)
+					row.update(available=False, reason=frappe._(NO_RATE_AVAILABLE), quote=None)
 			except Exception:
 				pass  # still list the room type even if this date range cannot be quoted
 		results.append(row)
@@ -816,9 +816,9 @@ def _save_id_image(owner: str, data_url: str,
 	m = re.match(r"^data:image/(jpeg|jpg|png|webp);base64,(.+)$",
 	              data_url or "", re.S)
 	if not m:
-		frappe.throw("The ID photo must be a JPEG, PNG or WebP image.")
+		frappe.throw(frappe._("The ID photo must be a JPEG, PNG or WebP image."))
 	if len(m.group(2)) > 8_000_000:  # ~6 MB decoded
-		frappe.throw("The ID photo is too large - please retake it.")
+		frappe.throw(frappe._("The ID photo is too large - please retake it."))
 	if doctype == "Reservation":
 		from kamra.id_documents import _decode, _sanitise
 
@@ -969,7 +969,7 @@ def precheckin_upload_id(token: str, data: str):
 	if res.status != "Confirmed":
 		frappe.throw(frappe._("This check-in link is not valid anymore."))
 	if res.precheckin_status == "Verified":
-		frappe.throw("The desk has already verified your check-in details.")
+		frappe.throw(frappe._("The desk has already verified your check-in details."))
 
 	with act_as(GUEST_AGENT):
 		# owning the File as the agent matters: File.has_permission short-
@@ -1091,7 +1091,7 @@ def _child_ages(child_ages) -> list[int] | None:
 			continue
 		age = cint(a)
 		if age < 0 or age > 17:
-			frappe.throw("Child ages must be between 0 and 17.")
+			frappe.throw(frappe._("Child ages must be between 0 and 17."))
 		ages.append(age)
 	return ages
 
@@ -1102,7 +1102,7 @@ def _party(rt_doc, adults, children, ages) -> tuple[int, int, int]:
 	from kamra.pricing import party_by_age
 
 	if cint(adults) < 1:
-		frappe.throw("At least one adult is required.")
+		frappe.throw(frappe._("At least one adult is required."))
 	if ages is None:
 		return cint(adults), cint(children), 0
 	return party_by_age(rt_doc, cint(adults), ages)
@@ -1212,7 +1212,7 @@ def book(property: str, room_type: str, check_in_date: str,
 	the sleeping arrangement and agrees the price for them.
 	"""
 	if not guest_name.strip() or not phone.strip():
-		frappe.throw("Name and phone are required.")
+		frappe.throw(frappe._("Name and phone are required."))
 
 	from kamra.ledger import round_money
 	from kamra.pricing import capacity_overflow
@@ -1222,7 +1222,7 @@ def book(property: str, room_type: str, check_in_date: str,
 	adults, children, infants = _party(rtd, adults, children, _child_ages(child_ages))
 	above, beds = capacity_overflow(rtd, adults, children)
 	if above > beds:
-		frappe.throw(TOO_MANY_GUESTS)
+		frappe.throw(frappe._(TOO_MANY_GUESTS))
 
 	# a guest may only add experiences the hotel actually publishes for this
 	# property - never a private, disabled or another property's experience,
@@ -1258,14 +1258,14 @@ def book(property: str, room_type: str, check_in_date: str,
 		)
 	except (frappe.ValidationError, ContractRateRefused):
 		frappe.clear_messages()
-		frappe.throw(NO_RATE_AVAILABLE)
+		frappe.throw(frappe._(NO_RATE_AVAILABLE))
 
 	from kamra.restrictions import StayRestrictionError, evaluate_stay_restrictions
 	ev = evaluate_stay_restrictions(
 		property, room_type, check_in_date, check_out_date, rate_plan=resolved_plan,
 	)
 	if not ev["allowed"]:
-		frappe.throw(ev["summary"], StayRestrictionError, title="Stay restriction")
+		frappe.throw(ev["summary"], StayRestrictionError, title=frappe._("Stay restriction"))
 
 	# Peek at payment terms before insert so Instant can choose status.
 	try:
@@ -1277,7 +1277,7 @@ def book(property: str, room_type: str, check_in_date: str,
 		)
 	except (ContractRateRefused, frappe.ValidationError):
 		frappe.clear_messages()
-		frappe.throw(NO_RATE_AVAILABLE)
+		frappe.throw(frappe._(NO_RATE_AVAILABLE))
 	stay_rules = q.get("stay_rules") or {}
 	advance_due, policy = _advance_terms(
 		prop, float(q["amount_after_tax"] or 0), stay_rules)

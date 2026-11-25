@@ -70,24 +70,71 @@ def _can_fit(groups, occupied):
 
 @dataclass
 class CapacityWindow:
-	"""Demand is constant until the next arrival, departure or block boundary."""
+	"""One connected set of stays. A resource is a physical room during one interval."""
 	options: dict
 	occupied: set
-	deferred: Counter
+	demand: Counter
 	incoming: dict
 
 	def fits(self, assigned):
 		occupied = self.occupied.copy()
-		demand = self.deferred.copy()
-		for index, room_type in self.incoming.items():
+		demand = self.demand.copy()
+		for index, key in self.incoming.items():
 			rooms = assigned.get(index)
 			if rooms:
-				if not occupied.isdisjoint(rooms):
+				cells = {(night, room) for night in key[1] for room in rooms}
+				if not occupied.isdisjoint(cells):
 					return False
-				occupied.update(rooms)
+				occupied.update(cells)
 			else:
-				demand[room_type] += 1
-		return _can_fit([(n, self.options[rt]) for rt, n in demand.items()], occupied)
+				demand[key] += 1
+		return _can_fit([(count, self.options[key]) for key, count in demand.items()], occupied)
+
+
+def _connected_spans(requests, deferred):
+	"""Extend through overlapping deferred stays, including transitive overlaps."""
+	intervals = [(a, b, True) for _, _, a, b in requests]
+	intervals.extend((a, b, False) for _, a, b in deferred)
+	start = end = None
+	requested = False
+	for a, b, incoming in sorted(intervals):
+		if end is None or a >= end:
+			if requested:
+				yield start, end
+			start, end, requested = a, b, incoming
+		else:
+			end = max(end, b)
+			requested |= incoming
+	if requested:
+		yield start, end
+
+
+def _window(options, requests, deferred, fixed, unserviceable, quotas, start, end):
+	# Only split when inventory changes. A physical option covers ALL cells
+	# of a reservation, so a guest cannot switch rooms at an interval boundary.
+	bounds = {start, end}
+	for intervals in (requests, deferred, fixed):
+		for *_, a, b in intervals:
+			bounds.update((max(a, start), min(b, end)))
+	for a, b, _, _ in quotas:
+		bounds.update((a, b))
+	points = sorted(bounds)[:-1]
+	def stay_key(rt, a, b):
+		return rt, tuple(i for i, day in enumerate(points) if a <= day < b)
+	incoming = {i: stay_key(rt, a, b) for i, rt, a, b in requests}
+	demand = Counter(stay_key(rt, a, b) for rt, a, b in deferred)
+	for a, b, rt, count in quotas:
+		# Allotments are nightly promises. A later pickup becomes a stay.
+		for night in stay_key(rt, a, b)[1]:
+			demand[rt, (night,)] += count
+	occupied = {(i, room) for rooms, a, b in fixed for i in stay_key(None, a, b)[1] for room in rooms}
+	choices = {}
+	for key in set(demand) | set(incoming.values()):
+		rt, nights = key
+		choices[key] = [frozenset((n, r) for n in nights for r in footprint)
+		                for footprint in options[rt] if footprint.isdisjoint(unserviceable)]
+	occupied.update((i, r) for i in range(len(points)) for r in unserviceable)
+	return CapacityWindow(choices, occupied, demand, incoming)
 
 
 def shared_capacity_windows(property, lines, *, exclude_reservation=None):
@@ -144,41 +191,42 @@ def shared_capacity_windows(property, lines, *, exclude_reservation=None):
 	if not components:
 		return []
 
-	spans = [_span(line) for line in lines]
-	start = min(s for s, _ in spans)
-	end = max(e for _, e in spans)
-	bookings = frappe.db.sql(
-		"""SELECT name, room_type, room, sellable_unit, check_in_date, check_out_date
-		   FROM `tabReservation` WHERE property = %(property)s AND status IN %(live)s
-		   AND name != %(exclude)s AND check_in_date < %(end)s AND check_out_date >= %(start)s
-		   FOR UPDATE""", {"property": property, "live": LIVE_STATUSES, "exclude": exclude_reservation or "",
-		                   "start": start, "end": end}, as_dict=True)
-	blocks = frappe.get_all("Room Block", {"property": property, "block_status": "Active",
-	                                      "from_date": ("<", end), "to_date": (">", start)},
-	                        ["room", "from_date", "to_date"])
+	from kamra.group_blocks import shared_block_holds
 	windows = []
 	for component in components:
-		requests = [(i, line["room_type"], *spans[i]) for i, line in enumerate(lines) if line["room_type"] in component]
-		holds = []
-		for stay in bookings:
-			held = members.get(stay.sellable_unit, set())
-			if stay.room:
-				held = held | {stay.room}
-			if stay.room_type in component or any(room_types.get(r) in component for r in held):
-				holds.append((stay.room_type, held, *_span(stay)))
-		outages = [(b.room, getdate(b.from_date), getdate(b.to_date)) for b in blocks if room_types.get(b.room) in component]
-		boundaries = {day for interval in (*requests, *holds, *outages) for day in interval[-2:]}
-		for day in sorted(boundaries):
-			incoming = {i: rt for i, rt, a, b in requests if a <= day < b}
-			if not incoming:
-				continue
-			occupied = unserviceable | {r for r, a, b in outages if a <= day < b}
-			deferred = Counter()
-			for rt, held, a, b in holds:
-				if a <= day < b:
-					if held:
-						occupied.update(held)
-					else:
-						deferred[rt] += 1
-			windows.append(CapacityWindow(options, occupied, deferred, incoming))
+		requests = [(i, line["room_type"], *_span(line)) for i, line in enumerate(lines)
+		            if line["room_type"] in component]
+		params = {"property": property, "live": LIVE_STATUSES, "exclude": exclude_reservation or "",
+		          "types": sorted(component)}
+		promises = frappe.db.sql(
+			"""SELECT room_type, check_in_date, check_out_date FROM `tabReservation`
+			   WHERE property = %(property)s AND status IN %(live)s AND name != %(exclude)s
+			   AND room_type IN %(types)s AND COALESCE(room, '') = '' AND COALESCE(sellable_unit, '') = ''
+			   ORDER BY check_in_date FOR UPDATE""", params, as_dict=True)
+		deferred = [(s.room_type, *_span(s)) for s in promises]
+		for start, end in _connected_spans(requests, deferred):
+			arrivals = [r for r in requests if r[2] < end and r[3] > start]
+			stays = [r for r in deferred if r[1] < end and r[2] > start]
+			bookings = frappe.db.sql(
+				"""SELECT room, sellable_unit, check_in_date, check_out_date FROM `tabReservation`
+				   WHERE property = %(property)s AND status IN %(live)s AND name != %(exclude)s
+				   AND check_in_date < %(end)s AND check_out_date >= %(start)s
+				   AND (COALESCE(room, '') != '' OR COALESCE(sellable_unit, '') != '') FOR UPDATE""",
+				{**params, "start": start, "end": end}, as_dict=True)
+			fixed = []
+			for booking in bookings:
+				held = members.get(booking.sellable_unit, set())
+				if booking.room:
+					held = held | {booking.room}
+				a, b = _span(booking)
+				if b > start and any(room_types.get(r) in component for r in held):
+					fixed.append((held, a, b))
+			blocks = frappe.get_all("Room Block", {"property": property, "block_status": "Active",
+			                                      "from_date": ("<", end), "to_date": (">", start)},
+			                        ["room", "from_date", "to_date"])
+			fixed.extend(({row.room}, getdate(row.from_date), getdate(row.to_date)) for row in blocks
+			             if room_types.get(row.room) in component)
+			pickups = [(lines[i].get("group_booking"), rt, a, b) for i, rt, a, b in arrivals]
+			quotas = shared_block_holds(property, component, start, end, pickups, exclude_reservation)
+			windows.append(_window(options, arrivals, stays, fixed, unserviceable, quotas, start, end))
 	return windows

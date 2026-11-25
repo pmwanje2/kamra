@@ -6860,7 +6860,7 @@ def verify_precheckin(reservation: str):
 	moment this lands; that guard was clearly written for this."""
 	res = frappe.get_doc("Reservation", reservation, for_update=True)
 	if res.precheckin_status != "Submitted":
-		frappe.throw("Only a submitted pre-check-in can be verified.")
+		frappe.throw(frappe._("Only a submitted pre-check-in can be verified."))
 	frappe.db.set_value("Reservation", res.name, {
 		"precheckin_status": "Verified",
 		"precheckin_verified_by": frappe.session.user,
@@ -7235,9 +7235,9 @@ def upload_guest_document(guest: str, kind: str, image: str, reservation: str | 
 	from kamra.public_api import _save_id_image
 
 	if kind not in ("id", "address"):
-		frappe.throw("kind must be 'id' or 'address'.")
+		frappe.throw(frappe._("kind must be 'id' or 'address'."))
 	if not frappe.db.exists("Guest", guest):
-		frappe.throw("Guest not found.")
+		frappe.throw(frappe._("Guest not found."))
 	if reservation:
 		res = frappe.get_doc("Reservation", reservation, for_update=True)
 		if res.guest != guest:
@@ -8294,7 +8294,7 @@ def send_precheckin_link(reservation: str, channel: str = "WhatsApp"):
 		["name", "property", "guest", "guest_name", "status", "check_out_date"],
 		as_dict=True, for_update=True)
 	if not res:
-		frappe.throw("Reservation not found.")
+		frappe.throw(frappe._("Reservation not found."))
 	if not active(res):
 		frappe.throw(_("This check-in link is not valid anymore."))
 	link_fields = new_link_fields(res)
@@ -8645,7 +8645,7 @@ def move_reservation(reservation: str, new_room: str,
 	assert_property_access(doc.property)
 	_discount_sign_off(doc, supervisor_user, supervisor_pin)
 	if doc.status not in ("Confirmed", "Checked In"):
-		frappe.throw("Only active reservations can be moved.")
+		frappe.throw(frappe._("Only active reservations can be moved."))
 	if frappe.db.get_value("Room", new_room, "property") != doc.property:
 		frappe.throw(_("Room {0} is not in this property.").format(new_room))
 	old_room = doc.room
@@ -13485,7 +13485,7 @@ def linked_records(doctype: str, name: str):
 		r = frappe.db.get_value("Reservation", name,
 			["guest", "guest_name", "company", "group_booking"], as_dict=True)
 		if not r:
-			frappe.throw("Reservation not found.")
+			frappe.throw(frappe._("Reservation not found."))
 		out.update(guest=r.guest, guest_name=r.guest_name, company=r.company,
 		           group_booking=r.group_booking)
 		out["folios"] = folios_for({"reservation": name})

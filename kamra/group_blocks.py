@@ -50,7 +50,7 @@ def effective_cutoff(cutoff_date, check_in_date):
 
 
 def _holding_groups(property: str, check_in_date, check_out_date,
-                    for_group: str | None = None) -> list[dict]:
+                    for_group: str | None = None, *, for_update: bool = False) -> list[dict]:
 	"""Confirmed, unreleased groups overlapping the window whose cutoff has
 	not passed. `for_group` (a pickup booking against its own block) is
 	left out: the group's own rooms are not a shortage for it."""
@@ -60,18 +60,18 @@ def _holding_groups(property: str, check_in_date, check_out_date,
 		fields.append("released_on")
 	today = getdate(nowdate())
 	out = []
-	for gb in frappe.get_all(
+	for gb in frappe.db.get_values(
 		"Group Booking",
 		filters={"property": property, "status": "Confirmed",
 		         "check_in_date": ("<", check_out_date),
 		         "check_out_date": (">", check_in_date)},
-		fields=fields,
+		fieldname=fields, as_dict=True, for_update=for_update,
 	):
 		if for_group and gb.name == for_group:
 			continue
 		if has_released and gb.get("released_on"):
 			continue
-		if gb.cutoff_date and getdate(gb.cutoff_date) < today:
+		if effective_cutoff(gb.cutoff_date, gb.check_in_date) < today:
 			continue
 		out.append(gb)
 	return out
@@ -96,7 +96,7 @@ def group_nights(check_in_date, check_out_date) -> list[str]:
 
 
 def unpicked_by_night(group: str, room_type: str, *,
-                      for_update: bool = False) -> dict[str, int]:
+                      for_update: bool = False, exclude_reservation: str | None = None) -> dict[str, int]:
 	"""{night: rooms of the block still held} over the group's nights. A
 	night's block is its own count (rooms per night) or Rooms Blocked; a
 	night is picked up by every live stay of the group covering it."""
@@ -113,19 +113,19 @@ def unpicked_by_night(group: str, room_type: str, *,
 	if not row or not (row.rooms_blocked or row.nightly_counts):
 		return {}
 	gb = frappe.db.get_value("Group Booking", group,
-	                         ["check_in_date", "check_out_date"], as_dict=True)
+	                         ["check_in_date", "check_out_date"], as_dict=True, for_update=for_update)
 	nightly = parse_nightly(row.nightly_counts)
 	# a stay that has checked out used its nights too
 	if for_update:
 		stays = frappe.db.sql(
 			"""SELECT check_in_date, check_out_date FROM `tabReservation`
-			   WHERE group_booking = %s AND room_type = %s
+			   WHERE group_booking = %s AND room_type = %s AND name != %s
 			     AND status IN ('Confirmed', 'Checked In', 'Held', 'Pending Payment', 'Checked Out')
 			   FOR UPDATE""",
-			(group, room_type), as_dict=True)
+			(group, room_type, exclude_reservation or ""), as_dict=True)
 	else:
 		stays = frappe.get_all("Reservation", filters={
-			"group_booking": group, "room_type": room_type,
+			"group_booking": group, "room_type": room_type, "name": ("!=", exclude_reservation or ""),
 			"status": ("in", [*LIVE_STATUSES, "Checked Out"])},
 			fields=["check_in_date", "check_out_date"])
 	out = {}
@@ -166,13 +166,40 @@ def block_hold_by_night(property: str, room_type: str, nights: list,
 		return {}
 	dates = [getdate(d) for d in nights]
 	groups = _holding_groups(property, min(dates),
-	                         add_days(max(dates), 1), for_group)
+	                         add_days(max(dates), 1), for_group, for_update=for_update)
 	out = {str(d): 0 for d in dates}
 	for gb in groups:
 		held = unpicked_by_night(gb.name, room_type, for_update=for_update)
 		for d in dates:
 			out[str(d)] += held.get(str(d), 0)
 	return out
+
+
+def shared_block_holds(property, room_types, start, end, pickups, exclude_reservation=None):
+	"""Unpicked nightly commitments competing for the same physical stock."""
+	holds = []
+	for group in _holding_groups(property, start, end, for_update=True):
+		blocked_types = frappe.db.get_values(
+			"Group Room Block", {"parent": group.name, "room_type": ("in", sorted(room_types))},
+			"room_type", pluck=True, for_update=True,
+		)
+		for rt in sorted(set(blocked_types)):
+			nightly = unpicked_by_night(group.name, rt, for_update=True, exclude_reservation=exclude_reservation)
+			for date, count in nightly.items():
+				day = getdate(date)
+				if not count or not start <= day < end:
+					continue
+				own = sum(1 for g, t, a, b in pickups if g == group.name and t == rt and a <= day < b)
+				held = count - own
+				if held <= 0:
+					continue
+				until = getdate(add_days(day, 1))
+				# A constant quota only needs a new interval when another commitment changes.
+				if holds and holds[-1][1:] == (day, rt, held):
+					holds[-1] = (holds[-1][0], until, rt, held)
+				else:
+					holds.append((day, until, rt, held))
+	return holds
 
 
 def group_rate(group: str | None, room_type: str | None) -> float:

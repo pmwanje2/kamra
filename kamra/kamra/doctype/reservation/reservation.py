@@ -437,7 +437,8 @@ class Reservation(Document):
 			if self._takes_new_inventory() or (before and (before.room, before.sellable_unit)
 			                                   != (self.room, self.sellable_unit)):
 				from kamra.siu.shared_capacity import shared_capacity_windows
-				stay = {"room_type": self.room_type, "check_in_date": self.check_in_date, "check_out_date": self.check_out_date}
+				stay = {"room_type": self.room_type, "group_booking": self.group_booking,
+				        "check_in_date": self.check_in_date, "check_out_date": self.check_out_date}
 				windows = shared_capacity_windows(self.property, [stay], exclude_reservation=self.name)
 				if windows:
 					assigned = {0: self._physical_rooms()}
