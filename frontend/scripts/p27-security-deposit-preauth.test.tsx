@@ -365,6 +365,72 @@ describe("P27 SecurityDepositPanel card pre-authorization lifecycle", () => {
     )
   })
 
+  it("keeps the primary confirmation at WCAG AA contrast in both themes, including disabled", async () => {
+    await act(async () =>
+      root.render(<SecurityDepositPanel reservation="RES-COLOR" deposit={baseDeposit()} canStart onChanged={vi.fn()} />),
+    )
+    const open = [...host.querySelectorAll("button")].find((b) => /Authorize hold/i.test(b.textContent ?? ""))!
+    await act(async () => open.click())
+    const confirm = [...host.querySelectorAll("button")].find((b) => /Authorize \$250/i.test(b.textContent ?? ""))!
+    expect(confirm.disabled).toBe(true)
+    expect([...confirm.classList]).toEqual(expect.arrayContaining([
+      "text-on-primary", "bg-primary-button", "hover:bg-primary-button-hover",
+      "disabled:bg-primary-button-disabled", "disabled:opacity-100",
+    ]))
+    const css = fs.readFileSync(path.resolve(path.dirname(PANEL_PATH), "../index.css"), "utf8")
+    const luminance = (hex: string) => {
+      const channels = hex.match(/../g)!.map((channel) => parseInt(channel, 16) / 255)
+      const [red, green, blue] = channels.map((n) => n <= 0.04045 ? n / 12.92 : ((n + 0.055) / 1.055) ** 2.4)
+      return 0.2126 * red + 0.7152 * green + 0.0722 * blue
+    }
+    const color = (token: string) => {
+      const values = [...css.matchAll(new RegExp(`--color-${token}: #([0-9a-f]{6});`, "gi"))]
+      expect(values).toHaveLength(1)
+      return values[0][1]
+    }
+    expect(color("on-primary")).toBe("ffffff")
+    for (const suffix of ["", "-hover", "-disabled"]) {
+      expect(1.05 / (luminance(color(`primary-button${suffix}`)) + 0.05)).toBeGreaterThanOrEqual(4.5)
+    }
+    await act(async () => {
+      setInputValue(host.querySelector<HTMLInputElement>('input[name="gateway_auth_ref"]')!, "AUTH-COLOR")
+      setInputValue(host.querySelector<HTMLInputElement>('input[name="card_last4"]')!, "4242")
+    })
+    expect(confirm.disabled).toBe(false)
+  })
+
+  it("shows a capture draft immediately and suppresses repeat capture while the stay refreshes", async () => {
+    const deposit = baseDeposit({ status: "Authorized", authorized_amount: 250, can_capture: true })
+    await act(async () =>
+      root.render(<SecurityDepositPanel reservation="RES-DRAFT" deposit={deposit} canStart onChanged={vi.fn()} />),
+    )
+    const button = (text: RegExp) =>
+      [...host.querySelectorAll("button")].find((b) => text.test(b.textContent ?? ""))
+    await act(async () => button(/Capture for damage/i)!.click())
+    await act(async () => setInputValue(host.querySelector<HTMLInputElement>('input[name="deposit_text"]')!, "Damaged lamp"))
+    rpc.mockResolvedValueOnce({ capture_mode: "draft_pending_submit", pending_payment_entry: "PE-DRAFT-100" })
+    await act(async () => button(/Capture \$250/i)!.click())
+    expect((host.querySelector('[role="status"]')?.textContent ?? "")).toMatch(/Capture draft PE-DRAFT-100 created.*awaiting Finance submission/)
+    expect(button(/Capture for damage/i)).toBeUndefined()
+  })
+
+  it("keeps the pending draft visible when opening an existing stay", async () => {
+    const deposit = {
+      ...baseDeposit({ status: "Authorized", authorized_amount: 250, can_capture: false }),
+      pending_capture_payment_entry: "PE-DRAFT-200",
+    }
+    await act(async () =>
+      root.render(<SecurityDepositPanel reservation="RES-DRAFT" deposit={deposit} canStart onChanged={vi.fn()} />),
+    )
+    expect((host.querySelector('[role="status"]')?.textContent ?? "")).toContain("PE-DRAFT-200")
+    expect(host.textContent).toContain("awaiting Finance submission")
+  })
+
+  it.each(["fr", "es"] as const)("distinguishes money held from money withheld in %s", (language) => {
+    const labels = JSON.parse(fs.readFileSync(path.resolve(path.dirname(PANEL_PATH), `../i18n/locales/${language}.json`), "utf8"))
+    expect(labels.Held).not.toBe(labels.Withheld)
+  })
+
   it("hides pre-auth actions when can_* flags are false and meets RTL, dark-mode, tap-target, and white-label rules", async () => {
     await act(async () =>
       root.render(

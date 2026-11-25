@@ -16,6 +16,7 @@ import json
 import re
 import sys
 import unittest
+from contextlib import nullcontext
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
@@ -90,6 +91,8 @@ class _FakeSite:
 	def __init__(self, *, preauth_installed: bool = True, allowed_properties: set[str] | None = None):
 		self.preauth_installed = preauth_installed
 		self.allowed_properties = allowed_properties
+		self.permissions: dict[tuple[str, str], bool] = {}
+		self.customers: dict[str, dict] = {}
 		self.properties: dict[str, dict] = {}
 		self.reservations: dict[str, dict] = {}
 		self.folios: dict[str, dict] = {}
@@ -191,6 +194,8 @@ class _FakeSite:
 			self.deposits[doc["name"]] = doc.as_dict()
 		elif dt == "Folio":
 			self.folios[doc["name"]] = doc.as_dict()
+		elif dt == "Reservation":
+			self.reservations[doc["name"]] = doc.as_dict()
 
 	def _recalc_deposit(self, doc: _Doc):
 		col = float(doc.get("collected_amount") or 0)
@@ -205,6 +210,8 @@ class _FakeSite:
 			"Folio": self.folios,
 			"Security Deposit": self.deposits,
 			"Credit Preauthorization": self.preauths,
+			"Customer": self.customers,
+			"Payment Entry": {row["name"]: row for row in self.payment_entries},
 		}.get(dt, {})
 
 	def _match(self, row: dict, filters) -> bool:
@@ -227,7 +234,7 @@ class _FakeSite:
 				return True
 			if name in ("Credit Preauthorization", "Credit Preauthorization Event"):
 				return self.preauth_installed
-			if name in ("Company", "Customer"):
+			if name in ("Company", "Customer", "Payment Entry"):
 				return self.preauth_installed
 			return False
 		table = self._table(dt)
@@ -235,7 +242,7 @@ class _FakeSite:
 			return name in table
 		return any(self._match(r, name) for r in table.values())
 
-	def get_value(self, dt: str, filters, fieldname=None, as_dict=False, order_by=None):
+	def get_value(self, dt: str, filters, fieldname=None, as_dict=False, order_by=None, **kwargs):
 		rows = [r for r in self._table(dt).values() if self._match(r, filters)]
 		if not rows:
 			return None
@@ -247,7 +254,7 @@ class _FakeSite:
 			return _Doc({fieldname: row.get(fieldname)}, _store=None)
 		return row.get(fieldname)
 
-	def get_doc(self, arg1, arg2=None):
+	def get_doc(self, arg1, arg2=None, **kwargs):
 		if isinstance(arg1, dict):
 			return _Doc(dict(arg1), _store=self)
 		table = self._table(arg1)
@@ -257,7 +264,7 @@ class _FakeSite:
 		data.setdefault("doctype", arg1)
 		return _Doc(data, _store=self)
 
-	def get_all(self, dt: str, filters=None, fields=None, order_by=None, limit_page_length=None):
+	def get_all(self, dt: str, filters=None, fields=None, order_by=None, limit_page_length=None, **kwargs):
 		if dt == "Folio Payment":
 			parent = (filters or {}).get("parent")
 			rows = [r for r in self.folio_payments if r.get("parent") == parent]
@@ -345,19 +352,25 @@ class _FakeSite:
 			cap_amt = round(raw_cap, prec)
 			if raw_cap > rec["remaining_hold_amount"] or cap_amt > rec["remaining_hold_amount"]:
 				raise _ValidationError("[PREAUTH-OVER-CAPTURE]: Capture amount cannot exceed authorized hold.")
-			pe_name = self._next("ACC-PAY-2026")
-			self.payment_entries.append(
-				{
+			pe_name = form.get("existing_payment_entry")
+			if not pe_name:
+				pe_name = self._next("ACC-PAY-2026")
+				can_submit = self.permissions.get(("Payment Entry", "submit"), True)
+				self.payment_entries.append({
 					"name": pe_name,
 					"company": rec["company"],
 					"party": rec["customer"],
+					"party_type": "Customer",
+					"payment_type": "Receive",
 					"currency": rec["currency"],
 					"paid_amount": cap_amt,
-					"docstatus": 1,
-				}
-			)
-			self.gl_entries.append({"voucher_no": pe_name, "debit": cap_amt, "credit": 0.0})
-			self.gl_entries.append({"voucher_no": pe_name, "debit": 0.0, "credit": cap_amt})
+					"reference_no": form.get("gateway_capture_ref") or rec["gateway_auth_ref"],
+					"docstatus": int(can_submit),
+				})
+				if not can_submit:
+					return {**rec, "ok": True, "capture_mode": "draft_pending_submit", "payment_entry": pe_name}
+				self.gl_entries.append({"voucher_no": pe_name, "debit": cap_amt, "credit": 0.0})
+				self.gl_entries.append({"voucher_no": pe_name, "debit": 0.0, "credit": cap_amt})
 			rec["status"] = "Captured"
 			rec["captured_amount"] = cap_amt
 			rec["released_amount"] = round(rec["authorized_amount"] - cap_amt, prec)
@@ -404,6 +417,11 @@ class _FakeSite:
 def _load_deposit_module(site: _FakeSite):
 	def _throw(msg, exc=None, title=None):
 		raise (exc or _ValidationError)(msg)
+
+	def _get_list(dt, **kwargs):
+		if dt == "Customer":
+			raise _PermissionError("Insufficient Permission for Customer")
+		return site.get_all(dt, **kwargs)
 
 	def _get_datetime(val):
 		if isinstance(val, datetime.datetime):
@@ -505,7 +523,8 @@ def _load_deposit_module(site: _FakeSite):
 		get_cached_doc=site.get_doc,
 		get_cached_value=site.get_value,
 		get_all=site.get_all,
-		get_list=site.get_all,
+		get_list=_get_list,
+		has_permission=lambda dt, ptype, **kwargs: site.permissions.get((dt, ptype), True),
 		get_meta=lambda dt: SimpleNamespace(
 			has_field=lambda f: (dt == "Folio" and f == "customer")
 			or (dt == "Folio Payment" and f == "payment_entry")
@@ -522,6 +541,8 @@ def _load_deposit_module(site: _FakeSite):
 		flt=_flt,
 		now_datetime=lambda: site.now,
 		nowdate=lambda: "2026-11-25",
+		add_days=lambda date, days: date + datetime.timedelta(days=days),
+		getdate=datetime.date.fromisoformat,
 		get_datetime=_get_datetime,
 	)
 
@@ -668,6 +689,194 @@ class P27SecurityDepositPreauthTest(unittest.TestCase):
 
 	def tearDown(self):
 		self._patcher.stop()
+
+	def _authorize_usd(self):
+		return self.deposit.authorize_deposit(
+			"RES-USD-1", 250, gateway_auth_ref="GW-USD-27", card_last4="4242",
+			expires_on="2026-12-05 12:00:00",
+		)
+
+	def _capture_usd(self, amount=50, **kwargs):
+		return self.deposit.capture_deposit_auth("RES-USD-1", amount, "Damage", **kwargs)
+
+	def test_capture_draft_is_reported_after_refresh_without_posting(self):
+		self._authorize_usd()
+		self.site.permissions["Payment Entry", "submit"] = False
+		result = self._capture_usd(gateway_capture_ref="CUSTOM-CAPTURE-REF")
+		self.assertEqual(result["capture_mode"], "draft_pending_submit")
+		entry = result["pending_payment_entry"]
+		self.assertEqual(self.site.payment_entries[0]["docstatus"], 0)
+		self.assertFalse(self.site.folio_charges)
+		self.assertFalse(self.site.gl_entries)
+		for state in (result, self.deposit.deposit_state("RES-USD-1")):
+			with self.subTest(state=state):
+				self.assertEqual(state.get("pending_capture_payment_entry"), entry)
+				self.assertEqual(state["status"], "Authorized")
+				self.assertFalse(state["can_capture"])
+
+	def test_duplicate_capture_is_refused_with_draft_name(self):
+		self._authorize_usd()
+		self.site.permissions["Payment Entry", "submit"] = False
+		entry = self._capture_usd(gateway_capture_ref="CUSTOM-CAPTURE-REF")["pending_payment_entry"]
+		with self.assertRaisesRegex(_ValidationError, entry):
+			self._capture_usd(gateway_capture_ref="DIFFERENT-CAPTURE-REF")
+		self.assertEqual(len(self.site.payment_entries), 1)
+		self.assertFalse(self.site.folio_charges)
+
+	def test_detects_preexisting_draft_by_bridge_reference(self):
+		hold = self._authorize_usd()
+		self.site.payment_entries.append({
+			"name": "PE-LEGACY-DRAFT", "docstatus": 0, "payment_type": "Receive",
+			"company": "Harbor Plaza Inc", "party_type": "Customer", "party": "Walk-In USD",
+			"reference_no": hold["gateway_auth_ref"],
+		})
+		state = self.deposit.deposit_state("RES-USD-1")
+		self.assertEqual(state.get("pending_capture_payment_entry"), "PE-LEGACY-DRAFT")
+		with self.assertRaisesRegex(_ValidationError, "PE-LEGACY-DRAFT"):
+			self._capture_usd()
+		self.assertEqual(len(self.site.payment_entries), 1)
+
+	def test_capture_reuses_the_tracked_entry_after_finance_submits(self):
+		self._authorize_usd()
+		self.site.permissions["Payment Entry", "submit"] = False
+		entry = self._capture_usd()["pending_payment_entry"]
+		self.site.permissions["Payment Entry", "submit"] = True
+		self.site.payment_entries[0]["docstatus"] = 1
+		with self.assertRaisesRegex(_ValidationError, entry):
+			self._capture_usd(amount=51)
+		result = self._capture_usd()
+		self.assertEqual(result["payment_entry"], entry)
+		self.assertIsNone(result.get("pending_capture_payment_entry"))
+		self.assertEqual(len(self.site.payment_entries), 1)
+		self.assertEqual(len(self.site.folio_charges), 1)
+
+	def test_desk_can_resolve_customer_on_a_permitted_property(self):
+		self.site.allowed_properties = {"Harbor Plaza"}
+		self.site.properties["Harbor Plaza"]["walk_in_customer"] = ""
+		self.site.folios["FOL-USD-1"]["customer"] = None
+		self.site.customers["CUS-AMINA"] = {"name": "CUS-AMINA", "customer_name": "Amina Guest"}
+		state = self._authorize_usd()
+		self.assertEqual(self.site.preauths[state["preauth_hold"]]["customer"], "CUS-AMINA")
+
+	def test_card_actions_follow_document_permissions(self):
+		self.site.permissions["Credit Preauthorization", "create"] = False
+		self.assertFalse(self.deposit.deposit_state("RES-USD-1")["can_authorize"])
+		self.site.permissions["Credit Preauthorization", "create"] = True
+		self.assertTrue(self.deposit.deposit_state("RES-USD-1")["can_authorize"])
+		self._authorize_usd()
+		for can_write, can_create, can_submit in (
+			(False, True, True), (True, False, False), (True, True, False), (True, False, True),
+		):
+			with self.subTest(write=can_write, create=can_create, submit=can_submit):
+				self.site.permissions["Credit Preauthorization", "write"] = can_write
+				self.site.permissions["Payment Entry", "create"] = can_create
+				self.site.permissions["Payment Entry", "submit"] = can_submit
+				state = self.deposit.deposit_state("RES-USD-1")
+				self.assertEqual(state["can_increment"], can_write)
+				self.assertEqual(state["can_release"], can_write)
+				self.assertEqual(state["can_capture"], can_write and (can_create or can_submit))
+
+	def test_all_deposit_currency_fields_use_property_currency(self):
+		fields = json.loads(SECURITY_DEPOSIT_JSON.read_text())["fields"]
+		for field in fields:
+			if field["fieldtype"] == "Currency":
+				with self.subTest(field=field["fieldname"]):
+					self.assertEqual(field.get("options"), "Property:property:currency")
+
+	def test_preauth_event_notes_translate_before_formatting(self):
+		translations = {
+			"Security deposit pre-authorization for {0}": "Préautorisation de caution pour {0}",
+			"Incremental pre-authorization for {0}": "Augmentation de la préautorisation pour {0}",
+		}
+		translate = lambda text: translations.get(text, text)
+		with patch.object(self.deposit, "_", translate), patch.object(self.deposit.frappe, "_", translate):
+			state = self._authorize_usd()
+			updated = self.deposit.increment_deposit_auth("RES-USD-1", 25)
+		self.assertEqual(state["history"][-1]["note"], "Préautorisation de caution pour RES-USD-1")
+		self.assertEqual(updated["history"][-1]["note"], "Augmentation de la préautorisation pour RES-USD-1")
+
+	def test_checkout_context_blocks_active_holds_and_clears_on_terminal_state(self):
+		hold = self._authorize_usd()
+		name = hold["preauth_hold"]
+		checkout, modules = self._load_checkout()
+		with patch.dict(sys.modules, modules):
+			for status in ("Authorized", "Incremented", "Released", "Captured", "Expired"):
+				with self.subTest(status=status):
+					self.site.preauths[name]["status"] = status
+					context = checkout._checkout_context("RES-USD-1")
+					active = status in ("Authorized", "Incremented")
+					self.assertEqual(context["actions"]["can_checkout"], not active)
+					self.assertEqual(
+						any("release the card hold" in b["message"] for b in context["blockers"]),
+						active,
+					)
+
+	def test_checkout_endpoint_refuses_active_holds_and_allows_terminal_states(self):
+		hold = self._authorize_usd()
+		name = hold["preauth_hold"]
+		checkout, modules = self._load_checkout()
+		tree = ast.parse((KAMRA / "api.py").read_text())
+		endpoint = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "check_out")
+		endpoint.decorator_list = []
+		namespace = {
+			"frappe": self.deposit.frappe, "_": self.deposit._,
+			"_assert_settled": lambda *_: [], "_scrub_stay_ids": lambda *_: None,
+		}
+		exec(compile(ast.Module(body=[endpoint], type_ignores=[]), "api.py", "exec"), namespace)
+		with patch.dict(sys.modules, {**modules, "kamra.checkout": checkout}):
+			for status in ("Authorized", "Incremented", "Released", "Captured", "Expired"):
+				with self.subTest(status=status):
+					res = self.site.reservations["RES-USD-1"]
+					res["status"] = "Checked In"
+					self.site.preauths[name]["status"] = status
+					if status in ("Authorized", "Incremented"):
+						with self.assertRaisesRegex(_ValidationError, "release the card hold"):
+							namespace["check_out"]("RES-USD-1")
+						self.assertEqual(res["status"], "Checked In")
+					else:
+						self.assertTrue(namespace["check_out"]("RES-USD-1")["ok"])
+						self.assertEqual(self.site.reservations["RES-USD-1"]["status"], "Checked Out")
+
+	def _load_checkout(self):
+		"""Run checkout orchestration with a settled stay and unrelated services stubbed."""
+		res = self.site.reservations["RES-USD-1"]
+		res.update(
+			room=None, company=None, room_type="Standard", check_in_date=self.site.now.date(),
+			check_out_date=self.site.now.date(), adults=1, children=0, flags=SimpleNamespace(),
+		)
+
+		modules = {
+			"kamra.deposit": self.deposit,
+			"kamra.sop": _mod("kamra.sop", group_for_charge=lambda *_: None),
+			"kamra.traces": _mod(
+				"kamra.traces", assert_no_blocking_alerts=lambda *a, **kw: None,
+				check_point_alerts=lambda *a, **kw: [], can_override_blocking_alert=lambda: False,
+			),
+		}
+		for mod_name, attrs in {
+			"kamra.authz": {"assert_property_access": lambda prop: None},
+			"kamra.localization": {"pack_for": lambda prop: SimpleNamespace(locale=lambda doc: {})},
+			"kamra.folio": {
+				"post_remaining_nights": lambda res: None, "_security_deposit_row_ids": lambda doc: set(),
+				"billing_rule_rows": lambda company: [],
+			},
+		}.items():
+			modules[mod_name] = _mod(mod_name, **{**vars(sys.modules[mod_name]), **attrs})
+		self.deposit.frappe.db.savepoint = lambda name: None
+		spec = importlib.util.spec_from_file_location("checkout_p27_under_test", KAMRA / "checkout.py")
+		checkout = importlib.util.module_from_spec(spec)
+		spec.loader.exec_module(checkout)
+		checkout._NoTrace = lambda *args: nullcontext()
+		checkout._modes = lambda prop: ["Card"]
+		checkout._late_checkout = lambda *args: None
+		checkout._pending_bills = lambda *args: []
+		checkout._till = lambda prop: {"open": True}
+		checkout._can_check_out = lambda: True
+		checkout.early_departure_plan = lambda res: None
+		checkout.settlement_position = lambda res: {
+			"folios": [], "owed": 0, "refund_due": 0, "to_city_ledger": [],
+		}
+		return checkout, modules
 
 	def test_security_deposit_schema_declares_preauth_fields_and_statuses(self):
 		raw = SECURITY_DEPOSIT_JSON.read_text(encoding="utf-8")
