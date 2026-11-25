@@ -613,6 +613,42 @@ class TestContractTariffRemediationAPI(ContractTariffHarness):
 			 "room_count": 0, "price_lists": ["Corporate USD", "Local rates"]},
 		])
 
+	def test_first_tariff_links_native_item_and_submits_customer_draft(self):
+		from unittest.mock import Mock
+
+		room = Mock(property="Test Hotel", disabled=0, name="Test Hotel-STD",
+		            room_type_name="Standard", base_occupancy=2)
+		room.get.return_value = None
+		item = Mock(disabled=0, is_sales_item=1, is_stock_item=0)
+		item.name = "STANDARD-ROOM"
+		get_script = self.frappe.get_doc
+		self.frappe.get_doc = lambda dt, name, **kw: (
+			room if dt == "Room Type" else item if dt == "Item" else get_script(dt, name)
+		)
+		self.frappe.get_meta = lambda dt: SimpleNamespace(has_field=lambda field: True)
+		self.scripts = {"hospitality_tariffs.propose_tariff": {"name": "IP-NEW", "workflow_state": "Draft",
+		                                                    "customer": "Client Co"}}
+		draft = self.endpoint("propose_contract_tariff")(
+			"Test Hotel", "Corporate USD", "STANDARD-ROOM", 125, "2026-12-15",
+			customer="Client Co", room_type="Test Hotel-STD", occupancy_tier="2",
+		)
+		room.check_permission.assert_called_once_with("write")
+		item.check_permission.assert_called_once_with("read")
+		room.set.assert_called_once_with("custom_tariff_item", "STANDARD-ROOM")
+		room.save.assert_called_once_with()
+		self.assertEqual(draft["name"], "IP-NEW")
+		self.assertEqual(self.calls, [("hospitality_tariffs.propose_tariff", {
+			"property": "Test Hotel", "price_list": "Corporate USD", "item_code": "STANDARD-ROOM",
+			"price_list_rate": 125, "valid_from": "2026-12-15", "valid_upto": None, "customer": "Client Co",
+		})])
+
+	def test_refuses_to_bind_a_room_type_at_another_property(self):
+		self.frappe.get_doc = lambda *args, **kwargs: SimpleNamespace(property="Other Hotel", disabled=0)
+		with self.assertRaises(PermissionDenied):
+			self.endpoint("propose_contract_tariff")("Test Hotel", "Corporate USD", "", 125, "2026-12-15",
+			                                        room_type="Other Hotel-STD", occupancy_tier="2")
+		self.assertEqual(self.calls, [])
+
 	def test_unpriced_room_types_counts_active_siu_villa(self):
 		self.room_types = [
 			{"name": "Test Hotel-DLX", "room_type_name": "Deluxe", "room_type_code": "DLX", "disabled": 0},

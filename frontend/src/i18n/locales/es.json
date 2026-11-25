@@ -7329,5 +7329,9 @@
   "Custom Nightly Rate": "Tarifa personalizada por noche",
   "Rate Split Mode": "Modo de reparto de la tarifa",
   "Save Rate Split": "Guardar el reparto de la tarifa",
-  "Shared room with {n} reservations": "Habitación compartida por {n} reservas"
+  "Shared room with {n} reservations": "Habitación compartida por {n} reservas",
+  "Room matrix ({n})": "Matriz de habitaciones ({n})",
+  "Supplements ({n})": "Suplementos ({n})",
+  "Venues ({n})": "Espacios ({n})",
+  "Other ({n})": "Otro ({n})"
 }

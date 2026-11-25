@@ -322,6 +322,9 @@ export default function SettingsHub() {
 
   const mod = schema.modules.find((m) => m.id === section)
   const focus = search.get("focus")
+  const frontDesk = schema.modules.find((module) => module.id === "front-desk")
+  const canOpenBookingPricing = frontDesk && visibleSections(frontDesk).some((section) =>
+    section.settings.some((setting) => setting.key === "rate_plan_required"))
 
   return (
     // Full width of the shell - list and settings pages should use the desk.
@@ -512,6 +515,8 @@ export default function SettingsHub() {
                 enabled={Boolean(mod.values.rate_plan_required)}
               />
             )}
+            {mod.id === "revenue" && canOpenBookingPricing && <Link to="/settings/front-desk?focus=rate_plan_required"
+              className="text-sm font-medium text-accent-ink hover:underline">{t("Booking pricing settings")}</Link>}
             {mod.id === "front-desk" && <CheckInStepsCard property={property} />}
             {mod.id === "front-desk" && (
               <NightAuditScheduleCard

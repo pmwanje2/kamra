@@ -7315,5 +7315,9 @@
   "The supervisor must enroll an approval PIN first.": "O supervisor precisa cadastrar um PIN de aprovação primeiro.",
   "The supervisor’s PIN is locked. Try again later.": "O PIN do supervisor está bloqueado. Tente novamente mais tarde.",
   "{count} digits entered": "{count} dígitos digitados",
-  "Wrong cashier PIN.": "O PIN do caixa está incorreto."
+  "Wrong cashier PIN.": "O PIN do caixa está incorreto.",
+  "Room matrix ({n})": "Matriz de quartos ({n})",
+  "Supplements ({n})": "Suplementos ({n})",
+  "Venues ({n})": "Espaços ({n})",
+  "Other ({n})": "Outros ({n})"
 }
