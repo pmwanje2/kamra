@@ -11,7 +11,7 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import SecurityDepositPanel, { type SecurityDepositState } from "../src/components/SecurityDepositPanel"
-import { adoptUiLocale } from "../src/lib/money"
+import { adoptUiLocale, locale } from "../src/lib/money"
 import { setLang } from "../src/lib/dir"
 
 const { rpc } = vi.hoisted(() => ({ rpc: vi.fn() }))
@@ -91,12 +91,13 @@ describe("P27 SecurityDepositPanel card pre-authorization lifecycle", () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true)
     rpc.mockReset().mockImplementation((method: string) => {
       if (method === "kamra.api.property_locale") {
+        const curLoc = locale()
         return Promise.resolve({
-          currency: "USD",
-          currency_symbol: "$",
-          decimals: 2,
+          currency: curLoc.currency || "USD",
+          currency_symbol: curLoc.currency_symbol || "$",
+          decimals: curLoc.decimals ?? 2,
           currency_decimals: { UGX: 0, USD: 2, KWD: 3 },
-          locale: "en-GB",
+          locale: curLoc.locale || "en-GB",
           tax_label: "VAT",
           tax_id_label: "Tax ID",
           tax_rates: [],

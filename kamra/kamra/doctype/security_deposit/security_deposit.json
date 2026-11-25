@@ -14,11 +14,19 @@
   "method",
   "sb_amounts",
   "required_amount",
+  "authorized_amount",
   "collected_amount",
   "withheld_amount",
   "refunded_amount",
   "column_break_b",
   "balance",
+  "sb_preauth",
+  "preauth_hold",
+  "gateway_auth_ref",
+  "cb_preauth",
+  "card_brand",
+  "card_last4",
+  "expires_on",
   "sb_audit",
   "reason",
   "evidence",
@@ -64,7 +72,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Status",
-   "options": "Required\nWaived\nCollected\nHeld\nWithheld\nRefunded",
+   "options": "Required\nWaived\nAuthorized\nCollected\nHeld\nWithheld\nRefunded\nReleased\nExpired",
    "reqd": 1
   },
   {
@@ -85,6 +93,14 @@
    "in_list_view": 1,
    "label": "Required Amount",
    "reqd": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "authorized_amount",
+   "fieldtype": "Currency",
+   "label": "Authorized Amount",
+   "options": "Property:property:currency",
+   "read_only": 1
   },
   {
    "default": "0",
@@ -116,6 +132,46 @@
    "read_only": 1
   },
   {
+   "fieldname": "sb_preauth",
+   "fieldtype": "Section Break",
+   "label": "Card Pre-Authorization"
+  },
+  {
+   "fieldname": "preauth_hold",
+   "fieldtype": "Data",
+   "label": "Pre-Authorization Hold",
+   "length": 140,
+   "read_only": 1
+  },
+  {
+   "fieldname": "gateway_auth_ref",
+   "fieldtype": "Data",
+   "label": "Gateway Authorization Reference",
+   "length": 140
+  },
+  {
+   "fieldname": "cb_preauth",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "card_brand",
+   "fieldtype": "Data",
+   "label": "Card Brand",
+   "length": 32
+  },
+  {
+   "description": "Last 4 masked card digits only; never store full PAN or CVV.",
+   "fieldname": "card_last4",
+   "fieldtype": "Data",
+   "label": "Card Last 4",
+   "length": 4
+  },
+  {
+   "fieldname": "expires_on",
+   "fieldtype": "Datetime",
+   "label": "Expires On"
+  },
+  {
    "fieldname": "sb_audit",
    "fieldtype": "Section Break",
    "label": "Audit"
@@ -142,7 +198,7 @@
   }
  ],
  "links": [],
- "modified": "2026-08-11 00:00:00.000000",
+ "modified": "2026-11-25 06:30:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Security Deposit",
