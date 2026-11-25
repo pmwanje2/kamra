@@ -527,15 +527,15 @@ ADVANCE_APPLIED = "Advance applied to the stay"
 
 
 def _advance_held(folio: str, payment_row: str, property: str | None = None) -> float:
-	"""What of one Advance payment still sits in the Deposit ledger."""
+	"""What of one Advance payment still sits in Deposit after linked refunds."""
 	prop = property or frappe.db.get_value("Folio", folio, "property")
-	places = max(_currency_places(prop), 2)
+	places = cint(frappe.db.get_single_value("System Settings", "currency_precision")) or _currency_places(prop)
 	raw = frappe.db.sql(
 		"""SELECT COALESCE(SUM(credit - debit), 0) FROM `tabFolio Ledger Entry`
 		   WHERE ledger = 'Deposit' AND source_doctype = 'Folio Payment'
 		     AND folio = %s AND (source_name = %s OR source_name IN (
 		       SELECT name FROM `tabFolio Payment` WHERE parent = %s AND parenttype = 'Folio'
-		       AND refund_of = %s AND correction_signature IS NOT NULL))""",
+		       AND refund_of = %s))""",
 		(folio, payment_row, folio, payment_row))[0][0] or 0
 	return _round_currency(raw, places)
 
@@ -590,15 +590,13 @@ def _apply_advances(folios, business_date: str | None = None) -> float:
 		code = None
 	moved = Decimal(0)
 	for folio in folios:
-		places = max(_currency_places(folio.property), 2)
-		eps = 0.5 * (10 ** -places)
 		for row in frappe.get_all(
 				"Folio Payment",
 				filters={"parent": folio.name, "parenttype": "Folio",
 				         "payment_kind": "Advance"},
 				pluck="name"):
 			held = _advance_held(folio.name, row, property=folio.property)
-			if held <= eps:
+			if held <= 0:
 				continue
 			for ledger, debit, credit in (("Deposit", held, 0),
 			                              ("Guest", 0, held)):
