@@ -6,6 +6,7 @@ a correct multi-rate invoice - the PRD's FR-60.
 """
 
 import json
+from collections import defaultdict
 from contextlib import contextmanager
 from decimal import ROUND_HALF_UP, Decimal
 
@@ -60,34 +61,46 @@ def _security_deposit_row_ids(folio) -> set[int]:
 	}
 	sec_names = {payments[idx].name for idx in sec_idx if payments[idx].get("name")}
 	refunds = [(idx, p) for idx, p in enumerate(payments) if p.get("payment_kind") == "Refund"]
-	if not refunds:
+	if len(sec_idx) == len(payments):
 		return sec_idx
 	pending = (getattr(folio, "flags", None) or {}).get("kamra_pending_security_refund")
-	posted = set()
-	if folio.get("name") and any(p.get("name") for _, p in refunds):
-		filters = {"folio": folio.name, "ledger": "Deposit"}
-		fields = ["name", "source_doctype", "source_name", "reversal_of"]
-		if _deposit_read_for_update(folio):
-			entries = frappe.db.get_values("Folio Ledger Entry", filters, fields, as_dict=True, for_update=True)
-		else:
-			entries = frappe.get_all("Folio Ledger Entry", filters=filters, fields=fields)
-		security_entries = {
-			e.name for e in entries if e.source_doctype == "Security Deposit"
-			or (e.source_doctype == "Folio Payment" and e.source_name in sec_names)
-		}
-		posted = {
-			e.source_name for e in entries
-			if e.source_doctype == SECURITY_DEPOSIT_REFUND_SOURCE
-			or (e.source_doctype == "Folio Payment" and e.reversal_of in security_entries)
-		}
-	has_pe = bool(frappe.db.exists("DocType", "Payment Entry"))
+	has_pe = refunds and frappe.db.exists("DocType", "Payment Entry")
 	for idx, p in refunds:
-		if p is pending or p.get("name") in posted:
-			sec_idx.add(idx)
-		elif p.get("refund_of") in sec_names and not (
+		if p is pending or (p.get("refund_of") in sec_names and not (
 			has_pe and (p.get("payment_entry") or p.get("reversal_of"))
-		):
+		)):
 			sec_idx.add(idx)
+	if not folio.get("name"):
+		return sec_idx
+
+	sec_names.update(payments[i].name for i in sec_idx if payments[i].get("name"))
+	filters = {"folio": folio.name, "ledger": "Deposit"}
+	fields = ["name", "source_doctype", "source_name", "reversal_of"]
+	if _deposit_read_for_update(folio):
+		entries = frappe.db.get_values("Folio Ledger Entry", filters, fields, as_dict=True, for_update=True)
+	else:
+		entries = frappe.get_all("Folio Ledger Entry", filters=filters, fields=fields)
+
+	# A reversal retains its original liability, irrespective of its sign or depth.
+	children = defaultdict(list)
+	roots = []
+	for entry in entries:
+		if entry.reversal_of:
+			children[entry.reversal_of].append(entry)
+		if entry.source_doctype in ("Security Deposit", SECURITY_DEPOSIT_REFUND_SOURCE) or (
+			entry.source_doctype == "Folio Payment" and entry.source_name in sec_names
+		):
+			roots.append(entry)
+	seen = set()
+	while roots:
+		entry = roots.pop()
+		if entry.name in seen:
+			continue
+		seen.add(entry.name)
+		if entry.source_doctype in ("Folio Payment", SECURITY_DEPOSIT_REFUND_SOURCE):
+			sec_names.add(entry.source_name)
+		roots.extend(children.get(entry.name, ()))
+	sec_idx.update(i for i, p in enumerate(payments) if p.get("name") and p.name in sec_names)
 	return sec_idx
 
 
@@ -143,14 +156,38 @@ def _refund_amounts(folio, sec_idx: set[int]) -> tuple[Decimal, Decimal, Decimal
 def payment_savepoint():
 	"""Keep a refused posting atomic even if a caller handles its exception."""
 	point = "folio_payment_" + frappe.generate_hash(length=8)
-	frappe.db.savepoint(point)
+	db = frappe.db
+	writes = db.transaction_writes
+	queues = [(queue._functions, list(queue._functions)) for queue in (
+		db.before_commit, db.after_commit, db.before_rollback, db.after_rollback,
+	)]
+	queued = getattr(frappe.local, "_realtime_log", None)
+	realtime = list(queued) if queued is not None else None
+	db.savepoint(point)
 	try:
 		yield
-	except Exception:
-		frappe.db.rollback(save_point=point)
+	except Exception as exc:
+		try:
+			db.rollback(save_point=point)
+		except Exception as rollback_error:
+			# MariaDB removes every savepoint when it aborts the transaction.
+			# Keep the original conflict visible to the transaction owner.
+			if rollback_error.args and rollback_error.args[0] == 1305:
+				raise exc from None
+			raise
+		finally:
+			for queue, original in queues:
+				queue.clear()
+				queue.extend(original)
+			if realtime is not None:
+				frappe.local._realtime_log = realtime
+			elif hasattr(frappe.local, "_realtime_log"):
+				del frappe.local._realtime_log
+		db.transaction_writes = writes
+		db.release_savepoint(point)
 		raise
 	else:
-		frappe.db.release_savepoint(point)
+		db.release_savepoint(point)
 
 
 def lock_guest_deposit_windows(reservation):
@@ -163,20 +200,45 @@ def lock_guest_deposit_windows(reservation):
 		)
 
 
+def _check_receipt_snapshot(query, args):
+	"""Lock current versions without allowing MariaDB 1020 to abort the caller.
+
+	Only the comparison read uses current versions. A stale snapshot is
+	refused before any posting, with the caller's transaction still intact.
+	"""
+	snapshot = frappe.db.sql(query, args)
+	current = frappe.db.sql("SET STATEMENT innodb_snapshot_isolation=OFF FOR " + query + " FOR UPDATE", args)
+	if snapshot != current:
+		raise frappe.TimestampMismatchError(frappe._(
+			"The folio changed in another transaction. Retry the payment in a new transaction."))
+
+
 def payment_folio_for_update(name, *, lock_standalone=False):
 	"""Lock the stay first. Standalone keyed receipts still serialize on their own folio."""
 	from kamra.api import _with_snapshot_retry
 
 	def load_locked():
 		reservation = frappe.db.get_value("Folio", name, "reservation")
-		lock_guest_deposit_windows(reservation)
-		if reservation or lock_standalone:
-			return frappe.get_doc("Folio", name, for_update=True)
-		return frappe.get_doc("Folio", name)
+		if not reservation and not lock_standalone:
+			return frappe.get_doc("Folio", name)
+		mode = (getattr(frappe.db, "db_type", None) == "mariadb"
+		        and frappe.db.sql("SHOW SESSION VARIABLES LIKE 'innodb_snapshot_isolation'"))
+		if mode and mode[0][1] == "ON":
+			if reservation:
+				_check_receipt_snapshot("SELECT name, modified FROM `tabReservation` WHERE name=%s", reservation)
+				_check_receipt_snapshot(
+					"""SELECT name, modified, payments_total, balance FROM `tabFolio`
+					   WHERE reservation=%s AND (folio_type='Guest' OR name=%s) ORDER BY name""",
+					(reservation, name),
+				)
+			else:
+				_check_receipt_snapshot(
+					"SELECT name, modified, payments_total, balance FROM `tabFolio` WHERE name=%s", name)
+		else:
+			lock_guest_deposit_windows(reservation)
+		return frappe.get_doc("Folio", name, for_update=True)
 
-	# MariaDB snapshot isolation can reject the lock after a sibling commits.
-	# Refresh the snapshot before appending a receipt or creating a savepoint.
-	return _with_snapshot_retry(load_locked)
+	return _with_snapshot_retry(load_locked, receipt_lock=True)
 
 
 def guest_security_windows(reservation, property_name, *, for_update=False):

@@ -368,3 +368,7 @@ Property accounting currency,عملة المحاسبة للمنشأة
 Total in rate currency,الإجمالي بعملة السعر
 1 {0} = {1} {2},1 {0} = {1} {2}
 Amounts marked ≈ are estimates.,المبالغ المميزة بالرمز ≈ تقديرية.
+Recorded historical refund,استرداد تاريخي مسجّل
+This posting would change the historical refund on a settled invoice.,سيؤدي هذا القيد إلى تغيير مبلغ الاسترداد التاريخي في فاتورة مسددة.
+This posting would use funds reserved for a settled invoice.,سيستخدم هذا القيد أموالًا محجوزة لفاتورة مسددة.
+The folio changed in another transaction. Retry the payment in a new transaction.,تغيّر حساب النزيل في معاملة أخرى. أعد محاولة الدفع في معاملة جديدة.

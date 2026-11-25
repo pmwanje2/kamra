@@ -2805,3 +2805,4 @@ Choose an enabled non-stock sales item for the room type.,Choisissez un article 
 {0} adult occupancy,Occupation pour {0} adulte(s)
 This posting would change the historical refund on a settled invoice.,Cette écriture modifierait le remboursement historique d’une facture soldée.
 This posting would use funds reserved for a settled invoice.,Cette écriture utiliserait des fonds réservés à une facture soldée.
+The folio changed in another transaction. Retry the payment in a new transaction.,La note a été modifiée dans une autre transaction. Réessayez le paiement dans une nouvelle transaction.

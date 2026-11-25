@@ -100,13 +100,8 @@ def _post_link_receipt(folio, res, link_id, amount):
 	from kamra.folio import _recalculate
 	_recalculate(folio, payments_only=True)
 	folio.save(ignore_permissions=True)
-	try:
-		from kamra.ledger import record_payment_ledger
-		record_payment_ledger(folio, folio.payments[-1].as_dict())
-	except Exception:
-		if pre_arrival:
-			raise
-		frappe.log_error(title="ledger payment-link write failed")
+	from kamra.ledger import record_payment_ledger
+	record_payment_ledger(folio, folio.payments[-1].as_dict())
 	if pre_arrival:
 		res.reload()  # the folio save above may have touched the booking
 		paid = float(res.advance_paid or 0) + amount

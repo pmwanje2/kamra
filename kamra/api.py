@@ -8,6 +8,7 @@ import json
 import math
 from contextlib import nullcontext
 from contextvars import ContextVar
+from functools import wraps
 
 import frappe
 from frappe import _
@@ -1672,7 +1673,25 @@ def _pin_guard(folio: str, pin=None):
 	from kamra.authz import require_cashier_pin
 	require_cashier_pin(frappe.db.get_value("Folio", folio, "property"), pin)
 
+
+_fresh_receipt = ContextVar("kamra_fresh_receipt", default=False)
+
+
+def _receipt_transaction(fn):
+	@wraps(fn)
+	def guarded(*args, **kwargs):
+		# Establish ownership before role, property and PIN checks open a read view.
+		fresh = getattr(frappe.db, "db_type", None) == "mariadb" and not frappe.db.sql("SELECT @@in_transaction")[0][0]
+		token = _fresh_receipt.set(fresh)
+		try:
+			return fn(*args, **kwargs)
+		finally:
+			_fresh_receipt.reset(token)
+	return guarded
+
+
 @frappe.whitelist()
+@_receipt_transaction
 @require_roles("Finance", "Front Desk", "Kamra Agent")
 def add_folio_payment(folio: str, mode: str, amount: float,
                       reference: str | None = None, pin: str | None = None,
@@ -1785,7 +1804,7 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 		):
 			_ledger_mod.sync_folio_rounding_ledger(doc, session=sess)
 	except Exception:
-		if kind in ("Advance", "Security Deposit"):
+		if key or kind in ("Advance", "Security Deposit"):
 			raise
 		frappe.log_error(title="ledger payment write failed")
 	if kind in ("Advance", "Security Deposit"):
@@ -2494,53 +2513,57 @@ def _lock_folio_scope(reservations=(), folios=(), *, include_guest_windows=False
 		)
 
 
-def _with_snapshot_retry(fn):
-	"""Retry transient MariaDB snapshot/lock conflicts at the outermost request
-	boundary only. When a caller already has uncommitted writes in the current
-	transaction, use a savepoint so earlier writes are never discarded; nested
-	calls delegate retries to the enclosing outermost handler."""
-	depth = int(getattr(frappe.local, "_kamra_snapshot_retry_depth", 0) or 0)
-	if depth > 0:
+def _receipt_transaction_state():
+	"""Return whether we own the next transaction and whether the caller has only read.
+
+	The session's storage-engine write counters survive rollback to a savepoint.
+	They cover the entire connection, so on a reused connection we can refuse a
+	retry unnecessarily, but cannot mistake an earlier update for a clean read.
+	"""
+	db = frappe.db
+	if db.transaction_writes or any(q._functions for q in (
+		db.after_commit, db.before_commit, db.before_rollback, db.after_rollback,
+	)):
+		return False, False
+	# MariaDB accepts SAVEPOINT even before an InnoDB transaction starts.
+	counts = db.sql("""SHOW SESSION STATUS WHERE Variable_name IN
+		('Com_savepoint', 'Handler_write', 'Handler_update', 'Handler_delete')""")
+	only_reads = len(counts) == 4 and not any(int(count) for _, count in counts)
+	return only_reads and not db.sql("SELECT @@in_transaction")[0][0], only_reads
+
+
+def _with_snapshot_retry(fn, *, receipt_lock=False):
+	"""Only restart a transaction we acquired with no caller work or savepoints."""
+	from kamra.folio import payment_savepoint
+
+	if getattr(frappe.db, "db_type", None) != "mariadb" or getattr(frappe.local, "_kamra_snapshot_retry_depth", 0):
 		return fn()
-	has_prior_writes = bool(getattr(frappe.db, "transaction_writes", 0))
-	frappe.local._kamra_snapshot_retry_depth = depth + 1
+	owned, only_reads = _receipt_transaction_state()
+	if receipt_lock and only_reads and _fresh_receipt.get():
+		owned = True
+	frappe.local._kamra_snapshot_retry_depth = 1
 	try:
 		for attempt in range(1, _FOLIO_CONFLICT_RETRIES + 1):
-			ac_fns = getattr(getattr(frappe.db, "after_commit", None), "_functions", None)
-			ac_len = len(ac_fns) if isinstance(ac_fns, list) else None
-			rt_log = getattr(frappe.local, "_realtime_log", None)
-			rt_len = len(rt_log) if isinstance(rt_log, list) else None
-			sp = f"kamra_snap_retry_{attempt}" if has_prior_writes else None
-			if sp:
-				frappe.db.savepoint(sp)
 			try:
-				return fn()
+				with nullcontext() if owned else payment_savepoint():
+					return fn()
 			except Exception as exc:
-				if not _is_snapshot_conflict(exc) or attempt >= _FOLIO_CONFLICT_RETRIES:
-					if sp:
-						try:
-							frappe.db.rollback(save_point=sp)
-						except Exception:
-							pass
-						if ac_len is not None and len(ac_fns) > ac_len:
-							del ac_fns[ac_len:]
-						if rt_len is not None and len(rt_log) > rt_len:
-							del rt_log[rt_len:]
+				if not _is_snapshot_conflict(exc) or attempt == _FOLIO_CONFLICT_RETRIES:
 					raise
-				if sp:
-					try:
-						frappe.db.rollback(save_point=sp)
-					except Exception:
-						raise exc from None
-				else:
+				if owned:
 					frappe.db.rollback()
-				if ac_len is not None and len(ac_fns) > ac_len:
-					del ac_fns[ac_len:]
-				if rt_len is not None and len(rt_log) > rt_len:
-					del rt_log[rt_len:]
+				elif isinstance(exc, frappe.TimestampMismatchError):
+					# A savepoint cannot advance the caller's repeatable read view.
+					raise
+				elif not frappe.db.sql("SELECT @@in_transaction")[0][0]:
+					# InnoDB itself ended the transaction. Never discard an active
+					# caller transaction to refresh a read view.
+					if not only_reads:
+						raise
+					frappe.db.value_cache.clear()
 				frappe.clear_messages()
 	finally:
-		frappe.local._kamra_snapshot_retry_depth = depth
+		frappe.local._kamra_snapshot_retry_depth = 0
 
 
 def _still_covers(instruction: str, charge_type: str, transaction_code: str | None) -> bool:
