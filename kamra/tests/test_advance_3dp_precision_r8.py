@@ -105,3 +105,11 @@ class TestAdvancePrecisionR8(AuditTestCase):
 					}, pluck=field)
 					self.assertEqual([Decimal(str(amount)) for amount in legs], [ordinary])
 				self.assert_windows(res, windows, [unit, 0, third_held], [ordinary, 0, 0])
+
+	def test_targeted_payout_persists_payments_total_on_shortfall_window(self):
+		for currency, collected, returned, unit in self.cases:
+			with self.subTest(currency=currency):
+				res, windows, third_held, ordinary = self.stay(currency, collected, returned, unit)
+				deposit.refund_deposit(res.name, unit, "Cash", folio=windows[2])
+				self.assertEqual(frappe.db.get_value("Folio", windows[2], "payments_total"), 0)
+				self.assert_windows(res, windows, [2 * unit, 0, third_held - unit], [ordinary, 0, 0])
