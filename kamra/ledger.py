@@ -2407,12 +2407,18 @@ def folio_history(property: str, query: str | None = None,
 
 		to = report_range_end(from_date, to_date)
 		filters.append(["closed_on", "between", [from_date, f"{to} 23:59:59"]])
+	hist_fields = [
+		"name", "guest_name", "reservation", "status", "folio_type",
+		"window_no", "payee_type", "payee_company", "payee_agent",
+		"bill_to_name", "invoice_number", "grand_total", "payments_total",
+		"balance", "closed_on", "modified",
+	]
+	if frappe.get_meta("Folio").has_field("sales_invoice"):
+		hist_fields.append("sales_invoice")
 	rows = frappe.get_all(
 		"Folio",
 		filters=filters,
-		fields=["name", "guest_name", "reservation", "status", "invoice_number",
-		        "grand_total", "payments_total", "balance", "closed_on",
-		        "modified"],
+		fields=hist_fields,
 		order_by="modified desc",
 		limit_page_length=200,
 	)

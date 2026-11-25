@@ -22,7 +22,10 @@
   "exchange_rate_date",
   "repost_of",
   "correction_approved_by",
-  "correction_signature"
+  "correction_signature",
+  "transferred_from",
+  "transferred_to",
+  "transfer_group_key"
  ],
  "fields": [
   {
@@ -140,13 +143,37 @@
    "label": "Correction Request Fingerprint",
    "read_only": 1,
    "no_copy": 1
+  },
+  {
+   "fieldname": "transferred_from",
+   "fieldtype": "Link",
+   "label": "Transferred From",
+   "options": "Folio",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "transferred_to",
+   "fieldtype": "Link",
+   "label": "Transferred To",
+   "options": "Folio",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "transfer_group_key",
+   "fieldtype": "Data",
+   "label": "Transfer Group Key",
+   "read_only": 1,
+   "no_copy": 1,
+   "search_index": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-11-24 05:00:00.000000",
+ "modified": "2026-11-25 06:00:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Folio Payment",

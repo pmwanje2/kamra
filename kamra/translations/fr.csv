@@ -57,6 +57,7 @@ A rate plan is required for this property and cannot be cleared from an existing
 "A rate plan is required for this property. Set up a default rate plan in Rate Plans, or choose a rate plan for this booking.","Un plan tarifaire est obligatoire pour cet établissement. Définissez un plan tarifaire par défaut dans Plans tarifaires, ou choisissez-en un pour cette réservation."
 "A rate plan is required for this property. Set up a default rate plan in Rate Plans, or choose a rate plan for this group.","Un plan tarifaire est obligatoire pour cet établissement. Définissez un plan tarifaire par défaut dans Plans tarifaires, ou choisissez-en un pour ce groupe."
 "A rate plan is required for this property. Set up a default rate plan in Rate Plans, or choose a rate plan.","Un plan tarifaire est obligatoire pour cet établissement. Définissez un plan tarifaire par défaut dans Plans tarifaires, ou choisissez un plan tarifaire."
+A reason is required for a receipt transfer.,Un motif est obligatoire pour transférer un encaissement.
 A reason is required.,Un motif est obligatoire.
 A receipt has to be a positive amount - use kind 'Refund' to give money back.,Un encaissement doit être d'un montant positif - utilisez le type « Remboursement » pour restituer des fonds.
 A restaurant or laundry bill is still open for this stay: settle or cancel it first.,Une note de restaurant ou de blanchisserie est encore ouverte pour ce séjour : réglez-la ou annulez-la d'abord.
@@ -73,6 +74,7 @@ A stay's rate category is its rate plan's when it was booked. It changes only wh
 "A stay's rate plan changes only through Amend stay, which shows the new price and checks any required sign-off.","Le plan tarifaire d'un séjour ne change que via Modifier le séjour, qui affiche le nouveau prix et vérifie toute validation requise."
 "A stock take needs a note - what did you count, and why does it differ?",Un inventaire requiert une note : qu'avez-vous compté et pourquoi constatez-vous un écart ?
 A supplementary needs a positive quantity.,Un supplément nécessite une quantité positive.
+A transferred receipt cannot be transferred a second time.,Un encaissement déjà transféré ne peut pas être transféré une seconde fois.
 "A travel agent window names the paying agent, and only that.",Une fenêtre agence de voyages doit indiquer uniquement l'agence payeuse.
 A window instruction routes within the stay; leave the target room empty.,Une instruction de fenêtre route les frais au sein du même séjour ; laissez la chambre cible vide.
 A {0} bag can't move to {1}.,Un sac {0} ne peut pas passer en {1}.
@@ -345,6 +347,8 @@ Cancelled By,Annulé par
 Cancelled On,Annulé le
 Cancelling now is charged {0}.,Une annulation maintenant entraîne des frais de {0}.
 Cancelling {0} · arrival {1}.,Annulation de {0} · arrivée {1}.
+Cannot change the group of an existing routing instruction.,Impossible de modifier le groupe d'une instruction de routage existante.
+Cannot change the stay of an existing routing instruction.,Impossible de modifier le séjour d'une instruction de routage existante.
 Cannot check out: the guest is owed {0}. Issue the refund before departure.,Départ impossible : {0} est dû au client. Émettez le remboursement avant le départ.
 Cannot check out: {0} is still owed. Collect payment or transfer it to the city ledger before departure.,Départ impossible : {0} reste dû. Encaissez le paiement ou transférez sur le compte société avant le départ.
 Cannot close the folio: {0} is owed back to the guest. Issue the refund first.,Impossible de clôturer le folio : {0} est dû au client. Émettez d'abord le remboursement.
@@ -425,9 +429,12 @@ Children Count Towards Base Occupancy,Les enfants comptent dans l'occupation de 
 Children Policy,Politique enfants
 Children can't be fewer than none.,Le nombre d'enfants ne peut pas être négatif.
 "Choose 5, 15 or 30 days.","Choisissez 5, 15 ou 30 jours."
+"Choose Guest, Company, or Travel Agent as the window payee.","Choisissez Client, Société ou Agence de voyages comme payeur de la fenêtre."
 Choose Refund or Keep as forfeited deposit.,Choisissez Rembourser ou Conserver comme acompte acquis.
+Choose a different destination folio.,Choisissez un folio de destination différent.
 Choose at least one tariff version.,Sélectionnez au moins une version tarifaire.
 Choose at most {0} tariff versions at a time.,Sélectionnez au plus {0} versions tarifaires à la fois.
+Choose both source and destination folios.,Sélectionnez à la fois le folio d'origine et le folio de destination.
 Choose how the group bill is paid.,Choisissez le mode de règlement de la note de groupe.
 "Choose the charge types or codes to route, or tick All Charges.","Choisissez les types de frais ou les codes à router, ou cochez Tous les frais."
 Choose the price list and the item.,Choisissez la liste de prix et l'article.
@@ -696,6 +703,8 @@ Enquiry,Demande
 Enquiry Date,Date de demande
 Enter a description for the fixed charge.,Saisissez une description pour les frais fixes.
 Enter a discount above zero.,Saisissez une remise supérieure à zéro.
+Enter a positive amount with at most {0} decimal places.,Saisissez un montant positif comportant au maximum {0} décimales.
+Enter a positive whole-unit amount.,Saisissez un montant positif en unités entières.
 Enter a reason for the room charge override.,Saisissez un motif pour la dérogation d'imputation en chambre.
 Enter a valid email address.,Saisissez une adresse e-mail valide.
 Enter the advance amount.,Saisissez le montant de l'acompte.
@@ -794,6 +803,7 @@ Folio Display Mode must be Inclusive or Separate Add-on.,Le mode d'affichage du 
 Folio Type,Type de folio
 Folio balance after,Solde du folio après
 Folio display mode must be Inclusive or Separate Add-on.,Le mode d'affichage du folio doit être Inclus ou Supplément séparé.
+Folio not found.,Folio introuvable.
 Folio window must be between 1 and 8.,La fenêtre de folio doit être comprise entre 1 et 8.
 Folio {0} not found.,Folio {0} introuvable.
 "Folio {0} shows {1}{2} in the guest's favour but only {1}{3} was collected on it, so it can't all be refunded. Open the folio and correct it (move a charge or a payment).","Le folio {0} affiche {1}{2} en faveur du client, mais seul {1}{3} y a été encaissé ; tout ne peut donc pas être remboursé. Ouvrez le folio et corrigez-le (déplacez un frais ou un paiement)."
@@ -809,6 +819,7 @@ Foreign Cash needs the currency of the notes received.,Les espèces en devises n
 Foreign Cash refund needs the foreign currency of the notes returned.,Un remboursement en espèces en devises nécessite d'indiquer la devise des billets remis.
 Foreign cash count for {0} cannot be negative.,Le comptage en espèces en devises pour {0} ne peut pas être négatif.
 Foreign cash count for {0} must be a number.,Le comptage en espèces en devises pour {0} doit être un nombre.
+Foreign currency receipts cannot be transferred between windows.,Les encaissements en devise étrangère ne peuvent pas être transférés entre fenêtres.
 Found By,Trouvé par
 Found In Room,Trouvé en chambre
 Found On,Trouvé le
@@ -947,6 +958,7 @@ Id Number,Numéro d'identité
 Id Type,Type d'identité
 Idempotency Key,Clé d'idempotence
 Idempotency key already used,Clé d'idempotence déjà utilisée
+Idempotency key is too long.,La clé d'idempotence est trop longue.
 Identity,Identité
 "If you can read this, the printer works","Si vous lisez ceci, l'imprimante fonctionne"
 Image,Image
@@ -972,6 +984,7 @@ Invalid element type: {0}.,Type d'élément invalide : {0}.
 Invalid link.,Lien invalide.
 Invalid manager approval token.,Jeton d'approbation responsable invalide.
 Invalid posting rhythm: {0}.,Rythme de comptabilisation invalide : {0}.
+Invalid routing instruction payload.,Données d'instruction de routage invalides.
 Invalid schedule frequency.,Fréquence de planification invalide.
 Invalid status change,Changement de statut invalide
 Invite staff and give each the right role.,Invitez le personnel et attribuez à chacun le bon rôle.
@@ -1009,6 +1022,11 @@ Items,Articles
 Itinerary,Itinéraire
 Itinerary dates overlap,Les dates de l'itinéraire se chevauchent
 Itinerary not found.,Itinéraire introuvable.
+KMR-CN-001: Issued or closed windows cannot change payee or payment method.,KMR-CN-001 : Les fenêtres facturées ou clôturées ne peuvent pas modifier leur payeur ni leur mode de règlement.
+KMR-CO-001: Both folios must be open and uninvoiced to transfer a receipt.,KMR-CO-001 : Les deux folios doivent être ouverts et non facturés pour transférer un encaissement.
+KMR-CO-001: Receipts can only transfer between folios at the same property.,KMR-CO-001 : Les encaissements ne peuvent être transférés qu'entre folios du même établissement.
+KMR-PAY-001: Only receipts backed by a submitted payment entry can be transferred.,KMR-PAY-001 : Seuls les encaissements liés à une écriture de paiement validée peuvent être transférés.
+KMR-PAY-001: Receipts can only transfer between folios with the same payer.,KMR-PAY-001 : Les encaissements ne peuvent être transférés qu'entre folios ayant le même payeur.
 KOT,KOT
 KOT #,KOT n°
 KOT Fired,KOT envoyé
@@ -1061,6 +1079,8 @@ Legacy Charge Type,Ancien type de frais
 Legal Name,Raison sociale
 Limit,Plafond
 Limit Type,Type de plafond
+"Limit type must be None, Amount, or Percent.","Le type de plafond doit être Aucun, Montant ou Pourcentage."
+Limit value cannot be negative.,La valeur du plafond ne peut pas être négative.
 Line Items,Lignes
 Linked,Associé
 Listing Slug,Identifiant d'URL de l'annonce
@@ -1126,6 +1146,7 @@ Minimum nights is at least 1.,Le nombre minimal de nuits est d'au moins 1.
 Minimum stay,Séjour minimal
 Minutes Saved,Minutes économisées
 Mode,Mode
+Mode must be full or partial.,Le mode doit être complet (full) ou partiel (partial).
 Model,Modèle
 Modifier Type,Type de modificateur
 Modifier Value,Valeur du modificateur
@@ -1275,6 +1296,7 @@ Only Finance or a Hotel Admin can override a credit block.,Seuls Finance ou un a
 Only IT can change an IT administrator.,Seul le service informatique peut modifier un administrateur IT.
 Only IT can change this person's access.,Seul le service informatique peut modifier les accès de cette personne.
 Only IT can grant or remove the IT administrator role.,Seul le service informatique peut attribuer ou retirer le rôle d'administrateur IT.
+Only Payment and Advance receipts can be transferred between windows.,Seuls les encaissements de type Paiement et Acompte peuvent être transférés entre fenêtres.
 Only a Confirmed arrival can be marked no-show (this one is {0}).,Seule une arrivée confirmée peut être marquée non-présentation (celle-ci est {0}).
 Only a Hotel Admin can book a blacklisted guest.,Seul un administrateur hôtel peut réserver pour un client sur liste noire.
 Only a No Show's credit is settled here (this one is {0}).,Seul le crédit d'une non-présentation se règle ici (celle-ci est {0}).
@@ -1312,6 +1334,7 @@ Only the property's administrators change a rate plan's category.,Seuls les admi
 "Only {0:,.2f} of the deposit is still held.","Il ne reste que {0:,.2f} retenu sur l'acompte."
 Only {0} is due back to the guest - can't refund more than that.,Seul {0} est dû au client — impossible de rembourser davantage.
 Only {0} of this payment is left to refund.,Il ne reste que {0} à rembourser sur ce paiement.
+Only {0} of this receipt is left to transfer.,Il ne reste que {0} disponible à transférer sur cet encaissement.
 Open Items,Éléments ouverts
 Open a window on a stay or on a group's master bill.,Ouvrez une fenêtre sur un séjour ou sur le folio principal d'un groupe.
 Opened At,Ouvert à
@@ -1595,11 +1618,13 @@ Ready By,Prêt pour
 Ready Marked By,Marqué prêt par
 Reason,Motif
 Reason Code,Code motif
+Reason must be at most 500 characters.,Le motif doit comporter au maximum 500 caractères.
 Reason on file: {0}.,Motif au dossier : {0}.
 Reason required,Motif obligatoire
 Receipt,Reçu
 Receipt Date,Date du reçu
 Receipts,Encaissements
+Receipts can only transfer between folios of the same stay or group.,Les encaissements ne peuvent être transférés qu'entre folios du même séjour ou du même groupe.
 Received At,Reçu à
 Received By,Reçu par
 Received On,Reçu le
@@ -1624,6 +1649,7 @@ Refund {0} before departure.,Remboursez {0} avant le départ.
 Refundable Balance,Solde remboursable
 Refundable Deposit,Caution remboursable
 Refunded Amount,Montant remboursé
+Refunds and reversals cannot be transferred.,Les remboursements et contre-passations ne peuvent pas être transférés.
 "Region, currency and tax","Région, devise et fiscalité"
 Registration Consent Given,Consentement d'enregistrement donné
 Registration Fee,Frais d'enregistrement
@@ -1738,6 +1764,8 @@ Route To,Router vers
 "Route to a window, a room or the group master.","Routez vers une fenêtre, une chambre ou le folio principal du groupe."
 Routes,Routages
 Routing Instruction,Instruction de routage
+Routing instruction {0} not found.,Instruction de routage {0} introuvable.
+Routing instructions cannot move across properties.,Les instructions de routage ne peuvent pas être déplacées entre établissements.
 Row {0}: {1},Ligne {0} : {1}
 Rules,Règles
 Run By,Exécuté par
@@ -1972,6 +2000,7 @@ That is the same stay. Use to_folio.,Il s'agit du même séjour. Utilisez to_fol
 That line is already voided.,Cette ligne est déjà annulée.
 That line is not voided.,Cette ligne n'est pas annulée.
 That menu belongs to another property.,Cette carte appartient à un autre établissement.
+That payment is not on the source folio.,Cet encaissement ne figure pas sur le folio d'origine.
 That payment is not on this folio.,Ce paiement ne figure pas sur ce folio.
 That person isn't on the staff list for this property.,Cette personne ne figure pas dans la liste du personnel de cet établissement.
 That photo couldn't be processed. Please retake it.,Impossible de traiter cette photo. Veuillez la reprendre.
@@ -2194,7 +2223,9 @@ This property does not keep ID images. Verify the ID at check-in instead.,Cet é
 This property does not take payments through {0}.,Cet établissement n'accepte pas les paiements via {0}.
 This property requires a cashier PIN: undo the check-in on the hotel screen.,Cet établissement exige un code PIN caissier : annulez l'enregistrement sur l'écran hôtel.
 This property requires a stay of at least {0} nights.,Cet établissement exige un séjour d'au moins {0} nuits.
+This receipt has no remaining balance to transfer.,Cet encaissement n'a plus de solde disponible à transférer.
 This report is private.,Ce rapport est privé.
+This retry key already belongs to a different transfer.,Cette clé de reprise appartient déjà à un autre transfert.
 This room cannot be booked for these dates because the Entire Villa is already booked at {0} under Reservation {1}.,Cette chambre ne peut pas être réservée à ces dates car la Villa entière est déjà réservée à {0} sous la réservation {1}.
 This service account has been revoked.,Ce compte de service a été révoqué.
 This service account has no properties.,Ce compte de service n'a aucun établissement.
@@ -2242,6 +2273,10 @@ Transaction Code {0} must be an active non-payment code.,Le code de transaction 
 Transaction code {0} belongs to another property.,Le code de transaction {0} appartient à un autre établissement.
 Transaction code {0} has no charge type. Set one under Transaction codes.,Le code de transaction {0} n'a aucun type de frais. Définissez-en un dans Codes de transaction.
 Transaction code {0} is not an enabled charge code.,Le code de transaction {0} n'est pas un code de frais actif.
+Transfer Group Key,Clé de groupe de transfert
+Transfer reason must be at most 300 characters.,Le motif de transfert doit comporter au maximum 300 caractères.
+Transferred From,Transféré depuis
+Transferred To,Transféré vers
 Travel Agent,Agence de voyages
 Trigger,Déclencheur
 TripAdvisor URL,URL TripAdvisor
@@ -2458,6 +2493,7 @@ this bill,cette note
 {0} adults (max {1}),{0} adultes (max. {1})
 {0} already has a floor called {1}.,{0} possède déjà un étage nommé {1}.
 {0} already has an account here ({1}).,{0} dispose déjà d'un compte ici ({1}).
+{0} amount must be positive.,Le montant de {0} doit être positif.
 "{0} answered {1}, not the app manifest.","{0} a répondu {1}, et non le manifeste de l'application."
 {0} belongs to another property.,{0} appartient à un autre établissement.
 {0} bill(s) for this stay are not on the guest's bill yet: {1}. Post them to the room or settle them before check-out.,{0} note(s) de ce séjour ne figurent pas encore sur la note du client : {1}. Imputez-les en chambre ou réglez-les avant le départ.
