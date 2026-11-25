@@ -17,6 +17,7 @@ from frappe.utils import cint, flt, getdate, now_datetime, nowdate
 
 from kamra.authz import INVOICE_CORRECTION_ROLES, require_roles
 from kamra.business_date import get_business_date
+from kamra.erp_books import erp_screens, kept_in_erp, receivables_source, refuse_kept_in_erp
 
 CHARGE_TYPE_TO_CODE = {
 	"Room": ("1000", "Room Charge", "Rooms", "Room"),
@@ -357,7 +358,15 @@ _FLOAT_DUST = Decimal("1e-9")
 
 def _round_currency(value, places: int) -> float:
 	"""Half-up round to `places` decimals using Decimal."""
-	return float(_money(value).quantize(Decimal(1).scaleb(-places), rounding=ROUND_HALF_UP))
+	places = max(int(places), 0)
+	val = float(_money(value).quantize(Decimal(1).scaleb(-places), rounding=ROUND_HALF_UP))
+	return 0.0 if val == 0 else val
+
+
+def _fmt_currency(value, places: int) -> str:
+	"""Format an amount with thousands grouping and exact currency decimals."""
+	places = max(int(places), 0)
+	return f"{_round_currency(value, places):,.{places}f}"
 
 
 def _parse_currency_amount(amount, places: int) -> Decimal:
@@ -679,8 +688,20 @@ def ledger_balances(property: str, business_date: str | None = None):
 		ledgers.setdefault(name, {
 			"ledger": name, "debit": 0.0, "credit": 0.0, "balance": 0.0,
 		})
-	total_debit = sum(v["debit"] for v in ledgers.values())
-	total_credit = sum(v["credit"] for v in ledgers.values())
+	src = receivables_source(property, strict=False)
+	if src.in_erp:
+		# While the ERP keeps receivables, Folio Ledger Entry never sees ERP
+		# receipts and cannot reconcile AR. Never report 0.00 or stale figures.
+		ledgers["AR"] = {
+			"ledger": "AR",
+			"debit": None,
+			"credit": None,
+			"balance": None,
+			"kept_in_erp": True,
+			"unverified": src.unavailable,
+		}
+	total_debit = sum(v["debit"] for v in ledgers.values() if v["debit"] is not None)
+	total_credit = sum(v["credit"] for v in ledgers.values() if v["credit"] is not None)
 	# These four are subsidiary (control) ledgers, not a full double-entry
 	# book: a charge debits Guest and its revenue side lives in the GL the
 	# accounting export feeds, a payment credits Guest and the cash side is
@@ -699,6 +720,8 @@ def ledger_balances(property: str, business_date: str | None = None):
 		# today's folio balances cannot be compared with the old ledger
 		"in_balance": recon["in_balance"] if recon else None,
 		"reconciliation": recon,
+		"ar_kept_in_erp": src.in_erp,
+		"ar_unverified": src.unavailable,
 	}
 
 
@@ -713,6 +736,10 @@ def ledger_detail(property: str, ledger: str, business_date: str | None = None,
 		frappe.throw(frappe._("Unknown ledger {0}.").format(ledger))
 	from kamra.authz import assert_property_access
 	assert_property_access(property)
+	if ledger == "AR":
+		target = erp_screens().get("receivables")
+		if target:
+			refuse_kept_in_erp(target)
 	date = business_date or get_business_date(property)
 	limit = max(1, min(int(limit or 2000), 2000))
 	places = max(_currency_places(property), 2)
@@ -1449,6 +1476,7 @@ def apply_unapplied_credit(account: str, only_folio: str | None = None,
 
 @frappe.whitelist(methods=["POST"])
 @require_roles("Finance", "Hotel Admin", "Kamra Agent")
+@kept_in_erp("receivables")
 def city_ledger_settle(account: str, amount: float, mode: str = "Bank Transfer",
                        reference: str | None = None, allocations=None,
                        idempotency_key: str | None = None,
@@ -1614,6 +1642,7 @@ def _requested_with_key(key: str) -> dict | None:
 
 @frappe.whitelist(methods=["POST"])
 @require_roles("Finance", "Hotel Admin")
+@kept_in_erp("receivables")
 def decide_city_ledger_payment(request: str, approve: int = 1, note: str = "",
                                pin: str | None = None):
 	"""Confirm or reject a company payment an agent recorded. Confirming
@@ -1668,6 +1697,7 @@ def decide_city_ledger_payment(request: str, approve: int = 1, note: str = "",
 
 @frappe.whitelist(methods=["POST"])
 @require_roles("Finance", "Hotel Admin")
+@kept_in_erp("receivables")
 def reverse_city_ledger_payment(payment: str, reason: str | None = None,
                                 reason_code: str | None = None, pin: str | None = None):
 	"""Undo a company payment: a bounced cheque, or money put on the wrong
@@ -1740,6 +1770,7 @@ def reverse_city_ledger_payment(payment: str, reason: str | None = None,
 
 @frappe.whitelist(methods=["POST"])
 @require_roles("Finance", "Hotel Admin")
+@kept_in_erp("receivables")
 def set_city_ledger_dispute(account: str, folio: str, disputed: int = 1,
                             note: str | None = None):
 	"""Mark a company bill as disputed (or clear it). A disputed bill gets no
@@ -1815,12 +1846,13 @@ DUE_BUCKETS = ("not_due", "d1_30", "d31_60", "d61_90", "d90p")
 INVOICE_AGE_BUCKETS = ("current", "b30", "b60", "b90", "b90p")
 
 
-def _netted(open_items: list[dict], unapplied: float, *, places: int = 2) -> list[tuple[dict, float]]:
+def _netted(open_items: list[dict], unapplied: float, places: int = 2) -> list[tuple[dict, float]]:
 	"""(bill, what it still counts for) oldest first, with money the company
 	paid ahead (unapplied credit) netted off the oldest bills - so the
 	buckets add up to the account balance."""
 	eps = 0.5 * (10 ** -places)
 	credit = max(float(unapplied), 0.0)
+	eps = 0.5 * (10 ** -places)
 	out = []
 	for r in open_items:
 		amt = float(r["outstanding"])
@@ -1853,7 +1885,7 @@ def _due_bucket(overdue: int) -> str:
 	        "d31_60" if overdue <= 60 else "d61_90" if overdue <= 90 else "d90p")
 
 
-def _age_buckets(open_items: list[dict], unapplied: float, today=None, *, places: int = 2) -> dict:
+def _age_buckets(open_items: list[dict], unapplied: float, today=None, places: int = 2) -> dict:
 	"""Aging as of `today`: pass the property's business date, so it
 	agrees with night audit around midnight. Disputed bills stay in their
 	bucket and are also summed under `disputed`."""
@@ -1882,7 +1914,7 @@ def _age_buckets(open_items: list[dict], unapplied: float, today=None, *, places
 
 
 def overdue_past_grace(open_items: list[dict], unapplied: float,
-                       grace_days: int = 0, today=None, *, places: int = 2) -> tuple[float, str | None]:
+                       grace_days: int = 0, today=None, places: int = 2) -> tuple[float, str | None]:
 	"""What the company owes on bills more than `grace_days` past their due
 	date (as of `today`, the business date), and the oldest such due date.
 	A disputed bill doesn't count."""
@@ -1925,23 +1957,49 @@ def _account_position(account: str) -> dict:
 	}
 
 
+def _erp_aging(property: str, rows: list[dict]) -> list[dict]:
+	"""The aging rows of the same shape as _account_position, from the ERP's
+	Customer receivables (open vouchers by Payment Ledger Entry)."""
+	today = aging_date(property)
+	places = _currency_places(property)
+	out = []
+	for r in rows:
+		out.append({
+			"name": r["account"], "company": r["company"],
+			"account_number": r["account_number"],
+			"balance": r["balance"], "credit_limit": r["credit_limit"],
+			"open_balance": r["open_balance"],
+			"unapplied_credit": r["unapplied_credit"],
+			"credit_days": effective_credit_days(r["account"], property),
+			**_age_buckets(r["open_items"], r["unapplied_credit"], today, places=places),
+		})
+	return out
+
+
 @frappe.whitelist()
 @require_roles("Finance", "Hotel Admin", "Front Desk", "Night Auditor", "Kamra Agent")
 def city_ledger_aging(property: str):
 	"""Every company's AR at the property, aged by due date (not_due,
 	d1_30, d31_60, d61_90, d90p and their sum `overdue`). The invoice-age
-	keys (current, b30, b60, b90, b90p) are kept for older callers."""
+	keys (current, b30, b60, b90, b90p) are kept for older callers.
+
+	While the ERP keeps the receivables these are its Customer receivables
+	(a Payment Entry there is seen), never this app's City Ledger Entry rows."""
 	places = max(_currency_places(property), 2)
-	accounts = frappe.get_all(
-		"City Ledger Account",
-		filters={"property": property, "disabled": 0},
-		fields=["name", "company", "account_number", "balance", "credit_limit"],
-	)
-	out = []
-	for a in accounts:
-		pos = _account_position(a.name)
-		pos.pop("open_items")
-		out.append({**a, **pos})
+	src = receivables_source(property)
+	if src.in_erp:
+		out = _erp_aging(property, src.rows)
+	else:
+		accounts = frappe.get_all(
+			"City Ledger Account",
+			filters={"property": property, "disabled": 0},
+			fields=["name", "company", "account_number", "balance", "credit_limit"],
+		)
+		out = []
+		for a in accounts:
+			pos = _account_position(a.name)
+			pos.pop("open_items")
+			out.append({**a, **pos})
 	totals = {
 		k: _round_currency(sum((_money(a[k]) for a in out), Decimal(0)), places)
 		for k in (*DUE_BUCKETS, "overdue", "disputed")
@@ -1980,6 +2038,7 @@ def payment_bills(account: str, payments: list[str]) -> dict[str, list]:
 
 @frappe.whitelist()
 @require_roles("Finance", "Hotel Admin", "Front Desk", "Kamra Agent")
+@kept_in_erp("receivables")
 def city_ledger_history(account: str):
 	"""Everything that ever moved on one company's account, oldest first, with
 	the running balance: each bill (and the guest it was for), credit note,
@@ -2008,6 +2067,7 @@ def city_ledger_history(account: str):
 
 @frappe.whitelist()
 @require_roles("Finance", "Hotel Admin", "Front Desk", "Kamra Agent")
+@kept_in_erp("receivables")
 def city_ledger_account(account: str):
 	"""One company's city ledger: balance, aging, each open bill (oldest
 	first) and recent payments - what the payment screen needs."""
@@ -2038,6 +2098,8 @@ def city_ledger_account(account: str):
 	reversed_ = set(frappe.get_all(
 		"City Ledger Entry", pluck="reverses",
 		filters={"account": account, "reverses": ("is", "set")}))
+	places = _currency_places(acc.property)
+	eps = 0.5 * (10 ** -places)
 	for p in payments:
 		p["applied"] = paid_bills.get(p.name, [])
 		p["unapplied"] = _round_currency(
@@ -2921,9 +2983,20 @@ def _money(value) -> Decimal:
 	return Decimal(str(value or 0))
 
 
-def round_cents(value) -> float:
-	"""Half up to the cent, in Decimal (float round(2.345, 2) gives 2.34)."""
-	return float(_money(value).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+def round_cents(value, places: int | None = None, *,
+                property: str | None = None, currency: str | None = None) -> float:
+	"""Half up to the currency's minor unit (default 2 decimals), in Decimal
+	(float round(2.345, 2) gives 2.34)."""
+	if places is None:
+		if currency:
+			from kamra.pricing import _minor_unit
+			places = _minor_unit(currency)
+		elif property:
+			places = _currency_places(property)
+		else:
+			places = 2
+	val = float(_money(value).quantize(Decimal(1).scaleb(-max(int(places), 0)), rounding=ROUND_HALF_UP))
+	return 0.0 if val == 0 else val
 
 
 def fx_to_home(fx_amount, rate, digits=2) -> float:

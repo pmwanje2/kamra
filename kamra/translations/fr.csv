@@ -1309,7 +1309,6 @@ Only an open ticket can be started.,Seul un ticket ouvert peut être démarré.
 Only available while the payment gateway is in test mode.,Disponible uniquement lorsque la passerelle de paiement est en mode test.
 Only charges above zero can be shared.,Seuls les frais supérieurs à zéro peuvent être partagés.
 Only the property's administrators change a rate plan's category.,Seuls les administrateurs de l'établissement peuvent modifier la catégorie d'un plan tarifaire.
-"Only {0:,.2f} of the deposit is still held.","Il ne reste que {0:,.2f} retenu sur l'acompte."
 Only {0} is due back to the guest - can't refund more than that.,Seul {0} est dû au client — impossible de rembourser davantage.
 Only {0} of this payment is left to refund.,Il ne reste que {0} à rembourser sur ce paiement.
 Open Items,Éléments ouverts
@@ -2060,7 +2059,6 @@ The group's bill must be at the same property.,La note du groupe doit appartenir
 "The guest checked in online. Review what they sent, then confirm.",Le client s'est pré-enregistré en ligne. Vérifiez les informations transmises puis confirmez.
 The guest folio is already closed.,Le folio client est déjà clôturé.
 The guest folio is closed - withhold before closing it.,Le folio client est clôturé — effectuez la retenue avant de le clôturer.
-"The guest folio only has {0:,.2f} in credit. Settle the bill or withhold against it before refunding the deposit.","Le folio client ne dispose que de {0:,.2f} en crédit. Soldez la note ou imputez la retenue avant de rembourser la caution."
 The guest has no open folio to take these charges.,Le client n'a aucun folio ouvert pour recevoir ces frais.
 The guest is already in house. Use Room move to change rooms.,Le client est déjà enregistré. Utilisez Changement de chambre pour déplacer la chambre.
 "The guest is still in house, so their bill stays open for tonight's charges. To invoice what is paid so far, use Settle & continue stay.","Le client est encore en séjour, sa note reste donc ouverte pour les frais de ce soir. Pour facturer ce qui a déjà été payé, utilisez Régler et poursuivre le séjour."
@@ -2571,3 +2569,11 @@ this bill,cette note
 {0}{1} overdue by more than {2} days (oldest due {3}).,{0}{1} en retard de plus de {2} jours (plus ancienne échéance {3}).
 "{product} can't read this ID's code. Type the details in, and take a picture of the ID.",{product} ne peut pas lire le code de cette pièce d'identité. Saisissez les informations et photographiez la pièce.
 {product} is temporarily unavailable. Contact your system administrator.,{product} est temporairement indisponible. Contactez votre administrateur système.
+Kept in the accounting system,Tenu dans le système comptable
+Not verified,Non vérifié
+Not verified: {0},Non vérifié : {0}
+Only {0} of the deposit is still held.,Il ne reste que {0} retenu sur l'acompte.
+"Still open at the outlet. Settle it there before check-out: charge it to the room, take payment or void it.","Encore ouverte au point de vente. Réglez-la sur place avant le départ : imputez-la à la chambre, encaissez le paiement ou annulez-la."
+The guest folio only has {0} in credit. Settle the bill or withhold against it before refunding the deposit.,Le folio client ne dispose que de {0} en crédit. Soldez la note ou imputez la retenue avant de rembourser la caution.
+This is kept in the accounting system. Open {0}: {1},Cet élément est tenu dans le système comptable. Ouvrir {0} : {1}
+{0} bill(s) for this stay are still open at the outlet: {1}. Settle them at the outlet before check-out.,{0} note(s) de ce séjour sont encore ouvertes au point de vente : {1}. Réglez-les au point de vente avant le départ.

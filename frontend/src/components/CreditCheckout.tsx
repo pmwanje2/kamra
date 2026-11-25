@@ -8,14 +8,16 @@ import { call } from "../lib/api"
 export interface CreditCheck {
   ok: boolean
   blocked: boolean
+  unverified?: boolean
   policy: string
   company: string
   amount: number
   reasons: string[]
-  credit_limit: number
-  exposure: number
-  over_limit_by: number
-  overdue_amount: number
+  credit_limit: number | null
+  ar_balance?: number | null
+  exposure: number | null
+  over_limit_by: number | null
+  overdue_amount: number | null
   oldest_due_date: string | null
   can_override?: boolean
 }

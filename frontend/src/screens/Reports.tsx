@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
+import AppLink from "../components/AppLink"
 import { Mail, Plus, Printer, Trash2 } from "lucide-react"
 import { call, getCurrentProperty } from "../lib/api"
 import { Button } from "../components/ui/button"
@@ -521,12 +522,12 @@ export default function Reports({ initialTab = "saved" }: { initialTab?: Tab }) 
               {t("Voids & Allowances")}
             </Link>
           )}
-          <Link
+          <AppLink
             to="/accounting-export"
             className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50"
           >
             {t("Accounting export")}
-          </Link>
+          </AppLink>
         </div>
       </div>
 

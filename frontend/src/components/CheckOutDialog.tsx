@@ -166,6 +166,7 @@ export interface CheckoutContext {
     check_in_date: string
     check_out_date: string
   }
+  currency?: string
   currency_symbol: string
   payment_modes: string[]
   pin_required: boolean
@@ -292,8 +293,6 @@ export default function CheckOutDialog(props: {
 }) {
   const { t } = useT()
   const loc = useLocale()
-  const eps = moneyEps()
-  const step = moneyStep()
   const { ensureUnlocked } = useCashierAuth()
   const [ctx, setCtx] = useState<CheckoutContext | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -348,7 +347,7 @@ export default function CheckOutDialog(props: {
     if (!ctx) return
     // one line for the whole balance until the cashier splits it; a single
     // line follows the balance if it changes (a discount, a late charge)
-    const due = roundMoney(ctx.collect.reduce((sum, c) => sum + c.amount, 0))
+    const due = roundMoney(ctx.collect.reduce((sum, c) => sum + c.amount, 0), ctx.currency)
     setPayLines((ls) => {
       if (!ctx.collect.length) return []
       if (ls.length === 0) {
@@ -369,8 +368,10 @@ export default function CheckOutDialog(props: {
   }, [ctx, t])
 
   const sym = ctx?.currency_symbol ?? ""
+  const eps = moneyEps(ctx?.currency)
+  const step = moneyStep(ctx?.currency)
   const fmt = (n: number) =>
-    `${sym}${fmtAmount(n || 0)}`
+    `${sym}${fmtAmount(n || 0, ctx?.currency)}`
   const folioLink = (f: string) => toFullPath(`/billing/${encodeURIComponent(f)}`)
   const blockersFor = (step: StepKey) => (ctx?.blockers ?? []).filter((b) => b.step === step &&
     !["owed", "refund"].includes(b.code))
@@ -500,8 +501,8 @@ export default function CheckOutDialog(props: {
   const collectTotal = (ctx?.collect ?? []).reduce((s, c) => s + c.amount, 0)
   const refundTotal = (ctx?.refunds ?? []).reduce((s, r) => s + r.amount, 0)
 
-  const splitTotal = splitTotals(payLines, collectTotal)
-  const splitIssue = splitProblem(payLines, collectTotal, t)
+  const splitTotal = splitTotals(payLines, collectTotal, ctx?.currency)
+  const splitIssue = splitProblem(payLines, collectTotal, t, ctx?.currency)
 
   function updateLine(id: string, patch: Partial<PayLine>) {
     setPayLines((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)))
@@ -523,7 +524,7 @@ export default function CheckOutDialog(props: {
     return run(async () => {
       // every line is posted in one request: all of them or none
       await call("kamra.api.add_folio_payments", {
-        payments: allocate(payLines, ctx?.collect ?? []),
+        payments: allocate(payLines, ctx?.collect ?? [], ctx?.currency),
       })
       // a fresh single line for whatever is owed next
       setPayLines([])
@@ -616,7 +617,7 @@ export default function CheckOutDialog(props: {
   /** Open charge-bearing folios ready to close (zero balance, not group). */
   function readyToInvoice(c: CheckoutContext | null | undefined) {
     if (!c) return [] as FolioRow[]
-    const tol = moneyEps()
+    const tol = moneyEps(c.currency)
     return c.folios.filter((f) =>
       f.side !== "group" && f.status === "Open" && f.has_charges && Math.abs(f.balance) <= tol)
   }
@@ -693,6 +694,13 @@ export default function CheckOutDialog(props: {
 
   const close = checkedOut ? () => void finishCheckout() : props.onClose
   const r = ctx?.reservation
+  // The amber tip repeats the first blocker. Where that blocker is already
+  // shown in red on this step, the tip stays out so the sentence is not twice on screen.
+  const blockersHere: Blocker[] = !ctx ? [] : current === "review" ? reviewProblems
+    : current === "company" ? blockersFor("company")
+    : current === "settle" ? settleProblems
+    : current === "confirm" ? ctx.blockers.filter((b) => !["owed", "refund", "credit_blocked"].includes(b.code))
+    : []
 
   // ---- footer: what Continue means on each step ----------------------
   let continueLabel: string | undefined
@@ -782,7 +790,7 @@ export default function CheckOutDialog(props: {
             }}
           />
 
-          {ctx.sop.next_tip && !checkedOut && (
+          {ctx.sop.next_tip && !checkedOut && !blockersHere.some((b) => b.message === ctx.sop.next_tip) && (
             <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
               <Lightbulb className="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden />
               <p>{t(ctx.sop.next_tip)}</p>
@@ -1504,7 +1512,9 @@ export default function CheckOutDialog(props: {
                     ))}
                   </ul>
                   <p className="mt-2 text-xs text-amber-800">
-                    {t("Check-out waits for these. Go back to the Bill step and post them to the room, or settle them at the outlet.")}
+                    {ctx.pending_bills.some((b) => b.billable && b.can_post_to_room)
+                      ? t("Check-out waits for these. Go back to the Bill step and post them to the room, or settle them at the outlet.")
+                      : t("Check-out waits for these. Settle them at the outlet.")}
                   </p>
                 </Section>
               )}

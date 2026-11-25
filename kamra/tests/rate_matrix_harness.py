@@ -263,6 +263,12 @@ class RateMatrixHarness(unittest.TestCase):
 
 	def bridge_call(self, api_method, *, response_types=None, **form):
 		self.bridge_calls.append((api_method, dict(form)))
+		if api_method in (
+			"hospitality_kamra.erp_books",
+			"hospitality_kamra.erp_receivables",
+			"hospitality_kamra.open_outlet_checks",
+		):
+			return None
 		if api_method != "hospitality_tariffs.tariff_rate":
 			raise AssertionError(f"Unexpected bridge call: {api_method}")
 		result = self.tariffs.get(form.get("rate_plan"), {"is_tariff": 0})

@@ -497,9 +497,10 @@ def _context_currency(context: dict) -> tuple[str, str, int | None]:
 		decimals = context.get("decimals")
 		if not isinstance(decimals, int) or isinstance(decimals, bool) or decimals < 0:
 			decimals = None
-	if not currency and context.get("property"):
+	prop_name = context.get("property") or (context.get("reservation") or {}).get("property")
+	if not currency and prop_name:
 		try:
-			currency = (frappe.get_cached_value("Property", context["property"], "currency") or "").strip().upper()
+			currency = (frappe.get_cached_value("Property", prop_name, "currency") or "").strip().upper()
 		except Exception:
 			currency = ""
 	return symbol, currency, decimals

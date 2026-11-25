@@ -18,6 +18,7 @@ import {
 
 import { useAuth } from "../lib/auth"
 import { visibleApps } from "../lib/apps"
+import { keptInErp } from "../lib/erpBooks"
 import type { ShellContext } from "../AppShell"
 import { useT } from "../lib/i18n"
 
@@ -94,7 +95,8 @@ export default function ReportsHub() {
   const sections = SECTIONS.map((s) => ({
     ...s,
     items: s.items.filter(
-      (r) => (!r.app || apps.has(r.app)) && (!r.roles || r.roles.some((x) => roles.includes(x))),
+      (r) => (!r.app || apps.has(r.app)) && (!r.roles || r.roles.some((x) => roles.includes(x)))
+        && !keptInErp(r.to),
     ),
   })).filter((s) => s.items.length)
 
