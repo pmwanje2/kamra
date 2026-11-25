@@ -7621,5 +7621,8 @@
   "· in ": "· dans ",
   "…and {n} more": "…et {n} de plus",
   "…or paste the rows here": "…ou collez les lignes ici",
-  "≈ {amount}": "≈ {amount}"
+  "≈ {amount}": "≈ {amount}",
+  "Back-office allowance decisions are handled in Approvals Inbox under four-eyes approval controls. Floor overrides within the property limit require a second authorized manager's PIN.": "Les décisions de dégrèvement hors réception sont traitées dans la boîte des approbations sous contrôle à quatre yeux. Les autorisations sur place dans la limite de l'établissement nécessitent le code PIN d'un second responsable habilité.",
+  "Open in Approvals Inbox": "Ouvrir dans la boîte des approbations",
+  "Pending workflow approval": "En attente de validation du circuit d'approbation"
 }

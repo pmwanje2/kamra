@@ -2719,3 +2719,6 @@ this bill,cette note
 {0}{1} overdue by more than {2} days (oldest due {3}).,{0}{1} en retard de plus de {2} jours (plus ancienne échéance {3}).
 "{product} can't read this ID's code. Type the details in, and take a picture of the ID.",{product} ne peut pas lire le code de cette pièce d'identité. Saisissez les informations et photographiez la pièce.
 {product} is temporarily unavailable. Contact your system administrator.,{product} est temporairement indisponible. Contactez votre administrateur système.
+[HSP-DOA-ROLE] Allowance decisions require a named active user.,[HSP-DOA-ROLE] Les décisions de dégrèvement nécessitent un utilisateur actif nommé.
+[HSP-DOA-SELF] You cannot approve or reject your own allowance request.,[HSP-DOA-SELF] Vous ne pouvez pas approuver ni rejeter votre propre demande de dégrèvement.
+[SITEOPS-DOA-LIMIT] Amount exceeds the floor PIN limit; route this request through Approvals Inbox.,[SITEOPS-DOA-LIMIT] Le montant dépasse la limite de validation par code PIN sur place ; acheminez cette demande via la boîte des approbations.

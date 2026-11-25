@@ -7162,5 +7162,8 @@
   "· in ": "· خلال ",
   "…and {n} more": "…و{n} أخرى",
   "…or paste the rows here": "…أو الصق الصفوف هنا",
-  "≈ {amount}": "≈ {amount}"
+  "≈ {amount}": "≈ {amount}",
+  "Back-office allowance decisions are handled in Approvals Inbox under four-eyes approval controls. Floor overrides within the property limit require a second authorized manager's PIN.": "تُعالج قرارات التسويات الخلفية في صندوق الموافقات ضمن ضوابط الاعتماد المزدوج. تتطلب التجاوزات الميدانية ضمن حد المنشأة رمز PIN لمدير ثانٍ مخوّل.",
+  "Open in Approvals Inbox": "فتح في صندوق الموافقات",
+  "Pending workflow approval": "بانتظار اعتماد مسار الموافقة"
 }
