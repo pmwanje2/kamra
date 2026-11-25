@@ -103,10 +103,14 @@ def used(instruction: str, day=None, pending=(), *, for_update=False) -> Decimal
 def matching(reservation: str, charge_type: str, code: str | None, day, *, for_update=False):
 	"""The stay's one active instruction that covers this charge on this
 	day, or None."""
-	for name in frappe.db.get_values("Routing Instruction",
-	                           filters={"reservation": reservation, "disabled": 0},
-	                           fieldname="name", pluck=True, for_update=for_update, order_by="creation asc"):
-		ri = frappe.get_doc("Routing Instruction", name, for_update=for_update)
+	filters = {"reservation": reservation, "disabled": 0}
+	if for_update:
+		names = frappe.db.get_values("Routing Instruction", filters, "name", pluck=True,
+		                             order_by="creation asc", for_update=True)
+	else:
+		names = frappe.get_all("Routing Instruction", filters=filters, pluck="name", order_by="creation asc")
+	for name in names:
+		ri = frappe.get_doc("Routing Instruction", name, **({"for_update": True} if for_update else {}))
 		if applies_on(ri, day) and covers(ri, charge_type, code):
 			return ri
 	return None

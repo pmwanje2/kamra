@@ -174,7 +174,11 @@ def _recalculate(folio, *, payments_only: bool = False):
 		# grand_total stay equal to sum(c.amount) so KAM-SI-TOTAL-MISMATCH holds.
 		from kamra.pricing import property_currency, round_rate_amount
 		currency = property_currency(prop)
-		rounded_grand = round_rate_amount(raw_grand, 0, "Nearest", currency)
+		basis = raw_grand
+		if any(c.get("share_snapshot") for c in folio.charges):
+			from kamra.shares import independent_rounding_adjustment
+			basis += independent_rounding_adjustment(prop, folio.charges)
+		rounded_grand = round_rate_amount(basis, 0, "Nearest", currency)
 	if payments_only and folio.get("grand_total") is not None:
 		# Settlement writers (payment, refund, city ledger, re-close after
 		# cancel_invoice) must not re-round an already-computed bill whose
@@ -1379,7 +1383,8 @@ def post_room_night(reservation, date, folios=None, *, room_posted: list | None 
 	from kamra.packages import active_package_for_reservation, post_package_night_split
 	pkg_doc = None if shared else active_package_for_reservation(reservation)
 
-	if pkg_doc is not None or not _charge_posted(reservation.name, "Room", date, lock=shared):
+	lock_options = {"lock": True} if shared else {}
+	if pkg_doc is not None or not _charge_posted(reservation.name, "Room", date, **lock_options):
 		room_no = (reservation.room or "").split("-")[-1]
 		day_use = _day_use_room_charge(reservation, date)
 		current = None
@@ -1493,14 +1498,14 @@ def post_room_night(reservation, date, folios=None, *, room_posted: list | None 
 			room_gst = gst_rate
 			if room_posted is not None:
 				room_posted.append(night_rate)
-			_post_room_levy(folios, reservation, date, night_rate, gst_rate, share=share)
+			_post_room_levy(folios, reservation, date, night_rate, gst_rate, **({"share": share} if share else {}))
 
 	# Its own charge type, not the shared Misc bucket: dedupe is by type and
 	# date, so a sundry the desk had already typed as Misc that day would
 	# otherwise make the night's extra-bed charge look posted and skip it.
 	over_cap = float(reservation.get("over_capacity_charge") or 0)
 	if over_cap > 0 and not _charge_posted(
-			reservation.name, "Extra Guests", date, lock=shared):
+			reservation.name, "Extra Guests", date, **lock_options):
 		guests = int(reservation.get("over_capacity_guests") or 0)
 		if room_gst is None:
 			# the room line posted in an earlier call: its rate, else the locked night's
@@ -1520,7 +1525,7 @@ def post_room_night(reservation, date, folios=None, *, room_posted: list | None 
 		posted = True
 
 	if reservation.meal_plan and not _charge_posted(
-			reservation.name, "Meal Plan", date, lock=shared):
+			reservation.name, "Meal Plan", date, **lock_options):
 		mp = frappe.get_doc("Meal Plan", reservation.meal_plan)
 		locked = locked_night(reservation, date)
 		if locked is not None:
@@ -1592,7 +1597,7 @@ def _post_room_levy(folios, reservation, date, night_rate, gst_rate=None, *, sha
 			levy = levy.quantize(unit, rounding=ROUND_HALF_UP)
 		levy = float(levy)
 	if levy <= 0 or _charge_posted(
-			reservation.name, "Room Levy", date, lock=bool(share)):
+			reservation.name, "Room Levy", date, **({"lock": True} if share else {})):
 		return
 	from kamra.localization import pack_for
 	label = prop.get("room_levy_label") or getattr(pack_for(prop.name), "ROOM_LEVY_LABEL", None) or "Room levy"
