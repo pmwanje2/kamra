@@ -60,8 +60,7 @@ MODULES = [
     ("reports", "Reports", ""),
     ("audit_report", "Night audit report (day, MTD, YTD)", "Read only. Food and beverage come from the restaurant bills; the year starts where the country pack says."),
     ("custom_reports", "Custom reports (builder, save, email)",
-     "Whitelisted datasets only - no Desk Query Reports or free SQL. "
-     "Staff can open saved definitions under Finance → Reports."),
+     "Whitelisted datasets only - no Desk Query Reports or free SQL. Staff can open saved definitions under Finance → Reports."),
     ("ledger", "Ledgers (trial balance, city ledger / AR, FX desk)", ""),
     ("credit", "Company credit (payment terms, credit limit, overdue check)",
      "Credit control is enforced inside check_out, create_booking and city_ledger_transfer; these endpoints explain and configure it."),
