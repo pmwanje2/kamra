@@ -39,6 +39,8 @@ import frappe
 from frappe import _
 from frappe.utils import cint, flt, getdate
 
+from kamra.authz import assert_property_access, assert_record_access, require_roles
+
 DAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
 
 
@@ -373,3 +375,322 @@ def validate_instruction(ri) -> None:
 			frappe.throw(_("Instruction {0} already routes some of these charges on some "
 			               "of these days. Only one instruction may cover a charge on a "
 			               "date: change its dates or charges, or disable it.").format(name))
+
+
+def _serialize_instruction(ri) -> dict:
+	"""Serialize a Routing Instruction with live used_amount and target details."""
+	target_room_number = None
+	target_guest_name = None
+	if ri.target_type == "Room" and ri.target_reservation:
+		info = frappe.db.get_value(
+			"Reservation",
+			ri.target_reservation,
+			["room", "guest_name"],
+			as_dict=True,
+		)
+		if info:
+			target_guest_name = info.guest_name
+			if info.room:
+				target_room_number = frappe.db.get_value("Room", info.room, "room_number") or info.room
+
+	code_rows = []
+	for row in ri.get("codes") or []:
+		tc = row.get("transaction_code") or None
+		desc = frappe.db.get_value("Transaction Code", tc, "description") if tc else None
+		code_rows.append({
+			"charge_type": row.get("charge_type") or None,
+			"transaction_code": tc,
+			"description": desc,
+		})
+
+	day = None
+	if cint(ri.per_day):
+		from kamra.business_date import get_business_date
+		day = get_business_date(ri.property)
+	used_amt = float(used(ri.name, day)) if not ri.is_new() else 0.0
+	ref_count = frappe.db.count(
+		"Folio Charge",
+		{"parenttype": "Folio", "routing_instruction": ri.name},
+	) if not ri.is_new() else 0
+
+	return {
+		"name": ri.name,
+		"property": ri.property,
+		"reservation": ri.reservation or None,
+		"group_booking": ri.group_booking or None,
+		"target_type": ri.target_type,
+		"target_window": cint(ri.target_window) or 1,
+		"target_reservation": ri.target_reservation or None,
+		"target_room_number": target_room_number,
+		"target_guest_name": target_guest_name,
+		"disabled": cint(ri.disabled),
+		"all_codes": cint(ri.all_codes),
+		"codes": code_rows,
+		"from_date": str(ri.from_date) if ri.from_date else None,
+		"to_date": str(ri.to_date) if ri.to_date else None,
+		**{d: cint(ri.get(d)) for d in DAYS},
+		"limit_type": ri.limit_type or "None",
+		"limit_value": float(ri.limit_value or 0),
+		"per_day": cint(ri.per_day),
+		"used_amount": used_amt,
+		"source_instruction": ri.get("source_instruction") or None,
+		"referenced_charge_count": ref_count,
+	}
+
+
+def _resolve_routing_scope(reservation: str | None, group_booking: str | None) -> tuple[str, dict]:
+	"""Validate and authorize the stay or group scope for routing CRUD."""
+	res_id = (reservation or "").strip() or None
+	grp_id = (group_booking or "").strip() or None
+	if bool(res_id) == bool(grp_id):
+		frappe.throw(_("A routing instruction is for one stay or for one group."))
+
+	if res_id:
+		assert_record_access("Reservation", res_id)
+		prop = frappe.db.get_value("Reservation", res_id, "property")
+		if not prop:
+			frappe.throw(_("Reservation {0} not found.").format(res_id))
+		assert_property_access(prop)
+		return prop, {"reservation": res_id}
+
+	assert_record_access("Group Booking", grp_id)
+	prop = frappe.db.get_value("Group Booking", grp_id, "property")
+	if not prop:
+		frappe.throw(_("Group {0} not found.").format(grp_id))
+	assert_property_access(prop)
+	return prop, {"group_booking": grp_id, "reservation": ("is", "not set")}
+
+
+@frappe.whitelist()
+@require_roles("Front Desk", "Finance", "Revenue Manager")
+def list_routing_instructions(
+	reservation: str | None = None,
+	group_booking: str | None = None,
+	include_disabled: int = 1,
+) -> list[dict]:
+	"""List Routing Instructions for a stay or group with live usage figures."""
+	_prop, filters = _resolve_routing_scope(reservation, group_booking)
+	if not cint(include_disabled):
+		filters["disabled"] = 0
+	names = frappe.get_all(
+		"Routing Instruction",
+		filters=filters,
+		pluck="name",
+		order_by="disabled asc, creation asc",
+	)
+	return [_serialize_instruction(frappe.get_doc("Routing Instruction", n)) for n in names]
+
+
+@frappe.whitelist()
+@require_roles("Front Desk", "Finance", "Revenue Manager")
+def routing_options(property: str, reservation: str | None = None) -> dict:
+	"""Return active charge Transaction Codes, in-house target rooms, and window cap."""
+	assert_property_access(property)
+	if reservation:
+		assert_record_access("Reservation", reservation)
+	from kamra.folio import window_cap
+	from kamra.ledger import ensure_default_transaction_codes
+
+	ensure_default_transaction_codes()
+	codes = frappe.db.sql(
+		"""SELECT code, description, charge_type, revenue_group, is_alcohol
+		   FROM `tabTransaction Code`
+		   WHERE disabled = 0 AND txn_type != 'Payment'
+		     AND (IFNULL(property, '') = '' OR property = %(prop)s)
+		   ORDER BY code asc""",
+		{"prop": property},
+		as_dict=True,
+	)
+	rooms = frappe.db.sql(
+		"""SELECT r.name, r.guest_name, COALESCE(rm.room_number, r.room) AS room_number
+		   FROM `tabReservation` r
+		   LEFT JOIN `tabRoom` rm ON rm.name = r.room
+		   WHERE r.property = %(prop)s AND r.status = 'Checked In'
+		     AND (%(res)s = '' OR r.name != %(res)s)
+		   ORDER BY room_number asc, r.name asc
+		   LIMIT 200""",
+		{"prop": property, "res": (reservation or "").strip()},
+		as_dict=True,
+	)
+	return {
+		"window_cap": min(window_cap(property), 8),
+		"transaction_codes": codes,
+		"in_house_reservations": rooms,
+	}
+
+
+@frappe.whitelist(methods=["POST"])
+@require_roles("Front Desk", "Finance", "Hotel Admin")
+def save_routing_instruction(data) -> dict:
+	"""Create or update a Routing Instruction with strict property/role isolation."""
+	payload = frappe.parse_json(data) if isinstance(data, str) else dict(data or {})
+	if not isinstance(payload, dict):
+		frappe.throw(_("Invalid routing instruction payload."))
+
+	name = (payload.get("name") or "").strip() or None
+	if name:
+		assert_record_access("Routing Instruction", name)
+		if not frappe.db.exists("Routing Instruction", name):
+			frappe.throw(_("Routing instruction {0} not found.").format(name))
+		doc = frappe.get_doc("Routing Instruction", name)
+		assert_property_access(doc.property)
+		prop = doc.property
+		if payload.get("property") and payload.get("property") != prop:
+			frappe.throw(_("Routing instructions cannot move across properties."), frappe.PermissionError)
+		if payload.get("reservation") and doc.reservation and payload.get("reservation") != doc.reservation:
+			frappe.throw(_("Cannot change the stay of an existing routing instruction."))
+		if payload.get("group_booking") and doc.group_booking and payload.get("group_booking") != doc.group_booking:
+			frappe.throw(_("Cannot change the group of an existing routing instruction."))
+	else:
+		prop, _filters = _resolve_routing_scope(
+			payload.get("reservation"), payload.get("group_booking")
+		)
+		if payload.get("property") and payload.get("property") != prop:
+			frappe.throw(_("The stay or group must be at {0}.").format(payload.get("property")))
+		doc = frappe.get_doc({
+			"doctype": "Routing Instruction",
+			"property": prop,
+			"reservation": (payload.get("reservation") or "").strip() or None,
+			"group_booking": (payload.get("group_booking") or "").strip() or None,
+		})
+		for d in DAYS:
+			doc.set(d, 1)
+
+	target_type = (payload.get("target_type") or doc.target_type or "Window").strip()
+	doc.target_type = target_type
+
+	raw_window = payload.get("target_window")
+	if raw_window not in (None, ""):
+		win = cint(raw_window)
+		if not 1 <= win <= 8:
+			frappe.throw(_("Target window must be from 1 to {0}.").format(8))
+		doc.target_window = win
+	elif target_type == "Window":
+		doc.target_window = cint(doc.target_window) or 2
+	else:
+		doc.target_window = cint(doc.target_window) or 1
+
+	if target_type == "Room":
+		target_res = (payload.get("target_reservation") or "").strip() or None
+		if target_res:
+			assert_record_access("Reservation", target_res)
+		doc.target_reservation = target_res
+	else:
+		doc.target_reservation = None
+
+	if "disabled" in payload:
+		doc.disabled = 1 if cint(payload.get("disabled")) else 0
+
+	all_codes = 1 if cint(payload.get("all_codes")) else 0
+	doc.all_codes = all_codes
+	if all_codes:
+		doc.set("codes", [])
+	elif "codes" in payload:
+		raw_codes = payload.get("codes") or []
+		doc.set("codes", [])
+		for item in raw_codes:
+			if not isinstance(item, dict):
+				continue
+			ct = (item.get("charge_type") or "").strip() or None
+			tc = (item.get("transaction_code") or "").strip() or None
+			if ct or tc:
+				doc.append("codes", {"charge_type": ct, "transaction_code": tc})
+
+	if "from_date" in payload:
+		doc.from_date = payload.get("from_date") or None
+	if "to_date" in payload:
+		doc.to_date = payload.get("to_date") or None
+
+	for d in DAYS:
+		if d in payload:
+			doc.set(d, 1 if cint(payload.get(d)) else 0)
+
+	limit_type = (payload.get("limit_type") or doc.limit_type or "None").strip()
+	if limit_type not in ("None", "Amount", "Percent"):
+		frappe.throw(_("Limit type must be None, Amount, or Percent."))
+	doc.limit_type = limit_type
+	if limit_type == "None":
+		doc.limit_value = 0
+		doc.per_day = 0
+	else:
+		raw_val = flt(payload.get("limit_value") if "limit_value" in payload else doc.limit_value)
+		if raw_val < 0:
+			frappe.throw(_("Limit value cannot be negative."))
+		doc.limit_value = raw_val
+		doc.per_day = 1 if (limit_type == "Amount" and cint(payload.get("per_day"))) else 0
+
+	if doc.is_new():
+		doc.insert(ignore_permissions=True)
+	else:
+		doc.save(ignore_permissions=True)
+
+	from kamra.savings import log_action
+	parent_dt = "Reservation" if doc.reservation else "Group Booking"
+	parent_name = doc.reservation or doc.group_booking or doc.name
+	log_action(
+		"save_routing_instruction",
+		parent_dt,
+		parent_name,
+		doc.property,
+		rationale=f"Saved routing {doc.name} -> {doc.target_type} W{doc.target_window or 1}",
+	)
+	return _serialize_instruction(doc)
+
+
+@frappe.whitelist(methods=["POST"])
+@require_roles("Front Desk", "Finance", "Hotel Admin", scope={"name": "Routing Instruction"})
+def delete_routing_instruction(name: str) -> dict:
+	"""Delete an unused Routing Instruction, or soft-disable it when already used/referenced."""
+	assert_record_access("Routing Instruction", name)
+	if not frappe.db.exists("Routing Instruction", name):
+		frappe.throw(_("Routing instruction {0} not found.").format(name))
+	doc = frappe.get_doc("Routing Instruction", name)
+	assert_property_access(doc.property)
+
+	used_amt = float(used(doc.name))
+	ref_count = frappe.db.count(
+		"Folio Charge",
+		{"parenttype": "Folio", "routing_instruction": doc.name},
+	)
+	copied_count = frappe.db.count(
+		"Routing Instruction",
+		{"source_instruction": doc.name},
+	)
+
+	from kamra.savings import log_action
+	parent_dt = "Reservation" if doc.reservation else "Group Booking"
+	parent_name = doc.reservation or doc.group_booking or doc.name
+	if used_amt > 0 or ref_count > 0 or copied_count > 0:
+		doc.disabled = 1
+		doc.save(ignore_permissions=True)
+		log_action(
+			"disable_routing_instruction",
+			parent_dt,
+			parent_name,
+			doc.property,
+			rationale=f"Soft-disabled routing {doc.name} (used={used_amt}, charges={ref_count})",
+		)
+		return {
+			"name": doc.name,
+			"action": "disabled",
+			"disabled": 1,
+			"used_amount": used_amt,
+			"referenced_charges": ref_count,
+		}
+
+	prop = doc.property
+	frappe.delete_doc("Routing Instruction", doc.name, ignore_permissions=True, force=True)
+	log_action(
+		"delete_routing_instruction",
+		parent_dt,
+		parent_name,
+		prop,
+		rationale=f"Deleted unused routing {name}",
+	)
+	return {
+		"name": name,
+		"action": "deleted",
+		"disabled": 0,
+		"used_amount": 0.0,
+		"referenced_charges": 0,
+	}

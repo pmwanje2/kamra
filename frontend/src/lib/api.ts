@@ -283,6 +283,18 @@ export async function call<T = unknown>(
   return data.message
 }
 
+/** Return fields from the native invoice cancellation and credit note endpoints. */
+export interface InvoiceCorrectionResult {
+  cancelled?: string | null
+  credit_note?: string | null
+  number?: string | null
+  rebill?: string | null
+  sales_invoice?: string | null
+  draft?: boolean | number | null
+  status?: string | null
+  message?: string | null
+}
+
 /** Call an allow_guest endpoint as a guest, whoever is logged in.
  *  Public pages (booking, listings) must not ride the staff session: a CSRF
  *  token captured at page load goes stale the moment someone logs in or out
