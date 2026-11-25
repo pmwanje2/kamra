@@ -1135,6 +1135,16 @@ _PREAUTH_EVENT_LABELS = {
 }
 
 
+def _has_permission(doctype: str, ptype: str, doc=None) -> bool:
+	if doc is not None:
+		if frappe.has_permission(doctype, ptype, doc=doc, print_logs=False):
+			return True
+		return False
+	if frappe.has_permission(doctype, ptype, print_logs=False):
+		return True
+	return False
+
+
 def deposit_state(res) -> dict:
 	"""What the deposit panel shows: the policy, what is held or authorized,
 	what came out, and which actions are open right now."""
@@ -1166,21 +1176,17 @@ def deposit_state(res) -> dict:
 	preauth_available = _preauth_available()
 	entry = _capture_payment_entry(row, eff)
 	pending = entry.name if entry and entry.docstatus == 0 else None
-	can_create_hold = preauth_available and not active_preauth and frappe.has_permission(
-		"Credit Preauthorization", "create", print_logs=False,
-	)
+	can_create_hold = preauth_available and not active_preauth and _has_permission("Credit Preauthorization", "create")
 	can_write_hold = (
 		preauth_available and active_preauth
 		and frappe.db.exists("Credit Preauthorization", eff["preauth_hold"])
-		and frappe.has_permission(
-			"Credit Preauthorization", "write", doc=eff["preauth_hold"], print_logs=False,
-		)
+		and _has_permission("Credit Preauthorization", "write", doc=eff["preauth_hold"])
 	)
 	can_receive_payment = (
 		can_write_hold and not pending and frappe.db.exists("DocType", "Payment Entry")
 		and (
-			frappe.has_permission("Payment Entry", "create", print_logs=False)
-			or frappe.has_permission("Payment Entry", "submit", print_logs=False)
+			_has_permission("Payment Entry", "create")
+			or _has_permission("Payment Entry", "submit")
 		)
 	)
 
