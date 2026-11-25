@@ -34,7 +34,7 @@ export function FiscalDocument({ fiscal, internalNumber }: { fiscal: Fiscal; int
           ? t("Test fiscal number - not a valid tax invoice")
           : null
   return (
-    <div className="mt-2 space-y-1 text-right text-xs text-zinc-500">
+    <div className="mt-2 space-y-1 text-end text-xs text-zinc-500">
       {warning && (
         <div className="rounded border border-amber-300 bg-amber-50 px-2 py-1 text-amber-800">
           <p className="font-semibold">{warning}</p>

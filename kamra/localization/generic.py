@@ -49,9 +49,10 @@ def locale(prop_doc) -> dict:
 	# site with no currency records the code itself becomes the symbol -
 	# "USD 1,500" beats a bare unlabelled number
 	symbol = frappe.db.get_value("Currency", currency, "symbol")
+	sys_lang = frappe.db.get_single_value("System Settings", "language")
 	return {
 		"currency_symbol": symbol or f"{currency} ",
-		"locale": "en-US",
+		"locale": prop_doc.get("locale") or sys_lang or "en-GB",
 		"currency": currency,
 		"tax_label": "Tax",
 		"tax_id_label": "Tax ID",

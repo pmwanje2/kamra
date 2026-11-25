@@ -181,7 +181,7 @@ describe("PR #45 i18n catalog and 7-locale coverage", () => {
     const missingCatalog = requiredKeys.filter((key) => !csv.includes(key))
     expect(missingCatalog, "missing from catalog.csv").toEqual([])
     const localesDir = path.join(frontendRoot, "src/i18n/locales")
-    const langs = ["ar", "de", "es", "fil", "id", "pt", "zh-CN"]
+    const langs = ["ar", "de", "es", "fil", "fr", "id", "pt", "zh-CN"]
     for (const lang of langs) {
       const dict = JSON.parse(fs.readFileSync(path.join(localesDir, `${lang}.json`), "utf8")) as Record<string, string>
       for (const key of requiredKeys) {

@@ -69,15 +69,16 @@ def placeholders(text: str) -> str:
 	return " ".join(sorted(set(re.findall(r"\{(\w+)\}", text))))
 
 
-def existing_translations() -> dict[str, str]:
-	if not ZH_CSV.exists():
+def existing_translations(lang: str = "zh") -> dict[str, str]:
+	csv_path = APP / "translations" / f"{lang}.csv"
+	if not csv_path.exists():
 		return {}
-	with ZH_CSV.open(encoding="utf-8", newline="") as handle:
+	with csv_path.open(encoding="utf-8", newline="") as handle:
 		return {row[0]: row[1] for row in csv.reader(handle) if len(row) >= 2}
 
 
-def main() -> int:
-	wanted = existing_translations()
+def extract_strings() -> tuple[dict[str, set[str]], dict[str, set[str]], list[tuple[str, int, str]]]:
+	"""Walk Python sources and DocType JSONs to return (strings, kinds, dynamic)."""
 	strings: dict[str, set[str]] = {}
 	kinds: dict[str, set[str]] = {}
 	dynamic: list[tuple[str, int, str]] = []
@@ -126,6 +127,18 @@ def main() -> int:
 			strings.setdefault(label, set()).add(rel)
 			kinds.setdefault(label, set()).add("doctype")
 
+	return strings, kinds, dynamic
+
+
+def main() -> int:
+	lang = "zh"
+	if "--lang" in sys.argv:
+		idx = sys.argv.index("--lang")
+		if idx + 1 < len(sys.argv):
+			lang = sys.argv[idx + 1]
+	wanted = existing_translations(lang)
+	strings, kinds, dynamic = extract_strings()
+
 	rows = sorted(strings.items(), key=lambda item: item[0].lower())
 	with OUT.open("w", encoding="utf-8", newline="") as handle:
 		writer = csv.writer(handle)
@@ -145,7 +158,7 @@ def main() -> int:
 	print(f"{len(rows)} distinct backend strings -> {OUT.relative_to(ROOT)}")
 	print(f"  code: {sum(1 for _, k in kinds.items() if 'code' in k)}"
 	      f"  doctype labels: {sum(1 for _, k in kinds.items() if 'doctype' in k)}")
-	print(f"  translated in zh.csv: {len(rows) - len(missing)}"
+	print(f"  translated in {lang}.csv: {len(rows) - len(missing)}"
 	      f"  missing: {len(missing)}")
 	print(f"  runtime-built (cannot be translated from a catalogue): {len(dynamic)}")
 	if "--list" in sys.argv:

@@ -22,6 +22,7 @@ const COLUMNS = [
   ["es", "spanish"],
   ["pt", "portuguese"],
   ["zh-CN", "chinese"],
+  ["fr", "french"],
 ]
 
 function walk(dir, files = []) {

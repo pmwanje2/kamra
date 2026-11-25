@@ -536,8 +536,7 @@ export default function FolioView() {
       : property.currency && property.currency !== loc.currency
         ? `${property.currency} `
         : cur()
-  const docLocale =
-    property.locale || (property.currency && property.currency !== loc.currency ? "en-US" : loc.locale)
+  const docLocale = property.locale || loc.locale
   const inr = (n: unknown) => fmtAmount(n ?? 0, docCurrency, docLocale)
   const docTaxLabel = property.tax_label || taxLabel()
   // the server sends charges enriched with their service code (and on a

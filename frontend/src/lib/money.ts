@@ -214,9 +214,7 @@ export const fmtAmount = (
   numberLocale?: string | null,
 ) => {
   const d = moneyDigits(currency)
-  const locStr =
-    numberLocale || (currency && currency !== cache.currency ? "en-US" : cache.locale)
-  return Number(n ?? 0).toLocaleString(locStr || "en-US", {
+  return Number(n ?? 0).toLocaleString(numberLocale || cache.locale || "en", {
     minimumFractionDigits: d,
     maximumFractionDigits: d,
   })
@@ -230,9 +228,7 @@ export const fmtMoney = (n: unknown, ctx?: MoneyContext | null) => {
       : ctx?.currency && ctx.currency !== cache.currency
         ? `${ctx.currency} `
         : cache.currency_symbol
-  const numLocale =
-    ctx?.locale || (ctx?.currency && ctx.currency !== cache.currency ? "en-US" : cache.locale)
-  return symbol + fmtAmount(n, currency, numLocale)
+  return symbol + fmtAmount(n, currency, ctx?.locale)
 }
 export const taxRates = () => cache.tax_rates
 export const taxLabel = () => cache.tax_label

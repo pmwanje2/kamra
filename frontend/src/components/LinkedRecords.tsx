@@ -80,8 +80,7 @@ export default function LinkedRecords({
           : ccy && ccy !== loc.currency
             ? `${ccy} `
             : cur()
-    const numLoc =
-      f.locale || numberLocale || (ccy && ccy !== loc.currency ? "en-US" : loc.locale)
+    const numLoc = f.locale || numberLocale || loc.locale
     return `${sym}${fmtAmount(f.balance || 0, ccy, numLoc)}`
   }
 
