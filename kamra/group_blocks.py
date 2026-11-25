@@ -118,7 +118,7 @@ def unpicked_by_night(group: str, room_type: str, *,
 	# a stay that has checked out used its nights too
 	if for_update:
 		stays = frappe.db.sql(
-			"""SELECT check_in_date, check_out_date FROM `tabReservation`
+			"""SELECT name, room, share_group_id, check_in_date, check_out_date FROM `tabReservation`
 			   WHERE group_booking = %s AND room_type = %s
 			     AND status IN ('Confirmed', 'Checked In', 'Held', 'Pending Payment', 'Checked Out')
 			   FOR UPDATE""",
@@ -127,14 +127,15 @@ def unpicked_by_night(group: str, room_type: str, *,
 		stays = frappe.get_all("Reservation", filters={
 			"group_booking": group, "room_type": room_type,
 			"status": ("in", [*LIVE_STATUSES, "Checked Out"])},
-			fields=["check_in_date", "check_out_date"])
+			fields=["name", "room", "share_group_id", "check_in_date", "check_out_date"])
+	from kamra.shares import inventory_key
 	out = {}
 	for d in group_nights(gb.check_in_date, gb.check_out_date):
 		night = getdate(d)
-		picked = sum(1 for s in stays
-		             if getdate(s.check_in_date) <= night
-		             and (night < getdate(s.check_out_date)
-		                  or getdate(s.check_in_date) == getdate(s.check_out_date) == night))
+		picked = len({inventory_key(s) for s in stays
+		              if getdate(s.check_in_date) <= night
+		              and (night < getdate(s.check_out_date)
+		                   or getdate(s.check_in_date) == getdate(s.check_out_date) == night)})
 		out[d] = max(0, nightly.get(d, int(row.rooms_blocked or 0)) - picked)
 	return out
 

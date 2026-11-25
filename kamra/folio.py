@@ -208,61 +208,59 @@ def _line_tax(c, amount: Decimal) -> Decimal:
 	return amount * Decimal(str(c.gst_rate or 0)) / 100
 
 
-def open_folio(reservation) -> str:
-	"""Open (or return) the folio for a reservation. Called at check-in."""
+def open_folio(reservation, *, prearrival: bool = False) -> str:
+	"""Open (or return) a guest folio. Prearrival shares defer arrival charges."""
 	in_arrival_fc = reservation.name in (getattr(frappe.flags, "_kamra_arrival_fc_res", None) or ())
 	existing = frappe.db.get_value(
-		"Folio", {"reservation": reservation.name, "folio_type": "Guest"}
+		"Folio", {"reservation": reservation.name, "folio_type": "Guest"},
+		["name", "share_prearrival"], as_dict=True,
+		for_update=prearrival or bool(reservation.get("share_group_id")),
 	)
+	if existing and (in_arrival_fc or prearrival):
+		return existing.name
 	if existing:
-		if in_arrival_fc:
-			return existing
-		_post_addons(reservation, existing)
-		_post_pet_charge(reservation, existing)
-		if not reservation.flags.get("carried_forward"):
-			from kamra.fixed_charges import post_arrival_fixed_charges
-			post_arrival_fixed_charges(reservation, primary_folio=existing)
-		return existing
-	folio = frappe.get_doc({
-		"doctype": "Folio",
-		"property": reservation.property,
-		"reservation": reservation.name,
-		"guest": reservation.guest,
-		"status": "Open",
-		"opened_on": now_datetime(),
-	})
-	voucher = voucher_discount(reservation)
-	if voucher:
-		voucher_gst = _room_gst(reservation)
-		if not float(voucher_gst or 0):
-			from kamra.pricing import property_currency, round_rate_amount
-			voucher = float(round_rate_amount(
-				voucher, 0, "Nearest", property_currency(reservation.property)))
-	if voucher:
-		folio.append("charges", {
-			"posting_date": nowdate(),
-			"charge_type": "Discount",
-			"description": "Booking discount (voucher)",
-			"qty": 1,
-			"rate": -voucher,
-			"amount": -voucher,
-			"gst_rate": voucher_gst,
-			"auto_posted": 1,
+		folio = frappe.get_doc("Folio", existing.name) if existing.share_prearrival else None
+		if folio and reservation.status == "Confirmed":
+			return existing.name
+	else:
+		folio = frappe.get_doc({
+			"doctype": "Folio", "property": reservation.property, "reservation": reservation.name,
+			"guest": reservation.guest, "status": "Open", "opened_on": now_datetime(),
+			"share_prearrival": int(prearrival),
 		})
-	_recalculate(folio)
-	from kamra.ledger import save_folio
-	save_folio(folio)
-	if reservation.flags.get("carried_forward"):
-		# an in-house guest moved over at go-live: the old system billed
-		# the one-time fees, and they arrive inside the opening balance
+	if folio:
+		from kamra.ledger import save_folio
+		if not prearrival:
+			folio.share_prearrival = 0
+			_add_opening_voucher(reservation, folio)
+		_recalculate(folio)
+		save_folio(folio)
+	if prearrival or (not existing and reservation.flags.get("carried_forward")):
 		return folio.name
-	_post_addons(reservation, folio.name)
-	_post_cleaning_fee(reservation, folio.name)
-	_post_pet_charge(reservation, folio.name)
-	if not in_arrival_fc:
+	name = existing.name if existing else folio.name
+	_post_addons(reservation, name)
+	if folio:
+		_post_cleaning_fee(reservation, name)
+	_post_pet_charge(reservation, name)
+	if not in_arrival_fc and not reservation.flags.get("carried_forward"):
 		from kamra.fixed_charges import post_arrival_fixed_charges
-		post_arrival_fixed_charges(reservation, primary_folio=folio.name)
-	return folio.name
+		post_arrival_fixed_charges(reservation, primary_folio=name)
+	return name
+
+
+def _add_opening_voucher(reservation, folio):
+	voucher = voucher_discount(reservation)
+	if not voucher:
+		return
+	voucher_gst = _room_gst(reservation)
+	if not float(voucher_gst or 0):
+		from kamra.pricing import property_currency, round_rate_amount
+		voucher = float(round_rate_amount(
+			voucher, 0, "Nearest", property_currency(reservation.property)))
+	folio.append("charges", {
+		"posting_date": nowdate(), "charge_type": "Discount", "description": "Booking discount (voucher)",
+		"qty": 1, "rate": -voucher, "amount": -voucher, "gst_rate": voucher_gst, "auto_posted": 1,
+	})
 
 
 def voucher_discount(reservation) -> float:
@@ -716,7 +714,7 @@ def _legacy_target(reservation, charge_type: str, transaction_code: str | None =
 	return open_folio(reservation)
 
 
-def _charge_posted(reservation_name: str, charge_type: str, date: str) -> bool:
+def _charge_posted(reservation_name: str, charge_type: str, date: str, *, lock: bool = False) -> bool:
 	"""Has this charge type already been posted for this date on ANY folio
 	of the stay? Routing can land a member's room night on the GROUP
 	master (anchored to the lead reservation), so we match on the line's
@@ -741,7 +739,7 @@ def _charge_posted(reservation_name: str, charge_type: str, date: str) -> bool:
 		  AND (fc.reservation = %(res)s
 		       OR (IFNULL(fc.reservation, '') = '' AND f.reservation = %(res)s))
 		LIMIT 1
-		""",
+		""" + (" FOR UPDATE" if lock else ""),
 		{"res": reservation_name, "ct": charge_type, "date": str(date)},
 	))
 
@@ -1325,6 +1323,12 @@ def post_room_night(reservation, date, folios=None, *, room_posted: list | None 
 	posted - a Current Date night at its posting rate - for Night Audit's
 	total."""
 	date = str(date)
+	shared = bool(reservation.get("share_group_id"))
+	if shared:
+		from kamra.kamra.doctype.reservation.reservation import lock_property_for_inventory
+		lock_property_for_inventory(reservation.property)
+		reservation = frappe.get_doc("Reservation", reservation.name, for_update=True)
+		shared = bool(reservation.get("share_group_id"))
 	own_batch = folios is None
 	if own_batch:
 		folios = {}
@@ -1333,13 +1337,22 @@ def post_room_night(reservation, date, folios=None, *, room_posted: list | None 
 	room_gst = None
 
 	from kamra.packages import active_package_for_reservation, post_package_night_split
-	pkg_doc = active_package_for_reservation(reservation)
+	pkg_doc = None if shared else active_package_for_reservation(reservation)
 
-	if pkg_doc is not None or not _charge_posted(reservation.name, "Room", date):
+	if pkg_doc is not None or not _charge_posted(reservation.name, "Room", date, lock=shared):
 		room_no = (reservation.room or "").split("-")[-1]
 		day_use = _day_use_room_charge(reservation, date)
 		current = None
-		if day_use:
+		share = None
+		if shared:
+			from kamra.shares import nightly_share
+			share = nightly_share(reservation, date, lock=True)
+			if share is None:
+				return False
+		if share:
+			night_rate, gst_rate = float(share["rate"]), share["gst"]
+			desc = f"Room {room_no} · {reservation.room_type.split('-')[-1]}"
+		elif day_use:
 			night_rate, gst_rate, du_label = day_use
 			desc = (f"Room {room_no} · {reservation.room_type.split('-')[-1]}"
 			        f" · {du_label}")
@@ -1383,7 +1396,8 @@ def post_room_night(reservation, date, folios=None, *, room_posted: list | None 
 			fx_posted = {"contract_currency": current["currency"], "contract_fx_rate": current["fx_rate"],
 			             "contract_fx_date": current["fx_date"], "contract_fx_stale": int(current["stale"])}
 		from kamra.room_statistics import category_rules
-		rate_cat = category_rules(reservation.property).of(reservation.get("rate_category"))
+		rate_cat = category_rules(reservation.property).of(
+			share["category"] if share else reservation.get("rate_category"))
 		if pkg_doc is not None:
 			pkg_room_gst = _quoted_room_gst(reservation, date, gst_rate)
 			pkg_res = post_package_night_split(
@@ -1416,7 +1430,7 @@ def post_room_night(reservation, date, folios=None, *, room_posted: list | None 
 					room_posted.append(pkg_res["night_total"])
 				_post_room_levy(folios, reservation, date, night_rate, gst_rate)
 		else:
-			_append_charge(folios, reservation, "Room", {
+			line = {
 				**fx_posted,
 				"posting_date": date,
 				"charge_type": "Room",
@@ -1428,12 +1442,22 @@ def post_room_night(reservation, date, folios=None, *, room_posted: list | None 
 				"amount": night_rate,
 				"gst_rate": gst_rate,
 				"auto_posted": 1,
-			})
+			}
+			if share:
+				line.update(share["fx"], share_room=share["room"], share_group=reservation.share_group_id,
+				            share_snapshot=json.dumps({k: v for k, v in share.items() if k != "rate"}))
+				name = open_folio(reservation)
+				if name not in folios:
+					folios[name] = frappe.get_doc("Folio", name, for_update=True)
+				folios[name].append("charges", line)
+			else:
+				_append_charge(folios, reservation, "Room", line)
 			posted = True
 			room_gst = gst_rate
 			if room_posted is not None:
 				room_posted.append(night_rate)
-			_post_room_levy(folios, reservation, date, night_rate, gst_rate)
+			_post_room_levy(folios, reservation, date, night_rate, gst_rate,
+			                include_fixed=not share or share["lead"] == reservation.name)
 
 	# Its own charge type, not the shared Misc bucket: dedupe is by type and
 	# date, so a sundry the desk had already typed as Misc that day would
@@ -1493,7 +1517,7 @@ def post_room_night(reservation, date, folios=None, *, room_posted: list | None 
 	return posted
 
 
-def _post_room_levy(folios, reservation, date, night_rate, gst_rate=None):
+def _post_room_levy(folios, reservation, date, night_rate, gst_rate=None, *, include_fixed=True):
 	"""The property's per-night levy on the room rate (municipality fee,
 	city / tourism tax): a % of the night's rate and/or a fixed amount per
 	occupied room-night (room_levy_per_night) - its own line so the invoice
@@ -1502,7 +1526,7 @@ def _post_room_levy(folios, reservation, date, night_rate, gst_rate=None):
 	(a Current Date night's own), else the night's locked rate."""
 	prop = frappe.get_cached_doc("Property", reservation.property)
 	pct = float(prop.get("room_levy_percent") or 0)
-	fixed = float(prop.get("room_levy_per_night") or 0)
+	fixed = float(prop.get("room_levy_per_night") or 0) if include_fixed else 0
 	levy_gst = (
 		(_nightly_gst(reservation, date) if gst_rate is None else gst_rate)
 		if int(prop.get("room_levy_taxable") if prop.get("room_levy_taxable") is not None else 1)
@@ -1575,7 +1599,7 @@ def charged_nights(reservation_name: str) -> dict:
 		"""
 		SELECT IF(fc.charge_type = %(adj)s, fc.stay_date, fc.posting_date) AS night,
 		       fc.charge_type, fc.amount, fc.gst_rate, fc.gst_amount, fc.tax_as_posted,
-		       fc.idempotency_key, fc.parent,
+		       fc.idempotency_key, fc.parent, fc.share_room,
 		       CASE WHEN """ + NOT_VOIDED + """ THEN 1 ELSE 0 END AS live
 		FROM `tabFolio Charge` fc
 		JOIN `tabFolio` f ON fc.parent = f.name
@@ -1607,6 +1631,8 @@ def charged_nights(reservation_name: str) -> dict:
 		                         "levy_tax": 0.0, "folio": r.parent})
 		n["base"] += amount
 		n["tax"] += tax
+		if r.share_room:
+			n["shared"] = True
 	if pkg_nights:
 		pkg_rows = frappe.db.sql(
 			"""
@@ -1793,6 +1819,7 @@ def transfer_charges(from_folio: str, charge_rows: list, to_folio: str):
 	move_charges(src, dst, charge_rows)
 
 
+SHARE_CHARGE_FIELDS = ("share_room", "share_group", "share_snapshot")
 CONTRACT_FX_FIELDS = ("contract_currency", "contract_fx_rate", "contract_fx_date", "contract_fx_stale")
 
 
@@ -1847,6 +1874,7 @@ def move_charges(src, dst, charge_rows: list, reservation: str | None = None,
 			"transaction_code": row.get("transaction_code"),
 			"gl_code": row.get("gl_code"),
 			**_contract_fx_trail(row),
+			**{field: row.get(field) for field in SHARE_CHARGE_FIELDS},
 			# and its outlet reference, so the hotel invoice never bills an
 			# outlet charge again (the source row is saved away first)
 			"source_ref": row.get("source_ref"),
@@ -2065,6 +2093,7 @@ def _post_split(src, row, sign: int, line: dict, cuts: list, kept_units: Decimal
 		"transaction_code": row.get("transaction_code"),
 		"gl_code": row.get("gl_code"),
 		"split_of": row.name,
+		**{field: row.get(field) for field in SHARE_CHARGE_FIELDS},
 	}
 	names = ", ".join(dict.fromkeys(f.name for f, _p, _u in cuts if f is not src))
 	# the posted line stays; its reversal voids it on its own date, tax and all
@@ -2751,9 +2780,10 @@ def run_night_audit(property: str, business_date: str | None = None,
 	# UnboundLocalError. Default it so the audit runs everywhere.
 	if not getattr(frappe.local, "lang", None):
 		frappe.local.lang = "en"
-	from kamra.business_date import ensure_business_date, get_business_date
-	ensure_business_date(property)
-	current = get_business_date(property)
+	from kamra.business_date import ensure_business_date
+	current = frappe.db.get_value("Property", property, "business_date", for_update=True)
+	if not current:
+		current = ensure_business_date(property)
 	business_date = str(getdate(business_date or current))
 	# look the run up per property AND date - a global per-date lookup would
 	# make the second property's audit silently no-op every night. Checked
@@ -2763,13 +2793,13 @@ def run_night_audit(property: str, business_date: str | None = None,
 	done = frappe.db.get_value(
 		"Night Audit Run",
 		{"property": property, "business_date": business_date,
-		 "status": ("!=", "Draft")}, "name")
+		 "status": ("!=", "Draft")}, "name", for_update=True)
 	if done:
 		return {"already_ran": True, "audit": done}
 	draft_name = frappe.db.get_value(
 		"Night Audit Run",
 		{"property": property, "business_date": business_date,
-		 "status": "Draft"}, "name")
+		 "status": "Draft"}, "name", for_update=True)
 	# The audit only ever closes the property's current business date. A
 	# different date would post into a closed day or skip days, and then
 	# set the business date to that date + 1.
@@ -2841,7 +2871,7 @@ def run_night_audit(property: str, business_date: str | None = None,
 	from kamra.fixed_charges import post_fixed_charges_for_date
 	from kamra.packages import expire_daily_allowances
 
-	in_house = frappe.get_all(
+	in_house = frappe.qb.get_query(
 		"Reservation",
 		filters={
 			"property": property,
@@ -2849,8 +2879,8 @@ def run_night_audit(property: str, business_date: str | None = None,
 			"check_in_date": ("<=", business_date),
 			"check_out_date": (">", business_date),
 		},
-		fields=["name"],
-	)
+		fields=["name"], for_update=True, ignore_permissions=True,
+	).run(as_dict=True)
 	for row in in_house:
 		res = frappe.get_doc("Reservation", row.name)
 		if not frappe.db.get_value(

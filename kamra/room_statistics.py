@@ -14,8 +14,8 @@ Complimentary and House Use flags and its Manager Report:
 A category left out of a figure adds neither rooms nor revenue to it.
 
 Room revenue is what kamra.ledger books to the Rooms group's room-rate codes:
-Room (1000) and Rate Adjustment (1010). A room sold is one reservation on one
-posting date with a Room line that stands on that date
+Room (1000) and Rate Adjustment (1010). A room sold is one booking or shared physical room on one posting
+date with a Room line that stands on that date
 (folio.STANDS_ON_ITS_DATE).
 
 A stay keeps the category it was booked on (Reservation.rate_category, set
@@ -214,7 +214,12 @@ def posted_rooms(property: str, start, end, rules: CategoryRules | None = None) 
 	a room occupied, so each category's "occupied" is its rooms."""
 	from kamra.folio import STANDS_ON_ITS_DATE
 	rules = rules or category_rules(property)
-	key = "CONCAT(COALESCE(fc.reservation, f.reservation), '|', fc.posting_date)"
+	# The physical room is stamped when a share posts, so breaking the share
+	# or moving the guest later never changes a closed night's room count.
+	key = """CONCAT(CASE WHEN IFNULL(fc.share_room, '') != ''
+	                     THEN CONCAT('room:', fc.share_room)
+	                     ELSE CONCAT('stay:', COALESCE(fc.reservation, f.reservation))
+	                END, '|', fc.posting_date)"""
 	by: dict = {}
 	for category, rooms, revenue in frappe.db.sql(
 			"""
@@ -298,20 +303,23 @@ def stay_categories(rules: CategoryRules, reservations) -> dict:
 
 
 def in_house_by_category(rules: CategoryRules, property: str, date=None) -> dict:
-	"""Rooms in house (stays Checked In, arrived by date) by rate category:
-	{category: rooms}."""
+	"""Rooms in house by rate category, using the lead active sharer's category."""
 	out: dict = {}
-	for category, rooms in frappe.db.sql(
+	seen = set()
+	for room, group, category in frappe.db.sql(
 			"""
-			SELECT """ + STAY_CATEGORY + """,
-			       COUNT(DISTINCT COALESCE(NULLIF(r.room, ''), r.name))
+			SELECT COALESCE(NULLIF(r.room, ''), r.name), r.share_group_id, """ + STAY_CATEGORY + """
 			FROM `tabReservation` r
 			WHERE r.property = %(p)s AND r.status = 'Checked In'
 			  AND (%(d)s IS NULL OR r.check_in_date <= %(d)s)
-			GROUP BY """ + STAY_CATEGORY + """
+			ORDER BY r.is_share_primary DESC, r.check_in_date, r.name
 			""", {"p": property, "d": str(date) if date else None}):
+		key = (room,) if group else (room, category)
+		if key in seen:
+			continue
+		seen.add(key)
 		category = rules.of(category)
-		out[category] = out.get(category, 0) + int(rooms or 0)
+		out[category] = out.get(category, 0) + 1
 	return out
 
 
@@ -333,20 +341,27 @@ def booked_by_night(rules: CategoryRules, property: str, start, end, statuses, *
 	leaves; with day_use a same-day stay covers its own date (as the
 	occupancy forecast counts it)."""
 	from frappe.utils import add_days, getdate
+	from kamra.shares import inventory_key
 	leaves = ("GREATEST(r.check_out_date, DATE_ADD(r.check_in_date, INTERVAL 1 DAY))"
 	          if day_use else "r.check_out_date")
 	start, end = getdate(start), getdate(end)
 	out: dict = {}
-	for arrives, departs, category in frappe.db.sql(
-			"SELECT r.check_in_date, " + leaves + ", " + STAY_CATEGORY + """
+	seen = set()
+	for row in frappe.db.sql(
+			"SELECT r.name, r.room, r.share_group_id, r.check_in_date, " + leaves +
+			" AS leaves, " + STAY_CATEGORY + """ AS category
 			FROM `tabReservation` r
 			WHERE r.property = %(p)s AND r.status IN %(st)s
-			  AND r.check_in_date < %(e)s AND """ + leaves + " > %(s)s",
-			{"p": property, "st": tuple(statuses), "s": str(start), "e": str(end)}):
-		category = rules.of(category)
-		night = max(getdate(arrives), start)
-		while night < min(getdate(departs), end):
-			by = out.setdefault(str(night), {})
-			by[category] = by.get(category, 0) + 1
+			  AND r.check_in_date < %(e)s AND """ + leaves + """ > %(s)s
+			ORDER BY r.is_share_primary DESC, r.check_in_date, r.name""",
+			{"p": property, "st": tuple(statuses), "s": str(start), "e": str(end)}, as_dict=True):
+		category = rules.of(row.category)
+		key = inventory_key(row)
+		night = max(getdate(row.check_in_date), start)
+		while night < min(getdate(row.leaves), end):
+			if (night, key) not in seen:
+				seen.add((night, key))
+				by = out.setdefault(str(night), {})
+				by[category] = by.get(category, 0) + 1
 			night = getdate(add_days(night, 1))
 	return out

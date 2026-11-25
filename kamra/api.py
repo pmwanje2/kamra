@@ -6390,6 +6390,7 @@ def reservation_detail(reservation: str):
 	from kamra.folio import charged_nights
 	from kamra.kamra.doctype.reservation.reservation import uses_member_rooms
 	from kamra.pricing import effective_rate_currency, property_currency, saved_contract_tariff
+	from kamra.shares import share_summary
 	res = frappe.get_doc("Reservation", reservation)
 	night_charged = set(charged_nights(res.name)) if res.get("night_rates") else set()
 	home_cur = property_currency(res.property)
@@ -6520,6 +6521,7 @@ def reservation_detail(reservation: str):
 		"rate_currency": rate_cur,
 		**({"agreed_override": agreed_override} if agreed_override else {}),
 		"group": group,
+		"share": share_summary(res) if res.has_permission("read") else None,
 		"status": res.status,
 		"source": res.source,
 		"channel": res.channel,
@@ -7518,6 +7520,7 @@ def reverse_check_in(reservation: str, reason: str, pin: str | None = None):
 	one; the user it acts for is the logged actor."""
 	from kamra.authz import require_cashier_pin
 	from kamra.credit import _is_agent
+	from kamra.shares import other_sharer_in_house
 	reason = (reason or "").strip()
 	if not reason:
 		frappe.throw(_("Say why the check-in is being reversed."))
@@ -7555,6 +7558,8 @@ def reverse_check_in(reservation: str, reason: str, pin: str | None = None):
 		if occ.get("arrived_at"):
 			occ.db_set("arrived_at", None, update_modified=False)
 	for room in rooms:
+		if other_sharer_in_house(doc, room):
+			continue
 		if frappe.db.get_value("Room", room, "housekeeping_status") in ("Out of Order", "Out of Service"):
 			frappe.db.set_value("Room", room, "occupancy_status", "Vacant")
 		else:
@@ -7705,6 +7710,8 @@ def check_out(reservation: str, credit_override_reason: str | None = None,
 	# Locked before the open-check read and held to the save, so no other
 	# write to this stay lands between them. The ERP's check-out fence
 	# (KMR-CO-002, After Save) reads the outlet checks again at the save.
+	from kamra.kamra.doctype.reservation.reservation import lock_property_for_inventory
+	lock_property_for_inventory(frappe.db.get_value("Reservation", reservation, "property"))
 	doc = frappe.get_doc("Reservation", reservation, for_update=True)
 	from kamra.checkout import assert_no_active_card_hold
 	assert_no_active_card_hold(doc)
@@ -7904,6 +7911,7 @@ def availability_calendar(property: str, start_date: str | None = None, days: in
 	from kamra.group_blocks import block_hold_by_night
 	from kamra.kamra.doctype.reservation.reservation import villa_locked_nights
 	from kamra.pricing import occupancy_rate, season_adjust
+	from kamra.shares import inventory_key
 	from kamra.siu.availability import capacity_by_night, has_active_sius
 
 	start = start_date or nowdate()
@@ -7960,15 +7968,15 @@ def availability_calendar(property: str, start_date: str | None = None, days: in
 					"check_in_date": ("<", end),
 					"check_out_date": (">", start),
 				},
-				fields=["check_in_date", "check_out_date"],
+				fields=["name", "room", "share_group_id", "check_in_date", "check_out_date"],
 			)
 			cells = []
 			for date in dates:
 				d = getdate(date)
-				taken = sum(
-					1 for b in bookings
+				taken = len({
+					inventory_key(b) for b in bookings
 					if getdate(b.check_in_date) <= d < getdate(b.check_out_date)
-				)
+				})
 				cells.append({
 					"date": str(date),
 					"available": 0 if str(date) in locked
@@ -8019,7 +8027,7 @@ def tape_chart(property: str, start_date: str | None = None, days: int = 14):
 		        "check_in_date", "check_out_date", "is_day_use", "adults",
 		        "planned_check_in_time", "planned_check_out_time",
 		        "precheckin_status", "source", "booking_type", "company",
-		        "travel_agent", "group_booking"],
+		        "travel_agent", "group_booking", "share_group_id", "is_share_primary"],
 	)
 	# VIP flag rides in from the guest profile (one lookup per distinct guest)
 	guests = {b.guest for b in bookings if b.guest}
@@ -8055,7 +8063,8 @@ def tape_chart(property: str, start_date: str | None = None, days: int = 14):
 		               if b.planned_check_out_time not in (None, "")}
 		for b in r["bookings"]:
 			out = by_date_out.get(str(b.check_in_date))
-			if not out or out.name == b.name or b.planned_check_in_time in (None, ""):
+			if (not out or out.name == b.name or b.planned_check_in_time in (None, "")
+				    or (b.share_group_id and b.share_group_id == out.share_group_id)):
 				continue
 			in_eta = _format_hhmm(b.planned_check_in_time)
 			out_etd = _format_hhmm(out.planned_check_out_time)

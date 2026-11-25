@@ -2779,3 +2779,30 @@ Wrong cashier PIN.,Code PIN de caisse incorrect.
 Send PINs and passwords in the request body.,Envoyez les codes PIN et les mots de passe dans le corps de la requête.
 The PIN operation could not be completed. Try again.,L’opération sur le code PIN a échoué. Réessayez.
 Choose four to eight digits and avoid common PIN patterns.,Choisissez de quatre à huit chiffres et évitez les combinaisons courantes.
+Share Group,Groupe de partage
+Primary Sharer,Titulaire du partage
+Rate Split Mode,Mode de répartition du tarif
+Custom Nightly Rate,Tarif personnalisé par nuit
+Enter a nonnegative share rate in the folio currency's minor units.,Saisissez un tarif positif ou nul dans les unités de la devise du folio.
+Select a valid share rate mode.,Sélectionnez un mode de répartition valide.
+Use the Share panel to change a share reservation.,Utilisez le panneau de partage pour modifier une réservation partagée.
+Break the share before changing its room or guest.,Dissociez le partage avant de changer la chambre ou le client.
+Only confirmed or checked-in reservations can share a room.,Seules les réservations confirmées ou enregistrées peuvent partager une chambre.
+Assign a regular overnight room before sharing.,Attribuez une chambre pour un séjour avec nuitée avant de la partager.
+Reservations with an active package cannot share a room.,Les réservations avec un forfait actif ne peuvent pas partager une chambre.
+The share change could not be recorded.,La modification du partage n’a pas pu être enregistrée.
+A room night in this share has already been posted.,Une nuitée de ce partage a déjà été comptabilisée.
+Each sharer must have a different guest profile.,Chaque co-occupant doit avoir un profil client distinct.
+The sharer's dates must overlap an active stay in the room.,Les dates du co-occupant doivent chevaucher un séjour actif dans la chambre.
+Select an existing guest or enter a new guest name.,Sélectionnez un client existant ou saisissez un nouveau nom.
+"Choose a confirmed, unshared reservation for the same room type and property.",Choisissez une réservation confirmée et non partagée pour le même type de chambre et le même établissement.
+Choose an active share reservation.,Choisissez une réservation partagée active.
+Choose a different room to break the share.,Choisissez une autre chambre pour dissocier le partage.
+Choose a room of the same type at this property.,Choisissez une chambre du même type dans cet établissement.
+Post previous room nights before breaking the share.,Comptabilisez les nuitées précédentes avant de dissocier le partage.
+Select a valid share rate mode for an active share.,Sélectionnez un mode de répartition valide pour un partage actif.
+Enter a custom nightly rate for every sharer.,Saisissez un tarif par nuit personnalisé pour chaque co-occupant.
+Posted Share Group,Groupe de partage comptabilisé
+Posted Shared Room,Chambre partagée comptabilisée
+Share Night Allocation,Répartition de la nuitée partagée
+Share Prearrival Folio,Folio de partage avant l’arrivée

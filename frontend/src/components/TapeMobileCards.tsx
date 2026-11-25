@@ -21,6 +21,8 @@ export interface MobileTapeBooking {
   company?: string | null
   travel_agent?: string | null
   group_booking?: string | null
+  share_group_id?: string | null
+  is_share_primary?: number
   planned_check_in_time?: string | null
   planned_check_out_time?: string | null
 }
@@ -119,6 +121,9 @@ export function TapeMobileCards({
             </div>
             {g.rooms.map((room) => {
               const stay = bookingOnDate(room, selectedDate)
+              const shareCount = stay?.share_group_id ? room.bookings.filter((booking) =>
+                booking.share_group_id === stay.share_group_id
+                && booking.check_in_date <= selectedDate && selectedDate < booking.check_out_date).length : 0
               const blk = blockOnDate(room, selectedDate)
               const meta = roomMeta[room.name]
               const tone = hkTone(room.housekeeping_status)
@@ -238,6 +243,12 @@ export function TapeMobileCards({
                           {stay.vip === 1 && (
                             <Star className="size-3.5 shrink-0 fill-amber-300 text-amber-300" aria-hidden />
                           )}
+                          {shareCount > 1 && <span className="inline-flex shrink-0 items-center gap-1 rounded bg-zinc-50 px-1 text-xs text-zinc-900"
+                            title={t("Shared room with {n} reservations", { n: shareCount })}>
+                            <Users className="size-3.5" aria-hidden />
+                            <span className="sr-only">{t("Shared room with {n} reservations", { n: shareCount })}</span>
+                            {shareCount}
+                          </span>}
                           <span className="truncate">{stay.guest_name}</span>
                         </span>
                         <Badge tone={stay.status === "Checked In" ? "brand" : "sky"} className="shrink-0 bg-white/90">

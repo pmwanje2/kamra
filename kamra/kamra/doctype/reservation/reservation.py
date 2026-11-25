@@ -377,17 +377,23 @@ class Reservation(Document):
 			new_nights = [d for d in dates if d not in before]
 			if new_nights:
 				out = self._rooms_out_of_sale(new_nights)
+		from kamra.shares import inventory_key
+		key = inventory_key(self)
 		for d in dates:
-			cnt = len(frappe.db.sql(
-				"""SELECT name FROM `tabReservation`
+			bookings = frappe.db.sql(
+				"""SELECT name, room, share_group_id FROM `tabReservation`
 				   WHERE room_type = %(rt)s AND name != %(name)s
 				     AND status IN ('Confirmed', 'Checked In', 'Held', 'Pending Payment')
 				     AND check_in_date <= %(d)s
 				     AND GREATEST(check_out_date,
 				                  DATE_ADD(check_in_date, INTERVAL 1 DAY)) > %(d)s
 				   FOR UPDATE""",
-				{"rt": self.room_type, "name": self.name or "new", "d": d},
-			))
+				{"rt": self.room_type, "name": self.name or "new", "d": d}, as_dict=True,
+			)
+			held_keys = {inventory_key(row) for row in bookings}
+			if key in held_keys:
+				continue  # the room is already held by another sharer on this night
+			cnt = len(held_keys)
 			hold = held.get(d, 0)
 			rooms = total - out.get(d, 0)
 			limit = int(rooms * (1 + pct / 100))
@@ -500,6 +506,8 @@ class Reservation(Document):
 		self.validate_blacklist()
 		self.validate_occupancy()
 		self.default_occupant_nationality()
+		from kamra.shares import validate_reservation
+		validate_reservation(self)
 		self.validate_room_belongs_to_type()
 		self.validate_no_overlap()
 		self.validate_itinerary_leg()
@@ -2427,7 +2435,8 @@ class Reservation(Document):
 			base, gst = c["base"], c["gst_rate"]
 			changed = abs(new - base) >= tol or (correct and abs(new_gst - gst) >= 0.01)
 			action = "kept" if changed else "same"
-			if changed and correct:
+			# A share night is a posted allocation, not this reservation's room quote.
+			if changed and correct and not c.get("shared"):
 				out["lines"] += [
 					{"night": night, "folio": c["folio"], "amount": -base,
 					 "gst_rate": gst,
@@ -2437,7 +2446,7 @@ class Reservation(Document):
 					 "description": f"Rate correction: night of {night} at {new:,.2f}"},
 				]
 				base, gst, action = new, new_gst, "corrected"
-			elif changed and policy == "Credit the difference" and new < base:
+			elif changed and policy == "Credit the difference" and new < base and not c.get("shared"):
 				out["lines"].append(
 					{"night": night, "folio": c["folio"],
 					 "amount": round(new - base, places), "gst_rate": gst,
@@ -2512,7 +2521,7 @@ class Reservation(Document):
 			)
 
 	def validate_no_overlap(self):
-		"""A physical room can hold only one live reservation per night.
+		"""A physical room can hold one booking or share group per night.
 
 		This check is the seed of Kamra's no-overbooking guarantee: it runs
 		on every insert/update, regardless of whether a human or an AI agent
@@ -2535,6 +2544,7 @@ class Reservation(Document):
 			SELECT name FROM `tabReservation`
 			WHERE room = %(room)s
 			  AND name != %(name)s
+			  AND (%(share)s = '' OR IFNULL(share_group_id, '') != %(share)s)
 			  AND status IN ('Confirmed', 'Checked In', 'Held', 'Pending Payment')
 			  AND check_in_date < GREATEST(%(check_out)s,
 			                               DATE_ADD(%(check_in)s, INTERVAL 1 DAY))
@@ -2546,7 +2556,7 @@ class Reservation(Document):
 			{
 				"room": self.room,
 				"name": self.name or "new",
-				"check_in": self.check_in_date,
+				"check_in": self.check_in_date, "share": self.get("share_group_id") or "",
 				"check_out": self.check_out_date,
 			},
 		)
@@ -2594,6 +2604,7 @@ class Reservation(Document):
 			"""
 			SELECT name, guest_name FROM `tabReservation`
 			WHERE room = %(room)s AND name != %(name)s
+			  AND (%(share)s = '' OR IFNULL(share_group_id, '') != %(share)s)
 			  AND status = 'Checked In'
 			  AND check_in_date < GREATEST(%(check_out)s,
 			                               DATE_ADD(%(check_in)s, INTERVAL 1 DAY))
@@ -2604,7 +2615,7 @@ class Reservation(Document):
 			FOR UPDATE
 			""",
 			{"room": self.room, "name": self.name or "new",
-			 "check_in": self.check_in_date, "check_out": self.check_out_date,
+			 "check_in": self.check_in_date, "share": self.get("share_group_id") or "", "check_out": self.check_out_date,
 			 "today": today()},
 			as_dict=True,
 		)
@@ -2748,7 +2759,10 @@ class Reservation(Document):
 		post_remaining_nights(self)
 		# a no-op unless an advance reached the stay some other way
 		transfer_advances_to_guest(self.name)
+		from kamra.shares import other_sharer_in_house
 		for room in self._occupied_rooms(checking_in=False):
+			if other_sharer_in_house(self, room):
+				continue
 			hk, occ = frappe.db.get_value(
 				"Room", room, ["housekeeping_status", "occupancy_status"]) or (None, None)
 			if hk in ("Out of Order", "Out of Service"):

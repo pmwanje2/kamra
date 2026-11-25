@@ -411,7 +411,10 @@ def forecast_occupancy(property: str, date,
 	if not total:
 		return 0.0
 	sold = frappe.db.sql(
-		"""SELECT COUNT(*) FROM `tabReservation`
+		"""SELECT COUNT(DISTINCT CASE WHEN IFNULL(share_group_id, '') != ''
+		                            AND IFNULL(room, '') != ''
+		                       THEN CONCAT('room:', room) ELSE CONCAT('stay:', name) END)
+		   FROM `tabReservation`
 		   WHERE property = %(p)s AND status IN ('Confirmed', 'Checked In')
 		     AND name != %(x)s
 		     AND check_in_date <= %(d)s

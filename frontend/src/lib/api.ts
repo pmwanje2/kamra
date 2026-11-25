@@ -1921,7 +1921,25 @@ export const setHousekeepingStatus = (
   until_date?: string,
 ) => call("kamra.api.set_housekeeping_status", { room, status, reason, until_date })
 
+export interface ShareSummary {
+  group_id: string | null
+  mode: "Split Equal" | "Primary Pays" | "Full Rate Each" | "Custom"
+  currency: string
+  decimals?: number
+  can_manage: boolean
+  members: {
+    reservation: string
+    guest_name: string
+    folio: string | null
+    primary: boolean
+    custom_rate: number
+    check_in: string
+    check_out: string
+  }[]
+}
+
 export interface ReservationDetail extends TariffReference {
+  share?: ShareSummary | null
   name: string
   property_currency?: string
   rate_currency?: string

@@ -38,6 +38,7 @@ APP = os.path.join(HERE, "..", "kamra")
 # module -> (Postman folder, note)
 MODULES = [
     ("api", "Core (front desk, folios, guests, rooms)", ""),
+    ("shares", "Share reservations (shared rooms, separate guest folios)", ""),
     ("booking_requests", "Request to Book (accept / decline)", ""),
     ("pos", "Restaurant POS & kitchen", ""),
     ("onboarding", "Setup checklist (finish setting up a property)", ""),
