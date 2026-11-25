@@ -286,7 +286,7 @@ describe("K2 ReceiptTransferDialog & K3 CreditRebillDialog", () => {
       if (method === "kamra.payment_transfers.folio_windows_overview") return Promise.resolve({ folio: "FOLIO-1", window_cap: 8, can_add_window: false, windows: [] })
       if (method === "kamra.api.reservation_folios") return Promise.resolve([])
       if (method === "kamra.api.property_locale") return Promise.resolve(makeLocale("USD", false))
-      if (method === "kamra.payment_transfers.credit_and_rebill") {
+      if (method === "kamra.api.cancel_invoice") {
         return Promise.resolve({
           ok: 1,
           mode: "full",
@@ -326,10 +326,9 @@ describe("K2 ReceiptTransferDialog & K3 CreditRebillDialog", () => {
     await act(async () => submit.click())
 
     expect(rpc).toHaveBeenCalledWith(
-      "kamra.payment_transfers.credit_and_rebill",
+      "kamra.api.cancel_invoice",
       expect.objectContaining({
         folio: "FOLIO-1",
-        mode: "full",
         reason: "Wrong corporate billing profile",
       }),
     )
@@ -337,7 +336,7 @@ describe("K2 ReceiptTransferDialog & K3 CreditRebillDialog", () => {
     expect(dialog.textContent).toContain("ACC-SINV-2026-00100")
   })
 
-  it("shows EFRIS reason codes (102/104) ONLY when integrations.tax_return is true and uses step=1 for UGX 0dp partial credit", async () => {
+  it("shows EFRIS reason codes (102/104) for the loaded EFRIS invoice and uses step=1 for UGX 0dp partial credit", async () => {
     const data = makeFolioData({
       currency: "UGX",
       status: "Closed",
@@ -349,11 +348,11 @@ describe("K2 ReceiptTransferDialog & K3 CreditRebillDialog", () => {
     })
 
     rpc.mockReset().mockImplementation((method: string) => {
-      if (method === "kamra.api.folio_invoice") return Promise.resolve(data)
+      if (method === "kamra.api.folio_invoice") return Promise.resolve({ ...data, fiscal: { scheme: "efris", status: "issued" } })
       if (method === "kamra.payment_transfers.folio_windows_overview") return Promise.resolve({ folio: "FOLIO-1", window_cap: 8, can_add_window: false, windows: [] })
       if (method === "kamra.api.reservation_folios") return Promise.resolve([])
-      if (method === "kamra.api.property_locale") return Promise.resolve(makeLocale("UGX", true))
-      if (method === "kamra.payment_transfers.credit_and_rebill") {
+      if (method === "kamra.api.property_locale") return Promise.resolve(makeLocale("UGX", false))
+      if (method === "kamra.ledger.issue_credit_note") {
         return Promise.resolve({
           ok: 1,
           mode: "partial",
@@ -380,6 +379,7 @@ describe("K2 ReceiptTransferDialog & K3 CreditRebillDialog", () => {
     const partialRadio = dialog.querySelector<HTMLInputElement>('input[type="radio"][value="partial"]')!
     await act(async () => partialRadio.click())
     expect(dialog.textContent).toContain("104")
+    expect(dialog.textContent).toContain("Second manager/Finance approval required to finalize the partial credit note.")
 
     const amountInput = dialog.querySelector<HTMLInputElement>('input[aria-label="Partial credit amount"]')!
     expect(amountInput.step).toBe("1")
@@ -395,10 +395,9 @@ describe("K2 ReceiptTransferDialog & K3 CreditRebillDialog", () => {
     await act(async () => submit.click())
 
     expect(rpc).toHaveBeenCalledWith(
-      "kamra.payment_transfers.credit_and_rebill",
+      "kamra.ledger.issue_credit_note",
       expect.objectContaining({
         folio: "FOLIO-1",
-        mode: "partial",
         amount: 50000,
         reason: "Partial late checkout waiver",
       }),

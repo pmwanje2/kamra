@@ -430,6 +430,12 @@ describe("P18 Interactive 8-Window & Routing UI, Qty Split & Hygiene", () => {
     })
   })
 
+  it("formats overpaid move destinations as a credit", () => {
+    const source = fs.readFileSync(path.resolve("src/screens/FolioView.tsx"), "utf8")
+    expect(source).toContain('t("credit {amount}"')
+    expect(source).toContain("Math.abs(s.balance)")
+  })
+
   it("opens RoutingInstructionDrawer, shows limit progress bar, and saves/deletes routing rules", async () => {
     setupDefaultMocks()
     await renderFolio()
@@ -463,6 +469,69 @@ describe("P18 Interactive 8-Window & Routing UI, Qty Split & Hygiene", () => {
         }),
       }),
     )
+  })
+
+  it("keeps a mixed-code unconditional rule and displays its document-currency usage", async () => {
+    setupDefaultMocks()
+    const original = rpc.getMockImplementation()!
+    const payload = kwdFolioPayload()
+    rpc.mockImplementation((method: string, params: unknown) => {
+      if (method === "kamra.api.property_locale") {
+        return Promise.resolve({ ...kwdLocale(), currency: "USD", currency_symbol: "$" })
+      }
+      if (method === "kamra.api.folio_invoice") {
+        return Promise.resolve({ ...payload, property: { ...payload.property, currency_symbol: "د.ك ", locale: "en" } })
+      }
+      if (method === "kamra.routing.list_routing_instructions") {
+        return Promise.resolve([{
+          name: "RI-MIXED", target_type: "Window", target_window: 2, monday: 1,
+          codes: [{ charge_type: "Food & Beverage" }, { transaction_code: "3000" }],
+          limit_type: "None", limit_value: 0, used_amount: 150,
+        }])
+      }
+      return original(method, params)
+    })
+
+    await renderFolio()
+    const tabs = host.querySelector('[data-testid="folio-window-tabs"]')
+    expect(tabs?.textContent).toContain("د.ك 40.500")
+    const open = host.querySelector<HTMLButtonElement>('[data-testid="open-routing-drawer-btn"]')!
+    await act(async () => open.click())
+    const drawer = host.querySelector('[data-testid="routing-drawer"]')!
+    await vi.waitFor(() => expect(drawer.textContent).toContain("Used د.ك 150.000 · No limit"))
+    expect(drawer.textContent).not.toContain("/ 0.000")
+
+    const edit = drawer.querySelector<HTMLButtonElement>('button[aria-label="Edit routing rule"]')!
+    await act(async () => edit.click())
+    const save = drawer.querySelector<HTMLButtonElement>('[data-testid="save-routing-btn"]')!
+    await act(async () => save.click())
+    expect(rpc).toHaveBeenCalledWith("kamra.routing.save_routing_instruction", {
+      data: expect.objectContaining({
+        name: "RI-MIXED",
+        codes: expect.arrayContaining([{ transaction_code: "3000" }, { charge_type: "Food & Beverage" }]),
+      }),
+    })
+  })
+
+  it("names the agent on mobile history and isolates property amounts in RTL", async () => {
+    rpc.mockImplementation((method: string) => {
+      if (method === "kamra.ledger.folio_history") return Promise.resolve({
+        folios: [
+          { name: "FOLIO-A", guest_name: "Nasser", reservation: "RES-A", payee_type: "Agent",
+            payee_agent: "Gulf Voyages Agency", status: "Closed", window_no: 4, grand_total: 85, balance: 65.12,
+            money: { currency: "KWD", currency_symbol: "د.ك ", locale: "en", decimals: 3 } },
+          { name: "FOLIO-B", guest_name: "Layla", reservation: "RES-B", payee_type: "Guest",
+            status: "Closed", grand_total: 1, balance: 0 },
+        ],
+      })
+      return Promise.resolve({})
+    })
+    await act(async () => root.render(<MemoryRouter><FolioHistory /></MemoryRouter>))
+    const cards = host.querySelector('[data-testid="folio-history-cards"]')!
+    expect(cards.textContent).toContain("Gulf Voyages Agency")
+    expect(cards.textContent).not.toContain("· RES-B")
+    const amounts = [...cards.querySelectorAll('span[dir="ltr"]')].map((el) => el.textContent)
+    expect(amounts).toEqual(expect.arrayContaining(["د.ك 85.000", "د.ك 65.120"]))
   })
 
   it("renders FolioHistory with 3dp KWD precision, mobile cards, window badge, and tax_return-gated fiscal badge", async () => {
