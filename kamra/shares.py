@@ -13,7 +13,7 @@ from frappe.utils import add_days, cint, getdate
 from kamra.authz import ADMIN, assert_guest_access, assert_property_access, require_roles
 from kamra.kamra.doctype.reservation.reservation import is_entire_place, lock_property_for_inventory
 from kamra.localization import _minor_unit_for_currency
-from kamra.pricing import property_currency
+from kamra.pricing import property_currency, rates_include_tax
 from kamra.savings import log_action
 
 MODES = ("Split Equal", "Primary Pays", "Full Rate Each", "Custom")
@@ -110,8 +110,15 @@ def nightly_share(res, date, *, lock=False, advance_bill=False) -> dict | None:
 	rate_source = res if leader.name == res.name else frappe.get_doc("Reservation", leader.name)
 	mode = leader.share_rate_mode
 	current = current_date_contract_night(rate_source, date) if mode != "Custom" else None
-	rate = current["rate"] if current else (_nightly_room_rate(rate_source, date) if mode != "Custom" else 0)
 	gst = current["gst_rate"] if current else _nightly_gst(rate_source, date)
+	if mode == "Custom":
+		# The room and its percentage levy use the same
+		# unrounded room base an independent booking at this price would use.
+		rate = sum(Decimal(str(m.share_custom_rate or 0)) for m in members)
+		if gst and rates_include_tax(res.property):
+			rate /= 1 + Decimal(str(gst)) / 100
+	else:
+		rate = current["rate"] if current else _nightly_room_rate(rate_source, date)
 	rates, taxes = _night_amounts(
 		res.property, rate, gst, mode,
 		[(m.name, m.name == leader.name, m.share_custom_rate) for m in members],
@@ -172,7 +179,7 @@ def _share_levy(property, rates, room_taxes, room_rate, gst, mode, lead):
 	per_folio = mode == "Full Rate Each"
 
 	# Use the same base the independent room posting passes to the levy.
-	base = Decimal(str(room_rate)) if gst and mode != "Custom" else sum(rates.values())
+	base = Decimal(str(room_rate)) if gst else sum(rates.values())
 	if per_folio:
 		base = rates[lead]
 	percentage, flat = room_levy_components(base, pct, fixed, unit)
@@ -189,7 +196,10 @@ def _share_levy(property, rates, room_taxes, room_rate, gst, mode, lead):
 		tax_due = Decimal(0)
 		if levy_gst and levy > 0:
 			room_due = sum(rates.values()) + sum(room_taxes.values())
-			raw_room = base * (1 + Decimal(str(gst)) / 100) if mode != "Custom" else room_due
+			raw_room = base * (1 + Decimal(str(gst)) / 100)
+			if mode == "Custom" and prop.rates_include_tax:
+				# Each entered gross is exact to the currency unit.
+				raw_room = room_due
 			# The unshared folio rounds the document after adding levy and GST.
 			grand = (raw_room + levy * (1 + tax_rate)).quantize(unit, rounding=ROUND_HALF_UP)
 			gross_levy = grand - room_due
@@ -233,10 +243,6 @@ def _night_amounts(property, rate, gst, mode, members):
 
 	whole = line_figures(property, "Room", rate, gst_rate=gst)
 	gross = allocate_rates(whole["figure"], currency, mode, members)
-	if mode == "Custom":
-		net_tax = {name: cut_figure(whole, amount) for name, amount in gross.items()}
-		return ({name: values[0] for name, values in net_tax.items()},
-		        {name: values[1] for name, values in net_tax.items()})
 
 	rate = whole["rate"]
 	raw_tax = {name: amount * rate / (1 + rate) for name, amount in gross.items()}
