@@ -28,7 +28,11 @@ function contrast(locator, foreground) {
       return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722
     }
     const style = getComputedStyle(element)
-    const container = getComputedStyle(element.closest("dialog")).backgroundColor
+    let backgroundElement = element.closest("dialog") ?? element
+    while (getComputedStyle(backgroundElement).backgroundColor === "rgba(0, 0, 0, 0)" && backgroundElement.parentElement) {
+      backgroundElement = backgroundElement.parentElement
+    }
+    const container = getComputedStyle(backgroundElement).backgroundColor
     const color = luminance(style[property])
     const backgrounds = property === "borderTopColor" ? [style.backgroundColor, container] : [container]
     return Math.min(...backgrounds.map((background) => {
@@ -62,6 +66,7 @@ await withFixture(async (browser, origin) => {
       const reset = page.getByRole("button", { name: "Reset cashier PIN" })
       await reset.waitFor()
       check(`${theme} staff reset height`, (await reset.boundingBox()).height, 44)
+      check(`${theme} staff reset icon`, await contrast(reset.locator("svg"), "color"), 4.5)
       await page.getByRole("button", { name: "Account menu" }).click()
       const entry = page.getByRole("menuitem", { name: "My Approval PIN" })
       await entry.waitFor()

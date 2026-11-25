@@ -1,12 +1,14 @@
 """Site-less contracts for self-service and the cross-app Cashier PIN hook."""
 
 import hashlib
+import json
 import hmac
 import runpy
 import sys
 import unittest
+from traceback import walk_tb
 from datetime import timedelta
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from unittest.mock import Mock, patch
 
 from kamra.tests.test_p53_doa_floor_pin import KAMRA, _Doc, _FakeFrappe, _load_module, _match_filters
@@ -78,8 +80,8 @@ class ManagerPinSelfServiceTest(unittest.TestCase):
 		self.addCleanup(patcher.stop)
 		self.api = load_parts(
 			"api.py", {"PIN_SELF_SERVICE_ROLES", "my_pin_status", "set_cashier_pin", "reset_cashier_pin",
-			           "verify_cashier_pin", "correct_folio_payment", "refund_folio_payment"},
-			modules["frappe"], imports=("kamra.authz",), _=self.site._,
+			           "verify_cashier_pin", "correct_folio_payment", "refund_folio_payment", "decide_allowance"},
+			modules["frappe"], imports=("kamra.authz",), _=self.site._, __name__="kamra.api",
 		)
 
 	def seed_pin(self, user=USER, **values):
@@ -97,16 +99,16 @@ class ManagerPinSelfServiceTest(unittest.TestCase):
 
 	def test_password_enroll_rotate_and_reenroll_with_no_current_pin(self):
 		set_pin = self.api["set_cashier_pin"]
-		self.site.local.form_dict.update(pin="0246", current_pin="", password="account-secret", keep=True)
-		self.assertEqual(set_pin("0246", password="account-secret"), {"ok": True})
+		self.site.local.form_dict.update(pin="0246", current_pin="", current_password="account-secret", keep=True)
+		self.assertEqual(set_pin("0246", current_password="account-secret"), {"ok": True})
 		self.assertEqual(self.site.local.form_dict, {"keep": True})
 		doc = self.site.get_doc("Cashier PIN", USER)
 		self.assert_hashed(doc, "0246")
-		self.assertEqual(set_pin("6420", password="account-secret"), {"ok": True})
+		self.assertEqual(set_pin("6420", current_password="account-secret"), {"ok": True})
 		doc.must_reset = 1
 		doc.pin_attempts = 3
 		self.site.cache.set_value(f"kamra_cashier_unlock:{USER}", True)
-		self.assertEqual(set_pin("4057", password="account-secret"), {"ok": True})
+		self.assertEqual(set_pin("4057", current_password="account-secret"), {"ok": True})
 		self.assert_hashed(doc, "4057")
 		self.assertEqual((doc.must_reset, doc.pin_attempts, doc.locked_until), (0, 0, None))
 		self.assertIsNone(self.site.cache.get_value(f"kamra_cashier_unlock:{USER}"))
@@ -120,7 +122,7 @@ class ManagerPinSelfServiceTest(unittest.TestCase):
 		for _ in range(5):
 			self.site.local.form_dict.update(pin="4057", password="incorrect")
 			with self.assertRaises(self.site.ValidationError):
-				set_pin("4057", password="incorrect")
+				set_pin("4057", current_password="incorrect")
 			self.assertEqual(self.site.local.form_dict, {})
 		self.assertFalse(self.site.db.exists("Cashier PIN", USER))
 		self.site.cache._data.clear()
@@ -129,10 +131,10 @@ class ManagerPinSelfServiceTest(unittest.TestCase):
 		self.assertEqual(status["locked_until"], str(self.site.now + timedelta(minutes=15)))
 		self.check_password.side_effect = None
 		with self.assertRaises(self.site.ValidationError):
-			set_pin("4057", password="correct")
+			set_pin("4057", current_password="correct")
 		self.assertEqual(self.check_password.call_count, 5)
 		self.site.now += timedelta(minutes=15)
-		self.assertEqual(set_pin("4057", password="correct"), {"ok": True})
+		self.assertEqual(set_pin("4057", current_password="correct"), {"ok": True})
 
 	def assert_hashed(self, doc, pin):
 		self.assertIsNone(doc.pin)
@@ -169,9 +171,9 @@ class ManagerPinSelfServiceTest(unittest.TestCase):
 			self.assertGreaterEqual(compare.call_count, 2)
 
 	def test_new_hashes_have_distinct_salts(self):
-		self.api["set_cashier_pin"]("2605", password="account-secret")
+		self.api["set_cashier_pin"]("2605", current_password="account-secret")
 		first = self.site.get_doc("Cashier PIN", USER).pin_hash
-		self.api["set_cashier_pin"]("2605", password="account-secret")
+		self.api["set_cashier_pin"]("2605", current_password="account-secret")
 		second = self.site.get_doc("Cashier PIN", USER).pin_hash
 		self.assertIsNotNone(first)
 		self.assertNotEqual(first, second)
@@ -247,10 +249,24 @@ class ManagerPinSelfServiceTest(unittest.TestCase):
 		})
 		self.assertIn(USER, repr(self.audit.call_args))
 
-	def test_pos_enrollment_cannot_bypass_account_verification(self):
+	def test_web_enrollment_requires_current_password_even_with_old_fields(self):
 		with self.assertRaises(self.site.ValidationError):
-			self.authz.manage_pos_override_pin("set", pin="4067")
+			self.api["set_cashier_pin"]("4067", password="account-secret", current_pin="1234")
 		self.assertFalse(self.site.db.exists("Cashier PIN", USER))
+
+	def test_companion_pos_hook_accepts_internal_reauthentication_for_its_actor(self):
+		manage = self.authz.manage_pos_override_pin
+		for verified in ({}, {"password_verified": True}):
+			with self.subTest(verified=verified):
+				self.assertTrue(manage("set", user=USER, pin="4067", **verified)["ok"])
+		self.check_password.assert_not_called()
+		with self.assertRaises(self.site.PermissionError):
+			manage("set", user=OTHER, pin="4067", password_verified=True)
+		self.check_password.side_effect = AuthenticationError
+		with self.assertRaises(self.site.ValidationError):
+			manage("set", user=USER, pin="8260", password_verified=True, current_password="invalid")
+		self.check_password.assert_called_once_with(USER, "invalid", delete_tracker_cache=False)
+		self.assert_hashed(self.site.get_doc("Cashier PIN", USER), "4067")
 
 	def test_pos_status_allows_multi_property_staff_at_an_authorized_till(self):
 		self.site.user_roles[USER] = ["URY Manager"]
@@ -340,3 +356,145 @@ class ManagerPinSelfServiceTest(unittest.TestCase):
 			                     if row.get("defkey") == "siteops_floor_pin_hash"))
 			self.site.set_user(OTHER)
 			self.assertFalse(self.api["my_pin_status"]()["has_pin"])
+
+	def test_pos_staff_listing_status_without_profile_accepts_shared_scope(self):
+		self.site.user_roles[USER] = ["URY Manager"]
+		self.site.user_permissions = {
+			USER: {"Property": [{"doc": "Alpha"}], "Company": [{"doc": "Alpha Ltd"}]},
+			OTHER: {"Property": [{"doc": "Alpha"}, {"doc": "Beta"}],
+			        "Company": [{"doc": "Alpha Ltd"}, {"doc": "Beta Ltd"}]},
+		}
+		self.seed_pin(OTHER)
+		self.assertTrue(self.authz.manage_pos_override_pin("status", user=OTHER)["has_pin"])
+
+	def test_explicit_unbound_or_missing_pos_profile_cannot_use_sole_property(self):
+		self.site.user_roles[USER] = ["Hotel Admin"]
+		self.site.tables["Property"] = [{"name": "Alpha", "disabled": 0}]
+		self.site.tables["POS Profile"] = [{"name": "Unbound Till"}]
+		for profile in ("Missing Till", "Unbound Till"):
+			for action in ("status", "clear", "set"):
+				with self.subTest(profile=profile, action=action), self.assertRaises(self.site.PermissionError):
+					self.authz.manage_pos_override_pin(
+						action, user=USER, pos_profile=profile, pin="4067", current_password="account-secret",
+					)
+
+	def horizontal_siteops(self):
+		methods = (
+			"siteops_doa.my_floor_pin_status", "siteops_doa.set_my_floor_pin",
+			"siteops_doa.reset_user_floor_pin", "siteops_doa.verify_floor_authority",
+		)
+		calls = []
+
+		def run(method, form):
+			calls.append((method, dict(form)))
+			if method == methods[0]:
+				return {"store": "siteops_floor_pin", "has_pin": bool(self.floor_hash(self.site.session.user)),
+				        "must_reset": False, "locked": False}
+			if method == methods[1]:
+				self.put_floor_hash(self.site.session.user, "native-enrollment")
+				return {"ok": 1, "has_pin": 1, "store": "siteops_floor_pin"}
+			if method == methods[2]:
+				self.put_floor_hash(form["user"], "")
+				return {"ok": 1, "user": form["user"], "must_reset": 1}
+			return {"ok": 1, "approver": form["approver"]}
+
+		class Script(str):
+			script = 'return {"store": "siteops_floor_pin"}'
+		self.enterContext(patch.object(self.bridge, "get_bridge_script",
+		                               side_effect=lambda method: Script(method) if method in methods else None))
+		self.enterContext(patch.object(self.bridge, "call_bridge_script", side_effect=run))
+		return calls
+
+	def put_floor_hash(self, user, digest):
+		filters = {"parent": user, "parenttype": "SiteOps Floor PIN", "defkey": "siteops_floor_pin_hash"}
+		self.site.db.delete("DefaultValue", filters)
+		self.site.tables["DefaultValue"].append(dict(filters, name=f"floor-{user}", defvalue=digest))
+
+	def floor_hash(self, user):
+		return self.site.db.get_value(
+			"DefaultValue", {"parent": user, "parenttype": "SiteOps Floor PIN", "defkey": "siteops_floor_pin_hash"},
+			"defvalue",
+		)
+
+	def test_v7_web_enrollment_and_status_use_native_horizontal_methods(self):
+		calls = self.horizontal_siteops()
+		self.seed_pin()
+		self.assertFalse(self.api["my_pin_status"]()["has_pin"])
+		self.assertEqual(self.api["set_cashier_pin"]("4067", current_password="account-secret"), {"ok": True})
+		self.assertTrue(self.api["my_pin_status"]()["has_pin"])
+		self.assertIn(("siteops_doa.set_my_floor_pin", {"pin": "4067", "password": "account-secret"}), calls)
+		self.assertIsNone(self.site.get_doc("Cashier PIN", USER).pin_hash)
+
+	def test_v7_pos_preauth_enrolls_in_the_native_verifier_store(self):
+		self.horizontal_siteops()
+		self.assertTrue(self.authz.manage_pos_override_pin("set", user=USER, pin="4067")["ok"])
+		algorithm, rounds, salt, digest = self.floor_hash(USER).split("$")
+		self.assertEqual((algorithm, rounds), ("pbkdf2_sha256", "200000"))
+		key = hashlib.sha256(b"siteops_floor_pin_v2|4067").digest()
+		self.assertEqual(hashlib.pbkdf2_hmac("sha256", key, bytes.fromhex(salt), int(rounds)).hex(), digest)
+		self.assertFalse(self.site.db.exists("Cashier PIN", USER))
+
+	def test_v7_verification_never_moves_or_deletes_the_horizontal_credential(self):
+		calls = self.horizontal_siteops()
+		pin = "4067"
+		digest = hashlib.sha256(f"siteops_floor_pin_v1|{USER}|{pin}".encode()).hexdigest()
+		self.put_floor_hash(USER, digest)
+		self.site.set_user(OTHER)
+		self.assertEqual(self.authz.verify_supervisor("Alpha", USER, pin, requester=OTHER), USER)
+		self.assertTrue(any(name == "siteops_doa.verify_floor_authority" for name, _ in calls))
+		self.assertEqual(self.floor_hash(USER), digest)
+		self.assertFalse(self.site.db.exists("Cashier PIN", USER))
+
+	def test_v7_reset_delegates_without_creating_a_local_pin_record(self):
+		calls = self.horizontal_siteops()
+		self.site.user_roles[USER] = ["Hotel Admin"]
+		self.put_floor_hash(OTHER, "native-enrollment")
+		self.assertTrue(self.api["reset_cashier_pin"](OTHER)["must_reset"])
+		self.assertTrue(any(name == "siteops_doa.reset_user_floor_pin" and args["user"] == OTHER
+		                    for name, args in calls))
+		self.assertFalse(self.site.db.exists("Cashier PIN", OTHER))
+		self.assertFalse(self.floor_hash(OTHER))
+
+	def test_allowance_entry_scrubs_metadata_before_permission_check(self):
+		self.site.user_roles[USER] = []
+		keys = ("pin", "new_pin", "confirm_pin", "current_password", "manager_pin", "override_pin")
+		self.site.local.form_dict.update(dict.fromkeys(keys, "request-secret"), keep=True)
+		original_throw = self.site.throw
+
+		def check_form(*args, **kwargs):
+			self.assertEqual(self.site.local.form_dict, {"keep": True})
+			original_throw(*args, **kwargs)
+
+		with patch.object(self.frappe, "throw", side_effect=check_form), self.assertRaises(self.site.PermissionError):
+			self.api["decide_allowance"]("ALLOW-1", pin="7091")
+
+	def test_pin_and_password_have_redacted_reprs_in_raised_endpoint_frames(self):
+		self.site.user_roles[USER] = []
+		try:
+			self.api["set_cashier_pin"]("30971482", current_password="traceback-only-password")
+		except self.site.PermissionError as e:
+			frames = [repr(frame.f_locals) for frame, _ in walk_tb(e.__traceback__)
+			          if frame.f_code.co_filename in (str(KAMRA / "authz.py"), str(KAMRA / "api.py"))]
+			self.assertTrue(frames)
+			self.assertNotIn("30971482", "\n".join(frames))
+			self.assertNotIn("traceback-only-password", "\n".join(frames))
+		else:
+			self.fail("A role denial must raise")
+
+	def test_http_entry_stages_opaque_credentials_outside_frappe_form_dict(self):
+		self.site.local.request = SimpleNamespace(path="/api/method/kamra.api.set_cashier_pin")
+		self.site.local.form_dict.update(pin="59872041", current_password="http-context-password", keep=True)
+		self.authz.prepare_pin_request()
+		self.assertEqual(self.site.local.form_dict, {"keep": True})
+		self.site.local.request = None
+		self.assertEqual(self.api["set_cashier_pin"](), {"ok": True})
+		self.check_password.assert_called_once_with(USER, "http-context-password", delete_tracker_cache=False)
+
+	def test_wrong_cashier_pin_is_localized_by_backend_and_frontend(self):
+		self.seed_pin()
+		message = "Code PIN de caisse incorrect."
+		with patch.object(self.frappe, "_", side_effect=lambda key: message if key == "Wrong cashier PIN." else key):
+			with self.assertRaisesRegex(self.site.ValidationError, message):
+				self.authz._check_user_pin(USER, "4067", None)
+		locales = KAMRA.parent / "frontend" / "src" / "i18n" / "locales"
+		self.assertEqual(json.loads((locales / "fr.json").read_text())["Wrong cashier PIN."], message)
