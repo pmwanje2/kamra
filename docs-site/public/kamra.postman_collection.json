@@ -1548,7 +1548,7 @@
         "kamra.api.add_folio_payment"
        ]
       },
-      "description": "Record money received on the stay ledger. kind labels WHY it came\nin - Payment (against the bill), Advance (collected before/at\ncheck-in) or Security Deposit (held, refundable). Refunds go through\nrefund_folio_payment so they can never be entered by accident.\n\ncurrency: leave out (or pass the home currency) for a normal payment.\nA foreign code means `amount` is the foreign money received (cash or a\nbank transfer); the server converts it at today's buy rate, posts the\nhome amount and keeps the foreign amount and rate on the row.\nA retry with the same idempotency_key returns the folio without\nposting again.",
+      "description": "Record money received on the stay ledger. kind labels WHY it came\nin - Payment (against the bill), Advance (collected before/at\ncheck-in) or Security Deposit (held, refundable). Refunds go through\nrefund_folio_payment so they can never be entered by accident.\n\ncurrency: leave out (or pass the home currency) for a normal payment.\nA foreign code means `amount` is the foreign money received (cash or a\nbank transfer); the server converts it at the published settlement rate, posts the\nhome amount and keeps the foreign amount and rate on the row.\nA retry with the same idempotency_key returns the folio without\nposting again.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"folio\": \"FOLIO-2026-00001\",\n  \"mode\": \"<mode>\",\n  \"amount\": 1000,\n  \"kind\": \"Payment\"\n}",
@@ -1589,6 +1589,117 @@
       "body": {
        "mode": "raw",
        "raw": "{\n  \"payments\": \"<payments>\"\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "erp_correction_context",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "token {{api_key}}:{{api_secret}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.api.erp_correction_context",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.api.erp_correction_context"
+       ]
+      },
+      "description": "safe_exec creates separate flags. Expose only the active method's verified actors.",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"api_method\": \"<api_method>\"\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "payment_correction_options",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "token {{api_key}}:{{api_secret}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.api.payment_correction_options",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.api.payment_correction_options"
+       ]
+      },
+      "description": "",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"folio\": \"FOLIO-2026-00001\",\n  \"payment_row\": \"<payment_row>\"\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "correct_folio_payment",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "token {{api_key}}:{{api_secret}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.api.correct_folio_payment",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.api.correct_folio_payment"
+       ]
+      },
+      "description": "",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"folio\": \"FOLIO-2026-00001\",\n  \"payment_row\": \"<payment_row>\"\n}",
        "options": {
         "raw": {
          "language": "json"
@@ -1770,10 +1881,84 @@
         "kamra.api.post_stay_charge"
        ]
       },
-      "description": "Post a charge to a stay letting the billing rules pick the folio -\ncorporate room/meals land on the Company folio, alcohol and anything\nunruled lands on the guest. The agent-facing way to post charges.",
+      "description": "Post a charge to a stay letting its routing pick the window - its\nRouting Instructions first, then the billing rules: corporate room and\nmeals land on the company's window, anything unrouted on the guest's.\nA routing limit splits the charge (`parts`). Liquor posts under its own\ntransaction code (default 2010) and bills where the rules send that code.\nThe agent-facing way to post charges.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"reservation\": \"RES-2026-00001\",\n  \"charge_type\": \"<charge_type>\",\n  \"description\": \"<description>\",\n  \"amount\": 1000,\n  \"gst_rate\": 0,\n  \"is_alcohol\": 0\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "open_folio_window",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "token {{api_key}}:{{api_secret}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.api.open_folio_window",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.api.open_folio_window"
+       ]
+      },
+      "description": "Open the next billing window (OPERA windows 1-8, up to the property's\nfolio_windows) on a stay or on a group's master bill, with its own payee\nand payment method. Each window closes to its own invoice. Allowed to\nwhoever may create a Folio (native permissions).",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"reservation\": \"RES-2026-00001\"\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "route_outlet_charge",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "token {{api_key}}:{{api_secret}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.api.route_outlet_charge",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.api.route_outlet_charge"
+       ]
+      },
+      "description": "For the accounting bridge's room charge: the open folio an outlet\ncheck of this transaction code lands on for this stay, by the stay's\nrouting (OPERA routes a Simphony check by its transaction code). An\noutlet check is a fiscal receipt, so it routes whole or not at all.\nReturns `{folio, window_no, routing_instruction}` so the copied line\ncarries the instruction and its usage counts. `is_alcohol` was removed\nin K1 (beverage/alcohol items carry their own transaction code, default\n2010), and unknown parameters (including legacy `is_alcohol`) are\nrefused rather than silently ignored, even over `frappe.call`. Allowed\nto whoever may write a Folio (native permissions); posts nothing. The\ncode must be an enabled revenue code with a charge type. `dry_run` (a\ndraft check's lookup) opens no bill: `folio` is None when the window\nwould open one.",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"reservation\": \"RES-2026-00001\",\n  \"transaction_code\": \"<transaction_code>\",\n  \"amount\": 1000,\n  \"dry_run\": 0\n}",
        "options": {
         "raw": {
          "language": "json"
@@ -1807,7 +1992,7 @@
         "kamra.api.set_billing_rules"
        ]
       },
-      "description": "Replace a company's billing rules. rules = [{charge_type, pay_by}].",
+      "description": "Replace a company's billing rules (OPERA profile routing). rules =\n[{charge_type | transaction_code, pay_by}]: a rule names a charge type,\nevery code of it, or one transaction code.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"company\": \"<company>\",\n  \"rules\": \"<rules>\"\n}",
@@ -1881,7 +2066,7 @@
         "kamra.api.company_billing_default"
        ]
       },
-      "description": "What this company pays when it has no billing rules: the property's\n`default_company_billing` for a credit company, nothing otherwise.\n`charge_types` is None when every charge type (except liquor) is covered.",
+      "description": "What this company pays when it has no billing rules: the property's\n`default_company_billing` for a credit company, nothing otherwise.\n`charge_types` is None when every charge type is covered.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"company\": \"<company>\",\n  \"property\": \"Your Property\"\n}",
@@ -2140,7 +2325,7 @@
         "kamra.api.split_folio_charge"
        ]
       },
-      "description": "Split one charge line between two folios - by percent or amount.",
+      "description": "Split one charge line in two - by percent, amount or quantity - on\nits own folio or onto another of the stay or group.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"from_folio\": \"<from_folio>\",\n  \"charge_row\": \"<charge_row>\",\n  \"to_folio\": \"<to_folio>\",\n  \"amount\": 1000\n}",
@@ -2399,7 +2584,7 @@
         "kamra.api.set_group_master"
        ]
       },
-      "description": "Make this room the group's main room: its guest pays for the group.\nAn open group bill moves with it (re-anchored to the new main room).",
+      "description": "Make this room the group's main room: its guest pays for the group.\nThe posting master keeps no stay; the main room's guest becomes its\nwindow 1 payee (a company group keeps its company as payee).",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"group_booking\": \"<group_booking>\",\n  \"reservation\": \"RES-2026-00001\"\n}",
@@ -2806,7 +2991,7 @@
         "kamra.api.cancel_invoice"
        ]
       },
-      "description": "Void an invoice into the register and reopen the folio for correction.",
+      "description": "Void an invoice into the register and reopen the folio for correction.\nAn invoice the ERPNext bridge issued goes to the bridge's credit and\nre-bill instead; the folio is not reopened here.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"folio\": \"FOLIO-2026-00001\",\n  \"reason\": \"<reason>\"\n}",
@@ -2843,7 +3028,7 @@
         "kamra.api.folio_invoice"
        ]
       },
-      "description": "Everything the bill needs to print itself.\n\nA tax invoice is a legal document, not a screenshot of a table: the\nservice code belongs on each LINE (a room night, a restaurant cover\nand a laundry bag are three different supplies), the tax has to be\nnamed the way the country names it, the total has to appear in words,\nand the guest wants a summary by what they bought before they read\nforty lines. All of that is assembled here so every surface that\nprints a bill - the folio screen, a PDF, an email - agrees.\n\nStatement fields (stable for integrations):\n\n- `lines`: each charge line: row, posting_date, stay_date,\n  charge_type, description, qty, rate, amount (pre-tax), gst_rate,\n  gst_amount, total, service_code, transaction_code, gl_code (as\n  posted), corrects_row (a correction's original line), reservation,\n  is_alcohol, auto_posted\n- `payments`: row, posting_date, payment_kind, mode, amount (refunds\n  negative), reference, currency, fx_amount, exchange_rate,\n  transaction_code, gl_code, refund_of (the payment a refund is against)\n- `statement`: lines and payments in date order: date, row, kind\n  (Charge or the payment kind), charge_type, description, reference,\n  method, transaction_code, gl_code, charges, credits, tax, balance\n  (running)\n- `tax_summary`: per rate, taxable, total_tax and the country's parts\n- `allocations`: company payments that cleared this bill: payment,\n  account, posting_date, reference, amount\n- `folio`, `bill_to`, `guest`, `stay`, `property`, `document`",
+      "description": "Everything the bill needs to print itself.\n\nA tax invoice is a legal document, not a screenshot of a table: the\nservice code belongs on each LINE (a room night, a restaurant cover\nand a laundry bag are three different supplies), the tax has to be\nnamed the way the country names it, the total has to appear in words,\nand the guest wants a summary by what they bought before they read\nforty lines. All of that is assembled here so every surface that\nprints a bill - the folio screen, a PDF, an email - agrees.\n\nStatement fields (stable for integrations):\n\n- `lines`: each charge line: row, posting_date, stay_date,\n  charge_type, description, qty, rate, amount (pre-tax), gst_rate,\n  gst_amount, total, service_code, transaction_code, gl_code (as\n  posted), corrects_row (a correction's original line), reversal_of\n  and void_reason (a void's or a split's reversal), split_of (the line\n  a split part or reversal came from), reservation, is_alcohol,\n  auto_posted\n- `payments`: row, posting_date, payment_kind, mode, amount (refunds\n  negative), reference, currency, fx_amount, exchange_rate,\n  transaction_code, gl_code, refund_of (the payment a refund is against)\n- `statement`: lines and payments in date order: date, row, kind\n  (Charge or the payment kind), charge_type, description, reference,\n  method, transaction_code, gl_code, charges, credits, tax, balance\n  (running)\n- `tax_summary`: per rate, taxable, total_tax and the country's parts\n- `allocations`: company payments that cleared this bill: payment,\n  account, posting_date, reference, amount\n- `credited`: what the issued credit notes on this invoice add up to\n- `folio`, `bill_to`, `guest`, `stay`, `property`, `document`",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"folio\": \"FOLIO-2026-00001\"\n}",
@@ -3679,7 +3864,7 @@
       "description": "Walk-in in one step: book, register the ID, check into the chosen\nroom and take the money - the counter flow that used to be four screens.\n\ndefer_check_in=1 books, assigns the room and takes the money (as an\nadvance) but leaves the stay Confirmed, so the desk finishes it in the\nguided check-in. Without it, check_in runs now (room is enough; other\nsoft-required steps stay as backfill). The walk-in records the steps it\ndoes itself (room, who pays, the ID when given).\n\nIt is the same writers chained (create_booking \u2192 check_in \u2192\nadd_folio_payment), inside one request, so it is all-or-nothing: a\nrefused PIN or a room that just sold rolls the booking back too.\nArrival is always today (calendar, like every new booking - a lagging\nnight audit must not turn walk-ins away); a future stay is a normal\nbooking, not a walk-in.\n\nAn OTA guest who books and arrives the same day is a walk-in booked\nvia that site: booked_via / ota_ref / ota_total / ota_commission_pct\nwork as in create_booking (the stay's source is then OTA). night_prices\nbooks nights at the desk's own prices, as in create_booking.",
       "body": {
        "mode": "raw",
-       "raw": "{\n  \"property\": \"Your Property\",\n  \"room_type\": \"Your Property-DLX\",\n  \"room\": \"Your Property-101\",\n  \"check_out_date\": \"2026-08-03\",\n  \"guest_name\": \"A. Guest\",\n  \"phone\": \"+91 90000 00000\",\n  \"guest\": \"G-00001\",\n  \"adults\": 2,\n  \"children\": 0,\n  \"payment_amount\": 0,\n  \"defer_check_in\": 0,\n  \"ota_total\": 0\n}",
+       "raw": "{\n  \"property\": \"Your Property\",\n  \"room_type\": \"Your Property-DLX\",\n  \"room\": \"Your Property-101\",\n  \"check_out_date\": \"2026-08-03\",\n  \"guest_name\": \"A. Guest\",\n  \"phone\": \"+91 90000 00000\",\n  \"guest\": \"G-00001\",\n  \"adults\": 2,\n  \"children\": 0,\n  \"payment_amount\": 0,\n  \"defer_check_in\": 0,\n  \"ota_total\": 0,\n  \"extra_beds\": 0\n}",
        "options": {
         "raw": {
          "language": "json"
@@ -3935,7 +4120,7 @@
         "kamra.api.reverse_check_in"
        ]
       },
-      "description": "Undo a check-in made by mistake (wrong guest, wrong room), the same\nbusiness day and before anything is posted or paid. The stay goes back\nto Confirmed (arrival) with its room; the room is released and marked\nDirty so housekeeping inspects it before it is sold again. From there\nthe desk checks the guest in again or cancels the booking.",
+      "description": "Undo a check-in made by mistake (wrong guest, wrong room), on the\narrival's business date and before anything is posted, open or paid.\nThe stay goes back to Confirmed (arrival) with its room; the room is\nreleased and marked Dirty so housekeeping inspects it before it is sold\nagain. From there the desk checks the guest in again or cancels the\nbooking. An agent acts for a Front Desk, Finance or Hotel Admin user,\nnever passes a cashier PIN and is refused where the property requires\none; the user it acts for is the logged actor.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"reservation\": \"RES-2026-00001\",\n  \"reason\": \"<reason>\"\n}",
@@ -4577,6 +4762,80 @@
      }
     },
     {
+     "name": "rate_override_preview",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "token {{api_key}}:{{api_secret}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.api.rate_override_preview",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.api.rate_override_preview"
+       ]
+      },
+      "description": "What an agreed nightly rate would do to this stay before the desk\nconfirms it: the new nightly rates and total, the cut against what the\nguest pays now, the property's limit for the front desk and whether a\nsupervisor has to sign it off. Nothing is written.",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"reservation\": \"RES-2026-00001\",\n  \"agreed_rate\": \"<agreed_rate>\"\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "set_agreed_rate",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "token {{api_key}}:{{api_secret}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.api.set_agreed_rate",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.api.set_agreed_rate"
+       ]
+      },
+      "description": "Agree a different nightly rate for one stay, in place: the guest keeps\ntheir room, only this stay's nightly rates change (locked as usual, so\nthe folio and check-out bill it). The rate card - room type, season,\ntariff - is never touched. Nights already charged follow the property's\nrate-change policy.\n\nreason_code is a Rate Change reason (RATE-PROMO, RATE-MGR, ...).\nRevenue Manager / Hotel Admin set any positive rate. The front desk may\nonly lower it, by up to rate_override_limit_pct (Finance settings);\na bigger cut, or a reason code that requires a supervisor, is signed\noff by a Hotel Admin or Finance user with their PIN (supervisor + pin).\nAn AI agent may only apply a cut within the front desk's limit, for a\nsigned-in Front Desk / Revenue Manager / Hotel Admin; anything that\nneeds a supervisor (and any supervisor + pin it passes) is refused, for\na manager to approve on the hotel screen.\nCall rate_override_preview first and pass confirm_price=1.",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"reservation\": \"RES-2026-00001\",\n  \"agreed_rate\": \"<agreed_rate>\",\n  \"reason_code\": \"<reason_code>\",\n  \"reason\": \"\",\n  \"confirm_price\": 0\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
      "name": "room_move_preview",
      "request": {
       "method": "POST",
@@ -4863,7 +5122,7 @@
       "description": "Price a stay. With a company and no rate plan, the company's\nnegotiated plan applies - the same plan create_booking stores.\ncheck_in_time / check_out_time price an hourly or block day-use plan.\n\nnight_prices ([{date, price}], a Revenue Manager / Hotel Admin only)\nprices those nights at the typed figure - tax included when the\nproperty's rates include tax - and the rest at the rate card. A voucher,\nrate plan, long-stay discount or holiday package with typed nights is\nrefused.",
       "body": {
        "mode": "raw",
-       "raw": "{\n  \"property\": \"Your Property\",\n  \"room_type\": \"Your Property-DLX\",\n  \"check_in_date\": \"2026-08-01\",\n  \"check_out_date\": \"2026-08-03\",\n  \"adults\": 2,\n  \"children\": 0,\n  \"over_capacity_charge\": 0,\n  \"pets\": 0\n}",
+       "raw": "{\n  \"property\": \"Your Property\",\n  \"room_type\": \"Your Property-DLX\",\n  \"check_in_date\": \"2026-08-01\",\n  \"check_out_date\": \"2026-08-03\",\n  \"adults\": 2,\n  \"children\": 0,\n  \"over_capacity_charge\": 0,\n  \"pets\": 0,\n  \"extra_beds\": 0\n}",
        "options": {
         "raw": {
          "language": "json"
@@ -5530,6 +5789,80 @@
       "body": {
        "mode": "raw",
        "raw": "{\n  \"group_booking\": \"<group_booking>\"\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "booking_quotation",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "token {{api_key}}:{{api_secret}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.api.booking_quotation",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.api.booking_quotation"
+       ]
+      },
+      "description": "One booking's quotation / proforma: the hotel, the stay, each night's\nbooked rate, the totals and deposit, and the cancellation terms. The\nsame layout as group_quotation. Nothing is posted.",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"reservation\": \"RES-2026-00001\"\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "email_booking_quotation",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "token {{api_key}}:{{api_secret}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.api.email_booking_quotation",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.api.email_booking_quotation"
+       ]
+      },
+      "description": "Email the booking's quotation to the booker, as a PDF, through\nFrappe's own email: a Communication logged on the Reservation and sent\nby the site's outgoing account. It goes to the address on record only\n(the guest profile's email); no other recipient, cc or bcc can be given.\nThe mail is queued (status \"Queued\"); Frappe's Email Queue delivers it.\nRefuses with QUOTE_NO_EMAIL_ACCOUNT, QUOTE_NO_RECIPIENT_EMAIL,\nQUOTE_BOOKING_CLOSED, or QUOTE_RECENTLY_SENT when the same version of\nthe quotation went out less than a minute ago.",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"reservation\": \"RES-2026-00001\"\n}",
        "options": {
         "raw": {
          "language": "json"
@@ -6452,7 +6785,7 @@
         "kamra.pos.charge_to_room"
        ]
       },
-      "description": "Point a running bill (a dine-in table, say) at an in-house guest's\nroom, so Deliver posts it to their folio through the same controller\npath as room service - billing rules and the alcohol rule included.",
+      "description": "Point a running bill (a dine-in table, say) at an in-house guest's\nroom, so Deliver posts it to their folio through the same controller\npath as room service - routing and billing rules included.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"order\": \"ORD-2026-00001\",\n  \"room\": \"Your Property-101\"\n}",
@@ -6489,7 +6822,7 @@
         "kamra.pos.move_room_bill"
        ]
       },
-      "description": "A bill charged to the wrong room: move it to the right one, the same\nbusiness day it was posted. The charge leaves the first guest's folio\n(ledger reversed) and lands on the right guest's, by the same billing\nrules as room service, so liquor never reaches a company bill. Later\nthan that day it is a correction for Finance (allowance, then repost).",
+      "description": "A bill charged to the wrong room: move it to the right one, the same\nbusiness day it was posted. The charge leaves the first guest's folio\n(ledger reversed) and lands on the right guest's, by the same routing\nand billing rules as room service (liquor like any other line). Later\nthan that day it is a correction for Finance (allowance, then repost).",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"order\": \"ORD-2026-00001\",\n  \"room\": \"Your Property-101\",\n  \"reason\": \"<reason>\"\n}",
@@ -8066,6 +8399,191 @@
    "name": "Rates (rate calendar, what moves a rate)",
    "item": [
     {
+     "name": "room_type_tariffs",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "token {{api_key}}:{{api_secret}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.rates.room_type_tariffs",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.rates.room_type_tariffs"
+       ]
+      },
+      "description": "Read the published tariff panel for a room type the caller can read.",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"room_type\": \"Your Property-DLX\"\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "list_contract_tariffs",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "token {{api_key}}:{{api_secret}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.rates.list_contract_tariffs",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.rates.list_contract_tariffs"
+       ]
+      },
+      "description": "Read the property's tariff directory if the integration is installed.",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"property\": \"Your Property\"\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "propose_contract_tariff",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "token {{api_key}}:{{api_secret}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.rates.propose_contract_tariff",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.rates.propose_contract_tariff"
+       ]
+      },
+      "description": "Propose a new version; the integration owns effective-date validation.",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"property\": \"Your Property\",\n  \"price_list\": \"<price_list>\",\n  \"item_code\": \"<item_code>\",\n  \"price_list_rate\": \"<price_list_rate>\",\n  \"valid_from\": \"<valid_from>\"\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "approve_contract_tariff",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "token {{api_key}}:{{api_secret}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.rates.approve_contract_tariff",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.rates.approve_contract_tariff"
+       ]
+      },
+      "description": "Release an eligible draft through the integration's approval workflow.",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"item_price\": \"<item_price>\"\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "discard_contract_tariff",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "token {{api_key}}:{{api_secret}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.rates.discard_contract_tariff",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.rates.discard_contract_tariff"
+       ]
+      },
+      "description": "Discard a draft through the same property-scoped integration.",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"item_price\": \"<item_price>\"\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
      "name": "rate_calendar",
      "request": {
       "method": "POST",
@@ -8130,7 +8648,7 @@
       "description": "For the booking dialog: this stay night by night (BAR, season,\ndemand), the whole stay under each active rate plan against the plain\nrate, and what the voucher would do. Each total is a real quote.",
       "body": {
        "mode": "raw",
-       "raw": "{\n  \"property\": \"Your Property\",\n  \"room_type\": \"Your Property-DLX\",\n  \"check_in_date\": \"2026-08-01\",\n  \"check_out_date\": \"2026-08-03\",\n  \"adults\": 2,\n  \"children\": 0\n}",
+       "raw": "{\n  \"property\": \"Your Property\",\n  \"room_type\": \"Your Property-DLX\",\n  \"check_in_date\": \"2026-08-01\",\n  \"check_out_date\": \"2026-08-03\",\n  \"adults\": 2,\n  \"children\": 0,\n  \"extra_beds\": 0\n}",
        "options": {
         "raw": {
          "language": "json"
@@ -10641,7 +11159,7 @@
         "kamra.banquet.post_to_folio"
        ]
       },
-      "description": "Push the chargeable lines onto a bill. A function tied to a group\nrides the group's master folio; otherwise pass one explicitly.\n\nAlcohol is reported back rather than posted when the bill is a company\nor group folio - the same rule the folio itself enforces - so it can be\nsettled separately instead of failing the whole post.",
+      "description": "Push the chargeable lines onto a bill. A function tied to a group\nrides the group's master folio; otherwise pass one explicitly. Liquor\nposts with the rest: the bill chosen is the one that pays the function.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"function\": \"EVT-2026-0001\",\n  \"folio\": \"FOLIO-2026-00001\"\n}",
@@ -13113,7 +13631,7 @@
         "kamra.reports.manager_flash"
        ]
       },
-      "description": "The daily flash: yesterday's performance, month to date, today's\nmovement, collections by mode, and the 7-day outlook. With from_date,\nthe day figures, trend, movement and collections cover from_date..date.",
+      "description": "The daily flash: performance for the requested date, month to date,\nmovement, collections by mode, and the 7-day outlook. With from_date,\nthe day figures, trend, movement and collections cover from_date..date.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"property\": \"Your Property\",\n  \"date\": \"2026-08-01\",\n  \"from_date\": \"2026-08-01\"\n}",
@@ -14164,10 +14682,10 @@
         "kamra.ledger.generate_proforma"
        ]
       },
-      "description": "",
+      "description": "A pro forma bill: an estimate, never an invoice. For a stay still in\nprogress (Checked In, or Confirmed with a deposit folio) it adds the\nnights check-out will post as `projected_lines` (each projected: True)\nand an `estimate` of posted + projected - worked out by the writer\ncheck-out uses, in a savepoint that is always rolled back, so nothing\nis posted. include_projected=0 prints the posted folio only.",
       "body": {
        "mode": "raw",
-       "raw": "{\n  \"folio\": \"FOLIO-2026-00001\"\n}",
+       "raw": "{\n  \"folio\": \"FOLIO-2026-00001\",\n  \"include_projected\": 1\n}",
        "options": {
         "raw": {
          "language": "json"
@@ -14201,7 +14719,7 @@
         "kamra.ledger.issue_credit_note"
        ]
       },
-      "description": "",
+      "description": "Credit an issued invoice. Credit notes never add up to more than the\ninvoice (OPERA's Credit Bill credits at most the bill). The folio and\nits credit notes are read under lock, the notes with a locking read, so\na credit another desk committed meanwhile is counted (or, on MariaDB\n11.8 with innodb_snapshot_isolation, the request is refused with 1020\nand tried again) - never credited twice over.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"folio\": \"FOLIO-2026-00001\",\n  \"amount\": 1000,\n  \"reason\": \"<reason>\"\n}",
@@ -14386,7 +14904,7 @@
         "kamra.ledger.quick_checkout"
        ]
       },
-      "description": "Check out and close the guest folio in one step. check_out settles the\nstay the one way: the company's folio (Company, or the group master)\nmoves to the city ledger when the company has credit, and the guest's\nown folio must already be paid - liquor and extras are never billed to\nthe company.",
+      "description": "Check out and close the guest folio in one step. check_out settles the\nstay the one way: the stay's Company folio moves to the city ledger when\nthe company has credit (a group's master bill is settled with the\ngroup), and the guest's\nown folio must already be paid - liquor and extras are never billed to\nthe company.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"reservation\": \"RES-2026-00001\"\n}",
@@ -14612,6 +15130,43 @@
       "body": {
        "mode": "raw",
        "raw": "{\n  \"property\": \"Your Property\",\n  \"currency\": \"<currency>\",\n  \"fx_amount\": \"<fx_amount>\",\n  \"direction\": \"Buy\",\n  \"folio\": \"FOLIO-2026-00001\",\n  \"guest\": \"G-00001\"\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "payment_rate",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "token {{api_key}}:{{api_secret}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.ledger.payment_rate",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.ledger.payment_rate"
+       ]
+      },
+      "description": "Resolve the Finance-published settlement rate for this property's open business day.",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"property\": \"Your Property\",\n  \"currency\": \"<currency>\",\n  \"amount\": 1000\n}",
        "options": {
         "raw": {
          "language": "json"
@@ -18067,7 +18622,7 @@
         "kamra.pos_interface.pos_post_room_charge"
        ]
       },
-      "description": "Post one POS ticket to an in-house guest's bill.\n\n`ticket_id` is the idempotency key: the same ticket again returns the\nfirst posting with duplicate=true. Name the stay by room (number or id)\nand/or reservation. The billing rules choose the folio; anything with\nalcohol (is_alcohol=1) always goes to the guest's own folio, never the\ncompany's. Tax is the hotel's rule for the charge type, not the POS's.",
+      "description": "Post one POS ticket to an in-house guest's bill.\n\n`ticket_id` is the idempotency key: the same ticket again returns the\nfirst posting with duplicate=true. Name the stay by room (number or id)\nand/or reservation. Pass `transaction_code` to post under a specific\nrevenue code (Simphony-OPERA mapping); otherwise `is_alcohol=1` uses\nthe property's beverage transaction code (default 2010). The routing\nand billing rules choose the folio by transaction code. Tax is the\nhotel's rule for the charge type, not the POS's.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"property\": \"Your Property\",\n  \"ticket_id\": \"<ticket_id>\",\n  \"amount\": 1000,\n  \"description\": \"<description>\",\n  \"room\": \"Your Property-101\",\n  \"reservation\": \"RES-2026-00001\",\n  \"charge_type\": \"Food & Beverage\",\n  \"is_alcohol\": 0,\n  \"tax_rate\": 0\n}",

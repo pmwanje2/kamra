@@ -4,7 +4,8 @@
    check-out fix (#215): only the Company folio moves to the city ledger,
    and only billing rules put charges there. The property's
    `default_company_billing` now decides what such a company pays. Its own
-   rules always win, and liquor never bills to a company.
+   rules always win. Liquor is Food & Beverage like the food: the presets
+   carry no liquor rule (OPERA routes only what is included, by code).
 2. An unpaid dine-in or takeaway bill could be marked Delivered (closed).
    A POS bill closes only paid, posted to a checked-in room, or NC with an
    authorization. The kitchen marking food served does not settle it.
@@ -28,7 +29,7 @@ from kamra.tests.audit_fixtures import (
 	make_room_type,
 )
 
-DEFAULT = "Room and F&B (liquor to guest)"
+DEFAULT = "Room and F&B"
 NOTHING = "Nothing (guest pays unless rules say so)"
 
 
@@ -83,12 +84,12 @@ class CompanyDefaultBillingTestCase(AuditTestCase):
 		api.post_stay_charge(res.name, charge_type, desc, amount, is_alcohol=alcohol)
 		return _folio_type_of(res.name, desc)
 
-	def test_no_rules_credit_company_pays_room_and_food_not_liquor_or_laundry(self):
+	def test_no_rules_credit_company_pays_room_and_food_not_laundry(self):
 		res = self.stay(_corp("UT Default Corp"))
 		folio_mod.post_remaining_nights(res)
 		self.assertEqual(_room_folio_types(res.name), ["Company"])
 		self.assertEqual(self.post(res, "Food & Beverage", "UT lunch", 500), "Company")
-		self.assertEqual(self.post(res, "Food & Beverage", "UT whisky", 800, 1), "Guest")
+		self.assertEqual(self.post(res, "Food & Beverage", "UT whisky", 800, 1), "Company")
 		self.assertEqual(self.post(res, "Laundry", "UT laundry", 300), "Guest")
 		self.assertEqual(self.post(res, "Minibar", "UT minibar", 200), "Guest")
 		self.assertEqual(self.post(res, "Misc", "UT paid-out", 100), "Guest")
@@ -98,7 +99,7 @@ class CompanyDefaultBillingTestCase(AuditTestCase):
 		self.assertIn("Food & Beverage", shown["charge_types"])
 
 	def test_explicit_rules_override_the_default(self):
-		make_property(PROP_A, default_company_billing="Everything except liquor")
+		make_property(PROP_A, default_company_billing="Everything")
 		res = self.stay(_corp("UT Rules Corp", rules=("Laundry",)))
 		folio_mod.post_remaining_nights(res)
 		self.assertEqual(_room_folio_types(res.name), ["Guest"])
@@ -106,15 +107,34 @@ class CompanyDefaultBillingTestCase(AuditTestCase):
 		self.assertEqual(self.post(res, "Laundry", "UT laundry", 300), "Company")
 		self.assertFalse(api.company_billing_default("UT Rules Corp", PROP_A)["applies"])
 
-	def test_room_only_and_everything_except_liquor(self):
+	def test_room_only_and_everything(self):
 		make_property(PROP_A, default_company_billing="Room only")
 		res = self.stay(_corp("UT Room Only Corp"))
 		folio_mod.post_remaining_nights(res)
 		self.assertEqual(_room_folio_types(res.name), ["Company"])
 		self.assertEqual(self.post(res, "Food & Beverage", "UT lunch", 500), "Guest")
-		make_property(PROP_A, default_company_billing="Everything except liquor")
+		make_property(PROP_A, default_company_billing="Everything")
 		self.assertEqual(self.post(res, "Laundry", "UT laundry", 300), "Company")
-		self.assertEqual(self.post(res, "Minibar", "UT beer", 300, 1), "Guest")
+		self.assertEqual(self.post(res, "Minibar", "UT beer", 300, 1), "Company")
+
+	def test_the_liquor_presets_are_renamed_on_migrate(self):
+		# the old labels promised a liquor rule that no longer exists
+		import importlib
+		gb = frappe.get_doc({"doctype": "Group Booking", "property": PROP_A,
+		                     "group_name": "UT Preset Group", "check_in_date": d(1),
+		                     "check_out_date": d(2), "status": "Confirmed"}
+		                    ).insert(ignore_permissions=True)
+		frappe.db.set_value("Property", PROP_A, "default_company_billing",
+		                    "Everything except liquor")
+		frappe.db.set_value("Group Booking", gb.name, "master_pays",
+		                    "Room and F&B (liquor to guest)")
+		importlib.import_module("kamra.patches.v48.rename_company_billing_presets").execute()
+		self.assertEqual(frappe.db.get_value("Property", PROP_A, "default_company_billing"),
+		                 "Everything")
+		self.assertEqual(frappe.db.get_value("Group Booking", gb.name, "master_pays"),
+		                 "Room and F&B")
+		options = frappe.get_meta("Property").get_field("default_company_billing").options
+		self.assertNotIn("liquor", options)
 
 	def test_nothing_reproduces_strict_routing(self):
 		make_property(PROP_A, default_company_billing=NOTHING)

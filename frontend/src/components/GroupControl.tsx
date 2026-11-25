@@ -8,7 +8,7 @@ import { serverError, type Row } from "../lib/resource"
 import LinkedRecords from "./LinkedRecords"
 import { Badge } from "./ui/badge"
 import { Button } from "./ui/button"
-import { fmtMoney, moneyEps, moneyStep, roundMoney, useLocale } from "../lib/money"
+import { fmtMoney, moneyDigits, moneyEps, moneyStep, roundMoney, useLocale } from "../lib/money"
 import { t as translate, useUILanguage } from "../lib/i18n"
 import { useCashierAuth } from "../lib/cashierAuth"
 import CheckInDialog from "./CheckInDialog"
@@ -348,7 +348,11 @@ export default function GroupControl({
   const openSettle = () => {
     setTab("bill")
     const due = roundMoney(groupBillDue)
-    setSettle({ mode: loc.payment_modes[0] ?? "Cash", amount: due > 0 ? String(due) : "", cityLedger: !!g.company })
+    setSettle({
+      mode: loc.payment_modes[0] ?? "Cash",
+      amount: due > eps ? due.toFixed(moneyDigits()) : "",
+      cityLedger: !!g.company,
+    })
   }
   const openDeposit = () => {
     setTab("bill")

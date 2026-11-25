@@ -9,7 +9,7 @@ import {
 } from "lucide-react"
 
 import { call } from "../lib/api"
-import { cur, fmtAmount } from "../lib/money"
+import { fmtMoney, useLocale } from "../lib/money"
 import { t as translate, useUILanguage } from "../lib/i18n"
 
 /** The connective tissue, rendered: one strip of chips on any record that
@@ -50,6 +50,7 @@ export default function LinkedRecords({
   exclude?: ("guest" | "folio" | "company" | "group" | "event")[]
 }) {
   useUILanguage()
+  useLocale()
   const [links, setLinks] = useState<Links | null>(null)
   const navigate = useNavigate()
 
@@ -60,7 +61,6 @@ export default function LinkedRecords({
   }, [doctype, name])
 
   if (!links) return null
-  const inr = (n: number) => fmtAmount(n || 0)
 
   const chips: React.ReactNode[] = []
   if (links.guest && !exclude.includes("guest"))
@@ -89,7 +89,7 @@ export default function LinkedRecords({
               f.balance > 0 ? "text-amber-600" : "text-zinc-400"
             }
           >
-            {cur()}{inr(f.balance)}
+            {fmtMoney(f.balance)}
           </span>
         </button>,
       )

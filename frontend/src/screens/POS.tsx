@@ -618,7 +618,7 @@ export default function POS() {
     })
   }
   /** A dine-in guest signs the bill to their room: link the stay, then
-   *  Deliver posts it to their folio (billing rules and alcohol rule apply). */
+   *  Deliver posts it to their folio (routing and billing rules apply). */
   async function chargeToRoom() {
     if (!selected || !postRoom) return
     const order = selected

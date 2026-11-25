@@ -485,14 +485,21 @@ MODULES: tuple[Module, ...] = (
 			)),
 			Section("corporate", "Corporate billing",
 			        "Who pays what on a credit company's stay when that company has no billing rules of its own. "
-			        "A company's own rules always win, and liquor never bills to a company.", (
+			        "A company's own rules always win.", (
 				S("default_company_billing", "When a credit company has no billing rules", "select",
-				  "Room and F&B (liquor to guest)", P,
-				  options=("Room and F&B (liquor to guest)", "Room only", "Everything except liquor",
+				  "Room and F&B", P,
+				  options=("Room and F&B", "Room only", "Everything",
 				           "Nothing (guest pays unless rules say so)"),
 				  hint="Room covers the room night, its meal plan, levies, early check-in / late checkout and the "
 				       "cleaning fee. Laundry, minibar, spa and misc extras stay with the guest unless "
-				       "'Everything except liquor' is chosen."),
+				       "'Everything' is chosen."),
+				S("folio_windows", "Folio windows", "number", 8, min=1, max=8,
+				  hint="How many separate bills a stay or a group's master bill can have, each with its "
+				       "own payer and invoice. Window 1 is the guest's and takes every charge that is not "
+				       "routed elsewhere."),
+				S("beverage_transaction_code", "Default beverage transaction code", "text", "2010",
+				  hint="Transaction code used for alcoholic beverage postings from POS, banquets and the "
+				       "desk when an item or outlet has no code of its own."),
 			)),
 			Section("credit", "Company credit",
 			        "Payment terms and credit control for companies billed on the city ledger. "

@@ -69,8 +69,8 @@ const GROUP_TYPES = ["Corporate", "Wedding", "Event", "Tour", "Other"]
 // what the main room pays: keys of folio.COMPANY_BILLING_DEFAULTS
 const MASTER_PAYS: { value: string; label: string }[] = [
   { value: "Room only", label: "Room + tax" },
-  { value: "Room and F&B (liquor to guest)", label: "Room and F&B (liquor to guest)" },
-  { value: "Everything except liquor", label: "Everything except liquor" },
+  { value: "Room and F&B", label: "Room and F&B" },
+  { value: "Everything", label: "Everything" },
 ]
 
 const inputCls =
@@ -775,7 +775,7 @@ export default function GroupBookingDialog(props: {
                   <select className={inputCls} value={pays} onChange={(e) => setPays(e.target.value)}>
                     {MASTER_PAYS.map((m) => <option key={m.value} value={m.value}>{t(m.label)}</option>)}
                   </select>
-                  <span className="mt-1 block text-xs text-zinc-500">{t("For every room of the group, on one group bill. Each guest pays their own extras; liquor always stays with the guest.")}</span>
+                  <span className="mt-1 block text-xs text-zinc-500">{t("For every room of the group, on one group bill. Each guest pays their own extras.")}</span>
                 </label>
               ) : (
                 <p className="text-zinc-600">{t("The company's billing rules decide what it pays, on one group bill.")}</p>

@@ -16,6 +16,7 @@
   "price",
   "is_veg",
   "is_alcohol",
+  "transaction_code",
   "available",
   "image",
   "description",
@@ -87,6 +88,13 @@
    "label": "Is Alcohol"
   },
   {
+   "description": "Transaction code for this item when charged to a room. Leave blank to use the outlet's code, or the property's beverage code for alcohol.",
+   "fieldname": "transaction_code",
+   "fieldtype": "Link",
+   "label": "Transaction Code",
+   "options": "Transaction Code"
+  },
+  {
    "fieldname": "image",
    "fieldtype": "Attach Image",
    "label": "Photo",
@@ -133,7 +141,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-10-30 19:00:00.000000",
+ "modified": "2026-11-23 23:00:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Menu Item",

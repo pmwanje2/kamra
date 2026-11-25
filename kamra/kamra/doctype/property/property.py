@@ -33,6 +33,16 @@ def default_short_code(name: str, exclude: str | None = None) -> str:
 
 
 class Property(Document):
+	def _set_defaults(self):
+		# Frappe's _set_defaults copies Global Defaults.currency (which ERPNext
+		# seeds to INR on fresh sites) onto blank Link-to-Currency fields before
+		# before_insert runs, masking the country pack's currency (e.g. UGX/KWD)
+		# or a neutral blank fallback. Explicit operator values always win.
+		had_currency = bool((self.currency or "").strip())
+		super()._set_defaults()
+		if not had_currency:
+			self.currency = None
+
 	def before_insert(self):
 		# currency, clock, tax slab and money amounts come from the country
 		# pack, never an Indian default; what the operator typed wins

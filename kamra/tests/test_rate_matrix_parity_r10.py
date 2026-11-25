@@ -182,6 +182,8 @@ class ChangeStayCompanyContractTest(QuotePatches, RateMatrixHarness):
 		return {
 			"kamra.folio": stub_module(
 				"kamra.folio",
+				DIRECT_BILL="Company Credit",
+				_company_credit=lambda company: False,
 				_fnb_gst=lambda property: 5,
 				charged_nights=lambda name: {},
 				_company_pays=lambda *args: False,

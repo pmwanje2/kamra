@@ -18,7 +18,8 @@ const FRONTEND_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)),
 
 // Verified non-money `.toFixed(2)` sites (percentages & item quantities, never money).
 const EXEMPT_TO_FIXED_2: Readonly<Record<string, number>> = {
-  "src/screens/FolioView.tsx": 2, // split % ratios (:835, :859)
+  "src/lib/folioLabel.ts": 1, // split % ratio (:82)
+  "src/screens/FolioView.tsx": 2, // split % ratios (:801, :825)
   "src/screens/BanquetDocument.tsx": 2, // line qty (:569, :684)
   "src/screens/banquet/Economics.tsx": 1, // quoted_qty (:238)
 }
@@ -31,7 +32,6 @@ const PENDING_CROSS_PR_ALLOWLIST: Readonly<Record<string, number>> = {
   "src/screens/AuditPack.tsx": 3,
   // Pack 2 PR 4 (#43)
   "src/screens/FolioHistory.tsx": 1,
-  "src/screens/FolioView.tsx": 2, // missing-step on charge/allowance inputs (:1557, :1639)
   // Peer Banquet / Events (#45) & setup screens (pre-existing missing-step)
   "src/screens/BanquetCatalogue.tsx": 1,
   "src/screens/BanquetFunction.tsx": 7,
