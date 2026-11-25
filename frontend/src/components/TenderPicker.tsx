@@ -116,8 +116,9 @@ export function tenderAmount(balance: number, currency: string, home: string, ra
   return String(Math.ceil(units - Number.EPSILON * units) / tenderScale)
 }
 
-export function TenderInput({ currency, value, full, onChange }: {
+export function TenderInput({ currency, value, full, onChange, onFull }: {
   currency: string; value: string; full: string; onChange: (amount: string) => void
+  onFull?: () => void
 }) {
   const { t } = useT()
   return <div className="flex items-center gap-2">
@@ -127,7 +128,7 @@ export function TenderInput({ currency, value, full, onChange }: {
         className="w-24 min-w-0 text-right tabular-nums" value={value} onChange={e => onChange(e.target.value)} />
     </label>
     <button type="button" disabled={!full} className="rounded-full border px-2 py-1 text-xs disabled:opacity-50"
-      onClick={() => onChange(full)}>{t("Full amount")}</button>
+      onClick={onFull ?? (() => onChange(full))}>{t("Full amount")}</button>
   </div>
 }
 

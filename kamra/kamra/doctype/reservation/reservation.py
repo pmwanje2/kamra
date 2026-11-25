@@ -730,7 +730,8 @@ class Reservation(Document):
 		if self.flags.get("kamra_channel_tariff"):
 			return
 		if not self.is_new():
-			if self.flags.get("kamra_contract_relocked") or self.flags.get("kamra_fx_checkin_relock"):
+			if (self.flags.get("kamra_contract_relocked") or self.flags.get("kamra_fx_checkin_relock")
+					or self.flags.get("kamra_restore_contract_rate")):
 				return
 			previous = self.get_doc_before_save()
 			prev_snap = previous.get("contract_tariff") if previous else None
@@ -1297,6 +1298,7 @@ class Reservation(Document):
 				or self.flags.get("kamra_contract_relocked")
 				or self.flags.get("kamra_fx_checkin_relock")
 				or self.flags.get("kamra_contract_repriced")
+				or self.flags.get("kamra_restore_contract_rate")
 				or self.flags.get("kamra_channel_tariff")):
 			return
 		if self.is_new():
@@ -1336,6 +1338,13 @@ class Reservation(Document):
 			if abs(_amount_dec(group_rate(self.group_booking, self.room_type)) - rate) < tol:
 				return False
 		return True
+
+	def restore_contract_discount_base(self, snapshot: dict) -> None:
+		"""Replace a foreign fixed override with the stay's frozen tariff."""
+		self.agreed_rate = snapshot["agreed_rate"]
+		self.contract_tariff = {key: value for key, value in snapshot.items() if key != "agreed_override"}
+		self.fixed_rate = 0
+		self.flags.kamra_restore_contract_rate = True
 
 	def holds_manager_fixed_rate(self) -> bool:
 		"""A manager's fixed-rate override of the discount (a plan that takes
@@ -1976,6 +1985,7 @@ class Reservation(Document):
 			# OPERA keeps a booked rate: a discount given, changed or taken
 			# off comes off each locked night's booked base, never today's card
 			self.apply_rediscount(self.rediscount_locked_nights(), key)
+			self.flags.pop("kamra_restore_contract_rate", None)
 			return
 
 		q = self.requote(
@@ -1985,6 +1995,7 @@ class Reservation(Document):
 				self.is_new() or self.has_value_changed("voucher")),
 		)
 		self.apply_quote(q, key)
+		self.flags.pop("kamra_restore_contract_rate", None)
 		self.flags.kamra_repriced = not self.flags.get("kamra_room_pinned")
 
 	@classmethod
@@ -2011,7 +2022,8 @@ class Reservation(Document):
 		if (not old or not old.lock_is_current()
 				or self.get("rate_lock_key") != old.get("rate_lock_key")):
 			return False
-		return self.sold_key(inputs) == self.sold_key(old.quote_inputs())
+		return (bool(self.flags.get("kamra_restore_contract_rate"))
+		        or self.sold_key(inputs) == self.sold_key(old.quote_inputs()))
 
 	def rediscount_locked_nights(self) -> dict:
 		"""The stay's discount as it now stands, on the nights already locked:
@@ -2024,7 +2036,7 @@ class Reservation(Document):
 		(kamra.api.discount_preview) is exactly what the save persists.
 		Nothing is written."""
 		import json
-		from decimal import Decimal
+		from decimal import ROUND_HALF_UP, Decimal
 
 		from kamra.folio import charged_nights
 		from kamra.pricing import (
@@ -2051,13 +2063,14 @@ class Reservation(Document):
 			property=self.property,
 			discount_currency=self.get("discount_currency"),
 			rate_currency=rate_cur,
-			default_to_home=True,
+			inherit_stay_currency=False,
 		)
 		stay = (disc or {}).get("stay")
 		stay_cur = (disc or {}).get("stay_currency")
 		own = (disc or {}).get("nights") or {}
 		inclusive = rates_include_tax(self.property)
 		places = night_rate_places(self.property)
+		unit = Decimal(1).scaleb(-places)
 		plan_step = _dec(frappe.db.get_value("Rate Plan", self.rate_plan, "rounding_step")) if self.get("rate_plan") else Decimal(0)
 		rt = frappe.get_doc("Room Type", self.room_type)
 		over_cap = _dec(self.get("over_capacity_charge"))
@@ -2070,6 +2083,7 @@ class Reservation(Document):
 		def oc(rate):
 			return over_cap / (Decimal(1) + rate / Decimal(100)) if inclusive else over_cap
 
+		restored_bases = self.card_entry_bases() if self.flags.get("kamra_restore_contract_rate") else {}
 		rows, effective = [], {}
 		d_room = d_tax = d_oc = d_oc_tax = d_levy = d_levy_tax = Decimal(0)
 		for r in sorted(self.get("night_rates") or [], key=lambda r: getdate(r.stay_date)):
@@ -2092,6 +2106,12 @@ class Reservation(Document):
 			# the night's booked base on the desk's basis, and its tax rate
 			entry = entry_rate(rate, gst, inclusive, places) + off
 			base_gst = room_gst_rate(self.property, rt, entry + over_cap) if off else gst
+			if day in restored_bases:
+				entry = _dec(restored_bases[day])
+				base_gst = room_gst_rate(self.property, rt, entry + over_cap)
+				base = (entry / (Decimal(1) + base_gst / Decimal(100))).quantize(
+					unit, rounding=ROUND_HALF_UP) if inclusive else entry
+				row["quoted_base_rate"] = float(base)
 			net, new_gst, new_off = discount_night(
 				self.property, rt, base, base_gst, entry,
 				kind, value, inclusive, over_cap, day,

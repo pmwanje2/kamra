@@ -6367,17 +6367,10 @@ def _detail_rate_plans(res) -> list[dict]:
 def reservation_detail(reservation: str):
 	"""Everything about one booking in a single call - stay, money, guest,
 	booker and the actions currently available. Powers the reservation drawer."""
-	from decimal import Decimal
 	from kamra.business_date import get_business_date
 	from kamra.folio import charged_nights
 	from kamra.kamra.doctype.reservation.reservation import uses_member_rooms
-	from kamra.pricing import (
-		contract_night_tariff,
-		effective_rate_currency,
-		property_currency,
-		round_rate_amount,
-		saved_contract_tariff,
-	)
+	from kamra.pricing import effective_rate_currency, property_currency, saved_contract_tariff
 	res = frappe.get_doc("Reservation", reservation)
 	night_charged = set(charged_nights(res.name)) if res.get("night_rates") else set()
 	home_cur = property_currency(res.property)
@@ -6390,47 +6383,6 @@ def reservation_detail(reservation: str):
 	)
 	fx_rate = flt(tariff_inner.get("fx_rate")) if tariff_inner else 0.0
 	agreed_override = saved_ct.get("agreed_override") if isinstance(saved_ct, dict) else None
-
-	def _night_contract_fields(n) -> dict:
-		tn = contract_night_tariff(saved_ct, n.stay_date, allow_stepped=True)
-		if tn is None:
-			return {}
-		t_cur, t_gross, t_fx = tn
-		if not t_cur or t_cur == home_cur or t_fx <= 0:
-			return {}
-		gross_r = float(round_rate_amount(t_gross, 0, "Nearest", t_cur))
-		own_type = n.get("discount_type") or res.get("discount_type")
-		own_val = flt(n.get("discount_value")) if n.get("discount_type") else flt(res.get("discount_value"))
-		own_cur = (
-			(n.get("discount_currency") if n.get("discount_type") else res.get("discount_currency"))
-			or home_cur
-		)
-		disc_amt_home = flt(n.get("discount_amount"))
-		if own_type == "Amount" and own_val > 0 and own_cur.upper() == t_cur.upper():
-			c_disc = float(round_rate_amount(min(Decimal(str(own_val)), t_gross), 0, "Nearest", t_cur))
-			c_net = float(max(round_rate_amount(t_gross - Decimal(str(c_disc)), 0, "Nearest", t_cur), Decimal(0)))
-		elif own_type == "Percent" and own_val > 0:
-			c_disc = float(round_rate_amount(t_gross * Decimal(str(own_val)) / Decimal(100), 0, "Nearest", t_cur))
-			c_net = float(max(round_rate_amount(t_gross - Decimal(str(c_disc)), 0, "Nearest", t_cur), Decimal(0)))
-		elif disc_amt_home > 0:
-			c_disc = float(round_rate_amount(Decimal(str(disc_amt_home)) / t_fx, 0, "Nearest", t_cur))
-			c_net = float(max(round_rate_amount(t_gross - Decimal(str(c_disc)), 0, "Nearest", t_cur), Decimal(0)))
-		elif (
-			isinstance(agreed_override, dict)
-			and (agreed_override.get("currency") or "").upper() == t_cur.upper()
-			and flt(agreed_override.get("amount")) > 0
-		):
-			c_disc = 0.0
-			c_net = float(round_rate_amount(Decimal(str(agreed_override["amount"])), 0, "Nearest", t_cur))
-		else:
-			c_disc = 0.0
-			c_net = gross_r
-		return {
-			"contract_currency": t_cur,
-			"contract_base_rate": gross_r,
-			"contract_discount_amount": c_disc,
-			"contract_rate": c_net,
-		}
 
 	# guest identity + stay history
 	guest = None
@@ -6535,7 +6487,7 @@ def reservation_detail(reservation: str):
 		 # the night's own reason (Daily Details); blank follows the stay
 		 "discount_reason": n.get("discount_reason") or None,
 		 **_entry_figures(res.property, n),
-		 **_night_contract_fields(n),
+		 **_booked_contract_discount_fields(res, saved_ct, n),
 		 # already on the folio: its discount is settled there (a folio
 		 # allowance), so the Daily Details editor leaves it alone
 		 "charged": str(n.stay_date) in night_charged}
@@ -9542,7 +9494,7 @@ def _discount_plan(doc, discount_type=None, discount_value=0, reason_code=None,
 	already billed may come back unchanged (the editor shows the whole
 	stay); changing one is a folio allowance, not a discount."""
 	from kamra.folio import charged_nights
-	from kamra.pricing import effective_rate_currency, normalize_discounts, saved_contract_tariff
+	from kamra.pricing import contract_night_tariff, effective_rate_currency, normalize_discounts, saved_contract_tariff
 	if doc.status not in ("Confirmed", "Checked In"):
 		frappe.throw(_("Only an active reservation can take a discount."))
 	if not doc.get("auto_price"):
@@ -9573,6 +9525,16 @@ def _discount_plan(doc, discount_type=None, discount_value=0, reason_code=None,
 	current = flt(doc.amount_after_tax)
 	# decided before the discount goes on, as the save decides it
 	in_place = doc.nights_cover_stay() and doc.lock_is_current()
+	override = saved_ct.get("agreed_override") or {}
+	if (override.get("currency") == rate_cur and flt(saved_ct.get("agreed_rate")) > 0
+			and flt(override.get("home_amount")) == flt(doc.agreed_rate)
+			and contract_night_tariff(saved_ct, allow_stepped=True)):
+		stay_currency = disc.get("stay_currency")
+		per_night = disc.get("nights", {})
+		if any(per_night.get(day, {"currency": stay_currency})["currency"] == rate_cur
+		       for day in doc.stay_nights() if day not in charged):
+			doc.restore_contract_discount_base(saved_ct)
+			saved_ct = saved_contract_tariff(doc)
 	_set_discount_inputs(doc, disc, reason_code, fixed_rate, charged=charged)
 	if in_place:
 		priced = doc.rediscount_locked_nights()
@@ -9594,44 +9556,6 @@ def _discount_plan(doc, discount_type=None, discount_value=0, reason_code=None,
 	from kamra.ledger import _currency_places, _money, _round_currency
 	places = max(_currency_places(doc.property), 2)
 	eps = 0.5 * (10 ** -places)
-	from decimal import Decimal
-	from kamra.pricing import contract_night_tariff, property_currency, round_rate_amount
-	home_cur = property_currency(doc.property)
-
-	def _plan_night_contract(r, n) -> dict:
-		if r.get("contract_currency"):
-			return {
-				"contract_currency": r["contract_currency"],
-				"contract_base_rate": flt(r.get("contract_base_rate")),
-				"contract_discount_amount": flt(r.get("contract_discount_amount")),
-				"contract_rate": flt(r.get("contract_rate")),
-			}
-		tn = contract_night_tariff(saved_ct, n["date"], allow_stepped=True)
-		if tn is None:
-			return {}
-		t_cur, t_gross, t_fx = tn
-		if not t_cur or t_cur == home_cur or t_fx <= 0:
-			return {}
-		gross_r = float(round_rate_amount(t_gross, 0, "Nearest", t_cur))
-		disc_amt_home = flt(r.get("discount_amount"))
-		n_kind = n.get("discount_type")
-		n_val = flt(n.get("discount_value"))
-		n_cur = (n.get("discount_currency") or home_cur or "").strip().upper()
-		if n_kind == "Amount" and n_val > 0 and n_cur == t_cur.upper():
-			c_disc = float(round_rate_amount(min(Decimal(str(n_val)), t_gross), 0, "Nearest", t_cur))
-		elif n_kind == "Percent" and n_val > 0:
-			c_disc = float(round_rate_amount(t_gross * Decimal(str(n_val)) / Decimal(100), 0, "Nearest", t_cur))
-		elif disc_amt_home > 0:
-			c_disc = float(round_rate_amount(Decimal(str(disc_amt_home)) / t_fx, 0, "Nearest", t_cur))
-		else:
-			c_disc = 0.0
-		c_net = float(max(round_rate_amount(t_gross - Decimal(str(c_disc)), 0, "Nearest", t_cur), Decimal(0)))
-		return {
-			"contract_currency": t_cur,
-			"contract_base_rate": gross_r,
-			"contract_discount_amount": c_disc,
-			"contract_rate": c_net,
-		}
 
 	plan.update(
 		current_amount=current, new_amount=new,
@@ -9645,10 +9569,44 @@ def _discount_plan(doc, discount_type=None, discount_value=0, reason_code=None,
 		         "discount_currency": n.get("discount_currency"),
 		         "discount_amount": flt(r.get("discount_amount")), "rate": flt(r.get("rate")),
 		         **_entry_figures(doc.property, r),
-		         **_plan_night_contract(r, n),
+		         **_booked_contract_discount_fields(doc, saved_ct, r),
 		         "own": bool(r.get("discount_type")),
 		         "charged": n["date"] in charged} for r, n in zip(rows, nights, strict=True)])
 	return plan
+
+
+def _booked_contract_discount_fields(doc, snapshot: dict, row) -> dict:
+	"""Project locked room figures into contract currency using the quote's rounding."""
+	from kamra.pricing import (
+		_dec, apply_currency_discount, contract_discount_fields, contract_night_tariff,
+		entry_rate, night_rate_places, property_currency, rates_include_tax,
+	)
+	day = str(row.get("stay_date"))
+	tariff_night = contract_night_tariff(snapshot, day, allow_stepped=True)
+	if tariff_night is None:
+		return {}
+	home = property_currency(doc.property)
+	source = row if row.get("discount_type") else doc
+	kind = source.get("discount_type")
+	value = _dec(source.get("discount_value"))
+	currency = source.get("discount_currency") or home
+	off = _dec(row.get("discount_amount"))
+	net = entry_rate(row.get("rate"), row.get("gst_rate"), rates_include_tax(doc.property),
+	                 night_rate_places(doc.property))
+	if kind == "Amount" and currency == tariff_night[0]:
+		value = min(value, tariff_night[1])
+	elif kind != "Percent":
+		# Use the booked local discount so the foreign net comes from the
+		# rounded local net, including a half-minor-unit exchange difference.
+		kind, value, currency = "Amount", off, home
+	calc = apply_currency_discount(
+		gross_home=net + off, kind=kind, value=value, home_currency=home,
+		discount_currency=currency, tariff_night=tariff_night, date=day, property=doc.property,
+	)
+	override = snapshot.get("agreed_override") or {}
+	if not off and override.get("currency") == tariff_night[0] and _dec(override.get("home_amount")) == net:
+		calc["net_tx"] = _dec(override["amount"])
+	return contract_discount_fields(calc)
 
 
 def _entry_figures(property: str, row) -> dict:

@@ -152,7 +152,7 @@ export function BookingDialog(props: {
 }) {
   const { t, tn } = useT()
   const [options, setOptions] = useState<BookingOptions | null>(null)
-  const [quote, setQuote] = useState<Quote | null>(null)
+  const [quoted, setQuoted] = useState<{ rateKey: string; quote: Quote } | null>(null)
   const [quoting, setQuoting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const dialog = useRef<HTMLDivElement>(null)
@@ -218,6 +218,8 @@ export function BookingDialog(props: {
     booker_relation: "",
     contact_preference: "Booker",
   })
+  const rateCurKey = `${form.rate_plan}|${form.company}|${form.room_type}`
+  const quote = quoted?.rateKey === rateCurKey ? quoted.quote : null
   // Booked via an OTA (keyed from its email): the site, its reference and
   // the price it charged (all rooms) and its commission %, prefilled from
   // the site's default. "" = direct, "other" = a site typed by hand.
@@ -356,7 +358,6 @@ export function BookingDialog(props: {
     id_number: "",
     nationality: "",
     pay_mode: "Cash",
-    pay_amount: "",
     pay_reference: "",
   })
   const setW = (k: keyof typeof walk, v: string) =>
@@ -367,8 +368,6 @@ export function BookingDialog(props: {
       nationality: w.nationality || loc.default_nationality,
     }))
   }, [loc])
-  // until the desk edits the amount, it tracks the live total
-  const [amountTouched, setAmountTouched] = useState(false)
 
   function toggleWalkIn(on: boolean) {
     setWalkIn(on)
@@ -556,7 +555,6 @@ export function BookingDialog(props: {
   const planCurrency = (
     options?.rate_plans?.find((p) => p.name === discountPlan)?.currency || ""
   ).trim().toUpperCase()
-  const rateCurKey = `${discountPlan}|${form.company}|${form.room_type}`
   const [knownRate, setKnownRate] = useState<{ key: string; cur: string; fx: number | null } | null>(null)
   useEffect(() => {
     const qCur = (quote?.rate_currency || quote?.tariff?.currency || "").trim().toUpperCase()
@@ -678,12 +676,12 @@ export function BookingDialog(props: {
   useEffect(() => {
     if (!form.room_type) return
     if (badDate) {
-      setQuote(null)
+      setQuoted(null)
       setQuoting(false)
       return
     }
     let live = true
-    setQuote(null)
+    setQuoted(null)
     setQuoting(true)
     const t = setTimeout(() => {
       call<Quote>("kamra.api.get_quote", {
@@ -706,12 +704,12 @@ export function BookingDialog(props: {
       })
         .then((q) => {
           if (!live) return
-          setQuote(q)
+          setQuoted({ rateKey: rateCurKey, quote: q })
           setError(null)
         })
         .catch((e) => {
           if (!live) return
-          setQuote(null)
+          setQuoted(null)
           setError(shortErr(e))
         })
         .finally(() => { if (live) setQuoting(false) })
@@ -1009,15 +1007,34 @@ export function BookingDialog(props: {
     }
   }
 
-  // one key per open dialog: a double-tap replays instead of double-booking
-  const [requestedCurrency, setRequestedCurrency] = useState("")
+  // The first quote uses the property tender. A different plan starts with its own currency.
+  const [requestedTender, setRequestedTender] = useState<{ key: string; currency: string } | null>(null)
+  const [manualPayment, setManualPayment] = useState<{ key: string; currency: string; amount: string } | null>(null)
+  const [tenderPlan, setTenderPlan] = useState<{ key: string; followRate: boolean } | null>(null)
+  useEffect(() => {
+    if (!walkIn || !quote) return
+    setTenderPlan((current) => current?.key === rateCurKey ? current : { key: rateCurKey, followRate: !!current })
+  }, [walkIn, quote, rateCurKey])
+  useEffect(() => {
+    setRequestedTender((current) => current?.key === rateCurKey ? current : null)
+    setManualPayment((current) => current?.key === rateCurKey ? current : null)
+  }, [rateCurKey])
+
   const { today: settlementRates } = useTenderRates(getCurrentProperty(), walkIn)
   const modes = tenderModes(loc, loc.currency)
-  const tender = resolveTender(modes, loc.currency, { mode: walk.pay_mode, currency: requestedCurrency })
+  const tariffTenderCurrency = quote?.rate_currency || quote?.tariff?.currency || loc.currency
+  const followRate = tenderPlan && (tenderPlan.followRate || tenderPlan.key !== rateCurKey)
+  const defaultTender = resolveTender(modes, loc.currency, { mode: walk.pay_mode, currency: "" })
+  const tariffModes = modes.filter(({ currencies }) => currencies.includes(tariffTenderCurrency))
+  const tariffMode = tariffModes.find(({ mode }) => mode === defaultTender.mode) ?? tariffModes[0]
+  const tariffTender = { mode: tariffMode?.mode ?? "", currency: tariffTenderCurrency }
+  const tender = requestedTender?.key === rateCurKey
+    ? resolveTender(modes, loc.currency, { mode: defaultTender.mode, currency: requestedTender.currency })
+    : followRate && tenderReady(tariffTender, loc.currency, settlementRates) ? tariffTender : defaultTender
   const payCurrency = tender.currency
   const foreign = !!payCurrency && payCurrency !== loc.currency
   const paymentReady = tenderReady(tender, loc.currency, settlementRates)
-  const fx = useSettlementQuote(getCurrentProperty(), foreign && paymentReady ? payCurrency : "", Number(walk.pay_amount))
+  // one key per open dialog: a double-tap replays instead of double-booking
   const [walkInKey] = useState(() =>
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
@@ -1034,7 +1051,7 @@ export function BookingDialog(props: {
     setBusy(true)
     setError(null)
     try {
-      const amount = Number(walk.pay_amount) || 0
+      const amount = payAmount
       if (amount > 0 && !paymentReady) throw new Error(t("Choose an available payment method and currency."))
       if (foreign && amount > 0 && !fx?.quote) throw new Error(fx?.error || t("Wait for the settlement preview."))
       if (amount > 0 && pinStatus?.required) await ensureUnlocked()
@@ -1215,16 +1232,11 @@ export function BookingDialog(props: {
     }
     return tenderAmount(grandTotal, currency, loc.currency, settlementRates)
   }
-  const suggestedAmount = paymentReady ? fullAmount(payCurrency) : ""
-  useEffect(() => {
-    if (walkIn && !amountTouched)
-      setWalk((w) => ({
-        ...w,
-        pay_amount: suggestedAmount,
-      }))
-  }, [walkIn, amountTouched, suggestedAmount])
-
-  const payAmount = Number(walk.pay_amount) || 0
+  const suggestedAmount = quote && paymentReady ? fullAmount(payCurrency) : ""
+  const matchingManualPayment = manualPayment?.key === rateCurKey && manualPayment.currency === payCurrency
+  const paymentInput = quote && matchingManualPayment ? manualPayment.amount : suggestedAmount
+  const payAmount = Number(paymentInput) || 0
+  const fx = useSettlementQuote(getCurrentProperty(), foreign && paymentReady ? payCurrency : "", payAmount)
   // taking the walk-in's money needs the operator's till open
   const { till, refresh: refreshTill } = useTill(undefined, walkIn)
   const tillClosed = walkIn && payAmount > 0 && !!till && !till.open
@@ -2189,18 +2201,16 @@ export function BookingDialog(props: {
                     </h3>
                     <TenderPicker home={loc.currency} chosen={tender} modes={modes} rates={settlementRates}
                       onChange={({ mode, currency }) => {
-                        setRequestedCurrency(currency)
-                        setWalk((w) => ({
-                          ...w, pay_mode: mode,
-                          pay_amount: currency === payCurrency ? w.pay_amount : fullAmount(currency),
-                        }))
-                        if (currency !== payCurrency) setAmountTouched(false)
+                        setRequestedTender({ key: rateCurKey, currency })
+                        setW("pay_mode", mode)
+                        if (currency !== payCurrency) setManualPayment(null)
                       }} />
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div>
                         <p className="mb-1 text-xs font-medium">{t("Amount collected")}</p>
-                        <TenderInput currency={payCurrency} value={walk.pay_amount} full={suggestedAmount}
-                          onChange={amount => { setAmountTouched(true); setW("pay_amount", amount) }} />
+                        <TenderInput currency={payCurrency} value={paymentInput} full={suggestedAmount}
+                          onChange={(amount) => setManualPayment({ key: rateCurKey, currency: payCurrency, amount })}
+                          onFull={() => setManualPayment(null)} />
                         <p className="mt-1.5 text-xs text-zinc-400">
                           {foreign ? null : payAmount <= 0
                             ? t("Nothing collected now - the full amount stays on the bill.")

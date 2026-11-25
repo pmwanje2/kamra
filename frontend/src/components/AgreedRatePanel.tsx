@@ -318,7 +318,7 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
   const planNights = new Map((plan?.nights ?? []).map((n) => [n.date, n]))
 
   return (
-    <div className="mt-3 space-y-2 rounded-lg border border-brand-600/30 p-3">
+    <div className="mt-3 min-w-0 space-y-2 rounded-lg border border-brand-600/30 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-xs font-medium uppercase tracking-wider text-zinc-400">
           {t("Stay rate & daily details")}
@@ -364,8 +364,8 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
           const cTotalNet = hasForeignPlan ? plan.nights.reduce((s, n) => s + (n.contract_rate ?? 0), 0) : 0
           return (
             <div className="space-y-1.5">
-              <div className="w-0 min-w-full overflow-x-auto">
-                <table className="w-full whitespace-nowrap text-xs tabular-nums">
+              <div className="w-full min-w-0 max-w-full overflow-x-auto">
+                <table className="w-full table-fixed break-words text-xs tabular-nums">
                   <thead>
                     <tr className="text-zinc-400">
                       <th className="pe-2 text-start font-normal">{t("Night")}</th>
@@ -483,7 +483,7 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
               {activeOverrideCurrency}
             </span>
           )}
-          <input className={`${inputCls} w-full`} type="number" min="0" step={rateStep} inputMode="decimal"
+          <input className={`${inputCls} w-full min-w-0`} type="number" min="0" step={rateStep} inputMode="decimal"
             placeholder={isForeign ? activeOverrideCurrency : cur()} value={rate} onChange={(e) => setRate(e.target.value)} />
         </div>
       </label>
@@ -495,35 +495,35 @@ export default function AgreedRatePanel({ reservation, nightRates, current, canO
 
       {preview && (
         <>
-          <div className="w-0 min-w-full overflow-x-auto">
-          <table className="w-full whitespace-nowrap text-sm tabular-nums">
-            <thead>
-              <tr className="text-xs text-zinc-400">
-                <th className="pe-2 text-start font-normal">{t("Night")}</th>
-                <th className="px-2 text-end font-normal">{t("Was")}</th>
-                <th className="px-2 text-end font-normal">{t("Now")}</th>
-                <th className="ps-2 text-end font-normal">{t("Difference")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.date}>
-                  <td className="pe-2">{r.date}</td>
-                  <td className="px-2 text-end">{money(r.was)}</td>
-                  <td className="px-2 text-end">{money(r.now)}</td>
-                  <td className={`ps-2 text-end ${r.diff < 0 ? "text-emerald-700" : r.diff > 0 ? "text-amber-700" : ""}`}>
-                    {signed(r.diff)}
-                  </td>
+          <div className="w-full min-w-0 max-w-full overflow-x-auto">
+            <table className="w-full table-fixed break-words text-xs tabular-nums">
+              <thead>
+                <tr className="text-xs text-zinc-400">
+                  <th className="pe-2 text-start font-normal">{t("Night")}</th>
+                  <th className="px-2 text-end font-normal">{t("Was")}</th>
+                  <th className="px-2 text-end font-normal">{t("Now")}</th>
+                  <th className="ps-2 text-end font-normal">{t("Difference")}</th>
                 </tr>
-              ))}
-              <tr className="border-t border-zinc-200 font-medium">
-                <td className="pe-2">{t("Total")}</td>
-                <td className="px-2 text-end">{money(preview.current_amount)}</td>
-                <td className="px-2 text-end">{money(preview.new_amount)}</td>
-                <td className="ps-2 text-end">{signed(preview.difference)}</td>
-              </tr>
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.date}>
+                    <td className="pe-2">{r.date}</td>
+                    <td className="px-2 text-end">{money(r.was)}</td>
+                    <td className="px-2 text-end">{money(r.now)}</td>
+                    <td className={`ps-2 text-end ${r.diff < 0 ? "text-emerald-700" : r.diff > 0 ? "text-amber-700" : ""}`}>
+                      {signed(r.diff)}
+                    </td>
+                  </tr>
+                ))}
+                <tr className="border-t border-zinc-200 font-medium">
+                  <td className="pe-2">{t("Total")}</td>
+                  <td className="px-2 text-end">{money(preview.current_amount)}</td>
+                  <td className="px-2 text-end">{money(preview.new_amount)}</td>
+                  <td className="ps-2 text-end">{signed(preview.difference)}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
           {!preview.can_set_rate && preview.raises && (
             <p className="text-xs text-rose-600">

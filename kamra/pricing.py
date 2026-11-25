@@ -1672,13 +1672,12 @@ def resolve_discount_currency(
 	*,
 	property: str | None = None,
 	rate_currency: str | None = None,
-	default_to_home: bool = False,
 ) -> str:
 	"""Resolve and validate the currency of a flat Amount discount (SAP KONWA).
 
 	Allowed currencies are strictly {rate_currency, property_currency}. When omitted:
-	- New API/UI requests (`default_to_home=False`) default to `rate_currency` (WAERK).
-	- Persisted legacy DB rows (`default_to_home=True`) default to `property_currency` (HWAER)."""
+	An omitted currency keeps the original property-currency (HWAER) meaning.
+	Callers that know the rate currency (WAERK) send it explicitly."""
 	home = (property_currency(property) or "").strip().upper() if property else ""
 	rc = (rate_currency or "").strip().upper() or home
 	allowed = {c for c in (home, rc) if c}
@@ -1694,7 +1693,7 @@ def resolve_discount_currency(
 					)
 				)
 			return code
-	return home if default_to_home else rc
+	return home
 
 
 def _discount_places(currency: str | None, property: str | None) -> int:
@@ -1750,7 +1749,7 @@ def normalize_discounts(
 	*,
 	discount_currency: str | None = None,
 	rate_currency: str | None = None,
-	default_to_home: bool = False,
+	inherit_stay_currency: bool = True,
 ) -> dict:
 	"""Validate the desk's reservation discount: one for the stay and,
 	optionally, Daily Details nights of their own ([{date, discount_type,
@@ -1769,7 +1768,6 @@ def normalize_discounts(
 			discount_currency,
 			property=property,
 			rate_currency=rate_currency,
-			default_to_home=default_to_home,
 		)
 		stay_cur = resolved_stay_cur if raw_kind == "Amount" else None
 	stay_places = _discount_places(stay_cur, property)
@@ -1812,14 +1810,13 @@ def normalize_discounts(
 			row_raw_cur = row.get("discount_currency")
 			row_cur: str | None = None
 			if row_kind == "Amount" or row_raw_cur not in (None, ""):
-				effective_raw = row_raw_cur if row_raw_cur not in (None, "") else (
-					None if default_to_home else discount_currency
-				)
+				effective_raw = row_raw_cur
+				if effective_raw in (None, "") and inherit_stay_currency:
+					effective_raw = discount_currency
 				resolved_row_cur = resolve_discount_currency(
 					effective_raw,
 					property=property,
 					rate_currency=rate_currency,
-					default_to_home=default_to_home,
 				)
 				row_cur = resolved_row_cur if row_kind == "Amount" else None
 			row_places = _discount_places(row_cur, property)
@@ -1993,6 +1990,9 @@ def apply_currency_discount(
 			"discount_currency": rate_cur,
 		}
 
+	# A foreign amount without a usable tariff must never subtract in home units.
+	if eff_disc_cur != home:
+		frappe.throw(_("No exchange rate available for {0} to {1}.").format(eff_disc_cur, home))
 	# Home-currency Amount discount (or legacy blank discount_currency -> HWAER)
 	if value > gross_home:
 		frappe.throw(_("A discount of {0} is more than the room rate on {1} ({2}).").format(
@@ -2014,6 +2014,18 @@ def apply_currency_discount(
 		"discount_tx": disc_tx,
 		"currency": rate_cur,
 		"discount_currency": home,
+	}
+
+
+def contract_discount_fields(calc: dict) -> dict:
+	"""The contract-currency part of a priced night's breakdown."""
+	if not calc["currency"]:
+		return {}
+	return {
+		"contract_currency": calc["currency"],
+		"contract_base_rate": float(calc["gross_tx"]),
+		"contract_discount_amount": float(calc["discount_tx"]),
+		"contract_rate": float(calc["net_tx"]),
 	}
 
 
@@ -2124,14 +2136,6 @@ def _discount_nights(property, rt, nightly: list, room_total: Decimal, disc: dic
 				return night_over_cap / (Decimal(1) + rate / Decimal(100)) if inclusive else night_over_cap
 			oc_net += _oc(new_gst) - _oc(gst)
 			oc_tax += _oc(new_gst) * new_gst / Decimal(100) - _oc(gst) * gst / Decimal(100)
-		contract_meta = {}
-		if calc["currency"] and calc["gross_tx"] is not None:
-			contract_meta = {
-				"contract_currency": calc["currency"],
-				"contract_base_rate": float(calc["gross_tx"]),
-				"contract_discount_amount": float(calc["discount_tx"] or Decimal(0)),
-				"contract_rate": float(calc["net_tx"] if calc["net_tx"] is not None else calc["gross_tx"]),
-			}
 		n.update({
 			"base_rate": float(base), "rate": float(net), "gst_rate": float(new_gst),
 			"discount_type": kind, "discount_value": float(value),
@@ -2139,7 +2143,7 @@ def _discount_nights(property, rt, nightly: list, room_total: Decimal, disc: dic
 			"discount_amount": float(off),
 			"discount_source": "night" if own else ("stay" if kind else None),
 			"fixed_rate": 1 if (own and own["fixed_rate"]) or agreed_rate else 0,
-			**contract_meta,
+			**contract_discount_fields(calc),
 		})
 		if own:
 			# the night's own Daily Details entry, kept on its locked row

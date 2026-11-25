@@ -90,10 +90,24 @@ export default function DiscountPanel(props: {
     if (!isForeign || d.type !== "Amount" || typedNum === null || !Number.isFinite(typedNum) || typedNum <= 0) return null
     const rate = Number(props.fxRate || 0)
     if (!Number.isFinite(rate) || rate <= 0) return null
-    if (activeCurrency === rateCur) {
-      return { amount: roundMoney(typedNum * rate, homeCur), currency: homeCur }
-    }
-    return { amount: roundMoney(typedNum / rate, rateCur), currency: rateCur }
+    const foreignDiscount = activeCurrency === rateCur
+    const currency = foreignDiscount ? homeCur : rateCur
+    const equivalents = open.map((night) => {
+      if (night.contract_currency?.toUpperCase() !== rateCur || night.contract_base_rate === undefined) return null
+      const base = night.contract_base_rate
+      if (foreignDiscount) {
+        const net = roundMoney(base - roundMoney(typedNum, rateCur), rateCur)
+        if (net < 0) return null
+        return roundMoney(night.base_rate - Math.min(night.base_rate, roundMoney(net * rate, homeCur)), homeCur)
+      }
+      const localNet = roundMoney(night.base_rate - typedNum, homeCur)
+      if (localNet < 0) return null
+      return roundMoney(base - Math.min(base, roundMoney(localNet / rate, rateCur)), rateCur)
+    })
+    const amount = equivalents[0]
+    return amount != null && equivalents.every((equivalent) => equivalent === amount)
+      ? { amount, currency }
+      : null
   })()
 
   function setType(type: DiscountType) {
@@ -186,61 +200,56 @@ export default function DiscountPanel(props: {
                   onChange={(e) => setFuture(e.target.checked)} />
                 {t("Apply to future nights")}
               </label>
-              <div className="w-0 min-w-full overflow-x-auto">
-                <table className="w-full whitespace-nowrap text-sm tabular-nums">
-                  <thead>
-                    <tr className="text-xs text-zinc-400">
-                      <th className="pe-2 text-start font-normal">{t("Night")}</th>
-                      <th className="px-2 text-end font-normal">{t("Base")}</th>
-                      <th className="ps-2 text-start font-normal">{t("Discount")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {props.nights!.map((n) => {
-                      const own = d.nights[n.date] ?? { type: d.type, value: "", currency: activeCurrency || undefined }
-                      const nightCur = isForeign ? (own.currency || activeCurrency) : homeCur
-                      const nightStep = moneyStep(moneyDigits(nightCur || undefined))
-                      const showForeignBase = isForeign && n.contract_currency && n.contract_base_rate !== undefined
-                      return (
-                        <tr key={n.date} data-night={n.date}>
-                          <td className="pe-2">{n.date}</td>
-                          <td className="px-2 text-end">
-                            {showForeignBase ? (
-                              <div>
-                                <div>{props.money(n.contract_base_rate!, n.contract_currency)}</div>
-                                <div className="text-xs text-zinc-400">{props.money(n.base_rate, homeCur)}</div>
-                              </div>
-                            ) : props.money(n.base_rate, homeCur || undefined)}
-                          </td>
-                          <td className="flex items-center gap-1 ps-2">
-                            <select className={inputCls} aria-label={`${t("Discount")} ${n.date}`} disabled={n.charged}
+              <table className="w-full table-fixed text-sm">
+                <tbody>
+                  {props.nights!.map((n) => {
+                    const own = d.nights[n.date] ?? { type: d.type, value: "", currency: activeCurrency || undefined }
+                    const nightCur = isForeign ? (own.currency || activeCurrency) : homeCur
+                    const nightStep = moneyStep(moneyDigits(nightCur || undefined))
+                    const showForeignBase = isForeign && n.contract_currency && n.contract_base_rate !== undefined
+                    return (
+                      <tr key={n.date} data-night={n.date} className="border-t border-zinc-200">
+                        <td className="min-w-0 space-y-2 py-2">
+                          <div className="flex flex-wrap justify-between gap-x-2 tabular-nums">
+                            <span>{n.date}</span>
+                            <span className="text-end">
+                              {showForeignBase ? (
+                                <>
+                                  <span className="block">{props.money(n.contract_base_rate!, n.contract_currency)}</span>
+                                  <span className="block text-xs text-zinc-400">{props.money(n.base_rate, homeCur)}</span>
+                                </>
+                              ) : props.money(n.base_rate, homeCur || undefined)}
+                            </span>
+                          </div>
+                          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                            <select className={`${inputCls} min-w-0 max-w-full`} aria-label={`${t("Discount")} ${n.date}`} disabled={n.charged}
                               value={own.type} onChange={(e) => setNight(n.date, { ...own, type: e.target.value as DiscountType })}>
                               <option value="Percent">{t("% off")}</option>
                               <option value="Amount">{t("Amount / night")}</option>
                             </select>
                             {isForeign && own.type === "Amount" && (
-                              <select className={inputCls} aria-label={`${t("Discount currency")} ${n.date}`} disabled={n.charged}
+                              <select className={`${inputCls} min-w-0 max-w-full`} aria-label={`${t("Discount currency")} ${n.date}`} disabled={n.charged}
                                 value={nightCur} onChange={(e) => setNight(n.date, { ...own, currency: e.target.value })}>
                                 <option value={rateCur}>{rateCur}</option>
                                 <option value={homeCur}>{homeCur}</option>
                               </select>
                             )}
-                            <input className={`${inputCls} w-24`} type="number" min="0" step={own.type === "Amount" ? nightStep : "0.01"} inputMode="decimal"
+                            <input className={`${inputCls} w-24 min-w-0 max-w-full`} type="number" min="0" step={own.type === "Amount" ? nightStep : "0.01"} inputMode="decimal"
                               disabled={n.charged} value={own.value} placeholder={d.value || "0"}
                               onChange={(e) => setNight(n.date, { ...own, value: e.target.value })} />
-                            <select className={inputCls} aria-label={`${t("Discount reason")} ${n.date}`}
-                              disabled={n.charged} value={own.reason ?? ""}
-                              onChange={(e) => setNight(n.date, { ...own, reason: e.target.value })}>
-                              <option value="">{t("Same reason as the stay")}</option>
-                              {props.reasons.map((r) => <option key={r.name} value={r.name}>{t(r.description || r.name)}</option>)}
-                            </select>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                          </div>
+                          <select className={`${inputCls} w-full min-w-0`} aria-label={`${t("Discount reason")} ${n.date}`}
+                            disabled={n.charged} value={own.reason ?? ""}
+                            onChange={(e) => setNight(n.date, { ...own, reason: e.target.value })}>
+                            <option value="">{t("Same reason as the stay")}</option>
+                            {props.reasons.map((r) => <option key={r.name} value={r.name}>{t(r.description || r.name)}</option>)}
+                          </select>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
