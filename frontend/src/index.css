@@ -168,6 +168,15 @@ select:disabled {
   }
 }
 
+@keyframes sheet-in-rtl {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;
@@ -179,6 +188,10 @@ select:disabled {
 
 .animate-sheet-in {
   animation: sheet-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[dir="rtl"] .animate-sheet-in {
+  animation-name: sheet-in-rtl;
 }
 
 .animate-fade-in {

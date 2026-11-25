@@ -67,6 +67,10 @@ export function csvRows(text) {
   return rows
 }
 
+// Sound prefilter (no lookbehind) before expensive TypeScript AST parsing:
+// skips files that cannot contain any forbidden token or hex/unicode escape.
+const rawCandidate = /kamra|frappe|erpnext|ury|heykoala|\\[ux]/i
+
 export function scanTree(base = root) {
   let sourceCount = 0
   const findings = []
@@ -78,7 +82,9 @@ export function scanTree(base = root) {
       const name = path.join(dir, item.name)
       if (item.isDirectory()) walk(name)
       else if (/\.tsx?$/.test(name)) {
-        const source = ts.createSourceFile(name, fs.readFileSync(name, "utf8"), ts.ScriptTarget.Latest, true)
+        const text = fs.readFileSync(name, "utf8")
+        if (!rawCandidate.test(text)) continue
+        const source = ts.createSourceFile(name, text, ts.ScriptTarget.Latest, true)
         function visit(node) {
           if (ts.isStringLiteralLike(node) || ts.isTemplateLiteralToken(node) || ts.isJsxText(node)) {
             const before = findings.length
@@ -101,7 +107,7 @@ export function scanTree(base = root) {
   }
   const [header, ...rows] = csvRows(fs.readFileSync(path.join(base, "src/i18n/catalog.csv"), "utf8"))
   const valuesEnd = header?.indexOf("sources")
-  if (valuesEnd !== 6 || !rows.length) throw new Error("Unexpected catalog.csv schema")
+  if (valuesEnd < 6 || !rows.length) throw new Error("Unexpected catalog.csv schema")
   for (const [i, row] of rows.entries()) {
     if (row.length !== header.length) throw new Error(`catalog.csv:${i + 2}: unexpected column count`)
     for (let col = 0; col < valuesEnd; col++) scan(row[col], `catalog.csv:${i + 2}`)
