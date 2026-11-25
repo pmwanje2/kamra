@@ -3852,6 +3852,13 @@ def post_allowance(folio: str, amount: float, reason: str = "",
 			},
 			update_modified=False,
 		)
+		# The Pending insert ran the workflow hook. The audit update bypasses it.
+		if frappe.db.table_exists("Workflow Action"):
+			frappe.db.set_value(
+				"Workflow Action",
+				{"reference_doctype": "Allowance Request", "reference_name": req.name, "status": "Open"},
+				{"status": "Completed", "completed_by": approver},
+			)
 		return serial
 
 	if _allowance_needs_approval(doc.property, amount, reason_code):
@@ -4202,6 +4209,16 @@ def decide_allowance(allowance_request: str, approve: int = 1,
 	if req.status != "Pending":
 		frappe.throw(_("This allowance was already {0}.").format(
 			_(req.status).lower()))
+
+	def complete_open_actions(decided_by: str) -> None:
+		# Frappe's transition hook completes at most one matching action.
+		if frappe.db.table_exists("Workflow Action"):
+			frappe.db.set_value(
+				"Workflow Action",
+				{"reference_doctype": "Allowance Request", "reference_name": req.name, "status": "Open"},
+				{"status": "Completed", "completed_by": decided_by},
+			)
+
 	approver = (supervisor or "").strip() or frappe.session.user
 	has_workflow = bool(
 		frappe.db.exists("Workflow", {"document_type": "Allowance Request", "is_active": 1})
@@ -4290,6 +4307,7 @@ def decide_allowance(allowance_request: str, approve: int = 1,
 			                     f"({req.reason}) asked by {req.requested_by}: {note}",
 			           approver=decided_by, approval_status="Rejected")
 		req.decision_note = note
+		complete_open_actions(decided_by)
 		from kamra.webhooks import emit_approval
 		emit_approval("approval.decided", req)
 		return {"ok": True, "request": req.name, "status": req.status,
@@ -4340,6 +4358,7 @@ def decide_allowance(allowance_request: str, approve: int = 1,
 	req.decision_note = note
 	req.flags.kamra_decision = True
 	req.save(ignore_permissions=True)
+	complete_open_actions(approver)
 	from kamra.webhooks import emit_approval
 	emit_approval("approval.decided", req)
 	return {"ok": True, "request": req.name, "status": req.status,
