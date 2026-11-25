@@ -2812,3 +2812,16 @@ Registration Consent IP,Adresse IP lors du consentement à l’enregistrement
 Registration Terms Version,Version des conditions d’enregistrement
 Show Online Pre-Check-In Completion,Afficher les pré-enregistrements en ligne terminés
 Show on Booking Page,Afficher sur la page de réservation
+1 {0} = {1} {2},1 {0} = {1} {2}
+Enter an amount in the property or stay currency.,Saisissez un montant dans la devise de l’établissement ou du séjour.
+Exchange Rate Date,Date du taux de change
+No exchange rate from {0} to {1} is available for the business date.,Aucun taux de change de {0} vers {1} n’est disponible à la date d’exploitation.
+Property accounting currency,Devise comptable de l’établissement
+Rate Currency,Devise tarifaire
+Rate currency,Devise tarifaire
+Select a valid currency.,Sélectionnez une devise valide.
+The discount is below the smallest amount that can be posted.,La remise est inférieure au plus petit montant comptabilisable.
+The exchange rate is set by the discount at posting.,Le taux de change est défini lors de la comptabilisation de la remise.
+Total in rate currency,Total en devise tarifaire
+{0}: {1} ({2}),{0} : {1} ({2})
+Amounts marked ≈ are estimates.,Les montants précédés du signe ≈ sont des estimations.

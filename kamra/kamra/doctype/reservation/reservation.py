@@ -1178,6 +1178,7 @@ class Reservation(Document):
 				(row.get("description") or "").strip(),
 				round(flt(row.get("qty")), 6),
 				round(flt(row.get("unit_price")), 6),
+				(row.get("currency") or "").strip().upper(),
 				(row.get("frequency") or "").strip(),
 				cint(row.get("stay_day_n") or 0),
 				(row.get("day_of_week") or "").strip(),

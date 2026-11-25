@@ -5,7 +5,7 @@ outline: 2
 # REST API reference
 
 Every endpoint below is a whitelisted function - the same governed layer
-the UI and the AI use. **547 endpoints**, generated from the source
+the UI and the AI use. **548 endpoints**, generated from the source
 (`docs-site/gen_api.py`), so this page always matches the code.
 
 ## Calling convention
@@ -1104,6 +1104,14 @@ approve. Every allowance that posts gets a voucher serial
 | `supervisor` | no | `None` |
 | `supervisor_pin` | no | `None` |
 
+### `kamra.api.folio_discount_currency`
+
+**GET/POST** · roles: `Finance`, `Front Desk`, `Kamra Agent`
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `folio` | yes |  |
+
 ### `kamra.api.post_discount`
 
 **POST** · roles: `Finance`, `Front Desk`, `Kamra Agent`
@@ -1125,9 +1133,11 @@ lines without posting.
 | `basis` | no | `'Stay'` |
 | `reason` | no | `''` |
 | `reason_code` | no | `None` |
-| `pin` | no | `None` |
 | `voucher_code` | no | `None` |
 | `preview` | no | `0` |
+| `discount_currency` | no | `None` |
+| `pin_secret` | yes |  |
+| `pin` | yes |  |
 
 ### `kamra.api.decide_allowance`
 
@@ -1145,9 +1155,11 @@ decide.
 | `allowance_request` | yes |  |
 | `approve` | no | `1` |
 | `note` | no | `''` |
-| `pin` | no | `None` |
 | `supervisor` | no | `None` |
-| `supervisor_pin` | no | `None` |
+| `pin_secret` | yes |  |
+| `confirm_pin_secret` | yes |  |
+| `pin` | yes |  |
+| `supervisor_pin` | yes |  |
 
 ### `kamra.api.allowance_requests`
 

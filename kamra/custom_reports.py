@@ -1493,8 +1493,8 @@ def _table_html(payload: dict, lang: str = "en") -> str:
 
 def _page_html(title: str, meta: str, body: str, lang: str = "en") -> str:
 	# lang comes from the caller and lands in an attribute: keep it a code
-	lang = lang if re.fullmatch(r"[a-z]{2}(-[A-Z]{2})?", str(lang or "")) else "en"
-	rtl = lang == "ar"
+	lang = lang if re.fullmatch(r"[a-z]{2,3}(-[A-Z]{2})?", str(lang or "")) else "en"
+	rtl = lang.split("-", 1)[0] == "ar"
 	align = "right" if rtl else "left"
 	esc = frappe.utils.escape_html
 	return (

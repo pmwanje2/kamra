@@ -1124,7 +1124,8 @@ def rate_options(property: str, room_type: str, check_in_date: str, check_out_da
 			v = validate_voucher(property, code, max(nights, 1))
 			t = total(pricing_plan if any(p.name == pricing_plan for p in active) else None, code)
 			voucher = {"code": code, "valid": True, "discount": t["discount"],
-			           "kind": v.discount_type, "value": float(v.value or 0)}
+			           "kind": v.discount_type, "value": float(v.value or 0),
+			           **{k: t[k] for k in ("voucher_currency", "voucher_tx_amount", "voucher_fx_rate") if k in t}}
 		except frappe.ValidationError as e:
 			voucher = {"code": code, "valid": False, "reason": str(e)}
 	from kamra.api import discount_options

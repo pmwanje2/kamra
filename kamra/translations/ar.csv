@@ -386,3 +386,9 @@ Enter a valid arrival time.,أدخل وقت وصول صالحًا.
 The signature is invalid.,التوقيع غير صالح.
 Invalid occupant details.,بيانات شاغلي الغرفة غير صالحة.
 The ID photo is invalid.,صورة الهوية غير صالحة.
+Rate currency,عملة السعر
+Rate Currency,عملة السعر
+Property accounting currency,عملة المحاسبة للمنشأة
+Total in rate currency,الإجمالي بعملة السعر
+1 {0} = {1} {2},1 {0} = {1} {2}
+Amounts marked ≈ are estimates.,المبالغ المميزة بالرمز ≈ تقديرية.

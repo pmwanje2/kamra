@@ -715,7 +715,7 @@ export default function AppShell() {
       {!whiteLabel() && !kiosk && !demoMode && <SetupNag />}
       <div className="flex min-h-0 flex-1">
       {!kiosk && (
-      <aside className="hidden w-56 shrink-0 flex-col border-e border-zinc-200 bg-white px-3 py-5 sm:sticky sm:top-0 sm:flex sm:h-screen sm:overflow-y-auto sm:overscroll-contain">
+      <aside className="hidden print:hidden w-56 shrink-0 flex-col border-e border-zinc-200 bg-white px-3 py-5 sm:sticky sm:top-0 sm:flex sm:h-screen sm:overflow-y-auto sm:overscroll-contain">
         <div className="mb-5">{navBrand}</div>
         {navAppLabel}
         <nav className="space-y-0.5">{navGroups}</nav>
@@ -725,7 +725,7 @@ export default function AppShell() {
 
       {/* Phone: same nav as the sticky aside, in a start-edge drawer (aside is sm+ only). */}
       {!kiosk && navOpen && (
-        <div className="fixed inset-0 z-50 sm:hidden" role="dialog" aria-modal="true" aria-label={t("Navigation")}>
+        <div className="fixed inset-0 z-50 sm:hidden print:hidden" role="dialog" aria-modal="true" aria-label={t("Navigation")}>
           <div
             className="absolute inset-0 bg-black/40 animate-fade-in"
             onClick={() => setNavOpen(false)}
@@ -752,7 +752,7 @@ export default function AppShell() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         {!kiosk && (
-        <header className="sticky top-0 z-40 flex min-w-0 items-center flex-wrap gap-1 border-b border-zinc-200 bg-white/90 px-2 sm:gap-2 sm:px-4 py-2.5 backdrop-blur">
+        <header className="sticky top-0 z-40 print:hidden flex min-w-0 items-center flex-wrap gap-1 border-b border-zinc-200 bg-white/90 px-2 sm:gap-2 sm:px-4 py-2.5 backdrop-blur">
           <button
             type="button"
             className="grid size-8 shrink-0 place-items-center rounded-md text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 sm:hidden"
