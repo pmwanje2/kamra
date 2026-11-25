@@ -75,6 +75,19 @@ def _room_or_404(room: str) -> dict:
 
 # --- the board -----------------------------------------------------------------
 
+def add_room_numbers(rows: list, property: str) -> list:
+	"""Add display labels while keeping room links usable for writes."""
+	rooms = {row.get("room") for row in rows if row.get("room")}
+	numbers = {r.name: r.room_number for r in frappe.get_all(
+		"Room", filters={"property": property, "name": ("in", list(rooms))},
+		fields=["name", "room_number"],
+	)} if rooms else {}
+	for row in rows:
+		room = row.get("room")
+		row["room_number"] = (numbers.get(room) or room.removeprefix(f"{property}-")) if room else None
+	return rows
+
+
 @frappe.whitelist()
 @require_roles(*BOARD_ROLES)
 def rooms_board(property: str):

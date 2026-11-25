@@ -167,7 +167,7 @@ def correct(folio, name, action, code, note, key, pin, supervisor_user, supervis
 	from kamra.api import _refund_folio_payment
 	from kamra.authz import require_cashier_pin, verify_supervisor
 	from kamra.cashier import record_cashier_txn, require_open_session
-	from kamra.folio import _recalculate, void_charge
+	from kamra.folio import _recalculate, reconcile_reservation_advance, void_charge
 	from kamra.ledger import home_currency, record_payment_ledger
 	from kamra.localization import assert_payment_mode
 	from kamra.pricing import _minor_unit
@@ -273,6 +273,7 @@ def correct(folio, name, action, code, note, key, pin, supervisor_user, supervis
 		correction={**metadata, **fx},
 		bookkeeping_action=None if is_refund else action,
 		session=refund_session,
+		reconcile_advance=not repost,
 	)
 	if repost:
 		doc.reload()
@@ -319,14 +320,7 @@ def correct(folio, name, action, code, note, key, pin, supervisor_user, supervis
 				currency=pay.get("currency"),
 				fx_amount=float(pay.get("fx_amount") or 0),
 			)
+		if doc.reservation:
+			reconcile_reservation_advance(doc.reservation, doc.property, changed_folio=doc)
 		result.update(repost=pay.name, balance=doc.balance)
-	elif advance:
-		places = max(_currency_places(doc.property), 2)
-		paid = frappe.db.get_value("Reservation", doc.reservation, "advance_paid", for_update=True) or 0
-		frappe.db.set_value(
-			"Reservation",
-			doc.reservation,
-			"advance_paid",
-			max(0.0, _round_currency(_money(paid) - _money(amount), places)),
-		)
 	return result

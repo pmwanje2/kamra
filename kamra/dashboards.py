@@ -227,7 +227,21 @@ def _open_folio_totals(property: str) -> tuple[float, int]:
 		"""SELECT COALESCE(SUM(balance), 0), COUNT(*) FROM `tabFolio`
 		   WHERE property = %(p)s AND status = 'Open'""",
 		{"p": property})[0]
-	return float(total or 0), int(count or 0)
+	from kamra.folio import credit_note_positions, sales_invoice_field
+	from kamra.ledger import _currency_places, _money, _round_currency
+
+	if not count or not sales_invoice_field():
+		return float(total or 0), int(count or 0)
+	linked = frappe.get_all(
+		"Folio", filters={"property": property, "status": "Open", "sales_invoice": ("is", "set"),
+		                  "balance": (">", 0)},
+		fields=["sales_invoice", "balance", "grand_total"],
+	)
+	adjusted = _money(total)
+	for row, credit in zip(linked, credit_note_positions(linked, property), strict=True):
+		if credit["credit_notes"]:
+			adjusted += _money(credit["net_collectible_balance"]) - _money(row.balance)
+	return _round_currency(adjusted, _currency_places(property)), int(count or 0)
 
 
 @frappe.whitelist()

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react"
 import { MoonStar } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import { call, getCurrentProperty } from "../lib/api"
-import { listResource, type Row } from "../lib/resource"
+import type { Row } from "../lib/resource"
 import { auditHistory, type RunRow } from "../lib/eod"
 import { Badge } from "../components/ui/badge"
 import { Button } from "../components/ui/button"
@@ -36,14 +36,8 @@ export default function Billing() {
   const navigate = useNavigate()
 
   const load = useCallback(() => {
-    listResource("Folio", {
-      fields: [
-        "name", "guest_name", "reservation", "status", "invoice_number",
-        "grand_total", "payments_total", "balance",
-      ],
-      filters: [["property", "=", getCurrentProperty()]],
-      orderBy: "modified desc",
-    }).then(setFolios)
+    call<Row[]>("kamra.api.billing_folios", { property: getCurrentProperty() })
+      .then(setFolios).catch(() => setFolios([]))
     // departed guests who still owe: the desk chases these, not credit control
     call<GuestOwing[]>("kamra.receivables.guests_owing", { property: getCurrentProperty() })
       .then(setOwing).catch(() => setOwing([]))
@@ -173,14 +167,14 @@ export default function Billing() {
           <div className="overflow-x-auto">
             <ResponsiveList className="w-full text-sm">
               <thead>
-                <tr className="border-b border-line text-left text-xs font-medium uppercase tracking-wider text-muted-ink">
-                  <th className="py-2 pr-4">{t("Folio")}</th>
-                  <th className="py-2 pr-4">{t("Guest")}</th>
-                  <th className="py-2 pr-4">{t("Status")}</th>
-                  <th className="py-2 pr-4">{t("Invoice")}</th>
-                  <th className="py-2 pr-4">{t("Total {cur}", { cur: cur() })}</th>
-                  <th className="py-2 pr-4">{t("Paid {cur}", { cur: cur() })}</th>
-                  <th className="py-2 pr-4">{t("Balance {cur}", { cur: cur() })}</th>
+                <tr className="border-b border-line text-start text-xs font-medium uppercase tracking-wider text-muted-ink">
+                  <th className="py-2 pe-4">{t("Folio")}</th>
+                  <th className="py-2 pe-4">{t("Guest")}</th>
+                  <th className="py-2 pe-4">{t("Status")}</th>
+                  <th className="py-2 pe-4">{t("Invoice")}</th>
+                  <th className="py-2 pe-4">{t("Total {cur}", { cur: cur() })}</th>
+                  <th className="py-2 pe-4">{t("Paid {cur}", { cur: cur() })}</th>
+                  <th className="py-2 pe-4">{t("Balance {cur}", { cur: cur() })}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line-subtle">
@@ -190,21 +184,21 @@ export default function Billing() {
                     className="cursor-pointer hover:bg-canvas"
                     onClick={() => navigate(`/billing/${encodeURIComponent(f.name)}`)}
                   >
-                    <Popin label={t("Folio")} importance="high" className="py-2.5 pr-4 font-medium"><a href={`/billing/${encodeURIComponent(f.name)}`} onClick={e => { e.preventDefault(); e.stopPropagation(); navigate(`/billing/${encodeURIComponent(f.name)}`) }}>{f.name}</a></Popin>
-                    <Popin label={t("Guest")} importance="high" className="py-2.5 pr-4">{String(f.guest_name ?? "-")}</Popin>
-                    <Popin label={t("Status")} importance="high" className="py-2.5 pr-4">
+                    <Popin label={t("Folio")} importance="high" className="py-2.5 pe-4 font-medium"><a href={`/billing/${encodeURIComponent(f.name)}`} onClick={e => { e.preventDefault(); e.stopPropagation(); navigate(`/billing/${encodeURIComponent(f.name)}`) }}>{f.name}</a></Popin>
+                    <Popin label={t("Guest")} importance="high" className="py-2.5 pe-4">{String(f.guest_name ?? "-")}</Popin>
+                    <Popin label={t("Status")} importance="high" className="py-2.5 pe-4">
                       <Badge tone={f.status === "Open" ? "amber" : "green"}>
-                        {t(String(f.status))}
+                        {f.credit_status === "Credited" ? t("Credited") : f.credit_status === "Partially credited" ? t("Partially credited") : t(String(f.status))}
                       </Badge>
                     </Popin>
-                    <Popin label={t("Invoice")} importance="low" className="py-2.5 pr-4 text-muted-ink">
-                      {String(f.invoice_number ?? "-")}
+                    <Popin label={t("Invoice")} importance="low" className="py-2.5 pe-4 text-muted-ink">
+                      <bdi>{String(f.sales_invoice || f.invoice_number || "-")}</bdi>
                     </Popin>
-                    <Popin label={t("Total")} importance="medium" className="py-2.5 pr-4">{cur()}{inr(f.grand_total)}</Popin>
-                    <Popin label={t("Paid")} importance="medium" className="py-2.5 pr-4">{cur()}{inr(f.payments_total)}</Popin>
-                    <Popin label={t("Balance")} importance="medium" className="py-2.5 pr-4 font-medium">
-                      {Number(f.balance) > 0 ? (
-                        <span className="text-warning-text">{cur()}{inr(f.balance)}</span>
+                    <Popin label={t("Total")} importance="medium" className="py-2.5 pe-4">{cur()}{inr(f.grand_total)}</Popin>
+                    <Popin label={t("Paid")} importance="medium" className="py-2.5 pe-4">{cur()}{inr(f.payments_total)}</Popin>
+                    <Popin label={t("Balance")} importance="medium" className="py-2.5 pe-4 font-medium">
+                      {Number(f.net_collectible_balance ?? f.balance) > 0 ? (
+                        <span className="text-warning-text">{fmtMoney(f.net_collectible_balance ?? f.balance)}</span>
                       ) : (
                         <span className="text-success-text">{fmtMoney(0)}</span>
                       )}

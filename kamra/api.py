@@ -1910,6 +1910,11 @@ def payment_correction_options(folio: str, payment_row: str):
 	return options(doc, payment_row)
 
 
+def _lock_refund_scope(folio):
+	reservation = frappe.db.get_value("Folio", folio, "reservation")
+	_lock_folio_scope(reservations=[reservation] if reservation else (), folios=[folio])
+
+
 @frappe.whitelist(methods=["POST"])
 @scrub_pin_arguments
 @require_roles("Front Desk", "Finance")
@@ -1921,6 +1926,7 @@ def correct_folio_payment(folio: str, payment_row: str, action: str | None = Non
                           action_type: str | None = None, reason_note: str | None = None):
 	from kamra.authz import SUPERVISOR_ROLES, verify_supervisor
 	from kamra.corrections import correct
+	_lock_refund_scope(folio)
 	doc = frappe.get_doc("Folio", folio, for_update=True)
 	script = _booked_correction_script(doc, payment_row, "correct_folio_payment")
 	if script:
@@ -1928,10 +1934,26 @@ def correct_folio_payment(folio: str, payment_row: str, action: str | None = Non
 		if supervisor_user is not None or supervisor_pin is not None:
 			approver = verify_supervisor(doc.property, supervisor_user, supervisor_pin,
 			                             roles=SUPERVISOR_ROLES, requester=frappe.session.user)
-		return _execute_correction_script(script, dict(folio=folio, row_name=payment_row,
-			action=action_type or action, reason_code=reason_code, reason_text=reason_note or reason,
+		action = action_type or action
+		result = _execute_correction_script(script, dict(folio=folio, row_name=payment_row,
+			action=action, reason_code=reason_code, reason_text=reason_note or reason,
 			new_payment_mode=destination_mode, refund_amount=refund_amount, supervisor=approver,
 			idempotency_key=(idempotency_key or "").strip()), approver)
+		if doc.reservation:
+			from kamra.folio import reconcile_reservation_advance
+			from kamra.ledger import _money
+
+			original = next(p for p in doc.payments if p.name == payment_row)
+			before = {p.name for p in doc.payments}
+			updated = frappe.get_doc("Folio", folio, for_update=True)
+			returned = 0
+			if original.payment_kind == "Advance" and action in ("reverse_payment", "partial_refund"):
+				returned = sum(
+					-_money(p.amount) for p in updated.payments if p.name not in before and p.amount < 0
+					and (p.get("refund_of") == payment_row or p.get("reversal_of") == original.payment_entry)
+				)
+			reconcile_reservation_advance(doc.reservation, doc.property, changed_folio=updated, returned=returned)
+		return result
 	return correct(folio, payment_row, action_type or action, reason_code, reason_note or reason,
 	               (idempotency_key or "").strip(), pin, supervisor_user, supervisor_pin, refund_amount, destination_mode)
 
@@ -1958,13 +1980,10 @@ def refund_folio_payment(folio: str, amount: float | None = None,
 	A retry with the same idempotency_key returns the first refund instead of
 	paying out twice."""
 	key = (idempotency_key or "").strip() or None
-	if key:
-		# serialize refunds on this folio so a double submit sees the first
-		frappe.db.get_value("Folio", folio, "name", for_update=True)
-		if _paid_with_key(key, folio=folio):
-			return {"ok": True, "idempotent_replay": 1,
-			        "balance": frappe.db.get_value("Folio", folio, "balance")}
-	doc = frappe.get_doc("Folio", folio)
+	_lock_refund_scope(folio)
+	doc = frappe.get_doc("Folio", folio, for_update=True)
+	if key and any(p.get("idempotency_key") == key for p in doc.payments):
+		return {"ok": True, "idempotent_replay": 1, "balance": doc.balance}
 	from decimal import ROUND_HALF_UP, Decimal
 
 	from babel.numbers import get_currency_precision
@@ -2093,7 +2112,7 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
                           idempotency_key: str | None = None, correction: dict | None = None,
                           bookkeeping_action: str | None = None, session: str | None = None,
                           allow_closed: bool = False,
-                          fx: dict | None = None):
+                          fx: dict | None = None, reconcile_advance: bool = True):
 	"""The one refund writer (folio row, till, ledger). Not whitelisted:
 	ledger lets a security-deposit refund release the Deposit ledger -
 	callers that pass it have already checked the deposit's balance.
@@ -2105,7 +2124,8 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 	if not (reason or "").strip() and not reason_code:
 		frappe.throw("A refund reason is required.")
 	_pin_guard(folio, pin)
-	doc = frappe.get_doc("Folio", folio)
+	_lock_refund_scope(folio)
+	doc = frappe.get_doc("Folio", folio, for_update=True)
 	if doc.status == "Closed" and not (allow_closed and ledger == "Deposit"):
 		frappe.throw("This folio is closed - refunds need a credit note "
 		             "via allowance on a new folio.")
@@ -2224,6 +2244,15 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 		if correction:
 			raise
 		frappe.log_error(title="ledger refund write failed")
+	if doc.reservation and reconcile_advance:
+		from kamra.folio import reconcile_reservation_advance
+		advance_refund = release_advance if not refund_of else any(
+			p.name == refund_of and p.payment_kind == "Advance" for p in doc.payments
+		)
+		reconcile_reservation_advance(
+			doc.reservation, doc.property, changed_folio=doc,
+			returned=amount_dec if advance_refund else 0,
+		)
 	if bookkeeping_action:
 		from kamra.savings import log_action
 		log_action(bookkeeping_action, "Folio", doc.name, doc.property,
@@ -2233,12 +2262,6 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 	emit_payment("folio.refunded", doc, pay)
 	if ledger == "Deposit":  # a security deposit, or an advance still held
 		emit_payment("deposit.refunded", doc, pay)
-	if release_advance and doc.reservation:
-		paid = frappe.db.get_value(
-			"Reservation", doc.reservation, "advance_paid") or 0
-		frappe.db.set_value(
-			"Reservation", doc.reservation, "advance_paid",
-			max(0.0, _round_currency(_money(paid) - amount_dec, places)))
 	if ledger != "Deposit":  # a deposit refund logs itself (kamra.deposit)
 		from kamra.localization import money_text
 		from kamra.savings import log_action
@@ -3539,10 +3562,33 @@ def change_stay_company(reservation: str, reason: str,
 	        "credit_warning": (credit or {}).get("warning")}
 
 
-_FOLIO_LIST_FIELDS = ["name", "folio_type", "status", "invoice_number",
+_FOLIO_LIST_FIELDS = ["name", "folio_type", "status", "invoice_number", "sales_invoice",
                       "grand_total", "payments_total", "balance",
                       "bill_to_name", "window_no", "payee_type",
                       "payee_company", "payee_agent", "payment_method"]
+
+
+def _folio_list_fields():
+	from kamra.folio import sales_invoice_field
+
+	return _FOLIO_LIST_FIELDS if sales_invoice_field() else [
+		field for field in _FOLIO_LIST_FIELDS if field != "sales_invoice"
+	]
+
+
+@frappe.whitelist()
+@require_roles("Finance", "Front Desk", "Hotel Admin", "Night Auditor", "Kamra Agent")
+def billing_folios(property: str, limit: int = 100, start: int = 0) -> list[dict]:
+	"""Read folios at this property with their current collectible balances."""
+	from kamra.folio import credit_note_positions
+
+	rows = frappe.get_list(
+		"Folio", filters={"property": property},
+		fields=[*_folio_list_fields(), "guest_name", "reservation"],
+		order_by="modified desc", limit_page_length=max(1, min(int(limit or 100), 500)),
+		limit_start=max(0, int(start or 0)),
+	)
+	return [{**row, **credit} for row, credit in zip(rows, credit_note_positions(rows, property), strict=True)]
 
 
 @frappe.whitelist()
@@ -3554,7 +3600,7 @@ def reservation_folios(reservation: str):
 	rows = frappe.get_all(
 		"Folio",
 		filters={"reservation": reservation},
-		fields=_FOLIO_LIST_FIELDS,
+		fields=_folio_list_fields(),
 		order_by="creation asc",
 	)
 	stay_company, group = frappe.db.get_value(
@@ -3564,7 +3610,7 @@ def reservation_folios(reservation: str):
 		rows += [m for m in frappe.get_all(
 			"Folio",
 			filters={"group_booking": group, "folio_type": "Group"},
-			fields=_FOLIO_LIST_FIELDS,
+			fields=_folio_list_fields(),
 		) if m.name not in seen]
 	# name the company or travel agent each window bills to: a stay can carry
 	# a second sponsor's company window or a travel agent window alongside the
@@ -3646,7 +3692,7 @@ def group_folios(group_booking: str):
 	masters = frappe.get_all(
 		"Folio", filters={"group_booking": group_booking,
 		                  "folio_type": "Group"},
-		fields=_FOLIO_LIST_FIELDS,
+		fields=_folio_list_fields(),
 		order_by="window_no asc, creation desc")
 	selected = _select_group_folio(group_booking)
 	master = next((m for m in masters if selected and m.name == selected.name), None) \
@@ -3659,7 +3705,7 @@ def group_folios(group_booking: str):
 	for m in members:
 		m["folios"] = [f for f in frappe.get_all(
 			"Folio", filters={"reservation": m.name},
-			fields=_FOLIO_LIST_FIELDS) if f.folio_type != "Group"]
+			fields=_folio_list_fields()) if f.folio_type != "Group"]
 	return {"master": master, "members": members}
 
 
@@ -5226,12 +5272,14 @@ def folio_invoice(folio: str):
 	- `allocations`: company payments that cleared this bill: payment,
 	  account, posting_date, reference, amount
 	- `credited`: what the issued credit notes on this invoice add up to
+	- `credited_amount`, `credit_notes`, `credit_status`, `net_collectible_balance`:
+	  the current accounting credit position alongside the original folio
 	- `folio`, `bill_to`, `guest`, `stay`, `property`, `document`
 	"""
 	from decimal import ROUND_HALF_UP, Decimal
 
 	from kamra import localization as loc
-	from kamra.folio import reference_currency
+	from kamra.folio import reconcile_credit_note_status, reference_currency
 	from kamra.ledger import _currency_places, _round_currency, credited_total
 	from kamra.pricing import saved_contract_tariff
 
@@ -5507,6 +5555,7 @@ def folio_invoice(folio: str):
 	_prop_locale = pack.locale(prop) if callable(getattr(pack, "locale", None)) else {}
 	return {
 		"folio": folio_dict,
+		**reconcile_credit_note_status(doc),
 		"lines": lines,
 		"payments": payments,
 		"statement": _folio_statement(lines, payments, places=places),
@@ -6376,7 +6425,8 @@ def find_reservations(property: str, query: str | None = None,
 			["guest_name", "like", q],
 			["room", "like", q],
 		]
-	return frappe.get_all(
+	from kamra.rooms import add_room_numbers
+	rows = frappe.get_all(
 		"Reservation",
 		filters=filters,
 		or_filters=or_filters,
@@ -6388,6 +6438,7 @@ def find_reservations(property: str, query: str | None = None,
 		order_by="check_in_date desc",
 		limit=int(limit or 20),
 	)
+	return add_room_numbers(rows, property)
 
 
 @frappe.whitelist()
@@ -6645,6 +6696,9 @@ def reservation_detail(reservation: str):
 		for n in (res.get("night_rates") or [])]
 	first_contract_night = next((nr for nr in night_details if nr.get("contract_currency")), None)
 
+	from kamra.rooms import add_room_numbers
+	room_number = add_room_numbers([{"room": res.room}], res.property)[0]["room_number"]
+
 	return {
 		"name": res.name,
 		**saved_ct,
@@ -6666,7 +6720,7 @@ def reservation_detail(reservation: str):
 		"adults": res.adults,
 		"children": res.children,
 		"room": res.room,
-		"room_number": frappe.db.get_value("Room", res.room, "room_number") if res.room else None,
+		"room_number": room_number,
 		"room_type": res.room_type,
 		"room_type_name": frappe.db.get_value(
 			"Room Type", res.room_type, "room_type_name") if res.room_type else None,
@@ -9166,6 +9220,7 @@ def desk_limit_pct(property: str) -> float:
 	the property sets, so it never gives more than anyone at the desk.
 	Revenue Managers and Hotel Admins are not held to it (_can_set_rate)."""
 	from kamra.credit import _is_agent
+	from kamra.install import AGENT_ROLE
 	from kamra.settings import get_setting
 	base = flt(get_setting(property, "rate_override_limit_pct"))
 	tiers = {}
@@ -9177,11 +9232,11 @@ def desk_limit_pct(property: str) -> float:
 			value = None
 		# nan or inf is no limit at all (nan compares False with every cut)
 		if value is not None and math.isfinite(value):
-			tiers[role.strip()] = min(max(value, 0.0), 100.0)
+			key = AGENT_ROLE if role.strip().casefold() == "ai assistant" else role.strip()
+			tiers[key] = min(max(value, 0.0), 100.0)
 	if not tiers:
 		return base
 	if _is_agent():
-		from kamra.install import AGENT_ROLE
 		return tiers.get(AGENT_ROLE, min(base, *tiers.values()))
 	mine = [pct for role, pct in tiers.items() if role in set(frappe.get_roles())]
 	return max(mine) if mine else base
@@ -12119,12 +12174,8 @@ def room_blocks(property: str, active_only: int = 1):
 		        "block_status", "note", "released_by", "released_on"],
 		order_by="from_date asc",
 	)
-	nums = {r.name: r.room_number for r in frappe.get_all(
-		"Room", filters={"property": property},
-		fields=["name", "room_number"])}
-	for r in rows:
-		r["room_number"] = nums.get(r.room, r.room)
-	return rows
+	from kamra.rooms import add_room_numbers
+	return add_room_numbers(rows, property)
 
 
 @frappe.whitelist(methods=["POST"])

@@ -5,7 +5,7 @@ outline: 2
 # REST API reference
 
 Every endpoint below is a whitelisted function - the same governed layer
-the UI and the AI use. **546 endpoints**, generated from the source
+the UI and the AI use. **547 endpoints**, generated from the source
 (`docs-site/gen_api.py`), so this page always matches the code.
 
 ## Calling convention
@@ -978,6 +978,18 @@ across both booked and extended nights); who and why go on the record.
 | `move` | no | `'rules'` |
 | `override_reason` | no | `None` |
 
+### `kamra.api.billing_folios`
+
+**GET/POST** · roles: `Finance`, `Front Desk`, `Hotel Admin`, `Night Auditor`, `Kamra Agent`
+
+Read folios at this property with their current collectible balances.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `property` | yes |  |
+| `limit` | no | `100` |
+| `start` | no | `0` |
+
 ### `kamra.api.reservation_folios`
 
 **GET/POST** · roles: `Finance`, `Front Desk`, `Kamra Agent`
@@ -1256,6 +1268,8 @@ Statement fields (stable for integrations):
 - `allocations`: company payments that cleared this bill: payment,
   account, posting_date, reference, amount
 - `credited`: what the issued credit notes on this invoice add up to
+- `credited_amount`, `credit_notes`, `credit_status`, `net_collectible_balance`:
+  the current accounting credit position alongside the original folio
 - `folio`, `bill_to`, `guest`, `stay`, `property`, `document`
 
 | Param | Required | Default |

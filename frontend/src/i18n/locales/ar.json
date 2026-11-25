@@ -7266,5 +7266,16 @@
   "Property accounting currency": "عملة المحاسبة للمنشأة",
   "Total in rate currency": "الإجمالي بعملة السعر",
   "1 {foreign} = {rate} {home}": "1 {foreign} = {rate} {home}",
-  "Amounts marked ≈ are estimates.": "المبالغ المميزة بالرمز ≈ تقديرية."
+  "Amounts marked ≈ are estimates.": "المبالغ المميزة بالرمز ≈ تقديرية.",
+  "One role a line with its own limit, for example Front Desk: 5 and Duty Manager: 15. A person takes the highest limit among their roles; anyone with none of them takes the limit above. An AI agent takes its own line (AI Assistant: 3), or with none the lowest limit here. Revenue Managers and Hotel Admins set any rate.": "أدخل دورًا واحدًا وحدّه في كل سطر، مثل Front Desk: 5 وDuty Manager: 15. يسري أعلى حد من أدوار المستخدم، أو الحد أعلاه إذا لم يكن لأيّ منها حد. يستخدم مساعد الذكاء الاصطناعي سطره الخاص (AI Assistant: 3)، أو أدنى حد عند عدم وجوده. يمكن لمديري الإيرادات ومسؤولي الفندق تحديد أي سعر.",
+  "PINs enrolled": "الرموز المسجلة",
+  "Available when allowance approval is on.": "متاح عند تفعيل الموافقة على التخفيضات.",
+  "Enable manager approval": "تفعيل موافقة المدير",
+  "Front desk rate discounts are restricted, but staff can post folio allowances without manager approval.": "تخضع خصومات أسعار مكتب الاستقبال لقيود، لكن يمكن للموظفين تسجيل تخفيضات على حساب النزيل دون موافقة المدير.",
+  "Till variance tolerance": "حدّ التفاوت المسموح للصندوق",
+  "Partially credited": "دائن جزئيًا",
+  "Credit notes": "إشعارات دائنة",
+  "Control gap": "فجوة في الضوابط",
+  "Credited amount": "المبلغ الدائن",
+  "Configured cashiers": "أمناء الصندوق المسجلون"
 }

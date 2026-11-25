@@ -156,7 +156,7 @@
   {
    "fieldname": "column_break_b",
    "fieldtype": "Column Break",
-   "label": "Column Break B"
+   "label": ""
   },
   {
    "fieldname": "grand_total",

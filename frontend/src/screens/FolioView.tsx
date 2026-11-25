@@ -223,6 +223,10 @@ interface InvoiceData {
   }
   /** what the issued credit notes on this invoice add up to */
   credited?: number
+  credited_amount?: number
+  credit_notes?: string[]
+  credit_status?: "Credited" | "Partially credited" | null
+  net_collectible_balance?: number
   summary_by_head: {
     head: string
     amount: number
@@ -617,6 +621,7 @@ export default function FolioView() {
     lines.some((l) => Number(l.gst_rate) !== 0 || Number(l.gst_amount) !== 0) ||
     taxRows.length > 0
   const showLineTax = taxed && !taxUnavailable
+  const displayedBalance = data.credit_status ? data.net_collectible_balance ?? folio.balance : folio.balance
   const open = folio.status === "Open"
   const invoiced = !!(folio.invoice_number || folio.sales_invoice)
   const isFinal = doc ? doc.is_final : Boolean(folio.invoice_number)
@@ -1668,7 +1673,17 @@ export default function FolioView() {
               <p className="text-lg font-semibold">
                 {t("Grand total")}: {amount(folio.grand_total)}
               </p>
-              {(data.credited ?? 0) > 0 && (
+              {data.credit_status ? (
+                <div className="space-y-1">
+                  <Badge tone={data.credit_status === "Credited" ? "green" : "amber"}>
+                    {data.credit_status === "Credited" ? t("Credited") : t("Partially credited")}
+                  </Badge>
+                  <p>{t("Credited amount")}: {amount(data.credited_amount ?? 0)}</p>
+                  <p>{t("Credit notes")}: {data.credit_notes?.map((number, i) => (
+                    <span key={number}>{i > 0 && ", "}<bdi className="font-mono">{number}</bdi></span>
+                  ))}</p>
+                </div>
+              ) : (data.credited ?? 0) > 0 && (
                 <p className="text-sm font-medium text-danger-text">
                   {t("Credited")}: −{amount(data.credited)}
                 </p>
@@ -1713,15 +1728,15 @@ export default function FolioView() {
               )}
               <p className="text-muted-ink">
                 {t("Paid")}: {amount(folio.payments_total)} ·{" "}
-                {folio.balance < 0 ? t("Advance") : t("Balance")}:{" "}
+                {displayedBalance < 0 ? t("Advance") : t("Balance")}:{" "}
                 <span
                   className={
-                    folio.balance > 0
+                    displayedBalance > 0
                       ? "font-medium text-warning-text"
                       : "font-medium text-success-text"
                   }
                 >
-                  {amount(Math.abs(folio.balance))}
+                  {amount(Math.abs(displayedBalance))}
                 </span>
               </p>
             </div>

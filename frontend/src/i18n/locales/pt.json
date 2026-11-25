@@ -7315,5 +7315,16 @@
   "The supervisor must enroll an approval PIN first.": "O supervisor precisa cadastrar um PIN de aprovação primeiro.",
   "The supervisor’s PIN is locked. Try again later.": "O PIN do supervisor está bloqueado. Tente novamente mais tarde.",
   "{count} digits entered": "{count} dígitos digitados",
-  "Wrong cashier PIN.": "O PIN do caixa está incorreto."
+  "Wrong cashier PIN.": "O PIN do caixa está incorreto.",
+  "One role a line with its own limit, for example Front Desk: 5 and Duty Manager: 15. A person takes the highest limit among their roles; anyone with none of them takes the limit above. An AI agent takes its own line (AI Assistant: 3), or with none the lowest limit here. Revenue Managers and Hotel Admins set any rate.": "Uma função por linha com seu limite, por exemplo Front Desk: 5 e Duty Manager: 15. Vale o maior limite entre as funções da pessoa, ou o limite acima quando nenhuma tem limite. O assistente de IA usa sua própria linha (AI Assistant: 3), ou o menor limite se ela não existir. Gerentes de receita e administradores do hotel podem definir qualquer tarifa.",
+  "PINs enrolled": "PINs cadastrados",
+  "Available when allowance approval is on.": "Disponível quando a aprovação de abatimentos está ativa.",
+  "Enable manager approval": "Ativar aprovação da gerência",
+  "Front desk rate discounts are restricted, but staff can post folio allowances without manager approval.": "Os descontos de tarifa na recepção são restritos, mas a equipe pode lançar abatimentos no fólio sem aprovação da gerência.",
+  "Till variance tolerance": "Tolerância de divergência do caixa",
+  "Partially credited": "Creditado parcialmente",
+  "Credit notes": "Notas de crédito",
+  "Control gap": "Lacuna de controle",
+  "Credited amount": "Valor creditado",
+  "Configured cashiers": "Caixas configurados"
 }

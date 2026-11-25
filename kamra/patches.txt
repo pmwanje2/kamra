@@ -54,3 +54,4 @@ kamra.patches.v48.migrate_liquor_exclusion_to_code_rules
 kamra.patches.v48.rename_company_billing_presets
 kamra.patches.v2_8_1.pr1_traces_alerts_hk
 kamra.patches.v2_8_1_pr4_k2_payment_transfer
+kamra.patches.v48.reconcile_refunded_advances

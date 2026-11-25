@@ -7730,5 +7730,16 @@
   "Total in rate currency": "Total en devise tarifaire",
   "Voucher {code} takes {txAmount} ({homeAmount}) off.": "Le bon {code} déduit {txAmount} ({homeAmount}).",
   "≈ {amount} @ {rate}": "≈ {amount} au taux de {rate}",
-  "Amounts marked ≈ are estimates.": "Les montants précédés du signe ≈ sont des estimations."
+  "Amounts marked ≈ are estimates.": "Les montants précédés du signe ≈ sont des estimations.",
+  "One role a line with its own limit, for example Front Desk: 5 and Duty Manager: 15. A person takes the highest limit among their roles; anyone with none of them takes the limit above. An AI agent takes its own line (AI Assistant: 3), or with none the lowest limit here. Revenue Managers and Hotel Admins set any rate.": "Indiquez un rôle et sa limite par ligne, par exemple Front Desk: 5 et Duty Manager: 15. Chaque personne bénéficie de la limite la plus élevée de ses rôles, ou de la limite ci-dessus si aucun rôle n’en définit. L’assistant IA utilise sa ligne (AI Assistant: 3) ou, à défaut, la limite la plus basse. Les responsables des revenus et les administrateurs de l’hôtel peuvent fixer tout tarif.",
+  "PINs enrolled": "Codes PIN enregistrés",
+  "Available when allowance approval is on.": "Disponible lorsque l’approbation des réductions est activée.",
+  "Enable manager approval": "Activer l’approbation du responsable",
+  "Front desk rate discounts are restricted, but staff can post folio allowances without manager approval.": "Les remises tarifaires à la réception sont limitées, mais le personnel peut comptabiliser des réductions sur le folio sans l’approbation d’un responsable.",
+  "Till variance tolerance": "Tolérance d’écart de caisse",
+  "Partially credited": "Partiellement crédité",
+  "Credit notes": "Avoirs",
+  "Control gap": "Lacune de contrôle",
+  "Credited amount": "Montant crédité",
+  "Configured cashiers": "Caissiers configurés"
 }

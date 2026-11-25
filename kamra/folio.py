@@ -109,6 +109,32 @@ def _security_deposit_row_ids(folio) -> set[int]:
 	return sec_idx
 
 
+def reconcile_reservation_advance(reservation: str, property: str, *, changed_folio=None, returned=0) -> None:
+	"""Cap recorded advance by the stay's net collected funds, excluding security deposits."""
+	from kamra.ledger import _currency_places, _money, _round_currency
+
+	paid = _money(frappe.db.get_value("Reservation", reservation, "advance_paid", for_update=True))
+	if paid <= 0:
+		return
+	names = set(frappe.get_all("Folio", filters={"reservation": reservation}, pluck="name"))
+	if changed_folio is not None:
+		names.add(changed_folio.name)
+	collected = Decimal(0)
+	for name in sorted(names):
+		folio = changed_folio if changed_folio is not None and name == changed_folio.name else (
+			frappe.get_doc("Folio", name, for_update=True)
+		)
+		security_rows = _security_deposit_row_ids(folio)
+		collected += sum(
+			(_money(p.amount) for i, p in enumerate(folio.payments)
+			 if i not in security_rows and p.mode != "Company Credit"),
+			Decimal(0),
+		)
+	net = _round_currency(max(Decimal(0), min(paid - _money(returned), collected)), _currency_places(property))
+	if _money(net) != paid:
+		frappe.db.set_value("Reservation", reservation, "advance_paid", net)
+
+
 def _stay_withheld_deposit(folio, has_sec_dep: bool) -> Decimal:
 	"""Explicitly withheld stay Security Deposit applied against its posted damage charge."""
 	if not has_sec_dep or not folio.get("reservation"):
@@ -2534,6 +2560,73 @@ def bridge_invoice(folio) -> str | None:
 	cancellation, a URA EFRIS credit note - never reopened or credited here
 	on its own."""
 	return folio.get("sales_invoice") or None
+
+
+def sales_invoice_field() -> list[str]:
+	"""The bridge owns the optional Folio.sales_invoice custom field."""
+	get_meta = getattr(frappe, "get_meta", None)
+	return ["sales_invoice"] if get_meta and get_meta("Folio").has_field("sales_invoice") else []
+
+
+def credit_note_positions(folios, property: str) -> list[dict]:
+	"""Read submitted accounting returns for these property-scoped folios in one batch."""
+	if not folios:
+		return []
+	from kamra.ledger import _money
+	from kamra.pricing import _minor_unit, property_currency
+
+	currency = property_currency(property)
+	unit = Decimal(1).scaleb(-_minor_unit(currency))
+	invoices = list({invoice for row in folios if (invoice := bridge_invoice(row))})
+	notes = {}
+	originals = {}
+	if invoices and frappe.db.exists("DocType", "Sales Invoice"):
+		scope = {"docstatus": 1, "currency": currency}
+		company = frappe.get_cached_doc("Property", property).get("company")
+		if company:
+			scope["company"] = company
+		amount_fields = ["name", "grand_total", "rounded_total"]
+		originals = {invoice.name: invoice for invoice in frappe.get_all(
+			"Sales Invoice", filters={**scope, "is_return": 0, "name": ("in", invoices)},
+			fields=amount_fields,
+		)}
+		for note in frappe.get_all(
+			"Sales Invoice", filters={**scope, "is_return": 1, "return_against": ("in", invoices)},
+			fields=[*amount_fields, "return_against"], order_by="name asc",
+		):
+			notes.setdefault(note.return_against, []).append(note)
+
+	def rounded(value):
+		return _money(value).quantize(unit, rounding=ROUND_HALF_UP)
+
+	positions = []
+	for row in folios:
+		returns = notes.get(bridge_invoice(row), [])
+		credited = rounded(sum((abs(_money(n.rounded_total or n.grand_total)) for n in returns), Decimal(0)))
+		balance = max(Decimal(0), rounded(row.get("balance")) - credited)
+		status = None
+		if returns:
+			invoice = originals.get(bridge_invoice(row))
+			invoice_total = invoice.rounded_total or invoice.grand_total if invoice else row.get("grand_total")
+			status = "Credited" if credited >= rounded(invoice_total) else "Partially credited"
+		positions.append({
+			"credited_amount": float(credited),
+			"credit_notes": [n.name for n in returns],
+			"net_collectible_balance": float(balance),
+			"credit_status": status,
+		})
+	return positions
+
+
+def reconcile_credit_note_status(folio) -> dict:
+	"""Derive current credit status without changing the posted folio.
+
+	The bridge can call this after submit or cancel in the same transaction.
+	Reads derive the same position, so they also cover older bridged folios.
+	"""
+	if isinstance(folio, str):
+		folio = frappe.get_doc("Folio", folio)
+	return credit_note_positions([folio], folio.get("property"))[0]
 
 
 def invoiced(folio) -> bool:

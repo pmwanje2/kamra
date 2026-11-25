@@ -7387,5 +7387,16 @@
   "The supervisor must enroll an approval PIN first.": "主管必须先设置审批 PIN。",
   "The supervisor’s PIN is locked. Try again later.": "主管的 PIN 已锁定，请稍后重试。",
   "{count} digits entered": "已输入 {count} 位数字",
-  "Wrong cashier PIN.": "收银员 PIN 不正确。"
+  "Wrong cashier PIN.": "收银员 PIN 不正确。",
+  "One role a line with its own limit, for example Front Desk: 5 and Duty Manager: 15. A person takes the highest limit among their roles; anyone with none of them takes the limit above. An AI agent takes its own line (AI Assistant: 3), or with none the lowest limit here. Revenue Managers and Hotel Admins set any rate.": "每行设置一个角色及其限额，例如 Front Desk: 5 和 Duty Manager: 15。用户适用其所有角色中的最高限额，若均未设置则使用上方限额。AI 助手使用专属配置行（AI Assistant: 3），未设置时使用最低限额。收益经理和酒店管理员可设定任意房价。",
+  "PINs enrolled": "已登记 PIN",
+  "Available when allowance approval is on.": "启用减免审批后可用。",
+  "Enable manager approval": "启用经理审批",
+  "Front desk rate discounts are restricted, but staff can post folio allowances without manager approval.": "前台房价折扣受限，但员工仍可在未经经理审批的情况下为客账入账减免。",
+  "Till variance tolerance": "收银差异容差",
+  "Partially credited": "已部分冲减",
+  "Credit notes": "贷项通知单",
+  "Control gap": "控制缺口",
+  "Credited amount": "冲减金额",
+  "Configured cashiers": "已配置收银员"
 }
