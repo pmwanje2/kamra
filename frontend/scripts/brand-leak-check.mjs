@@ -136,10 +136,22 @@ export function scanTree(base = root) {
 export function checkSource() {
   const { findings, sourceCount } = scanTree()
   const collection = JSON.parse(fs.readFileSync(path.join(root, "../docs-site/public/kamra.postman_collection.json"), "utf8"))
-  for (const field of ["name", "description"]) {
-    const value = collection.info[field]
-    if (!value?.trim() || forbidden.test(value)) findings.push(`Postman collection ${field}: ${value}`)
+  function scanPostman(node, location) {
+    if (!node || typeof node !== "object") return
+    for (const [key, value] of Object.entries(node)) {
+      const field = `${location}.${key}`
+      if (key === "name" || key === "description") {
+        // Postman accepts either plain text or a description with a content field.
+        const prose = typeof value === "string" ? value : value?.content
+        if (typeof prose !== "string" || forbidden.test(prose)) findings.push(`${field}: ${prose}`)
+      }
+      scanPostman(value, field)
+    }
   }
+  for (const field of ["name", "description"]) {
+    if (!collection.info?.[field]?.trim()) findings.push(`Missing Postman collection ${field}`)
+  }
+  scanPostman(collection, "Postman collection")
   if (findings.length) {
     console.error(findings.join("\n"))
     throw new Error(`${sourceCount} UI source findings; ${findings.length} total branding findings`)
