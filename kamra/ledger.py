@@ -2202,6 +2202,13 @@ def force_advance_bill(reservation: str, nights: str = "entire",
 
 	nights: 'tonight' | 'entire' | integer string of nights.
 	"""
+	from kamra.shares import current_inventory_reads
+
+	with current_inventory_reads():
+		return _advance_bill_locked(reservation, nights, pin)
+
+
+def _advance_bill_locked(reservation, nights, pin):
 	from frappe.utils import add_days, date_diff, getdate
 
 	from kamra.authz import require_cashier_pin

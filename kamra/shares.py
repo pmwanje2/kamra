@@ -21,6 +21,26 @@ FIELDS = ("share_group_id", "is_share_primary", "share_rate_mode", "share_custom
 ACTIVE = ("Confirmed", "Checked In")
 
 
+@contextmanager
+def current_inventory_reads():
+	"""Use current locking reads while serializing against the property inventory writer.
+
+	MariaDB 11.8 can otherwise reject even SELECT FOR UPDATE with error 1020
+	after a concurrent commit. Plain reads keep their REPEATABLE READ snapshot.
+	Restore the connection's original behavior before returning to the caller.
+	"""
+	strict = (getattr(frappe.db, "db_type", None) == "mariadb"
+	          and frappe.db.sql("SHOW SESSION VARIABLES LIKE 'innodb_snapshot_isolation'"))
+	if not strict or strict[0][1] != "ON":
+		yield
+		return
+	frappe.db.sql("SET SESSION innodb_snapshot_isolation = OFF")
+	try:
+		yield
+	finally:
+		frappe.db.sql("SET SESSION innodb_snapshot_isolation = ON")
+
+
 def _money(value, quantum: Decimal, *, custom: bool = False) -> Decimal:
 	try:
 		amount = Decimal(str(value))
@@ -234,7 +254,7 @@ def _legacy_rounding(property, snapshot, carry, pending):
 	rates = {name: Decimal(value) for name, value in snapshot["rates"].items()}
 	levy = snapshot.get("levy") or {}
 	if not gst or not levy:
-		return {}
+		return carry
 	tax_rate = Decimal(str(levy["gst"])) / 100
 	if levy.get("per_folio"):
 		return {"currency": currency, "payers": {
@@ -297,7 +317,7 @@ def _night_charges(property, room_rate, gst, mode, members, lead, carry, pending
 		levy = levy.quantize(unit, rounding=ROUND_HALF_UP)
 
 	currency = property_currency(property)
-	rounding = {}
+	rounding = carry
 	if per_folio:
 		rounding = {"currency": currency, "payers": {
 			name: _round_shared_night(currency, rates[name], gst, levy, tax_rate,
@@ -628,7 +648,7 @@ def break_share(reservation: str, new_room: str):
 	from kamra.api import _available_rooms
 	from kamra.business_date import get_business_date
 
-	with _operation(reservation) as doc:
+	with current_inventory_reads(), _operation(reservation) as doc:
 		members = _member_rows(doc, lock=True)
 		if not members or doc.status not in ACTIVE:
 			frappe.throw(_("Choose an active share reservation."))
