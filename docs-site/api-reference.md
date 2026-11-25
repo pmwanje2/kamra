@@ -2433,6 +2433,7 @@ on the discount's audit row. Leaving them out books exactly as before.
 | `discount_note` | no | `None` |
 | `comp_supervisor_user` | no | `None` |
 | `comp_supervisor_pin` | no | `None` |
+| `sellable_unit` | no | `None` |
 
 ### `kamra.api.waitlist`
 

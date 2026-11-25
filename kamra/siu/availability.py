@@ -27,6 +27,7 @@ def availability(
 	check_in_date: str,
 	check_out_date: str,
 	include_reasons: bool = False,
+	exclude_reservation: str | None = None,
 ) -> list[dict[str, Any]]:
 	"""Return sellable capacity for one SIU, all SIUs of a room type, or all
 	active SIUs on the property for the date range.
@@ -50,6 +51,8 @@ def availability(
 
 	nights = _nights(check_in_date, check_out_date)
 	bookings = _load_bookings(property, check_in_date, check_out_date)
+	if exclude_reservation:
+		bookings = [b for b in bookings if b.name != exclude_reservation]
 	blocks = _load_room_blocks(property, check_in_date, check_out_date)
 
 	# Pre-index bookings / blocks by room and by room_type for competition.
@@ -271,7 +274,7 @@ def _load_bookings(property: str, check_in_date: str, check_out_date: str) -> li
 			"property": property,
 			"status": ("in", list(LIVE_STATUSES)),
 			"check_in_date": ("<", check_out_date),
-			"check_out_date": (">", check_in_date),
+			"check_out_date": (">=", check_in_date),
 		},
 		fields=fields,
 	)

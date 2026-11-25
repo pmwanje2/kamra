@@ -35,6 +35,7 @@ function Balance({ row }: { row: ReservationRow }) {
   const { t } = useT()
   const due = Number(row.balance_due ?? 0)
   const paid = Number(row.paid_total ?? 0)
+  if (row.balance_warning) return <Badge tone="amber">{row.balance_warning}</Badge>
   if (due <= 0 && paid > 0) return <Badge tone="green">{t("Paid")}</Badge>
   if (due > 0) return <span className="font-medium tabular-nums text-warning-ink">{money(due)}</span>
   return <span className="text-muted-ink">-</span>

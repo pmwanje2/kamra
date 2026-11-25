@@ -151,7 +151,23 @@ export function DirectBookingCart({
   )
 }
 
-export type CheckoutAttempt = { payload: string; key: string }
+function checkoutGuest(form?: HTMLFormElement) {
+  const data = form ? new FormData(form) : undefined
+  return {
+    guest_name: String(data?.get("guest_name") ?? ""),
+    phone: String(data?.get("phone") ?? ""),
+    email: String(data?.get("email") ?? ""),
+    special_requests: String(data?.get("special_requests") ?? ""),
+    marketing_consent: data?.get("marketing_consent") === "on" ? 1 : 0,
+  }
+}
+
+export type CheckoutAttempt = {
+  cart: string
+  guest: ReturnType<typeof checkoutGuest>
+  payload: string
+  key: string
+}
 
 export function DirectBookingCheckout({
   property, lines, upsells, ratePlans, mealPlans, onChange, onClose, onBooked, privacy, checkoutAttempt,
@@ -174,6 +190,9 @@ export function DirectBookingCheckout({
   const [submitError, setSubmitError] = useState("")
   const localAttempt = useRef<CheckoutAttempt | null>(null)
   const checkout = checkoutAttempt ?? localAttempt
+  const cart = JSON.stringify({ property, lines })
+  const [guest, setGuest] = useState(() => checkout.current?.cart === cart ? checkout.current.guest : checkoutGuest())
+  const canReplay = checkout.current?.payload === JSON.stringify({ property, lines, ...guest })
   const quote = pricing?.lines === lines ? pricing.quote ?? null : null
   const money = useCartMoney(done ?? quote)
 
@@ -190,6 +209,7 @@ export function DirectBookingCheckout({
 
   function change(next: CartLine[]) {
     setSubmitError("")
+    checkout.current = null
     onChange(next)
   }
 
@@ -199,15 +219,17 @@ export function DirectBookingCheckout({
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!quote || busy) return
-    const guest = Object.fromEntries(new FormData(event.currentTarget))
-    const payload = { property, lines, ...guest, marketing_consent: guest.marketing_consent === "on" ? 1 : 0 }
+    if (busy) return
+    const guest = checkoutGuest(event.currentTarget)
+    const payload = { property, lines, ...guest }
     const identity = JSON.stringify(payload)
     if (checkout.current?.payload !== identity) {
+      if (!quote) return
       const key = Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("")
-      checkout.current = { payload: identity, key }
+      checkout.current = { cart, guest, payload: identity, key }
     }
     setSubmitError("")
+    setGuest(guest)
     setBusy(true)
     try {
       const booked = await callGuest<CartConfirmation>("kamra.public_api.create_multi_room_booking", {
@@ -251,7 +273,7 @@ export function DirectBookingCheckout({
       ) : lines.length === 0 ? (
         <p>{t("Your booking cart is empty.")}</p>
       ) : (
-        <form className="space-y-5" onSubmit={submit}>
+        <form className="space-y-5" onSubmit={submit} onChange={(event) => setGuest(checkoutGuest(event.currentTarget))}>
           <DirectBookingCart lines={lines} upsells={upsells} quote={quote} ratePlans={ratePlans} mealPlans={mealPlans}
             disabled={busy} onRemove={(index) => change(lines.filter((_, i) => i !== index))}
             onUpsells={(index, upsells) => change(lines.map((line, i) => i === index ? { ...line, upsells } : line))}
@@ -260,18 +282,18 @@ export function DirectBookingCheckout({
           {pricing?.lines === lines && pricing.error && <p role="alert" className="text-danger-text">{t(pricing.error)}</p>}
           <fieldset disabled={busy} className="grid min-w-0 gap-3 sm:grid-cols-2">
             <legend className="mb-2 font-semibold">{t("Your details")}</legend>
-            <label>{t("Full name")}<input className={field} name="guest_name" required maxLength={140} autoComplete="name" /></label>
-            <label>{t("Phone")}<input className={field} name="phone" type="tel" required maxLength={50} autoComplete="tel" /></label>
-            <label>{t("Email (optional)")}<input className={field} name="email" type="email" maxLength={140} autoComplete="email" /></label>
-            <label>{t("Special requests")}<textarea className={field} name="special_requests" rows={2} maxLength={2000} /></label>
+            <label>{t("Full name")}<input className={field} name="guest_name" defaultValue={guest.guest_name} required maxLength={140} autoComplete="name" /></label>
+            <label>{t("Phone")}<input className={field} name="phone" defaultValue={guest.phone} type="tel" required maxLength={50} autoComplete="tel" /></label>
+            <label>{t("Email (optional)")}<input className={field} name="email" defaultValue={guest.email} type="email" maxLength={140} autoComplete="email" /></label>
+            <label>{t("Special requests")}<textarea className={field} name="special_requests" defaultValue={guest.special_requests} rows={2} maxLength={2000} /></label>
             <label className="flex items-start gap-2 text-sm sm:col-span-2">
-              <input type="checkbox" name="marketing_consent" className="mt-1 shrink-0 accent-primary-button" />
+              <input type="checkbox" name="marketing_consent" defaultChecked={Boolean(guest.marketing_consent)} className="mt-1 shrink-0 accent-primary-button" />
               {t("Send me offers on WhatsApp. Reply STOP at any time to opt out.")}
             </label>
           </fieldset>
           {privacy}
           {submitError && <p role="alert" className="text-danger-text">{t(submitError)}</p>}
-          <Button type="submit" disabled={!quote || busy}>{busy ? t("Booking…") : t("Complete your booking")}</Button>
+          <Button type="submit" disabled={(!quote && !canReplay) || busy}>{busy ? t("Booking…") : t("Complete your booking")}</Button>
         </form>
       )}
     </Sheet>

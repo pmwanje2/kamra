@@ -1252,3 +1252,6 @@ Online registration evidence cannot be changed.,No se pueden modificar los datos
 Direct Booking Transaction Code,Código de transacción de la reserva directa
 Direct Booking Price Basis,Base de cálculo del precio de la reserva directa
 Show Online Pre-Check-In Completion,Mostrar la finalización del prerregistro en línea
+The sellable unit does not match the booked room type.,La unidad de venta no corresponde al tipo de habitación reservado.
+Select a room in the booked unit.,Seleccione una habitación de la unidad reservada.
+Select a room in a compatible sellable unit.,Seleccione una habitación de una unidad de venta compatible.

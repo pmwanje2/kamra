@@ -6166,7 +6166,10 @@ def _stay_balances(names: list) -> dict:
 		folios.update(projected)
 	from kamra.fixed_charges import booked_upsell_totals
 	from kamra.ledger import _currency_places, _money, _round_currency, round_money
-	upsells = booked_upsell_totals(names)
+	warnings = {}
+	expected = [n for n, r in resv.items() if r.status not in ("Cancelled", "No Show")
+	            and not (n in folios and r.status in ("Checked In", "Checked Out"))]
+	upsells = booked_upsell_totals(expected, warnings=warnings)
 	out = {}
 	for name, res in resv.items():
 		folio = folios.get(name)
@@ -6194,7 +6197,9 @@ def _stay_balances(names: list) -> dict:
 			     "due": max(0.0, _round_currency(_money(total_booked) - _money(adv), places)),
 			     "has_folio": False, "source": "booking"}
 		# the posted figures stand in: check-out's own sheet says why
-		m["projection_unavailable"] = name in unavailable
+		m["projection_unavailable"] = name in unavailable or name in warnings
+		if name in warnings:
+			m["balance_warning"] = warnings[name]
 		out[name] = m
 	return out
 
@@ -6331,7 +6336,8 @@ def front_desk_snapshot(property: str | None = None, date: str | None = None):
 		m = money.get(r.name) or {}
 		r["pre_checked_in"] = bool(show_precheckin and r.precheckin_status in ("Submitted", "Verified"))
 		r["paid_total"] = m.get("paid", 0.0)
-		r["balance_due"] = m.get("due", 0.0)
+		r["balance_warning"] = m.get("balance_warning")
+		r["balance_due"] = None if r["balance_warning"] else m.get("due", 0.0)
 	rooms = frappe.get_all(
 		"Room",
 		filters=room_filters,
@@ -8645,7 +8651,7 @@ def move_reservation(reservation: str, new_room: str,
 	old_room = doc.room
 	old_type = doc.room_type
 	old_amount = float(doc.amount_after_tax or 0)
-	new_type = frappe.db.get_value("Room", new_room, "room_type")
+	new_type = doc.room_type if doc.unit_for_room(new_room) else frappe.db.get_value("Room", new_room, "room_type")
 	before_rate = flt(doc.get("agreed_rate"))
 	_require_price_confirmation(
 		_move_price(doc, new_type, rate_mode, agreed_rate), confirm_price)
@@ -10149,7 +10155,7 @@ def room_move_preview(reservation: str, new_room: str,
 	res = frappe.get_doc("Reservation", reservation)
 	from kamra.crs import assert_property_access
 	assert_property_access(res.property)
-	new_type = frappe.db.get_value("Room", new_room, "room_type")
+	new_type = res.room_type if res.unit_for_room(new_room) else frappe.db.get_value("Room", new_room, "room_type")
 	same_type = new_type == res.room_type
 	pv = _move_price(res, new_type, rate_mode, agreed_rate)
 	return {
@@ -11073,7 +11079,8 @@ def create_booking(property: str, room_type: str, check_in_date: str,
                    supervisor_user: str | None = None,
                    discount_note: str | None = None,
                    comp_supervisor_user: str | None = None,
-                   comp_supervisor_pin: str | None = None):
+                   comp_supervisor_pin: str | None = None,
+                   sellable_unit: str | None = None):
 	"""One-call booking: attach to an existing guest profile when given,
 	else reuse a profile whose phone and full name both match (a
 	blacklisted phone always resolves to its profile) / create one.
@@ -11292,6 +11299,7 @@ def create_booking(property: str, room_type: str, check_in_date: str,
 		"guest": guest,
 		"room_type": room_type,
 		"room": room,
+		"sellable_unit": sellable_unit,
 		"check_in_date": check_in_date,
 		"check_out_date": check_out_date,
 		"adults": int(adults),

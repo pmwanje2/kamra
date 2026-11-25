@@ -382,7 +382,8 @@ export interface ReservationRow {
   contact_preference: "Guest" | "Booker" | "Both" | null
   company: string | null
   paid_total: number
-  balance_due: number
+  balance_warning?: string | null
+  balance_due: number | null
 }
 
 export interface RoomRow {
@@ -2021,6 +2022,7 @@ export interface ReservationDetail extends TariffReference {
   room_number: string | null
   folio_name: string | null
   money: {
+    balance_warning?: string
     total: number
     paid: number
     due: number

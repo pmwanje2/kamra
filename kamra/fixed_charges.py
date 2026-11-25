@@ -28,6 +28,10 @@ WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", 
 CLOSED_STATUSES = ("Cancelled", "Checked Out", "No Show")
 
 
+class MissingFixedChargeRate(frappe.ValidationError):
+	"""A charge cannot be expressed in the property's currency."""
+
+
 def _dec(val) -> Decimal:
 	if val is None or val == "":
 		return Decimal(0)
@@ -58,7 +62,7 @@ def _reservation_meta(reservation: str):
 	res = frappe.db.get_value(
 		"Reservation",
 		reservation,
-		["name", "property", "status", "check_in_date", "check_out_date"],
+		["name", "property", "status", "check_in_date", "check_out_date", "rate_plan", "contract_tariff"],
 		as_dict=True,
 	)
 	if not res:
@@ -119,7 +123,13 @@ def list_fixed_charges(reservation: str) -> dict:
 @require_roles("Front Desk", "Finance", "Hotel Admin")
 def save_fixed_charge(reservation: str, row_data) -> dict:
 	"""Create or update a Reservation Fixed Charge row without tripping Reservation rate locks."""
-	return _save_fixed_charge(reservation, row_data)
+	try:
+		return _save_fixed_charge(reservation, row_data)
+	except MissingFixedChargeRate as exc:
+		if getattr(frappe.local, "request", None):
+			frappe.local.response["http_status_code"] = 422
+			frappe.msgprint(str(exc))
+		return {"error": str(exc)}
 
 
 def _save_fixed_charge(reservation: str, row_data, *, booked_tax_rate=None) -> dict:
@@ -211,6 +221,13 @@ def _save_fixed_charge(reservation: str, row_data, *, booked_tax_rate=None) -> d
 		"supplement": supplement,
 		"active": active,
 	}
+
+	home = home_currency(res.property)
+	if active and unit_price and currency != home:
+		snapshot = pricing.saved_contract_tariff(res)
+		charge = frappe._dict(payload)
+		for date in _expected_posting_dates(res, charge):
+			_posting_value(res, charge, home, snapshot.get("tariff") or snapshot, date)
 
 	if booked_tax_rate is not None and not row_name:
 		payload.update(booked_at_checkout=1, booked_tax_rate=booked_tax_rate)
@@ -418,8 +435,7 @@ def _posting_value(res, row, home, tariff, business_date):
 				rate = (locked_fx, tariff.get("fx_date"))
 		rate = rate or pricing.posting_fx_rate(res.property, currency, business_date)
 		if not rate:
-			frappe.throw(_("No exchange rate from {0} to {1} is available for the business date.")
-			             .format(currency, home), frappe.ValidationError)
+			raise MissingFixedChargeRate(_("No exchange rate from {0} to {1} is available for the business date.").format(currency, home))
 		fx, fx_date = rate
 	amount = pricing.round_rate_amount(_dec(row.qty or 1) * price * fx, 0, currency=home)
 	return amount, currency, price, fx, fx_date
@@ -437,9 +453,11 @@ def _expected_posting_dates(res, row):
 			yield str(day)
 
 
-def booked_upsell_totals(reservations: list[str]) -> dict[str, Decimal]:
+def booked_upsell_totals(reservations: list[str], *, warnings: dict[str, str] | None = None) -> dict[str, Decimal]:
 	"""Expected gross charges in the same currency and at the same FX as posting."""
 	totals = defaultdict(Decimal)
+	if not reservations:
+		return totals
 	rows = frappe.get_all(
 		"Reservation Fixed Charge",
 		filters={"parent": ("in", reservations), "parenttype": "Reservation",
@@ -458,9 +476,17 @@ def booked_upsell_totals(reservations: list[str]) -> dict[str, Decimal]:
 		home = home_currency(res.property)
 		snapshot = pricing.saved_contract_tariff(res)
 		tariff = snapshot.get("tariff") or snapshot
-		for day in _expected_posting_dates(res, row):
-			amount, *_ = _posting_value(res, row, home, tariff, day)
-			totals[row.parent] += amount + amount * _dec(row.booked_tax_rate) / 100
+		if warnings is not None and row.parent in warnings:
+			continue
+		try:
+			for day in _expected_posting_dates(res, row):
+				amount, *_ = _posting_value(res, row, home, tariff, day)
+				totals[row.parent] += amount + amount * _dec(row.booked_tax_rate) / 100
+		except MissingFixedChargeRate as exc:
+			if warnings is None:
+				raise
+			warnings[row.parent] = str(exc)
+			totals.pop(row.parent, None)
 	return totals
 
 

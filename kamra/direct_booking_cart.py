@@ -196,6 +196,7 @@ def _check_inventory(property: str, lines: list[dict]) -> None:
 
 	demand = defaultdict(Counter)
 	choices = []
+	free_units = defaultdict(dict)
 	sides = defaultdict(set)
 	sellable = _sellable_room_types(property, list(dict.fromkeys(line["room_type"] for line in lines)))
 	for line in lines:
@@ -241,6 +242,7 @@ def _check_inventory(property: str, lines: list[dict]) -> None:
 					candidates.append(_InventoryChoice(unit["siu"], members, unit["unit_kind"] == "composite"))
 		choices.append(candidates)
 		side = is_entire_place(room_type)
+		composite_supply = units and any(unit["unit_kind"] == "composite" for unit in units)
 		for offset in range(date_diff(co, ci)):
 			night = str(add_days(ci, offset))
 			sides[night].add(side)
@@ -249,6 +251,8 @@ def _check_inventory(property: str, lines: list[dict]) -> None:
 			demand[room_type][night] += 1
 			if units is not None:
 				capacity = sum(unit["sellable_per_night"][offset] for unit in units)
+				if composite_supply:
+					free_units[room_type][night] = capacity
 				if demand[room_type][night] > capacity:
 					_refuse_inventory()
 
@@ -260,7 +264,7 @@ def _check_inventory(property: str, lines: list[dict]) -> None:
 			"status": "Confirmed",
 		})
 		try:
-			res.validate_type_capacity(requested_by_night=nights)
+			res.validate_type_capacity(requested_by_night=nights, free_units_by_night=free_units.get(room_type))
 		except InventoryRefused:
 			frappe.clear_messages()
 			_refuse_inventory()
@@ -495,7 +499,7 @@ def book(property: str, lines, guest_name: str, phone: str, email: str = "",
 					group_booking=group.name if group else None,
 					booking_type="Group" if group else "Individual",
 					status=status, assign_room=0, hold_expires_on=str(expires) if expires else None,
-					room=line["assigned_room"] if assign_rooms else None,
+					room=line["assigned_room"] if assign_rooms else None, sellable_unit=line["composite_unit"],
 					idempotency_key=booking_key if index == 0 else None,
 					**{key: line[key] for key in ("room_type", "check_in_date", "check_out_date",
 					   "adults", "children", "stay_details", "meal_plan", "rate_plan", "pets", "voucher_code")},
@@ -505,8 +509,6 @@ def book(property: str, lines, guest_name: str, phone: str, email: str = "",
 					_save_fixed_charge(res.name, charge, booked_tax_rate=charge["booked_tax_rate"])
 				totals = _line_totals(prop, line, res.amount_after_tax, res.get("tax_amount"))
 				updated = {key: totals[key] for key in ("advance_due", "payment_policy")}
-				if line["composite_unit"]:
-					updated["sellable_unit"] = line["composite_unit"]
 				updated["is_pay_at_hotel"] = int(totals["balance_at_hotel"] > 0)
 				if special_requests:
 					updated["special_requests"] = special_requests

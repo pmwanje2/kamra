@@ -405,3 +405,6 @@ Online registration evidence cannot be changed.,لا يمكن تغيير إثب�
 Direct Booking Transaction Code,رمز معاملة الحجز المباشر
 Direct Booking Price Basis,أساس تسعير الحجز المباشر
 Show Online Pre-Check-In Completion,إظهار اكتمال التسجيل المسبق عبر الإنترنت
+The sellable unit does not match the booked room type.,لا تتوافق الوحدة القابلة للحجز مع نوع الغرفة المحجوزة.
+Select a room in the booked unit.,اختر غرفة ضمن الوحدة المحجوزة.
+Select a room in a compatible sellable unit.,اختر غرفة ضمن وحدة حجز متوافقة.

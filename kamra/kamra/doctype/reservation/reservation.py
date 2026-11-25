@@ -326,7 +326,7 @@ class Reservation(Document):
 		except Exception:
 			frappe.log_error(title="Security deposit ensure failed")
 
-	def validate_type_capacity(self, requested_by_night=None):
+	def validate_type_capacity(self, requested_by_night=None, free_units_by_night=None):
 		"""Room-type capacity with a controlled overbooking allowance.
 
 		The room-level overlap guard below stops physical double-booking;
@@ -347,6 +347,10 @@ class Reservation(Document):
 		# booking that committed while this one waited.
 		frappe.db.get_value("Room Type", self.room_type, "name", for_update=True)
 		total = frappe.db.count("Room", {"room_type": self.room_type})
+		if not total or self.sellable_unit:
+			filters = {"property": self.property, "room_type": self.room_type, "is_active": 1}
+			if frappe.db.exists("Sellable Unit", {**filters, "unit_kind": "composite"}):
+				total = frappe.db.count("Sellable Unit", filters)
 		if not total and requested_by_night is None:
 			return  # setup-time bookings before rooms exist
 		virtual_villa = not total and uses_member_rooms(self.property, self.room_type)
@@ -360,7 +364,6 @@ class Reservation(Document):
 			pct = float(frappe.db.get_value(
 				"Property", self.property, "overbooking_pct") or 0)
 		if requested_by_night is None:
-			from frappe.utils import add_days, date_diff
 			nights = max(1, date_diff(self.check_out_date, self.check_in_date))
 			dates = [str(add_days(self.check_in_date, i)) for i in range(min(int(nights), 366))]
 		else:
@@ -380,11 +383,17 @@ class Reservation(Document):
 			                           for_group=self.group_booking, for_update=True)
 			before = self._nights_held_before()
 			new_nights = [d for d in dates if d not in before]
-			if new_nights and not virtual_villa and total:
+			if new_nights and self.sellable_unit and free_units_by_night is None:
+				from kamra.siu.availability import availability
+				units = availability(self.property, room_type=self.room_type, check_in_date=dates[0],
+				                     check_out_date=str(add_days(dates[-1], 1)), exclude_reservation=self.name)
+				free_units_by_night = {day: sum(u["sellable_per_night"][date_diff(day, dates[0])] for u in units)
+				                       for day in new_nights}
+			elif new_nights and not virtual_villa and total and free_units_by_night is None:
 				out = self._rooms_out_of_sale(new_nights)
 		for d in dates:
-			cnt = len(frappe.db.sql(
-				"""SELECT name FROM `tabReservation`
+			bookings = frappe.db.sql(
+				"""SELECT room, sellable_unit FROM `tabReservation`
 				   WHERE room_type = %(rt)s AND name != %(name)s
 				     AND status IN ('Confirmed', 'Checked In', 'Held', 'Pending Payment')
 				     AND check_in_date <= %(d)s
@@ -392,9 +401,14 @@ class Reservation(Document):
 				                  DATE_ADD(check_in_date, INTERVAL 1 DAY)) > %(d)s
 				   FOR UPDATE""",
 				{"rt": self.room_type, "name": self.name or "new", "d": d},
-			))
+			)
+			cnt = len(bookings)
 			hold = held.get(d, 0)
 			rooms = total - out.get(d, 0)
+			if free_units_by_night is not None and d in free_units_by_night:
+				# Unit availability already deducted every assigned stay and room block.
+				rooms = free_units_by_night[d]
+				cnt = sum(1 for room, unit in bookings if not room and not unit)
 			limit = int(rooms * (1 + pct / 100))
 			demand = 1 if requested_by_night is None else requested_by_night[d]
 			if cnt + hold + demand > limit:
@@ -2503,7 +2517,37 @@ class Reservation(Document):
 		elif not self.get("channel"):
 			self.commission_amount = 0
 
+	def unit_for_room(self, room):
+		"""Keep a unit move within the booked product, including cross-type member rooms."""
+		if not self.sellable_unit:
+			return None
+		unit = frappe.db.get_value("Sellable Unit", self.sellable_unit,
+		                           ["property", "room_type", "unit_kind", "is_active"], as_dict=True)
+		before = self.get_doc_before_save()
+		changed = self.is_new() or (before and before.sellable_unit != self.sellable_unit)
+		if (not unit or unit.property != self.property or unit.room_type != self.room_type
+				or (changed and not unit.is_active)):
+			frappe.throw(_("The sellable unit does not match the booked room type."))
+		if room and frappe.db.get_value("Room", room, "property") != self.property:
+			frappe.throw(_("Room {0} is not in this property.").format(room))
+		if not room or frappe.db.exists("Sellable Unit Room", {"parent": self.sellable_unit, "room": room}):
+			return self.sellable_unit
+		if before and before.sellable_unit != self.sellable_unit:
+			frappe.throw(_("Select a room in the booked unit."))
+		candidates = frappe.db.sql(
+			"""SELECT DISTINCT u.name FROM `tabSellable Unit` u
+			   JOIN `tabSellable Unit Room` m ON m.parent = u.name
+			   WHERE m.room = %s AND u.property = %s AND u.room_type = %s
+			     AND u.unit_kind = %s AND u.is_active = 1""",
+			(room, self.property, self.room_type, unit.unit_kind))
+		if self.is_new() or len(candidates) != 1:
+			frappe.throw(_("Select a room in a compatible sellable unit."))
+		return candidates[0][0]
+
 	def validate_room_belongs_to_type(self):
+		if self.sellable_unit:
+			self.sellable_unit = self.unit_for_room(self.room)
+			return
 		if not self.room:
 			return
 		room_type = frappe.db.get_value("Room", self.room, "room_type")
@@ -2536,7 +2580,7 @@ class Reservation(Document):
 		on every insert/update, regardless of whether a human or an AI agent
 		created the booking.
 		"""
-		if not self.room or self.status in (
+		if not (self.room or self.sellable_unit) or self.status in (
 			"Cancelled", "No Show", "Checked Out", "Waitlist",
 			"Inquiry", "Quoted", "Requested",
 		):
@@ -2545,13 +2589,21 @@ class Reservation(Document):
 		# makes the second transaction wait, and the locking read below
 		# then sees the first one's committed reservation — check-then-
 		# insert alone would let two simultaneous requests both pass
-		frappe.db.get_value("Room", self.room, "name", for_update=True)
+		rooms = {self.room} if self.room else set()
+		if self.sellable_unit:
+			rooms.update(frappe.get_all("Sellable Unit Room", {"parent": self.sellable_unit}, pluck="room"))
+		if not rooms:
+			return
+		frappe.db.sql("SELECT name FROM `tabRoom` WHERE name IN %s ORDER BY name FOR UPDATE",
+		              (sorted(rooms),))
 		# a day-use stay occupies [check_in, check_in + 1 day) — GREATEST
 		# normalises both sides of the comparison
 		conflict = frappe.db.sql(
 			"""
 			SELECT name FROM `tabReservation`
-			WHERE room = %(room)s
+			WHERE property = %(property)s
+			  AND (room IN %(rooms)s OR sellable_unit IN (
+			    SELECT parent FROM `tabSellable Unit Room` WHERE room IN %(rooms)s))
 			  AND name != %(name)s
 			  AND status IN ('Confirmed', 'Checked In', 'Held', 'Pending Payment')
 			  AND check_in_date < GREATEST(%(check_out)s,
@@ -2562,7 +2614,7 @@ class Reservation(Document):
 			FOR UPDATE
 			""",
 			{
-				"room": self.room,
+				"rooms": sorted(rooms), "property": self.property,
 				"name": self.name or "new",
 				"check_in": self.check_in_date,
 				"check_out": self.check_out_date,
@@ -2571,7 +2623,7 @@ class Reservation(Document):
 		if conflict:
 			frappe.throw(
 				_("Room {0} is already booked ({1}) for these dates.").format(
-					self.room, conflict[0][0]
+					self.room or self.sellable_unit, conflict[0][0]
 				),
 				title=_("Double booking blocked"),
 				exc=InventoryRefused,

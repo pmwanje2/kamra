@@ -195,7 +195,10 @@ def apply_allocation(property: str, assignments):
 		assignments = frappe.parse_json(assignments)
 
 	from kamra.api import available_rooms
+	from kamra.kamra.doctype.reservation.reservation import lock_property_for_inventory
+	from kamra.siu.availability import availability
 	from kamra.savings import log_action
+	lock_property_for_inventory(property)
 	executed, skipped = [], []
 	taken: set[str] = set()
 	for a in assignments or []:
@@ -207,7 +210,7 @@ def apply_allocation(property: str, assignments):
 		doc = frappe.db.get_value(
 			"Reservation", res,
 			["property", "room", "status", "room_type", "check_in_date",
-			 "check_out_date", "group_booking"], as_dict=True)
+			 "check_out_date", "group_booking", "sellable_unit"], as_dict=True)
 		why = None
 		if not doc or doc.property != property:
 			why = "Not a booking at this property"
@@ -223,10 +226,15 @@ def apply_allocation(property: str, assignments):
 			r = frappe.db.get_value("Room", room, ["property", "room_type", "housekeeping_status"], as_dict=True)
 			if not r or r.property != property:
 				why = "Not a room at this property"
-			elif r.room_type != doc.room_type:
+			elif not doc.sellable_unit and r.room_type != doc.room_type:
 				why = "That room is another type; use a room move so the price is shown first"
 			elif r.housekeeping_status in ("Out of Order", "Out of Service"):
 				why = f"That room is no longer free or ready ({r.housekeeping_status})"
+			elif doc.sellable_unit:
+				units = availability(property, room_type=doc.room_type, check_in_date=doc.check_in_date,
+				                     check_out_date=doc.check_out_date, exclude_reservation=res)
+				if not any(u["sellable"] and any(m.name == room for m in u["rooms"]) for u in units):
+					why = "That room is no longer free or ready for these nights"
 			else:
 				free = available_rooms(property, doc.room_type, doc.check_in_date,
 				                       doc.check_out_date, group_booking=doc.group_booking,
@@ -236,7 +244,15 @@ def apply_allocation(property: str, assignments):
 		if why:
 			skipped.append({"reservation": res, "room": room, "reason": why})
 			continue
-		frappe.db.set_value("Reservation", res, "room", room)
+		stay = frappe.get_doc("Reservation", res)
+		stay.room = room
+		frappe.db.savepoint("allocate_one_room")
+		try:
+			stay.save()
+		except frappe.ValidationError as exc:
+			frappe.db.rollback(save_point="allocate_one_room")
+			skipped.append({"reservation": res, "room": room, "reason": str(exc)})
+			continue
 		taken.add(room)
 		log_action("allocate_room", "Reservation", res, property,
 		           minutes_saved=2,
