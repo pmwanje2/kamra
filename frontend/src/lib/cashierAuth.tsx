@@ -74,7 +74,7 @@ export function CashierAuthProvider({ children }: { children: ReactNode }) {
   }, [waiter])
 
   const onSubmit = useCallback(
-    async (pin: string) => {
+    async (pin: string, currentPassword?: string) => {
       if (padMode === "enroll") {
         setNewPin(pin)
         setPadError(null)
@@ -91,7 +91,7 @@ export function CashierAuthProvider({ children }: { children: ReactNode }) {
       setPadError(null)
       try {
         if (padMode === "confirm") {
-          await call("kamra.api.set_cashier_pin", { pin })
+          await call("kamra.api.set_cashier_pin", { pin, current_password: currentPassword })
           setNewPin("")
           setPadMode("unlock")
         }
@@ -163,6 +163,7 @@ export function CashierAuthProvider({ children }: { children: ReactNode }) {
         }
         error={padError}
         busy={busy}
+        requirePassword={padMode === "confirm"}
         onSubmit={onSubmit}
         onClose={() => {
           setNewPin("")

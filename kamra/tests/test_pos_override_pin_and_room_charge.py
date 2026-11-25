@@ -52,7 +52,8 @@ def _set_pin(user: str, pin: str, *, must_reset: int = 0) -> None:
 			"pin": pin,
 			"must_reset": must_reset,
 		}).insert(ignore_permissions=True)
-	frappe.cache.delete_value(f"kamra_supervisor_pin_fails:{user.casefold()}")
+	with authz._pin_attempt_connection() as db:
+		db.delete("Cashier PIN Attempt", authz._pin_attempt_name(user, "pin"))
 
 
 def _restrict_property(user: str, prop: str) -> None:
@@ -190,8 +191,7 @@ class POSOverridePinHookTestCase(AuditTestCase):
 		fn = frappe.get_attr(hooks.pos_override_pin_verifier)
 		frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- fixture
 		_set_pin(SUP_A, "4321", must_reset=1)
-		fails_key = f"kamra_supervisor_pin_fails:{SUP_A.casefold()}"
-		frappe.cache.delete_value(fails_key)
+		attempt = authz._pin_attempt_name(SUP_A, "pin")
 
 		# Non-PIN must_reset state must NEVER record lockout strikes even after PIN_MAX_ATTEMPTS + 1 calls!
 		frappe.set_user(POS_USER)  # nosemgrep: frappe-setuser -- cashier persona
@@ -199,7 +199,7 @@ class POSOverridePinHookTestCase(AuditTestCase):
 			res = fn(SUP_A, "4321", property=PROP_A, requester=POS_USER)
 			self.assertFalse(res.get("ok"))
 			self.assertEqual(res.get("code"), "POS-AUTH-NO-PIN")
-		self.assertEqual(frappe.utils.cint(frappe.cache.get_value(fails_key)), 0)
+		self.assertFalse(frappe.db.exists("Cashier PIN Attempt", attempt))
 
 		# Disabled user returns POS-AUTH-NOT-ELIGIBLE with zero strikes
 		frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- fixture
@@ -209,7 +209,7 @@ class POSOverridePinHookTestCase(AuditTestCase):
 		dis = fn(SUP_A, "4321", property=PROP_A, requester=POS_USER)
 		self.assertFalse(dis.get("ok"))
 		self.assertEqual(dis.get("code"), "POS-AUTH-NOT-ELIGIBLE")
-		self.assertEqual(frappe.utils.cint(frappe.cache.get_value(fails_key)), 0)
+		self.assertFalse(frappe.db.exists("Cashier PIN Attempt", attempt))
 
 		# DB-locked Cashier PIN (locked_until in future) returns POS-AUTH-LOCKED
 		frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- fixture

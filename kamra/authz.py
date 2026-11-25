@@ -3,6 +3,8 @@ paths, but raw-SQL reads and db.set_value writes sail past them. Every
 whitelisted Kamra endpoint therefore declares who may call it - and,
 for staff restricted to some properties, which properties it may touch."""
 
+import hashlib
+import hmac
 import inspect
 import json
 import math
@@ -37,12 +39,21 @@ def require_invoice_correction_role() -> None:
 # defaults - each property can change them in Settings -> Finance
 PIN_MAX_ATTEMPTS = 5
 PIN_LOCK_MINUTES = 15
+PIN_HASH_ROUNDS = 600_000
+_PIN_FIELDS = frozenset({
+	"pin", "current_pin", "new_pin", "confirm_pin", "supervisor_pin", "comp_supervisor_pin",
+	"override_pin", "approver_pin", "password", "current_password",
+})
+_PIN_ATTEMPT_DOCTYPE = "Cashier PIN Attempt"
+_FLOOR_PIN_PARENT = "SiteOps Floor PIN"
+_FLOOR_PIN_HASH = "siteops_floor_pin_hash"
+_FLOOR_PIN_LOCK = "siteops_floor_pin_locked_until"
 
 
 def _pin_policy(property: str | None) -> tuple[int, int]:
 	"""(max wrong attempts, lock / unlock-window minutes) for a property."""
 	from kamra.settings import get_setting
-	return (int(get_setting(property, "pin_max_attempts", PIN_MAX_ATTEMPTS)),
+	return (min(PIN_MAX_ATTEMPTS, int(get_setting(property, "pin_max_attempts", PIN_MAX_ATTEMPTS))),
 	        int(get_setting(property, "pin_lock_minutes", PIN_LOCK_MINUTES)))
 
 
@@ -395,6 +406,31 @@ def require_roles(*roles, scope: dict | None = None):
 	return deco
 
 
+def _scrub_pin_from_form_dict(*extra_fields: str) -> None:
+	form = getattr(frappe.local, "form_dict", None)
+	if isinstance(form, dict):
+		for key in _PIN_FIELDS | set(extra_fields):
+			form.pop(key, None)
+
+
+def scrub_pin_arguments(fn):
+	"""Remove credentials before role, scope and request argument validation."""
+	@wraps(fn)
+	def scrubbed(*args, **kwargs):
+		_scrub_pin_from_form_dict()
+		if getattr(frappe.local, "request", None) is not None:
+			from frappe.utils.typing_validations import transform_parameter_types
+
+			args, kwargs = transform_parameter_types(fn, args, kwargs)
+		return fn(*args, **kwargs)
+
+	# Frappe's whitelist wrapper normally validates before entering this
+	# decorator. Validate non-secret arguments inside it, after scrubbing.
+	fn.__annotations__ = {key: value for key, value in fn.__annotations__.items() if key not in _PIN_FIELDS}
+	scrubbed.__annotations__ = {}
+	return scrubbed
+
+
 def _pin_locked(doc) -> bool:
 	if not doc.get("locked_until"):
 		return False
@@ -423,14 +459,15 @@ def require_cashier_pin(property: str, pin=None):
 	user = frappe.session.user
 	if user == "Administrator":
 		return
-	max_attempts, lock_minutes = _pin_policy(property)
+	_, lock_minutes = _pin_policy(property)
 
 	# Sliding unlock window (set after a successful PinPad entry)
 	cache_key = f"kamra_cashier_unlock:{user}"
 	if pin in (None, "") and frappe.cache.get_value(cache_key):
-		# refresh sliding window
-		frappe.cache.set_value(cache_key, 1, expires_in_sec=lock_minutes * 60)
-		return
+		state = cashier_pin_state(user)
+		if state["has_pin"] and not state["locked"]:
+			frappe.cache.set_value(cache_key, 1, expires_in_sec=lock_minutes * 60)
+			return
 	_check_user_pin(user, pin, property)
 	frappe.cache.set_value(cache_key, 1, expires_in_sec=lock_minutes * 60)
 
@@ -695,11 +732,16 @@ def supervisors_for(property: str, roles=SUPERVISOR_ROLES,
 		"Has Role", filters={"role": ["in", [r for r in roles if r != "Administrator"]],
 		                     "parenttype": "User"},
 		pluck="parent", distinct=True))
-	if not include_pin_status:
+	bridge_active = doa_floor_bridge_active()
+	if bridge_active:
+		company = _property_company(property)
+		floor_roles = _approval_limit_floor_roles(company)
+		if floor_roles is not None:
+			users = _company_scoped_role_holders(company, floor_roles)
+	elif not include_pin_status:
 		users &= set(frappe.get_all("Cashier PIN", pluck="name"))
 	excluded = _people(exclude) | {"administrator", "guest"}
 	users = {u for u in users if u.casefold() not in excluded}
-	max_attempts = _pin_policy(property)[0] if include_pin_status else 0
 	out = []
 	for u in frappe.get_all("User", filters={"name": ["in", list(users) or [""]],
 	                                         "enabled": 1, "user_type": "System User"},
@@ -707,11 +749,12 @@ def supervisors_for(property: str, roles=SUPERVISOR_ROLES,
 		allowed = restricted_properties(u.name)
 		if allowed is None or property in allowed:
 			row = {"user": u.name, "full_name": u.full_name or u.name}
-			if include_pin_status:
-				status = cashier_pin_state(u.name)
-				fails = cint(frappe.cache.get_value(f"kamra_supervisor_pin_fails:{u.name.casefold()}"))
-				row.update(has_pin=status["has_pin"], must_reset=status["must_reset"],
-				           locked=status["locked"] or fails >= max_attempts)
+			if include_pin_status or bridge_active:
+				status = approval_pin_state(u.name, bridge_active=bridge_active)
+				if include_pin_status:
+					row.update(has_pin=status["has_pin"], must_reset=status["must_reset"], locked=status["locked"])
+				elif not status["has_pin"]:
+					continue
 			out.append(row)
 	return out
 
@@ -735,6 +778,7 @@ def verify_supervisor(property: str, supervisor: str | None, pin,
 	floor PIN DoA + SoD verification with a unique single-use nonce, refusing
 	Administrator free-pass and self-approval. Always scrubs PIN fields from
 	`form_dict`. Returns the approving user."""
+	_scrub_pin_from_form_dict()
 	try:
 		doa_script = _doa_floor_script()
 		supervisor_in = (supervisor or "").strip()
@@ -748,7 +792,7 @@ def verify_supervisor(property: str, supervisor: str | None, pin,
 					"never Administrator or Guest.",
 					frappe.PermissionError,
 				)
-			canonical = frappe.db.exists("User", supervisor_in)
+			canonical = frappe.db.get_value("User", supervisor_in, "name", for_update=True)
 			if not canonical:
 				frappe.throw("SUPERVISOR_REQUIRED: pick the supervisor who approves this.",
 				             frappe.PermissionError)
@@ -767,10 +811,12 @@ def verify_supervisor(property: str, supervisor: str | None, pin,
 					"must be two different people.",
 					frappe.PermissionError,
 				)
-			supplied_pin = str(pin or "").strip()
+			supplied_pin = pin if isinstance(pin, str) else ""
 			if not supplied_pin:
 				frappe.throw("SUPERVISOR_PIN_REQUIRED: the supervisor enters their PIN.")
 
+			if not supplied_pin.isascii() or not supplied_pin.isdigit():
+				frappe.throw("Wrong cashier PIN.")
 			comp = (company or _property_company(property) or "").strip()
 			req_people = [
 				str(u).strip()
@@ -790,6 +836,7 @@ def verify_supervisor(property: str, supervisor: str | None, pin,
 
 			req_nonce = (nonce or "").strip() or f"kmr-{secrets.token_hex(16)}"
 			payload = {
+				"cmd": DOA_FLOOR_VERIFY_METHOD,
 				"company": comp,
 				"property": property or "",
 				"requester": doa_requester,
@@ -826,7 +873,7 @@ def verify_supervisor(property: str, supervisor: str | None, pin,
 					"[SITEOPS-DOA-ELIGIBLE] Floor authority approver mismatch.",
 					frappe.PermissionError,
 				)
-			frappe.cache.delete_value(f"kamra_supervisor_pin_fails:{supervisor_user.casefold()}")
+			_upgrade_horizontal_floor_pin(supervisor_user, supplied_pin)
 			return verified_user
 
 		supervisor = supervisor_in
@@ -835,15 +882,14 @@ def verify_supervisor(property: str, supervisor: str | None, pin,
 			frappe.throw("SUPERVISOR_REQUIRED: pick the supervisor who approves this.",
 			             frappe.PermissionError)
 		supervisor = str(canonical)
-		if supervisor.casefold() in _people(requester) or supervisor.casefold() in _people(document_owner):
+		if supervisor.casefold() in (_people(requester) | _people(document_owner)):
 			frappe.throw("SUPERVISOR_SELF_APPROVAL: you cannot approve your own "
 			             "request. Another supervisor signs it off.", frappe.PermissionError)
 		if not frappe.db.get_value("User", supervisor, "enabled") or \
 				not is_supervisor(supervisor, roles):
 			frappe.throw(f"{supervisor} cannot approve this. It needs a {approver_roles(roles)} "
 			             "user.", frappe.PermissionError)
-		allowed = restricted_properties(supervisor)
-		if property and allowed is not None and property not in allowed:
+		if (property or company) and not _pin_scope_allows(supervisor, property, company or _property_company(property)):
 			frappe.throw(f"{supervisor} has no access to {property}.",
 			             frappe.PermissionError)
 		if not frappe.db.exists("Cashier PIN", supervisor):
@@ -851,23 +897,7 @@ def verify_supervisor(property: str, supervisor: str | None, pin,
 			             "set one the first time a money action asks for it.")
 		if not pin:
 			frappe.throw("SUPERVISOR_PIN_REQUIRED: the supervisor enters their PIN.")
-		# The PIN record's own attempt counter is rolled back with a refused
-		# request, so guesses at someone else's PIN are also counted in the
-		# cache, which a rollback does not touch.
-		max_attempts, lock_minutes = _pin_policy(property)
-		fails_key = f"kamra_supervisor_pin_fails:{supervisor.casefold()}"
-		if cint(frappe.cache.get_value(fails_key)) >= max_attempts:
-			frappe.throw("PIN_LOCKED: too many wrong supervisor PIN attempts - "
-			             f"try again in {lock_minutes} minutes.")
-		try:
-			_check_user_pin(supervisor, pin, property)
-		except frappe.ValidationError as exc:
-			msg = str(exc)
-			if not any(tag in msg for tag in ("PIN_MUST_RESET", "PIN_NOT_SET", "PIN_REQUIRED")):
-				frappe.cache.set_value(fails_key, cint(frappe.cache.get_value(fails_key)) + 1,
-				                       expires_in_sec=lock_minutes * 60)
-			raise
-		frappe.cache.delete_value(fails_key)
+		_check_user_pin(supervisor, pin, property)
 		return supervisor
 	finally:
 		_scrub_pin_from_form_dict()
@@ -891,7 +921,7 @@ def list_supervisors(property: str) -> list[dict]:
 	property = _require_approval_property(property)
 	company = _property_company(property)
 	floor_roles = _approval_limit_floor_roles(company)
-	if floor_roles is not None:
+	if floor_roles is not None and not doa_floor_bridge_active():
 		holders = _company_scoped_role_holders(company, floor_roles)
 		holders &= set(frappe.get_all("Cashier PIN", pluck="name"))
 		excluded = _people(frappe.session.user) | {"administrator", "guest"}
@@ -911,6 +941,7 @@ def list_supervisors(property: str) -> list[dict]:
 
 
 @frappe.whitelist(methods=["POST"])
+@scrub_pin_arguments
 @require_roles("Front Desk", "Finance")
 def verify_supervisor_approval(property: str, supervisor: str | None = None, pin: str | None = None) -> dict:
 	"""Verify a named supervisor for the authenticated requester's correction."""
@@ -998,25 +1029,6 @@ def resolve_property_for_pos_profile(pos_profile: str | None, user: str | None =
 	return str(props[0]) if len(props) == 1 else None
 
 
-def _scrub_pin_from_form_dict(*extra_fields: str) -> None:
-	form = getattr(frappe.local, "form_dict", None)
-	if isinstance(form, dict):
-		for key in ("pin", "supervisor_pin", "override_pin", *extra_fields):
-			form.pop(key, None)
-
-
-def scrub_pin_arguments(fn):
-	"""Scrub credentials even if the wrapped role or property check refuses."""
-	@wraps(fn)
-	def scrubbed(*args, **kwargs):
-		try:
-			return fn(*args, **kwargs)
-		finally:
-			_scrub_pin_from_form_dict("current_pin", "password")
-
-	return scrubbed
-
-
 def require_pin_identity(user: str | None = None, *, for_update: bool = False) -> str:
 	"""Return an active human account. Lock its User row before PIN writes."""
 	user = user if user is not None else frappe.session.user
@@ -1036,70 +1048,230 @@ def require_pin_identity(user: str | None = None, *, for_update: bool = False) -
 	return account.name
 
 
+def _active_lock(until):
+	if isinstance(until, str):
+		from frappe.utils import get_datetime
+		until = get_datetime(until)
+	return until if until and until > now_datetime() else None
+
+
+def _pin_attempt_name(user: str, kind: str) -> str:
+	return f"{kind}:{hashlib.sha256(user.casefold().encode()).hexdigest()}"
+
+
+def _pin_attempt_lock(user: str, kind: str, *, fresh: bool = False):
+	name = _pin_attempt_name(user, kind)
+	if fresh:
+		# A previous read in the business transaction can predate the User lock.
+		with _pin_attempt_connection() as db:
+			return _active_lock(db.get_value(_PIN_ATTEMPT_DOCTYPE, name, "locked_until"))
+	return _active_lock(frappe.db.get_value(_PIN_ATTEMPT_DOCTYPE, name, "locked_until"))
+
+
+@contextmanager
+def _pin_attempt_connection():
+	"""Commit credential counters independently of the caller's business transaction."""
+	from frappe.database import get_db
+
+	conf = frappe.conf
+	db = get_db(socket=conf.get("db_socket"), host=conf.get("db_host"), port=conf.get("db_port"),
+	            user=conf.get("db_user") or conf.get("db_name"), password=conf.get("db_password"),
+	            cur_db_name=conf.get("db_name"))
+	previous = frappe.local.db
+	try:
+		# Frappe's ORM and query builder use the active context connection.
+		frappe.local.db = db
+		yield db
+		db.commit()  # nosemgrep: frappe-manual-commit -- only the credential attempt transaction
+	finally:
+		frappe.local.db = previous
+		db.close()
+
+
+def _record_pin_attempt(user: str, kind: str, *, matched: bool, limit: int, minutes: int, previous: int = 0):
+	"""Called with the account's User row locked, including for first enrollment."""
+	name = _pin_attempt_name(user, kind)
+	with _pin_attempt_connection() as db:
+		row = db.get_value(_PIN_ATTEMPT_DOCTYPE, name, ["attempts", "locked_until"], as_dict=True)
+		now = now_datetime()
+		if matched:
+			if row and (row.attempts or row.locked_until):
+				db.set_value(_PIN_ATTEMPT_DOCTYPE, name, {"attempts": 0, "locked_until": None})
+			return None
+
+		attempts = (cint(row.attempts) if not row.locked_until else 0) if row else previous
+		attempts += 1
+		until = add_to_date(now, minutes=minutes) if attempts >= limit else None
+		if not row:
+			db.bulk_insert(_PIN_ATTEMPT_DOCTYPE, ["name", "creation", "modified"], [(name, now, now)])
+		db.set_value(_PIN_ATTEMPT_DOCTYPE, name, {"attempts": attempts, "locked_until": until})
+		return until
+
+
 def cashier_pin_state(user: str) -> dict:
 	"""Read only non-secret fields. A reset stub is not an enrolled PIN."""
 	row = frappe.db.get_value("Cashier PIN", user, ["must_reset", "locked_until"], as_dict=True)
 	must_reset = bool(row and cint(row.must_reset))
-	locked_until = row.locked_until if row and _pin_locked(row) else None
+	locks = [_pin_attempt_lock(user, "pin"), _active_lock(row.locked_until) if row else None]
+	locked_until = max((lock for lock in locks if lock), default=None)
 	return {"has_pin": bool(row and not must_reset), "must_reset": must_reset,
 	        "locked": bool(locked_until), "locked_until": locked_until}
 
 
+def _floor_pin_state_value(user: str, key: str):
+	return frappe.db.get_value(
+		"DefaultValue", {"parent": user, "parenttype": _FLOOR_PIN_PARENT, "defkey": key}, "defvalue",
+	)
+
+
+def approval_pin_state(user: str, *, bridge_active: bool | None = None) -> dict:
+	state = cashier_pin_state(user)
+	if bridge_active is None:
+		bridge_active = doa_floor_bridge_active()
+	if bridge_active and not (state["has_pin"] or state["must_reset"]):
+		state["has_pin"] = bool(_floor_pin_state_value(user, _FLOOR_PIN_HASH))
+		floor_lock = _active_lock(_floor_pin_state_value(user, _FLOOR_PIN_LOCK))
+		if floor_lock and (not state["locked_until"] or floor_lock > state["locked_until"]):
+			state.update(locked=True, locked_until=floor_lock)
+	return state
+
+
 def normalize_approval_pin(pin: str | None) -> str:
-	pin = str(pin or "").strip()
-	if not (pin.isascii() and pin.isdigit() and 4 <= len(pin) <= 8):
+	if not (isinstance(pin, str) and pin.isascii() and pin.isdigit() and 4 <= len(pin) <= 8):
 		frappe.throw(frappe._("The PIN must be 4 to 8 digits."))
+	steps = {(int(right) - int(left)) % 10 for left, right in zip(pin, pin[1:])}
+	if steps in ({0}, {1}, {9}):
+		frappe.throw(frappe._("Choose a PIN without repeated or consecutive digits."))
 	return pin
 
 
-def write_cashier_pin(user: str, pin: str | None) -> None:
-	"""Update the shared PIN record after locking its User row."""
+def hash_cashier_pin(pin: str) -> str:
+	salt = secrets.token_bytes(16)
+	digest = hashlib.pbkdf2_hmac("sha256", pin.encode(), salt, PIN_HASH_ROUNDS)
+	return f"pbkdf2_sha256${PIN_HASH_ROUNDS}${salt.hex()}${digest.hex()}"
+
+
+def _matches_cashier_hash(pin: str, encoded_hash: str) -> bool:
+	try:
+		algorithm, rounds, salt, digest = encoded_hash.split("$")
+		if algorithm != "pbkdf2_sha256" or int(rounds) != PIN_HASH_ROUNDS:
+			return False
+		expected = hashlib.pbkdf2_hmac("sha256", pin.encode(), bytes.fromhex(salt), int(rounds))
+		return hmac.compare_digest(expected, bytes.fromhex(digest))
+	except (ValueError, UnicodeError):
+		return False
+
+
+def _save_cashier_pin_hash(user: str, encoded_hash: str | None) -> None:
+	from frappe.utils.password import remove_encrypted_password
+
 	exists = frappe.db.get_value("Cashier PIN", user, "name", for_update=True)
 	doc = frappe.get_doc("Cashier PIN", user, for_update=True) if exists else frappe.get_doc({
 		"doctype": "Cashier PIN", "user": user,
 	})
-	# The required password field gets an unusable placeholder on a reset stub.
-	doc.pin = pin if pin is not None else "0000"
-	doc.must_reset = int(pin is None)
+	doc.pin = None
+	doc.pin_hash = encoded_hash
+	doc.must_reset = int(encoded_hash is None)
 	doc.pin_attempts = 0
 	doc.locked_until = None
 	if exists:
 		doc.save(ignore_permissions=True)
+		remove_encrypted_password("Cashier PIN", user, "pin")
 	else:
 		doc.insert(ignore_permissions=True)
+
+
+def _revoke_horizontal_floor_pin(user: str) -> None:
+	frappe.db.delete("DefaultValue", {"parent": user, "parenttype": _FLOOR_PIN_PARENT,
+	                                "defkey": ["in", [_FLOOR_PIN_HASH, _FLOOR_PIN_LOCK, "siteops_floor_pin_attempts"]]})
+
+
+def write_cashier_pin(user: str, pin: str | None) -> None:
+	"""Update the shared PIN record after locking its User row."""
+	encoded_hash = hash_cashier_pin(normalize_approval_pin(pin)) if pin is not None else None
+	_save_cashier_pin_hash(user, encoded_hash)
+	if doa_floor_bridge_active():
+		_revoke_horizontal_floor_pin(user)
+	_record_pin_attempt(user, "pin", matched=True, limit=PIN_MAX_ATTEMPTS, minutes=PIN_LOCK_MINUTES)
 	frappe.cache.delete_value(f"kamra_cashier_unlock:{user}")
-	frappe.cache.delete_value(f"kamra_supervisor_pin_fails:{user.casefold()}")
 
 
-def _password_attempt_key(user: str) -> str:
-	return f"kamra_pin_password_attempts:{user}"
+def _upgrade_horizontal_floor_pin(user: str, pin: str) -> None:
+	"""Adopt an older Floor PIN only after SiteOps authorizes the approval."""
+	if frappe.db.exists("Cashier PIN", user):
+		return
+	# Serialize with enrollment and recheck after locking.
+	frappe.db.get_value("User", user, "name", for_update=True)
+	if frappe.db.exists("Cashier PIN", user):
+		return
+	stored = _floor_pin_state_value(user, _FLOOR_PIN_HASH)
+	digest = hashlib.sha256(f"siteops_floor_pin_v1|{user.lower()}|{pin}".encode()).hexdigest()
+	if stored and hmac.compare_digest(digest.encode(), str(stored).strip().lower().encode()):
+		_save_cashier_pin_hash(user, hash_cashier_pin(pin))
+		_revoke_horizontal_floor_pin(user)
 
 
-def pin_password_locked_until(user: str):
-	_, until = frappe.cache.get_value(_password_attempt_key(user)) or (0, None)
-	return until if until and until > now_datetime() else None
+def pin_password_locked_until(user: str, *, fresh: bool = False):
+	until = _pin_attempt_lock(user, "password", fresh=fresh)
+	if not doa_floor_bridge_active():
+		return until
+	floor_until = _active_lock(_floor_pin_state_value(user, "siteops_floor_pin_pw_locked_until"))
+	return max((lock for lock in (until, floor_until) if lock), default=None)
 
 
-def verify_pin_account_password(user: str, password: str) -> None:
-	"""Throttle re-verification separately from PIN entry and site login."""
+def verify_pin_account_password(user: str, password: str | None) -> None:
+	"""Verify without logging the user in again or resetting the login tracker."""
 	from frappe.utils.password import check_password
 
-	if pin_password_locked_until(user):
+	if pin_password_locked_until(user, fresh=True):
 		frappe.throw(frappe._("Too many incorrect passwords. Try again later."))
-	key = _password_attempt_key(user)
 	try:
+		if not isinstance(password, str) or not password:
+			raise frappe.AuthenticationError
 		check_password(user, password, delete_tracker_cache=False)
 	except frappe.AuthenticationError:
-		# Cache survives HTTP validation-error rollbacks. The User row lock
-		# serializes attempts for this account, including first enrollment.
-		attempts, until = frappe.cache.get_value(key) or (0, None)
-		attempts = 1 if until else attempts + 1
-		until = add_to_date(now_datetime(), minutes=PIN_LOCK_MINUTES) if attempts >= PIN_MAX_ATTEMPTS else None
-		frappe.cache.set_value(key, (attempts, until), expires_in_sec=PIN_LOCK_MINUTES * 60)
+		until = _record_pin_attempt(user, "password", matched=False, limit=PIN_MAX_ATTEMPTS, minutes=PIN_LOCK_MINUTES)
 		if until:
 			frappe.throw(frappe._("Too many incorrect passwords. Try again later."))
 		frappe.throw(frappe._("The account password is incorrect."))
-	frappe.cache.delete_value(key)
+	_record_pin_attempt(user, "password", matched=True, limit=PIN_MAX_ATTEMPTS, minutes=PIN_LOCK_MINUTES)
+
+
+def _pin_company_scope(user: str) -> set[str] | None:
+	from frappe.core.doctype.user_permission.user_permission import get_user_permissions
+
+	permissions = get_user_permissions(user).get("Company")
+	if not permissions:
+		return None
+	user_scope = {entry["doc"] for entry in permissions if entry.get("doc") and entry.get("applicable_for") == "User"}
+	return user_scope or {entry["doc"] for entry in permissions if entry.get("doc") and not entry.get("applicable_for")}
+
+
+def _pin_property_scope(user: str) -> set[str] | None:
+	allowed = restricted_properties(user)
+	return {prop for prop in allowed if prop} if allowed is not None else None
+
+
+def _pin_scope_allows(user: str, property: str | None, company: str | None) -> bool:
+	properties = _pin_property_scope(user)
+	companies = _pin_company_scope(user)
+	return (properties is None or property in properties) and (companies is None or company in companies)
+
+
+def _pos_pin_company(pos_profile: str | None, property: str | None) -> str:
+	if pos_profile and _doctype_has_field("POS Profile", "company"):
+		company = frappe.db.get_value("POS Profile", pos_profile, "company")
+		if company:
+			return company
+	return _property_company(property)
+
+
+def _pin_scope_covers(actor: str, target: str) -> bool:
+	for scope in (_pin_property_scope, _pin_company_scope):
+		mine, theirs = scope(actor), scope(target)
+		if mine == set() or theirs == set() or (mine is not None and (theirs is None or not theirs <= mine)):
+			return False
+	return True
 
 
 def manage_pos_override_pin(
@@ -1107,12 +1279,14 @@ def manage_pos_override_pin(
 	*,
 	user: str | None = None,
 	pin: str | None = None,
+	current_password: str | None = None,
 	caller: str | None = None,
 	pos_profile: str | None = None,
 ) -> dict:
-	"""In-process POS hook. The POS owns its re-authentication and transaction."""
+	"""In-process POS hook with Kamra credential verification and scope checks."""
 	from kamra.savings import log_action
 
+	_scrub_pin_from_form_dict()
 	try:
 		actor = require_pin_identity()
 		if caller is not None and (not isinstance(caller, str) or caller.strip().casefold() != actor.casefold()):
@@ -1128,23 +1302,21 @@ def manage_pos_override_pin(
 				or ("System Manager" in frappe.get_roles(target) and not roles.intersection(IT_ADMIN))
 			):
 				frappe.throw(frappe._("This account cannot manage approval PINs."), frappe.PermissionError)
-			actor_props = restricted_properties(actor)
-			target_props = restricted_properties(target)
-			if actor_props is not None and (target_props is None or not target_props <= actor_props):
+			if (action != "status" or not pos_profile) and not _pin_scope_covers(actor, target):
 				frappe.throw(frappe._("This account cannot manage approval PINs."), frappe.PermissionError)
 		if pos_profile:
 			prop = resolve_property_for_pos_profile(pos_profile, user=actor)
-			for account in {actor, target}:
-				allowed = restricted_properties(account)
-				if allowed is not None and prop not in allowed:
-					frappe.throw(frappe._("This account cannot manage approval PINs."), frappe.PermissionError)
+			company = _pos_pin_company(pos_profile, prop)
+			if not prop or any(not _pin_scope_allows(account, prop, company) for account in {actor, target}):
+				frappe.throw(frappe._("This account cannot manage approval PINs."), frappe.PermissionError)
 		if action == "status":
-			status = cashier_pin_state(target)
+			status = approval_pin_state(target)
 			status.pop("locked_until")
 			status["locked"] |= bool(pin_password_locked_until(target))
 			return status
 		if action == "set":
-			write_cashier_pin(target, normalize_approval_pin(pin))
+			verify_pin_account_password(target, current_password)
+			write_cashier_pin(target, pin if pin is not None else "")
 			log_action("set_cashier_pin", "Cashier PIN", target, None)
 			return {"ok": True, "has_pin": True}
 		write_cashier_pin(target, None)
@@ -1171,6 +1343,7 @@ def verify_pos_override_pin(
 	Returns only yes/no + approver display name on success (and a neutral refusal
 	code on failure). Never introduces a second PIN store.
 	"""
+	_scrub_pin_from_form_dict()
 	try:
 		if (
 			getattr(frappe.flags, "kamra_agent_call", False)
@@ -1196,8 +1369,8 @@ def verify_pos_override_pin(
 			return {"ok": False, "name": None, "code": "POS-AUTH-SELF"}
 
 		prop = property or resolve_property_for_pos_profile(pos_profile, user=req)
-		allowed_props = restricted_properties(approver_user)
-		if allowed_props is not None and (not prop or prop not in allowed_props):
+		company = _pos_pin_company(pos_profile, prop)
+		if any(not _pin_scope_allows(account, prop, company) for account in (req, approver_user)):
 			return {"ok": False, "name": None, "code": "POS-AUTH-NOT-ELIGIBLE"}
 
 		try:
@@ -1207,6 +1380,7 @@ def verify_pos_override_pin(
 				pin,
 				roles=POS_SUPERVISOR_ROLES,
 				requester=req,
+				company=company,
 				reference_doctype="POS Invoice",
 				reason=privilege or "pos_override",
 			)
@@ -1241,67 +1415,69 @@ def verify_pos_override_pin(
 
 
 def _check_user_pin(user: str, pin, property: str | None):
-	"""Check `user`'s cashier PIN; wrong tries count towards the lock."""
+	"""Check the shared cashier PIN and serialize guesses across till and approval."""
 	max_attempts, lock_minutes = _pin_policy(property)
-	if not frappe.db.exists("Cashier PIN", user):
+	frappe.db.get_value("User", user, "name", for_update=True)
+	if not frappe.db.get_value("Cashier PIN", user, "name", for_update=True):
 		frappe.throw("PIN_NOT_SET: set your cashier PIN first (ask for it on "
 		             "this screen), then retry.")
 	doc = frappe.get_doc("Cashier PIN", user, for_update=True)
 	if doc.get("must_reset"):
 		frappe.throw("PIN_MUST_RESET: your PIN was reset by an admin - "
 		             "enroll a new PIN first.")
-	if _pin_locked(doc):
+	if _pin_locked(doc) or _pin_attempt_lock(user, "pin", fresh=True):
 		frappe.throw("PIN_LOCKED: too many wrong attempts - try again later.")
-	if not pin:
+	if pin is None or pin == "":
 		frappe.throw("PIN_REQUIRED: this action needs your cashier PIN.")
-	from frappe.utils.password import get_decrypted_password
-	stored = get_decrypted_password("Cashier PIN", user, "pin",
-	                                raise_exception=False)
-	if not stored or str(pin).strip() != str(stored):
-		attempts = int(doc.pin_attempts or 0) + 1
-		doc.pin_attempts = attempts
-		if attempts >= max_attempts:
-			doc.locked_until = add_to_date(now_datetime(),
-			                               minutes=lock_minutes)
-			doc.pin_attempts = 0
-			doc.save(ignore_permissions=True)
+	encoded_hash = doc.get("pin_hash")
+	matched = False
+	if isinstance(pin, str) and pin.isascii() and pin.isdigit() and len(pin) <= 8:
+		if encoded_hash:
+			matched = _matches_cashier_hash(pin, encoded_hash)
+		else:
+			from frappe.utils.password import get_decrypted_password
+			stored = get_decrypted_password("Cashier PIN", user, "pin", raise_exception=False)
+			matched = bool(stored and hmac.compare_digest(pin.encode(), str(stored).encode()))
+
+	until = _record_pin_attempt(user, "pin", matched=matched, limit=max_attempts, minutes=lock_minutes,
+	                            previous=cint(doc.pin_attempts) if not doc.locked_until else 0)
+	if not matched:
+		if until:
+			frappe.cache.delete_value(f"kamra_cashier_unlock:{user}")
 			frappe.throw("PIN_LOCKED: too many wrong attempts - locked for "
 			             f"{lock_minutes} minutes.")
-		doc.save(ignore_permissions=True)
 		frappe.throw("Wrong cashier PIN.")
-	# success
-	if doc.pin_attempts or doc.locked_until:
-		doc.pin_attempts = 0
-		doc.locked_until = None
-		doc.save(ignore_permissions=True)
+	if not encoded_hash:
+		# Existing tenants keep their current PIN until they choose to rotate it.
+		_save_cashier_pin_hash(user, hash_cashier_pin(pin))
+	elif doc.pin_attempts or doc.locked_until:
+		frappe.db.set_value("Cashier PIN", user, {"pin_attempts": 0, "locked_until": None})
 
 
 def unlock_cashier_session(property: str, pin: str) -> dict:
 	"""Explicit PinPad verify: validates PIN and opens the unlock window."""
-	# Clear any existing unlock so we always re-validate
-	frappe.cache.delete_value(f"kamra_cashier_unlock:{frappe.session.user}")
-	require_cashier_pin(property, pin)
-	return {"ok": True, "unlocked_minutes": _pin_policy(property)[1]}
+	user = require_pin_identity()
+	cache_key = f"kamra_cashier_unlock:{user}"
+	frappe.cache.delete_value(cache_key)
+	_check_user_pin(user, pin, property)
+	minutes = _pin_policy(property)[1]
+	frappe.cache.set_value(cache_key, 1, expires_in_sec=minutes * 60)
+	return {"ok": True, "unlocked_minutes": minutes}
 
 
 def cashier_unlock_status(property: str) -> dict:
 	required = bool(property and frappe.db.get_value(
 		"Property", property, "require_cashier_pin"))
 	user = frappe.session.user
-	has_pin = bool(frappe.db.exists("Cashier PIN", user))
-	must_reset = False
-	locked = False
-	if has_pin:
-		doc = frappe.get_doc("Cashier PIN", user)
-		must_reset = bool(doc.get("must_reset"))
-		locked = _pin_locked(doc)
+	state = cashier_pin_state(user)
+	locked = state["locked"] or (not state["has_pin"] and bool(pin_password_locked_until(user)))
 	unlocked = bool(frappe.cache.get_value(f"kamra_cashier_unlock:{user}"))
 	return {
 		"required": required,
-		"has_pin": has_pin,
-		"must_reset": must_reset,
+		"has_pin": state["has_pin"],
+		"must_reset": state["must_reset"],
 		"locked": locked,
-		"unlocked": unlocked or not required or user == "Administrator",
+		"unlocked": (unlocked and state["has_pin"] and not locked) or not required or user == "Administrator",
 		# how long an unlock lasts here (Settings -> Finance, pin_lock_minutes)
 		"unlock_minutes": _pin_policy(property)[1] if property else PIN_LOCK_MINUTES,
 	}

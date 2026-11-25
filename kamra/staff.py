@@ -22,7 +22,7 @@ from frappe import _
 from frappe.rate_limiter import rate_limit
 from frappe.utils import validate_email_address
 
-from kamra.authz import IT_ADMIN, require_roles, restricted_properties
+from kamra.authz import IT_ADMIN, approval_pin_state, doa_floor_bridge_active, require_roles, restricted_properties
 
 ROLES = (
 	("Hotel Admin", "Hotel Admin",
@@ -104,6 +104,7 @@ def list_staff(property: str) -> list:
 	pins = {p.name: p.must_reset for p in frappe.get_all(
 		"Cashier PIN", filters={"name": ("in", list(by_user))}, fields=["name", "must_reset"])}
 
+	bridge_active = doa_floor_bridge_active()
 	out = []
 	for u in users:
 		props = sorted(perms[u.name]) if u.name in perms else None
@@ -111,6 +112,9 @@ def list_staff(property: str) -> list:
 			continue
 		roles = [r for r in ROLE_NAMES if r in by_user[u.name]]
 		is_it_user = any(r in IT_ONLY for r in roles)
+		pin = ("reset" if pins[u.name] else "set") if u.name in pins else "none"
+		if pin == "none" and bridge_active and approval_pin_state(u.name, bridge_active=True)["has_pin"]:
+			pin = "set"
 		out.append({
 			"user": u.name, "full_name": u.full_name or "", "email": u.email or u.name,
 			"job_title": u.kamra_job_title or "",
@@ -118,7 +122,7 @@ def list_staff(property: str) -> list:
 			"last_login": str(u.last_login) if u.last_login else None,
 			"last_active": str(u.last_active) if u.last_active else None,
 			"user_image": u.user_image,
-			"pin": ("reset" if pins[u.name] else "set") if u.name in pins else "unset",
+			"pin": pin,
 			"is_self": u.name == me,
 			"editable": u.name != me and (it or not is_it_user),
 		})

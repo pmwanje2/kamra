@@ -2773,4 +2773,5 @@ The account password is incorrect.,Le mot de passe du compte est incorrect.
 This account cannot manage approval PINs.,Ce compte ne peut pas gérer les codes PIN d’approbation.
 Too many incorrect passwords. Try again later.,Trop de mots de passe incorrects. Réessayez plus tard.
 Unknown approval PIN action.,Action inconnue pour le code PIN d’approbation.
-Your current PIN is needed to change it.,Votre code PIN actuel est nécessaire pour le modifier.
+Choose a PIN without repeated or consecutive digits.,Choisissez un code PIN sans chiffres répétés ni consécutifs.
+PIN Hash,Empreinte du code PIN

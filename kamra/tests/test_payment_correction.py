@@ -467,9 +467,16 @@ class BridgeSupervisorTests(AuditTestCase):
 			).insert()
 			frappe.clear_cache(user=user)
 		frappe.get_doc(dict(doctype="Cashier PIN", user=self.approver, pin="8394")).insert()
-		self.fails_key = f"kamra_supervisor_pin_fails:{self.approver}"
-		frappe.cache.delete_value(self.fails_key)
-		self.addCleanup(frappe.cache.delete_value, self.fails_key)
+		from kamra.authz import _pin_attempt_connection, _pin_attempt_name
+
+		self.attempt_name = _pin_attempt_name(self.approver, "pin")
+
+		def clear_attempts():
+			with _pin_attempt_connection() as db:
+				db.delete("Cashier PIN Attempt", self.attempt_name)
+
+		clear_attempts()
+		self.addCleanup(clear_attempts)
 
 	def bridge(self, endpoint, prop, **kwargs):
 		from frappe.utils.safe_exec import safe_exec
@@ -520,16 +527,19 @@ class BridgeSupervisorTests(AuditTestCase):
 					self.bridge("list_supervisors", prop)
 				with self.assertRaises(frappe.PermissionError):
 					self.bridge("verify_supervisor_approval", prop, supervisor=self.approver, pin="0000")
-		self.assertFalse(frappe.cache.get_value(self.fails_key))
+		self.assertFalse(frappe.db.exists("Cashier PIN Attempt", self.attempt_name))
 
 	def test_wrong_attempts_survive_request_rollback_and_lock_correct_pin(self):
 		with self.set_user(self.desk), patch("kamra.authz._pin_policy", return_value=(2, 15)):
-			for count in (1, 2):
+			from kamra.authz import _pin_attempt_connection
+
+			for count, message in ((1, "Wrong cashier PIN"), (2, "PIN_LOCKED")):
 				frappe.db.savepoint("bad_supervisor_pin")
-				with self.assertRaisesRegex(frappe.ValidationError, "Wrong cashier PIN"):
+				with self.assertRaisesRegex(frappe.ValidationError, message):
 					self.bridge("verify_supervisor_approval", self.home, supervisor=self.approver, pin="0000")
 				frappe.db.rollback(save_point="bad_supervisor_pin")
-				self.assertEqual(frappe.cache.get_value(self.fails_key), count)
+				with _pin_attempt_connection() as db:
+					self.assertEqual(db.get_value("Cashier PIN Attempt", self.attempt_name, "attempts"), count)
 			with self.assertRaisesRegex(frappe.ValidationError, "PIN_LOCKED"):
 				self.bridge("verify_supervisor_approval", self.home, supervisor=self.approver, pin="8394")
 
@@ -542,9 +552,9 @@ class BridgeSupervisorTests(AuditTestCase):
 
 	def test_case_variants_share_rollback_resistant_lock(self):
 		with self.set_user(self.desk), patch("kamra.authz._pin_policy", return_value=(2, 15)):
-			for name in (self.approver.upper(), self.approver):
+			for name, message in ((self.approver.upper(), "Wrong cashier PIN"), (self.approver, "PIN_LOCKED")):
 				frappe.db.savepoint("failed_pin")
-				with self.assertRaisesRegex(frappe.ValidationError, "Wrong cashier PIN"):
+				with self.assertRaisesRegex(frappe.ValidationError, message):
 					self.bridge("verify_supervisor_approval", self.home, supervisor=name, pin="0000")
 				frappe.db.rollback(save_point="failed_pin")
 			with self.assertRaisesRegex(frappe.ValidationError, "PIN_LOCKED"):

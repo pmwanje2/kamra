@@ -1,0 +1,26 @@
+{
+ "actions": [],
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "attempts",
+  "locked_until"
+ ],
+ "fields": [
+  {
+   "fieldname": "attempts",
+   "fieldtype": "Int",
+   "label": "Failed Attempts",
+   "default": "0"
+  },
+  {
+   "fieldname": "locked_until",
+   "fieldtype": "Datetime",
+   "label": "Locked Until"
+  }
+ ],
+ "module": "Kamra",
+ "name": "Cashier PIN Attempt",
+ "permissions": [],
+ "track_changes": 0
+}

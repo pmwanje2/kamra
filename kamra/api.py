@@ -1910,6 +1910,7 @@ def payment_correction_options(folio: str, payment_row: str):
 
 
 @frappe.whitelist(methods=["POST"])
+@scrub_pin_arguments
 @require_roles("Front Desk", "Finance")
 def correct_folio_payment(folio: str, payment_row: str, action: str | None = None,
                           reason_code: str | None = None, reason: str | None = None,
@@ -1935,6 +1936,7 @@ def correct_folio_payment(folio: str, payment_row: str, action: str | None = Non
 
 
 @frappe.whitelist(methods=["POST"])
+@scrub_pin_arguments
 @require_roles("Finance", "Front Desk", "Kamra Agent")
 def refund_folio_payment(folio: str, amount: float | None = None,
                          mode: str | None = None, reason: str = "",
@@ -2359,6 +2361,7 @@ def _resolve_charge_gst(property: str, charge_type: str, description: str,
 
 
 @frappe.whitelist()
+@scrub_pin_arguments
 @require_roles("Finance", "Front Desk", "Kamra Agent")
 def void_folio_charge(folio: str, charge_row: str, reason: str = "",
                       pin: str | None = None,
@@ -2525,6 +2528,7 @@ def _still_covers(instruction: str, charge_type: str, transaction_code: str | No
 
 
 @frappe.whitelist(methods=["POST"])
+@scrub_pin_arguments
 @require_roles("Finance", "Front Desk", "Kamra Agent")
 def correct_folio_charge(folio: str, charge_row: str, reason: str = "",
                          amount: float | None = None,
@@ -4502,6 +4506,7 @@ def part_settle_folio(folio: str, pin: str | None = None):
 
 
 @frappe.whitelist(methods=["POST"])
+@scrub_pin_arguments
 @require_roles("Finance", "Front Desk", "Kamra Agent")
 def cancel_invoice(folio: str, reason: str, pin: str | None = None):
 	"""Void an invoice into the register and reopen the folio for correction.
@@ -10215,6 +10220,7 @@ def _amend_dates(doc, check_in_date: str, check_out_date: str,
 
 
 @frappe.whitelist(methods=["POST"])
+@scrub_pin_arguments
 @require_roles("Finance", "Hotel Admin")
 def correct_charged_nights(reservation: str, reason: str | None = None,
                            pin: str | None = None,
@@ -12040,10 +12046,10 @@ def cashier_pin_status(property: str):
 @require_roles(*PIN_SELF_SERVICE_ROLES)
 def my_pin_status():
 	"""Approval PIN enrollment and lock status for the signed-in user."""
-	from kamra.authz import cashier_pin_state, pin_password_locked_until, require_pin_identity
+	from kamra.authz import approval_pin_state, pin_password_locked_until, require_pin_identity
 
 	user = require_pin_identity()
-	state = cashier_pin_state(user)
+	state = approval_pin_state(user)
 	locks = [until for until in (state["locked_until"], pin_password_locked_until(user)) if until]
 	state.update(locked=bool(locks), locked_until=str(max(locks)) if locks else None)
 	return state
@@ -12052,39 +12058,24 @@ def my_pin_status():
 @frappe.whitelist(methods=["POST"])
 @scrub_pin_arguments
 @require_roles(*PIN_SELF_SERVICE_ROLES)
-def set_cashier_pin(pin: str, current_pin: str | None = None, password: str | None = None):
-	"""Enroll or rotate an approval PIN after account or current-PIN verification."""
-	from frappe.utils import cint
-	from frappe.utils.password import get_decrypted_password
-
-	from kamra.authz import normalize_approval_pin, require_pin_identity, verify_pin_account_password, write_cashier_pin
+def set_cashier_pin(pin: str, current_pin: str | None = None, password: str | None = None,
+                    current_password: str | None = None):
+	"""Enroll or rotate an approval PIN after verifying the signed-in account password."""
+	from kamra.authz import require_pin_identity, verify_pin_account_password, write_cashier_pin
 	from kamra.savings import log_action
 
 	user = require_pin_identity(for_update=True)
-	pin = normalize_approval_pin(pin)
-	row = frappe.db.get_value("Cashier PIN", user, ["must_reset", "locked_until"], as_dict=True, for_update=True)
-	if row and not cint(row.must_reset):
-		from secrets import compare_digest
-
-		from kamra.authz import _pin_locked
-
-		current_matches = False
-		if current_pin and not _pin_locked(row):
-			stored = get_decrypted_password("Cashier PIN", user, "pin", raise_exception=False)
-			current_matches = bool(stored and compare_digest(str(current_pin).strip().encode(), stored.encode()))
-		if not current_matches and password is None:
-			frappe.throw(_("Your current PIN is needed to change it."))
-	else:
-		current_matches = False
-	if password is not None and not current_matches:
-		verify_pin_account_password(user, password)
-	write_cashier_pin(user, pin)
+	# Keep the old password field usable by existing clients. A current PIN
+	# alone can no longer authorize enrollment or rotation.
+	verify_pin_account_password(user, current_password if current_password is not None else password)
+	write_cashier_pin(user, pin if pin is not None else "")
 	log_action("set_cashier_pin", "Cashier PIN", user, None)
 	frappe.db.commit()  # nosemgrep: frappe-manual-commit -- persists the completed operation before returning to an external/public caller; reviewed as intentional
 	return {"ok": True}
 
 
 @frappe.whitelist(methods=["POST"])
+@scrub_pin_arguments
 @require_roles("Hotel Admin")
 def reset_cashier_pin(user: str):
 	"""Admin reset: wipe the user's PIN and force re-enrollment."""
@@ -12099,6 +12090,7 @@ def reset_cashier_pin(user: str):
 
 
 @frappe.whitelist(methods=["POST"])
+@scrub_pin_arguments
 @require_roles("Finance", "Front Desk", "Revenue Manager", "Housekeeping",
                "F&B Manager")
 def verify_cashier_pin(property: str, pin: str):

@@ -12,7 +12,8 @@ type PinPadProps = {
   submitLabel?: string
   error?: string | null
   busy?: boolean
-  onSubmit: (pin: string) => void | Promise<void>
+  requirePassword?: boolean
+  onSubmit: (pin: string, currentPassword?: string) => void | Promise<void>
   onClose?: () => void
   maxLength?: number
 }
@@ -27,6 +28,7 @@ export function PinPad({
   submitLabel,
   error,
   busy,
+  requirePassword = false,
   onSubmit,
   onClose,
   maxLength = 8,
@@ -37,6 +39,7 @@ export function PinPad({
   const titleId = useId()
   const subtitleId = useId()
   const [pin, setPin] = useState("")
+  const [password, setPassword] = useState("")
 
   useEffect(() => {
     const element = dialog.current
@@ -45,7 +48,10 @@ export function PinPad({
     heading.current?.focus()
     return () => element.close()
   }, [open])
-  useEffect(() => setPin(""), [open, mode])
+  useEffect(() => {
+    setPin("")
+    setPassword("")
+  }, [open, mode])
 
   function push(digit: string) {
     if (!busy) setPin((value) => value.length < maxLength ? value + digit : value)
@@ -56,13 +62,15 @@ export function PinPad({
   }
 
   function submit() {
-    if (pin.length < 4 || busy) return
+    if (pin.length < 4 || busy || (requirePassword && !password)) return
     setPin("")
-    void onSubmit(pin)
+    setPassword("")
+    if (requirePassword) void onSubmit(pin, password)
+    else void onSubmit(pin)
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLDialogElement>) {
-    if (event.ctrlKey || event.altKey || event.metaKey) return
+    if (event.ctrlKey || event.altKey || event.metaKey || event.target instanceof HTMLInputElement) return
     if (/^[0-9]$/.test(event.key)) push(event.key)
     else if (event.key === "Backspace") erase()
     else if (event.key === "Enter" && !(event.target instanceof HTMLButtonElement)) submit()
@@ -129,9 +137,17 @@ export function PinPad({
         ))}
       </div>
 
+      {requirePassword && (
+        <label className="mt-4 block space-y-1 text-sm">
+          <span>{t("Account password")}</span>
+          <input type="password" autoComplete="current-password" required disabled={busy} value={password}
+            className="min-h-11 w-full rounded-lg border border-zinc-500 bg-white px-3 text-zinc-950 dark:border-[#71717a] dark:bg-zinc-900 dark:text-zinc-50"
+            onChange={(event) => setPassword(event.target.value)} />
+        </label>
+      )}
       <Button type="button"
         className="mt-4 min-h-11 w-full justify-center bg-zinc-900 hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-zinc-300"
-        disabled={busy || pin.length < 4} onClick={submit}>
+        disabled={busy || pin.length < 4 || (requirePassword && !password)} onClick={submit}>
         {busy ? t("Checking…") : submitLabel ?? (mode === "enroll" ? t("Set PIN")
           : mode === "confirm" ? t("Confirm") : t("Unlock"))}
       </Button>

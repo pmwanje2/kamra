@@ -4506,12 +4506,15 @@ def t95():
 	orig = frappe.db.get_value("Folio Ledger Entry", {
 		"source_name": row, "reversal_of": ["in", ["", None]]}, "name")
 	assert orig, "the charge left no ledger entry to reverse"
-	from kamra.authz import act_as
+	from kamra.authz import act_as, write_cashier_pin
 	pin_before = frappe.db.get_value("Property", P, "require_cashier_pin")
 	frappe.db.set_value("Property", P, "require_cashier_pin", 1)
 	user = "frontdesk@kamra.local"
 	unlock = f"kamra_cashier_unlock:{user}"
+	pin = "6017"
 	try:
+		frappe.db.get_value("User", user, "name", for_update=True)
+		write_cashier_pin(user, pin)
 		with act_as(user):
 			# no PinPad unlock yet - the PIN policy still holds
 			frappe.cache.delete_value(unlock)
@@ -4522,7 +4525,7 @@ def t95():
 			except frappe.ValidationError as e:
 				assert "PIN" in str(e), e
 			# after the unlock: the exact payload the screen sends
-			frappe.cache.set_value(unlock, 1, expires_in_sec=60)
+			api.verify_cashier_pin(P, pin)
 			# the pre-#160 call shape (no reason) and a blank one: refused
 			for bad in ({}, {"reason": "  "}):
 				try:
@@ -11254,7 +11257,6 @@ def t_ar_agent_payment_confirm():
 	sup = _supervisor()
 	with _as_user(sup):
 		_refused(decide_city_ledger_payment, req["request"], pin="0000", contains="Wrong")
-		frappe.cache.delete_value(f"kamra_supervisor_pin_fails:{sup}")
 		out = decide_city_ledger_payment(req["request"], pin=SUP_PIN)
 		_refused(decide_city_ledger_payment, req["request"], pin=SUP_PIN,
 		         contains="already")

@@ -88,7 +88,7 @@ export interface StaffRow {
   properties: string[] | null
   last_login: string | null
   last_active: string | null
-  pin: "set" | "unset" | "reset"
+  pin: "set" | "none" | "reset"
   is_self: boolean
   editable: boolean
   job_title?: string

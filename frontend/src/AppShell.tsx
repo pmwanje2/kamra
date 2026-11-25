@@ -237,7 +237,7 @@ function AccountMenu({
             {t("Change password")}
           </button>
           {canManageApprovalPin && (
-            <button type="button" role="menuitem" className={itemCls} onClick={() => {
+            <button type="button" role="menuitem" className={cn(itemCls, "min-h-11")} onClick={() => {
               setOpen(false)
               setPinOpen(true)
             }}>

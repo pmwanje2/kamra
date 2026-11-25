@@ -19,7 +19,7 @@ async function getPinStatus(signal?: AbortSignal) {
   return message
 }
 
-const inputClass = "min-h-11 w-full rounded-lg border border-zinc-400 bg-white px-3 text-zinc-950 dark:border-zinc-500 dark:bg-zinc-900 dark:text-zinc-50"
+const inputClass = "min-h-11 w-full rounded-lg border border-zinc-500 bg-white px-3 text-zinc-950"
 
 export function MyApprovalPinModal({ onClose, onSaved }: { onClose: () => void; onSaved?: () => void }) {
   const { t } = useT()
@@ -67,7 +67,7 @@ export function MyApprovalPinModal({ onClose, onSaved }: { onClose: () => void; 
     setBusy(true)
     setError("")
     try {
-      await call("kamra.api.set_cashier_pin", { pin, password })
+      await call("kamra.api.set_cashier_pin", { pin, current_password: password })
       setStatus({ has_pin: true, must_reset: false, locked: false, locked_until: null })
       setPin("")
       setConfirmPin("")
@@ -91,7 +91,7 @@ export function MyApprovalPinModal({ onClose, onSaved }: { onClose: () => void; 
         event.preventDefault()
         if (!busy) close()
       }}
-      className="m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-sm overflow-y-auto rounded-2xl border border-zinc-200 bg-white p-5 text-zinc-900 shadow-xl backdrop:bg-zinc-950/65 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+      className="m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-sm overflow-y-auto rounded-2xl border border-zinc-200 bg-white p-5 text-zinc-900 shadow-xl backdrop:bg-zinc-950/65"
     >
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
@@ -105,7 +105,7 @@ export function MyApprovalPinModal({ onClose, onSaved }: { onClose: () => void; 
           </div>
         </div>
         <button type="button" disabled={busy} onClick={close} aria-label={t("Close")}
-          className="grid min-h-11 min-w-11 place-items-center rounded-lg text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800">
+          className="grid min-h-11 min-w-11 place-items-center rounded-lg text-zinc-700 hover:bg-zinc-100">
           <X className="size-5" aria-hidden />
         </button>
       </div>
@@ -119,16 +119,16 @@ export function MyApprovalPinModal({ onClose, onSaved }: { onClose: () => void; 
           <span>{t("New PIN (4–8 digits)")}</span>
           <input className={inputClass} type="password" autoComplete="off" inputMode="numeric" dir="ltr"
             required minLength={4} maxLength={8} disabled={busy} value={pin}
-            onChange={(event) => setPin(event.target.value.replace(/[^0-9]/g, ""))} />
+            onChange={(event) => setPin(event.target.value)} />
         </label>
         <label className="block space-y-1">
           <span>{t("Confirm PIN")}</span>
           <input className={inputClass} type="password" autoComplete="off" inputMode="numeric" dir="ltr"
             required minLength={4} maxLength={8} disabled={busy} value={confirmPin}
-            onChange={(event) => setConfirmPin(event.target.value.replace(/[^0-9]/g, ""))} />
+            onChange={(event) => setConfirmPin(event.target.value)} />
         </label>
-        {error && <p role="alert" className="text-rose-700 dark:text-rose-300">{t(error)}</p>}
-        {saved && <p role="status" className="text-emerald-700 dark:text-emerald-300">{t("Approval PIN saved.")}</p>}
+        {error && <p role="alert" className="text-rose-700">{t(error)}</p>}
+        {saved && <p role="status" className="text-emerald-700">{t("Approval PIN saved.")}</p>}
         <Button type="submit" className="min-h-11 w-full justify-center bg-zinc-900 hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-zinc-300"
           disabled={busy || !status || !password || pin.length < 4 || confirmPin.length < 4}>
           {busy ? t("Saving…") : t("Save PIN")}
