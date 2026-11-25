@@ -4,13 +4,15 @@
 
 import type { ReactNode } from "react"
 import type { FunctionStatus } from "../../lib/api"
-import { fmtMoney, locale, moneyLocale } from "../../lib/money"
+import { fmtMoney, locale, moneyLocale, type MoneyContext } from "../../lib/money"
 import { t as translate, useUILanguage, uiDateLocale } from "../../lib/i18n"
 
-export const inr = (n: unknown) => fmtMoney(n)
+export type BanquetMoneyCtx = MoneyContext
+
+export const inr = (n: unknown, ctx?: BanquetMoneyCtx | null) => fmtMoney(n ?? 0, ctx)
 
 /** Money formatted with the active currency's minor-unit precision. */
-export const inrExact = (n: unknown) => fmtMoney(n)
+export const inrExact = (n: unknown, ctx?: BanquetMoneyCtx | null) => fmtMoney(n ?? 0, ctx)
 
 export const STATUSES: FunctionStatus[] = [
   "Enquiry",
@@ -54,6 +56,7 @@ export const ITEM_TYPES = [
   "Staffing",
   "Accommodation",
   "Stationery",
+  "Service Charge",
   "Other",
 ]
 export const SERVICE_CATEGORIES = [
@@ -152,15 +155,36 @@ export const SERVICE_STYLES = [
   "Boxed",
   "Cocktail",
 ]
-/** Banquet receipt modes, with the country's instant modes after Card. */
-export const payModes = () => [
-  "Cash",
-  "Card",
-  ...(locale().instant_payment_modes ?? []),
-  "Bank Transfer",
-  "Cheque",
-  "Other",
-]
+/** Banquet receipt modes, derived from the property's configured home-currency tenders. */
+export const payModes = () => {
+  const loc = locale()
+  const home = (loc.currency || "").trim().toUpperCase()
+  if (Array.isArray(loc.tender_modes) && loc.tender_modes.length > 0) {
+    const modes = [
+      ...new Set(
+        loc.tender_modes
+          .filter(
+            (m) =>
+              m.mode &&
+              m.mode !== "Foreign Cash" &&
+              (!home || !m.currencies?.length || m.currencies.includes(home)),
+          )
+          .map((m) => m.mode),
+      ),
+    ]
+    if (modes.length > 0) return modes
+  }
+  if (Array.isArray(loc.payment_modes) && loc.payment_modes.length > 0) {
+    const modes = [...new Set(loc.payment_modes.filter((m) => m && m !== "Foreign Cash"))]
+    if (modes.length > 0) return modes
+  }
+  return [
+    "Cash",
+    "Card",
+    ...(loc.instant_payment_modes ?? []),
+    "Bank Transfer",
+  ]
+}
 
 export const inputCls =
   "w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm " +

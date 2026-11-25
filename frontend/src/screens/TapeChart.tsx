@@ -22,7 +22,7 @@ import { parseDate, shiftDate } from "../lib/stay"
 import { fmtMoney, moneyLocale, useLocale } from "../lib/money"
 import { useAuth } from "../lib/auth"
 import { sortFloors, type FloorOrder } from "../lib/floors"
-import { HK_READINESS_ORDER, hkTone, visibleHkToggleOptions } from "../lib/hkStatus"
+import { HK_READINESS_ORDER, hkTone, isAssignableHkStatus, visibleHkToggleOptions } from "../lib/hkStatus"
 import { useT, t as translate, uiDateLocale } from "../lib/i18n"
 import CheckOutDialog from "../components/CheckOutDialog"
 import CheckInDialog from "../components/CheckInDialog"
@@ -1290,7 +1290,10 @@ export default function TapeChart() {
                                   )}
                                 </div>
                                 {/* vacant cell: bars and blocks sit on top, so a click here is a free night */}
-                                {data.dates.map((d) => canBook && d >= todayIso() ? (
+                                {data.dates.map((d) =>
+                                  canBook &&
+                                  d >= todayIso() &&
+                                  isAssignableHkStatus(room.housekeeping_status) ? (
                                   <button key={d} type="button" style={{ width: cellW }}
                                     aria-label={t("New booking")}
                                     onClick={() => newBooking({ room_type: room.room_type, room: room.name,
@@ -1298,7 +1301,11 @@ export default function TapeChart() {
                                     className="shrink-0 border-s border-zinc-100 hover:bg-brand-50" />
                                 ) : (
                                   <div key={d} style={{ width: cellW }}
-                                    className="shrink-0 border-s border-zinc-100" />
+                                    className={cn(
+                                      "shrink-0 border-s border-zinc-100",
+                                      room.housekeeping_status === "Out of Service" && "bg-orange-50/40 dark:bg-orange-950/20",
+                                      room.housekeeping_status === "Out of Order" && "bg-rose-50/40 dark:bg-rose-950/20",
+                                    )} />
                                 ))}
                                 {/* held-out-of-sale bands (house use, VIP, maintenance) */}
                                 {(room.blocks ?? []).map((k) => {

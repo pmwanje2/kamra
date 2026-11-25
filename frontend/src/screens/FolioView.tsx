@@ -2,6 +2,7 @@ import { SettlementPreview, useSettlementQuote } from "../components/SettlementP
 import TenderPicker, { TenderInput, resolveTender, tenderAmount, tenderModes, tenderReady, tenderTypeOf, useTenderRates } from "../components/TenderPicker"
 import { currencyText, formatFxRate, ReferenceCurrencyNote, TariffNight } from "../components/ContractTariff"
 import RowCorrection from "../components/RowCorrection"
+import { FiscalDocument, type Fiscal } from "../components/FiscalDocument"
 import InvoiceCorrectionDialog from "../components/InvoiceCorrectionDialog"
 import FolioWindowTabs, { type FolioWindowTabItem } from "../components/FolioWindowTabs"
 import RoutingInstructionDrawer from "../components/RoutingInstructionDrawer"
@@ -112,6 +113,8 @@ interface InvoiceData {
   }
   property: {
     currency: string
+    currency_symbol?: string
+    locale?: string
     name: string
     legal_name: string | null
     logo_url: string | null
@@ -168,11 +171,19 @@ interface InvoiceData {
     icv: number
     status: string
   } | null
+  /** Under the ERP accounting bridge: the Sales Invoice behind a settled
+   *  folio and its fiscal identifiers (null on an open folio or without it). */
+  fiscal?: Fiscal | null
+  /** true when hospitality_kamra.credit_and_rebill is installed on this bridge site */
+  bridge_credit_and_rebill?: boolean
   document: {
     title: string
     title_local?: string | null
     is_final: boolean
     number: string
+    /** this folio's own number, when the ERP invoice is the tax invoice */
+    internal_number?: string | null
+    reprint?: number | null
     date: string
     amount_in_words: string
     footer: string | null
@@ -270,8 +281,10 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
   )
 }
 
-/** ID verification check on the bill-to tax ID before the invoice goes out. */
-function VerifyTaxId({ taxId, name }: { taxId: string; name: string }) {
+/** Kamra Verify: check the bill-to tax ID before the invoice goes out.
+ *  Offered where the country pack has it (India: GSTIN); paid per check
+ *  from the Kamra Connect wallet. */
+function VerifyTaxId({ taxId, name, symbol }: { taxId: string; name: string; symbol?: string }) {
   const { t } = useT()
   const [busy, setBusy] = useState(false)
   const [res, setRes] = useState<{ ok: boolean; text: string } | null>(null)
@@ -289,7 +302,7 @@ function VerifyTaxId({ taxId, name }: { taxId: string; name: string }) {
               { property: getCurrentProperty(), tax_id: taxId, business_name: name })
             setRes({
               ok: r.valid && (r.status || "").toLowerCase() === "active",
-              text: `${r.valid ? r.legal_name || t("Valid") : t("Not a valid tax ID")}${r.status ? ` · ${r.status}` : ""} · ${cur()}${r.charged}`,
+              text: `${r.valid ? r.legal_name || t("Valid") : t("Not a valid tax ID")}${r.status ? ` · ${r.status}` : ""} · ${symbol ?? cur()}${r.charged}`,
             })
           } catch (e) {
             setRes({ ok: false, text: serverError(e) })
@@ -574,11 +587,25 @@ export default function FolioView() {
   }, [wantsAdvanceBill, data])
 
   if (!data)
-    return <p className="py-10 text-center text-sm text-zinc-400">{t("Loading…")}</p>
+    return error ? (
+      <div className="my-6 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+        {translate(error)}
+      </div>
+    ) : (
+      <p className="py-10 text-center text-sm text-zinc-400">{t("Loading…")}</p>
+    )
 
   const { folio, property, stay, gst_summary } = data
   const doc = data.document
   const fmt = (n: unknown) => fmtAmount(n ?? 0, home)
+  const docCurrency = property.currency || loc.currency
+  const docSymbol =
+    property.currency_symbol != null
+      ? property.currency_symbol
+      : property.currency && property.currency !== loc.currency
+        ? `${property.currency} `
+        : cur()
+  const docLocale = property.locale || loc.locale
   const docTaxLabel = property.tax_label || taxLabel()
   const lines = data.lines ?? folio.charges.map((c) => ({ ...c, row: c.name, qty: c.qty ?? 1, rate: c.rate ?? c.amount, service_code: null }))
   const lineByRow = new Map(lines.map((l) => [l.row, l]))
@@ -728,7 +755,8 @@ export default function FolioView() {
               {t("Advance bill")}
             </Button>
           ) : null}
-          {!open && invoiced && canCreditInvoice ? (
+          {!open && invoiced && canCreditInvoice
+            && (!folio.sales_invoice || data.bridge_credit_and_rebill !== false) ? (
             <Button variant="outline" disabled={busy} onClick={() => setShowCredit(true)}>
               {t("Credit note")}
             </Button>
@@ -773,7 +801,7 @@ export default function FolioView() {
               </Button>
             )}
           {!open && invoiced && folio.folio_type !== "Account"
-            && (!folio.sales_invoice || canCreditInvoice) && (
+            && (!folio.sales_invoice || (canCreditInvoice && data.bridge_credit_and_rebill !== false)) && (
             <Button
               variant="outline"
               disabled={busy}
@@ -846,6 +874,7 @@ export default function FolioView() {
 
       {showCredit && !open && invoiced && (
         <InvoiceCorrectionDialog folio={folio} credited={data.credited ?? 0}
+          currency={docCurrency} currencySymbol={docSymbol} numberLocale={docLocale}
           onClose={() => setShowCredit(false)}
           onDone={() => { setShowCredit(false); load() }} />
       )}
@@ -901,7 +930,8 @@ export default function FolioView() {
 
       {stay.reservation && (
         <div className="mb-4 print:hidden">
-          <LinkedRecords doctype="Reservation" name={stay.reservation} />
+          <LinkedRecords doctype="Reservation" name={stay.reservation}
+            currency={docCurrency} currencySymbol={docSymbol} numberLocale={docLocale} />
         </div>
       )}
 
@@ -1064,7 +1094,14 @@ export default function FolioView() {
                   {t("Place of supply")}: {property.place_of_supply}
                 </p>
               )}
-              {!doc?.is_final && (
+              {doc?.reprint ? (
+                <p className="mt-1 text-xs font-semibold uppercase text-zinc-600">
+                  {t("Copy - reprint {n}", { n: doc.reprint })}
+                </p>
+              ) : null}
+              {data.fiscal ? (
+                <FiscalDocument fiscal={data.fiscal} internalNumber={doc?.internal_number} />
+              ) : !doc?.is_final && (
                 <p className="mt-1 max-w-52 text-xs text-amber-700">
                   {t("Not a tax invoice yet - the number is issued when the folio is settled.")}
                 </p>
@@ -1081,7 +1118,7 @@ export default function FolioView() {
                 <span className="text-zinc-500">{" · "}{translate(property.tax_id_label ?? "Tax ID")}{" "}{data.bill_to.gstin}</span>
               )}
               {data.bill_to.gstin && loc.integrations.verify_tax_id && (
-                <VerifyTaxId taxId={data.bill_to.gstin} name={data.bill_to.name} />
+                <VerifyTaxId taxId={data.bill_to.gstin} name={data.bill_to.name} symbol={docSymbol} />
               )}
             </div>
           )}
@@ -1892,7 +1929,7 @@ export default function FolioView() {
               ) : (
                 <select
                   className={inputCls}
-                  aria-label={t("{tax} rate", { tax: taxLabel() })}
+                  aria-label={t("{tax} rate", { tax: docTaxLabel })}
                   value={charge.gst_rate}
                   onChange={(e) => {
                     taxPicked.current = true
@@ -1901,7 +1938,7 @@ export default function FolioView() {
                 >
                   {rates.map((n) => String(n)).map((r) => (
                     <option key={r} value={r}>
-                      {t("{tax} {rate}%", { tax: taxLabel(), rate: r })}
+                      {t("{tax} {rate}%", { tax: docTaxLabel, rate: r })}
                     </option>
                   ))}
                 </select>
@@ -1926,6 +1963,7 @@ export default function FolioView() {
                 {t("Post")}
               </Button>
               <FolioDiscount folio={folio.name} adjustCodes={adjustCodes} act={act}
+                currency={docCurrency} currencySymbol={docSymbol} numberLocale={docLocale}
                 onAdvanceBill={stay?.reservation ? advanceBill : undefined}
                 refreshKey={data}
                 onPosted={(pending) => {
@@ -1963,7 +2001,7 @@ export default function FolioView() {
                   >
                     {rates.map((n) => String(n)).map((r) => (
                       <option key={r} value={r}>
-                        {t("{tax} {rate}%", { tax: taxLabel(), rate: r })}
+                        {t("{tax} {rate}%", { tax: docTaxLabel, rate: r })}
                       </option>
                     ))}
                   </select>
@@ -2037,6 +2075,7 @@ export default function FolioView() {
                 {allowanceNote && <p className="mt-2 text-xs text-amber-700">{allowanceNote}</p>}
                 <div className="mt-2">
                   <AllowanceRequests property={folio.property ?? getCurrentProperty()} folio={folio.name}
+                    currency={docCurrency} currencySymbol={docSymbol} numberLocale={docLocale}
                     refreshKey={allowanceKey} onChanged={load} />
                 </div>
               </div>
