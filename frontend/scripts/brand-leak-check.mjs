@@ -133,8 +133,35 @@ export function scanTree(base = root) {
   return { findings, sourceCount }
 }
 
+function scanGeneratedDocs() {
+  const docs = path.resolve(root, "../docs-site")
+  const findings = []
+  function check(text, location) {
+    // These are callable names, config keys and the collection download path.
+    const prose = text.replace(/\b(?:kamra|frappe|erpnext)\.[a-z_][\w.]*/g, "")
+      .replace(/\bkamra_[a-z_]+\b/g, "").replace("/kamra.postman_collection.json", "")
+      .replace("/api/method/kamra.<module>.<function>", "")
+    if (forbidden.test(prose)) findings.push(location + ": " + text)
+  }
+  for (const [i, line] of fs.readFileSync(path.join(docs, "api-reference.md"), "utf8").split("\n").entries()) {
+    check(line.replace(/(roles: .*)/, (roles) => roles.replaceAll("`Kamra Agent`", "")), "api-reference.md:" + (i + 1))
+  }
+  const collection = JSON.parse(fs.readFileSync(path.join(docs, "public/kamra.postman_collection.json"), "utf8"))
+  function visit(node, location) {
+    for (const key of ["name", "description"]) {
+      if (typeof node[key] === "string") check(node[key], location + "." + key)
+    }
+    if (node.request) visit(node.request, location + ".request")
+    for (const item of node.item ?? []) visit(item, location + "/" + item.name)
+  }
+  visit(collection.info, "Postman info")
+  visit(collection, "Postman")
+  return findings
+}
+
 export function checkSource() {
   const { findings, sourceCount } = scanTree()
+  findings.push(...scanGeneratedDocs())
   if (findings.length) {
     console.error(findings.join("\n"))
     throw new Error(`${sourceCount} UI source findings; ${findings.length} total branding findings`)
