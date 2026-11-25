@@ -124,7 +124,7 @@ def nightly_share(res, date, *, lock=False, advance_bill=False) -> dict | None:
 	return _share_line({
 		"room": res.room, "gst": gst, "category": leader.rate_category or "",
 		"lead": leader.name, "fx": fx,
-		"levy": _share_levy(res.property, rates, gst, mode, leader.name),
+		"levy": _share_levy(res.property, rates, taxes, rate, gst, mode, leader.name),
 		"rates": {name: str(value) for name, value in rates.items()},
 		"taxes": {name: str(value) for name, value in taxes.items()},
 	}, res.name)
@@ -132,7 +132,9 @@ def nightly_share(res, date, *, lock=False, advance_bill=False) -> dict | None:
 
 def _share_line(snapshot, reservation):
 	taxes = snapshot.get("taxes") or {}
-	return {**snapshot, "rate": Decimal(snapshot["rates"].get(reservation, "0")),
+	# Each independently billed folio is the payer for its own fixed levy.
+	lead = reservation if snapshot.get("levy", {}).get("per_folio") else snapshot["lead"]
+	return {**snapshot, "lead": lead, "rate": Decimal(snapshot["rates"].get(reservation, "0")),
 	        "tax": Decimal(taxes.get(reservation, "0")) if taxes else None}
 
 
@@ -148,8 +150,15 @@ def _rounded_parts(raw, unit, total=None):
 	return parts
 
 
-def _share_levy(property, rates, gst, mode, lead):
-	"""Freeze one physical room's levy, including its fixed charge and any levy tax."""
+def _apportion(total, weights, unit):
+	"""Allocate an already-rounded total in proportion to the payers' amounts."""
+	weight = sum(weights.values())
+	if not weight:
+		return dict.fromkeys(weights, Decimal(0))
+	return _rounded_parts({name: total * value / weight for name, value in weights.items()}, unit, total)
+
+
+def _share_levy(property, rates, room_taxes, room_rate, gst, mode, lead):
 	from kamra.folio import room_levy_components
 	from kamra.ledger import minor_unit
 
@@ -157,19 +166,42 @@ def _share_levy(property, rates, gst, mode, lead):
 	unit = minor_unit(property)
 	pct = Decimal(str(prop.get("room_levy_percent") or 0))
 	fixed = prop.get("room_levy_per_night") or 0
-	# Full Rate Each duplicates the room rate, but still occupies one room.
-	divisor = len(rates) if mode == "Full Rate Each" else 1
-	raw = {name: amount * pct / (100 * divisor) for name, amount in rates.items()}
-	base = rates[lead] if mode == "Full Rate Each" else sum(rates.values())
-	percentage, flat = room_levy_components(base, pct, fixed, unit)
-	percentage_due = percentage.quantize(unit, rounding=ROUND_HALF_UP)
-	amounts = _rounded_parts(raw, unit, percentage_due)
-	amounts[lead] += (percentage + flat).quantize(unit, rounding=ROUND_HALF_UP) - percentage_due
 	taxable = prop.get("room_levy_taxable")
-	gst = gst if taxable is None or cint(taxable) else 0
-	tax_rate = Decimal(str(gst or 0)) / 100
-	taxes = _rounded_parts({name: value * tax_rate for name, value in amounts.items()}, unit)
-	return {"percent": str(pct), "fixed": str(fixed), "gst": gst,
+	levy_gst = gst if taxable is None or cint(taxable) else 0
+	tax_rate = Decimal(str(levy_gst or 0)) / 100
+	per_folio = mode == "Full Rate Each"
+
+	# Use the same base the independent room posting passes to the levy.
+	base = Decimal(str(room_rate)) if gst and mode != "Custom" else sum(rates.values())
+	if per_folio:
+		base = rates[lead]
+	percentage, flat = room_levy_components(base, pct, fixed, unit)
+	levy = percentage + flat
+	if not levy_gst:
+		levy = levy.quantize(unit, rounding=ROUND_HALF_UP)
+
+	if per_folio:
+		# Native taxable lines retain sub-minor precision until folio rounding.
+		amounts = dict.fromkeys(rates, levy)
+		taxes = dict.fromkeys(rates, levy * tax_rate)
+	else:
+		levy_due = levy.quantize(unit, rounding=ROUND_HALF_UP)
+		tax_due = Decimal(0)
+		if levy_gst and levy > 0:
+			room_due = sum(rates.values()) + sum(room_taxes.values())
+			raw_room = base * (1 + Decimal(str(gst)) / 100) if mode != "Custom" else room_due
+			# The unshared folio rounds the document after adding levy and GST.
+			grand = (raw_room + levy * (1 + tax_rate)).quantize(unit, rounding=ROUND_HALF_UP)
+			gross_levy = grand - room_due
+			# A positive residual needs a levy line even when its base alone
+			# rounds to zero. Never allocate tax to a zero-amount line.
+			levy_due = min(gross_levy, max(unit, levy_due))
+			tax_due = gross_levy - levy_due
+		percentage_due = min(percentage.quantize(unit, rounding=ROUND_HALF_UP), levy_due) if flat else levy_due
+		amounts = _apportion(percentage_due, rates, unit)
+		amounts[lead] += levy_due - percentage_due
+		taxes = _apportion(tax_due, amounts, unit)
+	return {"percent": str(pct), "fixed": str(fixed), "gst": levy_gst, "per_folio": per_folio,
 	        "amounts": {name: str(value) for name, value in amounts.items()},
 	        "taxes": {name: str(value) for name, value in taxes.items()}}
 
@@ -179,17 +211,29 @@ def _night_amounts(property, rate, gst, mode, members):
 	from kamra.ledger import minor_unit
 
 	currency = property_currency(property)
+	if mode == "Full Rate Each" and gst:
+		# Keep the full native base on each folio. It computes GST and rounds
+		# the guest's complete bill, including any taxable levy, independently.
+		return dict.fromkeys((name for name, _primary, _custom in members), Decimal(str(rate))), {}
 	if not gst or not priced_with_tax(property, "Room"):
 		bases = allocate_rates(rate, currency, mode, members)
 		if not gst:
 			return bases, {}
 		tax_rate = Decimal(str(gst)) / 100
-		raw_tax = {name: base * tax_rate for name, base in bases.items()}
-		return bases, _rounded_parts(raw_tax, minor_unit(property))
+		unit = minor_unit(property)
+		if mode == "Custom":
+			raw_tax = {name: base * tax_rate for name, base in bases.items()}
+			return bases, _rounded_parts(raw_tax, unit)
+		gross = (Decimal(str(rate)) * (1 + tax_rate)).quantize(unit, rounding=ROUND_HALF_UP)
+		tax_due = gross - sum(bases.values())
+		if not any(bases.values()):
+			# A sub-minor rate can round to zero before GST but one unit with GST.
+			return bases, allocate_rates(tax_due, currency, mode, members)
+		return bases, _apportion(tax_due, bases, unit)
 
 	whole = line_figures(property, "Room", rate, gst_rate=gst)
 	gross = allocate_rates(whole["figure"], currency, mode, members)
-	if mode in ("Full Rate Each", "Custom"):
+	if mode == "Custom":
 		net_tax = {name: cut_figure(whole, amount) for name, amount in gross.items()}
 		return ({name: values[0] for name, values in net_tax.items()},
 		        {name: values[1] for name, values in net_tax.items()})
