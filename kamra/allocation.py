@@ -26,15 +26,25 @@ _BED_WORDS = ("king", "queen", "twin", "double", "single")
 _QUIET_WORDS = ("quiet", "corner", "away from", "peaceful", "no noise")
 
 
+_HK_READINESS_RANK = {
+	"Inspected": 0,
+	"Ready": 0,
+	"Clean": 1,
+	"Pickup": 2,
+	"Dirty": 3,
+}
+
+
 def _room_pool(property: str):
 	"""Every room with the attributes allocation cares about, keyed by name."""
 	rooms = frappe.db.sql(
 		"""
-		SELECT r.name, r.room_number, r.floor, r.room_type,
+		SELECT r.name, r.room_number, r.floor, r.room_type, r.housekeeping_status,
 		       rt.room_type_name, rt.room_view, rt.bed_type
 		FROM `tabRoom` r
 		LEFT JOIN `tabRoom Type` rt ON rt.name = r.room_type
 		WHERE r.property = %(p)s
+		  AND COALESCE(r.housekeeping_status, '') NOT IN ('Out of Order', 'Out of Service')
 		""", {"p": property}, as_dict=True)
 	floors = [int(r.floor) for r in rooms if _as_int(r.floor) is not None]
 	return rooms, (max(floors) if floors else None), (min(floors) if floors else None)
@@ -123,7 +133,7 @@ def suggest_allocation(property: str, date: str | None = None):
 		# is not on offer (ready_now), even on that guest's departure date
 		free = available_rooms(property, a.room_type, a.check_in_date,
 		                       a.check_out_date, group_booking=a.group_booking,
-		                       ready_now=1)
+		                       ready_now=1, for_assignment=1)
 		cands = [by_name[r["name"]] for r in free
 		         if r["name"] in by_name and r["name"] not in taken]
 		if not cands:
@@ -143,7 +153,11 @@ def suggest_allocation(property: str, date: str | None = None):
 		cmin = min(cfloors) if cfloors else None
 		scored = sorted(
 			((_score(prefs, vip, r, cmax, cmin), r) for r in cands),
-			key=lambda x: (x[0][0], -(_as_int(x[1].get("room_number")) or 0)),
+			key=lambda x: (
+				x[0][0],
+				-_HK_READINESS_RANK.get(x[1].get("housekeeping_status") or "", 4),
+				-(_as_int(x[1].get("room_number")) or 0),
+			),
 			reverse=True)
 		(best_score, why), room = scored[0]
 		taken.add(room.name)
@@ -206,15 +220,17 @@ def apply_allocation(property: str, assignments):
 		elif room in taken:
 			why = "That room was just given to another arrival"
 		else:
-			r = frappe.db.get_value("Room", room, ["property", "room_type"], as_dict=True)
+			r = frappe.db.get_value("Room", room, ["property", "room_type", "housekeeping_status"], as_dict=True)
 			if not r or r.property != property:
 				why = "Not a room at this property"
 			elif r.room_type != doc.room_type:
 				why = "That room is another type; use a room move so the price is shown first"
+			elif r.housekeeping_status in ("Out of Order", "Out of Service"):
+				why = f"That room is no longer free or ready ({r.housekeeping_status})"
 			else:
 				free = available_rooms(property, doc.room_type, doc.check_in_date,
 				                       doc.check_out_date, group_booking=doc.group_booking,
-				                       ready_now=1)
+				                       ready_now=1, for_assignment=1)
 				if room not in {f["name"] for f in free}:
 					why = "That room is no longer free or ready for these nights"
 		if why:

@@ -142,11 +142,15 @@ def available_rooms_via_siu(
 	room_type: str,
 	check_in_date: str,
 	check_out_date: str,
+	*,
+	exclude_out_of_service: bool = False,
 ) -> list[dict]:
 	"""Physical rooms behind free individual SIUs for this room type.
 
 	Preserves the legacy ``available_rooms`` return shape so desk/public
-	callers keep working during the migration.
+	callers keep working during the migration. When ``exclude_out_of_service``
+	is True (physical room assignment), Out of Service rooms are excluded
+	without affecting room-type ``sellable_count``.
 	"""
 	rows = availability(
 		property,
@@ -161,6 +165,8 @@ def available_rooms_via_siu(
 			continue
 		for room in r.get("rooms") or []:
 			if room["name"] in seen:
+				continue
+			if exclude_out_of_service and room.get("housekeeping_status") == "Out of Service":
 				continue
 			seen.add(room["name"])
 			# Match legacy SQL as_dict shape (attribute + key access).

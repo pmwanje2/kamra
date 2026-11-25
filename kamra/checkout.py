@@ -667,6 +667,15 @@ def _checkout_context(reservation: str) -> dict:
 		blockers.append({
 			"code": "pending_bills", "step": "review",
 			"message": _open_bills_message(open_bills)})
+	from kamra.traces import can_override_blocking_alert, check_point_alerts
+	co_alerts = check_point_alerts("Check-Out", res.property, reservation=res.name, guest=res.guest)
+	blocking_co = [a for a in co_alerts if a.get("severity") == "Blocking" and not a.get("synthetic")]
+	if blocking_co:
+		blockers.append({
+			"code": "blocking_alert", "step": "review",
+			"message": _("Resolve blocking check-out alert: {0}").format(
+				"; ".join(a["message"] for a in blocking_co)),
+			"can_override": can_override_blocking_alert()})
 
 	owed, refund_due = pos["owed"], pos["refund_due"]
 	settled = owed <= eps and refund_due <= eps
@@ -778,6 +787,7 @@ def _checkout_context(reservation: str) -> dict:
 		"companions": companions,
 		"blockers": blockers,
 		"notices": notices,
+		"alerts": co_alerts,
 		"settled": settled,
 		"actions": {
 			"can_checkout": in_house and settled and not hard and not credit_stuck,

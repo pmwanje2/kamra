@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useOutletContext, useSearchParams } from "react-router-dom"
-import { BedDouble, Lock, LogIn, LogOut, RefreshCw, Search } from "lucide-react"
+import { BedDouble, Lock, LogIn, LogOut, RefreshCw, Search, Wrench } from "lucide-react"
 import type { ShellContext } from "../AppShell"
 import { getRoomsBoard, type BoardRoom, type RoomsBoard } from "../lib/rooms"
 import { serverError } from "../lib/resource"
@@ -26,6 +26,7 @@ type StatusFilter =
   | "all"
   | "vacant_ready"
   | "dirty"
+  | "pickup"
   | "occupied"
   | "arriving"
   | "departing"
@@ -42,6 +43,8 @@ function matches(r: BoardRoom, f: StatusFilter) {
       )
     case "dirty":
       return r.housekeeping_status === "Dirty"
+    case "pickup":
+      return r.housekeeping_status === "Pickup"
     case "occupied":
       return r.occupancy_status === "Occupied"
     case "arriving":
@@ -49,7 +52,11 @@ function matches(r: BoardRoom, f: StatusFilter) {
     case "departing":
       return !!r.stay?.departing_today
     case "out":
-      return !!r.block || r.housekeeping_status === "Out of Order"
+      return (
+        !!r.block ||
+        r.housekeeping_status === "Out of Order" ||
+        r.housekeeping_status === "Out of Service"
+      )
     case "task":
       return !!r.task
     default:
@@ -140,6 +147,7 @@ export default function Rooms() {
     { id: "all", label: t("All rooms") },
     { id: "vacant_ready", label: t("Ready to sell") },
     { id: "dirty", label: t("Dirty") },
+    { id: "pickup", label: t("Pickup") },
     { id: "occupied", label: t("Occupied") },
     { id: "arriving", label: t("Arriving today") },
     { id: "departing", label: t("Departing today") },
@@ -330,7 +338,8 @@ export default function Rooms() {
 function RoomTile({ r, onOpen }: { r: BoardRoom; onOpen: () => void }) {
   const { t } = useT()
   const occupied = r.occupancy_status === "Occupied"
-  const out = !!r.block || r.housekeeping_status === "Out of Order"
+  const isOo = !!r.block || r.housekeeping_status === "Out of Order"
+  const isOs = !isOo && r.housekeeping_status === "Out of Service"
   const who = r.stay?.surname ?? r.arrival?.surname
   return (
     <button
@@ -342,15 +351,16 @@ function RoomTile({ r, onOpen }: { r: BoardRoom; onOpen: () => void }) {
         "hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600",
         occupied
           ? "border-brand-700 bg-brand-700 text-white"
-          : out
-            ? "border-rose-400 bg-rose-50 text-rose-900"
+          : isOo
+            ? "border-rose-400 bg-rose-50 text-rose-900 dark:border-rose-500/40 dark:bg-rose-950/30 dark:text-rose-100"
             : HK_TONE[r.housekeeping_status],
       )}
     >
       <div className="flex w-full items-start justify-between gap-1">
         <span className="text-xl font-bold leading-none tabular-nums">{r.room_number}</span>
         <span className="flex shrink-0 items-center gap-1">
-          {out && <Lock className="size-4" aria-label={t("Out of service")} />}
+          {isOo && <Lock className="size-4" aria-label={t("Out of Order")} />}
+          {isOs && <Wrench className="size-4 text-orange-600" aria-label={t("Out of Service")} />}
           {occupied && <BedDouble className="size-4" aria-label={t("Occupied")} />}
         </span>
       </div>
@@ -393,9 +403,11 @@ function Legend() {
   const { t } = useT()
   const items: [string, string][] = [
     [t("Clean"), "bg-emerald-100 border-emerald-300"],
+    [t("Pickup"), "bg-indigo-100 border-indigo-300"],
     [t("Inspected"), "bg-sky-100 border-sky-300"],
     [t("Dirty"), "bg-amber-100 border-amber-300"],
-    [t("Out of service"), "bg-rose-100 border-rose-400"],
+    [t("Out of Service"), "bg-orange-100 border-orange-400"],
+    [t("Out of Order"), "bg-rose-100 border-rose-400"],
     [t("Occupied"), "bg-brand-700 border-brand-700"],
   ]
   return (
