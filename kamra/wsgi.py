@@ -49,15 +49,20 @@ def _validate_field_headers(headers):
 
 def _approval_form(request, boundary):
 	"""Decode field bytes strictly, including duplicate fields, before dispatch."""
-	decoder = MultipartDecoder(boundary, max_form_memory_size=request.max_form_memory_size,
+	field_limit = request.max_form_memory_size
+	if field_limit is None:
+		field_limit = 500_000  # Werkzeug's default maximum bytes per form field.
+	decoder = MultipartDecoder(boundary, max_form_memory_size=field_limit,
 	                           max_parts=request.max_form_parts)
+	# Leave space for framing bytes retained between reads at smaller limits.
+	read_size = min(64 * 1024, max(1, field_limit // 2))
 	stream = request.stream
 	fields = {}
 	value = bytearray()
 	while True:
 		event = decoder.next_event()
 		if isinstance(event, NeedData):
-			decoder.receive_data(stream.read(64 * 1024) or None)
+			decoder.receive_data(stream.read(read_size) or None)
 		elif isinstance(event, Field):
 			_validate_field_headers(event.headers)
 			name = event.name
@@ -65,6 +70,9 @@ def _approval_form(request, boundary):
 		elif isinstance(event, File):
 			raise BadRequest
 		elif isinstance(event, Data):
+			# The decoder bounds its own buffer. One field can span many buffers.
+			if len(value) + len(event.data) > field_limit:
+				raise RequestEntityTooLarge
 			value.extend(event.data)
 			if not event.more_data:
 				fields.setdefault(name, value.decode("utf-8", errors="strict"))

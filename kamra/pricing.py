@@ -2442,7 +2442,7 @@ def _package_night_price(pseudo_res, pkg_doc, night_rate: Decimal, room_gst: Dec
 
 
 def _plan_package_nights(rate_plan, nightly, package_prices, entry_rates, entry_extras, entry_floor,
-                        currency, inclusive):
+                        currency, inclusive, room_tax_at):
 	"""Price the stay on its advertised basis, then tax each night's actual components."""
 	prices, _ = plan_stay_nights(rate_plan, [(rate, Decimal(0)) for rate in entry_rates],
 	                             entry_extras, False, entry_floor, currency=currency, gross_prices=True)
@@ -2450,15 +2450,19 @@ def _plan_package_nights(rate_plan, nightly, package_prices, entry_rates, entry_
 	total_tax = Decimal(0)
 	for night, price in zip(nightly, prices, strict=True):
 		price = round_rate_amount(price, 0, currency=currency)
-		room_gst = _dec(night.get("room_gst_rate", night["gst_rate"]))
+		day = night["date"]
+		room_gst = room_tax_at(day, price)
 		net = price / (1 + room_gst / 100) if inclusive else price
 		tax = price - net if inclusive else net * room_gst / 100
-		day = night["date"]
+		effective = room_gst
 		if day in package_prices:
 			_, _, doc, party = package_prices[day]
 			net, tax, effective, meta = _package_night_price(
 				party, doc, net, room_gst, day, price if inclusive else None)
-			night.update(meta, gst_rate=float(effective))
+			# A crossing can turn a mixed-tax night into a single-rate night.
+			night.pop("package_tax", None)
+			night.update(meta)
+		night["gst_rate"] = float(effective)
 		nets.append(net)
 		total_tax += tax
 	return nets, total_tax
@@ -2647,12 +2651,16 @@ def quote(
 			else:
 				package_days.discard(day)
 	validate_package_discount(disc, package_days)
+
+	def room_tax_at(day, tariff):
+		return room_gst_rate(property, night_room_types.get(day, rt), tariff + night_over_cap)
+
 	for day in _stay_nights(check_in_date, check_out_date):
 		date = day
 		night_rt = night_room_types.get(day, rt)
 		if day in package_prices:
 			rate, label, doc, party = package_prices[day]
-			gst = room_gst_rate(property, night_rt, rate + night_over_cap)
+			gst = room_tax_at(day, rate)
 			factor = Decimal(1) + gst / 100 if inclusive else Decimal(1)
 			entry_rates.append(rate)
 			sold_gross = rate if inclusive else None
@@ -2718,7 +2726,7 @@ def quote(
 		# it bills as its own line: GST reads what the unit fetches for the
 		# day, not the occupancy its rate card started from. A room at 7,000
 		# with 2,000 of extra beds is a 9,000 night, so 18%, not 5%.
-		gst = room_gst_rate(property, night_rt, rate + night_over_cap)
+		gst = room_tax_at(day, rate)
 		entry_rates.append(rate)
 		entry_extras += min(night_extra, rate)
 		if inclusive:
@@ -2785,9 +2793,10 @@ def quote(
 	if rate_plan and not agreed_rate and not rate_plan_applied:
 		planned_by_plan = True
 		old_room_total = room_total
-		if package_prices and (not inclusive or any(n.get("package_tax") is not None for n in nightly)):
+		if package_prices:
 			planned, room_tax = _plan_package_nights(
-				rate_plan, nightly, package_prices, entry_rates, entry_extras, entry_floor, prop_currency, inclusive)
+				rate_plan, nightly, package_prices, entry_rates, entry_extras, entry_floor,
+				prop_currency, inclusive, room_tax_at)
 			rounded = True
 		else:
 			planned, rounded = plan_stay_nights(rate_plan, [(_dec(n["rate"]), _dec(n["gst_rate"])) for n in nightly],
