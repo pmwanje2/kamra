@@ -152,6 +152,7 @@
   "original_room_type",
   "room_type_to_charge",
   "room_move_rate_cutoff",
+  "room_move_night_types",
   "upgrade_type",
   "upgrade_reason",
   "upgrade_approved_by",
@@ -1079,6 +1080,14 @@
    "fieldname": "room_move_rate_cutoff",
    "fieldtype": "Date",
    "label": "Room Move Rate Cutoff",
+   "hidden": 1,
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "room_move_night_types",
+   "fieldtype": "JSON",
+   "label": "Nightly Room Types to Charge",
    "hidden": 1,
    "no_copy": 1,
    "read_only": 1

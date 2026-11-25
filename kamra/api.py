@@ -9068,6 +9068,8 @@ def _rate_override_plan(res, agreed_rate, override_currency: str | None = None) 
 	from kamra.credit import _is_agent
 	from kamra.folio import charged_nights
 	from kamra.pricing import (
+		billing_room_type,
+		nightly_billing_room_types,
 		effective_rate_currency,
 		entry_rate,
 		night_rate_places,
@@ -9131,9 +9133,11 @@ def _rate_override_plan(res, agreed_rate, override_currency: str | None = None) 
 	inclusive = rates_include_tax(res.property)
 	places = night_rate_places(res.property)
 	money_eps = 0.5 * (10 ** -max(places, 2))
+	room_types = nightly_billing_room_types(res)
+	default_type = billing_room_type(res)
 	rails = frappe.get_all(
 		"Rate Guardrail", filters={"property": res.property, "disabled": 0,
-		                           "room_type": ("in", [res.room_type, "", None])},
+		                           "room_type": ("in", [default_type, *set(room_types.values()), "", None])},
 		fields=["room_type", "floor_price", "days_of_week"])
 	cut, floor, override_discount_home = 0.0, [], 0.0
 	for r in rows:
@@ -9145,7 +9149,7 @@ def _rate_override_plan(res, agreed_rate, override_currency: str | None = None) 
 		if code:
 			cut = max(cut, 100 * (code - net) / code)
 			override_discount_home += max(code - net, 0.0)
-		rail = rail_for_day(rails, res.room_type, getdate(day).strftime("%a").lower())
+		rail = rail_for_day(rails, room_types.get(day, default_type), getdate(day).strftime("%a").lower())
 		# the floor is on the price basis the rate card uses
 		if rail and flt(rail.floor_price) and net < flt(rail.floor_price) - money_eps:
 			floor.append(day)
@@ -9517,12 +9521,13 @@ def discount_governance(property: str, room_type: str | None, rate_plan: str | N
 	comp = any(flt(n.get("rate")) <= 0 for n in discounted)
 	floor_breach = []
 	if discounted:
+		types = {n.get("room_type") or room_type for n in discounted}
 		rails = frappe.get_all(
 			"Rate Guardrail", filters={"property": property, "disabled": 0,
-			                           "room_type": ("in", [room_type, "", None])},
+			                           "room_type": ("in", [*types, "", None])},
 			fields=["room_type", "floor_price", "days_of_week"])
 		for n in discounted:
-			rail = rail_for_day(rails, room_type, getdate(n["date"]).strftime("%a").lower())
+			rail = rail_for_day(rails, n.get("room_type") or room_type, getdate(n["date"]).strftime("%a").lower())
 			# the floor is on the price basis the rate card uses
 			if rail and flt(rail.floor_price) and entry(n) < flt(rail.floor_price) - 0.5 * (10 ** -max(places, 2)):
 				floor_breach.append(str(n["date"]))
@@ -9657,6 +9662,9 @@ def _comp_sign_off(doc, comp_supervisor_user=None, comp_supervisor_pin=None) -> 
 def _night_rows_as_nights(rows, doc) -> list[dict]:
 	"""A booking's night rows in the shape discount_governance reads: each
 	night's own Daily Details discount, else the stay's (doc's)."""
+	from kamra.pricing import billing_room_type, nightly_billing_room_types
+	room_types = nightly_billing_room_types(doc)
+	default_type = billing_room_type(doc)
 	stay = (
 		doc.get("discount_type") or None,
 		flt(doc.get("discount_value")),
@@ -9671,7 +9679,8 @@ def _night_rows_as_nights(rows, doc) -> list[dict]:
 			if get("discount_type")
 			else stay
 		)
-		item = {"date": str(getdate(get("stay_date"))), "rate": flt(get("rate")),
+		day = str(getdate(get("stay_date")))
+		item = {"date": day, "room_type": room_types.get(day, default_type), "rate": flt(get("rate")),
 		        "base_rate": flt(get("base_rate")) or flt(get("rate")),
 		        "discount_amount": flt(get("discount_amount")),
 		        "discount_type": kind, "discount_value": value,
@@ -10221,6 +10230,13 @@ def _move_price(res, new_type: str | None, rate_mode: str,
 	else:
 		changes["agreed_rate"] = 0  # the destination's own rate card
 	if changes:
+		if res.flags.get("kamra_move_cutoff"):
+			from kamra.pricing import billing_room_type, nightly_billing_room_types
+
+			history = nightly_billing_room_types(res)
+			source = billing_room_type(res)
+			res.room_move_night_types = {day: history.get(day, source) for day in res.stay_nights()
+			                             if day < str(start)}
 		if rate_mode == "destination":
 			from kamra.pricing import (
 				billable_children, contract_rate, room_move_tariff, saved_contract_tariff,

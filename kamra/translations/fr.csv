@@ -2852,3 +2852,4 @@ This occupancy tier already has a linked item. Use that item to propose its rate
 Choose an enabled non-stock sales item for the room type.,Choisissez un article de vente actif et non stocké pour ce type de chambre.
 {0} adult occupancy,Occupation pour {0} adulte(s)
 Room Move Rate Cutoff,Date d’effet du tarif de la nouvelle chambre
+Nightly Room Types to Charge,Types de chambre à facturer par nuit

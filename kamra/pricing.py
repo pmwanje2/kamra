@@ -484,7 +484,7 @@ def rail_for_day(guardrails, room_type: str | None, day_abbr: str):
 	property-wide + days, then property-wide."""
 	ranked = [((1 if g.room_type == room_type else 0,
 	            1 if g.days_of_week else 0), g)
-	          for g in guardrails if days_cover(g.days_of_week, day_abbr)]
+	          for g in guardrails if (not g.room_type or g.room_type == room_type) and days_cover(g.days_of_week, day_abbr)]
 	return max(ranked, key=lambda x: x[0])[1] if ranked else None
 
 
@@ -947,8 +947,48 @@ def negotiated_rate_plan(property: str, company: str | None) -> str | None:
 	return None
 
 
-def billing_room_type(reservation):
-	"""The room type on the bill, independent of where the guest sleeps."""
+def nightly_billing_room_types(reservation) -> dict[str, str]:
+	"""Frozen room types for nights before a paid move, keyed by business date."""
+	recorded = reservation.get("room_move_night_types")
+	if recorded or isinstance(recorded, dict):
+		return frappe.parse_json(recorded) or {}
+	tariff = saved_contract_tariff(reservation).get("tariff") or {}
+	types = {str(n["date"]): n["room_type"] for n in tariff.get("nights") or [] if n.get("room_type")}
+	# Older moves recorded their effective date and the old room type together
+	# in the reservation Version. Recover only dates covered by a recorded move.
+	cutoff = reservation.get("room_move_rate_cutoff")
+	if not cutoff or not reservation.get("name"):
+		return types
+	days = {str(r.get("stay_date")) for r in reservation.get("night_rates") or []
+	        if r.get("stay_date") and str(r.get("stay_date")) < str(cutoff)} - types.keys()
+	if not days:
+		return types
+	from frappe.utils import formatdate
+
+	# Version stores Date changes in display format. Match against actual
+	# stay dates instead of comparing or guessing the order of date strings.
+	boundaries = [*_stay_nights(reservation.check_in_date, cutoff), str(cutoff)]
+	dates = {formatdate(day): day for day in boundaries}
+	dates.update({day: day for day in boundaries})
+	for version in frappe.get_all("Version", filters={
+		"ref_doctype": "Reservation", "docname": reservation.name,
+	}, pluck="data", order_by="creation asc"):
+		changes = {key: (old, new) for key, old, new in frappe.parse_json(version).get("changed", [])}
+		move_date = dates.get(changes.get("room_move_rate_cutoff", (None, None))[1])
+		if move_date and "room_type" in changes:
+			source = changes.get("room_type_to_charge", (None, None))[0] or changes["room_type"][0]
+			for day in days:
+				if day < move_date and source:
+					types.setdefault(day, source)
+	return types
+
+
+def billing_room_type(reservation, date=None):
+	"""The nightly rate's room type, independent of where the guest sleeps."""
+	if date is not None:
+		recorded = nightly_billing_room_types(reservation).get(str(getdate(date)))
+		if recorded:
+			return recorded
 	return reservation.get("room_type_to_charge") or reservation.room_type
 
 
@@ -1341,6 +1381,7 @@ def room_move_tariff(reservation, start, rate, tariff) -> dict:
 	from kamra.folio import _nightly_gst, _nightly_room_rate, locked_night
 
 	nights = []
+	room_types = nightly_billing_room_types(reservation)
 	for day in _stay_nights(reservation.check_in_date, start):
 		original = source_nights.get(day) or {}
 		agreed = original.get("agreed_rate", booked.get("agreed_rate"))
@@ -1360,8 +1401,8 @@ def room_move_tariff(reservation, start, rate, tariff) -> dict:
 			"date": day, "nightly": source.get("nightly") or agreed, "agreed_rate": agreed,
 			"currency": source.get("currency") or home, "property_currency": source.get("property_currency") or home,
 			"fx_rate": source.get("fx_rate"), "fx_date": source.get("fx_date"),
-			"room_type": billing_room_type(reservation), "fixed_rate": cint(reservation.get("fixed_rate")),
-			**original,
+			"fixed_rate": cint(reservation.get("fixed_rate")), **original,
+			"room_type": room_types.get(day) or original.get("room_type") or billing_room_type(reservation),
 		})
 	for day in _stay_nights(start, reservation.check_out_date):
 		nights.append(destination_nights.get(day) or {
@@ -2286,6 +2327,7 @@ def quote(
 	locked_nights: dict | None = None,
 	agreed_nights: dict | None = None,
 	contract_tariff: dict | None = None,
+	billing_types_by_date: dict | None = None,
 ) -> dict:
 	"""locked_nights ({date: a locked night row}): a booked stay's room
 	nights that keep their price (Reservation.pinned_room_nights); the
@@ -2303,19 +2345,20 @@ def quote(
 		frappe.throw("Check-out cannot be before check-in.")
 
 	rt = frappe.get_doc("Room Type", room_type)
-	# A paid move's tariff retains the room type for nights before the move.
-	night_room_types = {
-		str(night["date"]): frappe.get_cached_doc("Room Type", night["room_type"])
-		for night in (contract_tariff or {}).get("nights") or []
-		if night.get("room_type") and night["room_type"] != room_type
-	}
+	# Tariff history also covers contract moves saved before rack moves kept these dates.
+	types = {str(n["date"]): n["room_type"] for n in (contract_tariff or {}).get("nights") or []
+	         if n.get("room_type")}
+	types.update(billing_types_by_date or {})
+	night_room_types = {day: frappe.get_cached_doc("Room Type", name) for day, name in types.items()
+	                    if name != room_type}
 	inclusive = rates_include_tax(property)
-	small_ok = small_group_allows_stay(rt, check_in_date, check_out_date)
-	# holiday dates can charge a small party the house rate, as a weekend does
-	stay_rules = stay_season_rules(property, check_in_date, check_out_date,
-	                               room_type)
-	if stay_rules["no_small_group"]:
-		small_ok = False
+	stay_rules = stay_season_rules(property, check_in_date, check_out_date, room_type)
+	small_groups = {room_type: small_group_allows_stay(rt, check_in_date, check_out_date)
+	                and not stay_rules["no_small_group"]}
+	for name in set(types.values()) - {room_type}:
+		room = frappe.get_cached_doc("Room Type", name)
+		rules = stay_season_rules(property, check_in_date, check_out_date, name)
+		small_groups[name] = small_group_allows_stay(room, check_in_date, check_out_date) and not rules["no_small_group"]
 
 	nightly = []
 	exact_nets: list[Decimal] = []
@@ -2337,7 +2380,7 @@ def quote(
 	rails = frappe.get_all(
 		"Rate Guardrail",
 		filters={"property": property, "disabled": 0,
-		         "room_type": ("in", [room_type, "", None])},
+		         "room_type": ("in", [room_type, *set(types.values()), "", None])},
 		fields=["name", "room_type", "floor_price", "days_of_week"]) if los else []
 	los_saved = Decimal(0)
 	# the nights' floors (net of tax) on a long-stay discounted stay: the
@@ -2416,7 +2459,7 @@ def quote(
 				rate = (pkg_base_rate - accum) if i == billable_nights - 1 else base_per_night
 				accum += rate
 
-				gst = room_gst_rate(property, rt, rate + night_over_cap)
+				gst = room_gst_rate(property, night_room_types.get(str(d), rt), rate + night_over_cap)
 				if inclusive:
 					rate = rate / (Decimal(1) + gst / Decimal(100))
 				if night_over_cap:
@@ -2482,7 +2525,7 @@ def quote(
 					rate = extra_night_rate
 					label = f"{pkg.package_name} (Additional Night)"
 
-				gst = room_gst_rate(property, rt, rate + night_over_cap)
+				gst = room_gst_rate(property, night_room_types.get(str(d), rt), rate + night_over_cap)
 				if inclusive:
 					rate = rate / (Decimal(1) + gst / Decimal(100))
 				if night_over_cap:
@@ -2508,11 +2551,14 @@ def quote(
 		# a day-use stay bills one "night" on the check-in date
 		for i in range(max(nights, 1)):
 			date = add_days(check_in_date, i)
+			night_rt = night_room_types.get(str(date), rt)
+			night_type = types.get(str(date), room_type)
+			small_ok = small_groups[night_type]
 			rate = season_adjust(
 				property, date,
-				occupancy_rate(rt, adults, children, date,
+				occupancy_rate(night_rt, adults, children, date,
 				               allow_small_group=small_ok),
-				room_type
+				night_type
 			)
 			# demand pricing: when the house fills past a hurdle tier, the
 			# premium applies and the tier's floor holds - decided here, in
@@ -2520,7 +2566,7 @@ def quote(
 			if str(date) not in occ_cache:
 				occ_cache[str(date)] = forecast_occupancy(
 					property, date, exclude=exclude_reservation)
-			rate, tier = demand_adjust(property, room_type, date, rate,
+			rate, tier = demand_adjust(property, night_type, date, rate,
 			                           occupancy=occ_cache[str(date)])
 			if agreed_rate:
 				# a rate the desk agreed replaces the card and the premium; a
@@ -2534,18 +2580,18 @@ def quote(
 				# way they read the card.
 				rate, tier = hand, None
 			night_extra = (Decimal(0) if agreed_rate or hand is not None else
-			               extra_person_charge(rt, adults, children, date, allow_small_group=small_ok))
+			               extra_person_charge(night_rt, adults, children, date, allow_small_group=small_ok))
 			if los_pct:
 				off = rate * (Decimal(1) - los_pct / Decimal(100))
 				# never below the owner's floor or the hurdle tier's minimum for
 				# this night (a rate already under them is not raised by them)
-				rail = rail_for_day(rails, room_type,
+				rail = rail_for_day(rails, night_type,
 				                    getdate(date).strftime("%a").lower())
 				floor = max(_dec(rail.floor_price) if rail else Decimal(0),
 				            _dec(tier["min_rate"]) if tier else Decimal(0))
 				floor = min(rate, floor)
 				off = max(off, floor)
-				gst_off = room_gst_rate(property, rt, off + night_over_cap)
+				gst_off = room_gst_rate(property, night_rt, off + night_over_cap)
 				saved = rate - off
 				los_saved += (saved / (Decimal(1) + gst_off / Decimal(100))
 				              if inclusive else saved)
@@ -2556,7 +2602,6 @@ def quote(
 			# it bills as its own line: GST reads what the unit fetches for the
 			# day, not the occupancy its rate card started from. A room at 7,000
 			# with 2,000 of extra beds is a 9,000 night, so 18%, not 5%.
-			night_rt = night_room_types.get(str(date), rt)
 			gst = room_gst_rate(property, night_rt, rate + night_over_cap)
 			if inclusive:
 				# configured price is gross — back out the taxable value
@@ -2591,7 +2636,7 @@ def quote(
 			property, rate_plan, check_in_time, check_out_time, nightly_gross)
 		if day_use_meta:
 			gross = _dec(day_use_meta["amount"])
-			gst = room_gst_rate(property, rt, gross + night_over_cap)
+			gst = room_gst_rate(property, night_room_types.get(str(check_in_date), rt), gross + night_over_cap)
 			rate = (gross / (Decimal(1) + gst / Decimal(100))
 			        if inclusive else gross)
 			nightly[0] = {
