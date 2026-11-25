@@ -155,8 +155,11 @@ def _refund_amounts(folio, sec_idx: set[int]) -> tuple[Decimal, Decimal, Decimal
 @contextmanager
 def payment_savepoint():
 	"""Keep a refused posting atomic even if a caller handles its exception."""
-	point = "folio_payment_" + frappe.generate_hash(length=8)
 	db = frappe.db
+	if not hasattr(db, "transaction_writes"):  # site-free document adapters have no transaction
+		yield
+		return
+	point = "folio_payment_" + frappe.generate_hash(length=8)
 	writes = db.transaction_writes
 	queues = [(queue._functions, list(queue._functions)) for queue in (
 		db.before_commit, db.after_commit, db.before_rollback, db.after_rollback,
@@ -207,10 +210,31 @@ def _check_receipt_snapshot(query, args):
 	refused before any posting, with the caller's transaction still intact.
 	"""
 	snapshot = frappe.db.sql(query, args)
-	current = frappe.db.sql("SET STATEMENT innodb_snapshot_isolation=OFF FOR " + query + " FOR UPDATE", args)
+	previous = frappe.db.sql("SELECT @@SESSION.innodb_snapshot_isolation")[0][0]
+	try:
+		frappe.db.sql("SET SESSION innodb_snapshot_isolation=0")
+		current = frappe.db.sql(query + " FOR UPDATE", args)
+	finally:
+		frappe.db.sql("SET SESSION innodb_snapshot_isolation=%s", (previous,))
 	if snapshot != current:
 		raise frappe.TimestampMismatchError(frappe._(
 			"The folio changed in another transaction. Retry the payment in a new transaction."))
+
+
+def _snapshot_isolation_enabled():
+	if getattr(frappe.db, "db_type", None) != "mariadb":
+		return False
+	mode = frappe.db.sql("SHOW SESSION VARIABLES LIKE 'innodb_snapshot_isolation'")
+	return bool(mode and mode[0][1] == "ON")
+
+
+def lock_receipt_till(session):
+	if _snapshot_isolation_enabled():
+		_check_receipt_snapshot("SELECT name, modified FROM `tabCashier Session` WHERE name=%s", session)
+		# Foreign cash can append a journal row without changing stored totals.
+		# The cashier reads this journal FOR UPDATE when recomputing the till.
+		_check_receipt_snapshot(
+			"SELECT name, modified FROM `tabCashier Transaction` WHERE session=%s ORDER BY name", session)
 
 
 def payment_folio_for_update(name, *, lock_standalone=False):
@@ -219,11 +243,9 @@ def payment_folio_for_update(name, *, lock_standalone=False):
 
 	def load_locked():
 		reservation = frappe.db.get_value("Folio", name, "reservation")
-		if not reservation and not lock_standalone:
+		if not reservation and (not lock_standalone or not hasattr(frappe.db, "transaction_writes")):
 			return frappe.get_doc("Folio", name)
-		mode = (getattr(frappe.db, "db_type", None) == "mariadb"
-		        and frappe.db.sql("SHOW SESSION VARIABLES LIKE 'innodb_snapshot_isolation'"))
-		if mode and mode[0][1] == "ON":
+		if _snapshot_isolation_enabled():
 			if reservation:
 				_check_receipt_snapshot("SELECT name, modified FROM `tabReservation` WHERE name=%s", reservation)
 				_check_receipt_snapshot(
@@ -231,6 +253,9 @@ def payment_folio_for_update(name, *, lock_standalone=False):
 					   WHERE reservation=%s AND (folio_type='Guest' OR name=%s) ORDER BY name""",
 					(reservation, name),
 				)
+				_check_receipt_snapshot(
+					"""SELECT name, modified, refunded_amount, withheld_amount FROM `tabSecurity Deposit`
+					   WHERE reservation=%s ORDER BY name""", reservation)
 			else:
 				_check_receipt_snapshot(
 					"SELECT name, modified, payments_total, balance FROM `tabFolio` WHERE name=%s", name)

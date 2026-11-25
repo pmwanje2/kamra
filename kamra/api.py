@@ -1677,11 +1677,31 @@ def _pin_guard(folio: str, pin=None):
 _fresh_receipt = ContextVar("kamra_fresh_receipt", default=False)
 
 
+def _has_transaction_effects(db):
+	return db.transaction_writes or any(q._functions for q in (
+		db.after_commit, db.before_commit, db.before_rollback, db.after_rollback,
+	))
+
+
+def _at_transaction_start(db):
+	"""Only an unused connection or Frappe's just-opened transaction is ours.
+
+	A successful START TRANSACTION ends all previous locks, writes and
+	savepoints. Any intervening caller statement makes this proof unavailable.
+	"""
+	if _has_transaction_effects(db):
+		return False
+	last = str(getattr(db, "last_query", "") or "").strip().upper()
+	return last in ("START TRANSACTION", "COMMIT AND CHAIN", "ROLLBACK AND CHAIN") or (
+		not last and not db.sql("SELECT @@in_transaction")[0][0]
+	)
+
+
 def _receipt_transaction(fn):
 	@wraps(fn)
 	def guarded(*args, **kwargs):
 		# Establish ownership before role, property and PIN checks open a read view.
-		fresh = getattr(frappe.db, "db_type", None) == "mariadb" and not frappe.db.sql("SELECT @@in_transaction")[0][0]
+		fresh = getattr(frappe.db, "db_type", None) == "mariadb" and _at_transaction_start(frappe.db)
 		token = _fresh_receipt.set(fresh)
 		try:
 			return fn(*args, **kwargs)
@@ -1713,13 +1733,38 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 	if float(amount) <= 0:
 		frappe.throw("Amount must be positive.")
 	_pin_guard(folio, pin)
-	from kamra.folio import payment_folio_for_update
+	from kamra.folio import payment_savepoint
 	key = (idempotency_key or "").strip() or None
-	doc = payment_folio_for_update(folio, lock_standalone=bool(key) or kind != "Payment")
-	if key and any(p.get("idempotency_key") == key for p in doc.payments):
+	doc, sess, replay = _with_snapshot_retry(
+		lambda: _prepare_direct_receipt(folio, key), receipt_lock=True,
+	)
+	if replay:
 		out = doc.as_dict()
 		out["idempotent_replay"] = 1
 		return out
+	with payment_savepoint():
+		return _post_folio_payment(doc, mode, amount, reference, kind, currency, key, quote_id, sess)
+
+
+def _prepare_direct_receipt(name, key):
+	from kamra.cashier import require_open_session
+	from kamra.folio import lock_receipt_till, payment_folio_for_update
+
+	doc = payment_folio_for_update(name, lock_standalone=True)
+	if key and any(p.get("idempotency_key") == key for p in doc.payments):
+		return doc, None, True
+	session = None
+	try:
+		session = require_open_session(doc.property)
+	except Exception:
+		if "Kamra Agent" not in frappe.get_roles() and frappe.session.user != "Administrator":
+			raise
+	if session:
+		lock_receipt_till(session)
+	return doc, session, False
+
+
+def _post_folio_payment(doc, mode, amount, reference, kind, currency, key, quote_id, sess):
 	if doc.status == "Closed":
 		frappe.throw(_("This folio is closed. Record corrections through a credit note or reopen per policy."))
 	from kamra.traces import assert_no_blocking_alerts
@@ -1730,7 +1775,7 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 	from kamra.masters import default_mode_for_tender, is_system_payment_method, payment_tender_type
 	assert_payment_mode(doc.property, mode, currency)
 	from kamra.business_date import get_business_date
-	from kamra.cashier import assert_cashier_mode_allowed, record_cashier_txn, require_open_session
+	from kamra.cashier import assert_cashier_mode_allowed, record_cashier_txn
 	from kamra.ledger import _round_currency, home_currency, payment_rate
 	from kamra.pricing import _minor_unit
 	assert_cashier_mode_allowed(doc.property, mode)
@@ -1766,13 +1811,6 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 		# custom Cash-type tenders keep their own mode and stay out of home cash
 		# via currency/fx_amount on Cashier Transaction.
 		mode = default_mode_for_tender(doc.property, "Foreign Cash")
-	sess = None
-	try:
-		sess = require_open_session(doc.property)
-	except Exception:
-		if "Kamra Agent" not in frappe.get_roles() and \
-		   frappe.session.user != "Administrator":
-			raise
 	doc.append("payments", {
 		"posting_date": bd,
 		"payment_kind": kind,
@@ -1794,19 +1832,14 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 		doc.property, "Payment", mode, float(amount),
 		folio=doc.name, reference=reference, notes=fx_note, session=sess,
 		tender_validated=True, currency=pay.currency, fx_amount=float(pay.fx_amount or 0))
-	try:
-		from kamra import ledger as _ledger_mod
-		_ledger_mod.record_payment_ledger(doc, pay.as_dict(), session=sess)
-		if (
-			prev_grand is not None
-			and abs(float(doc.grand_total or 0) - float(prev_grand)) > 1e-9
-			and hasattr(_ledger_mod, "sync_folio_rounding_ledger")
-		):
-			_ledger_mod.sync_folio_rounding_ledger(doc, session=sess)
-	except Exception:
-		if key or kind in ("Advance", "Security Deposit"):
-			raise
-		frappe.log_error(title="ledger payment write failed")
+	from kamra import ledger as _ledger_mod
+	_ledger_mod.record_payment_ledger(doc, pay.as_dict(), session=sess)
+	if (
+		prev_grand is not None
+		and abs(float(doc.grand_total or 0) - float(prev_grand)) > 1e-9
+		and hasattr(_ledger_mod, "sync_folio_rounding_ledger")
+	):
+		_ledger_mod.sync_folio_rounding_ledger(doc, session=sess)
 	if kind in ("Advance", "Security Deposit"):
 		from kamra.webhooks import emit_payment
 		emit_payment("deposit.received", doc, pay)
@@ -2513,23 +2546,18 @@ def _lock_folio_scope(reservations=(), folios=(), *, include_guest_windows=False
 		)
 
 
-def _receipt_transaction_state():
-	"""Return whether we own the next transaction and whether the caller has only read.
+def _first_read_transaction(db):
+	"""Prove there are no caller effects if InnoDB itself aborts a routing operation.
 
-	The session's storage-engine write counters survive rollback to a savepoint.
-	They cover the entire connection, so on a reused connection we can refuse a
-	retry unnecessarily, but cannot mistake an earlier update for a clean read.
+	Only the first transaction qualifies: with no previous transaction end,
+	the engine's write and savepoint counts all belong to this transaction.
+	This proof never authorizes rollback and is not used for receipt locks.
 	"""
-	db = frappe.db
-	if db.transaction_writes or any(q._functions for q in (
-		db.after_commit, db.before_commit, db.before_rollback, db.after_rollback,
-	)):
-		return False, False
-	# MariaDB accepts SAVEPOINT even before an InnoDB transaction starts.
+	if _has_transaction_effects(db):
+		return False
 	counts = db.sql("""SHOW SESSION STATUS WHERE Variable_name IN
-		('Com_savepoint', 'Handler_write', 'Handler_update', 'Handler_delete')""")
-	only_reads = len(counts) == 4 and not any(int(count) for _, count in counts)
-	return only_reads and not db.sql("SELECT @@in_transaction")[0][0], only_reads
+		('Com_commit', 'Com_rollback', 'Com_savepoint', 'Handler_write', 'Handler_update', 'Handler_delete')""")
+	return len(counts) == 6 and not any(int(value) for _, value in counts)
 
 
 def _with_snapshot_retry(fn, *, receipt_lock=False):
@@ -2538,9 +2566,11 @@ def _with_snapshot_retry(fn, *, receipt_lock=False):
 
 	if getattr(frappe.db, "db_type", None) != "mariadb" or getattr(frappe.local, "_kamra_snapshot_retry_depth", 0):
 		return fn()
-	owned, only_reads = _receipt_transaction_state()
-	if receipt_lock and only_reads and _fresh_receipt.get():
-		owned = True
+	db = frappe.db
+	owned = _at_transaction_start(db) or (
+		receipt_lock and _fresh_receipt.get() and not _has_transaction_effects(db)
+	)
+	only_reads = not receipt_lock and not owned and _first_read_transaction(db)
 	frappe.local._kamra_snapshot_retry_depth = 1
 	try:
 		for attempt in range(1, _FOLIO_CONFLICT_RETRIES + 1):
