@@ -498,6 +498,10 @@ def open_window(reservation: str | None = None, group_booking: str | None = None
 		"status": "Open",
 		"opened_on": now_datetime(),
 	})
+	if reservation and n > 1 and payee_type == "Guest" and folio.meta.has_field("customer"):
+		folio.customer = frappe.db.get_value(
+			"Folio", {**key, "window_no": 1}, "customer", order_by="creation desc",
+		) or frappe.get_cached_doc("Property", prop).get("walk_in_customer")
 	_recalculate(folio)
 	folio.insert(ignore_permissions=True)
 	return folio.name
@@ -2705,8 +2709,9 @@ def run_night_audit(property: str, business_date: str | None = None,
 	  na_auto_audit_with_blockers - "Run and report exceptions" closes the
 	  day and records the blockers as exceptions; "Hold and alert" leaves
 	  the business date and alerts Hotel Admin and Finance.
-	mode None (an internal call): never gated; open blockers are recorded
-	  as exceptions.
+	mode None (an internal call): ordinary blockers are recorded as exceptions.
+	GL control tie-out blockers always hold a scheduled run and stop an
+	internal run. A manual run requires an authorized variance override.
 
 	Every run saves its audit pack (night_audit.build_pack) on the record."""
 	# In non-request contexts (the 3 AM scheduler, bench console) frappe.local.lang
@@ -2755,11 +2760,16 @@ def run_night_audit(property: str, business_date: str | None = None,
 	extended = na.auto_extend_departures(property, business_date)
 	checks = na.run_checks(property, business_date, run_at)
 	blockers = na.open_blockers(checks)
+	gl_blocker = next((c for c in blockers if c["key"] == "gl_control_tieout"), None)
 	acks: list[dict] = []
 	if mode == "manual":
 		# acknowledged in the End of Day wizard (each with its own reason)
-		drafted = {a["key"]: a for a in na.draft_acknowledgements(draft_name)}
+		raw_acks = (frappe.db.get_value("Night Audit Run", draft_name, "acknowledgements")
+		            if draft_name else None)
+		drafted = {a["key"]: a for a in na.draft_acknowledgements(property, checks, raw_acks)}
 		keys = na.parse_keys(acknowledge)
+		if gl_blocker and gl_blocker["key"] in keys and gl_blocker["key"] not in drafted:
+			na.validate_gl_variance_override(property, gl_blocker, (note or "").strip())
 		missing = [c for c in blockers
 		           if c["key"] not in keys and c["key"] not in drafted]
 		if missing:
@@ -2776,7 +2786,7 @@ def run_night_audit(property: str, business_date: str | None = None,
 			na.acknowledgement_rows(fresh, keys, (note or "").strip())
 	elif mode == "scheduled" and blockers:
 		from kamra.settings import get_setting
-		if get_setting(property, "na_auto_audit_with_blockers") == na.HOLD_AND_ALERT:
+		if gl_blocker or get_setting(property, "na_auto_audit_with_blockers") == na.HOLD_AND_ALERT:
 			out = na.hold_and_alert(property, business_date, blockers)
 			frappe.db.commit()  # nosemgrep: frappe-manual-commit -- scheduler job persists the hold alert per property; reviewed as intentional
 			return out
@@ -2784,6 +2794,8 @@ def run_night_audit(property: str, business_date: str | None = None,
 			blockers, [c["key"] for c in blockers],
 			"Scheduled audit: run and reported as exceptions", by="Administrator",
 			auto=True)
+	elif gl_blocker:
+		frappe.throw(frappe._("Accounting GL control tie-out must be cleared before closing."))
 
 	log_lines = []
 	folios_opened = charges_posted = no_shows = 0

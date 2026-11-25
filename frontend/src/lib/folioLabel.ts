@@ -16,6 +16,17 @@ export interface SiblingFolio {
   payee_agent?: string | null
   agent_name?: string | null
   payment_method?: string | null
+  sales_invoice?: string | null
+  charges_total?: number
+  payee_name?: string | null
+  efris_fiscalized?: boolean
+  routed_rule_count?: number
+}
+
+/** Compact billing window badge (W1..W8 or PM for an unnumbered group master). */
+export function windowBadge(s: Pick<SiblingFolio, "window_no" | "folio_type">): string {
+  if (s.window_no && s.window_no > 0) return `W${s.window_no}`
+  return s.folio_type === "Group" ? "PM" : "W1"
 }
 
 /** A distinct label per folio window. Travel Agent windows name their agent

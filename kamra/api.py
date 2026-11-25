@@ -3791,18 +3791,21 @@ def close_folio(folio: str, pin: str | None = None):
 @require_roles("Finance", "Front Desk", "Kamra Agent")
 def post_allowance(folio: str, amount: float, reason: str = "",
                    gst_rate: float = 0, pin: str | None = None,
-                   reason_code: str | None = None):
+                   reason_code: str | None = None,
+                   supervisor: str | None = None,
+                   supervisor_pin: str | None = None):
 	"""Write off part of a bill against a specific folio, with a reason.
 
 	When the property wants a manager's approval (Settings, Finance:
 	allowance_approval / allowance_approval_above) or the reason code needs
-	a supervisor, the allowance does not touch the folio yet: it becomes a
-	Pending Allowance Request ({"pending": True, "request": ...}) that a
-	manager approves on the spot with their PIN, or later from the list
-	(decide_allowance). A manager's own allowance posts at once, signed
-	with their own PIN (`pin`) whatever the property's cashier PIN setting.
-	AI agents can ask, never approve. Every allowance that posts gets a
-	voucher serial (allowance_voucher)."""
+	a supervisor, manager self-approval is never permitted: fast Floor PIN
+	posting is allowed ONLY when `amount` is within the company's governed
+	`custom_floor_override_max_amount` AND `supervisor_pin` belongs to a
+	different DoA-eligible floor approver (`approver != frappe.session.user`).
+	Otherwise, creates a Pending Allowance Request ({"pending": True,
+	"request": ...}) routed to Approvals Inbox. AI agents can ask, never
+	approve. Every allowance that posts gets a voucher serial
+	(allowance_voucher)."""
 	from kamra.localization import money_text
 	_pin_guard(folio, pin)
 	doc = frappe.get_doc("Folio", folio)
@@ -3818,38 +3821,98 @@ def post_allowance(folio: str, amount: float, reason: str = "",
 	if not amount:
 		frappe.throw(_("Allowance amount is required."))
 	text = _allowance_reason(reason_code, reason)
+
+	def _record_and_post(approver: str | None = None) -> str:
+		has_workflow = bool(
+			frappe.db.exists("Workflow", {"document_type": "Allowance Request", "is_active": 1})
+		)
+		if not has_workflow:
+			return _post_allowance(doc.name, amount, text, gst_rate, approver,
+			                       reason_code=reason_code)
+		now = now_datetime()
+		req = frappe.get_doc({
+			"doctype": "Allowance Request", "property": doc.property,
+			"folio": doc.name, "reservation": doc.reservation,
+			"amount": amount, "gst_rate": flt(gst_rate),
+			"reason_code": reason_code or None, "reason": text,
+			"status": "Pending", "requested_by": frappe.session.user,
+			"requested_on": now, "channel": agent_channel() or "Desk",
+		})
+		req.insert(ignore_permissions=True)
+		serial = _post_allowance(doc.name, amount, text, gst_rate, approver,
+		                         req=req, reason_code=reason_code)
+		frappe.db.set_value(
+			"Allowance Request",
+			req.name,
+			{
+				"status": "Approved",
+				"decided_by": approver,
+				"decided_on": now if approver else None,
+				"serial": serial,
+			},
+			update_modified=False,
+		)
+		# The Pending insert ran the workflow hook. The audit update bypasses it.
+		if frappe.db.table_exists("Workflow Action"):
+			frappe.db.set_value(
+				"Workflow Action",
+				{"reference_doctype": "Allowance Request", "reference_name": req.name, "status": "Open"},
+				{"status": "Completed", "completed_by": approver},
+			)
+		return serial
+
 	if _allowance_needs_approval(doc.property, amount, reason_code):
 		from kamra.credit import _is_agent
-		if _is_agent() or not _may_approve_allowance(doc.property):
-			req = frappe.get_doc({
-				"doctype": "Allowance Request", "property": doc.property,
-				"folio": doc.name, "reservation": doc.reservation,
-				"amount": amount, "gst_rate": flt(gst_rate),
-				"reason_code": reason_code or None, "reason": text,
-				"status": "Pending", "requested_by": frappe.session.user,
-				"requested_on": now_datetime(),
-				"channel": agent_channel() or "Desk",
-			}).insert(ignore_permissions=True)
-			from kamra.webhooks import emit_approval
-			emit_approval("approval.requested", req)
-			from kamra.savings import log_action
-			log_action("allowance_requested", "Folio", doc.name, doc.property,
-			           rationale=f"Asked for an allowance of "
-			                     f"{money_text(doc.property, amount)}: {text}",
-			           channel=agent_channel() or "Desk",
-			           approval_status="Pending")
-			return {"ok": True, "pending": True, "request": req.name,
-			        "folio": folio}
-		# a manager's own allowance: they are the approval, and sign it
-		# with their PIN like the paper voucher
-		from kamra.authz import verify_supervisor
-		approver = verify_supervisor(doc.property, frappe.session.user, pin)
-		serial = _post_allowance(doc.name, amount, text, gst_rate, approver,
-		                         reason_code=reason_code)
-		return {"ok": True, "folio": folio, "approved_by": approver,
-		        "serial": serial}
-	serial = _post_allowance(doc.name, amount, text, gst_rate,
-	                         reason_code=reason_code)
+		sup_user = (supervisor or "").strip()
+		sup_pin = (supervisor_pin or "").strip()
+		if not _is_agent() and (sup_user or sup_pin):
+			from kamra.authz import (
+				doa_floor_bridge_active,
+				floor_override_max_amount,
+				verify_supervisor,
+			)
+			if not doa_floor_bridge_active():
+				floor_max = floor_override_max_amount(doc.property)
+				if floor_max is not None and (floor_max <= 0 or amount > floor_max):
+					frappe.throw(
+						_("[SITEOPS-DOA-LIMIT] Amount exceeds the floor PIN limit; "
+						  "route this request through Approvals Inbox.")
+					)
+			approver = verify_supervisor(
+				doc.property,
+				sup_user,
+				sup_pin,
+				roles=_allowance_approver_roles(doc.property),
+				requester=frappe.session.user,
+				document_owner=frappe.session.user,
+				amount=amount,
+				reference_doctype="Folio",
+				reference_name=doc.name,
+				reason=text,
+			)
+			serial = _record_and_post(approver)
+			return {"ok": True, "folio": folio, "approved_by": approver,
+			        "serial": serial}
+		req = frappe.get_doc({
+			"doctype": "Allowance Request", "property": doc.property,
+			"folio": doc.name, "reservation": doc.reservation,
+			"amount": amount, "gst_rate": flt(gst_rate),
+			"reason_code": reason_code or None, "reason": text,
+			"status": "Pending", "requested_by": frappe.session.user,
+			"requested_on": now_datetime(),
+			"channel": agent_channel() or "Desk",
+		}).insert(ignore_permissions=True)
+		from kamra.webhooks import emit_approval
+		emit_approval("approval.requested", req)
+		from kamra.savings import log_action
+		log_action("allowance_requested", "Folio", doc.name, doc.property,
+		           rationale=f"Asked for an allowance of "
+		                     f"{money_text(doc.property, amount)}: {text}",
+		           channel=agent_channel() or "Desk",
+		           approval_status="Pending")
+		return {"ok": True, "pending": True, "request": req.name,
+		        "folio": folio}
+	serial = _record_and_post()
 	return {"ok": True, "folio": folio, "serial": serial}
 
 
@@ -4124,11 +4187,19 @@ def decide_allowance(allowance_request: str, approve: int = 1,
                      note: str = "", pin: str | None = None,
                      supervisor: str | None = None,
                      supervisor_pin: str | None = None):
-	"""Approve or reject a pending allowance. The approver is the signed-in
-	manager, or, on the spot at the desk, a manager who picks their name
-	and types their own PIN (supervisor + supervisor_pin). Approving posts
-	it on the folio; a rejection needs a note and is kept with who and why.
-	AI agents never decide."""
+	"""Approve or reject a pending allowance. When an active Workflow exists on
+	Allowance Request, executes the transition via
+	`frappe.model.workflow.apply_workflow` (failing closed on self-approval,
+	Administrator, or DoA role mismatch). Approving posts it on the folio;
+	a rejection needs a note and is kept with who and why. AI agents never
+	decide."""
+	from kamra.authz import (
+		_check_user_pin,
+		_scrub_pin_from_form_dict,
+		act_as,
+		doa_floor_bridge_active,
+		verify_supervisor,
+	)
 	from kamra.credit import _is_agent
 	from kamra.localization import money_text
 	if _is_agent():
@@ -4138,33 +4209,144 @@ def decide_allowance(allowance_request: str, approve: int = 1,
 	if req.status != "Pending":
 		frappe.throw(_("This allowance was already {0}.").format(
 			_(req.status).lower()))
+
+	def complete_open_actions(decided_by: str) -> None:
+		# Frappe's transition hook completes at most one matching action.
+		if frappe.db.table_exists("Workflow Action"):
+			frappe.db.set_value(
+				"Workflow Action",
+				{"reference_doctype": "Allowance Request", "reference_name": req.name, "status": "Open"},
+				{"status": "Completed", "completed_by": decided_by},
+			)
+
 	approver = (supervisor or "").strip() or frappe.session.user
-	if cint(approve) and approver == req.requested_by:
+	has_workflow = bool(
+		frappe.db.exists("Workflow", {"document_type": "Allowance Request", "is_active": 1})
+	)
+	doa_active = doa_floor_bridge_active()
+	requesters = {
+		str(u).strip().casefold()
+		for u in (req.get("requested_by"), req.get("owner"))
+		if u and str(u).strip()
+	}
+
+	if has_workflow or doa_active:
+		if not approver or approver.casefold() in ("administrator", "guest"):
+			frappe.throw(
+				_("[HSP-DOA-ROLE] Allowance decisions require a named active user."),
+				frappe.PermissionError,
+			)
+		if approver.casefold() in requesters:
+			frappe.throw(
+				_("[HSP-DOA-SELF] You cannot approve or reject your own allowance request."),
+				frappe.PermissionError,
+			)
+	elif cint(approve) and approver == req.requested_by:
 		frappe.throw(_("You asked for this allowance; another manager approves it."),
 		             frappe.PermissionError)
+
+	note = (note or "").strip()
+	if not cint(approve) and not note:
+		frappe.throw(_("Say why the allowance is rejected - it goes on the record."))
+	if cint(approve) and frappe.db.get_value("Folio", req.folio, "status") == "Closed":
+		frappe.throw(_("This folio is settled now. Reject this request and "
+		               "pass the allowance on the guest's open folio."))
+
+	if has_workflow:
+		try:
+			if supervisor:
+				approver = verify_supervisor(
+					req.property,
+					supervisor,
+					supervisor_pin,
+					roles=_allowance_approver_roles(req.property),
+					requester=(req.requested_by, frappe.session.user),
+					document_owner=req.get("owner"),
+					amount=flt(req.amount),
+					reference_doctype="Allowance Request",
+					reference_name=req.name,
+					reason=req.reason,
+				)
+			elif pin:
+				_check_user_pin(approver, pin, req.property)
+		finally:
+			_scrub_pin_from_form_dict()
+
+		from frappe.model.workflow import apply_workflow
+
+		action = "Approve" if cint(approve) else "Reject"
+		req.flags.kamra_decision = True
+		if supervisor and approver.casefold() != str(frappe.session.user or "").casefold():
+			with act_as(approver):
+				apply_workflow(req, action)
+		else:
+			apply_workflow(req, action)
+
+		decided_by = req.get("decided_by") or approver
+		if cint(approve):
+			if not req.get("serial"):
+				_post_allowance(req.folio, flt(req.amount), req.reason, req.gst_rate,
+				                decided_by, requested_by=req.requested_by, req=req)
+			frappe.db.set_value(
+				"Allowance Request",
+				req.name,
+				{"serial": req.serial, "decision_note": note},
+				update_modified=False,
+			)
+		else:
+			frappe.db.set_value(
+				"Allowance Request",
+				req.name,
+				"decision_note",
+				note,
+				update_modified=False,
+			)
+			from kamra.savings import log_action
+			log_action("allowance_rejected", "Folio", req.folio, req.property,
+			           rationale=f"Rejected {money_text(req.property, req.amount)} "
+			                     f"({req.reason}) asked by {req.requested_by}: {note}",
+			           approver=decided_by, approval_status="Rejected")
+		req.decision_note = note
+		complete_open_actions(decided_by)
+		from kamra.webhooks import emit_approval
+		emit_approval("approval.decided", req)
+		return {"ok": True, "request": req.name, "status": req.status,
+		        "decided_by": decided_by, "serial": req.serial}
+
 	if not _may_approve_allowance(req.property, approver):
 		frappe.throw(_("{0} can't approve allowances here. It needs: {1}.").format(
 			approver, ", ".join(_(r) for r in _allowance_approver_roles(req.property))),
 			frappe.PermissionError)
-	if supervisor or cint(approve):
+	if supervisor:
+		approver = verify_supervisor(
+			req.property,
+			approver,
+			supervisor_pin,
+			roles=_allowance_approver_roles(req.property),
+			requester=(req.requested_by, frappe.session.user),
+			document_owner=req.get("owner"),
+			amount=flt(req.amount),
+			reference_doctype="Allowance Request",
+			reference_name=req.name,
+			reason=req.reason,
+		)
+	elif cint(approve):
 		# an approval is signed with the manager's own PIN every time, even
 		# when they are the one signed in and the property's cashier PIN is off
-		from kamra.authz import verify_supervisor
-		verify_supervisor(req.property, approver,
-		                  supervisor_pin if supervisor else (pin or supervisor_pin))
+		if doa_active and approver.casefold() == str(frappe.session.user or "").casefold():
+			try:
+				_check_user_pin(approver, pin or supervisor_pin, req.property)
+			finally:
+				_scrub_pin_from_form_dict()
+		else:
+			verify_supervisor(req.property, approver, pin or supervisor_pin)
 	else:
 		_pin_guard(req.folio, pin)
-	note = (note or "").strip()
 	if cint(approve):
-		if frappe.db.get_value("Folio", req.folio, "status") == "Closed":
-			frappe.throw(_("This folio is settled now. Reject this request and "
-			               "pass the allowance on the guest's open folio."))
 		_post_allowance(req.folio, flt(req.amount), req.reason, req.gst_rate,
 		                approver, requested_by=req.requested_by, req=req)
 		req.status = "Approved"
 	else:
-		if not note:
-			frappe.throw(_("Say why the allowance is rejected - it goes on the record."))
 		req.status = "Rejected"
 		from kamra.savings import log_action
 		log_action("allowance_rejected", "Folio", req.folio, req.property,
@@ -4176,6 +4358,7 @@ def decide_allowance(allowance_request: str, approve: int = 1,
 	req.decision_note = note
 	req.flags.kamra_decision = True
 	req.save(ignore_permissions=True)
+	complete_open_actions(approver)
 	from kamra.webhooks import emit_approval
 	emit_approval("approval.decided", req)
 	return {"ok": True, "request": req.name, "status": req.status,

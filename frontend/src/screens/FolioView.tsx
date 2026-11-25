@@ -3,10 +3,13 @@ import TenderPicker, { TenderInput, resolveTender, tenderAmount, tenderModes, te
 import { currencyText, formatFxRate, ReferenceCurrencyNote, TariffNight } from "../components/ContractTariff"
 import RowCorrection from "../components/RowCorrection"
 import { FiscalDocument, type Fiscal } from "../components/FiscalDocument"
-import InvoiceCorrectionDialog from "../components/InvoiceCorrectionDialog"
+import FolioWindowTabs, { type FolioWindowTabItem } from "../components/FolioWindowTabs"
+import RoutingInstructionDrawer from "../components/RoutingInstructionDrawer"
+import ReceiptTransferDialog from "../components/ReceiptTransferDialog"
+import CreditRebillDialog from "../components/CreditRebillDialog"
 import { ResponsiveList, Popin } from "../components/ui/responsive-list"
 import { Fragment, useCallback, useEffect, useRef, useState } from "react"
-import { ArrowLeft, ArrowRightLeft, Printer, X } from "lucide-react"
+import { ArrowLeft, ArrowRightLeft, Printer } from "lucide-react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { formatDate, roomLabel } from "../lib/utils"
 import { call, getCurrentProperty, newIdempotencyKey, type ReferenceCurrency, type TariffReference } from "../lib/api"
@@ -16,15 +19,27 @@ import AllowanceRequests from "../components/AllowanceRequests"
 import FolioDiscount from "../components/FolioDiscount"
 import { ADVANCE_BILL_ACTION } from "../lib/discountHint"
 import ChangeCompany from "../components/ChangeCompany"
-import { loadLocale, sellsAlcohol, taxRates, fmtAmount } from "../lib/money"
+import {
+  cur,
+  fmtAmount,
+  fmtMoney,
+  type MoneyContext,
+  loadLocale,
+  locale,
+  moneyDigits,
+  roundMoney,
+  sellsAlcohol,
+  taxLabel,
+  taxRates,
+  useLocale,
+} from "../lib/money"
 import { defaultChargeTaxRate } from "../lib/chargeTax"
-import { folioLabel, shareFolioArgs, type SiblingFolio } from "../lib/folioLabel"
+import { folioLabel, shareFolioArgs, windowBadge, type SiblingFolio } from "../lib/folioLabel"
 import { serverError } from "../lib/resource"
 import { useCashierAuth } from "../lib/cashierAuth"
 import { useAuth } from "../lib/auth"
 import { Badge } from "../components/ui/badge"
 import { Button } from "../components/ui/button"
-import { cur, locale, taxLabel, useLocale } from "../lib/money"
 import { useT, t as translate, useUILanguage } from "../lib/i18n"
 import {
   Card,
@@ -39,6 +54,13 @@ interface InvoiceData {
     property?: string
     status: "Open" | "Closed"
     folio_type?: string
+    window_no?: number | null
+    payee_type?: string | null
+    payee_company?: string | null
+    payee_agent?: string | null
+    payment_method?: string | null
+    group_booking?: string | null
+    bill_to_name?: string | null
     invoice_number: string | null
     /** the accounting system's invoice for this folio, where it issued one:
      *  it is then corrected there (credit note and re-bill), never here */
@@ -49,6 +71,10 @@ interface InvoiceData {
       posting_date: string
       charge_type: string
       description: string
+      qty?: number
+      rate?: number
+      transaction_code?: string | null
+      routing_instruction?: string | null
       allowance_serial?: string | null
       /** on a void's reversal line: the line it reverses (both stay on the bill) */
       reversal_of?: string | null
@@ -74,6 +100,11 @@ interface InvoiceData {
       currency?: string | null
       fx_amount?: number | null
       exchange_rate?: number | null
+      refund_of?: string | null
+      reversal_of?: string | null
+      transferred_from?: string | null
+      transferred_to?: string | null
+      transfer_group_key?: string | null
     }[]
     charges_total: number
     tax_total: number
@@ -84,6 +115,7 @@ interface InvoiceData {
   property: {
     currency: string
     currency_symbol?: string
+    decimals?: number
     locale?: string
     name: string
     legal_name: string | null
@@ -132,8 +164,6 @@ interface InvoiceData {
     total_tax: number
   }[]
   bill_to: { name: string; gstin: string | null } | null
-  /** The document's own identity: a bill before settlement is provisional
-   *  and says so; only a closed folio carries an invoice number. */
   /** What the tax authority requires on the bill - ZATCA's QR code and
    *  bilingual title in Saudi Arabia; null elsewhere. */
   statutory?: {
@@ -209,17 +239,37 @@ interface InvoiceData {
   }[]
 }
 
+interface TransactionCodeChoice {
+  code: string
+  description: string
+  charge_type?: string | null
+  is_alcohol?: number
+}
+
+interface InHouseRoomChoice {
+  name: string
+  room_number?: string | null
+  guest_name?: string | null
+}
+
 const CHARGE_TYPES = [
   "Food & Beverage", "Minibar", "Laundry", "Spa", "Taxi",
   "Early Check-in", "Late Checkout", "Pet Charge", "Discount", "Misc",
 ]
 
+const FALLBACK_CODES: TransactionCodeChoice[] = [
+  { code: "2000", description: "Food & Beverage", charge_type: "Food & Beverage", is_alcohol: 0 },
+  { code: "2010", description: "Beverage & Alcohol", charge_type: "Food & Beverage", is_alcohol: 1 },
+  { code: "2100", description: "Minibar", charge_type: "Minibar", is_alcohol: 0 },
+  { code: "3000", description: "Laundry", charge_type: "Laundry", is_alcohol: 0 },
+  { code: "3100", description: "Spa", charge_type: "Spa", is_alcohol: 0 },
+  { code: "3200", description: "Taxi", charge_type: "Taxi", is_alcohol: 0 },
+  { code: "8000", description: "Miscellaneous", charge_type: "Misc", is_alcohol: 0 },
+]
+
 const inputCls =
   "rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm " +
   "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
-
-const isEmptyFolio = (s: SiblingFolio) =>
-  !s.grand_total && !s.payments_total
 
 /** One labelled fact on the printed bill - label and value stay on the
  *  same line so the header block reads as a form, not a paragraph. */
@@ -264,7 +314,7 @@ function VerifyTaxId({ taxId, name, symbol }: { taxId: string; name: string; sym
         }}>
         {busy ? t("Checking…") : t("Verify")}
       </button>
-      {res && <span className={`ml-1 text-xs ${res.ok ? "text-emerald-700" : "text-red-700"}`}>{translate(res.text)}</span>}
+      {res && <span className={`ms-1 text-xs ${res.ok ? "text-emerald-700" : "text-red-700"}`}>{translate(res.text)}</span>}
     </span>
   )
 }
@@ -280,17 +330,16 @@ function ChargeActions({ folio, row, correct, onMove, act }: {
 }) {
   const { t } = useT()
   const [open, setOpen] = useState(false)
-  // a line that stops being correctable (voided by the correction) never keeps Move hidden
   const correcting = correct && open
   if (!correct && !onMove) return null
   return (
     <div data-row-actions
-      className={correcting ? "grid min-w-56 gap-1.5 text-left" : "inline-flex items-center justify-end gap-1.5"}>
+      className={correcting ? "grid min-w-56 gap-1.5 text-start" : "inline-flex items-center justify-end gap-1.5"}>
       {correct && <RowCorrection folio={folio} row={row} modes={[]} act={act} onOpenChange={setOpen} />}
       {onMove && !correcting && (
         <button
           aria-label={t("Move or split this charge")}
-          className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2 py-1 text-xs text-zinc-500 hover:border-brand-400 hover:text-zinc-800"
+          className="inline-flex min-h-11 items-center gap-1 rounded-md border border-zinc-200 px-2 py-1 text-xs text-zinc-500 hover:border-brand-400 hover:text-zinc-800"
           onClick={onMove}
         >
           <ArrowRightLeft className="size-3" aria-hidden />
@@ -308,18 +357,31 @@ export default function FolioView() {
   const navigate = useNavigate()
   const [data, setData] = useState<InvoiceData | null>(null)
   const [siblings, setSiblings] = useState<SiblingFolio[]>([])
+  const [windowOverview, setWindowOverview] = useState<{
+    window_cap: number
+    can_add_window: boolean
+    windows: FolioWindowTabItem[]
+  } | null>(null)
+  const [txnCodes, setTxnCodes] = useState<TransactionCodeChoice[]>([])
+  const [inHouseRooms, setInHouseRooms] = useState<InHouseRoomChoice[]>([])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   const [charge, setCharge] = useState({
-    charge_type: "Food & Beverage", description: "", amount: "",
+    charge_type: "Food & Beverage",
+    transaction_code: "",
+    description: "",
+    amount: "",
     // the property's own rate (0% where it charges no tax), never a made-up one
     gst_rate: defaultChargeTaxRate(taxRates(), locale().services_tax_rate),
-    is_alcohol: false,
   })
   const taxPicked = useRef(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [splitMode, setSplitMode] = useState<"auto" | "qty">("auto")
   const [partVal, setPartVal] = useState("")
+  const [qtyVal, setQtyVal] = useState("1")
+  const [moveRoomTarget, setMoveRoomTarget] = useState("")
+  const [moveRoomReason, setMoveRoomReason] = useState("")
   const loc = useLocale()
   const [payment, setPayment] = useState({
     mode: "",
@@ -346,26 +408,21 @@ export default function FolioView() {
     grand_total: number; balance: number
   } | null>(null)
   const quote = useSettlementQuote(folioProperty, foreign && paymentReady ? tender.currency : "", Number(payment.amount))
-  const [showCancel, setShowCancel] = useState(false)
-  const [showCredit, setShowCredit] = useState(false)
-  const [cancelReason, setCancelReason] = useState("")
+  const [showCreditRebill, setShowCreditRebill] = useState(false)
+  const [showRouting, setShowRouting] = useState(false)
+  const [transferPayment, setTransferPayment] = useState<InvoiceData["folio"]["payments"][number] | null>(null)
   const [allowance, setAllowance] = useState({ amount: "", reason: "", gst_rate: "0", reason_code: "" })
   const [adjustCodes, setAdjustCodes] = useState<{ name: string; description: string }[]>([])
   const [allowanceNote, setAllowanceNote] = useState<string | null>(null)
   const [allowanceKey, setAllowanceKey] = useState(0)
-  // a manager's own allowance is signed with their PIN, asked when needed
   const [allowancePin, setAllowancePin] = useState<string | null>(null)
   const [panel, setPanel] = useState<"company" | "share" | null>(null)
   const [shares, setShares] = useState<Record<string, string>>({})
   const { ensureUnlocked, status: pinStatus } = useCashierAuth()
-  // Correct charged nights: Finance / Hotel Admin, when the property's
-  // rate-change policy allows it (the dry run refuses otherwise)
   const { roles } = useAuth()
-  const canRequestCorrection = roles.some(r => ["Front Desk","Finance","Hotel Admin","System Manager","Administrator"].includes(r))
+  const canRequestCorrection = roles.some(r => ["Front Desk", "Finance", "Hotel Admin", "System Manager", "Administrator"].includes(r))
   const canCorrect = roles.some((r) =>
     ["Finance", "Hotel Admin", "System Manager", "Administrator"].includes(r))
-  // who may correct an issued invoice - a credit note, or the accounting
-  // system's credit and re-bill: the server's INVOICE_CORRECTION_ROLES
   const canCreditInvoice = roles.some((r) =>
     ["Finance", "Hotel Admin", "System Manager", "Administrator"].includes(r))
   const [toCorrect, setToCorrect] = useState<
@@ -373,28 +430,79 @@ export default function FolioView() {
   const [correction, setCorrection] = useState({ reason: "", pin: "" })
 
   const load = useCallback(() => {
-    if (name)
-      call<InvoiceData>("kamra.api.folio_invoice", { folio: name })
-        .then((d) => {
-          setData(d)
-          setPayment((p) => ({
-            ...p, amount: p.currency && p.currency !== d.property.currency ? "" : String(d.folio.balance || ""),
-          }))
-          return d.stay.reservation
+    if (!name) return
+    call<InvoiceData>("kamra.api.folio_invoice", { folio: name })
+      .then(async (d) => {
+        setData(d)
+        setPayment((p) => ({
+          ...p,
+          amount: p.currency && p.currency !== d.property.currency ? "" : String(d.folio.balance || ""),
+        }))
+        const [ov, sibs] = await Promise.all([
+          call<{
+            window_cap?: number
+            can_add_window?: boolean
+            windows?: Array<FolioWindowTabItem & { folio?: string }>
+          }>("kamra.payment_transfers.folio_windows_overview", { folio: name }).catch(() => null),
+          d.stay.reservation
             ? call<SiblingFolio[]>("kamra.api.reservation_folios", {
                 reservation: d.stay.reservation,
-              })
-            : []
-        })
-        .then((s) => s && setSiblings(s))
-        .catch((e) => setError(serverError(e)))
+              }).catch(() => [])
+            : Promise.resolve([]),
+        ])
+        const normalizedSibs = Array.isArray(sibs) ? sibs : []
+        if (ov && Array.isArray(ov.windows) && ov.windows.length > 0) {
+          const mapped: FolioWindowTabItem[] = ov.windows.map((w) => ({
+            ...w,
+            name: w.folio || w.name,
+            folio_type: w.folio_type || "Guest",
+            status: w.status || "Open",
+            balance: Number(w.balance ?? 0),
+            grand_total: Number(w.grand_total ?? w.charges_total ?? 0),
+            payments_total: Number(w.payments_total ?? 0),
+          }))
+          setWindowOverview({
+            window_cap: ov.window_cap ?? 8,
+            can_add_window: ov.can_add_window ?? false,
+            windows: mapped,
+          })
+          setSiblings(normalizedSibs.length ? normalizedSibs : mapped)
+        } else {
+          setWindowOverview(null)
+          setSiblings(normalizedSibs)
+        }
+      })
+      .catch((e) => setError(serverError(e)))
   }, [name])
 
   useEffect(load, [load])
   useEffect(() => {
     call<{ name: string; description: string }[]>("kamra.ledger.list_reason_codes", { category: "Adjust" })
-      .then(setAdjustCodes).catch(() => {})
+      .then((list) => setAdjustCodes(Array.isArray(list) ? list : []))
+      .catch(() => {})
   }, [])
+
+  const stayRes = data?.stay.reservation
+  const folioOpen = data?.folio.status === "Open"
+  useEffect(() => {
+    if (!folioOpen || !folioProperty) return
+    call<{
+      transaction_codes?: TransactionCodeChoice[]
+      in_house_reservations?: InHouseRoomChoice[]
+    }>("kamra.routing.routing_options", {
+      property: folioProperty,
+      reservation: stayRes || undefined,
+    })
+      .then((res) => {
+        if (Array.isArray(res?.transaction_codes) && res.transaction_codes.length > 0) {
+          setTxnCodes(res.transaction_codes)
+        }
+        if (Array.isArray(res?.in_house_reservations)) {
+          setInHouseRooms(res.in_house_reservations)
+        }
+      })
+      .catch(() => {})
+  }, [folioOpen, folioProperty, stayRes])
 
   const balanceNow = data?.folio.balance
   useEffect(() => {
@@ -404,38 +512,35 @@ export default function FolioView() {
       .catch((e) => { setShown(null); setError(serverError(e)) })
   }, [showIn, name, balanceNow])
 
-  const stayRes = data?.stay.reservation
   const grand = data?.folio.grand_total
   useEffect(() => {
     if (!canCorrect || !stayRes) return
     call<{ nights: { date: string; charged: number; new: number }[] }>(
       "kamra.api.correct_charged_nights", { reservation: stayRes, dry_run: 1 })
-      .then((r) => setToCorrect(r.nights))
-      .catch(() => setToCorrect([]))  // policy off or nothing charged
+      .then((r) => setToCorrect(Array.isArray(r?.nights) ? r.nights : []))
+      .catch(() => setToCorrect([]))
   }, [canCorrect, stayRes, grand])
 
   const [rates, setRates] = useState<number[]>(taxRates())
   useEffect(() => {
     loadLocale().then((l) => {
       setRates(l.tax_rates)
-      // start on the property's rate once it is known, unless the desk picked one
       if (!taxPicked.current)
         setCharge((c) => ({ ...c, gst_rate: defaultChargeTaxRate(l.tax_rates, l.services_tax_rate) }))
     })
   }, [])
-  // a hotel that charges no tax (its only rate is 0%) gets no tax pickers
   const noTax = rates.length === 1 && Number(rates[0]) === 0
-  // the rate the server will put on this charge when it is food & beverage
-  // (same words and rate as kamra.api._resolve_charge_gst); null = the
-  // picked rate applies
+  const effectiveCodes = (txnCodes.length ? txnCodes : FALLBACK_CODES).filter(
+    (c) => sellsAlcohol() || !c.is_alcohol,
+  )
+  const chosenCode = effectiveCodes.find((c) => c.code === charge.transaction_code)
   const fnbWords = loc.fnb_charge_words ?? []
   const chargeText = `${charge.charge_type} ${charge.description}`.toLowerCase()
   const fixedRate: number | null =
-    !charge.is_alcohol && loc.fnb_tax_rate != null && fnbWords.some((w) => chargeText.includes(w))
+    !chosenCode?.is_alcohol && loc.fnb_tax_rate != null && fnbWords.some((w) => chargeText.includes(w))
       ? Number(loc.fnb_tax_rate)
       : null
 
-  /** Params helper kept for call sites; unlock happens in act(). */
   const withPin = (params: Record<string, unknown>) => params
 
   async function act(fn: () => Promise<unknown>, onError: (message: string) => void = setError) {
@@ -464,15 +569,11 @@ export default function FolioView() {
     })
   }
 
-  /** OPERA advance billing: post the stay's coming nights now, so a guest who
-   *  pays at check-in can be discounted and receipted before night audit. */
   function advanceBill() {
     if (!stayRes) return
     act(() => call("kamra.ledger.force_advance_bill", withPin({ reservation: stayRes, nights: "entire" })))
   }
 
-  // a link to /billing/<folio>?action=advance-bill (the discount hint, a chat
-  // hand-off) brings the desk to the Advance bill button; the cashier presses it
   const wantsAdvanceBill = searchParams.get("action") === ADVANCE_BILL_ACTION
   const focusedAdvanceBill = useRef(false)
   useEffect(() => {
@@ -503,90 +604,83 @@ export default function FolioView() {
         ? `${property.currency} `
         : cur()
   const docLocale = property.locale || loc.locale
-  const inr = (n: unknown) => fmtAmount(n ?? 0, docCurrency, docLocale)
-  const docTaxLabel = property.tax_label || taxLabel()
-  // the server sends charges enriched with their service code (and on a
-  // bridged site, the accounting invoice's own tax lines); fall back to the
-  // raw folio rows so a cached older payload still renders
-  const lines = data.lines ?? folio.charges.map((c) => ({ ...c, row: c.name, qty: 1, rate: c.amount, service_code: null }))
+  const money: MoneyContext = { currency: docCurrency, currency_symbol: docSymbol, locale: docLocale, decimals: property.decimals }
+  const fmt = (n: unknown) => fmtAmount(n ?? 0, docCurrency, money.decimals, docLocale)
+  const amount = (n: unknown) => <span dir="ltr" className="inline-block tabular-nums">{fmtMoney(n, money)}</span>
+  const taxName = property.tax_label || taxLabel()
+  const docTaxLabel = t(taxName.toUpperCase() === "TAX" ? "Tax" : taxName)
+  const lines = data.lines ?? folio.charges.map((c) => ({ ...c, row: c.name, qty: c.qty ?? 1, rate: c.rate ?? c.amount, service_code: null }))
   const lineByRow = new Map(lines.map((l) => [l.row, l]))
   const taxRows = data.tax_summary ?? []
   const taxUnavailable = data.tax_source === "accounting_unavailable"
-  // a bill with no tax on any line prints no tax columns or totals
   const taxed = taxUnavailable || Number(folio.tax_total) !== 0 ||
     lines.some((l) => Number(l.gst_rate) !== 0 || Number(l.gst_amount) !== 0) ||
     taxRows.length > 0
   const showLineTax = taxed && !taxUnavailable
   const open = folio.status === "Open"
-  // invoiced here, or by the accounting system: its check-out close sets only
-  // its own invoice (sales_invoice), and that bill is corrected all the same
   const invoiced = !!(folio.invoice_number || folio.sales_invoice)
   const isFinal = doc ? doc.is_final : Boolean(folio.invoice_number)
   const hasServiceCode = lines.some((l) => Boolean(l.service_code))
+  const groupBookingId = stay.group_booking || folio.group_booking || null
+
+  const windowTabs: FolioWindowTabItem[] = windowOverview?.windows?.length
+    ? windowOverview.windows
+    : siblings.length
+      ? siblings
+      : (stay.reservation || groupBookingId)
+        ? [{
+            name: folio.name,
+            folio_type: folio.folio_type || "Guest",
+            status: folio.status,
+            invoice_number: folio.invoice_number,
+            sales_invoice: folio.sales_invoice,
+            window_no: folio.window_no ?? 1,
+            payee_type: folio.payee_type ?? "Guest",
+            payee_company: folio.payee_company,
+            payee_agent: folio.payee_agent,
+            payment_method: folio.payment_method,
+            bill_to_name: folio.bill_to_name,
+            balance: folio.balance,
+            grand_total: folio.grand_total,
+            payments_total: folio.payments_total,
+          }]
+        : []
+
+  const openTransferTargets = windowTabs.filter(
+    (s) => s.status === "Open" && !s.invoice_number && !s.sales_invoice && s.name !== folio.name,
+  )
+
+  function remainingTransferable(p: InvoiceData["folio"]["payments"][number]): number {
+    const origAmt = Number(p.amount || 0)
+    if (origAmt <= 0) return 0
+    const prefix = `PT:${p.name}:`
+    let deducted = 0
+    for (const row of folio.payments) {
+      if (row.name === p.name) continue
+      const rowAmt = Number(row.amount || 0)
+      if (rowAmt >= 0) continue
+      if (row.refund_of === p.name) {
+        deducted += Math.abs(rowAmt)
+      } else if (row.transferred_to && (row.transfer_group_key || "").startsWith(prefix)) {
+        deducted += Math.abs(rowAmt)
+      }
+    }
+    return Math.max(0, roundMoney(origAmt - deducted, home))
+  }
 
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2 print:hidden">
         <Link
           to="/billing"
-          className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-800"
+          className="inline-flex min-h-11 items-center gap-1 text-sm text-zinc-500 hover:text-zinc-800 sm:min-h-0"
         >
-          <ArrowLeft className="size-4" aria-hidden />
+          <ArrowLeft className="size-4 rtl:rotate-180" aria-hidden />
           {t("Billing")}
         </Link>
         <div className="flex max-w-full flex-wrap gap-2">
-          {siblings.length > 1 && (
-            <div className="flex flex-wrap items-center gap-1 rounded-lg bg-zinc-100 p-1">
-              {siblings.map((s) => {
-                const active = s.name === folio.name
-                const empty = isEmptyFolio(s)
-                const canDelete =
-                  empty && s.folio_type !== "Guest" && s.folio_type !== "Group"
-                return (
-                  <div
-                    key={s.name}
-                    className={
-                      "group flex items-center rounded-md " +
-                      (active ? "bg-white shadow-sm" : "")
-                    }
-                  >
-                    <Link
-                      to={`/billing/${encodeURIComponent(s.name)}`}
-                      className={
-                        "flex items-center gap-1.5 px-2.5 py-1 text-xs " +
-                        (active
-                          ? "font-medium text-zinc-800"
-                          : "text-zinc-500 hover:text-zinc-800")
-                      }
-                    >
-                      {folioLabel(siblings, s, t)}
-                      <span
-                        className={
-                          "tabular-nums " +
-                          (s.balance > 0 ? "text-amber-600" : "text-zinc-400")
-                        }
-                      >
-                        {s.balance < 0 ? `${t("Advance")} ` : ""}{docSymbol}{inr(Math.abs(s.balance))}
-                      </span>
-                    </Link>
-                    {canDelete && (
-                      <button
-                        aria-label={t("Delete empty {label} folio", { label: folioLabel(siblings, s, t) })}
-                        title={t("Delete this empty folio")}
-                        disabled={busy}
-                        onClick={() => removeFolio(s)}
-                        className="pr-1.5 text-zinc-300 hover:text-rose-500"
-                      >
-                        <X className="size-3.5" />
-                      </button>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          )}
           {open && folio.balance > 0 && loc.integrations.payment_gateways.length > 0 && (
-            <Button
+            <Button className="min-h-11 sm:min-h-0"
               variant="outline"
               disabled={busy}
               onClick={() =>
@@ -609,26 +703,8 @@ export default function FolioView() {
               {t("Payment link")}
             </Button>
           )}
-          {open && (
-            <Button
-              variant="outline"
-              disabled={busy}
-              onClick={() =>
-                act(() =>
-                  call("kamra.api.split_folio", {
-                    reservation: data.stay.reservation,
-                    folio_type: siblings.some((s) => s.folio_type === "Company")
-                      ? "Extra"
-                      : "Company",
-                  }),
-                )
-              }
-            >
-              {t("Split folio")}
-            </Button>
-          )}
           {open && siblings.find((s) => s.folio_type === "Guest" && s.status === "Open")?.name === folio.name && (
-            <Button
+            <Button className="min-h-11 sm:min-h-0"
               variant="outline"
               disabled={busy}
               title={t("A separate bill for each guest sharing the room, in their own name")}
@@ -643,7 +719,7 @@ export default function FolioView() {
             </Button>
           )}
           {open && data.stay.reservation && (
-            <Button variant="outline" disabled={busy}
+            <Button className="min-h-11 sm:min-h-0" variant="outline" disabled={busy}
               onClick={() => setPanel(panel === "company" ? null : "company")}>
               {t("Change company")}
             </Button>
@@ -651,7 +727,7 @@ export default function FolioView() {
           {open &&
             data.stay.group_booking &&
             !siblings.some((s) => s.folio_type === "Group") && (
-              <Button
+              <Button className="min-h-11 sm:min-h-0"
                 variant="outline"
                 disabled={busy}
                 title={t("One consolidated company bill across every room of the group")}
@@ -666,7 +742,7 @@ export default function FolioView() {
                 {t("Group folio")}
               </Button>
             )}
-          <Button variant="outline" disabled={busy} onClick={() =>
+          <Button className="min-h-11 sm:min-h-0" variant="outline" disabled={busy} onClick={() =>
               act(async () => {
                 await call("kamra.ledger.generate_proforma", { folio: folio.name })
                 window.print()
@@ -675,35 +751,41 @@ export default function FolioView() {
             {t("Proforma")}
           </Button>
           {open && stay?.reservation ? (
-            <Button variant="outline" disabled={busy} id={ADVANCE_BILL_ACTION}
+            <Button className="min-h-11 sm:min-h-0" variant="outline" disabled={busy} id={ADVANCE_BILL_ACTION}
               title={t("Post future room & tax ahead of night audit")}
               onClick={advanceBill}>
               {t("Advance bill")}
             </Button>
           ) : null}
-          {!open && invoiced && canCreditInvoice
-            && (!folio.sales_invoice || data.bridge_credit_and_rebill !== false) ? (
-            <Button variant="outline" disabled={busy} onClick={() => setShowCredit(true)}>
-              {t("Credit note")}
+          {!open && invoiced && (folio.sales_invoice
+            ? canCreditInvoice && data.bridge_credit_and_rebill !== false
+            : canCreditInvoice || (folio.folio_type !== "Account" && roles.includes("Front Desk"))) ? (
+            <Button className="min-h-11 sm:min-h-0"
+              variant="outline"
+              disabled={busy}
+              data-testid="open-credit-rebill-btn"
+              onClick={() => setShowCreditRebill(true)}
+            >
+              {t("Credit & Rebill")}
             </Button>
           ) : null}
           {data.fiscal ? (
             // the tax invoice is the ERP fiscal document: reprint it (logged
             // with its number) only once it is final
-            <Button variant="outline" disabled={busy} onClick={() => {
-              if (!doc.is_final) return window.print()
+            <Button className="min-h-11 sm:min-h-0" variant="outline" disabled={busy} onClick={() => {
+              if (!isFinal) return window.print()
               void call<InvoiceData>("kamra.api.reprint_fiscal_folio", { folio: folio.name })
                 .then((d) => setData(d))
                 .then(() => window.setTimeout(() => window.print(), 0))
                 .catch((e) => setError(serverError(e)))
             }}>
               <Printer className="size-4" aria-hidden />
-              {doc.is_final
+              {isFinal
                 ? (data.fiscal.state === "fiscalised" ? t("Reprint fiscal invoice") : t("Reprint invoice"))
                 : t("Print folio")}
             </Button>
           ) : (
-            <Button variant="outline" onClick={() => {
+            <Button className="min-h-11 sm:min-h-0" variant="outline" onClick={() => {
               void call("kamra.ledger.record_folio_reprint", {
                 folio: folio.name,
                 document: isFinal ? "Guest Folio" : "Proforma",
@@ -716,7 +798,7 @@ export default function FolioView() {
           {open &&
             folio.balance === 0 &&
             folio.charges.length > 0 && (
-              <Button
+              <Button className="min-h-11 sm:min-h-0"
                 variant="outline"
                 disabled={busy}
                 title={translate("Interim invoice: freeze this paid folio and keep the stay running on a fresh one - for long stays settled every few days")}
@@ -733,18 +815,8 @@ export default function FolioView() {
                 {t("Settle & continue stay")}
               </Button>
             )}
-          {!open && invoiced && folio.folio_type !== "Account"
-            && (!folio.sales_invoice || (canCreditInvoice && data.bridge_credit_and_rebill !== false)) && (
-            <Button
-              variant="outline"
-              disabled={busy}
-              onClick={() => setShowCancel((s) => !s)}
-            >
-              {t("Cancel invoice")}
-            </Button>
-          )}
           {open && (
-            <Button
+            <Button className="min-h-11 sm:min-h-0"
               disabled={busy}
               onClick={() =>
                 act(() => call("kamra.api.close_folio", withPin({ folio: folio.name })))
@@ -756,47 +828,74 @@ export default function FolioView() {
         </div>
       </div>
 
-      {showCredit && !open && invoiced && (
-        <InvoiceCorrectionDialog folio={folio} credited={data.credited ?? 0}
-          currency={docCurrency} currencySymbol={docSymbol} numberLocale={docLocale}
-          onClose={() => setShowCredit(false)}
-          onDone={() => { setShowCredit(false); load() }} />
+      {windowTabs.length > 0 && (
+        <FolioWindowTabs
+          currentFolio={folio.name}
+          property={folioProperty}
+          windows={windowTabs}
+          currency={home}
+          money={money}
+          reservation={stay.reservation}
+          groupBooking={groupBookingId}
+          windowCap={windowOverview?.window_cap ?? 8}
+          canAddWindow={windowOverview ? windowOverview.can_add_window : windowTabs.length < 8}
+          busy={busy}
+          onDeleteEmpty={removeFolio}
+          onOpenRouting={() => setShowRouting(true)}
+          onWindowChanged={(targetFolio) => {
+            if (targetFolio && targetFolio !== folio.name) {
+              navigate(`/billing/${encodeURIComponent(targetFolio)}`)
+            } else {
+              load()
+            }
+          }}
+          act={act}
+        />
       )}
 
-      {showCancel && !open && (
-        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm print:hidden">
-          <span className="text-amber-800">
-            {folio.sales_invoice
-              ? t("Cancel {invoice}? The accounting system credits it and issues a new invoice; this bill is not reopened here.", {
-                  invoice: folio.invoice_number || folio.sales_invoice,
-                })
-              : t("Cancel {invoice}? The number goes on the cancelled register and the folio reopens for correction.", {
-                  invoice: folio.invoice_number ?? "",
-                })}
-          </span>
-          <input
-            className="min-w-56 flex-1 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-sm"
-            placeholder={t("Reason (required - goes on the record)")}
-            value={cancelReason}
-            onChange={(e) => setCancelReason(e.target.value)}
-          />
-          <Button
-            variant="outline"
-            disabled={busy || !cancelReason.trim()}
-            onClick={() =>
-              act(async () => {
-                await call("kamra.api.cancel_invoice", withPin({
-                  folio: folio.name,
-                  reason: cancelReason.trim(),
-                }))
-                setShowCancel(false)
-                setCancelReason("")
-              })
-            }
-          >
-            {t("Confirm cancel")}
-          </Button>
-        </div>
+      <RoutingInstructionDrawer
+        open={showRouting}
+        onClose={() => setShowRouting(false)}
+        property={folioProperty}
+        currency={home}
+        money={money}
+        reservation={stay.reservation}
+        groupBooking={groupBookingId}
+        onChanged={load}
+      />
+
+      {transferPayment && open && !invoiced && (
+        <ReceiptTransferDialog
+          folio={folio.name}
+          currency={home}
+          money={money}
+          payment={transferPayment}
+          maxAmount={remainingTransferable(transferPayment)}
+          siblings={windowTabs}
+          targets={openTransferTargets}
+          onClose={() => setTransferPayment(null)}
+          onDone={() => {
+            setTransferPayment(null)
+            load()
+          }}
+        />
+      )}
+
+      {showCreditRebill && !open && invoiced && (
+        <CreditRebillDialog
+          folio={folio}
+          currency={home}
+          money={money}
+          fiscalScheme={data.fiscal?.scheme || (data.fiscal?.efris_enrolled || data.fiscal?.state === "fiscalised" ? "efris" : null)}
+          allowFull={folio.folio_type !== "Account"}
+          allowPartial={canCreditInvoice}
+          credited={data.credited ?? 0}
+          onClose={() => setShowCreditRebill(false)}
+          onDone={() => {
+            setShowCreditRebill(false)
+            load()
+          }}
+        />
       )}
 
       {stay.reservation && (
@@ -816,7 +915,7 @@ export default function FolioView() {
                 : t("Cashier PIN required for money actions.")}
           </span>
           {!pinStatus.unlocked ? (
-            <Button
+            <Button className="min-h-11 sm:min-h-0"
               variant="outline"
               disabled={busy}
               onClick={() => void ensureUnlocked().catch((e) => setError(serverError(e)))}
@@ -870,7 +969,7 @@ export default function FolioView() {
                   {t("This bill keeps {pct}%.", { pct: (100 - total).toFixed(2) })}
                 </p>
                 <div className="flex gap-2">
-                  <Button variant="outline" disabled={busy || !rows.length || total >= 100}
+                  <Button className="min-h-11 sm:min-h-0" variant="outline" disabled={busy || !rows.length || total >= 100}
                     onClick={() =>
                       act(async () => {
                         await call(
@@ -889,7 +988,7 @@ export default function FolioView() {
                     }>
                     {t("Share these charges")}
                   </Button>
-                  <Button variant="ghost" onClick={() => { setShares({}); setPanel(null) }}>{t("Cancel")}</Button>
+                  <Button className="min-h-11 sm:min-h-0" variant="ghost" onClick={() => { setShares({}); setPanel(null) }}>{t("Cancel")}</Button>
                 </div>
               </>
             )}
@@ -953,7 +1052,7 @@ export default function FolioView() {
                 </p>
               </div>
             </div>
-            <div className="text-right">
+            <div className="text-end">
               <p className="font-mono text-lg font-semibold">
                 {doc?.number ?? folio.invoice_number ?? folio.name}
               </p>
@@ -993,13 +1092,9 @@ export default function FolioView() {
               )}
             </div>
           )}
-          {/* The facts a bill is expected to state - who, which room, how
-              many people, on what plan, and for a foreign guest their
-              nationality (the same field the police report needs). */}
           {stay.tariff && <p className="mb-3 text-sm text-zinc-600">
             {t("Booked contract tariff")}: <TariffNight {...stay} />
           </p>}
-          {/* on screen, on the pro-forma and on the printed invoice alike */}
           <ReferenceCurrencyNote reference={stay.reference_currency} />
           <dl className="mb-6 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
             <Fact label={t("Guest")}>
@@ -1021,10 +1116,7 @@ export default function FolioView() {
               )}
             </Fact>
             <Fact label={t("Stay")}>
-              {stay.check_in} → {stay.check_out} · {t("{n} night{s}", {
-                n: stay.nights,
-                s: stay.nights === 1 ? "" : "s",
-              })}
+              {stay.check_in} → {stay.check_out} · {stay.nights === 1 ? t("{n} night", { n: stay.nights }) : t("{n} nights", { n: stay.nights })}
             </Fact>
             <Fact label={t("Pax / plan")}>
               {stay.pax || stay.adults || "-"}
@@ -1071,32 +1163,69 @@ export default function FolioView() {
             const targets = siblings.filter(
               (s) => s.status === "Open" && s.name !== folio.name,
             )
-            // moving is always possible on an open folio - the Move panel
-            // can mint a fresh Extra/Company folio as the destination
-            const editable = open // charges can be voided on any open folio
+            const editable = open
             return (
               <>
                 {open && selected.size > 0 && (() => {
                   const sel = folio.charges.filter((c) => selected.has(c.name))
                   const selTotal = sel.reduce((s, c) => s + (c.total || 0), 0)
                   const one = sel.length === 1 ? sel[0] : null
+                  const oneLine = one ? lineByRow.get(one.name) : null
+                  const rowQty = Number(oneLine?.qty ?? one?.qty ?? 1)
                   const canSplit =
                     !!one && !one.source_ref && one.charge_type !== "Meal Plan" && (one.amount || 0) > 0
+                  const canQtySplit = canSplit && rowQty > 1
+                  const activeMode = splitMode === "qty" && canQtySplit ? "qty" : "auto"
+
                   const v = partVal.trim()
                   const isPct = v.endsWith("%")
                   const num = Number(v.replace("%", ""))
-                  const partOk =
+                  const autoPartOk =
                     canSplit && !!v && num > 0 &&
                     (isPct ? num < 100 : num < (one!.amount || 0))
-                  const partBad = canSplit && !!v && !partOk
+                  const autoPartBad = canSplit && !!v && !autoPartOk
+
+                  const qTrim = qtyVal.trim()
+                  const qtyNum = Number(qTrim)
+                  const qtyOk =
+                    activeMode === "qty" &&
+                    !!qTrim &&
+                    Number.isInteger(qtyNum) &&
+                    qtyNum >= 1 &&
+                    qtyNum < rowQty
+                  const qtyBad = activeMode === "qty" && !qtyOk
+
+                  const partOk = activeMode === "qty" ? qtyOk : autoPartOk
+                  const partBad = activeMode === "qty" ? qtyBad : autoPartBad
+
                   const movedTotal = !partOk
                     ? selTotal
-                    : isPct
-                      ? ((one!.total || 0) * num) / 100
-                      : num * (1 + (one!.gst_rate || 0) / 100)
+                    : activeMode === "qty"
+                      ? roundMoney(((one!.total || 0) * qtyNum) / rowQty, home)
+                      : isPct
+                        ? roundMoney(((one!.total || 0) * num) / 100, home)
+                        : roundMoney(num * (1 + (one!.gst_rate || 0) / 100), home)
+                  const keptTotal = partOk && one ? roundMoney((one.total || 0) - movedTotal, home) : 0
+
+                  const resetSelection = () => {
+                    setSelected(new Set())
+                    setPartVal("")
+                    setQtyVal("1")
+                    setSplitMode("auto")
+                    setMoveRoomTarget("")
+                    setMoveRoomReason("")
+                  }
+
                   const moveTo = (to: string) =>
                     act(async () => {
-                      if (one && partOk) {
+                      if (one && activeMode === "qty" && qtyOk) {
+                        await call("kamra.api.split_folio_charge", {
+                          from_folio: folio.name,
+                          charge_row: one.name,
+                          to_folio: to,
+                          qty: qtyNum,
+                        })
+                      } else if (one && activeMode === "auto" && autoPartOk) {
                         await call("kamra.api.split_folio_charge", {
                           from_folio: folio.name,
                           charge_row: one.name,
@@ -1111,16 +1240,23 @@ export default function FolioView() {
                           to_folio: to,
                         })
                       }
-                      setSelected(new Set())
-                      setPartVal("")
+                      resetSelection()
                     })
+
                   const moveToNew = (type: "Extra" | "Company") =>
                     act(async () => {
                       const r = await call<{ folio: string }>(
                         "kamra.api.split_folio",
                         { reservation: data.stay.reservation, folio_type: type },
                       )
-                      if (one && partOk) {
+                      if (one && activeMode === "qty" && qtyOk) {
+                        await call("kamra.api.split_folio_charge", {
+                          from_folio: folio.name,
+                          charge_row: one.name,
+                          to_folio: r.folio,
+                          qty: qtyNum,
+                        })
+                      } else if (one && activeMode === "auto" && autoPartOk) {
                         await call("kamra.api.split_folio_charge", {
                           from_folio: folio.name,
                           charge_row: one.name,
@@ -1135,9 +1271,20 @@ export default function FolioView() {
                           to_folio: r.folio,
                         })
                       }
-                      setSelected(new Set())
-                      setPartVal("")
+                      resetSelection()
                     })
+
+                  const moveToRoom = () =>
+                    act(async () => {
+                      await call("kamra.api.transfer_folio_charges", {
+                        from_folio: folio.name,
+                        charge_rows: [...selected],
+                        to_reservation: moveRoomTarget,
+                        reason: moveRoomReason.trim(),
+                      })
+                      resetSelection()
+                    })
+
                   return (
                     <div className="mb-3 rounded-xl border border-brand-200 bg-brand-50/40 p-3 text-sm print:hidden">
                       <div className="flex flex-wrap items-center gap-2">
@@ -1146,22 +1293,73 @@ export default function FolioView() {
                             n: sel.length,
                             s: sel.length > 1 ? "s" : "",
                             cur: docSymbol,
-                            amount: inr(selTotal),
+                            amount: fmt(selTotal),
                           })}
                         </span>
                         {canSplit ? (
-                          <span className="inline-flex items-center gap-1.5 text-xs text-zinc-600">
+                          <span className="inline-flex flex-wrap items-center gap-1.5 text-xs text-zinc-600">
                             <span>· {t("move only")}</span>
-                            <input
-                              className="w-24 rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs"
-                              aria-label={t("Part to move (percent, or {cur} before {tax})", { cur: docSymbol, tax: docTaxLabel })}
-                              placeholder={t("30% or 1500")}
-                              value={partVal}
-                              onChange={(e) => setPartVal(e.target.value)}
-                            />
-                            <span className="text-zinc-400">
-                              ({docSymbol} = {t("before {tax}", { tax: docTaxLabel })})
+                            <span className="inline-flex overflow-hidden rounded-md border border-zinc-200 bg-white">
+                              <button
+                                type="button"
+                                data-testid="split-mode-auto"
+                                onClick={() => setSplitMode("auto")}
+                                className={
+                                  "px-2 py-1 text-xs " +
+                                  (activeMode === "auto"
+                                    ? "bg-brand-600 font-medium text-white"
+                                    : "text-zinc-600 hover:bg-zinc-50")
+                                }
+                              >
+                                {t("% / Amount")}
+                              </button>
+                              {canQtySplit && (
+                                <button
+                                  type="button"
+                                  data-testid="split-mode-qty"
+                                  onClick={() => setSplitMode("qty")}
+                                  className={
+                                    "px-2 py-1 text-xs " +
+                                    (activeMode === "qty"
+                                      ? "bg-brand-600 font-medium text-white"
+                                      : "text-zinc-600 hover:bg-zinc-50")
+                                  }
+                                >
+                                  {t("By Qty")}
+                                </button>
+                              )}
                             </span>
+                            {activeMode === "qty" ? (
+                              <>
+                                <input
+                                  className="w-20 rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs"
+                                  type="number"
+                                  min={1}
+                                  max={Math.max(1, Math.floor(rowQty) - 1)}
+                                  step={1}
+                                  inputMode="numeric"
+                                  aria-label={t("Quantity to split")}
+                                  value={qtyVal}
+                                  onChange={(e) => setQtyVal(e.target.value)}
+                                />
+                                <span className="text-zinc-500">
+                                  {t("of {total} units", { total: rowQty })}
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <input
+                                  className="w-24 rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs"
+                                  aria-label={t("Part to move (percent, or {cur} before {tax})", { cur: docSymbol, tax: docTaxLabel })}
+                                  placeholder={t("30% or 1500")}
+                                  value={partVal}
+                                  onChange={(e) => setPartVal(e.target.value)}
+                                />
+                                <span className="text-zinc-400">
+                                  ({docSymbol} = {t("before {tax}", { tax: docTaxLabel })})
+                                </span>
+                              </>
+                            )}
                           </span>
                         ) : one ? (
                           <span className="text-xs text-zinc-500">
@@ -1169,95 +1367,143 @@ export default function FolioView() {
                           </span>
                         ) : null}
                         <button
-                          className="ml-auto text-xs text-zinc-400 hover:text-zinc-700"
-                          onClick={() => {
-                            setSelected(new Set())
-                            setPartVal("")
-                          }}
+                          className="ms-auto text-xs text-zinc-400 hover:text-zinc-700"
+                          onClick={resetSelection}
                         >
                           {t("Clear")}
                         </button>
                       </div>
+                      {partOk && one && (
+                        <p className="mt-1.5 text-xs text-brand-700">
+                          {t("Preview: Kept {kept} · Moved {moved}", {
+                            kept: `${docSymbol}${fmt(keptTotal)}`,
+                            moved: `${docSymbol}${fmt(movedTotal)}`,
+                          })}
+                        </p>
+                      )}
                       {partBad && (
                         <p className="mt-1.5 text-xs text-rose-600">
-                          {t("Enter 1-99%, or a {cur} amount under the line's {cur}{amount} (before {tax}).", {
-                            cur: docSymbol,
-                            amount: inr(one!.amount),
-                            tax: docTaxLabel,
-                          })}
+                          {activeMode === "qty"
+                            ? t("Enter a whole quantity from 1 to {max}.", { max: Math.max(1, Math.floor(rowQty) - 1) })
+                            : t("Enter 1-99%, or a {cur} amount under the line's {cur}{amount} (before {tax}).", {
+                                cur: docSymbol,
+                                amount: fmt(one!.amount),
+                                tax: docTaxLabel,
+                              })}
                         </p>
                       )}
                       <div className="mt-2 flex flex-wrap items-center gap-1.5">
                         <span className="text-xs text-zinc-500">
-                          {t("Send {cur}{amount} to", { cur: docSymbol, amount: inr(movedTotal) })}
+                          {t("Send {cur}{amount} to", { cur: docSymbol, amount: fmt(movedTotal) })}
                         </span>
                         {targets.map((s) => (
                           <button
                             key={s.name}
-                            className="rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs hover:border-brand-400 disabled:opacity-50"
+                            className="min-h-11 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs hover:border-brand-400 disabled:opacity-50"
                             disabled={busy || partBad}
                             onClick={() => moveTo(s.name)}
                           >
+                            {s.window_no ? (
+                              <span className="me-1 font-mono text-[11px] text-zinc-500">
+                                {windowBadge(s)}
+                              </span>
+                            ) : null}
                             <span className="font-medium">
                               {folioLabel(siblings, s, t)}
                             </span>
                             <span
                               className={
                                 s.balance > 0
-                                  ? "ml-1.5 text-amber-600"
-                                  : "ml-1.5 text-zinc-400"
+                                  ? "ms-1.5 text-amber-600"
+                                  : "ms-1.5 text-zinc-400"
                               }
                             >
-                              {t("owes {cur}{amount}", { cur: docSymbol, amount: inr(s.balance) })}
+                              {s.balance < 0
+                                ? t("credit {amount}", { amount: `\u2066${fmtMoney(Math.abs(s.balance), money)}\u2069` })
+                                : t("owes {cur}{amount}", { cur: "", amount: `\u2066${fmtMoney(s.balance, money)}\u2069` })}
                             </span>
                           </button>
                         ))}
                         <button
-                          className="rounded-lg border border-dashed border-zinc-300 bg-white px-2.5 py-1.5 text-xs text-zinc-600 hover:border-brand-400 disabled:opacity-50"
+                          className="min-h-11 rounded-lg border border-dashed border-zinc-300 bg-white px-2.5 py-1.5 text-xs text-zinc-600 hover:border-brand-400 disabled:opacity-50"
                           disabled={busy || partBad}
                           onClick={() => moveToNew("Company")}
                         >
                           {t("+ New Company folio")}
                         </button>
                         <button
-                          className="rounded-lg border border-dashed border-zinc-300 bg-white px-2.5 py-1.5 text-xs text-zinc-600 hover:border-brand-400 disabled:opacity-50"
+                          className="min-h-11 rounded-lg border border-dashed border-zinc-300 bg-white px-2.5 py-1.5 text-xs text-zinc-600 hover:border-brand-400 disabled:opacity-50"
                           disabled={busy || partBad}
                           onClick={() => moveToNew("Extra")}
                         >
                           {t("+ New Extra folio")}
                         </button>
                       </div>
+                      {canCorrect && inHouseRooms.length > 0 && !partOk && (
+                        <div className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-brand-200/70 pt-2">
+                          <span className="text-xs text-zinc-500">{t("Or transfer to another room")}:</span>
+                          <select
+                            aria-label={t("Destination room")}
+                            className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs"
+                            value={moveRoomTarget}
+                            onChange={(e) => setMoveRoomTarget(e.target.value)}
+                          >
+                            <option value="">{t("Select in-house room")}</option>
+                            {inHouseRooms.map((rm) => (
+                              <option key={rm.name} value={rm.name}>
+                                {rm.room_number ? `${rm.room_number} · ` : ""}
+                                {rm.guest_name || rm.name}
+                              </option>
+                            ))}
+                          </select>
+                          {moveRoomTarget && (
+                            <>
+                              <input
+                                className="min-w-40 flex-1 rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs"
+                                placeholder={t("Reason (required)")}
+                                value={moveRoomReason}
+                                onChange={(e) => setMoveRoomReason(e.target.value)}
+                              />
+                              <button
+                                type="button"
+                                className="rounded-lg border border-brand-600 bg-brand-600 px-2.5 py-1 text-xs font-medium text-white disabled:opacity-50"
+                                disabled={busy || !moveRoomReason.trim()}
+                                onClick={moveToRoom}
+                              >
+                                {t("Move to room")}
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )
                 })()}
                 <ResponsiveList className="mb-5 w-full text-sm">
                   <thead>
-                    <tr className="border-b border-zinc-200 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
+                    <tr className="border-b border-zinc-200 text-start text-xs font-medium uppercase tracking-wider text-zinc-500">
                       {open && (
-                        <th className="w-6 py-2 pr-2 print:hidden" aria-label={t("Select")} />
+                        <th className="w-6 py-2 pe-2 print:hidden" aria-label={t("Select")} />
                       )}
-                      <th className="py-2 pr-3">{t("Date")}</th>
-                      <th className="py-2 pr-3">{t("Item")}</th>
+                      <th className="py-2 pe-3">{t("Date")}</th>
+                      <th className="py-2 pe-3">{t("Item")}</th>
                       {hasServiceCode && (
-                        <th className="hidden py-2 pr-3 print:table-cell">
+                        <th className="hidden py-2 pe-3 print:table-cell">
                           {doc?.service_code_label ?? t("SAC")}
                         </th>
                       )}
-                      <th className="py-2 pr-3 text-right">{t("Amount {cur}", { cur: docSymbol })}</th>
-                      {showLineTax && <th className="py-2 pr-3 text-right">{docTaxLabel} %</th>}
-                      {showLineTax && <th className="py-2 pr-3 text-right">{docTaxLabel} {docSymbol}</th>}
-                      <th className="py-2 text-right">{t("Total {cur}", { cur: docSymbol })}</th>
+                      <th className="py-2 pe-3 text-end">{t("Amount {cur}", { cur: docSymbol })}</th>
+                      {showLineTax && <th className="py-2 pe-3 text-end">{docTaxLabel} %</th>}
+                      {showLineTax && <th className="py-2 pe-3 text-end">{docTaxLabel} {docSymbol}</th>}
+                      <th className="py-2 text-end">{t("Total {cur}", { cur: docSymbol })}</th>
                       {editable && (
-                        <th className="py-2 pl-3 print:hidden" aria-label={t("Actions")} />
+                        <th className="py-2 ps-3 print:hidden" aria-label={t("Actions")} />
                       )}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-100">
                     {folio.charges.map((c, i) => {
-                      // a voided line and its reversal stay on the bill; neither is voided or moved again
                       const voided = !!c.reversal_of || folio.charges.some((r) => r.reversal_of === c.name)
-                      // a split's line and its reversal: the trail of the split, shown as
-                      // such here and left off the printed bill, which shows the parts
                       const split = voided && (c.reversal_of
                         ? !!c.split_of
                         : folio.charges.some((r) => r.reversal_of === c.name && !!r.split_of))
@@ -1266,7 +1512,7 @@ export default function FolioView() {
                         <tr className={[voided && "text-zinc-400", split && "print:hidden"]
                           .filter(Boolean).join(" ") || undefined}>
                           {open && (
-                            <Popin label={t("Select")} importance="medium" className="py-2 pr-2 print:hidden">
+                            <Popin label={t("Select")} importance="medium" className="py-2 pe-2 print:hidden">
                               {!voided && <input
                                 type="checkbox"
                                 className="size-3.5 accent-brand-600"
@@ -1283,28 +1529,27 @@ export default function FolioView() {
                               />}
                             </Popin>
                           )}
-                          <Popin label={t("Date")} importance="medium" className="py-2 pr-3 text-zinc-500">{formatDate(c.posting_date)}</Popin>
-                          <Popin label={t("Item")} importance="high" className="py-2 pr-3">
-                            {/* on the guest's bill an allowance reads as a discount */}
+                          <Popin label={t("Date")} importance="medium" className="py-2 pe-3 text-zinc-500">{formatDate(c.posting_date)}</Popin>
+                          <Popin label={t("Item")} importance="high" className="py-2 pe-3">
                             <span className="font-medium">{translate(c.charge_type === "Allowance" ? "Discount" : c.charge_type)}</span>
                             {c.description && (
                               <span className="text-zinc-500"> - {c.description}</span>
                             )}
                             {voided && (
-                              <span className="ml-1 rounded bg-zinc-100 px-1 text-xs text-zinc-500">
+                              <span className="ms-1 rounded bg-zinc-100 px-1 text-xs text-zinc-500">
                                 {split ? t("status|Split") : t("Voided")}
                               </span>
                             )}
                             {c.allowance_serial && (
                               <Link to={`/allowance-voucher/${encodeURIComponent(c.allowance_serial)}`}
-                                className="ml-1 font-mono text-xs text-brand-700 hover:underline print:text-zinc-500 print:no-underline"
+                                className="ms-1 font-mono text-xs text-brand-700 hover:underline print:text-zinc-500 print:no-underline"
                                 title={t("Print voucher")}>
                                 {c.allowance_serial}
                               </Link>
                             )}
                           </Popin>
                           {hasServiceCode && (
-                            <td className="hidden py-2 pr-3 font-mono text-xs text-zinc-400 print:table-cell">
+                            <td className="hidden py-2 pe-3 font-mono text-xs text-zinc-400 print:table-cell">
                               {lineByRow.get(c.name)?.service_code ?? ""}
                             </td>
                           )}
@@ -1316,15 +1561,15 @@ export default function FolioView() {
                             const tot = ln ? ln.total : c.total
                             return (
                               <>
-                                <Popin label={t("Amount")} importance="medium" className="py-2 pr-3 text-right">{inr(amt)}</Popin>
-                                {showLineTax && <Popin label={`${docTaxLabel} %`} importance="medium" className="py-2 pr-3 text-right">{rate}%</Popin>}
-                                {showLineTax && <Popin label={docTaxLabel} importance="medium" className="py-2 pr-3 text-right">{inr(tax)}</Popin>}
-                                <Popin label={t("Total")} importance="medium" className="py-2 text-right font-medium">{inr(tot)}</Popin>
+                                <Popin label={t("Amount")} importance="medium" className="py-2 pe-3 text-end">{fmt(amt)}</Popin>
+                                {showLineTax && <Popin label={`${docTaxLabel} %`} importance="medium" className="py-2 pe-3 text-end">{rate}%</Popin>}
+                                {showLineTax && <Popin label={docTaxLabel} importance="medium" className="py-2 pe-3 text-end">{fmt(tax)}</Popin>}
+                                <Popin label={t("Total")} importance="medium" className="py-2 text-end font-medium">{fmt(tot)}</Popin>
                               </>
                             )
                           })()}
                           {editable && (
-                            <Popin label={t("Actions")} importance="medium" className="relative whitespace-nowrap py-2 pl-3 text-right print:hidden">
+                            <Popin label={t("Actions")} importance="medium" className="relative whitespace-nowrap py-2 ps-3 text-end print:hidden">
                               <ChargeActions folio={folio.name} row={c.name} act={act}
                                 correct={canRequestCorrection && c.charge_type !== "Allowance" && !voided}
                                 onMove={open && !voided && !selected.has(c.name)
@@ -1341,7 +1586,6 @@ export default function FolioView() {
             )
           })()}
 
-          {/* What the guest actually bought, before they read forty lines. */}
           {(data.summary_by_head?.length ?? 0) > 1 && (
             <div className="mb-6 break-inside-avoid rounded-xl bg-zinc-50 px-4 py-3">
               <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">
@@ -1353,20 +1597,20 @@ export default function FolioView() {
                     <tr key={h.head}>
                       <td className="py-1">
                         {translate(h.head)}
-                        <span className="ml-1.5 text-xs text-zinc-400">
+                        <span className="ms-1.5 text-xs text-zinc-400">
                           {t("{n} line{s}", { n: h.lines, s: h.lines === 1 ? "" : "s" })}
                         </span>
                       </td>
-                      <td className="py-1 text-right text-zinc-500">
-                        {docSymbol}{inr(h.amount)}
+                      <td className="py-1 text-end text-zinc-500">
+                        {amount(h.amount)}
                       </td>
                       {showLineTax && (
-                        <td className="py-1 text-right text-zinc-400">
-                          + {docSymbol}{inr(h.tax)} {docTaxLabel.toLowerCase()}
+                        <td className="py-1 text-end text-zinc-400">
+                          + {amount(h.tax)} {docTaxLabel.toLowerCase()}
                         </td>
                       )}
-                      <td className="py-1 text-right font-medium">
-                        {docSymbol}{inr(h.total)}
+                      <td className="py-1 text-end font-medium">
+                        {amount(h.total)}
                       </td>
                     </tr>
                   ))}
@@ -1395,15 +1639,15 @@ export default function FolioView() {
                       ],
                     }))).map((r, idx) => (
                       <tr key={`${r.rate}-${idx}`}>
-                        <td className="py-1.5 pr-3">{r.rate === 0 && Number(r.total_tax) !== 0 ? "—" : `${r.rate}%`}</td>
-                        <td className="py-1.5 pr-3 text-right text-zinc-500">
-                          {t("taxable {cur}{amount}", { cur: docSymbol, amount: inr(r.taxable) })}
+                        <td className="py-1.5 pe-3">{r.rate === 0 && Number(r.total_tax) !== 0 ? "—" : `${r.rate}%`}</td>
+                        <td className="py-1.5 pe-3 text-end text-zinc-500">
+                          {t("taxable {cur}{amount}", { cur: docSymbol, amount: fmt(r.taxable) })}
                         </td>
-                        <td className="py-1.5 text-right">
+                        <td className="py-1.5 text-end">
                           {r.parts
                             .map((x) => x.rate === 0
-                              ? `${x.label} ${docSymbol}${inr(x.amount)}`
-                              : `${x.label} @ ${x.rate}% ${docSymbol}${inr(x.amount)}`)
+                              ? `${x.label} ${docSymbol}${fmt(x.amount)}`
+                              : `${x.label} @ ${x.rate}% ${docSymbol}${fmt(x.amount)}`)
                             .join(" · ")}
                         </td>
                       </tr>
@@ -1412,21 +1656,21 @@ export default function FolioView() {
                 </table>
               )}
             </div> : <div />}
-            <div className="space-y-1.5 text-sm sm:text-right">
+            <div className="space-y-1.5 text-sm sm:text-end">
               <p className="text-zinc-500">
-                {t("Charges")}: <span className="text-zinc-900">{docSymbol}{inr(folio.charges_total)}</span>
+                {t("Charges")}: <span className="text-zinc-900">{amount(folio.charges_total)}</span>
               </p>
               {showLineTax && (
                 <p className="text-zinc-500">
-                  {docTaxLabel}: <span className="text-zinc-900">{docSymbol}{inr(folio.tax_total)}</span>
+                  {docTaxLabel}: <span className="text-zinc-900">{amount(folio.tax_total)}</span>
                 </p>
               )}
               <p className="text-lg font-semibold">
-                {t("Grand total")}: {docSymbol}{inr(folio.grand_total)}
+                {t("Grand total")}: {amount(folio.grand_total)}
               </p>
               {(data.credited ?? 0) > 0 && (
                 <p className="text-sm font-medium text-rose-600">
-                  {t("Credited")}: −{docSymbol}{inr(data.credited)}
+                  {t("Credited")}: −{amount(data.credited)}
                 </p>
               )}
               {doc?.amount_in_words && (
@@ -1456,7 +1700,7 @@ export default function FolioView() {
               )}
               {data.statutory && (
                 <div className="flex items-center justify-end gap-3 pt-2">
-                  <div className="text-right text-[10px] leading-tight text-zinc-400">
+                  <div className="text-end text-[10px] leading-tight text-zinc-400">
                     <p>{translate("ZATCA · ICV ")}{data.statutory.icv}</p>
                     <p className="font-mono">{data.statutory.uuid}</p>
                   </div>
@@ -1468,8 +1712,7 @@ export default function FolioView() {
                 </div>
               )}
               <p className="text-zinc-500">
-                {t("Paid")}: {docSymbol}{inr(folio.payments_total)} ·{" "}
-                {/* paid more than charged so far: that money is the guest's advance */}
+                {t("Paid")}: {amount(folio.payments_total)} ·{" "}
                 {folio.balance < 0 ? t("Advance") : t("Balance")}:{" "}
                 <span
                   className={
@@ -1478,7 +1721,7 @@ export default function FolioView() {
                       : "font-medium text-emerald-600"
                   }
                 >
-                  {docSymbol}{inr(Math.abs(folio.balance))}
+                  {amount(Math.abs(folio.balance))}
                 </span>
               </p>
             </div>
@@ -1490,49 +1733,84 @@ export default function FolioView() {
                 {t("Payments")}
               </h3>
               <ul className="divide-y divide-zinc-100">
-                {folio.payments.map((p) => (
-                  <li key={p.name} className="flex flex-wrap justify-between gap-2 py-1.5">
-                    <span>
-                      {formatDate(p.posting_date)} · {translate(p.mode)}
-                      {p.payment_kind && p.payment_kind !== "Payment" && (
-                        <span className={"ml-1.5 rounded px-1.5 py-0.5 text-[10px] font-semibold " +
-                          (p.payment_kind === "Refund" ? "bg-rose-50 text-rose-600"
-                            : p.payment_kind === "Security Deposit" ? "bg-violet-50 text-violet-700"
-                              : "bg-sky-50 text-sky-700")}>
-                          {t(p.payment_kind)}
+                {folio.payments.map((p) => {
+                  const canTransferRow =
+                    open &&
+                    !invoiced &&
+                    Number(p.amount) > 0 &&
+                    (!p.payment_kind || p.payment_kind === "Payment" || p.payment_kind === "Advance") &&
+                    !p.transferred_from &&
+                    !p.transferred_to &&
+                    !p.reversal_of &&
+                    !p.refund_of &&
+                    !Number(p.fx_amount) &&
+                    openTransferTargets.length > 0 &&
+                    remainingTransferable(p) > 0
+                  return (
+                    <li key={p.name} className="flex flex-wrap items-center justify-between gap-2 py-1.5">
+                      <span>
+                        {formatDate(p.posting_date)} · {translate(p.mode)}
+                        {p.payment_kind && p.payment_kind !== "Payment" && (
+                          <span className={"ms-1.5 rounded px-1.5 py-0.5 text-[10px] font-semibold " +
+                            (p.payment_kind === "Refund" ? "bg-rose-50 text-rose-600"
+                              : p.payment_kind === "Security Deposit" ? "bg-violet-50 text-violet-700"
+                                : "bg-sky-50 text-sky-700")}>
+                            {t(p.payment_kind)}
+                          </span>
+                        )}
+                        {p.transferred_to && (
+                          <span className="ms-1.5 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
+                            {t("Transferred out")}
+                          </span>
+                        )}
+                        {p.transferred_from && (
+                          <span className="ms-1.5 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
+                            {t("Transferred in")}
+                          </span>
+                        )}
+                        {p.reference && (
+                          <span className="text-zinc-400"> · {p.reference}</span>
+                        )}
+                        {!!Number(p.fx_amount) && (
+                          <span className="text-zinc-400"> · {currencyText(p.currency!, Number(p.fx_amount), loc.locale)} @ {formatFxRate(Number(p.exchange_rate), loc.locale)}{p.exchange_rate_date && ` · ${formatDate(p.exchange_rate_date)}`}</span>
+                        )}
+                      </span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={Number(p.amount) < 0 ? "font-medium text-rose-600" : ""}>
+                          <span dir="ltr" className="inline-block tabular-nums">{docCurrency} {fmt(p.amount)}</span>
                         </span>
-                      )}
-                      {p.reference && (
-                        <span className="text-zinc-400"> · {p.reference}</span>
-                      )}
-                      {!!Number(p.fx_amount) && (
-                        <span className="text-zinc-400"> · {currencyText(p.currency!, Number(p.fx_amount), loc.locale)} @ {formatFxRate(Number(p.exchange_rate), loc.locale)}{p.exchange_rate_date && ` · ${formatDate(p.exchange_rate_date)}`}</span>
-                      )}
-                    </span>
-                    <span className={Number(p.amount) < 0 ? "font-medium text-rose-600" : ""}>{property.currency} {inr(p.amount)}</span>
-                    {canRequestCorrection && <RowCorrection folio={folio.name} row={p.name}
-                      home={home} currency={Number(p.fx_amount) > 0 ? p.currency || home : home}
-                      tenderTypes={loc.payment_tender_types}
-                      modes={availableTenders.filter(({ mode }) => mode !== p.mode && tenderTypeOf(loc, mode) !== "Payment Link")} act={act} />}
-                  </li>
-                ))}
+                        {canTransferRow && (
+                          <button
+                            type="button"
+                            data-testid={`transfer-payment-${p.name}`}
+                            className="inline-flex min-h-11 items-center gap-1 rounded-md border border-zinc-200 px-2 py-1 text-xs text-zinc-600 hover:border-brand-400 hover:text-zinc-900 print:hidden"
+                            onClick={() => setTransferPayment(p)}
+                          >
+                            <ArrowRightLeft className="size-3" aria-hidden />
+                            {t("Transfer")}
+                          </button>
+                        )}
+                        {canRequestCorrection && <RowCorrection folio={folio.name} row={p.name}
+                          home={home} currency={Number(p.fx_amount) > 0 ? p.currency || home : home}
+                          tenderTypes={loc.payment_tender_types}
+                          modes={availableTenders.filter(({ mode }) => mode !== p.mode && tenderTypeOf(loc, mode) !== "Payment Link")} act={act} />}
+                      </div>
+                    </li>
+                  )
+                })}
               </ul>
-
             </div>
           )}
 
           {isFinal && (
             <div className="mt-8 flex flex-wrap items-end justify-between gap-4 border-t border-zinc-200 pt-4 text-xs text-zinc-500">
               <p className="max-w-md">
-                {/* the pack words the footer for its country (GST Act in
-                    India, ZATCA simplified invoice in Saudi Arabia…) */}
                 {doc?.footer
                   ? t(doc.footer)
                   : t("This is a computer-generated invoice.")}
                 {property.gstin && property.tax_note
                   ? ` ${t(property.tax_note)}`
                   : ""}
-                {/* the hotel's own lines - CIN, bank details - as typed */}
                 {doc?.invoice_footer && (
                   <span className="mt-2 block whitespace-pre-line">
                     {doc.invoice_footer}
@@ -1559,6 +1837,7 @@ export default function FolioView() {
             <CardContent className="flex flex-wrap items-end gap-2">
               <select
                 className={inputCls}
+                aria-label={t("Charge type")}
                 value={charge.charge_type}
                 onChange={(e) =>
                   setCharge({ ...charge, charge_type: e.target.value })
@@ -1568,8 +1847,31 @@ export default function FolioView() {
                   <option key={ct} value={ct}>{t(ct)}</option>
                 ))}
               </select>
+              <select
+                className={inputCls}
+                aria-label={t("Transaction Code")}
+                value={charge.transaction_code}
+                onChange={(e) => {
+                  const tcCode = e.target.value
+                  const match = effectiveCodes.find((c) => c.code === tcCode)
+                  setCharge({
+                    ...charge,
+                    transaction_code: tcCode,
+                    charge_type: match?.charge_type && CHARGE_TYPES.includes(match.charge_type)
+                      ? match.charge_type
+                      : charge.charge_type,
+                  })
+                }}
+              >
+                <option value="">{t("Default code")}</option>
+                {effectiveCodes.map((tc) => (
+                  <option key={tc.code} value={tc.code}>
+                    {tc.code} · {translate(tc.description)}
+                  </option>
+                ))}
+              </select>
               <input
-                className={`${inputCls} flex-1`}
+                className={`${inputCls} min-w-36 flex-1`}
                 placeholder={t("Description")}
                 value={charge.description}
                 onChange={(e) =>
@@ -1577,24 +1879,21 @@ export default function FolioView() {
                 }
               />
               <input
-                className={`${inputCls} w-24`}
+                className={`${inputCls} w-28`}
                 type="number"
                 step="any"
-                inputMode="decimal"
+                inputMode={moneyDigits(docCurrency, money.decimals ?? undefined) === 0 ? "numeric" : "decimal"}
                 placeholder={translate(`${docSymbol}`)}
                 value={charge.amount}
                 onChange={(e) => setCharge({ ...charge, amount: e.target.value })}
               />
               {noTax ? null : fixedRate !== null ? (
-                /* the server taxes food & beverage at the pack's F&B rate
-                   whatever is picked (_resolve_charge_gst) - show that rate
-                   rather than offer a choice that would be ignored */
                 <span
                   className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-sm text-zinc-600"
                   title={t("Food & beverage is taxed at the property's F&B rate.")}
                 >
                   {t("{tax} {rate}%", { tax: docTaxLabel, rate: fixedRate })}
-                  <span className="ml-1 text-xs text-zinc-400">{t("(F&B rate)")}</span>
+                  <span className="ms-1 text-xs text-zinc-400">{t("(F&B rate)")}</span>
                 </span>
               ) : (
                 <select
@@ -1613,30 +1912,19 @@ export default function FolioView() {
                   ))}
                 </select>
               )}
-              {sellsAlcohol() && (
-              <label className="flex items-center gap-1.5 text-sm text-zinc-600">
-                <input
-                  type="checkbox"
-                  className="size-4 accent-brand-600"
-                  checked={charge.is_alcohol}
-                  onChange={(e) =>
-                    setCharge({ ...charge, is_alcohol: e.target.checked })
-                  }
-                />
-                {t("Alcohol")}
-              </label>)}
-              <Button
+              <Button className="min-h-11 sm:min-h-0"
                 disabled={busy || !charge.amount}
                 onClick={() =>
                   act(() =>
                     call("kamra.api.add_folio_charge", {
                       folio: folio.name,
-                      ...charge,
+                      charge_type: charge.charge_type,
+                      description: charge.description,
                       amount: Number(charge.amount),
                       gst_rate: fixedRate !== null && rates.includes(fixedRate)
                         ? fixedRate
                         : Number(charge.gst_rate),
-                      is_alcohol: charge.is_alcohol ? 1 : 0,
+                      ...(charge.transaction_code ? { transaction_code: charge.transaction_code } : {}),
                     }),
                   )
                 }
@@ -1656,16 +1944,16 @@ export default function FolioView() {
               <div className="mt-1 w-full border-t border-zinc-100 pt-3">
                 <div className="mb-2 text-xs font-medium uppercase tracking-wider text-zinc-400">
                   {t("Pass an allowance")}
-                  <span className="ml-1.5 normal-case tracking-normal">
+                  <span className="ms-1.5 normal-case tracking-normal">
                     {t("- write off part of the bill, with a reason")}
                   </span>
                 </div>
                 <div className="flex flex-wrap items-end gap-2">
                   <input
-                    className={`${inputCls} w-24`}
+                    className={`${inputCls} w-28`}
                     type="number"
                     step="any"
-                    inputMode="decimal"
+                    inputMode={moneyDigits(docCurrency, money.decimals ?? undefined) === 0 ? "numeric" : "decimal"}
                     placeholder={translate(`${docSymbol}`)}
                     value={allowance.amount}
                     onChange={(e) =>
@@ -1717,7 +2005,7 @@ export default function FolioView() {
                       placeholder={t("Your PIN")} aria-label={t("Your PIN")}
                     />
                   )}
-                  <Button
+                  <Button className="min-h-11 sm:min-h-0"
                     variant="outline"
                     disabled={busy || !allowance.amount || !(allowance.reason.trim() || allowance.reason_code)
                       || allowancePin === ""}
@@ -1731,7 +2019,6 @@ export default function FolioView() {
                           reason_code: allowance.reason_code || undefined,
                           pin: allowancePin || undefined,
                         })).catch((e) => {
-                          // the manager approves their own allowance: ask for their PIN
                           if (serverError(e).includes("SUPERVISOR_PIN_REQUIRED")) {
                             setAllowancePin("")
                             return null
@@ -1773,7 +2060,7 @@ export default function FolioView() {
                     {toCorrect.map((n) => (
                       <li key={n.date}>
                         {t("Night of {date}: {from} to {to}", {
-                          date: n.date, from: inr(n.charged), to: inr(n.new),
+                          date: n.date, from: fmt(n.charged), to: fmt(n.new),
                         })}
                       </li>
                     ))}
@@ -1794,7 +2081,7 @@ export default function FolioView() {
                       value={correction.pin}
                       onChange={(e) => setCorrection({ ...correction, pin: e.target.value })}
                     />
-                    <Button
+                    <Button className="min-h-11 sm:min-h-0"
                       variant="outline"
                       disabled={busy || !correction.reason.trim() || !correction.pin.trim()}
                       onClick={() =>
@@ -1848,7 +2135,7 @@ export default function FolioView() {
                 }
               />
               {foreign && <SettlementPreview result={quote} amount={Number(payment.amount)} balance={folio.balance} />}
-              <Button
+              <Button className="min-h-11 sm:min-h-0"
                 disabled={busy || !paymentReady || !(Number(payment.amount) > 0) || (foreign && !quote?.quote)}
                 onClick={() =>
                   act(async () => {

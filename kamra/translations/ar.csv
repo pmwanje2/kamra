@@ -352,3 +352,7 @@ Bill-to for {0}: {1}.,الفوترة لحساب {0}: {1}.
 Transaction code {0} belongs to another property.,رمز المعاملة {0} ينتمي إلى منشأة أخرى.
 Payment method {0} is not available for this property.,طريقة الدفع {0} غير متاحة لهذه المنشأة.
 {0} bill(s) for this stay are still open at the outlet: {1}. Settle them at the outlet before check-out.,{0} فاتورة لهذه الإقامة ما زالت مفتوحة في نقطة البيع: {1}. سدّدها هناك قبل المغادرة.
+Accounting GL control tie-out is unverified and cannot be overridden.,لا يمكن تجاوز مطابقة حسابات المراقبة في دفتر الأستاذ العام قبل التحقق منها.
+Give a reason of at least 10 characters for overriding an accounting GL control tie-out variance.,أدخل سببًا لا يقل عن 10 أحرف لتجاوز فرق مطابقة حسابات المراقبة في دفتر الأستاذ العام.
+Accounting GL control tie-out must be cleared before closing.,يجب تسوية مطابقة حسابات المراقبة في دفتر الأستاذ العام قبل الإغلاق.
+Overriding an accounting GL control tie-out variance requires Finance or Hotel Admin access and an enabled property policy.,يتطلب تجاوز فرق مطابقة حسابات المراقبة في دفتر الأستاذ العام صلاحية المالية أو مدير الفندق وتفعيل السماح بالتجاوز في سياسة المنشأة.

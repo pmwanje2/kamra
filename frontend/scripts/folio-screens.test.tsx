@@ -311,7 +311,7 @@ describe("FolioView bridge reprint & correction labels", () => {
     await act(async () => root.unmount())
   })
 
-  it("keeps 'Reprint fiscal invoice' for fiscalised invoices and shows Credit note / Cancel invoice when credit_and_rebill is installed", async () => {
+  it("keeps 'Reprint fiscal invoice' for fiscalised invoices and shows Credit & Rebill when credit_and_rebill is installed", async () => {
     authState.roles = ["Finance"]
     const payload = bridgePayload({
       bridge_credit_and_rebill: true,
@@ -340,8 +340,9 @@ describe("FolioView bridge reprint & correction labels", () => {
     await flush()
     const labels = [...host.querySelectorAll("button")].map((b) => b.textContent?.trim())
     expect(labels).toContain("Reprint fiscal invoice")
-    expect(labels).toContain("Credit note")
-    expect(labels).toContain("Cancel invoice")
+    expect(labels.filter((label) => label === "Credit & Rebill")).toHaveLength(1)
+    expect(labels).not.toContain("Credit note")
+    expect(labels).not.toContain("Cancel invoice")
     await act(async () => root.unmount())
   })
 })

@@ -292,6 +292,8 @@ MODULES: tuple[Module, ...] = (
 				  min=0, max=100000,
 				  hint="A room night posted more than this away from the booked (locked) "
 				       "nightly rate is listed as a rate variance."),
+				S("allow_na_gl_variance_override", "Allow accounting GL variance overrides", "check", 0,
+				  hint="Finance or Hotel Admin can acknowledge a verified accounting GL variance with a reason."),
 				S("na_auto_audit_with_blockers", "Scheduled audit when checks block", "select",
 				  "Run and report exceptions",
 				  options=("Run and report exceptions", "Hold and alert"),
