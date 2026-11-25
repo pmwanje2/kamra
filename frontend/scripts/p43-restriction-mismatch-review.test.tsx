@@ -9,6 +9,7 @@ import ar from "../src/i18n/locales/ar.json"
 import de from "../src/i18n/locales/de.json"
 import es from "../src/i18n/locales/es.json"
 import fil from "../src/i18n/locales/fil.json"
+import fr from "../src/i18n/locales/fr.json"
 import id from "../src/i18n/locales/id.json"
 import pt from "../src/i18n/locales/pt.json"
 import zhCN from "../src/i18n/locales/zh-CN.json"
@@ -26,6 +27,7 @@ vi.mock("../src/lib/api", () => ({
   clearChannelReview: (reservation: string) =>
     callMock("kamra.channel_manager.clear_channel_review", { reservation }),
   declineBookingRequest: vi.fn(),
+  getCurrentProperty: () => "Grand Kuwait",
   idDocumentImage: vi.fn().mockResolvedValue({ data: "" }),
   promoteWaitlist: vi.fn(),
   reservationDetail: (name: string) => detailMock(name),
@@ -178,6 +180,7 @@ describe("ReservationDetail: OTA restriction_mismatch review banner [P1 #2]", ()
     ["de", de],
     ["es", es],
     ["fil", fil],
+    ["fr", fr],
     ["id", id],
     ["pt", pt],
     ["zh-CN", zhCN],

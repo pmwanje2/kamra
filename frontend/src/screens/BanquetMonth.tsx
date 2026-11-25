@@ -26,6 +26,7 @@ import { serverError } from "../lib/resource"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Empty, ErrorNote, inr, StatusPill, today } from "./banquet/shared"
+import { moneyLocale, useLocale } from "../lib/money"
 import { t as translate, useUILanguage, uiDateLocale } from "../lib/i18n"
 
 const SESSIONS = ["Morning", "Afternoon", "Evening"] as const
@@ -46,7 +47,7 @@ function monthShift(month: string, by: number) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
 }
 const monthLabel = (m: string) =>
-  new Date(m + "-01T00:00:00").toLocaleDateString(uiDateLocale("en-US"), {
+  new Date(m + "-01T00:00:00").toLocaleDateString(uiDateLocale(moneyLocale()), {
     month: "long",
     year: "numeric",
   })
@@ -54,6 +55,7 @@ const weekend = (iso: string) => [0, 6].includes(new Date(iso + "T00:00:00").get
 
 export default function BanquetMonth() {
   useUILanguage()
+  useLocale()
   const navigate = useNavigate()
   const [month, setMonth] = useState(today().slice(0, 7))
   const [data, setData] = useState<MonthAvailability | null>(null)
@@ -101,7 +103,7 @@ export default function BanquetMonth() {
               onClick={() => setMonth(monthShift(month, -1))}
               aria-label={translate("Previous month")}
             >
-              <ChevronLeft className="size-4" />
+              <ChevronLeft className="size-4 rtl:rotate-180" />
             </Button>
             <Button variant="outline" onClick={() => setMonth(today().slice(0, 7))}>{translate("This month")}</Button>
             <Button
@@ -109,7 +111,7 @@ export default function BanquetMonth() {
               onClick={() => setMonth(monthShift(month, 1))}
               aria-label={translate("Next month")}
             >
-              <ChevronRight className="size-4" />
+              <ChevronRight className="size-4 rtl:rotate-180" />
             </Button>
           </div>
         </CardHeader>
@@ -141,8 +143,8 @@ export default function BanquetMonth() {
                 <table className="w-full table-fixed border-separate border-spacing-0 text-sm">
                   <thead>
                     <tr>
-                      <th className="sticky left-0 z-20 w-28 bg-white p-2 text-left text-[11px] font-medium uppercase tracking-wider text-zinc-500">{translate("Hall")}</th>
-                      <th className="sticky left-28 z-20 w-20 bg-white p-2 text-left text-[11px] font-medium uppercase tracking-wider text-zinc-500">{translate("Session")}</th>
+                      <th className="sticky start-0 z-20 w-28 bg-white p-2 text-start text-[11px] font-medium uppercase tracking-wider text-zinc-500">{translate("Hall")}</th>
+                      <th className="sticky start-28 z-20 w-20 bg-white p-2 text-start text-[11px] font-medium uppercase tracking-wider text-zinc-500">{translate("Session")}</th>
                       {data.dates.map((d) => (
                         <th
                           key={d}
@@ -157,7 +159,7 @@ export default function BanquetMonth() {
                         >
                           <div className="text-[9px] uppercase">
                             {new Date(d + "T00:00:00")
-                              .toLocaleDateString(uiDateLocale("en-US"), { weekday: "narrow" })}
+                              .toLocaleDateString(uiDateLocale(moneyLocale()), { weekday: "narrow" })}
                           </div>
                           {Number(d.slice(8))}
                         </th>
@@ -173,7 +175,7 @@ export default function BanquetMonth() {
                           {firstOfVenue ? (
                             <td
                               rowSpan={SESSIONS.length}
-                              className="sticky left-0 z-10 w-28 border-b border-zinc-100 bg-white p-2 align-top"
+                              className="sticky start-0 z-10 w-28 border-b border-zinc-100 bg-white p-2 align-top"
                             >
                               <div className="truncate font-medium" title={translate(r.venue_name)}>
                                 {r.venue_name}
@@ -186,7 +188,7 @@ export default function BanquetMonth() {
                           ) : null}
                           <td
                             className={
-                              "sticky left-28 z-10 w-20 whitespace-nowrap bg-white px-2 py-1 text-xs text-zinc-500 " +
+                              "sticky start-28 z-10 w-20 whitespace-nowrap bg-white px-2 py-1 text-xs text-zinc-500 " +
                               (r.session === "Evening"
                                 ? "border-b border-zinc-100"
                                 : "")
@@ -296,7 +298,7 @@ function Slot({
         )}
       </button>
       {showing && cell && (
-        <div className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-1 w-52 -translate-x-1/2 rounded-lg bg-zinc-900 px-2.5 py-2 text-left text-xs text-white shadow-lg">
+        <div className="pointer-events-none absolute bottom-full start-1/2 z-30 mb-1 w-52 -translate-x-1/2 rtl:translate-x-1/2 rounded-lg bg-zinc-900 px-2.5 py-2 text-start text-xs text-white shadow-lg">
           <div className="flex items-center justify-between gap-2">
             <span className="font-semibold">{cell.customer_name}</span>
             <StatusPill status={cell.status} className="!bg-white/15 !text-white !ring-0" />

@@ -1,5 +1,5 @@
 /** Talk instead of type. Uses the browser's own speech recognition
- *  (Chrome, Edge, Safari) - no Kamra server, no AI cost. Hidden where the
+ *  (Chrome, Edge, Safari) - no server round-trip, no AI cost. Hidden where the
  *  browser can't do it (Firefox). The words only fill the box: it keeps
  *  listening through pauses, and nothing is sent until the person presses
  *  Send (which stops the mic) or taps the mic again. */
@@ -45,6 +45,7 @@ export const VOICE_LANGS: [string, string][] = [
   ["en-GB", "English (UK)"],
   ["ar-SA", "العربية"],
   ["es-ES", "Español"],
+  ["fr-FR", "Français"],
   ["pt-BR", "Português (Brasil)"],
   ["zh-CN", "简体中文"],
   ["fil-PH", "Filipino"],
