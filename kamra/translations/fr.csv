@@ -2797,7 +2797,7 @@ Share Group,Groupe de partage
 Primary Sharer,Titulaire du partage
 Rate Split Mode,Mode de répartition du tarif
 Custom Nightly Rate,Tarif personnalisé par nuit
-Enter a nonnegative share rate in the folio currency's minor units.,Saisissez un tarif positif ou nul dans les unités de la devise du folio.
+Enter a nonnegative share rate in the folio currency's minor units.,Saisissez un tarif positif ou nul dans les unités mineures de la devise du folio.
 Select a valid share rate mode.,Sélectionnez un mode de répartition valide.
 Use the Share panel to change a share reservation.,Utilisez le panneau de partage pour modifier une réservation partagée.
 Break the share before changing its room or guest.,Dissociez le partage avant de changer la chambre ou le client.

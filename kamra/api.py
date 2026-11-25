@@ -11983,14 +11983,14 @@ def create_group_with_rooming_list(property: str, group_name: str,
 
 
 def _block_hold(property: str, room_type: str, check_in_date: str,
-                check_out_date: str, for_group: str | None = None) -> int:
+                check_out_date: str, for_group: str | None = None, *, for_update=False) -> int:
 	"""Rooms held by confirmed group blocks overlapping the window that
 	haven't been picked up yet (kamra.group_blocks). A block stops holding
 	once its cutoff passes; the scheduler then writes the release record.
 	The group's own pickups see their held rooms, not a shortage."""
 	from kamra.group_blocks import block_hold
 	return block_hold(property, room_type, check_in_date, check_out_date,
-	                  for_group=for_group)
+	                  for_group=for_group, for_update=for_update)
 
 
 @frappe.whitelist()
@@ -12029,51 +12029,57 @@ def available_rooms(property: str, room_type: str, check_in_date: str,
 	Pass for_assignment=1 (implied by ready_now=1) when picking a specific
 	physical room to assign: Out of Service rooms are excluded from room
 	assignment while remaining in room-type sellable capacity (for_assignment=0)."""
+	return _available_rooms(property, room_type, check_in_date, check_out_date, group_booking,
+	                        ready_now, for_assignment)
+
+
+def _available_rooms(property, room_type, check_in_date, check_out_date, group_booking,
+                     ready_now, for_assignment, *, for_update=False):
 	exclude_oos = bool(int(for_assignment or 0) or int(ready_now or 0))
 	# Prefer Sellable Unit availability when SIUs exist for this type
 	# (ADR-003). Fall back to legacy Room SQL during migration.
 	rooms = None
 	from kamra.siu.availability import has_active_sius
-	if has_active_sius(property, room_type):
+	if has_active_sius(property, room_type, for_update=for_update):
 		from kamra.siu.availability import available_rooms_via_siu
 		rooms = available_rooms_via_siu(
 			property, room_type, check_in_date, check_out_date,
-			exclude_out_of_service=exclude_oos,
+			for_update=for_update, exclude_out_of_service=exclude_oos,
 		)
 	if rooms is None:
 		rooms = _available_rooms_raw(property, room_type, check_in_date,
 		                             check_out_date,
-		                             exclude_out_of_service=exclude_oos)
+		                             for_update=for_update, exclude_out_of_service=exclude_oos)
 	if int(ready_now or 0) and getdate(check_in_date) <= getdate(nowdate()):
-		occupied = in_house_rooms(property)
+		occupied = in_house_rooms(property, for_update=for_update)
 		rooms = [r for r in (rooms or []) if r["name"] not in occupied]
 	hold = _block_hold(property, room_type, check_in_date, check_out_date,
-	                   for_group=group_booking)
+	                   for_group=group_booking, for_update=for_update)
 	if hold:
 		rooms = rooms[:max(0, len(rooms) - hold)]
 	# Always frappe._dict so callers can use row["name"] or row.name.
 	return [frappe._dict(r) for r in (rooms or [])]
 
 
-def in_house_rooms(property: str) -> set[str]:
+def in_house_rooms(property: str, *, for_update=False) -> set[str]:
 	"""Rooms a guest is checked in to right now, whatever their departure
 	date says - they stay occupied until the guest checks out."""
-	return set(frappe.get_all(
+	return set(frappe.db.get_values(
 		"Reservation",
 		filters={"property": property, "status": "Checked In",
 		         "room": ("is", "set"),
 		         "check_in_date": ("<=", nowdate())},
-		pluck="room"))
+		fieldname="room", pluck=True, for_update=for_update))
 
 
 def _available_rooms_raw(property: str, room_type: str, check_in_date: str,
                          check_out_date: str,
-                         exclude_out_of_service: bool = False):
+                         exclude_out_of_service: bool = False, *, for_update=False):
 	# villa <-> room lockout: a booked whole villa takes its member rooms off
 	# sale and any booked member room takes the villa off sale - the same
 	# query validate_villa_lockout refuses a booking on
 	from kamra.kamra.doctype.reservation.reservation import villa_lockout_conflict
-	if villa_lockout_conflict(property, room_type, check_in_date, check_out_date):
+	if villa_lockout_conflict(property, room_type, check_in_date, check_out_date, for_update=for_update):
 		return []
 	params = {
 		"property": property,
@@ -12081,42 +12087,15 @@ def _available_rooms_raw(property: str, room_type: str, check_in_date: str,
 		"check_in": check_in_date,
 		"check_out": check_out_date,
 	}
-	if exclude_out_of_service:
-		return frappe.db.sql(
-			"""
-			SELECT r.name, r.room_number, r.housekeeping_status
-			FROM `tabRoom` r
-			WHERE r.property = %(property)s
-			  AND r.room_type = %(room_type)s
-			  AND r.housekeeping_status NOT IN ('Out of Order', 'Out of Service')
-			  AND NOT EXISTS (
-				SELECT 1 FROM `tabReservation` b
-				WHERE b.room = r.name
-				  AND b.status IN ('Confirmed', 'Checked In')
-				  AND b.check_in_date < GREATEST(%(check_out)s,
-				                                 DATE_ADD(%(check_in)s, INTERVAL 1 DAY))
-				  AND GREATEST(b.check_out_date,
-				               DATE_ADD(b.check_in_date, INTERVAL 1 DAY)) > %(check_in)s
-			  )
-			  AND NOT EXISTS (
-				SELECT 1 FROM `tabRoom Block` k
-				WHERE k.room = r.name
-				  AND k.block_status = 'Active'
-				  AND k.from_date < %(check_out)s
-				  AND k.to_date > %(check_in)s
-			  )
-			ORDER BY r.room_number
-			""",
-			params,
-			as_dict=True,
-		)
+	params["excluded"] = ("Out of Order", "Out of Service") if exclude_out_of_service else ("Out of Order",)
+	lock = " FOR UPDATE" if for_update else ""
 	return frappe.db.sql(
 		"""
 		SELECT r.name, r.room_number, r.housekeeping_status
 		FROM `tabRoom` r
 		WHERE r.property = %(property)s
 		  AND r.room_type = %(room_type)s
-		  AND r.housekeeping_status != 'Out of Order'
+		  AND r.housekeeping_status NOT IN %(excluded)s
 		  AND NOT EXISTS (
 			SELECT 1 FROM `tabReservation` b
 			WHERE b.room = r.name
@@ -12125,6 +12104,7 @@ def _available_rooms_raw(property: str, room_type: str, check_in_date: str,
 			                                 DATE_ADD(%(check_in)s, INTERVAL 1 DAY))
 			  AND GREATEST(b.check_out_date,
 			               DATE_ADD(b.check_in_date, INTERVAL 1 DAY)) > %(check_in)s
+		    """ + lock + """
 		  )
 		  AND NOT EXISTS (
 			SELECT 1 FROM `tabRoom Block` k
@@ -12132,9 +12112,10 @@ def _available_rooms_raw(property: str, room_type: str, check_in_date: str,
 			  AND k.block_status = 'Active'
 			  AND k.from_date < %(check_out)s
 			  AND k.to_date > %(check_in)s
+		    """ + lock + """
 		  )
 		ORDER BY r.room_number
-		""",
+		""" + lock,
 		params,
 		as_dict=True,
 	)

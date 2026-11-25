@@ -127,9 +127,11 @@ def ota_live_key(property: str, ota_ref: str) -> str:
 	return hashlib.sha256(raw.encode()).hexdigest()
 
 
-def is_entire_place(room_type: str | None) -> bool:
+def is_entire_place(room_type: str | None, *, for_update=False) -> bool:
 	"""An entire-place (whole villa) stay: its room type is Villa-category,
 	sold as one unit - the same test validate_villa_lockout uses."""
+	if room_type and for_update:
+		return frappe.db.get_value("Room Type", room_type, "room_category", for_update=True) == "Villa"
 	return bool(room_type) and frappe.get_cached_value(
 		"Room Type", room_type, "room_category") == "Villa"
 
@@ -194,7 +196,7 @@ def villa_lockout_bookings(property: str, room_type: str | None, check_in,
 	A property with no villa type never matches (the join finds nothing)."""
 	if not room_type:
 		return []
-	side = NON_VILLA_SQL if is_entire_place(room_type) \
+	side = NON_VILLA_SQL if is_entire_place(room_type, for_update=for_update) \
 		else "rt.room_category = 'Villa'"
 	return frappe.db.sql(  # nosemgrep: frappe-sql-format-injection -- interpolated text is module constants (_LIVE_SQL, NON_VILLA_SQL) or a fixed clause; every value is bound
 		f"""
@@ -347,16 +349,20 @@ class Reservation(Document):
 		# category checks. The count below is a locking read so it sees a
 		# booking that committed while this one waited.
 		frappe.db.get_value("Room Type", self.room_type, "name", for_update=True)
-		total = frappe.db.count("Room", {"room_type": self.room_type})
+		lock = bool(self.flags.share_operation)
+		if lock:
+			total = len(frappe.db.get_values("Room", {"room_type": self.room_type}, "name", for_update=True))
+		else:
+			total = frappe.db.count("Room", {"room_type": self.room_type})
 		if not total:
 			return  # setup-time bookings before rooms exist
 		pct = float(frappe.db.get_value(
-			"Room Type", self.room_type, "overbooking_pct") or 0)
+			"Room Type", self.room_type, "overbooking_pct", for_update=lock) or 0)
 		if not pct:
 			# db read, not the document cache - enforcement must see the
 			# committed value, not a stale cached doc
 			pct = float(frappe.db.get_value(
-				"Property", self.property, "overbooking_pct") or 0)
+				"Property", self.property, "overbooking_pct", for_update=lock) or 0)
 		from frappe.utils import add_days, date_diff
 		nights = max(1, date_diff(self.check_out_date, self.check_in_date))
 		dates = [str(add_days(self.check_in_date, i))
@@ -586,7 +592,7 @@ class Reservation(Document):
 		if before and before.status == "Checked In" and before.room == self.room:
 			return
 		hk, room_no = frappe.db.get_value(
-			"Room", self.room, ["housekeeping_status", "room_number"]
+			"Room", self.room, ["housekeeping_status", "room_number"], for_update=bool(self.flags.share_operation)
 		) or (None, None)
 		if hk in ("Out of Order", "Out of Service"):
 			frappe.throw(
@@ -2514,7 +2520,7 @@ class Reservation(Document):
 	def validate_room_belongs_to_type(self):
 		if not self.room:
 			return
-		room_type = frappe.db.get_value("Room", self.room, "room_type")
+		room_type = frappe.db.get_value("Room", self.room, "room_type", for_update=bool(self.flags.share_operation))
 		if room_type != self.room_type:
 			# help the user by naming the rooms they CAN move to: rooms of the
 			# reservation's own type that are free for these dates

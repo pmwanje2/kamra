@@ -2231,17 +2231,20 @@ def force_advance_bill(reservation: str, nights: str = "entire",
 	# guest's: what was posted is judged across every folio of the stay
 	from kamra.folio import _charge_posted
 
+	shared = bool(res.get("share_group_id"))
+
 	def stay_lines():
-		return frappe.get_all("Folio Charge", filters={
+		return frappe.db.get_values("Folio Charge", filters={
 			"parenttype": "Folio", "reservation": res.name},
-			fields=["name", "total", "parent", "charge_type"], order_by="creation asc")
+			fieldname=["name", "total", "parent", "charge_type"], order_by="creation asc",
+			as_dict=True, for_update=shared)
 
 	before = {r.name for r in stay_lines()}
 	for i in range(n):
 		day = add_days(start, i)
 		if getdate(day) >= co:
 			break
-		if _charge_posted(res.name, "Room", str(day)):
+		if _charge_posted(res.name, "Room", str(day), lock=shared):
 			continue
 		ok = post_room_night(res, str(day), advance_bill=True)
 		if ok:
@@ -2257,7 +2260,7 @@ def force_advance_bill(reservation: str, nights: str = "entire",
 		"folio": target,
 		"nights_posted": posted,
 		"amount": amount,
-		"balance": frappe.db.get_value("Folio", target, "balance"),
+		"balance": frappe.db.get_value("Folio", target, "balance", for_update=shared),
 	}
 
 

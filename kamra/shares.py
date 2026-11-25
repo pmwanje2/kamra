@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from contextlib import contextmanager
-from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal, InvalidOperation
+from decimal import ROUND_DOWN, ROUND_FLOOR, ROUND_HALF_UP, Decimal, InvalidOperation
 
 import frappe
 from frappe import _
@@ -110,16 +110,47 @@ def nightly_share(res, date, *, lock=False, advance_bill=False, folios=None) -> 
 	statuses = ("Checked In", "Checked Out", "Confirmed") if advance_bill else ("Checked In", "Checked Out")
 	if not group or not res.room or res.status not in statuses:
 		return None
-	from kamra.folio import _nightly_gst, _nightly_room_rate, current_date_contract_night
-
 	frozen, _ = _frozen_night(res, date, lock, folios)
 	if frozen:
 		return _share_line(frozen, res.name)
-	members = _member_rows(res, lock=lock, date=date, statuses=statuses)
-	if not members:
+
+	# Advance bills can start with a later arrival. Walk back to the nearest
+	# checkpoint, then price missing nights chronologically without posting them.
+	nights = []
+	day = getdate(date)
+	carry, pending = {}, False
+	while True:
+		if frozen:
+			if frozen.get("room") != res.room:
+				break
+			if frozen.get("rounding"):
+				carry = frozen["rounding"]
+				break
+			nights.append((day, None, frozen, pending))
+		else:
+			members = _member_rows(res, lock=lock, date=day, statuses=statuses)
+			if not members:
+				break
+			nights.append((day, members, None, False))
+		day = add_days(day, -1)
+		frozen, pending = _frozen_night(res, day, lock, folios)
+	if not nights:
 		return None
+	for day, members, legacy, unsaved in reversed(nights):
+		if legacy:
+			carry = _legacy_rounding(res.property, legacy, carry, pending)
+		else:
+			snapshot = _price_night(res, day, members, carry, pending, lock)
+			carry = snapshot["rounding"]
+		pending = unsaved
+	return _share_line(snapshot, res.name)
+
+
+def _price_night(res, date, members, carry, pending, lock):
+	from kamra.folio import _nightly_gst, _nightly_room_rate, current_date_contract_night
+
 	leader = members[0]
-	rate_source = res if leader.name == res.name else frappe.get_doc("Reservation", leader.name)
+	rate_source = res if leader.name == res.name else frappe.get_doc("Reservation", leader.name, for_update=lock)
 	mode = leader.share_rate_mode
 	current = current_date_contract_night(rate_source, date) if mode != "Custom" else None
 	gst = current["gst_rate"] if current else _nightly_gst(rate_source, date)
@@ -136,21 +167,19 @@ def nightly_share(res, date, *, lock=False, advance_bill=False, folios=None) -> 
 		fx = {"contract_currency": current["currency"], "contract_fx_rate": current["fx_rate"],
 		      "contract_fx_date": str(current["fx_date"]) if current["fx_date"] else None,
 		      "contract_fx_stale": int(current["stale"])}
-	previous, pending = _frozen_night(res, add_days(date, -1), lock, folios)
-	carry = previous.get("rounding") or {}
-	if previous.get("room") != res.room or carry.get("currency") != property_currency(res.property):
+	if carry.get("currency") != property_currency(res.property):
 		carry = {}
 	rates, taxes, levy, rounding = _night_charges(
 		res.property, rate, gst, mode, [(m.name, m.name == leader.name, m.share_custom_rate) for m in members],
 		leader.name, carry, pending,
 	)
-	return _share_line({
+	return {
 		"room": res.room, "gst": gst, "category": leader.rate_category or "",
 		"lead": leader.name, "fx": fx,
 		"levy": levy, "rounding": rounding,
 		"rates": {name: str(value) for name, value in rates.items()},
 		"taxes": {name: str(value) for name, value in taxes.items()},
-	}, res.name)
+	}
 
 
 def _share_line(snapshot, reservation):
@@ -195,6 +224,55 @@ def _round_shared_night(currency, base, gst, levy, levy_rate, carry, pending):
 	return grand, {"currency": currency, "pending": str(open_total - grand), "stored": str(stored_total - grand)}
 
 
+def _legacy_rounding(property, snapshot, carry, pending):
+	"""Recover the last night's residual from its frozen prices and billed components."""
+	from kamra.folio import room_levy_components
+	from kamra.ledger import minor_unit
+
+	currency = property_currency(property)
+	gst = Decimal(str(snapshot["gst"]))
+	rates = {name: Decimal(value) for name, value in snapshot["rates"].items()}
+	levy = snapshot.get("levy") or {}
+	if not gst or not levy:
+		return {}
+	tax_rate = Decimal(str(levy["gst"])) / 100
+	if levy.get("per_folio"):
+		return {"currency": currency, "payers": {
+			name: _round_shared_night(currency, base, gst, Decimal(levy["amounts"][name]),
+			                          tax_rate, carry.get("payers", {}).get(name, {}), pending)[1]
+			for name, base in rates.items()}}
+	base = sum(rates.values())
+	room_due = base + sum(map(Decimal, snapshot["taxes"].values()))
+	if rates_include_tax(property):
+		base = Decimal(str(float(room_due / (1 + gst / 100))))
+	unit = minor_unit(property)
+	raw_levy = sum(room_levy_components(base, levy["percent"], levy["fixed"], unit))
+	if not tax_rate:
+		raw_levy = raw_levy.quantize(unit, rounding=ROUND_HALF_UP)
+	charged = room_due + sum(map(Decimal, levy["amounts"].values())) + sum(map(Decimal, levy["taxes"].values()))
+	grand, state = _round_shared_night(currency, base, gst, raw_levy, tax_rate,
+	                                  _continuing_carry(carry, snapshot["lead"], unit), pending)
+	# A legacy allocator could itself differ by a minor unit. Carry what it
+	# actually billed, without rewriting a historical snapshot or folio line.
+	for key in ("stored", "pending"):
+		state[key] = str(Decimal(state[key]) + grand - charged)
+	return state
+
+
+def _continuing_carry(carry, lead, unit):
+	if "payers" not in carry:
+		return carry
+	# Full-rate lines retain their unrounded amounts on each guest's folio.
+	# Only the fraction still unrepresented after reloading those lines is due.
+	state = carry["payers"].get(lead, {})
+	forward = {}
+	for key in ("stored", "pending"):
+		value = Decimal(state.get(key, "0"))
+		units = (value / unit + Decimal("0.5")).to_integral_value(rounding=ROUND_FLOOR)
+		forward[key] = str(value - units * unit)
+	return forward
+
+
 def _night_charges(property, room_rate, gst, mode, members, lead, carry, pending):
 	from kamra.folio import room_levy_components
 	from kamra.ledger import minor_unit
@@ -218,8 +296,13 @@ def _night_charges(property, room_rate, gst, mode, members, lead, carry, pending
 	if not levy_gst:
 		levy = levy.quantize(unit, rounding=ROUND_HALF_UP)
 
-	rounding = {} if per_folio else carry
+	currency = property_currency(property)
+	rounding = {}
 	if per_folio:
+		rounding = {"currency": currency, "payers": {
+			name: _round_shared_night(currency, rates[name], gst, levy, tax_rate,
+			                          carry.get("payers", {}).get(name, {}), pending)[1]
+			for name in rates}}
 		# Native taxable lines retain sub-minor precision until folio rounding.
 		amounts = dict.fromkeys(rates, levy)
 		taxes = dict.fromkeys(rates, levy * tax_rate)
@@ -228,7 +311,7 @@ def _night_charges(property, room_rate, gst, mode, members, lead, carry, pending
 		tax_due = Decimal(0)
 		if gst:
 			grand, rounding = _round_shared_night(
-				property_currency(property), base, gst, levy, tax_rate, carry, pending,
+				currency, base, gst, levy, tax_rate, _continuing_carry(carry, lead, unit), pending,
 			)
 			room_due = sum(rates.values()) + sum(room_taxes.values())
 			if levy_gst and levy > 0:
@@ -542,7 +625,7 @@ def combine_into_share(reservation: str, other_reservation: str, custom_rate: fl
 @require_roles("Front Desk", scope={"new_room": "Room"})
 def break_share(reservation: str, new_room: str):
 	"""Detach a sharer and assign a separate room of the same type."""
-	from kamra.api import available_rooms
+	from kamra.api import _available_rooms
 	from kamra.business_date import get_business_date
 
 	with _operation(reservation) as doc:
@@ -551,7 +634,7 @@ def break_share(reservation: str, new_room: str):
 			frappe.throw(_("Choose an active share reservation."))
 		if not new_room or doc.room == new_room:
 			frappe.throw(_("Choose a different room to break the share."))
-		target = frappe.db.get_value("Room", new_room, ["property", "room_type", "housekeeping_status"],
+		target = frappe.db.get_value("Room", new_room, ["property", "room_type"],
 		                             as_dict=True, for_update=True)
 		if not target or (target.property, target.room_type) != (doc.property, doc.room_type):
 			frappe.throw(_("Choose a room of the same type at this property."))
@@ -562,18 +645,10 @@ def break_share(reservation: str, new_room: str):
 		old_room = doc.room
 		was_primary = bool(doc.is_share_primary)
 		_assert_prior_shares_posted(doc, members, business_date)
-		choices = available_rooms(doc.property, doc.room_type, doc.check_in_date, doc.check_out_date,
-		                          group_booking=doc.group_booking, ready_now=int(doc.status == "Checked In"),
-		                          for_assignment=1)
-		# Read current block state even if this transaction waited for another
-		# inventory writer after its first consistent read.
-		block = frappe.db.get_value("Room Block", {
-			"room": new_room, "block_status": "Active", "from_date": ("<", doc.check_out_date),
-			"to_date": (">", doc.check_in_date),
-		}, "name", for_update=True)
-		if block or target.housekeeping_status in ("Out of Order", "Out of Service") or not any(
-			room.name == new_room for room in choices
-		):
+		choices = _available_rooms(doc.property, doc.room_type, doc.check_in_date, doc.check_out_date,
+		                           group_booking=doc.group_booking, ready_now=int(doc.status == "Checked In"),
+		                           for_assignment=1, for_update=True)
+		if not any(room.name == new_room for room in choices):
 			frappe.throw(_("Room unavailable"))
 		doc.room = new_room
 		doc.sellable_unit = None
