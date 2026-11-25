@@ -346,6 +346,19 @@ def _open_bills_message(bills: list[dict]) -> str:
 		len(bills), items)
 
 
+def _card_hold_message() -> str:
+	return _("Before check-out: capture any damage from the card hold or release the card hold.")
+
+
+def assert_no_active_card_hold(res) -> None:
+	from kamra.authz import assert_property_access
+	from kamra.deposit import has_checkout_card_hold
+
+	assert_property_access(res.property)
+	if has_checkout_card_hold(res):
+		frappe.throw(_card_hold_message())
+
+
 def assert_no_open_bills(res) -> None:
 	"""Refuse a check-out while laundry or a restaurant bill for the stay is
 	still open: the one write path, so the desk, the agent and REST all stop."""
@@ -575,6 +588,11 @@ def _checkout_context(reservation: str) -> dict:
 			"code": "not_in_house", "step": "review",
 			"message": _("This stay is {0}, so there is nothing to check out.")
 			.format(_(res.status))})
+	if deposit.get("blocks_checkout_card_hold"):
+		blockers.append({
+			"code": "active_card_hold", "step": "review",
+			"message": _card_hold_message(),
+		})
 	if nights_error:
 		closed = [f for f in own if f["status"] == "Closed" and f["side"] == "guest"]
 		msg = _("Check-out posts the remaining nights first, and that failed: {0}"

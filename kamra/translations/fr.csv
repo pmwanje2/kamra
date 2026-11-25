@@ -2732,3 +2732,38 @@ ZATCA response,Réponse ZATCA
 {0}{1} overdue by more than {2} days (oldest due {3}).,{0}{1} en retard de plus de {2} jours (plus ancienne échéance {3}).
 "{product} can't read this ID's code. Type the details in, and take a picture of the ID.",{product} ne peut pas lire le code de cette pièce d'identité. Saisissez les informations et photographiez la pièce.
 {product} is temporarily unavailable. Contact your system administrator.,{product} est temporairement indisponible. Contactez votre administrateur système.
+A card pre-authorization hold is active - release it before waiving.,Une préautorisation bancaire est active — libérez-la avant de dispenser la caution.
+A card pre-authorization hold is already active on this stay.,Une préautorisation bancaire est déjà active pour ce séjour.
+A collected deposit is already held on this stay.,Une caution encaissée est déjà détenue pour ce séjour.
+Authorized Amount,Montant autorisé
+Capturing a pre-authorization needs a reason.,L'encaissement d'une préautorisation nécessite un motif.
+Card Brand,Réseau de carte
+Card Last 4,4 derniers chiffres de la carte
+Card Pre-Authorization,Préautorisation bancaire
+Enter a valid authorization expiry date and time.,Saisissez une date et une heure d'expiration valides pour l'autorisation.
+Enter an authorization expiry date and time.,Saisissez une date et une heure d'expiration pour l'autorisation.
+Enter the additional amount to authorize.,Saisissez le montant supplémentaire à autoriser.
+Enter the amount to capture.,Saisissez le montant à encaisser.
+Enter the gateway authorization reference.,Saisissez la référence d'autorisation de la passerelle.
+Expires On,Expire le
+Gateway Authorization Reference,Référence d'autorisation passerelle
+No active card pre-authorization hold on this stay.,Aucune préautorisation bancaire active pour ce séjour.
+Pre-Authorization Hold,Empreinte de préautorisation
+Released without capture,Libérée sans encaissement
+The guest folio is closed - capture before closing it.,Le folio client est clôturé — encaissez avant de le clôturer.
+[HSP-DEP-PREAUTH-CONFIG]: No accounting company is linked to this property.,[HSP-DEP-PREAUTH-CONFIG] : Aucune société comptable n'est liée à cet établissement.
+[HSP-DEP-PREAUTH-CONFIG]: No billing customer is configured for this folio or property.,[HSP-DEP-PREAUTH-CONFIG] : Aucun client de facturation n'est configuré pour ce folio ou cet établissement.
+[HSP-DEP-PREAUTH-UNAVAILABLE]: Card pre-authorization control is not installed on this site.,[HSP-DEP-PREAUTH-UNAVAILABLE] : Le contrôle de préautorisation bancaire n'est pas installé sur ce site.
+[HSP-DEP-PREAUTH-UNAVAILABLE]: Unexpected pre-authorization control response.,[HSP-DEP-PREAUTH-UNAVAILABLE] : Réponse inattendue du contrôle de préautorisation.
+[PREAUTH-PCI-001]: Card Brand exceeds 32 characters.,[PREAUTH-PCI-001] : Le réseau de carte dépasse 32 caractères.
+[PREAUTH-PCI-001]: Card Last 4 must contain exactly 4 ASCII digits.,[PREAUTH-PCI-001] : Les 4 derniers chiffres de la carte doivent contenir exactement 4 chiffres ASCII.
+[PREAUTH-PCI-001]: Card PAN data is prohibited in {0}.,[PREAUTH-PCI-001] : Les données de numéro de carte (PAN) sont interdites dans {0}.
+[PREAUTH-PCI-001]: Card magnetic track data is prohibited in {0}.,[PREAUTH-PCI-001] : Les données de piste magnétique sont interdites dans {0}.
+[PREAUTH-PCI-001]: Card security code is prohibited in {0}.,[PREAUTH-PCI-001] : Le cryptogramme de carte est interdit dans {0}.
+Before check-out: capture any damage from the card hold or release the card hold.,"Avant le départ, encaissez les frais de dommages sur la préautorisation ou libérez-la."
+Capture draft {0} is awaiting Finance submission.,Le brouillon d’encaissement {0} est en attente de validation par la Finance.
+Incremental pre-authorization for {0},Augmentation de la préautorisation pour {0}
+Pending Capture Payment Entry,Écriture de paiement en attente de validation
+Security deposit pre-authorization for {0},Préautorisation de caution pour {0}
+Use submitted capture Payment Entry {0} and its original amount.,Utilisez l’écriture de paiement validée {0} et son montant d’origine.
+The card hold cannot be released or increased while capture Payment Entry {0} exists.,La préautorisation ne peut être ni libérée ni augmentée tant que l’écriture de paiement {0} existe.
