@@ -100,9 +100,18 @@ def _held_status(res) -> str:
 	return "Held" if res.status == "Checked In" else "Collected"
 
 
+def _deposit_precision(property: str | None) -> tuple[int, int, float]:
+	"""Return (round_places, display_places, eps) for a property's currency."""
+	from kamra.ledger import _currency_places
+	display = _currency_places(property)
+	rplaces = max(display, 2)
+	return rplaces, display, 0.5 * (10 ** -rplaces)
+
+
 def _settle_status(dep, res) -> None:
 	"""Status after a withhold or refund: open while money is still held."""
-	if flt(dep.balance) > 0.009:
+	_rplaces, _display, eps = _deposit_precision(res.property)
+	if flt(dep.balance) > eps:
 		dep.status = "Withheld" if flt(dep.withheld_amount) > 0 \
 			else _held_status(res)
 	elif flt(dep.refunded_amount) > 0:
@@ -173,10 +182,12 @@ def collect_deposit(reservation: str, amount: float, *, mode: str = "Cash",
 	add_folio_payment(folio, mode, amt,
 	                  reference=reference or f"security-deposit:{res.name}",
 	                  pin=pin, kind="Security Deposit", idempotency_key=key)
+	from kamra.ledger import _fmt_currency
 	from kamra.savings import log_action
+	_rplaces, display, _eps = _deposit_precision(res.property)
 	log_action("collect_security_deposit", "Reservation", res.name,
 	           res.property,
-	           rationale=f"{mode} security deposit {amt:,.2f} held for "
+	           rationale=f"{mode} security deposit {_fmt_currency(amt, display)} held for "
 	                     f"{res.guest_name}")
 	res.reload()
 	return deposit_state(res)
@@ -216,9 +227,11 @@ def withhold_deposit(reservation: str, amount: float, reason: str,
 		frappe.throw(_("Enter the amount to withhold."))
 	if not (reason or "").strip():
 		frappe.throw(_("Withholding a deposit needs a reason."))
-	if amt > flt(dep.balance) + 0.009:
-		frappe.throw(_("Only {0:,.2f} of the deposit is still held.")
-		             .format(flt(dep.balance)))
+	from kamra.ledger import _fmt_currency
+	_rplaces, display, eps = _deposit_precision(res.property)
+	if amt > flt(dep.balance) + eps:
+		frappe.throw(_("Only {0} of the deposit is still held.")
+		             .format(_fmt_currency(dep.balance, display)))
 	folio = _guest_folio(res)
 	if not folio or frappe.db.get_value("Folio", folio, "status") == "Closed":
 		frappe.throw(_("The guest folio is closed - withhold before closing it."))
@@ -240,7 +253,7 @@ def withhold_deposit(reservation: str, amount: float, reason: str,
 	dep.save(ignore_permissions=True)
 	from kamra.savings import log_action
 	log_action("withhold_security_deposit", "Reservation", res.name,
-	           res.property, rationale=f"Withheld {amt:,.2f}: {reason}")
+	           res.property, rationale=f"Withheld {_fmt_currency(amt, display)}: {reason}")
 	return deposit_state(res)
 
 
@@ -270,9 +283,11 @@ def apply_held_to_bill(res) -> float:
 		"Security Deposit", {"reservation": res.name}, "name")
 	if not name:
 		return 0.0
+	from kamra.ledger import _fmt_currency
+	_rplaces, display, eps = _deposit_precision(res.property)
 	dep = frappe.get_doc("Security Deposit", name)
 	amt = flt(dep.balance)
-	if amt <= 0.009:
+	if amt <= eps:
 		return 0.0
 	folio = _guest_folio(res)
 	if not folio:
@@ -286,7 +301,7 @@ def apply_held_to_bill(res) -> float:
 	from kamra.savings import log_action
 	log_action("apply_security_deposit", "Reservation", res.name,
 	           res.property,
-	           rationale=f"Held deposit {amt:,.2f} applied to the bill at check-out")
+	           rationale=f"Held deposit {_fmt_currency(amt, display)} applied to the bill at check-out")
 	return amt
 
 
@@ -294,15 +309,17 @@ def refund_deposit(reservation: str, amount: float | None = None,
                    mode: str | None = None, note: str | None = None,
                    pin: str | None = None) -> dict:
 	"""Give back what is still held, through the folio's refund writer."""
+	from kamra.ledger import _fmt_currency, _money, _round_currency
 	res = _reservation(reservation)
+	rplaces, display, eps = _deposit_precision(res.property)
 	dep = _get(res.name)
 	bal = flt(dep.balance)
 	amt = flt(amount) if amount not in (None, "", 0, "0") else bal
 	if amt <= 0:
 		frappe.throw(_("Nothing is held to refund."))
-	if amt > bal + 0.009:
-		frappe.throw(_("Only {0:,.2f} of the deposit is still held.")
-		             .format(bal))
+	if amt > bal + eps:
+		frappe.throw(_("Only {0} of the deposit is still held.")
+		             .format(_fmt_currency(bal, display)))
 	folio = _guest_folio(res)
 	if not folio:
 		frappe.throw(_("No guest folio for this stay."))
@@ -310,11 +327,11 @@ def refund_deposit(reservation: str, amount: float | None = None,
 	# folio still owes money, settle or withhold first (also stops a deposit
 	# that went back through the folio's own refund form going back twice)
 	credit = -flt(frappe.db.get_value("Folio", folio, "balance"))
-	if amt > credit + 0.009:
+	if amt > credit + eps:
 		frappe.throw(_(
-			"The guest folio only has {0:,.2f} in credit. Settle the bill "
+			"The guest folio only has {0} in credit. Settle the bill "
 			"or withhold against it before refunding the deposit.")
-			.format(max(credit, 0)))
+			.format(_fmt_currency(max(credit, 0), display)))
 	mode = mode or _last_mode(folio) or "Cash"
 	from kamra.localization import pack_for, payment_modes
 	modes = payment_modes(pack_for(res.property), res.property)
@@ -327,15 +344,20 @@ def refund_deposit(reservation: str, amount: float | None = None,
 	_refund_folio_payment(folio, amt, mode, text[:140], pin=pin,
 	                      ledger="Deposit")
 
-	dep.refunded_amount = flt(dep.refunded_amount) + amt
+	dep.refunded_amount = _round_currency(_money(dep.refunded_amount) + _money(amt), rplaces)
 	dep.refund_reference = text[:140]
-	dep.balance = max(0.0, flt(dep.collected_amount) - flt(dep.withheld_amount)
-	                  - flt(dep.refunded_amount))
+	dep.balance = max(
+		0.0,
+		_round_currency(
+			_money(dep.collected_amount) - _money(dep.withheld_amount) - _money(dep.refunded_amount),
+			rplaces,
+		),
+	)
 	_settle_status(dep, res)
 	dep.save(ignore_permissions=True)
 	from kamra.savings import log_action
 	log_action("refund_security_deposit", "Reservation", res.name,
-	           res.property, rationale=f"{mode} deposit refund {amt:,.2f}")
+	           res.property, rationale=f"{mode} deposit refund {_fmt_currency(amt, display)}")
 	return deposit_state(res)
 
 
@@ -389,6 +411,8 @@ def deposit_state(res) -> dict:
 			history.append({"kind": "Withheld", "date": str(c.posting_date),
 			                "amount": flt(c.amount),
 			                "note": c.description.split(":", 1)[-1].strip()})
+	from kamra.ledger import _money, _round_currency
+	rplaces, _display, eps = _deposit_precision(res.property)
 	return {
 		"name": row.name if row else None,
 		"status": status,
@@ -398,7 +422,7 @@ def deposit_state(res) -> dict:
 		"withheld": flt(row.withheld_amount) if row else 0.0,
 		"refunded": flt(row.refunded_amount) if row else 0.0,
 		"held": held,
-		"due": max(0.0, round(required - collected, 2))
+		"due": max(0.0, _round_currency(_money(required) - _money(collected), rplaces))
 			if status not in ("Waived", "Refunded") else 0.0,
 		"reason": row.reason if row else None,
 		"folio": folio.name if folio else None,
@@ -411,15 +435,15 @@ def deposit_state(res) -> dict:
 		"can_refund": held > 0 and folio_open,
 		# check-out refuses while the guest is owed money: a held deposit
 		# has to be withheld or refunded first
-		"blocks_checkout": res.status == "Checked In" and held > 0.009
-			and folio_open and -flt(folio.balance) > 0.009,
+		"blocks_checkout": res.status == "Checked In" and held > eps
+			and folio_open and -flt(folio.balance) > eps,
 	}
 
 
 def deposit_satisfied(reservation: str) -> bool:
 	"""True when deposit policy is met (none required, waived, or collected)."""
-	required = _policy_amount(
-		frappe.db.get_value("Reservation", reservation, "property"))
+	prop = frappe.db.get_value("Reservation", reservation, "property")
+	required = _policy_amount(prop)
 	if required <= 0:
 		return True
 	if not _has_doctype():
@@ -434,4 +458,5 @@ def deposit_satisfied(reservation: str) -> bool:
 		return False
 	if row.status == "Waived":
 		return True
-	return flt(row.collected_amount) + 0.01 >= flt(row.required_amount)
+	_rplaces, _display, eps = _deposit_precision(prop)
+	return flt(row.collected_amount) + eps >= flt(row.required_amount)

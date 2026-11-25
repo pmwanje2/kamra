@@ -26,6 +26,8 @@ export interface Check {
   mismatches?: number
   acknowledgement?: Acknowledgement | null
   exception?: boolean
+  unverified?: boolean
+  total?: number | null
 }
 
 export interface Acknowledgement {
@@ -76,6 +78,7 @@ export interface EodState {
   property: string
   property_name: string
   currency?: string
+  currency_symbol?: string
   business_date: string
   /** Property's open BD (may still equal a closed audit day when stuck). */
   open_business_date?: string

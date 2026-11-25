@@ -99,6 +99,22 @@ def assert_cashier_mode_allowed(property: str, mode: str | None, user: str | Non
 		)
 
 
+def _ccy_places(code: str | None) -> int:
+	if not code:
+		return 2
+	from kamra.pricing import _minor_unit
+	return _minor_unit(code)
+
+
+def _prop_places(property: str | None) -> int:
+	from kamra.ledger import _currency_places
+	return max(_currency_places(property), 2)
+
+
+def _eps(places: int) -> float:
+	return 0.5 * (10 ** -max(int(places), 0))
+
+
 def _parse_foreign_counts(raw) -> dict[str, float]:
 	"""Normalize foreign_counts ({USD: 14} or [{currency: 'USD', counted_fx: 14}])."""
 	if raw in (None, "", [], {}):
@@ -107,6 +123,7 @@ def _parse_foreign_counts(raw) -> dict[str, float]:
 		raw = frappe.parse_json(raw)
 	if not raw:
 		return {}
+	from kamra.ledger import _round_currency
 	pairs = raw.items() if isinstance(raw, dict) else (
 		(r.get("currency"), r.get("counted_fx", r.get("counted", r.get("amount")))) for r in raw
 	)
@@ -123,7 +140,7 @@ def _parse_foreign_counts(raw) -> dict[str, float]:
 			frappe.throw(frappe._("Foreign cash count for {0} must be a number.").format(code))
 		if num < 0:
 			frappe.throw(frappe._("Foreign cash count for {0} cannot be negative.").format(code))
-		out[code] = round(num, 2)
+		out[code] = _round_currency(num, _ccy_places(code))
 	return out
 
 
@@ -139,10 +156,11 @@ def _session_foreign_drawers(
 	names = [n for n in session_names if n]
 	if not names:
 		return {}
-	from kamra.ledger import home_currency
+	from kamra.ledger import _money, _round_currency, home_currency
 	from kamra.masters import client_tender_types, payment_tender_type
 
 	home = home_currency(property)
+	home_places = _prop_places(property)
 	tender_map = client_tender_types(property)
 	has_ccy = _txn_has_currency_cols()
 	has_fc_col = _session_has_foreign_count_col()
@@ -245,16 +263,18 @@ def _session_foreign_drawers(
 		drawers: list[dict[str, Any]] = []
 		for ccy in sorted(sess_map):
 			s = sess_map[ccy]
-			exp_fx = round(s["expected_fx"], 2)
+			fx_places = _ccy_places(ccy)
+			exp_fx = _round_currency(s["expected_fx"], fx_places)
 			counted_fx = counts.get(ccy)
 			drawers.append({
 				"currency": ccy,
-				"receipts_fx": round(s["receipts_fx"], 2),
-				"refunds_fx": round(s["refunds_fx"], 2),
+				"receipts_fx": _round_currency(s["receipts_fx"], fx_places),
+				"refunds_fx": _round_currency(s["refunds_fx"], fx_places),
 				"expected_fx": exp_fx,
-				"home_equivalent": round(s["home_equivalent"], 2),
+				"home_equivalent": _round_currency(s["home_equivalent"], home_places),
 				"counted_fx": counted_fx,
-				"variance_fx": round(counted_fx - exp_fx, 2) if counted_fx is not None else None,
+				"variance_fx": _round_currency(_money(counted_fx) - _money(exp_fx), fx_places)
+				if counted_fx is not None else None,
 				"txns": s["txns"],
 			})
 		out[n] = drawers
@@ -263,11 +283,13 @@ def _session_foreign_drawers(
 
 def _fx_variance_home(drawer: dict[str, Any], property: str) -> float:
 	var_fx = drawer.get("variance_fx")
-	if var_fx is None or abs(float(var_fx)) <= 0.004:
+	fx_eps = _eps(_ccy_places(drawer.get("currency")))
+	home_eps = _eps(_prop_places(property))
+	if var_fx is None or abs(float(var_fx)) <= fx_eps:
 		return 0.0
 	exp_fx = float(drawer.get("expected_fx") or 0)
 	home_eq = float(drawer.get("home_equivalent") or 0)
-	if abs(exp_fx) > 0.004 and abs(home_eq) > 0.004:
+	if abs(exp_fx) > fx_eps and abs(home_eq) > home_eps:
 		rate = abs(home_eq / exp_fx)
 		return float(var_fx) * rate
 	try:
@@ -476,8 +498,9 @@ def _recompute_session_totals(session: str, persist: bool = True) -> dict[str, f
 	expected = opening + cash - paid_outs - drops - petty
 	fresh = dict(zip(_TOTAL_FIELDS, (cash, card, upi, other, paid_outs, drops,
 	                                 petty, expected)))
+	tol = _eps(_prop_places(sess.property))
 	if persist and sess.status != "Closed" and any(
-		abs(float(sess.get(k) or 0) - v) > 0.004 for k, v in fresh.items()
+		abs(float(sess.get(k) or 0) - v) > tol for k, v in fresh.items()
 	):
 		sess.update(fresh)
 		sess.save(ignore_permissions=True)
@@ -726,10 +749,12 @@ def close_session(session: str, counted_cash: float | None = None,
 	count = cash_count_rows(doc.property, cash_count)
 	fx_counts = _parse_foreign_counts(foreign_counts)
 	if count:
-		total = round(sum(r["amount"] for r in count), 2)
+		from kamra.ledger import _money, _round_currency
+		places = _prop_places(doc.property)
+		total = _round_currency(sum((_money(r["amount"]) for r in count), _money(0)), places)
 		if counted_cash in (None, ""):
 			counted_cash = total
-		elif abs(float(counted_cash) - total) > 0.005:
+		elif abs(float(counted_cash) - total) > _eps(places):
 			from kamra.localization import money_text
 			frappe.throw(frappe._("The count by note adds up to {0}, not {1}.").format(
 				money_text(doc.property, total), money_text(doc.property, counted_cash)))
@@ -791,12 +816,17 @@ def cash_count_rows(property: str, raw) -> list[dict]:
 			frappe.throw(frappe._("{0} is not a note or coin here. Count in: {1}.").format(
 				f"{value:g}", ", ".join(f"{v:g}" for v in allowed)))
 		counts[value] = counts.get(value, 0) + int(n)
-	return [{"value": v, "count": c, "amount": round(v * c, 2)}
+	from kamra.ledger import _money, _round_currency
+	places = _prop_places(property)
+	return [{"value": v, "count": c, "amount": _round_currency(_money(v) * c, places)}
 	        for v, c in sorted(counts.items(), reverse=True) if c]
 
 
 def _sync_shift_handover(sess) -> None:
 	from frappe.utils import getdate
+
+	from kamra.ledger import _currency_places, _fmt_currency
+	disp = _currency_places(sess.property)
 	shift_date = getdate(sess.business_date)
 	# Map time-of-day roughly: Morning / Evening / Night by hour
 	hour = (sess.closed_at or now_datetime()).hour
@@ -816,7 +846,7 @@ def _sync_shift_handover(sess) -> None:
 		"handed_over_to": sess.user,
 		"handover_notes": (
 			f"Auto from cashier session {sess.name}; variance "
-			f"{float(sess.variance or 0):,.2f}"
+			f"{_fmt_currency(sess.variance or 0, disp)}"
 			+ (f"; {sess.close_notes}" if sess.close_notes else "")
 		)[:500],
 	}
@@ -1092,16 +1122,18 @@ def session_report(session: str):
 	cash_mode = default_mode_for_tender(d.get("property"), "Cash")
 	cash = methods.setdefault(cash_mode, {"mode": cash_mode, "receipts": 0.0,
 	                                      "refunds": 0.0, "net": 0.0})
+	from kamra.ledger import _money, _round_currency
+	places = _prop_places(d.get("property"))
 	for m in methods.values():
 		for k in ("receipts", "refunds", "net"):
-			m[k] = round(m[k], 2)
+			m[k] = _round_currency(m[k], places)
 		# only the cash drawer is counted; other methods are as the system has them
 		m["system"] = m["net"]
 		m["counted"] = m["variance"] = None
-	cash["system"] = round(float(d["totals"]["expected_cash"]), 2)
+	cash["system"] = _round_currency(d["totals"]["expected_cash"], places)
 	if closed:
 		cash["counted"] = float(d.get("counted_cash") or 0)
-		cash["variance"] = round(cash["counted"] - cash["system"], 2)
+		cash["variance"] = _round_currency(_money(cash["counted"]) - _money(cash["system"]), places)
 
 	def person(user):
 		return {"user": user, "full_name": frappe.db.get_value(
@@ -1387,16 +1419,17 @@ def assert_transfer_keeps_safe_solvent(doc) -> None:
 				["kind", "status", "amount", "from_terminal", "to_terminal"],
 				as_dict=True)
 		old_terminal, old_effect = _counted_safe_effect(prev)
+	tol = _eps(_prop_places(doc.get("property")))
 	for terminal in sorted({t for t in (new_terminal, old_terminal) if t}):
 		effect = new_effect if terminal == new_terminal else 0.0
 		saved = old_effect if terminal == old_terminal else 0.0
 		# Not a reduction: nothing to refuse.
-		if effect >= saved - _MONEY_TOLERANCE:
+		if effect >= saved - tol:
 			continue
 		_lock_cash_office(terminal)
 		current = _safe_balance(terminal, for_update=True)["balance"]
 		resulting = current - saved + effect
-		if resulting < -_MONEY_TOLERANCE:
+		if resulting < -tol:
 			frappe.throw("That is more than the safe holds.")
 
 
@@ -1485,7 +1518,8 @@ def bank_deposit(cash_office: str, amount: float, notes: str | None = None,
 		frappe.throw("Amount must be positive.")
 	# Serialise on the safe, then read the balance the lock waited for.
 	_lock_cash_office(office.name)
-	if amt > _safe_balance(office.name, for_update=True)["balance"] + _MONEY_TOLERANCE:
+	tol = _eps(_prop_places(office.property))
+	if amt > _safe_balance(office.name, for_update=True)["balance"] + tol:
 		frappe.throw("That is more than the safe holds.")
 	now = now_datetime()
 	doc = frappe.get_doc({

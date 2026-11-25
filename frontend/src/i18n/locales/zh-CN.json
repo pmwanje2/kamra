@@ -7173,5 +7173,14 @@
   "· in ": "· 在 ",
   "…and {n} more": "…另有 {n} 项",
   "…or paste the rows here": "…或在此粘贴行",
-  "≈ {amount}": "≈ {amount}"
+  "≈ {amount}": "≈ {amount}",
+  "Still open at the outlet. Settle it there before check-out: charge it to the room, take payment or void it.": "该账单在营业点仍未结清。请在退房前在那里结清：挂房账、收款或作废。",
+  "This is kept in the accounting system.": "此项在会计系统中管理。",
+  "Check-out waits for these. Settle them at the outlet.": "以下账单尚未处理，暂不能退房。请在营业点结清。",
+  "Not verified": "未核实",
+  "Kept in the accounting system": "在会计系统中管理",
+  "Company receivables could not be verified in the accounting system.": "无法在会计系统中核实公司应收款项。",
+  "Company credit could not be verified.": "无法核实公司信用额度。",
+  "Guest and deposit folios match their ledgers. Company receivables (AR) could not be verified in the accounting system.": "宾客和押金账单与其分类账一致。无法在会计系统中核实公司应收账款（AR）。",
+  "Guest and deposit folios match their ledgers. Company receivables (AR) are kept in the accounting system.": "宾客和押金账单与其分类账一致。公司应收账款（AR）在会计系统中管理。"
 }
