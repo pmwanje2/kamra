@@ -1672,15 +1672,15 @@ rules find it. Checkout discards the ID, never the photo.
 
 **POST** · roles: `Front Desk`, `Kamra Agent`
 
-The desk captures or replaces a guest's document while preparing
-the GRC - walk-ins, or a newer copy over last visit's. kind is 'id'
-or 'address'; stored privately, one current copy per slot.
+Replace the private document shown on the registration card. A card
+can display a stay-specific scan or fall back to the guest profile.
 
 | Param | Required | Default |
 | --- | --- | --- |
 | `guest` | yes |  |
 | `kind` | yes |  |
 | `image` | yes |  |
+| `reservation` | no | `None` |
 
 ### `kamra.api.cancellation_preview`
 

@@ -581,6 +581,7 @@ export default function RegistrationCard() {
     try {
       await call("kamra.api.upload_guest_document", {
         guest: d.guest.guest_id,
+        reservation: d.reservation.name,
         kind,
         image: await fileToDataUrl(f),
       })

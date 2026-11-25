@@ -7221,17 +7221,32 @@ def upload_occupant_id(reservation: str, row: str, image: str, kind: str = "id")
 
 
 @frappe.whitelist(methods=["POST"])
-@require_roles("Front Desk", "Kamra Agent", scope={"guest": "Guest"})
-def upload_guest_document(guest: str, kind: str, image: str):
-	"""The desk captures or replaces a guest's document while preparing
-	the GRC - walk-ins, or a newer copy over last visit's. kind is 'id'
-	or 'address'; stored privately, one current copy per slot."""
+@require_roles("Front Desk", "Kamra Agent", scope={"guest": "Guest", "reservation": "Reservation"})
+def upload_guest_document(guest: str, kind: str, image: str, reservation: str | None = None):
+	"""Replace the private document shown on the registration card. A card
+	can display a stay-specific scan or fall back to the guest profile."""
+	from kamra.id_documents import ACTIVE_STATUSES, store_id_document
+	from kamra.public_api import _save_id_image
+
 	if kind not in ("id", "address"):
 		frappe.throw("kind must be 'id' or 'address'.")
 	if not frappe.db.exists("Guest", guest):
 		frappe.throw("Guest not found.")
+	if reservation:
+		res = frappe.get_doc("Reservation", reservation, for_update=True)
+		if res.guest != guest:
+			frappe.throw(frappe._("Not permitted"), frappe.PermissionError)
+		stay_field = "id_document" if kind == "id" else "precheckin_address_file"
+		if res.get(stay_field):
+			if res.status not in ACTIVE_STATUSES:
+				frappe.throw(frappe._("This booking is no longer active."))
+			if kind == "id":
+				url = store_id_document(res, image, source="Desk")
+			else:
+				url = _save_id_image(res.name, image, stay_field, doctype="Reservation")
+				frappe.db.set_value("Reservation", res.name, stay_field, url, update_modified=False)
+			return {"ok": True, "file": url}
 	field = "id_file" if kind == "id" else "address_proof_file"
-	from kamra.public_api import _save_id_image
 	url = _save_id_image(guest, image, field)
 	frappe.db.set_value("Guest", guest, field, url, update_modified=False)
 	return {"ok": True, "file": url}

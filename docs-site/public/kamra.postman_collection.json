@@ -4009,10 +4009,10 @@
         "kamra.api.upload_guest_document"
        ]
       },
-      "description": "The desk captures or replaces a guest's document while preparing\nthe GRC - walk-ins, or a newer copy over last visit's. kind is 'id'\nor 'address'; stored privately, one current copy per slot.",
+      "description": "Replace the private document shown on the registration card. A card\ncan display a stay-specific scan or fall back to the guest profile.",
       "body": {
        "mode": "raw",
-       "raw": "{\n  \"guest\": \"G-00001\",\n  \"kind\": \"<kind>\",\n  \"image\": \"<image>\"\n}",
+       "raw": "{\n  \"guest\": \"G-00001\",\n  \"kind\": \"<kind>\",\n  \"image\": \"<image>\",\n  \"reservation\": \"RES-2026-00001\"\n}",
        "options": {
         "raw": {
          "language": "json"
