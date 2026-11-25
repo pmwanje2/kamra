@@ -2245,7 +2245,7 @@ def _discount_nights(property, rt, nightly: list, room_total: Decimal, disc: dic
 	property's rates include tax (discount_night). Nothing else on the stay
 	moves. The nights are left at the property's night-rate decimals
 	(night_rate_places), so the locked rows add up to the quote. Returns
-	(room_total, room_tax, extra-guest net change, extra-guest tax change,
+	(room_total, room_tax,
 	base total and discount total on the desk's basis)."""
 	home = selling_currency(property) or property_currency(property)
 	places = night_rate_places(property)
@@ -2253,7 +2253,7 @@ def _discount_nights(property, rt, nightly: list, room_total: Decimal, disc: dic
 	step = _dec(frappe.db.get_value("Rate Plan", rate_plan, "rounding_step")) if rate_plan else Decimal(0)
 	plan_free = sum((_dec(n["rate"]) for n in nightly), Decimal(0))
 	factor = room_total / plan_free if plan_free else Decimal(1)
-	new_total = new_tax = base_total = off_total = oc_net = oc_tax = Decimal(0)
+	new_total = new_tax = base_total = off_total = Decimal(0)
 	stay_cur = disc.get("stay_currency")
 	for idx, n in enumerate(nightly):
 		gst = _dec(n["gst_rate"])
@@ -2292,12 +2292,6 @@ def _discount_nights(property, rt, nightly: list, room_total: Decimal, disc: dic
 			discount_currency=eff_disc_cur,
 			plan_rounding_step=step,
 		)
-		if night_over_cap and new_gst != gst:
-			# the extra guests ride the night's tax rate
-			def _oc(rate):
-				return night_over_cap / (Decimal(1) + rate / Decimal(100)) if inclusive else night_over_cap
-			oc_net += _oc(new_gst) - _oc(gst)
-			oc_tax += _oc(new_gst) * new_gst / Decimal(100) - _oc(gst) * gst / Decimal(100)
 		n.update({
 			"base_rate": float(base), "rate": float(net), "gst_rate": float(new_gst),
 			"discount_type": kind, "discount_value": float(value),
@@ -2320,7 +2314,7 @@ def _discount_nights(property, rt, nightly: list, room_total: Decimal, disc: dic
 		off_total += off
 		new_total += net
 		new_tax += _dec(n["package_tax"]) if n.get("package_tax") is not None else net * new_gst / Decimal(100)
-	return new_total, new_tax, oc_net, oc_tax, base_total, off_total
+	return new_total, new_tax, base_total, off_total
 
 
 def stay_room_tax_rate(room_tax: Decimal, room_total: Decimal, nightly: list) -> Decimal:
@@ -2343,13 +2337,12 @@ def sold_night_gross(net, gst, unit, package_tax=None):
 	return (net + tax).quantize(unit, rounding=ROUND_HALF_UP)
 
 
-def _pin_nights(nightly: list, locked: dict, inclusive: bool, night_over_cap: Decimal,
+def _pin_nights(nightly: list, locked: dict, inclusive: bool,
                 places: int = 2, *, priced_nets: list[Decimal], gross_unit=None) -> tuple:
 	"""Put each booked night's locked room price back on the quote's night
 	(quote locked_nights) and total the room from them: (room total, room
-	tax, base and discount on the desk's basis, extra guests and their tax,
-	each at the night's own tax rate)."""
-	room_total = room_tax = base_total = off_total = oc = oc_tax = Decimal(0)
+	tax, base and discount on the desk's basis)."""
+	room_total = room_tax = base_total = off_total = Decimal(0)
 	for n, priced_net in zip(nightly, priced_nets, strict=True):
 		row = locked.get(str(n["date"]))
 		if row:
@@ -2392,11 +2385,7 @@ def _pin_nights(nightly: list, locked: dict, inclusive: bool, night_over_cap: De
 			room_tax += _dec(component_tax) if component_tax is not None else rate * gst / 100
 		base_total += entry_rate(rate, gst, inclusive, places) + off
 		off_total += off
-		if night_over_cap:
-			net = night_over_cap / (Decimal(1) + gst / Decimal(100)) if inclusive else night_over_cap
-			oc += net
-			oc_tax += net * gst / Decimal(100)
-	return room_total, room_tax, base_total, off_total, oc, oc_tax
+	return room_total, room_tax, base_total, off_total
 
 
 def billing_segments(check_in, check_out, room_type, types):
@@ -2562,8 +2551,6 @@ def quote(
 	# Guests above the room's capacity, at the price agreed on this booking:
 	# gathered per night so each night is taxed at its own rate.
 	night_over_cap = _dec(over_capacity_charge)
-	over_cap = Decimal(0)
-	over_cap_tax = Decimal(0)
 	occ_cache: dict = {}
 	# long-stay discount: off each night's rate before tax, so the nights
 	# locked on the booking (and billed by the folio) already carry it. A
@@ -2665,8 +2652,6 @@ def quote(
 			entry_rates.append(rate)
 			sold_gross = rate if inclusive else None
 			rate /= factor
-			over_cap += night_over_cap / factor
-			over_cap_tax += night_over_cap / factor * gst / 100
 			rate, night_tax, effective, meta = _package_night_price(party, doc, rate, gst, day, sold_gross)
 			nightly.append({"date": day, "rate": float(rate), "gst_rate": float(effective),
 			                "demand_premium_pct": 0, "package": label, "package_id": doc.name,
@@ -2734,11 +2719,6 @@ def quote(
 			rate = rate / (Decimal(1) + gst / Decimal(100))
 			night_extra = night_extra / (Decimal(1) + gst / Decimal(100))
 		extra_person_total += min(night_extra, rate)
-		if night_over_cap:
-			net = (night_over_cap / (Decimal(1) + gst / Decimal(100))
-			       if inclusive else night_over_cap)
-			over_cap += net
-			over_cap_tax += net * gst / Decimal(100)
 		nightly.append({"date": str(date), "package_id": None, "rate": float(rate),
 		                "gst_rate": float(gst),
 		                "demand_premium_pct": tier["premium_pct"] if tier else 0,
@@ -2790,6 +2770,7 @@ def quote(
 
 	prop_currency = property_currency(property)
 	planned_by_plan = False
+	plan_crossed_slab = False
 	if rate_plan and not agreed_rate and not rate_plan_applied:
 		planned_by_plan = True
 		old_room_total = room_total
@@ -2801,8 +2782,20 @@ def quote(
 		else:
 			planned, rounded = plan_stay_nights(rate_plan, [(_dec(n["rate"]), _dec(n["gst_rate"])) for n in nightly],
 			                                    extra_person_total, inclusive, los_floor, currency=prop_currency)
-			room_tax = sum((rate * _dec(n["gst_rate"]) / 100 for rate, n in zip(planned, nightly, strict=True)),
-			               Decimal(0))
+			# Preserve the plan's selling price when it crosses a slab. For an
+			# inclusive rate, the adjusted gross now backs out a different tax.
+			room_tax = Decimal(0)
+			for i, (net, night) in enumerate(zip(planned, nightly, strict=True)):
+				old_gst = _dec(night["gst_rate"])
+				tariff = net * (1 + old_gst / 100) if inclusive else net
+				gst = room_tax_at(night["date"], round_rate_amount(tariff, 0, currency=prop_currency))
+				if gst != old_gst:
+					plan_crossed_slab = True
+					night["gst_rate"] = float(gst)
+					if inclusive:
+						planned[i] = tariff / (1 + gst / 100)
+					rounded = True  # lock the adjusted net for this date
+				room_tax += planned[i] * gst / 100
 		exact_nets = list(planned)
 		room_total = sum(planned, Decimal(0))
 		if old_room_total:
@@ -2857,12 +2850,10 @@ def quote(
 	room_base_total = room_total + (room_tax if inclusive else Decimal(0))
 	reservation_discount = Decimal(0)
 	if disc:
-		room_total, room_tax, oc_net, oc_tax, room_base_total, reservation_discount = _discount_nights(
+		room_total, room_tax, room_base_total, reservation_discount = _discount_nights(
 			property, rt, nightly, room_total, disc, inclusive, night_over_cap, agreed_rate,
 			night_room_types=night_room_types, contract_tariff=contract_tariff,
 			rate_plan=rate_plan, exact_nets=exact_nets)
-		over_cap += oc_net
-		over_cap_tax += oc_tax
 	for n in nightly:
 		n.setdefault("base_rate", n["rate"])
 		n.setdefault("discount_type", None)
@@ -2880,11 +2871,10 @@ def quote(
 				n["contract_base_rate"] = gross_r
 				n["contract_discount_amount"] = 0.0
 				n["contract_rate"] = gross_r
-	# A tax-inclusive package is sold in gross currency units. Freeze that
-	# figure alongside the net, including ordinary rooms in a mixed stay.
-	# The booked net may be rounded again in the nightly child table.
+	# Freeze the sold gross across a slab change or package split. Posting
+	# must reproduce it even after the booked net rounds in the night table.
 	gross_unit = None
-	if inclusive and any(sold_packages.values()):
+	if inclusive and (plan_crossed_slab or any(sold_packages.values())):
 		from kamra.ledger import minor_unit
 		gross_unit = minor_unit(property)
 		for n, exact in zip(nightly, exact_nets, strict=True):
@@ -2897,10 +2887,21 @@ def quote(
 		# retain a previous room price when the stay otherwise qualifies.
 		locked_nights = {day: row for day, row in locked_nights.items() if day in types}
 	if locked_nights and not day_use:
-		room_total, room_tax, room_base_total, reservation_discount, over_cap, over_cap_tax = \
-			_pin_nights(nightly, locked_nights, inclusive, night_over_cap,
+		room_total, room_tax, room_base_total, reservation_discount = \
+			_pin_nights(nightly, locked_nights, inclusive,
 			            places=night_rate_places(property), gross_unit=gross_unit,
 			            priced_nets=[_dec(n["rate"]) for n in nightly] if disc else exact_nets)
+
+	# The folio posts the agreed extra bed as a separate taxable base even
+	# when room tariffs include tax. Lock the room slab for that line;
+	# mixed-rate package components retain their exact tax in package_tax.
+	over_cap = night_over_cap * len(nightly)
+	over_cap_tax = Decimal(0)
+	if night_over_cap:
+		for night in nightly:
+			if "room_gst_rate" in night:
+				night["gst_rate"] = night["room_gst_rate"]
+			over_cap_tax += night_over_cap * _dec(night["gst_rate"]) / 100
 
 	from kamra.folio import _fnb_gst
 	fnb_rate = _fnb_gst(property)  # the country pack's F&B rate
@@ -3063,7 +3064,7 @@ def quote(
 			"amount": float(over_cap),
 			"tax_amount": float(over_cap_tax),
 			"tax_rate": float(over_cap_tax / over_cap * 100) if over_cap else 0,
-			"is_tax_inclusive": bool(inclusive),
+			"is_tax_inclusive": False,
 			"nights_applied": billable_nights,
 		})
 	if cleaning > 0:
