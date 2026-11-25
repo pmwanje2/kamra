@@ -121,8 +121,10 @@ class TestDirectBookingCart(IntegrationTestCase):
 			public_api.precheckin_info(second.name)
 		with self.assertRaises(frappe.ValidationError):
 			public_api.precheckin_submit(token, "Passport", "P700100", consent=0)
+		from kamra.tests.test_p7_direct_booking_cart_r2 import signature
+
 		payload = public_api.precheckin_submit(
-			token, "Passport", "P700100", consent=1, eta="18:30",
+			token, "Passport", "P700100", consent=1, eta="18:30", signature=signature(),
 			address_line="10 High Street", city="Kampala",
 			special_requests="Quiet room", billing_address="10 High Street, Kampala",
 		)
