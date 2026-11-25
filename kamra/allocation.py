@@ -226,7 +226,7 @@ def apply_allocation(property: str, assignments):
 			elif r.room_type != doc.room_type:
 				why = "That room is another type; use a room move so the price is shown first"
 			elif r.housekeeping_status in ("Out of Order", "Out of Service"):
-				why = f"That room is currently {r.housekeeping_status}"
+				why = f"That room is no longer free or ready ({r.housekeeping_status})"
 			else:
 				free = available_rooms(property, doc.room_type, doc.check_in_date,
 				                       doc.check_out_date, group_booking=doc.group_booking,

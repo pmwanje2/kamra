@@ -241,13 +241,13 @@ const REQUEST_LABEL: Record<string, string> = {
 }
 
 const hkTone: Record<string, string> = {
-  Clean: "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-950/30 dark:text-emerald-200",
+  Clean: "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-950/30",
   Pickup: "border-indigo-200 bg-indigo-50 text-indigo-800 dark:border-indigo-500/40 dark:bg-indigo-950/30 dark:text-indigo-200",
-  Inspected: "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-500/40 dark:bg-sky-950/30 dark:text-sky-200",
+  Inspected: "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-500/40 dark:bg-sky-950/30",
   Ready: "border-teal-200 bg-teal-50 text-teal-800 dark:border-teal-500/40 dark:bg-teal-950/30 dark:text-teal-200",
-  Dirty: "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/40 dark:bg-amber-950/30 dark:text-amber-200",
+  Dirty: "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/40 dark:bg-amber-950/30",
   "Out of Service": "border-orange-200 bg-orange-50 text-orange-800 dark:border-orange-500/40 dark:bg-orange-950/30 dark:text-orange-200",
-  "Out of Order": "border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-500/40 dark:bg-rose-950/30 dark:text-rose-200",
+  "Out of Order": "border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-500/40 dark:bg-rose-950/30",
 }
 
 const inputCls =
@@ -941,17 +941,17 @@ export default function CheckInDialog(props: {
                     )}
                   </div>
                   {flow.room.housekeeping_status === "Dirty" && (
-                    <p className="text-sm font-medium text-amber-700">
+                    <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
                       {t("This room is not cleaned yet. Pick a clean room, or ask housekeeping first.")}
                     </p>
                   )}
                   {flow.room.housekeeping_status === "Pickup" && (
-                    <p className="text-sm font-medium text-indigo-700">
+                    <p className="text-sm font-medium text-indigo-700 dark:text-indigo-300">
                       {t("This room is flagged for quick touch-up (Pickup). Confirm with housekeeping before handing over keys.")}
                     </p>
                   )}
                   {flow.room.housekeeping_status === "Out of Service" && (
-                    <p className="text-sm font-medium text-orange-700">
+                    <p className="text-sm font-medium text-orange-700 dark:text-orange-300">
                       {t("This room is Out of Service and cannot be assigned. Pick another room first.")}
                     </p>
                   )}

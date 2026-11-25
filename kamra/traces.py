@@ -55,6 +55,15 @@ _TRACE_READ_ROLES = (
 	"Kamra Agent",
 )
 
+_TRACE_WRITE_ROLES = (
+	"Front Desk",
+	"Housekeeping Supervisor",
+	"Night Auditor",
+	"Finance",
+	"F&B Manager",
+	"Kamra Agent",
+)
+
 _ALERT_READ_ROLES = (
 	"Front Desk",
 	"Housekeeping Supervisor",
@@ -259,7 +268,7 @@ def list_traces(
 
 
 @frappe.whitelist(methods=["POST"])
-@require_roles(*_TRACE_READ_ROLES)
+@require_roles(*_TRACE_WRITE_ROLES)
 def add_trace(
 	reservation: str,
 	department: str,

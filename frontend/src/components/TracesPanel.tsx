@@ -51,15 +51,23 @@ function effectiveStatus(row: StayTraceItem, bd: string): "Scheduled" | "Open" |
   return "Open"
 }
 
+function formatTraceTime(raw: string): string {
+  const parts = String(raw).trim().split(":")
+  if (parts.length >= 2) {
+    return `${parts[0].padStart(2, "0")}:${parts[1].padStart(2, "0")}`
+  }
+  return String(raw).slice(0, 5)
+}
+
 const STATUS_BADGE: Record<"Scheduled" | "Open" | "Overdue" | "Done", string> = {
   Overdue:
-    "border-rose-300 bg-rose-50 text-rose-800 dark:border-rose-500/40 dark:bg-rose-950/40 dark:text-rose-200",
+    "border-rose-300 bg-rose-50 text-rose-800 dark:border-rose-500/40 dark:bg-rose-950/40",
   Open:
-    "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-500/40 dark:bg-amber-950/30 dark:text-amber-200",
+    "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-500/40 dark:bg-amber-950/30",
   Scheduled:
-    "border-sky-300 bg-sky-50 text-sky-800 dark:border-sky-500/40 dark:bg-sky-950/30 dark:text-sky-200",
+    "border-sky-300 bg-sky-50 text-sky-800 dark:border-sky-500/40 dark:bg-sky-950/30",
   Done:
-    "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-950/30 dark:text-emerald-200",
+    "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-950/30",
 }
 
 export default function TracesPanel({
@@ -273,7 +281,7 @@ export default function TracesPanel({
                         {r.trace_time ? (
                           <span className="inline-flex items-center gap-0.5">
                             · <Clock className="size-3" aria-hidden />
-                            {String(r.trace_time).slice(0, 5)}
+                            {formatTraceTime(r.trace_time)}
                           </span>
                         ) : null}
                       </span>

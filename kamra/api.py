@@ -5441,7 +5441,7 @@ def stay_instructions(reservation: str):
 
 
 @frappe.whitelist(methods=["POST"])
-@require_roles("Front Desk", "Housekeeping", "Housekeeping Supervisor", "Night Auditor", "Finance", "F&B Manager", "Kamra Agent")
+@require_roles("Front Desk", "Housekeeping Supervisor", "Night Auditor", "Finance", "F&B Manager", "Kamra Agent")
 def add_stay_instruction(
 	reservation: str,
 	department: str,
@@ -7581,9 +7581,12 @@ def move_reservation(reservation: str, new_room: str,
 		doc.rate_lock_key = doc.rate_lock_key_for(doc.quote_inputs())
 	doc.save()
 	if doc.status == "Checked In" and old_room and old_room != new_room:
-		frappe.db.set_value("Room", old_room,
-		                    {"occupancy_status": "Vacant",
-		                     "housekeeping_status": "Dirty"})
+		if frappe.db.get_value("Room", old_room, "housekeeping_status") in ("Out of Order", "Out of Service"):
+			frappe.db.set_value("Room", old_room, "occupancy_status", "Vacant")
+		else:
+			frappe.db.set_value("Room", old_room,
+			                    {"occupancy_status": "Vacant",
+			                     "housekeeping_status": "Dirty"})
 		frappe.db.set_value("Room", new_room, "occupancy_status", "Occupied")
 	from kamra.savings import log_action
 	note = f"{old_room} → {new_room}"

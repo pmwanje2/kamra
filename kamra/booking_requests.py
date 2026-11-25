@@ -134,9 +134,9 @@ def accept_booking_request(reservation: str, room: str | None = None):
 
 	room = room or res.room
 	if not room and not uses_member_rooms(res.property, res.room_type):
-		free = available_rooms(res.property, res.room_type, ci, co,
-		                       group_booking=res.get("group_booking"))
-		if not free:
+		sellable = available_rooms(res.property, res.room_type, ci, co,
+		                           group_booking=res.get("group_booking"))
+		if not sellable:
 			frappe.throw(
 				_("Can't accept {0}: no {1} room is free for {2} to {3} any "
 				  "more. Decline the request, or move it to another room "
@@ -146,7 +146,10 @@ def accept_booking_request(reservation: str, room: str | None = None):
 					                    "room_type_name") or res.room_type,
 					ci, co),
 				title=_("No inventory left"), exc=InventoryRefused)
-		room = free[0]["name"]
+		assignable = available_rooms(res.property, res.room_type, ci, co,
+		                             group_booking=res.get("group_booking"),
+		                             for_assignment=1)
+		room = assignable[0]["name"] if assignable else None
 
 	res.room = room or None
 	res.status = "Confirmed"

@@ -62,17 +62,17 @@ const SEVERITY_ORDER: Record<AlertSeverity, number> = {
 
 const SURFACE: Record<AlertSeverity, string> = {
   Blocking:
-    "border-rose-300 bg-rose-50 text-rose-950 dark:border-rose-500/40 dark:bg-rose-950/40 dark:text-rose-100",
+    "border-rose-300 bg-rose-50 text-rose-900 dark:border-rose-500/40 dark:bg-rose-950/40 dark:text-rose-100",
   Warning:
-    "border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-500/40 dark:bg-amber-950/30 dark:text-amber-100",
+    "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/30 dark:text-amber-100",
   Info:
-    "border-sky-300 bg-sky-50 text-sky-950 dark:border-sky-500/40 dark:bg-sky-950/30 dark:text-sky-100",
+    "border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-500/40 dark:bg-sky-950/30",
 }
 
 const BADGE_TONE: Record<AlertSeverity, string> = {
   Blocking: "bg-rose-600 text-white",
   Warning: "bg-amber-600 text-white",
-  Info: "bg-sky-600 text-white",
+  Info: "bg-sky-600 text-white dark:bg-sky-400",
 }
 
 export default function AlertBanner({

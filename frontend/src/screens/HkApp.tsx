@@ -75,7 +75,7 @@ const hkTone: Record<HkRoom["housekeeping_status"], string> = {
   Clean: "border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-950/30 dark:text-emerald-100",
   Pickup: "border-indigo-300 bg-indigo-50 text-indigo-900 dark:border-indigo-500/40 dark:bg-indigo-950/30 dark:text-indigo-100",
   Ready: "border-emerald-400 bg-emerald-100 text-emerald-950 dark:border-teal-500/40 dark:bg-teal-950/30 dark:text-teal-100",
-  Inspected: "border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-500/40 dark:bg-sky-950/30 dark:text-sky-100",
+  Inspected: "border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-500/40 dark:bg-sky-950/30",
   Dirty: "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/30 dark:text-amber-100",
   "Out of Service": "border-orange-300 bg-orange-50 text-orange-900 dark:border-orange-500/40 dark:bg-orange-950/30 dark:text-orange-100",
   "Out of Order": "border-rose-300 bg-rose-50 text-rose-900 dark:border-rose-500/40 dark:bg-rose-950/30 dark:text-rose-100",
