@@ -471,6 +471,14 @@ def _capture_payment_entry(row, effective: dict, *, for_update: bool = False) ->
 	return entry
 
 
+def _require_no_capture_payment_entry(dep, effective: dict) -> None:
+	entry = _capture_payment_entry(dep, effective, for_update=True)
+	if entry:
+		frappe.throw(
+			_("The card hold cannot be released or increased while capture Payment Entry {0} exists.").format(entry.name)
+		)
+
+
 def _select_card_mode(property: str) -> str:
 	from kamra.localization import pack_for, payment_modes
 	from kamra.masters import payment_tender_type
@@ -734,13 +742,14 @@ def increment_deposit_auth(
 		frappe.throw(_("A security deposit can't be taken on a {0} booking.").format(res.status))
 	dep = _get(res.name, for_update=True)
 
-	from kamra.authz import require_cashier_pin
-	require_cashier_pin(res.property, pin)
-
 	places, eps = _preauth_precision(res.property)
 	eff = _effective_preauth(dep, places, eps, for_update=True)
 	if not eff["active"] or not dep.get("preauth_hold"):
 		frappe.throw(_("No active card pre-authorization hold on this stay."))
+	_require_no_capture_payment_entry(dep, eff)
+
+	from kamra.authz import require_cashier_pin
+	require_cashier_pin(res.property, pin)
 
 	delta = _parse_positive_amount(
 		additional_amount, places, _("Enter the additional amount to authorize.")
@@ -916,6 +925,7 @@ def release_deposit_auth(
 	eff = _effective_preauth(dep, places, eps, for_update=True)
 	if not eff["active"] or not dep.get("preauth_hold"):
 		frappe.throw(_("No active card pre-authorization hold on this stay."))
+	_require_no_capture_payment_entry(dep, eff)
 
 	from kamra.authz import require_cashier_pin
 	require_cashier_pin(res.property, pin)
@@ -1137,10 +1147,10 @@ _PREAUTH_EVENT_LABELS = {
 
 def _has_permission(doctype: str, ptype: str, doc=None) -> bool:
 	if doc is not None:
-		if frappe.has_permission(doctype, ptype, doc=doc, print_logs=False):
+		if frappe.has_permission(doctype, ptype, doc=doc):
 			return True
 		return False
-	if frappe.has_permission(doctype, ptype, print_logs=False):
+	if frappe.has_permission(doctype, ptype):
 		return True
 	return False
 
@@ -1182,13 +1192,15 @@ def deposit_state(res) -> dict:
 		and frappe.db.exists("Credit Preauthorization", eff["preauth_hold"])
 		and _has_permission("Credit Preauthorization", "write", doc=eff["preauth_hold"])
 	)
-	can_receive_payment = (
-		can_write_hold and not pending and frappe.db.exists("DocType", "Payment Entry")
-		and (
-			_has_permission("Payment Entry", "create")
-			or _has_permission("Payment Entry", "submit")
-		)
-	)
+	can_receive_payment = False
+	if can_write_hold and frappe.db.exists("DocType", "Payment Entry"):
+		if not entry:
+			can_receive_payment = _has_permission("Payment Entry", "create")
+		elif entry.docstatus == 1:
+			can_receive_payment = (
+				_has_permission("Payment Entry", "read")
+				and _has_permission("Payment Entry", "submit")
+			)
 
 	folio_open = bool(folio and folio.status != "Closed")
 	folio_can_capture = (not folio) or folio_open
@@ -1285,9 +1297,9 @@ def deposit_state(res) -> dict:
 			and collected <= eps
 			and status not in ("Waived", "Refunded", "Withheld", "Collected", "Held")
 		),
-		"can_increment": bool(can_write_hold and in_play),
+		"can_increment": bool(can_write_hold and not entry and in_play),
 		"can_capture": bool(can_receive_payment and folio_can_capture),
-		"can_release": bool(can_write_hold),
+		"can_release": bool(can_write_hold and not entry),
 		"blocks_checkout_card_hold": preauth_blocks_checkout,
 		# check-out refuses while the guest is owed held cash or has an active
 		# uncaptured card pre-authorization hold

@@ -2719,3 +2719,4 @@ Incremental pre-authorization for {0},Augmentation de la préautorisation pour {
 Pending Capture Payment Entry,Écriture de paiement en attente de validation
 Security deposit pre-authorization for {0},Préautorisation de caution pour {0}
 Use submitted capture Payment Entry {0} and its original amount.,Utilisez l’écriture de paiement validée {0} et son montant d’origine.
+The card hold cannot be released or increased while capture Payment Entry {0} exists.,La préautorisation ne peut être ni libérée ni augmentée tant que l’écriture de paiement {0} existe.
