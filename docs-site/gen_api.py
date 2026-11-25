@@ -185,7 +185,23 @@ def sample_value(name, default, required):
     return None
 
 
+def pin_http_contract():
+    """Read the request guard's PIN fields without importing Frappe."""
+    path = os.path.join(APP, "authz.py")
+    with open(path, encoding="utf-8") as src:  # nosemgrep: frappe-security-file-traversal -- fixed source path
+        tree = ast.parse(src.read())
+    assignments = {
+        target.id: node.value
+        for node in tree.body if isinstance(node, ast.Assign)
+        for target in node.targets if isinstance(target, ast.Name)
+    }
+    pin_fields = ast.literal_eval(assignments["_PIN_FIELDS"].args[0])
+    http_fields = ast.literal_eval(assignments["_PIN_HTTP_FIELDS"])
+    return pin_fields, http_fields
+
+
 def collect():
+    pin_fields, pin_http_fields = pin_http_contract()
     modules = []
     for mod, folder, note in MODULES:
         path = os.path.join(APP, f"{mod}.py")
@@ -199,11 +215,16 @@ def collect():
             if not wl or node.name.startswith("_"):
                 continue
             doc = ast.get_docstring(node) or ""
+            endpoint_params = params(node)
+            if wire_fields := pin_http_fields.get(f"kamra.{mod}.{node.name}"):
+                # The request guard accepts only these credential keys over HTTP.
+                endpoint_params = [param for param in endpoint_params if param[0] not in pin_fields]
+                endpoint_params.extend((name, None, True) for name in wire_fields)
             eps.append({
                 "module": mod, "name": node.name, "guest": guest,
                 "method": "POST" if methods == ["POST"] else "GET/POST",
                 "roles": roles, "doc": doc.strip(),
-                "params": params(node),
+                "params": endpoint_params,
             })
         modules.append({"module": mod, "folder": folder, "note": note,
                         "endpoints": eps})
