@@ -35,10 +35,12 @@ def after_migrate():
 
 def ensure_code_masters():
 	"""Seed the Market / Origin / Cancellation Reason / Payment Method /
-	Meal Plan Code / Payer Type / Check-in Request masters (missing rows
-	only; a hotel's edits are kept)."""
+	Meal Plan Code / Payer Type / Check-in Request masters and default
+	Transaction Codes (missing rows only; a hotel's edits are kept)."""
+	from kamra.ledger import ensure_default_transaction_codes
 	from kamra.masters import ensure_masters
 	ensure_masters()
+	ensure_default_transaction_codes()
 
 
 def ensure_user_fields():

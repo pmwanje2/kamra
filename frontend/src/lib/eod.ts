@@ -196,6 +196,12 @@ export const runNightAudit = (property: string) =>
     already_ran?: boolean
     status?: string
     room_charges_posted?: number
+    fixed_charges_posted?: number
+    fixed_charges_amount?: number
+    package_elements_posted?: number
+    package_elements_amount?: number
+    package_breakage_count?: number
+    package_breakage_total?: number
     amount_posted?: number
     no_shows_flagged?: number
     next_business_date?: string

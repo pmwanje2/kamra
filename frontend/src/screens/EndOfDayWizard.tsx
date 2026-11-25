@@ -23,6 +23,7 @@ import { call, getCurrentProperty, setCurrentProperty } from "../lib/api"
 import CheckOutDialog from "../components/CheckOutDialog"
 import CheckInDialog from "../components/CheckInDialog"
 import NoShowDialog from "../components/NoShowDialog"
+import AuditSummaryCard from "../components/AuditSummaryCard"
 import {
   eodAcknowledge,
   eodProgress,
@@ -47,7 +48,7 @@ import { AuditPackView, PackMoney, sessionCols, DataTable, fmtDay } from "./Audi
 
 
 const money = (n: unknown, currency?: string) =>
-  n === null || n === undefined || n === "" ? "-" : fmtAmount(n, currency)
+  n === null || n === undefined || n === "" ? "-" : fmtAmount(n, currency || undefined)
 
 const zeroBalanceEps = (currency?: string) => Math.min(moneyEps(currency), 0.005)
 
@@ -936,14 +937,37 @@ export default function EndOfDayWizard() {
         <>
           <Message tone="ok">
             {runOut
-              ? t("Posted {n} room nights ({amount}), {ns} no-shows. The business date is now {next}.", {
+              ? t("Posted {n} room nights, {pkg} package splits, {fc} fixed charges ({amount}), {ns} no-shows. The business date is now {next}.", {
                   n: Number(runOut.room_charges_posted ?? 0),
+                  pkg: Number(runOut.package_elements_posted ?? 0),
+                  fc: Number(runOut.fixed_charges_posted ?? 0),
                   amount: `${wizardSymbol}${wizardMoney(runOut.amount_posted)}`,
                   ns: Number(runOut.no_shows_flagged ?? 0),
                   next: fmtDay(runOut.next_business_date),
                 })
               : t("Room and tax were posted and the business date rolled.")}
           </Message>
+          {runOut && (
+            <AuditSummaryCard
+              currency={state.currency}
+              summary={{
+                room_charges_posted: Number(runOut.room_charges_posted ?? 0),
+                package_elements_posted: Number(runOut.package_elements_posted ?? 0),
+                package_elements_amount:
+                  runOut.package_elements_amount !== undefined
+                    ? Number(runOut.package_elements_amount)
+                    : undefined,
+                fixed_charges_posted: Number(runOut.fixed_charges_posted ?? 0),
+                fixed_charges_amount: Number(runOut.fixed_charges_amount ?? 0),
+                package_breakage_count:
+                  runOut.package_breakage_count !== undefined
+                    ? Number(runOut.package_breakage_count)
+                    : undefined,
+                package_breakage_total: Number(runOut.package_breakage_total ?? 0),
+                amount_posted: Number(runOut.amount_posted ?? 0),
+              }}
+            />
+          )}
           <AuditPackView audit={state.audit} embedded />
         </>
       ) : (

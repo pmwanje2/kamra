@@ -271,6 +271,29 @@ class SplitAndMoveAuditTestCase(AuditTestCase):
 		self.assertAlmostEqual(kept.total, gross - 1500, places=6)
 		self.assert_conserved(night.name, amount=night.amount, tax=tax, total=gross)
 
+	def test_r7_tax_inclusive_night_split_by_amount_and_kwd_conserves_exact_tax(self):
+		# 1. INR 5000 @ 12% tax-inclusive night (base=4464.29, tax=535.7148) split by amount
+		night = self.taxed_night(5000, 12)
+		folio_mod.split_charge(self.main, night.name, self.extra, amount=1000)
+		self.assert_conserved(night.name, amount=night.amount, tax=night.gst_amount, total=night.total)
+
+		# 2. KWD (3dp) 50.125 @ 12% tax-inclusive night split by percent=30 conserves exact base/tax/total
+		make_property(PROP_A, business_date=TODAY, country="Kuwait", currency="KWD", rates_include_tax=1)
+		kwd_rt = make_room_type(PROP_A, "KINC12", base_price=50.125, tax_percent=12)
+		self.res = make_reservation(PROP_A, kwd_rt, d(-1), d(1), status="Checked In",
+		                            room=make_room(PROP_A, kwd_rt, "104"))
+		self.main = guest_folio(self.res.name)
+		self.extra = folio_mod.split_folio(self.res.name, "Extra")
+		folio_mod.post_room_night(frappe.get_doc("Reservation", self.res.name), d(-1))
+		kwd_night = next(c for c in self.lines(self.main) if c.charge_type == "Room")
+		folio_mod.split_charge(self.main, kwd_night.name, self.extra, percent=30)
+		self.assert_conserved(
+			kwd_night.name,
+			amount=kwd_night.amount,
+			tax=kwd_night.gst_amount,
+			total=kwd_night.total,
+		)
+
 	def test_a_shilling_night_splits_to_whole_shillings(self):
 		night = self.taxed_night(500000, 18, currency="UGX")
 		folio_mod.split_charge(self.main, night.name, self.extra, percent=33.3333)

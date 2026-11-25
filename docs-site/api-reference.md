@@ -5,7 +5,7 @@ outline: 2
 # REST API reference
 
 Every endpoint below is a whitelisted function - the same governed layer
-the UI and the AI use. **516 endpoints**, generated from the source
+the UI and the AI use. **531 endpoints**, generated from the source
 (`docs-site/gen_api.py`), so this page always matches the code.
 
 ## Calling convention
@@ -204,6 +204,8 @@ same key returns the first result instead of posting again.
 | `reference` | no | `None` |
 | `pin` | no | `None` |
 | `idempotency_key` | no | `None` |
+| `currency` | no | `None` |
+| `quote_id` | no | `None` |
 
 ### `kamra.api.deposit_payment_link`
 
@@ -553,6 +555,7 @@ Folio for a reservation - opens one if the guest is checked in.
 | `posting_date` | no | `None` |
 | `is_alcohol` | no | `0` |
 | `reservation` | no | `None` |
+| `transaction_code` | no | `None` |
 
 ### `kamra.api.add_folio_payment`
 
@@ -565,7 +568,7 @@ refund_folio_payment so they can never be entered by accident.
 
 currency: leave out (or pass the home currency) for a normal payment.
 A foreign code means `amount` is the foreign money received (cash or a
-bank transfer); the server converts it at today's buy rate, posts the
+bank transfer); the server converts it at the published settlement rate, posts the
 home amount and keeps the foreign amount and rate on the row.
 A retry with the same idempotency_key returns the folio without
 posting again.
@@ -580,6 +583,7 @@ posting again.
 | `kind` | no | `'Payment'` |
 | `currency` | no | `None` |
 | `idempotency_key` | no | `None` |
+| `quote_id` | no | `None` |
 
 ### `kamra.api.add_folio_payments`
 
@@ -599,6 +603,45 @@ were posted.
 | --- | --- | --- |
 | `payments` | yes |  |
 | `pin` | no | `None` |
+
+### `kamra.api.erp_correction_context`
+
+**GET/POST**
+
+safe_exec creates separate flags. Expose only the active method's verified actors.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `api_method` | yes |  |
+
+### `kamra.api.payment_correction_options`
+
+**GET/POST** · roles: `Front Desk`, `Finance`
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `folio` | yes |  |
+| `payment_row` | yes |  |
+
+### `kamra.api.correct_folio_payment`
+
+**POST** · roles: `Front Desk`, `Finance`
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `folio` | yes |  |
+| `payment_row` | yes |  |
+| `action` | no | `None` |
+| `reason_code` | no | `None` |
+| `reason` | no | `None` |
+| `idempotency_key` | no | `None` |
+| `pin` | no | `None` |
+| `supervisor_pin` | no | `None` |
+| `supervisor_user` | no | `None` |
+| `refund_amount` | no | `None` |
+| `destination_mode` | no | `None` |
+| `action_type` | no | `None` |
+| `reason_note` | no | `None` |
 
 ### `kamra.api.refund_folio_payment`
 
@@ -685,9 +728,12 @@ idempotency_key returns the first correction.
 
 **GET/POST** · roles: `Finance`, `Front Desk`, `Kamra Agent`
 
-Post a charge to a stay letting the billing rules pick the folio -
-corporate room/meals land on the Company folio, alcohol and anything
-unruled lands on the guest. The agent-facing way to post charges.
+Post a charge to a stay letting its routing pick the window - its
+Routing Instructions first, then the billing rules: corporate room and
+meals land on the company's window, anything unrouted on the guest's.
+A routing limit splits the charge (`parts`). Liquor posts under its own
+transaction code (default 2010) and bills where the rules send that code.
+The agent-facing way to post charges.
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -697,12 +743,59 @@ unruled lands on the guest. The agent-facing way to post charges.
 | `amount` | yes |  |
 | `gst_rate` | no | `0` |
 | `is_alcohol` | no | `0` |
+| `transaction_code` | no | `None` |
+
+### `kamra.api.open_folio_window`
+
+**POST**
+
+Open the next billing window (OPERA windows 1-8, up to the property's
+folio_windows) on a stay or on a group's master bill, with its own payee
+and payment method. Each window closes to its own invoice. Allowed to
+whoever may create a Folio (native permissions).
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `reservation` | no | `None` |
+| `group_booking` | no | `None` |
+| `payee_type` | no | `None` |
+| `payee_company` | no | `None` |
+| `payee_agent` | no | `None` |
+| `payment_method` | no | `None` |
+| `bill_to_name` | no | `None` |
+
+### `kamra.api.route_outlet_charge`
+
+**POST**
+
+For the accounting bridge's room charge: the open folio an outlet
+check of this transaction code lands on for this stay, by the stay's
+routing (OPERA routes a Simphony check by its transaction code). An
+outlet check is a fiscal receipt, so it routes whole or not at all.
+Returns `{folio, window_no, routing_instruction}` so the copied line
+carries the instruction and its usage counts. `is_alcohol` was removed
+in K1 (beverage/alcohol items carry their own transaction code, default
+2010), and unknown parameters (including legacy `is_alcohol`) are
+refused rather than silently ignored, even over `frappe.call`. Allowed
+to whoever may write a Folio (native permissions); posts nothing. The
+code must be an enabled revenue code with a charge type. `dry_run` (a
+draft check's lookup) opens no bill: `folio` is None when the window
+would open one.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `reservation` | yes |  |
+| `transaction_code` | yes |  |
+| `amount` | yes |  |
+| `dry_run` | no | `0` |
 
 ### `kamra.api.set_billing_rules`
 
 **GET/POST** · roles: `Finance`, `Front Desk`, `Kamra Agent`
 
-Replace a company's billing rules. rules = [{charge_type, pay_by}].
+Replace a company's billing rules (OPERA profile routing). rules =
+[{charge_type | transaction_code, pay_by}]: a rule names a charge type,
+every code of it, or one transaction code.
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -723,7 +816,7 @@ Replace a company's billing rules. rules = [{charge_type, pay_by}].
 
 What this company pays when it has no billing rules: the property's
 `default_company_billing` for a credit company, nothing otherwise.
-`charge_types` is None when every charge type (except liquor) is covered.
+`charge_types` is None when every charge type is covered.
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -816,7 +909,8 @@ reason). A retry with the same idempotency_key returns the first move.
 
 **GET/POST** · roles: `Finance`, `Front Desk`, `Kamra Agent`
 
-Split one charge line between two folios - by percent or amount.
+Split one charge line in two - by percent, amount or quantity - on
+its own folio or onto another of the stay or group.
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -825,6 +919,7 @@ Split one charge line between two folios - by percent or amount.
 | `to_folio` | yes |  |
 | `percent` | no | `None` |
 | `amount` | no | `None` |
+| `qty` | no | `None` |
 
 ### `kamra.api.open_guest_bills`
 
@@ -912,7 +1007,8 @@ member reservation's folios, with balances.
 **POST** · roles: `Front Desk`, `Revenue Manager`, `Kamra Agent`
 
 Make this room the group's main room: its guest pays for the group.
-An open group bill moves with it (re-anchored to the new main room).
+The posting master keeps no stay; the main room's guest becomes its
+window 1 payee (a company group keeps its company as payee).
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -1089,6 +1185,8 @@ Interim invoice mid-stay: freeze the paid folio, open a fresh one.
 **POST** · roles: `Finance`, `Front Desk`, `Kamra Agent`
 
 Void an invoice into the register and reopen the folio for correction.
+An invoice the ERPNext bridge issued goes to the bridge's credit and
+re-bill instead; the folio is not reopened here.
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -1115,8 +1213,10 @@ Statement fields (stable for integrations):
 - `lines`: each charge line: row, posting_date, stay_date,
   charge_type, description, qty, rate, amount (pre-tax), gst_rate,
   gst_amount, total, service_code, transaction_code, gl_code (as
-  posted), corrects_row (a correction's original line), reservation,
-  is_alcohol, auto_posted
+  posted), corrects_row (a correction's original line), reversal_of
+  and void_reason (a void's or a split's reversal), split_of (the line
+  a split part or reversal came from), reservation, is_alcohol,
+  auto_posted
 - `payments`: row, posting_date, payment_kind, mode, amount (refunds
   negative), reference, currency, fx_amount, exchange_rate,
   transaction_code, gl_code, refund_of (the payment a refund is against)
@@ -1127,6 +1227,7 @@ Statement fields (stable for integrations):
 - `tax_summary`: per rate, taxable, total_tax and the country's parts
 - `allocations`: company payments that cleared this bill: payment,
   account, posting_date, reference, amount
+- `credited`: what the issued credit notes on this invoice add up to
 - `folio`, `bill_to`, `guest`, `stay`, `property`, `document`
 
 | Param | Required | Default |
@@ -1480,7 +1581,10 @@ books nights at the desk's own prices, as in create_booking.
 | `ota_ref` | no | `None` |
 | `ota_total` | no | `0` |
 | `ota_commission_pct` | no | `None` |
+| `currency` | no | `None` |
+| `quote_id` | no | `None` |
 | `night_prices` | no | `None` |
+| `extra_beds` | no | `0` |
 
 ### `kamra.api.upload_occupant_id`
 
@@ -1576,13 +1680,16 @@ Safe to call again and again: opening the sheet writes nothing.
 
 ### `kamra.api.reverse_check_in`
 
-**POST** · roles: `Front Desk`
+**POST** · roles: `Front Desk`, `Finance`, `Kamra Agent`
 
-Undo a check-in made by mistake (wrong guest, wrong room), the same
-business day and before anything is posted or paid. The stay goes back
-to Confirmed (arrival) with its room; the room is released and marked
-Dirty so housekeeping inspects it before it is sold again. From there
-the desk checks the guest in again or cancels the booking.
+Undo a check-in made by mistake (wrong guest, wrong room), on the
+arrival's business date and before anything is posted, open or paid.
+The stay goes back to Confirmed (arrival) with its room; the room is
+released and marked Dirty so housekeeping inspects it before it is sold
+again. From there the desk checks the guest in again or cancels the
+booking. An agent acts for a Front Desk, Finance or Hotel Admin user,
+never passes a cashier PIN and is refused where the property requires
+one; the user it acts for is the logged actor.
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -1663,6 +1770,7 @@ role permissions actually removes the ability.
 | --- | --- | --- |
 | `room` | yes |  |
 | `status` | yes |  |
+| `reason` | no | `None` |
 
 ### `kamra.api.room_board`
 
@@ -1846,6 +1954,51 @@ Manager / admins only).
 | `rate_mode` | no | `'destination'` |
 | `agreed_rate` | no | `None` |
 
+### `kamra.api.rate_override_preview`
+
+**GET/POST** · roles: `Front Desk`, `Revenue Manager`, `Kamra Agent`
+
+What an agreed nightly rate would do to this stay before the desk
+confirms it: the new nightly rates and total, the cut against what the
+guest pays now, the property's limit for the front desk and whether a
+supervisor has to sign it off. Nothing is written.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `reservation` | yes |  |
+| `agreed_rate` | yes |  |
+
+### `kamra.api.set_agreed_rate`
+
+**POST** · roles: `Front Desk`, `Revenue Manager`, `Kamra Agent`
+
+Agree a different nightly rate for one stay, in place: the guest keeps
+their room, only this stay's nightly rates change (locked as usual, so
+the folio and check-out bill it). The rate card - room type, season,
+tariff - is never touched. Nights already charged follow the property's
+rate-change policy.
+
+reason_code is a Rate Change reason (RATE-PROMO, RATE-MGR, ...).
+Revenue Manager / Hotel Admin set any positive rate. The front desk may
+only lower it, by up to rate_override_limit_pct (Finance settings);
+a bigger cut, or a reason code that requires a supervisor, is signed
+off by a Hotel Admin or Finance user with their PIN (supervisor + pin).
+An AI agent may only apply a cut within the front desk's limit, for a
+signed-in Front Desk / Revenue Manager / Hotel Admin; anything that
+needs a supervisor (and any supervisor + pin it passes) is refused, for
+a manager to approve on the hotel screen.
+Call rate_override_preview first and pass confirm_price=1.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `reservation` | yes |  |
+| `agreed_rate` | yes |  |
+| `reason_code` | yes |  |
+| `reason` | no | `''` |
+| `confirm_price` | no | `0` |
+| `pin` | no | `None` |
+| `supervisor` | no | `None` |
+
 ### `kamra.api.room_move_preview`
 
 **GET/POST** · roles: `Front Desk`, `Kamra Agent`
@@ -1995,6 +2148,7 @@ refused.
 | `check_in_time` | no | `None` |
 | `check_out_time` | no | `None` |
 | `night_prices` | no | `None` |
+| `extra_beds` | no | `0` |
 
 ### `kamra.api.create_booking`
 
@@ -2346,6 +2500,35 @@ the terms (cutoff, allowed shortfall, who pays). Nothing is posted.
 | Param | Required | Default |
 | --- | --- | --- |
 | `group_booking` | yes |  |
+
+### `kamra.api.booking_quotation`
+
+**GET/POST** · roles: `Front Desk`, `Revenue Manager`, `Hotel Admin`
+
+One booking's quotation / proforma: the hotel, the stay, each night's
+booked rate, the totals and deposit, and the cancellation terms. The
+same layout as group_quotation. Nothing is posted.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `reservation` | yes |  |
+
+### `kamra.api.email_booking_quotation`
+
+**POST** · roles: `Front Desk`, `Revenue Manager`, `Hotel Admin`
+
+Email the booking's quotation to the booker, as a PDF, through
+Frappe's own email: a Communication logged on the Reservation and sent
+by the site's outgoing account. It goes to the address on record only
+(the guest profile's email); no other recipient, cc or bcc can be given.
+The mail is queued (status "Queued"); Frappe's Email Queue delivers it.
+Refuses with QUOTE_NO_EMAIL_ACCOUNT, QUOTE_NO_RECIPIENT_EMAIL,
+QUOTE_BOOKING_CLOSED, or QUOTE_RECENTLY_SENT when the same version of
+the quotation went out less than a minute ago.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `reservation` | yes |  |
 
 ### `kamra.api.group_detail`
 
@@ -2700,7 +2883,7 @@ check-in's decision; a blocked room is shown but cannot be charged.
 
 Point a running bill (a dine-in table, say) at an in-house guest's
 room, so Deliver posts it to their folio through the same controller
-path as room service - billing rules and the alcohol rule included.
+path as room service - routing and billing rules included.
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -2713,8 +2896,8 @@ path as room service - billing rules and the alcohol rule included.
 
 A bill charged to the wrong room: move it to the right one, the same
 business day it was posted. The charge leaves the first guest's folio
-(ledger reversed) and lands on the right guest's, by the same billing
-rules as room service, so liquor never reaches a company bill. Later
+(ledger reversed) and lands on the right guest's, by the same routing
+and billing rules as room service (liquor like any other line). Later
 than that day it is a correction for Finance (allowance, then repost).
 
 | Param | Required | Default |
@@ -3381,6 +3564,61 @@ Only items that matter for the modules this property runs.
 
 > These explain a price; they never set one. The quote is the only source of a charge.
 
+### `kamra.rates.room_type_tariffs`
+
+**GET/POST**
+
+Read the published tariff panel for a room type the caller can read.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `room_type` | yes |  |
+
+### `kamra.rates.list_contract_tariffs`
+
+**GET/POST**
+
+Read the property's tariff directory if the integration is installed.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `property` | yes |  |
+
+### `kamra.rates.propose_contract_tariff`
+
+**POST** · roles: `Revenue Manager`, `Hotel Admin`
+
+Propose a new version; the integration owns effective-date validation.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `property` | yes |  |
+| `price_list` | yes |  |
+| `item_code` | yes |  |
+| `price_list_rate` | yes |  |
+| `valid_from` | yes |  |
+| `valid_upto` | no | `None` |
+
+### `kamra.rates.approve_contract_tariff`
+
+**POST** · roles: `Hotel Admin`
+
+Release an eligible draft through the integration's approval workflow.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `item_price` | yes |  |
+
+### `kamra.rates.discard_contract_tariff`
+
+**POST** · roles: `Hotel Admin`
+
+Discard a draft through the same property-scoped integration.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `item_price` | yes |  |
+
 ### `kamra.rates.rate_calendar`
 
 **GET/POST**
@@ -3415,6 +3653,8 @@ rate, and what the voucher would do. Each total is a real quote.
 | `children` | no | `0` |
 | `meal_plan` | no | `None` |
 | `voucher_code` | no | `None` |
+| `rate_plan` | no | `None` |
+| `extra_beds` | no | `0` |
 
 
 ## Service tickets (assign, resolve, timeline)
@@ -4317,11 +4557,8 @@ have to agree on what it was called.
 **POST** · roles: `Finance`
 
 Push the chargeable lines onto a bill. A function tied to a group
-rides the group's master folio; otherwise pass one explicitly.
-
-Alcohol is reported back rather than posted when the bill is a company
-or group folio - the same rule the folio itself enforces - so it can be
-settled separately instead of failing the whole post.
+rides the group's master folio; otherwise pass one explicitly. Liquor
+posts with the rest: the bill chosen is the one that pays the function.
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -4581,6 +4818,7 @@ agreed.
 | `cost_rate` | no | `0` |
 | `is_alcohol` | no | `0` |
 | `notes` | no | `None` |
+| `transaction_code` | no | `None` |
 
 ### `kamra.banquet.function_economics`
 
@@ -5295,7 +5533,7 @@ cannot drift from what actually happened.
 
 **GET/POST** · roles: `Finance`, `Revenue Manager`, `Night Auditor`, `Kamra Agent`
 
-The daily flash: yesterday's performance, month to date, today's
+The daily flash: performance for the requested date, month to date,
 movement, collections by mode, and the 7-day outlook. With from_date,
 the day figures, trend, movement and collections cover from_date..date.
 
@@ -5737,14 +5975,29 @@ nights: 'tonight' | 'entire' | integer string of nights.
 
 **POST** · roles: `Front Desk`, `Finance`, `Kamra Agent`
 
+A pro forma bill: an estimate, never an invoice. For a stay still in
+progress (Checked In, or Confirmed with a deposit folio) it adds the
+nights check-out will post as `projected_lines` (each projected: True)
+and an `estimate` of posted + projected - worked out by the writer
+check-out uses, in a savepoint that is always rolled back, so nothing
+is posted. include_projected=0 prints the posted folio only.
+
 | Param | Required | Default |
 | --- | --- | --- |
 | `folio` | yes |  |
 | `notes` | no | `None` |
+| `include_projected` | no | `1` |
 
 ### `kamra.ledger.issue_credit_note`
 
-**POST** · roles: `Finance`, `Hotel Admin`, `Kamra Agent`
+**POST**
+
+Credit an issued invoice. Credit notes never add up to more than the
+invoice (OPERA's Credit Bill credits at most the bill). The folio and
+its credit notes are read under lock, the notes with a locking read, so
+a credit another desk committed meanwhile is counted (or, on MariaDB
+11.8 with innodb_snapshot_isolation, the request is refused with 1020
+and tried again) - never credited twice over.
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -5802,8 +6055,9 @@ Post the same charge to many folios (group / event).
 **POST** · roles: `Front Desk`, `Night Auditor`, `Kamra Agent`
 
 Check out and close the guest folio in one step. check_out settles the
-stay the one way: the company's folio (Company, or the group master)
-moves to the city ledger when the company has credit, and the guest's
+stay the one way: the stay's Company folio moves to the city ledger when
+the company has credit (a group's master bill is settled with the
+group), and the guest's
 own folio must already be paid - liquor and extras are never billed to
 the company.
 
@@ -5889,6 +6143,18 @@ already set for today is kept.
 | `guest` | no | `None` |
 | `pin` | no | `None` |
 
+### `kamra.ledger.payment_rate`
+
+**GET/POST** · roles: `Front Desk`, `Finance`, `Night Auditor`, `Kamra Agent`
+
+Resolve the Finance-published settlement rate for this property's open business day.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `property` | yes |  |
+| `currency` | yes |  |
+| `amount` | no | `None` |
+
 ### `kamra.ledger.folio_in_currency`
 
 **GET/POST** · roles: `Front Desk`, `Finance`, `Night Auditor`, `Kamra Agent`
@@ -5912,7 +6178,7 @@ rate. Display only: the bill and tax invoice stay in home currency.
 
 ### `kamra.ledger.list_reason_codes`
 
-**GET/POST** · roles: `Front Desk`, `Finance`, `F&B Manager`, `Kamra Agent`
+**GET/POST** · roles: `Front Desk`, `Finance`, `F&B Manager`, `Kamra Agent`, `Revenue Manager`
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -7195,9 +7461,11 @@ Post one POS ticket to an in-house guest's bill.
 
 `ticket_id` is the idempotency key: the same ticket again returns the
 first posting with duplicate=true. Name the stay by room (number or id)
-and/or reservation. The billing rules choose the folio; anything with
-alcohol (is_alcohol=1) always goes to the guest's own folio, never the
-company's. Tax is the hotel's rule for the charge type, not the POS's.
+and/or reservation. Pass `transaction_code` to post under a specific
+revenue code (Simphony-OPERA mapping); otherwise `is_alcohol=1` uses
+the property's beverage transaction code (default 2010). The routing
+and billing rules choose the folio by transaction code. Tax is the
+hotel's rule for the charge type, not the POS's.
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -7211,6 +7479,7 @@ company's. Tax is the hotel's rule for the charge type, not the POS's.
 | `is_alcohol` | no | `0` |
 | `tax_rate` | no | `0` |
 | `outlet_name` | no | `None` |
+| `transaction_code` | no | `None` |
 
 
 ## Service accounts (scoped keys for connected apps)

@@ -14,6 +14,7 @@
   "payment_mode",
   "subgroup",
   "default_tax_rate",
+  "tax_exempt",
   "is_alcohol",
   "charge_type",
   "disabled"
@@ -69,7 +70,14 @@
    "fieldname": "default_tax_rate",
    "fieldtype": "Percent",
    "label": "Default Tax %",
-   "default": "0"
+   "description": "Leave blank to follow the country pack or outlet rate. Set 0 or tick Tax Exempt for an explicit 0% rate."
+  },
+  {
+   "fieldname": "tax_exempt",
+   "fieldtype": "Check",
+   "label": "Tax Exempt (0%)",
+   "default": "0",
+   "description": "Always tax this code at 0% on standalone properties instead of the country or outlet rate."
   },
   {
    "fieldname": "is_alcohol",
@@ -106,7 +114,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-11-12 12:00:00.000000",
+ "modified": "2026-11-24 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Transaction Code",

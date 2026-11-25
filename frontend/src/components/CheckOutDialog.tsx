@@ -6,8 +6,9 @@ import { checkOutWithCredit } from "./CreditCheckout"
 import { useCashierAuth } from "../lib/cashierAuth"
 import { lateFeeDefault, lateFeeExceedsNight } from "../lib/lateFee"
 import { serverError } from "../lib/resource"
+import { ruleKey, ruleLabel, type BillingRuleRow } from "../lib/billingRules"
 import { toFullPath } from "../lib/routing"
-import { useLocale, fmtAmount, moneyEps, moneyStep, sellsAlcohol } from "../lib/money"
+import { useLocale, fmtAmount, moneyEps, moneyStep } from "../lib/money"
 import { useT, t as translate, useUILanguage } from "../lib/i18n"
 import { cn } from "../lib/utils"
 import { Button } from "./ui/button"
@@ -87,7 +88,7 @@ interface BillSplit {
   company_pays: number
   company: string | null
   company_name: string | null
-  rules: { charge_type: string; pay_by: string }[]
+  rules: BillingRuleRow[]
   explained: boolean
 }
 
@@ -185,7 +186,7 @@ export interface CheckoutContext {
   billing: {
     company: string | null
     company_name: string | null
-    rules: { charge_type: string; pay_by: string }[]
+    rules: BillingRuleRow[]
   }
   city_ledger: { folio: string; company: string; company_name: string; amount: number }[]
   credit: { checks: CreditCheck[]; ok: boolean; blocked: boolean; can_override: boolean } | null
@@ -830,18 +831,13 @@ export default function CheckOutDialog(props: {
                       {ctx.bill_split.rules.length > 0 ? (
                         <ul className="space-y-0.5 text-xs text-zinc-600">
                           {ctx.bill_split.rules.map((rule) => (
-                            <li key={rule.charge_type}>
-                              {t(rule.charge_type)} →{" "}
+                            <li key={ruleKey(rule)}>
+                              {ruleLabel(rule, t)} →{" "}
                               {rule.pay_by === "Company"
                                 ? t("Company")
                                 : t("Guest")}
                             </li>
                           ))}
-                          {sellsAlcohol() && (
-                            <li className="text-zinc-500">
-                              {t("Alcohol always stays with the guest.")}
-                            </li>
-                          )}
                         </ul>
                       ) : (
                         <p className="text-xs text-zinc-500">
@@ -1225,14 +1221,12 @@ export default function CheckOutDialog(props: {
                 {ctx.billing.rules.length > 0 && (
                   <ul className="mt-2 space-y-0.5 text-xs text-zinc-600">
                     {ctx.billing.rules.map((rule) => (
-                      <li key={rule.charge_type}>{t(rule.charge_type)}: {t(rule.pay_by)}</li>
+                      <li key={ruleKey(rule)}>{ruleLabel(rule, t)}: {t(rule.pay_by)}</li>
                     ))}
                   </ul>
                 )}
                 <p className="mt-2 text-xs text-zinc-500">
-                  {sellsAlcohol()
-                    ? t("At check-out this moves to the company's account (city ledger). Alcohol always stays with the guest.")
-                    : t("At check-out this moves to the company's account (city ledger).")}
+                  {t("At check-out this moves to the company's account (city ledger).")}
                 </p>
               </Section>
               {credit && !credit.ok && (

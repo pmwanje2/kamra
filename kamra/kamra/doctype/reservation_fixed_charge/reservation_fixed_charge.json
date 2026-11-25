@@ -1,0 +1,146 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-11-24 19:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "transaction_code",
+  "charge_type",
+  "description",
+  "qty",
+  "unit_price",
+  "frequency",
+  "stay_day_n",
+  "day_of_week",
+  "start_date",
+  "end_date",
+  "window_no",
+  "supplement",
+  "active",
+  "last_posted_business_date",
+  "post_count"
+ ],
+ "fields": [
+  {
+   "fieldname": "transaction_code",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Transaction Code",
+   "options": "Transaction Code",
+   "reqd": 1
+  },
+  {
+   "fieldname": "charge_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Charge Type",
+   "options": "\nRoom\nMeal Plan\nFood & Beverage\nMinibar\nLaundry\nSpa\nTaxi\nEarly Check-in\nLate Checkout\nEarly Departure\nCleaning Fee\nExtra Guests\nPet Charge\nRoom Levy\nDiscount\nMisc\nAllowance\nRate Adjustment\nOpening Balance"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Description",
+   "reqd": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Qty",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "unit_price",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Unit Price",
+   "reqd": 1
+  },
+  {
+   "default": "Daily",
+   "fieldname": "frequency",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Frequency",
+   "options": "Daily\nWeekly\nStay Day N\nOn Arrival\nOn Departure",
+   "reqd": 1
+  },
+  {
+   "default": "1",
+   "depends_on": "eval:doc.frequency=='Stay Day N'",
+   "fieldname": "stay_day_n",
+   "fieldtype": "Int",
+   "label": "Stay Day N"
+  },
+  {
+   "depends_on": "eval:doc.frequency=='Weekly'",
+   "fieldname": "day_of_week",
+   "fieldtype": "Select",
+   "label": "Day of Week",
+   "options": "\nMonday\nTuesday\nWednesday\nThursday\nFriday\nSaturday\nSunday"
+  },
+  {
+   "fieldname": "start_date",
+   "fieldtype": "Date",
+   "label": "Start Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "end_date",
+   "fieldtype": "Date",
+   "label": "End Date",
+   "reqd": 1
+  },
+  {
+   "default": "1",
+   "description": "Target folio window (1-8).",
+   "fieldname": "window_no",
+   "fieldtype": "Int",
+   "label": "Window"
+  },
+  {
+   "fieldname": "supplement",
+   "fieldtype": "Data",
+   "label": "Supplement"
+  },
+  {
+   "default": "1",
+   "fieldname": "active",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Active"
+  },
+  {
+   "fieldname": "last_posted_business_date",
+   "fieldtype": "Date",
+   "label": "Last Posted Date",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "post_count",
+   "fieldtype": "Int",
+   "label": "Post Count",
+   "read_only": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-11-24 19:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Kamra",
+ "name": "Reservation Fixed Charge",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

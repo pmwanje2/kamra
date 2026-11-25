@@ -1,0 +1,120 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-11-24 19:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "element_name",
+  "element_type",
+  "transaction_code",
+  "charge_type",
+  "allowance_basis",
+  "unit_allowance",
+  "posting_rhythm",
+  "included_in_rate",
+  "folio_display_mode",
+  "tax_inclusive",
+  "gst_rate"
+ ],
+ "fields": [
+  {
+   "fieldname": "element_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Element Name",
+   "reqd": 1
+  },
+  {
+   "default": "Meal",
+   "fieldname": "element_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Element Type",
+   "options": "Meal\nSpa\nTransport\nF&B Allowance\nUtility/Amenity",
+   "reqd": 1
+  },
+  {
+   "fieldname": "transaction_code",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Transaction Code",
+   "options": "Transaction Code",
+   "reqd": 1
+  },
+  {
+   "fieldname": "charge_type",
+   "fieldtype": "Select",
+   "label": "Charge Type",
+   "options": "\nRoom\nMeal Plan\nFood & Beverage\nMinibar\nLaundry\nSpa\nTaxi\nEarly Check-in\nLate Checkout\nEarly Departure\nCleaning Fee\nExtra Guests\nPet Charge\nRoom Levy\nDiscount\nMisc\nAllowance\nRate Adjustment\nOpening Balance"
+  },
+  {
+   "default": "Per Adult Night",
+   "fieldname": "allowance_basis",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Allowance Basis",
+   "options": "Per Adult Night\nPer Child Night\nPer Person Night\nPer Room Night\nFixed Per Stay",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "unit_allowance",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Unit Allowance",
+   "reqd": 1
+  },
+  {
+   "default": "Every Night",
+   "fieldname": "posting_rhythm",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Posting Rhythm",
+   "options": "Every Night\nFirst Night\nLast Night",
+   "reqd": 1
+  },
+  {
+   "default": "1",
+   "description": "Checked: allowance is deducted from the package rate to derive net room revenue. Unchecked: posted as a separate add-on on top of room revenue.",
+   "fieldname": "included_in_rate",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Included in Rate"
+  },
+  {
+   "default": "Inclusive",
+   "fieldname": "folio_display_mode",
+   "fieldtype": "Select",
+   "label": "Folio Display Mode",
+   "options": "Inclusive\nSeparate Add-on"
+  },
+  {
+   "default": "0",
+   "fieldname": "tax_inclusive",
+   "fieldtype": "Check",
+   "label": "Tax Inclusive"
+  },
+  {
+   "default": "0",
+   "fieldname": "gst_rate",
+   "fieldtype": "Percent",
+   "label": "Tax %"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-11-24 19:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Kamra",
+ "name": "Package Element",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

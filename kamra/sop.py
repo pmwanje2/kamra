@@ -77,7 +77,7 @@ CHECKOUT_DEFAULT_STEPS = [
 		"step_key": "confirm_bill_to",
 		"step_type": "confirm",
 		"title": "Confirm billing instructions",
-		"instruction": "Confirm which charges bill to the company vs the guest (alcohol always guest).",
+		"instruction": "Confirm which charges bill to the company vs the guest.",
 		"prompt_to_guest": "",
 		"is_blocking": 1,
 		"sequence": 50,
@@ -571,8 +571,11 @@ def evaluate_checkout_step(step: dict, context: dict) -> dict:
 		rules = billing.get("rules") or []
 		company = billing.get("company_name") or billing.get("company")
 		if company and rules:
-			parts = [f"{r.get('charge_type')}: {r.get('pay_by')}" for r in rules[:6]]
-			tip = _("Bill-to for {0}: {1}. Alcohol always bills the guest.").format(
+			parts = [
+				f"{r.get('code_label') or r.get('transaction_code') or r.get('charge_type')}: {r.get('pay_by')}"
+				for r in rules[:6]
+			]
+			tip = _("Bill-to for {0}: {1}.").format(
 				company, "; ".join(parts))
 		elif company:
 			tip = _("Corporate stay for {0}, confirm which charges the company pays.").format(company)

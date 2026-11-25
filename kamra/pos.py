@@ -48,7 +48,8 @@ def outlets(property: str):
 	setting, so the till never has to know where the answer came from."""
 	rows = frappe.get_all(
 		"POS Outlet", filters={"property": property, "disabled": 0},
-		fields=["name", "outlet_name", "outlet_type", "gst_rate", "kot_mode"],
+		fields=["name", "outlet_name", "outlet_type", "gst_rate", "kot_mode",
+		        "transaction_code"],
 		order_by="outlet_name")
 	for r in rows:
 		r["auto_kot"] = 1 if _auto_kot(property, r.kot_mode) else 0
@@ -79,7 +80,7 @@ def pos_menu(outlet: str):
 		"Menu Item",
 		filters={"outlet": outlet, "available": 1},
 		fields=["name", "item_name", "category", "price", "is_veg",
-		        "is_alcohol", "image", "description", "prep_station"],
+		        "is_alcohol", "transaction_code", "image", "description", "prep_station"],
 		order_by="category, item_name")
 	cats: dict[str, list] = {}
 	for it in items:
@@ -217,7 +218,7 @@ def in_house_rooms(property: str):
 def charge_to_room(order: str, room: str):
 	"""Point a running bill (a dine-in table, say) at an in-house guest's
 	room, so Deliver posts it to their folio through the same controller
-	path as room service - billing rules and the alcohol rule included."""
+	path as room service - routing and billing rules included."""
 	doc = frappe.get_doc("POS Order", order)
 	if doc.status in ("Delivered", "Cancelled"):
 		frappe.throw(_("This order is already closed."))
@@ -234,67 +235,99 @@ def charge_to_room(order: str, room: str):
 def move_room_bill(order: str, room: str, reason: str, pin: str | None = None):
 	"""A bill charged to the wrong room: move it to the right one, the same
 	business day it was posted. The charge leaves the first guest's folio
-	(ledger reversed) and lands on the right guest's, by the same billing
-	rules as room service, so liquor never reaches a company bill. Later
+	(ledger reversed) and lands on the right guest's, by the same routing
+	and billing rules as room service (liquor like any other line). Later
 	than that day it is a correction for Finance (allowance, then repost)."""
+	from kamra.api import _lock_folio_scope, _with_snapshot_retry
 	from kamra.authz import require_cashier_pin
 	from kamra.business_date import get_business_date
-	from kamra.folio import move_charges, target_folio
+	from kamra.folio import move_charges, routed_figure, routed_target, void_pairs
 
 	reason = (reason or "").strip()
 	if not reason:
 		frappe.throw(_("Say why the bill is moving."))
-	doc = frappe.get_doc("POS Order", order)
-	require_cashier_pin(doc.property, pin)
-	if not doc.posted_to_folio or not doc.reservation:
-		frappe.throw(_("This bill is not on a room yet. Use Charge to room instead."))
-	if doc.paid or doc.nc:
-		frappe.throw(_("This bill was settled at the outlet, so it is on no room."))
-	rows = frappe.get_all(
-		"Folio Charge",
-		filters={"parenttype": "Folio", "description": ("like", f"%({doc.name})%"),
-		         "reservation": doc.reservation},
-		fields=["name", "parent", "idx", "posting_date", "is_alcohol", "amount"])
-	if not rows:
-		frappe.throw(_("Couldn't find this bill on the room's folio. It may have "
-		              "been moved or voided already."))
-	# split on the folio, or partly allowed off: moving one piece would
-	# leave the rest on the wrong guest
-	if len(rows) != 1 or abs(float(rows[0].amount or 0) - float(doc.order_total or 0)) > 0.009:
-		frappe.throw(_("This bill was split or changed on the folio, so it can't be "
-		              "moved in one go. Move its lines from the folio instead."))
-	row = rows[0]
-	# an allowance carries no link to its charge: one posted after this bill
-	# on the same folio may be against it, and would stay with the wrong guest
-	if frappe.db.exists("Folio Charge", {"parenttype": "Folio", "parent": row.parent,
-	                                     "charge_type": "Allowance", "idx": (">", row.idx)}):
-		frappe.throw(_("An allowance was posted on this folio after the bill. Reverse "
-		              "the allowance first, then move the bill."))
-	if frappe.db.get_value("Folio", row.parent, "status") == "Closed":
-		frappe.throw(_("The bill is on a folio that is already closed. Ask Finance "
-		              "to correct it."))
-	if str(row.posting_date) != str(get_business_date(doc.property)):
-		frappe.throw(_("Only a bill posted today can be moved. For an earlier "
-		              "day, ask Finance to correct both folios."))
-	old_room = doc.room
-	new_room, new_res = _in_house_stay(doc.property, room, None)
-	if new_res == doc.reservation:
-		frappe.throw(_("The bill is already on this room."))
-	src = frappe.get_doc("Folio", row.parent)
-	dst = frappe.get_doc("Folio", target_folio(
-		frappe.get_doc("Reservation", new_res), "Food & Beverage",
-		is_alcohol=bool(row.is_alcohol)))
-	from kamra.webhooks import emit_folio_posted
-	for line in move_charges(src, dst, [row.name], reservation=new_res):
-		emit_folio_posted(dst, line)
-	doc.db_set({"room": new_room, "reservation": new_res,
-	            "guest": _bill_guest(new_res, None)}, update_modified=False)
-	number = lambda r: frappe.db.get_value("Room", r, "room_number") or r  # noqa: E731
-	from kamra.savings import log_action
-	log_action("pos_move_room_bill", "POS Order", doc.name, doc.property,
-	           rationale=f"Room {number(old_room)} to {number(new_room)}: {reason}")
-	return {"ok": True, "order": doc.name, "room": new_room,
-	        "reservation": new_res, "folio": dst.name}
+
+	def _move_once():
+		doc = frappe.get_doc("POS Order", order)
+		require_cashier_pin(doc.property, pin)
+		if not doc.posted_to_folio or not doc.reservation:
+			frappe.throw(_("This bill is not on a room yet. Use Charge to room instead."))
+		if doc.paid or doc.nc:
+			frappe.throw(_("This bill was settled at the outlet, so it is on no room."))
+		old_room = doc.room
+		new_room, new_res = _in_house_stay(doc.property, room, None)
+		if new_res == doc.reservation:
+			frappe.throw(_("The bill is already on this room."))
+		rows = frappe.get_all(
+			"Folio Charge",
+			filters={"parenttype": "Folio", "description": ("like", f"%({doc.name})%"),
+			         "reservation": doc.reservation},
+			fields=["name", "parent", "idx", "posting_date", "is_alcohol", "amount",
+			        "gst_amount", "transaction_code", "split_of", "reversal_of",
+			        "corrects_row"],
+			order_by="idx asc")
+		if not rows:
+			frappe.throw(_("Couldn't find this bill on the room's folio. It may have "
+			              "been moved or voided already."))
+		_lock_folio_scope(
+			reservations=[doc.reservation, new_res],
+			folios=[r.parent for r in rows],
+		)
+		# split on the folio, voided, or corrected: moving one piece would
+		# leave the rest on the wrong guest. A mixed-code order legitimately posts
+		# one unsplit line per transaction code summing to order_total.
+		parent_voids = {
+			p: void_pairs(frappe.get_doc("Folio", p))
+			for p in {r.parent for r in rows}
+		}
+		if (any(r.split_of or r.reversal_of or r.corrects_row
+		        or r.name in parent_voids[r.parent] for r in rows)
+		        or abs(sum(float(r.amount or 0) for r in rows) - float(doc.order_total or 0)) > 0.009):
+			frappe.throw(_("This bill was split or changed on the folio, so it can't be "
+			              "moved in one go. Move its lines from the folio instead."))
+		bd = str(get_business_date(doc.property))
+		for row in rows:
+			# an allowance carries no link to its charge: one posted after this bill
+			# on the same folio may be against it, and would stay with the wrong guest
+			if frappe.db.exists("Folio Charge", {"parenttype": "Folio", "parent": row.parent,
+			                                     "charge_type": "Allowance", "idx": (">", row.idx)}):
+				frappe.throw(_("An allowance was posted on this folio after the bill. Reverse "
+				              "the allowance first, then move the bill."))
+			if frappe.db.get_value("Folio", row.parent, "status") == "Closed":
+				frappe.throw(_("The bill is on a folio that is already closed. Ask Finance "
+				              "to correct it."))
+			if str(row.posting_date) != bd:
+				frappe.throw(_("Only a bill posted today can be moved. For an earlier "
+				              "day, ask Finance to correct both folios."))
+		new_res_doc = frappe.get_doc("Reservation", new_res)
+		from kamra.webhooks import emit_folio_posted
+		pending: list[tuple] = []
+		moved_folios: list[str] = []
+		for row in rows:
+			src = frappe.get_doc("Folio", row.parent)
+			target, instruction = routed_target(
+				new_res_doc, "Food & Beverage", amount=row.amount,
+				posting_date=row.posting_date, transaction_code=row.transaction_code,
+				pending=pending)
+			dst = frappe.get_doc("Folio", target)
+			for line in move_charges(src, dst, [row.name], reservation=new_res,
+			                         routing_instruction=instruction):
+				emit_folio_posted(dst, line)
+			if instruction:
+				pending.append((instruction, row.posting_date, routed_figure(
+					doc.property, "Food & Beverage", row.amount, row.gst_amount)))
+			if dst.name not in moved_folios:
+				moved_folios.append(dst.name)
+		doc.db_set({"room": new_room, "reservation": new_res,
+		            "guest": _bill_guest(new_res, None)}, update_modified=False)
+		number = lambda r: frappe.db.get_value("Room", r, "room_number") or r  # noqa: E731
+		from kamra.savings import log_action
+		log_action("pos_move_room_bill", "POS Order", doc.name, doc.property,
+		           rationale=f"Room {number(old_room)} to {number(new_room)}: {reason}")
+		return {"ok": True, "order": doc.name, "room": new_room,
+		        "reservation": new_res, "folio": moved_folios[0]}
+
+	return _with_snapshot_retry(_move_once)
 
 
 @frappe.whitelist(methods=["POST"])
