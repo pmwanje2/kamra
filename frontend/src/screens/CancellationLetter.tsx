@@ -3,7 +3,7 @@ import { ArrowLeft, Printer } from "lucide-react"
 import { Link, useParams } from "react-router-dom"
 import { call } from "../lib/api"
 import { Button } from "../components/ui/button"
-import { cur, moneyLocale } from "../lib/money"
+import { cur, fmtAmount } from "../lib/money"
 import { t as translate, useUILanguage } from "../lib/i18n"
 
 /** Printable cancellation confirmation - the guest's proof, with the
@@ -33,8 +33,7 @@ interface Letter {
   }
 }
 
-const inr = (n: number) =>
-  Number(n).toLocaleString(moneyLocale(), { maximumFractionDigits: 0 })
+const inr = (n: number) => fmtAmount(n)
 
 export default function CancellationLetter() {
   useUILanguage()

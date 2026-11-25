@@ -17,12 +17,16 @@ declare global {
 // The real site supplies this before first paint, including guest routes.
 export const siteBrand = () => typeof window === "undefined" ? undefined : window.kamra_brand
 export const whiteLabel = () => siteBrand()?.white_label === true
-export const product = () => siteBrand()?.product ?? "Kamra"
-export const assistant = () => siteBrand()?.assistant ?? "Kamra Agent"
+export const product = () => siteBrand()?.product?.trim() || "Hotel PMS"
+export const assistant = () => siteBrand()?.assistant?.trim() || "Concierge Assistant"
 export const brandTitle = () => whiteLabel() ? product() : `${product()} PMS`
 export const SERVICE_ROLE = "Kamra Agent"
-export const roleLabel = (role: string, label = role) =>
-  role === SERVICE_ROLE && (whiteLabel() || assistant() !== SERVICE_ROLE) ? "{assistant} (service)" : label
+export const roleLabel = (role: string, label = role) => {
+  if (role === SERVICE_ROLE && (whiteLabel() || assistant() !== SERVICE_ROLE)) {
+    return "{assistant} (service)"
+  }
+  return label
+}
 
 export const logo = () => siteBrand()?.logo || (whiteLabel() ? null : asset("kamra-mark.svg"))
 export const upstreamHome = () => whiteLabel() ? undefined : "https://kamrapms.com"

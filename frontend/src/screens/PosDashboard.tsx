@@ -11,12 +11,12 @@ import AppLink from "../components/AppLink"
 import { call, getCurrentProperty } from "../lib/api"
 import { subscribeRealtime } from "../lib/realtime"
 import { serverError } from "../lib/resource"
-import { cur, moneyLocale } from "../lib/money"
+import { activeMoneyLocale, cur, fmtAmount } from "../lib/money"
 import { cn } from "../lib/utils"
 import { t as translate, useUILanguage } from "../lib/i18n"
 
-const inr = (n: unknown) =>
-  Number(n ?? 0).toLocaleString(moneyLocale(), { maximumFractionDigits: 0 })
+const inr = (n: unknown) => fmtAmount(n ?? 0)
+const count = (n: unknown) => Math.round(Number(n ?? 0)).toLocaleString(activeMoneyLocale())
 
 interface Bucket { label: string; bills: number; total: number }
 interface OpenBill {
@@ -173,7 +173,7 @@ export default function PosDashboard() {
             <Kpi icon={Wallet} label={translate("Gross sales")} value={`${cur()}${inr(data.gross_sales)}`}
               sub={translate("{v0} bill{v1} settled", { v0: String(data.bills), v1: String(data.bills === 1 ? "" : "s") })} />
             <Kpi icon={Receipt} label={translate("Avg bill")} value={`${cur()}${inr(data.avg_bill)}`} />
-            <Kpi icon={Users} label={translate("Covers")} value={inr(data.covers)} />
+            <Kpi icon={Users} label={translate("Covers")} value={count(data.covers)} />
             <Kpi icon={Clock} label={translate("Open bills")} value={String(data.open_bills.length)}
               sub={translate("{v0}{v1} unsettled", { v0: String(cur()), v1: String(inr(data.open_bills.reduce((s, b) => s + Number(b.order_total || 0), 0))) })} />
             <Kpi icon={Gift} label={translate("Complimentary")} value={String(data.nc.count)} tone="amber"

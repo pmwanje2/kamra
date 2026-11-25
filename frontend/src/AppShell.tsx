@@ -2,7 +2,6 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react"
 import {
   ChevronDown,
   Globe,
-  IndianRupee,
   KeyRound,
   LayoutGrid,
   LogOut,
@@ -112,7 +111,7 @@ function SearchShortcut() {
     >
       <Search className="size-4 shrink-0" aria-hidden />
       <span className="min-w-0 truncate whitespace-nowrap">{t("Search guests, bookings, screens, settings…")}</span>
-      <kbd className="ml-auto hidden shrink-0 rounded border border-zinc-200 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-zinc-500 md:inline">
+      <kbd className="ms-auto hidden shrink-0 rounded border border-zinc-200 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-zinc-500 md:inline">
         {combo}
       </kbd>
     </button>
@@ -312,7 +311,7 @@ function AppSwitcher({ apps, current }: { apps: AppDef[]; current: AppDef }) {
         <LayoutGrid className="size-4" strokeWidth={1.75} aria-hidden />
       </button>
       {open && (
-        <div className="absolute left-0 top-10 z-50 w-64 rounded-lg border border-zinc-200 bg-white p-1.5 shadow-lg ring-1 ring-black/5">
+        <div className="absolute start-0 top-10 z-50 w-64 rounded-lg border border-zinc-200 bg-white p-1.5 shadow-lg ring-1 ring-black/5">
           <div className="grid grid-cols-3 gap-0.5">
             {apps.map((app) => {
               const active = app.id === current.id
@@ -392,7 +391,7 @@ export default function AppShell() {
   const [property, setProperty] = useState(getCurrentProperty())
   const [demoMode, setDemoMode] = useState(false)
   const [build, setBuild] = useState<string | null>(null)
-  // co-branding: the hotel's name and logo on top, Kamra PMS kept beneath
+  // co-branding: the hotel's name and logo on top, product brand kept beneath
   const [brand, setBrand] = useState<{ name: string | null; logo: string | null }>({ name: null, logo: null })
   const [navOpen, setNavOpen] = useState(false)
 
@@ -437,7 +436,7 @@ export default function AppShell() {
       if (!live) return
       setProperties(props)
       if (props.length === 0) {
-        // Fresh install / Frappe Cloud: force setup wizard, not empty Desk.
+        // Fresh install: force setup wizard when no property exists yet.
         if (
           !whiteLabel() && location.pathname !== "/setup" &&
           !location.pathname.startsWith("/setup/")
@@ -525,6 +524,19 @@ export default function AppShell() {
   const { on: kiosk } = useKiosk()
   const canBook = BOOKING_ROLES.some((r) => roles.includes(r))
 
+  // OPERA hotkey (Alt+N) and screen shortcuts dispatch kamra:open-booking to
+  // open the single canonical BookingDialog owned by AppShell.
+  useEffect(() => {
+    const onOpenBooking = (e: Event) => {
+      if (!canBook) return
+      e.preventDefault()
+      const detail = (e as CustomEvent<BookingInitial | undefined>).detail
+      setBooking(detail && typeof detail === "object" ? detail : {})
+    }
+    window.addEventListener("kamra:open-booking", onOpenBooking)
+    return () => window.removeEventListener("kamra:open-booking", onOpenBooking)
+  }, [canBook])
+
   const items = (currentApp?.items ?? []).filter(
     (item) => !item.roles || item.roles.some((r) => roles.includes(r)),
   )
@@ -564,7 +576,7 @@ export default function AppShell() {
             </span>
             <span className="truncate" title={t(item.label)}>{t(item.label)}</span>
             <span className={cn(
-              "ml-auto rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+              "ms-auto rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
               isActive ? "bg-white/20 text-white" : "bg-brand-100 text-brand-700",
             )}>{t("AI")}</span>
           </>
@@ -628,7 +640,7 @@ export default function AppShell() {
       ) : (
         <span className="text-lg font-semibold tracking-tight text-zinc-900">
           {product()}
-          {!whiteLabel() && <span className="ml-1 align-middle text-[10px] font-semibold tracking-[0.2em] text-brand-600">
+          {!whiteLabel() && <span className="ms-1 align-middle text-[10px] font-semibold tracking-[0.2em] text-brand-600">
             PMS
           </span>}
         </span>
@@ -689,7 +701,7 @@ export default function AppShell() {
       {!whiteLabel() && !kiosk && !demoMode && <SetupNag />}
       <div className="flex min-h-0 flex-1">
       {!kiosk && (
-      <aside className="hidden w-56 shrink-0 flex-col border-r border-zinc-200 bg-white px-3 py-5 sm:sticky sm:top-0 sm:flex sm:h-screen sm:overflow-y-auto sm:overscroll-contain">
+      <aside className="hidden w-56 shrink-0 flex-col border-e border-zinc-200 bg-white px-3 py-5 sm:sticky sm:top-0 sm:flex sm:h-screen sm:overflow-y-auto sm:overscroll-contain">
         <div className="mb-5">{navBrand}</div>
         {navAppLabel}
         <nav className="space-y-0.5">{navGroups}</nav>
@@ -697,7 +709,7 @@ export default function AppShell() {
       </aside>
       )}
 
-      {/* Phone: same nav as the sticky aside, in a left drawer (aside is sm+ only). */}
+      {/* Phone: same nav as the sticky aside, in a start-edge drawer (aside is sm+ only). */}
       {!kiosk && navOpen && (
         <div className="fixed inset-0 z-50 sm:hidden" role="dialog" aria-modal="true" aria-label={t("Navigation")}>
           <div
@@ -836,10 +848,6 @@ export default function AppShell() {
           />
         </Suspense>
       )}
-
-      <span className="hidden">
-        <IndianRupee className="size-3" aria-hidden />
-      </span>
     </div>
     </div>
   )

@@ -6,19 +6,10 @@ import { moneyEps, roundMoney } from "./money"
 
 export type PayLine = { id: string; mode: string; amount: string; reference: string; key: string }
 
-export const SPLIT_EPS = 0.009
 export const MAX_LINES = 20
 
 // Cash is the only mode that can be taken without a reference.
 export const isCash = (mode: string): boolean => mode === "Cash"
-
-const roundAmt = (n: number, currency?: string): number => {
-  const v = currency ? roundMoney(n, currency) : Math.round(n * 100) / 100
-  return v === 0 ? 0 : v
-}
-
-const epsFor = (currency?: string): number =>
-  currency ? Math.min(moneyEps(currency), 0.005) : SPLIT_EPS
 
 export const lineAmount = (l: PayLine): number => {
   const n = Number(l.amount)
@@ -26,8 +17,8 @@ export const lineAmount = (l: PayLine): number => {
 }
 
 export function splitTotals(lines: PayLine[], due: number, currency?: string) {
-  const entered = roundAmt(lines.reduce((s, l) => s + lineAmount(l), 0), currency)
-  return { entered, left: roundAmt(due - entered, currency) }
+  const entered = roundMoney(lines.reduce((s, l) => s + lineAmount(l), 0), currency)
+  return { entered, left: roundMoney(due - entered, currency) }
 }
 
 // The first thing that stops the cashier collecting, or null when the lines
@@ -44,7 +35,7 @@ export function splitProblem(
     if (!(lineAmount(l) > 0)) return msg("Every line needs an amount above zero.")
     if (!isCash(l.mode) && !l.reference.trim()) return msg("Enter a reference on every non-cash line.")
   }
-  const eps = epsFor(currency)
+  const eps = moneyEps(currency)
   const { left } = splitTotals(lines, due, currency)
   if (left > eps) return msg("The lines do not cover the balance yet.")
   if (left < -eps) return msg("The lines add up to more than the balance.")
@@ -68,14 +59,14 @@ export function allocate(
   owed: { folio: string; amount: number }[],
   currency?: string,
 ): PaymentRow[] {
-  const eps = epsFor(currency)
+  const eps = moneyEps(currency)
   const rows: PaymentRow[] = []
-  const need = owed.map((o) => ({ folio: o.folio, left: roundAmt(o.amount, currency) }))
+  const need = owed.map((o) => ({ folio: o.folio, left: roundMoney(o.amount, currency) }))
   let f = 0
   for (const line of lines) {
-    let todo = roundAmt(lineAmount(line), currency)
+    let todo = roundMoney(lineAmount(line), currency)
     while (todo > eps && f < need.length) {
-      const take = roundAmt(Math.min(todo, need[f].left), currency)
+      const take = roundMoney(Math.min(todo, need[f].left), currency)
       if (take > 0) {
         rows.push({
           folio: need[f].folio, mode: line.mode, amount: take, kind: "Payment",
@@ -83,8 +74,8 @@ export function allocate(
           idempotency_key: `${line.key}:${need[f].folio}`,
         })
       }
-      todo = roundAmt(todo - take, currency)
-      need[f].left = roundAmt(need[f].left - take, currency)
+      todo = roundMoney(todo - take, currency)
+      need[f].left = roundMoney(need[f].left - take, currency)
       if (need[f].left <= eps) f += 1
     }
   }

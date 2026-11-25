@@ -52,7 +52,7 @@ import SupervisorSignOff, { SignOffReasons } from "../components/SupervisorSignO
 import { supervisorArgs } from "../lib/reservationDiscount"
 import { useAuth } from "../lib/auth"
 import StayInstructions from "../components/StayInstructions"
-import { fmtMoney, useLocale } from "../lib/money"
+import { fmtMoney, moneyEps, useLocale } from "../lib/money"
 import { HOTKEY_EVENTS } from "../lib/hotkeys"
 import { t as translate, useUILanguage } from "../lib/i18n"
 
@@ -251,7 +251,7 @@ export default function ReservationDetail({
   // (the socket may be down, e.g. behind the dev proxy) and re-check when
   // the tab regains focus - the guest often pays while staff wait.
   const linkPending =
-    !!d?.deposit?.link_url && (d?.deposit?.due ?? 0) > 0.009
+    !!d?.deposit?.link_url && (d?.deposit?.due ?? 0) > moneyEps()
   useEffect(() => {
     if (!linkPending) return
     const timer = setInterval(() => {

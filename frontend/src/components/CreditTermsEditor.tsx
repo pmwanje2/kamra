@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { call, getCurrentProperty } from "../lib/api"
 import { serverError, type Row } from "../lib/resource"
-import { fmtMoney } from "../lib/money"
+import { fmtMoney, moneyStep } from "../lib/money"
 import { useT, t as translate } from "../lib/i18n"
 import { Button } from "./ui/button"
 
@@ -99,7 +99,7 @@ export default function CreditTermsEditor({ row }: { row: Row; reload: () => voi
           <input
             type="number"
             min="0"
-            step="0.01"
+            step={moneyStep()}
             inputMode="decimal"
             className={inputCls}
             value={limit}

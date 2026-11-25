@@ -7,17 +7,12 @@ import { useEffect } from "react"
 import { Clock, Maximize2, X, XCircle } from "lucide-react"
 import { Button } from "../../components/ui/button"
 import { cn } from "../../lib/utils"
-import { cur, moneyLocale } from "../../lib/money"
+import { cur, fmtAmount } from "../../lib/money"
 import { useT, t as translate } from "../../lib/i18n"
 
 
-const inr = (n: unknown) =>
-  Number(n ?? 0).toLocaleString(moneyLocale(), { maximumFractionDigits: 0 })
-const inr2 = (n: unknown) =>
-  Number(n ?? 0).toLocaleString(moneyLocale(), {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
+const inr = (n: unknown) => fmtAmount(n ?? 0)
+const inr2 = (n: unknown) => fmtAmount(n ?? 0)
 
 export interface OpenBillRow {
   name: string

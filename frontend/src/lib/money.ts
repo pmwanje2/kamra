@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from "react"
 import { call, getCurrentProperty, type TaxBasis } from "./api"
-import { adoptGuestLanguage, applyEnabledLanguages } from "./dir"
+import { adoptGuestLanguage, applyEnabledLanguages, getLang } from "./dir"
 
 export interface TenderMode {
   mode: string
@@ -22,6 +22,8 @@ interface Locale {
   currency_symbol: string
   locale: string
   currency: string
+  decimals?: number
+  currency_decimals?: Record<string, number>
   date_format?: string | null
   tax_label: string
   tax_basis?: TaxBasis | null
@@ -51,8 +53,8 @@ interface Locale {
   /** "foreign": a minor's ID is kept only for foreign nationals;
    *  "all": the country's register covers every guest. */
   minor_ids: "foreign" | "all"
-  /** Country integrations this property has - India: Razorpay/Cashfree,
-   *  GSTR-1, Kamra Verify. Off until the pack resolves. */
+  /** Country integrations this property has - payment gateways,
+   *  tax return export, and ID verification. Off until the pack resolves. */
   integrations: Integrations
   /** The rate the server puts on any food & beverage charge, whatever the
    *  caller picked, and the words that make a charge F&B. */
@@ -165,6 +167,8 @@ export function adoptUiLocale(ui?: {
   currency_symbol?: string
   locale?: string
   currency?: string
+  decimals?: number
+  currency_decimals?: Record<string, number>
   default_language?: string | null
   enabled_languages?: string[] | null
 } | null) {
@@ -178,6 +182,10 @@ export function adoptUiLocale(ui?: {
     currency_symbol: ui.currency_symbol ?? cache.currency_symbol,
     locale: ui.locale || cache.locale,
     currency: ui.currency || cache.currency,
+    decimals: typeof ui.decimals === "number" ? ui.decimals : cache.decimals,
+    currency_decimals: ui.currency_decimals
+      ? { ...(cache.currency_decimals ?? {}), ...ui.currency_decimals }
+      : cache.currency_decimals,
   }
   remember()
 }
@@ -185,47 +193,115 @@ export function adoptUiLocale(ui?: {
 export const locale = () => cache
 /** False on a dry property (Settings → Property): hide every alcohol field. */
 export const sellsAlcohol = () => cache.sells_alcohol !== false
-/** The property's currency symbol, e.g. "₹" or "Rp". */
+/** The property's currency symbol, e.g. "$", "UGX ", or "KWD ". */
 export const cur = () => cache.currency_symbol
-/** The number-formatting locale, e.g. "en-IN" (lakhs) or "id-ID". */
-export const moneyLocale = () => cache.locale
-/** The currency's minor-unit digits (2 for INR/USD, 0 for JPY), 2 until
- *  the pack resolves or for a code Intl does not know. */
-export function moneyDigits(currency = cache.currency) {
+
+/** Active number-formatting locale driven by the active UI language and property pack
+ *  (never hardcoded "en-US"). Uses Western ASCII ledger digits (`-u-nu-latn`) when
+ *  formatted in non-English UI languages including Arabic. */
+export function activeMoneyLocale(): string {
+  let lang = "en"
+  if (typeof window !== "undefined") {
+    try {
+      lang = getLang() || "en"
+    } catch {
+      lang = "en"
+    }
+  }
+  if (lang && lang !== "en") {
+    return `${lang}-u-nu-latn`
+  }
+  return cache.locale || "en-GB"
+}
+
+/** The property's number-formatting locale, e.g. "en-UG" or "en-GB". */
+export const moneyLocale = () => cache.locale || "en-GB"
+
+/** The currency's minor-unit digits (0 for UGX/JPY, 2 for USD/EUR/KES, 3 for KWD/BHD).
+ *  Priority: explicit finite integer decimals -> server currency_decimals map ->
+ *  home cache.decimals -> ISO 4217 via Intl.NumberFormat -> fallback 2. */
+export function moneyDigits(currency?: string, decimals?: number): number {
+  if (typeof decimals === "number" && Number.isInteger(decimals) && decimals >= 0) {
+    return decimals
+  }
+  const code = (currency ?? cache.currency ?? "").trim().toUpperCase()
+  const mapped = code ? cache.currency_decimals?.[code] : undefined
+  if (typeof mapped === "number" && Number.isInteger(mapped) && mapped >= 0) {
+    return mapped
+  }
+  if (!currency && typeof cache.decimals === "number" && Number.isInteger(cache.decimals) && cache.decimals >= 0) {
+    return cache.decimals
+  }
   try {
-    if (currency)
-      return new Intl.NumberFormat("en", { style: "currency", currency }).resolvedOptions()
+    if (code) {
+      return new Intl.NumberFormat("en", { style: "currency", currency: code }).resolvedOptions()
         .maximumFractionDigits ?? 2
+    }
   } catch {
     /* unknown currency code */
   }
   return 2
 }
-/** HTML number-input step matching a currency's ISO 4217 minor unit
- *  ("1" for UGX/JPY, "0.01" for USD/INR, "0.001" for KWD/BHD). */
-export function moneyStep(currency = cache.currency): string {
-  const d = moneyDigits(currency)
-  return d <= 0 ? "1" : `0.${"0".repeat(d - 1)}1`
+function resolveDigits(currencyOrDecimals?: string | number, decimals?: number): number {
+  if (typeof currencyOrDecimals === "number") {
+    return moneyDigits(undefined, currencyOrDecimals)
+  }
+  return moneyDigits(currencyOrDecimals, decimals)
 }
-/** Half a minor unit for a currency (0.5 for 0dp, 0.005 for 2dp, 0.0005 for 3dp). */
-export function moneyEps(currency = cache.currency): number {
-  return 0.5 * 10 ** -moneyDigits(currency)
+
+/** HTML `<input type="number" step>` matching the currency's minor unit:
+ *  0 -> "1", 2 -> "0.01", 3 -> "0.001". */
+export function moneyStep(currencyOrDecimals?: string | number, decimals?: number): string {
+  const d = resolveDigits(currencyOrDecimals, decimals)
+  return d <= 0 ? "1" : (10 ** -d).toFixed(d)
 }
-/** Round half-away-from-zero to the currency's ISO 4217 minor unit. */
-export function roundMoney(n: number, currency = cache.currency): number {
-  if (!Number.isFinite(n) || n === 0) return 0
-  const factor = 10 ** moneyDigits(currency)
+
+/** Half of one minor unit (0.5 for 0dp, 0.005 for 2dp, 0.0005 for 3dp). */
+export function moneyEps(currencyOrDecimals?: string | number, decimals?: number): number {
+  const d = resolveDigits(currencyOrDecimals, decimals)
+  return 0.5 * 10 ** -d
+}
+
+/** Half-away-from-zero rounding to the currency's minor unit. */
+export function roundMoney(
+  amount: number,
+  currencyOrDecimals?: string | number,
+  decimals?: number,
+): number {
+  const n = Number(amount ?? 0)
+  if (!Number.isFinite(n)) return 0
+  const d = resolveDigits(currencyOrDecimals, decimals)
   const sign = n < 0 ? -1 : 1
-  return (sign * Math.round((Math.abs(n) + Number.EPSILON * Math.max(1, Math.abs(n))) * factor)) / factor
+  const factor = 10 ** d
+  const abs = Math.abs(n)
+  const text = abs.toString()
+  const shifted = text.includes("e") || text.includes("E")
+    ? abs * factor * (1 + Number.EPSILON)
+    : Number(`${text}e${d}`)
+  const rounded = Math.floor(shifted + 0.5) / factor
+  return rounded === 0 ? 0 : sign * rounded
 }
-/** An amount with the currency's normal decimals, always the same count
- *  (2,27,255.40, never 2,27,255.4), so a column of figures lines up. */
-export const fmtAmount = (n: unknown, currency = cache.currency) => {
-  const d = moneyDigits(currency)
-  return Number(n ?? 0).toLocaleString(cache.locale, { minimumFractionDigits: d, maximumFractionDigits: d })
+
+/** An amount with the currency's exact minor-unit decimals (0/2/3dp), formatted
+ *  with the active user/property locale so columns line up cleanly. */
+export function fmtAmount(amount: unknown, currency?: string, decimals?: number): string {
+  const d = moneyDigits(currency, decimals)
+  const val = roundMoney(Number(amount ?? 0), currency, d)
+  return val.toLocaleString(activeMoneyLocale(), {
+    minimumFractionDigits: d,
+    maximumFractionDigits: d,
+  })
 }
-/** fmtAmount with the currency symbol in front. */
-export const fmtMoney = (n: unknown) => cache.currency_symbol + fmtAmount(n)
+
+/** fmtAmount with the property symbol (for home currency) or ISO code prefix (for foreign currency). */
+export function fmtMoney(amount: unknown, currency?: string, decimals?: number): string {
+  const code = currency?.trim().toUpperCase()
+  const home = cache.currency?.trim().toUpperCase()
+  if (!code || (home && code === home)) {
+    return `${cache.currency_symbol}${fmtAmount(amount, code || home, decimals)}`
+  }
+  return `${code} ${fmtAmount(amount, code, decimals)}`
+}
 export const taxRates = () => cache.tax_rates
 export const taxLabel = () => cache.tax_label
 /** False where the hotel charges no tax: its only rate is 0% (a country

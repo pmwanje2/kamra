@@ -17,7 +17,7 @@ import {
   type DiscountType,
 } from "../lib/reservationDiscount"
 import { useT } from "../lib/i18n"
-import { moneyDigits } from "../lib/money"
+import { moneyDigits, moneyStep } from "../lib/money"
 import SupervisorSignOff, { SignOffReasons } from "./SupervisorSignOff"
 
 const inputCls =
@@ -60,8 +60,7 @@ export default function DiscountPanel(props: {
   const lowest = open.length ? Math.min(...open.map((n) => n.base_rate)) : undefined
   const error = discountError(d, open)
   const stayNights = open.map((n) => n.date)
-  const digits = moneyDigits()
-  const amountStep = digits > 2 ? (10 ** -digits).toFixed(digits) : "0.01"
+  const amountStep = moneyStep(moneyDigits())
 
   function setType(type: DiscountType) {
     onChange({ ...d, type })

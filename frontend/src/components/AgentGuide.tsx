@@ -1,4 +1,4 @@
-/** Kamra Agent's guided desk tasks. A tap on "Check in" asks who, lists
+/** Guided desk tasks. A tap on "Check in" asks who, lists
  *  today's arrivals to tap, and so on step by step, so nobody has to know
  *  what to type. Lists come straight from the desk's own endpoints; the
  *  AI is only handed a finished, plain request at the end (or the normal
@@ -23,7 +23,7 @@ import {
 
 import type { BookingOptions, ReservationRow, Snapshot } from "../lib/api"
 import { t as translate } from "../lib/i18n"
-import { cur, moneyLocale } from "../lib/money"
+import { fmtMoney, locale } from "../lib/money"
 import type { BookingInitial } from "../AppShell"
 import type { AgentCard } from "./AgentCards"
 
@@ -141,7 +141,7 @@ export function menuTiles(): Tile[] {
     { id: "change", icon: CalendarClock, label: translate("Change a stay"),
       hint: translate("Extra night, new dates, another room") },
     { id: "payment", icon: Wallet, label: translate("Take a payment"),
-      hint: translate("Cash, UPI, card or bank") },
+      hint: translate("Cash, card, instant transfer or bank") },
     { id: "order", icon: UtensilsCrossed, label: translate("Food order"),
       hint: translate("Room service or a table, straight to the kitchen") },
     { id: "charge", icon: Receipt, label: translate("Add a charge"),
@@ -164,8 +164,7 @@ export const menuChoices = (): Choice[] =>
 
 export const startOver = (): Choice => ({ label: translate("Start over"), goto: "menu" })
 
-const money = (n: number) =>
-  `${cur()}${Number(n || 0).toLocaleString(moneyLocale(), { maximumFractionDigits: 0 })}`
+const money = (n: number) => fmtMoney(n || 0)
 
 const isoDay = (offset = 0) => {
   const d = new Date()
@@ -435,10 +434,15 @@ export function flows(): Record<FlowId, Flow> {
       },
       {
         key: "mode",
-        load: async () => ({
-          ask: translate("How did they pay?"),
-          choices: ["Cash", "UPI", "Card", "Bank"].map((m) => ({ label: translate(m), value: m })),
-        }),
+        load: async () => {
+          const modes = locale().payment_modes.length
+            ? locale().payment_modes
+            : ["Cash", "Card", "Bank Transfer"]
+          return {
+            ask: translate("How did they pay?"),
+            choices: modes.map((m) => ({ label: translate(m), value: m })),
+          }
+        },
       },
     ],
     finish: (a) => ({

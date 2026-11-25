@@ -4,7 +4,7 @@
  * - GroupControl formats KWD amounts to 3 decimal places (never truncating via maximumFractionDigits: 0)
  * - Sub-0.5 KWD balances (e.g. 0.250 KWD) remain visible and trigger "settle" / "Collect & check out"
  * - Settle group bill pre-fills exact 3dp string ("125.750", never Math.round -> "126")
- * - Monetary number inputs use step="any" (never default step=1 or hardcoded step="0.01")
+ * - Monetary number inputs use dynamic moneyStep() ("0.001" for KWD) or step="any" (never default step=1 or hardcoded step="0.01")
  */
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
@@ -129,7 +129,7 @@ describe("KWD 3dp precision in GroupControl and FolioView", () => {
     vi.unstubAllGlobals()
   })
 
-  it("displays KWD 3dp amounts, treats 0.250 KWD as unpaid, pre-fills 125.750, and uses step='any'", async () => {
+  it("displays KWD 3dp amounts, treats 0.250 KWD as unpaid, pre-fills 125.750, and uses step='0.001'", async () => {
     rpc.mockReset().mockImplementation(async (method: string) => {
       if (method === "kamra.api.property_locale") return KWD_LOCALE
       if (method === "kamra.api.group_detail") return makeGroupDetail()
@@ -156,7 +156,7 @@ describe("KWD 3dp precision in GroupControl and FolioView", () => {
     // 2. Guest own_balance of 0.250 KWD (below legacy 0.5 threshold) must show KD 0.250, not "Nothing"
     expect(host.textContent).toContain("KD 0.250")
 
-    // 3. Clicking Settle group bill pre-fills exact "125.750" (not "126") with step="any"
+    // 3. Clicking Settle group bill pre-fills exact "125.750" (not "126") with dynamic KWD step="0.001"
     const settleBtn = Array.from(host.querySelectorAll("button")).find((b) =>
       b.textContent?.includes("Settle group bill"),
     )
@@ -165,7 +165,7 @@ describe("KWD 3dp precision in GroupControl and FolioView", () => {
 
     const settleInput = host.querySelector<HTMLInputElement>('input[type="number"][value="125.750"]')
     expect(settleInput).not.toBeNull()
-    expect(settleInput?.getAttribute("step")).toBe("any")
+    expect(settleInput?.getAttribute("step")).toBe("0.001")
   })
 
   it("keeps group stage in 'settle' when master_folio_balance is 0.250 KWD", async () => {
@@ -242,6 +242,9 @@ describe("KWD 3dp precision in GroupControl and FolioView", () => {
     for (const input of numInputs) {
       if (input.getAttribute("aria-label") === "Amount collected") {
         expect(input.getAttribute("step")).toBe("0.001")
+      } else if (input.getAttribute("aria-label") === "Discount") {
+        // FolioDiscount defaults to Percent mode (0.01%) and switches to moneyStep() ("0.001" for KWD) in Amount mode
+        expect(input.getAttribute("step")).toBe("0.01")
       } else {
         expect(input.getAttribute("step")).toBe("any")
       }

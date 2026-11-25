@@ -12,7 +12,7 @@ import CheckOutDialog from "../components/CheckOutDialog"
 import type { ShellContext } from "../AppShell"
 import { cn, roomLabel, formatDate } from "../lib/utils"
 import { shiftDate } from "../lib/stay"
-import { cur, moneyLocale } from "../lib/money"
+import { fmtMoney } from "../lib/money"
 import { serverError } from "../lib/resource"
 import { useT, t as translate } from "../lib/i18n"
 
@@ -30,8 +30,7 @@ const TABS: { id: Tab; label: string; icon: typeof LogIn }[] = [
 
 // "" for a bad ?date= in the URL rather than an Invalid Date crash
 const shift = shiftDate
-const money = (n: number) =>
-  `${cur()}${Number(n || 0).toLocaleString(moneyLocale(), { maximumFractionDigits: 0 })}`
+const money = (n: number) => fmtMoney(n || 0)
 function Balance({ row }: { row: ReservationRow }) {
   const { t } = useT()
   const due = Number(row.balance_due ?? 0)
