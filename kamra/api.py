@@ -8190,9 +8190,11 @@ def tape_chart(property: str, start_date: str | None = None, days: int = 14):
 	for k in blocks:
 		blocks_by_room.setdefault(k.room, []).append(k)
 	for r in rooms:
-		# A stay ending on the first chart date has no visible nights there,
-		# but its departure still determines when that room turns over.
-		r["bookings"] = [b for b in by_room.get(r.name, ()) if getdate(b.check_out_date) > start]
+		# Departing overnight stays supply turnover times but have no bar on
+		# the first chart date. A day-use stay still occupies that day's slot.
+		r["bookings"] = [
+			b for b in by_room.get(r.name, ()) if b.is_day_use or getdate(b.check_out_date) > start
+		]
 		r["blocks"] = blocks_by_room.get(r.name, [])
 
 	# changeover conflicts: same room turns over today and the incoming
@@ -8203,21 +8205,21 @@ def tape_chart(property: str, start_date: str | None = None, days: int = 14):
 		by_date_out = {}
 		for booking in by_room.get(r.name, ()):
 			etd = _format_hhmm(booking.planned_check_out_time)
-			if not etd:
-				continue
-			date = str(booking.check_out_date)
-			last = by_date_out.get(date)
-			if last is None or (etd, booking.name) > (last[0], last[1].name):
-				by_date_out[date] = (etd, booking)
+			if etd:
+				by_date_out.setdefault(booking.check_out_date, []).append((etd, booking))
+		for departures in by_date_out.values():
+			departures.sort(key=lambda item: (item[0], item[1].name), reverse=True)
 		for b in r["bookings"]:
-			departure = by_date_out.get(str(b.check_in_date))
-			if not departure:
-				continue
-			out_etd, out = departure
-			if out.name == b.name or (b.share_group_id and b.share_group_id == out.share_group_id):
-				continue
 			in_eta = _format_hhmm(b.planned_check_in_time)
-			if in_eta and in_eta <= out_etd:
+			if not in_eta:
+				continue
+			for out_etd, out in by_date_out.get(b.check_in_date, ()):
+				if out_etd < in_eta:
+					break
+				if out.name == b.name or (b.share_group_id and b.share_group_id == out.share_group_id):
+					continue
+				if out.is_day_use and _format_hhmm(out.planned_check_in_time) > in_eta:
+					continue
 				conflicts.append({
 					"room": r.name, "room_number": r.room_number,
 					"date": str(b.check_in_date),
@@ -8226,6 +8228,7 @@ def tape_chart(property: str, start_date: str | None = None, days: int = 14):
 					"in_res": b.name, "in_guest": b.guest_name,
 					"eta": in_eta,
 				})
+				break
 
 	# the day-by-day house position: sold vs capacity vs the overbooking
 	# ceiling, plus the demand tier the pricing engine is applying
