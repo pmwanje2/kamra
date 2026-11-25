@@ -133,8 +133,32 @@ export function scanTree(base = root) {
   return { findings, sourceCount }
 }
 
+// The public namespace, RPC template and download filename are wire identifiers.
+export function scanPublishedApi(reference, collection) {
+  const findings = []
+  function display(text, where) {
+    if (typeof text !== "string") return
+    const prose = text.replace(/\/kamra\.postman_collection\.json\b|\/api\/method\/kamra\.<module>\.<function>|(?<![/:.])\bkamra\.[a-z_]\w*\.[a-z_]\w*\b|\bfrappe\.(?:call|get_list|session\.user|model\.workflow\.apply_workflow)\b|`kamra_demo_mode`/g, "")
+    if (forbidden.test(prose)) findings.push(`${where}: ${text}`)
+  }
+  reference.split("\n").forEach((line, i) => display(line, `api-reference.md:${i + 1}`))
+  function visit(item) {
+    display(item.name, "Postman name")
+    for (const field of [item.description, item.request?.description]) {
+      display(typeof field === "object" ? field?.content : field, "Postman description")
+    }
+    for (const child of item.item || []) visit(child)
+  }
+  visit(collection.info)
+  visit(collection)
+  return findings
+}
+
 export function checkSource() {
   const { findings, sourceCount } = scanTree()
+  const docs = path.join(root, "../docs-site")
+  findings.push(...scanPublishedApi(fs.readFileSync(path.join(docs, "api-reference.md"), "utf8"),
+    JSON.parse(fs.readFileSync(path.join(docs, "public/kamra.postman_collection.json"), "utf8"))))
   if (findings.length) {
     console.error(findings.join("\n"))
     throw new Error(`${sourceCount} UI source findings; ${findings.length} total branding findings`)
