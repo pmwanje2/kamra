@@ -6,6 +6,7 @@ a correct multi-rate invoice - the PRD's FR-60.
 """
 
 import json
+from contextlib import contextmanager
 from decimal import ROUND_HALF_UP, Decimal
 
 import frappe
@@ -138,6 +139,20 @@ def _refund_amounts(folio, sec_idx: set[int]) -> tuple[Decimal, Decimal, Decimal
 	return identified, mandatory, cap - mandatory
 
 
+@contextmanager
+def payment_savepoint():
+	"""Keep a refused posting atomic even if a caller handles its exception."""
+	point = "folio_payment_" + frappe.generate_hash(length=8)
+	frappe.db.savepoint(point)
+	try:
+		yield
+	except Exception:
+		frappe.db.rollback(save_point=point)
+		raise
+	else:
+		frappe.db.release_savepoint(point)
+
+
 def lock_guest_deposit_windows(reservation):
 	"""Serialize stay postings before any writer locks its individual folio."""
 	if reservation:
@@ -160,17 +175,30 @@ def allocate_historical_security_refunds(windows, recorded: Decimal) -> dict[str
 	if recorded <= 0:
 		return {}
 	remaining = recorded
+	allocations = {}
+	reserved = Decimal(0)
 	mandatory = []
 	ambiguous = []
 	for window, sec_idx in windows:
 		identified, required, optional = _refund_amounts(window, sec_idx)
 		remaining -= identified
+		if sec_idx and _is_closed_or_invoiced(window):
+			# The issued bill records the historical share in its saved paid total.
+			# Reserve that share before allocating refunds to still-open windows.
+			fixed = Decimal(str(window.payments_total or 0)) - _payments_before_historical_refunds(window, sec_idx)
+			if not required <= fixed <= required + optional:
+				frappe.throw(frappe._("This posting would change the historical refund on a settled invoice."))
+			allocations[window.name] = fixed
+			reserved += fixed
+			continue
 		if required:
 			mandatory.append((window.name, required))
 		if optional:
 			ambiguous.append((window.name, optional))
 
-	allocations = {}
+	remaining -= reserved
+	if reserved and remaining < sum(cap for _, cap in mandatory):
+		frappe.throw(frappe._("This posting would use funds reserved for a settled invoice."))
 	for name, cap in mandatory + ambiguous:
 		if remaining <= 0:
 			break
@@ -195,7 +223,7 @@ def _legacy_security_deposit_refunded(folio, sec_idx: set[int]) -> Decimal:
 
 	windows = []
 	for name in guest_security_windows(folio.reservation, folio.property, for_update=for_update):
-		if name == folio.name:
+		if name == folio.name and not _is_closed_or_invoiced(folio):
 			# Include pending payment rows when recalculating the current document.
 			windows.append((folio, sec_idx))
 		else:
@@ -2465,7 +2493,8 @@ def close_folio(folio_name: str) -> str:
 	the company owes has moved to the city ledger (transfer_to_city_ledger
 	zeroes it with a Company Credit payment), and nothing is owed back.
 	Closing with money on it was how a guest left owing."""
-	folio = frappe.get_doc("Folio", folio_name)
+	lock_guest_deposit_windows(frappe.db.get_value("Folio", folio_name, "reservation"))
+	folio = frappe.get_doc("Folio", folio_name, for_update=True)
 	if folio.status == "Closed":
 		return folio.invoice_number
 	prev_grand = folio.get("grand_total")

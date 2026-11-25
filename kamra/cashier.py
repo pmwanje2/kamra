@@ -432,31 +432,18 @@ _TOTAL_FIELDS = ("system_cash", "system_card", "system_upi", "system_other",
                  "paid_outs", "drops", "petty_cash", "expected_cash")
 
 
-def _recompute_session_totals(session: str, persist: bool = True) -> dict[str, float]:
+def _recompute_session_totals(session: str, persist: bool = True, *, locked_session=None) -> dict[str, float]:
 	"""Re-add the session's transactions into its stored totals. The row is
 	written only when a total actually moved (and never on Closed sessions):
 	a screen that merely reads the till (current_session, on every load) must
 	not write, or two loads at once race on the same row (MariaDB 1020)."""
 	has_ccy = _txn_has_currency_cols()
+	fields = ["kind", "mode", "amount"]
 	if has_ccy:
-		rows = frappe.db.sql(
-			"""
-			SELECT kind, mode, amount, currency, fx_amount
-			FROM `tabCashier Transaction`
-			WHERE session = %s
-			""",
-			session, as_dict=True,
-		)
-	else:
-		rows = frappe.db.sql(
-			"""
-			SELECT kind, mode, amount
-			FROM `tabCashier Transaction`
-			WHERE session = %s
-			""",
-			session, as_dict=True,
-		)
-	sess = frappe.get_doc("Cashier Session", session)
+		fields.extend(["currency", "fx_amount"])
+	rows = frappe.db.get_values("Cashier Transaction", {"session": session}, fields,
+	                            as_dict=True, for_update=locked_session is not None)
+	sess = locked_session or frappe.get_doc("Cashier Session", session)
 	# the pack's instant modes keep their own bucket, stored
 	# in system_upi / "upi" - field kept by name so existing tills read on
 	from kamra.ledger import home_currency
@@ -567,8 +554,11 @@ def record_cashier_txn(
 		txn_ccy = (currency or "").strip().upper() or home
 		payload["currency"] = txn_ccy
 		payload["fx_amount"] = float(fx_amount or 0) if txn_ccy != home else 0.0
+	# Serialize the journal append and read current totals even when the request
+	# established a repeatable-read snapshot before acquiring the stay lock.
+	locked_session = frappe.get_doc("Cashier Session", sess, for_update=True)
 	frappe.get_doc(payload).insert(ignore_permissions=True)
-	_recompute_session_totals(sess)
+	_recompute_session_totals(sess, locked_session=locked_session)
 	return sess
 
 

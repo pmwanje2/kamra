@@ -7,6 +7,16 @@ from frappe.model.document import Document
 
 
 class Folio(Document):
+	def save(self, *args, **kwargs):
+		# Native cancellations append their refund before its ledger reversal.
+		# Document.save locks this folio during its timestamp check.
+		if self.reservation and self.folio_type == "Guest" and any(
+			p.payment_kind == "Refund" and p.is_new() for p in self.payments or ()
+		):
+			from kamra.folio import lock_guest_deposit_windows
+			lock_guest_deposit_windows(self.reservation)
+		return super().save(*args, **kwargs)
+
 	def precision(self, fieldname, parentfield=None):
 		if self.property and (
 			fieldname in {"grand_total", "charges_total", "tax_total", "payments_total", "balance"}

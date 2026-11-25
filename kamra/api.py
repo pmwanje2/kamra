@@ -1694,14 +1694,10 @@ def add_folio_payment(folio: str, mode: str, amount: float,
 	if float(amount) <= 0:
 		frappe.throw("Amount must be positive.")
 	_pin_guard(folio, pin)
-	if kind in ("Advance", "Security Deposit"):
-		from kamra.folio import lock_guest_deposit_windows
-		lock_guest_deposit_windows(frappe.db.get_value("Folio", folio, "reservation"))
+	from kamra.folio import lock_guest_deposit_windows
+	lock_guest_deposit_windows(frappe.db.get_value("Folio", folio, "reservation"))
 	key = (idempotency_key or "").strip() or None
-	if key or kind in ("Advance", "Security Deposit"):
-		doc = frappe.get_doc("Folio", folio, for_update=True)
-	else:
-		doc = frappe.get_doc("Folio", folio)
+	doc = frappe.get_doc("Folio", folio, for_update=True)
 	if key and any(p.get("idempotency_key") == key for p in doc.payments):
 		out = doc.as_dict()
 		out["idempotent_replay"] = 1
@@ -1854,8 +1850,7 @@ def add_folio_payments(payments, pin: str | None = None):
 	# caller keeps the transaction open (a request would roll back anyway)
 	frappe.db.savepoint("split_payment")
 	try:
-		if any(row.get("kind") in ("Advance", "Security Deposit") for row in payments):
-			_lock_folio_scope(folios=[row["folio"] for row in payments], include_guest_windows=True)
+		_lock_folio_scope(folios=[row["folio"] for row in payments], include_guest_windows=True)
 		for row in payments:
 			add_folio_payment(
 				row["folio"], row["mode"], float(row["amount"]),
@@ -2084,11 +2079,13 @@ def refund_folio_payment(folio: str, amount: float | None = None,
 		frappe.throw(_("Give the amount and the mode to refund."))
 	if not foreign and payment_tender_type(mode, doc.property) == "Foreign Cash":
 		frappe.throw(_("Foreign Cash refund needs the foreign currency of the notes returned."))
-	return _refund_folio_payment(folio, amount, mode, reason, pin=pin,
-	                             reason_code=reason_code,
-	                             supervisor_pin=supervisor_pin,
-	                             refund_of=payment_row, idempotency_key=key,
-	                             fx=fx_meta, locked_doc=doc)
+	from kamra.folio import payment_savepoint
+	with payment_savepoint():
+		return _refund_folio_payment(folio, amount, mode, reason, pin=pin,
+		                             reason_code=reason_code,
+		                             supervisor_pin=supervisor_pin,
+		                             refund_of=payment_row, idempotency_key=key,
+		                             fx=fx_meta, locked_doc=doc)
 
 
 def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
