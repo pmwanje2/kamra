@@ -95,6 +95,14 @@ def group_nights(check_in_date, check_out_date) -> list[str]:
 	return [str(add_days(ci, i)) for i in range(max((co - ci).days, 1))]
 
 
+def _pickup_span(stay):
+	"""Half-open occupancy range. A same-day stay picks up its arrival night."""
+	start, end = getdate(stay.check_in_date), getdate(stay.check_out_date)
+	if stay.status == "Checked Out" and stay.actual_check_out:
+		end = min(end, getdate(stay.actual_check_out))
+	return start, max(add_days(start, 1), end)
+
+
 def unpicked_by_night(group: str, room_type: str, *,
                       for_update: bool = False, exclude_reservation: str | None = None) -> dict[str, int]:
 	"""{night: rooms of the block still held} over the group's nights. A
@@ -118,7 +126,7 @@ def unpicked_by_night(group: str, room_type: str, *,
 	# a stay that has checked out used its nights too
 	if for_update:
 		stays = frappe.db.sql(
-			"""SELECT check_in_date, check_out_date FROM `tabReservation`
+			"""SELECT check_in_date, check_out_date, status, actual_check_out FROM `tabReservation`
 			   WHERE group_booking = %s AND room_type = %s AND name != %s
 			     AND status IN ('Confirmed', 'Checked In', 'Held', 'Pending Payment', 'Checked Out')
 			   FOR UPDATE""",
@@ -127,14 +135,12 @@ def unpicked_by_night(group: str, room_type: str, *,
 		stays = frappe.get_all("Reservation", filters={
 			"group_booking": group, "room_type": room_type, "name": ("!=", exclude_reservation or ""),
 			"status": ("in", [*LIVE_STATUSES, "Checked Out"])},
-			fields=["check_in_date", "check_out_date"])
+			fields=["check_in_date", "check_out_date", "status", "actual_check_out"])
+	spans = [_pickup_span(stay) for stay in stays]
 	out = {}
 	for d in group_nights(gb.check_in_date, gb.check_out_date):
 		night = getdate(d)
-		picked = sum(1 for s in stays
-		             if getdate(s.check_in_date) <= night
-		             and (night < getdate(s.check_out_date)
-		                  or getdate(s.check_in_date) == getdate(s.check_out_date) == night))
+		picked = sum(start <= night < end for start, end in spans)
 		out[d] = max(0, nightly.get(d, int(row.rooms_blocked or 0)) - picked)
 	return out
 
@@ -144,17 +150,18 @@ def restored_pickup_nights(before, after) -> set[str]:
 	# Match unpicked_by_night: checked-out stays still count on the nights used.
 	if before.status not in LIVE_STATUSES and before.status != "Checked Out":
 		return set()
+	start, end = _pickup_span(before)
 	if not any(g.name == before.group_booking for g in _holding_groups(
-		before.property, before.check_in_date, add_days(before.check_out_date, 1), for_update=True
+		before.property, start, end, for_update=True
 	)):
 		return set()
 	unpicked = unpicked_by_night(before.group_booking, before.room_type,
 	                             for_update=True, exclude_reservation=before.name)
-	restored = set(group_nights(before.check_in_date, before.check_out_date))
+	restored = set(group_nights(start, end))
 	if (before.property, before.room_type, before.group_booking) == (
 		after.property, after.room_type, after.group_booking
 	):
-		restored.difference_update(group_nights(after.check_in_date, after.check_out_date))
+		restored.difference_update(group_nights(*_pickup_span(after)))
 	return {night for night in restored if unpicked.get(night, 0)}
 
 

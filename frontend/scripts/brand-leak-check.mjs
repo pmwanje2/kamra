@@ -133,6 +133,30 @@ export function scanTree(base = root) {
   return { findings, sourceCount }
 }
 
+// The generated reference uses fenced examples, inline code and inline links.
+// Keep labels and surrounding prose visible to the guard.
+function scanReference(markdown, findings) {
+  let fence = ""
+  for (const [index, line] of markdown.split("\n").entries()) {
+    const marker = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/)
+    if (fence) {
+      if (marker && marker[1].startsWith(fence) && !marker[2].trim()) fence = ""
+      continue
+    }
+    if (marker) {
+      fence = marker[1]
+      continue
+    }
+    const prose = line
+      .replace(/\]\((?:<[^>]*>|[^()\s]+)(?=[\s)])/g, "](")
+      .replace(/(`+)([^`]+)\1/g, (_, ticks, code) => {
+        if (code === "Kamra Agent" && line.includes(" · roles: ")) return ""
+        return code.replace(/\b(?:kamra|frappe|erpnext)(?:[._]\w+)+|\bX-Frappe-[\w-]+/gi, "")
+      })
+    if (forbidden.test(prose)) findings.push(`api-reference.md:${index + 1}: ${line}`)
+  }
+}
+
 export function checkSource() {
   const { findings, sourceCount } = scanTree()
   const collection = JSON.parse(fs.readFileSync(path.join(root, "../docs-site/public/kamra.postman_collection.json"), "utf8"))
@@ -152,11 +176,12 @@ export function checkSource() {
     if (!collection.info?.[field]?.trim()) findings.push(`Missing Postman collection ${field}`)
   }
   scanPostman(collection, "Postman collection")
+  scanReference(fs.readFileSync(path.join(root, "../docs-site/api-reference.md"), "utf8"), findings)
   if (findings.length) {
     console.error(findings.join("\n"))
     throw new Error(`${sourceCount} UI source findings; ${findings.length} total branding findings`)
   }
-  console.log("Brand leak check passed: source, locales, catalog and shell")
+  console.log("Brand leak check passed: source, locales, catalog, shell and public API documentation")
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) checkSource()

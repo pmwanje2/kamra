@@ -11,12 +11,12 @@ the UI and the AI use. **548 endpoints**, generated from the source
 ## Calling convention
 
 ```
-POST https://<your-kamra>/api/method/kamra.<module>.<function>
+POST https://<your-host>/api/method/kamra.<module>.<function>
 Authorization: token <api_key>:<api_secret>
 Content-Type: application/json
 ```
 
-- Get keys from **Kamra Agent → Connect your AI** (Claude OAuth, role-scoped) or the
+- Get keys from **Connect your AI** in the assistant (Claude OAuth, role-scoped) or the
   dedicated agent user for services.
 - Responses: `{"message": <return value>}`. Errors are HTTP 4xx with a
   readable reason.
@@ -34,7 +34,7 @@ Content-Type: application/json
 
 **GET/POST** · roles: `Front Desk`, `Finance`, `Revenue Manager`, `Housekeeping`, `Housekeeping Supervisor`, `Kamra Agent`, `Night Auditor`, `F&B Manager`
 
-Which parts of Kamra this property runs. Empty setting = all of
+Which parts of Maximus this property runs. Empty setting = all of
 them, so an existing property keeps working untouched.
 
 | Param | Required | Default |
@@ -58,7 +58,7 @@ Turn parts of the product on or off for one property.
 
 The session's current CSRF token. An open tab asks for it when its
 page-load token went stale because someone signed in or out in another
-tab (Frappe rotates the token on login). None for a guest. A GET, like
+tab (the platform rotates the token on login). None for a guest. A GET, like
 the boot page that already carries the token, and readable only by the
 same origin.
 
@@ -78,7 +78,7 @@ allow_guest so the SPA's initial "am I logged in?" probe returns
 REST base URL + whether the current user already has an API key.
 
 Drives the on-site Developers page. The secret itself is never returned
-here - Frappe stores it hashed; it's only shown once, at generation time.
+here - the platform stores it hashed; it's only shown once, at generation time.
 
 ### `kamra.api.generate_api_key`
 
@@ -1213,7 +1213,7 @@ Interim invoice mid-stay: freeze the paid folio, open a fresh one.
 **POST** · roles: `Finance`, `Front Desk`, `Kamra Agent`
 
 Void an invoice into the register and reopen the folio for correction.
-An invoice the ERPNext bridge issued goes to the bridge's credit and
+An invoice the accounting bridge issued goes to the bridge's credit and
 re-bill instead; the folio is not reopened here.
 
 | Param | Required | Default |
@@ -1268,7 +1268,7 @@ Statement fields (stable for integrations):
 
 Reprint a settled folio's tax invoice (OPERA Folio History, Reprint).
 
-Under the ERPNext accounting bridge that is the fiscal document: the ERP
+Under the ERP accounting bridge that is the fiscal document: the ERP
 Sales Invoice number with its fiscal identifiers. A fiscal document that
 is still pending, from a test fiscal service, or whose status can't be
 read is not a tax invoice, so it is not reprinted as one. Each reprint is
@@ -1284,7 +1284,7 @@ logged with its revision.
 **GET/POST** · roles: `Front Desk`, `Finance`, `Night Auditor`, `Kamra Agent`
 
 Close the current business date. Refused while a blocking pre-check
-(kamra.night_audit.night_audit_precheck) has items, unless each is
+(`kamra.night_audit.night_audit_precheck`) has items, unless each is
 listed in `acknowledge` (check keys) with a `note` giving the reason.
 
 | Param | Required | Default |
@@ -1376,7 +1376,7 @@ lines and totals.
 
 **GET/POST**
 
-Right to erasure (DPDP s.12): see kamra.privacy.erase_guest. Stays
+Right to erasure (DPDP s.12): see `kamra.privacy.erase_guest`. Stays
 and bills stay for the books. Irreversible.
 
 | Param | Required | Default |
@@ -1399,7 +1399,7 @@ before speaking to a returning guest.
 
 **GET/POST**
 
-Properties the current user may work with. frappe.get_list applies
+Properties the current user may work with. `frappe.get_list` applies
 User Permissions, so a property-restricted user sees only theirs.
 
 ### `kamra.api.front_desk_snapshot`
@@ -1515,12 +1515,12 @@ fixes it in the same breath instead of turning the guest away.
 
 The ID scan as a data URL, for the desk to eyeball.
 
-Why not just point an &lt;img> at the /private/files/ URL: Frappe would
+Why not just point an &lt;img> at the /private/files/ URL: the platform would
 authorise that through File.has_permission -> the Reservation's own
 doctype permissions. On a site whose Custom DocPerm rows omit Front Desk
 (as ours do - any custom perm on a doctype REPLACES all its standard
 perms), that check says no, and the desk gets a broken image while a
-Hotel Admin sees it. Kamra's authorization has always lived on the
+Hotel Admin sees it. Maximus's authorization has always lived on the
 endpoint rather than the doctype (see authz.py), so the image is served
 the same way as everything else here: one gate, one rule, works for
 every role the app actually grants.
@@ -1565,7 +1565,7 @@ Check the guest in: the last step of the guided check-in.
 
 Hard gate: a room must be assigned (or passed here). Soft-required
 steps (ID, deposit, registration card, …) may still be open  -  the desk
-is warned and finishes them later. kamra.checkin.check_in_readiness
+is warned and finishes them later. `kamra.checkin.check_in_readiness`
 lists hard blockers and pending backfill. Records who checked the guest
 in and when; a connected door-lock system then makes the keys recorded
 in the Keys step.
@@ -1736,7 +1736,7 @@ its own refund path), what moves to the city ledger and its credit
 check, whether a cashier PIN and an open till are needed, every refusal
 check-out would give (`blockers`, each tied to its step) and the
 property's check-out SOP. check_out judges the balances with the same
-helper (kamra.checkout.settlement_position), so the two never disagree.
+helper (`kamra.checkout.settlement_position`), so the two never disagree.
 Safe to call again and again: opening the sheet writes nothing.
 
 | Param | Required | Default |
@@ -1925,7 +1925,7 @@ tape view).
 
 **GET/POST** · roles: `Front Desk`, `Finance`, `Kamra Agent`
 
-The GM / front-desk position briefing - what Kamra Agent reads out
+The GM / front-desk position briefing - what the assistant reads out
 at the morning meeting: today's occupancy against the overbooking
 ceiling, arrivals with ETAs, departures with ETDs and balances,
 back-to-back conflicts, the demand tier pricing is applying, and a
@@ -2124,7 +2124,7 @@ optional free text beside the reason code; it goes on the audit row.
 
 **GET/POST** · roles: `Front Desk`, `Kamra Agent`, `Finance`, `Revenue Manager`
 
-The reservation's Changes Log, newest first: every save Frappe
+The reservation's Changes Log, newest first: every save the platform
 recorded on it (its Version rows: the fields in CHANGE_LOG_FIELDS and
 each night's rate, before and after) and every governed action (the
 audit rows: who, why, each night before and after, and who signed it
@@ -2177,7 +2177,7 @@ confirm_price=1 when the total changes. For a stay in house,
 `charged_nights` says what the property's rate-change policy does to
 nights already on the folio: kept at their charged rate (kept_difference
 is what the desk may give back as an allowance) or credited
-(credit_total, posted by Kamra). A discounted stay also gets the
+(credit_total, posted by Maximus). A discounted stay also gets the
 discount rules the amendment will run (discount_governance,
 needs_supervisor and who can sign it off: supervisors). A new rate_plan
 gets comp_governance: a Complimentary or House Use plan's sign-off.
@@ -2354,7 +2354,7 @@ housekeeping when the room turns; on an overnight stay they are the
 ETA / ETD.
 
 A stay billed to a company on credit runs the property's credit control
-(kamra.credit) for its amount: a warning comes back as `credit_warning`;
+(`kamra.credit`) for its amount: a warning comes back as `credit_warning`;
 a block refuses (CREDIT_BLOCKED) unless Finance or a Hotel Admin passes
 `credit_override_reason`, which is logged. Agents can't override.
 
@@ -2745,10 +2745,10 @@ same layout as group_quotation. Nothing is posted.
 **POST** · roles: `Front Desk`, `Revenue Manager`, `Hotel Admin`
 
 Email the booking's quotation to the booker, as a PDF, through
-Frappe's own email: a Communication logged on the Reservation and sent
+the site's email service: a Communication logged on the Reservation and sent
 by the site's outgoing account. It goes to the address on record only
 (the guest profile's email); no other recipient, cc or bcc can be given.
-The mail is queued (status "Queued"); Frappe's Email Queue delivers it.
+The mail is queued (status "Queued"); the email queue delivers it.
 Refuses with QUOTE_NO_EMAIL_ACCOUNT, QUOTE_NO_RECIPIENT_EMAIL,
 QUOTE_BOOKING_CLOSED, or QUOTE_RECENTLY_SENT when the same version of
 the quotation went out less than a minute ago.
@@ -2920,7 +2920,7 @@ agent turns "30 rooms + a 200-pax wedding on Dec 12" into a proposal.
 **POST** · roles: `Front Desk`, `Finance`, `Revenue Manager`, `Housekeeping`
 
 Personal MCP credentials for connecting Claude (or any MCP client)
-AS YOURSELF. The key acts with exactly your roles - Frappe enforces the
+AS YOURSELF. The key acts with exactly your roles - the platform enforces the
 same gates as the UI, so a front-desk connection can do front-desk
 things and nothing more. Regenerating invalidates the old secret.
 
@@ -2949,7 +2949,7 @@ can offer one-tap paths to billing and editing. One endpoint, all types.
 
 Currency, number locale and tax vocabulary for this property, from its
 localization pack. Drives the frontend's money formatting and tax dropdowns
-so no screen hardcodes ₹ or GST %. `integrations` says which country
+so no screen hardcodes a particular currency symbol or tax rate. `integrations` says which country
 integrations (gateways, tax return, ID checks) this property has.
 
 | Param | Required | Default |
@@ -4575,7 +4575,7 @@ are ignored. Custom Hours, or no session with times, keeps the times.
 **GET/POST**
 
 One function, everything about it - the sheet the banquet screen
-renders and Kamra Agent reads.
+renders and the assistant reads.
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -4913,7 +4913,7 @@ standalone function posts to its event folio (under the bridge) or an
 explicitly passed folio. Liquor posts with the rest: the bill chosen is
 the one that pays the function.
 
-Under the ERP accounting bridge, line tax is zero because ERPNext's tax
+Under the ERP accounting bridge, line tax is zero because the accounting system's tax
 templates calculate tax on the Sales Invoice (KMR-TAX-001).
 
 | Param | Required | Default |
@@ -4930,7 +4930,7 @@ city ledger settlement or final cash/tender settlement).
 
 When `to_city_ledger=1`, routes the open balance to the function's
 Corporate Account City Ledger Account and closes the folio in the same
-request so ERPNext issues the Sales Invoice to the company's ERP Customer
+request so the accounting system issues the Sales Invoice to the company's ERP Customer
 with the unpaid balance in native AR.
 
 | Param | Required | Default |
@@ -5323,7 +5323,7 @@ business, so they never reach outbound webhook subscribers.
 
 **GET/POST** · roles: `Finance`, `Hotel Admin`
 
-The header row of one of Kamra's go-live CSV templates.
+The header row of one of Maximus's go-live CSV templates.
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -5372,7 +5372,7 @@ that can't be posted. Nothing is written.
 **POST** · roles: `Finance`
 
 Post the opening balances. Each item is posted once: a re-run of the
-same file finds it in Kamra and skips it (and says so). Company bills
+same file finds it in Maximus and skips it (and says so). Company bills
 go in before company credits, so a credit settles the oldest bill.
 
 | Param | Required | Default |
@@ -5384,7 +5384,7 @@ go in before company credits, so a credit settles the oldest bill.
 
 **POST** · roles: `Finance`
 
-Counts and totals in each go-live file against what is now in Kamra,
+Counts and totals in each go-live file against what is now in Maximus,
 per category. `ready` is true only when every category matches and no
 row of any file was left out - the gate before the hotel goes live.
 
@@ -6010,7 +6010,7 @@ year to date, plus each ledger's balance brought and carried forward.
 
 ## Custom reports (builder, save, email)
 
-> Whitelisted datasets only - no Desk Query Reports or free SQL. Saved definitions live on Kamra Custom Report; staff use Finance → Reports.
+> Whitelisted datasets only - no Desk Query Reports or free SQL. Staff can open saved definitions under Finance → Reports.
 
 ### `kamra.custom_reports.list_report_datasets`
 
@@ -6977,7 +6977,7 @@ A management P&L for the period, before tax: revenue by department
 expenses (approved supplier bills by category on their bill date, petty
 cash by category, cash paid out from the tills). Credit notes on
 closed bills count under allowances. Not statutory accounts: payroll, depreciation and anything
-paid outside Kamra are not in it.
+paid outside Maximus are not in it.
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -6992,9 +6992,9 @@ paid outside Kamra are not in it.
 What is owed to the hotel and what it owes, as of a date (default
 today): guest ledger and city ledger against advance deposits and
 supplier bills, plus cash in open tills when the date is today. Tax
-collected this month is shown for reference, not in the totals: Kamra
+collected this month is shown for reference, not in the totals: Maximus
 does not record tax paid to the government. Not a full balance sheet:
-the bank, fixed assets, loans and equity are not in Kamra.
+the bank, fixed assets, loans and equity are not in Maximus.
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -7210,9 +7210,8 @@ snapshots that are too heavy for the feed.
 
 **GET/POST** · roles: `Hotel Admin`, `Finance`, `System Manager`
 
-Who signed in to and out of Kamra, newest first: Frappe's own Login /
-Logout records (Activity Log), limited to this property's staff. Only
-what Frappe already stores is shown - who, when, in or out, and whether
+Who signed in to and out of Maximus, newest first: the sign-in and sign-out records (Activity Log), limited to this property's staff. Only
+what the platform already stores is shown - who, when, in or out, and whether
 the attempt worked. IP addresses are left out.
 
 | Param | Required | Default |
@@ -7521,7 +7520,7 @@ Create or update an SOP template and its steps.
 
 ## Guided check-in (steps, who did each, room-charges permission)
 
-> kamra.api.check_in refuses until every check-in step the property marks required is done. check_in_readiness says what is missing.
+> `kamra.api.check_in` refuses until every check-in step the property marks required is done. check_in_readiness says what is missing.
 
 ### `kamra.checkin.checkin_flow`
 
@@ -7693,7 +7692,7 @@ The roles a person can hold, and whether the caller may hand each out.
 
 **GET/POST**
 
-Everyone with a Kamra role who can reach this property.
+Everyone with a Maximus role who can reach this property.
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -8099,7 +8098,7 @@ what a bug report and the login screen quote.
 
 Which Property the public booking engine (``/book``) should show.
 
-Each Kamra deploy is single-tenant: one site = one hotel/villa. The
+Each Maximus deploy is single-tenant: one site = one hotel/villa. The
 frontend used to hardcode the demo property name, which only worked
 on the seeded demo site and broke the booking engine on every other
 tenant (``Property &lt;name> not found`` / permission error for Guest).
@@ -8191,7 +8190,7 @@ Submit the registration details and record consent for this reservation.
 
 The guest photographs their ID during pre-arrival check-in.
 
-Deliberately NOT Frappe's upload_file. That endpoint would need the
+Deliberately NOT the general file-upload endpoint. That endpoint would need the
 site-wide `allow_guests_to_upload_files` setting, which opens
 unauthenticated upload to the whole site; on its guest branch it sets
 ignore_permissions and never sees a token, so it cannot tell whether this
@@ -8334,7 +8333,7 @@ Live promo-code feedback on the booking page. Never throws - returns
 
 **POST**
 
-Hosting / implementation enquiry from kamrapms.com. Stored first (a lead is
+Hosting / implementation enquiry from the public hosting site. Stored first (a lead is
 never lost even without SMTP), then a best-effort email to the team.
 
 Leads are System Manager-only and purged after

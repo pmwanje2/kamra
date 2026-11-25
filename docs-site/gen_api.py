@@ -61,7 +61,7 @@ MODULES = [
     ("audit_report", "Night audit report (day, MTD, YTD)", "Read only. Food and beverage come from the restaurant bills; the year starts where the country pack says."),
     ("custom_reports", "Custom reports (builder, save, email)",
      "Whitelisted datasets only - no Desk Query Reports or free SQL. "
-     "Saved definitions live on Kamra Custom Report; staff use Finance → Reports."),
+     "Staff can open saved definitions under Finance → Reports."),
     ("ledger", "Ledgers (trial balance, city ledger / AR, FX desk)", ""),
     ("credit", "Company credit (payment terms, credit limit, overdue check)",
      "Credit control is enforced inside check_out, create_booking and city_ledger_transfer; these endpoints explain and configure it."),
@@ -255,12 +255,12 @@ the UI and the AI use. **{total} endpoints**, generated from the source
 ## Calling convention
 
 ```
-POST https://<your-kamra>/api/method/kamra.<module>.<function>
+POST https://<your-host>/api/method/kamra.<module>.<function>
 Authorization: token <api_key>:<api_secret>
 Content-Type: application/json
 ```
 
-- Get keys from **Kamra Agent → Connect your AI** (Claude OAuth, role-scoped) or the
+- Get keys from **Connect your AI** in the assistant (Claude OAuth, role-scoped) or the
   dedicated agent user for services.
 - Responses: `{{"message": <return value>}}`. Errors are HTTP 4xx with a
   readable reason.
@@ -272,9 +272,9 @@ Content-Type: application/json
   [contract.json](/contract.json).
 """]
     for m in modules:
-        out.append(f"\n## {m['folder']}\n")
+        out.append(f"\n## {markdown_display(m['folder'])}\n")
         if m["note"]:
-            out.append(f"> {m['note']}\n")
+            out.append(f"> {markdown_display(m['note'])}\n")
         for e in m["endpoints"]:
             badge = " <Badge type='tip' text='public' />" if e["guest"] else ""
             out.append(f"### `kamra.{e['module']}.{e['name']}`{badge}\n")
@@ -283,7 +283,7 @@ Content-Type: application/json
                 meta.append("roles: " + ", ".join(f"`{r}`" for r in e["roles"]))
             out.append(" · ".join(meta) + "\n")
             if e["doc"]:
-                out.append(esc(e["doc"]) + "\n")
+                out.append(esc(markdown_display(e["doc"])) + "\n")
             if e["params"]:
                 out.append("| Param | Required | Default |")
                 out.append("| --- | --- | --- |")
@@ -296,10 +296,10 @@ Content-Type: application/json
     return total
 
 
-# The Postman display copy also draws on internal docstrings. Describe
+# Public descriptions draw on internal docstrings. Describe
 # implementation references in plain language; wire methods and URLs below
 # always come directly from the source endpoint.
-_POSTMAN_TERMS = {
+_DISPLAY_TERMS = {
     "even over `frappe.call`": "including RPC calls",
     " (`approver != frappe.session.user`)": "",
     "`frappe.model.workflow.apply_workflow`": "the workflow engine",
@@ -325,21 +325,32 @@ _POSTMAN_TERMS = {
 }
 
 
-def postman_display(text):
-    for source, display in _POSTMAN_TERMS.items():
+def public_display(text):
+    for source, display in _DISPLAY_TERMS.items():
         text = text.replace(source, display)
     return text
+
+
+def markdown_display(text):
+    """Keep code spans literal and mark method names and wire headers as code."""
+    tokens = re.split(r"(`+[^`\n]*`+|\b(?:kamra|frappe|erpnext)(?:\.\w+)+|\bX-Frappe-[\w-]+)", text)
+    for i, part in enumerate(tokens):
+        if i % 2 == 0:
+            tokens[i] = public_display(part)
+        elif not part.startswith("`"):
+            tokens[i] = f"`{part}`"
+    return "".join(tokens)
 
 
 def write_postman(modules):
     items = []
     for m in modules:
-        folder = {"name": postman_display(m["folder"]), "item": []}
+        folder = {"name": public_display(m["folder"]), "item": []}
         for e in m["endpoints"]:
             body = {n: sample_value(n, d, req) for n, d, req in e["params"]}
             body = {k: v for k, v in body.items() if v is not None}
             req = {
-                "name": postman_display(e["name"]),
+                "name": public_display(e["name"]),
                 "request": {
                     "method": "POST",
                     "header": [
@@ -354,7 +365,7 @@ def write_postman(modules):
                         "path": ["api", "method",
                                  f"kamra.{e['module']}.{e['name']}"],
                     },
-                    "description": postman_display(e["doc"]),
+                    "description": public_display(e["doc"]),
                 },
             }
             if body:
