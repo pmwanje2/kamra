@@ -11,7 +11,7 @@ export default function BrandMark({ className, decorative, legacyLogo }: {
   if (src) return <img src={src} alt={label} className={cn("object-contain", className)} />
   const initials = product().split(/\s+/).slice(0, 2).map((word) => Array.from(word)[0]).join("").toUpperCase()
   return <span role={decorative ? undefined : "img"} aria-label={label || undefined}
-    aria-hidden={decorative} className={cn("inline-grid shrink-0 place-items-center rounded-lg bg-brand-100 font-semibold text-brand-800", className)}>
+    aria-hidden={decorative} className={cn("inline-grid shrink-0 place-items-center rounded-lg bg-accent-muted font-semibold text-accent-ink", className)}>
     {initials}
   </span>
 }

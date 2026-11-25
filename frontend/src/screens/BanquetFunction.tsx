@@ -115,18 +115,18 @@ export default function BanquetFunction() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <nav aria-label={translate("Breadcrumb")} className="mb-1">
-            <ol className="flex items-center gap-1.5 text-xs text-zinc-400">
+            <ol className="flex items-center gap-1.5 text-xs text-muted-ink">
               <li>
                 <button
                   onClick={() => navigate("/banquet")}
-                  className="inline-flex items-center gap-1 hover:text-zinc-700"
+                  className="inline-flex items-center gap-1 hover:text-secondary-ink"
                 >
                   <ArrowLeft className="size-3.5" />{translate("Banquets")}</button>
               </li>
               <li aria-hidden>/</li>
               <li className="font-mono">{fn.name}</li>
               <li aria-hidden>/</li>
-              <li className="text-zinc-600">
+              <li className="text-secondary-ink">
                 {translate(steps.find((x) => x.id === step)?.label)}
               </li>
             </ol>
@@ -134,11 +134,11 @@ export default function BanquetFunction() {
           <h1 className="flex flex-wrap items-center gap-2 text-lg font-semibold">
             {fn.customer_name}
             <StatusPill status={fn.status} />
-            <span className="font-mono text-xs font-normal text-zinc-400">
+            <span className="font-mono text-xs font-normal text-muted-ink">
               {fn.name}
             </span>
           </h1>
-          <p className="mt-0.5 text-sm text-zinc-500">
+          <p className="mt-0.5 text-sm text-muted-ink">
             {translate(fn.event_type)}
             {fn.event_name ? ` · ${fn.event_name}` : ""} · {fn.venue} ·{" "}
             {fn.event_date}
@@ -149,7 +149,7 @@ export default function BanquetFunction() {
               ? ` · ${fn.start_time.slice(0, 5)}-${(fn.end_time ?? "").slice(0, 5)}`
               : ""}
             {away >= 0 && fn.status !== "Completed" && (
-              <span className="text-zinc-400">
+              <span className="text-muted-ink">
                 {" "}{translate("· in ")}{away}{translate(" day")}{away === 1 ? "" : translate("s")}
               </span>
             )}
@@ -166,13 +166,13 @@ export default function BanquetFunction() {
       <ErrorNote error={error} />
 
       {fn.next_actions.length > 0 && (
-        <ul className="space-y-1 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+        <ul className="space-y-1 rounded-xl border border-warning-line bg-warning-subtle px-4 py-3">
           {fn.next_actions.map((a, i) => (
             <li
               key={i}
               className={
                 "text-sm " +
-                (a.urgency === "high" ? "text-amber-900" : "text-amber-700")
+                (a.urgency === "high" ? "text-warning-ink" : "text-warning-ink")
               }
             >
               {translate(a.message)}
@@ -193,7 +193,7 @@ export default function BanquetFunction() {
           label={translate("Balance")}
           value={fn.balance_due}
           moneyCtx={fn}
-          tone={fn.balance_due > 0 ? "text-rose-700" : "text-emerald-700"}
+          tone={fn.balance_due > 0 ? "text-danger-ink" : "text-success-ink"}
         />
         {/* Claiming 100% because nothing has been costed is the most
             flattering possible lie - say "not costed yet" instead. */}
@@ -208,10 +208,10 @@ export default function BanquetFunction() {
           }
           tone={
             !fn.total_cost
-              ? "text-zinc-300"
+              ? "text-muted-ink"
               : fn.margin_percent >= 35
-                ? "text-emerald-700"
-                : "text-amber-700"
+                ? "text-success-ink"
+                : "text-warning-ink"
           }
         />
       </div>
@@ -253,14 +253,14 @@ function Money({
 }) {
   useUILanguage()
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3">
-      <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+    <div className="rounded-xl border border-line bg-surface px-4 py-3">
+      <p className="text-[11px] font-medium uppercase tracking-wider text-muted-ink">
         {translate(label)}
       </p>
       <p className={"mt-1 text-xl font-semibold tabular-nums " + tone}>
         {value === null ? "-" : inr(value, moneyCtx)}
       </p>
-      {sub && <p className="mt-0.5 text-xs text-zinc-400">{translate(sub)}</p>}
+      {sub && <p className="mt-0.5 text-xs text-muted-ink">{translate(sub)}</p>}
     </div>
   )
 }
@@ -472,7 +472,7 @@ function StatusActions({
             </Field>
             {outcome === "Confirmed" &&
               (fn.status === "Enquiry" || fn.status === "Tentative") && (
-                <label className="flex items-start gap-2 text-sm text-zinc-600">
+                <label className="flex items-start gap-2 text-sm text-secondary-ink">
                   <input
                     type="checkbox"
                     className="mt-0.5"
@@ -566,7 +566,7 @@ function GroupLinkField({
         )}
         {fn.group_detail && !changed && (
           <Link
-            className="text-xs font-medium text-brand-700 hover:underline"
+            className="text-xs font-medium text-accent-ink hover:underline"
             to="/groups"
           >{translate("Open groups")}</Link>
         )}
@@ -912,8 +912,8 @@ function DetailTab({
       </div>
 
       {dirty && (
-        <div className="sticky bottom-4 flex items-center justify-between gap-3 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3">
-          <span className="text-sm text-brand-900">
+        <div className="sticky bottom-4 flex items-center justify-between gap-3 rounded-xl border border-accent-line bg-accent-subtle px-4 py-3">
+          <span className="text-sm text-accent-ink">
             {Object.keys(draft).length}{translate(" unsaved change")}{Object.keys(draft).length === 1 ? "" : translate("s")}
           </span>
           <div className="flex gap-2">
@@ -958,7 +958,7 @@ function GreenRoomCard({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <p className="text-xs text-zinc-400">{translate("The changing room for the wedding party. Assigning one puts a room block on it, so it genuinely leaves the sellable inventory rather than living on a note.")}</p>
+        <p className="text-xs text-muted-ink">{translate("The changing room for the wedding party. Assigning one puts a room block on it, so it genuinely leaves the sellable inventory rather than living on a note.")}</p>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label={translate("Room")}>
             <select
@@ -998,10 +998,10 @@ function GreenRoomCard({
         </div>
         <div className="flex items-center justify-between">
           {fn.green_room_block ? (
-            <span className="text-xs text-emerald-700">{translate("Held out of sale (")}{fn.green_room_block})
+            <span className="text-xs text-success-ink">{translate("Held out of sale (")}{fn.green_room_block})
             </span>
           ) : (
-            <span className="text-xs text-zinc-400">{translate("Nothing held")}</span>
+            <span className="text-xs text-muted-ink">{translate("Nothing held")}</span>
           )}
           <Button
             variant="outline"
@@ -1115,7 +1115,7 @@ function ItemsTab({
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-zinc-200 text-left text-[11px] uppercase tracking-wider text-zinc-400">
+                  <tr className="border-b border-line text-left text-[11px] uppercase tracking-wider text-muted-ink">
                     <th className="w-36 py-2 pr-2 font-medium">{translate("Type")}</th>
                     <th className="min-w-56 py-2 pr-2 font-medium">{translate("Item")}</th>
                     <th className="w-20 py-2 pr-2 text-right font-medium">{translate("Qty")}</th>
@@ -1137,8 +1137,8 @@ function ItemsTab({
                     <tr
                       key={l.name}
                       className={
-                        "border-b border-zinc-100 " +
-                        (l.chargeable ? "" : "bg-zinc-50/60")
+                        "border-b border-line-subtle " +
+                        (l.chargeable ? "" : "bg-canvas/60")
                       }
                     >
                       <td className="py-1.5 pr-2">
@@ -1165,7 +1165,7 @@ function ItemsTab({
                         />
                         {l.banquet_menu && (
                           <button
-                            className="mt-0.5 block text-[11px] font-medium text-brand-700 hover:underline"
+                            className="mt-0.5 block text-[11px] font-medium text-accent-ink hover:underline"
                             onClick={() => setComposing(l.banquet_menu)}
                           >
                             {fn.selections?.some(
@@ -1197,7 +1197,7 @@ function ItemsTab({
                           ))}
                         </select>
                       </td>
-                      <td className="py-1.5 pr-2 text-right text-xs tabular-nums text-zinc-400">
+                      <td className="py-1.5 pr-2 text-right text-xs tabular-nums text-muted-ink">
                         {l.list_rate ? inr(l.list_rate, fn) : "-"}
                       </td>
                       <td className="py-1.5 pr-2">
@@ -1214,7 +1214,7 @@ function ItemsTab({
                       <td className="py-1.5 pr-2 text-center">
                         <input
                           type="checkbox"
-                          className="size-4 accent-brand-600"
+                          className="size-4 accent-focus"
                           checked={Boolean(l.chargeable)}
                           title={
                             (l.chargeable
@@ -1250,7 +1250,7 @@ function ItemsTab({
                             }}
                           />
                         ) : (
-                          <span className="block text-right text-zinc-400">-</span>
+                          <span className="block text-right text-muted-ink">-</span>
                         )}
                       </td>
                       )}
@@ -1258,13 +1258,13 @@ function ItemsTab({
                         {l.chargeable ? (
                           inr(l.net_amount || l.amount, fn)
                         ) : (
-                          <span className="text-zinc-400">
+                          <span className="text-muted-ink">
                             {inr(l.qty * l.rate, fn)}{translate(" free")}</span>
                         )}
                       </td>
                       <td className="py-1.5 text-right">
                         <button
-                          className="text-zinc-300 hover:text-rose-600"
+                          className="text-muted-ink hover:text-danger-text"
                           onClick={() =>
                             setLines((ls) => ls.filter((_, x) => x !== i))
                           }
@@ -1306,7 +1306,7 @@ function ItemsTab({
                   onChange={(e) => setServiceCharge(e.target.value)}
                 />
               </Field>
-              <p className="max-w-64 pb-2 text-xs text-zinc-400">{translate("The discount spreads pro-rata across the lines, so each keeps its own ")}{fn.tax_label || taxLabel()}{translate(" rate.")}</p>
+              <p className="max-w-64 pb-2 text-xs text-muted-ink">{translate("The discount spreads pro-rata across the lines, so each keeps its own ")}{fn.tax_label || taxLabel()}{translate(" rate.")}</p>
             </div>
             <div className="min-w-56 space-y-1 text-sm">
               <Row label={translate("Subtotal")} value={inr(fn.subtotal, fn)} />
@@ -1314,7 +1314,7 @@ function ItemsTab({
                 <Row
                   label={translate("Less discount")}
                   value={"-" + inr(fn.discount_amount, fn)}
-                  tone="text-amber-700"
+                  tone="text-warning-ink"
                 />
               )}
               {fn.service_charge > 0 && (
@@ -1328,20 +1328,20 @@ function ItemsTab({
               <Row
                 label={translate("Grand total")}
                 value={inr(fn.grand_total, fn)}
-                tone="font-semibold border-t border-zinc-200 pt-1"
+                tone="font-semibold border-t border-line pt-1"
               />
               {fn.non_chargeable_value > 0 && (
                 <Row
                   label={translate("Complimentary")}
                   value={inr(fn.non_chargeable_value, fn)}
-                  tone="text-zinc-400"
+                  tone="text-muted-ink"
                 />
               )}
               {openImpact !== 0 && (
                 <Row
                   label={translate("If open items land")}
                   value={inr(fn.grand_total + openImpact, fn)}
-                  tone="text-zinc-400"
+                  tone="text-muted-ink"
                 />
               )}
             </div>
@@ -1428,7 +1428,7 @@ function Row({
   useUILanguage()
   return (
     <div className={"flex justify-between gap-6 " + tone}>
-      <span className="text-zinc-500">{translate(label)}</span>
+      <span className="text-muted-ink">{translate(label)}</span>
       <span className="tabular-nums">{value}</span>
     </div>
   )
@@ -1487,14 +1487,14 @@ function CataloguePicker({
             return (
               <li
                 key={item.name}
-                className="rounded-lg border border-zinc-200 px-3 py-2"
+                className="rounded-lg border border-line px-3 py-2"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="font-medium">
                       {isMenu ? item.menu_name : item.item_name}
                     </p>
-                    <p className="text-xs text-zinc-400">
+                    <p className="text-xs text-muted-ink">
                       {isMenu
                         ? `${item.meal_period} · ${item.food_type} · ${item.service_style}` +
                           (item.min_pax ? translate(" · min {v0} pax", { v0: String(item.min_pax) }) : "")
@@ -1502,7 +1502,7 @@ function CataloguePicker({
                           (item.chargeable ? "" : translate(" · normally free"))}
                     </p>
                     {isMenu && item.courses.length > 0 && (
-                      <p className="mt-1 line-clamp-2 text-xs text-zinc-500">
+                      <p className="mt-1 line-clamp-2 text-xs text-muted-ink">
                         {item.courses
                           .map((c) => `${c.course}: ${c.dishes ?? ""}`)
                           .join(" · ")}
@@ -1574,7 +1574,7 @@ function OpenItemsCard({
           <Plus className="size-4" />{translate("Add")}</Button>
       </CardHeader>
       <CardContent>
-        <p className="mb-3 text-xs text-zinc-400">{translate("What's still unsettled while the price is being agreed - and what agreeing it would do to the quote.")}</p>
+        <p className="mb-3 text-xs text-muted-ink">{translate("What's still unsettled while the price is being agreed - and what agreeing it would do to the quote.")}</p>
         {rows.length === 0 ? (
           <Empty>{translate("Nothing outstanding.")}</Empty>
         ) : (
@@ -1582,7 +1582,7 @@ function OpenItemsCard({
             {rows.map((r, i) => (
               <div
                 key={i}
-                className="grid gap-2 rounded-lg border border-zinc-200 px-3 py-2 sm:grid-cols-[1fr_auto_auto_auto_auto]"
+                className="grid gap-2 rounded-lg border border-line px-3 py-2 sm:grid-cols-[1fr_auto_auto_auto_auto]"
               >
                 <input
                   className={inputCls}
@@ -1666,12 +1666,12 @@ function RevisionsCard({ fn }: { fn: FunctionSheet }) {
         <ol className="space-y-2">
           {[...fn.revisions].reverse().map((r) => (
             <li key={r.name} className="flex items-start gap-3 text-sm">
-              <span className="mt-0.5 rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-xs text-zinc-500">
+              <span className="mt-0.5 rounded bg-subtle px-1.5 py-0.5 font-mono text-xs text-muted-ink">
                 v{r.version}
               </span>
               <div className="min-w-0 flex-1">
-                <p className="text-zinc-700">{r.change_note}</p>
-                <p className="text-xs text-zinc-400">
+                <p className="text-secondary-ink">{r.change_note}</p>
+                <p className="text-xs text-muted-ink">
                   {String(r.revised_on).slice(0, 16)} · {r.revised_by} ·{" "}
                   {r.pax}{translate(" pax")}</p>
               </div>
@@ -1749,7 +1749,7 @@ function MoneyTab({
               {terms.map((t, i) => (
                 <div
                   key={i}
-                  className="grid gap-2 rounded-lg border border-zinc-200 px-3 py-2 sm:grid-cols-[1fr_auto_auto_auto_auto]"
+                  className="grid gap-2 rounded-lg border border-line px-3 py-2 sm:grid-cols-[1fr_auto_auto_auto_auto]"
                 >
                   <input
                     className={inputCls}
@@ -1786,7 +1786,7 @@ function MoneyTab({
                     className={
                       inputCls +
                       " sm:!w-28 " +
-                      (t.status === "Overdue" ? "!text-rose-700" : "")
+                      (t.status === "Overdue" ? "!text-danger-ink" : "")
                     }
                     value={t.status ?? "Pending"}
                     onChange={(e) =>
@@ -1800,9 +1800,9 @@ function MoneyTab({
                   </select>
                 </div>
               ))}
-              <p className="pt-1 text-xs text-zinc-400">{translate("Scheduled ")}{inr(scheduled, fn)}{translate(" of ")}{inr(fn.grand_total, fn)}
+              <p className="pt-1 text-xs text-muted-ink">{translate("Scheduled ")}{inr(scheduled, fn)}{translate(" of ")}{inr(fn.grand_total, fn)}
                 {Math.abs(scheduled - fn.grand_total) > 1 && (
-                  <span className="text-amber-700">
+                  <span className="text-warning-ink">
                     {" "}
                     · {inr(Math.abs(scheduled - fn.grand_total), fn)}{" "}
                     {scheduled > fn.grand_total ? translate("over") : translate("unscheduled")}
@@ -1873,32 +1873,32 @@ function MoneyTab({
           {fn.receipts.length === 0 ? (
             <Empty>{translate("Nothing received yet.")}</Empty>
           ) : (
-            <ul className="divide-y divide-zinc-100 text-sm">
+            <ul className="divide-y divide-line-subtle text-sm">
               {fn.receipts.map((r) => (
                 <li
                   key={r.name}
                   className="group flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2"
                 >
                   <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
-                    <span className="shrink-0 tabular-nums text-zinc-500">
+                    <span className="shrink-0 tabular-nums text-muted-ink">
                       {r.receipt_date}
                     </span>
-                    <span className="font-medium text-zinc-800">
+                    <span className="font-medium text-ink">
                       {translate(r.kind)}
                       {r.kind === "Security Deposit" && Number(fn.deposit_held || 0) > 0 && (
-                        <span className="ml-1.5 rounded bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium text-violet-700">{translate("held")}</span>
+                        <span className="ml-1.5 rounded bg-violet-subtle px-1.5 py-0.5 text-[10px] font-medium text-violet-ink">{translate("held")}</span>
                       )}
                     </span>
-                    <span className="text-zinc-500">{translate(r.mode)}</span>
+                    <span className="text-muted-ink">{translate(r.mode)}</span>
                     {r.reference && (
-                      <span className="min-w-0 break-all text-zinc-400">{r.reference}</span>
+                      <span className="min-w-0 break-all text-muted-ink">{r.reference}</span>
                     )}
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     <span
                       className={
                         "whitespace-nowrap text-right tabular-nums " +
-                        (r.kind === "Refund" ? "text-rose-700" : "")
+                        (r.kind === "Refund" ? "text-danger-ink" : "")
                       }
                     >
                       {r.kind === "Refund" ? "-" : ""}
@@ -1910,7 +1910,7 @@ function MoneyTab({
                       <button
                         title={translate("Print this receipt")}
                         aria-label={translate("Print this receipt")}
-                        className="text-zinc-300 opacity-0 transition-opacity hover:text-brand-700 group-hover:opacity-100"
+                        className="text-muted-ink opacity-0 transition-opacity hover:text-accent-ink group-hover:opacity-100"
                         onClick={() => setReceiptDoc(r.name)}
                       >
                         <Printer className="size-4" />
@@ -1926,7 +1926,7 @@ function MoneyTab({
             <Row
               label={translate("Balance")}
               value={inr(fn.balance_due, fn)}
-              tone={fn.balance_due > 0 ? "text-rose-700" : "text-emerald-700"}
+              tone={fn.balance_due > 0 ? "text-danger-ink" : "text-success-ink"}
             />
           </div>
         </CardContent>
@@ -1941,7 +1941,7 @@ function MoneyTab({
         </CardHeader>
         <CardContent className="space-y-2">
           {fn.posted_to_folio ? (
-            <p className="text-sm text-emerald-700">{translate("Billed to folio")}{" "}
+            <p className="text-sm text-success-ink">{translate("Billed to folio")}{" "}
               <Link
                 className="font-medium hover:underline"
                 to={`/billing/${encodeURIComponent(fn.folio ?? "")}`}
@@ -1952,7 +1952,7 @@ function MoneyTab({
             </p>
           ) : (
             <>
-              <p className="text-sm text-zinc-500">
+              <p className="text-sm text-muted-ink">
                 {fn.group_detail
                   ? translate("Posts to {v0}'s master folio - one bill for the rooms and the function.", { v0: String(fn.group_detail.group_name) })
                   : eventBilling(fn).invoiceOnFolio
@@ -2131,28 +2131,28 @@ function CloseOutCard({
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="grid gap-3 sm:grid-cols-3">
-          <Money label={translate("Deposit held")} value={held} tone="text-violet-700" />
+          <Money label={translate("Deposit held")} value={held} tone="text-violet-ink" />
           <Money
             label={translate("Damages")}
             value={fn.damage_amount}
             sub={translate(fn.damage_note ?? undefined)}
-            tone={fn.damage_amount ? "text-rose-700" : "text-zinc-400"}
+            tone={fn.damage_amount ? "text-danger-ink" : "text-muted-ink"}
           />
           <Money
             label={translate("Returned")}
             value={fn.deposit_refunded}
-            tone="text-emerald-700"
+            tone="text-success-ink"
           />
         </div>
         {reopened ? (
-          <p className="text-sm text-amber-700">{translate("Reopened after its close-out on")}{" "}
+          <p className="text-sm text-warning-ink">{translate("Reopened after its close-out on")}{" "}
             {String(fn.closed_out_on).slice(0, 16).replace("T", " ")}{translate(". Correct the sheet, then close it again.")}</p>
         ) : done ? (
-          <p className="text-sm text-emerald-700">{translate("Closed out ")}{String(fn.closed_out_on).slice(0, 16).replace("T", " ")}
+          <p className="text-sm text-success-ink">{translate("Closed out ")}{String(fn.closed_out_on).slice(0, 16).replace("T", " ")}
             {fn.closed_out_by ? translate(" by {v0}", { v0: String(fn.closed_out_by) }) : ""}.
           </p>
         ) : (
-          <p className="text-xs text-zinc-400">{translate("A security deposit is held money, not payment - it never nets against the bill. Record it as a Security Deposit receipt, then close out to return what's left after damages.")}</p>
+          <p className="text-xs text-muted-ink">{translate("A security deposit is held money, not payment - it never nets against the bill. Record it as a Security Deposit receipt, then close out to return what's left after damages.")}</p>
         )}
       </CardContent>
 
@@ -2196,10 +2196,10 @@ function CloseOutCard({
             </Field>
 
             {reopened ? (
-              <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800">{translate("The deposit and damages were settled at the first close-out. Closing again records the covers only - bill anything further as a line on the function.")}</p>
+              <p className="rounded-xl bg-warning-subtle px-4 py-3 text-sm text-warning-ink">{translate("The deposit and damages were settled at the first close-out. Closing again records the covers only - bill anything further as a line on the function.")}</p>
             ) : (
               <>
-            <div className="rounded-xl border border-zinc-200 p-3">
+            <div className="rounded-xl border border-line p-3">
               <p className="mb-2 text-sm font-medium">{translate("Anything broken?")}</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field label={translate("Deduct from the deposit")}>
@@ -2236,32 +2236,32 @@ function CloseOutCard({
             <label className="flex items-start gap-2">
               <input
                 type="checkbox"
-                className="mt-0.5 size-4 accent-brand-600"
+                className="mt-0.5 size-4 accent-focus"
                 checked={refund}
                 onChange={(e) => setRefund(e.target.checked)}
               />
               <span>
-                <span className="block text-sm font-medium text-zinc-700">{translate("Return the deposit balance now")}</span>
-                <span className="block text-xs text-zinc-400">{translate("Recorded as a refund on the function's ledger.")}</span>
+                <span className="block text-sm font-medium text-secondary-ink">{translate("Return the deposit balance now")}</span>
+                <span className="block text-xs text-muted-ink">{translate("Recorded as a refund on the function's ledger.")}</span>
               </span>
             </label>
 
-            <div className="space-y-1 rounded-xl bg-zinc-50 px-4 py-3 text-sm">
+            <div className="space-y-1 rounded-xl bg-canvas px-4 py-3 text-sm">
               <Row label={translate("Deposit held")} value={inr(held, fn)} />
               {!!Number(damage) && (
                 <Row
                   label={translate("Less damages")}
                   value={"-" + inr(Number(damage), fn)}
-                  tone="text-rose-700"
+                  tone="text-danger-ink"
                 />
               )}
               <Row
                 label={translate("Returning")}
                 value={inr(willRefund, fn)}
-                tone="font-semibold border-t border-zinc-200 pt-1"
+                tone="font-semibold border-t border-line pt-1"
               />
               {!!Number(damage) && (
-                <p className="pt-2 text-xs text-zinc-500">{translate("The ")}{inr(Number(damage), fn)}{translate(" deducted goes on the bill as a damage-recovery line - it's the hotel's money now, not a deposit.")}</p>
+                <p className="pt-2 text-xs text-muted-ink">{translate("The ")}{inr(Number(damage), fn)}{translate(" deducted goes on the bill as a damage-recovery line - it's the hotel's money now, not a deposit.")}</p>
               )}
             </div>
               </>
@@ -2338,17 +2338,17 @@ function PaperTab({
           <Card key={d.kind}>
             <CardContent>
               <p className="flex items-center gap-1.5 font-medium">
-                <FileText className="size-4 text-zinc-400" />
+                <FileText className="size-4 text-muted-ink" />
                 {translate(d.title)}
               </p>
-              <p className="mt-1 min-h-10 text-xs text-zinc-400">{translate(d.blurb)}</p>
+              <p className="mt-1 min-h-10 text-xs text-muted-ink">{translate(d.blurb)}</p>
               {d.ready ? (
                 <Link
                   to={`/banquet/${encodeURIComponent(fn.name)}/${d.kind}`}
-                  className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+                  className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-accent-fill px-3 py-1.5 text-sm font-medium text-on-solid hover:bg-accent-fill-hover"
                 >{translate("action|Open")}</Link>
               ) : (
-                <p className="mt-2 text-xs text-amber-700">{translate(d.why)}</p>
+                <p className="mt-2 text-xs text-warning-ink">{translate(d.why)}</p>
               )}
             </CardContent>
           </Card>
@@ -2405,7 +2405,7 @@ function PaperTab({
           >
             {fn.beo_number ? translate("Reissue event order") : translate("Issue event order")}
           </Button>
-          <div className="basis-full text-xs text-zinc-400">
+          <div className="basis-full text-xs text-muted-ink">
             {fn.quote_sent_on
               ? translate("Quote v{v0} issued {v1}{v2}.", { v0: String(fn.quote_version), v1: String(fn.quote_sent_on), v2: String(fn.quote_valid_till ? `, valid till ${fn.quote_valid_till}` : "") })
               : translate("No quote issued yet.")}
@@ -2477,7 +2477,7 @@ function ChecklistPanel({
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-zinc-500">{translate("No checklist tasks yet. Confirming a function creates Sales, Finance, Housekeeping and F&B tasks from property templates.")}</p>
+          <p className="text-sm text-muted-ink">{translate("No checklist tasks yet. Confirming a function creates Sales, Finance, Housekeeping and F&B tasks from property templates.")}</p>
         </CardContent>
       </Card>
     )
@@ -2488,7 +2488,7 @@ function ChecklistPanel({
       <CardHeader>
         <CardTitle>
           <span className="inline-flex items-center gap-1.5">
-            <CheckSquare className="size-4" />{translate("Department checklist")}<span className="ml-2 font-mono text-xs font-normal text-zinc-400">
+            <CheckSquare className="size-4" />{translate("Department checklist")}<span className="ml-2 font-mono text-xs font-normal text-muted-ink">
               {board.done}/{board.total}{translate(" done · ")}{board.open}{translate(" open")}</span>
           </span>
         </CardTitle>
@@ -2496,14 +2496,14 @@ function ChecklistPanel({
       <CardContent className="space-y-4">
         {board.departments.map((dept) => (
           <div key={dept.department}>
-            <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+            <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-ink">
               {translate(dept.department)}
             </p>
             <ul className="space-y-1.5">
               {dept.tasks.map((t) => (
                 <li
                   key={t.name}
-                  className="flex flex-wrap items-center gap-2 rounded-lg border border-zinc-100 px-3 py-2"
+                  className="flex flex-wrap items-center gap-2 rounded-lg border border-line-subtle px-3 py-2"
                 >
                   <button
                     type="button"
@@ -2511,8 +2511,8 @@ function ChecklistPanel({
                     className={
                       "flex size-5 shrink-0 items-center justify-center rounded border text-xs " +
                       (t.status === "Done"
-                        ? "border-emerald-600 bg-emerald-600 text-white"
-                        : "border-zinc-300 bg-white text-transparent hover:border-brand-500")
+                        ? "border-emerald-600 bg-success-fill text-on-solid"
+                        : "border-control bg-surface text-transparent hover:border-accent-control")
                     }
                     aria-label={
                       (t.status === "Done" ? translate("Mark open") : translate("Mark done"))
@@ -2533,14 +2533,14 @@ function ChecklistPanel({
                     className={
                       "min-w-0 flex-1 text-sm " +
                       (t.status === "Done"
-                        ? "text-zinc-400 line-through"
-                        : "text-zinc-800")
+                        ? "text-muted-ink line-through"
+                        : "text-ink")
                     }
                   >
                     {translate(t.title)}
                   </span>
                   {t.due_date && (
-                    <span className="text-xs text-zinc-400">{translate("due ")}{t.due_date}
+                    <span className="text-xs text-muted-ink">{translate("due ")}{t.due_date}
                     </span>
                   )}
                 </li>
@@ -2596,18 +2596,18 @@ function ReceiptPrint({
       {!doc ? (
         <Empty>{translate("Loading…")}</Empty>
       ) : (
-        <article className="mx-auto max-w-xl rounded-xl border border-zinc-200 px-8 py-6 text-sm print:border-0">
-          <header className="border-b border-zinc-200 pb-3 text-center">
+        <article className="mx-auto max-w-xl rounded-xl border border-line px-8 py-6 text-sm print:border-0">
+          <header className="border-b border-line pb-3 text-center">
             <h1 className="text-base font-semibold">
               {doc.property.property_name ?? doc.property.legal_name}
             </h1>
-            <p className="mt-0.5 text-xs text-zinc-500">
+            <p className="mt-0.5 text-xs text-muted-ink">
               {[doc.property.address_line, doc.property.city]
                 .filter(Boolean)
                 .join(", ")}
               {doc.property.phone ? ` · ${doc.property.phone}` : ""}
             </p>
-            <p className="mt-3 text-xs font-semibold uppercase tracking-[0.25em] text-zinc-400">
+            <p className="mt-3 text-xs font-semibold uppercase tracking-[0.25em] text-muted-ink">
               {translate(doc.header.title)}
             </p>
           </header>
@@ -2631,20 +2631,20 @@ function ReceiptPrint({
               .filter(([, v]) => v && v.trim() && v.trim() !== "·")
               .map(([k, v]) => (
                 <div key={k} className="flex gap-2">
-                  <dt className="w-28 shrink-0 text-zinc-400">{translate(k)}</dt>
+                  <dt className="w-28 shrink-0 text-muted-ink">{translate(k)}</dt>
                   <dd className="font-medium">{v}</dd>
                 </div>
               ))}
           </dl>
 
-          <div className="mt-5 rounded-lg bg-zinc-50 px-4 py-3">
+          <div className="mt-5 rounded-lg bg-canvas px-4 py-3">
             <div className="flex items-baseline justify-between">
               <div>
-                <p className="text-xs uppercase tracking-wider text-zinc-400">
+                <p className="text-xs uppercase tracking-wider text-muted-ink">
                   {translate(doc.receipt.kind)} · {translate(doc.receipt.mode)}
                 </p>
                 {doc.receipt.reference && (
-                  <p className="text-xs text-zinc-500">
+                  <p className="text-xs text-muted-ink">
                     {doc.receipt.reference}
                   </p>
                 )}
@@ -2653,7 +2653,7 @@ function ReceiptPrint({
                 {inr(doc.receipt.amount, doc.property)}
               </p>
             </div>
-            <p className="mt-2 text-xs italic text-zinc-500">
+            <p className="mt-2 text-xs italic text-muted-ink">
               {doc.header.amount_in_words}
             </p>
           </div>
@@ -2678,12 +2678,12 @@ function ReceiptPrint({
 
           <div className="mt-10 grid grid-cols-2 gap-12">
             <div className="text-center">
-              <div className="h-10 border-b border-zinc-400" />
-              <p className="mt-1 text-[11px] text-zinc-400">{translate("Customer")}</p>
+              <div className="h-10 border-b border-control-strong" />
+              <p className="mt-1 text-[11px] text-muted-ink">{translate("Customer")}</p>
             </div>
             <div className="text-center">
-              <div className="h-10 border-b border-zinc-400" />
-              <p className="mt-1 text-[11px] text-zinc-400">{translate("For ")}{doc.property.property_name}
+              <div className="h-10 border-b border-control-strong" />
+              <p className="mt-1 text-[11px] text-muted-ink">{translate("For ")}{doc.property.property_name}
               </p>
             </div>
           </div>
@@ -2709,7 +2709,7 @@ function RunLine({
     <div
       className={
         "flex justify-between " +
-        (bold ? "border-t border-zinc-200 pt-1 font-semibold" : "text-zinc-500")
+        (bold ? "border-t border-line pt-1 font-semibold" : "text-muted-ink")
       }
     >
       <dt>{translate(label)}</dt>

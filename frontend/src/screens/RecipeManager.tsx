@@ -94,40 +94,40 @@ export default function RecipeManager({ onClose }: { onClose: () => void }) {
     : dishes
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/30 p-4">
-      <div className="flex h-[85vh] w-full max-w-5xl flex-col rounded-2xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-3">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/30 p-4">
+      <div className="flex h-[85vh] w-full max-w-5xl flex-col rounded-2xl bg-surface shadow-2xl">
+        <div className="flex items-center justify-between border-b border-line px-5 py-3">
           <div>
-            <h2 className="text-lg font-bold text-zinc-800">{translate("Recipes")}</h2>
-            <p className="text-xs text-zinc-500">{translate("What each dish takes off its outlet's stock when the kitchen fires it.")}</p>
+            <h2 className="text-lg font-bold text-ink">{translate("Recipes")}</h2>
+            <p className="text-xs text-muted-ink">{translate("What each dish takes off its outlet's stock when the kitchen fires it.")}</p>
           </div>
           <button onClick={onClose} aria-label={translate("Close")}
-            className="grid size-9 place-items-center rounded-lg border border-zinc-300 text-zinc-500 hover:bg-zinc-100">
+            className="grid size-9 place-items-center rounded-lg border border-control text-muted-ink hover:bg-subtle">
             <X className="size-4" />
           </button>
         </div>
 
         <div className="flex min-h-0 flex-1">
-          <div className="flex w-72 shrink-0 flex-col border-r border-zinc-200">
+          <div className="flex w-72 shrink-0 flex-col border-r border-line">
             <div className="relative p-2">
-              <Search className="absolute left-4 top-1/2 size-4 -translate-y-1/2 text-zinc-400" />
+              <Search className="absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-ink" />
               <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={translate("Find a dish…")}
-                className="w-full rounded-lg border border-zinc-300 py-1.5 pl-8 pr-2 text-sm" />
+                className="w-full rounded-lg border border-control py-1.5 pl-8 pr-2 text-sm" />
             </div>
             <ul className="flex-1 overflow-y-auto px-2 pb-2">
               {shown.map((d) => (
                 <li key={d.name}>
                   <button onClick={() => open(d)}
-                    className={cn("w-full rounded-lg px-2 py-1.5 text-left hover:bg-zinc-50",
-                      picked?.name === d.name && "bg-brand-50 ring-1 ring-brand-200")}>
+                    className={cn("w-full rounded-lg px-2 py-1.5 text-left hover:bg-canvas",
+                      picked?.name === d.name && "bg-accent-subtle ring-1 ring-brand-200")}>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="truncate text-sm font-semibold text-zinc-800">{d.item_name}</span>
+                      <span className="truncate text-sm font-semibold text-ink">{d.item_name}</span>
                       <span className={cn("shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold",
-                        d.lines ? "bg-emerald-50 text-emerald-700" : "bg-zinc-100 text-zinc-400")}>
+                        d.lines ? "bg-success-subtle text-success-ink" : "bg-subtle text-muted-ink")}>
                         {d.lines || "-"}
                       </span>
                     </div>
-                    <div className="truncate text-xs text-zinc-400">{d.outlet_name}</div>
+                    <div className="truncate text-xs text-muted-ink">{d.outlet_name}</div>
                   </button>
                 </li>
               ))}
@@ -136,29 +136,29 @@ export default function RecipeManager({ onClose }: { onClose: () => void }) {
 
           <div className="flex min-w-0 flex-1 flex-col">
             {!picked ? (
-              <div className="grid flex-1 place-items-center p-8 text-center text-sm text-zinc-400">{translate("Pick a dish to give it a recipe.")}</div>
+              <div className="grid flex-1 place-items-center p-8 text-center text-sm text-muted-ink">{translate("Pick a dish to give it a recipe.")}</div>
             ) : (
               <>
-                <div className="border-b border-zinc-100 px-5 py-3">
-                  <div className="text-base font-bold text-zinc-800">{picked.item_name}</div>
-                  <div className="text-xs text-zinc-500">{picked.outlet_name}</div>
+                <div className="border-b border-line-subtle px-5 py-3">
+                  <div className="text-base font-bold text-ink">{picked.item_name}</div>
+                  <div className="text-xs text-muted-ink">{picked.outlet_name}</div>
                 </div>
 
                 <div className="flex-1 overflow-y-auto px-5 py-3">
                   {err && (
-                    <div className="mb-3 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                    <div className="mb-3 rounded-lg border border-danger-line-strong bg-danger-subtle px-3 py-2 text-sm text-danger-ink">
                       {translate(err)}
                     </div>
                   )}
                   {lines.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-zinc-300 p-6 text-center">
-                      <CircleAlert className="mx-auto mb-2 size-5 text-zinc-300" />
-                      <p className="text-sm font-semibold text-zinc-600">{translate("No recipe")}</p>
-                      <p className="mt-0.5 text-xs text-zinc-400">{translate("This dish never touches inventory. That's a valid choice - most menus only ever cost their big movers.")}</p>
+                    <div className="rounded-xl border border-dashed border-control p-6 text-center">
+                      <CircleAlert className="mx-auto mb-2 size-5 text-muted-ink" />
+                      <p className="text-sm font-semibold text-secondary-ink">{translate("No recipe")}</p>
+                      <p className="mt-0.5 text-xs text-muted-ink">{translate("This dish never touches inventory. That's a valid choice - most menus only ever cost their big movers.")}</p>
                     </div>
                   ) : (
                     <table className="w-full text-sm">
-                      <thead className="text-left text-xs uppercase text-zinc-400">
+                      <thead className="text-left text-xs uppercase text-muted-ink">
                         <tr>
                           <th className="pb-1">{translate("Ingredient")}</th>
                           <th className="pb-1">{translate("Qty per dish")}</th>
@@ -166,7 +166,7 @@ export default function RecipeManager({ onClose }: { onClose: () => void }) {
                           <th className="pb-1"></th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-zinc-100">
+                      <tbody className="divide-y divide-line-subtle">
                         {lines.map((l, i) => {
                           const meta = ings.find((x) => x.name === l.ingredient)
                           return (
@@ -175,7 +175,7 @@ export default function RecipeManager({ onClose }: { onClose: () => void }) {
                                 <select value={l.ingredient}
                                   onChange={(e) => setLines(lines.map((x, j) =>
                                     j === i ? { ...x, ingredient: e.target.value } : x))}
-                                  className="w-full rounded border border-zinc-300 px-2 py-1 text-sm">
+                                  className="w-full rounded border border-control px-2 py-1 text-sm">
                                   <option value="">{translate("Pick…")}</option>
                                   {ings.map((x) => (
                                     <option key={x.name} value={x.name}>
@@ -189,22 +189,22 @@ export default function RecipeManager({ onClose }: { onClose: () => void }) {
                                   value={l.qty}
                                   onChange={(e) => setLines(lines.map((x, j) =>
                                     j === i ? { ...x, qty: e.target.value } : x))}
-                                  className="w-24 rounded border border-zinc-300 px-2 py-1 tabular-nums" />
-                                <span className="ml-1 text-xs text-zinc-400">
+                                  className="w-24 rounded border border-control px-2 py-1 tabular-nums" />
+                                <span className="ml-1 text-xs text-muted-ink">
                                   {meta?.uom ?? l.uom ?? ""}
                                 </span>
                               </td>
-                              <td className="py-1.5 tabular-nums text-zinc-400">
+                              <td className="py-1.5 tabular-nums text-muted-ink">
                                 {l.qty_on_hand === null || l.qty_on_hand === undefined
                                   ? "-"
-                                  : <span className={cn(l.qty_on_hand < 0 && "font-bold text-rose-600")}>
+                                  : <span className={cn(l.qty_on_hand < 0 && "font-bold text-danger-text")}>
                                       {l.qty_on_hand}
                                     </span>}
                               </td>
                               <td className="py-1.5 text-right">
                                 <button aria-label={translate("Remove line")}
                                   onClick={() => setLines(lines.filter((_, j) => j !== i))}
-                                  className="grid size-8 place-items-center rounded-lg text-zinc-400 hover:bg-rose-50 hover:text-rose-600">
+                                  className="grid size-8 place-items-center rounded-lg text-muted-ink hover:bg-danger-subtle hover:text-danger-text">
                                   <Trash2 className="size-4" />
                                 </button>
                               </td>
@@ -219,11 +219,11 @@ export default function RecipeManager({ onClose }: { onClose: () => void }) {
                     onClick={() => setLines([...lines, { ingredient: "", qty: "" }])}>
                     <Plus className="size-4" />{translate("Add ingredient")}</Button>
 
-                  <p className="mt-4 text-xs text-zinc-400">{translate("Quantities are per one dish, in each ingredient's own unit - there are no conversions. Editing a recipe never rewrites history: past consumption was recorded at the quantity in force when it was fired.")}</p>
+                  <p className="mt-4 text-xs text-muted-ink">{translate("Quantities are per one dish, in each ingredient's own unit - there are no conversions. Editing a recipe never rewrites history: past consumption was recorded at the quantity in force when it was fired.")}</p>
                 </div>
 
-                <div className="flex items-center gap-3 border-t border-zinc-200 p-4">
-                  {saved && <span className="text-sm font-medium text-emerald-600">{translate("Saved")}</span>}
+                <div className="flex items-center gap-3 border-t border-line p-4">
+                  {saved && <span className="text-sm font-medium text-success-text">{translate("Saved")}</span>}
                   <Button className="ml-auto h-11 px-6" disabled={busy} onClick={save}>{translate("Save recipe")}</Button>
                 </div>
               </>

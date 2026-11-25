@@ -171,7 +171,7 @@ export default function RateRestrictionsDrawer({
             type="button"
             variant="ghost"
             disabled={busy}
-            className="min-h-11 text-rose-700"
+            className="min-h-11 text-danger-ink"
             onClick={() => { void submit(true) }}
           >
             {t("Clear restrictions")}
@@ -188,8 +188,8 @@ export default function RateRestrictionsDrawer({
       }
     >
       <div className="space-y-5 text-sm">
-        <div className="space-y-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
-          <div className="text-xs font-semibold uppercase tracking-wider text-zinc-500">{t("Scope")}</div>
+        <div className="space-y-2 rounded-lg border border-line bg-canvas p-3">
+          <div className="text-xs font-semibold uppercase tracking-wider text-muted-ink">{t("Scope")}</div>
           <label className="flex min-h-11 cursor-pointer items-center gap-2.5">
             <input
               type="checkbox"
@@ -198,7 +198,7 @@ export default function RateRestrictionsDrawer({
                 setScopeAllRooms(e.target.checked)
                 setRestrictionsTouched(true)
               }}
-              className="size-4 rounded border-zinc-300"
+              className="size-4 rounded border-control"
             />
             <span>{t("Apply restrictions to all room types (house level)")}</span>
           </label>
@@ -211,7 +211,7 @@ export default function RateRestrictionsDrawer({
                   setApplyToPlan(e.target.checked)
                   setRestrictionsTouched(true)
                 }}
-                className="size-4 rounded border-zinc-300"
+                className="size-4 rounded border-control"
               />
               <span>
                 {t("Limit to rate plan: {plan}", { plan: ratePlanLabel || ratePlan })}
@@ -221,7 +221,7 @@ export default function RateRestrictionsDrawer({
         </div>
 
         <div className="space-y-2">
-          <div className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+          <div className="text-xs font-semibold uppercase tracking-wider text-muted-ink">
             {t("Days of week")}
           </div>
           <div className="flex flex-wrap gap-1.5">
@@ -237,8 +237,8 @@ export default function RateRestrictionsDrawer({
                   className={cn(
                     "min-h-11 min-w-11 rounded-lg border px-2 text-xs font-medium transition-colors",
                     active
-                      ? "border-brand-600 bg-brand-600 text-white"
-                      : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50",
+                      ? "border-accent-control bg-accent-fill text-on-solid"
+                      : "border-control bg-surface text-secondary-ink hover:bg-canvas",
                   )}
                 >
                   {wd.short}
@@ -246,12 +246,12 @@ export default function RateRestrictionsDrawer({
               )
             })}
           </div>
-          <p className="text-xs text-zinc-500">{t("Leave unselected to apply to every day in the range.")}</p>
+          <p className="text-xs text-muted-ink">{t("Leave unselected to apply to every day in the range.")}</p>
         </div>
 
         {allowBarEdit && !scopeAllRooms && (
           <div className="space-y-1.5">
-            <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-500" htmlFor="bar-rate-input">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-muted-ink" htmlFor="bar-rate-input">
               {t("BAR rate")} {currency ? `(${currency})` : ""}
             </label>
             <input
@@ -266,22 +266,22 @@ export default function RateRestrictionsDrawer({
                 setBarRate(e.target.value)
                 setBarTouched(true)
               }}
-              className="min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm tabular-nums text-zinc-900"
+              className="min-h-11 w-full rounded-lg border border-control bg-surface px-3 py-2 text-sm tabular-nums text-ink"
             />
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-muted-ink">
               {t("Overrides the nightly base rate for this room type and pushes to connected channels.")}
             </p>
           </div>
         )}
 
-        <div className="space-y-3 border-t border-zinc-200 pt-4">
-          <div className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+        <div className="space-y-3 border-t border-line pt-4">
+          <div className="text-xs font-semibold uppercase tracking-wider text-muted-ink">
             {t("Stay restrictions")}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="block text-xs font-medium text-zinc-700" htmlFor="min-los-input">
+              <label className="block text-xs font-medium text-secondary-ink" htmlFor="min-los-input">
                 {t("Min LOS")}
               </label>
               <input
@@ -297,11 +297,11 @@ export default function RateRestrictionsDrawer({
                   setMinLos(e.target.value)
                   setRestrictionsTouched(true)
                 }}
-                className="min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm tabular-nums text-zinc-900"
+                className="min-h-11 w-full rounded-lg border border-control bg-surface px-3 py-2 text-sm tabular-nums text-ink"
               />
             </div>
             <div className="space-y-1">
-              <label className="block text-xs font-medium text-zinc-700" htmlFor="max-los-input">
+              <label className="block text-xs font-medium text-secondary-ink" htmlFor="max-los-input">
                 {t("Max LOS")}
               </label>
               <input
@@ -317,13 +317,13 @@ export default function RateRestrictionsDrawer({
                   setMaxLos(e.target.value)
                   setRestrictionsTouched(true)
                 }}
-                className="min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm tabular-nums text-zinc-900"
+                className="min-h-11 w-full rounded-lg border border-control bg-surface px-3 py-2 text-sm tabular-nums text-ink"
               />
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <label className="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg border border-zinc-200 px-3">
+            <label className="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg border border-line px-3">
               <input
                 type="checkbox"
                 aria-label={t("Apply Min LOS stay-through")}
@@ -332,12 +332,12 @@ export default function RateRestrictionsDrawer({
                   setStayThrough(e.target.checked)
                   setRestrictionsTouched(true)
                 }}
-                className="size-4 rounded border-zinc-300"
+                className="size-4 rounded border-control"
               />
               <span>{t("Apply Min LOS stay-through")}</span>
             </label>
 
-            <label className="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg border border-amber-200 bg-amber-50/40 px-3">
+            <label className="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg border border-warning-line bg-warning-subtle/40 px-3">
               <input
                 type="checkbox"
                 aria-label={t("Closed to arrival")}
@@ -346,12 +346,12 @@ export default function RateRestrictionsDrawer({
                   setCta(e.target.checked)
                   setRestrictionsTouched(true)
                 }}
-                className="size-4 rounded border-zinc-300"
+                className="size-4 rounded border-control"
               />
-              <span className="font-medium text-amber-900">{t("Closed to arrival (CTA)")}</span>
+              <span className="font-medium text-warning-ink">{t("Closed to arrival (CTA)")}</span>
             </label>
 
-            <label className="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg border border-amber-200 bg-amber-50/40 px-3">
+            <label className="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg border border-warning-line bg-warning-subtle/40 px-3">
               <input
                 type="checkbox"
                 aria-label={t("Closed to departure")}
@@ -360,12 +360,12 @@ export default function RateRestrictionsDrawer({
                   setCtd(e.target.checked)
                   setRestrictionsTouched(true)
                 }}
-                className="size-4 rounded border-zinc-300"
+                className="size-4 rounded border-control"
               />
-              <span className="font-medium text-amber-900">{t("Closed to departure (CTD)")}</span>
+              <span className="font-medium text-warning-ink">{t("Closed to departure (CTD)")}</span>
             </label>
 
-            <label className="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg border border-rose-200 bg-rose-50/50 px-3">
+            <label className="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg border border-danger-line bg-danger-subtle/50 px-3">
               <input
                 type="checkbox"
                 aria-label={t("Stop-sell")}
@@ -374,15 +374,15 @@ export default function RateRestrictionsDrawer({
                   setStopSell(e.target.checked)
                   setRestrictionsTouched(true)
                 }}
-                className="size-4 rounded border-zinc-300"
+                className="size-4 rounded border-control"
               />
-              <span className="font-medium text-rose-800">{t("Stop-sell (closeout)")}</span>
+              <span className="font-medium text-danger-ink">{t("Stop-sell (closeout)")}</span>
             </label>
           </div>
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-500" htmlFor="restriction-reason-input">
+          <label className="block text-xs font-semibold uppercase tracking-wider text-muted-ink" htmlFor="restriction-reason-input">
             {t("Reason")}
           </label>
           <input
@@ -392,12 +392,12 @@ export default function RateRestrictionsDrawer({
             placeholder={t("Optional audit note (e.g. Peak weekend, Conference block)")}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            className="min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
+            className="min-h-11 w-full rounded-lg border border-control bg-surface px-3 py-2 text-sm text-ink"
           />
         </div>
 
         {err && (
-          <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+          <div className="rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-xs text-danger-ink">
             {translate(err)}
           </div>
         )}

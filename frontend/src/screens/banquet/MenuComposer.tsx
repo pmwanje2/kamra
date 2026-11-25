@@ -144,7 +144,7 @@ export default function MenuComposer({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="text-sm">
             {incomplete.length > 0 ? (
-              <span className="text-amber-700">{translate("Still to choose:")}{" "}
+              <span className="text-warning-ink">{translate("Still to choose:")}{" "}
                 {incomplete
                   .map(
                     (c) =>
@@ -153,10 +153,10 @@ export default function MenuComposer({
                   .join(", ")}
               </span>
             ) : (
-              <span className="text-zinc-500">
+              <span className="text-muted-ink">
                 {picks.length}{translate(" dish")}{picks.length === 1 ? "" : translate("es")} ·{" "}
                 {fmt(totals.cost)}{translate("/pax to make")}{totals.supplement > 0 && (
-                  <span className="text-amber-700">
+                  <span className="text-warning-ink">
                     {" "}
                     · +{fmt(totals.supplement)}{translate("/pax upgrades")}</span>
                 )}
@@ -201,13 +201,13 @@ export default function MenuComposer({
                   <h3 className="flex items-center gap-1.5 text-sm font-semibold">
                     {translate(c.course)}
                     {c.is_live_counter && (
-                      <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                      <span className="inline-flex items-center gap-1 rounded bg-warning-subtle px-1.5 py-0.5 text-[10px] font-medium text-warning-ink">
                         <Flame className="size-3" />{translate("live")}</span>
                     )}
                   </h3>
                   <span
                     className={
-                      "text-xs " + (done ? "text-emerald-600" : "text-amber-700")
+                      "text-xs " + (done ? "text-success-text" : "text-warning-ink")
                     }
                   >
                     {c.choice_of
@@ -217,7 +217,7 @@ export default function MenuComposer({
                 </div>
 
                 {c.options.length === 0 ? (
-                  <p className="rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-500">
+                  <p className="rounded-lg bg-canvas px-3 py-2 text-sm text-muted-ink">
                     {c.free_text || translate("Nothing listed for this course.")}
                   </p>
                 ) : (
@@ -231,14 +231,14 @@ export default function MenuComposer({
                           className={
                             "flex items-start gap-2.5 rounded-lg border px-3 py-2 text-left transition-all " +
                             (on
-                              ? "border-brand-600 bg-brand-50 ring-1 ring-brand-600/20"
-                              : "border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50")
+                              ? "border-accent-control bg-accent-subtle ring-1 ring-accent-control/20"
+                              : "border-line hover:border-control hover:bg-canvas")
                           }
                         >
                           <span
                             className={
                               "mt-1 size-2.5 shrink-0 rounded-full " +
-                              (DOT[o.food_type ?? ""] ?? "bg-zinc-300")
+                              (DOT[o.food_type ?? ""] ?? "bg-fill-strong")
                             }
                             title={translate(o.food_type ?? "")}
                           />
@@ -246,10 +246,10 @@ export default function MenuComposer({
                             <span className="flex items-center gap-1.5 font-medium">
                               {o.dish_name}
                               {o.is_default && !on && (
-                                <span className="text-[10px] font-normal text-zinc-400">{translate("standard")}</span>
+                                <span className="text-[10px] font-normal text-muted-ink">{translate("standard")}</span>
                               )}
                             </span>
-                            <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-zinc-400">
+                            <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-ink">
                               {o.kitchen && (
                                 <span className="inline-flex items-center gap-1">
                                   <ChefHat className="size-3" />
@@ -257,19 +257,19 @@ export default function MenuComposer({
                                 </span>
                               )}
                               {o.allergens && (
-                                <span className="text-amber-700">
+                                <span className="text-warning-ink">
                                   {o.allergens}
                                 </span>
                               )}
                               {o.supplement_per_pax > 0 && (
-                                <span className="inline-flex items-center gap-0.5 font-medium text-amber-700">
+                                <span className="inline-flex items-center gap-0.5 font-medium text-warning-ink">
                                   <Sparkles className="size-3" />
                                   +{fmt(o.supplement_per_pax)}{translate("/pax")}</span>
                               )}
                             </span>
                           </span>
                           {on && (
-                            <Check className="mt-0.5 size-4 shrink-0 text-brand-600" />
+                            <Check className="mt-0.5 size-4 shrink-0 text-accent-text" />
                           )}
                         </button>
                       )
@@ -281,13 +281,13 @@ export default function MenuComposer({
           })}
 
           {pax > 0 && (
-            <div className="rounded-xl bg-zinc-50 px-4 py-3 text-sm">
-              <p className="text-zinc-500">{translate("At ")}{pax}{translate(" pax this menu costs")}{" "}
-                <span className="font-semibold text-zinc-900">
+            <div className="rounded-xl bg-canvas px-4 py-3 text-sm">
+              <p className="text-muted-ink">{translate("At ")}{pax}{translate(" pax this menu costs")}{" "}
+                <span className="font-semibold text-ink">
                   {fmt(totals.cost * pax)}
                 </span>{" "}{translate("to produce")}{totals.supplement > 0 && (
                   <>{translate(", and the upgrades add")}{" "}
-                    <span className="font-semibold text-amber-700">
+                    <span className="font-semibold text-warning-ink">
                       {fmt(totals.supplement * pax)}
                     </span>{" "}{translate("to the quote")}</>
                 )}

@@ -47,7 +47,7 @@ export default function CancellationLetter() {
       )
   }, [name])
 
-  if (!d) return <p className="py-10 text-center text-zinc-400">{translate("Loading…")}</p>
+  if (!d) return <p className="py-10 text-center text-muted-ink">{translate("Loading…")}</p>
 
   const r = d.reservation
   const refundDue = Math.max(0, r.advance_paid - r.cancellation_fee)
@@ -57,29 +57,29 @@ export default function CancellationLetter() {
       <div className="mb-4 flex items-center justify-between print:hidden">
         <Link
           to="/reservations"
-          className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-800"
+          className="inline-flex items-center gap-1 text-sm text-muted-ink hover:text-ink"
         >
           <ArrowLeft className="size-4" aria-hidden />{translate(" Reservations")}</Link>
         <Button onClick={() => window.print()}>
           <Printer className="size-4" aria-hidden />{translate(" Print letter")}</Button>
       </div>
 
-      <div className="rounded-xl border border-zinc-200 bg-white p-8 print:border-0">
-        <div className="mb-6 flex items-start justify-between border-b border-zinc-300 pb-4">
+      <div className="rounded-xl border border-line bg-surface p-8 print:border-0">
+        <div className="mb-6 flex items-start justify-between border-b border-control pb-4">
           <div>
             <h1 className="text-lg font-bold">{d.property.property_name}</h1>
-            <p className="text-xs text-zinc-500">{d.property.address}</p>
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-muted-ink">{d.property.address}</p>
+            <p className="text-xs text-muted-ink">
               {d.property.phone}
               {d.property.email && <> · {d.property.email}</>}
             </p>
           </div>
           <div className="text-right">
             <p className="text-sm font-semibold">{translate("CANCELLATION CONFIRMATION")}</p>
-            <p className="text-lg font-bold text-brand-700">
+            <p className="text-lg font-bold text-accent-ink">
               {r.cancellation_number}
             </p>
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-muted-ink">
               {r.cancelled_on.slice(0, 16)}
             </p>
           </div>
@@ -95,13 +95,13 @@ export default function CancellationLetter() {
           .
         </p>
 
-        <div className="mt-5 space-y-1.5 rounded-lg bg-zinc-50 px-4 py-3 text-sm">
+        <div className="mt-5 space-y-1.5 rounded-lg bg-canvas px-4 py-3 text-sm">
           <div className="flex justify-between">
-            <span className="text-zinc-500">{translate("Stay value")}</span>
+            <span className="text-muted-ink">{translate("Stay value")}</span>
             <span>{cur()}{inr(r.amount_after_tax)}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-zinc-500">{translate("Cancellation fee")}</span>
+            <span className="text-muted-ink">{translate("Cancellation fee")}</span>
             <span>
               {r.cancellation_fee > 0 ? `${cur()}${inr(r.cancellation_fee)}` : translate("None")}
             </span>
@@ -109,10 +109,10 @@ export default function CancellationLetter() {
           {r.advance_paid > 0 && (
             <>
               <div className="flex justify-between">
-                <span className="text-zinc-500">{translate("Advance paid")}</span>
+                <span className="text-muted-ink">{translate("Advance paid")}</span>
                 <span>{cur()}{inr(r.advance_paid)}</span>
               </div>
-              <div className="flex justify-between border-t border-zinc-200 pt-1.5 font-medium">
+              <div className="flex justify-between border-t border-line pt-1.5 font-medium">
                 <span>{translate("Refund due")}</span>
                 <span>{cur()}{inr(refundDue)}</span>
               </div>
@@ -120,8 +120,8 @@ export default function CancellationLetter() {
           )}
         </div>
 
-        <p className="mt-5 text-sm leading-relaxed text-zinc-600">{translate("Please keep the cancellation number")}{" "}
-          <span className="font-medium text-zinc-900">
+        <p className="mt-5 text-sm leading-relaxed text-secondary-ink">{translate("Please keep the cancellation number")}{" "}
+          <span className="font-medium text-ink">
             {r.cancellation_number}
           </span>{" "}{translate("for your records. We'd love to host you another time -")}{" "}
           {d.property.phone
@@ -129,8 +129,8 @@ export default function CancellationLetter() {
             : translate("reach out any time and we'll find you a room.")}
         </p>
 
-        <p className="mt-8 text-sm text-zinc-500">{translate("Warm regards,")}<br />
-          <span className="font-medium text-zinc-900">
+        <p className="mt-8 text-sm text-muted-ink">{translate("Warm regards,")}<br />
+          <span className="font-medium text-ink">
             {d.property.property_name}
           </span>
         </p>

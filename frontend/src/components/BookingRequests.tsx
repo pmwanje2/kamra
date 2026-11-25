@@ -113,23 +113,23 @@ export default function BookingRequests({
           {t("Booking requests")}
           <Badge tone="amber">{data.count}</Badge>
         </CardTitle>
-        <Inbox className="size-4 text-zinc-400" aria-hidden />
+        <Inbox className="size-4 text-muted-ink" aria-hidden />
       </CardHeader>
       <CardContent className="pt-1">
-        <p className="mb-2 text-xs text-zinc-500">
+        <p className="mb-2 text-xs text-muted-ink">
           {t("Requests don't hold a room. Accepting checks availability again.")}
         </p>
         {error && (
-          <p className="mb-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs text-rose-700">
+          <p className="mb-2 rounded-lg border border-danger-line bg-danger-subtle px-3 py-1.5 text-xs text-danger-ink">
             {translate(error)}
           </p>
         )}
         {notice && (
-          <p className="mb-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs text-emerald-800">
+          <p className="mb-2 rounded-lg border border-success-line bg-success-subtle px-3 py-1.5 text-xs text-success-ink">
             {notice}
           </p>
         )}
-        <ul className="divide-y divide-zinc-100">
+        <ul className="divide-y divide-line-subtle">
           {data.requests.map((r) => (
             <li key={r.name} className="py-2.5">
               <div className="flex items-start gap-3">
@@ -149,7 +149,7 @@ export default function BookingRequests({
                       </Badge>
                     )}
                   </div>
-                  <div className="mt-0.5 text-xs text-zinc-500">
+                  <div className="mt-0.5 text-xs text-muted-ink">
                     {r.room_type_name} · {r.check_in_date} → {r.check_out_date} ·{" "}
                     {t("{n} night{s}", { n: r.nights, s: r.nights === 1 ? "" : "s" })} ·{" "}
                     {t("{n} ad", { n: r.adults })}
@@ -158,10 +158,10 @@ export default function BookingRequests({
                       ` · ${cur()}${money0(Number(r.amount_after_tax))}`}
                   </div>
                   {!r.can_accept && r.blocker && (
-                    <div className="mt-0.5 text-xs text-rose-600">{r.blocker}</div>
+                    <div className="mt-0.5 text-xs text-danger-text">{r.blocker}</div>
                   )}
                   {r.special_requests && (
-                    <div className="mt-0.5 line-clamp-2 text-xs text-zinc-400">
+                    <div className="mt-0.5 line-clamp-2 text-xs text-muted-ink">
                       {r.special_requests}
                     </div>
                   )}
@@ -212,7 +212,7 @@ export default function BookingRequests({
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
                     placeholder={t("Reason (sent to the guest)")}
-                    className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+                    className="w-full rounded-lg border border-control bg-surface px-3 py-1.5 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-focus"
                   />
                   <Button
                     type="submit"

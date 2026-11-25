@@ -15,8 +15,8 @@ import GoLiveImport from "./GoLiveImport"
 
 
 const inputCls =
-  "w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2.5 text-base " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "w-full rounded-lg border border-control bg-surface px-3.5 py-2.5 text-base " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 type PropertyKind = "Hotel" | "Short Term Rental"
 type Topology = "rooms" | "whole_property"
@@ -334,7 +334,7 @@ export default function Setup() {
   return (
     <div className="mx-auto max-w-2xl">
       <h1 className="mb-1 text-lg font-semibold">{t("Set up a new property")}</h1>
-      <p className="mb-4 text-sm text-zinc-500">
+      <p className="mb-4 text-sm text-muted-ink">
         {t("Hotel or vacation rental - same product, different defaults. Prefer talking? Connect Claude to {product}'s MCP and say \"onboard my property\".")}
       </p>
 
@@ -343,26 +343,26 @@ export default function Setup() {
           <button
             type="button"
             onClick={() => setMode("quick")}
-            className="rounded-xl border border-zinc-200 bg-white p-5 text-start transition hover:border-brand-600"
+            className="rounded-xl border border-line bg-surface p-5 text-start transition hover:border-accent-control"
           >
-            <Zap className="mb-2 size-5 text-brand-600" aria-hidden />
-            <div className="text-base font-semibold text-zinc-900">{t("Quick setup")}</div>
-            <p className="mt-1 text-sm leading-relaxed text-zinc-500">
+            <Zap className="mb-2 size-5 text-accent-text" aria-hidden />
+            <div className="text-base font-semibold text-ink">{t("Quick setup")}</div>
+            <p className="mt-1 text-sm leading-relaxed text-muted-ink">
               {t("Pick your region and name the property. Currency, time zone, tax and language follow the region. Add rooms, rates and the rest later, at your pace.")}
             </p>
-            <p className="mt-2 text-xs text-zinc-400">{t("About a minute")}</p>
+            <p className="mt-2 text-xs text-muted-ink">{t("About a minute")}</p>
           </button>
           <button
             type="button"
             onClick={() => setMode("guided")}
-            className="rounded-xl border border-zinc-200 bg-white p-5 text-start transition hover:border-brand-600"
+            className="rounded-xl border border-line bg-surface p-5 text-start transition hover:border-accent-control"
           >
-            <ListChecks className="mb-2 size-5 text-brand-600" aria-hidden />
-            <div className="text-base font-semibold text-zinc-900">{t("Guided setup")}</div>
-            <p className="mt-1 text-sm leading-relaxed text-zinc-500">
+            <ListChecks className="mb-2 size-5 text-accent-text" aria-hidden />
+            <div className="text-base font-semibold text-ink">{t("Guided setup")}</div>
+            <p className="mt-1 text-sm leading-relaxed text-muted-ink">
               {t("Step by step: choose the modules you want, then rooms, rates, and, if you run a restaurant, outlets, stations and tills. Each step asks only what it needs.")}
             </p>
-            <p className="mt-2 text-xs text-zinc-400">{t("Ten to fifteen minutes")}</p>
+            <p className="mt-2 text-xs text-muted-ink">{t("Ten to fifteen minutes")}</p>
           </button>
         </div>
       )}
@@ -381,7 +381,7 @@ export default function Setup() {
                   onClick={() => chooseKind(k)}
                   className={cn(
                     "rounded-xl border px-4 py-3 text-start text-sm font-semibold",
-                    kind === k ? "border-brand-600 bg-brand-50 ring-1 ring-brand-600" : "border-zinc-200 hover:border-zinc-300",
+                    kind === k ? "border-accent-control bg-accent-subtle ring-1 ring-accent-control" : "border-line hover:border-control",
                   )}
                 >
                   {k === "Hotel" ? t("Hotel") : t("Vacation rental")}
@@ -389,14 +389,14 @@ export default function Setup() {
               ))}
             </div>
             <label className="block">
-              <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-zinc-600">
+              <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-secondary-ink">
                 {t("Region *")}
                 <InfoTip doc="country-setup">
                   {t("The region sets the currency, time zone, tax words and invoice format, ID types and payment methods. Time zone decides when your business day rolls over.")}
                 </InfoTip>
               </span>
               <select
-                className={cn(inputCls, "bg-white")}
+                className={cn(inputCls, "bg-surface")}
                 value={otherCountry ? "__other" : prop.country}
                 onChange={(e) =>
                   pickCountry(
@@ -420,7 +420,7 @@ export default function Setup() {
               </div>
             )}
             {pack && (
-              <p className="rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-600">
+              <p className="rounded-lg bg-canvas px-3 py-2 text-sm text-secondary-ink">
                 {t("This sets currency {currency}, time zone {tz}, and {tax} invoices.", {
                   currency: pack.currency ?? "",
                   tz: pack.timezone ?? prop.timezone,
@@ -429,19 +429,19 @@ export default function Setup() {
               </p>
             )}
             <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-zinc-600">{t("Property name *")}</span>
+              <span className="mb-1.5 block text-sm font-medium text-secondary-ink">{t("Property name *")}</span>
               <input className={inputCls} placeholder="Sunrise Residency" value={prop.property_name}
                 onChange={(e) => setProp({ ...prop, property_name: e.target.value })} />
             </label>
             <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-zinc-600">{t("City")}</span>
+              <span className="mb-1.5 block text-sm font-medium text-secondary-ink">{t("City")}</span>
               <input className={inputCls} value={prop.city} onChange={(e) => setProp({ ...prop, city: e.target.value })} />
             </label>
-            <p className="text-sm text-zinc-500">
+            <p className="text-sm text-muted-ink">
               {t("Everything else starts at sensible defaults. You will land on a Finish setup list: rooms and rates, the booking page, outlets, tills and your team.")}
             </p>
             {error && (
-              <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{translate(error)}</div>
+              <div className="rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">{translate(error)}</div>
             )}
             <div className="flex justify-between pt-2">
               <Button variant="outline" onClick={() => setMode("choose")}>{t("Back")}</Button>
@@ -465,10 +465,10 @@ export default function Setup() {
             className={cn(
               "flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium",
               i === step
-                ? "bg-brand-600 text-white"
+                ? "bg-accent-fill text-on-solid"
                 : i < step || (createdProperty && i <= reviewStep)
-                  ? "bg-brand-50 text-brand-700"
-                  : "bg-zinc-100 text-zinc-400",
+                  ? "bg-accent-subtle text-accent-ink"
+                  : "bg-subtle text-muted-ink",
             )}
           >
             {(i < step || (createdProperty && i <= reviewStep)) && (
@@ -507,12 +507,12 @@ export default function Setup() {
                   className={cn(
                     "rounded-xl border px-4 py-4 text-left transition",
                     kind === opt.value
-                      ? "border-brand-600 bg-brand-50 ring-1 ring-brand-600"
-                      : "border-zinc-200 bg-white hover:border-zinc-300",
+                      ? "border-accent-control bg-accent-subtle ring-1 ring-accent-control"
+                      : "border-line bg-surface hover:border-control",
                   )}
                 >
-                  <div className="text-sm font-semibold text-zinc-900">{translate(opt.title)}</div>
-                  <p className="mt-1 text-xs leading-relaxed text-zinc-500">{translate(opt.blurb)}</p>
+                  <div className="text-sm font-semibold text-ink">{translate(opt.title)}</div>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-ink">{translate(opt.blurb)}</p>
                 </button>
               ))}
             </div>
@@ -521,11 +521,11 @@ export default function Setup() {
           {stepKey === "Property" && (
             <>
               <label className="block">
-                <span className="mb-1.5 block text-sm font-medium text-zinc-600">
+                <span className="mb-1.5 block text-sm font-medium text-secondary-ink">
                   {t("Country *")}
                 </span>
                 <select
-                  className={cn(inputCls, "bg-white")}
+                  className={cn(inputCls, "bg-surface")}
                   value={otherCountry ? "__other" : prop.country}
                   onChange={(e) =>
                     pickCountry(
@@ -545,7 +545,7 @@ export default function Setup() {
                   ))}
                   <option value="__other">{t("Other country")}</option>
                 </select>
-                <span className="mt-1.5 block text-xs text-zinc-500">
+                <span className="mt-1.5 block text-xs text-muted-ink">
                   {pack
                     ? t("Sets {currency}, {tax} invoices, local ID types and payment methods.", {
                         currency: pack.currency ?? "",
@@ -557,7 +557,7 @@ export default function Setup() {
               {otherCountry && (
                 <div className="grid grid-cols-2 gap-3">
                   <label className="block">
-                    <span className="mb-1.5 block text-sm font-medium text-zinc-600">
+                    <span className="mb-1.5 block text-sm font-medium text-secondary-ink">
                       {t("Country name *")}
                     </span>
                     <input
@@ -567,7 +567,7 @@ export default function Setup() {
                     />
                   </label>
                   <label className="block">
-                    <span className="mb-1.5 block text-sm font-medium text-zinc-600">
+                    <span className="mb-1.5 block text-sm font-medium text-secondary-ink">
                       {t("Currency code *")}
                     </span>
                     <input
@@ -599,10 +599,10 @@ export default function Setup() {
                 ] as const
               ).map(([k, label, type, ph]) => (
                 <label key={k} className="block">
-                  <span className="mb-1.5 block text-sm font-medium text-zinc-600">{translate(label)}</span>
+                  <span className="mb-1.5 block text-sm font-medium text-secondary-ink">{translate(label)}</span>
                   {k === "booking_payment_mode" ? (
                     <select
-                      className={cn(inputCls, "bg-white")}
+                      className={cn(inputCls, "bg-surface")}
                       value={prop[k]}
                       onChange={(e) => setProp({ ...prop, [k]: e.target.value })}
                     >
@@ -612,7 +612,7 @@ export default function Setup() {
                     </select>
                   ) : type === "time" ? (
                     <select
-                      className={cn(inputCls, "bg-white")}
+                      className={cn(inputCls, "bg-surface")}
                       value={prop[k]}
                       onChange={(e) => setProp({ ...prop, [k]: e.target.value })}
                     >
@@ -641,7 +641,7 @@ export default function Setup() {
               {roomTypes.map((rt, i) => (
                 <div
                   key={i}
-                  className="relative space-y-3 rounded-xl border border-zinc-200 bg-zinc-50/50 p-4"
+                  className="relative space-y-3 rounded-xl border border-line bg-canvas/50 p-4"
                 >
                   {roomTypes.length > 1 && (
                     <Button
@@ -650,11 +650,11 @@ export default function Setup() {
                       className="absolute top-2 right-2"
                       onClick={() => setRoomTypes((r) => r.filter((_, j) => j !== i))}
                     >
-                      <Trash2 className="size-4 text-rose-500" />
+                      <Trash2 className="size-4 text-danger-text" />
                     </Button>
                   )}
                   <label className="block">
-                    <span className="mb-1 block text-xs font-semibold text-zinc-500">
+                    <span className="mb-1 block text-xs font-semibold text-muted-ink">
                       {isStr ? t("Listing code") : t("Room Type Code (e.g. STD)")}
                     </span>
                     <input
@@ -665,7 +665,7 @@ export default function Setup() {
                     />
                   </label>
                   <label className="block">
-                    <span className="mb-1 block text-xs font-semibold text-zinc-500">
+                    <span className="mb-1 block text-xs font-semibold text-muted-ink">
                       {isStr ? t("Listing name") : t("Room Type Name (e.g. Standard Room)")}
                     </span>
                     <input
@@ -676,7 +676,7 @@ export default function Setup() {
                     />
                   </label>
                   <label className="block">
-                    <span className="mb-1 block text-xs font-semibold text-zinc-500">
+                    <span className="mb-1 block text-xs font-semibold text-muted-ink">
                       {t("Nightly price")}
                     </span>
                     <input
@@ -689,7 +689,7 @@ export default function Setup() {
                   </label>
                   {isStr && (
                     <label className="block">
-                      <span className="mb-1 block text-xs font-semibold text-zinc-500">
+                      <span className="mb-1 block text-xs font-semibold text-muted-ink">
                         {t("Weekend nightly price (optional)")}
                       </span>
                       <input
@@ -702,7 +702,7 @@ export default function Setup() {
                     </label>
                   )}
                   <label className="block">
-                    <span className="mb-1 block text-xs font-semibold text-zinc-500">
+                    <span className="mb-1 block text-xs font-semibold text-muted-ink">
                       {t("Max guests (base)")}
                     </span>
                     <input
@@ -715,11 +715,11 @@ export default function Setup() {
                   </label>
                   {!(isStr && topology === "whole_property") && (
                     <label className="block">
-                      <span className="mb-1 block text-xs font-semibold text-zinc-500">
+                      <span className="mb-1 block text-xs font-semibold text-muted-ink">
                         {t("Category")}
                       </span>
                       <select
-                        className={cn(inputCls, "bg-white")}
+                        className={cn(inputCls, "bg-surface")}
                         value={rt.room_category}
                         onChange={(e) => setRT(i, "room_category", e.target.value)}
                       >
@@ -731,11 +731,11 @@ export default function Setup() {
                   )}
                   {rt.room_category !== "Villa" && !(isStr && topology === "whole_property") && (
                     <label className="block">
-                      <span className="mb-1 block text-xs font-semibold text-zinc-500">
+                      <span className="mb-1 block text-xs font-semibold text-muted-ink">
                         {t("Air Conditioning")}
                       </span>
                       <select
-                        className={cn(inputCls, "bg-white")}
+                        className={cn(inputCls, "bg-surface")}
                         value={rt.air_conditioning}
                         onChange={(e) => setRT(i, "air_conditioning", e.target.value)}
                       >
@@ -745,7 +745,7 @@ export default function Setup() {
                     </label>
                   )}
                   <label className="block">
-                    <span className="mb-1 block text-xs font-semibold text-zinc-500">
+                    <span className="mb-1 block text-xs font-semibold text-muted-ink">
                       {t("Free Child Age Limit (Years)")}
                     </span>
                     <input
@@ -757,7 +757,7 @@ export default function Setup() {
                     />
                   </label>
                   <label className="block">
-                    <span className="mb-1 block text-xs font-semibold text-zinc-500">
+                    <span className="mb-1 block text-xs font-semibold text-muted-ink">
                       {t("Extra guest price / night")}
                     </span>
                     <input
@@ -793,7 +793,7 @@ export default function Setup() {
 
           {stepKey === "Inventory" && (
             <div className="space-y-4">
-              <p className="text-sm text-zinc-500">
+              <p className="text-sm text-muted-ink">
                 {t("How do guests book this property? This sets Sellable Units and competition groups - not a separate product fork.")}
               </p>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -818,25 +818,25 @@ export default function Setup() {
                     className={cn(
                       "rounded-xl border px-4 py-4 text-left transition",
                       topology === opt.value
-                        ? "border-brand-600 bg-brand-50 ring-1 ring-brand-600"
-                        : "border-zinc-200 bg-white hover:border-zinc-300",
+                        ? "border-accent-control bg-accent-subtle ring-1 ring-accent-control"
+                        : "border-line bg-surface hover:border-control",
                     )}
                   >
-                    <div className="text-sm font-semibold text-zinc-900">{translate(opt.title)}</div>
-                    <p className="mt-1 text-xs leading-relaxed text-zinc-500">{translate(opt.blurb)}</p>
+                    <div className="text-sm font-semibold text-ink">{translate(opt.title)}</div>
+                    <p className="mt-1 text-xs leading-relaxed text-muted-ink">{translate(opt.blurb)}</p>
                   </button>
                 ))}
               </div>
               {topology === "rooms" && (
                 <>
-                  <p className="text-sm text-zinc-500">
+                  <p className="text-sm text-muted-ink">
                     {t("Unit / room numbers per listing, comma-separated.")}
                   </p>
                   {roomTypes
                     .filter((r) => r.code)
                     .map((rt, i) => (
                       <label key={i} className="block">
-                        <span className="mb-1.5 block text-sm font-medium text-zinc-600">
+                        <span className="mb-1.5 block text-sm font-medium text-secondary-ink">
                           {rt.name || rt.code}
                         </span>
                         <input
@@ -850,7 +850,7 @@ export default function Setup() {
                 </>
               )}
               {topology === "whole_property" && (
-                <p className="rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-600">
+                <p className="rounded-lg bg-canvas px-3 py-2 text-sm text-secondary-ink">
                   {t("{product} will create a whole-property sellable unit for each listing. You can add physical rooms later for housekeeping if needed.")}
                 </p>
               )}
@@ -859,12 +859,12 @@ export default function Setup() {
 
           {stepKey === "Rooms" && (
             <>
-              <p className="text-sm text-zinc-500">{t("Room numbers per type, comma-separated.")}</p>
+              <p className="text-sm text-muted-ink">{t("Room numbers per type, comma-separated.")}</p>
               {roomTypes
                 .filter((r) => r.code)
                 .map((rt, i) => (
                   <label key={i} className="block">
-                    <span className="mb-1.5 block text-sm font-medium text-zinc-600">
+                    <span className="mb-1.5 block text-sm font-medium text-secondary-ink">
                       {rt.name || rt.code}
                     </span>
                     <input
@@ -884,7 +884,7 @@ export default function Setup() {
                 <div key={mp.code} className="flex items-center gap-3">
                   <input
                     type="checkbox"
-                    className="size-4 accent-brand-600"
+                    className="size-4 accent-focus"
                     checked={mp.on}
                     onChange={(e) =>
                       setMealPlans((m) =>
@@ -907,7 +907,7 @@ export default function Setup() {
                       )
                     }
                   />
-                  <span className="text-xs text-zinc-400">{t("{cur}/adult/night", { cur: cur() })}</span>
+                  <span className="text-xs text-muted-ink">{t("{cur}/adult/night", { cur: cur() })}</span>
                 </div>
               ))}
             </>
@@ -915,7 +915,7 @@ export default function Setup() {
 
           {stepKey === "Modules" && (
             <div className="space-y-3">
-              <p className="text-sm text-zinc-500">
+              <p className="text-sm text-muted-ink">
                 {t("Switch on what you need. You can change this any time in Settings.")}
               </p>
               {MODULE_CHOICES.filter((m) => !(isStr && m.hotelOnly)).map((m) => {
@@ -925,12 +925,12 @@ export default function Setup() {
                     key={m.id}
                     className={cn(
                       "flex items-start gap-3 rounded-xl border px-4 py-3",
-                      on ? "border-brand-600/40 bg-brand-50/40" : "border-zinc-200",
+                      on ? "border-accent-control/40 bg-accent-subtle/40" : "border-line",
                     )}
                   >
                     <input
                       type="checkbox"
-                      className="mt-1 size-4 accent-brand-600"
+                      className="mt-1 size-4 accent-focus"
                       checked={on}
                       disabled={m.locked}
                       onChange={(e) =>
@@ -938,33 +938,33 @@ export default function Setup() {
                       }
                     />
                     <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-1.5 text-sm font-semibold text-zinc-900">
+                      <span className="flex items-center gap-1.5 text-sm font-semibold text-ink">
                         {t(m.label)}
                         <InfoTip doc={m.doc}>{t(m.info)}</InfoTip>
-                        {m.locked && <span className="text-xs font-normal text-zinc-400">{t("always on")}</span>}
+                        {m.locked && <span className="text-xs font-normal text-muted-ink">{t("always on")}</span>}
                       </span>
-                      <span className="block text-xs text-zinc-500">{t(m.blurb)}</span>
+                      <span className="block text-xs text-muted-ink">{t(m.blurb)}</span>
                     </span>
                   </label>
                 )
               })}
-              <div className="rounded-xl border border-zinc-200 px-4 py-3">
-                <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-zinc-900">
+              <div className="rounded-xl border border-line px-4 py-3">
+                <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-ink">
                   {t("Connections")}
                   <InfoTip doc="channel-manager">
                     {t("A channel manager sends your rooms, rates and availability to booking sites and brings their bookings back. You connect it after setup; ticking this adds it to your Finish setup list.")}
                   </InfoTip>
                 </p>
-                <label className="flex items-center gap-2 text-sm text-zinc-700">
+                <label className="flex items-center gap-2 text-sm text-secondary-ink">
                   <input
                     type="checkbox"
-                    className="size-4 accent-brand-600"
+                    className="size-4 accent-focus"
                     checked={wantsChannel}
                     onChange={(e) => setWantsChannel(e.target.checked)}
                   />
                   {t("I use a channel manager (OTA bookings)")}
                 </label>
-                <p className="mt-1 text-xs text-zinc-400">
+                <p className="mt-1 text-xs text-muted-ink">
                   {modules.includes("booking-engine")
                     ? t("The online booking page can run alongside a channel manager or on its own.")
                     : t("Without the booking page, bookings come from the front desk and your channels.")}
@@ -976,7 +976,7 @@ export default function Setup() {
           {stepKey === "Outlets and tills" && (
             <div className="space-y-5">
               <section className="space-y-2">
-                <p className="flex items-center gap-1.5 text-sm font-semibold text-zinc-900">
+                <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
                   {t("Outlets")}
                   <InfoTip doc="fnb">
                     {t("An outlet is a place that sells food or drink: a restaurant, bar, room service, a spa cafe. Each has its own menu and bills. How many do you run?")}
@@ -986,7 +986,7 @@ export default function Setup() {
                   <div key={i} className="flex gap-2">
                     <input className={inputCls} placeholder={t("Outlet name")} value={o.name}
                       onChange={(e) => setOutlets((r) => r.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} />
-                    <select className={cn(inputCls, "w-40 bg-white")} value={o.type}
+                    <select className={cn(inputCls, "w-40 bg-surface")} value={o.type}
                       onChange={(e) => setOutlets((r) => r.map((x, j) => (j === i ? { ...x, type: e.target.value } : x)))}>
                       {["Restaurant", "Room Service", "Bar", "Spa", "Shop", "Other"].map((x) => <option key={x} value={x}>{translate(x)}</option>)}
                     </select>
@@ -1003,7 +1003,7 @@ export default function Setup() {
               </section>
 
               <section className="space-y-2">
-                <p className="flex items-center gap-1.5 text-sm font-semibold text-zinc-900">
+                <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
                   {t("Kitchen stations")}
                   <InfoTip doc="fnb">
                     {t("A station is where food or drinks are prepared: the kitchen, the bar, a tandoor. Kitchen tickets (KOTs) print at the station that makes the item. Bills print separately, at the till.")}
@@ -1012,20 +1012,20 @@ export default function Setup() {
                 <div className="flex flex-wrap gap-2">
                   {STATION_CHOICES.map((st) => (
                     <label key={st} className={cn("flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm",
-                      stations.includes(st) ? "border-brand-600 bg-brand-50 text-brand-700" : "border-zinc-200 text-zinc-600")}>
-                      <input type="checkbox" className="accent-brand-600" checked={stations.includes(st)}
+                      stations.includes(st) ? "border-accent-control bg-accent-subtle text-accent-ink" : "border-line text-secondary-ink")}>
+                      <input type="checkbox" className="accent-focus" checked={stations.includes(st)}
                         onChange={(e) => setStations((cur) => (e.target.checked ? [...cur, st] : cur.filter((x) => x !== st)))} />
                       {t(st)}
                     </label>
                   ))}
                 </div>
-                <p className="text-xs text-zinc-400">
+                <p className="text-xs text-muted-ink">
                   {t("One printer is set up per station. Connect the physical printers later under Printers.")}
                 </p>
               </section>
 
               <section className="space-y-2">
-                <p className="flex items-center gap-1.5 text-sm font-semibold text-zinc-900">
+                <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
                   {t("Tills")}
                   <InfoTip doc="billing">
                     {t("A till is a cash drawer someone counts and closes each shift. Give each its own name, and tie it to an outlet if it serves one. A cash office is the safe tills drop cash into.")}
@@ -1035,11 +1035,11 @@ export default function Setup() {
                   <div key={i} className="flex gap-2">
                     <input className={inputCls} placeholder={t("Till name")} value={x.name}
                       onChange={(e) => setTills((r) => r.map((y, j) => (j === i ? { ...y, name: e.target.value } : y)))} />
-                    <select className={cn(inputCls, "w-36 bg-white")} value={x.kind}
+                    <select className={cn(inputCls, "w-36 bg-surface")} value={x.kind}
                       onChange={(e) => setTills((r) => r.map((y, j) => (j === i ? { ...y, kind: e.target.value } : y)))}>
                       {TILL_KINDS.map((k) => <option key={k} value={k}>{translate(k)}</option>)}
                     </select>
-                    <select className={cn(inputCls, "w-40 bg-white")} value={x.outlet}
+                    <select className={cn(inputCls, "w-40 bg-surface")} value={x.outlet}
                       onChange={(e) => setTills((r) => r.map((y, j) => (j === i ? { ...y, outlet: e.target.value } : y)))}>
                       <option value="">{t("No outlet")}</option>
                       {outlets.filter((o) => o.name.trim()).map((o) => <option key={o.name}>{o.name}</option>)}
@@ -1053,8 +1053,8 @@ export default function Setup() {
                   <Button variant="outline" onClick={() => setTills((r) => [...r, { name: "", kind: "Restaurant", outlet: "" }])}>
                     <Plus className="size-4" aria-hidden /> {t("Add till")}
                   </Button>
-                  <label className="flex items-center gap-2 text-sm text-zinc-700">
-                    <input type="checkbox" className="size-4 accent-brand-600" checked={cashOffice}
+                  <label className="flex items-center gap-2 text-sm text-secondary-ink">
+                    <input type="checkbox" className="size-4 accent-focus" checked={cashOffice}
                       onChange={(e) => setCashOffice(e.target.checked)} />
                     {t("Add a cash office (central safe)")}
                   </label>
@@ -1067,7 +1067,7 @@ export default function Setup() {
             <div className="space-y-2 text-sm">
               <p>
                 <span className="font-medium">{prop.property_name}</span>
-                {prop.city && <span className="text-zinc-500"> · {prop.city}</span>}
+                {prop.city && <span className="text-muted-ink"> · {prop.city}</span>}
               </p>
               <div className="flex flex-wrap gap-1.5">
                 <Badge tone="brand">{t(kind)}</Badge>
@@ -1104,7 +1104,7 @@ export default function Setup() {
                       </Badge>
                     ))}
               </div>
-              <p className="text-zinc-500">
+              <p className="text-muted-ink">
                 {t("Creating sets this as your active property. Rates, seasons, vouchers and guardrails can be added later from Revenue.")}
               </p>
             </div>
@@ -1112,21 +1112,21 @@ export default function Setup() {
 
           {step === importStep && (
             <div className="space-y-4">
-              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+              <div className="rounded-lg border border-success-line bg-success-subtle px-4 py-3 text-sm text-success-ink">
                 <span className="font-semibold">{createdProperty}</span> {t("is live. Bring your bookings, companies and opening balances over from {product}'s CSV templates, then reconcile before you switch - or let the AI migration assistant do the mapping via MCP.")}
               </div>
-              {!whiteLabel() && <div className="rounded-lg border border-brand-200 bg-brand-50/60 px-4 py-3 text-sm text-zinc-800">
-                <p className="font-semibold text-brand-800">
+              {!whiteLabel() && <div className="rounded-lg border border-accent-line bg-accent-subtle/60 px-4 py-3 text-sm text-ink">
+                <p className="font-semibold text-accent-ink">
                   {t("Optional: guest concierge on WhatsApp")}
                 </p>
-                <p className="mt-1 text-zinc-600">
+                <p className="mt-1 text-secondary-ink">
                   {t(
                     "After the desk is live, {product} Enterprise can answer guests on your WhatsApp number with an AI concierge that uses {product}'s tools. The PMS stays free.",
                   )}
                 </p>
                 <a
                   href={toFullPath("/marketplace")}
-                  className="mt-2 inline-block text-sm font-medium text-brand-700 hover:underline"
+                  className="mt-2 inline-block text-sm font-medium text-accent-ink hover:underline"
                 >
                   {t("Open Marketplace → {product} Enterprise")}
                 </a>
@@ -1136,7 +1136,7 @@ export default function Setup() {
           )}
 
           {error && (
-            <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+            <div className="rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">
               {translate(error)}
             </div>
           )}

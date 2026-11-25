@@ -106,15 +106,15 @@ const eventIcon = {
 }
 
 const eventTone = {
-  booking: "bg-brand-50 text-brand-700 border-brand-100",
-  check_in: "bg-emerald-50 text-emerald-700 border-emerald-100",
-  check_out: "bg-zinc-100 text-zinc-600 border-zinc-200",
-  cancelled: "bg-rose-50 text-rose-600 border-rose-100",
-  agent: "bg-indigo-50 text-indigo-700 border-indigo-100",
+  booking: "bg-accent-subtle text-accent-ink border-accent-line",
+  check_in: "bg-success-subtle text-success-ink border-success-line",
+  check_out: "bg-subtle text-secondary-ink border-line",
+  cancelled: "bg-danger-subtle text-danger-text border-danger-line",
+  agent: "bg-indigo-subtle text-indigo-ink border-indigo-line",
 }
 
 const stripTone: Record<string, string> = {
-  "Checked Out": "bg-brand-600",
+  "Checked Out": "bg-accent-fill",
   "Checked In": "bg-emerald-500",
   Confirmed: "bg-sky-400",
   Cancelled: "bg-rose-300",
@@ -138,15 +138,15 @@ function StayStrip({ rows }: { rows: ResRow[] }) {
             title={`${r.check_in_date} → ${r.check_out_date} · ${translate(r.status)} · ${cur()}${inr(r.amount_after_tax)}`}
             className={cn(
               "rounded-sm",
-              stripTone[r.status] ?? "bg-zinc-300",
+              stripTone[r.status] ?? "bg-fill-strong",
             )}
             style={{ flexGrow: Math.max(1, r.nights || 1), flexBasis: 8 }}
           />
         ))}
       </div>
-      <div className="mt-1.5 flex gap-3 text-[10px] text-zinc-400">
+      <div className="mt-1.5 flex gap-3 text-[10px] text-muted-ink">
         <span>
-          <span className="mr-1 inline-block size-2 rounded-sm bg-brand-600 align-middle" />{translate("stayed")}</span>
+          <span className="mr-1 inline-block size-2 rounded-sm bg-accent-fill align-middle" />{translate("stayed")}</span>
         <span>
           <span className="mr-1 inline-block size-2 rounded-sm bg-emerald-500 align-middle" />{translate("in-house")}</span>
         <span>
@@ -186,13 +186,13 @@ function MergePanel(props: {
   }, [q, picked, props.survivor])
 
   return (
-    <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+    <div className="rounded-xl border border-line bg-canvas p-4">
       <p className="text-sm font-medium">{translate("Merge a duplicate into this profile")}</p>
-      <p className="mb-2 mt-0.5 text-xs text-zinc-500">{translate("The duplicate's stays, bills and tickets move to")}{" "}
+      <p className="mb-2 mt-0.5 text-xs text-muted-ink">{translate("The duplicate's stays, bills and tickets move to")}{" "}
         <span className="font-medium">{props.survivorName}</span>{translate(", then the duplicate is deleted. This can't be undone.")}</p>
       <div className="relative max-w-sm">
         <input
-          className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+          className="w-full rounded-lg border border-control bg-surface px-3 py-1.5 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-focus"
           placeholder={translate("Find the duplicate by name or phone")}
           value={picked ? picked.full_name : q}
           onChange={(e) => {
@@ -201,15 +201,15 @@ function MergePanel(props: {
           }}
         />
         {hits.length > 0 && (
-          <ul className="absolute z-10 mt-1 w-full overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-lg">
+          <ul className="absolute z-10 mt-1 w-full overflow-hidden rounded-xl border border-line bg-surface shadow-lg">
             {hits.map((h) => (
               <li key={h.name}>
                 <button
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-zinc-50"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-canvas"
                   onClick={() => setPicked(h)}
                 >
                   <span className="font-medium">{h.full_name}</span>
-                  <span className="ml-auto text-xs text-zinc-400">
+                  <span className="ml-auto text-xs text-muted-ink">
                     {h.phone ? `${h.phone} · ` : ""}
                     {h.stays}{translate(" stay")}{h.stays === 1 ? "" : translate("s")}
                   </span>
@@ -245,7 +245,7 @@ function MergePanel(props: {
               ? translate("Merge {v0} into this profile", { v0: String(picked.full_name) })
               : translate("Merge")}
         </Button>
-        {error && <span className="text-xs text-rose-600">{translate(error)}</span>}
+        {error && <span className="text-xs text-danger-text">{translate(error)}</span>}
       </div>
     </div>
   )
@@ -287,7 +287,7 @@ function BlacklistControl(props: {
       <div>
         <Button
           variant="outline"
-          className={cn(adding && "text-rose-600")}
+          className={cn(adding && "text-danger-text")}
           onClick={() => setOpen(true)}
         >
           {adding ? (
@@ -297,7 +297,7 @@ function BlacklistControl(props: {
           )}
           {adding ? translate("Blacklist guest") : translate("Remove from blacklist")}
         </Button>
-        <p className="mt-1.5 text-xs text-zinc-400">
+        <p className="mt-1.5 text-xs text-muted-ink">
           {adding
             ? translate("Blocks new bookings for this guest until a Hotel Admin lifts it.")
             : translate("New bookings for this guest will be allowed again.")}
@@ -306,22 +306,22 @@ function BlacklistControl(props: {
     )
 
   return (
-    <div className="space-y-2 rounded-lg border border-zinc-200 p-3">
-      <label className="block text-sm font-medium text-zinc-700">
+    <div className="space-y-2 rounded-lg border border-line p-3">
+      <label className="block text-sm font-medium text-secondary-ink">
         {adding ? translate("Why is this guest being blacklisted?") : translate("Why is the blacklist being lifted?")}
       </label>
       <textarea
-        className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+        className="w-full rounded-lg border border-control px-3 py-2 text-sm"
         rows={2}
         value={reason}
         autoFocus
         onChange={(e) => setReason(e.target.value)}
         placeholder={translate("Reason (required)")}
       />
-      {err && <p className="text-sm text-rose-600">{translate(err)}</p>}
+      {err && <p className="text-sm text-danger-text">{translate(err)}</p>}
       <div className="flex gap-2">
         <Button
-          className={cn(adding && "bg-rose-600 hover:bg-rose-700")}
+          variant={adding ? "danger" : "primary"}
           disabled={busy || !reason.trim()}
           onClick={save}
         >
@@ -346,7 +346,7 @@ function StatCell(props: { label: string; value: string }) {
   return (
     <div>
       <div className="text-lg font-semibold leading-tight">{props.value}</div>
-      <div className="text-[10px] font-medium uppercase tracking-widest text-zinc-400">
+      <div className="text-[10px] font-medium uppercase tracking-widest text-muted-ink">
         {translate(props.label)}
       </div>
     </div>
@@ -377,7 +377,7 @@ export default function GuestJourney() {
   useEffect(load, [load])
 
   if (!data || notes === null) {
-    return <p className="py-10 text-center text-sm text-zinc-400">{translate("Loading…")}</p>
+    return <p className="py-10 text-center text-sm text-muted-ink">{translate("Loading…")}</p>
   }
 
   const { guest, stats, timeline, reservations } = data
@@ -405,7 +405,7 @@ export default function GuestJourney() {
     <div>
       <Link
         to="/guests"
-        className="mb-4 inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-800"
+        className="mb-4 inline-flex items-center gap-1 text-sm text-muted-ink hover:text-ink"
       >
         <ArrowLeft className="size-4" aria-hidden />{translate("All guests")}</Link>
 
@@ -427,7 +427,7 @@ export default function GuestJourney() {
                   <Badge tone="rose">{translate("Blacklisted")}</Badge>
                 )}
               </h1>
-              <p className="mt-0.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-zinc-500">
+              <p className="mt-0.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-ink">
                 {guest.phone && (
                   <span className="inline-flex items-center gap-1">
                     <Phone className="size-3.5" aria-hidden />
@@ -485,7 +485,7 @@ export default function GuestJourney() {
             </div>
           </div>
           {Boolean(guest.blacklisted) && guest.blacklist_reason && (
-            <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
+            <p className="mt-3 rounded-lg bg-danger-subtle px-3 py-2 text-sm text-danger-ink">
               {guest.blacklist_reason}
             </p>
           )}
@@ -493,10 +493,10 @@ export default function GuestJourney() {
       </Card>
 
       {upcoming.length > 0 && (
-        <Card className="mb-4 border-sky-200">
+        <Card className="mb-4 border-info-line">
           <CardContent className="py-4">
-            <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-sky-800">{translate("Upcoming")}</h2>
-            <ul className="divide-y divide-zinc-100">
+            <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-info-ink">{translate("Upcoming")}</h2>
+            <ul className="divide-y divide-line-subtle">
               {upcoming.map((r) => (
                 <li
                   key={r.name}
@@ -505,7 +505,7 @@ export default function GuestJourney() {
                   <span className="font-medium">
                     {r.check_in_date} → {r.check_out_date}
                   </span>
-                  <span className="text-zinc-500">
+                  <span className="text-muted-ink">
                     {r.room_type?.split("-").pop()}
                     {r.room ? translate(" · Room {v0}", { v0: String(r.room.split("-").pop()) }) : ""} ·{" "}
                     {r.nights}{translate(" night")}{r.nights === 1 ? "" : translate("s")}
@@ -515,7 +515,7 @@ export default function GuestJourney() {
                     <span>{cur()}{inr(r.amount_after_tax)}</span>
                     <Link
                       to={`/grc/${encodeURIComponent(r.name)}`}
-                      className="font-medium text-brand-700 hover:underline"
+                      className="font-medium text-accent-ink hover:underline"
                     >{translate("GRC")}</Link>
                   </span>
                 </li>
@@ -529,14 +529,14 @@ export default function GuestJourney() {
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>{translate("Journey")}</CardTitle>
-            <span className="text-xs text-zinc-400">
+            <span className="text-xs text-muted-ink">
               {timeline.length}{translate(" events · newest first")}</span>
           </CardHeader>
           <CardContent>
             {timeline.length === 0 ? (
-              <p className="py-4 text-sm text-zinc-400">{translate("No activity yet - their story starts with the first booking.")}</p>
+              <p className="py-4 text-sm text-muted-ink">{translate("No activity yet - their story starts with the first booking.")}</p>
             ) : (
-              <ol className="relative ml-3 space-y-5 border-l border-zinc-200 pb-1">
+              <ol className="relative ml-3 space-y-5 border-l border-line pb-1">
                 {timeline.map((e, i) => {
                   const Icon = eventIcon[e.type]
                   return (
@@ -553,7 +553,7 @@ export default function GuestJourney() {
                         {e.reference && e.type !== "agent" ? (
                           <Link
                             to={`/reservations?q=${encodeURIComponent(e.reference)}`}
-                            className="text-sm font-medium text-brand-700 hover:underline"
+                            className="text-sm font-medium text-accent-ink hover:underline"
                             title={translate("Open {v0}", { v0: String(e.reference) })}
                           >
                             {translate(e.title)}
@@ -562,17 +562,17 @@ export default function GuestJourney() {
                           <span className="text-sm font-medium">{translate(e.title)}</span>
                         )}
                         {e.amount ? (
-                          <span className="text-sm text-zinc-500">
+                          <span className="text-sm text-muted-ink">
                             {cur()}{inr(e.amount)}
                           </span>
                         ) : null}
                         {e.channel && <Badge tone="indigo">{e.channel}</Badge>}
-                        <span className="ml-auto text-xs text-zinc-400">
+                        <span className="ml-auto text-xs text-muted-ink">
                           {e.ts.slice(0, 16)}
                         </span>
                       </div>
                       {e.detail && (
-                        <p className="mt-0.5 text-sm text-zinc-500">
+                        <p className="mt-0.5 text-sm text-muted-ink">
                           {e.detail}
                         </p>
                       )}
@@ -595,7 +595,7 @@ export default function GuestJourney() {
             </CardHeader>
             <CardContent>
               <label className="mb-3 block text-sm">
-                <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-zinc-400">{translate("Nationality")}</span>
+                <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-ink">{translate("Nationality")}</span>
                 <EditableNationality
                   guestId={guest.name}
                   value={guest.nationality}
@@ -607,7 +607,7 @@ export default function GuestJourney() {
                 />
               </label>
               <textarea
-                className="min-h-24 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+                className="min-h-24 w-full rounded-lg border border-control bg-surface px-3 py-2 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-focus"
                 placeholder={translate("Allergies, room preferences, how they take their chai…")}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
@@ -618,10 +618,10 @@ export default function GuestJourney() {
                   disabled={busy || notes === (guest.notes ?? "")}
                   onClick={() => saveField({ guest_notes: notes })}
                 >{translate("Save notes")}</Button>
-                <label className="flex items-center gap-1.5 text-sm text-zinc-600">
+                <label className="flex items-center gap-1.5 text-sm text-secondary-ink">
                   <input
                     type="checkbox"
-                    className="size-4 accent-brand-600"
+                    className="size-4 accent-focus"
                     checked={Boolean(guest.vip)}
                     disabled={busy}
                     onChange={(e) =>
@@ -638,10 +638,10 @@ export default function GuestJourney() {
             </CardHeader>
             <CardContent className="space-y-3">
               <div>
-                <label className="flex items-center gap-2 text-sm font-medium text-zinc-700">
+                <label className="flex items-center gap-2 text-sm font-medium text-secondary-ink">
                   <input
                     type="checkbox"
-                    className="size-4 accent-brand-600"
+                    className="size-4 accent-focus"
                     checked={Boolean(guest.marketing_consent)}
                     disabled={busy}
                     onChange={async (e) => {
@@ -657,7 +657,7 @@ export default function GuestJourney() {
                       }
                     }}
                   />{translate("Offers on WhatsApp")}</label>
-                <p className="mt-1.5 text-xs text-zinc-400">
+                <p className="mt-1.5 text-xs text-muted-ink">
                   {!consentWhen
                     ? translate("Not opted in. Booking and stay messages are not affected.")
                     : guest.marketing_consent
@@ -689,7 +689,7 @@ export default function GuestJourney() {
                 <Button
                   variant="outline"
                   className={cn(
-                    confirmAnon && "border-rose-300 text-rose-600",
+                    confirmAnon && "border-danger-line-strong text-danger-text",
                   )}
                   disabled={busy}
                   onClick={async () => {
@@ -713,7 +713,7 @@ export default function GuestJourney() {
                     ? translate("Confirm - erase identity forever")
                     : translate("Anonymize profile")}
                 </Button>
-                <p className="mt-1.5 text-xs text-zinc-400">{translate("Erases name, contact, ID photos, signatures, messages and change history; stays and bills stay on the books. For data-erasure requests.")}</p>
+                <p className="mt-1.5 text-xs text-muted-ink">{translate("Erases name, contact, ID photos, signatures, messages and change history; stays and bills stay on the books. For data-erasure requests.")}</p>
               </div>
               <div>
                 <Button
@@ -737,7 +737,7 @@ export default function GuestJourney() {
                   }}
                 >
                   <Download className="size-4" aria-hidden />{translate("Export guest data")}</Button>
-                <p className="mt-1.5 text-xs text-zinc-400">{translate("Everything held about this guest, for a data-access request.")}</p>
+                <p className="mt-1.5 text-xs text-muted-ink">{translate("Everything held about this guest, for a data-access request.")}</p>
               </div>
             </CardContent>
           </Card>

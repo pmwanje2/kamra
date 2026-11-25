@@ -91,22 +91,22 @@ export function IdDocumentField({
 
       {preview && (
         <img src={preview} alt={translate("Your ID")}
-          className="mb-2 max-h-44 w-auto rounded-lg border border-zinc-200" />
+          className="mb-2 max-h-44 w-auto rounded-lg border border-line" />
       )}
 
       <div className={cn("flex items-center gap-3 rounded-lg border p-3",
-        have ? "border-emerald-300 bg-emerald-50/60" : "border-zinc-300 bg-white")}>
+        have ? "border-success-line-strong bg-success-subtle/60" : "border-control bg-surface")}>
         {have ? (
-          <Check className="size-5 shrink-0 text-emerald-600" />
+          <Check className="size-5 shrink-0 text-success-text" />
         ) : (
-          <Camera className="size-5 shrink-0 text-zinc-400" />
+          <Camera className="size-5 shrink-0 text-muted-ink" />
         )}
         <div className="min-w-0 flex-1">
           <div className={cn("text-sm font-semibold",
-            have ? "text-emerald-800" : "text-zinc-700")}>
+            have ? "text-success-ink" : "text-secondary-ink")}>
             {have ? translate("ID photo received") : translate(label)}
           </div>
-          {hint && !have && <div className="mt-0.5 text-xs text-zinc-500">{translate(hint)}</div>}
+          {hint && !have && <div className="mt-0.5 text-xs text-muted-ink">{translate(hint)}</div>}
         </div>
         <Button type="button" variant="outline" disabled={busy}
           onClick={() => fileRef.current?.click()} className="shrink-0">
@@ -118,7 +118,7 @@ export function IdDocumentField({
       </div>
 
       {err && (
-        <div className="mt-2 flex items-start gap-1.5 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">
+        <div className="mt-2 flex items-start gap-1.5 rounded-lg border border-danger-line-strong bg-danger-subtle px-3 py-2 text-xs font-medium text-danger-ink">
           <TriangleAlert className="mt-px size-3.5 shrink-0" />{translate(err)}
         </div>
       )}

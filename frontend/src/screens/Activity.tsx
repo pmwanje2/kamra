@@ -10,9 +10,9 @@ export default function Activity() {
   return (
     <div className="space-y-4">
       <header className="flex items-center gap-2">
-        <ScrollText className="size-5 text-brand-600" aria-hidden />
+        <ScrollText className="size-5 text-accent-text" aria-hidden />
         <h1 className="text-xl font-semibold tracking-tight">{translate("Activity Log")}</h1>
-        <p className="ml-2 text-sm text-zinc-500">{translate("Everything that happened on the property, by people and by AI.")}</p>
+        <p className="ml-2 text-sm text-muted-ink">{translate("Everything that happened on the property, by people and by AI.")}</p>
       </header>
       <ActivityTab property={getCurrentProperty()} />
     </div>

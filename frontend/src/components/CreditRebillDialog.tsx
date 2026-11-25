@@ -10,8 +10,8 @@ import { Button } from "./ui/button"
 type CreditRebillResult = InvoiceCorrectionResult & { mode: "full" | "partial" }
 
 const inputCls =
-  "min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "min-h-11 w-full rounded-lg border border-control bg-surface px-3 py-2 text-sm " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 export default function CreditRebillDialog({
   folio,
@@ -109,19 +109,19 @@ export default function CreditRebillDialog({
       aria-label={t("Credit & Rebill")}
     >
       <div className="absolute inset-0 bg-black/40" onClick={result ? onDone : onClose} aria-hidden />
-      <div className="relative max-h-dvh w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
-        <header className="border-b border-zinc-200 px-5 py-4">
-          <h2 className="text-lg font-semibold text-zinc-900">{t("Credit & Rebill")}</h2>
-          <p className="text-xs text-zinc-500">
+      <div className="relative max-h-dvh w-full max-w-lg overflow-y-auto rounded-t-2xl bg-surface shadow-2xl sm:rounded-2xl">
+        <header className="border-b border-line px-5 py-4">
+          <h2 className="text-lg font-semibold text-ink">{t("Credit & Rebill")}</h2>
+          <p className="text-xs text-muted-ink">
             {invoiceLabel} · <span dir="ltr" className="inline-block tabular-nums">{fmtMoney(folio.grand_total, moneyContext)}</span>
           </p>
         </header>
 
         {result ? (
           <div className="space-y-3 px-5 py-4 text-sm">
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 space-y-2">
+            <div className="rounded-xl border border-success-line bg-success-subtle/70 p-4 space-y-2">
               <div className="flex items-center justify-between gap-2">
-                <span className="font-semibold text-emerald-900">
+                <span className="font-semibold text-success-ink">
                   {result.mode === "partial"
                     ? t("Partial credit note prepared")
                     : t("Credit & Rebill prepared")}
@@ -129,28 +129,28 @@ export default function CreditRebillDialog({
                 {result.status && <Badge tone="amber">{t(result.status)}</Badge>}
               </div>
               {result.credit_note && (
-                <p className="font-mono text-xs text-zinc-800">
+                <p className="font-mono text-xs text-ink">
                   {t("Credit note")}: {result.credit_note}
                 </p>
               )}
               {result.number && result.number !== result.credit_note && (
-                <p className="font-mono text-xs text-zinc-800">
+                <p className="font-mono text-xs text-ink">
                   {t("Credit note number")}: {result.number}
                 </p>
               )}
               {result.mode === "full" && result.rebill && (
-                <p className="font-mono text-xs text-zinc-800">
+                <p className="font-mono text-xs text-ink">
                   {t("Replacement invoice")}: {result.rebill}
                 </p>
               )}
               {result.cancelled && (
-                <p className="font-mono text-xs text-zinc-800">
+                <p className="font-mono text-xs text-ink">
                   {t("Cancelled invoice")}: {result.cancelled}
                 </p>
               )}
-              {result.message && <p className="text-xs text-zinc-600">{result.message}</p>}
+              {result.message && <p className="text-xs text-secondary-ink">{result.message}</p>}
             </div>
-            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <p className="rounded-lg border border-warning-line bg-warning-subtle px-3 py-2 text-xs text-warning-ink">
               {result.mode === "partial"
                 ? t("Second manager/Finance approval required to finalize the partial credit note.")
                 : folio.sales_invoice ? t("Second manager/Finance approval required to finalize credit note & release replacement invoice.") : null}
@@ -165,7 +165,7 @@ export default function CreditRebillDialog({
           <>
             <div className="space-y-4 px-5 py-4 text-sm">
               {folio.sales_invoice && (
-                <p className="text-zinc-600">
+                <p className="text-secondary-ink">
                   {folio.invoice_number
                     ? t("Invoice {invoice} was issued by the accounting system as {document}.", {
                         invoice: folio.invoice_number, document: folio.sales_invoice,
@@ -175,48 +175,48 @@ export default function CreditRebillDialog({
               )}
               <fieldset className="space-y-2">
                 <legend className="sr-only">{t("Correction mode")}</legend>
-                {allowFull && <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-zinc-200 p-3 hover:border-brand-600/40">
+                {allowFull && <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-line p-3 hover:border-accent-control/40">
                   <input
                     type="radio"
                     name="credit-rebill-mode"
                     value="full"
-                    className="mt-0.5 accent-brand-600"
+                    className="mt-0.5 accent-focus"
                     checked={mode === "full"}
                     onChange={() => setMode("full")}
                   />
                   <span className="space-y-0.5">
-                    <span className="block font-medium text-zinc-900">{t("Full Credit & Rebill")}</span>
-                    {mode === "full" && <span className="block text-xs text-zinc-500">
+                    <span className="block font-medium text-ink">{t("Full Credit & Rebill")}</span>
+                    {mode === "full" && <span className="block text-xs text-muted-ink">
                       {folio.sales_invoice
                         ? t("Credits the full invoice and drafts a replacement invoice for correction.")
                         : t("Cancel {invoice}? The number goes on the cancelled register and the folio reopens for correction.", { invoice: invoiceLabel })}
                     </span>}
                     {hasTaxReturn && (
-                      <span className="block font-mono text-[11px] text-brand-700">
+                      <span className="block font-mono text-[11px] text-accent-ink">
                         {t("Tax return reason code: 102 (Cancellation of goods/services)")}
                       </span>
                     )}
                   </span>
                 </label>}
 
-                {allowPartial && <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-zinc-200 p-3 hover:border-brand-600/40">
+                {allowPartial && <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-line p-3 hover:border-accent-control/40">
                   <input
                     type="radio"
                     name="credit-rebill-mode"
                     value="partial"
-                    className="mt-0.5 accent-brand-600"
+                    className="mt-0.5 accent-focus"
                     checked={mode === "partial"}
                     onChange={() => setMode("partial")}
                   />
                   <span className="space-y-0.5">
-                    <span className="block font-medium text-zinc-900">{t("Partial Credit Note")}</span>
-                    <span className="block text-xs text-zinc-500">
+                    <span className="block font-medium text-ink">{t("Partial Credit Note")}</span>
+                    <span className="block text-xs text-muted-ink">
                       {t("Credits a specific amount (up to {left}) without reissuing the full invoice.", {
                         left: fmtMoney(left, moneyContext),
                       })}
                     </span>
                     {hasTaxReturn && (
-                      <span className="block font-mono text-[11px] text-brand-700">
+                      <span className="block font-mono text-[11px] text-accent-ink">
                         {t("Tax return reason code: 104 (Partial waive off / adjustment)")}
                       </span>
                     )}
@@ -226,7 +226,7 @@ export default function CreditRebillDialog({
 
               {mode === "partial" && (
                 <div className="space-y-1.5">
-                  <label className="block space-y-1 text-xs text-zinc-600">
+                  <label className="block space-y-1 text-xs text-secondary-ink">
                     <span>{t("Partial credit amount")}</span>
                     <input
                       aria-label={t("Partial credit amount")}
@@ -242,14 +242,14 @@ export default function CreditRebillDialog({
                     />
                   </label>
                   {val > left && (
-                    <p className="text-xs text-amber-700">
+                    <p className="text-xs text-warning-ink">
                       {t("At most {amount} can still be credited on this invoice.", {
                         amount: fmtMoney(left, moneyContext),
                       })}
                     </p>
                   )}
                   {propTax > 0 && val <= left && (
-                    <p className="text-xs text-zinc-500">
+                    <p className="text-xs text-muted-ink">
                       {t("Tax in this credit note: {amount}", {
                         amount: fmtMoney(propTax, moneyContext),
                       })}
@@ -258,7 +258,7 @@ export default function CreditRebillDialog({
                 </div>
               )}
 
-              <label className="block space-y-1 text-xs text-zinc-600">
+              <label className="block space-y-1 text-xs text-secondary-ink">
                 <span>{t("Reason")}</span>
                 <input
                   data-testid="credit-rebill-reason"
@@ -272,7 +272,7 @@ export default function CreditRebillDialog({
               </label>
 
               {needsPinInput && (
-                <label className="block space-y-1 text-xs text-zinc-600">
+                <label className="block space-y-1 text-xs text-secondary-ink">
                   <span>{t("Cashier PIN")}</span>
                   <input
                     aria-label={t("Cashier PIN")}
@@ -287,20 +287,20 @@ export default function CreditRebillDialog({
                 </label>
               )}
 
-              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <p className="rounded-lg border border-warning-line bg-warning-subtle px-3 py-2 text-xs text-warning-ink">
                 {mode === "partial"
                 ? t("Second manager/Finance approval required to finalize the partial credit note.")
                 : folio.sales_invoice ? t("Second manager/Finance approval required to finalize credit note & release replacement invoice.") : null}
               </p>
 
               {error && (
-                <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                <p role="alert" className="rounded-lg bg-danger-subtle px-3 py-2 text-xs text-danger-ink">
                   {error}
                 </p>
               )}
             </div>
 
-            <footer className="flex justify-end gap-2 border-t border-zinc-100 px-5 py-3">
+            <footer className="flex justify-end gap-2 border-t border-line-subtle px-5 py-3">
               <Button className="min-h-11" type="button" variant="outline" disabled={busy} onClick={onClose}>
                 {t("Close")}
               </Button>

@@ -122,30 +122,30 @@ export default function NotificationBell({ property }: { property: string }) {
         onClick={() => setOpen((o) => !o)}
         aria-label={t("Notifications")}
         title={t("Notifications")}
-        className="relative rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
+        className="relative rounded-lg p-1.5 text-muted-ink hover:bg-subtle hover:text-secondary-ink"
       >
         <Bell className="size-4" aria-hidden />
         {data.unread > 0 && (
-          <span className="absolute -end-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-600 px-1 text-[10px] font-semibold leading-none text-white">
+          <span className="absolute -end-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger-fill px-1 text-[10px] font-semibold leading-none text-on-solid">
             {data.unread > 99 ? "99+" : data.unread}
           </span>
         )}
       </button>
       {open && (
-        <div className="absolute end-0 top-10 z-50 flex max-h-[70vh] w-[22rem] max-w-[calc(100vw-2rem)] flex-col rounded-lg border border-zinc-200 bg-white shadow-lg ring-1 ring-black/5 dark:border-zinc-700 dark:bg-zinc-900">
-          <div className="flex items-center justify-between border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
+        <div className="absolute end-0 top-10 z-50 flex max-h-[70vh] w-[22rem] max-w-[calc(100vw-2rem)] flex-col rounded-lg border border-line bg-surface shadow-lg ring-1 ring-black/5">
+          <div className="flex items-center justify-between border-b border-line-subtle px-3 py-2">
             <span className="text-sm font-semibold">{t("Notifications")}</span>
             {data.unread > 0 && (
               <button
                 onClick={markRead}
-                className="text-xs font-medium text-brand-700 hover:underline dark:text-brand-400"
+                className="text-xs font-medium text-accent-ink hover:underline"
               >
                 {t("Mark all read")}
               </button>
             )}
           </div>
           {tabs.length > 0 && (
-            <div className="flex flex-wrap gap-1 border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
+            <div className="flex flex-wrap gap-1 border-b border-line-subtle px-3 py-2">
               {tabs.map((m) => (
                 <button
                   key={m}
@@ -153,8 +153,8 @@ export default function NotificationBell({ property }: { property: string }) {
                   className={cn(
                     "rounded-full border px-2.5 py-0.5 text-xs",
                     tab === m
-                      ? "border-brand-200 bg-brand-50 text-brand-700 dark:border-brand-700 dark:bg-brand-900/40 dark:text-brand-300"
-                      : "border-zinc-200 text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800",
+                      ? "border-accent-line bg-accent-subtle text-accent-ink"
+                      : "border-line text-secondary-ink hover:bg-canvas",
                   )}
                 >
                   {m === "all" ? t("All") : t(MODULE_NAMES[m] ?? m)}
@@ -164,20 +164,20 @@ export default function NotificationBell({ property }: { property: string }) {
           )}
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
             {items.length === 0 ? (
-              <p className="px-3 py-8 text-center text-sm text-zinc-400">{t("Nothing new.")}</p>
+              <p className="px-3 py-8 text-center text-sm text-muted-ink">{t("Nothing new.")}</p>
             ) : (
               items.map((i) => (
                 <button
                   key={i.name}
                   onClick={() => openOne(i)}
-                  className="flex w-full items-start gap-2 border-b border-zinc-50 px-3 py-2.5 text-start last:border-0 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-800"
+                  className="flex w-full items-start gap-2 border-b border-line-subtle px-3 py-2.5 text-start last:border-0 hover:bg-canvas"
                 >
-                  <span className="mt-1.5 size-2 shrink-0 rounded-full bg-brand-600" aria-hidden />
+                  <span className="mt-1.5 size-2 shrink-0 rounded-full bg-accent-fill" aria-hidden />
                   <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                    <span className="block text-sm font-medium text-ink">
                       {i.subject}
                     </span>
-                    <span className="mt-0.5 block text-xs text-zinc-400">
+                    <span className="mt-0.5 block text-xs text-muted-ink">
                       {t(MODULE_NAMES[i.module] ?? i.module)} · {ago(i.age)}
                     </span>
                   </span>

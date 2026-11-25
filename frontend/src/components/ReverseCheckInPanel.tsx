@@ -49,13 +49,13 @@ export default function ReverseCheckInPanel({ reservation, onDone }: {
     )
   }
   return (
-    <div className="w-full space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
-      <p className="text-amber-900">
+    <div className="w-full space-y-2 rounded-xl border border-warning-line bg-warning-subtle p-3 text-sm">
+      <p className="text-warning-ink">
         {t("Puts the booking back to arrival with its room. The room is released and marked dirty for housekeeping to check. Only today, and only while nothing is on the bill.")}
       </p>
-      <input className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2" value={reason}
+      <input className="w-full rounded-lg border border-control bg-surface px-3 py-2" value={reason}
         onChange={(e) => setReason(e.target.value)} placeholder={t("Why (e.g. checked in the wrong guest)")} />
-      {err && <p className="text-xs font-medium text-rose-700">{err}</p>}
+      {err && <p className="text-xs font-medium text-danger-ink">{err}</p>}
       <div className="flex gap-2">
         <Button disabled={busy || !reason.trim()} onClick={() => void go()}>{t("Undo check-in")}</Button>
         <Button variant="outline" disabled={busy} onClick={() => setOpen(false)}>{t("Cancel")}</Button>

@@ -34,7 +34,7 @@ export default function SetupNag() {
 
   if (!list) return null
   return (
-    <div className="flex items-center gap-3 border-b border-brand-200 bg-brand-50 px-4 py-2 text-sm text-brand-800">
+    <div className="flex items-center gap-3 border-b border-accent-line bg-accent-subtle px-4 py-2 text-sm text-accent-ink">
       <ListChecks className="size-4 shrink-0" aria-hidden />
       <span className="min-w-0 flex-1">
         {t("Finish setting up: {done} of {total} done.", { done: list.done, total: list.total })}{" "}

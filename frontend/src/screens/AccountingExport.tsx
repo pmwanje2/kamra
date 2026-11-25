@@ -168,9 +168,9 @@ export default function AccountingExport() {
   return (
     <div className="space-y-5">
       <header className="flex items-center gap-2">
-        <FileSpreadsheet className="size-5 text-brand-600" aria-hidden />
+        <FileSpreadsheet className="size-5 text-accent-text" aria-hidden />
         <h1 className="text-xl font-semibold tracking-tight">{translate("Accounting Export")}</h1>
-        <p className="ml-2 text-sm text-zinc-500">{translate("Closed invoices, ready to import into your books.")}</p>
+        <p className="ml-2 text-sm text-muted-ink">{translate("Closed invoices, ready to import into your books.")}</p>
       </header>
 
       <Card>
@@ -178,21 +178,21 @@ export default function AccountingExport() {
           <div className="flex flex-wrap items-center gap-2">
             <input
               type="date"
-              className="rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
+              className="rounded-lg border border-control px-2 py-1.5 text-sm"
               value={from}
               onChange={(e) => setFrom(e.target.value)}
               aria-label={translate("From")}
             />
-            <span className="text-xs text-zinc-400">{translate("to")}</span>
+            <span className="text-xs text-muted-ink">{translate("to")}</span>
             <input
               type="date"
-              className="rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
+              className="rounded-lg border border-control px-2 py-1.5 text-sm"
               value={to}
               onChange={(e) => setTo(e.target.value)}
               aria-label={translate("To")}
             />
             <select
-              className="rounded-lg border border-zinc-300 px-2.5 py-1.5 text-sm"
+              className="rounded-lg border border-control px-2.5 py-1.5 text-sm"
               value={format}
               onChange={(e) => setFormat(e.target.value)}
               aria-label={translate("Format")}
@@ -209,25 +209,25 @@ export default function AccountingExport() {
         </CardHeader>
         <CardContent>
           {error && (
-            <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+            <div className="mb-3 rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">
               {translate(error)}
             </div>
           )}
           {data && (
             <>
-              <p className="mb-3 text-sm text-zinc-500">
+              <p className="mb-3 text-sm text-muted-ink">
                 {data.totals.invoices}{translate(" invoice")}{data.totals.invoices === 1 ? "" : translate("s")}{translate(" · taxable ")}
                 {fmtMoney(data.totals.taxable, data.currency)} · {data.tax_label}{" "}
                 {fmtMoney(data.totals.total_tax, data.currency)}{translate(" · total ")}
                 {fmtMoney(data.totals.grand_total, data.currency)}
               </p>
               {data.rows.length === 0 ? (
-                <p className="py-6 text-center text-sm text-zinc-400">{translate("No closed invoices in this window.")}</p>
+                <p className="py-6 text-center text-sm text-muted-ink">{translate("No closed invoices in this window.")}</p>
               ) : (
-                <div className="overflow-x-auto rounded-xl border border-zinc-200">
+                <div className="overflow-x-auto rounded-xl border border-line">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-zinc-200 bg-zinc-50 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
+                      <tr className="border-b border-line bg-canvas text-left text-xs font-medium uppercase tracking-wider text-muted-ink">
                         {cols.map((c) => (
                           <th key={c.header} className="whitespace-nowrap px-3 py-2">
                             {translate(c.header)}
@@ -235,7 +235,7 @@ export default function AccountingExport() {
                         ))}
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-zinc-100">
+                    <tbody className="divide-y divide-line-subtle">
                       {shown.slice(0, 12).map((r, i) => (
                         <tr key={i}>
                           {cols.map((c) => (
@@ -251,7 +251,7 @@ export default function AccountingExport() {
                     </tbody>
                   </table>
                   {shown.length > 12 && (
-                    <p className="px-3 py-2 text-xs text-zinc-400">{translate("Showing 12 of ")}{shown.length}{translate(" rows - download for all.")}</p>
+                    <p className="px-3 py-2 text-xs text-muted-ink">{translate("Showing 12 of ")}{shown.length}{translate(" rows - download for all.")}</p>
                   )}
                 </div>
               )}

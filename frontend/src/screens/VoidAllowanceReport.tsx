@@ -83,11 +83,11 @@ export default function VoidAllowanceReport() {
     <div className="w-full space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-ink">
             {t("Reports")}
           </p>
           <h1 className="text-2xl font-semibold">{t("Voids & Allowances")}</h1>
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-muted-ink">
             {t("Every void, allowance and cancelled invoice: who, when and why.")}
           </p>
         </div>
@@ -95,15 +95,15 @@ export default function VoidAllowanceReport() {
           <input
             type="date"
             aria-label={t("From")}
-            className="rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
+            className="rounded-lg border border-control px-2 py-1.5 text-sm"
             value={from}
             onChange={(e) => setFrom(e.target.value)}
           />
-          <span className="text-xs text-zinc-400">{t("to")}</span>
+          <span className="text-xs text-muted-ink">{t("to")}</span>
           <input
             type="date"
             aria-label={t("To")}
-            className="rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
+            className="rounded-lg border border-control px-2 py-1.5 text-sm"
             value={to}
             onChange={(e) => setTo(e.target.value)}
           />
@@ -112,14 +112,14 @@ export default function VoidAllowanceReport() {
           </Button>
         </div>
       </div>
-      {err ? <p className="text-sm text-rose-600">{translate(err)}</p> : null}
+      {err ? <p className="text-sm text-danger-text">{translate(err)}</p> : null}
 
       <div className="flex flex-wrap items-center gap-2 print:hidden">
         <button
           type="button"
           onClick={() => setOnly(null)}
           className={`rounded-full border px-3 py-1 text-xs ${
-            only === null ? "border-brand-600 bg-brand-50 text-brand-800" : "border-zinc-200 text-zinc-600 hover:bg-zinc-50"
+            only === null ? "border-accent-control bg-accent-subtle text-accent-ink" : "border-line text-secondary-ink hover:bg-canvas"
           }`}
         >
           {t("All")} · {rows?.length ?? 0}
@@ -130,26 +130,26 @@ export default function VoidAllowanceReport() {
             type="button"
             onClick={() => setOnly(only === a ? null : a)}
             className={`rounded-full border px-3 py-1 text-xs ${
-              only === a ? "border-brand-600 bg-brand-50 text-brand-800" : "border-zinc-200 text-zinc-600 hover:bg-zinc-50"
+              only === a ? "border-accent-control bg-accent-subtle text-accent-ink" : "border-line text-secondary-ink hover:bg-canvas"
             }`}
           >
             {translate(actionLabel[a])} · {counts[a] ?? 0}
           </button>
         ))}
         <label className="relative ms-auto">
-          <Search className="pointer-events-none absolute start-2 top-2 size-4 text-zinc-400" aria-hidden />
+          <Search className="pointer-events-none absolute start-2 top-2 size-4 text-muted-ink" aria-hidden />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder={t("Search folio, staff or reason")}
-            className="w-64 rounded-lg border border-zinc-300 bg-white py-1.5 ps-8 pe-2 text-sm"
+            className="w-64 rounded-lg border border-control bg-surface py-1.5 ps-8 pe-2 text-sm"
           />
         </label>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white">
+      <div className="overflow-x-auto rounded-xl border border-line bg-surface">
         <table className="w-full text-left text-sm">
-          <thead className="border-b text-xs uppercase text-zinc-400">
+          <thead className="border-b text-xs uppercase text-muted-ink">
             <tr>
               <th className="px-3 py-2">{t("When")}</th>
               <th className="px-3 py-2">{t("Action")}</th>
@@ -158,35 +158,35 @@ export default function VoidAllowanceReport() {
               <th className="px-3 py-2">{t("Detail")}</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-zinc-100">
+          <tbody className="divide-y divide-line-subtle">
             {rows === null ? (
               <tr>
-                <td colSpan={5} className="px-3 py-6 text-center text-zinc-400">{t("Loading…")}</td>
+                <td colSpan={5} className="px-3 py-6 text-center text-muted-ink">{t("Loading…")}</td>
               </tr>
             ) : shown.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-3 py-6 text-center text-zinc-400">
+                <td colSpan={5} className="px-3 py-6 text-center text-muted-ink">
                   {t("No voids, allowances or cancelled invoices in this window.")}
                 </td>
               </tr>
             ) : (
               shown.map((r, i) => (
                 <tr key={`${r.when}-${i}`} className="align-top">
-                  <td className="whitespace-nowrap px-3 py-2 tabular-nums text-zinc-500">{r.when.slice(0, 16)}</td>
+                  <td className="whitespace-nowrap px-3 py-2 tabular-nums text-muted-ink">{r.when.slice(0, 16)}</td>
                   <td className="whitespace-nowrap px-3 py-2">
                     <span
                       className={`rounded-full px-2 py-0.5 text-xs ${
                         r.action === "Void" || r.action === "POS void"
-                          ? "bg-rose-50 text-rose-700"
+                          ? "bg-danger-subtle text-danger-ink"
                           : r.action === "Allowance"
-                            ? "bg-amber-50 text-amber-800"
-                            : "bg-zinc-100 text-zinc-700"
+                            ? "bg-warning-subtle text-warning-ink"
+                            : "bg-subtle text-secondary-ink"
                       }`}
                     >
                       {translate(actionLabel[r.action]) ?? t(r.action)}
                     </span>
                     {r.serial && (
-                      <Link className="mt-1 block font-mono text-xs text-brand-700 hover:underline"
+                      <Link className="mt-1 block font-mono text-xs text-accent-ink hover:underline"
                         to={`/allowance-voucher/${encodeURIComponent(r.serial)}`} title={t("Print voucher")}>
                         {r.serial}
                       </Link>
@@ -194,22 +194,22 @@ export default function VoidAllowanceReport() {
                   </td>
                   <td className="whitespace-nowrap px-3 py-2">
                     {r.folio ? (
-                      <Link className="text-brand-700 hover:underline" to={`/billing/${encodeURIComponent(r.folio)}`}>
+                      <Link className="text-accent-ink hover:underline" to={`/billing/${encodeURIComponent(r.folio)}`}>
                         {r.folio}
                       </Link>
                     ) : r.pos_order ? (
-                      <span className="text-zinc-700">{r.pos_order}</span>
+                      <span className="text-secondary-ink">{r.pos_order}</span>
                     ) : (
                       "-"
                     )}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-zinc-600">
+                  <td className="whitespace-nowrap px-3 py-2 text-secondary-ink">
                     {r.actor}
                     {r.approver && r.approver !== r.actor ? (
-                      <span className="block text-xs text-zinc-400">{t("approved by {name}", { name: r.approver })}</span>
+                      <span className="block text-xs text-muted-ink">{t("approved by {name}", { name: r.approver })}</span>
                     ) : null}
                   </td>
-                  <td className="px-3 py-2 text-zinc-700">{r.detail ?? "-"}</td>
+                  <td className="px-3 py-2 text-secondary-ink">{r.detail ?? "-"}</td>
                 </tr>
               ))
             )}

@@ -51,7 +51,7 @@ export function LanguagesPage() {
   }
 
   if (!enabled) {
-    return <p className="py-10 text-center text-sm text-zinc-400">{t("Loading…")}</p>
+    return <p className="py-10 text-center text-sm text-muted-ink">{t("Loading…")}</p>
   }
 
   return (
@@ -59,33 +59,33 @@ export function LanguagesPage() {
       <CardHeader>
         <div>
           <CardTitle>{t("Languages offered")}</CardTitle>
-          <p className="mt-0.5 text-xs text-zinc-400">
+          <p className="mt-0.5 text-xs text-muted-ink">
             {t("Sign-in, the staff app and guest pages only offer these. Applies to the whole site. English stays on.")}
           </p>
-          <p className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-zinc-500">
+          <p className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-ink">
             {t("Changed by")}
-            <span className="rounded-full bg-zinc-100 px-2 py-0.5 font-medium text-zinc-600">{t("Hotel Admin")}</span>
+            <span className="rounded-full bg-subtle px-2 py-0.5 font-medium text-secondary-ink">{t("Hotel Admin")}</span>
           </p>
         </div>
       </CardHeader>
-      <CardContent className="divide-y divide-zinc-100 px-5">
+      <CardContent className="divide-y divide-line-subtle px-5">
         {error && (
-          <p className="mb-2 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{t(error)}</p>
+          <p className="mb-2 rounded-lg bg-danger-subtle px-3 py-2 text-sm text-danger-ink">{t(error)}</p>
         )}
         {shipped.map((lang) => {
           const on = lang.code === "en" || enabled.includes(lang.code)
           return (
             <div key={lang.code} className="flex items-center gap-3 py-3">
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-zinc-800" lang={lang.code}>
+                <p className="text-sm font-medium text-ink" lang={lang.code}>
                   {lang.nativeLabel}
-                  {lang.code !== "en" ? <span className="font-normal text-zinc-500"> ({lang.englishLabel})</span> : null}
+                  {lang.code !== "en" ? <span className="font-normal text-muted-ink"> ({lang.englishLabel})</span> : null}
                 </p>
                 {lang.code === "en" && (
-                  <p className="text-xs text-zinc-400">{t("English is always available.")}</p>
+                  <p className="text-xs text-muted-ink">{t("English is always available.")}</p>
                 )}
                 {lang.dir === "rtl" && (
-                  <p className="text-xs text-zinc-400">{t("Switches the interface to right-to-left.")}</p>
+                  <p className="text-xs text-muted-ink">{t("Switches the interface to right-to-left.")}</p>
                 )}
               </div>
               <Switch

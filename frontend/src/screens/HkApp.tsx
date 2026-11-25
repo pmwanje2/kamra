@@ -72,13 +72,13 @@ interface HkRoom {
 }
 
 const hkTone: Record<HkRoom["housekeeping_status"], string> = {
-  Clean: "border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-950/30 dark:text-emerald-100",
-  Pickup: "border-indigo-300 bg-indigo-50 text-indigo-900 dark:border-indigo-500/40 dark:bg-indigo-950/30 dark:text-indigo-100",
-  Ready: "border-emerald-400 bg-emerald-100 text-emerald-950 dark:border-teal-500/40 dark:bg-teal-950/30 dark:text-teal-100",
-  Inspected: "border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-500/40 dark:bg-sky-950/30",
-  Dirty: "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/30 dark:text-amber-100",
-  "Out of Service": "border-orange-300 bg-orange-50 text-orange-900 dark:border-orange-500/40 dark:bg-orange-950/30 dark:text-orange-100",
-  "Out of Order": "border-rose-300 bg-rose-50 text-rose-900 dark:border-rose-500/40 dark:bg-rose-950/30 dark:text-rose-100",
+  Clean: "border-success-line-strong bg-success-subtle text-success-ink dark:border-emerald-500/40 dark:bg-emerald-950/30 dark:text-emerald-100",
+  Pickup: "border-indigo-line-strong bg-indigo-subtle text-indigo-ink dark:border-indigo-500/40 dark:bg-indigo-950/30 dark:text-indigo-100",
+  Ready: "border-emerald-400 bg-success-muted text-success-ink dark:border-teal-500/40 dark:bg-teal-950/30 dark:text-teal-100",
+  Inspected: "border-info-line-strong bg-info-subtle text-info-ink dark:border-sky-500/40 dark:bg-sky-950/30",
+  Dirty: "border-warning-line-strong bg-warning-subtle text-warning-ink dark:border-amber-500/40 dark:bg-amber-950/30 dark:text-amber-100",
+  "Out of Service": "border-notice-line-strong bg-notice-subtle text-notice-ink dark:border-orange-500/40 dark:bg-orange-950/30 dark:text-orange-100",
+  "Out of Order": "border-danger-line-strong bg-danger-subtle text-danger-ink dark:border-rose-500/40 dark:bg-rose-950/30 dark:text-rose-100",
 }
 
 export default function HkApp() {
@@ -180,14 +180,14 @@ export default function HkApp() {
   }
 
   if (auth === "loading")
-    return <p className="py-20 text-center text-zinc-400">{t("Loading…")}</p>
+    return <p className="py-20 text-center text-muted-ink">{t("Loading…")}</p>
   if (auth === "anon") return <Login onSuccess={checkAuth} />
 
   const mine = (data?.tasks ?? []).filter((t) => t.mine)
   const pool = (data?.tasks ?? []).filter((t) => t.claimable)
 
   const TaskCard = ({ task }: { task: HkTask }) => (
-    <li className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
+    <li className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
       <div className="flex items-center gap-3">
         <span className="text-3xl font-bold tabular-nums">{task.room_number}</span>
         <div className="min-w-0 flex-1">
@@ -215,17 +215,17 @@ export default function HkApp() {
         </div>
       </div>
       {task.special_requests && (
-        <p className="mt-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-sm text-amber-800">
+        <p className="mt-2 rounded-lg bg-warning-subtle px-2.5 py-1.5 text-sm text-warning-ink">
           {t("Guest request: {req}", { req: task.special_requests })}
         </p>
       )}
-      {task.notes && <p className="mt-2 text-sm text-zinc-500">{task.notes}</p>}
+      {task.notes && <p className="mt-2 text-sm text-muted-ink">{task.notes}</p>}
 
       {task.claimable ? (
         <button
           disabled={busy === task.name}
           onClick={() => run(task.name, "kamra.api.hk_claim_task")}
-          className="mt-3 w-full rounded-xl bg-brand-600 py-3 text-base font-semibold text-white active:bg-brand-700"
+          className="mt-3 w-full rounded-xl bg-accent-fill py-3 text-base font-semibold text-on-solid active:bg-accent-fill-hover"
         >
           {t("Take this room")}
         </button>
@@ -233,14 +233,14 @@ export default function HkApp() {
         rejecting === task.name ? (
           <div className="mt-3 space-y-2">
             <input
-              className="w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-base"
+              className="w-full rounded-xl border border-control px-3 py-2.5 text-base"
               placeholder={t("Reason (optional)")}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
             />
             <div className="flex gap-2">
               <button
-                className="flex-1 rounded-xl border border-zinc-300 py-3 text-base font-semibold text-zinc-600"
+                className="flex-1 rounded-xl border border-control py-3 text-base font-semibold text-secondary-ink"
                 onClick={() => { setRejecting(null); setReason("") }}
               >
                 {t("Keep")}
@@ -254,7 +254,7 @@ export default function HkApp() {
                     setReason("")
                   })
                 }
-                className="flex-1 rounded-xl bg-rose-600 py-3 text-base font-semibold text-white"
+                className="flex-1 rounded-xl bg-danger-fill py-3 text-base font-semibold text-on-solid"
               >
                 {t("Send back")}
               </button>
@@ -265,14 +265,14 @@ export default function HkApp() {
             <button
               disabled={busy === task.name}
               onClick={() => setRejecting(task.name)}
-              className="flex-1 rounded-xl border border-zinc-300 py-3 text-base font-semibold text-zinc-600 active:bg-zinc-100"
+              className="flex-1 rounded-xl border border-control py-3 text-base font-semibold text-secondary-ink active:bg-subtle"
             >
               {t("Decline")}
             </button>
             <button
               disabled={busy === task.name}
               onClick={() => run(task.name, "kamra.api.hk_accept_task")}
-              className="flex-1 rounded-xl bg-brand-600 py-3 text-base font-semibold text-white active:bg-brand-700"
+              className="flex-1 rounded-xl bg-accent-fill py-3 text-base font-semibold text-on-solid active:bg-accent-fill-hover"
             >
               {t("Accept")}
             </button>
@@ -293,7 +293,7 @@ export default function HkApp() {
                         muted
                         playsInline
                         controls
-                        className="size-16 rounded-lg bg-zinc-100 object-cover"
+                        className="size-16 rounded-lg bg-subtle object-cover"
                       />
                     ) : (
                       <img
@@ -307,7 +307,7 @@ export default function HkApp() {
                       aria-label={t("Remove")}
                       disabled={busy === task.name}
                       onClick={() => removeMedia(task.name, url)}
-                      className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full bg-rose-600 text-white shadow active:bg-rose-700"
+                      className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full bg-danger-fill text-on-solid shadow active:bg-danger-fill-hover"
                     >
                       <X className="size-3" />
                     </button>
@@ -315,7 +315,7 @@ export default function HkApp() {
                 ))}
               </div>
             )}
-            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-300 py-2.5 text-sm font-medium text-zinc-600 active:bg-zinc-100">
+            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-control py-2.5 text-sm font-medium text-secondary-ink active:bg-subtle">
               <Camera className="size-4" aria-hidden />
               {(task.media ?? []).length ? t("Add another photo / video") : t("Add photo / video")}
               <input
@@ -337,12 +337,12 @@ export default function HkApp() {
               <button
                 disabled={busy === task.name}
                 onClick={() => run(task.name, "kamra.api.hk_update_task", { status: "In Progress" })}
-                className="flex-1 rounded-xl border border-zinc-300 py-3 text-base font-semibold text-zinc-700 active:bg-zinc-100"
+                className="flex-1 rounded-xl border border-control py-3 text-base font-semibold text-secondary-ink active:bg-subtle"
               >
                 {t("Start")}
               </button>
             ) : (
-              <span className="flex flex-1 items-center justify-center rounded-xl bg-sky-50 py-3 text-base font-medium text-sky-700">
+              <span className="flex flex-1 items-center justify-center rounded-xl bg-info-subtle py-3 text-base font-medium text-info-ink">
                 {t("In progress…")}
               </span>
             )}
@@ -352,7 +352,7 @@ export default function HkApp() {
                 disabled={busy === task.name || !supervisor}
                 title={(supervisor ? undefined : t("A supervisor passes the inspection"))}
                 onClick={() => run(task.name, "kamra.api.hk_update_task", { status: "Verified" })}
-                className="flex-1 rounded-xl bg-sky-600 py-3 text-base font-semibold text-white active:bg-sky-700 disabled:opacity-50"
+                className="flex-1 rounded-xl bg-info-fill py-3 text-base font-semibold text-on-solid active:bg-info-fill-hover disabled:opacity-50"
               >
                 {supervisor ? t("Pass inspection ✓") : t("Supervisor passes")}
               </button>
@@ -360,7 +360,7 @@ export default function HkApp() {
               <button
                 disabled={busy === task.name}
                 onClick={() => run(task.name, "kamra.api.hk_update_task", { status: "Done" })}
-                className="flex-1 rounded-xl bg-brand-600 py-3 text-base font-semibold text-white active:bg-brand-700"
+                className="flex-1 rounded-xl bg-accent-fill py-3 text-base font-semibold text-on-solid active:bg-accent-fill-hover"
               >
                 {t("Done ✓")}
               </button>
@@ -372,8 +372,8 @@ export default function HkApp() {
   )
 
   return (
-    <div className="min-h-screen bg-zinc-50 pb-20">
-      <header className="sticky top-0 z-40 flex items-center gap-2 border-b border-zinc-200 bg-white px-4 py-3">
+    <div className="min-h-screen bg-canvas pb-20">
+      <header className="sticky top-0 z-40 flex items-center gap-2 border-b border-line bg-surface px-4 py-3">
         <BrandMark className="size-6" decorative />
         <span className="font-semibold">{t("Housekeeping")}</span>
         <span className="ml-auto flex items-center gap-3">
@@ -381,16 +381,16 @@ export default function HkApp() {
             onClick={() => { setLogItem({ desc: "", condition: "Found", room: "" }); setLogMsg(null); setLogErr(null) }}
             aria-label={t("Log a lost or found item")}
           >
-            <PackageSearch className="size-5 text-zinc-400" />
+            <PackageSearch className="size-5 text-muted-ink" />
           </button>
           <button onClick={load} aria-label={t("Refresh")}>
-            <RefreshCw className="size-5 text-zinc-400" />
+            <RefreshCw className="size-5 text-muted-ink" />
           </button>
           <button
             onClick={() => logout().then(() => setAuth("anon"))}
             aria-label={t("Sign out")}
           >
-            <LogOut className="size-5 text-zinc-400" />
+            <LogOut className="size-5 text-muted-ink" />
           </button>
         </span>
       </header>
@@ -399,7 +399,7 @@ export default function HkApp() {
         {notice && (
           <div
             role="alert"
-            className="mb-3 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-800"
+            className="mb-3 flex items-start gap-2 rounded-xl border border-danger-line bg-danger-subtle px-3 py-2.5 text-sm text-danger-ink"
           >
             <span className="flex-1">{notice}</span>
             <button onClick={() => setNotice(null)} aria-label={t("Dismiss")}>
@@ -409,7 +409,7 @@ export default function HkApp() {
         )}
         {view === "mine" && (
           <>
-            <p className="mb-3 px-1 text-sm text-zinc-500">
+            <p className="mb-3 px-1 text-sm text-muted-ink">
               {t("{n} task{s} for you - arrivals first", {
                 n: mine.length,
                 s: mine.length === 1 ? "" : "s",
@@ -418,9 +418,9 @@ export default function HkApp() {
             <ul className="space-y-3">
               {mine.map((task) => <TaskCard key={task.name} task={task} />)}
               {mine.length === 0 && (
-                <li className="rounded-2xl border border-dashed border-zinc-300 p-8 text-center text-zinc-400">
+                <li className="rounded-2xl border border-dashed border-control p-8 text-center text-muted-ink">
                   {t("Nothing assigned to you. Check")}{" "}
-                  <button className="font-semibold text-brand-700" onClick={() => setView("pool")}>
+                  <button className="font-semibold text-accent-ink" onClick={() => setView("pool")}>
                     {t("Available")}
                   </button>{" "}
                   {t("to pick up a room.")}
@@ -432,13 +432,13 @@ export default function HkApp() {
 
         {view === "pool" && (
           <>
-            <p className="mb-3 px-1 text-sm text-zinc-500">
+            <p className="mb-3 px-1 text-sm text-muted-ink">
               {t("{n} unassigned - take one to add it to your list", { n: pool.length })}
             </p>
             <ul className="space-y-3">
               {pool.map((task) => <TaskCard key={task.name} task={task} />)}
               {pool.length === 0 && (
-                <li className="rounded-2xl border border-dashed border-zinc-300 p-8 text-center text-zinc-400">
+                <li className="rounded-2xl border border-dashed border-control p-8 text-center text-muted-ink">
                   {t("No unassigned rooms right now.")}
                 </li>
               )}
@@ -477,7 +477,7 @@ export default function HkApp() {
                   <div className="flex items-center justify-center gap-1 text-xl font-bold">
                     {r.room_number}
                     {r.housekeeping_status === "Out of Service" && (
-                      <Wrench className="size-3.5 text-orange-600" aria-hidden />
+                      <Wrench className="size-3.5 text-notice-text" aria-hidden />
                     )}
                     {r.occupancy_status === "Occupied" && (
                       <BedDouble className="size-4" aria-hidden />
@@ -503,7 +503,7 @@ export default function HkApp() {
           </div>
         )}
         {view === "rooms" && (
-          <p className="mt-3 text-center text-xs text-zinc-400">
+          <p className="mt-3 text-center text-xs text-muted-ink">
             {t("Tap a vacant room to update housekeeping status, or an occupied room to post minibar or laundry.")}
           </p>
         )}
@@ -513,7 +513,7 @@ export default function HkApp() {
             onClick={() => setStatusRoom(null)}
           >
             <div
-              className="w-full space-y-3 rounded-t-2xl bg-white p-4"
+              className="w-full space-y-3 rounded-t-2xl bg-surface p-4"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between">
@@ -524,7 +524,7 @@ export default function HkApp() {
                   type="button"
                   onClick={() => setStatusRoom(null)}
                   aria-label={t("Close")}
-                  className="p-2 text-zinc-500"
+                  className="p-2 text-muted-ink"
                 >
                   <X className="size-5" />
                 </button>
@@ -564,7 +564,7 @@ export default function HkApp() {
         {view === "laundry" && <HkLaundry rooms={data?.rooms ?? []} />}
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-zinc-200 bg-white">
+      <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-line bg-surface">
         {(
           [
             ["mine", t("My Tasks{n}", { n: mine.length ? ` (${mine.length})` : "" })],
@@ -578,7 +578,7 @@ export default function HkApp() {
             onClick={() => setView(key)}
             className={cn(
               "py-3.5 text-sm font-semibold",
-              view === key ? "text-brand-700" : "text-zinc-400",
+              view === key ? "text-accent-ink" : "text-muted-ink",
             )}
           >
             {translate(label)}
@@ -592,17 +592,17 @@ export default function HkApp() {
           onClick={() => setLogItem(null)}
         >
           <div
-            className="w-full rounded-t-2xl bg-white p-4"
+            className="w-full rounded-t-2xl bg-surface p-4"
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="mb-3 text-lg font-semibold">{t("Log an item")}</h2>
             {logMsg ? (
               <div className="space-y-3">
-                <p className="rounded-xl bg-emerald-50 px-3 py-3 text-emerald-800">
+                <p className="rounded-xl bg-success-subtle px-3 py-3 text-success-ink">
                   {logMsg}
                 </p>
                 <button
-                  className="w-full rounded-xl bg-brand-600 py-3 text-base font-semibold text-white"
+                  className="w-full rounded-xl bg-accent-fill py-3 text-base font-semibold text-on-solid"
                   onClick={() => setLogItem(null)}
                 >
                   {t("Done")}
@@ -618,8 +618,8 @@ export default function HkApp() {
                       className={cn(
                         "rounded-xl border py-2.5 text-sm font-semibold",
                         logItem.condition === c
-                          ? "border-brand-500 bg-brand-50 text-brand-700"
-                          : "border-zinc-300 text-zinc-600",
+                          ? "border-accent-control bg-accent-subtle text-accent-ink"
+                          : "border-control text-secondary-ink",
                       )}
                     >
                       {t(c)}
@@ -627,14 +627,14 @@ export default function HkApp() {
                   ))}
                 </div>
                 <input
-                  className="w-full rounded-xl border border-zinc-300 px-3 py-3 text-base"
+                  className="w-full rounded-xl border border-control px-3 py-3 text-base"
                   placeholder={t("What is it? (e.g. black umbrella)")}
                   value={logItem.desc}
                   autoFocus
                   onChange={(e) => setLogItem({ ...logItem, desc: e.target.value })}
                 />
                 <select
-                  className="w-full rounded-xl border border-zinc-300 px-3 py-3 text-base"
+                  className="w-full rounded-xl border border-control px-3 py-3 text-base"
                   value={logItem.room}
                   onChange={(e) => setLogItem({ ...logItem, room: e.target.value })}
                 >
@@ -644,20 +644,20 @@ export default function HkApp() {
                   ))}
                 </select>
                 {logErr && (
-                  <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2.5 text-sm text-rose-800">
+                  <p role="alert" className="rounded-xl bg-danger-subtle px-3 py-2.5 text-sm text-danger-ink">
                     {logErr}
                   </p>
                 )}
                 <div className="flex gap-2">
                   <button
-                    className="flex-1 rounded-xl border border-zinc-300 py-3 text-base font-semibold text-zinc-600"
+                    className="flex-1 rounded-xl border border-control py-3 text-base font-semibold text-secondary-ink"
                     onClick={() => setLogItem(null)}
                   >
                     {t("Cancel")}
                   </button>
                   <button
                     disabled={!logItem.desc.trim() || busy === "log"}
-                    className="flex-1 rounded-xl bg-brand-600 py-3 text-base font-semibold text-white disabled:opacity-50"
+                    className="flex-1 rounded-xl bg-accent-fill py-3 text-base font-semibold text-on-solid disabled:opacity-50"
                     onClick={async () => {
                       setBusy("log")
                       setLogErr(null)
@@ -694,7 +694,7 @@ export default function HkApp() {
           onClick={() => setCharge(null)}
         >
           <div
-            className="w-full rounded-t-2xl bg-white p-4"
+            className="w-full rounded-t-2xl bg-surface p-4"
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="mb-3 text-lg font-semibold">
@@ -702,11 +702,11 @@ export default function HkApp() {
             </h2>
             {chargeMsg ? (
               <div className="space-y-3">
-                <p className="rounded-xl bg-emerald-50 px-3 py-3 text-emerald-800">
+                <p className="rounded-xl bg-success-subtle px-3 py-3 text-success-ink">
                   {chargeMsg}
                 </p>
                 <button
-                  className="w-full rounded-xl bg-brand-600 py-3 text-base font-semibold text-white"
+                  className="w-full rounded-xl bg-accent-fill py-3 text-base font-semibold text-on-solid"
                   onClick={() => setCharge(null)}
                 >{translate("Done")}</button>
               </div>
@@ -720,8 +720,8 @@ export default function HkApp() {
                       className={cn(
                         "rounded-xl border py-2.5 text-sm font-semibold",
                         charge.type === type
-                          ? "border-brand-500 bg-brand-50 text-brand-700"
-                          : "border-zinc-300 text-zinc-600",
+                          ? "border-accent-control bg-accent-subtle text-accent-ink"
+                          : "border-control text-secondary-ink",
                       )}
                     >
                       {t(type)}
@@ -729,14 +729,14 @@ export default function HkApp() {
                   ))}
                 </div>
                 <input
-                  className="w-full rounded-xl border border-zinc-300 px-3 py-3 text-base"
+                  className="w-full rounded-xl border border-control px-3 py-3 text-base"
                   placeholder={(charge.type === "Minibar" ? t("e.g. 2 cola, 1 water") : t("e.g. 3 shirts pressed"))}
                   value={charge.desc}
                   autoFocus
                   onChange={(e) => setCharge({ ...charge, desc: e.target.value })}
                 />
                 <input
-                  className="w-full rounded-xl border border-zinc-300 px-3 py-3 text-base"
+                  className="w-full rounded-xl border border-control px-3 py-3 text-base"
                   placeholder={t("Amount {cur}", { cur: cur() })}
                   inputMode="numeric"
                   value={charge.amount}
@@ -744,14 +744,14 @@ export default function HkApp() {
                 />
                 <div className="flex gap-2">
                   <button
-                    className="flex-1 rounded-xl border border-zinc-300 py-3 text-base font-semibold text-zinc-600"
+                    className="flex-1 rounded-xl border border-control py-3 text-base font-semibold text-secondary-ink"
                     onClick={() => setCharge(null)}
                   >
                     {t("Cancel")}
                   </button>
                   <button
                     disabled={!charge.desc.trim() || !Number(charge.amount) || busy === "charge"}
-                    className="flex-1 rounded-xl bg-brand-600 py-3 text-base font-semibold text-white disabled:opacity-50"
+                    className="flex-1 rounded-xl bg-accent-fill py-3 text-base font-semibold text-on-solid disabled:opacity-50"
                     onClick={async () => {
                       setBusy("charge")
                       try {

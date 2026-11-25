@@ -5,8 +5,8 @@ import { t as translate, useUILanguage } from "../lib/i18n"
 import { useLocale } from "../lib/money"
 
 const inputCls =
-  "rounded-lg border border-zinc-300 bg-white px-2 py-1 text-sm " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "rounded-lg border border-control bg-surface px-2 py-1 text-sm " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 /** Inline nationality edit - updates the Guest profile (shown on folio & GRC). */
 export default function EditableNationality(props: {
@@ -85,20 +85,20 @@ export default function EditableNationality(props: {
       </Button>
       <button
         type="button"
-        className="text-xs text-zinc-400"
+        className="text-xs text-muted-ink"
         disabled={busy}
         onClick={() => setEditing(false)}
       >
         ✕
       </button>
-      {error && <span className="text-xs text-rose-600">{translate(error)}</span>}
+      {error && <span className="text-xs text-danger-text">{translate(error)}</span>}
     </span>
   ) : (
     <span className="font-medium">
       <span className="print:inline">{displayed}</span>
       <button
         type="button"
-        className="ml-2 text-xs font-medium text-brand-700 hover:underline print:hidden"
+        className="ml-2 text-xs font-medium text-accent-ink hover:underline print:hidden"
         onClick={startEdit}
       >{translate("edit")}</button>
     </span>
@@ -106,8 +106,8 @@ export default function EditableNationality(props: {
 
   if (variant === "row") {
     return (
-      <div className="flex border-b border-zinc-200 py-1.5 text-sm">
-        <span className="w-40 shrink-0 text-zinc-500">{translate("Nationality")}</span>
+      <div className="flex border-b border-line py-1.5 text-sm">
+        <span className="w-40 shrink-0 text-muted-ink">{translate("Nationality")}</span>
         {editor}
       </div>
     )

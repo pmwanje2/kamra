@@ -32,8 +32,8 @@ export default function AppLauncher() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-xl font-semibold tracking-tight text-zinc-900">{t("Your apps")}</h1>
-        <p className="mt-0.5 text-sm text-zinc-500">
+        <h1 className="text-xl font-semibold tracking-tight text-ink">{t("Your apps")}</h1>
+        <p className="mt-0.5 text-sm text-muted-ink">
           {t("Everything {product} does, one room at a time. Pick where you want to work.")}
         </p>
       </header>
@@ -43,7 +43,7 @@ export default function AppLauncher() {
           <button
             key={app.id}
             onClick={() => open(app)}
-            className="group flex items-start gap-3 rounded-lg border border-zinc-200 bg-white p-3.5 text-left transition-colors hover:border-zinc-300 hover:bg-zinc-50"
+            className="group flex items-start gap-3 rounded-lg border border-line bg-surface p-3.5 text-left transition-colors hover:border-control hover:bg-canvas"
           >
             <span
               className={cn(
@@ -55,9 +55,9 @@ export default function AppLauncher() {
             </span>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-zinc-900">{t(app.name)}</span>
+                <span className="text-sm font-semibold text-ink">{t(app.name)}</span>
               </div>
-              <p className="mt-0.5 text-sm leading-snug text-zinc-500">{t(app.description)}</p>
+              <p className="mt-0.5 text-sm leading-snug text-muted-ink">{t(app.description)}</p>
             </div>
           </button>
         ))}
@@ -65,7 +65,7 @@ export default function AppLauncher() {
 
       {connected.length > 0 && (
         <section className="space-y-2">
-          <h2 className="text-sm font-semibold text-zinc-700">{t("Connected apps")}</h2>
+          <h2 className="text-sm font-semibold text-secondary-ink">{t("Connected apps")}</h2>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {connected.map((app) => (
               <a
@@ -73,12 +73,12 @@ export default function AppLauncher() {
                 href={app.url}
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-center gap-3 rounded-lg border border-zinc-200 bg-white p-3.5 text-left transition-colors hover:border-zinc-300 hover:bg-zinc-50"
+                className="flex items-center gap-3 rounded-lg border border-line bg-surface p-3.5 text-left transition-colors hover:border-control hover:bg-canvas"
               >
                 <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-md", APP_TILE)}>
                   <ConnectedAppIcon src={app.icon} />
                 </span>
-                <span className="min-w-0 truncate text-sm font-semibold text-zinc-900">{app.name}</span>
+                <span className="min-w-0 truncate text-sm font-semibold text-ink">{app.name}</span>
               </a>
             ))}
           </div>
@@ -88,14 +88,14 @@ export default function AppLauncher() {
       {!whiteLabel() && canMarket && (
         <button
           onClick={() => navigate("/marketplace")}
-          className="flex w-full items-center gap-3 rounded-lg border border-dashed border-zinc-300 bg-white p-3.5 text-left hover:border-zinc-400 hover:bg-zinc-50"
+          className="flex w-full items-center gap-3 rounded-lg border border-dashed border-control bg-surface p-3.5 text-left hover:border-control-strong hover:bg-canvas"
         >
           <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-md", APP_TILE)}>
             <Store className="size-4" strokeWidth={1.75} aria-hidden />
           </span>
           <div>
-            <div className="text-sm font-semibold text-zinc-900">{t("Marketplace")}</div>
-            <p className="mt-0.5 text-sm text-zinc-500">
+            <div className="text-sm font-semibold text-ink">{t("Marketplace")}</div>
+            <p className="mt-0.5 text-sm text-muted-ink">
               {t("Add channels, payments, accounting and country packs - and see what's included in your plan.")}
             </p>
           </div>

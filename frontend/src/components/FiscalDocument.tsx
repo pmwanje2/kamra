@@ -35,9 +35,9 @@ export function FiscalDocument({ fiscal, internalNumber }: { fiscal: Fiscal; int
           ? t("Test fiscal number - not a valid tax invoice")
           : null
   return (
-    <div className="mt-2 space-y-1 text-end text-xs text-zinc-500">
+    <div className="mt-2 space-y-1 text-end text-xs text-muted-ink">
       {warning && (
-        <div className="rounded border border-amber-300 bg-amber-50 px-2 py-1 text-amber-800">
+        <div className="rounded border border-warning-line-strong bg-warning-subtle px-2 py-1 text-warning-ink">
           <p className="font-semibold">{warning}</p>
           {effectiveState !== "fiscalised" && (
             <p>{t("This is not a tax invoice yet. It becomes one when the fiscal number is issued.")}</p>
@@ -51,10 +51,10 @@ export function FiscalDocument({ fiscal, internalNumber }: { fiscal: Fiscal; int
         <div className="flex items-start justify-end gap-3">
           <div className="space-y-0.5">
             <p>
-              {t("Fiscal Document Number (FDN)")}: <span className="font-mono font-semibold text-zinc-800">{fiscal.fdn}</span>
+              {t("Fiscal Document Number (FDN)")}: <span className="font-mono font-semibold text-ink">{fiscal.fdn}</span>
             </p>
             <p>
-              {t("Verification code")}: <span className="font-mono text-zinc-800">{fiscal.verification_code}</span>
+              {t("Verification code")}: <span className="font-mono text-ink">{fiscal.verification_code}</span>
             </p>
             {fiscal.issued && <p>{t("Issued {when}", { when: fiscal.issued })}</p>}
           </div>

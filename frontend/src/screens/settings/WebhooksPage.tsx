@@ -64,12 +64,12 @@ function SecretOnce({ secret, onDone }: { secret: string; onDone: () => void }) 
   const { t } = useT()
   const [copied, setCopied] = useState(false)
   return (
-    <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
-      <p className="text-sm font-medium text-amber-800">
+    <div className="space-y-2 rounded-lg border border-warning-line bg-warning-subtle p-3">
+      <p className="text-sm font-medium text-warning-ink">
         {t("Signing secret - copy it now. It won't be shown again.")}
       </p>
       <div className="flex items-stretch gap-2">
-        <code className="flex-1 overflow-x-auto rounded-md bg-white px-3 py-2 font-mono text-xs text-zinc-800">
+        <code className="flex-1 overflow-x-auto rounded-md bg-surface px-3 py-2 font-mono text-xs text-ink">
           {secret}
         </code>
         <Button
@@ -123,31 +123,31 @@ function HookForm({
   }
 
   return (
-    <div className="space-y-3 rounded-lg border border-zinc-200 bg-zinc-50 p-4">
+    <div className="space-y-3 rounded-lg border border-line bg-canvas p-4">
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block text-sm">
-          <span className="mb-1 block text-xs font-medium text-zinc-500">{t("Label")}</span>
+          <span className="mb-1 block text-xs font-medium text-muted-ink">{t("Label")}</span>
           <input
             value={label}
             onChange={(e) => setLabel(e.target.value)}
             placeholder={t("e.g. Door lock middleware")}
-            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm"
+            className="w-full rounded-lg border border-control bg-surface px-3 py-1.5 text-sm"
           />
         </label>
         <label className="block text-sm">
-          <span className="mb-1 block text-xs font-medium text-zinc-500">{t("Endpoint URL (HTTPS)")}</span>
+          <span className="mb-1 block text-xs font-medium text-muted-ink">{t("Endpoint URL (HTTPS)")}</span>
           <input
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-1.5 font-mono text-xs"
+            className="w-full rounded-lg border border-control bg-surface px-3 py-1.5 font-mono text-xs"
           />
         </label>
       </div>
       <fieldset>
-        <legend className="mb-1 text-xs font-medium text-zinc-500">{t("Events")}</legend>
+        <legend className="mb-1 text-xs font-medium text-muted-ink">{t("Events")}</legend>
         <div className="grid gap-1.5 sm:grid-cols-2">
           {events.map((ev) => (
-            <label key={ev.event} className="flex items-start gap-2 rounded-md px-1 py-1 text-sm hover:bg-white">
+            <label key={ev.event} className="flex items-start gap-2 rounded-md px-1 py-1 text-sm hover:bg-surface">
               <input
                 type="checkbox"
                 className="mt-0.5"
@@ -157,14 +157,14 @@ function HookForm({
                 }
               />
               <span>
-                <code className="font-mono text-xs text-zinc-800">{ev.event}</code>
-                <span className="block text-xs text-zinc-500">{t(ev.description)}</span>
+                <code className="font-mono text-xs text-ink">{ev.event}</code>
+                <span className="block text-xs text-muted-ink">{t(ev.description)}</span>
               </span>
             </label>
           ))}
         </div>
       </fieldset>
-      {error && <p className="rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">{translate(error)}</p>}
+      {error && <p className="rounded-md bg-danger-subtle px-3 py-2 text-sm text-danger-ink">{translate(error)}</p>}
       <div className="flex gap-2">
         <Button onClick={save} disabled={busy || !picked.length}>
           {busy ? t("Saving…") : hook ? t("Save") : t("Add webhook")}
@@ -221,12 +221,12 @@ export function WebhooksPage({ property }: { property: string }) {
     return h?.label || h?.url || name
   }
 
-  if (!hooks) return <p className="py-6 text-sm text-zinc-400">{translate(error) ?? t("Loading…")}</p>
+  if (!hooks) return <p className="py-6 text-sm text-muted-ink">{translate(error) ?? t("Loading…")}</p>
 
   return (
     <div className="space-y-5">
-      {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{translate(error)}</p>}
-      {note && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{note}</p>}
+      {error && <p className="rounded-lg bg-danger-subtle px-3 py-2 text-sm text-danger-ink">{translate(error)}</p>}
+      {note && <p className="rounded-lg bg-success-subtle px-3 py-2 text-sm text-success-ink">{note}</p>}
       {secret && <SecretOnce secret={secret} onDone={() => setSecret(null)} />}
 
       <Card>
@@ -234,7 +234,7 @@ export function WebhooksPage({ property }: { property: string }) {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <CardTitle>{t("Endpoints")}</CardTitle>
-              <p className="mt-0.5 text-xs text-zinc-400">
+              <p className="mt-0.5 text-xs text-muted-ink">
                 {t("{product} POSTs a signed JSON event to each endpoint. Failed deliveries are retried for about 8 hours.")}
               </p>
             </div>
@@ -260,7 +260,7 @@ export function WebhooksPage({ property }: { property: string }) {
             />
           )}
           {hooks.length === 0 && editing === null && (
-            <p className="text-sm text-zinc-500">
+            <p className="text-sm text-muted-ink">
               {t("No webhooks yet. Add one to send bookings, check-ins, folio postings and the night audit to another system.")}
             </p>
           )}
@@ -278,22 +278,22 @@ export function WebhooksPage({ property }: { property: string }) {
                 }}
               />
             ) : (
-              <div key={h.name} className="rounded-lg border border-zinc-200 p-3">
+              <div key={h.name} className="rounded-lg border border-line p-3">
                 <div className="flex flex-wrap items-start gap-3">
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-zinc-900">{h.label || t("Webhook")}</p>
-                    <p className="truncate font-mono text-xs text-zinc-500">{h.url}</p>
+                    <p className="text-sm font-medium text-ink">{h.label || t("Webhook")}</p>
+                    <p className="truncate font-mono text-xs text-muted-ink">{h.url}</p>
                     <div className="mt-2 flex flex-wrap gap-1">
                       {h.events.map((e) => (
                         <Badge key={e} tone="brand">{e}</Badge>
                       ))}
                     </div>
-                    <p className="mt-2 text-xs text-zinc-500">
+                    <p className="mt-2 text-xs text-muted-ink">
                       {h.last_status
                         ? t("Last delivery: {status}", { status: h.last_status })
                         : t("Nothing sent yet")}
                       {h.consecutive_failures > 0 && (
-                        <span className="ms-2 text-rose-600">
+                        <span className="ms-2 text-danger-text">
                           {t("{n} failures in a row", { n: String(h.consecutive_failures) })}
                         </span>
                       )}
@@ -370,7 +370,7 @@ export function WebhooksPage({ property }: { property: string }) {
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
               aria-label={t("Filter by status")}
-              className="rounded-lg border border-zinc-300 bg-white px-2 py-1 text-sm"
+              className="rounded-lg border border-control bg-surface px-2 py-1 text-sm"
             >
               <option value="">{t("All")}</option>
               {(["Delivered", "Retrying", "Failed", "Pending"] as const).map((s) => (
@@ -381,33 +381,33 @@ export function WebhooksPage({ property }: { property: string }) {
         </CardHeader>
         <CardContent>
           {log.length === 0 ? (
-            <p className="text-sm text-zinc-500">{t("No deliveries yet.")}</p>
+            <p className="text-sm text-muted-ink">{t("No deliveries yet.")}</p>
           ) : (
-            <div className="divide-y divide-zinc-100 rounded-lg border border-zinc-100">
+            <div className="divide-y divide-line-subtle rounded-lg border border-line-subtle">
               {log.map((d) => (
                 <div key={d.name} className="px-3 py-2 text-sm">
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                     <Badge tone={STATUS_TONE[d.status]}>{t(d.status)}</Badge>
-                    <code className="font-mono text-xs text-zinc-800">{d.event}</code>
-                    <span className="text-xs text-zinc-500">{hookLabel(d.webhook)}</span>
-                    <span className="ms-auto text-xs text-zinc-400">
+                    <code className="font-mono text-xs text-ink">{d.event}</code>
+                    <span className="text-xs text-muted-ink">{hookLabel(d.webhook)}</span>
+                    <span className="ms-auto text-xs text-muted-ink">
                       {d.creation.slice(0, 16)}
                       {d.response_code ? ` · HTTP ${d.response_code}` : ""}
                       {` · ${t("{n} attempts", { n: String(d.attempts) })}`}
                     </span>
                   </div>
                   {d.last_error && d.status !== "Delivered" && (
-                    <p className="mt-1 truncate text-xs text-rose-600">{d.last_error}</p>
+                    <p className="mt-1 truncate text-xs text-danger-text">{d.last_error}</p>
                   )}
                   {d.status === "Retrying" && d.next_retry_at && (
-                    <p className="mt-1 text-xs text-amber-700">
+                    <p className="mt-1 text-xs text-warning-ink">
                       {t("Next try {at}", { at: d.next_retry_at.slice(0, 16) })}
                     </p>
                   )}
                   <div className="mt-1 flex gap-3">
                     <button
                       type="button"
-                      className="text-xs font-medium text-brand-700 hover:underline"
+                      className="text-xs font-medium text-accent-ink hover:underline"
                       onClick={async () => {
                         if (open === d.name) return setOpen(null)
                         const r = await call<{ payload: string }>(`${M}delivery_detail`, { delivery: d.name })
@@ -424,7 +424,7 @@ export function WebhooksPage({ property }: { property: string }) {
                     {d.status !== "Pending" && (
                       <button
                         type="button"
-                        className="inline-flex items-center gap-1 text-xs font-medium text-brand-700 hover:underline"
+                        className="inline-flex items-center gap-1 text-xs font-medium text-accent-ink hover:underline"
                         onClick={() =>
                           act(() => call(`${M}resend_delivery`, { delivery: d.name }), t("Queued to resend."))
                         }
@@ -434,7 +434,7 @@ export function WebhooksPage({ property }: { property: string }) {
                     )}
                   </div>
                   {open === d.name && (
-                    <pre className={cn("mt-2 max-h-72 overflow-auto rounded-lg bg-zinc-900 p-3 text-xs text-zinc-100")}>
+                    <pre className={cn("mt-2 max-h-72 overflow-auto rounded-lg bg-inverse p-3 text-xs text-on-inverse")}>
                       {payload}
                     </pre>
                   )}
@@ -449,22 +449,22 @@ export function WebhooksPage({ property }: { property: string }) {
         <CardHeader>
           <CardTitle>{t("Verifying a delivery")}</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2 text-sm text-zinc-600">
+        <CardContent className="space-y-2 text-sm text-secondary-ink">
           <p>
             {t("Recompute the signature over the raw body and reject old timestamps.")}
           </p>
-          {!whiteLabel() && <pre className="overflow-x-auto rounded-lg bg-zinc-900 p-3 text-xs leading-relaxed text-zinc-100">
+          {!whiteLabel() && <pre className="overflow-x-auto rounded-lg bg-inverse p-3 text-xs leading-relaxed text-on-inverse">
 {`expected = "sha256=" + HMAC_SHA256(secret, timestamp + "." + raw_body).hex()
 valid = constant_time_equal(expected, ${"X-Kamra-Signature"})
         and abs(now - timestamp) < 300`}
           </pre>}
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-muted-ink">
             {t("Answer 2xx within 10 seconds. Retries keep the same event id, so ignore ids you've already processed.")}{" "}
             {!whiteLabel() && <a
               href={`${upstreamDocs()}/integrations`}
               target="_blank"
               rel="noreferrer"
-              className="font-medium text-brand-700 hover:underline"
+              className="font-medium text-accent-ink hover:underline"
             >
               {t("Integrations guide")} →
             </a>}

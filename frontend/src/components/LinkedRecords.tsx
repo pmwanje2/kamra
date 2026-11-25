@@ -38,9 +38,9 @@ interface Links {
 }
 
 const chipCls =
-  "inline-flex min-h-11 items-center gap-1.5 rounded-full border border-zinc-200 " +
-  "bg-white px-2.5 py-1 text-xs font-medium text-zinc-600 " +
-  "hover:border-brand-400 hover:text-brand-700 transition"
+  "inline-flex min-h-11 items-center gap-1.5 rounded-full border border-line " +
+  "bg-surface px-2.5 py-1 text-xs font-medium text-secondary-ink " +
+  "hover:border-accent-control hover:text-accent-ink transition"
 
 export default function LinkedRecords({
   doctype,
@@ -112,7 +112,7 @@ export default function LinkedRecords({
             : translate("{type} folio", { type: translate(f.folio_type) })}<span
             dir="ltr"
             className={
-              f.balance > 0 ? "text-amber-600" : "text-zinc-400"
+              f.balance > 0 ? "text-warning-text" : "text-muted-ink"
             }
           >
             {fmtFolioBalance(f)}

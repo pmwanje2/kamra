@@ -195,11 +195,11 @@ export default function FixedChargesPanel({
   return (
     <section
       aria-label={translate("Fixed charges")}
-      className="rounded-xl border border-zinc-200 bg-white p-4"
+      className="rounded-xl border border-line bg-surface p-4"
     >
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-sm font-semibold text-zinc-700">
-          <Repeat className="size-4 text-zinc-400" aria-hidden />
+        <div className="flex items-center gap-2 text-sm font-semibold text-secondary-ink">
+          <Repeat className="size-4 text-muted-ink" aria-hidden />
           <span>{translate("Fixed charges")}</span>
           {activeCount > 0 && (
             <Badge tone="sky">{translate("{n} active", { n: activeCount })}</Badge>
@@ -219,11 +219,11 @@ export default function FixedChargesPanel({
       </div>
 
       {rows.length === 0 && !adding && (
-        <p className="text-sm text-zinc-400">{translate("No recurring fixed charges on this stay.")}</p>
+        <p className="text-sm text-muted-ink">{translate("No recurring fixed charges on this stay.")}</p>
       )}
 
       {rows.length > 0 && (
-        <ul className="divide-y divide-zinc-100">
+        <ul className="divide-y divide-line-subtle">
           {rows.map((row) => {
             const isActive = Boolean(Number(row.active))
             const lineTotal = Number(row.qty || 1) * Number(row.unit_price || 0)
@@ -237,10 +237,10 @@ export default function FixedChargesPanel({
               >
                 <div className="min-w-0 flex-1 space-y-1">
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[11px] font-medium text-zinc-700">
+                    <span className="rounded bg-subtle px-1.5 py-0.5 font-mono text-[11px] font-medium text-secondary-ink">
                       {row.transaction_code}
                     </span>
-                    <span className="text-sm font-medium text-zinc-900">{row.description}</span>
+                    <span className="text-sm font-medium text-ink">{row.description}</span>
                     <Badge tone={isActive ? "green" : "zinc"}>
                       {translate(row.frequency)}
                       {row.frequency === "Stay Day N" && row.stay_day_n ? ` (${row.stay_day_n})` : ""}
@@ -248,11 +248,11 @@ export default function FixedChargesPanel({
                     </Badge>
                     <Badge tone="sky">W{row.window_no || 1}</Badge>
                   </div>
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-zinc-500">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-ink">
                     <span className="tabular-nums">
                       {row.start_date} → {row.end_date}
                     </span>
-                    <span className="tabular-nums font-medium text-zinc-700">
+                    <span className="tabular-nums font-medium text-secondary-ink">
                       {row.qty} × {fmtMoney(row.unit_price, row.currency || homeCurrency)} = {fmtMoney(lineTotal, row.currency || homeCurrency)}
                     </span>
                     <span>
@@ -268,7 +268,7 @@ export default function FixedChargesPanel({
                       disabled={busy}
                       onClick={() => toggleActive(row)}
                       aria-label={isActive ? translate("Pause") : translate("Resume")}
-                      className="inline-flex min-h-11 sm:min-h-8 items-center gap-1 rounded-md border border-zinc-200 px-2.5 py-1 text-xs text-zinc-600 hover:bg-zinc-50"
+                      className="inline-flex min-h-11 sm:min-h-8 items-center gap-1 rounded-md border border-line px-2.5 py-1 text-xs text-secondary-ink hover:bg-canvas"
                     >
                       {isActive ? (
                         <>
@@ -287,7 +287,7 @@ export default function FixedChargesPanel({
                       disabled={busy}
                       onClick={() => removeRow(row)}
                       aria-label={translate("Remove")}
-                      className="inline-flex min-h-11 sm:min-h-8 items-center gap-1 rounded-md border border-zinc-200 px-2.5 py-1 text-xs text-rose-600 hover:bg-rose-50"
+                      className="inline-flex min-h-11 sm:min-h-8 items-center gap-1 rounded-md border border-line px-2.5 py-1 text-xs text-danger-text hover:bg-danger-subtle"
                     >
                       <Trash2 className="size-3" aria-hidden />
                       {Number(row.post_count || 0) > 0 ? translate("Stop") : translate("Delete")}
@@ -301,10 +301,10 @@ export default function FixedChargesPanel({
       )}
 
       {adding && canEdit && (
-        <div className="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3 space-y-3">
+        <div className="mt-3 rounded-lg border border-line bg-canvas p-3 space-y-3">
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <label className="block">
-              <span className="mb-1 block text-xs font-medium text-zinc-600">{translate("Transaction code")}</span>
+              <span className="mb-1 block text-xs font-medium text-secondary-ink">{translate("Transaction code")}</span>
               <select
                 name="fc_transaction_code"
                 value={code}
@@ -314,7 +314,7 @@ export default function FixedChargesPanel({
                   const found = data?.transaction_codes?.find((c) => c.code === next)
                   if (found && !desc.trim()) setDesc(found.description)
                 }}
-                className="w-full min-h-11 sm:min-h-9 rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm text-zinc-900"
+                className="w-full min-h-11 sm:min-h-9 rounded-lg border border-control bg-surface px-2.5 py-1.5 text-sm text-ink"
               >
                 {(data?.transaction_codes ?? []).map((tc) => (
                   <option key={tc.code} value={tc.code}>
@@ -324,25 +324,25 @@ export default function FixedChargesPanel({
               </select>
             </label>
             <label className="block sm:col-span-2">
-              <span className="mb-1 block text-xs font-medium text-zinc-600">{translate("Description")}</span>
+              <span className="mb-1 block text-xs font-medium text-secondary-ink">{translate("Description")}</span>
               <input
                 name="fc_description"
                 value={desc}
                 onChange={(e) => setDesc(e.target.value)}
                 placeholder={translate("e.g. Daily Valet Parking, Resort Fee")}
-                className="w-full min-h-11 sm:min-h-9 rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm text-zinc-900"
+                className="w-full min-h-11 sm:min-h-9 rounded-lg border border-control bg-surface px-2.5 py-1.5 text-sm text-ink"
               />
             </label>
           </div>
 
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
             <label className="block">
-              <span className="mb-1 block text-xs font-medium text-zinc-600">{translate("Frequency")}</span>
+              <span className="mb-1 block text-xs font-medium text-secondary-ink">{translate("Frequency")}</span>
               <select
                 name="fc_frequency"
                 value={freq}
                 onChange={(e) => setFreq(e.target.value)}
-                className="w-full min-h-11 sm:min-h-9 rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm text-zinc-900"
+                className="w-full min-h-11 sm:min-h-9 rounded-lg border border-control bg-surface px-2.5 py-1.5 text-sm text-ink"
               >
                 {FREQUENCIES.map((f) => (
                   <option key={f} value={f}>{translate(f)}</option>
@@ -351,25 +351,25 @@ export default function FixedChargesPanel({
             </label>
             {freq === "Stay Day N" && (
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-zinc-600">{translate("Stay day")}</span>
+                <span className="mb-1 block text-xs font-medium text-secondary-ink">{translate("Stay day")}</span>
                 <input
                   type="number"
                   min={1}
                   name="fc_stay_day_n"
                   value={stayDayN}
                   onChange={(e) => setStayDayN(Number(e.target.value || 1))}
-                  className="w-full min-h-11 sm:min-h-9 rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm tabular-nums text-zinc-900"
+                  className="w-full min-h-11 sm:min-h-9 rounded-lg border border-control bg-surface px-2.5 py-1.5 text-sm tabular-nums text-ink"
                 />
               </label>
             )}
             {freq === "Weekly" && (
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-zinc-600">{translate("Day of week")}</span>
+                <span className="mb-1 block text-xs font-medium text-secondary-ink">{translate("Day of week")}</span>
                 <select
                   name="fc_day_of_week"
                   value={dow}
                   onChange={(e) => setDow(e.target.value)}
-                  className="w-full min-h-11 sm:min-h-9 rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm text-zinc-900"
+                  className="w-full min-h-11 sm:min-h-9 rounded-lg border border-control bg-surface px-2.5 py-1.5 text-sm text-ink"
                 >
                   <option value="">{translate("Every 7 days from start")}</option>
                   {WEEKDAYS.map((w) => (
@@ -379,7 +379,7 @@ export default function FixedChargesPanel({
               </label>
             )}
             <label className="block">
-              <span className="mb-1 block text-xs font-medium text-zinc-600">{translate("Quantity")}</span>
+              <span className="mb-1 block text-xs font-medium text-secondary-ink">{translate("Quantity")}</span>
               <input
                 type="number"
                 min={0.01}
@@ -387,21 +387,21 @@ export default function FixedChargesPanel({
                 name="fc_qty"
                 value={qty}
                 onChange={(e) => setQty(Number(e.target.value || 1))}
-                className="w-full min-h-11 sm:min-h-9 rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm tabular-nums text-zinc-900"
+                className="w-full min-h-11 sm:min-h-9 rounded-lg border border-control bg-surface px-2.5 py-1.5 text-sm tabular-nums text-ink"
               />
             </label>
             <label className="block">
-              <span className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-300">{translate("Currency")}</span>
+              <span className="mb-1 block text-xs font-medium text-secondary-ink">{translate("Currency")}</span>
               <select
                 value={selectedCurrency}
                 onChange={(e) => setChargeCurrency(e.target.value)}
-                className="w-full min-h-11 sm:min-h-9 rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                className="w-full min-h-11 sm:min-h-9 rounded-lg border border-control bg-surface px-2.5 py-1.5 text-sm text-ink"
               >
                 {currencies.map((code) => <option key={code} value={code}>{code}</option>)}
               </select>
             </label>
             <label className="block">
-              <span className="mb-1 block text-xs font-medium text-zinc-600">{translate("Unit price")}</span>
+              <span className="mb-1 block text-xs font-medium text-secondary-ink">{translate("Unit price")}</span>
               <input
                 type="number"
                 min={0}
@@ -410,16 +410,16 @@ export default function FixedChargesPanel({
                 value={unitPrice}
                 onChange={(e) => setUnitPrice(e.target.value)}
                 placeholder="0"
-                className="w-full min-h-11 sm:min-h-9 rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm tabular-nums text-zinc-900"
+                className="w-full min-h-11 sm:min-h-9 rounded-lg border border-control bg-surface px-2.5 py-1.5 text-sm tabular-nums text-ink"
               />
             </label>
             <label className="block">
-              <span className="mb-1 block text-xs font-medium text-zinc-600">{translate("Window")}</span>
+              <span className="mb-1 block text-xs font-medium text-secondary-ink">{translate("Window")}</span>
               <select
                 name="fc_window_no"
                 value={windowNo}
                 onChange={(e) => setWindowNo(Number(e.target.value || 1))}
-                className="w-full min-h-11 sm:min-h-9 rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm text-zinc-900"
+                className="w-full min-h-11 sm:min-h-9 rounded-lg border border-control bg-surface px-2.5 py-1.5 text-sm text-ink"
               >
                 {WINDOWS.map((w) => (
                   <option key={w} value={w}>W{w}</option>
@@ -430,33 +430,33 @@ export default function FixedChargesPanel({
 
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <label className="block">
-              <span className="mb-1 block text-xs font-medium text-zinc-600">{translate("Start date")}</span>
+              <span className="mb-1 block text-xs font-medium text-secondary-ink">{translate("Start date")}</span>
               <input
                 type="date"
                 name="fc_start_date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="w-full min-h-11 sm:min-h-9 rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm text-zinc-900"
+                className="w-full min-h-11 sm:min-h-9 rounded-lg border border-control bg-surface px-2.5 py-1.5 text-sm text-ink"
               />
             </label>
             <label className="block">
-              <span className="mb-1 block text-xs font-medium text-zinc-600">{translate("End date")}</span>
+              <span className="mb-1 block text-xs font-medium text-secondary-ink">{translate("End date")}</span>
               <input
                 type="date"
                 name="fc_end_date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="w-full min-h-11 sm:min-h-9 rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm text-zinc-900"
+                className="w-full min-h-11 sm:min-h-9 rounded-lg border border-control bg-surface px-2.5 py-1.5 text-sm text-ink"
               />
             </label>
             <label className="block">
-              <span className="mb-1 block text-xs font-medium text-zinc-600">{translate("Supplement")}</span>
+              <span className="mb-1 block text-xs font-medium text-secondary-ink">{translate("Supplement")}</span>
               <input
                 name="fc_supplement"
                 value={supplement}
                 onChange={(e) => setSupplement(e.target.value)}
                 placeholder={translate("Optional reference")}
-                className="w-full min-h-11 sm:min-h-9 rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm text-zinc-900"
+                className="w-full min-h-11 sm:min-h-9 rounded-lg border border-control bg-surface px-2.5 py-1.5 text-sm text-ink"
               />
             </label>
           </div>
@@ -483,7 +483,7 @@ export default function FixedChargesPanel({
         </div>
       )}
 
-      {error && <p className="mt-2 text-sm text-rose-700">{translate(error)}</p>}
+      {error && <p className="mt-2 text-sm text-danger-ink">{translate(error)}</p>}
     </section>
   )
 }

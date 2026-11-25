@@ -152,7 +152,7 @@ export default function VoiceButton(props: {
         disabled={listening}
         aria-label={translate("Language for voice and replies")}
         title={translate("Language for voice and replies")}
-        className="hidden max-w-[5.5rem] truncate rounded-md bg-transparent py-1 text-xs text-zinc-500 outline-none hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 sm:block"
+        className="hidden max-w-[5.5rem] truncate rounded-md bg-transparent py-1 text-xs text-muted-ink outline-none hover:text-ink sm:block"
       >
         {VOICE_LANGS.map(([code, name]) => (
           <option key={code} value={code}>
@@ -169,8 +169,8 @@ export default function VoiceButton(props: {
         className={cn(
           "flex size-9 items-center justify-center rounded-full transition disabled:opacity-40",
           listening
-            ? "animate-pulse bg-rose-600 text-white"
-            : "text-zinc-500 hover:bg-zinc-100 hover:text-brand-700 dark:text-zinc-400 dark:hover:bg-zinc-800",
+            ? "animate-pulse bg-danger-fill text-on-solid"
+            : "text-muted-ink hover:bg-subtle hover:text-accent-ink",
         )}
       >
         {listening ? <Square className="size-3.5" /> : <Mic className="size-4" />}
