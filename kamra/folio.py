@@ -83,6 +83,23 @@ def _security_deposit_row_ids(folio) -> set[int]:
 	return sec_idx
 
 
+def _refund_amounts(folio, sec_idx: set[int]) -> tuple[Decimal, Decimal]:
+	"""Identified security refunds and unlinked refund candidates on one folio."""
+	from kamra.ledger import _money
+
+	pending = (getattr(folio, "flags", None) or {}).get("kamra_pending_security_refund")
+	identified = unlinked = Decimal(0)
+	for idx, payment in enumerate(folio.get("payments") or []):
+		if payment is pending or not payment.get("name") or payment.get("payment_kind") != "Refund":
+			continue
+		amount = max(-_money(payment.get("amount")), Decimal(0))
+		if idx in sec_idx:
+			identified += amount
+		elif not (payment.get("refund_of") or payment.get("payment_entry") or payment.get("reversal_of")):
+			unlinked += amount
+	return identified, unlinked
+
+
 def _legacy_security_deposit_refunded(folio, sec_idx: set[int]) -> Decimal:
 	"""Security refunds recorded only in the stay's historical refund total."""
 	if not sec_idx or not folio.get("reservation") or (folio.get("folio_type") or "Guest") != "Guest":
@@ -95,17 +112,20 @@ def _legacy_security_deposit_refunded(folio, sec_idx: set[int]) -> Decimal:
 	if recorded <= 0:
 		return Decimal(0)
 
-	pending = (getattr(folio, "flags", None) or {}).get("kamra_pending_security_refund")
-	identified = unlinked = Decimal(0)
-	for idx, payment in enumerate(folio.get("payments") or []):
-		if payment is pending or not payment.get("name") or payment.get("payment_kind") != "Refund":
-			continue
-		amount = max(-_money(payment.get("amount")), Decimal(0))
-		if idx in sec_idx:
-			identified += amount
-		elif not (payment.get("refund_of") or payment.get("payment_entry") or payment.get("reversal_of")):
-			unlinked += amount
-	return min(unlinked, max(recorded - identified, Decimal(0)))
+	identified, unlinked = _refund_amounts(folio, sec_idx)
+	remaining = recorded - identified
+	if unlinked and remaining > 0:
+		# The total belongs to the stay. Even an unlinked refund on another
+		# window could explain part of it, so only use the provable remainder.
+		for name in frappe.get_all("Folio", filters={
+			"reservation": folio.reservation, "name": ("!=", folio.name),
+		}, pluck="name"):
+			other = frappe.get_doc("Folio", name)
+			known, possible = _refund_amounts(other, _security_deposit_row_ids(other))
+			remaining -= known + possible
+			if remaining <= 0:
+				break
+	return min(unlinked, max(remaining, Decimal(0)))
 
 
 def _stay_withheld_deposit(folio, has_sec_dep: bool) -> Decimal:
@@ -140,13 +160,17 @@ def _is_closed_or_invoiced(folio) -> bool:
 	)
 
 
-def _recalculate(folio, *, payments_only: bool = False):
+def _payments_total(folio) -> Decimal:
 	sec_idx = _security_deposit_row_ids(folio)
 	paid = sum(
 		(Decimal(str(p.amount or 0)) for idx, p in enumerate(folio.payments) if idx not in sec_idx),
 		Decimal(0),
 	)
-	paid += _stay_withheld_deposit(folio, bool(sec_idx)) + _legacy_security_deposit_refunded(folio, sec_idx)
+	return paid + _stay_withheld_deposit(folio, bool(sec_idx)) + _legacy_security_deposit_refunded(folio, sec_idx)
+
+
+def _recalculate(folio, *, payments_only: bool = False):
+	paid = _payments_total(folio)
 	if _is_closed_or_invoiced(folio) and folio.get("grand_total") is not None:
 		# Closed / invoiced folios have frozen charges, tax and grand_total;
 		# adding a payment or correction must never re-round them.

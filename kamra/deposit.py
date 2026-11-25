@@ -1206,26 +1206,35 @@ def deposit_state(res) -> dict:
 	folio_can_capture = (not folio) or folio_open
 	in_play = res.status in COLLECT_STATUSES
 	history = []
-	if folio:
-		from kamra.folio import _security_deposit_row_ids
-		folio_doc = frappe.get_doc("Folio", folio.name)
+	from kamra.folio import _security_deposit_row_ids
+	identified_refunds = _money(0)
+	for window in frappe.get_all("Folio", filters={"reservation": res.name},
+	                             fields=["name"], order_by="creation asc"):
+		folio_doc = frappe.get_doc("Folio", window.name)
 		for idx in sorted(_security_deposit_row_ids(folio_doc)):
 			p = folio_doc.payments[idx]
 			if p.payment_kind == "Security Deposit":
 				history.append({"kind": "Collected", "date": str(p.posting_date),
 				                "mode": p.mode, "amount": flt(p.amount)})
 			elif p.payment_kind == "Refund":
+				identified_refunds -= _money(p.amount)
 				history.append({"kind": "Refunded", "date": str(p.posting_date),
 				                "mode": p.mode, "amount": -flt(p.amount)})
 		for c in frappe.get_all(
 				"Folio Charge",
-				filters={"parent": folio.name, "parenttype": "Folio",
+				filters={"parent": window.name, "parenttype": "Folio",
 				         "description": ("like", f"{WITHHOLD_PREFIX}%")},
 				fields=["posting_date", "description", "amount"],
 				order_by="idx asc"):
 			history.append({"kind": "Withheld", "date": str(c.posting_date),
 			                "amount": flt(c.amount),
 			                "note": c.description.split(":", 1)[-1].strip()})
+	# Old stays recorded only a cumulative refund. Show the unexplained
+	# portion once without inventing a payment, date or tender.
+	historical = _money(row.refunded_amount if row else 0) - identified_refunds
+	if historical > 0:
+		history.append({"kind": "Refunded", "date": "", "amount": float(historical),
+		                "note": _("Recorded historical refund")})
 
 	if eff["preauth_hold"] and frappe.db.exists("DocType", "Credit Preauthorization Event"):
 		masked = (

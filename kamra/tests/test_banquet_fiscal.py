@@ -459,15 +459,14 @@ class TestEventFolio(BanquetFiscalCase):
 		with accounting_bridge():
 			bq.record_receipt(fn_cancel, 100000, mode="Cash", kind="Security Deposit")
 			folio_c = frappe.get_doc("Folio", sheet(fn_cancel).folio)
-			orig_entry, original_payment = frappe.db.get_value(
+			orig_entry = frappe.db.get_value(
 				"Folio Ledger Entry",
 				{"folio": folio_c.name, "ledger": "Deposit", "transaction_code": "9003"},
-				["name", "source_name"],
+				"name",
 			)
 			folio_c.append("payments", {
 				"posting_date": nowdate(), "payment_kind": "Refund", "mode": "Cash",
 				"amount": -100000.0, "currency": "UGX", "reference": "PE-DEP-CANCEL",
-				"refund_of": original_payment,
 			})
 			_recalculate(folio_c)
 			folio_c.save(ignore_permissions=True)
@@ -479,7 +478,7 @@ class TestEventFolio(BanquetFiscalCase):
 			)
 			fsc = bq.function_sheet(fn_cancel)
 			self.assertEqual((fsc["deposit_held"], fsc["deposit_refunded"]), (0.0, 0.0))
-			self.assertAlmostEqual(float(folio_c.payments_total), 0.0, 2)
+			self.assertAlmostEqual(float(folio_c.reload().payments_total), 0.0, 2)
 
 	def test_folio_history_includes_and_searches_sales_invoice_when_column_exists(self):
 		"""Hydrogen P2: FolioHistory surfaces ERP sales_invoice instead of internal INV-... on bridge sites."""
