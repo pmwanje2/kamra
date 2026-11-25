@@ -135,7 +135,7 @@ export function scanTree(base = root) {
 
 // The generated reference uses fenced examples, inline code and inline links.
 // Keep labels and surrounding prose visible to the guard.
-function scanReference(markdown, findings) {
+function scanReference(markdown, wireMethods, findings) {
   let fence = ""
   for (const [index, line] of markdown.split("\n").entries()) {
     const marker = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/)
@@ -149,10 +149,8 @@ function scanReference(markdown, findings) {
     }
     const prose = line
       .replace(/\]\((?:<[^>]*>|[^()\s]+)(?=[\s)])/g, "](")
-      .replace(/(`+)([^`]+)\1/g, (_, ticks, code) => {
-        if (code === "Kamra Agent" && line.includes(" · roles: ")) return ""
-        return code.replace(/\b(?:kamra|frappe|erpnext)(?:[._]\w+)+|\bX-Frappe-[\w-]+/gi, "")
-      })
+      .replace(/(`+)([^`]+)\1/g, (_, ticks, code) =>
+        wireMethods.has(code) || /^X-Frappe-[\w-]+$/i.test(code) ? "" : code)
     if (forbidden.test(prose)) findings.push(`api-reference.md:${index + 1}: ${line}`)
   }
 }
@@ -160,8 +158,13 @@ function scanReference(markdown, findings) {
 export function checkSource() {
   const { findings, sourceCount } = scanTree()
   const collection = JSON.parse(fs.readFileSync(path.join(root, "../docs-site/public/kamra.postman_collection.json"), "utf8"))
+  const wireMethods = new Set()
   function scanPostman(node, location) {
     if (!node || typeof node !== "object") return
+    const urlPath = node.request?.url?.path
+    if (urlPath?.length === 3 && urlPath[0] === "api" && urlPath[1] === "method") {
+      wireMethods.add(urlPath[2])
+    }
     for (const [key, value] of Object.entries(node)) {
       const field = `${location}.${key}`
       if (key === "name" || key === "description") {
@@ -176,7 +179,7 @@ export function checkSource() {
     if (!collection.info?.[field]?.trim()) findings.push(`Missing Postman collection ${field}`)
   }
   scanPostman(collection, "Postman collection")
-  scanReference(fs.readFileSync(path.join(root, "../docs-site/api-reference.md"), "utf8"), findings)
+  scanReference(fs.readFileSync(path.join(root, "../docs-site/api-reference.md"), "utf8"), wireMethods, findings)
   if (findings.length) {
     console.error(findings.join("\n"))
     throw new Error(`${sourceCount} UI source findings; ${findings.length} total branding findings`)

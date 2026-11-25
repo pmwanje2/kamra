@@ -2843,7 +2843,7 @@
         "kamra.api.decide_allowance"
        ]
       },
-      "description": "Approve or reject a pending allowance. When an active Workflow exists on\nAllowance Request, executes the transition via\nthe workflow engine (failing closed on self-approval,\nAdministrator, or DoA role mismatch). Approving posts it on the folio;\na rejection needs a note and is kept with who and why. AI agents never\ndecide.",
+      "description": "Approve or reject a pending allowance. When an active Workflow exists on\nAllowance Request, executes the transition via\nthe native workflow approval action (failing closed on self-approval,\nAdministrator, or DoA role mismatch). Approving posts it on the folio;\na rejection needs a note and is kept with who and why. AI agents never\ndecide.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"allowance_request\": \"<allowance_request>\",\n  \"approve\": 1,\n  \"note\": \"\",\n  \"pin_secret\": \"<pin_secret>\",\n  \"confirm_pin_secret\": \"<confirm_pin_secret>\",\n  \"pin\": \"<pin>\",\n  \"supervisor_pin\": \"<supervisor_pin>\"\n}",

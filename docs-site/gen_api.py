@@ -83,7 +83,7 @@ MODULES = [
     ("today_layout", "Today layout (per-user widgets, hotel default)", ""),
     ("sop", "Desk procedures (check-out, check-in and other SOPs)", ""),
     ("checkin", "Guided check-in (steps, who did each, room-charges permission)",
-     "kamra.api.check_in refuses until every check-in step the property marks required is done. check_in_readiness says what is missing."),
+     "Check-in requires every step marked mandatory by the property. The readiness report lists the remaining steps."),
     ("staff", "Staff & access", ""),
     ("webhooks", "Outbound webhooks (subscriptions, delivery log)",
      "Hotel Admin / System Manager. Events are signed with HMAC-SHA256 - see the Integrations page."),
@@ -271,18 +271,19 @@ Content-Type: application/json
   [contract.json](/contract.json).
 """]
     for m in modules:
-        out.append(f"\n## {markdown_display(m['folder'])}\n")
+        out.append(f"\n## {public_display(m['folder'])}\n")
         if m["note"]:
-            out.append(f"> {markdown_display(m['note'])}\n")
+            out.append(f"> {public_display(m['note'])}\n")
         for e in m["endpoints"]:
             badge = " <Badge type='tip' text='public' />" if e["guest"] else ""
             out.append(f"### `kamra.{e['module']}.{e['name']}`{badge}\n")
             meta = [f"**{e['method']}**"]
             if e["roles"]:
-                meta.append("roles: " + ", ".join(f"`{r}`" for r in e["roles"]))
+                labels = ("Maximus Assistant" if role == "Kamra Agent" else role for role in e["roles"])
+                meta.append("roles: " + ", ".join(f"`{label}`" for label in labels))
             out.append(" · ".join(meta) + "\n")
             if e["doc"]:
-                out.append(esc(markdown_display(e["doc"])) + "\n")
+                out.append(esc(public_display(e["doc"])) + "\n")
             if e["params"]:
                 out.append("| Param | Required | Default |")
                 out.append("| --- | --- | --- |")
@@ -301,7 +302,7 @@ Content-Type: application/json
 _DISPLAY_TERMS = {
     "even over `frappe.call`": "including RPC calls",
     " (`approver != frappe.session.user`)": "",
-    "`frappe.model.workflow.apply_workflow`": "the workflow engine",
+    "`frappe.model.workflow.apply_workflow`": "the native workflow approval action",
     "(kamra.night_audit.night_audit_precheck) ": "",
     ": see kamra.privacy.erase_guest": "",
     "frappe.get_list applies": "The property list respects",
@@ -317,7 +318,6 @@ _DISPLAY_TERMS = {
     "ERPNext accounting bridge": "ERP accounting bridge",
     "ERPNext bridge": "accounting bridge",
     "ERPNext": "the accounting system",
-    "Frappe": "the platform",
     "kamrapms.com": "the public hosting site",
     "Kamra": "Maximus",
     "₹ or GST %": "a particular currency symbol or tax rate",
@@ -327,18 +327,8 @@ _DISPLAY_TERMS = {
 def public_display(text):
     for source, display in _DISPLAY_TERMS.items():
         text = text.replace(source, display)
-    return text
-
-
-def markdown_display(text):
-    """Keep code spans literal and mark method names and wire headers as code."""
-    tokens = re.split(r"(`+[^`\n]*`+|\b(?:kamra|frappe|erpnext)(?:\.\w+)+|\bX-Frappe-[\w-]+)", text)
-    for i, part in enumerate(tokens):
-        if i % 2 == 0:
-            tokens[i] = public_display(part)
-        elif not part.startswith("`"):
-            tokens[i] = f"`{part}`"
-    return "".join(tokens)
+    # The HTTP header prefix X-Frappe- is part of the wire protocol.
+    return re.sub(r"(?<!X-)\bFrappe\b", "the platform", text)
 
 
 def write_postman(modules):
