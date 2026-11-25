@@ -402,3 +402,6 @@ Check-In Link Expires At,انتهاء صلاحية رابط تسجيل الوص�
 Booked at Checkout,تم حجزه عند إتمام الشراء
 Booked Tax Rate,معدل الضريبة عند الحجز
 Online registration evidence cannot be changed.,لا يمكن تغيير إثبات التسجيل عبر الإنترنت.
+Direct Booking Transaction Code,رمز معاملة الحجز المباشر
+Direct Booking Price Basis,أساس تسعير الحجز المباشر
+Show Online Pre-Check-In Completion,إظهار اكتمال التسجيل المسبق عبر الإنترنت

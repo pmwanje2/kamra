@@ -7236,10 +7236,10 @@ def upload_guest_document(guest: str, kind: str, image: str, reservation: str | 
 		res = frappe.get_doc("Reservation", reservation, for_update=True)
 		if res.guest != guest:
 			frappe.throw(frappe._("Not permitted"), frappe.PermissionError)
+		if res.status not in ACTIVE_STATUSES:
+			frappe.throw(frappe._("This booking is no longer active."))
 		stay_field = "id_document" if kind == "id" else "precheckin_address_file"
 		if res.get(stay_field):
-			if res.status not in ACTIVE_STATUSES:
-				frappe.throw(frappe._("This booking is no longer active."))
 			if kind == "id":
 				url = store_id_document(res, image, source="Desk")
 			else:
@@ -13591,14 +13591,20 @@ def verify_tax_id(property: str, tax_id: str, business_name: str = ""):
 
 
 @frappe.whitelist(methods=["POST"])
-@require_roles("Front Desk", scope={"guest": "Guest"})
-def verify_guest_id(property: str, guest: str, id_type: str, consent: int = 0):
+@require_roles("Front Desk", scope={"guest": "Guest", "reservation": "Reservation"})
+def verify_guest_id(property: str, guest: str, id_type: str, consent: int = 0, reservation: str | None = None):
 	"""Read the guest's ID document on file into the profile, where the
 	property's country pack offers it. consent: the desk confirms the guest
 	was told."""
 	from kamra import localization as loc
+	stay_image = None
+	if reservation:
+		stay = frappe.get_doc("Reservation", reservation)
+		if stay.guest != guest or stay.property != property:
+			frappe.throw(frappe._("Not permitted"), frappe.PermissionError)
+		stay_image = stay.get("id_document")
 	return loc.verify_guest_id(loc.pack_for(property), property, guest,
-	                           id_type, consent)
+	                           id_type, consent, stay_image=stay_image)
 
 
 @frappe.whitelist()

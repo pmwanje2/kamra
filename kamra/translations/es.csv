@@ -1,5 +1,4 @@
 Set access instructions on the Property first.,Primero configure las instrucciones de acceso en la propiedad.
-Invalid link.,Enlace no válido.
 Cannot release access yet. Failed gates: {0},Todavía no se puede liberar el acceso. Controles pendientes: {0}
 Enter the deposit amount.,Ingrese el importe del anticipo.
 No deposit is due - enter the amount to request.,No hay anticipo pendiente: ingrese el importe a solicitar.
@@ -1250,3 +1249,6 @@ The signature is invalid.,La firma no es válida.
 These dates need a stay of at least {0} nights.,Estas fechas requieren una estancia de al menos {0} noches.
 This property does not allow pets.,Este alojamiento no admite mascotas.
 Online registration evidence cannot be changed.,No se pueden modificar los datos que acreditan el registro en línea.
+Direct Booking Transaction Code,Código de transacción de la reserva directa
+Direct Booking Price Basis,Base de cálculo del precio de la reserva directa
+Show Online Pre-Check-In Completion,Mostrar la finalización del prerregistro en línea

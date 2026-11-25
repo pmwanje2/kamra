@@ -2982,6 +2982,7 @@ was told.
 | `guest` | yes |  |
 | `id_type` | yes |  |
 | `consent` | no | `0` |
+| `reservation` | no | `None` |
 
 ### `kamra.api.zatca_settings`
 

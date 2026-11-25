@@ -9,6 +9,7 @@ target Folio Windows (W1..W8), and posted idempotently via `fc:` keys.
 from __future__ import annotations
 
 import json
+from datetime import timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 from collections import defaultdict
@@ -402,17 +403,64 @@ def booked_charge_amount(row) -> tuple[Decimal, Decimal]:
 	return net, net * _dec(row.get("booked_tax_rate")) / 100
 
 
+def _posting_value(res, row, home, tariff, business_date):
+	"""Compute one posting in home currency, retaining its source rate and FX evidence."""
+	currency = (row.get("currency") or "").strip().upper() or home
+	price = pricing.round_rate_amount(row.unit_price or 0, 0, currency=currency)
+	fx, fx_date = Decimal(1), None
+	if currency != home and price > 0:
+		rate = None
+		if currency == tariff.get("currency") and pricing.reservation_fx_policy(res) in (
+			pricing.DEFAULT_FX_LOCK, "Fixed at Check In",
+		):
+			locked_fx = _dec(tariff.get("fx_rate"))
+			if locked_fx.is_finite() and locked_fx > 0:
+				rate = (locked_fx, tariff.get("fx_date"))
+		rate = rate or pricing.posting_fx_rate(res.property, currency, business_date)
+		if not rate:
+			frappe.throw(_("No exchange rate from {0} to {1} is available for the business date.")
+			             .format(currency, home), frappe.ValidationError)
+		fx, fx_date = rate
+	amount = pricing.round_rate_amount(_dec(row.qty or 1) * price * fx, 0, currency=home)
+	return amount, currency, price, fx, fx_date
+
+
+def _expected_posting_dates(res, row):
+	if row.frequency in ("On Arrival", "On Departure"):
+		yield get_business_date(res.property)
+		return
+	start = max(getdate(row.start_date), getdate(res.check_in_date))
+	end = min(getdate(row.end_date), getdate(res.check_out_date) - timedelta(days=1))
+	for offset in range((end - start).days + 1):
+		day = start + timedelta(days=offset)
+		if _matches_trigger(row, res, day, "night_audit"):
+			yield str(day)
+
+
 def booked_upsell_totals(reservations: list[str]) -> dict[str, Decimal]:
-	"""Expected add-on totals from the same booked rows the folio will post."""
+	"""Expected gross charges in the same currency and at the same FX as posting."""
 	totals = defaultdict(Decimal)
-	for row in frappe.get_all(
+	rows = frappe.get_all(
 		"Reservation Fixed Charge",
 		filters={"parent": ("in", reservations), "parenttype": "Reservation",
 		         "parentfield": "fixed_charges", "booked_at_checkout": 1, "active": 1},
-		fields=["parent", "frequency", "start_date", "end_date", "qty", "unit_price", "booked_tax_rate"],
-	):
-		net, tax = booked_charge_amount(row)
-		totals[row.parent] += net + tax
+		fields=["parent", "frequency", "start_date", "end_date", "day_of_week", "stay_day_n",
+		        "qty", "currency", "unit_price", "booked_tax_rate"],
+	)
+	if not rows:
+		return totals
+	stays = {res.name: res for res in frappe.get_all(
+		"Reservation", filters={"name": ("in", sorted({row.parent for row in rows}))},
+		fields=["name", "property", "rate_plan", "contract_tariff", "check_in_date", "check_out_date"],
+	)}
+	for row in rows:
+		res = stays[row.parent]
+		home = home_currency(res.property)
+		snapshot = pricing.saved_contract_tariff(res)
+		tariff = snapshot.get("tariff") or snapshot
+		for day in _expected_posting_dates(res, row):
+			amount, *_ = _posting_value(res, row, home, tariff, day)
+			totals[row.parent] += amount + amount * _dec(row.booked_tax_rate) / 100
 	return totals
 
 
@@ -479,31 +527,14 @@ def post_fixed_charges_for_date(
 		gst_rate = flt(row.booked_tax_rate if row.booked_at_checkout else tc.get("default_tax_rate"))
 
 		qty = _dec(row.qty or 1)
-		currency = (row.get("currency") or "").strip().upper() or home
-		unit_price = pricing.round_rate_amount(row.unit_price or 0, 0, currency=currency)
-		if unit_price <= 0:
+		amount, currency, unit_price, fx, fx_date = _posting_value(res, row, home, tariff, bd_str)
+		if amount <= 0:
 			continue
 		fx_fields, fx_note = {}, ""
-		fx = Decimal(1)
 		if currency != home:
-			rate = None
-			if currency == tariff.get("currency") and pricing.reservation_fx_policy(res) in (
-				pricing.DEFAULT_FX_LOCK, "Fixed at Check In",
-			):
-				locked_fx = _dec(tariff.get("fx_rate"))
-				if locked_fx.is_finite() and locked_fx > 0:
-					rate = (locked_fx, tariff.get("fx_date"))
-			rate = rate or pricing.posting_fx_rate(res.property, currency, bd_str)
-			if not rate:
-				frappe.throw(_("No exchange rate from {0} to {1} is available for the business date.")
-				             .format(currency, home), frappe.ValidationError)
-			fx, fx_date = rate
 			fx_fields = {"contract_currency": currency, "contract_fx_rate": float(fx),
 			             "contract_fx_date": fx_date}
 			fx_note = f" ({currency} {unit_price:,f} @ {fx.normalize():,f})"
-		amount = pricing.round_rate_amount(qty * unit_price * fx, 0, currency=home)
-		if amount <= 0:
-			continue
 
 		desc = (row.description or charge_type).strip()
 		if row.get("supplement"):

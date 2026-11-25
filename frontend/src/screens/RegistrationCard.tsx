@@ -472,7 +472,8 @@ function fileToDataUrl(file: File): Promise<string> {
 /** Kamra Verify: read the captured ID and fill the guest profile. Offered
  *  where the country pack has it (India); paid per read from the Kamra
  *  Connect wallet. */
-function ReadIdButton({ guest, idType, idTypes, onDone }: {
+function ReadIdButton({ guest, reservation, idType, idTypes, onDone }: {
+  reservation: string
   guest: string
   idType: string | null
   idTypes: string[]
@@ -502,7 +503,7 @@ function ReadIdButton({ guest, idType, idTypes, onDone }: {
           try {
             const r = await call<{ filled: Record<string, string>; charged: number }>(
               "kamra.api.verify_guest_id",
-              { property: getCurrentProperty(), guest, id_type: type, consent: 1 })
+              { property: getCurrentProperty(), guest, reservation, id_type: type, consent: 1 })
             const n = Object.keys(r.filled).length
             setMsg({
               ok: true,
@@ -881,7 +882,7 @@ export default function RegistrationCard() {
                 </label>
               ))}
               {d.guest.id_file && d.guest.guest_id && loc.integrations.verify_guest_id && (
-                <ReadIdButton guest={d.guest.guest_id} idType={d.guest.id_type}
+                <ReadIdButton reservation={r.name} guest={d.guest.guest_id} idType={d.guest.id_type}
                               idTypes={loc.id_types} onDone={load} />
               )}
             </div>

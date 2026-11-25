@@ -151,9 +151,12 @@ export function DirectBookingCart({
   )
 }
 
+export type CheckoutAttempt = { payload: string; key: string }
+
 export function DirectBookingCheckout({
-  property, lines, upsells, ratePlans, mealPlans, onChange, onClose, onBooked, privacy,
+  property, lines, upsells, ratePlans, mealPlans, onChange, onClose, onBooked, privacy, checkoutAttempt,
 }: {
+  checkoutAttempt?: React.RefObject<CheckoutAttempt | null>
   property: string
   lines: CartLine[]
   upsells: CartUpsell[]
@@ -169,7 +172,8 @@ export function DirectBookingCheckout({
   const [done, setDone] = useState<CartConfirmation>()
   const [busy, setBusy] = useState(false)
   const [submitError, setSubmitError] = useState("")
-  const checkout = useRef<{ payload: string; key: string } | null>(null)
+  const localAttempt = useRef<CheckoutAttempt | null>(null)
+  const checkout = checkoutAttempt ?? localAttempt
   const quote = pricing?.lines === lines ? pricing.quote ?? null : null
   const money = useCartMoney(done ?? quote)
 
@@ -209,6 +213,7 @@ export function DirectBookingCheckout({
       const booked = await callGuest<CartConfirmation>("kamra.public_api.create_multi_room_booking", {
         ...payload, idempotency_key: checkout.current.key,
       })
+      checkout.current = null
       setDone(booked)
       onBooked()
     } catch (error) {

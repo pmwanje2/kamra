@@ -55,9 +55,20 @@ def availability(
 	# Pre-index bookings / blocks by room and by room_type for competition.
 	by_room = defaultdict(list)
 	by_room_type = defaultdict(list)
+	# A reservation can hold a connecting unit before a desk room is assigned.
+	# Index every member, including members sold through another unit or type.
+	held_units = {b["sellable_unit"] for b in bookings if b.get("sellable_unit")}
+	members = defaultdict(set)
+	if held_units:
+		for link in frappe.get_all("Sellable Unit Room", filters={"parent": ("in", sorted(held_units))},
+		                           fields=["parent", "room"]):
+			members[link.parent].add(link.room)
 	for b in bookings:
+		rooms = members.get(b.get("sellable_unit"), set())
 		if b.get("room"):
-			by_room[b["room"]].append(b)
+			rooms = rooms | {b["room"]}
+		for room in rooms:
+			by_room[room].append(b)
 		if b.get("room_type"):
 			by_room_type[b["room_type"]].append(b)
 

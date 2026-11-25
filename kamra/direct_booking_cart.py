@@ -6,6 +6,7 @@ from hashlib import sha256
 from collections import Counter, defaultdict
 from datetime import date
 from decimal import Decimal
+from typing import NamedTuple
 
 import frappe
 from frappe import _
@@ -148,8 +149,14 @@ def _parse_lines(lines) -> list[dict]:
 	return parsed
 
 
-def _assign_continuous_rooms(lines: list[dict], choices: list[set]) -> None:
-	"""Find a room for every stay, reusing a room only for disjoint dates."""
+class _InventoryChoice(NamedTuple):
+	unit: str | None
+	rooms: tuple[str, ...]
+	composite: bool = False
+
+
+def _assign_continuous_rooms(lines: list[dict], choices: list[list[_InventoryChoice]]) -> None:
+	"""Reserve each candidate's entire physical footprint for the stay."""
 	order = sorted(range(len(lines)), key=lambda i: len(choices[i]))
 	overlaps = [
 		{j for j, other in enumerate(lines)
@@ -162,18 +169,24 @@ def _assign_continuous_rooms(lines: list[dict], choices: list[set]) -> None:
 		if offset == len(order):
 			return True
 		index = order[offset]
-		busy = {room for i, room in assigned.items() if i in overlaps[index]}
-		for room in sorted(choices[index] - busy, key=lambda name: name or ""):
-			assigned[index] = room
+		busy = [choice for i, choice in assigned.items() if i in overlaps[index]]
+		taken_rooms = {room for choice in busy for room in choice.rooms}
+		for choice in choices[index]:
+			if choice in busy or not taken_rooms.isdisjoint(choice.rooms):
+				continue
+			assigned[index] = choice
 			if place(offset + 1):
 				return True
-		assigned.pop(index, None)
+			del assigned[index]
 		return False
 
 	if not place(0):
 		_refuse_inventory()
-	for index, room in assigned.items():
-		lines[index]["assigned_room"] = room
+	for index, choice in assigned.items():
+		lines[index]["assigned_room"] = choice.rooms[0] if choice.rooms else None
+		# A connecting unit holds all its members even when the desk defers
+		# assigning the physical room. Individual stays retain that desk policy.
+		lines[index]["composite_unit"] = choice.unit if choice.composite else None
 
 
 def _check_inventory(property: str, lines: list[dict]) -> None:
@@ -216,7 +229,17 @@ def _check_inventory(property: str, lines: list[dict]) -> None:
 			              if str(row.check_out_date) > ci or str(row.check_in_date) == ci}
 			if ci <= today():
 				available -= in_house_rooms(property)
-		choices.append({None} if virtual else available)
+		if virtual:
+			candidates = [_InventoryChoice(None, ())]
+		elif units is None:
+			candidates = [_InventoryChoice(None, (room,)) for room in sorted(available)]
+		else:
+			candidates = []
+			for unit in sellable_units:
+				members = tuple(sorted(room["name"] for room in unit["rooms"]))
+				if members and available.issuperset(members):
+					candidates.append(_InventoryChoice(unit["siu"], members, unit["unit_kind"] == "composite"))
+		choices.append(candidates)
 		side = is_entire_place(room_type)
 		for offset in range(date_diff(co, ci)):
 			night = str(add_days(ci, offset))
@@ -482,6 +505,8 @@ def book(property: str, lines, guest_name: str, phone: str, email: str = "",
 					_save_fixed_charge(res.name, charge, booked_tax_rate=charge["booked_tax_rate"])
 				totals = _line_totals(prop, line, res.amount_after_tax, res.get("tax_amount"))
 				updated = {key: totals[key] for key in ("advance_due", "payment_policy")}
+				if line["composite_unit"]:
+					updated["sellable_unit"] = line["composite_unit"]
 				updated["is_pay_at_hotel"] = int(totals["balance_at_hotel"] > 0)
 				if special_requests:
 					updated["special_requests"] = special_requests

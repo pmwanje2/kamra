@@ -30,7 +30,7 @@ import { serverError } from "../lib/resource"
 import { accentVars } from "../lib/accents"
 import { Badge } from "../components/ui/badge"
 import { Button } from "../components/ui/button"
-import { DirectBookingCheckout, type CartLine, type CartUpsell } from "../components/DirectBookingCart"
+import { DirectBookingCheckout, type CheckoutAttempt, type CartLine, type CartUpsell } from "../components/DirectBookingCart"
 import { Sheet } from "../components/ui/sheet"
 import { cur, fmtAmount, locale, adoptUiLocale } from "../lib/money"
 import { formatPhoneDisplay, formatPhoneTel } from "../lib/phone"
@@ -531,6 +531,7 @@ export default function PublicBooking() {
   const [selected, setSelected] = useState<{ room_type: string; meal_plan: string } | null>(null)
   const [lightbox, setLightbox] = useState<{ photos: Photo[]; start: number; title: string } | null>(null)
   const [cart, setCart] = useState<CartLine[]>([])
+  const checkoutAttempt = useRef<CheckoutAttempt | null>(null)
   const [cartOpen, setCartOpen] = useState(false)
   const [booking, setBooking] = useState<string | null>(null) // room type name
   const [form, setForm] = useState({ guest_name: "", phone: "", email: "", special_requests: "", marketing_consent: 0 })
@@ -554,6 +555,7 @@ export default function PublicBooking() {
   const nights = nightsBetween(search.check_in_date, checkOut)
 
   useEffect(() => {
+    checkoutAttempt.current = null
     setCart([])
     setCartOpen(false)
   }, [propertySlug])
@@ -1734,7 +1736,7 @@ export default function PublicBooking() {
       )}
 
       {cartOpen && property && (
-        <DirectBookingCheckout property={property} lines={cart} upsells={data.cart_upsells ?? []}
+        <DirectBookingCheckout checkoutAttempt={checkoutAttempt} property={property} lines={cart} upsells={data.cart_upsells ?? []}
           ratePlans={data.cart_rate_plans} mealPlans={data.meal_plans} onChange={setCart}
           onClose={() => setCartOpen(false)} onBooked={() => { setCart([]); fetchResults() }}
           privacy={<PrivacyNotice propertyName={p.property_name} contact={p.privacy_contact}

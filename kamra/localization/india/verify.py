@@ -49,7 +49,7 @@ def _as_date(value: str):
 	return None
 
 
-def scan_guest_id(property: str, guest: str, id_type: str, consent: int = 0) -> dict:
+def scan_guest_id(property: str, guest: str, id_type: str, consent: int = 0, *, stay_image: str | None = None) -> dict:
 	"""Read the guest's ID document on file and fill the profile: ID type
 	and number, date of birth, gender; nationality, name and address only
 	where the profile has none."""
@@ -61,9 +61,10 @@ def scan_guest_id(property: str, guest: str, id_type: str, consent: int = 0) -> 
 	if not frappe.db.exists("Guest", guest):
 		frappe.throw("Guest not found.")
 	g = frappe.get_doc("Guest", guest)
-	if not g.id_file:
+	url = stay_image or g.id_file
+	if not url:
 		frappe.throw("Capture the ID document first, then read it.")
-	image, filename = _id_image(g.id_file)
+	image, filename = _id_image(url)
 
 	from kamra.connect.client import call
 	out = call("scan_id", params={"id_type": id_type, "filename": filename, "consent": 1},

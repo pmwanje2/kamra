@@ -208,9 +208,9 @@ def verify_tax_id(property, tax_id, business_name=""):
 	return verify.verify_gstin(property, tax_id, business_name)
 
 
-def verify_guest_id(property, guest, id_type, consent=0):
+def verify_guest_id(property, guest, id_type, consent=0, *, stay_image=None):
 	from kamra.localization.india import verify
-	return verify.scan_guest_id(property, guest, id_type, consent)
+	return verify.scan_guest_id(property, guest, id_type, consent, stay_image=stay_image)
 
 
 def read_id_scan(text):

@@ -6593,7 +6593,7 @@
       "description": "Read the guest's ID document on file into the profile, where the\nproperty's country pack offers it. consent: the desk confirms the guest\nwas told.",
       "body": {
        "mode": "raw",
-       "raw": "{\n  \"property\": \"Your Property\",\n  \"guest\": \"G-00001\",\n  \"id_type\": \"<id_type>\",\n  \"consent\": 0\n}",
+       "raw": "{\n  \"property\": \"Your Property\",\n  \"guest\": \"G-00001\",\n  \"id_type\": \"<id_type>\",\n  \"consent\": 0,\n  \"reservation\": \"RES-2026-00001\"\n}",
        "options": {
         "raw": {
          "language": "json"

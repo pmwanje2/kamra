@@ -761,12 +761,14 @@ def verify_tax_id(pack, property: str, tax_id: str, business_name: str = ""):
 
 
 def verify_guest_id(pack, property: str, guest: str, id_type: str,
-                    consent: int = 0):
+                    consent: int = 0, *, stay_image: str | None = None):
 	if not verify_released():
 		frappe.throw(frappe._("The ID verification partner isn't available yet."))
 	fn = getattr(pack, "verify_guest_id", None)
 	if not fn:
 		_not_offered(frappe._("Guest ID verification"))
+	if stay_image:
+		return fn(property, guest, id_type, consent, stay_image=stay_image)
 	return fn(property, guest, id_type, consent)
 
 
