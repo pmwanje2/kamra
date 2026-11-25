@@ -86,6 +86,8 @@ scheduler_events = {
 		# entering the 500-day horizon, what a trigger missed); never a full
 		# sync on a timer
 		"20 6 * * *": ["kamra.channel_ari.nightly_sweep"],
+		# every 2 hours - escalate overdue dated stay traces into native ToDos
+		"0 */2 * * *": ["kamra.traces.escalate_overdue_traces"],
 	},
 }
 
@@ -279,7 +281,7 @@ _PROPERTY_SCOPED = (
 	"Company Payment Request",
 	"Copilot Conversation", "Credit Note", "Discount Voucher", "Exchange Rate",
 	"Exchange Transaction", "Experience", "External POS Charge", "Floor", "Folio", "Folio Ledger Entry",
-	"Folio Reprint", "Group Booking", "Holiday Package", "Housekeeping Task", "Hurdle Rate",
+	"Folio Reprint", "Group Booking", "Guest Alert", "Holiday Package", "Housekeeping Task", "Hurdle Rate",
 	"Ingredient", "Ingredient Ledger Entry", "Ingredient Stock", "Kamra Custom Report",
 	"Kamra Notification", "Kamra Notification Read", "Kitchen Printer",
 	"Laundry Order", "Laundry Rate", "Lost And Found Item", "MCP OAuth Grant",
@@ -355,6 +357,15 @@ for _dt, _events in {
 		_have = doc_events.setdefault(_dt, {}).get(_event)
 		doc_events[_dt][_event] = ([_have] if _have else []) + [f"kamra.notifications.{_fn}"]
 doc_events["Kamra Notification"] = {"after_insert": "kamra.realtime.notify"}
+doc_events["Guest Alert"] = {
+	"after_insert": "kamra.realtime.notify",
+	"on_update": "kamra.realtime.notify",
+	"on_trash": "kamra.realtime.notify",
+}
+doc_events["Night Audit Run"] = {
+	"after_insert": ["kamra.traces.on_night_audit_close"],
+	"on_update": ["kamra.traces.on_night_audit_close"],
+}
 
 # A reservation booked/modified/cancelled moves availability, so fan the new
 # numbers out to the channel manager (Pipeline 1). Runs alongside the realtime

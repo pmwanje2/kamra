@@ -362,7 +362,14 @@ export interface RoomRow {
   room_number: string
   room_type: string
   floor: string | null
-  housekeeping_status: "Clean" | "Dirty" | "Inspected" | "Out of Order"
+  housekeeping_status:
+    | "Clean"
+    | "Dirty"
+    | "Pickup"
+    | "Inspected"
+    | "Ready"
+    | "Out of Service"
+    | "Out of Order"
   occupancy_status: "Vacant" | "Occupied"
 }
 
@@ -1860,8 +1867,12 @@ export const checkIn = (reservation: string) =>
 export const checkOut = (reservation: string) =>
   call("kamra.api.check_out", { reservation })
 
-export const setHousekeepingStatus = (room: string, status: string, reason?: string) =>
-  call("kamra.api.set_housekeeping_status", { room, status, reason })
+export const setHousekeepingStatus = (
+  room: string,
+  status: string,
+  reason?: string,
+  until_date?: string,
+) => call("kamra.api.set_housekeeping_status", { room, status, reason, until_date })
 
 export interface ReservationDetail extends TariffReference {
   name: string
@@ -2014,6 +2025,14 @@ export interface ReservationDetail extends TariffReference {
   }[]
   /** Soft-required check-in steps still open (finish after the guest is in). */
   checkin_backfill: { step: string; title: string; tip: string }[]
+  business_date?: string
+  traces?: import("../components/TracesPanel").StayTraceItem[]
+  alerts?: {
+    blocking_count: number
+    warning_count: number
+    info_count: number
+    items: import("../components/AlertBanner").GuestAlertItem[]
+  }
 }
 
 export const reservationDetail = (name: string) =>

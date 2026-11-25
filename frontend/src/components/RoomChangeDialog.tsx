@@ -51,10 +51,13 @@ type RateMode = "destination" | "source" | "custom"
 const REASONS = ["Guest request", "Upgrade", "Maintenance", "Noise / complaint", "Other"]
 
 const hkTone: Record<string, string> = {
-  Clean: "bg-emerald-50 text-emerald-700",
-  Inspected: "bg-sky-50 text-sky-700",
-  Dirty: "bg-amber-50 text-amber-700",
-  "Out of Order": "bg-rose-50 text-rose-700",
+  Clean: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300",
+  Pickup: "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300",
+  Inspected: "bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300",
+  Ready: "bg-teal-50 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300",
+  Dirty: "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300",
+  "Out of Service": "bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300",
+  "Out of Order": "bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300",
 }
 
 const money = (n: number) =>

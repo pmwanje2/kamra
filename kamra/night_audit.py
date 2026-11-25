@@ -695,10 +695,13 @@ def check_overdue_ar(property: str) -> dict:
 		total=_r(sum(r["overdue"] for r in items), places), unverified=False)
 
 
-def check_room_status(property: str) -> dict:
+def check_room_status(property: str, business_date: str | None = None) -> dict:
+	from kamra.business_date import get_business_date
+	bd = getdate(business_date or get_business_date(property))
 	rooms = frappe.get_all(
 		"Room", filters={"property": property},
-		fields=["name", "room_number", "housekeeping_status", "occupancy_status"],
+		fields=["name", "room_number", "housekeeping_status", "occupancy_status",
+		        "os_oo_until", "os_oo_reason"],
 		limit_page_length=0)
 	in_house: dict[str, dict] = {}
 	for r in frappe.get_all(
@@ -717,6 +720,13 @@ def check_room_status(property: str) -> dict:
 			issue = "Room board shows Occupied, no guest in house"
 		elif guest and room.housekeeping_status == "Out of Order":
 			issue = "Out of order room has an in-house guest"
+		elif (
+			not guest
+			and room.housekeeping_status == "Out of Service"
+			and room.get("os_oo_until")
+			and getdate(room.os_oo_until) < bd
+		):
+			issue = "Out of service return date passed"
 		if not issue:
 			continue
 		items.append({
@@ -823,7 +833,7 @@ def run_checks(property: str, business_date: str | None = None,
 		check_departed_balances(property),
 		check_credit_limit(property),
 		check_overdue_ar(property),
-		check_room_status(property),
+		check_room_status(property, bd),
 		check_vacant_rooms(property),
 	]
 
