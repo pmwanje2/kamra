@@ -1752,6 +1752,7 @@ Received quantity must be above zero.,La quantité reçue doit être supérieure
 Recipe,Recette
 Recipients,Destinataires
 Recorded by,Enregistré par
+Recorded historical refund,Remboursement historique enregistré
 Recorded for Finance to confirm. It does not change the account until a Finance user confirms it with their PIN.,Enregistré pour confirmation par la Finance. Aucune incidence sur le compte tant qu'un utilisateur Finance ne confirme pas par son code PIN.
 Redirect URI,URI de redirection
 Redirect URIs,URIs de redirection
