@@ -39,10 +39,7 @@ interface Approver { user: string; full_name: string }
 const inputCls =
   "rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm " +
   "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
-const money = (n: number) =>
-  `${cur()}${fmtAmount(n || 0)}`
-
-export default function AllowanceRequests({ property, folio, status = "Pending", refreshKey, onChanged, showStay }: {
+export default function AllowanceRequests({ property, folio, status = "Pending", refreshKey, onChanged, showStay, currency, currencySymbol, numberLocale }: {
   property: string
   folio?: string
   status?: string
@@ -50,8 +47,12 @@ export default function AllowanceRequests({ property, folio, status = "Pending",
   onChanged?: () => void
   /** list view: show guest, room and a link to the folio */
   showStay?: boolean
+  currency?: string | null
+  currencySymbol?: string | null
+  numberLocale?: string | null
 }) {
   const { t } = useT()
+  const money = (n: number) => `${currencySymbol ?? cur()}${fmtAmount(n || 0, currency || undefined, numberLocale || undefined)}`
   const { ensureUnlocked, status: pinStatus } = useCashierAuth()
   const [rows, setRows] = useState<Req[] | null>(null)
   const [canDecide, setCanDecide] = useState(false)

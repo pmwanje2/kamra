@@ -74,14 +74,12 @@
   {
    "fieldname": "cost_gst_rate",
    "fieldtype": "Percent",
-   "label": "Input GST %",
-   "default": "18"
+   "label": "Input GST %"
   },
   {
    "fieldname": "gst_rate",
    "fieldtype": "Percent",
-   "label": "GST %",
-   "default": "18"
+   "label": "GST %"
   },
   {
    "fieldname": "sb_flags",

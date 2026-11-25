@@ -6,18 +6,19 @@ import { call, getCurrentProperty } from "../lib/api"
 import { serverError } from "../lib/resource"
 import { Button } from "../components/ui/button"
 import { Badge } from "../components/ui/badge"
-import { moneyLocale } from "../lib/money"
+import { fmtAmount, moneyLocale, useLocale } from "../lib/money"
 import { t as translate, useUILanguage } from "../lib/i18n"
 
-const inr = (n: unknown) =>
-  Number(n ?? 0).toLocaleString(moneyLocale(), { maximumFractionDigits: 0 })
+const inr = (n: unknown) => fmtAmount(n ?? 0)
 
 type FolioRow = {
   name: string
   guest_name: string
   reservation: string
+  venue_booking?: string | null
   status: string
   invoice_number?: string
+  sales_invoice?: string | null
   grand_total: number
   balance: number
   closed_on?: string
@@ -27,6 +28,7 @@ type FolioRow = {
 
 export default function FolioHistory() {
   useUILanguage()
+  useLocale()
   const [q, setQ] = useState("")
   const [status, setStatus] = useState("")
   const [fromDate, setFromDate] = useState("") // closed on, "" = any day
@@ -160,10 +162,10 @@ export default function FolioHistory() {
                   >
                     {r.guest_name || r.name}
                   </Link>
-                  <div className="text-xs text-zinc-400">{r.reservation}</div>
+                  <div className="text-xs text-zinc-400">{r.reservation || r.venue_booking}</div>
                 </td>
                 <td className="px-3 py-2 font-mono text-xs">
-                  {r.invoice_number || "-"}
+                  {r.sales_invoice || r.invoice_number || "-"}
                   {r.fx_payments?.map((p,i)=><div className="tabular-nums" key={i}>{currencyText(p.currency, p.fx_amount, moneyLocale())} @ {formatFxRate(p.exchange_rate, moneyLocale())}{p.exchange_rate_date && ` · ${formatDate(p.exchange_rate_date)}`}</div>)}
                 </td>
                 <td className="px-3 py-2">

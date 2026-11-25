@@ -251,6 +251,10 @@ def withhold_deposit(reservation: str, amount: float, reason: str,
 		dep.evidence = evidence
 	dep.status = "Withheld"
 	dep.save(ignore_permissions=True)
+	from kamra.folio import _recalculate
+	fdoc = frappe.get_doc("Folio", folio)
+	_recalculate(fdoc)
+	fdoc.save(ignore_permissions=True)
 	from kamra.savings import log_action
 	log_action("withhold_security_deposit", "Reservation", res.name,
 	           res.property, rationale=f"Withheld {_fmt_currency(amt, display)}: {reason}")
@@ -298,6 +302,10 @@ def apply_held_to_bill(res) -> float:
 		dep.reason, _("Applied to the bill at check-out")]))
 	dep.status = "Withheld"
 	dep.save(ignore_permissions=True)
+	from kamra.folio import _recalculate
+	fdoc = frappe.get_doc("Folio", folio)
+	_recalculate(fdoc)
+	fdoc.save(ignore_permissions=True)
 	from kamra.savings import log_action
 	log_action("apply_security_deposit", "Reservation", res.name,
 	           res.property,
@@ -323,15 +331,6 @@ def refund_deposit(reservation: str, amount: float | None = None,
 	folio = _guest_folio(res)
 	if not folio:
 		frappe.throw(_("No guest folio for this stay."))
-	# the deposit can only come back out of the guest's credit - if the
-	# folio still owes money, settle or withhold first (also stops a deposit
-	# that went back through the folio's own refund form going back twice)
-	credit = -flt(frappe.db.get_value("Folio", folio, "balance"))
-	if amt > credit + eps:
-		frappe.throw(_(
-			"The guest folio only has {0} in credit. Settle the bill "
-			"or withhold against it before refunding the deposit.")
-			.format(_fmt_currency(max(credit, 0), display)))
 	mode = mode or _last_mode(folio) or "Cash"
 	from kamra.localization import pack_for, payment_modes
 	modes = payment_modes(pack_for(res.property), res.property)
@@ -342,7 +341,7 @@ def refund_deposit(reservation: str, amount: float | None = None,
 		text += f": {note.strip()}"
 	from kamra.api import _refund_folio_payment
 	_refund_folio_payment(folio, amt, mode, text[:140], pin=pin,
-	                      ledger="Deposit")
+	                      ledger="Deposit", allow_closed=True)
 
 	dep.refunded_amount = _round_currency(_money(dep.refunded_amount) + _money(amt), rplaces)
 	dep.refund_reference = text[:140]
@@ -432,11 +431,10 @@ def deposit_state(res) -> dict:
 		"can_waive": in_play and collected <= 0 and status != "Waived"
 			and required > 0,
 		"can_withhold": held > 0 and folio_open,
-		"can_refund": held > 0 and folio_open,
-		# check-out refuses while the guest is owed money: a held deposit
-		# has to be withheld or refunded first
-		"blocks_checkout": res.status == "Checked In" and held > eps
-			and folio_open and -flt(folio.balance) > eps,
+		"can_refund": held > 0 and bool(folio),
+		# check-out refuses while a security deposit is still held: it must be
+		# explicitly withheld or refunded first, never silently applied
+		"blocks_checkout": res.status == "Checked In" and held > eps,
 	}
 
 

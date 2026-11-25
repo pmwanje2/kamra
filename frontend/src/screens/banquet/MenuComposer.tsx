@@ -17,7 +17,7 @@ import { banquet, type DishOption, type MenuChoices } from "../../lib/api"
 import { serverError } from "../../lib/resource"
 import { Button } from "../../components/ui/button"
 import { Sheet } from "../../components/ui/sheet"
-import { Empty, ErrorNote, inr } from "./shared"
+import { Empty, ErrorNote, inr, type BanquetMoneyCtx } from "./shared"
 import { t as translate, useUILanguage } from "../../lib/i18n"
 
 type Pick = {
@@ -41,16 +41,19 @@ export default function MenuComposer({
   fn,
   menu,
   pax,
+  moneyCtx,
   onClose,
   onSaved,
 }: {
   fn: string
   menu: string
   pax: number
+  moneyCtx?: BanquetMoneyCtx | null
   onClose: () => void
   onSaved: () => void
 }) {
   useUILanguage()
+  const fmt = (n: unknown) => inr(n, moneyCtx)
   const [data, setData] = useState<MenuChoices | null>(null)
   const [picks, setPicks] = useState<Pick[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -152,10 +155,10 @@ export default function MenuComposer({
             ) : (
               <span className="text-zinc-500">
                 {picks.length}{translate(" dish")}{picks.length === 1 ? "" : translate("es")} ·{" "}
-                {inr(totals.cost)}{translate("/pax to make")}{totals.supplement > 0 && (
+                {fmt(totals.cost)}{translate("/pax to make")}{totals.supplement > 0 && (
                   <span className="text-amber-700">
                     {" "}
-                    · +{inr(totals.supplement)}{translate("/pax upgrades")}</span>
+                    · +{fmt(totals.supplement)}{translate("/pax upgrades")}</span>
                 )}
               </span>
             )}
@@ -261,7 +264,7 @@ export default function MenuComposer({
                               {o.supplement_per_pax > 0 && (
                                 <span className="inline-flex items-center gap-0.5 font-medium text-amber-700">
                                   <Sparkles className="size-3" />
-                                  +{inr(o.supplement_per_pax)}{translate("/pax")}</span>
+                                  +{fmt(o.supplement_per_pax)}{translate("/pax")}</span>
                               )}
                             </span>
                           </span>
@@ -281,11 +284,11 @@ export default function MenuComposer({
             <div className="rounded-xl bg-zinc-50 px-4 py-3 text-sm">
               <p className="text-zinc-500">{translate("At ")}{pax}{translate(" pax this menu costs")}{" "}
                 <span className="font-semibold text-zinc-900">
-                  {inr(totals.cost * pax)}
+                  {fmt(totals.cost * pax)}
                 </span>{" "}{translate("to produce")}{totals.supplement > 0 && (
                   <>{translate(", and the upgrades add")}{" "}
                     <span className="font-semibold text-amber-700">
-                      {inr(totals.supplement * pax)}
+                      {fmt(totals.supplement * pax)}
                     </span>{" "}{translate("to the quote")}</>
                 )}
                 .

@@ -442,6 +442,7 @@ Children Policy,Politique enfants
 Children can't be fewer than none.,Le nombre d'enfants ne peut pas être négatif.
 "Choose 5, 15 or 30 days.","Choisissez 5, 15 ou 30 jours."
 Choose Refund or Keep as forfeited deposit.,Choisissez Rembourser ou Conserver comme acompte acquis.
+Choose a payment mode for the settlement payment.,Choisissez un mode de paiement pour le règlement.
 Choose at least one tariff version.,Sélectionnez au moins une version tarifaire.
 Choose at most {0} tariff versions at a time.,Sélectionnez au plus {0} versions tarifaires à la fois.
 Choose how the group bill is paid.,Choisissez le mode de règlement de la note de groupe.
@@ -617,6 +618,7 @@ Decision Note,Note de décision
 Decline it on the OTA's extranet too ({0}).,Refusez-la également sur l'extranet de l'OTA ({0}).
 Default Opening Float,Fond de caisse par défaut
 Default Tax %,Taxe par défaut %
+Default banquet revenue code {0} must be an enabled Revenue Transaction Code for this property.,Le code de revenu banquet par défaut {0} doit être un code de transaction de revenu actif pour cet établissement.
 Default company billing,Facturation société par défaut
 Default for Property,Par défaut pour l'établissement
 Delivered At,Livré le
@@ -748,6 +750,15 @@ Event Name,Nom de l'événement
 Event Order No.,N° de fiche de fonction
 Event Order Notes,Notes de fiche de fonction
 Event Type,Type d'événement
+"Event folio {0} is already closed, so close-out cannot change the settled function total.",Le folio événement {0} est déjà clôturé ; la clôture ne peut donc pas modifier le total réglé de l'événement.
+Event folio {0} is already closed. Changes to a settled function are not allowed.,Le folio événement {0} est déjà clôturé. Les modifications sur un événement réglé ne sont pas autorisées.
+Event folio {0} is already closed. Post post-close damages on a supplemental charge or folio instead of modifying a settled function.,Le folio événement {0} est déjà clôturé. Imputez les dommages postérieurs à la clôture sur des frais complémentaires ou un nouveau folio au lieu de modifier un événement réglé.
+Event folio {0} is already closed. Quotes cannot be re-issued for a settled function.,Le folio événement {0} est déjà clôturé. Les devis ne peuvent pas être réémis pour un événement réglé.
+Event folio {0} is already closed. Record adjustments on a new folio instead.,Le folio événement {0} est déjà clôturé. Enregistrez plutôt les ajustements sur un nouveau folio.
+Event folio {0} is already closed. Record corrections through a credit note or reopen per policy.,Le folio événement {0} est déjà clôturé. Enregistrez les corrections par un avoir ou rouvrez selon la procédure.
+Event folio {0} is already closed. Refund the remaining deposit on the folio instead of adding a close-out refund receipt.,Le folio événement {0} est déjà clôturé. Remboursez le solde de caution sur le folio au lieu d'ajouter un reçu de remboursement de clôture.
+Event folio {0} is already closed. Status changes on a settled function are not allowed.,Le folio événement {0} est déjà clôturé. Les changements de statut sur un événement réglé ne sont pas autorisés.
+Event folio {0} is already {1}.,Le folio événement {0} est déjà {1}.
 Events,Événements
 Every charged night already has the current rate.,Chaque nuit facturée applique déjà le tarif actuel.
 Every line is moving - rename the table on this bill instead of splitting it.,Toutes les lignes sont déplacées — renommez la table sur cette note au lieu de la scinder.
@@ -819,6 +830,7 @@ Flyer / Promo Image,Visuel promotionnel
 Folio,Folio
 Folio Display Mode,Mode d'affichage du folio
 Folio Display Mode must be Inclusive or Separate Add-on.,Le mode d'affichage du folio doit être Inclus ou Supplément séparé.
+Folio Payment,Paiement de folio
 Folio Type,Type de folio
 Folio balance after,Solde du folio après
 Folio display mode must be Inclusive or Separate Add-on.,Le mode d'affichage du folio doit être Inclus ou Supplément séparé.
@@ -856,6 +868,7 @@ From date and to date are required.,Les dates de début et de fin sont obligatoi
 Full Name,Nom complet
 Full Payment On Booking,Paiement intégral à la réservation
 Full sync,Synchronisation complète
+Function,Événement
 Function Contract,Contrat événementiel
 Function register,Registre des événements
 GL Code,Code comptable
@@ -930,8 +943,10 @@ Guest pays the bill (no company on this stay).,Le client règle la note (aucune 
 Guest profile {0} not found.,Profil client {0} introuvable.
 Guest {0} is blacklisted{1}. Remove the flag on the guest profile to book.,Le client {0} est sur liste noire{1}. Retirez l'indicateur sur sa fiche pour réserver.
 Guests,Clients
+Hall,Salle
 Hall Waived,Location de salle offerte
 Hall deal,Offre salle
+Hall {0} belongs to another property.,La salle {0} appartient à un autre établissement.
 Hand over keys for room {0}. {1},Remettez les clés de la chambre {0}. {1}
 Hand-over,Passation
 Hand-set nightly prices cannot be used while a rate plan is required for this property. Choose a rate plan or apply a discount instead.,Les tarifs par nuit saisis manuellement ne sont pas autorisés lorsqu'un plan tarifaire est obligatoire pour cet établissement. Choisissez un plan tarifaire ou appliquez une remise.
@@ -1098,6 +1113,7 @@ Legal Name,Raison sociale
 Limit,Plafond
 Limit Type,Type de plafond
 Line Items,Lignes
+Link a company to this function before settling to the city ledger.,Associez une société à cet événement avant de le transférer sur le compte société.
 Linked,Associé
 Listing Slug,Identifiant d'URL de l'annonce
 Live Counter,Animation culinaire en direct
@@ -1119,6 +1135,7 @@ Main Room Pays,Prise en charge chambre principale
 Manager approval details are required.,Les détails d'approbation du responsable sont obligatoires.
 Manifest,Manifeste
 Manifest URL,URL du manifeste
+Map a function charge to an enabled revenue transaction code.,Associez les frais d'événement à un code de transaction de revenu actif.
 Margin %,Marge %
 Market Mid Rate,Cours moyen du marché
 Market Segment,Segment de marché
@@ -1208,6 +1225,7 @@ Night audit run {0} not found.,Exécution d'audit de nuit {0} introuvable.
 Nightly prices need an overnight stay; a day-use stay is priced by its time slot.,Les tarifs par nuit requièrent une nuitée ; un séjour en usage de jour est tarifé par créneau.
 "Nightly prices typed by hand cannot be combined with {0}. Clear the typed prices, or remove {0}.",Les tarifs par nuit manuels ne se cumulent pas avec {0}. Effacez les prix saisis ou retirez {0}.
 Nights,Nuits
+No Banquet Revenue Mapping is configured for: {0}. Add a Banquet Revenue Mapping or set the property's Default banquet revenue code.,Aucune correspondance de revenu banquet n'est configurée pour : {0}. Ajoutez une correspondance de revenu banquet ou définissez le code de revenu banquet par défaut de l'établissement.
 No Charge (NC),Offert (NC)
 No Shows Flagged,Non-présentations signalées
 No Small-group Rate,Aucun tarif petit groupe
@@ -1346,6 +1364,7 @@ Only a housekeeping supervisor can pass an inspection or verify a clean.,Seul un
 Only a housekeeping supervisor can set a room to {0}.,Seul un superviseur des étages peut passer une chambre au statut {0}.
 Only a posted allowance has a voucher.,Seul un dégrèvement validé dispose d'un bon.
 Only a room of a group booking can pay its own charges.,Seule une chambre faisant partie d'un groupe peut régler ses propres frais.
+Only a settled folio has an invoice to reprint.,Seul un folio réglé dispose d'une facture à réimprimer.
 Only a settled folio with an invoice can be cancelled.,Seul un folio réglé accompagné d'une facture peut être annulé.
 Only a stay with charged nights can be corrected.,Seul un séjour comportant des nuits facturées peut être corrigé.
 Only an active reservation can take a discount.,Seule une réservation active peut recevoir une remise.
@@ -1524,6 +1543,7 @@ Policy deposit {0} ({1}% of stay). Still due {2}.,Acompte requis {0} ({1}% du s�
 Port,Port
 Portion Per Pax,Portion par pers.
 Post Count,Nombre d'écritures
+Post this function to its event folio before settling it.,Imputez cet événement sur son folio événement avant de le régler.
 Post {0} as {1} on the folio.,Comptabiliser {0} en tant que {1} sur le folio.
 Postal code,Code postal
 Postal code (5 digits),Code postal (5 chiffres)
@@ -1722,6 +1742,7 @@ Returned,Retourné
 Returned On,Retourné le
 RevPAR Target,Objectif RevPAR
 Revenue Group,Groupe de revenus
+Revenue Type,Type de revenu
 Reversal Of,Contre-passation de
 Reverses,Contre-passe
 Reverses Line,Ligne contre-passée
@@ -2124,6 +2145,8 @@ The early departure charge must be one of: {0}.,Les frais de départ anticipé d
 The end date is before the start date.,La date de fin est antérieure à la date de début.
 The fallback printer must be at this property.,L'imprimante de secours doit appartenir à cet établissement.
 The file is larger than 1 MB. Split it and import each part.,Le fichier dépasse 1 Mo. Scindez-le et importez chaque partie.
+"The fiscal document is still pending, so there is nothing final to reprint yet.",Le document fiscal est encore en attente ; il n'y a donc pas encore de facture définitive à réimprimer.
+"The fiscal status is unavailable, so this can't be reprinted as a tax invoice. Try again, or ask Finance.",Le statut fiscal est indisponible ; ce document ne peut donc pas être réimprimé en tant que facture fiscale. Réessayez ou contactez la finance.
 "The folio was invoiced before every night was posted. Open it and cancel the invoice, then check out.",Le folio a été facturé avant que toutes les nuits soient comptabilisées. Ouvrez-le et annulez la facture avant d'enregistrer le départ.
 "The front desk can lower a stay's rate, not raise it. Ask a Revenue Manager.","La réception peut baisser le tarif d'un séjour, pas l'augmenter. Demandez à un Revenue Manager."
 The function can't end before it starts.,L'événement ne peut pas se terminer avant de commencer.
@@ -2133,7 +2156,6 @@ The group's bill must be at the same property.,La note du groupe doit appartenir
 "The guest checked in online. Review what they sent, then confirm.",Le client s'est pré-enregistré en ligne. Vérifiez les informations transmises puis confirmez.
 The guest folio is already closed.,Le folio client est déjà clôturé.
 The guest folio is closed - withhold before closing it.,Le folio client est clôturé — effectuez la retenue avant de le clôturer.
-The guest folio only has {0} in credit. Settle the bill or withhold against it before refunding the deposit.,Le folio client ne dispose que de {0} en crédit. Soldez la note ou imputez la retenue avant de rembourser la caution.
 The guest has no open folio to take these charges.,Le client n'a aucun folio ouvert pour recevoir ces frais.
 The guest is already in house. Use Room move to change rooms.,Le client est déjà enregistré. Utilisez Changement de chambre pour déplacer la chambre.
 "The guest is still in house, so their bill stays open for tonight's charges. To invoice what is paid so far, use Settle & continue stay.","Le client est encore en séjour, sa note reste donc ouverte pour les frais de ce soir. Pour facturer ce qui a déjà été payé, utilisez Régler et poursuivre le séjour."
@@ -2176,7 +2198,6 @@ The remaining nights could not be posted.,Les nuits restantes n'ont pas pu être
 The rooms kept for this group are not free on those dates. {0},Les chambres réservées pour ce groupe ne sont pas libres à ces dates. {0}
 The rounding step cannot be negative.,Le pas d'arrondi ne peut pas être négatif.
 "The same item, customer and date appear twice.","Le même article, client et date apparaissent deux fois."
-The security deposit of {0}{1} still held counts toward the bill; check-out records it as applied.,La caution de {0}{1} encore détenue vient en déduction de la note ; le départ l'enregistre comme imputée.
 The security deposit was applied to the bill at checkout and stays applied. Take a new deposit if the guest needs one.,La caution a été imputée sur la note au départ et reste imputée. Encaissez une nouvelle caution si le client en a besoin.
 The service needs a name.,Le service doit avoir un nom.
 The start date is after the end date.,La date de début est postérieure à la date de fin.
@@ -2222,7 +2243,9 @@ This connection is not active.,Cette connexion n'est pas active.
 This dataset's module is disabled for the property.,Le module de ce jeu de données est désactivé pour l'établissement.
 This deposit has already been refunded.,Cette caution a déjà été remboursée.
 This deposit was waived.,Cette caution a été dispensée.
+This fiscal number comes from a test fiscal service and is not a valid tax invoice.,Ce numéro fiscal provient d'un service fiscal de test et ne constitue pas une facture fiscale valide.
 This folio has no open balance. Use a refund or credit note instead.,Ce folio n'a aucun solde ouvert. Utilisez plutôt un remboursement ou un avoir.
+This folio is closed. Record corrections through a credit note or reopen per policy.,Ce folio est clôturé. Enregistrez les corrections par un avoir ou rouvrez selon la procédure.
 "This folio is settled - give the discount on the guest's open folio, or cancel the invoice first.",Ce folio est soldé — accordez la remise sur le folio ouvert du client ou annulez d'abord la facture.
 "This folio is settled - issue a credit note, or cancel the invoice first.",Ce folio est soldé — émettez un avoir ou annulez d'abord la facture.
 "This folio is settled - pass the allowance on the guest's open folio, or cancel the invoice first.",Ce folio est soldé — passez le dégrèvement sur le folio ouvert du client ou annulez d'abord la facture.
@@ -2233,6 +2256,8 @@ This function is already billed to {0} - its group can't change now.,Cet événe
 This function is already billed to {0}. Correct the bill there (void / reverse) rather than reopening.,Cet événement est déjà facturé à {0}. Corrigez la note là-bas (annulation / contre-passation) plutôt que de rouvrir.
 This function is closed. Reopen it (with a reason) before moving it.,Cet événement est clôturé. Rouvrez-le (avec un motif) avant de le déplacer.
 This function is closed. Reopen it before editing.,Cet événement est clôturé. Rouvrez-le avant de le modifier.
+This function rides group {0}: settle it on the group's master folio.,Cet événement est rattaché au groupe {0} : réglez-le sur le folio maître du groupe.
+This function rides group {0}: take its money on the group's master folio.,Cet événement est rattaché au groupe {0} : encaissez les paiements sur le folio maître du groupe.
 This function was already closed out on {0}.,Cet événement a déjà été clôturé le {0}.
 This group has no open group bill.,Ce groupe n'a aucune note de groupe ouverte.
 This guest has no phone number on file.,Ce client n'a aucun numéro de téléphone au dossier.
@@ -2334,6 +2359,7 @@ Type the waiter's name.,Saisissez le nom du serveur.
 Typed Price,Prix saisi
 UBL XML,XML UBL
 UUID,UUID
+Under the ERP accounting bridge Finance pays a refund out with a native refund Payment Entry against the function's folio. Nothing was refunded.,"Avec la passerelle comptable, la finance effectue le remboursement par une écriture de paiement de remboursement native sur le folio de l'événement. Aucun remboursement n'a été enregistré."
 Unexpected parameter(s) for route_outlet_charge: {0}. Pass a transaction_code instead (is_alcohol was removed).,Paramètre(s) inattendu(s) pour route_outlet_charge : {0}. Indiquez un transaction_code à la place (is_alcohol a été supprimé).
 Unit,Unité
 Unit Allowance,Allocation unitaire
@@ -2557,6 +2583,7 @@ this bill,cette note
 {0} cannot be skipped — assign a room first.,{0} ne peut pas être ignoré — attribuez d'abord une chambre.
 {0} cannot leave before they arrived.,{0} ne peut pas partir avant sa date d'arrivée.
 {0} cannot refund in foreign currency {1}.,{0} ne peut pas rembourser en devise étrangère {1}.
+{0} charges map to more than one transaction code ({1}) with the same reach. Keep one mapping.,Les frais {0} renvoient vers plusieurs codes de transaction ({1}) de même portée. Ne conservez qu'une seule correspondance.
 {0} children (max {1}),{0} enfants (max. {1})
 {0} day(s) before arrival: inside the fee window. Estimated fee {1} ({2}).,{0} jour(s) avant l'arrivée : dans la fenêtre de frais. Frais estimés {1} ({2}).
 {0} day(s) before arrival: outside the fee window (or no fee). Cancellation is free.,{0} jour(s) avant l'arrivée : hors fenêtre de frais (ou sans frais). L'annulation est gratuite.
@@ -2589,6 +2616,7 @@ this bill,cette note
 {0} is not a valid app manifest.,{0} n'est pas un manifeste d'application valide.
 {0} is not a valid night.,{0} n'est pas une nuit valide.
 {0} is not a {product} language.,{0} n'est pas une langue {product}.
+{0} is not allowed on city ledger (credit).,{0} n'est pas autorisé sur le compte société (crédit).
 {0} is not an active rate plan of this property.,{0} n'est pas un plan tarifaire actif de cet établissement.
 {0} is not an active user.,{0} n'est pas un utilisateur actif.
 {0} is not available for payments in {1}.,{0} n'est pas disponible pour les paiements en {1}.
@@ -2620,6 +2648,7 @@ this bill,cette note
 {0} needs a stay of at least {1} nights.,{0} exige un séjour d'au moins {1} nuits.
 {0} needs an admin and can't be in a scope.,{0} nécessite un administrateur et ne peut pas figurer dans une portée.
 {0} night(s),{0} nuit(s)
+{0} of deposit is held on the function's folio. Under the ERP accounting bridge Finance returns it with a native refund Payment Entry: close out without refunding here.,"{0} de caution reste détenu sur le folio de l'événement. Avec la passerelle comptable, la finance le restitue par une écriture de paiement de remboursement native : clôturez sans rembourser ici."
 {0} of deposit is still held. Record the refund as a receipt before closing again.,{0} de caution est encore détenu. Enregistrez le remboursement comme reçu avant de clôturer à nouveau.
 {0} on {1} - not yet agreed.,{0} le {1} — pas encore convenu.
 "{0} on {1}: {2} blocked, {3} free","{0} le {1} : {2} bloquées, {3} libres"
