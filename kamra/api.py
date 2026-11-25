@@ -12540,10 +12540,17 @@ def _booking_quotation(res) -> dict:
 
 		# On older or edited bookings a saved tariff may still exist even
 		# though there is no transaction amount for the booked nightly price.
+		snapshot_nights = quote_snapshot.get("nightly") or []
 		saved_nights = {
-			str(row.get("date")): row for row in quote_snapshot.get("nightly") or []
-			if isinstance(row, dict)
+			str(row.get("date")): row for row in snapshot_nights if isinstance(row, dict)
 		} if not quote_snapshot.get("rediscounted_at") else {}
+		locked_home_rates = {}
+		if (saved_nights and quote_snapshot.get("room_total") is not None
+		        and all(isinstance(row, dict) and "date" in row and "rate" in row for row in snapshot_nights)):
+			# Match the booking lock's spread, minor-unit rounding and final-night remainder.
+			locked_home_rates = {
+				str(row["stay_date"]): row["rate"] for row in res.quote_night_rows(quote_snapshot)
+			}
 		inclusive = (quote_snapshot.get("contract_summary") or {}).get("room_tax_included")
 		if inclusive is None:
 			inclusive = rates_include_tax(res.property)
@@ -12552,8 +12559,9 @@ def _booking_quotation(res) -> dict:
 			booked = saved_nights.get(night["date"], {})
 			canonical = booked.get("contract_rate")
 			gst = flt(row.get("gst_rate"))
+			expected_home_rate = locked_home_rates.get(night["date"], flt(booked.get("rate")))
 			exact = (isinstance(canonical, (int, float)) and booked.get("contract_currency") == currency
-			         and flt(booked.get("rate")) == night["rate"] and flt(booked.get("gst_rate")) == gst)
+			         and expected_home_rate == night["rate"] and flt(booked.get("gst_rate")) == gst)
 			if exact and inclusive:
 				# Pricing snapshots store the rate-entry amount. Quotation
 				# nights are before tax, so remove tax in the same currency.
