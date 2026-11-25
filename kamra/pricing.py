@@ -2123,7 +2123,7 @@ def discount_night(property, rt, base, base_gst, entry, kind, value, inclusive: 
 
 
 def _discount_nights(property, rt, nightly: list, room_total: Decimal, disc: dict,
-                     inclusive: bool, night_over_cap: Decimal, agreed_rate,
+                     inclusive: bool, night_over_cap: Decimal, agreed_rate, *, night_room_types: dict,
                      contract_tariff: dict | None = None,
                      rate_plan: str | None = None,
                      exact_nets: list[Decimal] | None = None) -> tuple:
@@ -2176,7 +2176,7 @@ def _discount_nights(property, rt, nightly: list, room_total: Decimal, disc: dic
 			property=property,
 		)
 		net, new_gst, off = discount_night(
-			property, rt, base, gst, entry, kind, value,
+			property, night_room_types.get(n["date"], rt), base, gst, entry, kind, value,
 			inclusive, night_over_cap, n["date"],
 			tariff_night=raw_tariff_night,
 			discount_currency=eff_disc_cur,
@@ -2297,6 +2297,12 @@ def quote(
 		frappe.throw("Check-out cannot be before check-in.")
 
 	rt = frappe.get_doc("Room Type", room_type)
+	# A paid move's tariff retains the room type for nights before the move.
+	night_room_types = {
+		str(night["date"]): frappe.get_cached_doc("Room Type", night["room_type"])
+		for night in (contract_tariff or {}).get("nights") or []
+		if night.get("room_type") and night["room_type"] != room_type
+	}
 	inclusive = rates_include_tax(property)
 	small_ok = small_group_allows_stay(rt, check_in_date, check_out_date)
 	# holiday dates can charge a small party the house rate, as a weekend does
@@ -2544,7 +2550,8 @@ def quote(
 			# it bills as its own line: GST reads what the unit fetches for the
 			# day, not the occupancy its rate card started from. A room at 7,000
 			# with 2,000 of extra beds is a 9,000 night, so 18%, not 5%.
-			gst = room_gst_rate(property, rt, rate + night_over_cap)
+			night_rt = night_room_types.get(str(date), rt)
+			gst = room_gst_rate(property, night_rt, rate + night_over_cap)
 			if inclusive:
 				# configured price is gross — back out the taxable value
 				rate = rate / (Decimal(1) + gst / Decimal(100))
@@ -2670,7 +2677,8 @@ def quote(
 	if disc:
 		room_total, room_tax, oc_net, oc_tax, room_base_total, reservation_discount = _discount_nights(
 			property, rt, nightly, room_total, disc, inclusive, night_over_cap, agreed_rate,
-			contract_tariff=contract_tariff, rate_plan=rate_plan, exact_nets=exact_nets)
+			night_room_types=night_room_types, contract_tariff=contract_tariff,
+			rate_plan=rate_plan, exact_nets=exact_nets)
 		over_cap += oc_net
 		over_cap_tax += oc_tax
 	for n in nightly:
