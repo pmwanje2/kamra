@@ -51,7 +51,16 @@ export async function withFixture(run) {
 
 export async function fixturePage(browser, origin, role, viewport, replies = {}) {
   const context = await browser.newContext({ baseURL: origin, viewport })
-  await context.addInitScript((brand) => { window.kamra_brand = brand }, brand)
+  const guest = role === "Guest"
+  const properties = replies["kamra.api.my_properties"] ?? [
+    { name: "Fixture Hotel", property_name: "Fixture Hotel", business_date: "2031-03-12" },
+  ]
+  // Start with the synthetic property selected so the shell does not remount
+  // the route during a visibility assertion while my_properties resolves.
+  await context.addInitScript(({ brand, property }) => {
+    window.kamra_brand = brand
+    if (property) localStorage.setItem("kamra_property", property)
+  }, { brand, property: guest ? null : properties[0]?.name })
   // No browser request can hit a real service (including Vite's dev proxy).
   await context.route("**/*", async (route) => {
     const url = new URL(route.request().url())
@@ -59,10 +68,9 @@ export async function fixturePage(browser, origin, role, viewport, replies = {})
     if (url.pathname.startsWith("/socket.io")) return route.abort()
     if (!url.pathname.startsWith("/api/")) return route.continue()
     const method = url.pathname.split("/").at(-1)
-    const guest = role === "Guest"
     const defaults = {
       "kamra.api.whoami": guest ? { user: "Guest" } : { user: "staff@example.test", full_name: "Fixture Staff", roles: role === "IT" ? ["Hotel Admin", "System Manager"] : [role] },
-      "kamra.api.my_properties": [{ name: "Fixture Hotel", property_name: "Fixture Hotel", business_date: "2031-03-12" }],
+      "kamra.api.my_properties": properties,
       "kamra.api.enabled_modules": [],
       "kamra.public_api.site_info": { brand, brand_name: null, brand_logo: null },
       "kamra.api.hk_queue": { tasks: [], rooms: [] },

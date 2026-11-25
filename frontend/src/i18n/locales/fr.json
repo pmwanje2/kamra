@@ -7721,5 +7721,14 @@
   "The supervisor must enroll an approval PIN first.": "Le responsable doit d’abord configurer un code PIN d’approbation.",
   "The supervisor’s PIN is locked. Try again later.": "Le code PIN du responsable est verrouillé. Réessayez plus tard.",
   "{count} digits entered": "{count} chiffre(s) saisi(s)",
-  "Wrong cashier PIN.": "Code PIN de caisse incorrect."
+  "Wrong cashier PIN.": "Code PIN de caisse incorrect.",
+  "1 {foreign} = {rate} {home}": "1 {foreign} = {rate} {home}",
+  "Enter in stay currency ({contractCurrency})": "Saisir dans la devise du séjour ({contractCurrency})",
+  "Property accounting currency": "Devise comptable de l’établissement",
+  "Rate currency": "Devise tarifaire",
+  "The stay currency exchange rate is unavailable.": "Le taux de change de la devise du séjour est indisponible.",
+  "Total in rate currency": "Total en devise tarifaire",
+  "Voucher {code} takes {txAmount} ({homeAmount}) off.": "Le bon {code} déduit {txAmount} ({homeAmount}).",
+  "≈ {amount} @ {rate}": "≈ {amount} au taux de {rate}",
+  "Amounts marked ≈ are estimates.": "Les montants précédés du signe ≈ sont des estimations."
 }

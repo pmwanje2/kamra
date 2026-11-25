@@ -6,7 +6,7 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": ["serial", "property", "folio", "reservation", "amount", "gst_rate",
-                 "reason_code", "reason", "column_break_a", "status",
+                 "reason_code", "reason", "contract_currency", "contract_fx_rate", "contract_fx_date", "column_break_a", "status",
                  "requested_by", "requested_on", "channel", "decided_by",
                  "decided_on", "decision_note"],
  "fields": [
@@ -18,6 +18,9 @@
   {"fieldname": "gst_rate", "fieldtype": "Percent", "label": "Tax Rate"},
   {"fieldname": "reason_code", "fieldtype": "Link", "label": "Reason Code", "options": "Reason Code"},
   {"fieldname": "reason", "fieldtype": "Small Text", "label": "Reason", "reqd": 1},
+  {"fieldname": "contract_currency", "fieldtype": "Link", "label": "Rate Currency", "options": "Currency", "read_only": 1},
+  {"fieldname": "contract_fx_rate", "fieldtype": "Float", "label": "Exchange Rate", "precision": "9", "read_only": 1},
+  {"fieldname": "contract_fx_date", "fieldtype": "Date", "label": "Exchange Rate Date", "read_only": 1},
   {"fieldname": "column_break_a", "fieldtype": "Column Break"},
   {"fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "Pending\nApproved\nRejected", "default": "Pending", "in_list_view": 1, "in_standard_filter": 1},
   {"fieldname": "requested_by", "fieldtype": "Link", "label": "Requested By", "options": "User"},

@@ -15,6 +15,7 @@ import sys
 import unittest
 from contextlib import contextmanager
 from datetime import datetime, timedelta
+from contextvars import ContextVar
 from decimal import Decimal
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -733,8 +734,10 @@ class TestP53AllowanceConvergence(unittest.TestCase):
 
 		api_ns = _load_api_functions(
 			site,
-			("post_allowance", "decide_allowance", "_allowance_needs_approval", "_ALLOWANCE_APPROVERS"),
+			("post_allowance", "decide_allowance", "_allowance_needs_approval", "_ALLOWANCE_APPROVERS",
+			 "_discount_allowance_fx"),
 			extra_ns={
+				"ContextVar": ContextVar,
 				"_pin_guard": lambda folio, pin: None,
 				"_allowance_reason": lambda rc, r: (r or rc or "Reason").strip(),
 				"_allowance_approver_roles": lambda prop: ("Hotel Admin", "Finance"),
@@ -745,6 +748,44 @@ class TestP53AllowanceConvergence(unittest.TestCase):
 			extra_modules=extra_mods,
 		)
 		return api_ns, extra_mods, posted, actions, emitted, workflow_calls
+
+	def test_fx_quotes_retain_provenance_on_workflow_allowance_requests(self):
+		facts = {"contract_currency": "USD", "contract_fx_rate": 4000, "contract_fx_date": "2031-03-12"}
+		for approval in ("Off", "Hotel Admin or Finance"):
+			with self.subTest(approval=approval):
+				site = _base_site()
+				api, modules, *_ = self._build_api_env(site, allowance_approval=approval)
+				context = api["_discount_allowance_fx"]
+				token = context.set((site.tables["Folio"][0]["property"], "FOL-001", 60000, facts))
+				try:
+					with patch.dict(sys.modules, modules):
+						api["post_allowance"]("FOL-001", 30000, reason="Foreign discount")
+				finally:
+					context.reset(token)
+				request, = site.tables["Allowance Request"]
+				self.assertEqual({key: request.get(key) for key in facts}, facts)
+
+	def test_pending_fx_allowance_approval_consumes_masked_pin(self):
+		site = _base_site()
+		api, modules, posted, *_ = self._build_api_env(site, workflow_active=False)
+		typing = ModuleType("frappe.utils.typing_validations")
+		typing.transform_parameter_types = lambda fn, args, kwargs: (args, kwargs)
+		modules[typing.__name__] = typing
+		authz = modules["kamra.authz"]
+		with patch.dict(sys.modules, modules), patch.object(authz, "verify_supervisor", wraps=authz.verify_supervisor) as verify:
+			site.db.set_value("Cashier PIN", "finance@alpha.ug", "pin_hash", authz.hash_cashier_pin("9012"))
+			request = api["post_allowance"]("FOL-001", 30000, reason="Foreign discount")["request"]
+			site.set_user("finance@alpha.ug")
+			site.local.request = SimpleNamespace(path="/api/method/kamra.api.decide_allowance", method="POST")
+			site.local.form_dict.update(allowance_request=request, approve=1, pin_secret="9012")
+			authz.prepare_pin_request()
+			self.assertNotIn("pin_secret", site.local.form_dict)
+			endpoint = api["decide_allowance"]
+			endpoint.__module__ = "kamra.api"
+			decision = authz.scrub_pin_arguments(endpoint)(**site.local.form_dict)
+		self.assertEqual(decision["status"], "Approved")
+		self.assertEqual(posted[0]["amount"], 30000)
+		self.assertEqual(verify.call_args.args[2], "9012")
 
 	def test_post_allowance_removes_manager_self_approval(self):
 		site = _base_site(user="gm@alpha.ug", currency="UGX", floor_max=50000.0)
