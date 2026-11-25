@@ -38,11 +38,11 @@ export default function EventLinks({
   }, [name])
 
   return (
-    <div className="space-y-3 border-t border-zinc-200 pt-4">
+    <div className="space-y-3 border-t border-line pt-4">
       <Button onClick={() => navigate(`/banquet/${encodeURIComponent(name)}`)}>
         <PartyPopper className="size-4" aria-hidden />{translate("Open the function sheet")}</Button>
-      <p className="text-xs text-zinc-500">{translate("Menus, services, the negotiation, payment terms and the event order all live there - this form only edits the basics.")}</p>
-      <div className="text-xs font-semibold uppercase tracking-wider text-zinc-500">{translate("Connections & billing")}</div>
+      <p className="text-xs text-muted-ink">{translate("Menus, services, the negotiation, payment terms and the event order all live there - this form only edits the basics.")}</p>
+      <div className="text-xs font-semibold uppercase tracking-wider text-muted-ink">{translate("Connections & billing")}</div>
       <LinkedRecords doctype="Venue Booking" name={name} exclude={["event"]} />
       {group && !hasFolio && (
         <Button
@@ -68,9 +68,9 @@ export default function EventLinks({
           <Receipt className="size-4" aria-hidden />{translate("Open group folio (bill this event)")}</Button>
       )}
       {!group && (
-        <p className="text-xs text-zinc-500">{translate("To bill this event, attach it to a group in Groups & Blocks - rooms and banquet then land on one folio.")}</p>
+        <p className="text-xs text-muted-ink">{translate("To bill this event, attach it to a group in Groups & Blocks - rooms and banquet then land on one folio.")}</p>
       )}
-      {error && <p className="text-xs text-rose-600">{translate(error)}</p>}
+      {error && <p className="text-xs text-danger-text">{translate(error)}</p>}
     </div>
   )
 }

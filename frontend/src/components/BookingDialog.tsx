@@ -73,15 +73,15 @@ interface ExtraRoom {
 }
 
 const inputCls =
-  "w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2.5 text-base " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "w-full rounded-lg border border-control bg-surface px-3.5 py-2.5 text-base " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 
 function Field(props: { required?: boolean; label: string; children: React.ReactNode }) {
   useUILanguage()
   return (
     <label className="block">
-      <span className="mb-1.5 block text-sm font-medium text-zinc-600">
+      <span className="mb-1.5 block text-sm font-medium text-secondary-ink">
         {props.label}{props.required && <span aria-hidden="true"> *</span>}
       </span>
       {props.children}
@@ -456,9 +456,12 @@ export function BookingDialog(props: {
             ? (f.meal_plan || (mealPlanTouched.current ? "" : defaultMeal))
             : defaultMeal
 
-        const defaultRate = o.default_plan || ""
+        const governed = o.all_active_plans_tariff && o.rate_plans.length > 0
+        const defaultRate = o.default_rate_plan || o.default_plan
+          || o.rate_plans.find((rp) => rp.is_default)?.name
+          || ((o.rate_plan_required || governed) ? o.rate_plans[0]?.name : "") || ""
         const rateValid = !f.rate_plan || o.rate_plans.some((rp) => rp.name === f.rate_plan)
-        const canKeepBlankRate = !o.rate_plan_required || !!f.company
+        const canKeepBlankRate = (!o.rate_plan_required && !governed) || !!f.company
         const nextRate = isInitial && !ratePlanTouched.current
           ? (f.rate_plan && rateValid ? f.rate_plan : defaultRate)
           : rateValid
@@ -502,7 +505,7 @@ export function BookingDialog(props: {
   // screen shows). Only a Revenue Manager / Hotel Admin may; an OTA total
   // already sets the price, and a day-use stay is priced by its slot.
   const [nightPrices, setNightPrices] = useState<Record<string, number>>({})
-  const planRequired = !!options?.rate_plan_required
+  const planRequired = !!options?.rate_plan_required || (!!options?.all_active_plans_tariff && options.rate_plans.length > 0)
   const canSetPrice = !!options?.can_set_rate && otaTotal <= 0 && !dayUse && !form.rate_plan && !planRequired
   const stayNights = badDate || dayUse
     ? []
@@ -674,7 +677,7 @@ export function BookingDialog(props: {
     (onBehalf && !isPhoneComplete(form.booked_by_phone, country))
 
   useEffect(() => {
-    if (!form.room_type) return
+    if (!options || !form.room_type) return
     if (badDate) {
       setQuoted(null)
       setQuoting(false)
@@ -722,6 +725,7 @@ export function BookingDialog(props: {
     form.adults,
     form.children,
     form.meal_plan,
+    options,
     form.rate_plan,
     form.company,
     form.voucher_code,
@@ -1301,22 +1305,22 @@ export function BookingDialog(props: {
         aria-hidden
       />
       <div
-        className="absolute inset-y-0 right-0 flex h-full w-full flex-col bg-white shadow-2xl animate-sheet-in md:w-2/3"
+        className="absolute inset-y-0 right-0 flex h-full w-full flex-col bg-surface shadow-2xl animate-sheet-in md:w-2/3"
       >
-        <header className="flex shrink-0 items-center justify-between gap-4 border-b border-zinc-200 px-6 py-4 md:px-8">
+        <header className="flex shrink-0 items-center justify-between gap-4 border-b border-line px-6 py-4 md:px-8">
           <div className="min-w-0">
-            <h2 className="text-xl font-semibold tracking-tight text-zinc-900">
+            <h2 className="text-xl font-semibold tracking-tight text-ink">
               {walkIn ? t("Walk-in") : t("New booking")}
             </h2>
-            <p className="mt-0.5 truncate text-sm text-zinc-500">
+            <p className="mt-0.5 truncate text-sm text-muted-ink">
               {getCurrentProperty()}
-              <span className="text-zinc-300"> · </span>
+              <span className="text-muted-ink"> · </span>
               {walkIn
                 ? t("Book, check in and collect in one step")
                 : t("Live quote as you type")}
               {pinnedRoom && (
                 <>
-                  <span className="text-zinc-300"> · </span>
+                  <span className="text-muted-ink"> · </span>
                   {t("Room {n}", { n: roomLabel(props.initial) })}
                 </>
               )}
@@ -1326,7 +1330,7 @@ export function BookingDialog(props: {
             <div
               role="radiogroup"
               aria-label={t("Booking mode")}
-              className="ml-auto inline-flex shrink-0 rounded-lg bg-zinc-100 p-0.5 text-sm font-medium"
+              className="ml-auto inline-flex shrink-0 rounded-lg bg-subtle p-0.5 text-sm font-medium"
             >
               {[
                 { on: false, label: t("Reservation") },
@@ -1341,8 +1345,8 @@ export function BookingDialog(props: {
                   className={
                     "rounded-md px-3 py-1.5 transition-colors " +
                     (walkIn === m.on
-                      ? "bg-white text-zinc-900 shadow-sm"
-                      : "text-zinc-500 hover:text-zinc-800")
+                      ? "bg-surface text-ink shadow-sm"
+                      : "text-muted-ink hover:text-ink")
                   }
                 >
                   {translate(m.label)}
@@ -1358,7 +1362,7 @@ export function BookingDialog(props: {
         {done ? (
           <div className="space-y-5 overflow-y-auto px-6 py-8 md:px-8">
             {done.walkIn ? (
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-emerald-800">
+              <div className="rounded-xl border border-success-line bg-success-subtle px-5 py-4 text-success-ink">
                 <p className="text-lg font-semibold">
                   {done.walkIn.checked_in === 0 && !walkInCheckedIn
                     ? t("Booked · Room {n}. Check-in not finished yet.", { n: done.walkIn.room_number })
@@ -1376,14 +1380,14 @@ export function BookingDialog(props: {
                 </p>
               </div>
             ) : done.waitlist ? (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-amber-800">
+              <div className="rounded-xl border border-warning-line bg-warning-subtle px-5 py-4 text-warning-ink">
                 <p className="text-lg font-semibold">{t("Waitlisted · {ref}", { ref: done.ref })}</p>
                 <p className="mt-1 text-sm">
                   {t("Parked with no room. Promote it from the reservation when a room frees. Auto-purges 2 days after departure.")}
                 </p>
               </div>
             ) : (
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-emerald-800">
+              <div className="rounded-xl border border-success-line bg-success-subtle px-5 py-4 text-success-ink">
                 <p className="text-lg font-semibold">{t("Booked · {ref}", { ref: done.ref })}</p>
                 <p className="mt-1 text-sm">
                   {done.room
@@ -1396,22 +1400,22 @@ export function BookingDialog(props: {
 
             {/* Stay receipt for the desk: guest, room and dates in one place
                 so staff can confirm without opening the reservation. */}
-            <div className="space-y-3 border-t border-zinc-100 pt-4 text-sm text-zinc-800">
+            <div className="space-y-3 border-t border-line-subtle pt-4 text-sm text-ink">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <span className="text-zinc-500">{t("Guest name")}</span>
+                <span className="text-muted-ink">{t("Guest name")}</span>
                 <span className="font-medium">{form.guest_name || "-"}</span>
               </div>
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <span className="text-zinc-500">{t("Phone")}</span>
+                <span className="text-muted-ink">{t("Phone")}</span>
                 <span className="font-medium">{form.phone || "-"}</span>
               </div>
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <span className="text-zinc-500">{t("Room")}</span>
+                <span className="text-muted-ink">{t("Room")}</span>
                 <span className="text-right font-medium">
                   {done.room
                     ? roomLabel(done)
                     : t("Unassigned")}
-                  <span className="mt-0.5 block text-xs font-normal text-zinc-500">
+                  <span className="mt-0.5 block text-xs font-normal text-muted-ink">
                     {roomTypeName || form.room_type}
                     {moreRooms.length > 0
                       ? ` · ${1 + moreRooms.reduce((s, r) => s + r.count, 0)} ${t("Rooms")}`
@@ -1420,21 +1424,21 @@ export function BookingDialog(props: {
                 </span>
               </div>
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <span className="text-zinc-500">{t("Check-in")}</span>
+                <span className="text-muted-ink">{t("Check-in")}</span>
                 <span className="font-medium">
                   {formatDate(form.check_in_date)}
                   {!dayUse && !walkIn && stayIn ? ` · ${stayIn}` : ""}
                 </span>
               </div>
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <span className="text-zinc-500">{t("Check-out")}</span>
+                <span className="text-muted-ink">{t("Check-out")}</span>
                 <span className="font-medium">
                   {formatDate(checkOut)}
                   {!dayUse && !walkIn && stayOut ? ` · ${stayOut}` : ""}
                 </span>
               </div>
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <span className="text-zinc-500">
+                <span className="text-muted-ink">
                   {dayUse ? t("Day use") : t("Nights")}
                 </span>
                 <span className="font-medium">
@@ -1442,7 +1446,7 @@ export function BookingDialog(props: {
                 </span>
               </div>
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <span className="text-zinc-500">{t("Guests")}</span>
+                <span className="text-muted-ink">{t("Guests")}</span>
                 <span className="font-medium">
                   {form.adults} {t("Adults")}
                   {form.children > 0
@@ -1497,9 +1501,9 @@ export function BookingDialog(props: {
             <div className="min-w-0 shrink-0 px-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:px-6 py-5 md:px-8 md:py-6">
               <div className="w-full max-w-none space-y-6">
                 {options?.property?.sell_message && (
-                  <div className="flex items-start gap-2 rounded-xl bg-brand-50 px-4 py-3 text-sm text-brand-900">
+                  <div className="flex items-start gap-2 rounded-xl bg-accent-subtle px-4 py-3 text-sm text-accent-ink">
                     <Megaphone
-                      className="mt-0.5 size-4 shrink-0 text-brand-700"
+                      className="mt-0.5 size-4 shrink-0 text-accent-ink"
                       aria-hidden
                     />
                     <span>{options.property.sell_message}</span>
@@ -1520,12 +1524,12 @@ export function BookingDialog(props: {
                         placeholder={t("Type to find or create")}
                       />
                       {hits.length > 0 && (
-                        <ul className="absolute z-10 mt-1 w-full overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-lg">
+                        <ul className="absolute z-10 mt-1 w-full overflow-hidden rounded-xl border border-line bg-surface shadow-lg">
                           {hits.map((h) => (
                             <li key={h.name}>
                               <button
                                 type="button"
-                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-zinc-50"
+                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-canvas"
                                 onClick={() => {
                                   setProfile(h)
                                   setHits([])
@@ -1538,7 +1542,7 @@ export function BookingDialog(props: {
                               >
                                 <span className="font-medium">{h.full_name}</span>
                                 {Boolean(h.blacklisted) && (
-                                  <span className="rounded-full bg-rose-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-rose-700">
+                                  <span className="rounded-full bg-danger-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase text-danger-ink">
                                     {t("Blacklisted")}
                                   </span>
                                 )}
@@ -1548,7 +1552,7 @@ export function BookingDialog(props: {
                                     aria-label={t("VIP")}
                                   />
                                 )}
-                                <span className="ml-auto text-xs text-zinc-400">
+                                <span className="ml-auto text-xs text-muted-ink">
                                   {h.phone ? `${h.phone} · ` : ""}
                                   {h.stays} {t("stay{s}", { s: h.stays === 1 ? "" : "s" })}
                                 </span>
@@ -1559,7 +1563,7 @@ export function BookingDialog(props: {
                       )}
                     </div>
                     {profile && (
-                      <span className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700">
+                      <span className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-accent-subtle px-2.5 py-1 text-xs font-medium text-accent-ink">
                         {t("Returning guest · {n} stay{s}", {
                           n: profile.stays,
                           s: profile.stays === 1 ? "" : "s",
@@ -1568,7 +1572,7 @@ export function BookingDialog(props: {
                           type="button"
                           aria-label={t("Detach profile")}
                           onClick={() => setProfile(null)}
-                          className="text-brand-700/60 hover:text-brand-700"
+                          className="text-accent-ink/60 hover:text-accent-ink"
                         >
                           <X className="size-3" aria-hidden />
                         </button>
@@ -1585,7 +1589,7 @@ export function BookingDialog(props: {
                 </div>
                 <Field label={t("Others staying (optional)")}>
                   <input
-                    className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-control bg-surface px-3 py-2 text-sm"
                     value={others}
                     placeholder={t("e.g. Ravi Sharma; Meera Sharma - their IDs are taken at check-in")}
                     onChange={(e) => setOthers(e.target.value)}
@@ -1595,10 +1599,10 @@ export function BookingDialog(props: {
                 {blacklisted && (
                   <div {...target("blacklist")} tabIndex={-1}
                     role="alert"
-                    className="space-y-3 rounded-xl border-2 border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-800"
+                    className="space-y-3 rounded-xl border-2 border-danger-line-strong bg-danger-subtle px-4 py-3 text-sm text-danger-ink"
                   >
                     <div className="flex items-start gap-2">
-                      <ShieldAlert className="mt-0.5 size-5 shrink-0 text-rose-600" aria-hidden />
+                      <ShieldAlert className="mt-0.5 size-5 shrink-0 text-danger-text" aria-hidden />
                       <div>
                         <p className="font-semibold">
                           {alert?.full_name
@@ -1643,8 +1647,8 @@ export function BookingDialog(props: {
                     role="alert"
                     className={
                       credit.blocked
-                        ? "space-y-2 rounded-xl border-2 border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-800"
-                        : "space-y-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+                        ? "space-y-2 rounded-xl border-2 border-danger-line-strong bg-danger-subtle px-4 py-3 text-sm text-danger-ink"
+                        : "space-y-2 rounded-xl border border-warning-line-strong bg-warning-subtle px-4 py-3 text-sm text-warning-ink"
                     }
                   >
                     <div className="flex items-start gap-2">
@@ -1655,7 +1659,7 @@ export function BookingDialog(props: {
                             ? t("{company}: company credit is blocked", { company: credit.company ?? "" })
                             : t("{company}: company credit warning", { company: credit.company ?? "" })}
                           {credit.unverified && (
-                            <span className="ms-2 inline-flex items-center rounded-full bg-amber-200/80 px-2 py-0.5 text-xs font-medium text-amber-900">
+                            <span className="ms-2 inline-flex items-center rounded-full bg-warning-soft/80 px-2 py-0.5 text-xs font-medium text-warning-ink">
                               {t("Not verified")}
                             </span>
                           )}
@@ -1708,7 +1712,7 @@ export function BookingDialog(props: {
                         autoComplete="off"
                       />
                       {!!walk.id_number.trim() && !walk.id_type && (
-                        <p className="mt-1.5 text-xs text-rose-600">
+                        <p className="mt-1.5 text-xs text-danger-text">
                           {t("Pick the ID type too.")}
                         </p>
                       )}
@@ -1760,7 +1764,7 @@ export function BookingDialog(props: {
                   {selectedRt &&
                     (selectedRt.adults_capacity > 0 ||
                       selectedRt.children_capacity > 0) && (
-                      <p className="mt-1.5 text-xs text-zinc-400">
+                      <p className="mt-1.5 text-xs text-muted-ink">
                         {t("Sleeps up to {guests}", {
                           guests: [
                             selectedRt.adults_capacity > 0 &&
@@ -1798,7 +1802,7 @@ export function BookingDialog(props: {
                       )}
                     </select>
                     {freeRooms?.length === 0 && (
-                      <p className="mt-1.5 text-xs text-rose-600">
+                      <p className="mt-1.5 text-xs text-danger-text">
                         {t("This type is full tonight - try another room type.")}
                       </p>
                     )}
@@ -1806,7 +1810,7 @@ export function BookingDialog(props: {
                       const r = freeRooms?.find((x) => x.name === walk.room)
                       return r?.housekeeping_status &&
                         !["Clean", "Inspected"].includes(r.housekeeping_status) ? (
-                        <p className="mt-1.5 text-xs text-amber-700">
+                        <p className="mt-1.5 text-xs text-warning-ink">
                           {t("{room} hasn't been cleaned yet - housekeeping will see the room flip to occupied.", {
                             room: r.room_number,
                           })}
@@ -1820,7 +1824,7 @@ export function BookingDialog(props: {
                 <div
                   role="radiogroup"
                   aria-label={t("Stay type")}
-                  className="inline-flex rounded-lg border border-zinc-200 bg-zinc-50 p-0.5 text-sm"
+                  className="inline-flex rounded-lg border border-line bg-canvas p-0.5 text-sm"
                 >
                   {([false, true] as const).map((du) => (
                     <button
@@ -1835,8 +1839,8 @@ export function BookingDialog(props: {
                       className={
                         "rounded-md px-3 py-1.5 font-medium " +
                         (dayUse === du
-                          ? "bg-white text-brand-800 shadow-sm"
-                          : "text-zinc-500 hover:text-zinc-700")
+                          ? "bg-surface text-accent-ink shadow-sm"
+                          : "text-muted-ink hover:text-secondary-ink")
                       }
                     >
                       {du ? t("Day use") : t("Overnight")}
@@ -1848,7 +1852,7 @@ export function BookingDialog(props: {
                   <Field required={!walkIn} label={t("Check-in")}>
                     <input
                       type="date"
-                      className={inputCls + (walkIn ? " bg-zinc-50 text-zinc-500" : "")}
+                      className={inputCls + (walkIn ? " bg-canvas text-muted-ink" : "")}
                       min={todayLocal()}
                       {...target("arrival")} value={form.check_in_date}
                       readOnly={walkIn}
@@ -1859,7 +1863,7 @@ export function BookingDialog(props: {
                       }}
                     />
                     {pastCheckIn && (
-                      <p className="mt-1.5 text-xs text-rose-600">
+                      <p className="mt-1.5 text-xs text-danger-text">
                         {t("That date has already passed.")}
                       </p>
                     )}
@@ -1877,7 +1881,7 @@ export function BookingDialog(props: {
                             {...target("slot")} value={slot.from}
                             onChange={(e) => setSlot((x) => ({ ...x, from: e.target.value }))}
                           />
-                          <span className="shrink-0 text-zinc-400" aria-hidden>
+                          <span className="shrink-0 text-muted-ink" aria-hidden>
                             -
                           </span>
                           <input
@@ -1889,7 +1893,7 @@ export function BookingDialog(props: {
                           />
                         </div>
                         {badSlot && (
-                          <p className="mt-1.5 text-xs text-rose-600">
+                          <p className="mt-1.5 text-xs text-danger-text">
                             {t("The slot must end after it starts.")}
                           </p>
                         )}
@@ -1916,7 +1920,7 @@ export function BookingDialog(props: {
                           }}
                         />
                         {outError && (
-                          <p className="mt-1.5 text-xs text-rose-600">
+                          <p className="mt-1.5 text-xs text-danger-text">
                             {t("Check-out must be after check-in.")}
                           </p>
                         )}
@@ -1985,7 +1989,7 @@ export function BookingDialog(props: {
                         onChange={(e) => setStayTimes((x) => ({ ...x, to: e.target.value }))}
                       />
                     </Field>
-                    <p className="col-span-2 self-end pb-2 text-xs text-zinc-500">
+                    <p className="col-span-2 self-end pb-2 text-xs text-muted-ink">
                       {t("Standard times from the property. Change them for this booking if the guest agreed otherwise.")}
                     </p>
                   </div>
@@ -2005,7 +2009,7 @@ export function BookingDialog(props: {
                       />
                     </Field>
                     {options.property.pet_charge > 0 && (
-                      <p className="col-span-1 self-end pb-2 text-xs text-zinc-500 sm:col-span-3">
+                      <p className="col-span-1 self-end pb-2 text-xs text-muted-ink sm:col-span-3">
                         {homeText(options.property.pet_charge)}{" "}
                         {t(petChargeBasis(options.property.pet_charge_basis))}
                       </p>
@@ -2018,8 +2022,8 @@ export function BookingDialog(props: {
                     className={
                       "space-y-2 rounded-xl border px-3 py-2.5 text-sm " +
                       (form.over_capacity_guests > 0
-                        ? "border-amber-200 bg-amber-50 text-amber-800"
-                        : "border-zinc-200 text-zinc-600")
+                        ? "border-warning-line bg-warning-subtle text-warning-ink"
+                        : "border-line text-secondary-ink")
                     }
                   >
                     <div>
@@ -2156,7 +2160,7 @@ export function BookingDialog(props: {
                       supervisor={discountSupervisor} pin={discountPin}
                       onSupervisor={setDiscountSupervisor} onPin={setDiscountPin} money={anyMoneyText}>
                       {canFixRate && (
-                        <label className="flex items-center gap-2 text-xs text-zinc-600">
+                        <label className="flex items-center gap-2 text-xs text-secondary-ink">
                           <input type="checkbox" aria-label={t("Fixed rate override")} checked={fixedOverride}
                             onChange={(e) => setFixedOverride(e.target.checked)} />
                           {t("Fixed rate override")}
@@ -2195,8 +2199,8 @@ export function BookingDialog(props: {
                 )}
 
                 {walkIn && (
-                  <div className="space-y-3 rounded-xl border border-zinc-200 p-4">
-                    <h3 className="text-sm font-semibold text-zinc-800">
+                  <div className="space-y-3 rounded-xl border border-line p-4">
+                    <h3 className="text-sm font-semibold text-ink">
                       {t("Payment")}
                     </h3>
                     <TenderPicker home={loc.currency} chosen={tender} modes={modes} rates={settlementRates}
@@ -2211,7 +2215,7 @@ export function BookingDialog(props: {
                         <TenderInput currency={payCurrency} value={paymentInput} full={suggestedAmount}
                           onChange={(amount) => setManualPayment({ key: rateCurKey, currency: payCurrency, amount })}
                           onFull={() => setManualPayment(null)} />
-                        <p className="mt-1.5 text-xs text-zinc-400">
+                        <p className="mt-1.5 text-xs text-muted-ink">
                           {foreign ? null : payAmount <= 0
                             ? t("Nothing collected now - the full amount stays on the bill.")
                             : payAmount < grandTotal
@@ -2254,9 +2258,9 @@ export function BookingDialog(props: {
                   return (
                   <div
                     key={i}
-                    className="flex flex-wrap items-end gap-2 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5"
+                    className="flex flex-wrap items-end gap-2 rounded-xl border border-line bg-canvas/50 px-3 py-2.5"
                   >
-                    <span className="w-full text-xs font-medium uppercase tracking-wider text-zinc-400">{translate("Room ")}{i + 2}
+                    <span className="w-full text-xs font-medium uppercase tracking-wider text-muted-ink">{translate("Room ")}{i + 2}
                     </span>
                     <select
                       className={`${inputCls} !w-auto flex-1`}
@@ -2276,7 +2280,7 @@ export function BookingDialog(props: {
                         </option>
                       ))}
                     </select>
-                    <label className="flex items-center gap-1 text-xs text-zinc-500">
+                    <label className="flex items-center gap-1 text-xs text-muted-ink">
                       {t("Qty")}
                       <input
                         type="number"
@@ -2360,7 +2364,7 @@ export function BookingDialog(props: {
                       ))}
                     </select>
                     <button
-                      className="rounded p-1.5 text-zinc-400 hover:text-rose-500"
+                      className="rounded p-1.5 text-muted-ink hover:text-danger-text"
                       aria-label={translate("Remove room {v0}", { v0: String(i + 2) })}
                       onClick={() =>
                         setMoreRooms((rs) => rs.filter((_, j) => j !== i))
@@ -2374,7 +2378,7 @@ export function BookingDialog(props: {
 
                 {!dayUse && <button
                   type="button"
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-600 hover:border-brand-500 hover:bg-brand-50/40 hover:text-brand-800"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-control px-3 py-2 text-sm font-medium text-secondary-ink hover:border-accent-control hover:bg-accent-subtle/40 hover:text-accent-ink"
                   onClick={() =>
                     setMoreRooms((rs) => [
                       ...rs,
@@ -2395,7 +2399,7 @@ export function BookingDialog(props: {
                 {!dayUse && !walkIn && (
                   <button
                     type="button"
-                    className="ml-3 text-sm font-medium text-brand-700 hover:underline"
+                    className="ml-3 text-sm font-medium text-accent-ink hover:underline"
                     onClick={() => {
                       props.onClose()
                       navigate("/groups?new=1")
@@ -2470,17 +2474,17 @@ export function BookingDialog(props: {
                   )}
                 </div>
 
-                <div className="border-t border-zinc-100 pt-2">
+                <div className="border-t border-line-subtle pt-2">
                   <button
                     type="button"
-                    className="flex w-full items-center justify-between py-2 text-left text-sm font-medium text-zinc-700"
+                    className="flex w-full items-center justify-between py-2 text-left text-sm font-medium text-secondary-ink"
                     onClick={() => setMoreOpen((o) => !o)}
                     aria-expanded={moreOpen}
                   >
                     <span>{t("Company, add-ons & arrival details")}</span>
                     <ChevronDown
                       className={
-                        "size-4 text-zinc-400 transition-transform " +
+                        "size-4 text-muted-ink transition-transform " +
                         (moreOpen ? "rotate-180" : "")
                       }
                       aria-hidden
@@ -2549,7 +2553,7 @@ export function BookingDialog(props: {
                       {moreRooms.length === 0 &&
                         (options?.experiences.length ?? 0) > 0 && (
                           <div>
-                            <span className="mb-1.5 block text-sm font-medium text-zinc-600">{translate("Add-ons")}</span>
+                            <span className="mb-1.5 block text-sm font-medium text-secondary-ink">{translate("Add-ons")}</span>
                             <div className="flex flex-wrap gap-1.5">
                               {options?.experiences.map((x) => {
                                 const on = (addonQty[x.name] ?? 0) > 0
@@ -2560,8 +2564,8 @@ export function BookingDialog(props: {
                                     aria-pressed={on}
                                     className={
                                       on
-                                        ? "rounded-full bg-brand-600 px-3 py-1.5 text-sm font-medium text-white"
-                                        : "rounded-full border border-zinc-300 px-3 py-1.5 text-sm text-zinc-600 hover:border-brand-600"
+                                        ? "rounded-full bg-accent-fill px-3 py-1.5 text-sm font-medium text-on-solid"
+                                        : "rounded-full border border-control px-3 py-1.5 text-sm text-secondary-ink hover:border-accent-control"
                                     }
                                     onClick={() =>
                                       setAddonQty((q) => ({
@@ -2579,22 +2583,22 @@ export function BookingDialog(props: {
                         )}
 
                       {moreRooms.length > 0 && (
-                        <p className="text-xs text-zinc-400">{translate("Multi-room bookings are created as a group - vouchers, add-ons and booker details can be added per stay afterwards.")}</p>
+                        <p className="text-xs text-muted-ink">{translate("Multi-room bookings are created as a group - vouchers, add-ons and booker details can be added per stay afterwards.")}</p>
                       )}
 
                       {moreRooms.length === 0 && (
                         <>
-                          <label className="flex items-center gap-2 text-sm font-medium text-zinc-700">
+                          <label className="flex items-center gap-2 text-sm font-medium text-secondary-ink">
                             <input
                               type="checkbox"
-                              className="size-4 accent-brand-600"
+                              className="size-4 accent-focus"
                               checked={offers}
                               onChange={(e) => setOffers(e.target.checked)}
                             />{translate("Guest agrees to offers on WhatsApp")}</label>
-                          <label className="flex items-center gap-2 text-sm font-medium text-zinc-700">
+                          <label className="flex items-center gap-2 text-sm font-medium text-secondary-ink">
                             <input
                               type="checkbox"
-                              className="size-4 accent-brand-600"
+                              className="size-4 accent-focus"
                               checked={onBehalf}
                               onChange={(e) => setOnBehalf(e.target.checked)}
                             />{translate("Booked on someone's behalf")}</label>
@@ -2675,7 +2679,7 @@ export function BookingDialog(props: {
                             ).map(([k, lbl]) => (
                               <label
                                 key={k}
-                                className="flex items-center gap-1.5 font-medium text-zinc-700"
+                                className="flex items-center gap-1.5 font-medium text-secondary-ink"
                               >
                                 <input
                                   type="checkbox"
@@ -2781,15 +2785,15 @@ export function BookingDialog(props: {
             </div>
 
             {/* Quote rail - always visible on lg */}
-            <aside className="flex w-full shrink-0 flex-col border-t border-zinc-200 bg-zinc-50 lg:w-80 lg:border-l lg:border-t-0 xl:w-[22rem]">
+            <aside className="flex w-full shrink-0 flex-col border-t border-line bg-canvas lg:w-80 lg:border-l lg:border-t-0 xl:w-[22rem]">
               <div className="flex-1 overflow-y-auto px-6 py-5 md:px-7">
                 <div className="mb-4 flex items-center justify-between">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-ink">
                     {t("Quote")}
                   </h3>
                   {quoting && (
                     <Loader2
-                      className="size-4 animate-spin text-zinc-400"
+                      className="size-4 animate-spin text-muted-ink"
                       aria-label={t("Updating quote")}
                     />
                   )}
@@ -2797,7 +2801,7 @@ export function BookingDialog(props: {
 
                 {quote ? (
                   <div className="space-y-2.5 text-[15px]">
-                    <div className="flex justify-between gap-3 text-zinc-600">
+                    <div className="flex justify-between gap-3 text-secondary-ink">
                       <span className="min-w-0 truncate">
                         {roomTypeName} ·{" "}
                         {quote.day_use
@@ -2811,15 +2815,15 @@ export function BookingDialog(props: {
                     {/* label wraps cleanly so the full reason is visible;
                         the amount keeps its width */}
                     {(quote.reservation_discount_total ?? 0) > 0 && (<>
-                      <div className="flex items-start justify-between gap-3 text-zinc-600">
+                      <div className="flex items-start justify-between gap-3 text-secondary-ink">
                         <span>{t("Base room rate")}</span>
                         <span className="shrink-0 whitespace-nowrap text-end tabular-nums">
                           {contractSummary ? (
                             <>
-                              <span className="block font-medium text-zinc-800">
+                              <span className="block font-medium text-ink">
                                 {currencyText(contractSummary.currency, contractSummary.room_base_total, moneyLoc)}
                               </span>
-                              <span className="block text-xs text-zinc-400">
+                              <span className="block text-xs text-muted-ink">
                                 ≈ {homeText(quote.room_base_total ?? quote.room_total)}
                               </span>
                             </>
@@ -2831,7 +2835,7 @@ export function BookingDialog(props: {
                           ? t("Discount ({reason})", { reason: discountReasonText })
                           : t("Discount")
                         return (
-                          <div className="flex items-start justify-between gap-3 font-medium text-emerald-700">
+                          <div className="flex items-start justify-between gap-3 font-medium text-success-ink">
                             <span className="min-w-0 break-words" title={discountLabel}>
                               {discountLabel}
                             </span>
@@ -2841,7 +2845,7 @@ export function BookingDialog(props: {
                                   <span className="block">
                                     −{currencyText(contractSummary.currency, contractSummary.room_discount_total, moneyLoc)}
                                   </span>
-                                  <span className="block text-xs font-normal text-emerald-700/80">
+                                  <span className="block text-xs font-normal text-success-ink/80">
                                     ≈ −{homeText(quote.reservation_discount_total ?? 0)}
                                   </span>
                                 </>
@@ -2850,17 +2854,17 @@ export function BookingDialog(props: {
                           </div>
                         )
                       })()}
-                      <div className="flex items-start justify-between gap-3 text-zinc-600">
+                      <div className="flex items-start justify-between gap-3 text-secondary-ink">
                         <span>{t("Net room rate")}</span>
                         {/* base less discount, on the basis both are entered
                             (gross where rates include tax) */}
                         <span className="shrink-0 whitespace-nowrap text-end tabular-nums">
                           {contractSummary ? (
                             <>
-                              <span className="block font-semibold text-zinc-900">
+                              <span className="block font-semibold text-ink">
                                 {currencyText(contractSummary.currency, contractSummary.room_net_total, moneyLoc)}
                               </span>
-                              <span className="block text-xs text-zinc-400">
+                              <span className="block text-xs text-muted-ink">
                                 ≈ {homeText((quote.room_base_total ?? quote.room_total) - (quote.reservation_discount_total ?? 0))}
                               </span>
                             </>
@@ -2869,7 +2873,7 @@ export function BookingDialog(props: {
                         </span>
                       </div>
                       {contractSummary && (
-                        <p className="text-xs tabular-nums text-zinc-400">
+                        <p className="text-xs tabular-nums text-muted-ink">
                           {t("1 {cur} = {rate} {home}", {
                             cur: contractSummary.currency,
                             rate: formatFxRate(contractSummary.fx_rate, moneyLoc),
@@ -2886,7 +2890,7 @@ export function BookingDialog(props: {
                         agreedRate={quote.agreed_rate ?? 0} locale={moneyLoc} /></p>
                     </div>}
                     {(quote.over_capacity_total ?? 0) > 0 && (
-                      <div className="flex justify-between text-zinc-600">
+                      <div className="flex justify-between text-secondary-ink">
                         <span>{t("Extra guests")}</span>
                         <span className="tabular-nums">
                           {homeText(quote.over_capacity_total ?? 0)}
@@ -2894,7 +2898,7 @@ export function BookingDialog(props: {
                       </div>
                     )}
                     {quote.meal_total > 0 && (
-                      <div className="flex justify-between text-zinc-600">
+                      <div className="flex justify-between text-secondary-ink">
                         <span>{t("Meals")}</span>
                         <span className="tabular-nums">
                           {homeText(quote.meal_total)}
@@ -2902,7 +2906,7 @@ export function BookingDialog(props: {
                       </div>
                     )}
                     {(quote.pet_charge || 0) > 0 && (
-                      <div className="flex justify-between text-zinc-600">
+                      <div className="flex justify-between text-secondary-ink">
                         <span>
                           {t("Pets")} × {form.pets}
                         </span>
@@ -2912,7 +2916,7 @@ export function BookingDialog(props: {
                       </div>
                     )}
                     {quote.long_stay && (
-                      <div className="flex justify-between font-medium text-emerald-700">
+                      <div className="flex justify-between font-medium text-success-ink">
                         <span>{t("Long stay {pct}% off (in the room price)", { pct: String(quote.long_stay.percent) })}</span>
                         <span className="tabular-nums">
                           −{homeText(quote.long_stay.amount)}
@@ -2920,7 +2924,7 @@ export function BookingDialog(props: {
                       </div>
                     )}
                     {(quote.voucher_discount ?? quote.discount) > 0 && (
-                      <div className="flex justify-between font-medium text-emerald-700">
+                      <div className="flex justify-between font-medium text-success-ink">
                         <span>{t("Voucher")}</span>
                         <span className="tabular-nums">
                           −{homeText(quote.voucher_discount ?? quote.discount)}
@@ -2930,17 +2934,17 @@ export function BookingDialog(props: {
                     {isTaxUndetermined(quoteTaxBasis) ? (
                       <p
                         role="status"
-                        className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs text-amber-800"
+                        className="rounded-lg border border-warning-line bg-warning-subtle px-2.5 py-2 text-xs text-warning-ink"
                       >
                         {t(TAX_NOT_SET_UP_MSG)}
                       </p>
-                    ) : quoteTaxBasis?.inclusive ? <p className="text-xs text-zinc-600">
+                    ) : quoteTaxBasis?.inclusive ? <p className="text-xs text-secondary-ink">
                       {t("Includes {tax} (≈ {amount} on the room). The invoice shows the exact tax.", {
                         tax: quoteTaxBasis.label,
                         amount: currencyText(quoteTariff?.property_currency || loc.currency,
                           quote.room_total * quoteTaxBasis.rate / (100 + quoteTaxBasis.rate), loc.locale),
                       })}
-                    </p> : <div className="flex justify-between text-zinc-600">
+                    </p> : <div className="flex justify-between text-secondary-ink">
                       <span>
                         {loc.tax_label} {quote.tax_percent}%
                       </span>
@@ -2952,7 +2956,7 @@ export function BookingDialog(props: {
                       mq ? (
                         <div
                           key={i}
-                          className="flex justify-between gap-3 text-zinc-600"
+                          className="flex justify-between gap-3 text-secondary-ink"
                         >
                           <span className="min-w-0 truncate">{translate("Room ")}{i + 2} ·{" "}
                             {options?.room_types.find(
@@ -2969,7 +2973,7 @@ export function BookingDialog(props: {
                       ) : null,
                     )}
                     {addonsGross > 0 && (
-                      <div className="flex justify-between text-zinc-600">
+                      <div className="flex justify-between text-secondary-ink">
                         <span>
                           {t("Add-ons (incl. {tax})", { tax: loc.tax_label })}
                         </span>
@@ -2979,11 +2983,11 @@ export function BookingDialog(props: {
                       </div>
                     )}
 
-                    <div className="mt-3 rounded-xl border border-zinc-200 bg-white px-4 py-3.5 shadow-sm">
+                    <div className="mt-3 rounded-xl border border-line bg-surface px-4 py-3.5 shadow-sm">
                       <div className="flex items-baseline justify-between gap-2">
                         <span>{t("Total")}{moreRooms.length > 0 ? t(" · all rooms") : ""}</span>
                         <span className="text-end">
-                          <span className="block text-3xl font-semibold tabular-nums tracking-tight text-zinc-900">
+                          <span className="block text-3xl font-semibold tabular-nums tracking-tight text-ink">
                             {pureContractStay && contractSummary
                               ? currencyText(contractSummary.currency, contractSummary.room_after_tax_total, moneyLoc)
                               : quoteTariff
@@ -2991,26 +2995,26 @@ export function BookingDialog(props: {
                                 : homeText(grandTotal)}
                           </span>
                           {pureContractStay && contractSummary && (
-                            <span className="mt-0.5 block text-xs tabular-nums text-zinc-500">
+                            <span className="mt-0.5 block text-xs tabular-nums text-muted-ink">
                               ≈ {currencyText(quoteTariff?.property_currency || loc.currency, grandTotal, moneyLoc)}
                             </span>
                           )}
                         </span>
                       </div>
-                      <p className="mt-1 text-xs text-zinc-400">
+                      <p className="mt-1 text-xs text-muted-ink">
                         {quote.day_use
                           ? `${formatDate(quoteStay.from)} · ${slot.from}-${slot.to}`
                           : `${formatDate(quoteStay.from)} → ${formatDate(quoteStay.to)}`}
                       </p>
                       {otaTotal > 0 && (
-                        <p className="mt-1 text-xs font-medium text-indigo-600">
+                        <p className="mt-1 text-xs font-medium text-indigo-text">
                           {t("Billed at the price {site} sold it for", { site: viaName })}
                         </p>
                       )}
                     </div>
 
                     {options?.property && (
-                      <p className="pt-1 text-xs leading-relaxed text-zinc-500">
+                      <p className="pt-1 text-xs leading-relaxed text-muted-ink">
                         {cancelText}
                         {(options.property.no_show_charge || "None") !== "None" &&
                           translate(" No-show: {v0} charged.", { v0: String(String(options.property.no_show_charge).toLowerCase()) })}
@@ -3021,7 +3025,7 @@ export function BookingDialog(props: {
                       </p>
                     )}
                     {options?.property && advanceNow > 0 && advancePercents.size > 1 && (
-                      <ul className="text-xs text-zinc-500">
+                      <ul className="text-xs text-muted-ink">
                         {advanceRooms.map((r, i) => (
                           <li key={i}>{`${r.name} · ${r.percent}% · ${homeText(r.amount)}`}</li>
                         ))}
@@ -3029,26 +3033,26 @@ export function BookingDialog(props: {
                     )}
                   </div>
                 ) : (
-                  <p className="text-sm text-zinc-400">
+                  <p className="text-sm text-muted-ink">
                     {error ? t("Fix the issue below to see a price.") : "…"}
                   </p>
                 )}
 
                 {error && (
-                  <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-700">
+                  <div className="mt-4 rounded-lg border border-danger-line bg-danger-subtle px-3 py-2.5 text-sm text-danger-ink">
                     {translate(error)}
                   </div>
                 )}
               </div>
 
-              <div className="shrink-0 space-y-2 border-t border-zinc-200 bg-white px-6 py-4 md:px-7">
+              <div className="shrink-0 space-y-2 border-t border-line bg-surface px-6 py-4 md:px-7">
                 {walkIn ? (
                   <>
                     {tillClosed && (
                       <>
                         <TillCard till={till} onOpened={() => void refreshTill()}
                           purpose={t("to take the walk-in's payment")} />
-                        <p className="text-xs text-zinc-500">
+                        <p className="text-xs text-muted-ink">
                           {t("Or set the amount to 0: the stay goes on the bill and the guest pays at check-out.")}
                         </p>
                       </>
@@ -3076,9 +3080,9 @@ export function BookingDialog(props: {
                   </>
                 ) : (
                 <>
-                {messages.length > 0 && <div className="relative mb-2 text-sm text-rose-800">
+                {messages.length > 0 && <div className="relative mb-2 text-sm text-danger-ink">
                   <Button variant="outline" aria-expanded={messagesOpen} onClick={() => setMessagesOpen(!messagesOpen)}><ShieldAlert className="size-4" />{t("Messages ({n})", {n: messages.length})}</Button>
-                  {messagesOpen && <section aria-label={t("Booking messages")} className="absolute bottom-full z-10 mb-1 max-h-52 w-full overflow-auto rounded-lg border border-rose-200 bg-white p-2 shadow-lg">
+                  {messagesOpen && <section aria-label={t("Booking messages")} className="absolute bottom-full z-10 mb-1 max-h-52 w-full overflow-auto rounded-lg border border-danger-line bg-surface p-2 shadow-lg">
                     <ul>{messages.map(m => <li key={m.field}>{m.field === "server" ? <span role="alert">{m.message}</span> : <button className="w-full p-2 text-start underline" onClick={() => jump(m.field)}>{m.message}</button>}</li>)}</ul>
                   </section>}
                 </div>}

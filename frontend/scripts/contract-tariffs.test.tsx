@@ -99,7 +99,8 @@ describe("Contract Tariffs", () => {
   }
   const text = (scope: ParentNode = host) => scope.textContent ?? ""
   function button(label: string, scope: ParentNode = host) {
-    const result = Array.from(scope.querySelectorAll("button")).find((node) => node.textContent?.trim() === label)
+    const result = Array.from(scope.querySelectorAll("button")).find((node) => node.textContent?.trim() === label ||
+      (node.hasAttribute("aria-pressed") && node.textContent?.trim().replace(/ \(\d+\)$/, "") === label))
     expect(result, `Missing button: ${label}`).toBeDefined()
     return result!
   }
@@ -166,7 +167,7 @@ describe("Contract Tariffs", () => {
 
   it("filters by category tab, price list, customer and search", async () => {
     await render()
-    expect(labels()).toEqual(expect.arrayContaining(["Room matrix", "Supplements", "Venues", "Other", "Pending approval (1)"]))
+    expect(labels()).toEqual(expect.arrayContaining(["Room matrix (2)", "Supplements (2)", "Venues (0)", "Other (0)", "Pending approval (1)"]))
     await click("Supplements")
     expect(text()).toContain("Extra adult")
     expect(text()).toContain("Extra bed")
@@ -478,7 +479,7 @@ describe("Contract Tariffs", () => {
     await render()
     expect(host.querySelector("h1")?.textContent).toBe(heading)
     expect(text()).toContain(action)
-    expect(labels()).toEqual(expect.arrayContaining([matrix, exportLabel]))
+    expect(labels()).toEqual(expect.arrayContaining([`${matrix} (2)`, exportLabel]))
   })
 
   it("is discoverable in Revenue and through staff search", () => {
@@ -493,7 +494,7 @@ describe("Contract Tariffs", () => {
     </MemoryRouter>))
     const link = host.querySelector("a")
     expect(link?.textContent ?? "").toContain("Manage tariffs")
-    expect(link?.getAttribute("href")).toBe("/tariffs?q=DLX+Test")
+    expect(link?.getAttribute("href")).toBe("/tariffs?q=Deluxe+King&room_type=DLX+Test")
   })
 
   it("offers the editor link from Rate Plans", async () => {
@@ -644,13 +645,14 @@ describe("Contract Tariffs", () => {
     expect(corporateRow.dataset.scope).toBe("corporate")
     const badge = (scope: HTMLElement) => scope.querySelector<HTMLElement>("th[role=rowheader] [data-scope-badge]")
     expect(text(badge(publicRow)!)).toBe("Public")
-    expect(badge(publicRow)!.className).toContain("bg-zinc-100")
+    expect(badge(publicRow)!.className).toContain("bg-subtle")
     expect(text(badge(corporateRow)!)).toContain("Corporate")
     expect(text(badge(corporateRow)!)).toContain("Client Co")
-    expect(badge(corporateRow)!.className).toContain("bg-indigo-50")
+    expect(badge(corporateRow)!.className).toContain("bg-indigo-subtle")
     // the negotiated row carries an accent edge and tint; the public row stays plain
     expect(corporateRow.className).toContain("border-s-indigo-500")
-    expect(corporateRow.className).not.toContain("bg-white")
+    expect(corporateRow.classList).toContain("bg-indigo-subtle/25")
+    expect(publicRow.classList).toContain("bg-surface")
     expect(publicRow.className).not.toContain("indigo")
     // the row's controls are unchanged
     expect(host.querySelector("input[aria-label='Select Deluxe · Corporate USD · Client Co']")).not.toBeNull()

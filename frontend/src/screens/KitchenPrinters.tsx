@@ -16,8 +16,8 @@ const WRITE_ROLES = ["Finance", "F&B Manager", "Hotel Admin", "System Manager", 
 const STATIONS = ["Kitchen", "Tandoor", "Grill", "Fryer", "Bar"]
 
 const inputCls =
-  "w-full rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "w-full rounded-lg border border-control bg-surface px-3 py-1.5 text-sm " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 interface KitchenPrinter {
   name: string
@@ -169,7 +169,7 @@ export default function KitchenPrinters() {
   }
 
   const status = (p: KitchenPrinter) => {
-    if (p.disabled) return { tone: "bg-zinc-300", text: t("Disabled") }
+    if (p.disabled) return { tone: "bg-fill-strong", text: t("Disabled") }
     if (p.last_error && p.failed_today) return { tone: "bg-rose-500", text: p.last_error }
     if (p.connection === "Print station") {
       return p.online
@@ -178,25 +178,25 @@ export default function KitchenPrinters() {
     }
     return p.last_printed
       ? { tone: "bg-emerald-500", text: t("Last printed {at}", { at: p.last_printed.slice(0, 16) }) }
-      : { tone: "bg-zinc-300", text: t("Not used yet") }
+      : { tone: "bg-fill-strong", text: t("Not used yet") }
   }
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 p-4 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="flex items-center gap-2 text-xl font-semibold text-zinc-900">
-            <Printer className="size-5 text-zinc-500" aria-hidden />
+          <h1 className="flex items-center gap-2 text-xl font-semibold text-ink">
+            <Printer className="size-5 text-muted-ink" aria-hidden />
             {t("Kitchen printers")}
           </h1>
-          <p className="mt-1 max-w-2xl text-sm text-zinc-500">
+          <p className="mt-1 max-w-2xl text-sm text-muted-ink">
             {t(
               "Which printer gets which KOTs. Two restaurants can share a kitchen printer, and the bar's drinks can print at the bar. With no printers here, each till prints its own KOTs.",
             )}
           </p>
-          <p className="mt-1 text-xs text-zinc-400">
+          <p className="mt-1 text-xs text-muted-ink">
             {t("On a kitchen device, open")}{" "}
-            <Link to="/kitchen" className="text-brand-700 underline-offset-2 hover:underline">
+            <Link to="/kitchen" className="text-accent-ink underline-offset-2 hover:underline">
               {t("Kitchen Display")}
             </Link>{" "}
             {t("and choose Print for this printer.")}
@@ -221,15 +221,15 @@ export default function KitchenPrinters() {
           <CardTitle className="text-base">{t("Printers at this property")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          {err && <p className="text-sm text-rose-700">{translate(err)}</p>}
-          {note && <p className="text-sm text-emerald-700">{note}</p>}
+          {err && <p className="text-sm text-danger-ink">{translate(err)}</p>}
+          {note && <p className="text-sm text-success-ink">{note}</p>}
 
           {!form && !err && printers.length === 0 && (
-            <div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 px-4 py-6 text-center">
-              <p className="text-sm font-medium text-zinc-800">
+            <div className="rounded-lg border border-dashed border-control bg-canvas px-4 py-6 text-center">
+              <p className="text-sm font-medium text-ink">
                 {t("No kitchen printers yet.")}
               </p>
-              <p className="mt-1 text-xs text-zinc-500">
+              <p className="mt-1 text-xs text-muted-ink">
                 {t(
                   "Add a printer to route KOTs by outlet and station. Status (online, waiting, failed) shows here once a kitchen screen is set to Print for it.",
                 )}
@@ -255,13 +255,13 @@ export default function KitchenPrinters() {
               return (
                 <div
                   key={p.name}
-                  className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-zinc-200 px-3 py-2.5"
+                  className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-line px-3 py-2.5"
                 >
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2 text-sm font-semibold text-zinc-900">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-ink">
                       <span className={`size-2 shrink-0 rounded-full ${st.tone}`} title={translate(st.text)} />
                       {p.printer_name}
-                      <span className="text-xs font-normal text-zinc-400">
+                      <span className="text-xs font-normal text-muted-ink">
                         {p.connection === "Direct IP"
                           ? `${p.ip_address}:${p.port || 9100}`
                           : t("Print station")}{" "}
@@ -269,7 +269,7 @@ export default function KitchenPrinters() {
                         {p.copies > 1 ? ` · ×${p.copies}` : ""}
                       </span>
                     </div>
-                    <p className="mt-0.5 text-xs text-zinc-500">
+                    <p className="mt-0.5 text-xs text-muted-ink">
                       {p.routes.length
                         ? p.routes
                             .map(
@@ -279,7 +279,7 @@ export default function KitchenPrinters() {
                             .join(", ")
                         : t("Prints nothing yet - choose outlets and stations.")}
                     </p>
-                    <p className="mt-0.5 text-xs text-zinc-400">
+                    <p className="mt-0.5 text-xs text-muted-ink">
                       {translate(st.text)}
                       {p.queued ? ` · ${t("{n} waiting", { n: p.queued })}` : ""}
                       {p.failed_today ? ` · ${t("{n} failed today", { n: p.failed_today })}` : ""}
@@ -322,10 +322,10 @@ export default function KitchenPrinters() {
             })}
 
           {form && canEdit && (
-            <div className="space-y-4 rounded-lg border border-zinc-200 p-3">
+            <div className="space-y-4 rounded-lg border border-line p-3">
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block text-sm">
-                  <span className="mb-1 block font-medium text-zinc-700">{t("Printer name")}</span>
+                  <span className="mb-1 block font-medium text-secondary-ink">{t("Printer name")}</span>
                   <input
                     className={inputCls}
                     value={form.printer_name}
@@ -334,7 +334,7 @@ export default function KitchenPrinters() {
                   />
                 </label>
                 <label className="block text-sm">
-                  <span className="mb-1 block font-medium text-zinc-700">{t("Connection")}</span>
+                  <span className="mb-1 block font-medium text-secondary-ink">{t("Connection")}</span>
                   <select
                     className={inputCls}
                     value={form.connection}
@@ -352,7 +352,7 @@ export default function KitchenPrinters() {
                       {t("Direct IP ({product} on the hotel network)")}
                     </option>
                   </select>
-                  <span className="mt-1 block text-xs text-zinc-400">
+                  <span className="mt-1 block text-xs text-muted-ink">
                     {form.connection === "Print station"
                       ? t(
                           "Any printer - USB, network or Bluetooth - attached to a device in the kitchen. On that device, open the kitchen display and pick this printer under Print for.",
@@ -365,7 +365,7 @@ export default function KitchenPrinters() {
                 {form.connection === "Direct IP" && (
                   <>
                     <label className="block text-sm">
-                      <span className="mb-1 block font-medium text-zinc-700">{t("IP address")}</span>
+                      <span className="mb-1 block font-medium text-secondary-ink">{t("IP address")}</span>
                       <input
                         className={inputCls}
                         value={form.ip_address || ""}
@@ -374,7 +374,7 @@ export default function KitchenPrinters() {
                       />
                     </label>
                     <label className="block text-sm">
-                      <span className="mb-1 block font-medium text-zinc-700">{t("Port")}</span>
+                      <span className="mb-1 block font-medium text-secondary-ink">{t("Port")}</span>
                       <input
                         className={inputCls}
                         type="number"
@@ -387,7 +387,7 @@ export default function KitchenPrinters() {
                   </>
                 )}
                 <label className="block text-sm">
-                  <span className="mb-1 block font-medium text-zinc-700">{t("Paper width")}</span>
+                  <span className="mb-1 block font-medium text-secondary-ink">{t("Paper width")}</span>
                   <select
                     className={inputCls}
                     value={form.paper_width}
@@ -398,7 +398,7 @@ export default function KitchenPrinters() {
                   </select>
                 </label>
                 <label className="block text-sm">
-                  <span className="mb-1 block font-medium text-zinc-700">{t("Copies")}</span>
+                  <span className="mb-1 block font-medium text-secondary-ink">{t("Copies")}</span>
                   <select
                     className={inputCls}
                     value={form.copies}
@@ -412,7 +412,7 @@ export default function KitchenPrinters() {
                   </select>
                 </label>
                 <label className="block text-sm">
-                  <span className="mb-1 block font-medium text-zinc-700">
+                  <span className="mb-1 block font-medium text-secondary-ink">
                     {t("Fallback printer")}
                   </span>
                   <select
@@ -431,12 +431,12 @@ export default function KitchenPrinters() {
                         </option>
                       ))}
                   </select>
-                  <span className="mt-1 block text-xs text-zinc-400">
+                  <span className="mt-1 block text-xs text-muted-ink">
                     {t("Where a ticket goes if this printer fails.")}
                   </span>
                 </label>
                 <div className="sm:col-span-2">
-                  <p className="mb-1 text-sm font-medium text-zinc-700">{t("This printer prints")}</p>
+                  <p className="mb-1 text-sm font-medium text-secondary-ink">{t("This printer prints")}</p>
                   <div className="flex flex-wrap gap-4 text-sm">
                     <label className="flex items-center gap-2">
                       <input
@@ -459,7 +459,7 @@ export default function KitchenPrinters() {
                       {t("Bills and receipts")}
                     </label>
                   </div>
-                  <span className="mt-1 block text-xs text-zinc-400">
+                  <span className="mt-1 block text-xs text-muted-ink">
                     {t("KOTs follow the outlet and station routes below. A bill goes to the printer chosen on the till, else to a bill printer routed to the bill's outlet.")}
                   </span>
                 </div>
@@ -476,11 +476,11 @@ export default function KitchenPrinters() {
               </div>
 
               <div>
-                <p className="mb-1.5 text-sm font-medium text-zinc-700">{t("Routes: outlets and stations this printer serves")}</p>
+                <p className="mb-1.5 text-sm font-medium text-secondary-ink">{t("Routes: outlets and stations this printer serves")}</p>
                 {outlets.length === 0 ? (
-                  <p className="text-sm text-zinc-500">
+                  <p className="text-sm text-muted-ink">
                     {t("Add an outlet first.")}{" "}
-                    <Link to="/outlets" className="text-brand-700 underline-offset-2 hover:underline">
+                    <Link to="/outlets" className="text-accent-ink underline-offset-2 hover:underline">
                       {t("Outlets")}
                     </Link>
                   </p>
@@ -488,7 +488,7 @@ export default function KitchenPrinters() {
                   <div className="overflow-x-auto">
                     <table className="w-full min-w-[28rem] text-sm">
                       <thead>
-                        <tr className="text-xs text-zinc-500">
+                        <tr className="text-xs text-muted-ink">
                           <th className="py-1 text-start font-medium">{t("Outlet")}</th>
                           <th className="px-2 py-1 font-medium">{t("All stations")}</th>
                           {STATIONS.map((st) => (
@@ -500,7 +500,7 @@ export default function KitchenPrinters() {
                       </thead>
                       <tbody>
                         {outlets.map((o) => (
-                          <tr key={o.name} className="border-t border-zinc-100">
+                          <tr key={o.name} className="border-t border-line-subtle">
                             <td className="py-1.5 pe-2">{o.outlet_name}</td>
                             <td className="px-2 text-center">
                               <input
@@ -527,7 +527,7 @@ export default function KitchenPrinters() {
                     </table>
                   </div>
                 )}
-                <p className="mt-1.5 text-xs text-zinc-400">
+                <p className="mt-1.5 text-xs text-muted-ink">
                   {t(
                     "A station comes from each menu item. Tick the same outlet on several printers to print a copy on each.",
                   )}

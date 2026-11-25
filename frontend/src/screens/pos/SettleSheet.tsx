@@ -19,8 +19,8 @@ export interface SettleRoom {
 }
 
 const inputCls =
-  "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "w-full rounded-lg border border-control bg-surface px-3 py-2 text-sm " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 export default function SettleSheet({
   subtitle,
@@ -96,21 +96,21 @@ export default function SettleSheet({
       aria-labelledby="settle-title"
     >
       <div className="absolute inset-0 bg-black/40 animate-fade-in" onClick={onClose} aria-hidden />
-      <div className="relative z-10 flex w-full max-w-md flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl animate-sheet-in">
-        <div className="flex items-start justify-between gap-3 border-b border-zinc-100 px-5 py-4">
+      <div className="relative z-10 flex w-full max-w-md flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl animate-sheet-in">
+        <div className="flex items-start justify-between gap-3 border-b border-line-subtle px-5 py-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">{t("Settle")}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-ink">{t("Settle")}</p>
             <h2
               id="settle-title"
-              className="mt-0.5 text-3xl font-semibold tracking-tight tabular-nums text-zinc-900"
+              className="mt-0.5 text-3xl font-semibold tracking-tight tabular-nums text-ink"
             >
               {grandLabel}
             </h2>
-            <p className="mt-1 text-sm text-zinc-500">{translate(subtitle)}</p>
+            <p className="mt-1 text-sm text-muted-ink">{translate(subtitle)}</p>
           </div>
           <button
             type="button"
-            className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
+            className="rounded-lg p-2 text-muted-ink hover:bg-subtle hover:text-secondary-ink"
             aria-label={t("Close")}
             onClick={onClose}
           >
@@ -126,7 +126,7 @@ export default function SettleSheet({
             </Button>
           ) : sheetNc ? (
             <div className="space-y-3">
-              <p className="text-sm font-medium text-amber-800">
+              <p className="text-sm font-medium text-warning-ink">
                 {t("Complimentary (no charge) - who authorized?")}
               </p>
               <div className="flex gap-2">
@@ -181,7 +181,7 @@ export default function SettleSheet({
 
               {room ? (
                 roomBlocked ? (
-                  <p className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-800">
+                  <p className="rounded-xl bg-danger-subtle px-3 py-2 text-sm text-danger-ink">
                     {t("Room {n} cannot take room charges (set at check-in). Take payment here.", {
                       n: roomNo,
                     })}
@@ -200,8 +200,8 @@ export default function SettleSheet({
               ) : (
                 /* a guest who wants it on the room: its own way to settle,
                    for any bill (dine in, takeaway, delivery), not hidden */
-                <div className="space-y-1.5 rounded-xl border border-brand-200 bg-white p-2.5">
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-brand-800">
+                <div className="space-y-1.5 rounded-xl border border-accent-line bg-surface p-2.5">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-accent-ink">
                     <BedDouble className="size-3.5" />
                     {t("Charge to the guest's room")}
                   </div>
@@ -219,7 +219,7 @@ export default function SettleSheet({
                       </Button>
                     </div>
                   ) : (
-                    <p className="text-xs text-zinc-500">
+                    <p className="text-xs text-muted-ink">
                       {t("No guest is checked in right now. Check the guest in first, or take payment above.")}
                     </p>
                   )}
@@ -228,7 +228,7 @@ export default function SettleSheet({
 
               <Button
                 variant="outline"
-                className="h-11 w-full text-amber-700"
+                className="h-11 w-full text-warning-ink"
                 disabled={busy}
                 onClick={() => onSheetNc(true)}
               >

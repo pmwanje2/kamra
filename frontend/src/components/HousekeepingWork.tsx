@@ -14,7 +14,7 @@ export interface HousekeepingWorkRoom {
   turndown_status?: string
 }
 
-const control = "min-h-11 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+const control = "min-h-11 rounded-lg border border-control bg-surface px-3 text-sm text-ink"
 
 
 const roomActions = {
@@ -56,7 +56,7 @@ export function HousekeepingRoomWork({ room, canResolve, refresh }: {
     <div className="grid min-w-0 gap-2 text-sm">
       <div className="flex flex-wrap items-center gap-2">
         <p className="font-medium">{t("Front desk: {status}", { status: t(occupancy) })}</p>
-        {room.discrepancy && <strong className="rounded-full bg-amber-100 px-2 py-1 text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+        {room.discrepancy && <strong className="rounded-full bg-warning-muted px-2 py-1 text-warning-ink">
           {room.discrepancy === "Skip" ? t("Skip (occupancy)") : t("Sleep (occupancy)")}
         </strong>}
       </div>
@@ -90,7 +90,7 @@ export function HousekeepingRoomWork({ room, canResolve, refresh }: {
           <Button className="min-h-11" disabled={busy || !note.trim()} type="submit">{t("Resolve discrepancy")}</Button>
         </form>
       )}
-      {error && <p role="alert" className="text-rose-700 dark:text-rose-300">{t(error)}</p>}
+      {error && <p role="alert" className="text-danger-ink">{t(error)}</p>}
     </div>
   )
 }
@@ -142,7 +142,7 @@ export function HousekeepingAssignment({ businessDate, staff, refresh }: {
   }
 
   return (
-    <div className="space-y-4 rounded-lg border bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
+    <div className="space-y-4 rounded-lg border bg-surface p-4 border-line">
       <label className="grid gap-1 text-sm sm:max-w-xs">
         {t("Credit limit per attendant")}
         <input type="number" inputMode="decimal" min="0.001" step="0.001" className={control} value={cap}
@@ -166,7 +166,7 @@ export function HousekeepingAssignment({ businessDate, staff, refresh }: {
         <Button className="min-h-11" disabled={busy || !attendants.length || !(Number(cap) > 0)}
           onClick={() => void assign(false)}>{t("Auto-assign tasks")}</Button>
       </div>
-      {error && <p role="alert" className="text-rose-700 dark:text-rose-300">{t(error)}</p>}
+      {error && <p role="alert" className="text-danger-ink">{t(error)}</p>}
       {result && (
         <div aria-live="polite" className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -175,17 +175,17 @@ export function HousekeepingAssignment({ businessDate, staff, refresh }: {
                 used: credit.format(load.credits), limit: credit.format(load.max_credits),
               })
               return (
-                <div key={load.user} className="rounded-lg border p-3 text-sm dark:border-zinc-700">
+                <div key={load.user} className="rounded-lg border p-3 text-sm border-line">
                   <p className="font-medium">{load.full_name}</p>
                   <p>{text}</p>
-                  <progress className="mt-2 w-full accent-brand-700" aria-label={`${load.full_name} · ${text}`}
+                  <progress className="mt-2 w-full accent-accent-control" aria-label={`${load.full_name} · ${text}`}
                     value={Math.min(load.credits, load.max_credits)} max={load.max_credits} />
                 </div>
               )
             })}
           </div>
           {([...result.assigned, ...result.unassigned]).map((row) => (
-            <div key={row.task} className="flex flex-wrap gap-x-3 gap-y-1 border-t py-2 text-sm dark:border-zinc-700">
+            <div key={row.task} className="flex flex-wrap gap-x-3 gap-y-1 border-t py-2 text-sm border-line">
               <strong>{row.room_number}</strong>
               <span>{row.task_type === "Turndown" ? t("Turndown") : t(row.task_type)}</span>
               {row.section && <span>{row.section}</span>}

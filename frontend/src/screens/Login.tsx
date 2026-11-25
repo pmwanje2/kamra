@@ -10,9 +10,9 @@ import { useOfferedLanguages, useT, t as translate } from "../lib/i18n"
 
 
 const inputCls =
-  "w-full rounded border border-[#E2E8F0] bg-[#ffffff] px-3 py-2 text-sm " +
-  "text-[#191c1e] placeholder:text-[#6f7a71] " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-[#1E7B4F]"
+  "w-full rounded border border-control bg-surface px-3 py-2 text-sm " +
+  "text-ink placeholder:text-muted-ink " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 const DEMO_ACCOUNTS = [
   { label: "System Admin", usr: "admin@kamra.local", pwd: "KamraAdmin1!" },
@@ -82,31 +82,31 @@ export default function Login(props: { onSuccess: () => void }) {
 
   return (
     <div
-      className="flex min-h-[100dvh] flex-col items-center justify-center bg-[#f7f9fb] px-4"
+      className="flex min-h-[100dvh] flex-col items-center justify-center bg-canvas px-4"
       style={{ colorScheme: "light" }}
     >
-      <div className="fixed inset-x-0 top-0 h-[5px] bg-[#1C3F38]" aria-hidden />
+      <div className="fixed inset-x-0 top-0 h-[5px] bg-accent-deep" aria-hidden />
       <div className="w-full max-w-sm">
         {sessionEnded && mode === "sign-in" && (
-          <p className="mb-4 rounded border border-[#fde68a] bg-[#fffbeb] px-4 py-2.5 text-center text-sm text-[#92400e]">
+          <p className="mb-4 rounded border border-warning-line bg-warning-subtle px-4 py-2.5 text-center text-sm text-warning-ink">
             {t("Your session ended. Sign in to pick up where you left off.")}
           </p>
         )}
         <div className="mb-6 flex flex-col items-center gap-2">
           <BrandMark className="size-16 text-xl" />
           <span
-            className="text-2xl font-semibold tracking-[0.02em] text-[#1C3F38]"
+            className="text-2xl font-semibold tracking-[0.02em] text-ink"
             style={{ fontFamily: "Montserrat, ui-sans-serif, system-ui, sans-serif" }}
           >
             {product()}
-            {!whiteLabel() && <span className="ml-1.5 align-middle text-[10px] font-semibold tracking-[0.4em] text-[#1E7B4F]">
+            {!whiteLabel() && <span className="ml-1.5 align-middle text-[10px] font-semibold tracking-[0.4em] text-accent-ink">
               PMS
             </span>}
           </span>
-          <label className="mt-1 flex items-center gap-2 text-xs text-[#6f7a71]">
+          <label className="mt-1 flex items-center gap-2 text-xs text-muted-ink">
             <span>{t("Language")}</span>
             <select
-              className="rounded border border-[#E2E8F0] bg-white px-2 py-1 text-xs text-[#3f4941]"
+              className="rounded border border-control bg-surface px-2 py-1 text-xs text-secondary-ink"
               value={langState}
               onChange={(e) => {
                 const next = e.target.value as Lang
@@ -126,14 +126,14 @@ export default function Login(props: { onSuccess: () => void }) {
 
         {mode === "sign-in" ? (
         <form
-          className="space-y-3 rounded border border-[#E2E8F0] bg-[#ffffff] p-6"
+          className="space-y-3 rounded border border-control bg-surface p-6"
           onSubmit={(e) => {
             e.preventDefault()
             submit()
           }}
         >
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-[#3f4941]">
+            <span className="mb-1 block text-xs font-medium text-secondary-ink">
               {t("Email or username")}
             </span>
             <input
@@ -149,11 +149,11 @@ export default function Login(props: { onSuccess: () => void }) {
             />
           </label>
           <label className="block">
-            <span className="mb-1 flex items-center justify-between text-xs font-medium text-[#3f4941]">
+            <span className="mb-1 flex items-center justify-between text-xs font-medium text-secondary-ink">
               <span>{t("Password")}</span>
               <button
                 type="button"
-                className="font-medium text-[#1E7B4F] hover:underline"
+                className="font-medium text-accent-ink hover:underline"
                 onClick={() => {
                   setMode("forgot")
                   setError(null)
@@ -173,13 +173,13 @@ export default function Login(props: { onSuccess: () => void }) {
           </label>
 
           {error && (
-            <div className="rounded border border-[#ffdad6] bg-[#fff8f7] px-3 py-2 text-sm text-[#93000a]">
+            <div className="rounded border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">
               {translate(error)}
             </div>
           )}
 
           <Button
-            className="w-full justify-center rounded bg-[#1E7B4F] py-2 text-white hover:bg-[#00613a] focus-visible:outline-[#1E7B4F]"
+            className="w-full justify-center rounded bg-primary-button py-2 text-on-solid hover:bg-primary-button-hover focus-visible:outline-focus"
             disabled={busy || !usr || !pwd}
             type="submit"
           >
@@ -188,18 +188,18 @@ export default function Login(props: { onSuccess: () => void }) {
         </form>
         ) : (
         <form
-          className="space-y-3 rounded border border-[#E2E8F0] bg-[#ffffff] p-6"
+          className="space-y-3 rounded border border-control bg-surface p-6"
           onSubmit={(e) => {
             e.preventDefault()
             sendReset()
           }}
         >
-          <h1 className="text-base font-semibold text-[#1C3F38]">{t("Reset password")}</h1>
-          <p className="text-sm text-[#6f7a71]">
+          <h1 className="text-base font-semibold text-ink">{t("Reset password")}</h1>
+          <p className="text-sm text-muted-ink">
             {t("Enter the email or username for your {product} account. If it is registered, we will send a reset link.")}
           </p>
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-[#3f4941]">
+            <span className="mb-1 block text-xs font-medium text-secondary-ink">
               {t("Email or username")}
             </span>
             <input
@@ -217,18 +217,18 @@ export default function Login(props: { onSuccess: () => void }) {
           </label>
 
           {error && (
-            <div className="rounded border border-[#ffdad6] bg-[#fff8f7] px-3 py-2 text-sm text-[#93000a]">
+            <div className="rounded border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">
               {translate(error)}
             </div>
           )}
           {resetSent && (
-            <div className="rounded border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-sm text-[#166534]">
+            <div className="rounded border border-success-line bg-success-subtle px-3 py-2 text-sm text-success-ink">
               {t("If this email is registered with us, we have sent password reset instructions to it. Please check your inbox.")}
             </div>
           )}
 
           <Button
-            className="w-full justify-center rounded bg-[#1E7B4F] py-2 text-white hover:bg-[#00613a]"
+            className="w-full justify-center rounded bg-primary-button py-2 text-on-solid hover:bg-primary-button-hover"
             disabled={busy || !usr.trim() || resetSent}
             type="submit"
           >
@@ -236,7 +236,7 @@ export default function Login(props: { onSuccess: () => void }) {
           </Button>
           <button
             type="button"
-            className="w-full text-center text-sm text-[#6f7a71] hover:text-[#1E7B4F]"
+            className="w-full text-center text-sm text-muted-ink hover:text-accent-ink"
             onClick={() => {
               setMode("sign-in")
               setError(null)
@@ -249,11 +249,11 @@ export default function Login(props: { onSuccess: () => void }) {
         )}
 
         {!whiteLabel() && demoMode && mode === "sign-in" && (
-        <div className="mt-4 rounded border border-dashed border-[#bec9bf] p-4">
-          <p className="mb-3 rounded bg-[#fffbeb] px-3 py-2 text-center text-xs leading-relaxed text-[#92400e]">
+        <div className="mt-4 rounded border border-dashed border-control p-4">
+          <p className="mb-3 rounded bg-warning-subtle px-3 py-2 text-center text-xs leading-relaxed text-warning-ink">
             {t("Shared playground, not a live hotel. Play data is wiped every night and the sample hotel is seeded again. Don't put real guests, payments or API keys here.")}
           </p>
-          <p className="mb-2 text-center text-xs text-[#6f7a71]">
+          <p className="mb-2 text-center text-xs text-muted-ink">
             {t("Demo accounts - one tap to try each role")}
           </p>
           <div className="grid grid-cols-2 gap-2">
@@ -262,7 +262,7 @@ export default function Login(props: { onSuccess: () => void }) {
                 key={a.usr}
                 disabled={busy}
                 onClick={() => submit(a.usr, a.pwd)}
-                className="rounded border border-[#E2E8F0] bg-[#ffffff] px-2 py-1.5 text-xs font-medium text-[#3f4941] hover:border-[#1E7B4F] hover:text-[#00613a]"
+                className="rounded border border-control bg-surface px-2 py-1.5 text-xs font-medium text-secondary-ink hover:border-focus hover:text-accent-ink"
               >
                 {t(a.label)}
               </button>
@@ -271,7 +271,7 @@ export default function Login(props: { onSuccess: () => void }) {
         </div>
         )}
         {!whiteLabel() && version && (
-          <p className="mt-6 text-center text-[11px] text-[#6f7a71]">
+          <p className="mt-6 text-center text-[11px] text-muted-ink">
             {product()} PMS v{version}
           </p>
         )}

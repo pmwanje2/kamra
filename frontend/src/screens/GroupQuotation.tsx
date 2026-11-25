@@ -70,8 +70,8 @@ export default function GroupQuotation() {
         .catch((e) => setError(serverError(e)))
   }, [name])
 
-  if (error) return <p className="py-10 text-center text-rose-600">{error}</p>
-  if (!d) return <p className="py-10 text-center text-zinc-400">{translate("Loading…")}</p>
+  if (error) return <p className="py-10 text-center text-danger-text">{error}</p>
+  if (!d) return <p className="py-10 text-center text-muted-ink">{translate("Loading…")}</p>
 
   const { property: p, group: g, prices } = d
   return (
@@ -79,7 +79,7 @@ export default function GroupQuotation() {
       <div className="mb-4 flex items-center justify-between print:hidden">
         <Link
           to={`/groups?open=${encodeURIComponent(g.name)}`}
-          className="inline-flex items-center gap-1.5 text-sm text-zinc-500 hover:text-zinc-800"
+          className="inline-flex items-center gap-1.5 text-sm text-muted-ink hover:text-ink"
         >
           <ArrowLeft className="size-4" aria-hidden />{translate("Back to the group")}
         </Link>
@@ -88,37 +88,37 @@ export default function GroupQuotation() {
         </Button>
       </div>
 
-      <div className="space-y-6 rounded-xl border border-zinc-200 bg-white p-8 text-sm print:border-0 print:p-0">
+      <div className="space-y-6 rounded-xl border border-line bg-surface p-8 text-sm print:border-0 print:p-0">
         <header className="flex items-start justify-between gap-6">
           <div>
             {p.logo_url && <img src={p.logo_url} alt="" className="mb-2 h-12 object-contain" />}
-            <div className="text-lg font-semibold text-zinc-900">{p.property_name}</div>
-            <div className="text-zinc-500">{p.address}</div>
-            <div className="text-zinc-500">{[p.phone, p.email, p.website].filter(Boolean).join(" · ")}</div>
-            {p.tax_id && <div className="text-zinc-500">{translate(p.tax_id_label)}: {p.tax_id}</div>}
+            <div className="text-lg font-semibold text-ink">{p.property_name}</div>
+            <div className="text-muted-ink">{p.address}</div>
+            <div className="text-muted-ink">{[p.phone, p.email, p.website].filter(Boolean).join(" · ")}</div>
+            {p.tax_id && <div className="text-muted-ink">{translate(p.tax_id_label)}: {p.tax_id}</div>}
           </div>
           <div className="text-right">
-            <div className="text-xl font-semibold tracking-tight text-zinc-900">
+            <div className="text-xl font-semibold tracking-tight text-ink">
               {g.status === "Open" ? translate("Group quotation") : translate("Group proforma")}
             </div>
-            <div className="text-zinc-500">{g.name}</div>
-            <div className="text-zinc-500">{translate("Issued {v0}", { v0: d.issued_on })}</div>
+            <div className="text-muted-ink">{g.name}</div>
+            <div className="text-muted-ink">{translate("Issued {v0}", { v0: d.issued_on })}</div>
           </div>
         </header>
 
-        <section className="grid gap-1 rounded-lg bg-zinc-50 p-4 sm:grid-cols-2">
-          <div><span className="text-zinc-500">{translate("Group")}: </span>{g.group_name}{g.group_type ? ` (${translate(g.group_type)})` : ""}</div>
-          {g.company && <div><span className="text-zinc-500">{translate("Company")}: </span>{g.company}</div>}
-          {g.contact && <div><span className="text-zinc-500">{translate("Contact")}: </span>{g.contact}</div>}
+        <section className="grid gap-1 rounded-lg bg-canvas p-4 sm:grid-cols-2">
+          <div><span className="text-muted-ink">{translate("Group")}: </span>{g.group_name}{g.group_type ? ` (${translate(g.group_type)})` : ""}</div>
+          {g.company && <div><span className="text-muted-ink">{translate("Company")}: </span>{g.company}</div>}
+          {g.contact && <div><span className="text-muted-ink">{translate("Contact")}: </span>{g.contact}</div>}
           <div>
-            <span className="text-zinc-500">{translate("Stay")}: </span>
+            <span className="text-muted-ink">{translate("Stay")}: </span>
             {g.check_in_date} → {g.check_out_date} · {translate("{v0} night(s)", { v0: String(prices.nights) })}
           </div>
         </section>
 
         <table className="w-full">
           <thead>
-            <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
+            <tr className="border-b border-line text-left text-xs text-muted-ink">
               <th className="py-2 pr-2 font-medium">{translate("Room type")}</th>
               <th className="py-2 pr-2 text-right font-medium">{translate("Rooms")}</th>
               <th className="py-2 pr-2 text-right font-medium">{translate("Room-nights")}</th>
@@ -129,12 +129,12 @@ export default function GroupQuotation() {
           </thead>
           <tbody>
             {prices.rows.map((r) => (
-              <tr key={r.room_type} className="border-b border-zinc-100 align-top">
+              <tr key={r.room_type} className="border-b border-line-subtle align-top">
                 <td className="py-2 pr-2">
                   {r.room_type_name}
-                  {r.group_rate && <span className="ml-1 text-xs text-brand-700">{translate("group rate")}</span>}
+                  {r.group_rate && <span className="ml-1 text-xs text-accent-ink">{translate("group rate")}</span>}
                   {Object.keys(r.nightly).length > 0 && (
-                    <div className="text-xs text-zinc-500">
+                    <div className="text-xs text-muted-ink">
                       {Object.entries(r.nightly).map(([date, n]) => `${date.slice(5)}: ${n}`).join(" · ")}
                     </div>
                   )}
@@ -148,20 +148,20 @@ export default function GroupQuotation() {
             ))}
           </tbody>
           <tfoot>
-            <tr><td colSpan={5} className="pt-3 text-right text-zinc-500">{translate("Rooms before tax")}</td><td className="pt-3 text-right">{money(prices.before_tax)}</td></tr>
-            <tr><td colSpan={5} className="text-right text-zinc-500">{translate(p.tax_label)}</td><td className="text-right">{money(prices.tax)}</td></tr>
+            <tr><td colSpan={5} className="pt-3 text-right text-muted-ink">{translate("Rooms before tax")}</td><td className="pt-3 text-right">{money(prices.before_tax)}</td></tr>
+            <tr><td colSpan={5} className="text-right text-muted-ink">{translate(p.tax_label)}</td><td className="text-right">{money(prices.tax)}</td></tr>
             {prices.levy > 0 && (
-              <tr><td colSpan={5} className="text-right text-zinc-500">{translate("Room levy")}</td><td className="text-right">{money(prices.levy)}</td></tr>
+              <tr><td colSpan={5} className="text-right text-muted-ink">{translate("Room levy")}</td><td className="text-right">{money(prices.levy)}</td></tr>
             )}
             <tr className="text-base font-semibold"><td colSpan={5} className="pt-1 text-right">{translate("Total")}</td><td className="pt-1 text-right">{money(prices.total)}</td></tr>
             {g.deposit_due > 0 && (
-              <tr><td colSpan={5} className="pt-2 text-right text-zinc-600">{translate("Deposit to confirm")}</td><td className="pt-2 text-right font-medium">{money(g.deposit_due)}</td></tr>
+              <tr><td colSpan={5} className="pt-2 text-right text-secondary-ink">{translate("Deposit to confirm")}</td><td className="pt-2 text-right font-medium">{money(g.deposit_due)}</td></tr>
             )}
           </tfoot>
         </table>
 
-        <section className="space-y-1 text-zinc-600">
-          <div className="font-medium text-zinc-800">{translate("Terms")}</div>
+        <section className="space-y-1 text-secondary-ink">
+          <div className="font-medium text-ink">{translate("Terms")}</div>
           <ul className="list-disc space-y-1 pl-5">
             <li>{translate("Rooms are held until {v0}. Rooms not named by then are released.", { v0: g.cutoff_date })}</li>
             {g.attrition_pct > 0 && (

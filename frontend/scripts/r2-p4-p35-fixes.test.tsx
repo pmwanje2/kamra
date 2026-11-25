@@ -36,31 +36,6 @@ vi.mock("../src/lib/realtime", () => ({
   useRealtime: () => undefined,
 }))
 
-function relativeLuminance(hex: string): number {
-  const clean = hex.replace("#", "")
-  const r = parseInt(clean.slice(0, 2), 16) / 255
-  const g = parseInt(clean.slice(2, 4), 16) / 255
-  const b = parseInt(clean.slice(4, 6), 16) / 255
-  const toLinear = (c: number) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)
-  return 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b)
-}
-
-function loadDarkRemappedLowLuminanceTokens(): Map<string, string> {
-  const css = fs.readFileSync(path.join(frontendRoot, "src/index.css"), "utf8")
-  const match = css.match(/^\.dark\s*\{([\s\S]*?)^\}/m)
-  if (!match) throw new Error("Could not locate .dark token block in src/index.css")
-  const low = new Map<string, string>()
-  for (const m of match[1].matchAll(/--color-([a-z]+-\d+):\s*(#[0-9a-fA-F]{6})\s*;/g)) {
-    const [, token, hex] = m
-    if (relativeLuminance(hex) < 0.25) {
-      low.set(token, hex)
-    }
-  }
-  return low
-}
-
-const DARK_LOW_LUM_TOKENS = loadDarkRemappedLowLuminanceTokens()
-
 function darkModeContrastViolations(className: string): string[] {
   const tokens = className.split(/\s+/).filter(Boolean)
   const violations: string[] = []
@@ -68,12 +43,6 @@ function darkModeContrastViolations(className: string): string[] {
   const hasDarkBg = tokens.some((t) => /^dark:bg-/.test(t))
 
   for (const tok of tokens) {
-    const darkTextMatch = tok.match(/^dark:text-([a-z]+-\d+)(?:\/\d+)?$/)
-    if (darkTextMatch && DARK_LOW_LUM_TOKENS.has(darkTextMatch[1])) {
-      violations.push(
-        `${tok} resolves to dark ${DARK_LOW_LUM_TOKENS.get(darkTextMatch[1])} under .dark remap`,
-      )
-    }
     if (
       /^text-(rose|amber|emerald|sky|orange|indigo|teal)-950$/.test(tok) &&
       !hasDarkText
@@ -259,7 +228,7 @@ describe("R2 fixes: dark-mode contrast, trace time formatting, and clean i18n sc
     }
   })
 
-  it("RoomDrawer HK_TONE avoids dark-remapped low-luminance text tokens", () => {
+  it("RoomDrawer HK_TONE uses theme-aware text colors", () => {
     for (const [status, cls] of Object.entries(HK_TONE)) {
       expect(
         darkModeContrastViolations(cls),
@@ -341,11 +310,11 @@ describe("R2 fixes: dark-mode contrast, trace time formatting, and clean i18n sc
         darkModeContrastViolations(callout.className),
         `RoomDrawer ${variant.status} callout dark-mode contrast violation`,
       ).toEqual([])
-      expect(callout.className).toMatch(/dark:bg-/)
+      expect(callout.className).toMatch(/bg-(?:notice|danger)-subtle/)
     }
   })
 
-  it("HousekeepingBoard Inspected and all status tiles avoid dark-remapped low-luminance text tokens", async () => {
+  it("HousekeepingBoard Inspected and all status tiles use theme-aware text colors", async () => {
     callMock.mockImplementation(async (method: string) => {
       if (method === "kamra.api.room_board") {
         return {
@@ -418,7 +387,7 @@ describe("R2 fixes: dark-mode contrast, trace time formatting, and clean i18n sc
       ).toEqual([])
     }
 
-    // Assigned Pickup / Out of Service status notices must provide light dark:text-* overrides
+    // The assigned-room notices use the corresponding status text tokens.
     for (const [status, snippet] of [
       ["Pickup", "quick touch-up (Pickup)"],
       ["Out of Service", "Out of Service and cannot be assigned"],
@@ -457,11 +426,11 @@ describe("R2 fixes: dark-mode contrast, trace time formatting, and clean i18n sc
         p.textContent?.includes(snippet),
       )
       expect(notice, `Expected ${status} notice`).toBeDefined()
-      expect(notice!.className).toMatch(/dark:text-/)
+      expect(notice!.classList).toContain(status === "Pickup" ? "text-indigo-ink" : "text-notice-ink")
     }
   })
 
-  it("AlertBanner surfaces avoid inverted dark tokens", async () => {
+  it("AlertBanner surfaces use theme-aware colors", async () => {
     await act(async () =>
       root.render(
         <AlertBanner

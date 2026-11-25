@@ -43,7 +43,7 @@ function segmentDot(item: UnassignedBooking): string {
   if (item.booking_type === "Group" || item.group_booking) return "bg-sky-400"
   if (item.booking_type === "Corporate" || item.company) return "bg-violet-400"
   if (item.source === "OTA") return "bg-orange-400"
-  return "bg-zinc-400"
+  return "bg-fill-prominent"
 }
 
 function overlaps(aStart: string, aEnd: string, bStart: string, bEnd: string): boolean {
@@ -120,24 +120,24 @@ export function TapeUnassignedDock({
       data-testid="tape-unassigned-dock"
       aria-label={t("Unassigned queue")}
       className={cn(
-        "flex flex-col rounded-xl border border-zinc-200 bg-white shadow-sm",
+        "flex flex-col rounded-xl border border-line bg-surface shadow-sm",
         className,
       )}
     >
-      <div className="space-y-2 border-b border-zinc-200 p-3">
+      <div className="space-y-2 border-b border-line p-3">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <h2 className="text-sm font-semibold text-zinc-900">
+            <h2 className="text-sm font-semibold text-ink">
               {t("Unassigned ({n})", { n: shown.length })}
             </h2>
           </div>
-          <div className="inline-flex rounded-lg border border-zinc-200 p-0.5 text-xs">
+          <div className="inline-flex rounded-lg border border-line p-0.5 text-xs">
             <button
               type="button"
               onClick={() => setScope("today")}
               className={cn(
                 "min-h-9 rounded-md px-2 py-1 font-medium transition md:min-h-7",
-                scope === "today" ? "bg-brand-50 text-brand-700" : "text-zinc-500 hover:text-zinc-700",
+                scope === "today" ? "bg-accent-subtle text-accent-ink" : "text-muted-ink hover:text-secondary-ink",
               )}
             >
               {t("Today's arrivals")}
@@ -147,7 +147,7 @@ export function TapeUnassignedDock({
               onClick={() => setScope("all")}
               className={cn(
                 "min-h-9 rounded-md px-2 py-1 font-medium transition md:min-h-7",
-                scope === "all" ? "bg-brand-50 text-brand-700" : "text-zinc-500 hover:text-zinc-700",
+                scope === "all" ? "bg-accent-subtle text-accent-ink" : "text-muted-ink hover:text-secondary-ink",
               )}
             >
               {t("All window")}
@@ -162,14 +162,14 @@ export function TapeUnassignedDock({
           onClick={onAutoAssign}
           className="min-h-11 w-full justify-center md:min-h-9"
         >
-          <Sparkles className="size-4 text-brand-600" aria-hidden />
+          <Sparkles className="size-4 text-accent-text" aria-hidden />
           {t("Auto-Assign (Inspected/Ready)")}
         </Button>
       </div>
 
       <div className="flex-1 space-y-2 overflow-y-auto p-3">
         {shown.length === 0 ? (
-          <p className="py-6 text-center text-xs text-zinc-400">
+          <p className="py-6 text-center text-xs text-muted-ink">
             {t("No unassigned bookings in this view.")}
           </p>
         ) : (
@@ -186,11 +186,11 @@ export function TapeUnassignedDock({
                   if (target?.closest("select, button, input, a")) return
                   onStartDrag?.(e, item)
                 }}
-                className="cursor-grab select-none rounded-lg border border-zinc-200 bg-zinc-50/60 p-2.5 transition hover:border-brand-300 hover:bg-white active:cursor-grabbing"
+                className="cursor-grab select-none rounded-lg border border-line bg-canvas/60 p-2.5 transition hover:border-accent-line-strong hover:bg-surface active:cursor-grabbing"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5 text-sm font-semibold text-zinc-900">
+                    <div className="flex items-center gap-1.5 text-sm font-semibold text-ink">
                       {item.vip === 1 ? (
                         <Star className="size-3.5 shrink-0 fill-amber-400 text-amber-400" aria-hidden />
                       ) : (
@@ -198,7 +198,7 @@ export function TapeUnassignedDock({
                       )}
                       <span className="truncate">{item.guest_name}</span>
                     </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-zinc-500">
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-ink">
                       <Badge tone="sky">{item.room_type_name || item.room_type}</Badge>
                       <span className="tabular-nums">
                         {item.check_in_date} → {item.check_out_date}
@@ -206,11 +206,11 @@ export function TapeUnassignedDock({
                       <span>({tn(nights, "{n} night", "{n} nights")})</span>
                     </div>
                   </div>
-                  <GripVertical className="mt-0.5 size-4 shrink-0 text-zinc-300" aria-hidden />
+                  <GripVertical className="mt-0.5 size-4 shrink-0 text-muted-ink" aria-hidden />
                 </div>
 
                 {item.special_requests ? (
-                  <p className="mt-1.5 rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800">
+                  <p className="mt-1.5 rounded-md bg-warning-subtle px-2 py-1 text-xs text-warning-ink">
                     {item.special_requests}
                   </p>
                 ) : null}
@@ -222,7 +222,7 @@ export function TapeUnassignedDock({
                     onChange={(e) =>
                       setPicked((prev) => ({ ...prev, [item.name]: e.target.value }))
                     }
-                    className="min-h-11 min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-2 py-1 text-xs md:min-h-8"
+                    className="min-h-11 min-w-0 flex-1 rounded-lg border border-control bg-surface px-2 py-1 text-xs md:min-h-8"
                   >
                     {candidates.length === 0 ? (
                       <option value="">{t("No free room")}</option>
@@ -247,7 +247,7 @@ export function TapeUnassignedDock({
                 </div>
 
                 {selectedRoom ? (
-                  <div className="mt-1 flex items-center gap-1 text-[10px] text-zinc-400">
+                  <div className="mt-1 flex items-center gap-1 text-[10px] text-muted-ink">
                     {(() => {
                       const chosen = candidates.find((c) => c.name === selectedRoom)
                       if (!chosen) return null

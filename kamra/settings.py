@@ -225,9 +225,10 @@ MODULES: tuple[Module, ...] = (
 				  hint="On: a room is assigned when the reservation is made. Off: the reservation holds a "
 				       "room type only, and the room is chosen at check-in. Walk-ins keep their room. "
 				       "Availability still counts the stay against the room type."),
-				S("rate_plan_required", "Require a rate plan for new bookings", "check", 0,
-				  hint="On: every new booking, walk-in, group pick-up, channel and online booking resolves "
-				       "a rate plan. Existing reservations are never repriced."),
+			)),
+			Section("pricing", "Pricing", "", (
+				S("rate_plan_required", "Require a rate plan on every booking", "check", 0,
+				  hint="When enabled, new reservations and walk-ins must use a rate plan. When disabled, staff can choose the standard rate if the property still uses it."),
 			)),
 			Section("holds", "Holds & selling", "", (
 				S("hold_minutes", "Hold unconfirmed bookings for", "number", 120, P, min=5, max=10080, unit="min"),

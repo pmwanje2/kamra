@@ -80,7 +80,7 @@ function range(p: Exclude<Preset, "custom">): [string, string] {
 }
 
 const selectCls =
-  "rounded-lg border border-zinc-300 bg-white px-2.5 py-2 text-sm text-zinc-700 focus:outline-2 focus:outline-brand-600"
+  "rounded-lg border border-control bg-surface px-2.5 py-2 text-sm text-secondary-ink focus:outline-2 focus:outline-focus"
 
 export default function OrderHistory({ outlet, onClose, onOpenBill }: {
   outlet: string
@@ -166,12 +166,12 @@ export default function OrderHistory({ outlet, onClose, onOpenBill }: {
   const span = from === to ? shortDay(from) : `${shortDay(from)} - ${shortDay(to)}`
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-zinc-50" role="dialog" aria-label={t("Order history")}>
-      <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-zinc-200 bg-white px-4 py-3">
-        <Receipt className="size-5 text-brand-700" aria-hidden />
+    <div className="fixed inset-0 z-50 flex flex-col bg-canvas" role="dialog" aria-label={t("Order history")}>
+      <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-surface px-4 py-3">
+        <Receipt className="size-5 text-accent-ink" aria-hidden />
         <div className="me-auto min-w-0">
-          <h1 className="text-lg font-semibold text-zinc-900">{t("Order history")}</h1>
-          <p className="text-xs text-zinc-500">{outlet} · {span}</p>
+          <h1 className="text-lg font-semibold text-ink">{t("Order history")}</h1>
+          <p className="text-xs text-muted-ink">{outlet} · {span}</p>
         </div>
         <Button variant="outline" disabled={exporting || !data} onClick={exportCsv}
           title={t("Download exactly these bills as a spreadsheet (CSV)")}>
@@ -195,7 +195,7 @@ export default function OrderHistory({ outlet, onClose, onOpenBill }: {
               {presets.map(([p, text]) => (
                 <button key={p} onClick={() => pick(p)} aria-pressed={preset === p}
                   className={cn("rounded-full px-3 py-1.5 text-sm font-medium",
-                    preset === p ? "bg-brand-600 text-white" : "bg-white text-zinc-700 ring-1 ring-zinc-200 hover:bg-zinc-100")}>
+                    preset === p ? "bg-accent-fill text-on-solid" : "bg-surface text-secondary-ink ring-1 ring-line hover:bg-subtle")}>
                   {text}
                 </button>
               ))}
@@ -204,7 +204,7 @@ export default function OrderHistory({ outlet, onClose, onOpenBill }: {
                   <input type="date" value={from} max={localDay()} aria-label={t("From")}
                     onChange={(e) => setSpan([e.target.value || localDay(), to < e.target.value ? e.target.value : to])}
                     className={selectCls} />
-                  <span className="text-zinc-400">-</span>
+                  <span className="text-muted-ink">-</span>
                   <input type="date" value={to} min={from} max={localDay()} aria-label={t("To")}
                     onChange={(e) => setSpan([from, e.target.value || localDay()])}
                     className={selectCls} />
@@ -215,10 +215,10 @@ export default function OrderHistory({ outlet, onClose, onOpenBill }: {
             {/* what */}
             <div className="flex flex-wrap items-center gap-2">
               <label className="relative min-w-[14rem] flex-1">
-                <Search className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-zinc-400" aria-hidden />
+                <Search className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-ink" aria-hidden />
                 <input value={q} onChange={(e) => setQ(e.target.value)}
                   placeholder={t("Bill, KOT, table, room, name or phone")}
-                  className="w-full rounded-lg border border-zinc-300 bg-white py-2 ps-8 pe-2 text-sm focus:outline-2 focus:outline-brand-600" />
+                  className="w-full rounded-lg border border-control bg-surface py-2 ps-8 pe-2 text-sm focus:outline-2 focus:outline-focus" />
               </label>
               <select value={orderType} onChange={(e) => setOrderType(e.target.value)}
                 aria-label={t("Order type")} className={selectCls}>
@@ -235,13 +235,13 @@ export default function OrderHistory({ outlet, onClose, onOpenBill }: {
             <div className="flex flex-wrap gap-1.5">
               <button onClick={() => setOnly(null)} aria-pressed={only === null}
                 className={cn("rounded-full px-3 py-1 text-xs font-medium",
-                  only === null ? "bg-zinc-800 text-white" : "bg-white text-zinc-600 ring-1 ring-zinc-200")}>
+                  only === null ? "bg-inverse text-on-inverse" : "bg-surface text-secondary-ink ring-1 ring-line")}>
                 {t("All")} · {data ? Object.values(data.counts).reduce((a, b) => a + b, 0) : 0}
               </button>
               {STATES.filter((s) => (data?.counts[s] ?? 0) > 0).map((s) => (
                 <button key={s} onClick={() => setOnly(only === s ? null : s)} aria-pressed={only === s}
                   className={cn("rounded-full px-3 py-1 text-xs font-medium",
-                    only === s ? "bg-zinc-800 text-white" : "bg-white text-zinc-600 ring-1 ring-zinc-200")}>
+                    only === s ? "bg-inverse text-on-inverse" : "bg-surface text-secondary-ink ring-1 ring-line")}>
                   {label(s)} · {data?.counts[s]}
                 </button>
               ))}
@@ -261,25 +261,25 @@ export default function OrderHistory({ outlet, onClose, onOpenBill }: {
               </div>
             )}
 
-            {err && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{translate(err)}</p>}
+            {err && <p className="rounded-lg bg-danger-subtle px-3 py-2 text-sm text-danger-ink">{translate(err)}</p>}
             {data?.truncated && (
-              <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              <p className="rounded-lg bg-warning-subtle px-3 py-2 text-sm text-warning-ink">
                 {t("Too many bills in this range to list them all. Narrow the dates, or export the range.")}
               </p>
             )}
 
             {data === null && !err ? (
-              <p className="py-10 text-center text-sm text-zinc-400">{t("Loading…")}</p>
+              <p className="py-10 text-center text-sm text-muted-ink">{t("Loading…")}</p>
             ) : rows.length === 0 && !loading ? (
-              <p className="rounded-xl border border-dashed border-zinc-300 bg-white py-10 text-center text-sm text-zinc-500">
+              <p className="rounded-xl border border-dashed border-control bg-surface py-10 text-center text-sm text-muted-ink">
                 {t("No bills match these filters.")}
               </p>
             ) : (
               <>
                 {/* wide screens: a table */}
-                <div className="hidden overflow-x-auto rounded-xl border border-zinc-200 bg-white md:block">
+                <div className="hidden overflow-x-auto rounded-xl border border-line bg-surface md:block">
                   <table className="w-full text-sm">
-                    <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
+                    <thead className="bg-canvas text-xs uppercase tracking-wide text-muted-ink">
                       <tr>
                         <th className="px-3 py-2 text-start font-medium">{t("Bill")}</th>
                         <th className="px-3 py-2 text-start font-medium">{t("Date")}</th>
@@ -294,33 +294,33 @@ export default function OrderHistory({ outlet, onClose, onOpenBill }: {
                         <th className="px-3 py-2"><span className="sr-only">{t("Actions")}</span></th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-zinc-100">
+                    <tbody className="divide-y divide-line-subtle">
                       {rows.map((r) => (
                         <tr key={r.name} onClick={() => open(r)}
-                          className={cn("cursor-pointer hover:bg-brand-50/40", r.stale ? "bg-rose-50/50" : "")}>
-                          <td className="px-3 py-2 font-medium text-zinc-900">
-                            {r.name}{r.kot_no ? <span className="ms-1 text-xs font-normal text-zinc-500">{translate("KOT ")}{r.kot_no}</span> : null}
+                          className={cn("cursor-pointer hover:bg-accent-subtle/40", r.stale ? "bg-danger-subtle/50" : "")}>
+                          <td className="px-3 py-2 font-medium text-ink">
+                            {r.name}{r.kot_no ? <span className="ms-1 text-xs font-normal text-muted-ink">{translate("KOT ")}{r.kot_no}</span> : null}
                           </td>
-                          <td className="whitespace-nowrap px-3 py-2 tabular-nums text-zinc-600">
+                          <td className="whitespace-nowrap px-3 py-2 tabular-nums text-secondary-ink">
                             {shortDay(r.time.slice(0, 10))} {hhmm(r.time)}
-                            {r.carried ? <span className="ms-1 text-xs text-rose-600">{t("carried over")}</span> : null}
+                            {r.carried ? <span className="ms-1 text-xs text-danger-text">{t("carried over")}</span> : null}
                           </td>
-                          <td className="px-3 py-2 text-zinc-600">{r.order_type ? t(r.order_type) : ""}</td>
-                          <td className="px-3 py-2 text-zinc-600">{r.room_no ? `${t("Room")} ${r.room_no}` : r.table_no ?? ""}</td>
-                          <td className="max-w-[12rem] truncate px-3 py-2 text-zinc-700">{r.who ?? ""}</td>
-                          <td className="px-3 py-2 text-end tabular-nums text-zinc-600">{r.items}</td>
-                          <td className="px-3 py-2 text-zinc-600">{r.state === "room" ? t("Posted to room") : r.state === "paid" ? translate(r.payment_mode) ?? "" : ""}</td>
-                          <td className="max-w-[10rem] px-3 py-2 text-xs text-zinc-600">
+                          <td className="px-3 py-2 text-secondary-ink">{r.order_type ? t(r.order_type) : ""}</td>
+                          <td className="px-3 py-2 text-secondary-ink">{r.room_no ? `${t("Room")} ${r.room_no}` : r.table_no ?? ""}</td>
+                          <td className="max-w-[12rem] truncate px-3 py-2 text-secondary-ink">{r.who ?? ""}</td>
+                          <td className="px-3 py-2 text-end tabular-nums text-secondary-ink">{r.items}</td>
+                          <td className="px-3 py-2 text-secondary-ink">{r.state === "room" ? t("Posted to room") : r.state === "paid" ? translate(r.payment_mode) ?? "" : ""}</td>
+                          <td className="max-w-[10rem] px-3 py-2 text-xs text-secondary-ink">
                             <div className="truncate">{r.served_by ?? ""}</div>
-                            {r.cashier && <div className="truncate text-zinc-400">{t("Cashier: {name}", { name: r.cashier })}</div>}
+                            {r.cashier && <div className="truncate text-muted-ink">{t("Cashier: {name}", { name: r.cashier })}</div>}
                           </td>
                           <td className="px-3 py-2">
                             <StateBadge state={r.state} />
                             {r.state === "cancelled" && r.cancel_reason
-                              ? <span className="ms-1.5 text-xs text-rose-700">{r.cancel_reason}</span> : null}
+                              ? <span className="ms-1.5 text-xs text-danger-ink">{r.cancel_reason}</span> : null}
                           </td>
                           <td className={cn("px-3 py-2 text-end font-semibold tabular-nums",
-                            r.state === "cancelled" && "text-zinc-400 line-through")}>
+                            r.state === "cancelled" && "text-muted-ink line-through")}>
                             {cur()}{money(r.amount)}
                           </td>
                           <td className="px-3 py-2 text-end">
@@ -341,18 +341,18 @@ export default function OrderHistory({ outlet, onClose, onOpenBill }: {
                   {rows.map((r) => (
                     <li key={r.name}>
                       <button onClick={() => open(r)}
-                        className={cn("w-full rounded-xl border bg-white p-3 text-start",
-                          r.stale ? "border-rose-300" : "border-zinc-200")}>
+                        className={cn("w-full rounded-xl border bg-surface p-3 text-start",
+                          r.stale ? "border-danger-line-strong" : "border-line")}>
                         <div className="flex items-center justify-between gap-2">
-                          <span className="truncate text-sm font-semibold text-zinc-900">
-                            {translate(r.label)}{r.who && r.who !== r.label ? <span className="font-normal text-zinc-500"> · {r.who}</span> : null}
+                          <span className="truncate text-sm font-semibold text-ink">
+                            {translate(r.label)}{r.who && r.who !== r.label ? <span className="font-normal text-muted-ink"> · {r.who}</span> : null}
                           </span>
                           <span className={cn("shrink-0 text-sm font-semibold tabular-nums",
-                            r.state === "cancelled" && "text-zinc-400 line-through")}>
+                            r.state === "cancelled" && "text-muted-ink line-through")}>
                             {cur()}{money(r.amount)}
                           </span>
                         </div>
-                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-zinc-500">
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-ink">
                           <StateBadge state={r.state} />
                           <span>{shortDay(r.time.slice(0, 10))} {hhmm(r.time)}</span>
                           <span>· {r.name}</span>
@@ -361,7 +361,7 @@ export default function OrderHistory({ outlet, onClose, onOpenBill }: {
                           {r.state === "room" ? <span>· {t("Posted to room")}</span> : null}
                           {r.served_by ? <span>· {r.served_by}</span> : null}
                         </div>
-                        <span className="mt-2 inline-block rounded-lg border border-zinc-300 px-3 py-1 text-xs font-semibold text-zinc-700">
+                        <span className="mt-2 inline-block rounded-lg border border-control px-3 py-1 text-xs font-semibold text-secondary-ink">
                           {r.state === "open" || r.state === "sent" ? t("Open on till") : t("View bill")}
                         </span>
                       </button>
@@ -370,7 +370,7 @@ export default function OrderHistory({ outlet, onClose, onOpenBill }: {
                 </ul>
 
                 <div className="flex flex-col items-center gap-1 pb-6 pt-2">
-                  <p className="text-xs text-zinc-500">
+                  <p className="text-xs text-muted-ink">
                     {t("Showing {n} of {total} bills", { n: rows.length, total: data?.total ?? rows.length })}
                   </p>
                   {data?.has_more && (
@@ -393,11 +393,11 @@ function Tile({ title, value, strong, tone }: {
 }) {
   useUILanguage()
   return (
-    <div className={cn("rounded-xl border bg-white px-3 py-2",
-      tone === "rose" ? "border-rose-200" : "border-zinc-200")}>
-      <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">{translate(title)}</p>
-      <p className={cn("tabular-nums", strong ? "text-lg font-semibold text-zinc-900" : "text-base font-medium text-zinc-800",
-        tone === "rose" && "text-rose-700")}>{value}</p>
+    <div className={cn("rounded-xl border bg-surface px-3 py-2",
+      tone === "rose" ? "border-danger-line" : "border-line")}>
+      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-ink">{translate(title)}</p>
+      <p className={cn("tabular-nums", strong ? "text-lg font-semibold text-ink" : "text-base font-medium text-ink",
+        tone === "rose" && "text-danger-ink")}>{value}</p>
     </div>
   )
 }

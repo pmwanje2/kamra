@@ -113,11 +113,11 @@ export default function BanquetCatalogue() {
       <CardHeader>
         <div>
           <CardTitle>{translate("Banquet catalogue")}</CardTitle>
-          <p className="mt-0.5 text-xs text-zinc-400">{translate("The menus and services every quote is built from.")}</p>
+          <p className="mt-0.5 text-xs text-muted-ink">{translate("The menus and services every quote is built from.")}</p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <div className="relative">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-zinc-400" />
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-ink" />
             <input
               className={inputCls + " !w-44 pl-8"}
               placeholder={translate("Search…")}
@@ -172,7 +172,7 @@ export default function BanquetCatalogue() {
       </CardHeader>
       <CardContent>
         <ErrorNote error={error} />
-        <div className="mb-4 flex gap-1 border-b border-zinc-200">
+        <div className="mb-4 flex gap-1 border-b border-line">
           {(
             [
               ["menus", `Menus (${cat?.menus.length ?? 0})`, UtensilsCrossed],
@@ -186,8 +186,8 @@ export default function BanquetCatalogue() {
               className={
                 "-mb-px inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium " +
                 (tab === id
-                  ? "border-brand-600 text-brand-700"
-                  : "border-transparent text-zinc-500 hover:text-zinc-800")
+                  ? "border-accent-control text-accent-ink"
+                  : "border-transparent text-muted-ink hover:text-ink")
               }
             >
               <Icon className="size-4" />
@@ -219,19 +219,19 @@ export default function BanquetCatalogue() {
               {menus.map((m) => (
                 <li
                   key={m.name}
-                  className="rounded-xl border border-zinc-200 px-4 py-3"
+                  className="rounded-xl border border-line px-4 py-3"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="font-medium">
                         {m.menu_name}
                         {m.menu_code && (
-                          <span className="ml-2 font-mono text-xs font-normal text-zinc-400">
+                          <span className="ml-2 font-mono text-xs font-normal text-muted-ink">
                             {m.menu_code}
                           </span>
                         )}
                       </p>
-                      <p className="text-xs text-zinc-400">
+                      <p className="text-xs text-muted-ink">
                         {translate(m.meal_period)} · {translate(m.food_type)} · {translate(m.service_style)}
                         {m.cuisine ? ` · ${m.cuisine}` : ""}
                         {m.min_pax ? translate(" · min {v0} pax", { v0: String(m.min_pax) }) : ""}
@@ -240,9 +240,9 @@ export default function BanquetCatalogue() {
                     <div className="shrink-0 text-right">
                       <p className="tabular-nums">
                         {inr(m.rate_per_pax)}
-                        <span className="text-xs text-zinc-400">{translate("/pax")}</span>
+                        <span className="text-xs text-muted-ink">{translate("/pax")}</span>
                       </p>
-                      <p className="text-xs text-zinc-400">
+                      <p className="text-xs text-muted-ink">
                         {taxLabel()} {m.gst_rate}%
                       </p>
                     </div>
@@ -251,10 +251,10 @@ export default function BanquetCatalogue() {
                     <ul className="mt-2 space-y-0.5">
                       {m.courses.map((c) => (
                         <li key={c.name} className="flex gap-2 text-xs">
-                          <span className="w-28 shrink-0 font-medium text-zinc-500">
+                          <span className="w-28 shrink-0 font-medium text-muted-ink">
                             {translate(c.course)}
                           </span>
-                          <span className="text-zinc-500">{c.dishes}</span>
+                          <span className="text-muted-ink">{c.dishes}</span>
                         </li>
                       ))}
                     </ul>
@@ -268,7 +268,7 @@ export default function BanquetCatalogue() {
                       >{translate("Edit")}</Button>
                       <Button
                         variant="ghost"
-                        className="!px-2 !py-1 !text-xs !text-rose-600"
+                        className="!px-2 !py-1 !text-xs !text-danger-text"
                         disabled={busy}
                         onClick={() => act(() => banquet.deleteMenu(m.name))}
                       >
@@ -291,7 +291,7 @@ export default function BanquetCatalogue() {
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wider text-zinc-400">
+                <tr className="border-b border-line text-left text-xs uppercase tracking-wider text-muted-ink">
                   <th className="py-2 pr-3 font-medium">{translate("Item")}</th>
                   <th className="py-2 pr-3 font-medium">{translate("Category")}</th>
                   <th className="py-2 pr-3 font-medium">{translate("Charged")}</th>
@@ -305,34 +305,34 @@ export default function BanquetCatalogue() {
               </thead>
               <tbody>
                 {services.map((s) => (
-                  <tr key={s.name} className="border-b border-zinc-100">
+                  <tr key={s.name} className="border-b border-line-subtle">
                     <td className="py-2 pr-3">
                       <span className="font-medium">{s.item_name}</span>
                       {s.description && (
-                        <p className="text-xs text-zinc-400">{s.description}</p>
+                        <p className="text-xs text-muted-ink">{s.description}</p>
                       )}
                     </td>
-                    <td className="py-2 pr-3 text-zinc-500">{translate(s.category)}</td>
-                    <td className="py-2 pr-3 text-zinc-500">{translate(s.uom)}</td>
+                    <td className="py-2 pr-3 text-muted-ink">{translate(s.category)}</td>
+                    <td className="py-2 pr-3 text-muted-ink">{translate(s.uom)}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">
                       {inr(s.rate)}
                     </td>
-                    <td className="py-2 pr-3 text-right tabular-nums text-zinc-500">
+                    <td className="py-2 pr-3 text-right tabular-nums text-muted-ink">
                       {s.gst_rate}%
                     </td>
                     <td className="py-2 pr-3 text-xs">
                       <span
                         className={
-                          s.chargeable ? "text-zinc-500" : "text-emerald-700"
+                          s.chargeable ? "text-muted-ink" : "text-success-ink"
                         }
                       >
                         {s.chargeable ? translate("Chargeable") : translate("Complimentary")}
                       </span>
                       {s.is_alcohol && sellsAlcohol() ? (
-                        <span className="ml-1.5 text-amber-700">{translate("alcohol")}</span>
+                        <span className="ml-1.5 text-warning-ink">{translate("alcohol")}</span>
                       ) : null}
                       {s.on_pack_list ? (
-                        <span className="ml-1.5 text-zinc-400">{translate("packed")}</span>
+                        <span className="ml-1.5 text-muted-ink">{translate("packed")}</span>
                       ) : null}
                     </td>
                     {canEdit && (
@@ -345,7 +345,7 @@ export default function BanquetCatalogue() {
                           >{translate("Edit")}</Button>
                           <Button
                             variant="ghost"
-                            className="!px-2 !py-1 !text-xs !text-rose-600"
+                            className="!px-2 !py-1 !text-xs !text-danger-text"
                             disabled={busy}
                             onClick={() =>
                               act(() => banquet.deleteService(s.name))
@@ -533,7 +533,7 @@ function MenuSheet({
 
         <div>
           <div className="mb-2 flex items-center justify-between">
-            <p className="text-xs font-medium text-zinc-500">{translate("Courses")}</p>
+            <p className="text-xs font-medium text-muted-ink">{translate("Courses")}</p>
             <Button
               variant="outline"
               className="!px-2 !py-1 !text-xs"
@@ -547,13 +547,13 @@ function MenuSheet({
               <Plus className="size-3.5" />{translate("Course")}</Button>
           </div>
           {courses.length === 0 ? (
-            <p className="text-sm text-zinc-400">{translate("No courses yet - Starters, Main course, Live counter, Desserts.")}</p>
+            <p className="text-sm text-muted-ink">{translate("No courses yet - Starters, Main course, Live counter, Desserts.")}</p>
           ) : (
             <div className="space-y-2">
               {courses.map((c, i) => (
                 <div
                   key={i}
-                  className="grid gap-2 rounded-lg border border-zinc-200 px-3 py-2 sm:grid-cols-[10rem_1fr_5rem_auto_auto]"
+                  className="grid gap-2 rounded-lg border border-line px-3 py-2 sm:grid-cols-[10rem_1fr_5rem_auto_auto]"
                 >
                   <input
                     className={inputCls}
@@ -577,10 +577,10 @@ function MenuSheet({
                       editCourse(i, { choice_of: Number(e.target.value) })
                     }
                   />
-                  <label className="flex items-center gap-1.5 text-xs text-zinc-500">
+                  <label className="flex items-center gap-1.5 text-xs text-muted-ink">
                     <input
                       type="checkbox"
-                      className="size-4 accent-brand-600"
+                      className="size-4 accent-focus"
                       checked={Boolean(c.is_live_counter)}
                       onChange={(e) =>
                         editCourse(i, {
@@ -589,7 +589,7 @@ function MenuSheet({
                       }
                     />{translate("Live")}</label>
                   <button
-                    className="text-zinc-300 hover:text-rose-600"
+                    className="text-muted-ink hover:text-danger-text"
                     onClick={() =>
                       setCourses((cs) => cs.filter((_, x) => x !== i))
                     }
@@ -723,7 +723,7 @@ function ServiceSheet({
             onChange={(e) => set("description", e.target.value)}
           />
         </Field>
-        <div className="space-y-2 rounded-lg border border-zinc-200 px-3 py-2">
+        <div className="space-y-2 rounded-lg border border-line px-3 py-2">
           <Toggle
             checked={Boolean(s.chargeable)}
             onChange={(v) => set("chargeable", v ? 1 : 0)}
@@ -765,13 +765,13 @@ function Toggle({
     <label className="flex items-start gap-2">
       <input
         type="checkbox"
-        className="mt-0.5 size-4 accent-brand-600"
+        className="mt-0.5 size-4 accent-focus"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
       />
       <span>
-        <span className="block text-sm font-medium text-zinc-700">{translate(label)}</span>
-        <span className="block text-xs text-zinc-400">{translate(hint)}</span>
+        <span className="block text-sm font-medium text-secondary-ink">{translate(label)}</span>
+        <span className="block text-xs text-muted-ink">{translate(hint)}</span>
       </span>
     </label>
   )
@@ -833,10 +833,10 @@ function DishLibrary({
     <div className="space-y-4">
       <ErrorNote error={error} />
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-zinc-500">
+        <p className="text-sm text-muted-ink">
           {tn(dishes.length, "{n} dish", "{n} dishes")}
           {uncosted.length > 0 && (
-            <span className="text-amber-700">
+            <span className="text-warning-ink">
               {" "}
               · {uncosted.length}{translate(" with no recipe, so they cost nothing")}</span>
           )}
@@ -852,10 +852,10 @@ function DishLibrary({
       </div>
 
       {/* the number on every card is arithmetic, not an estimate - say so */}
-      <p className="rounded-lg bg-zinc-50 px-3 py-2 text-xs text-zinc-500">{translate("A dish costs the sum of its recipe: for each ingredient,")}{" "}
-        <span className="font-medium text-zinc-700">{translate("quantity per portion x that ingredient's cost per unit")}</span>{translate(". Re-costing walks every dish and recomputes it at today's ingredient prices, so a quote is never priced off last season's onions.")}</p>
+      <p className="rounded-lg bg-canvas px-3 py-2 text-xs text-muted-ink">{translate("A dish costs the sum of its recipe: for each ingredient,")}{" "}
+        <span className="font-medium text-secondary-ink">{translate("quantity per portion x that ingredient's cost per unit")}</span>{translate(". Re-costing walks every dish and recomputes it at today's ingredient prices, so a quote is never priced off last season's onions.")}</p>
       {changes && (
-        <p className="text-xs text-emerald-700">{changes}</p>
+        <p className="text-xs text-success-ink">{changes}</p>
       )}
 
       {dishes.length === 0 ? (
@@ -864,14 +864,14 @@ function DishLibrary({
         <div className="space-y-5">
           {Object.entries(byCourse).map(([course, rows]) => (
             <div key={course}>
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-ink">
                 {course}
               </h3>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {rows.map((d) => (
                   <div
                     key={d.name}
-                    className="rounded-lg border border-zinc-200 px-3 py-2"
+                    className="rounded-lg border border-line px-3 py-2"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
@@ -888,7 +888,7 @@ function DishLibrary({
                           />
                           {d.dish_name}
                         </p>
-                        <p className="text-xs text-zinc-400">
+                        <p className="text-xs text-muted-ink">
                           {d.kitchen}
                           {d.portion_per_pax !== 1
                             ? translate(" · {v0}/pax", { v0: String(d.portion_per_pax) })
@@ -900,15 +900,15 @@ function DishLibrary({
                         {d.cost_per_portion ? (
                           <p className="tabular-nums">
                             {inr(d.cost_per_portion)}
-                            <span className="text-xs text-zinc-400">{translate("/portion")}</span>
+                            <span className="text-xs text-muted-ink">{translate("/portion")}</span>
                           </p>
                         ) : (
-                          <p className="text-xs text-amber-700">{translate("no recipe")}</p>
+                          <p className="text-xs text-warning-ink">{translate("no recipe")}</p>
                         )}
                       </div>
                     </div>
                     <div className="mt-1 flex items-center justify-between gap-2">
-                      <p className="text-xs text-zinc-400">
+                      <p className="text-xs text-muted-ink">
                         {d.recipe.length
                           ? translate("{v0} ingredient{v1}", { v0: String(d.recipe.length), v1: String(d.recipe.length === 1 ? "" : "s") })
                           : translate("no recipe")}
@@ -916,11 +916,11 @@ function DishLibrary({
                       {canEdit && (
                         <span className="flex gap-1">
                           <button
-                            className="text-xs font-medium text-brand-700 hover:underline"
+                            className="text-xs font-medium text-accent-ink hover:underline"
                             onClick={() => onEdit(d)}
                           >{translate("Edit")}</button>
                           <button
-                            className="text-zinc-300 hover:text-rose-600"
+                            className="text-muted-ink hover:text-danger-text"
                             aria-label={translate("Delete {v0}", { v0: String(d.dish_name) })}
                             disabled={busy}
                             onClick={() => onDelete(d.name)}
@@ -995,7 +995,7 @@ function DishSheet({
       wide
       footer={
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <span className="text-sm text-zinc-500">
+          <span className="text-sm text-muted-ink">
             {recipe.length
               ? translate("Costs {v0} a portion", { v0: String(inr(cost)) })
               : translate("No recipe yet - this dish will cost nothing")}
@@ -1084,8 +1084,8 @@ function DishSheet({
         <div>
           <div className="mb-2 flex items-center justify-between">
             <div>
-              <p className="text-xs font-medium text-zinc-500">{translate("Recipe - one portion")}</p>
-              <p className="text-[11px] text-zinc-400">{translate("Quantities are per portion, in each ingredient's own unit.")}</p>
+              <p className="text-xs font-medium text-muted-ink">{translate("Recipe - one portion")}</p>
+              <p className="text-[11px] text-muted-ink">{translate("Quantities are per portion, in each ingredient's own unit.")}</p>
             </div>
             <Button
               variant="outline"
@@ -1098,13 +1098,13 @@ function DishSheet({
           </div>
 
           {ingredients.length === 0 ? (
-            <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">{translate("No ingredients on this property yet. Add them under Kitchen Inventory first - a dish can only cost what its ingredients cost.")}</p>
+            <p className="rounded-lg bg-warning-subtle px-3 py-2 text-sm text-warning-ink">{translate("No ingredients on this property yet. Add them under Kitchen Inventory first - a dish can only cost what its ingredients cost.")}</p>
           ) : recipe.length === 0 ? (
-            <p className="text-sm text-zinc-400">{translate("No recipe yet. Without one the dish costs nothing, and every quote built on it will look more profitable than it is.")}</p>
+            <p className="text-sm text-muted-ink">{translate("No recipe yet. Without one the dish costs nothing, and every quote built on it will look more profitable than it is.")}</p>
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wider text-zinc-400">
+                <tr className="border-b border-line text-left text-xs uppercase tracking-wider text-muted-ink">
                   <th className="py-1.5 font-medium">{translate("Ingredient")}</th>
                   <th className="w-24 py-1.5 text-right font-medium">{translate("Qty")}</th>
                   <th className="w-28 py-1.5 text-right font-medium">{translate("Price")}</th>
@@ -1114,7 +1114,7 @@ function DishSheet({
               </thead>
               <tbody>
                 {recipe.map((r, i) => (
-                  <tr key={i} className="border-b border-zinc-100">
+                  <tr key={i} className="border-b border-line-subtle">
                     <td className="py-1.5 pr-2">
                       <select
                         className={inputCls + " !py-1"}
@@ -1152,7 +1152,7 @@ function DishSheet({
                         }
                       />
                     </td>
-                    <td className="py-1.5 pr-2 text-right text-xs tabular-nums text-zinc-400">
+                    <td className="py-1.5 pr-2 text-right text-xs tabular-nums text-muted-ink">
                       {r.ingredient
                         ? `${inr(priceOf(r.ingredient))}/${uomOf(r.ingredient)}`
                         : "-"}
@@ -1162,7 +1162,7 @@ function DishSheet({
                     </td>
                     <td className="py-1.5 text-right">
                       <button
-                        className="text-zinc-300 hover:text-rose-600"
+                        className="text-muted-ink hover:text-danger-text"
                         aria-label={translate("Remove ingredient")}
                         onClick={() =>
                           setRecipe((rs) => rs.filter((_, n) => n !== i))

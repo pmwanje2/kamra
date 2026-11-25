@@ -118,8 +118,8 @@ const PLACEHOLDER: Record<FileKind, string> = {
 }
 
 const inputCls =
-  "w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2.5 text-base " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "w-full rounded-lg border border-control bg-surface px-3.5 py-2.5 text-base " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 function money(n: number | null | undefined) {
   return n === null || n === undefined ? "-" : fmtMoney(n)
@@ -251,20 +251,20 @@ export default function GoLiveImport({
     <div className="space-y-4">
       {!embedded && (
         <header className="flex flex-wrap items-center gap-2">
-          <FileUp className="size-5 text-brand-600" aria-hidden />
+          <FileUp className="size-5 text-accent-text" aria-hidden />
           <h1 className="text-xl font-semibold tracking-tight">{t("Go-live import")}</h1>
-          <p className="ml-2 text-sm text-zinc-500">
+          <p className="ml-2 text-sm text-muted-ink">
             {t("Bring bookings, companies and opening balances over from your old system, then reconcile before you switch.")}
           </p>
         </header>
       )}
       {!property && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="rounded-lg border border-warning-line bg-warning-subtle px-4 py-3 text-sm text-warning-ink">
           {t("Pick a property first.")}
         </div>
       )}
 
-      <div className="flex flex-wrap gap-1 rounded-xl bg-zinc-100 p-1" role="tablist">
+      <div className="flex flex-wrap gap-1 rounded-xl bg-subtle p-1" role="tablist">
         {TABS.map((tb) => (
           <button
             key={tb.id}
@@ -273,11 +273,11 @@ export default function GoLiveImport({
             onClick={() => setTab(tb.id)}
             className={cn(
               "flex-1 rounded-lg px-3 py-2 text-left text-sm transition",
-              tab === tb.id ? "bg-white font-semibold text-zinc-900 shadow-sm" : "text-zinc-600 hover:text-zinc-900",
+              tab === tb.id ? "bg-surface font-semibold text-ink shadow-sm" : "text-secondary-ink hover:text-ink",
             )}
           >
             <span className="block">{t(tb.label)}</span>
-            <span className="block text-xs font-normal text-zinc-500">{t(tb.hint)}</span>
+            <span className="block text-xs font-normal text-muted-ink">{t(tb.hint)}</span>
           </button>
         ))}
       </div>
@@ -305,7 +305,7 @@ export default function GoLiveImport({
                   <option value="cloudbeds">{t("Cloudbeds export")}</option>
                 </select>
               )}
-              <label className="cursor-pointer rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:border-brand-400">
+              <label className="cursor-pointer rounded-lg border border-control bg-surface px-3 py-2 text-sm font-medium text-secondary-ink hover:border-accent-control">
                 {t("Upload CSV file")}
                 <input
                   type="file"
@@ -318,10 +318,10 @@ export default function GoLiveImport({
                   }}
                 />
               </label>
-              <span className="text-xs text-zinc-400">{t("or paste it below")}</span>
+              <span className="text-xs text-muted-ink">{t("or paste it below")}</span>
             </div>
             {kind === "opening" && (
-              <p className="text-sm text-zinc-600">
+              <p className="text-sm text-secondary-ink">
                 {t(
                   "One row per balance. Type is In-house (what the guest owes; negative if in credit, 0 if settled), City ledger (an unpaid company invoice; negative for money paid ahead) or Deposit (an advance a future booking has paid). Use the closing figures from the old system's last night audit.",
                 )}
@@ -338,8 +338,8 @@ export default function GoLiveImport({
             {preview && <PreviewPanel kind={kind} preview={preview} />}
 
             {reports[kind] && (
-              <div className="rounded-lg bg-zinc-50 px-4 py-3 text-sm">
-                <p className="font-medium text-emerald-700">{reports[kind]}</p>
+              <div className="rounded-lg bg-canvas px-4 py-3 text-sm">
+                <p className="font-medium text-success-ink">{reports[kind]}</p>
                 <IssueList issues={reportErrors[kind] ?? []} />
               </div>
             )}
@@ -367,7 +367,7 @@ export default function GoLiveImport({
       {tab === "reconcile" && (
         <Card>
           <CardContent className="space-y-4 pt-4">
-            <p className="text-sm text-zinc-600">
+            <p className="text-sm text-secondary-ink">
               {t(
                 "Compares the files loaded in steps 1-3 with what is now in {product}: counts and totals per category. Go live only when every line matches.",
               )}
@@ -394,7 +394,7 @@ export default function GoLiveImport({
       )}
 
       {error && (
-        <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{translate(error)}</div>
+        <div className="rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">{translate(error)}</div>
       )}
     </div>
   )
@@ -408,7 +408,7 @@ function IssueList({ issues }: { issues: Issue[] }) {
       {issues.map((iss, i) => {
         const who = iss.guest || iss.name || iss.who
         return (
-          <li key={`${iss.row}-${i}`} className="text-rose-600">{translate("Row ")}{iss.row}
+          <li key={`${iss.row}-${i}`} className="text-danger-text">{translate("Row ")}{iss.row}
             {who ? ` (${who})` : ""}: {translate(iss.error)}
           </li>
         )
@@ -420,19 +420,19 @@ function IssueList({ issues }: { issues: Issue[] }) {
 function PreviewPanel({ kind, preview }: { kind: FileKind; preview: Preview }) {
   const { t } = useT()
   return (
-    <div className="space-y-2 rounded-lg bg-zinc-50 px-4 py-3 text-sm">
+    <div className="space-y-2 rounded-lg bg-canvas px-4 py-3 text-sm">
       <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <span className="font-medium text-emerald-700">{t("{n} ready to import", { n: preview.ok })}</span>
+        <span className="font-medium text-success-ink">{t("{n} ready to import", { n: preview.ok })}</span>
         {preview.skipped > 0 && (
-          <span className="font-medium text-rose-600">{t("{n} will be skipped", { n: preview.skipped })}</span>
+          <span className="font-medium text-danger-text">{t("{n} will be skipped", { n: preview.skipped })}</span>
         )}
         {kind === "bookings" && (preview as BookingsPreview).already_imported > 0 && (
-          <span className="text-zinc-500">
+          <span className="text-muted-ink">
             {t("{n} already in {product} (left alone)", { n: (preview as BookingsPreview).already_imported })}
           </span>
         )}
         {kind === "companies" && (
-          <span className="text-zinc-500">
+          <span className="text-muted-ink">
             {t("{n} new, {e} existing (updated), {c} on credit", {
               n: (preview as CompaniesPreview).new,
               e: (preview as CompaniesPreview).existing,
@@ -441,10 +441,10 @@ function PreviewPanel({ kind, preview }: { kind: FileKind; preview: Preview }) {
           </span>
         )}
         {"date_format" in preview && (
-          <span className="text-zinc-400">{t("dates read as {format}", { format: preview.date_format })}</span>
+          <span className="text-muted-ink">{t("dates read as {format}", { format: preview.date_format })}</span>
         )}
         {kind === "opening" && (
-          <span className="text-zinc-400">
+          <span className="text-muted-ink">
             {t("posts on business date {date}", { date: (preview as OpeningPreview).business_date })}
           </span>
         )}
@@ -463,7 +463,7 @@ function PreviewPanel({ kind, preview }: { kind: FileKind; preview: Preview }) {
       </div>
       {kind === "opening" && (
         <table className="w-full text-left text-sm">
-          <thead className="text-xs uppercase text-zinc-500">
+          <thead className="text-xs uppercase text-muted-ink">
             <tr>
               <th className="py-1 font-medium">{t("Category")}</th>
               <th className="py-1 text-right font-medium">{t("Rows")}</th>
@@ -473,7 +473,7 @@ function PreviewPanel({ kind, preview }: { kind: FileKind; preview: Preview }) {
           </thead>
           <tbody className="tabular-nums">
             {(preview as OpeningPreview).categories.map((c) => (
-              <tr key={c.category} className="border-t border-zinc-200">
+              <tr key={c.category} className="border-t border-line">
                 <td className="py-1">{t(c.label)}</td>
                 <td className="py-1 text-right">{c.count}</td>
                 <td className="py-1 text-right">{fmtMoney(c.total)}</td>
@@ -496,8 +496,8 @@ function ReconView({ recon }: { recon: Reconciliation }) {
         className={cn(
           "flex items-start gap-3 rounded-lg border px-4 py-3 text-sm",
           recon.ready
-            ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-            : "border-amber-200 bg-amber-50 text-amber-900",
+            ? "border-success-line bg-success-subtle text-success-ink"
+            : "border-warning-line bg-warning-subtle text-warning-ink",
         )}
       >
         {recon.ready ? (
@@ -521,7 +521,7 @@ function ReconView({ recon }: { recon: Reconciliation }) {
 
       <div className="overflow-x-auto">
         <table className="w-full min-w-[34rem] text-left text-sm">
-          <thead className="text-xs uppercase text-zinc-500">
+          <thead className="text-xs uppercase text-muted-ink">
             <tr>
               <th className="py-1.5 font-medium">{t("Category")}</th>
               <th className="py-1.5 text-right font-medium">{t("File rows")}</th>
@@ -533,7 +533,7 @@ function ReconView({ recon }: { recon: Reconciliation }) {
           </thead>
           <tbody className="tabular-nums">
             {recon.categories.map((c) => (
-              <tr key={c.category} className="border-t border-zinc-200 align-top">
+              <tr key={c.category} className="border-t border-line align-top">
                 <td className="py-1.5">{t(c.label)}</td>
                 <td className="py-1.5 text-right">{c.file_count}</td>
                 <td className="py-1.5 text-right">{c.category === "companies" ? "-" : money(c.file_total)}</td>
@@ -552,9 +552,9 @@ function ReconView({ recon }: { recon: Reconciliation }) {
         .filter((c) => c.by_company && c.by_company.length > 0)
         .map((c) => (
           <div key={`${c.category}-co`} className="overflow-x-auto">
-            <p className="mb-1 text-xs font-semibold uppercase text-zinc-500">{t("City ledger by company")}</p>
+            <p className="mb-1 text-xs font-semibold uppercase text-muted-ink">{t("City ledger by company")}</p>
             <table className="w-full min-w-[30rem] text-left text-sm">
-              <thead className="text-xs text-zinc-500">
+              <thead className="text-xs text-muted-ink">
                 <tr>
                   <th className="py-1 font-medium">{t("Company")}</th>
                   <th className="py-1 text-right font-medium">{t("File")}</th>
@@ -564,8 +564,8 @@ function ReconView({ recon }: { recon: Reconciliation }) {
               </thead>
               <tbody className="tabular-nums">
                 {c.by_company!.map((b) => (
-                  <tr key={b.company} className="border-t border-zinc-200">
-                    <td className={cn("py-1", !b.matched && "text-rose-600")}>{b.company}</td>
+                  <tr key={b.company} className="border-t border-line">
+                    <td className={cn("py-1", !b.matched && "text-danger-text")}>{b.company}</td>
                     <td className="py-1 text-right">{fmtMoney(b.file)}</td>
                     <td className="py-1 text-right">{fmtMoney(b.kamra)}</td>
                     <td className="py-1 text-right">{fmtMoney(b.balance)}</td>
@@ -577,9 +577,9 @@ function ReconView({ recon }: { recon: Reconciliation }) {
         ))}
 
       {recon.blockers.length > 0 && (
-        <div className="rounded-lg bg-zinc-50 px-4 py-3 text-sm">
-          <p className="mb-1 font-medium text-zinc-800">{t("To fix before go-live")}</p>
-          <ul className="list-disc space-y-0.5 pl-5 text-rose-700">
+        <div className="rounded-lg bg-canvas px-4 py-3 text-sm">
+          <p className="mb-1 font-medium text-ink">{t("To fix before go-live")}</p>
+          <ul className="list-disc space-y-0.5 pl-5 text-danger-ink">
             {recon.blockers.map((b, i) => (
               <li key={i}>{b}</li>
             ))}
@@ -588,8 +588,8 @@ function ReconView({ recon }: { recon: Reconciliation }) {
             .filter((c) => c.problems.length > 0)
             .map((c) => (
               <div key={`${c.category}-p`} className="mt-2">
-                <p className="text-xs font-semibold uppercase text-zinc-500">{t(c.label)}</p>
-                <ul className="list-disc pl-5 text-zinc-700">
+                <p className="text-xs font-semibold uppercase text-muted-ink">{t(c.label)}</p>
+                <ul className="list-disc pl-5 text-secondary-ink">
                   {c.problems.map((p, i) => (
                     <li key={i}>{p}</li>
                   ))}

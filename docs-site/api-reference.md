@@ -3861,6 +3861,9 @@ rounding - are this app's own records and are added here.
 
 Propose a new version; the integration owns effective-date validation.
 
+For a `room_type` and `occupancy_tier`, use its binding or link a selling
+item in the same request. A blank item code creates one if permitted.
+
 With `customer` the version is that customer's own price (SAP PR02
 A305). An integration that answers without that customer ignored it
 and drafted the public rate: the request is refused, so its draft rolls
@@ -3875,6 +3878,8 @@ back with it, rather than publishing a corporate rate to everyone.
 | `valid_from` | yes |  |
 | `valid_upto` | no | `None` |
 | `customer` | no | `None` |
+| `room_type` | no | `None` |
+| `occupancy_tier` | no | `None` |
 
 ### `kamra.rates.approve_contract_tariff`
 

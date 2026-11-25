@@ -312,16 +312,19 @@ export default function SettingsHub() {
   )
 
   if (error)
-    return <p className="rounded-lg bg-rose-50 px-4 py-3 text-sm text-rose-600">{translate(error)}</p>
-  if (!schema) return <p className="py-10 text-center text-sm text-zinc-400">{t("Loading…")}</p>
+    return <p className="rounded-lg bg-danger-subtle px-4 py-3 text-sm text-danger-text">{translate(error)}</p>
+  if (!schema) return <p className="py-10 text-center text-sm text-muted-ink">{t("Loading…")}</p>
   if (!nav.length)
-    return <p className="py-10 text-center text-sm text-zinc-500">{t("Your role has no settings to manage.")}</p>
+    return <p className="py-10 text-center text-sm text-muted-ink">{t("Your role has no settings to manage.")}</p>
 
   const current = nav.find((n) => n.id === section)
   if (!section || !current) return <Navigate to={`/settings/${nav[0].id}`} replace />
 
   const mod = schema.modules.find((m) => m.id === section)
   const focus = search.get("focus")
+  const frontDesk = schema.modules.find((module) => module.id === "front-desk")
+  const canOpenBookingPricing = frontDesk && visibleSections(frontDesk).some((section) =>
+    section.settings.some((setting) => setting.key === "rate_plan_required"))
 
   return (
     // Full width of the shell - list and settings pages should use the desk.
@@ -332,7 +335,7 @@ export default function SettingsHub() {
         <div className="lg:sticky lg:top-20 lg:flex lg:max-h-[calc(100dvh-6rem)] lg:flex-col">
           <h1 className="mb-3 text-xl font-semibold tracking-tight">{t("Settings")}</h1>
           <div className="relative mb-4">
-            <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-zinc-400" aria-hidden />
+            <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-ink" aria-hidden />
             <input
               ref={searchRef}
               value={q}
@@ -355,13 +358,13 @@ export default function SettingsHub() {
               }}
               placeholder={t("Search settings")}
               aria-label={t("Search settings")}
-              className="w-full rounded-lg border border-zinc-200 bg-white py-1.5 ps-9 pe-8 text-sm placeholder:text-zinc-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+              className="w-full rounded-lg border border-line bg-surface py-1.5 ps-9 pe-8 text-sm placeholder:text-muted-ink focus:border-accent-control focus:outline-none focus:ring-2 focus:ring-brand-100"
             />
-            <kbd className="pointer-events-none absolute end-2 top-1/2 -translate-y-1/2 rounded border border-zinc-200 px-1.5 text-[10px] text-zinc-400">/</kbd>
+            <kbd className="pointer-events-none absolute end-2 top-1/2 -translate-y-1/2 rounded border border-line px-1.5 text-[10px] text-muted-ink">/</kbd>
             {searchOpen && q.trim() && (
-              <div className="absolute inset-x-0 top-full z-40 mt-1 max-h-96 overflow-y-auto rounded-xl border border-zinc-200 bg-white p-1 shadow-lg lg:w-96">
+              <div className="absolute inset-x-0 top-full z-40 mt-1 max-h-96 overflow-y-auto rounded-xl border border-line bg-surface p-1 shadow-lg lg:w-96">
                 {hits.length === 0 ? (
-                  <p className="px-3 py-3 text-sm text-zinc-400">{t("No setting matches.")}</p>
+                  <p className="px-3 py-3 text-sm text-muted-ink">{t("No setting matches.")}</p>
                 ) : (
                   hits.map((h, i) => (
                     <button
@@ -373,10 +376,10 @@ export default function SettingsHub() {
                         setQ("")
                         searchRef.current?.blur()
                       }}
-                      className="block w-full rounded-lg px-3 py-2 text-start hover:bg-zinc-50"
+                      className="block w-full rounded-lg px-3 py-2 text-start hover:bg-canvas"
                     >
-                      <span className="block text-sm font-medium text-zinc-800">{t(h.label)}</span>
-                      <span className="block truncate text-xs text-zinc-500">
+                      <span className="block text-sm font-medium text-ink">{t(h.label)}</span>
+                      <span className="block truncate text-xs text-muted-ink">
                         {t(h.pageTitle)}
                         {h.sub && h.sub !== h.pageTitle ? ` · ${t(h.sub)}` : ""}
                       </span>
@@ -389,7 +392,7 @@ export default function SettingsHub() {
 
           {/* phone / tablet: a picker instead of the rail */}
           <select
-            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm lg:hidden"
+            className="w-full rounded-lg border border-control bg-surface px-3 py-2 text-sm lg:hidden"
             value={section}
             onChange={(e) => go(e.target.value)}
             aria-label={t("Settings page")}
@@ -415,7 +418,7 @@ export default function SettingsHub() {
               if (!items.length) return null
               return (
                 <div key={g.id}>
-                  <p className="mb-1 px-2.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-400">{t(g.label)}</p>
+                  <p className="mb-1 px-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-ink">{t(g.label)}</p>
                   <ul className="space-y-0.5">
                     {items.map((n) => (
                       <li key={n.id}>
@@ -426,13 +429,13 @@ export default function SettingsHub() {
                           className={cn(
                             "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-start text-sm",
                             n.id === section
-                              ? "bg-brand-50 font-medium text-brand-800"
-                              : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900",
+                              ? "bg-accent-subtle font-medium text-accent-ink"
+                              : "text-secondary-ink hover:bg-subtle hover:text-ink",
                           )}
                         >
                           <n.icon className="size-4 shrink-0" aria-hidden />
                           <span className="flex-1 truncate">{t(n.title)}</span>
-                          {n.off && <span className="text-[10px] font-medium uppercase text-zinc-400">{t("Off")}</span>}
+                          {n.off && <span className="text-[10px] font-medium uppercase text-muted-ink">{t("Off")}</span>}
                         </button>
                       </li>
                     ))}
@@ -442,14 +445,14 @@ export default function SettingsHub() {
             })}
             {!whiteLabel() && schema.is_it_admin && (
               <div>
-                <p className="mb-1 px-2.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-400">{t("IT")}</p>
+                <p className="mb-1 px-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-ink">{t("IT")}</p>
                 <Link
                   to="/developers"
-                  className="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
+                  className="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm text-secondary-ink hover:bg-subtle hover:text-ink"
                 >
                   <Code2 className="size-4" aria-hidden />
                   <span className="flex-1">{t("Developers & API keys")}</span>
-                  <ExternalLink className="size-3.5 text-zinc-400" aria-hidden />
+                  <ExternalLink className="size-3.5 text-muted-ink" aria-hidden />
                 </Link>
               </div>
             )}
@@ -484,7 +487,7 @@ export default function SettingsHub() {
           {mod.id === "finance" && isTaxUndetermined(loc.tax_basis) && (
             <p
               role="status"
-              className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+              className="mb-4 rounded-lg border border-warning-line bg-warning-subtle px-4 py-3 text-sm text-warning-ink"
             >
               {t(TAX_NOT_SET_UP_MSG)}
             </p>
@@ -512,6 +515,8 @@ export default function SettingsHub() {
                 enabled={Boolean(mod.values.rate_plan_required)}
               />
             )}
+            {mod.id === "revenue" && canOpenBookingPricing && <Link to="/settings/front-desk?focus=rate_plan_required"
+              className="text-sm font-medium text-accent-ink hover:underline">{t("Booking pricing settings")}</Link>}
             {mod.id === "front-desk" && <CheckInStepsCard property={property} />}
             {mod.id === "front-desk" && (
               <NightAuditScheduleCard
@@ -556,16 +561,16 @@ function PageHeader({
 }) {
   const { t } = useT()
   return (
-    <header className="mb-6 border-b border-zinc-200 pb-5">
+    <header className="mb-6 border-b border-line pb-5">
       <div className="flex flex-wrap items-start gap-x-4 gap-y-3">
         <div className="min-w-0 flex-1">
-          <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight text-zinc-900">
-            <entry.icon className="size-5 text-brand-600" aria-hidden />
+          <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight text-ink">
+            <entry.icon className="size-5 text-accent-text" aria-hidden />
             {t(entry.title)}
           </h2>
-          <p className="mt-1 max-w-2xl text-sm text-zinc-500">{t(entry.description)}</p>
+          <p className="mt-1 max-w-2xl text-sm text-muted-ink">{t(entry.description)}</p>
           {module && (
-            <p className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-zinc-500">
+            <p className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-ink">
               {t("Changed by")}
               {["Hotel Admin", ...module.editors.filter((r) => r !== "Hotel Admin")].map((r) => (
                 <Badge key={r} tone="zinc">{t(roleLabel(r))}</Badge>
@@ -574,8 +579,8 @@ function PageHeader({
           )}
         </div>
         {module?.toggle && (
-          <label className="flex items-center gap-3 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm">
-            <span className={module.enabled ? "text-zinc-700" : "text-zinc-500"}>
+          <label className="flex items-center gap-3 rounded-lg border border-line bg-surface px-3 py-2 text-sm">
+            <span className={module.enabled ? "text-secondary-ink" : "text-muted-ink"}>
               {module.enabled ? t("Module on") : t("Module off")}
             </span>
             <Switch
@@ -588,7 +593,7 @@ function PageHeader({
         )}
       </div>
       {module?.toggle && !module.enabled && (
-        <p className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600">
+        <p className="mt-4 rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-secondary-ink">
           {t("This module is off, so its apps are hidden for everyone. Settings are kept for when you switch it back on.")}
         </p>
       )}

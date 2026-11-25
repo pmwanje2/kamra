@@ -30,7 +30,10 @@ jobs:
         working-directory: frontend
       - run: npm run languages:check
         working-directory: frontend
-      - name: Frontend unit tests (vitest)
+      - name: Install Chromium for synthetic browser checks
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Frontend tests (Vitest and Chromium)
         run: npm test
         working-directory: frontend
       - name: UI language fallback rules
@@ -43,9 +46,6 @@ jobs:
           python3 -m unittest kamra.tests.test_white_label
       - name: White-label health API contract (no site)
         run: python3 -m unittest kamra.tests.test_health_white_label
-      - name: Install Chromium for synthetic browser checks
-        working-directory: frontend
-        run: npx playwright install --with-deps chromium
       - name: Check white-label routes and disabled F&B settings
         working-directory: frontend
         run: |

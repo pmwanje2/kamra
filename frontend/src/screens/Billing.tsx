@@ -60,7 +60,7 @@ export default function Billing() {
         <CardHeader>
           <div>
             <CardTitle>{t("Night Audit")}</CardTitle>
-            <p className="mt-0.5 text-xs text-zinc-400">
+            <p className="mt-0.5 text-xs text-muted-ink">
               {t("Clear what is open, post room and tax, roll the business date and print the audit pack. Runs automatically every night at the time set in Settings.")}
             </p>
           </div>
@@ -72,14 +72,14 @@ export default function Billing() {
         {auditRuns.length > 0 && (
           <CardContent className="pt-0">
             <div className="mb-1.5 flex items-center justify-between">
-              <span className="text-xs font-medium uppercase tracking-wider text-zinc-400">
+              <span className="text-xs font-medium uppercase tracking-wider text-muted-ink">
                 {t("Recent runs")}
               </span>
-              <button type="button" className="text-xs text-brand-700 hover:underline" onClick={() => navigate("/end-of-day")}>
+              <button type="button" className="text-xs text-accent-ink hover:underline" onClick={() => navigate("/end-of-day")}>
                 {t("All audits")}
               </button>
             </div>
-            <ul className="divide-y divide-zinc-100 text-sm">
+            <ul className="divide-y divide-line-subtle text-sm">
               {auditRuns.map((r) => (
                 <li
                   key={r.name}
@@ -88,7 +88,7 @@ export default function Billing() {
                   <span className="w-28 font-medium">
                     {formatDate(r.business_date)}
                   </span>
-                  <span className="flex-1 text-zinc-500">
+                  <span className="flex-1 text-muted-ink">
                     {t("{n} night{s} · {amount} · {folios} folio{s2} · {noShows} no-show{s3}", {
                       n: Number(r.room_charges_posted) || 0,
                       s: Number(r.room_charges_posted) === 1 ? "" : "s",
@@ -103,19 +103,19 @@ export default function Billing() {
                     {Number(r.exceptions) > 0 &&
                       ` · ${t("{n} exception(s)", { n: Number(r.exceptions) })}`}
                   </span>
-                  <span className="text-xs text-zinc-400">
+                  <span className="text-xs text-muted-ink">
                     {t("ran {when}", { when: fmtWhen(r.creation) })}
                   </span>
                   {r.has_pack ? (
                     <button
                       type="button"
-                      className="text-xs text-brand-700 hover:underline"
+                      className="text-xs text-accent-ink hover:underline"
                       onClick={() => navigate(`/end-of-day/pack/${encodeURIComponent(r.name)}`)}
                     >
                       {t("View audit pack")}
                     </button>
                   ) : (
-                    <span className="text-xs text-zinc-300">{t("No pack")}</span>
+                    <span className="text-xs text-muted-ink">{t("No pack")}</span>
                   )}
                 </li>
               ))}
@@ -128,7 +128,7 @@ export default function Billing() {
         <CardHeader>
           <div>
             <CardTitle>{t("Cashier till")}</CardTitle>
-            <p className="mt-0.5 text-xs text-zinc-400">
+            <p className="mt-0.5 text-xs text-muted-ink">
               {t("Open your till, reconcile cash and close the session under Finance → Cashier. Collections live there now.")}
             </p>
           </div>
@@ -143,7 +143,7 @@ export default function Billing() {
           <CardHeader>
             <div>
               <CardTitle>{t("Guests left owing")}</CardTitle>
-              <p className="mt-0.5 text-xs text-zinc-400">{t("Departed stays with a balance. Open the folio to take the payment or move it to a company.")}</p>
+              <p className="mt-0.5 text-xs text-muted-ink">{t("Departed stays with a balance. Open the folio to take the payment or move it to a company.")}</p>
             </div>
           </CardHeader>
           <CardContent>
@@ -153,7 +153,7 @@ export default function Billing() {
               columns={[
                 { key: "guest_name", importance: "high", label: t("Guest"), render: (g) => <span className="font-medium">{g.guest_name}</span> },
                 { key: "reservation", label: t("Booking"), render: (g) => <span className="font-mono text-xs">{g.reservation}</span> },
-                { key: "check_in_date", label: t("Stay"), render: (g) => <span className="text-xs text-zinc-500">{formatDate(g.check_in_date)} → {formatDate(g.check_out_date)}</span> },
+                { key: "check_in_date", label: t("Stay"), render: (g) => <span className="text-xs text-muted-ink">{formatDate(g.check_in_date)} → {formatDate(g.check_out_date)}</span> },
                 { key: "status", label: t("Status"), render: (g) => <span className="text-xs">{t(g.status)}</span> },
                 { key: "balance", importance: "high", label: t("Owed"), align: "right", render: (g) => <span className="font-medium">{fmtMoney(g.balance)}</span> },
               ]}
@@ -165,7 +165,7 @@ export default function Billing() {
       <Card>
         <CardHeader>
           <CardTitle>{t("Folios")}</CardTitle>
-          <span className="text-xs text-zinc-400">
+          <span className="text-xs text-muted-ink">
             {t("Click a folio to post charges, settle and print the tax invoice")}
           </span>
         </CardHeader>
@@ -173,7 +173,7 @@ export default function Billing() {
           <div className="overflow-x-auto">
             <ResponsiveList className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-200 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
+                <tr className="border-b border-line text-left text-xs font-medium uppercase tracking-wider text-muted-ink">
                   <th className="py-2 pr-4">{t("Folio")}</th>
                   <th className="py-2 pr-4">{t("Guest")}</th>
                   <th className="py-2 pr-4">{t("Status")}</th>
@@ -183,11 +183,11 @@ export default function Billing() {
                   <th className="py-2 pr-4">{t("Balance {cur}", { cur: cur() })}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-100">
+              <tbody className="divide-y divide-line-subtle">
                 {folios.map((f) => (
                   <tr
                     key={f.name}
-                    className="cursor-pointer hover:bg-zinc-50"
+                    className="cursor-pointer hover:bg-canvas"
                     onClick={() => navigate(`/billing/${encodeURIComponent(f.name)}`)}
                   >
                     <Popin label={t("Folio")} importance="high" className="py-2.5 pr-4 font-medium"><a href={`/billing/${encodeURIComponent(f.name)}`} onClick={e => { e.preventDefault(); e.stopPropagation(); navigate(`/billing/${encodeURIComponent(f.name)}`) }}>{f.name}</a></Popin>
@@ -197,23 +197,23 @@ export default function Billing() {
                         {t(String(f.status))}
                       </Badge>
                     </Popin>
-                    <Popin label={t("Invoice")} importance="low" className="py-2.5 pr-4 text-zinc-500">
+                    <Popin label={t("Invoice")} importance="low" className="py-2.5 pr-4 text-muted-ink">
                       {String(f.invoice_number ?? "-")}
                     </Popin>
                     <Popin label={t("Total")} importance="medium" className="py-2.5 pr-4">{cur()}{inr(f.grand_total)}</Popin>
                     <Popin label={t("Paid")} importance="medium" className="py-2.5 pr-4">{cur()}{inr(f.payments_total)}</Popin>
                     <Popin label={t("Balance")} importance="medium" className="py-2.5 pr-4 font-medium">
                       {Number(f.balance) > 0 ? (
-                        <span className="text-amber-600">{cur()}{inr(f.balance)}</span>
+                        <span className="text-warning-text">{cur()}{inr(f.balance)}</span>
                       ) : (
-                        <span className="text-emerald-600">{fmtMoney(0)}</span>
+                        <span className="text-success-text">{fmtMoney(0)}</span>
                       )}
                     </Popin>
                   </tr>
                 ))}
                 {folios.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="py-6 text-center text-zinc-400">
+                    <td colSpan={7} className="py-6 text-center text-muted-ink">
                       {t("No folios yet - they open automatically at check-in.")}
                     </td>
                   </tr>
