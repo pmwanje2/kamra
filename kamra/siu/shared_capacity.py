@@ -32,15 +32,24 @@ class SearchBudget:
 		self.remaining -= steps
 
 
-def _physical_components(groups, occupied, budget):
-	"""Partition options by shared room/interval cells, even within one room type."""
+def _free(rooms, mask, occupied):
+	return all(not (occupied.get(room, 0) & mask) for room in rooms)
+
+
+def _occupy(rooms, mask, occupied):
+	for room in rooms:
+		occupied[room] = occupied.get(room, 0) | mask
+
+
+def _physical_components(groups, occupied, masks, budget):
+	"""Partition options by shared physical rooms, even within one room type."""
 	connected = UnionFind()
 	offers = []
 	for group, (count, choices) in enumerate(groups):
 		free = set()
 		for rooms in choices:
 			budget.spend(1 + len(rooms))
-			if rooms and rooms.isdisjoint(occupied):
+			if rooms and _free(rooms, masks[group], occupied):
 				free.add(tuple(sorted(rooms)))
 		if len(free) < count:
 			return None
@@ -54,14 +63,14 @@ def _physical_components(groups, occupied, budget):
 	return components.values()
 
 
-def _profiles(component, limits, budget):
+def _profiles(component, limits, masks, budget):
 	"""Yield attainable group counts in ONE component, always using whole footprints."""
 	offers = [(group, rooms) for group, options in component.items() for rooms in options]
 	zero = (0,) * len(limits)
 	yield zero
 	# Each stack frame extends a selection using only later offers. This
 	# enumerates combinations, never permutations, without Python recursion.
-	stack = [(iter(range(len(offers))), frozenset(), zero)]
+	stack = [(iter(range(len(offers))), {}, zero)]
 	while stack:
 		indices, used, counts = stack[-1]
 		index = next(indices, None)
@@ -70,14 +79,16 @@ def _profiles(component, limits, budget):
 			continue
 		group, rooms = offers[index]
 		budget.spend(1 + len(rooms))
-		if counts[group] >= limits[group] or not rooms.isdisjoint(used):
+		if counts[group] >= limits[group] or not _free(rooms, masks[group], used):
 			continue
 		budget.spend(len(counts) + len(used))
 		picked = list(counts)
 		picked[group] += 1
 		profile = tuple(picked)
 		yield profile
-		stack.append((iter(range(index + 1, len(offers))), used | rooms, profile))
+		next_used = used.copy()
+		_occupy(rooms, masks[group], next_used)
+		stack.append((iter(range(index + 1, len(offers))), next_used, profile))
 
 
 def _single_capacity(options, limit, budget):
@@ -104,14 +115,14 @@ def _single_capacity(options, limit, budget):
 		budget.spend(len(graph) * graph.number_of_edges())
 		return min(limit, len(singles) + len(max_weight_matching(graph, maxcardinality=True)))
 
-	for (attainable,) in _profiles({0: options}, (limit,), budget):
+	for (attainable,) in _profiles({0: options}, (limit,), (1,), budget):
 		count = max(count, attainable)
 		if count == upper:
 			break
 	return count
 
 
-def _fills_component(component, demand, budget):
+def _fills_component(component, demand, masks, budget):
 	"""Search only placements that can still meet all of the specified counts."""
 	def placements(options, needs, group):
 		for i, rooms in enumerate(options[group]):
@@ -124,7 +135,8 @@ def _fills_component(component, demand, budget):
 				if remaining[g]:
 					budget.spend(len(choices))
 					candidates = choices[i + 1:] if g == group else choices
-					rest[g] = [choice for choice in candidates if rooms.isdisjoint(choice)]
+					rest[g] = ([choice for choice in candidates if rooms.isdisjoint(choice)]
+					           if masks[g] & masks[group] else candidates)
 			yield rest, remaining
 
 	stack = [iter([(component, list(demand))])]
@@ -146,7 +158,7 @@ def _fills_component(component, demand, budget):
 	return False
 
 
-def _mixed_fits(components, demand, budget):
+def _mixed_fits(components, demand, masks, budget):
 	"""Combine feasible component allocations, retaining the outstanding demand by type."""
 	if len(demand) == 1:
 		needed = demand[0]
@@ -162,13 +174,13 @@ def _mixed_fits(components, demand, budget):
 	for component in components:
 		for group, options in component.items():
 			free[group].extend(options)
-	used = set()
-	for group in sorted(range(len(demand)), key=lambda g: len(free[g]) - demand[g]):
+	used = {}
+	for group in sorted(range(len(demand)), key=lambda g: (len(free[g]) - demand[g], -masks[g].bit_count())):
 		needed = demand[group]
 		for rooms in free[group]:
 			budget.spend(len(rooms))
-			if rooms.isdisjoint(used):
-				used.update(rooms)
+			if _free(rooms, masks[group], used):
+				_occupy(rooms, masks[group], used)
 				needed -= 1
 				if not needed:
 					break
@@ -177,14 +189,19 @@ def _mixed_fits(components, demand, budget):
 	else:
 		return True
 
+	# For different spans a room can satisfy several non-overlapping stays.
+	# Branch on the most constrained stay before enumerating component counts.
+	if len(set(masks)) > 1:
+		return _fills_component(free, demand, masks, budget)
+
 	target = tuple(demand)
 	remaining = {target}
 	for i, component in enumerate(components):
 		if i == len(components) - 1:
-			return any(_fills_component(component, needs, budget) for needs in sorted(remaining))
+			return any(_fills_component(component, needs, masks, budget) for needs in sorted(remaining))
 		next_remaining = set()
 		seen = set()
-		for profile in _profiles(component, target, budget):
+		for profile in _profiles(component, target, masks, budget):
 			if profile in seen:
 				continue
 			seen.add(profile)
@@ -198,11 +215,14 @@ def _mixed_fits(components, demand, budget):
 	return False
 
 
-def _can_fit(groups, occupied, *, budget=None):
+def _can_fit(groups, occupied, *, budget=None, masks=None):
 	"""One-component capacities add; only competing products need a joint search."""
 	budget = budget if budget is not None else SearchBudget()
 	try:
-		components = _physical_components(groups, occupied, budget)
+		if masks is None:
+			masks = [1] * len(groups)
+			occupied = dict.fromkeys(occupied, 1)
+		components = _physical_components(groups, occupied, masks, budget)
 		if components is None:
 			return False
 		demand = [count for count, _ in groups]
@@ -231,7 +251,7 @@ def _can_fit(groups, occupied, *, budget=None):
 			group_ids = sorted(region)
 			index = {group: i for i, group in enumerate(group_ids)}
 			local = [{index[g]: opts for g, opts in c.items()} for c in regions[products[group_ids[0]]]]
-			if not _mixed_fits(local, [demand[g] for g in group_ids], budget):
+			if not _mixed_fits(local, [demand[g] for g in group_ids], [masks[g] for g in group_ids], budget):
 				return False
 		return True
 	except SearchLimit:
@@ -240,25 +260,27 @@ def _can_fit(groups, occupied, *, budget=None):
 
 @dataclass
 class CapacityWindow:
-	"""One connected set of stays. A resource is a physical room during one interval."""
+	"""Physical footprints are shared across stays; each bit represents one interval."""
 	options: dict
-	occupied: set
+	occupied: dict
 	demand: Counter
 	incoming: dict
+	budget: SearchBudget
 
 	def fits(self, assigned, *, budget=None):
+		budget = budget or self.budget
 		occupied = self.occupied.copy()
 		demand = self.demand.copy()
 		for index, key in self.incoming.items():
 			rooms = assigned.get(index)
 			if rooms:
-				cells = {(night, room) for night in key[1] for room in rooms}
-				if not occupied.isdisjoint(cells):
+				if not _free(rooms, key[1], occupied):
 					return False
-				occupied.update(cells)
+				_occupy(rooms, key[1], occupied)
 			else:
 				demand[key] += 1
-		return _can_fit([(count, self.options[key]) for key, count in demand.items()], occupied, budget=budget)
+		groups = [(count, self.options[rt]) for (rt, _), count in demand.items()]
+		return _can_fit(groups, occupied, masks=[mask for _, mask in demand], budget=budget)
 
 
 def _connected_spans(requests, deferred):
@@ -279,39 +301,44 @@ def _connected_spans(requests, deferred):
 		yield start, end
 
 
-def _window(options, requests, deferred, fixed, unserviceable, quotas, start, end):
-	# Only split when inventory changes. A physical option covers ALL cells
-	# of a reservation, so a guest cannot switch rooms at an interval boundary.
+def _window(options, requests, deferred, fixed, unserviceable, quotas, start, end, *, budget=None):
+	budget = budget or SearchBudget()
+	budget.spend(1 + len(requests) + len(deferred) + len(fixed) + len(quotas) + len(unserviceable))
 	bounds = {start, end}
 	for intervals in (requests, deferred, fixed):
 		for *_, a, b in intervals:
 			bounds.update((max(a, start), min(b, end)))
 	for a, b, _, _ in quotas:
-		bounds.update((a, b))
-	points = sorted(bounds)[:-1]
-	def stay_key(rt, a, b):
-		return rt, tuple(i for i, day in enumerate(points) if a <= day < b)
-	incoming = {i: stay_key(rt, a, b) for i, rt, a, b in requests}
-	demand = Counter(stay_key(rt, a, b) for rt, a, b in deferred)
+		bounds.update((max(a, start), min(b, end)))
+	index = {day: i for i, day in enumerate(sorted(bounds))}
+
+	def mask(a, b):
+		last = index[min(b, end)]
+		budget.spend(1 + last // 30)  # Account for the words in the interval bitmask.
+		return (1 << last) - (1 << index[max(a, start)])
+
+	incoming = {i: (rt, mask(a, b)) for i, rt, a, b in requests}
+	demand = Counter((rt, mask(a, b)) for rt, a, b in deferred)
 	for a, b, rt, count in quotas:
-		# Allotments are nightly promises. A later pickup becomes a stay.
-		for night in stay_key(rt, a, b)[1]:
-			demand[rt, (night,)] += count
-	occupied = {(i, room) for rooms, a, b in fixed for i in stay_key(None, a, b)[1] for room in rooms}
-	choices = {}
-	for key in set(demand) | set(incoming.values()):
-		rt, nights = key
-		choices[key] = [frozenset((n, r) for n in nights for r in footprint)
-		                for footprint in options[rt] if footprint.isdisjoint(unserviceable)]
-	occupied.update((i, r) for i in range(len(points)) for r in unserviceable)
-	return CapacityWindow(choices, occupied, demand, incoming)
+		# Unpicked holds can use different rooms on different nights.
+		first, last = index[max(a, start)], index[min(b, end)]
+		budget.spend(last - first)
+		for i in range(first, last):
+			demand[rt, 1 << i] += count
+	occupied = dict.fromkeys(unserviceable, mask(start, end))
+	for rooms, a, b in fixed:
+		budget.spend(len(rooms))
+		_occupy(rooms, mask(a, b), occupied)
+	return CapacityWindow(options, occupied, demand, incoming, budget)
 
 
-def shared_capacity_windows(property, lines, *, exclude_reservation=None):
+def shared_capacity_windows(property, lines, *, exclude_reservation=None, budget=None):
 	"""Read under the property inventory lock. Keep unrelated room types independent."""
+	budget = budget or SearchBudget()
 	if not frappe.db.exists("Sellable Unit", {"property": property, "unit_kind": "composite"}):
 		return []
 	rooms = frappe.get_all("Room", {"property": property}, ["name", "room_type", "housekeeping_status"])
+	budget.spend(len(rooms))
 	room_types = {r.name: r.room_type for r in rooms}
 	unserviceable = {r.name for r in rooms if r.housekeeping_status in ("Out of Order", "Out of Service")}
 	options = defaultdict(set)
@@ -320,7 +347,9 @@ def shared_capacity_windows(property, lines, *, exclude_reservation=None):
 	members = defaultdict(set)
 	units = frappe.get_all("Sellable Unit", {"property": property, "unit_kind": ("in", ("individual", "composite"))},
 	                       ["name", "room_type", "is_active", "unit_kind"])
+	budget.spend(len(units))
 	for row in frappe.get_all("Sellable Unit Room", {"parent": ("in", [u.name for u in units])}, ["parent", "room"]):
+		budget.spend()
 		members[row.parent].add(row.room)
 	neighbors = defaultdict(set)
 	composite_types = set()
@@ -373,8 +402,10 @@ def shared_capacity_windows(property, lines, *, exclude_reservation=None):
 			   WHERE property = %(property)s AND status IN %(live)s AND name != %(exclude)s
 			   AND room_type IN %(types)s AND COALESCE(room, '') = '' AND COALESCE(sellable_unit, '') = ''
 			   ORDER BY check_in_date FOR UPDATE""", params, as_dict=True)
+		budget.spend(len(promises) + len(requests))
 		deferred = [(s.room_type, *_span(s)) for s in promises]
 		for start, end in _connected_spans(requests, deferred):
+			budget.spend(len(requests) + len(deferred))
 			arrivals = [r for r in requests if r[2] < end and r[3] > start]
 			stays = [r for r in deferred if r[1] < end and r[2] > start]
 			bookings = frappe.db.sql(
@@ -385,6 +416,7 @@ def shared_capacity_windows(property, lines, *, exclude_reservation=None):
 				{**params, "start": start, "end": end}, as_dict=True)
 			fixed = []
 			for booking in bookings:
+				budget.spend(1 + len(members.get(booking.sellable_unit, ())))
 				held = members.get(booking.sellable_unit, set())
 				if booking.room:
 					held = held | {booking.room}
@@ -396,7 +428,8 @@ def shared_capacity_windows(property, lines, *, exclude_reservation=None):
 			                        ["room", "from_date", "to_date"])
 			fixed.extend(({row.room}, getdate(row.from_date), getdate(row.to_date)) for row in blocks
 			             if room_types.get(row.room) in component)
+			arrivals = [r for r in arrivals if not lines[r[0]].get("holds_only")]
 			pickups = [(lines[i].get("group_booking"), rt, a, b) for i, rt, a, b in arrivals]
 			quotas = shared_block_holds(property, component, start, end, pickups, exclude_reservation)
-			windows.append(_window(options, arrivals, stays, fixed, unserviceable, quotas, start, end))
+			windows.append(_window(options, arrivals, stays, fixed, unserviceable, quotas, start, end, budget=budget))
 	return windows

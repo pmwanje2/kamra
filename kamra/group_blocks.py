@@ -139,6 +139,22 @@ def unpicked_by_night(group: str, room_type: str, *,
 	return out
 
 
+def restored_pickup_nights(before, after) -> set[str]:
+	"""Nights where removing the stored pickup returns a live hold to its block."""
+	if not any(g.name == before.group_booking for g in _holding_groups(
+		before.property, before.check_in_date, add_days(before.check_out_date, 1), for_update=True
+	)):
+		return set()
+	unpicked = unpicked_by_night(before.group_booking, before.room_type,
+	                             for_update=True, exclude_reservation=before.name)
+	restored = set(group_nights(before.check_in_date, before.check_out_date))
+	if (before.property, before.room_type, before.group_booking) == (
+		after.property, after.room_type, after.group_booking
+	):
+		restored.difference_update(group_nights(after.check_in_date, after.check_out_date))
+	return {night for night in restored if unpicked.get(night, 0)}
+
+
 def _unpicked(group: str, room_type: str, nights: list | None = None) -> int:
 	"""Rooms still held on the busiest of `nights` (default: every night of
 	the group)."""
@@ -159,19 +175,22 @@ def block_hold(property: str, room_type: str, check_in_date, check_out_date,
 
 def block_hold_by_night(property: str, room_type: str, nights: list,
                         for_group: str | None = None,
-                        for_update: bool = False, exclude_reservation: str | None = None) -> dict[str, int]:
+                        for_update: bool = False, exclude_reservation: str | None = None,
+                        credit_one_pickup: bool = False) -> dict[str, int]:
 	"""Per-night hold for `room_type`: {date: rooms held}. One read of the
 	groups for the whole range, then each group counts on its own nights."""
 	if not nights:
 		return {}
 	dates = [getdate(d) for d in nights]
 	groups = _holding_groups(property, min(dates),
-	                         add_days(max(dates), 1), for_group, for_update=for_update)
+	                         add_days(max(dates), 1), None if credit_one_pickup else for_group, for_update=for_update)
 	out = {str(d): 0 for d in dates}
 	for gb in groups:
 		held = unpicked_by_night(gb.name, room_type, for_update=for_update, exclude_reservation=exclude_reservation)
 		for d in dates:
-			out[str(d)] += held.get(str(d), 0)
+			count = held.get(str(d), 0)
+			# Transferring one pickup satisfies at most one of the new group's promises.
+			out[str(d)] += max(0, count - int(credit_one_pickup and gb.name == for_group))
 	return out
 
 

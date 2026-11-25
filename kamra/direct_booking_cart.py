@@ -155,11 +155,10 @@ class _InventoryChoice(NamedTuple):
 	composite: bool = False
 
 
-def _assign_continuous_rooms(lines: list[dict], choices: list[list[_InventoryChoice]], windows) -> None:
+def _assign_continuous_rooms(lines: list[dict], choices: list[list[_InventoryChoice]], windows, budget) -> None:
 	"""Reserve each candidate's entire physical footprint for the stay."""
-	from kamra.siu.shared_capacity import SearchBudget, SearchLimit
+	from kamra.siu.shared_capacity import SearchLimit
 
-	budget = SearchBudget()
 	order = sorted(range(len(lines)), key=lambda i: len(choices[i]))
 	overlaps = [
 		{j for j, other in enumerate(lines)
@@ -280,8 +279,13 @@ def _check_inventory(property: str, lines: list[dict]) -> None:
 			frappe.clear_messages()
 			_refuse_inventory()
 
-	from kamra.siu.shared_capacity import shared_capacity_windows
-	_assign_continuous_rooms(lines, choices, shared_capacity_windows(property, lines))
+	from kamra.siu.shared_capacity import SearchBudget, SearchLimit, shared_capacity_windows
+	budget = SearchBudget()
+	try:
+		windows = shared_capacity_windows(property, lines, budget=budget)
+	except SearchLimit:
+		_refuse_inventory()
+	_assign_continuous_rooms(lines, choices, windows, budget)
 
 
 def _price_upsells(prop, line: dict, options: dict, guests: int) -> tuple[list[dict], Decimal, Decimal]:

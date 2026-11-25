@@ -248,6 +248,16 @@ def villa_locked_nights(property: str, room_type: str | None, start,
 
 
 class Reservation(Document):
+	def load_doc_before_save(self, *, raise_exception=False):
+		# Frappe's check_if_latest reads the old Reservation FOR UPDATE.
+		# Order that lock after the Property lock, as public checkout does.
+		properties = {self.property}
+		if self.name and not self.is_new():
+			properties.add(frappe.db.get_value("Reservation", self.name, "property"))
+		for prop in sorted(filter(None, properties)):
+			lock_property_for_inventory(prop)
+		return super().load_doc_before_save(raise_exception=raise_exception)
+
 	def autoname(self):
 		# RES-<year>-00001, the year being the property's financial year, so
 		# the count restarts in April in India and in January elsewhere
@@ -341,6 +351,59 @@ class Reservation(Document):
 		# also skip classic non-inventory statuses not in LIVE
 		if self.status in ("Cancelled", "No Show", "Checked Out", "Waitlist"):
 			return
+		from kamra.group_blocks import group_nights, restored_pickup_nights
+
+		dates = (group_nights(self.check_in_date, self.check_out_date) if requested_by_night is None
+		         else sorted(requested_by_night))
+		before = None if self.is_new() else self.get_doc_before_save()
+		restored = set()
+		probes = []
+		if before and before.group_booking and self._takes_new_inventory():
+			restored = restored_pickup_nights(before, self)
+			same_type = (before.property, before.room_type) == (self.property, self.room_type)
+			dropped = sorted(restored.difference(dates) if same_type else restored)
+			if dropped:
+				before._check_nightly_capacity(dropped, dict.fromkeys(dropped, 0), None, set(dropped), None)
+				# A released night can restore a promise even outside the new stay.
+				# Probe each consecutive span without adding a second reservation.
+				first = last = dropped[0]
+				for day in dropped[1:]:
+					if date_diff(day, last) > 1:
+						probes.append((first, last))
+						first = day
+					last = day
+				probes.append((first, last))
+			if not same_type:
+				restored.clear()
+		self._check_nightly_capacity(dates, requested_by_night, free_units_by_night, restored, self.group_booking)
+
+		if requested_by_night is None and (self._takes_new_inventory() or (before and
+			    (before.room, before.sellable_unit) != (self.room, self.sellable_unit))):
+			from kamra.siu.shared_capacity import SearchBudget, SearchLimit, shared_capacity_windows
+
+			stay = {"room_type": self.room_type, "group_booking": self.group_booking,
+			        "check_in_date": self.check_in_date, "check_out_date": self.check_out_date}
+			by_property = {self.property: [stay]}
+			for first, last in probes:
+				by_property.setdefault(before.property, []).append({
+					"room_type": before.room_type, "check_in_date": first,
+					"check_out_date": add_days(last, 1), "holds_only": True})
+			budget = SearchBudget()
+			try:
+				for prop, lines in by_property.items():
+					windows = shared_capacity_windows(prop, lines, exclude_reservation=self.name, budget=budget)
+					if windows and not all(window.fits({0: self._physical_rooms()}) for window in windows):
+						break
+				else:
+					return
+			except SearchLimit:
+				pass
+			frappe.throw(_("There are not enough available rooms for the overlapping stays."),
+			             exc=InventoryRefused)
+
+	def _check_nightly_capacity(self, dates, requested_by_night, free_units_by_night, restored, group):
+		from bisect import bisect_left
+
 		# Serialize bookings of a category, even before a room is assigned.
 		# The property lock in validate() is already held; this lock orders
 		# category checks. The count below is a locking read so it sees a
@@ -351,7 +414,7 @@ class Reservation(Document):
 			filters = {"property": self.property, "room_type": self.room_type, "is_active": 1}
 			if frappe.db.exists("Sellable Unit", {**filters, "unit_kind": "composite"}):
 				total = frappe.db.count("Sellable Unit", filters)
-		if not total and requested_by_night is None:
+		if not total and requested_by_night is None and not restored:
 			return  # setup-time bookings before rooms exist
 		virtual_villa = not total and uses_member_rooms(self.property, self.room_type)
 		if virtual_villa:
@@ -363,26 +426,18 @@ class Reservation(Document):
 			# committed value, not a stale cached doc
 			pct = float(frappe.db.get_value(
 				"Property", self.property, "overbooking_pct") or 0)
-		if requested_by_night is None:
-			nights = max(1, date_diff(self.check_out_date, self.check_in_date))
-			dates = [str(add_days(self.check_in_date, i)) for i in range(min(int(nights), 366))]
-		else:
+		if requested_by_night is not None:
 			pct = 0
-			dates = sorted(requested_by_night)
-		# rooms a confirmed group block holds back (until its cutoff) are
-		# not for general sale; a pickup books against its own block. Only
-		# a stay taking NEW inventory is held to this - a block made after
-		# a booking never stops that booking being edited.
-		# Out of order and blocked rooms are not for sale either, on the
-		# nights this stay newly takes; a night it already held is not
-		# re-checked, so shortening or extending a stay still works
+		# Grandfather retained nights, except where releasing a pickup restores
+		# supply owed to its group. Exclude the old row throughout this edit.
 		held, out = {}, {}
-		if self._takes_new_inventory():
+		if restored or self._takes_new_inventory():
 			from kamra.group_blocks import block_hold_by_night
 			held = block_hold_by_night(self.property, self.room_type, dates,
-			                           for_group=self.group_booking, for_update=True, exclude_reservation=self.name)
+			                           for_group=group, for_update=True, exclude_reservation=self.name,
+			                           credit_one_pickup=bool(restored))
 			before = self._nights_held_before()
-			new_nights = [d for d in dates if d not in before]
+			new_nights = [d for d in dates if d not in before or d in restored]
 			if new_nights and self.sellable_unit and free_units_by_night is None:
 				from kamra.siu.availability import availability
 				units = availability(self.property, room_type=self.room_type, check_in_date=dates[0],
@@ -391,24 +446,36 @@ class Reservation(Document):
 				                       for day in new_nights}
 			elif new_nights and not virtual_villa and total and free_units_by_night is None:
 				out = self._rooms_out_of_sale(new_nights)
-		for d in dates:
-			bookings = frappe.db.sql(
-				"""SELECT room, sellable_unit FROM `tabReservation`
-				   WHERE room_type = %(rt)s AND name != %(name)s
-				     AND status IN ('Confirmed', 'Checked In', 'Held', 'Pending Payment')
-				     AND check_in_date <= %(d)s
-				     AND GREATEST(check_out_date,
-				                  DATE_ADD(check_in_date, INTERVAL 1 DAY)) > %(d)s
-				   FOR UPDATE""",
-				{"rt": self.room_type, "name": self.name or "new", "d": d},
-			)
-			cnt = len(bookings)
+		# Count overlapping stays in one locking read, even for multi-year
+		# reservations. Same-day stays consume their arrival night.
+		bookings = frappe.db.sql(
+			"""SELECT room, sellable_unit, check_in_date, check_out_date FROM `tabReservation`
+			   WHERE room_type = %(rt)s AND name != %(name)s
+			     AND status IN ('Confirmed', 'Checked In', 'Held', 'Pending Payment')
+			     AND check_in_date <= %(last)s
+			     AND GREATEST(check_out_date, DATE_ADD(check_in_date, INTERVAL 1 DAY)) > %(first)s
+			   FOR UPDATE""", {"rt": self.room_type, "name": self.name or "new", "first": dates[0], "last": dates[-1]})
+		all_changes = [0] * (len(dates) + 1)
+		deferred_changes = all_changes.copy()
+		for room, unit, start, end in bookings:
+			left = bisect_left(dates, str(start))
+			right = bisect_left(dates, str(end if end > start else add_days(start, 1)))
+			all_changes[left] += 1
+			all_changes[right] -= 1
+			if not room and not unit:
+				deferred_changes[left] += 1
+				deferred_changes[right] -= 1
+		sold = deferred = 0
+		for i, d in enumerate(dates):
+			sold += all_changes[i]
+			deferred += deferred_changes[i]
+			cnt = sold
 			hold = held.get(d, 0)
 			rooms = total - out.get(d, 0)
 			if free_units_by_night is not None and d in free_units_by_night:
 				# Unit availability already deducted every assigned stay and room block.
 				rooms = free_units_by_night[d]
-				cnt = sum(1 for room, unit in bookings if not room and not unit)
+				cnt = deferred
 			limit = int(rooms * (1 + pct / 100))
 			demand = 1 if requested_by_night is None else requested_by_night[d]
 			if cnt + hold + demand > limit:
@@ -430,34 +497,15 @@ class Reservation(Document):
 						self.room_type, d, cnt, rooms, pct),
 					title=_("Overbooking limit"), exc=InventoryRefused)
 
-		# The cart checks all proposed lines together. A Desk write must also
-		# leave room for deferred arrivals sold under other, connected types.
-		if requested_by_night is None:
-			before = self.get_doc_before_save()
-			if self._takes_new_inventory() or (before and (before.room, before.sellable_unit)
-			                                   != (self.room, self.sellable_unit)):
-				from kamra.siu.shared_capacity import shared_capacity_windows
-				stay = {"room_type": self.room_type, "group_booking": self.group_booking,
-				        "check_in_date": self.check_in_date, "check_out_date": self.check_out_date}
-				windows = shared_capacity_windows(self.property, [stay], exclude_reservation=self.name)
-				if windows:
-					assigned = {0: self._physical_rooms()}
-					if not all(window.fits(assigned) for window in windows):
-						frappe.throw(_("There are not enough available rooms for the overlapping stays."),
-						             exc=InventoryRefused)
-
 	def _nights_held_before(self) -> set[str]:
-		"""Nights this stay already held in this room type before this save.
-		A date change re-checks every night; these are not re-checked
-		against the capacity that out of order or blocked rooms reduce."""
-		from frappe.utils import add_days
+		"""Retained nights keep their original inventory unless a group hold is restored."""
+		from kamra.group_blocks import group_nights
 
 		from kamra.reservation_state import holds_inventory
 		old = None if self.is_new() else self.get_doc_before_save()
 		if not old or old.room_type != self.room_type or not holds_inventory(old.status):
 			return set()
-		n = max(1, date_diff(old.check_out_date, old.check_in_date))
-		return {str(add_days(old.check_in_date, i)) for i in range(min(int(n), 366))}
+		return set(group_nights(old.check_in_date, old.check_out_date))
 
 	def _rooms_out_of_sale(self, dates: list[str]) -> dict[str, int]:
 		"""Rooms of this type that can't be sold on each night: Out of Order,
