@@ -408,3 +408,5 @@ Show Online Pre-Check-In Completion,إظهار اكتمال التسجيل ال�
 The sellable unit does not match the booked room type.,لا تتوافق الوحدة القابلة للحجز مع نوع الغرفة المحجوزة.
 Select a room in the booked unit.,اختر غرفة ضمن الوحدة المحجوزة.
 Select a room in a compatible sellable unit.,اختر غرفة ضمن وحدة حجز متوافقة.
+There are not enough available rooms for the overlapping stays.,لا توجد غرف متاحة كافية للإقامات المتزامنة.
+Room {0} is blocked for the selected dates.,الغرفة {0} محجوبة في التواريخ المحددة.

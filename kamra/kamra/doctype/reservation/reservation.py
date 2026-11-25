@@ -430,6 +430,21 @@ class Reservation(Document):
 						self.room_type, d, cnt, rooms, pct),
 					title=_("Overbooking limit"), exc=InventoryRefused)
 
+		# The cart checks all proposed lines together. A Desk write must also
+		# leave room for deferred arrivals sold under other, connected types.
+		if requested_by_night is None:
+			before = self.get_doc_before_save()
+			if self._takes_new_inventory() or (before and (before.room, before.sellable_unit)
+			                                   != (self.room, self.sellable_unit)):
+				from kamra.siu.shared_capacity import shared_capacity_windows
+				stay = {"room_type": self.room_type, "check_in_date": self.check_in_date, "check_out_date": self.check_out_date}
+				windows = shared_capacity_windows(self.property, [stay], exclude_reservation=self.name)
+				if windows:
+					assigned = {0: self._physical_rooms()}
+					if not all(window.fits(assigned) for window in windows):
+						frappe.throw(_("There are not enough available rooms for the overlapping stays."),
+						             exc=InventoryRefused)
+
 	def _nights_held_before(self) -> set[str]:
 		"""Nights this stay already held in this room type before this save.
 		A date change re-checks every night; these are not re-checked
@@ -534,6 +549,7 @@ class Reservation(Document):
 		self.validate_itinerary_leg()
 		self.validate_room_vacant()
 		self.validate_villa_lockout()
+		self.validate_room_serviceability()
 		self.validate_type_capacity()
 		self.validate_cancellation_path()
 		self.apply_negotiated_rate_plan()
@@ -545,7 +561,6 @@ class Reservation(Document):
 		self.apply_pricing()
 		self.govern_discount()
 		self.guard_rate_plan()
-		self.validate_room_serviceability()
 		self.stamp_room_assignment()
 
 	def guard_rate_plan(self):
@@ -581,25 +596,36 @@ class Reservation(Document):
 		nationality = default_nationality(pack_for(self.property))
 		for o in new_rows:
 			o.nationality = nationality or None
+	def _physical_rooms(self):
+		rooms = {self.room} if self.room else set()
+		if self.sellable_unit:
+			rooms.update(frappe.get_all("Sellable Unit Room", {"parent": self.sellable_unit}, pluck="room"))
+		return sorted(rooms)
+
 	def validate_room_serviceability(self):
-		"""Block assigning or checking a guest into an Out of Service or Out of Order room.
-		An already Checked In stay whose room becomes OS/OO mid-stay stays editable and
-		check-out capable until departure."""
-		if not self.room or self.status not in ("Confirmed", "Checked In", "Held", "Pending Payment"):
+		"""Check every room being handed over, including the other side of a connecting unit."""
+		from kamra.reservation_state import holds_inventory
+		if not holds_inventory(self.status) or not (self.room or self.sellable_unit):
 			return
-		before = None if self.is_new() else self.get_doc_before_save()
-		if before and before.status == "Checked In" and before.room == self.room:
+		before = self.get_doc_before_save()
+		if (before and before.status == "Checked In" and before.room == self.room
+				and before.sellable_unit == self.sellable_unit):
 			return
-		hk, room_no = frappe.db.get_value(
-			"Room", self.room, ["housekeeping_status", "room_number"]
-		) or (None, None)
-		if hk in ("Out of Order", "Out of Service"):
-			frappe.throw(
-				_("Room {0} is currently {1} and cannot be assigned.").format(
-					room_no or self.room, _(hk)
-				),
-				title=_("Room unavailable"),
-			)
+		rooms = self._physical_rooms()
+		unavailable = frappe.db.get_value("Room", {"name": ("in", rooms),
+		                                  "housekeeping_status": ("in", ("Out of Order", "Out of Service"))},
+		                                  ["room_number", "housekeeping_status"], for_update=True)
+		if unavailable:
+			number, status = unavailable
+			frappe.throw(_("Room {0} is currently {1} and cannot be assigned.").format(number, _(status)),
+			             title=_("Room unavailable"))
+		if self.sellable_unit:
+			end = max(getdate(self.check_out_date), getdate(add_days(self.check_in_date, 1)))
+			blocked = frappe.db.get_value("Room Block", {"room": ("in", rooms), "block_status": "Active",
+			                              "from_date": ("<", end), "to_date": (">", self.check_in_date)}, "room", for_update=True)
+			if blocked:
+				frappe.throw(_("Room {0} is blocked for the selected dates.").format(blocked),
+				             title=_("Room unavailable"))
 
 	def stamp_room_assignment(self):
 		"""Who put the guest in this room, and when. Every writer that
@@ -2589,45 +2615,40 @@ class Reservation(Document):
 		# makes the second transaction wait, and the locking read below
 		# then sees the first one's committed reservation — check-then-
 		# insert alone would let two simultaneous requests both pass
-		rooms = {self.room} if self.room else set()
-		if self.sellable_unit:
-			rooms.update(frappe.get_all("Sellable Unit Room", {"parent": self.sellable_unit}, pluck="room"))
+		rooms = self._physical_rooms()
 		if not rooms:
 			return
-		frappe.db.sql("SELECT name FROM `tabRoom` WHERE name IN %s ORDER BY name FOR UPDATE",
-		              (sorted(rooms),))
-		# a day-use stay occupies [check_in, check_in + 1 day) — GREATEST
-		# normalises both sides of the comparison
-		conflict = frappe.db.sql(
-			"""
-			SELECT name FROM `tabReservation`
-			WHERE property = %(property)s
-			  AND (room IN %(rooms)s OR sellable_unit IN (
-			    SELECT parent FROM `tabSellable Unit Room` WHERE room IN %(rooms)s))
-			  AND name != %(name)s
-			  AND status IN ('Confirmed', 'Checked In', 'Held', 'Pending Payment')
-			  AND check_in_date < GREATEST(%(check_out)s,
-			                               DATE_ADD(%(check_in)s, INTERVAL 1 DAY))
-			  AND GREATEST(check_out_date,
-			               DATE_ADD(check_in_date, INTERVAL 1 DAY)) > %(check_in)s
-			LIMIT 1
-			FOR UPDATE
-			""",
-			{
-				"rooms": sorted(rooms), "property": self.property,
-				"name": self.name or "new",
-				"check_in": self.check_in_date,
-				"check_out": self.check_out_date,
-			},
-		)
+		frappe.db.sql("SELECT name FROM `tabRoom` WHERE name IN %s ORDER BY name FOR UPDATE", (rooms,))
+		conflict = self._conflicting_stay(rooms)
+
 		if conflict:
 			frappe.throw(
 				_("Room {0} is already booked ({1}) for these dates.").format(
-					self.room or self.sellable_unit, conflict[0][0]
+					self.room or self.sellable_unit, conflict.name
 				),
 				title=_("Double booking blocked"),
 				exc=InventoryRefused,
 			)
+
+	def _conflicting_stay(self, rooms, *, handover=False):
+		"""Nightly sale and physical handover use the same occupied room footprint."""
+		from kamra.reservation_state import LIVE_STATUSES
+		rows = frappe.db.sql(
+			"""
+			SELECT name, guest_name FROM `tabReservation`
+			WHERE property = %(property)s
+			  AND (room IN %(rooms)s OR sellable_unit IN (
+			    SELECT parent FROM `tabSellable Unit Room` WHERE room IN %(rooms)s))
+			  AND name != %(name)s AND status IN %(statuses)s
+			  AND check_in_date < GREATEST(%(check_out)s, DATE_ADD(%(check_in)s, INTERVAL 1 DAY))
+			  AND GREATEST(check_out_date, DATE_ADD(check_in_date, INTERVAL 1 DAY),
+			               IF(%(handover)s, DATE_ADD(%(today)s, INTERVAL 1 DAY), check_out_date)) > %(check_in)s
+			LIMIT 1 FOR UPDATE
+			""", {"property": self.property, "rooms": rooms, "name": self.name or "new",
+			      "check_in": self.check_in_date, "check_out": self.check_out_date, "today": today(),
+			      "handover": int(handover), "statuses": ("Checked In",) if handover else LIVE_STATUSES},
+			as_dict=True)
+		return rows[0] if rows else None
 
 	def validate_itinerary_leg(self):
 		"""A leg of an itinerary can't overlap another live leg of the same
@@ -2653,39 +2674,21 @@ class Reservation(Document):
 		since the departing guest will be gone by then - but a guest still
 		Checked In has not gone. Checking in (or moving in-house) to a room
 		whose occupant has not checked out yet is refused until they do."""
-		if self.status != "Checked In" or not self.room:
+		if self.status != "Checked In" or not (self.room or self.sellable_unit):
 			return
 		before = self.get_doc_before_save()
-		if before and before.status == "Checked In" and before.room == self.room:
-			return  # already in this room; an unrelated edit
-		# the occupant holds the room until they check out: their stay runs
-		# to their departure date or, while they are still in, to tomorrow
-		occupant = frappe.db.sql(
-			"""
-			SELECT name, guest_name FROM `tabReservation`
-			WHERE room = %(room)s AND name != %(name)s
-			  AND status = 'Checked In'
-			  AND check_in_date < GREATEST(%(check_out)s,
-			                               DATE_ADD(%(check_in)s, INTERVAL 1 DAY))
-			  AND GREATEST(check_out_date,
-			               DATE_ADD(check_in_date, INTERVAL 1 DAY),
-			               DATE_ADD(%(today)s, INTERVAL 1 DAY)) > %(check_in)s
-			LIMIT 1
-			FOR UPDATE
-			""",
-			{"room": self.room, "name": self.name or "new",
-			 "check_in": self.check_in_date, "check_out": self.check_out_date,
-			 "today": today()},
-			as_dict=True,
-		)
+		if (before and before.status == "Checked In" and before.room == self.room
+				and before.sellable_unit == self.sellable_unit):
+			return
+		rooms = self._physical_rooms()
+		occupant = rooms and self._conflicting_stay(rooms, handover=True)
 		if occupant:
-			room_no = frappe.db.get_value("Room", self.room, "room_number") \
-				or self.room
+			room_no = frappe.db.get_value("Room", self.room, "room_number") if self.room else self.sellable_unit
 			frappe.throw(
 				_("Room {0} is still occupied by {1} ({2}). Check them out "
 				  "first, or choose another room.").format(
-					room_no, occupant[0].guest_name or occupant[0].name,
-					occupant[0].name),
+					room_no or self.sellable_unit, occupant.guest_name or occupant.name,
+					occupant.name),
 				title=_("Room still occupied"),
 				exc=InventoryRefused,
 			)

@@ -1255,3 +1255,5 @@ Show Online Pre-Check-In Completion,Mostrar la finalización del prerregistro en
 The sellable unit does not match the booked room type.,La unidad de venta no corresponde al tipo de habitación reservado.
 Select a room in the booked unit.,Seleccione una habitación de la unidad reservada.
 Select a room in a compatible sellable unit.,Seleccione una habitación de una unidad de venta compatible.
+There are not enough available rooms for the overlapping stays.,No hay suficientes habitaciones disponibles para las estancias que coinciden.
+Room {0} is blocked for the selected dates.,La habitación {0} está bloqueada para las fechas seleccionadas.

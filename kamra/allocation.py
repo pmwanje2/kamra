@@ -233,7 +233,9 @@ def apply_allocation(property: str, assignments):
 			elif doc.sellable_unit:
 				units = availability(property, room_type=doc.room_type, check_in_date=doc.check_in_date,
 				                     check_out_date=doc.check_out_date, exclude_reservation=res)
-				if not any(u["sellable"] and any(m.name == room for m in u["rooms"]) for u in units):
+				free_members = {m.get("name") if isinstance(m, dict) else getattr(m, "name", m)
+				                for unit in units if unit["sellable"] for m in unit["rooms"]}
+				if room not in free_members:
 					why = "That room is no longer free or ready for these nights"
 			else:
 				free = available_rooms(property, doc.room_type, doc.check_in_date,

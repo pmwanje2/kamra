@@ -2848,3 +2848,5 @@ Not permitted,Accès refusé
 The sellable unit does not match the booked room type.,L’unité de vente ne correspond pas à la catégorie de chambre réservée.
 Select a room in the booked unit.,Sélectionnez une chambre de l’unité réservée.
 Select a room in a compatible sellable unit.,Sélectionnez une chambre dans une unité de vente compatible.
+There are not enough available rooms for the overlapping stays.,Le nombre de chambres disponibles est insuffisant pour ces séjours qui se chevauchent.
+Room {0} is blocked for the selected dates.,La chambre {0} est bloquée aux dates sélectionnées.
