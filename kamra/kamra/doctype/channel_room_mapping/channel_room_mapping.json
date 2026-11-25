@@ -13,7 +13,13 @@
   "external_room_id",
   "external_rate_id",
   "external_currency",
-  "rate_plan"
+  "rate_plan",
+  "sb_health",
+  "last_synced_at",
+  "last_parity_status",
+  "column_break_health",
+  "last_parity_delta",
+  "last_error"
  ],
  "fields": [
   {
@@ -65,6 +71,42 @@
    "options": "Rate Plan",
    "in_list_view": 1,
    "description": "The hotel's rate plan this provider rate plan sells. Blank: the room type's base price."
+  },
+  {
+   "fieldname": "sb_health",
+   "fieldtype": "Section Break",
+   "label": "Sync & Parity Health"
+  },
+  {
+   "fieldname": "last_synced_at",
+   "fieldtype": "Datetime",
+   "label": "Last Synced At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_parity_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Last Parity Status",
+   "options": "\nOK\nUndercut\nOverpriced\nUnmapped\nStale",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_health",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "last_parity_delta",
+   "fieldtype": "Float",
+   "label": "Last Parity Delta",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_error",
+   "fieldtype": "Small Text",
+   "label": "Last Error",
+   "read_only": 1
   }
  ],
  "permissions": [

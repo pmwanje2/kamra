@@ -285,7 +285,7 @@ _PROPERTY_SCOPED = (
 	"Outbound Webhook Delivery", "Payment Gateway Settings",
 	"Petty Cash Voucher", "POS Order", "POS Outlet", "POS Table Reservation",
 	"Print Job",
-	"Proforma Folio", "Property Setting", "Rate Guardrail", "Rate Plan",
+	"Proforma Folio", "Property Setting", "Rate Guardrail", "Rate Plan", "Rate Restriction",
 	"Reservation",
 	"Long Stay Discount", "Revenue Budget", "Room", "Room Block", "Room Type", "Routing Instruction",
 	"Season",

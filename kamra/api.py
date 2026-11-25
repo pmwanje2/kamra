@@ -6134,6 +6134,7 @@ def reservation_detail(reservation: str):
 		"channel.cancel_needs_review": "update_not_applied",
 		"channel.modify_discount_removed": "discount_removed",
 		"channel.modify_discount_review": "discount_review",
+		"channel.restriction_mismatch": "restriction_mismatch",
 	}
 	channel_review_needed = int(res.get("channel_review_needed") or 0)
 	channel_reviews = []
