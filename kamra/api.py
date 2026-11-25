@@ -1853,20 +1853,25 @@ def _post_folio_payment(doc, mode, amount, reference, kind, currency, key, quote
 		# house, it pays the group at once, whichever room it is anchored to
 		from kamra.ledger import transfer_group_advances
 		transfer_group_advances(doc.group_booking)
+	# Both append paths use a shared Frappe naming series. Allocate the next
+	# number from its current row while retaining the caller's read view.
+	from kamra.folio import current_locking_read
 	if kind == "Security Deposit" and doc.reservation and \
 	   (doc.folio_type or "Guest") == "Guest":
 		# keep the stay's Security Deposit record in step, whichever screen
 		# took the money (the deposit panel or the folio's own payment form)
 		from kamra.deposit import record_collected
-		record_collected(doc.reservation, float(amount), mode)
+		with current_locking_read():
+			record_collected(doc.reservation, float(amount), mode)
 	elif kind != "Security Deposit":
 		# who took which money, for the activity log (a deposit logs its own)
 		from kamra.localization import money_text
 		from kamra.savings import log_action
-		log_action("folio_payment", "Folio", doc.name, doc.property,
-		           rationale=f"{kind} {money_text(doc.property, amount)} by {mode}"
-		                     + (f" ({fx_note})" if fx_note else "")
-		                     + (f" ({reference})" if reference else ""))
+		with current_locking_read():
+			log_action("folio_payment", "Folio", doc.name, doc.property,
+			           rationale=f"{kind} {money_text(doc.property, amount)} by {mode}"
+			                     + (f" ({fx_note})" if fx_note else "")
+			                     + (f" ({reference})" if reference else ""))
 	return doc.as_dict()
 
 

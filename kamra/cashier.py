@@ -7,6 +7,7 @@ caller's open session. Agents bypass the session gate (same rule as PIN)."""
 from __future__ import annotations
 
 import re
+from contextlib import nullcontext
 from typing import Any
 
 import frappe
@@ -441,8 +442,14 @@ def _recompute_session_totals(session: str, persist: bool = True, *, locked_sess
 	fields = ["kind", "mode", "amount"]
 	if has_ccy:
 		fields.extend(["currency", "fx_amount"])
-	rows = frappe.db.get_values("Cashier Transaction", {"session": session}, fields,
-	                            as_dict=True, for_update=locked_session is not None)
+	from kamra.folio import current_locking_read
+
+	# A journal scan can encounter a newer row on an unrelated till. Read
+	# current entries under the session lock without invalidating the caller.
+	locked = locked_session is not None
+	with current_locking_read() if locked else nullcontext():
+		rows = frappe.db.get_values("Cashier Transaction", {"session": session}, fields,
+		                            as_dict=True, for_update=locked)
 	sess = locked_session or frappe.get_doc("Cashier Session", session)
 	# the pack's instant modes keep their own bucket, stored
 	# in system_upi / "upi" - field kept by name so existing tills read on

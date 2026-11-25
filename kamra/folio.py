@@ -203,6 +203,20 @@ def lock_guest_deposit_windows(reservation):
 		)
 
 
+@contextmanager
+def current_locking_read():
+	"""Read locked current versions without MariaDB aborting a stale read view."""
+	if not _snapshot_isolation_enabled():
+		yield
+		return
+	previous = frappe.db.sql("SELECT @@SESSION.innodb_snapshot_isolation")[0][0]
+	try:
+		frappe.db.sql("SET SESSION innodb_snapshot_isolation=0")
+		yield
+	finally:
+		frappe.db.sql("SET SESSION innodb_snapshot_isolation=%s", (previous,))
+
+
 def _check_receipt_snapshot(query, args):
 	"""Lock current versions without allowing MariaDB 1020 to abort the caller.
 
@@ -210,12 +224,8 @@ def _check_receipt_snapshot(query, args):
 	refused before any posting, with the caller's transaction still intact.
 	"""
 	snapshot = frappe.db.sql(query, args)
-	previous = frappe.db.sql("SELECT @@SESSION.innodb_snapshot_isolation")[0][0]
-	try:
-		frappe.db.sql("SET SESSION innodb_snapshot_isolation=0")
+	with current_locking_read():
 		current = frappe.db.sql(query + " FOR UPDATE", args)
-	finally:
-		frappe.db.sql("SET SESSION innodb_snapshot_isolation=%s", (previous,))
 	if snapshot != current:
 		raise frappe.TimestampMismatchError(frappe._(
 			"The folio changed in another transaction. Retry the payment in a new transaction."))
