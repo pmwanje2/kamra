@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
+import { Link } from "react-router-dom"
 
 import { call } from "../lib/api"
 import { serverError, type Row } from "../lib/resource"
@@ -92,12 +93,27 @@ export default function ChannelConnectionActions({ row, reload }: { row: Row; re
     refresh()
   }
 
+  async function retryFailed() {
+    const out = await run(() => call<{ ok: boolean; retried: number }>(
+      "kamra.restrictions.retry_outbox_failures",
+      { connection },
+    ))
+    if (!out) return
+    setNotice(t("Re-queued {n} failed outbox item(s).", { n: out.retried }))
+    refresh()
+  }
+
   if (status && !status.outbox) return null
   const paused = Object.entries(status?.paused ?? {})
 
   return (
     <div className="space-y-3 border-t border-zinc-200 pt-4">
-      <div className={heading}>{t("Availability and rates sync")}</div>
+      <div className="flex items-center justify-between gap-2">
+        <div className={heading}>{t("Availability and rates sync")}</div>
+        <Link to="/channel-health" className="text-xs font-medium text-brand-700 hover:underline">
+          {t("Channel health & parity")} →
+        </Link>
+      </div>
       {status && (
         <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
           <dt className="text-zinc-500">{t("Changes waiting")}</dt>
@@ -122,6 +138,11 @@ export default function ChannelConnectionActions({ row, reload }: { row: Row; re
         <Button variant="outline" disabled={busy} onClick={() => { void fullSync(0) }}>
           {t("Full sync")}
         </Button>
+        {status && status.failed > 0 && (
+          <Button variant="outline" disabled={busy} onClick={() => { void retryFailed() }}>
+            {t("Retry failed outbox")} ({status.failed})
+          </Button>
+        )}
       </div>
 
       {confirmSince !== null && (

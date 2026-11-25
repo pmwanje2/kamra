@@ -221,17 +221,33 @@ def _plan_night_rate(property: str, room_type: str, rate_plan: str | None, d,
 	return total if total > 0 else None
 
 
-def _restriction_day(rate: Decimal | None) -> dict:
-	"""The one place a day's restriction values are put together (minimum
-	stay and the like would add their fields here): the rate, or stop-sell
-	when there is no price."""
-	if rate is None:
-		return {"stop_sell": True}
-	return {"rate": rate, "stop_sell": False}
+def _restriction_day(rate: Decimal | None, restriction: dict | None = None) -> dict:
+	"""The one place a day's restriction values are put together: the rate
+	plus stop-sell, min_stay_arrival, max_stay, closed_to_arrival, and
+	closed_to_departure when a Rate Restriction applies."""
+	if not restriction or not restriction.get("has_rule"):
+		if rate is None:
+			return {"stop_sell": True}
+		return {"rate": rate, "stop_sell": False}
+
+	out: dict = {}
+	if rate is not None:
+		out["rate"] = rate
+	out["stop_sell"] = True if (rate is None or bool(restriction.get("stop_sell"))) else False
+	min_los = cint(restriction.get("min_los"))
+	out["min_stay_arrival"] = min_los if min_los > 0 else 1
+	if restriction.get("is_stay_through") and min_los > 0:
+		out["min_stay_through"] = min_los
+	max_los = cint(restriction.get("max_los"))
+	if max_los > 0:
+		out["max_stay"] = max_los
+	out["closed_to_arrival"] = bool(restriction.get("cta"))
+	out["closed_to_departure"] = bool(restriction.get("ctd"))
+	return out
 
 
 def restriction_cells(conn, date_from, date_to, problems: dict | None = None) -> dict[str, dict[str, dict]]:
-	"""{external_rate_id: {"YYYY-MM-DD": {"rate": Decimal, "stop_sell": False}}}
+	"""{external_rate_id: {"YYYY-MM-DD": {"rate": Decimal, "stop_sell": False, ...}}}
 	for each mapping with a provider rate plan id, priced by _plan_night_rate
 	in the mapping's currency (the tariff directory read once for the pass);
 	a day without a price is {"stop_sell": True} and carries no rate.
@@ -259,6 +275,9 @@ def restriction_cells(conn, date_from, date_to, problems: dict | None = None) ->
 def _restriction_cells(conn, start: str, days: int, home: str, problems: dict) -> dict[str, dict[str, dict]]:
 	"""restriction_cells for `days` days from `start`, inside its pass."""
 	from kamra.channel_manager import _mappings
+	from kamra.restrictions import _fetch_rows_for_window, resolve_night_restrictions
+	end = str(add_days(start, max(days - 1, 0)))
+	rows_by_date = _fetch_rows_for_window(conn.property, start, end)
 	out: dict[str, dict[str, dict]] = {}
 	for m in _mappings(conn.name):
 		if not m.external_rate_id:
@@ -270,8 +289,17 @@ def _restriction_cells(conn, start: str, days: int, home: str, problems: dict) -
 			for i in range(days):
 				d = getdate(add_days(start, i))
 				try:
+					restr = (
+						resolve_night_restrictions(
+							conn.property, d, room_type=m.room_type,
+							rate_plan=m.rate_plan or None, _rows_by_date=rows_by_date,
+						)
+						if str(d) in rows_by_date else None
+					)
 					plan[str(d)] = _restriction_day(
-						_plan_night_rate(conn.property, m.room_type, m.rate_plan, d, currency))
+						_plan_night_rate(conn.property, m.room_type, m.rate_plan, d, currency),
+						restr,
+					)
 				except (AriPriceHeld, AriPricingFailed) as exc:
 					key = "held" if isinstance(exc, AriPriceHeld) else "errored"
 					held = problems.setdefault(key, {}).setdefault(
@@ -298,16 +326,30 @@ def _canon(value):
 	return value
 
 
+_CLEARABLE_RESTRICTIONS = {
+	"min_stay_arrival": 1,
+	"min_stay_through": 1,
+	"max_stay": 0,
+	"closed_to_arrival": False,
+	"closed_to_departure": False,
+}
+
+
 def diff_cells(cells: dict, sent: dict) -> dict:
 	"""Only the fields whose value differs from `sent` (same shape); a day
-	with no change does not appear, nor an id with no changed day."""
+	with no change does not appear, nor an id with no changed day.
+	When a previously pushed restriction field is lifted/deleted, emit its
+	neutral clear value so the provider lifts it too."""
 	out: dict[str, dict[str, dict]] = {}
 	for ext_id, days in cells.items():
 		known = sent.get(ext_id) or {}
 		for d, values in days.items():
 			before = known.get(d) or {}
 			changed = {f: v for f, v in values.items()
-			           if f not in before or _canon(before[f]) != _canon(v)}
+			           if v is not None and (f not in before or _canon(before[f]) != _canon(v))}
+			for f, neutral in _CLEARABLE_RESTRICTIONS.items():
+				if f in before and (f not in values or values[f] is None) and _canon(before[f]) != _canon(neutral):
+					changed[f] = neutral
 			if changed:
 				out.setdefault(ext_id, {})[d] = changed
 	return out
@@ -386,6 +428,15 @@ def _remember(connection: str, kind: str, cells: dict) -> None:
 		else:
 			frappe.get_doc({"doctype": "Channel ARI State", "connection": connection, "kind": kind,
 				"external_id": ext_id, "sent_values": payload}).insert(ignore_permissions=True)
+		if kind == "restrictions" and frappe.get_meta("Channel Room Mapping").has_field("last_synced_at"):
+			mapping_name = frappe.db.get_value(
+				"Channel Room Mapping", {"connection": connection, "external_rate_id": ext_id}, "name",
+			)
+			if mapping_name:
+				frappe.db.set_value(
+					"Channel Room Mapping", mapping_name, "last_synced_at",
+					frappe.utils.now_datetime(), update_modified=False,
+				)
 
 
 def _forget(connection: str, kind: str, ext_id: str | None) -> None:
@@ -852,7 +903,32 @@ def _flush(conn, rows: list, now: float, result: dict) -> None:
 			continue
 		rejected = out.get("rejected") or []
 		dropped = {_key(c) for c in rejected}
-		_remember(connection, kind, _expand([c for c in changes if _key(c) not in dropped]))
+		accepted = [c for c in changes if _key(c) not in dropped]
+		_remember(connection, kind, _expand(accepted))
+		if kind == "restrictions" and frappe.get_meta("Channel Room Mapping").has_field("last_synced_at"):
+			synced_ids = {str(c["external_id"]) for c in accepted if c.get("external_id")}
+			rejected_by_id: dict[str, str] = {}
+			for r in rejected:
+				ext_id = str(r.get("external_id") or "")
+				if ext_id and ext_id not in rejected_by_id:
+					why = "; ".join(f"{f}: {', '.join(map(str, m))}" for f, m in (r.get("reasons") or {}).items())
+					rejected_by_id[ext_id] = why[:280]
+			for m in frappe.get_all(
+				"Channel Room Mapping",
+				filters={"connection": connection},
+				fields=["name", "external_rate_id"],
+			):
+				ext_id = str(m.external_rate_id or "")
+				if ext_id in rejected_by_id:
+					frappe.db.set_value(
+						"Channel Room Mapping", m.name,
+						{"last_error": rejected_by_id[ext_id]}, update_modified=False,
+					)
+				elif ext_id in synced_ids:
+					frappe.db.set_value(
+						"Channel Room Mapping", m.name,
+						{"last_synced_at": _dt(now), "last_error": ""}, update_modified=False,
+					)
 		detail = " | ".join(filter(None, [_rejected_detail(rejected), refused]))
 		_settle(conn, krows, kind, out.get("task_ids") or [], now, detail, problems, result, len(changes))
 		if rejected:
@@ -967,6 +1043,10 @@ def _source(doc, method) -> tuple[str, str | None, str | None, str] | None:
 	if dt == "Season":
 		w = _window(_dates(doc.start_date, before and before.start_date),
 		            _dates(doc.end_date, before and before.end_date))
+		return (doc.property, *w, "restrictions") if w else None
+	if dt == "Rate Restriction":
+		w = _window(_dates(doc.restriction_date, before and before.restriction_date),
+		            _dates(doc.restriction_date, before and before.restriction_date))
 		return (doc.property, *w, "restrictions") if w else None
 	if dt in _HORIZON_SOURCES:
 		return doc.property, None, None, "restrictions"

@@ -606,6 +606,17 @@ def search_stay(property: str, check_in_date: str, check_out_date: str,
 					row.update(available=False, reason=(
 						f"These dates need a stay of at least {need} nights"
 						+ (f" ({rules['season']})." if rules.get("season") else ".")))
+				else:
+					from kamra.restrictions import evaluate_stay_restrictions
+					ev = evaluate_stay_restrictions(
+						property, rt, check_in_date, check_out_date, rate_plan=resolved_plan,
+					)
+					if not ev["allowed"]:
+						row.update(
+							available=False,
+							reason=ev["summary"],
+							restrictions=ev["violations"],
+						)
 			except ContractRateRefused:
 				frappe.clear_messages()
 				row.update(available=False, quote=None, reason=NO_RATE_AVAILABLE)
@@ -1133,6 +1144,13 @@ def book(property: str, room_type: str, check_in_date: str,
 	except (frappe.ValidationError, ContractRateRefused):
 		frappe.clear_messages()
 		frappe.throw(NO_RATE_AVAILABLE)
+
+	from kamra.restrictions import StayRestrictionError, evaluate_stay_restrictions
+	ev = evaluate_stay_restrictions(
+		property, room_type, check_in_date, check_out_date, rate_plan=resolved_plan,
+	)
+	if not ev["allowed"]:
+		frappe.throw(ev["summary"], StayRestrictionError, title="Stay restriction")
 
 	# Peek at payment terms before insert so Instant can choose status.
 	try:
