@@ -560,7 +560,11 @@ class ZeroTaxMinorUnitLineRoundingTest(QuotePatches, RateMatrixHarness):
 
 		with patch.object(self.folio, "_charge_posted", lambda *a, **kw: False), \
 				patch.object(self.folio, "current_date_contract_night", lambda *a, **kw: None), \
-				patch.object(self.folio, "open_line_target", lambda r, ct, is_alcohol=0: "FOL-UNLOCKED"), \
+				patch.object(
+					self.folio,
+					"line_parts",
+					lambda r, ct, amount, *a, **kw: [{"folio": "FOL-UNLOCKED", "amount": amount, "routing_instruction": None}],
+				), \
 				patch.object(self.folio, "_post_room_levy", lambda *a, **kw: None), \
 				patch.object(self.ledger, "save_folio", lambda f, **kw: f):
 			self.folio.post_room_night(res, "2026-12-01")

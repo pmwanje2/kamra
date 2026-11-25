@@ -50,12 +50,30 @@ CHARGE_TYPE_TO_CODE = {
 	                    "Opening Balance"),
 }
 
+# Extra revenue codes beyond the 1:1 charge-type defaults. Matches OPERA Cloud
+# routing and transaction codes (and the Simphony-OPERA interface), where
+# beverage/alcohol posts under its own transaction code so a food-only routing
+# rule never captures liquor:
+# https://docs.oracle.com/en/industries/hospitality/opera-cloud/25.5/ocsuh/t_admin_financial_transaction_management_managing_routing_codes.htm
+# https://docs.oracle.com/en/industries/hospitality/simphony/19.7/simcg/c_opera_connection.htm
+DEFAULT_BEVERAGE_CODE = "2010"
+EXTRA_REVENUE_CODES = (
+	("2010", "Beverage & Alcohol", "F&B", "Beverage", "Food & Beverage", 1),
+)
+
 PAYMENT_CODES = {
 	"Payment": ("9001", "Payment", "Payment"),
 	"Advance": ("9002", "Advance / Deposit", "Payment"),
 	"Security Deposit": ("9003", "Security Deposit", "Payment"),
 	"Refund": ("9004", "Refund", "Payment"),
 }
+
+PACKAGE_AND_FIXED_CODES = (
+	("1400", "Package Allowance", "Package", "Package", "Allowance"),
+	("1410", "Package Breakage", "Package", "Package", "Misc"),
+	("3300", "Parking", "Revenue", "Other", "Misc"),
+	("3400", "Resort Fee", "Revenue", "Other", "Misc"),
+)
 
 
 def ensure_default_transaction_codes(property: str | None = None) -> None:
@@ -75,6 +93,20 @@ def ensure_default_transaction_codes(property: str | None = None) -> None:
 			"charge_type": charge_type,
 			"is_alcohol": 0,
 		}).insert(ignore_permissions=True)
+	for code, desc, group, subgroup, charge_type, is_alc in EXTRA_REVENUE_CODES:
+		if frappe.db.exists("Transaction Code", code):
+			continue
+		frappe.get_doc({
+			"doctype": "Transaction Code",
+			"code": code,
+			"description": desc,
+			"property": property,
+			"txn_type": "Revenue",
+			"revenue_group": group,
+			"subgroup": subgroup,
+			"charge_type": charge_type,
+			"is_alcohol": is_alc,
+		}).insert(ignore_permissions=True)
 	for kind, (code, desc, group) in PAYMENT_CODES.items():
 		if frappe.db.exists("Transaction Code", code):
 			continue
@@ -86,6 +118,21 @@ def ensure_default_transaction_codes(property: str | None = None) -> None:
 			"revenue_group": group,
 			"subgroup": kind,
 		}).insert(ignore_permissions=True)
+	for code, desc, txn_type, group, charge_type in PACKAGE_AND_FIXED_CODES:
+		if frappe.db.exists("Transaction Code", code):
+			continue
+		frappe.get_doc({
+			"doctype": "Transaction Code",
+			"code": code,
+			"description": desc,
+			"property": property,
+			"txn_type": txn_type,
+			"revenue_group": group,
+			"subgroup": desc,
+			"charge_type": charge_type,
+			"is_alcohol": 0,
+			"disabled": 0,
+		}).insert(ignore_permissions=True)
 
 
 def code_for_charge_type(charge_type: str) -> str | None:
@@ -96,6 +143,82 @@ def code_for_charge_type(charge_type: str) -> str | None:
 	if not frappe.db.exists("Transaction Code", code):
 		ensure_default_transaction_codes()
 	return code if frappe.db.exists("Transaction Code", code) else None
+
+
+def beverage_transaction_code(property: str | None = None) -> str:
+	"""The property's configured transaction code for beverage / alcohol
+	postings (default 2010), seeded on demand when missing."""
+	configured = ""
+	if property:
+		from kamra.settings import get_setting
+		configured = (get_setting(property, "beverage_transaction_code") or "").strip()
+	code = configured or DEFAULT_BEVERAGE_CODE
+	if not frappe.db.exists("Transaction Code", code):
+		ensure_default_transaction_codes()
+	row = frappe.db.get_value("Transaction Code", code, ["disabled", "property"], as_dict=True)
+	if row and not row.disabled and (not property or not row.property or row.property == property):
+		return code
+	if not frappe.db.exists("Transaction Code", DEFAULT_BEVERAGE_CODE):
+		ensure_default_transaction_codes()
+	return DEFAULT_BEVERAGE_CODE
+
+
+def code_is_alcohol(code: str | None) -> bool:
+	"""True when `code` names a Transaction Code flagged is_alcohol=1."""
+	return bool(code and cint(frappe.db.get_value("Transaction Code", code, "is_alcohol")))
+
+
+def code_default_tax_rate(code: str | None) -> float | None:
+	"""Configured default tax % on a Transaction Code (OPERA Generates),
+	including an explicit 0% (`tax_exempt=1`), or None when unset. On ERP
+	bridge sites (KMR-TAX-001), always 0.0 because ERPNext Tax Rule owns tax."""
+	if not code:
+		return None
+	from kamra.erp_bridge import is_bridge_active
+	if is_bridge_active():
+		return 0.0
+	row = frappe.db.get_value(
+		"Transaction Code", code, ["default_tax_rate", "tax_exempt"], as_dict=True)
+	if not row:
+		return None
+	if row.default_tax_rate is not None and float(row.default_tax_rate) > 0:
+		return float(row.default_tax_rate)
+	if cint(row.tax_exempt):
+		return 0.0
+	return None
+
+
+def assert_transaction_code_property(code: str, code_property: str | None,
+                                     property: str | None) -> None:
+	"""A property may only use shared Transaction Codes (blank property) or
+	its own property's codes."""
+	if property and code_property and code_property != property:
+		frappe.throw(
+			frappe._("Transaction code {0} belongs to another property.").format(code))
+
+
+def resolve_transaction_code(charge_type: str, *,
+                             transaction_code: str | None = None,
+                             is_alcohol: int = 0,
+                             property: str | None = None) -> str | None:
+	"""Transaction code for a charge posting: an explicit code wins (must be an
+	enabled non-Payment code belonging to this property or shared); otherwise
+	an alcohol line uses the property's configured beverage code (default 2010),
+	and every other line uses the charge type's default code."""
+	code = (transaction_code or "").strip() or None
+	if code:
+		if code == DEFAULT_BEVERAGE_CODE and not frappe.db.exists("Transaction Code", code):
+			ensure_default_transaction_codes()
+		row = frappe.db.get_value(
+			"Transaction Code", code, ["disabled", "txn_type", "property"], as_dict=True)
+		if not row or row.disabled or row.txn_type == "Payment":
+			frappe.throw(
+				frappe._("Transaction code {0} is not an enabled charge code.").format(code))
+		assert_transaction_code_property(code, row.property, property)
+		return code
+	if cint(is_alcohol):
+		return beverage_transaction_code(property)
+	return code_for_charge_type(charge_type)
 
 
 def payment_code_for(kind: str | None, mode: str | None) -> str | None:
@@ -129,7 +252,9 @@ def stamp_gl_codes(folio_doc) -> None:
 		if c.name in posted:
 			continue
 		if not c.transaction_code:
-			c.transaction_code = code_for_charge_type(c.charge_type or "Misc")
+			c.transaction_code = (
+				beverage_transaction_code(folio_doc.property) if cint(c.get("is_alcohol"))
+				else code_for_charge_type(c.charge_type or "Misc"))
 		if not c.gl_code:
 			c.gl_code = gl_code_of(c.transaction_code)
 	for p in folio_doc.payments:
@@ -763,19 +888,36 @@ def _ar_account(property: str, company: str) -> str:
 	return doc.name
 
 
+def _payee(folio) -> tuple[str | None, str | None]:
+	"""(payee_type, payee_company) of a folio or a folio row that may not
+	carry them (a get_all row with other fields)."""
+	payee = folio.get("payee_type")
+	if payee is None and folio.get("name"):
+		row = frappe.db.get_value("Folio", folio.get("name"),
+		                          ["payee_type", "payee_company"], as_dict=True) or {}
+		return row.get("payee_type"), row.get("payee_company")
+	return payee, folio.get("payee_company")
+
+
 def company_payer_of(folio) -> str | None:
 	"""The company that pays this folio on credit, or None when the guest
-	pays it. Only a Company folio (the stay's company) or a group master
-	(the group's company) is the company's bill; Guest and Extra folios -
-	liquor, extras - are always the guest's."""
-	kind = folio.get("folio_type") or "Guest"
-	company = None
-	if kind == "Company" and folio.get("reservation"):
-		company = frappe.db.get_value(
-			"Reservation", folio.get("reservation"), "company")
-	elif kind == "Group" and folio.get("group_booking"):
-		company = frappe.db.get_value(
-			"Group Booking", folio.get("group_booking"), "company")
+	pays it. A window's payee decides (OPERA: each window has its own payee;
+	SAP: the payer): a Company payee with credit is the company's bill, any
+	other payee the guest's - liquor and extras included. A folio from
+	before windows, with no payee yet, keeps the old rule: only a Company
+	folio (the stay's company) or a group master (the group's company)."""
+	payee, payee_company = _payee(folio)
+	if payee:
+		company = payee_company if payee == "Company" else None
+	else:
+		kind = folio.get("folio_type") or "Guest"
+		company = None
+		if kind == "Company" and folio.get("reservation"):
+			company = frappe.db.get_value(
+				"Reservation", folio.get("reservation"), "company")
+		elif kind == "Group" and folio.get("group_booking"):
+			company = frappe.db.get_value(
+				"Group Booking", folio.get("group_booking"), "company")
 	if company and frappe.db.get_value(
 			"Corporate Account", company, "credit_allowed"):
 		return company
@@ -805,7 +947,11 @@ def due_date_for(account: str | None, invoice_date, property: str | None = None)
 
 def _transfer_company(folio, company: str | None = None) -> str | None:
 	"""Who a city ledger transfer bills: the company asked for, else the
-	stay's, else the group's."""
+	window's payee company, else the stay's, else the group's."""
+	if not company:
+		payee, payee_company = _payee(folio)
+		if payee == "Company":
+			company = payee_company
 	if not company and folio.get("reservation"):
 		company = frappe.db.get_value("Reservation", folio.reservation, "company")
 	if not company and folio.get("group_booking"):
@@ -2743,9 +2889,32 @@ def home_currency(property: str) -> str:
 
 def minor_unit(property: str) -> Decimal:
 	"""The smallest amount a bill in the hotel's currency states: 0.01 for a
-	two-decimal currency, 1 for the Uganda shilling (ISO 4217, via babel)."""
+	two-decimal currency, 1 for the Uganda shilling, 0.001 for KWD (ISO 4217, via babel)."""
 	from babel.numbers import get_currency_precision
 	return Decimal(1).scaleb(-get_currency_precision(home_currency(property)))
+
+
+def currency_precision(property: str | None) -> int:
+	"""ISO 4217 decimal places for the property's home currency (0 UGX, 2 USD/INR, 3 KWD)."""
+	if not property:
+		return 2
+	from babel.numbers import get_currency_precision
+	return get_currency_precision(home_currency(property))
+
+
+def round_money(value, property: str | None = None, *, min_places: int = 0) -> float:
+	"""Half-up round in Decimal to at least `min_places` and the currency's ISO 4217 places."""
+	places = max(currency_precision(property), int(min_places or 0))
+	unit = Decimal(1).scaleb(-places)
+	return float(_money(value).quantize(unit, rounding=ROUND_HALF_UP))
+
+
+def balance_eps(property: str | None = None) -> float:
+	"""Sub-minor-unit settlement tolerance: 0.009 for <=2dp currencies, 0.0009 for 3dp (KWD)."""
+	places = currency_precision(property)
+	if places >= 3:
+		return float(Decimal("0.9") * Decimal(1).scaleb(-places))
+	return 0.009
 
 
 def _money(value) -> Decimal:

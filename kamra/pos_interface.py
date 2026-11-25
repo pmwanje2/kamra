@@ -9,8 +9,8 @@ Both are for a service user holding the "POS Integrator" role (or Kamra
 Agent), limited to its property with a Property User Permission, calling
 with its API key. Nothing here is a second way to bill: the charge goes
 through api.post_stay_charge - the same path as the desk, housekeeping and
-the AI agent - so the billing rules pick the folio, tax comes from the
-country pack, and alcohol never lands on a Company or Group folio.
+the AI agent - so the routing and billing rules pick the folio and tax
+comes from the country pack. Liquor routes like any other charge.
 
 Every ticket is posted at most once: `ticket_id` (the POS's own check
 number) is the idempotency key per property. Retrying a ticket returns the
@@ -297,15 +297,31 @@ def _convert_to_home(property: str, amount: float | None, currency: str | None) 
 
 
 def _resolve_target_folio_readonly(
-	res: dict, charge_type: str = "Food & Beverage", is_alcohol: int = 0
+	res: dict,
+	charge_type: str = "Food & Beverage",
+	is_alcohol: int = 0,
+	*,
+	transaction_code: str | None = None,
+	amount: float | None = None,
 ) -> tuple[str | None, str, float, bool]:
 	"""Read-only mirror of `kamra.folio.target_folio` without opening new folios.
 
+	Checks active K1 Routing Instructions first (same precedence as
+	`kamra.routing.route(..., whole=True)`), then falls back to legacy
+	group/company billing rules using the resolved transaction code.
 	Also surfaces any House Account (`folio_type == 'Account'`) folio linked to
 	the reservation so both `verify_room_charge` and `pos_post_room_charge`
 	hard-refuse it instead of silently opening a fresh Guest folio.
 	"""
+	from decimal import Decimal
+
+	from frappe.utils import getdate
+
+	from kamra import folio as folio_mod
+	from kamra import routing as routing_mod
+	from kamra.business_date import get_business_date
 	from kamra.folio import COMPANY_BILLING_DEFAULTS, _company_pays
+	from kamra.ledger import resolve_transaction_code
 
 	open_acct = frappe.db.get_value(
 		"Folio",
@@ -315,23 +331,118 @@ def _resolve_target_folio_readonly(
 	if open_acct:
 		return open_acct, "Account", _current_folio_balance(open_acct), False
 
-	master_no_post = False
-	if not is_alcohol:
-		group = res.get("group_booking")
-		if group:
-			gb = frappe.db.get_value(
-				"Group Booking",
-				group,
-				["company", "master_reservation", "master_pays"],
-				as_dict=True,
-			)
-			if gb:
-				company_covers = bool(gb.company and _company_pays(gb.company, charge_type, res.get("property")))
-				master_covers = False
-				if gb.master_reservation and not cint(res.get("pays_own_charges")):
-					covered = COMPANY_BILLING_DEFAULTS.get(gb.master_pays, frozenset())
-					master_covers = covered is None or charge_type in covered
-				if company_covers or master_covers:
+	prop = res.get("property")
+	code = resolve_transaction_code(
+		charge_type,
+		transaction_code=transaction_code,
+		is_alcohol=cint(is_alcohol),
+		property=prop,
+	)
+
+	def _window_1_readonly() -> tuple[str | None, str, float, bool]:
+		gf = frappe.db.get_value(
+			"Folio",
+			{"reservation": res["name"], "folio_type": "Guest", "status": "Open"},
+			"name",
+		) or frappe.db.get_value(
+			"Folio",
+			{"reservation": res["name"], "folio_type": "Guest"},
+			"name",
+		)
+		if gf:
+			return gf, "Guest", _current_folio_balance(gf), False
+		any_acct = frappe.db.get_value(
+			"Folio",
+			{"reservation": res["name"], "folio_type": "Account"},
+			"name",
+		)
+		if any_acct:
+			return any_acct, "Account", _current_folio_balance(any_acct), False
+		return None, "Guest", 0.0, False
+
+	# 1. Active K1 Routing Instructions (read-only mirror of kamra.routing.route(whole=True))
+	if frappe.db.exists("Routing Instruction", {"reservation": res["name"], "disabled": 0}):
+		day = getdate(get_business_date(prop))
+		ri = routing_mod.matching(res["name"], charge_type, code, day)
+		if ri:
+			kind = ri.limit_type or "None"
+			skip_limit_without_amount = kind != "None" and amount is None
+			if not skip_limit_without_amount:
+				fits = True
+				if kind == "Percent":
+					fits = False  # outlet charges move whole only
+				elif kind == "Amount":
+					line = folio_mod.line_figures(prop, charge_type, amount)
+					if line["base"] > 0:
+						left = Decimal(str(ri.limit_value or 0)) - routing_mod.used(
+							ri.name, day if cint(ri.per_day) else None
+						)
+						fits = left >= line["figure"] and left > 0
+				if not fits:
+					return _window_1_readonly()
+				window = cint(ri.target_window) or 1
+				if ri.target_type == "Window":
+					f_row = frappe.db.get_value(
+						"Folio",
+						{
+							"reservation": res["name"],
+							"window_no": window,
+							"folio_type": ("!=", "Group"),
+							"status": "Open",
+						},
+						["name", "folio_type"],
+						as_dict=True,
+					)
+					if f_row:
+						return (
+							f_row.name,
+							f_row.folio_type or "Guest",
+							_current_folio_balance(f_row.name),
+							False,
+						)
+					return None, "Guest", 0.0, False
+				if ri.target_type == "Room":
+					other = frappe.db.get_value(
+						"Reservation",
+						ri.target_reservation,
+						["name", "status", "property", "room_charges_allowed"],
+						as_dict=True,
+					)
+					if not other or other.status != "Checked In" or other.property != ri.property:
+						return _window_1_readonly()
+					target_no_post = (
+						other.room_charges_allowed is not None and not cint(other.room_charges_allowed)
+					)
+					f_row = frappe.db.get_value(
+						"Folio",
+						{
+							"reservation": other.name,
+							"window_no": window,
+							"folio_type": ("!=", "Group"),
+							"status": "Open",
+						},
+						["name", "folio_type"],
+						as_dict=True,
+					)
+					if f_row:
+						return (
+							f_row.name,
+							f_row.folio_type or "Guest",
+							_current_folio_balance(f_row.name),
+							target_no_post,
+						)
+					return None, "Guest", 0.0, target_no_post
+				if ri.target_type == "Group Master":
+					group = res.get("group_booking")
+					gb = group and frappe.db.get_value(
+						"Group Booking",
+						group,
+						["property", "status", "master_reservation"],
+						as_dict=True,
+					)
+					if not gb or gb.property != ri.property or gb.status == "Cancelled":
+						return _window_1_readonly()
+					master_no_post = False
 					if gb.master_reservation:
 						m_allowed = frappe.db.get_value(
 							"Reservation", gb.master_reservation, "room_charges_allowed"
@@ -340,40 +451,88 @@ def _resolve_target_folio_readonly(
 							master_no_post = True
 					gf = frappe.db.get_value(
 						"Folio",
-						{"group_booking": group, "folio_type": "Group", "status": "Open"},
+						{
+							"group_booking": group,
+							"folio_type": "Group",
+							"window_no": window,
+							"status": "Open",
+						},
 						"name",
 					)
+					if not gf and window == 1:
+						gf = frappe.db.get_value(
+							"Folio",
+							{
+								"group_booking": group,
+								"folio_type": "Group",
+								"window_no": 0,
+								"status": "Open",
+							},
+							"name",
+						)
 					return gf, "Group", _current_folio_balance(gf), master_no_post
+				return _window_1_readonly()
 
-		if res.get("company") and _company_pays(res.get("company"), charge_type, res.get("property")):
-			cf = frappe.db.get_value(
+	# 2. Legacy presets (read-only mirror of kamra.folio._legacy_target)
+	master_no_post = False
+	group = res.get("group_booking")
+	gb = frappe.db.get_value(
+		"Group Booking",
+		group,
+		["company", "master_reservation", "master_pays", "status"],
+		as_dict=True,
+	) if group else None
+	if gb and gb.status == "Cancelled":
+		gb = None
+	opted_out = bool(gb) and bool(cint(res.get("pays_own_charges")))
+	if gb and not opted_out:
+		company_covers = bool(gb.company and _company_pays(gb.company, charge_type, prop, code))
+		master_covers = False
+		if gb.master_reservation:
+			covered = COMPANY_BILLING_DEFAULTS.get(gb.master_pays, frozenset())
+			master_covers = covered is None or charge_type in covered
+		if company_covers or master_covers:
+			if gb.master_reservation:
+				m_allowed = frappe.db.get_value(
+					"Reservation", gb.master_reservation, "room_charges_allowed"
+				)
+				if m_allowed is not None and not cint(m_allowed):
+					master_no_post = True
+			gf = frappe.db.get_value(
 				"Folio",
-				{"reservation": res["name"], "folio_type": "Company", "status": "Open"},
+				{
+					"group_booking": group,
+					"folio_type": "Group",
+					"window_no": 1,
+					"status": "Open",
+				},
+				"name",
+			) or frappe.db.get_value(
+				"Folio",
+				{
+					"group_booking": group,
+					"folio_type": "Group",
+					"window_no": 0,
+					"status": "Open",
+				},
 				"name",
 			)
-			return cf, "Company", _current_folio_balance(cf), False
+			return gf, "Group", _current_folio_balance(gf), master_no_post
 
-	gf = frappe.db.get_value(
-		"Folio",
-		{"reservation": res["name"], "folio_type": "Guest", "status": "Open"},
-		"name",
-	) or frappe.db.get_value(
-		"Folio",
-		{"reservation": res["name"], "folio_type": "Guest"},
-		"name",
-	)
-	if gf:
-		return gf, "Guest", _current_folio_balance(gf), False
+	company = res.get("company")
+	if (
+		company
+		and not (opted_out and gb and company == gb.company)
+		and _company_pays(company, charge_type, prop, code)
+	):
+		cf = frappe.db.get_value(
+			"Folio",
+			{"reservation": res["name"], "folio_type": "Company", "status": "Open"},
+			"name",
+		)
+		return cf, "Company", _current_folio_balance(cf), False
 
-	any_acct = frappe.db.get_value(
-		"Folio",
-		{"reservation": res["name"], "folio_type": "Account"},
-		"name",
-	)
-	if any_acct:
-		return any_acct, "Account", _current_folio_balance(any_acct), False
-
-	return None, "Guest", 0.0, False
+	return _window_1_readonly()
 
 
 def _evaluate_stay(
@@ -383,16 +542,30 @@ def _evaluate_stay(
 	currency: str | None = None,
 	charge_type: str = "Food & Beverage",
 	is_alcohol: int = 0,
+	transaction_code: str | None = None,
 ) -> dict:
-	from kamra.ledger import home_currency
+	from kamra.ledger import code_is_alcohol, home_currency, resolve_transaction_code
 	from kamra.settings import get_setting
 
 	room_no = _room_number(res.get("room"))
 	departure = str(res["check_out_date"]) if res.get("check_out_date") else None
 	masked_name = _masked_guest_name(res.get("guest_name"))
 
+	resolved_code = resolve_transaction_code(
+		charge_type,
+		transaction_code=transaction_code,
+		is_alcohol=cint(is_alcohol),
+		property=property,
+	)
+	effective_alcohol = 1 if (cint(is_alcohol) or code_is_alcohol(resolved_code)) else 0
+	home_amount, home, fx_err = _convert_to_home(property, amount, currency)
+
 	folio_name, folio_type, balance, master_no_post = _resolve_target_folio_readonly(
-		res, charge_type=charge_type, is_alcohol=cint(is_alcohol)
+		res,
+		charge_type=charge_type,
+		is_alcohol=effective_alcohol,
+		transaction_code=resolved_code,
+		amount=home_amount,
 	)
 	actual_type = frappe.db.get_value("Folio", folio_name, "folio_type") if folio_name else folio_type
 	if folio_type == "Account" or actual_type == "Account":
@@ -417,7 +590,6 @@ def _evaluate_stay(
 			"reason": "House accounts cannot be billed as a room charge.",
 		}
 
-	home_amount, home, fx_err = _convert_to_home(property, amount, currency)
 	prec = _currency_precision(home)
 	no_post = 1 if (
 		(res.get("room_charges_allowed") is not None and not cint(res.get("room_charges_allowed")))
@@ -508,6 +680,7 @@ def verify_room_charge(
 	pos_profile: str | None = None,
 	charge_type: str = "Food & Beverage",
 	is_alcohol: int = 0,
+	transaction_code: str | None = None,
 ) -> dict:
 	"""Read-only room-charge eligibility lookup for POS tills.
 
@@ -552,7 +725,7 @@ def verify_room_charge(
 				"reason_code": "POS-RC-NOT-IN-HOUSE",
 				"reason": "Guest is not checked in.",
 			}
-		ev = _evaluate_stay(prop, res_row, amt, currency, charge_type, is_alcohol)
+		ev = _evaluate_stay(prop, res_row, amt, currency, charge_type, is_alcohol, transaction_code)
 		return {**ev, "shared_room": False, "matches": [ev] if ev.get("ok") else []}
 
 	if not room_in and not surname_in:
@@ -609,7 +782,7 @@ def verify_room_charge(
 			"reason": "No checked-in guest matched your search.",
 		}
 
-	evaluated = [_evaluate_stay(prop, r, amt, currency, charge_type, is_alcohol) for r in rows]
+	evaluated = [_evaluate_stay(prop, r, amt, currency, charge_type, is_alcohol, transaction_code) for r in rows]
 	if len(evaluated) == 1:
 		ev = evaluated[0]
 		return {**ev, "shared_room": False, "matches": [ev] if ev.get("ok") else []}
@@ -759,13 +932,18 @@ def pos_post_room_charge(
 	override_reason: str | None = None,
 	pos_profile: str | None = None,
 	reference_name: str | None = None,
+	transaction_code: str | None = None,
 ) -> dict:
 	"""Post one POS ticket to an in-house guest's bill.
 
 	`ticket_id` is the idempotency key: the same ticket again returns the
 	first posting with duplicate=true. Name the stay by room (number or id)
-	and/or reservation. Over-limit or No Post stays refuse unless accompanied
-	by a verified duty-manager approval, which is audited on both sides."""
+	and/or reservation. Pass `transaction_code` to post under a specific
+	revenue code (Simphony-OPERA mapping); otherwise `is_alcohol=1` uses
+	the property's beverage transaction code (default 2010). The routing
+	and billing rules choose the folio by transaction code. Over-limit or
+	No Post stays refuse unless accompanied by a verified duty-manager
+	approval, which is audited on both sides."""
 	_assert_pos_profile_access(pos_profile)
 	if not (property or "").strip() and pos_profile:
 		property = resolve_property_for_pos_profile(pos_profile) or ""
@@ -780,9 +958,22 @@ def pos_post_room_charge(
 	if not description:
 		frappe.throw(_("Describe the charge (e.g. 'Rooftop bar - check 1042')."))
 	is_alcohol = 1 if cint(is_alcohol) else 0
-
-	from kamra.api import _check_charge_amount_and_tax
-	_check_charge_amount_and_tax(property, amount, tax_rate)
+	# the posting path checks these again; checking first means a bad ticket
+	# never claims its ticket number
+	from kamra.api import (
+		_check_charge_amount_and_tax,
+		_lock_folio_scope,
+		_post_stay_charge_once,
+		_with_snapshot_retry,
+	)
+	from kamra.erp_bridge import is_bridge_active
+	from kamra.ledger import code_is_alcohol, resolve_transaction_code
+	effective_tax = 0.0 if is_bridge_active() else flt(tax_rate)
+	_check_charge_amount_and_tax(property, amount, effective_tax)
+	resolved_code = resolve_transaction_code(
+		charge_type, transaction_code=transaction_code,
+		is_alcohol=is_alcohol, property=property)
+	is_alcohol = 1 if (is_alcohol or code_is_alcohol(resolved_code)) else 0
 	home_amount, home, fx_err = _convert_to_home(property, flt(amount), currency)
 	if fx_err or home_amount is None:
 		frappe.throw(fx_err or _("POS-RC-CURRENCY: Currency conversion failed."), frappe.ValidationError)
@@ -842,7 +1033,11 @@ def pos_post_room_charge(
 	room_id = room_id or res_row.get("room")
 
 	folio_name, folio_type, current_balance, master_no_post = _resolve_target_folio_readonly(
-		res_row, charge_type=charge_type, is_alcohol=is_alcohol
+		res_row,
+		charge_type=charge_type,
+		is_alcohol=is_alcohol,
+		transaction_code=resolved_code,
+		amount=amount,
 	)
 	if folio_type == "Account" or (folio_name and frappe.db.get_value("Folio", folio_name, "folio_type") == "Account"):
 		frappe.throw(_("House accounts cannot be billed as a room charge."), frappe.ValidationError)
@@ -902,93 +1097,105 @@ def pos_post_room_charge(
 			)
 
 	# claim the ticket first: a concurrent retry now waits on this row and
-	# then sees the duplicate, instead of posting a second time
-	rec = frappe.get_doc({
-		"doctype": CHARGE,
-		"name": key,
-		"property": property,
-		"ticket_id": ticket_id,
-		"outlet_name": (outlet_name or "").strip()[:140] or None,
-		"posted_by": frappe.session.user,
-		"reservation": reservation,
-		"room": room_id,
-		"charge_type": charge_type,
-		"description": description[:140],
-		"amount": amount,
-		"is_alcohol": is_alcohol,
-		"override_approved_by": override_approver,
-		"override_reason": (override_reason_recorded or "")[:200] or None,
-	})
-	try:
-		rec.insert(ignore_permissions=True)  # role + property checked above
-	except frappe.DuplicateEntryError:
-		frappe.clear_messages()
-		return _result(frappe.get_doc(CHARGE, key), duplicate=True)
-
-	from kamra.api import post_stay_charge
+	# then sees the duplicate, instead of posting a second time. Wrap with
+	# snapshot-isolation retry so MariaDB 11.8 error 1020 never bubbles as 500.
 	text = f"{description} (POS {ticket_id})"[:140]
-	with act_as(AGENT_EMAIL):
-		out = post_stay_charge(
-			reservation,
-			charge_type,
-			text,
-			amount,
-			gst_rate=flt(tax_rate),
-			is_alcohol=is_alcohol,
-		)
-	rec.db_set(
-		{"folio": out.get("folio"), "balance_after": flt(out.get("balance"))},
-		update_modified=False,
-	)
+	posted_by = frappe.session.user
 
-	from kamra.savings import log_action
-	log_action(
-		"pos_room_charge",
-		"Folio",
-		out.get("folio"),
-		property,
-		rationale=(
-			f"{outlet_name or 'External POS'} ticket {ticket_id}: "
-			f"{charge_type} {amount} -> {out.get('folio')} by {frappe.session.user}"
-		),
-		channel="API",
-	)
-	if override_approver:
-		triggers = [
-			tag for tag, hit in (
-				("no_post", no_post_blocked),
-				("per_ticket_limit", over_ticket_limit),
-				("cumulative_limit", over_cumulative_limit),
+	def _post_once():
+		_lock_folio_scope(reservations=[reservation])
+		if frappe.db.exists(CHARGE, key):
+			return _result(frappe.get_doc(CHARGE, key), duplicate=True)
+		rec = frappe.get_doc({
+			"doctype": CHARGE,
+			"name": key,
+			"property": property,
+			"ticket_id": ticket_id,
+			"outlet_name": (outlet_name or "").strip()[:140] or None,
+			"posted_by": posted_by,
+			"reservation": reservation,
+			"room": room_id,
+			"charge_type": charge_type,
+			"transaction_code": resolved_code,
+			"description": description[:140],
+			"amount": amount,
+			"is_alcohol": is_alcohol,
+			"override_approved_by": override_approver,
+			"override_reason": (override_reason_recorded or "")[:200] or None,
+		})
+		try:
+			rec.insert(ignore_permissions=True)  # role + property checked above
+		except frappe.DuplicateEntryError:
+			frappe.clear_messages()
+			return _result(frappe.get_doc(CHARGE, key), duplicate=True)
+
+		# the one write path; the integrator was authorised above and is limited
+		# to room-chargeable types, the same pattern as housekeeping's minibar
+		with act_as(AGENT_EMAIL):
+			out = _post_stay_charge_once(
+				reservation,
+				charge_type,
+				text,
+				amount,
+				gst_rate=effective_tax,
+				is_alcohol=is_alcohol,
+				transaction_code=resolved_code,
 			)
-			if hit
-		]
+		rec.db_set(
+			{"folio": out.get("folio"), "balance_after": flt(out.get("balance"))},
+			update_modified=False,
+		)
+
+		from kamra.savings import log_action
 		log_action(
-			"pos_room_charge_override",
+			"pos_room_charge",
 			"Folio",
 			out.get("folio"),
 			property,
 			rationale=(
-				f"Override ({', '.join(triggers)}) for {outlet_name or 'External POS'} "
-				f"ticket {ticket_id} ({amount} {home}): {override_reason_recorded}"
+				f"{outlet_name or 'External POS'} ticket {ticket_id}: "
+				f"{charge_type} {amount} -> {out.get('folio')} by {posted_by}"
 			),
-			approval_status="Approved",
-			approver=override_approver,
-			before_snapshot={
-				"reservation": reservation,
-				"folio": folio_name,
-				"balance": current_balance,
-				"no_post": 1 if no_post_blocked else 0,
-				"per_ticket_limit": per_ticket_limit,
-				"allowance": allowance,
-			},
-			after_snapshot={
-				"ticket_id": ticket_id,
-				"folio": out.get("folio"),
-				"amount": amount,
-				"balance": flt(out.get("balance")),
-				"override_approved_by": override_approver,
-				"override_reason": override_reason_recorded,
-			},
 			channel="API",
 		)
-	return _result(rec, duplicate=False)
+		if override_approver:
+			triggers = [
+				tag for tag, hit in (
+					("no_post", no_post_blocked),
+					("per_ticket_limit", over_ticket_limit),
+					("cumulative_limit", over_cumulative_limit),
+				)
+				if hit
+			]
+			log_action(
+				"pos_room_charge_override",
+				"Folio",
+				out.get("folio"),
+				property,
+				rationale=(
+					f"Override ({', '.join(triggers)}) for {outlet_name or 'External POS'} "
+					f"ticket {ticket_id} ({amount} {home}): {override_reason_recorded}"
+				),
+				approval_status="Approved",
+				approver=override_approver,
+				before_snapshot={
+					"reservation": reservation,
+					"folio": folio_name,
+					"balance": current_balance,
+					"no_post": 1 if no_post_blocked else 0,
+					"per_ticket_limit": per_ticket_limit,
+					"allowance": allowance,
+				},
+				after_snapshot={
+					"ticket_id": ticket_id,
+					"folio": out.get("folio"),
+					"amount": amount,
+					"balance": flt(out.get("balance")),
+					"override_approved_by": override_approver,
+					"override_reason": override_reason_recorded,
+				},
+				channel="API",
+			)
+		return _result(rec, duplicate=False)
+
+	return _with_snapshot_retry(_post_once)

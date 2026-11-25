@@ -653,12 +653,8 @@ def _checkout_context(reservation: str) -> dict:
 	city_total = _r(sum(b for _f, _c, b in pos["to_city_ledger"]), places)
 	company_name = frappe.db.get_value(
 		"Corporate Account", res.company, "company_name") if res.get("company") else None
-	billing_rules = [
-		{"charge_type": r.charge_type, "pay_by": r.pay_by}
-		for r in frappe.get_all("Company Billing Rule",
-		                        filters={"parent": res.company},
-		                        fields=["charge_type", "pay_by"])
-	] if res.get("company") else []
+	from kamra.folio import billing_rule_rows
+	billing_rules = billing_rule_rows(res.company) if res.get("company") else []
 	room = frappe.db.get_value(
 		"Room", res.room, ["name", "room_number", "housekeeping_status"],
 		as_dict=True) if res.room else None

@@ -567,7 +567,7 @@ TOOLS = {
 		{"reservation": {"type": "string"}}, False, False),
 	"post_charge": (
 		"post_stay_charge",
-		"Post a charge to a stay; billing rules pick the folio. Alcohol never bills to a company.",
+		"Post a charge to a stay; routing and billing rules pick the folio.",
 		{"reservation": {"type": "string"}, "charge_type": {"type": "string"},
 		 "description": {"type": "string"}, "amount": {"type": "number"},
 		 "gst_rate": {"type": "number"}, "is_alcohol": {"type": "integer"}},

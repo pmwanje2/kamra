@@ -741,7 +741,7 @@ function ServiceSheet({
             checked={Boolean(s.is_alcohol)}
             onChange={(v) => set("is_alcohol", v ? 1 : 0)}
             label={translate("Alcohol")}
-            hint={translate("Alcohol never rides a company or group folio - it settles separately.")}
+            hint={translate("Liquor, for its tax and the F&B report. It posts to the function's bill with the rest.")}
           />)}
         </div>
       </div>

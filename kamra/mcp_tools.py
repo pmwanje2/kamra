@@ -806,8 +806,8 @@ TOOLS: tuple[ToolSpec, ...] = (
 		"post_stay_charge",
 		"api.post_stay_charge",
 		"""Post a charge to a stay and let the company billing rules pick the
-		folio - corporate room/meals go to the Company folio, alcohol and
-		unruled charges to the guest. Prefer this over add_folio_charge when
+		folio - corporate room/meals go to the Company folio, unruled charges
+		to the guest; liquor bills like any line. Prefer this over add_folio_charge when
 		you don't know which folio should carry the line.""",
 		{
 			"reservation": _p("string"),
@@ -1081,7 +1081,7 @@ TOOLS: tuple[ToolSpec, ...] = (
 		"""Move charge lines (names from get_folio or folio_statement) off an
 		open folio, ledger and all. Give ONE target: to_folio (another folio
 		of the same stay or group), to_company=true (the stay's Company
-		folio, opened if needed; alcohol never moves there) or
+		folio, opened if needed) or
 		to_reservation (another checked-in stay here: Finance or Hotel Admin
 		only, reason required). Lines keep their GL code.""",
 		{
@@ -1631,8 +1631,7 @@ TOOLS: tuple[ToolSpec, ...] = (
 		room?, guest_name?}]; unnamed rooms take guest_name. master_index
 		picks the main room (default the first) whose guest pays what
 		master_pays covers for every room on one group bill: "Room only"
-		(room + tax, the default), "Room and F&B (liquor to guest)",
-		"Everything except liquor". Rooms that cannot be booked are skipped
+		(room + tax, the default), "Room and F&B", "Everything". Rooms that cannot be booked are skipped
 		and reported. Prices come from the rate card.""",
 		{
 			"group_name": _p("string"),
@@ -2188,7 +2187,7 @@ TOOLS: tuple[ToolSpec, ...] = (
 		"""Move a restaurant bill that was charged to the wrong room onto the
 		right in-house room, the same business day it was posted, with a
 		reason. The charge leaves the first guest's bill and lands on the
-		right guest's (liquor never on a company bill). Confirm the room with
+		right guest's, by that stay's routing and billing rules. Confirm the room with
 		the user first.""",
 		{"order": _p("string"), "room": _p("string"), "reason": _p("string")},
 		required=("order", "room", "reason"),
@@ -2223,8 +2222,8 @@ TOOLS: tuple[ToolSpec, ...] = (
 		"""Post an outlet ticket (bar, spa, restaurant on another POS) to an
 		in-house guest's bill. ticket_id is the POS check number and makes the
 		call safe to retry: the same ticket is never posted twice. The billing
-		rules pick the folio; alcohol (is_alcohol=true) always goes to the
-		guest's own folio. Confirm the amount with staff before calling.""",
+		rules pick the folio; liquor (is_alcohol=true, taxed at its own rate)
+		bills like any line. Confirm the amount with staff before calling.""",
 		{"ticket_id": _p("string"), "amount": _p("number"),
 		 "description": _p("string"), "room": _p("string"),
 		 "reservation": _p("string"),

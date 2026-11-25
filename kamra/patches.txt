@@ -48,3 +48,7 @@ kamra.patches.v48.payment_method_per_property_key
 kamra.patches.v48.backfill_blank_property_country
 kamra.patches.v48.backfill_open_cashier_txn_currency
 kamra.patches.v2_8_1_pr2_restrictions
+kamra.patches.v2_8_1_pr3_packages_fixed
+kamra.patches.v48.backfill_folio_windows
+kamra.patches.v48.migrate_liquor_exclusion_to_code_rules
+kamra.patches.v48.rename_company_billing_presets

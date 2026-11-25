@@ -2,7 +2,7 @@
 # For license information, please see license.txt
 
 """External POS interface: in-house lookup, one posting per ticket, the
-alcohol rule, property scope and roles."""
+stay's billing rules (liquor like any other line), property scope and roles."""
 
 from __future__ import annotations
 
@@ -113,19 +113,21 @@ class POSInterfaceTestCase(AuditTestCase):
 		with self.assertRaisesRegex(frappe.ValidationError, "different"):
 			self.post(amount=999)
 
-	def test_alcohol_never_bills_the_company(self):
+	def test_liquor_bills_where_the_rules_send_it(self):
 		frappe.db.set_value("Reservation", self.res.name,
 		                    {"company": _corp("UT POS Corp"), "booking_type": "Corporate"})
 		self.as_pos()
 		food = self.post("T-food", 500, description="Lunch")
 		self.assertEqual(food["folio_type"], "Company")
+		# the company pays Food & Beverage: beer is Food & Beverage, so it
+		# pays that too (no hidden liquor rule; leave its code unrouted)
 		beer = self.post("T-beer", 300, description="Beer", is_alcohol=1)
-		self.assertEqual(beer["folio_type"], "Guest")
-		# and the posting helper itself refuses alcohol on a Company folio
+		self.assertEqual(beer["folio_type"], "Company")
+		# and the posting helper takes liquor on a company bill like any line
 		frappe.set_user("Administrator")  # nosemgrep: frappe-setuser -- direct helper check
-		with self.assertRaisesRegex(frappe.ValidationError, "Alcohol cannot be billed"):
-			api._post_folio_charge(food["folio"], "Food & Beverage", "Whisky", 800,
-			                       is_alcohol=1)
+		out = api._post_folio_charge(food["folio"], "Food & Beverage", "Whisky", 800,
+		                             is_alcohol=1)
+		self.assertEqual(out["charges"][-1]["is_alcohol"], 1)
 
 	def test_other_property_refused(self):
 		self.as_pos()

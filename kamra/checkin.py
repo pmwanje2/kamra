@@ -192,16 +192,15 @@ def _billing(res) -> dict:
 	if res.get("company"):
 		company_name = frappe.db.get_value("Corporate Account", res.company,
 		                                   "company_name") or res.company
-		rules = [{"charge_type": r.charge_type, "pay_by": r.pay_by}
-		         for r in frappe.get_doc("Corporate Account", res.company)
-		         .get("billing_rules") or []]
+		from kamra.folio import billing_rule_rows
+		rules = billing_rule_rows(res.company)
 	group_name = master = None
 	if res.get("group_booking"):
 		group_name = frappe.db.get_value("Group Booking", res.group_booking,
 		                                 "group_name") or res.group_booking
 		master = frappe.db.get_value(
 			"Folio", {"group_booking": res.group_booking, "folio_type": "Group"},
-			"name")
+			"name", order_by="window_no asc, creation desc")
 	is_ota = res.source == "OTA" or bool(res.get("ota_ref"))
 	if master:
 		payer = "Group"
@@ -777,6 +776,9 @@ def issue_keys(reservation: str, key_count: int = 1,
 def _request_tax_rate(res, charge_type: str) -> float:
 	"""An extra bed is taxed as the room it is in (that night's rate);
 	a taxi or other service at the country pack's services rate."""
+	from kamra.erp_bridge import is_bridge_active
+	if is_bridge_active():
+		return 0.0
 	if charge_type == "Extra Guests":
 		from kamra.business_date import get_business_date
 		from kamra.folio import _nightly_gst
@@ -793,8 +795,6 @@ def log_checkin_requests(reservation: str, requests=None, note: str | None = Non
 	note is kept on the step and, if given alone, raised as one ticket.
 	`prices` ({request: amount}) bills a paid request (an extra bed, an
 	airport drop) to the stay, by the hotel's tax rules and billing rules."""
-	res = _res(reservation)
-	_open(res)
 	if isinstance(requests, str):
 		requests = frappe.parse_json(requests) if requests.strip() else []
 	presets = request_presets()
@@ -802,45 +802,57 @@ def log_checkin_requests(reservation: str, requests=None, note: str | None = Non
 	note = (note or "").strip()[:500]
 	if isinstance(prices, str):
 		prices = frappe.parse_json(prices) if prices.strip() else {}
-	from kamra.api import create_ticket, post_stay_charge
-	tickets = []
-	# the step can be saved again (back, or a retry): a request already on
-	# the bill is not charged twice. The row lock makes two saves at once
-	# queue here, so the second reads the first one's `billed`.
-	res.checkin_steps = frappe.db.get_value("Reservation", res.name, "checkin_steps",
-	                                        for_update=True)
-	billed = list((_records(res).get("guest_requests") or {}).get("billed") or [])
-	# STAFF is checked above, but the night auditor has no folio or ticket
-	# rights of its own: it posts as the governed agent, as housekeeping
-	# charges do, and the step record below keeps who did it
-	from kamra.authz import act_as
-	from kamra.install import AGENT_EMAIL
-	can_bill = frappe.has_permission("Folio", "write")
-	can_ticket = frappe.has_permission("Service Ticket", "create")
-	as_agent = not (can_bill and can_ticket)
-	with act_as(AGENT_EMAIL) if as_agent else nullcontext():
-		for key in requests:
-			subject, category, priority, charge_type = presets[key]
-			amount = flt((prices or {}).get(key))
-			if charge_type and amount > 0 and key not in billed:
-				post_stay_charge(res.name, charge_type, subject, amount,
-				                 _request_tax_rate(res, charge_type))
-				billed.append(key)
-			tickets.append(create_ticket(
-				res.property, f"{subject} ({res.guest_name})", category,
-				priority=priority, room=res.room, reservation=res.name,
-				guest=res.guest, description=note or None)["ticket"])
-		if note and not requests:
-			tickets.append(create_ticket(
-				res.property, f"Request at check-in ({res.guest_name})", "Front Desk",
-				room=res.room, reservation=res.name, guest=res.guest,
-				description=note)["ticket"])
-	record_step(res, "guest_requests", "done",
-	            note=", ".join(presets[k][0] for k in requests) or note or _("Nothing needed"),
-	            tickets=tickets, billed=billed)
-	out = checkin_flow(reservation)
-	out["tickets"] = tickets
-	return out
+	from kamra.api import (
+		_lock_folio_scope,
+		_with_snapshot_retry,
+		create_ticket,
+		post_stay_charge,
+	)
+
+	def _log_once():
+		_lock_folio_scope(reservations=[reservation])
+		res = _res(reservation)
+		_open(res)
+		tickets = []
+		# the step can be saved again (back, or a retry): a request already on
+		# the bill is not charged twice. The row lock makes two saves at once
+		# queue here, so the second reads the first one's `billed`.
+		res.checkin_steps = frappe.db.get_value("Reservation", res.name, "checkin_steps",
+		                                        for_update=True)
+		billed = list((_records(res).get("guest_requests") or {}).get("billed") or [])
+		# STAFF is checked above, but the night auditor has no folio or ticket
+		# rights of its own: it posts as the governed agent, as housekeeping
+		# charges do, and the step record below keeps who did it
+		from kamra.authz import act_as
+		from kamra.install import AGENT_EMAIL
+		can_bill = frappe.has_permission("Folio", "write")
+		can_ticket = frappe.has_permission("Service Ticket", "create")
+		as_agent = not (can_bill and can_ticket)
+		with act_as(AGENT_EMAIL) if as_agent else nullcontext():
+			for key in requests:
+				subject, category, priority, charge_type = presets[key]
+				amount = flt((prices or {}).get(key))
+				if charge_type and amount > 0 and key not in billed:
+					post_stay_charge(res.name, charge_type, subject, amount,
+					                 _request_tax_rate(res, charge_type))
+					billed.append(key)
+				tickets.append(create_ticket(
+					res.property, f"{subject} ({res.guest_name})", category,
+					priority=priority, room=res.room, reservation=res.name,
+					guest=res.guest, description=note or None)["ticket"])
+			if note and not requests:
+				tickets.append(create_ticket(
+					res.property, f"Request at check-in ({res.guest_name})", "Front Desk",
+					room=res.room, reservation=res.name, guest=res.guest,
+					description=note)["ticket"])
+		record_step(res, "guest_requests", "done",
+		            note=", ".join(presets[k][0] for k in requests) or note or _("Nothing needed"),
+		            tickets=tickets, billed=billed)
+		out = checkin_flow(reservation)
+		out["tickets"] = tickets
+		return out
+
+	return _with_snapshot_retry(_log_once)
 
 
 @frappe.whitelist(methods=["POST"])

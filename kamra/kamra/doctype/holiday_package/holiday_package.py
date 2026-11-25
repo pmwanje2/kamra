@@ -45,6 +45,29 @@ class HolidayPackage(Document):
 		if self.ota_strategy == "Markup" and self.ota_daily_rate and _dec(self.ota_daily_rate) < 0:
 			frappe.throw(_("OTA Daily Rate cannot be negative."))
 
+		if self.get("folio_display_mode") and self.folio_display_mode not in ("Inclusive", "Separate Add-on"):
+			frappe.throw(_("Folio Display Mode must be Inclusive or Separate Add-on."))
+
+		for row in self.get("elements") or []:
+			if _dec(row.get("unit_allowance")) < 0:
+				frappe.throw(_("Package element allowance cannot be negative."))
+			code = row.get("transaction_code")
+			if not code or not frappe.db.exists("Transaction Code", code):
+				frappe.throw(_("Package element requires a valid Transaction Code."))
+			tc = frappe.db.get_value(
+				"Transaction Code", code, ["disabled", "txn_type", "property", "charge_type"], as_dict=True,
+			)
+			if tc.disabled or tc.txn_type == "Payment":
+				frappe.throw(_("Package element Transaction Code {0} must be an active non-payment code.").format(code))
+			if tc.property and self.property and tc.property != self.property:
+				frappe.throw(_("Transaction Code {0} belongs to another property.").format(code))
+			if not row.get("charge_type") and tc.charge_type:
+				row.charge_type = tc.charge_type
+
+	def _quantum(self) -> Decimal:
+		from kamra.pricing import rate_quantum
+		return rate_quantum(self.get("property"))
+
 	def package_price_for(self, adults: int, children: int = 0, nights: int | None = None) -> Decimal:
 		"""Calculate the package total for the party size and stay duration.
 
@@ -87,17 +110,18 @@ class HolidayPackage(Document):
 
 		pkg_nights = int(getattr(self, "package_nights", None) or getattr(self, "minimum_nights", None) or 1)
 		if nights is not None and nights > pkg_nights:
+			quantum = self._quantum()
 			extra_n = nights - pkg_nights
-			package_daily = (base / Decimal(pkg_nights)).quantize(Decimal("0.01"))
+			package_daily = (base / Decimal(pkg_nights)).quantize(quantum)
 
 			fixed_extra = _dec(getattr(self, "extra_night_price", 0))
 			pct_raw = getattr(self, "extra_night_percent", None)
 			pct_extra = float(pct_raw) if (pct_raw is not None and pct_raw != "") else 100.0
 
 			if fixed_extra > 0:
-				extra_rate = fixed_extra
+				extra_rate = fixed_extra.quantize(quantum)
 			else:
-				extra_rate = (package_daily * Decimal(str(pct_extra)) / Decimal(100)).quantize(Decimal("0.01"))
+				extra_rate = (package_daily * Decimal(str(pct_extra)) / Decimal(100)).quantize(quantum)
 
 			base += Decimal(extra_n) * extra_rate
 
