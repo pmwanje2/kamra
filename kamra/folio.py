@@ -2588,38 +2588,82 @@ def sales_invoice_field() -> list[str]:
 	return ["sales_invoice"] if get_meta and get_meta("Folio").has_field("sales_invoice") else []
 
 
+_MAX_REBILL_HOPS = 16
+
+
+def _verified_invoice_anchors(links, invoice_scope, columns):
+	"""Walk stored pointers backwards in batches. Only the root's backlink proves ownership."""
+	pending = dict(links)
+	trails = {folio: [] for folio in links}
+	stored = {}
+	verified_paths = {}
+	for _depth in range(_MAX_REBILL_HOPS + 1):
+		if not pending:
+			break
+		rows = frappe.get_all(
+			"Sales Invoice", filters={**invoice_scope, "name": ("in", list(set(pending.values())))},
+			fields=columns,
+		)
+		by_name = {row.name: row for row in rows}
+		parents = {}
+		for folio, name in pending.items():
+			row = by_name.get(name)
+			trail = trails[folio]
+			if not row or row.kamra_ref not in (None, "", folio) or name in trail:
+				continue
+			if not trail:
+				stored[folio] = row
+			trail.append(name)
+			if row.get("kamra_rebill_of"):
+				parents[folio] = row.kamra_rebill_of
+			elif row.kamra_ref == folio:
+				verified_paths[folio] = list(reversed(trail))
+		pending = parents
+	return {folio: stored[folio] for folio in verified_paths}, verified_paths
+
+
 def _active_folio_invoices(links, scope, fields):
-	"""Resolve submitted invoices in batches, keeping the verified path to each folio."""
+	"""Resolve submitted invoices and their ordered ownership paths, from root to active invoice."""
 	invoice_scope = {**scope, "is_return": 0, "docstatus": ("in", [1, 2])}
+	has_rebill = frappe.db.has_column("Sales Invoice", "kamra_rebill_of")
 	columns = [*fields, "docstatus", "kamra_ref"]
-	current = {
-		row.kamra_ref: row for row in frappe.get_all(
-			"Sales Invoice", filters={**invoice_scope, "name": ("in", list(links.values())),
-			                         "kamra_ref": ("in", list(links))}, fields=columns,
-		) if links.get(row.kamra_ref) == row.name
-	}
-	paths = {folio: {invoice.name} for folio, invoice in current.items()}
-	parents = {invoice.name: folio for folio, invoice in current.items()}
-	if parents and frappe.db.has_column("Sales Invoice", "kamra_rebill_of"):
-		while parents:
-			children = frappe.get_all(
-				"Sales Invoice", filters={**invoice_scope, "kamra_rebill_of": ("in", list(parents))},
-				fields=[*columns, "kamra_rebill_of"], order_by="docstatus asc, creation desc, name asc",
-			)
-			next_parents = {}
-			for child in children:
-				folio = parents.get(child.kamra_rebill_of)
-				if not folio or child.name in paths[folio] or child.kamra_ref not in (None, "", folio):
-					continue
-				if child.docstatus == 2 and current[folio].docstatus == 1:
-					continue
-				# The first eligible replacement wins (submitted, then newest).
-				del parents[child.kamra_rebill_of]
-				paths[folio].add(child.name)
-				current[folio] = child
-				next_parents[child.name] = folio
-			parents = next_parents
+	if has_rebill:
+		columns.append("kamra_rebill_of")
+	current, paths = _verified_invoice_anchors(links, invoice_scope, columns)
+	parents = {invoice.name: folio for folio, invoice in current.items()} if has_rebill else {}
+	while parents:
+		children = frappe.get_all(
+			"Sales Invoice", filters={**invoice_scope, "kamra_rebill_of": ("in", list(parents))},
+			fields=columns, order_by="docstatus asc, creation desc, name asc",
+		)
+		next_parents = {}
+		for child in children:
+			folio = parents.get(child.kamra_rebill_of)
+			if not folio or child.kamra_ref not in (None, "", folio):
+				continue
+			if child.docstatus == 2 and current[folio].docstatus == 1:
+				continue
+			# The first eligible replacement wins (submitted, then newest).
+			del parents[child.kamra_rebill_of]
+			if child.name in paths[folio] or len(paths[folio]) > _MAX_REBILL_HOPS:
+				del current[folio]
+				continue
+			paths[folio].append(child.name)
+			current[folio] = child
+			next_parents[child.name] = folio
+		parents = next_parents
 	return {folio: si for folio, si in current.items() if si.docstatus == 1}, paths
+
+
+def _readable_invoice_names(names, *, filter_list=True):
+	"""Apply list restrictions and native document-read hooks before exposing a reference."""
+	try:
+		if filter_list and names:
+			names = frappe.get_list("Sales Invoice", filters={"name": ("in", list(names))},
+			                        pluck="name", limit=0)
+		return {name for name in names if frappe.has_permission("Sales Invoice", ptype="read", doc=name)}
+	except (frappe.PermissionError, frappe.DoesNotExistError, frappe.db.TableMissingError):
+		return set()
 
 
 def _linked_sales_credit_notes(folios, property: str, currency: str, *, read_note_numbers: bool):
@@ -2669,16 +2713,9 @@ def _linked_sales_credit_notes(folios, property: str, currency: str, *, read_not
 		names = set(links.values()) | {note.name for linked_notes in notes.values() for note in linked_notes}
 		for path in paths.values():
 			names.update(path)
-		try:
-			if has_backlink and names:
-				names = frappe.get_list("Sales Invoice", filters={"name": ("in", list(names))},
-				                        pluck="name", limit=0)
-			# Frappe resolves each docname to a document for native permission hooks.
-			readable = {name for name in names if frappe.has_permission("Sales Invoice", ptype="read", doc=name)}
-		except (frappe.PermissionError, frappe.DoesNotExistError, frappe.db.TableMissingError):
-			readable = set()
+		readable = _readable_invoice_names(names, filter_list=has_backlink)
 		for folio, invoice in links.items():
-			if invoice not in readable or (has_backlink and not paths[folio].issubset(readable)):
+			if invoice not in readable or (has_backlink and not readable.issuperset(paths[folio])):
 				continue
 			if has_backlink:
 				visible.add(invoice)

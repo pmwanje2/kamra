@@ -179,6 +179,7 @@ def guests_owing(property: str) -> list[dict]:
 			row["sales_invoice"] = invoices.get(row.folio)
 	return [{"folio": row.folio, "guest_name": row.guest_name, "reservation": row.reservation,
 	         "status": row.status, "balance": credit["net_collectible_balance"],
+	         "credited_amount": credit["credited_amount"], "net_collectible_balance": credit["net_collectible_balance"],
 	         "check_in_date": str(row.check_in_date), "check_out_date": str(row.check_out_date)}
 	        for row, credit in zip(rows, credit_note_positions(rows, property, read_note_numbers=False), strict=True)
 	        if credit["net_collectible_balance"] > eps]

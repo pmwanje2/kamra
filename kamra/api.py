@@ -4770,6 +4770,27 @@ def _resolve_accounting_invoice(doc, prop=None, prop_currency: str | None = None
 		return None, None, "unavailable"
 	if not frappe.has_permission("Sales Invoice", ptype="read", doc=si):
 		return None, None, "unavailable"
+	if si.get("kamra_rebill_of"):
+		# The bridge moves the pointer to the replacement but keeps the unique
+		# folio backlink and original item references on the root invoice.
+		from kamra.folio import _active_folio_invoices, _readable_invoice_names
+
+		company = prop.get("company") if prop else None
+		if not company or not prop_currency:
+			return None, None, "unavailable"
+		try:
+			active, paths = _active_folio_invoices(
+				{doc.name: si.name}, {"company": company, "currency": prop_currency}, ["name"],
+			)
+			if doc.name not in active:
+				return None, None, "unavailable"
+			path = paths[doc.name]
+			if not _readable_invoice_names(path).issuperset(path):
+				return None, None, "unavailable"
+			return (frappe.get_doc("Sales Invoice", active[doc.name].name),
+			        frappe.get_doc("Sales Invoice", path[0]), "submitted")
+		except (frappe.DoesNotExistError, frappe.PermissionError, frappe.db.TableMissingError):
+			return None, None, "unavailable"
 	if (si.get("kamra_ref") or "") != doc.name:
 		return None, None, "unavailable"
 	if not _si_matches_folio_scope(si, prop, prop_currency):
