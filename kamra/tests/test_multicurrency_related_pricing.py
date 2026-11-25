@@ -72,6 +72,17 @@ if frappe is not None:
 						self.assertEqual((q["voucher_currency"], q["voucher_tx_amount"],
 						                  q["voucher_fx_rate"]), ("USD", 50, float(FX)))
 
+		def test_foreign_voucher_rounds_before_conversion_with_a_reservation_discount(self):
+			voucher = frappe._dict(name="V1", discount_type="Amount", value=35.004, currency="USD")
+			with patch.object(pricing, "validate_voucher", return_value=voucher):
+				quote = pricing.quote(PROPERTY, self.room_type, d(0), d(1),
+				                      contract_tariff=TARIFF, voucher_code="V1",
+				                      discount_type="Amount", discount_value=5, discount_currency="USD")
+			self.assertEqual(quote["voucher_tx_amount"], 35)
+			self.assertEqual(quote["voucher_discount"], 143004)
+			self.assertGreater(quote["reservation_discount_total"], 0)
+			self.assertEqual(quote["discount"], 143004 + quote["reservation_discount_total"])
+
 		def test_missing_voucher_exchange_rate_is_a_validation_error(self):
 			voucher = frappe._dict(name="V1", discount_type="Amount", value=50, currency="KWD")
 			with patch.object(pricing, "validate_voucher", return_value=voucher), \
