@@ -13,6 +13,12 @@
   --color-brand-700: #0b5442;
   --color-brand-900: #073527;
 
+  /* Primary actions pair white text with accessible fills in both themes. */
+  --color-on-primary: #ffffff;
+  --color-primary-button: #0f6b54;
+  --color-primary-button-hover: #0b5442;
+  --color-primary-button-disabled: #48635b;
+
   /* CJK fallbacks. Tailwind's default sans stack stops at system-ui, which on
      some Linux/distro images resolves to a face without Han glyphs. Naming the
      common Simplified Chinese faces keeps 简体中文 identical across Windows,

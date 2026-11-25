@@ -10,6 +10,7 @@ source,translation
 [HSP-DOA-ROLE] Allowance decisions require a named active user.,[HSP-DOA-ROLE] Les décisions de dégrèvement nécessitent un utilisateur actif nommé.
 [HSP-DOA-SELF] You cannot approve or reject your own allowance request.,[HSP-DOA-SELF] Vous ne pouvez pas approuver ni rejeter votre propre demande de dégrèvement.
 [SITEOPS-DOA-LIMIT] Amount exceeds the floor PIN limit; route this request through Approvals Inbox.,[SITEOPS-DOA-LIMIT] Le montant dépasse la limite de validation par code PIN sur place ; acheminez cette demande via la boîte des approbations.
+[SITEOPS-DOA-LIMIT] Discount {0} exceeds supervisor approval limit {1}.,[SITEOPS-DOA-LIMIT] La remise de {0} dépasse le plafond d'approbation du superviseur ({1}).
 A bill can have at most {0} windows. Close a window or move its charges to another one.,Une note peut comporter au maximum {0} fenêtres. Clôturez une fenêtre ou transférez ses frais vers une autre.
 "A booking is priced by hand only from the booking screen (nightly prices or an OTA total), the channel manager or an import.","Une réservation n'est tarifée manuellement que depuis l'écran de réservation (prix par nuit ou total OTA), le channel manager ou une importation."
 A cancellation needs a reason - it goes on the record.,Une annulation requiert un motif - il est conservé dans l'historique.
@@ -160,6 +161,7 @@ Agreed fee {0} for {1}. Confirm with the guest before posting.,Frais convenus de
 Agreed Nightly Rate,Tarif par nuit convenu
 Agreed Rate,Tarif convenu
 Agreed rate,Tarif convenu
+Agreed rate currency must be {0}.,La devise du tarif convenu doit être {0}.
 AI access (MCP),Accès IA (MCP)
 AI access over MCP,Accès IA via MCP
 "AI access over MCP is turned off for {0}. A hotel admin can turn it on under Settings, AI access (MCP).","L'accès IA via MCP est désactivé pour {0}. Un administrateur hôtel peut l'activer dans Paramètres, Accès IA (MCP)."
@@ -681,6 +683,9 @@ Disabled,Désactivé
 Discount,Remise
 Discount %,Remise %
 Discount Amount,Montant de la remise
+Discount Currency,Devise de la remise
+Discount currency must be a valid currency code.,La devise de la remise doit être un code devise valide.
+Discount currency {0} is not valid for this stay. Use {1}.,La devise de la remise {0} n'est pas valide pour ce séjour. Utilisez {1}.
 Discount Eligible,Éligible aux remises
 Discount Reason,Motif de remise
 Discount reason,Motif de remise
@@ -1291,6 +1296,7 @@ no currency,aucune devise
 No deposit is due - enter the amount to request.,Aucun acompte dû — saisissez le montant à demander.
 No discount or voucher lines on the folio.,Aucune ligne de remise ni de bon sur le folio.
 No event order yet and the function is in {0} days.,Aucune fiche de fonction encore émise et l'événement a lieu dans {0} jours.
+No exchange rate available for {0} to {1}.,Aucun taux de change disponible pour {0} vers {1}.
 No fixed deposit %: take an advance amount the guest agrees.,Aucun pourcentage fixe d'acompte : encaissez le montant convenu avec le client.
 No guaranteed pax - the kitchen can't order.,Aucun nombre garanti de convives — la cuisine ne peut pas commander.
 No guest folio for this stay.,Aucun folio client pour ce séjour.
@@ -2726,6 +2732,41 @@ ZATCA response,Réponse ZATCA
 {0}{1} overdue by more than {2} days (oldest due {3}).,{0}{1} en retard de plus de {2} jours (plus ancienne échéance {3}).
 "{product} can't read this ID's code. Type the details in, and take a picture of the ID.",{product} ne peut pas lire le code de cette pièce d'identité. Saisissez les informations et photographiez la pièce.
 {product} is temporarily unavailable. Contact your system administrator.,{product} est temporairement indisponible. Contactez votre administrateur système.
+A card pre-authorization hold is active - release it before waiving.,Une préautorisation bancaire est active — libérez-la avant de dispenser la caution.
+A card pre-authorization hold is already active on this stay.,Une préautorisation bancaire est déjà active pour ce séjour.
+A collected deposit is already held on this stay.,Une caution encaissée est déjà détenue pour ce séjour.
+Authorized Amount,Montant autorisé
+Capturing a pre-authorization needs a reason.,L'encaissement d'une préautorisation nécessite un motif.
+Card Brand,Réseau de carte
+Card Last 4,4 derniers chiffres de la carte
+Card Pre-Authorization,Préautorisation bancaire
+Enter a valid authorization expiry date and time.,Saisissez une date et une heure d'expiration valides pour l'autorisation.
+Enter an authorization expiry date and time.,Saisissez une date et une heure d'expiration pour l'autorisation.
+Enter the additional amount to authorize.,Saisissez le montant supplémentaire à autoriser.
+Enter the amount to capture.,Saisissez le montant à encaisser.
+Enter the gateway authorization reference.,Saisissez la référence d'autorisation de la passerelle.
+Expires On,Expire le
+Gateway Authorization Reference,Référence d'autorisation passerelle
+No active card pre-authorization hold on this stay.,Aucune préautorisation bancaire active pour ce séjour.
+Pre-Authorization Hold,Empreinte de préautorisation
+Released without capture,Libérée sans encaissement
+The guest folio is closed - capture before closing it.,Le folio client est clôturé — encaissez avant de le clôturer.
+[HSP-DEP-PREAUTH-CONFIG]: No accounting company is linked to this property.,[HSP-DEP-PREAUTH-CONFIG] : Aucune société comptable n'est liée à cet établissement.
+[HSP-DEP-PREAUTH-CONFIG]: No billing customer is configured for this folio or property.,[HSP-DEP-PREAUTH-CONFIG] : Aucun client de facturation n'est configuré pour ce folio ou cet établissement.
+[HSP-DEP-PREAUTH-UNAVAILABLE]: Card pre-authorization control is not installed on this site.,[HSP-DEP-PREAUTH-UNAVAILABLE] : Le contrôle de préautorisation bancaire n'est pas installé sur ce site.
+[HSP-DEP-PREAUTH-UNAVAILABLE]: Unexpected pre-authorization control response.,[HSP-DEP-PREAUTH-UNAVAILABLE] : Réponse inattendue du contrôle de préautorisation.
+[PREAUTH-PCI-001]: Card Brand exceeds 32 characters.,[PREAUTH-PCI-001] : Le réseau de carte dépasse 32 caractères.
+[PREAUTH-PCI-001]: Card Last 4 must contain exactly 4 ASCII digits.,[PREAUTH-PCI-001] : Les 4 derniers chiffres de la carte doivent contenir exactement 4 chiffres ASCII.
+[PREAUTH-PCI-001]: Card PAN data is prohibited in {0}.,[PREAUTH-PCI-001] : Les données de numéro de carte (PAN) sont interdites dans {0}.
+[PREAUTH-PCI-001]: Card magnetic track data is prohibited in {0}.,[PREAUTH-PCI-001] : Les données de piste magnétique sont interdites dans {0}.
+[PREAUTH-PCI-001]: Card security code is prohibited in {0}.,[PREAUTH-PCI-001] : Le cryptogramme de carte est interdit dans {0}.
+Before check-out: capture any damage from the card hold or release the card hold.,"Avant le départ, encaissez les frais de dommages sur la préautorisation ou libérez-la."
+Capture draft {0} is awaiting Finance submission.,Le brouillon d’encaissement {0} est en attente de validation par la Finance.
+Incremental pre-authorization for {0},Augmentation de la préautorisation pour {0}
+Pending Capture Payment Entry,Écriture de paiement en attente de validation
+Security deposit pre-authorization for {0},Préautorisation de caution pour {0}
+Use submitted capture Payment Entry {0} and its original amount.,Utilisez l’écriture de paiement validée {0} et son montant d’origine.
+The card hold cannot be released or increased while capture Payment Entry {0} exists.,La préautorisation ne peut être ni libérée ni augmentée tant que l’écriture de paiement {0} existe.
 Choose another staff member to reset their PIN.,Choisissez un autre membre du personnel pour réinitialiser son code PIN.
 The PIN must be 4 to 8 digits.,Le code PIN doit comporter de 4 à 8 chiffres.
 The account password is incorrect.,Le mot de passe du compte est incorrect.

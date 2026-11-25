@@ -17,6 +17,7 @@
   "quoted_base_rate",
   "discount_type",
   "discount_value",
+  "discount_currency",
   "discount_amount",
   "discount_reason",
   "fixed_rate"
@@ -102,6 +103,14 @@
    "fieldname": "discount_value",
    "fieldtype": "Float",
    "label": "Discount Value",
+   "read_only": 1
+  },
+  {
+   "description": "Currency of this night's flat Amount discount (rate currency or property currency). Blank on legacy rows means the property's currency.",
+   "fieldname": "discount_currency",
+   "fieldtype": "Link",
+   "label": "Discount Currency",
+   "options": "Currency",
    "read_only": 1
   },
   {
