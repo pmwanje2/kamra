@@ -13,7 +13,7 @@ from frappe.utils import add_days, cint, getdate
 from kamra.authz import ADMIN, assert_guest_access, assert_property_access, require_roles
 from kamra.kamra.doctype.reservation.reservation import is_entire_place, lock_property_for_inventory
 from kamra.localization import _minor_unit_for_currency
-from kamra.pricing import property_currency, rates_include_tax
+from kamra.pricing import property_currency, rates_include_tax, round_rate_amount
 from kamra.savings import log_action
 
 MODES = ("Split Equal", "Primary Pays", "Full Rate Each", "Custom")
@@ -112,11 +112,11 @@ def nightly_share(res, date, *, lock=False, advance_bill=False) -> dict | None:
 	current = current_date_contract_night(rate_source, date) if mode != "Custom" else None
 	gst = current["gst_rate"] if current else _nightly_gst(rate_source, date)
 	if mode == "Custom":
-		# The room and its percentage levy use the same
-		# unrounded room base an independent booking at this price would use.
 		rate = sum(Decimal(str(m.share_custom_rate or 0)) for m in members)
 		if gst and rates_include_tax(res.property):
-			rate /= 1 + Decimal(str(gst)) / 100
+			# _nightly_room_rate hands the folio a float after backing out GST.
+			# Its posted precision matters when the document total is at half a unit.
+			rate = float(rate / (1 + Decimal(str(gst)) / 100))
 	else:
 		rate = current["rate"] if current else _nightly_room_rate(rate_source, date)
 	rates, taxes = _night_amounts(
@@ -196,12 +196,11 @@ def _share_levy(property, rates, room_taxes, room_rate, gst, mode, lead):
 		tax_due = Decimal(0)
 		if levy_gst and levy > 0:
 			room_due = sum(rates.values()) + sum(room_taxes.values())
-			raw_room = base * (1 + Decimal(str(gst)) / 100)
-			if mode == "Custom" and prop.rates_include_tax:
-				# Each entered gross is exact to the currency unit.
-				raw_room = room_due
-			# The unshared folio rounds the document after adding levy and GST.
-			grand = (raw_room + levy * (1 + tax_rate)).quantize(unit, rounding=ROUND_HALF_UP)
+			# Match folio._recalculate: sum posted amounts and line taxes,
+			# then round the document once in the property's currency.
+			charges = base + levy
+			tax = base * Decimal(str(gst)) / 100 + levy * Decimal(str(levy_gst)) / 100
+			grand = round_rate_amount(charges + tax, 0, "Nearest", property_currency(property))
 			gross_levy = grand - room_due
 			# A positive residual needs a levy line even when its base alone
 			# rounds to zero. Never allocate tax to a zero-amount line.
