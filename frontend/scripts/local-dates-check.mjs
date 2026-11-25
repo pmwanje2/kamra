@@ -11,7 +11,7 @@ import ts from "typescript"
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const require = createRequire(import.meta.url)
 const dictionaries = { en: {} }
-for (const language of ["es", "pt", "ar"]) {
+for (const language of ["es", "pt", "ar", "fr"]) {
   dictionaries[language] = JSON.parse(fs.readFileSync(path.join(root, `src/i18n/locales/${language}.json`), "utf8"))
 }
 let language = "en"
@@ -40,11 +40,13 @@ const synced = "2026-11-17 09:15:00"
 const lastYear = "2025-12-30 23:05:59"
 const ask = "The last full sync went out on {date} at {time}. The channel manager admits one a day: send another anyway?"
 
-// Spanish and Portuguese: dd-mm (with the year only outside the current one) and hh:mm, no seconds.
+// Spanish, Portuguese and French: dd-mm (with the year only outside the current one) and hh:mm, no seconds.
 assert.deepEqual(dates.momentParts(synced, "es", { now }), { date: "17-11", time: "09:15" })
 assert.deepEqual(dates.momentParts(lastYear, "es", { now }), { date: "30-12-2025", time: "23:05" })
 assert.deepEqual(dates.momentParts(synced, "pt", { now }), { date: "17-11", time: "09:15" })
 assert.deepEqual(dates.momentParts("2026-11-17T09:15:00.123", "pt", { now }), { date: "17-11", time: "09:15" })
+assert.deepEqual(dates.momentParts(synced, "fr", { now }), { date: "17-11", time: "09:15" })
+assert.deepEqual(dates.momentParts(lastYear, "fr", { now }), { date: "30-12-2025", time: "23:05" })
 assert.equal(dates.momentParts("", "es", { now }), null)
 assert.equal(dates.momentParts("ayer", "es", { now }), null)
 
@@ -57,6 +59,11 @@ language = "pt"
 assert.equal(t(ask, dates.momentParts(synced, language, { now })),
   "A última sincronização completa saiu no dia 17-11 às 09:15. O gerenciador de canais aceita uma por dia: enviar outra mesmo assim?")
 assert.equal(t("{date} at {time}", dates.momentParts(synced, language, { now })), "17-11 às 09:15")
+
+language = "fr"
+assert.equal(t(ask, dates.momentParts(synced, language, { now })),
+  "La dernière synchronisation complète a été envoyée le 17-11 à 09:15. Le channel manager n'en autorise qu'une par jour : en envoyer une autre malgré tout ?")
+assert.equal(t("{date} at {time}", dates.momentParts(synced, language, { now })), "17-11 à 09:15")
 
 // English keeps the format Kamra already uses (RoomDrawer's useDates): day and short month, and hh:mm.
 language = "en"
@@ -80,4 +87,4 @@ assert.match(actions, /moment\(status\.last_push\)/, "Last push goes through mom
 assert.match(actions, /momentParts\(confirmSince/, "The second full sync warning goes through momentParts")
 assert.ok(!actions.includes("went out at {time}"), "The old warning key is gone")
 assert.ok(!/field: "last_full_sync"/.test(source("src/screens/configs.ts")), "The raw last_full_sync field left the form")
-console.log("local dates checks passed: es, pt and en")
+console.log("local dates checks passed: es, pt, fr and en")

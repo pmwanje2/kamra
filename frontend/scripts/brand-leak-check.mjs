@@ -69,6 +69,10 @@ export function csvRows(text) {
   return rows
 }
 
+// Sound prefilter (no lookbehind) before expensive TypeScript AST parsing:
+// skips files that cannot contain any forbidden token or hex/unicode escape.
+const rawCandidate = /kamra|frappe|erpnext|ury|tridz|buildsuite|heykoala|indianrupee|badgeindianrupee|currencyrupee|\u20b9|\\[ux]/i
+
 export function scanTree(base = root) {
   let sourceCount = 0
   const findings = []
@@ -80,7 +84,9 @@ export function scanTree(base = root) {
       const name = path.join(dir, item.name)
       if (item.isDirectory()) walk(name)
       else if (/\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name)) {
-        const source = ts.createSourceFile(name, fs.readFileSync(name, "utf8"), ts.ScriptTarget.Latest, true)
+        const text = fs.readFileSync(name, "utf8")
+        if (!rawCandidate.test(text)) continue
+        const source = ts.createSourceFile(name, text, ts.ScriptTarget.Latest, true)
         const filename = path.relative(base, name)
         function visit(node) {
           if (ts.isStringLiteralLike(node) || ts.isTemplateLiteralToken(node) || ts.isJsxText(node)) {

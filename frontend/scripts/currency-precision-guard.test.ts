@@ -29,18 +29,9 @@ const PENDING_CROSS_PR_ALLOWLIST: Readonly<Record<string, number>> = {
   // Wave 0 #41 / Pack 1
   "src/components/SecurityDepositPanel.tsx": 1,
   "src/screens/AuditPack.tsx": 3,
-  // Pack 3 PR 2 (PMS-P0-TAPECHART-RESPONSIVE)
-  "src/screens/EndOfDayWizard.tsx": 1,
   // Pack 2 PR 4 (#43)
   "src/screens/FolioHistory.tsx": 1,
   "src/screens/FolioView.tsx": 2, // missing-step on charge/allowance inputs (:1557, :1639)
-  // Pack 3 PR 3 (PMS-P0-FRENCH-RTL-I18N)
-  "src/screens/CashierBoard.tsx": 3,
-  "src/screens/CashierSessions.tsx": 3,
-  "src/screens/CashierShiftReport.tsx": 3,
-  "src/screens/CashierTill.tsx": 4, // includes :101 Math.round(... * 100) / 100
-  "src/screens/banquet/shared.tsx": 4,
-  "src/screens/BanquetMonth.tsx": 2, // uiDateLocale("en-US") at :49, :160
   // Peer Banquet / Events (#45) & setup screens (pre-existing missing-step)
   "src/screens/BanquetCatalogue.tsx": 1,
   "src/screens/BanquetFunction.tsx": 7,
