@@ -1085,6 +1085,9 @@ def folio_payment_link(folio: str):
 def hk_queue(property: str):
 	"""The housekeeper's phone view: prioritized task queue + room board.
 	Checkout cleans for rooms with an arrival today jump the queue."""
+	from kamra.business_date import get_business_date
+	from kamra.housekeeping import turndown_is_current
+
 	today = nowdate()
 	arriving_rooms = set(frappe.get_all(
 		"Reservation",
@@ -1098,7 +1101,7 @@ def hk_queue(property: str):
 		filters={"property": property,
 		         "status": ("in", ["Pending", "In Progress"])},
 		fields=["name", "room", "task_type", "priority", "status", "notes",
-		        "assigned_to_user", "assignment_status", "due_by", "creation"],
+		        "assigned_to_user", "assignment_status", "due_by", "creation", "business_date"],
 		order_by="creation asc",
 	)
 	me = frappe.session.user
@@ -1124,9 +1127,14 @@ def hk_queue(property: str):
 		order_by="room_number asc",
 	)
 
-	numbers = {r.name: r.room_number for r in rooms}
+	rooms_by_name = {room.name: room for room in rooms}
+	business_day = get_business_date(property)
+	tasks = [task for task in tasks if task.task_type != "Turndown" or (
+		task.room in rooms_by_name and turndown_is_current(
+			task.business_date, business_day, rooms_by_name[task.room].housekeeping_status))]
 	for task in tasks:
-		task["room_number"] = numbers.get(task.room)
+		room = rooms_by_name.get(task.room)
+		task["room_number"] = room.room_number if room else None
 
 	# guest context the housekeeper needs on the floor: who's in the room or
 	# arriving, whether they're a VIP, their requests and arrival timing
@@ -1202,6 +1210,8 @@ def hk_update_task(task: str, status: str):
 	if status not in ("In Progress", "Done", "Verified"):
 		frappe.throw("Status must be In Progress, Done or Verified.")
 	doc = frappe.get_doc("Housekeeping Task", task)
+	from kamra.housekeeping import assert_turndown_actionable
+	assert_turndown_actionable(doc)
 	if doc.task_type == "Inspection" and status == "Done":
 		status = "Verified"
 	if status == "Verified" and not _is_room_supervisor():
@@ -1347,6 +1357,8 @@ def hk_assign_task(task: str, user: str):
 		frappe.throw(_("Only a housekeeping supervisor can assign tasks."),
 		             frappe.PermissionError)
 	doc = frappe.get_doc("Housekeeping Task", task)
+	from kamra.housekeeping import assert_turndown_actionable
+	assert_turndown_actionable(doc)
 	if doc.status not in ("Pending", "In Progress"):
 		frappe.throw(_("Task {0} is already {1}.").format(doc.name, doc.status))
 	if user not in {s["user"] for s in _hk_staff(doc.property)}:
@@ -1365,6 +1377,8 @@ def hk_assign_task(task: str, user: str):
 def hk_claim_task(task: str):
 	"""A housekeeper takes an unassigned task from the pool for themselves."""
 	doc = frappe.get_doc("Housekeeping Task", task)
+	from kamra.housekeeping import assert_turndown_actionable
+	assert_turndown_actionable(doc)
 	if doc.assigned_to_user and doc.assigned_to_user != frappe.session.user:
 		frappe.throw(f"Already taken by {doc.assigned_to_user}.")
 	doc.assigned_to_user = frappe.session.user
@@ -1378,6 +1392,8 @@ def hk_claim_task(task: str):
 def hk_accept_task(task: str):
 	"""The assigned housekeeper accepts the task handed to them."""
 	doc = frappe.get_doc("Housekeeping Task", task)
+	from kamra.housekeeping import assert_turndown_actionable
+	assert_turndown_actionable(doc)
 	doc.assignment_status = "Accepted"
 	if not doc.assigned_to_user:
 		doc.assigned_to_user = frappe.session.user
@@ -1391,6 +1407,8 @@ def hk_reject_task(task: str, reason: str = ""):
 	"""Decline a task - it drops back into the pool for someone else,
 	keeping the reason on record."""
 	doc = frappe.get_doc("Housekeeping Task", task)
+	from kamra.housekeeping import assert_turndown_actionable
+	assert_turndown_actionable(doc)
 	who = doc.assigned_to_user or frappe.session.user
 	doc.assigned_to_user = None
 	doc.assignment_status = "Unassigned"
@@ -6844,7 +6862,7 @@ def check_in(reservation: str, room: str | None = None,
 		if fee["waiver_approval_required"]:
 			from kamra.authz import verify_supervisor
 			approver = verify_supervisor(
-				doc.property, supervisor_user, supervisor_pin, amount=fee["amount"],
+				doc.property, supervisor_user, supervisor_pin, requester=frappe.session.user, amount=fee["amount"],
 				currency=fee["currency"], action="early_checkin_fee_waiver",
 				reference_doctype="Reservation", reference_name=doc.name, reason=waiver)
 		doc.early_checkin_waived_reason = waiver
@@ -6858,6 +6876,7 @@ def check_in(reservation: str, room: str | None = None,
 		# at today's posting rate; the save re-locks the uncharged nights
 		from kamra.pricing import relock_contract_fx_at_check_in
 		relock_contract_fx_at_check_in(doc)
+	doc.flags.kamra_check_in = True
 	doc.status = "Checked In"
 	doc.save()
 	from kamra.savings import log_action
@@ -7840,6 +7859,9 @@ def set_housekeeping_status(
 		frappe.throw(
 			_("Only a housekeeping supervisor can set a room to {0}.").format(status),
 			frappe.PermissionError)
+	from kamra.kamra.doctype.reservation.reservation import lock_property_for_inventory
+	lock_property_for_inventory(r.property)
+	r.housekeeping_status = frappe.db.get_value("Room", room, "housekeeping_status", for_update=True)
 	clean_reason = (reason or "").strip()[:500] or None
 	clean_until = str(getdate(until_date)) if until_date else None
 	if status == r.housekeeping_status and not (clean_reason or clean_until):
@@ -7854,6 +7876,9 @@ def set_housekeeping_status(
 		updates["os_oo_until"] = None
 		updates["os_oo_set_by"] = None
 	frappe.db.set_value("Room", room, updates)
+	from kamra.housekeeping import UNSERVICEABLE_ROOMS, retire_turndown_tasks
+	if status in UNSERVICEABLE_ROOMS:
+		retire_turndown_tasks(r.property, room=room)
 	from kamra.savings import log_action
 	suffix = f": {clean_reason}" if clean_reason else ""
 	if clean_until:
@@ -7875,7 +7900,7 @@ def room_board(property: str):
 	inside the Housekeeping module (#99)."""
 	from kamra.crs import assert_property_access
 	assert_property_access(property)
-	from kamra.housekeeping import BOARD_FIELDS, board_status
+	from kamra.housekeeping import BOARD_FIELDS, board_status, turndown_is_current
 	can_supervise = _is_room_supervisor()
 	can_manage_work = can_supervise and bool(set(frappe.get_roles()) & {
 		"Administrator", "System Manager", "Hotel Admin", "Front Desk", HK_SUPERVISOR})
@@ -7897,13 +7922,17 @@ def room_board(property: str):
 	business = get_business_date(property)
 	clean_tasks = {}
 	tasks = {}
+	room_status = {room.name: room.housekeeping_status for room in rooms}
 	for t in frappe.get_all(
 			"Housekeeping Task",
 			filters={"property": property,
 			         "status": ("in", ["Pending", "In Progress"])},
 			fields=["name", "room", "task_type", "status", "priority",
-			        "assigned_to_user", "due_by", "reservation.check_out_business_date as departure_day"],
+			        "assigned_to_user", "due_by", "business_date", "reservation.check_out_business_date as departure_day"],
 			order_by="creation asc"):
+		if t.task_type == "Turndown" and not turndown_is_current(
+				t.business_date, business, room_status.get(t.room)):
+			continue
 		tasks.setdefault(t.room, t)
 		day = t.departure_day if t.task_type == "Checkout Clean" and t.departure_day else t.due_by
 		if t.task_type in ("Checkout Clean", "Stayover Clean") and str(day)[:10] == business:
@@ -8477,6 +8506,9 @@ def venue_calendar(property: str, start_date: str | None = None, days: int = 14)
 	}
 
 
+ROOM_MOVE_READY_STATUSES = {"Clean", "Inspected", "Ready"}
+
+
 def _room_move_target(doc, room, *, strict=False, lock=False):
 	target = frappe.db.get_value(
 		"Room", {"name": room, "property": doc.property},
@@ -8486,9 +8518,9 @@ def _room_move_target(doc, room, *, strict=False, lock=False):
 		frappe.throw(_("The destination room is outside this property."), frappe.PermissionError)
 	if room != doc.room:
 		if target.housekeeping_status in ("Out of Service", "Out of Order") or (
-				strict and (target.housekeeping_status not in ("Clean", "Inspected")
+				strict and (target.housekeeping_status not in ROOM_MOVE_READY_STATUSES
 				            or target.occupancy_status != "Vacant")):
-			frappe.throw(_("Choose a vacant room marked Clean or Inspected."))
+			frappe.throw(_("Choose a vacant room marked Clean, Inspected or Ready."))
 	return target
 
 
@@ -8526,8 +8558,8 @@ def _swap_rooms(reservation, new_room, swap_reservation, reason):
 		frappe.throw(_("Choose two checked-in rooms of the same type at this property."))
 	for room in sorted((stay.room, other.room)):
 		target = _room_move_target(stay, room, lock=True)
-		if target.housekeeping_status not in ("Clean", "Inspected"):
-			frappe.throw(_("Both rooms must be marked Clean or Inspected."))
+		if target.housekeeping_status not in ROOM_MOVE_READY_STATUSES:
+			frappe.throw(_("Both rooms must be marked Clean, Inspected or Ready."))
 	savepoint = "room_swap"
 	frappe.db.savepoint(savepoint)
 	try:
@@ -8560,9 +8592,9 @@ def move_room(reservation: str, new_room: str, upgrade_type: str = "None",
 		if upgrade_type != "None":
 			frappe.throw(_("A room swap keeps both booked rates."))
 		return _swap_rooms(reservation, new_room, swap_reservation, reason)
-	return move_reservation(
-		reservation, new_room, reason=reason, confirm_price=confirm_price,
-		upgrade_type=upgrade_type, supervisor_user=supervisor_user, supervisor_pin=supervisor_pin)
+	return _move_reservation(
+		reservation, new_room, reason, confirm_price, "destination", None,
+		supervisor_user, supervisor_pin, upgrade_type)
 
 
 @frappe.whitelist()
@@ -8587,10 +8619,15 @@ def move_reservation(reservation: str, new_room: str,
 	rate_mode: "destination" (the new type's rate, above), "source" (keep
 	what the guest pays now) or "custom" (agreed_rate per night; Revenue
 	Manager / admins only). A discounted stay re-priced for its new room type
-	takes the discount rules again (supervisor_user + supervisor_pin sign it
+	takes the discount rules again (supervisor_user + pin_secret sign it
 	off when it needs one)."""
+	return _move_reservation(reservation, new_room, reason, confirm_price, rate_mode,
+	                         agreed_rate, supervisor_user, supervisor_pin, upgrade_type)
+
+
+def _move_reservation(reservation, new_room, reason, confirm_price, rate_mode,
+                      agreed_rate, supervisor_user, supervisor_pin, upgrade_type):
 	doc = frappe.get_doc("Reservation", reservation)
-	from kamra.crs import assert_property_access
 	assert_property_access(doc.property)
 	from kamra.kamra.doctype.reservation.reservation import lock_property_for_inventory
 	lock_property_for_inventory(doc.property)
@@ -8618,7 +8655,8 @@ def move_reservation(reservation: str, new_room: str,
 		if _move_approval_required(doc.property):
 			from kamra.authz import verify_supervisor
 			upgrade_approver = verify_supervisor(
-				doc.property, supervisor_user, supervisor_pin, action="complimentary_upgrade",
+				doc.property, supervisor_user, supervisor_pin, requester=frappe.session.user,
+				action="complimentary_upgrade",
 				reference_doctype="Reservation", reference_name=doc.name, reason=reason)
 	else:
 		_discount_sign_off(doc, supervisor_user, supervisor_pin)
@@ -8635,6 +8673,7 @@ def move_reservation(reservation: str, new_room: str,
 		doc.upgrade_type = "None" if preview["difference"] < 0 else classification
 		doc.upgrade_reason = reason or None
 		doc.upgrade_approved_by = upgrade_approver
+	doc.flags.kamra_room_move = True
 	doc.room = new_room
 	from kamra.ledger import _currency_places, _round_currency
 	places = _currency_places(doc.property)
@@ -10043,14 +10082,16 @@ def _move_price(res, new_type: str | None, rate_mode: str,
 		if res.status == "Checked In":
 			from kamra.business_date import get_business_date
 			res.flags.kamra_move_cutoff = str(get_business_date(res.property))
-		if authoritative:
-			if not res.get("auto_price"):
-				frappe.throw(_("A paid room move needs a server-priced reservation."))
+		if rate_mode == "destination":
 			from kamra.pricing import billable_children, contract_rate, saved_contract_tariff
+
+			if (authoritative or saved_contract_tariff(res).get("tariff")) and not res.get("auto_price"):
+				frappe.throw(_("A paid room move needs a server-priced reservation."))
 			tariff = contract_rate(
 				res.property, new_type, res.rate_plan, res.check_in_date, res.check_out_date,
-				res.adults, billable_children(res), res.get("extra_beds"), company=res.get("company"))
+				res.adults, billable_children(res, room_type=new_type), res.get("extra_beds"), company=res.get("company"))
 			if tariff:
+				changes["fixed_rate"] = 0
 				rate, snapshot = tariff
 				res.contract_tariff = {"tariff": snapshot, "agreed_rate": rate,
 				                       "company": res.get("company")}
@@ -10223,6 +10264,18 @@ def movable_rooms(reservation: str, check_in_date: str | None = None,
 		"Room", filters={"property": res.property},
 		fields=["name", "room_number", "room_type", "floor",
 		        "housekeeping_status", "occupancy_status"], order_by="room_number")
+	# A swap needs two ready rooms of the same type and a checked-in peer.
+	ready = {r.name for r in rooms if r.housekeeping_status in ROOM_MOVE_READY_STATUSES}
+	swap_targets = sorted(r.name for r in rooms if r.name in ready and r.name != res.room
+	                      and r.room_type == res.room_type and r.occupancy_status == "Occupied")
+	swaps = {}
+	if res.status == "Checked In" and res.room in ready and swap_targets:
+		peers = frappe.get_all("Reservation",
+			filters={"property": res.property, "status": "Checked In", "room_type": res.room_type,
+			         "room": ("in", swap_targets)}, fields=["name", "room"])
+		for peer in peers:
+			# Ambiguous legacy occupancy is not an eligible swap.
+			swaps[peer.room] = peer.name if peer.room not in swaps else None
 	# availability is computed per type; union the free rooms across every type
 	types = {r.room_type for r in rooms}
 	free = set()
@@ -10248,9 +10301,11 @@ def movable_rooms(reservation: str, check_in_date: str | None = None,
 		 "current": r.name == res.room,
 		 "room_type_name": type_name.get(r.room_type, r.room_type),
 		 # the guest's own current room counts as available to them
-		 "free": (r.name in free and (res.status != "Checked In" or (
-		    r.housekeeping_status in ("Clean", "Inspected") and r.occupancy_status == "Vacant"))) or r.name == res.room,
-		 "same_type": r.room_type == res.room_type}
+		 "free": r.name == res.room or (
+			r.name in free and (res.status != "Checked In"
+				or (r.name in ready and r.occupancy_status == "Vacant"))),
+		 "same_type": r.room_type == res.room_type,
+		 "swap_reservation": swaps.get(r.name) if r.room_type == res.room_type else None}
 		for r in rooms
 	]
 	# current type first, then the rest - so a same-type swap is the default and

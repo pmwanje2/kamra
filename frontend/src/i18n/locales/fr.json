@@ -7757,5 +7757,8 @@
   "Early Check-In Fee Value": "Valeur des frais d’arrivée anticipée",
   "Early Check-In Window Start": "Début de la période d’arrivée anticipée",
   "Require Early Check-In Waiver Approval": "Exiger l’approbation d’une exonération des frais d’arrivée anticipée",
-  "Require Complimentary Upgrade Approval": "Exiger l’approbation des surclassements offerts"
+  "Require Complimentary Upgrade Approval": "Exiger l’approbation des surclassements offerts",
+  "Swap with occupied room": "Échanger avec une chambre occupée",
+  "Both reservations keep their booked rates.": "Les deux réservations conservent leurs tarifs.",
+  "Swap with room {room}": "Échanger avec la chambre {room}"
 }

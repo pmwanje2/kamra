@@ -220,7 +220,10 @@ def collect():
             if wire_fields := pin_http_fields.get(f"kamra.{mod}.{node.name}"):
                 # The request guard accepts only these credential keys over HTTP.
                 endpoint_params = [param for param in endpoint_params if param[0] not in pin_fields]
-                endpoint_params.extend((name, None, True) for name in wire_fields)
+                endpoint_params.extend(
+                    (name, None, target != "supervisor_pin")
+                    for name, target in wire_fields.items()
+                )
             eps.append({
                 "module": mod, "name": node.name, "guest": guest,
                 "method": "POST" if methods == ["POST"] else "GET/POST",

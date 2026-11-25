@@ -1564,7 +1564,7 @@ in the Keys step.
 | `room` | no | `None` |
 | `waive_early_checkin_reason` | no | `None` |
 | `supervisor_user` | no | `None` |
-| `supervisor_pin` | no | `None` |
+| `pin_secret` | no |  |
 
 ### `kamra.api.walk_in`
 
@@ -1999,8 +1999,8 @@ Move into a ready room using the booked rate or a server-priced rate.
 | `reason` | no | `None` |
 | `confirm_price` | no | `0` |
 | `supervisor_user` | no | `None` |
-| `supervisor_pin` | no | `None` |
 | `swap_reservation` | no | `None` |
+| `pin_secret` | no |  |
 
 ### `kamra.api.move_reservation`
 
@@ -2019,7 +2019,7 @@ the locked nightly rates; a manually-priced booking keeps its amount.
 rate_mode: "destination" (the new type's rate, above), "source" (keep
 what the guest pays now) or "custom" (agreed_rate per night; Revenue
 Manager / admins only). A discounted stay re-priced for its new room type
-takes the discount rules again (supervisor_user + supervisor_pin sign it
+takes the discount rules again (supervisor_user + pin_secret sign it
 off when it needs one).
 
 | Param | Required | Default |
@@ -2031,8 +2031,8 @@ off when it needs one).
 | `rate_mode` | no | `'destination'` |
 | `agreed_rate` | no | `None` |
 | `supervisor_user` | no | `None` |
-| `supervisor_pin` | no | `None` |
 | `upgrade_type` | no | `None` |
+| `pin_secret` | no |  |
 
 ### `kamra.api.rate_override_preview`
 

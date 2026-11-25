@@ -28,6 +28,7 @@ interface MovableRoom {
   free: boolean
   same_type: boolean
   current: boolean
+  swap_reservation?: string | null
 }
 
 interface Preview {
@@ -90,6 +91,7 @@ export default function RoomChangeDialog(props: {
   const [pin, setPin] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const swapReservation = pick?.swap_reservation
 
   useEffect(() => {
     call<MovableRoom[]>("kamra.api.movable_rooms", { reservation: props.reservation })
@@ -98,7 +100,7 @@ export default function RoomChangeDialog(props: {
         const want = props.initialRoom && list.find((r) => r.name === props.initialRoom)
         if (!want || want.current) return
         if (!want.same_type) setScope("all")
-        if (want.free) setPick(want)
+        if (want.free || want.swap_reservation) setPick(want)
         else setError(t("Room {room} is booked for these dates.", { room: want.room_number }))
       })
       .catch((e) => setError(serverError(e)))
@@ -107,7 +109,7 @@ export default function RoomChangeDialog(props: {
 
   useEffect(() => {
     setPreview(null)
-    if (!pick || (rateMode === "custom" && !(Number(agreedRate) > 0))) return
+    if (!pick || pick.swap_reservation || (rateMode === "custom" && !(Number(agreedRate) > 0))) return
     let live = true
     call<Preview>("kamra.api.room_move_preview", {
       reservation: props.reservation,
@@ -144,7 +146,7 @@ export default function RoomChangeDialog(props: {
     )
     // free and clean first - the room the desk most likely wants
     const rank = (r: MovableRoom) =>
-      (r.free ? 0 : 2) + (r.housekeeping_status === "Clean" || r.housekeeping_status === "Inspected" ? 0 : 1)
+      (r.free ? 0 : 2) + (["Clean", "Inspected", "Ready"].includes(r.housekeeping_status ?? "") ? 0 : 1)
     return [...list].sort((a, b) => rank(a) - rank(b))
   }, [rooms, scope, q])
 
@@ -160,7 +162,7 @@ export default function RoomChangeDialog(props: {
   const gov = preview?.discount_governance ?? null
   const approvalRequired = !!preview?.approval_required
   const signOff = approvalRequired
-    ? { supervisor_user: supervisor, supervisor_pin: pin }
+    ? { supervisor_user: supervisor, pin_secret: pin }
     : supervisorArgs(gov, supervisor, pin)
   const signed = approvalRequired ? !!(supervisor && pin) : !gov?.needs_supervisor || !!signOff.supervisor_user
   const money = (n: number) => preview?.currency && preview.places !== undefined
@@ -168,22 +170,29 @@ export default function RoomChangeDialog(props: {
     : fmtMoney(Math.abs(n))
 
   async function confirm() {
-    if (!pick || !preview || !signed) return
+    if (!pick || (!swapReservation && (!preview || !signed))) return
     setBusy(true)
     setError(null)
+    const target = {
+      reservation: props.reservation,
+      new_room: pick.name,
+      reason: note.trim() ? `${reason}: ${note.trim()}` : reason,
+    }
     try {
-      const r = await call<{ room: string; room_type: string }>("kamra.api.move_reservation", {
-        reservation: props.reservation,
-        new_room: pick.name,
-        reason: note.trim() ? `${reason}: ${note.trim()}` : reason,
-        // the dialog shows the re-priced total before this button; pressing
-        // it is the confirmation the server asks for
-        confirm_price: 1,
-        rate_mode: rateMode,
-        upgrade_type: rateMode === "custom" ? undefined : pick.same_type ? "None" : upgradeType,
-        agreed_rate: rateMode === "custom" ? Number(agreedRate) : undefined,
-        ...signOff,
-      })
+      const r = swapReservation
+        ? await call<{ room: string; room_type: string }>("kamra.api.move_room", {
+            ...target, swap_reservation: swapReservation,
+          })
+        : await call<{ room: string; room_type: string }>("kamra.api.move_reservation", {
+            ...target,
+            // the dialog shows the re-priced total before this button; pressing
+            // it is the confirmation the server asks for
+            confirm_price: 1,
+            rate_mode: rateMode,
+            upgrade_type: rateMode === "custom" ? undefined : pick.same_type ? "None" : upgradeType,
+            agreed_rate: rateMode === "custom" ? Number(agreedRate) : undefined,
+            ...signOff,
+          })
       props.onMoved(r)
       props.onClose()
     } catch (e) {
@@ -240,14 +249,14 @@ export default function RoomChangeDialog(props: {
               </button>
             ))}
           </div>
-          <label className="relative ml-auto">
-            <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-zinc-400" aria-hidden />
+          <label className="relative ms-auto">
+            <Search className="pointer-events-none absolute start-2.5 top-2.5 size-4 text-zinc-400" aria-hidden />
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder={t("Room no.")}
               aria-label={t("Search room number")}
-              className="w-32 rounded-lg border border-zinc-300 py-2 pl-8 pr-2 text-sm focus:outline-2 focus:outline-brand-600"
+              className="w-32 rounded-lg border border-zinc-300 py-2 ps-8 pe-2 text-sm focus:outline-2 focus:outline-brand-600"
             />
           </label>
         </div>
@@ -274,14 +283,14 @@ export default function RoomChangeDialog(props: {
                     <button
                       key={r.name}
                       type="button"
-                      disabled={!r.free}
+                      disabled={!r.free && !r.swap_reservation}
                       aria-pressed={pick?.name === r.name}
                       onClick={() => { setPick(r); setError(null) }}
-                      title={(r.free ? undefined : t("Booked for these dates"))}
+                      title={r.free || r.swap_reservation ? undefined : t("Booked for these dates")}
                       className={cn(
                         "min-h-11 rounded-lg border px-2.5 py-2 text-start transition-colors",
-                        !r.free && "cursor-not-allowed border-dashed border-zinc-200 bg-zinc-50 opacity-50",
-                        r.free && pick?.name !== r.name && "border-zinc-200 hover:border-zinc-400",
+                        !r.free && !r.swap_reservation && "cursor-not-allowed border-dashed border-zinc-200 bg-zinc-50 opacity-50",
+                        (r.free || r.swap_reservation) && pick?.name !== r.name && "border-zinc-200 hover:border-zinc-400",
                         pick?.name === r.name && "border-brand-600 bg-brand-50 ring-2 ring-brand-600/30",
                       )}
                     >
@@ -295,7 +304,7 @@ export default function RoomChangeDialog(props: {
                           r.free ? hkTone[r.housekeeping_status ?? ""] ?? "bg-zinc-100 text-zinc-600" : "bg-zinc-100 text-zinc-500 dark:text-zinc-300",
                         )}
                       >
-                        {r.free ? t(r.housekeeping_status || "-") : t("Booked")}
+                        {r.swap_reservation ? t("Swap with occupied room") : r.free ? t(r.housekeeping_status || "-") : t("Booked")}
                       </span>
                     </button>
                   ))}
@@ -316,7 +325,11 @@ export default function RoomChangeDialog(props: {
                   {t("Booked room type: {type}", { type: preview.original_room_type_name })}
                 </p>
               )}
-              {preview ? (
+              {swapReservation ? (
+                <p className="basis-full text-zinc-600 dark:text-zinc-300">
+                  {t("Both reservations keep their booked rates.")}
+                </p>
+              ) : preview ? (
                 preview.difference === 0 ? (
                   <span className="text-zinc-500 dark:text-zinc-300">{t("No change to the price.")}</span>
                 ) : (
@@ -380,7 +393,7 @@ export default function RoomChangeDialog(props: {
                   {t("The guest is in-house: the old room is marked Dirty for housekeeping.")}
                 </span>
               )}
-              {pick.housekeeping_status && !["Clean", "Inspected"].includes(pick.housekeeping_status) && (
+              {pick.housekeeping_status && !["Clean", "Inspected", "Ready"].includes(pick.housekeeping_status) && (
                 <span className="basis-full text-xs text-amber-700">
                   {t("{room} hasn't been cleaned yet.", { room: pick.room_number })}
                 </span>
@@ -411,8 +424,10 @@ export default function RoomChangeDialog(props: {
               placeholder={t("Note (optional)")}
               className="min-w-0 flex-1 min-h-11 rounded-lg border border-zinc-300 bg-white px-2.5 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
             />
-            <Button className="min-h-11" disabled={!pick || !preview || busy || !signed} onClick={confirm}>
-              {busy ? t("Moving…") : pick ? t("Move to {room}", { room: pick.room_number }) : t("Pick a room")}
+            <Button className="min-h-11" disabled={!pick || busy || (!swapReservation && (!preview || !signed))} onClick={confirm}>
+              {busy ? t("Moving…") : pick ? (swapReservation
+                ? t("Swap with room {room}", { room: pick.room_number })
+                : t("Move to {room}", { room: pick.room_number })) : t("Pick a room")}
             </Button>
           </div>
           {error && (

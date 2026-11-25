@@ -11,6 +11,8 @@ from decimal import ROUND_HALF_UP, Decimal
 import frappe
 from frappe.utils import add_days, cint, getdate, now_datetime, nowdate
 
+from kamra.pricing import billing_room_type
+
 # SQL on `tabFolio Charge` fc: a line that is neither voided nor a void's
 # reversal. Both stay on the folio (void_charge) and net to zero, so sums
 # need nothing; counts of rooms sold and "already posted" checks do.
@@ -768,7 +770,7 @@ def _room_gst(reservation) -> float:
 	if locked is not None:
 		return float(locked.gst_rate or 0)
 
-	rt = frappe.get_doc("Room Type", reservation.room_type)
+	rt = frappe.get_doc("Room Type", billing_room_type(reservation))
 	rate = Decimal(str(_nightly_room_rate(reservation, reservation.check_in_date)))
 	return float(room_gst_rate(reservation.property, rt, rate))
 
@@ -829,7 +831,7 @@ def _day_use_room_charge(reservation, date) -> tuple[float, float, str] | None:
 		overstay=overstay_rule(reservation.property),
 		planned_hours=planned,
 	)
-	rt = frappe.get_doc("Room Type", reservation.room_type)
+	rt = frappe.get_doc("Room Type", billing_room_type(reservation))
 	inclusive = rates_include_tax(reservation.property)
 	if units["full_day"]:
 		# Overstay past planned ETD under "Full day": one card night.
@@ -927,7 +929,7 @@ def _planned_nights(reservation, plan) -> dict[str, Decimal]:
 	)
 
 	key = (plan, str(reservation.check_in_date), str(reservation.check_out_date),
-	       reservation.adults, reservation.children, reservation.room_type,
+	       reservation.adults, reservation.children, billing_room_type(reservation),
 	       reservation.get("over_capacity_charge"))
 	flags = getattr(reservation, "flags", None)
 	cache = flags.get("_kamra_planned_nights") if flags is not None else None
@@ -935,7 +937,7 @@ def _planned_nights(reservation, plan) -> dict[str, Decimal]:
 		return cache[1]
 	start = getdate(reservation.check_in_date)
 	count = max((getdate(reservation.check_out_date) - start).days, 1)
-	rt = frappe.get_doc("Room Type", reservation.room_type)
+	rt = frappe.get_doc("Room Type", billing_room_type(reservation))
 	small_ok = small_group_allows_stay(rt, reservation.check_in_date, reservation.check_out_date)
 	inclusive = rates_include_tax(reservation.property)
 	dates, nights, extras = [], [], Decimal(0)
@@ -972,13 +974,13 @@ def _plan_free_night(reservation, date) -> tuple[Decimal, Decimal]:
 		small_group_allows_stay,
 	)
 
-	rt = frappe.get_doc("Room Type", reservation.room_type)
+	rt = frappe.get_doc("Room Type", billing_room_type(reservation))
 	base = occupancy_rate(
 		rt, reservation.adults, reservation.children, date,
 		allow_small_group=small_group_allows_stay(
 			rt, reservation.check_in_date, reservation.check_out_date))
 	rate = season_adjust(reservation.property, date, base,
-	                     reservation.room_type)
+	                     rt.name)
 	gst = Decimal(str(room_gst_rate(reservation.property, rt,
 	                                rate + _over_cap_night(reservation))))
 	if rates_include_tax(reservation.property):
@@ -1004,13 +1006,13 @@ def _nightly_gst(reservation, date) -> float:
 		small_group_allows_stay,
 	)
 
-	rt = frappe.get_doc("Room Type", reservation.room_type)
+	rt = frappe.get_doc("Room Type", billing_room_type(reservation))
 	base = occupancy_rate(
 		rt, reservation.adults, reservation.children, date,
 		allow_small_group=small_group_allows_stay(
 			rt, reservation.check_in_date, reservation.check_out_date))
 	gross = season_adjust(reservation.property, date, base,
-	                      reservation.room_type)
+	                      rt.name)
 	return float(room_gst_rate(reservation.property, rt,
 	                           gross + _over_cap_night(reservation)))
 
@@ -1188,7 +1190,7 @@ def current_date_contract_night(reservation, date) -> dict | None:
 		if share != 1:
 			gross = round_rate_amount(gross * share, 0, currency=home)
 			contract_net = round_rate_amount(nightly * share, 0, currency=currency)
-	rt = frappe.get_doc("Room Type", reservation.room_type)
+	rt = frappe.get_doc("Room Type", billing_room_type(reservation))
 	gst = room_gst_rate(reservation.property, rt, gross + _over_cap_night(reservation))
 	rate = gross / (Decimal(1) + Decimal(str(gst)) / Decimal(100)) if rates_include_tax(reservation.property) else gross
 	shown_contract = contract_net if (disc_kind and disc_val > 0) else contract

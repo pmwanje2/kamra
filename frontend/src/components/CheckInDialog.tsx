@@ -564,7 +564,7 @@ export default function CheckInDialog(props: {
           reservation: props.reservation,
           waive_early_checkin_reason: waiveFee && fee?.amount ? waiverReason.trim() : undefined,
           supervisor_user: waiveFee && fee?.waiver_approval_required ? waiverSupervisor : undefined,
-          supervisor_pin: waiveFee && fee?.waiver_approval_required ? waiverPin : undefined,
+          pin_secret: waiveFee && fee?.waiver_approval_required ? waiverPin : undefined,
         },
       )
       setWaiverPin("")

@@ -23,7 +23,8 @@
   "breached",
   "escalation_level",
   "business_date",
-  "assignment_credits"
+  "assignment_credits",
+  "assignment_credits_recorded"
  ],
  "fields": [
   {
@@ -134,6 +135,14 @@
    "fieldname": "assignment_credits",
    "label": "Assignment Credits",
    "fieldtype": "Float",
+   "read_only": 1
+  },
+  {
+   "fieldname": "assignment_credits_recorded",
+   "label": "Assignment Credits Recorded",
+   "fieldtype": "Check",
+   "default": "0",
+   "hidden": 1,
    "read_only": 1
   }
  ],

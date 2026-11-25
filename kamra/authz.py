@@ -50,6 +50,9 @@ _PIN_FIELDS = frozenset({
 _PIN_HTTP_FIELDS = {
 	"kamra.api.set_cashier_pin": {"pin_secret": "pin", "current_password": "current_password"},
 	"kamra.api.verify_cashier_pin": {"pin_secret": "pin"},
+	"kamra.api.check_in": {"pin_secret": "supervisor_pin"},
+	"kamra.api.move_reservation": {"pin_secret": "supervisor_pin"},
+	"kamra.api.move_room": {"pin_secret": "supervisor_pin"},
 }
 _PIN_ATTEMPT_DOCTYPE = "Cashier PIN Attempt"
 _FLOOR_PIN_PARENT = "SiteOps Floor PIN"

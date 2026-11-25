@@ -467,6 +467,7 @@ class Reservation(Document):
 			from kamra.api import AdvancePaidIsLedgerOwned
 			frappe.throw(_("Advance paid follows the payments on the folio; take a payment or refund there."),
 			             AdvancePaidIsLedgerOwned)
+		self.validate_in_house_room_change()
 		self.validate_room_move_audit()
 		self.guard_discount_inputs()
 		self.guard_locked_nights()
@@ -515,10 +516,28 @@ class Reservation(Document):
 		self.guard_agreed_rate()
 		self.keep_hand_set_nights()
 		self.apply_pricing()
+		self.validate_check_in_path()
 		self.govern_discount()
 		self.guard_rate_plan()
 		self.validate_room_serviceability()
 		self.stamp_room_assignment()
+
+	def validate_check_in_path(self):
+		if self.status != "Checked In" or self.flags.get("kamra_check_in") or self.flags.get("carried_forward"):
+			return
+		previous = self.get_doc_before_save()
+		if previous and previous.status in ("Checked In", "Checked Out"):
+			return
+		from kamra.checkin import early_checkin_fee
+		if early_checkin_fee(self, checking_in=True)["amount"]:
+			frappe.throw(_("Use guided check-in when an early check-in fee applies."))
+
+	def validate_in_house_room_change(self):
+		previous = self.get_doc_before_save()
+		if (previous and previous.status == "Checked In"
+				and (self.room, self.room_type) != (previous.room, previous.room_type)
+				and not (self.flags.get("kamra_room_move") or self.flags.get("kamra_swap_reservation"))):
+			frappe.throw(_("Use Move Room to change a checked-in reservation's room."))
 
 	def validate_room_move_audit(self):
 		previous = None if self.is_new() else self.get_doc_before_save()
@@ -981,11 +1000,11 @@ class Reservation(Document):
 				"Discount Voucher", self.voucher, "voucher_code"
 			)
 		# Deduct free children under free_child_age from billing
-		from kamra.pricing import billable_children
+		from kamra.pricing import billable_children, billing_room_type
 		charged_children = billable_children(self)
 		inputs = {
 			"property": self.property,
-			"room_type": self.get("room_type_to_charge") or self.room_type,
+			"room_type": billing_room_type(self),
 			"check_in_date": str(self.check_in_date),
 			"check_out_date": str(self.check_out_date),
 			"adults": int(self.adults or 0),

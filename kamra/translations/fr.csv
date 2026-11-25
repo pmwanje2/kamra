@@ -2781,9 +2781,7 @@ Choose four to eight digits and avoid common PIN patterns.,Choisissez de quatre 
 A paid room move needs a server-priced reservation.,Un changement de chambre payant requiert une réservation dont le tarif est calculé par le système.
 A room swap keeps both booked rates.,L’échange conserve les deux tarifs réservés.
 Assignment Credits,Crédits d’attribution
-Both rooms must be marked Clean or Inspected.,Les deux chambres doivent être marquées Propres ou Inspectées.
 Choose Vacant or Occupied.,Sélectionnez Libre ou Occupée.
-Choose a vacant room marked Clean or Inspected.,Sélectionnez une chambre libre marquée Propre ou Inspectée.
 Choose a valid turndown status.,Sélectionnez un état valide pour le service du soir.
 Choose a valid upgrade type.,Sélectionnez un type de surclassement valide.
 Choose attendants with access to this property.,Sélectionnez du personnel d’étage ayant accès à cet établissement.
@@ -2824,3 +2822,9 @@ Early Check-In Fee Value,Valeur des frais d’arrivée anticipée
 Early Check-In Window Start,Début de la période d’arrivée anticipée
 Require Early Check-In Waiver Approval,Exiger l’approbation d’une exonération des frais d’arrivée anticipée
 Require Complimentary Upgrade Approval,Exiger l’approbation des surclassements offerts
+Assignment Credits Recorded,Crédits d’attribution enregistrés
+"Both rooms must be marked Clean, Inspected or Ready.","Les deux chambres doivent être marquées Propres, Inspectées ou Prêtes."
+"Choose a vacant room marked Clean, Inspected or Ready.","Sélectionnez une chambre libre marquée Propre, Inspectée ou Prête."
+Turndown is unavailable for rooms out of order or out of service.,Le service du soir est indisponible pour les chambres hors service ou hors d’usage.
+Turndown is unavailable for this room on the current business date.,Le service du soir est indisponible pour cette chambre à la date opérationnelle en cours.
+Use guided check-in when an early check-in fee applies.,Utilisez l’enregistrement guidé lorsque des frais d’arrivée anticipée s’appliquent.

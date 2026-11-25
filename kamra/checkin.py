@@ -895,7 +895,7 @@ def set_room_charges(reservation: str, allowed: int = 1, reason: str | None = No
 	return checkin_flow(reservation)
 
 
-def early_checkin_fee(res) -> dict:
+def early_checkin_fee(res, *, checking_in=False) -> dict:
 	"""Quote an early arrival from the property's clock and first locked night."""
 	from decimal import Decimal
 
@@ -914,7 +914,8 @@ def early_checkin_fee(res) -> dict:
 	places = _currency_places(res.property)
 	out = {"amount": 0, "currency": property_currency(res.property), "places": places,
 	       "waiver_approval_required": bool(prop.early_checkin_waiver_approval)}
-	if (res.status != "Confirmed" or prop.early_checkin_fee_type not in ("Fixed", "Percentage")
+	if ((res.status != "Confirmed" and not checking_in)
+			or prop.early_checkin_fee_type not in ("Fixed", "Percentage")
 			or not flt(prop.early_checkin_fee_value)):
 		return out
 	clock = property_local_now(res.property)
@@ -927,7 +928,7 @@ def early_checkin_fee(res) -> dict:
 	if prop.early_checkin_fee_type == "Percentage":
 		value *= Decimal(str(_nightly_room_rate(res, res.check_in_date))) / 100
 	out["amount"] = _round_currency(value, places)
-	if out["amount"] and out["waiver_approval_required"]:
+	if out["amount"] and out["waiver_approval_required"] and not checking_in:
 		from kamra.authz import supervisors_for
 		out["supervisors"] = supervisors_for(res.property, exclude=frappe.session.user)
 	return out

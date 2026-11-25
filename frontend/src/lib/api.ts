@@ -282,6 +282,10 @@ export async function call<T = unknown>(
   } else if (method === "kamra.api.verify_cashier_pin") {
     params = { property: params.property, pin_secret: params.pin_secret ?? params.pin }
   }
+  if (method === "kamra.api.check_in" || method === "kamra.api.move_reservation" || method === "kamra.api.move_room") {
+    const { supervisor_pin, pin_secret, ...fields } = params
+    params = { ...fields, pin_secret: pin_secret ?? supervisor_pin }
+  }
   const data = await frappeFetch<{ message: T }>(`/api/method/${method}`, {
     method: "POST",
     body: JSON.stringify(params),

@@ -22,6 +22,14 @@ class HousekeepingTask(Document):
 			frappe.throw(frappe._("The task room must belong to this property."), frappe.PermissionError)
 		if self.reservation and frappe.db.get_value("Reservation", self.reservation, "property") != self.property:
 			frappe.throw(frappe._("The task reservation must belong to this property."), frappe.PermissionError)
+		from kamra.housekeeping import (
+			OPEN_HOUSEKEEPING_STATUSES, assert_turndown_actionable, snapshot_assignment_credits,
+		)
+		previous = self.get_doc_before_save()
+		if self.status in OPEN_HOUSEKEEPING_STATUSES or (
+				self.status in ("Done", "Verified") and (not previous or previous.status != self.status)):
+			assert_turndown_actionable(self)
+		snapshot_assignment_credits(self, previous)
 
 	def before_insert(self):
 		if not self.business_date:

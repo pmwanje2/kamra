@@ -1091,6 +1091,7 @@ Books,Books,الدفاتر,Contabilidad,Livros,账册,Comptabilité,screens/Cash
 Books check,Books check,مطابقة الدفاتر,Cuadre contable,Conferência dos livros,账册核对,Contrôle comptable,screens/Ledgers.tsx,,translated
 Books for your accounting software.,Books for your accounting software.,الدفاتر لبرنامج المحاسبة لديك.,Libros para su software contable.,Livros para o seu software de contabilidade.,用于会计软件的账册。,Écritures pour votre logiciel comptable.,,,translated
 Both,Both,كلاهما,Ambos,Ambos,两者,Les deux,components/BookingDialog.tsx,,translated
+Both reservations keep their booked rates.,Both reservations keep their booked rates.,,,,,Les deux réservations conservent leurs tarifs.,components/RoomChangeDialog.tsx,,needs_translation
 Boxed,Boxed,معبأ في علب,En caja individual,Em caixa,盒装,En coffret,,,translated
 Breach %,Breach %,نسبة الإخلال %,Incumplimiento (%),% de violação,超时率 %,% de dépassement,screens/OpsSLA.tsx,,translated
 Breach rate,Breach rate,معدل الإخلال,Porcentaje de incumplimiento,Taxa de violação,超时率,Taux de dépassement,screens/OpsSLA.tsx,,translated
@@ -6312,6 +6313,8 @@ Supplier bills the hotel pays later. Cash paid from the till stays in Petty Cash
 Supplier's bill number,Supplier's bill number,رقم فاتورة المورد,Número de factura del proveedor,Número da fatura do fornecedor,供应商账单号,Numéro de facture du fournisseur,,,translated
 Supplies,Supplies,المستلزمات,Suministros,Suprimentos,用品,Fournitures,,,translated
 swap room,swap room,تبديل الغرفة,cambiar habitación,trocar quarto,换房,échanger la chambre,,,translated
+Swap with occupied room,Swap with occupied room,,,,,Échanger avec une chambre occupée,components/RoomChangeDialog.tsx,,needs_translation
+Swap with room {room},Swap with room {room},,,,,Échanger avec la chambre {room},components/RoomChangeDialog.tsx,room,needs_translation
 "Swimming Pool
 Free Parking
 Complimentary Wi-Fi

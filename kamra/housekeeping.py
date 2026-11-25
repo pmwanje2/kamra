@@ -109,6 +109,8 @@ CREDIT_FIELDS = {
 	"Deep Clean": ("hk_deep_clean_credits", Decimal("3")),
 	"Turndown": ("hk_turndown_credits", Decimal("0.5")),
 }
+UNSERVICEABLE_ROOMS = {"Out of Order", "Out of Service"}
+OPEN_HOUSEKEEPING_STATUSES = ("Pending", "In Progress")
 BOARD_FIELDS = [
 	"hk_occupancy", "hk_reported_at", "hk_resolved_occupancy", "hk_section",
 	"turndown_requested", "turndown_status", "turndown_business_date",
@@ -140,14 +142,15 @@ def board_status(property, rooms, *, business_date=None):
 			if hk and hk != fd and row.hk_resolved_occupancy != fd else None
 		)
 		row.pop("hk_resolved_occupancy", None)
-		if str(row.turndown_business_date) != day:
+		if (str(row.turndown_business_date) != day or (
+				row.turndown_status == "Pending" and row.housekeeping_status in UNSERVICEABLE_ROOMS)):
 			row.update(turndown_requested=0, turndown_status="Not Required")
 	return rooms
 
 
 def _room_rows(property):
 	return frappe.get_all("Room", filters={"property": property},
-	                      fields=["name", "room_number", *BOARD_FIELDS], order_by="room_number, name")
+	                      fields=["name", "room_number", "housekeeping_status", *BOARD_FIELDS], order_by="room_number, name")
 
 
 def _locked_room(room):
@@ -212,6 +215,8 @@ def set_turndown_status(room: str, status: str):
 	doc = _locked_room(room)
 	if status not in ("Not Required", "Pending", "Completed", "DND"):
 		frappe.throw(_("Choose a valid turndown status."))
+	if status in ("Pending", "Completed") and doc.housekeeping_status in UNSERVICEABLE_ROOMS:
+		frappe.throw(_("Turndown is unavailable for rooms out of order or out of service."))
 	if status != "Not Required" and room not in _occupied_rooms(doc.property):
 		frappe.throw(_("Turndown requires a checked-in stay."))
 	day = get_business_date(doc.property)
@@ -237,19 +242,69 @@ def clear_stay_room_state(property, room):
 		"hk_resolved_occupancy": None, "turndown_requested": 0,
 		"turndown_status": "Not Required", "turndown_business_date": None,
 	})
-	frappe.db.set_value("Housekeeping Task", {
-		"property": property, "room": room, "task_type": "Turndown",
-		"status": ("in", ["Pending", "In Progress"]),
-	}, "status", "Cancelled")
+	retire_turndown_tasks(property, room=room)
+
+
+def retire_turndown_tasks(property, *, room=None, before=None):
+	filters = {"property": property, "task_type": "Turndown",
+	           "status": ("in", OPEN_HOUSEKEEPING_STATUSES)}
+	if room:
+		filters["room"] = room
+	if before:
+		filters["business_date"] = ("<", before)
+	frappe.db.set_value("Housekeeping Task", filters, "status", "Cancelled")
+	if room:
+		frappe.db.set_value("Room", {"name": room, "property": property, "turndown_status": "Pending"},
+		                    {"turndown_requested": 0, "turndown_status": "Not Required"})
+
+
+def turndown_is_current(service_date, business_date, room_status):
+	return bool(room_status) and room_status not in UNSERVICEABLE_ROOMS and str(service_date) == str(business_date)
+
+
+def assert_turndown_actionable(task):
+	if task.task_type != "Turndown":
+		return
+	status = frappe.db.get_value("Room", {"name": task.room, "property": task.property}, "housekeeping_status")
+	if task.status == "Cancelled" or not turndown_is_current(
+			task.business_date, get_business_date(task.property), status):
+		frappe.throw(_("Turndown is unavailable for this room on the current business date."))
+
+
+def _has_credit_snapshot(task):
+	# Older positive snapshots remain authoritative. An unmarked zero was
+	# also the numeric default on manually assigned tasks.
+	return bool(task.get("assignment_credits_recorded") or task.get("assignment_credits"))
+
+
+def _configured_credit(task_type, value):
+	if value is None:
+		return CREDIT_FIELDS[task_type][1]
+	return Decimal(str(value))
+
+
+def snapshot_assignment_credits(task, previous):
+	if task.task_type not in CREDIT_FIELDS or not task.assigned_to_user:
+		task.assignment_credits = 0
+		task.assignment_credits_recorded = 0
+		return
+	if (previous and _has_credit_snapshot(previous)
+			and (task.assigned_to_user, task.room, task.task_type)
+			== (previous.assigned_to_user, previous.room, previous.task_type)):
+		task.assignment_credits = previous.assignment_credits
+	else:
+		room_type = frappe.db.get_value("Room", task.room, "room_type")
+		field, _default = CREDIT_FIELDS[task.task_type]
+		value = frappe.db.get_value("Room Type", {"name": room_type, "property": task.property}, field)
+		task.assignment_credits = float(_configured_credit(task.task_type, value))
+	task.assignment_credits_recorded = 1
 
 
 def _credit_weight(task, room_types):
-	field, default = CREDIT_FIELDS[task.task_type]
-	row = room_types.get(task.room_type)
-	value = row.get(field) if row else None
-	if task.assigned_to_user and task.assignment_credits is not None:
-		value = task.assignment_credits
-	return Decimal(str(value)) if value is not None else default
+	if task.assigned_to_user and _has_credit_snapshot(task):
+		return Decimal(str(task.assignment_credits))
+	field, _default = CREDIT_FIELDS[task.task_type]
+	return _configured_credit(task.task_type, room_types.get(task.room_type, {}).get(field))
 
 
 @frappe.whitelist(methods=["POST"])
@@ -275,12 +330,14 @@ def auto_assign_housekeeping_tasks(property: str, business_date: str, attendants
 		frappe.throw(_("Enter a positive task credit limit."))
 	day = str(getdate(business_date))
 	lock_property_for_inventory(property)
+	current_day = get_business_date(property)
 	room = frappe.qb.DocType("Room")
 	task = frappe.qb.DocType("Housekeeping Task")
 	rows = (frappe.qb.from_(task).join(room).on(task.room == room.name)
 	        .select(task.name, task.room, task.task_type, task.assigned_to_user,
-	                task.assignment_credits, task.status, task.priority, room.room_type,
-	                room.room_number, room.hk_section, room.floor)
+	                task.assignment_credits, task.assignment_credits_recorded, task.business_date,
+	                task.status, task.priority, room.room_type, room.room_number,
+	                room.hk_section, room.floor, room.housekeeping_status)
 	        .where((task.property == property) & (room.property == property) &
 	               ((task.business_date == day) |
 	                (task.business_date.isnull() & task.creation.like(f"{day}%"))) &
@@ -294,6 +351,9 @@ def auto_assign_housekeeping_tasks(property: str, business_date: str, attendants
 	sections = {user: set() for user in users}
 	pending = []
 	for row in rows:
+		if (row.task_type == "Turndown" and row.status in OPEN_HOUSEKEEPING_STATUSES
+				and not turndown_is_current(row.business_date, current_day, row.housekeeping_status)):
+			continue
 		row["credits"] = _credit_weight(row, room_types)
 		row["section"] = row.hk_section or row.floor or ""
 		user = row.assigned_to_user
@@ -318,7 +378,7 @@ def auto_assign_housekeeping_tasks(property: str, business_date: str, attendants
 		if not cint(preview):
 			frappe.db.set_value("Housekeeping Task", row.name, {
 				"assigned_to_user": user, "assignment_status": "Assigned",
-				"assignment_credits": float(row.credits),
+				"assignment_credits": float(row.credits), "assignment_credits_recorded": 1,
 			})
 			log_action("hk_auto_assign", "Housekeeping Task", row.name, property,
 			           after_snapshot={**assigned[-1], "business_date": day})

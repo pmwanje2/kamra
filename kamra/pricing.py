@@ -945,14 +945,19 @@ def negotiated_rate_plan(property: str, company: str | None) -> str | None:
 	return None
 
 
-def billable_children(reservation) -> int:
+def billing_room_type(reservation):
+	"""The room type on the bill, independent of where the guest sleeps."""
+	return reservation.get("room_type_to_charge") or reservation.room_type
+
+
+def billable_children(reservation, *, room_type=None) -> int:
 	"""Chargeable children for a stay: total children less free children
 	(occupants at or under the room type's free_child_age, or recorded
 	infants, whichever is higher). Shared by quote_inputs,
 	capture_contract_tariff and contract_tariff_for_new_dates so quotes,
 	bookings, amendments and the tariff resolver agree."""
 	free_children = 0
-	free_child_age = frappe.db.get_value("Room Type", reservation.room_type, "free_child_age")
+	free_child_age = frappe.db.get_value("Room Type", room_type or billing_room_type(reservation), "free_child_age")
 	free_child_age = 6 if free_child_age is None else int(free_child_age)
 	for occ in reservation.get("occupants") or []:
 		age = occ.get("age") if isinstance(occ, dict) else getattr(occ, "age", None)
@@ -1288,7 +1293,7 @@ def contract_tariff_for_new_dates(reservation, booked_check_in, booked_check_out
 	pricing_company = snapshot["company"] if "company" in snapshot else reservation.get("company")
 	for run in runs:
 		start, end = run[0], str(getdate(add_days(run[-1], 1)))
-		resolved = contract_rate(reservation.property, reservation.room_type, reservation.rate_plan, start, end,
+		resolved = contract_rate(reservation.property, billing_room_type(reservation), reservation.rate_plan, start, end,
 			reservation.adults, billable_children(reservation), reservation.get("extra_beds"),
 			company=pricing_company, fx_date=tariff.get("fx_date"))
 		if not resolved:
