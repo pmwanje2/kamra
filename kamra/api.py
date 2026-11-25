@@ -10052,6 +10052,15 @@ def _move_price(res, new_type: str | None, rate_mode: str,
 		frappe.throw(_("Unknown rate option: {0}").format(rate_mode))
 	res.flags.kamra_move_currency_places = True
 	changes = {} if not new_type or new_type == res.room_type else {"room_type": new_type}
+	start, end = getdate(res.check_in_date), getdate(res.check_out_date)
+	if changes and res.status == "Checked In" and rate_mode != "source":
+		from kamra.business_date import get_business_date
+		res.flags.kamra_move_cutoff = str(get_business_date(res.property))
+		start = max(start, getdate(res.flags.kamra_move_cutoff))
+		# An hourly stay has a rate on arrival day. A move after the last
+		# billable night only changes the physical room.
+		if rate_mode == "destination" and start >= max(end, getdate(add_days(res.check_in_date, 1))):
+			rate_mode = "source"
 	if rate_mode == "source":
 		if changes:
 			res.room_type_to_charge = res.get("room_type_to_charge") or res.room_type
@@ -10077,28 +10086,29 @@ def _move_price(res, new_type: str | None, rate_mode: str,
 		changes["agreed_rate"] = float(agreed_rate)
 	else:
 		changes["agreed_rate"] = 0  # the destination's own rate card
-	if changes.get("room_type"):
-		res.room_type_to_charge = None
-		if res.status == "Checked In":
-			from kamra.business_date import get_business_date
-			res.flags.kamra_move_cutoff = str(get_business_date(res.property))
+	if changes:
 		if rate_mode == "destination":
-			from kamra.pricing import billable_children, contract_rate, saved_contract_tariff
+			from kamra.pricing import (
+				billable_children, contract_rate, room_move_tariff, saved_contract_tariff,
+			)
 
-			if (authoritative or saved_contract_tariff(res).get("tariff")) and not res.get("auto_price"):
+			booked_tariff = saved_contract_tariff(res).get("tariff")
+			if (authoritative or booked_tariff) and not res.get("auto_price"):
 				frappe.throw(_("A paid room move needs a server-priced reservation."))
-			tariff = contract_rate(
-				res.property, new_type, res.rate_plan, res.check_in_date, res.check_out_date,
+			resolved = contract_rate(
+				res.property, new_type, res.rate_plan, start, end,
 				res.adults, billable_children(res, room_type=new_type), res.get("extra_beds"), company=res.get("company"))
-			if tariff:
-				changes["fixed_rate"] = 0
-				rate, snapshot = tariff
-				res.contract_tariff = {"tariff": snapshot, "agreed_rate": rate,
-				                       "company": res.get("company")}
+			if resolved:
+				if not res.get("auto_price"):
+					frappe.throw(_("A paid room move needs a server-priced reservation."))
+				rate, tariff = resolved
+				changes.update(fixed_rate=0, agreed_rate=rate)
+				res.contract_tariff = {"tariff": room_move_tariff(res, start, rate, tariff),
+				                       "agreed_rate": rate, "company": res.get("company")}
 				res.flags.kamra_contract_relocked = True
-				changes["agreed_rate"] = rate
-			elif saved_contract_tariff(res).get("tariff"):
+			elif booked_tariff:
 				frappe.throw(_("The destination room type has no rate in this contract."))
+		res.room_type_to_charge = None
 	return _reprice_preview(res, **changes)
 
 

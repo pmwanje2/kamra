@@ -835,9 +835,9 @@ def _day_use_room_charge(reservation, date) -> tuple[float, float, str] | None:
 	inclusive = rates_include_tax(reservation.property)
 	if units["full_day"]:
 		# Overstay past planned ETD under "Full day": one card night.
-		amount = float(_plan_free_night_rate(reservation, date))
-		return _day_use_discount(reservation, date, rt, inclusive, amount,
-		                         _nightly_gst(reservation, date), "day use · full day")
+		amount, gst = _plan_free_night(reservation, date)
+		return _day_use_discount(reservation, date, rt, inclusive, float(amount),
+		                         float(gst), "day use · full day")
 	gross = Decimal(str(units["amount"]))
 	gst = float(room_gst_rate(reservation.property, rt,
 	                          gross + _over_cap_night(reservation)))
@@ -1137,15 +1137,16 @@ def current_date_contract_night(reservation, date) -> dict | None:
 		return None
 	snapshot = saved_contract_tariff(reservation)
 	tariff = snapshot.get("tariff") or {}
-	currency, home = tariff.get("currency"), tariff.get("property_currency")
 	night = _tariff_night(tariff, date)
-	nightly = Decimal(str((night or tariff).get("nightly") or 0))
-	if not currency or currency == home or nightly <= 0:
+	terms = {**tariff, **(night or {})}
+	currency, home = terms.get("currency"), terms.get("property_currency")
+	nightly = Decimal(str(terms.get("nightly") or 0))
+	if terms.get("fixed_rate") or not currency or currency == home or nightly <= 0:
 		return None
 	contract = round_rate_amount(nightly, 0, currency=currency)
 	posting = posting_fx_rate(reservation.property, currency, date)
 	if not posting:
-		fx, fx_date = Decimal(str(tariff.get("fx_rate") or 0)), tariff.get("fx_date")
+		fx, fx_date = Decimal(str(terms.get("fx_rate") or 0)), terms.get("fx_date")
 		frappe.log_error(
 			title=f"Current Date FX missing: {reservation.name}",
 			message=(f"No single published {currency} rate for {date}: room night of {reservation.name} "
@@ -1190,7 +1191,7 @@ def current_date_contract_night(reservation, date) -> dict | None:
 		if share != 1:
 			gross = round_rate_amount(gross * share, 0, currency=home)
 			contract_net = round_rate_amount(nightly * share, 0, currency=currency)
-	rt = frappe.get_doc("Room Type", billing_room_type(reservation))
+	rt = frappe.get_doc("Room Type", terms.get("room_type") or billing_room_type(reservation))
 	gst = room_gst_rate(reservation.property, rt, gross + _over_cap_night(reservation))
 	rate = gross / (Decimal(1) + Decimal(str(gst)) / Decimal(100)) if rates_include_tax(reservation.property) else gross
 	shown_contract = contract_net if (disc_kind and disc_val > 0) else contract

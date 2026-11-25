@@ -1,1 +1,16 @@
-{"deprecations": []}
+{
+  "deprecations": [
+    {
+      "item": "method:kamra.api.check_in:param:supervisor_pin",
+      "replacement": "pin_secret",
+      "remove_in": "2.10.0",
+      "reason": "Security migration. HTTP clients must now use the field masked by Frappe before request hooks."
+    },
+    {
+      "item": "method:kamra.api.move_reservation:param:supervisor_pin",
+      "replacement": "pin_secret",
+      "remove_in": "2.10.0",
+      "reason": "Security migration. HTTP clients must now use the field masked by Frappe before request hooks."
+    }
+  ]
+}

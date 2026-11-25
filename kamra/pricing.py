@@ -1323,6 +1323,43 @@ def contract_tariff_for_new_dates(reservation, booked_check_in, booked_check_out
 	        "tariff": {**tariff, "nightly": float(first["nightly"]), "nights": nights}}
 
 
+def room_move_tariff(reservation, start, rate, tariff) -> dict:
+	"""Keep the original contract terms before the destination tariff begins."""
+	if getdate(start) <= getdate(reservation.check_in_date):
+		return tariff
+
+	booked = saved_contract_tariff(reservation)
+	source = booked.get("tariff") or {}
+	source_nights = {str(n["date"]): n for n in source.get("nights") or []}
+	destination_nights = {str(n["date"]): n for n in tariff.get("nights") or []}
+	home = property_currency(reservation.property)
+
+	# A contract can start mid-stay on a previously non-contract booking.
+	# Preserve those nights at their original room figure and in local currency.
+	from kamra.folio import _nightly_gst, _nightly_room_rate
+
+	nights = []
+	for day in _stay_nights(reservation.check_in_date, start):
+		original = source_nights.get(day) or {}
+		agreed = original.get("agreed_rate", booked.get("agreed_rate"))
+		if agreed is None:
+			agreed = float(entry_rate(_nightly_room_rate(reservation, day),
+			                          _nightly_gst(reservation, day), rates_include_tax(reservation.property),
+			                          night_rate_places(reservation.property)))
+		nights.append({
+			"date": day, "nightly": source.get("nightly") or agreed, "agreed_rate": agreed,
+			"currency": source.get("currency") or home, "property_currency": source.get("property_currency") or home,
+			"fx_rate": source.get("fx_rate"), "fx_date": source.get("fx_date"),
+			"room_type": billing_room_type(reservation), "fixed_rate": cint(reservation.get("fixed_rate")),
+			**original,
+		})
+	for day in _stay_nights(start, reservation.check_out_date):
+		nights.append(destination_nights.get(day) or {
+			"date": day, "nightly": tariff["nightly"], "agreed_rate": rate,
+		})
+	return {**tariff, "nights": nights}
+
+
 def _stay_nights(check_in, check_out) -> list[str]:
 	"""Each night of a stay by date (its check-in date for a day-use stay)."""
 	return [str(getdate(add_days(check_in, i))) for i in range(max(date_diff(check_out, check_in), 1))]
@@ -1867,17 +1904,17 @@ def contract_night_tariff(
 	if not allow_stepped and rate_plan and _dec(frappe.db.get_value("Rate Plan", rate_plan, "rounding_step")) > 0:
 		return None
 	tariff = contract_tariff.get("tariff") if isinstance(contract_tariff.get("tariff"), dict) else contract_tariff
-	currency = (tariff.get("currency") or "").strip().upper()
-	home = (tariff.get("property_currency") or "").strip().upper()
-	fx = _dec(tariff.get("fx_rate"))
-	if not currency or (home and currency == home) or fx <= 0:
-		return None
-	nightly = _dec(tariff.get("nightly"))
 	if date and tariff.get("nights"):
 		key = str(getdate(date))
 		own = next((n for n in tariff["nights"] if str(n.get("date")) == key), None)
 		if own is not None:
-			nightly = _dec(own.get("nightly"))
+			tariff = {**tariff, **own}
+	currency = (tariff.get("currency") or "").strip().upper()
+	home = (tariff.get("property_currency") or "").strip().upper()
+	fx = _dec(tariff.get("fx_rate"))
+	if tariff.get("fixed_rate") or not currency or (home and currency == home) or fx <= 0:
+		return None
+	nightly = _dec(tariff.get("nightly"))
 	if nightly <= 0:
 		return None
 	return currency, nightly, fx

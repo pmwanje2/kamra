@@ -98,6 +98,7 @@ def build(root: str, keep: tuple[str, ...] = ()) -> dict:
 	dotted = {s.dotted for s in m.TOOLS} | set(response_keys)
 	dotted |= {r for s in scopes.values() for r in s["rest"]}
 	trees: dict = {}
+	wire_fields = _literal(root, "authz", "_PIN_HTTP_FIELDS") or {}
 	methods = {}
 	for d in sorted(dotted | {k.removeprefix("kamra.") for k in keep}):
 		sig = _signature(root, d, trees)
@@ -105,7 +106,13 @@ def build(root: str, keep: tuple[str, ...] = ()) -> dict:
 			if d in dotted:  # a tool, scope or key table names a missing function
 				raise SystemExit(f"contract: kamra.{d} not found in kamra/")
 			continue  # gone since the base contract: the check reports it
-		methods[f"kamra.{d}"] = {**sig, "response_keys": sorted(response_keys.get(d, ()))}
+		method = f"kamra.{d}"
+		# The request guard accepts Frappe-masked wire names. Keep the
+		# target parameter's optionality without publishing its Python name.
+		for field, internal in wire_fields.get(method, {}).items():
+			if internal in sig["params"]:
+				sig["params"][field] = sig["params"].pop(internal)
+		methods[method] = {**sig, "response_keys": sorted(response_keys.get(d, ()))}
 
 	events = _literal(root, "webhooks", "EVENTS") or {}
 	stale = set(payload_keys) - set(events)
