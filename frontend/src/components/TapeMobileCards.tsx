@@ -241,7 +241,7 @@ export function TapeMobileCards({
                           {stay.vip === 1 && (
                             <Star className="size-3.5 shrink-0 fill-amber-300 text-amber-300" aria-hidden />
                           )}
-                          {shareCount > 1 && <span className="inline-flex shrink-0 items-center gap-1 rounded bg-zinc-50 px-1 text-xs text-zinc-900"
+                          {shareCount > 1 && <span className="inline-flex shrink-0 items-center gap-1 rounded bg-subtle px-1 text-xs text-ink"
                             title={t("Shared room with {n} reservations", { n: shareCount })}>
                             <Users className="size-3.5" aria-hidden />
                             <span className="sr-only">{t("Shared room with {n} reservations", { n: shareCount })}</span>

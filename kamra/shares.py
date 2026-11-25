@@ -210,7 +210,7 @@ def _validate_capacity(res):
 		children = max(0, cint(party.children) - cint(party.get("infants")))
 		overflow = capacity_overflow(cap, adults, children)[0]
 		extras = max(0, cint(party.get("over_capacity_guests")) - overflow)
-		total = adults + cint(party.children) + extras
+		total = adults + children + extras
 		for day, direction in ((max(start, getdate(party.check_in_date)), 1),
 		                       (min(end, getdate(party.check_out_date)), -1)):
 			change = changes.setdefault(day, [0, 0, 0])

@@ -1392,7 +1392,7 @@ export default function TapeChart() {
                                         <span className={cn("size-2 shrink-0 rounded-full", seg.dot)} aria-hidden />
                                       )}
                                       {!!b.share_count && b.share_count > 1 && <span
-                                        className="inline-flex shrink-0 items-center gap-0.5 rounded bg-zinc-50 px-1 text-[10px] text-zinc-900"
+                                        className="inline-flex shrink-0 items-center gap-0.5 rounded bg-subtle px-1 text-[10px] text-ink"
                                         title={t("Shared room with {n} reservations", { n: b.share_count })}>
                                         <Users className="size-3" aria-hidden />
                                         <span className="sr-only">{t("Shared room with {n} reservations", { n: b.share_count })}</span>

@@ -8160,7 +8160,7 @@ def tape_chart(property: str, start_date: str | None = None, days: int = 14):
 		filters={
 			"property": property, "room": ("is", "set"),
 			"status": ("in", ["Confirmed", "Checked In"]),
-			"check_in_date": ("<", end), "check_out_date": (">", start),
+			"check_in_date": ("<", end), "check_out_date": (">=", start),
 		},
 		fields=["name", "room", "guest", "guest_name", "status",
 		        "check_in_date", "check_out_date", "is_day_use", "adults",
@@ -8190,7 +8190,9 @@ def tape_chart(property: str, start_date: str | None = None, days: int = 14):
 	for k in blocks:
 		blocks_by_room.setdefault(k.room, []).append(k)
 	for r in rooms:
-		r["bookings"] = by_room.get(r.name, [])
+		# A stay ending on the first chart date has no visible nights there,
+		# but its departure still determines when that room turns over.
+		r["bookings"] = [b for b in by_room.get(r.name, ()) if getdate(b.check_out_date) > start]
 		r["blocks"] = blocks_by_room.get(r.name, [])
 
 	# changeover conflicts: same room turns over today and the incoming
@@ -8198,16 +8200,24 @@ def tape_chart(property: str, start_date: str | None = None, days: int = 14):
 	from kamra.day_use import format_hhmm as _format_hhmm
 	conflicts = []
 	for r in rooms:
-		by_date_out = {str(b.check_out_date): b for b in r["bookings"]
-		               if b.planned_check_out_time not in (None, "")}
+		by_date_out = {}
+		for booking in by_room.get(r.name, ()):
+			etd = _format_hhmm(booking.planned_check_out_time)
+			if not etd:
+				continue
+			date = str(booking.check_out_date)
+			last = by_date_out.get(date)
+			if last is None or (etd, booking.name) > (last[0], last[1].name):
+				by_date_out[date] = (etd, booking)
 		for b in r["bookings"]:
-			out = by_date_out.get(str(b.check_in_date))
-			if (not out or out.name == b.name or b.planned_check_in_time in (None, "")
-				    or (b.share_group_id and b.share_group_id == out.share_group_id)):
+			departure = by_date_out.get(str(b.check_in_date))
+			if not departure:
+				continue
+			out_etd, out = departure
+			if out.name == b.name or (b.share_group_id and b.share_group_id == out.share_group_id):
 				continue
 			in_eta = _format_hhmm(b.planned_check_in_time)
-			out_etd = _format_hhmm(out.planned_check_out_time)
-			if in_eta and out_etd and in_eta <= out_etd:
+			if in_eta and in_eta <= out_etd:
 				conflicts.append({
 					"room": r.name, "room_number": r.room_number,
 					"date": str(b.check_in_date),

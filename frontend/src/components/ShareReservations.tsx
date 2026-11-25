@@ -14,7 +14,7 @@ type Choice = { name: string; label: string }
 
 export type { ShareSummary } from "../lib/api"
 
-const input = "min-h-10 w-full min-w-0 rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-zinc-900"
+const input = "min-h-10 w-full min-w-0 rounded-lg border border-control bg-surface px-2.5 py-1.5 text-ink"
 
 export default function ShareReservations({ reservation, summary, reload, property, roomType, room, checkIn, checkOut }: {
   reservation: string
@@ -134,23 +134,23 @@ export default function ShareReservations({ reservation, summary, reload, proper
   }
 
   return (
-    <section aria-label={t("Share Reservations")} className="space-y-3 rounded-xl border border-zinc-200 bg-white p-4 text-start">
-      <h2 className="flex items-center gap-2 text-sm font-semibold text-zinc-900">
+    <section aria-label={t("Share Reservations")} className="space-y-3 rounded-xl border border-line bg-surface p-4 text-start text-ink">
+      <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
         <Users className="size-4" aria-hidden />{t("Share Reservations")}
       </h2>
-      {summary.members.length > 0 && <ul className="divide-y divide-zinc-200 text-sm">
+      {summary.members.length > 0 && <ul className="divide-y divide-line text-sm">
         {summary.members.map((member) => <li key={member.reservation} className="flex flex-wrap items-center justify-between gap-2 py-2">
           <div className="min-w-0">
-            <p className="break-words font-medium text-zinc-900">
+            <p className="break-words font-medium text-ink">
               {member.guest_name}
-              {member.primary && <span className="ms-2 text-xs text-zinc-600">{t("Primary Sharer")}</span>}
+              {member.primary && <span className="ms-2 text-xs text-muted-ink">{t("Primary Sharer")}</span>}
             </p>
-            <p className="text-xs text-zinc-600">
+            <p className="text-xs text-muted-ink">
               <bdi>{member.check_in} – {member.check_out}</bdi>
               {summary.mode === "Custom" && <bdi className="ms-2">{fmtMoney(member.custom_rate, summary.currency, digits)}</bdi>}
             </p>
           </div>
-          {member.folio && <Link className="text-brand-700 underline underline-offset-2"
+          {member.folio && <Link className="text-accent-ink underline underline-offset-2"
             to={`/billing/${encodeURIComponent(member.folio)}`}>{t("Open Folio")}</Link>}
         </li>)}
       </ul>}
@@ -161,7 +161,7 @@ export default function ShareReservations({ reservation, summary, reload, proper
           {summary.group_id && <Button type="button" variant="outline" disabled={busy}
             onClick={() => open("break")}>{labels.break}</Button>}
         </div>
-        {action && <form className="grid gap-2 rounded-lg border border-zinc-200 p-3 text-sm"
+        {action && <form className="grid gap-2 rounded-lg border border-line p-3 text-sm"
           onSubmit={(event) => { event.preventDefault(); void changeMembership() }}>
           {action !== "break" && <label className="grid gap-1">
             {action === "add" ? t("Search guests or enter a new name") : t("Search reservations")}
@@ -190,7 +190,7 @@ export default function ShareReservations({ reservation, summary, reload, proper
             <input className={input} type="number" min="0" step={step} value={rate} required
               onChange={(event) => setRate(event.target.value)} />
           </label>}
-          {searchError && <p role="alert" className="text-rose-700">{t(searchError)}</p>}
+          {searchError && <p role="alert" className="text-danger-text">{t(searchError)}</p>}
           <div className="flex flex-wrap gap-2">
             <Button type="submit" disabled={busy}>{t("Confirm")}</Button>
             <Button type="button" variant="ghost" disabled={busy} onClick={() => open(null)}>{t("Cancel")}</Button>
@@ -219,7 +219,7 @@ export default function ShareReservations({ reservation, summary, reload, proper
           <Button type="submit" className="justify-self-start" disabled={busy}>{t("Save Rate Split")}</Button>
         </form>}
       </>}
-      {error && <p role="alert" className="text-sm text-rose-700">{t(error)}</p>}
+      {error && <p role="alert" className="text-sm text-danger-text">{t(error)}</p>}
     </section>
   )
 }
