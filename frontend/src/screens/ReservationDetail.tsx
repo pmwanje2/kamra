@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { lazy, Suspense, useCallback, useEffect, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { useRealtime } from "../lib/realtime"
 import { TariffNight } from "../components/ContractTariff"
@@ -55,6 +55,8 @@ import StayInstructions from "../components/StayInstructions"
 import { fmtMoney, moneyEps, useLocale } from "../lib/money"
 import { HOTKEY_EVENTS } from "../lib/hotkeys"
 import { t as translate, useUILanguage } from "../lib/i18n"
+
+const FixedChargesPanel = lazy(() => import("../components/FixedChargesPanel"))
 
 const inr = (n: number) => fmtMoney(Number(n || 0))
 
@@ -881,6 +883,11 @@ export default function ReservationDetail({
           </Card>
         )}
       </div>
+
+      {/* recurring fixed charges (Reservation Fixed Charge rows) */}
+      <Suspense fallback={null}>
+        <FixedChargesPanel reservation={name} status={d.status} />
+      </Suspense>
 
       {/* special requests - editable */}
       <Card icon={<FileText className="size-4" />} title={translate("Special requests")}>

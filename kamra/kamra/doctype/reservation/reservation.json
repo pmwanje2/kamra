@@ -144,7 +144,10 @@
   "night_rates",
   "rate_lock_key",
   "access_released",
-  "access_released_on"
+  "access_released_on",
+  "package_display_mode",
+  "sb_fixed_charges",
+  "fixed_charges"
  ],
  "fields": [
   {
@@ -1022,6 +1025,25 @@
    "fieldtype": "Table",
    "label": "Special Instructions",
    "options": "Stay Instruction"
+  },
+  {
+   "description": "Override how bundled package elements display on the guest folio (blank follows the package default).",
+   "fieldname": "package_display_mode",
+   "fieldtype": "Select",
+   "label": "Package Folio Display Mode",
+   "options": "\nInclusive\nSeparate Add-on"
+  },
+  {
+   "fieldname": "sb_fixed_charges",
+   "fieldtype": "Section Break",
+   "label": "Fixed Charges"
+  },
+  {
+   "description": "Recurring stay charges (Daily, Weekly, Stay Day N, On Arrival, On Departure) auto-posted idempotently.",
+   "fieldname": "fixed_charges",
+   "fieldtype": "Table",
+   "label": "Fixed Charges",
+   "options": "Reservation Fixed Charge"
   }
  ],
  "grid_page_length": 50,
