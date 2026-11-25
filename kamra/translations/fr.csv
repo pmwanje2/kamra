@@ -2825,3 +2825,13 @@ The exchange rate is set by the discount at posting.,Le taux de change est défi
 Total in rate currency,Total en devise tarifaire
 {0}: {1} ({2}),{0} : {1} ({2})
 Amounts marked ≈ are estimates.,Les montants précédés du signe ≈ sont des estimations.
+Invalid checkout reference.,La référence de réservation est invalide.
+This checkout reference belongs to a different booking.,Cette référence correspond à une autre réservation.
+This promo code is no longer available. Remove it and check the price again.,Ce code promotionnel n’est plus disponible. Retirez-le et vérifiez à nouveau le prix.
+Registration has already been submitted.,Le formulaire d’enregistrement a déjà été envoyé.
+Signed online,Signé en ligne
+Cart Checkout Snapshot,Instantané de validation du panier
+Check-In Link Expires At,Expiration du lien d’enregistrement
+Booked at Checkout,Réservé lors de la validation du panier
+Booked Tax Rate,Taux de taxe enregistré à la réservation
+Online registration evidence cannot be changed.,Les preuves de l’enregistrement en ligne ne peuvent pas être modifiées.

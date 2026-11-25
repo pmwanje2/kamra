@@ -4490,7 +4490,7 @@
         "kamra.api.send_precheckin_link"
        ]
       },
-      "description": "Send the guest their self check-in link (mints a token if needed). Sends\nover a connected channel when there is one; otherwise returns the link for\nthe desk to share. Marks when it went out so the arrivals board can show it;\na link nobody was sent is not marked.",
+      "description": "Rotate and send the guest's self check-in link. Sends\nover a connected channel when there is one; otherwise returns the link for\nthe desk to share. Marks when it went out so the arrivals board can show it;\na link nobody was sent is not marked.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"reservation\": \"RES-2026-00001\",\n  \"channel\": \"WhatsApp\"\n}",
@@ -20054,10 +20054,10 @@
         "kamra.public_api.create_multi_room_booking"
        ]
       },
-      "description": "Create all cart reservations in one transaction and return their reference.\n\nAccepts the same lines as cart_quote. The response includes the group\nreference for a multi-room booking and one pre-check-in token per\nconfirmed reservation.",
+      "description": "Create all cart reservations in one transaction and return their reference.\n\nAccepts the same lines as cart_quote. The response includes the group\nreference for a multi-room booking and one pre-check-in token per\nconfirmed reservation. Send the same idempotency key and payload to\nretry a completed checkout after a dropped response.",
       "body": {
        "mode": "raw",
-       "raw": "{\n  \"property\": \"Your Property\",\n  \"lines\": \"<lines>\",\n  \"guest_name\": \"A. Guest\",\n  \"phone\": \"+91 90000 00000\",\n  \"email\": \"guest@example.com\",\n  \"special_requests\": \"\",\n  \"marketing_consent\": 0\n}",
+       "raw": "{\n  \"property\": \"Your Property\",\n  \"lines\": \"<lines>\",\n  \"guest_name\": \"A. Guest\",\n  \"phone\": \"+91 90000 00000\",\n  \"email\": \"guest@example.com\",\n  \"special_requests\": \"\",\n  \"marketing_consent\": 0,\n  \"idempotency_key\": \"\"\n}",
        "options": {
         "raw": {
          "language": "json"

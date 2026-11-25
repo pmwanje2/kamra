@@ -1880,7 +1880,7 @@ Rooms × dates grid with reservation bars - the front desk's home.
 
 **POST** · roles: `Front Desk`, `Kamra Agent`
 
-Send the guest their self check-in link (mints a token if needed). Sends
+Rotate and send the guest's self check-in link. Sends
 over a connected channel when there is one; otherwise returns the link for
 the desk to share. Marks when it went out so the arrivals board can show it;
 a link nobody was sent is not marked.
@@ -8251,7 +8251,8 @@ Create all cart reservations in one transaction and return their reference.
 
 Accepts the same lines as cart_quote. The response includes the group
 reference for a multi-room booking and one pre-check-in token per
-confirmed reservation.
+confirmed reservation. Send the same idempotency key and payload to
+retry a completed checkout after a dropped response.
 
 | Param | Required | Default |
 | --- | --- | --- |
@@ -8262,6 +8263,7 @@ confirmed reservation.
 | `email` | no | `''` |
 | `special_requests` | no | `''` |
 | `marketing_consent` | no | `0` |
+| `idempotency_key` | no | `''` |
 
 ### `kamra.public_api.book` <Badge type='tip' text='public' />
 

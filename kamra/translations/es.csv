@@ -1218,3 +1218,35 @@ Discount currency must be a valid currency code.,La moneda del descuento debe se
 Discount currency {0} is not valid for this stay. Use {1}.,La moneda del descuento {0} no es válida para esta estancia. Use {1}.
 No exchange rate available for {0} to {1}.,No hay un tipo de cambio disponible de {0} a {1}.
 [SITEOPS-DOA-LIMIT] Discount {0} exceeds supervisor approval limit {1}.,[SITEOPS-DOA-LIMIT] El descuento de {0} supera el límite de aprobación del supervisor ({1}).
+Invalid checkout reference.,La referencia de la reserva no es válida.
+This checkout reference belongs to a different booking.,Esta referencia pertenece a otra reserva.
+This promo code is no longer available. Remove it and check the price again.,Este código promocional ya no está disponible. Elimínalo y vuelve a consultar el precio.
+Registration has already been submitted.,El registro ya se ha enviado.
+Signed online,Firmado en línea
+Cart Checkout Snapshot,Instantánea de compra de la cesta
+Check-In Link Expires At,Caducidad del enlace de registro
+Booked at Checkout,Contratado al efectuar la reserva
+Booked Tax Rate,Tipo impositivo de la reserva
+A selected add-on is no longer available.,Un complemento seleccionado ya no está disponible.
+A selected meal plan is no longer available.,El régimen de comidas seleccionado ya no está disponible.
+A selected room type is no longer available.,Un tipo de habitación seleccionado ya no está disponible.
+Choose a future stay of one to 30 nights.,Elige una estancia futura de 1 a 30 noches.
+Choose between one and eight rooms.,Elige entre una y ocho habitaciones.
+Enter a valid arrival time.,Introduce una hora de llegada válida.
+Enter an age for each child.,Introduce la edad de cada menor.
+Enter valid stay dates.,Introduce fechas válidas para la estancia.
+Invalid booking add-ons.,Los complementos de la reserva no son válidos.
+Invalid number of guests or pets.,La cantidad de huéspedes o mascotas no es válida.
+Invalid occupant details.,Los datos de los ocupantes no son válidos.
+Invalid room cart.,La cesta de habitaciones no es válida.
+One or more rooms in your cart are no longer available for the selected dates.,Una o más habitaciones de tu cesta ya no están disponibles para las fechas seleccionadas.
+Online booking is unavailable for this property.,Este alojamiento no admite reservas en línea.
+Please accept the registration declaration.,Acepta la declaración de registro.
+Please fill in the required details.,Completa los campos obligatorios.
+Select a room that fits all guests.,Selecciona una habitación con capacidad para todos los huéspedes.
+Some booking details are invalid.,Algunos datos de la reserva no son válidos.
+The ID photo is invalid.,La foto del documento de identidad no es válida.
+The signature is invalid.,La firma no es válida.
+These dates need a stay of at least {0} nights.,Estas fechas requieren una estancia de al menos {0} noches.
+This property does not allow pets.,Este alojamiento no admite mascotas.
+Online registration evidence cannot be changed.,No se pueden modificar los datos que acreditan el registro en línea.

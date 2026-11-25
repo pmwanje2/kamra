@@ -26,6 +26,7 @@
   "channel_review_needed",
   "channel_review_reason",
   "idempotency_key",
+  "cart_checkout_snapshot",
   "hold_expires_on",
   "travel_agent",
   "commission_amount",
@@ -91,6 +92,7 @@
   "special_requests",
   "sb_precheckin",
   "precheckin_token",
+  "precheckin_token_expires_at",
   "precheckin_status",
   "precheckin_on",
   "precheckin_signature",
@@ -245,6 +247,15 @@
    "fieldtype": "Data",
    "label": "Idempotency Key",
    "read_only": 1
+  },
+  {
+   "fieldname": "cart_checkout_snapshot",
+   "fieldtype": "JSON",
+   "label": "Cart Checkout Snapshot",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1,
+   "permlevel": 1
   },
   {
    "description": "When set, Held / Pending Payment auto-cancels after this time.",
@@ -653,7 +664,18 @@
    "fieldtype": "Data",
    "hidden": 1,
    "label": "Pre-checkin Token",
-   "no_copy": 1
+   "no_copy": 1,
+   "read_only": 1,
+   "permlevel": 1
+  },
+  {
+   "fieldname": "precheckin_token_expires_at",
+   "fieldtype": "Datetime",
+   "label": "Check-In Link Expires At",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1,
+   "permlevel": 1
   },
   {
    "default": "Not Started",

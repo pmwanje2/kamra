@@ -11,6 +11,8 @@ from __future__ import annotations
 import json
 from decimal import ROUND_HALF_UP, Decimal
 
+from collections import defaultdict
+
 import frappe
 from frappe import _
 from frappe.utils import cint, date_diff, flt, getdate, now_datetime
@@ -119,7 +121,7 @@ def save_fixed_charge(reservation: str, row_data) -> dict:
 	return _save_fixed_charge(reservation, row_data)
 
 
-def _save_fixed_charge(reservation: str, row_data) -> dict:
+def _save_fixed_charge(reservation: str, row_data, *, booked_tax_rate=None) -> dict:
 	"""Shared writer for authorized desk and server-priced direct bookings."""
 	res = _reservation_meta(reservation)
 	if res.status in CLOSED_STATUSES:
@@ -208,6 +210,9 @@ def _save_fixed_charge(reservation: str, row_data) -> dict:
 		"supplement": supplement,
 		"active": active,
 	}
+
+	if booked_tax_rate is not None and not row_name:
+		payload.update(booked_at_checkout=1, booked_tax_rate=booked_tax_rate)
 
 	if row_name:
 		if not frappe.db.exists(
@@ -390,6 +395,27 @@ def _resolve_window_folio(
 	return extras[target_idx]
 
 
+def booked_charge_amount(row) -> tuple[Decimal, Decimal]:
+	"""The booked net and tax of one public upsell, across its booked dates."""
+	times = date_diff(row["end_date"], row["start_date"]) + 1 if row["frequency"] == "Daily" else 1
+	net = _dec(row["qty"]) * _dec(row["unit_price"]) * times
+	return net, net * _dec(row.get("booked_tax_rate")) / 100
+
+
+def booked_upsell_totals(reservations: list[str]) -> dict[str, Decimal]:
+	"""Expected add-on totals from the same booked rows the folio will post."""
+	totals = defaultdict(Decimal)
+	for row in frappe.get_all(
+		"Reservation Fixed Charge",
+		filters={"parent": ("in", reservations), "parenttype": "Reservation",
+		         "parentfield": "fixed_charges", "booked_at_checkout": 1, "active": 1},
+		fields=["parent", "frequency", "start_date", "end_date", "qty", "unit_price", "booked_tax_rate"],
+	):
+		net, tax = booked_charge_amount(row)
+		totals[row.parent] += net + tax
+	return totals
+
+
 def post_fixed_charges_for_date(
 	res,
 	business_date,
@@ -419,6 +445,7 @@ def post_fixed_charges_for_date(
 			"name", "transaction_code", "charge_type", "description",
 			"qty", "currency", "unit_price", "frequency", "stay_day_n", "day_of_week",
 			"start_date", "end_date", "window_no", "supplement", "post_count",
+			"booked_at_checkout", "booked_tax_rate",
 		],
 		order_by="idx asc, creation asc",
 	)
@@ -449,7 +476,7 @@ def post_fixed_charges_for_date(
 		) or {}
 		charge_type = row.charge_type or tc.get("charge_type") or "Misc"
 		is_alcohol = cint(tc.get("is_alcohol") or 0)
-		gst_rate = flt(tc.get("default_tax_rate") or 0)
+		gst_rate = flt(row.booked_tax_rate if row.booked_at_checkout else tc.get("default_tax_rate"))
 
 		qty = _dec(row.qty or 1)
 		currency = (row.get("currency") or "").strip().upper() or home

@@ -91,6 +91,7 @@ def erase_guest(guest: str, reason: str = "request") -> dict:
 		changes = {
 			"booked_by_phone": "", "precheckin_signature": None, "precheckin_registration": None,
 			"precheckin_billing_address": None, "precheckin_consent_ip": None,
+			"precheckin_token": None, "precheckin_token_expires_at": None,
 		}
 		if res.get("precheckin_address_file"):
 			counts["files"] += _delete_files("Reservation", r, url=res.precheckin_address_file)

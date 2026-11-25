@@ -756,7 +756,8 @@ def sign_registration_card(reservation: str, signature: str | None = None,
 	signed = bool(signature and str(signature).startswith("data:image"))
 	if not signed and not cint(on_paper):
 		frappe.throw(_("Have the guest sign on screen, or tick that they signed the printed card."))
-	if signed:
+	online_consent = frappe.db.get_value("Reservation", res.name, "precheckin_terms_version", for_update=True)
+	if signed and not online_consent:
 		if len(signature) > 400_000:
 			frappe.throw(_("That signature image is too large."))
 		frappe.db.set_value("Reservation", res.name, {
@@ -764,8 +765,9 @@ def sign_registration_card(reservation: str, signature: str | None = None,
 		}, update_modified=False)
 		res.precheckin_signature = signature
 	record_step(res, "registration_card", "done",
-	            note=_("Signed on screen") if signed else _("Signed on paper"),
-	            method="screen" if signed else "paper")
+	            note=_("Signed online") if online_consent else
+	                  (_("Signed on screen") if signed else _("Signed on paper")),
+	            method="online" if online_consent else ("screen" if signed else "paper"))
 	return checkin_flow(reservation)
 
 

@@ -6164,12 +6164,16 @@ def _stay_balances(names: list) -> dict:
 	if due_out:
 		projected, unavailable = _checkout_projection(due_out)
 		folios.update(projected)
-	from kamra.ledger import _currency_places, _money, _round_currency
+	from kamra.fixed_charges import booked_upsell_totals
+	from kamra.ledger import _currency_places, _money, _round_currency, round_money
+	upsells = booked_upsell_totals(names)
 	out = {}
 	for name, res in resv.items():
 		folio = folios.get(name)
 		places = max(_currency_places(res.get("property")), 2)
 		total_booked = float(res.amount_after_tax or 0)
+		if name in upsells:
+			total_booked = round_money(_money(total_booked) + upsells[name], res.property)
 		adv = float(res.advance_paid or 0)
 		ended = res.status in ("No Show", "Cancelled")
 		if folio and (ended or res.status in ("Checked In", "Checked Out")):
@@ -8258,22 +8262,25 @@ def tape_chart(property: str, start_date: str | None = None, days: int = 14):
 @frappe.whitelist(methods=["POST"])
 @require_roles("Front Desk", "Kamra Agent")
 def send_precheckin_link(reservation: str, channel: str = "WhatsApp"):
-	"""Send the guest their self check-in link (mints a token if needed). Sends
+	"""Rotate and send the guest's self check-in link. Sends
 	over a connected channel when there is one; otherwise returns the link for
 	the desk to share. Marks when it went out so the arrivals board can show it;
 	a link nobody was sent is not marked."""
+	from kamra.precheckin_links import active, new_link_fields
+
 	res = frappe.db.get_value(
 		"Reservation", reservation,
-		["name", "property", "guest", "guest_name", "precheckin_token"],
-		as_dict=True)
+		["name", "property", "guest", "guest_name", "status", "check_out_date"],
+		as_dict=True, for_update=True)
 	if not res:
 		frappe.throw("Reservation not found.")
-	if not res.precheckin_token:
-		res.precheckin_token = frappe.generate_hash(length=32)
-		frappe.db.set_value("Reservation", reservation, "precheckin_token",
-		                    res.precheckin_token)
+	if not active(res):
+		frappe.throw(_("This check-in link is not valid anymore."))
+	link_fields = new_link_fields(res)
+	link_fields["precheckin_link_sent"] = None
+	frappe.db.set_value("Reservation", reservation, link_fields)
 
-	link = public_url(f"checkin/{res.precheckin_token}")
+	link = public_url(f"checkin/{link_fields['precheckin_token']}")
 	phone = frappe.db.get_value("Guest", res.guest, "phone") if res.guest else None
 	sent = False
 	if phone:

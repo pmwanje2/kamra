@@ -298,11 +298,10 @@ class Reservation(Document):
 		self.ota_live_key = desired
 
 	def after_insert(self):
-		# every booking gets a pre-arrival check-in link
-		self.db_set(
-			"precheckin_token", frappe.generate_hash(length=24),
-			update_modified=False,
-		)
+		from kamra.precheckin_links import REVOKED_STATUSES, new_link_fields
+
+		if self.status not in REVOKED_STATUSES:
+			self.db_set(new_link_fields(self), update_modified=False)
 		if self.voucher:
 			from kamra.pricing import consume_voucher_use
 			consume_voucher_use(self.voucher)
@@ -481,6 +480,11 @@ class Reservation(Document):
 		# and cleared only through clear_channel_review (role check + audit log).
 		# Any insert with them set or save that changes them is refused.
 		prev_doc = None if self.is_new() else self.get_doc_before_save()
+		if prev_doc and prev_doc.get("precheckin_terms_version"):
+			evidence = ("precheckin_on", "precheckin_consent_ip", "precheckin_consent",
+			            "precheckin_signature", "precheckin_terms_version")
+			if any(str(self.get(key) or "") != str(prev_doc.get(key) or "") for key in evidence):
+				frappe.throw(_("Online registration evidence cannot be changed."))
 		prev_review = 0 if not prev_doc else cint(prev_doc.get("channel_review_needed"))
 		prev_reason = "" if not prev_doc else (prev_doc.get("channel_review_reason") or "")
 		if cint(self.get("channel_review_needed")) != prev_review or (self.get("channel_review_reason") or "") != prev_reason:
@@ -504,6 +508,10 @@ class Reservation(Document):
 		self.nights = date_diff(self.check_out_date, self.check_in_date)
 		self.validate_minimum_nights()
 		self.validate_status_transition()
+		from kamra.precheckin_links import REVOKED_STATUSES
+		if self.status in REVOKED_STATUSES:
+			self.precheckin_token = None
+			self.precheckin_token_expires_at = None
 		self.validate_blacklist()
 		self.validate_occupancy()
 		self.default_occupant_nationality()
@@ -1179,6 +1187,8 @@ class Reservation(Document):
 				round(flt(row.get("qty")), 6),
 				round(flt(row.get("unit_price")), 6),
 				(row.get("currency") or "").strip().upper(),
+				cint(row.get("booked_at_checkout")),
+				round(flt(row.get("booked_tax_rate")), 6),
 				(row.get("frequency") or "").strip(),
 				cint(row.get("stay_day_n") or 0),
 				(row.get("day_of_week") or "").strip(),

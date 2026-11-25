@@ -392,3 +392,13 @@ Property accounting currency,عملة المحاسبة للمنشأة
 Total in rate currency,الإجمالي بعملة السعر
 1 {0} = {1} {2},1 {0} = {1} {2}
 Amounts marked ≈ are estimates.,المبالغ المميزة بالرمز ≈ تقديرية.
+Invalid checkout reference.,مرجع إتمام الحجز غير صالح.
+This checkout reference belongs to a different booking.,هذا المرجع يخص حجزًا آخر.
+This promo code is no longer available. Remove it and check the price again.,لم يعد هذا الرمز الترويجي متاحًا. أزله وتحقّق من السعر مرة أخرى.
+Registration has already been submitted.,تم إرسال بيانات التسجيل بالفعل.
+Signed online,تم التوقيع عبر الإنترنت
+Cart Checkout Snapshot,لقطة إتمام حجز السلة
+Check-In Link Expires At,انتهاء صلاحية رابط تسجيل الوصول
+Booked at Checkout,تم حجزه عند إتمام الشراء
+Booked Tax Rate,معدل الضريبة عند الحجز
+Online registration evidence cannot be changed.,لا يمكن تغيير إثبات التسجيل عبر الإنترنت.

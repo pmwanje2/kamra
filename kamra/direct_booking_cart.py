@@ -1,6 +1,8 @@
 """Public cart orchestration over the existing reservation and folio writers."""
 
 import json
+import re
+from hashlib import sha256
 from collections import Counter, defaultdict
 from datetime import date
 from decimal import Decimal
@@ -121,7 +123,7 @@ def _parse_lines(lines) -> list[dict]:
 			frappe.throw(_("Invalid room cart."))
 		ci = _stay_date(raw.get("check_in_date"))
 		co = _stay_date(raw.get("check_out_date"))
-		if ci < today() or not 1 <= date_diff(co, ci) <= MAX_NIGHTS:
+		if not 1 <= date_diff(co, ci) <= MAX_NIGHTS:
 			frappe.throw(_("Choose a future stay of one to 30 nights."))
 		upsells = raw.get("upsells", [])
 		if not isinstance(upsells, list) or len(upsells) > MAX_UPSELLS:
@@ -146,11 +148,41 @@ def _parse_lines(lines) -> list[dict]:
 	return parsed
 
 
+def _assign_continuous_rooms(lines: list[dict], choices: list[set]) -> None:
+	"""Find a room for every stay, reusing a room only for disjoint dates."""
+	order = sorted(range(len(lines)), key=lambda i: len(choices[i]))
+	overlaps = [
+		{j for j, other in enumerate(lines)
+		 if line["check_in_date"] < other["check_out_date"] and other["check_in_date"] < line["check_out_date"]}
+		for line in lines
+	]
+	assigned = {}
+
+	def place(offset):
+		if offset == len(order):
+			return True
+		index = order[offset]
+		busy = {room for i, room in assigned.items() if i in overlaps[index]}
+		for room in sorted(choices[index] - busy, key=lambda name: name or ""):
+			assigned[index] = room
+			if place(offset + 1):
+				return True
+		assigned.pop(index, None)
+		return False
+
+	if not place(0):
+		_refuse_inventory()
+	for index, room in assigned.items():
+		lines[index]["assigned_room"] = room
+
+
 def _check_inventory(property: str, lines: list[dict]) -> None:
-	from kamra.api import _available_rooms_raw, _sellable_room_types
+	from kamra.api import _available_rooms_raw, _sellable_room_types, in_house_rooms
+	from kamra.reservation_state import LIVE_STATUSES
 	from kamra.siu.availability import availability, has_active_sius
 
 	demand = defaultdict(Counter)
+	choices = []
 	sides = defaultdict(set)
 	sellable = _sellable_room_types(property, list(dict.fromkeys(line["room_type"] for line in lines)))
 	for line in lines:
@@ -159,12 +191,32 @@ def _check_inventory(property: str, lines: list[dict]) -> None:
 		if room_type not in sellable or villa_lockout_conflict(property, room_type, ci, co, for_update=True):
 			_refuse_inventory()
 		units = None
+		virtual = uses_member_rooms(property, room_type)
 		if has_active_sius(property, room_type):
 			units = availability(property, room_type=room_type, check_in_date=ci, check_out_date=co)
-			if not any(unit["sellable"] for unit in units):
+			sellable_units = [unit for unit in units if unit["sellable"]]
+			if not sellable_units:
 				_refuse_inventory()
-		elif not uses_member_rooms(property, room_type) and not _available_rooms_raw(property, room_type, ci, co):
-			_refuse_inventory()
+			rooms = [room for unit in sellable_units for room in unit["rooms"]
+			         if room["housekeeping_status"] != "Out of Service"]
+		elif virtual:
+			rooms = []
+		else:
+			rooms = _available_rooms_raw(property, room_type, ci, co, exclude_out_of_service=True)
+		available = {room["name"] for room in rooms}
+		if available:
+			# Legacy room queries omit some held statuses. Use the same live
+			# status set as the Reservation writer, including day-use holds.
+			bookings = frappe.get_all("Reservation", filters={
+				"property": property, "room": ("in", sorted(available)),
+				"status": ("in", sorted(LIVE_STATUSES)), "check_in_date": ("<", co),
+				"check_out_date": (">=", ci),
+			}, fields=["room", "check_in_date", "check_out_date"])
+			available -= {row.room for row in bookings
+			              if str(row.check_out_date) > ci or str(row.check_in_date) == ci}
+			if ci <= today():
+				available -= in_house_rooms(property)
+		choices.append({None} if virtual else available)
 		side = is_entire_place(room_type)
 		for offset in range(date_diff(co, ci)):
 			night = str(add_days(ci, offset))
@@ -190,8 +242,12 @@ def _check_inventory(property: str, lines: list[dict]) -> None:
 			frappe.clear_messages()
 			_refuse_inventory()
 
+	_assign_continuous_rooms(lines, choices)
+
 
 def _price_upsells(prop, line: dict, options: dict, guests: int) -> tuple[list[dict], Decimal, Decimal]:
+	from kamra.fixed_charges import booked_charge_amount
+
 	charges = []
 	base = tax = Decimal(0)
 	for name in line["upsells"]:
@@ -201,23 +257,25 @@ def _price_upsells(prop, line: dict, options: dict, guests: int) -> tuple[list[d
 		basis, code = option["basis"], option["code"]
 		price = round_money(option["price"], prop.name)
 		qty = guests if basis == "Per guest" else 1
-		repetitions = date_diff(line["check_out_date"], line["check_in_date"]) if basis == "Per night" else 1
-		net = Decimal(str(price)) * qty * repetitions
-		base += net
-		tax += net * Decimal(str(code.default_tax_rate or 0)) / 100
-		charges.append({
+		row = {
 			"transaction_code": code.name, "charge_type": code.charge_type or "Misc",
 			"description": option["label"], "qty": qty, "unit_price": price,
+			"booked_tax_rate": float(code.default_tax_rate or 0),
+			"start_date": line["check_in_date"],
 			"end_date": add_days(line["check_out_date"], -1) if basis == "Per night" else line["check_out_date"],
 			"frequency": "On Departure" if basis == "Per stay" and code.charge_type == "Late Checkout"
 			else BASES[basis],
-		})
+		}
+		net, row_tax = booked_charge_amount(row)
+		base += net
+		tax += row_tax
+		charges.append(row)
 	return charges, base, tax
 
 
 def _price_line(prop, line: dict, rates: set, default_rate: str | None, meals: set, upsells: dict) -> dict:
 	from kamra.pricing import ContractRateRefused, capacity_overflow, resolve_booking_rate_plan
-	from kamra.public_api import NO_RATE_AVAILABLE, _party, _quote_public_stay, _usable_voucher
+	from kamra.public_api import NO_RATE_AVAILABLE, _party, _quote_public_stay
 	from kamra.restrictions import evaluate_stay_restrictions
 
 	rt = frappe.db.get_value("Room Type", line["room_type"], ["property", "disabled"], as_dict=True)
@@ -238,7 +296,9 @@ def _price_line(prop, line: dict, rates: set, default_rate: str | None, meals: s
 	if above:
 		frappe.throw(_("Select a room that fits all guests."))
 	ci, co = line["check_in_date"], line["check_out_date"]
-	voucher = _usable_voucher(prop.name, line["voucher_code"], date_diff(co, ci))
+	if ci < today():
+		frappe.throw(_("Choose a future stay of one to 30 nights."))
+	voucher = line["voucher_code"] or None
 	try:
 		rate = resolve_booking_rate_plan(
 			prop.name, rtd.name, ci, co, rate_plan=requested_rate,
@@ -295,14 +355,29 @@ def _summary(prop, rows: list[dict]) -> dict:
 	}
 
 
-def _prepare(property: str, lines) -> tuple:
+def _validate_cart_vouchers(property: str, lines: list[dict]) -> None:
+	from kamra.pricing import validate_voucher
+
+	try:
+		requested = Counter()
+		for line in lines:
+			if line["voucher_code"]:
+				nights = date_diff(line["check_out_date"], line["check_in_date"])
+				voucher = validate_voucher(property, line["voucher_code"], nights)
+				requested[voucher.name] += 1
+		for name, uses in sorted(requested.items()):
+			row = frappe.db.get_value("Discount Voucher", name, ["max_uses", "times_used"],
+			                          as_dict=True, for_update=True)
+			if not row or (row.max_uses and (row.times_used or 0) + uses > row.max_uses):
+				raise frappe.ValidationError
+	except frappe.ValidationError:
+		frappe.clear_messages()
+		frappe.throw(_("This promo code is no longer available. Remove it and check the price again."))
+
+
+def _prepare(property: str, lines: list[dict]) -> tuple:
 	from kamra.public_api import _public_default_rate_plan
 
-	property = text(property, 140, required=True)
-	lines = _parse_lines(lines)
-	# Acquire before any database snapshot so a waiting transaction sees
-	# the preceding commit in the shared availability queries as well.
-	lock_property_for_inventory(property)
 	if not frappe.db.exists("Property", {"name": property, "booking_engine_enabled": 1, "disabled": 0}):
 		frappe.throw(_("Online booking is unavailable for this property."))
 	prop = frappe.get_cached_doc("Property", property)
@@ -310,6 +385,7 @@ def _prepare(property: str, lines) -> tuple:
 	rates = {p["name"] for p in public_rate_plans(property, default)}
 	meals = set(frappe.get_all("Meal Plan", filters={"property": property, "disabled": 0}, pluck="name"))
 	upsells = public_upsells(property)
+	_validate_cart_vouchers(property, lines)
 	priced = [_price_line(prop, line, rates, default["name"] if default else None, meals, upsells)
 	          for line in lines]
 	_check_inventory(property, priced)
@@ -317,6 +393,9 @@ def _prepare(property: str, lines) -> tuple:
 
 
 def quote(property: str, lines) -> dict:
+	property = text(property, 140, required=True)
+	lines = _parse_lines(lines)
+	lock_property_for_inventory(property)
 	prop, priced = _prepare(property, lines)
 	totals = [_line_totals(prop, line, line["room_total"], line["room_tax"]) for line in priced]
 	return {**_summary(prop, totals), "lines": totals}
@@ -337,12 +416,13 @@ def _insert_group(prop, priced: list[dict], guest_name: str, mode: str):
 
 
 def book(property: str, lines, guest_name: str, phone: str, email: str = "",
-         special_requests: str = "", marketing_consent: int = 0) -> dict:
+         special_requests: str = "", marketing_consent: int = 0, idempotency_key: str = "") -> dict:
 	from kamra.api import create_booking
 	from kamra.authz import act_as
 	from kamra.fixed_charges import _save_fixed_charge
 	from kamra.public_api import GUEST_AGENT
 	from kamra.reservation_state import resolve_instant_status
+	from kamra.settings import get_setting
 
 	guest_name = text(guest_name, 140, required=True)
 	phone = text(phone, 50, required=True)
@@ -351,8 +431,29 @@ def book(property: str, lines, guest_name: str, phone: str, email: str = "",
 		frappe.utils.validate_email_address(email, throw=True)
 	special_requests = text(special_requests, 2000)
 	marketing_consent = number(marketing_consent, 0, 1)
+	property = text(property, 140, required=True)
+	lines = _parse_lines(lines)
+	key = text(idempotency_key, 128)
+	if key and not re.fullmatch(r"[A-Za-z0-9_-]{16,128}", key):
+		frappe.throw(_("Invalid checkout reference."))
+	lock_property_for_inventory(property)
+	booking_key = fingerprint = None
+	if key:
+		booking_key = "direct-cart:" + sha256(key.encode()).hexdigest()
+		fingerprint = sha256(json.dumps(
+			[lines, guest_name, phone, email, special_requests, marketing_consent],
+			sort_keys=True, ensure_ascii=False,
+		).encode()).hexdigest()
+		saved = frappe.db.get_value("Reservation", {"property": property, "idempotency_key": booking_key},
+		                            "cart_checkout_snapshot", for_update=True)
+		if saved:
+			snapshot = frappe.parse_json(saved)
+			if snapshot["request"] != fingerprint:
+				frappe.throw(_("This checkout reference belongs to a different booking."))
+			return _replay_checkout(snapshot["result"])
 	prop, priced = _prepare(property, lines)
 	mode = prop.get("booking_mode") or "Instant"
+	assign_rooms = mode != "Request to Book" and get_setting(prop.name, "assign_room_on_booking")
 	results = []
 	frappe.db.savepoint("direct_booking_cart")
 	previous = frappe.flags.kamra_atomic_booking_cart
@@ -360,7 +461,7 @@ def book(property: str, lines, guest_name: str, phone: str, email: str = "",
 	try:
 		with act_as(GUEST_AGENT):
 			group = _insert_group(prop, priced, guest_name, mode)
-			for line in priced:
+			for index, line in enumerate(priced):
 				estimated = _line_totals(prop, line, line["room_total"], line["room_tax"])
 				requested = mode == "Request to Book"
 				status, expires = ("Requested", None) if requested else resolve_instant_status(
@@ -370,13 +471,15 @@ def book(property: str, lines, guest_name: str, phone: str, email: str = "",
 					property=prop.name, guest_name=guest_name, phone=phone, source="Website",
 					group_booking=group.name if group else None,
 					booking_type="Group" if group else "Individual",
-					status=status, assign_room=int(not requested), hold_expires_on=str(expires) if expires else None,
+					status=status, assign_room=0, hold_expires_on=str(expires) if expires else None,
+					room=line["assigned_room"] if assign_rooms else None,
+					idempotency_key=booking_key if index == 0 else None,
 					**{key: line[key] for key in ("room_type", "check_in_date", "check_out_date",
 					   "adults", "children", "stay_details", "meal_plan", "rate_plan", "pets", "voucher_code")},
 				)
 				res = frappe.get_doc("Reservation", booked["reservation"])
 				for charge in line["charges"]:
-					_save_fixed_charge(res.name, charge)
+					_save_fixed_charge(res.name, charge, booked_tax_rate=charge["booked_tax_rate"])
 				totals = _line_totals(prop, line, res.amount_after_tax, res.get("tax_amount"))
 				updated = {key: totals[key] for key in ("advance_due", "payment_policy")}
 				updated["is_pay_at_hotel"] = int(totals["balance_at_hotel"] > 0)
@@ -392,6 +495,14 @@ def book(property: str, lines, guest_name: str, phone: str, email: str = "",
 			if marketing_consent:
 				from kamra.privacy import set_marketing_consent
 				set_marketing_consent(res.guest, 1, "Booking Page", prop.name)
+			result = {
+				**_summary(prop, results), "reservations": results,
+				"group_booking": group.name if group else None,
+				"confirmation": group.name if group else results[0]["reservation"],
+			}
+			if booking_key:
+				frappe.db.set_value("Reservation", results[0]["reservation"], "cart_checkout_snapshot",
+				                    frappe.as_json({"request": fingerprint, "result": result}))
 	except frappe.QueryDeadlockError:
 		raise
 	except Exception:
@@ -399,8 +510,17 @@ def book(property: str, lines, guest_name: str, phone: str, email: str = "",
 		raise
 	finally:
 		frappe.flags.kamra_atomic_booking_cart = previous
-	return {
-		**_summary(prop, results), "reservations": results,
-		"group_booking": group.name if group else None,
-		"confirmation": group.name if group else results[0]["reservation"],
-	}
+	return result
+
+
+def _replay_checkout(result: dict) -> dict:
+	"""Replay the price and confirmation without resurrecting a revoked link."""
+	from kamra.public_api import _precheckin_link_active
+
+	for booked in result["reservations"]:
+		token = booked.get("precheckin_token")
+		if token:
+			res = frappe.get_doc("Reservation", booked["reservation"])
+			if token != res.precheckin_token or not _precheckin_link_active(res):
+				booked["precheckin_token"] = None
+	return result

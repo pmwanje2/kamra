@@ -6,6 +6,7 @@ behind auth. Money still comes only from the pricing engine.
 """
 
 import base64
+from io import BytesIO
 import re
 from decimal import Decimal
 from hmac import compare_digest
@@ -18,6 +19,7 @@ from kamra.authz import act_as
 from kamra.booking_slugs import resolve_public_slug, slugify
 from kamra.branding import brand_context, brand_logo, product_name, white_label
 from kamra.install import AGENT_EMAIL
+from kamra.precheckin_links import active as _precheckin_link_active
 
 
 def _room_type_filters(property: str, listing_slug: str | None = None,
@@ -456,7 +458,7 @@ def showcase(property: str, listing_slug: str | None = None,
 		filters={"property": property, "disabled": 0,
 		         "show_on_booking_page": 1},
 		fields=["name", "experience_name", "category", "price", "duration",
-		        "description", "image_url", "gst_rate", "direct_booking_transaction_code"],
+		        "description", "image_url", "gst_rate"],
 		order_by="category asc",
 	)
 
@@ -479,8 +481,7 @@ def showcase(property: str, listing_slug: str | None = None,
 		"room_types": room_types,
 		"locations": locations,
 		"meal_plans": meal_plans,
-		"experiences": [{k: v for k, v in e.items() if k != "direct_booking_transaction_code"}
-		                for e in experiences if not e.direct_booking_transaction_code],
+		"experiences": experiences,
 		"cart_rate_plans": public_rate_plans(property, default_rp),
 		"cart_upsells": [{"name": row["name"], "label": row["label"],
 		                   "basis": row["basis"], "price": float(row["price"])}
@@ -665,7 +666,7 @@ def _res_by_token(token: str, *, for_update: bool = False):
 
 		lock_property_for_inventory(row.property)
 	res = frappe.get_doc("Reservation", row.name, for_update=for_update)
-	if not compare_digest(token, res.precheckin_token or ""):
+	if not compare_digest(token, res.precheckin_token or "") or not _precheckin_link_active(res):
 		frappe.throw(frappe._("This check-in link is not valid anymore."))
 	return res
 
@@ -846,6 +847,25 @@ def _save_id_image(owner: str, data_url: str,
 	return fdoc.file_url
 
 
+def _validate_registration_signature(signature: str) -> None:
+	from PIL import Image, ImageChops, UnidentifiedImageError
+
+	try:
+		match = re.fullmatch(r"data:image/png;base64,([A-Za-z0-9+/=]+)", signature) if len(signature) <= 512_000 else None
+		if not match:
+			raise ValueError
+		with Image.open(BytesIO(base64.b64decode(match[1], validate=True))) as image:
+			if image.format != "PNG" or image.width * image.height > 8_000_000 or getattr(image, "is_animated", False):
+				raise ValueError
+			signed = image.convert("RGBA")
+			paper = Image.new("RGBA", signed.size, "white")
+			visible = Image.alpha_composite(paper, signed).convert("RGB")
+			if not ImageChops.difference(paper.convert("RGB"), visible).getbbox():
+				raise ValueError
+	except (ValueError, OSError, UnidentifiedImageError, Image.DecompressionBombError):
+		frappe.throw(frappe._("The signature is invalid."))
+
+
 @frappe.whitelist(allow_guest=True, methods=["POST"])
 @rate_limit(limit=20, seconds=3600)
 def precheckin_submit(token: str, id_type: str, id_number: str,
@@ -865,6 +885,8 @@ def precheckin_submit(token: str, id_type: str, id_number: str,
 		frappe.throw(frappe._("This check-in link is not valid anymore."))
 	if res.precheckin_status == "Verified":
 		frappe.throw(frappe._("Check-in details were already verified by the desk."))
+	if res.precheckin_status == "Submitted" or res.get("precheckin_terms_version"):
+		frappe.throw(frappe._("Registration has already been submitted."))
 	if consent not in (1, "1"):
 		frappe.throw(frappe._("Please accept the registration declaration."))
 	registration = {
@@ -884,14 +906,7 @@ def precheckin_submit(token: str, id_type: str, id_number: str,
 	if eta and not re.fullmatch(r"(?:[01][0-9]|2[0-3]):[0-5][0-9]", eta):
 		frappe.throw(frappe._("Enter a valid arrival time."))
 	special_requests = text(special_requests, 2000)
-	if signature:
-		signature = text(signature, 512_000)
-		match = re.fullmatch(r"data:image/png;base64,([A-Za-z0-9+/=]+)", signature)
-		try:
-			if not match or not base64.b64decode(match[1], validate=True).startswith(b"\x89PNG\r\n\x1a\n"):
-				frappe.throw(frappe._("The signature is invalid."))
-		except ValueError:
-			frappe.throw(frappe._("The signature is invalid."))
+	_validate_registration_signature(signature)
 	if isinstance(occupants, str) and occupants:
 		try:
 			occupants = frappe.parse_json(text(occupants, 16_000))
@@ -904,7 +919,7 @@ def precheckin_submit(token: str, id_type: str, id_number: str,
 	updates = {
 		"precheckin_status": "Submitted", "precheckin_on": frappe.utils.now_datetime(),
 		"eta": eta or None, "special_requests": special_requests or res.special_requests,
-		"precheckin_signature": signature or None, "precheckin_consent": 1,
+		"precheckin_signature": signature, "precheckin_consent": 1,
 		"precheckin_registration": frappe.as_json(registration),
 		"precheckin_billing_address": billing_address or None,
 		"precheckin_consent_ip": getattr(frappe.local, "request_ip", None),
@@ -1161,18 +1176,20 @@ def cart_quote(property: str, lines: str | list):
 @rate_limit(limit=10, seconds=3600)
 def create_multi_room_booking(property: str, lines: str | list, guest_name: str,
                               phone: str, email: str = "", special_requests: str = "",
-                              marketing_consent: int = 0):
+                              marketing_consent: int = 0, idempotency_key: str = ""):
 	"""Create all cart reservations in one transaction and return their reference.
 
 	Accepts the same lines as cart_quote. The response includes the group
 	reference for a multi-room booking and one pre-check-in token per
-	confirmed reservation.
+	confirmed reservation. Send the same idempotency key and payload to
+	retry a completed checkout after a dropped response.
 	"""
 	from kamra.direct_booking_cart import book as book_cart
 
 	if hasattr(frappe.local, "response_headers"):
 		frappe.local.response_headers["Cache-Control"] = "no-store"
-	return book_cart(property, lines, guest_name, phone, email, special_requests, marketing_consent)
+	return book_cart(property, lines, guest_name, phone, email, special_requests, marketing_consent,
+	                 idempotency_key)
 
 
 @frappe.whitelist(allow_guest=True, methods=["POST"])
@@ -1214,8 +1231,7 @@ def book(property: str, room_type: str, check_in_date: str,
 		addons = frappe.parse_json(addons)
 	public_ids = set(frappe.get_all(
 		"Experience",
-		filters={"property": property, "disabled": 0, "show_on_booking_page": 1,
-		         "direct_booking_transaction_code": ("is", "not set")},
+		filters={"property": property, "disabled": 0, "show_on_booking_page": 1},
 		pluck="name",
 	))
 	safe_addons = [

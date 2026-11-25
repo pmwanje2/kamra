@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import { callGuest } from "../lib/api"
 import { useT } from "../lib/i18n"
@@ -50,7 +50,7 @@ interface CartProps {
   mealPlans?: { name: string; label: string }[]
   onUpsells: (index: number, upsells: string[]) => void
   onRemove: (index: number) => void
-  onPlan?: (index: number, kind: "rate_plan" | "meal_plan", value: string) => void
+  onPlan?: (index: number, kind: "rate_plan" | "meal_plan" | "voucher_code", value: string) => void
   disabled?: boolean
 }
 
@@ -114,6 +114,14 @@ export function DirectBookingCart({
               )}
             </div>
           )}
+          {line.voucher_code && onPlan && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+              <span>{t("Promo code")} <bdi>{line.voucher_code}</bdi></span>
+              <Button type="button" variant="ghost" onClick={() => onPlan(index, "voucher_code", "")}>
+                {t("Remove")}
+              </Button>
+            </div>
+          )}
           {upsells.length > 0 && (
             <div className="mt-3 border-t border-line pt-3">
               <h4 className="mb-2 text-sm font-semibold">{t("Booking add-ons")}</h4>
@@ -161,6 +169,7 @@ export function DirectBookingCheckout({
   const [done, setDone] = useState<CartConfirmation>()
   const [busy, setBusy] = useState(false)
   const [submitError, setSubmitError] = useState("")
+  const checkout = useRef<{ payload: string; key: string } | null>(null)
   const quote = pricing?.lines === lines ? pricing.quote ?? null : null
   const money = useCartMoney(done ?? quote)
 
@@ -188,11 +197,17 @@ export function DirectBookingCheckout({
     event.preventDefault()
     if (!quote || busy) return
     const guest = Object.fromEntries(new FormData(event.currentTarget))
+    const payload = { property, lines, ...guest, marketing_consent: guest.marketing_consent === "on" ? 1 : 0 }
+    const identity = JSON.stringify(payload)
+    if (checkout.current?.payload !== identity) {
+      const key = Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("")
+      checkout.current = { payload: identity, key }
+    }
     setSubmitError("")
     setBusy(true)
     try {
       const booked = await callGuest<CartConfirmation>("kamra.public_api.create_multi_room_booking", {
-        property, lines, ...guest, marketing_consent: guest.marketing_consent === "on" ? 1 : 0,
+        ...payload, idempotency_key: checkout.current.key,
       })
       setDone(booked)
       onBooked()
