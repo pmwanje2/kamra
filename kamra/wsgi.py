@@ -1,6 +1,7 @@
 """Mask deprecated approval fields before session initialization (remove in 2.10)."""
 import io
 import json
+import re
 
 from werkzeug.exceptions import BadRequest, RequestEntityTooLarge
 from werkzeug.formparser import MultiPartParser
@@ -8,6 +9,31 @@ from werkzeug.http import parse_options_header
 from werkzeug.wrappers import Request, Response
 
 _APPROVAL_METHODS = {"kamra.api.check_in", "kamra.api.move_reservation", "kamra.api.move_room"}
+
+# Preserve duplicate and malformed parameters that parse_options_header discards.
+_TOKEN = r"[!#$%&'*+.^_`|~0-9A-Za-z-]+"
+_PARAMETER = re.compile(rf';[ \t]*({_TOKEN})[ \t]*=[ \t]*({_TOKEN}|"(?:[^"\\\r\n]|\\[^\r\n])*")[ \t]*')
+
+
+def _validate_text_part(content_type):
+	media = content_type.partition(";")[0]
+	if media.strip().lower() != "text/plain":
+		raise BadRequest
+	pos = len(media)
+	seen_charset = False
+	while pos < len(content_type):
+		match = _PARAMETER.match(content_type, pos)
+		if not match:
+			raise BadRequest
+		name, value = match.groups()
+		name = name.lower()
+		if name == "charset":
+			if seen_charset or value.lower() not in ("utf-8", '"utf-8"'):
+				raise BadRequest
+			seen_charset = True
+		elif name.startswith("charset*"):
+			raise BadRequest
+		pos = match.end()
 
 
 class _ApprovalMultipartParser(MultiPartParser):
@@ -18,9 +44,11 @@ class _ApprovalMultipartParser(MultiPartParser):
 		disposition = headers.getlist("Content-Disposition")
 		if len(disposition) != 1 or parse_options_header(disposition[0])[0].lower() != "form-data":
 			raise BadRequest
-		if media and (len(media) != 1 or parse_options_header(media[0])[0].lower() != "text/plain"):
+		if len(media) > 1:
 			raise BadRequest
-		return super().get_part_charset(headers)
+		if media:
+			_validate_text_part(media[0])
+		return "utf-8"
 
 	def start_file_streaming(self, event, total_content_length):
 		raise BadRequest

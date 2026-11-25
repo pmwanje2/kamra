@@ -85,7 +85,6 @@ Room {0} is not a {1} room here.,La habitación {0} no es una habitación {1} aq
 Leaving early,Salida anticipada
 Room {0} not found.,No se encontró la habitación {0}.
 Only a housekeeping supervisor can set a room to {0}.,Solo un supervisor de pisos puede poner una habitación en {0}.
-Room {0} is not in this property.,La habitación {0} no es de esta propiedad.
 Unknown rate option: {0},Opción de tarifa desconocida: {0}
 "This change re-prices the stay from {0} to {1}. Show the guest the new price, then confirm it (confirm_price=1).",Este cambio vuelve a calcular el precio de la estancia de {0} a {1}. Muéstrele al huésped el nuevo precio y luego confírmelo (confirm_price=1).
 {0} cannot approve this. A rate correction needs a Finance or Hotel Admin user.,{0} no puede aprobar esto. Una corrección de tarifa necesita un usuario de Finanzas o administrador del hotel.
