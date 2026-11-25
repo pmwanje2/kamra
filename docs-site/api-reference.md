@@ -2447,13 +2447,12 @@ signed-in user have one set yet? Includes unlock / lockout state.
 
 **POST** · roles: `Finance`, `Front Desk`, `Revenue Manager`, `Housekeeping`, `F&B Manager`
 
-Set or change your own cashier PIN (4-8 digits). Changing an existing
-PIN needs the current one  -  unless must_reset was set by an admin.
+Enroll or rotate your approval PIN using your current account password.
 
 | Param | Required | Default |
 | --- | --- | --- |
-| `pin` | yes |  |
-| `current_pin` | no | `None` |
+| `pin_secret` | yes |  |
+| `current_password` | yes |  |
 
 ### `kamra.api.reset_cashier_pin`
 
@@ -2474,7 +2473,7 @@ PinPad unlock: validate PIN and open a 15-minute sliding window.
 | Param | Required | Default |
 | --- | --- | --- |
 | `property` | yes |  |
-| `pin` | yes |  |
+| `pin_secret` | yes |  |
 
 ### `kamra.api.group_price_preview`
 

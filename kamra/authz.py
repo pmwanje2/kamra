@@ -44,8 +44,13 @@ PIN_LOCK_MINUTES = 15
 PIN_HASH_ROUNDS = 600_000
 _PIN_FIELDS = frozenset({
 	"pin", "current_pin", "new_pin", "confirm_pin", "supervisor_pin", "comp_supervisor_pin",
-	"override_pin", "approver_pin", "manager_pin", "password", "current_password",
+	"override_pin", "approver_pin", "manager_pin", "pin_secret", "confirm_pin_secret", "password", "current_password",
 })
+# Frappe sanitizes these names in Error Log metadata before before_request runs.
+_PIN_HTTP_FIELDS = {
+	"kamra.api.set_cashier_pin": {"pin_secret": "pin", "current_password": "current_password"},
+	"kamra.api.verify_cashier_pin": {"pin_secret": "pin"},
+}
 _PIN_ATTEMPT_DOCTYPE = "Cashier PIN Attempt"
 _FLOOR_PIN_PARENT = "SiteOps Floor PIN"
 _FLOOR_PIN_HASH = "siteops_floor_pin_hash"
@@ -556,13 +561,19 @@ def scrub_pin_arguments(fn):
 		             for i, value in enumerate(args))
 		kwargs = {key: _protect_pin(value) if key in _PIN_FIELDS else value for key, value in kwargs.items()}
 		_scrub_pin_from_form_dict()
+		request = getattr(frappe.local, "request", None)
+		wire_fields = _PIN_HTTP_FIELDS.get(method) if request is not None else None
+		if wire_fields is not None:
+			# Requests may supply only the sanitizer-compatible credential names.
+			kwargs = {wire_fields.get(key, key): value for key, value in kwargs.items()
+			          if key in wire_fields or key not in _PIN_FIELDS}
 		staged = getattr(frappe.local, "kamra_pin_arguments", None)
 		if staged and staged[0] == method:
 			frappe.local.kamra_pin_arguments = None
 			for key, value in staged[1].items():
-				if key in parameters and key not in positional[:len(args)]:
-					kwargs.setdefault(key, value)
-		request = getattr(frappe.local, "request", None)
+				parameter = wire_fields.get(key) if wire_fields is not None else key
+				if parameter in parameters and parameter not in positional[:len(args)]:
+					kwargs.setdefault(parameter, value)
 		_reject_pin_query(request or getattr(frappe, "request", None) or None)
 		try:
 			if request is not None:
@@ -1176,8 +1187,8 @@ def resolve_property_for_pos_profile(pos_profile: str | None, user: str | None =
 	   enabled properties, when that leaves exactly one permitted enabled Property
 	7. Single enabled `Property` on the site (when only one exists)
 
-	Strict PIN operations accept explicit property links and a mapped cost
-	center. Name matching and user/site defaults remain for older POS callers.
+	Strict PIN operations require an enabled profile with an explicit property link
+	or mapped cost center. Name matching and user/site defaults remain for older POS callers.
 	"""
 
 	def linked_property(value):
@@ -1186,6 +1197,8 @@ def resolve_property_for_pos_profile(pos_profile: str | None, user: str | None =
 		return None
 	if pos_profile and frappe.db.table_exists("POS Profile") and frappe.db.exists("POS Profile", pos_profile):
 		meta = frappe.get_meta("POS Profile")
+		if strict and meta.has_field("disabled") and cint(frappe.db.get_value("POS Profile", pos_profile, "disabled")):
+			return None
 		for field in ("custom_property", "property"):
 			if meta.has_field(field):
 				prop = frappe.db.get_value("POS Profile", pos_profile, field)
@@ -1675,6 +1688,8 @@ def _floor_pin_reset_scope(actor, target, property, pos_profile):
 	if not branch and prop and _doctype_has_field("Branch", "custom_property"):
 		branches = frappe.get_all("Branch", filters={"custom_property": prop}, pluck="name", limit=2)
 		branch = branches[0] if len(branches) == 1 else ""
+	if not branch and not property and pos_profile is None:
+		branch = _unique_reset_scope(_pin_user_scope(user, "Branch") for user in accounts) or ""
 	return prop, company, branch
 
 

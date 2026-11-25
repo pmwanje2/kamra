@@ -5637,10 +5637,10 @@
         "kamra.api.set_cashier_pin"
        ]
       },
-      "description": "Set or change your own cashier PIN (4-8 digits). Changing an existing\nPIN needs the current one \u2014 unless must_reset was set by an admin.",
+      "description": "Enroll or rotate your approval PIN using your current account password.",
       "body": {
        "mode": "raw",
-       "raw": "{\n  \"pin\": \"<pin>\"\n}",
+       "raw": "{\n  \"pin_secret\": \"<pin>\",\n  \"current_password\": \"<account password>\"\n}",
        "options": {
         "raw": {
          "language": "json"
@@ -5714,7 +5714,7 @@
       "description": "PinPad unlock: validate PIN and open a 15-minute sliding window.",
       "body": {
        "mode": "raw",
-       "raw": "{\n  \"property\": \"Your Property\",\n  \"pin\": \"<pin>\"\n}",
+       "raw": "{\n  \"property\": \"Your Property\",\n  \"pin_secret\": \"<pin>\"\n}",
        "options": {
         "raw": {
          "language": "json"

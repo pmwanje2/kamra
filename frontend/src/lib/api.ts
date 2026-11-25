@@ -276,6 +276,12 @@ export async function call<T = unknown>(
   method: string,
   params: Record<string, unknown> = {},
 ): Promise<T> {
+  // These endpoints use names that Frappe masks before request hooks run.
+  if (method === "kamra.api.set_cashier_pin") {
+    params = { pin_secret: params.pin_secret ?? params.pin, current_password: params.current_password }
+  } else if (method === "kamra.api.verify_cashier_pin") {
+    params = { property: params.property, pin_secret: params.pin_secret ?? params.pin }
+  }
   const data = await frappeFetch<{ message: T }>(`/api/method/${method}`, {
     method: "POST",
     body: JSON.stringify(params),

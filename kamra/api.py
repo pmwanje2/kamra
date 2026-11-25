@@ -12060,7 +12060,10 @@ def my_pin_status():
 @require_roles(*PIN_SELF_SERVICE_ROLES)
 def set_cashier_pin(pin: str, current_pin: str | None = None, password: str | None = None,
                     current_password: str | None = None):
-	"""Enroll or rotate an approval PIN after verifying the signed-in account password."""
+	"""Enroll or rotate an approval PIN after verifying the signed-in account password.
+
+	HTTP callers send `pin_secret` and `current_password` in the POST body.
+	"""
 	from kamra.authz import enroll_approval_pin, require_pin_identity
 	from kamra.savings import log_action
 
@@ -12091,7 +12094,10 @@ def reset_cashier_pin(user: str, property: str | None = None):
 @require_roles("Finance", "Front Desk", "Revenue Manager", "Housekeeping",
                "F&B Manager")
 def verify_cashier_pin(property: str, pin: str):
-	"""PinPad unlock: validate PIN and open a 15-minute sliding window."""
+	"""Validate the PIN and open a 15-minute sliding unlock window.
+
+	HTTP callers send `property` and `pin_secret` in the POST body.
+	"""
 	from kamra.authz import unlock_cashier_session
 	return unlock_cashier_session(property, pin)
 
