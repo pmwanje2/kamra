@@ -211,7 +211,7 @@ export default function WhatsAppChat() {
                       className={cn(
                         "mb-0.5 text-[10px] font-semibold uppercase tracking-wide",
                         m.direction === "Outbound"
-                          ? "text-brand-100"
+                          ? "text-on-solid"
                           : "text-muted-ink",
                       )}
                     >{translate("template · ")}{m.template_name}
@@ -222,7 +222,7 @@ export default function WhatsAppChat() {
                     className={cn(
                       "mt-1 text-right text-[10px]",
                       m.direction === "Outbound"
-                        ? "text-brand-100"
+                        ? "text-on-solid"
                         : "text-muted-ink",
                     )}
                   >
