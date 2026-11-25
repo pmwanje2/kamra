@@ -220,6 +220,7 @@ key,english,arabic,spanish,portuguese,chinese,french,sources,placeholders,status
 1 to 30 late,1 to 30 late,متأخر 1 إلى 30 يومًا,1 a 30 días de retraso,1 a 30 dias de atraso,,1 à 30 j de retard,screens/Receivables.tsx,,needs_translation
 1 to 30 overdue,1 to 30 overdue,متأخر 1 إلى 30,Vencido de 1 a 30 días,1 a 30 em atraso,逾期 1 至 30 天,1 à 30 j échus,,,translated
 1 unsaved change,1 unsaved change,تغيير واحد غير محفوظ,1 cambio no guardado,1 alteração não salva,1 项未保存更改,1 modification non enregistrée,screens/settings/ModulePage.tsx,,translated
+1 {cur} = {rate} {home},1 {cur} = {rate} {home},1 {cur} = {rate} {home},1 {cur} = {rate} {home},1 {cur} = {rate} {home},1 {cur} = {rate} {home},1 {cur} = {rate} {home},components/BookingDialog.tsx,cur rate home,translated
 1 · Bookings,1 · Bookings,1 · الحجوزات,1 · Reservas,1 · Reservas,1 · 预订,1 · Réservations,,,translated
 1-30 days,1-30 days,1-30 يومًا,De 1 a 30 días,1-30 dias,1-30 天,1-30 jours,,,translated
 1-30 overdue,1-30 overdue,متأخر 1-30,Vencido de 1 a 30 días,1-30 em atraso,1-30 天逾期,1-30 échus,,,translated
@@ -517,6 +518,7 @@ Aging by days overdue,Aging by days overdue,التقادم حسب أيام ال�
 Agreed,Agreed,متفق عليه,Acordado,Concordo,已同意,Convenu,screens/BanquetFunction.tsx,,translated
 "Agreed charge / night, all of them","Agreed charge / night, all of them",الرسوم المتفق عليها / ليلة، لجميعهم,Cargo por noche acordado para todos los huéspedes adicionales,"Taxa/noite acordada, todas",约定的每晚费用（全部房间）,"Tarif convenu / nuit, sur tout le séjour",components/BookingDialog.tsx,,translated
 Agreed rate,Agreed rate,السعر المتفق عليه,Tarifa acordada,Tarifa acordada,,Tarif convenu,components/AgreedRatePanel.tsx,,needs_translation
+Agreed rate currency,Agreed rate currency,عملة السعر المتفق عليه,Moneda de la tarifa acordada,Moeda da tarifa acordada,协议房价币种,Devise du tarif convenu,components/AgreedRatePanel.tsx,,translated
 Agrees with folios,Agrees with folios,مطابق للفواتير,Concuerda con los folios,Concorda com os fólios,与客账一致,Conforme aux folios,screens/AuditPack.tsx,,translated
 AI,AI,ذكاء اصطناعي,IA,IA,AI,IA,AppShell.tsx,,translated
 AI access at this property,AI access at this property,وصول الذكاء الاصطناعي في هذا العقار,Acceso de IA en este alojamiento,Acesso de IA nesta propriedade,本酒店的 AI 访问权限,Accès IA sur cet établissement,screens/settings/McpAccessPage.tsx,,translated
@@ -2095,6 +2097,7 @@ Discount % off the room rate,Discount % off the room rate,نسبة الخصم % 
 Discount ({reason}),Discount ({reason}),خصم ({reason}),Descuento ({reason}),Desconto ({reason}),折扣（{reason}）,Remise ({reason}),components/BookingDialog.tsx,reason,translated
 Discount codes guests or agents can apply at booking. Toggle Disabled to activate or deactivate a code.,Discount codes guests or agents can apply at booking. Toggle Disabled to activate or deactivate a code.,رموز خصم يمكن للضيوف أو الوكلاء تطبيقها عند الحجز. استخدم معطّل لتفعيل الرمز أو إيقافه.,Cupones de descuento que los huéspedes o agentes pueden aplicar al reservar. Use Desactivado para activar o desactivar un código.,Os códigos de desconto que hóspedes ou agentes podem aplicar no momento da reserva. Alterne Desativado para ativar ou desativar um código.,宾客或代理可在预订时使用的折扣码。切换「已停用」以启用或停用。,Codes promotionnels applicables à la réservation par les clients ou agences. Activez Désactivé pour mettre un code en pause.,,,translated
 "Discount codes with dates, minimum nights and use limits.","Discount codes with dates, minimum nights and use limits.",رموز خصم بتواريخ وحد أدنى لعدد الليالي وحدود للاستخدام.,"Cupones con fechas de vigencia, mínimo de noches y límites de uso.","Códigos de desconto com datas, noites mínimas e limites de utilização.",带有效期、最少间夜与使用次数限制的折扣码。,"Codes promotionnels avec dates, séjour minimum et limites d'utilisation.",,,translated
+Discount currency,Discount currency,عملة الخصم,Moneda del descuento,Moeda do desconto,折扣币种,Devise de la remise,components/DiscountPanel.tsx,,translated
 Discount eligible,Discount eligible,مؤهل للخصم,Admite descuento,Aceita desconto,可打折,Éligible aux remises,,,translated
 Discount note,Discount note,ملاحظة الخصم,Nota del descuento,Nota do desconto,折扣备注,Note de remise,components/DiscountPanel.tsx,,translated
 Discount on the whole quote,Discount on the whole quote,خصم على كامل عرض السعر,Descuento sobre toda la cotización,Desconto em todo o orçamento,整单折扣,Remise sur l'ensemble du devis,screens/BanquetFunction.tsx,,translated
@@ -7738,3 +7741,5 @@ Zero-rated on purpose,Zero-rated on purpose,خاضع لنسبة صفرية عم�
 …and {n} more,…and {n} more,…و{n} أخرى,…y {n} más,…e mais {n},…另有 {n} 项,…et {n} de plus,screens/RoomsSetup.tsx,n,translated
 …or paste the rows here,…or paste the rows here,…أو الصق الصفوف هنا,…o pegue aquí las filas,…ou cole as linhas aqui,…或在此粘贴行,…ou collez les lignes ici,screens/MenuImport.tsx,,translated
 ≈ {amount},≈ {amount},≈ {amount},≈ {amount},≈ {amount},≈ {amount},≈ {amount},screens/ContractTariffs.tsx,amount,translated
+≈ {amt} / night,≈ {amt} / night,≈ {amt} / ليلة,≈ {amt} / noche,≈ {amt} / noite,≈ {amt} / 晚,≈ {amt} / nuit,components/AgreedRatePanel.tsx,amt,translated
+≈ {amt} off / night,≈ {amt} off / night,≈ {amt} خصم / ليلة,≈ {amt} de descuento / noche,≈ {amt} de desconto / noite,≈ 每晚立减 {amt},≈ {amt} de remise / nuit,components/DiscountPanel.tsx,amt,translated

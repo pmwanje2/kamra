@@ -1,7 +1,7 @@
 import { SettlementPreview, useSettlementQuote } from "./SettlementPreview"
 import TenderPicker, { TenderInput, resolveTender, tenderAmount, tenderModes, tenderReady, useTenderRates } from "./TenderPicker"
 import { RateOptions } from "./RateOptions"
-import { currencyText, TariffRoomTotal } from "./ContractTariff"
+import { currencyText, formatFxRate, fxLockNote, TariffRoomTotal } from "./ContractTariff"
 import { useEffect, useRef, useState } from "react"
 import { htmlToText, formatDate, roomLabel } from "../lib/utils"
 import { useNavigate } from "react-router-dom"
@@ -18,7 +18,7 @@ import {
 } from "../lib/api"
 import { pickDefaultRoomType } from "../lib/bookingDefaults"
 import { Button } from "./ui/button"
-import { moneyDigits, moneyStep, roundMoney, useLocale } from "../lib/money"
+import { activeMoneyLocale, moneyDigits, moneyStep, roundMoney, useLocale } from "../lib/money"
 import { isPhoneComplete } from "../lib/phone"
 import { nightsBetween, parseDate, shiftDate } from "../lib/stay"
 import { onSettingsChanged, onTariffsChanged } from "../lib/tariffSync"
@@ -113,7 +113,12 @@ interface WalkInResult {
 function discountNights(q: Quote) {
   const inclusive = !!q.line_items?.[0]?.is_tax_inclusive
   const places = Math.max(moneyDigits(), 2)
-  return q.nightly.map((n) => ({ date: n.date, base_rate: entryBase(n, inclusive, places) }))
+  return q.nightly.map((n) => ({
+    date: n.date,
+    base_rate: entryBase(n, inclusive, places),
+    ...(n.contract_base_rate !== undefined ? { contract_base_rate: n.contract_base_rate } : {}),
+    ...(n.contract_currency ? { contract_currency: n.contract_currency } : {}),
+  }))
 }
 
 function todayLocal() {
@@ -147,7 +152,7 @@ export function BookingDialog(props: {
 }) {
   const { t, tn } = useT()
   const [options, setOptions] = useState<BookingOptions | null>(null)
-  const [quote, setQuote] = useState<Quote | null>(null)
+  const [quoted, setQuoted] = useState<{ rateKey: string; quote: Quote } | null>(null)
   const [quoting, setQuoting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const dialog = useRef<HTMLDivElement>(null)
@@ -213,6 +218,8 @@ export function BookingDialog(props: {
     booker_relation: "",
     contact_preference: "Booker",
   })
+  const rateCurKey = `${form.rate_plan}|${form.company}|${form.room_type}`
+  const quote = quoted?.rateKey === rateCurKey ? quoted.quote : null
   // Booked via an OTA (keyed from its email): the site, its reference and
   // the price it charged (all rooms) and its commission %, prefilled from
   // the site's default. "" = direct, "other" = a site typed by hand.
@@ -321,7 +328,10 @@ export function BookingDialog(props: {
   const navigate = useNavigate()
   // ID documents and ways to pay come from the property's country pack
   const loc = useLocale()
-  const homeText = (amount: number) => currencyText(loc.currency, amount, loc.locale)
+  const moneyLoc = activeMoneyLocale()
+  const homeText = (amount: number) => currencyText(loc.currency, amount, moneyLoc)
+  const anyMoneyText = (amount: number, currency?: string) =>
+    currencyText(currency || loc.currency, amount, moneyLoc)
   const { ensureUnlocked, status: pinStatus } = useCashierAuth()
   const [walkIn, setWalkIn] = useState(!!props.initial.walkIn)
   // Overnight stay: the arrival and departure time. They default to the
@@ -348,7 +358,6 @@ export function BookingDialog(props: {
     id_number: "",
     nationality: "",
     pay_mode: "Cash",
-    pay_amount: "",
     pay_reference: "",
   })
   const setW = (k: keyof typeof walk, v: string) =>
@@ -359,8 +368,6 @@ export function BookingDialog(props: {
       nationality: w.nationality || loc.default_nationality,
     }))
   }, [loc])
-  // until the desk edits the amount, it tracks the live total
-  const [amountTouched, setAmountTouched] = useState(false)
 
   function toggleWalkIn(on: boolean) {
     setWalkIn(on)
@@ -543,7 +550,51 @@ export function BookingDialog(props: {
     setDiscountSupervisor("")
     setDiscountPin("")
   }, [discountOk, discountAllowed])
-  const discountEntered = canDiscount && discountAllowed ? discountArgs(discount, stayNights) : {}
+  const quoteTariff = otaTotal <= 0 ? quote?.tariff : null
+  const contractSummary = otaTotal <= 0 ? (quote?.contract_summary ?? null) : null
+  const planCurrency = (
+    options?.rate_plans?.find((p) => p.name === discountPlan)?.currency || ""
+  ).trim().toUpperCase()
+  const [knownRate, setKnownRate] = useState<{ key: string; cur: string; fx: number | null } | null>(null)
+  useEffect(() => {
+    const qCur = (quote?.rate_currency || quote?.tariff?.currency || "").trim().toUpperCase()
+    if (!qCur) return
+    const qFx = quote?.contract_summary?.fx_rate ?? quote?.tariff?.fx_rate ?? null
+    setKnownRate((prev) =>
+      prev && prev.key === rateCurKey && prev.cur === qCur && prev.fx === qFx
+        ? prev
+        : { key: rateCurKey, cur: qCur, fx: qFx },
+    )
+  }, [quote, rateCurKey])
+  const rateCurrency = (
+    quote?.rate_currency
+    || quoteTariff?.currency
+    || (knownRate?.key === rateCurKey ? knownRate.cur : "")
+    || planCurrency
+  ).trim().toUpperCase()
+  const isForeignRate = Boolean(rateCurrency && loc.currency && rateCurrency !== loc.currency.toUpperCase())
+  const rateFx = contractSummary?.fx_rate ?? quoteTariff?.fx_rate ?? (knownRate?.key === rateCurKey ? knownRate.fx : null)
+  useEffect(() => {
+    if (!rateCurrency) return
+    const allowed = new Set([rateCurrency, (loc.currency || "").toUpperCase()].filter(Boolean))
+    setDiscount((prev) => {
+      const stayBad = Boolean(prev.currency && !allowed.has(prev.currency.toUpperCase()))
+      const nightsBad = Object.values(prev.nights).some(
+        (n) => Boolean(n.currency && !allowed.has(n.currency.toUpperCase())),
+      )
+      if (!stayBad && !nightsBad) return prev
+      const nextNights = Object.fromEntries(
+        Object.entries(prev.nights).map(([k, v]) => [
+          k,
+          v.currency && !allowed.has(v.currency.toUpperCase()) ? { ...v, currency: undefined } : v,
+        ]),
+      )
+      return { ...prev, currency: stayBad ? undefined : prev.currency, nights: nextNights }
+    })
+  }, [rateCurrency, loc.currency])
+  const discountEntered = canDiscount && discountAllowed
+    ? discountArgs(discount, stayNights, rateCurrency || undefined)
+    : {}
   const discountParam = discountOk || !(discountEntered.discount_type || discountEntered.night_discounts)
     ? discountEntered : { ...discountEntered, fixed_rate: 1 as const }
   const discountGov: DiscountGovernance | null = quote?.discount_governance ?? null
@@ -625,12 +676,12 @@ export function BookingDialog(props: {
   useEffect(() => {
     if (!form.room_type) return
     if (badDate) {
-      setQuote(null)
+      setQuoted(null)
       setQuoting(false)
       return
     }
     let live = true
-    setQuote(null)
+    setQuoted(null)
     setQuoting(true)
     const t = setTimeout(() => {
       call<Quote>("kamra.api.get_quote", {
@@ -653,12 +704,12 @@ export function BookingDialog(props: {
       })
         .then((q) => {
           if (!live) return
-          setQuote(q)
+          setQuoted({ rateKey: rateCurKey, quote: q })
           setError(null)
         })
         .catch((e) => {
           if (!live) return
-          setQuote(null)
+          setQuoted(null)
           setError(shortErr(e))
         })
         .finally(() => { if (live) setQuoting(false) })
@@ -956,15 +1007,34 @@ export function BookingDialog(props: {
     }
   }
 
-  // one key per open dialog: a double-tap replays instead of double-booking
-  const [requestedCurrency, setRequestedCurrency] = useState("")
+  // The first quote uses the property tender. A different plan starts with its own currency.
+  const [requestedTender, setRequestedTender] = useState<{ key: string; currency: string } | null>(null)
+  const [manualPayment, setManualPayment] = useState<{ key: string; currency: string; amount: string } | null>(null)
+  const [tenderPlan, setTenderPlan] = useState<{ key: string; followRate: boolean } | null>(null)
+  useEffect(() => {
+    if (!walkIn || !quote) return
+    setTenderPlan((current) => current?.key === rateCurKey ? current : { key: rateCurKey, followRate: !!current })
+  }, [walkIn, quote, rateCurKey])
+  useEffect(() => {
+    setRequestedTender((current) => current?.key === rateCurKey ? current : null)
+    setManualPayment((current) => current?.key === rateCurKey ? current : null)
+  }, [rateCurKey])
+
   const { today: settlementRates } = useTenderRates(getCurrentProperty(), walkIn)
   const modes = tenderModes(loc, loc.currency)
-  const tender = resolveTender(modes, loc.currency, { mode: walk.pay_mode, currency: requestedCurrency })
+  const tariffTenderCurrency = quote?.rate_currency || quote?.tariff?.currency || loc.currency
+  const followRate = tenderPlan && (tenderPlan.followRate || tenderPlan.key !== rateCurKey)
+  const defaultTender = resolveTender(modes, loc.currency, { mode: walk.pay_mode, currency: "" })
+  const tariffModes = modes.filter(({ currencies }) => currencies.includes(tariffTenderCurrency))
+  const tariffMode = tariffModes.find(({ mode }) => mode === defaultTender.mode) ?? tariffModes[0]
+  const tariffTender = { mode: tariffMode?.mode ?? "", currency: tariffTenderCurrency }
+  const tender = requestedTender?.key === rateCurKey
+    ? resolveTender(modes, loc.currency, { mode: defaultTender.mode, currency: requestedTender.currency })
+    : followRate && tenderReady(tariffTender, loc.currency, settlementRates) ? tariffTender : defaultTender
   const payCurrency = tender.currency
   const foreign = !!payCurrency && payCurrency !== loc.currency
   const paymentReady = tenderReady(tender, loc.currency, settlementRates)
-  const fx = useSettlementQuote(getCurrentProperty(), foreign && paymentReady ? payCurrency : "", Number(walk.pay_amount))
+  // one key per open dialog: a double-tap replays instead of double-booking
   const [walkInKey] = useState(() =>
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
@@ -981,7 +1051,7 @@ export function BookingDialog(props: {
     setBusy(true)
     setError(null)
     try {
-      const amount = Number(walk.pay_amount) || 0
+      const amount = payAmount
       if (amount > 0 && !paymentReady) throw new Error(t("Choose an available payment method and currency."))
       if (foreign && amount > 0 && !fx?.quote) throw new Error(fx?.error || t("Wait for the settlement preview."))
       if (amount > 0 && pinStatus?.required) await ensureUnlocked()
@@ -1066,7 +1136,10 @@ export function BookingDialog(props: {
   // bounds (the stay's against its lowest night, each Daily Details night
   // against its own), a reason, and a manager's PIN when the server asks
   const discountBad = canDiscount && discountAllowed
-    ? discountError(discount, quote ? discountNights(quote) : undefined) : null
+    ? discountError(discount, quote ? discountNights(quote) : undefined, {
+        rateCurrency: isForeignRate ? rateCurrency : undefined,
+        homeCurrency: loc.currency || undefined,
+      }) : null
   const discountAsked = !!(discountParam.discount_type || discountParam.night_discounts)
   const discountProblem = discountBad
     ?? (discountAsked && !discountParam.discount_reason ? "Pick a reason for the discount."
@@ -1109,12 +1182,13 @@ export function BookingDialog(props: {
     : []
   const advancePercents = new Set(advanceRooms.map((r) => r.percent))
 
+  const addonsGross = Object.entries(addonQty).reduce((s, [n, q]) => {
+    const x = options?.experiences.find((e) => e.name === n)
+    return x && q > 0 ? s + q * x.price * (1 + x.gst_rate / 100) : s
+  }, 0)
+
   const grandTotal = (() => {
     if (!quote) return 0
-    const addonsGross = Object.entries(addonQty).reduce((s, [n, q]) => {
-      const x = options?.experiences.find((e) => e.name === n)
-      return x && q > 0 ? s + q * x.price * (1 + x.gst_rate / 100) : s
-    }, 0)
     // the OTA's sold price covers every room of the booking
     return (
       (otaTotal > 0
@@ -1128,23 +1202,41 @@ export function BookingDialog(props: {
       addonsGross
     )
   })()
-  const quoteTariff = otaTotal <= 0 ? quote?.tariff : null
   const quoteTaxBasis = quote?.tax_basis === undefined ? loc.tax_basis : quote.tax_basis
 
-  const fullAmount = (currency: string) => quoteTariff && quote && quoteTariff.currency === currency &&
-    quote.agreed_rate != null && quote.agreed_rate * quote.nights === grandTotal
-    ? String(roundMoney(quoteTariff.nightly * quote.nights, currency))
-    : tenderAmount(grandTotal, currency, loc.currency, settlementRates)
-  const suggestedAmount = paymentReady ? fullAmount(payCurrency) : ""
-  useEffect(() => {
-    if (walkIn && !amountTouched)
-      setWalk((w) => ({
-        ...w,
-        pay_amount: suggestedAmount,
-      }))
-  }, [walkIn, amountTouched, suggestedAmount])
-
-  const payAmount = Number(walk.pay_amount) || 0
+  const pureContractStay = Boolean(
+    contractSummary &&
+    !contractSummary.has_home_currency_extras &&
+    moreRooms.length === 0 &&
+    addonsGross === 0,
+  )
+  const fullAmount = (currency: string) => {
+    const curUp = currency.toUpperCase()
+    if (pureContractStay && contractSummary && contractSummary.currency.toUpperCase() === curUp) {
+      const cashierRate = settlementRates[curUp]
+      const contractFx = contractSummary.fx_rate
+      const fxMatches = !cashierRate || !contractFx || Math.abs(cashierRate - contractFx) / contractFx < 1e-4
+      if (fxMatches) {
+        return String(roundMoney(contractSummary.room_after_tax_total, curUp))
+      }
+    }
+    if (
+      quoteTariff &&
+      quote &&
+      quoteTariff.currency === currency &&
+      quote.agreed_rate != null &&
+      quote.agreed_rate * quote.nights === grandTotal &&
+      !(quote.reservation_discount_total ?? 0)
+    ) {
+      return String(roundMoney(quoteTariff.nightly * quote.nights, currency))
+    }
+    return tenderAmount(grandTotal, currency, loc.currency, settlementRates)
+  }
+  const suggestedAmount = quote && paymentReady ? fullAmount(payCurrency) : ""
+  const matchingManualPayment = manualPayment?.key === rateCurKey && manualPayment.currency === payCurrency
+  const paymentInput = quote && matchingManualPayment ? manualPayment.amount : suggestedAmount
+  const payAmount = Number(paymentInput) || 0
+  const fx = useSettlementQuote(getCurrentProperty(), foreign && paymentReady ? payCurrency : "", payAmount)
   // taking the walk-in's money needs the operator's till open
   const { till, refresh: refreshTill } = useTill(undefined, walkIn)
   const tillClosed = walkIn && payAmount > 0 && !!till && !till.open
@@ -1186,11 +1278,6 @@ export function BookingDialog(props: {
       })
     return t("Free cancellation.")
   })()
-
-  const addonsGross = Object.entries(addonQty).reduce((s, [n, q]) => {
-    const x = options?.experiences.find((e) => e.name === n)
-    return x && q > 0 ? s + q * x.price * (1 + x.gst_rate / 100) : s
-  }, 0)
 
   return (
     <div
@@ -2062,9 +2149,12 @@ export function BookingDialog(props: {
                     <DiscountPanel value={discount} onChange={setDiscount}
                       reasons={options?.discount_reasons ?? []} eligible={discountAllowed}
                       governance={discountGov}
+                      rateCurrency={isForeignRate ? rateCurrency : undefined}
+                      homeCurrency={loc.currency}
+                      fxRate={rateFx}
                       nights={dayUse || !quote ? undefined : discountNights(quote)}
                       supervisor={discountSupervisor} pin={discountPin}
-                      onSupervisor={setDiscountSupervisor} onPin={setDiscountPin} money={homeText}>
+                      onSupervisor={setDiscountSupervisor} onPin={setDiscountPin} money={anyMoneyText}>
                       {canFixRate && (
                         <label className="flex items-center gap-2 text-xs text-zinc-600">
                           <input type="checkbox" aria-label={t("Fixed rate override")} checked={fixedOverride}
@@ -2111,18 +2201,16 @@ export function BookingDialog(props: {
                     </h3>
                     <TenderPicker home={loc.currency} chosen={tender} modes={modes} rates={settlementRates}
                       onChange={({ mode, currency }) => {
-                        setRequestedCurrency(currency)
-                        setWalk((w) => ({
-                          ...w, pay_mode: mode,
-                          pay_amount: currency === payCurrency ? w.pay_amount : fullAmount(currency),
-                        }))
-                        if (currency !== payCurrency) setAmountTouched(false)
+                        setRequestedTender({ key: rateCurKey, currency })
+                        setW("pay_mode", mode)
+                        if (currency !== payCurrency) setManualPayment(null)
                       }} />
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div>
                         <p className="mb-1 text-xs font-medium">{t("Amount collected")}</p>
-                        <TenderInput currency={payCurrency} value={walk.pay_amount} full={suggestedAmount}
-                          onChange={amount => { setAmountTouched(true); setW("pay_amount", amount) }} />
+                        <TenderInput currency={payCurrency} value={paymentInput} full={suggestedAmount}
+                          onChange={(amount) => setManualPayment({ key: rateCurKey, currency: payCurrency, amount })}
+                          onFull={() => setManualPayment(null)} />
                         <p className="mt-1.5 text-xs text-zinc-400">
                           {foreign ? null : payAmount <= 0
                             ? t("Nothing collected now - the full amount stays on the bill.")
@@ -2723,9 +2811,20 @@ export function BookingDialog(props: {
                     {/* label wraps cleanly so the full reason is visible;
                         the amount keeps its width */}
                     {(quote.reservation_discount_total ?? 0) > 0 && (<>
-                      <div className="flex justify-between gap-3 text-zinc-600">
+                      <div className="flex items-start justify-between gap-3 text-zinc-600">
                         <span>{t("Base room rate")}</span>
-                        <span className="shrink-0 whitespace-nowrap tabular-nums">{homeText(quote.room_base_total ?? quote.room_total)}</span>
+                        <span className="shrink-0 whitespace-nowrap text-end tabular-nums">
+                          {contractSummary ? (
+                            <>
+                              <span className="block font-medium text-zinc-800">
+                                {currencyText(contractSummary.currency, contractSummary.room_base_total, moneyLoc)}
+                              </span>
+                              <span className="block text-xs text-zinc-400">
+                                ≈ {homeText(quote.room_base_total ?? quote.room_total)}
+                              </span>
+                            </>
+                          ) : homeText(quote.room_base_total ?? quote.room_total)}
+                        </span>
                       </div>
                       {(() => {
                         const discountLabel = discountReasonText
@@ -2736,23 +2835,55 @@ export function BookingDialog(props: {
                             <span className="min-w-0 break-words" title={discountLabel}>
                               {discountLabel}
                             </span>
-                            <span className="shrink-0 whitespace-nowrap tabular-nums">−{homeText(quote.reservation_discount_total ?? 0)}</span>
+                            <span className="shrink-0 whitespace-nowrap text-end tabular-nums">
+                              {contractSummary ? (
+                                <>
+                                  <span className="block">
+                                    −{currencyText(contractSummary.currency, contractSummary.room_discount_total, moneyLoc)}
+                                  </span>
+                                  <span className="block text-xs font-normal text-emerald-700/80">
+                                    ≈ −{homeText(quote.reservation_discount_total ?? 0)}
+                                  </span>
+                                </>
+                              ) : `−${homeText(quote.reservation_discount_total ?? 0)}`}
+                            </span>
                           </div>
                         )
                       })()}
-                      <div className="flex justify-between gap-3 text-zinc-600">
+                      <div className="flex items-start justify-between gap-3 text-zinc-600">
                         <span>{t("Net room rate")}</span>
                         {/* base less discount, on the basis both are entered
                             (gross where rates include tax) */}
-                        <span className="shrink-0 whitespace-nowrap tabular-nums">{homeText(
-                          (quote.room_base_total ?? quote.room_total) - (quote.reservation_discount_total ?? 0))}</span>
+                        <span className="shrink-0 whitespace-nowrap text-end tabular-nums">
+                          {contractSummary ? (
+                            <>
+                              <span className="block font-semibold text-zinc-900">
+                                {currencyText(contractSummary.currency, contractSummary.room_net_total, moneyLoc)}
+                              </span>
+                              <span className="block text-xs text-zinc-400">
+                                ≈ {homeText((quote.room_base_total ?? quote.room_total) - (quote.reservation_discount_total ?? 0))}
+                              </span>
+                            </>
+                          ) : homeText(
+                            (quote.room_base_total ?? quote.room_total) - (quote.reservation_discount_total ?? 0))}
+                        </span>
                       </div>
+                      {contractSummary && (
+                        <p className="text-xs tabular-nums text-zinc-400">
+                          {t("1 {cur} = {rate} {home}", {
+                            cur: contractSummary.currency,
+                            rate: formatFxRate(contractSummary.fx_rate, moneyLoc),
+                            home: loc.currency,
+                          })}
+                          {contractSummary.fx_lock_policy ? ` · ${fxLockNote(contractSummary.fx_lock_policy)}` : ""}
+                        </p>
+                      )}
                     </>)}
                     {/* a discounted tariff shows base, discount and net above,
                         never the undiscounted tariff total beside them */}
                     {quoteTariff && !(quote.reservation_discount_total ?? 0) && <div className="space-y-1 text-sm">
                       <p><TariffRoomTotal tariff={quoteTariff} nights={quote.nights}
-                        agreedRate={quote.agreed_rate ?? 0} locale={loc.locale} /></p>
+                        agreedRate={quote.agreed_rate ?? 0} locale={moneyLoc} /></p>
                     </div>}
                     {(quote.over_capacity_total ?? 0) > 0 && (
                       <div className="flex justify-between text-zinc-600">
@@ -2851,8 +2982,19 @@ export function BookingDialog(props: {
                     <div className="mt-3 rounded-xl border border-zinc-200 bg-white px-4 py-3.5 shadow-sm">
                       <div className="flex items-baseline justify-between gap-2">
                         <span>{t("Total")}{moreRooms.length > 0 ? t(" · all rooms") : ""}</span>
-                        <span className="text-3xl font-semibold tabular-nums tracking-tight text-zinc-900">
-                          {quoteTariff ? currencyText(quoteTariff.property_currency, grandTotal, loc.locale) : homeText(grandTotal)}
+                        <span className="text-end">
+                          <span className="block text-3xl font-semibold tabular-nums tracking-tight text-zinc-900">
+                            {pureContractStay && contractSummary
+                              ? currencyText(contractSummary.currency, contractSummary.room_after_tax_total, moneyLoc)
+                              : quoteTariff
+                                ? currencyText(quoteTariff.property_currency, grandTotal, moneyLoc)
+                                : homeText(grandTotal)}
+                          </span>
+                          {pureContractStay && contractSummary && (
+                            <span className="mt-0.5 block text-xs tabular-nums text-zinc-500">
+                              ≈ {currencyText(quoteTariff?.property_currency || loc.currency, grandTotal, moneyLoc)}
+                            </span>
+                          )}
                         </span>
                       </div>
                       <p className="mt-1 text-xs text-zinc-400">
@@ -2920,7 +3062,7 @@ export function BookingDialog(props: {
                         ? t("Saving…")
                         : payAmount > 0
                           ? t("Collect {amt} and continue to check-in", {
-                              amt: currencyText(payCurrency, payAmount, loc.locale),
+                              amt: currencyText(payCurrency, payAmount, moneyLoc),
                             })
                           : t("Continue to check-in")}
                     </Button>

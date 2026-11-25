@@ -1212,3 +1212,9 @@ The guest folio only has {0} in credit. Settle the bill or withhold against it b
 Cannot close the folio: {0} is owed back to the guest. Issue the refund first.,No se puede cerrar el folio: se le deben {0} al huésped. Haga primero el reembolso.
 "Cannot close the folio: {0} is still owed. Collect payment, or move the company's share to the city ledger, first.","No se puede cerrar el folio: todavía se deben {0}. Cobre, o pase primero la parte de la empresa a cuentas por cobrar."
 {0} bill(s) for this stay are still open at the outlet: {1}. Settle them at the outlet before check-out.,{0} cuenta(s) de esta estancia siguen abiertas en el punto de venta: {1}. Liquídalas allí antes del check-out.
+Agreed rate currency must be {0}.,La moneda de la tarifa acordada debe ser {0}.
+Discount Currency,Moneda del descuento
+Discount currency must be a valid currency code.,La moneda del descuento debe ser un código de moneda válido.
+Discount currency {0} is not valid for this stay. Use {1}.,La moneda del descuento {0} no es válida para esta estancia. Use {1}.
+No exchange rate available for {0} to {1}.,No hay un tipo de cambio disponible de {0} a {1}.
+[SITEOPS-DOA-LIMIT] Discount {0} exceeds supervisor approval limit {1}.,[SITEOPS-DOA-LIMIT] El descuento de {0} supera el límite de aprobación del supervisor ({1}).

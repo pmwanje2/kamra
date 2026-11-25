@@ -441,6 +441,8 @@ export interface BookingOptions {
     is_default?: 0 | 1
     /** OPERA Rate Code "Discount": 0 = the desk can't discount this plan */
     discount_eligible?: 0 | 1
+    /** Rate plan currency when selling foreign tariffs (e.g. USD, KWD) */
+    currency?: string | null
   }[]
   default_plan?: string | null
   rate_plan_required?: boolean
@@ -505,6 +507,22 @@ export interface ContractTariff {
   derived_from?: string
 }
 
+export interface ContractSummary {
+  currency: string
+  fx_rate: number
+  fx_date: string | null
+  fx_lock_policy?: string | null
+  room_base_total: number
+  room_discount_total: number
+  room_net_total: number
+  room_tax_included: boolean
+  room_tax_amount: number
+  room_after_tax_total: number
+  has_home_currency_extras: boolean
+  home_extras_total: number
+  extras_home_total?: number
+}
+
 export interface TariffReference {
   tariff?: ContractTariff | null
   agreed_rate?: number | null
@@ -546,6 +564,10 @@ export interface Quote extends TariffReference {
   nights: number
   /** same-day stay: nights is 0 and one date is billed */
   day_use?: boolean
+  property_currency?: string
+  rate_currency?: string
+  discount_currency?: string | null
+  contract_summary?: ContractSummary | null
   nightly: {
     date: string
     /** the night's net room rate (after the desk's discount), before tax */
@@ -556,7 +578,12 @@ export interface Quote extends TariffReference {
     base_rate?: number
     discount_type?: "Percent" | "Amount" | null
     discount_value?: number
+    discount_currency?: string | null
     discount_amount?: number
+    contract_currency?: string
+    contract_base_rate?: number
+    contract_discount_amount?: number
+    contract_rate?: number
     fixed_rate?: 0 | 1
   }[]
   /** net accommodation, after the desk's discount */
@@ -678,6 +705,7 @@ export interface QuoteParams {
   /** the desk's discount (DiscountArgs) and, above the limit, the sign-off */
   discount_type?: "Percent" | "Amount"
   discount_value?: number
+  discount_currency?: string
   discount_reason?: string
   night_discounts?: DiscountArgs["night_discounts"]
   /** a manager's fixed-rate override of a plan that takes no discount */
@@ -1888,6 +1916,9 @@ export const setHousekeepingStatus = (
 
 export interface ReservationDetail extends TariffReference {
   name: string
+  property_currency?: string
+  rate_currency?: string
+  agreed_override?: { currency: string; amount: number; fx_rate: number; home_amount: number } | null
   /** set when the stay is one room of a group booking */
   group: { name: string; group_name: string; rooms: number; to_check_in: number } | null
   status: string
@@ -1936,8 +1967,13 @@ export interface ReservationDetail extends TariffReference {
     /** the night's own Daily Details discount (blank: follows the stay) */
     discount_type?: "Percent" | "Amount" | null
     discount_value?: number
+    discount_currency?: string | null
     /** the night's own reason (blank: the stay's) */
     discount_reason?: string | null
+    contract_currency?: string
+    contract_base_rate?: number
+    contract_discount_amount?: number
+    contract_rate?: number
     /** already on the folio: its discount is settled there */
     charged?: boolean
   }[]
@@ -1945,8 +1981,15 @@ export interface ReservationDetail extends TariffReference {
   discount?: {
     discount_type: "Percent" | "Amount" | null
     discount_value: number
+    discount_currency?: string | null
     discount_reason: string | null
     fixed_rate: 0 | 1
+    rate_currency?: string
+    property_currency?: string
+    fx_rate?: number
+    contract_base_nightly?: number
+    contract_discount_amount?: number
+    contract_net_nightly?: number
   }
   /** the reason-code categories a discount and an agreed rate take (the
    *  property's settings, discount_reason_categories / agreed_rate_reason_categories) */

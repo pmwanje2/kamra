@@ -43,6 +43,9 @@ export interface AgreedRatePreview {
   difference: number
   current_nightly: number
   agreed_rate: number
+  override_currency?: string
+  override_amount?: number
+  fx_rate?: number
   reduction_pct: number
   limit_pct: number
   /** a Revenue Manager / Hotel Admin sets any positive rate */
