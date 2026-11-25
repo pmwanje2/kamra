@@ -12,6 +12,7 @@ const GroupControl = lazy(() => import("../components/GroupControl"))
 const RoomTypeTariffs = lazy(() => import("../components/RoomTypeTariffs"))
 const RoomTypeMedia = lazy(() => import("../components/RoomTypeMedia"))
 const OutletWaiters = lazy(() => import("../components/OutletWaiters"))
+const PackageElementsEditor = lazy(() => import("../components/PackageElementsEditor"))
 const ChannelConnectionActions = lazy(() => import("../components/ChannelConnectionActions"))
 const HkTaskMediaPanel = lazy(() =>
   import("../components/HkMedia").then((m) => ({ default: m.HkTaskMediaPanel })),
@@ -304,9 +305,10 @@ export const holidayPackagesConfig: ScreenConfig = {
   doctype: "Holiday Package",
   title: "Packages",
   description:
-    "Fixed holiday packages with tiered occupancy pricing (Carnaval, Réveillon, long weekends) and OTA markup strategies.",
+    "Fixed holiday packages with tiered occupancy pricing, itemised revenue allowances, and OTA markup strategies.",
   propertyScoped: true,
   orderBy: "start_date asc",
+  extra: PackageElementsEditor,
   columns: [
     { field: "package_name", label: "Package" },
     { field: "start_date", label: "From" },
@@ -343,6 +345,7 @@ export const holidayPackagesConfig: ScreenConfig = {
     { field: "advance_percent", label: "Advance deposit %", type: "float", hint: "Deposit required (e.g. 50 or 100)" },
     { field: "non_refundable", label: "Non-refundable", type: "check" },
     { field: "inclusions", label: "Inclusions", type: "data", hint: "Breakfast, gala dinner, late checkout" },
+    { field: "folio_display_mode", label: "Folio display mode", type: "select", options: ["Inclusive", "Separate Add-on"], default: "Inclusive" },
     { field: "priority", label: "Priority", type: "int" },
     { field: "disabled", label: "Disabled", type: "check" },
   ],

@@ -24,6 +24,10 @@ vi.mock("../src/lib/api", () => ({
   whoami: vi.fn().mockResolvedValue({ user: "hk@hotel.test", roles: ["Housekeeping"] }),
 }))
 
+vi.mock("../src/lib/auth", () => ({
+  useAuth: () => ({ status: "authed", roles: ["Front Desk", "Housekeeping Supervisor", "Hotel Admin"] }),
+}))
+
 vi.mock("../src/lib/realtime", () => ({
   subscribeRealtime: () => () => undefined,
   useRealtime: () => undefined,

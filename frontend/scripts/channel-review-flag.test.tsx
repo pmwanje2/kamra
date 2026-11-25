@@ -29,6 +29,7 @@ vi.mock("../src/lib/api", () => ({
   clearChannelReview: (reservation: string) =>
     callMock("kamra.channel_manager.clear_channel_review", { reservation }),
   declineBookingRequest: vi.fn(),
+  getCurrentProperty: () => "Kampala Grand Exclusive",
   idDocumentImage: vi.fn().mockResolvedValue({ data: "" }),
   promoteWaitlist: vi.fn(),
   reservationDetail: (name: string) => detailMock(name),

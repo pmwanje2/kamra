@@ -109,12 +109,18 @@ def _line_tax(c, amount: Decimal) -> Decimal:
 
 def open_folio(reservation) -> str:
 	"""Open (or return) the folio for a reservation. Called at check-in."""
+	in_arrival_fc = reservation.name in (getattr(frappe.flags, "_kamra_arrival_fc_res", None) or ())
 	existing = frappe.db.get_value(
 		"Folio", {"reservation": reservation.name, "folio_type": "Guest"}
 	)
 	if existing:
+		if in_arrival_fc:
+			return existing
 		_post_addons(reservation, existing)
 		_post_pet_charge(reservation, existing)
+		if not reservation.flags.get("carried_forward"):
+			from kamra.fixed_charges import post_arrival_fixed_charges
+			post_arrival_fixed_charges(reservation, primary_folio=existing)
 		return existing
 	folio = frappe.get_doc({
 		"doctype": "Folio",
@@ -152,6 +158,9 @@ def open_folio(reservation) -> str:
 	_post_addons(reservation, folio.name)
 	_post_cleaning_fee(reservation, folio.name)
 	_post_pet_charge(reservation, folio.name)
+	if not in_arrival_fc:
+		from kamra.fixed_charges import post_arrival_fixed_charges
+		post_arrival_fixed_charges(reservation, primary_folio=folio.name)
 	return folio.name
 
 
@@ -976,8 +985,9 @@ def reference_currency(reservation, grand_total=None, balance=None, *, charges=N
 	return out
 
 
-def post_room_night(reservation, date, folios=None, *, room_posted: list | None = None) -> bool:
-	"""Post one night's room (and meal plan) charge, routed by the
+def post_room_night(reservation, date, folios=None, *, room_posted: list | None = None,
+                    package_stats: dict | None = None) -> bool:
+	"""Post one night's room (and meal plan / package elements) charge, routed by the
 	company's billing rules. Skips dates already posted - safe to call
 	from both audit and checkout. Pass `folios` (a dict) to batch saves
 	across nights; when omitted the touched folios save immediately.
@@ -992,7 +1002,10 @@ def post_room_night(reservation, date, folios=None, *, room_posted: list | None 
 	# the GST rate this call's room line posts at: its levy and extra guests follow it
 	room_gst = None
 
-	if not _charge_posted(reservation.name, "Room", date):
+	from kamra.packages import active_package_for_reservation, post_package_night_split
+	pkg_doc = active_package_for_reservation(reservation)
+
+	if pkg_doc is not None or not _charge_posted(reservation.name, "Room", date):
 		room_no = (reservation.room or "").split("-")[-1]
 		day_use = _day_use_room_charge(reservation, date)
 		current = None
@@ -1040,25 +1053,57 @@ def post_room_night(reservation, date, folios=None, *, room_posted: list | None 
 			fx_posted = {"contract_currency": current["currency"], "contract_fx_rate": current["fx_rate"],
 			             "contract_fx_date": current["fx_date"], "contract_fx_stale": int(current["stale"])}
 		from kamra.room_statistics import category_rules
-		_append_charge(folios, reservation, "Room", {
-			**fx_posted,
-			"posting_date": date,
-			"charge_type": "Room",
-			"reservation": reservation.name,
-			"rate_category": category_rules(reservation.property).of(
-				reservation.get("rate_category")),
-			"description": desc,
-			"qty": 1,
-			"rate": night_rate,
-			"amount": night_rate,
-			"gst_rate": gst_rate,
-			"auto_posted": 1,
-		})
-		posted = True
-		room_gst = gst_rate
-		if room_posted is not None:
-			room_posted.append(night_rate)
-		_post_room_levy(folios, reservation, date, night_rate, gst_rate)
+		rate_cat = category_rules(reservation.property).of(reservation.get("rate_category"))
+		if pkg_doc is not None:
+			pkg_room_gst = _quoted_room_gst(reservation, date, gst_rate)
+			pkg_res = post_package_night_split(
+				reservation,
+				pkg_doc,
+				night_rate,
+				pkg_room_gst,
+				date,
+				folios=folios,
+				room_desc=desc,
+				fx_posted=fx_posted,
+				rate_category=rate_cat,
+			)
+			if package_stats is not None:
+				package_stats["elements_posted"] = (
+					int(package_stats.get("elements_posted") or 0) + pkg_res["elements_posted"]
+				)
+				package_stats["elements_amount"] = float(
+					Decimal(str(package_stats.get("elements_amount") or 0))
+					+ Decimal(str(pkg_res["elements_amount"]))
+				)
+				package_stats["addon_amount"] = float(
+					Decimal(str(package_stats.get("addon_amount") or 0))
+					+ Decimal(str(pkg_res["addon_amount"]))
+				)
+			if pkg_res["posted"]:
+				posted = True
+				room_gst = gst_rate
+				if room_posted is not None:
+					room_posted.append(pkg_res["night_total"])
+				_post_room_levy(folios, reservation, date, night_rate, gst_rate)
+		else:
+			_append_charge(folios, reservation, "Room", {
+				**fx_posted,
+				"posting_date": date,
+				"charge_type": "Room",
+				"reservation": reservation.name,
+				"rate_category": rate_cat,
+				"description": desc,
+				"qty": 1,
+				"rate": night_rate,
+				"amount": night_rate,
+				"gst_rate": gst_rate,
+				"auto_posted": 1,
+			})
+			posted = True
+			room_gst = gst_rate
+			if room_posted is not None:
+				room_posted.append(night_rate)
+			_post_room_levy(folios, reservation, date, night_rate, gst_rate)
 
 	# Its own charge type, not the shared Misc bucket: dedupe is by type and
 	# date, so a sundry the desk had already typed as Misc that day would
@@ -1169,11 +1214,28 @@ def _post_room_levy(folios, reservation, date, night_rate, gst_rate=None):
 RATE_ADJUSTMENT = "Rate Adjustment"
 
 
+def _quoted_room_gst(reservation, date, fallback: float) -> float:
+	"""The room-component tax rate stored in quote_snapshot for a package night, or fallback."""
+	snap = reservation.get("quote_snapshot")
+	if not snap:
+		return float(fallback or 0)
+	try:
+		parsed = json.loads(snap) if isinstance(snap, str) else snap
+		key = str(getdate(date))
+		for n in (parsed.get("nightly") or []) if isinstance(parsed, dict) else ():
+			if str(n.get("date")) == key and n.get("room_gst_rate") is not None:
+				return float(n["room_gst_rate"])
+	except (TypeError, ValueError):
+		pass
+	return float(fallback or 0)
+
+
 def charged_nights(reservation_name: str) -> dict:
 	"""What the folios hold for each night of the stay already charged: the
-	room line(s) posted for the night plus every rate adjustment made to it
-	since, and the night's levy. {night: {base, tax, gst_rate, levy_base,
-	levy_tax, folio}} - folio is where the night's room line went.
+	room line(s) posted for the night (plus included package-element splits
+	belonging to that night) plus every rate adjustment made to it since,
+	and the night's levy. {night: {base, tax, gst_rate, levy_base, levy_tax,
+	folio}} - folio is where the night's room line went.
 
 	A night counts as charged under STANDS_ON_ITS_DATE, the same standing
 	rule _charge_posted uses: a same-date void drops out, while a closed
@@ -1182,7 +1244,8 @@ def charged_nights(reservation_name: str) -> dict:
 	rows = frappe.db.sql(
 		"""
 		SELECT IF(fc.charge_type = %(adj)s, fc.stay_date, fc.posting_date) AS night,
-		       fc.charge_type, fc.amount, fc.gst_rate, fc.parent,
+		       fc.charge_type, fc.amount, fc.gst_rate, fc.gst_amount, fc.tax_as_posted,
+		       fc.idempotency_key, fc.parent,
 		       CASE WHEN """ + NOT_VOIDED + """ THEN 1 ELSE 0 END AS live
 		FROM `tabFolio Charge` fc
 		JOIN `tabFolio` f ON fc.parent = f.name
@@ -1195,19 +1258,60 @@ def charged_nights(reservation_name: str) -> dict:
 		ORDER BY fc.charge_type = 'Room' DESC, live DESC, fc.amount DESC
 		""", {"res": reservation_name, "adj": RATE_ADJUSTMENT}, as_dict=True)
 	out: dict = {}
+	pkg_nights: set[str] = set()
 	for r in rows:
 		key = str(r.night)
 		amount = float(r.amount or 0) if r.live else 0.0
-		tax = amount * float(r.gst_rate or 0) / 100
+		tax = (
+			float(r.gst_amount or 0) if (r.live and r.get("tax_as_posted"))
+			else amount * float(r.gst_rate or 0) / 100
+		)
 		if r.charge_type == "Room Levy":
 			if key in out:
 				out[key]["levy_base"] += amount
 				out[key]["levy_tax"] += tax
 			continue  # a levy with no room line is not a charged night
+		if r.charge_type == "Room" and (r.get("idempotency_key") or "").startswith("pkg:"):
+			pkg_nights.add(key)
 		n = out.setdefault(key, {"base": 0.0, "tax": 0.0, "levy_base": 0.0,
 		                         "levy_tax": 0.0, "folio": r.parent})
 		n["base"] += amount
 		n["tax"] += tax
+	if pkg_nights:
+		pkg_rows = frappe.db.sql(
+			"""
+			SELECT fc.posting_date AS night, fc.amount, fc.gst_rate, fc.gst_amount, fc.tax_as_posted,
+			       CASE WHEN """ + NOT_VOIDED + """ THEN 1 ELSE 0 END AS live
+			FROM `tabFolio Charge` fc
+			JOIN `tabFolio` f ON fc.parent = f.name
+			LEFT JOIN `tabReservation Package Allowance` rpa
+			  ON rpa.idempotency_key = fc.idempotency_key
+			LEFT JOIN `tabPackage Element` pe
+			  ON pe.name = COALESCE(
+			      NULLIF(rpa.package_element, ''),
+			      SUBSTRING_INDEX(SUBSTRING_INDEX(fc.idempotency_key, ':', 3), ':', -1)
+			  )
+			WHERE (fc.reservation = %(res)s
+			       OR (IFNULL(fc.reservation, '') = '' AND f.reservation = %(res)s))
+			  AND fc.charge_type != 'Room'
+			  AND fc.idempotency_key LIKE 'pkg:%%'
+			  AND fc.idempotency_key NOT LIKE 'pkg:%%:room:%%'
+			  AND COALESCE(rpa.included_in_rate, pe.included_in_rate, 0) = 1
+			  AND """ + STANDS_ON_ITS_DATE,
+			{"res": reservation_name},
+			as_dict=True,
+		)
+		for pr in pkg_rows:
+			key = str(pr.night)
+			if key not in pkg_nights or key not in out:
+				continue
+			amount = float(pr.amount or 0) if pr.live else 0.0
+			tax = (
+				float(pr.gst_amount or 0) if (pr.live and pr.get("tax_as_posted"))
+				else amount * float(pr.gst_rate or 0) / 100
+			)
+			out[key]["base"] += amount
+			out[key]["tax"] += tax
 	from kamra.pricing import night_rate_places
 	prop = frappe.db.get_value("Reservation", reservation_name, "property")
 	places = night_rate_places(prop)
@@ -1289,7 +1393,12 @@ def post_remaining_nights(reservation) -> int:
 		if post_room_night(reservation, date, folios):
 			posted += 1
 		date = getdate(add_days(date, 1))
+	from kamra.fixed_charges import post_departure_fixed_charges
+	post_departure_fixed_charges(reservation, folios=folios)
 	save_folios(folios)
+	if reservation.get("status") == "Checked Out":
+		from kamra.packages import settle_package_breakage
+		settle_package_breakage(reservation.name)
 	return posted
 
 
@@ -2319,8 +2428,15 @@ def run_night_audit(property: str, business_date: str | None = None,
 
 	log_lines = []
 	folios_opened = charges_posted = no_shows = 0
+	fixed_charges_posted = package_elements_posted = package_breakage_count = 0
 	amount_posted = Decimal(0)
+	fixed_charges_amount = Decimal(0)
+	package_elements_amount = Decimal(0)
+	package_breakage_total = Decimal(0)
 	no_show_rows: list[dict] = []
+
+	from kamra.fixed_charges import post_fixed_charges_for_date
+	from kamra.packages import expire_daily_allowances
 
 	in_house = frappe.get_all(
 		"Reservation",
@@ -2340,11 +2456,32 @@ def run_night_audit(property: str, business_date: str | None = None,
 			folios_opened += 1
 			log_lines.append(f"opened folio {folio_name} for {res.name}")
 		room_posted: list = []
-		if post_room_night(res, business_date, room_posted=room_posted):
+		pkg_stats: dict = {}
+		if post_room_night(res, business_date, room_posted=room_posted, package_stats=pkg_stats):
 			charges_posted += 1
 			# what the room line posted at (a Current Date night at today's rate), not the booked night
 			amount_posted += sum((Decimal(str(amount)) for amount in room_posted), Decimal(0))
 			log_lines.append(f"posted room night {business_date} for {res.name}")
+		if pkg_stats.get("elements_posted"):
+			package_elements_posted += int(pkg_stats["elements_posted"])
+			package_elements_amount += Decimal(str(pkg_stats.get("elements_amount") or 0))
+			addon_amt = Decimal(str(pkg_stats.get("addon_amount") or 0))
+			if addon_amt:
+				amount_posted += addon_amt
+			log_lines.append(
+				f"posted {pkg_stats['elements_posted']} package element(s) for {res.name}"
+			)
+		fc_res = post_fixed_charges_for_date(res, business_date, trigger="night_audit")
+		if fc_res["count"]:
+			fixed_charges_posted += int(fc_res["count"])
+			fc_amt = Decimal(str(fc_res["amount"]))
+			fixed_charges_amount += fc_amt
+			amount_posted += fc_amt
+			log_lines.append(f"posted {fc_res['count']} fixed charge(s) for {res.name}")
+		brk_res = expire_daily_allowances(res, business_date)
+		if brk_res["count"]:
+			package_breakage_count += int(brk_res["count"])
+			package_breakage_total += Decimal(str(brk_res["breakage_amount"]))
 
 	# no-shows: closing day D ends D's arrivals too (Opera end of day), so
 	# a confirmed stay due on or before the closed date that never checked
@@ -2419,6 +2556,12 @@ def run_night_audit(property: str, business_date: str | None = None,
 	trigger = {"manual": "Manual", "scheduled": "Scheduled"}.get(mode or "", "System")
 	summary = {
 		"room_charges_posted": charges_posted,
+		"fixed_charges_posted": fixed_charges_posted,
+		"fixed_charges_amount": float(fixed_charges_amount),
+		"package_elements_posted": package_elements_posted,
+		"package_elements_amount": float(package_elements_amount),
+		"package_breakage_count": package_breakage_count,
+		"package_breakage_total": float(package_breakage_total),
 		"amount_posted": float(amount_posted),
 		"no_shows_flagged": no_shows,
 		"late_arrivals_held": len(held_late),
@@ -2520,6 +2663,12 @@ def run_night_audit(property: str, business_date: str | None = None,
 		"acknowledged": [a["key"] for a in acks],
 		"has_pack": bool(report_pack),
 		"room_charges_posted": charges_posted,
+		"fixed_charges_posted": fixed_charges_posted,
+		"fixed_charges_amount": float(fixed_charges_amount),
+		"package_elements_posted": package_elements_posted,
+		"package_elements_amount": float(package_elements_amount),
+		"package_breakage_count": package_breakage_count,
+		"package_breakage_total": float(package_breakage_total),
 		"amount_posted": float(amount_posted),
 		"no_shows_flagged": no_shows,
 		"late_arrivals_held": len(held_late),

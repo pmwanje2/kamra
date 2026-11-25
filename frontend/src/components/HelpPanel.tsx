@@ -6,8 +6,8 @@ import { cn } from "../lib/utils"
 import { Markdown } from "../lib/markdown"
 import { t as translate, useUILanguage } from "../lib/i18n"
 
-/** How-to help assistant - explains how to use Kamra (it never acts on data;
- *  that's Kamra Agent). Streams answers, grounded in the app. */
+/** How-to help assistant - explains how to use the hotel PMS (it never acts on
+ *  data; that's the AI assistant). Streams answers, grounded in the app. */
 
 interface Msg {
   role: "user" | "assistant"
@@ -108,17 +108,17 @@ export default function HelpPanel() {
       <button
         aria-label={translate("Open help")}
         onClick={() => setOpen((o) => !o)}
-        className="fixed bottom-5 right-5 z-40 flex size-12 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-600 shadow-lg hover:text-brand-700 print:hidden"
+        className="fixed bottom-5 end-5 z-40 flex size-12 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-600 shadow-lg hover:text-brand-700 print:hidden"
       >
         {open ? <X className="size-5" /> : <HelpCircle className="size-5" />}
       </button>
 
       {open && (
-        <div className="fixed bottom-20 right-5 z-40 flex h-[520px] w-[360px] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl print:hidden">
+        <div className="fixed bottom-20 end-5 z-40 flex h-[520px] w-[360px] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl print:hidden">
           <div className="flex items-center gap-2 border-b border-zinc-100 px-4 py-3">
             <HelpCircle className="size-4 text-brand-600" />
             <span className="text-sm font-semibold">{translate("How-to help")}</span>
-            <span className="ml-auto text-[10px] uppercase tracking-wider text-zinc-400">{translate("explains, doesn't act")}</span>
+            <span className="ms-auto text-[10px] uppercase tracking-wider text-zinc-400">{translate("explains, doesn't act")}</span>
           </div>
 
           <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
@@ -128,7 +128,7 @@ export default function HelpPanel() {
                 {SUGGESTIONS.map((s) => (
                   <button
                     key={s}
-                    className="block w-full rounded-lg border border-zinc-200 px-3 py-1.5 text-left text-sm text-zinc-600 hover:border-brand-600"
+                    className="block w-full rounded-lg border border-zinc-200 px-3 py-1.5 text-start text-sm text-zinc-600 hover:border-brand-600"
                     onClick={() => send(translate(s))}
                   >
                     {translate(s)}
@@ -142,7 +142,7 @@ export default function HelpPanel() {
                 className={cn(
                   "max-w-[88%] rounded-2xl px-3.5 py-2 text-sm",
                   m.role === "user"
-                    ? "ml-auto whitespace-pre-wrap bg-brand-600 text-white"
+                    ? "ms-auto whitespace-pre-wrap bg-brand-600 text-white"
                     : "space-y-1.5 bg-zinc-100 text-zinc-800",
                 )}
               >

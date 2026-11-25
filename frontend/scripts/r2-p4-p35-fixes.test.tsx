@@ -226,12 +226,37 @@ describe("R2 fixes: dark-mode contrast, trace time formatting, and clean i18n sc
 
   const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 20)))
 
-  it("removes partial 1% French (fr) locale registration and dictionary from PR #58", () => {
+  it("registers complete French (fr) locale in languages.json and translates PR #58 keys in locales/fr.json", () => {
     const languages = JSON.parse(
       fs.readFileSync(path.join(frontendRoot, "src/i18n/languages.json"), "utf8"),
     ) as { code: string }[]
-    expect(languages.some((l) => l.code === "fr")).toBe(false)
-    expect(fs.existsSync(path.join(frontendRoot, "src/i18n/locales/fr.json"))).toBe(false)
+    expect(languages.some((l) => l.code === "fr")).toBe(true)
+
+    const frPath = path.join(frontendRoot, "src/i18n/locales/fr.json")
+    expect(fs.existsSync(frPath)).toBe(true)
+    const fr = JSON.parse(fs.readFileSync(frPath, "utf8")) as Record<string, string>
+
+    const p4P35Keys = [
+      "Traces & Instructions",
+      "Add trace",
+      "Due Today & Overdue",
+      "Add alert",
+      "Blocking",
+      "Clear / Resolve",
+      "A resolution reason is required to clear a blocking alert.",
+      "Resolve blocking alerts before check-in.",
+      "Resolve blocking alerts before check-out.",
+      "Out of Service",
+      "Pickup",
+      "Expected return: {date}",
+      "This room is Out of Service and cannot be assigned. Pick another room first.",
+      "This room is flagged for quick touch-up (Pickup). Confirm with housekeeping before handing over keys.",
+    ]
+    for (const key of p4P35Keys) {
+      expect(typeof fr[key], `fr.json missing key: ${key}`).toBe("string")
+      expect(fr[key].trim().length, `fr.json empty translation: ${key}`).toBeGreaterThan(0)
+      expect(fr[key], `fr.json untranslated English fallback: ${key}`).not.toBe(key)
+    }
   })
 
   it("RoomDrawer HK_TONE avoids dark-remapped low-luminance text tokens", () => {

@@ -3,15 +3,8 @@ import { Link, useSearchParams } from "react-router-dom"
 import { call, getCurrentProperty } from "../lib/api"
 import { serverError } from "../lib/resource"
 import { Badge } from "../components/ui/badge"
-import { moneyLocale, useLocale } from "../lib/money"
+import { fmtAmount, moneyDigits, useLocale } from "../lib/money"
 import { useT, t as translate } from "../lib/i18n"
-
-
-const inr = (n: unknown) =>
-  Number(n ?? 0).toLocaleString(moneyLocale(), { maximumFractionDigits: 0 })
-
-const fmtFx = (n: unknown) =>
-  Number(n ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 type ForeignDrawer = {
   currency: string
@@ -171,7 +164,7 @@ export default function CashierShiftReport() {
       {err ? <p className="text-sm text-rose-600">{translate(err)}</p> : null}
 
       <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white">
-        <table className="min-w-[600px] w-full text-left text-sm">
+        <table className="min-w-[600px] w-full text-start text-sm">
           <thead className="border-b text-xs uppercase text-zinc-400">
             <tr>
               <th className="px-3 py-2">{t("Cashier")}</th>
@@ -204,15 +197,15 @@ export default function CashierShiftReport() {
                       {String(s.status)}
                     </Badge>
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{inr(s.system_cash)}</td>
-                  <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{inr(s.system_card)}</td>
-                  {instant ? <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{inr(s.system_upi)}</td> : null}
+                  <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{fmtAmount(s.system_cash)}</td>
+                  <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{fmtAmount(s.system_card)}</td>
+                  {instant ? <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{fmtAmount(s.system_upi)}</td> : null}
                   <td className="whitespace-nowrap px-3 py-2.5 text-xs tabular-nums text-zinc-600">
                     {fds.length
-                      ? fds.map((fd) => `${fd.currency} ${fmtFx(fd.expected_fx)}`).join(" · ")
+                      ? fds.map((fd) => `${fd.currency} ${fmtAmount(fd.expected_fx, fd.currency)}`).join(" · ")
                       : "-"}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{inr(s.variance)}</td>
+                  <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{fmtAmount(s.variance)}</td>
                 </tr>
               )
             })}
@@ -264,7 +257,7 @@ export default function CashierShiftReport() {
                   {translate(label)}
                 </p>
                 <p className="mt-0.5 text-base font-semibold tabular-nums">
-                  {inr(val)}
+                  {fmtAmount(val)}
                 </p>
               </div>
             ))}
@@ -276,37 +269,37 @@ export default function CashierShiftReport() {
                 {t("Foreign currency drawers")}
               </h3>
               <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white">
-                <table className="min-w-[560px] w-full text-left text-sm">
+                <table className="min-w-[560px] w-full text-start text-sm">
                   <thead className="border-b text-xs uppercase text-zinc-400">
                     <tr>
                       <th className="px-3 py-2">{t("Currency")}</th>
-                      <th className="px-3 py-2 text-right">{t("Receipts (FX)")}</th>
-                      <th className="px-3 py-2 text-right">{t("Refunds (FX)")}</th>
-                      <th className="px-3 py-2 text-right">{t("Expected (FX)")}</th>
-                      <th className="px-3 py-2 text-right">{t("Counted (FX)")}</th>
-                      <th className="px-3 py-2 text-right">{t("Variance")}</th>
-                      <th className="px-3 py-2 text-right">{t("Home equivalent")}</th>
+                      <th className="px-3 py-2 text-end">{t("Receipts (FX)")}</th>
+                      <th className="px-3 py-2 text-end">{t("Refunds (FX)")}</th>
+                      <th className="px-3 py-2 text-end">{t("Expected (FX)")}</th>
+                      <th className="px-3 py-2 text-end">{t("Counted (FX)")}</th>
+                      <th className="px-3 py-2 text-end">{t("Variance")}</th>
+                      <th className="px-3 py-2 text-end">{t("Home equivalent")}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {sessionDetail.foreign_drawers!.map((fd) => (
                       <tr key={fd.currency} className="border-t">
                         <td className="whitespace-nowrap px-3 py-2 font-medium text-zinc-800">{fd.currency}</td>
-                        <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{fmtFx(fd.receipts_fx)}</td>
-                        <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{fmtFx(fd.refunds_fx)}</td>
-                        <td className="whitespace-nowrap px-3 py-2 text-right font-medium tabular-nums">{fmtFx(fd.expected_fx)}</td>
-                        <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
-                          {fd.counted_fx !== null && fd.counted_fx !== undefined ? fmtFx(fd.counted_fx) : "-"}
+                        <td className="whitespace-nowrap px-3 py-2 text-end tabular-nums">{fmtAmount(fd.receipts_fx, fd.currency)}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-end tabular-nums">{fmtAmount(fd.refunds_fx, fd.currency)}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-end font-medium tabular-nums">{fmtAmount(fd.expected_fx, fd.currency)}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-end tabular-nums">
+                          {fd.counted_fx !== null && fd.counted_fx !== undefined ? fmtAmount(fd.counted_fx, fd.currency) : "-"}
                         </td>
                         <td
                           className={
-                            "whitespace-nowrap px-3 py-2 text-right font-semibold tabular-nums " +
-                            (fd.variance_fx && Math.abs(fd.variance_fx) > 0.004 ? "text-rose-700" : "")
+                            "whitespace-nowrap px-3 py-2 text-end font-semibold tabular-nums " +
+                            (fd.variance_fx && Math.abs(fd.variance_fx) >= 0.5 * 10 ** -moneyDigits(fd.currency) ? "text-rose-700" : "")
                           }
                         >
-                          {fd.variance_fx !== null && fd.variance_fx !== undefined ? fmtFx(fd.variance_fx) : "-"}
+                          {fd.variance_fx !== null && fd.variance_fx !== undefined ? fmtAmount(fd.variance_fx, fd.currency) : "-"}
                         </td>
-                        <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-zinc-600">{inr(fd.home_equivalent)}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-end tabular-nums text-zinc-600">{fmtAmount(fd.home_equivalent)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -321,29 +314,29 @@ export default function CashierShiftReport() {
                 {t("By payment method")}
               </h3>
               <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white">
-                <table className="min-w-[520px] w-full text-left text-sm">
+                <table className="min-w-[520px] w-full text-start text-sm">
                   <thead className="border-b text-xs uppercase text-zinc-400">
                     <tr>
                       <th className="px-3 py-2">{t("Mode")}</th>
-                      <th className="px-3 py-2 text-right">{t("Receipts")}</th>
-                      <th className="px-3 py-2 text-right">{t("Refunds")}</th>
-                      <th className="px-3 py-2 text-right">{t("System")}</th>
-                      <th className="px-3 py-2 text-right">{t("Counted")}</th>
-                      <th className="px-3 py-2 text-right">{t("Variance")}</th>
+                      <th className="px-3 py-2 text-end">{t("Receipts")}</th>
+                      <th className="px-3 py-2 text-end">{t("Refunds")}</th>
+                      <th className="px-3 py-2 text-end">{t("System")}</th>
+                      <th className="px-3 py-2 text-end">{t("Counted")}</th>
+                      <th className="px-3 py-2 text-end">{t("Variance")}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {sessionDetail.by_method!.map((m) => (
                       <tr key={m.mode} className="border-t">
                         <td className="whitespace-nowrap px-3 py-2 font-medium text-zinc-800">{translate(m.mode)}</td>
-                        <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{inr(m.receipts)}</td>
-                        <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{inr(m.refunds)}</td>
-                        <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{inr(m.system)}</td>
-                        <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
-                          {m.counted !== null && m.counted !== undefined ? inr(m.counted) : "-"}
+                        <td className="whitespace-nowrap px-3 py-2 text-end tabular-nums">{fmtAmount(m.receipts)}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-end tabular-nums">{fmtAmount(m.refunds)}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-end tabular-nums">{fmtAmount(m.system)}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-end tabular-nums">
+                          {m.counted !== null && m.counted !== undefined ? fmtAmount(m.counted) : "-"}
                         </td>
-                        <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
-                          {m.variance !== null && m.variance !== undefined ? inr(m.variance) : "-"}
+                        <td className="whitespace-nowrap px-3 py-2 text-end tabular-nums">
+                          {m.variance !== null && m.variance !== undefined ? fmtAmount(m.variance) : "-"}
                         </td>
                       </tr>
                     ))}
@@ -360,7 +353,7 @@ export default function CashierShiftReport() {
           {t("Journal by kind / mode")}
         </h2>
         <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white">
-          <table className="min-w-[460px] w-full text-left text-sm">
+          <table className="min-w-[460px] w-full text-start text-sm">
             <thead className="border-b text-xs uppercase text-zinc-400">
               <tr>
                 <th className="px-3 py-2">{t("Kind")}</th>
@@ -375,7 +368,7 @@ export default function CashierShiftReport() {
                   <td className="px-3 py-2">{translate(j.kind)}</td>
                   <td className="px-3 py-2">{translate(j.mode)}</td>
                   <td className="px-3 py-2 tabular-nums">{j.txns}</td>
-                  <td className="px-3 py-2 tabular-nums">{inr(j.total)}</td>
+                  <td className="px-3 py-2 tabular-nums">{fmtAmount(j.total)}</td>
                 </tr>
               ))}
               {!report?.journal?.length ? (

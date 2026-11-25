@@ -32,9 +32,12 @@
   "advance_percent",
   "non_refundable",
   "inclusions",
+  "folio_display_mode",
   "priority",
   "minimum_nights",
-  "disabled"
+  "disabled",
+  "sb_elements",
+  "elements"
  ],
  "fields": [
   {
@@ -46,7 +49,7 @@
    "in_list_view": 1
   },
   {
-   "description": "e.g. Pacote Carnaval, Pacote Réveillon, Feriado 3 Noites",
+   "description": "e.g. Weekend Retreat, Holiday 3-Night Package",
    "fieldname": "package_name",
    "fieldtype": "Data",
    "label": "Package Name",
@@ -219,6 +222,25 @@
    "fieldname": "disabled",
    "fieldtype": "Check",
    "label": "Disabled"
+  },
+  {
+   "default": "Inclusive",
+   "description": "Inclusive bundles room and included package elements into one guest-facing folio line while splitting internal revenue codes; Separate Add-on shows each element on its own line.",
+   "fieldname": "folio_display_mode",
+   "fieldtype": "Select",
+   "label": "Folio Display Mode",
+   "options": "Inclusive\nSeparate Add-on"
+  },
+  {
+   "fieldname": "sb_elements",
+   "fieldtype": "Section Break",
+   "label": "Package Elements & Allowances"
+  },
+  {
+   "fieldname": "elements",
+   "fieldtype": "Table",
+   "label": "Package Elements",
+   "options": "Package Element"
   }
  ],
  "grid_page_length": 50,

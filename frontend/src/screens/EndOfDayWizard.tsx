@@ -8,7 +8,7 @@
     reopening keeps them. */
 
 import { whiteLabel } from "../lib/brand"
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import {
   ArrowLeft,
   CheckCircle2,
@@ -19,10 +19,11 @@ import {
   TriangleAlert,
 } from "lucide-react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
-import { call } from "../lib/api"
+import { call, getCurrentProperty, setCurrentProperty } from "../lib/api"
 import CheckOutDialog from "../components/CheckOutDialog"
 import CheckInDialog from "../components/CheckInDialog"
 import NoShowDialog from "../components/NoShowDialog"
+import AuditSummaryCard from "../components/AuditSummaryCard"
 import {
   eodAcknowledge,
   eodProgress,
@@ -39,16 +40,16 @@ import { CHECK_FIXES } from "../lib/eodFixes"
 import { Badge } from "../components/ui/badge"
 import { Button } from "../components/ui/button"
 import { Card } from "../components/ui/card"
-import { cur, moneyLocale } from "../lib/money"
+import { cur, fmtAmount, loadLocale, moneyEps, useLocale } from "../lib/money"
 import { useT, t as translate } from "../lib/i18n"
 import { cn } from "../lib/utils"
 import { AuditPackView, sessionCols, DataTable, fmtDay } from "./AuditPack"
 
 
-const money = (n: unknown) =>
-  n === null || n === undefined || n === ""
-    ? "-"
-    : Number(n).toLocaleString(moneyLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const money = (n: unknown, currency?: string) =>
+  n === null || n === undefined || n === "" ? "-" : fmtAmount(n, currency || undefined)
+
+const zeroBalanceEps = (currency?: string) => moneyEps(currency)
 
 interface Column {
   key: string
@@ -64,11 +65,13 @@ function StepTable({
   rows,
   actions,
   empty,
+  currency,
 }: {
   cols: Column[]
   rows: CheckItem[]
   actions?: (row: CheckItem) => ReactNode
   empty?: string
+  currency?: string
 }) {
   const { t } = useT()
   const [q, setQ] = useState("")
@@ -92,26 +95,56 @@ function StepTable({
     if (c.render) return c.render(r)
     const v = r[c.key]
     if (v === null || v === undefined || v === "") return "-"
-    if (c.kind === "money") return money(v)
+    if (c.kind === "money") return money(v, currency)
     if (c.kind === "date") return fmtDay(v)
     return String(v)
   }
   const right = (c: Column) => (c.kind === "money" || c.kind === "num" ? "text-end tabular-nums" : "")
   return (
     <div className="rounded-lg border border-zinc-200">
-      <div className="flex items-center justify-between gap-2 border-b border-zinc-100 px-3 py-2">
-        <label className="relative">
-          <Search className="pointer-events-none absolute start-2 top-2 size-4 text-zinc-400" aria-hidden />
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-100 px-3 py-2">
+        <label className="relative min-w-0 flex-1 sm:flex-none">
+          <Search className="pointer-events-none absolute start-2.5 top-3.5 size-4 text-zinc-400 sm:top-2.5" aria-hidden />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder={t("Search")}
-            className="w-56 rounded-lg border border-zinc-300 bg-white py-1.5 ps-8 pe-2 text-sm"
+            className="min-h-11 w-full rounded-lg border border-zinc-300 bg-white py-1.5 ps-8 pe-2 text-sm sm:min-h-9 sm:w-56"
           />
         </label>
         <span className="text-xs text-zinc-400">{t("{n} of {m}", { n: shown.length, m: rows.length })}</span>
       </div>
-      <div className="overflow-x-auto">
+      <div data-testid="eod-mobile-cards" className="divide-y divide-zinc-100 md:hidden">
+        {shown.length === 0 ? (
+          <div className="px-3 py-5 text-center text-sm text-zinc-400">
+            {t(empty ?? "Nothing here.")}
+          </div>
+        ) : (
+          shown.map((r, i) => (
+            <div
+              key={`card-${String(r.order ?? r.session ?? r.folio ?? r.reservation ?? r.room_id ?? r.account ?? "")}-${i}`}
+              className="space-y-2.5 p-3"
+            >
+              <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                {cols.map((c) => (
+                  <div key={c.key} className="min-w-0">
+                    <dt className="text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+                      {t(c.label)}
+                    </dt>
+                    <dd className="mt-0.5 min-w-0 break-words text-zinc-800">{cell(c, r)}</dd>
+                  </div>
+                ))}
+              </dl>
+              {actions && (
+                <div className="border-t border-zinc-100 pt-2">
+                  {actions(r)}
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+      <div data-testid="eod-desktop-table" className="hidden overflow-x-auto md:block">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-zinc-200 text-[11px] font-medium uppercase tracking-wider text-zinc-500">
@@ -192,7 +225,7 @@ const STAY_COLS: Column[] = [
 /* Arrivals carry two more columns (ETA, no-show policy) and two buttons,
    so the stay's detail folds into fewer columns - the full twelve overflowed
    the card at laptop widths and cut off the policy the step is about. */
-const ARRIVAL_COLS: Column[] = [
+const arrivalCols = (currency?: string): Column[] => [
   { key: "reservation", label: "Confirmation", render: resLink },
   {
     key: "guest_name",
@@ -227,7 +260,7 @@ const ARRIVAL_COLS: Column[] = [
     kind: "money",
     render: (r) => (
       <div>
-        <div>{r.rate === null || r.rate === undefined || r.rate === "" ? "-" : money(r.rate)}</div>
+        <div>{r.rate === null || r.rate === undefined || r.rate === "" ? "-" : money(r.rate, currency)}</div>
         {r.rate_plan ? <div className="text-xs text-zinc-500">{String(r.rate_plan)}</div> : null}
       </div>
     ),
@@ -302,7 +335,7 @@ function FixHelp({ check, date }: { check: Check; date: string }) {
       {!whiteLabel() && <div className="mt-3 flex flex-wrap items-center gap-2">
         <Button
           variant="outline"
-          className="h-8 px-3 text-xs"
+          className="min-h-11 px-3 text-xs md:min-h-8"
           onClick={() => navigate("/assistant", { state: { prompt: translate(fix.ask(check.count, date)), property } })}
         >
           <Sparkles className="me-1.5 size-3.5" aria-hidden />
@@ -364,10 +397,11 @@ function CheckBlock({
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder={t("Reason")}
-              className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+              className="min-h-11 min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm md:min-h-9"
             />
             <Button
               variant="outline"
+              className="min-h-11 md:min-h-9"
               disabled={busy || reason.trim().length < 3}
               onClick={async () => {
                 setBusy(true)
@@ -409,6 +443,20 @@ export default function EndOfDayWizard() {
   const navigate = useNavigate()
   const { property: rawProperty = "" } = useParams()
   const property = decodeURIComponent(rawProperty)
+  const syncedPropRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!property) return
+    const changed = getCurrentProperty() !== property
+    if (changed) {
+      setCurrentProperty(property)
+      window.dispatchEvent(new CustomEvent("kamra:property", { detail: property }))
+    }
+    if (syncedPropRef.current !== null && changed) {
+      void loadLocale()
+    }
+    syncedPropRef.current = property
+  }, [property])
+  const loc = useLocale()
   const [params, setParams] = useSearchParams()
   const audit = params.get("audit")
   const { withPin } = useCashierAuth()
@@ -498,14 +546,16 @@ export default function EndOfDayWizard() {
   const canClose = !state.ran && !ahead && !state.stuck_date && blockers.length === 0
 
   /* each check's list and its buttons, under the check's heading */
+  const eodCurrency = state.currency || loc.currency || undefined
   const body = (c: Check): ReactNode => {
     const items = c.items ?? []
     switch (c.key) {
       case "arrivals_pending":
         return (
           <StepTable
+            currency={eodCurrency}
             cols={[
-              ...ARRIVAL_COLS,
+              ...arrivalCols(eodCurrency),
               { key: "eta", label: "ETA" },
               {
                 key: "policy",
@@ -513,7 +563,7 @@ export default function EndOfDayWizard() {
                 render: (r) => (
                   <span className={r.outcome === "no_show" ? "text-rose-700" : "text-amber-700"}>
                     {t(String(r.policy))}
-                    {Number(r.fee_amount) > 0 ? ` · ${cur()}${money(r.fee_amount)}` : ""}
+                    {Number(r.fee_amount) > 0 ? ` · ${cur()}${money(r.fee_amount, eodCurrency)}` : ""}
                   </span>
                 ),
               },
@@ -522,12 +572,12 @@ export default function EndOfDayWizard() {
             empty={translate("Every arrival is checked in.")}
             actions={(r) =>
               state.ran ? null : (
-                <div className="flex flex-col items-stretch gap-1">
-                  <Button variant="outline" className="h-7 px-2 text-xs"
+                <div className="flex flex-col items-stretch gap-1.5 md:gap-1">
+                  <Button variant="outline" className="min-h-11 px-3 text-xs md:min-h-7 md:px-2"
                     onClick={() => setCheckingIn(String(r.reservation))}>
                     {t("Check in")}
                   </Button>
-                  <Button variant="ghost" className="h-7 px-2 text-xs text-rose-700" disabled={!!busy}
+                  <Button variant="ghost" className="min-h-11 px-3 text-xs text-rose-700 md:min-h-7 md:px-2" disabled={!!busy}
                     onClick={() => setMarkingNoShow(String(r.reservation))}>
                     {t("Mark no-show")}
                   </Button>
@@ -537,12 +587,12 @@ export default function EndOfDayWizard() {
           />
         )
       case "departures_due": {
-        const zero = items.filter((r) => Math.abs(Number(r.balance ?? 0)) < 0.01)
+        const zero = items.filter((r) => Math.abs(Number(r.balance ?? 0)) < zeroBalanceEps(eodCurrency))
         return (
           <>
             {!state.ran && zero.length > 0 && (
               <div className="flex justify-end">
-                <Button variant="outline" disabled={!!busy}
+                <Button variant="outline" className="min-h-11 md:min-h-9" disabled={!!busy}
                   onClick={() =>
                     act("bulk", () =>
                       withPin(async (pin) => {
@@ -556,17 +606,18 @@ export default function EndOfDayWizard() {
               </div>
             )}
             <StepTable
+              currency={eodCurrency}
               cols={STAY_COLS}
               rows={items}
               empty={translate("Every departure is checked out.")}
               actions={(r) =>
                 state.ran ? null : (
-                  <div className="flex justify-end gap-1">
-                    <Button variant="outline" className="h-7 px-2 text-xs" disabled={!!busy}
+                  <div className="flex flex-wrap justify-end gap-1.5 md:gap-1">
+                    <Button variant="outline" className="min-h-11 px-3 text-xs md:min-h-7 md:px-2" disabled={!!busy}
                       onClick={() => setCheckingOut(String(r.reservation))}>
                       {t("Check out")}
                     </Button>
-                    <Button variant="ghost" className="h-7 px-2 text-xs"
+                    <Button variant="ghost" className="min-h-11 px-3 text-xs md:min-h-7 md:px-2"
                       onClick={() => navigate(`/reservations?q=${encodeURIComponent(String(r.reservation))}`)}>
                       {t("Extend stay")}
                     </Button>
@@ -581,16 +632,17 @@ export default function EndOfDayWizard() {
         return (
           <>
             {c.enabled && (
-              <p className="text-xs text-zinc-500">{t("Threshold {cur}{n}", { cur: cur(), n: money(c.threshold) })}</p>
+              <p className="text-xs text-zinc-500">{t("Threshold {cur}{n}", { cur: cur(), n: money(c.threshold, eodCurrency) })}</p>
             )}
-            <StepTable cols={FOLIO_COLS} rows={items} empty={translate("No in-house folio is over the threshold.")} />
+            <StepTable currency={eodCurrency} cols={FOLIO_COLS} rows={items} empty={translate("No in-house folio is over the threshold.")} />
           </>
         )
       case "departed_balances":
-        return <StepTable cols={FOLIO_COLS} rows={items} empty={translate("No balances on departed stays.")} />
+        return <StepTable currency={eodCurrency} cols={FOLIO_COLS} rows={items} empty={translate("No balances on departed stays.")} />
       case "credit_limit":
         return (
           <StepTable
+            currency={eodCurrency}
             cols={[
               { key: "company", label: "Company" },
               { key: "credit_limit", label: "Credit limit", kind: "money" },
@@ -606,6 +658,7 @@ export default function EndOfDayWizard() {
       case "overdue_ar":
         return (
           <StepTable
+            currency={eodCurrency}
             cols={[
               { key: "company", label: "Company" },
               { key: "credit_days", label: "Terms (days)" },
@@ -621,7 +674,7 @@ export default function EndOfDayWizard() {
           />
         )
       case "open_pos_bills":
-        return <StepTable cols={POS_COLS} rows={items} empty={translate("Every outlet bill is settled.")} />
+        return <StepTable currency={eodCurrency} cols={POS_COLS} rows={items} empty={translate("Every outlet bill is settled.")} />
       case "pos_room_postings":
         return (
           <>
@@ -629,6 +682,7 @@ export default function EndOfDayWizard() {
               <Message tone="warn">{t("{n} bill(s) were taken for a different room than the folio they posted to.", { n: c.mismatches! })}</Message>
             )}
             <StepTable
+              currency={eodCurrency}
               cols={[
                 ...POSTING_COLS,
                 {
@@ -645,6 +699,7 @@ export default function EndOfDayWizard() {
       case "rate_variance":
         return (
           <StepTable
+            currency={eodCurrency}
             cols={[
               { key: "room", label: "Room" },
               { key: "guest_name", label: "Guest" },
@@ -660,7 +715,7 @@ export default function EndOfDayWizard() {
           />
         )
       case "zero_rate":
-        return <StepTable cols={STAY_COLS} rows={items} empty={translate("No zero-rate rooms tonight.")} />
+        return <StepTable currency={eodCurrency} cols={STAY_COLS} rows={items} empty={translate("No zero-rate rooms tonight.")} />
       case "room_status":
         return (
           <StepTable
@@ -693,6 +748,7 @@ export default function EndOfDayWizard() {
         const blind = !!state.blind_count
         return (
           <StepTable
+            currency={eodCurrency}
             cols={[
               { key: "cashier_id", label: "Cashier", render: (r) => String(r.cashier_id || r.user_name || r.user) },
               { key: "business_date", label: "Business date", kind: "date" },
@@ -705,16 +761,16 @@ export default function EndOfDayWizard() {
             empty={translate("Every till is closed.")}
             actions={(r) =>
               state.ran ? null : (
-                <div className="flex items-center justify-end gap-1">
+                <div className="flex flex-wrap items-center justify-end gap-1.5 md:gap-1">
                   <input
                     inputMode="decimal"
                     aria-label={t("Counted cash")}
                     placeholder={t("Counted cash")}
                     value={counted[String(r.session)] ?? ""}
                     onChange={(e) => setCounted((m) => ({ ...m, [String(r.session)]: e.target.value }))}
-                    className="h-7 w-28 rounded-md border border-zinc-300 px-2 text-xs"
+                    className="min-h-11 w-full rounded-md border border-zinc-300 px-2 text-xs md:min-h-7 md:w-28"
                   />
-                  <Button variant="outline" className="h-7 px-2 text-xs"
+                  <Button variant="outline" className="min-h-11 px-3 text-xs md:min-h-7 md:px-2"
                     disabled={!!busy || !Number.isFinite(cash(counted[String(r.session)]))}
                     onClick={() =>
                       act("close", () =>
@@ -797,8 +853,8 @@ export default function EndOfDayWizard() {
 
       <div className="flex flex-wrap items-end justify-between gap-3 print:hidden">
         <div>
-          <Link to="/end-of-day" className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-800">
-            <ArrowLeft className="size-3.5" aria-hidden />
+          <Link to="/end-of-day" className="inline-flex min-h-11 items-center gap-1 text-xs text-zinc-500 hover:text-zinc-800 md:min-h-0">
+            <ArrowLeft className="size-3.5 rtl:rotate-180" aria-hidden />
             {t("Night Audit")}
           </Link>
           <h1 className="text-xl font-semibold text-zinc-900">
@@ -829,7 +885,7 @@ export default function EndOfDayWizard() {
             )}
           </Badge>
           {!state.ran && (
-            <Button disabled={!!busy || !canClose} onClick={runAudit}>
+            <Button className="min-h-11 md:min-h-9" disabled={!!busy || !canClose} onClick={runAudit}>
               {busy === "run" ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <MoonStar className="size-4" aria-hidden />}
               {busy === "run" ? t("Posting…") : t("Close {d}", { d: fmtDay(state.business_date) })}
             </Button>
@@ -846,6 +902,7 @@ export default function EndOfDayWizard() {
           </p>
           <Button
             variant="outline"
+            className="min-h-11 md:min-h-9"
             disabled={busy === "recover"}
             onClick={() =>
               act("recover", async () => {
@@ -864,14 +921,37 @@ export default function EndOfDayWizard() {
         <>
           <Message tone="ok">
             {runOut
-              ? t("Posted {n} room nights ({amount}), {ns} no-shows. The business date is now {next}.", {
+              ? t("Posted {n} room nights, {pkg} package splits, {fc} fixed charges ({amount}), {ns} no-shows. The business date is now {next}.", {
                   n: Number(runOut.room_charges_posted ?? 0),
-                  amount: `${cur()}${money(runOut.amount_posted)}`,
+                  pkg: Number(runOut.package_elements_posted ?? 0),
+                  fc: Number(runOut.fixed_charges_posted ?? 0),
+                  amount: `${cur()}${money(runOut.amount_posted, eodCurrency)}`,
                   ns: Number(runOut.no_shows_flagged ?? 0),
                   next: fmtDay(runOut.next_business_date),
                 })
               : t("Room and tax were posted and the business date rolled.")}
           </Message>
+          {runOut && (
+            <AuditSummaryCard
+              currency={state.currency}
+              summary={{
+                room_charges_posted: Number(runOut.room_charges_posted ?? 0),
+                package_elements_posted: Number(runOut.package_elements_posted ?? 0),
+                package_elements_amount:
+                  runOut.package_elements_amount !== undefined
+                    ? Number(runOut.package_elements_amount)
+                    : undefined,
+                fixed_charges_posted: Number(runOut.fixed_charges_posted ?? 0),
+                fixed_charges_amount: Number(runOut.fixed_charges_amount ?? 0),
+                package_breakage_count:
+                  runOut.package_breakage_count !== undefined
+                    ? Number(runOut.package_breakage_count)
+                    : undefined,
+                package_breakage_total: Number(runOut.package_breakage_total ?? 0),
+                amount_posted: Number(runOut.amount_posted ?? 0),
+              }}
+            />
+          )}
           <AuditPackView audit={state.audit} embedded />
         </>
       ) : (
