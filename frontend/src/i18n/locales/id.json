@@ -857,5 +857,10 @@
   "{rate} from {date}": "{rate} mulai {date}",
   "{tax} rate": "Rate {tax}",
   "{tax} summary": "Ringkasan {tax}",
-  "≈ {amount}": "≈ {amount}"
+  "≈ {amount}": "≈ {amount}",
+  "≈ {amt} / night": "≈ {amt} / malam",
+  "≈ {amt} off / night": "≈ {amt} diskon / malam",
+  "1 {cur} = {rate} {home}": "1 {cur} = {rate} {home}",
+  "Agreed rate currency": "Mata uang tarif disepakati",
+  "Discount currency": "Mata uang diskon"
 }

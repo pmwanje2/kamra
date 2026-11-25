@@ -121,6 +121,7 @@ class PriceDeterminationParityTest(RateMatrixHarness):
 			("over_capacity_charge", "flt"),
 			("discount_type", "str"),
 			("discount_value", "flt"),
+			("discount_currency", "str"),
 			("planned_check_in_time", "day_use_time"),
 			("planned_check_out_time", "day_use_time"),
 			("occupants", "occupant_ages"),

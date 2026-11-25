@@ -297,17 +297,18 @@ def fill_property_defaults(doc) -> None:
 			doc.set(key, value)
 
 
-def amount_text(property: str | None, amount) -> str:
-	"""An amount formatted to the property currency's minor-unit precision
+def amount_text(property: str | None, amount, currency: str | None = None) -> str:
+	"""An amount formatted to the given (or property) currency's minor-unit precision
 	(0 decimals for UGX/JPY, 2 for INR/USD, 3 for KWD) for folio line
 	descriptions and plain-number messages."""
-	currency = ""
-	try:
-		if property:
-			currency = frappe.get_cached_value("Property", property, "currency") or ""
-	except Exception:
-		currency = ""
-	digits = _minor_unit_for_currency(currency)
+	code = (currency or "").strip().upper()
+	if not code:
+		try:
+			if property:
+				code = (frappe.get_cached_value("Property", property, "currency") or "").strip().upper()
+		except Exception:
+			code = ""
+	digits = _minor_unit_for_currency(code)
 	try:
 		value = float(amount or 0)
 	except (TypeError, ValueError):
@@ -315,28 +316,34 @@ def amount_text(property: str | None, amount) -> str:
 	return f"{value:,.{digits}f}"
 
 
-def money_text(property: str | None, amount) -> str:
-	"""An amount in the property's currency for server-written text (the
-	activity log, alerts) - never a hardcoded rupee sign."""
-	symbol, currency = "", ""
+def money_text(property: str | None, amount, currency: str | None = None) -> str:
+	"""An amount in the given currency (or the property's currency) for server-written
+	text (the activity log, alerts) - never a hardcoded currency symbol."""
+	symbol, home_currency = "", ""
 	try:
 		if property:
 			prop = frappe.get_cached_doc("Property", property)
 			loc = pack_for(property).locale(prop)
-			symbol, currency = loc.get("currency_symbol") or "", loc.get("currency") or ""
+			symbol, home_currency = loc.get("currency_symbol") or "", (loc.get("currency") or "").strip().upper()
 	except Exception:
 		symbol = ""
+	explicit = (currency or "").strip().upper()
+	use_currency = explicit or home_currency
 	try:
 		value = float(amount or 0)
 	except (TypeError, ValueError):
-		return f"{symbol}{amount}"
-	minor = _minor_unit_for_currency(currency)
+		prefix = f"{explicit} " if explicit and explicit != home_currency else symbol
+		return f"{prefix}{amount}"
+	minor = _minor_unit_for_currency(use_currency)
+	if explicit and explicit != home_currency:
+		digits = f"{abs(value):,.{minor}f}"
+		return f"{'-' if value < 0 else ''}{explicit} {digits}"
 	if minor == 0:
 		digits = f"{abs(value):,.0f}"
 	elif minor > 2:
 		digits = f"{abs(value):,.{minor}f}"
 	else:
-		digits = group_digits(abs(value), currency == "INR")
+		digits = group_digits(abs(value), use_currency == "INR")
 	return f"{'-' if value < 0 else ''}{symbol}{digits}"
 
 

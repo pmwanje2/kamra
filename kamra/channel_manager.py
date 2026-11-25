@@ -743,18 +743,25 @@ def _describe_superseded_discount(doc) -> str:
 	from frappe.utils import flt
 
 	from kamra.localization import money_text
+	from kamra.pricing import property_currency
 
-	def fmt_val(kind: str, val) -> str:
-		return f"{flt(val):g}% off" if kind == "Percent" else f"{money_text(doc.property, val)} off/night"
+	home = property_currency(doc.property)
+
+	def fmt_val(kind: str, val, disc_cur: str | None = None) -> str:
+		if kind == "Percent":
+			return f"{flt(val):g}% off"
+		cur = (disc_cur or "").strip().upper() or home
+		return f"{money_text(doc.property, val, currency=cur)} off/night"
 
 	parts = []
 	if doc.get("discount_type") and flt(doc.get("discount_value")) > 0:
 		reason = doc.get("discount_reason") or "no reason"
-		parts.append(f"{fmt_val(doc.discount_type, doc.discount_value)} ({reason})")
+		parts.append(f"{fmt_val(doc.discount_type, doc.discount_value, doc.get('discount_currency'))} ({reason})")
 	for r in doc.get("night_rates") or []:
 		if r.get("discount_type") and flt(r.get("discount_value")) > 0:
 			reason = r.get("discount_reason") or doc.get("discount_reason") or "no reason"
-			parts.append(f"{str(r.stay_date)}: {fmt_val(r.discount_type, r.discount_value)} ({reason})")
+			row_cur = r.get("discount_currency") or doc.get("discount_currency")
+			parts.append(f"{str(r.stay_date)}: {fmt_val(r.discount_type, r.discount_value, row_cur)} ({reason})")
 	if not parts:
 		reason = doc.get("discount_reason") or "no reason"
 		parts.append(f"desk discount ({reason})")
@@ -810,17 +817,70 @@ def _reconcile_ota_modify_discount(doc, old) -> dict | None:
 
 	if not cint(doc.get("auto_price")) or not doc.has_discount():
 		return None
+	from kamra.api import _discount_snapshot
+	from kamra.pricing import effective_rate_currency, property_currency, saved_contract_tariff
+
+	home_cur = property_currency(doc.property)
+	old_rate_cur = effective_rate_currency(
+		old.property, contract_tariff=saved_contract_tariff(old), rate_plan=old.get("rate_plan"),
+	)
+	new_rate_cur = effective_rate_currency(
+		doc.property, contract_tariff=saved_contract_tariff(doc), rate_plan=doc.get("rate_plan"),
+	)
+	allowed_new_curs = {c for c in (home_cur, new_rate_cur) if c}
+
+	def _has_incompatible_flat_currency() -> bool:
+		if doc.get("discount_type") == "Amount" and flt(doc.get("discount_value")) > 0:
+			stay_c = (doc.get("discount_currency") or home_cur or "").strip().upper()
+			if stay_c and allowed_new_curs and stay_c not in allowed_new_curs:
+				return True
+		for r in doc.get("night_rates") or []:
+			if r.get("discount_type") == "Amount" and flt(r.get("discount_value")) > 0:
+				row_c = (r.get("discount_currency") or doc.get("discount_currency") or home_cur or "").strip().upper()
+				if row_c and allowed_new_curs and row_c not in allowed_new_curs:
+					return True
+		return False
+
+	currency_mismatch = old_rate_cur != new_rate_cur and _has_incompatible_flat_currency()
 	if (
-		old.get("night_rates")
+		not currency_mismatch
+		and old.get("night_rates")
 		and cint(old.get("auto_price"))
 		and doc.get("rate_lock_key")
+		and doc.get("rate_lock_key") == old.get("rate_lock_key")
 		and doc.get("rate_lock_key") == doc.rate_lock_key_for(doc.quote_inputs())
 	):
 		return None
-	from kamra.api import _discount_snapshot
 
 	doc.flags.kamra_stored = old
 	try:
+		if currency_mismatch:
+			before = {**_discount_snapshot(old), "amount_after_tax": flt(old.amount_after_tax)}
+			before_desc = _describe_superseded_discount(old)
+			doc.discount_type = None
+			doc.discount_value = 0
+			doc.discount_currency = None
+			doc.discount_reason = None
+			doc.fixed_rate = 0
+			doc.flags.kamra_reservation_discount = True
+			for r in doc.get("night_rates") or []:
+				r.discount_type = None
+				r.discount_value = 0
+				r.discount_currency = None
+				r.discount_reason = None
+				r.fixed_rate = 0
+			old_by_date = {str(getdate(r.stay_date)): r for r in old.get("night_rates") or []}
+			added_dates = [day for day in doc.stay_nights() if day not in old_by_date]
+			return {
+				"kind": CHANNEL_REVIEW_DISCOUNT_REMOVED,
+				"action_type": "channel.modify_discount_removed",
+				"before": before,
+				"desc": before_desc,
+				"kept": [],
+				"added": added_dates,
+				"dropped": sorted(old_by_date),
+			}
+
 		q = doc.requote()
 		rows = doc.quote_night_rows(q)
 		judged = doc.judged_nights(old, rows)
@@ -870,9 +930,11 @@ def _reconcile_ota_modify_discount(doc, old) -> dict | None:
 		same_product = (
 			doc.room_type == old.room_type
 			and (doc.get("rate_plan") or None) == (old.get("rate_plan") or None)
+			and old_rate_cur == new_rate_cur
 		)
 		old_stay_type = old.get("discount_type") or None
 		old_stay_val = flt(old.get("discount_value"))
+		old_stay_cur = old.get("discount_currency") or None
 		old_stay_reason = old.get("discount_reason") or None
 		old_stay_fixed = cint(old.get("fixed_rate"))
 		new_stay_set = set(new_stay_nights)
@@ -885,17 +947,19 @@ def _reconcile_ota_modify_discount(doc, old) -> dict | None:
 				return (
 					r.discount_type,
 					flt(r.discount_value),
+					r.get("discount_currency") or old_stay_cur,
 					r.get("discount_reason") or old_stay_reason,
 					cint(r.get("fixed_rate")) or old_stay_fixed,
 				)
 			if old_stay_type and old_stay_val > 0:
-				return (old_stay_type, old_stay_val, old_stay_reason, old_stay_fixed)
+				return (old_stay_type, old_stay_val, old_stay_cur, old_stay_reason, old_stay_fixed)
 			return None
 
 		# Clear stay-level discount so added/uncovered nights never inherit it;
 		# pin each surviving originally-approved night's discount on its row.
 		doc.discount_type = None
 		doc.discount_value = 0
+		doc.discount_currency = None
 		doc.discount_reason = None
 		doc.fixed_rate = 0
 		doc.flags.kamra_reservation_discount = True
@@ -905,11 +969,12 @@ def _reconcile_ota_modify_discount(doc, old) -> dict | None:
 			day = str(getdate(r.stay_date))
 			approved = _approved_for(day) if day in new_stay_set else None
 			if approved:
-				r.discount_type, r.discount_value, r.discount_reason, r.fixed_rate = approved
+				r.discount_type, r.discount_value, r.discount_currency, r.discount_reason, r.fixed_rate = approved
 				kept_dates.append(day)
 			else:
 				r.discount_type = None
 				r.discount_value = 0
+				r.discount_currency = None
 				r.discount_reason = None
 				r.fixed_rate = 0
 
@@ -928,6 +993,7 @@ def _reconcile_ota_modify_discount(doc, old) -> dict | None:
 					if day in kept_dates and day in judged2 and _channel_discount_needs_approval(doc, rows2, {day}):
 						r.discount_type = None
 						r.discount_value = 0
+						r.discount_currency = None
 						r.discount_reason = None
 						r.fixed_rate = 0
 						dropped_dates.append(day)

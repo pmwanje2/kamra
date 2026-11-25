@@ -218,6 +218,7 @@
   "1 to 30 late": "متأخر 1 إلى 30 يومًا",
   "1 to 30 overdue": "متأخر 1 إلى 30",
   "1 unsaved change": "تغيير واحد غير محفوظ",
+  "1 {cur} = {rate} {home}": "1 {cur} = {rate} {home}",
   "1 · Bookings": "1 · الحجوزات",
   "1-30 days": "1-30 يومًا",
   "1-30 overdue": "متأخر 1-30",
@@ -499,6 +500,7 @@
   "Agreed": "متفق عليه",
   "Agreed charge / night, all of them": "الرسوم المتفق عليها / ليلة، لجميعهم",
   "Agreed rate": "السعر المتفق عليه",
+  "Agreed rate currency": "عملة السعر المتفق عليه",
   "Agrees with folios": "مطابق للفواتير",
   "AI": "ذكاء اصطناعي",
   "AI access at this property": "وصول الذكاء الاصطناعي في هذا العقار",
@@ -1955,6 +1957,7 @@
   "Discount ({reason})": "خصم ({reason})",
   "Discount codes guests or agents can apply at booking. Toggle Disabled to activate or deactivate a code.": "رموز خصم يمكن للضيوف أو الوكلاء تطبيقها عند الحجز. استخدم معطّل لتفعيل الرمز أو إيقافه.",
   "Discount codes with dates, minimum nights and use limits.": "رموز خصم بتواريخ وحد أدنى لعدد الليالي وحدود للاستخدام.",
+  "Discount currency": "عملة الخصم",
   "Discount eligible": "مؤهل للخصم",
   "Discount note": "ملاحظة الخصم",
   "Discount on the whole quote": "خصم على كامل عرض السعر",
@@ -7198,5 +7201,7 @@
   "· in ": "· خلال ",
   "…and {n} more": "…و{n} أخرى",
   "…or paste the rows here": "…أو الصق الصفوف هنا",
-  "≈ {amount}": "≈ {amount}"
+  "≈ {amount}": "≈ {amount}",
+  "≈ {amt} / night": "≈ {amt} / ليلة",
+  "≈ {amt} off / night": "≈ {amt} خصم / ليلة"
 }

@@ -4,12 +4,16 @@
  * and enforces every rule again (kamra.api.discount_governance); these only
  * decide what the screen sends and when Save can be pressed. */
 
+import { moneyEps } from "./money"
+
 export type DiscountType = "Percent" | "Amount"
 
 /** One night's own discount as typed (Daily Details). */
 export interface NightEntry {
   type: DiscountType
   value: string
+  /** currency code for flat Amount discounts (e.g. USD / UGX); omitted uses stay/rate default */
+  currency?: string
   /** the night's own Reason Code ("" or missing: the stay's reason) */
   reason?: string
 }
@@ -18,6 +22,8 @@ export interface DiscountState {
   type: DiscountType
   /** as typed; "" = no discount for the stay */
   value: string
+  /** currency code for flat Amount discounts (e.g. USD / UGX); omitted defaults to rate currency */
+  currency?: string
   /** Reason Code name; required whenever a discount is given */
   reason: string
   /** date -> the night's own discount ("" value: the night follows the stay) */
@@ -57,8 +63,15 @@ export interface DiscountGovernance {
 export interface DiscountArgs {
   discount_type?: DiscountType
   discount_value?: number
+  discount_currency?: string
   discount_reason?: string
-  night_discounts?: { date: string; discount_type: DiscountType; discount_value: number; discount_reason?: string }[]
+  night_discounts?: {
+    date: string
+    discount_type: DiscountType
+    discount_value: number
+    discount_currency?: string
+    discount_reason?: string
+  }[]
   /** a manager's fixed-rate override of a plan that takes no discount */
   fixed_rate?: 0 | 1
 }
@@ -89,20 +102,34 @@ const num = (s: string) => (s.trim() === "" ? null : Number(s))
 /** What get_quote / create_booking / walk_in take for the discount entered:
  * nothing at all when none is (existing callers are unchanged). Only nights
  * of this stay are sent. */
-export function discountArgs(state: DiscountState, stayNights: string[]): DiscountArgs {
+export function discountArgs(
+  state: DiscountState,
+  stayNights: string[],
+  defaultCurrency?: string,
+): DiscountArgs {
   const value = num(state.value)
   const stay = value !== null && Number.isFinite(value) && value > 0
+  const stayCur = state.type === "Amount" ? (state.currency || defaultCurrency || undefined) : undefined
   const nights = stayNights
     .filter((date) => state.nights[date] && num(state.nights[date].value) !== null)
-    .map((date) => ({
-      date,
-      discount_type: state.nights[date].type,
-      discount_value: Number(state.nights[date].value),
-      ...(state.nights[date].reason ? { discount_reason: state.nights[date].reason } : {}),
-    }))
+    .map((date) => {
+      const own = state.nights[date]
+      const ownCur = own.type === "Amount" ? (own.currency || state.currency || defaultCurrency || undefined) : undefined
+      return {
+        date,
+        discount_type: own.type,
+        discount_value: Number(own.value),
+        ...(ownCur ? { discount_currency: ownCur } : {}),
+        ...(own.reason ? { discount_reason: own.reason } : {}),
+      }
+    })
   if (!stay && !nights.length) return {}
   return {
-    ...(stay ? { discount_type: state.type, discount_value: value } : {}),
+    ...(stay ? {
+      discount_type: state.type,
+      discount_value: value,
+      ...(stayCur ? { discount_currency: stayCur } : {}),
+    } : {}),
     discount_reason: state.reason || undefined,
     ...(nights.length ? { night_discounts: nights } : {}),
   }
@@ -126,16 +153,30 @@ export function applyToFutureNights(
 export interface NightBase {
   date: string
   base_rate: number
+  contract_base_rate?: number
+  contract_currency?: string
 }
 
-function entryError(type: DiscountType, raw: string, nightRate?: number): string | null {
+function entryError(type: DiscountType, raw: string, nightRate?: number, currency?: string): string | null {
   const value = num(raw)
   if (value === null) return null
   if (!Number.isFinite(value) || value < 0) return "Enter a discount of zero or more."
   if (type === "Percent" && value > 100) return "A percentage is between 0 and 100."
-  if (type === "Amount" && nightRate !== undefined && value > nightRate + 0.005)
+  if (type === "Amount" && nightRate !== undefined && value > nightRate + moneyEps(currency))
     return "The discount is more than the night's rate."
   return null
+}
+
+function baseForCurrency(night: NightBase, activeCurrency?: string): number {
+  if (
+    activeCurrency &&
+    night.contract_currency &&
+    activeCurrency.trim().toUpperCase() === night.contract_currency.trim().toUpperCase() &&
+    night.contract_base_rate !== undefined
+  ) {
+    return night.contract_base_rate
+  }
+  return night.base_rate
 }
 
 /** The bounds the server holds too (SAP OVB2): 0 to 100%, never below zero,
@@ -143,17 +184,24 @@ function entryError(type: DiscountType, raw: string, nightRate?: number): string
  * against its lowest night, each Daily Details night against its own.
  * `nights` is the stay's nights (or just the lowest rate). null when fine. */
 export function discountError(
-  state: Pick<DiscountState, "type" | "value"> & { nights?: DiscountState["nights"] },
+  state: Pick<DiscountState, "type" | "value"> & { currency?: string; nights?: DiscountState["nights"] },
   nights?: number | NightBase[],
+  opts?: { rateCurrency?: string | null; homeCurrency?: string },
 ): string | null {
   const list = Array.isArray(nights) ? nights : []
+  const stayCur = state.type === "Amount"
+    ? (state.currency || opts?.rateCurrency || opts?.homeCurrency || undefined)
+    : undefined
   const lowest = typeof nights === "number" ? nights
-    : list.length ? Math.min(...list.map((n) => n.base_rate)) : undefined
-  const stay = entryError(state.type, state.value, lowest)
+    : list.length ? Math.min(...list.map((n) => baseForCurrency(n, stayCur))) : undefined
+  const stay = entryError(state.type, state.value, lowest, stayCur)
   if (stay) return stay
   for (const night of list) {
     const own = state.nights?.[night.date]
-    const bad = own && entryError(own.type, own.value, night.base_rate)
+    const ownCur = own?.type === "Amount"
+      ? (own.currency || state.currency || opts?.rateCurrency || opts?.homeCurrency || undefined)
+      : undefined
+    const bad = own && entryError(own.type, own.value, baseForCurrency(night, ownCur), ownCur)
     if (bad) return bad
   }
   return null

@@ -7252,5 +7252,10 @@
   "· in ": "· em ",
   "…and {n} more": "…e mais {n}",
   "…or paste the rows here": "…ou cole as linhas aqui",
-  "≈ {amount}": "≈ {amount}"
+  "≈ {amount}": "≈ {amount}",
+  "≈ {amt} / night": "≈ {amt} / noite",
+  "≈ {amt} off / night": "≈ {amt} de desconto / noite",
+  "1 {cur} = {rate} {home}": "1 {cur} = {rate} {home}",
+  "Agreed rate currency": "Moeda da tarifa acordada",
+  "Discount currency": "Moeda do desconto"
 }

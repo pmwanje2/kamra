@@ -1569,5 +1569,10 @@
   "{v0} piece(s) short - why? (required)": "{v0} piraso ang kulang - bakit? (kailangan)",
   "{v0} skipped: {v1}": "{v0} ang nilaktawan: {v1}",
   "{view} view": "tanaw na {view}",
-  "≈ {amount}": "≈ {amount}"
+  "≈ {amount}": "≈ {amount}",
+  "≈ {amt} / night": "≈ {amt} / gabi",
+  "≈ {amt} off / night": "≈ {amt} diskwento / gabi",
+  "1 {cur} = {rate} {home}": "1 {cur} = {rate} {home}",
+  "Agreed rate currency": "Pera ng napagkasunduang singil",
+  "Discount currency": "Pera ng diskwento"
 }

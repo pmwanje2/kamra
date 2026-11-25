@@ -220,6 +220,7 @@
   "1 to 30 late": "1 à 30 j de retard",
   "1 to 30 overdue": "1 à 30 j échus",
   "1 unsaved change": "1 modification non enregistrée",
+  "1 {cur} = {rate} {home}": "1 {cur} = {rate} {home}",
   "1 · Bookings": "1 · Réservations",
   "1-30 days": "1-30 jours",
   "1-30 overdue": "1-30 échus",
@@ -516,6 +517,7 @@
   "Agreed": "Convenu",
   "Agreed charge / night, all of them": "Tarif convenu / nuit, sur tout le séjour",
   "Agreed rate": "Tarif convenu",
+  "Agreed rate currency": "Devise du tarif convenu",
   "Agrees with folios": "Conforme aux folios",
   "AI": "IA",
   "AI access at this property": "Accès IA sur cet établissement",
@@ -2076,6 +2078,7 @@
   "Discount ({reason})": "Remise ({reason})",
   "Discount codes guests or agents can apply at booking. Toggle Disabled to activate or deactivate a code.": "Codes promotionnels applicables à la réservation par les clients ou agences. Activez Désactivé pour mettre un code en pause.",
   "Discount codes with dates, minimum nights and use limits.": "Codes promotionnels avec dates, séjour minimum et limites d'utilisation.",
+  "Discount currency": "Devise de la remise",
   "Discount eligible": "Éligible aux remises",
   "Discount note": "Note de remise",
   "Discount on the whole quote": "Remise sur l'ensemble du devis",
@@ -7658,5 +7661,7 @@
   "· in ": "· dans ",
   "…and {n} more": "…et {n} de plus",
   "…or paste the rows here": "…ou collez les lignes ici",
-  "≈ {amount}": "≈ {amount}"
+  "≈ {amount}": "≈ {amount}",
+  "≈ {amt} / night": "≈ {amt} / nuit",
+  "≈ {amt} off / night": "≈ {amt} de remise / nuit"
 }

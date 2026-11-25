@@ -7324,5 +7324,10 @@
   "· in ": "· 在 ",
   "…and {n} more": "…另有 {n} 项",
   "…or paste the rows here": "…或在此粘贴行",
-  "≈ {amount}": "≈ {amount}"
+  "≈ {amount}": "≈ {amount}",
+  "≈ {amt} / night": "≈ {amt} / 晚",
+  "≈ {amt} off / night": "≈ 每晚立减 {amt}",
+  "1 {cur} = {rate} {home}": "1 {cur} = {rate} {home}",
+  "Agreed rate currency": "协议房价币种",
+  "Discount currency": "折扣币种"
 }

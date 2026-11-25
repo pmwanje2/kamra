@@ -159,3 +159,9 @@ Bill-to for {0}: {1}.,Faturar para {0}: {1}.
 Transaction code {0} belongs to another property.,O código de transação {0} pertence a outra propriedade.
 Payment method {0} is not available for this property.,O método de pagamento {0} não está disponível para esta propriedade.
 {0} bill(s) for this stay are still open at the outlet: {1}. Settle them at the outlet before check-out.,{0} conta(s) desta estadia ainda estão abertas no ponto de venda: {1}. Acerte-as lá antes do check-out.
+Agreed rate currency must be {0}.,A moeda da tarifa acordada deve ser {0}.
+Discount Currency,Moeda do desconto
+Discount currency must be a valid currency code.,A moeda do desconto deve ser um código de moeda válido.
+Discount currency {0} is not valid for this stay. Use {1}.,A moeda do desconto {0} não é válida para esta estadia. Use {1}.
+No exchange rate available for {0} to {1}.,Nenhuma taxa de câmbio disponível de {0} para {1}.
+[SITEOPS-DOA-LIMIT] Discount {0} exceeds supervisor approval limit {1}.,[SITEOPS-DOA-LIMIT] O desconto de {0} excede o limite de aprovação do supervisor ({1}).
