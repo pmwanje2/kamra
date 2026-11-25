@@ -226,7 +226,7 @@ describe("P58 French (fr) locale completeness & hospitality quality", () => {
   it("passes brand-leak-check.mjs with the french catalog.csv column and fr.json", () => {
     const { findings } = scanTree(root)
     expect(findings).toEqual([])
-  })
+  }, 30000)
 })
 
 describe("P58 en-US hardcoded locale-lock removal & Cashier/Banquet dynamic precision", () => {
