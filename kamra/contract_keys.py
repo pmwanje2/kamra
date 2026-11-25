@@ -27,6 +27,8 @@ RESPONSE_KEYS: dict[str, tuple[str, ...]] = {
 		"tax_rates", "payment_modes", "integrations", "fnb_tax_rate",
 		"sells_alcohol",
 	),
+	"api.open_folio_window": ("folio", "window_no"),
+	"api.route_outlet_charge": ("folio", "window_no", "routing_instruction"),
 	"cashier.list_sessions": ("sessions", "business_date"),
 	"cashier.session_report": (
 		"name", "property", "cashier", "cashier_id", "user", "business_date",

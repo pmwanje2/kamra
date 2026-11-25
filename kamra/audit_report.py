@@ -49,9 +49,11 @@ def _folio(property: str, start, end) -> dict:
 		SELECT
 		  COALESCE(SUM(CASE WHEN fc.charge_type IN ('Meal Plan', 'Minibar')
 		        THEN fc.amount END), 0) AS meal_plan_minibar,
-		  COALESCE(SUM(CASE WHEN fc.charge_type IN %(fnb)s AND fc.is_alcohol = 0
+		  COALESCE(SUM(CASE WHEN fc.charge_type IN %(fnb)s
+		        AND fc.is_alcohol = 0 AND IFNULL(tc.is_alcohol, 0) = 0
 		        THEN fc.amount END), 0) AS food,
-		  COALESCE(SUM(CASE WHEN fc.charge_type IN %(fnb)s AND fc.is_alcohol = 1
+		  COALESCE(SUM(CASE WHEN fc.charge_type IN %(fnb)s
+		        AND (fc.is_alcohol = 1 OR IFNULL(tc.is_alcohol, 0) = 1)
 		        THEN fc.amount END), 0) AS beverage,
 		  COALESCE(SUM(CASE WHEN fc.charge_type IN ('Allowance', 'Discount')
 		        THEN fc.amount END), 0) AS allowances,
@@ -66,7 +68,9 @@ def _folio(property: str, start, end) -> dict:
 # outlet bills and banquets are counted from their own records, so the folio
 # lines they post are left out here
 _FOLIO_FROM = """
-		FROM `tabFolio Charge` fc JOIN `tabFolio` f ON fc.parent = f.name
+		FROM `tabFolio Charge` fc
+		JOIN `tabFolio` f ON fc.parent = f.name
+		LEFT JOIN `tabTransaction Code` tc ON tc.name = fc.transaction_code
 		WHERE f.property = %(p)s AND fc.posting_date BETWEEN %(s)s AND %(e)s
 		  AND IFNULL(fc.description, '') NOT LIKE '%%(ORD-%%'
 		  AND IFNULL(fc.description, '') NOT LIKE 'EVT-%%'
@@ -102,11 +106,12 @@ def _outlets(property: str, start, end) -> list[dict]:
 	rows = frappe.db.sql(
 		"""
 		SELECT o.outlet, o.name AS bill, o.subtotal, o.discount_amount, o.paid,
-		       COALESCE(SUM(CASE WHEN mi.is_alcohol = 1 THEN i.amount END), 0) AS bev,
-		       COALESCE(SUM(CASE WHEN IFNULL(mi.is_alcohol, 0) = 0 THEN i.amount END), 0) AS food
+		       COALESCE(SUM(CASE WHEN mi.is_alcohol = 1 OR IFNULL(tc.is_alcohol, 0) = 1 THEN i.amount END), 0) AS bev,
+		       COALESCE(SUM(CASE WHEN IFNULL(mi.is_alcohol, 0) = 0 AND IFNULL(tc.is_alcohol, 0) = 0 THEN i.amount END), 0) AS food
 		FROM `tabPOS Order` o
 		JOIN `tabPOS Order Item` i ON i.parent = o.name AND i.voided = 0
 		LEFT JOIN `tabMenu Item` mi ON mi.name = i.menu_item
+		LEFT JOIN `tabTransaction Code` tc ON tc.name = mi.transaction_code
 		WHERE o.property = %(p)s AND o.status = 'Delivered' AND o.nc = 0
 		  AND COALESCE(o.business_date, DATE(o.creation)) BETWEEN %(s)s AND %(e)s
 		GROUP BY o.name

@@ -81,7 +81,7 @@ class TestPostingPaths(unittest.TestCase):
 		res = frappe._dict(status="Checked In", property="P", name="R")
 		with patch("kamra.localization.pack_for", return_value=pack), \
 		     patch("kamra.api.frappe.get_doc", return_value=res), \
-		     patch("kamra.folio.target_folio", return_value="F"), \
+		     patch("kamra.folio._legacy_target", return_value="F"), \
 		     patch("kamra.api._resolve_charge_gst", return_value=resolved), \
 		     patch("kamra.api._post_folio_charge",
 		           return_value={"folio_type": "Guest", "balance": 0}) as post:
