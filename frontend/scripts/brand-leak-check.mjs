@@ -133,8 +133,35 @@ export function scanTree(base = root) {
   return { findings, sourceCount }
 }
 
+// Inspect display text recursively. Request transport fields and JSON examples
+// are the public API, and retain their actual callable identifiers.
+export function generatedApiFindings(docs) {
+  const findings = []
+  const inspect = (text, where) => {
+    const prose = String(text ?? "")
+      .replace(/\bkamra\.(?:[a-z_][a-z_0-9]*\.)+[a-z_][a-z_0-9]*\b/g, "")
+      .replace(/\b(?:frappe\.(?:call|get_list|session\.user|model\.workflow\.apply_workflow)|kamra\.credit|kamra_demo_mode)\b/g, "")
+      .replace(/\/kamra\.postman_collection\.json|kamra\.<module>\.<function>/g, "")
+    if (forbidden.test(prose)) findings.push(where + ": " + text)
+  }
+  const collection = JSON.parse(fs.readFileSync(path.join(docs, "public/kamra.postman_collection.json"), "utf8"))
+  const visit = (item, where) => {
+    inspect(item.name, where + ".name")
+    for (const [field, value] of [["description", item.description], ["request.description", item.request?.description]]) {
+      inspect(typeof value === "object" ? value?.content : value, where + "." + field)
+    }
+    for (const [i, child] of (item.item ?? []).entries()) visit(child, where + ".item[" + i + "]")
+  }
+  visit(collection.info, "collection.info")
+  collection.item.forEach((item, i) => visit(item, "collection.item[" + i + "]"))
+  fs.readFileSync(path.join(docs, "api-reference.md"), "utf8").split("\n")
+    .forEach((line, i) => inspect(line, "api-reference.md:" + (i + 1)))
+  return findings
+}
+
 export function checkSource() {
   const { findings, sourceCount } = scanTree()
+  findings.push(...generatedApiFindings(path.resolve(root, "../docs-site")))
   if (findings.length) {
     console.error(findings.join("\n"))
     throw new Error(`${sourceCount} UI source findings; ${findings.length} total branding findings`)
