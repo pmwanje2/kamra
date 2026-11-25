@@ -158,7 +158,7 @@ export default function RowCorrection({
       {!options && (
         <button
           disabled={loading}
-          className="inline-flex items-center rounded-md border border-zinc-200 px-2 py-1 text-xs text-brand-700 hover:border-brand-400 disabled:opacity-50"
+          className="inline-flex min-h-11 items-center rounded-md border border-zinc-200 px-2 py-1 text-xs text-brand-700 hover:border-brand-400 disabled:opacity-50"
           onClick={open}
         >
           {t("Correct…")}

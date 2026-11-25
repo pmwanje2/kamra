@@ -44,7 +44,7 @@ import { Card } from "../components/ui/card"
 import { fmtAmount, loadLocale, moneyEps, useLocale } from "../lib/money"
 import { useT, t as translate } from "../lib/i18n"
 import { cn } from "../lib/utils"
-import { AuditPackView, PackMoney, sessionCols, DataTable, fmtDay } from "./AuditPack"
+import { AuditPackView, ControlTieOutCard, PackMoney, sessionCols, DataTable, fmtDay } from "./AuditPack"
 
 
 const money = (n: unknown, currency?: string) =>
@@ -313,7 +313,7 @@ function Message({ tone, children }: { tone: "info" | "warn" | "block" | "ok"; c
 }
 
 /** What to do about a check: usual fixes, ask the agent, or override. */
-function FixHelp({ check, date }: { check: Check; date: string }) {
+function FixHelp({ check, date, canOverride }: { check: Check; date: string; canOverride: boolean }) {
   const property = decodeURIComponent(useParams().property ?? "")
   const { t } = useT()
   const navigate = useNavigate()
@@ -346,9 +346,9 @@ function FixHelp({ check, date }: { check: Check; date: string }) {
         </Button>
         <span className="text-xs text-zinc-400">{t("It opens the agent with this check described. You approve what it changes.")}</span>
       </div>}
-      <p className="mt-3 text-xs text-zinc-500">
+      {canOverride && <p className="mt-3 text-xs text-zinc-500">
         <span className="font-medium text-zinc-600">{t("If you override:")}</span> {t(fix.override)}
-      </p>
+      </p>}
     </div>
   )
 }
@@ -369,7 +369,10 @@ function CheckBlock({
   const [busy, setBusy] = useState(false)
   if (!check) return null
   const ack = state.acknowledgements.find((a) => a.key === check.key)
-  const blocking = check.severity === "block" && check.count > 0
+  const blocking = check.severity === "block" && (check.count > 0 || !!check.unverified)
+  const glTieOut = check.key === "gl_control_tieout"
+  const canOverride = !glTieOut || (!check.unverified && check.can_override_gl_variance === true)
+  const minReasonLen = glTieOut ? 10 : 3
   const needsAttention = check.count > 0 || !!check.unverified
   return (
     <div className="space-y-2">
@@ -388,13 +391,24 @@ function CheckBlock({
       </div>
       {needsAttention && <p className="text-xs text-zinc-500">{t(check.action)}</p>}
       {needsAttention && !state.ran && check.severity !== "info" && (
-        <FixHelp check={check} date={state.business_date} />
+        <FixHelp check={check} date={state.business_date} canOverride={canOverride} />
       )}
       {children}
-      {blocking && !ack && !state.ran && (
+      {blocking && !ack && !state.ran && !canOverride && (
         <div className="rounded-lg border border-rose-200 bg-rose-50/60 p-3">
           <p className="text-xs text-rose-800">
-            {t("This blocks the audit. Fix it above, or override it with a reason - your name and the time are recorded on the audit.")}
+            {check.unverified
+              ? t("Accounting GL control tie-out is unverified and blocks closing until control accounts are configured and verified.")
+              : t("Finance or Hotel Admin can override this variance only when property policy allows it.")}
+          </p>
+        </div>
+      )}
+      {blocking && !ack && !state.ran && canOverride && (
+        <div className="rounded-lg border border-rose-200 bg-rose-50/60 p-3">
+          <p className="text-xs text-rose-800">
+            {minReasonLen >= 10
+              ? t("This blocks the audit. Reconcile the variance above, or override with an explanatory note of at least 10 characters if policy permits.")
+              : t("This blocks the audit. Fix it above, or override it with a reason - your name and the time are recorded on the audit.")}
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
             <input
@@ -406,7 +420,7 @@ function CheckBlock({
             <Button
               variant="outline"
               className="min-h-11 md:min-h-9"
-              disabled={busy || reason.trim().length < 3}
+              disabled={busy || reason.trim().length < minReasonLen}
               onClick={async () => {
                 setBusy(true)
                 try {
@@ -538,7 +552,12 @@ export default function EndOfDayWizard() {
 
   const acked = new Set(state.acknowledgements.map((a) => a.key))
   const open = (c: Check) => (c.count > 0 || !!c.unverified) && c.severity !== "info" && !acked.has(c.key)
-  const blockers = state.checks.filter((c) => c.severity === "block" && c.count > 0 && !acked.has(c.key))
+  const blockers = state.checks.filter((c) => c.severity === "block" && (c.count > 0 || !!c.unverified) && !acked.has(c.key))
+  const glTieOutCheck = state.checks.find((c) => c.key === "gl_control_tieout")
+  const balancedGlTieOut =
+    glTieOutCheck?.summary && glTieOutCheck.summary.in_balance === true && glTieOutCheck.summary.status === "Balanced"
+      ? glTieOutCheck.summary
+      : null
   const needs = state.checks
     .filter(open)
     .sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 3) - (SEVERITY_ORDER[b.severity] ?? 3))
@@ -687,6 +706,13 @@ export default function EndOfDayWizard() {
             rows={items}
             empty={translate("No company has an overdue bill.")}
           />
+        )
+      case "gl_control_tieout":
+        if (c.unverified && !c.summary) {
+          return <Message tone="block">{t("Control Tie-Out: Not verified")} — {t(c.action)}</Message>
+        }
+        return c.severity !== "info" && (
+          <ControlTieOutCard tieout={c.summary ?? null} currency={wizardCurrency} symbol={wizardSymbol} />
         )
       case "open_pos_bills":
         return <StepTable currency={wizardCurrency} cols={POS_COLS} rows={items} empty={translate("Every outlet bill is settled.")} />
@@ -997,6 +1023,14 @@ export default function EndOfDayWizard() {
               <h2 className="text-sm font-semibold text-zinc-800">{t("Needs you")}</h2>
               {needs.map(checkCard)}
             </section>
+          )}
+
+          {balancedGlTieOut && (
+            <ControlTieOutCard
+              tieout={balancedGlTieOut}
+              currency={wizardCurrency}
+              symbol={wizardSymbol}
+            />
           )}
 
           {fyi.length > 0 && (
