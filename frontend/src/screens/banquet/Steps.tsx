@@ -69,7 +69,7 @@ export function stepsFor(fn: FunctionSheet): Step[] {
       n: 2,
       label: "Quote",
       state: lines
-        ? tn(lines, "{n} line · {amount}", "{n} lines · {amount}", { amount: inr(fn.grand_total) })
+        ? tn(lines, "{n} line · {amount}", "{n} lines · {amount}", { amount: inr(fn.grand_total, fn) })
         : "Nothing priced",
       done: lines > 0,
       blocker: !lines ? "Add the menu and the extras" : undefined,
@@ -79,7 +79,7 @@ export function stepsFor(fn: FunctionSheet): Step[] {
       n: 3,
       label: "Margin",
       state: costed
-        ? `${fn.margin_percent}% · ${inr(fn.gross_margin)}`
+        ? `${fn.margin_percent}% · ${inr(fn.gross_margin, fn)}`
         : "Not costed",
       done: costed,
       blocker: !costed ? "Choose the dishes, or cost the services" : undefined,
@@ -89,7 +89,7 @@ export function stepsFor(fn: FunctionSheet): Step[] {
       n: 4,
       label: "Money",
       state: collected
-        ? translate("{v0} in · {v1} due", { v0: String(inr(fn.advance_received)), v1: String(inr(fn.balance_due)) })
+        ? translate("{v0} in · {v1} due", { v0: String(inr(fn.advance_received, fn)), v1: String(inr(fn.balance_due, fn)) })
         : fn.payment_terms.length
           ? translate("{v0} milestones · nothing in", { v0: String(fn.payment_terms.length) })
           : "No terms set",

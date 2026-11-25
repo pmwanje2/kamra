@@ -27,8 +27,6 @@ const EXEMPT_TO_FIXED_2: Readonly<Record<string, number>> = {
 // Strict exact-count ratchet for parallel-PR-owned files outside PR 1's ownership boundary.
 // Every entry must match its exact live finding count (no excess/stale caps permitted).
 const PENDING_CROSS_PR_ALLOWLIST: Readonly<Record<string, number>> = {
-  // Pack 2 PR 4 (#43)
-  "src/screens/FolioHistory.tsx": 1,
   // Peer Banquet / Events (#45) & setup screens (pre-existing missing-step)
   "src/screens/BanquetCatalogue.tsx": 1,
   "src/screens/BanquetFunction.tsx": 7,

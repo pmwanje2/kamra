@@ -9,7 +9,7 @@ import {
 } from "lucide-react"
 
 import { call } from "../lib/api"
-import { fmtMoney, useLocale } from "../lib/money"
+import { cur, fmtAmount, useLocale } from "../lib/money"
 import { t as translate, useUILanguage } from "../lib/i18n"
 
 /** The connective tissue, rendered: one strip of chips on any record that
@@ -26,6 +26,9 @@ interface Links {
     status: string
     balance: number
     invoice_number: string | null
+    currency?: string | null
+    currency_symbol?: string | null
+    locale?: string | null
   }[]
   company: string | null
   group_booking: string | null
@@ -43,14 +46,20 @@ export default function LinkedRecords({
   doctype,
   name,
   exclude = [],
+  currency,
+  currencySymbol,
+  numberLocale,
 }: {
   doctype: string
   name: string
   /** hide chip kinds that would link back to the current screen */
   exclude?: ("guest" | "folio" | "company" | "group" | "event")[]
+  currency?: string | null
+  currencySymbol?: string | null
+  numberLocale?: string | null
 }) {
   useUILanguage()
-  useLocale()
+  const loc = useLocale()
   const [links, setLinks] = useState<Links | null>(null)
   const navigate = useNavigate()
 
@@ -61,6 +70,19 @@ export default function LinkedRecords({
   }, [doctype, name])
 
   if (!links) return null
+  const fmtFolioBalance = (f: Links["folios"][number]) => {
+    const ccy = f.currency || currency || loc.currency
+    const sym =
+      f.currency_symbol != null
+        ? f.currency_symbol
+        : currencySymbol != null
+          ? currencySymbol
+          : ccy && ccy !== loc.currency
+            ? `${ccy} `
+            : cur()
+    const numLoc = f.locale || numberLocale || loc.locale
+    return `${sym}${fmtAmount(f.balance || 0, ccy, numLoc)}`
+  }
 
   const chips: React.ReactNode[] = []
   if (links.guest && !exclude.includes("guest"))
@@ -89,7 +111,7 @@ export default function LinkedRecords({
               f.balance > 0 ? "text-amber-600" : "text-zinc-400"
             }
           >
-            {fmtMoney(f.balance)}
+            {fmtFolioBalance(f)}
           </span>
         </button>,
       )

@@ -17,6 +17,7 @@
   "status",
   "folio_type",
   "group_booking",
+  "venue_booking",
   "window_no",
   "payee_type",
   "payee_company",
@@ -211,6 +212,15 @@
    "fieldtype": "Link",
    "label": "Group Booking",
    "options": "Group Booking"
+  },
+  {
+   "fieldname": "venue_booking",
+   "fieldtype": "Link",
+   "label": "Function",
+   "options": "Venue Booking",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "Set on an event folio: the function (banquet or venue booking) this bill belongs to. It has no stay."
   },
   {
    "description": "The billing window (1 to the property's Folio windows setting). Window 1 is the guest's and takes every charge no routing instruction sends elsewhere. One open folio per window.",

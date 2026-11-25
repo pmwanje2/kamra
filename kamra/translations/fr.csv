@@ -2154,7 +2154,6 @@ The group's bill must be at the same property.,La note du groupe doit appartenir
 The guest folio is already closed.,Le folio client est déjà clôturé.
 The guest folio is closed - capture before closing it.,Le folio client est clôturé — encaissez avant de le clôturer.
 The guest folio is closed - withhold before closing it.,Le folio client est clôturé — effectuez la retenue avant de le clôturer.
-The guest folio only has {0} in credit. Settle the bill or withhold against it before refunding the deposit.,Le folio client ne dispose que de {0} en crédit. Soldez la note ou imputez la retenue avant de rembourser la caution.
 The guest has no open folio to take these charges.,Le client n'a aucun folio ouvert pour recevoir ces frais.
 The guest is already in house. Use Room move to change rooms.,Le client est déjà enregistré. Utilisez Changement de chambre pour déplacer la chambre.
 "The guest is still in house, so their bill stays open for tonight's charges. To invoice what is paid so far, use Settle & continue stay.","Le client est encore en séjour, sa note reste donc ouverte pour les frais de ce soir. Pour facturer ce qui a déjà été payé, utilisez Régler et poursuivre le séjour."
@@ -2197,7 +2196,6 @@ The remaining nights could not be posted.,Les nuits restantes n'ont pas pu être
 The rooms kept for this group are not free on those dates. {0},Les chambres réservées pour ce groupe ne sont pas libres à ces dates. {0}
 The rounding step cannot be negative.,Le pas d'arrondi ne peut pas être négatif.
 "The same item, customer and date appear twice.","Le même article, client et date apparaissent deux fois."
-The security deposit of {0}{1} still held counts toward the bill; check-out records it as applied.,La caution de {0}{1} encore détenue vient en déduction de la note ; le départ l'enregistre comme imputée.
 The security deposit was applied to the bill at checkout and stays applied. Take a new deposit if the guest needs one.,La caution a été imputée sur la note au départ et reste imputée. Encaissez une nouvelle caution si le client en a besoin.
 The service needs a name.,Le service doit avoir un nom.
 The start date is after the end date.,La date de début est postérieure à la date de fin.
@@ -2684,3 +2682,34 @@ this bill,cette note
 {0}{1} overdue by more than {2} days (oldest due {3}).,{0}{1} en retard de plus de {2} jours (plus ancienne échéance {3}).
 "{product} can't read this ID's code. Type the details in, and take a picture of the ID.",{product} ne peut pas lire le code de cette pièce d'identité. Saisissez les informations et photographiez la pièce.
 {product} is temporarily unavailable. Contact your system administrator.,{product} est temporairement indisponible. Contactez votre administrateur système.
+Choose a payment mode for the settlement payment.,Choisissez un mode de paiement pour le règlement.
+Default banquet revenue code {0} must be an enabled Revenue Transaction Code for this property.,Le code de revenu banquet par défaut {0} doit être un code de transaction de revenu actif pour cet établissement.
+"Event folio {0} is already closed, so close-out cannot change the settled function total.",Le folio événement {0} est déjà clôturé ; la clôture ne peut donc pas modifier le total réglé de l'événement.
+Event folio {0} is already closed. Changes to a settled function are not allowed.,Le folio événement {0} est déjà clôturé. Les modifications sur un événement réglé ne sont pas autorisées.
+Event folio {0} is already closed. Post post-close damages on a supplemental charge or folio instead of modifying a settled function.,Le folio événement {0} est déjà clôturé. Imputez les dommages postérieurs à la clôture sur des frais complémentaires ou un nouveau folio au lieu de modifier un événement réglé.
+Event folio {0} is already closed. Quotes cannot be re-issued for a settled function.,Le folio événement {0} est déjà clôturé. Les devis ne peuvent pas être réémis pour un événement réglé.
+Event folio {0} is already closed. Record adjustments on a new folio instead.,Le folio événement {0} est déjà clôturé. Enregistrez plutôt les ajustements sur un nouveau folio.
+Event folio {0} is already closed. Record corrections through a credit note or reopen per policy.,Le folio événement {0} est déjà clôturé. Enregistrez les corrections par un avoir ou rouvrez selon la procédure.
+Event folio {0} is already closed. Refund the remaining deposit on the folio instead of adding a close-out refund receipt.,Le folio événement {0} est déjà clôturé. Remboursez le solde de caution sur le folio au lieu d'ajouter un reçu de remboursement de clôture.
+Event folio {0} is already closed. Status changes on a settled function are not allowed.,Le folio événement {0} est déjà clôturé. Les changements de statut sur un événement réglé ne sont pas autorisés.
+Event folio {0} is already {1}.,Le folio événement {0} est déjà {1}.
+Folio Payment,Paiement de folio
+Function,Événement
+Hall,Salle
+Hall {0} belongs to another property.,La salle {0} appartient à un autre établissement.
+Link a company to this function before settling to the city ledger.,Associez une société à cet événement avant de le transférer sur le compte société.
+Map a function charge to an enabled revenue transaction code.,Associez les frais d'événement à un code de transaction de revenu actif.
+No Banquet Revenue Mapping is configured for: {0}. Add a Banquet Revenue Mapping or set the property's Default banquet revenue code.,Aucune correspondance de revenu banquet n'est configurée pour : {0}. Ajoutez une correspondance de revenu banquet ou définissez le code de revenu banquet par défaut de l'établissement.
+Only a settled folio has an invoice to reprint.,Seul un folio réglé dispose d'une facture à réimprimer.
+Post this function to its event folio before settling it.,Imputez cet événement sur son folio événement avant de le régler.
+Revenue Type,Type de revenu
+"The fiscal document is still pending, so there is nothing final to reprint yet.",Le document fiscal est encore en attente ; il n'y a donc pas encore de facture définitive à réimprimer.
+"The fiscal status is unavailable, so this can't be reprinted as a tax invoice. Try again, or ask Finance.",Le statut fiscal est indisponible ; ce document ne peut donc pas être réimprimé en tant que facture fiscale. Réessayez ou contactez la finance.
+This fiscal number comes from a test fiscal service and is not a valid tax invoice.,Ce numéro fiscal provient d'un service fiscal de test et ne constitue pas une facture fiscale valide.
+This folio is closed. Record corrections through a credit note or reopen per policy.,Ce folio est clôturé. Enregistrez les corrections par un avoir ou rouvrez selon la procédure.
+This function rides group {0}: settle it on the group's master folio.,Cet événement est rattaché au groupe {0} : réglez-le sur le folio maître du groupe.
+This function rides group {0}: take its money on the group's master folio.,Cet événement est rattaché au groupe {0} : encaissez les paiements sur le folio maître du groupe.
+Under the ERP accounting bridge Finance pays a refund out with a native refund Payment Entry against the function's folio. Nothing was refunded.,"Avec la passerelle comptable, la finance effectue le remboursement par une écriture de paiement de remboursement native sur le folio de l'événement. Aucun remboursement n'a été enregistré."
+{0} charges map to more than one transaction code ({1}) with the same reach. Keep one mapping.,Les frais {0} renvoient vers plusieurs codes de transaction ({1}) de même portée. Ne conservez qu'une seule correspondance.
+{0} is not allowed on city ledger (credit).,{0} n'est pas autorisé sur le compte société (crédit).
+{0} of deposit is held on the function's folio. Under the ERP accounting bridge Finance returns it with a native refund Payment Entry: close out without refunding here.,"{0} de caution reste détenu sur le folio de l'événement. Avec la passerelle comptable, la finance le restitue par une écriture de paiement de remboursement native : clôturez sans rembourser ici."

@@ -2591,18 +2591,19 @@ def t37():
 	except frappe.exceptions.ValidationError:
 		pass
 
-	# refunds: reason mandatory, can't exceed what was collected
+	# refunds: reason mandatory, can't exceed what was collected;
+	# security deposit stays separate from payments_total (OPERA/SAP)
 	try:
 		api.refund_folio_payment(folio, 5000, "Cash", "too much")
 		raise AssertionError("over-refund accepted")
 	except frappe.exceptions.ValidationError:
 		pass
-	api.refund_folio_payment(folio, 1000, "Cash", "deposit returned")
+	api.refund_security_deposit(res.name, 1000, "Cash", "deposit returned")
 	fd = frappe.get_doc("Folio", folio)
 	kinds = {(p.payment_kind, float(p.amount)) for p in fd.payments}
 	assert ("Advance", 2000.0) in kinds and ("Security Deposit", 1000.0) in kinds
 	assert ("Refund", -1000.0) in kinds, kinds
-	assert float(fd.payments_total) == 2000.0, fd.payments_total  # 2000+1000-1000
+	assert float(fd.payments_total) == 2000.0, fd.payments_total  # Advance only; Security Deposit stays separate
 
 	# actual times: corrected by the desk, visible on the GRC with money
 	api.set_actual_times(res.name, actual_check_in=f"{nowdate()} 07:15:00")
@@ -3342,6 +3343,19 @@ def _banquet_setup():
 		{"course": course, "dish": BQ["dish_nv"], "supplement_per_pax": 150},
 	])
 	menu.save(ignore_permissions=True)
+	# OPERA Revenue Type Mapping: every banquet revenue type maps to a Transaction Code.
+	for code, charge_type in (("EVAL-BQ-HALL", "Misc"), ("EVAL-BQ-FOOD", "Food & Beverage")):
+		if not frappe.db.exists("Transaction Code", code):
+			frappe.get_doc({
+				"doctype": "Transaction Code", "code": code, "description": code,
+				"txn_type": "Revenue", "charge_type": charge_type,
+			}).insert(ignore_permissions=True)
+	for rev_type, code in (("Venue Rental", "EVAL-BQ-HALL"), ("Menu", "EVAL-BQ-FOOD")):
+		if not frappe.db.exists("Banquet Revenue Mapping", {"property": P, "revenue_type": rev_type}):
+			frappe.get_doc({
+				"doctype": "Banquet Revenue Mapping", "property": P,
+				"revenue_type": rev_type, "transaction_code": code,
+			}).insert(ignore_permissions=True)
 	return BQ
 
 
@@ -5562,10 +5576,11 @@ def t171():
 	fd = frappe.get_doc("Folio", folio)
 	dmg = [c for c in fd.charges if "withheld" in (c.description or "")]
 	assert len(dmg) == 1 and float(dmg[0].amount) == 3000, dmg
-	# no second payment row: the deposit already on the folio pays it
+	# no second payment row: only the withheld 3,000 applies to the damage charge;
+	# the remaining 7,000 stays held on the Deposit liability (balance = 0, not -7000)
 	assert sum(1 for p in fd.payments
 	           if p.payment_kind == "Security Deposit") == 1
-	assert abs(float(fd.balance) - (-7000)) < 0.01, fd.balance
+	assert abs(float(fd.balance)) < 0.01, fd.balance
 	assert _ledger(folio, "Deposit") == (3000.0, 10000.0), _ledger(folio, "Deposit")
 	# Guest: damage charge debit 3000, deposit applied credit 3000
 	g1 = _ledger(folio, "Guest")
@@ -5611,34 +5626,42 @@ def t172():
 	assert frappe.db.get_value("Reservation", res.name, "status") == "Checked Out"
 
 
-@check("security deposit: refund can't take back what the bill owes; a deposit the bill used is applied at check-out")
+@check("security deposit: held deposit never reduces bill balance or auto-applies at check-out")
 def t173():
 	from kamra import api
 	res, folio = _dep_stay("E173", "+91 70000 00173")
+	pre_paid = float(frappe.db.get_value("Folio", folio, "payments_total") or 0)
 	api.collect_security_deposit(res.name, 5000, "Cash")
 	api.add_folio_charge(folio, "Misc", "Extra bed", 4000)
+	fd = frappe.get_doc("Folio", folio)
+	# Security deposit stays on Deposit liability; payments_total stays at pre_paid and bill still owes 4,000
+	assert abs(float(fd.payments_total) - pre_paid) < 0.01 and abs(float(fd.balance) - 4000) < 0.01, (
+		fd.payments_total, pre_paid, fd.balance)
+	# Ordinary folio refund cannot dip into the held security deposit
 	try:
-		api.refund_security_deposit(res.name, 5000)
-		raise AssertionError("refunded a deposit the bill is using")
+		api.refund_folio_payment(folio, 1000, "Cash", "cannot tap deposit")
+		raise AssertionError("ordinary refund tapped held security deposit")
 	except frappe.ValidationError:
 		pass
-	# the last 1,000 handed back through the folio's own refund form can't
-	# then be refunded again from the deposit panel
-	api.refund_folio_payment(folio, 1000, "Cash", "deposit change returned")
+	# Check-out refuses while bill is unpaid, and never auto-applies the deposit
 	try:
-		api.refund_security_deposit(res.name, 1000)
-		raise AssertionError("deposit refunded twice")
+		api.check_out(res.name)
+		raise AssertionError("check-out accepted while bill unpaid")
 	except frappe.ValidationError:
 		pass
-	# the settled bill used the deposit: check-out records it as applied
-	api.check_out(res.name)
-	dep = frappe.get_doc("Security Deposit", {"reservation": res.name})
-	assert float(dep.balance) == 0 and dep.status == "Withheld", dep.as_dict()
-	assert "check-out" in (dep.reason or ""), dep.reason
+	api.add_folio_payment(folio, "Cash", 4000)
+	# Bill is settled (balance 0), but held deposit still blocks check-out until refunded
+	try:
+		api.check_out(res.name)
+		raise AssertionError("check-out accepted while security deposit still held")
+	except frappe.ValidationError:
+		pass
+	st = api.refund_security_deposit(res.name, 5000, "Cash", "Deposit returned")
+	assert st["status"] == "Refunded" and float(st["held"]) == 0, st
 	d, c = _ledger(folio, "Deposit")
 	assert abs(d - c) < 0.01, (d, c)
-	assert frappe.db.exists("Agent Action Log",
-	                        {"action_type": "apply_security_deposit"})
+	api.check_out(res.name)
+	assert frappe.db.get_value("Reservation", res.name, "status") == "Checked Out"
 
 
 @check("security deposit: waive needs a reason, is refused once paid; roles gate withhold/refund")
