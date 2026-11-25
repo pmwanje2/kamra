@@ -625,10 +625,12 @@ def save_routing_instruction(data) -> dict:
 		doc.save(ignore_permissions=True)
 
 	from kamra.savings import log_action
+	parent_dt = "Reservation" if doc.reservation else "Group Booking"
+	parent_name = doc.reservation or doc.group_booking or doc.name
 	log_action(
 		"save_routing_instruction",
-		"Routing Instruction",
-		doc.name,
+		parent_dt,
+		parent_name,
 		doc.property,
 		rationale=f"Saved routing {doc.name} -> {doc.target_type} W{doc.target_window or 1}",
 	)
@@ -650,15 +652,21 @@ def delete_routing_instruction(name: str) -> dict:
 		"Folio Charge",
 		{"parenttype": "Folio", "routing_instruction": doc.name},
 	)
+	copied_count = frappe.db.count(
+		"Routing Instruction",
+		{"source_instruction": doc.name},
+	)
 
 	from kamra.savings import log_action
-	if used_amt > 0 or ref_count > 0:
+	parent_dt = "Reservation" if doc.reservation else "Group Booking"
+	parent_name = doc.reservation or doc.group_booking or doc.name
+	if used_amt > 0 or ref_count > 0 or copied_count > 0:
 		doc.disabled = 1
 		doc.save(ignore_permissions=True)
 		log_action(
 			"disable_routing_instruction",
-			"Routing Instruction",
-			doc.name,
+			parent_dt,
+			parent_name,
 			doc.property,
 			rationale=f"Soft-disabled routing {doc.name} (used={used_amt}, charges={ref_count})",
 		)
@@ -671,11 +679,11 @@ def delete_routing_instruction(name: str) -> dict:
 		}
 
 	prop = doc.property
-	frappe.delete_doc("Routing Instruction", doc.name, ignore_permissions=True)
+	frappe.delete_doc("Routing Instruction", doc.name, ignore_permissions=True, force=True)
 	log_action(
 		"delete_routing_instruction",
-		"Routing Instruction",
-		name,
+		parent_dt,
+		parent_name,
 		prop,
 		rationale=f"Deleted unused routing {name}",
 	)

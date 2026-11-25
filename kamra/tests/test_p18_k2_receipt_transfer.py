@@ -254,9 +254,9 @@ if frappe is not None:
 
 			# Agent Action Log entry written
 			self.assertTrue(frappe.db.exists("Agent Action Log", {
-				"action": "payment_transfer",
-				"target_doctype": "Folio",
-				"target_name": w2,
+				"action_type": "payment_transfer",
+				"reference_doctype": "Folio",
+				"reference_name": w2,
 			}))
 
 			# Idempotent replay returns same result without adding rows
@@ -442,7 +442,8 @@ if frappe is not None:
 		def test_credit_and_rebill_delegates_full_and_partial_with_role_guard(self):
 			from kamra import payment_transfers
 
-			_, _, res, w1 = self._setup_stay(PROP_USD, "USD", "United States", room_no="303")
+			_, _, res, _w1 = self._setup_stay(PROP_USD, "USD", "United States", room_no="303")
+			w1 = folio_mod.open_window(reservation=res.name, payee_type="Guest", bill_to_name="Settled Window")
 			api.add_folio_charge(w1, "Laundry", "Suit press", 100.00, gst_rate=0)
 			api.add_folio_payment(w1, "Cash", 100.00, reference="SETTLE-1", kind="Payment")
 			api.close_folio(w1)
