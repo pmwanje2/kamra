@@ -10517,10 +10517,13 @@ def _sellable_room_types(property: str, room_type_names: list[str]) -> set[str]:
 def booking_options(property: str):
 	"""Everything the booking form needs to render its dropdowns."""
 	from kamra.channel_manager import channel_commission_pcts
-	from kamra.rates import default_plan
+	from kamra.rates import all_active_plans_use_tariffs, default_plan
 	from kamra.settings import get_setting
 	plan_fields = ["name", "rate_plan_name", "code", "is_default", "discount_eligible"]
-	if frappe.get_meta("Rate Plan").has_field("currency"):
+	meta = frappe.get_meta("Rate Plan")
+	if meta.has_field("custom_tariff_price_list"):
+		plan_fields.extend(("custom_tariff_price_list", "base_rate_plan"))
+	if meta.has_field("currency"):
 		plan_fields.append("currency")
 	plans = frappe.get_all(
 		"Rate Plan", filters={"property": property, "disabled": 0},
@@ -10534,6 +10537,7 @@ def booking_options(property: str):
 		# cheapest first; name breaks ties so the dialog default is stable (#549)
 		order_by="base_price asc, room_type_name asc",
 	)
+	default = default_plan(plans)
 	sellable = _sellable_room_types(property, [rt["name"] for rt in all_room_types])
 	return {
 		"room_types": [rt for rt in all_room_types if rt["name"] in sellable],
@@ -10542,8 +10546,11 @@ def booking_options(property: str):
 			fields=["name", "code", "label", "price_per_adult", "is_default"],
 			order_by="price_per_adult asc",
 		),
-		"rate_plans": plans,
-		"default_plan": default_plan(plans),
+		"rate_plans": [{key: value for key, value in plan.items() if key not in
+		                ("custom_tariff_price_list", "base_rate_plan")} for plan in plans],
+		"default_plan": default,
+		"default_rate_plan": default,
+		"all_active_plans_tariff": all_active_plans_use_tariffs(property, plans),
 		"rate_plan_required": bool(get_setting(property, "rate_plan_required")),
 		"companies": frappe.get_all(
 			"Corporate Account", filters={"disabled": 0},

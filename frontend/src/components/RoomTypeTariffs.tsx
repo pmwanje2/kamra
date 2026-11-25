@@ -71,7 +71,8 @@ export default function RoomTypeTariffs({ row }: { row: Row; reload?: () => void
   return <section aria-label={t("Contract tariffs")} className="space-y-3 rounded-xl border border-line p-4">
     <div className="flex flex-wrap items-center justify-between gap-2">
       <h3 className="text-sm font-semibold">{t("Contract tariffs")}</h3>
-      <ManageTariffsLink roomType={roomType} />
+      <ManageTariffsLink roomType={roomType}
+        roomTypeName={String(row.room_type_name || "")} roomTypeCode={String(row.room_type_code || "")} />
     </div>
     {error && <p className="text-sm text-danger-ink">{t("Could not load contract tariffs.")}</p>}
     {primary && <div data-primary-tariff className="space-y-0.5 rounded-lg bg-canvas p-3 text-sm">
