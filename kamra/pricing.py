@@ -80,6 +80,12 @@ def _minor_unit(currency: str | None) -> int:
 	return get_currency_precision(currency)
 
 
+def rate_quantum(property: str | None = None, currency: str | None = None) -> Decimal:
+	"""Currency minor-unit quantum (1 for UGX/JPY, 0.01 for USD, 0.001 for KWD)."""
+	resolved = currency or (property_currency(property) if property else None)
+	return Decimal(1).scaleb(-_minor_unit(resolved))
+
+
 def round_rate_amount(amount, step, mode: str = "Nearest", currency: str | None = None) -> Decimal:
 	"""A price rounded the way its rate plan says.
 
@@ -2039,13 +2045,39 @@ def quote(
 		pkg_doc = frappe.get_doc("Holiday Package", pkg.name)
 		pkg_nights = int(getattr(pkg, "package_nights", None) or getattr(pkg, "minimum_nights", None) or 1)
 		billable_nights = max(nights, 1)
+		pkg_quantum = rate_quantum(property)
 
 		# The package base covers up to pkg_nights
 		pkg_base_rate = pkg_doc.package_price_for(adults, children, nights=pkg_nights)
 		stay_dates = [add_days(check_in_date, i) for i in range(billable_nights)]
+		has_pkg_elements = bool(pkg_doc.get("elements") or [])
+		pseudo_res = frappe._dict({
+			"name": "",
+			"property": property,
+			"check_in_date": check_in_date,
+			"check_out_date": check_out_date,
+			"adults": adults,
+			"children": children,
+		}) if has_pkg_elements else None
+
+		def _package_night_tax(night_rate: Decimal, room_gst: Decimal, night_date) -> tuple[Decimal, Decimal, dict]:
+			"""Compute night tax matching post_package_night_split for inclusive elements."""
+			if not has_pkg_elements:
+				return night_rate * room_gst / Decimal(100), room_gst, {}
+			from kamra.packages import split_package_night
+			split = split_package_night(pseudo_res, pkg_doc, night_rate, night_date, gst_rate=float(room_gst))
+			inc_items = [item for item in split["elements"] if item["included_in_rate"]]
+			if not inc_items or all(_dec(item["gst_rate"]) == room_gst for item in inc_items):
+				return night_rate * room_gst / Decimal(100), room_gst, {"room_gst_rate": float(room_gst)}
+			tax_val = split["room_net"] * room_gst / Decimal(100) + sum(
+				(item["amount"] * _dec(item["gst_rate"]) / Decimal(100) for item in inc_items),
+				Decimal(0),
+			)
+			eff = (tax_val * Decimal(100) / night_rate).quantize(Decimal("0.01")) if night_rate else room_gst
+			return tax_val, eff, {"room_gst_rate": float(room_gst)}
 
 		if billable_nights <= pkg_nights:
-			base_per_night = (pkg_base_rate / Decimal(billable_nights)).quantize(Decimal("0.01"))
+			base_per_night = (pkg_base_rate / Decimal(billable_nights)).quantize(pkg_quantum)
 			accum = Decimal(0)
 			for i, d in enumerate(stay_dates):
 				rate = (pkg_base_rate - accum) if i == billable_nights - 1 else base_per_night
@@ -2060,17 +2092,19 @@ def quote(
 					over_cap += net
 					over_cap_tax += net * gst / Decimal(100)
 
+				night_tax, eff_gst, extra_meta = _package_night_tax(rate, gst, d)
 				nightly.append({
 					"date": str(d),
 					"rate": float(rate),
-					"gst_rate": float(gst),
+					"gst_rate": float(eff_gst),
 					"demand_premium_pct": 0,
 					"package": pkg.package_name,
-					"occupancy": 0
+					"occupancy": 0,
+					**extra_meta,
 				})
 				exact_nets.append(rate)
 				room_total += rate
-				room_tax += rate * gst / Decimal(100)
+				room_tax += night_tax
 		else:
 			# Identify which dates are package dates (prefer inside [start_date, end_date])
 			inside_pkg = [d for d in stay_dates if getdate(pkg.start_date) <= getdate(d) <= getdate(pkg.end_date)]
@@ -2090,15 +2124,15 @@ def quote(
 				needed = pkg_nights - len(inside_pkg)
 				pkg_dates_set = set(inside_pkg + outside_pkg[:needed])
 
-			package_daily = (pkg_base_rate / Decimal(pkg_nights)).quantize(Decimal("0.01"))
+			package_daily = (pkg_base_rate / Decimal(pkg_nights)).quantize(pkg_quantum)
 			fixed_extra = _dec(getattr(pkg, "extra_night_price", 0))
 			pct_raw = getattr(pkg, "extra_night_percent", None)
 			pct_extra = float(pct_raw) if (pct_raw is not None and pct_raw != "") else 100.0
 
 			if fixed_extra > 0:
-				extra_night_rate = fixed_extra
+				extra_night_rate = fixed_extra.quantize(pkg_quantum)
 			else:
-				extra_night_rate = (package_daily * Decimal(str(pct_extra)) / Decimal(100)).quantize(Decimal("0.01"))
+				extra_night_rate = (package_daily * Decimal(str(pct_extra)) / Decimal(100)).quantize(pkg_quantum)
 
 			base_per_night = package_daily
 			accum = Decimal(0)
@@ -2113,7 +2147,7 @@ def quote(
 					label = pkg.package_name
 				else:
 					rate = extra_night_rate
-					label = f"{pkg.package_name} (Diária Adicional)"
+					label = f"{pkg.package_name} (Additional Night)"
 
 				gst = room_gst_rate(property, rt, rate + night_over_cap)
 				if inclusive:
@@ -2124,17 +2158,19 @@ def quote(
 					over_cap += net
 					over_cap_tax += net * gst / Decimal(100)
 
+				night_tax, eff_gst, extra_meta = _package_night_tax(rate, gst, d)
 				nightly.append({
 					"date": str(d),
 					"rate": float(rate),
-					"gst_rate": float(gst),
+					"gst_rate": float(eff_gst),
 					"demand_premium_pct": 0,
 					"package": label,
-					"occupancy": 0
+					"occupancy": 0,
+					**extra_meta,
 				})
 				exact_nets.append(rate)
 				room_total += rate
-				room_tax += rate * gst / Decimal(100)
+				room_tax += night_tax
 	else:
 		# a day-use stay bills one "night" on the check-in date
 		for i in range(max(nights, 1)):
@@ -2549,6 +2585,8 @@ def quote(
 			"extra_night_percent": pct_extra if "pct_extra" in locals() else float(getattr(pkg, "extra_night_percent", 0) or 100),
 			"extra_night_price": float(extra_night_rate if "extra_night_rate" in locals() else (getattr(pkg, "extra_night_price", 0) or 0)),
 			"inclusions": pkg.inclusions or "",
+			"folio_display_mode": getattr(pkg_doc, "folio_display_mode", None) or "Inclusive",
+			"elements_count": len(pkg_doc.get("elements") or []),
 			"flyer_image": pkg.flyer_image or None,
 			"ota_strategy": pkg.ota_strategy,
 			"ota_daily_rate": float(pkg.ota_daily_rate or 0)

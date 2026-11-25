@@ -149,7 +149,10 @@ Alcohol can't ride a company bill - settle those lines separately.,Les alcools n
 Alcohol cannot be billed to a company folio.,Les alcools ne peuvent pas être facturés sur un folio société.
 All companies,Toutes les sociétés
 Allergens,Allergènes
+Allocated Amount,Montant alloué
 Allocations,Affectations
+Allowance Basis,Base d'allocation
+Allowance Ledger,Grand livre des allocations
 Allowance Serial,Série des dégrèvements
 Allowance amount is required.,Le montant du dégrèvement est obligatoire.
 Allowed Modes,Modes autorisés
@@ -303,6 +306,7 @@ Booking Type,Type de réservation
 Booking advance,Acompte de réservation
 Booking notes: {0},Notes de réservation : {0}
 Both accounts must be at the same property.,Les deux comptes doivent appartenir au même établissement.
+Breakage / Profit,Reliquat / Marge
 Buffer After Ready (minutes),Marge après prêt (minutes)
 Building number,Numéro de bâtiment
 Building number (4 digits),Numéro de bâtiment (4 chiffres)
@@ -334,8 +338,10 @@ Cannot check out: the guest is owed {0}. Issue the refund before departure.,Dép
 Cannot check out: {0} is still owed. Collect payment or transfer it to the city ledger before departure.,Départ impossible : {0} reste dû. Encaissez le paiement ou transférez sur le compte société avant le départ.
 Cannot close the folio: {0} is owed back to the guest. Issue the refund first.,Impossible de clôturer le folio : {0} est dû au client. Émettez d'abord le remboursement.
 "Cannot close the folio: {0} is still owed. Collect payment, or move the company's share to the city ledger, first.",Impossible de clôturer le folio : {0} reste dû. Encaissez d'abord le paiement ou transférez la part de la société sur le compte société.
+Cannot edit fixed charges on a {0} stay.,Impossible de modifier les frais fixes sur un séjour {0}.
 Cannot move reservation from {0} to {1}.,Impossible de faire passer la réservation de {0} à {1}.
 Cannot release access yet. Failed gates: {0},Impossible de libérer l'accès pour le moment. Contrôles échoués : {0}
+Cannot remove fixed charges on a {0} stay.,Impossible de supprimer les frais fixes sur un séjour {0}.
 Capacity,Capacité
 Capacity & Attributes,Capacité et caractéristiques
 Captain,Chef de rang
@@ -486,6 +492,9 @@ Connection,Connexion
 Consecutive failures,Échecs consécutifs
 Consent changed on,Consentement modifié le
 Consent source,Origine du consentement
+Consumed Amount,Montant consommé
+Consumed Source References,Références sources consommées
+Consumed amount must be greater than zero.,Le montant consommé doit être supérieur à zéro.
 Contact Email,E-mail du contact
 Contact For This Stay,Contact pour ce séjour
 Contact Name,Nom du contact
@@ -552,6 +561,8 @@ Date & Setup,Date et mise en place
 Date of Birth,Date de naissance
 Date range cannot exceed {0} days.,La plage de dates ne peut pas dépasser {0} jours.
 Day Use,Usage de jour
+Day of Week,Jour de la semaine
+Day of week must be Monday through Sunday.,Le jour de la semaine doit être compris entre lundi et dimanche.
 Day-use billing,Facturation usage de jour
 Day-use stays check out the same day.,Les séjours en usage de jour repartent le jour même.
 Days Before Arrival,Jours avant l'arrivée
@@ -612,6 +623,7 @@ Dish Name,Nom du plat
 Dishes,Plats
 Dishes Offered,Plats proposés
 Dishes and prices per outlet.,Plats et tarifs par point de vente.
+"Display mode must be Inclusive, Separate Add-on, or blank.","Le mode d'affichage doit être Inclus, Supplément séparé ou vide."
 Dispute Note,Note de litige
 Disputed,En litige
 District,Quartier / District
@@ -644,6 +656,9 @@ Early Departure Reason,Motif de départ anticipé
 Early departure: {0} of {1} unused night(s) at {2}% tax,Départ anticipé : {0} sur {1} nuit(s) non utilisée(s) avec {2}% de taxe
 Effective Exchange Rate Date,Date effective du taux de change
 Effective from must be a date (YYYY-MM-DD).,La date d'entrée en vigueur doit être une date (AAAA-MM-JJ).
+Element Name,Nom de l'élément
+Element Type,Type d'élément
+Elements must be a list.,Les éléments doivent être fournis sous forme de liste.
 Email,E-mail
 Email schedule,Planning d'envoi par e-mail
 Enabled,Activé
@@ -658,6 +673,7 @@ Endpoint URL,URL de destination
 Enquiries received,Demandes reçues
 Enquiry,Demande
 Enquiry Date,Date de demande
+Enter a description for the fixed charge.,Saisissez une description pour les frais fixes.
 Enter a discount above zero.,Saisissez une remise supérieure à zéro.
 Enter a reason for the room charge override.,Saisissez un motif pour la dérogation d'imputation en chambre.
 Enter a valid email address.,Saisissez une adresse e-mail valide.
@@ -687,6 +703,7 @@ Events,Événements
 Every charged night already has the current rate.,Chaque nuit facturée applique déjà le tarif actuel.
 Every line is moving - rename the table on this bill instead of splitting it.,Toutes les lignes sont déplacées — renommez la table sur cette note au lieu de la scinder.
 Every line needs a description.,Chaque ligne nécessite une description.
+Every package element needs a name.,Chaque élément de forfait doit porter un nom.
 Every recipe line needs a quantity above zero.,Chaque ligne de recette requiert une quantité supérieure à zéro.
 Every rooming list row needs a guest name.,Chaque ligne de la rooming list nécessite un nom de client.
 Evidence URL / Ref,URL / Réf. de preuve
@@ -732,7 +749,13 @@ Finished At,Terminé le
 Fired At,Envoyé le
 First Name,Prénom
 First Response At,Première réponse le
+Fixed Charges,Frais fixes
 Fixed Rate,Tarif fixe
+Fixed charge details are required.,Les détails des frais fixes sont requis.
+Fixed charge row not found on this reservation.,Ligne de frais fixes introuvable sur cette réservation.
+Fixed charges,Frais fixes
+Fixed charges can only be added through the Fixed Charges actions.,Les frais fixes ne peuvent être ajoutés que via les actions Frais fixes.
+Fixed charges can only be edited or removed through the Fixed Charges actions.,Les frais fixes ne peuvent être modifiés ou supprimés que via les actions Frais fixes.
 Flight / Train No.,N° de vol / train
 Float & Close,Fond de caisse et clôture
 Floating Cashier,Caissier volant
@@ -745,8 +768,13 @@ Floor {0} still has rooms. Move them to another floor before deleting it.,L'éta
 Floor {0} still has rooms. Move them to another floor before disabling it.,L'étage {0} contient encore des chambres. Déplacez-les vers un autre étage avant de le désactiver.
 Flyer / Promo Image,Visuel promotionnel
 Folio,Folio
+Folio Display Mode,Mode d'affichage du folio
+Folio Display Mode must be Inclusive or Separate Add-on.,Le mode d'affichage du folio doit être Inclus ou Supplément séparé.
 Folio Type,Type de folio
 Folio balance after,Solde du folio après
+Folio display mode must be Inclusive or Separate Add-on.,Le mode d'affichage du folio doit être Inclus ou Supplément séparé.
+Folio window must be between 1 and 8.,La fenêtre de folio doit être comprise entre 1 et 8.
+Folio {0} not found.,Folio {0} introuvable.
 "Folio {0} shows {1}{2} in the guest's favour but only {1}{3} was collected on it, so it can't all be refunded. Open the folio and correct it (move a charge or a payment).","Le folio {0} affiche {1}{2} en faveur du client, mais seul {1}{3} y a été encaissé ; tout ne peut donc pas être remboursé. Ouvrez le folio et corrigez-le (déplacez un frais ou un paiement)."
 Folios Opened,Folios ouverts
 Follow Up Date,Date de relance
@@ -768,6 +796,8 @@ Free Child Age,Âge enfant gratuit
 Free cancellation until {0}; after that {1} is charged.,"Annulation gratuite jusqu'au {0} ; passé ce délai, {1} sont facturés."
 Free cancellation.,Annulation gratuite.
 Free {0} rooms for these dates: {1}.,Chambres {0} libres pour ces dates : {1}.
+Frequency,Fréquence
+Frequency must be one of: {0}.,La fréquence doit être l'une des suivantes : {0}.
 From,Du
 From Session,Depuis la session
 From Terminal,Depuis le terminal
@@ -837,6 +867,7 @@ Guest ETA,Heure d'arrivée prévue client
 Guest ID verification,Vérification d'identité client
 Guest Name,Nom du client
 Guest Notes,Notes client
+Guest Overage Billed,Dépassement facturé au client
 Guest Picks,Choix du client
 Guest Response,Réponse du client
 Guest Response Notes,Notes de réponse du client
@@ -859,6 +890,8 @@ Hero Image,Image principale
 Hold Expires On,Expiration de l'option
 Hold Window (minutes),Délai de maintien (minutes)
 Holiday / Long Weekend,Vacances / Week-end prolongé
+Holiday Package,Forfait séjour
+Holiday Package {0} not found.,Forfait séjour {0} introuvable.
 Hotel admins and IT always have full AI access.,Les administrateurs hôtel et l'informatique disposent toujours de l'accès IA complet.
 Hourly Rate,Tarif horaire
 Hourly View End,Fin de la vue horaire
@@ -895,6 +928,7 @@ Image,Image
 Image Url,URL de l'image
 Inbound Webhook Secret,Secret webhook entrant
 Included,Inclus
+Included in Rate,Inclus dans le tarif
 Inclusions,Prestations incluses
 Infants,Bébés
 Ingredient,Ingrédient
@@ -907,8 +941,11 @@ Instruction must be for one of: {0}.,L'instruction doit concerner l'un des élé
 Instructions,Instructions
 Interested in,Intéressé par
 Internal Notes,Notes internes
+Invalid allowance basis: {0}.,Base d'allocation invalide : {0}.
+Invalid element type: {0}.,Type d'élément invalide : {0}.
 Invalid link.,Lien invalide.
 Invalid manager approval token.,Jeton d'approbation responsable invalide.
+Invalid posting rhythm: {0}.,Rythme de comptabilisation invalide : {0}.
 Invalid schedule frequency.,Fréquence de planification invalide.
 Invalid status change,Changement de statut invalide
 Invite staff and give each the right role.,Invitez le personnel et attribuez à chacun le bon rôle.
@@ -968,6 +1005,7 @@ Language,Langue
 Last ARI push,Dernier envoi ARI
 Last Counted,Dernier comptage
 Last Name,Nom de famille
+Last Posted Date,Dernière date de comptabilisation
 Last Reject Reason,Dernier motif de refus
 Last Used,Dernière utilisation
 Last delivery,Dernier envoi
@@ -1283,6 +1321,11 @@ POS-RC-CURRENCY: Currency conversion failed.,POS-RC-CURRENCY : échec de la conv
 POS-RC-OVER-LIMIT: Projected balance ({0}) exceeds this property's room charge credit limit ({1}). Settle it at the outlet or ask a duty manager.,POS-RC-OVER-LIMIT : le solde prévisionnel ({0}) dépasse le plafond de crédit d'imputation chambre de cet établissement ({1}). Réglez au point de vente ou demandez à un chef de réception.
 POS-RC-OVER-LIMIT: {0} is over this property's limit for one POS room charge ({1}). Settle it at the outlet or ask a duty manager.,POS-RC-OVER-LIMIT : {0} dépasse la limite de cet établissement pour une imputation chambre PDV ({1}). Réglez au point de vente ou demandez à un chef de réception.
 Pack List,Liste de préparation
+Package,Forfait
+Package Element Row,Ligne d'élément de forfait
+Package Elements,Éléments du forfait
+Package Elements & Allowances,Éléments du forfait et allocations
+Package Folio Display Mode,Mode d'affichage du forfait sur le folio
 Package Name,Nom du forfait
 Package Nights,Nuits du forfait
 Package Nights must be at least 1.,Le nombre de nuits du forfait doit être d'au moins 1.
@@ -1293,6 +1336,9 @@ Package Rate 3 Pax,Tarif forfait 3 pers.
 Package Rate 4 Pax,Tarif forfait 4 pers.
 Package Rate 5 Pax,Tarif forfait 5 pers.
 Package Rates,Tarifs forfaitaires
+Package element Transaction Code {0} must be an active non-payment code.,Le code de transaction {0} de l'élément de forfait doit être un code actif hors paiement.
+Package element allowance cannot be negative.,L'allocation de l'élément de forfait ne peut pas être négative.
+Package element requires a valid Transaction Code.,L'élément de forfait requiert un code de transaction valide.
 Page Slug,Identifiant de page
 Paid,Payé
 Paid Outs,Débours
@@ -1392,6 +1438,7 @@ Please upload a photo of your ID.,Veuillez téléverser une photo de votre pièc
 Policy deposit {0} ({1}% of stay). Still due {2}.,Acompte requis {0} ({1}% du séjour). Reste dû {2}.
 Port,Port
 Portion Per Pax,Portion par pers.
+Post Count,Nombre d'écritures
 Post {0} as {1} on the folio.,Comptabiliser {0} en tant que {1} sur le folio.
 Postal code,Code postal
 Postal code (5 digits),Code postal (5 chiffres)
@@ -1401,6 +1448,7 @@ Posted By,Comptabilisé par
 Posted To Folio,Imputé au folio
 Posted by,Comptabilisé par
 Posting Date,Date de comptabilisation
+Posting Rhythm,Rythme de comptabilisation
 Pre-arrival Check-in,Pré-enregistrement avant arrivée
 Pre-check-in Signature,Signature de pré-enregistrement
 Pre-checkin,Pré-enregistrement
@@ -1444,6 +1492,7 @@ Property is required.,L'établissement est obligatoire.
 Property standard is {0}. Pick the agreed time for {1}.,L'horaire standard de l'établissement est {0}. Choisissez l'heure convenue pour {1}.
 "Property, reservation, and room are required.","L'établissement, la réservation et la chambre sont obligatoires."
 Protect Late Arrivals,Protéger les arrivées tardives
+Provide a Transaction Code or Element Type for allowance consumption.,Indiquez un code de transaction ou un type d'élément pour consommer l'allocation.
 Provider,Fournisseur
 Provider Credentials,Identifiants du fournisseur
 Provider ID,ID fournisseur
@@ -1459,6 +1508,7 @@ Purpose of Visit,Motif du séjour
 Qty,Qté
 Qty Change,Variation de qté
 Quantity must be a whole number above zero.,La quantité doit être un nombre entier supérieur à zéro.
+Quantity must be greater than zero.,La quantité doit être supérieure à zéro.
 Question,Question
 Queued At,Mis en file à
 Quotation,Devis
@@ -1687,6 +1737,8 @@ Security Deposit Amount,Montant de la caution
 Security deposit {0} is held ({1} refundable). Check the room; withhold damage or refund.,Caution {0} détenue ({1} remboursable). Vérifiez la chambre ; retenez pour dommages ou remboursez.
 Security deposits are not set up on this site.,Les cautions ne sont pas configurées sur ce site.
 Select a property to view its business day.,Sélectionnez un établissement pour afficher sa journée d'exploitation.
+Select a valid Transaction Code for {0}.,Sélectionnez un code de transaction valide pour {0}.
+Select a valid Transaction Code.,Sélectionnez un code de transaction valide.
 Selected Menu,Menu sélectionné
 Selections,Sélections
 Sell Message,Message commercial
@@ -1725,6 +1777,7 @@ Setting,Paramètre
 Settle before check-out,Régler avant le départ
 Settle separately (alcohol can't ride a company bill): {0},Régler séparément (l'alcool ne peut pas passer sur une note société) : {0}
 Settled By,Réglé par
+Settled On,Soldé le
 Setup Access From,Accès mise en place dès
 Setup Notes,Notes de mise en place
 Setup Style,Style de mise en place
@@ -1782,6 +1835,7 @@ Standard {0} · agreed {1} for {2}.,Standard {0} · convenu {1} pour {2}.
 Start Date,Date de début
 Start Date cannot be after End Date.,La date de début ne peut pas être postérieure à la date de fin.
 Start Time,Heure de début
+Start date cannot be after end date.,La date de début ne peut pas être postérieure à la date de fin.
 Started At,Démarré à
 State,État / province
 Station,Poste
@@ -1789,6 +1843,8 @@ Status,Statut
 Status must be Open or Done.,Le statut doit être Ouvert ou Terminé.
 "Status must be Seated, Cancelled or No Show.","Le statut doit être Installé, Annulé ou Non-présentation."
 Stay,Séjour
+Stay Day N,Jour de séjour N
+Stay Day N must be at least 1.,Le jour de séjour N doit être au moins égal à 1.
 Stay details,Détails du séjour
 Stays overlap: {0} to {1} and {2} to {3}. A guest can't be in two places on one night.,Chevauchement de séjours : du {0} au {1} et du {2} au {3}. Un client ne peut pas occuper deux endroits la même nuit.
 Step Key,Clé d'étape
@@ -1805,6 +1861,7 @@ Street,Rue
 Subgroup,Sous-groupe
 Subject,Objet
 Subtotal,Sous-total
+Supplement,Supplément
 Supplement Per Pax,Supplément par pers.
 Supplier,Fournisseur
 Supplier's bill number,Numéro de facture du fournisseur
@@ -1828,6 +1885,7 @@ Tax As Posted,Taxe telle que comptabilisée
 Tax Exempt,Exonéré de taxe
 Tax ID,N° fiscal
 Tax ID verification,Vérification du n° fiscal
+Tax Inclusive,Taxes incluses
 Tax Rate,Taux de taxe
 Tax Total,Total des taxes
 Tax as per the accounting invoice,Taxe selon la facture comptable
@@ -2127,6 +2185,8 @@ Total excl. VAT,Total HT
 Total incl. VAT,Total TTC
 Totals,Totaux
 Transaction Code,Code de transaction
+Transaction Code {0} belongs to another property.,Le code de transaction {0} appartient à un autre établissement.
+Transaction Code {0} must be an active non-payment code.,Le code de transaction {0} doit être un code actif hors paiement.
 Travel Agent,Agence de voyages
 Trigger,Déclencheur
 TripAdvisor URL,URL TripAdvisor
@@ -2139,8 +2199,12 @@ Typed Price,Prix saisi
 UBL XML,XML UBL
 UUID,UUID
 Unit,Unité
+Unit Allowance,Allocation unitaire
 Unit Kind,Type d'unité
 Unit Name,Nom de l'unité
+Unit Price,Prix unitaire
+Unit allowance cannot be negative for {0}.,L'allocation unitaire ne peut pas être négative pour {0}.
+Unit price cannot be negative.,Le prix unitaire ne peut pas être négatif.
 Unknown End of Day step: {0},Étape de clôture de journée inconnue : {0}
 Unknown ID type {0}. Use one of: {1}.,Type de pièce d'identité inconnu {0}. Utilisez l'un des suivants : {1}.
 Unknown category: {0},Catégorie inconnue : {0}
@@ -2247,6 +2311,7 @@ Whole place: the guest gets every room as one unit.,Logement entier : le client 
 Whose function is this? A customer name is required.,Pour qui est cet événement ? Un nom de client est obligatoire.
 Whose reservation is it?,De quelle réservation s'agit-il ?
 Why it was cancelled,Motif de l'annulation
+Window,Fenêtre
 Wish farewell and return the remaining deposit of {0}.,Saluez le client et restituez le solde de caution de {0}.
 Withheld Amount,Montant retenu
 Withholding a deposit needs a reason.,Retenir une caution nécessite un motif.

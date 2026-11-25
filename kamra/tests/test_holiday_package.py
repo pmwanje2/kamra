@@ -262,7 +262,7 @@ class HolidayPackageTestCase(AuditTestCase):
 		self.assertEqual(q_4n["room_total"], 2350.0)
 		self.assertEqual(len(q_4n["nightly"]), 4)
 		self.assertAlmostEqual(sum(n["rate"] for n in q_4n["nightly"]), 2350.0, places=2)
-		self.assertIn("Diária Adicional", q_4n["nightly"][-1]["package"])
+		self.assertIn("Additional Night", q_4n["nightly"][-1]["package"])
 		self.assertEqual(q_4n["nightly"][-1]["rate"], 500.0)
 
 	def test_reveillon_flyer_scenarios_touching_peak_date(self):
@@ -299,7 +299,7 @@ class HolidayPackageTestCase(AuditTestCase):
 		self.assertEqual(q_extended["room_total"], 3450.0)
 		self.assertEqual(len(q_extended["nightly"]), 7)
 		pkg_nights = [n for n in q_extended["nightly"] if n["package"] == "Pacote Réveillon Costa do Mar"]
-		extra_nights = [n for n in q_extended["nightly"] if "Diária Adicional" in n["package"]]
+		extra_nights = [n for n in q_extended["nightly"] if "Additional Night" in n["package"]]
 		self.assertEqual(len(pkg_nights), 3)
 		self.assertEqual(len(extra_nights), 4)
 		self.assertEqual(extra_nights[0]["rate"], 400.0)
