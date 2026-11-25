@@ -91,9 +91,7 @@ def _record_transfer_ledger(src_doc, dst_doc, orig, src_row, dst_row, amt: Decim
 
 	deposit_leg = Decimal(0)
 	if (orig.payment_kind or "Payment") == "Advance":
-		held = Decimal(str(_advance_held(src_doc.name, orig.name, property=src_doc.property) or 0))
-		if held > 0:
-			deposit_leg = min(held, amt)
+		deposit_leg = min(_advance_held(src_doc, orig.name), amt)
 	guest_leg = amt - deposit_leg
 
 	legs = []

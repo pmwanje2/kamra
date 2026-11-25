@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Callable
-from decimal import ROUND_HALF_UP, ROUND_UP, Decimal
+from decimal import ROUND_DOWN, ROUND_HALF_UP, ROUND_UP, Decimal
 from typing import Any
 
 import frappe
@@ -526,18 +526,58 @@ def record_payment_ledger(folio_doc, payment_row, session: str | None = None,
 ADVANCE_APPLIED = "Advance applied to the stay"
 
 
-def _advance_held(folio: str, payment_row: str, property: str | None = None) -> float:
-	"""What of one Advance payment still sits in Deposit after linked refunds."""
-	prop = property or frappe.db.get_value("Folio", folio, "property")
-	places = cint(frappe.db.get_single_value("System Settings", "currency_precision")) or _currency_places(prop)
-	raw = frappe.db.sql(
-		"""SELECT COALESCE(SUM(credit - debit), 0) FROM `tabFolio Ledger Entry`
-		   WHERE ledger = 'Deposit' AND source_doctype = 'Folio Payment'
-		     AND folio = %s AND (source_name = %s OR source_name IN (
-		       SELECT name FROM `tabFolio Payment` WHERE parent = %s AND parenttype = 'Folio'
-		       AND refund_of = %s))""",
-		(folio, payment_row, folio, payment_row))[0][0] or 0
-	return _round_currency(raw, places)
+def _advance_deposit_balances(folio) -> tuple[Decimal, dict[str, Decimal]]:
+	"""Read the ordinary Deposit balance and the remaining amount per advance."""
+	from kamra.folio import _security_deposit_row_ids
+
+	payments = folio.get("payments") or []
+	advances = {
+		p.name: Decimal(0) for p in payments
+		if p.get("payment_kind") == "Advance" and _money(p.get("amount")) > 0
+	}
+	if not advances:
+		return Decimal(0), advances
+
+	security_rows = {payments[i].name for i in _security_deposit_row_ids(folio)}
+	linked_rows = {}
+	for payment in payments:
+		receipt = payment.get("refund_of") or payment.name
+		transfer_key = payment.get("transfer_group_key") or ""
+		if payment.get("transferred_to") and transfer_key.startswith("PT:"):
+			receipt = transfer_key.split(":", 2)[1]
+		if receipt in advances:
+			linked_rows[payment.name] = receipt
+
+	# Return the database's decimal text so the cap uses the exact posted amount.
+	entries = frappe.db.sql(
+		"""SELECT source_doctype, source_name, CONCAT(COALESCE(credit, 0) - COALESCE(debit, 0), '')
+		   FROM `tabFolio Ledger Entry`
+		   WHERE folio = %s AND ledger = 'Deposit' FOR UPDATE""",
+		(folio.name,),
+	)
+	total = security = Decimal(0)
+	for source_doctype, source_name, raw in entries:
+		amount = _money(raw)
+		total += amount
+		if source_doctype == "Security Deposit" or (
+			source_doctype == "Folio Payment" and source_name in security_rows
+		):
+			security += amount
+		elif source_doctype == "Folio Payment" and source_name in linked_rows:
+			advances[linked_rows[source_name]] += amount
+	# Reserve held security and cap ordinary transfers by the total on the ledger.
+	return total - max(security, 0), advances
+
+
+def _transferable_advance(held: Decimal, available: Decimal, unit: Decimal) -> Decimal:
+	return max(Decimal(0), min(held, available).quantize(unit, rounding=ROUND_DOWN))
+
+
+def _advance_held(folio, payment_row: str) -> Decimal:
+	"""Spendable Deposit funds for one advance on a locked folio."""
+	available, advances = _advance_deposit_balances(folio)
+	unit = Decimal(1).scaleb(-folio.precision("grand_total"))
+	return _transferable_advance(advances.get(payment_row, Decimal(0)), available, unit)
 
 
 def transfer_advances_to_guest(reservation: str,
@@ -589,23 +629,26 @@ def _apply_advances(folios, business_date: str | None = None) -> float:
 	if not frappe.db.exists("Transaction Code", code):
 		code = None
 	moved = Decimal(0)
-	for folio in folios:
-		for row in frappe.get_all(
-				"Folio Payment",
-				filters={"parent": folio.name, "parenttype": "Folio",
-				         "payment_kind": "Advance"},
-				pluck="name"):
-			held = _advance_held(folio.name, row, property=folio.property)
+	for name in sorted(f.name for f in folios):
+		folio = frappe.get_doc("Folio", name, for_update=True)
+		available, advances = _advance_deposit_balances(folio)
+		if available <= 0:
+			continue
+		unit = Decimal(1).scaleb(-folio.precision("grand_total"))
+		for row, balance in advances.items():
+			held = _transferable_advance(balance, available, unit)
 			if held <= 0:
 				continue
-			for ledger, debit, credit in (("Deposit", held, 0),
-			                              ("Guest", 0, held)):
+			amount = float(held)
+			for ledger, debit, credit in (("Deposit", amount, 0),
+			                              ("Guest", 0, amount)):
 				write_ledger_entry(
 					property=folio.property, folio=folio.name, ledger=ledger,
 					debit=debit, credit=credit, description=ADVANCE_APPLIED,
 					transaction_code=code, source_doctype="Folio Payment",
 					source_name=row, business_date=business_date)
-			moved += _money(held)
+			available -= held
+			moved += held
 	return float(moved)
 
 
