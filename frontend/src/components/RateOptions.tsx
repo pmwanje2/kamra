@@ -3,7 +3,7 @@ import { call, getCurrentProperty, type TariffReference } from "../lib/api"
 import { onSettingsChanged, onTariffsChanged } from "../lib/tariffSync"
 import { currencyText, formatFxRate, tariffDate } from "./ContractTariff"
 import { InfoTip } from "./InfoTip"
-import { locale, moneyDigits, moneyLocale } from "../lib/money"
+import { fmtMoney, locale, moneyDigits, moneyLocale } from "../lib/money"
 import { isOverride, maxPriceDigits, parsePrice, splitRoomTotal } from "../lib/nightPrices"
 import { useT, t as translate } from "../lib/i18n"
 import { cn } from "../lib/utils"
@@ -39,7 +39,7 @@ interface Options {
   nights: NightRate[]
   plain: { room_total: number; amount_after_tax: number }
   plans: PlanRow[]
-  voucher: { code: string; valid: boolean; discount?: number; kind?: string; value?: number; reason?: string } | null
+  voucher: { code: string; valid: boolean; discount?: number; kind?: string; value?: number; reason?: string; voucher_currency?: string; voucher_tx_amount?: number; voucher_fx_rate?: number } | null
   /** the figures above (and a typed night price) include tax */
   tax_inclusive?: boolean
   rate_plan_required?: boolean
@@ -393,7 +393,13 @@ export function RateOptions({
       {data.voucher && (
         <p className={cn("text-sm", data.voucher.valid ? "text-success-ink" : "text-danger-ink")}>
           {data.voucher.valid
-            ? t("Voucher {code} takes {amt} off.", { code: data.voucher.code, amt: homeText(data.voucher.discount ?? 0) })
+            ? data.voucher.voucher_currency && data.voucher.voucher_currency !== locale().currency
+              ? t("Voucher {code} takes {txAmount} ({homeAmount}) off.", {
+                code: data.voucher.code,
+                txAmount: fmtMoney(data.voucher.voucher_tx_amount, data.voucher.voucher_currency),
+                homeAmount: homeText(data.voucher.discount ?? 0),
+              })
+              : t("Voucher {code} takes {amt} off.", { code: data.voucher.code, amt: homeText(data.voucher.discount ?? 0) })
             : data.voucher.reason}
         </p>
       )}

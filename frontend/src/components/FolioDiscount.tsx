@@ -5,17 +5,23 @@
 
 import { useEffect, useState } from "react"
 import { call } from "../lib/api"
-import { cur, fmtAmount, moneyStep } from "../lib/money"
+import { cur, fmtAmount, moneyLocale, moneyStep } from "../lib/money"
 import { serverError } from "../lib/resource"
 import { isNoRoomNights } from "../lib/discountHint"
 import { useT } from "../lib/i18n"
 import { Button } from "./ui/button"
+import { currencyText, formatFxRate } from "./ContractTariff"
 
 const inputCls =
   "rounded-lg border border-control bg-surface px-3 py-1.5 text-sm " +
   "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
-interface Preview { total: number; label: string; lines: { nights: number; base: number }[] }
+interface Preview {
+  total: number
+  label: string
+  lines: { nights: number; base: number }[]
+  conversion?: { home_amount: number; home_currency: string; fx_rate: number }
+}
 
 export default function FolioDiscount({ folio, adjustCodes: given, act, onPosted, onAdvanceBill, refreshKey, currency, currencySymbol, numberLocale }: {
   folio: string
@@ -37,6 +43,8 @@ export default function FolioDiscount({ folio, adjustCodes: given, act, onPosted
   const fmt = (n: unknown) => fmtAmount(n, currency || undefined, numberLocale || undefined)
   const blank = { kind: "Percent", value: "", basis: "Stay", code: "", reason: "", reason_code: "" }
   const [d, setD] = useState(blank)
+  const [stayCurrency, setStayCurrency] = useState<{ folio: string; currency: string } | null>(null)
+  const [foreignSelection, setForeignSelection] = useState<{ folio: string; currency: string } | null>(null)
   const [preview, setPreview] = useState<Preview | null>(null)
   const [hint, setHint] = useState<string | null>(null)
   const [noNights, setNoNights] = useState(false)
@@ -49,31 +57,49 @@ export default function FolioDiscount({ folio, adjustCodes: given, act, onPosted
       .then(setFetched).catch(() => setFetched([]))
   }, [given])
 
+  useEffect(() => {
+    let live = true
+    call<{ contract_currency?: string }>("kamra.api.folio_discount_currency", { folio })
+      .then((reference) => {
+        if (live) setStayCurrency(reference?.contract_currency ? { folio, currency: reference.contract_currency } : null)
+      })
+      .catch(() => { if (live) setStayCurrency(null) })
+    return () => { live = false }
+  }, [folio, refreshKey])
+
   const promo = d.code.trim()
+  const contractCurrency = stayCurrency?.folio === folio ? stayCurrency.currency : null
+  const foreignEntry = !promo && d.kind === "Amount" && foreignSelection?.folio === folio
+  const discountCurrency = foreignEntry && foreignSelection.currency === contractCurrency ? contractCurrency : null
+  const entryCurrency = (foreignEntry ? foreignSelection.currency : currency) || undefined
+  const entryLabel = (foreignEntry ? foreignSelection.currency : sym.trim())
   const params = promo
     ? { folio, voucher_code: promo }
-    : { folio, kind: d.kind, value: Number(d.value), basis: d.kind === "Amount" ? d.basis : "Stay" }
+    : { folio, kind: d.kind, value: Number(d.value), basis: d.kind === "Amount" ? d.basis : "Stay",
+        discount_currency: discountCurrency || undefined }
 
   // what it takes off, before anyone presses Give
   useEffect(() => {
     setPreview(null)
     setHint(null)
     setNoNights(false)
-    if (!promo && !(Number(d.value) > 0)) return
+    if ((!promo && !(Number(d.value) > 0)) || (foreignEntry && !discountCurrency)) return
+    let live = true
     const id = setTimeout(() => {
       call<Preview>("kamra.api.post_discount", { ...params, preview: 1 })
-        .then(setPreview)
+        .then((result) => { if (live) setPreview(result) })
         .catch((e) => {
+          if (!live) return
           setHint(serverError(e))
           setNoNights(isNoRoomNights(e))
         })
     }, 350)
-    return () => clearTimeout(id)
+    return () => { live = false; clearTimeout(id) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [folio, promo, d.kind, d.value, d.basis, refreshKey])
+  }, [folio, promo, d.kind, d.value, d.basis, foreignEntry, discountCurrency, refreshKey])
 
   const nights = preview?.lines.reduce((s, l) => s + l.nights, 0) ?? 0
-  const canGive = !!preview && (promo || d.reason.trim() || d.reason_code) && pin !== ""
+  const canGive = !!preview && (promo || d.reason.trim() || d.reason_code) && pin !== "" && (!foreignEntry || !!discountCurrency)
 
   return (
     <div className="mt-1 w-full border-t border-line-subtle pt-3">
@@ -85,12 +111,19 @@ export default function FolioDiscount({ folio, adjustCodes: given, act, onPosted
       </div>
       <div className="flex flex-wrap items-end gap-2">
         <select className={inputCls} aria-label={t("Discount type")} value={d.kind} disabled={!!promo}
-          onChange={(e) => setD({ ...d, kind: e.target.value })}>
+          onChange={(e) => {
+            if (foreignSelection?.folio === folio) {
+              setD({ ...d, kind: e.target.value, value: "" })
+              setForeignSelection(null)
+            } else {
+              setD({ ...d, kind: e.target.value })
+            }
+          }}>
           <option value="Percent">{t("Percent (%)")}</option>
-          <option value="Amount">{t("Amount ({cur})", { cur: sym.trim() })}</option>
+          <option value="Amount">{t("Amount ({cur})", { cur: entryLabel })}</option>
         </select>
-        <input className={`${inputCls} w-24`} type="number" min="0" step={d.kind === "Amount" ? moneyStep(currency || undefined) : "0.01"} inputMode="decimal" disabled={!!promo}
-          placeholder={d.kind === "Percent" ? "%" : sym} aria-label={t("Discount")}
+        <input className={`${inputCls} w-24`} type="number" min="0" step={d.kind === "Amount" ? moneyStep(entryCurrency) : "0.01"} inputMode="decimal" disabled={!!promo}
+          placeholder={d.kind === "Percent" ? "%" : entryLabel} aria-label={t("Discount")}
           value={d.value} onChange={(e) => setD({ ...d, value: e.target.value })} />
         {d.kind === "Amount" && !promo && (
           <select className={inputCls} aria-label={t("Applies to")} value={d.basis}
@@ -104,6 +137,25 @@ export default function FolioDiscount({ folio, adjustCodes: given, act, onPosted
           aria-label={t("Promo code")} value={d.code}
           onChange={(e) => setD({ ...d, code: e.target.value })} />
       </div>
+      {d.kind === "Amount" && !promo && (contractCurrency || foreignEntry) && (
+        <label className="mt-2 flex min-h-8 items-center gap-2 text-sm text-secondary-ink">
+          <input type="checkbox" checked={foreignEntry} onChange={(e) => {
+            setForeignSelection(e.target.checked && contractCurrency ? { folio, currency: contractCurrency } : null)
+            setD({ ...d, value: "" })
+          }} />
+          {contractCurrency && (!foreignEntry || discountCurrency)
+            ? t("Enter in stay currency ({contractCurrency})", { contractCurrency })
+            : t("The stay currency exchange rate is unavailable.")}
+        </label>
+      )}
+      {preview?.conversion && (
+        <p className="mt-2 text-xs text-secondary-ink">
+          {t("≈ {amount} @ {rate}", {
+            amount: currencyText(preview.conversion.home_currency, preview.conversion.home_amount, numberLocale || moneyLocale()),
+            rate: formatFxRate(preview.conversion.fx_rate, numberLocale || moneyLocale()),
+          })}
+        </p>
+      )}
       <div className="mt-2 flex flex-wrap items-end gap-2">
         {adjustCodes.length > 0 && (
           <select className={inputCls} aria-label={t("Discount reason")} value={d.reason_code}
@@ -136,6 +188,7 @@ export default function FolioDiscount({ folio, adjustCodes: given, act, onPosted
             if (!r) return
             setPin(null)
             setD(blank)
+            setForeignSelection(null)
             onPosted(!!r.pending)
           })}>
           {t("Give discount")}

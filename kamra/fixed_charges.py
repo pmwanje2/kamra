@@ -15,6 +15,7 @@ import frappe
 from frappe import _
 from frappe.utils import cint, date_diff, flt, getdate, now_datetime
 
+from kamra import pricing
 from kamra.authz import assert_property_access, require_roles
 from kamra.business_date import get_business_date
 from kamra.ledger import home_currency, minor_unit, save_folio
@@ -69,7 +70,7 @@ def _fixed_charge_rows(reservation: str) -> list[dict]:
 		filters={"parent": reservation, "parenttype": "Reservation", "parentfield": "fixed_charges"},
 		fields=[
 			"name", "idx", "transaction_code", "charge_type", "description",
-			"qty", "unit_price", "frequency", "stay_day_n", "day_of_week",
+			"qty", "currency", "unit_price", "frequency", "stay_day_n", "day_of_week",
 			"start_date", "end_date", "window_no", "supplement",
 			"active", "last_posted_business_date", "post_count",
 		],
@@ -93,10 +94,17 @@ def list_fixed_charges(reservation: str) -> dict:
 		order_by="code asc",
 		limit_page_length=200,
 	)
+	snapshot = pricing.saved_contract_tariff(frappe.get_doc("Reservation", res.name))
+	tariff = snapshot.get("tariff") or snapshot
+	from kamra.settings import list_setting
+	currencies = {code.upper() for code in list_setting(res.property, "fx_currencies")}
+	if tariff.get("currency"):
+		currencies.add(tariff["currency"])
 	return {
 		"reservation": res.name,
 		"property": res.property,
 		"currency": home_currency(res.property),
+		"currencies": sorted(c for c in currencies if c),
 		"check_in_date": str(res.check_in_date or ""),
 		"check_out_date": str(res.check_out_date or ""),
 		"rows": _fixed_charge_rows(res.name),
@@ -140,8 +148,15 @@ def save_fixed_charge(reservation: str, row_data) -> dict:
 	if qty <= 0:
 		frappe.throw(_("Quantity must be greater than zero."))
 
-	unit = minor_unit(res.property)
-	unit_price = _quantize(row_data.get("unit_price", 0), unit)
+	row_name = (row_data.get("name") or "").strip()
+	currency = row_data.get("currency")
+	if currency is None and row_name:
+		currency = frappe.db.get_value("Reservation Fixed Charge", {"name": row_name, "parent": res.name},
+		                              "currency")
+	currency = (currency or "").strip().upper() or home_currency(res.property)
+	if not frappe.db.exists("Currency", currency):
+		frappe.throw(_("Select a valid currency."))
+	unit_price = pricing.round_rate_amount(row_data.get("unit_price", 0), 0, currency=currency)
 	if unit_price < 0:
 		frappe.throw(_("Unit price cannot be negative."))
 
@@ -172,12 +187,12 @@ def save_fixed_charge(reservation: str, row_data) -> dict:
 	# Row-lock reservation before modifying child table directly
 	frappe.db.sql("SELECT name FROM `tabReservation` WHERE name = %s FOR UPDATE", res.name)
 
-	row_name = (row_data.get("name") or "").strip()
 	payload = {
 		"transaction_code": code,
 		"charge_type": charge_type,
 		"description": description,
 		"qty": qty,
+		"currency": currency,
 		"unit_price": float(unit_price),
 		"frequency": frequency,
 		"stay_day_n": stay_day_n,
@@ -397,7 +412,7 @@ def post_fixed_charges_for_date(
 		},
 		fields=[
 			"name", "transaction_code", "charge_type", "description",
-			"qty", "unit_price", "frequency", "stay_day_n", "day_of_week",
+			"qty", "currency", "unit_price", "frequency", "stay_day_n", "day_of_week",
 			"start_date", "end_date", "window_no", "supplement", "post_count",
 		],
 		order_by="idx asc, creation asc",
@@ -405,7 +420,10 @@ def post_fixed_charges_for_date(
 	if not rows:
 		return {"count": 0, "amount": 0.0, "keys": []}
 
+	home = home_currency(res.property)
 	unit = minor_unit(res.property)
+	snapshot = pricing.saved_contract_tariff(res)
+	tariff = snapshot.get("tariff") or snapshot
 	posted_count = 0
 	posted_amount = Decimal(0)
 	posted_keys: list[str] = []
@@ -429,8 +447,29 @@ def post_fixed_charges_for_date(
 		gst_rate = flt(tc.get("default_tax_rate") or 0)
 
 		qty = _dec(row.qty or 1)
-		unit_price = _quantize(row.unit_price or 0, unit)
-		amount = _quantize(qty * unit_price, unit)
+		currency = (row.get("currency") or "").strip().upper() or home
+		unit_price = pricing.round_rate_amount(row.unit_price or 0, 0, currency=currency)
+		if unit_price <= 0:
+			continue
+		fx_fields, fx_note = {}, ""
+		fx = Decimal(1)
+		if currency != home:
+			rate = None
+			if currency == tariff.get("currency") and pricing.reservation_fx_policy(res) in (
+				pricing.DEFAULT_FX_LOCK, "Fixed at Check In",
+			):
+				locked_fx = _dec(tariff.get("fx_rate"))
+				if locked_fx.is_finite() and locked_fx > 0:
+					rate = (locked_fx, tariff.get("fx_date"))
+			rate = rate or pricing.posting_fx_rate(res.property, currency, bd_str)
+			if not rate:
+				frappe.throw(_("No exchange rate from {0} to {1} is available for the business date.")
+				             .format(currency, home), frappe.ValidationError)
+			fx, fx_date = rate
+			fx_fields = {"contract_currency": currency, "contract_fx_rate": float(fx),
+			             "contract_fx_date": fx_date}
+			fx_note = f" ({currency} {unit_price:,f} @ {fx.normalize():,f})"
+		amount = pricing.round_rate_amount(qty * unit_price * fx, 0, currency=home)
 		if amount <= 0:
 			continue
 
@@ -453,10 +492,11 @@ def post_fixed_charges_for_date(
 			"transaction_code": row.transaction_code,
 			"idempotency_key": idem_key,
 			"reservation": res.name,
-			"description": desc[:140],
+			"description": desc[:140 - len(fx_note)] + fx_note,
 			"qty": float(qty),
-			"rate": float(unit_price),
+			"rate": float(pricing.round_rate_amount(unit_price * fx, 0, currency=home)),
 			"amount": float(amount),
+			**fx_fields,
 			"gst_rate": gst_rate,
 			"is_alcohol": is_alcohol,
 			"auto_posted": 1,
