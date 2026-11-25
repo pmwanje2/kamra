@@ -29,8 +29,6 @@ const EXEMPT_TO_FIXED_2: Readonly<Record<string, number>> = {
 const PENDING_CROSS_PR_ALLOWLIST: Readonly<Record<string, number>> = {
   // Wave 0 #41 / Pack 1
   "src/components/SecurityDepositPanel.tsx": 1,
-  // Pack 2 PR 4 (#43)
-  "src/screens/FolioHistory.tsx": 1,
   // Peer Banquet / Events (#45) & setup screens (pre-existing missing-step)
   "src/screens/BanquetCatalogue.tsx": 1,
   "src/screens/BanquetFunction.tsx": 7,
