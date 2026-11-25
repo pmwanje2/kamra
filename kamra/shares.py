@@ -158,7 +158,7 @@ def nightly_share(res, date, *, lock=False, advance_bill=False, folios=None) -> 
 		return None
 	for day, members, legacy, unsaved in reversed(nights):
 		if legacy:
-			carry = _legacy_rounding(res.property, legacy, carry, pending)
+			carry = _legacy_rounding(res.property, legacy, carry, pending, day)
 		else:
 			snapshot = _price_night(res, day, members, carry, pending, lock)
 			carry = snapshot["rounding"]
@@ -195,7 +195,7 @@ def _price_night(res, date, members, carry, pending, lock):
 	)
 	return {
 		"room": res.room, "gst": gst, "category": leader.rate_category or "",
-		"lead": leader.name, "fx": fx,
+		"lead": leader.name, "fx": fx, "rates_include_tax": rates_include_tax(res.property),
 		"levy": levy, "rounding": rounding,
 		"rates": {name: str(value) for name, value in rates.items()},
 		"taxes": {name: str(value) for name, value in taxes.items()},
@@ -244,7 +244,7 @@ def _round_shared_night(currency, base, gst, levy, levy_rate, carry, pending):
 	return grand, {"currency": currency, "pending": str(open_total - grand), "stored": str(stored_total - grand)}
 
 
-def _legacy_rounding(property, snapshot, carry, pending):
+def _legacy_rounding(property, snapshot, carry, pending, day):
 	"""Recover the last night's residual from its frozen prices and billed components."""
 	from kamra.ledger import minor_unit
 
@@ -260,7 +260,7 @@ def _legacy_rounding(property, snapshot, carry, pending):
 			name: _round_shared_night(currency, base, gst, Decimal(levy["amounts"][name]),
 			                          tax_rate, carry.get("payers", {}).get(name, {}), pending)[1]
 			for name, base in rates.items()}}
-	fractions = _frozen_fractions(property, snapshot)
+	fractions = _frozen_fractions(property, snapshot, day)
 	opening = _continuing_carry(carry, snapshot["lead"], minor_unit(property))
 	state = {"currency": currency}
 	for key in ("stored", "pending"):
@@ -309,7 +309,7 @@ def _with_payer_rounding(state, carry, fractions, pending):
 	return {**state, "payers": payers, "fractions": fractions}
 
 
-def _frozen_fractions(property, snapshot):
+def _frozen_fractions(property, snapshot, day, group=None):
 	rounding = snapshot.get("rounding") or {}
 	if "fractions" in rounding:
 		return rounding["fractions"]
@@ -324,18 +324,54 @@ def _frozen_fractions(property, snapshot):
 	rates = {n: Decimal(v) for n, v in snapshot["rates"].items()}
 	gst = Decimal(str(snapshot["gst"]))
 	gross = {n: rate + Decimal(snapshot["taxes"][n]) for n, rate in rates.items()}
-	inclusive = rates_include_tax(property)
-	weights = gross if inclusive else rates
-	base = (Decimal(str(float(sum(gross.values()) / (1 + gst / 100))))
-	        if inclusive else sum(rates.values()))
 	unit = minor_unit(property)
-	pct, fixed = room_levy_components(base, levy["percent"], levy["fixed"], unit)
 	levy_tax = Decimal(str(levy["gst"])) / 100
-	raw_levy = pct + fixed
-	if not levy_tax:
-		raw_levy = raw_levy.quantize(unit, rounding=ROUND_HALF_UP)
 	posted = {n: gross[n] + Decimal(levy["amounts"][n]) + Decimal(levy["taxes"][n]) for n in rates}
-	return _payer_fractions(base, gst, raw_levy, fixed, levy_tax, weights, posted, snapshot["lead"])
+
+	def fractions(inclusive):
+		weights = gross if inclusive else rates
+		base = (Decimal(str(float(sum(gross.values()) / (1 + gst / 100))))
+		        if inclusive else sum(rates.values()))
+		pct, fixed = room_levy_components(base, levy["percent"], levy["fixed"], unit)
+		raw_levy = pct + fixed
+		if not levy_tax:
+			raw_levy = raw_levy.quantize(unit, rounding=ROUND_HALF_UP)
+		return _payer_fractions(base, gst, raw_levy, fixed, levy_tax, weights, posted, snapshot["lead"])
+
+	if "rates_include_tax" in snapshot:
+		return fractions(snapshot["rates_include_tax"])
+	exclusive, inclusive = fractions(False), fractions(True)
+	if all(Decimal(value) == Decimal(inclusive[n][key])
+	       for n, part in exclusive.items() for key, value in part.items()):
+		return exclusive
+	# The legacy checkpoint is cumulative. Compare its nightly change with
+	# each posting basis, using only the frozen charges for this share.
+	if "stored" in rounding and group:
+		res = frappe._dict(property=property, share_group_id=group)
+		prior, _ = _frozen_night(res, add_days(day, -1), False, None)
+		opening = prior.get("rounding", {}) if prior.get("room") == snapshot["room"] else {}
+		carry = _continuing_carry(opening, snapshot["lead"], unit)
+		delta = Decimal(rounding["stored"]) - Decimal(carry.get("stored", "0"))
+		matches = []
+		for parts in (exclusive, inclusive):
+			if sum(Decimal(part["stored"]) for part in parts.values()) == delta:
+				matches.append(parts)
+		if len(matches) == 1:
+			return matches[0]
+	# Pre-checkpoint stays keep the desk's original rate-code price and
+	# pre-discount net base on the dated night, even after a room upgrade.
+	night = frappe.db.get_value("Reservation Night Rate", {"parent": snapshot["lead"], "stay_date": day},
+	                           ["rate_code_amount", "base_rate"])
+	if night and all(night):
+		entry, base = (Decimal(str(value)) for value in night)
+		# The quoted base may already be rounded to the night-rate precision.
+		tolerance = min(unit, Decimal("0.01")) * (1 + gst / 100)
+		net_difference = abs(entry - base)
+		gross_difference = abs(entry - base * (1 + gst / 100))
+		if min(net_difference, gross_difference) <= tolerance:
+			return inclusive if gross_difference < net_difference else exclusive
+	# Without a recorded basis there is no verifiable fractional correction.
+	return {}
 
 
 def independent_rounding_adjustment(property, charges):
@@ -358,13 +394,14 @@ def independent_rounding_adjustment(property, charges):
 		levy = (frozen or {}).get("levy") or {}
 		if frozen and not (levy.get("per_folio") or levy.get("primary_pays")):
 			pooled.append((name, day, row, frozen))
-		else:
+		elif row.get("amount") or row.get("gst_amount"):
+			# A complimentary night does not restart this guest's rounding.
 			independent[name] = max(day, independent.get(name, ""))
 	adjustment = Decimal(0)
 	for name, day, row, frozen in pooled:
 		if day >= independent.get(name, ""):
 			continue
-		fraction = _frozen_fractions(property, frozen).get(name, {})
+		fraction = _frozen_fractions(property, frozen, day, row.get("share_group")).get(name, {})
 		value = Decimal(fraction.get("pending" if row.is_new() else "stored", "0"))
 		# A routing limit or a split bill may place only part of the room line here.
 		rate = Decimal(frozen["rates"].get(name, "0"))
@@ -405,6 +442,8 @@ def _night_charges(property, room_rate, gst, mode, members, lead, carry, pending
 		taxes = {name: value * tax_rate for name, value in amounts.items()}
 		payers = dict(carry.get("payers", {}))
 		for name, rate in rates.items():
+			if not rate and not amounts[name]:
+				continue
 			_, payers[name] = _round_shared_night(
 				currency, rate, gst, amounts[name], tax_rate, payers.get(name, {}), pending,
 			)
