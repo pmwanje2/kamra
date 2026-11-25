@@ -1,4 +1,4 @@
-"""Check kamra/translations/zh.csv against the extracted backend strings.
+"""Check kamra/translations/<lang>.csv against the extracted backend strings.
 
 Fails when a catalogue row cannot work at runtime:
 
@@ -12,11 +12,14 @@ Fails when a catalogue row cannot work at runtime:
 * a row exists for a string the code no longer asks for (orphan).
 
 Usage:
-    python scripts/i18n/check_backend_translations.py
+    python scripts/i18n/check_backend_translations.py              # defaults to fr
+    python scripts/i18n/check_backend_translations.py --lang fr
+    python scripts/i18n/check_backend_translations.py --lang zh
 """
 
 from __future__ import annotations
 
+import argparse
 import csv
 import re
 import sys
@@ -25,7 +28,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 STRINGS = HERE / "backend-strings.csv"
-ZH_CSV = ROOT / "kamra" / "translations" / "zh.csv"
+TRANSLATIONS_DIR = ROOT / "kamra" / "translations"
 
 PLACEHOLDER = re.compile(r"\{[^{}]*\}")
 
@@ -36,49 +39,79 @@ def read_rows(path: Path) -> list[list[str]]:
 	return rows[1:] if rows and rows[0][0] == "source" else rows
 
 
-def main() -> int:
-	if not STRINGS.exists() or not ZH_CSV.exists():
-		print("run extract_backend_strings.py and build_zh_csv.py first", file=sys.stderr)
+def load_expected_strings() -> set[str]:
+	if str(HERE) not in sys.path:
+		sys.path.insert(0, str(HERE))
+	from extract_backend_strings import extract_strings
+
+	strings, _, _ = extract_strings()
+	return set(strings.keys())
+
+
+def check_language(lang: str, expected: set[str]) -> int:
+	csv_path = TRANSLATIONS_DIR / f"{lang}.csv"
+	if not csv_path.exists():
+		print(f"{csv_path.relative_to(ROOT)} is missing", file=sys.stderr)
 		return 2
 
-	expected = {row[0] for row in read_rows(STRINGS)}
-	rows = read_rows(ZH_CSV)
+	rows = read_rows(csv_path)
+	label = f"{lang}.csv"
 
 	problems: list[str] = []
 	seen: set[str] = set()
 	for number, row in enumerate(rows, 2):
 		if len(row) < 2:
-			problems.append(f"zh.csv:{number}: not a source,translation row")
+			problems.append(f"{label}:{number}: not a source,translation row")
 			continue
 		source, translation = row[0], row[1]
 		if source in seen:
-			problems.append(f"zh.csv:{number}: duplicate source {source!r}")
+			problems.append(f"{label}:{number}: duplicate source {source!r}")
 		seen.add(source)
 		if not translation.strip():
-			problems.append(f"zh.csv:{number}: empty translation for {source!r}")
+			problems.append(f"{label}:{number}: empty translation for {source!r}")
 			continue
 		if source not in expected:
-			problems.append(f"zh.csv:{number}: orphan source {source!r} (no longer in the code)")
+			problems.append(f"{label}:{number}: orphan source {source!r} (no longer in the code)")
 		if sorted(PLACEHOLDER.findall(source)) != sorted(PLACEHOLDER.findall(translation)):
 			problems.append(
-				f"zh.csv:{number}: placeholder mismatch\n"
+				f"{label}:{number}: placeholder mismatch\n"
 				f"    source      {source!r} -> {sorted(PLACEHOLDER.findall(source))}\n"
 				f"    translation {translation!r} -> {sorted(PLACEHOLDER.findall(translation))}"
 			)
 
 	missing = sorted(expected - seen)
 	for source in missing:
-		problems.append(f"missing translation: {source!r}")
+		problems.append(f"{label}: missing translation: {source!r}")
 
 	if problems:
-		print(f"{len(problems)} problem(s):")
+		print(f"{label}: {len(problems)} problem(s):")
 		for problem in problems:
 			print(f"  {problem}")
 		return 1
 
-	print(f"backend translations OK: {len(seen)}/{len(expected)} strings, "
-	      f"placeholders match, no orphans or duplicates")
+	print(
+		f"backend translations ({label}) OK: {len(seen)}/{len(expected)} strings, "
+		f"placeholders match, no orphans or duplicates"
+	)
 	return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+	parser = argparse.ArgumentParser(description="Validate backend translation catalogues.")
+	parser.add_argument(
+		"--lang",
+		default="fr",
+		help="Language code under kamra/translations/<lang>.csv (e.g. fr, zh, or comma-separated list).",
+	)
+	args = parser.parse_args(argv)
+	expected = load_expected_strings()
+	langs = [part.strip() for part in args.lang.split(",") if part.strip()]
+	rc = 0
+	for lang in langs:
+		code = check_language(lang, expected)
+		if code != 0:
+			rc = code
+	return rc
 
 
 if __name__ == "__main__":

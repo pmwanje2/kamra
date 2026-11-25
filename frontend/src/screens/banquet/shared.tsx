@@ -4,20 +4,13 @@
 
 import type { ReactNode } from "react"
 import type { FunctionStatus } from "../../lib/api"
-import { cur, locale, moneyLocale } from "../../lib/money"
+import { fmtMoney, locale, moneyLocale } from "../../lib/money"
 import { t as translate, useUILanguage, uiDateLocale } from "../../lib/i18n"
 
-export const inr = (n: unknown) =>
-  cur() +
-  Number(n || 0).toLocaleString(moneyLocale(), { maximumFractionDigits: 0 })
+export const inr = (n: unknown) => fmtMoney(n)
 
-/** Money with paise - totals on paper, where rounding would be noticed. */
-export const inrExact = (n: unknown) =>
-  cur() +
-  Number(n || 0).toLocaleString(moneyLocale(), {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
+/** Money formatted with the active currency's minor-unit precision. */
+export const inrExact = (n: unknown) => fmtMoney(n)
 
 export const STATUSES: FunctionStatus[] = [
   "Enquiry",
@@ -178,10 +171,10 @@ export const today = () => new Date().toISOString().slice(0, 10)
 export { shiftDate } from "../../lib/stay"
 
 export const dayName = (d: string) =>
-  new Date(d + "T00:00:00").toLocaleDateString(uiDateLocale("en-US"), { weekday: "short" })
+  new Date(d + "T00:00:00").toLocaleDateString(uiDateLocale(moneyLocale()), { weekday: "short" })
 
 export const monthName = (ym: string) =>
-  new Date(ym + "-01T00:00:00").toLocaleDateString(uiDateLocale("en-US"), {
+  new Date(ym + "-01T00:00:00").toLocaleDateString(uiDateLocale(moneyLocale()), {
     month: "short",
     year: "numeric",
   })
