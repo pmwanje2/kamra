@@ -456,9 +456,11 @@ export function BookingDialog(props: {
             ? (f.meal_plan || (mealPlanTouched.current ? "" : defaultMeal))
             : defaultMeal
 
-        const defaultRate = o.default_plan || ""
+        const governed = o.all_active_plans_tariff && o.rate_plans.length > 0
+        const defaultRate = o.default_rate_plan || o.default_plan
+          || o.rate_plans.find((rp) => rp.is_default)?.name || o.rate_plans[0]?.name || ""
         const rateValid = !f.rate_plan || o.rate_plans.some((rp) => rp.name === f.rate_plan)
-        const canKeepBlankRate = !o.rate_plan_required || !!f.company
+        const canKeepBlankRate = (!o.rate_plan_required && !governed) || !!f.company
         const nextRate = isInitial && !ratePlanTouched.current
           ? (f.rate_plan && rateValid ? f.rate_plan : defaultRate)
           : rateValid
@@ -502,7 +504,7 @@ export function BookingDialog(props: {
   // screen shows). Only a Revenue Manager / Hotel Admin may; an OTA total
   // already sets the price, and a day-use stay is priced by its slot.
   const [nightPrices, setNightPrices] = useState<Record<string, number>>({})
-  const planRequired = !!options?.rate_plan_required
+  const planRequired = !!options?.rate_plan_required || (!!options?.all_active_plans_tariff && options.rate_plans.length > 0)
   const canSetPrice = !!options?.can_set_rate && otaTotal <= 0 && !dayUse && !form.rate_plan && !planRequired
   const stayNights = badDate || dayUse
     ? []
@@ -674,7 +676,7 @@ export function BookingDialog(props: {
     (onBehalf && !isPhoneComplete(form.booked_by_phone, country))
 
   useEffect(() => {
-    if (!form.room_type) return
+    if (!options || !form.room_type) return
     if (badDate) {
       setQuoted(null)
       setQuoting(false)
@@ -722,6 +724,7 @@ export function BookingDialog(props: {
     form.adults,
     form.children,
     form.meal_plan,
+    options,
     form.rate_plan,
     form.company,
     form.voucher_code,

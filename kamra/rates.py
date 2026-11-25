@@ -17,6 +17,7 @@ same pricing functions the quote uses, so what is shown is what is charged."""
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 import itertools
 import json
@@ -94,6 +95,21 @@ def _plan_uses_tariff(plan_name: str | None, plans_by_name: dict[str, dict]) -> 
 			return True
 		current = row.get("base_rate_plan")
 	return False
+
+
+def all_active_plans_use_tariffs(property: str, plans: list[dict]) -> bool:
+	"""Whether every active plan uses a governed price list, directly or through its base plan."""
+	if not plans or "custom_tariff_price_list" not in plans[0]:
+		return False
+	by_name = {plan["name"]: plan for plan in plans}
+	if any(plan.get("base_rate_plan") and plan["base_rate_plan"] not in by_name for plan in plans):
+		# A disabled base plan can still supply the pricing of an active derived plan.
+		for base in frappe.get_all("Rate Plan", filters={"property": property, "disabled": 1},
+		                           fields=["name", "base_rate_plan", "custom_tariff_price_list"]):
+			by_name[base["name"]] = base
+	if not any(plan.get("custom_tariff_price_list") for plan in by_name.values()):
+		return False
+	return all(_plan_uses_tariff(plan["name"], by_name) for plan in plans)
 
 
 @frappe.whitelist()
@@ -386,30 +402,72 @@ def list_contract_tariffs(property: str, price_list: str | None = None, customer
 			and bool(result.get("can_propose") or result.get("can_approve"))
 			and bool(can_delete_price)
 		)
-		result["unpriced_room_types"] = _unpriced_room_types(property, result)
+		room_types = frappe.get_all(
+			"Room Type", filters={"property": property, "disabled": 0},
+			fields=["name", "room_type_name", "room_type_code", "base_occupancy"],
+			order_by="room_type_name asc, name asc",
+		)
+		_enrich_tariff_items(result, room_types)
+		result["unpriced_room_types"] = _unpriced_room_types(property, result, room_types)
+		if result.get("can_propose"):
+			result["room_types"] = room_types
+			result["available_items"] = _tariff_item_choices(result)
 		return result
 	return {"supported": False, "property": property, "price_lists": [], "items": [],
 	        "can_propose": False, "can_approve": False, "can_discard": False}
 
 
-def _unpriced_room_types(property: str, directory: dict) -> list[dict]:
-	"""Active room types missing a room contract tariff on one or more price lists."""
+def _enrich_tariff_items(directory: dict, room_types: list[dict]):
+	"""Join directory labels to unambiguous identifiers scoped to the property."""
+	by_identity: dict[str, list[dict]] = {}
+	for rt in room_types:
+		for value in {rt.get("room_type_name"), rt.get("room_type_code"), rt["name"]} - {None, ""}:
+			by_identity.setdefault(value.casefold(), []).append(rt)
+	by_id = {rt["name"]: rt for rt in room_types}
+	for item in directory.get("items") or []:
+		rt = by_id.get(item.get("room_type_id"))
+		for value in (item.get("room_type"), item.get("room_type_code")):
+			if rt:
+				break
+			matches = by_identity.get(_text(value).casefold(), [])
+			if len(matches) == 1:
+				rt = matches[0]
+		if rt:
+			item.update(room_type_id=rt["name"], room_type_code=rt.get("room_type_code"))
+
+
+def _tariff_item_choices(directory: dict) -> list[dict]:
+	"""Offer directory items and readable, enabled sales items without prices."""
+	choices = {
+		row["item_code"]: {"item_code": row["item_code"], "item_name": row.get("item_name") or row["item_code"],
+		                   "category": row.get("category")}
+		for row in [*(directory.get("items") or []), *(directory.get("available_items") or [])]
+		if row.get("item_code")
+	}
+	if directory.get("price_lists") and frappe.has_permission("Item", "read"):
+		# An optional ERP integration owns the Item master. get_list respects its User Permissions.
+		get_list = getattr(frappe, "get_list", None)
+		if get_list:
+			for row in get_list("Item", filters={"disabled": 0, "is_sales_item": 1},
+			                    fields=["name", "item_name", "is_stock_item"], limit_page_length=0):
+				code = row["name"]
+				choice = choices.setdefault(code, {"item_code": code, "item_name": row.get("item_name") or code})
+				choice["can_link_to_room"] = not row.get("is_stock_item")
+	return sorted(choices.values(), key=lambda row: (row["item_name"].casefold(), row["item_code"]))
+
+
+def _unpriced_room_types(property: str, directory: dict, room_types: list[dict]) -> list[dict]:
+	"""Active room types without an effective room or venue tariff on one or more price lists."""
 	list_names = [pl.get("name") for pl in directory.get("price_lists") or [] if pl.get("name")]
 	if not list_names:
 		return []
 	priced_by_list: dict[str, set[str]] = {name: set() for name in list_names}
 	for item in directory.get("items") or []:
-		if item.get("category") != "Room":
-			continue
 		pl = item.get("price_list")
-		rt_label = item.get("room_type")
-		if pl in priced_by_list and rt_label and (item.get("active") or item.get("pending")):
-			priced_by_list[pl].add(rt_label)
-	room_types = frappe.get_all(
-		"Room Type", filters={"property": property, "disabled": 0},
-		fields=["name", "room_type_name", "room_type_code"],
-		order_by="room_type_name asc, name asc",
-	)
+		room = item.get("room_type_id") or item.get("room_type")
+		if pl in priced_by_list and room and item.get("category") in ("Room", "Venue") and item.get("active"):
+			priced_by_list[pl].add(room)
+
 	if not room_types:
 		return []
 	counts = _room_counts(property)
@@ -468,8 +526,12 @@ def _rate_plan_policies(property: str, directory: dict) -> dict:
 @require_roles("Revenue Manager", "Hotel Admin")
 def propose_contract_tariff(property: str, price_list: str, item_code: str,
                             price_list_rate: float, valid_from: str, valid_upto: str | None = None,
-                            customer: str | None = None):
+                            customer: str | None = None, room_type: str | None = None,
+                            occupancy_tier: str | None = None):
 	"""Propose a new version; the integration owns effective-date validation.
+
+	For a `room_type` and `occupancy_tier`, use its binding or link a selling
+	item in the same request. A blank item code creates one if permitted.
 
 	With `customer` the version is that customer's own price (SAP PR02
 	A305). An integration that answers without that customer ignored it
@@ -479,15 +541,94 @@ def propose_contract_tariff(property: str, price_list: str, item_code: str,
 
 	assert_property_access(property)
 	customer = _text(customer)
+	if room_type:
+		# Binding and the native proposal share the POST transaction. A refusal rolls both back.
+		item_code = _bind_tariff_item(property, room_type, _text(occupancy_tier), price_list_rate, _text(item_code))
 	form = {"property": property, "price_list": price_list, "item_code": item_code,
 	        "price_list_rate": price_list_rate, "valid_from": valid_from, "valid_upto": valid_upto}
 	if customer:
 		form["customer"] = customer
 	result = bridge_call("hospitality_tariffs.propose_tariff", **form)
+	if room_type and (not result or result.get("workflow_state") != "Draft"):
+		frappe.throw(_("The tariff could not be submitted for approval."))
 	if customer and result is not None and _text(result.get("customer")) != customer:
 		frappe.throw(_("This tariff integration cannot propose a customer's own rate, so nothing was saved. "
 		               "Update the tariff integration, then try again."))
 	return result
+
+
+def _bind_tariff_item(property: str, room_type: str, tier: str, rate: float, item_code: str) -> str:
+	"""Resolve an existing Room Type binding or create its native selling Item."""
+	rt = frappe.get_doc("Room Type", room_type, for_update=True)
+	if rt.property != property or rt.disabled:
+		frappe.throw(_("Choose an active room type at this property."), frappe.PermissionError)
+	rt.check_permission("write")
+	if tier not in ("1", "2", "3", "4", "5", "bed"):
+		frappe.throw(_("Choose an occupancy tier."))
+	amount = _rate(rate)
+	if amount is None or (amount < 0 if tier == "bed" else amount <= 0):
+		frappe.throw(_("Enter a valid rate for this occupancy tier."))
+
+	meta = frappe.get_meta("Room Type")
+	base = str(int(rt.base_occupancy or 2))
+	raw_map = _text(rt.get("custom_tariff_occupancy_map"))
+	tiers = {}
+	if raw_map:
+		try:
+			tiers = json.loads(raw_map)
+		except ValueError:
+			tiers = None
+		if not isinstance(tiers, dict) or not tiers or not all(
+			key.isascii() and key.isdigit() and key == str(int(key)) and int(key) > 0 and _text(code)
+			and isinstance(code, str) for key, code in tiers.items()
+		):
+			frappe.throw(_("Correct the room type's occupancy tariff configuration before adding a rate."))
+
+	field = "custom_tariff_occupancy_map"
+	if tier == "bed":
+		field = "custom_tariff_extra_bed_item"
+	elif not tiers and tier == "1" and rt.get("custom_tariff_item") and (
+		tier != base or rt.get("custom_tariff_single_item")
+	):
+		field = "custom_tariff_single_item"
+	elif not tiers and tier == base:
+		field = "custom_tariff_item"
+	if not meta.has_field(field):
+		frappe.throw(_("This tariff integration does not support the selected occupancy tier."))
+	existing = tiers.get(tier) if field == "custom_tariff_occupancy_map" else rt.get(field)
+	if existing:
+		if item_code and item_code != existing.strip():
+			frappe.throw(_("This occupancy tier already has a linked item. Use that item to propose its rate."))
+		return existing.strip()
+
+	if field == "custom_tariff_occupancy_map" and not tiers:
+		# Preserve the legacy tiers when the first additional adult count moves this type to a schedule.
+		for count, code in ((base, rt.get("custom_tariff_item")), ("1", rt.get("custom_tariff_single_item"))):
+			if code:
+				tiers[count] = code
+	if item_code:
+		doc = frappe.get_doc("Item", item_code)
+		doc.check_permission("read")
+		if doc.disabled or not doc.is_sales_item or doc.is_stock_item:
+			frappe.throw(_("Choose an enabled non-stock sales item for the room type."))
+	else:
+		hash_part = hashlib.sha256(rt.name.encode()).hexdigest()[:20]
+		suffix = "BED" if tier == "bed" else f"{tier}A"
+		code = f"TAR-{hash_part}-{suffix}"
+		label = _("Extra bed") if tier == "bed" else _("{0} adult occupancy").format(tier)
+		doc = frappe.get_doc({
+			"doctype": "Item", "item_code": code, "item_name": f"{rt.room_type_name or rt.name} · {label}",
+			"item_group": frappe.defaults.get_global_default("item_group") or "Services",
+			"stock_uom": frappe.defaults.get_global_default("stock_uom") or "Nos",
+			"is_stock_item": 0, "is_sales_item": 1, "is_purchase_item": 0,
+		}).insert()
+	if field == "custom_tariff_occupancy_map":
+		tiers[tier] = doc.name
+		rt.set(field, json.dumps(tiers, sort_keys=True))
+	else:
+		rt.set(field, doc.name)
+	rt.save()
+	return doc.name
 
 
 @frappe.whitelist(methods=["POST"])
@@ -1075,8 +1216,7 @@ def rate_options(property: str, room_type: str, check_in_date: str, check_out_da
 	plain = total()
 	plans = []
 	active = frappe.get_all("Rate Plan", filters={"property": property, "disabled": 0},
-	                        fields=["name", "rate_plan_name", "code", "modifier_type", "modifier_value",
-	                                "is_default", "discount_eligible", "fx_lock_policy", "base_rate_plan"],
+	                        fields=_rate_plan_fields(("modifier_type", "modifier_value", "is_default", "discount_eligible")),
 	                        order_by="rate_plan_name asc, name asc")
 	labels = {rp.name: rp.rate_plan_name for rp in active}
 	pricing_plan = rate_plan or company_plan
@@ -1129,10 +1269,13 @@ def rate_options(property: str, room_type: str, check_in_date: str, check_out_da
 		except frappe.ValidationError as e:
 			voucher = {"code": code, "valid": False, "reason": str(e)}
 	from kamra.api import discount_options
+	default = default_plan(active)
 	return {"nights": night_rows, "plans": plans, "voucher": voucher,
 	        "plain": {k: plain[k] for k in ("room_total", "amount_after_tax", "discount")},
 	        "company_plan": company_plan,
-	        "default_plan": default_plan(active), "rate_plan_required": bool(get_setting(property, "rate_plan_required")),
+	        "default_plan": default, "default_rate_plan": default,
+	        "rate_plan_required": bool(get_setting(property, "rate_plan_required")),
+	        "all_active_plans_tariff": all_active_plans_use_tariffs(property, active),
 	        # the basis of every nightly figure above (and of a typed night price)
 	        "tax_inclusive": bool(rates_include_tax(property)),
 	        # the inline discount: who may give one, the desk's limit, the reasons

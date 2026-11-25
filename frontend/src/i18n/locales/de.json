@@ -862,5 +862,9 @@
   "≈ {amt} off / night": "≈ {amt} Rabatt / Nacht",
   "1 {cur} = {rate} {home}": "1 {cur} = {rate} {home}",
   "Agreed rate currency": "Währung der vereinbarten Rate",
-  "Discount currency": "Rabattwährung"
+  "Discount currency": "Rabattwährung",
+  "Room matrix ({n})": "Zimmermatrix ({n})",
+  "Supplements ({n})": "Zuschläge ({n})",
+  "Venues ({n})": "Veranstaltungsräume ({n})",
+  "Other ({n})": "Sonstige ({n})"
 }

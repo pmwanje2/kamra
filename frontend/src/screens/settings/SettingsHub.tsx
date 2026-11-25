@@ -512,6 +512,8 @@ export default function SettingsHub() {
                 enabled={Boolean(mod.values.rate_plan_required)}
               />
             )}
+            {mod.id === "revenue" && <Link to="/settings/front-desk?focus=rate_plan_required"
+              className="text-sm font-medium text-brand-700 hover:underline">{t("Booking pricing settings")}</Link>}
             {mod.id === "front-desk" && <CheckInStepsCard property={property} />}
             {mod.id === "front-desk" && (
               <NightAuditScheduleCard

@@ -43,6 +43,7 @@ interface Options {
   /** the figures above (and a typed night price) include tax */
   tax_inclusive?: boolean
   rate_plan_required?: boolean
+  all_active_plans_tariff?: boolean
   /** the booking company's negotiated plan: it prices the stay while no plan is picked */
   company_plan?: string | null
 }
@@ -143,7 +144,7 @@ export function RateOptions({
   const references = [...new Map(data.plans.flatMap(({ tariff }) => tariff ? [[
     JSON.stringify([tariff.currency, tariff.property_currency, tariff.fx_rate, tariff.fx_date]), tariff,
   ] as const] : [])).values()]
-  const required = planRequired || data.rate_plan_required
+  const required = planRequired || data.rate_plan_required || (data.all_active_plans_tariff && data.plans.length > 0)
   const moved = data.nights.some((x) => x.season || x.demand)
   const digits = maxPriceDigits(moneyDigits())
   const plain = (n: number) => String(Number(n.toFixed(digits)))

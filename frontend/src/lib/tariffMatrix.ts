@@ -64,6 +64,8 @@ export interface ContractTariffItem {
   item_name: string
   category: "Room" | "Supplement" | "Venue" | "Other"
   room_type?: string | null
+  room_type_id?: string | null
+  room_type_code?: string | null
   occupancy?: string | null
   price_list: string
   customer?: string | null

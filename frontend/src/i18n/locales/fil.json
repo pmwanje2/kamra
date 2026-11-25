@@ -1574,5 +1574,9 @@
   "≈ {amt} off / night": "≈ {amt} diskwento / gabi",
   "1 {cur} = {rate} {home}": "1 {cur} = {rate} {home}",
   "Agreed rate currency": "Pera ng napagkasunduang singil",
-  "Discount currency": "Pera ng diskwento"
+  "Discount currency": "Pera ng diskwento",
+  "Room matrix ({n})": "Matrix ng kuwarto ({n})",
+  "Supplements ({n})": "Mga dagdag na serbisyo ({n})",
+  "Venues ({n})": "Mga venue ({n})",
+  "Other ({n})": "Iba ({n})"
 }
