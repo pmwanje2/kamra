@@ -459,14 +459,15 @@ class TestEventFolio(BanquetFiscalCase):
 		with accounting_bridge():
 			bq.record_receipt(fn_cancel, 100000, mode="Cash", kind="Security Deposit")
 			folio_c = frappe.get_doc("Folio", sheet(fn_cancel).folio)
-			orig_entry = frappe.db.get_value(
+			orig_entry, original_payment = frappe.db.get_value(
 				"Folio Ledger Entry",
 				{"folio": folio_c.name, "ledger": "Deposit", "transaction_code": "9003"},
-				"name",
+				["name", "source_name"],
 			)
 			folio_c.append("payments", {
 				"posting_date": nowdate(), "payment_kind": "Refund", "mode": "Cash",
 				"amount": -100000.0, "currency": "UGX", "reference": "PE-DEP-CANCEL",
+				"refund_of": original_payment,
 			})
 			_recalculate(folio_c)
 			folio_c.save(ignore_permissions=True)

@@ -59,12 +59,19 @@ def _security_deposit_row_ids(folio) -> set[int]:
 	pending = (getattr(folio, "flags", None) or {}).get("kamra_pending_security_refund")
 	posted = set()
 	if folio.get("name") and any(p.get("name") for _, p in refunds):
-		posted = set(frappe.get_all(
-			"Folio Ledger Entry",
-			filters={"folio": folio.name, "ledger": "Deposit",
-			         "source_doctype": SECURITY_DEPOSIT_REFUND_SOURCE},
-			pluck="source_name",
-		))
+		entries = frappe.get_all(
+			"Folio Ledger Entry", filters={"folio": folio.name, "ledger": "Deposit"},
+			fields=["name", "source_doctype", "source_name", "reversal_of"],
+		)
+		security_entries = {
+			e.name for e in entries if e.source_doctype == "Security Deposit"
+			or (e.source_doctype == "Folio Payment" and e.source_name in sec_names)
+		}
+		posted = {
+			e.source_name for e in entries
+			if e.source_doctype == SECURITY_DEPOSIT_REFUND_SOURCE
+			or (e.source_doctype == "Folio Payment" and e.reversal_of in security_entries)
+		}
 	has_pe = bool(frappe.db.exists("DocType", "Payment Entry"))
 	for idx, p in refunds:
 		if p is pending or p.get("name") in posted:
