@@ -137,13 +137,14 @@
    "fieldtype": "Data",
    "hidden": 1,
    "label": "Scope Key",
+   "length": 255,
    "read_only": 1,
    "unique": 1
   }
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-11-24 19:00:00.000000",
+ "modified": "2026-11-24 21:45:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "Rate Restriction",

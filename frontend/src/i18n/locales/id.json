@@ -808,5 +808,11 @@
   "They keep their booked prices. Only new bookings will require a rate plan.": "Pemesanan tersebut tetap menggunakan harga saat dipesan. Hanya pemesanan baru yang wajib memakai paket tarif.",
   "On: every new booking, walk-in, group pick-up, channel and online booking resolves a rate plan. Existing reservations are never repriced.": "Aktif: setiap pemesanan baru, walk-in, pengambilan grup, kanal, dan pemesanan online memakai paket tarif. Reservasi yang sudah ada tidak pernah dihitung ulang harganya.",
   "Set a default rate plan in Rate Plans.": "Atur paket tarif default di Paket Tarif.",
-  "No active rate plans are configured. Set up a default rate plan in Rate Plans.": "Tidak ada paket tarif aktif yang dikonfigurasi. Siapkan paket tarif default di Paket Tarif."
+  "No active rate plans are configured. Set up a default rate plan in Rate Plans.": "Tidak ada paket tarif aktif yang dikonfigurasi. Siapkan paket tarif default di Paket Tarif.",
+  "OTA booking honored despite active stay restrictions — review required": "Pemesanan OTA tetap diterima meskipun ada pembatasan masa inap aktif — perlu ditinjau",
+  "The channel booking was accepted to avoid a walk even though active stay restrictions were in place. Review the restriction details below and adjust the stay or channel availability if needed.": "Pemesanan kanal diterima untuk menghindari pengalihan tamu meskipun pembatasan masa inap sedang aktif. Tinjau detail pembatasan di bawah ini dan sesuaikan masa inap atau ketersediaan kanal jika diperlukan.",
+  "Daily breakdown": "Rincian harian",
+  "Hide daily breakdown": "Sembunyikan rincian harian",
+  "The last full sync went out on {date} at {time}. The channel manager admits one a day: send another anyway?": "Sinkronisasi penuh terakhir dikirim pada {date} pukul {time}. Manajer kanal mengizinkan satu kali sehari: kirim lagi sekarang?",
+  "Send it": "Kirim"
 }

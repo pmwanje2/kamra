@@ -120,12 +120,12 @@ def _day_restriction_fields(day_row: dict) -> dict:
 	fields: dict = {}
 	if "stop_sell" in day_row:
 		fields["stopSell"] = bool(day_row["stop_sell"])
-	min_los = int(day_row.get("min_stay_arrival") or day_row.get("min_los") or 0)
-	if min_los > 0:
-		fields["minStay"] = min_los
-	max_los = int(day_row.get("max_stay") or day_row.get("max_los") or 0)
-	if max_los > 0:
-		fields["maxStay"] = max_los
+	if "min_stay_arrival" in day_row or "min_los" in day_row:
+		min_los = int(day_row.get("min_stay_arrival") or day_row.get("min_los") or 0)
+		fields["minStay"] = min_los if min_los > 0 else 1
+	if "max_stay" in day_row or "max_los" in day_row:
+		max_los = int(day_row.get("max_stay") or day_row.get("max_los") or 0)
+		fields["maxStay"] = max(0, max_los)
 	if "cta" in day_row or "closed_to_arrival" in day_row:
 		fields["cta"] = bool(day_row.get("closed_to_arrival", day_row.get("cta")))
 	if "ctd" in day_row or "closed_to_departure" in day_row:

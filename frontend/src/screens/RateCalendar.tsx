@@ -18,6 +18,7 @@ import type { NightRate } from "../components/RateOptions"
 import { currencyText, fxLockNote, roundingRule, TariffNight } from "../components/ContractTariff"
 import RateRestrictionsDrawer from "../components/RateRestrictionsDrawer"
 import {
+  canEditBarForCalendar,
   canEditRates,
   normalizeDateRange,
   restrictionBadges,
@@ -111,7 +112,13 @@ export default function RateCalendar() {
   const [mode, setMode] = useState<"view" | "edit">("view")
   const [selection, setSelection] = useState<GridSelection | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const dragRef = useRef<{ roomType: string; roomTypeName: string; anchorDate: string; moved: boolean } | null>(null)
+  const dragRef = useRef<{
+    roomType: string
+    roomTypeName: string
+    anchorDate: string
+    moved: boolean
+    alreadySingle: boolean
+  } | null>(null)
   const suppressClickRef = useRef(false)
 
   useEffect(() => {
@@ -123,12 +130,12 @@ export default function RateCalendar() {
 
   useEffect(() => {
     const onPointerUp = () => {
-      if (dragRef.current) {
-        if (dragRef.current.moved) {
-          suppressClickRef.current = true
-          setTimeout(() => { suppressClickRef.current = false }, 0)
-        }
-        dragRef.current = null
+      const drag = dragRef.current
+      if (!drag) return
+      dragRef.current = null
+      if (drag.moved || drag.alreadySingle) {
+        suppressClickRef.current = true
+        setTimeout(() => { suppressClickRef.current = false }, 0)
         setDrawerOpen(true)
       }
     }
@@ -222,9 +229,24 @@ export default function RateCalendar() {
   const picked = data && pick ? data.room_types.find((r) => r.room_type === pick.rt)?.nights[pick.i] : null
   const pickedType = data && pick ? data.room_types.find((r) => r.room_type === pick.rt) : null
 
-  const startCellDrag = (r: CalendarRoomType, date: string) => {
+  const startCellDrag = (r: CalendarRoomType, date: string, shiftKey = false) => {
     if (mode !== "edit" || !canEdit) return
-    dragRef.current = { roomType: r.room_type, roomTypeName: r.name, anchorDate: date, moved: false }
+    if (shiftKey && selection && selection.roomType === r.room_type && !drawerOpen) {
+      // Preserve existing selection anchor so the following Shift+Click extends the range
+      return
+    }
+    const alreadySingle =
+      !drawerOpen &&
+      selection?.roomType === r.room_type &&
+      selection.dates.length === 1 &&
+      selection.startDate === date
+    dragRef.current = {
+      roomType: r.room_type,
+      roomTypeName: r.name,
+      anchorDate: date,
+      moved: false,
+      alreadySingle,
+    }
     setSelection({
       roomType: r.room_type,
       roomTypeName: r.name,
@@ -249,7 +271,11 @@ export default function RateCalendar() {
   }
 
   const handleEditTap = (r: CalendarRoomType, date: string, shiftKey = false) => {
-    if (mode !== "edit" || !canEdit || suppressClickRef.current) return
+    if (mode !== "edit" || !canEdit) return
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false
+      return
+    }
     if ((shiftKey || isMobile) && selection && selection.roomType === r.room_type && !drawerOpen) {
       const dates = normalizeDateRange(selection.startDate, date, orderedDates)
       setSelection({
@@ -568,7 +594,7 @@ export default function RateCalendar() {
                                 type="button"
                                 data-cell-rt={r.room_type}
                                 data-cell-date={x.date}
-                                onPointerDown={() => startCellDrag(r, x.date)}
+                                onPointerDown={(e) => startCellDrag(r, x.date, e.shiftKey)}
                                 onPointerEnter={() => extendCellDrag(r, x.date)}
                                 onPointerOver={() => extendCellDrag(r, x.date)}
                                 onClick={(e) => {
@@ -598,7 +624,7 @@ export default function RateCalendar() {
                               type="button"
                               data-cell-rt={r.room_type}
                               data-cell-date={x.date}
-                              onPointerDown={() => startCellDrag(r, x.date)}
+                              onPointerDown={(e) => startCellDrag(r, x.date, e.shiftKey)}
                               onPointerEnter={() => extendCellDrag(r, x.date)}
                               onPointerOver={() => extendCellDrag(r, x.date)}
                               onClick={(e) => {
@@ -802,9 +828,16 @@ export default function RateCalendar() {
           currency={data?.property_currency}
           ratePlan={plan?.name ?? null}
           ratePlanLabel={plan?.label ?? null}
-          initialRate={selectedFirstNight?.rate ?? null}
+          initialRate={selectedFirstNight?.card_rate ?? selectedFirstNight?.rate ?? null}
           initialRestriction={selectedFirstNight}
-          allowBarEdit={!plan}
+          allowBarEdit={canEditBarForCalendar({
+            company,
+            ratePlanRequired: data?.rate_plan_required,
+            defaultPlan: data?.default_plan,
+            plan,
+            propertyCurrency: data?.property_currency,
+            selectedNight: selectedFirstNight,
+          })}
           onClose={() => setDrawerOpen(false)}
           onSaved={handleSaved}
         />

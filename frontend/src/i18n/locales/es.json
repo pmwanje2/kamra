@@ -7116,5 +7116,9 @@
   "ZATCA: still needed for valid e-invoices - {fields}.": "ZATCA: aún es necesario para facturas electrónicas válidas - {fields}.",
   "Zero balance: use Quick check out above, or Check out on the row.": "Saldo cero: utilice Salida rápida arriba o Registrar salida en la fila.",
   "Zero-rate and complimentary rooms": "Habitaciones con tarifa cero y de cortesía",
-  "Zero-rated on purpose": "Tasa cero aplicada intencionalmente"
+  "Zero-rated on purpose": "Tasa cero aplicada intencionalmente",
+  "OTA booking honored despite active stay restrictions — review required": "Reserva de OTA aceptada pese a las restricciones de estancia activas — se requiere revisión",
+  "The channel booking was accepted to avoid a walk even though active stay restrictions were in place. Review the restriction details below and adjust the stay or channel availability if needed.": "Se aceptó la reserva del canal para evitar desviar al huésped aunque había restricciones de estancia activas. Revise los detalles de las restricciones a continuación y ajuste la estancia o la disponibilidad del canal si es necesario.",
+  "Daily breakdown": "Desglose diario",
+  "Hide daily breakdown": "Ocultar desglose diario"
 }

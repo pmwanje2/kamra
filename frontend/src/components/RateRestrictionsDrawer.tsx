@@ -51,6 +51,7 @@ export default function RateRestrictionsDrawer({
     initialRate != null && Number.isFinite(initialRate) ? initialRate.toFixed(digits) : "",
   )
   const [barTouched, setBarTouched] = useState(false)
+  const [restrictionsTouched, setRestrictionsTouched] = useState(false)
 
   const [minLos, setMinLos] = useState(
     initialRestriction?.min_los ? String(initialRestriction.min_los) : "",
@@ -69,6 +70,7 @@ export default function RateRestrictionsDrawer({
   useEffect(() => {
     setBarRate(initialRate != null && Number.isFinite(initialRate) ? initialRate.toFixed(digits) : "")
     setBarTouched(false)
+    setRestrictionsTouched(false)
     setMinLos(initialRestriction?.min_los ? String(initialRestriction.min_los) : "")
     setMaxLos(initialRestriction?.max_los ? String(initialRestriction.max_los) : "")
     setStayThrough(Boolean(initialRestriction?.is_stay_through))
@@ -121,7 +123,7 @@ export default function RateRestrictionsDrawer({
           cta: 0,
           ctd: 0,
         })
-      } else {
+      } else if (restrictionsTouched || rateUpdates.length === 0) {
         const minVal = minLos.trim() === "" ? 0 : Math.max(0, Math.floor(Number(minLos) || 0))
         const maxVal = maxLos.trim() === "" ? 0 : Math.max(0, Math.floor(Number(maxLos) || 0))
         if (minVal > 0 && maxVal > 0 && maxVal < minVal) {
@@ -192,7 +194,10 @@ export default function RateRestrictionsDrawer({
             <input
               type="checkbox"
               checked={scopeAllRooms}
-              onChange={(e) => setScopeAllRooms(e.target.checked)}
+              onChange={(e) => {
+                setScopeAllRooms(e.target.checked)
+                setRestrictionsTouched(true)
+              }}
               className="size-4 rounded border-zinc-300"
             />
             <span>{t("Apply restrictions to all room types (house level)")}</span>
@@ -202,7 +207,10 @@ export default function RateRestrictionsDrawer({
               <input
                 type="checkbox"
                 checked={applyToPlan}
-                onChange={(e) => setApplyToPlan(e.target.checked)}
+                onChange={(e) => {
+                  setApplyToPlan(e.target.checked)
+                  setRestrictionsTouched(true)
+                }}
                 className="size-4 rounded border-zinc-300"
               />
               <span>
@@ -285,7 +293,10 @@ export default function RateRestrictionsDrawer({
                 aria-label={t("Min LOS")}
                 placeholder="0"
                 value={minLos}
-                onChange={(e) => setMinLos(e.target.value)}
+                onChange={(e) => {
+                  setMinLos(e.target.value)
+                  setRestrictionsTouched(true)
+                }}
                 className="min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm tabular-nums text-zinc-900"
               />
             </div>
@@ -302,7 +313,10 @@ export default function RateRestrictionsDrawer({
                 aria-label={t("Max LOS")}
                 placeholder="0"
                 value={maxLos}
-                onChange={(e) => setMaxLos(e.target.value)}
+                onChange={(e) => {
+                  setMaxLos(e.target.value)
+                  setRestrictionsTouched(true)
+                }}
                 className="min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm tabular-nums text-zinc-900"
               />
             </div>
@@ -314,7 +328,10 @@ export default function RateRestrictionsDrawer({
                 type="checkbox"
                 aria-label={t("Apply Min LOS stay-through")}
                 checked={stayThrough}
-                onChange={(e) => setStayThrough(e.target.checked)}
+                onChange={(e) => {
+                  setStayThrough(e.target.checked)
+                  setRestrictionsTouched(true)
+                }}
                 className="size-4 rounded border-zinc-300"
               />
               <span>{t("Apply Min LOS stay-through")}</span>
@@ -325,7 +342,10 @@ export default function RateRestrictionsDrawer({
                 type="checkbox"
                 aria-label={t("Closed to arrival")}
                 checked={cta}
-                onChange={(e) => setCta(e.target.checked)}
+                onChange={(e) => {
+                  setCta(e.target.checked)
+                  setRestrictionsTouched(true)
+                }}
                 className="size-4 rounded border-zinc-300"
               />
               <span className="font-medium text-amber-900">{t("Closed to arrival (CTA)")}</span>
@@ -336,7 +356,10 @@ export default function RateRestrictionsDrawer({
                 type="checkbox"
                 aria-label={t("Closed to departure")}
                 checked={ctd}
-                onChange={(e) => setCtd(e.target.checked)}
+                onChange={(e) => {
+                  setCtd(e.target.checked)
+                  setRestrictionsTouched(true)
+                }}
                 className="size-4 rounded border-zinc-300"
               />
               <span className="font-medium text-amber-900">{t("Closed to departure (CTD)")}</span>
@@ -347,7 +370,10 @@ export default function RateRestrictionsDrawer({
                 type="checkbox"
                 aria-label={t("Stop-sell")}
                 checked={stopSell}
-                onChange={(e) => setStopSell(e.target.checked)}
+                onChange={(e) => {
+                  setStopSell(e.target.checked)
+                  setRestrictionsTouched(true)
+                }}
                 className="size-4 rounded border-zinc-300"
               />
               <span className="font-medium text-rose-800">{t("Stop-sell (closeout)")}</span>

@@ -6933,5 +6933,11 @@
   "ZATCA: still needed for valid e-invoices - {fields}.": "زاتكا: مطلوب لإصدار فواتير إلكترونية صحيحة - {fields}.",
   "Zero balance: use Quick check out above, or Check out on the row.": "رصيد صفري: استخدم المغادرة السريعة أعلاه، أو تسجيل المغادرة في الصف.",
   "Zero-rate and complimentary rooms": "غرف بسعر صفر ومجانية",
-  "Zero-rated on purpose": "خاضع لنسبة صفرية عمدًا"
+  "Zero-rated on purpose": "خاضع لنسبة صفرية عمدًا",
+  "OTA booking honored despite active stay restrictions — review required": "تم قبول حجز قناة الحجز رغم قيود الإقامة النشطة — المراجعة مطلوبة",
+  "The channel booking was accepted to avoid a walk even though active stay restrictions were in place. Review the restriction details below and adjust the stay or channel availability if needed.": "تم قبول حجز القناة لتجنّب تحويل النزيل رغم وجود قيود إقامة نشطة. راجع تفاصيل القيود أدناه وعدّل الإقامة أو توفر القناة عند الحاجة.",
+  "Daily breakdown": "التفصيل اليومي",
+  "Hide daily breakdown": "إخفاء التفصيل اليومي",
+  "The last full sync went out on {date} at {time}. The channel manager admits one a day: send another anyway?": "أُرسلت آخر مزامنة كاملة في {date} الساعة {time}. يقبل مدير القنوات مزامنة واحدة يومياً: هل تريد إرسال أخرى على أي حال؟",
+  "Send it": "أرسِلها"
 }

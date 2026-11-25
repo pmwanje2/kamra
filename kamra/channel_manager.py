@@ -159,12 +159,15 @@ def ari_snapshot(property: str, connection: str, days: int = 90, start=None,
 
 	def day_entry(m_row, d, avail, night_rate):
 		item = {"date": str(d), "available": avail, "rate": night_rate}
-		if restr_rows and str(d) in restr_rows:
-			r = resolve_night_restrictions(
-				property, d, room_type=m_row.room_type,
-				rate_plan=m_row.get("rate_plan") or None, _rows_by_date=restr_rows,
+		if with_rates:
+			r = (
+				resolve_night_restrictions(
+					property, d, room_type=m_row.room_type,
+					rate_plan=m_row.get("rate_plan") or None, _rows_by_date=restr_rows,
+				)
+				if (restr_rows and str(d) in restr_rows) else None
 			)
-			if r["has_rule"]:
+			if r and r["has_rule"]:
 				item.update(
 					stop_sell=r["stop_sell"],
 					min_los=r["min_los"],
@@ -174,6 +177,14 @@ def ari_snapshot(property: str, connection: str, days: int = 90, start=None,
 				)
 				if r.get("is_stay_through"):
 					item["is_stay_through"] = True
+			else:
+				item.update(
+					stop_sell=False,
+					min_los=1,
+					max_los=0,
+					cta=False,
+					ctd=False,
+				)
 		return item
 
 	for m in mappings:
@@ -1146,8 +1157,8 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 		)
 		if not restr_ev["allowed"]:
 			restriction_mismatch = restr_ev["summary"]
-			from kamra.savings import log_action
 			if _strict_ota_restrictions(conn.property):
+				from kamra.savings import log_action
 				log_action(
 					"channel.restriction_refused", "Channel Manager Connection", conn.name,
 					conn.property,
@@ -1161,13 +1172,6 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 					"reason": restriction_mismatch,
 					"violations": restr_ev["violations"],
 				}
-			log_action(
-				"channel.restriction_mismatch", "Channel Manager Connection", conn.name,
-				conn.property,
-				rationale=f"{e.get('channel') or 'OTA'} {e['event']} {e.get('ota_ref')} via "
-				          f"{conn.provider} accepted for review despite restriction: {restriction_mismatch}",
-				channel="API",
-			)
 	property_currency = frappe.db.get_value("Property", conn.property, "currency")
 	# a modify of a stay the OTA sold on a foreign contract: what it was stamped with
 	booked = _booked_channel_snapshot(existing.name) if e["event"] == "modify" and existing else None
@@ -1297,6 +1301,13 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 					s for s in (doc.special_requests, mismatch_note) if s
 				)
 			doc.db_set(m_updates)
+			from kamra.savings import log_action
+			log_action(
+				"channel.restriction_mismatch", "Reservation", doc.name, conn.property,
+				rationale=f"{e.get('channel') or 'OTA'} {e['event']} {e.get('ota_ref')} via "
+				          f"{conn.provider} accepted for review despite restriction: {restriction_mismatch}",
+				channel="API",
+			)
 		if discount_review:
 			from kamra.api import _discount_snapshot
 			from kamra.localization import money_text
@@ -1428,6 +1439,13 @@ def _apply_event(conn, e: dict, requested_reason: str | None = None) -> dict:
 				s for s in (doc.special_requests, mismatch_note) if s
 			)
 		doc.db_set(m_updates)
+		from kamra.savings import log_action
+		log_action(
+			"channel.restriction_mismatch", "Reservation", doc.name, conn.property,
+			rationale=f"{e.get('channel') or 'OTA'} {e['event']} {e.get('ota_ref')} via "
+			          f"{conn.provider} accepted for review despite restriction: {restriction_mismatch}",
+			channel="API",
+		)
 	# the channel's own commission when it sends one, else the site's default
 	if e.get("commission"):
 		doc.db_set("commission_amount", float(e["commission"]))

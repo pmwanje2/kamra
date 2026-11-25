@@ -1523,5 +1523,11 @@
   "They keep their booked prices. Only new bookings will require a rate plan.": "Mananatili ang kanilang mga presyong na-book. Mga bagong booking lang ang mangangailangan ng rate plan.",
   "On: every new booking, walk-in, group pick-up, channel and online booking resolves a rate plan. Existing reservations are never repriced.": "Naka-on: bawat bagong booking, walk-in, group pick-up, channel at online booking ay gagamit ng rate plan. Hindi kailanman muling pinipresyuhan ang mga kasalukuyang reserbasyon.",
   "Set a default rate plan in Rate Plans.": "Magtakda ng default na rate plan sa Mga Rate Plan.",
-  "No active rate plans are configured. Set up a default rate plan in Rate Plans.": "Walang naka-configure na aktibong rate plan. Mag-set up ng default na rate plan sa Mga Rate Plan."
+  "No active rate plans are configured. Set up a default rate plan in Rate Plans.": "Walang naka-configure na aktibong rate plan. Mag-set up ng default na rate plan sa Mga Rate Plan.",
+  "OTA booking honored despite active stay restrictions — review required": "Tinanggap ang booking mula sa OTA sa kabila ng mga aktibong restriksyon sa pananatili — kailangan ng pagsusuri",
+  "The channel booking was accepted to avoid a walk even though active stay restrictions were in place. Review the restriction details below and adjust the stay or channel availability if needed.": "Tinanggap ang booking ng channel upang maiwasan ang paglipat ng bisita kahit na may mga aktibong restriksyon sa pananatili. Suriin ang mga detalye ng restriksyon sa ibaba at i-adjust ang pananatili o availability ng channel kung kinakailangan.",
+  "Daily breakdown": "Araw-araw na detalye",
+  "Hide daily breakdown": "Itago ang araw-araw na detalye",
+  "The last full sync went out on {date} at {time}. The channel manager admits one a day: send another anyway?": "Ang huling buong pag-sync ay ipinadala noong {date} nang {time}. Isa bawat araw lang ang tinatanggap ng channel manager: magpadala pa rin ng isa pa?",
+  "Send it": "Ipadala"
 }

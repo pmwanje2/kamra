@@ -237,10 +237,16 @@ def push_ari(conn, snapshot) -> tuple[bool, str]:
 					cell["rate"] = d["rate"]
 				if "stop_sell" in d:
 					cell["stop_sell"] = bool(d["stop_sell"])
-				if d.get("min_los") or d.get("min_stay_arrival"):
-					cell["min_stay_arrival"] = int(d.get("min_stay_arrival") or d.get("min_los"))
-				if d.get("max_los") or d.get("max_stay"):
-					cell["max_stay"] = int(d.get("max_stay") or d.get("max_los"))
+				if "min_los" in d or "min_stay_arrival" in d:
+					min_los = int(d.get("min_stay_arrival") or d.get("min_los") or 0)
+					cell["min_stay_arrival"] = min_los if min_los > 0 else 1
+				if d.get("is_stay_through") and int(d.get("min_stay_through") or d.get("min_los") or 0) > 0:
+					cell["min_stay_through"] = int(d.get("min_stay_through") or d.get("min_los"))
+				elif "min_stay_through" in d:
+					mst = int(d.get("min_stay_through") or 0)
+					cell["min_stay_through"] = mst if mst > 0 else 1
+				if "max_los" in d or "max_stay" in d:
+					cell["max_stay"] = max(0, int(d.get("max_stay") or d.get("max_los") or 0))
 				if "cta" in d or "closed_to_arrival" in d:
 					cell["closed_to_arrival"] = bool(d.get("closed_to_arrival", d.get("cta")))
 				if "ctd" in d or "closed_to_departure" in d:

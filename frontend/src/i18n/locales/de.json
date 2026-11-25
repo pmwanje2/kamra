@@ -808,5 +808,11 @@
   "They keep their booked prices. Only new bookings will require a rate plan.": "Sie behalten ihre gebuchten Preise. Nur neue Buchungen erfordern einen Ratenplan.",
   "On: every new booking, walk-in, group pick-up, channel and online booking resolves a rate plan. Existing reservations are never repriced.": "Aktiv: Jede neue Buchung, jeder Walk-in, jeder Gruppenabruf sowie jede Kanal- und Online-Buchung verwendet einen Ratenplan. Bestehende Reservierungen werden niemals neu bepreist.",
   "Set a default rate plan in Rate Plans.": "Legen Sie einen Standard-Ratenplan unter Ratenpläne fest.",
-  "No active rate plans are configured. Set up a default rate plan in Rate Plans.": "Es sind keine aktiven Ratenpläne eingerichtet. Richten Sie unter Ratenpläne einen Standard-Ratenplan ein."
+  "No active rate plans are configured. Set up a default rate plan in Rate Plans.": "Es sind keine aktiven Ratenpläne eingerichtet. Richten Sie unter Ratenpläne einen Standard-Ratenplan ein.",
+  "OTA booking honored despite active stay restrictions — review required": "OTA-Buchung trotz aktiver Aufenthaltsbeschränkungen akzeptiert — Prüfung erforderlich",
+  "The channel booking was accepted to avoid a walk even though active stay restrictions were in place. Review the restriction details below and adjust the stay or channel availability if needed.": "Die Kanalbuchung wurde akzeptiert, um eine Umbuchung des Gastes zu vermeiden, obwohl aktive Aufenthaltsbeschränkungen galten. Prüfen Sie die Beschränkungsdetails unten und passen Sie bei Bedarf den Aufenthalt oder die Kanalverfügbarkeit an.",
+  "Daily breakdown": "Tagesübersicht",
+  "Hide daily breakdown": "Tagesübersicht ausblenden",
+  "The last full sync went out on {date} at {time}. The channel manager admits one a day: send another anyway?": "Die letzte vollständige Synchronisierung erfolgte am {date} um {time}. Der Channel Manager erlaubt eine pro Tag: trotzdem eine weitere senden?",
+  "Send it": "Senden"
 }

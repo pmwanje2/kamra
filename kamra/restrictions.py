@@ -253,6 +253,9 @@ def evaluate_stay_restrictions(
 	check_out_date,
 	rate_plan: str | None = None,
 	ignore_day_use: bool = True,
+	*,
+	skip_arrival_cta: bool = False,
+	existing_nights: set[str] | None = None,
 ) -> dict:
 	"""Evaluate all active Rate Restrictions for a stay `[check_in_date, check_out_date)`."""
 	if not property or not check_in_date or not check_out_date or not _table_available():
@@ -282,8 +285,10 @@ def evaluate_stay_restrictions(
 		for d in [*stay_dates, co_str]
 	}
 
-	# 1. Stop-Sell across every stay night [ci .. co)
+	# 1. Stop-Sell across every stay night [ci .. co) (excluding already-held nights on in-house amendments)
 	for d in stay_dates:
+		if existing_nights and d in existing_nights:
+			continue
 		r = resolved_by_day[d]
 		if r["stop_sell"]:
 			violations.append({
@@ -293,9 +298,10 @@ def evaluate_stay_restrictions(
 				"message": _("Closed to sale (Stop-Sell) on {0}.").format(d),
 			})
 
-	# 2. CTA on arrival date (stay-overs passing through a CTA date are allowed)
+	# 2. CTA on arrival date (stay-overs passing through a CTA date and already-checked-in
+	#    stays amending check-out without changing check_in_date are allowed)
 	r_ci = resolved_by_day[ci_str]
-	if r_ci["cta"]:
+	if not skip_arrival_cta and r_ci["cta"]:
 		violations.append({
 			"code": "cta",
 			"date": ci_str,
@@ -370,22 +376,27 @@ def assert_stay_allowed(res) -> None:
 
 	# Allow non-stay edits (e.g. room swap, guest note, check-in/out) on existing stays
 	# whose dates, room_type, and rate_plan have not changed.
+	skip_arrival_cta = False
+	existing_nights: set[str] | None = None
 	if not res.is_new():
 		old = res.get_doc_before_save()
 		if old and old.status not in _PRE_BOOK_STATUSES:
-			unchanged = (
-				str(getdate(old.check_in_date)),
-				str(getdate(old.check_out_date)),
-				old.room_type or "",
-				old.get("rate_plan") or "",
-			) == (
-				str(getdate(res.check_in_date)),
-				str(getdate(res.check_out_date)),
-				res.room_type or "",
-				res.get("rate_plan") or "",
-			)
-			if unchanged:
+			old_ci = str(getdate(old.check_in_date))
+			old_co = str(getdate(old.check_out_date))
+			new_ci = str(getdate(res.check_in_date))
+			new_co = str(getdate(res.check_out_date))
+			same_ci = old_ci == new_ci
+			same_rt = (old.room_type or "") == (res.room_type or "")
+			same_rp = (old.get("rate_plan") or "") == (res.get("rate_plan") or "")
+			if same_ci and old_co == new_co and same_rt and same_rp:
 				return
+			# Already-checked-in stay amending check-out only: do not falsely reject
+			# CTA on check_in_date or Stop-Sell on already-held nights; still enforce
+			# Stop-Sell on newly added nights and CTD on the new departure date.
+			if old.status == "Checked In" and same_ci and same_rt and same_rp:
+				skip_arrival_cta = True
+				old_span = max(0, date_diff(old_co, old_ci))
+				existing_nights = {str(getdate(add_days(old_ci, i))) for i in range(old_span)}
 
 	rp = res.get("rate_plan") or None
 	if not rp and res.get("company"):
@@ -393,7 +404,8 @@ def assert_stay_allowed(res) -> None:
 		rp = negotiated_rate_plan(res.property, res.get("company"))
 
 	ev = evaluate_stay_restrictions(
-		res.property, res.room_type, res.check_in_date, res.check_out_date, rate_plan=rp,
+		res.property, res.room_type, res.check_in_date, res.check_out_date,
+		rate_plan=rp, skip_arrival_cta=skip_arrival_cta, existing_nights=existing_nights,
 	)
 	if not ev["allowed"]:
 		frappe.throw(ev["summary"], StayRestrictionError, title=_("Stay restriction"))
@@ -1090,19 +1102,6 @@ def channel_health_snapshot(property: str, days: int = 14) -> dict:
 				parity_ok += 1
 			else:
 				parity_issues += 1
-
-			# Keep Channel Room Mapping health fields synced when writable by an authorized manager
-			if _can_manage_restrictions() and frappe.get_meta("Channel Room Mapping").has_field("last_parity_status"):
-				frappe.db.set_value(
-					"Channel Room Mapping",
-					m.name,
-					{
-						"last_parity_status": row_status,
-						"last_parity_delta": lead["delta"] if (lead and lead["delta"] is not None) else 0.0,
-						"last_error": last_err[:280],
-					},
-					update_modified=False,
-				)
 
 			parity_rows.append({
 				"mapping_name": m.name,

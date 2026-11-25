@@ -7193,5 +7193,11 @@
   "ZATCA: still needed for valid e-invoices - {fields}.": "ZATCA：有效电子发票仍缺少 - {fields}。",
   "Zero balance: use Quick check out above, or Check out on the row.": "余额为零：使用上方「快速退房」，或在行上点击「退房」。",
   "Zero-rate and complimentary rooms": "零房价与免单客房",
-  "Zero-rated on purpose": "确认为零税率"
+  "Zero-rated on purpose": "确认为零税率",
+  "OTA booking honored despite active stay restrictions — review required": "尽管存在生效的入住限制，仍已承接 OTA 预订 — 需要复核",
+  "The channel booking was accepted to avoid a walk even though active stay restrictions were in place. Review the restriction details below and adjust the stay or channel availability if needed.": "尽管存在生效的入住限制，为避免客人被转店仍已承接该渠道预订。请在下方核对限制详情，如需调整请修改入住信息或渠道房态。",
+  "Daily breakdown": "每日明细",
+  "Hide daily breakdown": "隐藏每日明细",
+  "The last full sync went out on {date} at {time}. The channel manager admits one a day: send another anyway?": "上次全量同步已于 {date} {time} 发送。渠道管理器每天仅允许一次：确定仍要再次发送吗？",
+  "Send it": "立即发送"
 }

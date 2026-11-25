@@ -44,6 +44,7 @@ export default function ChannelHealth() {
   const [err, setErr] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [busyConn, setBusyConn] = useState<string | null>(null)
+  const [confirmSync, setConfirmSync] = useState<{ conn: ChannelConnectionHealth; since: string } | null>(null)
   const [parityFilter, setParityFilter] = useState<"all" | "issues">("all")
   const [outboxFilter, setOutboxFilter] = useState<"all" | "Pending" | "Failed" | "Sent">("all")
   const [expandedMapping, setExpandedMapping] = useState<string | null>(null)
@@ -93,22 +94,25 @@ export default function ChannelHealth() {
     }
   }
 
-  async function pushFullAri(conn: ChannelConnectionHealth) {
+  async function pushFullAri(conn: ChannelConnectionHealth, confirm = 0) {
     setBusyConn(conn.name)
     setErr(null)
     setNotice(null)
     try {
       if (conn.uses_outbox) {
-        const out = await call<{ queued?: boolean; needs_confirm?: boolean }>(
+        const out = await call<{ queued?: boolean; needs_confirm?: boolean; last_full_sync?: string }>(
           "kamra.channel_ari.request_full_sync",
-          { connection: conn.name, confirm: 0 },
+          { connection: conn.name, confirm },
         )
         if (out.needs_confirm) {
-          await call("kamra.channel_ari.request_full_sync", { connection: conn.name, confirm: 1 })
+          setConfirmSync({ conn, since: out.last_full_sync || conn.last_full_sync || "" })
+          return
         }
+        setConfirmSync(null)
         setNotice(t("Full ARI sync queued for {provider}.", { provider: conn.provider }))
       } else {
         await call("kamra.channel_manager.push_ari", { connection: conn.name })
+        setConfirmSync(null)
         setNotice(t("Full ARI push completed for {provider}.", { provider: conn.provider }))
       }
       await load()
@@ -296,28 +300,62 @@ export default function ChannelHealth() {
                       </p>
                     )}
                     {canManage && (
-                      <div className="flex flex-wrap gap-2 pt-1">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="min-h-11"
-                          disabled={busyConn === conn.name || !conn.active}
-                          onClick={() => { void pushFullAri(conn) }}
-                        >
-                          <Send className="me-1.5 size-4" aria-hidden />
-                          {t("Push full ARI")}
-                        </Button>
-                        {conn.outbox_counts.failed > 0 && (
+                      <div className="space-y-2 pt-1">
+                        <div className="flex flex-wrap gap-2">
                           <Button
                             type="button"
                             variant="outline"
-                            className="min-h-11 border-rose-300 text-rose-700 hover:bg-rose-50"
-                            disabled={busyConn === conn.name}
-                            onClick={() => { void retryFailed(conn.name) }}
+                            className="min-h-11"
+                            disabled={busyConn === conn.name || !conn.active}
+                            onClick={() => { void pushFullAri(conn, 0) }}
                           >
-                            <RotateCcw className="me-1.5 size-4" aria-hidden />
-                            {t("Retry failed outbox")}
+                            <Send className="me-1.5 size-4" aria-hidden />
+                            {t("Push full ARI")}
                           </Button>
+                          {conn.outbox_counts.failed > 0 && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="min-h-11 border-rose-300 text-rose-700 hover:bg-rose-50"
+                              disabled={busyConn === conn.name}
+                              onClick={() => { void retryFailed(conn.name) }}
+                            >
+                              <RotateCcw className="me-1.5 size-4" aria-hidden />
+                              {t("Retry failed outbox")}
+                            </Button>
+                          )}
+                        </div>
+                        {confirmSync?.conn.name === conn.name && (
+                          <div
+                            role="alertdialog"
+                            className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"
+                          >
+                            <p>
+                              {t(
+                                "The last full sync went out on {date} at {time}. The channel manager admits one a day: send another anyway?",
+                                momentParts(confirmSync.since, lang) ?? { date: confirmSync.since, time: "" },
+                              )}
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                type="button"
+                                className="min-h-11"
+                                disabled={busyConn === conn.name}
+                                onClick={() => { void pushFullAri(conn, 1) }}
+                              >
+                                {t("Send it")}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                className="min-h-11"
+                                disabled={busyConn === conn.name}
+                                onClick={() => setConfirmSync(null)}
+                              >
+                                {t("Cancel")}
+                              </Button>
+                            </div>
+                          </div>
                         )}
                       </div>
                     )}
@@ -454,42 +492,89 @@ export default function ChannelHealth() {
 
                   {/* Mobile Card List (zero horizontal overflow at 390px) */}
                   <div className="divide-y divide-zinc-100 md:hidden">
-                    {filteredParity.map((row) => (
-                      <div key={row.mapping_name} className="space-y-2 p-4 text-sm">
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <div className="font-medium text-zinc-900">{row.room_type_name}</div>
-                            <div className="text-xs text-zinc-500">
-                              {row.rate_plan_label} · {row.provider} · {row.external_rate_id || row.external_room_id}
+                    {filteredParity.map((row) => {
+                      const open = expandedMapping === row.mapping_name
+                      return (
+                        <div key={row.mapping_name} className="space-y-2 p-4 text-sm">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="font-medium text-zinc-900">{row.room_type_name}</div>
+                              <div className="break-words text-xs text-zinc-500">
+                                {row.rate_plan_label} · {row.provider} · {row.external_rate_id || row.external_room_id}
+                              </div>
+                            </div>
+                            <Badge tone={parityTone(row.parity_status)}>{t(row.parity_status)}</Badge>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 rounded-lg bg-zinc-50 p-2.5 text-xs">
+                            <div className="min-w-0">
+                              <div className="text-zinc-500">{t("Direct rate")}</div>
+                              <div className="font-medium tabular-nums text-zinc-900">
+                                {formatRate(row.direct_rate, row.currency)}
+                              </div>
+                            </div>
+                            <div className="min-w-0 text-end">
+                              <div className="text-zinc-500">{t("Last OTA rate")}</div>
+                              <div className="font-medium tabular-nums text-zinc-900">
+                                {formatRate(row.ota_rate, row.currency)}
+                              </div>
                             </div>
                           </div>
-                          <Badge tone={parityTone(row.parity_status)}>{t(row.parity_status)}</Badge>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2 rounded-lg bg-zinc-50 p-2.5 text-xs">
-                          <div>
-                            <div className="text-zinc-500">{t("Direct rate")}</div>
-                            <div className="font-medium tabular-nums text-zinc-900">
-                              {formatRate(row.direct_rate, row.currency)}
-                            </div>
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            {renderRestrictionsChips(row)}
+                            {row.parity_delta !== null && row.parity_delta !== 0 && (
+                              <span className="text-xs font-medium tabular-nums text-zinc-600">
+                                {formatDelta(row.parity_delta, row.currency)}
+                              </span>
+                            )}
                           </div>
-                          <div className="text-end">
-                            <div className="text-zinc-500">{t("Last OTA rate")}</div>
-                            <div className="font-medium tabular-nums text-zinc-900">
-                              {formatRate(row.ota_rate, row.currency)}
+                          {row.last_error && <p className="break-words text-xs text-rose-600">{row.last_error}</p>}
+                          {row.days.length > 0 && (
+                            <div className="pt-1">
+                              <button
+                                type="button"
+                                aria-expanded={open}
+                                data-mobile-parity-toggle={row.mapping_name}
+                                onClick={() => setExpandedMapping(open ? null : row.mapping_name)}
+                                className="inline-flex min-h-11 items-center rounded-lg border border-zinc-200 bg-white px-3 text-xs font-medium text-brand-700 hover:bg-zinc-50"
+                              >
+                                {open ? t("Hide daily breakdown") : t("Daily breakdown")}
+                              </button>
+                              {open && (
+                                <div className="mt-2 grid grid-cols-2 gap-2">
+                                  {row.days.map((d) => (
+                                    <div key={d.date} className="min-w-0 rounded-md border border-zinc-200 bg-zinc-50/70 p-2 text-xs">
+                                      <div className="flex items-center justify-between gap-1">
+                                        <span className="font-medium tabular-nums text-zinc-700">{d.date.slice(5)}</span>
+                                        <Badge tone={parityTone(d.status)}>{t(d.status)}</Badge>
+                                      </div>
+                                      <div className="mt-1.5 space-y-1 tabular-nums text-zinc-600">
+                                        <div>
+                                          <div className="text-[11px] text-zinc-500">{t("Direct rate")}</div>
+                                          <div className="font-medium text-zinc-900">{formatRate(d.direct_rate, row.currency)}</div>
+                                        </div>
+                                        <div>
+                                          <div className="text-[11px] text-zinc-500">{t("Last OTA rate")}</div>
+                                          <div className="font-medium text-zinc-900">{formatRate(d.ota_rate, row.currency)}</div>
+                                        </div>
+                                      </div>
+                                      {(d.stop_sell || d.cta || d.ctd || d.min_los > 0 || d.max_los > 0) && (
+                                        <div className="mt-1 flex flex-wrap gap-1">
+                                          {d.stop_sell && <Badge tone="rose">SS</Badge>}
+                                          {d.cta && <Badge tone="amber">CTA</Badge>}
+                                          {d.ctd && <Badge tone="amber">CTD</Badge>}
+                                          {d.min_los > 0 && <Badge tone="sky">{d.min_los}+</Badge>}
+                                          {d.max_los > 0 && <Badge tone="sky">≤{d.max_los}</Badge>}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
-                          </div>
-                        </div>
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          {renderRestrictionsChips(row)}
-                          {row.parity_delta !== null && row.parity_delta !== 0 && (
-                            <span className="text-xs font-medium tabular-nums text-zinc-600">
-                              {formatDelta(row.parity_delta, row.currency)}
-                            </span>
                           )}
                         </div>
-                        {row.last_error && <p className="text-xs text-rose-600">{row.last_error}</p>}
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </>
               )}

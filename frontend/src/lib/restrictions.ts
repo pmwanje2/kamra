@@ -174,6 +174,31 @@ export function canEditRates(roles: string[]): boolean {
   return roles.some((r) => EDITOR_ROLES.has(r))
 }
 
+export function canEditBarForCalendar(opts: {
+  company?: string | null
+  ratePlanRequired?: boolean
+  defaultPlan?: string | null
+  plan?: {
+    name: string
+    base_rate_plan?: string | null
+    is_tariff?: boolean
+    currency?: string | null
+  } | null
+  propertyCurrency?: string | null
+  selectedNight?: { contract?: unknown; source?: string } | null
+}): boolean {
+  if (opts.company) return false
+  if (!opts.plan) return !opts.ratePlanRequired
+  if (!opts.defaultPlan || opts.plan.name !== opts.defaultPlan) return false
+  if (opts.plan.base_rate_plan) return false
+  if (opts.plan.is_tariff) return false
+  if (opts.selectedNight?.contract || opts.selectedNight?.source === "contract") return false
+  if (opts.plan.currency && opts.propertyCurrency && opts.plan.currency !== opts.propertyCurrency) {
+    return false
+  }
+  return true
+}
+
 export function normalizeDateRange(a: string, b: string, orderedDates: string[]): string[] {
   const ia = orderedDates.indexOf(a)
   const ib = orderedDates.indexOf(b)
