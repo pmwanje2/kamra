@@ -163,14 +163,20 @@ def guests_owing(property: str) -> list[dict]:
 
 	places = _currency_places(property)
 	eps = 0.5 * (10 ** -places)
-	rows = frappe.db.sql(
+	linked = sales_invoice_field()
+	# The bridge column is optional. Both predicates are fixed SQL; property
+	# and the currency cutoff remain bound parameters on either installation.
+	candidate = "(f.balance >= %s OR f.sales_invoice != '')" if linked else "f.balance >= %s"
+	query = (
 		"""SELECT f.name AS folio, f.guest_name, f.balance, r.name AS reservation,
 		          r.status, r.check_in_date, r.check_out_date, f.grand_total
 		    FROM `tabFolio` f JOIN `tabReservation` r ON r.name = f.reservation
-		    WHERE f.property = %s AND f.folio_type = 'Guest' AND f.balance >= %s
+		    WHERE f.property = %s AND f.folio_type = 'Guest' AND """ + candidate + """
 		      AND r.status IN ('Checked Out', 'No Show', 'Cancelled')
-		    ORDER BY r.check_in_date""", (property, eps), as_dict=True)
-	if rows and sales_invoice_field():
+		    ORDER BY r.check_in_date"""
+	)
+	rows = frappe.db.sql(query, (property, eps), as_dict=True)
+	if rows and linked:
 		invoices = dict(frappe.get_list(
 			"Folio", filters={"property": property, "name": ("in", [r.folio for r in rows])},
 			fields=["name", "sales_invoice"], as_list=True, limit=0,

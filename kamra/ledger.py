@@ -1056,17 +1056,15 @@ def transfer_to_city_ledger(folio: str, company: str | None = None,
 	locked = float(frappe.db.get_value("Folio", folio, "balance", for_update=True) or 0)
 	doc = frappe.get_doc("Folio", folio)
 	balance = float(doc.balance or 0)
-	places = max(_currency_places(doc.property), 2)
+	places = _currency_places(doc.property)
 	eps = 0.5 * (10 ** -places)
-	if locked <= 0:
-		frappe.throw("No balance to transfer to city ledger.")
 	if abs(locked - balance) > eps:
 		frappe.throw(frappe._("This bill changed while it was being moved to the "
 		                      "company's account. Try again."))
 	from kamra.folio import settlement_balance
 	balance = float(settlement_balance(doc))
 	if balance <= eps:
-		frappe.throw("No balance to transfer to city ledger.")
+		frappe.throw(frappe._("No balance to transfer to city ledger."))
 	company = _transfer_company(doc, company)
 	if not company:
 		frappe.throw("A company is required for city ledger transfer.")

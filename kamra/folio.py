@@ -2767,7 +2767,7 @@ def _credit_projections(folios, property, *, read_note_numbers=True):
 			# onto the replacement once; only credits on the active bill reduce it.
 			collected = rounded(row.get("grand_total")) - posted
 			posted = rounded(invoice.rounded_total or invoice.grand_total) - collected
-		balance = max(Decimal(0), posted - credited)
+		balance = posted - credited
 		status = None
 		if credited:
 			invoice_total = invoice.rounded_total or invoice.grand_total if invoice else row.get("grand_total")
@@ -2776,7 +2776,8 @@ def _credit_projections(folios, property, *, read_note_numbers=True):
 			"sales_invoice": invoice.name if invoice and invoice.name in visible else None,
 			"credited_amount": float(credited),
 			"credit_notes": [n.name for n in returns if n.name in visible],
-			"net_collectible_balance": float(balance),
+			"settlement_balance": float(balance),
+			"net_collectible_balance": float(max(Decimal(0), balance)),
 			"credit_status": status,
 		}, invoice.name if invoice else None))
 	return positions
@@ -2787,10 +2788,10 @@ def credit_note_positions(folios, property: str, *, read_note_numbers: bool = Tr
 
 
 def settlement_balance(doc):
-	"""Keep a signed guest advance; project the amount to collect on a bridged debit."""
-	if not bridge_invoice(doc) or (doc.balance or 0) < 0:
+	"""Amount to collect (positive) or refund (negative) after applied credits and rebills."""
+	if not bridge_invoice(doc):
 		return doc.balance or 0
-	return credit_note_positions([doc], doc.property, read_note_numbers=False)[0]["net_collectible_balance"]
+	return credit_note_positions([doc], doc.property, read_note_numbers=False)[0]["settlement_balance"]
 
 
 def reconcile_credit_note_status(folio) -> dict:

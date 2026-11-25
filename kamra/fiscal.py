@@ -73,15 +73,17 @@ def fiscal_status(folio) -> dict | None:
 		return None
 	import frappe
 
-	from kamra.erp_bridge import bridge_call
+	from kamra.erp_bridge import get_bridge_script
 
 	try:
-		answer = bridge_call(FISCAL_DOCUMENT, folio=folio.name)
+		script = get_bridge_script(FISCAL_DOCUMENT)
+		if script is None:
+			return None
+		from kamra.erp_bridge import call_bridge_script
+		answer = call_bridge_script(script, {"folio": folio.name})
 	except Exception:
 		frappe.log_error(title="fiscal status read failed")
 		return _unverified()
-	if answer is None:
-		return None
 	if not isinstance(answer, dict):
 		return _unverified()
 	state = answer.get("state")

@@ -226,6 +226,7 @@ interface InvoiceData {
   credited_amount?: number
   credit_notes?: string[]
   credit_status?: "Credited" | "Partially credited" | null
+  settlement_balance?: number
   net_collectible_balance?: number
   summary_by_head: {
     head: string
@@ -621,7 +622,7 @@ export default function FolioView() {
     lines.some((l) => Number(l.gst_rate) !== 0 || Number(l.gst_amount) !== 0) ||
     taxRows.length > 0
   const showLineTax = taxed && !taxUnavailable
-  const displayedBalance = windowBalance({ balance: folio.balance, net_collectible_balance: data.net_collectible_balance })
+  const displayedBalance = windowBalance({ ...data, balance: folio.balance })
   const open = folio.status === "Open"
   const invoiced = !!(folio.invoice_number || folio.sales_invoice)
   const isFinal = doc ? doc.is_final : Boolean(folio.invoice_number)
@@ -646,6 +647,7 @@ export default function FolioView() {
             payment_method: folio.payment_method,
             bill_to_name: folio.bill_to_name,
             balance: folio.balance,
+            settlement_balance: data.settlement_balance,
             net_collectible_balance: data.net_collectible_balance,
             grand_total: folio.grand_total,
             payments_total: folio.payments_total,
@@ -1424,8 +1426,8 @@ export default function FolioView() {
                                   : "ms-1.5 text-muted-ink"
                               }
                             >
-                              {s.balance < 0
-                                ? t("credit {amount}", { amount: `\u2066${fmtMoney(Math.abs(s.balance), money)}\u2069` })
+                              {windowBalance(s) < 0
+                                ? t("credit {amount}", { amount: `\u2066${fmtMoney(Math.abs(windowBalance(s)), money)}\u2069` })
                                 : t("owes {cur}{amount}", { cur: "", amount: `\u2066${fmtMoney(windowBalance(s), money)}\u2069` })}
                             </span>
                           </button>

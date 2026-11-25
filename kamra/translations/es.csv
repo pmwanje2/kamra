@@ -1219,3 +1219,4 @@ Discount currency {0} is not valid for this stay. Use {1}.,La moneda del descuen
 No exchange rate available for {0} to {1}.,No hay un tipo de cambio disponible de {0} a {1}.
 [SITEOPS-DOA-LIMIT] Discount {0} exceeds supervisor approval limit {1}.,[SITEOPS-DOA-LIMIT] El descuento de {0} supera el límite de aprobación del supervisor ({1}).
 Printed Invoice Number,Número de factura impreso
+No balance to transfer to city ledger.,No hay saldo para transferir a la cuenta por cobrar de la empresa.

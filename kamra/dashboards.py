@@ -224,7 +224,7 @@ def sees_figures() -> bool:
 def _open_folio_totals(property: str) -> tuple[float, int]:
 	"""What guests owe on open folios right now, and how many are open."""
 	total, count = frappe.db.sql(
-		"""SELECT COALESCE(SUM(balance), 0), COUNT(*) FROM `tabFolio`
+		"""SELECT COALESCE(SUM(GREATEST(balance, 0)), 0), COUNT(*) FROM `tabFolio`
 		   WHERE property = %(p)s AND status = 'Open'""",
 		{"p": property})[0]
 	from kamra.folio import credit_note_positions, sales_invoice_field
@@ -234,13 +234,12 @@ def _open_folio_totals(property: str) -> tuple[float, int]:
 		return float(total or 0), int(count or 0)
 	# The dashboard role and property gates authorize aggregate figures here.
 	linked = frappe.get_all(
-		"Folio", filters={"property": property, "status": "Open", "sales_invoice": ("is", "set"),
-		                  "balance": (">", 0)},
+		"Folio", filters={"property": property, "status": "Open", "sales_invoice": ("is", "set")},
 		fields=["name", "sales_invoice", "balance", "grand_total"], limit=0,
 	)
 	adjusted = _money(total)
 	for row, credit in zip(linked, credit_note_positions(linked, property, read_note_numbers=False), strict=True):
-		adjusted += _money(credit["net_collectible_balance"]) - _money(row.balance)
+		adjusted += _money(credit["net_collectible_balance"]) - max(_money(row.balance), 0)
 	return _round_currency(adjusted, _currency_places(property)), int(count or 0)
 
 

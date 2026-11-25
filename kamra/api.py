@@ -5267,7 +5267,7 @@ def folio_invoice(folio: str):
 	- `allocations`: company payments that cleared this bill: payment,
 	  account, posting_date, reference, amount
 	- `credited`: what the issued credit notes on this invoice add up to
-	- `credited_amount`, `credit_notes`, `credit_status`, `net_collectible_balance`:
+	- `credited_amount`, `credit_notes`, `credit_status`, `settlement_balance`, `net_collectible_balance`:
 	  the current accounting credit position alongside the original folio
 	- `folio`, `bill_to`, `guest`, `stay`, `property`, `document`
 	"""
@@ -5452,9 +5452,9 @@ def folio_invoice(folio: str):
 	if acct_state == "submitted" and acct_si is not None:
 		settled = True
 		doc_number = acct_si.name
-	elif acct_state == "not_final":
+	elif acct_state in ("unavailable", "not_final"):
 		settled = False
-		doc_number = doc.invoice_number or doc.name
+		doc_number = doc.name
 	else:
 		settled = bool(doc.invoice_number)
 		doc_number = doc.invoice_number or doc.name
@@ -5488,10 +5488,10 @@ def folio_invoice(folio: str):
 			for rate, v in sorted(by_rate.items())
 		]
 	)
-	if not settled:
-		doc_title = _("Provisional Bill")
-	elif acct_tax["tax_source"] == "accounting_unavailable":
+	if acct_state == "unavailable" and doc.invoice_number:
 		doc_title = _(loc.neutral_invoice_title(pack))
+	elif not settled:
+		doc_title = _("Provisional Bill")
 	else:
 		tax_charged = _tax_summary_has_vat(tax_summary, _loc_ctx.get("tax_label") or "")
 		doc_title = (statutory or {}).get("title") or _(loc.invoice_title(pack, tax_charged=tax_charged))
@@ -5664,9 +5664,10 @@ def reprint_fiscal_folio(folio: str, reason: str | None = None):
 	if data["folio"]["status"] != "Closed":
 		frappe.throw(_("Only a settled folio has an invoice to reprint."))
 	fiscal, document = data["fiscal"], data["document"]
-	if fiscal and not document["is_final"]:
+	if not document["is_final"]:
 		from kamra.fiscal import assert_reprintable
 		assert_reprintable(fiscal)
+		frappe.throw(_("Only a settled folio has an invoice to reprint."))
 	from kamra.ledger import _insert_folio_reprint
 	row = data["folio"]
 	reprint = _insert_folio_reprint(
@@ -12832,7 +12833,7 @@ def _group_money(gb, prices, rooming, group_folios, member_folios) -> dict:
 		"""SELECT COALESCE(SUM(total), 0) FROM `tabFolio Charge`
 		   WHERE parent IN %(f)s AND charge_type IN ('Room', 'Meal Plan', 'Room Levy', 'Extra Guests')""",
 		{"f": folios or [""]})[0][0])
-	open_balances = sum(f.net_collectible_balance if f.balance >= 0 else f.balance for f in group_folios + member_folios)
+	open_balances = sum(f.settlement_balance for f in group_folios + member_folios)
 	# the advance alone: a settlement on the same bill is not a deposit
 	deposits = flt(frappe.db.sql(
 		"""SELECT COALESCE(SUM(amount), 0) FROM `tabFolio Payment`
@@ -12923,10 +12924,10 @@ def group_detail(group_booking: str):
 		"folio_type": ("!=", "Group")}, fields=fields)
 	all_folios = group_folios + member_folios
 	for f, pos in zip(all_folios, credit_note_positions(all_folios, gb.property, read_note_numbers=False), strict=True):
-		f.net_collectible_balance = pos["net_collectible_balance"]
+		f.settlement_balance = pos["settlement_balance"]
 	own = {}
 	for f in member_folios:
-		own[f.reservation] = own.get(f.reservation, 0) + (f.net_collectible_balance if f.balance >= 0 else f.balance)
+		own[f.reservation] = own.get(f.reservation, 0) + f.settlement_balance
 	type_names = dict(frappe.get_all(
 		"Room Type", filters={"property": gb.property},
 		fields=["name", "room_type_name"], as_list=True))
@@ -12963,8 +12964,7 @@ def group_detail(group_booking: str):
 	from kamra.pricing import negotiated_rate_plan
 	comp_plan = negotiated_rate_plan(gb.property, gb.company) if gb.company else None
 	live_reservations = {r.name for r in rooming if r.status in ("Confirmed", "Checked In", "Checked Out")}
-	master_balance = next((f.net_collectible_balance if f.balance >= 0 else f.balance
-	                       for f in group_folios if f.name == master), 0)
+	master_balance = next((f.settlement_balance for f in group_folios if f.name == master), 0)
 	return {
 		"business_date": get_business_date(gb.property),
 		"comp_governance": comp_rate_governance(gb.property, comp_plan),

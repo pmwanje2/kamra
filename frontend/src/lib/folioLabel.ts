@@ -4,6 +4,7 @@ export interface SiblingFolio {
   status: string
   invoice_number?: string | null
   balance: number
+  settlement_balance?: number
   net_collectible_balance?: number
   grand_total: number
   payments_total: number
@@ -114,6 +115,6 @@ export function shareFolioArgs(
 
 
 /** Retain signed advances while presenting the collectible amount on debit windows. */
-export function windowBalance(w: Pick<SiblingFolio, "balance" | "net_collectible_balance">) {
-  return w.balance < 0 ? w.balance : w.net_collectible_balance ?? w.balance
+export function windowBalance(w: Pick<SiblingFolio, "balance" | "net_collectible_balance" | "settlement_balance">) {
+  return w.settlement_balance ?? (w.balance < 0 ? w.balance : w.net_collectible_balance ?? w.balance)
 }
