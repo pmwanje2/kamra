@@ -2093,7 +2093,7 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
                           idempotency_key: str | None = None, correction: dict | None = None,
                           bookkeeping_action: str | None = None, session: str | None = None,
                           allow_closed: bool = False,
-                          fx: dict | None = None):
+                          fx: dict | None = None, *, security_deposit_refund: bool = False):
 	"""The one refund writer (folio row, till, ledger). Not whitelisted:
 	ledger lets a security-deposit refund release the Deposit ledger -
 	callers that pass it have already checked the deposit's balance.
@@ -2136,7 +2136,7 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 		supervisor_pin=supervisor_pin, property=doc.property)
 	unit_calc = Decimal(1).scaleb(-places)
 	if not ledger:
-		from kamra.folio import _security_deposit_row_ids
+		from kamra.folio import _legacy_security_deposit_refunded, _security_deposit_row_ids
 		sec_idx = _security_deposit_row_ids(doc)
 		received = sum(
 			(_money(p.amount) for idx, p in enumerate(doc.payments)
@@ -2148,7 +2148,9 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 			 if idx not in sec_idx and _money(p.amount) < 0),
 			Decimal(0),
 		)
-		collected_left = (received - refunded).quantize(unit_calc, rounding=ROUND_HALF_UP)
+		legacy_security_refunded = _legacy_security_deposit_refunded(doc, sec_idx)
+		collected_left = (received - refunded + legacy_security_refunded).quantize(
+			unit_calc, rounding=ROUND_HALF_UP)
 		if amount_dec > collected_left:
 			from kamra.localization import money_text
 			frappe.throw(f"Only {money_text(doc.property, float(collected_left))} was collected on "
@@ -2194,6 +2196,8 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 		**(fx or {}),
 		**(correction or {}),
 	})
+	if security_deposit_refund:
+		doc.flags.kamra_pending_security_refund = doc.payments[-1]
 	prev_grand = doc.get("grand_total")
 	from kamra.folio import _recalculate
 	_recalculate(doc, payments_only=True)
@@ -2213,7 +2217,9 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 			currency=pay.get("currency"), fx_amount=fx_amt_val)
 	try:
 		from kamra import ledger as _ledger_mod
-		_ledger_mod.record_payment_ledger(doc, pay.as_dict(), session=sess, ledger=ledger)
+		_ledger_mod.record_payment_ledger(
+			doc, pay.as_dict(), session=sess, ledger=ledger, security_deposit_refund=security_deposit_refund,
+		)
 		if (
 			prev_grand is not None
 			and abs(float(doc.grand_total or 0) - float(prev_grand)) > 1e-9
@@ -2221,7 +2227,7 @@ def _refund_folio_payment(folio: str, amount: float, mode: str, reason: str,
 		):
 			_ledger_mod.sync_folio_rounding_ledger(doc, session=sess)
 	except Exception:
-		if correction:
+		if correction or security_deposit_refund:
 			raise
 		frappe.log_error(title="ledger refund write failed")
 	if bookkeeping_action:

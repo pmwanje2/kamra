@@ -493,8 +493,11 @@ def save_folio(folio_doc, session: str | None = None) -> None:
 	ledger_charges(folio_doc, new_rows, session=session)
 
 
+SECURITY_DEPOSIT_REFUND_SOURCE = "Security Deposit Refund"
+
+
 def record_payment_ledger(folio_doc, payment_row, session: str | None = None,
-                          ledger: str | None = None):
+                          ledger: str | None = None, *, security_deposit_refund: bool = False):
 	"""ledger overrides where the row lands: a security-deposit refund is
 	stored as a Refund row on the folio but releases the Deposit ledger
 	(the liability), not the Guest ledger."""
@@ -518,7 +521,7 @@ def record_payment_ledger(folio_doc, payment_row, session: str | None = None,
 		description=f"{kind} {payment_row.get('mode') or ''}".strip(),
 		transaction_code=code,
 		session=session,
-		source_doctype="Folio Payment",
+		source_doctype=SECURITY_DEPOSIT_REFUND_SOURCE if security_deposit_refund else "Folio Payment",
 		source_name=payment_row.get("name"),
 	)
 
@@ -528,7 +531,7 @@ ADVANCE_APPLIED = "Advance applied to the stay"
 
 def _advance_deposit_balances(folio) -> tuple[Decimal, dict[str, Decimal]]:
 	"""Read the ordinary Deposit balance and the remaining amount per advance."""
-	from kamra.folio import _security_deposit_row_ids
+	from kamra.folio import _legacy_security_deposit_refunded, _security_deposit_row_ids
 
 	payments = folio.get("payments") or []
 	advances = {
@@ -538,7 +541,8 @@ def _advance_deposit_balances(folio) -> tuple[Decimal, dict[str, Decimal]]:
 	if not advances:
 		return Decimal(0), advances
 
-	security_rows = {payments[i].name for i in _security_deposit_row_ids(folio)}
+	sec_idx = _security_deposit_row_ids(folio)
+	security_rows = {payments[i].name for i in sec_idx}
 	linked_rows = {}
 	for payment in payments:
 		receipt = payment.get("refund_of") or payment.name
@@ -555,17 +559,21 @@ def _advance_deposit_balances(folio) -> tuple[Decimal, dict[str, Decimal]]:
 		   WHERE folio = %s AND ledger = 'Deposit' FOR UPDATE""",
 		(folio.name,),
 	)
-	total = security = Decimal(0)
+	total = security = unlinked_debits = Decimal(0)
 	for source_doctype, source_name, raw in entries:
 		amount = _money(raw)
 		total += amount
-		if source_doctype == "Security Deposit" or (
+		if source_doctype in ("Security Deposit", SECURITY_DEPOSIT_REFUND_SOURCE) or (
 			source_doctype == "Folio Payment" and source_name in security_rows
 		):
 			security += amount
-		elif source_doctype == "Folio Payment" and source_name in linked_rows:
-			advances[linked_rows[source_name]] += amount
-	# Reserve held security and cap ordinary transfers by the total on the ledger.
+		elif source_doctype == "Folio Payment":
+			if source_name in linked_rows:
+				advances[linked_rows[source_name]] += amount
+			elif amount < 0:
+				unlinked_debits -= amount
+	# Legacy recorded refunds can only explain actual unlinked Deposit debits.
+	security -= min(unlinked_debits, _legacy_security_deposit_refunded(folio, sec_idx))
 	return total - max(security, 0), advances
 
 

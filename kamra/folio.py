@@ -42,71 +42,63 @@ def _payment_entry_is_security_deposit(key: str | None) -> bool:
 	return frappe.db.get_value("Payment Entry", key, "kamra_payment_kind") == "Security Deposit"
 
 
-def _currency_places_of(folio) -> int:
-	from kamra.ledger import _currency_places
-	return max(_currency_places(folio.get("property") if hasattr(folio, "get") else getattr(folio, "property", None)), 2)
-
-
 def _security_deposit_row_ids(folio) -> set[int]:
-	"""Indices in `folio.payments` belonging to the Security Deposit liability chain.
+	"""Indices of payments and refunds with recorded security-deposit provenance."""
+	from kamra.ledger import SECURITY_DEPOSIT_REFUND_SOURCE
 
-	OPERA/SAP: a security deposit is a separate liability, never a payment toward
-	the bill balance. Refunds and cancellation reversals of security deposits
-	stay out of `payments_total` and `balance` too."""
-	payments = list(folio.get("payments") or [])
-	if not payments:
-		return set()
-	sec_names: set[str] = set()
-	sec_idx: set[int] = set()
-	non_dep_received = 0.0
-	sec_held = Decimal(0)
-	for idx, p in enumerate(payments):
-		kind = p.get("payment_kind") or "Payment"
-		pe_key = p.get("payment_entry") or p.get("reversal_of")
-		if kind == "Security Deposit" or _payment_entry_is_security_deposit(pe_key):
-			sec_idx.add(idx)
-			sec_held += Decimal(str(p.get("amount") or 0))
-			if p.get("name"):
-				sec_names.add(p.name)
-		elif float(p.get("amount") or 0) > 0:
-			non_dep_received += float(p.get("amount") or 0)
-	if not sec_idx:
-		return set()
-	from kamra.deposit import REFUND_REASON
-	has_pe = bool(frappe.db.exists("DocType", "Payment Entry"))
-	has_advance = any(
-		(p.get("payment_kind") or "") == "Advance"
-		for idx, p in enumerate(payments) if idx not in sec_idx
-	)
-	for idx, p in enumerate(payments):
-		if idx in sec_idx or (p.get("payment_kind") or "") != "Refund":
-			continue
-		pe_key = p.get("payment_entry") or p.get("reversal_of")
-		if pe_key and has_pe:
-			# Bridge-backed refund: Payment Entry.kamra_payment_kind is authoritative.
-			continue
-		refund_of = p.get("refund_of")
-		if refund_of:
-			if refund_of in sec_names:
-				sec_idx.add(idx)
-				sec_held += Decimal(str(p.get("amount") or 0))
-			continue
-		ref = (p.get("reference") or "").strip()
-		amt = Decimal(str(p.get("amount") or 0))
-		if ref.startswith(REFUND_REASON):
-			sec_idx.add(idx)
-			sec_held += amt
-		elif p.get("name") and (not has_advance or folio.get("folio_type") == "Account") and frappe.db.exists(
+	payments = folio.get("payments") or []
+	sec_idx = {
+		idx for idx, p in enumerate(payments)
+		if p.get("payment_kind") == "Security Deposit"
+		or _payment_entry_is_security_deposit(p.get("payment_entry") or p.get("reversal_of"))
+	}
+	sec_names = {payments[idx].name for idx in sec_idx if payments[idx].get("name")}
+	refunds = [(idx, p) for idx, p in enumerate(payments) if p.get("payment_kind") == "Refund"]
+	if not refunds:
+		return sec_idx
+	pending = (getattr(folio, "flags", None) or {}).get("kamra_pending_security_refund")
+	posted = set()
+	if folio.get("name") and any(p.get("name") for _, p in refunds):
+		posted = set(frappe.get_all(
 			"Folio Ledger Entry",
-			{"folio": folio.name, "ledger": "Deposit",
-			 "source_doctype": "Folio Payment", "source_name": p.name},
+			filters={"folio": folio.name, "ledger": "Deposit",
+			         "source_doctype": SECURITY_DEPOSIT_REFUND_SOURCE},
+			pluck="source_name",
+		))
+	has_pe = bool(frappe.db.exists("DocType", "Payment Entry"))
+	for idx, p in refunds:
+		if p is pending or p.get("name") in posted:
+			sec_idx.add(idx)
+		elif p.get("refund_of") in sec_names and not (
+			has_pe and (p.get("payment_entry") or p.get("reversal_of"))
 		):
 			sec_idx.add(idx)
-			sec_held += amt
-		elif non_dep_received <= Decimal("0.5") * Decimal(1).scaleb(-_currency_places_of(folio)) and sec_held > Decimal(0) and abs(amt) <= sec_held + Decimal("0.5") * Decimal(1).scaleb(-_currency_places_of(folio)):
-			sec_idx.add(idx)
-			sec_held += amt
 	return sec_idx
+
+
+def _legacy_security_deposit_refunded(folio, sec_idx: set[int]) -> Decimal:
+	"""Security refunds recorded only in the stay's historical refund total."""
+	if not sec_idx or not folio.get("reservation") or (folio.get("folio_type") or "Guest") != "Guest":
+		return Decimal(0)
+	if not frappe.db.exists("DocType", "Security Deposit"):
+		return Decimal(0)
+	from kamra.ledger import _money
+	recorded = _money(frappe.db.get_value(
+		"Security Deposit", {"reservation": folio.reservation}, "refunded_amount"))
+	if recorded <= 0:
+		return Decimal(0)
+
+	pending = (getattr(folio, "flags", None) or {}).get("kamra_pending_security_refund")
+	identified = unlinked = Decimal(0)
+	for idx, payment in enumerate(folio.get("payments") or []):
+		if payment is pending or not payment.get("name") or payment.get("payment_kind") != "Refund":
+			continue
+		amount = max(-_money(payment.get("amount")), Decimal(0))
+		if idx in sec_idx:
+			identified += amount
+		elif not (payment.get("refund_of") or payment.get("payment_entry") or payment.get("reversal_of")):
+			unlinked += amount
+	return min(unlinked, max(recorded - identified, Decimal(0)))
 
 
 def _stay_withheld_deposit(folio, has_sec_dep: bool) -> Decimal:
@@ -129,7 +121,7 @@ def security_deposit_held_on_folio(folio) -> float:
 		return 0.0
 	payments = list(folio.get("payments") or [])
 	raw = sum((Decimal(str(payments[i].get("amount") or 0)) for i in sec_idx), Decimal(0))
-	return float(raw - _stay_withheld_deposit(folio, True))
+	return float(raw - _stay_withheld_deposit(folio, True) - _legacy_security_deposit_refunded(folio, sec_idx))
 
 
 def _is_closed_or_invoiced(folio) -> bool:
@@ -147,7 +139,7 @@ def _recalculate(folio, *, payments_only: bool = False):
 		(Decimal(str(p.amount or 0)) for idx, p in enumerate(folio.payments) if idx not in sec_idx),
 		Decimal(0),
 	)
-	paid += _stay_withheld_deposit(folio, bool(sec_idx))
+	paid += _stay_withheld_deposit(folio, bool(sec_idx)) + _legacy_security_deposit_refunded(folio, sec_idx)
 	if _is_closed_or_invoiced(folio) and folio.get("grand_total") is not None:
 		# Closed / invoiced folios have frozen charges, tax and grand_total;
 		# adding a payment or correction must never re-round them.

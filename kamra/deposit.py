@@ -1110,7 +1110,7 @@ def refund_deposit(reservation: str, amount: float | None = None,
 		text += f": {note.strip()}"
 	from kamra.api import _refund_folio_payment
 	_refund_folio_payment(folio, amt, mode, text[:140], pin=pin,
-	                      ledger="Deposit", allow_closed=True)
+	                      ledger="Deposit", allow_closed=True, security_deposit_refund=True)
 
 	dep.refunded_amount = _round_currency(_money(dep.refunded_amount) + _money(amt), rplaces)
 	dep.refund_reference = text[:140]
@@ -1207,16 +1207,14 @@ def deposit_state(res) -> dict:
 	in_play = res.status in COLLECT_STATUSES
 	history = []
 	if folio:
-		for p in frappe.get_all(
-				"Folio Payment",
-				filters={"parent": folio.name, "parenttype": "Folio"},
-				fields=["posting_date", "payment_kind", "mode", "amount",
-				        "reference"], order_by="idx asc"):
+		from kamra.folio import _security_deposit_row_ids
+		folio_doc = frappe.get_doc("Folio", folio.name)
+		for idx in sorted(_security_deposit_row_ids(folio_doc)):
+			p = folio_doc.payments[idx]
 			if p.payment_kind == "Security Deposit":
 				history.append({"kind": "Collected", "date": str(p.posting_date),
 				                "mode": p.mode, "amount": flt(p.amount)})
-			elif p.payment_kind == "Refund" and \
-					(p.reference or "").startswith(REFUND_REASON):
+			elif p.payment_kind == "Refund":
 				history.append({"kind": "Refunded", "date": str(p.posting_date),
 				                "mode": p.mode, "amount": -flt(p.amount)})
 		for c in frappe.get_all(
