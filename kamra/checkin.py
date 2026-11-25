@@ -295,12 +295,14 @@ def _free_rooms(res) -> list[dict]:
 def _deposit(res) -> dict:
 	from kamra.api import _deposit_state
 	from kamra.deposit import deposit_satisfied, deposit_state
+	from kamra.ledger import _currency_places
 	sec = deposit_state(res)
 	adv = _deposit_state(res)
+	eps = 0.5 * (10 ** -_currency_places(res.property))
 	sec_applies = flt(sec.get("required")) > 0 and sec.get("status") != "None"
 	adv_due = flt(adv.get("due")) if adv.get("can_take") else 0.0
 	return {
-		"applies": bool(sec_applies or adv_due > 0.009),
+		"applies": bool(sec_applies or adv_due > eps),
 		"satisfied": deposit_satisfied(res.name),
 		"security": sec,
 		"advance": adv,
@@ -331,7 +333,16 @@ def _keys(res) -> dict:
 
 
 def build_context(res, room_override: str | None = None) -> dict:
+	from kamra.ledger import _currency_places
+	from kamra.localization import pack_for
+
 	guest = frappe.get_doc("Guest", res.guest) if res.guest else None
+	prop = frappe.get_cached_doc("Property", res.property)
+	loc = pack_for(res.property).locale(prop)
+	symbol = loc.get("currency_symbol", "")
+	currency = loc.get("currency") or prop.get("currency") or ""
+	display_places = _currency_places(res.property)
+	eps = 0.5 * (10 ** -display_places)
 	billing = _billing(res)
 	room = _room(res)
 	if room_override and not room["room_number"]:
@@ -342,7 +353,9 @@ def build_context(res, room_override: str | None = None) -> dict:
 	payer = (records.get("billing_check") or {}).get("payer") or billing["payer"]
 	held = flt(deposit["security"].get("held"))
 	return {
-		"currency_symbol": _symbol(res.property),
+		"currency": currency,
+		"currency_symbol": symbol,
+		"currency_decimals": display_places,
 		"records": records,
 		"ids": _ids(res, guest),
 		"billing": billing,
@@ -355,7 +368,7 @@ def build_context(res, room_override: str | None = None) -> dict:
 		"room_charges": {
 			"allowed": bool(cint(res.get("room_charges_allowed")
 			                     if res.get("room_charges_allowed") is not None else 1)),
-			"recommend_block": payer == "OTA prepaid" and held <= 0.009,
+			"recommend_block": payer == "OTA prepaid" and held <= eps,
 		},
 		"_guest": guest,
 	}

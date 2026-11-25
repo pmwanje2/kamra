@@ -11,6 +11,9 @@ it never invents amounts. Flows work with no LLM configured.
 
 from __future__ import annotations
 
+import math
+from decimal import ROUND_HALF_UP, Decimal
+
 import frappe
 from frappe import _
 from frappe.utils import flt
@@ -467,8 +470,58 @@ def group_for_charge(charge_type: str, description: str = "") -> str:
 	return CHARGE_GROUPS.get(charge_type or "", "Extras")
 
 
-def format_money(symbol: str, amount: float) -> str:
-	return f"{symbol}{flt(amount):,.2f}"
+def _money_places(currency: str | None = None, decimals: int | None = None, symbol: str = "") -> int:
+	if isinstance(decimals, int) and not isinstance(decimals, bool) and decimals >= 0:
+		return decimals
+	code = (currency or "").strip().upper()
+	if not code and symbol:
+		candidate = symbol.strip().upper()
+		if len(candidate) == 3 and candidate.isascii() and candidate.isalpha():
+			code = candidate
+	if not code:
+		return 2
+	from kamra.localization import _minor_unit_for_currency
+	return int(_minor_unit_for_currency(code))
+
+
+def _money_eps(currency: str | None = None, decimals: int | None = None, symbol: str = "") -> float:
+	places = _money_places(currency=currency, decimals=decimals, symbol=symbol)
+	return 0.5 * (10 ** -places)
+
+
+def _context_currency(context: dict) -> tuple[str, str, int | None]:
+	symbol = context.get("currency_symbol") or ""
+	currency = (context.get("currency") or "").strip().upper()
+	decimals = context.get("currency_decimals")
+	if not isinstance(decimals, int) or isinstance(decimals, bool) or decimals < 0:
+		decimals = context.get("decimals")
+		if not isinstance(decimals, int) or isinstance(decimals, bool) or decimals < 0:
+			decimals = None
+	if not currency and context.get("property"):
+		try:
+			currency = (frappe.get_cached_value("Property", context["property"], "currency") or "").strip().upper()
+		except Exception:
+			currency = ""
+	return symbol, currency, decimals
+
+
+def format_money(
+	symbol: str,
+	amount: float,
+	currency: str | None = None,
+	decimals: int | None = None,
+) -> str:
+	places = _money_places(currency=currency, decimals=decimals, symbol=symbol)
+	value = flt(amount)
+	if not math.isfinite(value):
+		return f"{symbol}{value:,.{places}f}"
+	quant = Decimal(1).scaleb(-places)
+	rounded = Decimal(str(value)).quantize(quant, rounding=ROUND_HALF_UP)
+	if rounded == 0:
+		rounded = Decimal(0).quantize(quant)
+	if rounded < 0:
+		return f"-{symbol}{abs(rounded):,.{places}f}"
+	return f"{symbol}{rounded:,.{places}f}"
 
 
 def evaluate_checkout_step(step: dict, context: dict) -> dict:
@@ -478,7 +531,8 @@ def evaluate_checkout_step(step: dict, context: dict) -> dict:
 	are taken only from context, never recomputed here.
 	"""
 	key = (step.get("step_key") or "").strip()
-	symbol = context.get("currency_symbol") or ""
+	symbol, currency, decimals = _context_currency(context)
+	eps = _money_eps(currency=currency, decimals=decimals, symbol=symbol)
 	blockers = context.get("blockers") or []
 	totals = context.get("totals") or {}
 	deposit = context.get("deposit") or {}
@@ -503,30 +557,32 @@ def evaluate_checkout_step(step: dict, context: dict) -> dict:
 		n_folios = len(context.get("folios") or [])
 		tip = _("Review {0} open folio(s). Total charges {1}, paid {2}.").format(
 			n_folios,
-			format_money(symbol, totals.get("charges") or 0),
-			format_money(symbol, totals.get("paid") or 0),
+			format_money(symbol, totals.get("charges") or 0, currency=currency, decimals=decimals),
+			format_money(symbol, totals.get("paid") or 0, currency=currency, decimals=decimals),
 		)
 		state = "done" if n_folios else "todo"
 
 	elif key == "verify_restaurant":
-		if restaurant:
+		if abs(restaurant) > eps:
 			tip = _("Confirm {0} in restaurant / minibar charges with the guest.").format(
-				format_money(symbol, restaurant))
+				format_money(symbol, restaurant, currency=currency, decimals=decimals))
 			state = "todo"
 		else:
 			tip = _("No restaurant or minibar charges on this stay.")
 			state = "done"
 
 	elif key == "check_damages":
-		if damages:
+		if abs(damages) > eps:
 			tip = _("Damage / withhold of {0} is already on the bill: confirm with the guest.").format(
-				format_money(symbol, damages))
+				format_money(symbol, damages, currency=currency, decimals=decimals))
 			state = "done"
-		elif dep_held > 0.009 and dep_bal > 0.009:
+		elif dep_held > eps and dep_bal > eps:
 			tip = _("Security deposit {0} is held ({1} refundable). Check the room; withhold damage or refund.").format(
-				format_money(symbol, dep_held), format_money(symbol, dep_bal))
+				format_money(symbol, dep_held, currency=currency, decimals=decimals),
+				format_money(symbol, dep_bal, currency=currency, decimals=decimals),
+			)
 			state = "todo"
-		elif dep_held > 0.009 and dep_bal <= 0.009:
+		elif dep_held > eps and dep_bal <= eps:
 			tip = _("Deposit is fully applied or refunded: nothing left to withhold.")
 			state = "done"
 		else:
@@ -534,10 +590,10 @@ def evaluate_checkout_step(step: dict, context: dict) -> dict:
 			state = "done"
 
 	elif key == "confirm_discounts":
-		if discounts:
+		if abs(discounts) > eps:
 			# discounts are negative amounts
 			tip = _("Confirm discount / voucher / allowance lines totaling {0}.").format(
-				format_money(symbol, discounts))
+				format_money(symbol, discounts, currency=currency, decimals=decimals))
 			state = "todo"
 		else:
 			tip = _("No discount or voucher lines on the folio.")
@@ -560,16 +616,18 @@ def evaluate_checkout_step(step: dict, context: dict) -> dict:
 
 	elif key == "collect_settle":
 		city_amt = flt(totals.get("city_ledger_eligible") or 0)
-		if owed > 0.009:
-			tip = _("Collect {0} before departure.").format(format_money(symbol, owed))
+		if owed > eps:
+			tip = _("Collect {0} before departure.").format(
+				format_money(symbol, owed, currency=currency, decimals=decimals))
 			state = "blocked" if step.get("is_blocking") else "todo"
-		elif refund > 0.009:
-			tip = _("Refund {0} before departure.").format(format_money(symbol, refund))
+		elif refund > eps:
+			tip = _("Refund {0} before departure.").format(
+				format_money(symbol, refund, currency=currency, decimals=decimals))
 			state = "blocked" if step.get("is_blocking") else "todo"
-		elif can_city and city_amt > 0.009:
+		elif can_city and city_amt > eps:
 			# Credit company: check_out auto-transfers; tip asks the desk to confirm.
 			tip = _("{0} can move to the city ledger (company has credit). Confirm, then check out.").format(
-				format_money(symbol, city_amt))
+				format_money(symbol, city_amt, currency=currency, decimals=decimals))
 			state = "todo"
 		elif can_checkout:
 			tip = _("Balances are clear: ready to check out.")
@@ -585,9 +643,9 @@ def evaluate_checkout_step(step: dict, context: dict) -> dict:
 		state = "todo"
 
 	elif key == "farewell":
-		if dep_bal > 0.009:
+		if dep_bal > eps:
 			tip = _("Wish farewell and return the remaining deposit of {0}.").format(
-				format_money(symbol, dep_bal))
+				format_money(symbol, dep_bal, currency=currency, decimals=decimals))
 		else:
 			tip = step.get("prompt_to_guest") or tip
 		state = "todo"
@@ -610,7 +668,8 @@ def evaluate_checkin_step(step: dict, context: dict) -> dict:
 	server refuses to skip them (kamra.checkin) and check_in refuses until
 	they are done. Amounts come from the context only."""
 	key = (step.get("step_key") or "").strip()
-	symbol = context.get("currency_symbol") or ""
+	symbol, currency, decimals = _context_currency(context)
+	eps = _money_eps(currency=currency, decimals=decimals, symbol=symbol)
 	records = context.get("records") or {}
 	rec = records.get(key) or {}
 	blocking = bool(step.get("is_blocking"))
@@ -633,8 +692,9 @@ def evaluate_checkin_step(step: dict, context: dict) -> dict:
 		billing = context.get("billing") or {}
 		label = billing.get("payer_label") or ""
 		due = flt(billing.get("balance_due") or 0)
-		if label and due > 0.009:
-			tip = _("{0}. Still to pay: {1}.").format(label, format_money(symbol, due))
+		if label and due > eps:
+			tip = _("{0}. Still to pay: {1}.").format(
+				label, format_money(symbol, due, currency=currency, decimals=decimals))
 		elif label:
 			tip = _("{0}. Nothing to pay now.").format(label)
 
@@ -659,10 +719,12 @@ def evaluate_checkin_step(step: dict, context: dict) -> dict:
 		sec_due = flt(dep.get("security_due") or 0)
 		adv_due = flt(dep.get("advance_due") or 0)
 		parts = []
-		if sec_due > 0.009:
-			parts.append(_("security deposit {0}").format(format_money(symbol, sec_due)))
-		if adv_due > 0.009:
-			parts.append(_("advance {0}").format(format_money(symbol, adv_due)))
+		if sec_due > eps:
+			parts.append(_("security deposit {0}").format(
+				format_money(symbol, sec_due, currency=currency, decimals=decimals)))
+		if adv_due > eps:
+			parts.append(_("advance {0}").format(
+				format_money(symbol, adv_due, currency=currency, decimals=decimals)))
 		if parts:
 			tip = _("Still to take: {0}.").format(", ".join(parts))
 		else:
@@ -725,7 +787,8 @@ def evaluate_checkin_step(step: dict, context: dict) -> dict:
 def evaluate_cancel_step(step: dict, context: dict) -> dict:
 	"""Evaluate one cancel-booking SOP step from cancellation_preview context."""
 	key = (step.get("step_key") or "").strip()
-	symbol = context.get("currency_symbol") or ""
+	symbol, currency, decimals = _context_currency(context)
+	eps = _money_eps(currency=currency, decimals=decimals, symbol=symbol)
 	preview = context.get("preview") or {}
 	guest = (context.get("guest_name") or "").strip()
 	check_in = context.get("check_in_date") or ""
@@ -751,11 +814,11 @@ def evaluate_cancel_step(step: dict, context: dict) -> dict:
 			state = "todo"
 
 	elif key == "check_policy":
-		if inside and basis != "None" and fee > 0.009:
+		if inside and basis != "None" and fee > eps:
 			tip = _(
 				"{0} day(s) before arrival: inside the fee window. "
 				"Estimated fee {1} ({2})."
-			).format(days, format_money(symbol, fee), _(basis))
+			).format(days, format_money(symbol, fee, currency=currency, decimals=decimals), _(basis))
 			state = "todo"
 		else:
 			tip = _(
@@ -765,16 +828,16 @@ def evaluate_cancel_step(step: dict, context: dict) -> dict:
 			state = "done"
 
 	elif key == "explain_fee":
-		if waive and fee > 0.009:
+		if waive and fee > eps:
 			tip = _(
 				"Fee of {0} will be WAIVED: manager call, logged on the stay. "
 				"Tell the guest cancellation is free."
-			).format(format_money(symbol, fee))
+			).format(format_money(symbol, fee, currency=currency, decimals=decimals))
 			state = "todo"
-		elif inside and basis != "None" and fee > 0.009:
+		elif inside and basis != "None" and fee > eps:
 			tip = _(
 				"Explain the {0} cancellation fee ({1}) before they confirm."
-			).format(format_money(symbol, fee), _(basis))
+			).format(format_money(symbol, fee, currency=currency, decimals=decimals), _(basis))
 			state = "todo"
 		else:
 			tip = _("Tell the guest cancellation is free under the policy.")
@@ -805,7 +868,8 @@ def evaluate_cancel_step(step: dict, context: dict) -> dict:
 def evaluate_walkin_step(step: dict, context: dict) -> dict:
 	"""Evaluate walk-in SOP tips from booking-dialog context."""
 	key = (step.get("step_key") or "").strip()
-	symbol = context.get("currency_symbol") or ""
+	symbol, currency, decimals = _context_currency(context)
+	eps = _money_eps(currency=currency, decimals=decimals, symbol=symbol)
 	room = context.get("room") or {}
 	hk = room.get("housekeeping_status") or context.get("housekeeping_status") or ""
 	room_number = room.get("room_number") or context.get("room_number") or ""
@@ -843,8 +907,8 @@ def evaluate_walkin_step(step: dict, context: dict) -> dict:
 
 	elif key == "confirm_rate":
 		bits = []
-		if total > 0.009:
-			bits.append(format_money(symbol, total))
+		if total > eps:
+			bits.append(format_money(symbol, total, currency=currency, decimals=decimals))
 		if meal:
 			bits.append(meal)
 		if bits:
@@ -855,13 +919,13 @@ def evaluate_walkin_step(step: dict, context: dict) -> dict:
 			state = "todo"
 
 	elif key == "collect_payment":
-		if paid > 0.009:
+		if paid > eps:
 			tip = _("Collecting {0} now, then check in and hand keys.").format(
-				format_money(symbol, paid))
+				format_money(symbol, paid, currency=currency, decimals=decimals))
 			state = "todo"
-		elif total > 0.009:
+		elif total > eps:
 			tip = _("Collect {0} (or note company billing) before handing keys.").format(
-				format_money(symbol, total))
+				format_money(symbol, total, currency=currency, decimals=decimals))
 			state = "todo"
 		else:
 			tip = _("Enter the amount to collect, then confirm the walk-in.")
@@ -883,7 +947,8 @@ def evaluate_walkin_step(step: dict, context: dict) -> dict:
 def evaluate_deposit_step(step: dict, context: dict) -> dict:
 	"""Evaluate deposit SOP tips from DepositState context."""
 	key = (step.get("step_key") or "").strip()
-	symbol = context.get("currency_symbol") or ""
+	symbol, currency, decimals = _context_currency(context)
+	eps = _money_eps(currency=currency, decimals=decimals, symbol=symbol)
 	deposit = context.get("deposit") or context
 	pct = flt(deposit.get("pct") or 0)
 	expected = flt(deposit.get("expected") or 0)
@@ -896,60 +961,61 @@ def evaluate_deposit_step(step: dict, context: dict) -> dict:
 	tip = (step.get("instruction") or "").strip()
 
 	if key == "quote_expected":
-		if expected > 0.009:
+		if expected > eps:
 			if pct > 0:
 				tip = _("Policy deposit {0} ({1}% of stay). Still due {2}.").format(
-					format_money(symbol, expected),
+					format_money(symbol, expected, currency=currency, decimals=decimals),
 					int(pct) if pct == int(pct) else pct,
-					format_money(symbol, due),
+					format_money(symbol, due, currency=currency, decimals=decimals),
 				)
 			else:
 				tip = _("Expected deposit {0}. Still due {1}.").format(
-					format_money(symbol, expected),
-					format_money(symbol, due),
+					format_money(symbol, expected, currency=currency, decimals=decimals),
+					format_money(symbol, due, currency=currency, decimals=decimals),
 				)
-			state = "done" if due <= 0.009 else "todo"
+			state = "done" if due <= eps else "todo"
 		else:
 			tip = _("No fixed deposit %: take an advance amount the guest agrees.")
 			state = "todo" if can_take else "done"
 
 	elif key == "collect_or_link":
-		if due <= 0.009 and paid > 0.009:
-			tip = _("Deposit secured ({0} received).").format(format_money(symbol, paid))
+		if due <= eps and paid > eps:
+			tip = _("Deposit secured ({0} received).").format(
+				format_money(symbol, paid, currency=currency, decimals=decimals))
 			state = "done"
-		elif link_url and due > 0.009:
+		elif link_url and due > eps:
 			tip = _("Payment link already sent: follow up or record a desk payment of {0}.").format(
-				format_money(symbol, due))
+				format_money(symbol, due, currency=currency, decimals=decimals))
 			state = "todo"
-		elif can_take and due > 0.009:
+		elif can_take and due > eps:
 			tip = _("Collect {0} at the desk or send a payment link.").format(
-				format_money(symbol, due))
+				format_money(symbol, due, currency=currency, decimals=decimals))
 			state = "todo"
 		else:
 			tip = _("Deposit not open for collection on this booking.")
 			state = "done"
 
 	elif key == "confirm_receipt":
-		if due <= 0.009 and paid > 0.009:
+		if due <= eps and paid > eps:
 			tip = _("Confirm the guest has a receipt / link confirmation for {0}.").format(
-				format_money(symbol, paid))
+				format_money(symbol, paid, currency=currency, decimals=decimals))
 			state = "done"
 		elif link_url:
 			tip = _("Confirm the payment link reached the guest.")
 			state = "todo"
-		elif paid > 0.009:
+		elif paid > eps:
 			tip = _("Part paid {0}: give a receipt for what was taken.").format(
-				format_money(symbol, paid))
+				format_money(symbol, paid, currency=currency, decimals=decimals))
 			state = "todo"
 		else:
 			tip = _("After collecting, give a receipt or confirm the link.")
 			state = "todo"
 
 	elif key == "remind_balance":
-		if due > 0.009:
+		if due > eps:
 			tip = _(
 				"Still due {0} before arrival (or at check-in). Tell the guest clearly."
-			).format(format_money(symbol, due))
+			).format(format_money(symbol, due, currency=currency, decimals=decimals))
 			state = "todo"
 		else:
 			tip = step.get("prompt_to_guest") or _(
@@ -963,7 +1029,8 @@ def evaluate_deposit_step(step: dict, context: dict) -> dict:
 def evaluate_early_late_step(step: dict, context: dict) -> dict:
 	"""Shared tips for early check-in / late checkout fee walkthrough."""
 	key = (step.get("step_key") or "").strip()
-	symbol = context.get("currency_symbol") or ""
+	symbol, currency, decimals = _context_currency(context)
+	eps = _money_eps(currency=currency, decimals=decimals, symbol=symbol)
 	kind = context.get("kind") or "late_checkout"
 	std = context.get("standard_time") or ""
 	until = context.get("until_time") or ""
@@ -994,19 +1061,19 @@ def evaluate_early_late_step(step: dict, context: dict) -> dict:
 		state = "todo"
 
 	elif key == "agree_fee":
-		if amount_f is not None and amount_f <= 0.009:
+		if amount_f is not None and amount_f <= eps:
 			tip = _("Fee waived (free {0}). Confirm with the guest, then save.").format(label)
 			state = "todo"
 		elif amount_f is not None:
 			tip = _("Agreed fee {0} for {1}. Confirm with the guest before posting.").format(
-				format_money(symbol, amount_f), label)
+				format_money(symbol, amount_f, currency=currency, decimals=decimals), label)
 			state = "todo"
-		elif nightly > 0.009:
+		elif nightly > eps:
 			tip = _(
 				"Quote free, half night ({0}), or full night ({1}) for {2}."
 			).format(
-				format_money(symbol, nightly * 0.5),
-				format_money(symbol, nightly),
+				format_money(symbol, nightly * 0.5, currency=currency, decimals=decimals),
+				format_money(symbol, nightly, currency=currency, decimals=decimals),
 				label,
 			)
 			state = "todo"
@@ -1021,15 +1088,15 @@ def evaluate_early_late_step(step: dict, context: dict) -> dict:
 			).format(
 				existing_n,
 				context.get("charge_type") or label,
-				format_money(symbol, existing_total),
+				format_money(symbol, existing_total, currency=currency, decimals=decimals),
 			)
 			state = "todo"
-		elif amount_f is not None and amount_f <= 0.009:
+		elif amount_f is not None and amount_f <= eps:
 			tip = _("Save as waived: no folio charge, stay time still updates.")
 			state = "todo"
 		elif amount_f is not None:
 			tip = _("Post {0} as {1} on the folio.").format(
-				format_money(symbol, amount_f),
+				format_money(symbol, amount_f, currency=currency, decimals=decimals),
 				context.get("charge_type") or label,
 			)
 			state = "todo"
@@ -1168,7 +1235,9 @@ def get_sop(property: str, key: str, context=None):
 	"""
 	if isinstance(context, str):
 		context = frappe.parse_json(context) if context else {}
-	context = context or {}
+	context = dict(context or {})
+	if property and not context.get("property"):
+		context["property"] = property
 	meta, steps = _template_steps(property, (key or "").strip().lower())
 	if not meta:
 		return {"key": key, "title": None, "steps": [], "next_tip": None}
