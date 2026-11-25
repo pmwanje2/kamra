@@ -3,6 +3,7 @@
 import hashlib
 import json
 import hmac
+import inspect
 import runpy
 import sys
 import unittest
@@ -448,6 +449,9 @@ class ManagerPinSelfServiceTest(unittest.TestCase):
 	def test_v7_reset_delegates_without_creating_a_local_pin_record(self):
 		calls = self.horizontal_siteops()
 		self.site.user_roles[USER] = ["Hotel Admin"]
+		self.site.user_permissions = {
+			account: {"Company": [{"doc": "Alpha Ltd"}]} for account in (USER, OTHER)
+		}
 		self.put_floor_hash(OTHER, "native-enrollment")
 		self.assertTrue(self.api["reset_cashier_pin"](OTHER)["must_reset"])
 		self.assertTrue(any(name == "siteops_doa.reset_user_floor_pin" and args["user"] == OTHER
@@ -498,3 +502,130 @@ class ManagerPinSelfServiceTest(unittest.TestCase):
 				self.authz._check_user_pin(USER, "4067", None)
 		locales = KAMRA.parent / "frontend" / "src" / "i18n" / "locales"
 		self.assertEqual(json.loads((locales / "fr.json").read_text())["Wrong cashier PIN."], message)
+
+	def test_pos_verification_forwards_transaction_context_to_floor_authority(self):
+		calls = self.horizontal_siteops()
+		self.site.meta_fields.update({"POS Profile": {"company", "custom_property"}, "Property": {"company"}})
+		self.site.tables["POS Profile"] = [{"name": "Till", "company": "Alpha Ltd", "custom_property": "Alpha"}]
+		self.site.tables["Property"] = [{"name": "Alpha", "company": "Alpha Ltd", "disabled": 0}]
+		self.site.set_user(OTHER)
+		context = {
+			"amount": 845.25, "currency": "EUR", "action": "refund",
+			"reference_doctype": "POS Opening Entry", "reference_name": "Opening-042",
+			"requester": OTHER,
+		}
+		hook = self.authz.verify_pos_override_pin
+		# URY advertises the context only through the hook's explicit parameters.
+		self.assertLessEqual(context.keys(), inspect.signature(hook).parameters.keys())
+		for doctype in ("POS Opening Entry", None, ""):
+			with self.subTest(doctype=doctype):
+				context["reference_doctype"] = doctype
+				self.assertTrue(hook(USER, "4067", "Till", **context)["ok"])
+				method, form = calls[-1]
+				self.assertEqual(method, "siteops_doa.verify_floor_authority")
+				expected = {**context, "reference_doctype": "POS Invoice" if doctype is None else doctype}
+				self.assertEqual({key: form[key] for key in expected}, expected)
+				self.assertEqual(form["reason"], "refund")
+
+	def test_pos_verification_refuses_missing_unbound_and_mismatched_profiles(self):
+		calls = self.horizontal_siteops()
+		self.site.set_user(OTHER)
+		self.site.meta_fields["POS Profile"] = {"custom_property"}
+		self.site.tables["POS Profile"] = [{"name": "Unbound"}, {"name": "Bound", "custom_property": "Alpha"}]
+		self.site.tables["Property"] = [{"name": "Alpha", "disabled": 0}]
+		for profile, prop in (("Missing", None), ("Unbound", None), ("Unbound", "Alpha"), ("Bound", "Beta")):
+			with self.subTest(profile=profile, property=prop):
+				self.assertEqual(self.authz.verify_pos_override_pin(USER, "4067", profile, property=prop), {
+					"ok": False, "name": None, "code": "POS-AUTH-NOT-ELIGIBLE",
+				})
+		self.assertEqual(calls, [])
+
+	def test_v7_governed_reset_obeys_native_company_and_branch_scope(self):
+		native = runpy.run_path(str(KAMRA / "tests" / "fixtures" / "siteops_v7_reset_scope.py"))
+		self.horizontal_siteops()
+		self.site.user_roles[USER] = ["Hotel Admin"]
+		scope = {"Company": "Alpha Ltd", "Property": "Alpha", "Branch": "Alpha Branch"}
+		self.site.user_permissions = {
+			account: {kind: [{"doc": name}] for kind, name in scope.items()} for account in (USER, OTHER)
+		}
+		self.site.tables.update({
+			"Approval Limit": [{"name": "Alpha Ltd", "custom_floor_override_approver_roles": "Hotel Admin"}],
+			"User Permission": [
+				{"user": account, "allow": kind, "for_value": name, "apply_to_all_doctypes": 1}
+				for account in (USER, OTHER) for kind, name in scope.items()
+			],
+			"Property": [{"name": "Alpha", "company": "Alpha Ltd", "branch": "Alpha Branch", "disabled": 0}],
+			"POS Profile": [{"name": "Till", "company": "Alpha Ltd", "branch": "Alpha Branch", "custom_property": "Alpha"}],
+		})
+		self.site.meta_fields.update({"Property": {"company", "branch"},
+		                              "POS Profile": {"company", "branch", "custom_property"}})
+		self.site.existing_doctypes.add("Property")
+		self.frappe.utils = SimpleNamespace(cint=int)
+		original_call = self.bridge.call_bridge_script.side_effect
+
+		def run(script, form):
+			if script == "siteops_doa.reset_user_floor_pin":
+				self.frappe.form_dict = form
+				native["authorize_reset"](
+					self.frappe, lambda user, **kw: {"name": user},
+					lambda row: [role.lower() for role in self.site.get_roles(row["name"])],
+					lambda role: role == "Hotel Admin", lambda role: False, lambda role: False,
+				)
+			return original_call(script, form)
+
+		self.bridge.call_bridge_script.side_effect = run
+		with self.subTest(surface="PMS, property omitted"):
+			self.assertTrue(self.api["reset_cashier_pin"](OTHER)["must_reset"])
+		with self.subTest(surface="POS, branch on profile"):
+			del self.site.tables["Property"][0]["branch"]
+			self.assertTrue(self.authz.manage_pos_override_pin("clear", user=OTHER, pos_profile="Till")["must_reset"])
+		with self.subTest(surface="POS, different branch"):
+			self.site.tables["POS Profile"][0]["branch"] = "Beta Branch"
+			with self.assertRaises(self.site.PermissionError):
+				self.authz.manage_pos_override_pin("clear", user=OTHER, pos_profile="Till")
+		with self.subTest(surface="PMS, no company can be resolved"):
+			self.site.user_permissions.clear()
+			self.bridge.call_bridge_script.reset_mock()
+			with self.assertRaises(self.site.PermissionError):
+				self.api["reset_cashier_pin"](OTHER)
+			self.bridge.call_bridge_script.assert_not_called()
+
+	def test_pin_query_credentials_are_rejected_and_removed_from_request(self):
+		endpoint = "/api/v2/method/kamra.api.set_cashier_pin"
+		for carrier, value in (
+			("args", {"override_pin": "query-only-secret"}),
+			("query_string", b"current%5Fpassword=query-only-secret"),
+			("full_path", endpoint + "?pin=query-only-secret"),
+			("path", endpoint + "?manager_pin=query-only-secret"),
+		):
+			with self.subTest(carrier=carrier):
+				request = SimpleNamespace(path=endpoint)
+				setattr(request, carrier, value)
+				request.environ = {"RAW_URI": endpoint + "?pin=query-only-secret",
+				                   "QUERY_STRING": "pin=query-only-secret"}
+				request.url = "https://example.test" + request.environ["RAW_URI"]
+				self.site.local.request = request
+				self.site.local.form_dict.update(pin="query-only-secret", keep=True)
+				with self.assertRaises(self.site.ValidationError) as raised:
+					self.authz.prepare_pin_request()
+				self.assertNotIn("query-only-secret", repr(vars(request)))
+				self.assertNotIn("query-only-secret", str(raised.exception))
+				self.assertNotIn("pin", self.site.local.form_dict)
+
+	def test_unexpected_endpoint_error_drops_credential_tracebacks(self):
+		error = RuntimeError("unexpected-provider-secret")
+		with patch.object(self.authz, "enroll_approval_pin", side_effect=error), \
+		     patch.object(self.frappe, "_", side_effect=lambda message: "Localized: " + message):
+			with self.assertRaisesRegex(self.site.ValidationError, "^Localized: ") as raised:
+				self.api["set_cashier_pin"]("4067", current_password="synthetic-account-password")
+		self.assertIsNone(raised.exception.__context__)
+		self.assertIsNone(raised.exception.__cause__)
+
+	def test_preverified_pos_enrollment_applies_native_v7_weak_pin_policy(self):
+		self.horizontal_siteops()
+		for pin in ("1212", "33030", "55667", "7788990", "1478963", "12369874", "2580", "85952"):
+			with self.subTest(pin=pin):
+				self.site.tables["DefaultValue"].clear()
+				with self.assertRaises(self.site.ValidationError):
+					self.authz.manage_pos_override_pin("set", user=USER, pin=pin)
+				self.assertIsNone(self.floor_hash(USER))
