@@ -4,9 +4,9 @@
     Download PDF (the browser's Save as PDF), or Print all as one A4 run. */
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
-import { ArrowLeft, Download, Printer } from "lucide-react"
+import { ArrowLeft, CheckCircle2, Download, Printer, TriangleAlert } from "lucide-react"
 import { Link, useParams } from "react-router-dom"
-import { auditPack, rebuildAuditPack, type Pack, type PackResponse } from "../lib/eod"
+import { auditPack, rebuildAuditPack, type ControlTieOutSummary, type Pack, type PackResponse } from "../lib/eod"
 import { keptInErp } from "../lib/erpBooks"
 import { serverError } from "../lib/resource"
 import { Button } from "../components/ui/button"
@@ -468,13 +468,232 @@ function DepositLedger({ p }: { p: Pack }) {
   )
 }
 
+export function ControlTieOutCard({
+  tieout,
+  currency: overrideCurrency,
+  symbol: overrideSymbol,
+}: {
+  tieout: ControlTieOutSummary | null
+  currency?: string
+  symbol?: string
+}) {
+  const { t } = useT()
+  const packMoney = usePackMoney()
+  const controls = Array.isArray(tieout?.controls) ? tieout.controls : []
+  if (!tieout || (tieout.status !== "Unverified" && (
+    !Number.isFinite(tieout.total_variance) || controls.length === 0 ||
+    controls.some((row) =>
+      ![row.subledger_balance, row.gl_balance, row.variance].every(Number.isFinite))
+  ))) {
+    return (
+      <p className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
+        {t("Accounting GL control tie-out figures are restricted.")}
+      </p>
+    )
+  }
+  const resolvedCurrency = tieout.currency || overrideCurrency || packMoney.currency || undefined
+  const resolvedDigits =
+    typeof tieout.precision === "number" && Number.isInteger(tieout.precision) && tieout.precision >= 0
+      ? tieout.precision
+      : undefined
+  const resolvedSymbol =
+    overrideSymbol !== undefined
+      ? overrideSymbol
+      : resolvedCurrency && packMoney.currency && resolvedCurrency !== packMoney.currency
+        ? `${resolvedCurrency} `
+        : packMoney.symbol || (resolvedCurrency ? `${resolvedCurrency} ` : "")
+  const fmt = (n: unknown) => fmtAmount(n, resolvedCurrency, resolvedDigits)
+  const fmtWithCur = (n: unknown) => `${resolvedSymbol}${fmt(n)}`
+  const isBalanced = tieout.in_balance === true && tieout.status === "Balanced"
+  const isUnverified = tieout.status === "Unverified"
+  const toneClass = isBalanced
+    ? "border-emerald-200 bg-emerald-50/40"
+    : isUnverified
+      ? "border-amber-200 bg-amber-50/50"
+      : "border-rose-200 bg-rose-50/40"
+
+  const rowStatusTone = (status: string): "green" | "rose" | "amber" =>
+    status === "Balanced" ? "green" : status === "Unverified" ? "amber" : "rose"
+  const rowStatusLabel = (status: string) =>
+    status === "Balanced"
+      ? t("Balanced")
+      : status === "Unverified"
+        ? t("Not verified")
+        : t("Variance")
+
+  return (
+    <section
+      data-testid="gl-control-tieout-card"
+      aria-label={t("Accounting GL Control Tie-Out")}
+      className={cn("mb-4 space-y-3 rounded-xl border p-4 text-start", toneClass)}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0 space-y-0.5">
+          <h4 className="text-sm font-semibold text-zinc-900">
+            {t("Accounting GL Control Tie-Out")}
+          </h4>
+          <p className="text-xs text-zinc-500">
+            {tieout.business_date && fmtDay(tieout.business_date)}
+            {Number.isFinite(tieout.tolerance) && (
+              <>{tieout.business_date && " · "}{t("Tolerance {amount}", { amount: fmtWithCur(tieout.tolerance) })}</>
+            )}
+          </p>
+        </div>
+        {isBalanced ? (
+          <Badge tone="green">
+            <CheckCircle2 className="me-1 size-3.5 shrink-0" aria-hidden />
+            {t("Control Tie-Out: Balanced")}
+          </Badge>
+        ) : isUnverified ? (
+          <Badge tone="amber" className="dark:text-amber-800">
+            <TriangleAlert className="me-1 size-3.5 shrink-0" aria-hidden />
+            {t("Control Tie-Out: Not verified")}
+          </Badge>
+        ) : (
+          <Badge tone="rose">
+            <TriangleAlert className="me-1 size-3.5 shrink-0" aria-hidden />
+            {t("Control Tie-Out: Variance ({amount})", {
+              amount: fmtWithCur(tieout.total_variance),
+            })}
+          </Badge>
+        )}
+      </div>
+
+      {isUnverified ? (
+        <div className="rounded-lg border border-amber-200 bg-white px-3 py-2.5 text-sm text-amber-900">
+          {tieout.reason
+            ? t(tieout.reason)
+            : t("Accounting GL control tie-out could not be verified.")}
+        </div>
+      ) : (
+        <>
+          <div className="space-y-2 md:hidden print:hidden">
+            {controls.map((row) => {
+              const isRowBad = row.status !== "Balanced"
+              return (
+                <div
+                  key={row.key}
+                  data-control-key={row.key}
+                  className={cn(
+                    "space-y-2 rounded-lg border bg-white p-3",
+                    isRowBad ? "border-rose-200 bg-rose-50/30" : "border-zinc-200",
+                  )}
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-zinc-900">{t(row.label)}</div>
+                      {row.account && (
+                        <div className="truncate text-xs text-zinc-500">{row.account}</div>
+                      )}
+                    </div>
+                    <Badge
+                      tone={rowStatusTone(row.status)}
+                      className={row.status === "Unverified" ? "dark:text-amber-800" : undefined}
+                    >
+                      {rowStatusLabel(row.status)}
+                    </Badge>
+                  </div>
+                  <dl className="grid grid-cols-3 gap-2 border-t border-zinc-100 pt-2 text-xs">
+                    <div className="min-w-0">
+                      <dt className="text-zinc-500">{t("Subledger")}</dt>
+                      <dd className="mt-0.5 font-medium tabular-nums text-zinc-900">
+                        {fmt(row.subledger_balance)}
+                      </dd>
+                    </div>
+                    <div className="min-w-0">
+                      <dt className="text-zinc-500">{t("Accounting GL")}</dt>
+                      <dd className="mt-0.5 font-medium tabular-nums text-zinc-900">
+                        {fmt(row.gl_balance)}
+                      </dd>
+                    </div>
+                    <div className="min-w-0 text-end">
+                      <dt className="text-zinc-500">{t("Variance")}</dt>
+                      <dd
+                        className={cn(
+                          "mt-0.5 font-semibold tabular-nums",
+                          isRowBad ? "text-rose-700" : "text-emerald-700",
+                        )}
+                      >
+                        {fmt(row.variance)}
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+              )
+            })}
+          </div>
+
+          <div className="hidden overflow-x-auto rounded-lg border border-zinc-200 bg-white md:block print:block print:overflow-visible">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-zinc-200 bg-zinc-50 text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+                  <th className="px-3 py-2 text-start">{t("Control bucket")}</th>
+                  <th className="px-3 py-2 text-end">{t("Subledger")}</th>
+                  <th className="px-3 py-2 text-end">{t("Accounting GL")}</th>
+                  <th className="px-3 py-2 text-end">{t("Variance")}</th>
+                  <th className="px-3 py-2 text-end">{t("Status")}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100">
+                {controls.map((row) => {
+                  const isRowBad = row.status !== "Balanced"
+                  return (
+                    <tr
+                      key={row.key}
+                      data-control-key={row.key}
+                      className={cn("break-inside-avoid", isRowBad && "bg-rose-50/40")}
+                    >
+                      <td className="px-3 py-2 align-top text-start">
+                        <div className="font-medium text-zinc-900">{t(row.label)}</div>
+                        {row.account && (
+                          <div className="text-xs text-zinc-500">{row.account}</div>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 align-top text-end tabular-nums text-zinc-800">
+                        {fmt(row.subledger_balance)}
+                      </td>
+                      <td className="px-3 py-2 align-top text-end tabular-nums text-zinc-800">
+                        {fmt(row.gl_balance)}
+                      </td>
+                      <td
+                        className={cn(
+                          "px-3 py-2 align-top text-end font-semibold tabular-nums",
+                          isRowBad ? "text-rose-700" : "text-emerald-700",
+                        )}
+                      >
+                        {fmt(row.variance)}
+                      </td>
+                      <td className="px-3 py-2 align-top text-end">
+                        <Badge
+                          tone={rowStatusTone(row.status)}
+                          className={row.status === "Unverified" ? "dark:text-amber-800" : undefined}
+                        >
+                          {rowStatusLabel(row.status)}
+                        </Badge>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </section>
+  )
+}
+
 function TrialBalance({ p }: { p: Pack }) {
   const { t } = useT()
   const { money } = usePackMoney()
   const tb = p.ledger_balances || { ledgers: [] }
   const codes = p.revenue_by_transaction_code?.rows || []
+  const tieout = p.gl_control_tieout && typeof p.gl_control_tieout === "object"
+    ? (p.gl_control_tieout as ControlTieOutSummary)
+    : null
   return (
     <div>
+      {tieout && <ControlTieOutCard tieout={tieout} />}
       <DataTable
         cols={[
           { key: "ledger", label: "Ledger" },
