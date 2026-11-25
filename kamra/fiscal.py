@@ -124,6 +124,21 @@ def fiscal_status(folio) -> dict | None:
 	return out
 
 
+def visible_fiscal_references(fiscal: dict, credit: dict) -> dict:
+	"""Expose bridge references only when the folio's accounting projection verifies them."""
+	invoice = credit.get("sales_invoice")
+	visible_invoice = invoice if invoice == fiscal["sales_invoice"] else None
+	allowed = set(credit.get("credit_notes", [])) if visible_invoice else set()
+	notes = []
+	for note in fiscal["credit_notes"]:
+		name = note.get("name") if isinstance(note, dict) else note
+		if isinstance(name, str) and name in allowed:
+			notes.append({key: note[key] for key in ("name", "grand_total", "efris_irn") if key in note}
+			             if isinstance(note, dict) else name)
+	return {**fiscal, "sales_invoice": visible_invoice, "credit_notes": notes,
+	        "replaced_by": invoice if invoice == fiscal["replaced_by"] else None}
+
+
 def is_final(fiscal: dict | None) -> bool:
 	"""Whether the fiscal document can be handed over as the tax invoice."""
 	if not fiscal or fiscal.get("sandbox"):

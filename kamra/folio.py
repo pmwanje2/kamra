@@ -2649,7 +2649,8 @@ def _linked_sales_credit_notes(folios, property: str, currency: str, *, read_not
 		returns = frappe.get_all(
 			"Sales Invoice", filters={**scope, "docstatus": 1, "is_return": 1,
 			                         "return_against": ("in", list(links.values()))},
-			fields=[*amount_fields, "return_against", "update_outstanding_for_self"],
+			fields=[*amount_fields, "return_against", "update_outstanding_for_self",
+			        *(["kamra_ref"] if has_backlink else [])],
 			order_by="name asc",
 		)
 	except (frappe.db.TableMissingError, frappe.DoesNotExistError):
@@ -2658,10 +2659,14 @@ def _linked_sales_credit_notes(folios, property: str, currency: str, *, read_not
 	notes_by_invoice = {}
 	for note in returns:
 		notes_by_invoice.setdefault(note.return_against, []).append(note)
-	notes = {folio: notes_by_invoice.get(invoice, []) for folio, invoice in links.items()}
+	notes = {
+		folio: [note for note in notes_by_invoice.get(invoice, [])
+		        if not has_backlink or note.get("kamra_ref") in (None, "", folio)]
+		for folio, invoice in links.items()
+	}
 	visible = set()
 	if read_note_numbers and frappe.has_permission("Sales Invoice", ptype="read"):
-		names = set(links.values()) | {note.name for note in returns}
+		names = set(links.values()) | {note.name for linked_notes in notes.values() for note in linked_notes}
 		for path in paths.values():
 			names.update(path)
 		try:

@@ -225,8 +225,14 @@ interface FolioRow {
   grand_total: number
   payments_total: number
   balance: number
+  net_collectible_balance?: number | null
+  credit_status?: "Credited" | "Partially credited" | null
   /** the company a Company or Group bill goes to */
   company?: string | null
+}
+
+function collectible(folio: FolioRow) {
+  return folio.net_collectible_balance ?? folio.balance
 }
 
 interface FolioDoc {
@@ -273,7 +279,7 @@ export function StayBilling({ d, onChanged }: { d: RoomDetail; onChanged: () => 
         setPay((p) => ({
           ...p,
           folio: p.folio || open?.name || "",
-          amount: p.amount || (open && open.balance > 0 ? String(open.balance) : ""),
+          amount: p.amount || (open && collectible(open) > 0 ? String(collectible(open)) : ""),
         }))
       })
       .catch((e) => setError(serverError(e)))
@@ -348,6 +354,11 @@ export function StayBilling({ d, onChanged }: { d: RoomDetail; onChanged: () => 
                   {f.company && ` · ${f.company}`}
                   {f.status === "Closed" && ` · ${t("Closed")}`}
                 </span>
+                {f.credit_status && (
+                  <Badge tone={f.credit_status === "Credited" ? "green" : "amber"}>
+                    {f.credit_status === "Credited" ? t("Credited") : t("Partially credited")}
+                  </Badge>
+                )}
                 <span className="block text-xs text-muted-ink">
                   {t("Bill {total} · paid {paid}", {
                     total: fmtMoney(f.grand_total),
@@ -355,14 +366,14 @@ export function StayBilling({ d, onChanged }: { d: RoomDetail; onChanged: () => 
                   })}
                 </span>
               </span>
-              <span className="flex items-center gap-3">
+              <span className="flex flex-wrap items-center gap-3">
                 <span
                   className={cn(
                     "tabular-nums text-base font-semibold",
-                    f.balance > 0 ? "text-warning-ink" : "text-secondary-ink",
+                    collectible(f) > 0 ? "text-warning-ink" : "text-secondary-ink",
                   )}
                 >
-                  {fmtMoney(f.balance)}
+                  {fmtMoney(collectible(f))}
                 </span>
                 <Link
                   to={`/billing/${encodeURIComponent(f.name)}`}
@@ -491,12 +502,16 @@ export function StayBilling({ d, onChanged }: { d: RoomDetail; onChanged: () => 
               {t("Folio")}
               <select
                 value={pay.folio}
-                onChange={(e) => setPay({ ...pay, folio: e.target.value })}
+                onChange={(e) => {
+                  const selected = folios?.find((f) => f.name === e.target.value)
+                  const amount = selected ? collectible(selected) : 0
+                  setPay({ ...pay, folio: e.target.value, amount: amount > 0 ? String(amount) : "" })
+                }}
                 className={cn(inputCls, "mt-1")}
               >
                 {(folios ?? []).map((f) => (
                   <option key={f.name} value={f.name}>
-                    {t("{type} folio", { type: t(f.folio_type) })}{f.company ? ` · ${f.company}` : ""} · {fmtMoney(f.balance)}
+                    {t("{type} folio", { type: t(f.folio_type) })}{f.company ? ` · ${f.company}` : ""} · {fmtMoney(collectible(f))}
                   </option>
                 ))}
               </select>

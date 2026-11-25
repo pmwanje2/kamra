@@ -3565,12 +3565,11 @@ def _folio_list_fields():
 
 
 def _filter_folio_invoice_refs(rows, property):
-	"""Replace internal bridge links with the same verified reference Billing displays."""
+	"""Attach the collectible balance and the references visible to this reader."""
 	from kamra.folio import credit_note_positions
 
-	linked = [row for row in rows if row.get("sales_invoice")]
-	for row, position in zip(linked, credit_note_positions(linked, property), strict=True):
-		row["sales_invoice"] = position["sales_invoice"]
+	for row, position in zip(rows, credit_note_positions(rows, property), strict=True):
+		row.update(position)
 
 
 def _desk_folio_dict(doc):
@@ -4846,7 +4845,7 @@ def _load_accounting_invoice(doc, prop=None, prop_currency: str | None = None):
 	return si
 
 
-def _erp_credited_total(si, prop=None, prop_currency: str | None = None) -> float:
+def _erp_credited_total(si, folio, prop=None, prop_currency: str | None = None) -> float:
 	"""Sum submitted, readable ERP Credit Notes (Sales Invoice with is_return=1)
 	against the active accounting Sales Invoice."""
 	if si is None or not si.get("name"):
@@ -4879,7 +4878,7 @@ def _erp_credited_total(si, prop=None, prop_currency: str | None = None) -> floa
 			continue
 		if int(ret.get("docstatus") or 0) != 1 or not cint(ret.get("is_return")):
 			continue
-		if (ret.get("return_against") or "") != si.name:
+		if ret.get("return_against") != si.name or ret.get("kamra_ref") not in (None, "", folio):
 			continue
 		if si_company and ret.get("company") != si_company:
 			continue
@@ -5222,7 +5221,7 @@ def _apply_accounting_invoice_taxes(doc, prop, prop_currency: str | None, folio_
 		"by_head": by_head,
 		"si": si,
 		"state": "submitted",
-		"erp_credited": _erp_credited_total(si, prop=prop, prop_currency=prop_currency),
+		"erp_credited": _erp_credited_total(si, doc.name, prop=prop, prop_currency=prop_currency),
 	}
 
 
@@ -5518,12 +5517,13 @@ def folio_invoice(folio: str):
 	# under the ERPNext accounting bridge the tax invoice is the ERP Sales
 	# Invoice and its fiscal identifiers (EFRIS FDN, verification code, QR);
 	# this folio's own number is then an internal reference only
-	from kamra.fiscal import fiscal_status, fiscal_title
+	from kamra.fiscal import fiscal_status, fiscal_title, visible_fiscal_references
 	from kamra.fiscal import is_final as fiscal_final
+	credit = reconcile_credit_note_status(doc) if frappe.has_permission("Folio", ptype="read", doc=doc) else {}
 	fiscal = fiscal_status(doc)
 	number, final, internal_number = doc_number, settled, None
 	if fiscal:
-		number, final, internal_number = fiscal["sales_invoice"] or doc.name, fiscal_final(fiscal), doc.invoice_number
+		final, internal_number = fiscal_final(fiscal), doc.invoice_number
 		if acct_tax["tax_source"] == "accounting_unavailable":
 			# Restricted viewer (lacks Sales Invoice read) or unreadable accounting invoice:
 			# never leak accounting tax metadata or elevate the neutral title (#48).
@@ -5540,6 +5540,8 @@ def folio_invoice(folio: str):
 				doc_title = _(fiscal_title(fiscal))
 		else:
 			doc_title = _(fiscal_title(fiscal))
+		fiscal = visible_fiscal_references(fiscal, credit)
+		number = fiscal["sales_invoice"] or doc.name
 	payments = [{
 		"row": p.name, "posting_date": str(p.posting_date),
 		"payment_kind": p.payment_kind, "mode": p.mode,
@@ -5563,7 +5565,6 @@ def folio_invoice(folio: str):
 	)
 	places = max(raw_places, 2)
 	_prop_locale = pack.locale(prop) if callable(getattr(pack, "locale", None)) else {}
-	credit = reconcile_credit_note_status(doc) if frappe.has_permission("Folio", ptype="read", doc=doc) else {}
 	if "sales_invoice" in folio_dict:
 		folio_dict["sales_invoice"] = credit.get("sales_invoice")
 	return {
