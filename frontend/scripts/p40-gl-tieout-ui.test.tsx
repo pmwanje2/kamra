@@ -9,9 +9,9 @@ import { adoptUiLocale } from "../src/lib/money"
 import { setLang } from "../src/lib/dir"
 import { ensureDictionary } from "../src/lib/locales"
 
-const { rpc } = vi.hoisted(() => {
+const { rpc, auth } = vi.hoisted(() => {
   Object.defineProperty(globalThis, "localStorage", { configurable: true, value: jsdom.window.localStorage })
-  return { rpc: vi.fn() }
+  return { rpc: vi.fn(), auth: { status: "authed", roles: ["Finance", "Hotel Admin"] } }
 })
 
 vi.mock("../src/lib/api", async (original) => ({
@@ -19,7 +19,7 @@ vi.mock("../src/lib/api", async (original) => ({
   call: (method: string, params: unknown) => rpc(method, params),
   getCurrentProperty: () => "Grand Plaza",
 }))
-vi.mock("../src/lib/auth", () => ({ useAuth: () => ({ status: "authed", roles: ["Finance", "Hotel Admin"] }) }))
+vi.mock("../src/lib/auth", () => ({ useAuth: () => auth }))
 vi.mock("../src/lib/cashierAuth", () => ({ useCashierAuth: () => ({ ensure: async () => true, withPin: async (fn: (p: string) => unknown) => fn("1234") }) }))
 
 const FORBIDDEN_VENDOR_RE = /(?<![a-z0-9])(?:Kamra|Frappe|ERPNext|URY|Tridz|BuildSuite)(?![a-z0-9])/i
@@ -52,6 +52,7 @@ describe("P40 Subledger-to-GL Control Tie-Out UI (AuditPack & EndOfDayWizard)", 
   let root: Root
 
   beforeEach(() => {
+    auth.roles = ["Finance", "Hotel Admin"]
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true)
     vi.stubGlobal("localStorage", jsdom.window.localStorage)
     setLang("en")
@@ -276,6 +277,7 @@ describe("P40 Subledger-to-GL Control Tie-Out UI (AuditPack & EndOfDayWizard)", 
               severity: "block",
               count: 1,
               unverified: false,
+              can_override_gl_variance: true,
               items: [varianceControls[2]],
               action: "Reconcile the control account variance in Accounting before closing the business date.",
               resolve: "/end-of-day",
@@ -343,6 +345,80 @@ describe("P40 Subledger-to-GL Control Tie-Out UI (AuditPack & EndOfDayWizard)", 
 
     await act(async () => setNative(reasonInput!, "Approved by Finance controller pending JV"))
     expect(overrideBtn!.disabled).toBe(false)
+  })
+
+  async function renderVarianceCheck(overrides: Record<string, unknown> = {}) {
+    adoptUiLocale({ currency: "USD", currency_symbol: "$", locale: "en-GB", decimals: 2 })
+    const controls = makeControls({
+      guest_ledger_clearing: { subledger: 80, gl: 80.05, variance: 0.05, status: "Variance" },
+    })
+    rpc.mockReset().mockResolvedValue({
+      property: "Grand Plaza",
+      property_name: "Grand Plaza",
+      currency: "USD",
+      currency_symbol: "$",
+      business_date: "2026-11-24",
+      server_date: "2026-11-24",
+      property_now: "2026-11-24 23:15",
+      auto_audit_with_blockers: "Hold and alert",
+      ran: false,
+      acknowledgements: [],
+      sessions: [],
+      checks: [{
+        key: "gl_control_tieout",
+        title: "Accounting GL control tie-out",
+        severity: "block",
+        count: 1,
+        unverified: false,
+        can_override_gl_variance: false,
+        items: [controls[2]],
+        action: "Reconcile the control account variance in Accounting before closing the business date.",
+        summary: {
+          ok: true,
+          status: "Variance",
+          in_balance: false,
+          currency: "USD",
+          precision: 2,
+          tolerance: 0.01,
+          total_variance: 0.05,
+          controls,
+        },
+        ...overrides,
+      }],
+    })
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={["/end-of-day/Grand%20Plaza"]}>
+          <Routes>
+            <Route path="/end-of-day/:property" element={<EndOfDayWizard />} />
+          </Routes>
+        </MemoryRouter>,
+      )
+    })
+    await vi.waitFor(() => expect(host.textContent).toContain("Accounting GL control tie-out"))
+  }
+
+  it.each([
+    ["Finance", "property policy disables overrides"],
+    ["Night Auditor", "role is ineligible"],
+  ])("EndOfDayWizard hides the override controls for %s when %s", async (role) => {
+    auth.roles = [role]
+    await renderVarianceCheck()
+    expect(host.querySelector('input[placeholder="Reason"]')).toBeNull()
+    expect(host.textContent).not.toContain("Override with reason")
+    expect(host.textContent).toContain("Finance or Hotel Admin can override this variance only when property policy allows it.")
+    expect(host.textContent).not.toMatch(FORBIDDEN_VENDOR_RE)
+  })
+
+  it("EndOfDayWizard shows restricted figures for a redacted verified tie-out", async () => {
+    auth.roles = ["Front Desk"]
+    await renderVarianceCheck({
+      summary: null,
+      items: [{ key: "guest_ledger_clearing", label: "Guest Ledger Clearing", status: "Variance" }],
+    })
+    expect(host.textContent).not.toContain("0.00")
+    expect(host.textContent).not.toContain("Control Tie-Out: Variance (")
+    expect(host.textContent).toContain("Accounting GL control tie-out figures are restricted.")
   })
 
   it("EndOfDayWizard blocks Close and hides Override when gl_control_tieout is Unverified (even count=0)", async () => {

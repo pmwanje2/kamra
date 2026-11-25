@@ -15,6 +15,7 @@ Verifies the thin kamra/night_audit.py consumer against the exact
 from __future__ import annotations
 
 import copy
+import json
 import re
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -115,7 +116,9 @@ class TestP40NightAuditGlTieout(RateMatrixHarness):
 	modules = (
 		"kamra.authz",
 		"kamra.ledger",
+		"kamra.settings",
 		"kamra.night_audit",
+		"kamra.folio",
 	)
 
 	def extra_modules(self):
@@ -147,6 +150,7 @@ class TestP40NightAuditGlTieout(RateMatrixHarness):
 		self.authz.restricted_properties = lambda user=None: None
 		self.frappe.local.message_log = []
 		self.frappe.db.count = lambda doctype, filters=None: 10
+		self.frappe.cache = lambda: SimpleNamespace(hget=lambda *_: None, hset=lambda *_: None)
 		self.add("Property", "UGX Hotel", property_name="UGX Hotel", currency="UGX", business_date="2026-11-24")
 		self.add("Property", "USD Hotel", property_name="USD Hotel", currency="USD", business_date="2026-11-24")
 		self.add("Property", "KWD Hotel", property_name="KWD Hotel", currency="KWD", business_date="2026-11-24")
@@ -162,6 +166,81 @@ class TestP40NightAuditGlTieout(RateMatrixHarness):
 		):
 			return None
 		return super().bridge_call(api_method, response_types=response_types, **form)
+
+	def set_override_policy(self, enabled):
+		self.records["Property Setting"] = [
+			Doc(property="USD Hotel", setting_key="allow_na_gl_variance_override", value=str(enabled)),
+		]
+
+	def live_gl_checks(self, property, bd, *_):
+		return [self.night_audit.check_gl_control_tieout(property, bd)]
+
+	def test_eod_gl_variance_override_requires_policy_and_role(self):
+		self.tieout_handler = lambda _: _sample_tieout(clearing_variance=0.05)
+		reason = "Controller approved pending reconciliation"
+		for role in ("Night Auditor", "Kamra Agent", "Front Desk", "Finance", "Hotel Admin"):
+			for enabled in (0, 1):
+				with self.subTest(role=role, enabled=enabled):
+					self.roles = [role]
+					self.set_override_policy(enabled)
+					allowed = enabled == 1 and role in ("Finance", "Hotel Admin")
+					draft = self.add("Night Audit Run", "DRAFT", acknowledgements=None, save=lambda **_: None)
+					with (
+						patch.object(self.night_audit, "_draft", return_value=draft.name),
+						patch.object(self.night_audit, "run_checks", side_effect=self.live_gl_checks),
+					):
+						if allowed:
+							result = self.night_audit.eod_acknowledge("USD Hotel", "gl_control_tieout", reason)
+							self.assertEqual(result["acknowledgement"]["note"], reason)
+							self.assertEqual(json.loads(draft.acknowledgements), result["acknowledgements"])
+						else:
+							with self.assertRaises(self.frappe.PermissionError):
+								self.night_audit.eod_acknowledge("USD Hotel", "gl_control_tieout", reason)
+							self.assertIsNone(draft.acknowledgements)
+					check = self.live_gl_checks("USD Hotel", "2026-11-24")[0]
+					self.assertIs(check.get("can_override_gl_variance"), allowed)
+
+	def test_manual_close_revalidates_drafted_and_inline_gl_overrides(self):
+		self.tieout_handler = lambda _: _sample_tieout(clearing_variance=0.05)
+		key = "gl_control_tieout"
+		reason = "Controller approved pending reconciliation"
+		cases = (
+			(0, "Finance", True),
+			(1, "Night Auditor", True),
+			(0, "Hotel Admin", False),
+			(1, "Kamra Agent", False),
+		)
+		for enabled, role, drafted in cases:
+			with self.subTest(enabled=enabled, role=role, drafted=drafted):
+				self.set_override_policy(enabled)
+				self.roles = [role]
+				draft = self.add("Night Audit Run", "DRAFT", acknowledgements=json.dumps([
+					{"key": key, "by": self.frappe.session.user, "note": reason},
+				] if drafted else []))
+
+				def get_value(doctype, name, *args, **kwargs):
+					if doctype == "Night Audit Run" and isinstance(name, dict) and name["status"] == "Draft":
+						return draft.name
+					return self.get_value(doctype, name, *args, **kwargs)
+
+				with (
+					patch.object(self.frappe.db, "get_value", side_effect=get_value),
+					patch.object(self.night_audit, "run_checks", side_effect=self.live_gl_checks),
+					patch.object(self.night_audit, "auto_extend_departures"),
+					patch.object(self.folio, "audit_clock"),
+					patch.object(self.folio, "nowdate", return_value="2026-11-24"),
+					patch.object(self.frappe, "get_all", wraps=self.frappe.get_all) as get_all,
+				):
+					# Stop at the first posting query if the GL guard fails to block.
+					def stop_before_posting(doctype, *args, **kwargs):
+						if doctype == "Reservation":
+							self.fail("Night audit reached posting with an unauthorized GL override")
+						return self.get_all(doctype, *args, **kwargs)
+
+					get_all.side_effect = stop_before_posting
+					with self.assertRaisesRegex((ValidationError, self.frappe.PermissionError), "GL control tie-out"):
+						self.folio.run_night_audit("USD Hotel", mode="manual",
+							acknowledge=[] if drafted else [key], note=reason)
 
 	def test_order_steps_and_pack_figure_sections_include_gl_control_tieout(self):
 		self.assertIn("gl_control_tieout", self.night_audit.ORDER)
@@ -289,6 +368,7 @@ class TestP40NightAuditGlTieout(RateMatrixHarness):
 		self.assertNotRegex(perm_check["action"], FORBIDDEN_VENDOR_RE)
 
 	def test_eod_acknowledge_refuses_unverified_tieout_and_short_variance_note(self):
+		self.set_override_policy(1)
 		# Unverified tie-out must never be overridden in eod_acknowledge
 		unverified_check = {
 			"key": "gl_control_tieout",
