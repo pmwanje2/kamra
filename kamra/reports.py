@@ -28,6 +28,13 @@ def _out_of_order(property: str, date: str, open_date: bool) -> int:
 		""", {"p": property, "d": date})[0][0] or 0)
 
 
+def _out_of_service(property: str) -> int:
+	"""Informational count of rooms in Out of Service (OS). Never deducted
+	from sellable inventory or RevPAR denominators."""
+	return frappe.db.count("Room", {
+		"property": property, "housekeeping_status": "Out of Service"})
+
+
 PROJECTED_KEYS = ("projected_room_revenue", "projected_adr", "projected_revpar")
 
 
@@ -313,6 +320,8 @@ def manager_flash(property: str, date: str | None = None,
 
 	return {
 		**dates, "from_date": str(start), "total_rooms": total_rooms,
+		"sellable": sellable,
+		"os_rooms": _out_of_service(property),
 		"available_rooms": days[-1]["available_rooms"],
 		"today": days[-1] if len(days) == 1 else _sum_days(property, days, days_by, total_rooms),
 		"mtd": _sum_days(property, month, month_by, total_rooms), "movement": movement,

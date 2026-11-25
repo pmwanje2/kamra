@@ -17,6 +17,7 @@ import { StepFlowFooter, StepFlowHeader, useStepFlow, type FlowStep } from "./St
 import TillCard, { type TillState } from "./TillCard"
 import ChangeCompany from "./ChangeCompany"
 import FolioDiscount from "./FolioDiscount"
+import AlertBanner, { type GuestAlertItem } from "./AlertBanner"
 
 
 /* Guided check-out, one stay at a time:
@@ -226,6 +227,7 @@ export interface CheckoutContext {
   settled: boolean
   actions: { can_checkout: boolean; can_withhold_deposit: boolean; can_check_out_role: boolean }
   sop: { steps: SopStep[]; next_tip: string | null }
+  alerts?: GuestAlertItem[]
 }
 
 type EarlyFee = "None" | "One Night" | "All Nights"
@@ -299,6 +301,7 @@ export default function CheckOutDialog(props: {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [checkedOut, setCheckedOut] = useState(false)
+  const [hasBlockingAlert, setHasBlockingAlert] = useState(false)
   const [creditWarnings, setCreditWarnings] = useState<string[]>([])
   // per-step desk input
   // the payment lines to collect with: one or several modes (#597). Each line
@@ -707,7 +710,10 @@ export default function CheckOutDialog(props: {
   let continueDisabled = false
   let disabledReason: string | undefined
   let onContinue: (() => void) | undefined = flow.next
-  if (current === "review") continueDisabled = reviewProblems.length > 0
+  if (current === "review") {
+    continueDisabled = reviewProblems.length > 0 || hasBlockingAlert
+    if (hasBlockingAlert) disabledReason = t("Resolve blocking alerts before check-out.")
+  }
   if (current === "early" && early && !early.applied) {
     continueDisabled = earlyProblems.length > 0
     if (continueDisabled) disabledReason = t("Shorten the stay above to continue.")
@@ -732,6 +738,9 @@ export default function CheckOutDialog(props: {
     if (ctx && !ctx.actions.can_check_out_role) {
       continueDisabled = true
       disabledReason = t("Only Front Desk or a Hotel Admin can check the guest out.")
+    } else if (hasBlockingAlert) {
+      continueDisabled = true
+      disabledReason = t("Resolve blocking alerts before check-out.")
     }
   }
   if (current === "invoice") {
@@ -789,6 +798,17 @@ export default function CheckOutDialog(props: {
               flow.goTo(k)
             }}
           />
+
+          {!checkedOut && (
+            <AlertBanner
+              trigger="Check-Out"
+              reservation={props.reservation}
+              guest={ctx.reservation.guest ?? undefined}
+              initialAlerts={ctx.alerts ?? []}
+              onAlertsChanged={() => void load()}
+              onBlockingChange={setHasBlockingAlert}
+            />
+          )}
 
           {ctx.sop.next_tip && !checkedOut && !blockersHere.some((b) => b.message === ctx.sop.next_tip) && (
             <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">

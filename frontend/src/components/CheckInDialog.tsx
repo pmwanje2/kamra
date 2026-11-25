@@ -28,6 +28,7 @@ import DepositPanel, { type DepositState } from "./DepositPanel"
 import SecurityDepositPanel, { type SecurityDepositState } from "./SecurityDepositPanel"
 import RoomChangeDialog from "./RoomChangeDialog"
 import TillCard, { type TillState } from "./TillCard"
+import AlertBanner, { type GuestAlertItem } from "./AlertBanner"
 import {
   StepFlowFooter,
   StepFlowHeader,
@@ -169,6 +170,7 @@ interface Flow {
   till: TillState
   records: Record<string, { state: string; by: string; at: string; note?: string }>
   key_result?: { ok: boolean; manual: boolean; message: string } | null
+  alerts?: GuestAlertItem[]
 }
 
 /* Built-in step texts, translated here; a property that rewrote a step's
@@ -240,9 +242,13 @@ const REQUEST_LABEL: Record<string, string> = {
 }
 
 const hkTone: Record<string, string> = {
-  Clean: "border-emerald-200 bg-emerald-50 text-emerald-800",
-  Inspected: "border-sky-200 bg-sky-50 text-sky-800",
-  Dirty: "border-amber-200 bg-amber-50 text-amber-800",
+  Clean: "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-950/30",
+  Pickup: "border-indigo-200 bg-indigo-50 text-indigo-800 dark:border-indigo-500/40 dark:bg-indigo-950/30 dark:text-indigo-200",
+  Inspected: "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-500/40 dark:bg-sky-950/30",
+  Ready: "border-teal-200 bg-teal-50 text-teal-800 dark:border-teal-500/40 dark:bg-teal-950/30 dark:text-teal-200",
+  Dirty: "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/40 dark:bg-amber-950/30",
+  "Out of Service": "border-orange-200 bg-orange-50 text-orange-800 dark:border-orange-500/40 dark:bg-orange-950/30 dark:text-orange-200",
+  "Out of Order": "border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-500/40 dark:bg-rose-950/30",
 }
 
 const inputCls =
@@ -337,6 +343,7 @@ export default function CheckInDialog(props: {
   const [allowCharges, setAllowCharges] = useState<boolean | null>(null)
   const [chargesReason, setChargesReason] = useState("")
   const [keyMessage, setKeyMessage] = useState<string | null>(null)
+  const [hasBlockingAlert, setHasBlockingAlert] = useState(false)
 
   const adopt = useCallback((f: Flow) => {
     setFlow(f)
@@ -391,9 +398,9 @@ export default function CheckInDialog(props: {
   // confirm goes red only when the room is still missing
   const headerSteps = useMemo(
     () => flowSteps.map((s) =>
-      s.key === "confirm" && nav.current === "confirm" && flow?.missing_required.length
+      s.key === "confirm" && nav.current === "confirm" && (flow?.missing_required.length || hasBlockingAlert)
         ? { ...s, status: "blocked" as const } : s),
-    [flowSteps, nav, flow],
+    [flowSteps, nav, flow, hasBlockingAlert],
   )
   const step = flow?.steps.find((s) => s.step_key === nav.current) ?? null
   const roomReady = !!flow && !flow.missing_required.length
@@ -639,8 +646,12 @@ export default function CheckInDialog(props: {
           onBack={nav.isFirst ? undefined : nav.back}
           onSkip={optional ? onSkip : undefined}
           onContinue={onContinue}
-          continueDisabled={isConfirm && !!flow?.missing_required.length}
-          disabledReason={t("Assign a room before check-in.")}
+          continueDisabled={isConfirm && (!!flow?.missing_required.length || hasBlockingAlert)}
+          disabledReason={
+            hasBlockingAlert
+              ? t("Resolve blocking alerts before check-in.")
+              : t("Assign a room before check-in.")
+          }
           continueLabel={
             busy
               ? t("Saving…")
@@ -670,6 +681,15 @@ export default function CheckInDialog(props: {
       {flow && r && (
         <div className="space-y-5">
           <StepFlowHeader steps={headerSteps} current={nav.current} onSelect={nav.goTo} />
+
+          <AlertBanner
+            trigger="Check-In"
+            reservation={props.reservation}
+            guest={flow.guest.name ?? undefined}
+            initialAlerts={flow.alerts ?? []}
+            onAlertsChanged={() => void load()}
+            onBlockingChange={setHasBlockingAlert}
+          />
 
           {r.vip ? (
             <p className="flex items-center gap-1.5 text-sm font-semibold text-amber-700">
@@ -921,8 +941,18 @@ export default function CheckInDialog(props: {
                     )}
                   </div>
                   {flow.room.housekeeping_status === "Dirty" && (
-                    <p className="text-sm font-medium text-amber-700">
+                    <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
                       {t("This room is not cleaned yet. Pick a clean room, or ask housekeeping first.")}
+                    </p>
+                  )}
+                  {flow.room.housekeeping_status === "Pickup" && (
+                    <p className="text-sm font-medium text-indigo-700 dark:text-indigo-300">
+                      {t("This room is flagged for quick touch-up (Pickup). Confirm with housekeeping before handing over keys.")}
+                    </p>
+                  )}
+                  {flow.room.housekeeping_status === "Out of Service" && (
+                    <p className="text-sm font-medium text-orange-700 dark:text-orange-300">
+                      {t("This room is Out of Service and cannot be assigned. Pick another room first.")}
                     </p>
                   )}
                   {r.status === "Confirmed" && (

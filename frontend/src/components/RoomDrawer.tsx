@@ -50,14 +50,16 @@ export type RoomTab =
 type Tab = RoomTab
 
 export const HK_TONE: Record<HkStatus, string> = {
-  Clean: "border-emerald-300 bg-emerald-50 text-emerald-900",
-  Inspected: "border-sky-300 bg-sky-50 text-sky-900",
-  Ready: "border-teal-400 bg-teal-50 text-teal-900",
-  Dirty: "border-amber-300 bg-amber-50 text-amber-900",
-  "Out of Order": "border-rose-300 bg-rose-50 text-rose-900",
+  Clean: "border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-950/30 dark:text-emerald-100",
+  Pickup: "border-indigo-300 bg-indigo-50 text-indigo-900 dark:border-indigo-500/40 dark:bg-indigo-950/30 dark:text-indigo-100",
+  Inspected: "border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-500/40 dark:bg-sky-950/30",
+  Ready: "border-teal-400 bg-teal-50 text-teal-900 dark:border-teal-500/40 dark:bg-teal-950/30 dark:text-teal-100",
+  Dirty: "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/30 dark:text-amber-100",
+  "Out of Service": "border-orange-300 bg-orange-50 text-orange-900 dark:border-orange-500/40 dark:bg-orange-950/30 dark:text-orange-100",
+  "Out of Order": "border-rose-300 bg-rose-50 text-rose-900 dark:border-rose-500/40 dark:bg-rose-950/30 dark:text-rose-100",
 }
 
-const HK_SET: HkStatus[] = ["Dirty", "Clean", "Inspected", "Ready"]
+const HK_SET: HkStatus[] = ["Dirty", "Pickup", "Clean", "Inspected", "Ready"]
 
 /** What the person picks; the Room Block reason it is stored as. */
 const OUT_KINDS = [
@@ -317,7 +319,7 @@ function StatusTab({
         await call("kamra.api.release_room_block", { name: b.name })
       }
       // it needs a clean before anyone sleeps in it
-      if (status === "Out of Order" && d.can.supervise) {
+      if ((status === "Out of Order" || status === "Out of Service") && d.can.supervise) {
         await setHousekeepingStatus(d.room.name, "Dirty")
       }
     })
@@ -368,9 +370,28 @@ function StatusTab({
       </Section>
 
       <Section title={t("Out of service")}>
-        {d.blocks.length === 0 && status !== "Out of Order" && (
+        {d.blocks.length === 0 && status !== "Out of Order" && status !== "Out of Service" && (
           <Empty>{t("This room is in service.")}</Empty>
         )}
+        {(status === "Out of Service" || status === "Out of Order") &&
+          (d.room.os_oo_reason || d.room.os_oo_until) && (
+            <div
+              className={cn(
+                "mb-3 rounded-lg border px-3 py-2 text-sm",
+                status === "Out of Service"
+                  ? "border-orange-200 bg-orange-50/70 text-orange-950 dark:border-orange-500/40 dark:bg-orange-950/40 dark:text-orange-100"
+                  : "border-rose-200 bg-rose-50/70 text-rose-900 dark:border-rose-500/40 dark:bg-rose-950/40 dark:text-rose-100",
+              )}
+            >
+              <div className="font-medium">{t(status)}</div>
+              {d.room.os_oo_reason && <div className="mt-0.5">{d.room.os_oo_reason}</div>}
+              {d.room.os_oo_until && (
+                <div className="mt-0.5 text-xs opacity-80">
+                  {t("Expected return: {date}", { date: day(d.room.os_oo_until) })}
+                </div>
+              )}
+            </div>
+          )}
         {d.blocks.length > 0 && (
           <ul className="mb-3 space-y-2">
             {d.blocks.map((b) => (
@@ -390,7 +411,7 @@ function StatusTab({
             ))}
           </ul>
         )}
-        {(current.length > 0 || status === "Out of Order") &&
+        {(current.length > 0 || status === "Out of Order" || status === "Out of Service") &&
           (d.can.block || d.can.supervise) && (
             <Button
               className="min-h-11 px-4 text-base"

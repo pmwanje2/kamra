@@ -4,7 +4,14 @@
 
 import { call, getCurrentProperty } from "./api"
 
-export type HkStatus = "Clean" | "Dirty" | "Inspected" | "Ready" | "Out of Order"
+export type HkStatus =
+  | "Clean"
+  | "Dirty"
+  | "Pickup"
+  | "Inspected"
+  | "Ready"
+  | "Out of Service"
+  | "Out of Order"
 
 export interface RoomPermissions {
   supervise: boolean
@@ -21,6 +28,9 @@ export interface BoardRoom {
   floor: string | null
   housekeeping_status: HkStatus
   occupancy_status: "Vacant" | "Occupied"
+  os_oo_reason?: string | null
+  os_oo_until?: string | null
+  os_oo_set_by?: string | null
   stay: {
     reservation: string
     guest_name: string
@@ -75,6 +85,9 @@ export interface RoomDetail {
     floor: string | null
     housekeeping_status: HkStatus
     occupancy_status: "Vacant" | "Occupied"
+    os_oo_reason?: string | null
+    os_oo_until?: string | null
+    os_oo_set_by?: string | null
     notes: string | null
   }
   room_type: {

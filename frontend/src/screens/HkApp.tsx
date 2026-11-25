@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react"
-import { BedDouble, Camera, LogOut, Plane, RefreshCw, Star, Clock, PackageSearch, X } from "lucide-react"
+import { BedDouble, Camera, LogOut, Plane, RefreshCw, Star, Clock, PackageSearch, Wrench, X } from "lucide-react"
 import {
   call,
   getCurrentProperty,
   isNetworkError,
   logout,
+  setHousekeepingStatus,
   uploadTo,
   whoami,
 } from "../lib/api"
@@ -50,8 +51,17 @@ const isVideo = (url: string) => /\.(mp4|mov|webm|m4v|3gp|avi)$/i.test(url)
 interface HkRoom {
   name: string
   room_number: string
-  housekeeping_status: "Clean" | "Dirty" | "Inspected" | "Ready" | "Out of Order"
+  housekeeping_status:
+    | "Clean"
+    | "Dirty"
+    | "Pickup"
+    | "Inspected"
+    | "Ready"
+    | "Out of Service"
+    | "Out of Order"
   occupancy_status: "Vacant" | "Occupied"
+  os_oo_reason?: string | null
+  os_oo_until?: string | null
   arrival_today: boolean
   vip?: number
   in_house_guest?: string
@@ -62,11 +72,13 @@ interface HkRoom {
 }
 
 const hkTone: Record<HkRoom["housekeeping_status"], string> = {
-  Clean: "border-emerald-300 bg-emerald-50 text-emerald-900",
-  Ready: "border-emerald-400 bg-emerald-100 text-emerald-950",
-  Inspected: "border-sky-300 bg-sky-50 text-sky-900",
-  Dirty: "border-amber-300 bg-amber-50 text-amber-900",
-  "Out of Order": "border-rose-300 bg-rose-50 text-rose-900",
+  Clean: "border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-950/30 dark:text-emerald-100",
+  Pickup: "border-indigo-300 bg-indigo-50 text-indigo-900 dark:border-indigo-500/40 dark:bg-indigo-950/30 dark:text-indigo-100",
+  Ready: "border-emerald-400 bg-emerald-100 text-emerald-950 dark:border-teal-500/40 dark:bg-teal-950/30 dark:text-teal-100",
+  Inspected: "border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-500/40 dark:bg-sky-950/30",
+  Dirty: "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/30 dark:text-amber-100",
+  "Out of Service": "border-orange-300 bg-orange-50 text-orange-900 dark:border-orange-500/40 dark:bg-orange-950/30 dark:text-orange-100",
+  "Out of Order": "border-rose-300 bg-rose-50 text-rose-900 dark:border-rose-500/40 dark:bg-rose-950/30 dark:text-rose-100",
 }
 
 export default function HkApp() {
@@ -85,6 +97,7 @@ export default function HkApp() {
   const [logMsg, setLogMsg] = useState<string | null>(null)
   const [charge, setCharge] = useState<{ room: string; num: string; type: string; desc: string; amount: string } | null>(null)
   const [chargeMsg, setChargeMsg] = useState<string | null>(null)
+  const [statusRoom, setStatusRoom] = useState<HkRoom | null>(null)
 
   const checkAuth = () =>
     whoami()
@@ -435,51 +448,117 @@ export default function HkApp() {
 
         {view === "rooms" && (
           <div className="grid grid-cols-3 gap-2">
-            {(data?.rooms ?? []).map((r) => (
-              <button
-                key={r.name}
-                disabled={r.occupancy_status !== "Occupied"}
-                onClick={() => {
-                  setCharge({ room: r.name, num: r.room_number, type: "Minibar", desc: "", amount: "" })
-                  setChargeMsg(null)
-                }}
-                className={cn(
-                  "relative rounded-xl border p-3 text-center",
-                  hkTone[r.housekeeping_status],
-                  r.occupancy_status === "Occupied" ? "active:brightness-95" : "cursor-default",
-                )}
-              >
-                {r.vip ? (
-                  <Star className="absolute right-1.5 top-1.5 size-3.5 fill-amber-400 text-amber-400" aria-label={translate("VIP")} />
-                ) : null}
-                <div className="flex items-center justify-center gap-1 text-xl font-bold">
-                  {r.room_number}
-                  {r.occupancy_status === "Occupied" && (
-                    <BedDouble className="size-4" aria-hidden />
+            {(data?.rooms ?? []).map((r) => {
+              const blocked =
+                r.housekeeping_status === "Out of Service" ||
+                r.housekeeping_status === "Out of Order"
+              return (
+                <button
+                  key={r.name}
+                  type="button"
+                  disabled={blocked && r.occupancy_status !== "Occupied"}
+                  onClick={() => {
+                    if (r.occupancy_status === "Occupied") {
+                      setCharge({ room: r.name, num: r.room_number, type: "Minibar", desc: "", amount: "" })
+                      setChargeMsg(null)
+                    } else if (!blocked) {
+                      setStatusRoom(r)
+                    }
+                  }}
+                  className={cn(
+                    "relative min-h-16 rounded-xl border p-3 text-center",
+                    hkTone[r.housekeeping_status],
+                    r.occupancy_status === "Occupied" || !blocked ? "active:brightness-95" : "cursor-default",
                   )}
-                </div>
-                <div className="mt-0.5 text-[10px] font-medium uppercase tracking-wide opacity-70">
-                  {t(r.housekeeping_status)}
-                </div>
-                <div className="mt-1 flex items-center justify-center gap-1">
-                  {r.arrival_today && (
-                    <span className="inline-flex items-center gap-0.5 text-[9px] font-medium">
-                      <Plane className="size-3" aria-label={translate("Arrival today")} />
-                      {r.eta || ""}
-                    </span>
-                  )}
-                  {r.departure_today ? (
-                    <Clock className="size-3" aria-label={translate("Departure today")} />
+                >
+                  {r.vip ? (
+                    <Star className="absolute end-1.5 top-1.5 size-3.5 fill-amber-400 text-amber-400" aria-label={translate("VIP")} />
                   ) : null}
-                </div>
-              </button>
-            ))}
+                  <div className="flex items-center justify-center gap-1 text-xl font-bold">
+                    {r.room_number}
+                    {r.housekeeping_status === "Out of Service" && (
+                      <Wrench className="size-3.5 text-orange-600" aria-hidden />
+                    )}
+                    {r.occupancy_status === "Occupied" && (
+                      <BedDouble className="size-4" aria-hidden />
+                    )}
+                  </div>
+                  <div className="mt-0.5 text-[10px] font-medium uppercase tracking-wide opacity-75">
+                    {t(r.housekeeping_status)}
+                  </div>
+                  <div className="mt-1 flex items-center justify-center gap-1">
+                    {r.arrival_today && (
+                      <span className="inline-flex items-center gap-0.5 text-[9px] font-medium">
+                        <Plane className="size-3" aria-label={translate("Arrival today")} />
+                        {r.eta || ""}
+                      </span>
+                    )}
+                    {r.departure_today ? (
+                      <Clock className="size-3" aria-label={translate("Departure today")} />
+                    ) : null}
+                  </div>
+                </button>
+              )
+            })}
           </div>
         )}
         {view === "rooms" && (
           <p className="mt-3 text-center text-xs text-zinc-400">
-            {t("Tap an occupied room to post minibar or laundry.")}
+            {t("Tap a vacant room to update housekeeping status, or an occupied room to post minibar or laundry.")}
           </p>
+        )}
+        {statusRoom && (
+          <div
+            className="fixed inset-0 z-50 flex items-end bg-black/40"
+            onClick={() => setStatusRoom(null)}
+          >
+            <div
+              className="w-full space-y-3 rounded-t-2xl bg-white p-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold">
+                  {t("Room {n} status", { n: statusRoom.room_number })}
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setStatusRoom(null)}
+                  aria-label={t("Close")}
+                  className="p-2 text-zinc-500"
+                >
+                  <X className="size-5" />
+                </button>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {(["Dirty", "Pickup", "Clean"] as const).map((st) => (
+                  <button
+                    key={st}
+                    type="button"
+                    disabled={busy === statusRoom.name || statusRoom.housekeeping_status === st}
+                    onClick={async () => {
+                      setBusy(statusRoom.name)
+                      setNotice(null)
+                      try {
+                        await setHousekeepingStatus(statusRoom.name, st)
+                        setStatusRoom(null)
+                        load()
+                      } catch (e) {
+                        setNotice(serverError(e))
+                      } finally {
+                        setBusy(null)
+                      }
+                    }}
+                    className={cn(
+                      "min-h-12 rounded-xl border py-3 text-sm font-semibold disabled:opacity-50",
+                      hkTone[st],
+                    )}
+                  >
+                    {t(st)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
         )}
 
         {view === "laundry" && <HkLaundry rooms={data?.rooms ?? []} />}

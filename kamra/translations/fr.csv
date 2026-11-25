@@ -57,8 +57,10 @@ A rate plan is required for this property and cannot be cleared from an existing
 "A rate plan is required for this property. Set up a default rate plan in Rate Plans, or choose a rate plan for this booking.","Un plan tarifaire est obligatoire pour cet établissement. Définissez un plan tarifaire par défaut dans Plans tarifaires, ou choisissez-en un pour cette réservation."
 "A rate plan is required for this property. Set up a default rate plan in Rate Plans, or choose a rate plan for this group.","Un plan tarifaire est obligatoire pour cet établissement. Définissez un plan tarifaire par défaut dans Plans tarifaires, ou choisissez-en un pour ce groupe."
 "A rate plan is required for this property. Set up a default rate plan in Rate Plans, or choose a rate plan.","Un plan tarifaire est obligatoire pour cet établissement. Définissez un plan tarifaire par défaut dans Plans tarifaires, ou choisissez un plan tarifaire."
+A reason is required to clear a Blocking alert.,Un motif est requis pour lever une alerte bloquante.
 A reason is required.,Un motif est obligatoire.
 A receipt has to be a positive amount - use kind 'Refund' to give money back.,Un encaissement doit être d'un montant positif - utilisez le type « Remboursement » pour restituer des fonds.
+A resolution reason is required to resolve a Blocking alert.,Un motif de résolution est requis pour résoudre une alerte bloquante.
 A restaurant or laundry bill is still open for this stay: settle or cancel it first.,Une note de restaurant ou de blanchisserie est encore ouverte pour ce séjour : réglez-la ou annulez-la d'abord.
 A room night is posted for this stay: check the guest out instead.,Une nuitée est déjà comptabilisée pour ce séjour : effectuez plutôt le départ du client.
 A routing instruction is for one stay or for one group.,"Une instruction de routage s'applique soit à un séjour, soit à un groupe."
@@ -100,8 +102,13 @@ Access Token Hash,Empreinte du jeton d'accès
 Account,Compte
 Account Number,Numéro de compte
 Account number {0} is already used at this property.,Le numéro de compte {0} est déjà utilisé dans cet établissement.
+Acknowledged By,Pris en compte par
+Acknowledged On,Pris en compte le
+Acknowledged Reason,Motif de prise en compte
+Acknowledgement & Resolution,Prise en compte et résolution
 Acknowledgements (JSON),Confirmations (JSON)
 Action Type,Type d'action
+Activated On,Activé le
 Active,Actif
 Actor (User),Acteur (Utilisateur)
 Actual Check In,Arrivée réelle
@@ -154,6 +161,9 @@ Air Conditioning,Climatisation
 Airport / Station Drop,Transfert aéroport / gare (départ)
 Airport / Station Pickup,Transfert aéroport / gare (arrivée)
 Alcohol,Alcool
+Alert Code,Code d'alerte
+Alert Message,Message d'alerte
+Alert message is required.,Le message d'alerte est obligatoire.
 All Charges,Tous les frais
 All Charges routes everything; remove the rows.,L'option Tous les frais route l'ensemble des imputations ; supprimez les lignes.
 All companies,Toutes les sociétés
@@ -302,7 +312,9 @@ Block at least one room.,Bloquez au moins une chambre.
 Block write tools,Bloquer les outils d'écriture
 Blocked MCP tools,Outils MCP bloqués
 Blocked Rooms,Chambres bloquées
+Blocked by active {0} alert: {1},Bloqué par une alerte {0} active : {1}
 Blocking Checks Open,Contrôles bloquants ouverts
+Blocking guest alert,Alerte client bloquante
 Booked By,Réservé par
 Booked By (if not the guest),Réservé par (si différent du client)
 Booked Check Out,Départ prévu
@@ -614,6 +626,7 @@ Delivery Address,Adresse de livraison
 Delivery needs the customer's name or phone.,Une livraison nécessite le nom ou le téléphone du client.
 Demand Premium %,Majoration demande %
 Department,Service
+Department must be one of: {0}.,Le service doit être l'un des suivants : {0}.
 Departure Flight / Train No.,N° de vol / train au départ
 Departure Mode,Mode de départ
 Departure Time,Heure de départ
@@ -652,7 +665,9 @@ Dish Name,Nom du plat
 Dishes,Plats
 Dishes Offered,Plats proposés
 Dishes and prices per outlet.,Plats et tarifs par point de vente.
+Display Mode,Mode d'affichage
 "Display mode must be Inclusive, Separate Add-on, or blank.","Le mode d'affichage doit être Inclus, Supplément séparé ou vide."
+Display mode must be one of: {0}.,Le mode d'affichage doit être l'un des suivants : {0}.
 Dispute Note,Note de litige
 Disputed,En litige
 District,Quartier / District
@@ -909,6 +924,8 @@ Guest Overage Billed,Dépassement facturé au client
 Guest Picks,Choix du client
 Guest Response,Réponse du client
 Guest Response Notes,Notes de réponse du client
+Guest alert {0} not found.,Alerte client {0} introuvable.
+Guest is blacklisted.,Le client est sur liste noire.
 Guest pays the bill (no company on this stay).,Le client règle la note (aucune société sur ce séjour).
 Guest profile {0} not found.,Profil client {0} introuvable.
 Guest {0} is blacklisted{1}. Remove the flag on the guest profile to book.,Le client {0} est sur liste noire{1}. Retirez l'indicateur sur sa fiche pour réserver.
@@ -975,7 +992,6 @@ Input Tax,Taxe déductible
 Input Tax Credit,Crédit de taxe sur intrants
 Inspect Duration (minutes),Durée d'inspection (minutes)
 Instruction,Instruction
-Instruction must be for one of: {0}.,L'instruction doit concerner l'un des éléments suivants : {0}.
 "Instruction {0} already routes some of these charges on some of these days. Only one instruction may cover a charge on a date: change its dates or charges, or disable it.","L'instruction {0} route déjà certains de ces frais sur certains de ces jours. Une seule instruction peut couvrir un frais à une date donnée : modifiez ses dates ou ses frais, ou désactivez-la."
 Instructions,Instructions
 Interested in,Intéressé par
@@ -1029,6 +1045,7 @@ KOT #,KOT n°
 KOT Fired,KOT envoyé
 KOT no,N° KOT
 KOT on send,KOT à l'envoi
+Kept in the accounting system,Tenu dans le système comptable
 Key Card Numbers,Numéros des cartes clés
 Key ID,ID de clé
 Key Secret,Secret de clé
@@ -1247,6 +1264,8 @@ Not enough rooms for these dates. {0},Pas assez de chambres pour ces dates. {0}
 "Not on the bill yet. Post it to the room, or the guest pays for it at the outlet.",Pas encore sur la note. Imputez-le à la chambre ou faites-le régler par le client au point de vente.
 "Not sent, no billing contact email: {0}","Non envoyé, aucune adresse e-mail de facturation : {0}"
 "Not sent, see the Error Log: {0}","Non envoyé, voir le journal des erreurs : {0}"
+Not verified,Non vérifié
+Not verified: {0},Non vérifié : {0}
 Note,Note
 Notes,Notes
 Notes for the Manager,Notes pour la direction
@@ -1303,6 +1322,8 @@ Only IT can change this person's access.,Seul le service informatique peut modif
 Only IT can grant or remove the IT administrator role.,Seul le service informatique peut attribuer ou retirer le rôle d'administrateur IT.
 Only a Confirmed arrival can be marked no-show (this one is {0}).,Seule une arrivée confirmée peut être marquée non-présentation (celle-ci est {0}).
 Only a Hotel Admin can book a blacklisted guest.,Seul un administrateur hôtel peut réserver pour un client sur liste noire.
+Only a Hotel Admin or Front Desk Supervisor can clear a Blocking alert.,Seul un administrateur hôtel ou un superviseur de réception peut lever une alerte bloquante.
+Only a Hotel Admin or Front Desk Supervisor can resolve a Blocking alert.,Seul un administrateur hôtel ou un superviseur de réception peut résoudre une alerte bloquante.
 Only a No Show's credit is settled here (this one is {0}).,Seul le crédit d'une non-présentation se règle ici (celle-ci est {0}).
 Only a Revenue Manager or Hotel Admin can change a group rate.,Seul un responsable des revenus ou un administrateur hôtel peut modifier un tarif de groupe.
 Only a Revenue Manager or Hotel Admin can enter a new rate.,Seul un responsable des revenus ou un administrateur hôtel peut saisir un nouveau tarif.
@@ -1336,6 +1357,7 @@ Only available while the payment gateway is in test mode.,Disponible uniquement 
 Only charges above zero can be shared.,Seuls les frais supérieurs à zéro peuvent être partagés.
 Only the property's administrators change a rate plan's category.,Seuls les administrateurs de l'établissement peuvent modifier la catégorie d'un plan tarifaire.
 Only {0} is due back to the guest - can't refund more than that.,Seul {0} est dû au client — impossible de rembourser davantage.
+Only {0} of the deposit is still held.,Il ne reste que {0} retenu sur l'acompte.
 Only {0} of this payment is left to refund.,Il ne reste que {0} à rembourser sur ce paiement.
 Open Items,Éléments ouverts
 Open a window on a stay or on a group's master bill.,Ouvrez une fenêtre sur un séjour ou sur le folio principal d'un groupe.
@@ -1350,6 +1372,8 @@ Order Type,Type de commande
 Order line not found.,Ligne de commande introuvable.
 Ordered On The Day,Commandé le jour même
 Original Invoice,Facture d'origine
+Out of Service / Order Reason,Motif hors service / hors inventaire
+Out of Service / Order Until,Hors service / hors inventaire jusqu'au
 Outbound URL,URL sortante
 Outcome,Résultat
 Outlet,Point de vente
@@ -1554,6 +1578,7 @@ Property standard is {0}. Pick the agreed time for {1}.,L'horaire standard de l'
 "Property, reservation, and room are required.","L'établissement, la réservation et la chambre sont obligatoires."
 Protect Late Arrivals,Protéger les arrivées tardives
 Provide a Transaction Code or Element Type for allowance consumption.,Indiquez un code de transaction ou un type d'élément pour consommer l'allocation.
+Provide a reservation or guest for this alert.,Indiquez une réservation ou un client pour cette alerte.
 Provide at least one rate or restriction update.,Fournissez au moins une mise à jour tarifaire ou de restriction.
 Provider,Fournisseur
 Provider Credentials,Identifiants du fournisseur
@@ -1676,9 +1701,12 @@ Requirements,Exigences
 Requires Inspection,Inspection requise
 Requires Supervisor,Superviseur requis
 Reservation,Réservation
+Reservation belongs to a different property.,La réservation appartient à un autre établissement.
 Reservation {0} not found.,Réservation {0} introuvable.
 Reserved At,Réservé à
 Resolution Note,Note de résolution
+Resolve blocking check-out alert: {0},Résoudre l'alerte bloquante de départ : {0}
+Resolved At,Résolu le
 Resolved By,Résolu par
 Resolved On,Résolu le
 Responding.,Réponse en cours.
@@ -1739,6 +1767,7 @@ Room type is required for BAR rate updates.,La catégorie de chambre est obligat
 Room type {0} does not belong to property {1}.,La catégorie de chambre {0} n'appartient pas à l'établissement {1}.
 Room type {0} does not belong to this property.,La catégorie de chambre {0} n'appartient pas à cet établissement.
 Room types and rates,Catégories de chambres et tarifs
+Room unavailable,Chambre indisponible
 Room {0},Chambre {0}
 "Room {0} belongs to {1}, not {2}.","La chambre {0} appartient à {1}, pas à {2}."
 "Room {0} cannot take charges to the room (set at check-in). Take payment at the outlet, or ask the front desk.",La chambre {0} n'accepte pas les imputations chambre (défini à l'arrivée). Encaissez au point de vente ou demandez à la réception.
@@ -1746,6 +1775,7 @@ Room {0} has multiple checked-in guests. Pick the specific reservation before po
 Room {0} has no checked-in guest. Room charges need an in-house stay - take this as a walk-in bill instead.,La chambre {0} n'a aucun client enregistré. Une imputation chambre nécessite un séjour en cours — encaissez plutôt en note de passage.
 Room {0} is Dirty: warn the guest before handing keys.,La chambre {0} est À nettoyer : prévenez le client avant de remettre les clés.
 Room {0} is already booked ({1}) for these dates.,La chambre {0} est déjà réservée ({1}) pour ces dates.
+Room {0} is currently {1} and cannot be assigned.,La chambre {0} est actuellement {1} et ne peut pas être attribuée.
 Room {0} is not a room of this property.,La chambre {0} n'est pas une chambre de cet établissement.
 Room {0} is not a {1} room here.,La chambre {0} n'est pas une chambre {1} ici.
 Room {0} is not cleaned yet. Pick a clean room or ask housekeeping first.,La chambre {0} n'est pas encore nettoyée. Choisissez une chambre propre ou sollicitez d'abord les étages.
@@ -1801,6 +1831,7 @@ Say why this went away - a cancelled or lost function needs a reason.,Indiquez p
 Schedule,Planification
 Scope,Portée
 Scope Key,Clé de périmètre
+Scope must be Reservation or Guest.,La portée doit être Réservation ou Client.
 Scopes,Portées
 Season Name,Nom de saison
 Seats (round table),Places (table ronde)
@@ -1810,6 +1841,7 @@ Security Deposit Amount,Montant de la caution
 Security deposit {0} is held ({1} refundable). Check the room; withhold damage or refund.,Caution {0} détenue ({1} remboursable). Vérifiez la chambre ; retenez pour dommages ou remboursez.
 Security deposits are not set up on this site.,Les cautions ne sont pas configurées sur ce site.
 Select a property to view its business day.,Sélectionnez un établissement pour afficher sa journée d'exploitation.
+Select a reservation or a guest for this alert.,Sélectionnez une réservation ou un client pour cette alerte.
 Select a valid Transaction Code for {0}.,Sélectionnez un code de transaction valide pour {0}.
 Select a valid Transaction Code.,Sélectionnez un code de transaction valide.
 Selected Menu,Menu sélectionné
@@ -1856,6 +1888,8 @@ Setup Style,Style de mise en place
 Setup Styles,Styles de mise en place
 Setup Wishlist,Souhaits de configuration
 Several rate plans of this room match no {product} rate plan: map them by hand.,Plusieurs plans tarifaires de cette chambre ne correspondent à aucun plan {product} : associez-les manuellement.
+Severity,Gravité
+Severity must be one of: {0}.,La gravité doit être l'une des suivantes : {0}.
 Shared payment methods cannot be changed by a property-scoped user. Create a property override instead.,Les modes de paiement partagés ne peuvent pas être modifiés par un utilisateur limité à un établissement. Créez plutôt une surcharge d'établissement.
 Shared payment methods cannot be deleted by a property-scoped user.,Les modes de paiement partagés ne peuvent pas être supprimés par un utilisateur limité à un établissement.
 Shared with property,Partagé avec l'établissement
@@ -1912,6 +1946,7 @@ Started At,Démarré à
 State,État / province
 Station,Poste
 Status,Statut
+Status Set By,Statut défini par
 Status must be Open or Done.,Le statut doit être Ouvert ou Terminé.
 "Status must be Seated, Cancelled or No Show.","Le statut doit être Installé, Annulé ou Non-présentation."
 Stay,Séjour
@@ -1926,6 +1961,7 @@ Step {0} is listed twice.,L'étape {0} est listée deux fois.
 Steps,Étapes
 "Still at the laundry ({0}). It can be billed once it is back: when the bag is at the desk, mark it ready, then post it to the room.","Encore à la blanchisserie ({0}). Facturable dès son retour : lorsque le sac arrive à la réception, marquez-le prêt puis imputez-le en chambre."
 Still due {0} before arrival (or at check-in). Tell the guest clearly.,Reste dû {0} avant l'arrivée (ou à l'enregistrement). Informez clairement le client.
+"Still open at the outlet. Settle it there before check-out: charge it to the room, take payment or void it.","Encore ouverte au point de vente. Réglez-la sur place avant le départ : imputez-la à la chambre, encaissez le paiement ou annulez-la."
 Still owed,Reste dû
 "Still pending: {0}. Return everything, or deliver with a shortage note.",Toujours en attente : {0}. Restituez tout ou livrez avec une note de manquant.
 Still to take: {0}.,Reste à encaisser : {0}.
@@ -2001,7 +2037,6 @@ That file didn't upload correctly. Please try again.,Le téléversement du fichi
 That file is no longer stored.,Ce fichier n'est plus stocké.
 That guest is not staying in this room.,Ce client ne séjourne pas dans cette chambre.
 That guest profile was not found.,Cette fiche client est introuvable.
-That instruction is not on this stay.,Cette instruction ne figure pas sur ce séjour.
 That is not a valid URL.,Cette URL n'est pas valide.
 That is the last item on the bill. Cancel the bill instead.,C'est le dernier article de la note. Annulez plutôt la note.
 That is the same stay. Use to_folio.,Il s'agit du même séjour. Utilisez to_folio.
@@ -2025,6 +2060,7 @@ That stay has no open guest folio.,Ce séjour n'a pas de folio client ouvert.
 That stay is not at this property.,Ce séjour n'appartient pas à cet établissement.
 That stay is not checked in here - a bill can only be charged to an in-house guest.,Ce séjour n'est pas enregistré ici — une note ne peut être imputée qu'à un client présent.
 That terminal is not at this property.,Ce terminal n'appartient pas à cet établissement.
+That trace is not on this stay.,Cette trace ne figure pas sur ce séjour.
 That vendor belongs to another property.,Ce fournisseur appartient à un autre établissement.
 That webhook belongs to another property.,Ce webhook appartient à un autre établissement.
 The CSV needs a header row and at least one data row.,Le fichier CSV doit comporter une ligne d'en-tête et au moins une ligne de données.
@@ -2097,6 +2133,7 @@ The group's bill must be at the same property.,La note du groupe doit appartenir
 "The guest checked in online. Review what they sent, then confirm.",Le client s'est pré-enregistré en ligne. Vérifiez les informations transmises puis confirmez.
 The guest folio is already closed.,Le folio client est déjà clôturé.
 The guest folio is closed - withhold before closing it.,Le folio client est clôturé — effectuez la retenue avant de le clôturer.
+The guest folio only has {0} in credit. Settle the bill or withhold against it before refunding the deposit.,Le folio client ne dispose que de {0} en crédit. Soldez la note ou imputez la retenue avant de rembourser la caution.
 The guest has no open folio to take these charges.,Le client n'a aucun folio ouvert pour recevoir ces frais.
 The guest is already in house. Use Room move to change rooms.,Le client est déjà enregistré. Utilisez Changement de chambre pour déplacer la chambre.
 "The guest is still in house, so their bill stays open for tonight's charges. To invoice what is paid so far, use Settle & continue stay.","Le client est encore en séjour, sa note reste donc ouverte pour les frais de ce soir. Pour facturer ce qui a déjà été payé, utilisez Régler et poursuivre le séjour."
@@ -2206,6 +2243,7 @@ This hall has no chargeable extras on it.,Cette salle n'a aucun supplément fact
 This idempotency_key was already used for another correction.,Cette idempotency_key a déjà été utilisée pour une autre correction.
 This ingredient has stock history. Deactivate it instead.,Cet ingrédient a un historique de stock. Désactivez-le plutôt.
 "This is an NC (complimentary) bill - close it with Deliver, there is nothing to collect.","Ceci est une note offerte (NC) — clôturez avec Livrer, rien n'est à encaisser."
+This is kept in the accounting system. Open {0}: {1},Cet élément est tenu dans le système comptable. Ouvrir {0} : {1}
 This key already opened another account ({0}).,Cette clé a déjà ouvert un autre compte ({0}).
 This laundry order is closed.,Cette commande de blanchisserie est clôturée.
 This line is itself a correction. Correct the reposted line instead.,Cette ligne est elle-même une correction. Corrigez plutôt la ligne recomptabilisée.
@@ -2241,7 +2279,7 @@ This stay bills to no company. Set one with change_stay_company first.,Ce séjou
 This stay is not leaving before its booked date.,Ce séjour ne part pas avant sa date réservée.
 "This stay is not part of a group, so it has no group master.",Ce séjour ne fait pas partie d'un groupe et ne dispose donc pas de folio principal.
 This stay is priced by hand; its rates are not re-quoted.,Ce séjour est tarifé manuellement ; ses tarifs ne sont pas rechiffrés.
-This stay is {0} - no new instructions.,Ce séjour est {0} — aucune nouvelle instruction.
+This stay is {0} - no new traces.,Ce séjour est {0} — aucune nouvelle trace.
 "This stay is {0}, so there is nothing to check out.","Ce séjour est {0}, il n'y a donc aucun départ à enregistrer."
 This stay is {0}; its company can't change now.,Ce séjour est {0} ; sa société ne peut plus changer.
 This step is not finished yet.,Cette étape n'est pas encore terminée.
@@ -2266,12 +2304,16 @@ To Date is before From Date.,La date de fin est antérieure à la date de début
 To Terminal,Vers terminal
 To date must be on or after from date.,La date de fin doit être égale ou postérieure à la date de début.
 "To route within the stay, route to one of its windows.","Pour router au sein du même séjour, routez vers l'une de ses fenêtres."
+ToDo,Tâche
 Token Auth Method,Méthode d'authentification du jeton
 Total,Total
 Total Cost,Coût total
 Total excl. VAT,Total HT
 Total incl. VAT,Total TTC
 Totals,Totaux
+Trace Date,Date de trace
+Trace Status,Statut de trace
+Trace Time,Heure de trace
 Transaction Code,Code de transaction
 Transaction Code {0} belongs to another property.,Le code de transaction {0} appartient à un autre établissement.
 Transaction Code {0} must be an active non-payment code.,Le code de transaction {0} doit être un code actif hors paiement.
@@ -2280,6 +2322,8 @@ Transaction code {0} has no charge type. Set one under Transaction codes.,Le cod
 Transaction code {0} is not an enabled charge code.,Le code de transaction {0} n'est pas un code de frais actif.
 Travel Agent,Agence de voyages
 Trigger,Déclencheur
+Trigger Area,Zone de déclenchement
+Trigger area must be one of: {0}.,La zone de déclenchement doit être l'une des suivantes : {0}.
 TripAdvisor URL,URL TripAdvisor
 Try again,Réessayer
 Tuesday,Mardi
@@ -2417,8 +2461,8 @@ Wish farewell and return the remaining deposit of {0}.,Saluez le client et resti
 Withheld Amount,Montant retenu
 Withholding a deposit needs a reason.,Retenir une caution nécessite un motif.
 "Workable, though under the {0}% a banquet normally holds.","Réalisable, bien qu'inférieur aux {0}% habituellement attendus sur un banquet."
-Write the instruction.,Saisissez l'instruction.
 Write the note first.,Saisissez d'abord la note.
+Write the trace instruction.,Saisissez la consigne de trace.
 Wrong payment mode pressed,Mauvais mode de paiement saisi
 You are not assigned to this POS profile.,Vous n'êtes pas affecté à ce profil PDV.
 You asked for this allowance; another manager approves it.,Vous avez demandé ce dégrèvement ; un autre responsable doit l'approuver.
@@ -2499,6 +2543,7 @@ this bill,cette note
 "{0} answered {1}, not the app manifest.","{0} a répondu {1}, et non le manifeste de l'application."
 {0} belongs to another property.,{0} appartient à un autre établissement.
 {0} bill(s) for this stay are not on the guest's bill yet: {1}. Post them to the room or settle them before check-out.,{0} note(s) de ce séjour ne figurent pas encore sur la note du client : {1}. Imputez-les en chambre ou réglez-les avant le départ.
+{0} bill(s) for this stay are still open at the outlet: {1}. Settle them at the outlet before check-out.,{0} note(s) de ce séjour sont encore ouvertes au point de vente : {1}. Réglez-les au point de vente avant le départ.
 {0} booking. The guest pays the hotel.,Réservation {0}. Le client règle à l'hôtel.
 "{0} can move to the city ledger (company has credit). Confirm, then check out.",{0} peut passer sur le compte société (la société dispose d'un crédit). Confirmez puis enregistrez le départ.
 {0} can't approve allowances here. It needs: {1}.,{0} ne peut pas approuver de dégrèvements ici. Requis : {1}.
@@ -2609,11 +2654,3 @@ this bill,cette note
 {0}{1} overdue by more than {2} days (oldest due {3}).,{0}{1} en retard de plus de {2} jours (plus ancienne échéance {3}).
 "{product} can't read this ID's code. Type the details in, and take a picture of the ID.",{product} ne peut pas lire le code de cette pièce d'identité. Saisissez les informations et photographiez la pièce.
 {product} is temporarily unavailable. Contact your system administrator.,{product} est temporairement indisponible. Contactez votre administrateur système.
-Kept in the accounting system,Tenu dans le système comptable
-Not verified,Non vérifié
-Not verified: {0},Non vérifié : {0}
-Only {0} of the deposit is still held.,Il ne reste que {0} retenu sur l'acompte.
-"Still open at the outlet. Settle it there before check-out: charge it to the room, take payment or void it.","Encore ouverte au point de vente. Réglez-la sur place avant le départ : imputez-la à la chambre, encaissez le paiement ou annulez-la."
-The guest folio only has {0} in credit. Settle the bill or withhold against it before refunding the deposit.,Le folio client ne dispose que de {0} en crédit. Soldez la note ou imputez la retenue avant de rembourser la caution.
-This is kept in the accounting system. Open {0}: {1},Cet élément est tenu dans le système comptable. Ouvrir {0} : {1}
-{0} bill(s) for this stay are still open at the outlet: {1}. Settle them at the outlet before check-out.,{0} note(s) de ce séjour sont encore ouvertes au point de vente : {1}. Réglez-les au point de vente avant le départ.
