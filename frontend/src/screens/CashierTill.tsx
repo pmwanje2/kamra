@@ -20,15 +20,8 @@ import {
   CardHeader,
   CardTitle,
 } from "../components/ui/card"
-import { moneyLocale, useLocale } from "../lib/money"
+import { fmtAmount, moneyDigits, useLocale } from "../lib/money"
 import { useT, t as translate } from "../lib/i18n"
-
-
-const inr = (n: unknown) =>
-  Number(n ?? 0).toLocaleString(moneyLocale(), { maximumFractionDigits: 0 })
-
-const fmtFx = (n: unknown) =>
-  Number(n ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 type ForeignDrawer = {
   currency: string
@@ -98,8 +91,9 @@ export default function CashierTill() {
   // optional count by note and coin: denomination -> count
   const [notes, setNotes] = useState<Record<string, string>>({})
   const counts = Object.entries(notes).filter(([, n]) => Number(n) > 0)
+  const noteFactor = 10 ** moneyDigits()
   const noteTotal = counts.length
-    ? Math.round(counts.reduce((sum, [v, n]) => sum + Number(v) * Number(n), 0) * 100) / 100
+    ? Math.round(counts.reduce((sum, [v, n]) => sum + Number(v) * Number(n), 0) * noteFactor) / noteFactor
     : null
   const drawer = noteTotal !== null ? String(noteTotal) : counted
   const [paidOutAmt, setPaidOutAmt] = useState("")
@@ -366,7 +360,7 @@ export default function CashierTill() {
               />
             </label>
             <Button disabled={busy} onClick={open}>
-              <Unlock className="mr-1.5 size-4" />
+              <Unlock className="me-1.5 size-4" />
               {t("Open session")}
             </Button>
           </CardContent>
@@ -395,7 +389,7 @@ export default function CashierTill() {
                   {translate(label)}
                 </p>
                 <p className="mt-0.5 text-lg font-semibold tabular-nums text-zinc-900">
-                  {inr(val)}
+                  {fmtAmount(val)}
                 </p>
               </div>
             ))}
@@ -486,7 +480,7 @@ export default function CashierTill() {
                 <label className="block text-sm">
                   <span className="mb-1 block text-zinc-600">
                     {t("Counted cash (expected {amount})", {
-                      amount: inr(session?.expected_cash),
+                      amount: fmtAmount(session?.expected_cash),
                     })}
                   </span>
                   <input
@@ -505,7 +499,7 @@ export default function CashierTill() {
                     <div className="mt-2 grid grid-cols-2 gap-2">
                       {session.denominations.map((d) => (
                         <label key={d} className="flex items-center gap-2">
-                          <span className="w-16 text-right tabular-nums text-zinc-600">{d}</span>
+                          <span className="w-16 text-end tabular-nums text-zinc-600">{d}</span>
                           <span className="text-zinc-400">×</span>
                           <input
                             className="w-full rounded-md border border-zinc-300 px-2 py-1 text-sm"
@@ -524,7 +518,7 @@ export default function CashierTill() {
                   <p className="text-sm text-zinc-600">
                     {t("Variance")}:{" "}
                     <span className="font-semibold tabular-nums">
-                      {inr(Number(drawer) - Number(session?.expected_cash || 0))}
+                      {fmtAmount(Number(drawer) - Number(session?.expected_cash || 0))}
                     </span>
                   </p>
                 ) : null}
@@ -536,27 +530,28 @@ export default function CashierTill() {
                     {foreignDrawers.map((fd) => {
                       const typed = foreignCounts[fd.currency] ?? ""
                       const fxVar = typed !== "" ? Number(typed) - Number(fd.expected_fx || 0) : null
+                      const fxEps = 0.5 * 10 ** -moneyDigits(fd.currency)
                       return (
                         <label key={fd.currency} className="block text-sm">
                           <span className="mb-1 flex items-center justify-between gap-2 text-xs text-zinc-600">
                             <span>{t("Counted {currency}", { currency: fd.currency })}</span>
                             <span className="tabular-nums text-zinc-400">
-                              {t("Expected (FX)")}: {fd.currency} {fmtFx(fd.expected_fx)}
+                              {t("Expected (FX)")}: {fd.currency} {fmtAmount(fd.expected_fx, fd.currency)}
                             </span>
                           </span>
                           <input
                             aria-label={t("Counted {currency}", { currency: fd.currency })}
                             className="w-full rounded-lg border border-zinc-300 px-3 py-1.5 text-sm tabular-nums"
                             inputMode="decimal"
-                            placeholder={fmtFx(fd.expected_fx)}
+                            placeholder={fmtAmount(fd.expected_fx, fd.currency)}
                             value={typed}
                             onChange={(e) =>
                               setForeignCounts({ ...foreignCounts, [fd.currency]: e.target.value })
                             }
                           />
                           {fxVar !== null ? (
-                            <span className={"mt-0.5 block text-xs tabular-nums " + (Math.abs(fxVar) > 0.004 ? "text-rose-600" : "text-zinc-500")}>
-                              {t("Variance")}: {fd.currency} {fmtFx(fxVar)}
+                            <span className={"mt-0.5 block text-xs tabular-nums " + (Math.abs(fxVar) >= fxEps ? "text-rose-600" : "text-zinc-500")}>
+                              {t("Variance")}: {fd.currency} {fmtAmount(fxVar, fd.currency)}
                             </span>
                           ) : null}
                         </label>
@@ -584,24 +579,24 @@ export default function CashierTill() {
                 </p>
               </CardHeader>
               <CardContent className="overflow-x-auto pt-0">
-                <table className="min-w-[480px] w-full text-left text-sm">
+                <table className="min-w-[480px] w-full text-start text-sm">
                   <thead className="text-xs uppercase tracking-wide text-zinc-400">
                     <tr>
-                      <th className="py-2 pr-3">{t("Currency")}</th>
-                      <th className="py-2 pr-3 text-right">{t("Receipts (FX)")}</th>
-                      <th className="py-2 pr-3 text-right">{t("Refunds (FX)")}</th>
-                      <th className="py-2 pr-3 text-right">{t("Expected (FX)")}</th>
-                      <th className="py-2 text-right">{t("Home equivalent")}</th>
+                      <th className="py-2 pe-3">{t("Currency")}</th>
+                      <th className="py-2 pe-3 text-end">{t("Receipts (FX)")}</th>
+                      <th className="py-2 pe-3 text-end">{t("Refunds (FX)")}</th>
+                      <th className="py-2 pe-3 text-end">{t("Expected (FX)")}</th>
+                      <th className="py-2 text-end">{t("Home equivalent")}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {foreignDrawers.map((fd) => (
                       <tr key={fd.currency} className="border-t border-zinc-100">
-                        <td className="py-2 pr-3 font-medium text-zinc-800">{fd.currency}</td>
-                        <td className="py-2 pr-3 text-right tabular-nums">{fmtFx(fd.receipts_fx)}</td>
-                        <td className="py-2 pr-3 text-right tabular-nums">{fmtFx(fd.refunds_fx)}</td>
-                        <td className="py-2 pr-3 text-right font-semibold tabular-nums">{fmtFx(fd.expected_fx)}</td>
-                        <td className="py-2 text-right tabular-nums text-zinc-600">{inr(fd.home_equivalent)}</td>
+                        <td className="py-2 pe-3 font-medium text-zinc-800">{fd.currency}</td>
+                        <td className="py-2 pe-3 text-end tabular-nums">{fmtAmount(fd.receipts_fx, fd.currency)}</td>
+                        <td className="py-2 pe-3 text-end tabular-nums">{fmtAmount(fd.refunds_fx, fd.currency)}</td>
+                        <td className="py-2 pe-3 text-end font-semibold tabular-nums">{fmtAmount(fd.expected_fx, fd.currency)}</td>
+                        <td className="py-2 text-end tabular-nums text-zinc-600">{fmtAmount(fd.home_equivalent)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -619,30 +614,30 @@ export default function CashierTill() {
             </CardHeader>
             <CardContent className="overflow-x-auto pt-0">
               {txns.length ? (
-                <table className="min-w-[520px] w-full text-left text-sm">
+                <table className="min-w-[520px] w-full text-start text-sm">
                   <thead className="text-xs uppercase tracking-wide text-zinc-400">
                     <tr>
-                      <th className="py-2 pr-3">{t("Kind")}</th>
-                      <th className="py-2 pr-3">{t("Mode")}</th>
-                      <th className="py-2 pr-3">{t("Amount")}</th>
-                      <th className="py-2 pr-3">{t("Ref")}</th>
+                      <th className="py-2 pe-3">{t("Kind")}</th>
+                      <th className="py-2 pe-3">{t("Mode")}</th>
+                      <th className="py-2 pe-3">{t("Amount")}</th>
+                      <th className="py-2 pe-3">{t("Ref")}</th>
                       <th className="py-2">{t("When")}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {txns.map((tx) => (
                       <tr key={tx.name} className="border-t border-zinc-100">
-                        <td className="whitespace-nowrap py-2 pr-3">{translate(tx.kind)}</td>
-                        <td className="whitespace-nowrap py-2 pr-3">{translate(tx.mode)}</td>
-                        <td className="whitespace-nowrap py-2 pr-3 tabular-nums">
-                          {inr(tx.amount)}
+                        <td className="whitespace-nowrap py-2 pe-3">{translate(tx.kind)}</td>
+                        <td className="whitespace-nowrap py-2 pe-3">{translate(tx.mode)}</td>
+                        <td className="whitespace-nowrap py-2 pe-3 tabular-nums">
+                          {fmtAmount(tx.amount)}
                           {tx.fx_amount && tx.currency ? (
-                            <span className="ml-1.5 rounded bg-sky-50 px-1.5 py-0.5 text-xs text-sky-700">
-                              {tx.currency} {fmtFx(tx.fx_amount)}
+                            <span className="ms-1.5 rounded bg-sky-50 px-1.5 py-0.5 text-xs text-sky-700">
+                              {tx.currency} {fmtAmount(tx.fx_amount, tx.currency)}
                             </span>
                           ) : null}
                         </td>
-                        <td className="max-w-xs truncate py-2 pr-3 text-zinc-500">
+                        <td className="max-w-xs truncate py-2 pe-3 text-zinc-500">
                           {tx.reference || tx.folio || tx.pos_order || "-"}
                         </td>
                         <td className="whitespace-nowrap py-2 text-zinc-500">

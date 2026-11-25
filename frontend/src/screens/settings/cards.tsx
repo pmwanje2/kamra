@@ -225,6 +225,10 @@ export const LOCALES = [
   "en-AE",
   "en-PH",
   "en-SA",
+  "fr-FR",
+  "fr-CA",
+  "fr-CH",
+  "fr-BE",
   "de-DE",
   "es-NI",
   "es-ES",
@@ -233,6 +237,8 @@ export const LOCALES = [
   "ms-MY",
   "th-TH",
   "ar-SA",
+  "ar-AE",
+  "ar-EG",
   "zh-CN",
 ]
 
@@ -395,8 +401,8 @@ function GatewayHelp({ property, gateway, hasKeys }: {
   )
 }
 
-/** Kamra Verify (GSTIN lookup, reading a guest's ID) runs on the Kamra
- *  Connect hub and is charged to its wallet - this links the install. */
+/** ID verification partner (tax ID lookup, reading a guest's ID) runs on the
+ *  verification hub and is charged to its wallet - this links the install. */
 export function KamraVerifyCard() {
   const { t } = useT()
   const [linked, setLinked] = useState<boolean | null>(null)
@@ -1052,9 +1058,9 @@ export function LaundryRatesCard({ property }: { property: string }) {
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-xs uppercase tracking-wide text-zinc-400">
+              <tr className="text-start text-xs uppercase tracking-wide text-zinc-400">
                 <th className="py-1.5">{translateUI("Item")}</th><th>{translateUI("Service")}</th>
-                <th className="text-right">{translateUI("Rate")}</th><th className="text-right">{translateUI("Express")}</th><th />
+                <th className="text-end">{translateUI("Rate")}</th><th className="text-end">{translateUI("Express")}</th><th />
               </tr>
             </thead>
             <tbody>
@@ -1062,12 +1068,12 @@ export function LaundryRatesCard({ property }: { property: string }) {
                 <tr key={r.name} className="border-t border-zinc-100">
                   <td className="py-1.5 font-medium">{r.item_name}</td>
                   <td className="text-zinc-500">{translateUI(r.service_type)}</td>
-                  <td className="text-right tabular-nums">{cur()}{r.rate.toLocaleString(moneyLocale())}</td>
-                  <td className="text-right tabular-nums text-zinc-500">{cur()}{r.express_rate.toLocaleString(moneyLocale())}</td>
-                  <td className="text-right">
+                  <td className="text-end tabular-nums">{cur()}{r.rate.toLocaleString(moneyLocale())}</td>
+                  <td className="text-end tabular-nums text-zinc-500">{cur()}{r.express_rate.toLocaleString(moneyLocale())}</td>
+                  <td className="text-end">
                     <button className="text-xs font-medium text-brand-700 hover:underline"
                       onClick={() => setForm({ name: r.name, item: r.item_name, service: r.service_type, rate: String(r.rate), express: "" })}>{translateUI("Edit")}</button>
-                    <button className="ml-2 text-xs text-zinc-400 hover:text-rose-600"
+                    <button className="ms-2 text-xs text-zinc-400 hover:text-rose-600"
                       onClick={async () => { await call("kamra.laundry.delete_laundry_rate", { name: r.name }); load() }}>{translateUI("Delete")}</button>
                   </td>
                 </tr>
@@ -1189,11 +1195,11 @@ export function HurdleRatesCard({ property }: { property: string }) {
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-xs uppercase tracking-wide text-zinc-400">
+              <tr className="text-start text-xs uppercase tracking-wide text-zinc-400">
                 <th className="py-1.5">{translateUI("When occupancy ≥")}</th>
                 <th>{translateUI("Room type")}</th>
-                <th className="text-right">{translateUI("Premium")}</th>
-                <th className="text-right">{translateUI("Hurdle (min rate)")}</th><th />
+                <th className="text-end">{translateUI("Premium")}</th>
+                <th className="text-end">{translateUI("Hurdle (min rate)")}</th><th />
               </tr>
             </thead>
             <tbody>
@@ -1201,12 +1207,12 @@ export function HurdleRatesCard({ property }: { property: string }) {
                 <tr key={t.name} className="border-t border-zinc-100">
                   <td className="py-1.5 font-medium">{t.occupancy_from}%</td>
                   <td className="text-zinc-600">{t.room_type ? (t.room_type_name || t.room_type) : <span className="text-zinc-400">{translateUI("All")}</span>}</td>
-                  <td className="text-right tabular-nums">{t.premium_pct ? `+${t.premium_pct}%` : "-"}</td>
-                  <td className="text-right tabular-nums">{t.min_rate ? `${cur()}${t.min_rate.toLocaleString(moneyLocale())}` : "-"}</td>
-                  <td className="text-right">
+                  <td className="text-end tabular-nums">{t.premium_pct ? `+${t.premium_pct}%` : "-"}</td>
+                  <td className="text-end tabular-nums">{t.min_rate ? `${cur()}${t.min_rate.toLocaleString(moneyLocale())}` : "-"}</td>
+                  <td className="text-end">
                     <button className="text-xs font-medium text-brand-700 hover:underline"
                       onClick={() => setForm({ name: t.name, from: String(t.occupancy_from), premium: String(t.premium_pct || ""), min: String(t.min_rate || ""), room_type: t.room_type || "" })}>{translateUI("Edit")}</button>
-                    <button className="ml-2 text-xs text-zinc-400 hover:text-rose-600"
+                    <button className="ms-2 text-xs text-zinc-400 hover:text-rose-600"
                       onClick={async () => { await call("kamra.api.delete_hurdle_rate", { name: t.name }); load() }}>{translateUI("Delete")}</button>
                   </td>
                 </tr>
@@ -1718,12 +1724,12 @@ export function CashierLimitsCard({ property }: { property: string }) {
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-zinc-200 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
-                <th className="py-2 pr-3">{t("Cashier")}</th>
-                <th className="py-2 pr-3">{t("User")}</th>
-                <th className="py-2 pr-3">{t("Cash refund limit")}</th>
-                <th className="py-2 pr-3">{t("Allowed modes")}</th>
-                <th className="py-2 pr-3">{t("Disabled")}</th>
+              <tr className="border-b border-zinc-200 text-start text-xs font-medium uppercase tracking-wider text-zinc-500">
+                <th className="py-2 pe-3">{t("Cashier")}</th>
+                <th className="py-2 pe-3">{t("User")}</th>
+                <th className="py-2 pe-3">{t("Cash refund limit")}</th>
+                <th className="py-2 pe-3">{t("Allowed modes")}</th>
+                <th className="py-2 pe-3">{t("Disabled")}</th>
                 <th className="py-2" />
               </tr>
             </thead>
@@ -1734,9 +1740,9 @@ export function CashierLimitsCard({ property }: { property: string }) {
                 const cid = String(row.cashier_id || row.name)
                 return (
                   <tr key={row.name}>
-                    <td className="py-2.5 pr-2 font-medium whitespace-nowrap text-zinc-800">{cid}</td>
-                    <td className="max-w-36 truncate py-2.5 pr-2 text-zinc-600" title={row.user || undefined}>{row.user || "-"}</td>
-                    <td className="py-2.5 pr-2">
+                    <td className="py-2.5 pe-2 font-medium whitespace-nowrap text-zinc-800">{cid}</td>
+                    <td className="max-w-36 truncate py-2.5 pe-2 text-zinc-600" title={row.user || undefined}>{row.user || "-"}</td>
+                    <td className="py-2.5 pe-2">
                       <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
                         <input
                           type="number"
@@ -1755,7 +1761,7 @@ export function CashierLimitsCard({ property }: { property: string }) {
                         {cur() && <span className="shrink-0 text-xs text-zinc-500">{cur()}</span>}
                       </span>
                     </td>
-                    <td className="py-2.5 pr-2">
+                    <td className="py-2.5 pe-2">
                       <input
                         type="text"
                         aria-label={t("Allowed modes for {id}", { id: cid })}
@@ -1770,7 +1776,7 @@ export function CashierLimitsCard({ property }: { property: string }) {
                         }
                       />
                     </td>
-                    <td className="py-2.5 pr-2">
+                    <td className="py-2.5 pe-2">
                       <input
                         type="checkbox"
                         aria-label={t("Disable {id}", { id: cid })}
@@ -1784,7 +1790,7 @@ export function CashierLimitsCard({ property }: { property: string }) {
                         }
                       />
                     </td>
-                    <td className="py-2.5 text-right whitespace-nowrap">
+                    <td className="py-2.5 text-end whitespace-nowrap">
                       <Button
                         variant="outline"
                         disabled={saving === row.name}
@@ -1794,7 +1800,7 @@ export function CashierLimitsCard({ property }: { property: string }) {
                       </Button>
                       {st && (
                         <span
-                          className={`ml-2 text-xs ${st.ok ? "text-emerald-600" : "text-rose-600"}`}
+                          className={`ms-2 text-xs ${st.ok ? "text-emerald-600" : "text-rose-600"}`}
                         >
                           {translateUI(st.text)}
                         </span>

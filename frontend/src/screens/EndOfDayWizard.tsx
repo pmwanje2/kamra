@@ -8,7 +8,7 @@
     reopening keeps them. */
 
 import { whiteLabel } from "../lib/brand"
-import { useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import {
   ArrowLeft,
   CheckCircle2,
@@ -19,7 +19,7 @@ import {
   TriangleAlert,
 } from "lucide-react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
-import { call } from "../lib/api"
+import { call, getCurrentProperty, setCurrentProperty } from "../lib/api"
 import CheckOutDialog from "../components/CheckOutDialog"
 import CheckInDialog from "../components/CheckInDialog"
 import NoShowDialog from "../components/NoShowDialog"
@@ -40,7 +40,7 @@ import AppLink from "../components/AppLink"
 import { Badge } from "../components/ui/badge"
 import { Button } from "../components/ui/button"
 import { Card } from "../components/ui/card"
-import { fmtAmount, moneyEps, useLocale } from "../lib/money"
+import { fmtAmount, loadLocale, moneyEps, useLocale } from "../lib/money"
 import { useT, t as translate } from "../lib/i18n"
 import { cn } from "../lib/utils"
 import { AuditPackView, PackMoney, sessionCols, DataTable, fmtDay } from "./AuditPack"
@@ -48,6 +48,8 @@ import { AuditPackView, PackMoney, sessionCols, DataTable, fmtDay } from "./Audi
 
 const money = (n: unknown, currency?: string) =>
   n === null || n === undefined || n === "" ? "-" : fmtAmount(n, currency)
+
+const zeroBalanceEps = (currency?: string) => Math.min(moneyEps(currency), 0.005)
 
 interface Column {
   key: string
@@ -63,14 +65,17 @@ function StepTable({
   rows,
   actions,
   empty,
+  currency: propCurrency,
 }: {
   cols: Column[]
   rows: CheckItem[]
   actions?: (row: CheckItem) => ReactNode
   empty?: string
+  currency?: string
 }) {
   const { t } = useT()
-  const { currency } = useContext(PackMoney)
+  const { currency: ctxCurrency } = useContext(PackMoney)
+  const currency = propCurrency ?? ctxCurrency
   const [q, setQ] = useState("")
   const [sort, setSort] = useState<{ key: string; dir: 1 | -1 } | null>(null)
   const shown = useMemo(() => {
@@ -99,19 +104,49 @@ function StepTable({
   const right = (c: Column) => (c.kind === "money" || c.kind === "num" ? "text-end tabular-nums" : "")
   return (
     <div className="rounded-lg border border-zinc-200">
-      <div className="flex items-center justify-between gap-2 border-b border-zinc-100 px-3 py-2">
-        <label className="relative">
-          <Search className="pointer-events-none absolute start-2 top-2 size-4 text-zinc-400" aria-hidden />
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-100 px-3 py-2">
+        <label className="relative min-w-0 flex-1 sm:flex-none">
+          <Search className="pointer-events-none absolute start-2.5 top-3.5 size-4 text-zinc-400 sm:top-2.5" aria-hidden />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder={t("Search")}
-            className="w-56 rounded-lg border border-zinc-300 bg-white py-1.5 ps-8 pe-2 text-sm"
+            className="min-h-11 w-full rounded-lg border border-zinc-300 bg-white py-1.5 ps-8 pe-2 text-sm sm:min-h-9 sm:w-56"
           />
         </label>
         <span className="text-xs text-zinc-400">{t("{n} of {m}", { n: shown.length, m: rows.length })}</span>
       </div>
-      <div className="overflow-x-auto">
+      <div data-testid="eod-mobile-cards" className="divide-y divide-zinc-100 md:hidden">
+        {shown.length === 0 ? (
+          <div className="px-3 py-5 text-center text-sm text-zinc-400">
+            {t(empty ?? "Nothing here.")}
+          </div>
+        ) : (
+          shown.map((r, i) => (
+            <div
+              key={`card-${String(r.order ?? r.session ?? r.folio ?? r.reservation ?? r.room_id ?? r.account ?? "")}-${i}`}
+              className="space-y-2.5 p-3"
+            >
+              <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                {cols.map((c) => (
+                  <div key={c.key} className="min-w-0">
+                    <dt className="text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+                      {t(c.label)}
+                    </dt>
+                    <dd className="mt-0.5 min-w-0 break-words text-zinc-800">{cell(c, r)}</dd>
+                  </div>
+                ))}
+              </dl>
+              {actions && (
+                <div className="border-t border-zinc-100 pt-2">
+                  {actions(r)}
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+      <div data-testid="eod-desktop-table" className="hidden overflow-x-auto md:block">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-zinc-200 text-[11px] font-medium uppercase tracking-wider text-zinc-500">
@@ -302,7 +337,7 @@ function FixHelp({ check, date }: { check: Check; date: string }) {
       {!whiteLabel() && <div className="mt-3 flex flex-wrap items-center gap-2">
         <Button
           variant="outline"
-          className="h-8 px-3 text-xs"
+          className="min-h-11 px-3 text-xs md:min-h-8"
           onClick={() => navigate("/assistant", { state: { prompt: translate(fix.ask(check.count, date)), property } })}
         >
           <Sparkles className="me-1.5 size-3.5" aria-hidden />
@@ -365,10 +400,11 @@ function CheckBlock({
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder={t("Reason")}
-              className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+              className="min-h-11 min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm md:min-h-9"
             />
             <Button
               variant="outline"
+              className="min-h-11 md:min-h-9"
               disabled={busy || reason.trim().length < 3}
               onClick={async () => {
                 setBusy(true)
@@ -406,11 +442,24 @@ const SEVERITY_ORDER: Record<string, number> = { block: 0, warn: 1, info: 2 }
 const cash = (v?: string) => (v && v.trim() ? Number(v.trim().replace(/\s/g, "").replace(",", ".")) : NaN)
 
 export default function EndOfDayWizard() {
-  const loc = useLocale()
   const { t } = useT()
   const navigate = useNavigate()
   const { property: rawProperty = "" } = useParams()
   const property = decodeURIComponent(rawProperty)
+  const syncedPropRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!property) return
+    const changed = getCurrentProperty() !== property
+    if (changed) {
+      setCurrentProperty(property)
+      window.dispatchEvent(new CustomEvent("kamra:property", { detail: property }))
+    }
+    if (syncedPropRef.current !== null && changed) {
+      void loadLocale()
+    }
+    syncedPropRef.current = property
+  }, [property])
+  const loc = useLocale()
   const [params, setParams] = useSearchParams()
   const audit = params.get("audit")
   const { withPin } = useCashierAuth()
@@ -498,7 +547,7 @@ export default function EndOfDayWizard() {
   const fyi = state.checks.filter((c) => c.count > 0 && (c.severity === "info" || acked.has(c.key)))
   const ahead = state.business_date > state.server_date
   const canClose = !state.ran && !ahead && !state.stuck_date && blockers.length === 0
-  const wizardCurrency = state.currency || undefined
+  const wizardCurrency = state.currency || loc.currency || undefined
   const wizardSymbol =
     state.currency_symbol !== undefined
       ? state.currency_symbol
@@ -514,6 +563,7 @@ export default function EndOfDayWizard() {
       case "arrivals_pending":
         return (
           <StepTable
+            currency={wizardCurrency}
             cols={[
               ...arrivalCols(wizardCurrency),
               { key: "eta", label: "ETA" },
@@ -532,12 +582,12 @@ export default function EndOfDayWizard() {
             empty={translate("Every arrival is checked in.")}
             actions={(r) =>
               state.ran ? null : (
-                <div className="flex flex-col items-stretch gap-1">
-                  <Button variant="outline" className="h-7 px-2 text-xs"
+                <div className="flex flex-col items-stretch gap-1.5 md:gap-1">
+                  <Button variant="outline" className="min-h-11 px-3 text-xs md:min-h-7 md:px-2"
                     onClick={() => setCheckingIn(String(r.reservation))}>
                     {t("Check in")}
                   </Button>
-                  <Button variant="ghost" className="h-7 px-2 text-xs text-rose-700" disabled={!!busy}
+                  <Button variant="ghost" className="min-h-11 px-3 text-xs text-rose-700 md:min-h-7 md:px-2" disabled={!!busy}
                     onClick={() => setMarkingNoShow(String(r.reservation))}>
                     {t("Mark no-show")}
                   </Button>
@@ -547,13 +597,12 @@ export default function EndOfDayWizard() {
           />
         )
       case "departures_due": {
-        const wizEps = Math.min(moneyEps(wizardCurrency), 0.005)
-        const zero = items.filter((r) => Math.abs(Number(r.balance ?? 0)) <= wizEps)
+        const zero = items.filter((r) => Math.abs(Number(r.balance ?? 0)) <= zeroBalanceEps(wizardCurrency))
         return (
           <>
             {!state.ran && zero.length > 0 && (
               <div className="flex justify-end">
-                <Button variant="outline" disabled={!!busy}
+                <Button variant="outline" className="min-h-11 md:min-h-9" disabled={!!busy}
                   onClick={() =>
                     act("bulk", () =>
                       withPin(async (pin) => {
@@ -567,17 +616,18 @@ export default function EndOfDayWizard() {
               </div>
             )}
             <StepTable
+              currency={wizardCurrency}
               cols={STAY_COLS}
               rows={items}
               empty={translate("Every departure is checked out.")}
               actions={(r) =>
                 state.ran ? null : (
-                  <div className="flex justify-end gap-1">
-                    <Button variant="outline" className="h-7 px-2 text-xs" disabled={!!busy}
+                  <div className="flex flex-wrap justify-end gap-1.5 md:gap-1">
+                    <Button variant="outline" className="min-h-11 px-3 text-xs md:min-h-7 md:px-2" disabled={!!busy}
                       onClick={() => setCheckingOut(String(r.reservation))}>
                       {t("Check out")}
                     </Button>
-                    <Button variant="ghost" className="h-7 px-2 text-xs"
+                    <Button variant="ghost" className="min-h-11 px-3 text-xs md:min-h-7 md:px-2"
                       onClick={() => navigate(`/reservations?q=${encodeURIComponent(String(r.reservation))}`)}>
                       {t("Extend stay")}
                     </Button>
@@ -594,16 +644,17 @@ export default function EndOfDayWizard() {
             {c.enabled && (
               <p className="text-xs text-zinc-500">{t("Threshold {cur}{n}", { cur: wizardSymbol, n: wizardMoney(c.threshold) })}</p>
             )}
-            <StepTable cols={FOLIO_COLS} rows={items} empty={translate("No in-house folio is over the threshold.")} />
+            <StepTable currency={wizardCurrency} cols={FOLIO_COLS} rows={items} empty={translate("No in-house folio is over the threshold.")} />
           </>
         )
       case "departed_balances":
-        return <StepTable cols={FOLIO_COLS} rows={items} empty={translate("No balances on departed stays.")} />
+        return <StepTable currency={wizardCurrency} cols={FOLIO_COLS} rows={items} empty={translate("No balances on departed stays.")} />
       case "credit_limit":
         return c.unverified ? (
           <Message tone="warn">{t("Not verified")} — {t(c.action)}</Message>
         ) : (
           <StepTable
+            currency={wizardCurrency}
             cols={[
               { key: "company", label: "Company" },
               { key: "credit_limit", label: "Credit limit", kind: "money" },
@@ -621,6 +672,7 @@ export default function EndOfDayWizard() {
           <Message tone="warn">{t("Not verified")} — {t(c.action)}</Message>
         ) : (
           <StepTable
+            currency={wizardCurrency}
             cols={[
               { key: "company", label: "Company" },
               { key: "credit_days", label: "Terms (days)" },
@@ -636,7 +688,7 @@ export default function EndOfDayWizard() {
           />
         )
       case "open_pos_bills":
-        return <StepTable cols={POS_COLS} rows={items} empty={translate("Every outlet bill is settled.")} />
+        return <StepTable currency={wizardCurrency} cols={POS_COLS} rows={items} empty={translate("Every outlet bill is settled.")} />
       case "pos_room_postings":
         return (
           <>
@@ -644,6 +696,7 @@ export default function EndOfDayWizard() {
               <Message tone="warn">{t("{n} bill(s) were taken for a different room than the folio they posted to.", { n: c.mismatches! })}</Message>
             )}
             <StepTable
+              currency={wizardCurrency}
               cols={[
                 ...POSTING_COLS,
                 {
@@ -660,6 +713,7 @@ export default function EndOfDayWizard() {
       case "rate_variance":
         return (
           <StepTable
+            currency={wizardCurrency}
             cols={[
               { key: "room", label: "Room" },
               { key: "guest_name", label: "Guest" },
@@ -675,7 +729,7 @@ export default function EndOfDayWizard() {
           />
         )
       case "zero_rate":
-        return <StepTable cols={STAY_COLS} rows={items} empty={translate("No zero-rate rooms tonight.")} />
+        return <StepTable currency={wizardCurrency} cols={STAY_COLS} rows={items} empty={translate("No zero-rate rooms tonight.")} />
       case "room_status":
         return (
           <StepTable
@@ -708,6 +762,7 @@ export default function EndOfDayWizard() {
         const blind = !!state.blind_count
         return (
           <StepTable
+            currency={wizardCurrency}
             cols={[
               { key: "cashier_id", label: "Cashier", render: (r) => String(r.cashier_id || r.user_name || r.user) },
               { key: "business_date", label: "Business date", kind: "date" },
@@ -720,16 +775,16 @@ export default function EndOfDayWizard() {
             empty={translate("Every till is closed.")}
             actions={(r) =>
               state.ran ? null : (
-                <div className="flex items-center justify-end gap-1">
+                <div className="flex flex-wrap items-center justify-end gap-1.5 md:gap-1">
                   <input
                     inputMode="decimal"
                     aria-label={t("Counted cash")}
                     placeholder={t("Counted cash")}
                     value={counted[String(r.session)] ?? ""}
                     onChange={(e) => setCounted((m) => ({ ...m, [String(r.session)]: e.target.value }))}
-                    className="h-7 w-28 rounded-md border border-zinc-300 px-2 text-xs"
+                    className="min-h-11 w-full rounded-md border border-zinc-300 px-2 text-xs md:min-h-7 md:w-28"
                   />
-                  <Button variant="outline" className="h-7 px-2 text-xs"
+                  <Button variant="outline" className="min-h-11 px-3 text-xs md:min-h-7 md:px-2"
                     disabled={!!busy || !Number.isFinite(cash(counted[String(r.session)]))}
                     onClick={() =>
                       act("close", () =>
@@ -813,8 +868,8 @@ export default function EndOfDayWizard() {
 
       <div className="flex flex-wrap items-end justify-between gap-3 print:hidden">
         <div>
-          <Link to="/end-of-day" className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-800">
-            <ArrowLeft className="size-3.5" aria-hidden />
+          <Link to="/end-of-day" className="inline-flex min-h-11 items-center gap-1 text-xs text-zinc-500 hover:text-zinc-800 md:min-h-0">
+            <ArrowLeft className="size-3.5 rtl:rotate-180" aria-hidden />
             {t("Night Audit")}
           </Link>
           <h1 className="text-xl font-semibold text-zinc-900">
@@ -845,7 +900,7 @@ export default function EndOfDayWizard() {
             )}
           </Badge>
           {!state.ran && (
-            <Button disabled={!!busy || !canClose} onClick={runAudit}>
+            <Button className="min-h-11 md:min-h-9" disabled={!!busy || !canClose} onClick={runAudit}>
               {busy === "run" ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <MoonStar className="size-4" aria-hidden />}
               {busy === "run" ? t("Posting…") : t("Close {d}", { d: fmtDay(state.business_date) })}
             </Button>
@@ -862,6 +917,7 @@ export default function EndOfDayWizard() {
           </p>
           <Button
             variant="outline"
+            className="min-h-11 md:min-h-9"
             disabled={busy === "recover"}
             onClick={() =>
               act("recover", async () => {
