@@ -38,7 +38,7 @@ interface Links {
 }
 
 const chipCls =
-  "inline-flex items-center gap-1.5 rounded-full border border-zinc-200 " +
+  "inline-flex min-h-11 items-center gap-1.5 rounded-full border border-zinc-200 " +
   "bg-white px-2.5 py-1 text-xs font-medium text-zinc-600 " +
   "hover:border-brand-400 hover:text-brand-700 transition"
 
@@ -106,7 +106,11 @@ export default function LinkedRecords({
           title={(f.invoice_number ? translate("Invoice {v0}", { v0: String(f.invoice_number) }) : translate("Open folio"))}
         >
           <Receipt className="size-3.5" aria-hidden />
-          {translate(f.folio_type)}{translate(" folio")}<span
+          {f.folio_type === "Guest" ? translate("Guest folio")
+            : f.folio_type === "Company" ? translate("Company folio")
+            : f.folio_type === "Extra" ? translate("Extra folio")
+            : translate("{type} folio", { type: translate(f.folio_type) })}<span
+            dir="ltr"
             className={
               f.balance > 0 ? "text-amber-600" : "text-zinc-400"
             }

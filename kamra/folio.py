@@ -498,6 +498,10 @@ def open_window(reservation: str | None = None, group_booking: str | None = None
 		"status": "Open",
 		"opened_on": now_datetime(),
 	})
+	if reservation and n > 1 and payee_type == "Guest" and folio.meta.has_field("customer"):
+		folio.customer = frappe.db.get_value(
+			"Folio", {**key, "window_no": 1}, "customer", order_by="creation desc",
+		) or frappe.get_cached_doc("Property", prop).get("walk_in_customer")
 	_recalculate(folio)
 	folio.insert(ignore_permissions=True)
 	return folio.name

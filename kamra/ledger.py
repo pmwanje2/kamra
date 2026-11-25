@@ -2521,17 +2521,19 @@ def folio_history(property: str, query: str | None = None,
 
 		to = report_range_end(from_date, to_date)
 		filters.append(["closed_on", "between", [from_date, f"{to} 23:59:59"]])
-	fields = ["name", "guest_name", "reservation", "venue_booking", "folio_type",
-	          "status", "invoice_number",
-	          "grand_total", "payments_total", "balance", "closed_on",
-	          "modified"]
+	hist_fields = [
+		"name", "guest_name", "reservation", "venue_booking", "status", "folio_type",
+		"window_no", "payee_type", "payee_company", "payee_agent",
+		"bill_to_name", "invoice_number", "grand_total", "payments_total",
+		"balance", "closed_on", "modified",
+	]
 	if frappe.db.has_column("Folio", "sales_invoice"):
-		fields.append("sales_invoice")
+		hist_fields.append("sales_invoice")
 	rows = frappe.get_all(
 		"Folio",
 		filters=filters,
 		or_filters=or_filters,
-		fields=fields,
+		fields=hist_fields,
 		order_by="modified desc",
 		limit_page_length=200,
 	)
@@ -2548,8 +2550,19 @@ def folio_history(property: str, query: str | None = None,
 		for pay in frappe.get_all("Folio Payment", filters={"parenttype": "Folio", "parent": ["in", [r.name for r in rows]],
 			"fx_amount": ["!=", 0]}, fields=["parent", "currency", "fx_amount", "exchange_rate", "exchange_rate_date"], order_by="idx"):
 			by_folio.setdefault(pay.parent, []).append(pay)
-	# Attach reprint counts
+	if rows:
+		from kamra.localization import pack_for
+
+		prop = frappe.get_cached_doc("Property", property)
+		loc = pack_for(property).locale(prop)
+		money = {
+			"currency": loc.get("currency") or home_currency(property),
+			"currency_symbol": loc.get("currency_symbol"),
+			"locale": loc.get("locale"),
+			"decimals": _currency_places(property),
+		}
 	for r in rows:
+		r["money"] = money
 		r["fx_payments"] = by_folio.get(r.name, [])
 		r["reprints"] = frappe.db.count("Folio Reprint", {"folio": r.name})
 	return {"folios": rows}

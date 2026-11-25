@@ -6,6 +6,7 @@ import { t } from "../lib/i18n"
  *  code and QR. Anything but a fiscalised (or non-fiscal-service) invoice is
  *  said plainly not to be a tax invoice. */
 export type Fiscal = {
+  scheme?: string | null
   state: "fiscalised" | "pending" | "not_efris" | "unverified"
   sales_invoice: string | null
   fdn: string | null
