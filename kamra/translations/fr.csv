@@ -211,6 +211,7 @@ App URL,URL de l'application
 App address,Adresse de l'application
 Application not built,Application non compilée
 Applied to the bill at check-out,Appliqué sur la note au départ
+Apply Min LOS Stay-Through,Appliquer le séjour minimal sur toute la durée
 Approval,Approbation
 Approve bill {0} before paying it.,Approuvez la facture {0} avant de la régler.
 Approve or reject an allowance from Allowances to approve.,Approuvez ou refusez un dégrèvement depuis Dégrèvements à approuver.
@@ -243,6 +244,9 @@ Auto Price,Tarification automatique
 Auto-send self check-in links to arrivals,Envoi auto. des liens de pré-enregistrement aux arrivées
 Autonomy,Autonomie
 Available,Disponible
+BAR,Tarif BAR
+BAR rate must be a valid number.,Le tarif BAR doit être un nombre valide.
+BAR rate must be greater than zero.,Le tarif BAR doit être supérieur à zéro.
 Back from the laundry. Hand it to the guest and post it to the room.,De retour de la blanchisserie. Remettez-le au client et imputez-le sur la chambre.
 Backfill after check-in,Compléter après l'arrivée
 Background jobs,Tâches d'arrière-plan
@@ -458,6 +462,11 @@ Closed By,Fermée par
 Closed On,Clôturée le
 Closed Out By,Clôturé par
 Closed Out On,Clôturé le
+Closed to Arrival,Fermé à l'arrivée
+Closed to Departure,Fermé au départ
+Closed to arrival on {0}.,Fermé à l'arrivée le {0}.
+Closed to departure on {0}.,Fermé au départ le {0}.
+Closed to sale (Stop-Sell) on {0}.,Fermé à la vente (Stop-Sell) le {0}.
 Closing Cash,Espèces de clôture
 Code,Code
 Code Challenge,Défi de code
@@ -676,9 +685,12 @@ Each foreign currency count needs a 3-letter ISO currency code.,Chaque comptage 
 "Each night price must be exactly {date, price}.","Chaque prix par nuit doit être exactement {date, price}."
 Each note count needs a value and a number.,Chaque ligne de coupures requiert une valeur et une quantité.
 Each place that sells food or drink.,Chaque lieu servant nourriture ou boissons.
+Each rate update must be an object.,Chaque mise à jour tarifaire doit être un objet.
+Each restriction update must be an object.,Chaque mise à jour de restriction doit être un objet.
 "Each row names a charge type or a transaction code, not both.","Chaque ligne indique un type de frais ou un code de transaction, pas les deux."
 Each stay in an itinerary is at least one night.,Chaque séjour d'un itinéraire dure au moins une nuit.
 Each stay needs {0}.,Chaque séjour nécessite {0}.
+Each update row requires a date or start_date and end_date.,Chaque ligne de mise à jour requiert une date ou start_date et end_date.
 Early Check-in Requested,Arrivée anticipée demandée
 Early Departure Reason,Motif de départ anticipé
 Early departure: {0} of {1} unused night(s) at {2}% tax,Départ anticipé : {0} sur {1} nuit(s) non utilisée(s) avec {2}% de taxe
@@ -693,6 +705,7 @@ Enabled,Activé
 Encode {0} key card(s) for room {1} at the encoder.,Encodez {0} carte(s) clé(s) pour la chambre {1} sur l'encodeur.
 End Date,Date de fin
 End Time,Heure de fin
+End date cannot be before start date.,La date de fin ne peut pas être antérieure à la date de début.
 End of Day,Clôture de journée
 End of Day Progress (JSON),Avancement de la clôture de journée (JSON)
 End of Day Step,Étape de clôture de journée
@@ -980,6 +993,7 @@ Instructions,Instructions
 Interested in,Intéressé par
 Internal Notes,Notes internes
 Invalid allowance basis: {0}.,Base d'allocation invalide : {0}.
+Invalid days_of_week value.,Valeur days_of_week invalide.
 Invalid element type: {0}.,Type d'élément invalide : {0}.
 Invalid link.,Lien invalide.
 Invalid manager approval token.,Jeton d'approbation responsable invalide.
@@ -987,6 +1001,7 @@ Invalid posting rhythm: {0}.,Rythme de comptabilisation invalide : {0}.
 Invalid routing instruction payload.,Données d'instruction de routage invalides.
 Invalid schedule frequency.,Fréquence de planification invalide.
 Invalid status change,Changement de statut invalide
+Invalid {0} payload.,Charge utile {0} invalide.
 Invite staff and give each the right role.,Invitez le personnel et attribuez à chacun le bon rôle.
 Invoice Date,Date de facture
 Invoice Footer,Pied de facture
@@ -1048,9 +1063,13 @@ Label,Libellé
 Language,Langue
 Last ARI push,Dernier envoi ARI
 Last Counted,Dernier comptage
+Last Error,Dernière erreur
 Last Name,Nom de famille
+Last Parity Delta,Dernier écart de parité
+Last Parity Status,Dernier statut de parité
 Last Posted Date,Dernière date de comptabilisation
 Last Reject Reason,Dernier motif de refus
+Last Synced At,Dernière synchronisation
 Last Used,Dernière utilisation
 Last delivery,Dernier envoi
 Last delivery on,Dernier envoi le
@@ -1113,9 +1132,12 @@ Match On,Faire correspondre sur
 Matches the hotel time zone.,Correspond au fuseau horaire de l'hôtel.
 Max Cash Refund,Remboursement espèces max.
 Max Extra Beds,Lits supplémentaires max.
+Max LOS,Séjour max.
 Max Occupants,Occupants max.
 Max Total Occupants,Total occupants max.
 Max Uses,Utilisations max.
+Maximum length of stay ({0}) cannot be less than minimum length of stay ({1}).,La durée maximale de séjour ({0}) ne peut pas être inférieure à la durée minimale ({1}).
+Maximum {0} nights stay allowed arriving on {1}.,Séjour maximal de {0} nuits autorisé pour une arrivée le {1}.
 Meal Period,Période de repas
 Meal Plan,Formule repas
 "Meal plan included: {0}, as priced above.","Formule repas incluse : {0}, au tarif indiqué ci-dessus."
@@ -1136,14 +1158,18 @@ Meta Message ID,ID de message Meta
 Meta Title,Méta-titre
 Method,Méthode
 Milestone,Échéance
+Min LOS,Séjour min.
 Min Nights,Nuits min.
 Minimum F&B spend,Minimum F&B garanti
 Minimum Hours,Heures minimales
 Minimum Nights,Nuits minimales
 Minimum Pax,Convives min.
 Minimum Stay Nights,Séjour minimal (nuits)
+Minimum and maximum length of stay cannot be negative.,Les durées minimale et maximale de séjour ne peuvent pas être négatives.
 Minimum nights is at least 1.,Le nombre minimal de nuits est d'au moins 1.
 Minimum stay,Séjour minimal
+Minimum {0} nights stay required on {1}.,Séjour minimal de {0} nuits requis le {1}.
+Minimum {0} nights stay-through required covering {1}.,Séjour minimal continu de {0} nuits requis couvrant le {1}.
 Minutes Saved,Minutes économisées
 Mode,Mode
 Mode must be full or partial.,Le mode doit être complet (full) ou partiel (partial).
@@ -1331,7 +1357,6 @@ Only an open ticket can be started.,Seul un ticket ouvert peut être démarré.
 Only available while the payment gateway is in test mode.,Disponible uniquement lorsque la passerelle de paiement est en mode test.
 Only charges above zero can be shared.,Seuls les frais supérieurs à zéro peuvent être partagés.
 Only the property's administrators change a rate plan's category.,Seuls les administrateurs de l'établissement peuvent modifier la catégorie d'un plan tarifaire.
-"Only {0:,.2f} of the deposit is still held.","Il ne reste que {0:,.2f} retenu sur l'acompte."
 Only {0} is due back to the guest - can't refund more than that.,Seul {0} est dû au client — impossible de rembourser davantage.
 Only {0} of this payment is left to refund.,Il ne reste que {0} à rembourser sur ce paiement.
 Only {0} of this receipt is left to transfer.,Il ne reste que {0} disponible à transférer sur cet encaissement.
@@ -1552,6 +1577,7 @@ Property standard is {0}. Pick the agreed time for {1}.,L'horaire standard de l'
 "Property, reservation, and room are required.","L'établissement, la réservation et la chambre sont obligatoires."
 Protect Late Arrivals,Protéger les arrivées tardives
 Provide a Transaction Code or Element Type for allowance consumption.,Indiquez un code de transaction ou un type d'élément pour consommer l'allocation.
+Provide at least one rate or restriction update.,Fournissez au moins une mise à jour tarifaire ou de restriction.
 Provider,Fournisseur
 Provider Credentials,Identifiants du fournisseur
 Provider ID,ID fournisseur
@@ -1600,6 +1626,7 @@ Rate Plan,Plan tarifaire
 Rate Plan Name,Nom du plan tarifaire
 Rate batch window (seconds),Fenêtre de regroupement des tarifs (secondes)
 Rate category,Catégorie tarifaire
+Rate is required for BAR rate updates.,Le tarif est obligatoire pour les mises à jour de tarif BAR.
 Rate must be positive.,Le tarif doit être positif.
 Rate plan,Plan tarifaire
 Rate plan '{0}' belongs to another property. Choose an active rate plan in Rate Plans.,Le plan tarifaire « {0} » appartient à un autre établissement. Choisissez un plan tarifaire actif dans Plans tarifaires.
@@ -1607,6 +1634,7 @@ Rate plan '{0}' has no approved tariff for {1} ({2} to {3}). Approve a tariff in
 Rate plan '{0}' is disabled. Enable it in Rate Plans or choose an active rate plan.,Le plan tarifaire « {0} » est désactivé. Activez-le dans Plans tarifaires ou choisissez un plan tarifaire actif.
 "Rate plan {0} adds a fixed amount: on the channels it applies every night, on direct bookings once per stay.","Le plan tarifaire {0} ajoute un montant fixe : sur les canaux il s'applique chaque nuit, sur les réservations directes une fois par séjour."
 "Rate plan {0} belongs to {1}, not to this connection's property {2}.","Le plan tarifaire {0} appartient à {1}, pas à l'établissement {2} de cette connexion."
+Rate plan {0} does not belong to property {1}.,Le plan tarifaire {0} n'appartient pas à l'établissement {1}.
 Rate plan {0} is a block plan but has no block rate.,Le plan tarifaire {0} est un plan contingent mais n'a aucun tarif contingent.
 Rate plan {0} is hourly but has no hourly rate.,Le plan tarifaire {0} est horaire mais n'a aucun tarif horaire.
 Rate plan {0} is priced per person; {product} sends one price per room.,Le plan tarifaire {0} est tarifé par personne ; {product} envoie un seul prix par chambre.
@@ -1685,6 +1713,8 @@ Restaurant,Restaurant
 Restaurant outlets,Points de vente restauration
 Restricted,Restreint
 Restricted Reason,Motif de restriction
+Restriction Date,Date de restriction
+Restriction date is required.,La date de restriction est obligatoire.
 Return,Retour
 Returned,Retourné
 Returned On,Retourné le
@@ -1730,7 +1760,9 @@ Room only: meals are not included.,Chambre seule : les repas ne sont pas inclus.
 Room still occupied,Chambre encore occupée
 "Room type code must use Latin letters or digits (e.g. DLX, RWBT3).","Le code de catégorie de chambre doit utiliser des lettres latines ou des chiffres (ex. DLX, RWBT3)."
 Room type code {0} is already used at this property.,Le code de catégorie de chambre {0} est déjà utilisé dans cet établissement.
+Room type is required for BAR rate updates.,La catégorie de chambre est obligatoire pour les mises à jour de tarif BAR.
 "Room type {0} belongs to {1}, not to this connection's property {2}.","La catégorie de chambre {0} appartient à {1}, pas à l'établissement {2} de cette connexion."
+Room type {0} does not belong to property {1}.,La catégorie de chambre {0} n'appartient pas à l'établissement {1}.
 Room type {0} does not belong to this property.,La catégorie de chambre {0} n'appartient pas à cet établissement.
 Room types and rates,Catégories de chambres et tarifs
 Room {0},Chambre {0}
@@ -1796,6 +1828,7 @@ Say why the payment is rejected - it goes on the record.,Indiquez pourquoi le pa
 Say why this went away - a cancelled or lost function needs a reason.,Indiquez pourquoi ce dossier est perdu — un événement annulé ou perdu exige un motif.
 Schedule,Planification
 Scope,Portée
+Scope Key,Clé de périmètre
 Scopes,Portées
 Season Name,Nom de saison
 Seats (round table),Places (table ronde)
@@ -1913,6 +1946,7 @@ Stay,Séjour
 Stay Day N,Jour de séjour N
 Stay Day N must be at least 1.,Le jour de séjour N doit être au moins égal à 1.
 Stay details,Détails du séjour
+Stay restriction,Restriction de séjour
 Stays overlap: {0} to {1} and {2} to {3}. A guest can't be in two places on one night.,Chevauchement de séjours : du {0} au {1} et du {2} au {3}. Un client ne peut pas occuper deux endroits la même nuit.
 Step Key,Clé d'étape
 "Step status must be done, skipped or pending.","Le statut de l'étape doit être terminé, ignoré ou en attente."
@@ -1924,6 +1958,7 @@ Still owed,Reste dû
 "Still pending: {0}. Return everything, or deliver with a shortage note.",Toujours en attente : {0}. Restituez tout ou livrez avec une note de manquant.
 Still to take: {0}.,Reste à encaisser : {0}.
 Stock Posted,Stock comptabilisé
+Stop-Sell,Fermeture à la vente
 Street,Rue
 Subgroup,Sous-groupe
 Subject,Objet
@@ -1935,6 +1970,7 @@ Supplier,Fournisseur
 Supplier's bill number,Numéro de facture du fournisseur
 Switch the webhook on first.,Activez d'abord le webhook.
 Sync,Synchroniser
+Sync & Parity Health,Santé de synchronisation et parité
 System Card,Carte système
 System Cash,Espèces système
 System Code,Code système
@@ -2009,6 +2045,7 @@ That printer is not at this property.,Cette imprimante n'appartient pas à cet �
 That reason code is not in use.,Ce code motif n'est pas actif.
 That reservation is not part of this group.,Cette réservation ne fait pas partie de ce groupe.
 "That room is another type. Use Upgrade or change type, so the price is shown first.",Cette chambre est d'une autre catégorie. Utilisez Surclassement ou changement de catégorie afin d'afficher le prix d'abord.
+That room type does not belong to this property.,Cette catégorie de chambre n'appartient pas à cet établissement.
 That room type is not at this property.,Cette catégorie de chambre n'appartient pas à cet établissement.
 That scan is too long to be an ID.,Cette lecture est trop longue pour une pièce d'identité.
 That service belongs to another property.,Ce service appartient à un autre établissement.
@@ -2089,7 +2126,6 @@ The group's bill must be at the same property.,La note du groupe doit appartenir
 "The guest checked in online. Review what they sent, then confirm.",Le client s'est pré-enregistré en ligne. Vérifiez les informations transmises puis confirmez.
 The guest folio is already closed.,Le folio client est déjà clôturé.
 The guest folio is closed - withhold before closing it.,Le folio client est clôturé — effectuez la retenue avant de le clôturer.
-"The guest folio only has {0:,.2f} in credit. Settle the bill or withhold against it before refunding the deposit.","Le folio client ne dispose que de {0:,.2f} en crédit. Soldez la note ou imputez la retenue avant de rembourser la caution."
 The guest has no open folio to take these charges.,Le client n'a aucun folio ouvert pour recevoir ces frais.
 The guest is already in house. Use Room move to change rooms.,Le client est déjà enregistré. Utilisez Changement de chambre pour déplacer la chambre.
 "The guest is still in house, so their bill stays open for tonight's charges. To invoice what is paid so far, use Settle & continue stay.","Le client est encore en séjour, sa note reste donc ouverte pour les frais de ce soir. Pour facturer ce qui a déjà été payé, utilisez Régler et poursuivre le séjour."
@@ -2326,8 +2362,10 @@ Unknown session {0}. Pick one of: {1}.,Séance inconnue {0}. Choisissez parmi : 
 Unknown settings page: {0},Page de paramètres inconnue : {0}
 Unknown template: {0}.,Modèle inconnu : {0}.
 Unknown tool: {0},Outil inconnu : {0}
+Unrecognized weekday: {0}.,Jour de la semaine non reconnu : {0}.
 Update In-House Reservations,Mettre à jour les réservations présentes
 "Update In-House Reservations = Y is not yet enabled: OXI Y requires arrival-date, room-type, billed-night, and assigned-room safety bounds. Keep N so OTA changes to checked-in stays are rejected and flagged for review.","Mettre à jour les réservations présentes = O n'est pas encore activé : OXI O exige des garde-fous sur la date d'arrivée, la catégorie, les nuits facturées et la chambre attribuée. Laissez N afin que les modifications OTA sur des séjours en cours soient rejetées et signalées pour révision."
+Updated By,Mis à jour par
 Url,URL
 Use Check out to check a guest out: it makes sure every bill is cleared first.,Utilisez Départ pour clôturer le séjour d'un client : cela garantit que chaque note est soldée d'abord.
 Use Property Default Credit Days,Utiliser les jours de crédit par défaut de l'établissement
@@ -2607,3 +2645,11 @@ this bill,cette note
 {0}{1} overdue by more than {2} days (oldest due {3}).,{0}{1} en retard de plus de {2} jours (plus ancienne échéance {3}).
 "{product} can't read this ID's code. Type the details in, and take a picture of the ID.",{product} ne peut pas lire le code de cette pièce d'identité. Saisissez les informations et photographiez la pièce.
 {product} is temporarily unavailable. Contact your system administrator.,{product} est temporairement indisponible. Contactez votre administrateur système.
+Kept in the accounting system,Tenu dans le système comptable
+Not verified,Non vérifié
+Not verified: {0},Non vérifié : {0}
+Only {0} of the deposit is still held.,Il ne reste que {0} retenu sur l'acompte.
+"Still open at the outlet. Settle it there before check-out: charge it to the room, take payment or void it.","Encore ouverte au point de vente. Réglez-la sur place avant le départ : imputez-la à la chambre, encaissez le paiement ou annulez-la."
+The guest folio only has {0} in credit. Settle the bill or withhold against it before refunding the deposit.,Le folio client ne dispose que de {0} en crédit. Soldez la note ou imputez la retenue avant de rembourser la caution.
+This is kept in the accounting system. Open {0}: {1},Cet élément est tenu dans le système comptable. Ouvrir {0} : {1}
+{0} bill(s) for this stay are still open at the outlet: {1}. Settle them at the outlet before check-out.,{0} note(s) de ce séjour sont encore ouvertes au point de vente : {1}. Réglez-les au point de vente avant le départ.

@@ -445,3 +445,100 @@ class CreditControlTestCase(AuditTestCase):
 			res = credit.enforce_company_credit(self.company, PROP_A, 300)
 		self.assertFalse(res["ok"])
 		self.assertGreater(res["over_limit_by"], 0)
+
+	def test_credit_reasons_format_property_currency_precision(self):
+		"""check_company_credit reasons must format KWD at 3dp (23.335, NOT 23.34)
+		and UGX at 0dp (42,000, NOT 42,000.00)."""
+		prop_kwd = "UT Credit KWD"
+		prop_ugx = "UT Credit UGX"
+		for prop, country, currency in (
+			(prop_kwd, "Kuwait", "KWD"),
+			(prop_ugx, "Uganda", "UGX"),
+		):
+			make_property(
+				prop, country=country, currency=currency, business_date=TODAY,
+				gst_rate_low=0, gst_rate_high=0,
+			)
+			self.addCleanup(frappe.clear_document_cache, "Property", prop)
+			self.addCleanup(clear_cache, prop)
+
+		# KWD (3dp): limit 100.121, balance 123.456 -> over_limit_by 23.335
+		acc_kwd = ledger._ar_account(prop_kwd, self.company)
+		frappe.db.set_value(
+			"City Ledger Account", acc_kwd,
+			{"credit_limit": 100.121, "credit_days": 10, "use_default_credit_days": 0},
+		)
+		folio_kwd = frappe.get_doc({
+			"doctype": "Folio",
+			"property": prop_kwd,
+			"folio_type": "Company",
+			"status": "Open",
+		}).insert(ignore_permissions=True).name
+		frappe.get_doc({
+			"doctype": "City Ledger Entry",
+			"account": acc_kwd,
+			"property": prop_kwd,
+			"folio": folio_kwd,
+			"posting_date": d(-25),
+			"invoice_date": d(-25),
+			"due_date": d(-15),
+			"kind": "Invoice",
+			"invoice_number": "INV-KWD-CR-1",
+			"debit": 123.456,
+			"credit": 0,
+		}).insert(ignore_permissions=True)
+
+		res_kwd = credit.check_company_credit(self.company, prop_kwd, 0)
+		self.assertFalse(res_kwd["ok"])
+		self.assertEqual(res_kwd["over_limit_by"], 23.335)
+		self.assertEqual(res_kwd["overdue_amount"], 123.456)
+		reasons_kwd = " ".join(res_kwd["reasons"])
+		self.assertIn("23.335", reasons_kwd)
+		self.assertNotIn("23.34", reasons_kwd)
+		self.assertIn("100.121", reasons_kwd)
+		self.assertIn("123.456", reasons_kwd)
+		self.assertNotIn("123.46", reasons_kwd)
+
+		# Also cover the grace_days overdue message branch
+		set_setting(prop_kwd, "credit_overdue_grace_days", 5)
+		res_kwd_grace = credit.check_company_credit(self.company, prop_kwd, 0)
+		reasons_grace = " ".join(res_kwd_grace["reasons"])
+		self.assertIn("123.456", reasons_grace)
+		self.assertNotIn("123.46", reasons_grace)
+
+		# UGX (0dp): limit 100,000, balance 142,000 -> over_limit_by 42,000
+		acc_ugx = ledger._ar_account(prop_ugx, self.company)
+		frappe.db.set_value(
+			"City Ledger Account", acc_ugx,
+			{"credit_limit": 100000, "credit_days": 10, "use_default_credit_days": 0},
+		)
+		folio_ugx = frappe.get_doc({
+			"doctype": "Folio",
+			"property": prop_ugx,
+			"folio_type": "Company",
+			"status": "Open",
+		}).insert(ignore_permissions=True).name
+		frappe.get_doc({
+			"doctype": "City Ledger Entry",
+			"account": acc_ugx,
+			"property": prop_ugx,
+			"folio": folio_ugx,
+			"posting_date": d(-25),
+			"invoice_date": d(-25),
+			"due_date": d(-15),
+			"kind": "Invoice",
+			"invoice_number": "INV-UGX-CR-1",
+			"debit": 142000,
+			"credit": 0,
+		}).insert(ignore_permissions=True)
+
+		res_ugx = credit.check_company_credit(self.company, prop_ugx, 0)
+		self.assertFalse(res_ugx["ok"])
+		self.assertEqual(res_ugx["over_limit_by"], 42000.0)
+		reasons_ugx = " ".join(res_ugx["reasons"])
+		self.assertIn("42,000", reasons_ugx)
+		self.assertNotIn("42,000.00", reasons_ugx)
+		self.assertIn("100,000", reasons_ugx)
+		self.assertNotIn("100,000.00", reasons_ugx)
+		self.assertIn("142,000", reasons_ugx)
+		self.assertNotIn("142,000.00", reasons_ugx)

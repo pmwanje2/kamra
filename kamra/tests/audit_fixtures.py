@@ -30,6 +30,13 @@ PROP_B = "UT Audit B"
 SAVEPOINT = "kamra_ut_audit"
 
 
+def erp_bridge_scripts_installed() -> bool:
+	"""Is the siteops bridge's DocType Event scripts installed and enabled?"""
+	return bool(frappe.db.exists("DocType", "Server Script") and frappe.db.exists(
+		"Server Script", {"script_type": "DocType Event", "disabled": 0,
+		                  "name": ("like", "Kamra ERP%")}))
+
+
 def d(offset: int) -> str:
 	"""TODAY shifted by `offset` days, as a string."""
 	return str(add_days(TODAY, offset))
@@ -72,7 +79,8 @@ def _default_company_billing() -> str:
 def make_property(name: str, **fields) -> str:
 	"""A bare property, put back to these exact values if it exists."""
 	payload = {
-		"property_name": name, "city": "Testville", "state": "Karnataka", "country": "India",
+		"property_name": name, "city": "Testville", "state": "Karnataka",
+		"country": "India", "currency": "INR",
 		"gst_mode": "Fixed", "no_show_charge": "None", "business_date": None,
 		"disabled": 0, "rates_include_tax": 0, "room_levy_percent": 0,
 		"require_cashier_pin": 0, "guest_retention_months": 0,
@@ -186,6 +194,14 @@ class AuditTestCase(IntegrationTestCase):
 		# commits inside the code under test would end the savepoint and
 		# leak rows into the site; turn them into no-ops for the test
 		self._stack.enter_context(patch.object(frappe.local.db, "commit"))
+		# On a site with the siteops bridge installed, its DocType Event scripts
+		# police the ERP side (Company, Cost Center, clearing accounts), which
+		# these fixtures, built for the hotel app alone, do not model: every
+		# make_property would refuse (KMR-CO-001). Pause them for the test; the
+		# seam they feed is mocked here and the scripts are tested in siteops.
+		if erp_bridge_scripts_installed():
+			self._stack.enter_context(
+				patch("frappe.model.document.run_server_script_for_doc_event"))
 		self._lang = getattr(frappe.local, "lang", None)
 		frappe.db.savepoint(SAVEPOINT)
 

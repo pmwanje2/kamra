@@ -6134,6 +6134,7 @@ def reservation_detail(reservation: str):
 		"channel.cancel_needs_review": "update_not_applied",
 		"channel.modify_discount_removed": "discount_removed",
 		"channel.modify_discount_review": "discount_review",
+		"channel.restriction_mismatch": "restriction_mismatch",
 	}
 	channel_review_needed = int(res.get("channel_review_needed") or 0)
 	channel_reviews = []
@@ -7335,11 +7336,14 @@ def check_out(reservation: str, credit_override_reason: str | None = None,
 	(early_departure, below). Without it, a property whose charge is not
 	"All Nights" refuses, so unused nights are never billed by accident;
 	under "All Nights" every booked night is billed as before."""
-	doc = frappe.get_doc("Reservation", reservation)
+	# Locked before the open-check read and held to the save, so no other
+	# write to this stay lands between them. The ERP's check-out fence
+	# (KMR-CO-002, After Save) reads the outlet checks again at the save.
+	doc = frappe.get_doc("Reservation", reservation, for_update=True)
 	from kamra.checkout import apply_early_departure, early_departure_plan
 	if (early_reason or "").strip():
 		apply_early_departure(doc.name, early_reason, early_fee)
-		doc = frappe.get_doc("Reservation", reservation)
+		doc = frappe.get_doc("Reservation", reservation, for_update=True)
 	else:
 		plan = early_departure_plan(doc)
 		if plan and plan["policy"] != "All Nights":
