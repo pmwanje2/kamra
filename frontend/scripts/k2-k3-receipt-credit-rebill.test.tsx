@@ -306,7 +306,9 @@ describe("K2 ReceiptTransferDialog & K3 CreditRebillDialog", () => {
     const openBtn = host.querySelector<HTMLButtonElement>('[data-testid="open-credit-rebill-btn"]')!
     await act(async () => openBtn.click())
 
-    const dialog = host.querySelector<HTMLElement>('[role="dialog"][aria-label="Credit & Rebill"]')!
+    const dialog = [...host.querySelectorAll<HTMLElement>('[role="dialog"]')].find(
+      (el) => el.getAttribute("aria-label") === "Credit & Rebill",
+    )!
     expect(dialog).not.toBeNull()
     // Country-neutral: tax_return=false -> ZERO EFRIS copy or 102/104 codes
     expect(dialog.textContent).not.toMatch(/EFRIS|\b102\b|\b104\b/i)
@@ -315,7 +317,9 @@ describe("K2 ReceiptTransferDialog & K3 CreditRebillDialog", () => {
     // Zero vendor leaks
     expect(dialog.textContent).not.toMatch(/ERPNext|Frappe|Kamra|URY/i)
 
-    const reasonInput = dialog.querySelector<HTMLInputElement>('input[aria-label="Credit & Rebill reason"]')!
+    const reasonInput = [...dialog.querySelectorAll<HTMLInputElement>("input")].find(
+      (el) => el.getAttribute("aria-label") === "Credit & Rebill reason",
+    )!
     await act(async () => setInput(reasonInput, "Wrong corporate billing profile"))
 
     const submit = dialog.querySelector<HTMLButtonElement>('[data-testid="submit-credit-rebill"]')!
@@ -368,7 +372,9 @@ describe("K2 ReceiptTransferDialog & K3 CreditRebillDialog", () => {
     const openBtn = host.querySelector<HTMLButtonElement>('[data-testid="open-credit-rebill-btn"]')!
     await act(async () => openBtn.click())
 
-    const dialog = host.querySelector<HTMLElement>('[role="dialog"][aria-label="Credit & Rebill"]')!
+    const dialog = [...host.querySelectorAll<HTMLElement>('[role="dialog"]')].find(
+      (el) => el.getAttribute("aria-label") === "Credit & Rebill",
+    )!
     await vi.waitFor(() => expect(dialog.textContent).toContain("102"))
 
     const partialRadio = dialog.querySelector<HTMLInputElement>('input[type="radio"][value="partial"]')!
@@ -377,7 +383,9 @@ describe("K2 ReceiptTransferDialog & K3 CreditRebillDialog", () => {
 
     const amountInput = dialog.querySelector<HTMLInputElement>('input[aria-label="Partial credit amount"]')!
     expect(amountInput.step).toBe("1")
-    const reasonInput = dialog.querySelector<HTMLInputElement>('input[aria-label="Credit & Rebill reason"]')!
+    const reasonInput = [...dialog.querySelectorAll<HTMLInputElement>("input")].find(
+      (el) => el.getAttribute("aria-label") === "Credit & Rebill reason",
+    )!
     await act(async () => {
       setInput(amountInput, "50000")
       setInput(reasonInput, "Partial late checkout waiver")
