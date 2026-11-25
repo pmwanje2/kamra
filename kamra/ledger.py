@@ -769,47 +769,85 @@ def ledger_detail(property: str, ledger: str, business_date: str | None = None,
 
 def folio_reconciliation(property: str, limit: int = 20) -> dict:
 	"""Guest + Deposit ledger postings per folio against the folio's own
-	balance (charges less payments). A folio whose ledger nets to something
-	else - a posting that never reached the ledger, or one the folio lost -
-	is a genuine break; the rest is money guests owe, not an imbalance."""
+	balance less any held security deposit (held deposits sit on the Deposit
+	ledger separately from folio.balance under OPERA/SAP). A folio whose
+	ledger nets to something else is a genuine break."""
+	from kamra.folio import security_deposit_held_on_folio
+
 	places = max(_currency_places(property), 2)
 	tol = 2 * (10 ** -places)
-	rows = frappe.db.sql(
-		"""
-		SELECT f.name AS folio, f.folio_type, f.status,
-		       COALESCE(f.balance, 0) AS balance,
-		       COALESCE(e.net, 0) AS ledger
-		FROM `tabFolio` f
-		LEFT JOIN (
-			SELECT folio, SUM(debit - credit) AS net
-			FROM `tabFolio Ledger Entry`
-			WHERE property = %(p)s AND ledger IN ('Guest', 'Deposit')
-			GROUP BY folio
-		) e ON e.folio = f.name
-		WHERE f.property = %(p)s
-		  AND ABS(COALESCE(f.balance, 0) - COALESCE(e.net, 0)) >= %(tol)s
-		ORDER BY f.creation DESC
-		""", {"p": property, "tol": tol}, as_dict=True)
-	ledger_net = float(frappe.db.sql(
+	sec_folios = set(frappe.get_all(
+		"Folio Payment",
+		filters={"parenttype": "Folio", "payment_kind": "Security Deposit"},
+		pluck="parent",
+	))
+	if sec_folios:
+		all_folios = frappe.db.sql(
+			"""
+			SELECT f.name AS folio, f.folio_type, f.status,
+			       COALESCE(f.balance, 0) AS balance,
+			       COALESCE(e.net, 0) AS ledger
+			FROM `tabFolio` f
+			LEFT JOIN (
+				SELECT folio, SUM(debit - credit) AS net
+				FROM `tabFolio Ledger Entry`
+				WHERE property = %(p)s AND ledger IN ('Guest', 'Deposit')
+				GROUP BY folio
+			) e ON e.folio = f.name
+			WHERE f.property = %(p)s
+			ORDER BY f.creation DESC
+			""", {"p": property, "tol": tol}, as_dict=True)
+		rows = []
+		folios_net = Decimal(0)
+		tol_dec = Decimal(str(tol))
+		for r in all_folios:
+			held = Decimal(0)
+			if r.folio in sec_folios:
+				held = _money(security_deposit_held_on_folio(frappe.get_doc("Folio", r.folio)))
+			expected = _money(r.balance) - held
+			folios_net += expected
+			if abs(expected - _money(r.ledger)) >= tol_dec:
+				r["expected"] = expected
+				rows.append(r)
+	else:
+		rows = frappe.db.sql(
+			"""
+			SELECT f.name AS folio, f.folio_type, f.status,
+			       COALESCE(f.balance, 0) AS balance,
+			       COALESCE(e.net, 0) AS ledger
+			FROM `tabFolio` f
+			LEFT JOIN (
+				SELECT folio, SUM(debit - credit) AS net
+				FROM `tabFolio Ledger Entry`
+				WHERE property = %(p)s AND ledger IN ('Guest', 'Deposit')
+				GROUP BY folio
+			) e ON e.folio = f.name
+			WHERE f.property = %(p)s
+			  AND ABS(COALESCE(f.balance, 0) - COALESCE(e.net, 0)) >= %(tol)s
+			ORDER BY f.creation DESC
+			""", {"p": property, "tol": tol}, as_dict=True)
+		for r in rows:
+			r["expected"] = _money(r.balance)
+		folios_net = _money(frappe.db.sql(
+			"SELECT COALESCE(SUM(balance), 0) FROM `tabFolio` WHERE property = %s",
+			property)[0][0] or 0)
+	ledger_net = _money(frappe.db.sql(
 		"""SELECT COALESCE(SUM(debit - credit), 0) FROM `tabFolio Ledger Entry`
 		   WHERE property = %s AND ledger IN ('Guest', 'Deposit')""",
 		property)[0][0] or 0)
-	folios_net = float(frappe.db.sql(
-		"""SELECT COALESCE(SUM(balance), 0) FROM `tabFolio`
-		   WHERE property = %s""", property)[0][0] or 0)
 	return {
 		"in_balance": not rows,
 		"ledger_net": _round_currency(ledger_net, places),
 		"folios_net": _round_currency(folios_net, places),
 		"difference": _round_currency(
-			sum((_money(r.balance) - _money(r.ledger) for r in rows), Decimal(0)),
+			sum((r["expected"] - _money(r.ledger) for r in rows), Decimal(0)),
 			places,
 		),
 		"folios_out": len(rows),
 		"folios": [{"folio": r.folio, "folio_type": r.folio_type,
-		            "status": r.status, "balance": _round_currency(r.balance, places),
+		            "status": r.status, "balance": _round_currency(r["expected"], places),
 		            "ledger": _round_currency(r.ledger, places),
-		            "difference": _round_currency(_money(r.balance) - _money(r.ledger), places)}
+		            "difference": _round_currency(r["expected"] - _money(r.ledger), places)}
 		           for r in rows[:limit]],
 	}
 
@@ -932,7 +970,8 @@ def company_payer_of(folio) -> str | None:
 	SAP: the payer): a Company payee with credit is the company's bill, any
 	other payee the guest's - liquor and extras included. A folio from
 	before windows, with no payee yet, keeps the old rule: only a Company
-	folio (the stay's company) or a group master (the group's company)."""
+	folio (the stay's company), a group master (the group's company), or a
+	standalone corporate event Account folio is the company's bill."""
 	payee, payee_company = _payee(folio)
 	if payee:
 		company = payee_company if payee == "Company" else None
@@ -945,6 +984,9 @@ def company_payer_of(folio) -> str | None:
 		elif kind == "Group" and folio.get("group_booking"):
 			company = frappe.db.get_value(
 				"Group Booking", folio.get("group_booking"), "company")
+		elif kind == "Account" and folio.get("venue_booking") and not folio.get("reservation") and not folio.get("group_booking"):
+			company = frappe.db.get_value(
+				"Venue Booking", folio.get("venue_booking"), "company")
 	if company and frappe.db.get_value(
 			"Corporate Account", company, "credit_allowed"):
 		return company
@@ -974,7 +1016,7 @@ def due_date_for(account: str | None, invoice_date, property: str | None = None)
 
 def _transfer_company(folio, company: str | None = None) -> str | None:
 	"""Who a city ledger transfer bills: the company asked for, else the
-	window's payee company, else the stay's, else the group's."""
+	window's payee company, else the stay's, else the group's, else the standalone event's."""
 	if not company:
 		payee, payee_company = _payee(folio)
 		if payee == "Company":
@@ -984,6 +1026,9 @@ def _transfer_company(folio, company: str | None = None) -> str | None:
 	if not company and folio.get("group_booking"):
 		company = frappe.db.get_value(
 			"Group Booking", folio.group_booking, "company")
+	if not company and folio.get("venue_booking") and not folio.get("group_booking"):
+		company = frappe.db.get_value(
+			"Venue Booking", folio.venue_booking, "company")
 	return company
 
 
@@ -2436,8 +2481,14 @@ def credited_total(folio: str, for_update: bool = False) -> Decimal:
 @require_roles("Front Desk", "Finance", "Kamra Agent")
 def record_folio_reprint(folio: str, document: str = "Guest Folio",
                          reason: str | None = None):
-	prop, inv = frappe.db.get_value(
-		"Folio", folio, ["property", "invoice_number"])
+	fdoc = frappe.get_doc("Folio", folio)
+	prop, inv = fdoc.property, fdoc.invoice_number
+	if fdoc.status == "Closed" and document != "Proforma":
+		from kamra.fiscal import assert_reprintable, fiscal_status
+		fiscal = fiscal_status(fdoc)
+		if fiscal is not None:
+			assert_reprintable(fiscal)
+			inv = fiscal["sales_invoice"] or inv
 	prev = frappe.db.count("Folio Reprint", {"folio": folio}) + 1
 	doc = frappe.get_doc({
 		"doctype": "Folio Reprint",
@@ -2459,9 +2510,10 @@ def record_folio_reprint(folio: str, document: str = "Guest Folio",
 def folio_history(property: str, query: str | None = None,
                   status: str | None = None, from_date: str | None = None,
                   to_date: str | None = None):
-	# account invoices have no stay to show - they live on Receivables
-	filters: list = [["property", "=", property],
-	                 ["folio_type", "!=", "Account"]]
+	# Direct Receivables AR invoices (Account folios without a Venue Booking) live on Receivables;
+	# stay folios and standalone event folios (Account folios with venue_booking) appear in Folio History.
+	filters: list = [["property", "=", property]]
+	or_filters: list = [["folio_type", "!=", "Account"], ["venue_booking", "is", "set"]]
 	if status:
 		filters.append(["status", "=", status])
 	if from_date:  # by the day the bill was closed
@@ -2469,12 +2521,17 @@ def folio_history(property: str, query: str | None = None,
 
 		to = report_range_end(from_date, to_date)
 		filters.append(["closed_on", "between", [from_date, f"{to} 23:59:59"]])
+	fields = ["name", "guest_name", "reservation", "venue_booking", "folio_type",
+	          "status", "invoice_number",
+	          "grand_total", "payments_total", "balance", "closed_on",
+	          "modified"]
+	if frappe.db.has_column("Folio", "sales_invoice"):
+		fields.append("sales_invoice")
 	rows = frappe.get_all(
 		"Folio",
 		filters=filters,
-		fields=["name", "guest_name", "reservation", "status", "invoice_number",
-		        "grand_total", "payments_total", "balance", "closed_on",
-		        "modified"],
+		or_filters=or_filters,
+		fields=fields,
 		order_by="modified desc",
 		limit_page_length=200,
 	)
@@ -2482,8 +2539,10 @@ def folio_history(property: str, query: str | None = None,
 		q = query.lower()
 		rows = [r for r in rows if q in (r.guest_name or "").lower()
 		        or q in (r.invoice_number or "").lower()
+		        or q in (r.get("sales_invoice") or "").lower()
 		        or q in (r.name or "").lower()
-		        or q in (r.reservation or "").lower()]
+		        or q in (r.reservation or "").lower()
+		        or q in (r.venue_booking or "").lower()]
 	by_folio = {}
 	if rows:
 		for pay in frappe.get_all("Folio Payment", filters={"parenttype": "Folio", "parent": ["in", [r.name for r in rows]],
@@ -2551,6 +2610,11 @@ def batch_print_folios(folios: str | list):
 	import json as _json
 	if isinstance(folios, str):
 		folios = _json.loads(folios)
+	from kamra.fiscal import assert_reprintable, fiscal_status
+	for fn in folios:
+		fdoc = frappe.get_doc("Folio", fn)
+		if fdoc.status == "Closed":
+			assert_reprintable(fiscal_status(fdoc))
 	out = []
 	for fn in folios:
 		out.append(record_folio_reprint(fn, "Guest Folio", "batch print"))

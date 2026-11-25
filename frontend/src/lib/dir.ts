@@ -30,7 +30,10 @@ export type Lang = string
 // Guest pages keep their own choice: a guest (or staff previewing /book)
 // picking Spanish there must not switch the desk, and the reverse.
 const GUEST_PAGE = /^(\/(?:kamra|hotel))?\/(book|stay|checkin)(\/|$)/
-const key = () => (GUEST_PAGE.test(window.location.pathname) ? "kamra-guest-lang" : "kamra-lang")
+const key = () =>
+  typeof window !== "undefined" && GUEST_PAGE.test(window.location.pathname)
+    ? "kamra-guest-lang"
+    : "kamra-lang"
 const known = LANGS.map((l) => l.code)
 
 // null until the site answers: every known language stays offered, so a
@@ -113,6 +116,7 @@ async function fetchEnabled(): Promise<string[] | null> {
 }
 
 export function applyLang(l: Lang) {
+  if (typeof document === "undefined") return
   const def = langDef(l)
   const el = document.documentElement
   el.setAttribute("lang", def.code)
@@ -121,10 +125,11 @@ export function applyLang(l: Lang) {
 
 export function setLang(l: Lang) {
   const code = effectiveLanguage(l, enabledCodes, known)
-  localStorage.setItem(key(), code)
+  if (typeof localStorage !== "undefined") localStorage.setItem(key(), code)
   applyLang(code)
   // Load the dictionary before notifying listeners so the first paint
   // after a switch is already translated (see lib/locales.ts).
+  if (typeof window === "undefined") return
   void import("./locales").then(({ ensureDictionary }) =>
     ensureDictionary(code).then(() => {
       window.dispatchEvent(new Event("kamra:lang"))
@@ -136,7 +141,8 @@ export function setLang(l: Lang) {
  * engine language (`preferred`), else the browser language. A switched-off
  * code is skipped. */
 export function adoptGuestLanguage(preferred?: string | null) {
-  const browser = navigator.language?.toLowerCase().split("-")[0]
+  const browser =
+    typeof navigator !== "undefined" ? navigator.language?.toLowerCase().split("-")[0] : undefined
   const next =
     [preferred, browser].find(
       (code) => code && effectiveLanguage(code, enabledCodes, known) === code,
@@ -150,6 +156,7 @@ export function adoptGuestLanguage(preferred?: string | null) {
 export function syncLang() {
   const code = getLang()
   applyLang(code)
+  if (typeof window === "undefined") return
   void import("./locales").then(({ ensureDictionary }) =>
     ensureDictionary(code).then(() => {
       window.dispatchEvent(new Event("kamra:lang"))

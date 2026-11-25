@@ -22,7 +22,7 @@ import { serverError } from "../lib/resource"
 import { Button } from "../components/ui/button"
 import { taxLabel } from "../lib/money"
 import { useT, t as translate, useUILanguage } from "../lib/i18n"
-import { Empty, ErrorNote, inrExact } from "./banquet/shared"
+import { Empty, ErrorNote, inrExact, type BanquetMoneyCtx } from "./banquet/shared"
 
 
 const KINDS: DocumentKind[] = ["quote", "contract", "beo", "pack_list", "invoice"]
@@ -138,7 +138,7 @@ export default function BanquetDocument() {
                     <td className="py-1.5 text-zinc-500">{translate(r.mode)}</td>
                     <td className="py-1.5 text-zinc-400">{r.reference}</td>
                     <td className="py-1.5 text-right tabular-nums">
-                      {inrExact(r.amount)}
+                      {inrExact(r.amount, doc.property)}
                     </td>
                   </tr>
                 ))}
@@ -164,7 +164,7 @@ export default function BanquetDocument() {
                     <td className="py-1.5">{t.milestone}</td>
                     <td className="py-1.5 text-zinc-500">{t.due_date ?? "-"}</td>
                     <td className="py-1.5 text-right tabular-nums">
-                      {inrExact(t.amount)}
+                      {inrExact(t.amount, doc.property)}
                       {t.percent ? (
                         <span className="text-zinc-400"> ({t.percent}%)</span>
                       ) : null}
@@ -206,7 +206,7 @@ export default function BanquetDocument() {
                       {o.price_impact ? (
                         <span className="shrink-0 tabular-nums text-zinc-500">
                           {o.price_impact > 0 ? "+" : ""}
-                          {inrExact(o.price_impact)}
+                          {inrExact(o.price_impact, doc.property)}
                         </span>
                       ) : null}
                     </li>
@@ -421,7 +421,7 @@ function Parties({ doc }: { doc: Doc }) {
         </p>
         {c.gstin && (
           <p className="text-xs text-zinc-500">
-            {taxLabel()}: {c.gstin}
+            {doc.header.tax_label || taxLabel()}: {c.gstin}
             {c.place_of_supply ? translate(" · Place of supply: {v0}", { v0: String(c.place_of_supply) }) : ""}
           </p>
         )}
@@ -537,7 +537,7 @@ function Lines({ doc, showsMoney }: { doc: Doc; showsMoney: boolean }) {
             {showsMoney && (
               <>
                 <th className="py-1.5 text-right font-medium">{translate("Rate")}</th>
-                {taxed && <th className="py-1.5 text-right font-medium">{taxLabel()}</th>}
+                {taxed && <th className="py-1.5 text-right font-medium">{doc.header.tax_label || taxLabel()}</th>}
                 <th className="py-1.5 text-right font-medium">{translate("Amount")}</th>
               </>
             )}
@@ -572,7 +572,7 @@ function Lines({ doc, showsMoney }: { doc: Doc; showsMoney: boolean }) {
               {showsMoney && (
                 <>
                   <td className="py-1.5 text-right tabular-nums">
-                    {l.chargeable ? inrExact(l.rate) : "-"}
+                    {l.chargeable ? inrExact(l.rate, doc.property) : "-"}
                   </td>
                   {taxed && (
                   <td className="py-1.5 text-right tabular-nums text-zinc-500">
@@ -580,7 +580,7 @@ function Lines({ doc, showsMoney }: { doc: Doc; showsMoney: boolean }) {
                   </td>
                   )}
                   <td className="py-1.5 text-right tabular-nums">
-                    {l.chargeable ? inrExact(l.net_amount) : "-"}
+                    {l.chargeable ? inrExact(l.net_amount, doc.property) : "-"}
                   </td>
                 </>
               )}
@@ -719,16 +719,16 @@ function TaxBreakup({ doc }: { doc: Doc }) {
             <tr key={r.rate} className="border-b border-zinc-100">
               <td className="py-1.5">{r.rate}%</td>
               <td className="py-1.5 text-right tabular-nums">
-                {inrExact(r.taxable)}
+                {inrExact(r.taxable, doc.property)}
               </td>
               {r.parts.map((p) => (
                 <td key={p.label} className="py-1.5 text-right tabular-nums">
                   <span className="text-zinc-400">{p.rate}% </span>
-                  {inrExact(p.amount)}
+                  {inrExact(p.amount, doc.property)}
                 </td>
               ))}
               <td className="py-1.5 text-right tabular-nums font-medium">
-                {inrExact(r.total_tax)}
+                {inrExact(r.total_tax, doc.property)}
               </td>
             </tr>
           ))}
@@ -741,35 +741,38 @@ function TaxBreakup({ doc }: { doc: Doc }) {
 function Totals({ doc }: { doc: Doc }) {
   useUILanguage()
   const t = doc.totals
+  const moneyCtx = doc.property
+  const docTaxLabel = doc.header.tax_label || taxLabel()
   return (
     <section className="mt-6 flex justify-end break-inside-avoid">
       <div className="w-72 space-y-1">
-        <Amt k="Subtotal" v={t.subtotal} />
-        {t.discount > 0 && <Amt k="Discount" v={-t.discount} />}
-        {Number(t.tax) !== 0 && <Amt k="Taxable" v={t.taxable} />}
+        <Amt k="Subtotal" v={t.subtotal} moneyCtx={moneyCtx} />
+        {t.discount > 0 && <Amt k="Discount" v={-t.discount} moneyCtx={moneyCtx} />}
+        {Number(t.tax) !== 0 && <Amt k="Taxable" v={t.taxable} moneyCtx={moneyCtx} />}
         {Number(t.tax) !== 0 && t.tax_summary.map((s) => (
           <Amt
             key={s.gst_rate}
-            k={`${taxLabel()} @ ${s.gst_rate}%`}
+            k={`${docTaxLabel} @ ${s.gst_rate}%`}
             v={s.tax}
+            moneyCtx={moneyCtx}
             muted
           />
         ))}
         <div className="flex justify-between border-t border-zinc-300 pt-1 font-semibold">
           <span>{translate("Total")}</span>
-          <span className="tabular-nums">{inrExact(t.grand_total)}</span>
+          <span className="tabular-nums">{inrExact(t.grand_total, moneyCtx)}</span>
         </div>
         {t.received > 0 && (
           <>
-            <Amt k="Received" v={-t.received} />
+            <Amt k="Received" v={-t.received} moneyCtx={moneyCtx} />
             <div className="flex justify-between border-t border-zinc-200 pt-1 font-semibold">
               <span>{translate("Balance due")}</span>
-              <span className="tabular-nums">{inrExact(t.balance_due)}</span>
+              <span className="tabular-nums">{inrExact(t.balance_due, moneyCtx)}</span>
             </div>
           </>
         )}
         {t.complimentary_value > 0 && (
-          <p className="pt-2 text-xs text-zinc-400">{translate("Complimentary items worth ")}{inrExact(t.complimentary_value)}{translate(" are included at no charge.")}</p>
+          <p className="pt-2 text-xs text-zinc-400">{translate("Complimentary items worth ")}{inrExact(t.complimentary_value, moneyCtx)}{translate(" are included at no charge.")}</p>
         )}
         {doc.header.amount_in_words && (
           <p className="border-t border-zinc-200 pt-2 text-xs italic text-zinc-600">
@@ -781,12 +784,12 @@ function Totals({ doc }: { doc: Doc }) {
   )
 }
 
-function Amt({ k, v, muted }: { k: string; v: number; muted?: boolean }) {
+function Amt({ k, v, muted, moneyCtx }: { k: string; v: number; muted?: boolean; moneyCtx?: BanquetMoneyCtx | null }) {
   useUILanguage()
   return (
     <div className={"flex justify-between " + (muted ? "text-zinc-500" : "")}>
       <span className="text-zinc-500">{translate(k)}</span>
-      <span className="tabular-nums">{inrExact(v)}</span>
+      <span className="tabular-nums">{inrExact(v, moneyCtx)}</span>
     </div>
   )
 }

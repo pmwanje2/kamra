@@ -1,0 +1,158 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-11-23 18:00:00.000000",
+ "description": "Which transaction code each kind of function charge posts to (OPERA Revenue Type Mapping). The most specific row wins: hall and event type, then hall, then event type, then the revenue type alone. Unmapped types require an explicit property default code or are refused.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "property",
+  "revenue_type",
+  "transaction_code",
+  "column_break_a",
+  "venue",
+  "event_type",
+  "disabled"
+ ],
+ "fields": [
+  {
+   "fieldname": "property",
+   "fieldtype": "Link",
+   "label": "Property",
+   "options": "Property",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "revenue_type",
+   "fieldtype": "Select",
+   "label": "Revenue Type",
+   "options": "Venue Rental\nMenu\nFood & Beverage\nAlcohol\nAudio Visual\nDecor\nEntertainment\nFurniture & Setup\nStaffing\nAccommodation\nStationery\nService Charge\nOther",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "The kind of line on the function sheet."
+  },
+  {
+   "fieldname": "transaction_code",
+   "fieldtype": "Link",
+   "label": "Transaction Code",
+   "options": "Transaction Code",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "A revenue code of this property, or one shared by every property."
+  },
+  {
+   "fieldname": "column_break_a",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "venue",
+   "fieldtype": "Link",
+   "label": "Hall",
+   "options": "Venue",
+   "in_list_view": 1,
+   "description": "Only for functions in this hall. Leave empty for every hall."
+  },
+  {
+   "fieldname": "event_type",
+   "fieldtype": "Select",
+   "label": "Event Type",
+   "options": "\nWedding\nReception\nSangeet\nMehendi\nEngagement\nConference\nSeminar\nTraining\nProduct Launch\nBirthday\nAnniversary\nCorporate Offsite\nExhibition\nOther",
+   "in_list_view": 1,
+   "description": "Only for this kind of function. Leave empty for every kind."
+  },
+  {
+   "default": "0",
+   "fieldname": "disabled",
+   "fieldtype": "Check",
+   "label": "Disabled"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-11-23 18:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Kamra",
+ "name": "Banquet Revenue Mapping",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "email": 1,
+   "share": 1
+  },
+  {
+   "role": "Hotel Admin",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "email": 1,
+   "share": 1
+  },
+  {
+   "role": "Revenue Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "email": 1,
+   "share": 1
+  },
+  {
+   "role": "Finance",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "email": 1,
+   "share": 1
+  },
+  {
+   "role": "Front Desk",
+   "read": 1,
+   "write": 0,
+   "create": 0,
+   "delete": 0,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "email": 1
+  },
+  {
+   "role": "Kamra Agent",
+   "read": 1,
+   "write": 0,
+   "create": 0,
+   "delete": 0,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "email": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

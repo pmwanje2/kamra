@@ -30,8 +30,8 @@ import { listResource, serverError, type Row } from "../../lib/resource"
 import { Button } from "../../components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card"
 import { Sheet } from "../../components/ui/sheet"
-import { sellsAlcohol, taxLabel } from "../../lib/money"
-import { Empty, ErrorNote, Field, inputCls, inr, Select } from "./shared"
+import { moneyStep, sellsAlcohol, taxLabel } from "../../lib/money"
+import { Empty, ErrorNote, Field, inputCls, inr, Select, type BanquetMoneyCtx } from "./shared"
 import { t as translate, useUILanguage } from "../../lib/i18n"
 
 type Act = (work: () => Promise<unknown>) => Promise<void>
@@ -63,27 +63,29 @@ export default function Economics({
   if (!data) return <Empty>{translate(error) ?? translate("Loading…")}</Empty>
   const m = data.margin
   const healthy = m.percent >= 35
+  const fmt = (n: unknown) => inr(n, fn)
+  const docTaxLabel = fn.tax_label || taxLabel()
 
   return (
     <div className="space-y-4">
       <ErrorNote error={error} />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Tile label={translate("Revenue")} value={inr(data.revenue.taxable)} sub={translate("before tax")} />
+        <Tile label={translate("Revenue")} value={fmt(data.revenue.taxable)} sub={translate("before tax")} />
         <Tile
           label={translate("Cost")}
-          value={inr(data.cost.net)}
+          value={fmt(data.cost.net)}
           sub={
             (data.cost.itc_eligible
-              ? translate("after {v0} credit", { v0: String(inr(data.cost.input_tax)) })
+              ? translate("after {v0} credit", { v0: String(fmt(data.cost.input_tax)) })
               : translate("no credit claimable"))
           }
           tone="text-zinc-600"
         />
         <Tile
           label={translate("Gross margin")}
-          value={inr(m.gross)}
-          sub={translate("{v0} per head", { v0: String(inr(m.per_pax)) })}
+          value={fmt(m.gross)}
+          sub={translate("{v0} per head", { v0: String(fmt(m.per_pax)) })}
           tone={healthy ? "text-emerald-700" : "text-amber-700"}
         />
         <Tile
@@ -119,28 +121,32 @@ export default function Economics({
               value={data.cost.food}
               of={data.revenue.taxable}
               tone="bg-orange-400"
+              moneyCtx={fn}
             />
             <Bar
               label={translate("Services & hire")}
               value={data.cost.service}
               of={data.revenue.taxable}
               tone="bg-sky-400"
+              moneyCtx={fn}
             />
             <Bar
               label={translate("Margin")}
               value={Math.max(0, m.gross)}
               of={data.revenue.taxable}
               tone="bg-emerald-500"
+              moneyCtx={fn}
             />
             <dl className="mt-3 space-y-1 border-t border-zinc-100 pt-3">
-              <Line label={translate("Subtotal")} value={data.revenue.subtotal} />
+              <Line label={translate("Subtotal")} value={data.revenue.subtotal} moneyCtx={fn} />
               {data.revenue.discount > 0 && (
-                <Line label={translate("Discount")} value={-data.revenue.discount} />
+                <Line label={translate("Discount")} value={-data.revenue.discount} moneyCtx={fn} />
               )}
               {data.revenue.service_charge > 0 && (
                 <Line
                   label={translate("Service charge")}
                   value={data.revenue.service_charge}
+                  moneyCtx={fn}
                 />
               )}
               {data.revenue.supplementary > 0 && (
@@ -148,24 +154,27 @@ export default function Economics({
                   label={translate("Ordered on the night")}
                   value={data.revenue.supplementary}
                   tone="text-amber-700"
+                  moneyCtx={fn}
                 />
               )}
-              <Line label={translate("Taxable")} value={data.revenue.taxable} bold />
+              <Line label={translate("Taxable")} value={data.revenue.taxable} bold moneyCtx={fn} />
               <Line
-                label={translate("{v0} charged", { v0: String(taxLabel()) })}
+                label={translate("{v0} charged", { v0: String(docTaxLabel) })}
                 value={data.revenue.tax}
                 tone="text-zinc-400"
+                moneyCtx={fn}
               />
               <Line
-                label={translate("{v0} paid on cost", { v0: String(taxLabel()) })}
+                label={translate("{v0} paid on cost", { v0: String(docTaxLabel) })}
                 value={data.cost.input_tax}
                 tone="text-zinc-400"
+                moneyCtx={fn}
               />
             </dl>
             <p className="pt-1 text-xs text-zinc-400">
               {data.cost.itc_eligible
-                ? translate("Billed at 12% or more, so the {v0} paid on the cost side is claimable as input credit - the margin above nets it off.", { v0: String(inr(data.cost.input_tax)) })
-                : translate("Billed under the 5% food scheme, so the {v0} paid on purchases is NOT claimable. It stays in the cost.", { v0: String(inr(data.cost.input_tax)) })}
+                ? translate("Billed at 12% or more, so the {v0} paid on the cost side is claimable as input credit - the margin above nets it off.", { v0: String(fmt(data.cost.input_tax)) })
+                : translate("Billed under the 5% food scheme, so the {v0} paid on purchases is NOT claimable. It stays in the cost.", { v0: String(fmt(data.cost.input_tax)) })}
             </p>
           </CardContent>
         </Card>
@@ -260,10 +269,10 @@ export default function Economics({
                       )}
                     </td>
                     <td className="py-1.5 pr-3 text-right tabular-nums">
-                      {inr(l.net_amount)}
+                      {fmt(l.net_amount)}
                     </td>
                     <td className="py-1.5 pr-3 text-right tabular-nums text-zinc-500">
-                      {l.cost_amount ? inr(l.cost_amount) : "-"}
+                      {l.cost_amount ? fmt(l.cost_amount) : "-"}
                     </td>
                     <td
                       className={
@@ -271,7 +280,7 @@ export default function Economics({
                         (l.margin < 0 ? "text-rose-700" : "")
                       }
                     >
-                      {l.cost_amount ? inr(l.margin) : "-"}
+                      {l.cost_amount ? fmt(l.margin) : "-"}
                     </td>
                   </tr>
                 ))}
@@ -285,6 +294,7 @@ export default function Economics({
         <IndentSheet
           indent={indent}
           property={fn.property}
+          moneyCtx={fn}
           busy={busy}
           onClose={() => setIndent(null)}
           onIssue={(outlet) =>
@@ -312,6 +322,7 @@ export default function Economics({
       )}
       {supp && (
         <SupplementarySheet
+          currency={fn.currency}
           busy={busy}
           onClose={() => setSupp(false)}
           onAdd={(params) =>
@@ -357,11 +368,13 @@ function Bar({
   value,
   of,
   tone,
+  moneyCtx,
 }: {
   label: string
   value: number
   of: number
   tone: string
+  moneyCtx?: BanquetMoneyCtx | null
 }) {
   useUILanguage()
   const pct = of ? Math.min(100, (value / of) * 100) : 0
@@ -370,7 +383,7 @@ function Bar({
       <div className="flex justify-between text-xs">
         <span className="text-zinc-600">{translate(label)}</span>
         <span className="tabular-nums text-zinc-500">
-          {inr(value)} <span className="text-zinc-400">({pct.toFixed(0)}%)</span>
+          {inr(value, moneyCtx)} <span className="text-zinc-400">({pct.toFixed(0)}%)</span>
         </span>
       </div>
       <div className="mt-1 h-2 overflow-hidden rounded-full bg-zinc-100">
@@ -385,11 +398,13 @@ function Line({
   value,
   bold,
   tone = "",
+  moneyCtx,
 }: {
   label: string
   value: number
   bold?: boolean
   tone?: string
+  moneyCtx?: BanquetMoneyCtx | null
 }) {
   useUILanguage()
   return (
@@ -401,7 +416,7 @@ function Line({
       }
     >
       <dt className={bold ? "" : "text-zinc-500"}>{translate(label)}</dt>
-      <dd className="tabular-nums">{inr(value)}</dd>
+      <dd className="tabular-nums">{inr(value, moneyCtx)}</dd>
     </div>
   )
 }
@@ -409,12 +424,14 @@ function Line({
 function IndentSheet({
   indent,
   property,
+  moneyCtx,
   busy,
   onClose,
   onIssue,
 }: {
   indent: KitchenIndent
   property: string
+  moneyCtx?: BanquetMoneyCtx | null
   busy: boolean
   onClose: () => void
   onIssue: (outlet: string) => void
@@ -443,7 +460,7 @@ function IndentSheet({
       footer={
         <div className="flex flex-wrap items-center justify-between gap-3">
           <span className="text-sm text-zinc-500">
-            {inr(indent.total_cost)}{translate(" of ingredients")}{indent.shortfall_lines > 0 && (
+            {inr(indent.total_cost, moneyCtx)}{translate(" of ingredients")}{indent.shortfall_lines > 0 && (
               <span className="text-amber-700">
                 {" "}
                 · {indent.shortfall_lines}{translate(" short on the shelf")}</span>
@@ -506,7 +523,7 @@ function IndentSheet({
               >
                 {r.short_by > 0 ? r.short_by : "-"}
               </td>
-              <td className="py-1.5 text-right tabular-nums">{inr(r.cost)}</td>
+              <td className="py-1.5 text-right tabular-nums">{inr(r.cost, moneyCtx)}</td>
             </tr>
           ))}
         </tbody>
@@ -635,10 +652,12 @@ function CountSheet({
 }
 
 function SupplementarySheet({
+  currency,
   busy,
   onClose,
   onAdd,
 }: {
+  currency?: string | null
   busy: boolean
   onClose: () => void
   onAdd: (params: Record<string, unknown>) => void
@@ -723,6 +742,7 @@ function SupplementarySheet({
           <Field label={translate("Rate")}>
             <input
               type="number"
+              step={moneyStep(currency)}
               className={inputCls}
               value={form.rate}
               onChange={(e) => set("rate", e.target.value)}
@@ -731,6 +751,7 @@ function SupplementarySheet({
           <Field label={translate("What it cost us")} hint={translate("Keeps the margin honest")}>
             <input
               type="number"
+              step={moneyStep(currency)}
               className={inputCls}
               value={form.cost_rate}
               onChange={(e) => set("cost_rate", e.target.value)}
