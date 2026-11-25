@@ -1,5 +1,7 @@
 """Site-less contracts for self-service and the cross-app Cashier PIN hook."""
 
+import hashlib
+import hmac
 import runpy
 import sys
 import unittest
@@ -7,7 +9,7 @@ from datetime import timedelta
 from types import ModuleType
 from unittest.mock import Mock, patch
 
-from kamra.tests.test_p53_doa_floor_pin import KAMRA, _Doc, _FakeFrappe, _load_module
+from kamra.tests.test_p53_doa_floor_pin import KAMRA, _Doc, _FakeFrappe, _load_module, _match_filters
 from kamra.tests.test_white_label import load_parts
 
 USER = "manager@example.test"
@@ -27,6 +29,8 @@ class ManagerPinSelfServiceTest(unittest.TestCase):
 		self.site = _FakeFrappe(user=USER, tables={
 			"User": [{"name": user, "enabled": 1} for user in (USER, OTHER, "Guest", "Administrator")],
 			"Cashier PIN": [],
+			"Cashier PIN Attempt": [],
+			"DefaultValue": [],
 		})
 		self.site.user_roles.update({USER: ["Finance"], OTHER: ["Front Desk"]})
 		self.site.AuthenticationError = AuthenticationError
@@ -41,6 +45,19 @@ class ManagerPinSelfServiceTest(unittest.TestCase):
 
 		self.site.get_doc = get_doc
 		self.site.db.commit = Mock()
+		self.site.db.close = Mock()
+		self.site.db.delete = lambda doctype, filters: self.site.tables[doctype].__setitem__(
+			slice(None), [row for row in self.site.tables[doctype] if not _match_filters(row, filters)],
+		)
+		self.site.local.db = self.site.db
+
+		def bulk_insert(doctype, fields, values, **kwargs):
+			for value in values:
+				row = dict(zip(fields, value))
+				if not self.site.db.exists(doctype, row["name"]):
+					self.site.tables[doctype].append(row)
+
+		self.site.db.bulk_insert = bulk_insert
 		audit = ModuleType("kamra.savings")
 		self.audit = audit.log_action = Mock()
 		self.authz, modules = _load_module("kamra.authz", "authz.py", self.site, {"kamra.savings": audit})
@@ -49,11 +66,19 @@ class ManagerPinSelfServiceTest(unittest.TestCase):
 			lambda doctype, user, field, **kwargs: self.site.db.get_value(doctype, user, field)
 		)
 		modules["kamra.authz"] = self.authz
+		modules["frappe.utils.password"].remove_encrypted_password = (
+			lambda doctype, user, field: self.site.db.set_value(doctype, user, field, None)
+		)
+		database = modules["frappe.database"] = ModuleType("frappe.database")
+		database.get_db = Mock(return_value=self.site.db)
+		self.bridge = modules["kamra.erp_bridge"]
+		self.frappe = modules["frappe"]
 		patcher = patch.dict(sys.modules, modules)
 		patcher.start()
 		self.addCleanup(patcher.stop)
 		self.api = load_parts(
-			"api.py", {"PIN_SELF_SERVICE_ROLES", "my_pin_status", "set_cashier_pin"},
+			"api.py", {"PIN_SELF_SERVICE_ROLES", "my_pin_status", "set_cashier_pin", "reset_cashier_pin",
+			           "verify_cashier_pin", "correct_folio_payment", "refund_folio_payment"},
 			modules["frappe"], imports=("kamra.authz",), _=self.site._,
 		)
 
@@ -76,16 +101,16 @@ class ManagerPinSelfServiceTest(unittest.TestCase):
 		self.assertEqual(set_pin("0246", password="account-secret"), {"ok": True})
 		self.assertEqual(self.site.local.form_dict, {"keep": True})
 		doc = self.site.get_doc("Cashier PIN", USER)
-		self.assertEqual(doc.pin, "0246")
+		self.assert_hashed(doc, "0246")
 		self.assertEqual(set_pin("6420", password="account-secret"), {"ok": True})
 		doc.must_reset = 1
 		doc.pin_attempts = 3
 		self.site.cache.set_value(f"kamra_cashier_unlock:{USER}", True)
-		self.assertEqual(set_pin("4567", password="account-secret"), {"ok": True})
-		self.assertEqual((doc.pin, doc.must_reset, doc.pin_attempts, doc.locked_until), ("4567", 0, 0, None))
+		self.assertEqual(set_pin("4057", password="account-secret"), {"ok": True})
+		self.assert_hashed(doc, "4057")
+		self.assertEqual((doc.must_reset, doc.pin_attempts, doc.locked_until), (0, 0, None))
 		self.assertIsNone(self.site.cache.get_value(f"kamra_cashier_unlock:{USER}"))
 		self.assertEqual(self.check_password.call_count, 3)
-		self.assertEqual(self.site.db.commit.call_count, 3)
 		self.audit.assert_called_with("set_cashier_pin", "Cashier PIN", USER, None)
 		self.assertNotIn("account-secret", repr(self.audit.call_args_list))
 
@@ -93,29 +118,83 @@ class ManagerPinSelfServiceTest(unittest.TestCase):
 		set_pin = self.api["set_cashier_pin"]
 		self.check_password.side_effect = AuthenticationError
 		for _ in range(5):
-			self.site.local.form_dict.update(pin="4567", password="incorrect")
+			self.site.local.form_dict.update(pin="4057", password="incorrect")
 			with self.assertRaises(self.site.ValidationError):
-				set_pin("4567", password="incorrect")
+				set_pin("4057", password="incorrect")
 			self.assertEqual(self.site.local.form_dict, {})
 		self.assertFalse(self.site.db.exists("Cashier PIN", USER))
+		self.site.cache._data.clear()
 		status = self.api["my_pin_status"]()
 		self.assertTrue(status["locked"])
 		self.assertEqual(status["locked_until"], str(self.site.now + timedelta(minutes=15)))
 		self.check_password.side_effect = None
 		with self.assertRaises(self.site.ValidationError):
-			set_pin("4567", password="correct")
+			set_pin("4057", password="correct")
 		self.assertEqual(self.check_password.call_count, 5)
 		self.site.now += timedelta(minutes=15)
-		self.assertEqual(set_pin("4567", password="correct"), {"ok": True})
+		self.assertEqual(set_pin("4057", password="correct"), {"ok": True})
 
-	def test_legacy_current_pin_and_ascii_validation(self):
+	def assert_hashed(self, doc, pin):
+		self.assertIsNone(doc.pin)
+		algorithm, rounds, salt, digest = (doc.pin_hash or "").split("$")
+		self.assertEqual(algorithm, "pbkdf2_sha256")
+		self.assertGreaterEqual(int(rounds), 600_000)
+		self.assertGreaterEqual(len(bytes.fromhex(salt)), 16)
+		expected = hashlib.pbkdf2_hmac("sha256", pin.encode(), bytes.fromhex(salt), int(rounds))
+		self.assertTrue(hmac.compare_digest(expected, bytes.fromhex(digest)))
+
+	def test_every_enrollment_state_requires_account_password(self):
+		for state in ("new", "reset", "rotation"):
+			with self.subTest(state=state):
+				self.site.tables["Cashier PIN"].clear()
+				if state != "new":
+					self.seed_pin(must_reset=int(state == "reset"))
+				with self.assertRaises(self.site.ValidationError):
+					self.api["set_cashier_pin"]("2605", current_pin="1234")
+		self.check_password.assert_not_called()
+
+	def test_shared_writer_rejects_weak_or_inexact_pin(self):
+		for pin in (" 4067", "4067 ", "４０６７", "1111", "000000", "1234", "654321", "135", "123456789"):
+			with self.subTest(pin=pin), self.assertRaises(self.site.ValidationError):
+				self.authz.write_cashier_pin(USER, pin)
+		self.assertFalse(self.site.db.exists("Cashier PIN", USER))
+
+	def test_verified_legacy_pin_is_migrated_and_checked_in_constant_time(self):
 		row = self.seed_pin()
-		with self.assertRaises(self.site.ValidationError):
-			self.api["set_cashier_pin"]("2345")
-		with self.assertRaises(self.site.ValidationError):
-			self.api["set_cashier_pin"]("１２３４", current_pin="1234")
-		self.assertEqual(self.api["set_cashier_pin"]("2345", current_pin="1234"), {"ok": True})
-		self.assertEqual(row.pin, "2345")
+		with patch("hmac.compare_digest", wraps=hmac.compare_digest) as compare:
+			self.authz._check_user_pin(USER, "1234", None)
+			self.assert_hashed(row, "1234")
+			self.site.set_user(OTHER)
+			self.assertEqual(self.authz.verify_supervisor("", USER, "1234", requester=OTHER), USER)
+			self.assertGreaterEqual(compare.call_count, 2)
+
+	def test_new_hashes_have_distinct_salts(self):
+		self.api["set_cashier_pin"]("2605", password="account-secret")
+		first = self.site.get_doc("Cashier PIN", USER).pin_hash
+		self.api["set_cashier_pin"]("2605", password="account-secret")
+		second = self.site.get_doc("Cashier PIN", USER).pin_hash
+		self.assertIsNotNone(first)
+		self.assertNotEqual(first, second)
+
+	def test_till_and_supervisor_guesses_share_durable_pin_lockout(self):
+		self.seed_pin()
+		for _ in range(2):
+			with self.assertRaisesRegex(self.site.ValidationError, "Wrong cashier PIN"):
+				self.authz._check_user_pin(USER, "2948", None)
+		self.site.set_user(OTHER)
+		for _ in range(2):
+			with self.assertRaisesRegex(self.site.ValidationError, "Wrong cashier PIN"):
+				self.authz.verify_supervisor("", USER, "2948", requester=OTHER)
+		with self.assertRaisesRegex(self.site.ValidationError, "PIN_LOCKED"):
+			self.authz.verify_supervisor("", USER, "2948", requester=OTHER)
+		self.site.cache._data.clear()
+		self.assertTrue(self.site.tables["Cashier PIN Attempt"])
+		with self.assertRaisesRegex(self.site.ValidationError, "PIN_LOCKED"):
+			self.authz._check_user_pin(USER, "1234", None)
+		self.site.now += timedelta(minutes=15)
+		with self.assertRaisesRegex(self.site.ValidationError, "Wrong cashier PIN"):
+			self.authz._check_user_pin(USER, "2948", None)
+		self.authz._check_user_pin(USER, "1234", None)
 
 	def test_forbidden_sessions_cannot_set_or_read_pin_and_form_is_scrubbed(self):
 		cases = [
@@ -134,9 +213,9 @@ class ManagerPinSelfServiceTest(unittest.TestCase):
 				self.site.flags.clear()
 				self.site.flags.update(flags)
 				next(row for row in self.site.tables["User"] if row["name"] == user)["enabled"] = enabled
-				self.site.local.form_dict.update(pin="4567", current_pin="1234", password="secret")
+				self.site.local.form_dict.update(pin="4057", current_pin="1234", password="secret")
 				with self.assertRaises(self.site.PermissionError):
-					self.api["set_cashier_pin"]("4567", password="secret")
+					self.api["set_cashier_pin"]("4057", password="secret")
 				self.assertEqual(self.site.local.form_dict, {})
 				with self.assertRaises(self.site.PermissionError):
 					self.api["my_pin_status"]()
@@ -148,7 +227,7 @@ class ManagerPinSelfServiceTest(unittest.TestCase):
 		self.assertEqual(manage("status", user=USER.upper()), {
 			"has_pin": False, "must_reset": False, "locked": False,
 		})
-		self.assertEqual(manage("set", user=USER.upper(), pin="4567"), {"ok": True, "has_pin": True})
+		self.assertEqual(manage("set", user=USER.upper(), pin="4057", current_password="account-secret"), {"ok": True, "has_pin": True})
 		self.assertEqual(manage("status"), {"has_pin": True, "must_reset": False, "locked": False})
 		self.assertEqual(manage("clear", caller=USER), {"ok": True, "has_pin": False, "must_reset": True})
 		self.assertEqual(manage("status"), {"has_pin": False, "must_reset": True, "locked": False})
@@ -156,9 +235,9 @@ class ManagerPinSelfServiceTest(unittest.TestCase):
 	def test_hook_refuses_to_set_another_users_pin_or_accept_spoofed_caller(self):
 		self.site.user_roles[USER] = ["Hotel Admin"]
 		manage = self.authz.manage_pos_override_pin
-		self.site.local.form_dict.update(pin="4567", override_pin="1234")
+		self.site.local.form_dict.update(pin="4057", override_pin="1234")
 		with self.assertRaises(self.site.PermissionError):
-			manage("set", user=OTHER, pin="4567")
+			manage("set", user=OTHER, pin="4057")
 		self.assertEqual(self.site.local.form_dict, {})
 		with self.assertRaises(self.site.PermissionError):
 			manage("clear", user=OTHER, caller=OTHER)
@@ -167,3 +246,97 @@ class ManagerPinSelfServiceTest(unittest.TestCase):
 			"ok": True, "has_pin": False, "must_reset": True,
 		})
 		self.assertIn(USER, repr(self.audit.call_args))
+
+	def test_pos_enrollment_cannot_bypass_account_verification(self):
+		with self.assertRaises(self.site.ValidationError):
+			self.authz.manage_pos_override_pin("set", pin="4067")
+		self.assertFalse(self.site.db.exists("Cashier PIN", USER))
+
+	def test_pos_status_allows_multi_property_staff_at_an_authorized_till(self):
+		self.site.user_roles[USER] = ["URY Manager"]
+		self.site.user_permissions = {
+			USER: {"Property": [{"doc": "Alpha"}], "Company": [{"doc": "Alpha Ltd"}]},
+			OTHER: {"Property": [{"doc": "Alpha"}, {"doc": "Beta"}],
+			        "Company": [{"doc": "Alpha Ltd"}, {"doc": "Beta Ltd"}]},
+		}
+		with patch.object(self.authz, "resolve_property_for_pos_profile", return_value="Alpha"), \
+		     patch.object(self.authz, "_property_company", return_value="Alpha Ltd"):
+			status = self.authz.manage_pos_override_pin("status", user=OTHER, pos_profile="Till")
+			self.assertFalse(status["has_pin"])
+
+	def test_reset_checks_full_company_scope_and_empty_strict_property_scope(self):
+		self.site.user_roles[USER] = ["Hotel Admin"]
+		scenarios = [
+			({"Property": [{"doc": "Alpha"}], "Company": [{"doc": "Alpha Ltd"}]},
+			 {"Property": [{"doc": "Alpha"}], "Company": [{"doc": "Beta Ltd"}]}),
+			({}, {}),
+		]
+		for actor, target in scenarios:
+			with self.subTest(actor=actor, target=target):
+				self.site.user_permissions = {USER: actor, OTHER: target}
+				self.site.conf["kamra_strict_property_scope"] = 1
+				with self.assertRaises(self.site.PermissionError):
+					self.api["reset_cashier_pin"](OTHER)
+
+	def test_passed_credentials_are_removed_before_permission_denials(self):
+		self.site.user_roles[USER] = []
+		credentials = dict.fromkeys(
+			("pin", "current_pin", "new_pin", "confirm_pin", "supervisor_pin", "password", "current_password"),
+			"synthetic-secret",
+		)
+		for method, args in (
+			("set_cashier_pin", ("4067",)),
+			("verify_cashier_pin", ("Local Property", "4067")),
+			("correct_folio_payment", ("FOL-1", "PAY-1")),
+			("refund_folio_payment", ("FOL-1",)),
+		):
+			with self.subTest(method=method):
+				self.site.local.form_dict.update(credentials, keep=True)
+				original_throw = self.site.throw
+				with patch.object(self.frappe, "throw", wraps=original_throw) as throw:
+					def check_scrubbing(*args, **kwargs):
+						self.assertEqual(self.site.local.form_dict, {"keep": True})
+						original_throw(*args, **kwargs)
+
+					throw.side_effect = check_scrubbing
+					with self.assertRaises(self.site.PermissionError):
+						self.api[method](*args)
+
+	def test_staff_wire_status_for_unenrolled_user_is_none(self):
+		self.site.tables["Has Role"] = [{"parent": OTHER, "role": "Front Desk", "parenttype": "User"}]
+		self.site.tables["User"][1].update(user_type="System User", full_name="Guest Services")
+		staff = load_parts(
+			"staff.py", {"list_staff"}, self.frappe, imports=("kamra.authz",),
+			ROLE_NAMES=("Front Desk",), NEVER_LISTED=(), IT_ONLY=(),
+			_caller_is_it=lambda: True, _visible_to=lambda *_: True,
+		)
+		self.site.user_roles[USER] = ["Hotel Admin"]
+		self.assertEqual(staff["list_staff"]("Alpha")[0]["pin"], "none")
+
+	def test_floor_only_pin_is_reported_for_self_service_and_row_corrections(self):
+		self.site.tables["User"][0].update(user_type="System User", full_name="Shift Manager")
+		self.site.tables["Has Role"] = [{"parent": USER, "role": "Finance", "parenttype": "User"}]
+		self.site.tables["DefaultValue"].append({
+			"name": "floor-hash", "parent": USER, "parenttype": "SiteOps Floor PIN",
+			"defkey": "siteops_floor_pin_hash", "defvalue": "existing-floor-only-record",
+		})
+		with patch.object(self.authz, "_doa_floor_script", return_value=object()):
+			self.assertTrue(self.api["my_pin_status"]()["has_pin"])
+			self.site.set_user(OTHER)
+			rows = self.authz.supervisors_for("Alpha", exclude=OTHER, include_pin_status=True)
+			self.assertEqual([row["user"] for row in rows], [USER])
+			self.assertTrue(rows[0]["has_pin"])
+			self.assertFalse(rows[0]["must_reset"])
+
+	def test_reset_revokes_both_store_entries_when_floor_bridge_is_active(self):
+		self.site.user_roles[USER] = ["Hotel Admin"]
+		self.site.tables["DefaultValue"].append({
+			"name": "floor-hash", "parent": OTHER, "parenttype": "SiteOps Floor PIN",
+			"defkey": "siteops_floor_pin_hash", "defvalue": "existing-floor-only-record",
+		})
+		with patch.object(self.authz, "_doa_floor_script", return_value=object()):
+			self.assertTrue(self.api["reset_cashier_pin"](OTHER)["must_reset"])
+			self.assertFalse(any(row.get("defvalue") for row in self.site.tables["DefaultValue"]
+			                     if row.get("defkey") == "siteops_floor_pin_hash"))
+			self.site.set_user(OTHER)
+			self.assertFalse(self.api["my_pin_status"]()["has_pin"])
