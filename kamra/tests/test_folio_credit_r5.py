@@ -79,7 +79,11 @@ class FolioCreditR5Test(AuditTestCase):
 					self.assertEqual(data["fiscal"]["sales_invoice"], shown_invoice)
 					self.assertEqual(data["fiscal"]["credit_notes"], notes)
 					self.assertIsNone(data["fiscal"]["replaced_by"])
-					self.assertEqual(data["fiscal"]["outstanding_amount"], 75)
+					if owner == "FOREIGN-FOLIO":
+						self.assertIsNone(data["fiscal"]["outstanding_amount"])
+						self.assertIs(data["document"]["is_final"], False)
+					else:
+						self.assertEqual(data["fiscal"]["outstanding_amount"], 75)
 
 	def test_window_fiscal_lookup_only_queries_verified_visible_invoices(self):
 		for currency, amount in CURRENCIES:

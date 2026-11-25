@@ -8,24 +8,12 @@ from kamra import api, ledger
 from kamra.folio import open_folio
 from kamra.tests import test_folio_credit_and_advance_r2 as r2
 from kamra.tests.audit_fixtures import PROP_A, TODAY, AuditTestCase, d, ensure_user, make_property, make_reservation, make_room_type
-from kamra.tests.bridge_fields import ensure_bridge_field
-from kamra.tests.test_fiscal_folio import FISCALISED, INVOICE, fiscal_reader
+from kamra.tests.test_fiscal_folio import FISCALISED, INVOICE, OwnedSalesInvoiceFixture, fiscal_reader
 
 
-class FiscalReprintR6Test(AuditTestCase):
+class FiscalReprintR6Test(OwnedSalesInvoiceFixture, AuditTestCase):
 	_erp = r2.FolioCreditAndAdvanceR2Test._erp
 	_invoice = r2.FolioCreditAndAdvanceR2Test._invoice
-
-	@classmethod
-	def setUpClass(cls):
-		super().setUpClass()
-		with patch.object(frappe.local, "db", frappe.local.db):
-			frappe.connect(set_admin_as_user=False)
-			try:
-				ensure_bridge_field("Folio", "sales_invoice")
-				ensure_bridge_field("Property", "company")
-			finally:
-				frappe.db.close()
 
 	def setUp(self):
 		super().setUp()
@@ -69,7 +57,13 @@ class FiscalReprintR6Test(AuditTestCase):
 		with self._erp([self._invoice(INVOICE, "ANOTHER-FOLIO")]), fiscal_reader(FISCALISED):
 			single = ledger.record_folio_reprint(self.folio)["reprint"]
 			batch = ledger.batch_print_folios([self.folio])["reprints"][0]["reprint"]
+			with self.assertRaises(frappe.ValidationError):
+				api.reprint_fiscal_folio(self.folio)
+		owned_invoice = "R6-OWNED-REPRINT"
+		self.link_sales_invoice(self.folio, owned_invoice)
+		with fiscal_reader({**FISCALISED, "sales_invoice": owned_invoice}):
 			printed = api.reprint_fiscal_folio(self.folio)["reprint"]
+		self.assertEqual(frappe.db.get_value("Folio Reprint", printed, "invoice_number"), owned_invoice)
 		for name in (single, batch, printed):
 			with self.subTest(name=name):
 				self.assertNotEqual(frappe.db.get_value("Folio Reprint", name, "invoice_number"), INVOICE)
