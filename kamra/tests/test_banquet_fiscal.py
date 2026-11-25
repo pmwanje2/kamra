@@ -22,6 +22,7 @@ from frappe.utils import add_days, nowdate
 from kamra import banquet as bq
 from kamra import erp_bridge
 from kamra.tests.fixtures import PROPERTY, _upsert, build, enquiry
+from kamra.tests.test_fiscal_folio import OwnedSalesInvoiceFixture
 
 FISCAL = "hospitality_kamra.fiscal_document"
 
@@ -480,39 +481,6 @@ class TestEventFolio(BanquetFiscalCase):
 			self.assertEqual((fsc["deposit_held"], fsc["deposit_refunded"]), (0.0, 0.0))
 			self.assertAlmostEqual(float(folio_c.payments_total), 0.0, 2)
 
-	def test_folio_history_includes_and_searches_sales_invoice_when_column_exists(self):
-		"""Hydrogen P2: FolioHistory surfaces ERP sales_invoice instead of internal INV-... on bridge sites."""
-		from kamra import ledger
-		from kamra.folio import close_folio
-
-		fn = confirmed(self.f)
-		mapping("Venue Rental", revenue_code("UT-BQ-HALL"))
-		mapping("Menu", revenue_code("UT-BQ-FOOD", charge_type="Food & Beverage"))
-		with accounting_bridge():
-			out = bq.post_to_folio(fn)
-			folio_doc = frappe.get_doc("Folio", out["folio"])
-			bq.record_receipt(fn, float(folio_doc.balance), mode="Cash", kind="Payment")
-			close_folio(out["folio"])
-		real_get_all = frappe.get_all
-
-		def fake_get_all(doctype, *args, **kwargs):
-			if doctype == "Folio":
-				fields = list(kwargs.get("fields") or [])
-				has_si = "sales_invoice" in fields
-				kwargs["fields"] = [f for f in fields if f != "sales_invoice"]
-				rows = real_get_all(doctype, *args, **kwargs)
-				if has_si:
-					for row in rows:
-						row["sales_invoice"] = "ACC-SINV-2026-0099" if row.name == out["folio"] else None
-				return rows
-			return real_get_all(doctype, *args, **kwargs)
-
-		with patch.object(frappe.db, "has_column", side_effect=lambda dt, col: True if (dt, col) == ("Folio", "sales_invoice") else False), \
-				patch.object(frappe, "get_all", side_effect=fake_get_all):
-			hist = ledger.folio_history(PROPERTY, query="ACC-SINV-2026-0099")["folios"]
-		self.assertEqual([r.name for r in hist], [out["folio"]])
-		self.assertEqual(hist[0].get("sales_invoice"), "ACC-SINV-2026-0099")
-
 	# --- without the bridge nothing changes ---------------------------------------------------------------
 
 	def test_standalone_kamra_keeps_receipts_on_the_function_and_its_own_invoice(self):
@@ -846,3 +814,23 @@ class TestDivisibleHalls(BanquetFiscalCase):
 		halls = {v["name"]: v for v in bq.venue_availability(PROPERTY, day)["venues"]}
 		self.assertFalse(halls[self.whole]["available"])
 		self.assertTrue(halls[self.west]["available"])
+
+
+class TestEventFolioInvoiceHistory(OwnedSalesInvoiceFixture, BanquetFiscalCase):
+	def test_folio_history_includes_and_searches_sales_invoice_when_column_exists(self):
+		"""Hydrogen P2: FolioHistory surfaces ERP sales_invoice instead of internal INV-... on bridge sites."""
+		from kamra import ledger
+		from kamra.folio import close_folio
+
+		fn = confirmed(self.f)
+		mapping("Venue Rental", revenue_code("UT-BQ-HALL"))
+		mapping("Menu", revenue_code("UT-BQ-FOOD", charge_type="Food & Beverage"))
+		with accounting_bridge():
+			out = bq.post_to_folio(fn)
+			folio_doc = frappe.get_doc("Folio", out["folio"])
+			bq.record_receipt(fn, float(folio_doc.balance), mode="Cash", kind="Payment")
+			close_folio(out["folio"])
+		self.link_sales_invoice(out["folio"], "ACC-SINV-2026-0099")
+		hist = ledger.folio_history(PROPERTY, query="ACC-SINV-2026-0099")["folios"]
+		self.assertEqual([r.name for r in hist], [out["folio"]])
+		self.assertEqual(hist[0].get("sales_invoice"), "ACC-SINV-2026-0099")

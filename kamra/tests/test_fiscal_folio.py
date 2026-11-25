@@ -63,7 +63,7 @@ def fiscal_reader(result):
 		yield calls
 
 
-class FiscalFolioTests(AuditTestCase):
+class FiscalStayFixture(AuditTestCase):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()
@@ -85,6 +85,8 @@ class FiscalFolioTests(AuditTestCase):
 		api.add_folio_payment(self.folio, "Cash", owed)
 		return close_folio(self.folio)
 
+
+class FiscalFolioTests(FiscalStayFixture):
 	@contextmanager
 	def owned_fiscal_reader(self, answer):
 		"""Supply the accounting record as well as the bridge's fiscal answer."""
@@ -562,30 +564,6 @@ class FiscalFolioTests(AuditTestCase):
 		self.assertAlmostEqual(float(closed_doc.balance), 0.0, 2)
 		self.assertAlmostEqual(security_deposit_held_on_folio(closed_doc), 50.0, 2)
 
-	def test_batch_print_folios_enforces_fiscal_finality_and_records_sales_invoice(self):
-		"""Hydrogen R1 #5: batch_print_folios refuses pending/sandbox/unverified EFRIS folios and logs sales_invoice."""
-		from kamra import ledger
-
-		self.settle()
-		for answer in (
-			{"state": "pending", "sales_invoice": INVOICE},
-			{**FISCALISED, "sandbox": 1},
-			{"state": "issued", "sales_invoice": INVOICE},
-			{"state": "not_efris", "sales_invoice": INVOICE, "charges_tax": 1, "efris_enrolled": 1},
-		):
-			with self.subTest(answer=answer), fiscal_reader(answer):
-				with self.assertRaisesRegex(frappe.ValidationError, "pending|not a valid|unavailable"):
-					ledger.batch_print_folios([self.folio])
-		self.assertFalse(frappe.db.exists("Folio Reprint", {"folio": self.folio}))
-
-		# When final (even if internal invoice_number is None on a bridged close), batch_print logs sales_invoice.
-		frappe.db.set_value("Folio", self.folio, "invoice_number", None, update_modified=False)
-		with fiscal_reader(FISCALISED):
-			res = ledger.batch_print_folios([self.folio])
-		self.assertEqual(len(res["reprints"]), 1)
-		logged_inv = frappe.db.get_value("Folio Reprint", res["reprints"][0]["reprint"], "invoice_number")
-		self.assertEqual(logged_inv, INVOICE)
-
 	def test_amount_in_words_and_stay_money_respect_currency_precision(self):
 		"""Hydrogen R1 #6: KWD 3dp precision preserved in amount_in_words and _stay_money."""
 		from kamra.localization.words import amount_in_words
@@ -726,3 +704,78 @@ class FiscalFolioTests(AuditTestCase):
 			close_folio(f_ug)
 		self.assertIn(f"{ugx_symbol}1 ", str(err_ug_cf.exception))
 		self.assertNotIn("1.00", str(err_ug_cf.exception))
+
+
+class OwnedSalesInvoiceFixture:
+	"""Install the bridge read model on an isolated connection for these two invoice tests."""
+
+	@classmethod
+	def setUpClass(cls):
+		from kamra.tests.bridge_fields import ensure_bridge_field
+
+		outer = frappe.local.db
+		frappe.connect(set_admin_as_user=False)
+		cls.addClassCleanup(setattr, frappe.local, "db", outer)
+		cls.addClassCleanup(frappe.local.db.close)
+		ensure_bridge_field("Folio", "sales_invoice")
+		ensure_bridge_field("Property", "company")
+		if not frappe.db.exists("DocType", "Sales Invoice"):
+			from frappe.core.doctype.doctype.test_doctype import new_doctype
+
+			if frappe.db.table_exists("Sales Invoice"):
+				raise RuntimeError("Cannot provision Sales Invoice over an existing table")
+			fields = (
+				("company", "Data"), ("currency", "Data"), ("kamra_ref", "Data"),
+				("grand_total", "Currency"), ("rounded_total", "Currency"),
+				("return_against", "Data"), ("is_return", "Check"), ("update_outstanding_for_self", "Check"),
+			)
+			schema = new_doctype("Sales Invoice", fields=[
+				{"fieldname": key, "label": key.replace("_", " ").title(), "fieldtype": kind}
+				for key, kind in fields
+			], is_submittable=1).insert()
+			cls.addClassCleanup(frappe.db.sql_ddl, "DROP TABLE `tabSales Invoice`")
+			cls.addClassCleanup(frappe.delete_doc, "DocType", schema.name, force=True)
+		# The integration fixture rolls its transaction back before schema cleanup.
+		super().setUpClass()
+
+	def link_sales_invoice(self, folio, number):
+		from kamra.pricing import property_currency
+
+		property_name, total = frappe.db.get_value("Folio", folio, ["property", "grand_total"])
+		company = frappe.db.get_value("Property", property_name, "company") or "Fiscal Fixture Company"
+		frappe.db.set_value("Property", property_name, "company", company)
+		frappe.clear_document_cache("Property", property_name)
+		self.addCleanup(frappe.clear_document_cache, "Property", property_name)
+		frappe.get_doc({
+			"doctype": "Sales Invoice", "name": number, "docstatus": 1, "is_return": 0,
+			"kamra_ref": folio, "company": company, "currency": property_currency(property_name),
+			"grand_total": total,
+		}).db_insert()
+		frappe.db.set_value("Folio", folio, "sales_invoice", number)
+
+
+class BatchPrintInvoiceTest(OwnedSalesInvoiceFixture, FiscalStayFixture):
+	def test_batch_print_folios_enforces_fiscal_finality_and_records_sales_invoice(self):
+		"""Hydrogen R1 #5: batch_print_folios refuses pending/sandbox/unverified EFRIS folios and logs sales_invoice."""
+		from kamra import ledger
+
+		self.settle()
+		self.link_sales_invoice(self.folio, INVOICE)
+		for answer in (
+			{"state": "pending", "sales_invoice": INVOICE},
+			{**FISCALISED, "sandbox": 1},
+			{"state": "issued", "sales_invoice": INVOICE},
+			{"state": "not_efris", "sales_invoice": INVOICE, "charges_tax": 1, "efris_enrolled": 1},
+		):
+			with self.subTest(answer=answer), fiscal_reader(answer):
+				with self.assertRaisesRegex(frappe.ValidationError, "pending|not a valid|unavailable"):
+					ledger.batch_print_folios([self.folio])
+		self.assertFalse(frappe.db.exists("Folio Reprint", {"folio": self.folio}))
+
+		# When final (even if internal invoice_number is None on a bridged close), batch_print logs sales_invoice.
+		frappe.db.set_value("Folio", self.folio, "invoice_number", None, update_modified=False)
+		with fiscal_reader(FISCALISED):
+			res = ledger.batch_print_folios([self.folio])
+		self.assertEqual(len(res["reprints"]), 1)
+		logged_inv = frappe.db.get_value("Folio Reprint", res["reprints"][0]["reprint"], "invoice_number")
+		self.assertEqual(logged_inv, INVOICE)
