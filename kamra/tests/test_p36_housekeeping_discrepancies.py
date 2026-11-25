@@ -34,7 +34,7 @@ class TestP36HousekeepingDiscrepancies(AuditTestCase):
 		return user
 
 	def test_skip_and_sleep_are_scoped_and_resolution_is_audited(self):
-		frappe.set_user(self.staff)
+		frappe.set_user(self.staff)  # nosemgrep: frappe-setuser -- test persona
 		housekeeping.report_hk_occupancy(self.occupied, "Vacant")
 		housekeeping.report_hk_occupancy(self.vacant, "Occupied")
 		with self.assertRaises(frappe.PermissionError):
@@ -45,7 +45,7 @@ class TestP36HousekeepingDiscrepancies(AuditTestCase):
 		self.assertEqual({row["room"]: row["discrepancy"] for row in rows}, {
 			self.occupied: "Skip", self.vacant: "Sleep",
 		})
-		frappe.set_user(self.desk)
+		frappe.set_user(self.desk)  # nosemgrep: frappe-setuser -- test persona
 		housekeeping.resolve_hk_discrepancy(self.occupied, "Guest stepped out temporarily")
 		self.assertEqual([row["discrepancy"] for row in housekeeping.get_hk_discrepancies(PROP_A)],
 		                 ["Sleep"])

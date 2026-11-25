@@ -51,7 +51,7 @@ class TestP23RoomMovesUpgrades(AuditTestCase):
 		frappe.get_doc(doctype="User Permission", user=user, allow="Property",
 		               for_value=PROP_A).insert(ignore_permissions=True)
 		frappe.clear_cache(user=user)
-		frappe.set_user(user)
+		frappe.set_user(user)  # nosemgrep: frappe-setuser -- test persona
 		with self.assertRaises(frappe.PermissionError):
 			api.room_move_preview(stay.name, self.foreign, upgrade_type="Paid")
 		with self.assertRaises(frappe.PermissionError):
