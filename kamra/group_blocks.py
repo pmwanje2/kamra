@@ -141,6 +141,9 @@ def unpicked_by_night(group: str, room_type: str, *,
 
 def restored_pickup_nights(before, after) -> set[str]:
 	"""Nights where removing the stored pickup returns a live hold to its block."""
+	# Match unpicked_by_night: checked-out stays still count on the nights used.
+	if before.status not in LIVE_STATUSES and before.status != "Checked Out":
+		return set()
 	if not any(g.name == before.group_booking for g in _holding_groups(
 		before.property, before.check_in_date, add_days(before.check_out_date, 1), for_update=True
 	)):
