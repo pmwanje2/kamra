@@ -63,6 +63,14 @@ class _Doc(_Dict):
 			self["name"] = f"ALW-{len(rows) + 1:05d}"
 		if store is not None:
 			store.setdefault(dt, []).append(self)
+			# Frappe v16 runs process_workflow_actions on on_update after insert.
+			if dt == "Allowance Request" and self.status == "Pending" and any(
+				wf["document_type"] == dt and wf["is_active"] for wf in store["Workflow"]
+			):
+				store["Workflow Action"].append({
+					"name": f"WA-{self.name}", "reference_doctype": dt,
+					"reference_name": self.name, "status": "Open", "permitted_role": "Finance",
+				})
 		return self
 
 	def save(self, ignore_permissions: bool = False):
@@ -213,14 +221,15 @@ class _FakeFrappe:
 			return row.get(fieldname)
 		return None
 
-	def _db_set_value(self, doctype: str, name: str, fieldname, value=None, **_kwargs):
+	def _db_set_value(self, doctype: str, filters, fieldname, value=None, **_kwargs):
+		if doctype == "Workflow Action" and not self.db.table_exists(doctype):
+			raise self.DoesNotExistError(doctype)
 		for row in self.tables.get(doctype, []):
-			if row.get("name") == name:
+			if _match_filters(row, filters):
 				if isinstance(fieldname, dict):
 					row.update(fieldname)
 				else:
 					row[fieldname] = value
-				return
 
 	def get_all(self, doctype: str, filters=None, fields=None, pluck: str | None = None,
 	            distinct: bool = False, order_by: str | None = None, **_kwargs):
@@ -623,7 +632,7 @@ class TestP53AllowanceConvergence(unittest.TestCase):
 	"""`kamra/api.py` (`post_allowance`, `decide_allowance`) four-eyes & Workflow convergence."""
 
 	def _build_api_env(self, site: _FakeFrappe, *, currency: str = "UGX",
-	                   needs_approval: bool = True, workflow_active: bool = True,
+	                   allowance_approval: str = "Hotel Admin or Finance", workflow_active: bool = True,
 	                   workflow_side_effect=None):
 		authz, mods = _load_module("kamra.authz", "authz.py", site)
 		posted: list[dict] = []
@@ -636,12 +645,27 @@ class TestP53AllowanceConvergence(unittest.TestCase):
 				{"name": "Allowance Request Approval", "document_type": "Allowance Request", "is_active": 1},
 			]
 
+			site.tables["Workflow Action"] = []
+			site.existing_doctypes.add("Workflow Action")
+
+		mods["kamra.settings"].get_setting = lambda prop, key, default=None: (
+			{"allowance_approval": allowance_approval, "allowance_approval_above": 0}.get(key, default)
+		)
+
 		def fake_apply_workflow(doc, action):
 			workflow_calls.append((doc.name, action, site.session.user, bool(doc.flags.get("kamra_decision"))))
 			if workflow_side_effect:
 				workflow_side_effect(doc, action)
 			doc["status"] = "Approved" if action == "Approve" else "Rejected"
 			doc["decided_by"] = site.session.user
+			# The native on_update hook completes one action for a matching role.
+			for row in site.tables["Workflow Action"]:
+				if (
+					row["reference_doctype"] == doc.doctype and row["reference_name"] == doc.name
+					and row["status"] == "Open" and row["permitted_role"] in site.get_roles()
+				):
+					row.update(status="Completed", completed_by=site.session.user)
+					break
 			return doc
 
 		wf_mod = ModuleType("frappe.model.workflow")
@@ -699,11 +723,10 @@ class TestP53AllowanceConvergence(unittest.TestCase):
 
 		api_ns = _load_api_functions(
 			site,
-			("post_allowance", "decide_allowance"),
+			("post_allowance", "decide_allowance", "_allowance_needs_approval", "_ALLOWANCE_APPROVERS"),
 			extra_ns={
 				"_pin_guard": lambda folio, pin: None,
 				"_allowance_reason": lambda rc, r: (r or rc or "Reason").strip(),
-				"_allowance_needs_approval": lambda prop, amt, rc: needs_approval,
 				"_allowance_approver_roles": lambda prop: ("Hotel Admin", "Finance"),
 				"_may_approve_allowance": lambda prop, user=None: (user or site.session.user) in ("gm@alpha.ug", "finance@alpha.ug", "Administrator"),
 				"_post_allowance": fake_post_allowance,
@@ -821,6 +844,81 @@ class TestP53AllowanceConvergence(unittest.TestCase):
 		self.assertEqual(saved_req["status"], "Approved")
 		self.assertEqual(saved_req["decided_by"], "duty@alpha.ug")
 		self.assertEqual(saved_req["serial"], res["serial"])
+
+	def _open_workflow_actions(self, site, request):
+		return site.get_all("Workflow Action", filters={
+			"reference_doctype": "Allowance Request", "reference_name": request, "status": "Open",
+		})
+
+	def test_post_allowance_floor_pin_leaves_no_open_workflow_action(self):
+		site = _base_site()
+		_install_doa_floor_script(site, [])
+		api, modules, posted, *_ = self._build_api_env(site)
+
+		with patch.dict(sys.modules, modules):
+			result = api["post_allowance"](
+				"FOL-001", 20000, reason="Service recovery",
+				supervisor="duty@alpha.ug", supervisor_pin="4821",
+			)
+
+		self.assertEqual(len(posted), 1)
+		self.assertEqual(result["approved_by"], "duty@alpha.ug")
+		request, = site.tables["Allowance Request"]
+		self.assertEqual(request.status, "Approved")
+		self.assertEqual(len(self._open_workflow_actions(site, request.name)), 0)
+
+	def test_post_allowance_approval_off_leaves_no_open_workflow_action(self):
+		site = _base_site()
+		api, modules, posted, *_ = self._build_api_env(site, allowance_approval="Off")
+
+		with patch.dict(sys.modules, modules):
+			result = api["post_allowance"]("FOL-001", 20000, reason="Service recovery")
+
+		self.assertEqual(len(posted), 1)
+		request, = site.tables["Allowance Request"]
+		self.assertEqual(request.status, "Approved")
+		self.assertEqual(request.serial, result["serial"])
+		self.assertEqual(len(self._open_workflow_actions(site, request.name)), 0)
+
+	def test_kamra_decisions_leave_no_open_workflow_actions(self):
+		for approve, status in ((1, "Approved"), (0, "Rejected")):
+			with self.subTest(status=status):
+				site = _base_site()
+				api, modules, posted, *_ = self._build_api_env(site)
+				with patch.dict(sys.modules, modules):
+					request = api["post_allowance"]("FOL-001", 20000, reason="Recovery")["request"]
+					other_request = api["post_allowance"]("FOL-001", 10000, reason="Other")["request"]
+					self.assertEqual(len(self._open_workflow_actions(site, request)), 1)
+					# An extra open row for the same request is left by native completion.
+					original = site.tables["Workflow Action"][0]
+					site.tables["Workflow Action"].append({**original, "name": "WA-extra"})
+					site.set_user("finance@alpha.ug")
+					result = api["decide_allowance"](request, approve=approve, note="Reviewed")
+
+				self.assertEqual(result["status"], status)
+				self.assertEqual(len(posted), approve)
+				self.assertEqual(len(self._open_workflow_actions(site, request)), 0)
+				self.assertEqual(len(self._open_workflow_actions(site, other_request)), 1)
+
+	def test_standalone_allowances_work_without_workflow_action_table(self):
+		site = _base_site()
+		api, modules, posted, *_ = self._build_api_env(
+			site, allowance_approval="Off", workflow_active=False,
+		)
+		self.assertFalse(site.db.table_exists("Workflow Action"))
+
+		with patch.dict(sys.modules, modules):
+			result = api["post_allowance"]("FOL-001", 20000, reason="Service recovery")
+			modules["kamra.settings"].get_setting = lambda prop, key, default=None: (
+				"Hotel Admin or Finance" if key == "allowance_approval" else default
+			)
+			request = api["post_allowance"]("FOL-001", 10000, reason="Pending review")["request"]
+			site.set_user("finance@alpha.ug")
+			decision = api["decide_allowance"](request, approve=0, note="Reviewed")
+
+		self.assertEqual(result["serial"], posted[0]["serial"])
+		self.assertEqual(decision["status"], "Rejected")
+		self.assertEqual(len(posted), 1)
 
 	def test_decide_allowance_runs_native_apply_workflow_and_blocks_self_and_admin(self):
 		site = _base_site(user="finance@alpha.ug", currency="KWD", floor_max=10.000)
