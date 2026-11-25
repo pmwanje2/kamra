@@ -63,8 +63,8 @@ const day = (d: string, opts: Intl.DateTimeFormatOptions) =>
 
 function Section({ title, children, className }: { title: string; children: ReactNode; className?: string }) {
   return (
-    <section className={cn("rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm", className)}>
-      <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">{title}</h2>
+    <section className={cn("rounded-2xl border border-line bg-surface p-4 shadow-sm", className)}>
+      <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-ink">{title}</h2>
       {children}
     </section>
   )
@@ -73,16 +73,16 @@ function Section({ title, children, className }: { title: string; children: Reac
 function Figure({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="min-w-0">
-      <div className="truncate text-xs text-zinc-500">{label}</div>
-      <div className="mt-0.5 truncate text-lg font-semibold tabular-nums text-zinc-900">{value}</div>
+      <div className="truncate text-xs text-muted-ink">{label}</div>
+      <div className="mt-0.5 truncate text-lg font-semibold tabular-nums text-ink">{value}</div>
     </div>
   )
 }
 
 function Bar({ pct }: { pct: number }) {
   return (
-    <div className="h-2 flex-1 overflow-hidden rounded-full bg-zinc-100">
-      <div className="h-full rounded-full bg-brand-500" style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
+    <div className="h-2 flex-1 overflow-hidden rounded-full bg-subtle">
+      <div className="h-full rounded-full bg-accent-fill" style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
     </div>
   )
 }
@@ -91,9 +91,9 @@ function Line({ label, value, tone, to }: { label: string; value: ReactNode; ton
   const external = to ? externalRoute(to) : undefined
   const body = (
     <>
-      <span className="text-zinc-600">{label}</span>
-      <span className={cn("ms-auto font-semibold tabular-nums", tone ?? "text-zinc-900")}>{value}</span>
-      {to && <ChevronRight className="size-4 shrink-0 text-zinc-400 rtl:rotate-180" aria-hidden />}
+      <span className="text-secondary-ink">{label}</span>
+      <span className={cn("ms-auto font-semibold tabular-nums", tone ?? "text-ink")}>{value}</span>
+      {to && <ChevronRight className="size-4 shrink-0 text-muted-ink rtl:rotate-180" aria-hidden />}
     </>
   )
   const cls = "flex min-h-11 items-center gap-2 text-sm"
@@ -156,7 +156,7 @@ export default function Owner() {
   return (
     <div className="mx-auto max-w-lg space-y-3 pb-8">
       <div>
-        <h1 className="text-xl font-semibold text-zinc-900">{t("Owner view")}</h1>
+        <h1 className="text-xl font-semibold text-ink">{t("Owner view")}</h1>
         {props.length > 1 ? (
           <select
             aria-label={t("Property")}
@@ -169,18 +169,18 @@ export default function Owner() {
               window.dispatchEvent(new CustomEvent("kamra:property", { detail: p }))
               setScope("property")
             }}
-            className="mt-2 min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-base font-medium"
+            className="mt-2 min-h-11 w-full rounded-xl border border-line bg-surface px-3 text-base font-medium"
           >
             {props.map((p) => <option key={p.name} value={p.name}>{p.property_name}</option>)}
             {chainWide && <option value="">{t("All properties, today")}</option>}
           </select>
         ) : (
-          <p className="truncate text-sm text-zinc-500">{snap?.property_name}</p>
+          <p className="truncate text-sm text-muted-ink">{snap?.property_name}</p>
         )}
       </div>
 
       {scope === "property" && (
-        <div role="tablist" className="grid grid-cols-3 rounded-xl border border-zinc-200 bg-white p-1 text-sm">
+        <div role="tablist" className="grid grid-cols-3 rounded-xl border border-line bg-surface p-1 text-sm">
           {periods.map(([p, label]) => (
             <button
               key={p}
@@ -190,7 +190,7 @@ export default function Owner() {
               onClick={() => setPeriod(p)}
               className={cn(
                 "min-h-10 rounded-lg px-2 font-medium",
-                period === p ? "bg-brand-600 text-white" : "text-zinc-600",
+                period === p ? "bg-accent-fill text-on-solid" : "text-secondary-ink",
               )}
             >
               {label}
@@ -200,7 +200,7 @@ export default function Owner() {
       )}
 
       {error && (
-        <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>
+        <p className="rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">{error}</p>
       )}
 
       {scope === "all" && port && (
@@ -218,12 +218,12 @@ export default function Owner() {
         </div>
       )}
 
-      {scope === "property" && !snap && !error && <p className="py-10 text-center text-sm text-zinc-400">{t("Loading…")}</p>}
+      {scope === "property" && !snap && !error && <p className="py-10 text-center text-sm text-muted-ink">{t("Loading…")}</p>}
 
       {scope === "property" && snap && d && (
         <>
           <Section title={t("Revenue")}>
-            <div className="text-3xl font-semibold tabular-nums text-zinc-900">{money(d.total_revenue)}</div>
+            <div className="text-3xl font-semibold tabular-nums text-ink">{money(d.total_revenue)}</div>
             <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3">
               <Figure label={t("Occupancy")} value={`${d.occupancy_pct}%`} />
               <Figure
@@ -236,7 +236,7 @@ export default function Owner() {
             <div className="mt-4 space-y-2">
               {depts.map(([label, v]) => (
                 <div key={label} className="flex items-center gap-3 text-sm">
-                  <span className="w-32 shrink-0 truncate text-zinc-600">{label}</span>
+                  <span className="w-32 shrink-0 truncate text-secondary-ink">{label}</span>
                   <Bar pct={(100 * v) / top} />
                   <span className="w-20 shrink-0 text-end font-medium tabular-nums">{money(v)}</span>
                 </div>
@@ -254,11 +254,11 @@ export default function Owner() {
               ] as [string, number, string | undefined][]).map(([label, n, to]) => {
                 const inner = (
                   <>
-                    <div className="text-xl font-semibold tabular-nums text-zinc-900">{n}</div>
-                    <div className="truncate text-[11px] text-zinc-500">{label}</div>
+                    <div className="text-xl font-semibold tabular-nums text-ink">{n}</div>
+                    <div className="truncate text-[11px] text-muted-ink">{label}</div>
                   </>
                 )
-                const cls = "rounded-xl bg-zinc-50 px-1 py-2"
+                const cls = "rounded-xl bg-canvas px-1 py-2"
                 return to && apps.has("front-desk")
                   ? <Link key={label} to={to} className={cls}>{inner}</Link>
                   : <div key={label} className={cls}>{inner}</div>
@@ -269,13 +269,13 @@ export default function Owner() {
           <Section title={t("Money")}>
             <Line label={t("Collected")} value={money(snap.collections.grand_total)} />
             {snap.collections.modes.map((m) => (
-              <div key={m.mode} className="flex items-center ps-3 text-xs text-zinc-500">
+              <div key={m.mode} className="flex items-center ps-3 text-xs text-muted-ink">
                 <span>{t(m.mode)}</span>
                 <span className="ms-auto tabular-nums">{money(m.total)}</span>
               </div>
             ))}
-            <div className="my-2 border-t border-zinc-100" />
-            <div className="text-xs text-zinc-400">{t("Balances as of now")}</div>
+            <div className="my-2 border-t border-line-subtle" />
+            <div className="text-xs text-muted-ink">{t("Balances as of now")}</div>
             <Line
               label={t("Guest balances ({n} open bills)", { n: snap.open_folios })}
               value={money(snap.guest_balances)}
@@ -287,7 +287,7 @@ export default function Owner() {
               to={apps.has("finance") ? (keptInErp("/receivables") ? "/receivables" : "/ledgers") : undefined}
             />
             {snap.city_ledger_overdue != null && snap.city_ledger_overdue > 0 && (
-              <Line label={t("Overdue")} value={money(snap.city_ledger_overdue)} tone="text-rose-600" />
+              <Line label={t("Overdue")} value={money(snap.city_ledger_overdue)} tone="text-danger-text" />
             )}
           </Section>
 
@@ -295,10 +295,10 @@ export default function Owner() {
             <div className="space-y-2">
               {snap.outlook.map((o) => (
                 <div key={o.date} className="flex items-center gap-3 text-sm">
-                  <span className="w-28 shrink-0 text-zinc-600">{day(o.date, { weekday: "short", day: "numeric", month: "short" })}</span>
+                  <span className="w-28 shrink-0 text-secondary-ink">{day(o.date, { weekday: "short", day: "numeric", month: "short" })}</span>
                   <Bar pct={o.occupancy_pct} />
                   <span className="w-20 shrink-0 text-end tabular-nums">
-                    {o.occupancy_pct}% <span className="text-xs text-zinc-400">({o.booked})</span>
+                    {o.occupancy_pct}% <span className="text-xs text-muted-ink">({o.booked})</span>
                   </span>
                 </div>
               ))}
@@ -307,13 +307,13 @@ export default function Owner() {
 
           {snap.audits && (
             <Section title={t("Night audits")}>
-              {snap.audits.length === 0 && <p className="text-sm text-zinc-400">{t("No night audits yet.")}</p>}
+              {snap.audits.length === 0 && <p className="text-sm text-muted-ink">{t("No night audits yet.")}</p>}
               {snap.audits.map((a) => (
                 <Line
                   key={a.name}
                   label={day(a.business_date, { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
                   value={a.has_pack
-                    ? <span className="inline-flex items-center gap-1 text-brand-700"><FileText className="size-4" aria-hidden />{t("Audit pack")}</span>
+                    ? <span className="inline-flex items-center gap-1 text-accent-ink"><FileText className="size-4" aria-hidden />{t("Audit pack")}</span>
                     : t(a.status)}
                   to={a.has_pack ? `/end-of-day/pack/${encodeURIComponent(a.name)}` : undefined}
                 />

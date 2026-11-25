@@ -117,8 +117,8 @@ interface StayResult extends StayFit {
 }
 
 const inputCls =
-  "w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2.5 text-base " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "w-full rounded-lg border border-control bg-surface px-3.5 py-2.5 text-base " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 
 function mapEmbedUrl(lat: number, lng: number) {
@@ -145,10 +145,10 @@ function MapBlock({
   if (!address && !mapsUrl && (lat == null || lng == null)) return null
   return (
     <section className="space-y-3">
-      <h2 className="text-xl font-semibold text-zinc-900">{t("Where you’ll be")}</h2>
-      {address && <p className="text-sm text-zinc-600">{address}</p>}
+      <h2 className="text-xl font-semibold text-ink">{t("Where you’ll be")}</h2>
+      {address && <p className="text-sm text-secondary-ink">{address}</p>}
       {lat != null && lng != null && (
-        <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100 shadow-sm">
+        <div className="overflow-hidden rounded-2xl border border-line bg-subtle shadow-sm">
           <iframe
             title={t("Map")}
             className="h-64 w-full border-0"
@@ -163,7 +163,7 @@ function MapBlock({
           href={mapsUrl}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-700 hover:underline"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-accent-ink hover:underline"
         >
           {t("Open in Google Maps")} <ExternalLink className="size-3.5" aria-hidden />
         </a>
@@ -188,20 +188,20 @@ function HostBlock({
   const display = formatPhoneDisplay(phone, country)
   const tel = formatPhoneTel(phone, country)
   return (
-    <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
-      <h2 className="text-lg font-semibold text-zinc-900">{t("Host & caretaker")}</h2>
-      <p className="mt-1 text-sm text-zinc-500">
+    <section className="rounded-2xl border border-line bg-surface p-5 shadow-sm">
+      <h2 className="text-lg font-semibold text-ink">{t("Host & caretaker")}</h2>
+      <p className="mt-1 text-sm text-muted-ink">
         {t("Coordinated by {brand}", { brand })}
         {city ? ` · ${city}` : ""}
       </p>
       <a
         href={`tel:${tel}`}
-        className="mt-4 inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-base font-semibold text-zinc-900 transition hover:border-brand-300 hover:bg-brand-50"
+        className="mt-4 inline-flex items-center gap-2 rounded-xl border border-line bg-canvas px-4 py-3 text-base font-semibold text-ink transition hover:border-accent-line-strong hover:bg-accent-subtle"
       >
-        <Phone className="size-4 text-brand-700" aria-hidden />
+        <Phone className="size-4 text-accent-ink" aria-hidden />
         {display}
       </a>
-      <p className="mt-2 text-xs text-zinc-400">
+      <p className="mt-2 text-xs text-muted-ink">
         {t("Call for directions, check-in help, or on-site questions.")}
       </p>
     </section>
@@ -389,7 +389,7 @@ export default function PublicListing() {
 
   if (!data || !resolved)
     return (
-      <p className="py-20 text-center text-zinc-400">{translate(error) ?? t("Loading…")}</p>
+      <p className="py-20 text-center text-muted-ink">{translate(error) ?? t("Loading…")}</p>
     )
 
   const p = data.property
@@ -430,17 +430,17 @@ export default function PublicListing() {
       : `/book/${stayPathSuffix}`
 
   return (
-    <div className="min-h-[100dvh] bg-zinc-50" style={accent}>
-      <header className="sticky top-0 z-20 border-b border-zinc-200/80 bg-white/90 backdrop-blur">
+    <div className="min-h-[100dvh] bg-canvas" style={accent}>
+      <header className="sticky top-0 z-20 border-b border-line/80 bg-surface/90 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center gap-3 px-5 py-3">
           <Link
             to={isSite ? `/book/${stayPathSuffix}` : backToSite}
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-zinc-600 hover:text-zinc-900"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-secondary-ink hover:text-ink"
           >
             <ArrowLeft className="size-4" aria-hidden />
             {isSite ? t("All properties") : t("Back to property")}
           </Link>
-          <span className="ml-auto truncate text-sm font-medium text-zinc-500">
+          <span className="ml-auto truncate text-sm font-medium text-muted-ink">
             {p.property_name}
           </span>
           <LanguageSwitcher />
@@ -449,7 +449,7 @@ export default function PublicListing() {
 
       <div className="mx-auto max-w-5xl px-5 pb-20 pt-6">
         {/* Photo plane */}
-        <div className="mb-6 overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100 shadow-sm">
+        <div className="mb-6 overflow-hidden rounded-2xl border border-line bg-subtle shadow-sm">
           {hero ? (
             <img
               src={hero}
@@ -457,7 +457,7 @@ export default function PublicListing() {
               className="aspect-[16/9] w-full object-cover sm:aspect-[21/9]"
             />
           ) : (
-            <div className="flex aspect-[16/9] items-center justify-center bg-gradient-to-br from-brand-700 to-brand-900 text-white sm:aspect-[21/9]">
+            <div className="flex aspect-[16/9] items-center justify-center bg-gradient-to-br from-accent-fill-hover to-accent-deep text-on-solid sm:aspect-[21/9]">
               <span className="text-5xl font-semibold tracking-tight">
                 {title
                   .split(" ")
@@ -468,7 +468,7 @@ export default function PublicListing() {
             </div>
           )}
           {uniquePhotos.length > 1 && (
-            <div className="flex gap-2 overflow-x-auto border-t border-zinc-200 bg-white p-2">
+            <div className="flex gap-2 overflow-x-auto border-t border-line bg-surface p-2">
               {uniquePhotos.slice(1, 7).map((m, i) => (
                 <img
                   key={`${m.url}-${i}`}
@@ -484,20 +484,20 @@ export default function PublicListing() {
         <div className="grid gap-10 lg:grid-cols-5">
           <div className="space-y-8 lg:col-span-3">
             <div>
-              <p className="text-sm font-medium text-brand-700">
+              <p className="text-sm font-medium text-accent-ink">
                 {isSite ? p.property_name : siteMeta?.name ?? p.property_name}
               </p>
-              <h1 className="mt-1 text-3xl font-semibold tracking-tight text-zinc-900 sm:text-4xl">
+              <h1 className="mt-1 text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
                 {translate(title)}
               </h1>
               {address && (
-                <p className="mt-2 inline-flex items-start gap-1.5 text-sm text-zinc-500">
+                <p className="mt-2 inline-flex items-start gap-1.5 text-sm text-muted-ink">
                   <MapPin className="mt-0.5 size-4 shrink-0" aria-hidden />
                   {address}
                 </p>
               )}
               {!isSite && primary && (
-                <p className="mt-2 inline-flex items-center gap-1.5 text-sm text-zinc-600">
+                <p className="mt-2 inline-flex items-center gap-1.5 text-sm text-secondary-ink">
                   <Users className="size-4" aria-hidden />
                   {t("Up to {n} guests", { n: primary.adults_capacity })}
                   {primary.bed_type ? ` · ${t("{type} bed", { type: primary.bed_type })}` : ""}
@@ -505,7 +505,7 @@ export default function PublicListing() {
                 </p>
               )}
               {isSite && (
-                <p className="mt-2 text-sm text-zinc-600">
+                <p className="mt-2 text-sm text-secondary-ink">
                   {fromRate > 0 ? `${t("From {amount} per night", { amount: `${cur()}${inr(fromRate)}` })} · ` : ""}
                   {tn(data.room_types.length, "{n} listing", "{n} listings")}
                 </p>
@@ -513,7 +513,7 @@ export default function PublicListing() {
             </div>
 
             {(isSite ? p.description : primary?.description) && (
-              <p className="text-[15px] leading-relaxed text-zinc-600">
+              <p className="text-[15px] leading-relaxed text-secondary-ink">
                 {isSite ? p.description : primary?.description}
               </p>
             )}
@@ -531,7 +531,7 @@ export default function PublicListing() {
             {/* Property page: listings */}
             {isSite && (
               <section id="choose-listing" className="space-y-4">
-                <h2 className="text-xl font-semibold text-zinc-900">
+                <h2 className="text-xl font-semibold text-ink">
                   {t("Choose a listing")}
                 </h2>
                 <div className="space-y-4">
@@ -541,9 +541,9 @@ export default function PublicListing() {
                     return (
                       <div
                         key={rt.name}
-                        className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm sm:grid sm:grid-cols-5"
+                        className="overflow-hidden rounded-2xl border border-line bg-surface shadow-sm sm:grid sm:grid-cols-5"
                       >
-                        <div className="relative bg-zinc-100 sm:col-span-2">
+                        <div className="relative bg-subtle sm:col-span-2">
                           {rt.media[0] ? (
                             <img
                               src={rt.media[0].url}
@@ -552,21 +552,21 @@ export default function PublicListing() {
                             />
                           ) : (
                             <div className="flex h-44 items-center justify-center sm:h-full">
-                              <BedDouble className="size-10 text-zinc-300" aria-hidden />
+                              <BedDouble className="size-10 text-muted-ink" aria-hidden />
                             </div>
                           )}
                         </div>
                         <div className="flex flex-col justify-between gap-3 p-4 sm:col-span-3 sm:p-5">
                           <div>
-                            <h3 className="text-lg font-semibold text-zinc-900">
+                            <h3 className="text-lg font-semibold text-ink">
                               {rt.room_type_name}
                             </h3>
-                            <p className="mt-1 text-sm text-zinc-500">
+                            <p className="mt-1 text-sm text-muted-ink">
                               {t("Up to {n} guests", { n: rt.adults_capacity })}
                               {rt.base_price > 0 ? ` · ${t("From {amount} per night", { amount: `${cur()}${inr(rt.base_price)}` })}` : ""}
                             </p>
                             {rt.description && (
-                              <p className="mt-2 line-clamp-2 text-sm text-zinc-600">
+                              <p className="mt-2 line-clamp-2 text-sm text-secondary-ink">
                                 {rt.description}
                               </p>
                             )}
@@ -574,17 +574,17 @@ export default function PublicListing() {
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <div className="text-sm">
                               {r?.quote ? (
-                                <p className="font-semibold text-zinc-900">
+                                <p className="font-semibold text-ink">
                                   {cur()}
                                   {inr(r.quote.amount_after_tax)}
-                                  <span className="ml-1 font-normal text-zinc-500">
+                                  <span className="ml-1 font-normal text-muted-ink">
                                     {t("total")}
                                   </span>
                                 </p>
                               ) : soldOut ? (
-                                <p className="font-medium text-rose-600">{t("Sold out")}</p>
+                                <p className="font-medium text-danger-text">{t("Sold out")}</p>
                               ) : (
-                                <p className="text-zinc-400">{t("Checking…")}</p>
+                                <p className="text-muted-ink">{t("Checking…")}</p>
                               )}
                               <StayNotice row={r} />
                             </div>
@@ -625,33 +625,33 @@ export default function PublicListing() {
             />
 
             {(p.house_rules || p.pets_policy || p.children_policy) && (
-              <section className="rounded-2xl border border-zinc-200 bg-white p-5 text-sm shadow-sm">
-                <h2 className="mb-3 text-lg font-semibold text-zinc-900">
+              <section className="rounded-2xl border border-line bg-surface p-5 text-sm shadow-sm">
+                <h2 className="mb-3 text-lg font-semibold text-ink">
                   {t("House rules")}
                 </h2>
                 {p.house_rules && (
-                  <p className="whitespace-pre-line leading-relaxed text-zinc-600">
+                  <p className="whitespace-pre-line leading-relaxed text-secondary-ink">
                     {p.house_rules}
                   </p>
                 )}
                 {p.pets_policy && (
-                  <p className="mt-3 text-zinc-600">{t("Pets: {policy}", { policy: p.pets_policy })}</p>
+                  <p className="mt-3 text-secondary-ink">{t("Pets: {policy}", { policy: p.pets_policy })}</p>
                 )}
                 {!!p.pets_allowed && (p.pet_charge || 0) > 0 && (
-                  <p className="mt-1 text-zinc-600">
+                  <p className="mt-1 text-secondary-ink">
                     {t("Pet charge: {amount} {basis}", { amount: `${cur()}${inr(p.pet_charge || 0)}`, basis: petChargeBasis(p.pet_charge_basis, t) })}
                   </p>
                 )}
                 {p.children_policy && (
-                  <p className="mt-2 text-zinc-600">{t("Children: {policy}", { policy: p.children_policy })}</p>
+                  <p className="mt-2 text-secondary-ink">{t("Children: {policy}", { policy: p.children_policy })}</p>
                 )}
                 {(p.cleaning_fee || 0) > 0 && (
-                  <p className="mt-3 text-zinc-600">
+                  <p className="mt-3 text-secondary-ink">
                     {t("Cleaning fee: {amount} (one-time)", { amount: `${cur()}${inr(p.cleaning_fee)}` })}
                   </p>
                 )}
                 {(p.security_deposit_amount || 0) > 0 && (
-                  <p className="mt-1 text-zinc-600">
+                  <p className="mt-1 text-secondary-ink">
                     {t("Refundable deposit: {amount}", { amount: `${cur()}${inr(p.security_deposit_amount)}` })}
                   </p>
                 )}
@@ -660,10 +660,10 @@ export default function PublicListing() {
           </div>
 
           <aside className="lg:col-span-2">
-            <div className="sticky top-20 space-y-4 rounded-2xl border border-zinc-200 bg-white p-5 shadow-md">
+            <div className="sticky top-20 space-y-4 rounded-2xl border border-line bg-surface p-5 shadow-md">
               {(!isSite && results[primary?.name ?? ""]?.quote) || fromRate > 0 ? (
                 <div>
-                  <p className="text-2xl font-semibold tabular-nums text-zinc-900">
+                  <p className="text-2xl font-semibold tabular-nums text-ink">
                     {cur()}
                     {inr(
                       !isSite && results[primary?.name ?? ""]?.quote
@@ -671,13 +671,13 @@ export default function PublicListing() {
                         : fromRate,
                     )}
                   </p>
-                  <p className="text-sm text-zinc-500">
+                  <p className="text-sm text-muted-ink">
                     {!isSite && results[primary?.name ?? ""]?.quote
                       ? tn(results[primary!.name].quote!.nights, "{n} night · taxes included", "{n} nights · taxes included")
                       : t("Price per night")}
                   </p>
                   {!isSite && (results[primary?.name ?? ""]?.quote?.pet_charge || 0) > 0 && (
-                    <p className="text-xs text-zinc-500">
+                    <p className="text-xs text-muted-ink">
                       {tn(search.pets, "Includes {amount} for {n} pet", "Includes {amount} for {n} pets", {
                         amount: `${cur()}${inr(results[primary!.name].quote!.pet_charge || 0)}`,
                       })}
@@ -688,7 +688,7 @@ export default function PublicListing() {
 
               <div className="grid grid-cols-2 gap-3">
                 <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-zinc-600">
+                  <span className="mb-1 block text-sm font-medium text-secondary-ink">
                     {t("Check-in")}
                   </span>
                   <input
@@ -709,7 +709,7 @@ export default function PublicListing() {
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-zinc-600">
+                  <span className="mb-1 block text-sm font-medium text-secondary-ink">
                     {t("Check-out")}
                   </span>
                   <input
@@ -723,7 +723,7 @@ export default function PublicListing() {
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-zinc-600">
+                  <span className="mb-1 block text-sm font-medium text-secondary-ink">
                     {t("Adults")}
                   </span>
                   <input
@@ -740,13 +740,13 @@ export default function PublicListing() {
                     }
                   />
                   {atAdultCap && (
-                    <span className="mt-1 block text-xs text-rose-600">
+                    <span className="mt-1 block text-xs text-danger-text">
                       {t("Sleeps up to {n}", { n: maxAdults })}
                     </span>
                   )}
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-zinc-600">
+                  <span className="mb-1 block text-sm font-medium text-secondary-ink">
                     {t("Children")}
                   </span>
                   <input
@@ -763,14 +763,14 @@ export default function PublicListing() {
                     }
                   />
                   {atChildCap && (
-                    <span className="mt-1 block text-xs text-rose-600">
+                    <span className="mt-1 block text-xs text-danger-text">
                       {t("Up to {n} children", { n: maxChildren })}
                     </span>
                   )}
                 </label>
                 {!!p.pets_allowed && (
                   <label className="block">
-                    <span className="mb-1 block text-sm font-medium text-zinc-600">
+                    <span className="mb-1 block text-sm font-medium text-secondary-ink">
                       {t("Pets")}
                     </span>
                     <input
@@ -786,7 +786,7 @@ export default function PublicListing() {
                       }
                     />
                     {(p.pet_charge || 0) > 0 && (
-                      <span className="mt-1 block text-xs text-zinc-500">
+                      <span className="mt-1 block text-xs text-muted-ink">
                         {cur()}
                         {inr(p.pet_charge || 0)} {petChargeBasis(p.pet_charge_basis, t)}
                       </span>
@@ -795,7 +795,7 @@ export default function PublicListing() {
                 )}
               </div>
               <ChildAges ages={childAges} onChange={setChildAges} selectCls={inputCls} />
-              <p className="text-center text-xs text-zinc-400">
+              <p className="text-center text-xs text-muted-ink">
                 {tn(nightsBetween(search.check_in_date, search.check_out_date), "{n} night", "{n} nights")}
               </p>
 
@@ -826,12 +826,12 @@ export default function PublicListing() {
               {!isSite && primary && <StayNotice row={results[primary.name]} />}
 
               {isSite && (
-                <p className="text-center text-sm text-zinc-500">
+                <p className="text-center text-sm text-muted-ink">
                   {t("Pick a listing below to reserve, or scroll the options on the left.")}
                 </p>
               )}
 
-              <p className="text-center text-xs text-zinc-400">
+              <p className="text-center text-xs text-muted-ink">
                 {t("Check-in")} {p.checkin_time?.slice(0, 5)} · {t("Check-out")}{" "}
                 {p.checkout_time?.slice(0, 5)}
                 {minNights > 1 ? ` · ${t("{n}-night minimum", { n: minNights })}` : ""}
@@ -840,7 +840,7 @@ export default function PublicListing() {
               {phone && (
                 <a
                   href={`tel:${formatPhoneTel(phone, p.country)}`}
-                  className="flex items-center justify-center gap-2 text-sm font-medium text-brand-700 hover:underline"
+                  className="flex items-center justify-center gap-2 text-sm font-medium text-accent-ink hover:underline"
                 >
                   <Phone className="size-3.5" aria-hidden />
                   {t("Call caretaker")} {formatPhoneDisplay(phone, p.country)}
@@ -887,7 +887,7 @@ export default function PublicListing() {
           }
         >
           {done ? (
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-emerald-800">
+            <div className="rounded-xl border border-success-line bg-success-subtle px-4 py-4 text-success-ink">
               <p className="text-lg font-semibold">{done.reservation}</p>
               <p className="mt-1 text-sm">
                 {t("Total {amount}", { amount: `${cur()}${inr(done.amount)}` })}
@@ -896,7 +896,7 @@ export default function PublicListing() {
           ) : (
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="block">
-                <span className="mb-1.5 block text-sm font-medium text-zinc-600">
+                <span className="mb-1.5 block text-sm font-medium text-secondary-ink">
                   {t("Full name")}
                 </span>
                 <input
@@ -907,7 +907,7 @@ export default function PublicListing() {
                 />
               </label>
               <label className="block">
-                <span className="mb-1.5 block text-sm font-medium text-zinc-600">
+                <span className="mb-1.5 block text-sm font-medium text-secondary-ink">
                   {t("Phone")}
                 </span>
                 <input
@@ -918,7 +918,7 @@ export default function PublicListing() {
                 />
               </label>
               <label className="block sm:col-span-2">
-                <span className="mb-1.5 block text-sm font-medium text-zinc-600">
+                <span className="mb-1.5 block text-sm font-medium text-secondary-ink">
                   {t("Email (optional)")}
                 </span>
                 <input
@@ -928,14 +928,14 @@ export default function PublicListing() {
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
                 />
               </label>
-              <label className="flex items-start gap-2 text-sm text-zinc-600 sm:col-span-2">
-                <input type="checkbox" className="mt-0.5 size-4 accent-brand-600"
+              <label className="flex items-start gap-2 text-sm text-secondary-ink sm:col-span-2">
+                <input type="checkbox" className="mt-0.5 size-4 accent-focus"
                   checked={Boolean(form.marketing_consent)}
                   onChange={(e) => setForm({ ...form, marketing_consent: e.target.checked ? 1 : 0 })} />
                 {t("Send me offers on WhatsApp. Reply STOP at any time to opt out.")}
               </label>
               {error && (
-                <p className="text-sm text-rose-600 sm:col-span-2">{translate(error)}</p>
+                <p className="text-sm text-danger-text sm:col-span-2">{translate(error)}</p>
               )}
             </div>
           )}

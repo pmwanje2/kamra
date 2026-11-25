@@ -45,7 +45,7 @@ export default function ImageField(props: {
   return (
     <div className="block">
       {props.label && (
-        <span className="mb-1 block text-sm font-medium text-zinc-600">
+        <span className="mb-1 block text-sm font-medium text-secondary-ink">
           {translate(props.label)}
         </span>
       )}
@@ -54,18 +54,18 @@ export default function ImageField(props: {
           <img
             src={props.value}
             alt=""
-            className="size-9 shrink-0 rounded-md border border-zinc-200 bg-zinc-50 object-cover"
+            className="size-9 shrink-0 rounded-md border border-line bg-canvas object-cover"
           />
         ) : null}
         <input
-          className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+          className="min-w-0 flex-1 rounded-lg border border-control bg-surface px-3 py-1.5 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-focus"
           placeholder={(props.placeholder ? translate(props.placeholder) : translate("Upload, or paste an image URL"))}
           value={props.value}
           onChange={(e) => props.onChange(e.target.value)}
         />
         <button
           type="button"
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-700 hover:border-brand-400 disabled:opacity-50"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-control bg-surface px-3 py-1.5 text-sm text-secondary-ink hover:border-accent-control disabled:opacity-50"
           disabled={busy}
           onClick={() => fileRef.current?.click()}
         >
@@ -81,9 +81,9 @@ export default function ImageField(props: {
         />
       </div>
       {props.hint && (
-        <p className="mt-1 text-xs text-zinc-400">{translate(props.hint)}</p>
+        <p className="mt-1 text-xs text-muted-ink">{translate(props.hint)}</p>
       )}
-      {err && <p className="mt-1 text-xs text-rose-600">{translate(err)}</p>}
+      {err && <p className="mt-1 text-xs text-danger-text">{translate(err)}</p>}
     </div>
   )
 }

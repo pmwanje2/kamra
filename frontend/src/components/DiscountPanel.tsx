@@ -22,8 +22,8 @@ import { moneyDigits, moneyStep, roundMoney } from "../lib/money"
 import SupervisorSignOff, { SignOffReasons } from "./SupervisorSignOff"
 
 const inputCls =
-  "rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm disabled:bg-zinc-100 disabled:text-zinc-400 " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "rounded-lg border border-control bg-surface px-3 py-1.5 text-sm disabled:bg-subtle disabled:text-muted-ink " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 export interface DiscountNight {
   date: string
@@ -127,29 +127,29 @@ export default function DiscountPanel(props: {
   const segment = (type: DiscountType, label: string) => (
     <button type="button" aria-pressed={d.type === type} disabled={off} onClick={() => setType(type)}
       className={`px-3 py-1.5 text-sm font-medium disabled:opacity-50 ${d.type === type
-        ? "rounded-md bg-white text-zinc-900 shadow-sm" : "text-zinc-500"}`}>
+        ? "rounded-md bg-surface text-ink shadow-sm" : "text-muted-ink"}`}>
       {label}
     </button>
   )
 
   return (
-    <div role="group" aria-label={t("Discount")} className="space-y-2.5 rounded-xl border border-zinc-200 p-4">
+    <div role="group" aria-label={t("Discount")} className="space-y-2.5 rounded-xl border border-line p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-zinc-800">{t("Discount")}</h3>
+        <h3 className="text-sm font-semibold text-ink">{t("Discount")}</h3>
         <div className="flex flex-wrap items-center gap-2">
           {isForeign && d.type === "Amount" && (
-            <div role="group" aria-label={t("Discount currency")} className="inline-flex rounded-lg bg-zinc-100 p-0.5">
+            <div role="group" aria-label={t("Discount currency")} className="inline-flex rounded-lg bg-subtle p-0.5">
               {[rateCur, homeCur].map((code) => (
                 <button key={code} type="button" aria-pressed={activeCurrency === code} disabled={off}
                   onClick={() => onChange({ ...d, currency: code })}
                   className={`px-2.5 py-1 text-xs font-medium disabled:opacity-50 ${activeCurrency === code
-                    ? "rounded-md bg-white text-zinc-900 shadow-sm" : "text-zinc-500"}`}>
+                    ? "rounded-md bg-surface text-ink shadow-sm" : "text-muted-ink"}`}>
                   {code}
                 </button>
               ))}
             </div>
           )}
-          <div className="inline-flex rounded-lg bg-zinc-100 p-0.5">
+          <div className="inline-flex rounded-lg bg-subtle p-0.5">
             {segment("Percent", t("% off"))}
             {segment("Amount", t("Amount / night"))}
           </div>
@@ -158,7 +158,7 @@ export default function DiscountPanel(props: {
       <div className="flex flex-wrap items-end gap-2">
         <div className="flex items-center gap-1.5">
           {d.type === "Amount" && activeCurrency && (
-            <span className="inline-flex items-center rounded-md border border-zinc-200 bg-zinc-100 px-2 py-1.5 text-xs font-semibold tabular-nums text-zinc-700">
+            <span className="inline-flex items-center rounded-md border border-line bg-subtle px-2 py-1.5 text-xs font-semibold tabular-nums text-secondary-ink">
               {activeCurrency}
             </span>
           )}
@@ -177,25 +177,25 @@ export default function DiscountPanel(props: {
           onChange={(e) => onChange({ ...d, note: e.target.value })} />
       </div>
       {!off && fxEquiv && (
-        <p className="text-xs tabular-nums text-zinc-500">
+        <p className="text-xs tabular-nums text-muted-ink">
           {t("≈ {amt} off / night", { amt: props.money(fxEquiv.amount, fxEquiv.currency) })}
         </p>
       )}
-      <p className="text-xs text-zinc-500">
+      <p className="text-xs text-muted-ink">
         {off ? t("This rate plan does not allow discounts.")
           : t("Comes off the room rate only - meals, extras and tax keep their own price.")}
       </p>
-      {!off && error && <p role="alert" className="text-xs text-rose-600">{t(error)}</p>}
+      {!off && error && <p role="alert" className="text-xs text-danger-text">{t(error)}</p>}
 
       {!off && (props.nights?.length ?? 0) > 0 && (
         <div>
-          <button type="button" className="text-xs font-medium text-brand-700 underline-offset-2 hover:underline"
+          <button type="button" className="text-xs font-medium text-accent-ink underline-offset-2 hover:underline"
             aria-expanded={daily} onClick={() => setDaily((v) => !v)}>
             {t("Per-night daily details")}
           </button>
           {daily && (
             <div className="mt-2 space-y-2">
-              <label className="flex items-center gap-2 text-xs text-zinc-600">
+              <label className="flex items-center gap-2 text-xs text-secondary-ink">
                 <input type="checkbox" aria-label={t("Apply to future nights")} checked={future}
                   onChange={(e) => setFuture(e.target.checked)} />
                 {t("Apply to future nights")}
@@ -208,7 +208,7 @@ export default function DiscountPanel(props: {
                     const nightStep = moneyStep(moneyDigits(nightCur || undefined))
                     const showForeignBase = isForeign && n.contract_currency && n.contract_base_rate !== undefined
                     return (
-                      <tr key={n.date} data-night={n.date} className="border-t border-zinc-200">
+                      <tr key={n.date} data-night={n.date} className="border-t border-line">
                         <td className="min-w-0 space-y-2 py-2">
                           <div className="flex flex-wrap justify-between gap-x-2 tabular-nums">
                             <span>{n.date}</span>
@@ -216,7 +216,7 @@ export default function DiscountPanel(props: {
                               {showForeignBase ? (
                                 <>
                                   <span className="block">{props.money(n.contract_base_rate!, n.contract_currency)}</span>
-                                  <span className="block text-xs text-zinc-400">{props.money(n.base_rate, homeCur)}</span>
+                                  <span className="block text-xs text-muted-ink">{props.money(n.base_rate, homeCur)}</span>
                                 </>
                               ) : props.money(n.base_rate, homeCur || undefined)}
                             </span>

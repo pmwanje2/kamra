@@ -93,18 +93,18 @@ export default function IdScan({ onRead, onClose }: {
   }, [camera]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="rounded-xl border border-brand-200 bg-brand-50/40 p-3">
+    <div className="rounded-xl border border-accent-line bg-accent-subtle/40 p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="flex items-center gap-1.5 text-sm font-semibold text-zinc-800">
+        <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
           <ScanLine className="size-4" aria-hidden />{t("Scan the ID")}
         </p>
         <button type="button" onClick={onClose} aria-label={t("Close")}
-          className="rounded-lg p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700">
+          className="rounded-lg p-1 text-muted-ink hover:bg-subtle hover:text-secondary-ink">
           <X className="size-4" />
         </button>
       </div>
       {camera ? (
-        <video ref={video} playsInline muted className="max-h-56 w-full rounded-lg bg-zinc-900 object-contain" />
+        <video ref={video} playsInline muted className="max-h-56 w-full rounded-lg bg-media object-contain" />
       ) : (
         <textarea
           ref={box}
@@ -112,20 +112,20 @@ export default function IdScan({ onRead, onClose }: {
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder={t("Scan the passport strip or the QR on the card now. Or paste what the scanner read.")}
-          className="w-full resize-none rounded-lg border border-zinc-300 bg-white px-3 py-2 font-mono text-xs focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+          className="w-full resize-none rounded-lg border border-control bg-surface px-3 py-2 font-mono text-xs focus:outline-2 focus:outline-offset-1 focus:outline-focus"
           autoComplete="off"
           spellCheck={false}
         />
       )}
       <div className="mt-2 flex flex-wrap items-center gap-2">
-        {busy && <span className="flex items-center gap-1 text-xs text-zinc-500"><Loader2 className="size-3.5 animate-spin" />{t("Reading")}</span>}
+        {busy && <span className="flex items-center gap-1 text-xs text-muted-ink"><Loader2 className="size-3.5 animate-spin" />{t("Reading")}</span>}
         {Native && (
           <Button type="button" variant="outline" onClick={() => setCamera((c) => !c)}>
             <Camera className="size-4" />{camera ? t("Use the scanner") : t("Use camera")}
           </Button>
         )}
       </div>
-      {err && <p className="mt-2 text-xs font-medium text-rose-700">{err}</p>}
+      {err && <p className="mt-2 text-xs font-medium text-danger-ink">{err}</p>}
     </div>
   )
 }

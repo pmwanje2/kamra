@@ -123,8 +123,8 @@ export function McpAccessPage() {
     )
   }, [data, toolQ])
 
-  if (error && !data) return <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-600">{t(error)}</p>
-  if (!data) return <p className="py-10 text-center text-sm text-zinc-400">{t("Loading…")}</p>
+  if (error && !data) return <p className="rounded-lg bg-danger-subtle px-3 py-2 text-sm text-danger-text">{t(error)}</p>
+  if (!data) return <p className="py-10 text-center text-sm text-muted-ink">{t("Loading…")}</p>
 
   const blocked = new Set(data.blocked_tools)
   const toggleTool = (name: string) => {
@@ -137,18 +137,18 @@ export function McpAccessPage() {
   return (
     <div className="space-y-4">
       {data.site_disabled && (
-        <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+        <p className="rounded-lg bg-warning-subtle px-3 py-2 text-sm text-warning-ink">
           {t("MCP is turned off for this whole site, so nothing below takes effect until IT turns it back on.")}
         </p>
       )}
-      {notice && <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{notice}</p>}
-      {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-600">{t(error)}</p>}
+      {notice && <p className="rounded-lg border border-success-line bg-success-subtle px-3 py-2 text-sm text-success-ink">{notice}</p>}
+      {error && <p className="rounded-lg bg-danger-subtle px-3 py-2 text-sm text-danger-text">{t(error)}</p>}
 
       <Card>
         <CardHeader>
           <div>
             <CardTitle>{t("AI access at this property")}</CardTitle>
-            <p className="mt-0.5 text-xs text-zinc-400">
+            <p className="mt-0.5 text-xs text-muted-ink">
               {t("Claude and other MCP clients act as the person who connected them, within that person's roles, and every change lands in Activity under their name.")}
             </p>
           </div>
@@ -156,21 +156,21 @@ export function McpAccessPage() {
         <CardContent className="space-y-4 text-sm">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="font-medium text-zinc-800">{t("AI access over MCP")}</p>
-              <p className="text-xs text-zinc-500">{t("Off: nobody can connect an AI client to this property, and existing connections stop working.")}</p>
+              <p className="font-medium text-ink">{t("AI access over MCP")}</p>
+              <p className="text-xs text-muted-ink">{t("Off: nobody can connect an AI client to this property, and existing connections stop working.")}</p>
             </div>
             <Switch on={data.enabled} label="AI access over MCP" disabled={busy === "policy"}
               onToggle={() => setPolicy({ enabled: data.enabled ? 0 : 1 })} />
           </div>
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="font-medium text-zinc-800">{t("Block write tools")}</p>
-              <p className="text-xs text-zinc-500">{t("AI clients can look but never change anything here, even for people with MCP Manage.")}</p>
+              <p className="font-medium text-ink">{t("Block write tools")}</p>
+              <p className="text-xs text-muted-ink">{t("AI clients can look but never change anything here, even for people with MCP Manage.")}</p>
             </div>
             <Switch on={data.read_only} label="Block write tools" disabled={busy === "policy"}
               onToggle={() => setPolicy({ read_only: data.read_only ? 0 : 1 })} />
           </div>
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-muted-ink">
             {t("In Claude, set write tools to Needs approval as well: {product} marks every tool as read-only or as making changes, and the destructive ones (cancel, void, check-out, night audit) separately.")}
           </p>
         </CardContent>
@@ -180,29 +180,29 @@ export function McpAccessPage() {
         <CardHeader>
           <div>
             <CardTitle>{t("Who can use MCP")}</CardTitle>
-            <p className="mt-0.5 text-xs text-zinc-400">
+            <p className="mt-0.5 text-xs text-muted-ink">
               {t("MCP Read lets the AI look; MCP Manage also lets it make changes. Hotel admins and IT always have full access. A person never gets more through the AI than their own roles allow. A change applies to their next request, no reconnect needed.")}
             </p>
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="relative">
-            <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-zinc-400" aria-hidden />
+            <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-ink" aria-hidden />
             <input className={cn(inputCls, "ps-9")} placeholder={t("Search name or email")}
               value={q} onChange={(e) => setQ(e.target.value)} aria-label={t("Search staff")} />
           </div>
-          <ul className="divide-y divide-zinc-100">
+          <ul className="divide-y divide-line-subtle">
             {shownStaff.map((s) => (
               <li key={s.user} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-zinc-800">{s.full_name || s.email}</p>
-                  <p className="truncate text-xs text-zinc-500">{s.email} · {s.roles.map((r) => t(r)).join(", ")}</p>
+                  <p className="truncate text-sm font-medium text-ink">{s.full_name || s.email}</p>
+                  <p className="truncate text-xs text-muted-ink">{s.email} · {s.roles.map((r) => t(r)).join(", ")}</p>
                 </div>
                 {s.level === "admin" ? (
                   <Badge tone="brand">{t("Full access (admin)")}</Badge>
                 ) : (
                   <select
-                    className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100 disabled:opacity-60"
+                    className="rounded-lg border border-control bg-surface px-3 py-1.5 text-sm focus:border-accent-control focus:outline-none focus:ring-2 focus:ring-brand-100 disabled:opacity-60"
                     value={s.level}
                     disabled={!s.editable || s.is_self || busy === s.user}
                     aria-label={t("AI access for {name}", { name: s.full_name || s.email })}
@@ -215,7 +215,7 @@ export function McpAccessPage() {
                 )}
               </li>
             ))}
-            {shownStaff.length === 0 && <li className="py-6 text-center text-sm text-zinc-400">{t("No one matches.")}</li>}
+            {shownStaff.length === 0 && <li className="py-6 text-center text-sm text-muted-ink">{t("No one matches.")}</li>}
           </ul>
         </CardContent>
       </Card>
@@ -224,19 +224,19 @@ export function McpAccessPage() {
         <CardHeader>
           <div>
             <CardTitle>{t("Connected AI clients")}</CardTitle>
-            <p className="mt-0.5 text-xs text-zinc-400">{t("Each sign-in from Claude, ChatGPT or another MCP client. Disconnect one and it has to sign in again.")}</p>
+            <p className="mt-0.5 text-xs text-muted-ink">{t("Each sign-in from Claude, ChatGPT or another MCP client. Disconnect one and it has to sign in again.")}</p>
           </div>
         </CardHeader>
         <CardContent>
           {data.connections.length === 0 ? (
-            <p className="py-4 text-sm text-zinc-400">{t("No AI client is connected to this property.")}</p>
+            <p className="py-4 text-sm text-muted-ink">{t("No AI client is connected to this property.")}</p>
           ) : (
-            <ul className="divide-y divide-zinc-100">
+            <ul className="divide-y divide-line-subtle">
               {data.connections.map((c) => (
                 <li key={c.name} className="flex flex-wrap items-center justify-between gap-3 py-2.5 text-sm">
                   <div className="min-w-0">
-                    <p className="font-medium text-zinc-800">{c.client_name} · {c.full_name}</p>
-                    <p className="text-xs text-zinc-500">
+                    <p className="font-medium text-ink">{c.client_name} · {c.full_name}</p>
+                    <p className="text-xs text-muted-ink">
                       {t("Connected {when}", { when: when(c.created) })} · {t("Last used {when}", { when: when(c.last_used) })}
                     </p>
                   </div>
@@ -250,8 +250,8 @@ export function McpAccessPage() {
               ))}
             </ul>
           )}
-          <p className="mt-3 text-xs text-zinc-500">
-            <Link to="/activity" className="font-medium text-brand-700 hover:underline">{t("See every AI action in Activity")}</Link>
+          <p className="mt-3 text-xs text-muted-ink">
+            <Link to="/activity" className="font-medium text-accent-ink hover:underline">{t("See every AI action in Activity")}</Link>
             {data.recent.length > 0 && <> · {t("Last: {action} by {actor}, {when}", {
               action: data.recent[0].action_type, actor: data.recent[0].actor, when: when(data.recent[0].creation),
             })}</>}
@@ -263,7 +263,7 @@ export function McpAccessPage() {
         <CardHeader>
           <div>
             <CardTitle>{t("Blocked tools")}</CardTitle>
-            <p className="mt-0.5 text-xs text-zinc-400">{t("Switch off single tools for AI clients at this property. Staff can still do the same thing in {product}.")}</p>
+            <p className="mt-0.5 text-xs text-muted-ink">{t("Switch off single tools for AI clients at this property. Staff can still do the same thing in {product}.")}</p>
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -271,10 +271,10 @@ export function McpAccessPage() {
             onChange={(e) => setToolQ(e.target.value)} aria-label={t("Find a tool")} />
           <ul className="grid max-h-80 gap-1 overflow-y-auto sm:grid-cols-2">
             {shownTools.map((tool) => (
-              <li key={tool.name} className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 hover:bg-zinc-50">
+              <li key={tool.name} className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 hover:bg-canvas">
                 <span className="min-w-0 truncate text-sm">
                   <code className="text-xs">{tool.name}</code>
-                  <span className="ms-2 text-xs text-zinc-400">{t(tool.group)}</span>
+                  <span className="ms-2 text-xs text-muted-ink">{t(tool.group)}</span>
                   {tool.mutating && <Badge tone="amber" className="ms-2">{t("changes data")}</Badge>}
                 </span>
                 <Switch on={!blocked.has(tool.name)} label={tool.name} disabled={busy === "policy"}
@@ -288,8 +288,8 @@ export function McpAccessPage() {
       <Card>
         <CardHeader>
           <div>
-            <CardTitle className="flex items-center gap-2"><ShieldCheck className="size-4 text-zinc-400" aria-hidden />{t("Extra sign-in addresses")}</CardTitle>
-            <p className="mt-0.5 text-xs text-zinc-400">
+            <CardTitle className="flex items-center gap-2"><ShieldCheck className="size-4 text-muted-ink" aria-hidden />{t("Extra sign-in addresses")}</CardTitle>
+            <p className="mt-0.5 text-xs text-muted-ink">
               {t("Claude, Claude Code and ChatGPT work out of the box. For another client, such as your own n8n, add its exact OAuth redirect address: https only, no wildcards, one per line. Applies to every property on this site.")}
             </p>
           </div>
@@ -307,7 +307,7 @@ export function McpAccessPage() {
               {t("Save addresses")}
             </Button>
           ) : (
-            <p className="text-xs text-zinc-500">{t("Only IT can change these.")}</p>
+            <p className="text-xs text-muted-ink">{t("Only IT can change these.")}</p>
           )}
         </CardContent>
       </Card>

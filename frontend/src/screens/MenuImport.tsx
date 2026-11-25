@@ -48,8 +48,8 @@ interface RunReport {
 }
 
 const inputCls =
-  "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "w-full rounded-lg border border-control bg-surface px-3 py-2 text-sm " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 export default function MenuImport({
   onClose,
@@ -199,7 +199,7 @@ export default function MenuImport({
     >
       <div className="space-y-4">
         {error && (
-          <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          <p className="rounded-lg bg-danger-subtle px-3 py-2 text-sm text-danger-ink">
             {translate(error)}
           </p>
         )}
@@ -207,7 +207,7 @@ export default function MenuImport({
         {/* ---------- result ---------- */}
         {report ? (
           <div className="space-y-3">
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-800">
+            <div className="rounded-xl border border-success-line bg-success-subtle p-4 text-success-ink">
               <p className="flex items-center gap-2 font-semibold">
                 <Check className="size-5" aria-hidden />{translate("Menu imported")}</p>
               <p className="mt-1 text-sm">
@@ -234,32 +234,32 @@ export default function MenuImport({
             </div>
 
             <div>
-              <p className="mb-1 text-xs font-medium uppercase tracking-wide text-zinc-400">{translate("Column mapping")}</p>
+              <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-ink">{translate("Column mapping")}</p>
               <div className="flex flex-wrap gap-1.5">
                 {Object.entries(preview.mapping).map(([canon, header]) => (
                   <span
                     key={canon}
-                    className="rounded-lg bg-zinc-100 px-2 py-1 text-xs"
+                    className="rounded-lg bg-subtle px-2 py-1 text-xs"
                   >
-                    <span className="text-zinc-500">{header}</span>
-                    <span className="mx-1 text-zinc-300">→</span>
+                    <span className="text-muted-ink">{header}</span>
+                    <span className="mx-1 text-muted-ink">→</span>
                     <span className="font-medium">{canon}</span>
                   </span>
                 ))}
               </div>
               {preview.unmapped.length > 0 && (
-                <p className="mt-1.5 text-xs text-zinc-400">{translate("Ignored: ")}{preview.unmapped.join(", ")}
+                <p className="mt-1.5 text-xs text-muted-ink">{translate("Ignored: ")}{preview.unmapped.join(", ")}
                 </p>
               )}
             </div>
 
             {preview.sample.length > 0 && (
               <div>
-                <p className="mb-1 text-xs font-medium uppercase tracking-wide text-zinc-400">{translate("First ")}{preview.sample.length}{translate(" row(s)")}</p>
-                <div className="overflow-x-auto rounded-lg border border-zinc-200">
+                <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-ink">{translate("First ")}{preview.sample.length}{translate(" row(s)")}</p>
+                <div className="overflow-x-auto rounded-lg border border-line">
                   <table className="w-full text-sm">
-                    <thead className="bg-zinc-50">
-                      <tr className="text-left text-xs text-zinc-500">
+                    <thead className="bg-canvas">
+                      <tr className="text-left text-xs text-muted-ink">
                         <th className="px-2 py-1.5">{translate("Item")}</th>
                         <th className="px-2">{translate("Category")}</th>
                         <th className="px-2 text-right">{translate("Price")}</th>
@@ -270,11 +270,11 @@ export default function MenuImport({
                     </thead>
                     <tbody>
                       {preview.sample.map((s) => (
-                        <tr key={s.row} className="border-t border-zinc-100">
+                        <tr key={s.row} className="border-t border-line-subtle">
                           <td className="px-2 py-1.5 font-medium">
                             {s.item_name}
                           </td>
-                          <td className="px-2 text-zinc-500">
+                          <td className="px-2 text-muted-ink">
                             {translate(s.category) || "-"}
                           </td>
                           <td className="px-2 text-right tabular-nums">
@@ -284,7 +284,7 @@ export default function MenuImport({
                             <span
                               className={cn(
                                 "text-xs font-medium",
-                                s.is_veg ? "text-emerald-700" : "text-rose-600",
+                                s.is_veg ? "text-success-ink" : "text-danger-text",
                               )}
                             >
                               {s.is_alcohol && sellsAlcohol()
@@ -294,7 +294,7 @@ export default function MenuImport({
                                   : translate("non-veg")}
                             </span>
                           </td>
-                          <td className="px-2 text-zinc-500">
+                          <td className="px-2 text-muted-ink">
                             {s.prep_station}
                           </td>
                           <td className="px-2">
@@ -323,7 +323,7 @@ export default function MenuImport({
           /* ---------- input ---------- */
           <div className="space-y-4">
             <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-zinc-600">{translate("Outlet")}</span>
+              <span className="mb-1.5 block text-sm font-medium text-secondary-ink">{translate("Outlet")}</span>
               <select
                 className={inputCls}
                 value={outlet}
@@ -336,7 +336,7 @@ export default function MenuImport({
                   </option>
                 ))}
               </select>
-              <span className="mt-1 block text-xs text-zinc-400">{translate("Used for every row - unless your file has its own")}{" "}
+              <span className="mt-1 block text-xs text-muted-ink">{translate("Used for every row - unless your file has its own")}{" "}
                 <code>outlet</code>{translate(" column.")}</span>
             </label>
 
@@ -355,7 +355,7 @@ export default function MenuImport({
             </div>
 
             <label className="block">
-              <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-zinc-600">
+              <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-secondary-ink">
                 <Table2 className="size-4" aria-hidden />{translate("…or paste the rows here")}</span>
               <textarea
                 className={cn(inputCls, "h-56 font-mono text-xs")}
@@ -373,7 +373,7 @@ export default function MenuImport({
                 }}
               />
             </label>
-            <p className="text-xs text-zinc-400">{translate("Headers are matched loosely - ")}<em>{translate("Dish / Item / Product")}</em>,{" "}
+            <p className="text-xs text-muted-ink">{translate("Headers are matched loosely - ")}<em>{translate("Dish / Item / Product")}</em>,{" "}
               <em>{translate("Rate / Price / MRP")}</em>, <em>{translate("Veg / Non-Veg")}</em>{translate(" all work. Only ")}<strong>{translate("item name")}</strong>{translate(" and ")}<strong>{translate("price")}</strong>{translate(" are required. Re-importing updates existing dishes instead of duplicating them.")}</p>
           </div>
         )}
@@ -392,12 +392,12 @@ function IssueList({
   useUILanguage()
   return (
     <div>
-      <p className="mb-1 text-xs font-medium uppercase tracking-wide text-rose-500">
+      <p className="mb-1 text-xs font-medium uppercase tracking-wide text-danger-text">
         {translate(title)}
       </p>
-      <ul className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-rose-100 bg-rose-50/50 p-2">
+      <ul className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-danger-line bg-danger-subtle/50 p-2">
         {issues.map((i) => (
-          <li key={`${i.row}-${i.item}`} className="text-xs text-zinc-600">
+          <li key={`${i.row}-${i.item}`} className="text-xs text-secondary-ink">
             <span className="font-medium">{translate("Row ")}{i.row}
               {i.item ? ` · ${i.item}` : ""}
             </span>{" "}

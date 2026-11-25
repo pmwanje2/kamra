@@ -104,7 +104,7 @@ import ErrorBoundary from "./components/ErrorBoundary"
 
 function Splash() {
   const { t } = useT()
-  return <p className="py-20 text-center text-sm text-zinc-400">{t("Loading…")}</p>
+  return <p className="py-20 text-center text-sm text-muted-ink">{t("Loading…")}</p>
 }
 
 /** Gate for the app shell: redirects to /login (remembering where you were)
@@ -183,13 +183,13 @@ function WhiteLabelRoutes() {
   const kept = keptInErp(pathname)
   if (kept)
     return (
-      <div className="space-y-3 py-10 text-center text-sm text-zinc-600">
+      <div className="space-y-3 py-10 text-center text-sm text-secondary-ink">
         <p>{t("This is kept in the accounting system.")}</p>
-        <a className="font-medium text-zinc-900 underline" href={kept.url}>{t("Open {v0}", { v0: kept.label })}</a>
+        <a className="font-medium text-ink underline" href={kept.url}>{t("Open {v0}", { v0: kept.label })}</a>
       </div>
     )
   return upstreamOnly(pathname)
-    ? <p className="py-10 text-center text-sm text-zinc-500">{t("Not available here")}</p>
+    ? <p className="py-10 text-center text-sm text-muted-ink">{t("Not available here")}</p>
     : <Outlet context={shell} />
 }
 
@@ -208,7 +208,7 @@ export default function App() {
       <ConnectionBanner />
       <Suspense
         fallback={
-          <div className="p-10 text-center text-sm text-zinc-400">{translate("Loading…")}</div>
+          <div className="p-10 text-center text-sm text-muted-ink">{translate("Loading…")}</div>
         }
       >
       <Routes>
@@ -472,7 +472,7 @@ export default function App() {
           <Route
             path="*"
             element={
-              <p className="py-10 text-center text-sm text-zinc-400">
+              <p className="py-10 text-center text-sm text-muted-ink">
                 {t("Page not found.")}
               </p>
             }

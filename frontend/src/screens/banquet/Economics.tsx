@@ -80,24 +80,24 @@ export default function Economics({
               ? translate("after {v0} credit", { v0: String(fmt(data.cost.input_tax)) })
               : translate("no credit claimable"))
           }
-          tone="text-zinc-600"
+          tone="text-secondary-ink"
         />
         <Tile
           label={translate("Gross margin")}
           value={fmt(m.gross)}
           sub={translate("{v0} per head", { v0: String(fmt(m.per_pax)) })}
-          tone={healthy ? "text-emerald-700" : "text-amber-700"}
+          tone={healthy ? "text-success-ink" : "text-warning-ink"}
         />
         <Tile
           label={translate("Margin")}
           value={`${m.percent}%`}
           sub={(healthy ? translate("healthy") : translate("thin - check the discount"))}
-          tone={healthy ? "text-emerald-700" : "text-amber-700"}
+          tone={healthy ? "text-success-ink" : "text-warning-ink"}
         />
       </div>
 
       {data.uncosted_lines.length > 0 && (
-        <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="flex items-start gap-2 rounded-xl border border-warning-line bg-warning-subtle px-4 py-3 text-sm text-warning-ink">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
           <p>
             <span className="font-medium">
@@ -137,7 +137,7 @@ export default function Economics({
               tone="bg-emerald-500"
               moneyCtx={fn}
             />
-            <dl className="mt-3 space-y-1 border-t border-zinc-100 pt-3">
+            <dl className="mt-3 space-y-1 border-t border-line-subtle pt-3">
               <Line label={translate("Subtotal")} value={data.revenue.subtotal} moneyCtx={fn} />
               {data.revenue.discount > 0 && (
                 <Line label={translate("Discount")} value={-data.revenue.discount} moneyCtx={fn} />
@@ -153,7 +153,7 @@ export default function Economics({
                 <Line
                   label={translate("Ordered on the night")}
                   value={data.revenue.supplementary}
-                  tone="text-amber-700"
+                  tone="text-warning-ink"
                   moneyCtx={fn}
                 />
               )}
@@ -161,17 +161,17 @@ export default function Economics({
               <Line
                 label={translate("{v0} charged", { v0: String(docTaxLabel) })}
                 value={data.revenue.tax}
-                tone="text-zinc-400"
+                tone="text-muted-ink"
                 moneyCtx={fn}
               />
               <Line
                 label={translate("{v0} paid on cost", { v0: String(docTaxLabel) })}
                 value={data.cost.input_tax}
-                tone="text-zinc-400"
+                tone="text-muted-ink"
                 moneyCtx={fn}
               />
             </dl>
-            <p className="pt-1 text-xs text-zinc-400">
+            <p className="pt-1 text-xs text-muted-ink">
               {data.cost.itc_eligible
                 ? translate("Billed at 12% or more, so the {v0} paid on the cost side is claimable as input credit - the margin above nets it off.", { v0: String(fmt(data.cost.input_tax)) })
                 : translate("Billed under the 5% food scheme, so the {v0} paid on purchases is NOT claimable. It stays in the cost.", { v0: String(fmt(data.cost.input_tax)) })}
@@ -194,13 +194,13 @@ export default function Economics({
             >{translate("Build the indent")}</Button>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-zinc-500">{translate("The chosen dishes, exploded through their recipes at")}{" "}
+            <p className="text-sm text-muted-ink">{translate("The chosen dishes, exploded through their recipes at")}{" "}
               {fn.billable_pax}{translate(" pax, checked against what's on the shelf - the sheet that has always been written by hand between the event order and the store room.")}</p>
             {fn.selections?.length ? (
-              <p className="mt-2 text-xs text-emerald-700">
+              <p className="mt-2 text-xs text-success-ink">
                 {fn.selections.length}{translate(" dish")}{fn.selections.length === 1 ? "" : translate("es")}{translate(" chosen.")}</p>
             ) : (
-              <p className="mt-2 text-xs text-amber-700">{translate("Nothing chosen yet - compose the menu first.")}</p>
+              <p className="mt-2 text-xs text-warning-ink">{translate("Nothing chosen yet - compose the menu first.")}</p>
             )}
           </CardContent>
         </Card>
@@ -220,7 +220,7 @@ export default function Economics({
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wider text-zinc-400">
+                <tr className="border-b border-line text-left text-xs uppercase tracking-wider text-muted-ink">
                   <th className="py-2 pr-3 font-medium">{translate("Item")}</th>
                   <th className="py-2 pr-3 text-right font-medium">{translate("Quoted")}</th>
                   <th className="py-2 pr-3 text-right font-medium">{translate("Served")}</th>
@@ -231,17 +231,17 @@ export default function Economics({
               </thead>
               <tbody>
                 {data.lines.map((l) => (
-                  <tr key={l.row} className="border-b border-zinc-100">
+                  <tr key={l.row} className="border-b border-line-subtle">
                     <td className="py-1.5 pr-3">
                       {l.item_name}
                       {l.is_supplementary && (
-                        <span className="ml-1.5 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">{translate("on the night")}</span>
+                        <span className="ml-1.5 rounded bg-warning-subtle px-1.5 py-0.5 text-[10px] font-medium text-warning-ink">{translate("on the night")}</span>
                       )}
                       {!l.chargeable && (
-                        <span className="ml-1.5 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">{translate("free")}</span>
+                        <span className="ml-1.5 rounded bg-success-subtle px-1.5 py-0.5 text-[10px] font-medium text-success-ink">{translate("free")}</span>
                       )}
                     </td>
-                    <td className="py-1.5 pr-3 text-right tabular-nums text-zinc-400">
+                    <td className="py-1.5 pr-3 text-right tabular-nums text-muted-ink">
                       {l.quoted_qty % 1 === 0
                         ? l.quoted_qty
                         : l.quoted_qty.toFixed(2)}{" "}
@@ -249,7 +249,7 @@ export default function Economics({
                     </td>
                     <td className="py-1.5 pr-3 text-right tabular-nums">
                       {l.actual_qty === null ? (
-                        <span className="text-zinc-300"> - </span>
+                        <span className="text-muted-ink"> - </span>
                       ) : (
                         <>
                           {l.actual_qty}
@@ -257,8 +257,8 @@ export default function Economics({
                             <span
                               className={
                                 l.variance > 0
-                                  ? "ml-1 text-emerald-600"
-                                  : "ml-1 text-rose-600"
+                                  ? "ml-1 text-success-text"
+                                  : "ml-1 text-danger-text"
                               }
                             >
                               {l.variance > 0 ? "+" : ""}
@@ -271,13 +271,13 @@ export default function Economics({
                     <td className="py-1.5 pr-3 text-right tabular-nums">
                       {fmt(l.net_amount)}
                     </td>
-                    <td className="py-1.5 pr-3 text-right tabular-nums text-zinc-500">
+                    <td className="py-1.5 pr-3 text-right tabular-nums text-muted-ink">
                       {l.cost_amount ? fmt(l.cost_amount) : "-"}
                     </td>
                     <td
                       className={
                         "py-1.5 text-right tabular-nums " +
-                        (l.margin < 0 ? "text-rose-700" : "")
+                        (l.margin < 0 ? "text-danger-ink" : "")
                       }
                     >
                       {l.cost_amount ? fmt(l.margin) : "-"}
@@ -353,12 +353,12 @@ function Tile({
 }) {
   useUILanguage()
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3">
-      <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+    <div className="rounded-xl border border-line bg-surface px-4 py-3">
+      <p className="text-[11px] font-medium uppercase tracking-wider text-muted-ink">
         {translate(label)}
       </p>
       <p className={"mt-1 text-xl font-semibold tabular-nums " + tone}>{value}</p>
-      {sub && <p className="mt-0.5 text-xs text-zinc-400">{translate(sub)}</p>}
+      {sub && <p className="mt-0.5 text-xs text-muted-ink">{translate(sub)}</p>}
     </div>
   )
 }
@@ -381,12 +381,12 @@ function Bar({
   return (
     <div>
       <div className="flex justify-between text-xs">
-        <span className="text-zinc-600">{translate(label)}</span>
-        <span className="tabular-nums text-zinc-500">
-          {inr(value, moneyCtx)} <span className="text-zinc-400">({pct.toFixed(0)}%)</span>
+        <span className="text-secondary-ink">{translate(label)}</span>
+        <span className="tabular-nums text-muted-ink">
+          {inr(value, moneyCtx)} <span className="text-muted-ink">({pct.toFixed(0)}%)</span>
         </span>
       </div>
-      <div className="mt-1 h-2 overflow-hidden rounded-full bg-zinc-100">
+      <div className="mt-1 h-2 overflow-hidden rounded-full bg-subtle">
         <div className={"h-full " + tone} style={{ width: `${pct}%` }} />
       </div>
     </div>
@@ -411,11 +411,11 @@ function Line({
     <div
       className={
         "flex justify-between " +
-        (bold ? "border-t border-zinc-200 pt-1 font-semibold " : "") +
+        (bold ? "border-t border-line pt-1 font-semibold " : "") +
         tone
       }
     >
-      <dt className={bold ? "" : "text-zinc-500"}>{translate(label)}</dt>
+      <dt className={bold ? "" : "text-muted-ink"}>{translate(label)}</dt>
       <dd className="tabular-nums">{inr(value, moneyCtx)}</dd>
     </div>
   )
@@ -459,9 +459,9 @@ function IndentSheet({
       wide
       footer={
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <span className="text-sm text-zinc-500">
+          <span className="text-sm text-muted-ink">
             {inr(indent.total_cost, moneyCtx)}{translate(" of ingredients")}{indent.shortfall_lines > 0 && (
-              <span className="text-amber-700">
+              <span className="text-warning-ink">
                 {" "}
                 · {indent.shortfall_lines}{translate(" short on the shelf")}</span>
             )}
@@ -487,12 +487,12 @@ function IndentSheet({
       }
     >
       {indent.uncosted.length > 0 && (
-        <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">{translate("No recipe for ")}{indent.uncosted.join(", ")}{translate(" - those dishes aren't on this list and won't be pulled from stock.")}</div>
+        <div className="mb-3 rounded-lg border border-warning-line bg-warning-subtle px-3 py-2 text-sm text-warning-ink">{translate("No recipe for ")}{indent.uncosted.join(", ")}{translate(" - those dishes aren't on this list and won't be pulled from stock.")}</div>
       )}
 
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wider text-zinc-400">
+          <tr className="border-b border-line text-left text-xs uppercase tracking-wider text-muted-ink">
             <th className="py-2 pr-3 font-medium">{translate("Ingredient")}</th>
             <th className="py-2 pr-3 text-right font-medium">{translate("Need")}</th>
             <th className="py-2 pr-3 text-right font-medium">{translate("On hand")}</th>
@@ -502,23 +502,23 @@ function IndentSheet({
         </thead>
         <tbody>
           {indent.ingredients.map((r) => (
-            <tr key={r.ingredient} className="border-b border-zinc-100">
+            <tr key={r.ingredient} className="border-b border-line-subtle">
               <td className="py-1.5 pr-3">
                 {r.ingredient_name}
-                <p className="text-xs text-zinc-400">
+                <p className="text-xs text-muted-ink">
                   {r.for_dishes.join(", ")}
                 </p>
               </td>
               <td className="py-1.5 pr-3 text-right tabular-nums font-medium">
                 {r.required} {r.uom}
               </td>
-              <td className="py-1.5 pr-3 text-right tabular-nums text-zinc-500">
+              <td className="py-1.5 pr-3 text-right tabular-nums text-muted-ink">
                 {r.on_hand}
               </td>
               <td
                 className={
                   "py-1.5 pr-3 text-right tabular-nums " +
-                  (r.short_by > 0 ? "font-medium text-rose-700" : "text-zinc-300")
+                  (r.short_by > 0 ? "font-medium text-danger-ink" : "text-muted-ink")
                 }
               >
                 {r.short_by > 0 ? r.short_by : "-"}
@@ -531,8 +531,8 @@ function IndentSheet({
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
         {indent.by_kitchen.map((k) => (
-          <div key={k.kitchen} className="rounded-lg border border-zinc-200 p-3">
-            <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+          <div key={k.kitchen} className="rounded-lg border border-line p-3">
+            <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted-ink">
               {k.kitchen}
             </h4>
             <ul className="space-y-0.5 text-sm">
@@ -541,10 +541,10 @@ function IndentSheet({
                   <span>
                     {d.dish}
                     {d.note && (
-                      <span className="text-xs text-amber-700"> · {d.note}</span>
+                      <span className="text-xs text-warning-ink"> · {d.note}</span>
                     )}
                   </span>
-                  <span className="shrink-0 tabular-nums text-zinc-400">
+                  <span className="shrink-0 tabular-nums text-muted-ink">
                     {d.portions}
                   </span>
                 </li>
@@ -620,7 +620,7 @@ function CountSheet({
       </Field>
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wider text-zinc-400">
+          <tr className="border-b border-line text-left text-xs uppercase tracking-wider text-muted-ink">
             <th className="py-2 pr-3 font-medium">{translate("Item")}</th>
             <th className="py-2 pr-3 text-right font-medium">{translate("Quoted")}</th>
             <th className="py-2 text-right font-medium">{translate("Served")}</th>
@@ -628,9 +628,9 @@ function CountSheet({
         </thead>
         <tbody>
           {data.lines.map((l) => (
-            <tr key={l.row} className="border-b border-zinc-100">
+            <tr key={l.row} className="border-b border-line-subtle">
               <td className="py-1.5 pr-3">{l.item_name}</td>
-              <td className="py-1.5 pr-3 text-right tabular-nums text-zinc-400">
+              <td className="py-1.5 pr-3 text-right tabular-nums text-muted-ink">
                 {l.quoted_qty} {l.uom}
               </td>
               <td className="py-1.5 text-right">
@@ -762,13 +762,13 @@ function SupplementarySheet({
         <label className="flex items-start gap-2">
           <input
             type="checkbox"
-            className="mt-0.5 size-4 accent-brand-600"
+            className="mt-0.5 size-4 accent-focus"
             checked={form.is_alcohol}
             onChange={(e) => set("is_alcohol", e.target.checked)}
           />
           <span>
-            <span className="block text-sm font-medium text-zinc-700">{translate("Alcohol")}</span>
-            <span className="block text-xs text-zinc-400">{translate("Never rides a company bill - it settles separately.")}</span>
+            <span className="block text-sm font-medium text-secondary-ink">{translate("Alcohol")}</span>
+            <span className="block text-xs text-muted-ink">{translate("Never rides a company bill - it settles separately.")}</span>
           </span>
         </label>)}
       </div>

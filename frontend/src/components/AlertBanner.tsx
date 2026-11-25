@@ -62,17 +62,17 @@ const SEVERITY_ORDER: Record<AlertSeverity, number> = {
 
 const SURFACE: Record<AlertSeverity, string> = {
   Blocking:
-    "border-rose-300 bg-rose-50 text-rose-900 dark:border-rose-500/40 dark:bg-rose-950/40 dark:text-rose-100",
+    "border-danger-line-strong bg-danger-subtle text-danger-ink dark:border-rose-500/40 dark:bg-rose-950/40 dark:text-rose-100",
   Warning:
-    "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/30 dark:text-amber-100",
+    "border-warning-line-strong bg-warning-subtle text-warning-ink dark:border-amber-500/40 dark:bg-amber-950/30 dark:text-amber-100",
   Info:
-    "border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-500/40 dark:bg-sky-950/30",
+    "border-info-line-strong bg-info-subtle text-info-ink dark:border-sky-500/40 dark:bg-sky-950/30",
 }
 
 const BADGE_TONE: Record<AlertSeverity, string> = {
-  Blocking: "bg-rose-600 text-white",
-  Warning: "bg-amber-600 text-white",
-  Info: "bg-sky-600 text-white dark:bg-sky-400",
+  Blocking: "bg-danger-fill text-on-solid",
+  Warning: "bg-warning-fill text-on-solid",
+  Info: "bg-info-fill text-on-solid",
 }
 
 export default function AlertBanner({
@@ -284,7 +284,7 @@ export default function AlertBanner({
                     >
                       {t(a.severity)}
                     </span>
-                    <span className="rounded bg-zinc-100/70 px-1.5 py-0.5 text-[11px] font-medium">
+                    <span className="rounded bg-subtle/70 px-1.5 py-0.5 text-[11px] font-medium">
                       {t(a.trigger_area)}
                     </span>
                     {a.alert_code && (
@@ -339,13 +339,13 @@ export default function AlertBanner({
             </div>
 
             {isResolving && (
-              <div className="mt-3 flex flex-col gap-2 border-t border-rose-200/70 pt-3 sm:flex-row sm:items-center dark:border-rose-500/30">
+              <div className="mt-3 flex flex-col gap-2 border-t border-danger-line/70 pt-3 sm:flex-row sm:items-center dark:border-rose-500/30">
                 <input
                   value={resolveNote}
                   onChange={(e) => setResolveNote(e.target.value)}
                   placeholder={t("Supervisor reason for clearing this blocking alert")}
                   aria-label={t("Resolution reason")}
-                  className="min-h-11 min-w-0 flex-1 rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-sm text-zinc-900 focus:outline-2 focus:outline-offset-1 focus:outline-rose-600 sm:min-h-9 dark:border-rose-500/50"
+                  className="min-h-11 min-w-0 flex-1 rounded-lg border border-danger-line-strong bg-surface px-3 py-1.5 text-sm text-ink focus:outline-2 focus:outline-offset-1 focus:outline-rose-600 sm:min-h-9 dark:border-rose-500/50"
                 />
                 <div className="flex items-center gap-2">
                   <Button
@@ -375,10 +375,10 @@ export default function AlertBanner({
       })}
 
       {canCreate && (
-        <div className="rounded-xl border border-zinc-200 bg-zinc-50/70 px-3.5 py-2.5">
+        <div className="rounded-xl border border-line bg-canvas/70 px-3.5 py-2.5">
           {!creating ? (
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-xs font-medium text-zinc-600">
+              <span className="text-xs font-medium text-secondary-ink">
                 {visible.length === 0
                   ? t("No active alerts on this stay.")
                   : t("{n} active alert(s)", { n: visible.length })}
@@ -397,7 +397,7 @@ export default function AlertBanner({
             <form onSubmit={(e) => void handleCreate(e)} className="space-y-2.5 text-start">
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-zinc-500">
+                  <span className="mb-1 block text-xs font-medium text-muted-ink">
                     {t("Trigger")}
                   </span>
                   <select
@@ -409,7 +409,7 @@ export default function AlertBanner({
                         trigger_area: e.target.value as AlertTrigger,
                       }))
                     }
-                    className="min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm text-zinc-900 sm:min-h-9"
+                    className="min-h-11 w-full rounded-lg border border-control bg-surface px-2.5 py-1.5 text-sm text-ink sm:min-h-9"
                   >
                     {TRIGGERS.map((tr) => (
                       <option key={tr} value={tr}>
@@ -419,7 +419,7 @@ export default function AlertBanner({
                   </select>
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-zinc-500">
+                  <span className="mb-1 block text-xs font-medium text-muted-ink">
                     {t("Severity")}
                   </span>
                   <select
@@ -431,7 +431,7 @@ export default function AlertBanner({
                         severity: e.target.value as AlertSeverity,
                       }))
                     }
-                    className="min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm text-zinc-900 sm:min-h-9"
+                    className="min-h-11 w-full rounded-lg border border-control bg-surface px-2.5 py-1.5 text-sm text-ink sm:min-h-9"
                   >
                     {SEVERITIES.map((s) => (
                       <option key={s} value={s}>
@@ -441,7 +441,7 @@ export default function AlertBanner({
                   </select>
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-zinc-500">
+                  <span className="mb-1 block text-xs font-medium text-muted-ink">
                     {t("Display")}
                   </span>
                   <select
@@ -453,7 +453,7 @@ export default function AlertBanner({
                         display_mode: e.target.value as AlertDisplayMode,
                       }))
                     }
-                    className="min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm text-zinc-900 sm:min-h-9"
+                    className="min-h-11 w-full rounded-lg border border-control bg-surface px-2.5 py-1.5 text-sm text-ink sm:min-h-9"
                   >
                     {DISPLAY_MODES.map((m) => (
                       <option key={m} value={m}>
@@ -469,7 +469,7 @@ export default function AlertBanner({
                 onChange={(e) => setDraft((d) => ({ ...d, message: e.target.value }))}
                 placeholder={t("Alert message for staff (e.g. Passport check required)")}
                 aria-label={t("Alert message")}
-                className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+                className="w-full rounded-lg border border-control bg-surface px-3 py-2 text-sm text-ink focus:outline-2 focus:outline-offset-1 focus:outline-focus"
               />
               <div className="flex flex-wrap items-center gap-2">
                 <Button
@@ -494,7 +494,7 @@ export default function AlertBanner({
       )}
 
       {error && (
-        <p role="alert" className="text-sm text-rose-700 dark:text-rose-300">
+        <p role="alert" className="text-sm text-danger-ink dark:text-rose-300">
           {error}
         </p>
       )}

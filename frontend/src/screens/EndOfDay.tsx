@@ -29,9 +29,9 @@ const amount = (n: unknown) => fmtAmount(n ?? 0)
 function Count({ label, n, warn }: { label: string; n: number; warn?: boolean }) {
   const { t } = useT()
   return (
-    <div className="rounded-lg border border-zinc-200 px-3 py-2">
-      <div className="text-[11px] uppercase tracking-wider text-zinc-500">{t(label)}</div>
-      <div className={`mt-0.5 text-lg font-semibold tabular-nums ${n && warn ? "text-rose-600" : "text-zinc-900"}`}>
+    <div className="rounded-lg border border-line px-3 py-2">
+      <div className="text-[11px] uppercase tracking-wider text-muted-ink">{t(label)}</div>
+      <div className={`mt-0.5 text-lg font-semibold tabular-nums ${n && warn ? "text-danger-text" : "text-ink"}`}>
         {n}
       </div>
     </div>
@@ -113,20 +113,20 @@ export default function EndOfDay() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-lg font-semibold text-zinc-900">{t("Night Audit")}</h1>
-        <p className="text-sm text-zinc-500">
+        <h1 className="text-lg font-semibold text-ink">{t("Night Audit")}</h1>
+        <p className="text-sm text-muted-ink">
           {t("Close each property's business date. The automatic audit does the same at the time set in Settings, Front Desk.")}
         </p>
       </div>
-      {err && <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{translate(err)}</p>}
-      {!rows && !err && <p className="text-sm text-zinc-400">{t("Loading…")}</p>}
+      {err && <p className="rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">{translate(err)}</p>}
+      {!rows && !err && <p className="text-sm text-muted-ink">{t("Loading…")}</p>}
       <div className="grid gap-4 lg:grid-cols-2">
         {(rows ?? []).map((r) => (
           <Card key={r.property}>
             <CardHeader>
               <div>
                 <CardTitle>{r.property_name}</CardTitle>
-                <p className="mt-0.5 text-xs text-zinc-500">
+                <p className="mt-0.5 text-xs text-muted-ink">
                   {t("Business date {bd} · property time {now}", {
                     bd: fmtDay(r.business_date),
                     now: r.property_now.slice(11, 16),
@@ -161,14 +161,14 @@ export default function EndOfDay() {
             </CardHeader>
             <CardContent className="pt-3">
               {r.stuck_date && (
-                <p className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
+                <p className="mb-3 rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-xs text-danger-ink">
                   {t("The night audit already closed {d}, but the business date did not move. Advance it without posting again.", {
                     d: fmtDay(r.stuck_date.business_date),
                   })}
                 </p>
               )}
               {r.held && !r.stuck_date && (
-                <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                <p className="mb-3 rounded-lg border border-warning-line bg-warning-subtle px-3 py-2 text-xs text-warning-ink">
                   {t("The scheduled audit held the date. Clear the blockers, then close the day.")}
                 </p>
               )}
@@ -179,7 +179,7 @@ export default function EndOfDay() {
                 <Count label={translate("Open POS bills")} n={r.open_pos_bills} warn />
               </div>
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                <span className="text-xs text-zinc-500">
+                <span className="text-xs text-muted-ink">
                   {r.last_run
                     ? t("Last closed {d}", { d: fmtDay(r.last_run.business_date) })
                     : t("No audit run yet")}
@@ -221,7 +221,7 @@ export default function EndOfDay() {
           <div className="flex flex-wrap items-center gap-2">
             {(rows?.length ?? 0) > 1 && (
               <select
-                className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm"
+                className="rounded-lg border border-control bg-surface px-2 py-1.5 text-sm"
                 value={histProp}
                 onChange={(e) => setHistProp(e.target.value)}
                 aria-label={t("Property")}
@@ -231,15 +231,15 @@ export default function EndOfDay() {
                 ))}
               </select>
             )}
-            <label className="flex items-center gap-1 text-sm text-zinc-500">
+            <label className="flex items-center gap-1 text-sm text-muted-ink">
               {t("From")}
               <input type="date" value={from} onChange={(e) => setFrom(e.target.value)}
-                className="rounded-lg border border-zinc-300 bg-white px-2 py-1 text-sm" />
+                className="rounded-lg border border-control bg-surface px-2 py-1 text-sm" />
             </label>
-            <label className="flex items-center gap-1 text-sm text-zinc-500">
+            <label className="flex items-center gap-1 text-sm text-muted-ink">
               {t("To")}
               <input type="date" value={to} onChange={(e) => setTo(e.target.value)}
-                className="rounded-lg border border-zinc-300 bg-white px-2 py-1 text-sm" />
+                className="rounded-lg border border-control bg-surface px-2 py-1 text-sm" />
             </label>
             <Button variant="outline" disabled={!history.length} onClick={exportHistory}>
               <Download className="size-4" aria-hidden />
@@ -251,7 +251,7 @@ export default function EndOfDay() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-200 text-start text-xs font-medium uppercase tracking-wider text-zinc-500">
+                <tr className="border-b border-line text-start text-xs font-medium uppercase tracking-wider text-muted-ink">
                   <th className="py-2 pe-3 text-start">{t("Business date")}</th>
                   <th className="py-2 pe-3 text-start">{t("Status")}</th>
                   <th className="py-2 pe-3 text-start">{t("Trigger")}</th>
@@ -262,14 +262,14 @@ export default function EndOfDay() {
                   <th className="py-2 text-end">{t("Audit pack")}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-100">
+              <tbody className="divide-y divide-line-subtle">
                 {history.map((r) => (
                   <tr key={r.name}>
                     <td className="py-2 pe-3 font-medium">{fmtDay(r.business_date)}</td>
                     <td className="py-2 pe-3">
                       <Badge tone={r.status === "Completed" ? "green" : "amber"}>{t(r.status)}</Badge>
                     </td>
-                    <td className="py-2 pe-3 text-zinc-500">{t(r.run_trigger || "Manual")}</td>
+                    <td className="py-2 pe-3 text-muted-ink">{t(r.run_trigger || "Manual")}</td>
                     <td className="py-2 pe-3 text-end tabular-nums">{r.room_charges_posted}</td>
                     <td className="py-2 pe-3 text-end tabular-nums">{amount(r.amount_posted)}</td>
                     <td className="py-2 pe-3 text-end tabular-nums">{r.no_shows_flagged}</td>
@@ -278,7 +278,7 @@ export default function EndOfDay() {
                       {r.has_pack ? (
                         <Link
                           to={`/end-of-day/pack/${encodeURIComponent(r.name)}`}
-                          className="inline-flex items-center gap-1 text-brand-700 hover:underline"
+                          className="inline-flex items-center gap-1 text-accent-ink hover:underline"
                         >
                           <FileText className="size-4" aria-hidden />
                           {t("Print")}
@@ -298,7 +298,7 @@ export default function EndOfDay() {
                 ))}
                 {history.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="py-6 text-center text-zinc-400">
+                    <td colSpan={8} className="py-6 text-center text-muted-ink">
                       {t("No audits found.")}
                     </td>
                   </tr>
@@ -307,7 +307,7 @@ export default function EndOfDay() {
             </table>
           </div>
           {history.length >= limit && (
-            <p className="mt-2 text-xs text-zinc-500">
+            <p className="mt-2 text-xs text-muted-ink">
               {t("Showing the latest {n}. Pick From and To dates to see others.", { n: limit })}
             </p>
           )}

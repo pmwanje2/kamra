@@ -109,20 +109,20 @@ export default function FolioHistory() {
     <div className="w-full space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-ink">
             {translate("Billing")}
           </p>
           <h1 className="text-2xl font-semibold">{translate("Folio History")}</h1>
         </div>
         <div className="flex flex-wrap gap-2">
           <input
-            className="min-h-11 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm sm:min-h-9"
+            className="min-h-11 rounded-lg border border-control bg-surface px-3 py-1.5 text-sm sm:min-h-9"
             placeholder={translate("Search guest / invoice")}
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
           <select
-            className="min-h-11 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm sm:min-h-9"
+            className="min-h-11 rounded-lg border border-control bg-surface px-2 py-1.5 text-sm sm:min-h-9"
             value={status}
             onChange={(e) => setStatus(e.target.value)}
           >
@@ -130,20 +130,20 @@ export default function FolioHistory() {
             <option value="Open">{translate("Open")}</option>
             <option value="Closed">{translate("Closed")}</option>
           </select>
-          <label className="flex items-center gap-1 text-xs text-zinc-500">
+          <label className="flex items-center gap-1 text-xs text-muted-ink">
             {translate("Closed from")}
             <input
               type="date"
-              className="min-h-11 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm sm:min-h-9"
+              className="min-h-11 rounded-lg border border-control bg-surface px-2 py-1.5 text-sm sm:min-h-9"
               value={fromDate}
               onChange={(e) => setFromDate(e.target.value)}
             />
           </label>
-          <label className="flex items-center gap-1 text-xs text-zinc-500">
+          <label className="flex items-center gap-1 text-xs text-muted-ink">
             {translate("To")}
             <input
               type="date"
-              className="min-h-11 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm sm:min-h-9"
+              className="min-h-11 rounded-lg border border-control bg-surface px-2 py-1.5 text-sm sm:min-h-9"
               value={toDate}
               min={fromDate || undefined}
               disabled={!fromDate}
@@ -161,7 +161,7 @@ export default function FolioHistory() {
           </Button>
         </div>
       </div>
-      {err ? <p className="text-sm text-rose-600">{translate(err)}</p> : null}
+      {err ? <p className="text-sm text-danger-text">{translate(err)}</p> : null}
 
       {/* Mobile card list (390px viewport) */}
       <div data-testid="folio-history-cards" className="grid gap-3 md:hidden">
@@ -171,7 +171,7 @@ export default function FolioHistory() {
           return (
             <div
               key={r.name}
-              className="rounded-xl border border-zinc-200 bg-white p-3.5 text-sm shadow-xs"
+              className="rounded-xl border border-line bg-surface p-3.5 text-sm shadow-xs"
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex min-w-0 items-start gap-2.5">
@@ -179,7 +179,7 @@ export default function FolioHistory() {
                     <input
                       type="checkbox"
                       aria-label={t("Select {name}", { name: r.guest_name || r.name })}
-                      className="size-4 accent-brand-600"
+                      className="size-4 accent-focus"
                       checked={selected.includes(r.name)}
                       onChange={() => toggle(r.name)}
                     />
@@ -187,12 +187,12 @@ export default function FolioHistory() {
                   <div className="min-w-0">
                     <Link
                       to={`/billing/${encodeURIComponent(r.name)}`}
-                      className="flex min-h-11 items-center truncate font-medium text-brand-700 hover:underline"
+                      className="flex min-h-11 items-center truncate font-medium text-accent-ink hover:underline"
                     >
                       {r.guest_name || r.name}
                     </Link>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-1 text-xs text-zinc-500">
-                      <span className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-zinc-700">
+                    <div className="mt-0.5 flex flex-wrap items-center gap-1 text-xs text-muted-ink">
+                      <span className="rounded bg-subtle px-1.5 py-0.5 font-mono text-[11px] font-semibold text-secondary-ink">
                         {windowBadge({ window_no: r.window_no, folio_type: r.folio_type || "Guest" })}
                       </span>
                       {payee && <span className="truncate">{payee}</span>}
@@ -209,18 +209,18 @@ export default function FolioHistory() {
                   )}
                 </div>
               </div>
-              <div className="mt-3 grid grid-cols-2 gap-2 border-t border-zinc-100 pt-2.5 text-xs">
+              <div className="mt-3 grid grid-cols-2 gap-2 border-t border-line-subtle pt-2.5 text-xs">
                 <div>
-                  <span className="block text-zinc-400">{translate("Invoice")}</span>
-                  <span className="font-mono text-zinc-700">{r.sales_invoice || r.invoice_number || "-"}</span>
+                  <span className="block text-muted-ink">{translate("Invoice")}</span>
+                  <span className="font-mono text-secondary-ink">{r.sales_invoice || r.invoice_number || "-"}</span>
                 </div>
                 <div className="flex flex-wrap justify-end gap-x-3 gap-y-1 text-end">
-                  <div className="font-medium text-zinc-900">
-                    <span className="block text-zinc-400">{t("Total")}</span>
+                  <div className="font-medium text-ink">
+                    <span className="block text-muted-ink">{t("Total")}</span>
                     {amount(r.grand_total, r)}
                   </div>
-                  <div className="text-zinc-500">
-                    <span className="block text-zinc-400">{t("Balance")}</span>
+                  <div className="text-muted-ink">
+                    <span className="block text-muted-ink">{t("Balance")}</span>
                     {amount(r.balance, r)}
                   </div>
                 </div>
@@ -231,9 +231,9 @@ export default function FolioHistory() {
       </div>
 
       {/* Desktop / tablet table */}
-      <div className="hidden overflow-x-auto rounded-xl border border-zinc-200 bg-white md:block">
+      <div className="hidden overflow-x-auto rounded-xl border border-line bg-surface md:block">
         <table className="w-full text-start text-sm">
-          <thead className="border-b text-xs uppercase text-zinc-400">
+          <thead className="border-b text-xs uppercase text-muted-ink">
             <tr>
               <th className="px-3 py-2" />
               <th className="px-3 py-2">{translate("Guest")}</th>
@@ -250,7 +250,7 @@ export default function FolioHistory() {
               const payee = payeeSummary(r, t)
               const fiscalized = showFiscalBadge && Boolean(r.sales_invoice || r.invoice_number)
               return (
-                <tr key={r.name} className="border-t border-zinc-50">
+                <tr key={r.name} className="border-t border-line-subtle">
                   <td className="px-3 py-2">
                     <input
                       type="checkbox"
@@ -261,17 +261,17 @@ export default function FolioHistory() {
                   <td className="px-3 py-2">
                     <Link
                       to={`/billing/${encodeURIComponent(r.name)}`}
-                      className="font-medium text-brand-700 hover:underline"
+                      className="font-medium text-accent-ink hover:underline"
                     >
                       {r.guest_name || r.name}
                     </Link>
-                    <div className="text-xs text-zinc-400">{r.reservation || r.venue_booking}</div>
+                    <div className="text-xs text-muted-ink">{r.reservation || r.venue_booking}</div>
                   </td>
                   <td className="px-3 py-2 text-xs">
-                    <span className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono font-semibold text-zinc-700">
+                    <span className="rounded bg-subtle px-1.5 py-0.5 font-mono font-semibold text-secondary-ink">
                       {windowBadge({ window_no: r.window_no, folio_type: r.folio_type || "Guest" })}
                     </span>
-                    {payee && <div className="mt-0.5 text-zinc-500">{payee}</div>}
+                    {payee && <div className="mt-0.5 text-muted-ink">{payee}</div>}
                   </td>
                   <td className="px-3 py-2 font-mono text-xs">
                     <div className="flex flex-wrap items-center gap-1.5">

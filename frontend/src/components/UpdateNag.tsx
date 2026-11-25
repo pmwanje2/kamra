@@ -71,10 +71,10 @@ export default function UpdateNag() {
   return (
     <div
       role="status"
-      className="flex flex-wrap items-center justify-between gap-2 border-b border-sky-200 bg-sky-50 px-4 py-2 text-sm text-sky-950"
+      className="flex flex-wrap items-center justify-between gap-2 border-b border-info-line bg-info-subtle px-4 py-2 text-sm text-info-ink"
     >
       <div className="flex min-w-0 items-center gap-2">
-        <ArrowUpCircle className="size-4 shrink-0 text-sky-700" aria-hidden />
+        <ArrowUpCircle className="size-4 shrink-0 text-info-ink" aria-hidden />
         <p className="min-w-0">
           {t("{product} {latest} is available - you are on {installed}.", {
             latest: latestLabel,
@@ -85,7 +85,7 @@ export default function UpdateNag() {
       <div className="flex flex-wrap items-center gap-2">
         <Link
           to="/health"
-          className="rounded-md bg-sky-700 px-2.5 py-1 text-xs font-semibold text-white hover:bg-sky-800"
+          className="rounded-md bg-info-fill-hover px-2.5 py-1 text-xs font-semibold text-on-solid hover:bg-info-fill-hover"
         >
           {t("View update")}
         </Link>
@@ -93,7 +93,7 @@ export default function UpdateNag() {
           type="button"
           disabled={busy}
           onClick={() => void dismiss(SNOOZE_DAYS)}
-          className="rounded-md px-2 py-1 text-xs font-medium text-sky-800 hover:bg-sky-100 disabled:opacity-50"
+          className="rounded-md px-2 py-1 text-xs font-medium text-info-ink hover:bg-info-muted disabled:opacity-50"
         >
           {t("Remind me later")}
         </button>
@@ -103,7 +103,7 @@ export default function UpdateNag() {
           onClick={() => void dismiss(0)}
           aria-label={t("Dismiss")}
           title={t("Dismiss")}
-          className="rounded-md p-1 text-sky-700 hover:bg-sky-100 disabled:opacity-50"
+          className="rounded-md p-1 text-info-ink hover:bg-info-muted disabled:opacity-50"
         >
           <X className="size-4" aria-hidden />
         </button>

@@ -35,30 +35,30 @@ export default function OutletWaiters({ row }: { row: Row; reload: () => void })
   }
 
   return (
-    <div className="space-y-2 border-t border-zinc-200 pt-4">
-      <div className="text-xs font-semibold uppercase tracking-wider text-zinc-500">{t("Waiters")}</div>
-      <p className="text-xs text-zinc-500">{t("Names the till offers in its Waiter box. No login needed.")}</p>
-      {list?.waiters.length === 0 && <p className="text-xs text-zinc-500">{t("No waiters on the list yet.")}</p>}
+    <div className="space-y-2 border-t border-line pt-4">
+      <div className="text-xs font-semibold uppercase tracking-wider text-muted-ink">{t("Waiters")}</div>
+      <p className="text-xs text-muted-ink">{t("Names the till offers in its Waiter box. No login needed.")}</p>
+      {list?.waiters.length === 0 && <p className="text-xs text-muted-ink">{t("No waiters on the list yet.")}</p>}
       <ul className="space-y-1">
         {list?.waiters.map((w) => (
           <li key={w.waiter_name} className="flex items-center gap-2 text-sm">
             <label className="flex flex-1 items-center gap-2">
               <input type="checkbox" checked={!!w.active} disabled={!list.can_edit}
                 onChange={(e) => { void save(w.waiter_name, e.target.checked ? 1 : 0) }} />
-              <span className={w.active ? "" : "text-zinc-400 line-through"}>{w.waiter_name}</span>
+              <span className={w.active ? "" : "text-muted-ink line-through"}>{w.waiter_name}</span>
             </label>
-            {!w.active && <span className="text-xs text-zinc-400">{t("Inactive")}</span>}
+            {!w.active && <span className="text-xs text-muted-ink">{t("Inactive")}</span>}
           </li>
         ))}
       </ul>
       {list?.can_edit && (
         <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); if (name.trim()) void save(name.trim(), 1) }}>
-          <input className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm" value={name}
+          <input className="w-full rounded-lg border border-control bg-surface px-3 py-1.5 text-sm" value={name}
             aria-label={t("Waiter name")} placeholder={t("Waiter name")} onChange={(e) => setName(e.target.value)} />
           <Button type="submit" variant="outline" disabled={!name.trim()}>{t("Add")}</Button>
         </form>
       )}
-      {error && <p className="text-xs text-rose-600">{t(error)}</p>}
+      {error && <p className="text-xs text-danger-text">{t(error)}</p>}
     </div>
   )
 }

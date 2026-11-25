@@ -113,9 +113,9 @@ export function DataTable<R>({ id, columns, rows, rowKey, onRowClick, exportName
             <Columns3 className="size-4" />{translate("Columns")}
           </Button>
           {picking ? (
-            <div className="absolute end-0 z-20 mt-1 w-56 rounded-lg border border-zinc-200 bg-white p-2 shadow-lg">
+            <div className="absolute end-0 z-20 mt-1 w-56 rounded-lg border border-line bg-surface p-2 shadow-lg">
               {columns.filter((c) => c.label).map((c) => (
-                <label key={c.key} className="flex items-center gap-2 rounded px-2 py-1 text-sm hover:bg-zinc-50">
+                <label key={c.key} className="flex items-center gap-2 rounded px-2 py-1 text-sm hover:bg-canvas">
                   <input type="checkbox" checked={!hidden.includes(c.key)} onChange={() => toggle(c.key)} />
                   {c.label}
                 </label>
@@ -129,12 +129,12 @@ export function DataTable<R>({ id, columns, rows, rowKey, onRowClick, exportName
       </div>
       <div className="overflow-x-auto">
         <Table className="w-full text-sm">
-          <thead className="text-xs uppercase text-zinc-400">
+          <thead className="text-xs uppercase text-muted-ink">
             <tr>
               {shown.map((c) => (
                 <th key={c.key} className="px-2 py-2 text-center font-medium">
                   {c.noSort || !c.label ? c.label : (
-                    <button type="button" className="inline-flex items-center gap-1 uppercase hover:text-zinc-700"
+                    <button type="button" className="inline-flex items-center gap-1 uppercase hover:text-secondary-ink"
                       onClick={() => setSort((s) => s?.key === c.key
                         ? (s.dir === 1 ? { key: c.key, dir: -1 } : null) : { key: c.key, dir: 1 })}>
                       {c.label}
@@ -149,7 +149,7 @@ export function DataTable<R>({ id, columns, rows, rowKey, onRowClick, exportName
           <tbody>
             {view.map((r) => (
               <tr key={rowKey(r)}
-                className={`border-t border-zinc-100 align-top ${onRowClick ? "cursor-pointer hover:bg-zinc-50" : ""}`}
+                className={`border-t border-line-subtle align-top ${onRowClick ? "cursor-pointer hover:bg-canvas" : ""}`}
                 onClick={onRowClick ? () => onRowClick(r) : undefined}>
                 {shown.map((c) => responsive ? (
                   <Popin key={c.key} label={c.label} importance={c.importance} className={`px-2 py-2 ${alignCls(c)}`}>
@@ -163,17 +163,17 @@ export function DataTable<R>({ id, columns, rows, rowKey, onRowClick, exportName
               </tr>
             ))}
             {!rows.length ? (
-              <tr><td colSpan={shown.length || 1} className="py-8 text-center text-zinc-400">
+              <tr><td colSpan={shown.length || 1} className="py-8 text-center text-muted-ink">
                 {empty ?? translate("Nothing to show.")}</td></tr>
             ) : null}
           </tbody>
         </Table>
       </div>
       {sorted.length > PAGE_SIZES[0] ? (
-        <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-zinc-500">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-ink">
           <label className="flex items-center gap-1.5">
             {translate("Rows per page")}
-            <select className="rounded border border-zinc-300 px-1.5 py-0.5" value={size}
+            <select className="rounded border border-control px-1.5 py-0.5" value={size}
               onChange={(e) => { setSize(Number(e.target.value)); setPage(0) }}>
               {PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
             </select>

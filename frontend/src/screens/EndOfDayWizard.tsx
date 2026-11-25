@@ -104,22 +104,22 @@ function StepTable({
   }
   const right = (c: Column) => (c.kind === "money" || c.kind === "num" ? "text-end tabular-nums" : "")
   return (
-    <div className="rounded-lg border border-zinc-200">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-100 px-3 py-2">
+    <div className="rounded-lg border border-line">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line-subtle px-3 py-2">
         <label className="relative min-w-0 flex-1 sm:flex-none">
-          <Search className="pointer-events-none absolute start-2.5 top-3.5 size-4 text-zinc-400 sm:top-2.5" aria-hidden />
+          <Search className="pointer-events-none absolute start-2.5 top-3.5 size-4 text-muted-ink sm:top-2.5" aria-hidden />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder={t("Search")}
-            className="min-h-11 w-full rounded-lg border border-zinc-300 bg-white py-1.5 ps-8 pe-2 text-sm sm:min-h-9 sm:w-56"
+            className="min-h-11 w-full rounded-lg border border-control bg-surface py-1.5 ps-8 pe-2 text-sm sm:min-h-9 sm:w-56"
           />
         </label>
-        <span className="text-xs text-zinc-400">{t("{n} of {m}", { n: shown.length, m: rows.length })}</span>
+        <span className="text-xs text-muted-ink">{t("{n} of {m}", { n: shown.length, m: rows.length })}</span>
       </div>
-      <div data-testid="eod-mobile-cards" className="divide-y divide-zinc-100 md:hidden">
+      <div data-testid="eod-mobile-cards" className="divide-y divide-line-subtle md:hidden">
         {shown.length === 0 ? (
-          <div className="px-3 py-5 text-center text-sm text-zinc-400">
+          <div className="px-3 py-5 text-center text-sm text-muted-ink">
             {t(empty ?? "Nothing here.")}
           </div>
         ) : (
@@ -131,15 +131,15 @@ function StepTable({
               <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
                 {cols.map((c) => (
                   <div key={c.key} className="min-w-0">
-                    <dt className="text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+                    <dt className="text-[11px] font-medium uppercase tracking-wider text-muted-ink">
                       {t(c.label)}
                     </dt>
-                    <dd className="mt-0.5 min-w-0 break-words text-zinc-800">{cell(c, r)}</dd>
+                    <dd className="mt-0.5 min-w-0 break-words text-ink">{cell(c, r)}</dd>
                   </div>
                 ))}
               </dl>
               {actions && (
-                <div className="border-t border-zinc-100 pt-2">
+                <div className="border-t border-line-subtle pt-2">
                   {actions(r)}
                 </div>
               )}
@@ -150,12 +150,12 @@ function StepTable({
       <div data-testid="eod-desktop-table" className="hidden overflow-x-auto md:block">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-zinc-200 text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+            <tr className="border-b border-line text-[11px] font-medium uppercase tracking-wider text-muted-ink">
               {cols.map((c) => (
                 <th key={c.key} className={cn("px-2 py-2 text-start", right(c))}>
                   <button
                     type="button"
-                    className="uppercase hover:text-zinc-800"
+                    className="uppercase hover:text-ink"
                     onClick={() =>
                       setSort((s) => (s?.key === c.key ? { key: c.key, dir: s.dir === 1 ? -1 : 1 } : { key: c.key, dir: 1 }))
                     }
@@ -168,7 +168,7 @@ function StepTable({
               {actions && <th className="px-2 py-2" />}
             </tr>
           </thead>
-          <tbody className="divide-y divide-zinc-100">
+          <tbody className="divide-y divide-line-subtle">
             {shown.map((r, i) => (
               <tr key={`${String(r.order ?? r.session ?? r.folio ?? r.reservation ?? r.room_id ?? r.account ?? "")}-${i}`}>
                 {cols.map((c) => (
@@ -179,7 +179,7 @@ function StepTable({
             ))}
             {shown.length === 0 && (
               <tr>
-                <td colSpan={cols.length + (actions ? 1 : 0)} className="px-2 py-5 text-center text-zinc-400">
+                <td colSpan={cols.length + (actions ? 1 : 0)} className="px-2 py-5 text-center text-muted-ink">
                   {t(empty ?? "Nothing here.")}
                 </td>
               </tr>
@@ -195,7 +195,7 @@ function StepTable({
 
 const resLink = (r: CheckItem) =>
   r.reservation ? (
-    <Link className="font-medium text-brand-700 hover:underline" to={`/reservations?q=${encodeURIComponent(String(r.reservation))}`}>
+    <Link className="font-medium text-accent-ink hover:underline" to={`/reservations?q=${encodeURIComponent(String(r.reservation))}`}>
       {String(r.reservation)}
     </Link>
   ) : (
@@ -203,7 +203,7 @@ const resLink = (r: CheckItem) =>
   )
 const folioLink = (r: CheckItem) =>
   r.folio ? (
-    <Link className="text-brand-700 hover:underline" to={`/billing/${encodeURIComponent(String(r.folio))}`}>
+    <Link className="text-accent-ink hover:underline" to={`/billing/${encodeURIComponent(String(r.folio))}`}>
       {String(r.folio)}
     </Link>
   ) : (
@@ -236,7 +236,7 @@ const arrivalCols = (currency?: string): Column[] => [
     render: (r) => (
       <div className="min-w-32">
         <div>{String(r.guest_name ?? "-")}</div>
-        <div className="text-xs text-zinc-500">
+        <div className="text-xs text-muted-ink">
           {[r.room_type, r.room, `${r.adults ?? 0}/${r.children ?? 0}`, r.source]
             .filter((v) => v !== null && v !== undefined && v !== "")
             .join(" · ")}
@@ -251,7 +251,7 @@ const arrivalCols = (currency?: string): Column[] => [
     render: (r) => (
       <div className="whitespace-nowrap">
         <div>{r.check_in_date ? fmtDay(r.check_in_date) : "-"}</div>
-        <div className="text-xs text-zinc-500">
+        <div className="text-xs text-muted-ink">
           {Number(r.nights) === 1 ? translate("1 night") : translate("{v0} nights", { v0: String(r.nights ?? 0) })}
         </div>
       </div>
@@ -264,7 +264,7 @@ const arrivalCols = (currency?: string): Column[] => [
     render: (r) => (
       <div>
         <div>{r.rate === null || r.rate === undefined || r.rate === "" ? "-" : money(r.rate, currency)}</div>
-        {r.rate_plan ? <div className="text-xs text-zinc-500">{String(r.rate_plan)}</div> : null}
+        {r.rate_plan ? <div className="text-xs text-muted-ink">{String(r.rate_plan)}</div> : null}
       </div>
     ),
   },
@@ -304,10 +304,10 @@ const POSTING_COLS: Column[] = [
 
 function Message({ tone, children }: { tone: "info" | "warn" | "block" | "ok"; children: ReactNode }) {
   const cls = {
-    info: "border-zinc-200 bg-zinc-50 text-zinc-700",
-    ok: "border-emerald-200 bg-emerald-50 text-emerald-800",
-    warn: "border-amber-200 bg-amber-50 text-amber-900",
-    block: "border-rose-200 bg-rose-50 text-rose-800",
+    info: "border-line bg-canvas text-secondary-ink",
+    ok: "border-success-line bg-success-subtle text-success-ink",
+    warn: "border-warning-line bg-warning-subtle text-warning-ink",
+    block: "border-danger-line bg-danger-subtle text-danger-ink",
   }[tone]
   return <div className={cn("rounded-lg border px-3 py-2 text-sm", cls)}>{children}</div>
 }
@@ -320,15 +320,15 @@ function FixHelp({ check, date, canOverride }: { check: Check; date: string; can
   const fix = CHECK_FIXES[check.key]
   if (!fix) return null
   return (
-    <div className="rounded-lg border border-zinc-200 bg-white p-3 text-sm">
-      <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{t("How to clear this")}</p>
-      <p className="mt-1 text-zinc-600">{t(fix.why)}</p>
-      <ol className="mt-2 list-decimal space-y-1 ps-5 text-zinc-700">
+    <div className="rounded-lg border border-line bg-surface p-3 text-sm">
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-ink">{t("How to clear this")}</p>
+      <p className="mt-1 text-secondary-ink">{t(fix.why)}</p>
+      <ol className="mt-2 list-decimal space-y-1 ps-5 text-secondary-ink">
         {fix.steps.map((st) => (
           <li key={st.text}>
             {t(st.text)}
             {st.to && (
-              <AppLink to={st.to} className="ms-2 text-brand-700 hover:underline">
+              <AppLink to={st.to} className="ms-2 text-accent-ink hover:underline">
                 {t(st.cta ?? "Open")} →
               </AppLink>
             )}
@@ -344,10 +344,10 @@ function FixHelp({ check, date, canOverride }: { check: Check; date: string; can
           <Sparkles className="me-1.5 size-3.5" aria-hidden />
           {t("Ask {assistant} to help")}
         </Button>
-        <span className="text-xs text-zinc-400">{t("It opens the agent with this check described. You approve what it changes.")}</span>
+        <span className="text-xs text-muted-ink">{t("It opens the agent with this check described. You approve what it changes.")}</span>
       </div>}
-      {canOverride && <p className="mt-3 text-xs text-zinc-500">
-        <span className="font-medium text-zinc-600">{t("If you override:")}</span> {t(fix.override)}
+      {canOverride && <p className="mt-3 text-xs text-muted-ink">
+        <span className="font-medium text-secondary-ink">{t("If you override:")}</span> {t(fix.override)}
       </p>}
     </div>
   )
@@ -377,26 +377,26 @@ function CheckBlock({
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-zinc-800">
+        <h3 className="text-sm font-semibold text-ink">
           {t(check.title)}{" "}
           <Badge tone={check.unverified ? "amber" : check.count === 0 ? "green" : check.severity === "block" ? "rose" : check.severity === "warn" ? "amber" : "zinc"}>
             {check.unverified ? t("Not verified") : check.count}
           </Badge>
         </h3>
         {check.resolve && needsAttention && (
-          <AppLink to={check.resolve} className="text-xs text-brand-700 hover:underline">
+          <AppLink to={check.resolve} className="text-xs text-accent-ink hover:underline">
             {t("Resolve")} →
           </AppLink>
         )}
       </div>
-      {needsAttention && <p className="text-xs text-zinc-500">{t(check.action)}</p>}
+      {needsAttention && <p className="text-xs text-muted-ink">{t(check.action)}</p>}
       {needsAttention && !state.ran && check.severity !== "info" && (
         <FixHelp check={check} date={state.business_date} canOverride={canOverride} />
       )}
       {children}
       {blocking && !ack && !state.ran && !canOverride && (
-        <div className="rounded-lg border border-rose-200 bg-rose-50/60 p-3">
-          <p className="text-xs text-rose-800">
+        <div className="rounded-lg border border-danger-line bg-danger-subtle/60 p-3">
+          <p className="text-xs text-danger-ink">
             {check.unverified
               ? t("Accounting GL control tie-out is unverified and blocks closing until control accounts are configured and verified.")
               : t("Finance or Hotel Admin can override this variance only when property policy allows it.")}
@@ -404,8 +404,8 @@ function CheckBlock({
         </div>
       )}
       {blocking && !ack && !state.ran && canOverride && (
-        <div className="rounded-lg border border-rose-200 bg-rose-50/60 p-3">
-          <p className="text-xs text-rose-800">
+        <div className="rounded-lg border border-danger-line bg-danger-subtle/60 p-3">
+          <p className="text-xs text-danger-ink">
             {minReasonLen >= 10
               ? t("This blocks the audit. Reconcile the variance above, or override with an explanatory note of at least 10 characters if policy permits.")
               : t("This blocks the audit. Fix it above, or override it with a reason - your name and the time are recorded on the audit.")}
@@ -415,7 +415,7 @@ function CheckBlock({
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder={t("Reason")}
-              className="min-h-11 min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm md:min-h-9"
+              className="min-h-11 min-w-0 flex-1 rounded-lg border border-control bg-surface px-2 py-1.5 text-sm md:min-h-9"
             />
             <Button
               variant="outline"
@@ -437,7 +437,7 @@ function CheckBlock({
         </div>
       )}
       {ack && (
-        <p className="text-xs text-zinc-500">
+        <p className="text-xs text-muted-ink">
           {t("Acknowledged by {who} at {when}: {why}", {
             who: ack.by_name || ack.by,
             when: String(ack.at).slice(0, 16),
@@ -547,8 +547,8 @@ export default function EndOfDayWizard() {
   }
 
   if (err && !state)
-    return <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{translate(err)}</p>
-  if (!state) return <p className="text-sm text-zinc-400">{t("Preparing the night audit…")}</p>
+    return <p className="rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">{translate(err)}</p>
+  if (!state) return <p className="text-sm text-muted-ink">{t("Preparing the night audit…")}</p>
 
   const acked = new Set(state.acknowledgements.map((a) => a.key))
   const open = (c: Check) => (c.count > 0 || !!c.unverified) && c.severity !== "info" && !acked.has(c.key)
@@ -591,7 +591,7 @@ export default function EndOfDayWizard() {
                 key: "policy",
                 label: "No-show policy",
                 render: (r) => (
-                  <span className={r.outcome === "no_show" ? "text-rose-700" : "text-amber-700"}>
+                  <span className={r.outcome === "no_show" ? "text-danger-ink" : "text-warning-ink"}>
                     {t(String(r.policy))}
                     {Number(r.fee_amount) > 0 ? ` · ${wizardSymbol}${wizardMoney(r.fee_amount)}` : ""}
                   </span>
@@ -607,7 +607,7 @@ export default function EndOfDayWizard() {
                     onClick={() => setCheckingIn(String(r.reservation))}>
                     {t("Check in")}
                   </Button>
-                  <Button variant="ghost" className="min-h-11 px-3 text-xs text-rose-700 md:min-h-7 md:px-2" disabled={!!busy}
+                  <Button variant="ghost" className="min-h-11 px-3 text-xs text-danger-ink md:min-h-7 md:px-2" disabled={!!busy}
                     onClick={() => setMarkingNoShow(String(r.reservation))}>
                     {t("Mark no-show")}
                   </Button>
@@ -662,7 +662,7 @@ export default function EndOfDayWizard() {
         return (
           <>
             {c.enabled && (
-              <p className="text-xs text-zinc-500">{t("Threshold {cur}{n}", { cur: wizardSymbol, n: wizardMoney(c.threshold) })}</p>
+              <p className="text-xs text-muted-ink">{t("Threshold {cur}{n}", { cur: wizardSymbol, n: wizardMoney(c.threshold) })}</p>
             )}
             <StepTable currency={wizardCurrency} cols={FOLIO_COLS} rows={items} empty={translate("No in-house folio is over the threshold.")} />
           </>
@@ -809,7 +809,7 @@ export default function EndOfDayWizard() {
                     placeholder={t("Counted cash")}
                     value={counted[String(r.session)] ?? ""}
                     onChange={(e) => setCounted((m) => ({ ...m, [String(r.session)]: e.target.value }))}
-                    className="min-h-11 w-full rounded-md border border-zinc-300 px-2 text-xs md:min-h-7 md:w-28"
+                    className="min-h-11 w-full rounded-md border border-control px-2 text-xs md:min-h-7 md:w-28"
                   />
                   <Button variant="outline" className="min-h-11 px-3 text-xs md:min-h-7 md:px-2"
                     disabled={!!busy || !Number.isFinite(cash(counted[String(r.session)]))}
@@ -895,16 +895,16 @@ export default function EndOfDayWizard() {
 
       <div className="flex flex-wrap items-end justify-between gap-3 print:hidden">
         <div>
-          <Link to="/end-of-day" className="inline-flex min-h-11 items-center gap-1 text-xs text-zinc-500 hover:text-zinc-800 md:min-h-0">
+          <Link to="/end-of-day" className="inline-flex min-h-11 items-center gap-1 text-xs text-muted-ink hover:text-ink md:min-h-0">
             <ArrowLeft className="size-3.5 rtl:rotate-180" aria-hidden />
             {t("Night Audit")}
           </Link>
-          <h1 className="text-xl font-semibold text-zinc-900">
+          <h1 className="text-xl font-semibold text-ink">
             {state.ran
               ? t("{d} closed", { d: fmtDay(state.business_date) })
               : t("Close {d}", { d: fmtDay(state.business_date) })}
           </h1>
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-muted-ink">
             {state.property_name} · {t("property time {now}", { now: state.property_now.slice(11, 16) })}
           </p>
         </div>
@@ -936,7 +936,7 @@ export default function EndOfDayWizard() {
       </div>
 
       {state.stuck_date && (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800 print:hidden">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink print:hidden">
           <p>
             {t("The night audit already closed {d}, but the business date did not move. Advance it without posting again.", {
               d: fmtDay(state.stuck_date.business_date),
@@ -957,7 +957,7 @@ export default function EndOfDayWizard() {
           </Button>
         </div>
       )}
-      {err && <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 print:hidden">{translate(err)}</p>}
+      {err && <p className="rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink print:hidden">{translate(err)}</p>}
 
       {state.ran ? (
         <>
@@ -1000,10 +1000,10 @@ export default function EndOfDayWizard() {
         <>
           <Card className="p-4 print:hidden">
             <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-              <span className="font-medium text-zinc-800">
+              <span className="font-medium text-ink">
                 {t("{a} of {b} checks clear", { a: clearN, b: counted_.length })}
               </span>
-              <span className="text-zinc-500">
+              <span className="text-muted-ink">
                 {ahead
                   ? t("The business date is ahead of the server date. The audit for it can run once that day has started.")
                   : blockers.length
@@ -1013,14 +1013,14 @@ export default function EndOfDayWizard() {
                       : t("Everything is clear. Closing posts room and tax for every in-house guest and rolls the date. It cannot be undone.")}
               </span>
             </div>
-            <div className="mt-2 h-2 overflow-hidden rounded-full bg-zinc-100" aria-hidden>
-              <div className="h-2 bg-brand-600" style={{ width: `${counted_.length ? (clearN / counted_.length) * 100 : 100}%` }} />
+            <div className="mt-2 h-2 overflow-hidden rounded-full bg-subtle" aria-hidden>
+              <div className="h-2 bg-accent-fill" style={{ width: `${counted_.length ? (clearN / counted_.length) * 100 : 100}%` }} />
             </div>
           </Card>
 
           {needs.length > 0 && (
             <section className="space-y-3">
-              <h2 className="text-sm font-semibold text-zinc-800">{t("Needs you")}</h2>
+              <h2 className="text-sm font-semibold text-ink">{t("Needs you")}</h2>
               {needs.map(checkCard)}
             </section>
           )}
@@ -1034,8 +1034,8 @@ export default function EndOfDayWizard() {
           )}
 
           {fyi.length > 0 && (
-            <details className="rounded-xl border border-zinc-200 bg-white p-4">
-              <summary className="cursor-pointer text-sm font-semibold text-zinc-800">
+            <details className="rounded-xl border border-line bg-surface p-4">
+              <summary className="cursor-pointer text-sm font-semibold text-ink">
                 {t("For information · {n}", { n: fyi.length })}
               </summary>
               <div className="mt-3 space-y-3">{fyi.map(checkCard)}</div>
@@ -1043,36 +1043,36 @@ export default function EndOfDayWizard() {
           )}
 
           {clear.length > 0 && (
-            <details className="rounded-xl border border-zinc-200 bg-white p-4">
-              <summary className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-emerald-700">
+            <details className="rounded-xl border border-line bg-surface p-4">
+              <summary className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-success-ink">
                 <CheckCircle2 className="size-4" aria-hidden />
                 {t("All clear · {n}", { n: clear.length })}
               </summary>
               <ul className="mt-3 flex flex-wrap gap-2">
                 {clear.map((c) => (
-                  <li key={c.key} className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs text-emerald-800">{t(c.title)}</li>
+                  <li key={c.key} className="rounded-full bg-success-subtle px-2.5 py-0.5 text-xs text-success-ink">{t(c.title)}</li>
                 ))}
               </ul>
             </details>
           )}
 
           {tillsTable && (
-            <details className="rounded-xl border border-zinc-200 bg-white p-4">
-              <summary className="cursor-pointer text-sm font-semibold text-zinc-800">{t("Tills on this date: expected and counted")}</summary>
+            <details className="rounded-xl border border-line bg-surface p-4">
+              <summary className="cursor-pointer text-sm font-semibold text-ink">{t("Tills on this date: expected and counted")}</summary>
               <div className="mt-3">{tillsTable}</div>
             </details>
           )}
 
           <Card className="p-4">
             <label className="block text-sm">
-              <span className="mb-1 block font-medium text-zinc-800">{t("Notes for the manager")}</span>
-              <span className="mb-2 block text-xs text-zinc-500">{t("Weather, incidents, hand-over. They print on the audit pack.")}</span>
+              <span className="mb-1 block font-medium text-ink">{t("Notes for the manager")}</span>
+              <span className="mb-2 block text-xs text-muted-ink">{t("Weather, incidents, hand-over. They print on the audit pack.")}</span>
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 onBlur={saveNotes}
                 rows={3}
-                className="w-full rounded-lg border border-zinc-300 bg-white p-3 text-sm"
+                className="w-full rounded-lg border border-control bg-surface p-3 text-sm"
               />
             </label>
             {state.acknowledgements.length > 0 && (
@@ -1090,7 +1090,7 @@ export default function EndOfDayWizard() {
                 />
               </div>
             )}
-            <p className="mt-3 text-xs text-zinc-500">
+            <p className="mt-3 text-xs text-muted-ink">
               {t("Scheduled audit when checks block: {mode}", { mode: t(state.auto_audit_with_blockers) })}
             </p>
           </Card>

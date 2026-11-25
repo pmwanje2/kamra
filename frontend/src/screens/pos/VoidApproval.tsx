@@ -22,8 +22,8 @@ interface ReasonCode { name: string; code: string; description: string }
 interface Approver { user: string; full_name: string }
 
 const inputCls =
-  "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "w-full rounded-lg border border-control bg-surface px-3 py-2 text-sm " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 export default function VoidApproval({
   outlet, title, kitchenCount, canApprove, busy, confirmLabel, onConfirm, onClose,
@@ -72,17 +72,17 @@ export default function VoidApproval({
   }
 
   return (
-    <div className="space-y-2 rounded-lg border border-rose-200 bg-rose-50 p-2.5">
-      <p className="text-xs font-semibold text-rose-800">{translate(title)}</p>
+    <div className="space-y-2 rounded-lg border border-danger-line bg-danger-subtle p-2.5">
+      <p className="text-xs font-semibold text-danger-ink">{translate(title)}</p>
       {needsApproval ? (
-        <p className="flex gap-1.5 text-xs text-rose-800">
+        <p className="flex gap-1.5 text-xs text-danger-ink">
           <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
           <span>
             {t("The kitchen already has {n} item(s). They are voided, not deleted: the kitchen is told to stop, and a supervisor approves.", { n: kitchenCount })}
           </span>
         </p>
       ) : (
-        <p className="text-xs text-rose-700">{t("Nothing was sent to the kitchen. A reason is enough.")}</p>
+        <p className="text-xs text-danger-ink">{t("Nothing was sent to the kitchen. A reason is enough.")}</p>
       )}
       {needsApproval && codes.length > 0 && (
         <select className={inputCls} value={code} onChange={(e) => setCode(e.target.value)}
@@ -96,7 +96,7 @@ export default function VoidApproval({
         onChange={(e) => setReason(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && submit()} />
       {needsApproval && (canApprove ? (
-        <p className="flex items-center gap-1.5 text-xs text-emerald-800">
+        <p className="flex items-center gap-1.5 text-xs text-success-ink">
           <ShieldCheck className="size-3.5" aria-hidden />{t("You approve this as a supervisor.")}
         </p>
       ) : (
@@ -111,14 +111,14 @@ export default function VoidApproval({
             placeholder={t("Their PIN")} aria-label={t("Supervisor PIN")}
             onKeyDown={(e) => e.key === "Enter" && submit()} />
           {approvers !== null && approvers.length === 0 && (
-            <p className="text-xs text-rose-700 sm:col-span-2">
+            <p className="text-xs text-danger-ink sm:col-span-2">
               {t("No supervisor with a cashier PIN can approve here yet. A Hotel Admin or Finance user sets a PIN first.")}
             </p>
           )}
         </div>
       ))}
       <div className="flex gap-1.5">
-        <Button variant="outline" className="h-10 flex-1 font-semibold text-rose-700"
+        <Button variant="outline" className="h-10 flex-1 font-semibold text-danger-ink"
           disabled={busy || !ready} onClick={submit}>
           {confirmLabel}
         </Button>

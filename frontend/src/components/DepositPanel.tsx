@@ -29,8 +29,8 @@ const fmt = (n: number) =>
   `${cur()}${fmtAmount(n || 0)}`
 
 const inputCls =
-  "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "w-full rounded-lg border border-control bg-surface px-3 py-2 text-sm " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 export default function DepositPanel(props: {
   reservation: string
@@ -140,17 +140,17 @@ export default function DepositPanel(props: {
   const secured = deposit.expected > 0 && deposit.due <= 0
 
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-4">
+    <div className="rounded-xl border border-line bg-surface p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-sm font-semibold text-zinc-800">{t("Deposit")}</h3>
+        <h3 className="text-sm font-semibold text-ink">{t("Deposit")}</h3>
         <span
           className={
             "rounded-full px-2 py-0.5 text-xs font-medium " +
             (secured
-              ? "bg-emerald-50 text-emerald-700"
+              ? "bg-success-subtle text-success-ink"
               : deposit.paid > 0
-                ? "bg-amber-50 text-amber-700"
-                : "bg-zinc-100 text-zinc-600")
+                ? "bg-warning-subtle text-warning-ink"
+                : "bg-subtle text-secondary-ink")
           }
         >
           {secured
@@ -162,39 +162,39 @@ export default function DepositPanel(props: {
       </div>
       <dl className="mt-2 grid grid-cols-3 gap-2 text-sm">
         <div>
-          <dt className="text-xs text-zinc-400">
+          <dt className="text-xs text-muted-ink">
             {deposit.pct > 0 ? t("Expected ({pct}%)", { pct: deposit.pct }) : t("Expected")}
           </dt>
-          <dd className="font-semibold tabular-nums text-zinc-900">
+          <dd className="font-semibold tabular-nums text-ink">
             {deposit.expected > 0 ? fmt(deposit.expected) : "-"}
           </dd>
         </div>
         <div>
-          <dt className="text-xs text-zinc-400">{t("Received")}</dt>
-          <dd className="font-semibold tabular-nums text-emerald-700">{fmt(deposit.paid)}</dd>
+          <dt className="text-xs text-muted-ink">{t("Received")}</dt>
+          <dd className="font-semibold tabular-nums text-success-ink">{fmt(deposit.paid)}</dd>
         </div>
         <div>
-          <dt className="text-xs text-zinc-400">{t("Still due")}</dt>
+          <dt className="text-xs text-muted-ink">{t("Still due")}</dt>
           <dd
             className={
               "font-semibold tabular-nums " +
-              (deposit.due > 0 ? "text-rose-600" : "text-zinc-400")
+              (deposit.due > 0 ? "text-danger-text" : "text-muted-ink")
             }
           >
             {fmt(deposit.due)}
           </dd>
         </div>
       </dl>
-      <p className="mt-2 text-xs text-zinc-400">
+      <p className="mt-2 text-xs text-muted-ink">
         {t("Carried to the guest folio - at check-in it counts against the bill.")}
       </p>
 
       {deposit.link_url && !link && (
-        <p className="mt-2 flex items-center gap-1.5 truncate text-xs text-zinc-500">
+        <p className="mt-2 flex items-center gap-1.5 truncate text-xs text-muted-ink">
           <Link2 className="size-3.5 shrink-0" aria-hidden />
           {t("Link sent")}
           {deposit.link_amount ? ` · ${fmt(deposit.link_amount)}` : ""} ·{" "}
-          <a href={deposit.link_url} target="_blank" rel="noreferrer" className="truncate text-brand-700 hover:underline">
+          <a href={deposit.link_url} target="_blank" rel="noreferrer" className="truncate text-accent-ink hover:underline">
             {deposit.link_url}
           </a>
         </p>
@@ -215,7 +215,7 @@ export default function DepositPanel(props: {
       )}
 
       {mode && (
-        <div className="mt-3 space-y-3 rounded-lg bg-zinc-50 p-3">
+        <div className="mt-3 space-y-3 rounded-lg bg-canvas p-3">
           {mode === "record" && <TenderPicker home={loc.currency} chosen={tender} modes={modes} rates={settlementRates}
             onChange={(choice) => {
               setRequested(choice)
@@ -260,7 +260,7 @@ export default function DepositPanel(props: {
 
           {mode === "link" && link && (
             <div className="space-y-2">
-              <p className="break-all rounded-md border border-zinc-200 bg-white px-2.5 py-2 text-xs text-zinc-700">
+              <p className="break-all rounded-md border border-line bg-surface px-2.5 py-2 text-xs text-secondary-ink">
                 {translate(link.message)}
               </p>
               <div className="flex flex-wrap gap-2">
@@ -281,7 +281,7 @@ export default function DepositPanel(props: {
                 </Button>
                 {waPhone && (
                   <a
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-control px-3 py-2 text-sm font-medium text-secondary-ink hover:bg-canvas"
                     href={`https://wa.me/${waPhone}?text=${encodeURIComponent(link.message)}`}
                     target="_blank"
                     rel="noreferrer"
@@ -294,7 +294,7 @@ export default function DepositPanel(props: {
                   </Button>
                 )}
               </div>
-              <p className="text-xs text-zinc-400">
+              <p className="text-xs text-muted-ink">
                 {t("When the guest pays, the deposit posts here automatically.")}
               </p>
             </div>
@@ -303,7 +303,7 @@ export default function DepositPanel(props: {
       )}
 
       {error && (
-        <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+        <div className="mt-3 rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">
           {translate(error)}
         </div>
       )}

@@ -60,7 +60,7 @@ function monthRange(offset: number): [string, string] {
   return [iso(start), iso(end)]
 }
 
-const input = "rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm"
+const input = "rounded-lg border border-control bg-surface px-3 py-1.5 text-sm"
 
 export default function ManagementBooks({ view }: { view: "pnl" | "balance" }) {
   useUILanguage()
@@ -69,13 +69,13 @@ export default function ManagementBooks({ view }: { view: "pnl" | "balance" }) {
     <div className="w-full space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">{translate("Books")}</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-ink">{translate("Books")}</p>
           <h1 className="text-2xl font-semibold">{translate(view === "pnl" ? "Profit and loss" : "Balance sheet")}</h1>
-          <p className="text-sm text-zinc-500">{translate("Management view from what {product} records. Not statutory accounts.")}</p>
+          <p className="text-sm text-muted-ink">{translate("Management view from what {product} records. Not statutory accounts.")}</p>
         </div>
-        <div className="inline-flex rounded-lg border border-zinc-200 p-0.5 text-sm">
-          <Link to="/profit-and-loss" className={`rounded-md px-3 py-1 ${view === "pnl" ? "bg-zinc-900 text-white" : "text-zinc-600"}`}>{translate("Profit and loss")}</Link>
-          <Link to="/balance-sheet" className={`rounded-md px-3 py-1 ${view === "balance" ? "bg-zinc-900 text-white" : "text-zinc-600"}`}>{translate("Balance sheet")}</Link>
+        <div className="inline-flex rounded-lg border border-line p-0.5 text-sm">
+          <Link to="/profit-and-loss" className={`rounded-md px-3 py-1 ${view === "pnl" ? "bg-inverse text-on-inverse" : "text-secondary-ink"}`}>{translate("Profit and loss")}</Link>
+          <Link to="/balance-sheet" className={`rounded-md px-3 py-1 ${view === "balance" ? "bg-inverse text-on-inverse" : "text-secondary-ink"}`}>{translate("Balance sheet")}</Link>
         </div>
       </div>
       {view === "pnl" ? <ProfitAndLoss /> : <BalanceSheet />}
@@ -85,7 +85,7 @@ export default function ManagementBooks({ view }: { view: "pnl" | "balance" }) {
 
 function Note({ children }: { children: React.ReactNode }) {
   return (
-    <p className="flex gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-2 text-xs text-zinc-600">
+    <p className="flex gap-2 rounded-lg border border-line bg-canvas px-4 py-2 text-xs text-secondary-ink">
       <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
       <span>{children}</span>
     </p>
@@ -94,9 +94,9 @@ function Note({ children }: { children: React.ReactNode }) {
 
 function Row({ label, amount, strong, muted, indent }: { label: string; amount: number | null; strong?: boolean; muted?: boolean; indent?: boolean }) {
   return (
-    <div className={`flex justify-between gap-3 py-1.5 ${strong ? "border-t border-zinc-200 font-semibold" : ""} ${muted ? "text-zinc-500" : ""}`}>
+    <div className={`flex justify-between gap-3 py-1.5 ${strong ? "border-t border-line font-semibold" : ""} ${muted ? "text-muted-ink" : ""}`}>
       <span className={indent ? "pl-4" : ""}>{label}</span>
-      <span className={`tabular-nums ${amount != null && amount < 0 ? "text-rose-700" : ""}`}>
+      <span className={`tabular-nums ${amount != null && amount < 0 ? "text-danger-ink" : ""}`}>
         {amount == null ? translate("Today only") : fmtMoney(amount)}
       </span>
     </div>
@@ -125,10 +125,10 @@ function ProfitAndLoss() {
         <Button variant="outline" onClick={() => setRange(monthRange(0))}>{translate("This month")}</Button>
         <Button variant="outline" onClick={() => setRange(monthRange(-1))}>{translate("Last month")}</Button>
         <input type="date" className={input} value={range[0]} onChange={(e) => setRange([e.target.value, range[1]])} />
-        <span className="pb-2 text-zinc-400">{translate("to")}</span>
+        <span className="pb-2 text-muted-ink">{translate("to")}</span>
         <input type="date" className={input} value={range[1]} onChange={(e) => setRange([range[0], e.target.value])} />
       </div>
-      {err ? <p className="text-sm text-rose-600">{translate(err)}</p> : null}
+      {err ? <p className="text-sm text-danger-text">{translate(err)}</p> : null}
       {data ? (
         <div className="grid gap-4 lg:grid-cols-2">
           <Card>
@@ -136,18 +136,18 @@ function ProfitAndLoss() {
             <CardContent className="text-sm">
               {data.revenue.map((r) => <Row key={r.key} label={translate(LABEL[r.key ?? ""] ?? r.key ?? "")} amount={r.amount} />)}
               <Row label={translate("Total revenue")} amount={data.revenue_total} strong />
-              <p className="mt-2 text-xs text-zinc-500">{translate("Before tax. Room levy and go-live balances are not revenue.")}</p>
+              <p className="mt-2 text-xs text-muted-ink">{translate("Before tax. Room levy and go-live balances are not revenue.")}</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader><CardTitle className="text-base">{translate("Expenses")}</CardTitle></CardHeader>
             <CardContent className="text-sm">
-              <p className="text-xs font-medium uppercase text-zinc-400">{translate("Supplier bills")}</p>
+              <p className="text-xs font-medium uppercase text-muted-ink">{translate("Supplier bills")}</p>
               {data.supplier_bills.map((r) => <Row key={`b-${r.category}`} label={translate(r.category ?? "")} amount={r.amount} indent />)}
-              {!data.supplier_bills.length ? <p className="py-1.5 pl-4 text-zinc-400">{translate("None in this period.")}</p> : null}
-              <p className="mt-2 text-xs font-medium uppercase text-zinc-400">{translate("Petty cash")}</p>
+              {!data.supplier_bills.length ? <p className="py-1.5 pl-4 text-muted-ink">{translate("None in this period.")}</p> : null}
+              <p className="mt-2 text-xs font-medium uppercase text-muted-ink">{translate("Petty cash")}</p>
               {data.petty_cash.map((r) => <Row key={`p-${r.category}`} label={translate(r.category ?? "")} amount={r.amount} indent />)}
-              {!data.petty_cash.length ? <p className="py-1.5 pl-4 text-zinc-400">{translate("None in this period.")}</p> : null}
+              {!data.petty_cash.length ? <p className="py-1.5 pl-4 text-muted-ink">{translate("None in this period.")}</p> : null}
               {data.paid_outs.amount ? <Row label={translate("Paid outs")} amount={data.paid_outs.amount} /> : null}
               <Row label={translate("Total expenses")} amount={data.expense_total} strong />
             </CardContent>
@@ -184,11 +184,11 @@ function BalanceSheet() {
 
   return (
     <>
-      <label className="flex items-center gap-2 text-sm text-zinc-600">
+      <label className="flex items-center gap-2 text-sm text-secondary-ink">
         {translate("As of")}
         <input type="date" className={input} value={asOf} max={iso(new Date())} onChange={(e) => setAsOf(e.target.value)} />
       </label>
-      {err ? <p className="text-sm text-rose-600">{translate(err)}</p> : null}
+      {err ? <p className="text-sm text-danger-text">{translate(err)}</p> : null}
       {data ? (
         <div className="grid gap-4 lg:grid-cols-2">
           <Card>

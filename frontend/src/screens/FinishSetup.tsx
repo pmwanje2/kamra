@@ -43,43 +43,43 @@ export default function FinishSetup() {
     <div className="mx-auto max-w-2xl space-y-4">
       <div>
         <h1 className="text-lg font-semibold">{t("Finish setting up")}</h1>
-        <p className="text-sm text-zinc-500">
+        <p className="text-sm text-muted-ink">
           {t("Your property is created. These are the things still to do, in any order. Each one links to where you do it.")}
         </p>
       </div>
-      {err && <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{translate(err)}</p>}
+      {err && <p className="rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">{translate(err)}</p>}
       {data && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
               <span>{t("{done} of {total} done", { done: data.done, total: data.total })}</span>
-              <span className="text-sm font-normal text-zinc-400">{data.percent}%</span>
+              <span className="text-sm font-normal text-muted-ink">{data.percent}%</span>
             </CardTitle>
-            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-100" aria-hidden>
-              <div className="h-full bg-brand-600" style={{ width: `${data.percent}%` }} />
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-subtle" aria-hidden>
+              <div className="h-full bg-accent-fill" style={{ width: `${data.percent}%` }} />
             </div>
           </CardHeader>
           <CardContent>
-            <ul className="divide-y divide-zinc-100">
+            <ul className="divide-y divide-line-subtle">
               {data.items.map((i) => (
                 <li key={i.key} className="flex items-start gap-3 py-3">
                   <span
                     className={cn(
                       "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full",
-                      i.done ? "bg-brand-600 text-white" : "border border-zinc-300 text-zinc-300",
+                      i.done ? "bg-accent-fill text-on-solid" : "border border-control text-muted-ink",
                     )}
                   >
                     {i.done ? <Check className="size-3" aria-hidden /> : <Circle className="size-2" aria-hidden />}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className={cn("flex items-center gap-1.5 text-sm font-medium", i.done && "text-zinc-400 line-through")}>
+                    <p className={cn("flex items-center gap-1.5 text-sm font-medium", i.done && "text-muted-ink line-through")}>
                       {t(i.label)}
                       {i.doc && <InfoTip doc={i.doc}>{t(i.detail)}</InfoTip>}
                     </p>
-                    <p className="text-xs text-zinc-500">{t(i.detail)}</p>
+                    <p className="text-xs text-muted-ink">{t(i.detail)}</p>
                   </div>
                   {!i.done && (
-                    <Link to={i.to} className="shrink-0 text-sm font-medium text-brand-700 hover:underline">
+                    <Link to={i.to} className="shrink-0 text-sm font-medium text-accent-ink hover:underline">
                       {t("Do it")} →
                     </Link>
                   )}

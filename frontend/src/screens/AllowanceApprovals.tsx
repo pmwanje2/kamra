@@ -36,9 +36,9 @@ interface AllowanceRow {
 const TABS = ["Pending", "Approved", "Rejected"] as const
 
 const STATUS_BADGE: Record<(typeof TABS)[number], string> = {
-  Pending: "border-amber-200 bg-amber-50 text-amber-800",
-  Approved: "border-emerald-200 bg-emerald-50 text-emerald-800",
-  Rejected: "border-rose-200 bg-rose-50 text-rose-800",
+  Pending: "border-warning-line bg-warning-subtle text-warning-ink",
+  Approved: "border-success-line bg-success-subtle text-success-ink",
+  Rejected: "border-danger-line bg-danger-subtle text-danger-ink",
 }
 
 function approvalsInboxUrl(): string {
@@ -94,13 +94,13 @@ export default function AllowanceApprovals() {
     <div className="w-full max-w-3xl space-y-4 text-start">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-ink">
             {t("Billing")}
           </p>
-          <h1 className="text-2xl font-semibold text-zinc-900">
+          <h1 className="text-2xl font-semibold text-ink">
             {t("Allowances to approve")}
           </h1>
-          <p className="mt-1 text-sm text-zinc-600">
+          <p className="mt-1 text-sm text-secondary-ink">
             {t("Nothing is taken off a bill until a manager approves it. A rejection is kept with who and why.")}
           </p>
         </div>
@@ -114,8 +114,8 @@ export default function AllowanceApprovals() {
         </Button>
       </div>
 
-      <div className="flex items-start gap-2.5 rounded-xl border border-brand-100 border-s-4 border-s-brand-600 bg-brand-50 p-3.5 text-sm text-zinc-700">
-        <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-brand-700" aria-hidden="true" />
+      <div className="flex items-start gap-2.5 rounded-xl border border-accent-line border-s-4 border-s-accent-control bg-accent-subtle p-3.5 text-sm text-secondary-ink">
+        <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-accent-ink" aria-hidden="true" />
         <p className="min-w-0 leading-relaxed">
           {t("Back-office allowance decisions are handled in Approvals Inbox under four-eyes approval controls. Floor overrides within the property limit require a second authorized manager's PIN.")}
         </p>
@@ -131,8 +131,8 @@ export default function AllowanceApprovals() {
             onClick={() => setTab(k)}
             className={`min-h-[44px] rounded-full border px-4 py-1.5 text-xs font-medium transition-colors sm:min-h-[36px] ${
               tab === k
-                ? "border-brand-600 bg-brand-50 text-brand-700"
-                : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-100"
+                ? "border-accent-control bg-accent-subtle text-accent-ink"
+                : "border-line bg-surface text-secondary-ink hover:bg-subtle"
             }`}
           >
             {label[k]}
@@ -141,17 +141,17 @@ export default function AllowanceApprovals() {
       </div>
 
       {error && (
-        <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+        <p className="rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">
           {translate(error)}
         </p>
       )}
 
       {!rows && !error && (
-        <p className="py-6 text-center text-sm text-zinc-500">{t("Loading…")}</p>
+        <p className="py-6 text-center text-sm text-muted-ink">{t("Loading…")}</p>
       )}
 
       {rows && rows.length === 0 && (
-        <p className="rounded-xl border border-dashed border-zinc-200 bg-white py-8 text-center text-sm text-zinc-500">
+        <p className="rounded-xl border border-dashed border-line bg-surface py-8 text-center text-sm text-muted-ink">
           {t("Nothing here.")}
         </p>
       )}
@@ -161,11 +161,11 @@ export default function AllowanceApprovals() {
           {rows.map((r) => (
             <article
               key={r.name}
-              className="rounded-xl border border-zinc-200 bg-white p-4 shadow-xs"
+              className="rounded-xl border border-line bg-surface p-4 shadow-xs"
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-1">
-                  <span className="text-base font-semibold tabular-nums text-zinc-900">
+                  <span className="text-base font-semibold tabular-nums text-ink">
                     {fmtMoney(r.amount)}
                   </span>
                   <span
@@ -176,15 +176,15 @@ export default function AllowanceApprovals() {
                 </div>
                 <Link
                   to={`/billing/${encodeURIComponent(r.folio)}`}
-                  className="max-w-full truncate text-xs font-medium text-brand-700 hover:underline"
+                  className="max-w-full truncate text-xs font-medium text-accent-ink hover:underline"
                 >
                   {[r.room, r.bill_to_name || r.guest_name, r.folio].filter(Boolean).join(" · ")}
                 </Link>
               </div>
 
-              <p className="mt-1.5 break-words text-sm text-zinc-800">{r.reason}</p>
+              <p className="mt-1.5 break-words text-sm text-ink">{r.reason}</p>
 
-              <p className="mt-1.5 text-xs text-zinc-500">
+              <p className="mt-1.5 text-xs text-muted-ink">
                 {t("Asked by {who} on {when}", {
                   who: r.requested_by,
                   when: String(r.requested_on || "").slice(0, 16),
@@ -193,7 +193,7 @@ export default function AllowanceApprovals() {
               </p>
 
               {r.status !== "Pending" && (
-                <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-zinc-100 pt-2 text-xs text-zinc-600">
+                <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-line-subtle pt-2 text-xs text-secondary-ink">
                   <span>
                     {r.status === "Approved"
                       ? r.decided_by
@@ -214,11 +214,11 @@ export default function AllowanceApprovals() {
                   {r.serial && (
                     <>
                       <span aria-hidden="true">·</span>
-                      <span className="font-mono text-zinc-700">{r.serial}</span>
+                      <span className="font-mono text-secondary-ink">{r.serial}</span>
                       <span aria-hidden="true">·</span>
                       <Link
                         to={`/allowance-voucher/${encodeURIComponent(r.serial)}`}
-                        className="font-medium text-brand-700 hover:underline"
+                        className="font-medium text-accent-ink hover:underline"
                       >
                         {t("Print voucher")}
                       </Link>
@@ -228,8 +228,8 @@ export default function AllowanceApprovals() {
               )}
 
               {r.status === "Pending" && (
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-zinc-100 pt-2.5">
-                  <span className="text-xs text-zinc-500">
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-line-subtle pt-2.5">
+                  <span className="text-xs text-muted-ink">
                     {r.folio_status === "Closed"
                       ? t("This bill is settled now. Reject it and pass the allowance on an open bill.")
                       : t("Pending workflow approval")}

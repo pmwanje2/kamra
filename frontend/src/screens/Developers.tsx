@@ -19,9 +19,9 @@ function Copyable({ label, value }: { label: string; value: string }) {
   const [copied, setCopied] = useState(false)
   return (
     <div>
-      <div className="mb-1 text-xs font-medium text-zinc-500">{translate(label)}</div>
+      <div className="mb-1 text-xs font-medium text-muted-ink">{translate(label)}</div>
       <div className="flex items-stretch gap-2">
-        <code className="flex-1 overflow-x-auto rounded-lg bg-zinc-100 px-3 py-2 font-mono text-xs text-zinc-800">
+        <code className="flex-1 overflow-x-auto rounded-lg bg-subtle px-3 py-2 font-mono text-xs text-ink">
           {value}
         </code>
         <button
@@ -30,7 +30,7 @@ function Copyable({ label, value }: { label: string; value: string }) {
             setCopied(true)
             setTimeout(() => setCopied(false), 1200)
           }}
-          className="flex items-center gap-1 rounded-lg border border-zinc-200 px-2.5 text-xs font-medium text-zinc-600 hover:border-brand-600 hover:text-brand-700"
+          className="flex items-center gap-1 rounded-lg border border-line px-2.5 text-xs font-medium text-secondary-ink hover:border-accent-control hover:text-accent-ink"
         >
           {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
           {copied ? translate("Copied") : translate("Copy")}
@@ -120,11 +120,11 @@ export default function Developers() {
     <div className="mx-auto max-w-3xl space-y-5 py-2">
       <div>
         <h1 className="text-xl font-semibold">{translate("Developers")}</h1>
-        <p className="mt-0.5 text-sm text-zinc-500">{translate("Your API key, the REST surface, and how to connect AI agents. Every call runs with your roles and lands in the audit log.")}</p>
+        <p className="mt-0.5 text-sm text-muted-ink">{translate("Your API key, the REST surface, and how to connect AI agents. Every call runs with your roles and lands in the audit log.")}</p>
       </div>
 
       {error && (
-        <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+        <div className="rounded-lg border border-danger-line bg-danger-subtle px-3 py-2 text-sm text-danger-ink">
           {translate(error)}
         </div>
       )}
@@ -134,8 +134,8 @@ export default function Developers() {
         <CardHeader>
           <div>
             <CardTitle className="flex items-center gap-2">
-              <KeyRound className="size-4 text-zinc-400" />{translate(" Your API key")}</CardTitle>
-            <p className="mt-0.5 text-xs text-zinc-400">{translate("Signed in as ")}<code className="text-zinc-500">{info?.user}</code>{translate(". The secret is shown once - copy it now.")}</p>
+              <KeyRound className="size-4 text-muted-ink" />{translate(" Your API key")}</CardTitle>
+            <p className="mt-0.5 text-xs text-muted-ink">{translate("Signed in as ")}<code className="text-muted-ink">{info?.user}</code>{translate(". The secret is shown once - copy it now.")}</p>
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -143,10 +143,10 @@ export default function Developers() {
             <>
               <Copyable label={translate("API key")} value={key.api_key} />
               <Copyable label={translate("API secret")} value={key.api_secret} />
-              <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">{translate("Store the secret somewhere safe now - it can't be shown again. Rotate any time from here.")}</p>
+              <p className="rounded-lg bg-warning-subtle px-3 py-2 text-xs text-warning-ink">{translate("Store the secret somewhere safe now - it can't be shown again. Rotate any time from here.")}</p>
             </>
           ) : (
-            <p className="text-sm text-zinc-600">
+            <p className="text-sm text-secondary-ink">
               {info?.has_key
                 ? translate("You already have an API key. Rotate it below to get a fresh key + secret.")
                 : translate("You don't have an API key yet. Generate one to call the REST API or connect an agent.")}
@@ -168,27 +168,27 @@ export default function Developers() {
         <CardHeader>
           <div>
             <CardTitle className="flex items-center gap-2">
-              <Terminal className="size-4 text-zinc-400" />{translate(" REST API")}</CardTitle>
-            <p className="mt-0.5 text-xs text-zinc-400">{translate("Base URL ")}<code className="text-zinc-500">{base}</code>{translate(". Authenticate with the token header on every request.")}</p>
+              <Terminal className="size-4 text-muted-ink" />{translate(" REST API")}</CardTitle>
+            <p className="mt-0.5 text-xs text-muted-ink">{translate("Base URL ")}<code className="text-muted-ink">{base}</code>{translate(". Authenticate with the token header on every request.")}</p>
           </div>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           <Copyable label={translate("Authorization header")} value={`Authorization: ${authHeader}`} />
           <div>
-            <div className="mb-1 text-xs font-medium text-zinc-500">{translate("Example - today's front desk")}</div>
-            <pre className="overflow-x-auto rounded-lg bg-zinc-900 p-3 text-xs leading-relaxed text-zinc-100">
+            <div className="mb-1 text-xs font-medium text-muted-ink">{translate("Example - today's front desk")}</div>
+            <pre className="overflow-x-auto rounded-lg bg-inverse p-3 text-xs leading-relaxed text-on-inverse">
 {`curl -X POST ${base}${"/api/method/kamra.api.front_desk_snapshot"} \\
   -H "Authorization: ${authHeader}" \\
   -H "Content-Type: application/json" \\
   -d '{"property": "${property}"}'`}
             </pre>
           </div>
-          <p className="text-xs text-zinc-400">{translate("Full reference:")}{" "}
+          <p className="text-xs text-muted-ink">{translate("Full reference:")}{" "}
             <a
                 href={`${upstreamRepo()}/blob/main/docs/ai-and-api.md`}
               target="_blank"
               rel="noreferrer"
-              className="font-medium text-brand-700 hover:underline"
+              className="font-medium text-accent-ink hover:underline"
             >{translate("docs/ai-and-api.md →")}</a>
           </p>
         </CardContent>
@@ -198,22 +198,22 @@ export default function Developers() {
       <Card>
         <CardHeader>
           <CardTitle>{translate("Key endpoints")}</CardTitle>
-          <p className="mt-0.5 text-xs text-zinc-400">{translate("All under ")}<code className="text-zinc-500">{"/api/method/kamra.api."}&lt;name&gt;</code>{" "}{translate("(POST, JSON). Role-gated the same as the UI.")}</p>
+          <p className="mt-0.5 text-xs text-muted-ink">{translate("All under ")}<code className="text-muted-ink">{"/api/method/kamra.api."}&lt;name&gt;</code>{" "}{translate("(POST, JSON). Role-gated the same as the UI.")}</p>
         </CardHeader>
         <CardContent className="space-y-4">
           {ENDPOINTS.map((sec) => (
             <div key={sec.group}>
-              <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-400">
+              <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-ink">
                 {sec.group}
               </div>
-              <div className="divide-y divide-zinc-100 rounded-lg border border-zinc-100">
+              <div className="divide-y divide-line-subtle rounded-lg border border-line-subtle">
                 {sec.rows.map(([name, desc]) => (
                   <div
                     key={name}
                     className="flex flex-col gap-0.5 px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
                   >
-                    <code className="font-mono text-xs text-zinc-800">{name}</code>
-                    <span className="text-xs text-zinc-500">{translate(desc)}</span>
+                    <code className="font-mono text-xs text-ink">{name}</code>
+                    <span className="text-xs text-muted-ink">{translate(desc)}</span>
                   </div>
                 ))}
               </div>
@@ -226,15 +226,15 @@ export default function Developers() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Webhook className="size-4 text-zinc-400" />{translate(" Webhooks & POS room charges")}</CardTitle>
-          <p className="mt-0.5 text-xs text-zinc-400">{translate("Push events out instead of polling, and let a third-party POS post to guest folios.")}</p>
+            <Webhook className="size-4 text-muted-ink" />{translate(" Webhooks & POS room charges")}</CardTitle>
+          <p className="mt-0.5 text-xs text-muted-ink">{translate("Push events out instead of polling, and let a third-party POS post to guest folios.")}</p>
         </CardHeader>
-        <CardContent className="space-y-2 text-sm text-zinc-600">
+        <CardContent className="space-y-2 text-sm text-secondary-ink">
           <p>{translate("Subscribe endpoints to ")}<code className="text-xs">reservation.*</code>,{" "}
             <code className="text-xs">guest.checked_in/out</code>,{" "}
             <code className="text-xs">folio.posted</code>{translate(" and")}{" "}
             <code className="text-xs">night_audit.closed</code>{translate(" under")}{" "}
-            <Link to="/settings/webhooks" className="font-medium text-brand-700 hover:underline">{translate("Settings → Webhooks")}</Link>
+            <Link to="/settings/webhooks" className="font-medium text-accent-ink hover:underline">{translate("Settings → Webhooks")}</Link>
             .
           </p>
           <p>{translate("A POS service user (role ")}<code className="text-xs">POS Integrator</code>{translate(", limited to this property) calls")}{" "}
@@ -244,7 +244,7 @@ export default function Developers() {
                 href={`${upstreamDocs()}/integrations`}
               target="_blank"
               rel="noreferrer"
-              className="font-medium text-brand-700 hover:underline"
+              className="font-medium text-accent-ink hover:underline"
             >{translate("Integrations guide →")}</a>
           </p>
         </CardContent>
@@ -254,11 +254,11 @@ export default function Developers() {
       <Card>
         <CardHeader>
           <CardTitle>{translate("Connect an AI agent (MCP)")}</CardTitle>
-          <p className="mt-0.5 text-xs text-zinc-400">{translate("Point Claude at this property over MCP. Staff should use")}{" "}
-            <a href={toFullPath("/assistant")} className="font-medium text-brand-700 hover:underline">{translate("{assistant} → AI Provider")}</a>{translate(". The key above is for unattended / service integrations.")}</p>
+          <p className="mt-0.5 text-xs text-muted-ink">{translate("Point Claude at this property over MCP. Staff should use")}{" "}
+            <a href={toFullPath("/assistant")} className="font-medium text-accent-ink hover:underline">{translate("{assistant} → AI Provider")}</a>{translate(". The key above is for unattended / service integrations.")}</p>
         </CardHeader>
         <CardContent>
-          <pre className="overflow-x-auto rounded-lg bg-zinc-100 p-3 text-xs leading-relaxed text-zinc-700">
+          <pre className="overflow-x-auto rounded-lg bg-subtle p-3 text-xs leading-relaxed text-secondary-ink">
 {`claude mcp add --transport http kamra ${base}/mcp`}
           </pre>
         </CardContent>

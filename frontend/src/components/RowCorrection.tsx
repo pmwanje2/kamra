@@ -187,13 +187,13 @@ export default function RowCorrection({
       {!options && (
         <button
           disabled={loading}
-          className="inline-flex min-h-11 items-center rounded-md border border-zinc-200 px-2 py-1 text-xs text-brand-700 hover:border-brand-400 disabled:opacity-50"
+          className="inline-flex min-h-11 items-center rounded-md border border-line px-2 py-1 text-xs text-accent-ink hover:border-accent-control disabled:opacity-50"
           onClick={open}
         >
           {t("Correct…")}
         </button>
       )}
-      {error && <p role="alert" className="rounded border border-red-200 bg-red-50 p-2 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200">{error}</p>}
+      {error && <p role="alert" className="rounded border border-critical-line bg-critical-subtle p-2 text-critical-ink dark:border-red-800 dark:bg-red-950 dark:text-red-200">{error}</p>}
       {options && (
         <div className="grid gap-2 rounded border p-2 [&_input]:min-w-0 [&_input]:rounded [&_input]:border [&_input]:p-2 [&_select]:min-w-0 [&_select]:rounded [&_select]:border [&_select]:p-2">
           {[...new Set(options.blocked.map((b) => b.reason))].map((b) => (
@@ -256,7 +256,7 @@ export default function RowCorrection({
                   <select
                     aria-label={t("Supervisor user")}
                     value={user}
-                    className="min-h-11 bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-50"
+                    className="min-h-11 bg-surface text-ink"
                     onChange={(e) => setUser(e.target.value)}
                   >
                     <option value="">{t("Select a supervisor")}</option>
@@ -266,7 +266,7 @@ export default function RowCorrection({
                 </>
               )}
               <button
-                className="min-h-11 rounded bg-brand-700 px-3 py-2 font-semibold text-white disabled:opacity-50"
+                className="min-h-11 rounded bg-accent-fill-hover px-3 py-2 font-semibold text-on-solid disabled:opacity-50"
                 disabled={loading}
                 onClick={submit}
               >

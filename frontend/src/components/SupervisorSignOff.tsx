@@ -8,8 +8,8 @@ import type { DiscountGovernance } from "../lib/reservationDiscount"
 import { useT } from "../lib/i18n"
 
 const inputCls =
-  "rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm " +
-  "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+  "rounded-lg border border-control bg-surface px-3 py-1.5 text-sm " +
+  "focus:outline-2 focus:outline-offset-1 focus:outline-focus"
 
 export default function SupervisorSignOff(props: {
   /** why a manager signs this off (signOffReasons for a discount) */
@@ -22,13 +22,13 @@ export default function SupervisorSignOff(props: {
 }) {
   const { t } = useT()
   return (
-    <div className="space-y-2 rounded-lg bg-amber-50 p-2">
-      <p className="text-xs text-amber-800">
+    <div className="space-y-2 rounded-lg bg-warning-subtle p-2">
+      <p className="text-xs text-warning-ink">
         {props.reason ? <>{props.reason}{" "}</> : null}
         {t("A manager signs this off with their PIN.")}
       </p>
       {props.supervisors.length === 0 ? (
-        <p className="text-xs text-rose-700">{t("No manager with a cashier PIN can approve here yet.")}</p>
+        <p className="text-xs text-danger-ink">{t("No manager with a cashier PIN can approve here yet.")}</p>
       ) : (
         <div className="flex flex-wrap gap-2">
           <select className={inputCls} aria-label={t("Manager")} value={props.supervisor}

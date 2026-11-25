@@ -17,10 +17,10 @@ export type MassAction =
   | { kind: "approve" | "discard"; drafts: DraftChoice[] }
   | { kind: "import" }
 
-export const field = "min-h-10 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 focus:border-brand-600 focus:outline-2 focus:outline-brand-600"
+export const field = "min-h-10 rounded-lg border border-control bg-surface px-3 text-sm text-ink focus:border-accent-control focus:outline-2 focus:outline-focus"
 export const decisionTone = {
-  approve: "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100",
-  discard: "border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100",
+  approve: "border-success-line bg-success-subtle text-success-ink hover:bg-success-muted",
+  discard: "border-danger-line bg-danger-subtle text-danger-ink hover:bg-danger-muted",
 }
 export const itemCurrency = (item: ContractTariffItem, list?: PriceList) => item.currency || list?.currency || ""
 
@@ -48,14 +48,14 @@ export function TariffModal({ title, subtitle, busy, onClose, onSubmit, children
   }, [])
   return <dialog ref={dialog} aria-labelledby={titleId}
     onCancel={(event) => { event.preventDefault(); if (!busy) onClose() }}
-    className="m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-2xl border border-zinc-200 bg-white p-0 text-zinc-900 shadow-xl backdrop:bg-zinc-950/40">
+    className="m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-2xl border border-line bg-surface p-0 text-ink shadow-xl backdrop:bg-scrim/40">
     <form onSubmit={onSubmit}>
-      <header className="space-y-1 border-b border-zinc-200 px-5 py-4">
+      <header className="space-y-1 border-b border-line px-5 py-4">
         <h2 id={titleId} className="text-lg font-semibold">{title}</h2>
-        {subtitle && <p className="text-sm text-zinc-700">{subtitle}</p>}
+        {subtitle && <p className="text-sm text-secondary-ink">{subtitle}</p>}
       </header>
       <div className="space-y-4 px-5 py-4">{children}</div>
-      <footer className="flex flex-wrap justify-end gap-2 border-t border-zinc-200 bg-zinc-50 px-5 py-3">{footer}</footer>
+      <footer className="flex flex-wrap justify-end gap-2 border-t border-line bg-canvas px-5 py-3">{footer}</footer>
     </form>
   </dialog>
 }
@@ -106,14 +106,14 @@ function useSubmission() {
 }
 
 function Failure({ message }: { message: string | null }) {
-  return message ? <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-800">{message}</p> : null
+  return message ? <p role="alert" className="rounded-lg bg-danger-subtle p-3 text-sm text-danger-ink">{message}</p> : null
 }
 
 /** The integration takes at most TARIFF_BATCH_LIMIT rows at once: say so instead of sending more. */
 function OverLimit({ count }: { count: number }) {
   const { t } = useT()
   const over = Math.max(count - TARIFF_BATCH_LIMIT, 0)
-  return over ? <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+  return over ? <p role="status" className="rounded-lg bg-warning-subtle p-3 text-sm text-warning-ink">
     {t("Choose at most {n} tariffs at a time.", { n: TARIFF_BATCH_LIMIT })}
   </p> : null
 }
@@ -206,7 +206,7 @@ function BulkVersionDialog({
       <input name="customer" list={customerList} autoComplete="off" className={field} value={customer}
         onChange={(event) => setCustomer(event.target.value)} disabled={busy} />
       <datalist id={customerList}>{customers.map((name) => <option key={name} value={name} />)}</datalist>
-      <span className="text-xs font-normal text-zinc-600">{t("Leave empty to keep each tariff's own customer.")}</span>
+      <span className="text-xs font-normal text-secondary-ink">{t("Leave empty to keep each tariff's own customer.")}</span>
     </label>
     <div className="grid gap-3 sm:grid-cols-2">
       <label className="flex min-w-0 flex-col gap-1.5 text-sm font-medium">
@@ -256,7 +256,7 @@ function BulkVersionDialog({
             onChange={(event) => setStep(event.target.value)} disabled={busy} placeholder="0"
             aria-describedby={prefilled ? prefillId : undefined} />
         </label>
-        {prefilled && <p id={prefillId} className="text-xs text-zinc-600">{t("Prefilled from the rate plan rounding rule")}</p>}
+        {prefilled && <p id={prefillId} className="text-xs text-secondary-ink">{t("Prefilled from the rate plan rounding rule")}</p>}
       </div>
       <label className="flex min-w-0 flex-col gap-1.5 text-sm font-medium">
         {t("Rounding")}
@@ -268,25 +268,25 @@ function BulkVersionDialog({
         </select>
       </label>
     </div>
-    {converts && <p className="text-xs text-zinc-600">
+    {converts && <p className="text-xs text-secondary-ink">
       {t("Tariffs are edited in the price list's contract currency; the {home} posting converts at booking or check-in under the rate plan's exchange rate lock.", { home: propertyCurrency })}
     </p>}
-    {ready && <div className="space-y-2 rounded-lg border border-brand-200 bg-brand-50 p-3 text-sm" aria-live="polite">
+    {ready && <div className="space-y-2 rounded-lg border border-accent-line bg-accent-subtle p-3 text-sm" aria-live="polite">
       <p className="font-medium">{t("New versions")}</p>
       <ul className="max-h-48 space-y-1 overflow-y-auto tabular-nums">
         {entries.map(({ item, reference, currency, rate, from, upto, valid, owner }) =>
-          <li key={[item.price_list, item.item_code, item.customer ?? "", owner ?? ""].join("|")} className={valid ? "" : "text-rose-800"}>
+          <li key={[item.price_list, item.item_code, item.customer ?? "", owner ?? ""].join("|")} className={valid ? "" : "text-danger-ink"}>
             {t("{item}: {from} → {to}", {
               item: [item.item_name, owner].filter(Boolean).join(" · "),
               from: reference ? currencyText(currency, reference.rate, locale) : "—",
               to: currencyText(currency, rate, locale),
-            })} <span className="text-zinc-600">{upto
+            })} <span className="text-secondary-ink">{upto
               ? t("{from} – {until}", { from: tariffDate(from, dateLocale), until: tariffDate(upto, dateLocale) })
               : tariffDate(from, dateLocale)}</span>
           </li>)}
       </ul>
       {leftOut > 0 && <p>{tn(leftOut, "{n} tariff has no current rate and is left out.", "{n} tariffs have no current rate and are left out.")}</p>}
-      {invalid > 0 && <p className="font-medium text-rose-800">{tn(invalid,
+      {invalid > 0 && <p className="font-medium text-danger-ink">{tn(invalid,
         "{n} version would start before its current version or end before it starts. Change the dates.",
         "{n} versions would start before their current versions or end before they start. Change the dates.")}</p>}
     </div>}
@@ -345,10 +345,10 @@ function DecisionDialog({ kind, drafts, locale, dateLocale, lists, onClose, onDo
         date: tariffDate(draft.valid_from, dateLocale),
       })}</li>)}
     </ul>
-    {excluded > 0 && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+    {excluded > 0 && <p className="rounded-lg bg-warning-subtle p-3 text-sm text-warning-ink">
       {tn(excluded, "{n} draft is left out: a different approver must release a draft its maker proposed.",
         "{n} drafts are left out: a different approver must release a draft its maker proposed.")}</p>}
-    <p className="text-sm text-zinc-700">{kind === "approve"
+    <p className="text-sm text-secondary-ink">{kind === "approve"
       ? t("These versions take effect on their effective dates once approved.")
       : t("Discarding drafts cannot be undone. Released tariffs do not change.")}</p>
     <Failure message={failure} />
@@ -405,14 +405,14 @@ function ImportDialog({ property, onClose, onDone }: MassProps) {
       <Button type="button" variant="outline" onClick={onClose} disabled={busy}>{t("Cancel")}</Button>
       <Button type="submit" disabled={busy || !file}>{busy ? t("Saving…") : t("Import as drafts")}</Button>
     </>}>
-    <p className="text-sm text-zinc-700">{t("Use a file exported from this screen. Each changed row becomes a draft version for approval; nothing is released until it is approved.")}</p>
-    <p className="text-sm text-zinc-600">{t("Up to {n} rows and 1 MB per file.", { n: TARIFF_BATCH_LIMIT })}</p>
+    <p className="text-sm text-secondary-ink">{t("Use a file exported from this screen. Each changed row becomes a draft version for approval; nothing is released until it is approved.")}</p>
+    <p className="text-sm text-secondary-ink">{t("Up to {n} rows and 1 MB per file.", { n: TARIFF_BATCH_LIMIT })}</p>
     <label className="flex flex-col gap-1.5 text-sm font-medium">
       {t("CSV file")}
       <input name="tariff_file" type="file" accept=".csv,text/csv" className="text-sm" disabled={busy}
         onChange={(event) => { setFile(event.target.files?.[0] ?? null); setErrors([]) }} />
     </label>
-    {errors.length > 0 && <div role="alert" className="space-y-1 rounded-lg bg-rose-50 p-3 text-sm text-rose-800">
+    {errors.length > 0 && <div role="alert" className="space-y-1 rounded-lg bg-danger-subtle p-3 text-sm text-danger-ink">
       <p className="font-medium">{t("Nothing was imported. Fix these rows and import again:")}</p>
       <ul className="max-h-48 list-disc space-y-0.5 overflow-y-auto ps-5">
         {errors.map((error) => <li key={`${error.row}:${error.message}`}>{t("Row {row}: {message}", error)}</li>)}

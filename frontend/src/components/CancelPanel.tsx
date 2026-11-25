@@ -49,7 +49,7 @@ export default function CancelPanel({ row, reload }: { row: Row; reload: () => v
 
   if (done)
     return (
-      <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+      <div className="rounded-xl border border-success-line bg-success-subtle px-4 py-3 text-sm text-success-ink">
         <p className="font-semibold">
           {t("Cancelled - {n}", { n: done.cancellation_number })}
         </p>
@@ -63,7 +63,7 @@ export default function CancelPanel({ row, reload }: { row: Row; reload: () => v
         </p>
         <Link
           to={`/cancelled/${encodeURIComponent(String(row.name))}`}
-          className="mt-1.5 inline-block font-medium text-emerald-900 underline"
+          className="mt-1.5 inline-block font-medium text-success-ink underline"
         >
           {t("Print / share the confirmation letter")}
         </Link>
@@ -71,7 +71,7 @@ export default function CancelPanel({ row, reload }: { row: Row; reload: () => v
     )
 
   return (
-    <div className="border-t border-zinc-200 pt-4">
+    <div className="border-t border-line pt-4">
       {!open ? (
         <Button variant="outline" onClick={() => setOpen(true)}>
           {t("Cancel this stay…")}
@@ -79,7 +79,7 @@ export default function CancelPanel({ row, reload }: { row: Row; reload: () => v
       ) : (
         <div className="space-y-3">
           {preview && (
-            <p className="rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-600">
+            <p className="rounded-lg bg-canvas px-3 py-2 text-sm text-secondary-ink">
               {t("{n} day{s} before arrival.", {
                 n: preview.days_before_arrival,
                 s: preview.days_before_arrival === 1 ? "" : "s",
@@ -98,11 +98,11 @@ export default function CancelPanel({ row, reload }: { row: Row; reload: () => v
             </p>
           )}
           <label className="block">
-            <span className="mb-1 block text-sm font-medium text-zinc-600">
+            <span className="mb-1 block text-sm font-medium text-secondary-ink">
               {t("Reason")}
             </span>
             <select
-              className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+              className="w-full rounded-lg border border-control bg-surface px-3 py-1.5 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-focus"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
             >
@@ -112,16 +112,16 @@ export default function CancelPanel({ row, reload }: { row: Row; reload: () => v
             </select>
           </label>
           <textarea
-            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+            className="w-full rounded-lg border border-control bg-surface px-3 py-1.5 text-sm focus:outline-2 focus:outline-offset-1 focus:outline-focus"
             placeholder={t("Anything worth remembering (optional)")}
             value={note}
             onChange={(e) => setNote(e.target.value)}
           />
           {preview?.inside_window && preview.fee_basis !== "None" && (
-            <label className="flex items-center gap-2 text-sm text-zinc-600">
+            <label className="flex items-center gap-2 text-sm text-secondary-ink">
               <input
                 type="checkbox"
-                className="size-4 accent-brand-600"
+                className="size-4 accent-focus"
                 checked={waive}
                 onChange={(e) => setWaive(e.target.checked)}
               />
@@ -159,7 +159,7 @@ export default function CancelPanel({ row, reload }: { row: Row; reload: () => v
               {t("Keep the booking")}
             </Button>
           </div>
-          {error && <p className="text-xs text-rose-600">{translate(error)}</p>}
+          {error && <p className="text-xs text-danger-text">{translate(error)}</p>}
         </div>
       )}
     </div>

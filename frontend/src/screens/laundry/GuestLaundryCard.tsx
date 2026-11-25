@@ -56,18 +56,18 @@ export function GuestLaundryCard({ token }: Readonly<{ token: string }>) {
   }
 
   return (
-    <div className="mb-5 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+    <div className="mb-5 rounded-xl border border-line bg-surface p-4 shadow-sm">
       <div className="flex items-center gap-2">
-        <Shirt className="size-5 text-brand-600" aria-hidden />
+        <Shirt className="size-5 text-accent-text" aria-hidden />
         <p className="font-medium">{translate("Laundry")}</p>
       </div>
 
       {alreadyOpen ? (
-        <p className="mt-2 flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+        <p className="mt-2 flex items-center gap-2 rounded-lg bg-success-subtle px-3 py-2 text-sm text-success-ink">
           <Check className="size-4" aria-hidden />{translate("Housekeeping has your laundry pickup - they'll be by shortly.")}</p>
       ) : (
         <>
-          <p className="mt-1 text-sm text-zinc-500">{translate("Need clothes washed? Ask housekeeping to pick them up - they'll count and price the bag with you at the door.")}</p>
+          <p className="mt-1 text-sm text-muted-ink">{translate("Need clothes washed? Ask housekeeping to pick them up - they'll count and price the bag with you at the door.")}</p>
 
           {!open ? (
             <div className="mt-3 flex flex-wrap gap-2">
@@ -82,7 +82,7 @@ export function GuestLaundryCard({ token }: Readonly<{ token: string }>) {
           ) : (
             <div className="mt-3 space-y-3">
               <input
-                className="w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2.5 text-base focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
+                className="w-full rounded-lg border border-control bg-surface px-3.5 py-2.5 text-base focus:outline-2 focus:outline-offset-1 focus:outline-focus"
                 placeholder={translate("Anything we should know? (bag by the door, after 3pm…)")}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
@@ -92,8 +92,8 @@ export function GuestLaundryCard({ token }: Readonly<{ token: string }>) {
                 className={
                   "flex w-full items-center justify-center gap-1.5 rounded-lg border py-2.5 text-sm font-semibold " +
                   (express
-                    ? "border-amber-400 bg-amber-50 text-amber-700"
-                    : "border-zinc-300 text-zinc-500")
+                    ? "border-amber-400 bg-warning-subtle text-warning-ink"
+                    : "border-control text-muted-ink")
                 }
                 onClick={() => setExpress((v) => !v)}
               >
@@ -110,16 +110,16 @@ export function GuestLaundryCard({ token }: Readonly<{ token: string }>) {
           )}
 
           {showRates && (
-            <div className="mt-3 max-h-56 overflow-y-auto rounded-lg border border-zinc-100">
+            <div className="mt-3 max-h-56 overflow-y-auto rounded-lg border border-line-subtle">
               <table className="w-full text-sm">
                 <tbody>
                   {info.rates.map((r) => (
                     <tr
                       key={`${r.item_name}-${r.service_type}`}
-                      className="border-b border-zinc-100 last:border-0"
+                      className="border-b border-line-subtle last:border-0"
                     >
                       <td className="px-3 py-1.5 font-medium">{r.item_name}</td>
-                      <td className="px-2 py-1.5 text-zinc-500">
+                      <td className="px-2 py-1.5 text-muted-ink">
                         {translate(r.service_type)}
                       </td>
                       <td className="px-3 py-1.5 text-right tabular-nums">
