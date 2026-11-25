@@ -12,6 +12,7 @@ import secrets
 from contextlib import contextmanager
 from copy import copy
 from functools import wraps
+from urllib.parse import parse_qsl, unquote_plus
 
 import frappe
 from frappe.utils import add_to_date, cint, now_datetime
@@ -477,20 +478,64 @@ class _FloorPinForm(frappe._dict):
 def _scrub_pin_from_form_dict(*extra_fields: str) -> None:
 	form = getattr(frappe.local, "form_dict", None)
 	if isinstance(form, dict):
-		for key in _PIN_FIELDS | set(extra_fields):
-			form.pop(key, None)
+		fields = _PIN_FIELDS | set(extra_fields)
+		for key in tuple(form):
+			if isinstance(key, str) and key.casefold() in fields:
+				form.pop(key, None)
+
+
+def _request_has_pin_query(request) -> bool:
+	args = getattr(request, "args", None)
+	if args and any(unquote_plus(str(key)).casefold() in _PIN_FIELDS for key in args):
+		return True
+	query = getattr(request, "query_string", "")
+	if isinstance(query, bytes):
+		query = query.decode("utf-8", errors="replace")
+	url_queries = [str(getattr(request, field, "") or "").partition("?")[2] for field in ("full_path", "path")]
+	return any(
+		key.casefold() in _PIN_FIELDS
+		for source in (query, *url_queries) if isinstance(source, str)
+		for key, _ in parse_qsl(source.replace(";", "&"), keep_blank_values=True)
+	)
+
+
+def _discard_request_query(request) -> None:
+	"""Clear the raw WSGI URL and Werkzeug's cached representations before raising."""
+	request.query_string = b""
+	for key in ("args", "values"):
+		vars(request).pop(key, None)
+	for key in ("path", "full_path", "url", "base_url", "root_url", "url_root", "referrer"):
+		url = vars(request).get(key)
+		if isinstance(url, str):
+			setattr(request, key, url.partition("?")[0])
+
+	environ = getattr(request, "environ", None)
+	if isinstance(environ, dict):
+		environ["QUERY_STRING"] = ""
+		for key in ("RAW_URI", "REQUEST_URI", "PATH_INFO", "HTTP_REFERER",
+		            "HTTP_X_ORIGINAL_URI", "HTTP_X_FORWARDED_URI"):
+			if isinstance(environ.get(key), str):
+				environ[key] = environ[key].partition("?")[0]
+
+
+def _reject_pin_query(request) -> None:
+	if request is not None and _request_has_pin_query(request):
+		_discard_request_query(request)
+		_scrub_pin_from_form_dict()
+		frappe.throw(frappe._("Send PINs and passwords in the request body."), frappe.ValidationError)
 
 
 def prepare_pin_request() -> None:
 	"""Stage credentials before Frappe copies RPC kwargs or logs a denied request."""
 	form = getattr(frappe.local, "form_dict", None)
-	request = getattr(frappe.local, "request", None)
+	request = getattr(frappe.local, "request", None) or getattr(frappe, "request", None) or None
 	if not isinstance(form, dict) or request is None:
 		return
-	path = request.path.rstrip("/")
+	path = request.path.partition("?")[0].rstrip("/")
 	method = path.rsplit("/method/", 1)[-1] if path.startswith("/api/") and "/method/" in path else form.get("cmd")
 	if not isinstance(method, str) or not method.startswith("kamra."):
 		return
+	_reject_pin_query(request)
 	frappe.local.kamra_pin_arguments = (
 		method, {key: _protect_pin(form.pop(key)) for key in _PIN_FIELDS if key in form},
 	)
@@ -517,11 +562,21 @@ def scrub_pin_arguments(fn):
 			for key, value in staged[1].items():
 				if key in parameters and key not in positional[:len(args)]:
 					kwargs.setdefault(key, value)
-		if getattr(frappe.local, "request", None) is not None:
-			from frappe.utils.typing_validations import transform_parameter_types
+		request = getattr(frappe.local, "request", None)
+		_reject_pin_query(request or getattr(frappe, "request", None) or None)
+		try:
+			if request is not None:
+				from frappe.utils.typing_validations import transform_parameter_types
 
-			args, kwargs = transform_parameter_types(fn, args, kwargs)
-		return fn(*args, **kwargs)
+				args, kwargs = transform_parameter_types(fn, args, kwargs)
+			return fn(*args, **kwargs)
+		except Exception as error:
+			if (type(error).__module__ == "frappe.exceptions"
+			    or isinstance(error, (frappe.ValidationError, frappe.PermissionError))):
+				raise
+		# Raise outside the provider's exception context so Frappe cannot log its frames.
+		frappe.clear_messages()
+		frappe.throw(frappe._("The PIN operation could not be completed. Try again."), frappe.ValidationError)
 
 	# Frappe's whitelist wrapper validates before entering this decorator.
 	# Move non-secret type validation behind the credential boundary.
@@ -902,11 +957,13 @@ def verify_supervisor(property: str, supervisor: str | None, pin,
                       roles=SUPERVISOR_ROLES, requester=None, *,
                       company: str | None = None,
                       document_owner: str | None = None,
-                      amount: float = 0.0,
+                      amount: float | None = 0.0,
+                      currency: str | None = None,
+                      action: str | None = None,
                       role_field: str = "custom_floor_override_approver_roles",
                       max_amount_field: str | None = "custom_floor_override_max_amount",
                       reference_doctype: str = "",
-                      reference_name: str = "",
+                      reference_name: str | None = "",
                       reason: str = "",
                       nonce: str | None = None) -> str:
 	"""A supervisor approves at someone else's till with their user id and
@@ -986,10 +1043,14 @@ def verify_supervisor(property: str, supervisor: str | None, pin,
 				"amount": 0 if amount is None else amount,
 				"role_field": role_field or "custom_floor_override_approver_roles",
 				"reference_doctype": reference_doctype or "",
-				"reference_name": reference_name or "",
+				"reference_name": "" if reference_name is None else reference_name,
 				"reason": reason or "",
 				"nonce": req_nonce,
 			}
+			if currency is not None:
+				payload["currency"] = currency
+			if action is not None:
+				payload["action"] = action
 			if max_amount_field is not None:
 				payload["max_amount_field"] = max_amount_field
 
@@ -1115,7 +1176,7 @@ def resolve_property_for_pos_profile(pos_profile: str | None, user: str | None =
 	   enabled properties, when that leaves exactly one permitted enabled Property
 	7. Single enabled `Property` on the site (when only one exists)
 
-	Strict PIN management accepts explicit property links and a mapped cost
+	Strict PIN operations accept explicit property links and a mapped cost
 	center. Name matching and user/site defaults remain for older POS callers.
 	"""
 
@@ -1398,16 +1459,34 @@ def _encode_floor_pin(pin: str) -> str:
 	return f"pbkdf2_sha256${_FLOOR_PIN_ROUNDS}${salt.hex()}${digest.hex()}"
 
 
-def _validate_floor_pin(pin: _PinSecret) -> _PinSecret:
-	# Match the native package's weak-pattern policy on the preverified path.
-	reversed_pin = _protect_pin(pin.reveal()[::-1])
-	patterns = ("1230", "4560", "7890", "1470", "2580", "3690", "1590", "3570")
-	if (pin == reversed_pin or (len(pin) == 4 and 1990 <= int(pin.reveal()) <= 2030)
-	    or pin in patterns or reversed_pin in patterns
-	    or pin in ("0001", "1000", "1004", "1122", "2000", "5683", "112233")
-	    or any(len(pin) % n == 0 and pin == pin.reveal()[:n] * (len(pin) // n) for n in range(1, len(pin) // 2 + 1))):
-		frappe.throw(frappe._("Choose a PIN without repeated or consecutive digits."))
-	return pin
+def _is_weak_floor_pin(pin: str) -> bool:
+	"""Match SiteOps delegation-of-authority@7 on the preverified enrollment path."""
+	reverse = pin[::-1]
+	size = len(pin)
+	if pin == reverse or len(set(pin)) <= 2:
+		return True
+	isolated = sum(
+		(index == 0 or digit != pin[index - 1]) and (index == size - 1 or digit != pin[index + 1])
+		for index, digit in enumerate(pin)
+	)
+	if isolated <= 1 or any(pin == (pin[:width] * size)[:size] for width in range(2, size // 2 + 1)):
+		return True
+	if size == 4 and 1990 <= int(pin) <= 2030:
+		return True
+	sequence = "01234567890123456789"
+	if pin in sequence or reverse in sequence:
+		return True
+
+	# The bottom row of the keypad contains only zero, in the middle column.
+	positions = ["123456789 0".index(digit) for digit in pin]
+	if all(left != right and abs(left // 3 - right // 3) <= 1 and abs(left % 3 - right % 3) <= 1
+	       for left, right in zip(positions, positions[1:])):
+		return True
+	for line in ("123", "456", "789", "147", "258", "369", "159", "357"):
+		for walk in (line * 4, (line + "0") * 3, line + "0258258", line + "0852852"):
+			if pin in walk or reverse in walk:
+				return True
+	return pin in ("0001", "1000", "1004", "1122", "2000", "5683", "112233")
 
 
 def enroll_approval_pin(user: str, pin, current_password: str | None, *, preverified: bool = False) -> None:
@@ -1423,8 +1502,10 @@ def enroll_approval_pin(user: str, pin, current_password: str | None, *, preveri
 	else:
 		# The native setter requires a password. The trusted POS hook already
 		# proved it. Use the exact same store and format under the User lock.
+		if _is_weak_floor_pin(pin.reveal()):
+			frappe.throw(frappe._("Choose four to eight digits and avoid common PIN patterns."))
 		_write_floor_pin_state(user, {
-			_FLOOR_PIN_HASH: _encode_floor_pin(_validate_floor_pin(pin)),
+			_FLOOR_PIN_HASH: _encode_floor_pin(pin),
 			_FLOOR_PIN_ATTEMPTS: 0, _FLOOR_PIN_LOCK: "", _FLOOR_PIN_RESET: 0,
 		})
 	frappe.cache.delete_value(f"kamra_cashier_unlock:{user}")
@@ -1516,14 +1597,18 @@ def verify_pin_account_password(user: str, password: str | None) -> None:
 	_record_pin_attempt(user, "password", matched=True, limit=PIN_MAX_ATTEMPTS, minutes=PIN_LOCK_MINUTES)
 
 
-def _pin_company_scope(user: str) -> set[str] | None:
+def _pin_user_scope(user: str, doctype: str) -> set[str] | None:
 	from frappe.core.doctype.user_permission.user_permission import get_user_permissions
 
-	permissions = get_user_permissions(user).get("Company")
+	permissions = get_user_permissions(user).get(doctype)
 	if not permissions:
 		return None
 	user_scope = {entry["doc"] for entry in permissions if entry.get("doc") and entry.get("applicable_for") == "User"}
 	return user_scope or {entry["doc"] for entry in permissions if entry.get("doc") and not entry.get("applicable_for")}
+
+
+def _pin_company_scope(user: str) -> set[str] | None:
+	return _pin_user_scope(user, "Company")
 
 
 def _pin_property_scope(user: str) -> set[str] | None:
@@ -1561,6 +1646,38 @@ def _pin_scopes_overlap(actor: str, target: str) -> bool:
 	return True
 
 
+def _unique_reset_scope(scopes) -> str | None:
+	assigned = [scope for scope in scopes if scope is not None]
+	shared = set.intersection(*assigned) if assigned else set()
+	return next(iter(shared)) if len(shared) == 1 else None
+
+
+def _linked_pin_scope(doctype: str, name: str | None, field: str) -> str:
+	if name:
+		for link in (field, f"custom_{field}"):
+			if _doctype_has_field(doctype, link):
+				value = frappe.db.get_value(doctype, name, link)
+				if value:
+					return str(value)
+	return ""
+
+
+def _floor_pin_reset_scope(actor, target, property, pos_profile):
+	accounts = (actor, target)
+	prop = property or _unique_reset_scope(_pin_property_scope(user) for user in accounts)
+	company = _linked_pin_scope("POS Profile", pos_profile, "company") or _linked_pin_scope("Property", prop, "company")
+	if not company:
+		company = _unique_reset_scope(_pin_company_scope(user) for user in accounts) or ""
+	if not company and not set(frappe.get_roles(actor)).intersection(IT_ADMIN):
+		frappe.throw(frappe._("This account cannot manage approval PINs."), frappe.PermissionError)
+
+	branch = _linked_pin_scope("POS Profile", pos_profile, "branch") or _linked_pin_scope("Property", prop, "branch")
+	if not branch and prop and _doctype_has_field("Branch", "custom_property"):
+		branches = frappe.get_all("Branch", filters={"custom_property": prop}, pluck="name", limit=2)
+		branch = branches[0] if len(branches) == 1 else ""
+	return prop, company, branch
+
+
 def manage_pos_override_pin(
 	action: str,
 	*,
@@ -1577,6 +1694,7 @@ def manage_pos_override_pin(
 
 	pin, current_password = _protect_pin(pin), _protect_pin(current_password)
 	_scrub_pin_from_form_dict()
+	_reject_pin_query(getattr(frappe.local, "request", None))
 	actor = require_pin_identity()
 	if caller is not None and (not isinstance(caller, str) or caller.strip().casefold() != actor.casefold()):
 		frappe.throw(frappe._("This account cannot manage approval PINs."), frappe.PermissionError)
@@ -1601,9 +1719,14 @@ def manage_pos_override_pin(
 		prop = resolve_property_for_pos_profile(pos_profile, user=actor, strict=True)
 		if not prop:
 			frappe.throw(frappe._("This account cannot manage approval PINs."), frappe.PermissionError)
-	company = _pos_pin_company(pos_profile, prop) if prop else ""
+	horizontal_reset = action == "clear" and _horizontal_floor_status_script() is not None
+	branch = ""
+	if horizontal_reset:
+		prop, company, branch = _floor_pin_reset_scope(actor, target, prop, pos_profile)
+	else:
+		company = _pos_pin_company(pos_profile, prop) if prop else ""
 	if pos_profile is not None and company:
-		property_company = _property_company(prop)
+		property_company = _linked_pin_scope("Property", prop, "company")
 		if property_company and property_company != company:
 			frappe.throw(frappe._("This account cannot manage approval PINs."), frappe.PermissionError)
 	if prop and any(not _pin_scope_allows(account, prop, company) for account in {actor, target}):
@@ -1618,8 +1741,8 @@ def manage_pos_override_pin(
 		enroll_approval_pin(target, pin, current_password, preverified=password_verified is not False)
 		log_action("set_cashier_pin", "Cashier PIN", target, None)
 		return {"ok": True, "has_pin": True}
-	if _horizontal_floor_status_script() is not None:
-		_call_floor_pin_script("clear", {"user": target, "property": prop or "", "company": company})
+	if horizontal_reset:
+		_call_floor_pin_script("clear", {"user": target, "property": prop or "", "company": company, "branch": branch})
 		frappe.cache.delete_value(f"kamra_cashier_unlock:{target}")
 	else:
 		write_cashier_pin(target, None)
@@ -1635,6 +1758,11 @@ def verify_pos_override_pin(
 	property: str | None = None,
 	requester: str | None = None,
 	privilege: str | None = None,
+	amount=None,
+	currency=None,
+	action=None,
+	reference_doctype=None,
+	reference_name=None,
 ) -> dict:
 	"""Frappe hook (`pos_override_pin_verifier`) called by POS override verification.
 
@@ -1646,6 +1774,7 @@ def verify_pos_override_pin(
 	"""
 	pin = _protect_pin(pin)
 	_scrub_pin_from_form_dict()
+	_reject_pin_query(getattr(frappe.local, "request", None))
 	try:
 		if (
 			getattr(frappe.flags, "kamra_agent_call", False)
@@ -1670,8 +1799,17 @@ def verify_pos_override_pin(
 		if approver_user.casefold() == str(req).casefold():
 			return {"ok": False, "name": None, "code": "POS-AUTH-SELF"}
 
-		prop = property or resolve_property_for_pos_profile(pos_profile, user=req)
+		prop = property
+		if pos_profile is not None:
+			prop = resolve_property_for_pos_profile(pos_profile, user=req, strict=True)
+			if property is not None and prop != property:
+				return {"ok": False, "name": None, "code": "POS-AUTH-NOT-ELIGIBLE"}
+		if not prop:
+			return {"ok": False, "name": None, "code": "POS-AUTH-NOT-ELIGIBLE"}
 		company = _pos_pin_company(pos_profile, prop)
+		property_company = _linked_pin_scope("Property", prop, "company")
+		if pos_profile is not None and property_company and company != property_company:
+			return {"ok": False, "name": None, "code": "POS-AUTH-NOT-ELIGIBLE"}
 		if any(not _pin_scope_allows(account, prop, company) for account in (req, approver_user)):
 			return {"ok": False, "name": None, "code": "POS-AUTH-NOT-ELIGIBLE"}
 
@@ -1683,8 +1821,12 @@ def verify_pos_override_pin(
 				roles=POS_SUPERVISOR_ROLES,
 				requester=req,
 				company=company,
-				reference_doctype="POS Invoice",
-				reason=privilege or "pos_override",
+				amount=amount,
+				currency=currency,
+				action=action,
+				reference_doctype="POS Invoice" if reference_doctype is None else reference_doctype,
+				reference_name=reference_name,
+				reason=action or privilege or "pos_override",
 			)
 		except frappe.PermissionError as exc:
 			frappe.clear_messages()
@@ -1704,7 +1846,7 @@ def verify_pos_override_pin(
 				code = "POS-AUTH-NO-PIN"
 			elif "SITEOPS-DOA-SELF" in msg:
 				code = "POS-AUTH-SELF"
-			elif any(tag in msg for tag in ("SITEOPS-DOA-ELIGIBLE", "SITEOPS-DOA-ROLE", "SITEOPS-DOA-UNCONFIGURED")):
+			elif any(tag in msg for tag in ("SITEOPS-DOA-ELIGIBLE", "SITEOPS-DOA-ROLE", "SITEOPS-DOA-UNCONFIGURED", "SITEOPS-DOA-LIMIT")):
 				code = "POS-AUTH-NOT-ELIGIBLE"
 			else:
 				code = "POS-AUTH-PIN"

@@ -2776,3 +2776,6 @@ Unknown approval PIN action.,Action inconnue pour le code PIN d’approbation.
 Choose a PIN without repeated or consecutive digits.,Choisissez un code PIN sans chiffres répétés ni consécutifs.
 PIN Hash,Empreinte du code PIN
 Wrong cashier PIN.,Code PIN de caisse incorrect.
+Send PINs and passwords in the request body.,Envoyez les codes PIN et les mots de passe dans le corps de la requête.
+The PIN operation could not be completed. Try again.,L’opération sur le code PIN a échoué. Réessayez.
+Choose four to eight digits and avoid common PIN patterns.,Choisissez de quatre à huit chiffres et évitez les combinaisons courantes.
