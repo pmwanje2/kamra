@@ -1940,6 +1940,9 @@ export interface ReservationDetail extends TariffReference {
   children: number
   room: string | null
   room_type: string | null
+  original_room_type?: string
+  room_type_to_charge_name?: string | null
+  upgrade_type?: "None" | "Complimentary" | "Paid"
   room_type_name: string | null
   meal_plan: string | null
   /** The meal plan's label - meal_plan is its internal ID. */

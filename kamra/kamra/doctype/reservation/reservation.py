@@ -467,6 +467,7 @@ class Reservation(Document):
 			from kamra.api import AdvancePaidIsLedgerOwned
 			frappe.throw(_("Advance paid follows the payments on the folio; take a payment or refund there."),
 			             AdvancePaidIsLedgerOwned)
+		self.validate_room_move_audit()
 		self.guard_discount_inputs()
 		self.guard_locked_nights()
 		self.guard_fixed_charges()
@@ -518,6 +519,17 @@ class Reservation(Document):
 		self.guard_rate_plan()
 		self.validate_room_serviceability()
 		self.stamp_room_assignment()
+
+	def validate_room_move_audit(self):
+		previous = None if self.is_new() else self.get_doc_before_save()
+		original = previous.get("original_room_type") if previous else None
+		if original or not self.flags.get("kamra_room_move_audit"):
+			self.original_room_type = original or (previous.room_type if previous else self.room_type)
+		if not self.flags.get("kamra_room_move_audit"):
+			for key in ("room_type_to_charge", "upgrade_type", "upgrade_reason",
+			            "upgrade_approved_by", "early_checkin_waived_reason"):
+				self.set(key, (previous.get(key) if previous else None)
+				         or ("None" if key == "upgrade_type" else None))
 
 	def guard_rate_plan(self):
 		"""An existing stay's rate plan changes only through the governed path
@@ -973,7 +985,7 @@ class Reservation(Document):
 		charged_children = billable_children(self)
 		inputs = {
 			"property": self.property,
-			"room_type": self.room_type,
+			"room_type": self.get("room_type_to_charge") or self.room_type,
 			"check_in_date": str(self.check_in_date),
 			"check_out_date": str(self.check_out_date),
 			"adults": int(self.adults or 0),
@@ -2401,13 +2413,15 @@ class Reservation(Document):
 			return out
 		from kamra.folio import charged_nights
 		charged = charged_nights(self.name)
-		if not charged:
+		move_cutoff = self.flags.get("kamra_move_cutoff")
+		if not charged and not move_cutoff:
 			return out
 		# the nights as they are locked now, before this quote replaces them
 		held = {str(getdate(r.stay_date)): r for r in self.get("night_rates") or []
 		        if r.get("stay_date")}
 		from kamra.settings import get_setting
-		policy = get_setting(self.property, "charged_night_rate_change")
+		policy = "Keep charged nights" if move_cutoff else get_setting(
+			self.property, "charged_night_rate_change")
 		out["policy"] = policy
 		from kamra.pricing import entry_rate, night_rate_places, rates_include_tax
 		inclusive = rates_include_tax(self.property)
@@ -2419,10 +2433,16 @@ class Reservation(Document):
 		levy_taxed = cint(prop.get("room_levy_taxable")
 		                  if prop.get("room_levy_taxable") is not None else 1)
 		for row in rows:
-			c = charged.get(str(row["stay_date"]))
+			night = str(row["stay_date"])
+			c = charged.get(night)
+			was = held.get(night)
+			if not c and move_cutoff and night < move_cutoff and was is not None:
+				base, gst = flt(was.rate), flt(was.gst_rate)
+				levy = base * levy_pct + levy_fixed
+				c = {"base": base, "gst_rate": gst, "levy_base": levy,
+				     "levy_tax": levy * gst / 100 if levy_taxed else 0}
 			if not c:
 				continue
-			night = str(row["stay_date"])
 			new, new_gst = flt(row["rate"]), flt(row["gst_rate"])
 			base, gst = c["base"], c["gst_rate"]
 			changed = abs(new - base) >= tol or (correct and abs(new_gst - gst) >= 0.01)
@@ -2534,7 +2554,7 @@ class Reservation(Document):
 			"""
 			SELECT name FROM `tabReservation`
 			WHERE room = %(room)s
-			  AND name != %(name)s
+			  AND name NOT IN (%(name)s, %(swap)s)
 			  AND status IN ('Confirmed', 'Checked In', 'Held', 'Pending Payment')
 			  AND check_in_date < GREATEST(%(check_out)s,
 			                               DATE_ADD(%(check_in)s, INTERVAL 1 DAY))
@@ -2546,6 +2566,7 @@ class Reservation(Document):
 			{
 				"room": self.room,
 				"name": self.name or "new",
+				"swap": self.flags.get("kamra_swap_reservation") or "",
 				"check_in": self.check_in_date,
 				"check_out": self.check_out_date,
 			},
@@ -2593,7 +2614,7 @@ class Reservation(Document):
 		occupant = frappe.db.sql(
 			"""
 			SELECT name, guest_name FROM `tabReservation`
-			WHERE room = %(room)s AND name != %(name)s
+			WHERE room = %(room)s AND name NOT IN (%(name)s, %(swap)s)
 			  AND status = 'Checked In'
 			  AND check_in_date < GREATEST(%(check_out)s,
 			                               DATE_ADD(%(check_in)s, INTERVAL 1 DAY))
@@ -2604,6 +2625,7 @@ class Reservation(Document):
 			FOR UPDATE
 			""",
 			{"room": self.room, "name": self.name or "new",
+				"swap": self.flags.get("kamra_swap_reservation") or "",
 			 "check_in": self.check_in_date, "check_out": self.check_out_date,
 			 "today": today()},
 			as_dict=True,
@@ -2712,7 +2734,9 @@ class Reservation(Document):
 		for occ in self.get("occupants") or []:
 			if not occ.get("arrived_at"):
 				occ.db_set("arrived_at", at, update_modified=False)
+		from kamra.housekeeping import clear_stay_room_state
 		for room in rooms:
+			clear_stay_room_state(self.property, room)
 			frappe.db.set_value("Room", room, "occupancy_status", "Occupied")
 		from kamra.folio import open_folio
 
@@ -2730,7 +2754,9 @@ class Reservation(Document):
 		self.db_set({"actual_check_out": None, "check_out_business_date": None},
 		            update_modified=False)
 		# occupied again; it stays Dirty (the guest used it) for the next service
+		from kamra.housekeeping import clear_stay_room_state
 		for room in self._occupied_rooms(checking_in=False):
+			clear_stay_room_state(self.property, room)
 			frappe.db.set_value("Room", room, "occupancy_status", "Occupied")
 		for task in frappe.get_all("Housekeeping Task", pluck="name", filters={
 				"reservation": self.name, "task_type": "Checkout Clean",
@@ -2748,7 +2774,9 @@ class Reservation(Document):
 		post_remaining_nights(self)
 		# a no-op unless an advance reached the stay some other way
 		transfer_advances_to_guest(self.name)
+		from kamra.housekeeping import clear_stay_room_state
 		for room in self._occupied_rooms(checking_in=False):
+			clear_stay_room_state(self.property, room)
 			hk, occ = frappe.db.get_value(
 				"Room", room, ["housekeeping_status", "occupancy_status"]) or (None, None)
 			if hk in ("Out of Order", "Out of Service"):

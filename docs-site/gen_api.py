@@ -83,6 +83,7 @@ MODULES = [
      "Hotel Admin. add_rooms with preview=1 only reports what it would create."),
     ("today_layout", "Today layout (per-user widgets, hotel default)", ""),
     ("sop", "Desk procedures (check-out, check-in and other SOPs)", ""),
+    ("housekeeping", "Housekeeping occupancy, turndown and assignment", ""),
     ("checkin", "Guided check-in (steps, who did each, room-charges permission)",
      "kamra.api.check_in refuses until every check-in step the property marks required is done. check_in_readiness says what is missing."),
     ("staff", "Staff & access", ""),

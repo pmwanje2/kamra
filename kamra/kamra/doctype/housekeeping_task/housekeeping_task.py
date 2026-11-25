@@ -17,7 +17,16 @@ def sla_minutes(property: str | None, priority: str | None) -> int:
 
 
 class HousekeepingTask(Document):
+	def validate(self):
+		if frappe.db.get_value("Room", self.room, "property") != self.property:
+			frappe.throw(frappe._("The task room must belong to this property."), frappe.PermissionError)
+		if self.reservation and frappe.db.get_value("Reservation", self.reservation, "property") != self.property:
+			frappe.throw(frappe._("The task reservation must belong to this property."), frappe.PermissionError)
+
 	def before_insert(self):
+		if not self.business_date:
+			from kamra.business_date import get_business_date
+			self.business_date = get_business_date(self.property)
 		if not self.due_by:
 			self.due_by = add_to_date(
 				now_datetime(),
@@ -28,6 +37,11 @@ class HousekeepingTask(Document):
 		previous = self.get_doc_before_save()
 		old_status = previous.status if previous else None
 		if self.status == old_status:
+			return
+		if self.task_type == "Turndown":
+			if self.status in ("Done", "Verified") and str(self.business_date) == str(
+					frappe.db.get_value("Room", self.room, "turndown_business_date")):
+				frappe.db.set_value("Room", self.room, "turndown_status", "Completed")
 			return
 		# Completed cleans flow back into the room's live status so the
 		# front desk (and any agent checking availability) sees readiness.

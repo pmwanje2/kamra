@@ -115,6 +115,7 @@ def require_it_admin(fn):
 # Several candidates are tried in order (their naming series don't collide).
 SCOPED_ARGS = {
 	"reservation": ("Reservation", "POS Table Reservation"),
+	"swap_reservation": ("Reservation",),
 	"folio": ("Folio",), "from_folio": ("Folio",), "to_folio": ("Folio",),
 	"folios": ("Folio",), "allowance_request": ("Allowance Request",),
 	"group_booking": ("Group Booking",), "group": ("Group Booking",),

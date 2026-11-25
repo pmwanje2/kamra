@@ -9,7 +9,8 @@ import { useEffect, useMemo, useState } from "react"
 import { ArrowRight, BedDouble, Loader2, Search, X } from "lucide-react"
 import { call } from "../lib/api"
 import { serverError } from "../lib/resource"
-import { cur, fmtAmount, moneyStep } from "../lib/money"
+import { fmtMoney, moneyStep } from "../lib/money"
+import { formatMoveDelta } from "../lib/pmsOperations"
 import { useT, t as translate } from "../lib/i18n"
 import { cn } from "../lib/utils"
 import { supervisorArgs, type DiscountGovernance } from "../lib/reservationDiscount"
@@ -31,6 +32,10 @@ interface MovableRoom {
 
 interface Preview {
   same_type: boolean
+  approval_required?: boolean
+  original_room_type_name?: string
+  currency?: string
+  places?: number
   new_room_type_name: string | null
   current_amount: number
   new_amount: number
@@ -60,9 +65,6 @@ const hkTone: Record<string, string> = {
   "Out of Order": "bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300",
 }
 
-const money = (n: number) =>
-  `${cur()}${fmtAmount(Math.abs(n))}`
-
 export default function RoomChangeDialog(props: {
   reservation: string
   currentRoomNumber?: string | null
@@ -81,6 +83,7 @@ export default function RoomChangeDialog(props: {
   const [rateMode, setRateMode] = useState<RateMode>("destination")
   const [agreedRate, setAgreedRate] = useState("")
   const [canSetRate, setCanSetRate] = useState(false)
+  const upgradeType = rateMode === "source" ? "Complimentary" : "Paid"
   const [reason, setReason] = useState(REASONS[0])
   const [note, setNote] = useState("")
   const [supervisor, setSupervisor] = useState("")
@@ -110,6 +113,7 @@ export default function RoomChangeDialog(props: {
       reservation: props.reservation,
       new_room: pick.name,
       rate_mode: rateMode,
+      upgrade_type: rateMode === "custom" ? undefined : pick.same_type ? "None" : upgradeType,
       agreed_rate: rateMode === "custom" ? Number(agreedRate) : undefined,
     })
       .then((p) => {
@@ -123,7 +127,7 @@ export default function RoomChangeDialog(props: {
     return () => {
       live = false
     }
-  }, [pick, props.reservation, rateMode, agreedRate])
+  }, [pick, props.reservation, rateMode, agreedRate, upgradeType])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && props.onClose()
@@ -154,11 +158,17 @@ export default function RoomChangeDialog(props: {
   }, [shown])
 
   const gov = preview?.discount_governance ?? null
-  const signOff = supervisorArgs(gov, supervisor, pin)
-  const signed = !gov?.needs_supervisor || !!signOff.supervisor_user
+  const approvalRequired = !!preview?.approval_required
+  const signOff = approvalRequired
+    ? { supervisor_user: supervisor, supervisor_pin: pin }
+    : supervisorArgs(gov, supervisor, pin)
+  const signed = approvalRequired ? !!(supervisor && pin) : !gov?.needs_supervisor || !!signOff.supervisor_user
+  const money = (n: number) => preview?.currency && preview.places !== undefined
+    ? formatMoveDelta(Math.abs(n), preview.currency, preview.places)
+    : fmtMoney(Math.abs(n))
 
   async function confirm() {
-    if (!pick || !signed) return
+    if (!pick || !preview || !signed) return
     setBusy(true)
     setError(null)
     try {
@@ -170,6 +180,7 @@ export default function RoomChangeDialog(props: {
         // it is the confirmation the server asks for
         confirm_price: 1,
         rate_mode: rateMode,
+        upgrade_type: rateMode === "custom" ? undefined : pick.same_type ? "None" : upgradeType,
         agreed_rate: rateMode === "custom" ? Number(agreedRate) : undefined,
         ...signOff,
       })
@@ -188,11 +199,11 @@ export default function RoomChangeDialog(props: {
   return (
     <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-label={t("Change room")}>
       <div className="absolute inset-0 bg-black/40" onClick={props.onClose} aria-hidden />
-      <div className="relative flex max-h-[90dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
+      <div className="relative flex max-h-[90dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl dark:bg-zinc-900 dark:text-zinc-100 sm:rounded-2xl [&_button]:min-h-11 [&_input]:min-h-11 [&_select]:min-h-11">
         <header className="flex items-start justify-between gap-3 border-b border-zinc-200 px-5 py-4">
           <div>
-            <h2 className="text-lg font-semibold text-zinc-900">{t("Change room")}</h2>
-            <p className="text-sm text-zinc-500">
+            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{t("Change room")}</h2>
+            <p className="text-sm text-zinc-500 dark:text-zinc-300">
               {props.currentRoomNumber
                 ? t("Now in {room} · {n} rooms free for these dates", {
                     room: currentType ? `${props.currentRoomNumber} (${currentType})` : props.currentRoomNumber,
@@ -222,7 +233,7 @@ export default function RoomChangeDialog(props: {
                 onClick={() => setScope(k)}
                 className={cn(
                   "rounded-md px-3 py-1.5 font-medium",
-                  scope === k ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500",
+                  scope === k ? "bg-white text-zinc-900 dark:text-zinc-100 shadow-sm" : "text-zinc-500 dark:text-zinc-300",
                 )}
               >
                 {translate(label)}
@@ -268,20 +279,20 @@ export default function RoomChangeDialog(props: {
                       onClick={() => { setPick(r); setError(null) }}
                       title={(r.free ? undefined : t("Booked for these dates"))}
                       className={cn(
-                        "rounded-lg border px-2.5 py-2 text-left transition-colors",
+                        "min-h-11 rounded-lg border px-2.5 py-2 text-start transition-colors",
                         !r.free && "cursor-not-allowed border-dashed border-zinc-200 bg-zinc-50 opacity-50",
                         r.free && pick?.name !== r.name && "border-zinc-200 hover:border-zinc-400",
                         pick?.name === r.name && "border-brand-600 bg-brand-50 ring-2 ring-brand-600/30",
                       )}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="font-semibold text-zinc-900">{r.room_number}</span>
+                        <span className="font-semibold text-zinc-900 dark:text-zinc-100">{r.room_number}</span>
                         {!r.free && <BedDouble className="size-3.5 text-zinc-400" aria-hidden />}
                       </div>
                       <span
                         className={cn(
                           "mt-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-medium",
-                          r.free ? hkTone[r.housekeeping_status ?? ""] ?? "bg-zinc-100 text-zinc-600" : "bg-zinc-100 text-zinc-500",
+                          r.free ? hkTone[r.housekeeping_status ?? ""] ?? "bg-zinc-100 text-zinc-600" : "bg-zinc-100 text-zinc-500 dark:text-zinc-300",
                         )}
                       >
                         {r.free ? t(r.housekeeping_status || "-") : t("Booked")}
@@ -294,15 +305,20 @@ export default function RoomChangeDialog(props: {
           </div>
         </div>
 
-        <footer className="space-y-3 border-t border-zinc-200 bg-zinc-50 px-5 py-4">
+        <footer className="max-h-[49dvh] shrink-0 space-y-3 overflow-y-auto border-t border-zinc-200 bg-zinc-50 px-5 py-4 dark:border-zinc-700 dark:bg-zinc-950">
           {pick && (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-              <span className="font-medium text-zinc-900">
-                {props.currentRoomNumber ?? "-"}{currentType ? ` (${currentType})` : ""} <ArrowRight className="inline size-3.5" aria-hidden /> {pick.room_number} ({pick.room_type_name})
+              <span className="font-medium text-zinc-900 dark:text-zinc-100">
+                {props.currentRoomNumber ?? "-"}{currentType ? ` (${currentType})` : ""} <ArrowRight className="inline size-3.5 rtl:rotate-180" aria-hidden /> {pick.room_number} ({pick.room_type_name})
               </span>
+              {preview?.original_room_type_name && (
+                <p className="basis-full text-zinc-600 dark:text-zinc-300">
+                  {t("Booked room type: {type}", { type: preview.original_room_type_name })}
+                </p>
+              )}
               {preview ? (
                 preview.difference === 0 ? (
-                  <span className="text-zinc-500">{t("No change to the price.")}</span>
+                  <span className="text-zinc-500 dark:text-zinc-300">{t("No change to the price.")}</span>
                 ) : (
                   <span className={preview.difference > 0 ? "text-amber-700" : "text-emerald-700"}>
                     {preview.difference > 0
@@ -321,13 +337,12 @@ export default function RoomChangeDialog(props: {
               ) : (
                 <Loader2 className="size-4 animate-spin text-zinc-400" aria-label={t("Checking price")} />
               )}
-              {(preview ? preview.auto_price && (!preview.same_type || preview.can_set_rate)
-                : rateMode === "custom") && (
+              {!pick.same_type && (
                 <div role="radiogroup" aria-label={t("Rate")} className="flex basis-full flex-wrap items-center gap-1.5">
                   {(
                     [
-                      ["destination", t("New room's rate")],
-                      ["source", t("Keep current price")],
+                      ["destination", t("Paid")],
+                      ["source", t("Complimentary")],
                       ...(canSetRate ? [["custom", t("Enter a rate")] as const] : []),
                     ] as const
                   ).map(([k, label]) => (
@@ -338,7 +353,7 @@ export default function RoomChangeDialog(props: {
                       aria-checked={rateMode === k}
                       onClick={() => setRateMode(k)}
                       className={cn(
-                        "rounded-md border px-2.5 py-1 text-xs font-medium",
+                        "min-h-11 rounded-md border px-2.5 py-1 text-xs font-medium",
                         rateMode === k ? "border-brand-600 bg-brand-50 text-brand-700" : "border-zinc-200 bg-white text-zinc-600",
                       )}
                     >
@@ -361,7 +376,7 @@ export default function RoomChangeDialog(props: {
                 </div>
               )}
               {preview?.in_house && (
-                <span className="basis-full text-xs text-zinc-500">
+                <span className="basis-full text-xs text-zinc-500 dark:text-zinc-300">
                   {t("The guest is in-house: the old room is marked Dirty for housekeeping.")}
                 </span>
               )}
@@ -372,9 +387,9 @@ export default function RoomChangeDialog(props: {
               )}
             </div>
           )}
-          {pick && gov?.needs_supervisor && (
-            <SupervisorSignOff reason={<SignOffReasons gov={gov} />}
-              supervisors={preview?.supervisors ?? gov.supervisors}
+          {pick && (approvalRequired || gov?.needs_supervisor) && (
+            <SupervisorSignOff reason={gov && <SignOffReasons gov={gov} />}
+              supervisors={preview?.supervisors ?? gov?.supervisors ?? []}
               supervisor={supervisor} pin={pin} onSupervisor={setSupervisor} onPin={setPin} />
           )}
           <div className="flex flex-wrap items-center gap-2">
@@ -382,7 +397,7 @@ export default function RoomChangeDialog(props: {
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               aria-label={t("Reason")}
-              className="rounded-lg border border-zinc-300 bg-white px-2.5 py-2 text-sm"
+              className="min-h-11 rounded-lg border border-zinc-300 bg-white px-2.5 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
             >
               {REASONS.map((r) => (
                 <option key={r} value={r}>
@@ -394,9 +409,9 @@ export default function RoomChangeDialog(props: {
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder={t("Note (optional)")}
-              className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-2.5 py-2 text-sm"
+              className="min-w-0 flex-1 min-h-11 rounded-lg border border-zinc-300 bg-white px-2.5 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
             />
-            <Button disabled={!pick || !preview || busy || !signed} onClick={confirm}>
+            <Button className="min-h-11" disabled={!pick || !preview || busy || !signed} onClick={confirm}>
               {busy ? t("Moving…") : pick ? t("Move to {room}", { room: pick.room_number }) : t("Pick a room")}
             </Button>
           </div>

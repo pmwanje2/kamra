@@ -119,6 +119,12 @@ MODULES: tuple[Module, ...] = (
 			Section("times", "Check-in & check-out", "", (
 				S("checkin_time", "Check-in time", "time", "14:00", P),
 				S("checkout_time", "Check-out time", "time", "11:00", P),
+				S("early_checkin_fee_type", "Early Check-In Fee Policy", "select", "Disabled", P,
+				  options=("Disabled", "Fixed", "Percentage")),
+				S("early_checkin_cutoff", "Early Check-In Window Start", "time", "", P),
+				S("early_checkin_fee_value", "Early Check-In Fee Value", "number", 0, P, min=0),
+				S("early_checkin_waiver_approval", "Require Early Check-In Waiver Approval", "check", 0, P),
+				S("complimentary_upgrade_approval", "Require Complimentary Upgrade Approval", "check", 0, P),
 				S("late_checkout_fee_mode", "Late check-out fee", "select", "None", P,
 				  options=("None", "Fixed", "Percent of Night"),
 				  hint="The Late check-out step starts on this fee. Percent of Night is a % of the last room night."),

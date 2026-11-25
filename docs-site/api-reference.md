@@ -5,7 +5,7 @@ outline: 2
 # REST API reference
 
 Every endpoint below is a whitelisted function - the same governed layer
-the UI and the AI use. **545 endpoints**, generated from the source
+the UI and the AI use. **553 endpoints**, generated from the source
 (`docs-site/gen_api.py`), so this page always matches the code.
 
 ## Calling convention
@@ -1562,6 +1562,9 @@ in the Keys step.
 | --- | --- | --- |
 | `reservation` | yes |  |
 | `room` | no | `None` |
+| `waive_early_checkin_reason` | no | `None` |
+| `supervisor_user` | no | `None` |
+| `supervisor_pin` | no | `None` |
 
 ### `kamra.api.walk_in`
 
@@ -1829,7 +1832,7 @@ removing Write on Room in the role permissions actually removes the ability.
 
 ### `kamra.api.room_board`
 
-**GET/POST** · roles: `Front Desk`, `Kamra Agent`
+**GET/POST** · roles: `Housekeeping`, `Front Desk`, `Kamra Agent`
 
 Every room at a glance for the housekeeping supervisor: status,
 occupancy, who is in it, and its open task - the board the desk has,
@@ -1982,6 +1985,23 @@ each venue's schedule so you can see availability and spot conflicts.
 | `start_date` | no | `None` |
 | `days` | no | `14` |
 
+### `kamra.api.move_room`
+
+**POST** · roles: `Front Desk`, `Kamra Agent`
+
+Move into a ready room using the booked rate or a server-priced rate.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `reservation` | yes |  |
+| `new_room` | yes |  |
+| `upgrade_type` | no | `'None'` |
+| `reason` | no | `None` |
+| `confirm_price` | no | `0` |
+| `supervisor_user` | no | `None` |
+| `supervisor_pin` | no | `None` |
+| `swap_reservation` | no | `None` |
+
 ### `kamra.api.move_reservation`
 
 **GET/POST** · roles: `Front Desk`, `Kamra Agent`
@@ -2012,6 +2032,7 @@ off when it needs one).
 | `agreed_rate` | no | `None` |
 | `supervisor_user` | no | `None` |
 | `supervisor_pin` | no | `None` |
+| `upgrade_type` | no | `None` |
 
 ### `kamra.api.rate_override_preview`
 
@@ -2138,6 +2159,7 @@ confirm_price=1.
 | `new_room` | yes |  |
 | `rate_mode` | no | `'destination'` |
 | `agreed_rate` | no | `None` |
+| `upgrade_type` | no | `None` |
 
 ### `kamra.api.movable_rooms`
 
@@ -7500,6 +7522,66 @@ Create or update an SOP template and its steps.
 | `property` | yes |  |
 
 
+## Housekeeping occupancy, turndown and assignment
+
+### `kamra.housekeeping.report_hk_occupancy`
+
+**POST**
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `room` | yes |  |
+| `hk_occupancy` | yes |  |
+
+### `kamra.housekeeping.get_hk_discrepancies`
+
+**GET/POST**
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `property` | yes |  |
+
+### `kamra.housekeeping.resolve_hk_discrepancy`
+
+**POST**
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `room` | yes |  |
+| `resolution_note` | yes |  |
+
+### `kamra.housekeeping.get_turndown_queue`
+
+**GET/POST**
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `property` | yes |  |
+
+### `kamra.housekeeping.set_turndown_status`
+
+**POST**
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `room` | yes |  |
+| `status` | yes |  |
+
+### `kamra.housekeeping.auto_assign_housekeeping_tasks`
+
+**POST**
+
+Allocate each open task once, preferring a section's current attendant.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `property` | yes |  |
+| `business_date` | yes |  |
+| `attendants` | yes |  |
+| `max_credits_per_attendant` | yes |  |
+| `preview` | no | `0` |
+
+
 ## Guided check-in (steps, who did each, room-charges permission)
 
 > kamra.api.check_in refuses until every check-in step the property marks required is done. check_in_readiness says what is missing.
@@ -7660,6 +7742,14 @@ stay by the desk or finance (logged).
 | `reservation` | yes |  |
 | `allowed` | no | `1` |
 | `reason` | no | `None` |
+
+### `kamra.checkin.early_checkin_fee_preview`
+
+**GET/POST**
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `reservation` | yes |  |
 
 
 ## Staff & access

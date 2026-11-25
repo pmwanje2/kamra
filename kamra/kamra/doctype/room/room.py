@@ -13,6 +13,14 @@ class Room(Document):
 		if self.floor and (self.is_new() or self.has_value_changed("floor")):
 			ensure_floor(self.property, self.floor)
 
+		previous = self.get_doc_before_save()
+		for field, default in {
+			"hk_occupancy": None, "hk_reported_at": None, "hk_resolved_occupancy": None,
+			"turndown_requested": 0, "turndown_status": "Not Required",
+			"turndown_business_date": None,
+		}.items():
+			self.set(field, previous.get(field) if previous else default)
+
 	def after_insert(self):
 		# Keep Sellable Units in sync with physical inventory (ADR-001).
 		try:

@@ -11,6 +11,8 @@ import { Button } from "../components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { cn } from "../lib/utils"
 import { sortFloors, type FloorOrder } from "../lib/floors"
+import { housekeepingWorkRows, type HousekeepingWork } from "../lib/pmsOperations"
+import { HousekeepingAssignment, HousekeepingRoomWork, type HousekeepingWorkRoom } from "../components/HousekeepingWork"
 import { useT, t as translate } from "../lib/i18n"
 
 
@@ -24,7 +26,7 @@ type HkStatus =
   | "Out of Service"
   | "Out of Order"
 
-interface BoardRoom {
+interface BoardRoom extends HousekeepingWorkRoom {
   name: string
   room_number: string
   room_type: string
@@ -85,8 +87,11 @@ type Filter = "All" | HkStatus | "Due out" | "Has task"
 
 export default function HousekeepingBoard() {
   const { t } = useT()
+  const [work, setWork] = useState<HousekeepingWork | "assignment">("all")
+  const [businessDate, setBusinessDate] = useState("")
   const [rooms, setRooms] = useState<BoardRoom[] | null>(null)
   const [canSupervise, setCanSupervise] = useState(false)
+  const [canManageWork, setCanManageWork] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [open, setOpen] = useState<string | null>(null)
@@ -101,7 +106,9 @@ export default function HousekeepingBoard() {
   const load = useCallback(() => {
     call<{
       rooms: BoardRoom[]
+      business_date: string
       can_supervise: boolean
+      can_manage_work: boolean
       floors?: FloorOrder[]
       room_types?: { name: string; room_type_name: string }[]
     }>("kamra.api.room_board", {
@@ -109,7 +116,9 @@ export default function HousekeepingBoard() {
     })
       .then((d) => {
         setRooms(d.rooms)
+        setBusinessDate(d.business_date)
         setCanSupervise(d.can_supervise)
+        setCanManageWork(d.can_manage_work)
         setFloorOrder(d.floors ?? [])
         setRoomTypes(d.room_types ?? [])
         setError(null)
@@ -203,6 +212,13 @@ export default function HousekeepingBoard() {
   )
   const groups = floor === "All" && floors.length ? floors : [floor === "All" ? "" : floor]
   const choices = canSupervise ? STATUSES : ATTENDANT
+  const discrepancies = housekeepingWorkRows(rooms, "discrepancies")
+  const tabs = [
+    { id: "all", label: t("All Rooms") },
+    { id: "discrepancies", label: t("Discrepancies ({count})", { count: discrepancies.length }) },
+    { id: "turndown", label: t("Turndown") },
+    ...(canManageWork ? [{ id: "assignment", label: t("Auto-Assign Queue") }] : []),
+  ] as { id: HousekeepingWork | "assignment"; label: string }[]
 
   return (
     <div className="space-y-4">
@@ -215,7 +231,7 @@ export default function HousekeepingBoard() {
               : t("Every room at a glance. You can mark rooms Clean, Pickup, or Dirty.")}
           </p>
         </div>
-        <Button variant="outline" onClick={load}>
+        <Button className="min-h-11" variant="outline" onClick={load}>
           <RefreshCw className="size-4" aria-hidden />
           {t("Refresh")}
         </Button>
@@ -227,6 +243,32 @@ export default function HousekeepingBoard() {
         </div>
       )}
 
+      <nav className="flex flex-wrap gap-2" aria-label={t("Housekeeping views")}>
+        {tabs.map((tab) => (
+          <Button className="min-h-11" key={tab.id} variant={work === tab.id ? "primary" : "outline"}
+            aria-pressed={work === tab.id} onClick={() => setWork(tab.id)}>{tab.label}</Button>
+        ))}
+      </nav>
+
+      {work === "assignment" && canManageWork && (
+        <HousekeepingAssignment businessDate={businessDate} staff={staff} refresh={load} />
+      )}
+      {(work === "discrepancies" || work === "turndown") && (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {housekeepingWorkRows(rooms, work).length === 0 && <p>{t("No rooms match.")}</p>}
+          {housekeepingWorkRows(rooms, work).map((room) => (
+            <Card key={room.name}>
+              <CardHeader>
+                <CardTitle>{room.room_number}</CardTitle>
+                {room.hk_section && <p className="text-sm">{room.hk_section}</p>}
+              </CardHeader>
+              <CardContent><HousekeepingRoomWork room={room} canResolve={canManageWork} refresh={load} /></CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {work === "all" && <>
       <div className="flex flex-wrap gap-2" role="toolbar" aria-label={t("Filter rooms")}>
         {(
           [
@@ -245,7 +287,7 @@ export default function HousekeepingBoard() {
             aria-pressed={filter === f}
             onClick={() => setFilter(f)}
             className={cn(
-              "inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm",
+              "inline-flex min-h-11 items-center gap-2 rounded-lg border px-3 py-1.5 text-sm",
               filter === f
                 ? "border-brand-600 bg-brand-50 font-medium text-brand-800"
                 : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300",
@@ -374,6 +416,9 @@ export default function HousekeepingBoard() {
                           aria-label={t("Room actions")} role="group"
                           className="relative z-10 mt-1 min-w-0 rounded-lg border border-zinc-200 bg-white shadow-lg"
                         >
+                          <div className="col-span-full border-b p-2 dark:border-zinc-700">
+                            <HousekeepingRoomWork room={r} canResolve={canManageWork} refresh={load} />
+                          </div>
                           {r.clean_tasks.length > 1 && <p className="p-2 text-xs">{t("Choose a cleaning task")}</p>}
                           {r.clean_tasks.map(task => <Button key={task.name} className="w-full whitespace-normal" disabled={busy === r.name} onClick={() => complete(r.name, task.name)}>
                             {task.type === "Checkout Clean" ? t("Complete Checkout Clean") : t("Complete Stayover Clean")}{r.clean_tasks.length > 1 && ` · ${task.name}`}</Button>)}
@@ -425,6 +470,7 @@ export default function HousekeepingBoard() {
           })}
         </CardContent>
       </Card>
+      </>}
     </div>
   )
 }
