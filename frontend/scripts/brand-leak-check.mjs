@@ -14,7 +14,7 @@ const root = fileURLToPath(new URL("../", import.meta.url))
 // Machine identifiers only. Whole-value matches keep prose containing an
 // identifier (an error, link caption, etc.) in scope.
 const exceptions = new Map(Object.entries({
-  "src/lib/brand.ts": ["Kamra", "Kamra Agent", "kamra-mark.svg", "https://kamrapms.com",
+  "src/lib/brand.ts": ["Kamra Agent", "kamra-mark.svg", "https://kamrapms.com",
     "https://github.com/Kamra-PMS/kamra-pms", "Frappe Desk", "ERPNext", "HeyKoala"],
   "src/lib/api.ts": ["kamra-session", "Kamra Demo Palace", "kamra.banquet."],
   "src/lib/dir.ts": ["kamra-guest-lang", "kamra-lang"],
@@ -137,10 +137,9 @@ function scanGeneratedDocs() {
   const docs = path.resolve(root, "../docs-site")
   const findings = []
   function check(text, location) {
-    // These are callable names, config keys and the collection download path.
-    const prose = text.replace(/\b(?:kamra|frappe|erpnext)\.[a-z_][\w.]*/g, "")
-      .replace(/\bkamra_[a-z_]+\b/g, "").replace("/kamra.postman_collection.json", "")
-      .replace("/api/method/kamra.<module>.<function>", "")
+    const prose = text.replace("](/kamra.postman_collection.json)", "]()")
+      .replace(/^POST https:\/\/<your-hotel>\/api\/method\/kamra\.<module>\.<function>$/, "")
+      .replace(/^### `kamra\.[a-z_][\w.]*\.[a-z_]\w*`(?= <Badge |$)/, "###")
     if (forbidden.test(prose)) findings.push(location + ": " + text)
   }
   for (const [i, line] of fs.readFileSync(path.join(docs, "api-reference.md"), "utf8").split("\n").entries()) {
