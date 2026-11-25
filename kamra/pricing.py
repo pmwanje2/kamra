@@ -2319,7 +2319,7 @@ def _discount_nights(property, rt, nightly: list, room_total: Decimal, disc: dic
 		base_total += entry
 		off_total += off
 		new_total += net
-		new_tax += net * new_gst / Decimal(100)
+		new_tax += _dec(n["package_tax"]) if n.get("package_tax") is not None else net * new_gst / Decimal(100)
 	return new_total, new_tax, oc_net, oc_tax, base_total, off_total
 
 
@@ -2384,8 +2384,12 @@ def _pin_nights(nightly: list, locked: dict, inclusive: bool, night_over_cap: De
 		if n.get("sold_room_gross") is not None:
 			room_tax += _dec(n["sold_room_gross"]) - rate
 		else:
-			room_tax += (_dec(n["package_tax"]) if n.get("package_tax") is not None and "planned_rate" not in n
-			             else rate * gst / Decimal(100))
+			# A legacy lock can supply a different net without a component
+			# breakdown. Only use package tax belonging to this locked price.
+			component_tax = n.get("package_tax")
+			if row and "package_tax" not in row and rate != priced_net:
+				component_tax = None
+			room_tax += _dec(component_tax) if component_tax is not None else rate * gst / 100
 		base_total += entry_rate(rate, gst, inclusive, places) + off
 		off_total += off
 		if night_over_cap:
@@ -2437,23 +2441,26 @@ def _package_night_price(pseudo_res, pkg_doc, night_rate: Decimal, room_gst: Dec
 	return night_rate, tax_val, eff, {"room_gst_rate": float(room_gst), "package_tax": str(tax_val)}
 
 
-def _plan_inclusive_package(rate_plan, nightly, package_prices, gross_rates, gross_extras, gross_floor, currency):
-	"""Apply the plan to guest-facing prices, then allocate each sold gross at its actual tax rates."""
-	gross_nights, _ = plan_stay_nights(rate_plan, [(gross, Decimal(0)) for gross in gross_rates],
-	                                  gross_extras, False, gross_floor, currency=currency, gross_prices=True)
+def _plan_package_nights(rate_plan, nightly, package_prices, entry_rates, entry_extras, entry_floor,
+                        currency, inclusive):
+	"""Price the stay on its advertised basis, then tax each night's actual components."""
+	prices, _ = plan_stay_nights(rate_plan, [(rate, Decimal(0)) for rate in entry_rates],
+	                             entry_extras, False, entry_floor, currency=currency, gross_prices=True)
 	nets = []
 	total_tax = Decimal(0)
-	for night, gross in zip(nightly, gross_nights, strict=True):
-		gross = round_rate_amount(gross, 0, currency=currency)
+	for night, price in zip(nightly, prices, strict=True):
+		price = round_rate_amount(price, 0, currency=currency)
 		room_gst = _dec(night.get("room_gst_rate", night["gst_rate"]))
-		net = gross / (1 + room_gst / 100)
+		net = price / (1 + room_gst / 100) if inclusive else price
+		tax = price - net if inclusive else net * room_gst / 100
 		day = night["date"]
 		if day in package_prices:
 			_, _, doc, party = package_prices[day]
-			net, _, effective, meta = _package_night_price(party, doc, net, room_gst, day, gross)
+			net, tax, effective, meta = _package_night_price(
+				party, doc, net, room_gst, day, price if inclusive else None)
 			night.update(meta, gst_rate=float(effective))
 		nets.append(net)
-		total_tax += gross - net
+		total_tax += tax
 	return nets, total_tax
 
 
@@ -2570,8 +2577,8 @@ def quote(
 	los_floor = Decimal(0)
 	day_use_meta = None
 
-	gross_rates = []
-	gross_extras = gross_floor = Decimal(0)
+	entry_rates = []
+	entry_extras = entry_floor = Decimal(0)
 	package_prices = {}
 	pkg = None
 	segments = list(billing_segments(check_in_date, check_out_date, room_type, types))
@@ -2647,7 +2654,7 @@ def quote(
 			rate, label, doc, party = package_prices[day]
 			gst = room_gst_rate(property, night_rt, rate + night_over_cap)
 			factor = Decimal(1) + gst / 100 if inclusive else Decimal(1)
-			gross_rates.append(rate)
+			entry_rates.append(rate)
 			sold_gross = rate if inclusive else None
 			rate /= factor
 			over_cap += night_over_cap / factor
@@ -2698,7 +2705,7 @@ def quote(
 			floor = max(_dec(rail.floor_price) if rail else Decimal(0),
 			            _dec(tier["min_rate"]) if tier else Decimal(0))
 			floor = min(rate, floor)
-			gross_floor += floor
+			entry_floor += floor
 			off = max(off, floor)
 			gst_off = room_gst_rate(property, night_rt, off + night_over_cap)
 			saved = rate - off
@@ -2712,8 +2719,8 @@ def quote(
 		# day, not the occupancy its rate card started from. A room at 7,000
 		# with 2,000 of extra beds is a 9,000 night, so 18%, not 5%.
 		gst = room_gst_rate(property, night_rt, rate + night_over_cap)
-		gross_rates.append(rate)
-		gross_extras += min(night_extra, rate)
+		entry_rates.append(rate)
+		entry_extras += min(night_extra, rate)
 		if inclusive:
 			# configured price is gross — back out the taxable value
 			rate = rate / (Decimal(1) + gst / Decimal(100))
@@ -2778,9 +2785,9 @@ def quote(
 	if rate_plan and not agreed_rate and not rate_plan_applied:
 		planned_by_plan = True
 		old_room_total = room_total
-		if inclusive and any(n.get("package_tax") is not None for n in nightly):
-			planned, room_tax = _plan_inclusive_package(
-				rate_plan, nightly, package_prices, gross_rates, gross_extras, gross_floor, prop_currency)
+		if package_prices and (not inclusive or any(n.get("package_tax") is not None for n in nightly)):
+			planned, room_tax = _plan_package_nights(
+				rate_plan, nightly, package_prices, entry_rates, entry_extras, entry_floor, prop_currency, inclusive)
 			rounded = True
 		else:
 			planned, rounded = plan_stay_nights(rate_plan, [(_dec(n["rate"]), _dec(n["gst_rate"])) for n in nightly],

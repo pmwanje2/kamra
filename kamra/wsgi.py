@@ -4,8 +4,8 @@ import json
 import re
 
 from werkzeug.exceptions import BadRequest, RequestEntityTooLarge
-from werkzeug.formparser import MultiPartParser
 from werkzeug.http import parse_options_header
+from werkzeug.sansio.multipart import Data, Epilogue, Field, File, MultipartDecoder, NeedData
 from werkzeug.wrappers import Request, Response
 
 _APPROVAL_METHODS = {"kamra.api.check_in", "kamra.api.move_reservation", "kamra.api.move_room"}
@@ -36,22 +36,40 @@ def _validate_text_part(content_type):
 		pos = match.end()
 
 
-class _ApprovalMultipartParser(MultiPartParser):
-	"""Inspect each part while Werkzeug still has its original headers."""
-
-	def get_part_charset(self, headers):
-		media = headers.getlist("Content-Type")
-		disposition = headers.getlist("Content-Disposition")
-		if len(disposition) != 1 or parse_options_header(disposition[0])[0].lower() != "form-data":
-			raise BadRequest
-		if len(media) > 1:
-			raise BadRequest
-		if media:
-			_validate_text_part(media[0])
-		return "utf-8"
-
-	def start_file_streaming(self, event, total_content_length):
+def _validate_field_headers(headers):
+	media = headers.getlist("Content-Type")
+	disposition = headers.getlist("Content-Disposition")
+	if len(disposition) != 1 or parse_options_header(disposition[0])[0].lower() != "form-data":
 		raise BadRequest
+	if len(media) > 1:
+		raise BadRequest
+	if media:
+		_validate_text_part(media[0])
+
+
+def _approval_form(request, boundary):
+	"""Decode field bytes strictly, including duplicate fields, before dispatch."""
+	decoder = MultipartDecoder(boundary, max_form_memory_size=request.max_form_memory_size,
+	                           max_parts=request.max_form_parts)
+	stream = request.stream
+	fields = {}
+	value = bytearray()
+	while True:
+		event = decoder.next_event()
+		if isinstance(event, NeedData):
+			decoder.receive_data(stream.read(64 * 1024) or None)
+		elif isinstance(event, Field):
+			_validate_field_headers(event.headers)
+			name = event.name
+			value.clear()
+		elif isinstance(event, File):
+			raise BadRequest
+		elif isinstance(event, Data):
+			value.extend(event.data)
+			if not event.more_data:
+				fields.setdefault(name, value.decode("utf-8", errors="strict"))
+		elif isinstance(event, Epilogue):
+			return fields
 
 
 def _stage_body(environ, method):
@@ -74,10 +92,7 @@ def _stage_body(environ, method):
 		boundary = request.mimetype_params.get("boundary")
 		if not boundary:
 			raise BadRequest
-		parser = _ApprovalMultipartParser(max_form_memory_size=request.max_form_memory_size,
-		                                  max_form_parts=request.max_form_parts)
-		fields, _ = parser.parse(request.stream, boundary.encode("ascii"), request.content_length)
-		body = {**request.args.to_dict(), **fields.to_dict()}
+		body = {**request.args.to_dict(), **_approval_form(request, boundary.encode("ascii"))}
 	elif request.mimetype == "application/x-www-form-urlencoded":
 		body = {**request.args.to_dict(), **request.form.to_dict()}
 	else:

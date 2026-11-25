@@ -283,17 +283,15 @@ def split_package_night(res, package_doc, night_total, business_date, *, gst_rat
 
 	included_total = sum((i["amount"] for i in included_items), Decimal(0))
 	if included_total > total_dec and included_items:
-		# Proportionally cap included allowances so room_net never goes negative
-		# while conserving total_dec down to the exact minor unit.
-		scaled_sum = Decimal(0)
-		for idx, item in enumerate(included_items):
-			if idx == len(included_items) - 1:
-				item["amount"] = max(Decimal(0), total_dec - scaled_sum)
-			else:
-				share = _quantize(total_dec * item["amount"] / included_total, unit)
-				item["amount"] = share
-				scaled_sum += share
-		included_total = sum((i["amount"] for i in included_items), Decimal(0))
+		# Each item takes the difference between two rounded cumulative
+		# shares. The last cumulative share equals the available net.
+		allocated = weight = Decimal(0)
+		for item in included_items:
+			weight += item["amount"]
+			through = _quantize(total_dec * weight / included_total, unit)
+			item["amount"] = through - allocated
+			allocated = through
+		included_total = allocated
 
 	room_net = (total_dec - included_total).quantize(unit, rounding=ROUND_HALF_UP)
 	addon_total = sum((i["amount"] for i in addon_items), Decimal(0))
