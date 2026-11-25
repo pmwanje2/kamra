@@ -46,6 +46,7 @@ export interface SecurityDepositState {
   card_last4?: string | null
   expires_on?: string | null
   payment_entry?: string | null
+  pending_capture_payment_entry?: string | null
   preauth_available?: boolean
   history: { kind: string; date: string; amount: number; mode?: string; note?: string }[]
   can_collect: boolean
@@ -57,6 +58,7 @@ export interface SecurityDepositState {
   can_capture?: boolean
   can_release?: boolean
   blocks_checkout: boolean
+  blocks_checkout_card_hold?: boolean
 }
 
 type Mode = "collect" | "waive" | "withhold" | "refund" | "authorize" | "increment" | "capture" | "release"
@@ -150,6 +152,9 @@ export default function SecurityDepositPanel(props: {
   const [expiresOn, setExpiresOn] = useState("")
   const [evidence, setEvidence] = useState("")
   const [busy, setBusy] = useState(false)
+  const [newCaptureDraft, setNewCaptureDraft] = useState<{ deposit: SecurityDepositState; name: string } | null>(null)
+  const pendingCapture = d.pending_capture_payment_entry ??
+    (newCaptureDraft?.deposit === d ? newCaptureDraft.name : null)
   const [error, setError] = useState<string | null>(null)
   // one key per Collect press; reused on retry (#550)
   const [collectKey, setCollectKey] = useState(newIdempotencyKey)
@@ -201,7 +206,7 @@ export default function SecurityDepositPanel(props: {
     hasPciViolation(evidence)
 
   async function submit() {
-    if (!mode || pciBlocked) return
+    if (!mode || busy || pciBlocked || (mode === "capture" && pendingCapture)) return
     setBusy(true)
     setError(null)
     try {
@@ -252,7 +257,10 @@ export default function SecurityDepositPanel(props: {
         method = "kamra.deposit.release_deposit_auth"
         Object.assign(args, { reason: text.trim() || undefined })
       }
-      await call(method, args)
+      const result = await call<{ capture_mode?: string; pending_payment_entry?: string }>(method, args)
+      if (mode === "capture" && result?.capture_mode === "draft_pending_submit" && result.pending_payment_entry) {
+        setNewCaptureDraft({ deposit: d, name: result.pending_payment_entry })
+      }
       if (mode === "collect") setCollectKey(newIdempotencyKey())
       setMode(null)
       props.onChanged()
@@ -281,7 +289,7 @@ export default function SecurityDepositPanel(props: {
             : mode === "increment"
               ? amt > 0
               : mode === "capture"
-                ? amt > 0 && amt <= maxCapture + eps && text.trim().length > 0
+                ? !pendingCapture && amt > 0 && amt <= maxCapture + eps && text.trim().length > 0
                 : mode === "release"
                   ? true
                   : amt > 0)
@@ -412,6 +420,12 @@ export default function SecurityDepositPanel(props: {
         </ul>
       )}
 
+      {pendingCapture && (
+        <p role="status" className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+          {t("Capture draft {pe} created — awaiting Finance submission", { pe: pendingCapture })}
+        </p>
+      )}
+
       {d.blocks_checkout && (
         <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800 dark:bg-amber-50 dark:text-amber-800">
           {d.status === "Authorized"
@@ -432,7 +446,7 @@ export default function SecurityDepositPanel(props: {
               {t("Increment hold")}
             </Button>
           )}
-          {d.can_capture && allowed("capture") && (
+          {d.can_capture && !pendingCapture && allowed("capture") && (
             <Button variant="outline" className="min-h-11" onClick={() => open("capture")}>
               {t("Capture for damage")}
             </Button>

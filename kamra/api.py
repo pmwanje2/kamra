@@ -7473,6 +7473,8 @@ def check_out(reservation: str, credit_override_reason: str | None = None,
 	# write to this stay lands between them. The ERP's check-out fence
 	# (KMR-CO-002, After Save) reads the outlet checks again at the save.
 	doc = frappe.get_doc("Reservation", reservation, for_update=True)
+	from kamra.checkout import assert_no_active_card_hold
+	assert_no_active_card_hold(doc)
 	from kamra.traces import assert_no_blocking_alerts
 	assert_no_blocking_alerts(
 		"Check-Out", doc.property, reservation=doc.name, guest=doc.guest,

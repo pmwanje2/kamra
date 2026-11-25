@@ -27,6 +27,7 @@
   "card_brand",
   "card_last4",
   "expires_on",
+  "pending_capture_payment_entry",
   "sb_audit",
   "reason",
   "evidence",
@@ -92,6 +93,7 @@
    "fieldtype": "Currency",
    "in_list_view": 1,
    "label": "Required Amount",
+   "options": "Property:property:currency",
    "reqd": 1
   },
   {
@@ -106,19 +108,22 @@
    "default": "0",
    "fieldname": "collected_amount",
    "fieldtype": "Currency",
-   "label": "Collected Amount"
+   "label": "Collected Amount",
+   "options": "Property:property:currency"
   },
   {
    "default": "0",
    "fieldname": "withheld_amount",
    "fieldtype": "Currency",
-   "label": "Withheld Amount"
+   "label": "Withheld Amount",
+   "options": "Property:property:currency"
   },
   {
    "default": "0",
    "fieldname": "refunded_amount",
    "fieldtype": "Currency",
-   "label": "Refunded Amount"
+   "label": "Refunded Amount",
+   "options": "Property:property:currency"
   },
   {
    "fieldname": "column_break_b",
@@ -129,6 +134,7 @@
    "fieldname": "balance",
    "fieldtype": "Currency",
    "label": "Refundable Balance",
+   "options": "Property:property:currency",
    "read_only": 1
   },
   {
@@ -170,6 +176,12 @@
    "fieldname": "expires_on",
    "fieldtype": "Datetime",
    "label": "Expires On"
+  },
+  {
+   "fieldname": "pending_capture_payment_entry",
+   "fieldtype": "Data",
+   "label": "Pending Capture Payment Entry",
+   "read_only": 1
   },
   {
    "fieldname": "sb_audit",

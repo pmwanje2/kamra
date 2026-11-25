@@ -1153,6 +1153,7 @@
   "Captain: {name}": "Capitão: {name}",
   "Caption": "Legenda",
   "Capture": "Captura",
+  "Capture draft {pe} created — awaiting Finance submission": "Rascunho de captura {pe} criado. Aguarda validação pelo Financeiro.",
   "Capture for damage": "Capturar por danos",
   "Capture ID": "ID de captura",
   "Capture or upload this occupant's ID document": "Capture ou carregue o documento de identificação deste ocupante",

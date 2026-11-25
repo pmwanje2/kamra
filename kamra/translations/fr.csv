@@ -2713,3 +2713,9 @@ Under the ERP accounting bridge Finance pays a refund out with a native refund P
 {0} charges map to more than one transaction code ({1}) with the same reach. Keep one mapping.,Les frais {0} renvoient vers plusieurs codes de transaction ({1}) de même portée. Ne conservez qu'une seule correspondance.
 {0} is not allowed on city ledger (credit).,{0} n'est pas autorisé sur le compte société (crédit).
 {0} of deposit is held on the function's folio. Under the ERP accounting bridge Finance returns it with a native refund Payment Entry: close out without refunding here.,"{0} de caution reste détenu sur le folio de l'événement. Avec la passerelle comptable, la finance le restitue par une écriture de paiement de remboursement native : clôturez sans rembourser ici."
+Before check-out: capture any damage from the card hold or release the card hold.,"Avant le départ, encaissez les frais de dommages sur la préautorisation ou libérez-la."
+Capture draft {0} is awaiting Finance submission.,Le brouillon d’encaissement {0} est en attente de validation par la Finance.
+Incremental pre-authorization for {0},Augmentation de la préautorisation pour {0}
+Pending Capture Payment Entry,Écriture de paiement en attente de validation
+Security deposit pre-authorization for {0},Préautorisation de caution pour {0}
+Use submitted capture Payment Entry {0} and its original amount.,Utilisez l’écriture de paiement validée {0} et son montant d’origine.

@@ -29,8 +29,6 @@ const EXEMPT_TO_FIXED_2: Readonly<Record<string, number>> = {
 const PENDING_CROSS_PR_ALLOWLIST: Readonly<Record<string, number>> = {
   // Peer Banquet / Events (#45) & setup screens (pre-existing missing-step)
   "src/screens/BanquetCatalogue.tsx": 1,
-  "src/screens/BanquetFunction.tsx": 7,
-  "src/screens/banquet/Economics.tsx": 2,
   "src/screens/BookingEngine.tsx": 1,
   "src/screens/Setup.tsx": 4,
 }

@@ -1042,7 +1042,11 @@ export default function ReservationDetail({
         )}
         {d.actions.can_check_out && d.security_deposit?.blocks_checkout && (
           <span className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-800">
-            <ShieldCheck className="size-3.5" />{translate(" Security deposit still held - withhold or refund it")}</span>
+            <ShieldCheck className="size-3.5" />
+            {d.security_deposit.blocks_checkout_card_hold
+              ? translate("Before check-out: capture any damage from the card hold or release the hold.")
+              : translate(" Security deposit still held - withhold or refund it")}
+          </span>
         )}
         {d.actions.can_check_out && (
           <Button className="min-h-11 sm:min-h-9" disabled={busy} onClick={() => setCheckingOut(true)}>

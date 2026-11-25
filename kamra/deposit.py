@@ -98,17 +98,17 @@ def ensure_deposit_for_reservation(reservation, amount: float = 0) -> str | None
 	return doc.name
 
 
-def _get(reservation: str):
+def _get(reservation: str, *, for_update: bool = False):
 	name = frappe.db.get_value(
-		"Security Deposit", {"reservation": reservation}, "name") \
+		"Security Deposit", {"reservation": reservation}, "name", for_update=for_update) \
 		if _has_doctype() else None
 	if not name:
 		frappe.throw(_("No security deposit has been taken on this stay."))
-	return frappe.get_doc("Security Deposit", name)
+	return frappe.get_doc("Security Deposit", name, for_update=for_update)
 
 
-def _reservation(reservation: str):
-	res = frappe.get_doc("Reservation", reservation)
+def _reservation(reservation: str, *, for_update: bool = False):
+	res = frappe.get_doc("Reservation", reservation, for_update=for_update)
 	from kamra.crs import assert_property_access
 	assert_property_access(res.property)
 	return res
@@ -297,14 +297,8 @@ def _resolve_preauth_context(res, folio_name: str | None = None) -> dict:
 	if not customer:
 		customer = (prop.get("walk_in_customer") or "").strip()
 	if not customer and res.get("guest_name") and frappe.db.exists("DocType", "Customer"):
-		crows = frappe.get_list(
-			"Customer",
-			filters={"customer_name": res.guest_name},
-			fields=["name"],
-			limit_page_length=1,
-		)
-		if crows:
-			customer = crows[0].get("name") or ""
+		# The reservation already passed the property-access check.
+		customer = frappe.db.get_value("Customer", {"customer_name": res.guest_name}, "name") or ""
 	if not customer:
 		frappe.throw(_("[HSP-DEP-PREAUTH-CONFIG]: No billing customer is configured for this folio or property."))
 
@@ -317,7 +311,7 @@ def _resolve_preauth_context(res, folio_name: str | None = None) -> dict:
 	}
 
 
-def _live_preauth_snapshot(preauth_hold: str | None) -> dict | None:
+def _live_preauth_snapshot(preauth_hold: str | None, *, for_update: bool = False) -> dict | None:
 	if not preauth_hold or not frappe.db.exists("DocType", "Credit Preauthorization"):
 		return None
 	return frappe.db.get_value(
@@ -335,7 +329,7 @@ def _live_preauth_snapshot(preauth_hold: str | None) -> dict | None:
 			"card_last4",
 			"gateway_auth_ref",
 		],
-		as_dict=True,
+		as_dict=True, for_update=for_update,
 	)
 
 
@@ -348,7 +342,7 @@ def _is_expired_ts(expires_on) -> bool:
 		return False
 
 
-def _effective_preauth(row, places: int, eps: float) -> dict:
+def _effective_preauth(row, places: int, eps: float, *, for_update: bool = False) -> dict:
 	"""Reconcile stored Security Deposit row with live Credit Preauthorization state."""
 	if not row:
 		return {
@@ -365,7 +359,7 @@ def _effective_preauth(row, places: int, eps: float) -> dict:
 		}
 	status = row.get("status")
 	preauth_hold = row.get("preauth_hold")
-	live = _live_preauth_snapshot(preauth_hold)
+	live = _live_preauth_snapshot(preauth_hold, for_update=for_update)
 	if live:
 		live_status = live.get("status")
 		auth_amt = flt(live.get("authorized_amount"), places)
@@ -398,10 +392,13 @@ def _effective_preauth(row, places: int, eps: float) -> dict:
 		card_brand = row.get("card_brand")
 		card_last4 = row.get("card_last4")
 		gateway_auth_ref = row.get("gateway_auth_ref")
-		rem_amt = auth_amt if status == "Authorized" else 0.0
-		if status == "Authorized" and _is_expired_ts(expires_on):
-			status = "Expired"
-			rem_amt = 0.0
+		rem_amt = 0.0
+		if status in ("Authorized", "Incremented"):
+			if _is_expired_ts(expires_on):
+				status = "Expired"
+			else:
+				status = "Authorized"
+				rem_amt = auth_amt
 
 	active = bool(preauth_hold and status == "Authorized" and rem_amt > eps)
 	return {
@@ -416,6 +413,62 @@ def _effective_preauth(row, places: int, eps: float) -> dict:
 		"payment_entry": payment_entry,
 		"active": active,
 	}
+
+
+def _card_hold_blocks_checkout(res, effective: dict, eps: float) -> bool:
+	return (
+		res.status == "Checked In" and bool(effective["preauth_hold"])
+		and effective["status"] == "Authorized" and effective["authorized_amount"] > eps
+	)
+
+
+def has_checkout_card_hold(res) -> bool:
+	"""Read the current hold while check-out owns the reservation lock."""
+	if res.status != "Checked In" or not _has_doctype():
+		return False
+	row = frappe.db.get_value(
+		"Security Deposit", {"reservation": res.name},
+		["status", "preauth_hold", "expires_on", "authorized_amount"], as_dict=True, for_update=True,
+	)
+	places, eps = _preauth_precision(res.property)
+	return _card_hold_blocks_checkout(res, _effective_preauth(row, places, eps, for_update=True), eps)
+
+
+def _capture_payment_entry(row, effective: dict, *, for_update: bool = False) -> dict | None:
+	"""Find an outstanding capture receipt for this hold, including older drafts."""
+	hold = effective["preauth_hold"]
+	if not effective["active"] or not frappe.db.exists("DocType", "Payment Entry"):
+		return None
+
+	fields = ["name", "docstatus", "paid_amount"]
+	tracked = row.get("pending_capture_payment_entry")
+	if tracked:
+		entry = frappe.db.get_value("Payment Entry", tracked, fields, as_dict=True, for_update=for_update)
+		if entry and entry.docstatus in (0, 1):
+			return entry
+
+	# Before Kamra recorded the link, the bridge used the hold ID in remarks
+	# and defaulted the transaction reference to the gateway authorization.
+	# ERPNext can replace the supplied remarks, so check both identifiers.
+	owner = frappe.db.get_value(
+		"Credit Preauthorization", hold, ["company", "customer"], as_dict=True,
+	)
+	if not owner or not owner.company or not owner.customer:
+		return None
+	filters = {
+		"docstatus": 0, "payment_type": "Receive", "party_type": "Customer",
+		"company": owner.company, "party": owner.customer,
+	}
+	entry = frappe.db.get_value(
+		"Payment Entry", {**filters, "remarks": f"Pre-authorization capture for {hold}"},
+		fields, as_dict=True,
+	)
+	if not entry and effective["gateway_auth_ref"]:
+		entry = frappe.db.get_value(
+			"Payment Entry", {**filters, "reference_no": effective["gateway_auth_ref"]},
+			fields, as_dict=True,
+		)
+	return entry
 
 
 def _select_card_mode(property: str) -> str:
@@ -569,7 +622,7 @@ def authorize_deposit(
 ) -> dict:
 	"""Create a non-GL card pre-authorization hold for a stay security deposit."""
 	_require_preauth_available()
-	res = _reservation(reservation)
+	res = _reservation(reservation, for_update=True)
 	if res.status not in COLLECT_STATUSES:
 		frappe.throw(_("A security deposit can't be taken on a {0} booking.").format(res.status))
 	if not _has_doctype():
@@ -595,10 +648,10 @@ def authorize_deposit(
 		"Security Deposit",
 		{"reservation": res.name},
 		["name", "status", "collected_amount", "authorized_amount", "preauth_hold", "expires_on"],
-		as_dict=True,
+		as_dict=True, for_update=True,
 	)
 	if existing:
-		eff = _effective_preauth(existing, places, eps)
+		eff = _effective_preauth(existing, places, eps, for_update=True)
 		if eff["status"] == "Waived":
 			frappe.throw(_("This deposit was waived."))
 		if eff["status"] == "Refunded":
@@ -621,7 +674,7 @@ def authorize_deposit(
 		"card_last4": last4,
 		"authorized_amount": amt,
 		"expires_on": exp_str,
-		"note": f"Security deposit pre-authorization for {res.name}",
+		"note": _("Security deposit pre-authorization for {0}").format(res.name),
 	}
 	if ctx.get("branch"):
 		payload["branch"] = ctx["branch"]
@@ -642,6 +695,7 @@ def authorize_deposit(
 	dep.refunded_amount = 0.0
 	dep.balance = 0.0
 	dep.preauth_hold = result.get("name")
+	dep.pending_capture_payment_entry = None
 	dep.gateway_auth_ref = result.get("gateway_auth_ref") or auth_ref
 	dep.card_brand = result.get("card_brand") or brand or None
 	dep.card_last4 = result.get("card_last4") or last4
@@ -675,16 +729,16 @@ def increment_deposit_auth(
 ) -> dict:
 	"""Increase an active card pre-authorization hold (zero GL)."""
 	_require_preauth_available()
-	res = _reservation(reservation)
+	res = _reservation(reservation, for_update=True)
 	if res.status not in COLLECT_STATUSES:
 		frappe.throw(_("A security deposit can't be taken on a {0} booking.").format(res.status))
-	dep = _get(res.name)
+	dep = _get(res.name, for_update=True)
 
 	from kamra.authz import require_cashier_pin
 	require_cashier_pin(res.property, pin)
 
 	places, eps = _preauth_precision(res.property)
-	eff = _effective_preauth(dep, places, eps)
+	eff = _effective_preauth(dep, places, eps, for_update=True)
 	if not eff["active"] or not dep.get("preauth_hold"):
 		frappe.throw(_("No active card pre-authorization hold on this stay."))
 
@@ -697,7 +751,7 @@ def increment_deposit_auth(
 	payload = {
 		"name": dep.preauth_hold,
 		"additional_amount": delta,
-		"note": f"Incremental pre-authorization for {res.name}",
+		"note": _("Incremental pre-authorization for {0}").format(res.name),
 	}
 	if tx_ref:
 		payload["gateway_tx_ref"] = tx_ref
@@ -742,12 +796,17 @@ def capture_deposit_auth(
 ) -> dict:
 	"""Capture all or part of an active card hold against damage (GL posts only here)."""
 	_require_preauth_available()
-	res = _reservation(reservation)
-	dep = _get(res.name)
+	res = _reservation(reservation, for_update=True)
+	dep = _get(res.name, for_update=True)
 	places, eps = _preauth_precision(res.property)
-	eff = _effective_preauth(dep, places, eps)
+	eff = _effective_preauth(dep, places, eps, for_update=True)
 	if not eff["active"] or not dep.get("preauth_hold"):
 		frappe.throw(_("No active card pre-authorization hold on this stay."))
+
+	# The reservation lock serializes retries with the first draft creation.
+	entry = _capture_payment_entry(dep, eff, for_update=True)
+	if entry and entry.docstatus == 0:
+		frappe.throw(_("Capture draft {0} is awaiting Finance submission.").format(entry.name))
 
 	amt = _parse_positive_amount(amount, places, _("Enter the amount to capture."))
 	reason_clean = str(reason or "").strip()
@@ -758,6 +817,16 @@ def capture_deposit_auth(
 	_assert_no_pci("reason", reason_clean)
 	_assert_no_pci("evidence", evidence_clean)
 	_assert_no_pci("gateway_capture_ref", cap_ref)
+
+	if entry:
+		# Finance submitted the draft. Finalize against that receipt instead
+		# of taking a second payment or posting a different amount.
+		if (
+			(existing_payment_entry and existing_payment_entry.strip() != entry.name)
+			or flt(entry.paid_amount, places) != amt
+		):
+			frappe.throw(_("Use submitted capture Payment Entry {0} and its original amount.").format(entry.name))
+		existing_payment_entry = entry.name
 
 	folio = _guest_folio(res, create=True)
 	if not folio or frappe.db.get_value("Folio", folio, "status") == "Closed":
@@ -784,9 +853,14 @@ def capture_deposit_auth(
 	result = _call_preauth("capture", payload)
 
 	if result.get("capture_mode") == "draft_pending_submit":
+		pending = result.get("payment_entry")
+		if not pending:
+			frappe.throw(_("[HSP-DEP-PREAUTH-UNAVAILABLE]: Unexpected pre-authorization control response."))
+		dep.pending_capture_payment_entry = pending
+		dep.save(ignore_permissions=True)
 		state = deposit_state(res)
 		state["capture_mode"] = "draft_pending_submit"
-		state["pending_payment_entry"] = result.get("payment_entry")
+		state["pending_payment_entry"] = pending
 		state["payment_entry_docstatus"] = 0
 		return state
 
@@ -804,6 +878,7 @@ def capture_deposit_auth(
 			places,
 		),
 	)
+	dep.pending_capture_payment_entry = None
 	dep.status = "Withheld"
 	dep.reason = reason_clean
 	if evidence_clean:
@@ -835,10 +910,10 @@ def release_deposit_auth(
 ) -> dict:
 	"""Release an uncaptured card pre-authorization hold (zero GL, clears checkout block)."""
 	_require_preauth_available()
-	res = _reservation(reservation)
-	dep = _get(res.name)
+	res = _reservation(reservation, for_update=True)
+	dep = _get(res.name, for_update=True)
 	places, eps = _preauth_precision(res.property)
-	eff = _effective_preauth(dep, places, eps)
+	eff = _effective_preauth(dep, places, eps, for_update=True)
 	if not eff["active"] or not dep.get("preauth_hold"):
 		frappe.throw(_("No active card pre-authorization hold on this stay."))
 
@@ -1071,7 +1146,7 @@ def deposit_state(res) -> dict:
 		["name", "status", "method", "required_amount", "authorized_amount",
 		 "collected_amount", "withheld_amount", "refunded_amount", "balance",
 		 "reason", "refund_reference", "preauth_hold", "gateway_auth_ref",
-		 "card_brand", "card_last4", "expires_on"], as_dict=True) if _has_doctype() else None
+		 "card_brand", "card_last4", "expires_on", "pending_capture_payment_entry"], as_dict=True) if _has_doctype() else None
 	folio = frappe.db.get_value(
 		"Folio", {"reservation": res.name, "folio_type": "Guest"},
 		["name", "status", "balance"], as_dict=True)
@@ -1089,6 +1164,25 @@ def deposit_state(res) -> dict:
 	remaining_hold = eff["remaining_hold_amount"]
 	active_preauth = eff["active"]
 	preauth_available = _preauth_available()
+	entry = _capture_payment_entry(row, eff)
+	pending = entry.name if entry and entry.docstatus == 0 else None
+	can_create_hold = preauth_available and not active_preauth and frappe.has_permission(
+		"Credit Preauthorization", "create", print_logs=False,
+	)
+	can_write_hold = (
+		preauth_available and active_preauth
+		and frappe.db.exists("Credit Preauthorization", eff["preauth_hold"])
+		and frappe.has_permission(
+			"Credit Preauthorization", "write", doc=eff["preauth_hold"], print_logs=False,
+		)
+	)
+	can_receive_payment = (
+		can_write_hold and not pending and frappe.db.exists("DocType", "Payment Entry")
+		and (
+			frappe.has_permission("Payment Entry", "create", print_logs=False)
+			or frappe.has_permission("Payment Entry", "submit", print_logs=False)
+		)
+	)
 
 	folio_open = bool(folio and folio.status != "Closed")
 	folio_can_capture = (not folio) or folio_open
@@ -1148,7 +1242,7 @@ def deposit_state(res) -> dict:
 		due = max(0.0, _round_currency(_money(required) - _money(collected), rplaces))
 
 	cash_blocks_checkout = res.status == "Checked In" and held > cash_eps
-	preauth_blocks_checkout = res.status == "Checked In" and active_preauth
+	preauth_blocks_checkout = _card_hold_blocks_checkout(res, eff, eps)
 
 	return {
 		"name": row.name if row else None,
@@ -1172,6 +1266,7 @@ def deposit_state(res) -> dict:
 		"card_last4": eff["card_last4"],
 		"expires_on": eff["expires_on"],
 		"payment_entry": eff["payment_entry"],
+		"pending_capture_payment_entry": pending,
 		"preauth_available": preauth_available,
 		"history": history,
 		"can_collect": in_play and status not in ("Waived", "Refunded") and not active_preauth,
@@ -1180,13 +1275,14 @@ def deposit_state(res) -> dict:
 		"can_withhold": held > cash_eps and folio_open,
 		"can_refund": held > cash_eps and bool(folio),
 		"can_authorize": (
-			preauth_available and in_play and not active_preauth
+			can_create_hold and in_play
 			and collected <= eps
 			and status not in ("Waived", "Refunded", "Withheld", "Collected", "Held")
 		),
-		"can_increment": preauth_available and in_play and active_preauth,
-		"can_capture": preauth_available and active_preauth and folio_can_capture,
-		"can_release": preauth_available and active_preauth,
+		"can_increment": bool(can_write_hold and in_play),
+		"can_capture": bool(can_receive_payment and folio_can_capture),
+		"can_release": bool(can_write_hold),
+		"blocks_checkout_card_hold": preauth_blocks_checkout,
 		# check-out refuses while the guest is owed held cash or has an active
 		# uncaptured card pre-authorization hold
 		"blocks_checkout": cash_blocks_checkout or preauth_blocks_checkout,
