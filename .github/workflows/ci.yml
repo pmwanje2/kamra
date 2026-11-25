@@ -102,7 +102,9 @@ jobs:
         working-directory: frontend
 
       - name: Check the single-booking quotation and its email
-        run: npm run booking-quote:check
+        run: |
+          npm run booking-quote:check
+          node --test scripts/booking-quotation-browser-check.mjs
         working-directory: frontend
 
       - name: Check the projected ADR / RevPAR on the manager flash
@@ -252,7 +254,7 @@ jobs:
           cd frappe-bench
           # tee would otherwise mask a runner that dies after printing OK
           set -o pipefail
-          for m in test_p2_share_reservations test_assistant_currency test_nicaragua_pack test_uganda_pack test_night_audit test_ledger_audit test_folio_leaks test_bill_settlement test_health test_scheduled_jobs test_golive test_credit_control test_webhooks test_pos_interface test_pos_override_pin_and_room_charge test_mcp test_contract_keys test_seed_history test_rates test_night_prices test_night_prices_booking test_holiday_package test_siu_room_type_sync test_booking_options_order test_payment_idempotency test_ui_languages test_agreed_rate test_charge_tax_default test_proforma_projected test_late_checkout_fee test_levy_per_night test_reverse_check_in test_night_audit_schedule test_cashier_tills_off test_folio_closed_target test_central_password_reset test_booking_quotation test_flash_projected test_desk_feedback test_void_keeps_line test_settings_document_events test_payment_correction test_payment_rate_window test_channel_webhook_query_args test_country_defaults test_configurable_masters test_india_defaults_migration test_reservation_discounts test_reservation_discounts_r2 test_reservation_discounts_r3 test_reservation_discounts_r4 test_reservation_discounts_r5 test_reservation_discounts_r6 test_reservation_discounts_merge_v280 test_printed_invoice_vat_and_day_use test_comp_house_use test_comp_house_use_r2 test_fiscal_folio test_banquet_fiscal test_outlet_checks test_erp_books_fence; do
+          for m in test_p2_share_reservations test_assistant_currency test_nicaragua_pack test_uganda_pack test_night_audit test_ledger_audit test_folio_leaks test_bill_settlement test_health test_scheduled_jobs test_golive test_credit_control test_webhooks test_pos_interface test_pos_override_pin_and_room_charge test_mcp test_contract_keys test_seed_history test_rates test_night_prices test_night_prices_booking test_holiday_package test_siu_room_type_sync test_booking_options_order test_payment_idempotency test_ui_languages test_agreed_rate test_charge_tax_default test_proforma_projected test_late_checkout_fee test_levy_per_night test_reverse_check_in test_night_audit_schedule test_cashier_tills_off test_folio_closed_target test_central_password_reset test_booking_quotation test_related_pricing_review test_flash_projected test_desk_feedback test_void_keeps_line test_settings_document_events test_payment_correction test_payment_rate_window test_channel_webhook_query_args test_country_defaults test_configurable_masters test_india_defaults_migration test_reservation_discounts test_reservation_discounts_r2 test_reservation_discounts_r3 test_reservation_discounts_r4 test_reservation_discounts_r5 test_reservation_discounts_r6 test_reservation_discounts_merge_v280 test_printed_invoice_vat_and_day_use test_comp_house_use test_comp_house_use_r2 test_fiscal_folio test_banquet_fiscal test_outlet_checks test_erp_books_fence; do
             bench --site test.localhost run-tests --module kamra.tests.$m \
               2>&1 | tee "$m.out"
             # known bugs are pinned as expected failures and a few tests skip

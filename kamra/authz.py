@@ -50,6 +50,12 @@ _PIN_FIELDS = frozenset({
 _PIN_HTTP_FIELDS = {
 	"kamra.api.set_cashier_pin": {"pin_secret": "pin", "current_password": "current_password"},
 	"kamra.api.verify_cashier_pin": {"pin_secret": "pin"},
+	# Keep accepting the existing approval keys for older clients.
+	"kamra.api.post_discount": {"pin_secret": "pin", "pin": "pin"},
+	"kamra.api.decide_allowance": {
+		"pin_secret": "pin", "confirm_pin_secret": "supervisor_pin",
+		"pin": "pin", "supervisor_pin": "supervisor_pin",
+	},
 }
 _PIN_ATTEMPT_DOCTYPE = "Cashier PIN Attempt"
 _FLOOR_PIN_PARENT = "SiteOps Floor PIN"
@@ -564,16 +570,18 @@ def scrub_pin_arguments(fn):
 		request = getattr(frappe.local, "request", None)
 		wire_fields = _PIN_HTTP_FIELDS.get(method) if request is not None else None
 		if wire_fields is not None:
-			# Requests may supply only the sanitizer-compatible credential names.
-			kwargs = {wire_fields.get(key, key): value for key, value in kwargs.items()
-			          if key in wire_fields or key not in _PIN_FIELDS}
+			credentials = {wire_fields[key]: kwargs[key] for key in reversed(wire_fields) if key in kwargs}
+			kwargs = {key: value for key, value in kwargs.items() if key not in _PIN_FIELDS}
+			kwargs.update(credentials)
 		staged = getattr(frappe.local, "kamra_pin_arguments", None)
 		if staged and staged[0] == method:
 			frappe.local.kamra_pin_arguments = None
-			for key, value in staged[1].items():
-				parameter = wire_fields.get(key) if wire_fields is not None else key
-				if parameter in parameters and parameter not in positional[:len(args)]:
-					kwargs.setdefault(parameter, value)
+			credentials = staged[1]
+			keys = wire_fields if wire_fields is not None else credentials
+			for key in keys:
+				parameter = wire_fields[key] if wire_fields is not None else key
+				if key in credentials and parameter in parameters and parameter not in positional[:len(args)]:
+					kwargs.setdefault(parameter, credentials[key])
 		_reject_pin_query(request or getattr(frappe, "request", None) or None)
 		try:
 			if request is not None:
