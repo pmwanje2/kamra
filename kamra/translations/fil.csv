@@ -71,3 +71,45 @@ Tax Invoice,Resibo ng Buwis
 Invoice,Faktura
 Provisional Bill,Pansamantalang bill
 Credited,Na-credit
+Transaction code {0} is not an enabled charge code.,Ang transaction code na {0} ay hindi isang aktibong charge code.
+Transaction code {0} has no charge type. Set one under Transaction codes.,Walang charge type ang transaction code na {0}. Magtakda ng isa sa Transaction codes.
+Unexpected parameter(s) for route_outlet_charge: {0}. Pass a transaction_code instead (is_alcohol was removed).,Hindi inaasahang parameter para sa route_outlet_charge: {0}. Ipasa ang transaction_code sa halip (inalis na ang is_alcohol).
+Cannot route to reservation {0} because its status is {1}.,Hindi mai-route sa reservation na {0} dahil ang status nito ay {1}.
+Cannot route to cancelled group {0}.,Hindi mai-route sa kinanselang grupo na {0}.
+Cannot create or keep an active routing instruction for cancelled group {0}.,Hindi maaaring gumawa o magpanatili ng aktibong routing instruction para sa kinanselang grupo na {0}.
+"A company window names the paying company, and only that.",Ang company window ay nagpapangalan lamang sa nagbabayad na kumpanya.
+A guest window names no company or agent.,Ang guest window ay walang pangalan ng kumpanya o ahente.
+"A travel agent window names the paying agent, and only that.",Ang travel agent window ay nagpapangalan lamang sa nagbabayad na ahente.
+A group's master bill needs its Group Booking.,Kailangan ng master bill ng grupo ang Group Booking nito.
+A group's master bill must be at the group's property.,Ang master bill ng grupo ay dapat nasa parehong property ng grupo.
+Window must be from 1 to {0}.,Ang window ay dapat mula 1 hanggang {0}.
+Window {0} already has an open bill.,May bukas nang bill ang window {0}.
+A bill can have at most {0} windows. Close a window or move its charges to another one.,Hanggang {0} window lang ang puwede sa isang bill. Isara ang isang window o ilipat ang mga singil nito sa iba.
+Open a window on a stay or on a group's master bill.,Magbukas ng window sa isang stay o sa master bill ng grupo.
+Reservation {0} not found.,Hindi makita ang reservation na {0}.
+Group {0} not found.,Hindi makita ang grupo na {0}.
+"Group {0} is cancelled, so it has no master bill.","Kinansela ang grupo na {0}, kaya wala itong master bill."
+A routing instruction is for one stay or for one group.,Ang isang routing instruction ay para sa isang stay o para sa isang grupo lamang.
+The stay or group must be at {0}.,Ang stay o grupo ay dapat nasa {0}.
+Target window must be from 1 to {0}.,Ang target window ay dapat mula 1 hanggang {0}.
+Choose the window to route to.,Piliin ang window na pagro-route-an.
+A window instruction routes within the stay; leave the target room empty.,Ang window instruction ay nagro-route sa loob ng stay; iwang blangko ang target room.
+Choose the room to route to.,Piliin ang room na pagro-route-an.
+Charges can only be routed to a room at the same property.,Maaari lamang i-route ang mga singil sa room na nasa parehong property.
+"To route within the stay, route to one of its windows.","Para mag-route sa loob ng stay, i-route sa isa sa mga window nito."
+"This stay is not part of a group, so it has no group master.","Hindi bahagi ng grupo ang stay na ito, kaya wala itong group master."
+The group's bill must be at the same property.,Ang bill ng grupo ay dapat nasa parehong property.
+A group master instruction has no target room.,Walang target room ang isang group master instruction.
+"Route to a window, a room or the group master.","I-route sa isang window, room, o sa group master."
+"Each row names a charge type or a transaction code, not both.","Ang bawat hilera ay nagpapangalan ng charge type o transaction code, hindi pareho."
+All Charges routes everything; remove the rows.,Iro-route ng All Charges ang lahat; alisin ang mga hilera.
+"Choose the charge types or codes to route, or tick All Charges.","Piliin ang mga charge type o code na iro-route, o lagyan ng tsek ang All Charges."
+An instruction for all charges cannot carry a limit.,Hindi maaaring magkaroon ng limit ang instruction para sa lahat ng singil.
+An amount limit must be more than zero.,Ang limit ng halaga ay dapat mas mataas sa zero.
+A percent limit must be more than 0 and at most 100.,Ang limit ng porsyento ay dapat higit sa 0 at hindi hihigit sa 100.
+To Date is before From Date.,Nauna ang To Date kaysa From Date.
+Tick at least one day of the week.,Lagyan ng tsek ang kahit isang araw ng linggo.
+"Instruction {0} already routes some of these charges on some of these days. Only one instruction may cover a charge on a date: change its dates or charges, or disable it.","Naka-route na sa instruction {0} ang ilan sa mga singil na ito sa ilan sa mga araw na ito. Isang instruction lang ang maaaring sumaklaw sa isang singil sa bawat petsa: palitan ang mga petsa o singil nito, o i-disable ito."
+Bill-to for {0}: {1}.,Sisingilin para sa {0}: {1}.
+Transaction code {0} belongs to another property.,Ang transaction code na {0} ay pagmamay-ari ng ibang property.
+Payment method {0} is not available for this property.,Hindi available ang paraan ng pagbabayad na {0} para sa property na ito.

@@ -17,6 +17,11 @@
   "status",
   "folio_type",
   "group_booking",
+  "window_no",
+  "payee_type",
+  "payee_company",
+  "payee_agent",
+  "payment_method",
   "opened_on",
   "closed_on",
   "invoice_number",
@@ -206,6 +211,41 @@
    "fieldtype": "Link",
    "label": "Group Booking",
    "options": "Group Booking"
+  },
+  {
+   "description": "The billing window (1 to the property's Folio windows setting). Window 1 is the guest's and takes every charge no routing instruction sends elsewhere. One open folio per window.",
+   "fieldname": "window_no",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Window",
+   "read_only": 1
+  },
+  {
+   "description": "Who this window bills. The invoice is made out to this payee.",
+   "fieldname": "payee_type",
+   "fieldtype": "Select",
+   "label": "Payee Type",
+   "options": "\nGuest\nCompany\nTravel Agent"
+  },
+  {
+   "depends_on": "eval:doc.payee_type=='Company'",
+   "fieldname": "payee_company",
+   "fieldtype": "Link",
+   "label": "Payee Company",
+   "options": "Corporate Account"
+  },
+  {
+   "depends_on": "eval:doc.payee_type=='Travel Agent'",
+   "fieldname": "payee_agent",
+   "fieldtype": "Link",
+   "label": "Payee Travel Agent",
+   "options": "Travel Agent"
+  },
+  {
+   "description": "How this window is settled (code from the Payment Method master). Company Credit is direct bill to the payee company's account.",
+   "fieldname": "payment_method",
+   "fieldtype": "Data",
+   "label": "Payment Method"
   }
  ],
  "grid_page_length": 50,

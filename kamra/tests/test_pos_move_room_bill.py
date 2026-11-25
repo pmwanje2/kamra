@@ -1,8 +1,9 @@
 """A restaurant bill charged to the wrong room, moved to the right one.
 
 pos.move_room_bill: same business day only, the charge and its ledger
-leave the first guest's folio and land on the right guest's, liquor stays
-off a company bill, and a paid or never-posted bill is refused.
+leave the first guest's folio and land on the right guest's by that stay's
+billing (liquor like any Food & Beverage line), and a paid or never-posted
+bill is refused.
 """
 
 from __future__ import annotations
@@ -121,7 +122,7 @@ class MoveRoomBillTestCase(AuditTestCase):
 		with self.assertRaises(frappe.ValidationError):  # never on a room
 			pos.move_room_bill(paid["order"], self.room2, "x")
 
-	def test_liquor_lands_on_the_guest_not_the_company(self):
+	def test_liquor_follows_the_right_stays_billing_rules(self):
 		COMPANY = leaks.COMPANY
 		if not frappe.db.exists("Corporate Account", COMPANY):
 			frappe.get_doc({"doctype": "Corporate Account", "company_name": COMPANY,
@@ -133,4 +134,7 @@ class MoveRoomBillTestCase(AuditTestCase):
 		self.outlet_items = self.outlet()
 		order = self.bill(self.outlet_items[2])  # gin
 		out = pos.move_room_bill(order, self.room2, "wrong room")
-		self.assertEqual(out["folio"], guest_folio(self.right.name))
+		# the company pays Food & Beverage, so it pays the gin too: a company
+		# that does not route no liquor code (there is no alcohol switch)
+		self.assertNotEqual(out["folio"], guest_folio(self.right.name))
+		self.assertEqual(frappe.db.get_value("Folio", out["folio"], "payee_company"), COMPANY)

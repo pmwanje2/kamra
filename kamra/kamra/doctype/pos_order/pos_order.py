@@ -8,6 +8,49 @@ from frappe.model.document import Document
 from kamra.localization import money_text
 
 
+def _folio_charge_description(outlet_label: str, detail: str, order_name: str,
+                              limit: int = 140) -> str:
+	"""Format a POS room-charge description within Folio Charge's 140-char limit
+	while always keeping the trailing ` (ORD-...)` marker so moves and audit
+	reports recognize the order."""
+	suffix = f" ({order_name})"
+	prefix = f"{outlet_label}: " if outlet_label else ""
+	full = f"{prefix}{detail}{suffix}"
+	if len(full) <= limit:
+		return full
+	room = limit - len(prefix) - len(suffix)
+	if room <= 1:
+		return (f"{prefix}{detail}"[:max(0, limit - len(suffix))] + suffix)[:limit]
+	return f"{prefix}{detail[:room - 1].rstrip(' ,')}…{suffix}"
+
+
+def _code_gst_rate(property: str, code: str | None, *, is_alcohol: bool,
+                   outlet_gst: float) -> float:
+	"""OPERA Cloud taxes by transaction code (Generates):
+	https://docs.oracle.com/en/industries/hospitality/opera-cloud/25.5/ocsuh/t_admin_financial_transaction_management_configuring_generates.htm
+	0. On ERP bridge sites (KMR-TAX-001), folio lines carry 0% tax.
+	1. Explicit Transaction Code.default_tax_rate (including 0%) wins when configured.
+	2. Otherwise an alcohol code uses the country pack's alcohol/services rate
+	   when the pack distinguishes it from food (e.g. India 18% vs 5% F&B).
+	3. Otherwise fall back to the outlet's configured gst_rate."""
+	from kamra.erp_bridge import is_bridge_active
+	if is_bridge_active():
+		return 0.0
+	from kamra.ledger import code_default_tax_rate
+	tc_rate = code_default_tax_rate(code)
+	if tc_rate is not None:
+		return tc_rate
+	if is_alcohol:
+		from kamra.localization import pack_for, services_tax_rate
+		pack = pack_for(property)
+		alc_fn = getattr(pack, "alcohol_tax_rate", None)
+		if alc_fn is not None:
+			return float(alc_fn(property))
+		if hasattr(pack, "services_tax_rate"):
+			return float(services_tax_rate(pack, property))
+	return float(outlet_gst)
+
+
 class POSOrder(Document):
 	def validate(self):
 		subtotal = 0.0
@@ -127,50 +170,149 @@ class POSOrder(Document):
 		# complimentary - there is nothing to charge anywhere
 		if self.nc:
 			return
-		# room-service charge routed by the company's billing rules; any
-		# alcohol on the order forces the whole order to the guest folio
-		from kamra.folio import _recalculate, target_folio
+		# room-service charge routed whole per transaction code by the stay's
+		# routing instructions (with its amount, so a limit applies) or its
+		# billing rules. Grouping by transaction code follows Simphony-OPERA:
+		# https://docs.oracle.com/en/industries/hospitality/simphony/19.7/simcg/c_opera_connection.htm
+		from decimal import ROUND_HALF_UP, Decimal
 
-		res = frappe.get_doc("Reservation", self.reservation)
-		has_alcohol = any(
-			frappe.db.get_value("Menu Item", it.menu_item, "is_alcohol")
-			for it in self.items if it.menu_item and not it.voided
+		from frappe.utils import cint
+
+		from kamra.folio import _recalculate, routed_figure, routed_target
+		from kamra.ledger import (
+			beverage_transaction_code,
+			code_for_charge_type,
+			minor_unit,
+			save_folio,
 		)
-		folio = frappe.get_doc(
-			"Folio",
-			target_folio(res, "Food & Beverage", is_alcohol=has_alcohol))
-		if folio.status == "Closed":
-			frappe.throw("Folio is closed — settle the order directly.")
+
+		from kamra.api import _lock_folio_scope
+		_lock_folio_scope(reservations=[self.reservation])
+		res = frappe.get_doc("Reservation", self.reservation)
+		bd = get_business_date(self.property)
 		# the outlet's own rate, 0 included (the field defaults new outlets to 5;
 		# `or 5` here charged tax at a 0% outlet)
-		gst = frappe.db.get_value("POS Outlet", self.outlet, "gst_rate")
-		gst = 5 if gst is None else gst
-		from kamra.business_date import get_business_date
-		detail = ", ".join(
-			f"{it.item_name} ×{int(it.qty)}" for it in self.items if not it.voided)
-		folio.append("charges", {
-			"posting_date": get_business_date(self.property),
-			"charge_type": "Food & Beverage",
-			"reservation": self.reservation,
-			"description": f"{self.outlet.split('-')[-1]}: {detail} ({self.name})",
-			"qty": 1,
-			"rate": self.order_total,
-			"amount": self.order_total,
-			"gst_rate": float(gst),
-			"auto_posted": 1,
-			"is_alcohol": 1 if has_alcohol else 0,
-		})
-		_recalculate(folio)
-		from kamra.ledger import save_folio
-		save_folio(folio)
+		outlet_doc = frappe.db.get_value(
+			"POS Outlet", self.outlet, ["gst_rate", "transaction_code"], as_dict=True
+		) or frappe._dict()
+		gst = 5 if outlet_doc.gst_rate is None else outlet_doc.gst_rate
+		outlet_code = (outlet_doc.transaction_code or "").strip() or None
+		outlet_code_alc = bool(
+			outlet_code and cint(frappe.db.get_value("Transaction Code", outlet_code, "is_alcohol"))
+		)
+
+		active_items = [it for it in self.items if not it.voided]
+		mi_ids = list({it.menu_item for it in active_items if it.menu_item})
+		mi_map = {
+			m.name: m
+			for m in frappe.get_all(
+				"Menu Item",
+				filters={"name": ["in", mi_ids]},
+				fields=["name", "is_alcohol", "transaction_code"],
+			)
+		} if mi_ids else {}
+
+		default_fnb = code_for_charge_type("Food & Beverage")
+		default_bev = beverage_transaction_code(self.property)
+		buckets: dict[str, list] = {}
+		for it in active_items:
+			mi = mi_map.get(it.menu_item) if it.menu_item else None
+			item_code = ((mi.transaction_code or "").strip() if mi else "") or None
+			item_alc = bool(cint(mi.is_alcohol)) if mi else False
+			if item_code:
+				code = item_code
+			elif item_alc:
+				code = outlet_code if (outlet_code and outlet_code_alc) else default_bev
+			elif outlet_code:
+				code = outlet_code
+			else:
+				code = default_fnb
+			buckets.setdefault(code, []).append((it, item_alc))
+
+		if not buckets:
+			buckets[outlet_code or default_fnb] = []
+
+		bucket_rows: list[tuple[str, list, float]] = []
+		if len(buckets) == 1:
+			code, entries = next(iter(buckets.items()))
+			bucket_rows.append((code, entries, float(self.order_total or 0)))
+		else:
+			total_dec = Decimal(str(self.order_total or 0))
+			gross_by_code = [
+				(code, entries, sum((Decimal(str(it.amount or 0)) for it, _ in entries), Decimal(0)))
+				for code, entries in buckets.items()
+			]
+			subtotal_dec = sum((g for _, _, g in gross_by_code), Decimal(0))
+			if not float(self.discount_amount or 0) or subtotal_dec <= 0:
+				bucket_rows = [(code, entries, float(g)) for code, entries, g in gross_by_code]
+			else:
+				unit = minor_unit(self.property)
+				allocated = Decimal(0)
+				for idx, (code, entries, g) in enumerate(gross_by_code):
+					if idx == len(gross_by_code) - 1:
+						share = total_dec - allocated
+					else:
+						share = (total_dec * g / subtotal_dec).quantize(unit, rounding=ROUND_HALF_UP)
+						allocated += share
+					bucket_rows.append((code, entries, float(share)))
+
+		folios: dict[str, Document] = {}
+		pending: list[tuple] = []
+		appended: list[tuple[str, int]] = []
+		for code, entries, amt in bucket_rows:
+			has_alcohol = 1 if (
+				any(alc for _, alc in entries)
+				or cint(frappe.db.get_value("Transaction Code", code, "is_alcohol"))
+			) else 0
+			bucket_gst = _code_gst_rate(
+				self.property, code, is_alcohol=bool(has_alcohol), outlet_gst=float(gst))
+			target, instruction = routed_target(
+				res, "Food & Beverage", amount=amt,
+				posting_date=bd, transaction_code=code, pending=pending)
+			if target not in folios:
+				fdoc = frappe.get_doc("Folio", target)
+				if fdoc.status == "Closed":
+					frappe.throw("Folio is closed — settle the order directly.")
+				folios[target] = fdoc
+			fdoc = folios[target]
+			b_detail = ", ".join(f"{it.item_name} ×{int(it.qty)}" for it, _ in entries)
+			fdoc.append("charges", {
+				"posting_date": bd,
+				"charge_type": "Food & Beverage",
+				"transaction_code": code,
+				"reservation": self.reservation,
+				"description": _folio_charge_description(
+					self.outlet.split("-")[-1], b_detail, self.name),
+				"qty": 1,
+				"rate": amt,
+				"amount": amt,
+				"gst_rate": bucket_gst,
+				"auto_posted": 1,
+				"is_alcohol": has_alcohol,
+				"routing_instruction": instruction,
+			})
+			appended.append((target, len(fdoc.charges) - 1))
+			if instruction:
+				pending.append((instruction, bd, routed_figure(
+					self.property, "Food & Beverage", amt, amt * bucket_gst / 100)))
+
+		for fdoc in folios.values():
+			_recalculate(fdoc)
+			save_folio(fdoc)
 		self.db_set("posted_to_folio", 1, update_modified=False)
 		from kamra.webhooks import emit_folio_posted
-		emit_folio_posted(folio, folio.charges[-1])
 		from kamra.whatsapp import queue_room_charge_alert
-		queue_room_charge_alert(folio, folio.charges[-1])
+		for target, idx in appended:
+			fdoc = folios[target]
+			row = fdoc.charges[idx]
+			emit_folio_posted(fdoc, row)
+			queue_room_charge_alert(fdoc, row)
 
+		detail = ", ".join(
+			f"{it.item_name} ×{int(it.qty)}" for it in active_items)
+		targets_str = ", ".join(folios.keys())
 		from kamra.savings import log_action
 		log_action("post_pos_order", "POS Order", self.name, self.property,
 		           minutes_saved=5 if self.source in ("AI Agent", "QR") else 0,
-		           rationale=f"{money_text(self.property, round(self.order_total or 0))} {detail} → {folio.name}",
+		           rationale=f"{money_text(self.property, round(self.order_total or 0))} {detail} → {targets_str}",
 		           channel="API")

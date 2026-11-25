@@ -11,6 +11,7 @@
   "property",
   "outlet_name",
   "outlet_type",
+  "transaction_code",
   "column_break_a",
   "gst_rate",
   "disabled",
@@ -40,6 +41,13 @@
    "in_list_view": 1,
    "label": "Outlet Type",
    "options": "Restaurant\nRoom Service\nBar\nSpa\nShop\nOther"
+  },
+  {
+   "description": "Default transaction code for room charges from this outlet. An item's own code takes precedence.",
+   "fieldname": "transaction_code",
+   "fieldtype": "Link",
+   "label": "Transaction Code",
+   "options": "Transaction Code"
   },
   {
    "fieldname": "column_break_a",
@@ -83,7 +91,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-11-12 10:00:00.000000",
+ "modified": "2026-11-23 23:00:00.000000",
  "modified_by": "Administrator",
  "module": "Kamra",
  "name": "POS Outlet",

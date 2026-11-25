@@ -17,6 +17,7 @@ import { ADVANCE_BILL_ACTION } from "../lib/discountHint"
 import ChangeCompany from "../components/ChangeCompany"
 import { loadLocale, sellsAlcohol, taxRates, fmtAmount } from "../lib/money"
 import { defaultChargeTaxRate } from "../lib/chargeTax"
+import { folioLabel, shareFolioArgs, type SiblingFolio } from "../lib/folioLabel"
 import { serverError } from "../lib/resource"
 import { useCashierAuth } from "../lib/cashierAuth"
 import { useAuth } from "../lib/auth"
@@ -206,41 +207,6 @@ const inputCls =
   "rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm " +
   "focus:outline-2 focus:outline-offset-1 focus:outline-brand-600"
 
-interface SiblingFolio {
-  name: string
-  folio_type: string
-  status: string
-  invoice_number?: string | null
-  balance: number
-  grand_total: number
-  payments_total: number
-  /** a guest's own bill in a shared room, made out to them */
-  bill_to_name?: string | null
-  /** the company a Company or Group bill goes to */
-  company?: string | null
-}
-
-/** A distinct label per folio. Extras get numbered when there's more than
- *  one. Any other type that repeats (Settle & continue stay closes the Guest
- *  folio and opens a fresh one) names the settled one by its invoice number,
- *  and numbers open ones that still share a type. */
-function folioLabel(siblings: SiblingFolio[], s: SiblingFolio, tr: (s: string, v?: Record<string, string | number>) => string) {
-  if (s.bill_to_name) return s.bill_to_name
-  const same = siblings.filter((x) => x.folio_type === s.folio_type)
-  if (s.folio_type === "Extra") {
-    if (same.length <= 1) return tr("Extra")
-    return tr("Extra {n}", { n: same.findIndex((x) => x.name === s.name) + 1 })
-  }
-  // a company bill names its company: a group member can carry its own
-  // company's bill next to the group's
-  const type = s.company ? `${tr(s.folio_type)} · ${s.company}` : tr(s.folio_type)
-  if (same.length <= 1) return type
-  if (s.status === "Closed")
-    return s.invoice_number ? `${type} · ${s.invoice_number}` : tr("{type} · settled", { type })
-  const open = same.filter((x) => x.status !== "Closed")
-  if (open.length <= 1) return type
-  return `${type} ${open.findIndex((x) => x.name === s.name) + 1}`
-}
 const isEmptyFolio = (s: SiblingFolio) =>
   !s.grand_total && !s.payments_total
 
@@ -850,7 +816,7 @@ export default function FolioView() {
                 {bills.map((b) => (
                   <label key={b.name} className="flex items-center gap-2">
                     <span className="w-40 truncate">{b.bill_to_name}</span>
-                    <input className={`${inputCls} w-20`} type="number" min={0} max={100}
+                    <input className={`${inputCls} w-20`} type="number" min={0} max={100} step="any" inputMode="decimal"
                       value={pct(b.name)} onChange={(e) => setShares({ ...shares, [b.name]: e.target.value })} />
                     <span className="text-zinc-500">%</span>
                   </label>
@@ -862,19 +828,23 @@ export default function FolioView() {
                   <Button variant="outline" disabled={busy || !rows.length || total >= 100}
                     onClick={() =>
                       act(async () => {
-                        await call("kamra.api.share_folio_charges", {
-                          from_folio: folio.name,
-                          charge_rows: rows.map((c) => c.name),
-                          to_folios: bills.map((b) => b.name),
-                          shares: bills.map((b) => Number(pct(b.name))),
-                        })
+                        await call(
+                          "kamra.api.share_folio_charges",
+                          shareFolioArgs(
+                            folio.name,
+                            rows.map((c) => c.name),
+                            bills.map((b) => b.name),
+                            shares,
+                          ),
+                        )
                         setSelected(new Set())
+                        setShares({})
                         setPanel(null)
                       })
                     }>
                     {t("Share these charges")}
                   </Button>
-                  <Button variant="ghost" onClick={() => setPanel(null)}>{t("Cancel")}</Button>
+                  <Button variant="ghost" onClick={() => { setShares({}); setPanel(null) }}>{t("Cancel")}</Button>
                 </div>
               </>
             )}
@@ -1557,6 +1527,8 @@ export default function FolioView() {
               <input
                 className={`${inputCls} w-24`}
                 type="number"
+                step="any"
+                inputMode="decimal"
                 placeholder={translate(`${cur()}`)}
                 value={charge.amount}
                 onChange={(e) => setCharge({ ...charge, amount: e.target.value })}
@@ -1639,6 +1611,8 @@ export default function FolioView() {
                   <input
                     className={`${inputCls} w-24`}
                     type="number"
+                    step="any"
+                    inputMode="decimal"
                     placeholder={translate(`${cur()}`)}
                     value={allowance.amount}
                     onChange={(e) =>

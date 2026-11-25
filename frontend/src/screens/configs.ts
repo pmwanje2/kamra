@@ -958,7 +958,7 @@ export const menuItemsConfig: ScreenConfig = {
       hint: "Edit the list under Settings → F&B → Menu master lists. Matched against the guest allergy note on the kitchen display." },
     { field: "is_veg", label: "Vegetarian", type: "check" },
     { field: "is_alcohol", label: "Alcohol", type: "check", dependsOn: sellsAlcohol,
-      hint: "Alcohol always bills the guest folio, never the company" },
+      hint: "Marks the item as liquor for tax and reports. It bills where the stay's routing sends it, like any other item." },
     { field: "available", label: "Available", type: "check" },
   ],
 }
@@ -1155,8 +1155,10 @@ export const transactionCodesConfig: ScreenConfig = {
       hint: "Payment codes only: a payment mode such as Cash, Card or Bank Transfer. Payments in that mode book to this code." },
     { field: "subgroup", label: "Subgroup", type: "data" },
     { field: "default_tax_rate", label: "Default tax %", type: "float" },
+    { field: "tax_exempt", label: "Tax exempt (0%)", type: "check",
+      hint: "Always tax this code at 0% on standalone properties instead of the country or outlet rate." },
     { field: "is_alcohol", label: "Alcohol", type: "check", dependsOn: sellsAlcohol,
-      hint: "Alcohol never bills a Company folio." },
+      hint: "Marks a liquor code. It routes like any other code: leave it out of a company's billing rules or a routing instruction and the guest pays it." },
     { field: "charge_type", label: "Legacy charge type", type: "select",
       options: [
         "Room", "Meal Plan", "Food & Beverage", "Minibar", "Laundry", "Spa", "Taxi",

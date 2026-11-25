@@ -310,55 +310,63 @@ def deliver_laundry(order: str, shortage_note: str | None = None):
 	"""Hand the bag back and bill the stay. If pieces are still pending, a
 	shortage note is required - the discrepancy is recorded, never silent.
 	Posting rides the governed agent path (HK can only bill laundry)."""
-	doc = frappe.get_doc("Laundry Order", order)
-	if doc.status in ("Delivered", "Cancelled"):
-		frappe.throw(_("This laundry order is closed."))
-	if not doc.items:
-		frappe.throw(_("Nothing was collected on this order."))
-	pending = [(it.item_name, int(it.qty) - int(it.returned_qty or 0))
-	           for it in doc.items if int(it.qty) > int(it.returned_qty or 0)]
-	if pending and not (shortage_note or "").strip():
-		frappe.throw(_("Still pending: {0}. Return everything, or deliver "
-		              "with a shortage note.").format(
-			", ".join(f"{n}×{q}" for n, q in pending)))
-	doc.status = "Delivered"
-	doc.delivered_by = frappe.session.user
-	doc.delivered_at = now_datetime()
-	if pending:
-		doc.shortage_note = (shortage_note or "").strip()[:200]
+	from kamra.api import _lock_folio_scope, _with_snapshot_retry, post_stay_charge
+	from kamra.erp_bridge import is_bridge_active
 
-	posted = False
-	billable = (
-		(doc.order_type or "Guest") == "Guest"
-		and not int(doc.complimentary or 0)
-		and doc.reservation and float(doc.total or 0) > 0)
-	if billable:
-		detail = ", ".join(
-			f"{int(it.qty)}× {it.item_name} ({it.service_type})"
-			for it in doc.items)
-		# the services tax rate comes from the property's country pack
-		# (18% GST in India, the standard VAT elsewhere), resolved here on
-		# the server - never from the caller
-		from kamra.localization import pack_for, services_tax_rate
-		rate = services_tax_rate(pack_for(doc.property), doc.property)
-		with act_as(AGENT_EMAIL):
-			from kamra.api import post_stay_charge
-			post_stay_charge(
-				doc.reservation, "Laundry",
-				f"Laundry{' (express)' if doc.express else ''}: "
-				f"{detail} ({doc.name})",
-				float(doc.total), gst_rate=rate)
-			posted = True
-	doc.posted_to_folio = 1 if posted else 0
-	doc.save()
-	if posted:
-		from kamra.savings import log_action
-		from kamra.localization import money_text
-		log_action("laundry_bill", "Laundry Order", doc.name, doc.property,
-		           rationale=f"{money_text(doc.property, doc.total)} laundry → {doc.room} "
-		                     f"({doc.reservation})", channel="API")
-	return {"ok": True, "status": "Delivered", "posted_to_folio": posted,
-	        "total": doc.total}
+	def _deliver_once():
+		doc = frappe.get_doc("Laundry Order", order)
+		if doc.status in ("Delivered", "Cancelled"):
+			frappe.throw(_("This laundry order is closed."))
+		if not doc.items:
+			frappe.throw(_("Nothing was collected on this order."))
+		pending = [(it.item_name, int(it.qty) - int(it.returned_qty or 0))
+		           for it in doc.items if int(it.qty) > int(it.returned_qty or 0)]
+		if pending and not (shortage_note or "").strip():
+			frappe.throw(_("Still pending: {0}. Return everything, or deliver "
+			              "with a shortage note.").format(
+				", ".join(f"{n}×{q}" for n, q in pending)))
+		billable = (
+			(doc.order_type or "Guest") == "Guest"
+			and not int(doc.complimentary or 0)
+			and doc.reservation and float(doc.total or 0) > 0)
+		if billable:
+			_lock_folio_scope(reservations=[doc.reservation])
+		doc.status = "Delivered"
+		doc.delivered_by = frappe.session.user
+		doc.delivered_at = now_datetime()
+		if pending:
+			doc.shortage_note = (shortage_note or "").strip()[:200]
+
+		posted = False
+		if billable:
+			detail = ", ".join(
+				f"{int(it.qty)}× {it.item_name} ({it.service_type})"
+				for it in doc.items)
+			# the services tax rate comes from the property's country pack
+			# (18% GST in India, the standard VAT elsewhere), resolved here on
+			# the server - never from the caller (0% on ERP bridge sites)
+			from kamra.localization import pack_for, services_tax_rate
+			rate = 0.0 if is_bridge_active() else services_tax_rate(
+				pack_for(doc.property), doc.property)
+			with act_as(AGENT_EMAIL):
+				post_stay_charge(
+					doc.reservation, "Laundry",
+					f"Laundry{' (express)' if doc.express else ''}: "
+					f"{detail} ({doc.name})",
+					float(doc.total), gst_rate=rate)
+				posted = True
+		doc.posted_to_folio = 1 if posted else 0
+		doc.save()
+		if posted:
+			from kamra.localization import money_text
+			from kamra.savings import log_action
+			log_action("laundry_bill", "Laundry Order", doc.name, doc.property,
+			           rationale=f"{money_text(doc.property, doc.total)} laundry → {doc.room} "
+			                     f"({doc.reservation})", channel="API")
+		return {"ok": True, "status": "Delivered", "posted_to_folio": posted,
+		        "total": doc.total}
+
+	return _with_snapshot_retry(_deliver_once)
 
 
 @frappe.whitelist(methods=["POST"])

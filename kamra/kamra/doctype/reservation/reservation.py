@@ -315,6 +315,10 @@ class Reservation(Document):
 					"kamra.whatsapp.notify_booking_confirmed",
 					reservation=self.name, queue="short",
 					enqueue_after_commit=True)
+		# a room picked up from a group takes the group's routing instructions
+		if self.get("group_booking"):
+			from kamra.routing import copy_group_instructions
+			copy_group_instructions(self)
 		# ADR-009: open deposit liability when property policy requires one.
 		try:
 			from kamra.deposit import ensure_deposit_for_reservation

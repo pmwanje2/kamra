@@ -481,7 +481,8 @@ class ZeroTaxChargesTotalAndBridgeAgreementTest(QuotePatches, RateMatrixHarness)
 		folio.save = lambda **kw: folio
 		with patch.object(self.folio, "_charge_posted", lambda *a, **kw: False), \
 				patch.object(self.folio, "current_date_contract_night", lambda *a, **kw: None), \
-				patch.object(self.folio, "open_line_target", lambda r, ct, is_alcohol=0: "FOL-UNLOCKED-FRAC"), \
+				patch.object(self.folio, "_legacy_target", lambda *a, **kw: "FOL-UNLOCKED-FRAC"), \
+				patch.object(self.folio, "open_line_target", lambda *a, **kw: "FOL-UNLOCKED-FRAC"), \
 				patch.object(self.folio, "_post_room_levy", lambda *a, **kw: None), \
 				patch.object(self.ledger, "save_folio", lambda f, **kw: f):
 			self.folio.post_room_night(res, "2026-12-01")
