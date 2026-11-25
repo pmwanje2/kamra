@@ -23,7 +23,10 @@ export type Fiscal = {
   replaced_by?: string | null
 }
 
-export function FiscalDocument({ fiscal, internalNumber }: { fiscal: Fiscal; internalNumber?: string | null }) {
+export function FiscalDocument({
+  fiscal, internalNumber, verifiedInvoice = fiscal.sales_invoice,
+}: { fiscal: Fiscal; internalNumber?: string | null; verifiedInvoice?: string | null }) {
+  const showIdentifiers = !!verifiedInvoice && verifiedInvoice === fiscal.sales_invoice
   const effectiveState =
     fiscal.state === "not_efris" && fiscal.efris_enrolled ? "pending" : fiscal.state
   const warning =
@@ -42,12 +45,12 @@ export function FiscalDocument({ fiscal, internalNumber }: { fiscal: Fiscal; int
           {effectiveState !== "fiscalised" && (
             <p>{t("This is not a tax invoice yet. It becomes one when the fiscal number is issued.")}</p>
           )}
-          {effectiveState === "pending" && fiscal.efris_status && (
+          {showIdentifiers && effectiveState === "pending" && fiscal.efris_status && (
             <p>{t("Status: {status}", { status: fiscal.efris_status })}</p>
           )}
         </div>
       )}
-      {effectiveState === "fiscalised" && (
+      {showIdentifiers && effectiveState === "fiscalised" && (
         <div className="flex items-start justify-end gap-3">
           <div className="space-y-0.5">
             <p>

@@ -1075,7 +1075,7 @@ export default function FolioView() {
                 </p>
               ) : null}
               {data.fiscal ? (
-                <FiscalDocument fiscal={data.fiscal} internalNumber={doc?.internal_number} />
+                <FiscalDocument fiscal={data.fiscal} verifiedInvoice={folio.sales_invoice ?? null} internalNumber={doc?.internal_number} />
               ) : !doc?.is_final && (
                 <p className="mt-1 max-w-52 text-xs text-warning-ink">
                   {t("Not a tax invoice yet - the number is issued when the folio is settled.")}

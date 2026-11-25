@@ -5,7 +5,7 @@ outline: 2
 # REST API reference
 
 Every endpoint below is a whitelisted function - the same governed layer
-the UI and the AI use. **547 endpoints**, generated from the source
+the UI and the AI use. **548 endpoints**, generated from the source
 (`docs-site/gen_api.py`), so this page always matches the code.
 
 ## Calling convention
@@ -6408,6 +6408,16 @@ and tried again) - never credited twice over.
 | `folio` | yes |  |
 | `document` | no | `'Guest Folio'` |
 | `reason` | no | `None` |
+
+### `kamra.ledger.folio_reprint_details`
+
+**GET/POST** · roles: `Front Desk`, `Finance`, `Kamra Agent`
+
+Read a saved revision with the accounting reference visible to the current reader.
+
+| Param | Required | Default |
+| --- | --- | --- |
+| `reprint` | yes |  |
 
 ### `kamra.ledger.folio_history`
 

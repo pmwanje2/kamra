@@ -276,11 +276,11 @@ export function StayBilling({ d, onChanged }: { d: RoomDetail; onChanged: () => 
         setFolios(rows)
         setGuest(g)
         const open = rows.find((r) => r.status === "Open" && r.folio_type === "Guest") ?? rows[0]
-        setPay((p) => ({
-          ...p,
-          folio: p.folio || open?.name || "",
-          amount: p.amount || (open && collectible(open) > 0 ? String(collectible(open)) : ""),
-        }))
+        setPay((p) => {
+          const selected = rows.find((row) => row.name === p.folio) ?? open
+          const balance = selected ? collectible(selected) : 0
+          return { ...p, folio: selected?.name ?? "", amount: balance > 0 ? String(balance) : "" }
+        })
       })
       .catch((e) => setError(serverError(e)))
   }, [stay.name])

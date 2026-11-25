@@ -5540,7 +5540,10 @@ def folio_invoice(folio: str):
 				doc_title = _(fiscal_title(fiscal))
 		else:
 			doc_title = _(fiscal_title(fiscal))
+		matching_accounting_invoice = acct_si is not None and acct_si.name == fiscal["sales_invoice"]
 		fiscal = visible_fiscal_references(fiscal, credit)
+		if final and not fiscal["sales_invoice"] and not matching_accounting_invoice:
+			doc_title = _(loc.neutral_invoice_title(pack))
 		number = fiscal["sales_invoice"] or doc.name
 	payments = [{
 		"row": p.name, "posting_date": str(p.posting_date),
@@ -5671,20 +5674,14 @@ def reprint_fiscal_folio(folio: str, reason: str | None = None):
 	if fiscal and not document["is_final"]:
 		from kamra.fiscal import assert_reprintable
 		assert_reprintable(fiscal)
-	revision = frappe.db.count("Folio Reprint", {"folio": folio}) + 1
-	reprint = frappe.get_doc({
-		"doctype": "Folio Reprint",
-		"property": data["folio"]["property"],
-		"folio": folio,
-		"invoice_number": document["number"],
-		"reprint_of": "Guest Folio",
-		"printed_on": now_datetime(),
-		"printed_by": frappe.session.user,
-		"reason": reason,
-		"revision": revision,
-	}).insert(ignore_permissions=True)
-	document["reprint"] = revision
-	return {**data, "reprint": reprint.name, "revision": revision}
+	from kamra.ledger import _insert_folio_reprint
+	row = data["folio"]
+	reprint = _insert_folio_reprint(
+		folio, row["property"], row.get("invoice_number"), fiscal["sales_invoice"] if fiscal else row.get("sales_invoice"),
+		"Guest Folio", reason,
+	)
+	document["reprint"] = reprint["revision"]
+	return {**data, **reprint}
 
 
 def _folio_statement(lines: list, payments: list, places: int = 2) -> list[dict]:

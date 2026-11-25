@@ -2482,27 +2482,56 @@ def credited_total(folio: str, for_update: bool = False) -> Decimal:
 def record_folio_reprint(folio: str, document: str = "Guest Folio",
                          reason: str | None = None):
 	fdoc = frappe.get_doc("Folio", folio)
-	prop, inv = fdoc.property, fdoc.invoice_number
+	fdoc.check_permission("read")
+	invoice = None
 	if fdoc.status == "Closed" and document != "Proforma":
-		from kamra.fiscal import assert_reprintable, fiscal_status
+		from kamra.fiscal import assert_reprintable, fiscal_status, visible_fiscal_references
+		from kamra.folio import reconcile_credit_note_status
+
 		fiscal = fiscal_status(fdoc)
-		if fiscal is not None:
-			assert_reprintable(fiscal)
-			inv = fiscal["sales_invoice"] or inv
-	prev = frappe.db.count("Folio Reprint", {"folio": folio}) + 1
+		assert_reprintable(fiscal)
+		if fiscal:
+			invoice = visible_fiscal_references(fiscal, reconcile_credit_note_status(fdoc))["sales_invoice"]
+	return _insert_folio_reprint(fdoc.name, fdoc.property, fdoc.invoice_number, invoice, document, reason)
+
+
+def _insert_folio_reprint(folio, property, internal_number, verified_invoice, document, reason):
+	internal_number = internal_number or folio
+	revision = frappe.db.count("Folio Reprint", {"folio": folio}) + 1
 	doc = frappe.get_doc({
 		"doctype": "Folio Reprint",
-		"property": prop,
+		"property": property,
 		"folio": folio,
-		"invoice_number": inv,
+		"internal_number": internal_number,
+		"invoice_number": verified_invoice or internal_number,
 		"reprint_of": document,
 		"printed_on": now_datetime(),
 		"printed_by": frappe.session.user,
 		"reason": reason,
-		"revision": prev,
-	})
-	doc.insert(ignore_permissions=True)
-	return {"reprint": doc.name, "revision": prev}
+		"revision": revision,
+	}).insert(ignore_permissions=True)
+	return {"reprint": doc.name, "revision": revision}
+
+
+@frappe.whitelist()
+@require_roles("Front Desk", "Finance", "Kamra Agent", scope={"reprint": "Folio Reprint"})
+def folio_reprint_details(reprint: str) -> dict:
+	"""Read a saved revision with the accounting reference visible to the current reader."""
+	from kamra.folio import reconcile_credit_note_status
+
+	record = frappe.get_doc("Folio Reprint", reprint)
+	record.check_permission("read")
+	snapshot = record.invoice_number
+	record.apply_fieldlevel_read_permissions()
+	result = record.as_dict()
+	result["sales_invoice"] = None
+	if snapshot and snapshot != record.internal_number:
+		folio = frappe.get_doc("Folio", record.folio)
+		if folio.property == record.property and folio.has_permission("read"):
+			visible = reconcile_credit_note_status(folio)["sales_invoice"]
+			if visible == snapshot:
+				result["sales_invoice"] = visible
+	return result
 
 
 @frappe.whitelist()
@@ -2537,6 +2566,9 @@ def folio_history(property: str, query: str | None = None,
 		order_by="modified desc",
 		limit_page_length=200,
 	)
+	# Apply the same projection before matching search terms and returning history.
+	from kamra.api import _filter_folio_invoice_refs
+	_filter_folio_invoice_refs([row for row in rows if row.get("sales_invoice")], property)
 	if query:
 		q = query.lower()
 		rows = [r for r in rows if q in (r.guest_name or "").lower()
@@ -2626,6 +2658,7 @@ def batch_print_folios(folios: str | list):
 	from kamra.fiscal import assert_reprintable, fiscal_status
 	for fn in folios:
 		fdoc = frappe.get_doc("Folio", fn)
+		fdoc.check_permission("read")
 		if fdoc.status == "Closed":
 			assert_reprintable(fiscal_status(fdoc))
 	out = []

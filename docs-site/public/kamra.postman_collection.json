@@ -15278,6 +15278,43 @@
      }
     },
     {
+     "name": "folio_reprint_details",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "token {{api_key}}:{{api_secret}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/method/kamra.ledger.folio_reprint_details",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "method",
+        "kamra.ledger.folio_reprint_details"
+       ]
+      },
+      "description": "Read a saved revision with the accounting reference visible to the current reader.",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"reprint\": \"<reprint>\"\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
      "name": "folio_history",
      "request": {
       "method": "POST",
