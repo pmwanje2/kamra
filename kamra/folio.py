@@ -83,12 +83,12 @@ def _security_deposit_row_ids(folio) -> set[int]:
 	return sec_idx
 
 
-def _refund_amounts(folio, sec_idx: set[int]) -> tuple[Decimal, Decimal]:
-	"""Identified security refunds and unlinked refund candidates on one folio."""
+def _refund_amounts(folio, sec_idx: set[int]) -> tuple[Decimal, Decimal, Decimal]:
+	"""Return identified refunds and the mandatory and ambiguous parts of the unlinked cap."""
 	from kamra.ledger import _money
 
 	if not sec_idx:
-		return Decimal(0), Decimal(0)
+		return Decimal(0), Decimal(0), Decimal(0)
 	pending = (getattr(folio, "flags", None) or {}).get("kamra_pending_security_refund")
 	identified = Decimal(0)
 	candidates = {}
@@ -101,19 +101,29 @@ def _refund_amounts(folio, sec_idx: set[int]) -> tuple[Decimal, Decimal]:
 		elif not (payment.get("refund_of") or payment.get("payment_entry") or payment.get("reversal_of")):
 			candidates[payment.name] = amount
 	if not candidates:
-		return identified, Decimal(0)
+		return identified, Decimal(0), Decimal(0)
 
-	# Only the amount actually debited to Deposit can explain a legacy return.
-	debits = frappe.db.sql(
-		"""SELECT source_name, CONCAT(GREATEST(SUM(COALESCE(debit, 0) - COALESCE(credit, 0)), 0), '')
+	# All Deposit entries back the window's security. Only unlinked payment
+	# debits are candidates for explaining its historical refunds.
+	entries = frappe.db.sql(
+		"""SELECT source_doctype, source_name, CONCAT(SUM(COALESCE(credit, 0) - COALESCE(debit, 0)), '')
 		   FROM `tabFolio Ledger Entry`
-		   WHERE folio = %s AND ledger = 'Deposit' AND source_doctype = 'Folio Payment'
-		       AND source_name IN %s
-		   GROUP BY source_name""",
-		(folio.name, tuple(candidates)),
+		   WHERE folio = %s AND ledger = 'Deposit'
+		   GROUP BY source_doctype, source_name""",
+		(folio.name,),
 	)
-	unlinked = sum((min(candidates[name], _money(debit)) for name, debit in debits), Decimal(0))
-	return identified, min(unlinked, max(Decimal(0), _security_before_legacy(folio, sec_idx)))
+	balance = unlinked = Decimal(0)
+	for kind, name, net in entries:
+		amount = _money(net)
+		balance += amount
+		if kind == "Folio Payment" and name in candidates and amount < 0:
+			unlinked += min(candidates[name], -amount)
+
+	security = max(Decimal(0), _security_before_legacy(folio, sec_idx))
+	cap = min(unlinked, security)
+	shortfall = max(Decimal(0), security - max(Decimal(0), balance))
+	mandatory = min(cap, shortfall)
+	return identified, mandatory, cap - mandatory
 
 
 def guest_security_windows(reservation, property_name, *, for_update=False):
@@ -124,23 +134,26 @@ def guest_security_windows(reservation, property_name, *, for_update=False):
 
 
 def allocate_historical_security_refunds(windows, recorded: Decimal) -> dict[str, Decimal]:
-	"""Allocate the stay total remaining after all identified refunds, in Guest window order."""
+	"""Cover ledger shortfalls first, then allocate the remainder in Guest window order."""
 	if recorded <= 0:
 		return {}
 	remaining = recorded
-	caps = []
+	mandatory = []
+	ambiguous = []
 	for window, sec_idx in windows:
-		identified, cap = _refund_amounts(window, sec_idx)
+		identified, required, optional = _refund_amounts(window, sec_idx)
 		remaining -= identified
-		if cap:
-			caps.append((window.name, cap))
+		if required:
+			mandatory.append((window.name, required))
+		if optional:
+			ambiguous.append((window.name, optional))
 
 	allocations = {}
-	for name, cap in caps:
+	for name, cap in mandatory + ambiguous:
 		if remaining <= 0:
 			break
 		take = min(remaining, cap)
-		allocations[name] = take
+		allocations[name] = allocations.get(name, Decimal(0)) + take
 		remaining -= take
 	return allocations
 
